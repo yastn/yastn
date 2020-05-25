@@ -62,38 +62,38 @@ def diag_get(x):
 
 
 def zeros(D, isdiag, dtype='float64'):
-    if (dtype is 'float64') and (not isdiag):
+    if (dtype == 'float64') and (not isdiag):
         return np.zeros(D, dtype=np.float64)
-    elif (dtype is 'float64') and (isdiag):
+    elif (dtype == 'float64') and (isdiag):
         return np.diag(np.zeros(D[0], dtype=np.float64))
-    elif (dtype is 'complex128') and (not isdiag):
+    elif (dtype == 'complex128') and (not isdiag):
         return np.zeros(D, dtype=np.complex128)
-    elif (dtype is 'complex128') and (isdiag):
+    elif (dtype == 'complex128') and (isdiag):
         return np.diag(np.zeros(D[0], dtype=np.complex128))
 
 
 def ones(D, isdiag, dtype='float64'):
-    if (dtype is 'float64') and (not isdiag):
+    if (dtype == 'float64') and (not isdiag):
         return np.ones(D, dtype=np.float64)
-    elif (dtype is 'float64') and (isdiag):
+    elif (dtype == 'float64') and (isdiag):
         return np.diag(np.ones(D[0], dtype=np.float64))
-    elif (dtype is 'complex128') and (not isdiag):
+    elif (dtype == 'complex128') and (not isdiag):
         return np.ones(D, dtype=np.complex128)
-    elif (dtype is 'complex128') and (isdiag):
+    elif (dtype == 'complex128') and (isdiag):
         return np.diag(np.ones(D[0], dtype=np.complex128))
 
 
 def rand(D, isdiag, dtype):
-    if dtype is 'float64':
+    if dtype == 'float64':
         if not isdiag:
-            return 2*np.random.rand(*D)-1
+            return 2 * np.random.rand(*D) - 1
         else:
-            return np.diag(2*np.random.rand(D[0])-1)
-    elif dtype is 'complex128':
+            return np.diag(2 * np.random.rand(D[0]) - 1)
+    elif dtype == 'complex128':
         if not isdiag:
-            return 2*np.random.rand(*D)-1 + 1j*(2*np.random.rand(*D)-1)
+            return 2 * np.random.rand(*D) - 1 + 1j * (2 * np.random.rand(*D) - 1)
         else:
-            return np.diag(2*np.random.rand(D[0])-1 + 1j*(2*np.random.rand(D[0])-1))
+            return np.diag(2 * np.random.rand(D[0]) - 1 + 1j * (2 * np.random.rand(D[0]) - 1))
 
 
 def to_tensor(val, isdiag=False, dtype='float64', Ds=None):
@@ -108,7 +108,7 @@ def to_tensor(val, isdiag=False, dtype='float64', Ds=None):
         if Ds is not None:
             return np.reshape(np.array(val, dtype=np.complex128), Ds)
         else:
-            return np.array(val, dtype=np.complex128) 
+            return np.array(val, dtype=np.complex128)
     elif (dtype == 'complex128') and (isdiag):
         return np.diag(np.array(val, dtype=np.complex128))
 
@@ -130,14 +130,14 @@ def trace(A, to_execute, in1, in2, out):
     ''' trace dict of tensors using to_execute =[(ind_in, ind_out), ...]
         adds repeating ind_out's '''
     cA = {}
-    order = in1+in2+out
+    order = in1 + in2 + out
     for task in to_execute:
         D1 = tuple(A[task[0]].shape[ii] for ii in in1)
         D2 = tuple(A[task[0]].shape[ii] for ii in in2)
         D3 = tuple(A[task[0]].shape[ii] for ii in out)
         pD1 = reduce(mul, D1, 1)
         pD2 = reduce(mul, D2, 1)
-        Atemp = np.reshape(np.transpose(A[task[0]], order), (pD1, pD2)+D3)
+        Atemp = np.reshape(np.transpose(A[task[0]], order), (pD1, pD2) + D3)
         if task[1] in cA:
             cA[task[1]] = cA[task[1]] + np.trace(Atemp)
         else:
@@ -156,10 +156,10 @@ def invsqrt(A, isdiag=True):
     cA = {}
     if isdiag:
         for ind in A:
-            cA[ind] = np.diag(1./np.sqrt(np.diag(A[ind])))
+            cA[ind] = np.diag(1. / np.sqrt(np.diag(A[ind])))
     else:
         for ind in A:
-            cA[ind] = 1./np.sqrt(A[ind])
+            cA[ind] = 1. / np.sqrt(A[ind])
     return cA
 
 
@@ -167,10 +167,10 @@ def inv(A, isdiag=True):
     cA = {}
     if isdiag:
         for ind in A:
-            cA[ind] = np.diag(1./np.diag(A[ind]))
+            cA[ind] = np.diag(1. / np.diag(A[ind]))
     else:
         for ind in A:
-            cA[ind] = 1./A[ind]
+            cA[ind] = 1. / A[ind]
     return cA
 
 
@@ -178,10 +178,10 @@ def exp(A, step, isdiag=True):
     cA = {}
     if isdiag:
         for ind in A:
-            cA[ind] = np.diag(np.exp(np.diag(A[ind])*step))
+            cA[ind] = np.diag(np.exp(np.diag(A[ind]) * step))
     else:
         for ind in A:
-            cA[ind] = np.exp(A[ind]*step)
+            cA[ind] = np.exp(A[ind] * step)
     return cA
 
 
@@ -199,8 +199,8 @@ def sqrt(A, isdiag):
 def svd(A, truncated=False, Dblock=np.inf, nbit=60, kfac=6):
     U, S, V = {}, {}, {}
     for ind in A:
-        if truncated and min(A[ind].shape) > kfac*Dblock:
-            U[ind], S[ind], V[ind] = pca.pca(A[ind], k=Dblock, raw=True, n_iter=nbit, l=kfac*Dblock)
+        if truncated and min(A[ind].shape) > kfac * Dblock:
+            U[ind], S[ind], V[ind] = pca.pca(A[ind], k=Dblock, raw=True, n_iter=nbit, l=kfac * Dblock)
         else:
             try:
                 U[ind], S[ind], V[ind] = sp.linalg.svd(A[ind], full_matrices=False)
@@ -226,7 +226,7 @@ def qr(A):
         sR = np.sign(np.real(np.diag(R[ind])))
         sR[sR == 0] = 1
         # positive diag of R
-        Q[ind], R[ind] = Q[ind]*sR, sR.reshape([-1, 1])*R[ind]
+        Q[ind], R[ind] = Q[ind] * sR, sR.reshape([-1, 1]) * R[ind]
     return Q, R
 
 
@@ -237,7 +237,7 @@ def rq(A):
         sR = np.sign(np.real(np.diag(R[ind])))
         sR[sR == 0] = 1
         # positive diag of R
-        R[ind], Q[ind] = R[ind]*sR, sR.reshape([-1, 1])*Q[ind]
+        R[ind], Q[ind] = R[ind] * sR, sR.reshape([-1, 1]) * Q[ind]
     return R, Q
 
 
@@ -278,14 +278,14 @@ def entropy(A, alpha=1):
             if x.ndim == 2:
                 x = np.diag(x)
             Smin = min(Smin, min(x))
-            x = x/no
+            x = x / no
             if alpha == 1:
                 x = x[x > 1e-12]
-                ent += -2*sum(x*x*np.log2(x))
+                ent += -2 * sum(x * x * np.log2(x))
             else:
-                ent += x**(2*alpha)
+                ent += x**(2 * alpha)
         if alpha != 1:
-            ent = np.log2(ent)/(1-alpha)
+            ent = np.log2(ent) / (1 - alpha)
     return ent, Smin, no
 
 ##############
@@ -302,7 +302,7 @@ def norm_diff(A, B, ord):
         block_norm = [0.]
     for ind in A:
         if ind in B:
-            block_norm.append(f(A[ind]-B[ind]))
+            block_norm.append(f(A[ind] - B[ind]))
         else:
             block_norm.append(f(A[ind]))
     for ind in B:
@@ -319,11 +319,11 @@ def add(aA, bA, to_execute, x=1):
     cA = {}
     for ind in to_execute:
         if (ind[1] == 0):
-            cA[ind[0]] = aA[ind[0]]+x*bA[ind[0]]
+            cA[ind[0]] = aA[ind[0]] + x * bA[ind[0]]
         elif (ind[1] == 1):
             cA[ind[0]] = aA[ind[0]].copy()
         elif (ind[1] == 2):
-            cA[ind[0]] = x*bA[ind[0]].copy()
+            cA[ind[0]] = x * bA[ind[0]].copy()
     return cA
 
 
@@ -335,7 +335,7 @@ def sub(aA, bA, to_execute):
     cA = {}
     for ind in to_execute:
         if (ind[1] == 0):
-            cA[ind[0]] = aA[ind[0]]-bA[ind[0]]
+            cA[ind[0]] = aA[ind[0]] - bA[ind[0]]
         elif (ind[1] == 1):
             cA[ind[0]] = aA[ind[0]].copy()
         elif (ind[1] == 2):
@@ -381,8 +381,8 @@ def dot_merged(A, B, conj):
 
 
 def dot(A, B, conj, to_execute, a_out, a_con, b_con, b_out):
-    a_all = a_out+a_con  # order for transpose in A
-    b_all = b_con+b_out  # order for transpose in B
+    a_all = a_out + a_con  # order for transpose in A
+    b_all = b_con + b_out  # order for transpose in B
     f = dot_dict[conj]  # proper conjugations
     if len(to_execute) == 1:
         in1, in2, out = to_execute[0]
@@ -393,7 +393,7 @@ def dot(A, B, conj, to_execute, a_out, a_con, b_con, b_out):
         pDl = reduce(mul, Dl, 1)
         pDc = reduce(mul, Dc, 1)
         pDr = reduce(mul, Dr, 1)
-        C = {out: f(AA.transpose(a_all).reshape(pDl, pDc), BB.transpose(b_all).reshape(pDc, pDr)).reshape(Dl+Dr)}
+        C = {out: f(AA.transpose(a_all).reshape(pDl, pDc), BB.transpose(b_all).reshape(pDc, pDr)).reshape(Dl + Dr)}
     else:
         Andim = len(a_con) + len(a_out)
         Bndim = len(b_con) + len(b_out)
@@ -418,7 +418,7 @@ def dot(A, B, conj, to_execute, a_out, a_con, b_con, b_out):
                 C[out] = C[out] + temp
             except KeyError:
                 C[out] = temp
-                DC[out] = Atemp[in1][1]+Btemp[in2][1]
+                DC[out] = Atemp[in1][1] + Btemp[in2][1]
         for out in C:
             C[out] = C[out].reshape(DC[out])  # C[out].shape=DC[out]
         # CAN DIVIDE BELOW into multiplication, and than adding the same out...
@@ -455,10 +455,10 @@ def merge_blocks(A, to_execute, out_l, out_r):
             dtype = A[ind].dtype  # all dtype's in A should be the same -- takes the last one
 
             ind_l, ind_r = sorted(Dl), sorted(Dr)
-            cpDl = np.cumsum([0]+[pDl[ind] for ind in ind_l])
-            order_l[tcut] = [(ind, Dl[ind], slice(cpDl[ii], cpDl[ii+1])) for ii, ind in enumerate(ind_l)]
-            cpDr = np.cumsum([0]+[pDr[ind] for ind in ind_r])
-            order_r[tcut] = [(ind, Dr[ind], slice(cpDr[ii], cpDr[ii+1])) for ii, ind in enumerate(ind_r)]
+            cpDl = np.cumsum([0] + [pDl[ind] for ind in ind_l])
+            order_l[tcut] = [(ind, Dl[ind], slice(cpDl[ii], cpDl[ii + 1])) for ii, ind in enumerate(ind_l)]
+            cpDr = np.cumsum([0] + [pDr[ind] for ind in ind_r])
+            order_r[tcut] = [(ind, Dr[ind], slice(cpDr[ii], cpDr[ii + 1])) for ii, ind in enumerate(ind_r)]
 
             Atemp = np.zeros((cpDl[-1], cpDr[-1]), dtype=dtype)
 
@@ -515,17 +515,17 @@ def slice_S(S, tol=0., Dblock=np.inf, Dtotal=np.inf, decrease=True):
     # truncate to given relative tolerance
     if (tol > 0) and (maxS > 0):
         for ind in Dmax:
-            Dmax[ind] = min(Dmax[ind], np.sum(S[ind] >= maxS*tol))
+            Dmax[ind] = min(Dmax[ind], np.sum(S[ind] >= maxS * tol))
     # truncate to total bond dimension
     if sum(Dmax[ind] for ind in Dmax) > Dtotal:
         if decrease:
             s_all = np.hstack([S[ind][:Dmax[ind]] for ind in Dmax])
         else:
             s_all = np.hstack([S[ind][-Dmax[ind]:] for ind in Dmax])
-        order = s_all.argpartition(-Dtotal-1)[-Dtotal:]
+        order = s_all.argpartition(- Dtotal - 1)[-Dtotal:]
         low = 0
         for ind in Dmax:
-            high = low+Dmax[ind]
+            high = low + Dmax[ind]
             Dmax[ind] = np.sum((low <= order) & (order < high))
             low = high
     # give slices for truncation
@@ -554,7 +554,7 @@ def unmerge_blocks_left(U, order_l, Dcut):
     Dc = [-1]
     for tcut in Dcut:  # fill blocks
         for tl, Dl, slice_l in order_l[tcut]:
-            Uout[tl] = np.reshape(U[tcut][slice_l, Dcut[tcut]], Dl+Dc)
+            Uout[tl] = np.reshape(U[tcut][slice_l, Dcut[tcut]], Dl + Dc)
     return Uout
 
 
@@ -564,7 +564,7 @@ def unmerge_blocks_right(V, order_r, Dcut):
     Dc = [-1]
     for tcut in Dcut:  # fill blocks
         for tr, Dr, slice_r in order_r[tcut]:
-            Vout[tr] = np.reshape(V[tcut][Dcut[tcut], slice_r], Dc+Dr)
+            Vout[tr] = np.reshape(V[tcut][Dcut[tcut], slice_r], Dc + Dr)
     return Vout
 
 
@@ -572,8 +572,8 @@ def unmerge_blocks(C, order_l, order_r):
     Cout = {}
     for tcut in C:
         for (tl, Dl, slice_l), (tr, Dr, slice_r) in product(order_l[tcut], order_r[tcut]):
-            ind = tl+tr
-            Cout[ind] = C[tcut][slice_l, slice_r].reshape(Dl+Dr)
+            ind = tl + tr
+            Cout[ind] = C[tcut][slice_l, slice_r].reshape(Dl + Dr)
     return Cout
 
 ##############
@@ -587,7 +587,7 @@ def block(Ad, to_execute):
         if level > 0:
             oi = []
             for ii, DD in zip(li, lD):
-                oi.append(to_block(ii, DD, level-1))
+                oi.append(to_block(ii, DD, level - 1))
             return oi
         else:
             key = tuple(li)
@@ -607,11 +607,11 @@ def block(Ad, to_execute):
         all_ind = np.array(list(product(*legs_ind)), dtype=int)
         all_D = np.array(list(product(*legs_D)), dtype=int)
 
-        shape_ind = [len(x) for x in legs_D]+[-1]
+        shape_ind = [len(x) for x in legs_D] + [-1]
         all_ind = list(np.reshape(all_ind, shape_ind))
         all_D = list(np.reshape(all_D, shape_ind))
 
-        temp = to_block(all_ind, all_D, len(shape_ind)-1)
+        temp = to_block(all_ind, all_D, len(shape_ind) - 1)
         A[ind] = np.block(temp)
 
     return A
