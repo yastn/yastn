@@ -4,7 +4,6 @@ import numpy as np
 import yamps.mps as mps
 import yamps.ops.ops_full as ops_full
 import yamps.ops.ops_Z2 as ops_Z2
-import dmrg
 
 
 def run_dmrg_1_site(psi, H, sweeps=10):
@@ -13,7 +12,7 @@ def run_dmrg_1_site(psi, H, sweeps=10):
     """
     env = None
     for _ in range(sweeps):
-        env = dmrg.dmrg_sweep_1site(psi, H, env=env, dtype='float64')
+        env = mps.dmrg.dmrg_sweep_1site(psi, H, env=env, dtype='float64')
     return env.measure()
 
 
