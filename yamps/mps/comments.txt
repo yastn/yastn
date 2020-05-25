@@ -1,0 +1,8 @@
+# List of changes:
+# -- change 'direction' to 'towards' (a given site); this would allow easier extension to TTN
+# -- similarly, use only indices of existing sites [or None in defining key for bond outside leaf]
+# -- introduce class Geometry which deals with reltive positions of tensor sites
+# -- remove settings/backend from here (class is agnostic to specific tensor and settings; it should only implement "structure" of mps)
+# -- to the extend possible, do the above also with tensor [leaving tensor would make sense only if it is unique,
+#     this might happen later---when there is a tensor with any number of symmetries (including 0)]
+# -- divide envs into envs2 for <mps|mps> and  envs3 for <mps|mpo|mps>
