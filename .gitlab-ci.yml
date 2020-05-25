@@ -19,13 +19,16 @@ cache:
     - venv/
 
 before_script:
-  - python -V  # Print out python version for debugging
-  - pip install virtualenv
-  - virtualenv venv
-  - source venv/bin/activate
+  - python --version
+  - pip install -r requirements.txt
 
-test:
+stages:
+  - Static Analysis
+  - Test
+
+pylint:
+  stage: Static Analysis
   script:
-    - python setup.py test
-    - pip install tox flake8  # you can also use tox
-    - tox -e py36,flake8
+  - pylint -d C0301 yamps/mps/*.py
+  - pylint -d C0301 yamps/ops/*.py
+  - pylint -d C0301 yamps/tensor/*.py
