@@ -1,4 +1,4 @@
-# yamps
+# Yet another matrix product state
 
 Documentation
 -------------
