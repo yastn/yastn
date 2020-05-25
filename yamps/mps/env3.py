@@ -172,8 +172,8 @@ class Env3:
         OO = ncon([self.op.A[n], self.op.A[nn]], ((-1, -2, -4, 1), (1, -3, -5, -6)))
 
         if self.nr_phys == 1:
-            return ncon([self.F[(nl, n)], A, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, 5), (2, -2, -3, 3, 4, 6), (5, 6, -4)), (0, 0, 0, 0))
+            return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, 5), (2, -2, -3, 3, 4, 6), (5, 6, -4)), (0, 0, 0, 0))
         elif self.nr_phys == 2 and not self.on_aux:
-            return ncon([self.F[(nl, n)], A, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, -4, -5, 5), (2, -2, -3, 3, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
+            return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, -4, -5, 5), (2, -2, -3, 3, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
         else:  # self.nr_phys == 2 and self.on_aux:
-            return ncon([self.F[(nl, n)], A, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, -2, -3, 3, 4, 5), (2, -4, -5, 3, 4, 6), (5, 6, -4)), (0, 0, 0, 0))
+            return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, -2, -3, 3, 4, 5), (2, -4, -5, 3, 4, 6), (5, 6, -4)), (0, 0, 0, 0))

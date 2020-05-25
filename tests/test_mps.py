@@ -1,4 +1,3 @@
-import pytest
 import numpy as np
 
 import yamps.mps as mps
@@ -146,7 +145,6 @@ def test_Z2_env2_update():
     """
     Initialize random mps' and check if overlaps are calculated consistently.
     """
-    N = 13
     psi1 = ops_Z2.mps_random(N=16, Dmax=25, total_parity=0)
     psi2 = ops_Z2.mps_random(N=16, Dmax=25, total_parity=0, dtype='complex128')
 
@@ -165,7 +163,6 @@ def test_Z2_env3_update():
     """
     Initialize random mps' and check if overlaps are calculated consistently.
     """
-    N = 13
     psi1 = ops_Z2.mps_random(N=16, Dmax=25, total_parity=0)
     psi2 = ops_Z2.mps_random(N=16, Dmax=25, total_parity=0, dtype='complex128')
     op = ops_Z2.mpo_random(N=16, Dmax=5, total_parity=0)

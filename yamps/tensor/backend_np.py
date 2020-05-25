@@ -1,7 +1,7 @@
 import numpy as np
 import scipy as sp
 import fbpca as pca
-from itertools import groupby
+# from itertools import groupby
 from itertools import product
 from functools import reduce
 from operator import mul
@@ -505,9 +505,11 @@ def slice_none(d):
 
 
 def slice_S(S, tol=0., Dblock=np.inf, Dtotal=np.inf, decrease=True):
-    """gives slices for truncation of 1d matrices
-    decrease =True assumes that S[][0]  is largest -- like in svd
-    decrease=False assumes that S[][-1] is largest -- like in eigh"""
+    r"""Gives slices for truncation of 1d matrices.
+
+    decrease = True assumes that S[][0] is largest -- like in svd
+    decrease = False assumes that S[][-1] is largest -- like in eigh
+    """
     maxS, Dmax = 0., {}
     for ind in S:
         maxS = max(maxS, S[ind][0], S[ind][-1])

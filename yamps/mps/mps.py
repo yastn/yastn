@@ -49,7 +49,7 @@ class Mps:
         -------
         Copied mps : mps
         """
-        phi = mps(g=self.g, nr_phys=self.nr_phys)
+        phi = Mps(g=self.g, nr_phys=self.nr_phys)
         for ind in self.A:
             phi.A[ind] = self.A[ind].copy()
         phi.pC = self.pC

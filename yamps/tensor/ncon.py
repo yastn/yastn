@@ -1,10 +1,14 @@
+###########################################
+#      Contraction of a set of tensors    #
+###########################################
+
 def ncon(ts, inds, conjs=None):
     """Execute series of tensor contractions"""
     if len(ts) != len(inds):
-        raise Exception('Wrong number of tensors')      
+        raise Exception('Wrong number of tensors')
     for ii, ind in enumerate(inds):
         if ts[ii].get_ndim() != len(ind):
-            raise Exception('Wrong number of legs in tensot %02d'%ii)      
+            raise Exception('Wrong number of legs in tensot %02d' % ii)
 
     ts = {ind: val for ind, val in enumerate(ts)}
     cutoff = 512
@@ -29,7 +33,8 @@ def ncon(ts, inds, conjs=None):
             (t1, t2) = (ten2, ten1)
             ax1.append(leg2)
             ax2.append(leg1)
-        if (edges[-1][0] == cutoff) or min(edges[-1][2], edges[-2][2]) != t1 or max(edges[-1][2], edges[-2][2]) != t2: #execute contraction
+        if (edges[-1][0] == cutoff) or min(edges[-1][2], edges[-2][2]) != t1 or max(edges[-1][2], edges[-2][2]) != t2:  
+            # execute contraction
             if t1 == t2:  # trace
                 ts[t1] = ts[t1].trace(axes=(ax1, ax2))
                 ax12 = ax1 + ax2

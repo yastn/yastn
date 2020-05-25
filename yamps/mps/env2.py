@@ -61,13 +61,21 @@ class Env2:
         nnext, leg, nprev = self.g.from_site(n, towards)
 
         if self.nr_phys == 1 and leg == 1:
-            self.F[(n, nnext)] = ncon([self.bra.A[n], self.F[(nprev, n)], self.ket.A[n]], ((2, 3, -1), (2, 1), (1, 3, -2)), (1, 0, 0))
+            self.F[(n, nnext)] = ncon([self.bra.A[n], self.F[(nprev, n)], self.ket.A[n]],
+                                      ((2, 3, -1), (2, 1), (1, 3, -2)),
+                                      (1, 0, 0))
         elif self.nr_phys == 1 and leg == 0:
-            self.F[(n, nnext)] = ncon([self.ket.A[n], self.F[(nprev, n)], self.bra.A[n]], ((-1, 2, 1), (1, 3), (-2, 2, 3)), (0, 0, 1))
+            self.F[(n, nnext)] = ncon([self.ket.A[n], self.F[(nprev, n)], self.bra.A[n]],
+                                      ((-1, 2, 1), (1, 3), (-2, 2, 3)),
+                                      (0, 0, 1))
         elif self.nr_phys == 2 and leg == 1:
-            self.F[(n, nnext)] = ncon([self.bra.A[n], self.F[(nprev, n)], self.ket.A[n]], ((2, 3, 4, -1), (2, 1), (1, 3, 4, -2)), (1, 0, 0))
+            self.F[(n, nnext)] = ncon([self.bra.A[n], self.F[(nprev, n)], self.ket.A[n]],
+                                      ((2, 3, 4, -1), (2, 1), (1, 3, 4, -2)),
+                                      (1, 0, 0))
         else:  # self.nr_phys == 2 and leg == 0:
-            self.F[(n, nnext)] = ncon([self.ket.A[n], self.F[(nprev, n)], self.bra.A[n]], ((-1, 2, 3, 1), (1, 4), (-2, 2, 3, 4)), (0, 0, 1))
+            self.F[(n, nnext)] = ncon([self.ket.A[n], self.F[(nprev, n)], self.bra.A[n]],
+                                      ((-1, 2, 3, 1), (1, 4), (-2, 2, 3, 4)),
+                                      (0, 0, 1))
 
     def setup_to_last(self):
         r"""

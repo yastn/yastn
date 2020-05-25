@@ -121,6 +121,10 @@ def block(td, common_legs, ndim):
     return c
 
 
+class TensorShapeError(Exception):
+    pass
+
+
 class Tensor:
     """
     =========================================
@@ -147,19 +151,19 @@ class Tensor:
 
     def set_block(self, Ds=None, val='zeros'):
         """ Set values of the tensor"""
-        if val is 'zeros':
+        if val == 'zeros':
             if Ds is None:
                 Ds = self.backend.get_shape(self.A[0])
             elif self.isdiag:
                 Ds = (Ds, Ds)
             self.A[0] = self.backend.zeros(Ds, self.isdiag, self.dtype)
-        elif val is 'rand':
+        elif val == 'rand':
             if Ds is None:
                 Ds = self.backend.get_shape(self.A[0])
             elif self.isdiag:
                 Ds = (Ds, Ds)
             self.A[0] = self.backend.rand(Ds, self.isdiag, self.dtype)
-        elif val is 'ones':
+        elif val == 'ones':
             if Ds is None:
                 Ds = self.backend.get_shape(self.A[0])
             elif self.isdiag:
@@ -171,7 +175,7 @@ class Tensor:
     #     New tensor of the same class
 
     def ones(self, D=[], dtype='float64'):
-        return ones(settings=self.settings, D=D, dtype=Dtype)
+        return ones(settings=self.settings, D=D, dtype=dtype)
 
     def rand(self, D=[], isdiag=False, dtype='float64'):
         return rand(settings=self.settings, D=D, isdiag=isdiag, dtype=dtype)

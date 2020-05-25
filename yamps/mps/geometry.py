@@ -23,7 +23,7 @@ class Geometry:
         r"""
         Next site, leg connecting to that site, and other neighbouring sites.
 
-        If n == towards == leaf, than return direction going outside of the network. 
+        If n == towards == leaf, than return direction going outside of the network.
 
         Parameters
         ----------
