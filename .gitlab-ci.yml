@@ -20,15 +20,12 @@ cache:
 
 before_script:
   - python --version
-  - pip install -r requirements.txt
+  - pip install .
 
 stages:
-  - Static Analysis
   - Test
 
-pylint:
-  stage: Static Analysis
+pytest:
+  stage: Test
   script:
-  - pylint -d C0301 yamps/mps/*.py
-  - pylint -d C0301 yamps/ops/*.py
-  - pylint -d C0301 yamps/tensor/*.py
+  - cd tests/;pytest -v

@@ -1,7 +1,7 @@
 
 numpy>=1.16
 scipy>=1.3.0
-pylint==2.4.4
+pytest==5.3.5
 
 # for docs
 sphinx
