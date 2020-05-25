@@ -30,24 +30,10 @@ test:
     - pip install tox flake8  # you can also use tox
     - tox -e py36,flake8
 
-run:
+testbuild :
+  stage: build
   script:
-    - python setup.py bdist_wheel
-    # an alternative approach is to install and run:
-    # - pip install dist/*
-    # run the command here
-    - pytest
-  artifacts:
-    paths:
-      - dist/*.whl
-
-pages:
-  script:
-    - pip install sphinx sphinx-rtd-theme
-    - cd doc ; make html
-    - mv build/html/ ../public/
-  artifacts:
-    paths:
-      - public
-  only:
-    - master
+    - conda create --name test_env --file requirements.txt
+    - source activate test_env
+    - python setup.py install
+    - cd tests && pytest .
