@@ -55,5 +55,5 @@ def test_Z2_dmrg():
 
 if __name__ == "__main__":
     pass
-    # test_full_dmrg()
+    test_full_dmrg()
     test_Z2_dmrg()

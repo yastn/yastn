@@ -4,6 +4,14 @@ yamps.tensor package
 Submodules
 ----------
 
+yamps.tensor.aux module
+-----------------------
+
+.. automodule:: yamps.tensor.aux
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 yamps.tensor.backend\_np module
 -------------------------------
 
@@ -28,18 +36,10 @@ yamps.tensor.ncon module
    :undoc-members:
    :show-inheritance:
 
-yamps.tensor.tensor\_abelian module
------------------------------------
+yamps.tensor.tensor\_abelians module
+------------------------------------
 
-.. automodule:: yamps.tensor.tensor_abelian
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-yamps.tensor.tensor\_full module
---------------------------------
-
-.. automodule:: yamps.tensor.tensor_full
+.. automodule:: yamps.tensor.tensor_abelians
    :members:
    :undoc-members:
    :show-inheritance:
