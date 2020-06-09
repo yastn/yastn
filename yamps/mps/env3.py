@@ -39,15 +39,15 @@ class Env3:
         ll = self.g.last
         tn = self.ket.A[ff]
 
-        Ds = tn.match_legs(tensors=[self.bra.A[ff], self.op.A[ff], self.ket.A[ff]],
-                           legs=[self.bra.left[0], self.op.left[0], self.ket.left[0]],
-                           conjs=[1, 0, 0])
-        self.F[(None, ff)] = tn.ones(**Ds)  # left boundary
+        # left boundary
+        self.F[(None, ff)] = tn.match_legs(tensors=[self.bra.A[ff], self.op.A[ff], self.ket.A[ff]],
+                                           legs=[self.bra.left[0], self.op.left[0], self.ket.left[0]],
+                                           conjs=[1, 0, 0], val='ones')
 
-        Ds = tn.match_legs(tensors=[self.ket.A[ll], self.op.A[ll], self.bra.A[ll]],
-                           legs=[self.ket.right[0], self.op.right[0], self.bra.right[0]],
-                           conjs=[0, 0, 1])
-        self.F[(None, ll)] = tn.ones(**Ds)  # left boundary
+        # right boundary
+        self.F[(None, ll)] = tn.match_legs(tensors=[self.ket.A[ll], self.op.A[ll], self.bra.A[ll]],
+                                           legs=[self.ket.right[0], self.op.right[0], self.bra.right[0]],
+                                           conjs=[0, 0, 1], val='ones')
 
     def update(self, n, towards):
         r"""

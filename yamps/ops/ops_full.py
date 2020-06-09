@@ -1,6 +1,6 @@
 import yamps.mps as mps
 import yamps.ops.settings_full as settings
-from yamps.ops.settings_full import tensor
+import yamps.tensor as tensor
 import numpy as np
 
 
@@ -14,7 +14,7 @@ def mps_random(N=2, Dmax=2, d=2, dtype='float64'):
     for n in range(N):
         Dr = Dmax if n < N - 1 else 1
         Dl = Dmax if n > 0 else 1
-        psi.A[n] = tensor.rand(settings=settings, D=[Dl, d[n], Dr], dtype=dtype)
+        psi.A[n] = tensor.rand(settings=settings, s=(1, 1, -1), D=[Dl, d[n], Dr])
     return psi
 
 
@@ -33,7 +33,7 @@ def mpo_random(N=2, Dmax=2, d_out=None, d=2, dtype='float64'):
     for n in range(N):
         Dr = Dmax if n < N - 1 else 1
         Dl = Dmax if n > 0 else 1
-        psi.A[n] = tensor.rand(settings=settings, D=[Dl, d_out[n], d[n], Dr], dtype=dtype)
+        psi.A[n] = tensor.rand(settings=settings, s=(1, 1, -1, -1), D=[Dl, d_out[n], d[n], Dr])
     return psi
 
 
@@ -46,7 +46,7 @@ def mpo_XX_model(N, t, mu):
 
     H = mps.Mps(N, nr_phys=2)
     for n in H.g.sweep(to='last'):  # empty tensors
-        H.A[n] = tensor.Tensor(settings=settings)
+        H.A[n] = tensor.Tensor(settings=settings, s=(1, 1, -1, -1))
         if n == H.g.first:
             tmp = np.block([[mu * nn, t * cp, t * c, ee]])
             tmp = tmp.reshape((1, 2, 4, 2))

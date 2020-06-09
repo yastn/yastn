@@ -86,14 +86,14 @@ def ones(D, isdiag, dtype='float64'):
 def rand(D, isdiag, dtype):
     if dtype == 'float64':
         if not isdiag:
-            return 2 * np.random.rand(*D) - 1
+            return 2 * np.random.random_sample(D) - 1
         else:
-            return np.diag(2 * np.random.rand(D[0]) - 1)
+            return np.diag(2 * np.random.random_sample(D[0]) - 1)
     elif dtype == 'complex128':
         if not isdiag:
-            return 2 * np.random.rand(*D) - 1 + 1j * (2 * np.random.rand(*D) - 1)
+            return 2 * np.random.random_sample(D) - 1 + 1j * (2 * np.random.random_sample(D) - 1)
         else:
-            return np.diag(2 * np.random.rand(D[0]) - 1 + 1j * (2 * np.random.rand(D[0]) - 1))
+            return np.diag(2 * np.random.random_sample(D[0]) - 1 + 1j * (2 * np.random.random_sample(D[0]) - 1))
 
 
 def to_tensor(val, isdiag=False, dtype='float64', Ds=None):
@@ -248,19 +248,14 @@ def eigh(A):
     return S, U
 
 
-def norm(A, ord, round2=False):
-    if ord == 'fro':
-        f = lambda x: np.linalg.norm(x)
-        block_norm = []
-    elif ord == 'inf':
-        f = lambda x: np.abs(x).max()
-        block_norm = [0.]
+_norms = {'fro': np.linalg.norm, 'inf': lambda x: np.abs(x).max()}
+
+
+def norm(A, ord):
+    block_norm = [0.]
     for x in A.values():
-        block_norm.append(f(x))
-    if not round2:
-        return f(block_norm)
-    else:
-        return find_round2(f(block_norm))
+        block_norm.append(_norms[ord](x))
+    return _norms[ord](block_norm)
 
 
 def entropy(A, alpha=1):
@@ -294,21 +289,16 @@ def entropy(A, alpha=1):
 
 
 def norm_diff(A, B, ord):
-    if ord == 'fro':
-        f = lambda x: np.linalg.norm(x)
-        block_norm = []
-    elif ord == 'inf':
-        f = lambda x: np.abs(x).max()
-        block_norm = [0.]
+    block_norm = [0.]
     for ind in A:
         if ind in B:
-            block_norm.append(f(A[ind] - B[ind]))
+            block_norm.append(_norms[ord](A[ind] - B[ind]))
         else:
-            block_norm.append(f(A[ind]))
+            block_norm.append(_norms[ord](A[ind]))
     for ind in B:
         if ind not in B:
-            block_norm.append(f(B[ind]))
-    return f(block_norm)
+            block_norm.append(_norms[ord](B[ind]))
+    return _norms[ord](block_norm)
 
 
 def add(aA, bA, to_execute, x=1):

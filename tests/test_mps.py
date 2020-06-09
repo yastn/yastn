@@ -12,8 +12,7 @@ def is_left_canonical(psi):
     cl = (0, 1) if psi.nr_phys == 1 else (0, 1, 2)
     for n in range(psi.N):
         x = psi.A[n].dot(psi.A[n], axes=(cl, cl), conj=(1, 0))
-        ss = x.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True)
-        x0 = x.eye(**ss)
+        x0 = x.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True)
         assert((x0 - x).norm() < 1e-12)
 
 
@@ -24,8 +23,7 @@ def is_right_canonical(psi):
     cl = (1, 2) if psi.nr_phys == 1 else (1, 2, 3)
     for n in range(psi.N):
         x = psi.A[n].dot(psi.A[n], axes=(cl, cl), conj=(0, 1))
-        ss = x.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True)
-        x0 = x.eye(**ss)
+        x0 = x.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True)
         assert((x0 - x).norm() < 1e-12)
 
 

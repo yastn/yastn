@@ -1,4 +1,4 @@
 import yamps.tensor.backend_np as back
 dot_merge = False
-sym = []
+sym = ['U1']
 nsym = len(sym)

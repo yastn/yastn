@@ -1,4 +1,4 @@
-import yamps.tensor.backend_np as backend
-import yamps.tensor.tensor_abelian as tensor
+import yamps.tensor.backend_np as back
 dot_merge = False
-symmetry = 'Z2'
+sym = ['Z2']
+nsym = len(sym)

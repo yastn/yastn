@@ -1,6 +1,6 @@
 import yamps.mps as mps
 import yamps.ops.settings_Z2 as settings
-from yamps.ops.settings_Z2 import tensor
+import yamps.tensor as tensor
 import numpy as np
 
 
@@ -13,7 +13,7 @@ def mps_random(N=2, Dmax=2, total_parity=0, dtype='float64'):
         Dr = (Dmax, Dmax) if n < N - 1 else (1,)
         tl = (0, 1) if n > 0 else (0,)
         Dl = (Dmax, Dmax) if n > 0 else (1,)
-        psi.A[n] = tensor.rand(settings=settings, s=(1, 1, -1), t=[tl, tc, tr], D=[Dl, Dc, Dr], dtype=dtype)
+        psi.A[n] = tensor.rand(settings=settings, s=(1, 1, -1), t=[tl, tc, tr], D=[Dl, Dc, Dr])
     return psi
 
 
@@ -30,7 +30,7 @@ def mpo_random(N=2, Dmax=2, total_parity=0, t_out=None, t_in=(0, 1), dtype='floa
         Dr = (D0, D1) if n < N - 1 else (1,)
         tl = (0, 1) if n > 0 else (0,)
         Dl = (D0, D1) if n > 0 else (1,)
-        psi.A[n] = tensor.rand(settings=settings, s=(1, 1, -1, -1), t=[tl, t_out, t_in, tr], D=[Dl, Dout, Din, Dr], dtype=dtype)
+        psi.A[n] = tensor.rand(settings=settings, s=(1, 1, -1, -1), t=[tl, t_out, t_in, tr], D=[Dl, Dout, Din, Dr])
     return psi
 
 

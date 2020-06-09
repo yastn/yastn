@@ -14,7 +14,7 @@ Matrix Product States implementation which employs tensors with abelian symmetri
 
    yamps.mps
    yamps.ops
-   tamps.tensors
+   yamps.tensor
 
 
 Indices and tables
