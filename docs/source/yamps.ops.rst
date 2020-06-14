@@ -20,10 +20,10 @@ yamps.ops.ops\_full module
    :undoc-members:
    :show-inheritance:
 
-yamps.ops.settings0 module
---------------------------
+yamps.ops.settings\_full module
+-------------------------------
 
-.. automodule:: yamps.ops.settings0
+.. automodule:: yamps.ops.settings_full
    :members:
    :undoc-members:
    :show-inheritance:

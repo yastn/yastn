@@ -10,19 +10,9 @@ from operator import mul
 def random_seed(seed):
     np.random.seed(seed)
 
-
-def find_round2(x):
-    """get significand"""
-    n = np.abs(np.float64(x)).view(np.int64)
-    return 2.**((n >> 52) - 1023)
-
 ##############
 # single element calculations
 ##############
-
-
-def get_str(x):
-    return str(x)
 
 
 def copy(x):
@@ -35,10 +25,6 @@ def to_numpy(nparray):
 
 def first_el(x):
     return x.flat[0]
-
-
-def get_dtype(x):
-    return x.dtype
 
 
 def get_shape(x):
@@ -61,56 +47,25 @@ def diag_get(x):
 ##############
 
 
-def zeros(D, isdiag, dtype='float64'):
-    if (dtype == 'float64') and (not isdiag):
-        return np.zeros(D, dtype=np.float64)
-    elif (dtype == 'float64') and (isdiag):
-        return np.diag(np.zeros(D[0], dtype=np.float64))
-    elif (dtype == 'complex128') and (not isdiag):
-        return np.zeros(D, dtype=np.complex128)
-    elif (dtype == 'complex128') and (isdiag):
-        return np.diag(np.zeros(D[0], dtype=np.complex128))
+def zeros(D):
+    return np.zeros(D, dtype=np.float64)
 
 
-def ones(D, isdiag, dtype='float64'):
-    if (dtype == 'float64') and (not isdiag):
-        return np.ones(D, dtype=np.float64)
-    elif (dtype == 'float64') and (isdiag):
-        return np.diag(np.ones(D[0], dtype=np.float64))
-    elif (dtype == 'complex128') and (not isdiag):
-        return np.ones(D, dtype=np.complex128)
-    elif (dtype == 'complex128') and (isdiag):
-        return np.diag(np.ones(D[0], dtype=np.complex128))
+def ones(D):
+    return np.ones(D, dtype=np.float64)
 
 
-def rand(D, isdiag, dtype):
-    if dtype == 'float64':
-        if not isdiag:
-            return 2 * np.random.random_sample(D) - 1
-        else:
-            return np.diag(2 * np.random.random_sample(D[0]) - 1)
-    elif dtype == 'complex128':
-        if not isdiag:
-            return 2 * np.random.random_sample(D) - 1 + 1j * (2 * np.random.random_sample(D) - 1)
-        else:
-            return np.diag(2 * np.random.random_sample(D[0]) - 1 + 1j * (2 * np.random.random_sample(D[0]) - 1))
+def randR(D):
+    return 2 * np.random.random_sample(D) - 1
 
 
-def to_tensor(val, isdiag=False, dtype='float64', Ds=None):
-    if (dtype == 'float64') and (not isdiag):
-        if Ds is not None:
-            return np.reshape(np.array(val, dtype=np.float64), Ds)
-        else:
-            return np.array(val, dtype=np.float64)
-    elif (dtype == 'float64') and (isdiag):
-        return np.diag(np.array(val, dtype=np.float64))
-    elif (dtype == 'complex128') and (not isdiag):
-        if Ds is not None:
-            return np.reshape(np.array(val, dtype=np.complex128), Ds)
-        else:
-            return np.array(val, dtype=np.complex128)
-    elif (dtype == 'complex128') and (isdiag):
-        return np.diag(np.array(val, dtype=np.complex128))
+def randC(D):
+    return 2 * np.random.random_sample(D) - 1 + 1j * (2 * np.random.random_sample(D) - 1)
+
+
+def to_tensor(val, Ds=None):
+    return np.array(val) if Ds is None else np.array(val).reshape(Ds)
+
 
 ##############
 # single dict operations
@@ -118,7 +73,7 @@ def to_tensor(val, isdiag=False, dtype='float64', Ds=None):
 
 
 def conj(A):
-    ''' conjugate dict of tensors '''
+    """ conjugate dict of tensors """
     cA = {}
     for ind in A:
         cA[ind] = A[ind].copy()
@@ -126,9 +81,22 @@ def conj(A):
     return cA
 
 
+def trace_axis(A, to_execute, axis):
+    """ sum dict of tensors according to: to_execute =[(ind_in, ind_out), ...]
+        repeating ind_out are added"""
+    cA = {}
+    for old, new in to_execute:
+        Atemp = np.sum(A[old], axis=axis)
+        if new in cA:
+            cA[new] = cA[new] + Atemp
+        else:
+            cA[new] = Atemp
+    return cA
+
+
 def trace(A, to_execute, in1, in2, out):
-    ''' trace dict of tensors using to_execute =[(ind_in, ind_out), ...]
-        adds repeating ind_out's '''
+    """ trace dict of tensors according to: to_execute =[(ind_in, ind_out), ...]
+        repeating ind_out are added"""
     cA = {}
     order = in1 + in2 + out
     for task in to_execute:
@@ -152,47 +120,31 @@ def transpose(A, axes, to_execute):
     return cA
 
 
-def invsqrt(A, isdiag=True):
+def invsqrt(A):
     cA = {}
-    if isdiag:
-        for ind in A:
-            cA[ind] = np.diag(1. / np.sqrt(np.diag(A[ind])))
-    else:
-        for ind in A:
-            cA[ind] = 1. / np.sqrt(A[ind])
+    for ind in A:
+        cA[ind] = 1. / np.sqrt(A[ind])
     return cA
 
 
-def inv(A, isdiag=True):
+def inv(A):
     cA = {}
-    if isdiag:
-        for ind in A:
-            cA[ind] = np.diag(1. / np.diag(A[ind]))
-    else:
-        for ind in A:
-            cA[ind] = 1. / A[ind]
+    for ind in A:
+        cA[ind] = 1. / A[ind]
     return cA
 
 
-def exp(A, step, isdiag=True):
+def exp(A, step):
     cA = {}
-    if isdiag:
-        for ind in A:
-            cA[ind] = np.diag(np.exp(np.diag(A[ind]) * step))
-    else:
-        for ind in A:
-            cA[ind] = np.exp(A[ind] * step)
+    for ind in A:
+        cA[ind] = np.exp(A[ind] * step)
     return cA
 
 
-def sqrt(A, isdiag):
+def sqrt(A):
     cA = {}
-    if isdiag:
-        for ind in A:
-            cA[ind] = np.diag(np.sqrt(np.diag(A[ind])))
-    else:
-        for ind in A:
-            cA[ind] = np.sqrt(A[ind])
+    for ind in A:
+        cA[ind] = np.sqrt(A[ind])
     return cA
 
 
@@ -258,24 +210,20 @@ def norm(A, ord):
     return _norms[ord](block_norm)
 
 
-def entropy(A, alpha=1):
-    block_norm = []
+def entropy(A, alpha=1, tol=1e-12):
+    temp = 0.
     for x in A.values():
-        if x.ndim == 2:
-            x = np.diag(x)
-        block_norm.append(np.linalg.norm(x))
-    no = np.linalg.norm(block_norm)
+        temp += np.sum(np.abs(x) ** 2)
+    no = np.sqrt(temp)
 
     ent = 0.
     Smin = np.inf
     if no > 0:
         for x in A.values():
-            if x.ndim == 2:
-                x = np.diag(x)
             Smin = min(Smin, min(x))
             x = x / no
             if alpha == 1:
-                x = x[x > 1e-12]
+                x = x[x > tol]
                 ent += -2 * sum(x * x * np.log2(x))
             else:
                 ent += x**(2 * alpha)
@@ -302,10 +250,10 @@ def norm_diff(A, B, ord):
 
 
 def add(aA, bA, to_execute, x=1):
-    ''' add two dicts of tensors, according to to_execute = [(ind, meta), ...]
+    """ add two dicts of tensors, according to to_execute = [(ind, meta), ...]
         meta = 0; add both
         meta = 1; only from aA
-        meta = 2; only from bA'''
+        meta = 2; only from bA"""
     cA = {}
     for ind in to_execute:
         if (ind[1] == 0):
@@ -318,10 +266,10 @@ def add(aA, bA, to_execute, x=1):
 
 
 def sub(aA, bA, to_execute):
-    ''' subtract two dicts of tensors, according to to_execute = [(ind, meta), ...]
+    """ subtract two dicts of tensors, according to to_execute = [(ind, meta), ...]
         meta = 0; add both
         meta = 1; only from aA
-        meta = 2; only from bA'''
+        meta = 2; only from bA"""
     cA = {}
     for ind in to_execute:
         if (ind[1] == 0):
@@ -357,16 +305,16 @@ def dot_merged(A, B, conj):
     C = {}
     if conj == (0, 0):
         for ind in A:
-            C[ind] = A[ind]@B[ind]
+            C[ind] = A[ind] @ B[ind]
     elif conj == (0, 1):
         for ind in A:
-            C[ind] = A[ind]@B[ind].conj()
+            C[ind] = A[ind] @ B[ind].conj()
     elif conj == (1, 0):
         for ind in A:
-            C[ind] = A[ind].conj()@B[ind]
+            C[ind] = A[ind].conj() @ B[ind]
     elif conj == (1, 1):
         for ind in A:
-            C[ind] = (A[ind]@B[ind]).conj()
+            C[ind] = (A[ind] @ B[ind]).conj()
     return C
 
 
@@ -389,14 +337,14 @@ def dot(A, B, conj, to_execute, a_out, a_con, b_con, b_out):
         Bndim = len(b_con) + len(b_out)
         DA = np.array([A[ind].shape for ind in A]).reshape(len(A), Andim)  # bond dimensions of A
         DB = np.array([B[ind].shape for ind in B]).reshape(len(B), Bndim)  # bond dimensions of B
-        Dl = DA[:, np.array(a_out, dtype=np.int64)]  # bond dimension on left legs
-        Dlc = DA[:, np.array(a_con, dtype=np.int64)]  # bond dimension on contracted legs
-        Dcr = DB[:, np.array(b_con, dtype=np.int64)]  # bond dimension on contracted legs
-        Dr = DB[:, np.array(b_out, dtype=np.int64)]  # bond dimension on right legs
-        pDl = np.multiply.reduce(Dl, axis=1, dtype=np.int64)  # their product
-        pDlc = np.multiply.reduce(Dlc, axis=1, dtype=np.int64)
-        pDcr = np.multiply.reduce(Dcr, axis=1, dtype=np.int64)
-        pDr = np.multiply.reduce(Dr, axis=1, dtype=np.int64)
+        Dl = DA[:, np.array(a_out, dtype=np.int)]  # bond dimension on left legs
+        Dlc = DA[:, np.array(a_con, dtype=np.int)]  # bond dimension on contracted legs
+        Dcr = DB[:, np.array(b_con, dtype=np.int)]  # bond dimension on contracted legs
+        Dr = DB[:, np.array(b_out, dtype=np.int)]  # bond dimension on right legs
+        pDl = np.multiply.reduce(Dl, axis=1, dtype=np.int)  # their product
+        pDlc = np.multiply.reduce(Dlc, axis=1, dtype=np.int)
+        pDcr = np.multiply.reduce(Dcr, axis=1, dtype=np.int)
+        pDr = np.multiply.reduce(Dr, axis=1, dtype=np.int)
 
         Atemp = {in1: (A[in1].transpose(a_all).reshape(d1, d2), tuple(dl)) for in1, d1, d2, dl in zip(A, pDl, pDlc, Dl)}
         Btemp = {in2: (B[in2].transpose(b_all).reshape(d1, d2), tuple(dr)) for in2, d1, d2, dr in zip(B, pDcr, pDr, Dr)}
@@ -422,13 +370,44 @@ def dot(A, B, conj, to_execute, a_out, a_con, b_con, b_out):
         #     C[out] = C[out].reshape(dl+dr)
     return C
 
+
+def dotdiag_matrix(x, y, dim):
+    return x * y.reshape(dim)
+
+
+def dotdiagC_matrix(x, y, dim):
+    return x * y.reshape(dim).conj()
+
+
+def Cdotdiag_matrix(x, y, dim):
+    return x.conj() * y.reshape(dim)
+
+
+def CdotdiagC_matrix(x, y, dim):
+    return x.conj() * y.reshape(dim).conj()
+
+
+dotdiag_dict = {(0, 0): dotdiag_matrix, (0, 1): dotdiagC_matrix,
+                (1, 0): Cdotdiag_matrix, (1, 1): CdotdiagC_matrix}
+
+
+def dot_diag(A, B, conj, to_execute, a_con, a_ndim):
+    dim = np.ones(a_ndim, int)
+    dim[a_con] = -1
+    f = dotdiag_dict[conj]
+
+    C = {}
+    for in1, in2, out in to_execute:
+        C[out] = f(A[in1], B[in2], dim)
+    return C
+
 ##############
 # block merging, truncations and un-merging
 ##############
 
 
 def merge_blocks(A, to_execute, out_l, out_r):
-    ''' merge blocks depending on the cut '''
+    """ merge blocks depending on the cut """
     out_all = out_l + out_r
     Amerged, order_l, order_r = {}, {}, {}
     for tcut, tts in to_execute:
@@ -533,15 +512,15 @@ def slice_S(S, tol=0., Dblock=np.inf, Dtotal=np.inf, decrease=True):
     return Dcut
 
 
-def unmerge_blocks_diag(S, order_s, Dcut):
+def unmerge_blocks_diag(S, Dcut):
     Sout = {}
-    for tcut, ind in order_s:
-        Sout[ind] = np.diag(S[tcut][Dcut[tcut]])
+    for ind in Dcut:
+        Sout[ind] = S[ind][Dcut[ind]]
     return Sout
 
 
 def unmerge_blocks_left(U, order_l, Dcut):
-    ''' select non-zero sectors; and truncate u, s, v to newD '''
+    """ select non-zero sectors; and truncate u, s, v to newD """
     Uout = {}
     Dc = [-1]
     for tcut in Dcut:  # fill blocks
@@ -551,7 +530,7 @@ def unmerge_blocks_left(U, order_l, Dcut):
 
 
 def unmerge_blocks_right(V, order_r, Dcut):
-    ''' select non-zero sectors; and truncate u, s, v to newD'''
+    """ select non-zero sectors; and truncate u, s, v to newD"""
     Vout = {}
     Dc = [-1]
     for tcut in Dcut:  # fill blocks

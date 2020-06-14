@@ -50,9 +50,11 @@ _tmod = {'U1': _sym_U1,
 #######################################################
 
 
-def rand(settings=None, s=None, n=None, t=(), D=(), isdiag=False, **kwargs):
+def rand(settings=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with random numbers from [-1,1].
+
+    Initialize tensor and call :meth:`Tensor.reset_tensor`.
 
     Parameters
     ----------
@@ -61,25 +63,27 @@ def rand(settings=None, s=None, n=None, t=(), D=(), isdiag=False, **kwargs):
     n : int
         total charge
     t : list
-        a list of charges for each leg
+        a list of charges for each leg, see :meth:`Tensor.reset_tensor` for description.
     D : list
         a list of corresponding bond dimensions
     isdiag : bool
-        makes tensor diagonal; s=(1, -1); n=0; t/D is a list of charges/dimensions of one leg
+        makes tensor diagonal
 
     Returns
     -------
     tensor : tensor
-        a random instance of a tens tensor
+        a random instance of a tensor
     """
     a = Tensor(settings=settings, s=s, n=n, isdiag=isdiag)
     a.reset_tensor(t=t, D=D, val='randR')
     return a
 
 
-def zeros(settings=None, s=None, n=None, t=(), D=(), **kwargs):
+def randC(settings=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     r"""
-    Initialize tensor with all possible blocks filled with zeros.
+    Initialize tensor with all possible blocks filled with complex random numbers from [-1,1] + 1j * [-1,1].
+
+    Initialize tensor and call :meth:`Tensor.reset_tensor`.
 
     Parameters
     ----------
@@ -88,25 +92,56 @@ def zeros(settings=None, s=None, n=None, t=(), D=(), **kwargs):
     n : int
         total charge
     t : list
-        a list of charges for each leg
+        a list of charges for each leg, see :meth:`Tensor.reset_tensor` for description.
     D : list
         a list of corresponding bond dimensions
     isdiag : bool
-        makes tensor diagonal; s=(1, -1); n=0; t/D is a list of charges/dimensions of one leg
+        makes tensor diagonal
 
     Returns
     -------
     tensor : tensor
-        an instance of a tens tensor filled with zeros
+        a random instance of a tensor
+    """
+    a = Tensor(settings=settings, s=s, n=n, isdiag=isdiag)
+    a.reset_tensor(t=t, D=D, val='randC')
+    return a
+
+
+def zeros(settings=None, s=(), n=None, t=(), D=(), **kwargs):
+    r"""
+    Initialize tensor with all possible blocks filled with zeros.
+
+    Initialize tensor and call :meth:`Tensor.reset_tensor`.
+
+    Parameters
+    ----------
+    s : tuple
+        a signature of tensor
+    n : int
+        total charge
+    t : list
+        a list of charges for each leg, see :meth:`Tensor.reset_tensor` for description.
+    D : list
+        a list of corresponding bond dimensions
+    isdiag : bool
+        makes tensor diagonal
+
+    Returns
+    -------
+    tensor : tensor
+        an instance of a tensor filled with zeros
     """
     a = Tensor(settings=settings, s=s, n=n, isdiag=False)
     a.reset_tensor(t=t, D=D, val='zeros')
     return a
 
 
-def ones(settings=None, s=None, n=None, t=(), D=(), **kwargs):
+def ones(settings=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with ones.
+
+    Initialize tensor and call :meth:`Tensor.reset_tensor`.
 
     Parameters
     ----------
@@ -115,33 +150,56 @@ def ones(settings=None, s=None, n=None, t=(), D=(), **kwargs):
     n : int
         total charge
     t : list
-        a list of charges for each leg
+        a list of charges for each leg, see :meth:`Tensor.reset_tensor` for description.
     D : list
         a list of corresponding bond dimensions
 
     Returns
     -------
     tensor : tensor
-        an instance of a tens tensor filled with ones
+        an instance of a tensor filled with ones
     """
-    a = Tensor(settings=settings, s=s, n=n, isdiag=False)
+    a = Tensor(settings=settings, s=s, n=n, isdiag=isdiag)
     a.reset_tensor(t=t, D=D, val='ones')
     return a
 
 
 def eye(settings=None, t=(), D=(), **kwargs):
-    """ Initialize diagonal identity tensor
-        s=(1, -1); n=0; t/D is a list of charges/dimensions of one leg
-        dtype = floa64/complex128 """
-    a = Tensor(settings=settings, s=(1, -1), n=None, isdiag=True)
+    r"""
+    Initialize diagonal tensor with all possible blocks filled with ones.
+
+    Initialize tensor and call :meth:`Tensor.reset_tensor`.
+
+    Parameters
+    ----------
+    t : list
+        a list of charges for each leg, see :meth:`Tensor.reset_tensor` for description.
+    D : list
+        a list of corresponding bond dimensions
+
+    Returns
+    -------
+    tensor : tensor
+        an instance of diagonal tensor filled with ones
+    """
+    a = Tensor(settings=settings, isdiag=True)
     a.reset_tensor(t=t, D=D, val='ones')
     return a
 
 
-def from_dict(settings=None, d={'s': [], 'n': None, 'isdiag': False, 'dtype': 'float64', 'A': {}}):
-    """ Load tensor from dictionary """
+def from_dict(settings=None, d={'s': (), 'n': None, 'isdiag': False, 'A': {}}):
+    """
+    Generate tensor based on information in dictionary d.
+
+    Parameters
+    ----------
+    settings: module
+            configuration with backend, symmetry, etc.
+
+    d : dict
+        information about tensor stored with :meth:`Tensor.to_dict`
+    """
     a = Tensor(settings=settings, s=d['s'], n=d['n'], isdiag=d['isdiag'])
-    # lookup table of possible blocks (combinations of t) numpy.array
     for ind in d['A']:
         a.set_block(ts=ind, val=d['A'][ind])
     return a
@@ -151,23 +209,26 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
     r"""
     Initialize tensor matching legs of existing tensors, so that it can be contracted with those tensors.
 
-    Finds all matching symmetry sectors and their bond dimensions and passes it to reset_tensor.
+    Finds all matching symmetry sectors and their bond dimensions and passes it to :meth:`Tensor.reset_tensor`.
+    Can creat diagonal tensor by matching to one leg of one other tensor.
 
     Parameters
     ----------
     tensors: list
-        list of tensors
+        list of tensors -- they should not be diagonal to properly identify signature.
     legs: list
         and their corresponding legs to match
     conjs: list
         if tensors are entering dot as conjugated
     val: str
-        as in reset_tensor
+        'randR' == 'rand', 'randC', 'ones', 'zeros'
     """
     t, D, s = [], [], []
     if conjs is None:
         conjs = len(tensors) * [0]
     for ii, te, cc in zip(legs, tensors, conjs):
+        if te.isdiag:
+            raise TensorError("One of the tensors is diagonal.")
         lts, lDs = te.get_tD()
         t.append(lts[ii])
         D.append(lDs[ii])
@@ -177,16 +238,16 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
     return a
 
 
-class TensorShapeError(Exception):
+class TensorError(Exception):
     pass
 
 
 class Tensor:
     """
-    Class defining a tensor with abelian symmetries and main actions on such tensor.
+    Class defining a tensor with abelian symmetries and main operations acting on such tensor(s).
     """
 
-    def __init__(self, settings=None, s=None, n=None, isdiag=False, **kwargs):
+    def __init__(self, settings=None, s=(), n=None, isdiag=False, **kwargs):
         r"""
         Initialize empty Tensor with abelian symmetries.
 
@@ -194,23 +255,25 @@ class Tensor:
         ----------
         settings: module
             configuration with backend, symmetry, etc.
-        s : tuple
-            a signature of the tensor
-        n : int
-            total charge for each symmetry sectors
+        s : tuple, int
+            a signature of the tensor; define rank of the tensor; can provide int for ndim == 1
+        n : tuple, int
+            total charge for each symmetry sectors; default is 0; can provide int for nsym == 1
         isdiag : bool
-            makes tensor diagonal; s=(1, -1); n=0
+            makes tensor diagonal: no signature nor charge; keep only diagonal; Defined and stored using ndim=1,
+            but acts like a rank-2 tensor.
         """
         self.conf = settings
         self.isdiag = isdiag
-        self.nsym = self.conf.nsym
+        self.nsym = self.conf.nsym  # number of symmetries
         if not isdiag:
-            self.s = np.empty(0, dtype=np.int) if s is None else np.array(s, dtype=np.int)
+            self.ndim = 1 if isinstance(s, int) else len(s)  # number of legs
+            self.s = np.array(s, dtype=np.int).reshape(self.ndim)
             self.n = np.zeros(self.nsym, dtype=np.int) if n is None else np.array(n, dtype=np.int).reshape(self.nsym)
         else:
-            self.s = np.array([1, -1], dtype=np.int)
+            self.ndim = 1  # number of legs
+            self.s = np.zeros(self.ndim, dtype=np.int)
             self.n = np.zeros(self.nsym, dtype=np.int)
-        self.ndim = len(self.s)  # number of legs
         self.tset = np.empty((0, self.ndim, self.nsym), dtype=np.int)  # list of blocks; 3d nparray of ints
         self.A = {}  # dictionary of blocks
 
@@ -240,44 +303,59 @@ class Tensor:
         t : list
             list of charges on all legs
             If nsym == 0, it is not taken into account.
-            If nsym >= 1
-            t = [(leg1sym1), (leg1sym2), (leg2sym1), (leg2sym2), ... ] or
-            t = [((leg1sym1, leg1sym2), ... ), ((leg2sym1, leg2sym2), ... )]
-            When somewhere there is only one value, tuple can be replaced by int: (sym1leg1) == sym1leg1.
+            Otherwise, two formats are accepted:
+            1) All possible charges for leg and symmetry
+            t = [(leg1sym1, ...), (leg1sym2, ...), (leg2sym1, ...), (leg2sym2, ...), ... ]
+            2) All possible combination of charges for each leg:
+            t = [[(leg1sym1, leg1sym2), ... ], [(leg2sym1, leg2sym2), ... )]
+            They are equivalent for nsym = 1.
+            When somewhere there is only one value and it is unambiguous, tuple can typically be replaced by int, see examples.
 
         D : tuple
             list of bond dimensions on all legs
             If nsym == 0, D = [leg1, leg2, leg3]
-            If nsym >= 1 (it should match t)
-            When there is only one value somewhere tuple can be replaced by int.
+            If nsym >= 1 (it should match the form of t)
+            When somewhere there is only one value tuple can typically be replaced by int.
 
         val : str
             'randR' == 'rand', 'randC', 'ones', 'zeros'
 
         Examples
         --------
-        D=[1, 2, 3] (nsym = 0 ndim = 3)
-        t=[0, (-2, 0), (2, 0)] D=[1, (1, 2), (1, 3)]  (nsym = 1 ndim = 3)
-        t=[0, 0, (-2, 0), (-2, 0), (2, 0), (2, 0)], D=[1, 1, (1, 2), (1, 2), (1, 3), (1, 3)]
-        t=[[(0, 0)], [(-2, -2), (0, 0), (-2, 0), (0, -2)], [(2, 2), (0, 0), (2, 0), (0, 2)]] D=[1, (1, 4, 2, 2), (1, 9, 3, 3)]
-        (last two should give the same structure)
+        D=5 (ndim = 1)
+        D=(1, 2, 3) (nsym = 0 ndim = 3)
+        t=[0, (-2, 0), (2, 0)] D=[1, (1, 2), (1, 3)] (nsym = 1 ndim = 3)
+        t=[0, 0, (-2, 0), (-2, 0), (2, 0), (2, 0)], D=[1, 1, (1, 2), (1, 2), (1, 3), (1, 3)] (nsym = 2 ndim = 3)
+        t=[[(0, 0)], [(-2, -2), (0, 0), (-2, 0), (0, -2)], [(2, 2), (0, 0), (2, 0), (0, 2)]] D=[1, (1, 4, 2, 2), (1, 9, 3, 3)] (nsym = 2 ndim = 3)
+        The last two give the same structure.
         """
-
-        if len(D) != self.ndim and len(D) != self.ndim * self.nsym:
-            raise TensorShapeError("Wrong number of elements in D")
-
-        if len(t) != self.ndim and len(t) != self.ndim * self.nsym:
-            raise TensorShapeError("Wrong number of elements in t")
+        if isinstance(D, int):
+            D = (D,)
+        if isinstance(t, int):
+            t = (t,)
 
         if self.nsym == 0:
+            if len(D) != self.ndim:
+                raise TensorError("Wrong number of elements in D")
             tset = np.zeros((1, self.ndim, self.nsym))
             Dset = np.array(D, dtype=np.int).reshape(1, self.ndim, 1)
         elif self.nsym >= 1:
+            if (self.ndim == 1) and isinstance(D[0], int):
+                D = (D,)
+            if (self.ndim == 1) and isinstance(t[0], int):
+                t = (t,)
             D = list(x if isinstance(x, tuple) or isinstance(x, list) else (x, ) for x in D)
             t = list(x if isinstance(x, tuple) or isinstance(x, list) else (x, ) for x in t)
+
+            if len(D) != self.ndim and len(D) != self.ndim * self.nsym:
+                print(t, D, self.ndim, self.nsym, len(D))
+                raise TensorError("Wrong number of elements in D")
+            if len(t) != self.ndim and len(t) != self.ndim * self.nsym:
+                raise TensorError("Wrong number of elements in t")
             for x, y in zip(D, t):
                 if len(x) != len(y):
-                    raise TensorShapeError("t and D do not match")
+                    raise TensorError("t and D do not match")
+
             all_t = []
             all_D = []
             if len(t) > self.ndim:
@@ -308,41 +386,47 @@ class Tensor:
         for ind, Ds in zip(tset, Dset):
             ind, Ds = tuple(ind.flat), tuple(np.prod(Ds, axis=1))
             if val == 'zeros':
-                self.A[ind] = self.conf.back.zeros(Ds, self.isdiag, 'float64')
+                self.A[ind] = self.conf.back.zeros(Ds)
             elif val == 'rand' or val == 'randR':
-                self.A[ind] = self.conf.back.rand(Ds, self.isdiag, 'float64')
+                self.A[ind] = self.conf.back.randR(Ds)
             elif val == 'randC':
-                self.A[ind] = self.conf.back.rand(Ds, self.isdiag, 'complex128')
+                self.A[ind] = self.conf.back.randC(Ds)
             elif val == 'ones':
-                self.A[ind] = self.conf.back.ones(Ds, self.isdiag, 'float64')
+                self.A[ind] = self.conf.back.ones(Ds)
         self.tset = tset
 
     def set_block(self, ts=(), Ds=None, val='zeros'):
         """
         Add new block to tensor or change the existing one.
 
+        Checks if bond dimensions of the new block are consistent with the existing ones.
+
         Parameters
         ----------
         ts : tuple
-            charges identifing the block.
+            charges identifing the block, t = (sym1leg1, sym2leg1, sym1leg2, sym2leg2, ...)
             If nsym == 0, it is not taken into account.
-            If nsym >= 1, t = (sym1leg1, sym2leg1, sym1leg2, sym2leg2, ...)
 
         Ds : tuple
             bond dimensions of the block. Ds = (leg1, leg2, leg3)
-            If Ds not given, tries to read it from existing block with ts.
+            If Ds not given, tries to read it from existing blocks.
 
-        val : str, nparray
+        val : str, nparray, list
             'randR' == 'rand', 'randC', 'ones', 'zeros'
             for nparray setting Ds is needed.
         """
+        if isinstance(Ds, int):
+            Ds = (Ds,)
+        if isinstance(ts, int):
+            ts = (ts,)
 
         if (len(ts) != self.ndim * self.nsym) or (Ds is not None and len(Ds) != self.ndim):
-            raise TensorShapeError('Number of charges does not match ndim')
+            raise TensorError('Wrong size of input')
+
         ats = np.array(ts, dtype=np.int).reshape(1, self.ndim, self.nsym)
         for ss in range(self.nsym):
             if not (_tmod[self.conf.sym[ss]](ats[0, :, ss] @ self.s - self.n[ss]) == 0):
-                raise TensorShapeError('Charges do not fit the tensor: t @ s != n')
+                raise TensorError('Charges do not fit the tensor: t @ s != n')
 
         lts, lDs = self.get_tD()
         existing_D = []
@@ -360,30 +444,27 @@ class Tensor:
         if isinstance(val, str):
             if Ds is None:
                 if no_existing_D:
-                    raise TensorShapeError('Not all dimensions specify')
+                    raise TensorError('Not all dimensions specify')
                 Ds = existing_D
             else:
                 for D1, D2 in zip(Ds, existing_D):
                     if (D1 != D2) and (D2 != -1):
-                        raise TensorShapeError('Dimension of the new block does not match the existing ones')
+                        raise TensorError('Dimension of the new block does not match the existing ones')
             Ds = tuple(Ds)
             if val == 'zeros':
-                self.A[ts] = self.conf.back.zeros(Ds, self.isdiag, 'float64')
+                self.A[ts] = self.conf.back.zeros(Ds)
             elif val == 'rand' or val == 'randR':
-                self.A[ts] = self.conf.back.rand(Ds, self.isdiag, 'float64')
+                self.A[ts] = self.conf.back.randR(Ds)
             elif val == 'randC':
-                self.A[ts] = self.conf.back.rand(Ds, self.isdiag, 'complex128')
+                self.A[ts] = self.conf.back.randC(Ds)
             elif val == 'ones':
-                self.A[ts] = self.conf.back.ones(Ds, self.isdiag, 'float64')
+                self.A[ts] = self.conf.back.ones(Ds)
         else:
-            val = np.array(val)
-            if Ds is not None:
-                val = np.reshape(val, Ds)
-            self.A[ts] = self.conf.back.to_tensor(val, isdiag=self.isdiag)
+            self.A[ts] = self.conf.back.to_tensor(val, Ds)
             Ds = self.conf.back.get_shape(self.A[ts])
             for D1, D2 in zip(Ds, existing_D):
                 if (D1 != D2) and (D2 != -1):
-                    raise TensorShapeError('Dimension of a new block does not match the existing ones')
+                    raise TensorError('Dimension of a new block does not match the existing ones')
 
     ###########################
     #       new tensors       #
@@ -400,10 +481,9 @@ class Tensor:
         s : tuple
             a signature of tensor
         n : int
-            total charge in all symmetry sectors
+            total charges in all symmetry sectors
         isdiag : bool
-            makes tensor diagonal; s=(1, -1); n=0
-
+            makes tensor diagonal
         Returns
         -------
         tensor : Tensor
@@ -416,6 +496,12 @@ class Tensor:
         Wraper to :meth:`match_legs`.
         """
         return match_legs(**kwargs)
+
+    def from_dict(self, **kwargs):
+        r"""
+        Wraper to :meth:`from_dict`, passing the settings.
+        """
+        return from_dict(settings=self.conf, **kwargs)
 
     def rand(self, **kwargs):
         r"""
@@ -454,10 +540,7 @@ class Tensor:
         d: dict
             dictionary containing all the information needed to recreate the tensor.
         """
-        if self.isdiag:
-            AA = {ind: self.conf.back.to_numpy(self.conf.back.diag_get(self.A[ind])) for ind in self.A}
-        else:
-            AA = {ind: self.conf.back.to_numpy(self.A[ind]) for ind in self.A}
+        AA = {ind: self.conf.back.to_numpy(self.A[ind]) for ind in self.A}
         out = {'A': AA, 's': self.s, 'n': self.n, 'isdiag': self.isdiag}
         return out
 
@@ -553,7 +636,7 @@ class Tensor:
 
     def to_numpy(self):
         """
-        Create full (and complex) nparray corresponding to the tensor.
+        Create full nparray corresponding to the tensor.
 
         Returns
         -------
@@ -561,7 +644,7 @@ class Tensor:
         """
         lts, lDs = self.get_tD()
         Dtotal = [sum(Ds) for Ds in lDs]
-        a = np.zeros(Dtotal, dtype=np.complex)
+        a = np.zeros(Dtotal, dtype=np.float64)
         for ind in self.tset:  # fill in the blocks
             sl = []
             for leg, t in enumerate(ind):
@@ -569,16 +652,21 @@ class Tensor:
                 ii = lts[leg].index(t)
                 Dleg = sum(lDs[leg][:ii])
                 sl.append(slice(Dleg, Dleg + lDs[leg][ii]))
+            temp = self.conf.back.to_numpy(self.A[tuple(ind.flat)])
+            if np.iscomplexobj(temp) and not np.iscomplexobj(a):
+                a = a.astype(complex)
             if sl:
-                a[tuple(sl)] = self.A[tuple(ind.flat)]
+                a[tuple(sl)] = temp
             else:  # should only happen for 0-dim tensor -- i.e.  a scalar
-                a = self.A[tuple(ind.flat)]
+                a = temp
+        if self.isdiag:
+            a = np.diag(a)
         return a
 
     def to_number(self):
         """
         Return first number in the first (unsorted) block.
-        Mainly used for tensor with 1 block of size 1.
+        Mainly used for rank-0 tensor with 1 block of size 1.
 
         Return 0 if there are no blocks.
         """
@@ -642,7 +730,7 @@ class Tensor:
             the result of addition as a new tensor.
         """
         if not all(self.s == other.s) or not all(self.n == other.n):
-            raise TensorShapeError('Tensor signatures do not match')
+            raise TensorError('Tensor signatures do not match')
         to_execute = []
         tset = self.tset.copy()
         new_tset = []
@@ -679,7 +767,7 @@ class Tensor:
             the result of addition as a new tensor.
         """
         if not all(self.s == other.s) or not all(self.n == other.n):
-            raise TensorShapeError('Tensors do not match')
+            raise TensorError('Tensors do not match')
         to_execute = []
         tset = self.tset.copy()
         new_tset = []
@@ -715,7 +803,7 @@ class Tensor:
             the result of subtraction as a new tensor.
         """
         if not all(self.s == other.s) or not all(self.n == other.n):
-            raise TensorShapeError('Tensors do not match')
+            raise TensorError('Tensors do not match')
         to_execute = []
         tset = self.tset.copy()
         new_tset = []
@@ -765,11 +853,37 @@ class Tensor:
         -------
         norm : float64
         """
+        if not all(self.s == other.s):
+            raise TensorError('Signs do not match')
         return self.conf.back.norm_diff(self.A, other.A, ord)
 
     ############################
     #     tensor functions     #
     ############################
+
+    def diag(self, s0=1):
+        """
+        Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa.
+
+        Parameters
+        ----------
+            s0: +1 or -1
+                while transforming diagonal tensor into 2d tensor, one has to select signature (s0, -s0)
+        """
+        if self.isdiag:
+            a = Tensor(settings=self.conf, s=(s0, -s0), n=self.n, isdiag=False)
+            for ind in self.A:
+                nind = ind + ind
+                a.set_block(ts=nind, val=self.conf.back.diag_create(self.A[ind]))
+        elif self.ndim == 2 and sum(np.abs(self.n)) == 0 and sum(self.s) == 0:
+            a = Tensor(settings=self.conf, isdiag=True)
+            for ind in self.tset:
+                if np.all(ind[0, :] == ind[1, :]):
+                    nind = tuple(ind[0, :].flat)
+                    a.set_block(ts=nind, val=self.conf.back.diag_get(self.A[tuple(ind.flat)]))
+        else:
+            raise TensorError('Tensor cannot be changed into a diagonal one')
+        return a
 
     def conj(self):
         """
@@ -799,14 +913,17 @@ class Tensor:
         -------
         tensor : Tensor
         """
-        order = np.array(axes, dtype=np.int)
-        a = Tensor(settings=self.conf, s=self.s[order], n=self.n, isdiag=self.isdiag)
-        a.tset = self.tset[:, order, :]
-        to_execute = []
-        for old, new in zip(self.tset, a.tset):
-            to_execute.append((tuple(old.flat), tuple(new.flat)))
-        a.A = a.conf.back.transpose(self.A, axes, to_execute)
-        return a
+        if not self.isdiag:
+            order = np.array(axes, dtype=np.int)
+            a = Tensor(settings=self.conf, s=self.s[order], n=self.n, isdiag=self.isdiag)
+            a.tset = self.tset[:, order, :]
+            to_execute = []
+            for old, new in zip(self.tset, a.tset):
+                to_execute.append((tuple(old.flat), tuple(new.flat)))
+            a.A = a.conf.back.transpose(self.A, axes, to_execute)
+            return a
+        else:
+            return self.copy()
 
     def swap_gate(self, axes, fermionic=[]):
         """
@@ -841,7 +958,7 @@ class Tensor:
                     if (np.sum(ind[axes[0], fermionic]) % 2 == 1) and (np.sum(ind[axes[1], fermionic]) % 2 == 1):
                         a.A[ind] = -a.A[ind]
             else:
-                raise TensorShapeError('Cannot sweep the same index')
+                raise TensorError('Cannot sweep the same index')
             return a
         else:
             return self
@@ -878,8 +995,7 @@ class Tensor:
         """
         Calculate entropy from tensor.
 
-        If diagonal, calculates entropy treating S^2 as probabilities,
-        where self = U*S*V. It normalizes S^2 if neccesary.
+        If diagonal, calculates entropy treating S^2 as probabilities. Normalizes S^2 if neccesary.
         If not diagonal, calculates svd first to get the diagonal S.
         Use log base 2.
 
@@ -913,7 +1029,7 @@ class Tensor:
                 lr = 1
 
             if not (self.ndim == ll + lr):
-                raise TensorShapeError('Two few indices in axes')
+                raise TensorError('Two few indices in axes')
 
             # divide charges between l and r
             # order formation of blocks
@@ -959,7 +1075,7 @@ class Tensor:
             x: number
         """
         if not all(self.s == other.s):
-            raise TensorShapeError('Signs do not match')
+            raise TensorError('Signs do not match')
 
         a_set = set([tuple(t.flat) for t in self.tset])
         b_set = set([tuple(t.flat) for t in other.tset])
@@ -976,7 +1092,11 @@ class Tensor:
             return 0.
 
     def trace(self, axes=(0, 1)):
-        """ Compute trace of legs specified by axes"""
+        """
+        Compute trace of legs specified by axes.
+
+        For diagonal tensor, return 0-rank tensor
+        """
         try:
             in1 = tuple(axes[0])
         except TypeError:
@@ -985,27 +1105,102 @@ class Tensor:
             in2 = tuple(axes[1])
         except TypeError:
             in2 = (axes[1],)  # indices going v
-        out = tuple(ii for ii in range(self.ndim) if ii not in in1 + in2)
 
-        nout = np.array(out, dtype=np.int)
-        nin1 = np.array(in1, dtype=np.int)
-        nin2 = np.array(in2, dtype=np.int)
+        if len(in1) != len(in2):
+            raise TensorError('Number of axis to trace should be the same')
 
-        if not all(self.s[nin1] == -self.s[nin2]):
-            raise TensorShapeError('Signs do not match')
+        if self.isdiag:
+            if in1 == in2 == ():
+                return self.copy()
+            elif in1 + in2 == (0, 1) or in1 + in2 == (1, 0):
+                a = Tensor(settings=self.conf)
+                to_execute = []
+                for tt in self.tset:
+                    to_execute.append((tuple(tt.flat), ()))  # old, new
+                a.A = a.conf.back.trace_axis(A=self.A, to_execute=to_execute, axis=0)
+            else:
+                raise TensorError('Wrong axes for diagonal tensor')
+        else:
+            out = tuple(ii for ii in range(self.ndim) if ii not in in1 + in2)
+            nout = np.array(out, dtype=np.int)
+            nin1 = np.array(in1, dtype=np.int)
+            nin2 = np.array(in2, dtype=np.int)
+            if not all(self.s[nin1] == -self.s[nin2]):
+                raise TensorError('Signs do not match')
 
-        to_execute = []
-        for tt in self.tset:
-            if np.all(tt[nin1, :] == tt[nin2, :]):
-                to_execute.append((tuple(tt.flat), tuple(tt[nout].flat)))  # old, new
+            to_execute = []
+            for tt in self.tset:
+                if np.all(tt[nin1, :] == tt[nin2, :]):
+                    to_execute.append((tuple(tt.flat), tuple(tt[nout].flat)))  # old, new
+            a = Tensor(settings=self.conf, s=self.s[nout], n=self.n)
+            a.A = a.conf.back.trace(A=self.A, to_execute=to_execute, in1=in1, in2=in2, out=out)
 
-        a = Tensor(settings=self.conf, s=self.s[nout], n=self.n)
-        a.A = a.conf.back.trace(A=self.A, to_execute=to_execute, in1=in1, in2=in2, out=out)
         a.tset = np.array([ind for ind in a.A], dtype=np.int).reshape(len(a.A), a.ndim, a.nsym)
         return a
 
+    def dot_diag(self, other, axis, conj=(0, 0)):
+        r""" Compute dot product of a tensor with a diagonal tensor.
+
+        At least one of the tensors should be diagonal.
+        Legs of a new tensor are ordered in the same way as the non-diagonal one.
+        Produce diagonal tensor if both are diagonal.
+
+        Parameters
+        ----------
+        other: Tensor
+
+        axis: int or tuple
+            leg of non-diagonal tensor to be multiplied by the diagonal one.
+
+        conj: tuple
+            shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
+        """
+        if other.isdiag:
+            a = self
+            b = other
+        elif self.isdiag:
+            a = other
+            b = self
+            conj = conj[::-1]
+        else:
+            raise TensorError('Both tensors are non-diagonal. Use dot() instead')
+
+        na_con = axis if isinstance(axis, int) else axis[0]
+        if a.isdiag:
+            na_con = 0
+
+        conja = (1 - 2 * conj[0])
+
+        t_a_con = a.tset[:, na_con, :]
+        block_a = sorted([(tuple(x.flat), tuple(y.flat)) for x, y in zip(t_a_con, a.tset)], key=lambda x: x[0])
+        block_b = sorted([tuple(x.flat) for x in b.tset])
+        block_a = itertools.groupby(block_a, key=lambda x: x[0])
+        block_b = iter(block_b)
+
+        to_execute = []
+        try:
+            tta, ga = next(block_a)
+            ttb = next(block_b)
+            while True:
+                if tta == ttb:
+                    for ta in ga:
+                        to_execute.append((ta[1], ttb, ta[1]))
+                    tta, ga = next(block_a)
+                    ttb = next(block_b)
+                elif tta < ttb:
+                    tta, ga = next(block_a)
+                elif tta > ttb:
+                    ttb = next(block_b)
+        except StopIteration:
+            pass
+
+        c = Tensor(settings=self.conf, s=conja * a.s, n=conja * a.n, isdiag=a.isdiag)
+        c.A = self.conf.back.dot_diag(a.A, b.A, conj, to_execute, na_con, a.ndim)
+        c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c.ndim, c.nsym)
+        return c
+
     def dot(self, other, axes, conj=(0, 0)):
-        """ Compute dot product of two tensor along specified axes.
+        r""" Compute dot product of two tensor along specified axes.
 
             Outgoing legs ordered such that first come remaining legs of the first tensor in the original order,
             and than those of the second tensor.
@@ -1021,6 +1216,9 @@ class Tensor:
             conj: tuple
                 shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
         """
+        if self.isdiag or other.isdiag:
+            raise TensorError('dot does not support diagonal tensor. Use dot_diag instead.')
+
         try:
             a_con = tuple(axes[0])  # contracted legs
         except TypeError:
@@ -1045,14 +1243,14 @@ class Tensor:
                 if all(self.s[na_con] == other.s[nb_con] * conja * conjb):
                     conjb *= -1
                 else:
-                    raise TensorShapeError('Signs do not match')
+                    raise TensorError('Signs do not match')
             elif self.isdiag:
                 if all(self.s[na_con] == other.s[nb_con] * conja * conjb):
                     conja *= -1
                 else:
-                    raise TensorShapeError('Signs do not match')
+                    raise TensorError('Signs do not match')
             else:
-                raise TensorShapeError('Signs do not match')
+                raise TensorError('Signs do not match')
 
         if self.conf.dot_merge:
             t_a_con = self.tset[:, na_con, :]
@@ -1172,7 +1370,7 @@ class Tensor:
 
     def split_svd(self, axes=(0, 1), tol=0, D_block=_large_int, D_total=_large_int, truncated_svd=False, truncated_nbit=60, truncated_kfac=6):
         r"""
-        Split tensor using svd, tensor = U*S*V. Truncate smallest singular values if neccesary.
+        Split tensor using svd, tensor = U * S * V. Truncate smallest singular values if neccesary.
 
         Truncate using (whichever gives smaller bond dimension) relative tolerance, bond dimension of each block, and total bond dimension from all blocks.
         By default do not truncate. Charge divided between U and V as n_u = n+1//2 and n_v = n//2, respectively.
@@ -1216,9 +1414,9 @@ class Tensor:
             lr = 1
 
         if not (self.ndim == ll + lr):
-            raise TensorShapeError('Two few indices in axes')
+            raise TensorError('Two few indices in axes')
         elif not (sorted(set(out_l + out_r)) == list(range(self.ndim))):
-            raise TensorShapeError('Repeated axis')
+            raise TensorError('Repeated axis')
 
         # divide charges between l and r
         n_l, n_r = np.zeros(self.nsym, dtype=int), np.zeros(self.nsym, dtype=int)
@@ -1248,14 +1446,13 @@ class Tensor:
         Umerged, Smerged, Vmerged = self.conf.back.svd(Amerged, truncated=truncated_svd, Dblock=D_block, nbit=truncated_nbit, kfac=truncated_kfac)
 
         U = Tensor(settings=self.conf, s=np.append(self.s[nout_l], -1), n=n_l)
-        S = Tensor(settings=self.conf, isdiag=True, dtype='float64')
+        S = Tensor(settings=self.conf, isdiag=True)
         V = Tensor(settings=self.conf, s=np.append(1, self.s[nout_r]), n=n_r)
 
         Dcut = self.conf.back.slice_S(Smerged, tol=tol, Dblock=D_block, Dtotal=D_total)
-        order_s = [(tcut, (*tcut, *tcut)) for tcut in Dcut]
 
         U.A = self.conf.back.unmerge_blocks_left(Umerged, order_l, Dcut)
-        S.A = self.conf.back.unmerge_blocks_diag(Smerged, order_s, Dcut)
+        S.A = self.conf.back.unmerge_blocks_diag(Smerged, Dcut)
         V.A = self.conf.back.unmerge_blocks_right(Vmerged, order_r, Dcut)
 
         U.tset = np.array([ind for ind in U.A], dtype=np.int).reshape((len(U.A), U.ndim, U.nsym))
@@ -1265,7 +1462,7 @@ class Tensor:
 
     def split_qr(self, axes):
         r"""
-        Split tensor using qr decomposition, tensor = Q*R.
+        Split tensor using qr decomposition, tensor = Q * R.
 
         Signature of connecting leg is set as -1 in Q nad 1 in R. Charge of R is zero.
 
@@ -1293,9 +1490,9 @@ class Tensor:
         out_all = out_l + out_r  # order for transpose
 
         if not (self.ndim == ll + lr):
-            raise TensorShapeError('Two few indices in axes')
+            raise TensorError('Two few indices in axes')
         elif not (sorted(set(out_all)) == list(range(self.ndim))):
-            raise TensorShapeError('Repeated axis')
+            raise TensorError('Repeated axis')
 
         # divide charges between Q=l and R=r
         n_l, n_r = self.n, np.zeros(self.nsym, dtype=int)
@@ -1335,7 +1532,7 @@ class Tensor:
 
     def split_rq(self, axes):
         r"""
-        Split tensor using rq decomposition, tensor = R*Q.
+        Split tensor using rq decomposition, tensor = R * Q.
 
         Signature of connecting leg is set as -1 in R nad 1 in Q. Charge of R is zero.
 
@@ -1363,9 +1560,9 @@ class Tensor:
         out_all = out_l + out_r  # order for transpose
 
         if not (self.ndim == ll + lr):
-            raise TensorShapeError('Two few indices in axes')
+            raise TensorError('Two few indices in axes')
         elif not (sorted(set(out_all)) == list(range(self.ndim))):
-            raise TensorShapeError('Repeated axis')
+            raise TensorError('Repeated axis')
 
         # divide charges between R=l and Q=r
         n_l, n_r = np.zeros(self.nsym, dtype=int), self.n
@@ -1406,7 +1603,7 @@ class Tensor:
 
     def split_eigh(self, axes=(0, 1), tol=0, D_block=_large_int, D_total=_large_int):
         r"""
-        Split tensor using eig, tensor = U*S*U^dag. Truncate smallest eigenvalues if neccesary.
+        Split tensor using eig, tensor = U * S * U^dag. Truncate smallest eigenvalues if neccesary.
 
         Tensor should be hermitian and has charge 0.
         Truncate using (whichever gives smaller bond dimension) relative tolerance, bond dimension of each block, and total bond dimension from all blocks.
@@ -1447,11 +1644,11 @@ class Tensor:
 
         out_all = out_l + out_r  # order for transpose
         if not (self.ndim == ll + lr):
-            raise TensorShapeError('Two few indices in axes')
+            raise TensorError('Two few indices in axes')
         elif not (sorted(set(out_all)) == list(range(self.ndim))):
-            raise TensorShapeError('Repeated axis')
+            raise TensorError('Repeated axis')
         elif np.any(self.n != 0):
-            raise TensorShapeError('Charge should be zero')
+            raise TensorError('Charge should be zero')
 
         nout_r = np.array(out_r, dtype=np.int)
         nout_l = np.array(out_l, dtype=np.int)
@@ -1475,13 +1672,12 @@ class Tensor:
         Smerged, Umerged = self.conf.back.eigh(Amerged)
 
         # order formation of blocks
-        S = Tensor(settings=self.conf, isdiag=True, dtype='float64')
+        S = Tensor(settings=self.conf, isdiag=True)
         U = Tensor(settings=self.conf, s=np.append(self.s[nout_l], -1))
 
         Dcut = self.conf.back.slice_S(Smerged, tol=tol, Dblock=D_block, Dtotal=D_total, decrease=False)
-        order_s = [(tcut, (*tcut, *tcut)) for tcut in Dcut]
 
-        S.A = self.conf.back.unmerge_blocks_diag(Smerged, order_s, Dcut)
+        S.A = self.conf.back.unmerge_blocks_diag(Smerged, Dcut)
         U.A = self.conf.back.unmerge_blocks_left(Umerged, order_l, Dcut)
         U.tset = np.array([ind for ind in U.A], dtype=np.int).reshape(len(U.A), U.ndim, U.nsym)
         S.tset = np.array([ind for ind in S.A], dtype=np.int).reshape(len(S.A), S.ndim, S.nsym)
@@ -1510,3 +1706,85 @@ class Tensor:
             return True
         else:
             return False
+
+    # def block(td, common_legs, ndim):
+    #     """ Assemble new tensor by blocking a set of tensors.
+
+    #         Parameters
+    #         ----------
+    #         td : dict
+    #             dictionary of tensors {(k,l): tensor at position k,l}.
+    #             Length of tuple should be equall to tensor.ndim - len(common_legs)
+
+    #         common_legs : list
+    #             Legs which are not blocked
+
+    #         ndim : int
+    #             All tensor should have the same rank ndim
+    #     """
+    #     try:
+    #         ls = len(common_legs)
+    #         out_s = tuple(common_legs)
+    #     except TypeError:
+    #         out_s = (common_legs,)  # indices going u
+    #         ls = 1
+
+    #     out_m = tuple(ii for ii in range(ndim) if ii not in out_s)
+    #     out_ma = np.array(out_m, dtype=int)
+    #     li = ndim - ls
+    #     pos = []
+    #     newdtype = 'float64'
+    #     for ind, ten in td.items():
+    #         if li != len(ind):
+    #             raise TensorShapeError('block: wrong tensors rank or placement')
+    #         pos.append(ind)
+    #         if ten.dtype == 'complex128':
+    #             newdtype = 'complex128'
+    #     pos.sort()
+
+    #     # all charges and bond dimensions
+    #     tlist, Dlist = {}, {}
+    #     for ind in pos:
+    #         tt, DD = td[ind].get_tD_list()
+    #         tlist[ind] = tt
+    #         Dlist[ind] = DD
+
+    #     # combinations of charges on legs to merge
+    #     t_out_m = [np.unique(td[ind].tset[:, out_ma], axis=0) for ind in pos]
+    #     t_out_unique = np.unique(np.vstack(t_out_m), axis=0)
+
+    #     # positions including those charges
+    #     t_out_pos = []
+    #     for tt in t_out_unique:
+    #         t_out_pos.append([ind for ind, tm in zip(pos, t_out_m) if not np.any(np.sum(np.abs(tt - tm), axis=1))])
+
+    #     # print(t_out_m)
+    #     # print(t_out_unique)
+    #     # print(t_out_pos)
+
+    #     for tt, pos_tt in zip(t_out_unique, t_out_pos):
+    #         for ind in pos_tt:
+    #             for kk in td[ind].tset:
+    #                 if np.all(kk[out_ma] == tt):
+    #                     pass
+    #         # pos_tt
+
+    #     posa = np.array(pos, dtype=int)
+    #     legs_ind = []  # indices on specific legs
+    #     legs_D = []  # and corresponding keys
+    #     kk = -1
+    #     for ii in range(ndim):
+    #         if ii in out_m:
+    #             kk += 1
+    #             x, y = np.unique(posa[:, kk], return_index=True)
+    #             legs_ind.append(list(x))
+    #             legs_D.append([td[pos[ll]].get_shape()[ii] for ll in y])
+    #         else:
+    #             legs_D.append([td[pos[0]].get_shape()[ii]])
+
+    #     Ad = {key: td[key].A for key in pos}
+    #     to_execute = [(0, pos, legs_ind, legs_D)]
+
+    #     c = Tensor(td[pos[0]].settings, dtype=newdtype)
+    #     c.A = c.backend.block(Ad, to_execute)
+    #     return c
