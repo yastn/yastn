@@ -1,8 +1,8 @@
-import numpy as np
-
 import yamps.mps as mps
 import yamps.ops.ops_full as ops_full
 import yamps.ops.ops_Z2 as ops_Z2
+import numpy as np
+import pytest
 
 
 def is_left_canonical(psi):
@@ -12,8 +12,9 @@ def is_left_canonical(psi):
     cl = (0, 1) if psi.nr_phys == 1 else (0, 1, 2)
     for n in range(psi.N):
         x = psi.A[n].dot(psi.A[n], axes=(cl, cl), conj=(1, 0))
-        x0 = x.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True)
-        assert((x0 - x).norm() < 1e-12)
+        x0 = x.match_legs(tensors=[x], legs=[0], isdiag=True, val='ones')
+        x0 = x0.diag(s0=x.s[0])
+        assert pytest.approx(x0.norm_diff(x)) == 0
 
 
 def is_right_canonical(psi):
@@ -23,8 +24,9 @@ def is_right_canonical(psi):
     cl = (1, 2) if psi.nr_phys == 1 else (1, 2, 3)
     for n in range(psi.N):
         x = psi.A[n].dot(psi.A[n], axes=(cl, cl), conj=(0, 1))
-        x0 = x.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True)
-        assert((x0 - x).norm() < 1e-12)
+        x0 = x.match_legs(tensors=[x], legs=[0], isdiag=True, val='ones')
+        x0 = x0.diag(s0=x.s[0])
+        assert pytest.approx(x0.norm_diff(x)) == 0
 
 
 def canonize(psi):
@@ -170,6 +172,6 @@ def test_Z2_env3_update():
 
 if __name__ == "__main__":
     pass
-    #  test_full_canonize()
-    #  test_Z2_canonize()
-    #  test_full_env2_update()
+    # test_full_canonize()
+    # test_Z2_canonize()
+    # test_full_env2_update()

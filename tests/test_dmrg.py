@@ -1,8 +1,8 @@
-import numpy as np
-
 import yamps.mps as mps
 import yamps.ops.ops_full as ops_full
 import yamps.ops.ops_Z2 as ops_Z2
+import numpy as np
+import pytest
 
 
 def run_dmrg_1_site(psi, H, sweeps=10):
