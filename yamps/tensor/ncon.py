@@ -7,7 +7,7 @@ def ncon(ts, inds, conjs=None):
     if len(ts) != len(inds):
         raise Exception('Wrong number of tensors')
     for ii, ind in enumerate(inds):
-        if ts[ii].get_ndim() != len(ind):
+        if ts[ii].ndim != len(ind):
             raise Exception('Wrong number of legs in tensot %02d' % ii)
 
     ts = {ind: val for ind, val in enumerate(ts)}
@@ -33,7 +33,7 @@ def ncon(ts, inds, conjs=None):
             (t1, t2) = (ten2, ten1)
             ax1.append(leg2)
             ax2.append(leg1)
-        if (edges[-1][0] == cutoff) or min(edges[-1][2], edges[-2][2]) != t1 or max(edges[-1][2], edges[-2][2]) != t2:  
+        if (edges[-1][0] == cutoff) or min(edges[-1][2], edges[-2][2]) != t1 or max(edges[-1][2], edges[-2][2]) != t2:
             # execute contraction
             if t1 == t2:  # trace
                 ts[t1] = ts[t1].trace(axes=(ax1, ax2))
@@ -68,7 +68,7 @@ def ncon(ts, inds, conjs=None):
             del ts[t2]
         order = [ed[1] for ed in sorted(edges)]
         _, result = ts.popitem()
-        return result.transpose(axes=order)
+        return result._transpose_local(axes=order)
     else:
         result = 1
         for num in ts.values():

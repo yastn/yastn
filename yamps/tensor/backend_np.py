@@ -113,7 +113,20 @@ def trace(A, to_execute, in1, in2, out):
     return cA
 
 
+def transpose_local(A, axes, to_execute):
+    """
+    transpose in place.
+    """
+    cA = {}
+    for old, new in to_execute:
+        cA[new] = A[old].transpose(axes)
+    return cA
+
+
 def transpose(A, axes, to_execute):
+    """
+    transpose forcing a copy.
+    """
     cA = {}
     for old, new in to_execute:
         cA[new] = np.transpose(A[old], axes=axes).copy()
@@ -401,6 +414,22 @@ def dot_diag(A, B, conj, to_execute, a_con, a_ndim):
         C[out] = f(A[in1], B[in2], dim)
     return C
 
+
+def trace_dot_diag(A, B, conj, to_execute, axis1, axis2, a_ndim):
+    dim = np.ones(a_ndim, int)
+    dim[axis2] = -1
+    f = dotdiag_dict[conj]
+
+    C = {}
+    for in1, in2, out in to_execute:
+        temp = np.trace(f(A[in1], B[in2], dim), axis1=axis1, axis2=axis2)
+        try:
+            C[out] = C[out] + temp
+        except KeyError:
+            C[out] = temp
+    return C
+
+
 ##############
 # block merging, truncations and un-merging
 ##############
@@ -546,6 +575,17 @@ def unmerge_blocks(C, order_l, order_r):
             ind = tl + tr
             Cout[ind] = C[tcut][slice_l, slice_r].reshape(Dl + Dr)
     return Cout
+
+##############
+#  tests
+##############
+
+
+def is_independent(A, B):
+    """ 
+    check if two arrays are identical, or share the same view.
+    """
+    return (A is B) or (A.base is B) or (A is B.base)
 
 ##############
 #  multi dict operations

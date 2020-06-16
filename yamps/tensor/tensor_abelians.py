@@ -9,7 +9,7 @@ with their individual dimensions labeled by the symmetries' charges.
 
 import numpy as np
 import itertools
-
+from functools import wraps
 
 # defaults and defining symmetries
 _large_int = 1073741824
@@ -29,16 +29,16 @@ def _sym_Z2(x):
     return np.mod(x, 2)
 
 
-def _argsort(tset, ndim):
+def _argsort(tset, nsym):
     """
     Auxliary function supporting sorting of tset.
     """
-    if ndim == 0:
+    if nsym == 0:
         return np.array([0], dtype=int)
-    elif ndim == 1:
-        return tset.argsort()
-    else:
-        return np.lexsort(tset.T)
+    elif nsym == 1:
+        return tset[:, 0].argsort()
+    # else:
+    return np.lexsort(tset.T[::-1])
 
 
 _tmod = {'U1': _sym_U1,
@@ -260,21 +260,21 @@ class Tensor:
         n : tuple, int
             total charge for each symmetry sectors; default is 0; can provide int for nsym == 1
         isdiag : bool
-            makes tensor diagonal: no signature nor charge; keep only diagonal; Defined and stored using ndim=1,
+            makes tensor diagonal: no signature nor charge; keep only diagonal; Defined and stored using _ndim=1,
             but acts like a rank-2 tensor.
         """
         self.conf = settings
         self.isdiag = isdiag
         self.nsym = self.conf.nsym  # number of symmetries
         if not isdiag:
-            self.ndim = 1 if isinstance(s, int) else len(s)  # number of legs
-            self.s = np.array(s, dtype=np.int).reshape(self.ndim)
+            self._ndim = 1 if isinstance(s, int) else len(s)  # number of legs
+            self.s = np.array(s, dtype=np.int).reshape(self._ndim)
             self.n = np.zeros(self.nsym, dtype=np.int) if n is None else np.array(n, dtype=np.int).reshape(self.nsym)
         else:
-            self.ndim = 1  # number of legs
-            self.s = np.zeros(self.ndim, dtype=np.int)
+            self._ndim = 1  # number of legs
+            self.s = np.zeros(self._ndim, dtype=np.int)
             self.n = np.zeros(self.nsym, dtype=np.int)
-        self.tset = np.empty((0, self.ndim, self.nsym), dtype=np.int)  # list of blocks; 3d nparray of ints
+        self.tset = np.empty((0, self._ndim, self.nsym), dtype=np.int)  # list of blocks; 3d nparray of ints
         self.A = {}  # dictionary of blocks
 
     def copy(self):
@@ -335,22 +335,22 @@ class Tensor:
             t = (t,)
 
         if self.nsym == 0:
-            if len(D) != self.ndim:
+            if len(D) != self._ndim:
                 raise TensorError("Wrong number of elements in D")
-            tset = np.zeros((1, self.ndim, self.nsym))
-            Dset = np.array(D, dtype=np.int).reshape(1, self.ndim, 1)
+            tset = np.zeros((1, self._ndim, self.nsym))
+            Dset = np.array(D, dtype=np.int).reshape(1, self._ndim, 1)
         elif self.nsym >= 1:
-            if (self.ndim == 1) and isinstance(D[0], int):
+            if (self._ndim == 1) and isinstance(D[0], int):
                 D = (D,)
-            if (self.ndim == 1) and isinstance(t[0], int):
+            if (self._ndim == 1) and isinstance(t[0], int):
                 t = (t,)
             D = list(x if isinstance(x, tuple) or isinstance(x, list) else (x, ) for x in D)
             t = list(x if isinstance(x, tuple) or isinstance(x, list) else (x, ) for x in t)
 
-            if len(D) != self.ndim and len(D) != self.ndim * self.nsym:
-                print(t, D, self.ndim, self.nsym, len(D))
+            if len(D) != self._ndim and len(D) != self._ndim * self.nsym:
+                print(t, D, self._ndim, self.nsym, len(D))
                 raise TensorError("Wrong number of elements in D")
-            if len(t) != self.ndim and len(t) != self.ndim * self.nsym:
+            if len(t) != self._ndim and len(t) != self._ndim * self.nsym:
                 raise TensorError("Wrong number of elements in t")
             for x, y in zip(D, t):
                 if len(x) != len(y):
@@ -358,9 +358,9 @@ class Tensor:
 
             all_t = []
             all_D = []
-            if len(t) > self.ndim:
+            if len(t) > self._ndim:
                 for ss in range(self.nsym):
-                    rr = slice(ss, self.nsym * self.ndim, self.nsym)
+                    rr = slice(ss, self.nsym * self._ndim, self.nsym)
                     comb_t = np.array(list(itertools.product(*t[rr])), dtype=np.int)
                     ind = (_tmod[self.conf.sym[ss]](comb_t @ self.s - self.n[ss]) == 0)
                     all_t.append(comb_t[ind])
@@ -374,8 +374,8 @@ class Tensor:
                 comb_t = list(itertools.product(*t))
                 comb_D = list(itertools.product(*D))
                 lcomb_t = len(comb_t)
-                comb_t = np.array(comb_t, dtype=np.int).reshape(lcomb_t, self.ndim, self.nsym)
-                comb_D = np.array(comb_D, dtype=np.int).reshape(lcomb_t, self.ndim, 1)
+                comb_t = np.array(comb_t, dtype=np.int).reshape(lcomb_t, self._ndim, self.nsym)
+                comb_D = np.array(comb_D, dtype=np.int).reshape(lcomb_t, self._ndim, 1)
                 t_cut = np.zeros((lcomb_t, self.nsym), dtype=np.int)
                 for ss in range(self.nsym):
                     t_cut[:, ss] = _tmod[self.conf.sym[ss]](comb_t[:, :, ss] @ self.s - self.n[ss])
@@ -420,10 +420,10 @@ class Tensor:
         if isinstance(ts, int):
             ts = (ts,)
 
-        if (len(ts) != self.ndim * self.nsym) or (Ds is not None and len(Ds) != self.ndim):
+        if (len(ts) != self._ndim * self.nsym) or (Ds is not None and len(Ds) != self._ndim):
             raise TensorError('Wrong size of input')
 
-        ats = np.array(ts, dtype=np.int).reshape(1, self.ndim, self.nsym)
+        ats = np.array(ts, dtype=np.int).reshape(1, self._ndim, self.nsym)
         for ss in range(self.nsym):
             if not (_tmod[self.conf.sym[ss]](ats[0, :, ss] @ self.s - self.n[ss]) == 0):
                 raise TensorError('Charges do not fit the tensor: t @ s != n')
@@ -431,7 +431,7 @@ class Tensor:
         lts, lDs = self.get_tD()
         existing_D = []
         no_existing_D = False
-        for ii in range(self.ndim):
+        for ii in range(self._ndim):
             try:
                 existing_D.append(lDs[ii][lts[ii].index(tuple(ats[0, ii, :].flat))])
             except ValueError:
@@ -562,7 +562,7 @@ class Tensor:
         lts, lDs = self.get_tD()
         print("leg charges  : ", lts)
         print("dimensions   : ", lDs)
-        print("total dim    : ", [sum(xx) for xx in lDs])
+        print("total dim    : ", [sum(xx) for xx in lDs], "\n")
 
     def get_total_charge(self):
         """ Global charges of the tensor tensor."""
@@ -584,9 +584,14 @@ class Tensor:
             shape.append(self.conf.back.get_shape(self.A[tuple(ind.flat)]))
         return shape
 
-    def get_ndim(self):
-        """ Number of legs"""
-        return self.ndim
+    @property
+    def ndim(self):
+        """
+        Number of legs.
+
+        Since diagonal tensor is kept using 1d structure self._ndim is dimension of blocks keeping data.
+        """
+        return 2 if self.isdiag else self._ndim
 
     def get_nsym(self):
         """ Number of symmetries"""
@@ -603,7 +608,7 @@ class Tensor:
         """
         ts = []
         for ss in range(self.nsym):
-            ts.append([sorted(set(self.tset[:, ll, ss])) for ll in range(self.ndim)])
+            ts.append([sorted(set(self.tset[:, ll, ss])) for ll in range(self._ndim)])
         return ts
 
     def get_tD(self):
@@ -626,7 +631,7 @@ class Tensor:
             Dset.append(self.conf.back.get_shape(self.A[ind]))
 
         lts, lDs = [], []
-        for ii in range(self.ndim):
+        for ii in range(self._ndim):
             tt = [tuple(t[ii].flat) for t in self.tset]
             DD = [D[ii] for D in Dset]
             TD = sorted(set(zip(tt, DD)))
@@ -745,7 +750,7 @@ class Tensor:
                 new_tset.append(ind)
         a = Tensor(settings=self.conf, s=self.s, n=self.n, isdiag=self.isdiag)
         if len(new_tset) > 0:
-            tset = np.vstack([tset, np.array(new_tset, dtype=np.int).reshape((-1, self.ndim, self.nsym))])
+            tset = np.vstack([tset, np.array(new_tset, dtype=np.int).reshape((-1, self._ndim, self.nsym))])
         a.tset = tset
         a.A = a.conf.back.add(self.A, other.A, to_execute)
         return a
@@ -782,7 +787,7 @@ class Tensor:
                 new_tset.append(ind)
         a = Tensor(settings=self.conf, s=self.s, n=self.n, isdiag=self.isdiag)
         if len(new_tset) > 0:
-            tset = np.vstack([tset, np.array(new_tset, dtype=np.int).reshape((-1, self.ndim, self.nsym))])
+            tset = np.vstack([tset, np.array(new_tset, dtype=np.int).reshape((-1, self._ndim, self.nsym))])
         a.tset = tset
         a.A = a.conf.back.add(self.A, other.A, to_execute, x)
         return a
@@ -818,7 +823,7 @@ class Tensor:
                 new_tset.append(ind)
         a = Tensor(settings=self.conf, s=self.s, n=self.n, isdiag=self.isdiag)
         if len(new_tset) > 0:
-            tset = np.vstack([tset, np.array(new_tset, dtype=np.int).reshape((-1, self.ndim, self.nsym))])
+            tset = np.vstack([tset, np.array(new_tset, dtype=np.int).reshape((-1, self._ndim, self.nsym))])
         a.tset = tset
         a.A = a.conf.back.sub(self.A, other.A, to_execute)
         return a
@@ -875,7 +880,7 @@ class Tensor:
             for ind in self.A:
                 nind = ind + ind
                 a.set_block(ts=nind, val=self.conf.back.diag_create(self.A[ind]))
-        elif self.ndim == 2 and sum(np.abs(self.n)) == 0 and sum(self.s) == 0:
+        elif self._ndim == 2 and sum(np.abs(self.n)) == 0 and sum(self.s) == 0:
             a = Tensor(settings=self.conf, isdiag=True)
             for ind in self.tset:
                 if np.all(ind[0, :] == ind[1, :]):
@@ -899,6 +904,27 @@ class Tensor:
         a.tset = self.tset.copy()
         a.A = a.conf.back.conj(self.A)
         return a
+
+    def _transpose_local(self, axes):
+        """
+        Transpose tensor in place. Intended for internal use of ncon.
+
+        Parameters
+        ----------
+        axes: tuple
+            New order of the legs.
+        """
+        if (not self.isdiag) and (axes != tuple(range(self._ndim))):
+            order = np.array(axes, dtype=np.int)
+            self.s = self.s[order]
+            tset = self.tset[:, order, :]
+            to_execute = []
+            for old, new in zip(self.tset, tset):
+                to_execute.append((tuple(old.flat), tuple(new.flat)))
+            cA = self.conf.back.transpose_local(self.A, axes, to_execute)
+            self.tset = tset
+            self.A = cA
+        return self
 
     def transpose(self, axes):
         """
@@ -948,17 +974,22 @@ class Tensor:
             fermionic = np.array(fermionic, dtype=bool)
             axes = sorted(list(axes))
             a = self.copy()
-            if (axes[0] == -1) and (np.sum(a.n[fermionic]) % 2 == 1):  # swap gate with local a.n
-                for ind in a.tset:
-                    if np.sum(ind[axes[1], fermionic]) % 2 == 1:
-                        ind = tuple(ind.flat)
-                        a.A[ind] = -a.A[ind]
-            elif axes[0] != axes[1]:  # swap gate on 2 legs
-                for ind in a.tset:
-                    if (np.sum(ind[axes[0], fermionic]) % 2 == 1) and (np.sum(ind[axes[1], fermionic]) % 2 == 1):
-                        a.A[ind] = -a.A[ind]
-            else:
+            if axes[0] == axes[1]:
                 raise TensorError('Cannot sweep the same index')
+            if not self.isdiag:
+                if (axes[0] == -1) and (np.sum(a.n[fermionic]) % 2 == 1):  # swap gate with local a.n
+                    for ind in a.tset:
+                        if np.sum(ind[axes[1], fermionic]) % 2 == 1:
+                            ind = tuple(ind.flat)
+                            a.A[ind] = -a.A[ind]
+                else:  # axes[0] != axes[1]:  # swap gate on 2 legs
+                    for ind in a.tset:
+                        if (np.sum(ind[axes[0], fermionic]) % 2 == 1) and (np.sum(ind[axes[1], fermionic]) % 2 == 1):
+                            a.A[ind] = -a.A[ind]                
+            else:
+                for ind in a.tset:
+                    if (np.sum(ind[axes[0], fermionic]) % 2 == 1):
+                        a.A[ind] = -a.A[ind]
             return a
         else:
             return self
@@ -1028,7 +1059,7 @@ class Tensor:
                 out_r = (axes[1],)  # indices going v
                 lr = 1
 
-            if not (self.ndim == ll + lr):
+            if not (self._ndim == ll + lr):
                 raise TensorError('Two few indices in axes')
 
             # divide charges between l and r
@@ -1083,7 +1114,7 @@ class Tensor:
         to_execute = [(t, t, ()) for t in common]
         if len(to_execute) > 0:
             a_out = ()
-            a_con = tuple(range(self.ndim))
+            a_con = tuple(range(self._ndim))
             b_out = a_out
             b_con = a_con
             A = self.conf.back.dot(self.A, other.A, (1, 0), to_execute, a_out, a_con, b_con, b_out)
@@ -1121,7 +1152,7 @@ class Tensor:
             else:
                 raise TensorError('Wrong axes for diagonal tensor')
         else:
-            out = tuple(ii for ii in range(self.ndim) if ii not in in1 + in2)
+            out = tuple(ii for ii in range(self._ndim) if ii not in in1 + in2)
             nout = np.array(out, dtype=np.int)
             nin1 = np.array(in1, dtype=np.int)
             nin2 = np.array(in2, dtype=np.int)
@@ -1135,19 +1166,20 @@ class Tensor:
             a = Tensor(settings=self.conf, s=self.s[nout], n=self.n)
             a.A = a.conf.back.trace(A=self.A, to_execute=to_execute, in1=in1, in2=in2, out=out)
 
-        a.tset = np.array([ind for ind in a.A], dtype=np.int).reshape(len(a.A), a.ndim, a.nsym)
+        a.tset = np.array([ind for ind in a.A], dtype=np.int).reshape(len(a.A), a._ndim, a.nsym)
         return a
 
     def dot_diag(self, other, axis, conj=(0, 0)):
         r""" Compute dot product of a tensor with a diagonal tensor.
 
-        At least one of the tensors should be diagonal.
-        Legs of a new tensor are ordered in the same way as the non-diagonal one.
+        Other tensors should be diagonal.
+        Legs of a new tensor are ordered in the same way as those of the first one.
         Produce diagonal tensor if both are diagonal.
 
         Parameters
         ----------
         other: Tensor
+            diagonal tensor
 
         axis: int or tuple
             leg of non-diagonal tensor to be multiplied by the diagonal one.
@@ -1155,25 +1187,16 @@ class Tensor:
         conj: tuple
             shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
         """
-        if other.isdiag:
-            a = self
-            b = other
-        elif self.isdiag:
-            a = other
-            b = self
-            conj = conj[::-1]
-        else:
-            raise TensorError('Both tensors are non-diagonal. Use dot() instead')
 
-        na_con = axis if isinstance(axis, int) else axis[0]
-        if a.isdiag:
-            na_con = 0
+        if not other.isdiag:
+            raise TensorError('Other tensor should be diagonal.')
 
         conja = (1 - 2 * conj[0])
+        na_con = 0 if self.isdiag else axis if isinstance(axis, int) else axis[0]
 
-        t_a_con = a.tset[:, na_con, :]
-        block_a = sorted([(tuple(x.flat), tuple(y.flat)) for x, y in zip(t_a_con, a.tset)], key=lambda x: x[0])
-        block_b = sorted([tuple(x.flat) for x in b.tset])
+        t_a_con = self.tset[:, na_con, :]
+        block_a = sorted([(tuple(x.flat), tuple(y.flat)) for x, y in zip(t_a_con, self.tset)], key=lambda x: x[0])
+        block_b = sorted([tuple(x.flat) for x in other.tset])
         block_a = itertools.groupby(block_a, key=lambda x: x[0])
         block_b = iter(block_b)
 
@@ -1194,9 +1217,72 @@ class Tensor:
         except StopIteration:
             pass
 
-        c = Tensor(settings=self.conf, s=conja * a.s, n=conja * a.n, isdiag=a.isdiag)
-        c.A = self.conf.back.dot_diag(a.A, b.A, conj, to_execute, na_con, a.ndim)
-        c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c.ndim, c.nsym)
+        c = Tensor(settings=self.conf, s=conja * self.s, n=conja * self.n, isdiag=self.isdiag)
+        c.A = self.conf.back.dot_diag(self.A, other.A, conj, to_execute, na_con, self._ndim)
+        c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
+        return c
+
+    def trace_dot_diag(self, other, axis1=0, axis2=1, conj=(0, 0)):
+        r""" Contract two legs of a tensor with a diagonal tensor -- equivalent to dot_diag and trace of the result.
+
+        Other tensor should be diagonal.
+        Legs of a new tensor are ordered in the same way as those of the first one.
+
+        Parameters
+        ----------
+        other: Tensor
+            diagonal tensor
+
+        axis1, axis2: int
+            2 legs of the first tensor to be multiplied by the diagonal one.
+            they are ignored if the first tensor is diagonal.
+
+        conj: tuple
+            shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
+        """
+        if self.isdiag:
+            c = self.dot_diag(other, axis=0, conj=conj)
+            c = c.trace()
+            return c
+
+        if self.s[axis1] != -self.s[axis2]:
+            raise TensorError('Signs do not match')
+
+        conja = (1 - 2 * conj[0])
+        na_con = np.array([axis1, axis2], dtype=np.int)
+        out = tuple(ii for ii in range(self._ndim) if ii != axis1 and ii != axis2)
+        nout = np.array(out, dtype=np.int)
+
+        ind = np.all(self.tset[:, axis1, :] == self.tset[:, axis2, :], axis=1)
+        tset = self.tset[ind]
+        t_a_con = tset[:, axis1, :]
+        t_a_out = tset[:, nout, :]
+
+        block_a = sorted([(tuple(x.flat), tuple(y.flat), tuple(z.flat)) for x, y, z in zip(t_a_con, tset, t_a_out)], key=lambda x: x[0])
+        block_b = sorted([tuple(x.flat) for x in other.tset])
+        block_a = itertools.groupby(block_a, key=lambda x: x[0])
+        block_b = iter(block_b)
+
+        to_execute = []
+        try:
+            tta, ga = next(block_a)
+            ttb = next(block_b)
+            while True:
+                if tta == ttb:
+                    for ta in ga:
+                        to_execute.append((ta[1], ttb, ta[2]))
+                    tta, ga = next(block_a)
+                    ttb = next(block_b)
+                elif tta < ttb:
+                    tta, ga = next(block_a)
+                elif tta > ttb:
+                    ttb = next(block_b)
+        except StopIteration:
+            pass
+
+        c = Tensor(settings=self.conf, s=conja * self.s[nout], n=conja * self.n, isdiag=False)
+        c.A = self.conf.back.trace_dot_diag(self.A, other.A, conj, to_execute, axis1, axis2, self._ndim)
+        c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
         return c
 
     def dot(self, other, axes, conj=(0, 0)):
@@ -1216,8 +1302,6 @@ class Tensor:
             conj: tuple
                 shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
         """
-        if self.isdiag or other.isdiag:
-            raise TensorError('dot does not support diagonal tensor. Use dot_diag instead.')
 
         try:
             a_con = tuple(axes[0])  # contracted legs
@@ -1227,11 +1311,38 @@ class Tensor:
             b_con = tuple(axes[1])
         except TypeError:
             b_con = (axes[1],)
+
+        if other.isdiag:
+            if len(b_con) == 1:
+                c = self.dot_diag(other, axis=a_con[0], conj=conj)
+                order = tuple((ii for ii in range(self._ndim) if ii != a_con[0])) + (a_con[0],)
+                c._transpose_local(axes=order)
+            elif len(b_con) == 2:
+                c = self.trace_dot_diag(other, axis1=a_con[0], axis2=a_con[1], conj=conj)
+            elif len(b_con) == 0:
+                raise TensorError('len(axes[0]) == 0. Do not support outer product with diagonal tensor. Use diag() first.')
+            else:
+                raise TensorError('To many axis to contract.')
+            return c
+
+        if self.isdiag:
+            if len(a_con) == 1:
+                c = other.dot_diag(self, axis=b_con[0], conj=conj[::-1])
+                order = (b_con[0],) + tuple((ii for ii in range(other._ndim) if ii != b_con[0]))
+                c._transpose_local(axes=order)
+            elif len(a_con) == 2:
+                c = other.trace_dot_diag(self, axis1=b_con[0], axis2=b_con[1], conj=conj[::-1])
+            elif len(a_con) > 2:
+                raise TensorError('len(axes[0]) == 0. Do not support outer product with diagonal tensor. Use diag() first.')
+            else:
+                raise TensorError('To many axis to contract.')
+            return c
+
         conja = (1 - 2 * conj[0])
         conjb = (1 - 2 * conj[1])
 
-        a_out = tuple(ii for ii in range(self.ndim) if ii not in a_con)  # outgoing legs
-        b_out = tuple(ii for ii in range(other.ndim) if ii not in b_con)
+        a_out = tuple(ii for ii in range(self._ndim) if ii not in a_con)  # outgoing legs
+        b_out = tuple(ii for ii in range(other._ndim) if ii not in b_con)
 
         na_con = np.array(a_con, dtype=np.int)
         nb_con = np.array(b_con, dtype=np.int)
@@ -1239,18 +1350,7 @@ class Tensor:
         nb_out = np.array(b_out, dtype=np.int)
 
         if not all(self.s[na_con] == -other.s[nb_con] * conja * conjb):
-            if other.isdiag:  # added for diagonal tensor to efectively reverse the order of signs
-                if all(self.s[na_con] == other.s[nb_con] * conja * conjb):
-                    conjb *= -1
-                else:
-                    raise TensorError('Signs do not match')
-            elif self.isdiag:
-                if all(self.s[na_con] == other.s[nb_con] * conja * conjb):
-                    conja *= -1
-                else:
-                    raise TensorError('Signs do not match')
-            else:
-                raise TensorError('Signs do not match')
+            raise TensorError('Signs do not match')
 
         if self.conf.dot_merge:
             t_a_con = self.tset[:, na_con, :]
@@ -1276,8 +1376,8 @@ class Tensor:
             t_b_out = t_b_out[b_sort]
             t_b_cuts = t_b_cuts[b_sort]
 
-            a_list = [(tuple(t1.flatten()), tuple(t2.flatten()), tuple(t3.flatten()), tuple(t4.flatten())) for t1, t2, t3, t4 in zip(t_a_cuts, t_a_out, t_a_con, t_a_full)]
-            b_list = [(tuple(t1.flatten()), tuple(t2.flatten()), tuple(t3.flatten()), tuple(t4.flatten())) for t1, t2, t3, t4 in zip(t_b_cuts, t_b_con, t_b_out, t_b_full)]
+            a_list = [(tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), tuple(t4.flat)) for t1, t2, t3, t4 in zip(t_a_cuts, t_a_out, t_a_con, t_a_full)]
+            b_list = [(tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), tuple(t4.flat)) for t1, t2, t3, t4 in zip(t_b_cuts, t_b_con, t_b_out, t_b_full)]
             a_iter = itertools.groupby(a_list, key=lambda x: x[0])
             b_iter = itertools.groupby(b_list, key=lambda x: x[0])
 
@@ -1327,7 +1427,7 @@ class Tensor:
             c_s = np.hstack([conja * self.s[na_out], conjb * other.s[nb_out]])
             c = Tensor(settings=self.conf, s=c_s, n=conja * self.n + conjb * other.n)
             c.A = self.conf.back.unmerge_blocks(Cmerged, order_l, order_r)
-            c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c.ndim, c.nsym)
+            c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
             return c
         else:
             t_a_con = self.tset[:, na_con, :]
@@ -1361,7 +1461,7 @@ class Tensor:
             c_s = np.hstack([conja * self.s[na_out], conjb * other.s[nb_out]])
             c = Tensor(settings=self.conf, s=c_s, n=conja * self.n + conjb * other.n)
             c.A = self.conf.back.dot(self.A, other.A, conj, to_execute, a_out, a_con, b_con, b_out)
-            c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c.ndim, c.nsym)
+            c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
             return c
 
     ###########################
@@ -1413,9 +1513,9 @@ class Tensor:
             out_r = (axes[1],)  # indices going v
             lr = 1
 
-        if not (self.ndim == ll + lr):
+        if not (self._ndim == ll + lr):
             raise TensorError('Two few indices in axes')
-        elif not (sorted(set(out_l + out_r)) == list(range(self.ndim))):
+        elif not (sorted(set(out_l + out_r)) == list(range(self._ndim))):
             raise TensorError('Repeated axis')
 
         # divide charges between l and r
@@ -1455,9 +1555,9 @@ class Tensor:
         S.A = self.conf.back.unmerge_blocks_diag(Smerged, Dcut)
         V.A = self.conf.back.unmerge_blocks_right(Vmerged, order_r, Dcut)
 
-        U.tset = np.array([ind for ind in U.A], dtype=np.int).reshape((len(U.A), U.ndim, U.nsym))
-        S.tset = np.array([ind for ind in S.A], dtype=np.int).reshape((len(S.A), S.ndim, S.nsym))
-        V.tset = np.array([ind for ind in V.A], dtype=np.int).reshape((len(V.A), V.ndim, V.nsym))
+        U.tset = np.array([ind for ind in U.A], dtype=np.int).reshape((len(U.A), U._ndim, U.nsym))
+        S.tset = np.array([ind for ind in S.A], dtype=np.int).reshape((len(S.A), S._ndim, S.nsym))
+        V.tset = np.array([ind for ind in V.A], dtype=np.int).reshape((len(V.A), V._ndim, V.nsym))
         return U, S, V
 
     def split_qr(self, axes):
@@ -1489,9 +1589,9 @@ class Tensor:
             lr = 1
         out_all = out_l + out_r  # order for transpose
 
-        if not (self.ndim == ll + lr):
+        if not (self._ndim == ll + lr):
             raise TensorError('Two few indices in axes')
-        elif not (sorted(set(out_all)) == list(range(self.ndim))):
+        elif not (sorted(set(out_all)) == list(range(self._ndim))):
             raise TensorError('Repeated axis')
 
         # divide charges between Q=l and R=r
@@ -1526,8 +1626,8 @@ class Tensor:
         Q.A = self.conf.back.unmerge_blocks_left(Qmerged, order_l, Dcut)
         R.A = self.conf.back.unmerge_blocks_right(Rmerged, order_r, Dcut)
 
-        Q.tset = np.array([ind for ind in Q.A], dtype=np.int).reshape(len(Q.A), Q.ndim, Q.nsym)
-        R.tset = np.array([ind for ind in R.A], dtype=np.int).reshape(len(R.A), R.ndim, R.nsym)
+        Q.tset = np.array([ind for ind in Q.A], dtype=np.int).reshape(len(Q.A), Q._ndim, Q.nsym)
+        R.tset = np.array([ind for ind in R.A], dtype=np.int).reshape(len(R.A), R._ndim, R.nsym)
         return Q, R
 
     def split_rq(self, axes):
@@ -1559,9 +1659,9 @@ class Tensor:
             lr = 1
         out_all = out_l + out_r  # order for transpose
 
-        if not (self.ndim == ll + lr):
+        if not (self._ndim == ll + lr):
             raise TensorError('Two few indices in axes')
-        elif not (sorted(set(out_all)) == list(range(self.ndim))):
+        elif not (sorted(set(out_all)) == list(range(self._ndim))):
             raise TensorError('Repeated axis')
 
         # divide charges between R=l and Q=r
@@ -1597,8 +1697,8 @@ class Tensor:
         R.A = self.conf.back.unmerge_blocks_left(Rmerged, order_l, Dcut)
         Q.A = self.conf.back.unmerge_blocks_right(Qmerged, order_r, Dcut)
 
-        R.tset = np.array([ind for ind in R.A], dtype=np.int).reshape(len(R.A), R.ndim, R.nsym)
-        Q.tset = np.array([ind for ind in Q.A], dtype=np.int).reshape(len(Q.A), Q.ndim, Q.nsym)
+        R.tset = np.array([ind for ind in R.A], dtype=np.int).reshape(len(R.A), R._ndim, R.nsym)
+        Q.tset = np.array([ind for ind in Q.A], dtype=np.int).reshape(len(Q.A), Q._ndim, Q.nsym)
         return R, Q
 
     def split_eigh(self, axes=(0, 1), tol=0, D_block=_large_int, D_total=_large_int):
@@ -1643,9 +1743,9 @@ class Tensor:
             lr = 1
 
         out_all = out_l + out_r  # order for transpose
-        if not (self.ndim == ll + lr):
+        if not (self._ndim == ll + lr):
             raise TensorError('Two few indices in axes')
-        elif not (sorted(set(out_all)) == list(range(self.ndim))):
+        elif not (sorted(set(out_all)) == list(range(self._ndim))):
             raise TensorError('Repeated axis')
         elif np.any(self.n != 0):
             raise TensorError('Charge should be zero')
@@ -1679,8 +1779,8 @@ class Tensor:
 
         S.A = self.conf.back.unmerge_blocks_diag(Smerged, Dcut)
         U.A = self.conf.back.unmerge_blocks_left(Umerged, order_l, Dcut)
-        U.tset = np.array([ind for ind in U.A], dtype=np.int).reshape(len(U.A), U.ndim, U.nsym)
-        S.tset = np.array([ind for ind in S.A], dtype=np.int).reshape(len(S.A), S.ndim, S.nsym)
+        U.tset = np.array([ind for ind in U.A], dtype=np.int).reshape(len(U.A), U._ndim, U.nsym)
+        S.tset = np.array([ind for ind in S.A], dtype=np.int).reshape(len(S.A), S._ndim, S.nsym)
         return S, U
 
     #################
@@ -1698,10 +1798,7 @@ class Tensor:
         t.append(self.s is other.s)
         for key in self.A.keys():
             if key in other.A:
-                t.append(self.A[key] is other.A[key])
-        for key in other.A.keys():
-            if key in self.A:
-                t.append(self.A[key] is other.A[key])
+                t.append(self.conf.back.is_independent(self.A[key], other.A[key]))
         if not any(t):
             return True
         else:
