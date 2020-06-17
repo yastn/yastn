@@ -1,9 +1,25 @@
 # Yet another matrix product state
 
+Instalation
+-----------
+Install using
+   ```
+   pip install .
+   ```
+or
+   ```
+   pip install --user .
+   ```
+in the main folder.
+
+Examples
+--------
+Tests, which are also examples, are in the folder /tests
+
+
 Documentation
 -------------
-
-Build using sphinx.
+Build documentation using sphinx.
    ```
    cd docs && make html
    ```
