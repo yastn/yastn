@@ -907,7 +907,7 @@ class Tensor:
 
     def _transpose_local(self, axes):
         """
-        Transpose tensor in place. Intended for internal use of ncon.
+        Transpose tensor in place. Intended for internal use and ncon.
 
         Parameters
         ----------
@@ -1241,9 +1241,7 @@ class Tensor:
             shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
         """
         if self.isdiag:
-            c = self.dot_diag(other, axis=0, conj=conj)
-            c = c.trace()
-            return c
+            return self.dot_diag(other, axis=0, conj=conj).trace()
 
         if self.s[axis1] != -self.s[axis2]:
             raise TensorError('Signs do not match')
@@ -1352,6 +1350,10 @@ class Tensor:
         if not all(self.s[na_con] == -other.s[nb_con] * conja * conjb):
             raise TensorError('Signs do not match')
 
+        c_n = conja * self.n + conjb * other.n
+        for ss in range(self.nsym):
+            c_n[ss] = _tmod[self.conf.sym[ss]](c_n[ss])
+
         if self.conf.dot_merge:
             t_a_con = self.tset[:, na_con, :]
             t_b_con = other.tset[:, nb_con, :]
@@ -1425,7 +1427,7 @@ class Tensor:
             Cmerged = self.conf.back.dot_merged(Amerged, Bmerged, conj)
 
             c_s = np.hstack([conja * self.s[na_out], conjb * other.s[nb_out]])
-            c = Tensor(settings=self.conf, s=c_s, n=conja * self.n + conjb * other.n)
+            c = Tensor(settings=self.conf, s=c_s, n=c_n)
             c.A = self.conf.back.unmerge_blocks(Cmerged, order_l, order_r)
             c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
             return c
@@ -1459,7 +1461,7 @@ class Tensor:
                 pass
 
             c_s = np.hstack([conja * self.s[na_out], conjb * other.s[nb_out]])
-            c = Tensor(settings=self.conf, s=c_s, n=conja * self.n + conjb * other.n)
+            c = Tensor(settings=self.conf, s=c_s, n=c_n)
             c.A = self.conf.back.dot(self.A, other.A, conj, to_execute, a_out, a_con, b_con, b_out)
             c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
             return c
@@ -1468,7 +1470,7 @@ class Tensor:
     #     spliting tensor     #
     ###########################
 
-    def split_svd(self, axes=(0, 1), tol=0, D_block=_large_int, D_total=_large_int, truncated_svd=False, truncated_nbit=60, truncated_kfac=6):
+    def split_svd(self, axes, sU=1, Uaxis=-1, Vaxis=0, tol=0, D_block=_large_int, D_total=_large_int, truncated_svd=False, truncated_nbit=60, truncated_kfac=6):
         r"""
         Split tensor using svd, tensor = U * S * V. Truncate smallest singular values if neccesary.
 
@@ -1479,6 +1481,12 @@ class Tensor:
         ----------
         axes: tuple
             Specify two groups of legs between which to perform svd, as well as their final order.
+
+        sU: int
+            signature of connecting leg in U equall 1 or -1. Default is 1.
+
+        Uaxis, Vaxis: int
+            specify which leg of U and V tensors are connecting with S. By delault it is the last leg of U and the first of V.
 
         tol: float
             relative tolerance of singular values below which to truncate.
@@ -1527,9 +1535,10 @@ class Tensor:
         # order formation of blocks
         nout_r, nout_l = np.array(out_r, dtype=np.int), np.array(out_l, dtype=np.int)
 
-        t_cuts = - self.tset[:, nout_r, :].swapaxes(1, 2) @ self.s[nout_r]
+        t_cuts = self.tset[:, nout_l, :].swapaxes(1, 2) @ self.s[nout_l]
         for ss in range(self.nsym):
-            t_cuts[:, ss] = _tmod[self.conf.sym[ss]](n_r[ss] + t_cuts[:, ss])
+            t_cuts[:, ss] = _tmod[self.conf.sym[ss]](sU * (n_l[ss] - t_cuts[:, ss]))
+
         t_l = self.tset[:, np.append(nout_l, 0), :]
         t_l[:, -1, :] = t_cuts
         t_r = self.tset[:, np.append(0, nout_r), :]
@@ -1545,9 +1554,9 @@ class Tensor:
         Amerged, order_l, order_r = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r)
         Umerged, Smerged, Vmerged = self.conf.back.svd(Amerged, truncated=truncated_svd, Dblock=D_block, nbit=truncated_nbit, kfac=truncated_kfac)
 
-        U = Tensor(settings=self.conf, s=np.append(self.s[nout_l], -1), n=n_l)
+        U = Tensor(settings=self.conf, s=np.append(self.s[nout_l], sU), n=n_l)
         S = Tensor(settings=self.conf, isdiag=True)
-        V = Tensor(settings=self.conf, s=np.append(1, self.s[nout_r]), n=n_r)
+        V = Tensor(settings=self.conf, s=np.append(-sU, self.s[nout_r]), n=n_r)
 
         Dcut = self.conf.back.slice_S(Smerged, tol=tol, Dblock=D_block, Dtotal=D_total)
 
@@ -1558,18 +1567,43 @@ class Tensor:
         U.tset = np.array([ind for ind in U.A], dtype=np.int).reshape((len(U.A), U._ndim, U.nsym))
         S.tset = np.array([ind for ind in S.A], dtype=np.int).reshape((len(S.A), S._ndim, S.nsym))
         V.tset = np.array([ind for ind in V.A], dtype=np.int).reshape((len(V.A), V._ndim, V.nsym))
+
+        if Uaxis != -1:
+            order = list(range(U.ndim - 1))
+            if Uaxis >= 0:
+                order.insert(Uaxis, U.ndim - 1)
+            else:
+                order.insert(Uaxis + 1, U.ndim - 1)
+            U._transpose_local(axes=order)
+
+        if Vaxis != 0:
+            order = list(range(1, V.ndim))
+            if Vaxis >= 0:
+                order.insert(Vaxis, 0)
+            elif Vaxis == -1:
+                order.append(0)
+            else:
+                order.insert(Vaxis + 1, 0)
+            V._transpose_local(axes=order)
+
         return U, S, V
 
-    def split_qr(self, axes):
+    def split_qr(self, axes, sQ=1, Qaxis=-1, Raxis=0):
         r"""
         Split tensor using qr decomposition, tensor = Q * R.
 
-        Signature of connecting leg is set as -1 in Q nad 1 in R. Charge of R is zero.
+        Charge of R is zero.
 
         Parameters
         ----------
         axes: tuple
             Specify two groups of legs between which to perform svd, as well as their final order.
+
+        sQ: int
+            signature of connecting leg in Q equall 1 or -1. Default is 1.
+
+        Qaxis, Raxis: int
+            specify which leg of Q and R tensors are connecting to the other tensor. By delault it is the last leg of Q and the first of R.
 
         Returns
         -------
@@ -1600,9 +1634,10 @@ class Tensor:
         # order formation of blocks
         nout_r, nout_l = np.array(out_r, dtype=np.int), np.array(out_l, dtype=np.int)
 
-        t_cuts = - self.tset[:, nout_r, :].swapaxes(1, 2) @ self.s[nout_r]
+        t_cuts = self.tset[:, nout_l, :].swapaxes(1, 2) @ self.s[nout_l]
         for ss in range(self.nsym):
-            t_cuts[:, ss] = _tmod[self.conf.sym[ss]](n_r[ss] + t_cuts[:, ss])
+            t_cuts[:, ss] = _tmod[self.conf.sym[ss]](sQ * (n_l[ss] - t_cuts[:, ss]))
+
         t_l = self.tset[:, np.append(nout_l, 0), :]
         t_l[:, -1, :] = t_cuts
         t_r = self.tset[:, np.append(0, nout_r), :]
@@ -1620,88 +1655,36 @@ class Tensor:
         Qmerged, Rmerged = self.conf.back.qr(Amerged)
         Dcut = self.conf.back.slice_none(Amerged)
 
-        Q = Tensor(settings=self.conf, s=np.append(self.s[nout_l], -1), n=n_l)
-        R = Tensor(settings=self.conf, s=np.append(1, self.s[nout_r]), n=n_r)
+        Q = Tensor(settings=self.conf, s=np.append(self.s[nout_l], sQ), n=n_l)
+        R = Tensor(settings=self.conf, s=np.append(-sQ, self.s[nout_r]), n=n_r)
 
         Q.A = self.conf.back.unmerge_blocks_left(Qmerged, order_l, Dcut)
         R.A = self.conf.back.unmerge_blocks_right(Rmerged, order_r, Dcut)
 
         Q.tset = np.array([ind for ind in Q.A], dtype=np.int).reshape(len(Q.A), Q._ndim, Q.nsym)
         R.tset = np.array([ind for ind in R.A], dtype=np.int).reshape(len(R.A), R._ndim, R.nsym)
+
+        if Qaxis != -1:
+            order = list(range(Q.ndim - 1))
+            if Qaxis >= 0:
+                order.insert(Qaxis, Q.ndim - 1)
+            else:
+                order.insert(Qaxis + 1, Q.ndim - 1)
+            Q._transpose_local(axes=order)
+
+        if Raxis != 0:
+            order = list(range(1, R.ndim))
+            if Raxis > 0:
+                order.insert(Raxis, 0)
+            elif Raxis == -1:
+                order.append(0)
+            else:
+                order.insert(Raxis + 1, 0)
+            R._transpose_local(axes=order)
+
         return Q, R
 
-    def split_rq(self, axes):
-        r"""
-        Split tensor using rq decomposition, tensor = R * Q.
-
-        Signature of connecting leg is set as -1 in R nad 1 in Q. Charge of R is zero.
-
-        Parameters
-        ----------
-        axes: tuple
-            Specify two groups of legs between which to perform svd, as well as their final order.
-
-        Returns
-        -------
-            R, Q: Tensor
-        """
-        try:
-            ll = len(axes[0])
-            out_l = tuple(axes[0])
-        except TypeError:
-            out_l = (axes[0],)  # indices going u
-            ll = 1
-        try:
-            lr = len(axes[1])
-            out_r = tuple(axes[1])
-        except TypeError:
-            out_r = (axes[1],)  # indices going v
-            lr = 1
-        out_all = out_l + out_r  # order for transpose
-
-        if not (self._ndim == ll + lr):
-            raise TensorError('Two few indices in axes')
-        elif not (sorted(set(out_all)) == list(range(self._ndim))):
-            raise TensorError('Repeated axis')
-
-        # divide charges between R=l and Q=r
-        n_l, n_r = np.zeros(self.nsym, dtype=int), self.n
-
-        # order formation of blocks
-        nout_r, nout_l = np.array(out_r, dtype=np.int), np.array(out_l, dtype=np.int)
-
-        t_cuts = - self.tset[:, nout_r, :].swapaxes(1, 2) @ self.s[nout_r]
-        for ss in range(self.nsym):
-            t_cuts[:, ss] = _tmod[self.conf.sym[ss]](n_r[ss] + t_cuts[:, ss])
-        t_l = self.tset[:, np.append(nout_l, 0), :]
-        t_l[:, -1, :] = t_cuts
-        t_r = self.tset[:, np.append(0, nout_r), :]
-        t_r[:, 0, :] = t_cuts
-
-        xx_list = sorted((tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), tuple(t4.flat))
-                         for t1, t2, t3, t4 in zip(t_cuts, t_l, t_r, self.tset))
-        to_execute = []
-
-        for t1, tgroup in itertools.groupby(xx_list, key=lambda x: x[0]):
-            to_execute.append((t1, list(tgroup)))
-
-        # merged blocks and information for un-merging
-        Amerged, order_l, order_r = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r)
-
-        Rmerged, Qmerged = self.conf.back.rq(Amerged)
-        Dcut = self.conf.back.slice_none(Amerged)
-
-        R = Tensor(settings=self.conf, s=np.append(self.s[nout_l], -1), n=n_l)
-        Q = Tensor(settings=self.conf, s=np.append(1, self.s[nout_r]), n=n_r)
-
-        R.A = self.conf.back.unmerge_blocks_left(Rmerged, order_l, Dcut)
-        Q.A = self.conf.back.unmerge_blocks_right(Qmerged, order_r, Dcut)
-
-        R.tset = np.array([ind for ind in R.A], dtype=np.int).reshape(len(R.A), R._ndim, R.nsym)
-        Q.tset = np.array([ind for ind in Q.A], dtype=np.int).reshape(len(Q.A), Q._ndim, Q.nsym)
-        return R, Q
-
-    def split_eigh(self, axes=(0, 1), tol=0, D_block=_large_int, D_total=_large_int):
+    def split_eigh(self, axes=(0, 1), sU=1, Uaxis=-1, tol=0, D_block=_large_int, D_total=_large_int):
         r"""
         Split tensor using eig, tensor = U * S * U^dag. Truncate smallest eigenvalues if neccesary.
 
@@ -1714,6 +1697,12 @@ class Tensor:
         ----------
         axes: tuple
             Specify two groups of legs between which to perform svd, as well as their final order.
+
+        sU: int
+            signature of connecting leg in U equall 1 or -1. Default is 1.
+
+        Uaxis: int
+            specify which leg of U is the new connecting leg. By delault it is the last leg.
 
         tol: float
             relative tolerance of singular values below which to truncate.
@@ -1753,9 +1742,10 @@ class Tensor:
         nout_r = np.array(out_r, dtype=np.int)
         nout_l = np.array(out_l, dtype=np.int)
 
-        t_cuts = - self.tset[:, nout_r, :].swapaxes(1, 2) @ self.s[nout_r]
+        t_cuts = self.tset[:, nout_l, :].swapaxes(1, 2) @ self.s[nout_l]
         for ss in range(self.nsym):
-            t_cuts[:, ss] = _tmod[self.conf.sym[ss]](t_cuts[:, ss])
+            t_cuts[:, ss] = _tmod[self.conf.sym[ss]](-sU * t_cuts[:, ss])
+
         t_l = self.tset[:, np.append(nout_l, 0), :]
         t_l[:, -1, :] = t_cuts
         t_r = self.tset[:, np.append(0, nout_r), :]
@@ -1773,14 +1763,23 @@ class Tensor:
 
         # order formation of blocks
         S = Tensor(settings=self.conf, isdiag=True)
-        U = Tensor(settings=self.conf, s=np.append(self.s[nout_l], -1))
+        U = Tensor(settings=self.conf, s=np.append(self.s[nout_l], sU))
 
         Dcut = self.conf.back.slice_S(Smerged, tol=tol, Dblock=D_block, Dtotal=D_total, decrease=False)
 
         S.A = self.conf.back.unmerge_blocks_diag(Smerged, Dcut)
         U.A = self.conf.back.unmerge_blocks_left(Umerged, order_l, Dcut)
-        U.tset = np.array([ind for ind in U.A], dtype=np.int).reshape(len(U.A), U._ndim, U.nsym)
         S.tset = np.array([ind for ind in S.A], dtype=np.int).reshape(len(S.A), S._ndim, S.nsym)
+        U.tset = np.array([ind for ind in U.A], dtype=np.int).reshape(len(U.A), U._ndim, U.nsym)
+
+        if Uaxis != -1:
+            order = list(range(U.ndim - 1))
+            if Uaxis >= 0:
+                order.insert(Uaxis, U.ndim - 1)
+            else:
+                order.insert(Uaxis + 1, U.ndim - 1)
+            U._transpose_local(axes=order)
+
         return S, U
 
     #################
@@ -1791,18 +1790,35 @@ class Tensor:
         """
         Test if all elements of two tensors are independent objects in memory.
         """
-        t = []
-        t.append(self is other)
-        t.append(self.A is other.A)
-        t.append(self.n is other.n)
-        t.append(self.s is other.s)
+        test = []
+        test.append(self is other)
+        test.append(self.A is other.A)
+        test.append(self.n is other.n)
+        test.append(self.s is other.s)
         for key in self.A.keys():
             if key in other.A:
-                t.append(self.conf.back.is_independent(self.A[key], other.A[key]))
-        if not any(t):
-            return True
-        else:
-            return False
+                test.append(self.conf.back.is_independent(self.A[key], other.A[key]))
+        return not any(test)
+
+    def is_symmetric(self):
+        """
+        Test if tset corresponds to indices of A; and is f(s * t - n) == 0 is satisfied for all blocks.
+        """
+        test = []
+        for ind in self.tset:
+            test.append(tuple(ind.flat) in self.A)
+        test.append(len(self.tset) == len(self.A))
+
+        tcut = self.tset.swapaxes(1, 2) @ self.s
+        for ss in range(self.nsym):
+            tcut[:, ss] = _tmod[self.conf.sym[ss]](tcut[:, ss] - self.n[ss])
+        test.append(not np.any(tcut))
+        ts = self.get_t()
+        for ss in range(self.nsym):
+            for nn in range(self._ndim):
+                cleared_t = [_tmod[self.conf.sym[ss]](x) for x in ts[ss][nn]]
+                test.append(len(set(cleared_t)) == len(ts[ss][nn]))
+        return all(test)
 
     # def block(td, common_legs, ndim):
     #     """ Assemble new tensor by blocking a set of tensors.

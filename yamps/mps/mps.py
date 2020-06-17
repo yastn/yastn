@@ -80,9 +80,9 @@ class Mps:
         if nnext is not None:
             self.pC = (n, nnext)
             if leg == 0:  # ortogonalize from right to left (last to first)
-                R, Q = self.A[n].split_rq(axes=(self.left, self.phys + self.right))
+                Q, R = self.A[n].split_qr(axes=(self.phys + self.right, self.left), sQ=1, Qaxis=0, Raxis=-1)
             else:  # leg == 1 or leg is None:  # ortogonalize from left to right (first to last)
-                Q, R = self.A[n].split_qr(axes=(self.left + self.phys, self.right))
+                Q, R = self.A[n].split_qr(axes=(self.left + self.phys, self.right), sQ=-1)
 
             self.A[n] = Q
             normC = R.norm()
