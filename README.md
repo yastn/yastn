@@ -1,6 +1,8 @@
 # Yet another matrix product state
 
-Instalation
+Development of tensor supporting abelian symmetries with some examples and test employing it for matrix product states.
+
+Installation
 -----------
 Install using
    ```
