@@ -11,6 +11,7 @@ def test_block1():
     a = Tensor(settings=settings_U1, s=(-1, 1, 1))
     a.set_block(ts=(1, -1, 2), Ds=(1, 1, 1), val='randR')
     a.set_block(ts=(2, 0, 2), Ds=(1, 1, 1), val='randR')
+    a.show_properties()
 
     b = Tensor(settings=settings_U1, s=(-1, 1, 1))
     b.set_block(ts=(1, 0, 1), Ds=(1, 1, 1), val='randR')
