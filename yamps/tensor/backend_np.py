@@ -7,6 +7,10 @@ from functools import reduce
 from operator import mul
 
 
+_select_dtype = {'float64': np.float64,
+                 'complex128': np.complex128}
+
+
 def random_seed(seed):
     np.random.seed(seed)
 
@@ -35,6 +39,10 @@ def get_ndim(x):
     return x.ndim
 
 
+def get_size(x):
+    return x.size
+
+
 def diag_create(x):
     return np.diag(x)
 
@@ -47,24 +55,27 @@ def diag_get(x):
 ##############
 
 
-def zeros(D):
-    return np.zeros(D, dtype=np.float64)
+def zeros(D, dtype='float64'):
+    return np.zeros(D, dtype=_select_dtype[dtype])
 
 
-def ones(D):
-    return np.ones(D, dtype=np.float64)
+def ones(D, dtype='float64'):
+    return np.ones(D, dtype=_select_dtype[dtype])
 
 
-def randR(D):
-    return 2 * np.random.random_sample(D) - 1
+def randR(D, dtype='float64'):
+    return 2 * np.random.random_sample(D).astype(_select_dtype[dtype]) - 1
 
 
-def randC(D):
-    return 2 * np.random.random_sample(D) - 1 + 1j * (2 * np.random.random_sample(D) - 1)
+def rand(D, dtype='float64'):
+    if dtype == 'float64':
+        return randR(D, dtype=dtype)
+    elif dtype == 'complex128':
+        return 2 * np.random.random_sample(D) - 1 + 1j * (2 * np.random.random_sample(D) - 1)
 
 
-def to_tensor(val, Ds=None):
-    return np.array(val) if Ds is None else np.array(val).reshape(Ds)
+def to_tensor(val, Ds=None, dtype='float64'):
+    return np.array(val, dtype=_select_dtype[dtype]) if Ds is None else np.array(val, dtype=_select_dtype[dtype]).reshape(Ds)
 
 
 ##############
@@ -435,7 +446,7 @@ def trace_dot_diag(A, B, conj, to_execute, axis1, axis2, a_ndim):
 ##############
 
 
-def merge_blocks(A, to_execute, out_l, out_r):
+def merge_blocks(A, to_execute, out_l, out_r, dtype='float64'):
     """ merge blocks depending on the cut """
     out_all = out_l + out_r
     Amerged, order_l, order_r = {}, {}, {}
@@ -450,15 +461,13 @@ def merge_blocks(A, to_execute, out_l, out_r):
                     Dr[tr] = [A[ind].shape[ii] for ii in out_r]
                     pDr[tr] = reduce(mul, Dr[tr], 1)
 
-            dtype = A[ind].dtype  # all dtype's in A should be the same -- takes the last one
-
             ind_l, ind_r = sorted(Dl), sorted(Dr)
             cpDl = np.cumsum([0] + [pDl[ind] for ind in ind_l])
             order_l[tcut] = [(ind, Dl[ind], slice(cpDl[ii], cpDl[ii + 1])) for ii, ind in enumerate(ind_l)]
             cpDr = np.cumsum([0] + [pDr[ind] for ind in ind_r])
             order_r[tcut] = [(ind, Dr[ind], slice(cpDr[ii], cpDr[ii + 1])) for ii, ind in enumerate(ind_r)]
 
-            Atemp = np.zeros((cpDl[-1], cpDr[-1]), dtype=dtype)
+            Atemp = np.zeros((cpDl[-1], cpDr[-1]), dtype=_select_dtype[dtype])
 
             jj, max_tts = 0, len(tts)
             _, tl, tr, ind = tts[jj]
@@ -483,7 +492,7 @@ def merge_blocks(A, to_execute, out_l, out_r):
             #             except StopIteration:
             #                 pass
             #         else:
-            #             form_row.append(np.zeros((pDl[il], pDr[ir])))
+            #             form_row.append(np.zeros((pDl[il], pDr[ir]), dtype=self.conf.dtype))
             #     form_matrix.append(np.hstack(form_row) if len(form_row) > 1 else form_row[0])
             # Amerged[tcut] = np.vstack(form_matrix) if len(form_matrix) > 1 else form_matrix[0]
         else:
@@ -496,6 +505,47 @@ def merge_blocks(A, to_execute, out_l, out_r):
             order_r[tcut] = [(tr, Dr, slice(None))]
             Amerged[tcut] = np.transpose(A[ind], out_all).reshape(pDl, pDr)
     return Amerged, order_l, order_r
+
+
+def group_legs(A, to_execute, axes, rest, new_axis, dtype='float64'):
+    """ merge blocks depending on the cut """
+    out_all = rest[:new_axis] + axes + rest[new_axis:]
+    Anew, leg_order = {}, {}
+    slc = [slice(None)] * (len(rest) + 1)
+
+    for tcut, tts in to_execute:
+        Din, pDin = {}, {}
+        for _, tin, _, ind in tts:
+            if tin not in Din:
+                Din[tin] = tuple(A[ind].shape[ii] for ii in axes)
+                pDin[tin] = reduce(mul, Din[tin], 1)
+
+        ind_in = sorted(Din)
+        cpDin = np.cumsum([0] + [pDin[ind] for ind in ind_in])
+        leg_order[tcut] = {ind: (Din[ind], slice(cpDin[ii], cpDin[ii + 1])) for ii, ind in enumerate(ind_in)}
+
+        Dnew = {}
+        for _, tin, tnew, ind in tts:
+            if tnew not in Anew:
+                Dnew[tnew] = tuple(A[ind].shape[ii] for ii in rest)
+                Anew[tnew] = np.zeros((*Dnew[tnew][:new_axis], cpDin[-1], *Dnew[tnew][new_axis:]), dtype=_select_dtype[dtype])
+
+            slc[new_axis] = leg_order[tcut][tin][1]
+            Anew[tnew][tuple(slc)] = A[ind].transpose(out_all).reshape(*Dnew[tnew][:new_axis], pDin[tin], *Dnew[tnew][new_axis:])
+
+    return Anew, leg_order
+
+
+def ungroup_leg(A, axis, ndim, leg_order, to_execute):
+    """ ungroup single leg """
+    Anew = {}
+    slc = [slice(None)] * ndim
+    for tcut, tout, told, tnew in to_execute:
+        Dn, slc[axis] = leg_order[tcut][tout]
+        shp = A[told].shape
+        shp = shp[:axis] + Dn + shp[axis + 1:]
+        Anew[tnew] = np.reshape(A[told][tuple(slc)], shp).copy()
+    return Anew
 
 
 def slice_none(d):
@@ -582,7 +632,7 @@ def unmerge_blocks(C, order_l, order_r):
 
 
 def is_independent(A, B):
-    """ 
+    """
     check if two arrays are identical, or share the same view.
     """
     return (A is B) or (A.base is B) or (A is B.base)

@@ -45,6 +45,10 @@ _tmod = {'U1': _sym_U1,
          'Z2': _sym_Z2}
 
 
+# dtype used during conversion to numpy array
+_select_dtype = {'float64': np.float64,
+                 'complex128': np.complex128}
+
 #######################################################
 #     Functions creating and filling in new tensor    #
 #######################################################
@@ -75,11 +79,11 @@ def rand(settings=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
         a random instance of a tensor
     """
     a = Tensor(settings=settings, s=s, n=n, isdiag=isdiag)
-    a.reset_tensor(t=t, D=D, val='randR')
+    a.reset_tensor(t=t, D=D, val='rand')
     return a
 
 
-def randC(settings=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
+def randR(settings=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with complex random numbers from [-1,1] + 1j * [-1,1].
 
@@ -104,7 +108,7 @@ def randC(settings=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
         a random instance of a tensor
     """
     a = Tensor(settings=settings, s=s, n=n, isdiag=isdiag)
-    a.reset_tensor(t=t, D=D, val='randC')
+    a.reset_tensor(t=t, D=D, val='randR')
     return a
 
 
@@ -221,7 +225,7 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
     conjs: list
         if tensors are entering dot as conjugated
     val: str
-        'randR' == 'rand', 'randC', 'ones', 'zeros'
+        'randR', 'rand', 'ones', 'zeros'
     """
     t, D, s = [], [], []
     if conjs is None:
@@ -318,7 +322,7 @@ class Tensor:
             When somewhere there is only one value tuple can typically be replaced by int.
 
         val : str
-            'randR' == 'rand', 'randC', 'ones', 'zeros'
+            'randR', 'rand' (use current dtype float or complex), 'ones', 'zeros'
 
         Examples
         --------
@@ -386,13 +390,13 @@ class Tensor:
         for ind, Ds in zip(tset, Dset):
             ind, Ds = tuple(ind.flat), tuple(np.prod(Ds, axis=1))
             if val == 'zeros':
-                self.A[ind] = self.conf.back.zeros(Ds)
-            elif val == 'rand' or val == 'randR':
-                self.A[ind] = self.conf.back.randR(Ds)
-            elif val == 'randC':
-                self.A[ind] = self.conf.back.randC(Ds)
+                self.A[ind] = self.conf.back.zeros(Ds, dtype=self.conf.dtype)
+            elif val == 'randR':
+                self.A[ind] = self.conf.back.randR(Ds, dtype=self.conf.dtype)
+            elif val == 'rand':
+                self.A[ind] = self.conf.back.rand(Ds, dtype=self.conf.dtype)
             elif val == 'ones':
-                self.A[ind] = self.conf.back.ones(Ds)
+                self.A[ind] = self.conf.back.ones(Ds, dtype=self.conf.dtype)
         self.tset = tset
 
     def set_block(self, ts=(), Ds=None, val='zeros'):
@@ -412,7 +416,7 @@ class Tensor:
             If Ds not given, tries to read it from existing blocks.
 
         val : str, nparray, list
-            'randR' == 'rand', 'randC', 'ones', 'zeros'
+            'randR', 'rand' (use current dtype float or complex), 'ones', 'zeros'
             for nparray setting Ds is needed.
         """
         if isinstance(Ds, int):
@@ -452,15 +456,15 @@ class Tensor:
                         raise TensorError('Dimension of the new block does not match the existing ones')
             Ds = tuple(Ds)
             if val == 'zeros':
-                self.A[ts] = self.conf.back.zeros(Ds)
-            elif val == 'rand' or val == 'randR':
-                self.A[ts] = self.conf.back.randR(Ds)
-            elif val == 'randC':
-                self.A[ts] = self.conf.back.randC(Ds)
+                self.A[ts] = self.conf.back.zeros(Ds, dtype=self.conf.dtype)
+            elif val == 'randR':
+                self.A[ts] = self.conf.back.randR(Ds, dtype=self.conf.dtype)
+            elif val == 'rand':
+                self.A[ts] = self.conf.back.rand(Ds, dtype=self.conf.dtype)
             elif val == 'ones':
-                self.A[ts] = self.conf.back.ones(Ds)
+                self.A[ts] = self.conf.back.ones(Ds, dtype=self.conf.dtype)
         else:
-            self.A[ts] = self.conf.back.to_tensor(val, Ds)
+            self.A[ts] = self.conf.back.to_tensor(val, Ds, dtype=self.conf.dtype)
             Ds = self.conf.back.get_shape(self.A[ts])
             for D1, D2 in zip(Ds, existing_D):
                 if (D1 != D2) and (D2 != -1):
@@ -557,12 +561,17 @@ class Tensor:
         print("charge       : ", self.n)
         print("isdiag       : ", self.isdiag)
         print("no. of blocks: ", len(self.A))
+        print("size         : ", self.get_size())
         print("tset shape   : ", self.tset.shape)
         print("charges      : ", self.get_t())
         lts, lDs = self.get_tD()
         print("leg charges  : ", lts)
         print("dimensions   : ", lDs)
         print("total dim    : ", [sum(xx) for xx in lDs], "\n")
+
+    def get_size(self):
+        """ Total number of elements in tensor."""
+        return sum(self.conf.back.get_size(A) for A in self.A.values())
 
     def get_total_charge(self):
         """ Global charges of the tensor tensor."""
@@ -649,7 +658,7 @@ class Tensor:
         """
         lts, lDs = self.get_tD()
         Dtotal = [sum(Ds) for Ds in lDs]
-        a = np.zeros(Dtotal, dtype=np.float64)
+        a = np.zeros(Dtotal, dtype=_select_dtype[self.conf.dtype])
         for ind in self.tset:  # fill in the blocks
             sl = []
             for leg, t in enumerate(ind):
@@ -658,8 +667,6 @@ class Tensor:
                 Dleg = sum(lDs[leg][:ii])
                 sl.append(slice(Dleg, Dleg + lDs[leg][ii]))
             temp = self.conf.back.to_numpy(self.A[tuple(ind.flat)])
-            if np.iscomplexobj(temp) and not np.iscomplexobj(a):
-                a = a.astype(complex)
             if sl:
                 a[tuple(sl)] = temp
             else:  # should only happen for 0-dim tensor -- i.e.  a scalar
@@ -951,12 +958,107 @@ class Tensor:
         else:
             return self.copy()
 
+    def group_legs(self, axes, new_s=1):
+        """
+        Group tensor legs into a single leg.
+
+        Create one new leg, which is placed on the position of the first index in axes. The rest is shifted accordingly.
+
+        Parameters
+        ----------
+        axes: tuple
+            tuple of legs to combine.
+
+        new_s: int
+            signeture of a new leg.
+
+        Returns
+        -------
+        tensor : Tensor
+        """
+        if self.isdiag:
+            raise TensorError('Cannot group legs of diagonal tensor')
+
+        nin = np.array(axes, dtype=np.int)
+
+        rest = tuple(ii for ii in range(self._ndim) if ii not in axes)  # other legs
+        nrest = np.array(rest, dtype=np.int)
+
+        axes1 = axes[1:]
+        rest1 = tuple(ii for ii in range(self._ndim) if ii not in axes1)  # other legs
+        nrest1 = np.array(rest1, dtype=np.int)
+        new_axis = rest1.index(axes[0])
+
+        t_cuts = self.tset[:, nin, :].swapaxes(1, 2) @ self.s[nin]
+        for ss in range(self.nsym):
+            t_cuts[:, ss] = _tmod[self.conf.sym[ss]](new_s * t_cuts[:, ss])
+
+        t_new = self.tset[:, nrest1, :]
+        t_new[:, new_axis, :] = t_cuts
+        t_in = self.tset[:, nin, :]
+
+        xx_list = sorted((tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), tuple(t4.flat))
+                         for t1, t2, t3, t4 in zip(t_cuts, t_in, t_new, self.tset))
+        to_execute = []
+        for t1, tgroup in itertools.groupby(xx_list, key=lambda x: x[0]):
+            to_execute.append((t1, list(tgroup)))
+
+        Agrouped, leg_order = self.conf.back.group_legs(self.A, to_execute, axes, rest, new_axis, self.conf.dtype)
+
+        s = self.s[nrest1]
+        s[new_axis] = new_s
+
+        leg_order['s'] = tuple(self.s[nin])
+        c = Tensor(settings=self.conf, s=s, n=self.n, isdiag=self.isdiag)
+        c.A = Agrouped
+        c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
+        return c, leg_order
+
+    def ungroup_leg(self, axis, leg_order):
+        """
+        Ungroup a single tensor leg.
+
+        New legs are inserted in place of the ungrouped one.
+
+        Parameters
+        ----------
+        axis: int
+            index of leg to ungroup.
+
+        leg_order: tuple
+            information about grouped indices generetat by :meth:`Tensor.group_legs`
+
+        Returns
+        -------
+        tensor : Tensor
+        """
+
+        if self.isdiag:
+            raise TensorError('Cannot group legs of diagonal tensor')
+
+        to_execute = []
+        for t in self.tset:
+            tcut = tuple(t[axis, :].flat)
+            tl = tuple(t[:axis, :].flat)
+            tr = tuple(t[axis + 1:, :].flat)
+            t = tuple(t.flat)
+            for tout in leg_order[tcut]:
+                to_execute.append((tcut, tout, t, tl + tout + tr))
+
+        s = tuple(self.s[:axis]) + leg_order['s'] + tuple(self.s[axis + 1:])
+        c = Tensor(settings=self.conf, s=s, n=self.n, isdiag=self.isdiag)
+        c.A = self.conf.back.ungroup_leg(self.A, axis, self._ndim, leg_order, to_execute)
+        c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
+        return c
+
     def swap_gate(self, axes, fermionic=[]):
         """
         Return tensor after application of the swap gate.
 
         Multiply the block with odd charges on swaped legs by -1.
         If one of the axes is -1, then swap with charge n.
+
+        TEST IT
 
         Parameters
         ----------
@@ -985,7 +1087,7 @@ class Tensor:
                 else:  # axes[0] != axes[1]:  # swap gate on 2 legs
                     for ind in a.tset:
                         if (np.sum(ind[axes[0], fermionic]) % 2 == 1) and (np.sum(ind[axes[1], fermionic]) % 2 == 1):
-                            a.A[ind] = -a.A[ind]                
+                            a.A[ind] = -a.A[ind]
             else:
                 for ind in a.tset:
                     if (np.sum(ind[axes[0], fermionic]) % 2 == 1):
@@ -1065,9 +1167,11 @@ class Tensor:
             # divide charges between l and r
             # order formation of blocks
             nout_r, nout_l = np.array(out_r, dtype=np.int), np.array(out_l, dtype=np.int)
-            t_cuts = - self.tset[:, nout_r, :].swapaxes(2, 1) @ self.s[nout_r]
+
+            t_cuts = self.tset[:, nout_l, :].swapaxes(1, 2) @ self.s[nout_l]
             for ss in range(self.nsym):
                 t_cuts[:, ss] = _tmod[self.conf.sym[ss]](t_cuts[:, ss])
+
             t_l = self.tset[:, np.append(nout_l, 0), :]
             t_l[:, -1, :] = t_cuts
             t_r = self.tset[:, np.append(0, nout_r), :]
@@ -1080,7 +1184,7 @@ class Tensor:
                 to_execute.append((t1, list(tgroup)))
 
             # merged blocks; do not need information for unmerging
-            Amerged, _, _ = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r)
+            Amerged, _, _ = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r, self.conf.dtype)
             Smerged = self.conf.back.svd_no_uv(Amerged)
         else:
             Smerged = self.A
@@ -1420,9 +1524,9 @@ class Tensor:
                 pass
 
             # merged blocks and information for un-merging
-            Amerged, order_l, _ = self.conf.back.merge_blocks(self.A, to_merge_a, a_out, a_con)
+            Amerged, order_l, _ = self.conf.back.merge_blocks(self.A, to_merge_a, a_out, a_con, self.conf.dtype)
             # merged blocks and information for un-merging
-            Bmerged, _, order_r = self.conf.back.merge_blocks(other.A, to_merge_b, b_con, b_out)
+            Bmerged, _, order_r = self.conf.back.merge_blocks(other.A, to_merge_b, b_con, b_out, self.conf.dtype)
 
             Cmerged = self.conf.back.dot_merged(Amerged, Bmerged, conj)
 
@@ -1551,7 +1655,7 @@ class Tensor:
             to_execute.append((t1, list(tgroup)))
 
         # merged blocks and information for un-merging
-        Amerged, order_l, order_r = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r)
+        Amerged, order_l, order_r = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r, self.conf.dtype)
         Umerged, Smerged, Vmerged = self.conf.back.svd(Amerged, truncated=truncated_svd, Dblock=D_block, nbit=truncated_nbit, kfac=truncated_kfac)
 
         U = Tensor(settings=self.conf, s=np.append(self.s[nout_l], sU), n=n_l)
@@ -1651,7 +1755,7 @@ class Tensor:
             to_execute.append((t1, list(tgroup)))
 
         # merged blocks and information for un-merging
-        Amerged, order_l, order_r = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r)
+        Amerged, order_l, order_r = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r, self.conf.dtype)
         Qmerged, Rmerged = self.conf.back.qr(Amerged)
         Dcut = self.conf.back.slice_none(Amerged)
 
@@ -1758,7 +1862,7 @@ class Tensor:
             to_execute.append((t1, list(tgroup)))
 
         # merged blocks and information for un-merging
-        Amerged, order_l, _ = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r)
+        Amerged, order_l, _ = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r, self.conf.dtype)
         Smerged, Umerged = self.conf.back.eigh(Amerged)
 
         # order formation of blocks

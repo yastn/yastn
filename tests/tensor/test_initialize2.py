@@ -14,9 +14,9 @@ def test_set0():
     print('----------')
     print('3d tensor:')
     a = tensor.Tensor(settings=settings_full, s=(-1, 1, 1))
-    a.set_block(Ds=(4, 5, 6), val='randC')
+    a.set_block(Ds=(4, 5, 6), val='randR')
     npa = a.to_numpy()
-    assert np.iscomplexobj(npa)
+    # assert np.iscomplexobj(npa)
     assert npa.shape == (4, 5, 6)
     assert a.tset.shape == (1, 3, 0)
     assert a.is_symmetric()
@@ -60,9 +60,9 @@ def test_set1():
     a = tensor.ones(settings=settings_U1, s=(-1, 1, 1, 1),
                     t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
                     D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
-    a.set_block(ts=(-2, 0, -2, 0), val='randC')
+    a.set_block(ts=(-2, 0, -2, 0), val='randR')
     npa = a.to_numpy()
-    assert np.iscomplexobj(npa)
+    # assert np.iscomplexobj(npa)
     assert npa.shape == (6, 3, 6, 1)
     assert a.tset.shape == (5, 4, 1)
     assert a.is_symmetric()
@@ -159,7 +159,7 @@ def test_dict():
     assert pytest.approx(a.norm_diff(b)) == 0
     assert a.is_symmetric()
 
-    a = tensor.randC(settings=settings_full)  # s=()
+    a = tensor.randR(settings=settings_full)  # s=()
     d = a.to_dict()
     b = tensor.from_dict(settings=settings_full, d=d)
     assert pytest.approx(a.norm_diff(b)) == 0

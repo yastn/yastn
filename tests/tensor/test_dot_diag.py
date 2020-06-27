@@ -21,8 +21,8 @@ def test_dot_diag0():
     assert pytest.approx(r1.norm_diff(r3)) == 0
     assert pytest.approx(r1.norm_diff(r4)) == 0
 
-    a = tensor.randC(settings=settings_full, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
-    b = tensor.randC(settings=settings_full, s=(-1, 1), D=(7, 5))
+    a = tensor.randR(settings=settings_full, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
+    b = tensor.randR(settings=settings_full, s=(-1, 1), D=(7, 5))
     b = b.diag()  # 5x5 diagonal
     b1 = b.diag()
 
