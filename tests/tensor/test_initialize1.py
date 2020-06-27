@@ -1,5 +1,5 @@
 r"""
-Test functions: reset_tensor (which is called in: rand, randC, zeros, ones), to_numpy, match_legs, norm_diff
+Test functions: reset_tensor (which is called in: rand, randR, zeros, ones), to_numpy, match_legs, norm_diff
 
 """
 
@@ -114,10 +114,10 @@ def test_reset1():
 
     print('----------------')
     print('diagonal tensor:')
-    a = tensor.randC(settings=settings_U1, isdiag=True, t=(-1, 0, 1), D=(2, 3, 4))
+    a = tensor.randR(settings=settings_U1, isdiag=True, t=(-1, 0, 1), D=(2, 3, 4))
     a.show_properties()
     npa = a.to_numpy()
-    assert np.iscomplexobj(npa)
+    # assert np.iscomplexobj(npa)
     assert npa.shape == (9, 9)
     assert a.tset.shape == (3, 1, 1)
     assert pytest.approx(np.linalg.norm(np.diag(np.diag(npa)) - npa)) == 0
@@ -211,12 +211,12 @@ def test_reset2():
 
     print('----------------')
     print('diagonal tensor:')
-    a = tensor.randC(settings=settings_Z2_U1, isdiag=True,
+    a = tensor.randR(settings=settings_Z2_U1, isdiag=True,
                      t=[(0, 1), (0, 1)],
                      D=[(2, 2), (2, 2)])
     a.show_properties()
     npa = a.to_numpy()
-    assert np.iscomplexobj(npa)
+    # assert np.iscomplexobj(npa)
     assert npa.shape == (16, 16)
     assert a.tset.shape == (4, 1, 2)
     assert pytest.approx(np.linalg.norm(np.diag(np.diag(npa)) - npa)) == 0
