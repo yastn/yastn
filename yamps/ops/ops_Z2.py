@@ -4,32 +4,30 @@ import yamps.tensor as tensor
 import numpy as np
 
 
-def mps_random(N=2, Dmax=2, total_parity=0, dtype='float64'):
+def mps_random(N=2, Dblock=2, total_parity=0, dtype='float64'):
     psi = mps.Mps(N, nr_phys=1)
     tc = (0, 1)
     Dc = (1, 1)
     for n in range(N):
         tr = (0, 1) if n < N - 1 else (total_parity, )
-        Dr = (Dmax, Dmax) if n < N - 1 else (1,)
+        Dr = (Dblock, Dblock) if n < N - 1 else (1,)
         tl = (0, 1) if n > 0 else (0,)
-        Dl = (Dmax, Dmax) if n > 0 else (1,)
+        Dl = (Dblock, Dblock) if n > 0 else (1,)
         psi.A[n] = tensor.rand(settings=settings, s=(1, 1, -1), t=[tl, tc, tr], D=[Dl, Dc, Dr])
     return psi
 
 
-def mpo_random(N=2, Dmax=2, total_parity=0, t_out=None, t_in=(0, 1), dtype='float64'):
+def mpo_random(N=2, Dblock=2, total_parity=0, t_out=None, t_in=(0, 1), dtype='float64'):
     psi = mps.Mps(N, nr_phys=2)
     if t_out is None:
         t_out = t_in
     Din = (1,) * len(t_in)
     Dout = (1,) * len(t_out)
-    D0 = Dmax // 2
-    D1 = Dmax - D0
     for n in range(N):
         tr = (0, 1) if n < N - 1 else (total_parity, )
-        Dr = (D0, D1) if n < N - 1 else (1,)
+        Dr = (Dblock, Dblock) if n < N - 1 else (1,)
         tl = (0, 1) if n > 0 else (0,)
-        Dl = (D0, D1) if n > 0 else (1,)
+        Dl = (Dblock, Dblock) if n > 0 else (1,)
         psi.A[n] = tensor.rand(settings=settings, s=(1, 1, -1, -1), t=[tl, t_out, t_in, tr], D=[Dl, Dout, Din, Dr])
     return psi
 
