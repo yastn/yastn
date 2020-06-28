@@ -90,6 +90,14 @@ class Env3:
         for n in self.g.sweep(to='first'):
             self.update(n, towards=self.g.first)
 
+    def clear_site(self, n):
+        r"""
+        Clear environments pointing from site n.
+        """
+        nl, nr = self.g.order_neighbours(n)
+        self.F.pop((n, nl), None)
+        self.F.pop((n, nr), None)
+
     def measure(self, bd=None):
         r"""
         Calculate overlap between environments at nn bond
@@ -177,3 +185,32 @@ class Env3:
             return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, -4, -5, 5), (2, -2, -3, 3, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
         else:  # self.nr_phys == 2 and self.on_aux:
             return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, -2, -3, 3, 4, 5), (2, -4, -5, 3, 4, 6), (5, 6, -4)), (0, 0, 0, 0))
+
+    def Heff2_group(self, AA, n):
+        r"""Action of Heff on central site.
+
+        Parameters
+        ----------
+        AA : tensor
+            merged tensor for 2 sites
+        n : int
+            index of the left site
+
+        Returns
+        -------
+        out : tensor
+            Heff2 * AA
+        """
+        nl, nn = self.g.order_neighbours(n)
+        _, nr = self.g.order_neighbours(nn)
+
+        if not hasattr(self, 'op_merged'):
+            self.op_merged = {}
+        if not (n, nn) in self.op_merged:
+            OO = ncon([self.op.A[n], self.op.A[nn]], ((-1, -2, -4, 1), (1, -3, -5, -6)))
+            OO, _ = OO.group_legs(axes=(3, 4), new_s=-1)
+            OO, _ = OO.group_legs(axes=(1, 2), new_s=1)
+            self.op_merged[(n, nn)] = OO
+
+        if self.nr_phys == 1:
+            return ncon([self.F[(nl, n)], AA, self.op_merged[(n, nn)], self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))

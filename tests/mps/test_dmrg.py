@@ -5,14 +5,29 @@ import numpy as np
 import pytest
 
 
-def run_dmrg_1_site(psi, H, sweeps=10):
+def run_dmrg_1_site(psi, H, Etarget, sweeps=10):
     """
     Run a faw sweeps of dmrg_1site_sweep. Returns energy
     """
     env = None
     for _ in range(sweeps):
         env = mps.dmrg.dmrg_sweep_1site(psi, H, env=env, dtype='float64')
-    return env.measure()
+    Eng = env.measure()
+    assert pytest.approx(Eng) == Etarget
+    return Eng
+
+
+def run_dmrg_2_site(psi, H, Etarget, sweeps=10):
+    """
+    Run a faw sweeps of dmrg_1site_sweep. Returns energy
+    """
+    env = None
+    opts_svd = {'tol': 1e-8, 'D_block': 32, 'D_total': 32}
+    for _ in range(sweeps):
+        env = mps.dmrg.dmrg_sweep_2site(psi, H, env=env, dtype='float64', opts_svd=opts_svd)
+    Eng = env.measure()
+    assert pytest.approx(Eng) == Etarget
+    return Eng
 
 
 def test_full_dmrg():
@@ -21,13 +36,17 @@ def test_full_dmrg():
     """
     N = 8
     Eng_gs = -4.758770483143633
-    psi = ops_full.mps_random(N=N, Dmax=32, d=2)
-    psi.canonize_sweep(to='first')
     H = ops_full.mpo_XX_model(N=N, t=1, mu=0)
 
-    Eng = run_dmrg_1_site(psi, H)
+    psi = ops_full.mps_random(N=N, Dmax=32, d=2)
+    psi.canonize_sweep(to='first')
+    Eng = run_dmrg_1_site(psi, H, Eng_gs)
     print('Energy = ', Eng)
-    assert(np.allclose(Eng_gs, Eng))
+
+    psi = ops_full.mps_random(N=N, Dmax=32, d=2)
+    psi.canonize_sweep(to='first')
+    Eng = run_dmrg_2_site(psi, H, Eng_gs)
+    print('Energy = ', Eng)
 
 
 def test_Z2_dmrg():
@@ -42,18 +61,26 @@ def test_Z2_dmrg():
 
     psi = ops_Z2.mps_random(N=N, Dmax=32, total_parity=0)
     psi.canonize_sweep(to='first')
-    Eng = run_dmrg_1_site(psi, H)
+    Eng = run_dmrg_1_site(psi, H, Eng_parity0)
     print('Energy = ', Eng)
-    assert(np.allclose(Eng_parity0, Eng))
 
     psi = ops_Z2.mps_random(N=N, Dmax=32, total_parity=1)
     psi.canonize_sweep(to='first')
-    Eng = run_dmrg_1_site(psi, H)
+    Eng = run_dmrg_1_site(psi, H, Eng_parity1)
     print('Energy = ', Eng)
-    assert(np.allclose(Eng_parity1, Eng))
+
+    psi = ops_Z2.mps_random(N=N, Dmax=32, total_parity=0)
+    psi.canonize_sweep(to='first')
+    Eng = run_dmrg_2_site(psi, H, Eng_parity0)
+    print('Energy = ', Eng)
+
+    psi = ops_Z2.mps_random(N=N, Dmax=32, total_parity=1)
+    psi.canonize_sweep(to='first')
+    Eng = run_dmrg_2_site(psi, H, Eng_parity1)
+    print('Energy = ', Eng)
 
 
 if __name__ == "__main__":
-    pass
+    # pass
     test_full_dmrg()
     test_Z2_dmrg()
