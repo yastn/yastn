@@ -131,13 +131,13 @@ def test_Z2_canonize():
     """
     Initialize random mps of full tensors and checks canonization
     """
-    psi1 = ops_Z2.mps_random(N=16, Dmax=25, total_parity=0)
+    psi1 = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
     canonize(psi1)
-    psi2 = ops_Z2.mps_random(N=16, Dmax=25, total_parity=1, dtype='complex128')
+    psi2 = ops_Z2.mps_random(N=16, Dblock=25, total_parity=1, dtype='complex128')
     canonize(psi2)
-    psi3 = ops_Z2.mpo_random(N=16, Dmax=25, total_parity=1)
+    psi3 = ops_Z2.mpo_random(N=16, Dblock=5, total_parity=1)
     canonize(psi3)
-    psi4 = ops_Z2.mpo_random(N=16, Dmax=25, total_parity=0, t_out=(0,), dtype='complex128')
+    psi4 = ops_Z2.mpo_random(N=16, Dblock=5, total_parity=0, t_out=(0,), dtype='complex128')
     canonize(psi4)
 
 
@@ -145,11 +145,11 @@ def test_Z2_env2_update():
     """
     Initialize random mps' and check if overlaps are calculated consistently.
     """
-    psi1 = ops_Z2.mps_random(N=16, Dmax=25, total_parity=0)
-    psi2 = ops_Z2.mps_random(N=16, Dmax=25, total_parity=0, dtype='complex128')
+    psi1 = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
+    psi2 = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0, dtype='complex128')
 
-    psi3 = ops_Z2.mpo_random(N=16, Dmax=25, total_parity=1)
-    psi4 = ops_Z2.mpo_random(N=16, Dmax=25, total_parity=1, dtype='complex128')
+    psi3 = ops_Z2.mpo_random(N=16, Dblock=25, total_parity=1)
+    psi4 = ops_Z2.mpo_random(N=16, Dblock=5, total_parity=1, dtype='complex128')
 
     env2_measure(psi1, psi2)
     env2_cononize(psi1)
@@ -163,9 +163,9 @@ def test_Z2_env3_update():
     """
     Initialize random mps' and check if overlaps are calculated consistently.
     """
-    psi1 = ops_Z2.mps_random(N=16, Dmax=25, total_parity=0)
-    psi2 = ops_Z2.mps_random(N=16, Dmax=25, total_parity=0, dtype='complex128')
-    op = ops_Z2.mpo_random(N=16, Dmax=5, total_parity=0)
+    psi1 = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
+    psi2 = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0, dtype='complex128')
+    op = ops_Z2.mpo_random(N=16, Dblock=3, total_parity=0)
 
     env3_measure(psi1, op, psi2)
 

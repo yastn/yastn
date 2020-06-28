@@ -40,9 +40,9 @@ def time_Z2_dmrg():
     """
     N = 32
     H = ops_Z2.mpo_XX_model(N=N, t=1, mu=0)
-    Dmax = 64
+    Dmax = 128
 
-    psi = ops_Z2.mps_random(N=N, Dmax=Dmax, total_parity=0)
+    psi = ops_Z2.mps_random(N=N, Dblock=Dmax / 2, total_parity=0)
     psi.canonize_sweep(to='first')
     t0 = time.time()
     Eng = run_dmrg_2_site(psi, H)
