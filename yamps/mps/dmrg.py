@@ -51,7 +51,7 @@ def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
         val, vec, happy = eigs(Av=lambda v: env.Heff2(v, n), init=[init], tol=tol, k=k, hermitian=True, dtype=dtype)
         val = list(val)
         out = vec[val.index(min(val))]
-        A1, S, A2 = out.split_svd(axes=((0, 1), (2, 3)), **opts_svd)
+        A1, S, A2 = out.split_svd(axes=((0, 1), (2, 3)), sU=-1, **opts_svd)
         psi.A[n] = A1
         psi.A[n1] = A2.dot_diag(S, axis=0)
         env.clear_site(n)
@@ -64,7 +64,7 @@ def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
         val, vec, happy = eigs(Av=lambda v: env.Heff2(v, n), init=[init], tol=tol, k=k, hermitian=True, dtype=dtype)
         val = list(val)
         out = vec[val.index(min(val))]
-        A1, S, A2 = out.split_svd(axes=((0, 1), (2, 3)), **opts_svd)
+        A1, S, A2 = out.split_svd(axes=((0, 1), (2, 3)), sU=-1, **opts_svd)
         psi.A[n] = A1.dot_diag(S, axis=2)
         psi.A[n1] = A2
         env.clear_site(n)
@@ -91,7 +91,7 @@ def dmrg_sweep_2site_group(psi, H, env=None, dtype='complex128', hermitian=True,
         val = list(val)
         out = vec[val.index(min(val))]
         out = out.ungroup_leg(axis=1, leg_order=leg_order)
-        A1, S, A2 = out.split_svd(axes=((0, 1), (2, 3)), **opts_svd)
+        A1, S, A2 = out.split_svd(axes=((0, 1), (2, 3)), sU=-1, **opts_svd)
         psi.A[n] = A1
         psi.A[n1] = A2.dot_diag(S, axis=0)
         env.clear_site(n)
@@ -106,7 +106,7 @@ def dmrg_sweep_2site_group(psi, H, env=None, dtype='complex128', hermitian=True,
         val = list(val)
         out = vec[val.index(min(val))]
         out = out.ungroup_leg(axis=1, leg_order=leg_order)
-        A1, S, A2 = out.split_svd(axes=((0, 1), (2, 3)), **opts_svd)
+        A1, S, A2 = out.split_svd(axes=((0, 1), (2, 3)), sU=-1, **opts_svd)
         psi.A[n] = A1.dot_diag(S, axis=2)
         psi.A[n1] = A2
         env.clear_site(n)
