@@ -1,7 +1,7 @@
-import yamps.mps as mps
-import yamps.ops.ops_full as ops_full
-import yamps.ops.ops_Z2 as ops_Z2
-import yamps.ops.ops_U1 as ops_U1
+import mps
+import ops_full
+import ops_Z2
+import ops_U1
 import numpy as np
 import time
 
