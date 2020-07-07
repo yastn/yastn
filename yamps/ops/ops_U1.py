@@ -23,6 +23,8 @@ def mps_random(N=2, Dblocks=[2], total_charge=1, dtype='float64'):
 
 def mpo_random(N=2, Dblocks=[2], total_charge=1, t_out=None, t_in=(0, 1), dtype='float64'):
     psi = mps.Mps(N, nr_phys=2)
+    Dblocks = tuple(Dblocks)
+    nb = len(Dblocks)
     if t_out is None:
         t_out = t_in
     Din = (1,) * len(t_in)
