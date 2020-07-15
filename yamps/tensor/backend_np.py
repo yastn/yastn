@@ -1,11 +1,12 @@
 import numpy as np
 import scipy as sp
 import fbpca as pca
-# from itertools import groupby
+from itertools import groupby
 from itertools import product
+from itertools import accumulate
 from functools import reduce
 from operator import mul
-
+import numba as nb
 
 _select_dtype = {'float64': np.float64,
                  'complex128': np.complex128}
@@ -342,7 +343,21 @@ def dot_merged(A, B, conj):
     return C
 
 
-def dot(A, B, conj, to_execute, a_out, a_con, b_con, b_out):
+# @nb.njit()
+# def tr_rs(Al, a_all):
+#     # sl = nb.typed.List()
+#     # for ii in range(len(Al)):
+#     #     sl.append(np.empty((pDl[ii], pDlc[ii])))
+#     for ii in nb.prange(len(Al)):
+#         Al[ii] = Al[ii].transpose(a_all).copy()
+#     return Al
+#       numba_list = nb.typed.List()
+# [numba_list.append(x) for x in A.values()]
+# numba_list = tr_rs(numba_list, a_all)
+# Atemp = {in1: x.reshape(dl, dc) for in1, x, dl, dc in zip(A, numba_list, pDl, pDlc)}
+
+# @profile
+def dot(A, B, conj, to_execute, a_out, a_con, b_con, b_out, dtype='float64'):
     a_all = a_out + a_con  # order for transpose in A
     b_all = b_con + b_out  # order for transpose in B
     f = dot_dict[conj]  # proper conjugations
@@ -359,8 +374,8 @@ def dot(A, B, conj, to_execute, a_out, a_con, b_con, b_out):
     else:
         Andim = len(a_con) + len(a_out)
         Bndim = len(b_con) + len(b_out)
-        DA = np.array([A[ind].shape for ind in A]).reshape(len(A), Andim)  # bond dimensions of A
-        DB = np.array([B[ind].shape for ind in B]).reshape(len(B), Bndim)  # bond dimensions of B
+        DA = np.array([A[ind].shape for ind in A], dtype=np.int).reshape(len(A), Andim)  # bond dimensions of A
+        DB = np.array([B[ind].shape for ind in B], dtype=np.int).reshape(len(B), Bndim)  # bond dimensions of B
         Dl = DA[:, np.array(a_out, dtype=np.int)]  # bond dimension on left legs
         Dlc = DA[:, np.array(a_con, dtype=np.int)]  # bond dimension on contracted legs
         Dcr = DB[:, np.array(b_con, dtype=np.int)]  # bond dimension on contracted legs
@@ -370,28 +385,51 @@ def dot(A, B, conj, to_execute, a_out, a_con, b_con, b_out):
         pDcr = np.multiply.reduce(Dcr, axis=1, dtype=np.int)
         pDr = np.multiply.reduce(Dr, axis=1, dtype=np.int)
 
-        Atemp = {in1: (A[in1].transpose(a_all).reshape(d1, d2), tuple(dl)) for in1, d1, d2, dl in zip(A, pDl, pDlc, Dl)}
-        Btemp = {in2: (B[in2].transpose(b_all).reshape(d1, d2), tuple(dr)) for in2, d1, d2, dr in zip(B, pDcr, pDr, Dr)}
+        Atemp = {in1: A[in1].transpose(a_all).reshape(d1, d2) for in1, d1, d2 in zip(A, pDl, pDlc)}
+        Btemp = {in2: B[in2].transpose(b_all).reshape(d1, d2) for in2, d1, d2 in zip(B, pDcr, pDr)}
 
-        C, DC = {}, {}
-        for in1, in2, out in to_execute:   # can use if in place of try;exept
-            temp = f(Atemp[in1][0], Btemp[in2][0])
-            try:
-                C[out] = C[out] + temp
-            except KeyError:
-                C[out] = temp
-                DC[out] = Atemp[in1][1] + Btemp[in2][1]
-        for out in C:
-            C[out] = C[out].reshape(DC[out])  # C[out].shape=DC[out]
-        # CAN DIVIDE BELOW into multiplication, and than adding the same out...
-        # multiplied = [[out, f(Atemp[in1][0], Btemp[in2][0]), Atemp[in1][1], Btemp[in2][1]] for in1, in2, out in to_execute]
-        # multiplied = groupby(sorted(multiplied, key=lambda x: x[0]), key=lambda x: x[0])
-        # C={}
-        # for out, xx in multiplied:
-        #     _, C[out], dl, dr = next(xx)
-        #     for _, mat, _, _ in xx:
-        #         C[out] = C[out] + mat
-        #     C[out] = C[out].reshape(dl+dr)
+        Dl = {in1: tuple(dl) for in1, dl in zip(A, Dl)}
+        Dr = {in2: tuple(dr) for in2, dr in zip(B, Dr)}
+        C = {}
+
+        # DC = {}
+        # for in1, in2, out in to_execute:   # can use if in place of try;exept
+        #     temp = f(Atemp[in1], Btemp[in2])
+        #     try:
+        #         C[out] += temp
+        #     except KeyError:
+        #         C[out] = temp
+        #         DC[out] = Dl[in1] + Dr[in2]
+        # for out in C:
+        #     C[out] = C[out].reshape(DC[out])
+
+        # to_execute = groupby(sorted(to_execute, key=lambda x: x[2]), key=lambda x: x[2])
+        # for out, execute in to_execute:
+        #     execute = list(execute)
+        #     le = len(execute)
+        #     in1, in2, _ = execute[-1]
+        #     dl = Dl[in1]
+        #     dr = Dr[in2]
+        #     if le > 1:
+        #         pdl = Atemp[in1].shape[0]
+        #         pdr = Btemp[in2].shape[1]
+        #         temp = np.empty((le, pdl, pdr), dtype=_select_dtype[dtype])
+        #         for ii in range(le):
+        #             in1, in2, _ = execute[ii]
+        #             np.matmul(Atemp[in1], Btemp[in2], out=temp[ii])
+        #         C[out] = np.sum(temp, axis=0).reshape(dl + dr)
+        #     else:
+        #         C[out] = np.matmul(Atemp[in1], Btemp[in2]).reshape(dl + dr)
+
+        to_execute = sorted(to_execute, key=lambda x: x[2])
+        multiplied = [f(Atemp[in1], Btemp[in2]) for in1, in2, _ in to_execute[::-1]]
+        to_execute = groupby(to_execute, key=lambda x: x[2])
+        for out, execute in to_execute:
+            C[out] = multiplied.pop()
+            in1, in2, _ = next(execute)
+            for _ in execute:
+                C[out] += multiplied.pop()
+            C[out] = C[out].reshape(Dl[in1] + Dr[in2])
     return C
 
 
@@ -445,66 +483,153 @@ def trace_dot_diag(A, B, conj, to_execute, axis1, axis2, a_ndim):
 # block merging, truncations and un-merging
 ##############
 
+# @profile
+# def merge_blocks(A, to_execute, out_l, out_r, dtype='float64'):
+#     """ merge blocks depending on the cut """
+#     out_all = out_l + out_r
+#     Amerged, order_l, order_r = {}, {}, {}
+#     for tcut, tts in to_execute:
+#         if len(tts) > 1:
+#             Dl, Dr = {}, {}
+#             for tl, tr, ind in tts:
+#                 if tl not in Dl:
+#                     s = A[ind].shape
+#                     Dl[tl] = tuple(s[ii] for ii in out_l)
+#                 if tr not in Dr:
+#                     s = A[ind].shape
+#                     Dr[tr] = tuple(s[ii] for ii in out_r)
 
+#             ind_l, ind_r = sorted(Dl), sorted(Dr)
+#             pDl = {tl: reduce(mul, Dl[tl], 1) for tl in ind_l}
+#             pDr = {tr: reduce(mul, Dr[tr], 1) for tr in ind_r}
+
+#             orl = {ind: (Dl[ind], slice(j - i, j)) for ind, i, j in zip(ind_l, pDl.values(), accumulate(pDl.values()))}
+#             orr = {ind: (Dr[ind], slice(j - i, j)) for ind, i, j in zip(ind_r, pDr.values(), accumulate(pDr.values()))}
+
+#             Atemp = np.zeros((sum(pDl.values()), sum(pDr.values())), dtype=_select_dtype[dtype])
+
+#             for tl, tr, ind in tts:
+#                 Atemp[orl[tl][1], orr[tr][1]] = A[ind].transpose(out_all).reshape(pDl[tl], pDr[tr])
+
+#             order_l[tcut] = orl
+#             order_r[tcut] = orr
+#             Amerged[tcut] = Atemp
+#         else:
+#             tl, tr, ind = tts[0]
+#             Dl = tuple(A[ind].shape[ii] for ii in out_l)
+#             Dr = tuple(A[ind].shape[ii] for ii in out_r)
+#             pDl = reduce(mul, Dl, 1)
+#             pDr = reduce(mul, Dr, 1)
+#             order_l[tcut] = {tl: (Dl, slice(None))}  # info for un-grouping
+#             order_r[tcut] = {tr: (Dr, slice(None))}
+#             Amerged[tcut] = np.transpose(A[ind], out_all).reshape(pDl, pDr)
+#     return Amerged, order_l, order_r
+
+
+# @profile
 def merge_blocks(A, to_execute, out_l, out_r, dtype='float64'):
     """ merge blocks depending on the cut """
     out_all = out_l + out_r
+    Andim = len(out_all)
+
+    lA = [A[ind] for _, tts in to_execute for _, _, ind in tts]
+    aDA = np.array([x.shape for x in lA], dtype=np.int).reshape(len(lA), Andim)
+    aDl = aDA[:, np.array(out_l, dtype=np.int)]  # bond dimension on left legs
+    aDr = aDA[:, np.array(out_r, dtype=np.int)]  # bond dimension on right legs
+    apDl = np.multiply.reduce(aDl, axis=1, dtype=np.int)  # their product
+    apDr = np.multiply.reduce(aDr, axis=1, dtype=np.int)
+
+    Are = [x.transpose(out_all).reshape(pl, pr) for x, pl, pr in zip(lA, apDl, apDr)]
+    Are = Are[::-1]
+
     Amerged, order_l, order_r = {}, {}, {}
+
+    ii = 0  # assume here that tts are ordered according to tl
     for tcut, tts in to_execute:
         if len(tts) > 1:
-            Dl, Dr, pDl, pDr = {}, {}, {}, {}
-            for _, tl, tr, ind in tts:
-                if tl not in Dl:
-                    Dl[tl] = [A[ind].shape[ii] for ii in out_l]
-                    pDl[tl] = reduce(mul, Dl[tl], 1)
-                if tr not in Dr:
-                    Dr[tr] = [A[ind].shape[ii] for ii in out_r]
-                    pDr[tr] = reduce(mul, Dr[tr], 1)
+            Dl, pDl, ind_tl, Dr, pDr, tr_list = [], [], [], {}, {}, {}
+            for tl, group_tr in groupby(tts, key=lambda x: x[0]):
+                Dl.append(tuple(aDl[ii]))
+                pDl.append(apDl[ii])
+                ind_tl.append(tl)
+                tr_list = [x[1] for x in group_tr]
+                for jj, tr in enumerate(tr_list):
+                    if tr not in Dr:
+                        Dr[tr] = tuple(aDr[ii + jj])
+                        pDr[tr] = apDr[ii + jj]
+                ii += len(tr_list)
 
-            ind_l, ind_r = sorted(Dl), sorted(Dr)
-            cpDl = np.cumsum([0] + [pDl[ind] for ind in ind_l])
-            order_l[tcut] = [(ind, Dl[ind], slice(cpDl[ii], cpDl[ii + 1])) for ii, ind in enumerate(ind_l)]
-            cpDr = np.cumsum([0] + [pDr[ind] for ind in ind_r])
-            order_r[tcut] = [(ind, Dr[ind], slice(cpDr[ii], cpDr[ii + 1])) for ii, ind in enumerate(ind_r)]
+            ind_tr = sorted(Dr)
+            ipDr = [pDr[ind] for ind in ind_tr]
 
-            Atemp = np.zeros((cpDl[-1], cpDr[-1]), dtype=_select_dtype[dtype])
+            orl = {tl: (x, slice(j - i, j)) for tl, x, i, j in zip(ind_tl, Dl, pDl, accumulate(pDl))}
+            orr = {tr: (Dr[tr], slice(j - i, j)) for tr, i, j in zip(ind_tr, ipDr, accumulate(ipDr))}
+            order_l[tcut] = orl
+            order_r[tcut] = orr
 
-            jj, max_tts = 0, len(tts)
-            _, tl, tr, ind = tts[jj]
-            for il, _, sl in order_l[tcut]:
-                for ir, _, sr in order_r[tcut]:
-                    if (tr == ir) and (tl == il):
-                        Atemp[sl, sr] = A[ind].transpose(out_all).reshape(pDl[il], pDr[ir])
-                        jj += 1
-                        if jj < max_tts:
-                            _, tl, tr, ind = tts[jj]
+            # version with slices;
+            Atemp = np.zeros((sum(pDl), sum(ipDr)), dtype=_select_dtype[dtype])
+            for tl, tr, _ in tts:
+                Atemp[orl[tl][1], orr[tr][1]] = Are.pop()
             Amerged[tcut] = Atemp
-
-            # version with stack; instead of filling in with slices
-            # form_matrix = []
-            # for il in ind_l:
-            #     form_row = []
-            #     for ir in ind_r:
-            #         if (tr == ir) and (tl == il):
-            #             form_row.append(np.transpose(A[ind], out_all).reshape(pDl[il], pDr[ir]))
-            #             try:
-            #                 _, tl, tr, ind = next(itts)
-            #             except StopIteration:
-            #                 pass
-            #         else:
-            #             form_row.append(np.zeros((pDl[il], pDr[ir]), dtype=self.conf.dtype))
-            #     form_matrix.append(np.hstack(form_row) if len(form_row) > 1 else form_row[0])
-            # Amerged[tcut] = np.vstack(form_matrix) if len(form_matrix) > 1 else form_matrix[0]
         else:
-            tcut, tl, tr, ind = tts[0]
-            Dl = [A[ind].shape[ii] for ii in out_l]
-            Dr = [A[ind].shape[ii] for ii in out_r]
-            pDl = reduce(mul, Dl, 1)
-            pDr = reduce(mul, Dr, 1)
-            order_l[tcut] = [(tl, Dl, slice(None))]  # info for un-grouping
-            order_r[tcut] = [(tr, Dr, slice(None))]
-            Amerged[tcut] = np.transpose(A[ind], out_all).reshape(pDl, pDr)
+            tl, tr, _ = tts[0]
+            order_l[tcut] = {tl: (tuple(aDl[ii]), slice(None))}  # info for un-grouping
+            order_r[tcut] = {tr: (tuple(aDr[ii]), slice(None))}
+            ii += 1
+            Amerged[tcut] = Are.pop()
     return Amerged, order_l, order_r
+
+# @profile
+# def merge_blocks(A, to_execute, out_l, out_r, dtype='float64'):
+#     """ merge blocks depending on the cut """
+#     out_all = out_l + out_r
+#     Andim = len(out_all)
+
+#     lA = [A[ind] for _, tts in to_execute for _, _, ind in tts]
+#     aDA = np.array([x.shape for x in lA], dtype=np.int).reshape(len(lA), Andim)
+#     aDl = aDA[:, np.array(out_l, dtype=np.int)]  # bond dimension on left legs
+#     aDr = aDA[:, np.array(out_r, dtype=np.int)]  # bond dimension on right legs
+#     apDl = np.multiply.reduce(aDl, axis=1, dtype=np.int)  # their product
+#     apDr = np.multiply.reduce(aDr, axis=1, dtype=np.int)
+
+#     Are = [x.transpose(out_all).reshape(pl, pr) for x, pl, pr in zip(lA, apDl, apDr)]
+#     Are = Are[::-1]
+
+#     Amerged, order_l, order_r = {}, {}, {}
+#     Azeros = np.zeros((max(apDl), max(apDr)), dtype=_select_dtype[dtype])
+#     ii = 0  # assume here that tts are ordered according to tl
+#     for tcut, tts in to_execute:
+#         if len(tts) > 1:
+#             Dl, pDl, ind_tl, Dr, pDr, tr_list = [], [], [], {}, {}, {}
+#             for tl, group_tr in groupby(tts, key=lambda x: x[0]):
+#                 Dl.append(tuple(aDl[ii]))
+#                 pDl.append(apDl[ii])
+#                 ind_tl.append(tl)
+#                 tr_list[tl] = [x[1] for x in group_tr]
+#                 for jj, tr in enumerate(tr_list[tl]):
+#                     if tr not in Dr:
+#                         Dr[tr] = tuple(aDr[ii + jj])
+#                         pDr[tr] = apDr[ii + jj]
+#                 ii += len(tr_list[tl])
+
+#             ind_tr = sorted(Dr)
+#             ipDr = [pDr[ind] for ind in ind_tr]
+#             order_l[tcut] = {tl: (x, slice(j - i, j)) for tl, x, i, j in zip(ind_tl, Dl, pDl, accumulate(pDl))}
+#             order_r[tcut] = {tr: (Dr[tr], slice(j - i, j)) for tr, i, j in zip(ind_tr, ipDr, accumulate(ipDr))}
+
+#             # version with stack;
+#             form_matrix = []
+#             for tl, dl in zip(ind_tl, pDl):
+#                 form_matrix.append([Are.pop() if ir in tr_list[tl] else Azeros[:dl, :pDr[ir]] for ir in ind_tr])
+#             Amerged[tcut] = np.block(form_matrix)
+#         else:
+#             tl, tr, _ = tts[0]
+#             order_l[tcut] = {tl: (tuple(aDl[ii]), slice(None))}  # info for un-grouping
+#             order_r[tcut] = {tr: (tuple(aDr[ii]), slice(None))}
+#             ii += 1
+#             Amerged[tcut] = Are.pop()
+#     return Amerged, order_l, order_r
 
 
 def group_legs(A, to_execute, axes, rest, new_axis, dtype='float64'):
@@ -518,17 +643,17 @@ def group_legs(A, to_execute, axes, rest, new_axis, dtype='float64'):
         for _, tin, _, ind in tts:
             if tin not in Din:
                 Din[tin] = tuple(A[ind].shape[ii] for ii in axes)
-                pDin[tin] = reduce(mul, Din[tin], 1)
 
         ind_in = sorted(Din)
-        cpDin = np.cumsum([0] + [pDin[ind] for ind in ind_in])
-        leg_order[tcut] = {ind: (Din[ind], slice(cpDin[ii], cpDin[ii + 1])) for ii, ind in enumerate(ind_in)}
+        pDin = {tin: reduce(mul, Din[tin], 1) for tin in ind_in}
 
+        leg_order[tcut] = {ind: (Din[ind], slice(j - i, j)) for ind, i, j in zip(ind_in, pDin.values(), accumulate(pDin.values()))}
+        cpDin = sum(pDin.values())
         Dnew = {}
         for _, tin, tnew, ind in tts:
             if tnew not in Anew:
                 Dnew[tnew] = tuple(A[ind].shape[ii] for ii in rest)
-                Anew[tnew] = np.zeros((*Dnew[tnew][:new_axis], cpDin[-1], *Dnew[tnew][new_axis:]), dtype=_select_dtype[dtype])
+                Anew[tnew] = np.zeros((*Dnew[tnew][:new_axis], cpDin, *Dnew[tnew][new_axis:]), dtype=_select_dtype[dtype])
 
             slc[new_axis] = leg_order[tcut][tin][1]
             Anew[tnew][tuple(slc)] = A[ind].transpose(out_all).reshape(*Dnew[tnew][:new_axis], pDin[tin], *Dnew[tnew][new_axis:])
@@ -601,9 +726,9 @@ def unmerge_blocks_diag(S, Dcut):
 def unmerge_blocks_left(U, order_l, Dcut):
     """ select non-zero sectors; and truncate u, s, v to newD """
     Uout = {}
-    Dc = [-1]
+    Dc = (-1,)
     for tcut in Dcut:  # fill blocks
-        for tl, Dl, slice_l in order_l[tcut]:
+        for tl, (Dl, slice_l) in order_l[tcut].items():
             Uout[tl] = np.reshape(U[tcut][slice_l, Dcut[tcut]], Dl + Dc)
     return Uout
 
@@ -611,9 +736,9 @@ def unmerge_blocks_left(U, order_l, Dcut):
 def unmerge_blocks_right(V, order_r, Dcut):
     """ select non-zero sectors; and truncate u, s, v to newD"""
     Vout = {}
-    Dc = [-1]
+    Dc = (-1,)
     for tcut in Dcut:  # fill blocks
-        for tr, Dr, slice_r in order_r[tcut]:
+        for tr, (Dr, slice_r) in order_r[tcut].items():
             Vout[tr] = np.reshape(V[tcut][Dcut[tcut], slice_r], Dc + Dr)
     return Vout
 
@@ -621,9 +746,10 @@ def unmerge_blocks_right(V, order_r, Dcut):
 def unmerge_blocks(C, order_l, order_r):
     Cout = {}
     for tcut in C:
-        for (tl, Dl, slice_l), (tr, Dr, slice_r) in product(order_l[tcut], order_r[tcut]):
-            ind = tl + tr
-            Cout[ind] = C[tcut][slice_l, slice_r].reshape(Dl + Dr)
+        for tl, (Dl, slice_l) in order_l[tcut].items():
+            for tr, (Dr, slice_r) in order_r[tcut].items():
+                ind = tl + tr
+                Cout[ind] = C[tcut][slice_l, slice_r].reshape(Dl + Dr)
     return Cout
 
 ##############
@@ -675,4 +801,43 @@ def block(Ad, to_execute):
         temp = to_block(all_ind, all_D, len(shape_ind) - 1)
         A[ind] = np.block(temp)
 
+    return A
+
+##############
+#  multi dict operations
+##############
+
+
+def block(Ad, to_execute, dtype):
+
+    def to_block(li, lD, level):
+        if level > 0:
+            oi = []
+            for ii, DD in zip(li, lD):
+                oi.append(to_block(ii, DD, level - 1))
+            return oi
+        else:
+            key = tuple(li)
+            try:
+                return Ad[key][ind]
+            except KeyError:
+                return np.zeros(lD, dtype=_select_dtype[dtype])
+
+    A = {}
+    # to_execute = [(ind, pos, legs_ind, legs_D), ... ]
+    # ind: index of the merged blocks
+    # pos: non-trivial tensors in the block, rest is zero
+    # legs_ind: all elements for all dimensions to be cloked
+    # legs_D: and bond dimensions (including common ones)
+
+    for ind, legs_ind, legs_D in to_execute:
+        all_ind = np.array(list(product(*legs_ind)), dtype=int)
+        all_D = np.array(list(product(*legs_D)), dtype=int)
+
+        shape_ind = [len(x) for x in legs_D] + [-1]
+        all_ind = list(np.reshape(all_ind, shape_ind))
+        all_D = list(np.reshape(all_D, shape_ind))
+
+        temp = to_block(all_ind, all_D, len(shape_ind) - 1)
+        A[ind] = np.block(temp)
     return A

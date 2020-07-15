@@ -242,6 +242,87 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
     return a
 
 
+def block(td, common_legs):
+    """ Assemble new tensor by blocking a set of tensors.
+
+        Parameters
+        ----------
+        td : dict
+            dictionary of tensors {(k,l): tensor at position k,l}.
+            Length of tuple should be equall to tensor.ndim - len(common_legs)
+
+        common_legs : list
+            Legs which are not blocked
+
+        ndim : int
+            All tensor should have the same rank ndim
+    """
+    try:
+        ls = len(common_legs)
+        out_s = tuple(common_legs)
+    except TypeError:
+        out_s = (common_legs,)  # indices going u
+        ls = 1
+
+    a = next(iter(td.values()))  # first tensor, used to initialize and retrive common values
+    ndim = a._ndim
+    nsym = a.nsym
+
+    out_m = tuple(ii for ii in range(ndim) if ii not in out_s)
+    out_ma = np.array(out_m, dtype=int)
+    li = ndim - ls
+    pos = []
+    for ind in td:
+        if li != len(ind):
+            raise TensorShapeError('block: wrong tensors rank or placement')
+        pos.append(ind)
+    pos.sort()
+
+    # all charges and bond dimensions
+    tlist, Dlist = {}, {}
+    for ind in pos:
+        tt, DD = td[ind].get_tD()
+        tlist[ind] = tt
+        Dlist[ind] = DD
+
+    # all unique blocks to block
+    t_out_unique = sorted(set([ind for x in td.values() for ind in x.A]))
+    to_execute = []
+    for t in t_out_unique:
+        ta = np.array(t, dtype=np.int).reshape(ndim, nsym)
+        legs_ind = []  # indices on specific legs
+        legs_D = []  # and corresponding D
+        kk = -1
+        for ii in range(ndim):
+            tl = tuple(ta[ii].flat)
+            relevant_pos = []
+            relevant_D = []
+            for ind in pos:
+                if tl in tlist[ind][ii]:
+                    relevant_pos.append(ind)
+                    ind_tl = tlist[ind][ii].index(tl)
+                    relevant_D.append(Dlist[ind][ii][ind_tl])
+            if ii in out_m:
+                kk += 1
+                posa = np.array(relevant_pos, dtype=int)
+                x, y = np.unique(posa[:, kk], return_index=True)
+                legs_ind.append(list(x))
+                legs_D.append([relevant_D[ll] for ll in y])  # all D's for unique positions should be identical -- does not check this
+            else:
+                legs_D.append([relevant_D[0]])  # all should be identical -- does not check this
+        print(t)
+        print(legs_ind)
+        print(legs_D)
+        to_execute.append((t, legs_ind, legs_D))
+
+    Ad = {key: td[key].A for key in pos}
+    print(to_execute)
+    c = Tensor(settings=a.conf, s=a.s, isdiag=a.isdiag)
+    c.A = c.conf.back.block(Ad, to_execute, dtype=a.conf.dtype)
+    c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
+    return c
+
+
 class TensorError(Exception):
     pass
 
@@ -1001,7 +1082,7 @@ class Tensor:
                          for t1, t2, t3, t4 in zip(t_cuts, t_in, t_new, self.tset))
         to_execute = []
         for t1, tgroup in itertools.groupby(xx_list, key=lambda x: x[0]):
-            to_execute.append((t1, list(tgroup)))
+            to_execute.append((t1, sorted(tgroup)))
 
         Agrouped, leg_order = self.conf.back.group_legs(self.A, to_execute, axes, rest, new_axis, self.conf.dtype)
 
@@ -1177,11 +1258,16 @@ class Tensor:
             t_r = self.tset[:, np.append(0, nout_r), :]
             t_r[:, 0, :] = t_cuts
 
-            xx_list = sorted((tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), tuple(t4.flat))
-                             for t1, t2, t3, t4 in zip(t_cuts, t_l, t_r, self.tset))
+            t_sort = _argsort(t_cuts, self.nsym)
+            t_cuts = t_cuts[t_sort]
+            t_full = self.tset[t_sort]
+            t_l = t_l[t_sort]
+            t_r = t_r[t_sort]
+
+            xx_list = ((tuple(t2.flat), tuple(t3.flat), tuple(t4.flat)) for t2, t3, t4 in zip(t_l, t_r, t_full))
             to_execute = []
-            for t1, tgroup in itertools.groupby(xx_list, key=lambda x: x[0]):
-                to_execute.append((t1, list(tgroup)))
+            for t1, tgroup in itertools.groupby(xx_list, key=lambda _, it=iter(t_cuts): tuple(next(it).flat)):
+                to_execute.append((t1, sorted(tgroup)))
 
             # merged blocks; do not need information for unmerging
             Amerged, _, _ = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r, self.conf.dtype)
@@ -1221,7 +1307,7 @@ class Tensor:
             a_con = tuple(range(self._ndim))
             b_out = a_out
             b_con = a_con
-            A = self.conf.back.dot(self.A, other.A, (1, 0), to_execute, a_out, a_con, b_con, b_out)
+            A = self.conf.back.dot(self.A, other.A, (1, 0), to_execute, a_out, a_con, b_con, b_out, self.conf.dtype)
             return self.conf.back.first_el(A[()])
         else:
             return 0.
@@ -1387,6 +1473,7 @@ class Tensor:
         c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
         return c
 
+    # @profile
     def dot(self, other, axes, conj=(0, 0)):
         r""" Compute dot product of two tensor along specified axes.
 
@@ -1482,10 +1569,11 @@ class Tensor:
             t_b_out = t_b_out[b_sort]
             t_b_cuts = t_b_cuts[b_sort]
 
-            a_list = [(tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), tuple(t4.flat)) for t1, t2, t3, t4 in zip(t_a_cuts, t_a_out, t_a_con, t_a_full)]
-            b_list = [(tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), tuple(t4.flat)) for t1, t2, t3, t4 in zip(t_b_cuts, t_b_con, t_b_out, t_b_full)]
-            a_iter = itertools.groupby(a_list, key=lambda x: x[0])
-            b_iter = itertools.groupby(b_list, key=lambda x: x[0])
+            a_list = [(tuple(t2.flat), tuple(t3.flat), tuple(t4.flat)) for t2, t3, t4 in zip(t_a_out, t_a_con, t_a_full)]
+            b_list = [(tuple(t2.flat), tuple(t3.flat), tuple(t4.flat)) for t2, t3, t4 in zip(t_b_con, t_b_out, t_b_full)]
+
+            a_iter = itertools.groupby(a_list, key=lambda _, ia=iter(t_a_cuts): tuple(next(ia).flat))
+            b_iter = itertools.groupby(b_list, key=lambda _, ib=iter(t_b_cuts): tuple(next(ib).flat))
 
             to_merge_a, to_merge_b = [], []
             try:
@@ -1497,8 +1585,8 @@ class Tensor:
                     elif cut_a > cut_b:
                         cut_b, gb = next(b_iter)
                     else:
-                        ga_iter = itertools.groupby(sorted(ga, key=lambda x: x[2]), key=lambda x: x[2])
-                        gb_iter = itertools.groupby(sorted(gb, key=lambda x: x[1]), key=lambda x: x[1])
+                        ga_iter = itertools.groupby(sorted(ga, key=lambda x: x[1]), key=lambda x: x[1])
+                        gb_iter = itertools.groupby(sorted(gb, key=lambda x: x[0]), key=lambda x: x[0])
                         try:
                             con_a, la = next(ga_iter)
                             con_b, lb = next(gb_iter)
@@ -1566,7 +1654,7 @@ class Tensor:
 
             c_s = np.hstack([conja * self.s[na_out], conjb * other.s[nb_out]])
             c = Tensor(settings=self.conf, s=c_s, n=c_n)
-            c.A = self.conf.back.dot(self.A, other.A, conj, to_execute, a_out, a_con, b_con, b_out)
+            c.A = self.conf.back.dot(self.A, other.A, conj, to_execute, a_out, a_con, b_con, b_out, self.conf.dtype)
             c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
             return c
 
@@ -1648,11 +1736,16 @@ class Tensor:
         t_r = self.tset[:, np.append(0, nout_r), :]
         t_r[:, 0, :] = t_cuts
 
-        xx_list = sorted((tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), tuple(t4.flat))
-                         for t1, t2, t3, t4 in zip(t_cuts, t_l, t_r, self.tset))
+        t_sort = _argsort(t_cuts, self.nsym)
+        t_cuts = t_cuts[t_sort]
+        t_full = self.tset[t_sort]
+        t_l = t_l[t_sort]
+        t_r = t_r[t_sort]
+
+        xx_list = ((tuple(t2.flat), tuple(t3.flat), tuple(t4.flat)) for t2, t3, t4 in zip(t_l, t_r, t_full))
         to_execute = []
-        for t1, tgroup in itertools.groupby(xx_list, key=lambda x: x[0]):
-            to_execute.append((t1, list(tgroup)))
+        for t1, tgroup in itertools.groupby(xx_list, key=lambda _, it=iter(t_cuts): tuple(next(it).flat)):
+            to_execute.append((t1, sorted(tgroup)))
 
         # merged blocks and information for un-merging
         Amerged, order_l, order_r = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r, self.conf.dtype)
@@ -1747,12 +1840,16 @@ class Tensor:
         t_r = self.tset[:, np.append(0, nout_r), :]
         t_r[:, 0, :] = t_cuts
 
-        xx_list = sorted((tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), tuple(t4.flat))
-                         for t1, t2, t3, t4 in zip(t_cuts, t_l, t_r, self.tset))
-        to_execute = []
+        t_sort = _argsort(t_cuts, self.nsym)
+        t_cuts = t_cuts[t_sort]
+        t_full = self.tset[t_sort]
+        t_l = t_l[t_sort]
+        t_r = t_r[t_sort]
 
-        for t1, tgroup in itertools.groupby(xx_list, key=lambda x: x[0]):
-            to_execute.append((t1, list(tgroup)))
+        xx_list = ((tuple(t2.flat), tuple(t3.flat), tuple(t4.flat)) for t2, t3, t4 in zip(t_l, t_r, t_full))
+        to_execute = []
+        for t1, tgroup in itertools.groupby(xx_list, key=lambda _, it=iter(t_cuts): tuple(next(it).flat)):
+            to_execute.append((t1, sorted(tgroup)))
 
         # merged blocks and information for un-merging
         Amerged, order_l, order_r = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r, self.conf.dtype)
@@ -1855,11 +1952,16 @@ class Tensor:
         t_r = self.tset[:, np.append(0, nout_r), :]
         t_r[:, 0, :] = t_cuts
 
-        xx_list = sorted((tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), tuple(t4.flat))
-                         for t1, t2, t3, t4 in zip(t_cuts, t_l, t_r, self.tset))
+        t_sort = _argsort(t_cuts, self.nsym)
+        t_cuts = t_cuts[t_sort]
+        t_full = self.tset[t_sort]
+        t_l = t_l[t_sort]
+        t_r = t_r[t_sort]
+
+        xx_list = ((tuple(t2.flat), tuple(t3.flat), tuple(t4.flat)) for t2, t3, t4 in zip(t_l, t_r, t_full))
         to_execute = []
-        for t1, tgroup in itertools.groupby(xx_list, key=lambda x: x[0]):
-            to_execute.append((t1, list(tgroup)))
+        for t1, tgroup in itertools.groupby(xx_list, key=lambda _, it=iter(t_cuts): tuple(next(it).flat)):
+            to_execute.append((t1, sorted(tgroup)))
 
         # merged blocks and information for un-merging
         Amerged, order_l, _ = self.conf.back.merge_blocks(self.A, to_execute, out_l, out_r, self.conf.dtype)
@@ -1923,85 +2025,3 @@ class Tensor:
                 cleared_t = [_tmod[self.conf.sym[ss]](x) for x in ts[ss][nn]]
                 test.append(len(set(cleared_t)) == len(ts[ss][nn]))
         return all(test)
-
-    # def block(td, common_legs, ndim):
-    #     """ Assemble new tensor by blocking a set of tensors.
-
-    #         Parameters
-    #         ----------
-    #         td : dict
-    #             dictionary of tensors {(k,l): tensor at position k,l}.
-    #             Length of tuple should be equall to tensor.ndim - len(common_legs)
-
-    #         common_legs : list
-    #             Legs which are not blocked
-
-    #         ndim : int
-    #             All tensor should have the same rank ndim
-    #     """
-    #     try:
-    #         ls = len(common_legs)
-    #         out_s = tuple(common_legs)
-    #     except TypeError:
-    #         out_s = (common_legs,)  # indices going u
-    #         ls = 1
-
-    #     out_m = tuple(ii for ii in range(ndim) if ii not in out_s)
-    #     out_ma = np.array(out_m, dtype=int)
-    #     li = ndim - ls
-    #     pos = []
-    #     newdtype = 'float64'
-    #     for ind, ten in td.items():
-    #         if li != len(ind):
-    #             raise TensorShapeError('block: wrong tensors rank or placement')
-    #         pos.append(ind)
-    #         if ten.dtype == 'complex128':
-    #             newdtype = 'complex128'
-    #     pos.sort()
-
-    #     # all charges and bond dimensions
-    #     tlist, Dlist = {}, {}
-    #     for ind in pos:
-    #         tt, DD = td[ind].get_tD_list()
-    #         tlist[ind] = tt
-    #         Dlist[ind] = DD
-
-    #     # combinations of charges on legs to merge
-    #     t_out_m = [np.unique(td[ind].tset[:, out_ma], axis=0) for ind in pos]
-    #     t_out_unique = np.unique(np.vstack(t_out_m), axis=0)
-
-    #     # positions including those charges
-    #     t_out_pos = []
-    #     for tt in t_out_unique:
-    #         t_out_pos.append([ind for ind, tm in zip(pos, t_out_m) if not np.any(np.sum(np.abs(tt - tm), axis=1))])
-
-    #     # print(t_out_m)
-    #     # print(t_out_unique)
-    #     # print(t_out_pos)
-
-    #     for tt, pos_tt in zip(t_out_unique, t_out_pos):
-    #         for ind in pos_tt:
-    #             for kk in td[ind].tset:
-    #                 if np.all(kk[out_ma] == tt):
-    #                     pass
-    #         # pos_tt
-
-    #     posa = np.array(pos, dtype=int)
-    #     legs_ind = []  # indices on specific legs
-    #     legs_D = []  # and corresponding keys
-    #     kk = -1
-    #     for ii in range(ndim):
-    #         if ii in out_m:
-    #             kk += 1
-    #             x, y = np.unique(posa[:, kk], return_index=True)
-    #             legs_ind.append(list(x))
-    #             legs_D.append([td[pos[ll]].get_shape()[ii] for ll in y])
-    #         else:
-    #             legs_D.append([td[pos[0]].get_shape()[ii]])
-
-    #     Ad = {key: td[key].A for key in pos}
-    #     to_execute = [(0, pos, legs_ind, legs_D)]
-
-    #     c = Tensor(td[pos[0]].settings, dtype=newdtype)
-    #     c.A = c.backend.block(Ad, to_execute)
-    #     return c
