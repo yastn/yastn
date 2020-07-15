@@ -1,36 +1,28 @@
-from yamps.tensor import Tensor
-import settings_full
-import settings_U1
-import settings_Z2_U1
-import settings_U1_U1
+import settings_U1 as settings
+import yamps.tensor as tensor
 import pytest
-import numpy as np
 
 
-def test_block1():
-    a = Tensor(settings=settings_U1, s=(-1, 1, 1))
-    a.set_block(ts=(1, -1, 2), Ds=(1, 1, 1), val='randR')
-    a.set_block(ts=(2, 0, 2), Ds=(1, 1, 1), val='randR')
-    a.show_properties()
+def test_block_U1():
 
-    b = Tensor(settings=settings_U1, s=(-1, 1, 1))
-    b.set_block(ts=(1, 0, 1), Ds=(1, 1, 1), val='randR')
-    b.set_block(ts=(2, 0, 2), Ds=(1, 1, 1), val='randR')
+    w = 0.6
+    mu = -0.4
 
-    c1 = a.dot(a, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 1))
-    c2 = b.dot(b, axes=((1, 2), (1, 2)), conj=(0, 1))
-    c3 = a.dot(b, axes=(0, 2), conj=(1, 1))
+    II = tensor.ones(settings=settings, t=(0, (0, 1), (0, 1), 0), D=(1, (1, 1), (1, 1), 1), s=(1, 1, -1, -1))
+    nn = tensor.ones(settings=settings, t=(0, 1, 1, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
+    c01 = tensor.ones(settings=settings, t=(0, 0, 1, -1), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
+    cp01 = tensor.ones(settings=settings, t=(0, 1, 0, 1), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
+    cp10 = tensor.ones(settings=settings, t=(1, 0, 1, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
+    c10 = tensor.ones(settings=settings, t=(-1, 1, 0, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
+    C = tensor.block({(0, 0): II, (1, 0): cp10, (2, 0): c10, (3, 0): mu * nn, (3, 1): w * c01, (3, 2): w * cp01, (3, 3): II}, common_legs=(1, 2))
+    C.show_properties()
 
-    a1 = a.to_numpy()
-    b1 = b.to_numpy()
-    cc1 = np.tensordot(a1, a1.conj(), axes=((0, 1, 2), (0, 1, 2)))
-    cc2 = np.tensordot(b1, b1.conj(), axes=((1, 2), (1, 2)))
-    cc3 = np.tensordot(a1.conj(), b1.conj(), axes=(0, 2))
+    A = tensor.Tensor(settings=settings, s=(1, 1, -1, -1))
+    A.set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 1, 2))
+    A.set_block(ts=(0, 1, 1, 0), val=[[1, 0], [mu, 1]], Ds=(2, 1, 1, 2))
+    A.set_block(ts=(0, 0, 1, -1), val=[0, w], Ds=(2, 1, 1, 1))
+    A.set_block(ts=(0, 1, 0, 1), val=[0, w], Ds=(2, 1, 1, 1))
+    A.set_block(ts=(-1, 1, 0, 0), val=[1, 0], Ds=(1, 1, 1, 2))
+    A.set_block(ts=(1, 0, 1, 0), val=[1, 0], Ds=(1, 1, 1, 2))
 
-    assert 0 == pytest.approx(c1.norm() - np.linalg.norm(cc1))
-    assert 0 == pytest.approx(c2.norm() - np.linalg.norm(cc2))
-    assert 0 == pytest.approx(c3.norm() - np.linalg.norm(cc3))
-
-
-if __name__ == '__main__':
-    test_block1()
+    assert pytest.approx(A.norm_diff(C)) == 0
