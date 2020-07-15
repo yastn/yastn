@@ -274,7 +274,7 @@ def block(td, common_legs):
     pos = []
     for ind in td:
         if li != len(ind):
-            raise TensorShapeError('block: wrong tensors rank or placement')
+            raise TensorError('block: wrong tensors rank or placement')
         pos.append(ind)
     pos.sort()
 
