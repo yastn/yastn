@@ -6,7 +6,6 @@ from itertools import product
 from itertools import accumulate
 from functools import reduce
 from operator import mul
-import numba as nb
 
 _select_dtype = {'float64': np.float64,
                  'complex128': np.complex128}
@@ -763,12 +762,12 @@ def is_independent(A, B):
     """
     return (A is B) or (A.base is B) or (A is B.base)
 
+
 ##############
 #  multi dict operations
 ##############
 
-
-def block(Ad, to_execute):
+def block(td, to_execute, dtype):
 
     def to_block(li, lD, level):
         if level > 0:
@@ -779,47 +778,7 @@ def block(Ad, to_execute):
         else:
             key = tuple(li)
             try:
-                return Ad[key][ind]
-            except KeyError:
-                return np.zeros(lD)
-
-    A = {}
-    # to_execute = [(ind, pos, legs_ind, legs_D), ... ]
-    # ind: index of the merged blocks
-    # pos: non-trivial tensors in the block, rest is zero
-    # legs_ind: all elements for all dimensions to be cloked
-    # legs_D: and bond dimensions (including common ones)
-
-    for ind, pos, legs_ind, legs_D in to_execute:
-        all_ind = np.array(list(product(*legs_ind)), dtype=int)
-        all_D = np.array(list(product(*legs_D)), dtype=int)
-
-        shape_ind = [len(x) for x in legs_D] + [-1]
-        all_ind = list(np.reshape(all_ind, shape_ind))
-        all_D = list(np.reshape(all_D, shape_ind))
-
-        temp = to_block(all_ind, all_D, len(shape_ind) - 1)
-        A[ind] = np.block(temp)
-
-    return A
-
-##############
-#  multi dict operations
-##############
-
-
-def block(Ad, to_execute, dtype):
-
-    def to_block(li, lD, level):
-        if level > 0:
-            oi = []
-            for ii, DD in zip(li, lD):
-                oi.append(to_block(ii, DD, level - 1))
-            return oi
-        else:
-            key = tuple(li)
-            try:
-                return Ad[key][ind]
+                return td[key].A[ind]
             except KeyError:
                 return np.zeros(lD, dtype=_select_dtype[dtype])
 

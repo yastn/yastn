@@ -310,15 +310,10 @@ def block(td, common_legs):
                 legs_D.append([relevant_D[ll] for ll in y])  # all D's for unique positions should be identical -- does not check this
             else:
                 legs_D.append([relevant_D[0]])  # all should be identical -- does not check this
-        print(t)
-        print(legs_ind)
-        print(legs_D)
         to_execute.append((t, legs_ind, legs_D))
 
-    Ad = {key: td[key].A for key in pos}
-    print(to_execute)
     c = Tensor(settings=a.conf, s=a.s, isdiag=a.isdiag)
-    c.A = c.conf.back.block(Ad, to_execute, dtype=a.conf.dtype)
+    c.A = c.conf.back.block(td, to_execute, dtype=a.conf.dtype)
     c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
     return c
 
