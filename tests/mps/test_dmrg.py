@@ -6,6 +6,18 @@ import numpy as np
 import pytest
 
 
+def run_dmrg_0site(psi, H, Etarget, sweeps=10):
+    """
+    Run a faw sweeps of dmrg_0site_sweep. Returns energy
+    """
+    env = None
+    for _ in range(sweeps):
+        env = mps.dmrg.dmrg_sweep_0site(psi, H, env=env, dtype='float64')
+    Eng = env.measure()
+    # assert pytest.approx(Eng) == Etarget
+    return Eng
+
+
 def run_dmrg_1site(psi, H, Etarget, sweeps=10):
     """
     Run a faw sweeps of dmrg_1site_sweep. Returns energy
@@ -55,18 +67,23 @@ def test_full_dmrg():
 
     psi = ops_full.mps_random(N=N, Dmax=32, d=2)
     psi.canonize_sweep(to='first')
+    Eng = run_dmrg_0site(psi, H, Eng_gs)
+    print('0site: Energy = ', Eng)
+
+    psi = ops_full.mps_random(N=N, Dmax=32, d=2)
+    psi.canonize_sweep(to='first')
     Eng = run_dmrg_1site(psi, H, Eng_gs)
-    print('Energy = ', Eng)
+    print('1site: Energy = ', Eng)
 
     psi = ops_full.mps_random(N=N, Dmax=32, d=2)
     psi.canonize_sweep(to='first')
     Eng = run_dmrg_2site(psi, H, Eng_gs, D_total=D_total)
-    print('Energy = ', Eng)
+    print('2site: Energy = ', Eng)
 
     psi = ops_full.mps_random(N=N, Dmax=32, d=2)
     psi.canonize_sweep(to='first')
     Eng = run_dmrg_2site_group(psi, H, Eng_gs, D_total=D_total)
-    print('Energy = ', Eng)
+    print('2site group: Energy = ', Eng)
 
 
 def test_Z2_dmrg():
@@ -82,33 +99,43 @@ def test_Z2_dmrg():
 
     psi = ops_Z2.mps_random(N=N, Dblock=16, total_parity=0)
     psi.canonize_sweep(to='first')
+    Eng = run_dmrg_0site(psi, H, Eng_parity0)
+    print('0site: Energy = ', Eng)
+
+    psi = ops_Z2.mps_random(N=N, Dblock=16, total_parity=1)
+    psi.canonize_sweep(to='first')
+    Eng = run_dmrg_0site(psi, H, Eng_parity1)
+    print('0site: Energy = ', Eng)
+
+    psi = ops_Z2.mps_random(N=N, Dblock=16, total_parity=0)
+    psi.canonize_sweep(to='first')
     Eng = run_dmrg_1site(psi, H, Eng_parity0)
-    print('Energy = ', Eng)
+    print('1site: Energy = ', Eng)
 
     psi = ops_Z2.mps_random(N=N, Dblock=16, total_parity=1)
     psi.canonize_sweep(to='first')
     Eng = run_dmrg_1site(psi, H, Eng_parity1)
-    print('Energy = ', Eng)
+    print('1site: Energy = ', Eng)
 
     psi = ops_Z2.mps_random(N=N, Dblock=16, total_parity=0)
     psi.canonize_sweep(to='first')
     Eng = run_dmrg_2site(psi, H, Eng_parity0, D_total=D_total)
-    print('Energy = ', Eng)
+    print('2site: Energy = ', Eng)
 
     psi = ops_Z2.mps_random(N=N, Dblock=16, total_parity=1)
     psi.canonize_sweep(to='first')
     Eng = run_dmrg_2site(psi, H, Eng_parity1, D_total=D_total)
-    print('Energy = ', Eng)
+    print('2site: Energy = ', Eng)
 
     psi = ops_Z2.mps_random(N=N, Dblock=16, total_parity=0)
     psi.canonize_sweep(to='first')
     Eng = run_dmrg_2site_group(psi, H, Eng_parity0, D_total=D_total)
-    print('Energy = ', Eng)
+    print('2site group: Energy = ', Eng)
 
     psi = ops_Z2.mps_random(N=N, Dblock=16, total_parity=1)
     psi.canonize_sweep(to='first')
     Eng = run_dmrg_2site_group(psi, H, Eng_parity1, D_total=D_total)
-    print('Energy = ', Eng)
+    print('2site group: Energy = ', Eng)
 
 
 def test_U1_dmrg():
@@ -140,6 +167,6 @@ def test_U1_dmrg():
 
 if __name__ == "__main__":
     # pass
-    # test_full_dmrg()
-    # test_Z2_dmrg()
+    #test_full_dmrg()
+    #test_Z2_dmrg()
     test_U1_dmrg()
