@@ -61,8 +61,7 @@ def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
         if not hermitian:
             val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), Bv=lambda v: env.Heff1(v, n, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
         else:
-            val, vec, happy = eigs(Av=lambda v: env.Heff1(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
-            #val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
         init = vec[list(val).index(min(list(val)))]
         # canonize 
         if opts_svd != None:
@@ -83,10 +82,9 @@ def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
         if not hermitian:
             val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), Bv=lambda v: env.Heff1(v, n, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
         else:
-            val, vec, happy = eigs(Av=lambda v: env.Heff1(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
-            #val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
         init = vec[list(val).index(min(list(val)))]
-        # canonize 
+        # canonize and save
         if opts_svd != None:
             U, S, V = init.split_svd(axes=(psi.left, psi.phys + psi.aux + psi.right), sU=-1, **opts_svd)
             psi.A[n] = U
@@ -95,12 +93,13 @@ def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
         else:
             psi.A[n] = init
             psi.orthogonalize_site(n, towards=psi.g.first)
-        # update environment
         env.clear_site(n)
         env.update(n, towards=psi.g.first)
+
     return env
     
-def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, tol=1e-14, opts_svd={}):
+
+def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, eigs_tol=1e-14, opts_svd={}):
     """ 
     Perform sweep of two-site DMRG. Assume input psi is right canonical. 
     Sweep consists of iterative updates from last site to first and back to the first one. 
@@ -152,10 +151,14 @@ def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
     for n in psi.g.sweep(to='last', dl=1):
         n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
         init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
-        val, vec, happy = eigs(Av=lambda v: env.Heff2(v, n), init=[init], tol=tol, k=k, hermitian=True, dtype=dtype)
-        val = list(val)
-        out = vec[val.index(min(val))]
-        A1, S, A2 = out.split_svd(axes=((0, 1), (2, 3)), sU=-1, **opts_svd)
+        # update site n using eigs
+        if not hermitian:
+            val, vec, _ = eigs(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(v, n, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+        else:
+            val, vec, _ = eigs(Av=lambda v: env.Heff2(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+        init = vec[list(val).index(min(list(val)))]
+        #split and save
+        A1, S, A2 = init.split_svd(axes=(psi.left + psi.phys + psi.aux, tuple(a + psi.right[0] - 1 for a in psi.phys + psi.aux + psi.right)), sU=-1, **opts_svd)
         psi.A[n] = A1
         psi.A[n1] = A2.dot_diag(S, axis=0)
         env.clear_site(n)
@@ -165,10 +168,13 @@ def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
     for n in psi.g.sweep(to='first', dl=1):
         n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
         init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
-        val, vec, happy = eigs(Av=lambda v: env.Heff2(v, n), init=[init], tol=tol, k=k, hermitian=True, dtype=dtype)
-        val = list(val)
-        out = vec[val.index(min(val))]
-        A1, S, A2 = out.split_svd(axes=((0, 1), (2, 3)), sU=-1, **opts_svd)
+        if not hermitian:
+            val, vec, _ = eigs(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(v, n, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+        else:
+            val, vec, _ = eigs(Av=lambda v: env.Heff2(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+        init = vec[list(val).index(min(list(val)))]
+        #split and save
+        A1, S, A2 = init.split_svd(axes=(psi.left + psi.phys + psi.aux, tuple(a + psi.right[0] - 1 for a in psi.phys + psi.aux + psi.right)), sU=-1, **opts_svd)
         psi.A[n] = A1.dot_diag(S, axis=2)
         psi.A[n1] = A2
         env.clear_site(n)
@@ -179,7 +185,7 @@ def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
     return env  # can be used in the next sweep
 
 
-def dmrg_sweep_2site_group(psi, H, env=None, dtype='complex128', hermitian=True, k=4, tol=1e-14, opts_svd={}):
+def dmrg_sweep_2site_group(psi, H, env=None, dtype='complex128', hermitian=True, k=4, eigs_tol=1e-14, opts_svd={}):
     """
     Assume psi is in the left cannonical form.
     """
@@ -191,7 +197,7 @@ def dmrg_sweep_2site_group(psi, H, env=None, dtype='complex128', hermitian=True,
         n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
         init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
         init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
-        val, vec, happy = eigs(Av=lambda v: env.Heff2_group(v, n), init=[init], tol=tol, k=k, hermitian=True, dtype=dtype)
+        val, vec, happy = eigs(Av=lambda v: env.Heff2_group(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
         val = list(val)
         out = vec[val.index(min(val))]
         out = out.ungroup_leg(axis=1, leg_order=leg_order)
@@ -206,7 +212,7 @@ def dmrg_sweep_2site_group(psi, H, env=None, dtype='complex128', hermitian=True,
         n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
         init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
         init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
-        val, vec, happy = eigs(Av=lambda v: env.Heff2_group(v, n), init=[init], tol=tol, k=k, hermitian=True, dtype=dtype)
+        val, vec, happy = eigs(Av=lambda v: env.Heff2_group(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
         val = list(val)
         out = vec[val.index(min(val))]
         out = out.ungroup_leg(axis=1, leg_order=leg_order)
