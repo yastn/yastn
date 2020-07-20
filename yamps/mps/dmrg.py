@@ -5,42 +5,146 @@ from yamps.tensor import eigs
 #           dmrg                #
 #################################
 
+def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, eigs_tol=1e-14, opts_svd=None):
+    """ 
+    Perform sweep of single-site DMRG. Assume input psi is right canonical. 
+    Sweep consists of iterative updates from last site to first and back to the first one. 
+    
+    Output:
+    env - overlap <psi| H |psi> as Env3.
+    psi is self updated.
+    
+    Parameters
+    ----------
+    psi: Mps, nr_phys=1, nr_aux=0 or 1
+        Initial state.
+        Can be gives as an MPS (nr_aux=0) or a purification (nr_aux=1).
 
-def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, tol=1e-14):
+    H: Mps, nr_phys=2
+        Operator given in MPO decomposition. 
+        Legs are [left-virtual, ket-physical, bra-physical, right-virtual]
+
+    env: Env3
+        default = None
+        Initial overlap <psi| H |psi>
+        Initial environments must be set up with respect to the last site.
+        
+    dtype: str
+        default='complex128'
+        Type of Tensor.
+
+    hermitian: bool
+        default=True
+        Is MPO hermitian
+            
+    k: int 
+        default=4
+        Dimension of Krylov subspace for eigs(.)
+            
+    eigs_tol: float
+        default=1e-14
+        Cutoff for krylov subspace for eigs(.)
+            
+    opts_svd: dict
+        default=None
+        options for truncation
     """
-    Assume psi is in the left cannonical form.
-    """
+
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup_to_first()
 
-    for n in psi.g.sweep(to='last'):
+    for n in psi.g.sweep(to='last'): # sweep from fist to last 
         psi.absorb_central(towards=psi.g.last)
         init = psi.A[n]
-        val, vec, happy = eigs(Av=lambda v: env.Heff1(v, n), init=[init], tol=tol, k=k, hermitian=True, dtype=dtype)
-        val = list(val)
-        psi.A[n] = vec[val.index(min(val))]
-        psi.orthogonalize_site(n, towards=psi.g.last)
+        # update site n using eigs
+        if not hermitian:
+            val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), Bv=lambda v: env.Heff1(v, n, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+        else:
+            val, vec, happy = eigs(Av=lambda v: env.Heff1(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            #val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+        init = vec[list(val).index(min(list(val)))]
+        # canonize 
+        if opts_svd != None:
+            U, S, V = init.split_svd(axes=(psi.left, psi.phys + psi.aux + psi.right), sU=-1, **opts_svd)
+            psi.A[n] = V
+            psi.pC = (n - 1,n)
+            psi.A[psi.pC] = U.dot(S, axes=((1),(0)))
+        else:
+            psi.A[n] = init
+            psi.orthogonalize_site(n, towards=psi.g.last)
+        # update environment
         env.clear_site(n)
         env.update(n, towards=psi.g.last)
 
     for n in psi.g.sweep(to='first'):
         psi.absorb_central(towards=psi.g.first)
         init = psi.A[n]
-        val, vec, happy = eigs(Av=lambda v: env.Heff1(v, n), init=[init], tol=tol, k=k, hermitian=True, dtype=dtype)
-        val = list(val)
-        psi.A[n] = vec[val.index(min(val))]
-        psi.orthogonalize_site(n, towards=psi.g.first)
+        if not hermitian:
+            val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), Bv=lambda v: env.Heff1(v, n, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+        else:
+            val, vec, happy = eigs(Av=lambda v: env.Heff1(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            #val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+        init = vec[list(val).index(min(list(val)))]
+        # canonize 
+        if opts_svd != None:
+            U, S, V = init.split_svd(axes=(psi.left, psi.phys + psi.aux + psi.right), sU=-1, **opts_svd)
+            psi.A[n] = U
+            psi.pC = (n,n+1)
+            psi.A[psi.pC] = S.dot(V, axes=((1),(0)))
+        else:
+            psi.A[n] = init
+            psi.orthogonalize_site(n, towards=psi.g.first)
+        # update environment
         env.clear_site(n)
         env.update(n, towards=psi.g.first)
-
-    return env  # can be used in the next sweep
-
-
+    return env
+    
 def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, tol=1e-14, opts_svd={}):
+    """ 
+    Perform sweep of two-site DMRG. Assume input psi is right canonical. 
+    Sweep consists of iterative updates from last site to first and back to the first one. 
+    
+    Output:
+    env - overlap <psi| H |psi> as Env3.
+    psi is self updated.
+    
+    Parameters
+    ----------
+    psi: Mps, nr_phys=1, nr_aux=0 or 1
+        Initial state.
+        Can be gives as an MPS (nr_aux=0) or a purification (nr_aux=1).
+
+    H: Mps, nr_phys=2
+        Operator given in MPO decomposition. 
+        Legs are [left-virtual, ket-physical, bra-physical, right-virtual]
+
+    env: Env3
+        default = None
+        Initial overlap <psi| H |psi>
+        Initial environments must be set up with respect to the last site.
+        
+    dtype: str
+        default='complex128'
+        Type of Tensor.
+
+    hermitian: bool
+        default=True
+        Is MPO hermitian
+            
+    k: int 
+        default=4
+        Dimension of Krylov subspace for eigs(.)
+            
+    eigs_tol: float
+        default=1e-14
+        Cutoff for krylov subspace for eigs(.)
+            
+    opts_svd: dict
+        default=None
+        options for truncation
     """
-    Assume psi is in the left cannonical form.
-    """
+
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup_to_first()
