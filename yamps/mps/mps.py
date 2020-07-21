@@ -19,7 +19,7 @@ class Mps:
     and (None, n) if placed outside of a leaf. Maximally one central block is allowed.
     """
 
-    def __init__(self, N=2, nr_phys=1):
+    def __init__(self, N=2, nr_phys=1, nr_aux=0):
         r"""
         Initialize basic structure for matrix product state/operator/purification.
 
@@ -34,11 +34,14 @@ class Mps:
         self.N = self.g.N
         self.A = {}  # dict of mps tensors; indexed by integers
         self.pC = None  # index of the central site, None if it does not exist
+        self.norma = 1. # norm of a tensor
         self.nr_phys = nr_phys  # number of physical legs
+        self.nr_aux = nr_aux  # number of auxilliary legs
         self.left = (0,)  # convention which leg is left-virtual (connected to site with smaller index)
         self.right = (nr_phys + 1,)  # convention which leg is right-virtual leg (connected to site with larger index)
         self.phys = tuple(ii for ii in range(1, nr_phys + 1))  # convention which legs are physical
-
+        self.aux = tuple(ii for ii in range(1 + nr_phys, nr_aux + nr_phys + 1))
+  
     def copy(self):
         r"""
         Makes a copy of mps.
@@ -65,6 +68,8 @@ class Mps:
             index of site to be ortogonalized.
         towards : int
             index of site toward which to orthogonalize.
+        normalize : bool
+            true if central site should be normalized
 
         Returns
         -------
@@ -137,18 +142,20 @@ class Mps:
             else:  # leg == 0:
                 self.A[nnext] = C.dot(self.A[nnext], axes=(1, self.left))
 
-    def canonize_sweep(self, to='last'):
+    def canonize_sweep(self, to='last', normalize=True):
         r"""
-        Left or right canonize and normalize mps.
+        Left or right canonize and normalize mps if normalize is True.
         """
         if to == 'last':
             for n in self.g.sweep(to='last'):
-                self.orthogonalize_site(n=n, towards=self.g.last)
+                norma = self.orthogonalize_site(n=n, towards=self.g.last)
                 self.absorb_central(towards=self.g.last)
         elif to == 'first':
             for n in self.g.sweep(to='first'):
-                self.orthogonalize_site(n=n, towards=self.g.first)
+                norma = self.orthogonalize_site(n=n, towards=self.g.first)
                 self.absorb_central(towards=self.g.first)
+        if not normalize:
+            self.norma = norma
 
     def merge_mps(self, n):
         r"""
@@ -180,9 +187,9 @@ class Mps:
             list of bond dimensions on virtual legs from left to right,
             including "trivial" leftmost and rightmost virtual indices.
         """
-        Ds = []
+        Ds = [None]*(self.N+1)
         for n in range(self.N):
-            DAn = self.A[n].get_shape()
-            Ds.append(DAn[self.left[0]])
-        Ds.append(DAn[self.right[0]])
+            DAn = self.A[n].get_shape()[0]
+            Ds[n] = DAn[self.left[0]] 
+        Ds[n+1] = DAn[self.right[0]]
         return Ds
