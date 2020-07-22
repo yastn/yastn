@@ -102,9 +102,49 @@ def test_Z2_tdvp():
     psi = ops_Z2.mps_random(N=N, Dblock=16, total_parity=0)
     psi.canonize_sweep(to='first', normalize=True)
     Eng = run_tdvp_2site_group(psi, H, dt = dt, sweeps = sweeps, opts=opts_svd, Eng_gs=Eng_gs)
+
+
+def test_dmrg_total_full():
+    """
+    Check tdvp_OBC with measuring additional expectation values
+    """
+    N = 8
+    D_total = 32
+    opts_svd = {'tol': 1e-6, 'D_total': D_total}
+
+    H = ops_full.mpo_XX_model(N=N, t=1, mu=0)    
+    M = None
+    measure_O = None
+
+    Eng_gs = -4.758770483143633
+    dt = .125*1j
+    tmax = dt*30.
+
+    version = '1site'
+    psi = ops_full.mps_random(N=N, Dmax=32, d=2)
+    psi.canonize_sweep(to='first')
+    print()
+    env, E, dE, out = mps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, measure_O=measure_O, version=version, opts_svd=opts_svd)
+    print('1site: Energy - Eref= ', E-Eng_gs)
+
+    version = '2site'
+    psi = ops_full.mps_random(N=N, Dmax=32, d=2)
+    psi.canonize_sweep(to='first')
+    print()
+    env, E, dE, out = mps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, measure_O=measure_O, version=version, opts_svd=opts_svd)
+    print('2site: Energy - Eref= ', E-Eng_gs)
     
+    version = '2site_group'
+    psi = ops_full.mps_random(N=N, Dmax=32, d=2)
+    psi.canonize_sweep(to='first')
+    print()
+    env, E, dE, out = mps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, measure_O=measure_O, version=version, opts_svd=opts_svd)
+    print('2site_group: Energy - Eref= ', E-Eng_gs)
+
+
 
 if __name__ == "__main__":
     # pass
     #test_full_tdvp()
-    test_Z2_tdvp()
+    #test_Z2_tdvp()
+    test_dmrg_total_full()
