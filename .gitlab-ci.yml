@@ -20,9 +20,9 @@ pylint:
   allow_failure: true
   script:
   - pip install pylint
-  - pylint -d C0301 yamps/mps/*.py
-  - pylint -d C0301 yamps/ops/*.py
-  - pylint -d C0301 yamps/tensor/*.py
+  - pylint -d C0301,C0103 yamps/mps/*.py
+  - pylint -d C0301,C0103 yamps/ops/*.py
+  - pylint -d C0301,C0103 yamps/tensor/*.py
 
 pytest:
   stage: Test
