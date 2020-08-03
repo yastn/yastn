@@ -31,6 +31,7 @@ class Mps:
             number of physical legs: _1_ for mps; _2_ for mpo;
         """
         self.g = Geometry(N) if isinstance(N, int) else N  # g is a number (length) or directly a geometry class
+        self.normalize = True # if the state should be normalized 
         self.N = self.g.N
         self.A = {}  # dict of mps tensors; indexed by integers
         self.pC = None  # index of the central site, None if it does not exist
@@ -90,10 +91,10 @@ class Mps:
                 Q, R = self.A[n].split_qr(axes=(self.left + self.phys, self.right), sQ=-1)
 
             self.A[n] = Q
-            normC = R.norm()
+            normC = R.norm() if self.normalize else 1.
             self.A[self.pC] = (1 / normC) * R
         else:
-            normC = self.A[n].norm()
+            normC = self.A[n].norm() if self.normalize else 1.
             self.A[n] = (1 / normC) * self.A[n]
         return normC
 
@@ -134,7 +135,7 @@ class Mps:
         """
         if self.pC is not None:
             C = self.A.pop(self.pC)
-            nnext, leg, nprev = self.g.from_bond(self.pC, towards)
+            nnext, leg, _ = self.g.from_bond(self.pC, towards)
             self.pC = None
 
             if leg == 1:
@@ -142,7 +143,7 @@ class Mps:
             else:  # leg == 0:
                 self.A[nnext] = C.dot(self.A[nnext], axes=(1, self.left))
 
-    def canonize_sweep(self, to='last', normalize=True):
+    def canonize_sweep(self, to='last'):
         r"""
         Left or right canonize and normalize mps if normalize is True.
         """
@@ -154,7 +155,9 @@ class Mps:
             for n in self.g.sweep(to='first'):
                 norma = self.orthogonalize_site(n=n, towards=self.g.first)
                 self.absorb_central(towards=self.g.first)
-        if not normalize:
+        else:
+            raise MpsError("mps/canonize_sweep: Option ", to, " is not defined.")
+        if not self.normalize:
             self.norma = norma
 
     def merge_mps(self, n):
@@ -193,3 +196,15 @@ class Mps:
             Ds[n] = DAn[self.left[0]] 
         Ds[n+1] = DAn[self.right[0]]
         return Ds
+
+    def measuring(self,list_of_ops, norm=None):
+        if norm:
+            norm.setup_to_first()
+            norm = norm.measure().real
+        else:
+            norm = 1.
+        out = [None]*len(list_of_ops)
+        for n in range(len(out)):
+            list_of_ops[n].setup_to_first()
+            out[n] = list_of_ops[n].measure()/norm
+        return out
