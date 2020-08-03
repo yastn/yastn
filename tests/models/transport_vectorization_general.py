@@ -260,8 +260,8 @@ def save_to_file(names, vals, file_name):
         data.update({names[it]: vals[it]})
     np.save(file_name, data, 'a')
 
-
-def measuring(list_of_ops, normalization):
+# MEASURE
+def measuring(list_of_ops, normalization=None):
     if normalization:
         normalization.setup_to_first()
         normalization = normalization.measure().real
@@ -272,4 +272,3 @@ def measuring(list_of_ops, normalization):
         list_of_ops[n].setup_to_first()
         out[n] = list_of_ops[n].measure()/normalization
     return out
-

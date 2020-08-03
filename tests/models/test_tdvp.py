@@ -33,7 +33,7 @@ def test_tdvp_total(main, choice):
 
     # algorithm
     dtype = 'complex128'
-    sgn = 1j  # imaginary time evolution for sgn==1j
+    sgn = 1j  # imaginary time evolution for sgn == 1j
     dt = .125 * sgn  # time step - time step for single tdvp
     tmax = 1000. * dt * sgn  # total time
     opts_svd = {'tol': tol_svd, 'D_total': D_total}
@@ -98,8 +98,7 @@ def test_tdvp_total(main, choice):
     # EVOLUTION
     qt = 0
     Dmax = max(psi.get_D())
-    out = general.measuring([env, NL, NS, NR, JLS, JSR],
-                            normalization=trace_rho)
+    out = general.measuring([env, NL, NS, NR, JLS, JSR], normalization=trace_rho)
     E, nl, ns, nr, jls, jsr = out[0].real, out[1].real, out[2].real, out[3].real, out[4].imag, out[5].imag
     E *= trace_rho.measure().real
     print('Time: ', round(abs(qt), 4), ' Dmax: ', Dmax, 'normalization: ', (trace_rho.measure().real), ' E = ', E, ' Tot_Occ= ',
