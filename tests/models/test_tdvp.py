@@ -98,13 +98,13 @@ def test_tdvp_total(main, choice):
     # EVOLUTION
     qt = 0
     Dmax = max(psi.get_D())
-    out = general.measuring([env, NL, NS, NR, JLS, JSR], normalization=trace_rho)
+    out = psi.measuring([env, NL, NS, NR, JLS, JSR], norm=trace_rho)
     E, nl, ns, nr, jls, jsr = out[0].real, out[1].real, out[2].real, out[3].real, out[4].imag, out[5].imag
     E *= trace_rho.measure().real
     print('Time: ', round(abs(qt), 4), ' Dmax: ', Dmax, 'normalization: ', (trace_rho.measure().real), ' E = ', E, ' Tot_Occ= ',
           round(nl+ns+nr, 4), ' JLS=', jls, ' JSR=', jsr, ' NL=', round(nl, 5), ' NS=', round(ns, 5), ' NR=', round(nr, 5))
 
-    Nocc = general.measuring(OP_Nocc, normalization=trace_rho)
+    Nocc = psi.measuring(OP_Nocc, norm=trace_rho)
     print([round(it.real, 5) for it in Nocc])
     with open(name_txt, 'a') as f:
         print(qt, E, jls, jsr, nl, ns, nr, file=f)
@@ -134,13 +134,13 @@ def test_tdvp_total(main, choice):
         qt += abs(ddt)
         #
         Dmax = max(psi.get_D())
-        out = general.measuring(
-            [env, NL, NS, NR, JLS, JSR], normalization=trace_rho)
+        out = psi.measuring(
+            [env, NL, NS, NR, JLS, JSR], norm=trace_rho)
         E, nl, ns, nr, jls, jsr = out[0].real, out[1].real, out[2].real, out[3].real, out[4].imag, out[5].imag
         E *= trace_rho.measure().real
         print('Time: ', round(abs(qt), 4), ' Dmax: ', Dmax, 'normalization: ', (trace_rho.measure().real), ' E = ', E, ' Tot_Occ= ',  round(
             nl+ns+nr, 4), ' JLS=', jls, ' JSR=', jsr, ' NL=', round(nl, 5), ' NS=', round(ns, 5), ' NR=', round(nr, 5))
-        Nocc = general.measuring(OP_Nocc, normalization=trace_rho)
+        Nocc = psi.measuring(OP_Nocc, norm=trace_rho)
         print([round(it.real, 5) for it in Nocc])
         print(psi.get_D())
         with open(name_txt, 'a') as f:

@@ -259,16 +259,3 @@ def save_to_file(names, vals, file_name):
     for it in range(len(names)):
         data.update({names[it]: vals[it]})
     np.save(file_name, data, 'a')
-
-# MEASURE
-def measuring(list_of_ops, normalization=None):
-    if normalization:
-        normalization.setup_to_first()
-        normalization = normalization.measure().real
-    else:
-        normalization = 1.
-    out = [None]*len(list_of_ops)
-    for n in range(len(out)):
-        list_of_ops[n].setup_to_first()
-        out[n] = list_of_ops[n].measure()/normalization
-    return out
