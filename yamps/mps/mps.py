@@ -19,7 +19,7 @@ class Mps:
     and (None, n) if placed outside of a leaf. Maximally one central block is allowed.
     """
 
-    def __init__(self, N=2, nr_phys=1, nr_aux=0):
+    def __init__(self, N, nr_phys=1):
         r"""
         Initialize basic structure for matrix product state/operator/purification.
 
@@ -30,19 +30,20 @@ class Mps:
         nr_phys : int
             number of physical legs: _1_ for mps; _2_ for mpo;
         """
-        self.g = Geometry(N) if isinstance(N, int) else N  # g is a number (length) or directly a geometry class
-        self.normalize = True # if the state should be normalized 
+        # g is a number (length) or directly a geometry class
+        self.g = Geometry(N) if isinstance(N, int) else N
         self.N = self.g.N
         self.A = {}  # dict of mps tensors; indexed by integers
         self.pC = None  # index of the central site, None if it does not exist
-        self.norma = 1. # norm of a tensor
+        self.normalize = True  # if the state should be normalized
         self.nr_phys = nr_phys  # number of physical legs
-        self.nr_aux = nr_aux  # number of auxilliary legs
-        self.left = (0,)  # convention which leg is left-virtual (connected to site with smaller index)
-        self.right = (nr_phys + 1,)  # convention which leg is right-virtual leg (connected to site with larger index)
-        self.phys = tuple(ii for ii in range(1, nr_phys + 1))  # convention which legs are physical
-        self.aux = tuple(ii for ii in range(1 + nr_phys, nr_aux + nr_phys + 1))
-  
+        # convention which leg is left-virtual (connected to site with smaller index)
+        self.left = (0,)
+        # convention which leg is right-virtual leg (connected to site with larger index)
+        self.right = (nr_phys + 1,)
+        # convention which legs are physical
+        self.phys = tuple(ii for ii in range(1, nr_phys + 1))
+
     def copy(self):
         r"""
         Makes a copy of mps.
@@ -53,7 +54,7 @@ class Mps:
         -------
         Copied mps : mps
         """
-        phi = Mps(g=self.g, nr_phys=self.nr_phys)
+        phi = Mps(N=self.g, nr_phys=self.nr_phys)
         for ind in self.A:
             phi.A[ind] = self.A[ind].copy()
         phi.pC = self.pC
@@ -86,9 +87,12 @@ class Mps:
         if nnext is not None:
             self.pC = (n, nnext)
             if leg == 0:  # ortogonalize from right to left (last to first)
-                Q, R = self.A[n].split_qr(axes=(self.phys + self.right, self.left), sQ=1, Qaxis=0, Raxis=-1)
-            else:  # leg == 1 or leg is None:  # ortogonalize from left to right (first to last)
-                Q, R = self.A[n].split_qr(axes=(self.left + self.phys, self.right), sQ=-1)
+                Q, R = self.A[n].split_qr(
+                    axes=(self.phys + self.right, self.left), sQ=1, Qaxis=0, Raxis=-1)
+            # leg == 1 or leg is None:  # ortogonalize from left to right (first to last)
+            else:
+                Q, R = self.A[n].split_qr(
+                    axes=(self.left + self.phys, self.right), sQ=-1)
 
             self.A[n] = Q
             normC = R.norm() if self.normalize else 1.
@@ -149,16 +153,15 @@ class Mps:
         """
         if to == 'last':
             for n in self.g.sweep(to='last'):
-                norma = self.orthogonalize_site(n=n, towards=self.g.last)
+                self.orthogonalize_site(n=n, towards=self.g.last)
                 self.absorb_central(towards=self.g.last)
         elif to == 'first':
             for n in self.g.sweep(to='first'):
-                norma = self.orthogonalize_site(n=n, towards=self.g.first)
+                self.orthogonalize_site(n=n, towards=self.g.first)
                 self.absorb_central(towards=self.g.first)
         else:
-            raise MpsError("mps/canonize_sweep: Option ", to, " is not defined.")
-        if not self.normalize:
-            self.norma = norma
+            raise MpsError("mps/canonize_sweep: Option ",
+                           to, " is not defined.")
 
     def merge_mps(self, n):
         r"""
@@ -193,11 +196,11 @@ class Mps:
         Ds = [None]*(self.N+1)
         for n in range(self.N):
             DAn = self.A[n].get_shape()[0]
-            Ds[n] = DAn[self.left[0]] 
+            Ds[n] = DAn[self.left[0]]
         Ds[n+1] = DAn[self.right[0]]
         return Ds
 
-    def measuring(self,list_of_ops, norm=None):
+    def measuring(self, list_of_ops, norm=None):
         if norm:
             norm.setup_to_first()
             norm = norm.measure().real
