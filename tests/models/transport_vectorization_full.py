@@ -59,11 +59,10 @@ def Lindbladian_1AIM_mixed(NL, LSR, wk, temp, vk, dV, gamma, basis, AdagA=False,
             settings=settings, s=(1, 1, -1, -1), dtype=dtype)
 
         wn = wk[n]
-        if LSR[n] == -1:  # L
-            vL, vR = (-1j)*vk[n], 0
-        elif LSR[n] == +1:  # R
-            vL, vR = 0, (-1j)*vk[n]
-
+        if LSR[n] == -1:
+            v = (-1j)*vk[n] if LSR[n] == -1 else 0
+        elif LSR[n] == 1:
+            v = (-1j)*vk[n] if LSR[n] == +1 else 0
         # local operator - including dissipation
         if abs(LSR[n]) == 1:
             en = wk[n] + dV[n]
@@ -80,62 +79,45 @@ def Lindbladian_1AIM_mixed(NL, LSR, wk, temp, vk, dV, gamma, basis, AdagA=False,
             On_Site = wn * m1j_n_q__m__q_n
         #
         if n == 0:
-            tmp = np.block([On_Site+diss_off, +vL * c_q, -vL * q_c, +vL * cp_q, -vL * q_cp,
-                            +vR * c_q, -vR * q_c, +vR * cp_q, -vR * q_cp,
+            tmp = np.block([On_Site+diss_off, +v * c_q, -v * q_c, +v * cp_q, -v * q_cp,
                             z_q_z, II])
-            tmp = tmp.reshape((1, 4, 11, 4))
+            tmp = tmp.reshape((1, 4, 7, 4))
         elif n != 0 and n < n1:
-            tmp = np.block([[II, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [OO,     z_q, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [OO, OO,     q_z, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [OO, OO, OO,     z_q, OO, OO, OO, OO, OO, OO, OO],
-                            [OO, OO, OO, OO,     q_z, OO, OO, OO, OO, OO, OO],
-                            [OO, OO, OO, OO, OO,     z_q, OO, OO, OO, OO, OO],
-                            [OO, OO, OO, OO, OO, OO,     q_z, OO, OO, OO, OO],
-                            [OO, OO, OO, OO, OO, OO, OO,     z_q, OO, OO, OO],
-                            [OO, OO, OO, OO, OO, OO, OO, OO,     q_z, OO, OO],
-                            [diss_off, OO, OO, OO, OO, OO, OO, OO, OO,  z_q_z, OO],
-                            [On_Site, +vL * c_q, -vL * q_c, +vL * cp_q, -vL * q_cp, +vR * c_q, -vR * q_c, +vR * cp_q, -vR * q_cp,  OO, II]])
-            tmp = tmp.reshape((11, 4, 11, 4))
+            tmp = np.block([[II,  OO, OO, OO, OO, OO, OO],
+                            [OO, z_q, OO, OO, OO, OO, OO],
+                            [OO, OO, q_z, OO, OO, OO, OO],
+                            [OO, OO, OO, z_q, OO, OO, OO],
+                            [OO, OO, OO, OO, q_z, OO, OO],
+                            [diss_off, OO, OO, OO, OO, z_q_z, OO],
+                            [On_Site, +v * c_q, -v * q_c, +v * cp_q, -v * q_cp, OO, II]])
+            tmp = tmp.reshape((7, 4, 7, 4))
         elif n == n1:
-            tmp = np.block([[II, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [cp_q, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [q_cp, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [c_q, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [q_c, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [cp_q, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [q_cp, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [c_q, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [q_c, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [OO, OO, OO, OO, OO, OO, OO, OO, OO, z_q_z, OO],
-                            [On_Site, c_q, q_c, cp_q, q_cp, c_q, q_c, cp_q, q_cp, OO, II]])
-            tmp = tmp.reshape((11, 4, 11, 4))
+            tmp = np.block([[II,   OO, OO, OO, OO, OO, OO],
+                            [cp_q, OO, OO, OO, OO, OO, OO],
+                            [q_cp, OO, OO, OO, OO, OO, OO],
+                            [c_q,  OO, OO, OO, OO, OO, OO],
+                            [q_c,  OO, OO, OO, OO, OO, OO],
+                            [OO,   OO, OO, OO, OO, z_q_z, OO],
+                            [On_Site, c_q, q_c, cp_q, q_cp, OO, II]])
+            tmp = tmp.reshape((7, 4, 7, 4))
         elif n < n1 and n != N-1:
-            tmp = np.block([[II, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [+vL*cp_q, z_q, OO, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [-vL*q_cp, OO, q_z, OO, OO, OO, OO, OO, OO, OO, OO],
-                            [+vL*c_q, OO, OO, z_q, OO, OO, OO, OO, OO, OO, OO],
-                            [-vL*q_c, OO, OO, OO, q_z, OO, OO, OO, OO, OO, OO],
-                            [+vR*cp_q, OO, OO, OO, OO, z_q, OO, OO, OO, OO, OO],
-                            [-vR*q_cp, OO, OO, OO, OO, OO, q_z, OO, OO, OO, OO],
-                            [+vR*c_q, OO, OO, OO, OO, OO, OO, z_q, OO, OO, OO],
-                            [-vR*q_c, OO, OO, OO, OO, OO, OO, OO, q_z, OO, OO],
-                            [diss_off, OO, OO, OO, OO, OO, OO, OO, OO, z_q_z, OO],
-                            [On_Site, OO, OO, OO, OO, OO, OO, OO, OO, OO, II]])
-            tmp = tmp.reshape((11, 4, 11, 4))
+            tmp = np.block([[II,   OO, OO, OO, OO, OO, OO],
+                            [+v*cp_q, OO, OO, OO, OO, OO, OO],
+                            [-v*q_cp, OO, OO, OO, OO, OO, OO],
+                            [+v*c_q,  OO, OO, OO, OO, OO, OO],
+                            [-v*q_c,  OO, OO, OO, OO, OO, OO],
+                            [diss_off,   OO, OO, OO, OO, z_q_z, OO],
+                            [On_Site, OO, OO, OO, OO, OO, II]])
+            tmp = tmp.reshape((7, 4, 7, 4))
         elif n == N - 1:
             tmp = np.block([[II],
-                            [+vL*cp_q],
-                            [-vL*q_cp],
-                            [+vL*c_q],
-                            [-vL*q_c],
-                            [+vR*cp_q],
-                            [-vR*q_cp],
-                            [+vR*c_q],
-                            [-vR*q_c],
+                            [+v*cp_q],
+                            [-v*q_cp],
+                            [+v*c_q],
+                            [-v*q_c],
                             [diss_off],
                             [On_Site]])
-            tmp = tmp.reshape((11, 4, 1, 4))
+            tmp = tmp.reshape((7, 4, 1, 4))
         #  #  #
         tmp = tmp.transpose((0, 1, 3, 2))
         H.A[n].set_block(val=tmp)

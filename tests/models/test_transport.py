@@ -4,7 +4,9 @@ import yamps.mps.tdvp as tdvp
 import transport_vectorization_full as main_full
 import transport_vectorization_sym as main_sym
 import transport_vectorization_general as general
-# Imaginary time evolution of full Lindbladian 
+
+
+# Imaginary time evolution of full Lindbladian
 def test_tdvp_total(main, choice):
     # MODEL
     NL = 1
@@ -13,11 +15,11 @@ def test_tdvp_total(main, choice):
     wS = 0.
     mu = .5
     dV = 0
-    gamma = 1.  # dissipation rate
+    gamma = 100.  # dissipation rate
     temp = 0.  # temperature
     distribution = 1
     # how to arrange modes. 0-spatial 1d to energy modes via sine-transformation.
-    #1-uniform spacing through W=4*w0. Are not places on the very corners of W.
+    # 1-uniform spacing through W=4*w0. Are not places on the very corners of W.
     ordered = False  # order basis for mps/mpo
     if choice == 'Z2':
         basis = 0
@@ -25,7 +27,7 @@ def test_tdvp_total(main, choice):
         basis = 1
         # what basis for spanning density and mpo. 0 - choose I, Z, X, Y basis
         # 1 - choose cp c, c cp, c, cp
-    
+
     # MPS
     tol_svd = 1e-6
     D_total = 4
@@ -38,7 +40,7 @@ def test_tdvp_total(main, choice):
     tmax = 1000. * dt * sgn  # total time
     opts_svd = {'tol': tol_svd, 'D_total': D_total}
     eigs_tol = 1e-14
-    
+
     # STORAGE
     directory = 'tests/models/'
     name = directory+'testZ2_0'
@@ -55,21 +57,22 @@ def test_tdvp_total(main, choice):
     LSR, wk, temp, vk, dV, gamma = general.generate_discretization(
         NL=NL, w0=w0, wS=wS, mu=mu, v=v, dV=dV, tempL=temp, tempR=temp, method=distribution, ordered=ordered, gamma=gamma)
     psi = main.thermal_state(LSR=LSR, io=io, ww=wk, temp=temp, basis=basis)
-    _, LdagL = main.Lindbladian_1AIM_mixed(
+    LL, LdagL = main.Lindbladian_1AIM_mixed(
         NL=NL, LSR=LSR, wk=wk, temp=temp, vk=vk, dV=dV, gamma=gamma, basis=basis, AdagA=True, dtype=dtype)
     #_, LdagL = main.local_1AIM_mixed(NL=NL, LSR=LSR, wk=wk, dV=dV, temp=temp, gamma=gamma, basis=basis, AdagA=True, dtype=dtype)
-    H = LdagL
-
+    H, hermitian, dmrg = LL, False, False
+    #H, hermitian, dmrg = LdagL, True, True
+    
     # canonize MPS
     psi.normalize = True
     psi.canonize_sweep(to='last')
     psi.canonize_sweep(to='first')
-    
+
     # compress MPO
     H.normalize = False
     H.canonize_sweep(to='last')
     H.canonize_sweep(to='first')
-    
+
     # trace rho
     trace_rho = mps.env2.Env2(bra=main.identity(psi.N, basis=basis), ket=psi)
 
@@ -111,26 +114,25 @@ def test_tdvp_total(main, choice):
 
     init_steps = 5
     qt = 0
-    dmrg = False
     while abs(qt) < abs(tmax):
-        exp_tol = tol_svd*.01
+        exp_tol = 1e-2#tol_svd*.01
         if dmrg:
             ddt = dt
             env = mps.dmrg.dmrg_sweep_1site(psi=psi, H=H, env=env, eigs_tol=eigs_tol, dtype=dtype, hermitian=True,  opts_svd=opts_svd)
         else:
             for it in range(init_steps):
-                exp_tol = 1e-10
+                exp_tol = 1e-14
                 ddt = dt*2**(it-init_steps)
                 if D_total > 1:
                     env = mps.tdvp.tdvp_sweep_2site(
-                        psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=dtype, hermitian=True,  opts_svd=opts_svd)
+                        psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=dtype, hermitian=hermitian,  opts_svd=opts_svd)
                 else:
                     env = mps.tdvp.tdvp_sweep_1site(
-                        psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=dtype, hermitian=True,  opts_svd=opts_svd)
+                        psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=dtype, hermitian=hermitian,  opts_svd=opts_svd)
             else:
                 ddt = dt
                 env = mps.tdvp.tdvp_sweep_1site(psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol,
-                                                exp_tol=exp_tol,  dtype=dtype, hermitian=True,  opts_svd=opts_svd)
+                                                exp_tol=exp_tol,  dtype=dtype, hermitian=hermitian,  opts_svd=opts_svd)
         qt += abs(ddt)
         #
         Dmax = max(psi.get_D())
