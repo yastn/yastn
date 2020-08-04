@@ -17,16 +17,12 @@ def thermal_state(LSR, io, ww, temp, basis, dtype='float64'):
     ----------
     NL: int
         Number of states in a lead with occupancies acc. to Fermi-Dirac distribution.
-        
     io: list of size NS
         List of occupancies in the impurity.
-    
     temp: list
         Temperature on sites, zero for the impurity
-
     ww: list
         List of energies in a chain. Impurity energies are ignored - io used instead.
-    
     """
     N = len(LSR)
     im = 0
@@ -226,7 +222,7 @@ def Lindbladian_1AIM_mixed(NL, LSR, wk, temp, vk, dV, gamma, basis, AdagA=False,
         m1j_N_Q__M__Q_N.set_block(ts=(virt_ch[0], ts[phys_ch[0]], ts[phys_ch[1]], virt_ch[1]),
                                   val=op[ch[phys_ch[0]], :][:, ch[phys_ch[1]]], Ds=(1, Ds[phys_ch[0]], Ds[phys_ch[1]], 1))
 
-        #? check ones again
+        # ? check ones again
         virt_ch = (0, 0)  # virtual charges left/right
         op = z_q_z         # operator in full version
         Z_Q_Z = tensor.Tensor(settings=settings_U1, s=(
@@ -258,8 +254,6 @@ def Lindbladian_1AIM_mixed(NL, LSR, wk, temp, vk, dV, gamma, basis, AdagA=False,
         phys_ch = [it+1 for it in (0, 0)]  # physical charges ket, bra
         CP_Q_C.set_block(ts=(virt_ch[0], ts[phys_ch[0]], ts[phys_ch[1]], virt_ch[1]),
                          val=op[ch[phys_ch[0]], :][:, ch[phys_ch[1]]], Ds=(1, Ds[phys_ch[0]], Ds[phys_ch[1]], 1))
-        #???
-
         #
         virt_ch = (1, 1)  # virtual charges left/right
 
@@ -450,7 +444,7 @@ def Lindbladian_1AIM_mixed(NL, LSR, wk, temp, vk, dV, gamma, basis, AdagA=False,
                                        (0, 7): +vR*CP_Q_right,  (0, 8): -vR*Q_CP_right,
                                        (0, 9): Z_Q_Z, (0, 10): II}, common_legs=(1, 2))
             else:
-                H.A[n] = tensor.block({(0, 0): On_Site, (0, 1): diss_off,
+                H.A[n] = tensor.block({(0, 0): On_Site, (-1, 0): diss_off,
                                        (0, 1): +vL*C_Q_right,  (0, 2): -vL*Q_C_right,
                                        (0, 3): +vL*CP_Q_right,  (0, 4): -vL*Q_CP_right,
                                        (0, 5): +vR*C_Q_right,  (0, 6): -vR*Q_C_right,
@@ -578,11 +572,11 @@ def current(LSR, vk, cut, basis):
             H.A[n] = tensor.block({(0, 0): II*0, (-2, 0): II, (-1, 0): v*ck_left}, common_legs=(1))
         else:
             if n < n1:
-                H.A[n] = tensor.block({(0, 0): II*0, (0, 2): II, (0, 1): v*ck_right, (-1,1): z}, common_legs=(1))
+                H.A[n] = tensor.block({(0, 0): II*0, (0, 2): II, (0, 1): v*ck_right, (-1, 1): z}, common_legs=(1))
             if n == n1:
-                H.A[n] = tensor.block({(0, 0): II*0, (0, 2): II, (0, 1): cs_right, (-2, 0): II, (-1, 0): cs_left, (-1,1): z}, common_legs=(1))
+                H.A[n] = tensor.block({(0, 0): II*0, (0, 2): II, (0, 1): cs_right, (-2, 0): II, (-1, 0): cs_left, (-1, 1): z}, common_legs=(1))
             else:
-                H.A[n] = tensor.block({(0, 0): II*0,(-2, 0): II, (-1, 0): v*ck_left, (-1,1): z}, common_legs=(1))    
+                H.A[n] = tensor.block({(0, 0): II*0,(-2, 0): II, (-1, 0): v*ck_left, (-1, 1): z}, common_legs=(1))
     # TO PUSH:  cant blck different blocks on the same position. Overwrites.
     return H
 

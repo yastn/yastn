@@ -1,6 +1,4 @@
 import numpy as np
-import yamps.mps as mps
-import yamps.tensor as tensor
 from yamps.tensor.ncon import ncon
 
 
@@ -85,7 +83,7 @@ def generate_operator_basis(basis):
         m1j_n_q__m__q_n = np.block([[0, 0, 0, 0],
                                     [0, 0, 0, 0],
                                     [0, 0, 0, 1],
-                                    [0, 0,-1, 0]])
+                                    [0, 0, -1, 0]])
 
         z_q_z = np.block([[1, 0, 0, 0],
                           [0, 1, 0, 0],
@@ -93,63 +91,54 @@ def generate_operator_basis(basis):
                           [0, 0, 0, -1]])
 
         c_q = .5*np.block([[0, 0, 1, +1j],
-                         [0, 0, +1, 1j],
-                         [1, -1, 0, 0],
-                         [+1j, -1j, 0, 0]])
+                          [0, 0, +1, 1j],
+                          [1, -1, 0, 0],
+                          [+1j, -1j, 0, 0]])
 
         cp_q = .5*np.block([[0, 0, 1, -1j],
-                          [0, 0, -1, 1j],
-                          [1, +1, 0, 0],
-                          [-1j, -1j, 0, 0]
-                          ])
+                           [0, 0, -1, 1j],
+                           [1, +1, 0, 0],
+                           [-1j, -1j, 0, 0]])
 
         q_c = .5*np.block([[0, 0, 1, +1j],
-                         [0, 0, -1, -1j],
-                         [1, +1, 0, 0],
-                         [+1j, 1j, 0, 0]
-                         ])
+                          [0, 0, -1, -1j],
+                          [1, +1, 0, 0],
+                          [+1j, 1j, 0, 0]])
 
         q_cp = .5*np.block([[0, 0, 1, -1j],
-                          [0, 0, +1, -1j],
-                          [1, -1, 0, 0],
-                          [-1j, 1j, 0, 0]
-                          ])
+                           [0, 0, +1, -1j],
+                           [1, -1, 0, 0],
+                           [-1j, 1j, 0, 0]])
 
         c_q_cp = .5*np.block([[+1, -1, 0, 0],
-                            [+1, -1, 0, 0],
-                            [0, 0, 0, 0],
-                            [0, 0, 0, 0]
-                            ])
+                             [+1, -1, 0, 0],
+                             [0, 0, 0, 0],
+                             [0, 0, 0, 0]])
 
         cp_q_c = .5*np.block([[+1, +1, 0, 0],
-                            [-1, -1, 0, 0],
-                            [0, 0, 0, 0],
-                            [0, 0, 0, 0]
-                            ])
+                             [-1, -1, 0, 0],
+                             [0, 0, 0, 0],
+                             [0, 0, 0, 0]])
 
         n_q = .5*np.block([[1, -1, 0, 0],
-                         [-1, 1, 0, 0],
-                         [0, 0, 1, 1j],
-                         [0, 0, -1j, 1]
-                         ])
+                          [-1, 1, 0, 0],
+                          [0, 0, 1, 1j],
+                          [0, 0, -1j, 1]])
 
         q_n = .5*np.block([[1, -1, 0, 0],
-                         [-1, 1, 0, 0],
-                         [0, 0, 1, -1j],
-                         [0, 0, 1j, 1]
-                         ])
+                          [-1, 1, 0, 0],
+                          [0, 0, 1, -1j],
+                          [0, 0, 1j, 1]])
 
         q_ccp = .5*np.block([[1, 1, 0, 0],
-                           [1, 1, 0, 0],
-                           [0, 0, 1, 1j],
-                           [0, 0, 1j, 1]
-                           ])
+                            [1, 1, 0, 0],
+                            [0, 0, 1, 1j],
+                            [0, 0, 1j, 1]])
 
         ccp_q = .5*np.block([[1, 1, 0, 0],
-                           [1, 1, 0, 0],
-                           [0, 0, 1, -1j],
-                           [0, 0, -1j, 1]
-                           ])
+                            [1, 1, 0, 0],
+                            [0, 0, 1, -1j],
+                            [0, 0, -1j, 1]])
     elif basis == 1:  # choose cp c, c cp, c, cp
         OO = np.zeros((4, 4), dtype=np.complex128)
 
@@ -158,14 +147,12 @@ def generate_operator_basis(basis):
         q_z = np.block([[-1, 0, 0, 0],
                         [0, 1, 0, 0],
                         [0, 0, -1, 0],
-                        [0, 0, 0, 1]
-                         ])
+                        [0, 0, 0, 1]])
 
         z_q = np.block([[-1, 0, 0, 0],
                         [0, 1, 0, 0],
                         [0, 0, 1, 0],
-                        [0, 0, 0, -1]
-                         ])
+                        [0, 0, 0, -1]])
 
         n_q__p__q_n = np.zeros((4, 4), dtype=np.complex128)
         n_q__p__q_n[0, 0] = 2
@@ -185,13 +172,12 @@ def generate_operator_basis(basis):
         z_q_z = np.block([[1, 0, 0, 0],
                           [0, 1, 0, 0],
                           [0, 0, -1, 0],
-                          [0, 0, 0, -1]
-                           ])
+                          [0, 0, 0, -1]])
 
         c_q = np.zeros((4, 4), dtype=np.complex128)
         c_q[2, 0] = 1
         c_q[1, -1] = 1
-        
+
         cp_q = np.zeros((4, 4), dtype=np.complex128)
         cp_q[0, 2] = 1
         cp_q[-1, 1] = 1
@@ -245,8 +231,8 @@ def generate_vectorized_basis(basis):
     return vII, vnn, vc, vcp, vz
 
 
-def stack_MPOs(UP, DOWN):# TO PUSH :copy has problems with geometry?-unexpected argument
-    for it in range(UP.N):  # empty tensors
+def stack_MPOs(UP, DOWN):
+    for it in range(UP.N):
         tmp = ncon([DOWN.A[it], UP.A[it]], [[-1, 1, -3, -5], [-2, 1, -4, -6]], [1, 0])
         tmp, _ = tmp.group_legs(axes=(4, 5), new_s=-1)
         UP.A[it], _ = tmp.group_legs(axes=(0, 1), new_s=1)

@@ -1,8 +1,7 @@
 import numpy as np
 import yamps.mps as mps
-import yamps.ops.settings_full as settings
 import yamps.tensor as tensor
-from yamps.tensor.ncon import ncon
+import yamps.ops.settings_full as settings
 import transport_vectorization_general as general
 
 
@@ -16,16 +15,12 @@ def thermal_state(LSR, io, ww, temp, basis, dtype='float64'):
     ----------
     NL: int
         Number of states in a lead with occupancies acc. to Fermi-Dirac distribution.
-        
     io: list of size NS
         List of occupancies in the impurity.
-    
     temp: list
         Temperature on sites, zero for the impurity
-
     ww: list
         List of energies in a chain. Impurity energies are ignored - io used instead.
-    
     """
     N = len(LSR)
     im = 0
@@ -89,7 +84,7 @@ def Lindbladian_1AIM_mixed(NL, LSR, wk, temp, vk, dV, gamma, basis, AdagA=False,
                             +vR * c_q, -vR * q_c, +vR * cp_q, -vR * q_cp,
                             z_q_z, II])
             tmp = tmp.reshape((1, 4, 11, 4))
-        elif n!=0 and n<n1:
+        elif n != 0 and n < n1:
             tmp = np.block([[II, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
                             [OO,     z_q, OO, OO, OO, OO, OO, OO, OO, OO, OO],
                             [OO, OO,     q_z, OO, OO, OO, OO, OO, OO, OO, OO],
@@ -115,7 +110,7 @@ def Lindbladian_1AIM_mixed(NL, LSR, wk, temp, vk, dV, gamma, basis, AdagA=False,
                             [OO, OO, OO, OO, OO, OO, OO, OO, OO, z_q_z, OO],
                             [On_Site, c_q, q_c, cp_q, q_cp, c_q, q_c, cp_q, q_cp, OO, II]])
             tmp = tmp.reshape((11, 4, 11, 4))
-        elif n<n1 and n!=N-1:
+        elif n < n1 and n != N-1:
             tmp = np.block([[II, OO, OO, OO, OO, OO, OO, OO, OO, OO, OO],
                             [+vL*cp_q, z_q, OO, OO, OO, OO, OO, OO, OO, OO, OO],
                             [-vL*q_cp, OO, q_z, OO, OO, OO, OO, OO, OO, OO, OO],
@@ -192,8 +187,8 @@ def current(LSR, vk, cut, basis):
             tmp = tmp.reshape((3, 3, 4))
         elif n == N - 1:
             tmp = np.block([[II],
-                            [ v * ck],
-                            [ OO]])
+                            [v * ck],
+                            [OO]])
             tmp = tmp.reshape((3, 1, 4))
         tmp = tmp.transpose((0, 2, 1))
         H.A[n].set_block(val=tmp)
@@ -258,6 +253,7 @@ def measure_sumOp(choice, LSR, basis, Op):
         tmp = tmp.transpose((0, 2, 1))
         H.A[n].set_block(val=tmp)
     return H
+
 
 # TEMPORARY
 def local_1AIM_mixed(NL, LSR, wk, dV, temp, gamma, basis, AdagA=False, dtype='float64'):
