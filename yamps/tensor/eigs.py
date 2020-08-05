@@ -3,18 +3,22 @@ import scipy as sp
 import time
 import tracemalloc
 
+_select_dtype = {'float64': np.float64,
+                 'complex128': np.complex128}
+
 
 class EigsError(Exception):
     pass
 
 
 def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype='complex128', NA=None, cost_estim=0):
+    dtype = _select_dtype[dtype]
     def exp_A(x): return expA(Av=Av, Bv=Bv, init=x, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k,
                               hermitian=hermitian, bi_orth=bi_orth,  dtype=dtype, NA=NA, cost_estim=cost_estim)
     return exp_A(init)
 
 
-def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype='complex128', NA=None, cost_estim=1):
+def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype=np.complex128, NA=None, cost_estim=1):
     if not hermitian and not Bv:
         print('expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
 
@@ -126,7 +130,7 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
 
             tau_old = tau
             k_old = k
-            if happy == 1: #or (dt - qt)<1e-3*dt: ERR maybe neglect very small intervals? rather not 
+            if happy == 1:
                 omega = 0
                 tau_new = dt - qt
                 k_new = k  # len(eval)
@@ -147,29 +151,27 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
                 else:
                     k_new = k_opt
                     tau_new = tau
-        if omega < delta:
-            # save result of exp(tau*A) evolution
+        if omega < delta:  # use this one
             it += 1
             qt += tau
             vec = [evec]
-        else:
+        else:  # try again
             itry += 1
-        if itry == max_try:
-            it += 1
-            qt = dt
-            vec = [evec]
-            tau = dt - qt
-            k = k_max
-        else:
-            tau = min([dt - qt, max([.2 * tau, min([tau_new, 2 * tau])])]).real
-            k = max([1, min([k_max, max([int(.75 * k), min([k_new, int(1.3333 * k) + 1])])])]).real
-    if qt < dt:
-        raise EigsError(
-            'eigs/expA: Failed to approximate matrix exponent with given parameters. \nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
+            if itry == max_try - 1:
+                it += 1
+                qt = dt
+                vec = [evec]
+                tau = dt - qt
+                k = k_max
+                raise EigsError(
+                    'eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = ', omega/delta, '\nRemaining time step = ', abs(1.-qt/dt), '\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
+            else:
+                tau = min([dt - qt, max([.2 * tau, min([tau_new, 2 * tau])])]).real
+                k = max([1, min([k_max, max([int(.75 * k), min([k_new, int(1.3333 * k) + 1])])])]).real
     return (vec[0], it, k, qt,)
 
 
-def eigs(Av, init, Bv=None, tau=None, tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype='complex128'):
+def eigs(Av, init, Bv=None, tau=None, tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype=np.complex128):
     # solve eigenproblem using Lanczos
     init = [it.__mul__(1. / (it.norm(ord='fro'))) for it in init]
     if hermitian:
@@ -181,7 +183,7 @@ def eigs(Av, init, Bv=None, tau=None, tol=1e-14, k=5, hermitian=False, bi_orth=T
     return out
 
 
-def lanczos_her(Av, init, tau=None, tol=1e-14, k=5, dtype='complex128'):
+def lanczos_her(Av, init, tau=None, tol=1e-14, k=5, dtype=np.complex128):
     # Lanczos algorithm for hermitian matrices
     beta = False
     q = init
@@ -221,7 +223,7 @@ def lanczos_her(Av, init, tau=None, tol=1e-14, k=5, dtype='complex128'):
     return out + (happy,)
 
 
-def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, dtype='complex128', bi_orth=True):
+def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, dtype=np.complex128, bi_orth=True):
     # Lanczos algorithm for non-hermitian matrices
     if len(init) == 1:
         p, q = init[0], init[0]
@@ -301,7 +303,7 @@ def make_tridiag(a, b, c=None, hermitian=False):
     return out
 
 
-def solve_tridiag(a, b, Q, c=None, V=None, tau=None, beta=None, hermitian=False, dtype='complex128'):
+def solve_tridiag(a, b, Q, c=None, V=None, tau=None, beta=None, hermitian=False, dtype=np.complex128):
     # find approximate eigenvalues and eigenvectors using tridiagonal matrix
     # and Krylov vectors Q and V
     if not tau or not beta:
