@@ -236,14 +236,14 @@ def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, dtype='complex128', bi_
     r = Av(q)
     s = Bv(p)
     for it in range(k):
-        if r.norm(ord='fro') < tol or s.norm(ord='fro') < tol:
-            beta = 0
-            happy = 1
-            break
         tmp = p.scalar(r)
         a[it] = tmp
         Q[it] = q
         P[it] = p
+        if r.norm(ord='fro') < tol or s.norm(ord='fro') < tol:
+            beta = 0
+            happy = 1
+            break
         r = r.apxb(q, x=-a[it])
         s = s.apxb(p, x=-a[it].conjugate())
         w = r.scalar(s)

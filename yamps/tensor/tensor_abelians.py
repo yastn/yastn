@@ -838,7 +838,7 @@ class Tensor:
         a.A = a.conf.back.add(self.A, other.A, to_execute)
         return a
 
-    def axpb(self, other, x=1):
+    def apxb(self, other, x=1):
         """
         Directly calculate tensor + x * tensor
 
