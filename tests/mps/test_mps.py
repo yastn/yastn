@@ -101,6 +101,32 @@ def test_full_canonize():
     psi3 = ops_full.mpo_random(N=16, Dmax=51, d=[2, 3], d_out=[3, 2])
     canonize(psi3)
 
+def test_full_copy():
+    """
+    Initialize random mps of full tensors and checks copying.
+    """
+    psi = ops_full.mps_random(N=16, Dmax=25, d=2)
+    x = psi.copy()
+    if not psi.g==x.g:
+        print('Copy has failed. Geometry does not match.')
+    for n in range(psi.N):
+        if not  np.all(psi.A[n].to_numpy()==x.A[n].to_numpy()):
+            print('Copy has failed. Arrays are not the same.')
+    psi = ops_full.mps_random(N=16, Dmax=25, d=[2, 3], dtype='complex128')
+    x = psi.copy()
+    if not psi.g==x.g:
+        print('Copy has failed. Geometry does not match.')
+    for n in range(psi.N):
+        if not  np.all(psi.A[n].to_numpy()==x.A[n].to_numpy()):
+            print('Copy has failed. Arrays are not the same.')
+    psi = ops_full.mpo_random(N=16, Dmax=51, d=[2, 3], d_out=[3, 2])
+    x = psi.copy()
+    if not psi.g==x.g:
+        print('Copy has failed. Geometry does not match.')
+    for n in range(psi.N):
+        if not  np.all(psi.A[n].to_numpy()==x.A[n].to_numpy()):
+            print('Copy has failed. Arrays are not the same.')
+    
 
 def test_full_env2_update():
     """
@@ -140,6 +166,24 @@ def test_Z2_canonize():
     psi4 = ops_Z2.mpo_random(N=16, Dblock=5, total_parity=0, t_out=(0,), dtype='complex128')
     canonize(psi4)
 
+def test_Z2_copy():
+    """
+    Initialize random mps of full tensors and checks copying.
+    """
+    psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
+    x = psi.copy()
+    if not psi.g==x.g:
+        print('Copy has failed. Geometry does not match.')
+    for n in range(psi.N):
+        if not  np.all(psi.A[n].to_numpy()==x.A[n].to_numpy()):
+            print('Copy has failed. Arrays are not the same.')
+    psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=1, dtype='complex128')
+    x = psi.copy()
+    if not psi.g==x.g:
+        print('Copy has failed. Geometry does not match.')
+    for n in range(psi.N):
+        if not  np.all(psi.A[n].to_numpy()==x.A[n].to_numpy()):
+            print('Copy has failed. Arrays are not the same.')
 
 def test_Z2_env2_update():
     """
@@ -171,7 +215,9 @@ def test_Z2_env3_update():
 
 
 if __name__ == "__main__":
-    pass
+    test_full_copy()
+    test_Z2_copy()
+    #pass
     # test_full_canonize()
     # test_Z2_canonize()
     # test_full_env2_update()

@@ -115,8 +115,7 @@ class Env3:
         if bd is None:
             bd = (None, self.g.first)
         return self.F[bd].dot(self.F[bd[::-1]], axes=((0, 1, 2), (2, 1, 0))).to_number()
-
-    def Heff0(self, C, bd):
+    def Heff0(self, C, bd, conj=False):
         r"""
         Action of Heff on central site.
 
@@ -126,6 +125,8 @@ class Env3:
             a central site
         bd : tuple
             and a bond on which it acts, e.g. (1, 2) [or (2, 1) -- it is ordered]
+        conj : boolean
+            True to calculate Heff^\daggerC
 
         Returns
         -------
@@ -133,9 +134,13 @@ class Env3:
             Heff0 * C
         """
         bd = self.g.order_bond(bd)
-        return ncon([self.F[bd], C, self.F[bd[::-1]]], ((-1, 2, 1), (1, 3), (3, 2, -2)), (0, 0, 0))
+        
+        if not conj:
+            return ncon([self.F[bd], C, self.F[bd[::-1]]], ((1, 2, -1), (1, 3), (-2, 2, 3)), (0, 1, 0)).conj()
+        else:
+            return ncon([self.F[bd], C, self.F[bd[::-1]]], ((-1, 2, 1), (1, 3), (3, 2, -2)), (0, 0, 0))
 
-    def Heff1(self, A, n):
+    def Heff1(self, A, n, conj=False):
         r"""Action of Heff on central site.
 
         Parameters
@@ -144,6 +149,8 @@ class Env3:
             site tensor
         n : int
             index of corresponding site
+        conj : boolean
+            True to calculate Heff^\daggerA = (Heff^T A.conj).conj
 
         Returns
         -------
@@ -151,15 +158,22 @@ class Env3:
             Heff1 * A
         """
         nl, nr = self.g.order_neighbours(n)
+        if conj:
+            if self.nr_phys == 1:
+                return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((1, 2, -1), (1, 3, 4), (2, 3, -2, 5), (-3, 5, 4)), (0, 1, 0, 0)).conj()
+            elif self.nr_phys == 2:
+                return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((1, 2, -1), (1, 3, -3, 4), (2, 3, -2, 5), (-4, 5, 4)), (0, 1, 0, 0)).conj()
+            else:  # self.nr_phys == 2 and self.on_aux:
+                return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((1, 2, -1), (1, -2, 3, 4), (2, 3, -3, 5), (-4, 5, 4)), (0, 1, 0, 0)).conj()
+        else:
+            if self.nr_phys == 1:
+                return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))
+            elif self.nr_phys == 2 and not self.on_aux:
+                return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((-1, 2, 1), (1, 3, -3, 4), (2, -2, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
+            else:  # self.nr_phys == 2 and self.on_aux:
+                return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((-1, 2, 1), (1, -2, 3, 4), (2, -3, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
 
-        if self.nr_phys == 1:
-            return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))
-        elif self.nr_phys == 2 and not self.on_aux:
-            return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((-1, 2, 1), (1, 3, -3, 4), (2, -2, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
-        else:  # self.nr_phys == 2 and self.on_aux:
-            return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((-1, 2, 1), (1, -2, 3, 4), (2, -3, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
-
-    def Heff2(self, AA, n):
+    def Heff2(self, AA, n, conj=False):
         r"""Action of Heff on central site.
 
         Parameters
@@ -168,6 +182,8 @@ class Env3:
             merged tensor for 2 sites
         n : int
             index of the left site
+        conj : boolean
+            True to calculate Heff^\daggerAA
 
         Returns
         -------
@@ -178,15 +194,22 @@ class Env3:
         _, nr = self.g.order_neighbours(nn)
 
         OO = ncon([self.op.A[n], self.op.A[nn]], ((-1, -2, -4, 1), (1, -3, -5, -6)))
+        if conj:
+            if self.nr_phys == 1:
+                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, 3, 4, 5), (2, 3, 4, -2, -3, 6), (-4, 6, 5)), (0, 1, 0, 0)).conj()
+            elif self.nr_phys == 2 and not self.on_aux:
+                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, 3, 4, -4, -5, 5), (2, 3, 4, -2, -3, 6), (-6, 6, 5)), (0, 1, 0, 0)).conj()
+            else:  # self.nr_phys == 2 and self.on_aux:
+                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, -2, -3, 3, 4, 5), (2, 3, 4, -4, -5, 6), (-6, 6, 5)), (0, 1, 0, 0)).conj()
+        else:
+            if self.nr_phys == 1:
+                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, 5), (2, -2, -3, 3, 4, 6), (5, 6, -4)), (0, 0, 0, 0))
+            elif self.nr_phys == 2 and not self.on_aux:
+                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, -4, -5, 5), (2, -2, -3, 3, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
+            else:  # self.nr_phys == 2 and self.on_aux:
+                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, -2, -3, 3, 4, 5), (2, -4, -5, 3, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
 
-        if self.nr_phys == 1:
-            return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, 5), (2, -2, -3, 3, 4, 6), (5, 6, -4)), (0, 0, 0, 0))
-        elif self.nr_phys == 2 and not self.on_aux:
-            return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, -4, -5, 5), (2, -2, -3, 3, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
-        else:  # self.nr_phys == 2 and self.on_aux:
-            return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, -2, -3, 3, 4, 5), (2, -4, -5, 3, 4, 6), (5, 6, -4)), (0, 0, 0, 0))
-
-    def Heff2_group(self, AA, n):
+    def Heff2_group(self, AA, n, conj=False):
         r"""Action of Heff on central site.
 
         Parameters
@@ -195,6 +218,8 @@ class Env3:
             merged tensor for 2 sites
         n : int
             index of the left site
+        conj : boolean
+            True to calculate Heff^\daggerAA
 
         Returns
         -------
@@ -212,5 +237,9 @@ class Env3:
             OO, _ = OO.group_legs(axes=(1, 2), new_s=1)
             self.op_merged[(n, nn)] = OO
 
-        if self.nr_phys == 1:
-            return ncon([self.F[(nl, n)], AA, self.op_merged[(n, nn)], self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))
+        if conj:
+            if self.nr_phys == 1:
+                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, 3, 4), (2, 3, -2, 5), (-3, 5, 4)), (0, 1, 0, 0)).conj()
+        else:
+            if self.nr_phys == 1:
+                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))
