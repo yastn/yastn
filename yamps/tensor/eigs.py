@@ -83,7 +83,7 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
     # safety factors
     k_max = 10 * k
     gamma = .8
-    max_try = 32  # Upper bound on tdvp trial iterations. Can be increased if needed
+    max_try = 8  # Upper bound on tdvp trial iterations. Can be increased if needed
     delta = 1.2
     comp_q = True
     comp_kappa = True
@@ -96,6 +96,10 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
     while qt < dt and itry < max_try:
         evec, err, happy = eigs(Av=Av, Bv=Bv, init=vec, tol=eigs_tol, k=k,
                                 hermitian=hermitian, bi_orth=bi_orth,  dtype=dtype, tau=(tau.real, sgn))
+        if itry == max_try:
+            it += 1
+            qt += tau
+            vec = [evec]
         omega_old = omega
         omega = dt / tau * err / exp_tol
         if (happy == 0 and err == 0) or omega_old == 0:  # < err?, omega_old==0
@@ -155,19 +159,19 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
             it += 1
             qt += tau
             vec = [evec]
+            itry = 0
         else:  # try again
             itry += 1
-            if itry == max_try - 1:
-                it += 1
-                qt = dt
-                vec = [evec]
-                tau = dt - qt
-                k = k_max
-                raise EigsError(
-                    'eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = ', omega/delta, '\nRemaining time step = ', abs(1.-qt/dt), '\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
-            else:
-                tau = min([dt - qt, max([.2 * tau, min([tau_new, 2 * tau])])]).real
-                k = max([1, min([k_max, max([int(.75 * k), min([k_new, int(1.3333 * k) + 1])])])]).real
+        if itry == max_try - 1:
+            it += 1
+            qt = dt
+            tau = dt - qt
+            k = k_max
+        else:
+            tau = min([dt - qt, max([.2 * tau, min([tau_new, 2 * tau])])]).real
+            k = max([1, min([k_max, max([int(.75 * k), min([k_new, int(1.3333 * k) + 1])])])]).real
+    if abs(qt/dt) < 1.:
+        raise EigsError('eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = ', omega/delta, '\nRemaining time = ', abs(1.-qt/dt), '\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
     return (vec[0], it, k, qt,)
 
 

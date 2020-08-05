@@ -46,14 +46,12 @@ def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, measure_O=None, cutoff
 
         E = env.measure()
         dE = abs(E - E0)
-        print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE, ' time: ',
-              curr_t, ' norma:', psi.norma, ' D: ', max(psi.get_D()))
+        print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE, ' D: ', max(psi.get_D()))
         E0 = E
         sweep += 1
-        curr_t += dt
-        #
-        out = (env, E, dE,)
-    return out
+        out = ()
+    return env, E, dE, out
+
 
 
 def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, dtype='complex128', hermitian=True, fermionic=False, k=4, eigs_tol=1e-14, exp_tol=1e-14, bi_orth=True, NA=None, opts_svd=None, optsK_svd=None):
