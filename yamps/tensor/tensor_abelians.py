@@ -708,7 +708,7 @@ class Tensor:
             lDs : list
                 format is [[block dimensions on leg1], [block dimensions on leg1], ...]
         """
-        tset, Dset = [], []
+        _, Dset = [], []
 
         Dset = []
         for ind in self.tset:
