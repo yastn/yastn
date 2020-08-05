@@ -12,7 +12,7 @@ class DMRGWarning(UserWarning):
 #################################
 
 
-def dmrg_OBC(psi, H, env=None, nor=None, measure_O=None, version='1site', cutoff_sweep=20, cutoff_dE=1e-9, dtype='complex128', hermitian=True, k=4, eigs_tol=1e-14, opts_svd=None):
+def dmrg_OBC(psi, H, env=None, version='1site', cutoff_sweep=1, cutoff_dE=-1, dtype='complex128', hermitian=True, k=4, eigs_tol=1e-14, opts_svd=None):
     r"""
     Perform dmrg on system with open boundary conditions. The version of dmrg update p[rovoded by version.
     Assume input psi is right canonical.
@@ -96,10 +96,9 @@ def dmrg_OBC(psi, H, env=None, nor=None, measure_O=None, version='1site', cutoff
             env = dmrg_sweep_1site(psi, H=H, env=env, dtype=dtype, k=k,
                                    hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd)
 
-        E = env.measure()/psi.norma
+        E = env.measure()
         dE = abs(E - E0)
-        print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE,
-              ' norma:', psi.norma, ' D: ', max(psi.get_D()))
+        print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE, ' D: ', max(psi.get_D()))
         E0 = E
         sweep += 1
         out = ()

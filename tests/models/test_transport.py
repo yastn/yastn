@@ -62,7 +62,7 @@ def test_tdvp_total(main, choice):
     LL, LdagL = main.Lindbladian_1AIM_mixed(
         NL=NL, LSR=LSR, wk=wk, temp=temp, vk=vk, dV=dV, gamma=gamma, basis=basis, AdagA=True, dtype=dtype)
     #H, hermitian, dmrg = LL, False, False
-    H, hermitian, dmrg = LdagL, True, True
+    H, hermitian, dmrg, version = LdagL, True, True, '2site'
 
     # canonize MPS
     psi.normalize = True
@@ -81,8 +81,8 @@ def test_tdvp_total(main, choice):
     env = mps.env3.Env3(bra=psi, op=H, ket=psi)
 
     # current
-    curr_LS = main.current(LSR, -4.*np.pi*vk, cut='LS', basis=basis)
-    curr_SR = main.current(LSR, -4.*np.pi*vk, cut='SR', basis=basis)
+    curr_LS = main.current(LSR, -2.*np.pi*vk, cut='LS', basis=basis)
+    curr_SR = main.current(LSR, -2.*np.pi*vk, cut='SR', basis=basis)
     JLS = mps.env2.Env2(bra=curr_LS, ket=psi)
     JSR = mps.env2.Env2(bra=curr_SR, ket=psi)
 
@@ -119,8 +119,7 @@ def test_tdvp_total(main, choice):
         exp_tol = 1e-2  # tol_svd*.01
         if dmrg:
             ddt = dt
-            env = mps.dmrg.dmrg_sweep_2site(
-                psi=psi, H=H, env=env, eigs_tol=eigs_tol, dtype=dtype, hermitian=True,  opts_svd=opts_svd)
+            env, _, _, _ = mps.dmrg.dmrg_OBC(psi=psi, H=H, env=env, version=version, cutoff_sweep=1, eigs_tol=eigs_tol, dtype=dtype, hermitian=True,  opts_svd=opts_svd)
         else:
             for it in range(init_steps):
                 exp_tol = 1e-14
@@ -161,7 +160,5 @@ def test_tdvp_total_sym(choice):
 
 if __name__ == "__main__":
     # pass
-    #test_tdvp_total_full('Z2');print()
+    # test_tdvp_total_full('Z2');print()
     test_tdvp_total_full('U1');print()
-    #test_tdvp_total_sym('Z2');print()
-    #test_tdvp_total_sym('U1');print()

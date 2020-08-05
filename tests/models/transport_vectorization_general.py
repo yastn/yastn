@@ -25,7 +25,7 @@ def generate_discretization(NL, w0, wS, mu, v, dV, tempL, tempR, method, ordered
     elif method == 1:  # Minimal model with uniform spacing and constant coupling to S
         W = 4*w0
         dw = W/NL
-        ww = -W*.5+dw*.5+np.arange(NL)*dw 
+        ww = -W*.5+dw*.5+np.arange(NL)*dw
         vk = np.zeros(NL)+v
 
         LSR = np.concatenate(
@@ -39,7 +39,7 @@ def generate_discretization(NL, w0, wS, mu, v, dV, tempL, tempR, method, ordered
         gamma = np.zeros(NL*2+1)+gamma
         #
         wk_tmp = np.concatenate((ww, np.array([0]), ww + 1e-14))
-        
+
     if ordered:  # sort by energy before applying mu
         id = np.argsort(wk_tmp)
         LSR = LSR[id]
@@ -218,7 +218,7 @@ def generate_operator_basis(basis):
 def generate_vectorized_basis(basis):
     if basis == 0:  # choose I, Z, X, Y basis
         vII = np.array([1, 0, 0, 0])
-        vnn =.5*np.array([1, -1, 0, 0])
+        vnn = .5*np.array([1, -1, 0, 0])
         vc = .5*np.array([0, 0, 1, 1j])
         vcp = .5*np.array([0, 0, 1, -1j])
         vz = np.array([0, 1, 0, 0])
