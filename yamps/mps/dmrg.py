@@ -1,5 +1,11 @@
 from yamps.mps import Env3
 from yamps.tensor import eigs
+import warnings
+
+
+class DMRGWarning(UserWarning):
+    pass
+
 
 #################################
 #           dmrg                #
@@ -140,7 +146,10 @@ def dmrg_sweep_0site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
     psi: Mps
         Is self updated.
     """
-    if env is None:
+    if opts_svd:
+        warnings.warn("dmrg_sweep_0site: Truncation not implemeted.",  DMRGWarning)
+
+    if not env:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup_to_first()
 
@@ -159,12 +168,7 @@ def dmrg_sweep_0site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
                                    init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
             init = vec[list(val).index(min(list(val)))]
             # canonize and save
-            if opts_svd:
-                U, S, V = init.split_svd(axes=((0), (1)), sU=-1, **opts_svd)
-                psi.A[psi.pC] = U.dot(
-                    S.dot(V, axes=((1), (0))), axes=((1), (0)))
-            else:
-                psi.A[psi.pC] = init
+            psi.A[psi.pC] = init
         psi.absorb_central(towards=psi.g.last)
 
     for n in psi.g.sweep(to='first'):
@@ -182,12 +186,7 @@ def dmrg_sweep_0site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
                                    init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
             init = vec[list(val).index(min(list(val)))]
             # canonize and save
-            if opts_svd:
-                U, S, V = init.split_svd(axes=((0), (1)), sU=-1, **opts_svd)
-                psi.A[psi.pC] = U.dot(
-                    S.dot(V, axes=((1), (0))), axes=((1), (0)))
-            else:
-                psi.A[psi.pC] = init
+            psi.A[psi.pC] = init
         psi.absorb_central(towards=psi.g.first)
     return env
 
@@ -232,8 +231,10 @@ def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
     psi: Mps
         Is self updated.
     """
+    if opts_svd:
+        warnings.warn("dmrg_sweep_1site: Truncation not implemeted.",  DMRGWarning)
 
-    if env is None:
+    if not env:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup_to_first()
 
@@ -249,15 +250,8 @@ def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
                                init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
         init = vec[list(val).index(min(list(val)))]
         # canonize and save
-        if opts_svd:
-            U, S, V = init.split_svd(
-                axes=(psi.left + psi.phys, psi.right), sU=-1, **opts_svd)
-            psi.A[n] = U
-            psi.pC = (n, n+1)
-            psi.A[psi.pC] = S.dot(V, axes=((1), (0)))
-        else:
-            psi.A[n] = init
-            psi.orthogonalize_site(n, towards=psi.g.last)
+        psi.A[n] = init
+        psi.orthogonalize_site(n, towards=psi.g.last)
         env.clear_site(n)
         env.update(n, towards=psi.g.last)
 
@@ -272,15 +266,8 @@ def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
                                init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
         init = vec[list(val).index(min(list(val)))]
         # canonize and save
-        if opts_svd:
-            U, S, V = init.split_svd(
-                axes=(psi.left, psi.phys + psi.right), sU=-1, **opts_svd)
-            psi.A[n] = V
-            psi.pC = (n - 1, n)
-            psi.A[psi.pC] = U.dot(S, axes=((1), (0)))
-        else:
-            psi.A[n] = init
-            psi.orthogonalize_site(n, towards=psi.g.first)
+        psi.A[n] = init
+        psi.orthogonalize_site(n, towards=psi.g.first)
         env.clear_site(n)
         env.update(n, towards=psi.g.first)
 
@@ -328,7 +315,7 @@ def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
         Is self updated.
     """
 
-    if env is None:
+    if not env:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup_to_first()
 
@@ -417,7 +404,7 @@ def dmrg_sweep_2site_group(psi, H, env=None, dtype='complex128', hermitian=True,
         Is self updated.
     """
 
-    if env is None:
+    if not env:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup_to_first()
 
