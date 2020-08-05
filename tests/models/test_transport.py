@@ -5,17 +5,18 @@ import transport_vectorization_full as main_full
 import transport_vectorization_sym as main_sym
 import transport_vectorization_general as general
 
-
 # Imaginary time evolution of full Lindbladian
+
+
 def test_tdvp_total(main, choice):
     # MODEL
-    NL = 1
+    NL = 2
     w0 = 1
     v = .5
-    wS = 0.
+    wS = 0
     mu = .5
     dV = 0
-    gamma = 100.  # dissipation rate
+    gamma = 1.  # dissipation rate
     temp = 0.  # temperature
     distribution = 1
     # how to arrange modes. 0-spatial 1d to energy modes via sine-transformation.
@@ -30,14 +31,14 @@ def test_tdvp_total(main, choice):
 
     # MPS
     tol_svd = 1e-6
-    D_total = 4
+    D_total = 16
     io = [0.5]  # initial occupation on the impurity
 
     # algorithm
     dtype = 'complex128'
     sgn = 1j  # imaginary time evolution for sgn == 1j
     dt = .125 * sgn  # time step - time step for single tdvp
-    tmax = 1000. * dt * sgn  # total time
+    tmax = 300. * dt * sgn  # total time
     opts_svd = {'tol': tol_svd, 'D_total': D_total}
     eigs_tol = 1e-14
 
@@ -56,13 +57,13 @@ def test_tdvp_total(main, choice):
     # EXECUTE
     LSR, wk, temp, vk, dV, gamma = general.generate_discretization(
         NL=NL, w0=w0, wS=wS, mu=mu, v=v, dV=dV, tempL=temp, tempR=temp, method=distribution, ordered=ordered, gamma=gamma)
-    psi = main.thermal_state(LSR=LSR, io=io, ww=wk, temp=temp, basis=basis)
+    psi = main.thermal_state(LSR=LSR, io=io, ww=wk,
+                             temp=temp, basis=basis, dtype=dtype)
     LL, LdagL = main.Lindbladian_1AIM_mixed(
         NL=NL, LSR=LSR, wk=wk, temp=temp, vk=vk, dV=dV, gamma=gamma, basis=basis, AdagA=True, dtype=dtype)
-    #_, LdagL = main.local_1AIM_mixed(NL=NL, LSR=LSR, wk=wk, dV=dV, temp=temp, gamma=gamma, basis=basis, AdagA=True, dtype=dtype)
-    H, hermitian, dmrg = LL, False, False
-    #H, hermitian, dmrg = LdagL, True, True
-    
+    #H, hermitian, dmrg = LL, False, False
+    H, hermitian, dmrg = LdagL, True, True
+
     # canonize MPS
     psi.normalize = True
     psi.canonize_sweep(to='last')
@@ -80,8 +81,8 @@ def test_tdvp_total(main, choice):
     env = mps.env3.Env3(bra=psi, op=H, ket=psi)
 
     # current
-    curr_LS = main.current(LSR, -4*2.*np.pi*vk, cut='LS', basis=basis)
-    curr_SR = main.current(LSR, -4*2.*np.pi*vk, cut='SR', basis=basis)
+    curr_LS = main.current(LSR, -4.*np.pi*vk, cut='LS', basis=basis)
+    curr_SR = main.current(LSR, -4.*np.pi*vk, cut='SR', basis=basis)
     JLS = mps.env2.Env2(bra=curr_LS, ket=psi)
     JSR = mps.env2.Env2(bra=curr_SR, ket=psi)
 
@@ -115,10 +116,11 @@ def test_tdvp_total(main, choice):
     init_steps = 5
     qt = 0
     while abs(qt) < abs(tmax):
-        exp_tol = 1e-2#tol_svd*.01
+        exp_tol = 1e-2  # tol_svd*.01
         if dmrg:
             ddt = dt
-            env = mps.dmrg.dmrg_sweep_1site(psi=psi, H=H, env=env, eigs_tol=eigs_tol, dtype=dtype, hermitian=True,  opts_svd=opts_svd)
+            env = mps.dmrg.dmrg_sweep_2site(
+                psi=psi, H=H, env=env, eigs_tol=eigs_tol, dtype=dtype, hermitian=True,  opts_svd=opts_svd)
         else:
             for it in range(init_steps):
                 exp_tol = 1e-14
@@ -138,7 +140,7 @@ def test_tdvp_total(main, choice):
         Dmax = max(psi.get_D())
         out = psi.measuring(
             [env, NL, NS, NR, JLS, JSR], norm=trace_rho)
-        E, nl, ns, nr, jls, jsr = out[0].real, out[1].real, out[2].real, out[3].real, out[4].imag, out[5].imag
+        E, nl, ns, nr, jls, jsr = out[0].real, out[1].real, out[2].real, out[3].real, out[4].real, out[5].real
         E *= trace_rho.measure().real
         print('Time: ', round(abs(qt), 4), ' Dmax: ', Dmax, 'normalization: ', (trace_rho.measure().real), ' E = ', E, ' Tot_Occ= ',  round(
             nl+ns+nr, 4), ' JLS=', jls, ' JSR=', jsr, ' NL=', round(nl, 5), ' NS=', round(ns, 5), ' NR=', round(nr, 5))
@@ -159,7 +161,7 @@ def test_tdvp_total_sym(choice):
 
 if __name__ == "__main__":
     # pass
-    test_tdvp_total_full('Z2');print()
-    #test_tdvp_total_full('U1');print()
+    #test_tdvp_total_full('Z2');print()
+    test_tdvp_total_full('U1');print()
     #test_tdvp_total_sym('Z2');print()
     #test_tdvp_total_sym('U1');print()

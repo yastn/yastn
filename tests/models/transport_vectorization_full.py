@@ -59,10 +59,7 @@ def Lindbladian_1AIM_mixed(NL, LSR, wk, temp, vk, dV, gamma, basis, AdagA=False,
             settings=settings, s=(1, 1, -1, -1), dtype=dtype)
 
         wn = wk[n]
-        if LSR[n] == -1:
-            v = (-1j)*vk[n] if LSR[n] == -1 else 0
-        elif LSR[n] == 1:
-            v = (-1j)*vk[n] if LSR[n] == +1 else 0
+        v = (-1j)*vk[n]
         # local operator - including dissipation
         if abs(LSR[n]) == 1:
             en = wk[n] + dV[n]
@@ -100,12 +97,12 @@ def Lindbladian_1AIM_mixed(NL, LSR, wk, temp, vk, dV, gamma, basis, AdagA=False,
                             [OO,   OO, OO, OO, OO, z_q_z, OO],
                             [On_Site, c_q, q_c, cp_q, q_cp, OO, II]])
             tmp = tmp.reshape((7, 4, 7, 4))
-        elif n < n1 and n != N-1:
+        elif n > n1 and n != N-1:
             tmp = np.block([[II,   OO, OO, OO, OO, OO, OO],
-                            [+v*cp_q, OO, OO, OO, OO, OO, OO],
-                            [-v*q_cp, OO, OO, OO, OO, OO, OO],
-                            [+v*c_q,  OO, OO, OO, OO, OO, OO],
-                            [-v*q_c,  OO, OO, OO, OO, OO, OO],
+                            [+v*cp_q, z_q, OO, OO, OO, OO, OO],
+                            [-v*q_cp, OO, q_z, OO, OO, OO, OO],
+                            [+v*c_q,  OO, OO, z_q, OO, OO, OO],
+                            [-v*q_c,  OO, OO, OO, q_z, OO, OO],
                             [diss_off,   OO, OO, OO, OO, z_q_z, OO],
                             [On_Site, OO, OO, OO, OO, OO, II]])
             tmp = tmp.reshape((7, 4, 7, 4))
@@ -145,33 +142,37 @@ def current(LSR, vk, cut, basis):
         H.A[n] = tensor.Tensor(settings=settings, s=(1, 1, -1))
         #
         if cut == 'LS':
-            v = vk[n] if LSR[n] == -1 else 0
+            v = 1j*vk[n] if LSR[n] == -1 else 0
         elif cut == 'SR':
-            v = vk[n] if LSR[n] == +1 else 0
+            v = 1j*vk[n] if LSR[n] == +1 else 0
         #
         if n == 0:
-            tmp = np.block([OO,  v * ck, II])
-            tmp = tmp.reshape((1, 3, 4))
+            tmp = np.block([OO,  v * ck,  -v * cs, II])
+            tmp = tmp.reshape((1, 4, 4))
         elif n < n1 and n != 0:
-            tmp = np.block([[II,     OO, OO],
-                            [OO,      z, OO],
-                            [OO, v * ck, II]])
-            tmp = tmp.reshape((3, 3, 4))
+            tmp = np.block([[II,     OO, OO, OO],
+                            [OO,      z, OO, OO],
+                            [OO,     OO,  z, OO],
+                            [OO, v * ck, -v * cs, II]])
+            tmp = tmp.reshape((4, 4, 4))
         elif n == n1:
-            tmp = np.block([[II, OO, OO],
-                            [cs, OO, OO],
-                            [OO, cs, II]])
-            tmp = tmp.reshape((3, 3, 4))
+            tmp = np.block([[II, OO, OO, OO],
+                            [cs, OO, OO, OO],
+                            [ck, OO, OO, OO],
+                            [OO, cs, ck, II]])
+            tmp = tmp.reshape((4, 4, 4))
         elif n > n1 and n != N - 1:
-            tmp = np.block([[II,     OO, OO],
-                            [v * ck,  z, OO],
-                            [OO,     OO, II]])
-            tmp = tmp.reshape((3, 3, 4))
+            tmp = np.block([[II,     OO, OO, OO],
+                            [v * ck,  z, OO, OO],
+                            [-v * cs,  OO, z, OO],
+                            [OO,     OO, OO, II]])
+            tmp = tmp.reshape((4, 4, 4))
         elif n == N - 1:
             tmp = np.block([[II],
                             [v * ck],
+                            [-v * cs],
                             [OO]])
-            tmp = tmp.reshape((3, 1, 4))
+            tmp = tmp.reshape((4, 1, 4))
         tmp = tmp.transpose((0, 2, 1))
         H.A[n].set_block(val=tmp)
     return H
@@ -235,47 +236,3 @@ def measure_sumOp(choice, LSR, basis, Op):
         tmp = tmp.transpose((0, 2, 1))
         H.A[n].set_block(val=tmp)
     return H
-
-
-# TEMPORARY
-def local_1AIM_mixed(NL, LSR, wk, dV, temp, gamma, basis, AdagA=False, dtype='float64'):
-    OO, II, q_z, z_q, q_n, n_q, q_ccp, ccp_q, c_q_cp, cp_q_c, z_q_z, c_q, cp_q, q_c, q_cp, ccp_q__p__q_ccp, n_q__p__q_n, m1j_n_q__m__q_n = general.generate_operator_basis(
-        basis)
-    N = 2 * NL + 1  # total number of sites
-    H = mps.Mps(N, nr_phys=2)
-    for n in range(N):  # empty tensors
-        H.A[n] = tensor.Tensor(
-            settings=settings, s=(1, 1, -1, -1), dtype=dtype)
-        wn = wk[n]
-        if abs(LSR[n]) == 1:
-            en = wk[n] + dV[n]
-            p = 1. / \
-                (1. + np.exp(en / temp[n])
-                 ) if temp[n] > 1e-6 else (1. - np.sign(en))*.5
-            gp = gamma[n]*p
-            gm = gamma[n]*(1. - p)
-            #
-            On_Site = wn * m1j_n_q__m__q_n - gp*.5 * \
-                (ccp_q__p__q_ccp) - gm*.5*(n_q__p__q_n)
-            diss_off = gp*cp_q_c + gm*c_q_cp
-        else:  # impurity
-            On_Site = wn * m1j_n_q__m__q_n
-            diss_off = OO
-            #
-        if n == 0:
-            tmp = np.block([On_Site+diss_off, z_q_z, II])
-            tmp = tmp.reshape((1, 4, 3, 4))
-        elif n == N - 1:
-            tmp = np.block([[II],
-                            [diss_off],
-                            [On_Site]])
-            tmp = tmp.reshape((3, 4, 1, 4))
-        else:
-            tmp = np.block([[II, OO, OO],
-                            [diss_off, z_q_z, OO],
-                            [On_Site, OO, II]])
-            tmp = tmp.reshape((3, 4, 3, 4))
-        tmp = tmp.transpose((0, 1, 3, 2))
-        H.A[n].set_block(val=tmp)
-    HdagH = general.stack_MPOs(H, H) if AdagA else None
-    return H, HdagH
