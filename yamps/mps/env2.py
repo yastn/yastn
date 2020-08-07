@@ -91,6 +91,22 @@ class Env2:
         for n in self.g.sweep(to='first'):
             self.update(n, towards=self.g.first)
 
+    def overlap(self):
+        r"""
+        Sweep from last site to first updating environments and calculates overlap.
+
+        Returns
+        -------
+        overlap : float or complex
+        """
+        n0 = None
+        for n in self.g.sweep(to='first'):
+            self.update(n, towards=self.g.first)
+            if n0 is not None:
+                self.F.pop((n0, n))
+            n0 = n
+        return self.F[(None, n0)].dot(self.F[(n0, None)], axes=((0, 1), (1, 0))).to_number()  
+
     def measure(self, bd=None):
         r"""
         Calculate overlap between environments at nn bond
