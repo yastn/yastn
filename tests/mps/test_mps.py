@@ -60,6 +60,9 @@ def env2_measure(psi1, psi2):
     env2 = mps.Env2(bra=psi2, ket=psi1)
     env2.setup_to_last()
     results.append(np.conj(env2.measure(bd=(None, N - 1))))
+
+    results.append(mps.measure_overlap(bra=psi1, ket=psi2))
+    results.append(mps.measure_overlap(bra=psi2, ket=psi1).conj())
     assert(np.std(results) / abs(np.mean(results)) < 1e-12)
 
 
@@ -80,6 +83,8 @@ def env3_measure(psi1, op, psi2):
     for n in range(N - 1, 0, -1):
         results.append(env.measure(bd=(n, n - 1)))
     results.append(env.measure(bd=(0, None)))
+
+    results.append(mps.measure_mpo(bra=psi1, op=op, ket=psi2))
     assert(np.std(results) / abs(np.mean(results)) < 1e-12)
 
 
