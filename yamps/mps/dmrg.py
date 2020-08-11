@@ -101,8 +101,7 @@ def dmrg_OBC(psi, H, env=None, version='1site', cutoff_sweep=1, cutoff_dE=-1, dt
         print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE, ' D: ', max(psi.get_D()))
         E0 = E
         sweep += 1
-        out = ()
-    return env, E, dE, out
+    return env, E, dE
 
 
 def dmrg_sweep_0site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, eigs_tol=1e-14, opts_svd=None):

@@ -251,15 +251,3 @@ class Mps:
             Ds.append(DAn[self.left[0]])
         Ds.append(DAn[self.right[0]])
         return Ds
-
-    def measuring(self, list_of_ops, norm=None):
-        if norm:
-            norm.setup_to_first()
-            norm = norm.measure().real
-        else:
-            norm = 1.
-        out = [None] * len(list_of_ops)
-        for n in range(len(out)):
-            list_of_ops[n].setup_to_first()
-            out[n] = list_of_ops[n].measure() / norm
-        return out

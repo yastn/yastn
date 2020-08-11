@@ -1,6 +1,9 @@
 import numpy as np
 from yamps.tensor.ncon import ncon
+import yamps.mps.measure as measure
 
+# Majorana basis: I, Z, X, Y
+# Dirac basis: cp_c, c_cp, c, cp
 
 def generate_discretization(NL, w0, wS, mu, v, dV, tempL, tempR, method, ordered, gamma):
     muL = +0.5 * mu
@@ -55,7 +58,7 @@ def generate_discretization(NL, w0, wS, mu, v, dV, tempL, tempR, method, ordered
 
 
 def generate_operator_basis(basis):
-    if basis == 0:  # choose I, Z, X, Y basis
+    if basis == 'Majorana':
         OO = np.zeros((4, 4), dtype=np.complex128)
 
         II = np.identity(4)
@@ -139,7 +142,7 @@ def generate_operator_basis(basis):
                             [1, 1, 0, 0],
                             [0, 0, 1, -1j],
                             [0, 0, -1j, 1]])
-    elif basis == 1:  # choose cp c, c cp, c, cp
+    elif basis == 'Dirac':
         OO = np.zeros((4, 4), dtype=np.complex128)
 
         II = np.identity(4, dtype=np.complex128)
@@ -216,13 +219,13 @@ def generate_operator_basis(basis):
 
 
 def generate_vectorized_basis(basis):
-    if basis == 0:  # choose I, Z, X, Y basis
+    if basis == 'Majorana':
         vII = np.array([1, 0, 0, 0])
         vnn = .5*np.array([1, -1, 0, 0])
         vc = .5*np.array([0, 0, 1, 1j])
         vcp = .5*np.array([0, 0, 1, -1j])
         vz = np.array([0, 1, 0, 0])
-    elif basis == 1:  # choose cp c, c cp, c, cp
+    elif basis == 'Dirac':
         vII = np.array([1, 1, 0, 0])
         vnn = np.array([1, 0, 0, 0])
         vc = np.array([0, 0, 1, 0])
@@ -239,9 +242,28 @@ def stack_MPOs(UP, DOWN):
     return UP
 
 
-# SAVE TO FILE
+# SAVE
 def save_to_file(names, vals, file_name):
     data = {}
     for it in range(len(names)):
         data.update({names[it]: vals[it]})
     np.save(file_name, data, 'a')
+
+
+def measure_overlaps(psi, list_of_ops, norm=None):
+    if norm:
+        norm = measure.measure_overlap(psi, norm)
+    else:
+        norm = 1.
+    out = [None]*len(list_of_ops)
+    for n in range(len(out)):
+        out[n] = measure.measure_overlap(bra=psi, ket=list_of_ops[n])/norm
+    return out
+
+
+def measure_MPOs(psi, list_of_ops):
+    norm = measure.measure_overlap(bra=psi, ket=psi)
+    out = [None]*len(list_of_ops)
+    for n in range(len(out)):
+        out[n] = measure.measure_mpo(bra=psi, op=list_of_ops[n], ket=psi)/norm
+    return out
