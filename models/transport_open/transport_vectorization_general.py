@@ -73,6 +73,26 @@ def generate_operator_basis(basis):
                         [0, 0, 0, -1j],
                         [0, 0, 1j, 0]])
 
+        q_x = np.block([[0, 0, 1, 0],
+                        [0, 0, 0, -1j],
+                        [1, 0, 0, 0],
+                        [0, 1j, 0, 0]])
+
+        x_q = np.block([[0, 0, 1, 0],
+                        [0, 0, 0, 1j],
+                        [1, 0, 0, 0],
+                        [0, -1j, 0, 0]])
+
+        q_y = np.block([[0, 0, 0, 1],
+                        [0, 0, 1j, 0],
+                        [0, -1j, 0, 0],
+                        [1, 0, 0, 0]])
+
+        y_q = np.block([[0, 0, 0, 1],
+                        [0, 0, -1j, 0],
+                        [0, 1j, 0, 0],
+                        [1, 0, 0, 0]])
+
         n_q__p__q_n = np.block([[1, -1, 0, 0],
                                 [-1, 1, 0, 0],
                                 [0, 0, 1, 0],
@@ -151,6 +171,11 @@ def generate_operator_basis(basis):
                         [0, 1, 0, 0],
                         [0, 0, -1, 0],
                         [0, 0, 0, 1]])
+                        
+        q_z = np.block([[-1, 0, 0, 0],
+                        [0, 1, 0, 0],
+                        [0, 0, -1, 0],
+                        [0, 0, 0, 1]])
 
         z_q = np.block([[-1, 0, 0, 0],
                         [0, 1, 0, 0],
@@ -215,7 +240,13 @@ def generate_operator_basis(basis):
         ccp_q[1, 1] = 1
         ccp_q[-1, -1] = 1
 
-    return OO, II, q_z, z_q, q_n, n_q, q_ccp, ccp_q, c_q_cp, cp_q_c, z_q_z, c_q, cp_q, q_c, q_cp, ccp_q__p__q_ccp, n_q__p__q_n, m1j_n_q__m__q_n
+        q_x = q_cp + q_c
+        x_q = cp_q + c_q
+
+        q_y = 1j*(q_cp - q_c)
+        y_q = 1j*(cp_q - c_q)
+
+    return OO, II, q_x, x_q, q_y, y_q, q_z, z_q, q_n, n_q, q_ccp, ccp_q, c_q_cp, cp_q_c, z_q_z, c_q, cp_q, q_c, q_cp, ccp_q__p__q_ccp, n_q__p__q_n, m1j_n_q__m__q_n
 
 
 def generate_vectorized_basis(basis):

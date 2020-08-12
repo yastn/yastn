@@ -28,15 +28,15 @@ def transport(main, basis, tensor):
     ordered = False  # order basis for mps/mpo
 
     # MPS
+    tensor_type = main.get_tensor_type(basis)
     tol_svd = 1e-6
     D_total = 32
     io = [0.5]  # initial occupation on the impurity
 
     # algorithm
-    dtype = 'complex128'
     sgn = 1j  # imaginary time evolution for sgn == 1j
     dt = .125 * sgn  # time step - time step for single tdvp
-    tmax = 3. * dt * sgn  # total time
+    tmax = 1. * dt * sgn  # total time
     opts_svd = {'tol': tol_svd, 'D_total': D_total}
     eigs_tol = 1e-14
 
@@ -47,20 +47,17 @@ def transport(main, basis, tensor):
     name_npy = name + '_output.npy'
 
     names = ['NL', 'w0', 'v', 'wS', 'mu', 'dV', 'gamma', 'temp', 'distribution',
-             'ordered', 'basis', 'tol_svd', 'D_total', 'io', 'dtype', 'dt']
+             'ordered', 'basis', 'tol_svd', 'D_total', 'io', 'tensor_type', 'dt']
     values = [NL, w0, v, wS, mu, dV, gamma, temp, distribution,
-              ordered, basis, tol_svd, D_total, io, dtype, dt]
+              ordered, basis, tol_svd, D_total, io, tensor_type, dt]
     general.save_to_file(names, values, name_npy)
 
     # EXECUTE
-    LSR, wk, temp, vk, dV, gamma = general.generate_discretization(
-        NL=NL, w0=w0, wS=wS, mu=mu, v=v, dV=dV, tempL=temp, tempR=temp, method=distribution, ordered=ordered, gamma=gamma)
-    psi = main.thermal_state(LSR=LSR, io=io, ww=wk,
-                             temp=temp, basis=basis)
-    LL, LdagL = main.Lindbladian_1AIM_mixed(
-        NL=NL, LSR=LSR, wk=wk, temp=temp, vk=vk, dV=dV, gamma=gamma, basis=basis, AdagA=True)
-    #H, hermitian, dmrg = LL, False, False
-    H, hermitian, dmrg, version = LdagL, True, True, '2site'
+    LSR, wk, temp, vk, dV, gamma = general.generate_discretization(NL=NL, w0=w0, wS=wS, mu=mu, v=v, dV=dV, tempL=temp, tempR=temp, method=distribution, ordered=ordered, gamma=gamma)
+    psi = main.thermal_state(tensor_type=tensor_type, LSR=LSR, io=io, ww=wk, temp=temp, basis=basis)
+    LL, LdagL = main.Lindbladian_1AIM_mixed(tensor_type=tensor_type, NL=NL, LSR=LSR, wk=wk, temp=temp, vk=vk, dV=dV, gamma=gamma, basis=basis, AdagA=True)
+    #H, hermitian, dmrg, HH = LL, False, False, LdagL
+    H, hermitian, dmrg, version, HH = LdagL, True, True, '2site', LdagL
 
     # canonize MPS
     psi.normalize = True
@@ -73,25 +70,25 @@ def transport(main, basis, tensor):
     H.sweep_truncate(to='first', opts={'tol': 1e-12}, normalize=False)
 
     # trace rho
-    trace_rho = main.identity(psi.N, basis=basis)
+    trace_rho = main.identity(tensor_type=tensor_type, N=psi.N, basis=basis)
 
     # current
-    JLS = main.current(LSR, -2.*np.pi*vk, cut='LS', basis=basis)
-    JSR = main.current(LSR, -2.*np.pi*vk, cut='SR', basis=basis)
+    JLS = main.current(tensor_type=tensor_type, LSR=LSR, vk=-2.*np.pi*vk, cut='LS', basis=basis)
+    JSR = main.current(tensor_type=tensor_type, LSR=LSR, vk=-2.*np.pi*vk, cut='SR', basis=basis)
 
     # Occupation
-    NL = main.measure_sumOp(choice=-1, LSR=LSR, Op='nn', basis=basis)
-    NS = main.measure_sumOp(choice=2, LSR=LSR, Op='nn', basis=basis)
-    NR = main.measure_sumOp(choice=1, LSR=LSR, Op='nn', basis=basis)
+    NL = main.measure_sumOp(tensor_type=tensor_type, choice=-1, LSR=LSR, Op='nn', basis=basis)
+    NS = main.measure_sumOp(tensor_type=tensor_type, choice=2, LSR=LSR, Op='nn', basis=basis)
+    NR = main.measure_sumOp(tensor_type=tensor_type, choice=1, LSR=LSR, Op='nn', basis=basis)
 
     OP_Nocc = [0.]*psi.N
     for n in range(psi.N):
-        OP_Nocc[n] = main.measure_Op(N=psi.N, id=n, Op='nn', basis=basis)
+        OP_Nocc[n] = main.measure_Op(tensor_type=tensor_type, N=psi.N, id=n, Op='nn', basis=basis)
     
     # EVOLUTION
     qt = 0
     Dmax = max(psi.get_D())
-    E = general.measure_MPOs(psi, [H])
+    E = general.measure_MPOs(psi, [HH])
     out = general.measure_overlaps(psi, [NL, NS, NR, JLS, JSR], norm=trace_rho)
     E, nl, ns, nr, jls, jsr = E[0].real, out[0].real, out[1].real, out[2].real, out[3].real, out[4].real
     Nocc = general.measure_overlaps(psi, OP_Nocc, norm=trace_rho)
@@ -115,18 +112,17 @@ def transport(main, basis, tensor):
                 ddt = dt*2**(it-init_steps)
                 if D_total > 1:
                     env = mps.tdvp.tdvp_sweep_2site(
-                        psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=dtype, hermitian=hermitian,  opts_svd=opts_svd)
+                        psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=tensor_type[0], hermitian=hermitian,  opts_svd=opts_svd)
                 else:
                     env = mps.tdvp.tdvp_sweep_1site(
-                        psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=dtype, hermitian=hermitian,  opts_svd=opts_svd)
+                        psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=tensor_type[0], hermitian=hermitian,  opts_svd=opts_svd)
             else:
                 ddt = dt
-                env = mps.tdvp.tdvp_sweep_1site(psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol,
-                                                exp_tol=exp_tol,  dtype=dtype, hermitian=hermitian,  opts_svd=opts_svd)
+                env = mps.tdvp.tdvp_sweep_1site(psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=tensor_type[0], hermitian=hermitian,  opts_svd=opts_svd)
         qt += abs(ddt)
         #
         Dmax = max(psi.get_D())
-        E = general.measure_MPOs(psi, [H])
+        E = general.measure_MPOs(psi, [HH])
         out = general.measure_overlaps(psi, [NL, NS, NR, JLS, JSR], norm=trace_rho)
         E, nl, ns, nr, jls, jsr = E[0].real, out[0].real, out[1].real, out[2].real, out[3].real, out[4].real
         Nocc = general.measure_overlaps(psi, OP_Nocc, norm=trace_rho)
