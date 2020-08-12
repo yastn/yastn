@@ -64,7 +64,7 @@ def Lindbladian_1AIM_mixed(tensor_type, NL, LSR, wk, temp, vk, dV, gamma, basis,
 
 def Lindbladian_1AIM_mixed_general(tensor_type, NL, LSR, wk, temp, vk, dV, gamma, basis, AdagA=False):
     # make operator for evolution with dissipation
-    _, ii, q_z, z_q, _, _, _, _, c_q_cp, cp_q_c, z_q_z, c_q, cp_q, q_c, q_cp, ccp_q__p__q_ccp, n_q__p__q_n, m1j_n_q__m__q_n = general.generate_operator_basis(basis)
+    _, ii, _, _, _, _, q_z, z_q, _, _, _, _, c_q_cp, cp_q_c, z_q_z, c_q, cp_q, q_c, q_cp, ccp_q__p__q_ccp, n_q__p__q_n, m1j_n_q__m__q_n = general.generate_operator_basis(basis)
     N = 2 * NL + 1  # total number of sites
     n1 = np.argwhere(LSR == 2)[0, 0]  # impurity position
     #
@@ -147,7 +147,7 @@ def Lindbladian_1AIM_mixed_general(tensor_type, NL, LSR, wk, temp, vk, dV, gamma
 
 def Lindbladian_1AIM_mixed_real(tensor_type, NL, LSR, wk, temp, vk, dV, gamma, basis, AdagA=False):
     # make operator for evolution with dissipation
-    _, ii, q_z, z_q, _, _, _, _, c_q_cp, cp_q_c, z_q_z, c_q, cp_q, q_c, q_cp, ccp_q__p__q_ccp, n_q__p__q_n, m1j_n_q__m__q_n = general.generate_operator_basis(basis)
+    _, ii, _, x_q, _, y_q, _, z_q, _, _, _, _, c_q_cp, cp_q_c, z_q_z, _, _, _, _, ccp_q__p__q_ccp, n_q__p__q_n, m1j_n_q__m__q_n = general.generate_operator_basis(basis)
     N = 2 * NL + 1  # total number of sites
     n1 = np.argwhere(LSR == 2)[0, 0]  # impurity position
     #
@@ -158,22 +158,24 @@ def Lindbladian_1AIM_mixed_real(tensor_type, NL, LSR, wk, temp, vk, dV, gamma, b
     Z_Q_Z = operator_into_Tensor(tensor_type, z_q_z, 0)
     C_Q_CP = operator_into_Tensor(tensor_type, c_q_cp, 0)
     CP_Q_C = operator_into_Tensor(tensor_type, cp_q_c, 0)
-    Q_Z_for_ccp = operator_into_Tensor(tensor_type, q_z, -1)
-    Z_Q_for_ccp = operator_into_Tensor(tensor_type, z_q, -1)
-    Q_Z_for_cpc = operator_into_Tensor(tensor_type, q_z, 1)
-    Z_Q_for_cpc = operator_into_Tensor(tensor_type, z_q, 1)
-    Q_CP_right = operator_into_Tensor(tensor_type, q_cp, 0)
-    Q_C_left = operator_into_Tensor(tensor_type, q_c, 1)
-    Q_C_right = operator_into_Tensor(tensor_type, q_c, 0)
-    Q_CP_left = operator_into_Tensor(tensor_type, q_cp, -1)
-    CP_Q_right = operator_into_Tensor(tensor_type, cp_q, 0)
-    C_Q_left = operator_into_Tensor(tensor_type, c_q, 1)
-    C_Q_right = operator_into_Tensor(tensor_type, c_q, 0)
-    CP_Q_left = operator_into_Tensor(tensor_type, cp_q, -1)
+    #
+    ZR = operator_into_Tensor(tensor_type, z_q.real, 1)
+    ZI = operator_into_Tensor(tensor_type, z_q.imag, 1)
+    #
+    XR_right = operator_into_Tensor(tensor_type, x_q.real, 0)
+    XI_right = operator_into_Tensor(tensor_type, x_q.imag, 0)
+    YR_right = operator_into_Tensor(tensor_type, y_q.real, 0)
+    YI_right = operator_into_Tensor(tensor_type, y_q.imag, 0)
+    #
+    XR_left = operator_into_Tensor(tensor_type, x_q.real, 1)
+    XI_left = operator_into_Tensor(tensor_type, x_q.imag, 1)
+    YR_left = operator_into_Tensor(tensor_type, y_q.real, 1)
+    YI_left = operator_into_Tensor(tensor_type, y_q.imag, 1)
+    #
     H = mps.Mps(N, nr_phys=2)
     for n in range(N):
         wn = wk[n]
-        v = (-1j)*vk[n]
+        v = vk[n]
         # local operator - including dissipation
         if abs(LSR[n]) == 1:
             en = wk[n] + dV[n]
@@ -190,38 +192,43 @@ def Lindbladian_1AIM_mixed_real(tensor_type, NL, LSR, wk, temp, vk, dV, gamma, b
             On_Site = wn * m1j_N_Q__M__Q_N
         #
         if n == 0:
-            H.A[n] = tensor.block({(0, 0): On_Site + diss_off, (0, 1): +v*C_Q_right,  (0, 2): -v*Q_C_right,
-                                   (0, 3): +v*CP_Q_right, (0, 4): -v*Q_CP_right, (0, 5): Z_Q_Z, (0, 6): II}, common_legs=(1, 2))
+            H.A[n] = tensor.block({(0, 0): On_Site + diss_off, 
+                                    (0, 1): v*XR_right, (0, 2): v*XI_right, (0, 3): v*YR_right,  (0, 4): v*YI_right,
+                                    (0, 5): Z_Q_Z, (0, 6): II}, common_legs=(1, 2))
         elif n != 0 and n < n1:
             H.A[n] = tensor.block({(-6, 0): II,
-                                   (-5, 1): Z_Q_for_ccp,
-                                   (-4, 2): Q_Z_for_ccp,
-                                   (-3, 3): Z_Q_for_cpc,
-                                   (-2, 4): Q_Z_for_cpc,
+                                   (-5, 1): ZR, (-5, 2): ZI,
+                                   (-4, 1): (-1)*ZI, (-4, 2): ZR,
+                                   (-3, 3): ZR, (-3, 4): ZI,
+                                   (-2, 3): (-1)*ZI, (-2, 4): ZR,
                                    (-1, 0): diss_off, (-1, 5): Z_Q_Z,
-                                   (0, 0): On_Site, (0, 1): +v*C_Q_right,  (0, 2): -v*Q_C_right, (0, 3): +v*CP_Q_right, (0, 4): -v*Q_CP_right, (0, 6): II}, common_legs=(1, 2))
+                                   (0, 0): On_Site, (0, 1): v*XR_right, (0, 2): v*XI_right, (0, 3): v*YR_right,  (0, 4): v*YI_right, (0, 6): II}, common_legs=(1, 2))
         elif n == n1:
             H.A[n] = tensor.block({(-6, 0): II,
-                                   (-5, 0): CP_Q_left,
-                                   (-4, 0): Q_CP_left,
-                                   (-3, 0): C_Q_left,
-                                   (-2, 0): Q_C_left,
+                                   (-5, 0): XI_left,
+                                   (-4, 0): XR_left,
+                                   (-3, 0): YI_left,
+                                   (-2, 0): YR_left,
                                    (-1, 5): Z_Q_Z,
-                                   (0, 0): On_Site, (0, 1): C_Q_right, (0, 2): Q_C_right, (0, 3): CP_Q_right, (0, 4): Q_CP_right, (0, 6): II}, common_legs=(1, 2))
+                                   (0, 0): On_Site, (0, 1): XR_right, (0, 2): XI_right, (0, 3): YR_right,  (0, 4): YI_right, (0, 6): II}, common_legs=(1, 2))
         elif n > n1 and n != N-1:
             H.A[n] = tensor.block({(-6, 0): II,
-                                   (-5, 0): +v*CP_Q_left, (-5, 1): Z_Q_for_ccp,
-                                   (-4, 0): -v*Q_CP_left, (-4, 2): Q_Z_for_ccp,
-                                   (-3, 0): +v*C_Q_left, (-3, 3): Z_Q_for_cpc,
-                                   (-2, 0): -v*Q_C_left, (-2, 4): Q_Z_for_cpc,
+                                   (-5, 0): v*XI_left,
+                                   (-4, 0): v*XR_left,
+                                   (-3, 0): v*YI_left,
+                                   (-2, 0): v*YR_left,
+                                   (-5, 1): ZR, (-5, 2): ZI,
+                                   (-4, 1): (-1)*ZI, (-4, 2): ZR,
+                                   (-3, 3): ZR, (-3, 4): ZI,
+                                   (-2, 3): (-1)*ZI, (-2, 4): ZR,
                                    (-1, 0): diss_off, (-1, 5): Z_Q_Z,
                                    (0, 0): On_Site, (0, 6): II}, common_legs=(1, 2))
         elif n == N - 1:
             H.A[n] = tensor.block({(-6, 0): II,
-                                   (-5, 0): +v*CP_Q_left,
-                                   (-4, 0): -v*Q_CP_left,
-                                   (-3, 0): +v*C_Q_left,
-                                   (-2, 0): -v*Q_C_left,
+                                   (-5, 0): v*XI_left,
+                                   (-4, 0): v*XR_left,
+                                   (-3, 0): v*YI_left,
+                                   (-2, 0): v*YR_left,
                                    (-1, 0): diss_off,
                                    (0, 0): On_Site}, common_legs=(1, 2))
     HdagH = general.stack_MPOs(H, H) if AdagA else None
@@ -274,7 +281,7 @@ def measure_sumOp(tensor_type, choice, LSR, basis, Op):
     return H
 
 
-def current(tensor_type, LSR, vk, cut, basis):
+def current_ccp(tensor_type, LSR, vk, cut, basis):
     N = len(LSR)  # total number of sites
     n1 = np.argwhere(LSR == 2)[0, 0]  # impurity position
     vii, _, vc, vcp, vz = general.generate_vectorized_basis(basis)
@@ -300,9 +307,9 @@ def current(tensor_type, LSR, vk, cut, basis):
     for n in range(N):
         #
         if cut == 'LS':
-            v = 1j*vk[n] if LSR[n] == -1 else 0
+            v = (-.5*1j)*vk[n] if LSR[n] == -1 else 0
         elif cut == 'SR':
-            v = 1j*vk[n] if LSR[n] == +1 else 0
+            v = (.5*1j)*vk[n] if LSR[n] == +1 else 0
         #
         if n == 0:
             H.A[n] = tensor.block(
@@ -330,28 +337,81 @@ def current(tensor_type, LSR, vk, cut, basis):
     return H
 
 
+def current_XY(tensor_type, LSR, vk, cut, basis):
+    N = len(LSR)  # total number of sites
+    n1 = np.argwhere(LSR == 2)[0, 0]  # impurity position
+    vii, _, vc, vcp, vz = general.generate_vectorized_basis(basis)
+    #
+    ii = vector_into_Tensor(tensor_type, vii, 0)
+    x_right = vector_into_Tensor(tensor_type, (vcp+vc), 0)
+    y_right = vector_into_Tensor(tensor_type, 1j*(vcp-vc), 0)
+    x_left = vector_into_Tensor(tensor_type, (vcp+vc), 1)
+    y_left = vector_into_Tensor(tensor_type, 1j*(vcp-vc), 1)
+    z = vector_into_Tensor(tensor_type, vz, 1)
+    oo = ii*0
+    if cut == 'LS':
+        c1_right, c1_left = x_right, x_left
+        c2_right, c2_left = y_right, y_left
+    elif cut == 'SR':
+        c2_right, c2_left = x_right, x_left
+        c1_right, c1_left = y_right, y_left
+    #
+    H = mps.Mps(N, nr_phys=1)
+    for n in range(N):
+        #
+        if cut == 'LS':
+            v = (-.25)*vk[n] if LSR[n] == -1 else 0
+        elif cut == 'SR':
+            v = (.25)*vk[n] if LSR[n] == +1 else 0
+        #
+        if n == 0:
+            H.A[n] = tensor.block(
+                {(0, 0): oo, (0, 1): v*c1_right, (0, 2): -v*c2_right, (0, 3): ii}, common_legs=(1))
+        elif n < n1 and n != 0:
+            H.A[n] = tensor.block({(-3, 0): ii,
+                                   (-2, 1): z,
+                                   (-1, 2): z,
+                                   (0, 1): v*c1_right, (0, 2): -v*c2_right, (0, 3): ii}, common_legs=(1))
+        elif n == n1:
+            H.A[n] = tensor.block({(-3, 0): ii,
+                                   (-2, 0): c2_left,
+                                   (-1, 0): c1_left,
+                                   (0, 1): c1_right, (0, 2): c2_right, (0, 3): ii}, common_legs=(1))
+        elif n > n1 and n != N - 1:
+            H.A[n] = tensor.block({(-3, 0): ii,
+                                   (-2, 0): v*c2_left, (-2, 1): z,
+                                   (-1, 0): -v*c1_left, (-1, 2): z,
+                                   (0, 3): ii}, common_legs=(1))
+        elif n == N - 1:
+            H.A[n] = tensor.block({(-3, 0): ii,
+                                   (-2, 0): v*c2_left,
+                                   (-1, 0): -v*c1_left,
+                                   (0, 0): oo}, common_legs=(1))
+    return H
+
+
 # WORKING ON TENSORS
 
 
 def vector_into_Tensor(tensor_type, np_matrix, left_virtual):
-    if tensor_type == 'full':
-        return cast_into_Tensor(settings=settings_full, s=(1, 1, -1), dims_chrgs=[(range(4), 0)], np_matrix=np_matrix)
-    elif tensor_type == 'Z2':
-        return cast_into_Tensor(settings=settings_Z2, s=(1, 1, -1), dims_chrgs=[(range(2), 0), (range(2, 4), 1)], np_matrix=np_matrix, left_virtual=abs(left_virtual), cycle=2, n=0)
-    elif tensor_type == tensor_type:
-        return cast_into_Tensor(settings=settings_U1, s=(1, 1, -1), dims_chrgs=[(range(2), 0), ([2], -1), ([3], 1)], np_matrix=np_matrix, left_virtual=left_virtual, n=0)
+    if tensor_type[0] == 'full':
+        return cast_into_Tensor(settings=settings_full, s=(1, 1, -1), dims_chrgs=[(range(4), 0)], np_matrix=np_matrix, dtype=tensor_type[1])
+    elif tensor_type[0] == 'Z2':
+        return cast_into_Tensor(settings=settings_Z2, s=(1, 1, -1), dims_chrgs=[(range(2), 0), (range(2, 4), 1)], np_matrix=np_matrix, left_virtual=abs(left_virtual), cycle=2, n=0, dtype=tensor_type[1])
+    elif tensor_type[0] == 'U1':
+        return cast_into_Tensor(settings=settings_U1, s=(1, 1, -1), dims_chrgs=[(range(2), 0), ([2], -1), ([3], 1)], np_matrix=np_matrix, left_virtual=left_virtual, n=0, dtype=tensor_type[1])
 
 
 def operator_into_Tensor(tensor_type, np_matrix, left_virtual):
-    if tensor_type == 'full':
-        return cast_into_Tensor(settings=settings_full, s=(1, 1, -1, -1), dims_chrgs=[(range(4), 0)], np_matrix=np_matrix)
-    elif tensor_type == 'Z2':
-        return cast_into_Tensor(settings=settings_Z2, s=(1, 1, -1, -1), dims_chrgs=[(range(2), 0), (range(2, 4), 1)], np_matrix=np_matrix, left_virtual=abs(left_virtual), cycle=2, n=0)
-    elif tensor_type == tensor_type:
-        return cast_into_Tensor(settings=settings_U1, s=(1, 1, -1, -1), dims_chrgs=[(range(2), 0), ([2], -1), ([3], 1)], np_matrix=np_matrix, left_virtual=left_virtual, n=0)
+    if tensor_type[0] == 'full':
+        return cast_into_Tensor(settings=settings_full, s=(1, 1, -1, -1), dims_chrgs=[(range(4), 0)], np_matrix=np_matrix, dtype=tensor_type[1])
+    elif tensor_type[0] == 'Z2':
+        return cast_into_Tensor(settings=settings_Z2, s=(1, 1, -1, -1), dims_chrgs=[(range(2), 0), (range(2, 4), 1)], np_matrix=np_matrix, left_virtual=abs(left_virtual), cycle=2, n=0, dtype=tensor_type[1])
+    elif tensor_type[0] == 'U1':
+        return cast_into_Tensor(settings=settings_U1, s=(1, 1, -1, -1), dims_chrgs=[(range(2), 0), ([2], -1), ([3], 1)], np_matrix=np_matrix, left_virtual=left_virtual, n=0, dtype=tensor_type[1])
 
 
-def cast_into_Tensor(settings, s, dims_chrgs, np_matrix, left_virtual=0, cycle=None, n=None):
+def cast_into_Tensor(settings, dtype, s, dims_chrgs, np_matrix, left_virtual=0, cycle=None, n=None):
     r"""
     Build 3 or 4 legged Tensor out of numpy array. Analogous to MPS or MPO tensors.
 
@@ -373,6 +433,7 @@ def cast_into_Tensor(settings, s, dims_chrgs, np_matrix, left_virtual=0, cycle=N
     left_virtual:  int
         Charge on left virtual leg.
     """
+    settings.dtype = dtype
     Op = tensor.Tensor(settings=settings, s=s, n=n)
     if len(s) == 3:
         for iL, chL in dims_chrgs:
