@@ -1,5 +1,14 @@
+import logging
 from .env2 import Env2
 from .env3 import Env3
+
+
+class FatalError(Exception):
+    pass
+
+
+logger = logging.getLogger('yamps.mps.env2')
+
 
 
 def measure_overlap(bra, ket):

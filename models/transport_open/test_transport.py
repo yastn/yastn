@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import yamps.mps as mps
 import yamps.mps.tdvp as tdvp
@@ -6,7 +7,15 @@ import transport_vectorization_Z2 as main_Z2
 import transport_vectorization_U1 as main_U1
 import transport_vectorization_general as general
 
-# Imaginary time evolution of full Lindbladian
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("mySnake.log"),
+        logging.StreamHandler()
+    ])
+
 
 def transport(main, basis, tensor):
     # main - module to produce hamiltonian 
@@ -36,7 +45,7 @@ def transport(main, basis, tensor):
     # algorithm
     sgn = 1j  # imaginary time evolution for sgn == 1j
     dt = .125 * sgn  # time step - time step for single tdvp
-    tmax = 1. * dt * sgn  # total time
+    tmax = 3. * dt * sgn  # total time
     opts_svd = {'tol': tol_svd, 'D_total': D_total}
     eigs_tol = 1e-14
 
@@ -45,7 +54,7 @@ def transport(main, basis, tensor):
     name = directory+'test'
     name_txt = name + '_output.txt'
     name_npy = name + '_output.npy'
-
+    #
     names = ['NL', 'w0', 'v', 'wS', 'mu', 'dV', 'gamma', 'temp', 'distribution',
              'ordered', 'basis', 'tol_svd', 'D_total', 'io', 'tensor_type', 'dt']
     values = [NL, w0, v, wS, mu, dV, gamma, temp, distribution,
@@ -112,13 +121,13 @@ def transport(main, basis, tensor):
                 ddt = dt*2**(it-init_steps)
                 if D_total > 1:
                     env = mps.tdvp.tdvp_sweep_2site(
-                        psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=tensor_type[0], hermitian=hermitian,  opts_svd=opts_svd)
+                        psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=tensor_type[1], hermitian=hermitian,  opts_svd=opts_svd)
                 else:
                     env = mps.tdvp.tdvp_sweep_1site(
-                        psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=tensor_type[0], hermitian=hermitian,  opts_svd=opts_svd)
+                        psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=tensor_type[1], hermitian=hermitian,  opts_svd=opts_svd)
             else:
                 ddt = dt
-                env = mps.tdvp.tdvp_sweep_1site(psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=tensor_type[0], hermitian=hermitian,  opts_svd=opts_svd)
+                env = mps.tdvp.tdvp_sweep_1site(psi=psi, H=H, env=env, dt=ddt, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=tensor_type[1], hermitian=hermitian,  opts_svd=opts_svd)
         qt += abs(ddt)
         #
         Dmax = max(psi.get_D())
@@ -157,7 +166,7 @@ if __name__ == "__main__":
     # pass
     transport_full('Majorana'); print()
     transport_full('Dirac'); print()
-    transport_Z2('Majorana'); print()
-    transport_Z2('Dirac'); print()
-    transport_U1('Majorana'); print()
-    transport_U1('Dirac'); print()
+    #transport_Z2('Majorana'); print()
+    #transport_Z2('Dirac'); print()
+    #transport_U1('Majorana'); print()
+    #transport_U1('Dirac'); print()

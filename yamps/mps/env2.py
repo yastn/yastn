@@ -1,5 +1,13 @@
+import logging
 from yamps.tensor import ncon
-from .mps import MpsError
+
+
+class FatalError(Exception):
+    pass
+
+
+logger = logging.getLogger('yamps.mps.env2')
+
 
 ################################################
 #     environment for <bra|ket> operations     #
@@ -29,7 +37,8 @@ class Env2:
         self.F = {}  # dict for environments
 
         if self.bra.nr_phys != self.ket.nr_phys:
-            raise MpsError('bra and ket should have the same number of physical legs.')
+            logger.error('bra and ket should have the same number of physical legs.')
+            raise FatalError
 
         # set environments at boundaries
         ff = self.g.first

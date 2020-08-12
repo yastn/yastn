@@ -1,10 +1,13 @@
+import logging
 from yamps.mps import Env3
 from yamps.tensor import eigs
-import warnings
 
 
-class DMRGWarning(UserWarning):
+class FatalError(Exception):
     pass
+
+
+logger = logging.getLogger('yamps.mps.dmrg')
 
 
 #################################
@@ -95,7 +98,6 @@ def dmrg_OBC(psi, H, env=None, version='1site', cutoff_sweep=1, cutoff_dE=-1, dt
         else:
             env = dmrg_sweep_1site(psi, H=H, env=env, dtype=dtype, k=k,
                                    hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd)
-
         E = env.measure()
         dE = abs(E - E0)
         print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE, ' D: ', max(psi.get_D()))
@@ -145,8 +147,7 @@ def dmrg_sweep_0site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
         Is self updated.
     """
     if opts_svd:
-        warnings.warn("dmrg_sweep_0site: Truncation not implemeted.",  DMRGWarning)
-
+        logger.warning("dmrg_sweep_0site: Truncation not implemeted.")
     if not env:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup_to_first()
@@ -230,8 +231,7 @@ def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
         Is self updated.
     """
     if opts_svd:
-        warnings.warn("dmrg_sweep_1site: Truncation not implemeted.",  DMRGWarning)
-
+        logger.warning("dmrg_sweep_1site: Truncation not implemeted.")
     if not env:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup_to_first()

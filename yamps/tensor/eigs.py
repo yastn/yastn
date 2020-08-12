@@ -1,14 +1,19 @@
+import logging
 import numpy as np
 import scipy as sp
 import time
 import tracemalloc
 
+
+class FatalError(Exception):
+    pass
+
+
+logger = logging.getLogger('yamps.tensor.eigs')
+
+
 _select_dtype = {'float64': np.float64,
                  'complex128': np.complex128}
-
-
-class EigsError(Exception):
-    pass
 
 
 def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype='complex128', NA=None, cost_estim=0):
@@ -171,7 +176,8 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
             tau = min([dt - qt, max([.2 * tau, min([tau_new, 2 * tau])])]).real
             k = max([1, min([k_max, max([int(.75 * k), min([k_new, int(1.3333 * k) + 1])])])]).real
     if abs(qt/dt) < 1.:
-        raise EigsError('eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = ', omega/delta, '\nRemaining time = ', abs(1.-qt/dt), '\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
+        logger.error('eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = '+omega/delta+'\nRemaining time = '+abs(1.-qt/dt)+'\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
+        raise FatalError
     return (vec[0], it, k, qt,)
 
 

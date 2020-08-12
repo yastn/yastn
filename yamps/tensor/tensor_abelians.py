@@ -7,12 +7,21 @@ An instance of a Tensor is defined by list of blocks (dense tensors)
 with their individual dimensions labeled by the symmetries' charges.
 """
 
+import logging
 import numpy as np
 import itertools
 from functools import wraps
 
+
+class FatalError(Exception):
+    pass
+
+
 # defaults and defining symmetries
 _large_int = 1073741824
+
+
+logger = logging.getLogger('yamps.tensor.tensor_abelians')
 
 
 def _sym_U1(x):
@@ -232,7 +241,8 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
         conjs = len(tensors) * [0]
     for ii, te, cc in zip(legs, tensors, conjs):
         if te.isdiag:
-            raise TensorError("One of the tensors is diagonal.")
+            logger.exception("One of the tensors is diagonal.")
+            raise FatalError
         lts, lDs = te.get_tD()
         t.append(lts[ii])
         D.append(lDs[ii])
@@ -274,7 +284,8 @@ def block(td, common_legs):
     pos = []
     for ind in td:
         if li != len(ind):
-            raise TensorError('block: wrong tensors rank or placement')
+            logger.exception('block: wrong tensors rank or placement')
+            raise FatalError
         pos.append(ind)
     pos.sort()
 
@@ -316,10 +327,6 @@ def block(td, common_legs):
     c.A = c.conf.back.block(td, to_execute, dtype=a.conf.dtype)
     c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
     return c
-
-
-class TensorError(Exception):
-    pass
 
 
 class Tensor:
@@ -416,7 +423,8 @@ class Tensor:
 
         if self.nsym == 0:
             if len(D) != self._ndim:
-                raise TensorError("Wrong number of elements in D")
+                logger.exception("Wrong number of elements in D")
+                raise FatalError
             tset = np.zeros((1, self._ndim, self.nsym))
             Dset = np.array(D, dtype=np.int).reshape(1, self._ndim, 1)
         elif self.nsym >= 1:
@@ -429,12 +437,15 @@ class Tensor:
 
             if len(D) != self._ndim and len(D) != self._ndim * self.nsym:
                 print(t, D, self._ndim, self.nsym, len(D))
-                raise TensorError("Wrong number of elements in D")
+                logger.exception("Wrong number of elements in D")
+                raise FatalError
             if len(t) != self._ndim and len(t) != self._ndim * self.nsym:
-                raise TensorError("Wrong number of elements in t")
+                logger.exception("Wrong number of elements in t")
+                raise FatalError
             for x, y in zip(D, t):
                 if len(x) != len(y):
-                    raise TensorError("t and D do not match")
+                    logger.exception("t and D do not match")
+                    raise FatalError
 
             all_t = []
             all_D = []
@@ -501,12 +512,14 @@ class Tensor:
             ts = (ts,)
 
         if (len(ts) != self._ndim * self.nsym) or (Ds is not None and len(Ds) != self._ndim):
-            raise TensorError('Wrong size of input')
+            logger.exception('Wrong size of input')
+            raise FatalError
 
         ats = np.array(ts, dtype=np.int).reshape(1, self._ndim, self.nsym)
         for ss in range(self.nsym):
             if not (_tmod[self.conf.sym[ss]](ats[0, :, ss] @ self.s - self.n[ss]) == 0):
-                raise TensorError('Charges do not fit the tensor: t @ s != n')
+                logger.exception('Charges do not fit the tensor: t @ s != n')
+                raise FatalError
 
         lts, lDs = self.get_tD()
         existing_D = []
@@ -524,12 +537,14 @@ class Tensor:
         if isinstance(val, str):
             if Ds is None:
                 if no_existing_D:
-                    raise TensorError('Not all dimensions specify')
+                    logger.exception('Not all dimensions specified')
+                    raise FatalError
                 Ds = existing_D
             else:
                 for D1, D2 in zip(Ds, existing_D):
                     if (D1 != D2) and (D2 != -1):
-                        raise TensorError('Dimension of the new block does not match the existing ones')
+                        logger.exception('Dimension of the new block does not match the existing ones')
+                        raise FatalError
             Ds = tuple(Ds)
             if val == 'zeros':
                 self.A[ts] = self.conf.back.zeros(Ds, dtype=self.conf.dtype)
@@ -544,7 +559,8 @@ class Tensor:
             Ds = self.conf.back.get_shape(self.A[ts])
             for D1, D2 in zip(Ds, existing_D):
                 if (D1 != D2) and (D2 != -1):
-                    raise TensorError('Dimension of a new block does not match the existing ones')
+                    logger.exception('Dimension of a new block does not match the existing ones')
+                    raise FatalError
 
     ###########################
     #       new tensors       #
@@ -818,7 +834,8 @@ class Tensor:
             the result of addition as a new tensor.
         """
         if not all(self.s == other.s) or not all(self.n == other.n):
-            raise TensorError('Tensor signatures do not match')
+            logger.exception('Tensor signatures do not match')
+            raise FatalError
         to_execute = []
         tset = self.tset.copy()
         new_tset = []
@@ -855,7 +872,8 @@ class Tensor:
             the result of addition as a new tensor.
         """
         if not all(self.s == other.s) or not all(self.n == other.n):
-            raise TensorError('Tensors do not match')
+            logger.exception('Tensors do not match')
+            raise FatalError
         to_execute = []
         tset = self.tset.copy()
         new_tset = []
@@ -891,7 +909,8 @@ class Tensor:
             the result of subtraction as a new tensor.
         """
         if not all(self.s == other.s) or not all(self.n == other.n):
-            raise TensorError('Tensors do not match')
+            logger.exception('Tensors do not match')
+            raise FatalError
         to_execute = []
         tset = self.tset.copy()
         new_tset = []
@@ -942,7 +961,8 @@ class Tensor:
         norm : float64
         """
         if not all(self.s == other.s):
-            raise TensorError('Signs do not match')
+            logger.exception('Signs do not match')
+            raise FatalError
         return self.conf.back.norm_diff(self.A, other.A, ord)
 
     ############################
@@ -970,7 +990,7 @@ class Tensor:
                     nind = tuple(ind[0, :].flat)
                     a.set_block(ts=nind, val=self.conf.back.diag_get(self.A[tuple(ind.flat)]))
         else:
-            raise TensorError('Tensor cannot be changed into a diagonal one')
+            logger.exception('Tensor cannot be changed into a diagonal one')
         return a
 
     def conj(self):
@@ -1053,7 +1073,8 @@ class Tensor:
         tensor : Tensor
         """
         if self.isdiag:
-            raise TensorError('Cannot group legs of diagonal tensor')
+            logger.exception('Cannot group legs of diagonal tensor')
+            raise FatalError
 
         nin = np.array(axes, dtype=np.int)
 
@@ -1110,7 +1131,8 @@ class Tensor:
         """
 
         if self.isdiag:
-            raise TensorError('Cannot group legs of diagonal tensor')
+            logger.exception('Cannot group legs of diagonal tensor')
+            raise FatalError
 
         to_execute = []
         for t in self.tset:
@@ -1153,7 +1175,8 @@ class Tensor:
             axes = sorted(list(axes))
             a = self.copy()
             if axes[0] == axes[1]:
-                raise TensorError('Cannot sweep the same index')
+                logger.exception('Cannot sweep the same index')
+                raise FatalError
             if not self.isdiag:
                 if (axes[0] == -1) and (np.sum(a.n[fermionic]) % 2 == 1):  # swap gate with local a.n
                     for ind in a.tset:
@@ -1238,7 +1261,8 @@ class Tensor:
                 lr = 1
 
             if not (self._ndim == ll + lr):
-                raise TensorError('Two few indices in axes')
+                logger.exception('Two few indices in axes')
+                raise FatalError
 
             # divide charges between l and r
             # order formation of blocks
@@ -1291,7 +1315,8 @@ class Tensor:
             x: number
         """
         if not all(self.s == other.s):
-            raise TensorError('Signs do not match')
+            logger.exception('Signs do not match')
+            raise FatalError
 
         a_set = set([tuple(t.flat) for t in self.tset])
         b_set = set([tuple(t.flat) for t in other.tset])
@@ -1323,7 +1348,8 @@ class Tensor:
             in2 = (axes[1],)  # indices going v
 
         if len(in1) != len(in2):
-            raise TensorError('Number of axis to trace should be the same')
+            logger.exception('Number of axis to trace should be the same')
+            raise FatalError
 
         if self.isdiag:
             if in1 == in2 == ():
@@ -1335,14 +1361,16 @@ class Tensor:
                     to_execute.append((tuple(tt.flat), ()))  # old, new
                 a.A = a.conf.back.trace_axis(A=self.A, to_execute=to_execute, axis=0)
             else:
-                raise TensorError('Wrong axes for diagonal tensor')
+                logger.exception('Wrong axes for diagonal tensor')
+                raise FatalError
         else:
             out = tuple(ii for ii in range(self._ndim) if ii not in in1 + in2)
             nout = np.array(out, dtype=np.int)
             nin1 = np.array(in1, dtype=np.int)
             nin2 = np.array(in2, dtype=np.int)
             if not all(self.s[nin1] == -self.s[nin2]):
-                raise TensorError('Signs do not match')
+                logger.exception('Signs do not match')
+                raise FatalError
 
             to_execute = []
             for tt in self.tset:
@@ -1374,7 +1402,8 @@ class Tensor:
         """
 
         if not other.isdiag:
-            raise TensorError('Other tensor should be diagonal.')
+            logger.exception('Other tensor should be diagonal.')
+            raise FatalError
 
         conja = (1 - 2 * conj[0])
         na_con = 0 if self.isdiag else axis if isinstance(axis, int) else axis[0]
@@ -1429,7 +1458,8 @@ class Tensor:
             return self.dot_diag(other, axis=0, conj=conj).trace()
 
         if self.s[axis1] != -self.s[axis2]:
-            raise TensorError('Signs do not match')
+            logger.exception('Signs do not match')
+            raise FatalError
 
         conja = (1 - 2 * conj[0])
         na_con = np.array([axis1, axis2], dtype=np.int)
@@ -1504,9 +1534,11 @@ class Tensor:
             elif len(b_con) == 2:
                 c = self.trace_dot_diag(other, axis1=a_con[0], axis2=a_con[1], conj=conj)
             elif len(b_con) == 0:
-                raise TensorError('len(axes[0]) == 0. Do not support outer product with diagonal tensor. Use diag() first.')
+                logger.exception('len(axes[0]) == 0. Do not support outer product with diagonal tensor. Use diag() first.')
+                raise FatalError
             else:
-                raise TensorError('To many axis to contract.')
+                logger.exception('To many axis to contract.')
+                raise FatalError
             return c
 
         if self.isdiag:
@@ -1517,9 +1549,11 @@ class Tensor:
             elif len(a_con) == 2:
                 c = other.trace_dot_diag(self, axis1=b_con[0], axis2=b_con[1], conj=conj[::-1])
             elif len(a_con) > 2:
-                raise TensorError('len(axes[0]) == 0. Do not support outer product with diagonal tensor. Use diag() first.')
+                logger.exception('len(axes[0]) == 0. Do not support outer product with diagonal tensor. Use diag() first.')
+                raise FatalError
             else:
-                raise TensorError('To many axis to contract.')
+                logger.exception('To many axis to contract.')
+                raise FatalError
             return c
 
         conja = (1 - 2 * conj[0])
@@ -1534,7 +1568,8 @@ class Tensor:
         nb_out = np.array(b_out, dtype=np.int)
 
         if not all(self.s[na_con] == -other.s[nb_con] * conja * conjb):
-            raise TensorError('Signs do not match')
+            logger.exception('Signs do not match')
+            raise FatalError
 
         c_n = conja * self.n + conjb * other.n
         for ss in range(self.nsym):
@@ -1709,9 +1744,11 @@ class Tensor:
             lr = 1
 
         if not (self._ndim == ll + lr):
-            raise TensorError('Two few indices in axes')
+            logger.exception('Two few indices in axes')
+            raise FatalError
         elif not (sorted(set(out_l + out_r)) == list(range(self._ndim))):
-            raise TensorError('Repeated axis')
+            logger.exception('Repeated axis')
+            raise FatalError
 
         # divide charges between l and r
         n_l, n_r = np.zeros(self.nsym, dtype=int), np.zeros(self.nsym, dtype=int)
@@ -1816,9 +1853,11 @@ class Tensor:
         out_all = out_l + out_r  # order for transpose
 
         if not (self._ndim == ll + lr):
-            raise TensorError('Two few indices in axes')
+            logger.exception('Two few indices in axes')
+            raise FatalError
         elif not (sorted(set(out_all)) == list(range(self._ndim))):
-            raise TensorError('Repeated axis')
+            logger.exception('Repeated axis')
+            raise FatalError
 
         # divide charges between Q=l and R=r
         n_l, n_r = self.n, np.zeros(self.nsym, dtype=int)
@@ -1929,11 +1968,14 @@ class Tensor:
 
         out_all = out_l + out_r  # order for transpose
         if not (self._ndim == ll + lr):
-            raise TensorError('Two few indices in axes')
+            logger.exception('Two few indices in axes')
+            raise FatalError
         elif not (sorted(set(out_all)) == list(range(self._ndim))):
-            raise TensorError('Repeated axis')
+            logger.exception('Repeated axis')
+            raise FatalError
         elif np.any(self.n != 0):
-            raise TensorError('Charge should be zero')
+            logger.exception('Charge should be zero')
+            raise FatalError
 
         nout_r = np.array(out_r, dtype=np.int)
         nout_l = np.array(out_l, dtype=np.int)

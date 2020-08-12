@@ -1,10 +1,13 @@
+import logging
 import numpy as np
 from yamps.mps import Env3
 from yamps.tensor.eigs import expmw
 #################################
 #           tdvp                #
 #################################
-# TO PUSH: aux d.o.f are removed hot to obtain nice evolution on purificatin ?
+
+
+logger = logging.getLogger('yamps.tensor.tdvp')
 
 
 def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, cutoff_dE=1e-9, hermitian=True, fermionic=False, k=4, eigs_tol=1e-14, exp_tol=1e-14, dtype='complex128', bi_orth=True, NA=None, version='1site', opts_svd=None, optsK_svd=None):
