@@ -453,3 +453,56 @@ def cast_into_Tensor(settings, dtype, s, dims_chrgs, np_matrix, left_virtual=0, 
                         ts = (left_virtual, chL, chR, int(-n+left_virtual+chL-chR) % cycle) if cycle else (left_virtual, chL, chR, int(-n+left_virtual+chL-chR))
                     Op.set_block(ts=ts, val=np_matrix[:, iR][iL, :], Ds=(1, len(iL), len(iR), 1))
     return Op
+
+
+def save_psi_to_h5py(big_file, psi):
+    direction = 'state/'
+    for n in range(psi.N):
+        direction_g = direction + str(n) + '/'
+        to_dict = psi.A[n].to_dict()
+        g_mps = big_file.create_group(direction_g)
+        for inm, ival in to_dict.items():
+            if type(ival) is dict:
+                direction_sb = direction_g + inm + '/'
+                it2 = 0
+                for inm2, ival2 in ival.items():
+                    sb_mps = big_file.create_group(direction_sb+str(it2)+'/')
+                    sb_mps.create_dataset('block', data=inm2)
+                    sb_mps.create_dataset('mat', data=ival2)
+                    it2 += 1
+            else:
+                g_mps.create_dataset(str(inm), data=[ival])
+
+
+def import_psi_from_h5py(big_file,tensor_type):
+    if tensor_type[0] == 'full':
+        settings = settings_full
+    elif tensor_type[0] == 'Z2':
+        settings = settings_Z2
+    elif tensor_type[0] == 'U1':
+        settings = settings_U1
+    settings_full.dtype = tensor_type[1]
+    direction = 'state/'
+    g_mps = big_file.get(direction)
+    N = len(g_mps.items())
+    psi = mps.Mps(N, nr_phys=1)
+    it=0
+    for inm, _ in g_mps.items():
+        d = {}
+        g_A = big_file.get(direction+inm)
+        # GET A
+        d_A = {}
+        g_mat = big_file.get(direction+inm+'/A/')
+        for _, ival3 in g_mat.items():
+            block = tuple(ival3.get('block')[:])
+            mat = ival3.get('mat')[:]
+            d_A[block] = mat
+        d['A'] = d_A
+        # GET OTHERS
+        d['s'] = g_A.get('s')[:][0]
+        d['n'] = g_A.get('n')[:][0]
+        d['isdiag'] = g_A.get('isdiag')[:][0]
+        #
+        psi.A[it] = tensor.from_dict(settings=settings, d=d)
+        it += 1
+    return psi
