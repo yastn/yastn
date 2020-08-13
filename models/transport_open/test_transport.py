@@ -55,7 +55,6 @@ def transport(main, basis, tensor):
     # STORAGE
     directory = 'models/transport_open/'
     name = directory+'test_v2'
-    name_txt = name + '_output.txt'
     big_file = h5py.File(name + '_output.h5', 'w')
 
     # SAVE information about simulation
@@ -75,13 +74,11 @@ def transport(main, basis, tensor):
     H, hermitian, dmrg, version, HH = LdagL, True, True, '2site', LdagL
 
     # canonize MPS
-    psi.normalize = True
     psi.canonize_sweep(to='last')
     psi.canonize_sweep(to='first')
 
     # compress MPO
-    H.normalize = False
-    H.canonize_sweep(to='last')
+    H.canonize_sweep(to='last', normalize=False)
     H.sweep_truncate(to='first', opts={'tol': 1e-12}, normalize=False)
 
     # trace rho
