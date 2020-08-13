@@ -27,10 +27,9 @@ def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, cutoff_dE=1e-9, hermit
         E0, dE = 0, 0
 
     while abs(curr_t) < abs(tmax):
-        dt = min([abs(tmax - curr_t), abs(dt)]) * \
-            (np.sign(dt.real)+np.sign(dt.imag)*1j)
+        dt = min([abs(tmax - curr_t)/abs(dt), 1.]) * dt
         if not H and not M:
-            print('yamps.tdvp: Neither Hamiltonian nor Kraus operators defined.')
+            logger.error('yamps.tdvp: Neither Hamiltonian nor Kraus operators defined.')
         else:
             if version == '2site':
                 env = tdvp_sweep_2site(psi=psi, H=H, M=M, dt=dt, env=env, dtype=dtype, hermitian=hermitian, fermionic=fermionic,

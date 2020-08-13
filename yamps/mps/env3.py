@@ -160,7 +160,7 @@ class Env3:
             Heff0 * C
         """
         bd = self.g.order_bond(bd)
-
+        
         if not conj:
             return ncon([self.F[bd], C, self.F[bd[::-1]]], ((1, 2, -1), (1, 3), (-2, 2, 3)), (0, 1, 0)).conj()
         else:

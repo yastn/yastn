@@ -307,9 +307,9 @@ def current_ccp(tensor_type, LSR, vk, cut, basis):
     for n in range(N):
         #
         if cut == 'LS':
-            v = (-.5*1j)*vk[n] if LSR[n] == -1 else 0
+            v = (.5*1j)*vk[n] if LSR[n] == -1 else 0
         elif cut == 'SR':
-            v = (.5*1j)*vk[n] if LSR[n] == +1 else 0
+            v = (-.5*1j)*vk[n] if LSR[n] == +1 else 0
         #
         if n == 0:
             H.A[n] = tensor.block(
@@ -360,9 +360,9 @@ def current_XY(tensor_type, LSR, vk, cut, basis):
     for n in range(N):
         #
         if cut == 'LS':
-            v = (-.25)*vk[n] if LSR[n] == -1 else 0
+            v = (.25)*vk[n] if LSR[n] == -1 else 0
         elif cut == 'SR':
-            v = (.25)*vk[n] if LSR[n] == +1 else 0
+            v = (-.25)*vk[n] if LSR[n] == +1 else 0
         #
         if n == 0:
             H.A[n] = tensor.block(
