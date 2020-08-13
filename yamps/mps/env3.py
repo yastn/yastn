@@ -262,7 +262,7 @@ class Env3:
             OO, _ = OO.group_legs(axes=(3, 4), new_s=-1)
             OO, _ = OO.group_legs(axes=(1, 2), new_s=1)
             self.op_merged[(n, nn)] = OO
-
+        OO = self.op_merged[(n, nn)]
         if conj:
             if self.nr_phys == 1:
                 return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, 3, 4), (2, 3, -2, 5), (-3, 5, 4)), (0, 1, 0, 0)).conj()
