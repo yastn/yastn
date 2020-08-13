@@ -1,5 +1,5 @@
 import yamps.mps as mps
-import yamps.ops.settings_U1 as settings
+import settings_U1 as settings
 import yamps.tensor as tensor
 import numpy as np
 

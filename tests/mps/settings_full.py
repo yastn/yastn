@@ -2,4 +2,4 @@ import yamps.tensor.backend_np as back
 dot_merge = False
 sym = []
 nsym = len(sym)
-dtype = 'complex128'
+dtype = 'float64'
