@@ -253,10 +253,27 @@ class Env3:
             OO, _ = OO.group_legs(axes=(3, 4), new_s=-1)
             OO, _ = OO.group_legs(axes=(1, 2), new_s=1)
             self.op_merged[(n, nn)] = OO
-
+        OO = self.op_merged[(n, nn)]
         if conj:
             if self.nr_phys == 1:
                 return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, 3, 4), (2, 3, -2, 5), (-3, 5, 4)), (0, 1, 0, 0)).conj()
         else:
             if self.nr_phys == 1:
                 return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))
+
+    def project_ket_on_bra(self, n):
+        r"""Project ket on a n-th site of bra.
+
+        It is equall to the overlap <bra|op|ket> up to the contribution from n-th site of bra.
+
+        Parameters
+        ----------
+        n : int
+            index of site
+
+        Returns
+        -------
+        out : tensor
+            result of projection
+        """
+        return self.Heff1(self, self.ket.A[n], n, conj=False)

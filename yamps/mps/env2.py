@@ -91,6 +91,14 @@ class Env2:
         for n in self.g.sweep(to='first'):
             self.update(n, towards=self.g.first)
 
+    def clear_site(self, n):
+        r"""
+        Clear environments pointing from site n.
+        """
+        nl, nr = self.g.order_neighbours(n)
+        self.F.pop((n, nl), None)
+        self.F.pop((n, nr), None)
+
     def overlap(self):
         r"""
         Sweep from last site to first updating environments and calculates overlap.
@@ -124,3 +132,26 @@ class Env2:
         if bd is None:
             bd = (None, self.g.first)
         return self.F[bd].dot(self.F[bd[::-1]], axes=((0, 1), (1, 0))).to_number()
+
+    def project_ket_on_bra(self, n):
+        r"""Project ket on a n-th site of bra.
+
+        It is equall to the overlap <bra|ket> up to the contribution from n-th site of bra.
+
+        Parameters
+        ----------
+        n : int
+            index of site
+
+        Returns
+        -------
+        out : tensor
+            result of projection
+        """
+
+        nl, nr = self.g.order_neighbours(n)
+
+        if self.nr_phys == 1:
+            return ncon([self.F[(nl, n)], self.ket.A[n], self.F[(nr, n)]], ((-1, 1), (1, -2, 2), (2, -3)), (0, 0, 0))
+        else:
+            return ncon([self.F[(nl, n)], self.ket.A[n], self.F[(nr, n)]], ((-1, 1), (1, -2, -3, 2), (2, -4)), (0, 0, 0))
