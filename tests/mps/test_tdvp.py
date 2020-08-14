@@ -1,8 +1,7 @@
 import yamps.mps as mps
-import yamps.mps.tdvp as tdvp
-import ops_full as ops_full
-import ops_Z2 as ops_Z2
-import ops_U1 as ops_U1
+import ops_full
+import ops_Z2
+import ops_U1
 import numpy as np
 import pytest
 
@@ -14,8 +13,8 @@ def run_tdvp_1site(psi, H, dt, sweeps,  Eng_gs, opts=None):
     env = None
 
     for _ in range(sweeps):
-        env = tdvp.tdvp_sweep_1site(psi, H, env=env, dt=dt, dtype='float64',
-                                    hermitian=True, fermionic=False, opts_svd=opts, exp_tol=1e-8)
+        env = mps.tdvp.tdvp_sweep_1site(psi, H, env=env, dt=dt, dtype='float64',
+                                        hermitian=True, fermionic=False, opts_svd=opts, exp_tol=1e-8)
         Eng = env.measure()
         print('1site: Energy err = ', Eng-Eng_gs, ' Eg = ', Eng)
     return Eng
@@ -28,8 +27,8 @@ def run_tdvp_2site(psi, H, dt, sweeps,  Eng_gs, opts=None):
     env = None
 
     for _ in range(sweeps):
-        env = tdvp.tdvp_sweep_2site(psi, H, env=env, dt=dt, dtype='float64',
-                                    hermitian=True, fermionic=False, opts_svd=opts, exp_tol=1e-8)
+        env = mps.tdvp.tdvp_sweep_2site(psi, H, env=env, dt=dt, dtype='float64',
+                                        hermitian=True, fermionic=False, opts_svd=opts, exp_tol=1e-8)
         Eng = env.measure()
         print('2site: Energy err = ', Eng-Eng_gs, ' Eg = ', Eng)
     return Eng
@@ -42,7 +41,7 @@ def run_tdvp_2site_group(psi, H, dt, sweeps,  Eng_gs, opts=None):
     env = None
 
     for _ in range(sweeps):
-        env = tdvp.tdvp_sweep_2site_group(
+        env = mps.tdvp.tdvp_sweep_2site_group(
             psi, H, env=env, dt=dt, dtype='float64', hermitian=True, fermionic=False, opts_svd=opts, exp_tol=1e-8)
         Eng = env.measure()
         print('2site_group: Energy err = ', Eng-Eng_gs, ' Eg = ', Eng)
@@ -190,7 +189,7 @@ def test_OBC_tdvp():
 
 if __name__ == "__main__":
     # pass
-    test_OBC_tdvp()
     test_U1_tdvp()
     test_full_tdvp()
     test_Z2_tdvp()
+    test_OBC_tdvp()
