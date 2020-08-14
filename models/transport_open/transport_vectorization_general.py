@@ -1,6 +1,9 @@
 import numpy as np
 from yamps.tensor.ncon import ncon
+import yamps.mps.measure as measure
 
+# Majorana basis: I, Z, X, Y
+# Dirac basis: cp_c, c_cp, c, cp
 
 def generate_discretization(NL, w0, wS, mu, v, dV, tempL, tempR, method, ordered, gamma):
     muL = +0.5 * mu
@@ -55,7 +58,7 @@ def generate_discretization(NL, w0, wS, mu, v, dV, tempL, tempR, method, ordered
 
 
 def generate_operator_basis(basis):
-    if basis == 0:  # choose I, Z, X, Y basis
+    if basis == 'Majorana':
         OO = np.zeros((4, 4), dtype=np.complex128)
 
         II = np.identity(4)
@@ -69,6 +72,26 @@ def generate_operator_basis(basis):
                         [1, 0, 0, 0],
                         [0, 0, 0, -1j],
                         [0, 0, 1j, 0]])
+
+        q_x = np.block([[0, 0, 1, 0],
+                        [0, 0, 0, -1j],
+                        [1, 0, 0, 0],
+                        [0, 1j, 0, 0]])
+
+        x_q = np.block([[0, 0, 1, 0],
+                        [0, 0, 0, 1j],
+                        [1, 0, 0, 0],
+                        [0, -1j, 0, 0]])
+
+        q_y = np.block([[0, 0, 0, 1],
+                        [0, 0, 1j, 0],
+                        [0, -1j, 0, 0],
+                        [1, 0, 0, 0]])
+
+        y_q = np.block([[0, 0, 0, 1],
+                        [0, 0, -1j, 0],
+                        [0, 1j, 0, 0],
+                        [1, 0, 0, 0]])
 
         n_q__p__q_n = np.block([[1, -1, 0, 0],
                                 [-1, 1, 0, 0],
@@ -139,11 +162,16 @@ def generate_operator_basis(basis):
                             [1, 1, 0, 0],
                             [0, 0, 1, -1j],
                             [0, 0, -1j, 1]])
-    elif basis == 1:  # choose cp c, c cp, c, cp
+    elif basis == 'Dirac':
         OO = np.zeros((4, 4), dtype=np.complex128)
 
         II = np.identity(4, dtype=np.complex128)
 
+        q_z = np.block([[-1, 0, 0, 0],
+                        [0, 1, 0, 0],
+                        [0, 0, -1, 0],
+                        [0, 0, 0, 1]])
+                        
         q_z = np.block([[-1, 0, 0, 0],
                         [0, 1, 0, 0],
                         [0, 0, -1, 0],
@@ -212,17 +240,23 @@ def generate_operator_basis(basis):
         ccp_q[1, 1] = 1
         ccp_q[-1, -1] = 1
 
-    return OO, II, q_z, z_q, q_n, n_q, q_ccp, ccp_q, c_q_cp, cp_q_c, z_q_z, c_q, cp_q, q_c, q_cp, ccp_q__p__q_ccp, n_q__p__q_n, m1j_n_q__m__q_n
+        q_x = q_cp + q_c
+        x_q = cp_q + c_q
+
+        q_y = 1j*(q_cp - q_c)
+        y_q = 1j*(cp_q - c_q)
+
+    return OO, II, q_x, x_q, q_y, y_q, q_z, z_q, q_n, n_q, q_ccp, ccp_q, c_q_cp, cp_q_c, z_q_z, c_q, cp_q, q_c, q_cp, ccp_q__p__q_ccp, n_q__p__q_n, m1j_n_q__m__q_n
 
 
 def generate_vectorized_basis(basis):
-    if basis == 0:  # choose I, Z, X, Y basis
+    if basis == 'Majorana':
         vII = np.array([1, 0, 0, 0])
         vnn = .5*np.array([1, -1, 0, 0])
         vc = .5*np.array([0, 0, 1, 1j])
         vcp = .5*np.array([0, 0, 1, -1j])
         vz = np.array([0, 1, 0, 0])
-    elif basis == 1:  # choose cp c, c cp, c, cp
+    elif basis == 'Dirac':
         vII = np.array([1, 1, 0, 0])
         vnn = np.array([1, 0, 0, 0])
         vc = np.array([0, 0, 1, 0])
@@ -239,9 +273,28 @@ def stack_MPOs(UP, DOWN):
     return UP
 
 
-# SAVE TO FILE
+# SAVE
 def save_to_file(names, vals, file_name):
     data = {}
     for it in range(len(names)):
         data.update({names[it]: vals[it]})
     np.save(file_name, data, 'a')
+
+
+def measure_overlaps(psi, list_of_ops, norm=None):
+    if norm:
+        norm = measure.measure_overlap(psi, norm)
+    else:
+        norm = 1.
+    out = [None]*len(list_of_ops)
+    for n in range(len(out)):
+        out[n] = measure.measure_overlap(bra=psi, ket=list_of_ops[n])/norm
+    return out
+
+
+def measure_MPOs(psi, list_of_ops):
+    norm = measure.measure_overlap(bra=psi, ket=psi)
+    out = [None]*len(list_of_ops)
+    for n in range(len(out)):
+        out[n] = measure.measure_mpo(bra=psi, op=list_of_ops[n], ket=psi)/norm
+    return out

@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import scipy as sp
 import fbpca as pca
@@ -6,6 +7,14 @@ from itertools import product
 from itertools import accumulate
 from functools import reduce
 from operator import mul
+
+
+class FatalError(Exception):
+    pass
+
+
+logger = logging.getLogger('yamps.tensor.backend_np')
+
 
 _select_dtype = {'float64': np.float64,
                  'complex128': np.complex128}

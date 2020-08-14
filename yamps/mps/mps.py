@@ -1,13 +1,18 @@
+import logging
 from yamps.tensor import ncon
 from .geometry import Geometry
+
+
+class FatalError(Exception):
+    pass
+
+
+logger = logging.getLogger('yamps.mps.mps')
+
 
 ###################################
 #     basic operations on MPS     #
 ###################################
-
-
-class MpsError(Exception):
-    pass
 
 
 class Mps:
@@ -74,7 +79,8 @@ class Mps:
         """
 
         if self.pC is not None:
-            raise MpsError('Only one central site is possible.')
+            logger.exception('Only one central site is possible.')
+            raise FatalError
 
         nnext, leg, _ = self.g.from_site(n, towards)
 
@@ -179,8 +185,8 @@ class Mps:
                 self.orthogonalize_site(n=n, towards=self.g.first, normalize=normalize)
                 self.absorb_central(towards=self.g.first)
         else:
-            raise MpsError("mps/canonize_sweep: Option ",
-                           to, " is not defined.")
+            logger.exception("canonize_sweep: Option " + to + " is not defined.")
+            raise FatalError
 
     def sweep_truncate(self, to='last', opts={}, normalize=True):
         r"""
@@ -219,8 +225,9 @@ class Mps:
                 discarded_max = max(discarded_max, discarded)
                 self.absorb_central(towards=self.g.first)
         else:
-            raise MpsError("mps/canonize_sweep: Option ",
-                           to, " is not defined.")
+            logger.exception("canonize_sweep: Option " + to +  " is not defined.")
+            raise FatalError
+
         return discarded_max
 
     def merge_mps(self, n):
@@ -259,15 +266,3 @@ class Mps:
             Ds.append(DAn[self.left[0]])
         Ds.append(DAn[self.right[0]])
         return Ds
-
-    def measuring(self, list_of_ops, norm=None):
-        if norm:
-            norm.setup_to_first()
-            norm = norm.measure().real
-        else:
-            norm = 1.
-        out = [None] * len(list_of_ops)
-        for n in range(len(out)):
-            list_of_ops[n].setup_to_first()
-            out[n] = list_of_ops[n].measure() / norm
-        return out

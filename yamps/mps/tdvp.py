@@ -1,18 +1,16 @@
+import logging
 import numpy as np
-from yamps.mps import Env3
+from yamps.mps.env3 import Env3
 from yamps.tensor.eigs import expmw
-import warnings
 #################################
 #           tdvp                #
 #################################
-# TO PUSH: aux d.o.f are removed hot to obtain nice evolution on purificatin ?
 
 
-class TDVPWarning(UserWarning):
-    pass
+logger = logging.getLogger('yamps.tensor.tdvp')
 
 
-def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, measure_O=None, cutoff_sweep=20, cutoff_dE=1e-9, hermitian=True, fermionic=False, k=4, eigs_tol=1e-14, exp_tol=1e-14, dtype='complex128', bi_orth=True, NA=None, version='1site', opts_svd=None, optsK_svd=None):
+def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, cutoff_dE=1e-9, hermitian=True, fermionic=False, k=4, eigs_tol=1e-14, exp_tol=1e-14, dtype='complex128', bi_orth=True, NA=None, version='1site', opts_svd=None, optsK_svd=None):
     # evolve with TDVP method, up to tmax and initial guess of the time step dt
     # meaure_O - list of things to measure e.g.  [2,[OL, OR], [1,2,3]] -
     # measure exp.  val of 2-site operator OL, OR on sites (1,2), (2,3), (3,4)
@@ -29,10 +27,9 @@ def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, measure_O=None, cutoff
         E0, dE = 0, 0
 
     while abs(curr_t) < abs(tmax):
-        dt = min([abs(tmax - curr_t), abs(dt)]) * \
-            (np.sign(dt.real)+np.sign(dt.imag)*1j)
+        dt = min([abs(tmax - curr_t)/abs(dt), 1.]) * dt
         if not H and not M:
-            print('yamps.tdvp: Neither Hamiltonian nor Kraus operators defined.')
+            logger.error('yamps.tdvp: Neither Hamiltonian nor Kraus operators defined.')
         else:
             if version == '2site':
                 env = tdvp_sweep_2site(psi=psi, H=H, M=M, dt=dt, env=env, dtype=dtype, hermitian=hermitian, fermionic=fermionic,
@@ -48,10 +45,8 @@ def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, measure_O=None, cutoff
         dE = abs(E - E0)
         print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE, ' D: ', max(psi.get_D()))
         E0 = E
-        sweep += 1
-        out = ()
-    return env, E, dE, out
-
+        curr_t += dt
+    return env, E, dE
 
 
 def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, dtype='complex128', hermitian=True, fermionic=False, k=4, eigs_tol=1e-14, exp_tol=1e-14, bi_orth=True, NA=None, opts_svd=None, optsK_svd=None):
@@ -115,10 +110,6 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, dtype='complex128',
     psi: Mps
         Is self updated.
     """
-
-    if opts_svd:
-        warnings.warn("tdvp_sweep_1site: Truncation not implemeted.",  TDVPWarning)
-
     # change. adjust the sign according to the convention
     sgn = 1j * (np.sign(dt.real) + 1j * np.sign(dt.imag))
     dt = sgn * abs(dt)

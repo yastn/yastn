@@ -1,14 +1,19 @@
+import logging
 import numpy as np
 import scipy as sp
 import time
 import tracemalloc
 
+
+class FatalError(Exception):
+    pass
+
+
+logger = logging.getLogger('yamps.tensor.eigs')
+
+
 _select_dtype = {'float64': np.float64,
                  'complex128': np.complex128}
-
-
-class EigsError(Exception):
-    pass
 
 
 def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype='complex128', NA=None, cost_estim=0):
@@ -20,14 +25,16 @@ def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian
 
 def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype=np.complex128, NA=None, cost_estim=1):
     if not hermitian and not Bv:
-        print('expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
-
+        logger.exception(
+            'expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
+        raise FatalError
     k_max = 20
     if not NA:
         # n - cost of vector init
         # NA - cost of matrix Av
         # v_i - cost of exponatiation of size m(m-krylov dim)
-        T = sp.linalg.expm(np.diag(np.random.rand(k_max-1), -1) + np.diag(np.random.rand(k_max), 0) + np.diag(np.random.rand(k_max-1), 1))
+        T = sp.linalg.expm(np.diag(np.random.rand(k_max-1), -1) + np.diag(
+            np.random.rand(k_max), 0) + np.diag(np.random.rand(k_max-1), 1))
         if cost_estim == 0:  # approach 0: defaoult based on matrix size
             # in units of n
             n = init[0].get_size()
@@ -74,7 +81,7 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
 
     # initial values
     qt = 0  # holds current time
-    sgn = np.sign(dt.real)*1. + np.sign(dt.imag) * 1j
+    sgn = np.sign(dt).real*1j if dt.real == 0. else np.sign(dt).real*1
     dt = abs(dt)
     vec = init
     tau = dt
@@ -94,7 +101,7 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
     it = 0
     itry = 0
     while qt < dt and itry < max_try:
-        evec, err, happy = eigs(Av=Av, Bv=Bv, init=vec, tol=eigs_tol, k=k,
+        err, evec, happy = eigs(Av=Av, Bv=Bv, init=vec, tol=eigs_tol, k=k,
                                 hermitian=hermitian, bi_orth=bi_orth,  dtype=dtype, tau=(tau.real, sgn))
         if itry == max_try:
             it += 1
@@ -143,7 +150,8 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
                 k_new = k
             else:
                 tau_opt = tau * (omega / delta) ** (-1. / q)
-                k_opt = max([1, 1 + int(k + np.log(omega / gamma) / np.log(kappa))])
+                k_opt = max(
+                    [1, 1 + int(k + np.log(omega / gamma) / np.log(kappa))])
                 # evaluate cost functions for possible options
                 Ctau = (k * NA + 3 * k * n + (k/k_max)**2*v_i * (10 + 3 * (k - 1))
                         * (k + 1) ** 3) * (int((dt - qt).real / tau_opt) + 1)
@@ -169,9 +177,12 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
             k = k_max
         else:
             tau = min([dt - qt, max([.2 * tau, min([tau_new, 2 * tau])])]).real
-            k = max([1, min([k_max, max([int(.75 * k), min([k_new, int(1.3333 * k) + 1])])])]).real
+            k = max(
+                [1, min([k_max, max([int(.75 * k), min([k_new, int(1.3333 * k) + 1])])])]).real
     if abs(qt/dt) < 1.:
-        raise EigsError('eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = ', omega/delta, '\nRemaining time = ', abs(1.-qt/dt), '\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
+        logger.error('eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = '+omega /
+                     delta+'\nRemaining time = '+abs(1.-qt/dt)+'\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
+        raise FatalError
     return (vec[0], it, k, qt,)
 
 
@@ -179,12 +190,11 @@ def eigs(Av, init, Bv=None, tau=None, tol=1e-14, k=5, hermitian=False, bi_orth=T
     # solve eigenproblem using Lanczos
     init = [it.__mul__(1. / (it.norm(ord='fro'))) for it in init]
     if hermitian:
-        out = lanczos_her(
+        return lanczos_her(
             Av=Av, init=init[0], k=k, tol=tol, dtype=dtype, tau=tau)
     else:
-        out = lanczos_nher(Av=Av, Bv=Bv, init=init, k=k,
-                           tol=tol, bi_orth=bi_orth, dtype=dtype, tau=tau)
-    return out
+        return lanczos_nher(Av=Av, Bv=Bv, init=init, k=k,
+                            tol=tol, bi_orth=bi_orth, dtype=dtype, tau=tau)
 
 
 def lanczos_her(Av, init, tau=None, tol=1e-14, k=5, dtype=np.complex128):
@@ -195,7 +205,7 @@ def lanczos_her(Av, init, tau=None, tol=1e-14, k=5, dtype=np.complex128):
     b = np.zeros(k + 1, dtype=dtype)
     Q = [None] * (k + 1)
     r = Av(q)
-    for it in range(0, k):
+    for it in range(k):
         a[it] = q.scalar(r)
         Q[it] = q
         r = r.apxb(q, x=-a[it])
@@ -222,9 +232,9 @@ def lanczos_her(Av, init, tau=None, tol=1e-14, k=5, dtype=np.complex128):
     k = len(a)
     b = b[range(k - 1)]
     Q = Q[:k]
-    out = solve_tridiag(a=a, b=b, Q=Q, hermitian=True,
-                        tau=tau, beta=beta, dtype=dtype)
-    return out + (happy,)
+    val, Y = solve_tridiag(a=a, b=b, Q=Q, hermitian=True,
+                           tau=tau, beta=beta, dtype=dtype)
+    return val, Y, happy
 
 
 def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, dtype=np.complex128, bi_orth=True):
@@ -293,9 +303,9 @@ def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, dtype=np.complex128, bi
     c = c[range(k - 1)]
     Q = Q[:k]
     P = P[:k]
-    out = solve_tridiag(a=a, b=b, c=c, Q=Q, V=P,
-                        hermitian=False, tau=tau, beta=beta, dtype=dtype)
-    return out + (happy,)
+    val, Y = solve_tridiag(a=a, b=b, c=c, Q=Q, V=P,
+                           hermitian=False, tau=tau, beta=beta, dtype=dtype)
+    return val, Y, happy
 
 
 def make_tridiag(a, b, c=None, hermitian=False):
@@ -310,7 +320,30 @@ def make_tridiag(a, b, c=None, hermitian=False):
 def solve_tridiag(a, b, Q, c=None, V=None, tau=None, beta=None, hermitian=False, dtype=np.complex128):
     # find approximate eigenvalues and eigenvectors using tridiagonal matrix
     # and Krylov vectors Q and V
-    if not tau or not beta:
+    if tau and beta != None:
+        if hermitian:
+            T = make_tridiag(a=a, b=b, hermitian=True)
+        else:
+            T = make_tridiag(a=a, b=b, c=c)
+        # calculate new vector for expmv: expA*v
+        tau = tau[1] * tau[0]
+        expT = sp.linalg.expm(tau * T)[:, 0]
+        expT = expT / np.linalg.norm(expT)
+
+        Y = None
+        for it in expT.nonzero()[0]:
+            if Y:
+                Y = Y.__add__(expT[it] * Q[it])
+            else:
+                Y = Q[it].__mul__(expT[it])
+        Y = Y.__mul__(1. / Y.norm())
+
+        # calculate an error for expmv
+        tmp = sp.linalg.expm(tau*T)-np.identity(len(expT))
+        tmp = sum(tmp[-1, :]*np.linalg.pinv(tau*T, rcond=1e-12)[:, 0])
+        err = abs(beta*tmp)
+        return err, Y
+    else:
         k = len(a)
         Y = [None] * k
         if hermitian:
@@ -332,26 +365,4 @@ def solve_tridiag(a, b, Q, c=None, V=None, tau=None, beta=None, hermitian=False,
                     tmp = tmp.apxb(Q[i1], x=sit[i1])
                 tmp = tmp.__mul__(1. / tmp.norm())
                 Y[it] = tmp
-        out = val, Y
-    else:
-        T = make_tridiag(a=a, b=b, hermitian=True) if hermitian else make_tridiag(a=a, b=b, c=c)
-
-        # calculate new vector for expmv: expA*v
-        tau = tau[1] * tau[0]
-        expT = sp.linalg.expm(tau * T)[:, 0]
-        expT = expT / np.linalg.norm(expT)
-
-        Y = None
-        for it in expT.nonzero()[0]:
-            if Y:
-                Y = Y.__add__(expT[it] * Q[it])
-            else:
-                Y = Q[it].__mul__(expT[it])
-        Y = Y.__mul__(1. / Y.norm())
-
-        # calculate an error for expmv
-        tmp = sp.linalg.expm(tau*T)-np.identity(len(expT))
-        tmp = sum(tmp[-1, :]*np.linalg.pinv(tau*T, rcond=1e-12)[:, 0])
-        err = abs(beta*tmp)
-        out = Y, err
-    return out
+        return val, Y

@@ -1,4 +1,4 @@
-import mps
+import yamps.mps as mps
 import ops_full
 import ops_Z2
 import ops_U1

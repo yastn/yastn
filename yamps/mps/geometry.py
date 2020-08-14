@@ -1,3 +1,13 @@
+import logging
+
+
+class FatalError(Exception):
+    pass
+
+
+logger = logging.getLogger('yamps.mps.geometry')
+
+
 ##################################
 #     geometry of the lattice    #
 ##################################

@@ -1,3 +1,13 @@
+import logging
+
+
+class FatalError(Exception):
+    pass
+
+
+logger = logging.getLogger('yamps.tensor.ncon')
+
+
 ###########################################
 #      Contraction of a set of tensors    #
 ###########################################
@@ -5,10 +15,12 @@
 def ncon(ts, inds, conjs=None):
     """Execute series of tensor contractions"""
     if len(ts) != len(inds):
-        raise Exception('Wrong number of tensors')
+        logger.exception('Wrong number of tensors')
+        raise FatalError
     for ii, ind in enumerate(inds):
         if ts[ii].ndim != len(ind):
-            raise Exception('Wrong number of legs in tensot %02d' % ii)
+            logger.exception('Wrong number of legs in tensot %02d' % ii)
+            raise FatalError
 
     ts = {ind: val for ind, val in enumerate(ts)}
     cutoff = 512
@@ -24,7 +36,8 @@ def ncon(ts, inds, conjs=None):
     while (order1 != cutoff):  # tensordot two tensors; or trace one tensor
         order2, leg2, ten2 = edges.pop()
         if (order1 != order2):
-            raise Exception('Contracted legs do not match')
+            logger.exception('Contracted legs do not match')
+            raise FatalError
         if ten1 < ten2:
             (t1, t2) = (ten1, ten2)
             ax1.append(leg1)

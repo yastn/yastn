@@ -1,5 +1,13 @@
 from yamps.tensor import ncon
-from .mps import MpsError
+import logging
+
+
+class FatalError(Exception):
+    pass
+
+
+logger = logging.getLogger('yamps.mps.geometry')
+
 
 ####################################################
 #     environment for <bra|opp|ket> operations     #
@@ -32,7 +40,8 @@ class Env3:
         self.on_aux = on_aux
         self.F = {}  # dict for environments
         if self.bra.nr_phys != self.ket.nr_phys:
-            raise MpsError('bra and ket should have the same number of physical legs.')
+            logger.error('bra and ket should have the same number of physical legs.')
+            raise FatalError
 
         # set environments at boundaries
         ff = self.g.first
@@ -151,7 +160,7 @@ class Env3:
             Heff0 * C
         """
         bd = self.g.order_bond(bd)
-
+        
         if not conj:
             return ncon([self.F[bd], C, self.F[bd[::-1]]], ((1, 2, -1), (1, 3), (-2, 2, 3)), (0, 1, 0)).conj()
         else:
