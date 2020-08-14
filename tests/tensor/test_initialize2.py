@@ -84,7 +84,7 @@ def test_set1():
     try:
         a.set_block(ts=0, Ds=4)
         assert 1 == 0
-    except tensor.TensorError:
+    except tensor.FatalError:
         a.set_block(ts=0, Ds=5)
 
     print('----------------')
