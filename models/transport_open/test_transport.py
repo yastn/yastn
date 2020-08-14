@@ -2,7 +2,6 @@ import logging
 import h5py
 import numpy as np
 import yamps.mps as mps
-import yamps.mps.tdvp as tdvp
 import transport_vectorization as main_fun
 import transport_vectorization_full as main_full
 import transport_vectorization_Z2 as main_Z2
@@ -71,7 +70,7 @@ def transport(main, basis, tensor):
     LSR, wk, temp, vk, dV, gamma = general.generate_discretization(NL=NL, w0=w0, wS=wS, mu=mu, v=v, dV=dV, tempL=temp, tempR=temp, method=distribution, ordered=ordered, gamma=gamma)
     psi = main.thermal_state(tensor_type=tensor_type, LSR=LSR, io=io, ww=wk, temp=temp, basis=basis)
     LL, LdagL = main.Lindbladian_1AIM_mixed(tensor_type=tensor_type, NL=NL, LSR=LSR, wk=wk, temp=temp, vk=vk, dV=dV, gamma=gamma, basis=basis, AdagA=True)
-    H, hermitian, dmrg, HH = LL, False, False, LdagL
+    H, hermitian, dmrg, version, HH = LL, False, False, None, LdagL
     #H, hermitian, dmrg, version, HH = LdagL, True, True, '2site', LdagL
 
     # canonize MPS
