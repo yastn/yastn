@@ -14,7 +14,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler("mySnake.log"),
+        logging.FileHandler("models/transport_open/transport.log"),
         logging.StreamHandler()
     ])
 
@@ -25,7 +25,7 @@ def transport(main, basis, tensor):
     # tensor - tensor type: full, Z2 or U1
     #
     # MODEL
-    NL = 16
+    NL = 3
     NS = 1
     w0 = 1
     v = .5
@@ -48,13 +48,14 @@ def transport(main, basis, tensor):
     # algorithm
     sgn = 1j  # imaginary time evolution for sgn == 1j
     dt = .125 * sgn  # time step - time step for single tdvp
-    tmax = 5. * dt * sgn  # total time
+    tmax = 200. * dt * sgn  # total time
     opts_svd = {'tol': tol_svd, 'D_total': D_total}
     eigs_tol = 1e-14
 
     # STORAGE
     directory = 'models/transport_open/'
     name = directory+'test_v2'
+    name_txt = directory+'test_v2'+'_output.txt'
     big_file = h5py.File(name + '_output.h5', 'w')
 
     # SAVE information about simulation
@@ -70,8 +71,8 @@ def transport(main, basis, tensor):
     LSR, wk, temp, vk, dV, gamma = general.generate_discretization(NL=NL, w0=w0, wS=wS, mu=mu, v=v, dV=dV, tempL=temp, tempR=temp, method=distribution, ordered=ordered, gamma=gamma)
     psi = main.thermal_state(tensor_type=tensor_type, LSR=LSR, io=io, ww=wk, temp=temp, basis=basis)
     LL, LdagL = main.Lindbladian_1AIM_mixed(tensor_type=tensor_type, NL=NL, LSR=LSR, wk=wk, temp=temp, vk=vk, dV=dV, gamma=gamma, basis=basis, AdagA=True)
-    #H, hermitian, dmrg, HH = LL, False, False, LdagL
-    H, hermitian, dmrg, version, HH = LdagL, True, True, '2site', LdagL
+    H, hermitian, dmrg, HH = LL, False, False, LdagL
+    #H, hermitian, dmrg, version, HH = LdagL, True, True, '2site', LdagL
 
     # canonize MPS
     psi.canonize_sweep(to='last')
@@ -123,7 +124,7 @@ def transport(main, basis, tensor):
     Nocc = general.measure_overlaps(psi, OP_Nocc, norm=trace_rho)
     
     print('Time: ', round(abs(qt), 4), ' Dmax: ', Dmax, ' E = ', E, ' Tot_Occ= ', round(nl+ns+nr, 4), ' JLS=', jls, ' JSR=', jsr, ' NL=', round(nl, 5), ' NS=', round(ns, 5), ' NR=', round(nr, 5))
-    with open(name_txt, 'a') as f:
+    with open(name_txt, 'w') as f:
         print(qt, E, jls, jsr, nl, ns, nr, file=f)
     #
     Es[it_step] = E
@@ -145,7 +146,7 @@ def transport(main, basis, tensor):
             env, _, _ = mps.dmrg.dmrg_OBC(psi=psi, H=H, env=env, version=version, cutoff_sweep=1, eigs_tol=eigs_tol, hermitian=True,  opts_svd=opts_svd)
         else:
             for it in range(init_steps):
-                exp_tol = 1e-14
+                exp_tol = 1e-1
                 ddt = dt*2**(it-init_steps)
                 if D_total > 1:
                     env = mps.tdvp.tdvp_sweep_2site(
@@ -177,7 +178,6 @@ def transport(main, basis, tensor):
     main_fun.save_psi_to_h5py(big_file, psi)
     big_file.close()
     
-
 
 def transport_full(choice):
     transport(main_full, choice, 'full')
