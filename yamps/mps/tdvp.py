@@ -1,6 +1,6 @@
 import logging
 import numpy as np
-from yamps.mps import Env3
+from yamps.mps.env3 import Env3
 from yamps.tensor.eigs import expmw
 #################################
 #           tdvp                #
