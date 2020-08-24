@@ -18,7 +18,7 @@ def test_hermitian(D, k, tau, eigs_tol, exp_tol):
     print('\nHermitian')
     hermitian = True
     cost_estim = 0
-    def Av(x): return A.dot(x, axes=((2, 3, ), (0, 1, )))
+    Av  = lambda x: A.dot(x, axes=((2, 3, ), (0, 1, )))
     Bv = None
 
     # full
@@ -104,8 +104,8 @@ def test_non_hermitian(D, k, tau, eigs_tol, exp_tol):
     print('\nNon-Hermitian')
     hermitian = False
     cost_estim = 0
-    def Av(x): return A.dot(x, axes=((2, 3, ), (0, 1, )))
-    def Bv(x): return A.conj().transpose(
+    Av  = lambda x: A.dot(x, axes=((2, 3, ), (0, 1, )))
+    Bv  = lambda x: A.conj().transpose(
         axes=(2, 3, 0, 1)).dot(x, axes=((2, 3, ), (0, 1, )))
 
     # full
