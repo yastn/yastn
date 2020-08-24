@@ -14,11 +14,12 @@ settings_Z2.dtype = 'complex128'
 settings_U1.dtype = 'complex128'
 
 
+@pytest.mark.parametrize("D, k, tau, eigs_tol, exp_tol", [(6, 6, 1., 1e-18, 1e-14), (6, 6, 1j*1., 1e-18, 1e-14)])
 def test_hermitian(D, k, tau, eigs_tol, exp_tol):
     print('\nHermitian')
     hermitian = True
     cost_estim = 0
-    Av  = lambda x: A.dot(x, axes=((2, 3, ), (0, 1, )))
+    def Av(x): return A.dot(x, axes=((2, 3, ), (0, 1, )))
     Bv = None
 
     # full
@@ -100,12 +101,13 @@ def test_hermitian(D, k, tau, eigs_tol, exp_tol):
     assert abs(LA.norm(w)/LA.norm(w_np)-1.) < 1e-14
 
 
+@pytest.mark.parametrize("D, k, tau, eigs_tol, exp_tol", [(6, 6, 1., 1e-18, 1e-14), (6, 6, 1j*1., 1e-18, 1e-14)])
 def test_non_hermitian(D, k, tau, eigs_tol, exp_tol):
     print('\nNon-Hermitian')
     hermitian = False
     cost_estim = 0
-    Av  = lambda x: A.dot(x, axes=((2, 3, ), (0, 1, )))
-    Bv  = lambda x: A.conj().transpose(
+    def Av(x): return A.dot(x, axes=((2, 3, ), (0, 1, )))
+    def Bv(x): return A.conj().transpose(
         axes=(2, 3, 0, 1)).dot(x, axes=((2, 3, ), (0, 1, )))
 
     # full
@@ -185,17 +187,19 @@ def test_non_hermitian(D, k, tau, eigs_tol, exp_tol):
 
 
 def test_eigs():
+
     D = 6  # if k**2 in fact
     k = D
     tau = 1
     eigs_tol = 1e-18
     exp_tol = 1e-14
     print('\ntau-real:')
-    test_hermitian(D, k, tau, eigs_tol, exp_tol)
-    test_non_hermitian(D, k, tau, eigs_tol, exp_tol)
+    test_hermitian(D=D, k=k, tau=tau, eigs_tol=eigs_tol, exp_tol=exp_tol)
+    test_non_hermitian(D=D, k=k, tau=tau, eigs_tol=eigs_tol, exp_tol=exp_tol)
     print('\ntau-imag:')
-    test_hermitian(D, k, 1j*tau, eigs_tol, exp_tol)
-    test_non_hermitian(D, k, 1j*tau, eigs_tol, exp_tol)
+    test_hermitian(D=D, k=k, tau=1j*tau, eigs_tol=eigs_tol, exp_tol=exp_tol)
+    test_non_hermitian(D=D, k=k, tau=1j*tau,
+                       eigs_tol=eigs_tol, exp_tol=exp_tol)
 
 
 if __name__ == '__main__':
