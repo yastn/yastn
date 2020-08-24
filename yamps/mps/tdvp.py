@@ -2,20 +2,23 @@ import logging
 import numpy as np
 from yamps.mps.env3 import Env3
 from yamps.tensor.eigs import expmw
-#################################
-#           tdvp                #
-#################################
+
+
+class FatalError(Exception):
+    pass
 
 
 logger = logging.getLogger('yamps.tensor.tdvp')
 
 
+#################################
+#           tdvp                #
+#################################
+
+
 def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, cutoff_dE=1e-9, hermitian=True, fermionic=False, k=4, eigs_tol=1e-14, exp_tol=1e-14, dtype='complex128', bi_orth=True, NA=None, version='1site', opts_svd=None, optsK_svd=None):
     # evolve with TDVP method, up to tmax and initial guess of the time step dt
-    # meaure_O - list of things to measure e.g.  [2,[OL, OR], [1,2,3]] -
-    # measure exp.  val of 2-site operator OL, OR on sites (1,2), (2,3), (3,4)
     # opts - optional info for MPS truncation
-    sweep = 0
     curr_t = 0
     if not env and H:
         env = Env3(bra=psi, op=H, ket=psi)
@@ -25,25 +28,24 @@ def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, cutoff_dE=1e-9, hermit
         dE = cutoff_dE + 1
     else:
         E0, dE = 0, 0
-
     while abs(curr_t) < abs(tmax):
         dt = min([abs(tmax - curr_t)/abs(dt), 1.]) * dt
         if not H and not M:
-            logger.error('yamps.tdvp: Neither Hamiltonian nor Kraus operators defined.')
+            logger.error(
+                'yamps.tdvp: Neither Hamiltonian nor Kraus operators defined.')
         else:
             if version == '2site':
                 env = tdvp_sweep_2site(psi=psi, H=H, M=M, dt=dt, env=env, dtype=dtype, hermitian=hermitian, fermionic=fermionic,
                                        k=k, eigs_tol=eigs_tol, exp_tol=exp_tol, bi_orth=bi_orth, NA=NA, opts_svd=opts_svd, optsK_svd=optsK_svd)
             elif version == '2site_group':
-                env = tdvp_sweep_2site(psi=psi, H=H, M=M, dt=dt, env=env, dtype=dtype, hermitian=hermitian, fermionic=fermionic,
-                                       k=k, eigs_tol=eigs_tol, exp_tol=exp_tol, bi_orth=bi_orth, NA=NA, opts_svd=opts_svd, optsK_svd=optsK_svd)
+                env = tdvp_sweep_2site_group(psi=psi, H=H, M=M, dt=dt, env=env, dtype=dtype, hermitian=hermitian, fermionic=fermionic,
+                                             k=k, eigs_tol=eigs_tol, exp_tol=exp_tol, bi_orth=bi_orth, NA=NA, opts_svd=opts_svd, optsK_svd=optsK_svd)
             else:
                 env = tdvp_sweep_1site(psi=psi, H=H, M=M, dt=dt, env=env, dtype=dtype, hermitian=hermitian, fermionic=fermionic,
                                        k=k, eigs_tol=eigs_tol, exp_tol=exp_tol, bi_orth=bi_orth, NA=NA, opts_svd=opts_svd, optsK_svd=optsK_svd)
-
         E = env.measure()
         dE = abs(E - E0)
-        print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE, ' D: ', max(psi.get_D()))
+        #print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE, ' D: ', max(psi.get_D()))
         E0 = E
         curr_t += dt
     return env, E, dE
@@ -52,6 +54,7 @@ def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, cutoff_dE=1e-9, hermit
 def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, dtype='complex128', hermitian=True, fermionic=False, k=4, eigs_tol=1e-14, exp_tol=1e-14, bi_orth=True, NA=None, opts_svd=None, optsK_svd=None):
     r"""
     Perform sweep with 1site-TDVP by applying exp(-i*dt*H) on initial vector. Note the convention for time step sign.
+    Procedure performs exponantiation: psi(dt) = exp( dt * H )*psi(0). For Hamiltonian real time evolution forward in time: sign(dt)= -1j, for Hamiltonian imaginary time evolution forward in time: sign(dt)= -1.. For Hamiltonian real time evolution forward in time: sign(dt)= -1j, for Hamiltonian imaginary time evolution forward in time: sign(dt)= -1.
     Assume input psi is right canonical.
     Sweep consists of iterative updates from last site to first and back to the first one.
 
@@ -69,11 +72,9 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, dtype='complex128',
         default = None
         initial overlap <psi| H |psi>
         initial environments must be set up with respect to the last site.
-
     dt: double
-        default = 1. (real time evolution, forward in time)
+        default = 1
         time interval for matrix expontiation. May be divided into smaller intervals according to the cost function.
-        sign(dt) = +1j for imaginary time evolution.
     dtype: str
         default='complex128'
         Type of Tensor.
@@ -110,9 +111,6 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, dtype='complex128',
     psi: Mps
         Is self updated.
     """
-    # change. adjust the sign according to the convention
-    sgn = 1j * (np.sign(dt.real) + 1j * np.sign(dt.imag))
-    dt = sgn * abs(dt)
 
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
@@ -154,7 +152,7 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, dtype='complex128',
                 init = expmw(Av=lambda v: env.Heff0(v, psi.pC), init=[
                              init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, dtype=dtype, NA=NA)
             psi.A[psi.pC] = init[0]
-        psi.absorb_central(towards=psi.g.last)
+            psi.absorb_central(towards=psi.g.last)
 
     for n in psi.g.sweep(to='first'):
         init = psi.A[n]
@@ -192,7 +190,7 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, dtype='complex128',
                 init = expmw(Av=lambda v: env.Heff0(v, psi.pC), init=[
                              init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, dtype=dtype, NA=NA)
             psi.A[psi.pC] = init[0]
-        psi.absorb_central(towards=psi.g.first)
+            psi.absorb_central(towards=psi.g.first)
 
     return env
 
@@ -200,6 +198,7 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, dtype='complex128',
 def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, dtype='complex128', hermitian=True, fermionic=False, k=4, eigs_tol=1e-14, exp_tol=1e-14, bi_orth=True, NA=None, opts_svd=None, optsK_svd=None):
     r"""
     Perform sweep with 2site-TDVP.
+    Procedure performs exponantiation: psi(dt) = exp( dt * H )*psi(0). For Hamiltonian real time evolution forward in time: sign(dt)= -1j, for Hamiltonian imaginary time evolution forward in time: sign(dt)= -1.
     Assume input psi is right canonical.
     Sweep consists of iterative updates from last site to first and back to the first one.
 
@@ -218,9 +217,8 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, dtype='complex128',
         initial overlap <psi| H |psi>
         initial environments must be set up with respect to the last site.
     dt: double
-        default = 1. (real time evolution, forward in time)
+        default = 1
         time interval for matrix expontiation. May be divided into smaller intervals according to the cost function.
-        sign(dt) = +1j for imaginary time evolution
     dtype: str
         default='complex128'
         Type of Tensor.
@@ -257,9 +255,6 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, dtype='complex128',
     psi: Mps
         Is self updated.
     """
-    # change. adjust the sign according to the convention
-    sgn = 1j * (np.sign(dt.real) + 1j * np.sign(dt.imag))
-    dt = sgn * abs(dt)
 
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
@@ -354,9 +349,10 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, dtype='complex128',
     return env
 
 
-def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1., env=None, dtype='complex128', hermitian=True, fermionic=False, k=4, eigs_tol=1e-14, exp_tol=1e-14, bi_orth=True, NA=None, opts_svd=None, optsK_svd=None):
+def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, dtype='complex128', hermitian=True, fermionic=False, k=4, eigs_tol=1e-14, exp_tol=1e-14, bi_orth=True, NA=None, opts_svd=None, optsK_svd=None):
     r"""
     Perform sweep with 2site-TDVP with grouping neigbouring sites.
+    Procedure performs exponantiation: psi(dt) = exp( dt * H )*psi(0). For Hamiltonian real time evolution forward in time: sign(dt)= -1j, for Hamiltonian imaginary time evolution forward in time: sign(dt)= -1.
     Assume input psi is right canonical.
     Sweep consists of iterative updates from last site to first and back to the first one.
 
@@ -375,9 +371,8 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1., env=None, dtype='comple
         initial overlap <psi| H |psi>
         initial environments must be set up with respect to the last site.
     dt: double
-        default = 1. (real time evolution, forward in time)
+        default = 1
         time interval for matrix expontiation. May be divided into smaller intervals according to the cost function.
-        sign(dt) = +1j for imaginary time evolution.
     dtype: str
         default='complex128'
         Type of Tensor.
@@ -414,9 +409,6 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1., env=None, dtype='comple
     psi: Mps
         Is self updated.
     """
-    # change. adjust the sign according to the convention
-    sgn = 1j * (np.sign(dt.real) + 1j * np.sign(dt.imag))
-    dt = sgn * abs(dt)
 
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)

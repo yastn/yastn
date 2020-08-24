@@ -1029,7 +1029,7 @@ class Tensor:
             self.A = cA
         return self
 
-    def transpose(self, axes):
+    def transpose(self, axes=(1,0)):
         """
         Return transposed tensor.
 
@@ -1516,7 +1516,6 @@ class Tensor:
             conj: tuple
                 shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
         """
-
         try:
             a_con = tuple(axes[0])  # contracted legs
         except TypeError:

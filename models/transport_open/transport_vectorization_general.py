@@ -6,9 +6,6 @@ import yamps.mps.measure as measure
 # Dirac basis: cp_c, c_cp, c, cp
 
 def generate_discretization(NL, w0, wS, mu, v, dV, tempL, tempR, method, ordered, gamma):
-    muL = +0.5 * mu
-    muR = -0.5 * mu
-
     if method == 0:  # spatial 1d to energy modes via sine-transformation.
         kk = np.arange(1, NL + 1, 1)
         ww = 2. * w0 * np.cos(kk * np.pi / (NL + 1))
@@ -16,15 +13,14 @@ def generate_discretization(NL, w0, wS, mu, v, dV, tempL, tempR, method, ordered
 
         LSR = np.concatenate(
             (-1 + np.zeros(NL), np.array([2]), +1 + np.zeros(NL)))  # -1,0,1 = L,S,R
-        wk = np.concatenate((ww - muL, np.array([0]), ww - muR + 1e-14))
+        wk = np.concatenate((ww - mu*.5, np.array([0]), ww + mu*.5 + 1e-14))
         vk = np.concatenate((vk, np.array([0]), vk))
-        dV = np.concatenate(
-            (-dV * .5 + np.zeros(NL), np.array([0]), +dV * .5 + np.zeros(NL)))
+        dV = np.concatenate((-dV * .5 + np.zeros(NL), np.array([0]), +dV * .5 + np.zeros(NL)))
         temp = np.concatenate(
             (tempL + np.zeros(NL), np.array([0]), tempR + np.zeros(NL)))
         gamma = np.zeros(NL*2+1)+gamma
         #
-        wk_tmp = np.concatenate((ww, np.array([0]), ww + 1e-14))
+        wk_tmp = np.concatenate((ww - 1e-14, np.array([0]), ww + 1e-14))
     elif method == 1:  # Minimal model with uniform spacing and constant coupling to S
         W = 4*w0
         dw = W/NL
@@ -33,15 +29,14 @@ def generate_discretization(NL, w0, wS, mu, v, dV, tempL, tempR, method, ordered
 
         LSR = np.concatenate(
             (-1 + np.zeros(NL), np.array([2]), +1 + np.zeros(NL)))  # -1,0,1 = L,S,R
-        wk = np.concatenate((ww - muL, np.array([0]), ww - muR + 1e-14))
+        wk = np.concatenate((ww - mu*.5, np.array([0]), ww + mu*.5 + 1e-14))
         vk = np.concatenate((vk, np.array([0]), vk))
-        dV = np.concatenate(
-            (-dV * .5 + np.zeros(NL), np.array([0]), +dV * .5 + np.zeros(NL)))
+        dV = np.concatenate((-dV * .5 + np.zeros(NL), np.array([0]), +dV * .5 + np.zeros(NL)))
         temp = np.concatenate(
             (tempL + np.zeros(NL), np.array([0]), tempR + np.zeros(NL)))
         gamma = np.zeros(NL*2+1)+gamma
         #
-        wk_tmp = np.concatenate((ww, np.array([0]), ww + 1e-14))
+        wk_tmp = np.concatenate((ww - 1e-14, np.array([0]), ww + 1e-14))
 
     if ordered:  # sort by energy before applying mu
         id = np.argsort(wk_tmp)
@@ -52,7 +47,7 @@ def generate_discretization(NL, w0, wS, mu, v, dV, tempL, tempR, method, ordered
         temp = temp[id]
         gamma = gamma[id]
 
-    wk[list(LSR).index(2)] = wS
+    wk[list(LSR).index(2)] = wS+1e-15
 
     return LSR, wk, temp, vk, dV, gamma
 

@@ -309,7 +309,7 @@ def current_ccp(tensor_type, LSR, vk, cut, basis):
         if cut == 'LS':
             v = (.5*1j)*vk[n] if LSR[n] == -1 else 0
         elif cut == 'SR':
-            v = (-.5*1j)*vk[n] if LSR[n] == +1 else 0
+            v = (.5*1j)*vk[n] if LSR[n] == +1 else 0
         #
         if n == 0:
             H.A[n] = tensor.block(
@@ -326,13 +326,13 @@ def current_ccp(tensor_type, LSR, vk, cut, basis):
                                    (0, 1): c1_right, (0, 2): c2_right, (0, 3): ii}, common_legs=(1))
         elif n > n1 and n != N - 1:
             H.A[n] = tensor.block({(-3, 0): ii,
-                                   (-2, 0): v*c2_left, (-2, 1): z1,
-                                   (-1, 0): -v*c1_left, (-1, 2): z2,
+                                   (-2, 0): -v*c2_left, (-2, 1): z1,
+                                   (-1, 0): v*c1_left, (-1, 2): z2,
                                    (0, 3): ii}, common_legs=(1))
         elif n == N - 1:
             H.A[n] = tensor.block({(-3, 0): ii,
-                                   (-2, 0): v*c2_left,
-                                   (-1, 0): -v*c1_left,
+                                   (-2, 0): -v*c2_left,
+                                   (-1, 0): v*c1_left,
                                    (0, 0): oo}, common_legs=(1))
     return H
 
@@ -344,9 +344,9 @@ def current_XY(tensor_type, LSR, vk, cut, basis):
     #
     ii = vector_into_Tensor(tensor_type, vii, 0)
     x_right = vector_into_Tensor(tensor_type, (vcp+vc), 0)
-    y_right = vector_into_Tensor(tensor_type, 1j*(vcp-vc), 0)
+    y_right = vector_into_Tensor(tensor_type, (1j*(vcp-vc)).real, 0)
     x_left = vector_into_Tensor(tensor_type, (vcp+vc), 1)
-    y_left = vector_into_Tensor(tensor_type, 1j*(vcp-vc), 1)
+    y_left = vector_into_Tensor(tensor_type, (1j*(vcp-vc)).real, 1)
     z = vector_into_Tensor(tensor_type, vz, 1)
     oo = ii*0
     if cut == 'LS':
@@ -362,7 +362,7 @@ def current_XY(tensor_type, LSR, vk, cut, basis):
         if cut == 'LS':
             v = (.25)*vk[n] if LSR[n] == -1 else 0
         elif cut == 'SR':
-            v = (-.25)*vk[n] if LSR[n] == +1 else 0
+            v = (.25)*vk[n] if LSR[n] == +1 else 0
         #
         if n == 0:
             H.A[n] = tensor.block(
@@ -379,13 +379,13 @@ def current_XY(tensor_type, LSR, vk, cut, basis):
                                    (0, 1): c1_right, (0, 2): c2_right, (0, 3): ii}, common_legs=(1))
         elif n > n1 and n != N - 1:
             H.A[n] = tensor.block({(-3, 0): ii,
-                                   (-2, 0): v*c2_left, (-2, 1): z,
-                                   (-1, 0): -v*c1_left, (-1, 2): z,
+                                   (-2, 0): -v*c2_left, (-2, 1): z,
+                                   (-1, 0): v*c1_left, (-1, 2): z,
                                    (0, 3): ii}, common_legs=(1))
         elif n == N - 1:
             H.A[n] = tensor.block({(-3, 0): ii,
-                                   (-2, 0): v*c2_left,
-                                   (-1, 0): -v*c1_left,
+                                   (-2, 0): -v*c2_left,
+                                   (-1, 0): v*c1_left,
                                    (0, 0): oo}, common_legs=(1))
     return H
 
