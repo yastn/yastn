@@ -1,5 +1,6 @@
 import logging
 import h5py
+import time
 import numpy as np
 import yamps.mps as mps
 import transport_vectorization as main_fun
@@ -24,7 +25,7 @@ def transport(main, basis, tensor):
     # tensor - tensor type: full, Z2 or U1
     #
     # MODEL
-    NL = 3
+    NL = 16
     NS = 1
     w0 = 1
     v = .5
@@ -34,26 +35,25 @@ def transport(main, basis, tensor):
     gamma = 1.  # dissipation rate
     temp = 0.025  # temperature
     distribution = 0
-    # how to arrange modes. 
+    # how to arrange modes.
     # 0-spatial 1d to energy modes via sine-transformation.
     # 1-uniform spacing through W=4*w0. Are not places on the very corners of W.
-    ordered = True  # order basis for mps/mpo
+    ordered = False  # order basis for mps/mpo
 
     # MPS
     tensor_type = main.get_tensor_type(basis)
     tol_svd = 1e-6
-    D_total = 16
+    D_total = 64
     io = [.5]  # initial occupation on the impurity
 
     # algorithm
     dt = .125 # time step - time step for single tdvp
-    tmax = 20. # total time
+    tmax = 100. # total time
     opts_svd = {'tol': tol_svd, 'D_total': D_total}
-    eigs_tol = 1e-12
 
     # STORAGE
     directory = 'models/transport_open/'
-    name = directory+'test_full'
+    name = directory+'test_full_Dirac'+'_Dtot_'+str(D_total)
     name_txt = name+'_output.txt'
 
     # SAVE information about simulation
@@ -83,9 +83,9 @@ def transport(main, basis, tensor):
     psi.canonize_sweep(to='first')
 
     # compress MPO
-    H.canonize_sweep(to='last', normalize=False)
-    H.sweep_truncate(to='first', opts={'tol': 1e-12}, normalize=False)
-    H.canonize_sweep(to='last', normalize=False)
+    #H.canonize_sweep(to='last', normalize=False)
+    #H.sweep_truncate(to='first', opts={'tol': 1e-12}, normalize=False)
+    #H.canonize_sweep(to='last', normalize=False)
     # trace rho
     trace_rho = main.identity(tensor_type=tensor_type, N=psi.N, basis=basis)
 
@@ -109,6 +109,7 @@ def transport(main, basis, tensor):
     qt = 0
 
     max_steps = int((abs(tmax)/abs(dt)).real)+10
+    cpu_time = np.zeros(max_steps)
     Es = np.zeros(max_steps)
     occ_L = np.zeros(max_steps)
     occ_S = np.zeros(max_steps)
@@ -126,6 +127,7 @@ def transport(main, basis, tensor):
     Nocc, _ = general.measure_overlaps(psi, OP_Nocc, norm=trace_rho)
     Nocc=Nocc.real
     # SAVE
+    cpu_time[it_step] = time.time()
     Es[it_step] = E
     occ_L[it_step] = nl
     occ_S[it_step] = ns
@@ -137,10 +139,10 @@ def transport(main, basis, tensor):
 
     # PRINT
     print('Time: ', round(abs(qt), 4), ' Dmax: ', Dmax, ' E = ', E, ' Tot_Occ= ', round(nl+ns+nr, 4), ' JLS=', jls, ' JSR=', jsr, ' NL=', round(nl, 5), ' NS=', round(ns, 5), ' NR=', round(nr, 5))
-    with open(name_txt, 'w') as f:
-        print(qt, 1., E, jls, jsr, nl, ns, nr, file=f)
-    # EXPORT
-    export = {'Es': Es, 'occ_L': occ_L, 'occ_S': occ_S, 'occ_R': occ_R, 'curr_LS': curr_LS, 'curr_SR': curr_SR, 'Ds': Ds, 'occ': occ}
+    with open(name_txt, 'a') as f:
+        print(qt, 1, E, jls, jsr, nl, ns, nr, cpu_time[it_step], file=f)
+   # EXPORT
+    export = {'Es': Es, 'cpu_time': cpu_time, 'occ_L': occ_L, 'occ_S': occ_S, 'occ_R': occ_R, 'curr_LS': curr_LS, 'curr_SR': curr_SR, 'Ds': Ds, 'occ': occ}
     with h5py.File(name + '_output.h5', 'w') as f:
         f.create_group('measurements')
         for inm, ival in export.items():
@@ -149,31 +151,23 @@ def transport(main, basis, tensor):
     #
     while abs(qt) < abs(tmax):
         #
-        if it_step < len(init_steps) and it_step%25 < 3:
-            version = '2site_group'
-        else:
-            version = '1site'
-        if 1==0:
-            if it_step%100 < 1:
-                dmrg=True
-            else:
-                dmrg = False
-        #
+        version = '2site_group'
         if dmrg:
             ddt = dt
             _, _, _ = mps.dmrg.dmrg_OBC(psi=psi, H=LdagL, version=version, cutoff_sweep=1, eigs_tol=eigs_tol, hermitian=hermitian,  opts_svd=opts_svd)
         else:
+            eigs_tol = 1e-13
             if it_step<len(init_steps):
-                exp_tol = 1e-14 # REported to be unstable for exp_tol lower than 1e-9
-                eigs_tol = 1e-14
                 ddt = dt*2**(-init_steps[it_step])
+                opts_svd['tol'] = tol_svd*.001
+                opts_svd['D_total'] = int(1.5*D_total)
+                exp_tol = 1e-14
             else:
-                exp_tol = 1e-8
-                eigs_tol = 1e-10
                 ddt = dt
-            env, _, _ = mps.tdvp.tdvp_OBC(psi=psi, tmax=sgn*ddt, dt=sgn*ddt, H=H, env=env, version=version, eigs_tol=eigs_tol, exp_tol=exp_tol,  dtype=tensor_type[1], hermitian=hermitian,  opts_svd=opts_svd)
-        #for n in range(psi.N):
-        #    print(n, ':', psi.A[n].to_numpy(),'\n')
+                opts_svd['tol'] = tol_svd
+                opts_svd['D_total'] = D_total
+                exp_tol = tol_svd*.01
+            env, _, _ = mps.tdvp.tdvp_OBC(psi=psi, tmax=sgn*ddt, dt=sgn*ddt, H=H, env=env, version=version, eigs_tol=eigs_tol, exp_tol=exp_tol, hermitian=hermitian,  opts_svd=opts_svd)
         qt += abs(ddt)
         # MEASURE
         Dmax = max(psi.get_D())
@@ -184,6 +178,7 @@ def transport(main, basis, tensor):
         Nocc, _ = general.measure_overlaps(psi, OP_Nocc, norm=trace_rho)
         Nocc=Nocc.real
         # SAVE
+        cpu_time[it_step] = time.time()-cpu_time[0]
         Es[it_step] = E
         occ_L[it_step] = nl
         occ_S[it_step] = ns
@@ -195,9 +190,9 @@ def transport(main, basis, tensor):
         # PRINT
         print('Time: ', round(abs(qt), 4), ' Dmax: ', Dmax, ' E = ', E, ' N = ', norm, ' Tot_Occ= ', round(nl+ns+nr, 4), ' JLS=', jls, ' JSR=', jsr, ' NL=', round(nl, 5), ' NS=', round(ns, 5), ' NR=', round(nr, 5))
         with open(name_txt, 'a') as f:
-            print(qt, Dmax, E, jls, jsr, nl, ns, nr, file=f)
+            print(qt, Dmax, E, jls, jsr, nl, ns, nr, cpu_time[it_step], file=f)
         # EXPORT
-        export = {'Es': Es, 'occ_L': occ_L, 'occ_S': occ_S, 'occ_R': occ_R, 'curr_LS': curr_LS, 'curr_SR': curr_SR, 'Ds': Ds, 'occ': occ}
+        export = {'Es': Es, 'cpu_time': cpu_time, 'occ_L': occ_L, 'occ_S': occ_S, 'occ_R': occ_R, 'curr_LS': curr_LS, 'curr_SR': curr_SR, 'Ds': Ds, 'occ': occ}
         if it_step%100 == 0:
             with h5py.File(name + '_output.h5', 'w') as f:
                 f.create_group('measurements')
@@ -229,9 +224,9 @@ def transport_U1(choice):
 
 if __name__ == "__main__":
     # pass
-    transport_full('Majorana'); print()
-    #transport_full('Dirac'); print()
-    #transport_Z2('Majorana'); print()
-    #transport_Z2('Dirac'); print()
-    #transport_U1('Majorana'); print()
-    #transport_U1('Dirac'); print()
+    transport_full('Majorana')
+    #transport_full('Dirac')
+    #transport_Z2('Majorana')
+    #transport_Z2('Dirac')
+    #transport_U1('Majorana')
+    #transport_U1('Dirac')

@@ -261,11 +261,20 @@ def generate_vectorized_basis(basis):
 
 
 def stack_MPOs(UP, DOWN):
+    new = UP.copy()
     for it in range(UP.N):
         tmp = ncon([DOWN.A[it], UP.A[it]], [[-1, 1, -3, -5], [-2, 1, -4, -6]], [1, 0])
         tmp, _ = tmp.group_legs(axes=(4, 5), new_s=-1)
-        UP.A[it], _ = tmp.group_legs(axes=(0, 1), new_s=1)
-    return UP
+        new.A[it], _ = tmp.group_legs(axes=(0, 1), new_s=1)
+    return new
+
+
+def stack_mpo_mps(mpo, mps):
+    for it in range(mps.N):
+        tmp = ncon([mps.A[it], mpo.A[it]], [[-2, 1, -5], [-1, -3, 1, -4]], [0, 0])
+        tmp, _ = tmp.group_legs(axes=(3, 4), new_s=-1)
+        mps.A[it], _ = tmp.group_legs(axes=(0, 1), new_s=1)
+    return mps
 
 
 # SAVE
@@ -281,15 +290,15 @@ def measure_overlaps(psi, list_of_ops, norm=None):
         norm = measure.measure_overlap(psi, norm)
     else:
         norm = 1.
-    out = [None]*len(list_of_ops)
+    out = np.zeros(len(list_of_ops))
     for n in range(len(out)):
-        out[n] = measure.measure_overlap(bra=psi, ket=list_of_ops[n])/norm
-    return out
+        out[n] = measure.measure_overlap(bra=psi, ket=list_of_ops[n])
+    return out/norm, norm
 
 
 def measure_MPOs(psi, list_of_ops):
     norm = measure.measure_overlap(bra=psi, ket=psi)
-    out = [None]*len(list_of_ops)
+    out = np.zeros(len(list_of_ops))
     for n in range(len(out)):
-        out[n] = measure.measure_mpo(bra=psi, op=list_of_ops[n], ket=psi)/norm
-    return out
+        out[n] = measure.measure_mpo(bra=psi, op=list_of_ops[n], ket=psi)
+    return out/norm, norm

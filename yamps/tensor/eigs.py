@@ -16,12 +16,11 @@ _select_dtype = {'float64': np.float64,
                  'complex128': np.complex128}
 
 
-def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype='complex128', NA=None, cost_estim=0):
-    dtype = _select_dtype[dtype]
-    return expA(Av=Av, Bv=Bv, init=init, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k,
-                              hermitian=hermitian, bi_orth=bi_orth,  dtype=dtype, NA=NA, cost_estim=cost_estim)
+def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=0):
+    return expA(Av=Av, Bv=Bv, init=init, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=hermitian, bi_orth=bi_orth, NA=NA, cost_estim=cost_estim)
 
-def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype=np.complex128, NA=None, cost_estim=1):
+
+def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=1):
     if not hermitian and not Bv:
         logger.exception(
             'expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
@@ -104,8 +103,7 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
     # Iterate until we reach the final t
     while tnow < tout:
         # Compute the exponential of the augmented matrix
-        err, evec, good = eigs(Av=Av, Bv=Bv, init=w, tol=eigs_tol, k=m,
-                               hermitian=hermitian, bi_orth=bi_orth,  dtype=dtype, tau=(tau.real, sgn))
+        err, evec, good = eigs(Av=Av, Bv=Bv, init=w, tol=eigs_tol, k=m, hermitian=hermitian, bi_orth=bi_orth, tau=(tau.real, sgn))
         happy = good[0]
         j = good[1]
 
@@ -182,25 +180,23 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
     return (w[0], step, j, tnow,)
 
 
-def eigs(Av, init, Bv=None, tau=None, tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype=np.complex128):
+def eigs(Av, init, Bv=None, tau=None, tol=1e-14, k=5, hermitian=False, bi_orth=True):
     # solve eigenproblem using Lanczos
     norm = init[0].norm()
     init = [(1. / it.norm())*it for it in init]
     if hermitian:
-        val, Y, good = lanczos_her(
-            Av=Av, init=init[0], k=k, tol=tol, dtype=dtype, tau=tau)
+        val, Y, good = lanczos_her(Av=Av, init=init[0], k=k, tol=tol, tau=tau)
     else:
-        val, Y, good = lanczos_nher(Av=Av, Bv=Bv, init=init, k=k,
-                            tol=tol, bi_orth=bi_orth, dtype=dtype, tau=tau)
+        val, Y, good = lanczos_nher(Av=Av, Bv=Bv, init=init, k=k, tol=tol, bi_orth=bi_orth, tau=tau)
     return val, [norm*Y[it] for it in range(len(Y))], good
 
 
-def lanczos_her(Av, init, tau=None, tol=1e-14, k=5, dtype=np.complex128):
+def lanczos_her(Av, init, tau=None, tol=1e-14, k=5):
     # Lanczos algorithm for hermitian matrices
     beta = None
     Q = [None] * (k + 1)
-    a = np.zeros(k + 1, dtype=dtype)
-    b = np.zeros(k + 1, dtype=dtype)
+    a = np.zeros(k + 1, dtype=init.conf.dtype)
+    b = np.zeros(k + 1, dtype=init.conf.dtype)
     #
     Q[0] = init
     r = Av(Q[0])
@@ -231,12 +227,12 @@ def lanczos_her(Av, init, tau=None, tol=1e-14, k=5, dtype=np.complex128):
     return val, Y, (happy, len(a))
 
 
-def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, dtype=np.complex128, bi_orth=True):
+def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, bi_orth=True):
     # Lanczos algorithm for non-hermitian matrices
     beta = None
-    a = np.zeros(k + 1, dtype=dtype)
-    b = np.zeros(k + 1, dtype=dtype)
-    c = np.zeros(k + 1, dtype=dtype)
+    a = np.zeros(k + 1, dtype=init[0].conf.dtype)
+    b = np.zeros(k + 1, dtype=init[0].conf.dtype)
+    c = np.zeros(k + 1, dtype=init[0].conf.dtype)
     Q = [None] * (k + 1)
     P = [None] * (k + 1)
     #

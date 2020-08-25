@@ -34,7 +34,7 @@ def test_hermitian(D, k, tau, eigs_tol, exp_tol):
     A *= (1./A.norm())
     v *= (1./v.norm())
     out = tensor.expmw(Av=Av, init=[v], Bv=Bv, dt=tau, eigs_tol=eigs_tol, exp_tol=exp_tol, k=kp,
-                       hermitian=hermitian, dtype=A.conf.dtype, cost_estim=cost_estim)
+                       hermitian=hermitian, cost_estim=cost_estim)
     w = out[0]
     A = A.to_numpy()
     A = A.reshape((A.shape[0]*A.shape[1], A.shape[2]*A.shape[3]))
@@ -60,7 +60,7 @@ def test_hermitian(D, k, tau, eigs_tol, exp_tol):
     A *= (1./A.norm())
     v *= (1./v.norm())
     out = tensor.expmw(Av=Av, init=[v], Bv=Bv, dt=tau, eigs_tol=eigs_tol, exp_tol=exp_tol, k=kp,
-                       hermitian=hermitian, dtype=A.conf.dtype, cost_estim=cost_estim)
+                       hermitian=hermitian, cost_estim=cost_estim)
     w = out[0]
     A = A.to_numpy()
     A = A.reshape((A.shape[0]*A.shape[1], A.shape[2]*A.shape[3]))
@@ -86,7 +86,7 @@ def test_hermitian(D, k, tau, eigs_tol, exp_tol):
     A *= (1./A.norm())
     v *= (1./v.norm())
     out = tensor.expmw(Av=Av, init=[v], Bv=Bv, dt=tau, eigs_tol=eigs_tol, exp_tol=exp_tol, k=kp,
-                       hermitian=hermitian, dtype=A.conf.dtype, cost_estim=cost_estim)
+                       hermitian=hermitian, cost_estim=cost_estim)
     w = out[0]
     A = A.to_numpy()
     A = A.reshape((A.shape[0]*A.shape[1], A.shape[2]*A.shape[3]))
@@ -121,7 +121,7 @@ def test_non_hermitian(D, k, tau, eigs_tol, exp_tol):
     A *= (1./A.norm())
     v *= (1./v.norm())
     out = tensor.expmw(Av=Av, init=[v], Bv=Bv, dt=tau, eigs_tol=eigs_tol, exp_tol=exp_tol, k=kp,
-                       hermitian=hermitian, dtype=A.conf.dtype, cost_estim=cost_estim)
+                       hermitian=hermitian, cost_estim=cost_estim)
     w = out[0]
     A = A.to_numpy()
     A = A.reshape((A.shape[0]*A.shape[1], A.shape[2]*A.shape[3]))
@@ -146,7 +146,7 @@ def test_non_hermitian(D, k, tau, eigs_tol, exp_tol):
     A *= (1./A.norm())**k
     v *= (1./v.norm())
     out = tensor.expmw(Av=Av, init=[v], Bv=Bv, dt=tau, eigs_tol=eigs_tol, exp_tol=exp_tol, k=kp,
-                       hermitian=hermitian, dtype=A.conf.dtype, cost_estim=cost_estim)
+                       hermitian=hermitian, cost_estim=cost_estim)
     w = out[0]
     A = A.to_numpy()
     A = A.reshape((A.shape[0]*A.shape[1], A.shape[2]*A.shape[3]))
@@ -171,7 +171,7 @@ def test_non_hermitian(D, k, tau, eigs_tol, exp_tol):
     A *= (1./A.norm())
     v *= (1./v.norm())
     out = tensor.expmw(Av=Av, init=[v], Bv=Bv, dt=tau, eigs_tol=eigs_tol, exp_tol=exp_tol, k=kp,
-                       hermitian=hermitian, dtype=A.conf.dtype, cost_estim=cost_estim)
+                       hermitian=hermitian, cost_estim=cost_estim)
     w = out[0]
     A = A.to_numpy()
     A = A.reshape((A.shape[0]*A.shape[1], A.shape[2]*A.shape[3]))
