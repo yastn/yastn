@@ -16,17 +16,16 @@ _select_dtype = {'float64': np.float64,
                  'complex128': np.complex128}
 
 
-def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=0):
+def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=1):
     return expA(Av=Av, Bv=Bv, init=init, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=hermitian, bi_orth=bi_orth, NA=NA, cost_estim=cost_estim)
 
 
-def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=1):
+def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_estim):
     if not hermitian and not Bv:
         logger.exception(
             'expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
         raise FatalError
     k_max = min([20, init[0].get_size()])
-    #k_max = init[0].get_size()
     if not NA:
         # n - cost of vector init
         # NA - cost of matrix Av
@@ -268,7 +267,7 @@ def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, bi_orth=True):
         s = Bv(P[it+1])
         r = r.apxb(Q[it], x=-c[it])
         s = s.apxb(P[it], x=-b[it].conj())
-    if beta == None:
+    if beta==None:
         a[it+1] = P[it+1].scalar(r)
         r = r.apxb(Q[it+1], x=-a[it+1])
         s = s.apxb(P[it+1], x=-a[it+1].conj())
@@ -313,7 +312,7 @@ def enlarged_aug_mat(T, p, dtype):
 def solve_tridiag(a, b, Q, c=None, P=None, tau=None, beta=None, hermitian=False):
     p = 1  # order of the Phi-function
     dtype = Q[0].conf.dtype
-    if tau and beta != None:
+    if tau and beta!=None:
         if hermitian:
             T = make_tridiag(a=a, b=b, c=b)
         else:
