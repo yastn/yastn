@@ -75,7 +75,7 @@ class Env2:
         elif self.nr_phys == 2 and leg == 1:
             self.F[(n, nnext)] = self.F[(nprev, n)].dot(self.bra.A[n], axes=((0),(0)), conj=(0,1)).dot(self.ket.A[n], axes=((0,1,2),(0,1,2)))
         else:  # self.nr_phys == 2 and leg == 0:
-            self.F[(n, nnext)] = self.ket.A[n].dot(self.F[(nprev, n)], axes=((3),(0))).dot(self.ket.A[n], axes=((1,2,3),(1,2,3)))
+            self.F[(n, nnext)] = self.ket.A[n].dot(self.F[(nprev, n)], axes=((3),(0))).dot(self.bra.A[n], axes=((1,2,3),(1,2,3)), conj=(0,1))
 
     def setup_to_last(self):
         r"""

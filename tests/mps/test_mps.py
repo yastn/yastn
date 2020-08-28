@@ -220,9 +220,9 @@ def test_Z2_env3_update():
 
 
 if __name__ == "__main__":
+    #pass
     test_full_copy()
     test_Z2_copy()
-    #pass
-    # test_full_canonize()
-    # test_Z2_canonize()
-    # test_full_env2_update()
+    test_full_canonize()
+    test_Z2_canonize()
+    test_full_env2_update()
