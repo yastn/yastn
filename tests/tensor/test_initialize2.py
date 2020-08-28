@@ -109,6 +109,7 @@ def test_set1():
 def test_set2():
     print('----------')
     print('3d tensor: ')
+    settings_Z2_U1.dtype = 'float64'
     a = tensor.ones(settings=settings_Z2_U1, s=(-1, 1, 1),
                     t=((0, 1), (0, 2), 0, (-2, 2), (0, 1), (-2, 0, 2)),
                     D=((1, 2), (1, 2), 1, (1, 2), (2, 3), (1, 2, 3)))

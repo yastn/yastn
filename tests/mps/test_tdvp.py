@@ -170,7 +170,6 @@ def test_OBC_tdvp():
     version = '1site'
     psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
     psi.canonize_sweep(to='first')
-    print()
     _, E, _ = mps.tdvp.tdvp_OBC(
         psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
     print('1site: Energy - Eref= ', E-Eng_gs)
@@ -178,7 +177,6 @@ def test_OBC_tdvp():
     version = '2site'
     psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
     psi.canonize_sweep(to='first')
-    print()
     _, E, _ = mps.tdvp.tdvp_OBC(
         psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
     print('2site: Energy - Eref= ', E-Eng_gs)
@@ -186,7 +184,6 @@ def test_OBC_tdvp():
     version = '2site_group'
     psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
     psi.canonize_sweep(to='first')
-    print()
     _, E, _ = mps.tdvp.tdvp_OBC(
         psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
     print('2site_group: Energy - Eref= ', E-Eng_gs)
