@@ -14,10 +14,11 @@ def run_tdvp_1site(psi, H, dt, sweeps,  Eng_gs, opts=None):
 
     for _ in range(sweeps):
         env = mps.tdvp.tdvp_sweep_1site(
-            psi, H, env=env, dt=dt, hermitian=True, fermionic=False, opts_svd=opts, eigs_tol=1e-12, exp_tol=1e-12)
+            psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
         norm = mps.measure.measure_overlap(psi, psi)
         Eng = env.measure()/norm
         print('1site: Energy err = ', Eng-Eng_gs, ' Eg = ', Eng)
+    assert 1. - abs(Eng/Eng_gs) < .1
     return Eng
 
 
@@ -29,10 +30,11 @@ def run_tdvp_2site(psi, H, dt, sweeps,  Eng_gs, opts=None):
 
     for _ in range(sweeps):
         env = mps.tdvp.tdvp_sweep_2site(
-            psi, H, env=env, dt=dt, hermitian=True, fermionic=False, opts_svd=opts, eigs_tol=1e-12, exp_tol=1e-12)
+            psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
         norm = mps.measure.measure_overlap(psi, psi)
         Eng = env.measure()/norm
         print('2site: Energy err = ', Eng-Eng_gs, ' Eg = ', Eng)
+    assert 1. - abs(Eng/Eng_gs) < .1
     return Eng
 
 
@@ -44,10 +46,11 @@ def run_tdvp_2site_group(psi, H, dt, sweeps,  Eng_gs, opts=None):
 
     for _ in range(sweeps):
         env = mps.tdvp.tdvp_sweep_2site_group(
-            psi, H, env=env, dt=dt, hermitian=True, fermionic=False, opts_svd=opts, eigs_tol=1e-12, exp_tol=1e-12)
+            psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
         norm = mps.measure.measure_overlap(psi, psi)
         Eng = env.measure()/norm
         print('2site_group: Energy err = ', Eng-Eng_gs, ' Eg = ', Eng)
+    assert 1. - abs(Eng/Eng_gs) < .1
     return Eng
 
 
@@ -55,28 +58,28 @@ def test_full_tdvp():
     """
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
-    N = 8
-    D_total = 16
-    dt = -.125
-    sweeps = 3
+    N = 3
+    D_total = 8
+    dt = -.25
+    sweeps = 15
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
-    Eng_gs = -4.758770483143633
+    Eng_gs = -1.4142135610633282
 
     H = ops_full.mpo_XX_model(N=N, t=1, mu=0)
 
     psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
     psi.canonize_sweep(to='first')
-    Eng = run_tdvp_1site(psi, H, dt=dt, sweeps=sweeps,
+    _ = run_tdvp_1site(psi, H, dt=dt, sweeps=sweeps,
                          opts=opts_svd, Eng_gs=Eng_gs)
 
     psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
     psi.canonize_sweep(to='first')
-    Eng = run_tdvp_2site(psi, H, dt=dt, sweeps=sweeps,
+    _ = run_tdvp_2site(psi, H, dt=dt, sweeps=sweeps,
                          opts=opts_svd, Eng_gs=Eng_gs)
 
     psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
     psi.canonize_sweep(to='first')
-    Eng = run_tdvp_2site_group(
+    _ = run_tdvp_2site_group(
         psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_gs)
 
 
@@ -84,74 +87,68 @@ def test_Z2_tdvp():
     """
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
-    N = 8
-    D_total = 16
-    dt = .125*1j  # sign dt = +1j for imaginary time evolution
-    sweeps = 1
+    N = 3
+    D_total = 8
+    dt = -.25
+    sweeps = 15
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
-    Eng_parity0 = -4.758770483143633
-    Eng_parity1 = -4.411474127809773
-    Eng_gs = -4.758770483143633
+    Eng_parity0 = -1.4142135623730947
+    Eng_parity1 = -1.4142135623730938
 
     H = ops_Z2.mpo_XX_model(N=N, t=1, mu=0)
 
     psi = ops_Z2.mps_random(N=N, Dblock=D_total, total_parity=0)
     psi.canonize_sweep(to='first')
-    Eng = run_tdvp_1site(psi, H, dt=dt, sweeps=sweeps,
+    _ = run_tdvp_1site(psi, H, dt=dt, sweeps=sweeps,
                          opts=opts_svd, Eng_gs=Eng_parity0)
 
     psi = ops_Z2.mps_random(N=N, Dblock=D_total, total_parity=1)
     psi.canonize_sweep(to='first')
-    Eng = run_tdvp_1site(psi, H, dt=dt, sweeps=sweeps,
+    _ = run_tdvp_1site(psi, H, dt=dt, sweeps=sweeps,
                          opts=opts_svd, Eng_gs=Eng_parity1)
 
     psi = ops_Z2.mps_random(N=N, Dblock=D_total, total_parity=0)
     psi.canonize_sweep(to='first')
-    Eng = run_tdvp_2site(psi, H, dt=dt, sweeps=sweeps,
-                         opts=opts_svd, Eng_gs=Eng_gs)
+    _ = run_tdvp_2site(psi, H, dt=dt, sweeps=sweeps,
+                         opts=opts_svd, Eng_gs=Eng_parity0)
 
     psi = ops_Z2.mps_random(N=N, Dblock=D_total, total_parity=0)
     psi.canonize_sweep(to='first')
-    Eng = run_tdvp_2site_group(
-        psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_gs)
+    _ = run_tdvp_2site_group(
+        psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_parity0)
 
 
 def test_U1_tdvp():
     """
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
-    N = 8
-    D_total = 16
-    dt = -.125
-    sweeps = 1
+    N = 4
+    D_total = 8
+    dt = -.25
+    sweeps = 15
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
-    Eng_parity0 = -4.758770483143633
-    Eng_parity1 = -4.411474127809773
-    Eng_gs = -4.758770483143633
+    Eng_ch1 = -1.6180339886438018
+    Eng_ch2 = -2.2360679246823536
 
     H = ops_U1.mpo_XX_model(N=N, t=1, mu=0)
 
-    psi = ops_U1.mps_random(N=N, Dblocks=[8, 16, 8], total_charge=5)
+    psi = ops_U1.mps_random(N=N, Dblocks=[2, 4, 2], total_charge=1)
     psi.canonize_sweep(to='first')
-    Eng = run_tdvp_1site(psi, H, dt=dt, sweeps=sweeps,
-                         opts=opts_svd, Eng_gs=Eng_parity0)
+    _ = run_tdvp_1site(psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_ch1)
 
-    psi = ops_U1.mps_random(N=N, Dblocks=[8, 16, 8], total_charge=5)
+    psi = ops_U1.mps_random(N=N, Dblocks=[2, 4, 2], total_charge=2)
     psi.canonize_sweep(to='first')
-    Eng = run_tdvp_1site(psi, H, dt=dt, sweeps=sweeps,
-                         opts=opts_svd, Eng_gs=Eng_parity1)
+    _ = run_tdvp_1site(psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_ch2)
 
-    psi = ops_U1.mps_random(N=N, Dblocks=[8, 16, 8], total_charge=5)
+    psi = ops_U1.mps_random(N=N, Dblocks=[2, 4, 2], total_charge=1)
     psi.canonize_sweep(to='first')
-    Eng = run_tdvp_2site(psi, H, dt=dt, sweeps=sweeps,
-                         opts=opts_svd, Eng_gs=Eng_gs)
+    _ = run_tdvp_2site(psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_ch1)
 
-    psi = ops_U1.mps_random(N=N, Dblocks=[8, 16, 8], total_charge=5)
+    psi = ops_U1.mps_random(N=N, Dblocks=[2, 4, 2], total_charge=1)
     psi.canonize_sweep(to='first')
-    Eng = run_tdvp_2site_group(
-        psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_gs)
+    _ = run_tdvp_2site_group(psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_ch1)
 
 
 def test_OBC_tdvp():
