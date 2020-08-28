@@ -13,7 +13,7 @@ def run_dmrg_0site(psi, H, Etarget, sweeps=10):
     env = None
     for _ in range(sweeps):
         env = mps.dmrg.dmrg_sweep_0site(psi, H, env=env)
-    Eng = env.measure()
+    Eng = env.measure().real
     assert pytest.approx(Eng) == Etarget
     return Eng
 
@@ -25,34 +25,34 @@ def run_dmrg_1site(psi, H, Etarget, sweeps=10):
     env = None
     for _ in range(sweeps):
         env = mps.dmrg.dmrg_sweep_1site(psi, H, env=env)
-    Eng = env.measure()
+    Eng = env.measure().real
     assert pytest.approx(Eng) == Etarget
     return Eng
 
 
 def run_dmrg_2site(psi, H, Etarget, sweeps=10, D_total=32):
     """
-    Run a faw sweeps of dmrg_1site_sweep. Returns energy
+    Run a faw sweeps of dmrg_2site_sweep. Returns energy
     """
     env = None
     opts_svd = {'tol': 1e-8, 'D_total': D_total}
     for _ in range(sweeps):
         env = mps.dmrg.dmrg_sweep_2site(psi, H, env=env, opts_svd=opts_svd)
-    Eng = env.measure()
+    Eng = env.measure().real
     assert pytest.approx(Eng) == Etarget
     return Eng
 
 
 def run_dmrg_2site_group(psi, H, Etarget, sweeps=10, D_total=32):
     """
-    Run a faw sweeps of dmrg_1site_sweep. Returns energy
+    Run a faw sweeps of dmrg_2site_group_sweep. Returns energy
     """
     env = None
     opts_svd = {'tol': 1e-8, 'D_total': D_total}
     for _ in range(sweeps):
         env = mps.dmrg.dmrg_sweep_2site_group(
             psi, H, env=env, opts_svd=opts_svd)
-    Eng = env.measure()
+    Eng = env.measure().real
     assert pytest.approx(Eng) == Etarget
     return Eng
 
