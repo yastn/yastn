@@ -89,16 +89,16 @@ def dmrg_OBC(psi, H, env=None, version='1site', cutoff_sweep=1, cutoff_dE=-1, he
     while sweep < cutoff_sweep and dE > cutoff_dE:
         if version == '0site':
             env = dmrg_sweep_0site(psi, H=H, env=env, k=k,
-                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd)
+                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
         elif version == '2site':
             env = dmrg_sweep_2site(psi, H=H, env=env, k=k,
-                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd)
+                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
         elif version == '2site_group':
             env = dmrg_sweep_2site_group(
-                psi, H=H, env=env, k=k, hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd)
-        else:
+                psi, H=H, env=env, k=k, hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
+        else:  # 1site
             env = dmrg_sweep_1site(psi, H=H, env=env, k=k,
-                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd)
+                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
         E = env.measure()
         dE = abs(E - E0)
         print('Iteration: ', sweep, ' energy: ', E,

@@ -202,7 +202,7 @@ def eigh(Av, init, tol=1e-14, k=5, algorithm='arnoldi'):
         T, Q, _, good = arnoldi(Av=Av, init=init[0], k=k, tol=tol)
     else:  # Lanczos
         T, Q, _, good = lanczos_her(Av=Av, init=init[0], k=k, tol=tol)
-    val, Y = eigs_aug(T=T, Q=Q, hermitian=False)
+    val, Y = eigs_aug(T=T, Q=Q, hermitian=True)
     return val, [norm*Y[it] for it in range(len(Y))], good
 
 
@@ -383,8 +383,7 @@ def eigs_aug(T, Q, P=None, hermitian=True):
     dtype = Q[0].conf.dtype
     Y = [None] * len(Q)
     if hermitian:
-        m, n = LA.eigh(T, right=True)
-        val, vr = m.astype(dtype), n.astype(dtype)
+        val, vr = LA.eigh(T)
         for it in range(len(Q)):
             sit = vr[:, it]
             for i1 in sit.nonzero()[0]:
@@ -395,7 +394,7 @@ def eigs_aug(T, Q, P=None, hermitian=True):
             Y[it] *= (1./Y[it].norm())
     else:
         m, n, p = LA.eig(T, left=True, right=True)
-        val, vl, vr = m.astype(dtype), n.astype(dtype), p.astype(dtype)
+        #val, vl, vr = m.astype(dtype), n.astype(dtype), p.astype(dtype)
         for it in range(len(Q)):
             sit = vr[:, it]
             for i1 in sit.nonzero()[0]:
