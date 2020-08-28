@@ -72,5 +72,5 @@ def time_U1_dmrg():
 
 if __name__ == "__main__":
     # pass
-    # time_full_dmrg()
+    time_full_dmrg()
     time_U1_dmrg()
