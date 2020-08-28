@@ -153,17 +153,17 @@ def test_U1_dmrg():
     psi = ops_U1.mps_random(N=N, Dblocks=[8, 16, 8], total_charge=3)
     psi.canonize_sweep(to='first')
     Eng = run_dmrg_2site(psi, H, Eng_parity1, D_total=D_total)
-    print('Energy = ', Eng)
+    print('2site: Energy = ', Eng)
 
     psi = ops_U1.mps_random(N=N, Dblocks=[8, 16, 8], total_charge=4)
     psi.canonize_sweep(to='first')
     Eng = run_dmrg_2site(psi, H, Eng_parity0, D_total=D_total)
-    print('Energy = ', Eng)
+    print('2site: Energy = ', Eng)
 
-    psi = ops_U1.mps_random(N=N, Dblocks=[8, 16, 8], total_charge=5)
+    psi = ops_U1.mps_random(N=N, Dblocks=[8, 16, 8], total_charge=3)
     psi.canonize_sweep(to='first')
-    Eng = run_dmrg_2site(psi, H, Eng_parity1, D_total=D_total)
-    print('Energy = ', Eng)
+    Eng = run_dmrg_2site_group(psi, H, Eng_parity1, D_total=D_total)
+    print('2site group: Energy = ', Eng)
 
 
 def test_OBC_dmrg():
