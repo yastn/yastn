@@ -174,7 +174,6 @@ def test_OBC_dmrg():
     D_total = 8
     cutoff_sweep = 1
     cutoff_dE = 1e-9
-    dtype = 'float64'
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
     H = ops_full.mpo_XX_model(N=N, t=1, mu=0)
