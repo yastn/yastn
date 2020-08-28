@@ -43,17 +43,19 @@ def transport(main, basis, tensor, filename):
     # MPS
     tensor_type = main.get_tensor_type(basis)
     tol_svd = 1e-6
-    D_total = 256
+    D_total = 64
     io = [.5]  # initial occupation on the impurity
 
     # algorithm
+    algorithm = 'lanczos'  #'arnoldi'
     dt = .125  # time step - time step for single tdvp
-    tmax = 100.  # total time
+    tmax = 12.5  # total time
     opts_svd = {'tol': tol_svd, 'D_total': D_total}
 
     # STORAGE
     directory = 'models/transport_open/results/'
-    name = directory+filename+'_NL_'+str(NL)+'_Dtot_'+str(D_total)
+    name = directory+filename+'_NL_' + \
+        str(NL)+'_Dtot_'+str(D_total)+'_algorithm_'+algorithm
     name_txt = name+'_output.txt'
 
     # SAVE information about simulation
@@ -67,9 +69,12 @@ def transport(main, basis, tensor, filename):
             g_param.create_dataset(inm, data=ival)
 
     # EXECUTE
-    LSR, wk, temp, vk, dV, gamma = general.generate_discretization(NL=NL, w0=w0, wS=wS, mu=mu, v=v, dV=dV, tempL=temp, tempR=temp, method=distribution, ordered=ordered, gamma=gamma)
-    psi = main.thermal_state(tensor_type=tensor_type, LSR=LSR, io=io, ww=(wk+dV), temp=temp, basis=basis)
-    LL, LdagL = main.Lindbladian_1AIM_mixed(tensor_type=tensor_type, NL=NL, LSR=LSR, wk=wk, temp=temp, vk=vk, dV=dV, gamma=gamma, basis=basis, AdagA=True)
+    LSR, wk, temp, vk, dV, gamma = general.generate_discretization(
+        NL=NL, w0=w0, wS=wS, mu=mu, v=v, dV=dV, tempL=temp, tempR=temp, method=distribution, ordered=ordered, gamma=gamma)
+    psi = main.thermal_state(tensor_type=tensor_type,
+                             LSR=LSR, io=io, ww=(wk+dV), temp=temp, basis=basis)
+    LL, LdagL = main.Lindbladian_1AIM_mixed(
+        tensor_type=tensor_type, NL=NL, LSR=LSR, wk=wk, temp=temp, vk=vk, dV=dV, gamma=gamma, basis=basis, AdagA=True)
 
     # TDVP
     H, hermitian, dmrg, version, HH, sgn = LL, False, False, None, LL, +1.
@@ -88,20 +93,27 @@ def transport(main, basis, tensor, filename):
         H.canonize_sweep(to='last', normalize=False)
         H.sweep_truncate(to='first', opts={'tol': 1e-12}, normalize=False)
         H.canonize_sweep(to='last', normalize=False)
+
     # trace rho
     trace_rho = main.identity(tensor_type=tensor_type, N=psi.N, basis=basis)
 
     # current
-    JLS = main.current(tensor_type=tensor_type, LSR=LSR, vk=-4.*np.pi*vk, cut='LS', basis=basis)
-    JSR = main.current(tensor_type=tensor_type, LSR=LSR, vk=-4.*np.pi*vk, cut='SR', basis=basis)
+    JLS = main.current(tensor_type=tensor_type, LSR=LSR,
+                       vk=-4.*np.pi*vk, cut='LS', basis=basis)
+    JSR = main.current(tensor_type=tensor_type, LSR=LSR,
+                       vk=-4.*np.pi*vk, cut='SR', basis=basis)
 
     # Occupation
-    NL = main.measure_sumOp(tensor_type=tensor_type, choice=-1, LSR=LSR, Op='nn', basis=basis)
-    NS = main.measure_sumOp(tensor_type=tensor_type, choice=2, LSR=LSR, Op='nn', basis=basis)
-    NR = main.measure_sumOp(tensor_type=tensor_type, choice=1, LSR=LSR, Op='nn', basis=basis)
+    NL = main.measure_sumOp(tensor_type=tensor_type,
+                            choice=-1, LSR=LSR, Op='nn', basis=basis)
+    NS = main.measure_sumOp(tensor_type=tensor_type,
+                            choice=2, LSR=LSR, Op='nn', basis=basis)
+    NR = main.measure_sumOp(tensor_type=tensor_type,
+                            choice=1, LSR=LSR, Op='nn', basis=basis)
     OP_Nocc = [0.]*psi.N
     for n in range(psi.N):
-        OP_Nocc[n] = main.measure_Op(tensor_type=tensor_type, N=psi.N, id=n, Op='nn', basis=basis)
+        OP_Nocc[n] = main.measure_Op(
+            tensor_type=tensor_type, N=psi.N, id=n, Op='nn', basis=basis)
 
     # EVOLUTION
     env = None
@@ -124,12 +136,15 @@ def transport(main, basis, tensor, filename):
     Dmax = max(psi.get_D())
     E, _ = general.measure_MPOs(psi, [HH])
     E = E.real
-    out, norm = general.measure_overlaps(psi, [NL, NS, NR, JLS, JSR], norm=trace_rho)
-    E, nl, ns, nr, jls, jsr = (E[0]), out[0].real, out[1].real, out[2].real, out[3].real, out[4].real
+    out, norm = general.measure_overlaps(
+        psi, [NL, NS, NR, JLS, JSR], norm=trace_rho)
+    E, nl, ns, nr, jls, jsr = (
+        E[0]), out[0].real, out[1].real, out[2].real, out[3].real, out[4].real
     Nocc, _ = general.measure_overlaps(psi, OP_Nocc, norm=trace_rho)
     Nocc = Nocc.real
     # SAVE
-    cpu_time[it_step] = time.time()
+    start = time.time()
+    cpu_time[it_step] = time.time()-start
     Es[it_step] = E
     occ_L[it_step] = nl
     occ_S[it_step] = ns
@@ -140,11 +155,13 @@ def transport(main, basis, tensor, filename):
     occ[it_step, :] = Nocc
 
     # PRINT
-    print('Time: ', round(abs(qt), 4), ' Dmax: ', Dmax, ' E = ', E, ' Tot_Occ= ', round(nl+ns+nr, 4), ' JLS=', jls, ' JSR=', jsr, ' NL=', round(nl, 5), ' NS=', round(ns, 5), ' NR=', round(nr, 5))
+    print('Time: ', round(abs(qt), 4), ' Dmax: ', Dmax, ' E = ', E, ' Tot_Occ= ', round(nl+ns+nr, 4),
+          ' JLS=', jls, ' JSR=', jsr, ' NL=', round(nl, 5), ' NS=', round(ns, 5), ' NR=', round(nr, 5))
     with open(name_txt, 'a') as f:
         print(qt, 1, E, jls, jsr, nl, ns, nr, cpu_time[it_step], file=f)
     # EXPORT
-    export = {'Es': Es, 'cpu_time': cpu_time, 'occ_L': occ_L, 'occ_S': occ_S, 'occ_R': occ_R, 'curr_LS': curr_LS, 'curr_SR': curr_SR, 'Ds': Ds, 'occ': occ}
+    export = {'Es': Es, 'cpu_time': cpu_time, 'occ_L': occ_L, 'occ_S': occ_S,
+              'occ_R': occ_R, 'curr_LS': curr_LS, 'curr_SR': curr_SR, 'Ds': Ds, 'occ': occ}
     with h5py.File(name + '_output.h5', 'w') as f:
         f.create_group('measurements')
         for inm, ival in export.items():
@@ -153,12 +170,17 @@ def transport(main, basis, tensor, filename):
     #
     while abs(qt) < abs(tmax):
         #
-        version = '2site'
+        if it_step < len(init_steps) or (it_step % 25 < 3 and qt < 10.):
+            version = '2site_group'
+        else:
+            version = '1site'
         #
+        version = '2site_group'
         eigs_tol = 1e-13
         if dmrg:
             ddt = dt
-            _, _, _ = mps.dmrg.dmrg_OBC(psi=psi, H=LdagL, version=version, cutoff_sweep=1, eigs_tol=eigs_tol, hermitian=hermitian,  opts_svd=opts_svd)
+            _, _, _ = mps.dmrg.dmrg_OBC(psi=psi, H=LdagL, version=version, cutoff_sweep=1,
+                                        eigs_tol=eigs_tol, hermitian=hermitian,  opts_svd=opts_svd)
         else:
             if it_step < len(init_steps):
                 ddt = dt*2**(-init_steps[it_step])
@@ -170,18 +192,21 @@ def transport(main, basis, tensor, filename):
                 opts_svd['tol'] = tol_svd
                 opts_svd['D_total'] = D_total
                 exp_tol = tol_svd*.01
-            env, _, _ = mps.tdvp.tdvp_OBC(psi=psi, tmax=sgn*ddt, dt=sgn*ddt, H=H, env=env, version=version, eigs_tol=eigs_tol, exp_tol=exp_tol, hermitian=hermitian,  opts_svd=opts_svd)
+            env, _, _ = mps.tdvp.tdvp_OBC(psi=psi, tmax=sgn*ddt, dt=sgn*ddt, H=H, env=env, version=version,
+                                          eigs_tol=eigs_tol, exp_tol=exp_tol, hermitian=hermitian,  opts_svd=opts_svd, algorithm=algorithm)
         qt += abs(ddt)
         # MEASURE
         Dmax = max(psi.get_D())
         E, _ = general.measure_MPOs(psi, [HH])
         E = E.real
-        out, norm = general.measure_overlaps(psi, [NL, NS, NR, JLS, JSR], norm=trace_rho)
-        E, nl, ns, nr, jls, jsr = (E[0]), out[0].real, out[1].real, out[2].real, out[3].real, out[4].real
+        out, norm = general.measure_overlaps(
+            psi, [NL, NS, NR, JLS, JSR], norm=trace_rho)
+        E, nl, ns, nr, jls, jsr = (
+            E[0]), out[0].real, out[1].real, out[2].real, out[3].real, out[4].real
         Nocc, _ = general.measure_overlaps(psi, OP_Nocc, norm=trace_rho)
         Nocc = Nocc.real
         # SAVE
-        cpu_time[it_step] = time.time()-cpu_time[0]
+        cpu_time[it_step] = time.time()-start
         Es[it_step] = E
         occ_L[it_step] = nl
         occ_S[it_step] = ns
@@ -191,11 +216,13 @@ def transport(main, basis, tensor, filename):
         Ds[it_step, :] = psi.get_D()
         occ[it_step, :] = Nocc
         # PRINT
-        print('Time: ', round(abs(qt), 4), ' Dmax: ', Dmax, ' E = ', E, ' N = ', norm, ' Tot_Occ= ', round(nl+ns+nr, 4), ' JLS=', jls, ' JSR=', jsr, ' NL=', round(nl, 5), ' NS=', round(ns, 5), ' NR=', round(nr, 5))
+        print('Time: ', round(abs(qt), 4), ' Dmax: ', Dmax, ' E = ', E, ' N = ', norm, ' Tot_Occ= ', round(
+            nl+ns+nr, 4), ' JLS=', jls, ' JSR=', jsr, ' NL=', round(nl, 5), ' NS=', round(ns, 5), ' NR=', round(nr, 5))
         with open(name_txt, 'a') as f:
             print(qt, Dmax, E, jls, jsr, nl, ns, nr, cpu_time[it_step], file=f)
         # EXPORT
-        export = {'Es': Es, 'cpu_time': cpu_time, 'occ_L': occ_L, 'occ_S': occ_S, 'occ_R': occ_R, 'curr_LS': curr_LS, 'curr_SR': curr_SR, 'Ds': Ds, 'occ': occ}
+        export = {'Es': Es, 'cpu_time': cpu_time, 'occ_L': occ_L, 'occ_S': occ_S,
+                  'occ_R': occ_R, 'curr_LS': curr_LS, 'curr_SR': curr_SR, 'Ds': Ds, 'occ': occ}
         if it_step % 100 == 0:
             with h5py.File(name + '_output.h5', 'w') as f:
                 f.create_group('measurements')

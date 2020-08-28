@@ -16,11 +16,11 @@ _select_dtype = {'float64': np.float64,
                  'complex128': np.complex128}
 
 
-def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=1):
-    return expA(Av=Av, Bv=Bv, init=init, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=hermitian, bi_orth=bi_orth, NA=NA, cost_estim=cost_estim)
+def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=0, algorithm='arnoldi'):
+    return expA(Av=Av, Bv=Bv, init=init, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=hermitian, bi_orth=bi_orth, NA=NA, cost_estim=cost_estim, algorithm=algorithm)
 
 
-def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_estim):
+def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_estim, algorithm):
     if not hermitian and not Bv:
         logger.exception(
             'expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
@@ -102,7 +102,8 @@ def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_es
     # Iterate until we reach the final t
     while tnow < tout:
         # Compute the exponential of the augmented matrix
-        err, evec, good = eigs(Av=Av, Bv=Bv, init=w, tol=eigs_tol, k=m, hermitian=hermitian, bi_orth=bi_orth, tau=(tau.real, sgn))
+        err, evec, good = expm(Av=Av, Bv=Bv, init=w, tol=eigs_tol, k=m, hermitian=hermitian,
+                               bi_orth=bi_orth, tau=(sgn, tau.real), algorithm=algorithm)
         happy = good[0]
         j = good[1]
 
@@ -179,18 +180,73 @@ def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_es
     return (w[0], step, j, tnow,)
 
 
-def eigs(Av, init, Bv=None, tau=None, tol=1e-14, k=5, hermitian=False, bi_orth=True):
-    # solve eigenproblem using Lanczos
+def expm(Av, init, tau, Bv=None, tol=1e-14, k=5, algorithm='arnoldi', bi_orth=False, hermitian=True):
     norm = init[0].norm()
     init = [(1. / it.norm())*it for it in init]
-    if hermitian:
-        val, Y, good = lanczos_her(Av=Av, init=init[0], k=k, tol=tol, tau=tau)
-    else:
-        val, Y, good = lanczos_nher(Av=Av, Bv=Bv, init=init, k=k, tol=tol, bi_orth=bi_orth, tau=tau)
+    if algorithm == 'arnoldi':
+        T, Q, beta, good = arnoldi(Av=Av, init=init[0], k=k, tol=tol)
+    else:  # Lanczos
+        if hermitian:
+            T, Q, beta, good = lanczos_her(Av=Av, init=init[0], k=k, tol=tol)
+        else:
+            T, Q, P, beta, good = lanczos_nher(
+                Av=Av, Bv=Bv, init=init, k=k, tol=tol, bi_orth=bi_orth)
+    val, Y = expm_aug(T=T, Q=Q, tau=tau, beta=beta)
     return val, [norm*Y[it] for it in range(len(Y))], good
 
 
-def lanczos_her(Av, init, tau=None, tol=1e-14, k=5):
+def eigh(Av, init, tol=1e-14, k=5, algorithm='arnoldi'):
+    norm = init[0].norm()
+    init = [(1. / it.norm())*it for it in init]
+    if algorithm == 'arnoldi':
+        T, Q, _, good = arnoldi(Av=Av, init=init[0], k=k, tol=tol)
+    else:  # Lanczos
+        T, Q, _, good = lanczos_her(Av=Av, init=init[0], k=k, tol=tol)
+    val, Y = eigs_aug(T=T, Q=Q, hermitian=False)
+    return val, [norm*Y[it] for it in range(len(Y))], good
+
+
+def eig(Av, init, Bv=None, tol=1e-14, k=5, bi_orth=True, algorithm='arnoldi'):
+    norm = init[0].norm()
+    init = [(1. / it.norm())*it for it in init]
+    if algorithm == 'arnoldi':
+        T, Q, _, good = arnoldi(Av=Av, init=init[0], k=k, tol=tol)
+        P = None
+    else:  # Lanczos
+        T, Q, P, _, good = lanczos_nher(
+            Av=Av, Bv=Bv, init=init, k=k, tol=tol, bi_orth=bi_orth)
+    val, Y = eigs_aug(T=T, Q=Q, P=P, hermitian=False)
+    return val, [norm*Y[it] for it in range(len(Y))], good
+
+
+# Algorithms based on Krylov methods
+
+
+def arnoldi(Av, init, tol=1e-14, k=5):
+    # Lanczos algorithm for hermitian matrices
+    beta = None
+    Q = [None] * (k + 1)
+    H = np.zeros((k + 1, k + 1), dtype=init.conf.dtype)
+    #
+    Q[0] = init
+    for jt in range(k):
+        w = Av(Q[jt])
+        for it in range(jt+1):
+            H[it, jt] = w.scalar(Q[it])
+            w = w.apxb(Q[it], x=-H[it, jt])
+        H[jt+1, jt] = w.norm()
+        if H[jt+1, jt] < tol:
+            beta, happy = 0, True
+            break
+        Q[jt+1] = w*(1./H[jt+1, jt])
+    if beta is None:
+        beta, happy = H[jt+1, jt], 0
+    H = H[:(jt+1), :(jt+1)]
+    Q = Q[:(jt+1)]
+    return H, Q, beta, (happy, len(Q))
+
+
+def lanczos_her(Av, init, tol=1e-14, k=5):
     # Lanczos algorithm for hermitian matrices
     beta = None
     Q = [None] * (k + 1)
@@ -206,14 +262,14 @@ def lanczos_her(Av, init, tau=None, tol=1e-14, k=5):
         if b[it] < tol:
             beta, happy = 0, 1
             break
-        Q[it+1] = (1. / b[it])*r.copy()
+        Q[it+1] = (1. / b[it])*r
         r = Av(Q[it+1])
         r = r.apxb(Q[it], x=-b[it])
-    if beta == None:
+    if beta is None:
         a[it+1] = Q[it+1].scalar(r)
         r = r.apxb(Q[it+1], x=-a[it+1])
         beta = r.norm()
-        if beta<tol:
+        if beta < tol:
             beta, happy = 0, 1
             it += 1
         else:
@@ -221,12 +277,10 @@ def lanczos_her(Av, init, tau=None, tol=1e-14, k=5):
     a = a[:(it+1)]
     b = b[:(it)]
     Q = Q[:(it+1)]
-    val, Y = solve_tridiag(a=a, b=b, Q=Q, hermitian=True,
-                           tau=tau, beta=beta)
-    return val, Y, (happy, len(a))
+    return make_tridiag(a=a, b=b, c=b), Q, beta, (happy, len(a))
 
 
-def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, bi_orth=True):
+def lanczos_nher(Av, Bv, init, tol=1e-14, k=5, bi_orth=True):
     # Lanczos algorithm for non-hermitian matrices
     beta = None
     a = np.zeros(k + 1, dtype=init[0].conf.dtype)
@@ -254,8 +308,8 @@ def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, bi_orth=True):
             break
         b[it] = np.sqrt(abs(w)).real
         c[it] = w.conj() / b[it]
-        Q[it+1] = (1. / b[it])*r.copy()
-        P[it+1] = (1. / c[it].conj())*s.copy()
+        Q[it+1] = (1. / b[it])*r
+        P[it+1] = (1. / c[it].conj())*s
         # bi_orthogonalization
         if bi_orth:
             for io in range(it):
@@ -267,7 +321,7 @@ def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, bi_orth=True):
         s = Bv(P[it+1])
         r = r.apxb(Q[it], x=-c[it])
         s = s.apxb(P[it], x=-b[it].conj())
-    if beta==None:
+    if beta is None:
         a[it+1] = P[it+1].scalar(r)
         r = r.apxb(Q[it+1], x=-a[it+1])
         s = s.apxb(P[it+1], x=-a[it+1].conj())
@@ -285,9 +339,7 @@ def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, bi_orth=True):
     c = c[:(it)]
     Q = Q[:(it+1)]
     P = P[:(it+1)]
-    val, Y = solve_tridiag(a=a, b=b, c=c, Q=Q, P=P,
-                           hermitian=False, tau=tau, beta=beta)
-    return val, Y, (happy, len(a))
+    return make_tridiag(a=a, b=b, c=c), Q, P, beta, (happy, len(a))
 
 
 def make_tridiag(a, b, c):
@@ -298,60 +350,58 @@ def make_tridiag(a, b, c):
 
 def enlarged_aug_mat(T, p, dtype):
     # build elarged augment matrix following Saad idea [1992, 1998]
-    # T:
     m = len(T)
     out2 = np.zeros((m+p, m+p), dtype=dtype)
     out2[:m, :m] = T
-    # e1:
     out2[0, m] = 1.
     for n in range(p-1):
         out2[m+n, m+1] = 1.  # ?
     return out2
 
 
-def solve_tridiag(a, b, Q, c=None, P=None, tau=None, beta=None, hermitian=False):
+def expm_aug(T, Q, tau, beta, P=None):
     p = 1  # order of the Phi-function
     dtype = Q[0].conf.dtype
-    if tau and beta!=None:
-        if hermitian:
-            T = make_tridiag(a=a, b=b, c=b)
+    tau = tau[0] * tau[1]
+    phi_p = enlarged_aug_mat(T=tau*T, p=p, dtype=_select_dtype[dtype])
+    expT = LA.expm(phi_p)[:len(T), 0]
+    expT = expT/LA.norm(expT)
+    Y = None
+    for it in expT.nonzero()[0]:
+        if Y:
+            Y = Y.apxb(Q[it], x=expT[it])
         else:
-            T = make_tridiag(a=a, b=b, c=c)
-        tau = tau[0] * tau[1]
-        phi_p = enlarged_aug_mat(T=tau*T, p=p, dtype=_select_dtype[dtype])
-        expT = LA.expm(phi_p)[:len(T), 0]
-        Y = None
-        for it in expT.nonzero()[0]:
-            if Y:
-                Y = Y.apxb(Q[it], x=expT[it])
-            else:
-                Y = expT[it]*Q[it]
-        phi_p1 = enlarged_aug_mat(T=tau*T, p=p+1, dtype=_select_dtype[dtype])
-        err = LA.expm(phi_p1)
-        err = abs(beta*err[len(expT)-1, len(expT)])
-        return err, [Y]
+            Y = expT[it]*Q[it]
+    Y *= (1./Y.norm())
+    phi_p1 = enlarged_aug_mat(T=tau*T, p=p+1, dtype=_select_dtype[dtype])
+    err = LA.expm(phi_p1)
+    err = abs(beta*err[len(expT)-1, len(expT)])
+    return err, [Y]
+
+
+def eigs_aug(T, Q, P=None, hermitian=True):
+    dtype = Q[0].conf.dtype
+    Y = [None] * len(Q)
+    if hermitian:
+        m, n = LA.eigh(T, right=True)
+        val, vr = m.astype(dtype), n.astype(dtype)
+        for it in range(len(Q)):
+            sit = vr[:, it]
+            for i1 in sit.nonzero()[0]:
+                if Y[it]:
+                    Y[it] = Y[it].apxb(Q[i1], x=sit[i1])
+                else:
+                    Y[it] = sit[i1]*Q[i1]
+            Y[it] *= (1./Y[it].norm())
     else:
-        k = len(a)
-        Y = [None] * k
-        if hermitian:
-            T = make_tridiag(a=a, b=b, c=b)
-            m, n = LA.eig(T, right=True)
-            val, vr = m.astype(dtype), n.astype(dtype)
-            for it in range(k):
-                sit = vr[:, it]
-                tmp = Q[0]*(sit[0])
-                for i1 in range(1, k):
-                    tmp = tmp.apxb(Q[i1], x=sit[i1])
-                Y[it] = tmp
-        else:
-            T = make_tridiag(a=a, b=b, c=c)
-            m, n, p = LA.eig(T, left=True, right=True)
-            val, vl, vr = m.astype(dtype), n.astype(dtype), p.astype(dtype)
-            for it in range(k):
-                sit = vr[:, it]
-                tmp = Q[0]*(sit[0])
-                for i1 in range(1, k):
-                    tmp = tmp.apxb(Q[i1], x=sit[i1])
-                tmp = tmp*(1. / tmp.norm())
-                Y[it] = tmp
-        return val, Y
+        m, n, p = LA.eig(T, left=True, right=True)
+        val, vl, vr = m.astype(dtype), n.astype(dtype), p.astype(dtype)
+        for it in range(len(Q)):
+            sit = vr[:, it]
+            for i1 in sit.nonzero()[0]:
+                if Y[it]:
+                    Y[it] = Y[it].apxb(Q[i1], x=sit[i1])
+                else:
+                    Y[it] = sit[i1]*Q[i1]
+            Y[it] *= (1./Y[it].norm())
+    return val, Y
