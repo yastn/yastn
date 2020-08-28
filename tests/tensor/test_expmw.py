@@ -41,12 +41,11 @@ def test_hermitian(D, k, tau, eigs_tol, exp_tol):
     v = v.to_numpy()
     v = v.reshape((v.shape[0]*v.shape[1]))
     w = w.to_numpy()
-    w = w.reshape((w.shape[0]*w.shape[1]))
+    w = w.reshape((w.shape[0]*w.shape[1]))/LA.norm(w)
     w_np = LA.expm(tau*A).dot(v)
-    print('FULL: Average error vector entry[%]:', sum(abs(
-        (w-w_np)/LA.norm(w_np)))/len(w_np), ' diff norm[%]: ', LA.norm(w)/LA.norm(w_np)-1.)
-    assert (abs((w-w_np)/LA.norm(w_np)) < 1e-14).all()
-    assert abs(LA.norm(w)/LA.norm(w_np)-1.) < 1e-14
+    w_np *= 1./LA.norm(w_np)
+    print('FULL: Average error vector entry[%]:', sum(abs((w-w_np)))/len(w_np))
+    assert (abs((w-w_np)) < 1e-14).all()
 
     # Z2
     ts = (0, 1)
@@ -67,12 +66,11 @@ def test_hermitian(D, k, tau, eigs_tol, exp_tol):
     v = v.to_numpy()
     v = v.reshape((v.shape[0]*v.shape[1]))
     w = w.to_numpy()
-    w = w.reshape((w.shape[0]*w.shape[1]))
+    w = w.reshape((w.shape[0]*w.shape[1]))/LA.norm(w)
     w_np = LA.expm(tau*A).dot(v)
-    print('Z2: Average error vector entry[%]:', sum(abs(
-        (w-w_np)/LA.norm(w_np)))/len(w_np), ' diff norm[%]: ', LA.norm(w)/LA.norm(w_np)-1.)
-    assert (abs((w-w_np)/LA.norm(w_np)) < 1e-14).all()
-    assert abs(LA.norm(w)/LA.norm(w_np)-1.) < 1e-14
+    w_np *= 1./LA.norm(w_np)
+    print('Z2: Average error vector entry[%]:', sum(abs((w-w_np)))/len(w_np))
+    assert (abs((w-w_np)) < 1e-14).all()
 
     # U1
     ts = (-1, 0, 1)
@@ -93,12 +91,11 @@ def test_hermitian(D, k, tau, eigs_tol, exp_tol):
     v = v.to_numpy()
     v = v.reshape((v.shape[0]*v.shape[1]))
     w = w.to_numpy()
-    w = w.reshape((w.shape[0]*w.shape[1]))
+    w = w.reshape((w.shape[0]*w.shape[1]))/LA.norm(w)
     w_np = LA.expm(tau*A).dot(v)
-    print('U1: Average error vector entry[%]:', sum(abs(
-        (w-w_np)/LA.norm(w_np)))/len(w_np), ' diff norm[%]: ', LA.norm(w)/LA.norm(w_np)-1.)
-    assert (abs((w-w_np)/LA.norm(w_np)) < 1e-14).all()
-    assert abs(LA.norm(w)/LA.norm(w_np)-1.) < 1e-14
+    w_np *= 1./LA.norm(w_np)
+    print('U1: Average error vector entry[%]:', sum(abs((w-w_np)))/len(w_np))
+    assert (abs((w-w_np)) < 1e-14).all()
 
 
 @pytest.mark.parametrize("D, k, tau, eigs_tol, exp_tol", [(6, 6, 1., 1e-18, 1e-14), (6, 6, 1j*1., 1e-18, 1e-14)])
@@ -128,12 +125,11 @@ def test_non_hermitian(D, k, tau, eigs_tol, exp_tol):
     v = v.to_numpy()
     v = v.reshape((v.shape[0]*v.shape[1]))
     w = w.to_numpy()
-    w = w.reshape((w.shape[0]*w.shape[1]))
+    w = w.reshape((w.shape[0]*w.shape[1]))/LA.norm(w)
     w_np = LA.expm(tau*A).dot(v)
-    print('FULL: Average error vector entry[%]:', sum(abs(
-        (w-w_np)/LA.norm(w_np)))/len(w_np), ' diff norm[%]: ', LA.norm(w)/LA.norm(w_np)-1.)
-    assert (abs((w-w_np)/LA.norm(w_np)) < 1e-14).all()
-    assert abs(LA.norm(w)/LA.norm(w_np)-1.) < 1e-14
+    w_np *= 1./LA.norm(w_np)
+    print('FULL: Average error vector entry[%]:', sum(abs((w-w_np)))/len(w_np))
+    assert (abs((w-w_np)) < 1e-14).all()
 
     # Z2
     ts = (0, 1)
@@ -153,12 +149,11 @@ def test_non_hermitian(D, k, tau, eigs_tol, exp_tol):
     v = v.to_numpy()
     v = v.reshape((v.shape[0]*v.shape[1]))
     w = w.to_numpy()
-    w = w.reshape((w.shape[0]*w.shape[1]))
+    w = w.reshape((w.shape[0]*w.shape[1]))/LA.norm(w)
     w_np = LA.expm(tau*A).dot(v)
-    print('Z2: Average error vector entry[%]:', sum(abs(
-        (w-w_np)/LA.norm(w_np)))/len(w_np), ' diff norm[%]: ', LA.norm(w)/LA.norm(w_np)-1.)
-    assert (abs((w-w_np)/LA.norm(w_np)) < 1e-14).all()
-    assert abs(LA.norm(w)/LA.norm(w_np)-1.) < 1e-14
+    w_np *= 1./LA.norm(w_np)
+    print('Z2: Average error vector entry[%]:', sum(abs((w-w_np)))/len(w_np))
+    assert (abs((w-w_np)) < 1e-14).all()
 
     # U1
     ts = (-1, 0, 1)
@@ -178,12 +173,11 @@ def test_non_hermitian(D, k, tau, eigs_tol, exp_tol):
     v = v.to_numpy()
     v = v.reshape((v.shape[0]*v.shape[1]))
     w = w.to_numpy()
-    w = w.reshape((w.shape[0]*w.shape[1]))
+    w = w.reshape((w.shape[0]*w.shape[1]))/LA.norm(w)
     w_np = LA.expm(tau*A).dot(v)
-    print('U1: Average error vector entry[%]:', sum(abs(
-        (w-w_np)/LA.norm(w_np)))/len(w_np), ' diff norm[%]: ', LA.norm(w)/LA.norm(w_np)-1.)
-    assert (abs((w-w_np)/LA.norm(w_np)) < 1e-14).all()
-    assert abs(LA.norm(w)/LA.norm(w_np)-1.) < 1e-14
+    w_np *= 1./LA.norm(w_np)
+    print('U1: Average error vector entry[%]:', sum(abs((w-w_np)))/len(w_np))
+    assert (abs((w-w_np)) < 1e-14).all()
 
 
 def test_eigs():

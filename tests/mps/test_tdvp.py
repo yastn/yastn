@@ -14,7 +14,7 @@ def run_tdvp_1site(psi, H, dt, sweeps,  Eng_gs, opts=None):
 
     for _ in range(sweeps):
         env = mps.tdvp.tdvp_sweep_1site(
-            psi, H, env=env, dt=dt, hermitian=True, fermionic=False, opts_svd=opts)
+            psi, H, env=env, dt=dt, hermitian=True, fermionic=False, opts_svd=opts, eigs_tol=1e-12, exp_tol=1e-12)
         norm = mps.measure.measure_overlap(psi, psi)
         Eng = env.measure()/norm
         print('1site: Energy err = ', Eng-Eng_gs, ' Eg = ', Eng)
@@ -29,7 +29,7 @@ def run_tdvp_2site(psi, H, dt, sweeps,  Eng_gs, opts=None):
 
     for _ in range(sweeps):
         env = mps.tdvp.tdvp_sweep_2site(
-            psi, H, env=env, dt=dt, hermitian=True, fermionic=False, opts_svd=opts)
+            psi, H, env=env, dt=dt, hermitian=True, fermionic=False, opts_svd=opts, eigs_tol=1e-12, exp_tol=1e-12)
         norm = mps.measure.measure_overlap(psi, psi)
         Eng = env.measure()/norm
         print('2site: Energy err = ', Eng-Eng_gs, ' Eg = ', Eng)
@@ -44,7 +44,7 @@ def run_tdvp_2site_group(psi, H, dt, sweeps,  Eng_gs, opts=None):
 
     for _ in range(sweeps):
         env = mps.tdvp.tdvp_sweep_2site_group(
-            psi, H, env=env, dt=dt, hermitian=True, fermionic=False, opts_svd=opts)
+            psi, H, env=env, dt=dt, hermitian=True, fermionic=False, opts_svd=opts, eigs_tol=1e-12, exp_tol=1e-12)
         norm = mps.measure.measure_overlap(psi, psi)
         Eng = env.measure()/norm
         print('2site_group: Energy err = ', Eng-Eng_gs, ' Eg = ', Eng)
