@@ -13,6 +13,7 @@ import numpy as np
 
 
 def test_reset0():
+    settings_full.dtype = 'float64'
     print('----------')
     print('3d tensor:')
     a = tensor.ones(settings=settings_full, s=(-1, 1, 1), D=(1, 2, 3))
@@ -62,6 +63,7 @@ def test_reset0():
 
 
 def test_reset1():
+    settings_U1.dtype = 'float64'
     print('----------')
     print('4d tensor: ')
     a = tensor.ones(settings=settings_U1, s=(-1, 1, 1, 1),
@@ -138,6 +140,7 @@ def test_reset1():
 
 
 def test_reset2():
+    settings_Z2_U1.dtype = 'float64'
     print('----------')
     print('3d tensor: ')
     a = tensor.ones(settings=settings_Z2_U1, s=(-1, 1, 1),
@@ -224,7 +227,6 @@ def test_reset2():
     assert a.tset.shape == (4, 1, 2)
     assert pytest.approx(np.linalg.norm(np.diag(np.diag(npa)) - npa)) == 0
     assert a.is_symmetric()
-    
 
 def test_examples_in_reset_tensor():
     a = tensor.ones(settings=settings_U1, s=(-1, 1, 1),
