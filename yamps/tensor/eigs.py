@@ -180,6 +180,7 @@ def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_es
     return (w[0], step, j, tnow,)
 
 
+
 def expm(Av, init, tau, Bv=None, tol=1e-14, k=5, algorithm='arnoldi', bi_orth=False, hermitian=True):
     norm = init[0].norm()
     init = [(1. / it.norm())*it for it in init]
