@@ -13,16 +13,18 @@ import numpy as np
 def test_set0():
     print('----------')
     print('3d tensor:')
+    settings_full.dtype = 'complex128'
     a = tensor.Tensor(settings=settings_full, s=(-1, 1, 1))
     a.set_block(Ds=(4, 5, 6), val='randR')
     npa = a.to_numpy()
-    # assert np.iscomplexobj(npa)
+    assert np.iscomplexobj(npa)
     assert npa.shape == (4, 5, 6)
     assert a.tset.shape == (1, 3, 0)
     assert a.is_symmetric()
 
     print('----------')
     print('0d tensor:')
+    settings_full.dtype = 'float64'
     a = tensor.Tensor(settings=settings_full)  # s=()
     a.set_block(val=3)
     npa = a.to_numpy()
@@ -57,18 +59,20 @@ def test_set0():
 def test_set1():
     print('----------')
     print('4d tensor: ')
+    settings_U1.dtype = 'complex128'
     a = tensor.ones(settings=settings_U1, s=(-1, 1, 1, 1),
                     t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
                     D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
     a.set_block(ts=(-2, 0, -2, 0), val='randR')
     npa = a.to_numpy()
-    # assert np.iscomplexobj(npa)
+    assert np.iscomplexobj(npa)
     assert npa.shape == (6, 3, 6, 1)
     assert a.tset.shape == (5, 4, 1)
     assert a.is_symmetric()
 
     print('----------')
     print('0d tensor:')
+    settings_U1.dtype = 'float64'
     a = tensor.ones(settings=settings_U1)  # s=()  # t=(), D=()
     a.set_block(val=2)
     npa = a.to_numpy()
@@ -105,6 +109,7 @@ def test_set1():
 def test_set2():
     print('----------')
     print('3d tensor: ')
+    settings_Z2_U1.dtype = 'float64'
     a = tensor.ones(settings=settings_Z2_U1, s=(-1, 1, 1),
                     t=((0, 1), (0, 2), 0, (-2, 2), (0, 1), (-2, 0, 2)),
                     D=((1, 2), (1, 2), 1, (1, 2), (2, 3), (1, 2, 3)))

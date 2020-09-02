@@ -13,7 +13,7 @@ def run_dmrg_2_site(psi, H, sweeps=20, Dmax=128):
     env = None
     opts_svd = {'D_total': Dmax}
     for _ in range(sweeps):
-        env = mps.dmrg.dmrg_sweep_2site(psi, H, env=env, dtype='float64', opts_svd=opts_svd)
+        env = mps.dmrg.dmrg_sweep_2site(psi, H, env=env, opts_svd=opts_svd)
         Eng = env.measure()
         print(Eng)
     return Eng
@@ -72,5 +72,5 @@ def time_U1_dmrg():
 
 if __name__ == "__main__":
     # pass
-    # time_full_dmrg()
+    time_full_dmrg()
     time_U1_dmrg()

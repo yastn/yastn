@@ -1,5 +1,4 @@
 import logging
-from yamps.tensor import ncon
 
 
 class FatalError(Exception):
@@ -70,21 +69,13 @@ class Env2:
         nnext, leg, nprev = self.g.from_site(n, towards)
 
         if self.nr_phys == 1 and leg == 1:
-            self.F[(n, nnext)] = ncon([self.bra.A[n], self.F[(nprev, n)], self.ket.A[n]],
-                                      ((2, 3, -1), (2, 1), (1, 3, -2)),
-                                      (1, 0, 0))
+            self.F[(n, nnext)] = self.F[(nprev, n)].dot(self.bra.A[n], axes=((0),(0)), conj=(0,1)).dot(self.ket.A[n], axes=((0,1),(0,1)))
         elif self.nr_phys == 1 and leg == 0:
-            self.F[(n, nnext)] = ncon([self.ket.A[n], self.F[(nprev, n)], self.bra.A[n]],
-                                      ((-1, 2, 1), (1, 3), (-2, 2, 3)),
-                                      (0, 0, 1))
+            self.F[(n, nnext)] = self.ket.A[n].dot(self.F[(nprev, n)], axes=((2),(0))).dot(self.bra.A[n], axes=((1,2),(1,2)), conj=(0,1))
         elif self.nr_phys == 2 and leg == 1:
-            self.F[(n, nnext)] = ncon([self.bra.A[n], self.F[(nprev, n)], self.ket.A[n]],
-                                      ((2, 3, 4, -1), (2, 1), (1, 3, 4, -2)),
-                                      (1, 0, 0))
+            self.F[(n, nnext)] = self.F[(nprev, n)].dot(self.bra.A[n], axes=((0),(0)), conj=(0,1)).dot(self.ket.A[n], axes=((0,1,2),(0,1,2)))
         else:  # self.nr_phys == 2 and leg == 0:
-            self.F[(n, nnext)] = ncon([self.ket.A[n], self.F[(nprev, n)], self.bra.A[n]],
-                                      ((-1, 2, 3, 1), (1, 4), (-2, 2, 3, 4)),
-                                      (0, 0, 1))
+            self.F[(n, nnext)] = self.ket.A[n].dot(self.F[(nprev, n)], axes=((3),(0))).dot(self.bra.A[n], axes=((1,2,3),(1,2,3)), conj=(0,1))
 
     def setup_to_last(self):
         r"""
@@ -161,6 +152,6 @@ class Env2:
         nl, nr = self.g.order_neighbours(n)
 
         if self.nr_phys == 1:
-            return ncon([self.F[(nl, n)], self.ket.A[n], self.F[(nr, n)]], ((-1, 1), (1, -2, 2), (2, -3)), (0, 0, 0))
+            return self.F[(nl, n)].dot(self.ket.A[n], axes=(1, 0)).dot(self.F[(nr, n)], axes=(2, 0))
         else:
-            return ncon([self.F[(nl, n)], self.ket.A[n], self.F[(nr, n)]], ((-1, 1), (1, -2, -3, 2), (2, -4)), (0, 0, 0))
+            return self.F[(nl, n)].dot(self.ket.A[n], axes=(1, 0)).dot(self.F[(nr, n)], axes=(3, 0))

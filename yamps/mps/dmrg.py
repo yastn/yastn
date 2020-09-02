@@ -1,6 +1,7 @@
 import logging
 from yamps.mps import Env3
-from yamps.tensor import eigs
+from yamps.tensor import eig
+from yamps.tensor import eigh
 
 
 class FatalError(Exception):
@@ -15,7 +16,7 @@ logger = logging.getLogger('yamps.mps.dmrg')
 #################################
 
 
-def dmrg_OBC(psi, H, env=None, version='1site', cutoff_sweep=1, cutoff_dE=-1, dtype='complex128', hermitian=True, k=4, eigs_tol=1e-14, opts_svd=None):
+def dmrg_OBC(psi, H, env=None, version='1site', cutoff_sweep=1, cutoff_dE=-1, hermitian=True, k=4, eigs_tol=1e-14, opts_svd={}, algorithm='arnoldi'):
     r"""
     Perform dmrg on system with open boundary conditions. The version of dmrg update p[rovoded by version.
     Assume input psi is right canonical.
@@ -87,26 +88,27 @@ def dmrg_OBC(psi, H, env=None, version='1site', cutoff_sweep=1, cutoff_dE=-1, dt
     sweep = 0
     while sweep < cutoff_sweep and dE > cutoff_dE:
         if version == '0site':
-            env = dmrg_sweep_0site(psi, H=H, env=env, dtype=dtype, k=k,
-                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd)
+            env = dmrg_sweep_0site(psi, H=H, env=env, k=k,
+                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
         elif version == '2site':
-            env = dmrg_sweep_2site(psi, H=H, env=env, dtype=dtype, k=k,
-                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd)
+            env = dmrg_sweep_2site(psi, H=H, env=env, k=k,
+                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
         elif version == '2site_group':
             env = dmrg_sweep_2site_group(
-                psi, H=H, env=env, dtype=dtype, k=k, hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd)
-        else:
-            env = dmrg_sweep_1site(psi, H=H, env=env, dtype=dtype, k=k,
-                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd)
+                psi, H=H, env=env, k=k, hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
+        else:  # 1site
+            env = dmrg_sweep_1site(psi, H=H, env=env, k=k,
+                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
         E = env.measure()
         dE = abs(E - E0)
-        print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE, ' D: ', max(psi.get_D()))
+        print('Iteration: ', sweep, ' energy: ', E,
+              ' dE: ', dE, ' D: ', max(psi.get_D()))
         E0 = E
         sweep += 1
     return env, E, dE
 
 
-def dmrg_sweep_0site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, eigs_tol=1e-14, opts_svd=None):
+def dmrg_sweep_0site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts_svd={}, algorithm='arnoldi'):
     r"""
     Perform sweep with 0site-DMRG where update is made on the central site.
     Assume input psi is right canonical.
@@ -160,11 +162,11 @@ def dmrg_sweep_0site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
             init = psi.A[psi.pC]
             # update site n using eigs
             if not hermitian:
-                val, vec, _ = eigs(Av=lambda v: env.Heff0(v, psi.pC), Bv=lambda v: env.Heff0(
-                    v, psi.pC, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+                val, vec, _ = eig(Av=lambda v: env.Heff0(v, psi.pC), Bv=lambda v: env.Heff0(
+                    v, psi.pC, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
             else:
-                val, vec, _ = eigs(Av=lambda v: env.Heff0(v, psi.pC), init=[
-                                   init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+                val, vec, _ = eigh(Av=lambda v: env.Heff0(v, psi.pC), init=[
+                                   init], tol=eigs_tol, k=k, algorithm=algorithm)
             init = vec[list(val).index(min(list(val)))]
             # canonize and save
             psi.A[psi.pC] = init
@@ -178,11 +180,11 @@ def dmrg_sweep_0site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
             init = psi.A[psi.pC]
             # update site n using eigs
             if not hermitian:
-                val, vec, _ = eigs(Av=lambda v: env.Heff0(v, psi.pC), Bv=lambda v: env.Heff0(
-                    v, psi.pC, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+                val, vec, _ = eig(Av=lambda v: env.Heff0(v, psi.pC), Bv=lambda v: env.Heff0(
+                    v, psi.pC, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
             else:
-                val, vec, _ = eigs(Av=lambda v: env.Heff0(v, psi.pC), init=[
-                                   init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+                val, vec, _ = eigh(Av=lambda v: env.Heff0(v, psi.pC), init=[
+                                   init], tol=eigs_tol, k=k, algorithm=algorithm)
             init = vec[list(val).index(min(list(val)))]
             # canonize and save
             psi.A[psi.pC] = init
@@ -190,7 +192,7 @@ def dmrg_sweep_0site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
     return env
 
 
-def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, eigs_tol=1e-14, opts_svd=None):
+def dmrg_sweep_1site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts_svd={}, algorithm='arnoldi'):
     r"""
     Perform sweep with 1ite-DMRG.
     Assume input psi is right canonical.
@@ -241,11 +243,11 @@ def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
         init = psi.A[n]
         # update site n using eigs
         if not hermitian:
-            val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), Bv=lambda v: env.Heff1(
-                v, n, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eig(Av=lambda v: env.Heff1(v, n), Bv=lambda v: env.Heff1(
+                v, n, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
         else:
-            val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), init=[
-                               init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eigh(Av=lambda v: env.Heff1(v, n), init=[
+                               init], tol=eigs_tol, k=k, algorithm=algorithm)
         init = vec[list(val).index(min(list(val)))]
         # canonize and save
         psi.A[n] = init
@@ -257,11 +259,11 @@ def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
         psi.absorb_central(towards=psi.g.first)
         init = psi.A[n]
         if not hermitian:
-            val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), Bv=lambda v: env.Heff1(
-                v, n, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eig(Av=lambda v: env.Heff1(v, n), Bv=lambda v: env.Heff1(
+                v, n, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
         else:
-            val, vec, _ = eigs(Av=lambda v: env.Heff1(v, n), init=[
-                               init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eigh(Av=lambda v: env.Heff1(v, n), init=[
+                               init], tol=eigs_tol, k=k, algorithm=algorithm)
         init = vec[list(val).index(min(list(val)))]
         # canonize and save
         psi.A[n] = init
@@ -272,7 +274,7 @@ def dmrg_sweep_1site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
     return env
 
 
-def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, eigs_tol=1e-14, opts_svd={}):
+def dmrg_sweep_2site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts_svd={}, algorithm='arnoldi'):
     r"""
     Perform sweep with 2site-DMRG.
     Assume input psi is right canonical.
@@ -322,11 +324,11 @@ def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
         init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
         # update site n using eigs
         if not hermitian:
-            val, vec, _ = eigs(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(
-                v, n, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eig(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(
+                v, n, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
         else:
-            val, vec, _ = eigs(Av=lambda v: env.Heff2(v, n), init=[
-                               init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eigh(Av=lambda v: env.Heff2(v, n), init=[
+                               init], tol=eigs_tol, k=k, algorithm=algorithm)
         init = vec[list(val).index(min(list(val)))]
         # split and save
         x, S, y = init.split_svd(axes=(psi.left + psi.phys, tuple(
@@ -342,11 +344,11 @@ def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
         init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
         # update site n using eigs
         if not hermitian:
-            val, vec, _ = eigs(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(
-                v, n, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eig(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(
+                v, n, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
         else:
-            val, vec, _ = eigs(Av=lambda v: env.Heff2(v, n), init=[
-                               init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eigh(Av=lambda v: env.Heff2(v, n), init=[
+                               init], tol=eigs_tol, k=k, algorithm=algorithm)
         init = vec[list(val).index(min(list(val)))]
         # split and save
         x, S, y = init.split_svd(axes=(psi.left + psi.phys, tuple(
@@ -361,7 +363,7 @@ def dmrg_sweep_2site(psi, H, env=None, dtype='complex128', hermitian=True, k=4, 
     return env  # can be used in the next sweep
 
 
-def dmrg_sweep_2site_group(psi, H, env=None, dtype='complex128', hermitian=True, k=4, eigs_tol=1e-14, opts_svd={}):
+def dmrg_sweep_2site_group(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts_svd={}, algorithm='arnoldi'):
     r"""
     Perform sweep of two-site DMRG with groupping neigbouring sites.
     Assume input psi is right canonical.
@@ -412,11 +414,10 @@ def dmrg_sweep_2site_group(psi, H, env=None, dtype='complex128', hermitian=True,
         init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
         # update site n using eigs
         if not hermitian:
-            val, vec, _ = eigs(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(
-                v, n, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eig(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
         else:
-            val, vec, _ = eigs(Av=lambda v: env.Heff2_group(v, n), init=[
-                               init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eigh(Av=lambda v: env.Heff2_group(v, n), init=[
+                               init], tol=eigs_tol, k=k, algorithm=algorithm)
         init = vec[list(val).index(min(list(val)))]
         init = init.ungroup_leg(axis=1, leg_order=leg_order)
         # split and save
@@ -434,11 +435,11 @@ def dmrg_sweep_2site_group(psi, H, env=None, dtype='complex128', hermitian=True,
         init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
         # update site n using eigs
         if not hermitian:
-            val, vec, _ = eigs(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(
-                v, n, conj=True), init=[init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eig(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(
+                v, n, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
         else:
-            val, vec, _ = eigs(Av=lambda v: env.Heff2_group(v, n), init=[
-                               init], tol=eigs_tol, k=k, hermitian=True, dtype=dtype)
+            val, vec, _ = eigh(Av=lambda v: env.Heff2_group(v, n), init=[
+                               init], tol=eigs_tol, k=k, algorithm=algorithm)
         init = vec[list(val).index(min(list(val)))]
         init = init.ungroup_leg(axis=1, leg_order=leg_order)
         # split and save

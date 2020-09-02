@@ -1,6 +1,6 @@
 import logging
 import numpy as np
-import scipy as sp
+from scipy import linalg as LA
 import time
 import tracemalloc
 
@@ -16,24 +16,21 @@ _select_dtype = {'float64': np.float64,
                  'complex128': np.complex128}
 
 
-def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype='complex128', NA=None, cost_estim=0):
-    dtype = _select_dtype[dtype]
-    def exp_A(x): return expA(Av=Av, Bv=Bv, init=x, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k,
-                              hermitian=hermitian, bi_orth=bi_orth,  dtype=dtype, NA=NA, cost_estim=cost_estim)
-    return exp_A(init)
+def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=0, algorithm='arnoldi'):
+    return expA(Av=Av, Bv=Bv, init=init, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=hermitian, bi_orth=bi_orth, NA=NA, cost_estim=cost_estim, algorithm=algorithm)
 
 
-def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype=np.complex128, NA=None, cost_estim=1):
+def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_estim, algorithm):
     if not hermitian and not Bv:
         logger.exception(
             'expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
         raise FatalError
-    k_max = 20
+    k_max = min([20, init[0].get_size()])
     if not NA:
         # n - cost of vector init
         # NA - cost of matrix Av
         # v_i - cost of exponatiation of size m(m-krylov dim)
-        T = sp.linalg.expm(np.diag(np.random.rand(k_max-1), -1) + np.diag(
+        T = LA.expm(np.diag(np.random.rand(k_max-1), -1) + np.diag(
             np.random.rand(k_max), 0) + np.diag(np.random.rand(k_max-1), 1))
         if cost_estim == 0:  # approach 0: defaoult based on matrix size
             # in units of n
@@ -48,7 +45,7 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
             n = time.time() - start_time
 
             start_time = time.time()
-            sp.linalg.expm(T)
+            LA.expm(T)
             v_i = time.time() - start_time
 
             start_time = time.time()
@@ -66,7 +63,7 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
             tracemalloc.stop()
 
             tracemalloc.start()
-            sp.linalg.expm(T)
+            LA.expm(T)
             v_i, _ = tracemalloc.get_traced_memory()
             tracemalloc.stop()
 
@@ -78,291 +75,333 @@ def expA(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=
             n *= (1./v_i)
             NA *= (1./v_i)
             v_i = 1.
+    # Krylov parameters
+    mmax = k_max
+    m = max([1, k])
 
-    # initial values
-    qt = 0  # holds current time
+    # Initialize variables
+    step = 0
+    ireject = 0
+    reject = 0
+    happy = 0
     sgn = np.sign(dt).real*1j if dt.real == 0. else np.sign(dt).real*1
-    dt = abs(dt)
-    vec = init
-    tau = dt
-    k = max([1, k])
+    tnow = 0
+    tout = abs(dt)
+    j = 0
+    tau = abs(dt)
 
-    # safety factors
-    k_max = 10 * k
-    gamma = .8
-    max_try = 8  # Upper bound on tdvp trial iterations. Can be increased if needed
+    # Set safety factors
+    gamma = 0.8
     delta = 1.2
-    comp_q = True
-    comp_kappa = True
-    k_old = k_max
-    omega = 1e+10
-    tau_old = tau
 
-    it = 0
-    itry = 0
-    while qt < dt and itry < max_try:
-        err, evec, happy = eigs(Av=Av, Bv=Bv, init=vec, tol=eigs_tol, k=k,
-                                hermitian=hermitian, bi_orth=bi_orth,  dtype=dtype, tau=(tau.real, sgn))
-        if itry == max_try:
-            it += 1
-            qt += tau
-            vec = [evec]
-        omega_old = omega
-        omega = dt / tau * err / exp_tol
-        if (happy == 0 and err == 0) or omega_old == 0:  # < err?, omega_old==0
-            itry += 1
-            comp_q = True
-            comp_kappa = True
-            if omega_old == 0:
-                tau_new = tau
-                k_new = k
-            else:
-                tau_new = tau
-                k_new = max([1, min([k_max, int(1.3333 * k) + 1])])
+    # Initial condition
+    w = init
+    oldm, oldtau, omega = np.nan, np.nan, np.nan
+    orderold, kestold = True, True
+
+    # Iterate until we reach the final t
+    while tnow < tout:
+        # Compute the exponential of the augmented matrix
+        err, evec, good = expm(Av=Av, Bv=Bv, init=w, tol=eigs_tol, k=m, hermitian=hermitian,
+                               bi_orth=bi_orth, tau=(sgn, tau.real), algorithm=algorithm)
+        happy = good[0]
+        j = good[1]
+
+        # Error per unit step
+        oldomega = omega
+        omega = (tout/tau)*(err/exp_tol)
+
+        # Estimate order
+        if m == oldm and tau != oldtau and ireject > 0:
+            order = max([1, np.log(omega/oldomega)/np.log(tau/oldtau)])
+            orderold = False
+        elif orderold or ireject == 0:
+            orderold = True
+            order = j*.25
         else:
-            if k == k_old and tau != tau_old and itry > 0:
-                q = max(
-                    [1, np.log(omega / omega_old) / np.log(tau / tau_old)])
-                comp_q = False
-            elif comp_q or itry == 0:
-                comp_q = True
-                q = .25 * k + 1
-            else:
-                comp_q = True
+            orderold = True
 
-            if k != k_old and tau == tau_old and itry > 0:
-                kappa = max([1.1, (omega / omega_old) ** (1. / (k_old - k))])
-                comp_kappa = False
-            elif comp_kappa or itry == 0:
-                comp_kappa = True
-                kappa = 2.
-            else:
-                comp_kappa = True
+        # Estimate k
+        if m != oldm and tau == oldtau and ireject > 0:
+            kest = max([1.1, (omega/oldomega)**(1./(oldm-m))]
+                       ) if omega > 0 else 1.1
+            kestold = False
+        elif kestold or ireject == 0:
+            kestold = True
+            kest = 2
+        else:
+            kestold = True
 
-            tau_old = tau
-            k_old = k
-            if happy == 1:
-                omega = 0
-                tau_new = dt - qt
-                k_new = k  # len(eval)
-            elif k == k_max and omega > delta:
-                tau_new = tau * (omega / delta) ** (-1. / q)
-                k_new = k
+        # This if statement is the main difference between fixed and variable m
+        oldtau, oldm = tau, m
+        if happy == 1:
+            # Happy breakdown; wrap up
+            omega = 0
+            taunew, mnew = tau, m
+        elif j == mmax and omega > delta:
+            # Krylov subspace to small and stepsize to large
+            taunew, mnew = tau*(omega/gamma)**(-1./order), j
+        else:
+            # Determine optimal tau and m
+            tauopt = tau*(omega/gamma)**(-1./order)
+            mopt = max([1, np.ceil(j+np.log(omega/gamma)/np.log(kest))])
+
+            # evaluate Cost functions
+            Ctau = (m * NA + 3 * m * n + (m/mmax)**2*v_i * (10 + 3 * (m - 1))
+                    * (m + 1) ** 3) * np.ceil((tout - tnow) / tauopt)
+
+            Ck = (mopt * NA + 3 * mopt * n + (mopt/mmax)**2*v_i * (10 + 3 * (mopt - 1))
+                  * (mopt + 1) ** 3) * np.ceil((tout - tnow) / tau)
+            if Ctau < Ck:
+                taunew, mnew = tauopt, m
             else:
-                tau_opt = tau * (omega / delta) ** (-1. / q)
-                k_opt = max(
-                    [1, 1 + int(k + np.log(omega / gamma) / np.log(kappa))])
-                # evaluate cost functions for possible options
-                Ctau = (k * NA + 3 * k * n + (k/k_max)**2*v_i * (10 + 3 * (k - 1))
-                        * (k + 1) ** 3) * (int((dt - qt).real / tau_opt) + 1)
-                Ck = (k_opt * NA + 3 * k_opt * n + (k/k_max)**2*v_i * (10 + 3 * (k_opt - 1))
-                      * (k_opt + 1) ** 3) * (int((dt - qt).real / tau) + 1)
-                if Ctau < Ck:
-                    tau_new = tau_opt
-                    k_new = k
-                else:
-                    k_new = k_opt
-                    tau_new = tau
-        if omega < delta:  # use this one
-            it += 1
-            qt += tau
-            vec = [evec]
-            itry = 0
+                taunew, mnew = tau, mopt
+
+        # Check error against target
+        if omega <= delta:  # use this one
+            reject += ireject
+            step += 1
+            w = evec
+            # update time
+            tnow += tau
+            ireject = 0
         else:  # try again
-            itry += 1
-        if itry == max_try - 1:
-            it += 1
-            qt = dt
-            tau = dt - qt
-            k = k_max
-        else:
-            tau = min([dt - qt, max([.2 * tau, min([tau_new, 2 * tau])])]).real
-            k = max(
-                [1, min([k_max, max([int(.75 * k), min([k_new, int(1.3333 * k) + 1])])])]).real
-    if abs(qt/dt) < 1.:
+            ireject += 1
+
+        # Another safety factors
+        tau = min([tout - tnow, max([.2 * tau, min([taunew, 2 * tau])])])
+        m = int(
+            max([1, min([mmax, max([np.floor(.75 * m), min([mnew, np.ceil(1.3333 * m)])])])]))
+
+    if abs(tnow/tout) < 1.:
         logger.error('eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = '+omega /
-                     delta+'\nRemaining time = '+abs(1.-qt/dt)+'\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
+                     delta+'\nRemaining time = '+abs(1.-tnow/tout)+'\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
         raise FatalError
-    return (vec[0], it, k, qt,)
+    return (w[0], step, j, tnow,)
 
 
-def eigs(Av, init, Bv=None, tau=None, tol=1e-14, k=5, hermitian=False, bi_orth=True,  dtype=np.complex128):
-    # solve eigenproblem using Lanczos
-    init = [it.__mul__(1. / (it.norm(ord='fro'))) for it in init]
-    if hermitian:
-        return lanczos_her(
-            Av=Av, init=init[0], k=k, tol=tol, dtype=dtype, tau=tau)
-    else:
-        return lanczos_nher(Av=Av, Bv=Bv, init=init, k=k,
-                            tol=tol, bi_orth=bi_orth, dtype=dtype, tau=tau)
+
+def expm(Av, init, tau, Bv=None, tol=1e-14, k=5, algorithm='arnoldi', bi_orth=False, hermitian=True):
+    norm = init[0].norm()
+    init = [(1. / it.norm())*it for it in init]
+    if algorithm == 'arnoldi':
+        T, Q, beta, good = arnoldi(Av=Av, init=init[0], k=k, tol=tol)
+    else:  # Lanczos
+        if hermitian:
+            T, Q, beta, good = lanczos_her(Av=Av, init=init[0], k=k, tol=tol)
+        else:
+            T, Q, P, beta, good = lanczos_nher(
+                Av=Av, Bv=Bv, init=init, k=k, tol=tol, bi_orth=bi_orth)
+    val, Y = expm_aug(T=T, Q=Q, tau=tau, beta=beta)
+    return val, [norm*Y[it] for it in range(len(Y))], good
 
 
-def lanczos_her(Av, init, tau=None, tol=1e-14, k=5, dtype=np.complex128):
+def eigh(Av, init, tol=1e-14, k=5, algorithm='arnoldi'):
+    norm = init[0].norm()
+    init = [(1. / it.norm())*it for it in init]
+    if algorithm == 'arnoldi':
+        T, Q, _, good = arnoldi(Av=Av, init=init[0], k=k, tol=tol)
+    else:  # Lanczos
+        T, Q, _, good = lanczos_her(Av=Av, init=init[0], k=k, tol=tol)
+    val, Y = eigs_aug(T=T, Q=Q, hermitian=True)
+    return val, [norm*Y[it] for it in range(len(Y))], good
+
+
+def eig(Av, init, Bv=None, tol=1e-14, k=5, bi_orth=True, algorithm='arnoldi'):
+    norm = init[0].norm()
+    init = [(1. / it.norm())*it for it in init]
+    if algorithm == 'arnoldi':
+        T, Q, _, good = arnoldi(Av=Av, init=init[0], k=k, tol=tol)
+        P = None
+    else:  # Lanczos
+        T, Q, P, _, good = lanczos_nher(
+            Av=Av, Bv=Bv, init=init, k=k, tol=tol, bi_orth=bi_orth)
+    val, Y = eigs_aug(T=T, Q=Q, P=P, hermitian=False)
+    return val, [norm*Y[it] for it in range(len(Y))], good
+
+
+# Algorithms based on Krylov methods
+
+
+def arnoldi(Av, init, tol=1e-14, k=5):
     # Lanczos algorithm for hermitian matrices
-    beta = False
-    q = init
-    a = np.zeros(k + 1, dtype=dtype)
-    b = np.zeros(k + 1, dtype=dtype)
+    beta = None
     Q = [None] * (k + 1)
-    r = Av(q)
-    for it in range(k):
-        a[it] = q.scalar(r)
-        Q[it] = q
-        r = r.apxb(q, x=-a[it])
-        b[it] = r.norm(ord='fro')
-        if b[it] < tol:
-            beta = 0
-            happy = 1
+    H = np.zeros((k + 1, k + 1), dtype=init.conf.dtype)
+    #
+    Q[0] = init
+    for jt in range(k):
+        w = Av(Q[jt])
+        for it in range(jt+1):
+            H[it, jt] = w.scalar(Q[it])
+            w = w.apxb(Q[it], x=-H[it, jt])
+        H[jt+1, jt] = w.norm()
+        if H[jt+1, jt] < tol:
+            beta, happy = 0, True
             break
-        v = q
-        q = r.__mul__(1. / b[it])
-        r = Av(q)
-        r = r.apxb(v, x=-b[it])
-    if not beta:
-        tmp = q.scalar(r)
-        a[it + 1] = tmp
-        Q[it + 1] = q
-        r = r.apxb(q, x=-a[it + 1])
-        beta = r.norm(ord='fro')
+        Q[jt+1] = w*(1./H[jt+1, jt])
+    if beta is None:
+        beta, happy = H[jt+1, jt], 0
+    H = H[:(jt+1), :(jt+1)]
+    Q = Q[:(jt+1)]
+    return H, Q, beta, (happy, len(Q))
+
+
+def lanczos_her(Av, init, tol=1e-14, k=5):
+    # Lanczos algorithm for hermitian matrices
+    beta = None
+    Q = [None] * (k + 1)
+    a = np.zeros(k + 1, dtype=init.conf.dtype)
+    b = np.zeros(k + 1, dtype=init.conf.dtype)
+    #
+    Q[0] = init
+    r = Av(Q[0])
+    for it in range(k):
+        a[it] = Q[it].scalar(r)
+        r = r.apxb(Q[it], x=-a[it])
+        b[it] = r.norm()
+        if b[it] < tol:
+            beta, happy = 0, 1
+            break
+        Q[it+1] = (1. / b[it])*r
+        r = Av(Q[it+1])
+        r = r.apxb(Q[it], x=-b[it])
+    if beta is None:
+        a[it+1] = Q[it+1].scalar(r)
+        r = r.apxb(Q[it+1], x=-a[it+1])
+        beta = r.norm()
         if beta < tol:
-            happy = 1
+            beta, happy = 0, 1
+            it += 1
         else:
             happy = 0
-    a = a[range(it + 1)]
-    k = len(a)
-    b = b[range(k - 1)]
-    Q = Q[:k]
-    val, Y = solve_tridiag(a=a, b=b, Q=Q, hermitian=True,
-                           tau=tau, beta=beta, dtype=dtype)
-    return val, Y, happy
+    a = a[:(it+1)]
+    b = b[:(it)]
+    Q = Q[:(it+1)]
+    return make_tridiag(a=a, b=b, c=b), Q, beta, (happy, len(a))
 
 
-def lanczos_nher(Av, Bv, init, tau=None, tol=1e-14, k=5, dtype=np.complex128, bi_orth=True):
+def lanczos_nher(Av, Bv, init, tol=1e-14, k=5, bi_orth=True):
     # Lanczos algorithm for non-hermitian matrices
-    if len(init) == 1:
-        p, q = init[0], init[0]
-    else:
-        p, q = init[0], init[1]
-    beta = False
-    a = np.zeros(k + 1, dtype=dtype)
-    b = np.zeros(k + 1, dtype=dtype)
-    c = np.zeros(k + 1, dtype=dtype)
+    beta = None
+    a = np.zeros(k + 1, dtype=init[0].conf.dtype)
+    b = np.zeros(k + 1, dtype=init[0].conf.dtype)
+    c = np.zeros(k + 1, dtype=init[0].conf.dtype)
     Q = [None] * (k + 1)
     P = [None] * (k + 1)
-    r = Av(q)
-    s = Bv(p)
+    #
+    if len(init) == 1:
+        P[0], Q[0] = init[0], init[0]
+    else:
+        P[0], Q[0] = init[0], init[1]
+    r = Av(Q[0])
+    s = Bv(P[0])
     for it in range(k):
-        tmp = p.scalar(r)
-        a[it] = tmp
-        Q[it] = q
-        P[it] = p
-        if r.norm(ord='fro') < tol or s.norm(ord='fro') < tol:
-            beta = 0
-            happy = 1
+        a[it] = P[it].scalar(r)
+        r = r.apxb(Q[it], x=-a[it])
+        s = s.apxb(P[it], x=-a[it].conj())
+        if r.norm() < tol or s.norm() < tol:
+            beta, happy = 0, 1
             break
-        r = r.apxb(q, x=-a[it])
-        s = s.apxb(p, x=-a[it].conjugate())
         w = r.scalar(s)
         if abs(w) < tol:
-            beta = 0
-            happy = 1
+            beta, happy = 0, 1
             break
-        b[it] = np.sqrt(abs(w))
-        c[it] = w.conjugate() / b[it]
-        pp = p
-        qp = q
-        q = r.__mul__(1. / c[it])
-        p = s.__mul__((1. / b[it]).conjugate())
+        b[it] = np.sqrt(abs(w)).real
+        c[it] = w.conj() / b[it]
+        Q[it+1] = (1. / b[it])*r
+        P[it+1] = (1. / c[it].conj())*s
         # bi_orthogonalization
         if bi_orth:
             for io in range(it):
-                c1 = P[io].scalar(q)
-                q = q.apxb(Q[io], x=-c1)
-                c2 = Q[io].scalar(p)
-                p = p.apxb(P[io], x=-c2)
-        r = Av(q)
-        s = Bv(p)
-        r = r.apxb(qp, x=-b[it])
-        s = s.apxb(pp, x=-c[it].conjugate())
-    if not beta:
-        tmp = p.scalar(r)
-        a[it + 1] = tmp
-        Q[it + 1] = q
-        P[it + 1] = p
-        r = r.apxb(q, x=-a[it + 1])
-        s = s.apxb(p, x=-a[it + 1].conjugate())
-        w = r.scalar(s)
-        beta = np.sqrt(abs(w))
-        if beta < tol:
-            happy = 1
+                c1 = P[io].scalar(Q[it])
+                Q[it] = Q[it].apxb(Q[io], x=-c1)
+                c2 = Q[io].scalar(P[it])
+                P[it] = P[it].apxb(P[io], x=-c2)
+        r = Av(Q[it+1])
+        s = Bv(P[it+1])
+        r = r.apxb(Q[it], x=-c[it])
+        s = s.apxb(P[it], x=-b[it].conj())
+    if beta is None:
+        a[it+1] = P[it+1].scalar(r)
+        r = r.apxb(Q[it+1], x=-a[it+1])
+        s = s.apxb(P[it+1], x=-a[it+1].conj())
+        if r.norm() < tol or s.norm() < tol:
+            beta, happy = 0, 1
         else:
-            happy = 0
-    a = a[range(it + 1)]
-    k = len(a)
-    b = b[range(k - 1)]
-    c = c[range(k - 1)]
-    Q = Q[:k]
-    P = P[:k]
-    val, Y = solve_tridiag(a=a, b=b, c=c, Q=Q, V=P,
-                           hermitian=False, tau=tau, beta=beta, dtype=dtype)
-    return val, Y, happy
+            w = r.scalar(s)
+            if abs(w) < tol:
+                beta, happy = 0, 1
+                it += 1
+            else:
+                beta, happy = np.sqrt(abs(w)), 0
+    a = a[:(it+1)]
+    b = b[:(it)]
+    c = c[:(it)]
+    Q = Q[:(it+1)]
+    P = P[:(it+1)]
+    return make_tridiag(a=a, b=b, c=c), Q, P, beta, (happy, len(a))
 
 
-def make_tridiag(a, b, c=None, hermitian=False):
+def make_tridiag(a, b, c):
     # build tridiagonal matrix
-    if hermitian:
-        out = np.diag(a, 0) + np.diag(b, +1) + np.diag(b, -1)
-    else:
-        out = np.diag(a, 0) + np.diag(b, +1) + np.diag(c, -1)
+    out = np.diag(a, 0) + np.diag(b, -1) + np.diag(c, +1)
     return out
 
 
-def solve_tridiag(a, b, Q, c=None, V=None, tau=None, beta=None, hermitian=False, dtype=np.complex128):
-    # find approximate eigenvalues and eigenvectors using tridiagonal matrix
-    # and Krylov vectors Q and V
-    if tau and beta != None:
-        if hermitian:
-            T = make_tridiag(a=a, b=b, hermitian=True)
+def enlarged_aug_mat(T, p, dtype):
+    # build elarged augment matrix following Saad idea [1992, 1998]
+    m = len(T)
+    out2 = np.zeros((m+p, m+p), dtype=dtype)
+    out2[:m, :m] = T
+    out2[0, m] = 1.
+    for n in range(p-1):
+        out2[m+n, m+1] = 1.  # ?
+    return out2
+
+
+def expm_aug(T, Q, tau, beta, P=None):
+    p = 1  # order of the Phi-function
+    dtype = Q[0].conf.dtype
+    tau = tau[0] * tau[1]
+    phi_p = enlarged_aug_mat(T=tau*T, p=p, dtype=_select_dtype[dtype])
+    expT = LA.expm(phi_p)[:len(T), 0]
+    expT = expT/LA.norm(expT)
+    Y = None
+    for it in expT.nonzero()[0]:
+        if Y:
+            Y = Y.apxb(Q[it], x=expT[it])
         else:
-            T = make_tridiag(a=a, b=b, c=c)
-        # calculate new vector for expmv: expA*v
-        tau = tau[1] * tau[0]
-        expT = sp.linalg.expm(tau * T)[:, 0]
-        expT = expT / np.linalg.norm(expT)
+            Y = expT[it]*Q[it]
+    Y *= (1./Y.norm())
+    phi_p1 = enlarged_aug_mat(T=tau*T, p=p+1, dtype=_select_dtype[dtype])
+    err = LA.expm(phi_p1)
+    err = abs(beta*err[len(expT)-1, len(expT)])
+    return err, [Y]
 
-        Y = None
-        for it in expT.nonzero()[0]:
-            if Y:
-                Y = Y.__add__(expT[it] * Q[it])
-            else:
-                Y = Q[it].__mul__(expT[it])
-        Y = Y.__mul__(1. / Y.norm())
 
-        # calculate an error for expmv
-        tmp = sp.linalg.expm(tau*T)-np.identity(len(expT))
-        tmp = sum(tmp[-1, :]*np.linalg.pinv(tau*T, rcond=1e-12)[:, 0])
-        err = abs(beta*tmp)
-        return err, Y
+def eigs_aug(T, Q, P=None, hermitian=True):
+    dtype = Q[0].conf.dtype
+    Y = [None] * len(Q)
+    if hermitian:
+        val, vr = LA.eigh(T)
+        for it in range(len(Q)):
+            sit = vr[:, it]
+            for i1 in sit.nonzero()[0]:
+                if Y[it]:
+                    Y[it] = Y[it].apxb(Q[i1], x=sit[i1])
+                else:
+                    Y[it] = sit[i1]*Q[i1]
+            Y[it] *= (1./Y[it].norm())
     else:
-        k = len(a)
-        Y = [None] * k
-        if hermitian:
-            T = make_tridiag(a=a, b=b, hermitian=True)
-            val, vec = np.linalg.eig(T)
-            for it in range(k):  # yit =sum_j q_j*sit_j, right eigenvectors
-                sit = vec[:, it]
-                tmp = Q[0].__mul__(sit[0])
-                for i1 in range(1, k):
-                    tmp = tmp.apxb(Q[i1], x=sit[i1])
-                Y[it] = tmp
-        else:
-            T = make_tridiag(a=a, b=b, c=c)
-            val, vec = np.linalg.eig(T)
-            for it in range(k):  # yit =sum_j q_j*sit_j, right eigenvectors
-                sit = vec[:, it]
-                tmp = Q[0].__mul__(sit[0])
-                for i1 in range(1, k):
-                    tmp = tmp.apxb(Q[i1], x=sit[i1])
-                tmp = tmp.__mul__(1. / tmp.norm())
-                Y[it] = tmp
-        return val, Y
+        m, n, p = LA.eig(T, left=True, right=True)
+        #val, vl, vr = m.astype(dtype), n.astype(dtype), p.astype(dtype)
+        for it in range(len(Q)):
+            sit = vr[:, it]
+            for i1 in sit.nonzero()[0]:
+                if Y[it]:
+                    Y[it] = Y[it].apxb(Q[i1], x=sit[i1])
+                else:
+                    Y[it] = sit[i1]*Q[i1]
+            Y[it] *= (1./Y[it].norm())
+    return val, Y

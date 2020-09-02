@@ -40,7 +40,8 @@ class Env3:
         self.on_aux = on_aux
         self.F = {}  # dict for environments
         if self.bra.nr_phys != self.ket.nr_phys:
-            logger.error('bra and ket should have the same number of physical legs.')
+            logger.error(
+                'bra and ket should have the same number of physical legs.')
             raise FatalError
 
         # set environments at boundaries
@@ -50,12 +51,14 @@ class Env3:
 
         # left boundary
         self.F[(None, ff)] = tn.match_legs(tensors=[self.bra.A[ff], self.op.A[ff], self.ket.A[ff]],
-                                           legs=[self.bra.left[0], self.op.left[0], self.ket.left[0]],
+                                           legs=[
+                                               self.bra.left[0], self.op.left[0], self.ket.left[0]],
                                            conjs=[1, 0, 0], val='ones')
 
         # right boundary
         self.F[(None, ll)] = tn.match_legs(tensors=[self.ket.A[ll], self.op.A[ll], self.bra.A[ll]],
-                                           legs=[self.ket.right[0], self.op.right[0], self.bra.right[0]],
+                                           legs=[
+                                               self.ket.right[0], self.op.right[0], self.bra.right[0]],
                                            conjs=[0, 0, 1], val='ones')
 
     def update(self, n, towards):
@@ -73,17 +76,23 @@ class Env3:
         nnext, leg, nprev = self.g.from_site(n, towards)
 
         if self.nr_phys == 1 and leg == 1:
-            self.F[(n, nnext)] = ncon([self.bra.A[n], self.F[(nprev, n)], self.ket.A[n], self.op.A[n]], ((4, 5, -1), (4, 2, 1), (1, 3, -3), (2, 5, 3, -2)), (1, 0, 0, 0))
+            self.F[(n, nnext)] = self.F[(nprev, n)].dot(self.bra.A[n], axes=((0), (0)), conj=(0, 1)).dot(
+                self.op.A[n], axes=((0, 2), (0, 1))).dot(self.ket.A[n], axes=((0, 2), (0, 1)))
         elif self.nr_phys == 1 and leg == 0:
-            self.F[(n, nnext)] = ncon([self.ket.A[n], self.F[(nprev, n)], self.op.A[n], self.bra.A[n]], ((-1, 2, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 4, 5)), (0, 0, 0, 1))
+            self.F[(n, nnext)] = self.ket.A[n].dot(self.F[(nprev, n)], axes=((2), (0))).dot(
+                self.op.A[n], axes=((1, 2), (2, 3))).dot(self.bra.A[n], axes=((3, 1), (1, 2)), conj=(0, 1))
         elif self.nr_phys == 2 and leg == 1 and not self.on_aux:
-            self.F[(n, nnext)] = ncon([self.bra.A[n], self.F[(nprev, n)], self.ket.A[n], self.op.A[n]], ((4, 5, 6, -1), (4, 2, 1), (1, 3, 6, -3), (2, 5, 3, -2)), (1, 0, 0, 0))
+            self.F[(n, nnext)] = ncon([self.bra.A[n], self.F[(nprev, n)], self.ket.A[n], self.op.A[n]], ((
+                4, 5, 6, -1), (4, 2, 1), (1, 3, 6, -3), (2, 5, 3, -2)), (1, 0, 0, 0))
         elif self.nr_phys == 2 and leg == 0 and not self.on_aux:
-            self.F[(n, nnext)] = ncon([self.ket.A[n], self.F[(nprev, n)], self.op.A[n], self.bra.A[n]], ((-1, 2, 6, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 4, 6, 5)), (0, 0, 0, 1))
+            self.F[(n, nnext)] = ncon([self.ket.A[n], self.F[(nprev, n)], self.op.A[n], self.bra.A[n]],
+                                      ((-1, 2, 6, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 4, 6, 5)), (0, 0, 0, 1))
         elif self.nr_phys == 2 and leg == 1 and self.on_aux:
-            self.F[(n, nnext)] = ncon([self.bra.A[n], self.F[(nprev, n)], self.ket.A[n], self.op.A[n]], ((4, 6, 5, -1), (4, 2, 1), (1, 6, 3, -3), (2, 5, 3, -2)), (1, 0, 0, 0))
+            self.F[(n, nnext)] = ncon([self.bra.A[n], self.F[(nprev, n)], self.ket.A[n], self.op.A[n]], ((
+                4, 6, 5, -1), (4, 2, 1), (1, 6, 3, -3), (2, 5, 3, -2)), (1, 0, 0, 0))
         else:  # self.nr_phys == 2 and leg == 0 and self.on_aux:
-            self.F[(n, nnext)] = ncon([self.ket.A[n], self.F[(nprev, n)], self.op.A[n], self.bra.A[n]], ((-1, 6, 2, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 6, 4, 5)), (0, 0, 0, 1))
+            self.F[(n, nnext)] = ncon([self.ket.A[n], self.F[(nprev, n)], self.op.A[n], self.bra.A[n]],
+                                      ((-1, 6, 2, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 6, 4, 5)), (0, 0, 0, 1))
 
     def setup_to_last(self):
         r"""
@@ -160,11 +169,10 @@ class Env3:
             Heff0 * C
         """
         bd = self.g.order_bond(bd)
-        
-        if not conj:
-            return ncon([self.F[bd], C, self.F[bd[::-1]]], ((1, 2, -1), (1, 3), (-2, 2, 3)), (0, 1, 0)).conj()
+        if conj:
+            return self.F[bd].dot(C, axes=((0), (0)), conj=(0, 1)).dot(self.F[bd[::-1]], axes=((0, 2), (1, 2))).conj()
         else:
-            return ncon([self.F[bd], C, self.F[bd[::-1]]], ((-1, 2, 1), (1, 3), (3, 2, -2)), (0, 0, 0))
+            return self.F[bd].dot(C, axes=((2), (0))).dot(self.F[bd[::-1]], axes=((1, 2), (1, 0)))
 
     def Heff1(self, A, n, conj=False):
         r"""Action of Heff on central site.
@@ -186,14 +194,14 @@ class Env3:
         nl, nr = self.g.order_neighbours(n)
         if conj:
             if self.nr_phys == 1:
-                return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((1, 2, -1), (1, 3, 4), (2, 3, -2, 5), (-3, 5, 4)), (0, 1, 0, 0)).conj()
+                return self.F[(nl, n)].dot(A, axes=((0), (0)), conj=(0,1)).dot(self.op.A[n], axes=((0, 2), (0, 1))).dot(self.F[(nr, n)], axes=((1, 3), (2, 1))).conj()
             elif self.nr_phys == 2:
                 return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((1, 2, -1), (1, 3, -3, 4), (2, 3, -2, 5), (-4, 5, 4)), (0, 1, 0, 0)).conj()
             else:  # self.nr_phys == 2 and self.on_aux:
                 return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((1, 2, -1), (1, -2, 3, 4), (2, 3, -3, 5), (-4, 5, 4)), (0, 1, 0, 0)).conj()
         else:
             if self.nr_phys == 1:
-                return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))
+                return self.F[(nl, n)].dot(A, axes=((2), (0))).dot(self.op.A[n], axes=((1, 2), (0, 2))).dot(self.F[(nr, n)], axes=((1, 3), (0, 1)))
             elif self.nr_phys == 2 and not self.on_aux:
                 return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((-1, 2, 1), (1, 3, -3, 4), (2, -2, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
             else:  # self.nr_phys == 2 and self.on_aux:
@@ -218,22 +226,21 @@ class Env3:
         """
         nl, nn = self.g.order_neighbours(n)
         _, nr = self.g.order_neighbours(nn)
-
-        OO = ncon([self.op.A[n], self.op.A[nn]], ((-1, -2, -4, 1), (1, -3, -5, -6)))
+        OO = self.op.A[n].dot(self.op.A[nn], axes=((3), (0)))
         if conj:
             if self.nr_phys == 1:
-                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, 3, 4, 5), (2, 3, 4, -2, -3, 6), (-4, 6, 5)), (0, 1, 0, 0)).conj()
+                return self.F[(nl, n)].dot(AA, axes=((0), (0)), conj=(0,1)).dot(OO, axes=((0,2,3), (0,1,3))).dot(self.F[(nr, nn)], axes=((1,4), (2,1))).conj()
             elif self.nr_phys == 2 and not self.on_aux:
                 return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, 3, 4, -4, -5, 5), (2, 3, 4, -2, -3, 6), (-6, 6, 5)), (0, 1, 0, 0)).conj()
             else:  # self.nr_phys == 2 and self.on_aux:
                 return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, -2, -3, 3, 4, 5), (2, 3, 4, -4, -5, 6), (-6, 6, 5)), (0, 1, 0, 0)).conj()
         else:
             if self.nr_phys == 1:
-                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, 5), (2, -2, -3, 3, 4, 6), (5, 6, -4)), (0, 0, 0, 0))
+                return self.F[(nl, n)].dot(AA, axes=((2), (0))).dot(OO, axes=((1,2,3), (0,2,4))).dot(self.F[(nr, nn)], axes=((1,4), (0,1)))
             elif self.nr_phys == 2 and not self.on_aux:
-                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, -4, -5, 5), (2, -2, -3, 3, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
+                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, -4, -5, 5), (2, -2, 3, -3, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
             else:  # self.nr_phys == 2 and self.on_aux:
-                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, -2, -3, 3, 4, 5), (2, -4, -5, 3, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
+                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, -2, -3, 3, 4, 5), (2, -4, 3, -5, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
 
     def Heff2_group(self, AA, n, conj=False):
         r"""Action of Heff on central site.
@@ -258,14 +265,14 @@ class Env3:
         if not hasattr(self, 'op_merged'):
             self.op_merged = {}
         if not (n, nn) in self.op_merged:
-            OO = ncon([self.op.A[n], self.op.A[nn]], ((-1, -2, -4, 1), (1, -3, -5, -6)))
-            OO, _ = OO.group_legs(axes=(3, 4), new_s=-1)
-            OO, _ = OO.group_legs(axes=(1, 2), new_s=1)
+            OO = self.op.A[n].dot(self.op.A[nn], axes=((3), (0)))
+            OO, _ = OO.group_legs(axes=(2, 4), new_s=-1)
+            OO, _ = OO.group_legs(axes=(1, 3), new_s=1)
             self.op_merged[(n, nn)] = OO
         OO = self.op_merged[(n, nn)]
         if conj:
             if self.nr_phys == 1:
-                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, 3, 4), (2, 3, -2, 5), (-3, 5, 4)), (0, 1, 0, 0)).conj()
+                return self.F[(nl, n)].dot(AA.conj(), axes=((0), (0))).dot(OO, axes=((0, 2), (0, 1))).dot(self.F[(nr, nn)], axes=((1, 3), (2, 1))).conj()
         else:
             if self.nr_phys == 1:
                 return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))
