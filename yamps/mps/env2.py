@@ -152,6 +152,6 @@ class Env2:
         nl, nr = self.g.order_neighbours(n)
 
         if self.nr_phys == 1:
-            return ncon([self.F[(nl, n)], self.ket.A[n], self.F[(nr, n)]], ((-1, 1), (1, -2, 2), (2, -3)), (0, 0, 0))
+            return self.F[(nl, n)].dot(self.ket.A[n], axes=(1, 0)).dot(self.F[(nr, n)], axes=(2, 0))
         else:
-            return ncon([self.F[(nl, n)], self.ket.A[n], self.F[(nr, n)]], ((-1, 1), (1, -2, -3, 2), (2, -4)), (0, 0, 0))
+            return self.F[(nl, n)].dot(self.ket.A[n], axes=(1, 0)).dot(self.F[(nr, n)], axes=(3, 0))
