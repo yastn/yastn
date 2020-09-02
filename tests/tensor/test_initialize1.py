@@ -13,6 +13,7 @@ import numpy as np
 
 
 def test_reset0():
+    settings_full.dtype = 'float64'
     print('----------')
     print('3d tensor:')
     a = tensor.ones(settings=settings_full, s=(-1, 1, 1), D=(1, 2, 3))
@@ -62,6 +63,7 @@ def test_reset0():
 
 
 def test_reset1():
+    settings_U1.dtype = 'float64'
     print('----------')
     print('4d tensor: ')
     a = tensor.ones(settings=settings_U1, s=(-1, 1, 1, 1),
@@ -114,10 +116,11 @@ def test_reset1():
 
     print('----------------')
     print('diagonal tensor:')
+    settings_U1.dtype = 'complex128'
     a = tensor.randR(settings=settings_U1, isdiag=True, t=(-1, 0, 1), D=(2, 3, 4))
     a.show_properties()
     npa = a.to_numpy()
-    # assert np.iscomplexobj(npa)
+    assert np.iscomplexobj(npa)
     assert npa.shape == (9, 9)
     assert a.tset.shape == (3, 1, 1)
     assert pytest.approx(np.linalg.norm(np.diag(np.diag(npa)) - npa)) == 0
@@ -125,6 +128,7 @@ def test_reset1():
 
     print('----------------')
     print('diagonal tensor:')
+    settings_U1.dtype = 'float64'
     a = tensor.eye(settings=settings_U1, t=(-1, 0, 1), D=(2, 3, 4))
     a.show_properties()
     npa = a.to_numpy()
@@ -136,6 +140,7 @@ def test_reset1():
 
 
 def test_reset2():
+    settings_Z2_U1.dtype = 'float64'
     print('----------')
     print('3d tensor: ')
     a = tensor.ones(settings=settings_Z2_U1, s=(-1, 1, 1),
@@ -211,17 +216,17 @@ def test_reset2():
 
     print('----------------')
     print('diagonal tensor:')
+    settings_Z2_U1.dtype = 'complex128'
     a = tensor.randR(settings=settings_Z2_U1, isdiag=True,
                      t=[(0, 1), (0, 1)],
                      D=[(2, 2), (2, 2)])
     a.show_properties()
     npa = a.to_numpy()
-    # assert np.iscomplexobj(npa)
+    assert np.iscomplexobj(npa)
     assert npa.shape == (16, 16)
     assert a.tset.shape == (4, 1, 2)
     assert pytest.approx(np.linalg.norm(np.diag(np.diag(npa)) - npa)) == 0
     assert a.is_symmetric()
-
 
 def test_examples_in_reset_tensor():
     a = tensor.ones(settings=settings_U1, s=(-1, 1, 1),

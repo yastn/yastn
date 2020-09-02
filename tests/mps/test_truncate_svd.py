@@ -12,9 +12,8 @@ def run_dmrg_1site(psi, H, Etarget, sweeps=10):
     """
     env = None
     for _ in range(sweeps):
-        env = mps.dmrg.dmrg_sweep_1site(psi, H, env=env, dtype='float64')
+        env = mps.dmrg.dmrg_sweep_1site(psi, H, env=env)
     Eng = env.measure()
-    # assert pytest.approx(Eng) == Etarget
     return Eng
 
 
