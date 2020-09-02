@@ -43,7 +43,7 @@ def run_dmrg_2site(psi, H, Etarget, sweeps=10, D_total=32):
     return Eng
 
 
-def run_dmrg_2site_group(psi, H, Etarget, sweeps=10, D_total=32):
+def run_dmrg_2site_group(psi, H, Etarget, sweeps=20, D_total=32):
     """
     Run a faw sweeps of dmrg_2site_group_sweep. Returns energy
     """
