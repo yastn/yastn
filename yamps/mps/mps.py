@@ -254,9 +254,10 @@ class Mps:
         """
         Ds = []
         for n in self.g.sweep(to='last'):
-            DAn = self.A[n].get_shape()[0]
-            Ds.append(DAn[self.left[0]])
-        Ds.append(DAn[self.right[0]])
+            _, lDs = self.A[n].get_tD()
+            leg_dim = [sum(xx) for xx in lDs]
+            Ds.append(np.prod([leg_dim[x] for x in self.left]))
+        Ds.append(np.prod([leg_dim[x] for x in self.right]))
         return Ds
 
     def get_S(self, alpha=1):
@@ -264,13 +265,20 @@ class Mps:
         
         Returns
         -------
-        Hs : list
+        Ds : list
+            set of bond dimension on cuts
+        Schmidt_spectrum : list
+            Schmidt spectrum on each bond
+        Smin : list
+            smallest singular value on a cut
+        Entropy : list
             list of bond entropies on virtual legs.
         SV : list
             list of Schmidt values saved as a directory
         """
         Ds = self.get_D()
         Entropy = [0]*self.N
+
         Schmidt_spectrum = np.zeros((self.N, max(Ds)))
         Smin = [0]*self.N
         R= None

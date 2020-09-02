@@ -1,4 +1,5 @@
 import numpy as np
+import yamps.tensor as tensor
 from yamps.tensor.ncon import ncon
 import yamps.mps.measure as measure
 from AIM_transport import basis as basis
@@ -7,7 +8,7 @@ from AIM_transport import basis as basis
 # Dirac basis: cp_c, c_cp, c, cp
 
 
-def generate_discretization(Nj, wj, HS, muj, dVj, tempj, vj, method, ordered, gamma, Fcoup=1, Frel=1):
+def generate_discretization(Nj, wj, HS, muj, dVj, tempj, vj, method, ordered, gamma, Fcoup=1, Frel=1, HU=None):
     """
     Nj: list of ints
         Nj = [NL, NS, NR]
@@ -120,6 +121,8 @@ def generate_discretization(Nj, wj, HS, muj, dVj, tempj, vj, method, ordered, ga
         corr[:NL, NL+n] = vkL * vj[n][0]
         corr[NL+NS:, NL+n] = vkR * vj[n][1]
 
+    corr_U = 0.*corr
+    corr_U[NL:NL+NS, NL:NL+NS] = np.tril(HU)
     if ordered:  # sort by energy, leave impurity ordering intact
         id = np.argsort(np.concatenate(
             (wkL + muL - 1e-14, np.arange(NS)*1e-16, wkR + muR+1e-14)))
@@ -128,8 +131,9 @@ def generate_discretization(Nj, wj, HS, muj, dVj, tempj, vj, method, ordered, ga
         temp = temp[id]
         gamma = gamma[id]
         corr = corr[id, :][:, id]
+        corr_U = corr_U[id, :][:, id]
 
-    return LSR, temp, dV, gamma, corr
+    return LSR, temp, dV, gamma, corr, corr_U
 
 
 def generate_operator_basis(basis):
@@ -340,14 +344,18 @@ def generate_vectorized_basis(basis):
     return vII, vnn, vc, vcp, vz
 
 
-def stack_MPOs(UP, DOWN):
-    new = UP.copy()
-    for it in range(UP.N):
-        tmp = ncon([DOWN.A[it], UP.A[it]], [
-                   [-1, 1, -3, -5], [-2, 1, -4, -6]], [1, 0])
-        tmp, _ = tmp.group_legs(axes=(4, 5), new_s=-1)
-        new.A[it], _ = tmp.group_legs(axes=(0, 1), new_s=1)
-    return new
+def stack_MPOs(UP, DOWN, transpose=[0, 0], conj=[0, 0]):
+    conn = [None]*2
+    conn[0] = [-2, 1, -4, -6] if not transpose[0] else [-2, -4, 1, -6]  # UP
+    conn[1] = [-1, -3, 1, -5] if not transpose[1] else [-1, 1, -3, -5]  # DOWN
+    tmp = ncon([UP, DOWN], conn, conj)
+    tmp, _ = tmp.group_legs(axes=(4, 5), new_s=-1)
+    tmp, _ = tmp.group_legs(axes=(0, 1), new_s=1)
+    return tmp
+
+
+def add_MPOs(A, B, common_legs=(1, 2)):
+    return tensor.block({(0, 0): A, (1, 1): B}, common_legs=common_legs)
 
 
 def stack_mpo_mps(mpo, mps):

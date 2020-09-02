@@ -54,8 +54,7 @@ def thermal_state(tensor_type, basis, LSR, io, ww, temp):
 
 # OPERATOR
 
-
-def vectorized_Lindbladian_general(tensor_type, LSR, temp, dV, gamma, corr, basis, AdagA=False):
+def vectorized_Lindbladian_general(tensor_type, LSR, temp, dV, gamma, corr, basis):
     # make operator for evolution with dissipation
     _, ii, _, _, _, _, q_z, z_q, _, _, _, _, c_q_cp, cp_q_c, z_q_z, c_q, cp_q, q_c, q_cp, ccp_q__p__q_ccp, n_q__p__q_n, m1j_n_q__m__q_n = general.generate_operator_basis(
         basis)
@@ -145,13 +144,11 @@ def vectorized_Lindbladian_general(tensor_type, LSR, temp, dV, gamma, corr, basi
                                     (-2, 0): +v*C_Q_left,
                                     (-1, 0): -v*Q_C_left,
                                     (0, 0): II*0.}, common_legs=(1, 2))
-            H.A[n] = tensor.block(
-                {(0, 0): H.A[n], (1, 1): tmp}, common_legs=(1, 2))
-    HdagH = general.stack_MPOs(H, H) if AdagA else None
-    return H, HdagH
+            H.A[n] = general.add_MPOs(H.A[n], tmp, common_legs=(1, 2))
+    return H
 
 
-def vectorized_Lindbladian_real(tensor_type, LSR, temp, dV, gamma, corr, basis, AdagA=False):
+def vectorized_Lindbladian_real(tensor_type, LSR, temp, dV, gamma, corr, basis):
     # make operator for evolution with dissipation
     _, ii, _, x_q, _, y_q, _, z_q, _, _, _, _, c_q_cp, cp_q_c, z_q_z, _, _, _, _, ccp_q__p__q_ccp, n_q__p__q_n, m1j_n_q__m__q_n = general.generate_operator_basis(
         basis)
@@ -247,10 +244,132 @@ def vectorized_Lindbladian_real(tensor_type, LSR, temp, dV, gamma, corr, basis, 
                                     (-2, 0): v*YI_left,
                                     (-1, 0): v*YR_left,
                                     (0, 0): II*0}, common_legs=(1, 2))
-            H.A[n] = tensor.block(
-                {(0, 0): H.A[n], (1, 1): tmp}, common_legs=(1, 2))
-    HdagH = general.stack_MPOs(H, H) if AdagA else None
-    return H, HdagH
+            H.A[n] = general.add_MPOs(H.A[n], tmp, common_legs=(1, 2))
+    return H
+
+
+def Liouville_AIM_Coulomb_general(tensor_type, LSR, temp, dV, gamma, corr, basis):
+    # make operator for evolution with dissipation
+    _, ii, _, _, _, _, _, _, q_n, n_q, _, _, _, _, _, _, _, _, _, _, _, _ = general.generate_operator_basis(
+        basis)
+    II = operator_into_Tensor(tensor_type, ii, 0)
+    N_Q = operator_into_Tensor(tensor_type, n_q, 0)
+    Q_N = operator_into_Tensor(tensor_type, q_n, 0)
+    #
+    N = len(LSR)
+    H = mps.Mps(N, nr_phys=2)
+    # Set 1 Coulomb interaction inside impurity
+    NS_sites = np.nonzero(LSR == 2)[0]
+    for mS in NS_sites:
+        for n in range(N):
+            U = (-1j)*corr[mS, n]
+            if n == min(NS_sites):
+                tmp = tensor.block(
+                    {(0, 0): II*0., (0, 1): U*N_Q,  (0, 2): -U*Q_N, (0, 3): II}, common_legs=(1, 2))
+            elif n > min(NS_sites) and n < mS:
+                tmp = tensor.block({(-3, 0): II,
+                                    (-2, 1): II,
+                                    (-1, 2): II,
+                                    (0, 0): II*0., (0, 1): U*N_Q,  (0, 2): -U*Q_N, (0, 3): II}, common_legs=(1, 2))
+            elif n == mS:
+                if n == max(NS_sites):
+                    tmp = tensor.block({(-3, 0): II,
+                                        (-2, 0): N_Q,
+                                        (-1, 0): Q_N,
+                                        (0, 0): II*0.}, common_legs=(1, 2))
+                else:
+                    tmp = tensor.block({(-3, 0): II,
+                                        (-2, 0): N_Q,
+                                        (-1, 0): Q_N,
+                                        (0, 0): II*0., (0, 1): N_Q,  (0, 2): Q_N, (0, 3): II}, common_legs=(1, 2))
+
+            elif n > mS and n < max(NS_sites):
+                tmp = tensor.block({(-3, 0): II,
+                                    (-2, 0): U*N_Q, (-2, 1): II,
+                                    (-1, 0): -U*Q_N, (-1, 2): II,
+                                    (0, 0): II*0., (0, 3): II}, common_legs=(1, 2))
+            elif n == max(NS_sites):
+                tmp = tensor.block({(-3, 0): II,
+                                    (-2, 0): U*N_Q,
+                                    (-1, 0): -U*Q_N,
+                                    (0, 0): II*0.}, common_legs=(1, 2))
+            else:
+                tmp = II
+            H.A[n] = general.add_MPOs(H.A[n], tmp, common_legs=(
+                1, 2)) if mS != NS_sites[0] else tmp
+    return H
+
+
+def Liouville_AIM_Coulomb_real(tensor_type, LSR, temp, dV, gamma, corr, basis):
+    # make operator for evolution with dissipation
+    _, ii, _, _, _, _, _, _, q_n, n_q, _, _, _, _, _, _, _, _, _, _, _, _ = general.generate_operator_basis(
+        basis)
+    II = operator_into_Tensor(tensor_type, ii, 0)
+    R = operator_into_Tensor(tensor_type, n_q.real, 0)
+    I = operator_into_Tensor(tensor_type, q_n.imag, 0)
+    #
+    N = len(LSR)
+    H = mps.Mps(N, nr_phys=2)
+    # Set 1 Coulomb interaction inside impurity
+    NS_sites = np.nonzero(LSR == 2)[0]
+    for mS in NS_sites:
+        for n in range(N):
+            U = 2.*corr[mS, n]
+            if n == min(NS_sites):
+                tmp = tensor.block(
+                    {(0, 0): II*0., (0, 1): U*R,  (0, 2): U*I, (0, 3): II}, common_legs=(1, 2))
+            elif n > min(NS_sites) and n < mS:
+                tmp = tensor.block({(-3, 0): II,
+                                    (-2, 1): II,
+                                    (-1, 2): II,
+                                    (0, 0): II*0., (0, 1): U*R,  (0, 2): U*I, (0, 3): II}, common_legs=(1, 2))
+            elif n == mS:
+                if n == max(NS_sites):
+                    tmp = tensor.block({(-3, 0): II,
+                                        (-2, 0): I,
+                                        (-1, 0): R,
+                                        (0, 0): II*0.}, common_legs=(1, 2))
+                else:
+                    tmp = tensor.block({(-3, 0): II,
+                                        (-2, 0): I,
+                                        (-1, 0): R,
+                                        (0, 0): II*0., (0, 1): R,  (0, 2): I, (0, 3): II}, common_legs=(1, 2))
+
+            elif n > mS and n < max(NS_sites):
+                tmp = tensor.block({(-3, 0): II,
+                                    (-2, 0): U*I, (-2, 1): II,
+                                    (-1, 0): U*R, (-1, 2): II,
+                                    (0, 0): II*0., (0, 3): II}, common_legs=(1, 2))
+            elif n == max(NS_sites):
+                tmp = tensor.block({(-3, 0): II,
+                                    (-2, 0): U*I,
+                                    (-1, 0): U*R,
+                                    (0, 0): II*0.}, common_legs=(1, 2))
+            else:
+                tmp = II
+            H.A[n] = general.add_MPOs(H.A[n], tmp, common_legs=(
+                1, 2)) if mS != NS_sites[0] else tmp
+    return H
+
+
+def stack_MPOs(A, B, transpose=[0, 0], conj=[0, 0]):
+    if A and B:
+        C = A.copy()
+        for n in range(C.N):
+            C.A[n] = general.stack_MPOs(A.A[n], B.A[n], transpose, conj)
+        return C
+    else:
+        return A if A else B
+
+
+def add_MPOs(A, B, common_legs=(1, 2)):
+    if A and B:
+        C = A.copy()
+        for n in range(C.N):
+            C.A[n] = general.add_MPOs(A.A[n], B.A[n], common_legs=common_legs)
+        return C
+    else:
+        return A if A else B
 
 
 # MEASURE

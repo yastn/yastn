@@ -30,24 +30,29 @@ def transport(main, basis, tensor, filename):  # PRA MODEL
     # MODEL
     Tscale = 2**(-4)
     NS = 2
-    discretization = 'influence_LinLin'
+    discretization ='influence_LinLin'
     # 'influence_LinInv'
     # 'influence_LinInv1D'
     # 'influence_LinLog'
     # 'influence_LinLog1D'
     # 'influence_LinLin'
     # 'spatial_1D'
+    v = .1
+    vS = (1.+np.sqrt(2))*.25
+    U = 0.5
+
     wj = [1]*2
-    vj = [[.1, 0],  # L-S1, R-S1
-          [0, .1]]  # L-S2, R-S2
+    vj = [[v, 0],  # L-S1, R-S1
+          [0, v]]  # L-S2, R-S2
     wS = [0, 0]
     muj = [-.25, .25]
     dVj = [0]*2
     gamma_val = 10**np.arange(2, -4.0001, -.25)  # dissipation rate
     tempj = [.025]*2  # temperature
-    vS = (1.+np.sqrt(2))*.25
     HS = np.array([[wS[0], vS],
                    [vS, wS[1]]])
+    HU = np.array([[0, U],
+                   [U, 0]])
 
     # MPS
     ordered = True  # order basis for mps/mpo
@@ -68,6 +73,9 @@ def transport(main, basis, tensor, filename):  # PRA MODEL
     directory = 'results/'
     name = directory+filename+'_Nj_' + str([Tscale, NS, Tscale]) + \
         '_gamma_'+str(min(gamma_val)) +\
+        '_v_'+str(v) +\
+        '_vS_'+str(vS) +\
+        '_U_'+str(v) +\
         '_Dtot_'+str(max(D_total_val))+'_algorithm_'+algorithm
     name_txt = name+'_output.txt'
 
@@ -84,9 +92,9 @@ def transport(main, basis, tensor, filename):  # PRA MODEL
             f['parameters'].create_dataset(inm, data=ival)
 
     # Initial setup
-    LSR, temp, dV, gamma, corr = general.generate_discretization(Nj=[Tscale, NS, Tscale], wj=wj,
-                                                                 HS=HS, muj=muj, dVj=dVj, tempj=tempj, vj=vj, method=discretization,
-                                                                 ordered=ordered, gamma=gamma_val[0])
+    LSR, temp, dV, gamma, corr, corr_U = general.generate_discretization(Nj=[Tscale, NS, Tscale], wj=wj,
+                                                                         HS=HS, HU=HU, muj=muj, dVj=dVj, tempj=tempj, vj=vj, method=discretization,
+                                                                         ordered=ordered, gamma=gamma_val[0])
     psi = main.thermal_state(tensor_type=tensor_type, LSR=LSR,
                              io=io, ww=corr.diagonal()+dV, temp=temp, basis=basis)
 
@@ -95,7 +103,7 @@ def transport(main, basis, tensor, filename):  # PRA MODEL
     psi.canonize_sweep(to='first')
 
     # compress MPO
-    compress = True
+    compress_MPO = True
 
     # trace rho
     trace_rho = main.identity(tensor_type=tensor_type, N=psi.N, basis=basis)
@@ -174,13 +182,8 @@ def transport(main, basis, tensor, filename):  # PRA MODEL
         section_time = section_time0*dt/dt0
         #
         LL, _ = main.vectorized_Lindbladian(
-            tensor_type=tensor_type, LSR=LSR, temp=temp, dV=dV, gamma=gamma*gmm/gamma_val[0], corr=corr, basis=basis)
+            tensor_type=tensor_type, LSR=LSR, temp=temp, dV=dV, gamma=gamma*gmm/gamma_val[0], corr=corr, corr_U=corr_U, basis=basis, compress=compress_MPO)
         H, hermitian, HH, sgn = LL, None, LL, +1.
-        if compress:
-            H.canonize_sweep(to='last', normalize=False)
-            H.sweep_truncate(to='first', opts={
-                                'tol': 1e-14}, normalize=False)
-            H.canonize_sweep(to='last', normalize=False)
         for D_total in D_total_val:
             qt_section = 0
             while qt_section < section_time:

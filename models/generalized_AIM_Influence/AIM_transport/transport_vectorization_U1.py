@@ -13,9 +13,25 @@ def thermal_state(tensor_type, LSR, io, ww, temp, basis):
     return main_fun.thermal_state(tensor_type, basis, LSR, io, ww, temp)
 
 
-def vectorized_Lindbladian(tensor_type, LSR, temp, dV, gamma, corr, basis, AdagA=False):
+def vectorized_Lindbladian(tensor_type, LSR, temp, dV, gamma, corr, basis, corr_U=False, AdagA=False, compress=True, tol=1e-14):
+    H_U, HdagH = None, None
     if basis == 'Dirac':
-        return main_fun.vectorized_Lindbladian_general(tensor_type, LSR, temp, dV, gamma, corr, basis, AdagA)
+        H = main_fun.vectorized_Lindbladian_general(
+            tensor_type, LSR, temp, dV, gamma, corr, basis)
+        if not isinstance(corr_U, bool):
+            H_U = main_fun.Liouville_AIM_Coulomb_general(
+                tensor_type, LSR, temp, dV, gamma, corr_U, basis)
+            H = main_fun.add_MPOs(H, H_U)
+    if compress:
+        H.canonize_sweep(to='last', normalize=False)
+        H.sweep_truncate(to='first', opts={'tol': tol}, normalize=False)
+    if AdagA:
+        HdagH = main_fun.stack_MPOs(H, H, transpose=[0, 1], conj=[0, 1])
+        if compress:
+            HdagH.canonize_sweep(to='last', normalize=False)
+            HdagH.sweep_truncate(
+                to='first', opts={'tol': tol}, normalize=False)
+    return H, HdagH
 
 
 def current(tensor_type, sign_from, id_to, sign_list, vk, direction, basis):
