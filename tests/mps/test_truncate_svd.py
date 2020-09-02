@@ -31,11 +31,16 @@ def test_truncate_svd_full():
     Eng = run_dmrg_1site(psi, H, Eng_gs)
 
     psi2 = psi.copy()
-    discarded = psi2.sweep_truncate(to='last', opts={'D_total': 8})
-    print('energy before truncation :', Eng)
+    discarded = psi2.sweep_truncate(to='last', opts={'D_total': 4})
+    print('energy befor truncation :', Eng)
     print('energy after truncation :', mps.measure_mpo(psi2, H, psi2))
     print('overlap after truncation : ', mps.measure_overlap(psi, psi2))
     print('max discarded : ', discarded)
+
+    psi2.canonize_sweep(to='first')
+    env = mps.sweep_variational(psi2, psi_target=psi)
+    print('overlap after variational sweep : ', np.abs(env.measure()))
+    print('energy after variational sweep :', mps.measure_mpo(psi2, H, psi2))
 
 
 def test_truncate_svd_Z2():
@@ -53,11 +58,17 @@ def test_truncate_svd_Z2():
     Eng = run_dmrg_1site(psi, H, Eng_parity1)
 
     psi2 = psi.copy()
-    discarded = psi2.sweep_truncate(to='last', opts={'D_total': 8})
+    discarded = psi2.sweep_truncate(to='last', opts={'D_total': 4})
+
     print('energy befor truncation :', Eng)
     print('energy after truncation :', mps.measure_mpo(psi2, H, psi2))
     print('overlap after truncation : ', mps.measure_overlap(psi, psi2))
     print('max discarded : ', discarded)
+
+    psi2.canonize_sweep(to='first')
+    env = mps.sweep_variational(psi2, psi_target=psi)
+    print('overlap after variational sweep : ', np.abs(env.measure()))
+    print('energy after variational sweep :', mps.measure_mpo(psi2, H, psi2))
 
 
 if __name__ == "__main__":
