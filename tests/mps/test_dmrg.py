@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 
-def run_dmrg_0site(psi, H, Etarget, sweeps=10):
+def run_dmrg_0site(psi, H, Etarget, sweeps=20):
     """
     Run a faw sweeps of dmrg_0site_sweep. Returns energy
     """
@@ -18,7 +18,7 @@ def run_dmrg_0site(psi, H, Etarget, sweeps=10):
     return Eng
 
 
-def run_dmrg_1site(psi, H, Etarget, sweeps=10):
+def run_dmrg_1site(psi, H, Etarget, sweeps=20):
     """
     Run a faw sweeps of dmrg_1site_sweep. Returns energy
     """
@@ -30,7 +30,7 @@ def run_dmrg_1site(psi, H, Etarget, sweeps=10):
     return Eng
 
 
-def run_dmrg_2site(psi, H, Etarget, sweeps=10, D_total=32):
+def run_dmrg_2site(psi, H, Etarget, sweeps=20, D_total=32):
     """
     Run a faw sweeps of dmrg_2site_sweep. Returns energy
     """
