@@ -118,7 +118,7 @@ class Mps:
         """
         if self.pC is not None:
             normC = self.A[self.pC].norm()
-            U, S, V = self.A[self.pC].split_svd(axes=(0, 1), **opts)
+            U, S, V = self.A[self.pC].split_svd(axes=(0, 1), sU=-1, **opts)
             normS = S.norm()
 
             self.A[self.pC] = (1 / normS) * S if normalize else S
@@ -136,6 +136,14 @@ class Mps:
             return normC / normS - 1
         else:
             return 0.
+
+    def remove_central(self):
+        r"""
+        Removes (ignores) the central site. Do nothing if is does not exist.
+        """
+        if self.pC is not None:
+            del self.A[self.pC]
+            self.pC = None
 
     def absorb_central(self, towards):
         r"""
