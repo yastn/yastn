@@ -577,10 +577,11 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
     """
     Ds = psi.get_D()
     if not D_totals:
-        D_totals = [None]*psi.N
+        D_totals = [None]*(psi.N+1)
         max_vdim = 1
         for n in range(psi.N):
             D_totals[n] = min([max_vdim, opts_svd['D_total']])
+            max_vdim = D_totals[n]
             _, lDs = psi.A[n].get_tD()
             leg_dim = [sum(xx) for xx in lDs]
             max_vdim *= np.prod([leg_dim[x] for x in psi.phys])
@@ -590,6 +591,8 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
             leg_dim = [sum(xx) for xx in lDs]
             max_vdim *= np.prod([leg_dim[x] for x in psi.phys])
             D_totals[n] = min([D_totals[n], max_vdim, opts_svd['D_total']])
+            max_vdim = D_totals[n]
+        D_totals[-1] = 1
     if not tol_svds:
         tol_svds = [opts_svd['tol'] for n in Ds]
     #
