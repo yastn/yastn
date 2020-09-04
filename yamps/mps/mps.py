@@ -298,9 +298,9 @@ class Mps:
             _, s, _ = R.split_svd(axes=(0,1))
             s = s.to_numpy().diagonal()
             Schmidt_spectrum[n, :len(s)] = s
-            Smin[n] = min(s)
+            Smin[n] = min(s).real
             if alpha == 1:  # von Neumann 
-                Entropy[n] = -2.*sum(s*s*np.log2(s))
+                Entropy[n] = (-2.*sum(s*s*np.log2(s))).real
             else:  # Renyi
-                Entropy[n] = np.log2(sum(s**alpha))/(alpha-1.)
+                Entropy[n] = (np.log2(sum(s**alpha))/(alpha-1.)).real
         return Ds, Schmidt_spectrum, Smin, Entropy
