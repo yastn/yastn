@@ -16,7 +16,7 @@ logger = logging.getLogger('yamps.tensor.tdvp')
 #################################
 
 
-def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, D_totals=None, tol_svds=None, SV_min=None, cutoff_dE=1e-9, hermitian=True, fermionic=False, k=4,  eigs_tol=1e-12, exp_tol=1e-12, bi_orth=False, NA=None, version='1site', opts_svd=None, optsK_svd=None, algorithm='arnoldi'):
+def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, D_totals=None, tol_svds=None, SV_min=None, versions=('1site', '2site'), cutoff_dE=1e-9, hermitian=True, fermionic=False, k=4,  eigs_tol=1e-12, exp_tol=1e-12, bi_orth=False, NA=None, version='1site', opts_svd=None, optsK_svd=None, algorithm='arnoldi'):
     # evolve with TDVP method, up to tmax and initial guess of the time step dt
     # opts - optional info for MPS truncation
     curr_t = 0
@@ -44,7 +44,7 @@ def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, D_totals=None, tol_svd
                 env = tdvp_sweep_2site_group(psi=psi, H=H, M=M, dt=dt, env=env, hermitian=hermitian, fermionic=fermionic,
                                              k=k, eigs_tol=eigs_tol, exp_tol=exp_tol, bi_orth=bi_orth, NA=NA, opts_svd=opts_svd, optsK_svd=optsK_svd, algorithm=algorithm)
             else:
-                env = tdvp_sweep_mix(psi=psi, H=H, M=M, dt=dt, env=env, hermitian=hermitian, fermionic=fermionic, versions=('1site', '2site'), D_totals=D_totals, tol_svds=tol_svds, SV_min=SV_min,
+                env = tdvp_sweep_mix(psi=psi, H=H, M=M, dt=dt, env=env, hermitian=hermitian, fermionic=fermionic, versions=versions, D_totals=D_totals, tol_svds=tol_svds, SV_min=SV_min,
                                            k=k, eigs_tol=eigs_tol, exp_tol=exp_tol, bi_orth=bi_orth, NA=NA, opts_svd=opts_svd, optsK_svd=optsK_svd, algorithm=algorithm)
         E = env.measure()
         dE = abs(E - E0)

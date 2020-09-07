@@ -180,7 +180,6 @@ def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_es
     return (w[0], step, j, tnow,)
 
 
-
 def expm(Av, init, tau, Bv=None, tol=1e-14, k=5, algorithm='arnoldi', bi_orth=False, hermitian=True):
     norm = init[0].norm()
     init = [(1. / it.norm())*it for it in init]
@@ -193,6 +192,59 @@ def expm(Av, init, tau, Bv=None, tol=1e-14, k=5, algorithm='arnoldi', bi_orth=Fa
             T, Q, P, beta, good = lanczos_nher(
                 Av=Av, Bv=Bv, init=init, k=k, tol=tol, bi_orth=bi_orth)
     val, Y = expm_aug(T=T, Q=Q, tau=tau, beta=beta)
+    return val, [norm*Y[it] for it in range(len(Y))], good
+
+
+def eigs(Av, v0, Bv=None, hermitian=True, k='all', sigma=None, ncv=5, which=None, tol=1e-14, bi_orth=True, return_eigenvectors=True, algorithm='arnoldi'):
+    r"""
+    Av, Bv: function handlers
+        Bv: default = None
+        Action of a matrix on a vector. For non-symmetric lanczos both have to be defined.
+    vo: Tensor
+        Initial vector for iteration.
+    k: int
+        default = 'all', number of eigenvalues eqauls number of non-zero Krylov vectors
+        The number of eigenvalues and eigenvectors desired. It is not possible to compute all eigenvectors of a matrix.
+    sigma: float
+        default = None (search for smallest)
+        Find eigenvalues near sigma.
+    ncv: int
+        default = 5
+        The number of Lanczos vectors generated ncv must be greater than k; it is recommended that ncv > 2*k.
+    which: str, [‘LM’ | ‘SM’ | ‘LR’ | ‘SR’ | ‘LI’ | ‘SI’]
+        default = None (search for closest to sigma - if defined and for 'SR' else)
+        Which k eigenvectors and eigenvalues to find:
+            ‘LM’ : largest magnitude
+            ‘SM’ : smallest magnitude
+            ‘LR’ : largest real part
+            ‘SR’ : smallest real part
+            ‘LI’ : largest imaginary part
+            ‘SI’ : smallest imaginary part
+    tol: float
+        defoult = 1e-14
+        Relative accuracy for eigenvalues (stopping criterion) for Krylov subspace.
+    return_eigenvectors: bool
+        default = True
+        Return eigenvectors (True) in addition to eigenvalues.
+    bi_orth: bool
+        default = True
+        Option for non-symmetric Lanczos method. Whether to bi-orthonomalize Krylov-subspace vectors.
+    algorithm: str
+        default = 'arnoldi'
+        What method to use. Possible options: arnoldi, lanczos
+    """
+    norm, P = v0[0].norm(), None
+    v0 = [(1. / it.norm())*it for it in v0]
+    if algorithm == 'arnoldi':
+        T, Q, _, good = arnoldi(Av=Av, init=v0[0], k=ncv, tol=tol)
+    else:  # Lanczos
+        if hermitian:
+            T, Q, _, good = lanczos_her(Av=Av, init=v0[0], k=ncv, tol=tol)
+        else:
+            T, Q, P, _, good = lanczos_nher(
+                Av=Av, Bv=Bv, init=v0[0], k=ncv, tol=tol, bi_orth=bi_orth)
+    val, Y = eigs_aug(T=T, Q=Q, P=P, k=k, hermitian=hermitian, sigma=sigma,
+                      which=which, return_eigenvectors=return_eigenvectors)
     return val, [norm*Y[it] for it in range(len(Y))], good
 
 
@@ -380,23 +432,32 @@ def expm_aug(T, Q, tau, beta, P=None):
     return err, [Y]
 
 
-def eigs_aug(T, Q, P=None, hermitian=True):
-    dtype = Q[0].conf.dtype
-    Y = [None] * len(Q)
+def eigs_aug(T, Q, P=None, k=None, hermitian=True, sigma=None, which=None, return_eigenvectors=True):
+    Y = [None] * k if k else [None] * len(Q)
     if hermitian:
         val, vr = LA.eigh(T)
-        for it in range(len(Q)):
-            sit = vr[:, it]
-            for i1 in sit.nonzero()[0]:
-                if Y[it]:
-                    Y[it] = Y[it].apxb(Q[i1], x=sit[i1])
-                else:
-                    Y[it] = sit[i1]*Q[i1]
-            Y[it] *= (1./Y[it].norm())
     else:
-        m, n, p = LA.eig(T, left=True, right=True)
-        #val, vl, vr = m.astype(dtype), n.astype(dtype), p.astype(dtype)
-        for it in range(len(Q)):
+        val, _, vr = LA.eig(T, left=True, right=True)
+
+    if sigma is not None:  # target val closest to sigma on Re-Im plane
+        id = np.argsort(abs(val-sigma))
+    if which == 'LM':  # ‘LM’ : largest magnitude
+        id = np.argsort(abs(val))[::-1]
+    elif which == 'SM':  # ‘SM’ : smallest magnitude
+        id = np.argsort(abs(val))
+    elif which == 'LR':  # ‘LR’ : largest real part
+        id = np.argsort(val.real)[::-1]
+    elif which == 'SR':  # ‘SR’ : smallest real part
+        id = np.argsort(val.real)
+    elif which == 'LI':  # ‘LI’ : largest imaginary part
+        id = np.argsort(val.imag)[::-1]
+    elif which == 'SI':  # ‘SI’ : smallest imaginary part
+        id = np.argsort(val.imag)
+    else:
+        id = np.argsort(val)  # lowest real
+    val, vr = val[id], vr[:, id]
+    if return_eigenvectors:
+        for it in range(len(Y)):
             sit = vr[:, it]
             for i1 in sit.nonzero()[0]:
                 if Y[it]:

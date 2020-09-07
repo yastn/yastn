@@ -1,7 +1,7 @@
+import numpy as np
 import logging
 from yamps.mps import Env3
-from yamps.tensor import eig
-from yamps.tensor import eigh
+from yamps.tensor import eigs
 
 
 class FatalError(Exception):
@@ -16,7 +16,7 @@ logger = logging.getLogger('yamps.mps.dmrg')
 #################################
 
 
-def dmrg_OBC(psi, H, env=None, version='1site', cutoff_sweep=1, cutoff_dE=-1, hermitian=True, k=4, eigs_tol=1e-14, opts_svd={}, algorithm='arnoldi'):
+def dmrg_OBC(psi, H, env=None, version='1site', cutoff_sweep=1, cutoff_dE=-1, hermitian=True, k=4, eigs_tol=1e-14, opts_svd=None, SV_min=None, D_totals=None, tol_svds=None, versions=('1site', '2site'), algorithm='arnoldi'):
     r"""
     Perform dmrg on system with open boundary conditions. The version of dmrg update p[rovoded by version.
     Assume input psi is right canonical.
@@ -90,15 +90,18 @@ def dmrg_OBC(psi, H, env=None, version='1site', cutoff_sweep=1, cutoff_dE=-1, he
         if version == '0site':
             env = dmrg_sweep_0site(psi, H=H, env=env, k=k,
                                    hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
+        elif version == '1site':
+            env = dmrg_sweep_1site(psi, H=H, env=env, k=k,
+                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
         elif version == '2site':
             env = dmrg_sweep_2site(psi, H=H, env=env, k=k,
                                    hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
         elif version == '2site_group':
             env = dmrg_sweep_2site_group(
                 psi, H=H, env=env, k=k, hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
-        else:  # 1site
-            env = dmrg_sweep_1site(psi, H=H, env=env, k=k,
-                                   hermitian=hermitian, eigs_tol=eigs_tol, opts_svd=opts_svd, algorithm=algorithm)
+        else:  # mix
+            env = dmrg_sweep_mix(psi=psi, SV_min=SV_min, versions=versions, H=H, env=env, hermitian=hermitian, k=k,
+                                 eigs_tol=eigs_tol, D_totals=D_totals, tol_svds=tol_svds, opts_svd=opts_svd, algorithm=algorithm)
         E = env.measure()
         dE = abs(E - E0)
         print('Iteration: ', sweep, ' energy: ', E,
@@ -161,15 +164,15 @@ def dmrg_sweep_0site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         if n != psi.g.sweep(to='last')[-1]:
             init = psi.A[psi.pC]
             # update site n using eigs
-            if not hermitian:
-                val, vec, _ = eig(Av=lambda v: env.Heff0(v, psi.pC), Bv=lambda v: env.Heff0(
-                    v, psi.pC, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
+            def Av(v): return env.Heff0(v, psi.pC)
+            if algorithm == 'lanczos' and not hermitian:
+                def Bv(v): return env.Heff0(v, psi.pC, conj=True)
             else:
-                val, vec, _ = eigh(Av=lambda v: env.Heff0(v, psi.pC), init=[
-                                   init], tol=eigs_tol, k=k, algorithm=algorithm)
-            init = vec[list(val).index(min(list(val)))]
+                Bv = None
+            _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+                             sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
             # canonize and save
-            psi.A[psi.pC] = init
+            psi.A[psi.pC] = vec[0]
         psi.absorb_central(towards=psi.g.last)
 
     for n in psi.g.sweep(to='first'):
@@ -179,15 +182,15 @@ def dmrg_sweep_0site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         if n != psi.g.sweep(to='first')[-1]:
             init = psi.A[psi.pC]
             # update site n using eigs
-            if not hermitian:
-                val, vec, _ = eig(Av=lambda v: env.Heff0(v, psi.pC), Bv=lambda v: env.Heff0(
-                    v, psi.pC, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
+            def Av(v): return env.Heff0(v, psi.pC)
+            if algorithm == 'lanczos' and not hermitian:
+                def Bv(v): return env.Heff0(v, psi.pC, conj=True)
             else:
-                val, vec, _ = eigh(Av=lambda v: env.Heff0(v, psi.pC), init=[
-                                   init], tol=eigs_tol, k=k, algorithm=algorithm)
-            init = vec[list(val).index(min(list(val)))]
+                Bv = None
+            _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+                             sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
             # canonize and save
-            psi.A[psi.pC] = init
+            psi.A[psi.pC] = vec[0]
         psi.absorb_central(towards=psi.g.first)
     return env
 
@@ -241,16 +244,15 @@ def dmrg_sweep_1site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
     for n in psi.g.sweep(to='last'):  # sweep from fist to last
         psi.absorb_central(towards=psi.g.last)
         init = psi.A[n]
-        # update site n using eigs
-        if not hermitian:
-            val, vec, _ = eig(Av=lambda v: env.Heff1(v, n), Bv=lambda v: env.Heff1(
-                v, n, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
+        def Av(v): return env.Heff1(v, n)
+        if algorithm == 'lanczos' and not hermitian:
+            def Bv(v): return env.Heff1(v, n, conj=True)
         else:
-            val, vec, _ = eigh(Av=lambda v: env.Heff1(v, n), init=[
-                               init], tol=eigs_tol, k=k, algorithm=algorithm)
-        init = vec[list(val).index(min(list(val)))]
+            Bv = None
+        _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+                         sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
         # canonize and save
-        psi.A[n] = init
+        psi.A[n] = vec[0]
         psi.orthogonalize_site(n, towards=psi.g.last)
         env.clear_site(n)
         env.update(n, towards=psi.g.last)
@@ -258,15 +260,15 @@ def dmrg_sweep_1site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
     for n in psi.g.sweep(to='first'):
         psi.absorb_central(towards=psi.g.first)
         init = psi.A[n]
-        if not hermitian:
-            val, vec, _ = eig(Av=lambda v: env.Heff1(v, n), Bv=lambda v: env.Heff1(
-                v, n, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
+        def Av(v): return env.Heff1(v, n)
+        if algorithm == 'lanczos' and not hermitian:
+            def Bv(v): return env.Heff1(v, n, conj=True)
         else:
-            val, vec, _ = eigh(Av=lambda v: env.Heff1(v, n), init=[
-                               init], tol=eigs_tol, k=k, algorithm=algorithm)
-        init = vec[list(val).index(min(list(val)))]
+            Bv = None
+        _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+                         sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
         # canonize and save
-        psi.A[n] = init
+        psi.A[n] = vec[0]
         psi.orthogonalize_site(n, towards=psi.g.first)
         env.clear_site(n)
         env.update(n, towards=psi.g.first)
@@ -323,15 +325,15 @@ def dmrg_sweep_2site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
         init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
         # update site n using eigs
-        if not hermitian:
-            val, vec, _ = eig(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(
-                v, n, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
+        def Av(v): return env.Heff2(v, n)
+        if algorithm == 'lanczos' and not hermitian:
+            def Bv(v): return env.Heff2(v, n, conj=True)
         else:
-            val, vec, _ = eigh(Av=lambda v: env.Heff2(v, n), init=[
-                               init], tol=eigs_tol, k=k, algorithm=algorithm)
-        init = vec[list(val).index(min(list(val)))]
+            Bv = None
+        _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+                         sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
         # split and save
-        x, S, y = init.split_svd(axes=(psi.left + psi.phys, tuple(
+        x, S, y = vec[0].split_svd(axes=(psi.left + psi.phys, tuple(
             a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
         psi.A[n] = x
         psi.A[n1] = y.dot_diag(S, axis=0)
@@ -343,15 +345,15 @@ def dmrg_sweep_2site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
         init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
         # update site n using eigs
-        if not hermitian:
-            val, vec, _ = eig(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(
-                v, n, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
+        def Av(v): return env.Heff2(v, n)
+        if algorithm == 'lanczos' and not hermitian:
+            def Bv(v): return env.Heff2(v, n, conj=True)
         else:
-            val, vec, _ = eigh(Av=lambda v: env.Heff2(v, n), init=[
-                               init], tol=eigs_tol, k=k, algorithm=algorithm)
-        init = vec[list(val).index(min(list(val)))]
+            Bv = None
+        _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+                         sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
         # split and save
-        x, S, y = init.split_svd(axes=(psi.left + psi.phys, tuple(
+        x, S, y = vec[0].split_svd(axes=(psi.left + psi.phys, tuple(
             a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
         psi.A[n] = x.dot_diag(S, axis=2)
         psi.A[n1] = y
@@ -413,13 +415,14 @@ def dmrg_sweep_2site_group(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14
         init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
         init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
         # update site n using eigs
-        if not hermitian:
-            val, vec, _ = eig(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
+        def Av(v): return env.Heff2_group(v, n)
+        if algorithm == 'lanczos' and not hermitian:
+            def Bv(v): return env.Heff2_group(v, n, conj=True)
         else:
-            val, vec, _ = eigh(Av=lambda v: env.Heff2_group(v, n), init=[
-                               init], tol=eigs_tol, k=k, algorithm=algorithm)
-        init = vec[list(val).index(min(list(val)))]
-        init = init.ungroup_leg(axis=1, leg_order=leg_order)
+            Bv = None
+        _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+                         sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
+        init = vec[0].ungroup_leg(axis=1, leg_order=leg_order)
         # split and save
         x, S, y = init.split_svd(axes=(psi.left + psi.phys, tuple(
             a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
@@ -434,14 +437,14 @@ def dmrg_sweep_2site_group(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14
         init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
         init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
         # update site n using eigs
-        if not hermitian:
-            val, vec, _ = eig(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(
-                v, n, conj=True), init=[init], tol=eigs_tol, k=k, algorithm=algorithm)
+        def Av(v): return env.Heff2_group(v, n)
+        if algorithm == 'lanczos' and not hermitian:
+            def Bv(v): return env.Heff2_group(v, n, conj=True)
         else:
-            val, vec, _ = eigh(Av=lambda v: env.Heff2_group(v, n), init=[
-                               init], tol=eigs_tol, k=k, algorithm=algorithm)
-        init = vec[list(val).index(min(list(val)))]
-        init = init.ungroup_leg(axis=1, leg_order=leg_order)
+            Bv = None
+        _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+                         sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
+        init = vec[0].ungroup_leg(axis=1, leg_order=leg_order)
         # split and save
         x, S, y = init.split_svd(axes=(psi.left + psi.phys, tuple(
             a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
@@ -453,3 +456,265 @@ def dmrg_sweep_2site_group(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14
     env.update(n, towards=psi.g.first)
 
     return env  # can be used in the next sweep
+
+
+def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, bi_orth=True, NA=None, D_totals=None, tol_svds=None, opts_svd=None, algorithm='arnoldi'):
+    r"""
+    Perform mixed 1site-2site sweep of DMRG basing on SV_min (smallest Schmidt value on the bond).
+    Assume input psi is right canonical.
+    Sweep consists of iterative updates from last site to first and back to the first one.
+
+    Parameters
+    ----------
+    psi: Mps, nr_phys=1
+        initial state.
+    H: Mps, nr_phys=2
+        operator given in MPO decomposition.
+        legs are [left-virtual, ket-physical, bra-physical, right-virtual]
+    env: Env3
+        default = None
+        initial overlap <psi| H |psi>
+        initial environments must be set up with respect to the last site.
+    SV_min: list
+        list of minimal Schmidt values on each bond
+    D_totals: list
+        list of upper bound on bond dimension
+    tol_svds: list
+        list of lower bound on Schmidt values.
+    versions: 2-element tuple
+        version = (else, version to increase bond_dimension)
+        tuple with what algorithm to use during a sweep. Algorithm is chosen basing on Schmidt values.
+    hermitian: bool
+        default = True
+        is MPO hermitian
+    k: int
+        default = 4
+        Dimension of Krylov subspace for eigs(.)
+    eigs_tol: float
+        default = 1e-14
+        Cutoff for krylov subspace for eigs(.)
+    bi_orth: bool
+        default = True
+        Option for exponentiation = exp(). For True and non-Hermitian cases will bi-orthogonalize set of generated vectors.
+    NA: bool
+        default = None
+        The cost of matrix-vector multiplication used to optimize Krylov subspace and time intervals.
+        Option for exponentiation = exp().
+    opts_svd: dict
+        default=None
+        options for truncation on virtual d.o.f.
+
+    Returns
+    -------
+    env: Env3
+     Overlap <psi| H |psi> as Env3.
+    psi: Mps
+        Is self updated.
+    """
+    Ds = psi.get_D()
+    if not D_totals:
+        D_totals = [None]*(psi.N+1)
+        max_vdim = 1
+        for n in range(psi.N):
+            D_totals[n] = min([max_vdim, opts_svd['D_total']])
+            max_vdim = D_totals[n]
+            _, lDs = psi.A[n].get_tD()
+            leg_dim = [sum(xx) for xx in lDs]
+            max_vdim *= np.prod([leg_dim[x] for x in psi.phys])
+        max_vdim = 1
+        for n in range(psi.N-1, -1, -1):
+            _, lDs = psi.A[n].get_tD()
+            leg_dim = [sum(xx) for xx in lDs]
+            max_vdim *= np.prod([leg_dim[x] for x in psi.phys])
+            D_totals[n] = min([D_totals[n], max_vdim, opts_svd['D_total']])
+            max_vdim = D_totals[n]
+        D_totals[-1] = 1
+    if not tol_svds:
+        tol_svds = [opts_svd['tol'] for n in Ds]
+    #
+    if env is None:
+        env = Env3(bra=psi, op=H, ket=psi)
+        env.setup_to_first()
+    for n in psi.g.sweep(to='last'):
+        opts_svd['D_total'] = D_totals[n]
+        opts_svd['tol'] = tol_svds[n]
+        #
+        if (SV_min[n] > tol_svds[n] and Ds[n] < D_totals[n]) or (Ds[n] > D_totals[n]):  # choose 2site
+            version = versions[1]
+        else:  # choose 1site
+            version = versions[0]
+        #
+        #print(n, version, SV_min[n], tol_svds[n], Ds[n], D_totals[n])
+        if version == '0site':
+            psi.orthogonalize_site(n, towards=psi.g.last)
+            env.clear_site(n)
+            env.update(n, towards=psi.g.last)
+            if n != psi.g.sweep(to='last')[-1]:
+                init = psi.A[psi.pC]
+                # update site n using eigs
+                def Av(v): return env.Heff0(v, psi.pC)
+                if algorithm == 'lanczos' and not hermitian:
+                    def Bv(v): return env.Heff0(v, psi.pC, conj=True)
+                else:
+                    Bv = None
+                _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
+                                 init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
+                # canonize and save
+                psi.A[psi.pC] = vec[0]
+            psi.absorb_central(towards=psi.g.last)
+        elif version == '1site':
+            init = psi.A[n]
+            def Av(v): return env.Heff1(v, n)
+            if algorithm == 'lanczos' and not hermitian:
+                def Bv(v): return env.Heff1(v, n, conj=True)
+            else:
+                Bv = None
+            _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+                             sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
+            # canonize and save
+            psi.A[n] = vec[0]
+            psi.orthogonalize_site(n, towards=psi.g.last)
+            env.clear_site(n)
+            env.update(n, towards=psi.g.last)
+            psi.absorb_central(towards=psi.g.last)
+        elif version == '2site':
+            if n == psi.g.sweep(to='last')[-1]:
+                env.clear_site(n)
+                env.update(n, towards=psi.g.first)
+            else:
+                n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
+                init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
+                # update site n using eigs
+                def Av(v): return env.Heff2(v, n)
+                if algorithm == 'lanczos' and not hermitian:
+                    def Bv(v): return env.Heff2(v, n, conj=True)
+                else:
+                    Bv = None
+                _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
+                                 init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
+                # split and save
+                x, S, y = vec[0].split_svd(axes=(psi.left + psi.phys, tuple(
+                    a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
+                psi.A[n] = x
+                psi.A[n1] = y.dot_diag(S, axis=0)
+                env.clear_site(n)
+                env.clear_site(n1)
+                env.update(n, towards=psi.g.last)
+        elif version == '2site_group':
+            if n == psi.g.sweep(to='last')[-1]:
+                env.clear_site(n)
+                env.update(n, towards=psi.g.first)
+            else:
+                n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
+                init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
+                init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
+                # update site n using eigs
+                def Av(v): return env.Heff2_group(v, n)
+                if algorithm == 'lanczos' and not hermitian:
+                    def Bv(v): return env.Heff2_group(v, n, conj=True)
+                else:
+                    Bv = None
+                _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
+                                 init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
+                init = vec[0].ungroup_leg(axis=1, leg_order=leg_order)
+                # split and save
+                x, S, y = init.split_svd(axes=(psi.left + psi.phys, tuple(
+                    a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
+                psi.A[n] = x
+                psi.A[n1] = y.dot_diag(S, axis=0)
+                env.clear_site(n)
+                env.clear_site(n1)
+                env.update(n, towards=psi.g.last)
+    Ds = psi.get_D()
+    for n in psi.g.sweep(to='first'):
+        opts_svd['D_total'] = D_totals[n]
+        opts_svd['tol'] = tol_svds[n]
+        #
+        if (SV_min[n] > tol_svds[n] and Ds[n] < D_totals[n]) or (Ds[n] > D_totals[n]):  # choose 2site
+            version = versions[1]
+        else:  # choose 1site
+            version = versions[0]
+        #print(n, version, SV_min[n], tol_svds[n], Ds[n], D_totals[n])
+        #
+        if version == '0site':
+            psi.orthogonalize_site(n, towards=psi.g.first)
+            env.clear_site(n)
+            env.update(n, towards=psi.g.first)
+            if n != psi.g.sweep(to='first')[-1]:
+                init = psi.A[psi.pC]
+                # update site n using eigs
+                def Av(v): return env.Heff0(v, psi.pC)
+                if algorithm == 'lanczos' and not hermitian:
+                    def Bv(v): return env.Heff0(v, psi.pC, conj=True)
+                else:
+                    Bv = None
+                _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
+                                 init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
+                # canonize and save
+                psi.A[psi.pC] = vec[0]
+            psi.absorb_central(towards=psi.g.first)
+        elif version == '1site':
+            init = psi.A[n]
+            def Av(v): return env.Heff1(v, n)
+            if algorithm == 'lanczos' and not hermitian:
+                def Bv(v): return env.Heff1(v, n, conj=True)
+            else:
+                Bv = None
+            _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+                             sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
+            # canonize and save
+            psi.A[n] = vec[0]
+            psi.orthogonalize_site(n, towards=psi.g.first)
+            env.clear_site(n)
+            env.update(n, towards=psi.g.first)
+            psi.absorb_central(towards=psi.g.first)
+        elif version == '2site':
+            if n == psi.g.sweep(to='first')[-1]:
+                env.clear_site(n)
+                env.update(n, towards=psi.g.first)
+            else:
+                n1, _, _ = psi.g.from_site(n, towards=psi.g.first)
+                init = psi.A[n1].dot(psi.A[n], axes=(psi.right, psi.left))
+                # update site n using eigs
+                def Av(v): return env.Heff2(v, n1)
+                if algorithm == 'lanczos' and not hermitian:
+                    def Bv(v): return env.Heff2(v, n1, conj=True)
+                else:
+                    Bv = None
+                _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
+                                 init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
+                # split and save
+                x, S, y = vec[0].split_svd(axes=(psi.left + psi.phys, tuple(
+                    a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
+                psi.A[n1] = x.dot_diag(S, axis=2)
+                psi.A[n] = y
+                env.clear_site(n)
+                env.update(n, towards=psi.g.first)
+                env.clear_site(n1)
+        elif version == '2site_group':
+            if n == psi.g.sweep(to='first')[-1]:
+                env.clear_site(n)
+                env.update(n, towards=psi.g.first)
+            else:
+                n1, _, _ = psi.g.from_site(n, towards=psi.g.first)
+                init = psi.A[n1].dot(psi.A[n], axes=(psi.right, psi.left))
+                init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
+                # update site n using eigs
+                def Av(v): return env.Heff2_group(v, n1)
+                if algorithm == 'lanczos' and not hermitian:
+                    def Bv(v): return env.Heff2_group(v, n1, conj=True)
+                else:
+                    Bv = None
+                _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
+                                 init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
+                init = vec[0].ungroup_leg(axis=1, leg_order=leg_order)
+                # split and save
+                x, S, y = init.split_svd(axes=(psi.left + psi.phys, tuple(
+                    a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
+                psi.A[n1] = x.dot_diag(S, axis=2)
+                psi.A[n] = y
+                env.clear_site(n)
+                env.update(n, towards=psi.g.first)
+                env.clear_site(n1)
+
+    return env

@@ -297,7 +297,7 @@ class Mps:
                 _, R = self.A[n].split_qr(axes=(self.left + self.phys, self.right), sQ=-1)
             _, s, _ = R.split_svd(axes=(0,1))
             s = s.to_numpy().diagonal()
-            Schmidt_spectrum[n, :len(s)] = s
+            Schmidt_spectrum[n, :len(s)] = s.real
             Smin[n] = min(s).real
             if alpha == 1:  # von Neumann 
                 Entropy[n] = (-2.*sum(s*s*np.log2(s))).real
