@@ -29,4 +29,5 @@ pytest:
   script:
   - pip install pytest
   - pip install .
+  - git submodule update --init --recursive
   - cd tests/; pytest -v
