@@ -1,7 +1,11 @@
+import warnings
 import logging
 import numpy as np
 import scipy as sp
-import fbpca as pca
+try:
+    import fbpca as pca
+except ImportError as e:
+    warnings.warn("fbpca not available", Warning)
 from itertools import groupby
 from itertools import product
 from itertools import accumulate

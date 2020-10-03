@@ -223,7 +223,7 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
     Initialize tensor matching legs of existing tensors, so that it can be contracted with those tensors.
 
     Finds all matching symmetry sectors and their bond dimensions and passes it to :meth:`Tensor.reset_tensor`.
-    Can creat diagonal tensor by matching to one leg of one other tensor.
+    Can create diagonal tensor by matching to one leg of one other tensor.
 
     Parameters
     ----------
@@ -343,7 +343,7 @@ class Tensor:
         settings: module
             configuration with backend, symmetry, etc.
         s : tuple, int
-            a signature of the tensor; define rank of the tensor; can provide int for ndim == 1
+            a signature of the tensor; defines rank of the tensor; can provide int for ndim == 1
         n : tuple, int
             total charge for each symmetry sectors; default is 0; can provide int for nsym == 1
         isdiag : bool
@@ -352,7 +352,9 @@ class Tensor:
         """
         self.conf = settings
         self.isdiag = isdiag
+        self.dtype= self.conf.dtype
         self.nsym = self.conf.nsym  # number of symmetries
+        self.sym= self.conf.sym
         if not isdiag:
             self._ndim = 1 if isinstance(s, int) else len(s)  # number of legs
             self.s = np.array(s, dtype=np.int).reshape(self._ndim)
@@ -425,7 +427,7 @@ class Tensor:
             if len(D) != self._ndim:
                 logger.exception("Wrong number of elements in D")
                 raise FatalError
-            tset = np.zeros((1, self._ndim, self.nsym))
+            tset = np.zeros((1, self._ndim, self.nsym), dtype= np.int)
             Dset = np.array(D, dtype=np.int).reshape(1, self._ndim, 1)
         elif self.nsym >= 1:
             if (self._ndim == 1) and isinstance(D[0], int):
@@ -678,7 +680,7 @@ class Tensor:
         return self.tset
 
     def get_shape(self):
-        """ Shapes fo all blocks. """
+        """ Shapes of all blocks. """
         shape = []
 
         for ind in self.tset:
@@ -1302,7 +1304,7 @@ class Tensor:
     ##################################
 
     def scalar(self, other):
-        """ Compute scalar product x=(a, b) of two tensor.
+        """ Compute scalar product x=(a, b) of two tensors.
 
             Note that the first one is conjugated.
 
