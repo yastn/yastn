@@ -123,3 +123,6 @@ dmypy.json
 
 # macOS
 .DS_Store
+
+# vim
+.swp
