@@ -41,7 +41,7 @@ class Test_IO_ipeps_abelian(unittest.TestCase):
             y = abs(r[1])
             return ((x + y) % 2, 0)
 
-        state= IPEPS_ABELIAN(sites, settings_full, vertexToSite)
+        state= IPEPS_ABELIAN(settings_full, sites, vertexToSite)
         write_ipeps(state, self.outf_full)
 
     def test_write_U1(self):
@@ -59,7 +59,7 @@ class Test_IO_ipeps_abelian(unittest.TestCase):
             y = abs(r[1])
             return ((x + y) % 2, 0)
 
-        state= IPEPS_ABELIAN(sites, settings_U1, vertexToSite)
+        state= IPEPS_ABELIAN(settings_U1, sites, vertexToSite)
         write_ipeps(state, self.outf_U1)
 
     def test_write_U1_U1(self):
@@ -77,7 +77,7 @@ class Test_IO_ipeps_abelian(unittest.TestCase):
             y = abs(r[1])
             return ((x + y) % 2, 0)
 
-        state= IPEPS_ABELIAN(sites, settings_U1_U1, vertexToSite)
+        state= IPEPS_ABELIAN(settings_U1_U1, sites, vertexToSite)
         write_ipeps(state, self.outf_U1_U1)
 
     def test_read_full(self):
@@ -90,7 +90,7 @@ class Test_IO_ipeps_abelian(unittest.TestCase):
             y = abs(r[1])
             return ((x + y) % 2, 0)
 
-        state0= IPEPS_ABELIAN(sites, settings_full, vertexToSite)
+        state0= IPEPS_ABELIAN(settings_full, sites, vertexToSite)
         write_ipeps(state0, self.outf_full)
         state1= read_ipeps(self.outf_full, settings_full, vertexToSite)
 
@@ -111,7 +111,7 @@ class Test_IO_ipeps_abelian(unittest.TestCase):
             y = abs(r[1])
             return ((x + y) % 2, 0)
 
-        state0= IPEPS_ABELIAN(sites, settings_U1, vertexToSite)
+        state0= IPEPS_ABELIAN(settings_U1, sites, vertexToSite)
         write_ipeps(state0, self.outf_U1)
         state1= read_ipeps(self.outf_U1, settings_U1, vertexToSite)
 
@@ -132,7 +132,7 @@ class Test_IO_ipeps_abelian(unittest.TestCase):
             y = abs(r[1])
             return ((x + y) % 2, 0)
 
-        state0= IPEPS_ABELIAN(sites, settings_U1_U1, vertexToSite)
+        state0= IPEPS_ABELIAN(settings_U1_U1, sites, vertexToSite)
         write_ipeps(state0, self.outf_U1_U1)
         state1= read_ipeps(self.outf_U1_U1, settings_U1_U1, vertexToSite)
 
