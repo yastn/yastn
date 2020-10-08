@@ -366,6 +366,8 @@ class Tensor:
         self.tset = np.empty((0, self._ndim, self.nsym), dtype=np.int)  # list of blocks; 3d nparray of ints
         self.A = {}  # dictionary of blocks
 
+        self._leg_fusion_data={}
+
     def copy(self):
         r"""
         Return a copy of the tensor.
@@ -643,7 +645,12 @@ class Tensor:
         return out
 
     def __str__(self):
-        return self.conf.sym + ' s=' + str(self.s) + ' n=' + str(self.n)
+        s=f"{self.conf.sym} s= {self.s} n= {self.n}\n"
+        s+=f"charges      : {self.get_t()}\n"
+        lts, lDs = self.get_tD()
+        s+=f"leg charges  : {lts}\n"
+        s+=f"dimensions   : {lDs}"
+        return s
 
     def show_properties(self):
         r"""
@@ -819,6 +826,24 @@ class Tensor:
             new tensor with the result of multipcilation.
         """
         return self.__mul__(other)
+
+    def __truediv__(self, other):
+        """
+        Divide tensor by a scalar, use: tensor / scalar.
+
+        Parameters
+        ----------
+        other: scalar
+
+        Returns
+        -------
+        tensor : Tensor
+            new tensor with the result of element-wise division.
+        """
+        a = Tensor(settings=self.conf, s=self.s, n=self.n, isdiag=self.isdiag)
+        a.tset = self.tset.copy()
+        a.A= { ind: b/other for ind,b in self.A.items() }  
+        return a
 
     def __add__(self, other):
         """
@@ -1060,7 +1085,8 @@ class Tensor:
         """
         Group tensor legs into a single leg.
 
-        Create one new leg, which is placed on the position of the first index in axes. The rest is shifted accordingly.
+        Create one new leg, which is placed on the position of the first index in axes. 
+        The rest is shifted accordingly, eg. 01(234)5->01(2)3
 
         Parameters
         ----------
@@ -1068,7 +1094,7 @@ class Tensor:
             tuple of legs to combine.
 
         new_s: int
-            signeture of a new leg.
+            signature of a new leg.
 
         Returns
         -------
@@ -1200,7 +1226,8 @@ class Tensor:
     def invsqrt(self):
         """ Element-wise 1/sqrt(A)"""
         a = Tensor(settings=self.conf, s=self.s, n=self.n, isdiag=self.isdiag)
-        a.A = self.conf.back.invsqrt(self.A, self.isdiag)
+        # a.A = self.conf.back.invsqrt(self.A, self.isdiag)
+        a.A = self.conf.back.invsqrt(self.A)
         a.tset = self.tset.copy()
         return a
 
@@ -1298,6 +1325,16 @@ class Tensor:
 
         ent, Smin, no = self.conf.back.entropy(Smerged, alpha=alpha)
         return ent, Smin, no
+
+    def max_abs(self):
+        """
+        Largest element by magnitude
+
+        Returns
+        -------
+        max_abs : float64
+        """
+        return self.conf.back.max_abs(self.A)
 
     ##################################
     #     contraction operations     #
@@ -1537,7 +1574,7 @@ class Tensor:
                 logger.exception('len(axes[0]) == 0. Do not support outer product with diagonal tensor. Use diag() first.')
                 raise FatalError
             else:
-                logger.exception('To many axis to contract.')
+                logger.exception('Too many axis to contract.')
                 raise FatalError
             return c
 
@@ -1692,23 +1729,29 @@ class Tensor:
     #     spliting tensor     #
     ###########################
 
-    def split_svd(self, axes, sU=1, Uaxis=-1, Vaxis=0, tol=0, D_block=_large_int, D_total=_large_int, truncated_svd=False, truncated_nbit=60, truncated_kfac=6):
+    def split_svd(self, axes, sU=1, Uaxis=-1, Vaxis=0, tol=0, D_block=_large_int, \
+        D_total=_large_int, truncated_svd=False, truncated_nbit=60, truncated_kfac=6):
         r"""
-        Split tensor using svd, tensor = U * S * V. Truncate smallest singular values if neccesary.
+        Split tensor using svd, tensor = U * S * V. Truncate smallest singular values 
+        if neccesary.
 
-        Truncate using (whichever gives smaller bond dimension) relative tolerance, bond dimension of each block, and total bond dimension from all blocks.
-        By default do not truncate. Charge divided between U and V as n_u = n+1//2 and n_v = n//2, respectively.
+        Truncate using (whichever gives smaller bond dimension) relative tolerance, 
+        bond dimension of each block, and total bond dimension from all blocks.
+        By default do not truncate. Charge divided between U and V as n_u = n+1//2 
+        and n_v = n//2, respectively.
 
         Parameters
         ----------
         axes: tuple
-            Specify two groups of legs between which to perform svd, as well as their final order.
+            Specify two groups of legs between which to perform svd, as well as 
+            their final order.
 
         sU: int
             signature of connecting leg in U equall 1 or -1. Default is 1.
 
         Uaxis, Vaxis: int
-            specify which leg of U and V tensors are connecting with S. By delault it is the last leg of U and the first of V.
+            specify which leg of U and V tensors are connecting with S. By default 
+            it is the last leg of U and the first of V.
 
         tol: float
             relative tolerance of singular values below which to truncate.

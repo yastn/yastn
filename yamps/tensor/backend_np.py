@@ -268,6 +268,9 @@ def entropy(A, alpha=1, tol=1e-12):
             ent = np.log2(ent) / (1 - alpha)
     return ent, Smin, no
 
+def max_abs(A):
+    return max([np.abs(x).max() for x in A.values()])
+
 ##############
 # two dicts operations
 ##############
