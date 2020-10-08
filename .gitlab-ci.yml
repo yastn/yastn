@@ -3,6 +3,27 @@ image: python:latest
 before_script:
   - python --version
   - pip install -r requirements.txt
+  ##
+  ## Install ssh-agent if not already installed, it is required by Docker.
+  ## (change apt-get to yum if you use an RPM-based image)
+  ##  
+  - 'command -v ssh-agent >/dev/null || ( apt-get update -y && apt-get install openssh-client -y )'
+  ##
+  ## Run ssh-agent (inside the build environment)
+  ##
+  - eval $(ssh-agent -s)
+  ##
+  ## Add the SSH key stored in SSH_PRIVATE_KEY variable to the agent store
+  ## We're using tr to fix line endings which makes ed25519 keys work
+  ## without extra base64 encoding.
+  ## https://gitlab.com/gitlab-examples/ssh-private-key/issues/1#note_48526556
+  ##
+  - echo "$id_rsa_deploy_tn-torch_dev" | tr -d '\r' | ssh-add -
+  ##
+  ## Create the SSH directory and give it the right permissions
+  ##
+  - mkdir -p ~/.ssh
+  - chmod 700 ~/.ssh
 
 stages:
   - Static Analysis
@@ -29,5 +50,6 @@ pytest:
   script:
   - pip install pytest
   - pip install .
+  - export PYTHONPATH=$(pwd)
   - git submodule update --init --recursive
   - cd tests/; pytest -v

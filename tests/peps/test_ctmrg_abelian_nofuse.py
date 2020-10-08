@@ -44,13 +44,14 @@ class Test_env_abelian(unittest.TestCase):
         a.set_block((-1,0,0,0,-1), (1,1,1,1,1), val=tmp_B)
 
         b = TA.zeros(settings=settings_U1, s=cls._ref_s_dir, n=0,
-                        t=((0, 1), (0, -1), (0, -1), (0,1), (0,1)),
+                        t=((0, -1), (0, 1), (0, 1), (0,-1), (0,-1)),
+                        # t=((0, 1), (0, -1), (0, -1), (0,1), (0,1)),
                         D=((1, 1), (1,1), (1,1), (1,1), (1,1)))
         b.set_block((0,0,0,0,0), (1,1,1,1,1), val='ones')
-        b.set_block((1,-1,0,0,0), (1,1,1,1,1), val=tmp_B)
-        b.set_block((1,0,-1,0,0), (1,1,1,1,1), val=tmp_B)
-        b.set_block((1,0,0,1,0), (1,1,1,1,1), val=tmp_B)
-        b.set_block((1,0,0,0,1), (1,1,1,1,1), val=tmp_B)
+        b.set_block((1,1,0,0,0), (1,1,1,1,1), val=tmp_B)
+        b.set_block((1,0,1,0,0), (1,1,1,1,1), val=tmp_B)
+        b.set_block((1,0,0,-1,0), (1,1,1,1,1), val=tmp_B)
+        b.set_block((1,0,0,0,-1), (1,1,1,1,1), val=tmp_B)
 
         sites=dict({(0,0): a, (1,0): b})
 
