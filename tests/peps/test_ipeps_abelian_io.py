@@ -1,13 +1,17 @@
 import yamps.tensor as TA
-from yamps.tests.peps import settings_full
-from yamps.tests.peps import settings_U1
-from yamps.tests.peps import settings_U1_U1
+import settings_full
+import settings_U1
+import settings_U1_U1
 import yamps.peps.config as cfg
 from yamps.peps.ipeps.ipeps_abelian import IPEPS_ABELIAN
 from yamps.peps.ipeps.ipeps_abelian import write_ipeps, read_ipeps
 import numpy as np
 import unittest
 import os
+import inspect
+print(inspect.getfile(settings_full))
+print(inspect.getfile(settings_U1))
+print(inspect.getfile(settings_U1_U1))
 
 class Test_IO_ipeps_abelian(unittest.TestCase):
 
