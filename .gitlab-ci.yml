@@ -53,5 +53,5 @@ pytest:
   - pip install .
   - export PYTHONPATH=$(pwd)
   - ssh-add -l
-  - ssh-agent 'git submodule update --init --recursive'
+  - ssh-agent -c 'git submodule update --init --recursive'
   - cd tests/; pytest -v
