@@ -23,8 +23,12 @@ before_script:
   ##
   ## Create the SSH directory and give it the right permissions
   ##
-  ##- mkdir -p ~/.ssh
-  ##- chmod 700 ~/.ssh
+  - mkdir -p ~/.ssh
+  - chmod 700 ~/.ssh
+  - echo "$id_rsa_deploy_tn_torch_dev" | tr -d '\r' > .ssh/id_rsa
+  - chmod 600 ~/.ssh/id_rsa
+  - echo $'Host github.com\n    HostName github.com\n    User git\n    IdentityFile .ssh/id_rsa' > .ssh/config
+  - chmod 600 ~/.ssh/config
 
 stages:
   - Static Analysis
@@ -54,5 +58,6 @@ pytest:
   - export PYTHONPATH=$(pwd)
   - git submodule status
   - ssh-add -l
-  - ssh-agent sh -c 'git submodule update --init --recursive'
+  - ssh -vT git@github.com
+  # - ssh-agent sh -c 'git submodule update --init --recursive'
   - cd tests/; pytest -v
