@@ -8,7 +8,6 @@ import yamps.peps.config as cfg
 from yamps.peps.ipeps.ipeps_abelian import IPEPS_ABELIAN
 from yamps.peps.ctm.generic_abelian_nofuse.env_abelian import ENV_ABELIAN
 import yamps.peps.ctm.generic_abelian_nofuse.ctmrg as ctmrg_abelian
-import yamps.peps.ctm.generic.ctmrg as ctmrg
 
 class Test_env_abelian(unittest.TestCase):
     
