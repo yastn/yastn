@@ -19,16 +19,17 @@ before_script:
   ## https://gitlab.com/gitlab-examples/ssh-private-key/issues/1#note_48526556
   ##
   - echo "$id_rsa_deploy_tn_torch_dev" | tr -d '\r' | ssh-add -
-  - ssh-add -l
+  - ssh-add -l 
   ##
   ## Create the SSH directory and give it the right permissions
   ##
   - mkdir -p ~/.ssh
   - chmod 700 ~/.ssh
-  - echo "$id_rsa_deploy_tn_torch_dev" | tr -d '\r' > ~/.ssh/id_rsa
-  - chmod 600 ~/.ssh/id_rsa
-  - echo $'Host github.com\n    HostName github.com\n    User git\n    IdentityFile .ssh/id_rsa' > ~/.ssh/config
-  - chmod 600 ~/.ssh/config
+  #- echo "$id_rsa_deploy_tn_torch_dev" | tr -d '\r' > ~/.ssh/id_rsa
+  #- chmod 600 ~/.ssh/id_rsa
+  #- echo $'Host github.com\n    HostName github.com\n    User git\n    IdentityFile .ssh/id_rsa' > ~/.ssh/config
+  #- chmod 600 ~/.ssh/config
+  - ssh-keyscan -t rsa github.com 2>&1 >> ~/.ssh/known_hosts
 
 stages:
   - Static Analysis
@@ -57,8 +58,7 @@ pytest:
   - pip install .
   - export PYTHONPATH=$(pwd)
   - git submodule status
-  - ssh-keyscan -t rsa github.com 2>&1 >> ~/.ssh/known_hosts
   - ssh-add -l
   - ssh -vT git@github.com
-  # - ssh-agent sh -c 'git submodule update --init --recursive'
+  #- ssh-agent sh -c 'git submodule update --init --recursive'
   - cd tests/; pytest -v
