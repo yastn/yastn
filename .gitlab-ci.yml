@@ -57,6 +57,7 @@ pytest:
   - pip install .
   - export PYTHONPATH=$(pwd)
   - git submodule status
+  - ssh-keyscan -t rsa github.com 2>&1 >> ~/.ssh/known_hosts
   - ssh-add -l
   - ssh -vT git@github.com
   # - ssh-agent sh -c 'git submodule update --init --recursive'
