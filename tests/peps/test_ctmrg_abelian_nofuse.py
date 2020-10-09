@@ -1,13 +1,17 @@
 import numpy as np
 import unittest
 import yamps.tensor as TA
-from yamps.tests.peps import settings_full
-from yamps.tests.peps import settings_U1
-from yamps.tests.peps import settings_U1_U1
+import settings_full
+import settings_U1
+import settings_U1_U1
 import yamps.peps.config as cfg
 from yamps.peps.ipeps.ipeps_abelian import IPEPS_ABELIAN
 from yamps.peps.ctm.generic_abelian_nofuse.env_abelian import ENV_ABELIAN
 import yamps.peps.ctm.generic_abelian_nofuse.ctmrg as ctmrg_abelian
+import inspect
+print(inspect.getfile(settings_full))
+print(inspect.getfile(settings_U1))
+print(inspect.getfile(settings_U1_U1))
 
 class Test_env_abelian(unittest.TestCase):
     
