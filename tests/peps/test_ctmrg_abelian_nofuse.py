@@ -1,9 +1,9 @@
 import numpy as np
 import unittest
 import yamps.tensor as TA
-import settings_full
-import settings_U1
-import settings_U1_U1
+from yamps.tests.peps import settings_full
+from yamps.tests.peps import settings_U1
+from yamps.tests.peps import settings_U1_U1
 import yamps.peps.config as cfg
 from yamps.peps.ipeps.ipeps_abelian import IPEPS_ABELIAN
 from yamps.peps.ctm.generic_abelian_nofuse.env_abelian import ENV_ABELIAN
