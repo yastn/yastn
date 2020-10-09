@@ -776,6 +776,15 @@ class Tensor:
             a = np.diag(a)
         return a
 
+    def to_dense(self):
+        settings_dense= self.conf
+        settings_dense.dot_merge= False
+        settings_dense.sym= []
+        settings_dense.nsym= 0
+        T= Tensor(settings=settings_dense, s=self.s, isdiag=self.isdiag)
+        T.set_block(val=self.to_numpy())
+        return T
+
     def to_number(self):
         """
         Return first number in the first (unsorted) block.

@@ -1,5 +1,4 @@
 import numpy as np
-import torch
 import unittest
 import yamps.tensor as TA
 import settings_full
@@ -44,14 +43,13 @@ class Test_env_abelian(unittest.TestCase):
         a.set_block((-1,0,0,0,-1), (1,1,1,1,1), val=tmp_B)
 
         b = TA.zeros(settings=settings_U1, s=cls._ref_s_dir, n=0,
-                        t=((0, -1), (0, 1), (0, 1), (0,-1), (0,-1)),
-                        # t=((0, 1), (0, -1), (0, -1), (0,1), (0,1)),
+                        t=((0, 1), (0, -1), (0, -1), (0,1), (0,1)),
                         D=((1, 1), (1,1), (1,1), (1,1), (1,1)))
         b.set_block((0,0,0,0,0), (1,1,1,1,1), val='ones')
-        b.set_block((1,1,0,0,0), (1,1,1,1,1), val=tmp_B)
-        b.set_block((1,0,1,0,0), (1,1,1,1,1), val=tmp_B)
-        b.set_block((1,0,0,-1,0), (1,1,1,1,1), val=tmp_B)
-        b.set_block((1,0,0,0,-1), (1,1,1,1,1), val=tmp_B)
+        b.set_block((1,-1,0,0,0), (1,1,1,1,1), val=tmp_B)
+        b.set_block((1,0,-1,0,0), (1,1,1,1,1), val=tmp_B)
+        b.set_block((1,0,0,1,0), (1,1,1,1,1), val=tmp_B)
+        b.set_block((1,0,0,0,1), (1,1,1,1,1), val=tmp_B)
 
         sites=dict({(0,0): a, (1,0): b})
 
@@ -93,7 +91,8 @@ class Test_env_abelian(unittest.TestCase):
             return False, history
 
         cfg.ctm_args.ctm_max_iter= 2
-        env_out, *ctm_log= ctmrg_abelian.run(state, env, conv_check=ctmrg_conv_f)
+        env_out, *ctm_log= ctmrg_abelian.run(state, env, conv_check=ctmrg_conv_f,
+            ctm_args= cfg.ctm_args)
 
     def test_ctmrg_abelian_full(self):
         state= self._get_2x1_BIPARTITE_full()
@@ -108,38 +107,20 @@ class Test_env_abelian(unittest.TestCase):
                 print(f"{cid}: {s}")
             return False, history
 
-        cfg.ctm_args.ctm_max_iter=50
+        cfg.ctm_args.ctm_max_iter=2
         env_out, *ctm_log= ctmrg_abelian.run(state, env, conv_check=ctmrg_conv_f,\
             ctm_args=cfg.ctm_args)
 
-        state_dense= state.to_dense()
-        state_dense.sites= {sid: torch.from_numpy(s) for sid,s in state_dense.sites.items()}
-        env_dense= env_out.to_dense()
-        env_dense.C= {cid: torch.from_numpy(c) for cid,c in env_dense.C.items()}
-        env_dense.T= {tid: torch.from_numpy(t) for tid,t in env_dense.T.items()}
-        
-        def ctmrg_conv_f(state, env, history, ctm_args=cfg.ctm_args):
-            # compute SVD of corners
-            for cid,c in env.C.items():
-                u,s,v=torch.svd(c, compute_uv=False)
-                print(f"{cid}: {s}")
-            return False, history
+    # def test_ctmrg_abelian_U1_chi1(self):
+    #     state= self._get_2x1_BIPARTITE_U1()
+    #     env= ENV_ABELIAN(state=state, init=True)
+    #     print(env)
 
-        cfg.ctm_args.ctm_max_iter= 50
-        env_out, *ctm_log= ctmrg.run(state_dense, env_dense, conv_check=ctmrg_conv_f,
-            ctm_args=cfg.ctm_args)
+    #     def ctmrg_conv_f(state, env, history, ctm_args=cfg.ctm_args):
+    #         return False, history
 
-
-    def test_ctmrg_abelian_U1_chi1(self):
-        state= self._get_2x1_BIPARTITE_U1()
-        env= ENV_ABELIAN(state=state, init=True)
-        print(env)
-
-        def ctmrg_conv_f(state, env, history, ctm_args=cfg.ctm_args):
-            return False, history
-
-        cfg.ctm_args.ctm_max_iter= 2
-        env_out, *ctm_log= ctmrg_abelian.run(state, env, conv_check=ctmrg_conv_f)
+    #     cfg.ctm_args.ctm_max_iter= 2
+    #     env_out, *ctm_log= ctmrg_abelian.run(state, env, conv_check=ctmrg_conv_f)
 
     def test_ctmrg_abelian_U1(self):
         chi=9
@@ -160,32 +141,20 @@ class Test_env_abelian(unittest.TestCase):
             ctm_args=cfg.ctm_args)
 
         print("----- CTMRG_ABELIAN FINISHED -----")
-        cfg.global_args.dtype= torch.float64
 
         state_dense= state.to_dense()
-        state_dense.sites= {sid: torch.from_numpy(s) for sid,s in state_dense.sites.items()}
-        state_dense.write_to_file("TEST_state.json")
-        # env_dense= env_out.to_dense()
-        # env_dense.C= {cid: torch.from_numpy(c) for cid,c in env_dense.C.items()}
-        # env_dense.T= {tid: torch.from_numpy(t) for tid,t in env_dense.T.items()}
-        env_dense= ENV(chi, state=state_dense, global_args=cfg.global_args)
-        init_env(state_dense, env_dense)
+        env_dense= ENV_ABELIAN(chi=chi, state=state_dense, init=True)
 
         def ctmrg_conv_f(state, env, history, ctm_args=cfg.ctm_args):
             # compute SVD of corners
             for cid,c in env.C.items():
-                u,s,v=torch.svd(c, compute_uv=False)
+                u,s,v= c.split_svd((0,1))
+                s= s.to_numpy().diagonal()
                 print(f"{cid}: {s}")
             return False, history
 
-        env_out, *ctm_log= ctmrg.run(state_dense, env_dense, conv_check=ctmrg_conv_f,\
-            ctm_args=cfg.ctm_args)
+        env_out, *ctm_log= ctmrg_abelian.run(state_dense, env_dense, \
+            conv_check=ctmrg_conv_f, ctm_args=cfg.ctm_args)
 
 if __name__ == '__main__':
-    #unittest.main()
-    T= Test_env_abelian()
-    #T.test_ctmrg_abelian_full_chi1()
-    #T.test_ctmrg_abelian_full()
-
-    #T.test_ctmrg_abelian_U1_chi1()
-    T.test_ctmrg_abelian_U1()
+    unittest.main()
