@@ -19,11 +19,12 @@ before_script:
   ## https://gitlab.com/gitlab-examples/ssh-private-key/issues/1#note_48526556
   ##
   - echo "$id_rsa_deploy_tn_torch_dev" | tr -d '\r' | ssh-add -
+  - ls ~/.ssh
   ##
   ## Create the SSH directory and give it the right permissions
   ##
-  - mkdir -p ~/.ssh
-  - chmod 700 ~/.ssh
+  ##- mkdir -p ~/.ssh
+  ##- chmod 700 ~/.ssh
 
 stages:
   - Static Analysis
@@ -51,5 +52,6 @@ pytest:
   - pip install pytest
   - pip install .
   - export PYTHONPATH=$(pwd)
+  - ls ~/.ssh
   - git submodule update --init --recursive
   - cd tests/; pytest -v
