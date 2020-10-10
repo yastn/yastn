@@ -6,10 +6,10 @@ In principle, any number of symmetries can be used -- including no symmetries.
 An instance of a Tensor is defined by list of blocks (dense tensors)
 with their individual dimensions labeled by the symmetries' charges.
 """
-
 import logging
 import numpy as np
 import itertools
+from types import SimpleNamespace
 from functools import wraps
 
 
@@ -777,10 +777,8 @@ class Tensor:
         return a
 
     def to_dense(self):
-        settings_dense= self.conf
-        settings_dense.dot_merge= False
-        settings_dense.sym= []
-        settings_dense.nsym= 0
+        settings_dense= SimpleNamespace(**dict(back= self.conf.back, dtype=self.dtype, \
+            dot_merge=False, sym= [], nsym=0))
         T= Tensor(settings=settings_dense, s=self.s, isdiag=self.isdiag)
         T.set_block(val=self.to_numpy())
         return T

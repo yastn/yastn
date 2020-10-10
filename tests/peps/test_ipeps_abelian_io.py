@@ -8,10 +8,6 @@ from yamps.peps.ipeps.ipeps_abelian import write_ipeps, read_ipeps
 import numpy as np
 import unittest
 import os
-import inspect
-print(inspect.getfile(settings_full))
-print(inspect.getfile(settings_U1))
-print(inspect.getfile(settings_U1_U1))
 
 class Test_IO_ipeps_abelian(unittest.TestCase):
 
