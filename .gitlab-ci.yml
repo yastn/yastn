@@ -60,4 +60,4 @@ pytest:
   - git submodule status
   - ssh-add -l
   - git submodule update --init --recursive
-  - cd tests/; pytest -v
+  - cd tests/; pytest -v tensor; pytest -v mps; pytest -v mps
