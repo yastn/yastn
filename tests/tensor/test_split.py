@@ -1,6 +1,6 @@
 import yamps.tensor as tensor
-import settings_full
-import settings_U1
+import settings_full_R
+import settings_U1_R
 import settings_Z2_U1
 import settings_U1_U1
 import pytest
@@ -68,7 +68,7 @@ def eigh_order_combine(a):
 
 
 def test_svd0():
-    a = tensor.rand(settings=settings_full, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
+    a = tensor.rand(settings=settings_full_R, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
     svd_combine(a)
     svd_order_combine(a)
     qr_combine(a)
@@ -78,7 +78,7 @@ def test_svd0():
 
 
 def test_svd1():
-    a = tensor.rand(settings=settings_U1, s=(-1, 1, -1, 1), n=1,
+    a = tensor.rand(settings=settings_U1_R, s=(-1, 1, -1, 1), n=1,
                     t=[(-1, 0, 1), (-2, 0, 2), (-2, -1, 0, 1, 2), (0, 1)],
                     D=[(2, 3, 4), (5, 6, 7), (6, 5, 4, 3, 2), (2, 3)])
     svd_combine(a)

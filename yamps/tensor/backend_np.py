@@ -364,7 +364,6 @@ def dot_merged(A, B, conj):
 # numba_list = tr_rs(numba_list, a_all)
 # Atemp = {in1: x.reshape(dl, dc) for in1, x, dl, dc in zip(A, numba_list, pDl, pDlc)}
 
-# @profile
 def dot(A, B, conj, to_execute, a_out, a_con, b_con, b_out, dtype='float64'):
     a_all = a_out + a_con  # order for transpose in A
     b_all = b_con + b_out  # order for transpose in B
@@ -534,7 +533,6 @@ def trace_dot_diag(A, B, conj, to_execute, axis1, axis2, a_ndim):
 #     return Amerged, order_l, order_r
 
 
-# @profile
 def merge_blocks(A, to_execute, out_l, out_r, dtype='float64'):
     """ merge blocks depending on the cut """
     out_all = out_l + out_r

@@ -1,6 +1,6 @@
 import yamps.tensor as tensor
-import settings_full
-import settings_U1
+import settings_full_R
+import settings_U1_R
 import settings_Z2_U1
 import settings_U1_U1
 import pytest
@@ -8,8 +8,8 @@ import numpy as np
 
 
 def test_dot_diag0():
-    a = tensor.rand(settings=settings_full, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
-    b = tensor.rand(settings=settings_full, isdiag=True, D=5)
+    a = tensor.rand(settings=settings_full_R, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
+    b = tensor.rand(settings=settings_full_R, isdiag=True, D=5)
     b1 = b.diag()
 
     r1 = a.dot_diag(b, axis=1)
@@ -21,8 +21,8 @@ def test_dot_diag0():
     assert pytest.approx(r1.norm_diff(r3)) == 0
     assert pytest.approx(r1.norm_diff(r4)) == 0
 
-    a = tensor.randR(settings=settings_full, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
-    b = tensor.randR(settings=settings_full, s=(-1, 1), D=(7, 5))
+    a = tensor.randR(settings=settings_full_R, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
+    b = tensor.randR(settings=settings_full_R, s=(-1, 1), D=(7, 5))
     b = b.diag()  # 5x5 diagonal
     b1 = b.diag()
 
@@ -39,10 +39,10 @@ def test_dot_diag0():
 
 
 def test_dot_diag1():
-    a = tensor.rand(settings=settings_U1, s=(-1, 1, 1, -1),
+    a = tensor.rand(settings=settings_U1_R, s=(-1, 1, 1, -1),
                     t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                     D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    b = tensor.rand(settings=settings_U1, isdiag=True, t=(-1, 1), D=(7, 8))
+    b = tensor.rand(settings=settings_U1_R, isdiag=True, t=(-1, 1), D=(7, 8))
     b1 = b.diag()
 
     r1 = a.dot_diag(b, axis=2)

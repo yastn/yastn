@@ -1498,7 +1498,6 @@ class Tensor:
         c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
         return c
 
-    # @profile
     def dot(self, other, axes, conj=(0, 0)):
         r""" Compute dot product of two tensor along specified axes.
 

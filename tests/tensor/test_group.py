@@ -1,6 +1,6 @@
 import yamps.tensor as tensor
-import settings_full
-import settings_U1
+import settings_full_R
+import settings_U1_R
 import settings_Z2_U1
 import settings_U1_U1
 import pytest
@@ -30,19 +30,19 @@ def group_ungroup31(a):
 
 
 def test_group0():
-    a = tensor.rand(settings=settings_full, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
+    a = tensor.rand(settings=settings_full_R, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
     group_ungroup01(a)
     group_ungroup31(a)
 
 
 def test_group1():
-    a = tensor.rand(settings=settings_U1, s=(-1, 1, -1, 1), n=1,
+    a = tensor.rand(settings=settings_U1_R, s=(-1, 1, -1, 1), n=1,
                     t=[(-1, 0, 1), (-2, 0, 2), (-2, -1, 0, 1, 2), (0, 1)],
                     D=[(2, 3, 4), (5, 6, 7), (6, 5, 4, 3, 2), (2, 3)])
     group_ungroup01(a)
     group_ungroup31(a)
 
-    a = tensor.rand(settings=settings_U1, s=(-1, 1, 1, 1),
+    a = tensor.rand(settings=settings_U1_R, s=(-1, 1, 1, 1),
                     t=((0, 2), (-2, 2), (-2, 0, 2), 0),
                     D=((1, 2), (1, 2), (1, 2, 3), 1))
     a.set_block(ts=(0, 0, 0, 0), Ds=(1, 3, 2, 1), val=np.arange(6))
@@ -85,7 +85,7 @@ def group_ungroup_sparse(a):
 
 
 def test_group1_sparse():
-    a = tensor.Tensor(settings=settings_U1, s=(1, -1, 1, -1))
+    a = tensor.Tensor(settings=settings_U1_R, s=(1, -1, 1, -1))
     a.set_block(ts=(0, 0, 1, 1), Ds=(1, 1, 2, 2), val='rand')
     a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
     a.show_properties()
