@@ -1,4 +1,4 @@
-import settings_U1 as settings
+import settings_U1_R as settings
 import yamps.tensor as tensor
 import pytest
 

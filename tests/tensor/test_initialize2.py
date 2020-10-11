@@ -3,8 +3,10 @@ Test functions: set_block, to_dict, from_dict
 """
 
 import yamps.tensor as tensor
-import settings_full
-import settings_U1
+import settings_full_R
+import settings_full_C
+import settings_U1_R
+import settings_U1_C
 import settings_Z2_U1
 import pytest
 import numpy as np
@@ -13,8 +15,7 @@ import numpy as np
 def test_set0():
     print('----------')
     print('3d tensor:')
-    settings_full.dtype = 'complex128'
-    a = tensor.Tensor(settings=settings_full, s=(-1, 1, 1))
+    a = tensor.Tensor(settings=settings_full_C, s=(-1, 1, 1))
     a.set_block(Ds=(4, 5, 6), val='randR')
     npa = a.to_numpy()
     assert np.iscomplexobj(npa)
@@ -24,8 +25,7 @@ def test_set0():
 
     print('----------')
     print('0d tensor:')
-    settings_full.dtype = 'float64'
-    a = tensor.Tensor(settings=settings_full)  # s=()
+    a = tensor.Tensor(settings=settings_full_R)  # s=()
     a.set_block(val=3)
     npa = a.to_numpy()
     assert np.isrealobj(npa)
@@ -36,7 +36,7 @@ def test_set0():
 
     print('----------')
     print('1d tensor:')
-    a = tensor.Tensor(settings=settings_full, s=1)  # s=(1,)
+    a = tensor.Tensor(settings=settings_full_R, s=1)  # s=(1,)
     a.set_block(Ds=5, val='ones')
     npa = a.to_numpy()
     assert np.isrealobj(npa)
@@ -46,7 +46,7 @@ def test_set0():
 
     print('----------------')
     print('diagonal tensor:')
-    a = tensor.Tensor(settings=settings_full, isdiag=True)
+    a = tensor.Tensor(settings=settings_full_R, isdiag=True)
     a.set_block(Ds=5, val='ones')
     npa = a.to_numpy()
     assert np.isrealobj(npa)
@@ -59,8 +59,7 @@ def test_set0():
 def test_set1():
     print('----------')
     print('4d tensor: ')
-    settings_U1.dtype = 'complex128'
-    a = tensor.ones(settings=settings_U1, s=(-1, 1, 1, 1),
+    a = tensor.ones(settings=settings_U1_C, s=(-1, 1, 1, 1),
                     t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
                     D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
     a.set_block(ts=(-2, 0, -2, 0), val='randR')
@@ -72,8 +71,7 @@ def test_set1():
 
     print('----------')
     print('0d tensor:')
-    settings_U1.dtype = 'float64'
-    a = tensor.ones(settings=settings_U1)  # s=()  # t=(), D=()
+    a = tensor.ones(settings=settings_U1_R)  # s=()  # t=(), D=()
     a.set_block(val=2)
     npa = a.to_numpy()
     assert np.isrealobj(npa)
@@ -84,7 +82,7 @@ def test_set1():
 
     print('----------')
     print('1d tensor:')
-    a = tensor.ones(settings=settings_U1, s=-1, t=0, D=5)
+    a = tensor.ones(settings=settings_U1_R, s=-1, t=0, D=5)
     try:
         a.set_block(ts=0, Ds=4)
         assert 1 == 0
@@ -93,7 +91,7 @@ def test_set1():
 
     print('----------------')
     print('diagonal tensor:')
-    a = tensor.rand(settings=settings_U1, isdiag=True, t=0, D=5)
+    a = tensor.rand(settings=settings_U1_R, isdiag=True, t=0, D=5)
     a.set_block(ts=0, val='randR')
     a.set_block(ts=1, val='randR', Ds=4)
     a.set_block(ts=-1, val='randR', Ds=4)
@@ -109,7 +107,6 @@ def test_set1():
 def test_set2():
     print('----------')
     print('3d tensor: ')
-    settings_Z2_U1.dtype = 'float64'
     a = tensor.ones(settings=settings_Z2_U1, s=(-1, 1, 1),
                     t=((0, 1), (0, 2), 0, (-2, 2), (0, 1), (-2, 0, 2)),
                     D=((1, 2), (1, 2), 1, (1, 2), (2, 3), (1, 2, 3)))
@@ -158,15 +155,15 @@ def test_dict():
     assert pytest.approx(a.norm_diff(b)) == 0
     assert a.is_symmetric()
 
-    a = tensor.rand(settings=settings_U1, isdiag=True, t=(0, 1), D=(3, 5))
+    a = tensor.rand(settings=settings_U1_R, isdiag=True, t=(0, 1), D=(3, 5))
     d = a.to_dict()
-    b = tensor.from_dict(settings=settings_U1, d=d)
+    b = tensor.from_dict(settings=settings_U1_R, d=d)
     assert pytest.approx(a.norm_diff(b)) == 0
     assert a.is_symmetric()
 
-    a = tensor.randR(settings=settings_full)  # s=()
+    a = tensor.randR(settings=settings_full_R)  # s=()
     d = a.to_dict()
-    b = tensor.from_dict(settings=settings_full, d=d)
+    b = tensor.from_dict(settings=settings_full_R, d=d)
     assert pytest.approx(a.norm_diff(b)) == 0
     assert a.is_symmetric()
 
