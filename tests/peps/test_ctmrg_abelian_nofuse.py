@@ -108,17 +108,6 @@ class Test_env_abelian(unittest.TestCase):
         env_out, *ctm_log= ctmrg_abelian.run(state, env, conv_check=ctmrg_conv_f,\
             ctm_args=cfg.ctm_args)
 
-    # def test_ctmrg_abelian_U1_chi1(self):
-    #     state= self._get_2x1_BIPARTITE_U1()
-    #     env= ENV_ABELIAN(state=state, init=True)
-    #     print(env)
-
-    #     def ctmrg_conv_f(state, env, history, ctm_args=cfg.ctm_args):
-    #         return False, history
-
-    #     cfg.ctm_args.ctm_max_iter= 2
-    #     env_out, *ctm_log= ctmrg_abelian.run(state, env, conv_check=ctmrg_conv_f)
-
     def test_ctmrg_abelian_U1(self):
         chi=9
         np.random.seed(2)
