@@ -68,26 +68,26 @@ def diag_get(x):
 ##############
 
 
-def zeros(D, dtype='float64'):
+def zeros(D, dtype='float64', device='cpu'):
     return np.zeros(D, dtype=_select_dtype[dtype])
 
 
-def ones(D, dtype='float64'):
+def ones(D, dtype='float64', device='cpu'):
     return np.ones(D, dtype=_select_dtype[dtype])
 
 
-def randR(D, dtype='float64'):
+def randR(D, dtype='float64', device='cpu'):
     return 2 * np.random.random_sample(D).astype(_select_dtype[dtype]) - 1
 
 
-def rand(D, dtype='float64'):
+def rand(D, dtype='float64', device='cpu'):
     if dtype == 'float64':
         return randR(D, dtype=dtype)
     elif dtype == 'complex128':
         return 2 * np.random.random_sample(D) - 1 + 1j * (2 * np.random.random_sample(D) - 1)
 
 
-def to_tensor(val, Ds=None, dtype='float64'):
+def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
     return np.array(val, dtype=_select_dtype[dtype]) if Ds is None else np.array(val, dtype=_select_dtype[dtype]).reshape(Ds)
 
 
@@ -772,9 +772,11 @@ def unmerge_blocks(C, order_l, order_r):
 
 def is_independent(A, B):
     """
-    check if two arrays are identical, or share the same view.
+    check if two dicts are identical, or share the same view on some of their elements.
     """
-    return (A is B) or (A.base is B) or (A is B.base)
+    inAB= set(A.keys()) & set(B.keys())
+    test= [(A[k] is B[k]) or (A[k].base is B[k]) or (A[k] is B[k].base) for k in inAB]
+    return not any(test)
 
 
 ##############

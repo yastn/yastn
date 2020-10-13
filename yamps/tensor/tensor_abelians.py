@@ -11,7 +11,7 @@ import numpy as np
 import itertools
 from types import SimpleNamespace
 from functools import wraps
-
+import pdb
 
 class FatalError(Exception):
     pass
@@ -478,16 +478,23 @@ class Tensor:
                 tset = comb_t[ind]
                 Dset = comb_D[ind]
 
+        # NOTE assume default device to be cpu
+        # pdb.set_trace()
+        device= 'cpu' if not hasattr(self.conf, 'device') else self.conf.device
         for ind, Ds in zip(tset, Dset):
             ind, Ds = tuple(ind.flat), tuple(np.prod(Ds, axis=1))
             if val == 'zeros':
-                self.A[ind] = self.conf.back.zeros(Ds, dtype=self.conf.dtype)
+                self.A[ind] = self.conf.back.zeros(Ds, dtype=self.conf.dtype, \
+                    device= device)
             elif val == 'randR':
-                self.A[ind] = self.conf.back.randR(Ds, dtype=self.conf.dtype)
+                self.A[ind] = self.conf.back.randR(Ds, dtype=self.conf.dtype, \
+                    device= device)
             elif val == 'rand':
-                self.A[ind] = self.conf.back.rand(Ds, dtype=self.conf.dtype)
+                self.A[ind] = self.conf.back.rand(Ds, dtype=self.conf.dtype, \
+                    device= device)
             elif val == 'ones':
-                self.A[ind] = self.conf.back.ones(Ds, dtype=self.conf.dtype)
+                self.A[ind] = self.conf.back.ones(Ds, dtype=self.conf.dtype, \
+                    device= device)
         self.tset = tset
 
     def set_block(self, ts=(), Ds=None, val='zeros'):
@@ -670,6 +677,7 @@ class Tensor:
         print("dimensions   : ", lDs)
         print("total dim    : ", [sum(xx) for xx in lDs], "\n")
 
+    # TODO make consistent by moving element-wise (on dictionary) operations to backend ?
     def get_size(self):
         """ Total number of elements in tensor."""
         return sum(self.conf.back.get_size(A) for A in self.A.values())
@@ -2088,9 +2096,7 @@ class Tensor:
         test.append(self.A is other.A)
         test.append(self.n is other.n)
         test.append(self.s is other.s)
-        for key in self.A.keys():
-            if key in other.A:
-                test.append(self.conf.back.is_independent(self.A[key], other.A[key]))
+        test.append(not self.conf.back.is_independent(self.A, other.A))
         return not any(test)
 
     def is_symmetric(self):
