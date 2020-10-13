@@ -51,7 +51,7 @@ pylint:
   - pylint -d C0301,C0103 yamps/ops/*.py
   - pylint -d C0301,C0103 yamps/tensor/*.py
 
-pytest:
+test_numpy:
   stage: Test
   script:
   - pip install pytest
@@ -60,4 +60,16 @@ pytest:
   - git submodule status
   - ssh-add -l
   - git submodule update --init --recursive
-  - cd tests/; pytest -v tensor; pytest -v mps; pytest -v mps
+  - cd tests/; pytest -v tensor/backend_numpy; pytest -v mps; pytest -v peps
+
+test_torch:
+  stage: Test
+  script:
+  - pip install torch==1.6.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+  - pip install pytest
+  - pip install .
+  - export PYTHONPATH=$(pwd)
+  - git submodule status
+  - ssh-add -l
+  - git submodule update --init --recursive
+  - cd tests/; pytest -v tensor/backend_torch
