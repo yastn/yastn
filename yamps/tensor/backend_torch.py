@@ -7,6 +7,7 @@ from itertools import product
 from itertools import accumulate
 from functools import reduce
 from operator import mul
+import pdb
 
 log= logging.getLogger('yamps.tensor.backend_torch')
 
@@ -72,7 +73,31 @@ def randR(D, dtype='float64', device='cpu'):
 
 def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
     T= torch.as_tensor(val, dtype=_select_dtype[dtype], device=device)
-    return T if not Ds else T.reshape(Ds)
+    return T if not Ds else T.reshape(Ds).contiguous()
+
+def compress_to_1d(A):
+    # get the total number of elements
+    n= sum((t.numel() for t in A.values()))
+    r1d= torch.zeros(n, dtype=next(iter(A.values())).dtype, \
+        device=next(iter(A.values())).device)
+    # store each block as 1D array within r1d in contiguous manner
+    i=0
+    meta= []
+    for ind in A:
+        r1d[i:i+A[ind].numel()]= A[ind].contiguous().view(-1)
+        meta.append((ind, A[ind].size()))
+        i+=A[ind].numel()
+    return meta, r1d
+
+def decompress_from_1d(r1d, charges_and_dims):
+    i=0
+    A={}
+    for charges,dims in charges_and_dims:
+        D= reduce(mul,dims,1)
+        A[charges]= r1d[i:i+D].reshape(dims).contiguous()
+        i+=D
+    return A
+
 
 # ===== single tensor/dict operations =========================================
 
@@ -617,30 +642,43 @@ def merge_blocks(A, to_execute, out_l, out_r, dtype=None):
 def slice_none(d):
     return {ind:slice(None) for ind in d}
 
+@torch.no_grad()
 def slice_S(S, tol=0., Dblock=np.inf, Dtotal=np.inf, decrease = True):
     """gives slices for truncation of 1d matrices
     decrease =True assumes that S[][0]  is largest -- like in svd
     decrease=False assumes that S[][-1] is largest -- like in eigh"""
+    if Dtotal<1073741824:
+        print(f"{Dblock} {Dtotal} {sum([t.numel() for t in S.values()])}")
+        assert sum([t.numel() for t in S.values()])>=Dtotal
+        
     maxS, Dmax = 0., {}
     for ind in S:
         maxS = max(maxS, S[ind][0], S[ind][-1])
+        # blocks of S are 1D, *get_shape(S[ind]) returns length of block
         Dmax[ind] = min(Dblock, *get_shape(S[ind]))
     # truncate to given relative tolerance
     if (tol > 0) and (maxS > 0):
         for ind in Dmax:
-            Dmax[ind] = min(Dmax[ind], torch.sum(S[ind] >= maxS*tol).numpy())
+            Dmax[ind] = min(Dmax[ind], torch.sum(S[ind] >= maxS*tol))
     # truncate to total bond dimension
     if sum(Dmax[ind] for ind in Dmax) > Dtotal:
         if decrease:
-            s_all = torch.cat([S[ind][:Dmax[ind]] for ind in Dmax]).numpy()
+            s_all = torch.cat([S[ind][:Dmax[ind]] for ind in Dmax])
         else:
-            s_all = torch.cat(([S[ind][-Dmax[ind]:] for ind in Dmax])).numpy()
-        order = s_all.argpartition(-Dtotal-1)[-Dtotal:]
+            s_all = torch.cat([S[ind][-Dmax[ind]:] for ind in Dmax])
+        order = s_all.numpy().argpartition(-Dtotal-1)[-Dtotal:]
+        # values, indices= torch.topk(s_all, Dtotal)
         low = 0
         for ind in Dmax:
             high = low+Dmax[ind]
-            Dmax[ind] = np.sum((low <= order) & (order < high))
+            Dmax[ind]= np.sum((low <= order) & (order < high))
+            # Dmax[ind] = torch.sum((low <= order) & (order < high))
             low = high
+    
+    if Dtotal<1073741824:
+        print(f"{Dblock} {Dtotal} {sum(Dmax.values())}")
+        assert sum(Dmax.values())>=Dtotal
+
     # give slices for truncation
     Dcut = {}
     if decrease:
@@ -677,7 +715,7 @@ def unmerge_blocks_left(U, order_l, Dcut):
     Dc = (-1,)
     for tcut in Dcut:  # fill blocks
         for tl, (Dl, slice_l) in order_l[tcut].items():
-            Uout[tl] = np.reshape(U[tcut][slice_l, Dcut[tcut]], Dl + Dc)
+            Uout[tl] = U[tcut][slice_l, Dcut[tcut]].reshape(Dl + Dc)
     return Uout
 
 def unmerge_blocks_right(V, order_r, Dcut):
@@ -692,7 +730,7 @@ def unmerge_blocks_right(V, order_r, Dcut):
     Dc = (-1,)
     for tcut in Dcut:  # fill blocks
         for tr, (Dr, slice_r) in order_r[tcut].items():
-            Vout[tr] = np.reshape(V[tcut][Dcut[tcut], slice_r], Dc + Dr)
+            Vout[tr] = V[tcut][Dcut[tcut], slice_r].reshape(Dc + Dr)
     return Vout
 
 def unmerge_blocks(C, order_l, order_r):

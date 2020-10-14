@@ -91,6 +91,28 @@ def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
     return np.array(val, dtype=_select_dtype[dtype]) if Ds is None else np.array(val, dtype=_select_dtype[dtype]).reshape(Ds)
 
 
+def compress_to_1d(A):
+    # get the total number of elements
+    n= sum((t.size for t in A.values()))
+    r1d= np.zeros(n, dtype=next(iter(A.values())).dtype)
+    # store each block as 1D array within r1d in contiguous manner
+    i=0
+    meta= []
+    for ind in A:
+        r1d[i:i+A[ind].size]= np.ascontiguousarray(A[ind]).reshape(-1)
+        meta.append((ind, A[ind].shape))
+        i+=A[ind].size
+    return meta, r1d
+
+def decompress_from_1d(r1d, charges_and_dims):
+    i=0
+    A={}
+    for charges,dims in charges_and_dims:
+        D= reduce(mul,dims,1)
+        A[charges]= np.ascontiguousarray(r1d[i:i+D].reshape(dims))
+        i+=D
+    return A
+
 ##############
 # single dict operations
 ##############

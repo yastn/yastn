@@ -217,6 +217,30 @@ def from_dict(settings=None, d={'s': (), 'n': None, 'isdiag': False, 'A': {}}):
         a.set_block(ts=ind, val=d['A'][ind])
     return a
 
+def decompress_from_1d(r1d, settings=None, \
+    d={'s': (), 'n': None, 'isdiag': False, 'blocks': []}):
+    """
+    Generate tensor based on information in dictionary d and 1D array
+    r1d containing the serialized blocks
+
+    Parameters
+    ----------
+    settings: module
+            configuration with backend, symmetry, etc.
+
+    d : dict
+        information about tensor stored with :meth:`Tensor.to_dict`
+    """
+    a= Tensor(settings=settings, s=d['s'], n=d['n'], isdiag=d['isdiag'])
+    a._leg_fusion_data= d['leg_fusion_data']
+    i=0
+    for charges,dims in d['blocks']:
+        D= 1
+        for x in dims: D*=x
+        a.set_block(ts=charges, Ds=dims, val=r1d[i:i+D])
+        i+=D
+    #a.A= a.conf.back.decompress_from_1d(r1d, d['blocks'])
+    return a
 
 def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
     r"""
@@ -250,7 +274,6 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
     a = Tensor(settings=tensors[0].conf, s=s, isdiag=isdiag)
     a.reset_tensor(t=t, D=D, val=val)
     return a
-
 
 def block(td, common_legs):
     """ Assemble new tensor by blocking a set of tensors.
@@ -650,6 +673,14 @@ class Tensor:
         AA = {ind: self.conf.back.to_numpy(self.A[ind]) for ind in self.A}
         out = {'A': AA, 's': self.s, 'n': self.n, 'isdiag': self.isdiag}
         return out
+
+    def compress_to_1d(self):
+        # store each block as 1D array within r1d in contiguous manner and 
+        # record info about charges and dimensions in a list
+        charges_and_dims, r1d= self.conf.back.compress_to_1d(self.A)
+        meta= {'s': self.s, 'n': self.n, 'isdiag': self.isdiag, \
+            'blocks': charges_and_dims, 'leg_fusion_data': self._leg_fusion_data}
+        return meta, r1d
 
     def __str__(self):
         s=f"{self.conf.sym} s= {self.s} n= {self.n}\n"
