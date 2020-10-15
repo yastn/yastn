@@ -52,6 +52,22 @@ pylint:
   - pylint -d C0301,C0103 yamps/ops/*.py
   - pylint -d C0301,C0103 yamps/tensor/*.py
 
+test_python3.7.4_numpy1.19.1: 
+  image: python:3.7.4
+  stage: Test
+  script:
+  - pip install numpy==1.19.1
+  - pip install scipy
+  - pip install pytest
+  - pip install .
+  - export PYTHONPATH=$(pwd)
+  - git submodule status
+  - ssh-add -l
+  - git submodule update --init --recursive
+  - cd tests/; pytest -v tensor/backend_numpy 
+  - pytest -v mps 
+  - pytest -v peps/backend_numpy
+
 test_python3.7_numpy1.19.1: 
   image: python:3.7
   stage: Test
