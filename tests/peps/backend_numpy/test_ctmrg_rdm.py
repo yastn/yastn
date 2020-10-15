@@ -10,7 +10,7 @@ from yamps.peps.ctm.generic_abelian.env_abelian import ENV_ABELIAN
 import yamps.peps.ctm.generic_abelian.ctmrg as ctmrg_abelian
 import yamps.peps.ctm.generic_abelian.rdm as rdm
 
-class Test_env_abelian_full(unittest.TestCase):
+class Test_ctmrg_rdm_abelian_full(unittest.TestCase):
     
     _ref_s_dir= IPEPS_ABELIAN._REF_S_DIRS
 
@@ -71,7 +71,7 @@ class Test_env_abelian_full(unittest.TestCase):
         state, env= self.state_full, self.env_full
         rho2x2= rdm.rdm2x2((0,0), state, env)
 
-class Test_env_abelian_U1(unittest.TestCase):
+class Test_ctmrg_rdm_abelian_U1(unittest.TestCase):
     
     _ref_s_dir= IPEPS_ABELIAN._REF_S_DIRS
 
@@ -140,7 +140,7 @@ class Test_env_abelian_U1(unittest.TestCase):
 
     def test_rdm2x2_abelian_2x1_BIPARTITE_U1(self):
         state, env= self.state_u1, self.env_u1
-        rho2x2= rdm.rdm2x2((0,0), state, env, verbosity=1)
+        rho2x2= rdm.rdm2x2((0,0), state, env)
 
 # TODO test correctness by comparing eigenvalues of RDMs from 
 #      full and U1 cases

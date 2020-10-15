@@ -9,7 +9,7 @@ from yamps.peps.ipeps.ipeps_abelian import IPEPS_ABELIAN
 from yamps.peps.ctm.generic_abelian.env_abelian import ENV_ABELIAN
 import yamps.peps.ctm.generic_abelian.ctmrg as ctmrg_abelian
 
-class Test_env_abelian(unittest.TestCase):
+class Test_ctmrg_abelian(unittest.TestCase):
     
     _ref_s_dir= IPEPS_ABELIAN._REF_S_DIRS
 
