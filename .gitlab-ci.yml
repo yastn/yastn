@@ -60,7 +60,7 @@ test_numpy:
   - git submodule status
   - ssh-add -l
   - git submodule update --init --recursive
-  - cd tests/; pytest -v tensor/backend_numpy; pytest -v mps; pytest -v peps
+  - cd tests/; pytest -v tensor/backend_numpy; pytest -v mps; pytest -v peps/backend_numpy
 
 test_torch:
   stage: Test
@@ -72,4 +72,4 @@ test_torch:
   - git submodule status
   - ssh-add -l
   - git submodule update --init --recursive
-  - cd tests/; pytest -v tensor/backend_torch
+  - cd tests/; pytest -v tensor/backend_torch; pytest -v peps/backend_torch
