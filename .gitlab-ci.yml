@@ -54,6 +54,7 @@ pylint:
 
 test_python3.7_numpy1.19.1: 
   image: python:3.7
+  stage: Test
   script:
   - pip install numpy==1.19.1
   - pip install scipy
@@ -69,6 +70,7 @@ test_python3.7_numpy1.19.1:
 
 test_python3.8_numpy1.19.1: 
   image: python:3.8
+  stage: Test
   script:
   - pip install numpy==1.19.1
   - pip install scipy
@@ -84,6 +86,7 @@ test_python3.8_numpy1.19.1:
 
 test_python3.8_numpy1.19.+: 
   image: python:3.8
+  stage: Test
   script:
   - pip install numpy
   - pip install scipy
