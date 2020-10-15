@@ -1,41 +1,41 @@
-image: python:3.8
-
-before_script:
-  - python --version
-  - pip install -r requirements.txt
-  ##
-  ## Install ssh-agent if not already installed, it is required by Docker.
-  ## (change apt-get to yum if you use an RPM-based image)
-  ##  
-  - 'command -v ssh-agent >/dev/null || ( apt-get update -y && apt-get install openssh-client -y )'
-  ##
-  ## Run ssh-agent (inside the build environment)
-  ##
-  - eval $(ssh-agent -s)
-  ##
-  ## Add the SSH key stored in SSH_PRIVATE_KEY variable to the agent store
-  ## We're using tr to fix line endings which makes ed25519 keys work
-  ## without extra base64 encoding.
-  ## https://gitlab.com/gitlab-examples/ssh-private-key/issues/1#note_48526556
-  ##
-  - echo "$id_rsa_deploy_tn_torch_dev" | tr -d '\r' | ssh-add -
-  - ssh-add -l 
-  ##
-  ## Create the SSH directory and give it the right permissions
-  ##
-  - mkdir -p ~/.ssh
-  - chmod 700 ~/.ssh
-  #- echo "$id_rsa_deploy_tn_torch_dev" | tr -d '\r' > ~/.ssh/id_rsa
-  #- chmod 600 ~/.ssh/id_rsa
-  #- echo $'Host github.com\n    HostName github.com\n    User git\n    IdentityFile .ssh/id_rsa' > ~/.ssh/config
-  #- chmod 600 ~/.ssh/config
-  - ssh-keyscan -t rsa github.com 2>&1 >> ~/.ssh/known_hosts
+default:
+  before_script:
+    - python --version
+    #- pip install -r requirements.txt
+    ##
+    ## Install ssh-agent if not already installed, it is required by Docker.
+    ## (change apt-get to yum if you use an RPM-based image)
+    ##  
+    - 'command -v ssh-agent >/dev/null || ( apt-get update -y && apt-get install openssh-client -y )'
+    ##
+    ## Run ssh-agent (inside the build environment)
+    ##
+    - eval $(ssh-agent -s)
+    ##
+    ## Add the SSH key stored in SSH_PRIVATE_KEY variable to the agent store
+    ## We're using tr to fix line endings which makes ed25519 keys work
+    ## without extra base64 encoding.
+    ## https://gitlab.com/gitlab-examples/ssh-private-key/issues/1#note_48526556
+    ##
+    - echo "$id_rsa_deploy_tn_torch_dev" | tr -d '\r' | ssh-add -
+    - ssh-add -l 
+    ##
+    ## Create the SSH directory and give it the right permissions
+    ##
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    #- echo "$id_rsa_deploy_tn_torch_dev" | tr -d '\r' > ~/.ssh/id_rsa
+    #- chmod 600 ~/.ssh/id_rsa
+    #- echo $'Host github.com\n    HostName github.com\n    User git\n    IdentityFile .ssh/id_rsa' > ~/.ssh/config
+    #- chmod 600 ~/.ssh/config
+    - ssh-keyscan -t rsa github.com 2>&1 >> ~/.ssh/known_hosts
 
 stages:
   - Static Analysis
   - Test
 
 flake8:
+  image: python:3.8
   stage: Static Analysis
   script:
   - pip install flake8
@@ -43,6 +43,7 @@ flake8:
   - flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
 
 pylint:
+  image: python:3.8
   stage: Static Analysis
   allow_failure: true
   script:
@@ -51,21 +52,71 @@ pylint:
   - pylint -d C0301,C0103 yamps/ops/*.py
   - pylint -d C0301,C0103 yamps/tensor/*.py
 
-test_numpy:
-  stage: Test
+test_python3.7_numpy1.19.1: 
+  image: python:3.7
   script:
+  - pip install numpy==1.19.1
+  - pip install scipy
   - pip install pytest
   - pip install .
   - export PYTHONPATH=$(pwd)
   - git submodule status
   - ssh-add -l
   - git submodule update --init --recursive
-  - cd tests/; pytest -v tensor/backend_numpy; pytest -v mps; pytest -v peps/backend_numpy
+  - cd tests/; pytest -v tensor/backend_numpy 
+  - pytest -v mps 
+  - pytest -v peps/backend_numpy
 
-test_torch:
+test_python3.8_numpy1.19.1: 
+  image: python:3.8
+  script:
+  - pip install numpy==1.19.1
+  - pip install scipy
+  - pip install pytest
+  - pip install .
+  - export PYTHONPATH=$(pwd)
+  - git submodule status
+  - ssh-add -l
+  - git submodule update --init --recursive
+  - cd tests/; pytest -v tensor/backend_numpy 
+  - pytest -v mps 
+  - pytest -v peps/backend_numpy
+
+test_python3.8_numpy1.19.+: 
+  image: python:3.8
+  script:
+  - pip install numpy
+  - pip install scipy
+  - pip install pytest
+  - pip install .
+  - export PYTHONPATH=$(pwd)
+  - git submodule status
+  - ssh-add -l
+  - git submodule update --init --recursive
+  - cd tests/; pytest -v tensor/backend_numpy 
+  - pytest -v mps 
+  - pytest -v peps/backend_numpy
+
+test_python3.7_torch1.6:
   stage: Test
+  image: python:3.7
   script:
   - pip install torch==1.6.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+  - pip install scipy
+  - pip install pytest
+  - pip install .
+  - export PYTHONPATH=$(pwd)
+  - git submodule status
+  - ssh-add -l
+  - git submodule update --init --recursive
+  - cd tests/; pytest -v tensor/backend_torch; pytest -v peps/backend_torch
+
+test_python3.8_torch1.6:
+  stage: Test
+  image: python:3.8
+  script:
+  - pip install torch==1.6.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
+  - pip install scipy
   - pip install pytest
   - pip install .
   - export PYTHONPATH=$(pwd)
