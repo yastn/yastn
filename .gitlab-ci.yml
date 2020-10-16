@@ -52,14 +52,16 @@ pylint:
   - pylint -d C0301,C0103 yamps/ops/*.py
   - pylint -d C0301,C0103 yamps/tensor/*.py
 
-test_python3.7.4_numpy1.19.1: 
-  image: python:3.7.4
+test_python3.7_conda_numpy1.19.1: 
+  image: python:3.7
   stage: Test
   script:
-  - pip install numpy==1.19.1
-  - pip install scipy
-  - pip install pytest
-  - pip install .
+  - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh && bash Miniconda3-latest-Linux-x86_64.sh -b -p _miniconda
+  - export PATH="$PWD/_miniconda/bin:$PATH"
+  - conda config --set always_yes yes --set changeps1 no
+  - conda install python=3.7
+  - conda update -q conda
+  - conda install numpy=1.19.1 scipy pytest
   - export PYTHONPATH=$(pwd)
   - git submodule status
   - ssh-add -l
@@ -68,7 +70,7 @@ test_python3.7.4_numpy1.19.1:
   - pytest -v mps 
   - pytest -v peps/backend_numpy
 
-test_python3.7_numpy1.19.1: 
+test_python3.7_pip_numpy1.19.1: 
   image: python:3.7
   stage: Test
   script:
