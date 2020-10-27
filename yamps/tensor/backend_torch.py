@@ -40,7 +40,7 @@ def copy(x):
     return x.clone().detach()
 
 def to_numpy(x):
-    return x.numpy()
+    return x.detach().numpy()
 
 # def get_str(x):
 #     return str(x)

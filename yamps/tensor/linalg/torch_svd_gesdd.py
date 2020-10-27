@@ -45,7 +45,7 @@ class SVDGESDD(torch.autograd.Function):
 
         return dA
 
-def test_SVDGESDD_random():
+def test_SVDSYMEIG_random():
     M, N = 50, 40
     A = torch.rand(M, N, dtype=torch.float64, requires_grad=True)
     assert(torch.autograd.gradcheck(SVDGESDD.apply, A, eps=1e-6, atol=1e-4))
