@@ -380,8 +380,13 @@ class Tensor:
         self.sym= self.conf.sym
         if not isdiag:
             self._ndim = 1 if isinstance(s, int) else len(s)  # number of legs
-            self.s = np.array(s, dtype=np.int).reshape(self._ndim)
-            self.n = np.zeros(self.nsym, dtype=np.int) if n is None else np.array(n, dtype=np.int).reshape(self.nsym)
+            self.s= np.array(s, dtype=np.int).reshape(self._ndim)
+            # NOTE: isn't nsym decisive ?
+            # self.n = np.zeros(self.nsym, dtype=np.int) if n is None else np.array(n, dtype=np.int).reshape(self.nsym)
+            if self.nsym==0 or n is None:
+                self.n= np.zeros(self.nsym, dtype=np.int)
+            else:
+                self.n= np.array(n, dtype=np.int).reshape(self.nsym)
         else:
             self._ndim = 1  # number of legs
             self.s = np.zeros(self._ndim, dtype=np.int)
@@ -400,6 +405,15 @@ class Tensor:
         for ind in self.A:
             a.A[ind] = self.conf.back.copy(self.A[ind])
         return a
+
+    # def contiguous_(self):
+
+    def detach_(self):
+        self.conf.back.detach_(self.A)
+
+    def move_to_device(self, device):
+        self.A= self.conf.back.move_to_device(self.A, device)
+        return self
 
     ################
     #  fill tensor #
@@ -683,11 +697,14 @@ class Tensor:
         return meta, r1d
 
     def __str__(self):
-        s=f"{self.conf.sym} s= {self.s} n= {self.n}\n"
-        s+=f"charges      : {self.get_t()}\n"
-        lts, lDs = self.get_tD()
-        s+=f"leg charges  : {lts}\n"
-        s+=f"dimensions   : {lDs}"
+        if self.get_size()==1:
+            s= str(next(iter(self.A.values())))
+        else:    
+            s=f"{self.conf.sym} s= {self.s} n= {self.n}\n"
+            s+=f"charges      : {self.get_t()}\n"
+            lts, lDs = self.get_tD()
+            s+=f"leg charges  : {lts}\n"
+            s+=f"dimensions   : {lDs}"
         return s
 
     def show_properties(self):
@@ -816,10 +833,31 @@ class Tensor:
         return a
 
     def to_dense(self):
+        device= 'cpu' if not hasattr(self.conf, 'device') else self.conf.device
         settings_dense= SimpleNamespace(**dict(back= self.conf.back, dtype=self.dtype, \
             dot_merge=False, sym= [], nsym=0))
         T= Tensor(settings=settings_dense, s=self.s, isdiag=self.isdiag)
-        T.set_block(val=self.to_numpy())
+        
+        # build dense block (not neccessary numpy)
+        lts, lDs = self.get_tD()
+        Dtotal = [sum(Ds) for Ds in lDs]
+        a = self.conf.back.zeros(Dtotal, dtype=self.dtype, device=device)
+        for ind in self.tset:  # fill in the blocks
+            sl = []
+            for leg, t in enumerate(ind):
+                t = tuple(t)
+                ii = lts[leg].index(t)
+                Dleg = sum(lDs[leg][:ii])
+                sl.append(slice(Dleg, Dleg + lDs[leg][ii]))
+            temp = self.A[tuple(ind.flat)]
+            if sl:
+                a[tuple(sl)] = temp
+            else:  # should only happen for 0-dim tensor -- i.e.  a scalar
+                a = temp
+        if self.isdiag:
+            a = self.conf.back.diag_create(a)
+        
+        T.set_block(val=a)
         return T
 
     def to_number(self):
@@ -872,6 +910,12 @@ class Tensor:
             new tensor with the result of multipcilation.
         """
         return self.__mul__(other)
+
+    def __pow__(self, exponent):
+        a= Tensor(settings=self.conf, s=self.s, n=self.n, isdiag=self.isdiag)
+        a.tset = self.tset.copy()
+        a.A= {ind: t**exponent for ind,t in self.A.items()}
+        return a
 
     def __truediv__(self, other):
         """

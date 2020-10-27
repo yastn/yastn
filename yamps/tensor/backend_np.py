@@ -27,10 +27,12 @@ _select_dtype = {'float64': np.float64,
 def random_seed(seed):
     np.random.seed(seed)
 
+def detach_(A):
+    pass
+
 ##############
 # single element calculations
 ##############
-
 
 def copy(x):
     return x.copy()
@@ -90,6 +92,8 @@ def rand(D, dtype='float64', device='cpu'):
 def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
     return np.array(val, dtype=_select_dtype[dtype]) if Ds is None else np.array(val, dtype=_select_dtype[dtype]).reshape(Ds)
 
+def move_to_device(A, device):
+    return A
 
 def compress_to_1d(A):
     # get the total number of elements

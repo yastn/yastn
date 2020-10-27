@@ -7,6 +7,7 @@ from itertools import product
 from itertools import accumulate
 from functools import reduce
 from operator import mul
+from .linalg.torch_svd_gesdd import SVDGESDD
 import pdb
 
 log= logging.getLogger('yamps.tensor.backend_torch')
@@ -16,6 +17,12 @@ _select_dtype = {'float64': torch.float64,
 
 def random_seed(seed):
     torch.random.manual_seed(seed)
+
+def set_num_threads(num_threads):
+    torch.set_num_threads(num_threads)
+
+def detach_(A):
+    for ind in A: A[ind]= A[ind].detach()
 
 # ----- properties ------------------------------------------------------------
 
@@ -30,7 +37,7 @@ def is_independent(A, B):
 # ----- single element (of dict) operations -----------------------------------
 
 def copy(x):
-    return x.clone()
+    return x.clone().detach()
 
 def to_numpy(x):
     return x.numpy()
@@ -74,6 +81,9 @@ def randR(D, dtype='float64', device='cpu'):
 def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
     T= torch.as_tensor(val, dtype=_select_dtype[dtype], device=device)
     return T if not Ds else T.reshape(Ds).contiguous()
+
+def move_to_device(A, device):
+    return { ind: b.to(device) for ind,b in A.items() }
 
 def compress_to_1d(A):
     # get the total number of elements
@@ -219,7 +229,8 @@ def svd(A, truncated = False, Dblock=np.inf, nbit = 60, kfac = 6):
         # if truncated and min(A[ind].shape) > kfac*Dblock:
         #     U[ind], S[ind], V[ind] =  pca.pca(A[ind], k=Dblock, raw=True, n_iter=nbit, l=kfac*Dblock)
         #else:
-        U[ind], S[ind], V[ind] = torch.svd(A[ind], some=True)
+        # U[ind], S[ind], V[ind] = torch.svd(A[ind], some=True)
+        U[ind], S[ind], V[ind] = SVDGESDD.apply(A[ind])
         V[ind] = V[ind].t().conj()
     return U, S, V
 
@@ -647,10 +658,6 @@ def slice_S(S, tol=0., Dblock=np.inf, Dtotal=np.inf, decrease = True):
     """gives slices for truncation of 1d matrices
     decrease =True assumes that S[][0]  is largest -- like in svd
     decrease=False assumes that S[][-1] is largest -- like in eigh"""
-    if Dtotal<1073741824:
-        print(f"{Dblock} {Dtotal} {sum([t.numel() for t in S.values()])}")
-        assert sum([t.numel() for t in S.values()])>=Dtotal
-        
     maxS, Dmax = 0., {}
     for ind in S:
         maxS = max(maxS, S[ind][0], S[ind][-1])
@@ -674,10 +681,6 @@ def slice_S(S, tol=0., Dblock=np.inf, Dtotal=np.inf, decrease = True):
             Dmax[ind]= np.sum((low <= order) & (order < high))
             # Dmax[ind] = torch.sum((low <= order) & (order < high))
             low = high
-    
-    if Dtotal<1073741824:
-        print(f"{Dblock} {Dtotal} {sum(Dmax.values())}")
-        assert sum(Dmax.values())>=Dtotal
 
     # give slices for truncation
     Dcut = {}
