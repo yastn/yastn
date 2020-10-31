@@ -7,7 +7,7 @@ from itertools import product
 from itertools import accumulate
 from functools import reduce
 from operator import mul
-from .linalg.torch_svd_gesdd import SVDGESDD
+from yamps.tensor.linalg.torch_svd_gesdd import SVDGESDD
 import pdb
 
 log= logging.getLogger('yamps.tensor.backend_torch')
