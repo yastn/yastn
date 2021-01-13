@@ -267,7 +267,11 @@ def block(td, common_legs):
     # all charges and bond dimensions
     tlist, Dlist = {}, {}
     for ind in pos:
-        tt, DD = td[ind].get_tD()
+        tt, DD = [], []
+        for n in range(ndim):
+            tDleg = td[ind].get_leg_tD(n)
+            tt.append(sorted([k for k in tDleg.keys()]))  
+            DD.append([tDleg[k] for k in tt[-1]])
         tlist[ind] = tt
         Dlist[ind] = DD
 
