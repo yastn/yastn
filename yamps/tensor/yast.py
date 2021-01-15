@@ -227,83 +227,77 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
     return a
 
 
-def block(td, common_legs):
+def block(pos_tens, common_legs):
     """ Assemble new tensor by blocking a set of tensors.
 
         Parameters
         ----------
-        td : dict
-            dictionary of tensors {(k,l): tensor at position k,l}.
+        pos_tens : dict
+            dictionary of tensors {(k,l): tensor at position k,l in the new, blocked super-tensor}.
             Length of tuple should be equall to tensor.ndim - len(common_legs)
 
         common_legs : list
             Legs which are not blocked
+            (equivalently on common legs all tensors have the same position in the supertensor, and those positions are not given in pos_tens)
 
         ndim : int
             All tensor should have the same rank ndim
     """
     try:
-        ls = len(common_legs)
+        lc = len(common_legs)
         out_s = tuple(common_legs)
     except TypeError:
         out_s = (common_legs,)
-        ls = 1
+        lc = 1
 
-    a = next(iter(td.values()))  # first tensor, used to initialize and retrive common values
-    ndim = a.ndim
-    nsym = a.config.sym.nsym
-
-    out_m = tuple(ii for ii in range(ndim) if ii not in out_s)
-    # out_ma = np.array(out_m, dtype=np.intp)
-    li = ndim - ls
+    a = next(iter(pos_tens.values()))  # first tensor; used to initialize new objects and retrive common values
+    out_b = tuple(ii for ii in range(a.ndim) if ii not in out_s)
+    
+    lb = a.ndim - lc
     pos = []
-    for ind in td:
-        if li != len(ind):
-            logger.exception('block: wrong tensors rank or placement')
+    for ind in pos_tens:
+        if (lb != len(ind)) or (pos_tens[ind].ndim != a.ndim) or (not np.all(pos_tens[ind].s == a.s)) or (not np.all(pos_tens[ind].n == a.n)) or (a.isdiag != pos_tens[ind].isdiag):
+            logger.exception('Dimensions, ndims, signatures or total charges of blocked tensors are not consistent')
             raise FatalError
         pos.append(ind)
-    pos.sort()
 
-    # all charges and bond dimensions
-    tlist, Dlist = {}, {}
-    for ind in pos:
-        tt, DD = [], []
-        for n in range(ndim):
-            tDleg = td[ind].get_leg_tD(n)
-            tt.append(sorted([k for k in tDleg.keys()]))  
-            DD.append([tDleg[k] for k in tt[-1]])
-        tlist[ind] = tt
-        Dlist[ind] = DD
+    posa = np.ones((len(pos), a.ndim), dtype=int)
+    posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int)
 
-    # all unique blocks to block
-    t_out_unique = sorted(set([ind for x in td.values() for ind in x.A]))
-    meta = []
-    for t in t_out_unique:
-        ta = np.array(t, dtype=int).reshape(ndim, nsym)
-        legs_ind = []  # indices on specific legs
-        legs_D = []  # and corresponding D
-        kk = -1
-        for ii in range(ndim):
-            tl = tuple(ta[ii].flat)
-            relevant_pos = []
-            relevant_D = []
-            for ind in pos:
-                if tl in tlist[ind][ii]:
-                    relevant_pos.append(ind)
-                    ind_tl = tlist[ind][ii].index(tl)
-                    relevant_D.append(Dlist[ind][ii][ind_tl])
-            if ii in out_m:
-                kk += 1
-                posa = np.array(relevant_pos, dtype=int)
-                x, y = np.unique(posa[:, kk], return_index=True)
-                legs_ind.append(list(x))
-                legs_D.append([relevant_D[ll] for ll in y])  # all D's for unique positions should be identical -- does not check this
-            else:
-                legs_D.append([relevant_D[0]])  # all should be identical -- does not check this
-        meta.append((t, legs_ind, legs_D))
+    tDs = []  # {leg: {charge: {position: D, 'D' : Dtotal}}}
+    for n in range(a.ndim):
+        tDl = {}
+        for ind, pp in zip(pos, posa):
+            tDn = pos_tens[ind].get_leg_tD(n)
+            for t, D in tDn.items():
+                if t in tDl:
+                    if (pp[n] in tDl[t]) and (tDl[t][pp[n]] != D):
+                        logger.exception('Dimensions of blocked tensors are not consistent')
+                        raise FatalError
+                    tDl[t][pp[n]] = D
+                else:
+                    tDl[t] = {pp[n]: D}
+        for t, pD in tDl.items():
+            ps = sorted(pD.keys())
+            Ds = [pD[p] for p in ps]
+            tDl[t] = {p: (aD-D, aD)  for p, D, aD in zip(ps, Ds, itertools.accumulate(Ds))}
+            tDl[t]['Dtot'] = sum(Ds)
+        tDs.append(tDl)
+        
+    # all unique blocks
+    # meta_new = {tind: Dtot};  #meta_block = [(tind, pos, Dslc)]
+    meta_new, meta_block = {}, []
+    for pind, pa in zip(pos, posa):
+        a = pos_tens[pind]
+        for t in a.tset:
+            tind = tuple(t.flat)
+            if tind not in meta_new:
+                meta_new[tind] = tuple(tDs[n][tuple(t[n].flat)]['Dtot'] for n in range(a.ndim))
+            meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.ndim))))
+    meta_new = tuple((ts, Ds) for ts, Ds in meta_new.items())
 
-    c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag)
-    c.A = c.config.backend.block(td, meta, dtype=a.config.dtype)
+    c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n)
+    c.A = c.config.backend.merge_super_blocks(pos_tens, meta_new, meta_block, dtype=a.config.dtype)
     c._calculate_tDset()
     return c
 

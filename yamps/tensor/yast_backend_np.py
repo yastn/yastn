@@ -376,6 +376,14 @@ def merge_to_dense(A, Dtot, meta, dtype):
         Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind]
     return Anew
 
+def merge_super_blocks(pos_tens, meta_new, meta_block, dtype):
+    """ Outputs new dictionary of blocks after creating super-tensor. """
+    Anew = {u: np.zeros(Du, dtype=_data_dtype[dtype]) for (u, Du) in meta_new}
+    for (tind, pos, Dslc) in meta_block: 
+        slc = tuple(slice(*DD) for DD in Dslc)
+        Anew[tind][slc] = pos_tens[pos].A[tind]# .copy() # is copy required?
+    return Anew
+
 
 def unmerge_from_matrix(A, meta):
     """ unmerge matrix into single blocks """
@@ -411,41 +419,3 @@ def is_independent(A, B):
     check if two arrays are identical, or share the same view.
     """
     return (A is B) or (A.base is B) or (A is B.base)
-
-##############
-#  multi dict operations
-##############
-
-def block(td, meta, dtype):
-
-    def to_block(li, lD, level):
-        if level > 0:
-            oi = []
-            for ii, DD in zip(li, lD):
-                oi.append(to_block(ii, DD, level - 1))
-            return oi
-        else:
-            key = tuple(li)
-            try:
-                return td[key].A[ind]
-            except KeyError:
-                return np.zeros(lD, dtype=_data_dtype[dtype])
-
-    A = {}
-    # to_execute = [(ind, pos, legs_ind, legs_D), ... ]
-    # ind: index of the merged blocks
-    # pos: non-trivial tensors in the block, rest is zero
-    # legs_ind: all elements for all dimensions to be cloked
-    # legs_D: and bond dimensions (including common ones)
-
-    for ind, legs_ind, legs_D in meta:
-        all_ind = np.array(list(product(*legs_ind)), dtype=int)
-        all_D = np.array(list(product(*legs_D)), dtype=int)
-
-        shape_ind = [len(x) for x in legs_D] + [-1]
-        all_ind = list(np.reshape(all_ind, shape_ind))
-        all_D = list(np.reshape(all_D, shape_ind))
-
-        temp = to_block(all_ind, all_D, len(shape_ind) - 1)
-        A[ind] = np.block(temp)
-    return A
