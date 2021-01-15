@@ -51,6 +51,7 @@ pylint:
   - pylint -d C0301,C0103 yamps/mps/*.py
   - pylint -d C0301,C0103 yamps/ops/*.py
   - pylint -d C0301,C0103 yamps/tensor/*.py
+  - pylint -d C0301,C0103 yamps/yast/*.py
 
 test_python3.7_conda_numpy1.19.1: 
   image: python:3.7

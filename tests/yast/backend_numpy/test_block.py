@@ -23,14 +23,12 @@ def test_block_U1():
     cp10 = yast.ones(config=config_U1_R, t=(1, 0, 1, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
     c10 = yast.ones(config=config_U1_R, t=(-1, 1, 0, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
 
-    B = yast.block({(0, 0): II, (1, 0): cp10, (2, 0): c10, (3, 0): mu * nn, (3, 1): w * c01, (3, 2): w * cp01, (3, 3): II}, common_legs=(1, 2))
-    # B.show_properties()
+    B1 = yast.block({(0, 0): II, (1, 0): cp10, (2, 0): c10, (3, 0): mu * nn, (3, 1): w * c01, (3, 2): w * cp01, (3, 3): II}, common_legs=(1, 2))
+    B2 = yast.block({(1, 1): II, (3, 1): cp10, (5, 1): c10, (7, 1): mu * nn, (7, 3): w * c01, (7, 5): w * cp01, (7, 9): II}, common_legs=(1, 2))
 
-    C = yast.block({(1, 1): II, (3, 1): cp10, (5, 1): c10, (7, 1): mu * nn, (7, 3): w * c01, (7, 5): w * cp01, (7, 9): II}, common_legs=(1, 2))
-    # C.show_properties()
-
-    assert pytest.approx(A.norm_diff(B)) == 0
-    assert pytest.approx(A.norm_diff(C)) == 0
+    assert pytest.approx(A.norm_diff(B1)) == 0
+    assert pytest.approx(A.norm_diff(B2)) == 0
+    assert B1.is_independent(B2)
 
 
 if __name__ == "__main__":
