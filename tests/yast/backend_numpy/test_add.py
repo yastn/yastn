@@ -44,8 +44,8 @@ def test_add_1():
     assert b.is_independent(c1)
     assert b.is_independent(c2)
 
-    d = yast.eye(config=config_U1_R, isdiag=True, t=1, D=5)
-    d1 = yast.eye(config=config_U1_R, isdiag=True, t=2, D=5)
+    d = yast.eye(config=config_U1_R, t=1, D=5)
+    d1 = yast.eye(config=config_U1_R, t=2, D=5)
 
     e1 = 2 * d + d1
     e2 = d - 2 * d1

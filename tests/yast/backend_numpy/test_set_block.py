@@ -1,4 +1,4 @@
-""" Test functions: set_block, """
+""" Test functions: set_block """
 
 import yamps.tensor.yast as yast
 import config_dense_R
