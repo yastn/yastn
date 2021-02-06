@@ -401,7 +401,7 @@ def unmerge_from_diagonal(A, meta):
     return Anew
 
 
-def unmerge_one_leg(A, axis, ndim, meta):
+def unmerge_one_leg(A, axis, meta):
     """ unmerge single leg """
     Anew = {}
     for (told, tnew, Dsl, Dnew) in meta:

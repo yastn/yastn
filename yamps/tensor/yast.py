@@ -44,7 +44,7 @@ def randR(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     tensor : tensor
         a random instance of a tensor
     """
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag)
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, **kwargs)
     a.fill_tensor(t=t, D=D, val='randR')
     return a
 
@@ -73,7 +73,7 @@ def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     tensor : tensor
         a random instance of a tensor
     """
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag)
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, **kwargs)
     a.fill_tensor(t=t, D=D, val='rand')
     return a
 
@@ -102,7 +102,7 @@ def zeros(config=None, s=(), n=None, t=(), D=(), **kwargs):
     tensor : tensor
         an instance of a tensor filled with zeros
     """
-    a = Tensor(config=config, s=s, n=n, isdiag=False)
+    a = Tensor(config=config, s=s, n=n, isdiag=False, **kwargs)
     a.fill_tensor(t=t, D=D, val='zeros')
     return a
 
@@ -129,7 +129,7 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     tensor : tensor
         an instance of a tensor filled with ones
     """
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag)
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, **kwargs)
     a.fill_tensor(t=t, D=D, val='ones')
     return a
 
@@ -152,7 +152,7 @@ def eye(config=None, t=(), D=(), **kwargs):
     tensor : tensor
         an instance of diagonal tensor filled with ones
     """
-    a = Tensor(config=config, isdiag=True)
+    a = Tensor(config=config, isdiag=True, **kwargs)
     a.fill_tensor(t=t, D=D, val='ones')
     return a
 
@@ -169,7 +169,7 @@ def from_dict(config=None, d={'s': (), 'n': None, 'isdiag': False, 'A': {}}):
     d : dict
         information about tensor stored with :meth:`Tensor.to_dict`
     """
-    a = Tensor(config=config, s=d['s'], n=d['n'], isdiag=d['isdiag'])
+    a = Tensor(config=config, **d)
     for ind in d['A']:
         a.set_block(ts=ind, Ds=d['A'][ind].shape, val=d['A'][ind])
     return a
@@ -188,10 +188,9 @@ def decompress_from_1d(r1d, config=None, d={}):
     d : dict
         information about tensor stored with :meth:`Tensor.to_dict`
     """
-    a = Tensor(config=config, s=d['s'], n=d['n'], isdiag=d['isdiag'])
+    a = Tensor(config=config, **d)
     A = {(): r1d}
-    a.A = a.config.backend.unmerge_one_leg(A, 0, 1000, d['meta_umrg'])
-    a.lss = {t:ls.copy() for t, ls in d['lss'].items()}
+    a.A = a.config.backend.unmerge_one_leg(A, 0, d['meta_umrg'])
     a._calculate_tDset()
     return a
 
@@ -302,11 +301,9 @@ def block(pos_tens, common_legs):
     return c
 
 class Tensor:
-    """
-    Class defining a tensor with abelian symmetries and main operations acting on such tensor(s).
-    """
+    """ Class defining a tensor with abelian symmetries, and operations on such tensor(s). """
 
-    def __init__(self, config=None, s=(), n=None, isdiag=False, lss=None, **kwargs):
+    def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
         self.config = kwargs['settings'] if 'settings' in kwargs else config
         self.isdiag = isdiag
         self.ndim = 1 if isinstance(s, int) else len(s)  # number of legs
@@ -316,44 +313,37 @@ class Tensor:
             if len(self.s) == 0:
                 self.s = np.array([1, -1], dtype=int)
                 self.ndim = 2
-            if not np.sum(self.s) == 0:
-                logger.exception("Signature should be (-1, 1) or (1, -1) in diagonal tensor")
-                raise FatalError
-            if not np.sum(np.abs(self.n)) == 0:
-                logger.exception("Tensor charge should be 0 in diagonal tensor")
-                raise FatalError
-            if not self.ndim == 2:
-                logger.exception("Diagonal tensor should have ndim == 2")
-                raise FatalError
+            if self.config.test:
+                if not np.sum(self.s) == 0:
+                    logger.exception("Signature should be (-1, 1) or (1, -1) in diagonal tensor")
+                    raise FatalError
+                if not np.sum(np.abs(self.n)) == 0:
+                    logger.exception("Tensor charge should be 0 in diagonal tensor")
+                    raise FatalError
+                if not self.ndim == 2:
+                    logger.exception("Diagonal tensor should have ndim == 2")
+                    raise FatalError
         self.tset = np.zeros((0, self.ndim, self.config.sym.nsym), dtype=int)  # list of blocks; 3d nparray of ints
         self.Dset = np.zeros((0, self.ndim), dtype=int)  # shapes of blocks; 2d nparray of ints
         self.A = {}  # dictionary of blocks
-        self.lss = {}  # dictionary of leg structures (of merged legs)
-
-    def copy(self):
-        r"""
-        Return a copy of the tensor.
-        """
-        a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag)
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
-        a.A = {ts: self.config.backend.copy(x) for ts, x in self.A.items()}
-        a.lss = {leg: ls.copy() for leg, ls in self.lss.items()}
-        return a
+        # (logical) fusion tree for each leg: (number_of_consequative_legs_it_represents, tuple_with_inner_structure)
+        self.lfuse = tuple(kwargs['lfuse']) if ('lfuse' in kwargs and kwargs['lfuse'] is not None) else ((1, ()),) * self.ndim
+        # self.lfuse is immutable for copying and comparison
 
     def detach_(self):
         self.conf.backend.detach_(self.A)
 
     def move_to_device(self, device):
-        self.A= self.conf.backend.move_to_device(self.A, device)
+        self.A = self.conf.backend.move_to_device(self.A, device)
         return self
 
     ######################
     #     fill tensor    #
     ######################
 
-    def reset_tensor(self, t=(), D=(), val='rand', **kwargs):
-        self.fill_tensor(t, D, val)
+    def reset_tensor(self, t=(), D=(), val='rand'):
+        """ TO REMOVE;  replaced by fill_tensor """
+        return self.fill_tensor(t, D, val)
     
     def fill_tensor(self, t=(), D=(), val='rand'):
         r"""
@@ -508,72 +498,66 @@ class Tensor:
     #     new tensors     #
     #######################
 
-    def empty(self, s=None, n=None, isdiag=False, **kwargs):
+    def copy(self):
+        """ Return a copy of the tensor. """
+        a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        a.tset = self.tset.copy()
+        a.Dset = self.Dset.copy()
+        a.A = {ts: self.config.backend.copy(x) for ts, x in self.A.items()}
+        #a.lss = {leg: ls.copy() for leg, ls in self.lss.items()}
+        return a
+    
+    def copy_empty(self):
+        """ Return a copy of the tensor, but without copying blocks. """
+        return Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+
+    def empty(self, **kwargs):
         r"""
         Initialize a new tensor using the same tensor config.
 
-        Parameters
-        ----------
-        s : tuple
-            a signature of tensor
-        n : int
-            total charges in all symmetry sectors
-        isdiag : bool
-            makes tensor diagonal
-        Returns
-        -------
-        tensor : Tensor
-            empty tensor
+        Parameters in kwargs are the same as in Tensor initialization
         """
-        return Tensor(config=self.config, s=s, n=n, isdiag=isdiag)
+        return Tensor(config=self.config, **kwargs)
 
     def from_dict(self, **kwargs):
-        r"""
-        Wraper to :meth:`from_dict`, passing the tensor config.
-        """
+        r""" Wraper to :meth:`from_dict`, passing the tensor config. """
         return from_dict(config=self.config, **kwargs)
 
     def rand(self, **kwargs):
-        r"""
-        Wraper to :meth:`rand`, passing the tensor config.
-        """
+        r""" Wraper to :meth:`rand`, passing the tensor config. """
         return rand(config=self.config, **kwargs)
 
     def zeros(self, **kwargs):
-        r"""
-        Wraper to :meth:`zeros`, passing the tensor config.
-        """
+        r""" Wraper to :meth:`zeros`, passing the tensor config. """
         return zeros(config=self.config, **kwargs)
 
     def ones(self, **kwargs):
-        r"""
-        Wraper to :meth:`ones`, passing the tensor config.
-        """
+        r""" Wraper to :meth:`ones`, passing the tensor config. """
         return ones(config=self.config, **kwargs)
 
     def eye(self, **kwargs):
-        r"""
-        Wraper to :meth:`eye`, passing the tensor config.
-        """
+        r""" Wraper to :meth:`eye`, passing the tensor config. """
         return eye(config=self.config, **kwargs)
 
-    ###########################
-    #    output statistics    #
-    ###########################
+    ############################
+    #    output information    #
+    ############################
 
     def show_properties(self):
         """ Display basic properties of the tensor. """
-        print("ndim      :", self.ndim)
-        print("signature :", self.s)
-        print("charge    :", self.n)
-        print("isdiag    :", self.isdiag)
-        print("blocks    :", len(self.A))
-        print("size      :", self.get_size())
-        tDs = [self.get_leg_tD(n) for n in range(self.ndim)]
+        print("ndim      :", self.ndim)  # number of dimensions
+        print("ldim:     :", len(self.lfuse))  # number of logical legs
+        print("lfuse:    :", self.lfuse)  # logical fusion tree for each leg
+        print("signature :", self.s)  # signature
+        print("charge    :", self.n)  # total charge of tensor
+        print("isdiag    :", self.isdiag)  
+        print("blocks    :", len(self.A))  # number of blocks
+        print("size      :", self.get_size())  # total number of elements in all blocks
+        tDs = [self.get_leg_tD(n) for n in range(self.ndim)]  
         Dtot = tuple(sum(tD.values()) for tD in tDs)
         print("total dim :", Dtot)
         for n in range(self.ndim):
-            print("Leg", n, ":", tDs[n])
+            print("Leg", n, ":", tDs[n])  # charges and their dimensions for each leg
         print()
 
     def to_dict(self):
@@ -588,7 +572,7 @@ class Tensor:
         AA = {ind: self.config.backend.to_numpy(self.A[ind]) for ind in self.A}
         if self.isdiag:
             AA = {t: np.diag(x) for t, x in AA.items()}
-        out = {'A': AA, 's': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag}
+        out = {'A': AA, 's': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, 'lfuse': self.lfuse}
         return out
 
     def compress_to_1d(self):
@@ -606,8 +590,7 @@ class Tensor:
         
         # (told, tnew, Dsl, Dnew)
         meta_umrg = tuple((told, tnew, Dsl, tuple(Dnew)) for (told, Dsl, tnew, _), Dnew in zip(meta_mrg, self.Dset))
-        meta = {'s': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, 
-                'lss':{n:ls.copy() for n, ls in self.lss.items()}, 'meta_umrg':meta_umrg}
+        meta = {'s': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, 'lfuse': self.lfuse, 'meta_umrg':meta_umrg}
         return meta, A[()]
 
     def __str__(self):
@@ -634,30 +617,32 @@ class Tensor:
         return self.Dset.copy()
 
     def get_leg_tD(self, n):
-        """
+        r"""
         Find all charges tn for n-th leg and the corresponding bond dimensions Dn.
         
         Check if the bond dimensions of blocks are consistent.
 
         Returns
         -------
-            tDn : dict
-                format is {tn: Dn}
+            tDn : dict of {tn: Dn}
         """
         tset = self.tset[:, n, :]
         Dset = self.Dset[:, n]
-        tDn = {}
-        for tn, Dn in zip(tset, Dset):
-            ind = tuple(tn.flat)
-            if (ind in tDn) and tDn[ind] != Dn:
-                logger.exception('Inconsistend bond dimension of charge.') 
-                raise FatalError
-            tDn[ind] = Dn
+        tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tset, Dset)}
+        if self.config.test:
+            for tn, Dn in zip(tset, Dset):
+                if tDn[tuple(tn.flat)] != Dn:
+                    logger.exception('Inconsistend bond dimension of charge.') 
+                    raise FatalError
         return tDn
 
     def get_total_shape(self):
         """ Total bond dimension of all legs."""
         return tuple(sum(self.get_leg_tD(n).values()) for n in range(self.ndim))
+
+    def get_fusion_tree(self):
+        """ Fusion trees for all logical legs."""
+        return self.lfuse
 
     #########################
     #    output numbers     #
@@ -683,7 +668,7 @@ class Tensor:
         tD = [self.get_leg_tD(n) for n in range(self.ndim)]
         if tDs is not None:
             for n, tDn in tDs.items():
-                if (n<0) or (n >= self.ndim):
+                if (n < 0) or (n >= self.ndim):
                     logger.exception('Specified leg out of ndim')
                     raise FatalError
                 for tn, Dn in tDn.items():
@@ -713,14 +698,13 @@ class Tensor:
     def to_number(self):
         """
         Return first number in the first (unsorted) block.
-        Mainly used for rank-0 tensor with 1 block of size 1.
-
-        Return 0 if there are no blocks.
+        
+        Mainly used for rank-0 tensor with 1 block of size 1. Return 0 if there are no blocks.
         """
         return self.config.backend.first_element(self.A)
 
     def norm(self, ord='fro'):
-        """
+        r"""
         Norm of the rensor.
 
         Parameters
@@ -736,7 +720,7 @@ class Tensor:
 
     def norm_diff(self, other, ord='fro'):
         """
-        Norm of the difference of the two tensors.
+        Norm of the difference of two tensors.
 
         Parameters
         ----------
@@ -749,9 +733,7 @@ class Tensor:
         -------
         norm : float64
         """
-        if not np.all(self.s == other.s):
-            logger.exception('Signs do not match')
-            raise FatalError
+        self._test_tensors_match(other)
         return self.config.backend.norm_diff(self.A, other.A, ord)
 
     def entropy(self, axes=(0, 1), alpha=1):
@@ -776,9 +758,10 @@ class Tensor:
         -------
         entropy, minimal singular value, normalization : float64
         """
-        out_l, out_r = _clean_axes(axes)
+        lout_l, lout_r = _clean_axes(axes)
+        out_l, out_r = self._unpack_axes(lout_l, lout_r)
         self._test_axes_split(out_l, out_r)
-        
+
         if not self.isdiag:
             Am, *_ = self._merge_to_matrix(out_l, out_r, news_l=-1, news_r=1)
             Sm = self.config.backend.svd_S(Am)
@@ -814,7 +797,7 @@ class Tensor:
         tensor : Tensor
             result of multipcilation as a new tensor
         """
-        a = self.empty(s=self.s, n=self.n, isdiag=self.isdiag)
+        a = self.copy_empty()
         a.A= {ind: other * x for ind, x in self.A.items()}
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
@@ -848,7 +831,7 @@ class Tensor:
         tensor : Tensor
             result of element-wise exponentiation as a new tensor
         """
-        a = self.empty(s=self.s, n=self.n, isdiag=self.isdiag)
+        a = self.copy_empty()
         a.A= {ind: x**exponent for ind, x in self.A.items()}
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
@@ -867,7 +850,7 @@ class Tensor:
         tensor : Tensor
             result of element-wise division  as a new tensor
         """
-        a = self.empty(s=self.s, n=self.n, isdiag=self.isdiag)
+        a = self.copy_empty()
         a.A= {ind: x / other for ind, x in self.A.items()}
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()  
@@ -888,11 +871,9 @@ class Tensor:
         tensor : Tensor
             result of addition as a new tensor
         """
-        if not all(self.s == other.s) or not all(self.n == other.n):
-            logger.exception('Tensor signatures do not match')
-            raise FatalError
+        self._test_tensors_match(other)
         meta = _common_keys(self.A, other.A)
-        a = self.empty(s=self.s, n=self.n, isdiag=self.isdiag)
+        a = self.copy_empty()
         a.A = a.config.backend.add(self.A, other.A, meta)
         a._calculate_tDset()
         return a
@@ -912,11 +893,9 @@ class Tensor:
         tensor : Tensor
             result of subtraction as a new tensor
         """
-        if not all(self.s == other.s) or not all(self.n == other.n):
-            logger.exception('Tensors do not match')
-            raise FatalError
+        self._test_tensors_match(other)
         meta = _common_keys(self.A, other.A)
-        a = self.empty(s=self.s, n=self.n, isdiag=self.isdiag)
+        a = self.copy_empty()
         a.A = a.config.backend.sub(self.A, other.A, meta)
         a._calculate_tDset()
         return a
@@ -937,11 +916,9 @@ class Tensor:
         tensor : Tensor
             result of addition as a new tensor
         """
-        if not all(self.s == other.s) or not all(self.n == other.n):
-            logger.exception('Tensors do not match')
-            raise FatalError
+        self._test_tensors_match(other)
         meta = _common_keys(self.A, other.A)
-        a = self.empty(s=self.s, n=self.n, isdiag=self.isdiag)
+        a = self.copy_empty()
         a.A = a.config.backend.apxb(self.A, other.A, x, meta)
         a._calculate_tDset()
         return a
@@ -950,7 +927,7 @@ class Tensor:
     #     tensor operations     #
     #############################
 
-    def transpose(self, axes=(1,0)):
+    def transpose(self, axes=(1, 0)):
         r"""
         Return transposed tensor.
 
@@ -964,12 +941,13 @@ class Tensor:
         tensor : Tensor
         """
         if not self.isdiag:
-            order = np.array(axes, dtype=np.intp)
-            a = Tensor(config=self.config, s=self.s[order], n=self.n, isdiag=self.isdiag)
+            naxes, = self._unpack_axes(axes)
+            order = np.array(naxes, dtype=np.intp)
+            a = Tensor(config=self.config, s=self.s[order], n=self.n, isdiag=self.isdiag, lfuse=tuple(self.lfuse[ii] for ii in axes))
             a.tset = self.tset[:, order, :]
             a.Dset = self.Dset[:, order]
             meta_transpose = tuple((tuple(old.flat), tuple(new.flat)) for old, new in zip(self.tset, a.tset))
-            a.A = a.config.backend.transpose(self.A, axes, meta_transpose)
+            a.A = a.config.backend.transpose(self.A, naxes, meta_transpose)
             return a
         else:
             return self.copy()
@@ -998,9 +976,10 @@ class Tensor:
         a.tset = new_tset
         a.Dset = a.Dset[:, axes]
         a.s = a.s[axes]
+        a.lfuse = tuple(a.lfuse[ii] for ii in axes)
         return a
 
-    def diag(self, s0=1):
+    def diag(self):
         """
         Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa.
 
@@ -1010,13 +989,13 @@ class Tensor:
                 while transforming diagonal tensor into 2d tensor, one has to select signature (s0, -s0)
         """
         if self.isdiag:
-            a = Tensor(config=self.conf, s=(s0, -s0), n=self.n, isdiag=False)
+            a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=False, lfuse=self.lfuse)
             for ind in self.A:
                 nind = ind + ind
                 a.set_block(ts=nind, val=self.conf.backend.diag_create(self.A[ind]))
             return a
         elif self.ndim == 2 and sum(np.abs(self.n)) == 0 and sum(self.s) == 0:
-            a = Tensor(config=self.conf, isdiag=True)
+            a = Tensor(config=self.config, s=self.s, isdiag=True, lfuse=self.lfuse)
             for ind in self.tset:
                 if np.all(ind[0, :] == ind[1, :]):
                     nind = tuple(ind[0, :].flat)
@@ -1035,7 +1014,7 @@ class Tensor:
         -------
         tensor : Tensor
         """
-        a = Tensor(config=self.conf, s=-self.s, n=-self.n, isdiag=self.isdiag)
+        a = Tensor(config=self.config, s=-self.s, n=-self.n, isdiag=self.isdiag, lfuse=self.lfuse)
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
         a.A = a.config.backend.conj(self.A)
@@ -1089,7 +1068,7 @@ class Tensor:
 
     def invsqrt(self):
         """ Element-wise 1/sqrt(A)"""
-        a = self.empty(s=self.s, n=self.n, isdiag=self.isdiag)
+        a = self.copy_empty()
         if not a.isdiag:
             a.A = self.config.backend.invsqrt(self.A)
         else:
@@ -1100,7 +1079,7 @@ class Tensor:
 
     def inv(self):
         """ Element-wise 1/sqrt(A)"""
-        a = self.empty(s=self.s, n=self.n, isdiag=self.isdiag)
+        a = self.copy_empty()
         if not a.isdiag:
             a.A = self.config.backend.inv(self.A)
         else:
@@ -1111,7 +1090,7 @@ class Tensor:
 
     def exp(self, step=1.):
         """ Element-wise exp(step * A)"""
-        a = self.empty(s=self.s, n=self.n, isdiag=self.isdiag)
+        a = self.copy_empty()
         if not a.isdiag:
             a.A = self.config.backend.exp(self.A, step)
         else:
@@ -1122,7 +1101,7 @@ class Tensor:
 
     def sqrt(self):
         """ Element-wise sqrt"""
-        a = self.empty(s=self.s, n=self.n, isdiag=self.isdiag)
+        a = self.copy_empty()
         a.A = self.config.backend.sqrt(self.A)
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
@@ -1133,21 +1112,18 @@ class Tensor:
     ##################################
 
     def scalar(self, other):
-        r""" Compute scalar product x=(a, b) of two tensors.
+        r""" 
+        Compute scalar product x = <self|other> of two tensors. Self is conjugated.
 
-            Note that the first one is conjugated.
+        Parameters
+        ----------
+        other: Tensor
 
-            Parameters
-            ----------
-            other: Tensor
-
-            Returns
-            -------
-            x: number
+        Returns
+        -------
+        x: number
         """
-        if not all(self.s == other.s) or not all(self.n == other.n):
-            logger.exception('Tensors do not match')
-            raise FatalError
+        self._test_tensors_match(other)
         k12, _, _ = _common_keys(self.A, other.A)
         return self.config.backend.scalar(self.A, other.A, k12)
 
@@ -1164,17 +1140,18 @@ class Tensor:
         -------
             tansor: Tensor
         """
-        in1, in2 = _clean_axes(axes)  # contracted legs
+        lin1, lin2 = _clean_axes(axes)  # contracted legs
+        lin12 = lin1 + lin2
+        lout = tuple(ii for ii in range(len(self.lfuse)) if ii not in lin12)
+        in1, in2, out = self._unpack_axes(lin1, lin2, lout)
 
-        if len(in1) != len(in2):
+        if len(in1) != len(in2) or len(lin1) != len(lin2):
             logger.exception('Number of axis to trace should be the same')
             raise FatalError
         if len(in1) == 0:
             return self
 
-        in12 = in1 + in2
-        out = tuple(ii for ii in range(self.ndim) if ii not in in12)
-        order = in12 + out
+        order = in1 + in2 + out
         ain1 = np.array(in1, dtype=np.intp)
         ain2 = np.array(in2, dtype=np.intp)
         aout = np.array(out, dtype=np.intp)
@@ -1200,38 +1177,46 @@ class Tensor:
             raise FatalError
 
         meta = [(tuple(to[n]), tuple(self.tset[n].flat), tuple(Drsh[n])) for n in ind]
-        a = Tensor(config=self.config, s=self.s[aout], n=self.n)
+        a = Tensor(config=self.config, s=self.s[aout], n=self.n, lfuse=tuple(self.lfuse[ii] for ii in lout))
         a.A = a.config.backend.trace(self.A, order, meta)
         a._calculate_tDset()
         return a
 
     def dot(self, other, axes, conj=(0, 0)):
-        r""" Compute dot product of two tensor along specified axes.
+        r""" 
+        Compute dot product of two tensor along specified axes.
 
-            Outgoing legs ordered such that first come remaining legs of the first tensor in the original order,
-            and than those of the second tensor.
+        Outgoing legs ordered such that first come remaining legs of the first tensor in the original order,
+        and than those of the second tensor.
 
-            Parameters
-            ----------
-            other: Tensor
+        Parameters
+        ----------
+        other: Tensor
 
-            axes: tuple
-                legs of both tensors (for each it is specified by int or tuple of ints)
-                e.g. axes=(0, 3), axes=((0, 3), (1, 2))
+        axes: tuple
+            legs of both tensors (for each it is specified by int or tuple of ints)
+            e.g. axes=(0, 3), axes=((0, 3), (1, 2))
 
-            conj: tuple
-                shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
-        """
-        a_con, b_con = _clean_axes(axes)  # contracted legs
-        a_out = tuple(ii for ii in range(self.ndim) if ii not in a_con)  # outgoing legs
-        b_out = tuple(ii for ii in range(other.ndim) if ii not in b_con)
+        conj: tuple
+            shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
         
+        Returns
+        -------
+            tansor: Tensor
+        """
+        la_con, lb_con = _clean_axes(axes)  # contracted logical legs
+        la_out = tuple(ii for ii in range(len(self.lfuse)) if ii not in la_con)  # outgoing logical legs
+        lb_out = tuple(ii for ii in range(len(other.lfuse)) if ii not in lb_con)  # outgoing logical legs
+
+        a_con, a_out = self._unpack_axes(la_con, la_out)  # actual legs of a=self
+        b_con, b_out = other._unpack_axes(lb_con, lb_out)  # actual legs of b=other
+
         na_con, na_out = np.array(a_con, dtype=np.intp), np.array(a_out, dtype=np.intp)
         nb_con, nb_out = np.array(b_con, dtype=np.intp), np.array(b_out, dtype=np.intp)
 
         conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
-        if not all(self.s[na_con] == -other.s[nb_con] * conja * conjb):
-            if self.isdiag:  # if diagonal tensor, than freely changes the signature by by a factor of -1
+        if not all(self.s[na_con] == (-conja * conjb) * other.s[nb_con]):
+            if self.isdiag:  # if diagonal tensor, than freely changes the signature by a factor of -1
                 self.s *= -1
             elif other.isdiag:
                 other.s *= -1
@@ -1239,7 +1224,7 @@ class Tensor:
                 logger.exception('Signs do not match')
                 raise FatalError
 
-        c_n = np.vstack([self.n, other.n]).reshape(1,2,-1)
+        c_n = np.vstack([self.n, other.n]).reshape(1, 2, -1)
         c_s = np.array([conja, conjb], dtype=int)
         c_n = self.config.sym.fuse(c_n, c_s, 1)
 
@@ -1251,13 +1236,14 @@ class Tensor:
 
         meta_dot = tuple((al + br, al + ar, bl + br)  for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
-        if not ua_r == ub_l:
+        if self.config.test and not ua_r == ub_l:
             logger.exception('Something went wrong in matching the indices of the two tensors')
             raise FatalError
 
         Cm = self.config.backend.dot(Am, Bm, conj, meta_dot)
         c_s = np.hstack([conja * self.s[na_out], conjb * other.s[nb_out]])
-        c = Tensor(config=self.config, s=c_s, n=c_n)
+        c_lfuse = [self.lfuse[ii] for ii in la_out] + [other.lfuse[ii] for ii in lb_out]
+        c = Tensor(config=self.config, s=c_s, n=c_n, lfuse=c_lfuse)
         c.A = self._unmerge_from_matrix(Cm, ls_l, ls_r)
         c._calculate_tDset()
         return c
@@ -1309,7 +1295,8 @@ class Tensor:
         U, S, V: Tensor
             U and V are unitary projectors. S is diagonal.
         """
-        out_l, out_r = _clean_axes(axes)
+        lout_l, lout_r = _clean_axes(axes)
+        out_l, out_r = self._unpack_axes(lout_l, lout_r)
         self._test_axes_split(out_l, out_r)
 
         Am, ls_l, ls_r, ul, ur = self._merge_to_matrix(out_l, out_r, news_l=-sU, news_r=sU)
@@ -1327,9 +1314,9 @@ class Tensor:
 
         Um, Sm, Vm = self.config.backend.svd(Am, meta, opts)
 
-        U = Tensor(config=self.config, s=ls_l.s + (sU,), n=n_l)
+        U = Tensor(config=self.config, s=ls_l.s + (sU,), n=n_l, lfuse=[self.lfuse[ii] for ii in lout_l] + [(1, ())])
         S = Tensor(config=self.config, s=(-sU, sU), isdiag=True)
-        V = Tensor(config=self.config, s=(-sU,) + ls_r.s, n=n_r)
+        V = Tensor(config=self.config, s=(-sU,) + ls_r.s, n=n_r, lfuse=[(1, ())] + [self.lfuse[ii] for ii in lout_r])
 
         ls_s = _Leg_struct(self.config)
         ls_s.leg_struct_for_truncation(Sm, opts, 'svd')
@@ -1366,7 +1353,8 @@ class Tensor:
         -------
             Q, R: Tensor
         """
-        out_l, out_r = _clean_axes(axes)
+        lout_l, lout_r = _clean_axes(axes)
+        out_l, out_r = self._unpack_axes(lout_l, lout_r)
         self._test_axes_split(out_l, out_r)
 
         Am, ls_l, ls_r, ul, ur = self._merge_to_matrix(out_l, out_r, news_l=-sQ, news_r=sQ)
@@ -1376,8 +1364,8 @@ class Tensor:
         
         Qs = tuple(self.s[lg] for lg in out_l) + (sQ,)
         Rs = (-sQ,) + tuple(self.s[lg] for lg in out_r)
-        Q = Tensor(config=self.config, s=Qs, n=self.n)
-        R = Tensor(config=self.config, s=Rs)
+        Q = Tensor(config=self.config, s=Qs, n=self.n, lfuse=[self.lfuse[ii] for ii in lout_l] + [(1, ())])
+        R = Tensor(config=self.config, s=Rs, lfuse=[(1, ())] + [self.lfuse[ii] for ii in lout_r])
 
         ls = _Leg_struct(self.config, -sQ, -sQ)
         ls.leg_struct_trivial(Rm, 0)
@@ -1426,7 +1414,8 @@ class Tensor:
             S, U: Tensor
                 U is unitary projector. S is diagonal.
         """
-        out_l, out_r = _clean_axes(axes)
+        lout_l, lout_r = _clean_axes(axes)
+        out_l, out_r = self._unpack_axes(lout_l, lout_r)
         self._test_axes_split(out_l, out_r)
 
         if np.any(self.n != 0):
@@ -1450,7 +1439,7 @@ class Tensor:
         Us = tuple(self.s[lg] for lg in out_l) + (sU,)
         
         S = Tensor(config=self.config, s=(-sU, sU), isdiag=True)
-        U = Tensor(config=self.config, s=Us)
+        U = Tensor(config=self.config, s=Us, lfuse=[self.lfuse[ii] for ii in lout_l] + [(1, ())])
 
         U.A = self._unmerge_from_matrix(Um, ls_l, ls_s)
         S.A = self._unmerge_from_diagonal(Sm, ls_s)
@@ -1519,20 +1508,14 @@ class Tensor:
     #    fusing operations   #
     ##########################
 
-    def group_legs(self, axes, new_s=None):
-        """
-        Permutes tensor legs. Next, fuse a specified group of legs into a new single leg.
+    def fuse_legs(self, axes, inplace=False):
+        r"""
+        Permutes tensor legs. Next, fuse groups of consequative legs into new logical legs.
     
-        If no internal tuple if given, fuse the given indices. 
-        New leg is placed at the position of the first fused oned.
-
         Parameters
         ----------
         axes: tuple 
-            tuple of leg indices for transpose. Group of legs to be fused forms inner tuple.
-
-        new_s: int
-            signature of a new leg. If not given, the signature of the first fused leg is given.
+            tuple of leg's indices for transpose. Groups of legs to be fused together form inner tuples.
 
         Returns
         -------
@@ -1540,123 +1523,195 @@ class Tensor:
 
         Example
         -------
-        For tensor with 5 legs: tensor.fuse_legs1(axes=(2, 0, (1, 4), 3))
-        tensor.fuse_legs1(axes=(2, 0)) is equivalent to tensor.fuse_legs1(axes=(1, (2, 0), 3, 4))
+        tensor.fuse_legs(axes=(2, 0, (1, 4), 3)) gives 4 efective legs from original 5; with one logically non-trivial one
+        tensor.fuse_legs(axes=((2, 0), (1, 4), (3, 5))) gives 3 effective legs from original 6
         """
         if self.isdiag:
             logger.exception('Cannot group legs of a diagonal tensor')
             raise FatalError
-
-        ituple = [ii for ii, ax in enumerate(axes) if isinstance(ax, tuple)]
-        if len(ituple) == 1:
-            ig = ituple[0]
-            al, ag, ar = axes[:ig], axes[ig], axes[ig+1:]
-        elif len(ituple) == 0: 
-            al = tuple(ii for ii in range(axes[0]) if ii not in axes)
-            ar = tuple(ii for ii in range(axes[0]+1, self.ndim) if ii not in axes)
-            ag = axes
-            ig = len(al)
+        
+        lfuse, order = [], []
+        for group in axes:
+            if isinstance(group, int):
+                order.append(group)
+                lfuse.append(self.lfuse[group])
+            else:
+                order.extend(group)
+                struct = tuple(self.lfuse[ii] for ii in group)
+                nlegs = sum(x[0] for x in struct)
+                lfuse.append((nlegs, struct))
+        order = tuple(order)
+        if inplace and order == tuple(ii for ii in range(len(self.lfuse))):
+            a = self
         else:
-            logger.exception('Too many groups to fuse')
-            raise FatalError
-        if len(ag) < 2:
-            logger.exception('Need at least two legs to fuse')
-            raise FatalError
+            a = self.transpose(axes=order)
+        a.lfuse = tuple(lfuse)
+        return a
 
-        order = al+ag+ar  # order for permute
-        legs_l = np.array(al, dtype=np.intp)
-        legs_r = np.array(ar, dtype=np.intp)
-        legs_c = np.array(ag, dtype=np.intp)
-
-        if new_s is None:
-            new_s = self.s[ag[0]]
-        
-        new_ndim = len(al) + 1 + len(ar)
-
-        t_grp = self.tset[:, legs_c, :]
-        D_grp = self.Dset[:, legs_c]
-        s_grp = self.s[legs_c]
-        t_eff = self.config.sym.fuse(t_grp, s_grp, new_s)
-        D_eff = np.prod(D_grp, axis=1)
-
-        D_rsh = np.empty((len(self.A), new_ndim), dtype=int)
-        D_rsh[:, :ig] = self.Dset[:, legs_l]
-        D_rsh[:, ig] = D_eff
-        D_rsh[:, ig+1:] = self.Dset[:, legs_r]
-
-        ls_c = _Leg_struct(self.config, s_grp, new_s)
-        ls_c.leg_struct_for_merged(t_eff, t_grp, D_eff, D_grp)
-
-        t_new = np.empty((len(self.A), new_ndim, self.config.sym.nsym), dtype=int)
-        t_new[:, :ig, :] = self.tset[:, legs_l, :]
-        t_new[:, ig, :] = t_eff
-        t_new[:, ig+1:, :] = self.tset[:, legs_r, :]
-
-        t_new = t_new.reshape(len(t_new), -1)
-        u_new, iu_new = np.unique(t_new, return_index=True, axis=0)
-        Du_new = D_rsh[iu_new]
-        Du_new[:, ig] = np.array([ls_c.D[tuple(t_eff[ii].flat)] for ii in iu_new], dtype=int)
-        
-        # meta_new = ((u, Du), ...)
-        meta_new = tuple((tuple(u.flat), tuple(Du)) for u, Du in zip(u_new, Du_new))
-        # meta_mrg = ((tn, Ds, to, Do), ...)
-        meta_mrg = tuple((tuple(tn.flat), ls_c.dec[tuple(te.flat)][tuple(tg.flat)][0], tuple(to.flat), tuple(Do)) 
-            for tn, te, tg, to, Do in zip(t_new, t_eff, t_grp, self.tset, D_rsh))
-
-        c = self.empty(s=tuple(self.s[legs_l]) + (new_s,) + tuple(self.s[legs_r]), n=self.n, isdiag=self.isdiag)
-        c.A = self.config.backend.merge_one_leg(self.A, ig, order, meta_new , meta_mrg, self.config.dtype) 
-        c._calculate_tDset()
-        c.lss[ig] = ls_c  
-        for nnew, nold in enumerate(al+ (-1,) + ar):
-            if nold in self.lss:
-                c.lss[nnew] = self.lss[nold].copy()
-        return c
-
-    def ungroup_leg(self, axis):
+    def unfuse_legs(self, axes, inplace=False):
         """
-        Unfuse a single tensor leg.
+        Unfuse logical legs reverting one layer of fusion. Operation can be done in-place.
 
         New legs are inserted in place of the unfused one.
 
         Parameters
         ----------
-        axis: int
-            index of leg to ungroup.
+        axis: int or tuple of ints
+            leg(s) to ungroup.
 
         Returns
         -------
         tensor : Tensor
         """
-        try:
-            ls = self.lss[axis]
-        except KeyError:
-            return self
+        if isinstance(axes, int):
+            axes = (axes,)
+        a = self if inplace else self.copy()
+        newlfuse = []
+        for ii in range(len(a.lfuse)):
+            if (ii not in axes) or (a.lfuse[ii][0] == 1):
+                newlfuse.append(a.lfuse[ii])
+            else:
+                newlfuse.extend(a.lfuse[ii][1])
+        a.lfuse = tuple(newlfuse)
+        #a.lfuse = tuple(itertools.chain((a.lfuse[ii],) if (ii not in axes) or (a.lfuse[ii][0] == 1) else a.lfuse[ii][1] for ii in range(len(a.lfuse))))
+        return a
 
-        meta = []
-        for tt, DD in zip(self.tset, self.Dset):
-            tl = tuple(tt[:axis, :].flat)
-            tc = tuple(tt[axis, :].flat)
-            tr = tuple(tt[axis+1:, :].flat)
-            told = tuple(tt.flat)
-            Dl = tuple(DD[:axis])
-            Dr = tuple(DD[axis+1:])
-            for tcom, (Dsl, _, Dc) in ls.dec[tc].items():
-                tnew = tl + tcom + tr
-                Dnew = Dl + Dc + Dr
-                meta.append((told, tnew, Dsl, Dnew))
-        meta = tuple(meta)
-        s = tuple(self.s[:axis]) + ls.s + tuple(self.s[axis+1:])
+    # def group_legs(self, axes, new_s=None):
+    #     """
+    #     Permutes tensor legs. Next, fuse a specified group of legs into a new single leg.
+    
+    #     Parameters
+    #     ----------
+    #     axes: tuple 
+    #         tuple of leg indices for transpose. Group of legs to be fused forms inner tuple.
+    #         If there is not internal tuple, fuse given indices and a new leg is placed at the position of the first fused oned.
 
-        c = self.empty(s=s, n=self.n, isdiag=self.isdiag)
-        c.A = self.config.backend.unmerge_one_leg(self.A, axis, self.ndim, meta)
-        c._calculate_tDset()
-        for ii in range(axis):
-            if ii in self.lss:
-                c.lss[ii]=self.lss[ii].copy()
-        for ii in range(axis+1, self.ndim):
-            if ii in self.lss:
-                c.lss[ii+ls.ndim]=self.lss[ii].copy()
-        return c
+    #     new_s: int
+    #         signature of a new leg. If not given, the signature of the first fused leg is given.
+
+    #     Returns
+    #     -------
+    #     tensor : Tensor
+
+    #     Example
+    #     -------
+    #     For tensor with 5 legs: tensor.fuse_legs1(axes=(2, 0, (1, 4), 3))
+    #     tensor.fuse_legs1(axes=(2, 0)) is equivalent to tensor.fuse_legs1(axes=(1, (2, 0), 3, 4))
+    #     """
+    #     if self.isdiag:
+    #         logger.exception('Cannot group legs of a diagonal tensor')
+    #         raise FatalError
+
+    #     ituple = [ii for ii, ax in enumerate(axes) if isinstance(ax, tuple)]
+    #     if len(ituple) == 1:
+    #         ig = ituple[0]
+    #         al, ag, ar = axes[:ig], axes[ig], axes[ig+1:]
+    #     elif len(ituple) == 0: 
+    #         al = tuple(ii for ii in range(axes[0]) if ii not in axes)
+    #         ar = tuple(ii for ii in range(axes[0]+1, self.ndim) if ii not in axes)
+    #         ag = axes
+    #         ig = len(al)
+    #     else:
+    #         logger.exception('Too many groups to fuse')
+    #         raise FatalError
+    #     if len(ag) < 2:
+    #         logger.exception('Need at least two legs to fuse')
+    #         raise FatalError
+
+    #     order = al+ag+ar  # order for permute
+    #     legs_l = np.array(al, dtype=np.intp)
+    #     legs_r = np.array(ar, dtype=np.intp)
+    #     legs_c = np.array(ag, dtype=np.intp)
+
+    #     if new_s is None:
+    #         new_s = self.s[ag[0]]
+        
+    #     new_ndim = len(al) + 1 + len(ar)
+
+    #     t_grp = self.tset[:, legs_c, :]
+    #     D_grp = self.Dset[:, legs_c]
+    #     s_grp = self.s[legs_c]
+    #     t_eff = self.config.sym.fuse(t_grp, s_grp, new_s)
+    #     D_eff = np.prod(D_grp, axis=1)
+
+    #     D_rsh = np.empty((len(self.A), new_ndim), dtype=int)
+    #     D_rsh[:, :ig] = self.Dset[:, legs_l]
+    #     D_rsh[:, ig] = D_eff
+    #     D_rsh[:, ig+1:] = self.Dset[:, legs_r]
+
+    #     ls_c = _Leg_struct(self.config, s_grp, new_s)
+    #     ls_c.leg_struct_for_merged(t_eff, t_grp, D_eff, D_grp)
+
+    #     t_new = np.empty((len(self.A), new_ndim, self.config.sym.nsym), dtype=int)
+    #     t_new[:, :ig, :] = self.tset[:, legs_l, :]
+    #     t_new[:, ig, :] = t_eff
+    #     t_new[:, ig+1:, :] = self.tset[:, legs_r, :]
+
+    #     t_new = t_new.reshape(len(t_new), -1)
+    #     u_new, iu_new = np.unique(t_new, return_index=True, axis=0)
+    #     Du_new = D_rsh[iu_new]
+    #     Du_new[:, ig] = np.array([ls_c.D[tuple(t_eff[ii].flat)] for ii in iu_new], dtype=int)
+        
+    #     # meta_new = ((u, Du), ...)
+    #     meta_new = tuple((tuple(u.flat), tuple(Du)) for u, Du in zip(u_new, Du_new))
+    #     # meta_mrg = ((tn, Ds, to, Do), ...)
+    #     meta_mrg = tuple((tuple(tn.flat), ls_c.dec[tuple(te.flat)][tuple(tg.flat)][0], tuple(to.flat), tuple(Do)) 
+    #         for tn, te, tg, to, Do in zip(t_new, t_eff, t_grp, self.tset, D_rsh))
+
+    #     c = self.empty(s=tuple(self.s[legs_l]) + (new_s,) + tuple(self.s[legs_r]), n=self.n, isdiag=self.isdiag)
+    #     c.A = self.config.backend.merge_one_leg(self.A, ig, order, meta_new , meta_mrg, self.config.dtype) 
+    #     c._calculate_tDset()
+    #     c.lss[ig] = ls_c  
+    #     for nnew, nold in enumerate(al+ (-1,) + ar):
+    #         if nold in self.lss:
+    #             c.lss[nnew] = self.lss[nold].copy()
+    #     return c
+
+    # def ungroup_leg(self, axis):
+    #     """
+    #     Unfuse a single tensor leg.
+
+    #     New legs are inserted in place of the unfused one.
+
+    #     Parameters
+    #     ----------
+    #     axis: int
+    #         index of leg to ungroup.
+
+    #     Returns
+    #     -------
+    #     tensor : Tensor
+    #     """
+    #     try:
+    #         ls = self.lss[axis]
+    #     except KeyError:
+    #         return self
+
+    #     meta = []
+    #     for tt, DD in zip(self.tset, self.Dset):
+    #         tl = tuple(tt[:axis, :].flat)
+    #         tc = tuple(tt[axis, :].flat)
+    #         tr = tuple(tt[axis+1:, :].flat)
+    #         told = tuple(tt.flat)
+    #         Dl = tuple(DD[:axis])
+    #         Dr = tuple(DD[axis+1:])
+    #         for tcom, (Dsl, _, Dc) in ls.dec[tc].items():
+    #             tnew = tl + tcom + tr
+    #             Dnew = Dl + Dc + Dr
+    #             meta.append((told, tnew, Dsl, Dnew))
+    #     meta = tuple(meta)
+    #     s = tuple(self.s[:axis]) + ls.s + tuple(self.s[axis+1:])
+
+    #     c = self.empty(s=s, n=self.n, isdiag=self.isdiag)
+    #     c.A = self.config.backend.unmerge_one_leg(self.A, axis, meta)
+    #     c._calculate_tDset()
+    #     for ii in range(axis):
+    #         if ii in self.lss:
+    #             c.lss[ii]=self.lss[ii].copy()
+    #     for ii in range(axis+1, self.ndim):
+    #         if ii in self.lss:
+    #             c.lss[ii+ls.ndim]=self.lss[ii].copy()
+    #     return c
 
     #################
     #     tests     #
@@ -1680,7 +1735,10 @@ class Tensor:
 
     def is_consistent(self):
         """
-        Test if tset corresponds to indices of A; and is f(s * t - n) == 0 is satisfied for all blocks.
+        Test: 
+        1) tset and Dset correspond to A
+        2) tset follow symmetry rule f(s@t)==n
+        3) block dimensions are consistent (this requires config.test=True)
         """
         test = []
         for ind, D in zip(self.tset, self.Dset):
@@ -1700,17 +1758,32 @@ class Tensor:
     #     aux function     #
     ########################
 
+    def _test_tensors_match(self, other):
+        if self.config.test:
+            if not all(self.s == other.s) or not all(self.n == other.n):
+                logger.exception('Tensor signatures do not match')
+                raise FatalError
+            if not self.lfuse == other.lfuse:
+                logger.exception('Fusion trees do not match')
+                raise FatalError
+
     def _test_axes_split(self, out_l, out_r):
-        if not (self.ndim == len(out_l) + len(out_r)):
-            logger.exception('Two few indices in axes')
-            raise FatalError
-        if not (sorted(set(out_l+out_r)) == list(range(self.ndim))):
-            logger.exception('Repeated axis')
-            raise FatalError
+        if self.config.test:
+            if not (self.ndim == len(out_l) + len(out_r)):
+                logger.exception('Two few indices in axes')
+                raise FatalError
+            if not (sorted(set(out_l+out_r)) == list(range(self.ndim))):
+                logger.exception('Repeated axis')
+                raise FatalError
 
     def _calculate_tDset(self):
         self.tset = np.array([ind for ind in self.A], dtype=int).reshape(len(self.A), self.ndim, self.config.sym.nsym)
         self.Dset = np.array([self.config.backend.get_shape(self.A[ind]) for ind in self.A], dtype=int).reshape(len(self.A), self.ndim)
+
+    def _unpack_axes(self, *args):
+        """Unpack logical axes based on self.lfuse"""
+        clegs = tuple(itertools.accumulate(x[0] for x in self.lfuse))
+        return (tuple(itertools.chain(*(range(clegs[ii]-self.lfuse[ii][0], clegs[ii]) for ii in axes))) for axes in args)
 
 
 class _Leg_struct:
