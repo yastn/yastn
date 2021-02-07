@@ -1,4 +1,4 @@
-from yamps.tensor import ncon
+from yamps.yast import ncon, match_legs
 import logging
 
 
@@ -47,19 +47,16 @@ class Env3:
         # set environments at boundaries
         ff = self.g.first
         ll = self.g.last
-        tn = self.ket.A[ff]
 
         # left boundary
-        self.F[(None, ff)] = tn.match_legs(tensors=[self.bra.A[ff], self.op.A[ff], self.ket.A[ff]],
-                                           legs=[
-                                               self.bra.left[0], self.op.left[0], self.ket.left[0]],
-                                           conjs=[1, 0, 0], val='ones')
+        self.F[(None, ff)] = match_legs(tensors=[self.bra.A[ff], self.op.A[ff], self.ket.A[ff]],
+                                        legs=[self.bra.left[0], self.op.left[0], self.ket.left[0]],
+                                        conjs=[1, 0, 0], val='ones')
 
         # right boundary
-        self.F[(None, ll)] = tn.match_legs(tensors=[self.ket.A[ll], self.op.A[ll], self.bra.A[ll]],
-                                           legs=[
-                                               self.ket.right[0], self.op.right[0], self.bra.right[0]],
-                                           conjs=[0, 0, 1], val='ones')
+        self.F[(None, ll)] = match_legs(tensors=[self.ket.A[ll], self.op.A[ll], self.bra.A[ll]],
+                                        legs=[self.ket.right[0], self.op.right[0], self.bra.right[0]],
+                                        conjs=[0, 0, 1], val='ones')
 
     def update(self, n, towards):
         r"""
@@ -266,8 +263,9 @@ class Env3:
             self.op_merged = {}
         if not (n, nn) in self.op_merged:
             OO = self.op.A[n].dot(self.op.A[nn], axes=((3), (0)))
-            OO, _ = OO.group_legs(axes=(2, 4), new_s=-1)
-            OO, _ = OO.group_legs(axes=(1, 3), new_s=1)
+            OO = OO.fuse_legs(axes=(0, (1, 3), (2, 4), 5))
+            # OO, _ = OO.group_legs(axes=(2, 4), new_s=-1)
+            # OO, _ = OO.group_legs(axes=(1, 3), new_s=1)
             self.op_merged[(n, nn)] = OO
         OO = self.op_merged[(n, nn)]
         if conj:

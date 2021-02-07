@@ -1,5 +1,5 @@
 import logging
-from yamps.tensor import ncon
+from yamps.yast import ncon
 from .geometry import Geometry
 import numpy as np
 
@@ -260,12 +260,9 @@ class Mps:
             list of bond dimensions on virtual legs from left to right,
             including "trivial" leftmost and rightmost virtual indices.
         """
-        Ds = []
-        for n in self.g.sweep(to='last'):
-            _, lDs = self.A[n].get_tD()
-            leg_dim = [sum(xx) for xx in lDs]
-            Ds.append(np.prod([leg_dim[x] for x in self.left]))
-        Ds.append(np.prod([leg_dim[x] for x in self.right]))
+
+        Ds = [self.A[n].get_shape_leg(self.left[0]) for n in self.g.sweep(to='last')]
+        Ds.append(self.A[self.g.last].get_shape_leg(self.right[0]))
         return Ds
 
     def get_S(self, alpha=1):

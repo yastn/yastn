@@ -300,6 +300,7 @@ def block(pos_tens, common_legs):
     c._calculate_tDset()
     return c
 
+
 class Tensor:
     """ Class defining a tensor with abelian symmetries, and operations on such tensor(s). """
 
@@ -331,10 +332,10 @@ class Tensor:
         # self.lfuse is immutable for copying and comparison
 
     def detach_(self):
-        self.conf.backend.detach_(self.A)
+        self.config.backend.detach_(self.A)
 
     def move_to_device(self, device):
-        self.A = self.conf.backend.move_to_device(self.A, device)
+        self.A = self.config.backend.move_to_device(self.A, device)
         return self
 
     ######################
@@ -546,7 +547,7 @@ class Tensor:
     def show_properties(self):
         """ Display basic properties of the tensor. """
         print("ndim      :", self.ndim)  # number of dimensions
-        print("ldim:     :", len(self.lfuse))  # number of logical legs
+        print("ldim:     :", self.ldim())  # number of logical legs
         print("lfuse:    :", self.lfuse)  # logical fusion tree for each leg
         print("signature :", self.s)  # signature
         print("charge    :", self.n)  # total charge of tensor
@@ -636,13 +637,20 @@ class Tensor:
                     raise FatalError
         return tDn
 
-    def get_total_shape(self):
+    def get_shape_leg(self, n):
+        """ Total bond dimension of n-th leg."""
+        return sum(self.get_leg_tD(n).values())
+
+    def get_shape_all(self):
         """ Total bond dimension of all legs."""
         return tuple(sum(self.get_leg_tD(n).values()) for n in range(self.ndim))
 
     def get_fusion_tree(self):
         """ Fusion trees for all logical legs."""
         return self.lfuse
+
+    def ldim(self):
+        return len(self.lfuse)
 
     #########################
     #    output numbers     #
@@ -927,7 +935,7 @@ class Tensor:
     #     tensor operations     #
     #############################
 
-    def transpose(self, axes=(1, 0)):
+    def transpose(self, axes=(1, 0), inplace=False):
         r"""
         Return transposed tensor.
 
@@ -980,29 +988,18 @@ class Tensor:
         return a
 
     def diag(self):
-        """
-        Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa.
-
-        Parameters
-        ----------
-            s0: +1 or -1
-                while transforming diagonal tensor into 2d tensor, one has to select signature (s0, -s0)
-        """
+        """Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa. """
         if self.isdiag:
             a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=False, lfuse=self.lfuse)
-            for ind in self.A:
-                nind = ind + ind
-                a.set_block(ts=nind, val=self.conf.backend.diag_create(self.A[ind]))
-            return a
+            a.A = {ind: self.config.backend.diag_diag(self.A[ind]) for ind in self.A}
         elif self.ndim == 2 and sum(np.abs(self.n)) == 0 and sum(self.s) == 0:
             a = Tensor(config=self.config, s=self.s, isdiag=True, lfuse=self.lfuse)
-            for ind in self.tset:
-                if np.all(ind[0, :] == ind[1, :]):
-                    nind = tuple(ind[0, :].flat)
-                    a.set_block(ts=nind, val=self.conf.backend.diag_get(self.A[tuple(ind.flat)]))
-            return a
+            a.A = {ind: self.config.backend.diag_diag(self.A[ind]) for ind in self.A}
         else:
             logger.exception('Tensor cannot be changed into a diagonal one')
+            raise FatalError
+        a._calculate_tDset()
+        return a
 
     def conj(self):
         """
@@ -1142,7 +1139,7 @@ class Tensor:
         """
         lin1, lin2 = _clean_axes(axes)  # contracted legs
         lin12 = lin1 + lin2
-        lout = tuple(ii for ii in range(len(self.lfuse)) if ii not in lin12)
+        lout = tuple(ii for ii in range(self.ldim()) if ii not in lin12)
         in1, in2, out = self._unpack_axes(lin1, lin2, lout)
 
         if len(in1) != len(in2) or len(lin1) != len(lin2):
@@ -1205,8 +1202,8 @@ class Tensor:
             tansor: Tensor
         """
         la_con, lb_con = _clean_axes(axes)  # contracted logical legs
-        la_out = tuple(ii for ii in range(len(self.lfuse)) if ii not in la_con)  # outgoing logical legs
-        lb_out = tuple(ii for ii in range(len(other.lfuse)) if ii not in lb_con)  # outgoing logical legs
+        la_out = tuple(ii for ii in range(self.ldim()) if ii not in la_con)  # outgoing logical legs
+        lb_out = tuple(ii for ii in range(other.ldim()) if ii not in lb_con)  # outgoing logical legs
 
         a_con, a_out = self._unpack_axes(la_con, la_out)  # actual legs of a=self
         b_con, b_out = other._unpack_axes(lb_con, lb_out)  # actual legs of b=other
@@ -1541,7 +1538,7 @@ class Tensor:
                 nlegs = sum(x[0] for x in struct)
                 lfuse.append((nlegs, struct))
         order = tuple(order)
-        if inplace and order == tuple(ii for ii in range(len(self.lfuse))):
+        if inplace and order == tuple(ii for ii in range(self.ldim())):
             a = self
         else:
             a = self.transpose(axes=order)
@@ -1567,13 +1564,13 @@ class Tensor:
             axes = (axes,)
         a = self if inplace else self.copy()
         newlfuse = []
-        for ii in range(len(a.lfuse)):
+        for ii in range(a.ldim()):
             if (ii not in axes) or (a.lfuse[ii][0] == 1):
                 newlfuse.append(a.lfuse[ii])
             else:
                 newlfuse.extend(a.lfuse[ii][1])
         a.lfuse = tuple(newlfuse)
-        #a.lfuse = tuple(itertools.chain((a.lfuse[ii],) if (ii not in axes) or (a.lfuse[ii][0] == 1) else a.lfuse[ii][1] for ii in range(len(a.lfuse))))
+        #a.lfuse = tuple(itertools.chain((a.lfuse[ii],) if (ii not in axes) or (a.lfuse[ii][0] == 1) else a.lfuse[ii][1] for ii in range(a.ldim()))))
         return a
 
     # def group_legs(self, axes, new_s=None):

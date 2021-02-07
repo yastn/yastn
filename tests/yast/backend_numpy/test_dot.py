@@ -1,4 +1,4 @@
-import yamps.tensor.yast as yast
+import yamps.yast as yast
 import config_dense_C
 import config_U1_R
 import config_Z2_U1_R
@@ -13,15 +13,15 @@ def dot_vs_numpy(a, b, axes, conj):
     tDs.update({nn + len(outa): b.get_leg_tD(ii) for nn, ii in enumerate(outb)})
     tDsa = {ia: b.get_leg_tD(ib) for  ia, ib in zip(*axes)}
     tDsb = {ib: a.get_leg_tD(ia) for  ia, ib in zip(*axes)}
-    na = a.to_numpy(tDsa)
-    nb = b.to_numpy(tDsb)
+    na = a.to_dense(tDsa)
+    nb = b.to_dense(tDsb)
     if conj[0]:
         na = na.conj()
     if conj[1]:
         nb = nb.conj()
     nab = np.tensordot(na, nb, axes)
     c = a.dot(b, axes, conj)
-    nc = c.to_numpy(tDs)
+    nc = c.to_dense(tDs)
     assert c.is_consistent()
     assert a.is_independent(c)
     assert c.is_independent(b)

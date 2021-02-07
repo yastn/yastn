@@ -15,7 +15,7 @@ logger = logging.getLogger('yamps.mps.geometry')
 
 class Geometry:
     """
-    Operations encoding geometry. This is a complete overkill for mps, but we put it here for easier transition to ttn.
+    Operations encoding geometry. This is a complete overkill in the context of mps itself.
     Sites of mps are numbered with :math:`0, 1, 2, 3, \\ldots, N-1` with :math:`0` corresponds to the leftmost site.
     """
     def __init__(self, N):

@@ -51,6 +51,10 @@ def diag_get(x):
     return np.diag(x)
 
 
+def diag_diag(x):
+    return np.diag(np.diag(x))
+
+
 def count_greater(x, cutoff):
     return np.sum(x > cutoff)
 
@@ -300,6 +304,7 @@ def scalar(A, B, meta):
     out = 0.
     for ind in meta:
         out += (A[ind].conj().reshape(-1)) @ (B[ind].reshape(-1))
+    return out
 
 
 dot_dict = {(0, 0): lambda x, y: x @ y,

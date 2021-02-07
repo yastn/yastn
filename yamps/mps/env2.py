@@ -1,5 +1,5 @@
 import logging
-
+from yamps.yast import match_legs
 
 class FatalError(Exception):
     pass
@@ -42,17 +42,16 @@ class Env2:
         # set environments at boundaries
         ff = self.g.first
         ll = self.g.last
-        tn = self.ket.A[ff]
 
         # left boundary
-        self.F[(None, ff)] = tn.match_legs(tensors=[self.bra.A[ff], self.ket.A[ff]],
-                                           legs=[self.bra.left[0], self.ket.left[0]],
-                                           conjs=[1, 0], val='ones')
+        self.F[(None, ff)] = match_legs(tensors=[self.bra.A[ff], self.ket.A[ff]],
+                                        legs=[self.bra.left[0], self.ket.left[0]],
+                                        conjs=[1, 0], val='ones')
 
         # right boundary
-        self.F[(None, ll)] = tn.match_legs(tensors=[self.ket.A[ll], self.bra.A[ll]],
-                                           legs=[self.ket.right[0], self.bra.right[0]],
-                                           conjs=[0, 1], val='ones')
+        self.F[(None, ll)] = match_legs(tensors=[self.ket.A[ll], self.bra.A[ll]],
+                                        legs=[self.ket.right[0], self.bra.right[0]],
+                                        conjs=[0, 1], val='ones')
 
     def update(self, n, towards):
         r"""

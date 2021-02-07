@@ -7,9 +7,7 @@ import pytest
 
 
 def run_dmrg_1site(psi, H, Etarget, sweeps=10):
-    """
-    Run a faw sweeps of dmrg_1site_sweep. Returns energy
-    """
+    """ Run a faw sweeps of dmrg_1site_sweep. Returns energy. """
     env = None
     for _ in range(sweeps):
         env = mps.dmrg.dmrg_sweep_1site(psi, H, env=env)
@@ -72,6 +70,5 @@ def test_truncate_svd_Z2():
 
 
 if __name__ == "__main__":
-    # pass
     test_truncate_svd_full()
-    test_truncate_svd_Z2()
+    # test_truncate_svd_Z2()

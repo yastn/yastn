@@ -1,7 +1,7 @@
 import logging
 import numpy as np
-from yamps.mps.env3 import Env3
-from yamps.tensor.eigs import expmw
+from .env3 import Env3
+from yamps.yast import expmw
 
 
 class FatalError(Exception):
@@ -285,7 +285,7 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
             A1, S, A2 = init[0].split_svd(axes=(psi.left + psi.phys, tuple(
                 a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
             psi.A[n] = A1
-            psi.A[n1] = A2.dot_diag(S, axis=psi.left)
+            psi.A[n1] = S.dot(A2, axes=(1, psi.left))
         env.clear_site(n)
         env.update(n, towards=psi.g.last)
 
@@ -326,7 +326,7 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
             # split and save
             A1, S, A2 = init[0].split_svd(axes=(psi.left + psi.phys, tuple(
                 a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-            psi.A[n1] = A1.dot_diag(S, axis=psi.right)
+            psi.A[n1] = A1.dot(S, axes=(psi.right, 0))
             psi.A[n] = A2
         env.clear_site(n)
         env.update(n, towards=psi.g.first)
@@ -429,7 +429,7 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
         if H:
             n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
             init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
-            init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
+            init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
@@ -437,11 +437,11 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
                 init = expmw(Av=lambda v: env.Heff2_group(v, n), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
-            init = init[0].ungroup_leg(axis=1, leg_order=leg_order)
+            init = init[0].unfuse_legs(axes=1, inplace=True)
             A1, S, A2 = init.split_svd(axes=(psi.left + psi.phys, tuple(
                 a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
             psi.A[n] = A1
-            psi.A[n1] = A2.dot_diag(S, axis=psi.left)
+            psi.A[n1] = S.dot(A2, axes=(1, psi.left))
         env.clear_site(n)
         env.update(n, towards=psi.g.last)
 
@@ -473,7 +473,7 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
         if H:
             n1, _, _ = psi.g.from_site(n, towards=psi.g.first)
             init = psi.A[n1].dot(psi.A[n], axes=(psi.right, psi.left))
-            init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
+            init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff2_group(v, n1), Bv=lambda v: env.Heff2_group(v, n1, conj=True), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
@@ -481,10 +481,10 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
                 init = expmw(Av=lambda v: env.Heff2_group(v, n1), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
-            init = init[0].ungroup_leg(axis=1, leg_order=leg_order)
+            init = init[0].unfuse_legs(axes=1, inplace=True)
             A1, S, A2 = init.split_svd(axes=(psi.left + psi.phys, tuple(
                 a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-            psi.A[n1] = A1.dot_diag(S, axis=psi.right)
+            psi.A[n1] = A1.dot(S, axes=(psi.right, 0))
             psi.A[n] = A2
         env.clear_site(n)
         env.update(n, towards=psi.g.first)
@@ -580,15 +580,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
         max_vdim = 1
         for n in range(psi.N):
             D_totals[n] = min([max_vdim, opts_svd['D_total']])
-            max_vdim = D_totals[n]
-            _, lDs = psi.A[n].get_tD()
-            leg_dim = [sum(xx) for xx in lDs]
-            max_vdim *= np.prod([leg_dim[x] for x in psi.phys])
+            max_vdim = D_totals[n] * np.prod((psi.A[n].get_shape_leg(x) for x in psi.phys))
         max_vdim = 1
         for n in range(psi.N-1,-1,-1):
-            _, lDs = psi.A[n].get_tD()
-            leg_dim = [sum(xx) for xx in lDs]
-            max_vdim *= np.prod([leg_dim[x] for x in psi.phys])
+            max_vdim *= np.prod((psi.A[n].get_shape_leg(x) for x in psi.phys))
             D_totals[n] = min([D_totals[n], max_vdim, opts_svd['D_total']])
             max_vdim = D_totals[n]
         D_totals[-1] = 1
@@ -665,7 +660,7 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     A1, S, A2 = init[0].split_svd(axes=(psi.left + psi.phys, tuple(
                         a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
                     psi.A[n] = A1
-                    psi.A[n1] = A2.dot_diag(S, axis=psi.left)
+                    psi.A[n1] = S.dot(A2, axes=(1, psi.left))
                 env.clear_site(n)
                 env.update(n, towards=psi.g.last)
 
@@ -688,19 +683,19 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                 if H:
                     n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
                     init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
-                    init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
+                    init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
                     if not hermitian:
-                        init = expmw(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[
-                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                        init = expmw(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[init], 
+                                    dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
-                        init = expmw(Av=lambda v: env.Heff2_group(v, n), init=[
-                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                        init = expmw(Av=lambda v: env.Heff2_group(v, n), init=[init], 
+                                    dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
-                    init = init[0].ungroup_leg(axis=1, leg_order=leg_order)
+                    init = init[0].unfuse_legs(axes=1, inplace=True)
                     A1, S, A2 = init.split_svd(axes=(psi.left + psi.phys, tuple(
                         a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
                     psi.A[n] = A1
-                    psi.A[n1] = A2.dot_diag(S, axis=psi.left)
+                    psi.A[n1] = S.dot(A2, axes=(1, psi.left))
                 env.clear_site(n)
                 env.update(n, towards=psi.g.last)
 
@@ -782,7 +777,7 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     # split and save
                     A1, S, A2 = init[0].split_svd(axes=(psi.left + psi.phys, tuple(
                         a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-                    psi.A[n1] = A1.dot_diag(S, axis=psi.right)
+                    psi.A[n1] = A1.dot(S, axes=(psi.right, 0))
                     psi.A[n] = A2
                 env.clear_site(n)
                 env.update(n, towards=psi.g.first)
@@ -806,7 +801,7 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                 if H:
                     n1, _, _ = psi.g.from_site(n, towards=psi.g.first)
                     init = psi.A[n1].dot(psi.A[n], axes=(psi.right, psi.left))
-                    init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
+                    init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
                     if not hermitian:
                         init = expmw(Av=lambda v: env.Heff2_group(v, n1), Bv=lambda v: env.Heff2_group(v, n1, conj=True), init=[
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
@@ -814,10 +809,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                         init = expmw(Av=lambda v: env.Heff2_group(v, n1), init=[
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
-                    init = init[0].ungroup_leg(axis=1, leg_order=leg_order)
+                    init = init[0].unfuse_legs(axes=1, inplace=True)
                     A1, S, A2 = init.split_svd(axes=(psi.left + psi.phys, tuple(
                         a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-                    psi.A[n1] = A1.dot_diag(S, axis=psi.right)
+                    psi.A[n1] = A1.dot(S, axes=(psi.right, 0))
                     psi.A[n] = A2
                 env.clear_site(n)
                 env.update(n, towards=psi.g.first)
