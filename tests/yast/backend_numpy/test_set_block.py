@@ -1,6 +1,6 @@
 """ Test functions: set_block """
 
-import yamps.tensor.yast as yast
+import yamps.yast as yast
 import config_dense_R
 import config_dense_C
 import config_U1_R
@@ -13,7 +13,7 @@ def test_set0():
     # print('3d tensor:')
     a = yast.Tensor(config=config_dense_C, s=(-1, 1, 1))
     a.set_block(Ds=(4, 5, 6), val='randR')
-    npa = a.to_numpy()
+    npa = a.to_dense()
     assert np.iscomplexobj(npa)
     assert np.linalg.norm(npa - npa.conj()) == 0
     assert npa.shape == (4, 5, 6)
@@ -23,7 +23,7 @@ def test_set0():
     # print('0d tensor:')
     a = yast.Tensor(config=config_dense_R)  # s=()
     a.set_block(val=3)
-    npa = a.to_numpy()
+    npa = a.to_dense()
     assert np.isrealobj(npa)
     assert npa.shape == ()
     assert a.tset.shape == (1, 0, 0)
@@ -33,7 +33,7 @@ def test_set0():
     # print('1d tensor:')
     a = yast.Tensor(config=config_dense_R, s=1)  # s=(1,)
     a.set_block(Ds=5, val='ones')
-    npa = a.to_numpy()
+    npa = a.to_dense()
     assert np.isrealobj(npa)
     assert npa.shape == (5,)
     assert a.tset.shape == (1, 1, 0)
@@ -42,7 +42,7 @@ def test_set0():
     # print('diagonal tensor:')
     a = yast.Tensor(config=config_dense_R, isdiag=True)
     a.set_block(Ds=5, val='ones')
-    npa = a.to_numpy()
+    npa = a.to_dense()
     assert np.isrealobj(npa)
     assert npa.shape == (5, 5)
     assert a.tset.shape == (1, 2, 0)
@@ -64,11 +64,11 @@ def test_set1():
     c2 = b.dot(b, axes=((1, 2), (1, 2)), conj=(0, 1))
     c3 = a.dot(b, axes=(0, 2))
 
-    na = a.to_numpy()
-    nb = b.to_numpy()
-    nc1 = c1.to_numpy()
-    nc2 = c2.to_numpy()
-    nc3 = c3.to_numpy()
+    na = a.to_dense()
+    nb = b.to_dense()
+    nc1 = c1.to_dense()
+    nc2 = c2.to_dense()
+    nc3 = c3.to_dense()
 
     nnc1 = np.tensordot(na, na.conj(), axes=((0, 1, 2), (0, 1, 2)))
     nnc2 = np.tensordot(nb, nb.conj(), axes=((1, 2), (1, 2)))
@@ -94,7 +94,7 @@ def test_set1():
                     t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
                     D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
     a.set_block(ts=(-2, 0, -2, 0), val='randR')
-    npa = a.to_numpy()
+    npa = a.to_dense()
     assert np.iscomplexobj(npa)
     assert npa.shape == (6, 3, 6, 1)
     assert a.tset.shape == (5, 4, 1)
@@ -103,7 +103,7 @@ def test_set1():
     # print('0d tensor:')
     a = yast.ones(config=config_U1_R)  # s=()  # t=(), D=()
     a.set_block(val=2)
-    npa = a.to_numpy()
+    npa = a.to_dense()
     assert np.isrealobj(npa)
     assert npa.shape == ()
     assert a.tset.shape == (1, 0, 1)
@@ -124,7 +124,7 @@ def test_set1():
     a.set_block(ts=0, val='randR')
     a.set_block(ts=1, val='randR', Ds=4)
     a.set_block(ts=-1, val='randR', Ds=4)
-    npa = a.to_numpy()
+    npa = a.to_dense()
 
     assert np.isrealobj(npa)
     assert npa.shape == (13, 13)
@@ -139,7 +139,7 @@ def test_set2():
                     t=(((0, 0), (1, 0), (0, 2), (1, 2)), ((0, -2), (0, 2)), ((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2))),
                     D=((1, 2, 2, 4), (1, 2), (2, 4, 6, 3, 6, 9)))
     a.set_block(ts=(0, 0, 0, 0, 0, 0), Ds=(1, 5, 4), val=np.arange(20))
-    npa = a.to_numpy()
+    npa = a.to_dense()
     assert np.isrealobj(npa)
     assert npa.shape == (9, 8, 30)
     assert a.tset.shape == (7, 3, 2)
@@ -150,7 +150,7 @@ def test_set2():
                     t=[[(0, 1), (1, 0)], [(0, 0)], [(0, 1), (1, 0)]],
                     D=[[1, 2], 3, [1, 2]])
     a.set_block(ts=(0, 1, 0, -2, 0, 3), Ds=(1, 5, 6))
-    npa = a.to_numpy()
+    npa = a.to_dense()
     assert np.isrealobj(npa)
     assert npa.shape == (3, 8, 9)
     assert a.tset.shape == (3, 3, 2)
@@ -164,7 +164,7 @@ def test_set2():
     a.set_block(ts=(1, 1), val='ones')
     a.set_block(ts=(0, 2), val='ones')
     a.set_block(ts=(1, 3), val='ones', Ds=1)
-    npa = a.to_numpy()
+    npa = a.to_dense()
     assert np.isrealobj(npa)
     assert npa.shape == (11, 11)
     assert a.tset.shape == (4, 2, 2)

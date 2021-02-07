@@ -1,4 +1,4 @@
-import yamps.tensor.yast as yast
+import yamps.yast as yast
 import config_dense_R
 import config_U1_R
 import config_Z2_U1_R

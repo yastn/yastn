@@ -1,4 +1,4 @@
-import yamps.tensor.yast as yast
+import yamps.yast as yast
 import config_dense_R
 import config_U1_R
 import config_Z2_U1_R
@@ -64,9 +64,9 @@ def test_add_2():
     c1 = a - b * 2
     c2 = a.apxb(b, -2)
     tDs = {2: b.get_leg_tD(2), 3: a.get_leg_tD(3)}
-    na = a.to_numpy(tDs)
-    nb = b.to_numpy(tDs)
-    nc = c1.to_numpy()
+    na = a.to_dense(tDs)
+    nb = b.to_dense(tDs)
+    nc = c1.to_dense()
 
     assert pytest.approx(c1.norm_diff(c2)) == 0
     assert pytest.approx(np.linalg.norm(nc - na + 2*nb)) == 0

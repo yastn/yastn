@@ -1,10 +1,10 @@
 import yamps.mps as mps
-import settings_U1 as settings
-import yamps.tensor as tensor
+import yamps.yast as yast
 import numpy as np
+import config_U1_R as config
 
 
-def mps_random(N=2, Dblocks=[2], total_charge=1, dtype='float64'):
+def mps_random(N=2, Dblocks=[2], total_charge=1):
     Dblocks = tuple(Dblocks)
     psi = mps.Mps(N, nr_phys=1)
     tc = (0, 1)
@@ -17,7 +17,7 @@ def mps_random(N=2, Dblocks=[2], total_charge=1, dtype='float64'):
         tr = ((n + 1) * total_charge) // N
         tr = tuple(tr + ii for ii in range((-nb + 1) // 2, (nb + 1) // 2)) if n < N - 1 else (total_charge,)
         Dr = Dblocks if n < N - 1 else (1,)
-        psi.A[n] = tensor.rand(settings=settings, s=(1, 1, -1), t=[tl, tc, tr], D=[Dl, Dc, Dr])
+        psi.A[n] = yast.rand(config=config, s=(1, 1, -1), t=[tl, tc, tr], D=[Dl, Dc, Dr])
     return psi
 
 
@@ -36,7 +36,7 @@ def mpo_random(N=2, Dblocks=[2], total_charge=1, t_out=None, t_in=(0, 1), dtype=
         tr = ((n + 1) * total_charge) // N
         tr = tuple(tr + ii for ii in range((-nb + 1) // 2, (nb + 1) // 2)) if n < N - 1 else (total_charge,)
         Dr = Dblocks if n < N - 1 else (1,)
-        psi.A[n] = tensor.rand(settings=settings, s=(1, 1, -1, -1), t=[tl, t_out, t_in, tr], D=[Dl, Dout, Din, Dr])
+        psi.A[n] = yast.rand(config=config, s=(1, 1, -1, -1), t=[tl, t_out, t_in, tr], D=[Dl, Dout, Din, Dr])
     return psi
 
 
@@ -45,7 +45,7 @@ def mpo_XX_model(N, t, mu):
     m = mu
     w = t
     for n in H.g.sweep(to='last'):
-        H.A[n] = tensor.Tensor(settings=settings, s=[1, 1, -1, -1], n=0)
+        H.A[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
         if n == H.g.first:
             H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 1, 2))
             H.A[n].set_block(ts=(0, 1, 1, 0), val=[mu, 1], Ds=(1, 1, 1, 2))

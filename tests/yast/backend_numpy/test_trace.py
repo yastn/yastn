@@ -1,4 +1,4 @@
-import yamps.tensor.yast as yast
+import yamps.yast as yast
 import config_dense_R
 import config_U1_R
 import config_Z2_U1_R
@@ -8,7 +8,7 @@ import numpy as np
 
 def test_trace_0():
     a = yast.ones(config=config_dense_R, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
-    x = a.to_numpy().transpose(0, 1, 3, 2)
+    x = a.to_dense().transpose(0, 1, 3, 2)
     x = np.trace(np.reshape(x, (x.shape[0] * x.shape[1], -1)))
     b = a.trace(axes=(0, 2))
     c = b.trace(axes=(0, 1))
@@ -25,7 +25,7 @@ def test_trace_1():
     a = yast.ones(config=config_U1_R, s=(-1, -1, -1, 1, 1, 1),
                     t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                     D=[(2, 3), (4, 5), (6, 7), (6, 7), (4, 5), (2, 3)])
-    x = a.to_numpy().transpose(0, 1, 2, 5, 4, 3)
+    x = a.to_dense().transpose(0, 1, 2, 5, 4, 3)
     x = np.trace(np.reshape(x, (x.shape[0] * x.shape[1] * x.shape[2], -1)))
     b = a.trace(axes=(0, 5))
     b = b.trace(axes=(0, 3))
@@ -44,7 +44,7 @@ def test_trace_2():
     a = yast.ones(config=config_Z2_U1_R, s=(-1, -1, 1, 1),
                     t=[t1, t1, t1, t1],
                     D=[(6, 4, 9, 6), (20, 16, 25, 20), (20, 16, 25, 20), (6, 4, 9, 6)])
-    x = a.to_numpy().transpose(0, 1, 3, 2)
+    x = a.to_dense().transpose(0, 1, 3, 2)
     x = np.reshape(x, (x.shape[0] * x.shape[1], -1))
     x = np.trace(x)
     b = a.trace(axes=(0, 3))

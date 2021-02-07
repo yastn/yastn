@@ -1,4 +1,4 @@
-import yamps.tensor.yast as yast
+import yamps.yast as yast
 import config_U1_R
 import pytest
 import numpy as np

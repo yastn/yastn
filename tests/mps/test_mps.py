@@ -1,8 +1,10 @@
 import yamps.mps as mps
+import yamps.yast as yast
 import ops_full
 import ops_Z2
 import numpy as np
 import pytest
+import logging
 
 
 def is_left_canonical(psi):
@@ -12,9 +14,8 @@ def is_left_canonical(psi):
     cl = (0, 1) if psi.nr_phys == 1 else (0, 1, 2)
     for n in range(psi.N):
         x = psi.A[n].dot(psi.A[n], axes=(cl, cl), conj=(1, 0))
-        x0 = x.match_legs(tensors=[x], legs=[0], isdiag=True, val='ones')
-        x0 = x0.diag(s0=x.s[0])
-        assert pytest.approx(x0.norm_diff(x)) == 0
+        x0 = yast.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True, val='ones', conjs=[1, 1])
+        assert pytest.approx(x.norm_diff(x0.diag())) == 0
 
 
 def is_right_canonical(psi):
@@ -24,12 +25,11 @@ def is_right_canonical(psi):
     cl = (1, 2) if psi.nr_phys == 1 else (1, 2, 3)
     for n in range(psi.N):
         x = psi.A[n].dot(psi.A[n], axes=(cl, cl), conj=(0, 1))
-        x0 = x.match_legs(tensors=[x], legs=[0], isdiag=True, val='ones')
-        x0 = x0.diag(s0=x.s[0])
-        assert pytest.approx(x0.norm_diff(x)) == 0
+        x0 = yast.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True, val='ones', conjs=[1, 1])
+        assert pytest.approx(x.norm_diff(x0.diag())) == 0
 
 
-def canonize(psi):
+def check_canonize(psi):
     """
     Canonize mps to left and right, running tests if it is canonical
     """
@@ -95,52 +95,48 @@ def env2_cononize(psi):
     assert(abs(env.measure() - 1) < 1e-12)
 
 
-def test_full_canonize():
-    """
-    Initialize random mps of full tensors and checks canonization.
-    """
-    psi1 = ops_full.mps_random(N=16, Dmax=25, d=2)
-    canonize(psi1)
-    psi2 = ops_full.mps_random(N=16, Dmax=25, d=[2, 3], dtype='complex128')
-    canonize(psi2)
-    psi3 = ops_full.mpo_random(N=16, Dmax=51, d=[2, 3], d_out=[3, 2])
-    canonize(psi3)
+def check_copy(psi1, psi2):
+    assert psi1.g is psi2.g
+    for n in psi1.g.sweep():
+        assert np.allclose(psi1.A[n].to_numpy(), psi2.A[n].to_numpy())
+
 
 def test_full_copy():
     """
     Initialize random mps of full tensors and checks copying.
     """
-    psi = ops_full.mps_random(N=16, Dmax=25, d=2)
-    x = psi.copy()
-    if not psi.g==x.g:
-        print('Copy has failed. Geometry does not match.')
-    for n in range(psi.N):
-        if not  np.all(psi.A[n].to_numpy()==x.A[n].to_numpy()):
-            print('Copy has failed. Arrays are not the same.')
-    psi = ops_full.mps_random(N=16, Dmax=25, d=[2, 3], dtype='complex128')
-    x = psi.copy()
-    if not psi.g==x.g:
-        print('Copy has failed. Geometry does not match.')
-    for n in range(psi.N):
-        if not  np.all(psi.A[n].to_numpy()==x.A[n].to_numpy()):
-            print('Copy has failed. Arrays are not the same.')
-    psi = ops_full.mpo_random(N=16, Dmax=51, d=[2, 3], d_out=[3, 2])
-    x = psi.copy()
-    if not psi.g==x.g:
-        print('Copy has failed. Geometry does not match.')
-    for n in range(psi.N):
-        if not  np.all(psi.A[n].to_numpy()==x.A[n].to_numpy()):
-            print('Copy has failed. Arrays are not the same.')
-    
+    psi = ops_full.mps_random(N=16, Dmax=15, d=2)
+    phi = psi.copy()
+    check_copy(psi, phi)
+
+    psi = ops_full.mps_random(N=16, Dmax=19, d=[2, 3])
+    phi = psi.copy()
+    check_copy(psi, phi)
+
+    psi = ops_full.mpo_random(N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
+    phi = psi.copy()
+    check_copy(psi, phi)
+
+
+def test_full_canonize():
+    """
+    Initialize random mps of full tensors and checks canonization.
+    """
+    psi1 = ops_full.mps_random(N=16, Dmax=9, d=2)
+    check_canonize(psi1)
+    psi2 = ops_full.mps_random(N=16, Dmax=19, d=[2, 3])
+    check_canonize(psi2)
+    psi3 = ops_full.mpo_random(N=16, Dmax=36, d=[2, 3], d_out=[2, 1])
+    check_canonize(psi3)
+
 
 def test_full_env2_update():
     """
     Initialize random mps' and check if overlaps are calculated consistently.
     """
     N = 13
-    psi1 = ops_full.mps_random(N=N, Dmax=25, d=3)
-    psi2 = ops_full.mps_random(N=N, Dmax=33, d=3, dtype='complex128')
-
+    psi1 = ops_full.mps_random(N=N, Dmax=15, d=3)
+    psi2 = ops_full.mps_random(N=N, Dmax=7, d=3)
     env2_measure(psi1, psi2)
     env2_cononize(psi1)
     env2_cononize(psi2)
@@ -151,54 +147,47 @@ def test_full_env3_update():
     Initialize random mps' and check if overlaps are calculated consistently.
     """
     N = 13
-    psi1 = ops_full.mps_random(N=N, Dmax=25, d=3)
-    psi2 = ops_full.mps_random(N=N, Dmax=33, d=3, dtype='complex128')
+    psi1 = ops_full.mps_random(N=N, Dmax=15, d=3)
+    psi2 = ops_full.mps_random(N=N, Dmax=7, d=3)
     op = ops_full.mpo_random(N=N, Dmax=5, d=3)
-
     env3_measure(psi1, op, psi2)
 
-
-def test_Z2_canonize():
-    """
-    Initialize random mps of full tensors and checks canonization
-    """
-    psi1 = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
-    canonize(psi1)
-    psi2 = ops_Z2.mps_random(N=16, Dblock=25, total_parity=1, dtype='complex128')
-    canonize(psi2)
-    psi3 = ops_Z2.mpo_random(N=16, Dblock=5, total_parity=1)
-    canonize(psi3)
-    psi4 = ops_Z2.mpo_random(N=16, Dblock=5, total_parity=0, t_out=(0,), dtype='complex128')
-    canonize(psi4)
 
 def test_Z2_copy():
     """
     Initialize random mps of full tensors and checks copying.
     """
     psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
-    x = psi.copy()
-    if not psi.g==x.g:
-        print('Copy has failed. Geometry does not match.')
-    for n in range(psi.N):
-        if not  np.all(psi.A[n].to_numpy()==x.A[n].to_numpy()):
-            print('Copy has failed. Arrays are not the same.')
-    psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=1, dtype='complex128')
-    x = psi.copy()
-    if not psi.g==x.g:
-        print('Copy has failed. Geometry does not match.')
-    for n in range(psi.N):
-        if not  np.all(psi.A[n].to_numpy()==x.A[n].to_numpy()):
-            print('Copy has failed. Arrays are not the same.')
+    phi = psi.copy()
+    check_copy(psi, phi)
+
+    psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=1)
+    phi = psi.copy()
+    check_copy(psi, phi)
+
+
+def test_Z2_canonize():
+    """
+    Initialize random mps of full tensors and checks canonization
+    """
+    psi1 = ops_Z2.mps_random(N=16, Dblock=11, total_parity=0)
+    check_canonize(psi1)
+    psi2 = ops_Z2.mps_random(N=16, Dblock=12, total_parity=1)
+    check_canonize(psi2)
+    psi3 = ops_Z2.mpo_random(N=16, Dblock=3, total_parity=1)
+    check_canonize(psi3)
+    psi4 = ops_Z2.mpo_random(N=16, Dblock=4, total_parity=0, t_out=(0,))
+    check_canonize(psi4)
+
 
 def test_Z2_env2_update():
     """
     Initialize random mps' and check if overlaps are calculated consistently.
     """
-    psi1 = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
-    psi2 = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0, dtype='complex128')
-
-    psi3 = ops_Z2.mpo_random(N=16, Dblock=25, total_parity=1)
-    psi4 = ops_Z2.mpo_random(N=16, Dblock=5, total_parity=1, dtype='complex128')
+    psi1 = ops_Z2.mps_random(N=16, Dblock=11, total_parity=0)
+    psi2 = ops_Z2.mps_random(N=16, Dblock=12, total_parity=0)
+    psi3 = ops_Z2.mpo_random(N=16, Dblock=13, total_parity=1)
+    psi4 = ops_Z2.mpo_random(N=16, Dblock=5, total_parity=1)
 
     env2_measure(psi1, psi2)
     env2_cononize(psi1)
@@ -212,17 +201,18 @@ def test_Z2_env3_update():
     """
     Initialize random mps' and check if overlaps are calculated consistently.
     """
-    psi1 = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
-    psi2 = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0, dtype='complex128')
+    psi1 = ops_Z2.mps_random(N=16, Dblock=11, total_parity=0)
+    psi2 = ops_Z2.mps_random(N=16, Dblock=12, total_parity=0)
     op = ops_Z2.mpo_random(N=16, Dblock=3, total_parity=0)
-
     env3_measure(psi1, op, psi2)
 
 
 if __name__ == "__main__":
-    #pass
     test_full_copy()
-    test_Z2_copy()
     test_full_canonize()
-    test_Z2_canonize()
     test_full_env2_update()
+    test_full_env3_update()
+    test_Z2_copy()
+    test_Z2_canonize()
+    test_Z2_env2_update()
+    test_Z2_env3_update()
