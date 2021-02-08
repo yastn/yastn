@@ -18,7 +18,8 @@ def run_dmrg_2_site(psi, H, sweeps=20, Dmax=128):
         env = mps.dmrg.dmrg_sweep_2site(psi, H, env=env, opts_svd=opts_svd)
     print(sweeps,' sweeps with 2-site dmrg in', time.time() - t0, 's.')
     print('Energy = ', env.measure())
-    print('MPS bond dimensions: ', psi.get_D())
+    print('MPS bond dimensions : ', psi.get_D())
+    print('charges resolved    : ', psi.get_tD())
 
 
 def time_full_dmrg():
@@ -27,6 +28,7 @@ def time_full_dmrg():
     """
     N = 32
     H = ops_full.mpo_XX_model(N=N, t=1, mu=0)
+    # Egs = -20.01638790048514
     Dmax = 128
     psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2).canonize_sweep(to='first')
 
@@ -40,6 +42,7 @@ def time_Z2_dmrg():
     """
     N = 32
     H = ops_Z2.mpo_XX_model(N=N, t=1, mu=0)
+    # Egs = -20.01638790048514
     Dmax = 128
     psi = ops_Z2.mps_random(N=N, Dblock=Dmax / 2, total_parity=0).canonize_sweep(to='first')
 
@@ -54,6 +57,7 @@ def time_U1_dmrg():
     N = 32
     Dmax = 128
     H = ops_U1.mpo_XX_model(N=N, t=1, mu=0)
+    # Egs = -20.01638790048514
     psi = ops_U1.mps_random(N=N, Dblocks=[Dmax/8, 3*Dmax/8, Dmax/2, 3*Dmax/8, Dmax/8], total_charge=16).canonize_sweep(to='first')
     psi.canonize_sweep(to='first')
 

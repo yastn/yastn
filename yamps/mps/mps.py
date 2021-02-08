@@ -266,6 +266,23 @@ class Mps:
         Ds.append(self.A[self.g.last].get_shape_leg(self.right[0]))
         return Ds
 
+
+    def get_tD(self):
+        r"""
+        Returns charges and bond dimensions of mps.
+
+        Returns
+        -------
+        Ds : list
+            list of bond dimensions on virtual legs from left to right,
+            including "trivial" leftmost and rightmost virtual indices.
+        """
+
+        Ds = [self.A[n].get_leg_tD(self.left[0]) for n in self.g.sweep(to='last')]
+        Ds.append(self.A[self.g.last].get_leg_tD(self.right[0]))
+        return Ds
+
+
     def get_S(self, alpha=1):
         r"""
         
