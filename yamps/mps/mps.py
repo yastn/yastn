@@ -262,8 +262,8 @@ class Mps:
             including "trivial" leftmost and rightmost virtual indices.
         """
 
-        Ds = [self.A[n].get_shape_leg(self.left[0]) for n in self.g.sweep(to='last')]
-        Ds.append(self.A[self.g.last].get_shape_leg(self.right[0]))
+        Ds = [self.A[n].get_leg_shape(self.left[0]) for n in self.g.sweep(to='last')]
+        Ds.append(self.A[self.g.last].get_leg_shape(self.right[0]))
         return Ds
 
 

@@ -629,6 +629,9 @@ class Tensor:
         """
         tset = self.tset[:, n, :]
         Dset = self.Dset[:, n]
+        if Dset.ndim > 1:
+            Dset = np.prod(Dset, axis=1)
+            tset = tset.reshape(len(tset), -1)
         tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tset, Dset)}
         if self.config.test:
             for tn, Dn in zip(tset, Dset):
@@ -637,13 +640,15 @@ class Tensor:
                     raise FatalError
         return tDn
 
-    def get_shape_leg(self, n):
-        """ Total bond dimension of n-th leg."""
-        return sum(self.get_leg_tD(n).values())
+    def get_leg_shape(self, n):
+        """ Charges and corresponding bond dimensions of n-th logical leg."""
+        nn, = self._unpack_axes((n,))
+        return sum(self.get_leg_tD(nn).values())
 
-    def get_shape_all(self):
+    def get_total_shape(self):
         """ Total bond dimension of all legs."""
-        return tuple(sum(self.get_leg_tD(n).values()) for n in range(self.ndim))
+        ns = self._unpack_axes(*((n,) for n in range(self.ldim())))
+        return tuple(sum(self.get_leg_tD(n).values()) for n in ns)
 
     def get_fusion_tree(self):
         """ Fusion trees for all logical legs."""
@@ -766,7 +771,7 @@ class Tensor:
         -------
         entropy, minimal singular value, normalization : float64
         """
-        lout_l, lout_r = _clean_axes(axes)
+        lout_l, lout_r = _clean_axes(*axes)
         out_l, out_r = self._unpack_axes(lout_l, lout_r)
         self._test_axes_split(out_l, out_r)
 
@@ -975,7 +980,7 @@ class Tensor:
         ----------
         source, destination: ints
         """
-        lsrc, ldst = _clean_axes((source, destination))
+        lsrc, ldst = _clean_axes(source, destination)
         lsrc = tuple(xx + self.ldim() if xx < 0 else xx for xx in lsrc)
         ldst = tuple(xx + self.ldim() if xx < 0 else xx for xx in ldst)
         if lsrc == ldst:
@@ -1136,7 +1141,7 @@ class Tensor:
         -------
             tansor: Tensor
         """
-        lin1, lin2 = _clean_axes(axes)  # contracted legs
+        lin1, lin2 = _clean_axes(*axes)  # contracted legs
         lin12 = lin1 + lin2
         lout = tuple(ii for ii in range(self.ldim()) if ii not in lin12)
         in1, in2, out = self._unpack_axes(lin1, lin2, lout)
@@ -1200,7 +1205,7 @@ class Tensor:
         -------
             tansor: Tensor
         """
-        la_con, lb_con = _clean_axes(axes)  # contracted logical legs
+        la_con, lb_con = _clean_axes(*axes)  # contracted logical legs
         la_out = tuple(ii for ii in range(self.ldim()) if ii not in la_con)  # outgoing logical legs
         lb_out = tuple(ii for ii in range(other.ldim()) if ii not in lb_con)  # outgoing logical legs
 
@@ -1291,7 +1296,7 @@ class Tensor:
         U, S, V: Tensor
             U and V are unitary projectors. S is diagonal.
         """
-        lout_l, lout_r = _clean_axes(axes)
+        lout_l, lout_r = _clean_axes(*axes)
         out_l, out_r = self._unpack_axes(lout_l, lout_r)
         self._test_axes_split(out_l, out_r)
 
@@ -1349,7 +1354,7 @@ class Tensor:
         -------
             Q, R: Tensor
         """
-        lout_l, lout_r = _clean_axes(axes)
+        lout_l, lout_r = _clean_axes(*axes)
         out_l, out_r = self._unpack_axes(lout_l, lout_r)
         self._test_axes_split(out_l, out_r)
 
@@ -1410,7 +1415,7 @@ class Tensor:
             S, U: Tensor
                 U is unitary projector. S is diagonal.
         """
-        lout_l, lout_r = _clean_axes(axes)
+        lout_l, lout_r = _clean_axes(*axes)
         out_l, out_r = self._unpack_axes(lout_l, lout_r)
         self._test_axes_split(out_l, out_r)
 
@@ -1540,7 +1545,7 @@ class Tensor:
         if inplace and order == tuple(ii for ii in range(self.ldim())):
             a = self
         else:
-            a = self.transpose(axes=order)
+            a = self.transpose(axes=order, inplace=inplace)
         a.lfuse = tuple(lfuse)
         return a
 
@@ -1868,7 +1873,10 @@ class _Leg_struct:
                 Dslc = self.config.backend.range_largest(D_keep[ind], Dmax[ind], sorting)
                 self.dec[ind] = {ind: (Dslc, D_keep[ind], (D_keep[ind],))}
 
-def _clean_axes(axes):
+def _clean_axes(*args):
+    return ((axis,) if isinstance(axis, int) else tuple(axis) for axis in args)
+
+def a_clean_axes(axes):
     try:
         out_l = tuple(axes[0])
     except TypeError:

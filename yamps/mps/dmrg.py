@@ -520,10 +520,10 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
         max_vdim = 1
         for n in range(psi.N):
             D_totals[n] = min([max_vdim, opts_svd['D_total']])
-            max_vdim = D_totals[n] * np.prod((psi.A[n].get_shape_leg(x) for x in psi.phys))
+            max_vdim = D_totals[n] * np.prod((psi.A[n].get_leg_shape(x) for x in psi.phys))
         max_vdim = 1
         for n in range(psi.N-1,-1,-1):
-            max_vdim *= np.prod((psi.A[n].get_shape_leg(x) for x in psi.phys))
+            max_vdim *= np.prod((psi.A[n].get_leg_shape(x) for x in psi.phys))
             D_totals[n] = min([D_totals[n], max_vdim, opts_svd['D_total']])
             max_vdim = D_totals[n]
         D_totals[-1] = 1
