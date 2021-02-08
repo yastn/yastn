@@ -62,7 +62,7 @@ test_python3.7_conda_numpy1.19.1:
   - conda config --set always_yes yes --set changeps1 no
   - conda install python=3.7
   - conda update -q conda
-  - conda install numpy=1.19.1 scipy pytest fpbca
+  - conda install numpy=1.19.1 scipy pytest
   - export PYTHONPATH=$(pwd)
   - git submodule status
   - ssh-add -l
