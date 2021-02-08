@@ -187,6 +187,7 @@ class Mps:
         else:
             logger.exception("canonize_sweep: Option " + to + " is not defined.")
             raise FatalError
+        return self
 
     def sweep_truncate(self, to='last', opts={}, normalize=True):
         r"""

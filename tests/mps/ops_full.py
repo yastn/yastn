@@ -65,3 +65,29 @@ def mpo_XX_model(N, t, mu):
         tmp = np.transpose(tmp, (0, 1, 3, 2))
         H.A[n].set_block(val=tmp, Ds=Ds)
     return H
+
+
+def mpo_occupation(N):
+    nn = np.array([[0, 0], [0, 1]])
+    ee = np.array([[1, 0], [0, 1]])
+    oo = np.array([[0, 0], [0, 0]])
+
+    H = mps.Mps(N, nr_phys=2)
+    for n in H.g.sweep(to='last'):  # empty tensors
+        H.A[n] = yast.Tensor(config=config, s=(1, 1, -1, -1))
+        if n == H.g.first:
+            tmp = np.block([[nn, ee]])
+            tmp = tmp.reshape((1, 2, 2, 2))
+            Ds = (1, 2, 2, 2)
+        elif n == H.g.last:
+            tmp = np.block([[ee], [nn]])
+            tmp = tmp.reshape((2, 2, 1, 2))
+            Ds = (2, 2, 2, 1)
+        else:
+            tmp = np.block([[ee, oo],
+                            [nn, ee]])
+            tmp = tmp.reshape((2, 2, 2, 2))
+            Ds = (2, 2, 2, 2)
+        tmp = np.transpose(tmp, (0, 1, 3, 2))
+        H.A[n].set_block(val=tmp, Ds=Ds)
+    return H

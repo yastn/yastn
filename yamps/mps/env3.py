@@ -13,7 +13,6 @@ logger = logging.getLogger('yamps.mps.geometry')
 #     environment for <bra|opp|ket> operations     #
 ####################################################
 
-
 class Env3:
     """
     The class combines environments of mps+mps for calculation of expectation values, overlaps, etc.

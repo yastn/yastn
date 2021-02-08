@@ -34,25 +34,38 @@ def mpo_random(N=2, Dblock=2, total_parity=0, t_out=None, t_in=(0, 1)):
 
 def mpo_XX_model(N, t, mu):
     H = mps.Mps(N, nr_phys=2)
-    m = mu
-    w = t
     for n in H.g.sweep(to='last'):
         H.A[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
         if n == H.g.first:
             H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 1, 2))
-            H.A[n].set_block(ts=(0, 1, 1, 0), val=[m, 1], Ds=(1, 1, 1, 2))
-            H.A[n].set_block(ts=(0, 0, 1, 1), val=[w, 0], Ds=(1, 1, 1, 2))
-            H.A[n].set_block(ts=(0, 1, 0, 1), val=[0, w], Ds=(1, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[mu, 1], Ds=(1, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 0, 1, 1), val=[t, 0], Ds=(1, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 1, 0, 1), val=[0, t], Ds=(1, 1, 1, 2))
         elif n == H.g.last:
             H.A[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
-            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, m], Ds=(2, 1, 1, 1))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, mu], Ds=(2, 1, 1, 1))
             H.A[n].set_block(ts=(1, 1, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
             H.A[n].set_block(ts=(1, 0, 1, 0), val=[0, 1], Ds=(2, 1, 1, 1))
         else:
             H.A[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 1, 2))
-            H.A[n].set_block(ts=(0, 1, 1, 0), val=[[1, 0], [m, 1]], Ds=(2, 1, 1, 2))
-            H.A[n].set_block(ts=(0, 0, 1, 1), val=[[0, 0], [w, 0]], Ds=(2, 1, 1, 2))
-            H.A[n].set_block(ts=(0, 1, 0, 1), val=[[0, 0], [0, w]], Ds=(2, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[[1, 0], [mu, 1]], Ds=(2, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 0, 1, 1), val=[[0, 0], [t, 0]], Ds=(2, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 1, 0, 1), val=[[0, 0], [0, t]], Ds=(2, 1, 1, 2))
             H.A[n].set_block(ts=(1, 1, 0, 0), val=[[1, 0], [0, 0]], Ds=(2, 1, 1, 2))
             H.A[n].set_block(ts=(1, 0, 1, 0), val=[[0, 0], [1, 0]], Ds=(2, 1, 1, 2))
+    return H
+
+def mpo_occupation(N):
+    H = mps.Mps(N, nr_phys=2)
+    for n in H.g.sweep(to='last'):
+        H.A[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
+        if n == H.g.first:
+            H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(1, 1, 1, 2))
+        elif n == H.g.last:
+            H.A[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(2, 1, 1, 1))
+        else:
+            H.A[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[[1, 0], [1, 1]], Ds=(2, 1, 1, 2))
     return H
