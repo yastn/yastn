@@ -36,7 +36,7 @@ def test_split_svd_truncate():
     
     opts={'tol':0.01, 'D_block':100, 'D_total':12, 'truncated_svd':False} 	
     U1, S1, V1 = a.split_svd(axes=((0, 1), (2, 3)), sU=-1, **opts)
-    assert S1.get_shape_all() == (12, 12)
+    assert S1.get_total_shape() == (12, 12)
 
 
 def test_split_svd_division():

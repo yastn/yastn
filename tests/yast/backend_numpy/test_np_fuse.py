@@ -78,18 +78,32 @@ def test_fuse_transpose():
     a = yast.ones(config=config_U1_R, s=(-1, -1, -1, 1, 1, 1),
                     t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                     D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
-    assert a.get_shape_all() == (3, 5, 7, 9, 11, 13)
+    # assert a.get_total_shape() == (3, 5, 7, 9, 11, 13)
     b = a.fuse_legs(axes=((0, 1), 2, (3, 4), 5))
 
     c = np.transpose(b, axes=(3, 2, 1, 0))
-    assert c.get_shape_all() == (13, 9, 11, 7, 3, 5)
-    c = b.moveaxis(source=1, destination=2)
-    assert c.get_shape_all() == (3, 5, 9, 11, 7, 13)
+    assert c.get_total_shape() == (13, 99, 7, 15)
+    c.unfuse_legs(axes=(1, 3), inplace=True)
+    assert c.get_total_shape() == (13, 9, 11, 7, 3, 5)
 
+    c = b.moveaxis(source=1, destination=2)
+    assert c.get_total_shape() == (15, 99, 7, 13)
+    c.unfuse_legs(axes=(1, 0), inplace=True)
+    assert c.get_total_shape() == (3, 5, 9, 11, 7, 13)
+
+
+def test_get_shapes():
+    a = yast.ones(config=config_U1_R, s=(-1, -1, -1, 1, 1, 1),
+                    t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
+                    D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
+    a.show_properties()
+    a.fuse_legs(axes=[(0, 1, 2, 3, 4, 5)], inplace=True)
+    print(a.get_leg_tD((0, 1)))
+    print(a.get_leg_shape(0))
 
 if __name__ == '__main__':
     test_fuse()
     test_fuse_dot()
     test_fuse_split()
     test_fuse_transpose()
-    test_fuse_transpose()
+    test_get_shapes()
