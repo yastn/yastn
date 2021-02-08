@@ -1,11 +1,10 @@
-import logging
+import warnings
 import numpy as np
 import scipy as sp
-import fbpca as pca
-from itertools import product
-
-
-logger = logging.getLogger('yast_backend_np')
+try:
+    import fbpca as pca 
+except ImportError as e:
+    warnings.warn("fbpca not available", Warning)
 
 
 _data_dtype = {'float64': np.float64,
@@ -106,15 +105,19 @@ def trace(A, order, meta):
     return Aout
 
 
-def moveaxis_local(A, source, destination, meta_transpose):
-    """ Move axis; Does not force a copy. """
-    return {new: np.moveaxis(A[old], source, destination) for old, new in meta_transpose}
+def moveaxis(A, source, destination, meta_transpose, inplace):
+    """ Move axis; Force a copy if not inplace. """
+    if inplace:
+        return {new: np.moveaxis(A[old], source, destination) for old, new in meta_transpose}
+    return {new: np.moveaxis(A[old], source, destination).copy() for old, new in meta_transpose}
 
 
-def transpose(A, axes, meta_transpose):
-    """ Transpose forcing a copy. """
+def transpose(A, axes, meta_transpose, inplace):
+    """ Transpose; Force a copy if not inplace. """
+    if inplace:
+        return {new: np.transpose(A[old], axes=axes) for old, new in meta_transpose}
     return {new: np.transpose(A[old], axes=axes).copy() for old, new in meta_transpose}
-
+    
 
 def invsqrt(A):
     return {t: 1. / np.sqrt(x) for t, x in A.items()}

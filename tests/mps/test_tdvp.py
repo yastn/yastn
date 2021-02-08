@@ -5,6 +5,7 @@ import ops_U1 as ops_U1
 import numpy as np
 import pytest
 
+tol=1e-8
 
 def run_tdvp_1site(psi, H, dt, sweeps,  Eng_gs, opts=None):
     """ Run a faw sweeps in imaginary time of tdvp_1site_sweep. """
@@ -13,7 +14,7 @@ def run_tdvp_1site(psi, H, dt, sweeps,  Eng_gs, opts=None):
     for _ in range(sweeps):
         env = mps.tdvp.tdvp_sweep_1site(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
         Eng = env.measure().real
-        assert Eng < Eng_old
+        assert Eng < Eng_old + tol
         Eng_old = Eng
     print('Eng =', Eng, ' Egs =', Eng_gs)
     assert pytest.approx(Eng, rel=1e-1) == Eng_gs
@@ -27,7 +28,7 @@ def run_tdvp_2site(psi, H, dt, sweeps,  Eng_gs, opts=None):
     for _ in range(sweeps):
         env = mps.tdvp.tdvp_sweep_2site(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
         Eng = env.measure().real
-        assert Eng < Eng_old
+        assert Eng < Eng_old + tol
         Eng_old = Eng
     print('Eng =', Eng, ' Egs =', Eng_gs)
     assert pytest.approx(Eng, rel=1e-1) == Eng_gs
@@ -41,7 +42,7 @@ def run_tdvp_2site_group(psi, H, dt, sweeps,  Eng_gs, opts=None):
     for _ in range(sweeps):
         env = mps.tdvp.tdvp_sweep_2site_group(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
         Eng = env.measure().real
-        assert Eng < Eng_old
+        assert Eng < Eng_old + tol
         Eng_old = Eng
     print('Eng =', Eng, ' Egs =', Eng_gs)
     assert pytest.approx(Eng, rel=1e-1) == Eng_gs

@@ -937,55 +937,54 @@ class Tensor:
 
     def transpose(self, axes=(1, 0), inplace=False):
         r"""
-        Return transposed tensor.
+        Return transposed tensor. 
+        
+        Operation can be done in-place, in which case copying of the data is not forced.
+        Othersiwe, new tensor is created and the data are copied.
 
         Parameters
         ----------
         axes: tuple
             New order of the legs.
-
-        Returns
-        -------
-        tensor : Tensor
         """
-        if not self.isdiag:
-            naxes, = self._unpack_axes(axes)
-            order = np.array(naxes, dtype=np.intp)
-            a = Tensor(config=self.config, s=self.s[order], n=self.n, isdiag=self.isdiag, lfuse=tuple(self.lfuse[ii] for ii in axes))
-            a.tset = self.tset[:, order, :]
-            a.Dset = self.Dset[:, order]
-            meta_transpose = tuple((tuple(old.flat), tuple(new.flat)) for old, new in zip(self.tset, a.tset))
-            a.A = a.config.backend.transpose(self.A, naxes, meta_transpose)
-            return a
+        uaxes, = self._unpack_axes(axes)
+        order = np.array(uaxes, dtype=np.intp)
+        newlfuse = tuple(self.lfuse[ii] for ii in axes)
+        news = self.s[order]
+        if inplace:
+            self.s = news
+            self.lfuse = newlfuse
+            a = self
         else:
-            return self.copy()
+            a = Tensor(config=self.config, s=news, n=self.n, isdiag=self.isdiag, lfuse=newlfuse)
+        newt = self.tset[:, order, :]
+        meta_transpose = tuple((tuple(old.flat), tuple(new.flat)) for old, new in zip(self.tset, newt))
+        a.A = a.config.backend.transpose(self.A, uaxes, meta_transpose, inplace)
+        a.tset = newt
+        a.Dset = self.Dset[:, order]
+        return a
     
     def moveaxis(self, source, destination, inplace=False):
         r"""
-        Change the position of a single axis of the tensor. 
+        Change the position of an axis (or a group of axes) of the tensor. 
         
-        Operation can be done in-place.
+        Operation can be done in-place, in which case copying of the data is not forced.
+        Othersiwe, new tensor is created and the data are copied. Calls transpose.
 
         Parameters
         ----------
         source, destination: ints
         """
-        a = self if inplace else self.copy()
-        source = source + a.ndim if source < 0 else source
-        destination = destination + a.ndim if destination < 0 else destination
-        if source == destination:
-            return a
-        axes = list(range(a.ndim))
-        axes.insert(destination, axes.pop(source))
-        axes = np.array(axes, dtype=np.intp)
-        new_tset = self.tset[:, axes, :]
-        meta_moveaxis = tuple((tuple(old.flat), tuple(new.flat)) for old, new in zip(self.tset, new_tset))
-        a.A = self.config.backend.moveaxis_local(a.A, source, destination, meta_moveaxis)
-        a.tset = new_tset
-        a.Dset = a.Dset[:, axes]
-        a.s = a.s[axes]
-        a.lfuse = tuple(a.lfuse[ii] for ii in axes)
-        return a
+        lsrc, ldst = _clean_axes((source, destination))
+        lsrc = tuple(xx + self.ldim() if xx < 0 else xx for xx in lsrc)
+        ldst = tuple(xx + self.ldim() if xx < 0 else xx for xx in ldst)
+        if lsrc == ldst:
+            return self if inplace else self.copy()
+        axes = [ii for ii in range(self.ldim()) if ii not in lsrc]
+        ds = sorted(((d, s) for d, s in zip(ldst, lsrc)))
+        for d, s in ds:
+            axes.insert(d, s)
+        return self.transpose(axes, inplace)
 
     def diag(self):
         """Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa. """
@@ -1868,7 +1867,6 @@ class _Leg_struct:
             if D_keep[ind] > 0:
                 Dslc = self.config.backend.range_largest(D_keep[ind], Dmax[ind], sorting)
                 self.dec[ind] = {ind: (Dslc, D_keep[ind], (D_keep[ind],))}
-
 
 def _clean_axes(axes):
     try:
