@@ -1,112 +1,114 @@
-import warnings
-import numpy as np
-import scipy as sp
-try:
-    import fbpca as pca 
-except ImportError as e:
-    warnings.warn("fbpca not available", Warning)
+import torch
+
+from .linalg.torch_svd_gesdd import SVDGESDD 
+# from .linalg.torch_eig_sym import SYMEIG 
+# from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
 
 
-_data_dtype = {'float64': np.float64,
-               'complex128': np.complex128}
+_data_dtype = {'float64': torch.float64,
+               'complex128': torch.complex128}
 
 
 def random_seed(seed):
-    np.random.seed(seed)
+    torch.random.manual_seed(seed)
 
-###################################
-#     single tensor operations    #
-###################################
+
+def set_num_threads(num_threads):
+    torch.set_num_threads(num_threads)
+
+
+####################################
+#     single tensor operations     #
+####################################
 
 def detach(x):
-    return x
+    return x.detach()
 
 
 def clone(x):
-    return x.copy()
+    return x.clone()
 
 
 def copy(x):
-    return x.copy()
+    return x.detach().clone()
 
 
 def to_numpy(x):
-    return x.copy()
+    return x.detach().cpu().numpy()
 
 
 def first_element(x):
-    return x.flat[0]
+    return x.view(-1)[0]
 
 
 def item(x):
-    return x.flat[0] # ????
+    return x.item()
 
 
 def get_shape(x):
-    return x.shape
+    return x.size()
 
 
 def get_ndim(x):
-    return x.ndim
+    return len(x.size())
 
 
 def get_size(x):
-    return x.size
+    return x.numel()
 
 
 def diag_create(x):
-    return np.diag(x)
+    return torch.diag(x)
 
 
 def diag_get(x):
-    return np.diag(x)
+    return torch.diag(x)
 
 
 def diag_diag(x):
-    return np.diag(np.diag(x))
+    return torch.diag(torch.diag(x))
 
 
 def count_greater(x, cutoff):
-    return np.sum(x > cutoff)
-
+    return torch.sum(x > cutoff)
 
 ##########################
 #     setting values     #
 ##########################
 
 def zeros(D, dtype='float64', device='cpu'):
-    return np.zeros(D, dtype=_data_dtype[dtype])
+    return torch.zeros(D, dtype=_data_dtype[dtype], device=device)
 
 
 def ones(D, dtype='float64', device='cpu'):
-    return np.ones(D, dtype=_data_dtype[dtype])
+    return torch.ones(D, dtype=_data_dtype[dtype], device=device)
 
 
 def randR(D, dtype='float64', device='cpu'):
-    return 2 * np.random.random_sample(D).astype(_data_dtype[dtype]) - 1
+    return 2 * torch.rand(D, dtype=_data_dtype[dtype], device=device) - 1
 
 
 def rand(D, dtype='float64', device='cpu'):
-    if dtype == 'float64':
-        return randR(D)
-    elif dtype == 'complex128':
-        return 2 * np.random.random_sample(D) - 1 + 1j * (2 * np.random.random_sample(D) - 1)
+    return 2 * torch.rand(D, dtype=_data_dtype[dtype], device=device) - 1
 
 
 def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
-    return np.array(val, dtype=_data_dtype[dtype]) if Ds is None else np.array(val, dtype=_data_dtype[dtype]).reshape(Ds)
+    T = torch.as_tensor(val, dtype=_data_dtype[dtype], device=device)
+    return T if Ds is None else T.reshape(Ds).contiguous() 
+    
 
 ##################################
 #     single dict operations     #
 ##################################
 
 def move_to_device(A, device):
-    return A
+    return {ind: x.to(device) for ind, x in A.items()}
 
 
 def conj(A):
     """ Conjugate dict of tensors forcing a copy. """
-    return {t: x.copy().conj() for t, x in A.items()}
+    # is it a copy or not
+    return {t: x.conj() for t, x in A.items()}
 
 
 def trace(A, order, meta):
@@ -114,23 +116,24 @@ def trace(A, order, meta):
         Repeating tnew are added."""
     Aout = {}
     for (tnew, told, Drsh) in meta:
-        Atemp = np.trace(np.reshape(np.transpose(A[told], order), Drsh))
+        Atemp = torch.reshape(A[told].permute(*order), Drsh)
         if tnew in Aout:
-            Aout[tnew] += Atemp
+            Aout[tnew] += torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=0)
         else:
-            Aout[tnew] = Atemp
+            Aout[tnew] = torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=0)
     return Aout
 
 
 def transpose(A, axes, meta_transpose, inplace):
     """ Transpose; Force a copy if not inplace. """
+    # check this inplace ...
     if inplace:
-        return {new: np.transpose(A[old], axes=axes) for old, new in meta_transpose}
-    return {new: np.transpose(A[old], axes=axes).copy() for old, new in meta_transpose}
+        return {new: A[old].permute(*axes) for old, new in meta_transpose}
+    return {new: A[old].permute(*axes).clone().contiguous() for old, new in meta_transpose}
     
 
 def invsqrt(A, cutoff=0):
-    res = {t: np.sqrt(x) for t, x in A.items()}
+    res = {t: x.rsqrt() for t, x in A.items()}
     if cutoff > 0:
         for t in res:
             res[t][abs(res[t]) > 1./cutoff] = 0.
@@ -138,11 +141,11 @@ def invsqrt(A, cutoff=0):
 
 
 def invsqrt_diag(A, cutoff=0):
-    res = {t: np.sqrt(np.diag(x)) for t, x in A.items()}
+    res = {t: torch.diag(x).rsqrt() for t, x in A.items()}
     if cutoff > 0:
         for t in res:
             res[t][abs(res[t]) > 1./cutoff] = 0.
-    return {t: np.diag(x) for t, x in res.items()}
+    return {t: torch.diag(x) for t, x in res.items()}
 
 
 def inv(A, cutoff=0):
@@ -154,84 +157,86 @@ def inv(A, cutoff=0):
 
 
 def inv_diag(A, cutoff=0):
-    res = {t: 1./ np.diag(x) for t, x in A.items()}
+    res = {t: 1./torch.diag(x) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
             res[t][abs(res[t]) > 1./cutoff] = 0.
-    return {t: np.diag(x) for t, x in res.items()}
+    return {t: torch.diag(x) for t, x in res.items()}
 
 
 def exp(A, step):
-    return {t: np.exp(step * x) for t, x in A.items()}
+    return {t: torch.exp(step * x) for t, x in A.items()}
 
 
 def exp_diag(A, step):
-    return {t: np.diag(np.exp(step * np.diag(x))) for t, x in A.items()}
+    return {t: torch.diag(torch.exp(step * torch.diag(x))) for t, x in A.items()}
 
 
 def sqrt(A):
-    return {t: np.sqrt(x) for t, x in A.items()}
+    return {t: torch.sqrt(x) for t, x in A.items()}
+
+
+ad_decomp_reg = 1.0e-12
 
 
 def svd(A, meta, opts):
     U, S, V = {}, {}, {}
+    tn = next(iter(A.values()))
+    reg = torch.as_tensor(ad_decomp_reg, dtype=tn.dtype, device=tn.device)
     for (iold, iU, iS, iV) in meta:
-        if opts['truncated_svd'] and min(A[iold].shape) > opts['kfac'] * opts['D_block']:
-            U[iU], S[iS], V[iV] = pca.pca(A[iold], k=opts['D_block'], raw=True,
-                                            n_iter=opts['nbit'], l=opts['kfac'] * opts['D_block'])
-        else:
-            try:
-                U[iU], S[iS], V[iV] = sp.linalg.svd(A[iold], full_matrices=False)
-            except sp.linalg.LinAlgError:
-                U[iU], S[iS], V[iV] = sp.linalg.svd(A[iold], full_matrices=False, lapack_driver='gesvd')
+        U[iU], S[iS], V[iV] = SVDGESDD.apply(A[iold], reg)
+        V[iV] = V[iV].t().conj()
     return U, S, V
 
 
-def eigh(A, meta):
+def eigh(A, meta, order_by_magnitude=False):
     S, U = {}, {}
-    for (ind, indS, indU) in meta:
-        S[indS], U[indU] = np.linalg.eigh(A[ind])
+    if order_by_magnitude:
+        tn = next(iter(A.values()))
+        reg = torch.as_tensor(ad_decomp_reg, dtype=tn.dtype, device=tn.device)
+        for ind in A:
+            S[ind], U[ind] = SYMEIG.apply(A[ind], reg)
+    else:
+        for (ind, indS, indU) in meta:
+            S[indS], U[indU] = torch.symeig(A[ind], eigenvectors=True)
     return S, U
 
 
 def svd_S(A):
     S = {}
     for ind in A:
-        try:
-            S[ind] = sp.linalg.svd(A[ind], full_matrices=False, compute_uv=False)
-        except sp.linalg.LinAlgError:
-            S[ind] = sp.linalg.svd(A[ind], full_matrices=False, lapack_driver='gesvd', compute_uv=False)
+        S[ind] = torch.svd(A[ind], some=True, compute_uv=False)
     return S
 
 
 def qr(A, meta):
     Q, R = {}, {}
     for (ind, indQ, indR) in meta:
-        Q[indQ], R[indR] = sp.linalg.qr(A[ind], mode='economic')
-        sR = np.sign(np.real(np.diag(R[indR])))
+        Q[indQ], R[indR] = torch.qr(A[ind], some=True)
+        sR = torch.sign(torch.real(torch.diag(R[indR])))
         sR[sR == 0] = 1
         # positive diag of R
         Q[indQ] = Q[indQ] * sR
         R[indR] = sR.reshape([-1, 1]) * R[indR]
     return Q, R
 
-
 # def rq(A):
 #     R, Q = {}, {}
 #     for ind in A:
-#         R[ind], Q[ind] = sp.linalg.rq(A[ind], mode='economic')
-#         sR = np.sign(np.real(np.diag(R[ind])))
+#         R[ind], Q[ind] = torch.qr(torch.t(A[ind]), some=True)
+#         sR = torch.sign(torch.real(torch.diag(R[ind])))
 #         sR[sR == 0] = 1
 #         # positive diag of R
-#         R[ind], Q[ind] = R[ind] * sR, sR.reshape([-1, 1]) * Q[ind]
+#         R[ind], Q[ind] = torch.t(R[ind]) * sR, sR.reshape([-1, 1]) * torch.t(Q[ind])
 #     return R, Q
-
 
 def select_largest(S, D_keep, D_total, sorting):
     if sorting == 'svd':
-        return np.hstack([S[ind][:D_keep[ind]] for ind in S]).argpartition(-D_total-1)[-D_total:]
+        s_all = torch.cat([S[ind][:D_keep[ind]] for ind in S])
+        return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
     elif sorting == 'eigh':
-        return np.hstack([S[ind][-D_keep[ind]:] for ind in S]).argpartition(-D_total-1)[-D_total:]
+        s_all = torch.cat([S[ind][-D_keep[ind]:] for ind in S])
+        return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
 
 
 def range_largest(D_keep, D_total, sorting):
@@ -242,13 +247,13 @@ def range_largest(D_keep, D_total, sorting):
 
 
 def maximum(A):
-    val = [np.max(x) for x in A.values()]
+    val = [torch.max(x) for x in A.values()]   ## IS THIS FINE WITH GRAD
     val.append(0.)
     return max(val)
 
 
 def max_abs(A):
-    val = [np.max(np.abs(x)) for x in A.values()]
+    val = [norm(x, ord='inf') for x in A.values()]  ## IS THIS FINE WITH GRAD
     val.append(0.)
     return max(val)
 
@@ -256,57 +261,59 @@ def max_abs(A):
 def entropy(A, alpha=1, tol=1e-12):
     temp = 0.
     for x in A.values():
-        temp += np.sum(np.abs(x) ** 2)
-    normalization = np.sqrt(temp)
+        temp += torch.sum(torch.abs(x) ** 2)
+    normalization = torch.sqrt(temp)
 
     entropy = 0.
-    Smin = np.inf
+    Smin = 10000000
     if normalization > 0:
         for x in A.values():
             Smin = min(Smin, min(x))
             x = x / normalization
             if alpha == 1:
                 x = x[x > tol]
-                entropy += -2 * sum(x * x * np.log2(x))
+                entropy += -2 * sum(x * x * torch.log2(x))
             else:
                 entropy += x**(2 * alpha)
         if alpha != 1:
-            entropy = np.log2(entropy) / (1 - alpha)
+            entropy = torch.log2(entropy) / (1 - alpha)
     return entropy, Smin, normalization
 
 
-_norms = {'fro': np.linalg.norm, 'inf': lambda x: np.abs(x).max()}
-
-
 def norm(A, ord):
-    block_norm = [0.]
-    for x in A.values():
-        block_norm.append(_norms[ord](x))
-    return _norms[ord](block_norm)
+    if ord=='fro':
+        return torch.sum(torch.stack([torch.sum(t.abs()**2) for t in A.values()])).sqrt()
+    elif ord=='inf':         
+        return torch.max(torch.stack([t.abs().max() for t in A.values()]))
+    else:
+        raise RuntimeError("Invalid metric: "+ord+". Choices: [\'fro\',\'inf\']")
+
 
 ################################
 #     two dicts operations     #
 ################################
 
 def norm_diff(A, B, ord, meta):
-    """ norm(A - B); meta = kab, ka, kb """
-    block_norm = [0.]
-    for ind in meta[0]:
-        block_norm.append(_norms[ord](A[ind] - B[ind]))
-    for ind in meta[1]:
-        block_norm.append(_norms[ord](A[ind]))
-    for ind in meta[2]:
-        block_norm.append(_norms[ord](B[ind]))
-    return _norms[ord](block_norm)
+    if ord=='fro':
+        # get the list of sums of squares, sum it and take square root         
+        return torch.sum(torch.stack([torch.sum(A[k].abs()**2) for k in meta[1]] + \
+                                     [torch.sum(B[k].abs()**2) for k in meta[2]] + \
+                                     [torch.sum((A[k]-B[k]).abs()**2) for k in meta[0]])).sqrt()
+    elif ord=='inf':       
+        return torch.max(torch.stack([A[k].abs().max() for k in meta[1]] + \
+                                     [B[k].abs().max() for k in meta[2]] + \
+                                     [(A[k]-B[k]).abs().max() for k in meta[0]]))
+    else: 
+        raise RuntimeError("Invalid metric: "+ord+". Choices: [\'fro\',\'inf\']") 
 
 
 def add(A, B, meta):
     """ C = A + B. meta = kab, ka, kb """
     C = {ind: A[ind] + B[ind] for ind in meta[0]}
     for ind in meta[1]:
-        C[ind] = A[ind].copy()
+        C[ind] = A[ind].clone()
     for ind in meta[2]:
-        C[ind] = B[ind].copy()
+        C[ind] = B[ind].clone()
     return C
 
 
@@ -314,7 +321,7 @@ def sub(A, B, meta):
     """ C = A - B. meta = kab, ka, kb """
     C = {ind: A[ind] - B[ind] for ind in meta[0]}
     for ind in meta[1]:
-        C[ind] = A[ind].copy()
+        C[ind] = A[ind].clone()
     for ind in meta[2]:
         C[ind] = -B[ind]
     return C
@@ -324,7 +331,7 @@ def apxb(A, B, x, meta):
     """ C = A + x * B. meta = kab, ka, kb """
     C = {ind: A[ind] + x * B[ind] for ind in meta[0]}
     for ind in meta[1]:
-        C[ind] = A[ind].copy()
+        C[ind] = A[ind].clone()
     for ind in meta[2]:
         C[ind] = x * B[ind]
     return C
@@ -350,45 +357,15 @@ def dot(A, B, conj, meta_dot):
         C[out] = f(A[ina], B[inb])    
     return C
 
-
-# dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
-#                 (0, 1): lambda x, y, dim: x * y.reshape(dim).conj(),
-#                 (1, 0): lambda x, y, dim: x.conj() * y.reshape(dim),
-#                 (1, 1): lambda x, y, dim: x.conj() * y.reshape(dim).conj()}
-
-# def dot_diag(A, B, conj, to_execute, a_con, a_ndim):
-#     dim = np.ones(a_ndim, int)
-#     dim[a_con] = -1
-#     f = dotdiag_dict[conj]
-#     C = {}
-#     for in1, in2, out in to_execute:
-#         C[out] = f(A[in1], B[in2], dim)
-#     return C
-
-
-# def trace_dot_diag(A, B, conj, to_execute, axis1, axis2, a_ndim):
-#     dim = np.ones(a_ndim, int)
-#     dim[axis2] = -1
-#     f = dotdiag_dict[conj]
-
-#     C = {}
-#     for in1, in2, out in to_execute:
-#         temp = np.trace(f(A[in1], B[in2], dim), axis1=axis1, axis2=axis2)
-#         try:
-#             C[out] = C[out] + temp
-#         except KeyError:
-#             C[out] = temp
-#     return C
-
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
 
 def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, device='cpu'):
     """ New dictionary of blocks after merging into matrix. """
-    Anew = {u: np.zeros(Du, dtype=_data_dtype[dtype]) for (u, Du) in meta_new}
+    Anew = {u: torch.zeros(Du, dtype=_data_dtype[dtype], device=device) for (u, Du) in meta_new}
     for (tn, to, Dsl, Dl, Dsr, Dr) in meta_mrg:
-        Anew[tn][slice(*Dsl), slice(*Dsr)] = A[to].transpose(order).reshape(Dl, Dr)
+        Anew[tn][slice(*Dsl), slice(*Dsr)] = A[to].permute(*order).reshape(Dl, Dr)
     return Anew
 
 
@@ -396,24 +373,24 @@ def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, device='cpu'):
     """
     outputs new dictionary of blocks after fusing one leg
     """
-    Anew = {u: np.zeros(Du, dtype=_data_dtype[dtype]) for (u, Du) in meta_new}
+    Anew = {u: torch.zeros(Du, dtype=_data_dtype[dtype], device=device) for (u, Du) in meta_new}
     for (tn, Ds, to, Do) in meta_mrg:
         slc = [slice(None)] * len(Do)
         slc[axis] = slice(*Ds)
-        Anew[tn][tuple(slc)] = A[to].transpose(order).reshape(Do)  
+        Anew[tn][tuple(slc)] = A[to].permute(*order).reshape(Do)  
     return Anew
 
 
 def merge_to_dense(A, Dtot, meta, dtype, device='cpu'):
     """ outputs full tensor """
-    Anew = np.zeros(Dtot, dtype=_data_dtype[dtype])
+    Anew = torch.zeros(Dtot, dtype=_data_dtype[dtype], device=device)
     for (ind, Dss) in meta:
         Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind]
     return Anew
 
 def merge_super_blocks(pos_tens, meta_new, meta_block, dtype, device='cpu'):
     """ Outputs new dictionary of blocks after creating super-tensor. """
-    Anew = {u: np.zeros(Du, dtype=_data_dtype[dtype]) for (u, Du) in meta_new}
+    Anew = {u: torch.zeros(Du, dtype=_data_dtype[dtype], device=device) for (u, Du) in meta_new}
     for (tind, pos, Dslc) in meta_block: 
         slc = tuple(slice(*DD) for DD in Dslc)
         Anew[tind][slc] = pos_tens[pos].A[tind]# .copy() # is copy required?
@@ -442,7 +419,7 @@ def unmerge_one_leg(A, axis, meta):
     for (told, tnew, Dsl, Dnew) in meta:
         slc = [slice(None)] * A[told].ndim
         slc[axis] = slice(*Dsl)
-        Anew[tnew] = np.reshape(A[told][tuple(slc)], Dnew).copy()
+        Anew[tnew] = torch.reshape(A[told][tuple(slc)], Dnew).clone()   # is this clone neccesary -- there is a test where it is neccesary for numpy
     return Anew
 
 ##############
@@ -453,4 +430,4 @@ def is_independent(A, B):
     """
     check if two arrays are identical, or share the same view.
     """
-    return (A is B) or (A.base is B) or (A is B.base)
+    return (A is B) or (A.storage().data_ptr() is B.storage().data_ptr())

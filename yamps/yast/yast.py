@@ -10,6 +10,7 @@ An instance of a Tensor is specified by a list of blocks (dense tensors) labeled
 import logging
 import numpy as np
 import itertools
+from types import SimpleNamespace
 
 logger = logging.getLogger('yast')
 
@@ -226,18 +227,18 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
     return a
 
 
-def block(pos_tens, common_legs):
+def block(tensors, common_legs):
     """ Assemble new tensor by blocking a set of tensors.
 
         Parameters
         ----------
-        pos_tens : dict
+        tensors : dict
             dictionary of tensors {(k,l): tensor at position k,l in the new, blocked super-tensor}.
             Length of tuple should be equall to tensor.ndim - len(common_legs)
 
         common_legs : list
             Legs which are not blocked
-            (equivalently on common legs all tensors have the same position in the supertensor, and those positions are not given in pos_tens)
+            (equivalently on common legs all tensors have the same position in the supertensor, and those positions are not given in tensors)
 
         ndim : int
             All tensor should have the same rank ndim
@@ -249,13 +250,13 @@ def block(pos_tens, common_legs):
         out_s = (common_legs,)
         lc = 1
 
-    a = next(iter(pos_tens.values()))  # first tensor; used to initialize new objects and retrive common values
+    a = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
     out_b = tuple(ii for ii in range(a.ndim) if ii not in out_s)
     
     lb = a.ndim - lc
     pos = []
-    for ind in pos_tens:
-        if (lb != len(ind)) or (pos_tens[ind].ndim != a.ndim) or (not np.all(pos_tens[ind].s == a.s)) or (not np.all(pos_tens[ind].n == a.n)) or (a.isdiag != pos_tens[ind].isdiag):
+    for ind in tensors:
+        if (lb != len(ind)) or (tensors[ind].ndim != a.ndim) or (not np.all(tensors[ind].s == a.s)) or (not np.all(tensors[ind].n == a.n)) or (a.isdiag != tensors[ind].isdiag):
             logger.exception('Dimensions, ndims, signatures or total charges of blocked tensors are not consistent')
             raise FatalError
         pos.append(ind)
@@ -267,7 +268,7 @@ def block(pos_tens, common_legs):
     for n in range(a.ndim):
         tDl = {}
         for ind, pp in zip(pos, posa):
-            tDn = pos_tens[ind].get_leg_tD(n)
+            tDn = tensors[ind].get_leg_tD(n)
             for t, D in tDn.items():
                 if t in tDl:
                     if (pp[n] in tDl[t]) and (tDl[t][pp[n]] != D):
@@ -287,7 +288,7 @@ def block(pos_tens, common_legs):
     # meta_new = {tind: Dtot};  #meta_block = [(tind, pos, Dslc)]
     meta_new, meta_block = {}, []
     for pind, pa in zip(pos, posa):
-        a = pos_tens[pind]
+        a = tensors[pind]
         for t in a.tset:
             tind = tuple(t.flat)
             if tind not in meta_new:
@@ -296,7 +297,7 @@ def block(pos_tens, common_legs):
     meta_new = tuple((ts, Ds) for ts, Ds in meta_new.items())
 
     c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n)
-    c.A = c.config.backend.merge_super_blocks(pos_tens, meta_new, meta_block, dtype=a.config.dtype)
+    c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, a.config.dtype, c.device)
     c._calculate_tDset()
     return c
 
@@ -306,6 +307,7 @@ class Tensor:
 
     def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
         self.config = kwargs['settings'] if 'settings' in kwargs else config
+        self.device = 'cpu' if not hasattr(self.config, 'device') else self.config.device
         self.isdiag = isdiag
         self.ndim = 1 if isinstance(s, int) else len(s)  # number of legs
         self.s = np.array(s, dtype=int).reshape(self.ndim)
@@ -331,12 +333,6 @@ class Tensor:
         self.lfuse = tuple(kwargs['lfuse']) if ('lfuse' in kwargs and kwargs['lfuse'] is not None) else ((1, ()),) * self.ndim
         # self.lfuse is immutable for copying and comparison
 
-    def detach_(self):
-        self.config.backend.detach_(self.A)
-
-    def move_to_device(self, device):
-        self.A = self.config.backend.move_to_device(self.A, device)
-        return self
 
     ######################
     #     fill tensor    #
@@ -474,23 +470,26 @@ class Tensor:
                     raise FatalError
         Ds = tuple(Ds)       
 
+        # NOTE assume default device to be cpu
+        device= 'cpu' if not hasattr(self.config, 'device') else self.config.device
+
         if isinstance(val, str):
             if val == 'zeros':
-                self.A[ts] = self.config.backend.zeros(Ds, dtype=self.config.dtype)
+                self.A[ts] = self.config.backend.zeros(Ds, dtype=self.config.dtype, device=device)
             elif val == 'randR':
-                self.A[ts] = self.config.backend.randR(Ds, dtype=self.config.dtype)
+                self.A[ts] = self.config.backend.randR(Ds, dtype=self.config.dtype, device=device)
             elif val == 'rand':
-                self.A[ts] = self.config.backend.rand(Ds, dtype=self.config.dtype)
+                self.A[ts] = self.config.backend.rand(Ds, dtype=self.config.dtype, device=device)
             elif val == 'ones':
-                self.A[ts] = self.config.backend.ones(Ds, dtype=self.config.dtype)
+                self.A[ts] = self.config.backend.ones(Ds, dtype=self.config.dtype, device=device)
             if self.isdiag:
                 self.A[ts] = self.config.backend.diag_get(self.A[ts])
                 self.A[ts] = self.config.backend.diag_create(self.A[ts])
         else:
             if self.isdiag and val.ndim == 1 and np.prod(Ds)==(val.size**2):
-                self.A[ts] = self.config.backend.to_tensor(np.diag(val), Ds, dtype=self.config.dtype)
+                self.A[ts] = self.config.backend.to_tensor(np.diag(val), Ds, dtype=self.config.dtype, device=device)
             else:
-                self.A[ts] = self.config.backend.to_tensor(val, Ds, dtype=self.config.dtype)
+                self.A[ts] = self.config.backend.to_tensor(val, Ds, dtype=self.config.dtype, device=device)
         # here it checkes the consistency of bond dimensions
         self._calculate_tDset()
         tD = [self.get_leg_tD(n) for n in range(self.ndim)]
@@ -505,9 +504,45 @@ class Tensor:
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
         a.A = {ts: self.config.backend.copy(x) for ts, x in self.A.items()}
-        #a.lss = {leg: ls.copy() for leg, ls in self.lss.items()}
         return a
-    
+
+    def clone(self):
+        """ Return a copy of the tensor, tracking gradients. """
+        a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        a.tset = self.tset.copy()
+        a.Dset = self.Dset.copy()
+        a.A = {ts: self.config.backend.clone(x) for ts, x in self.A.items()}
+        return a
+
+    def detach(self):
+        """ ???? """
+        a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        a.tset = self.tset.copy()
+        a.Dset = self.Dset.copy()
+        a.A = {ts: self.config.backend.clone(x) for ts, x in self.A.items()}
+        return a
+
+    def to(self, device):
+        r"""
+        Move the ``Tensor`` to ``device``. Returns a copy of the tensor on `device``.
+
+        If the tensor already resides on ``device``, return self
+
+        Parameters
+        ----------
+        device: str
+            device identifier         
+        """
+        if self.device == device:
+            return self
+        config_d = SimpleNamespace(backend=self.config.backend, dtype=self.config.dtype, device=device, \
+                                   sym=self.config.sym, test=self.config.test, reuse_meta=self.config.reuse_meta)
+        a = Tensor(config=config_d, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        a.tset= self.tset.copy()         
+        a.Dset= self.Dset.copy()         
+        a.A = self.conf.back.move_to_device(self.A, device)
+        return a
+        
     def copy_empty(self):
         """ Return a copy of the tensor, but without copying blocks. """
         return Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
@@ -561,6 +596,13 @@ class Tensor:
             print("Leg", n, ":", tDs[n])  # charges and their dimensions for each leg
         print()
 
+    def __str__(self):
+        return str(self.A)
+
+    def print_blocks(self):
+        for ind, x in self.A.items():
+            print(f"{ind} {self.conf.back.get_shape(x)}")
+
     def to_dict(self):
         r"""
         Export relevant information about tensor to dictionary -- so that it can be saved using numpy.save
@@ -587,15 +629,12 @@ class Tensor:
         meta_new = (((), D_tot),)
         # meta_mrg = ((tn, Ds, to, Do), ...)
         meta_mrg = tuple(((), (aD-D, aD), tuple(t.flat), (D,)) for t, D, aD in zip(self.tset, D_rsh, aD_rsh))
-        A = self.config.backend.merge_one_leg(self.A, 0, tuple(range(self.ndim)), meta_new, meta_mrg, self.config.dtype)
+        A = self.config.backend.merge_one_leg(self.A, 0, tuple(range(self.ndim)), meta_new, meta_mrg, self.config.dtype, self.device)
         
         # (told, tnew, Dsl, Dnew)
         meta_umrg = tuple((told, tnew, Dsl, tuple(Dnew)) for (told, Dsl, tnew, _), Dnew in zip(meta_mrg, self.Dset))
         meta = {'s': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, 'lfuse': self.lfuse, 'meta_umrg':meta_umrg}
         return meta, A[()]
-
-    def __str__(self):
-        return str(self.A)
 
     def get_size(self):
         """ Total number of elements in tensor. """
@@ -658,7 +697,7 @@ class Tensor:
         return len(self.lfuse)
 
     #########################
-    #    output numbers     #
+    #    output tensors     #
     #########################
 
     def to_dense(self, tDs=None):
@@ -678,6 +717,7 @@ class Tensor:
         -------
         out : tensor used by backend
         """
+        device= 'cpu' if not hasattr(self.config, 'device') else self.config.device
         tD = [self.get_leg_tD(n) for n in range(self.ndim)]
         if tDs is not None:
             for n, tDn in tDs.items():
@@ -701,20 +741,51 @@ class Tensor:
         for ind in self.tset:
             tt = tuple(ind.flat)
             meta.append((tt, tuple(tD[n][tuple(tn.flat)] for n, tn in enumerate(ind))))
-        Anew = self.config.backend.merge_to_dense(self.A, Dtot, meta, self.config.dtype)
+        Anew = self.config.backend.merge_to_dense(self.A, Dtot, meta, self.config.dtype, device)
         return Anew
 
     def to_numpy(self, tDs=None):
         """Create full nparray corresponding to the symmetric tensor."""
         return self.config.backend.to_numpy(self.to_dense(tDs=tDs))
 
+    def to_raw_tensor(self):
+        """ 
+        For tensor with a single block, return raw tensor representing that block.
+        """
+        if len(self.A) == 1:
+            key = next(iter(self.A))
+            return self.A[key]
+        logger.exception('only tensor with a single block can be converted to raw tensor') 
+        raise FatalError
+
+    def __getitem__(self, key):
+        return self.A[key]
+
+    #########################
+    #    output numbers     #
+    #########################
+
     def to_number(self):
         """
         Return first number in the first (unsorted) block.
         
-        Mainly used for rank-0 tensor with 1 block of size 1. Return 0 if there are no blocks.
+        Mainly used for rank-0 tensor with 1 block of size 1. 
+        Return 0 if there are no blocks.
         """
-        return self.config.backend.first_element(self.A)
+        if len(self.A) == 0:
+            return 0   # is this always fine e.g. for torch
+        if self.config.test and self.get_size() > 1:
+            logger.exception('Specified bond dimensions inconsistent with tensor.') 
+            raise FatalError
+        key = next(iter(self.A))
+        return self.config.backend.first_element(self.A[key])
+
+    def item(self):
+        """ Should it be integrated with to_number ??? """
+        if self.get_size() == 1:
+            key = next(iter(self.A))
+            return self.conf.back.item(self.A[key])
+        raise RuntimeError("only single-element (symmetric) Tensor can be converted to scalar")
 
     def norm(self, ord='fro'):
         r"""
@@ -747,7 +818,8 @@ class Tensor:
         norm : float64
         """
         self._test_tensors_match(other)
-        return self.config.backend.norm_diff(self.A, other.A, ord)
+        meta = _common_keys(self.A, other.A)
+        return self.config.backend.norm_diff(self.A, other.A, ord, meta)
 
     def entropy(self, axes=(0, 1), alpha=1):
         r"""
@@ -939,6 +1011,49 @@ class Tensor:
     #############################
     #     tensor operations     #
     #############################
+    def conj(self):
+        """
+        Return conjugated tensor.
+
+        Changes sign of signature s and total charge n, as well as complex conjugate each block.
+
+        Returns
+        -------
+        tensor : Tensor
+        """
+        a = Tensor(config=self.config, s=-self.s, n=-self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        a.tset = self.tset.copy()
+        a.Dset = self.Dset.copy()
+        a.A = a.config.backend.conj(self.A)
+        return a
+
+    def conj_blocks(self):
+        """
+        Conjugated each block, leaving symmetry structure unchanged.
+
+        Returns
+        -------
+        tensor : Tensor
+        """
+        a = self.copy_empty()
+        a.tset = self.tset.copy()
+        a.Dset = self.Dset.copy()
+        a.A = a.config.backend.conj(self.A)
+        return a
+
+    def negate_signature(self):
+        """
+        Conjugated each block, leaving symmetry structure unchanged.
+
+        Returns
+        -------
+        tensor : Tensor
+        """
+        a = Tensor(config=self.config, s=-self.s, n=-self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        a.tset = self.tset.copy()
+        a.Dset = self.Dset.copy()
+        a.A= {ind: self.conf.back.clone(self.A[ind]) for ind in self.A}
+        return a
 
     def transpose(self, axes=(1, 0), inplace=False):
         r"""
@@ -1005,22 +1120,6 @@ class Tensor:
         a._calculate_tDset()
         return a
 
-    def conj(self):
-        """
-        Return conjugated tensor.
-
-        Changes sign of signature s and total charge n, as well as complex conjugate each block.
-
-        Returns
-        -------
-        tensor : Tensor
-        """
-        a = Tensor(config=self.config, s=-self.s, n=-self.n, isdiag=self.isdiag, lfuse=self.lfuse)
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
-        a.A = a.config.backend.conj(self.A)
-        return a
-
     def swap_gate(self, axes, fermionic=()):
         """
         Return tensor after application of the swap gate.
@@ -1067,24 +1166,24 @@ class Tensor:
         else:
             return self
 
-    def invsqrt(self):
+    def invsqrt(self, cutoff=0):
         """ Element-wise 1/sqrt(A)"""
         a = self.copy_empty()
         if not a.isdiag:
-            a.A = self.config.backend.invsqrt(self.A)
+            a.A = self.config.backend.invsqrt(self.A, cutoff=cutoff)
         else:
-            a.A = self.config.backend.invsqrt_diag(self.A)
+            a.A = self.config.backend.invsqrt_diag(self.A, cutoff=cutoff)
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
         return a
 
-    def inv(self):
+    def inv(self, cutoff=0):
         """ Element-wise 1/sqrt(A)"""
         a = self.copy_empty()
         if not a.isdiag:
-            a.A = self.config.backend.inv(self.A)
+            a.A = self.config.backend.inv(self.A, cutoff=cutoff)
         else:
-            a.A = self.config.backend.inv_diag(self.A)
+            a.A = self.config.backend.inv_diag(self.A, cutoff=cutoff)
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
         return a
@@ -1488,7 +1587,7 @@ class Tensor:
         meta_mrg = tuple((tuple(tn.flat), tuple(to.flat), *ls_l.dec[tuple(tel.flat)][tuple(tl.flat)][:2], *ls_r.dec[tuple(ter.flat)][tuple(tr.flat)][:2]) 
             for tn, to, tel, tl, ter, tr in zip(t_new, tset, teff_l, t_l, teff_r, t_r))
        
-        Anew = self.config.backend.merge_to_matrix(self.A, order, meta_new, meta_mrg, self.config.dtype)
+        Anew = self.config.backend.merge_to_matrix(self.A, order, meta_new, meta_mrg, self.config.dtype, self.device)
         return Anew, ls_l, ls_r, u_new_l, u_new_r
 
     def _unmerge_from_matrix(self, A, ls_l, ls_r):

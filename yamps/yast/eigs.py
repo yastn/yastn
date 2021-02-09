@@ -9,7 +9,7 @@ class FatalError(Exception):
     pass
 
 
-logger = logging.getLogger('yamps.yast.eigs')
+logger = logging.getLogger('yamps.tensor.eigs')
 
 
 _select_dtype = {'float64': np.float64,
@@ -276,7 +276,7 @@ def eig(Av, init, Bv=None, tol=1e-14, k=5, bi_orth=True, algorithm='arnoldi'):
 
 
 def arnoldi(Av, init, tol=1e-14, k=5):
-    # Lanczos algorithm for hermitian matrices
+    # Arnoldi algorithm
     beta = None
     Q = [None] * (k + 1)
     H = np.zeros((k + 1, k + 1), dtype=init.config.dtype)
@@ -441,7 +441,7 @@ def eigs_aug(T, Q, P=None, k=None, hermitian=True, sigma=None, which=None, retur
 
     if sigma is not None:  # target val closest to sigma on Re-Im plane
         id = np.argsort(abs(val-sigma))
-    if which == 'LM':  # ‘LM’ : largest magnitude
+    elif which == 'LM':  # ‘LM’ : largest magnitude
         id = np.argsort(abs(val))[::-1]
     elif which == 'SM':  # ‘SM’ : smallest magnitude
         id = np.argsort(abs(val))
@@ -465,4 +465,4 @@ def eigs_aug(T, Q, P=None, k=None, hermitian=True, sigma=None, which=None, retur
                 else:
                     Y[it] = sit[i1]*Q[i1]
             Y[it] *= (1./Y[it].norm())
-    return val, Y
+    return val[:len(Y)], Y

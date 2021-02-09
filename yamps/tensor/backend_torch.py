@@ -21,8 +21,6 @@ def random_seed(seed):
 def set_num_threads(num_threads):
     torch.set_num_threads(num_threads)
 
-def detach_(A):
-    for ind in A: A[ind]= A[ind].detach()
 
 # ----- properties ------------------------------------------------------------
 
@@ -38,6 +36,12 @@ def is_independent(A, B):
 
 def copy(x):
     return x.clone().detach()
+
+def clone(x):
+    return x.clone()
+
+def detach(x):
+    return x.detach()
 
 def to_numpy(x):
     return x.detach().numpy()
