@@ -34,14 +34,6 @@ def to_numpy(x):
     return x.copy()
 
 
-def first_element(x):
-    return x.flat[0]
-
-
-def item(x):
-    return x.flat[0] # ????
-
-
 def get_shape(x):
     return x.shape
 
@@ -69,6 +61,61 @@ def diag_diag(x):
 def count_greater(x, cutoff):
     return np.sum(x > cutoff)
 
+#########################
+#    output numbers     #
+#########################
+
+def first_element(x):
+    return x.flat[0]
+
+
+def item(x):
+    return x.item()
+
+
+_norms = {'fro': np.linalg.norm, 'inf': lambda x: np.abs(x).max()}
+
+
+def norm(A, ord):
+    block_norm = [0.]
+    for x in A.values():
+        block_norm.append(_norms[ord](x))
+    return _norms[ord](block_norm)
+
+
+def norm_diff(A, B, ord, meta):
+    """ norm(A - B); meta = kab, ka, kb """
+    block_norm = [0.]
+    for ind in meta[0]:
+        block_norm.append(_norms[ord](A[ind] - B[ind]))
+    for ind in meta[1]:
+        block_norm.append(_norms[ord](A[ind]))
+    for ind in meta[2]:
+        block_norm.append(_norms[ord](B[ind]))
+    return _norms[ord](block_norm)
+
+
+
+def entropy(A, alpha=1, tol=1e-12):
+    temp = 0.
+    for x in A.values():
+        temp += np.sum(np.abs(x) ** 2)
+    normalization = np.sqrt(temp)
+
+    entropy = 0.
+    Smin = np.inf
+    if normalization > 0:
+        for x in A.values():
+            Smin = min(Smin, min(x))
+            x = x / normalization
+            if alpha == 1:
+                x = x[x > tol]
+                entropy += -2 * sum(x * x * np.log2(x))
+            else:
+                entropy += x**(2 * alpha)
+        if alpha != 1:
+            entropy = np.log2(entropy) / (1 - alpha)
+    return entropy, Smin, normalization
 
 ##########################
 #     setting values     #
@@ -252,53 +299,9 @@ def max_abs(A):
     val.append(0.)
     return max(val)
 
-
-def entropy(A, alpha=1, tol=1e-12):
-    temp = 0.
-    for x in A.values():
-        temp += np.sum(np.abs(x) ** 2)
-    normalization = np.sqrt(temp)
-
-    entropy = 0.
-    Smin = np.inf
-    if normalization > 0:
-        for x in A.values():
-            Smin = min(Smin, min(x))
-            x = x / normalization
-            if alpha == 1:
-                x = x[x > tol]
-                entropy += -2 * sum(x * x * np.log2(x))
-            else:
-                entropy += x**(2 * alpha)
-        if alpha != 1:
-            entropy = np.log2(entropy) / (1 - alpha)
-    return entropy, Smin, normalization
-
-
-_norms = {'fro': np.linalg.norm, 'inf': lambda x: np.abs(x).max()}
-
-
-def norm(A, ord):
-    block_norm = [0.]
-    for x in A.values():
-        block_norm.append(_norms[ord](x))
-    return _norms[ord](block_norm)
-
 ################################
 #     two dicts operations     #
 ################################
-
-def norm_diff(A, B, ord, meta):
-    """ norm(A - B); meta = kab, ka, kb """
-    block_norm = [0.]
-    for ind in meta[0]:
-        block_norm.append(_norms[ord](A[ind] - B[ind]))
-    for ind in meta[1]:
-        block_norm.append(_norms[ord](A[ind]))
-    for ind in meta[2]:
-        block_norm.append(_norms[ord](B[ind]))
-    return _norms[ord](block_norm)
-
 
 def add(A, B, meta):
     """ C = A + B. meta = kab, ka, kb """

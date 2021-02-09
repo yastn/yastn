@@ -37,14 +37,6 @@ def to_numpy(x):
     return x.detach().cpu().numpy()
 
 
-def first_element(x):
-    return x.view(-1)[0]
-
-
-def item(x):
-    return x.item()
-
-
 def get_shape(x):
     return x.size()
 
@@ -71,6 +63,58 @@ def diag_diag(x):
 
 def count_greater(x, cutoff):
     return torch.sum(x > cutoff)
+
+#########################
+#    output numbers     #
+#########################
+
+def first_element(x):
+    return x.view(-1)[0]
+
+
+def item(x):
+    return x.item()
+
+
+def norm(A, ord):
+    if ord=='fro':
+        return torch.sum(torch.stack([torch.sum(t.abs()**2) for t in A.values()])).sqrt()
+    elif ord=='inf':         
+        return torch.max(torch.stack([t.abs().max() for t in A.values()]))
+
+
+def norm_diff(A, B, ord, meta):
+    if ord=='fro':
+        # get the list of sums of squares, sum it and take square root         
+        return torch.sum(torch.stack([torch.sum(A[k].abs()**2) for k in meta[1]] + \
+                                     [torch.sum(B[k].abs()**2) for k in meta[2]] + \
+                                     [torch.sum((A[k]-B[k]).abs()**2) for k in meta[0]])).sqrt()
+    elif ord=='inf':       
+        return torch.max(torch.stack([A[k].abs().max() for k in meta[1]] + \
+                                     [B[k].abs().max() for k in meta[2]] + \
+                                     [(A[k]-B[k]).abs().max() for k in meta[0]]))
+
+
+def entropy(A, alpha=1, tol=1e-12):
+    temp = 0.
+    for x in A.values():
+        temp += torch.sum(torch.abs(x) ** 2)
+    normalization = torch.sqrt(temp)
+
+    entropy = 0.
+    Smin = 10000000  # very big number
+    if normalization > 0:
+        for x in A.values():
+            Smin = min(Smin, min(x))
+            x = x / normalization
+            if alpha == 1:
+                x = x[x > tol]
+                entropy += -2 * sum(x * x * torch.log2(x))
+            else:
+                entropy += x**(2 * alpha)
+        if alpha != 1:
+            entropy = torch.log2(entropy) / (1 - alpha)
+    return entropy, Smin, normalization
 
 ##########################
 #     setting values     #
@@ -257,55 +301,9 @@ def max_abs(A):
     val.append(0.)
     return max(val)
 
-
-def entropy(A, alpha=1, tol=1e-12):
-    temp = 0.
-    for x in A.values():
-        temp += torch.sum(torch.abs(x) ** 2)
-    normalization = torch.sqrt(temp)
-
-    entropy = 0.
-    Smin = 10000000
-    if normalization > 0:
-        for x in A.values():
-            Smin = min(Smin, min(x))
-            x = x / normalization
-            if alpha == 1:
-                x = x[x > tol]
-                entropy += -2 * sum(x * x * torch.log2(x))
-            else:
-                entropy += x**(2 * alpha)
-        if alpha != 1:
-            entropy = torch.log2(entropy) / (1 - alpha)
-    return entropy, Smin, normalization
-
-
-def norm(A, ord):
-    if ord=='fro':
-        return torch.sum(torch.stack([torch.sum(t.abs()**2) for t in A.values()])).sqrt()
-    elif ord=='inf':         
-        return torch.max(torch.stack([t.abs().max() for t in A.values()]))
-    else:
-        raise RuntimeError("Invalid metric: "+ord+". Choices: [\'fro\',\'inf\']")
-
-
 ################################
 #     two dicts operations     #
 ################################
-
-def norm_diff(A, B, ord, meta):
-    if ord=='fro':
-        # get the list of sums of squares, sum it and take square root         
-        return torch.sum(torch.stack([torch.sum(A[k].abs()**2) for k in meta[1]] + \
-                                     [torch.sum(B[k].abs()**2) for k in meta[2]] + \
-                                     [torch.sum((A[k]-B[k]).abs()**2) for k in meta[0]])).sqrt()
-    elif ord=='inf':       
-        return torch.max(torch.stack([A[k].abs().max() for k in meta[1]] + \
-                                     [B[k].abs().max() for k in meta[2]] + \
-                                     [(A[k]-B[k]).abs().max() for k in meta[0]]))
-    else: 
-        raise RuntimeError("Invalid metric: "+ord+". Choices: [\'fro\',\'inf\']") 
-
 
 def add(A, B, meta):
     """ C = A + B. meta = kab, ka, kb """

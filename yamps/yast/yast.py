@@ -519,7 +519,7 @@ class Tensor:
         a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
-        a.A = {ts: self.config.backend.clone(x) for ts, x in self.A.items()}
+        a.A = {ts: self.config.backend.detach(x) for ts, x in self.A.items()}   ## CHECK IT
         return a
 
     def to(self, device):
@@ -767,24 +767,31 @@ class Tensor:
 
     def to_number(self):
         """
-        Return first number in the first (unsorted) block.
+        Return an element of the size-one tensor as a scalar of the same type as the 
+        type use by backend.
         
-        Mainly used for rank-0 tensor with 1 block of size 1. 
-        Return 0 if there are no blocks.
+        For empty tensor, returns 0
         """
-        if len(self.A) == 0:
-            return 0   # is this always fine e.g. for torch
-        if self.config.test and self.get_size() > 1:
-            logger.exception('Specified bond dimensions inconsistent with tensor.') 
-            raise FatalError
-        key = next(iter(self.A))
-        return self.config.backend.first_element(self.A[key])
+        size = self.get_size()
+        if size == 1:
+            return self.config.backend.first_element(next(iter(self.A.values())))
+        elif size == 0:
+            return self.config.backend.to_tensor(0, dtype=self.config.dtype, device=self.config.device)
+            # is ther anything which would be better for torch autograd?
+        logger.exception('Specified bond dimensions inconsistent with tensor.') 
+        raise FatalError
 
     def item(self):
-        """ Should it be integrated with to_number ??? """
-        if self.get_size() == 1:
-            key = next(iter(self.A))
-            return self.conf.back.item(self.A[key])
+        """ 
+        Return an element of the size-one tensor as a standard Python scalar.
+
+        For empty tensor, returns 0
+        """
+        size = self.get_size()
+        if size == 1:
+            return self.config.backend.item(next(iter(self.A.values())))
+        elif size == 0:
+            return 0
         raise RuntimeError("only single-element (symmetric) Tensor can be converted to scalar")
 
     def norm(self, ord='fro'):
@@ -823,7 +830,7 @@ class Tensor:
 
     def entropy(self, axes=(0, 1), alpha=1):
         r"""
-        Calculate entropy from tensor.
+        Calculate entropy from spliting the tensor usinf svd.
 
         If diagonal, calculates entropy treating S^2 as probabilities. Normalizes S^2 if neccesary.
         If not diagonal, calculates svd first to get the diagonal S.
@@ -832,11 +839,11 @@ class Tensor:
         Parameters
         ----------
         axes: tuple
-            how to split the tensor for svd
+            Specify two groups of legs between which to perform svd
 
         alpha: float
             Order of Renyi entropy.
-            alpha=1 is von Neuman: Entropy -Tr(S^2 log2(S^2))
+            alpha=1 is von Neuman entropy -Tr(S^2 log2(S^2))
             otherwise: 1/(1-alpha) log2(Tr(S^(2*alpha)))
 
         Returns

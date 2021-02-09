@@ -97,13 +97,15 @@ def test_get_shapes():
                     t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                     D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
     a.show_properties()
-    a.fuse_legs(axes=[(0, 1, 2, 3, 4, 5)], inplace=True)
-    print(a.get_leg_tD((0, 1)))
-    print(a.get_leg_shape(0))
+    print(a.get_fusion_tree())
+    a.fuse_legs(axes=[0, 1, (2, 3), (4, 5)], inplace=True)
+    print(a.get_fusion_tree())
+    a.fuse_legs(axes=[0, (1, 2, 3)], inplace=True)
+    print(a.get_fusion_tree())
 
 if __name__ == '__main__':
-    test_fuse()
-    test_fuse_dot()
-    test_fuse_split()
-    test_fuse_transpose()
+    # test_fuse()
+    # test_fuse_dot()
+    # test_fuse_split()
+    # test_fuse_transpose()
     test_get_shapes()
