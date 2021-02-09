@@ -32,8 +32,8 @@ def test_dot_0():
     a = yast.rand(config=config_dense_C, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     b = yast.rand(config=config_dense_C, s=(1, -1, 1), D=(2, 3, 5))
 
-    dot_vs_numpy(a, b, ((0, 3), (0, 2)), (0, 0))
-    dot_vs_numpy(b, a, ((2, 0), (3, 0)), (1, 1))
+    dot_vs_numpy(a, b, axes=((0, 3), (0, 2)), conj=(0, 0))
+    dot_vs_numpy(b, a, axes=((2, 0), (3, 0)), conj=(1, 1))
 
 
 def test_dot_1():
