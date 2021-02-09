@@ -1,8 +1,8 @@
 import torch
 
 from .linalg.torch_svd_gesdd import SVDGESDD 
-# from .linalg.torch_eig_sym import SYMEIG 
-# from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
+from .linalg.torch_eig_sym import SYMEIG 
+from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
 
 
 _data_dtype = {'float64': torch.float64,
