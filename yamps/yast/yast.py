@@ -765,6 +765,9 @@ class Tensor:
     #    output numbers     #
     #########################
 
+    def zero_of_dtype(self):
+        return self.config.backend.zero_scalar(dtype=self.config.dtype, device=self.config.device)
+
     def to_number(self):
         """
         Return an element of the size-one tensor as a scalar of the same type as the 
@@ -776,7 +779,7 @@ class Tensor:
         if size == 1:
             return self.config.backend.first_element(next(iter(self.A.values())))
         elif size == 0:
-            return self.config.backend.to_tensor(0, dtype=self.config.dtype, device=self.config.device)
+            return self.zero_of_dtype()
             # is ther anything which would be better for torch autograd?
         logger.exception('Specified bond dimensions inconsistent with tensor.') 
         raise FatalError
@@ -807,6 +810,8 @@ class Tensor:
         -------
         norm : float64
         """
+        if len(self.A) == 0:
+            return self.zero_of_dtype()
         return self.config.backend.norm(self.A, ord=ord)
 
     def norm_diff(self, other, ord='fro'):
@@ -825,6 +830,8 @@ class Tensor:
         norm : float64
         """
         self._test_tensors_match(other)
+        if (len(self.A) == 0) and (len(other.A) == 0):
+            return self.zero_of_dtype()
         meta = _common_keys(self.A, other.A)
         return self.config.backend.norm_diff(self.A, other.A, ord, meta)
 
@@ -850,6 +857,9 @@ class Tensor:
         -------
         entropy, minimal singular value, normalization : float64
         """
+        if len(self.A) == 0:
+            return self.zero_of_dtype(), self.zero_of_dtype(), self.zero_of_dtype()
+
         lout_l, lout_r = _clean_axes(*axes)
         out_l, out_r = self._unpack_axes(lout_l, lout_r)
         self._test_axes_split(out_l, out_r)
@@ -1232,7 +1242,9 @@ class Tensor:
         """
         self._test_tensors_match(other)
         k12, _, _ = _common_keys(self.A, other.A)
-        return self.config.backend.scalar(self.A, other.A, k12)
+        if len(k12) > 0:
+            return self.config.backend.scalar(self.A, other.A, k12)
+        return self.zero_of_dtype()
 
     def trace(self, axes=(0, 1)):
         """

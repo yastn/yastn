@@ -47,6 +47,7 @@ def test_scalar_1R():
     scalar_vs_numpy(a, c)
     scalar_vs_numpy(c, b)
 
+
 def test_scalar_1C():
     a = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 0, 2)),
@@ -79,7 +80,9 @@ def test_scalar_exceptions():
     d = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1), n=1,
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
                   D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
+
     d = d.fuse_legs(axes=(0, (1, 2), 3))
+
     scalar_catch_error(a, b)
     scalar_catch_error(a, c)
     scalar_catch_error(a, d)

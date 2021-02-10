@@ -73,53 +73,52 @@ def item(x):
     return x.item()
 
 
-_norms = {'fro': np.linalg.norm, 'inf': lambda x: np.abs(x).max()}
-
-
 def norm(A, ord):
-    block_norm = [0.]
-    for x in A.values():
-        block_norm.append(_norms[ord](x))
-    return _norms[ord](block_norm)
+    if ord == 'fro':
+        return np.linalg.norm([np.linalg.norm(x) for x in A.values()])
+    elif ord == 'inf':
+        return max( [ np.abs(x).max() for x in A.values()] )
 
 
 def norm_diff(A, B, ord, meta):
     """ norm(A - B); meta = kab, ka, kb """
-    block_norm = [0.]
-    for ind in meta[0]:
-        block_norm.append(_norms[ord](A[ind] - B[ind]))
-    for ind in meta[1]:
-        block_norm.append(_norms[ord](A[ind]))
-    for ind in meta[2]:
-        block_norm.append(_norms[ord](B[ind]))
-    return _norms[ord](block_norm)
-
+    if ord == 'fro':
+        return np.linalg.norm([np.linalg.norm(A[ind]-B[ind]) for ind in meta[0]] +\
+                              [np.linalg.norm(A[ind]) for ind in meta[1]] +\
+                              [np.linalg.norm(B[ind]) for ind in meta[2]])
+    elif ord == 'inf':
+        return max([np.abs(A[ind]-B[ind]).max() for ind in meta[0]] +\
+                   [np.abs(A[ind]).max() for ind in meta[1]] +\
+                   [np.abs(B[ind]).max() for ind in meta[2]])
 
 
 def entropy(A, alpha=1, tol=1e-12):
-    temp = 0.
-    for x in A.values():
-        temp += np.sum(np.abs(x) ** 2)
-    normalization = np.sqrt(temp)
-
-    entropy = 0.
-    Smin = np.inf
+    """ von Neuman or Renyi entropy from svd's"""
+    normalization = np.sqrt(np.sum([np.sum(x ** 2) for x in A.values()]))
     if normalization > 0:
+        Smin = min([min(x) for x in A.values()])
+        entropy = []
         for x in A.values():
-            Smin = min(Smin, min(x))
             x = x / normalization
+            x = x[x > tol]
             if alpha == 1:
-                x = x[x > tol]
-                entropy += -2 * sum(x * x * np.log2(x))
+                entropy.append(-2 * np.sum(x * x * np.log2(x)))
             else:
-                entropy += x**(2 * alpha)
+                entropy.append(x**(2 * alpha))
+        entropy = np.sum(entropy)
         if alpha != 1:
             entropy = np.log2(entropy) / (1 - alpha)
-    return entropy, Smin, normalization
+        return entropy, Smin, normalization
+    return normalization, normalization, normalization  # this hould be 0., 0., 0.
+
 
 ##########################
 #     setting values     #
 ##########################
+
+def zero_scalar(dtype='float64', device='cpu'):
+    return _data_dtype[dtype](0)
+
 
 def zeros(D, dtype='float64', device='cpu'):
     return np.zeros(D, dtype=_data_dtype[dtype])
@@ -334,10 +333,7 @@ def apxb(A, B, x, meta):
 
 
 def scalar(A, B, meta):
-    out = 0.
-    for ind in meta:
-        out += (A[ind].conj().reshape(-1)) @ (B[ind].reshape(-1))
-    return out
+    return np.sum([(A[ind].conj().reshape(-1)) @ (B[ind].reshape(-1)) for ind in meta])
 
 
 dot_dict = {(0, 0): lambda x, y: x @ y,

@@ -86,9 +86,9 @@ def norm(A, ord):
 def norm_diff(A, B, ord, meta):
     if ord=='fro':
         # get the list of sums of squares, sum it and take square root         
-        return torch.sum(torch.stack([torch.sum(A[k].abs()**2) for k in meta[1]] + \
-                                     [torch.sum(B[k].abs()**2) for k in meta[2]] + \
-                                     [torch.sum((A[k]-B[k]).abs()**2) for k in meta[0]])).sqrt()
+        return torch.sum(torch.stack([torch.sum(A[k].abs() ** 2) for k in meta[1]] + \
+                                     [torch.sum(B[k].abs() ** 2) for k in meta[2]] + \
+                                     [torch.sum((A[k]-B[k]).abs() ** 2) for k in meta[0]])).sqrt()
     elif ord=='inf':       
         return torch.max(torch.stack([A[k].abs().max() for k in meta[1]] + \
                                      [B[k].abs().max() for k in meta[2]] + \
@@ -96,29 +96,32 @@ def norm_diff(A, B, ord, meta):
 
 
 def entropy(A, alpha=1, tol=1e-12):
-    temp = 0.
-    for x in A.values():
-        temp += torch.sum(torch.abs(x) ** 2)
-    normalization = torch.sqrt(temp)
-
-    entropy = 0.
-    Smin = 10000000  # very big number
+    """ von Neuman or Renyi entropy from svd's"""
+    normalization = torch.sum(torch.stack([torch.sum(x ** 2) for x in A.values()])).sqrt()
     if normalization > 0:
+        entropy = []
+        Smin = min([min(x) for x in A.values()])
         for x in A.values():
-            Smin = min(Smin, min(x))
             x = x / normalization
+            x = x[x > tol]
             if alpha == 1:
-                x = x[x > tol]
-                entropy += -2 * sum(x * x * torch.log2(x))
+                entropy.append(-2 * torch.sum(x * x * torch.log2(x)))
             else:
-                entropy += x**(2 * alpha)
+                entropy.append(x**(2 * alpha))
+        entropy = torch.sum(torch.stack(entropy))
         if alpha != 1:
             entropy = torch.log2(entropy) / (1 - alpha)
-    return entropy, Smin, normalization
+        return entropy, Smin, normalization
+    return normalization, normalization, normalization  # this hould be 0., 0., 0.
+
 
 ##########################
 #     setting values     #
 ##########################
+
+def zero_scalar(dtype='float64', device='cpu'):
+    return torch.tensor(0, dtype=_data_dtype[dtype], device=device) 
+
 
 def zeros(D, dtype='float64', device='cpu'):
     return torch.zeros(D, dtype=_data_dtype[dtype], device=device)
