@@ -1,5 +1,5 @@
 import yamps.yast as yast
-import config_dense_C
+import config_dense_R
 import config_U1_R
 import config_Z2_U1_R
 from math import isclose
@@ -30,8 +30,8 @@ def dot_vs_numpy(a, b, axes, conj):
 
 
 def test_dot_0():
-    a = yast.rand(config=config_dense_C, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
-    b = yast.rand(config=config_dense_C, s=(1, -1, 1), D=(2, 3, 5))
+    a = yast.rand(config=config_dense_R, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    b = yast.rand(config=config_dense_R, s=(1, -1, 1), D=(2, 3, 5))
 
     dot_vs_numpy(a, b, axes=((0, 3), (0, 2)), conj=(0, 0))
     dot_vs_numpy(b, a, axes=((2, 0), (3, 0)), conj=(1, 1))
