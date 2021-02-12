@@ -1,8 +1,9 @@
 import yamps.yast as yast
 import config_U1_R
-import pytest
+from math import isclose
 import numpy as np
 
+tol = 1e-12
 
 def test_diag_1():
     a1 = yast.rand(config=config_U1_R, s=(-1, 1),
@@ -19,15 +20,14 @@ def test_diag_1():
     assert a3.is_independent(a4)
     assert a4.is_independent(a5)
 
-    na1 = a1.to_dense()
-    na2 = a2.to_dense()
-    na3 = a3.to_dense()
-    na4 = a4.to_dense()
-    na5 = a5.to_dense()
+    na1 = a1.to_numpy()
+    na2 = a2.to_numpy()
+    na3 = a3.to_numpy()
+    na4 = a4.to_numpy()
+    na5 = a5.to_numpy()
     assert np.allclose(np.diag(np.diag(na1)), na5)
-    assert pytest.approx(a2.norm_diff(a4)) == 0
-    assert pytest.approx(a3.norm_diff(a5)) == 0
-
+    assert isclose(a2.norm_diff(a4), 0, rel_tol=tol, abs_tol=tol)
+    assert isclose(a3.norm_diff(a5), 0, rel_tol=tol, abs_tol=tol)
 
 if __name__ == '__main__':
     test_diag_1()

@@ -2,9 +2,11 @@ import yamps.yast as yast
 import config_dense_C
 import config_Z2_C
 import config_U1_C
-import pytest
 import numpy as np
 import scipy.linalg
+import pytest
+
+tol = 1e-12
 
 def run_expm_hermitian(A, v, tau, eigs_tol, exp_tol, kp):
     A = (A + A.conj().transpose(axes=(2, 3, 0, 1))) / 2

@@ -3,13 +3,12 @@ import yamps.yast as yast
 import config_dense_C
 import config_U1_R
 import config_U1_C
-import pytest
+from math import isclose
 import numpy as np
 
+tol = 1e-12
 
 def scalar_vs_numpy(a, b):
-    outa = tuple(ii for ii in range(a.ndim))
-    outb = tuple(ii for ii in range(b.ndim))
     tDsa = {ii: b.get_leg_tD(ii) for ii in range(b.ndim)}
     tDsb = {ii: a.get_leg_tD(ii) for ii in range(a.ndim)}
     na = a.to_dense(tDsa)
@@ -17,8 +16,8 @@ def scalar_vs_numpy(a, b):
     ns = na.conj().reshape(-1) @ nb.reshape(-1)
     sab = a.scalar(b)
     sba = b.scalar(a)
-    assert pytest.approx(ns) == sab
-    assert pytest.approx(ns) == np.conj(sba)
+    assert isclose(abs(ns - sab), 0, rel_tol=tol, abs_tol=tol)
+    assert isclose(abs(ns.conj() - sba), 0, rel_tol=tol, abs_tol=tol)
 
 def scalar_catch_error(a, b):
     try:

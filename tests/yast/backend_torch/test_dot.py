@@ -2,9 +2,10 @@ import yamps.yast as yast
 import config_dense_C
 import config_U1_R
 import config_Z2_U1_R
-import pytest
+from math import isclose
 import numpy as np
 
+tol = 1e-12
 
 def dot_vs_numpy(a, b, axes, conj):
     outa = tuple(ii for ii in range(a.ndim) if ii not in axes[0])
@@ -25,15 +26,15 @@ def dot_vs_numpy(a, b, axes, conj):
     assert c.is_consistent()
     assert a.is_independent(c)
     assert c.is_independent(b)
-    assert pytest.approx(np.linalg.norm(nc - nab)) == 0
+    assert isclose(np.linalg.norm(nc - nab), 0, rel_tol=tol, abs_tol=tol)
 
 
 def test_dot_0():
     a = yast.rand(config=config_dense_C, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     b = yast.rand(config=config_dense_C, s=(1, -1, 1), D=(2, 3, 5))
 
-    dot_vs_numpy(a, b, ((0, 3), (0, 2)), (0, 0))
-    dot_vs_numpy(b, a, ((2, 0), (3, 0)), (1, 1))
+    dot_vs_numpy(a, b, axes=((0, 3), (0, 2)), conj=(0, 0))
+    dot_vs_numpy(b, a, axes=((2, 0), (3, 0)), conj=(1, 1))
 
 
 def test_dot_1():
