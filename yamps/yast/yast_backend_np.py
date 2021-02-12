@@ -273,7 +273,7 @@ def qr(A, meta):
 #     return R, Q
 
 
-def select_largest(S, D_keep, D_total, sorting):
+def select_global_largest(S, D_keep, D_total, sorting):
     if sorting == 'svd':
         return np.hstack([S[ind][:D_keep[ind]] for ind in S]).argpartition(-D_total-1)[-D_total:]
     elif sorting == 'eigh':

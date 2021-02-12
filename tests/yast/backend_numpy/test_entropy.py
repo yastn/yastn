@@ -1,8 +1,9 @@
 import yamps.yast as yast
 import config_U1_R
-import pytest
+from math import isclose
 import numpy as np
 
+tol = 1e-12
 
 def test_entropy():
     a = yast.rand(config=config_U1_R, s=(1, 1, -1, -1), n=1,
@@ -15,9 +16,9 @@ def test_entropy():
     a = (U.dot(S, axes=(2, 0))).dot(V, axes=(2, 0))
     
     entropy, Smin, normalization = a.entropy(axes=((0, 1), (2, 3)))
-    assert pytest.approx(entropy) == np.log2(41)
-    assert pytest.approx(Smin) == 1.
-    assert pytest.approx(normalization) == np.sqrt(41)
+    assert isclose(entropy, np.log2(41), rel_tol=tol, abs_tol=tol)
+    assert isclose(Smin, 1, rel_tol=tol, abs_tol=tol)
+    assert isclose(normalization, np.sqrt(41), rel_tol=tol, abs_tol=tol)
 
 if __name__ == '__main__':
     test_entropy()

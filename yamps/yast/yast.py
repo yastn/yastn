@@ -239,9 +239,6 @@ def block(tensors, common_legs):
         common_legs : list
             Legs which are not blocked
             (equivalently on common legs all tensors have the same position in the supertensor, and those positions are not given in tensors)
-
-        ndim : int
-            All tensor should have the same rank ndim
     """
     try:
         lc = len(common_legs)
@@ -309,13 +306,14 @@ class Tensor:
         self.config = kwargs['settings'] if 'settings' in kwargs else config
         self.device = 'cpu' if not hasattr(self.config, 'device') else self.config.device
         self.isdiag = isdiag
-        self.ndim = 1 if isinstance(s, int) else len(s)  # number of legs
-        self.s = np.array(s, dtype=int).reshape(self.ndim)
+        self._ndim = 1 if isinstance(s, int) else len(s)  # number of native legs
+        self.ndim = self._ndim  # number of logical legs
+        self.s = np.array(s, dtype=int).reshape(self._ndim)
         self.n = np.zeros(self.config.sym.nsym, dtype=int) if n is None else np.array(n, dtype=int).reshape(self.config.sym.nsym)
         if self.isdiag:
             if len(self.s) == 0:
                 self.s = np.array([1, -1], dtype=int)
-                self.ndim = 2
+                self._ndim = 2
             if self.config.test:
                 if not np.sum(self.s) == 0:
                     logger.exception("Signature should be (-1, 1) or (1, -1) in diagonal tensor")
@@ -323,14 +321,14 @@ class Tensor:
                 if not np.sum(np.abs(self.n)) == 0:
                     logger.exception("Tensor charge should be 0 in diagonal tensor")
                     raise FatalError
-                if not self.ndim == 2:
+                if not self._ndim == 2:
                     logger.exception("Diagonal tensor should have ndim == 2")
                     raise FatalError
-        self.tset = np.zeros((0, self.ndim, self.config.sym.nsym), dtype=int)  # list of blocks; 3d nparray of ints
-        self.Dset = np.zeros((0, self.ndim), dtype=int)  # shapes of blocks; 2d nparray of ints
+        self.tset = np.zeros((0, self._ndim, self.config.sym.nsym), dtype=int)  # list of blocks; 3d nparray of ints
+        self.Dset = np.zeros((0, self._ndim), dtype=int)  # shapes of blocks; 2d nparray of ints
         self.A = {}  # dictionary of blocks
         # (logical) fusion tree for each leg: (number_of_consequative_legs_it_represents, tuple_with_inner_structure)
-        self.lfuse = tuple(kwargs['lfuse']) if ('lfuse' in kwargs and kwargs['lfuse'] is not None) else ((1, ()),) * self.ndim
+        self.lfuse = tuple(kwargs['lfuse']) if ('lfuse' in kwargs and kwargs['lfuse'] is not None) else ((1, ()),) * self._ndim
         # self.lfuse is immutable for copying and comparison
 
 
@@ -379,24 +377,24 @@ class Tensor:
         if self.config.sym.nsym == 0:
             if self.isdiag and len(D) == 1:
                 D = D + D
-            if len(D) != self.ndim:
+            if len(D) != self._ndim:
                 logger.exception("Number of elements in D does not match tensor rank.")
                 raise FatalError
-            tset = np.zeros((1, self.ndim, self.config.sym.nsym))
-            Dset = np.array(D, dtype=int).reshape(1, self.ndim)
+            tset = np.zeros((1, self._ndim, self.config.sym.nsym))
+            Dset = np.array(D, dtype=int).reshape(1, self._ndim)
         else:  # self.config.sym.nsym >= 1
-            D = (D,) if (self.ndim == 1 or self.isdiag) and isinstance(D[0], int) else D
-            t = (t,) if (self.ndim == 1 or self.isdiag) and isinstance(t[0], int) else t
+            D = (D,) if (self._ndim == 1 or self.isdiag) and isinstance(D[0], int) else D
+            t = (t,) if (self._ndim == 1 or self.isdiag) and isinstance(t[0], int) else t
             D = D + D if self.isdiag and len(D) == 1 else D
             t = t + t if self.isdiag and len(t) == 1 else t
 
             D = list(x if isinstance(x, tuple) or isinstance(x, list) else (x, ) for x in D)
             t = list(x if isinstance(x, tuple) or isinstance(x, list) else (x, ) for x in t)
     
-            if len(D) != self.ndim:
+            if len(D) != self._ndim:
                 logger.exception("Number of elements in D does not match tensor rank.")
                 raise FatalError
-            if len(t) != self.ndim:
+            if len(t) != self._ndim:
                 logger.exception("Number of elements in t does not match tensor rank.")
                 raise FatalError
             for x, y in zip(D, t):
@@ -407,8 +405,8 @@ class Tensor:
             comb_t = list(itertools.product(*t))
             comb_D = list(itertools.product(*D))
             lcomb_t = len(comb_t)
-            comb_t = np.array(comb_t, dtype=int).reshape(lcomb_t, self.ndim, self.config.sym.nsym)
-            comb_D = np.array(comb_D, dtype=int).reshape(lcomb_t, self.ndim)
+            comb_t = np.array(comb_t, dtype=int).reshape(lcomb_t, self._ndim, self.config.sym.nsym)
+            comb_D = np.array(comb_D, dtype=int).reshape(lcomb_t, self._ndim)
             ind = np.all(self.config.sym.fuse(comb_t, self.s, 1) == self.n, axis=1)
             tset = comb_t[ind]
             Dset = comb_D[ind]
@@ -447,22 +445,22 @@ class Tensor:
         if self.isdiag and len(ts) == self.config.sym.nsym:
             ts = ts + ts
 
-        if (len(ts) != self.ndim * self.config.sym.nsym):
+        if (len(ts) != self._ndim * self.config.sym.nsym):
             logger.exception('Wrong size of ts.')
             raise FatalError
-        if (Ds is not None and len(Ds) != self.ndim):
+        if (Ds is not None and len(Ds) != self._ndim):
             logger.exception('Wrong size of Ds.')
             raise FatalError        
 
-        ats = np.array(ts, dtype=int).reshape(1, self.ndim, self.config.sym.nsym)
+        ats = np.array(ts, dtype=int).reshape(1, self._ndim, self.config.sym.nsym)
         if not np.all(self.config.sym.fuse(ats, self.s, 1) == self.n):
             logger.exception('Charges ts are not consistent with the symmetry rules: t @ s - n != 0')
             raise FatalError
 
         if Ds is None:
             Ds = []
-            tD = [self.get_leg_tD(n) for n in range(self.ndim)]
-            for n in range(self.ndim):
+            tD = [self.get_leg_tD(n) for n in range(self._ndim)]
+            for n in range(self._ndim):
                 try:
                     Ds.append(tD[n][tuple(ats[0, n, :].flat)])
                 except KeyError:
@@ -492,7 +490,7 @@ class Tensor:
                 self.A[ts] = self.config.backend.to_tensor(val, Ds, dtype=self.config.dtype, device=device)
         # here it checkes the consistency of bond dimensions
         self._calculate_tDset()
-        tD = [self.get_leg_tD(n) for n in range(self.ndim)]
+        tD = [self.get_leg_tD(n) for n in range(self._ndim)]
 
     #######################
     #     new tensors     #
@@ -581,7 +579,7 @@ class Tensor:
 
     def show_properties(self):
         """ Display basic properties of the tensor. """
-        print("ndim      :", self.ndim)  # number of dimensions
+        print("ndim      :", self._ndim)  # number of dimensions
         print("ldim:     :", self.ldim())  # number of logical legs
         print("lfuse:    :", self.lfuse)  # logical fusion tree for each leg
         print("signature :", self.s)  # signature
@@ -589,10 +587,10 @@ class Tensor:
         print("isdiag    :", self.isdiag)  
         print("blocks    :", len(self.A))  # number of blocks
         print("size      :", self.get_size())  # total number of elements in all blocks
-        tDs = [self.get_leg_tD(n) for n in range(self.ndim)]  
+        tDs = [self.get_leg_tD(n) for n in range(self._ndim)]  
         Dtot = tuple(sum(tD.values()) for tD in tDs)
         print("total dim :", Dtot)
-        for n in range(self.ndim):
+        for n in range(self._ndim):
             print("Leg", n, ":", tDs[n])  # charges and their dimensions for each leg
         print()
 
@@ -629,7 +627,7 @@ class Tensor:
         meta_new = (((), D_tot),)
         # meta_mrg = ((tn, Ds, to, Do), ...)
         meta_mrg = tuple(((), (aD-D, aD), tuple(t.flat), (D,)) for t, D, aD in zip(self.tset, D_rsh, aD_rsh))
-        A = self.config.backend.merge_one_leg(self.A, 0, tuple(range(self.ndim)), meta_new, meta_mrg, self.config.dtype, self.device)
+        A = self.config.backend.merge_one_leg(self.A, 0, tuple(range(self._ndim)), meta_new, meta_mrg, self.config.dtype, self.device)
         
         # (told, tnew, Dsl, Dnew)
         meta_umrg = tuple((told, tnew, Dsl, tuple(Dnew)) for (told, Dsl, tnew, _), Dnew in zip(meta_mrg, self.Dset))
@@ -718,10 +716,10 @@ class Tensor:
         out : tensor used by backend
         """
         device= 'cpu' if not hasattr(self.config, 'device') else self.config.device
-        tD = [self.get_leg_tD(n) for n in range(self.ndim)]
+        tD = [self.get_leg_tD(n) for n in range(self._ndim)]
         if tDs is not None:
             for n, tDn in tDs.items():
-                if (n < 0) or (n >= self.ndim):
+                if (n < 0) or (n >= self._ndim):
                     logger.exception('Specified leg out of ndim')
                     raise FatalError
                 for tn, Dn in tDn.items():
@@ -1128,7 +1126,7 @@ class Tensor:
         if self.isdiag:
             a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=False, lfuse=self.lfuse)
             a.A = {ind: self.config.backend.diag_diag(self.A[ind]) for ind in self.A}
-        elif self.ndim == 2 and sum(np.abs(self.n)) == 0 and sum(self.s) == 0:
+        elif self._ndim == 2 and sum(np.abs(self.n)) == 0 and sum(self.s) == 0:
             a = Tensor(config=self.config, s=self.s, isdiag=True, lfuse=self.lfuse)
             a.A = {ind: self.config.backend.diag_diag(self.A[ind]) for ind in self.A}
         else:
@@ -1827,7 +1825,7 @@ class Tensor:
     #     for ii in range(axis):
     #         if ii in self.lss:
     #             c.lss[ii]=self.lss[ii].copy()
-    #     for ii in range(axis+1, self.ndim):
+    #     for ii in range(axis+1, self._ndim):
     #         if ii in self.lss:
     #             c.lss[ii+ls.ndim]=self.lss[ii].copy()
     #     return c
@@ -1868,7 +1866,7 @@ class Tensor:
         test.append(len(self.tset) == len(self.Dset))
 
         test.append(np.all(self.config.sym.fuse(self.tset, self.s, 1) == self.n))
-        for n in range(self.ndim):
+        for n in range(self._ndim):
             self.get_leg_tD(n)
 
         return all(test)
@@ -1888,19 +1886,19 @@ class Tensor:
 
     def _test_axes_split(self, out_l, out_r):
         if self.config.test:
-            if not (self.ndim == len(out_l) + len(out_r)):
+            if not (self._ndim == len(out_l) + len(out_r)):
                 logger.exception('Two few indices in axes')
                 raise FatalError
-            if not (sorted(set(out_l+out_r)) == list(range(self.ndim))):
+            if not (sorted(set(out_l+out_r)) == list(range(self._ndim))):
                 logger.exception('Repeated axis')
                 raise FatalError
 
     def _calculate_tDset(self):
-        self.tset = np.array([ind for ind in self.A], dtype=int).reshape(len(self.A), self.ndim, self.config.sym.nsym)
-        self.Dset = np.array([self.config.backend.get_shape(self.A[ind]) for ind in self.A], dtype=int).reshape(len(self.A), self.ndim)
+        self.tset = np.array([ind for ind in self.A], dtype=int).reshape(len(self.A), self._ndim, self.config.sym.nsym)
+        self.Dset = np.array([self.config.backend.get_shape(self.A[ind]) for ind in self.A], dtype=int).reshape(len(self.A), self._ndim)
 
     def _unpack_axes(self, *args):
-        """Unpack logical axes based on self.lfuse"""
+        """Unpack logical axes into native axes based on self.lfuse"""
         clegs = tuple(itertools.accumulate(x[0] for x in self.lfuse))
         return (tuple(itertools.chain(*(range(clegs[ii]-self.lfuse[ii][0], clegs[ii]) for ii in axes))) for axes in args)
 
@@ -1980,11 +1978,11 @@ class _Leg_struct:
             for ind in D_keep:
                 D_keep[ind] = min(D_keep[ind], self.config.backend.count_greater(A[ind], maxS * opts['tol']))
         if sum(D_keep[ind] for ind in D_keep) > opts['D_total']:  # truncate to total bond dimension
-            order = self.config.backend.select_largest(A, D_keep, opts['D_total'], sorting)
+            order = self.config.backend.select_global_largest(A, D_keep, opts['D_total'], sorting)
             low = 0
             for ind in D_keep:
                 high = low + D_keep[ind]
-                D_keep[ind] = np.sum((low <= order) & (order < high))
+                D_keep[ind] = sum((low <= order) & (order < high))
                 low = high
         for ind in D_keep:
             if D_keep[ind] > 0:
@@ -1993,17 +1991,6 @@ class _Leg_struct:
 
 def _clean_axes(*args):
     return ((axis,) if isinstance(axis, int) else tuple(axis) for axis in args)
-
-def a_clean_axes(axes):
-    try:
-        out_l = tuple(axes[0])
-    except TypeError:
-        out_l = (axes[0],)
-    try:
-        out_r = tuple(axes[1])
-    except TypeError:
-        out_r = (axes[1],)
-    return out_l, out_r
 
 def _common_keys(d1, d2):
     """

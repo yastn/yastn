@@ -50,15 +50,15 @@ def get_size(x):
 
 
 def diag_create(x):
-    return torch.diag(x)
+    return torch.diag(x)   ##  PROBLEM WITH COMPLEX NUMBERS
 
 
 def diag_get(x):
-    return torch.diag(x)
+    return torch.diag(x)   ##  PROBLEM WITH COMPLEX NUMBERS
 
 
 def diag_diag(x):
-    return torch.diag(torch.diag(x))
+    return torch.diag(torch.diag(x))   ##  PROBLEM WITH COMPLEX NUMBERS
 
 
 def count_greater(x, cutoff):
@@ -165,9 +165,9 @@ def trace(A, order, meta):
     for (tnew, told, Drsh) in meta:
         Atemp = torch.reshape(A[told].permute(*order), Drsh)
         if tnew in Aout:
-            Aout[tnew] += torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=0)
+            Aout[tnew] += torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=-1)
         else:
-            Aout[tnew] = torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=0)
+            Aout[tnew] = torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=-1)
     return Aout
 
 
@@ -251,8 +251,11 @@ def eigh(A, meta, order_by_magnitude=False):
 
 def svd_S(A):
     S = {}
+    tn = next(iter(A.values()))
+    reg = torch.as_tensor(ad_decomp_reg, dtype=tn.dtype, device=tn.device)
     for ind in A:
-        S[ind] = torch.svd(A[ind], some=True, compute_uv=False)
+        _, S[ind], _ = SVDGESDD.apply(A[ind], reg)
+        # S[ind] = torch.svd(A[ind], some=True, compute_uv=False)
     return S
 
 
@@ -260,7 +263,7 @@ def qr(A, meta):
     Q, R = {}, {}
     for (ind, indQ, indR) in meta:
         Q[indQ], R[indR] = torch.qr(A[ind], some=True)
-        sR = torch.sign(torch.real(torch.diag(R[indR])))
+        sR = torch.sign(torch.diag(R[indR])) ##  PROBLEM WITH COMPLEX NUMBERS
         sR[sR == 0] = 1
         # positive diag of R
         Q[indQ] = Q[indQ] * sR
@@ -277,14 +280,13 @@ def qr(A, meta):
 #         R[ind], Q[ind] = torch.t(R[ind]) * sR, sR.reshape([-1, 1]) * torch.t(Q[ind])
 #     return R, Q
 
-def select_largest(S, D_keep, D_total, sorting):
+def select_global_largest(S, D_keep, D_total, sorting):
     if sorting == 'svd':
         s_all = torch.cat([S[ind][:D_keep[ind]] for ind in S])
         return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
     elif sorting == 'eigh':
         s_all = torch.cat([S[ind][-D_keep[ind]:] for ind in S])
         return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
-
 
 def range_largest(D_keep, D_total, sorting):
     if sorting == 'svd':
@@ -366,7 +368,7 @@ def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, device='cpu'):
     """ New dictionary of blocks after merging into matrix. """
     Anew = {u: torch.zeros(Du, dtype=_data_dtype[dtype], device=device) for (u, Du) in meta_new}
     for (tn, to, Dsl, Dl, Dsr, Dr) in meta_mrg:
-        Anew[tn][slice(*Dsl), slice(*Dsr)] = A[to].permute(*order).reshape(Dl, Dr)
+        Anew[tn][slice(*Dsl), slice(*Dsr)] = A[to].permute(order).reshape(Dl, Dr)
     return Anew
 
 
@@ -378,7 +380,7 @@ def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, device='cpu'):
     for (tn, Ds, to, Do) in meta_mrg:
         slc = [slice(None)] * len(Do)
         slc[axis] = slice(*Ds)
-        Anew[tn][tuple(slc)] = A[to].permute(*order).reshape(Do)  
+        Anew[tn][tuple(slc)] = A[to].permute(order).reshape(Do)  
     return Anew
 
 
