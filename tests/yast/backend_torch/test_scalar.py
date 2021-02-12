@@ -1,10 +1,8 @@
 from numpy.lib.function_base import _cov_dispatcher
 import yamps.yast as yast
-import config_dense_C
+import config_dense_R
 import config_U1_R
-import config_U1_C
 from math import isclose
-import numpy as np
 
 tol = 1e-12
 
@@ -27,8 +25,8 @@ def scalar_catch_error(a, b):
         assert True
 
 def test_scalar_0():
-    a = yast.rand(config=config_dense_C, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
-    b = yast.rand(config=config_dense_C, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    a = yast.rand(config=config_dense_R, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    b = yast.rand(config=config_dense_R, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     scalar_vs_numpy(a, b)
 
 
@@ -48,13 +46,13 @@ def test_scalar_1R():
 
 
 def test_scalar_1C():
-    a = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 0, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 2, 12)))
-    b = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1),
+    b = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
                   D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
-    c = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1),
+    c = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
                   t=(1, -1, 2, 0),
                   D=(2, 4, 9, 2))
     scalar_vs_numpy(a, b)
@@ -63,20 +61,20 @@ def test_scalar_1C():
 
 
 def test_scalar_exceptions():
-    a = yast.Tensor(config=config_U1_C, s=())
-    b = yast.Tensor(config=config_U1_C, s=())
+    a = yast.Tensor(config=config_U1_R, s=())
+    b = yast.Tensor(config=config_U1_R, s=())
     scalar_vs_numpy(a, b)
 
-    a = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1), n=1,
+    a = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1), n=1,
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 0, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 2, 12)))
-    b = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1), n=-1,
+    b = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1), n=-1,
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
                   D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
-    c = yast.rand(config=config_U1_C, s=(-1, -1, 1, -1), n=1,
+    c = yast.rand(config=config_U1_R, s=(-1, -1, 1, -1), n=1,
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
                   D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
-    d = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1), n=1,
+    d = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1), n=1,
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
                   D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
 
