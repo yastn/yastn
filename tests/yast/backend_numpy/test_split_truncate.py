@@ -22,7 +22,7 @@ def test_split_svd_sparse():
     US = U.dot(S, axes=(ll, 0))
     USV = US.dot(V, axes=(ll, 0))
     b = a.transpose(axes=axes[0]+axes[1])
-    assert isclose(b.norm_diff(USV), 0, rel_tol=tol, abs_tol=tol)
+    assert b.norm_diff(USV) < tol  # == 0.0
 
 
 def test_split_svd_truncate():
