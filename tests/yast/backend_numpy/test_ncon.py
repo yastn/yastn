@@ -5,7 +5,6 @@ Test yast.ncon
 import yamps.yast as yast
 import config_U1_R
 import config_dense_C
-from math import isclose
 
 tol = 1e-12
 
@@ -33,8 +32,8 @@ def test_ncon_0():
     assert z2.get_shape() == (1, 2, 3, 4)
     assert z3.get_shape() == (1, 2, 3, 4)
     assert z4.get_shape() == (1, 2, 3, 4)
-    assert isclose(z1.norm_diff(z2), 0, rel_tol=tol, abs_tol=tol)
-    assert isclose((z3-z4.conj()).norm(), 0, rel_tol=tol, abs_tol=tol)
+    assert z1.norm_diff(z2) < tol  # == 0.0
+    assert (z3-z4.conj()).norm() < tol  # == 0.0
 
     y1 = yast.ncon([a, b, c, d, g, h], [[4, -3, -1], [-4, -2, 5], [4, 3, 1, 1], [3, 2, 5, 2], [-5], [-6]], [1, 0, 1, 0, 1, 0]) 
     assert y1.get_shape() == (1, 2, 3, 4, 5, 6)
@@ -49,7 +48,7 @@ def test_ncon_0():
     y5 = yast.ncon([a, a, b, b], [[6, 5, 4], [6, 5, 4], [1, 3, 2], [1, 3, 2]], [0, 1, 0, 1]) 
     assert isinstance(y4, complex)
     assert isinstance(y5, complex)
-    assert isclose(abs(y4-y5), 0, rel_tol=tol, abs_tol=tol)
+    assert abs(y4-y5) < tol  # == is0.0
 
 def test_ncon_1():
     a = yast.rand(config=config_U1_R, s=[-1, 1, -1], n=0, 

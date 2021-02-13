@@ -1,26 +1,14 @@
-import logging
+""" ncon routine for automatic contraction of a list of tensors. """
+from yamps.yast import YastError
 
-
-class FatalError(Exception):
-    pass
-
-
-logger = logging.getLogger('yamps.tensor.ncon')
-
-
-###########################################
-#      Contraction of a set of tensors    #
-###########################################
 
 def ncon(ts, inds, conjs=None):
     """Execute series of tensor contractions"""
     if len(ts) != len(inds):
-        logger.exception('Wrong number of tensors')
-        raise FatalError
+        raise YastError('Wrong number of tensors')
     for ii, ind in enumerate(inds):
         if ts[ii].ldim() != len(ind):
-            logger.exception('Wrong number of legs in tensor %02d' % ii)
-            raise FatalError
+            raise YastError('Wrong number of legs in %02d-th tensors.' % ii)
 
     ts = {ind: val for ind, val in enumerate(ts)}
     cutoff = 512
@@ -33,11 +21,10 @@ def ncon(ts, inds, conjs=None):
 
     order1, leg1, ten1 = edges.pop()
     ax1, ax2 = [], []
-    while (order1 != cutoff):  # tensordot two tensors; or trace one tensor
+    while order1 != cutoff:  # tensordot two tensors; or trace one tensor
         order2, leg2, ten2 = edges.pop()
         if (order1 != order2):
-            logger.exception('Contracted legs do not match')
-            raise FatalError
+            raise YastError('Contracted legs do not match')
         if ten1 < ten2:
             (t1, t2) = (ten1, ten2)
             ax1.append(leg1)
@@ -46,7 +33,7 @@ def ncon(ts, inds, conjs=None):
             (t1, t2) = (ten2, ten1)
             ax1.append(leg2)
             ax2.append(leg1)
-        if (edges[-1][0] == cutoff) or min(edges[-1][2], edges[-2][2]) != t1 or max(edges[-1][2], edges[-2][2]) != t2:
+        if edges[-1][0] == cutoff or min(edges[-1][2], edges[-2][2]) != t1 or max(edges[-1][2], edges[-2][2]) != t2:
             # execute contraction
             if t1 == t2:  # trace
                 ts[t1] = ts[t1].trace(axes=(ax1, ax2))
@@ -60,9 +47,9 @@ def ncon(ts, inds, conjs=None):
                 del ts[t2]
                 lt1 = sum(ii[2] == t1 for ii in edges)  # legs of t1
                 for ii, (order, leg, ten) in enumerate(edges):
-                    if (ten == t1):
+                    if ten == t1:
                         edges[ii] = (order, leg - sum(ii < leg for ii in ax1), ten)
-                    elif (ten == t2):
+                    elif ten == t2:
                         edges[ii] = (order, lt1 + leg - sum(ii < leg for ii in ax2), t1)
             ax1, ax2 = [], []
         order1, leg1, ten1 = edges.pop()
@@ -76,14 +63,13 @@ def ncon(ts, inds, conjs=None):
             conjs[t1], conjs[t2] = 0, 0
             lt1 = sum(ii[2] == t1 for ii in edges)
             for ii, (order, leg, ten) in enumerate(edges):
-                if (ten == t2):
+                if ten == t2:
                     edges[ii] = (order, leg + lt1, t1)
             del ts[t2]
         order = [ed[1] for ed in sorted(edges)]
         _, result = ts.popitem()
         return result.transpose(axes=order, inplace=True)
-    else:
-        result = 1
-        for num in ts.values():
-            result *= num.to_number()
-        return result
+    result = 1
+    for num in ts.values():
+        result *= num.to_number()
+    return result
