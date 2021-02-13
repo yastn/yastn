@@ -1,7 +1,7 @@
 import logging
+import numpy as np
 from yamps.yast import ncon
 from .geometry import Geometry
-import numpy as np
 
 class FatalError(Exception):
     pass
@@ -262,8 +262,8 @@ class Mps:
             including "trivial" leftmost and rightmost virtual indices.
         """
 
-        Ds = [self.A[n].get_leg_shape(self.left[0]) for n in self.g.sweep(to='last')]
-        Ds.append(self.A[self.g.last].get_leg_shape(self.right[0]))
+        Ds = [self.A[n].get_shape(self.left[0]) for n in self.g.sweep(to='last')]
+        Ds.append(self.A[self.g.last].get_shape(self.right[0]))
         return Ds
 
 
@@ -278,8 +278,8 @@ class Mps:
             including "trivial" leftmost and rightmost virtual indices.
         """
 
-        Ds = [self.A[n].get_leg_tD(self.left[0]) for n in self.g.sweep(to='last')]
-        Ds.append(self.A[self.g.last].get_leg_tD(self.right[0]))
+        Ds = [self.A[n].get_leg_structure(self.left[0]) for n in self.g.sweep(to='last')]
+        Ds.append(self.A[self.g.last].get_leg__structure(self.right[0]))
         return Ds
 
 
