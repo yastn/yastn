@@ -74,9 +74,9 @@ def test_add_2():
 
     assert isclose(c1.norm_diff(c2), 0, rel_tol=tol, abs_tol=tol)
 
-    tDs = {2: b.get_leg_tD(2), 3: a.get_leg_tD(3)}
-    na = a.to_numpy(tDs)
-    nb = b.to_numpy(tDs)
+    leg_structures = {2: b.get_leg_structure(2), 3: a.get_leg_structure(3)}
+    na = a.to_numpy(leg_structures)
+    nb = b.to_numpy(leg_structures)
     nc = c1.to_numpy()
 
     assert isclose(np.linalg.norm(nc - na + 2*nb), 0, rel_tol=tol, abs_tol=tol)

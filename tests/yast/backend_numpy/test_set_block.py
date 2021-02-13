@@ -2,14 +2,15 @@
 Test functions: set_block
 """
 
+from math import isclose
+import numpy as np
+import pytest
 import yamps.yast as yast
 import config_dense_R
 import config_dense_C
 import config_U1_R
 import config_U1_C
 import config_Z2_U1_R
-from math import isclose
-import numpy as np
 
 tol = 1e-12
 
@@ -117,11 +118,9 @@ def test_set1():
     # print('3d tensor:')
     a = yast.ones(config=config_U1_R, s=(1, 1, -1), t=((0, 1), (0, 1), (0, 1)), D=((2, 3), (4, 5), (6, 7)))
     b = a.copy()
-    try:
+    with pytest.raises(yast.YastError):
         a.set_block(ts=(0, 0, 0), Ds=(3, 4, 6))  # here (3, ...) is inconsistent bond dimension
-        assert 1 == 0
-    except yast.FatalError:
-        b.set_block(ts=(0, 0, 0)) # here should infer bond dimensions
+    b.set_block(ts=(0, 0, 0)) # here should infer bond dimensions
 
     # print('diagonal tensor:')
     a = yast.rand(config=config_U1_R, isdiag=True, t=0, D=5)
