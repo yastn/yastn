@@ -1068,7 +1068,8 @@ class Tensor:
         -------
         tensor : Tensor
         """
-        a = Tensor(config=self.config, s=-self.s, n=-self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        newn = self.config.sym.fuse(self.n.reshape(1, 1, -1), np.array([1], dtype=int), -1)[0]
+        a = Tensor(config=self.config, s=-self.s, n=newn, isdiag=self.isdiag, lfuse=self.lfuse)
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
         a.A = a.config.backend.conj(self.A)
@@ -1096,7 +1097,8 @@ class Tensor:
         -------
         tensor : Tensor
         """
-        a = Tensor(config=self.config, s=-self.s, n=-self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        newn = self.config.sym.fuse(self.n.reshape(1, 1, -1), np.array([1], dtype=int), -1)[0]
+        a = Tensor(config=self.config, s=-self.s, n=newn, isdiag=self.isdiag, lfuse=self.lfuse)
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
         a.A= {ind: self.conf.back.clone(self.A[ind]) for ind in self.A}
