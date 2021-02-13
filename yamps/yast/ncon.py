@@ -1,5 +1,5 @@
 """ ncon routine for automatic contraction of a list of tensors. """
-from yamps.yast import YastError
+from .yast import YastError
 
 
 def ncon(ts, inds, conjs=None):

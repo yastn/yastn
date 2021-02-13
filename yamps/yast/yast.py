@@ -1775,8 +1775,8 @@ class Tensor:
                 raise YastError('Repeated axis')
 
     def _calculate_tDset(self):
-        self.tset = np.array([ind for ind in self.A], dtype=int).reshape(len(self.A), self._ndim, self.config.sym.nsym)
-        self.Dset = np.array([self.config.backend.get_shape(self.A[ind]) for ind in self.A], dtype=int).reshape(len(self.A), self._ndim)
+        self.tset = np.array(list(self.A), dtype=int).reshape(len(self.A), self._ndim, self.config.sym.nsym)
+        self.Dset = np.array([self.config.backend.get_shape(x) for x in self.A.values()], dtype=int).reshape(len(self.A), self._ndim)
 
     def _unpack_axes(self, *args):
         """Unpack logical axes into native axes based on self.lfuse"""

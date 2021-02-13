@@ -14,7 +14,7 @@ def test_add_0():
     c1 = a + 2 * b
     c2 = a.apxb(b, 2)
 
-    assert isclose(c1.norm_diff(c2), 0, rel_tol=tol, abs_tol=tol)
+    assert c1.norm_diff(c2) < tol  # == 0.0
 
     d = yast.rand(config=config_dense_R, isdiag=True, D=5)
     d1 = d.copy()
@@ -22,8 +22,8 @@ def test_add_0():
     e1 = 2 * d1 - (d + d)
     e2 = 2 * d - d1 - d1
 
-    assert isclose(e1.norm(), 0, rel_tol=tol, abs_tol=tol)
-    assert isclose(e2.norm(), 0, rel_tol=tol, abs_tol=tol)
+    assert e1.norm() < tol  # == 0.0
+    assert e2.norm() < tol  # == 0.0
 
     assert a.is_independent(c1)
     assert a.is_independent(c2)
@@ -43,7 +43,7 @@ def test_add_1():
 
     c1 = a + 2 * b
     c2 = a.apxb(b, 2)
-    assert isclose(c1.norm_diff(c2), 0, rel_tol=tol, abs_tol=tol)
+    assert c1.norm_diff(c2) < tol  # == 0.0
 
     d = yast.eye(config=config_U1_R, t=1, D=5)
     d1 = yast.eye(config=config_U1_R, t=2, D=5)
@@ -51,9 +51,9 @@ def test_add_1():
     e1 = 2 * d + d1
     e2 = d - 2 * d1
     e3 = d1 - 2 * d
-    assert isclose(e1.norm(), 5, rel_tol=tol, abs_tol=tol)
-    assert isclose(e2.norm(), 5, rel_tol=tol, abs_tol=tol)
-    assert isclose(e3.norm(), 5, rel_tol=tol, abs_tol=tol)
+    assert isclose(e1.norm(), 5, rel_tol=tol)
+    assert isclose(e2.norm(), 5, rel_tol=tol)
+    assert isclose(e3.norm(), 5, rel_tol=tol)
 
     assert a.is_independent(c1)
     assert a.is_independent(c2)
@@ -72,7 +72,7 @@ def test_add_2():
     c1 = a - b * 2
     c2 = a.apxb(b, -2)
 
-    assert isclose(c1.norm_diff(c2), 0, rel_tol=tol, abs_tol=tol)
+    assert c1.norm_diff(c2) < tol  # == 0.0
 
     leg_structures = {2: b.get_leg_structure(2), 3: a.get_leg_structure(3)}
     na = a.to_numpy(leg_structures)
