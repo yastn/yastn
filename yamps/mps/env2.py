@@ -1,3 +1,4 @@
+""" Environments for the <mps|mps> contractions. """
 import logging
 from yamps.yast import match_legs
 
@@ -8,9 +9,16 @@ class FatalError(Exception):
 logger = logging.getLogger('yamps.mps.env2')
 
 
-################################################
-#     environment for <bra|ket> operations     #
-################################################
+def measure_overlap(bra, ket):
+    r"""
+    Calculate overlap <bra|ket>
+
+    Returns
+    -------
+    overlap : float or complex
+    """
+    env = Env2(bra=bra, ket=ket)
+    return env.overlap()
 
 
 class Env2:
@@ -112,7 +120,7 @@ class Env2:
             if n0 is not None:
                 self.F.pop((n0, n))
             n0 = n
-        return self.F[(None, n0)].dot(self.F[(n0, None)], axes=((0, 1), (1, 0))).to_number()  
+        return self.F[(None, n0)].dot(self.F[(n0, None)], axes=((0, 1), (1, 0))).to_number()
 
     def measure(self, bd=None):
         r"""
@@ -152,5 +160,4 @@ class Env2:
 
         if self.nr_phys == 1:
             return self.F[(nl, n)].dot(self.ket.A[n], axes=(1, 0)).dot(self.F[(nr, n)], axes=(2, 0))
-        else:
-            return self.F[(nl, n)].dot(self.ket.A[n], axes=(1, 0)).dot(self.F[(nr, n)], axes=(3, 0))
+        return self.F[(nl, n)].dot(self.ket.A[n], axes=(1, 0)).dot(self.F[(nr, n)], axes=(3, 0))

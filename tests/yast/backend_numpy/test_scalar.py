@@ -1,16 +1,15 @@
-from numpy.lib.function_base import _cov_dispatcher
+from math import isclose
+import pytest
 import yamps.yast as yast
 import config_dense_C
 import config_U1_R
 import config_U1_C
-from math import isclose
-import numpy as np
 
 tol = 1e-12
 
 def scalar_vs_numpy(a, b):
-    tDsa = {ii: b.get_leg_tD(ii) for ii in range(b.ndim)}
-    tDsb = {ii: a.get_leg_tD(ii) for ii in range(a.ndim)}
+    tDsa = {ii: b.get_leg_structure(ii) for ii in range(b.get_ndim())}
+    tDsb = {ii: a.get_leg_structure(ii) for ii in range(a.get_ndim())}
     na = a.to_dense(tDsa)
     nb = b.to_dense(tDsb)
     ns = na.conj().reshape(-1) @ nb.reshape(-1)
@@ -19,12 +18,6 @@ def scalar_vs_numpy(a, b):
     assert isclose(abs(ns - sab), 0, rel_tol=tol, abs_tol=tol)
     assert isclose(abs(ns.conj() - sba), 0, rel_tol=tol, abs_tol=tol)
 
-def scalar_catch_error(a, b):
-    try:
-        a.scalar(b)        
-        assert False
-    except yast.FatalError:
-        assert True
 
 def test_scalar_0():
     a = yast.rand(config=config_dense_C, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
@@ -82,9 +75,12 @@ def test_scalar_exceptions():
 
     d = d.fuse_legs(axes=(0, (1, 2), 3))
 
-    scalar_catch_error(a, b)
-    scalar_catch_error(a, c)
-    scalar_catch_error(a, d)
+    with pytest.raises(yast.YastError):
+        a.scalar(b)
+    with pytest.raises(yast.YastError):
+        a.scalar(c)
+    with pytest.raises(yast.YastError):
+        a.scalar(d)
 
 
 if __name__ == '__main__':

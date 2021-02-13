@@ -8,12 +8,12 @@ import numpy as np
 tol = 1e-12
 
 def dot_vs_numpy(a, b, axes, conj):
-    outa = tuple(ii for ii in range(a.ndim) if ii not in axes[0])
-    outb = tuple(ii for ii in range(b.ndim) if ii not in axes[1])
-    tDs = {nn: a.get_leg_tD(ii) for nn, ii in enumerate(outa)}
-    tDs.update({nn + len(outa): b.get_leg_tD(ii) for nn, ii in enumerate(outb)})
-    tDsa = {ia: b.get_leg_tD(ib) for  ia, ib in zip(*axes)}
-    tDsb = {ib: a.get_leg_tD(ia) for  ia, ib in zip(*axes)}
+    outa = tuple(ii for ii in range(a.get_ndim()) if ii not in axes[0])
+    outb = tuple(ii for ii in range(b.get_ndim()) if ii not in axes[1])
+    tDs = {nn: a.get_leg_structure(ii) for nn, ii in enumerate(outa)}
+    tDs.update({nn + len(outa): b.get_leg_structure(ii) for nn, ii in enumerate(outb)})
+    tDsa = {ia: b.get_leg_structure(ib) for  ia, ib in zip(*axes)}
+    tDsb = {ib: a.get_leg_structure(ia) for  ia, ib in zip(*axes)}
     na = a.to_numpy(tDsa)
     nb = b.to_numpy(tDsb)
     if conj[0]:
@@ -46,8 +46,12 @@ def test_dot_1():
                     t=((-1, 2), (1, 2), (-1, 1)),
                     D=((1, 3), (5, 6), (10, 11)))
 
-    dot_vs_numpy(a, b, ((0, 1), (0, 1)), (0, 0))
-    dot_vs_numpy(a, b, ((1, 3), (1, 2)), (0, 0))
+    dot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 0))
+    dot_vs_numpy(a, b, axes=((1, 3), (1, 2)), conj=(0, 0))
+
+    fa = a.fuse_legs(axes=(0, 2, (1, 3)))
+    fb = b.fuse_legs(axes=((1, 2), 0))
+    dot_vs_numpy(fa, fb, axes=((2,), (0,)), conj=(0, 0))
 
 def test_dot_1_sparse():
     a = yast.Tensor(config=config_U1_R, s=(-1, 1, 1, -1), n=-2)

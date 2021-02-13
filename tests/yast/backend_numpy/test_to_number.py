@@ -8,14 +8,14 @@ import numpy as np
 tol = 1e-12
 
 def run_to_number(a, b, result=None):
-    ax = tuple(range(a.ndim))  # here a.ndim == b.ndim
+    ax = tuple(range(a.get_ndim()))  # here a.get_ndim() == b.get_ndim()
     t0 = a.dot(b, axes=(ax, ax), conj=(1, 0))  # 0-dim tensor with 1 element, i.e., a number
 
     nb0 = t0.to_number()  # this is 
     it0 = t0.item()  # this is python float (or int)
     
-    tDa = {ii: a.get_leg_tD(ii) for ii in range(a.ndim)}  # info on charges and dimensions on all legs
-    tDb = {ii: b.get_leg_tD(ii) for ii in range(b.ndim)}  
+    tDa = {ii: a.get_leg_structure(ii) for ii in range(a.get_ndim())}  # info on charges and dimensions on all legs
+    tDb = {ii: b.get_leg_structure(ii) for ii in range(b.get_ndim())}  
     na = a.to_numpy(tDb)  # use tDb to fill in missing zero blocks to make sure that na and nb match
     nb = b.to_numpy(tDa)
     ns = na.conj().reshape(-1) @ nb.reshape(-1)  # this is numpy scalar

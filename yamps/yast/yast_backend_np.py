@@ -407,7 +407,7 @@ def merge_to_dense(A, Dtot, meta, dtype, device='cpu'):
     """ outputs full tensor """
     Anew = np.zeros(Dtot, dtype=_data_dtype[dtype])
     for (ind, Dss) in meta:
-        Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind]
+        Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
     return Anew
 
 def merge_super_blocks(pos_tens, meta_new, meta_block, dtype, device='cpu'):

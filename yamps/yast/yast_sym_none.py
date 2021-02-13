@@ -1,4 +1,8 @@
-nsym = 0  # trivial symmetry sector
+""" Define trivial rules for dense tensor"""
+
+nsym = 0  # nothing to distinguish symmetry sector
+
+name = 'Dense'
 
 def fuse(charges, signatures, new_signature):
     """
@@ -19,4 +23,6 @@ def fuse(charges, signatures, new_signature):
         teff: nparray(int)
             matrix of effective fused charges of size k x nsym for new signature
     """
-    return (charges.swapaxes(1,2) @ signatures) # just to match non-zero dimensions; it is an empty matrix
+    # charges is an empty matrix
+    return (charges.swapaxes(1,2) @ signatures)  # swap to properly match non-zero dimensions of tset;
+    

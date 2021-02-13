@@ -74,7 +74,7 @@ def test_add_2():
 
     assert isclose(c1.norm_diff(c2), 0, rel_tol=tol, abs_tol=tol)
 
-    tDs = {2: b.get_leg_tD(2), 3: a.get_leg_tD(3)}
+    tDs = {2: b.get_leg_structure(2), 3: a.get_leg_structure(3)}
     na = a.to_numpy(tDs)
     nb = b.to_numpy(tDs)
     nc = c1.to_numpy()

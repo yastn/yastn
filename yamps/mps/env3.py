@@ -1,5 +1,6 @@
-from yamps.yast import ncon, match_legs
+""" Environments for the <mps| mpo |mps> contractions. """
 import logging
+from yamps.yast import ncon, match_legs
 
 
 class FatalError(Exception):
@@ -9,9 +10,17 @@ class FatalError(Exception):
 logger = logging.getLogger('yamps.mps.geometry')
 
 
-####################################################
-#     environment for <bra|opp|ket> operations     #
-####################################################
+def measure_mpo(bra, op, ket):
+    r"""
+    Calculate overlap <bra|ket>
+
+    Returns
+    -------
+    overlap : float or complex
+    """
+    env = Env3(bra=bra, op=op, ket=ket)
+    return env.overlap()
+
 
 class Env3:
     """
@@ -228,15 +237,15 @@ class Env3:
                 return self.F[(nl, n)].dot(AA, axes=((0), (0)), conj=(0,1)).dot(OO, axes=((0,2,3), (0,1,3))).dot(self.F[(nr, nn)], axes=((1,4), (2,1))).conj()
             elif self.nr_phys == 2 and not self.on_aux:
                 return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, 3, 4, -4, -5, 5), (2, 3, 4, -2, -3, 6), (-6, 6, 5)), (0, 1, 0, 0)).conj()
-            else:  # self.nr_phys == 2 and self.on_aux:
-                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, -2, -3, 3, 4, 5), (2, 3, 4, -4, -5, 6), (-6, 6, 5)), (0, 1, 0, 0)).conj()
+            # else: self.nr_phys == 2 and self.on_aux:
+            return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, -2, -3, 3, 4, 5), (2, 3, 4, -4, -5, 6), (-6, 6, 5)), (0, 1, 0, 0)).conj()
         else:
             if self.nr_phys == 1:
                 return self.F[(nl, n)].dot(AA, axes=((2), (0))).dot(OO, axes=((1,2,3), (0,2,4))).dot(self.F[(nr, nn)], axes=((1,4), (0,1)))
             elif self.nr_phys == 2 and not self.on_aux:
                 return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, -4, -5, 5), (2, -2, 3, -3, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
-            else:  # self.nr_phys == 2 and self.on_aux:
-                return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, -2, -3, 3, 4, 5), (2, -4, 3, -5, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
+            #else: self.nr_phys == 2 and self.on_aux:
+            return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, -2, -3, 3, 4, 5), (2, -4, 3, -5, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
 
     def Heff2_group(self, AA, n, conj=False):
         r"""Action of Heff on central site.

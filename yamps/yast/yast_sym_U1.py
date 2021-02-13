@@ -1,4 +1,8 @@
-nsym = 1  # one int used to distinguish symmetry sectors
+""" Define rules for Z2 symmetry"""
+
+nsym = 1  # single int is used to distinguish symmetry sectors
+
+name = 'U(1)'
 
 def fuse(charges, signatures, new_signature):
     """
