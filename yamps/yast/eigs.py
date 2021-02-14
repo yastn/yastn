@@ -1,15 +1,8 @@
-import logging
-import numpy as np
+from .yast import YastError
 from scipy import linalg as LA
 import time
 import tracemalloc
-
-
-class FatalError(Exception):
-    pass
-
-
-logger = logging.getLogger('yamps.tensor.eigs')
+import numpy as np
 
 
 _select_dtype = {'float64': np.float64,
@@ -22,9 +15,7 @@ def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian
 
 def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_estim, algorithm):
     if not hermitian and not Bv:
-        logger.exception(
-            'expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
-        raise FatalError
+        raise YastError('expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
     k_max = min([20, init[0].get_size()])
     if not NA:
         # n - cost of vector init
@@ -174,9 +165,8 @@ def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_es
             max([1, min([mmax, max([np.floor(.75 * m), min([mnew, np.ceil(1.3333 * m)])])])]))
 
     if abs(tnow/tout) < 1.:
-        logger.error('eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = '+omega /
-                     delta+'\nRemaining time = '+abs(1.-tnow/tout)+'\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
-        raise FatalError
+        raise YastError('eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = '+omega /
+                    delta+'\nRemaining time = '+abs(1.-tnow/tout)+'\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
     return (w[0], step, j, tnow,)
 
 
