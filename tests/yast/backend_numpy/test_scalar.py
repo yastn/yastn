@@ -1,4 +1,3 @@
-from math import isclose
 import pytest
 import yamps.yast as yast
 import config_dense_C
@@ -15,8 +14,8 @@ def scalar_vs_numpy(a, b):
     ns = na.conj().reshape(-1) @ nb.reshape(-1)
     sab = a.scalar(b)
     sba = b.scalar(a)
-    assert isclose(abs(ns - sab), 0, rel_tol=tol, abs_tol=tol)
-    assert isclose(abs(ns.conj() - sba), 0, rel_tol=tol, abs_tol=tol)
+    assert abs(ns - sab) < tol  # == 0.0
+    assert abs(ns.conj() - sba) < tol  # == 0.0
 
 
 def test_scalar_0():

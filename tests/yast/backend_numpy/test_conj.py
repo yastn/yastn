@@ -1,7 +1,6 @@
 import yamps.yast as yast
 import config_Z2_R
 import config_Z2_U1_R
-from math import isclose
 import numpy as np
 
 tol = 1e-12

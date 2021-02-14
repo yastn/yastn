@@ -1,9 +1,7 @@
 import yamps.yast as yast
 import config_dense_R
 import config_U1_R
-import config_Z2_U1_R
 from math import isclose
-import numpy as np
 
 tol = 1e-12
 
@@ -20,8 +18,8 @@ def run_to_number(a, b, result=None):
     nb = b.to_numpy(tDa)
     ns = na.conj().reshape(-1) @ nb.reshape(-1)  # this is numpy scalar
 
-    assert isclose(it0, ns, rel_tol=tol, abs_tol=tol)
-    assert isclose(it0, it0, rel_tol=tol, abs_tol=tol)
+    assert isclose(it0, ns, rel_tol=tol)
+    assert isclose(it0, it0, rel_tol=tol)
     assert (type(it0) == type(0.0)) or ((type(it0) == type(0)))  #  in the examples it is real
     assert type(it0) is not type(nb0)
 

@@ -24,7 +24,7 @@ def test_fill_0():
     assert not ((npa is a.A[()]) or (npa.base is a.A[()]) or (npa is a.A[()].base))
 
     b = yast.match_legs(tensors=[a, a, a], legs=[0, 1, 2], conjs=[1, 1, 1])
-    assert isclose(a.norm_diff(b), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(b) < tol  # == 0.0
     assert b.is_consistent()
 
     # print('0d tensor:')
@@ -34,7 +34,7 @@ def test_fill_0():
     assert npa.shape == ()
     assert a.tset.shape == (1, 0, 0)
     assert a.Dset.shape == (1, 0)
-    assert isclose(a.to_number(), 1, rel_tol=tol, abs_tol=tol)
+    assert isclose(a.to_number(), 1, rel_tol=tol)
     assert a.is_consistent()
 
     # print('1d tensor:')
@@ -47,7 +47,7 @@ def test_fill_0():
     assert a.is_consistent()
 
     b = yast.match_legs(tensors=[a], legs=[0], conjs=[1], val='zeros')
-    assert isclose(a.norm_diff(b), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(b) < tol  # == 0.0
     assert b.is_consistent()
 
     # print('diagonal tensor:')
@@ -59,7 +59,7 @@ def test_fill_0():
     assert a.Dset.shape == (1, 2)
     assert a.is_consistent()
 
-    assert isclose(np.linalg.norm(np.diag(np.diag(npa)) - npa), 0, rel_tol=tol, abs_tol=tol)
+    assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
 
 
 def test_fill_1():
@@ -74,7 +74,7 @@ def test_fill_1():
     assert a.is_consistent()
 
     b = yast.match_legs(tensors=[a, a, a, a], legs=[0, 1, 2, 3], conjs=[1, 1, 1, 1], val='ones')
-    assert isclose(a.norm_diff(b), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(b) < tol  # == 0.0
 
     # print('0d tensor:')
     a = yast.ones(config=config_U1_R)  # s=()  # t=(), D=()
@@ -83,7 +83,7 @@ def test_fill_1():
     assert npa.shape == ()
     assert a.tset.shape == (1, 0, 1)
     assert a.Dset.shape == (1, 0)
-    assert isclose(a.to_number(), 1, rel_tol=tol, abs_tol=tol)
+    assert isclose(a.to_number(), 1, rel_tol=tol)
     assert a.is_consistent()
 
     # print('1d tensor:')
@@ -96,7 +96,7 @@ def test_fill_1():
     assert a.is_consistent()
 
     b = yast.match_legs(tensors=[a], legs=[0], conjs=[1], val='ones')
-    assert isclose(a.norm_diff(b), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(b) < tol  # == 0.0
 
     # print('diagonal tensor:')
     a = yast.rand(config=config_U1_R, isdiag=True, t=0, D=5)
@@ -106,7 +106,7 @@ def test_fill_1():
     assert a.tset.shape == (1, 2, 1)
     assert a.Dset.shape == (1, 2)
     
-    assert isclose(np.linalg.norm(np.diag(np.diag(npa)) - npa), 0, rel_tol=tol, abs_tol=tol)
+    assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
     assert a.is_consistent()
 
     # print('diagonal tensor:')
@@ -117,7 +117,7 @@ def test_fill_1():
     assert a.tset.shape == (3, 2, 1)
     assert a.Dset.shape == (3, 2)
 
-    assert isclose(np.linalg.norm(np.diag(np.diag(npa)) - npa.conj()), 0, rel_tol=tol, abs_tol=tol)
+    assert np.linalg.norm(np.diag(np.diag(npa)) - npa.conj()) < tol  # == 0.0
     assert a.is_consistent()
 
     # print('diagonal tensor:')
@@ -128,7 +128,7 @@ def test_fill_1():
     assert a.tset.shape == (3, 2, 1)
     assert a.Dset.shape == (3, 2)
 
-    assert isclose(np.linalg.norm(np.diag(np.diag(npa)) - npa), 0, rel_tol=tol, abs_tol=tol)
+    assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
     assert a.is_consistent()
 
 
@@ -144,7 +144,7 @@ def test_fill_2():
     assert a.is_consistent()
 
     b = yast.match_legs(tensors=[a, a, a], legs=[0, 1, 2], conjs=[1, 1, 1], val='ones')
-    assert isclose(a.norm_diff(b), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(b) < tol  # == 0.0
 
     # print('1d tensor:')
     a = yast.ones(config=config_Z2_U1_R, s=1,
@@ -158,7 +158,7 @@ def test_fill_2():
     assert a.is_consistent()
 
     b = yast.match_legs(tensors=[a], legs=[0], conjs=[1], val='ones')
-    assert isclose(a.norm_diff(b), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(b) < tol  # == 0.0
 
     # print('diagonal tensor:')
     a = yast.rand(config=config_Z2_U1_R, isdiag=True,
@@ -168,7 +168,7 @@ def test_fill_2():
     assert np.isrealobj(npa)
     assert npa.shape == (6, 6)
     assert a.tset.shape == (3, 2, 2)
-    assert isclose(np.linalg.norm(np.diag(np.diag(npa)) - npa), 0, rel_tol=tol, abs_tol=tol)
+    assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
     assert a.is_consistent()
 
     # print('diagonal tensor:')
@@ -180,7 +180,7 @@ def test_fill_2():
     assert npa.shape == (2, 2)
     assert a.tset.shape == (1, 2, 2)
 
-    assert isclose(np.linalg.norm(np.diag(np.diag(npa)) - npa), 0, rel_tol=tol, abs_tol=tol)
+    assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
     assert a.is_consistent()
 
 

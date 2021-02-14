@@ -2,7 +2,6 @@ import yamps.yast as yast
 import config_dense_R
 import config_U1_R
 import config_Z2_U1_R
-from math import isclose
 
 tol = 1e-10
 
@@ -11,7 +10,7 @@ def svd_combine(a):
     US = U.dot(S, axes=(2, 0))
     USV = US.dot(V, axes=(2, 0))
     USV = USV.transpose(axes=(3, 1, 2, 0))
-    assert isclose(a.norm_diff(USV), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(USV) < tol  # == 0.0
     assert a.is_consistent()
     assert U.is_consistent()
     assert S.is_consistent()
@@ -23,7 +22,7 @@ def svd_order_combine(a):
     US = S.dot(U, axes=(0, 0))
     USV = US.dot(V, axes=(0, 2))
     USV = USV.transpose(axes=(3, 1, 2, 0))
-    assert isclose(a.norm_diff(USV), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(USV) < tol  # == 0.0
     assert U.is_consistent()
     assert S.is_consistent()
     assert V.is_consistent()
@@ -33,7 +32,7 @@ def qr_combine(a):
     Q, R = a.split_qr(axes=((3, 1), (2, 0)))
     QR = Q.dot(R, axes=(2, 0))
     QR = QR.transpose(axes=(3, 1, 2, 0))
-    assert isclose(a.norm_diff(QR), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(QR) < tol  # == 0.0
     assert Q.is_consistent()
     assert R.is_consistent()
 
@@ -42,7 +41,7 @@ def qr_order_combine(a):
     Q, R = a.split_qr(axes=((3, 1), (2, 0)), sQ=-1, Qaxis=-2, Raxis=1)
     QR = Q.dot(R, axes=(1, 1))
     QR = QR.transpose(axes=(3, 1, 2, 0))
-    assert isclose(a.norm_diff(QR), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(QR) < tol  # == 0.0
     assert Q.is_consistent()
     assert R.is_consistent()
 
@@ -52,7 +51,7 @@ def eigh_combine(a):
     S, U = a2.split_eigh(axes=((0, 1), (2, 3)))
     US = U.dot(S, axes=(2, 0))
     USU = US.dot(U, axes=(2, 2), conj=(0, 1))
-    assert isclose(a2.norm_diff(USU), 0, rel_tol=tol, abs_tol=tol)
+    assert a2.norm_diff(USU) < tol  # == 0.0
     assert U.is_consistent()
     assert S.is_consistent()
 
@@ -62,7 +61,7 @@ def eigh_order_combine(a):
     S, U = a2.split_eigh(axes=((0, 1), (2, 3)), Uaxis=0, sU=-1)
     US = S.dot(U, axes=(0, 0))
     USU = US.dot(U, axes=(0, 0), conj=(0, 1))
-    assert isclose(a2.norm_diff(USU), 0, rel_tol=tol, abs_tol=tol)
+    assert a2.norm_diff(USU) < tol  # == 0.0
     assert U.is_consistent()
     assert S.is_consistent()
 

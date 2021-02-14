@@ -16,9 +16,9 @@ def test_entropy():
     a = (U.dot(S, axes=(2, 0))).dot(V, axes=(2, 0))
     
     entropy, Smin, normalization = a.entropy(axes=((0, 1), (2, 3)))
-    assert isclose(entropy, np.log2(41), rel_tol=tol, abs_tol=tol)
-    assert isclose(Smin, 1, rel_tol=tol, abs_tol=tol)
-    assert isclose(normalization, np.sqrt(41), rel_tol=tol, abs_tol=tol)
+    assert isclose(entropy, np.log2(41), rel_tol=tol)
+    assert isclose(Smin, 1, rel_tol=tol)
+    assert isclose(normalization, np.sqrt(41), rel_tol=tol)
 
 if __name__ == '__main__':
     test_entropy()

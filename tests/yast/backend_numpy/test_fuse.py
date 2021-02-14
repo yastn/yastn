@@ -6,7 +6,6 @@ tol = 1e-10
 
 import yamps.yast as yast
 import config_U1_R
-from math import isclose
 import numpy as np
 
 
@@ -19,7 +18,7 @@ def test_fuse():
     c.unfuse_legs(axes=1, inplace=True)
     c.unfuse_legs(axes=2, inplace=True)
     d = c.moveaxis(source=1, destination=0)
-    assert isclose(a.norm_diff(d), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(d) < tol  # == 0.0
 
 def test_fuse_dot():
     a = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1, 1,),
@@ -37,7 +36,7 @@ def test_fuse_dot():
     r1 = a.dot(b, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 1))
     r1f = af.dot(bf, axes=(0, 0), conj=(0, 1))
     r1uf = r1f.unfuse_legs(axes=(0, 1))
-    isclose(r1.norm_diff(r1uf), 0, rel_tol=tol, abs_tol=tol)
+    r1.norm_diff(r1uf) < tol  # == 0.0
 
 def test_fuse_split():
     a = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1, 1,),
@@ -54,28 +53,28 @@ def test_fuse_split():
     V = V.fuse_legs(axes=(0, (1, 2)))
 
     a2 = U.dot(S, axes=(1, 0)).dot(V, axes=(1, 0))
-    assert isclose(af.norm_diff(a2), 0, rel_tol=tol, abs_tol=tol)
+    assert af.norm_diff(a2) < tol  # == 0.0
     a3 = Uf.dot(Sf, axes=(1, 0)).dot(Vf, axes=(1, 0))
-    assert isclose(af.norm_diff(a3), 0, rel_tol=tol, abs_tol=tol)
+    assert af.norm_diff(a3) < tol  # == 0.0
     a3.unfuse_legs(axes=0, inplace=True)
     a3.unfuse_legs(axes=(1, 2), inplace=True)
     a3.moveaxis(source=2, destination=1, inplace=True)
-    assert isclose(a.norm_diff(a3), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(a3) < tol  # == 0.0
 
     Qf, Rf = af.split_qr(axes=(0, 1))
     Q, R = a.split_qr(axes=((0, 1, 2), (3, 4)))
     Q = Q.fuse_legs(axes=(0, (2, 1), 3))
     Q.fuse_legs(axes=((0, 1), 2), inplace=True)
-    assert isclose(Q.norm_diff(Qf), 0, rel_tol=tol, abs_tol=tol)
+    assert Q.norm_diff(Qf) < tol  # == 0.0
     Rf.unfuse_legs(axes=1, inplace=True)
-    assert isclose(R.norm_diff(Rf), 0, rel_tol=tol, abs_tol=tol)
+    assert R.norm_diff(Rf) < tol  # == 0.0
 
     aH = af.dot(af, axes=(1, 1), conj=(0, 1))
     Vf, Uf = aH.split_eigh(axes=(0, 1))
     Uf.unfuse_legs(axes=0, inplace = True)
     aH2 = (Uf.dot(Vf, axes=(2, 0))).dot(Uf, axes=(2, 2), conj=(0, 1))
     aH.unfuse_legs(axes=(0, 1), inplace=True)
-    assert isclose(aH2.norm_diff(aH), 0, rel_tol=tol, abs_tol=tol)
+    assert aH2.norm_diff(aH) < tol  # == 0.0
 
 
 def test_fuse_transpose():
