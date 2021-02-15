@@ -25,10 +25,10 @@ def test_ncon_0():
     y = yast.ncon([a, b, c, d], [[4, -3, -1], [-4, -2, 5], [4, 3, 1, 1], [3, 2, 5, 2]], [0, 1, 0, 1]) 
     assert y.get_shape() == (1, 2, 3, 4)
 
-    z1 = yast.ncon([e, f], [[-3, -1], [-2, -4]], [0, 1]) 
-    z2 = yast.ncon([f, e], [[-2, -4], [-3, -1]], [1, 0])     
-    z3 = yast.ncon([e, f], [[-3, -1], [-2, -4]], [0, 0]) 
-    z4 = yast.ncon([f, e], [[-2, -4], [-3, -1]], [1, 1]) 
+    z1 = yast.ncon([e, f], [[-3, -1], [-2, -4]], [0, 1])
+    z2 = yast.ncon([f, e], [[-2, -4], [-3, -1]], [1, 0])
+    z3 = yast.ncon([e, f], [[-3, -1], [-2, -4]], [0, 0])
+    z4 = yast.ncon([f, e], [[-2, -4], [-3, -1]], [1, 1])
     assert z1.get_shape() == (1, 2, 3, 4)
     assert z2.get_shape() == (1, 2, 3, 4)
     assert z3.get_shape() == (1, 2, 3, 4)
@@ -49,7 +49,7 @@ def test_ncon_0():
     y5 = yast.ncon([a, a, b, b], [[6, 5, 4], [6, 5, 4], [1, 3, 2], [1, 3, 2]], [0, 1, 0, 1]) 
     # assert isinstance(y4, complex)
     # assert isinstance(y5, complex)
-    assert isclose(abs(y4-y5), 0, rel_tol=tol, abs_tol=tol)
+    assert abs(y4 - y5) / abs(y4) < tol  # == 0.0
 
 def test_ncon_1():
     a = yast.rand(config=config_U1_R, s=[-1, 1, -1], n=0, 

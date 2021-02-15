@@ -2,7 +2,6 @@ import yamps.yast as yast
 import config_dense_C
 import config_U1_R
 import config_Z2_U1_R
-from math import isclose
 import numpy as np
 
 tol = 1e-12
@@ -26,7 +25,7 @@ def dot_vs_numpy(a, b, axes, conj):
     assert c.is_consistent()
     assert a.is_independent(c)
     assert c.is_independent(b)
-    assert isclose(np.linalg.norm(nc - nab), 0, rel_tol=tol, abs_tol=tol)
+    assert np.linalg.norm(nc - nab) < tol  # == 0.0
 
 def test_dot_0():
     a = yast.rand(config=config_dense_C, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))

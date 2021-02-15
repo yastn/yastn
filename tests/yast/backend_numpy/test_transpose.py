@@ -3,9 +3,7 @@ import numpy as np
 import config_dense_R
 import config_U1_R
 import config_Z2_U1_R
-from math import isclose
 
-tol = 1e-12
 
 def run_moveaxis(a, ad, source, destination, result):
     newa = a.moveaxis(source=source, destination=destination)
