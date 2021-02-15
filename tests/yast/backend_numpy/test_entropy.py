@@ -10,9 +10,9 @@ def test_entropy():
                     t=[(0, 1), (-1, 0), (-1, 0, 1), (-1, 0, 1)],
                     D=[(5, 6), (5, 6), (2, 3, 4), (2, 3, 4)])
     U, S, V = a.split_svd(axes=((0, 1), (2, 3)), sU=-1) 
-    S.set_block(ts=-2, Ds=4, val='ones') 	
-    S.set_block(ts=-1, Ds=12, val='ones') 	
-    S.set_block(ts=0, Ds=25, val='ones')	
+    S.set_block(ts=-2, Ds=4, val='ones')
+    S.set_block(ts=-1, Ds=12, val='ones')
+    S.set_block(ts=0, Ds=25, val='ones')
     a = (U.dot(S, axes=(2, 0))).dot(V, axes=(2, 0))
     
     entropy, Smin, normalization = a.entropy(axes=((0, 1), (2, 3)))
