@@ -491,7 +491,7 @@ class Tensor:
                 self.A[ts] = self.config.backend.to_tensor(np.diag(val), Ds, dtype=self.config.dtype, device=device)
             else:
                 # TODO Ds is given implicitly by the val n-dim array
-                self.A[ts] = self.config.backend.to_tensor(val, dtype=self.config.dtype, device=device)
+                self.A[ts] = self.config.backend.to_tensor(val, Ds=Ds, dtype=self.config.dtype, device=device)
         # here it checkes the consistency of bond dimensions
         self._calculate_tDset()
         tD = [self.get_leg_structure(n, native=True) for n in range(self._ndim)]
@@ -801,14 +801,27 @@ class Tensor:
 
         settings_dense= SimpleNamespace(backend= self.config.backend, dtype=self.config.dtype, \
             device=self.config.device, sym=sym_none)
+        val=self.config.backend.merge_to_dense(self.A, Dtot, meta, self.config.dtype, device)
         # TODO handling of diag tensors
-        T= Tensor(config=settings_dense, s=self.s, n=None, isdiag=self.isdiag)
-        T.set_block(val=self.config.backend.merge_to_dense(self.A, Dtot, meta, self.config.dtype, device))
+        # TODO signatures if leg_structures is supplied
+        if leg_structures is None and (native or self.isdiag):
+            T= Tensor(config=settings_dense, s=self.s, n=None, isdiag=self.isdiag)
+        elif leg_structures is None and not native and not self.isdiag:
+            T= Tensor(config=settings_dense, s=self.s if self.ldim()==self._ndim else [1]*self.ldim(), \
+                n=None, isdiag=self.isdiag)
+        else:
+            T= Tensor(config=settings_dense, s=[1]*len(Dtot), n=None)
+        T.set_block(val=val, Ds=Dtot)
         return T
 
     def to_numpy(self, leg_structures=None):
-        """Create full nparray corresponding to the symmetric tensor."""
-        return self.config.backend.to_numpy(self.to_dense(leg_structures=leg_structures))
+        r"""
+        Create full nparray corresponding to the symmetric tensor.
+        
+        First, create a yast.Tensor with no symmetry then extract the only block.
+        """
+        return self.config.backend.to_numpy(
+            self.to_dense(leg_structures=leg_structures).to_raw_tensor())
 
     def to_raw_tensor(self):
         """
@@ -1893,8 +1906,11 @@ class _Leg_struct:
             for ind in D_keep:
                 D_keep[ind] = min(D_keep[ind], self.config.backend.count_greater(A[ind], maxS * opts['tol']))
         if sum(D_keep[ind] for ind in D_keep) > opts['D_total']:  # truncate to total bond dimension
-            order = self.config.backend.select_global_largest(A, D_keep, opts['D_total'], \
-                sorting, keep_multiplets=opts['keep_multiplets'], eps_multiplet=opts['eps_multiplet'])
+            if 'keep_multiplets' in opts.keys():
+                order = self.config.backend.select_global_largest(A, D_keep, opts['D_total'], \
+                    sorting, keep_multiplets=opts['keep_multiplets'], eps_multiplet=opts['eps_multiplet'])
+            else:
+                order = self.config.backend.select_global_largest(A, D_keep, opts['D_total'], sorting)
             low = 0
             for ind in D_keep:
                 high = low + D_keep[ind]
@@ -1902,7 +1918,7 @@ class _Leg_struct:
                 low = high
         
         # check symmetry related blocks and truncate to equal length
-        if opts['keep_multiplets']:
+        if 'keep_multiplets' in opts.keys() and opts['keep_multiplets']:
             ind_list= [np.asarray(k) for k in D_keep.keys()]
             for ind in ind_list:
                 t= tuple(ind)
