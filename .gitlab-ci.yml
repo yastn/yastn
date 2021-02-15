@@ -48,7 +48,7 @@ pylint:
   allow_failure: true
   script:
   - pip install pylint
-  - pylint -d C0301,C0103 yamps/yast/*.py
+  - pylint -d C0301,C0103,R0801 yamps/yast/*.py
 
 test_python3.7_conda_numpy1.19.1: 
   image: python:3.7

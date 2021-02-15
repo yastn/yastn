@@ -188,7 +188,7 @@ def from_dict(config=None, d=None):
     return None
 
 
-def decompress_from_1d(r1d, config=None, d={}):
+def decompress_from_1d(r1d, config, d):
     """
     Generate tensor based on information in dictionary d and 1D array
     r1d containing the serialized blocks
@@ -213,7 +213,6 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
     Initialize tensor matching legs of existing tensors, so that it can be contracted with those tensors.
 
     Finds all matching symmetry sectors and their bond dimensions and passes it to :meth:`Tensor.fill_tensor`.
-    Can creat diagonal tensor by matching to one leg of one other tensor.
 
     Parameters
     ----------
@@ -226,23 +225,24 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
     val: str
         'randR', 'rand', 'ones', 'zeros'
     """
-    t, D, s = [], [], []
+    t, D, s, lf = [], [], [], []
     if conjs is None:
-        conjs = [0] * len(tensors)
+        conjs = (0,) * len(tensors)
     for n, te, cc in zip(legs, tensors, conjs):
-        tdn = te.get_leg_structure(n, native=True)
-        t.append(tuple(tdn.keys()))
-        D.append(tuple(tdn.values()))
-        s.append(te.s[n] * (2 * cc - 1))
-    a = tensors[0].empty(s=s, isdiag=isdiag)
+        lf.append(te.lfuse[n])
+        un, = te._unpack_axes((n,))
+        for n in un:
+            tdn = te.get_leg_structure(n, native=True)
+            t.append(tuple(tdn.keys()))
+            D.append(tuple(tdn.values()))
+            s.append(te.s[n] * (2 * cc - 1))
+    a = tensors[0].empty(s=s, isdiag=isdiag, lfuse=lf)
     a.fill_tensor(t=t, D=D, val=val)
     return a
 
 
-def block(tensors, common_legs):
+def block(tensors, common_legs=None):
     """ Assemble new tensor by blocking a set of tensors.
-
-        ADD SUPPORT FOR FUSION
 
         Parameters
         ----------
@@ -251,35 +251,39 @@ def block(tensors, common_legs):
             Length of tuple should be equall to tensor.ndim - len(common_legs)
 
         common_legs : list
-            Legs which are not blocked
+            Legs that are not blocked
             (equivalently on common legs all tensors have the same position in the supertensor, and those positions are not given in tensors)
 
     """
-    try:
-        lc = len(common_legs)
-        out_s = tuple(common_legs)
-    except TypeError:
-        out_s = (common_legs,)
-        lc = 1
-
+    out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
-    out_b = tuple(ii for ii in range(tn0.nnlegs) if ii not in out_s)
+    out_b = tuple((ii,) for ii in range(len(tn0.lfuse)) if ii not in out_s)
+    pos = list(_clear_axes(*tensors))
+    lind = len(tn0.lfuse) - len(out_s)
+    for ind in pos:
+        if len(ind) != lind:
+            raise YastError('Wrong number of coordinates encoded in tensors.keys()')
 
-    lb = tn0.nnlegs - lc
-    pos = []
-    for ind in tensors:
-        if (lb != len(ind)) or (tensors[ind].nnlegs != tn0.nnlegs) or (not np.all(tensors[ind].s == tn0.s)) or (not np.all(tensors[ind].n == tn0.n)) or (tn0.isdiag != tensors[ind].isdiag):
-            raise YastError('Dimensions, ndims, signatures or total charges of blocked tensors are not consistent')
-        pos.append(ind)
+    out_s, =  tn0._unpack_axes(out_s)
+    u_b = tuple(tn0._unpack_axes(*out_b))
+    out_b = tuple(itertools.chain(*u_b))
+    pos = tuple(tuple(itertools.chain.from_iterable(itertools.repeat(x, len(u)) for x, u in zip(ind, u_b))) for ind in pos)
+
+    for ind, tn in tensors.items():
+        ind, = _clear_axes(ind)
+        if tn.nnlegs != tn0.nnlegs or tn.lfuse != tn0.lfuse or\
+           not np.all(tn.s == tn0.s) or not np.all(tn.n == tn0.n) or\
+           tn.isdiag != tn0.isdiag :
+                raise YastError('Ndims, signatures, total charges or fusion trees of blocked tensors are inconsistent.')
 
     posa = np.ones((len(pos), tn0.nnlegs), dtype=int)
-    posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int)
+    posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int).reshape(len(pos), -1)
 
     tDs = []  # {leg: {charge: {position: D, 'D' : Dtotal}}}
     for n in range(tn0.nnlegs):
         tDl = {}
-        for ind, pp in zip(pos, posa):
-            tDn = tensors[ind].get_leg_structure(n, native=True)
+        for tn, pp in zip(tensors.values(), posa):
+            tDn = tn.get_leg_structure(n, native=True)
             for t, D in tDn.items():
                 if t in tDl:
                     if (pp[n] in tDl[t]) and (tDl[t][pp[n]] != D):
@@ -297,7 +301,7 @@ def block(tensors, common_legs):
     # all unique blocks
     # meta_new = {tind: Dtot};  #meta_block = [(tind, pos, Dslc)]
     meta_new, meta_block = {}, []
-    for pind, pa in zip(pos, posa):
+    for pind, pa in zip(tensors, posa):
         a = tensors[pind]
         for t in a.tset:
             tind = tuple(t.flat)
@@ -306,7 +310,7 @@ def block(tensors, common_legs):
             meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.nnlegs))))
     meta_new = tuple((ts, Ds) for ts, Ds in meta_new.items())
 
-    c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n)
+    c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n, lfuse=tn0.lfuse)
     c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, a.config.dtype, c.device)
     c.calculate_tDset()
     return c
@@ -839,9 +843,7 @@ class Tensor:
         -------
         norm : float64
         """
-        if len(self.A) == 0:
-            return self.zero_of_dtype()
-        return self.config.backend.norm(self.A, ord=ord)
+        return self.zero_of_dtype() if len(self.A) == 0 else self.config.backend.norm(self.A, ord=ord)
 
     def norm_diff(self, other, ord='fro'):
         """
@@ -903,13 +905,13 @@ class Tensor:
 
     def max_abs(self):
         """
-        Largest element by magnitude.
+        Largest element by magnitude.  THIS IS OBSOLATE norm(ord = 'inf') DOES THE SAME
 
         Returns
         -------
         max_abs : float64
         """
-        return self.config.backend.max_abs(self.A)
+        return self.zero_of_dtype() if len(self.A) == 0 else self.config.backend.max_abs(self.A)
 
     #############################
     #     linear operations     #
@@ -1375,8 +1377,8 @@ class Tensor:
         t_a_con, t_b_con = self.tset[:, na_con, :], other.tset[:, nb_con, :]
         inda, indb = _indices_common_rows(t_a_con, t_b_con)
 
-        Am, ls_l, _, ua_l, ua_r = self._merge_to_matrix(a_out, a_con, conja, -conja, inda, sort_r=True)
-        Bm, _, ls_r, ub_l, ub_r = other._merge_to_matrix(b_con, b_out, conjb, -conjb, indb)
+        Am, ls_l, ls_ac, ua_l, ua_r = self._merge_to_matrix(a_out, a_con, conja, -conja, inda, sort_r=True)
+        Bm, ls_bc, ls_r, ub_l, ub_r = other._merge_to_matrix(b_con, b_out, conjb, -conjb, indb)
 
         meta_dot = tuple((al + br, al + ar, bl + br)  for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
@@ -1787,12 +1789,8 @@ class Tensor:
 class _Leg_struct:
     """Information about internal structure of leg resulting from fusions."""
     def __init__(self, config=None, s=(), news=1):
-        try:
-            self.nlegs = len(s)  # number of fused legs
-            self.s = tuple(s)  # signature of fused legs
-        except TypeError:
-            self.s = (s,)
-            self.nlegs = 1
+        self.s, = _clear_axes(s)  # signature of fused legs
+        self.nlegs = len(self.s)  # number of fused legs
         self.config = config
         self.news = news # signature of effective leg
         self.D = {}
@@ -1850,7 +1848,7 @@ class _Leg_struct:
         Sorting gives information about ordering outputed by a particular splitting funcion:
         Usual convention is that for svd A[ind][0] is largest; and for eigh A[ind][-1] is largest.
         """
-        maxS = self.config.backend.maximum(A)
+        maxS = 0 if len(A) == 0 else self.config.backend.maximum(A)
         Dmax, D_keep = {}, {}
         for ind in A:
             Dmax[ind] = self.config.backend.get_size(A[ind])
@@ -1858,7 +1856,7 @@ class _Leg_struct:
         if (opts['tol'] > 0) and (maxS > 0):  # truncate to relative tolerance
             for ind in D_keep:
                 D_keep[ind] = min(D_keep[ind], self.config.backend.count_greater(A[ind], maxS * opts['tol']))
-        if sum(D_keep[ind] for ind in D_keep) > opts['D_total']:  # truncate to total bond dimension
+        if sum(D_keep.values()) > opts['D_total']:  # truncate to total bond dimension
             order = self.config.backend.select_global_largest(A, D_keep, opts['D_total'], sorting)
             low = 0
             for ind in D_keep:

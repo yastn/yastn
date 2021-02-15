@@ -10,7 +10,7 @@ def ncon(ts, inds, conjs=None):
         if ts[ii].ldim() != len(ind):
             raise YastError('Wrong number of legs in %02d-th tensors.' % ii)
 
-    ts = {ind: val for ind, val in enumerate(ts)}
+    ts = dict(enumerate(ts))
     cutoff = 512
     cutoff2 = 2 * cutoff
     edges = [(order, leg, ten) if order >= 0 else (-order + cutoff2, leg, ten) for ten, el in enumerate(inds) for leg, order in enumerate(el)]

@@ -4,6 +4,7 @@ Test elements of logical leg's fusion.
 
 tol = 1e-10
 
+from math import isclose
 import yamps.yast as yast
 import config_U1_R
 import numpy as np
@@ -111,9 +112,64 @@ def test_get_shapes():
     assert a.get_shape() == (a.get_size(), )
     assert a.to_numpy().shape == (a.get_size(), )
 
+
+def test_fuse_match_legs():
+    a = yast.ones(config=config_U1_R, s=(-1, -1, -1, 1, 1, 1),
+                  t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
+                  D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
+    b = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1, 1,),
+                  t=((-1, 0, 1), (1,), (-1, 1), (0, 1), (0, 1, 2)),
+                  D=((2, 1, 2), (4,), (4, 6), (7, 8), (9, 10, 11)))
+    af = a.fuse_legs(axes=((0, 1), (2, 3, 4), 5))
+    bf = b.fuse_legs(axes=(0, (1, 2), 3, 4))
+    bff = bf.fuse_legs(axes=(0, (1, 2), 3))
+    
+    c1 = yast.match_legs(tensors=[a, a, a, b, b, b], legs=[2, 3, 4, 1, 2, 3], conjs=[0, 0, 0, 1, 1, 1], val='ones')
+    r1 = yast.ncon([a, b, c1], [[-1, -2, 1, 2, 3, -3], [-4, 4, 5, 6, -5], [1, 2, 3, 4, 5, 6]],  [0, 1, 0])
+
+    c2 = yast.match_legs(tensors=[af, bff], legs=[1, 1], conjs=[0, 1], val='ones')
+    r2 = yast.ncon([af, bff, c2], [[-1, 1, -2], [-3, 2, -4], [1, 2]],  [0, 1, 0])
+    
+    c3 = c2.unfuse_legs(axes=1)  # partial unfuse
+    r3 = yast.ncon([af, bf, c3], [[-1, 1, -2], [-3, 2, 3, -4], [1, 2, 3]],  [0, 1, 0])
+    
+    assert r3.norm_diff(r2) < tol  # == 0.0
+    r2.unfuse_legs(axes=0, inplace=True)
+    assert r1.norm_diff(r2) < tol  # == 0.0
+
+
+def test_fuse_block():
+    l1 = yast.rand(config=config_U1_R, s=(1, 1), t=[(0, 1), (0, 1)], D=[(1, 2), (2, 3)])
+    l2 = yast.rand(config=config_U1_R, s=(1, 1), t=[(0, 1), (0, 1)], D=[(2, 3), (3, 4)])
+    c1 = yast.rand(config=config_U1_R, s=(-1, -1, 1, 1),
+                   t=[(0, 1), (0, 1), (0, 1), (0, 1)],
+                   D=[(1, 2), (2, 3), (3, 4), (4, 5)])
+    c2 = yast.rand(config=config_U1_R, s=(-1, -1, 1, 1),
+                   t=[(0, 1), (0, 1), (0, 1), (0, 1)],
+                   D=[(2, 3), (3, 4), (4, 5), (5, 6)])
+    r1 = yast.rand(config=config_U1_R, s=(-1, -1), t=[(0, 1), (0, 1)], D=[(3, 4), (4, 5)])
+    r2 = yast.rand(config=config_U1_R, s=(-1, -1), t=[(0, 1), (0, 1)], D=[(4, 5), (5, 6)])
+
+    s1 = yast.ncon([l1, c1, r1], [[1, 2], [1, 2, 3, 4], [3, 4]]) +\
+         yast.ncon([l2, c2, r2], [[1, 2], [1, 2, 3, 4], [3, 4]])
+    l1.fuse_legs(axes=[(0, 1)], inplace=True)
+    l2.fuse_legs(axes=[(0, 1)], inplace=True)
+    c1.fuse_legs(axes=((0, 1), (2, 3)), inplace=True)
+    c2.fuse_legs(axes=((0, 1), (2, 3)), inplace=True)
+    r1.fuse_legs(axes=[(0, 1)], inplace=True)
+    r2.fuse_legs(axes=[(0, 1)], inplace=True)
+    bl = yast.block({1: l1, 2: l2})
+    bc = yast.block({(1, 1): c1, (2, 2): c2})
+    br = yast.block({1: r1, 2: r2})
+    s2 = yast.ncon([bl, bc, br], [[1], [1, 2], [2]])
+    assert isclose(s1, s2, rel_tol=tol)
+
+
 if __name__ == '__main__':
     test_fuse()
     test_fuse_dot()
     test_fuse_split()
     test_fuse_transpose()
     test_get_shapes()
+    test_fuse_match_legs()
+    test_fuse_block()
