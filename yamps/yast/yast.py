@@ -10,6 +10,7 @@ An instance of a Tensor is specified by a list of blocks (dense tensors) labeled
 import itertools
 import numpy as np
 from types import SimpleNamespace
+import yamps.yast.yast_sym_none as sym_none
 
 
 # flags that controls which checks are performed
@@ -203,7 +204,7 @@ def decompress_from_1d(r1d, config=None, d={}):
     """
     a = Tensor(config=config, **d)
     A = {(): r1d}
-    a.A = a.config.backend.unmerge_one_leg(A, 0, d['meta_umrg'])
+    a.A = a.config.backend.unmerge_one_leg(A, 0, d['meta_unmerge'])
     a._calculate_tDset()
     return a
 
@@ -451,22 +452,29 @@ class Tensor:
 
         ats = np.array(ts, dtype=int).reshape(1, self._ndim, self.config.sym.nsym)
         if not np.all(self.config.sym.fuse(ats, self.s, 1) == self.n):
-            raise YastError('Charges ts are not consistent with the symmetry rules: t @ s - n != 0')
-
-        if Ds is None:
-            Ds = []
-            tD = [self.get_leg_structure(n, native=True) for n in range(self._ndim)]
-            for n in range(self._ndim):
-                try:
-                    Ds.append(tD[n][tuple(ats[0, n, :].flat)])
-                except KeyError:
-                    raise YastError('Cannot infer all bond dimensions')
-        Ds = tuple(Ds)
+            raise YastError('Charges ts are not consistent with the symmetry rules: t @ s - n != 0')            
 
         # NOTE assume default device to be cpu
         device= 'cpu' if not hasattr(self.config, 'device') else self.config.device
 
         if isinstance(val, str):
+            if ts in self.A.keys(): 
+                if Ds is None:
+                    # attempt to read Ds from existing block
+                    Ds = []
+                    tD = [self.get_leg_structure(n, native=True) for n in range(self._ndim)]
+                    for n in range(self._ndim):
+                        try:
+                            Ds.append(tD[n][tuple(ats[0, n, :].flat)])
+                        except KeyError:
+                            raise YastError('Cannot infer all bond dimensions')
+                    Ds = tuple(Ds)
+                else:
+                    # TODO allow changing size of the sector ?
+                    pass  
+            else:
+                assert Ds is not None, "No ts block "+str(ts)+" exists, Ds must be provided"
+
             if val == 'zeros':
                 self.A[ts] = self.config.backend.zeros(Ds, dtype=self.config.dtype, device=device)
             elif val == 'randR':
@@ -482,7 +490,8 @@ class Tensor:
             if self.isdiag and val.ndim == 1 and np.prod(Ds)==(val.size**2):
                 self.A[ts] = self.config.backend.to_tensor(np.diag(val), Ds, dtype=self.config.dtype, device=device)
             else:
-                self.A[ts] = self.config.backend.to_tensor(val, Ds, dtype=self.config.dtype, device=device)
+                # TODO Ds is given implicitly by the val n-dim array
+                self.A[ts] = self.config.backend.to_tensor(val, dtype=self.config.dtype, device=device)
         # here it checkes the consistency of bond dimensions
         self._calculate_tDset()
         tD = [self.get_leg_structure(n, native=True) for n in range(self._ndim)]
@@ -596,12 +605,16 @@ class Tensor:
         D_tot = np.sum(D_rsh)
         meta_new = (((), D_tot),)
         # meta_mrg = ((tn, Ds, to, Do), ...)
-        meta_mrg = tuple(((), (aD-D, aD), tuple(t.flat), (D,)) for t, D, aD in zip(self.tset, D_rsh, aD_rsh))
-        A = self.config.backend.merge_one_leg(self.A, 0, tuple(range(self._ndim)), meta_new, meta_mrg, self.config.dtype, self.device)
+        meta_mrg = tuple(((), (aD-D, aD), tuple(t.flat), (D,)) \
+            for t, D, aD in zip(self.tset, D_rsh, aD_rsh))
+        A = self.config.backend.merge_one_leg(self.A, 0, tuple(range(self._ndim)), \
+            meta_new, meta_mrg, self.config.dtype, self.device)
 
         # (told, tnew, Dsl, Dnew)
-        meta_umrg = tuple((told, tnew, Dsl, tuple(Dnew)) for (told, Dsl, tnew, _), Dnew in zip(meta_mrg, self.Dset))
-        meta = {'s': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, 'lfuse': self.lfuse, 'meta_umrg':meta_umrg}
+        meta_unmerge = tuple((told, tnew, Dsl, tuple(Dnew)) \
+            for (told, Dsl, tnew, _), Dnew in zip(meta_mrg, self.Dset))
+        meta = {'s': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, \
+        'lfuse': self.lfuse, 'meta_unmerge':meta_unmerge}
         return meta, A[()]
 
     ############################
@@ -626,7 +639,14 @@ class Tensor:
         print()
 
     def __str__(self):
-        return str(self.A)
+        # return str(self.A)
+        ts, Ds= self.get_leg_charges_and_dims(native=False)
+        s=f"{self.config.sym.name} s= {self.s} n= {self.n}\n"
+        # s+=f"charges      : {self.ts}\n"
+        s+=f"leg charges  : {ts}\n"
+        s+=f"dimensions   : {Ds}"
+        return s
+
 
     def print_blocks(self):
         for ind, x in self.A.items():
@@ -697,6 +717,12 @@ class Tensor:
                 if tDn[tuple(tn.flat)] != Dn:
                     raise YastError('Inconsistend bond dimension of charge.')
         return tDn
+
+    def get_leg_charges_and_dims(self, native=False):
+        ldim= self._ndim if native else len(self.lfuse)
+        _tmp= [self.get_leg_structure(n, native=native) for n in range(ldim)]
+        ts, Ds= tuple(zip(*[tuple(zip(*l.items())) for l in _tmp]))
+        return ts, Ds
 
     def get_shape(self, axes=None, native=False):
         r"""
@@ -772,8 +798,13 @@ class Tensor:
         for tt in self.tset:
             tind = tuple(tt.flat)
             meta.append((tind, tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
-        Anew = self.config.backend.merge_to_dense(self.A, Dtot, meta, self.config.dtype, device)
-        return Anew
+
+        settings_dense= SimpleNamespace(backend= self.config.backend, dtype=self.config.dtype, \
+            device=self.config.device, sym=sym_none)
+        # TODO handling of diag tensors
+        T= Tensor(config=settings_dense, s=self.s, n=None, isdiag=self.isdiag)
+        T.set_block(val=self.config.backend.merge_to_dense(self.A, Dtot, meta, self.config.dtype, device))
+        return T
 
     def to_numpy(self, leg_structures=None):
         """Create full nparray corresponding to the symmetric tensor."""
@@ -826,7 +857,7 @@ class Tensor:
             return 0
         raise YastError("only single-element (symmetric) Tensor can be converted to scalar")
 
-    def norm(self, ord='fro'):
+    def norm(self, p='fro'):
         r"""
         Norm of the rensor.
 
@@ -841,7 +872,7 @@ class Tensor:
         """
         if len(self.A) == 0:
             return self.zero_of_dtype()
-        return self.config.backend.norm(self.A, ord=ord)
+        return self.config.backend.norm(self.A, p=p)
 
     def norm_diff(self, other, ord='fro'):
         """
@@ -907,7 +938,7 @@ class Tensor:
 
         Returns
         -------
-        max_abs : float64
+        max_abs : scalar
         """
         return self.config.backend.max_abs(self.A)
 
@@ -1397,7 +1428,8 @@ class Tensor:
     ###########################
 
     def split_svd(self, axes, sU=1, nU=True, Uaxis=-1, Vaxis=0, tol=0, D_block=np.inf, \
-        D_total=np.inf, truncated_svd=False, truncated_nbit=60, truncated_kfac=6):
+        D_total=np.inf, truncated_svd=False, truncated_nbit=60, truncated_kfac=6,\
+        keep_multiplets=False, eps_multiplet=1.0e-14):
         r"""
         Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
 
@@ -1454,7 +1486,8 @@ class Tensor:
 
         opts = {'truncated_svd': truncated_svd, 'D_block': D_block,
                'nbit': truncated_nbit, 'kfac':truncated_kfac,
-               'tol': tol, 'D_total': D_total}
+               'tol': tol, 'D_total': D_total, 'keep_multiplets': keep_multiplets,
+               'eps_multiplet': eps_multiplet}
 
         Um, Sm, Vm = self.config.backend.svd(Am, meta, opts)
 
@@ -1652,7 +1685,7 @@ class Tensor:
 
     def fuse_legs(self, axes, inplace=False):
         r"""
-        Permutes tensor legs. Next, fuse groups of consequative legs into new logical legs.
+        Permutes tensor legs. Next, fuse groups of consecutive legs into new logical legs.
         Parameters
         ----------
         axes: tuple
@@ -1670,6 +1703,7 @@ class Tensor:
         if self.isdiag:
             raise YastError('Cannot group legs of a diagonal tensor')
 
+        # TODO verify input ? Inner tuples can contain only integers
         lfuse, order = [], []
         for group in axes:
             if isinstance(group, int):
@@ -1705,7 +1739,7 @@ class Tensor:
         """
         if isinstance(axes, int):
             axes = (axes,)
-        a = self if inplace else self.copy()
+        a = self if inplace else self.clone()
         newlfuse = []
         for ii in range(a.ldim()):
             if (ii not in axes) or (a.lfuse[ii][0] == 1):
@@ -1859,12 +1893,24 @@ class _Leg_struct:
             for ind in D_keep:
                 D_keep[ind] = min(D_keep[ind], self.config.backend.count_greater(A[ind], maxS * opts['tol']))
         if sum(D_keep[ind] for ind in D_keep) > opts['D_total']:  # truncate to total bond dimension
-            order = self.config.backend.select_global_largest(A, D_keep, opts['D_total'], sorting)
+            order = self.config.backend.select_global_largest(A, D_keep, opts['D_total'], \
+                sorting, keep_multiplets=opts['keep_multiplets'], eps_multiplet=opts['eps_multiplet'])
             low = 0
             for ind in D_keep:
                 high = low + D_keep[ind]
                 D_keep[ind] = sum((low <= order) & (order < high))
                 low = high
+        
+        # check symmetry related blocks and truncate to equal length
+        if opts['keep_multiplets']:
+            ind_list= [np.asarray(k) for k in D_keep.keys()]
+            for ind in ind_list:
+                t= tuple(ind)
+                tn= tuple(-ind)
+                minD_sector= min(D_keep[t],D_keep[tn])
+                D_keep[t]=D_keep[tn]= minD_sector
+                if -ind in ind_list: ind_list.remove(-ind)
+
         for ind in D_keep:
             if D_keep[ind] > 0:
                 Dslc = self.config.backend.range_largest(D_keep[ind], Dmax[ind], sorting)

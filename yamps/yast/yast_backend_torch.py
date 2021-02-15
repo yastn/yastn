@@ -76,11 +76,13 @@ def item(x):
     return x.item()
 
 
-def norm(A, ord):
-    if ord=='fro':
+def norm(A, p="fro"):
+    if p=="fro":
         return torch.sum(torch.stack([torch.sum(t.abs()**2) for t in A.values()])).sqrt()
-    elif ord=='inf':         
+    elif p=="inf":
         return torch.max(torch.stack([t.abs().max() for t in A.values()]))
+    else:
+        raise RuntimeError("Invalid norm type: "+p)
 
 
 def norm_diff(A, B, ord, meta):
@@ -280,10 +282,31 @@ def qr(A, meta):
 #         R[ind], Q[ind] = torch.t(R[ind]) * sR, sR.reshape([-1, 1]) * torch.t(Q[ind])
 #     return R, Q
 
-def select_global_largest(S, D_keep, D_total, sorting):
+@torch.no_grad()
+def select_global_largest(S, D_keep, D_total, sorting, keep_multiplets=False, \
+    eps_multiplet=1.0e-14):
     if sorting == 'svd':
         s_all = torch.cat([S[ind][:D_keep[ind]] for ind in S])
-        return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
+        values, order= torch.topk(s_all, D_total+int(keep_multiplets))
+        # if needed, preserve multiplets within each sector
+        if keep_multiplets:
+            # regularize by discarding small values
+            gaps=torch.abs(values.clone())
+            # compute gaps and normalize by larger sing. value. Introduce cutoff
+            # for handling vanishing values set to exact zero
+            gaps=(gaps[:len(values)-1]-torch.abs(values[1:len(values)]))/(gaps[:len(values)-1]+1.0e-16)
+            gaps[gaps > 1.0]= 0.
+
+            if gaps[D_total-1] < eps_multiplet:
+                # the chi is within the multiplet - find the largest chi_new < chi
+                # such that the complete multiplets are preserved
+                for i in range(D_total-1,-1,-1):
+                    if gaps[i] > eps_multiplet:
+                        #chi_new= i
+                        order= order[:i+1]
+                        break
+        return order
+        # return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
     elif sorting == 'eigh':
         s_all = torch.cat([S[ind][-D_keep[ind]:] for ind in S])
         return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
@@ -302,9 +325,7 @@ def maximum(A):
 
 
 def max_abs(A):
-    val = [norm(x, ord='inf') for x in A.values()]  ## IS THIS FINE WITH GRAD
-    val.append(0.)
-    return max(val)
+    return norm(A,p="inf")
 
 ################################
 #     two dicts operations     #
