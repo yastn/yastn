@@ -10,7 +10,7 @@ def ncon(ts, inds, conjs=None):
         if ts[ii].ldim() != len(ind):
             raise YastError('Wrong number of legs in %02d-th tensors.' % ii)
 
-    ts = {ind: val for ind, val in enumerate(ts)}
+    ts = dict(enumerate(ts))
     cutoff = 512
     cutoff2 = 2 * cutoff
     edges = [(order, leg, ten) if order >= 0 else (-order + cutoff2, leg, ten) for ten, el in enumerate(inds) for leg, order in enumerate(el)]
@@ -23,7 +23,7 @@ def ncon(ts, inds, conjs=None):
     ax1, ax2 = [], []
     while order1 != cutoff:  # tensordot two tensors; or trace one tensor
         order2, leg2, ten2 = edges.pop()
-        if (order1 != order2):
+        if order1 != order2:
             raise YastError('Contracted legs do not match')
         if ten1 < ten2:
             (t1, t2) = (ten1, ten2)
@@ -39,7 +39,7 @@ def ncon(ts, inds, conjs=None):
                 ts[t1] = ts[t1].trace(axes=(ax1, ax2))
                 ax12 = ax1 + ax2
                 for ii, (order, leg, ten) in enumerate(edges):
-                    if (ten == t1):
+                    if ten == t1:
                         edges[ii] = (order, leg - sum(ii < leg for ii in ax12), ten)
             else:  # tensordot
                 ts[t1] = ts[t1].dot(ts[t2], axes=(ax1, ax2), conj=(conjs[t1], conjs[t2]))

@@ -1,6 +1,5 @@
 import yamps.yast as yast
 import config_U1_R
-from math import isclose
 import numpy as np
 
 tol = 1e-12
@@ -26,8 +25,8 @@ def test_diag_1():
     na4 = a4.to_dense()
     na5 = a5.to_dense()
     assert np.allclose(np.diag(np.diag(na1)), na5)
-    assert isclose(a2.norm_diff(a4), 0, rel_tol=tol, abs_tol=tol)
-    assert isclose(a3.norm_diff(a5), 0, rel_tol=tol, abs_tol=tol)
+    assert a2.norm_diff(a4) < tol  # == 0.0
+    assert a3.norm_diff(a5) < tol  # == 0.0
 
 if __name__ == '__main__':
     test_diag_1()

@@ -1,7 +1,7 @@
+"""Support of torch as a data structure used by yast."""
 import torch
-
-from .linalg.torch_svd_gesdd import SVDGESDD 
-from .linalg.torch_eig_sym import SYMEIG 
+from .linalg.torch_svd_gesdd import SVDGESDD
+from .linalg.torch_eig_sym import SYMEIG
 from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
 
 
@@ -85,13 +85,13 @@ def norm(A, p="fro"):
         raise RuntimeError("Invalid norm type: "+p)
 
 
-def norm_diff(A, B, ord, meta):
-    if ord=='fro':
-        # get the list of sums of squares, sum it and take square root         
+def norm_diff(A, B, p, meta):
+    if p == 'fro':
+        # get the list of sums of squares, sum it and take square root
         return torch.sum(torch.stack([torch.sum(A[k].abs() ** 2) for k in meta[1]] + \
                                      [torch.sum(B[k].abs() ** 2) for k in meta[2]] + \
                                      [torch.sum((A[k]-B[k]).abs() ** 2) for k in meta[0]])).sqrt()
-    elif ord=='inf':       
+    if p == 'inf':
         return torch.max(torch.stack([A[k].abs().max() for k in meta[1]] + \
                                      [B[k].abs().max() for k in meta[2]] + \
                                      [(A[k]-B[k]).abs().max() for k in meta[0]]))
@@ -99,22 +99,22 @@ def norm_diff(A, B, ord, meta):
 
 def entropy(A, alpha=1, tol=1e-12):
     """ von Neuman or Renyi entropy from svd's"""
-    normalization = torch.sum(torch.stack([torch.sum(x ** 2) for x in A.values()])).sqrt()
-    if normalization > 0:
-        entropy = []
+    Snorm = torch.sum(torch.stack([torch.sum(x ** 2) for x in A.values()])).sqrt()
+    if Snorm > 0:
+        ent = []
         Smin = min([min(x) for x in A.values()])
         for x in A.values():
-            x = x / normalization
+            x = x / Snorm
             x = x[x > tol]
             if alpha == 1:
-                entropy.append(-2 * torch.sum(x * x * torch.log2(x)))
+                ent.append(-2 * torch.sum(x * x * torch.log2(x)))
             else:
-                entropy.append(x**(2 * alpha))
-        entropy = torch.sum(torch.stack(entropy))
+                ent.append(x**(2 * alpha))
+        ent = torch.sum(torch.stack(ent))
         if alpha != 1:
-            entropy = torch.log2(entropy) / (1 - alpha)
-        return entropy, Smin, normalization
-    return normalization, normalization, normalization  # this hould be 0., 0., 0.
+            ent = torch.log2(ent) / (1 - alpha)
+        return ent, Smin, Snorm
+    return Snorm, Snorm, Snorm  # this should be 0., 0., 0.
 
 
 ##########################
@@ -122,7 +122,7 @@ def entropy(A, alpha=1, tol=1e-12):
 ##########################
 
 def zero_scalar(dtype='float64', device='cpu'):
-    return torch.tensor(0, dtype=_data_dtype[dtype], device=device) 
+    return torch.tensor(0, dtype=_data_dtype[dtype], device=device)
 
 
 def zeros(D, dtype='float64', device='cpu'):
@@ -185,7 +185,7 @@ def invsqrt(A, cutoff=0):
     res = {t: x.rsqrt() for t, x in A.items()}
     if cutoff > 0:
         for t in res:
-            res[t][abs(res[t]) > 1./cutoff] = 0.
+            res[t][abs(res[t]) > 1./cutoff] = 0
     return res
 
 
@@ -193,7 +193,7 @@ def invsqrt_diag(A, cutoff=0):
     res = {t: torch.diag(x).rsqrt() for t, x in A.items()}
     if cutoff > 0:
         for t in res:
-            res[t][abs(res[t]) > 1./cutoff] = 0.
+            res[t][abs(res[t]) > 1./cutoff] = 0
     return {t: torch.diag(x) for t, x in res.items()}
 
 
@@ -201,7 +201,7 @@ def inv(A, cutoff=0):
     res = {t: 1./x for t, x in A.items()}
     if cutoff > 0:
         for t in res:
-            res[t][abs(res[t]) > 1./cutoff] = 0.
+            res[t][abs(res[t]) > 1./cutoff] = 0
     return res
 
 
@@ -209,7 +209,7 @@ def inv_diag(A, cutoff=0):
     res = {t: 1./torch.diag(x) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
-            res[t][abs(res[t]) > 1./cutoff] = 0.
+            res[t][abs(res[t]) > 1./cutoff] = 0
     return {t: torch.diag(x) for t, x in res.items()}
 
 
@@ -272,6 +272,7 @@ def qr(A, meta):
         R[indR] = sR.reshape([-1, 1]) * R[indR]
     return Q, R
 
+
 # def rq(A):
 #     R, Q = {}, {}
 #     for ind in A:
@@ -311,6 +312,7 @@ def select_global_largest(S, D_keep, D_total, sorting, keep_multiplets=False, \
         s_all = torch.cat([S[ind][-D_keep[ind]:] for ind in S])
         return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
 
+
 def range_largest(D_keep, D_total, sorting):
     if sorting == 'svd':
         return (0, D_keep)
@@ -319,13 +321,11 @@ def range_largest(D_keep, D_total, sorting):
 
 
 def maximum(A):
-    val = [torch.max(x) for x in A.values()]   ## IS THIS FINE WITH GRAD
-    val.append(0.)
-    return max(val)
+    return max(torch.max(x) for x in A.values())
 
 
 def max_abs(A):
-    return norm(A,p="inf")
+    return norm(A, p="inf")
 
 ################################
 #     two dicts operations     #
@@ -362,10 +362,7 @@ def apxb(A, B, x, meta):
 
 
 def scalar(A, B, meta):
-    out = 0.
-    for ind in meta:
-        out += (A[ind].conj().reshape(-1)) @ (B[ind].reshape(-1))
-    return out
+    return torch.sum(torch.stack([(A[ind].conj().reshape(-1)) @ (B[ind].reshape(-1)) for ind in meta]))
 
 
 dot_dict = {(0, 0): lambda x, y: x @ y,
@@ -378,7 +375,7 @@ def dot(A, B, conj, meta_dot):
     f = dot_dict[conj]  # proper conjugations
     C = {}
     for (out, ina, inb) in meta_dot:
-        C[out] = f(A[ina], B[inb])    
+        C[out] = f(A[ina], B[inb])
     return C
 
 #####################################################
@@ -401,7 +398,7 @@ def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, device='cpu'):
     for (tn, Ds, to, Do) in meta_mrg:
         slc = [slice(None)] * len(Do)
         slc[axis] = slice(*Ds)
-        Anew[tn][tuple(slc)] = A[to].permute(order).reshape(Do)  
+        Anew[tn][tuple(slc)] = A[to].permute(order).reshape(Do)
     return Anew
 
 
@@ -415,7 +412,7 @@ def merge_to_dense(A, Dtot, meta, dtype, device='cpu'):
 def merge_super_blocks(pos_tens, meta_new, meta_block, dtype, device='cpu'):
     """ Outputs new dictionary of blocks after creating super-tensor. """
     Anew = {u: torch.zeros(Du, dtype=_data_dtype[dtype], device=device) for (u, Du) in meta_new}
-    for (tind, pos, Dslc) in meta_block: 
+    for (tind, pos, Dslc) in meta_block:
         slc = tuple(slice(*DD) for DD in Dslc)
         Anew[tind][slc] = pos_tens[pos].A[tind]# .copy() # is copy required?
     return Anew

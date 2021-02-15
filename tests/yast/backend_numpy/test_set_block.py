@@ -20,7 +20,7 @@ def test_set0():
     a.set_block(Ds=(4, 5, 6), val='randR')
     npa = a.to_dense()
     assert np.iscomplexobj(npa)
-    assert isclose(np.linalg.norm(npa - npa.conj()), 0, rel_tol=tol, abs_tol=tol)
+    assert np.linalg.norm(npa - npa.conj()) < tol  # == 0.0
     assert npa.shape == (4, 5, 6)
     assert a.tset.shape == (1, 3, 0)
     assert a.is_consistent()
@@ -32,7 +32,7 @@ def test_set0():
     assert np.isrealobj(npa)
     assert npa.shape == ()
     assert a.tset.shape == (1, 0, 0)
-    assert isclose(a.to_number(), 3, rel_tol=tol, abs_tol=tol)
+    assert isclose(a.to_number(), 3, rel_tol=tol)
     assert a.is_consistent()
 
     # print('1d tensor:')
@@ -52,7 +52,7 @@ def test_set0():
     assert npa.shape == (5, 5)
     assert a.tset.shape == (1, 2, 0)
     assert a.is_consistent()
-    assert isclose(np.linalg.norm(np.diag(np.diag(npa)) - npa), 0, rel_tol=tol, abs_tol=tol)
+    assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
     
 
 def test_set1():
@@ -79,12 +79,12 @@ def test_set1():
     nnc2 = np.tensordot(nb, nb.conj(), axes=((1, 2), (1, 2)))
     nnc3 = np.tensordot(na.conj(), nb.conj(), axes=(0, 2))
 
-    assert isclose(np.linalg.norm(nc1 - nnc1), 0, rel_tol=tol, abs_tol=tol)
-    assert isclose(np.linalg.norm(nc2 - nnc2), 0, rel_tol=tol, abs_tol=tol)
-    assert isclose(np.linalg.norm(nc3 - nnc3), 0, rel_tol=tol, abs_tol=tol)
-    assert isclose(np.linalg.norm(nc1) - c1.norm(), 0, rel_tol=tol, abs_tol=tol)
-    assert isclose(np.linalg.norm(nc2) - c2.norm(), 0, rel_tol=tol, abs_tol=tol)
-    assert isclose(np.linalg.norm(nc3) - c3.norm(), 0, rel_tol=tol, abs_tol=tol)
+    assert np.linalg.norm(nc1 - nnc1) < tol  # == 0.0
+    assert np.linalg.norm(nc2 - nnc2) < tol  # == 0.0
+    assert np.linalg.norm(nc3 - nnc3) < tol  # == 0.0
+    assert np.linalg.norm(nc1) - c1.norm() < tol  # == 0.0
+    assert np.linalg.norm(nc2) - c2.norm() < tol  # == 0.0
+    assert np.linalg.norm(nc3) - c3.norm() < tol  # == 0.0
     
     assert na.shape == (5, 11, 3)
     assert nb.shape == (5, 6, 5)
@@ -112,7 +112,7 @@ def test_set1():
     assert np.isrealobj(npa)
     assert npa.shape == ()
     assert a.tset.shape == (1, 0, 1)
-    assert isclose(a.to_number(), 2, rel_tol=tol, abs_tol=tol)
+    assert isclose(a.to_number(), 2, rel_tol=tol)
     assert a.is_consistent()
 
     # print('3d tensor:')
@@ -133,7 +133,7 @@ def test_set1():
     assert npa.shape == (13, 13)
     assert a.tset.shape == (3, 2, 1)
     assert a.is_consistent()
-    assert isclose(np.linalg.norm(np.diag(np.diag(npa)) - npa), 0, rel_tol=tol, abs_tol=tol)
+    assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
 
 
 def test_set2():
@@ -179,7 +179,7 @@ def test_dict():
     a = yast.randR(config=config_dense_R)  # s=()
     d = a.to_dict()
     b = yast.from_dict(config=config_dense_R, d=d)
-    assert isclose(a.norm_diff(b), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(b) < tol  # == 0.0
     assert a.is_consistent()
     assert a.is_independent(b)
 
@@ -188,14 +188,14 @@ def test_dict():
                   D=((3, 5, 2), (1, 2, 3), (2, 3, 4)))
     d = a.to_dict()
     b = yast.from_dict(config=config_U1_R, d=d)
-    assert isclose(a.norm_diff(b), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(b) < tol  # == 0.0
     assert a.is_consistent()
     assert a.is_independent(b)
 
     a = yast.rand(config=config_U1_R, isdiag=True, t=(0, 1), D=(3, 5))
     d = a.to_dict()
     b = yast.from_dict(config=config_U1_R, d=d)
-    assert isclose(a.norm_diff(b), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(b) < tol  # == 0.0
     assert a.is_consistent()
     assert a.is_independent(b)
 
@@ -204,7 +204,7 @@ def test_dict():
                     D=((1, 2, 3, 4), (2, 1), (2, 3, 5, 4, 1, 6)))
     d = a.to_dict()
     b = yast.from_dict(config=config_Z2_U1_R, d=d)
-    assert isclose(a.norm_diff(b), 0, rel_tol=tol, abs_tol=tol)
+    assert a.norm_diff(b) < tol  # == 0.0
     assert b.is_consistent()
     assert a.is_independent(b)
 

@@ -1,8 +1,9 @@
+"""Support of numpy as a data structure used by yast."""
 import warnings
 import numpy as np
 import scipy as sp
 try:
-    import fbpca as pca 
+    import fbpca as pca
 except ImportError as e:
     warnings.warn("fbpca not available", Warning)
 
@@ -76,8 +77,8 @@ def item(x):
 def norm(A, ord):
     if ord == 'fro':
         return np.linalg.norm([np.linalg.norm(x) for x in A.values()])
-    elif ord == 'inf':
-        return max( [ np.abs(x).max() for x in A.values()] )
+    if ord == 'inf':
+        return max([ np.abs(x).max() for x in A.values()])
 
 
 def norm_diff(A, B, ord, meta):
@@ -94,59 +95,59 @@ def norm_diff(A, B, ord, meta):
 
 def entropy(A, alpha=1, tol=1e-12):
     """ von Neuman or Renyi entropy from svd's"""
-    normalization = np.sqrt(np.sum([np.sum(x ** 2) for x in A.values()]))
-    if normalization > 0:
+    Snorm = np.sqrt(np.sum([np.sum(x ** 2) for x in A.values()]))
+    if Snorm > 0:
         Smin = min([min(x) for x in A.values()])
-        entropy = []
+        ent = []
         for x in A.values():
-            x = x / normalization
+            x = x / Snorm
             x = x[x > tol]
             if alpha == 1:
-                entropy.append(-2 * np.sum(x * x * np.log2(x)))
+                ent.append(-2 * np.sum(x * x * np.log2(x)))
             else:
-                entropy.append(x**(2 * alpha))
-        entropy = np.sum(entropy)
+                ent.append(x**(2 * alpha))
+        ent = np.sum(ent)
         if alpha != 1:
-            entropy = np.log2(entropy) / (1 - alpha)
-        return entropy, Smin, normalization
-    return normalization, normalization, normalization  # this hould be 0., 0., 0.
+            ent = np.log2(ent) / (1 - alpha)
+        return ent, Smin, Snorm
+    return Snorm, Snorm, Snorm  # this should be 0., 0., 0.
 
 
 ##########################
 #     setting values     #
 ##########################
 
-def zero_scalar(dtype='float64', device='cpu'):
+def zero_scalar(dtype='float64', *args, **kwargs):
     return _data_dtype[dtype](0)
 
 
-def zeros(D, dtype='float64', device='cpu'):
+def zeros(D, dtype='float64', *args, **kwargs):
     return np.zeros(D, dtype=_data_dtype[dtype])
 
 
-def ones(D, dtype='float64', device='cpu'):
+def ones(D, dtype='float64', *args, **kwargs):
     return np.ones(D, dtype=_data_dtype[dtype])
 
 
-def randR(D, dtype='float64', device='cpu'):
+def randR(D, dtype='float64', *args, **kwargs):
     return 2 * np.random.random_sample(D).astype(_data_dtype[dtype]) - 1
 
 
-def rand(D, dtype='float64', device='cpu'):
+def rand(D, dtype='float64', *args, **kwargs):
     if dtype == 'float64':
         return randR(D)
-    elif dtype == 'complex128':
+    if dtype == 'complex128':
         return 2 * np.random.random_sample(D) - 1 + 1j * (2 * np.random.random_sample(D) - 1)
 
 
-def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
+def to_tensor(val, Ds=None, dtype='float64', *args, **kwargs):
     return np.array(val, dtype=_data_dtype[dtype]) if Ds is None else np.array(val, dtype=_data_dtype[dtype]).reshape(Ds)
 
 ##################################
 #     single dict operations     #
 ##################################
 
-def move_to_device(A, device):
+def move_to_device(A, *args, **kwargs):
     return A
 
 
@@ -173,13 +174,13 @@ def transpose(A, axes, meta_transpose, inplace):
     if inplace:
         return {new: np.transpose(A[old], axes=axes) for old, new in meta_transpose}
     return {new: np.transpose(A[old], axes=axes).copy() for old, new in meta_transpose}
-    
+
 
 def invsqrt(A, cutoff=0):
     res = {t: np.sqrt(x) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
-            res[t][abs(res[t]) > 1./cutoff] = 0.
+            res[t][abs(res[t]) > 1./cutoff] = 0
     return res
 
 
@@ -187,7 +188,7 @@ def invsqrt_diag(A, cutoff=0):
     res = {t: np.sqrt(np.diag(x)) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
-            res[t][abs(res[t]) > 1./cutoff] = 0.
+            res[t][abs(res[t]) > 1./cutoff] = 0
     return {t: np.diag(x) for t, x in res.items()}
 
 
@@ -195,7 +196,7 @@ def inv(A, cutoff=0):
     res = {t: 1./x for t, x in A.items()}
     if cutoff > 0:
         for t in res:
-            res[t][abs(res[t]) > 1./cutoff] = 0.
+            res[t][abs(res[t]) > 1./cutoff] = 0
     return res
 
 
@@ -203,7 +204,7 @@ def inv_diag(A, cutoff=0):
     res = {t: 1./ np.diag(x) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
-            res[t][abs(res[t]) > 1./cutoff] = 0.
+            res[t][abs(res[t]) > 1./cutoff] = 0
     return {t: np.diag(x) for t, x in res.items()}
 
 
@@ -276,27 +277,23 @@ def qr(A, meta):
 def select_global_largest(S, D_keep, D_total, sorting):
     if sorting == 'svd':
         return np.hstack([S[ind][:D_keep[ind]] for ind in S]).argpartition(-D_total-1)[-D_total:]
-    elif sorting == 'eigh':
+    if sorting == 'eigh':
         return np.hstack([S[ind][-D_keep[ind]:] for ind in S]).argpartition(-D_total-1)[-D_total:]
 
 
 def range_largest(D_keep, D_total, sorting):
     if sorting == 'svd':
         return (0, D_keep)
-    elif sorting == 'eigh':
+    if sorting == 'eigh':
         return (D_total - D_keep, D_total)
 
 
 def maximum(A):
-    val = [np.max(x) for x in A.values()]
-    val.append(0.)
-    return max(val)
+    return max(np.max(x) for x in A.values())
 
 
 def max_abs(A):
-    val = [np.max(np.abs(x)) for x in A.values()]
-    val.append(0.)
-    return max(val)
+    return norm(A, ord='inf')
 
 ################################
 #     two dicts operations     #
@@ -346,7 +343,7 @@ def dot(A, B, conj, meta_dot):
     f = dot_dict[conj]  # proper conjugations
     C = {}
     for (out, ina, inb) in meta_dot:
-        C[out] = f(A[ina], B[inb])    
+        C[out] = f(A[ina], B[inb])
     return C
 
 
@@ -383,7 +380,7 @@ def dot(A, B, conj, meta_dot):
 #     block merging, truncations and un-merging     #
 #####################################################
 
-def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, device='cpu'):
+def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, *args, **kwargs):
     """ New dictionary of blocks after merging into matrix. """
     Anew = {u: np.zeros(Du, dtype=_data_dtype[dtype]) for (u, Du) in meta_new}
     for (tn, to, Dsl, Dl, Dsr, Dr) in meta_mrg:
@@ -391,7 +388,7 @@ def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, device='cpu'):
     return Anew
 
 
-def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, device='cpu'):
+def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, *args, **kwargs):
     """
     outputs new dictionary of blocks after fusing one leg
     """
@@ -399,21 +396,21 @@ def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, device='cpu'):
     for (tn, Ds, to, Do) in meta_mrg:
         slc = [slice(None)] * len(Do)
         slc[axis] = slice(*Ds)
-        Anew[tn][tuple(slc)] = A[to].transpose(order).reshape(Do)  
+        Anew[tn][tuple(slc)] = A[to].transpose(order).reshape(Do)
     return Anew
 
 
-def merge_to_dense(A, Dtot, meta, dtype, device='cpu'):
+def merge_to_dense(A, Dtot, meta, dtype, *args, **kwargs):
     """ outputs full tensor """
     Anew = np.zeros(Dtot, dtype=_data_dtype[dtype])
     for (ind, Dss) in meta:
         Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
     return Anew
 
-def merge_super_blocks(pos_tens, meta_new, meta_block, dtype, device='cpu'):
+def merge_super_blocks(pos_tens, meta_new, meta_block, dtype, *args, **kwargs):
     """ Outputs new dictionary of blocks after creating super-tensor. """
     Anew = {u: np.zeros(Du, dtype=_data_dtype[dtype]) for (u, Du) in meta_new}
-    for (tind, pos, Dslc) in meta_block: 
+    for (tind, pos, Dslc) in meta_block:
         slc = tuple(slice(*DD) for DD in Dslc)
         Anew[tind][slc] = pos_tens[pos].A[tind]# .copy() # is copy required?
     return Anew
