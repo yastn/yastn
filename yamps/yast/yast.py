@@ -20,7 +20,13 @@ _check_consistency = True
 def check_signatures_match(value=True):
     """Set the value of the flag check_signature_match."""
     global _check_signatures_match
-    _check_signatures_match = value
+    _check_signatures_match = bool(value)
+
+
+def check_consistency(value=True):
+    """Set the value of the flag check_signature_match."""
+    global _check_consistency
+    _check_consistency = bool(value)
 
 
 class YastError(Exception):
@@ -228,14 +234,14 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', isdiag=False):
     t, D, s, lf = [], [], [], []
     if conjs is None:
         conjs = (0,) * len(tensors)
-    for n, te, cc in zip(legs, tensors, conjs):
-        lf.append(te.lfuse[n])
-        un, = te._unpack_axes((n,))
-        for n in un:
-            tdn = te.get_leg_structure(n, native=True)
+    for nf, te, cc in zip(legs, tensors, conjs):
+        lf.append(te.lfuse[nf])
+        un, = te._unpack_axes((nf,))
+        for nn in un:
+            tdn = te.get_leg_structure(nn, native=True)
             t.append(tuple(tdn.keys()))
             D.append(tuple(tdn.values()))
-            s.append(te.s[n] * (2 * cc - 1))
+            s.append(te.s[nn] * (2 * cc - 1))
     a = tensors[0].empty(s=s, isdiag=isdiag, lfuse=lf)
     a.fill_tensor(t=t, D=D, val=val)
     return a
@@ -1382,7 +1388,7 @@ class Tensor:
 
         meta_dot = tuple((al + br, al + ar, bl + br)  for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
-        if _check_consistency and not ua_r == ub_l:
+        if _check_consistency and not (ua_r == ub_l and ls_ac.match(ls_bc)):
             raise YastError('Something went wrong in matching the indices of the two tensors')
 
         Cm = self.config.backend.dot(Am, Bm, conj, meta_dot)
@@ -1463,7 +1469,7 @@ class Tensor:
         S = Tensor(config=self.config, s=(-sU, sU), isdiag=True)
         V = Tensor(config=self.config, s=(-sU,) + ls_r.s, n=n_r, lfuse=[(1, ())] + [self.lfuse[ii] for ii in lout_r])
 
-        ls_s = _Leg_struct(self.config)
+        ls_s = _LegDecomposition(self.config)
         ls_s.leg_struct_for_truncation(Sm, opts, 'svd')
 
         U.A = self._unmerge_from_matrix(Um, ls_l, ls_s)
@@ -1512,7 +1518,7 @@ class Tensor:
         Q = Tensor(config=self.config, s=Qs, n=self.n, lfuse=[self.lfuse[ii] for ii in lout_l] + [(1, ())])
         R = Tensor(config=self.config, s=Rs, lfuse=[(1, ())] + [self.lfuse[ii] for ii in lout_r])
 
-        ls = _Leg_struct(self.config, -sQ, -sQ)
+        ls = _LegDecomposition(self.config, -sQ, -sQ)
         ls.leg_struct_trivial(Rm, 0)
 
         Q.A = self._unmerge_from_matrix(Qm, ls_l, ls)
@@ -1568,7 +1574,7 @@ class Tensor:
 
         Am, ls_l, ls_r, ul, ur = self._merge_to_matrix(out_l, out_r, news_l=-sU, news_r=sU)
 
-        if ul != ur:
+        if _check_consistency and not (ul == ur and ls_l.match(ls_r)):
             raise YastError('Something went wrong in matching the indices of the two tensors')
 
         # meta = (indA, indS, indU)
@@ -1576,7 +1582,7 @@ class Tensor:
         Sm, Um = self.config.backend.eigh(Am, meta)
 
         opts = {'D_block': D_block, 'tol': tol, 'D_total': D_total}
-        ls_s = _Leg_struct(self.config, -sU, -sU)
+        ls_s = _LegDecomposition(self.config, -sU, -sU)
         ls_s.leg_struct_for_truncation(Sm, opts, 'eigh')
 
         Us = tuple(self.s[lg] for lg in out_l) + (sU,)
@@ -1610,8 +1616,8 @@ class Tensor:
         teff_r = self.config.sym.fuse(t_r, s_r, news_r)
         t_new = np.hstack([teff_l, teff_r])
 
-        ls_l = _Leg_struct(self.config, s_l, news_l)
-        ls_r = _Leg_struct(self.config, s_r, news_r)
+        ls_l = _LegDecomposition(self.config, s_l, news_l)
+        ls_r = _LegDecomposition(self.config, s_r, news_r)
         ls_l.leg_struct_for_merged(teff_l, t_l, Deff_l, D_l)
         ls_r.leg_struct_for_merged(teff_r, t_r, Deff_r, D_r)
 
@@ -1786,7 +1792,7 @@ class Tensor:
         return (tuple(itertools.chain(*(range(clegs[ii]-self.lfuse[ii][0], clegs[ii]) for ii in axes))) for axes in args)
 
 
-class _Leg_struct:
+class _LegDecomposition:
     """Information about internal structure of leg resulting from fusions."""
     def __init__(self, config=None, s=(), news=1):
         self.s, = _clear_axes(s)  # signature of fused legs
@@ -1796,9 +1802,13 @@ class _Leg_struct:
         self.D = {}
         self.dec = {}  # leg's structure/ decomposition
 
+    def match(self, other):
+        """ Compare if decomposition match. This does not include signatures."""
+        return self.nlegs == other.nlegs and self.D == other.D and self.dec == other.dec
+
     def copy(self):
         """ Copy leg structure. """
-        ls = _Leg_struct(s=self.s, news=self.news)
+        ls = _LegDecomposition(s=self.s, news=self.news)
         for te, de in self.dec.items():
             ls.dec[te] = de.copy()
         ls.D = self.D.copy()
@@ -1954,7 +1964,7 @@ def _indices_common_rows(a, b):
 #     D_rsh[:, ig] = D_eff
 #     D_rsh[:, ig+1:] = self.Dset[:, legs_r]
 
-#     ls_c = _Leg_struct(self.config, s_grp, new_s)
+#     ls_c = _LegDecomposition(self.config, s_grp, new_s)
 #     ls_c.leg_struct_for_merged(t_eff, t_grp, D_eff, D_grp)
 
 #     t_new = np.empty((len(self.A), new_ndim, self.config.sym.nsym), dtype=int)

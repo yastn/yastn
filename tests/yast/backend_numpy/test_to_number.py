@@ -5,7 +5,7 @@ from math import isclose
 
 tol = 1e-12
 
-def run_to_number(a, b, result=None):
+def run_to_number(a, b):
     ax = tuple(range(a.get_ndim()))  # here a.get_ndim() == b.get_ndim()
     t0 = a.dot(b, axes=(ax, ax), conj=(1, 0))  # 0-dim tensor with 1 element, i.e., a number
 
