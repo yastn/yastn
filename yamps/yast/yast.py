@@ -10,7 +10,6 @@ An instance of a Tensor is specified by a list of blocks (dense tensors) labeled
 from types import SimpleNamespace
 import itertools
 import numpy as np
-from types import SimpleNamespace
 import yamps.yast.yast_sym_none as sym_none
 
 
@@ -20,13 +19,13 @@ _check_consistency = True
 
 
 def check_signatures_match(value=True):
-    """Set the value of the flag check_signature_match."""
+    """Set the value of the flag check_signatures_match."""
     global _check_signatures_match
     _check_signatures_match = bool(value)
 
 
 def check_consistency(value=True):
-    """Set the value of the flag check_signature_match."""
+    """Set the value of the flag check_consistency."""
     global _check_consistency
     _check_consistency = bool(value)
 
@@ -193,7 +192,7 @@ def from_dict(config=None, d=None):
         for ind in d['A']:
             a.set_block(ts=ind, Ds=d['A'][ind].shape, val=d['A'][ind])
         return a
-    return None
+    raise YastError("Dictionary d is required.")
 
 
 def decompress_from_1d(r1d, config, d):
@@ -349,6 +348,7 @@ class Tensor:
         self.A = {}  # dictionary of blocks
         # (logical) fusion tree for each leg: (number_of_consequative_legs_it_represents, tuple_with_inner_structure)
         self.lfuse = tuple(kwargs['lfuse']) if ('lfuse' in kwargs and kwargs['lfuse'] is not None) else ((1, ()),) * self.nnlegs
+        self.nllegs = len(self.lfuse)  # number of logical legs
         # self.lfuse is immutable for copying and comparison
 
     ######################
@@ -473,8 +473,8 @@ class Tensor:
                 if Ds is None:
                     # attempt to read Ds from existing block
                     Ds = []
-                    tD = [self.get_leg_structure(n, native=True) for n in range(self._ndim)]
-                    for n in range(self._ndim):
+                    tD = [self.get_leg_structure(n, native=True) for n in range(self.nnlegs)]
+                    for n in range(self.nnlegs):
                         try:
                             Ds.append(tD[n][tuple(ats[0, n, :].flat)])
                         except KeyError:
@@ -618,7 +618,7 @@ class Tensor:
         # meta_mrg = ((tn, Ds, to, Do), ...)
         meta_mrg = tuple(((), (aD-D, aD), tuple(t.flat), (D,)) \
             for t, D, aD in zip(self.tset, D_rsh, aD_rsh))
-        A = self.config.backend.merge_one_leg(self.A, 0, tuple(range(self._ndim)), \
+        A = self.config.backend.merge_one_leg(self.A, 0, tuple(range(self.nnlegs)), \
             meta_new, meta_mrg, self.config.dtype, self.device)
 
         # (told, tnew, Dsl, Dnew)
@@ -671,9 +671,13 @@ class Tensor:
         """ Global charge of the tensor. """
         return tuple(self.n)
 
-    def get_signature(self):
-        """ Tensor signature. """
-        return tuple(self.s)
+    def get_signature(self, native=False):
+        """ Tensor signatures. If not native, returns the signature of the first leg in each group."""
+        if native:
+            return tuple(self.s)
+        pn = tuple((n,) for n in range(len(self.lfuse))) if len(self.lfuse) > 0 else ()
+        un = tuple(self._unpack_axes(*pn))
+        return tuple(self.s[p[0]] for p in un)
 
     def get_blocks_charges(self):
         """ Charges of all native blocks. """
@@ -730,7 +734,7 @@ class Tensor:
         return tDn
 
     def get_leg_charges_and_dims(self, native=False):
-        ldim= self._ndim if native else len(self.lfuse)
+        ldim= self.nnlegs if native else len(self.lfuse)
         _tmp= [self.get_leg_structure(n, native=native) for n in range(ldim)]
         ts, Ds= tuple(zip(*[tuple(zip(*l.items())) for l in _tmp]))
         return ts, Ds
@@ -777,7 +781,7 @@ class Tensor:
         Parameters
         ----------
         leg_structures : dict
-            {n: {tn: Dn}} specify charges and dimensions to include on some legs.
+            {n: {tn: Dn}} specify charges and dimensions to include on some legs (indicated by keys n).
 
         Returns
         -------
@@ -809,30 +813,15 @@ class Tensor:
         for tt in self.tset:
             tind = tuple(tt.flat)
             meta.append((tind, tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
+        return self.config.backend.merge_to_dense(self.A, Dtot, meta, self.config.dtype, device)
 
-        settings_dense= SimpleNamespace(backend= self.config.backend, dtype=self.config.dtype, \
-            device=self.config.device, sym=sym_none)
-        val=self.config.backend.merge_to_dense(self.A, Dtot, meta, self.config.dtype, device)
-        # TODO handling of diag tensors
-        # TODO signatures if leg_structures is supplied
-        if leg_structures is None and (native or self.isdiag):
-            T= Tensor(config=settings_dense, s=self.s, n=None, isdiag=self.isdiag)
-        elif leg_structures is None and not native and not self.isdiag:
-            T= Tensor(config=settings_dense, s=self.s if self.ldim()==self._ndim else [1]*self.ldim(), \
-                n=None, isdiag=self.isdiag)
-        else:
-            T= Tensor(config=settings_dense, s=[1]*len(Dtot), n=None)
-        T.set_block(val=val, Ds=Dtot)
-        return T
-
-    def to_numpy(self, leg_structures=None):
+    def to_numpy(self, leg_structures=None, native=False):
         r"""
         Create full nparray corresponding to the symmetric tensor.
         
         First, create a yast.Tensor with no symmetry then extract the only block.
         """
-        return self.config.backend.to_numpy(
-            self.to_dense(leg_structures=leg_structures).to_raw_tensor())
+        return self.config.backend.to_numpy(self.to_dense(leg_structures, native))
 
     def to_raw_tensor(self):
         """
@@ -842,6 +831,16 @@ class Tensor:
             key = next(iter(self.A))
             return self.A[key]
         raise YastError('Only tensor with a single block can be converted to raw tensor')
+
+
+    def to_nonsymmetric(self, leg_structures=None, native=False):
+        config_dense= SimpleNamespace(backend=self.config.backend, dtype=self.config.dtype, \
+                                       device=self.config.device, sym=sym_none)
+        news = self.get_signature(native)
+        T = Tensor(config=config_dense, s=news, n=None, isdiag=self.isdiag)
+        T.set_block(val=self.to_dense(leg_structures, native))
+        return T
+
 
     def __getitem__(self, key):
         return self.A[key]
@@ -896,7 +895,7 @@ class Tensor:
         """
         if len(self.A) == 0:
             return self.zero_of_dtype()
-        return self.config.backend.norm(self.A, p=p)
+        return self.config.backend.norm(self.A, p)
 
     def norm_diff(self, other, p='fro'):
         """
@@ -917,7 +916,7 @@ class Tensor:
         if (len(self.A) == 0) and (len(other.A) == 0):
             return self.zero_of_dtype()
         meta = _common_keys(self.A, other.A)
-        return self.config.backend.norm_diff(self.A, other.A, p=p, meta=meta)
+        return self.config.backend.norm_diff(self.A, other.A, meta, p)
 
     def entropy(self, axes, alpha=1):
         r"""
@@ -1709,6 +1708,7 @@ class Tensor:
     def fuse_legs(self, axes, inplace=False):
         r"""
         Permutes tensor legs. Next, fuse groups of consecutive legs into new logical legs.
+        
         Parameters
         ----------
         axes: tuple

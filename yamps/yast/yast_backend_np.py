@@ -74,20 +74,21 @@ def item(x):
     return x.item()
 
 
-def norm(A, ord):
-    if ord == 'fro':
+def norm(A, p):
+    if p == 'fro':
         return np.linalg.norm([np.linalg.norm(x) for x in A.values()])
-    if ord == 'inf':
-        return max([ np.abs(x).max() for x in A.values()])
+    if p == 'inf':
+        return max([np.abs(x).max() for x in A.values()])
+    else:
+        raise RuntimeError("Invalid norm type: "+p)
 
-
-def norm_diff(A, B, ord, meta):
+def norm_diff(A, B, meta, p):
     """ norm(A - B); meta = kab, ka, kb """
-    if ord == 'fro':
+    if p == 'fro':
         return np.linalg.norm([np.linalg.norm(A[ind]-B[ind]) for ind in meta[0]] +\
                               [np.linalg.norm(A[ind]) for ind in meta[1]] +\
                               [np.linalg.norm(B[ind]) for ind in meta[2]])
-    elif ord == 'inf':
+    elif p == 'inf':
         return max([np.abs(A[ind]-B[ind]).max() for ind in meta[0]] +\
                    [np.abs(A[ind]).max() for ind in meta[1]] +\
                    [np.abs(B[ind]).max() for ind in meta[2]])
@@ -111,7 +112,6 @@ def entropy(A, alpha=1, tol=1e-12):
             ent = np.log2(ent) / (1 - alpha)
         return ent, Smin, Snorm
     return Snorm, Snorm, Snorm  # this should be 0., 0., 0.
-
 
 ##########################
 #     setting values     #
@@ -141,7 +141,8 @@ def rand(D, dtype='float64', *args, **kwargs):
 
 
 def to_tensor(val, Ds=None, dtype='float64', *args, **kwargs):
-    return np.array(val, dtype=_data_dtype[dtype]) if Ds is None else np.array(val, dtype=_data_dtype[dtype]).reshape(Ds)
+    T = np.array(val, dtype=_data_dtype[dtype])
+    return T if Ds is None else T.reshape(Ds)
 
 ##################################
 #     single dict operations     #
@@ -177,7 +178,7 @@ def transpose(A, axes, meta_transpose, inplace):
 
 
 def invsqrt(A, cutoff=0):
-    res = {t: np.sqrt(x) for t, x in A.items()}
+    res = {t: 1./np.sqrt(x) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
             res[t][abs(res[t]) > 1./cutoff] = 0
@@ -185,7 +186,7 @@ def invsqrt(A, cutoff=0):
 
 
 def invsqrt_diag(A, cutoff=0):
-    res = {t: np.sqrt(np.diag(x)) for t, x in A.items()}
+    res = {t: 1./np.sqrt(np.diag(x)) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
             res[t][abs(res[t]) > 1./cutoff] = 0
@@ -274,7 +275,8 @@ def qr(A, meta):
 #     return R, Q
 
 
-def select_global_largest(S, D_keep, D_total, sorting):
+def select_global_largest(S, D_keep, D_total, sorting, \
+    keep_multiplets=False, eps_multiplet=1.0e-14):
     if sorting == 'svd':
         return np.hstack([S[ind][:D_keep[ind]] for ind in S]).argpartition(-D_total-1)[-D_total:]
     if sorting == 'eigh':
@@ -293,7 +295,7 @@ def maximum(A):
 
 
 def max_abs(A):
-    return norm(A, ord='inf')
+    return norm(A, p="inf")
 
 ################################
 #     two dicts operations     #
@@ -389,9 +391,7 @@ def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, *args, **kwargs):
 
 
 def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, *args, **kwargs):
-    """
-    outputs new dictionary of blocks after fusing one leg
-    """
+    """ Outputs new dictionary of blocks after fusing one leg. """
     Anew = {u: np.zeros(Du, dtype=_data_dtype[dtype]) for (u, Du) in meta_new}
     for (tn, Ds, to, Do) in meta_mrg:
         slc = [slice(None)] * len(Do)
@@ -401,7 +401,7 @@ def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, *args, **kwargs):
 
 
 def merge_to_dense(A, Dtot, meta, dtype, *args, **kwargs):
-    """ outputs full tensor """
+    """ Outputs full tensor. """
     Anew = np.zeros(Dtot, dtype=_data_dtype[dtype])
     for (ind, Dss) in meta:
         Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
@@ -438,7 +438,7 @@ def unmerge_one_leg(A, axis, meta):
     for (told, tnew, Dsl, Dnew) in meta:
         slc = [slice(None)] * A[told].ndim
         slc[axis] = slice(*Dsl)
-        Anew[tnew] = np.reshape(A[told][tuple(slc)], Dnew).copy()
+        Anew[tnew] = np.reshape(A[told][tuple(slc)], Dnew).copy()  # TODO check this copy()
     return Anew
 
 ##############

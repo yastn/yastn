@@ -76,18 +76,18 @@ def item(x):
     return x.item()
 
 
-def norm(A, p="fro"):
-    if p=="fro":
+def norm(A, p):
+    if p == "fro":
         return torch.sum(torch.stack([torch.sum(t.abs()**2) for t in A.values()])).sqrt()
-    elif p=="inf":
+    elif p == "inf":
         return torch.max(torch.stack([t.abs().max() for t in A.values()]))
     else:
         raise RuntimeError("Invalid norm type: "+p)
 
 
-def norm_diff(A, B, p, meta):
+def norm_diff(A, B, meta, p):
+    """ norm(A - B); meta = kab, ka, kb """
     if p == 'fro':
-        # get the list of sums of squares, sum it and take square root
         return torch.sum(torch.stack([torch.sum(A[k].abs() ** 2) for k in meta[1]] + \
                                      [torch.sum(B[k].abs() ** 2) for k in meta[2]] + \
                                      [torch.sum((A[k]-B[k]).abs() ** 2) for k in meta[0]])).sqrt()
@@ -116,7 +116,6 @@ def entropy(A, alpha=1, tol=1e-12):
         return ent, Smin, Snorm
     return Snorm, Snorm, Snorm  # this should be 0., 0., 0.
 
-
 ##########################
 #     setting values     #
 ##########################
@@ -143,8 +142,7 @@ def rand(D, dtype='float64', device='cpu'):
 
 def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
     T = torch.as_tensor(val, dtype=_data_dtype[dtype], device=device)
-    return T if Ds is None else T.reshape(Ds).contiguous() 
-    
+    return T if Ds is None else T.reshape(Ds).contiguous()
 
 ##################################
 #     single dict operations     #
@@ -156,7 +154,7 @@ def move_to_device(A, device):
 
 def conj(A):
     """ Conjugate dict of tensors forcing a copy. """
-    # is it a copy or not
+    # TODO is it a copy or not
     return {t: x.conj() for t, x in A.items()}
 
 
@@ -166,10 +164,11 @@ def trace(A, order, meta):
     Aout = {}
     for (tnew, told, Drsh) in meta:
         Atemp = torch.reshape(A[told].permute(*order), Drsh)
+        Atemp = torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=-1)
         if tnew in Aout:
-            Aout[tnew] += torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=-1)
+            Aout[tnew] += Atemp
         else:
-            Aout[tnew] = torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=-1)
+            Aout[tnew] = Atemp
     return Aout
 
 
@@ -284,8 +283,8 @@ def qr(A, meta):
 #     return R, Q
 
 @torch.no_grad()
-def select_global_largest(S, D_keep, D_total, sorting, keep_multiplets=False, \
-    eps_multiplet=1.0e-14):
+def select_global_largest(S, D_keep, D_total, sorting, \
+    keep_multiplets=False, eps_multiplet=1.0e-14):
     if sorting == 'svd':
         s_all = torch.cat([S[ind][:D_keep[ind]] for ind in S])
         values, order= torch.topk(s_all, D_total+int(keep_multiplets))
@@ -391,9 +390,7 @@ def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, device='cpu'):
 
 
 def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, device='cpu'):
-    """
-    outputs new dictionary of blocks after fusing one leg
-    """
+    """ Outputs new dictionary of blocks after fusing one leg. """
     Anew = {u: torch.zeros(Du, dtype=_data_dtype[dtype], device=device) for (u, Du) in meta_new}
     for (tn, Ds, to, Do) in meta_mrg:
         slc = [slice(None)] * len(Do)
@@ -403,7 +400,7 @@ def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, device='cpu'):
 
 
 def merge_to_dense(A, Dtot, meta, dtype, device='cpu'):
-    """ outputs full tensor """
+    """ Outputs full tensor. """
     Anew = torch.zeros(Dtot, dtype=_data_dtype[dtype], device=device)
     for (ind, Dss) in meta:
         Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))

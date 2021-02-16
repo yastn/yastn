@@ -100,17 +100,43 @@ def test_get_shapes():
     a = yast.ones(config=config_U1_R, s=(-1, -1, -1, 1, 1, 1),
                     t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                     D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
+
     assert a.get_shape() == (3, 5, 7, 9, 11, 13)
+    assert a.get_signature() == (-1, -1, -1, 1, 1, 1)
     assert a.to_numpy().shape == (3, 5, 7, 9, 11, 13)
+    b = a.to_nonsymmetric()
+    assert b.get_shape() == (3, 5, 7, 9, 11, 13)
+    b = a.to_nonsymmetric(native=True)
+    assert b.get_shape() == (3, 5, 7, 9, 11, 13)
+
     a.fuse_legs(axes=[0, 1, (2, 3), (4, 5)], inplace=True)
     assert a.get_shape() == (3, 5, 63, 143)
+    assert a.get_signature() == (-1, -1, -1, 1)
     assert a.to_numpy().shape == (3, 5, 63, 143)
+    b = a.to_nonsymmetric()
+    assert b.get_shape() == (3, 5, 63, 143)
+    b = a.to_nonsymmetric(native=True)
+    assert b.get_shape() == (3, 5, 7, 9, 11, 13)
+
     a.fuse_legs(axes=[0, (1, 2, 3)], inplace=True)
     assert a.get_shape() == (3, 28389)
+    assert a.get_signature() == (-1, -1)
     assert a.to_numpy().shape == (3, 28389)
+    b = a.to_nonsymmetric()
+    assert b.get_shape() == (3, 28389)
+    b = a.to_nonsymmetric(native=True)
+    assert b.get_shape() == (3, 5, 7, 9, 11, 13)
+
     a.fuse_legs(axes=[(0, 1)], inplace=True)
     assert a.get_shape() == (a.get_size(), )
+    assert a.get_signature() == (-1,)
     assert a.to_numpy().shape == (a.get_size(), )
+    b = a.to_nonsymmetric()
+    assert b.get_shape() == (a.get_size(), )
+    b = a.to_nonsymmetric(native=True)
+    assert b.get_shape() == (3, 5, 7, 9, 11, 13)
+
+
 
 
 def test_fuse_match_legs():

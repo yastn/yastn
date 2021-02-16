@@ -50,8 +50,8 @@ def test_split_svd_division():
     U2, S2, V2 = a.split_svd(axes=((0, 1), (2, 3)), nU=False, sU=1)
     USV2 = U2.dot(S2, axes=(2, 0)).dot(V2, axes=(2, 0))
     assert a.norm_diff(USV2) < tol  # == 0.0
-    assert U2.n-0 < tol  # == 0.0
-    assert V2.n-3 < tol  # == 0.0 
+    assert U2.n == 0
+    assert V2.n == 3
 
 
 if __name__ == '__main__':
