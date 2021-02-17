@@ -50,15 +50,15 @@ def get_size(x):
 
 
 def diag_create(x):
-    return torch.diag(x)   ##  PROBLEM WITH COMPLEX NUMBERS
+    return torch.diag(x)  ## TODO: PROBLEM WITH COMPLEX NUMBERS
 
 
 def diag_get(x):
-    return torch.diag(x)   ##  PROBLEM WITH COMPLEX NUMBERS
+    return torch.diag(x)  ## TODO: PROBLEM WITH COMPLEX NUMBERS
 
 
 def diag_diag(x):
-    return torch.diag(torch.diag(x))   ##  PROBLEM WITH COMPLEX NUMBERS
+    return torch.diag(torch.diag(x))  ## TODO: PROBLEM WITH COMPLEX NUMBERS
 
 
 def count_greater(x, cutoff):
@@ -77,6 +77,7 @@ def item(x):
 
 
 def norm(A, p):
+    """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
     if p == "fro":
         return torch.sum(torch.stack([torch.sum(t.abs()**2) for t in A.values()])).sqrt()
     elif p == "inf":
@@ -133,7 +134,9 @@ def ones(D, dtype='float64', device='cpu'):
 
 
 def randR(D, dtype='float64', device='cpu'):
+    # TODO: THIS SHOULD OUTPUT REAL VALUES FOR COMPLEX TENSOR TYPE
     return 2 * torch.rand(D, dtype=_data_dtype[dtype], device=device) - 1
+
 
 
 def rand(D, dtype='float64', device='cpu'):
@@ -152,10 +155,11 @@ def move_to_device(A, device):
     return {ind: x.to(device) for ind, x in A.items()}
 
 
-def conj(A):
-    """ Conjugate dict of tensors forcing a copy. """
-    # TODO is it a copy or not
-    return {t: x.conj() for t, x in A.items()}
+def conj(A, inplace):
+    """ Conjugate dict of tensors. Force a copy if not inplace. """
+    if inplace:
+        return {t: x.conj() for t, x in A.items()}
+    return {t: x.conj() for t, x in A.items()}   # TODO is it a copy or not
 
 
 def trace(A, order, meta):

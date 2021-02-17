@@ -75,6 +75,7 @@ def item(x):
 
 
 def norm(A, p):
+    """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
     if p == 'fro':
         return np.linalg.norm([np.linalg.norm(x) for x in A.values()])
     if p == 'inf':
@@ -152,8 +153,10 @@ def move_to_device(A, *args, **kwargs):
     return A
 
 
-def conj(A):
-    """ Conjugate dict of tensors forcing a copy. """
+def conj(A, inplace):
+    """ Conjugate dict of tensors; Force a copy in not in place. """
+    if inplace:
+        return {t: x.conj() for t, x in A.items()}
     return {t: x.copy().conj() for t, x in A.items()}
 
 

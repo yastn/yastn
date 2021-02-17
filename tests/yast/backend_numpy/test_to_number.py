@@ -10,6 +10,8 @@ def run_to_number(a, b):
     t0 = a.dot(b, axes=(ax, ax), conj=(1, 0))  # 0-dim tensor with 1 element, i.e., a number
 
     nb0 = t0.to_number()  # this is 
+    nb1 = t0.to_dense()
+    nb2 = t0.to_nonsymmetric()
     it0 = t0.item()  # this is python float (or int)
     
     tDa = {ii: a.get_leg_structure(ii) for ii in range(a.get_ndim())}  # info on charges and dimensions on all legs
