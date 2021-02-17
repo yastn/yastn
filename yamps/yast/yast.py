@@ -10,7 +10,7 @@ An instance of a Tensor is specified by a list of blocks (dense tensors) labeled
 from types import SimpleNamespace
 import itertools
 import numpy as np
-import yamps.yast.yast_sym_none as sym_none
+from .yast_sym_none import sym_none
 
 
 # flags that controls which checks are performed
