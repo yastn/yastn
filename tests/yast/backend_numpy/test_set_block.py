@@ -134,7 +134,7 @@ def test_set1():
     assert a.tset.shape == (3, 2, 1)
     assert a.is_consistent()
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
-
+    a.show_properties()
 
 def test_set2():
     # print('3d tensor: ')

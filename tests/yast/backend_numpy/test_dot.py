@@ -20,7 +20,7 @@ def dot_vs_numpy(a, b, axes, conj):
     if conj[1]:
         nb = nb.conj()
     nab = np.tensordot(na, nb, axes)
-    c = a.dot(b, axes, conj)
+    c = yast.tensordot(a, b, axes, conj)
     nc = c.to_dense(tDs)
     assert c.is_consistent()
     assert a.is_independent(c)
