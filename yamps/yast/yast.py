@@ -243,14 +243,14 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
     if conjs is None:
         conjs = (0,) * len(tensors)
     for nf, te, cc in zip(legs, tensors, conjs):
-        lf.append(te.lfuse[nf])
+        lf.append(te.meta_fusion[nf])
         un, = te._unpack_axes((nf,))
         for nn in un:
             tdn = te.get_leg_structure(nn, native=True)
             t.append(tuple(tdn.keys()))
             D.append(tuple(tdn.values()))
             s.append(te.s[nn] * (2 * cc - 1))
-    a = Tensor(config=tensors[0].config, s=s, n=n, isdiag=isdiag, lfuse=lf)
+    a = Tensor(config=tensors[0].config, s=s, n=n, isdiag=isdiag, meta_fusion=lf)
     a.fill_tensor(t=t, D=D, val=val)
     return a
 
@@ -271,9 +271,9 @@ def block(tensors, common_legs=None):
     """
     out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
-    out_b = tuple((ii,) for ii in range(tn0.llegs) if ii not in out_s)
+    out_b = tuple((ii,) for ii in range(tn0.mlegs) if ii not in out_s)
     pos = list(_clear_axes(*tensors))
-    lind = tn0.llegs - len(out_s)
+    lind = tn0.mlegs - len(out_s)
     for ind in pos:
         if len(ind) != lind:
             raise YastError('Wrong number of coordinates encoded in tensors.keys()')
@@ -285,7 +285,7 @@ def block(tensors, common_legs=None):
 
     for ind, tn in tensors.items():
         ind, = _clear_axes(ind)
-        if tn.nlegs != tn0.nlegs or tn.lfuse != tn0.lfuse or\
+        if tn.nlegs != tn0.nlegs or tn.meta_fusion != tn0.meta_fusion or\
            not np.all(tn.s == tn0.s) or not np.all(tn.n == tn0.n) or\
            tn.isdiag != tn0.isdiag :
                 raise YastError('Ndims, signatures, total charges or fusion trees of blocked tensors are inconsistent.')
@@ -324,7 +324,7 @@ def block(tensors, common_legs=None):
             meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.nlegs))))
     meta_new = tuple((ts, Ds) for ts, Ds in meta_new.items())
 
-    c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n, lfuse=tn0.lfuse)
+    c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n, meta_fusion=tn0.meta_fusion)
     c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, a.config.dtype, c.device)
     c.calculate_tDset()
     return c
@@ -358,10 +358,10 @@ class Tensor:
         # self.tset = np.zeros((0, self.nlegs, self.config.sym.nsym), dtype=int)  # list of blocks; 3d nparray of ints
         # self.Dset = np.zeros((0, self.nlegs), dtype=int)  # shapes of blocks; 2d nparray of ints
         self.A = {}  # dictionary of blocks
-        # (logical) fusion tree for each leg: (number_of_consequative_legs_it_represents, tuple_with_inner_structure)
-        self.lfuse = tuple(kwargs['lfuse']) if ('lfuse' in kwargs and kwargs['lfuse'] is not None) else ((1, ()),) * self.nlegs
-        # self.lfuse is immutable for copying and comparison
-        self.llegs = len(self.lfuse)  # number of logical legs
+        # (meta) fusion tree for each leg: (number_of_consequative_legs_it_represents, tuple_with_inner_structure)
+        self.meta_fusion = tuple(kwargs['meta_fusion']) if ('meta_fusion' in kwargs and kwargs['meta_fusion'] is not None) else ((1,),) * self.nlegs
+        # self.meta_fusion is immutable for copying and comparison
+        self.mlegs = len(self.meta_fusion)  # number of meta legs
         self.calculate_tDset()
 
     ######################
@@ -529,7 +529,7 @@ class Tensor:
         
             Warning: thismight break autograd if you are using it.
         """
-        a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.A = {ts: self.config.backend.copy(x) for ts, x in self.A.items()}
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
@@ -537,7 +537,7 @@ class Tensor:
 
     def clone(self):
         """ Return a copy of the tensor, tracking gradients. """
-        a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.A = {ts: self.config.backend.clone(x) for ts, x in self.A.items()}
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
@@ -548,7 +548,7 @@ class Tensor:
         if inplace:
             self.A = {ts: self.config.backend.detach(x) for ts, x in self.A.items()}
             return self
-        a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
         a.A = {ts: self.config.backend.detach(x) for ts, x in self.A.items()}
@@ -568,7 +568,7 @@ class Tensor:
         if self.device == device:
             return self
         config_d = SimpleNamespace(backend=self.config.backend, dtype=self.config.dtype, device=device, sym=self.config.sym)
-        a = Tensor(config=config_d, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        a = Tensor(config=config_d, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.tset= self.tset.copy()
         a.Dset= self.Dset.copy()
         a.A = self.config.backend.move_to_device(self.A, device)
@@ -576,7 +576,7 @@ class Tensor:
 
     def copy_empty(self):
         """ Return a copy of the tensor, but without copying blocks. """
-        return Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
+        return Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
 
     #######################
     #    export tensor    #
@@ -594,7 +594,7 @@ class Tensor:
         AA = {ind: self.config.backend.to_numpy(self.A[ind]) for ind in self.A}
         if self.isdiag:
             AA = {t: np.diag(x) for t, x in AA.items()}
-        out = {'A': AA, 's': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, 'lfuse': self.lfuse}
+        out = {'A': AA, 's': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, 'meta_fusion': self.meta_fusion}
         return out
 
     def compress_to_1d(self):
@@ -616,7 +616,7 @@ class Tensor:
         meta_unmerge = tuple((told, tnew, Dsl, tuple(Dnew)) \
             for (told, Dsl, tnew, _), Dnew in zip(meta_mrg, self.Dset))
         meta = {'s': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, \
-        'lfuse': self.lfuse, 'meta_unmerge':meta_unmerge}
+        'meta_fusion': self.meta_fusion, 'meta_unmerge':meta_unmerge}
         return meta, A[()]
 
     ############################
@@ -629,11 +629,13 @@ class Tensor:
         print("signature   :", self.s)  # signature
         print("charge      :", self.n)  # total charge of tensor
         print("isdiag      :", self.isdiag)
-        print("dim l./n.   :", self.llegs, self.nlegs)  # number of logical and native legs
-        print("shape l./n. :", self.get_shape(native=False), self.get_shape(native=True))
+        print("dim meta    :", self.mlegs)  # number of meta legs
+        print("dim native  :", self.nlegs)  # number of native legs
+        print("shape meta  :", self.get_shape(native=False))
+        print("shape native:", self.get_shape(native=True))
         print("no. blocks  :", len(self.A))  # number of blocks
         print("size        :", self.get_size())  # total number of elements in all blocks
-        print("l. fusion   :", self.lfuse, "\n")  # logical fusion tree for each leg
+        print("meta fusion :", self.meta_fusion, "\n")  # encoding meta fusion tree for each leg
 
 
     def __str__(self):
@@ -662,7 +664,7 @@ class Tensor:
         """ Tensor signatures. If not native, returns the signature of the first leg in each group."""
         if native:
             return tuple(self.s)
-        pn = tuple((n,) for n in range(self.llegs)) if self.llegs > 0 else ()
+        pn = tuple((n,) for n in range(self.mlegs)) if self.mlegs > 0 else ()
         un = tuple(self._unpack_axes(*pn))
         return tuple(self.s[p[0]] for p in un)
 
@@ -676,7 +678,7 @@ class Tensor:
 
     def get_leg_fusion(self, axes=None):
         """
-        Fusion trees for logical legs.
+        Fusion trees for meta legs.
 
         Parameters
         ----------
@@ -684,10 +686,10 @@ class Tensor:
             indices of legs; If axes is None returns all (default).
         """
         if axes is None:
-            return self.lfuse
+            return self.meta_fusion
         if isinstance(axes, int):
-            return self.lfuse(axes)
-        return tuple(self.lfuse(n) for n in axes)
+            return self.meta_fusion(axes)
+        return tuple(self.meta_fusion(n) for n in axes)
 
     def get_leg_structure(self, axis, native=False):
         r"""
@@ -699,7 +701,7 @@ class Tensor:
             Index of a leg.
 
         native : bool
-            consider native legs if True; otherwise logical/fused legs (default).
+            consider native legs if True; otherwise meta/fused legs (default).
 
         Returns
         -------
@@ -727,7 +729,7 @@ class Tensor:
 
     def get_shape(self, axes=None, native=False):
         r"""
-        Return total bond dimension of logical legs.
+        Return total bond dimension of meta legs.
 
         Parameters
         ----------
@@ -740,14 +742,14 @@ class Tensor:
             shapes of legs specified by axes
         """
         if axes is None:
-            axes = tuple(n for n in range(self.nlegs if native else self.llegs))
+            axes = tuple(n for n in range(self.nlegs if native else self.mlegs))
         if isinstance(axes, int):
             return sum(self.get_leg_structure(axes, native=native).values())
         return tuple(sum(self.get_leg_structure(ii, native=native).values()) for ii in axes)
 
     def get_ndim(self, native=False):
-        """ Number of: logical legs if not native else native legs. """
-        return self.nlegs if native else self.llegs
+        """ Number of: meta legs if not native else native legs. """
+        return self.nlegs if native else self.mlegs
 
 
     #########################
@@ -768,7 +770,7 @@ class Tensor:
             {n: {tn: Dn}} specify charges and dimensions to include on some legs (indicated by keys n).
 
         native: bool
-            output native tensor (neglecting logical fusions).
+            output native tensor (neglecting meta fusions).
 
         Returns
         -------
@@ -831,7 +833,7 @@ class Tensor:
             {n: {tn: Dn}} specify charges and dimensions to include on some legs (indicated by keys n).
 
         native: bool
-            output native tensor (neglecting logical fusions).
+            output native tensor (neglecting meta fusions).
 
         Returns
         -------
@@ -1129,7 +1131,7 @@ class Tensor:
             a = self
             a.n = newn
         else:
-            a = Tensor(config=self.config, s=-self.s, n=newn, isdiag=self.isdiag, lfuse=self.lfuse)
+            a = Tensor(config=self.config, s=-self.s, n=newn, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
             a.tset = self.tset.copy()
             a.Dset = self.Dset.copy()
         a.A = a.config.backend.conj(self.A, inplace)
@@ -1165,7 +1167,7 @@ class Tensor:
             self.n = newn
             self.s = -self.s
             return self
-        a = Tensor(config=self.config, s=-self.s, n=newn, isdiag=self.isdiag, lfuse=self.lfuse)
+        a = Tensor(config=self.config, s=-self.s, n=newn, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
         a.A= {ind: self.config.backend.clone(self.A[ind]) for ind in self.A}
@@ -1185,14 +1187,14 @@ class Tensor:
         """
         uaxes, = self._unpack_axes(axes)
         order = np.array(uaxes, dtype=np.intp)
-        newlfuse = tuple(self.lfuse[ii] for ii in axes)
+        new_meta_fusion = tuple(self.meta_fusion[ii] for ii in axes)
         news = self.s[order]
         if inplace:
             self.s = news
-            self.lfuse = newlfuse
+            self.meta_fusion = new_meta_fusion
             a = self
         else:
-            a = Tensor(config=self.config, s=news, n=self.n, isdiag=self.isdiag, lfuse=newlfuse)
+            a = Tensor(config=self.config, s=news, n=self.n, isdiag=self.isdiag, meta_fusion=new_meta_fusion)
         newt = self.tset[:, order, :]
         meta_transpose = tuple((tuple(old.flat), tuple(new.flat)) for old, new in zip(self.tset, newt))
         a.A = a.config.backend.transpose(self.A, uaxes, meta_transpose, inplace)
@@ -1212,11 +1214,11 @@ class Tensor:
         source, destination: ints
         """
         lsrc, ldst = _clear_axes(source, destination)
-        lsrc = tuple(xx + self.llegs if xx < 0 else xx for xx in lsrc)
-        ldst = tuple(xx + self.llegs if xx < 0 else xx for xx in ldst)
+        lsrc = tuple(xx + self.mlegs if xx < 0 else xx for xx in lsrc)
+        ldst = tuple(xx + self.mlegs if xx < 0 else xx for xx in ldst)
         if lsrc == ldst:
             return self if inplace else self.copy()
-        axes = [ii for ii in range(self.llegs) if ii not in lsrc]
+        axes = [ii for ii in range(self.mlegs) if ii not in lsrc]
         ds = sorted(((d, s) for d, s in zip(ldst, lsrc)))
         for d, s in ds:
             axes.insert(d, s)
@@ -1225,10 +1227,10 @@ class Tensor:
     def diag(self):
         """Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa. """
         if self.isdiag:
-            a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=False, lfuse=self.lfuse)
+            a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=False, meta_fusion=self.meta_fusion)
             a.A = {ind: self.config.backend.diag_diag(self.A[ind]) for ind in self.A}
         elif self.nlegs == 2 and sum(np.abs(self.n)) == 0 and sum(self.s) == 0:
-            a = Tensor(config=self.config, s=self.s, isdiag=True, lfuse=self.lfuse)
+            a = Tensor(config=self.config, s=self.s, isdiag=True, meta_fusion=self.meta_fusion)
             a.A = {ind: self.config.backend.diag_diag(self.A[ind]) for ind in self.A}
         else:
             raise YastError('Tensor cannot be changed into a diagonal one')
@@ -1357,7 +1359,7 @@ class Tensor:
         """
         lin1, lin2 = _clear_axes(*axes)  # contracted legs
         lin12 = lin1 + lin2
-        lout = tuple(ii for ii in range(self.llegs) if ii not in lin12)
+        lout = tuple(ii for ii in range(self.mlegs) if ii not in lin12)
         in1, in2, out = self._unpack_axes(lin1, lin2, lout)
 
         if len(in1) != len(in2) or len(lin1) != len(lin2):
@@ -1389,7 +1391,7 @@ class Tensor:
             raise YastError('Not all bond dimensions of the traced legs match')
 
         meta = [(tuple(to[n]), tuple(self.tset[n].flat), tuple(Drsh[n])) for n in ind]
-        a = Tensor(config=self.config, s=self.s[aout], n=self.n, lfuse=tuple(self.lfuse[ii] for ii in lout))
+        a = Tensor(config=self.config, s=self.s[aout], n=self.n, meta_fusion=tuple(self.meta_fusion[ii] for ii in lout))
         a.A = a.config.backend.trace(self.A, order, meta)
         a.calculate_tDset()
         return a
@@ -1416,9 +1418,9 @@ class Tensor:
         -------
             tansor: Tensor
         """
-        la_con, lb_con = _clear_axes(*axes)  # contracted logical legs
-        la_out = tuple(ii for ii in range(self.llegs) if ii not in la_con)  # outgoing logical legs
-        lb_out = tuple(ii for ii in range(other.llegs) if ii not in lb_con)  # outgoing logical legs
+        la_con, lb_con = _clear_axes(*axes)  # contracted meta legs
+        la_out = tuple(ii for ii in range(self.mlegs) if ii not in la_con)  # outgoing meta legs
+        lb_out = tuple(ii for ii in range(other.mlegs) if ii not in lb_con)  # outgoing meta legs
 
         a_con, a_out = self._unpack_axes(la_con, la_out)  # actual legs of a=self
         b_con, b_out = other._unpack_axes(lb_con, lb_out)  # actual legs of b=other
@@ -1452,8 +1454,8 @@ class Tensor:
 
         Cm = self.config.backend.dot(Am, Bm, conj, meta_dot)
         c_s = np.hstack([conja * self.s[na_out], conjb * other.s[nb_out]])
-        c_lfuse = [self.lfuse[ii] for ii in la_out] + [other.lfuse[ii] for ii in lb_out]
-        c = Tensor(config=self.config, s=c_s, n=c_n, lfuse=c_lfuse)
+        c_meta_fusion = [self.meta_fusion[ii] for ii in la_out] + [other.meta_fusion[ii] for ii in lb_out]
+        c = Tensor(config=self.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion)
         c.A = self._unmerge_from_matrix(Cm, ls_l, ls_r)
         c.calculate_tDset()
         return c
@@ -1526,9 +1528,9 @@ class Tensor:
 
         Um, Sm, Vm = self.config.backend.svd(Am, meta, opts)
 
-        U = Tensor(config=self.config, s=ls_l.s + (sU,), n=n_l, lfuse=[self.lfuse[ii] for ii in lout_l] + [(1, ())])
+        U = Tensor(config=self.config, s=ls_l.s + (sU,), n=n_l, meta_fusion=[self.meta_fusion[ii] for ii in lout_l] + [(1,)])
         S = Tensor(config=self.config, s=(-sU, sU), isdiag=True)
-        V = Tensor(config=self.config, s=(-sU,) + ls_r.s, n=n_r, lfuse=[(1, ())] + [self.lfuse[ii] for ii in lout_r])
+        V = Tensor(config=self.config, s=(-sU,) + ls_r.s, n=n_r, meta_fusion=[(1,)] + [self.meta_fusion[ii] for ii in lout_r])
 
         ls_s = _LegDecomposition(self.config)
         ls_s.leg_struct_for_truncation(Sm, opts, 'svd')
@@ -1576,8 +1578,8 @@ class Tensor:
 
         Qs = tuple(self.s[lg] for lg in out_l) + (sQ,)
         Rs = (-sQ,) + tuple(self.s[lg] for lg in out_r)
-        Q = Tensor(config=self.config, s=Qs, n=self.n, lfuse=[self.lfuse[ii] for ii in lout_l] + [(1, ())])
-        R = Tensor(config=self.config, s=Rs, lfuse=[(1, ())] + [self.lfuse[ii] for ii in lout_r])
+        Q = Tensor(config=self.config, s=Qs, n=self.n, meta_fusion=[self.meta_fusion[ii] for ii in lout_l] + [(1,)])
+        R = Tensor(config=self.config, s=Rs, meta_fusion=[(1,)] + [self.meta_fusion[ii] for ii in lout_r])
 
         ls = _LegDecomposition(self.config, -sQ, -sQ)
         ls.leg_struct_trivial(Rm, 0)
@@ -1649,7 +1651,7 @@ class Tensor:
         Us = tuple(self.s[lg] for lg in out_l) + (sU,)
 
         S = Tensor(config=self.config, s=(-sU, sU), isdiag=True)
-        U = Tensor(config=self.config, s=Us, lfuse=[self.lfuse[ii] for ii in lout_l] + [(1, ())])
+        U = Tensor(config=self.config, s=Us, meta_fusion=[self.meta_fusion[ii] for ii in lout_l] + [(1,)])
 
         U.A = self._unmerge_from_matrix(Um, ls_l, ls_s)
         S.A = self._unmerge_from_diagonal(Sm, ls_s)
@@ -1720,7 +1722,7 @@ class Tensor:
 
     def fuse_legs(self, axes, inplace=False):
         r"""
-        Permutes tensor legs. Next, fuse groups of consecutive legs into new logical legs.
+        Permutes tensor legs. Next, fuse groups of consecutive legs into new meta legs.
         
         Parameters
         ----------
@@ -1733,35 +1735,38 @@ class Tensor:
 
         Example
         -------
-        tensor.fuse_legs(axes=(2, 0, (1, 4), 3)) gives 4 efective legs from original 5; with one logically non-trivial one
+        tensor.fuse_legs(axes=(2, 0, (1, 4), 3)) gives 4 efective legs from original 5; with one metaly non-trivial one
         tensor.fuse_legs(axes=((2, 0), (1, 4), (3, 5))) gives 3 effective legs from original 6
         """
         if self.isdiag:
             raise YastError('Cannot group legs of a diagonal tensor')
 
         # TODO verify input ? Inner tuples can contain only integers
-        lfuse, order = [], []
+        meta_fusion, order = [], []
         for group in axes:
             if isinstance(group, int):
                 order.append(group)
-                lfuse.append(self.lfuse[group])
+                meta_fusion.append(self.meta_fusion[group])
             else:
                 order.extend(group)
-                struct = tuple(self.lfuse[ii] for ii in group)
-                nlegs = sum(x[0] for x in struct)
-                lfuse.append((nlegs, struct))
+                nlegs = [sum(self.meta_fusion[ii][0] for ii in group)]
+                for ii in group:
+                    nlegs.extend(self.meta_fusion[ii])
+                # struct = tuple(self.meta_fusion[ii] for ii in group)
+                # nlegs = sum(x[0] for x in struct)
+                meta_fusion.append(tuple(nlegs))
         order = tuple(order)
-        if inplace and order == tuple(ii for ii in range(self.llegs)):
+        if inplace and order == tuple(ii for ii in range(self.mlegs)):
             a = self
         else:
             a = self.transpose(axes=order, inplace=inplace)
-        a.lfuse = tuple(lfuse)
-        a.llegs = len(a.lfuse)
+        a.meta_fusion = tuple(meta_fusion)
+        a.mlegs = len(a.meta_fusion)
         return a
 
     def unfuse_legs(self, axes, inplace=False):
         """
-        Unfuse logical legs reverting one layer of fusion. Operation can be done in-place.
+        Unfuse meta legs reverting one layer of fusion. Operation can be done in-place.
 
         New legs are inserted in place of the unfused one.
 
@@ -1777,14 +1782,25 @@ class Tensor:
         if isinstance(axes, int):
             axes = (axes,)
         a = self if inplace else self.clone()
-        newlfuse = []
-        for ii in range(a.llegs):
-            if ii not in axes or a.lfuse[ii][0] == 1:
-                newlfuse.append(a.lfuse[ii])
+        new_meta_fusion = []
+        for ii in range(a.mlegs):
+            if ii not in axes or a.meta_fusion[ii][0] == 1:
+                new_meta_fusion.append(a.meta_fusion[ii])
             else:
-                newlfuse.extend(a.lfuse[ii][1])
-        a.lfuse = tuple(newlfuse)
-        a.llegs = len(a.lfuse)
+                stack = a.meta_fusion[ii]
+                lstack = len(stack)
+                pos_init, cum = 1, 0
+                for pos in range(1, lstack):
+                    if cum == 0:
+                        cum = stack[pos]
+                    if stack[pos] == 1:
+                        cum = cum - 1
+                        if cum == 0:
+                            new_meta_fusion.append(stack[pos_init : pos + 1])
+                            pos_init = pos + 1
+                # new_meta_fusion.extend(a.meta_fusion[ii][1])
+        a.meta_fusion = tuple(new_meta_fusion)
+        a.mlegs = len(a.meta_fusion)
         return a
 
     #################
@@ -1835,7 +1851,7 @@ class Tensor:
     def _test_tensors_match(self, other):
         if _check_signatures_match and (not all(self.s == other.s) or not all(self.n == other.n)):
             raise YastError('Tensor signatures do not match')
-        if _check_consistency and not self.lfuse == other.lfuse:
+        if _check_consistency and not self.meta_fusion == other.meta_fusion:
             raise YastError('Fusion trees do not match')
 
     def _test_axes_split(self, out_l, out_r):
@@ -1851,9 +1867,9 @@ class Tensor:
         self.Dset = np.array([self.config.backend.get_shape(x) for x in self.A.values()], dtype=int).reshape(len(self.A), self.nlegs)
 
     def _unpack_axes(self, *args):
-        """Unpack logical axes into native axes based on self.lfuse"""
-        clegs = tuple(itertools.accumulate(x[0] for x in self.lfuse))
-        return (tuple(itertools.chain(*(range(clegs[ii]-self.lfuse[ii][0], clegs[ii]) for ii in axes))) for axes in args)
+        """Unpack meta axes into native axes based on self.meta_fusion"""
+        clegs = tuple(itertools.accumulate(x[0] for x in self.meta_fusion))
+        return (tuple(itertools.chain(*(range(clegs[ii]-self.meta_fusion[ii][0], clegs[ii]) for ii in axes))) for axes in args)
 
 
 class _LegDecomposition:

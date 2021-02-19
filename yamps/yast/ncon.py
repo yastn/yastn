@@ -7,7 +7,7 @@ def ncon(ts, inds, conjs=None):
     if len(ts) != len(inds):
         raise YastError('Wrong number of tensors')
     for ii, ind in enumerate(inds):
-        if ts[ii].llegs != len(ind):
+        if ts[ii].get_ndim() != len(ind):
             raise YastError('Wrong number of legs in %02d-th tensors.' % ii)
 
     ts = dict(enumerate(ts))
