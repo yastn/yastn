@@ -546,7 +546,7 @@ class Tensor:
     def detach(self, inplace=False):
         """ Detach tensor from autograd; Can be called inplace (?) """
         if inplace:
-            self.A = {ts: self.config.backend.detach(x) for ts, x in self.A.items()}
+            for x in self.A.values(): self.config.backend.detach_(x)
             return self
         a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, lfuse=self.lfuse)
         a.tset = self.tset.copy()
