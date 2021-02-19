@@ -24,6 +24,8 @@ def set_num_threads(num_threads):
 def detach(x):
     return x.detach()
 
+def detach_(x):
+    x.detach_()
 
 def clone(x):
     return x.clone()

@@ -10,7 +10,7 @@ An instance of a Tensor is specified by a list of blocks (dense tensors) labeled
 from types import SimpleNamespace
 import itertools
 import numpy as np
-import yamps.yast.yast_sym_none as sym_none
+from .yast_sym_none import sym_none
 
 
 # flags that controls which checks are performed
@@ -546,7 +546,7 @@ class Tensor:
     def detach(self, inplace=False):
         """ Detach tensor from autograd; Can be called inplace (?) """
         if inplace:
-            self.A = {ts: self.config.backend.detach(x) for ts, x in self.A.items()}
+            for x in self.A.values(): self.config.backend.detach_(x)
             return self
         a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.tset = self.tset.copy()

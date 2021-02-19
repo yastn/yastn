@@ -1,7 +1,8 @@
+from types import SimpleNamespace
+
 """ Define trivial rules for dense tensor"""
 
 nsym = 0  # nothing to distinguish symmetry sector
-
 name = 'Dense'
 
 def fuse(charges, signatures, new_signature):
@@ -25,3 +26,5 @@ def fuse(charges, signatures, new_signature):
     """
     # charges is an empty matrix
     return charges.swapaxes(1,2) @ signatures  # swap to properly match non-zero dimensions of tset;
+
+sym_none= SimpleNamespace(nsym=nsym, name=name, fuse=fuse)
