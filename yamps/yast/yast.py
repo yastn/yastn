@@ -7,7 +7,7 @@ In principle, any number of symmetries can be used (including no symmetries).
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
 
-from types import SimpleNamespace
+from collections import namedtuple
 import itertools
 import numpy as np
 from .yast_sym_none import sym_none
@@ -18,6 +18,8 @@ _check_signatures_match = True
 _check_consistency = True
 _allow_cache_meta = True
 
+_config = namedtuple('_config', ('backend', 'sym', 'dtype', 'device'), \
+                    defaults = (None, sym_none, 'float64', 'cpu'))
 
 def check_signatures_match(value=True):
     """Set the value of the flag check_signatures_match."""
@@ -202,7 +204,7 @@ def from_dict(config=None, d=None):
     raise YastError("Dictionary d is required.")
 
 
-def decompress_from_1d(r1d, config, d):
+def decompress_from_1d(r1d, config, meta):
     """
     Generate tensor based on information in dictionary d and 1D array
     r1d containing the serialized blocks
@@ -215,9 +217,9 @@ def decompress_from_1d(r1d, config, d):
     d : dict
         information about tensor stored with :meth:`Tensor.to_dict`
     """
-    a = Tensor(config=config, **d)
+    a = Tensor(config=config, **meta)
     A = {(): r1d}
-    a.A = a.config.backend.unmerge_one_leg(A, 0, d['meta_unmerge'])
+    a.A = a.config.backend.unmerge_one_leg(A, 0, meta['meta_unmerge'])
     a.calculate_tDset()
     return a
 
@@ -325,7 +327,7 @@ def block(tensors, common_legs=None):
     meta_new = tuple((ts, Ds) for ts, Ds in meta_new.items())
 
     c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n, meta_fusion=tn0.meta_fusion)
-    c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, a.config.dtype, c.device)
+    c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, a.config.dtype, c.config.device)
     c.calculate_tDset()
     return c
 
@@ -339,8 +341,7 @@ class Tensor:
     """ Class defining a tensor with abelian symmetries, and operations on such tensor(s). """
 
     def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
-        self.config = kwargs['settings'] if 'settings' in kwargs else config
-        self.device = 'cpu' if not hasattr(self.config, 'device') else self.config.device
+        self.config = config if isinstance(config, _config) else _config(**{a:getattr(config, a) for a in _config._fields if hasattr(config, a)})
         self.isdiag = isdiag
         self.nlegs = 1 if isinstance(s, int) else len(s)  # number of native legs
         self.s = np.array(s, dtype=int).reshape(self.nlegs)
@@ -478,9 +479,6 @@ class Tensor:
         if not np.all(self.config.sym.fuse(ats, self.s, 1) == self.n):
             raise YastError('Charges ts are not consistent with the symmetry rules: t @ s - n != 0')            
 
-        # NOTE assume default device to be cpu
-        device= 'cpu' if not hasattr(self.config, 'device') else self.config.device
-
         if isinstance(val, str):
             if ts in self.A.keys(): 
                 if Ds is None:
@@ -500,22 +498,22 @@ class Tensor:
                 assert Ds is not None, "No ts block "+str(ts)+" exists, Ds must be provided"
 
             if val == 'zeros':
-                self.A[ts] = self.config.backend.zeros(Ds, dtype=self.config.dtype, device=device)
+                self.A[ts] = self.config.backend.zeros(Ds, dtype=self.config.dtype, device=self.config.device)
             elif val == 'randR':
-                self.A[ts] = self.config.backend.randR(Ds, dtype=self.config.dtype, device=device)
+                self.A[ts] = self.config.backend.randR(Ds, dtype=self.config.dtype, device=self.config.device)
             elif val == 'rand':
-                self.A[ts] = self.config.backend.rand(Ds, dtype=self.config.dtype, device=device)
+                self.A[ts] = self.config.backend.rand(Ds, dtype=self.config.dtype, device=self.config.device)
             elif val == 'ones':
-                self.A[ts] = self.config.backend.ones(Ds, dtype=self.config.dtype, device=device)
+                self.A[ts] = self.config.backend.ones(Ds, dtype=self.config.dtype, device=self.config.device)
             if self.isdiag:
                 self.A[ts] = self.config.backend.diag_get(self.A[ts])
                 self.A[ts] = self.config.backend.diag_create(self.A[ts])
         else:
             if self.isdiag and val.ndim == 1 and np.prod(Ds)==(val.size**2):
-                self.A[ts] = self.config.backend.to_tensor(np.diag(val), Ds, dtype=self.config.dtype, device=device)
+                self.A[ts] = self.config.backend.to_tensor(np.diag(val), Ds, dtype=self.config.dtype, device=self.config.device)
             else:
                 # TODO Ds is given implicitly by the val n-dim array
-                self.A[ts] = self.config.backend.to_tensor(val, Ds=Ds, dtype=self.config.dtype, device=device)
+                self.A[ts] = self.config.backend.to_tensor(val, Ds=Ds, dtype=self.config.dtype, device=self.config.device)
         # here it checkes the consistency of bond dimensions
         self.calculate_tDset()
         tD = [self.get_leg_structure(n, native=True) for n in range(self.nlegs)]
@@ -565,9 +563,9 @@ class Tensor:
         device: str
             device identifier
         """
-        if self.device == device:
+        if self.config.device == device:
             return self
-        config_d = SimpleNamespace(backend=self.config.backend, dtype=self.config.dtype, device=device, sym=self.config.sym)
+        config_d = self.config._replace(device=device)
         a = Tensor(config=config_d, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.tset= self.tset.copy()
         a.Dset= self.Dset.copy()
@@ -597,27 +595,41 @@ class Tensor:
         out = {'A': AA, 's': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, 'meta_fusion': self.meta_fusion}
         return out
 
-    def compress_to_1d(self):
+    def compress_to_1d(self, meta=None):
         """
-        Store each block as 1D array within r1d in contiguous manner and
-        record info about charges and dimensions in a list
-        """
-        D_rsh = np.prod(self.Dset, axis=1)
-        aD_rsh = np.cumsum(D_rsh)
-        D_tot = np.sum(D_rsh)
-        meta_new = (((), D_tot),)
-        # meta_mrg = ((tn, Ds, to, Do), ...)
-        meta_mrg = tuple(((), (aD-D, aD), tuple(t.flat), (D,)) \
-            for t, D, aD in zip(self.tset, D_rsh, aD_rsh))
-        A = self.config.backend.merge_one_leg(self.A, 0, tuple(range(self.nlegs)), \
-            meta_new, meta_mrg, self.config.dtype, self.device)
+        Store each block as 1D array within r1d in contiguous manner; outputs meta-information to reconstruct the original tensor
 
-        # (told, tnew, Dsl, Dnew)
-        meta_unmerge = tuple((told, tnew, Dsl, tuple(Dnew)) \
-            for (told, Dsl, tnew, _), Dnew in zip(meta_mrg, self.Dset))
-        meta = {'s': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, \
-        'meta_fusion': self.meta_fusion, 'meta_unmerge':meta_unmerge}
-        return meta, A[()]
+        Parameters
+        ----------
+            meta: dict
+                If not None, uses this metainformation to merge into 1d structure (filling-in zeros if tensor does not have some blocks). 
+                Raise error, if tensor has some blocks which are not included in meta; or otherwise meta does not match the tensor.
+        """
+        if meta is None:
+            D_rsh = np.prod(self.Dset, axis=1)
+            aD_rsh = np.cumsum(D_rsh)
+            D_tot = np.sum(D_rsh)
+            meta_new = (((), D_tot),)
+            # meta_merge = ((tn, Ds, to, Do), ...)
+            meta_merge = tuple(((), (aD-D, aD), tuple(t.flat), (D,)) \
+                for t, D, aD in zip(self.tset, D_rsh, aD_rsh))
+            # (told, tnew, Dsl, Dnew)
+            meta_unmerge = tuple((told, tnew, Dsl, tuple(Dnew)) \
+                for (told, Dsl, tnew, _), Dnew in zip(meta_merge, self.Dset))
+            meta = {'s': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, \
+                'meta_fusion': self.meta_fusion, 'meta_unmerge':meta_unmerge, 'meta_merge':meta_merge}
+        else:
+            if tuple(self.s) != meta['s'] or tuple(self.n) != meta['n'] or self.isdiag != meta['isdiag'] or self.meta_fusion != meta['meta_fusion']:
+                raise YastError("Tensor do not match provided metadata.")
+            meta_merge = meta['meta_merge']
+            D_tot = meta_merge[-1][1][1]
+            meta_new = (((), D_tot),)
+            if len(self.A) != sum(ind in self.A for (_, _, ind, _) in meta_merge):
+                raise YastError("Tensor has blocks that do not appear in meta.")
+
+        A = self.config.backend.merge_one_leg(self.A, 0, tuple(range(self.nlegs)), \
+            meta_new, meta_merge, self.config.dtype, self.config.device)
+        return A[()], meta
 
     ############################
     #    output information    #
@@ -776,7 +788,6 @@ class Tensor:
         -------
         out : tensor of the type used by backend
         """
-        device= 'cpu' if not hasattr(self.config, 'device') else self.config.device
         nlegs = self.get_ndim(native=native)
         tD = [self.get_leg_structure(n, native=native) for n in range(nlegs)]
         if leg_structures is not None:
@@ -802,7 +813,7 @@ class Tensor:
         for tt in self.tset:
             tind = tuple(tt.flat)
             meta.append((tind, tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
-        return self.config.backend.merge_to_dense(self.A, Dtot, meta, self.config.dtype, device)
+        return self.config.backend.merge_to_dense(self.A, Dtot, meta, self.config.dtype, self.config.device)
 
     def to_numpy(self, leg_structures=None, native=False):
         r"""
@@ -839,8 +850,7 @@ class Tensor:
         -------
         out : tensor of the type used by backend
         """
-        config_dense= SimpleNamespace(backend=self.config.backend, dtype=self.config.dtype, \
-                                       device=self.config.device, sym=sym_none)
+        config_dense = self.config._replace(sym=sym_none)
         news = self.get_signature(native)
         T = Tensor(config=config_dense, s=news, n=None, isdiag=self.isdiag)
         T.set_block(val=self.to_dense(leg_structures, native))
@@ -1060,6 +1070,7 @@ class Tensor:
         tensor : Tensor
             result of addition as a new tensor
         """
+        self._test_configs_match(other)
         self._test_tensors_match(other)
         meta = _common_keys(self.A, other.A)
         a = self.copy_empty()
@@ -1082,6 +1093,7 @@ class Tensor:
         tensor : Tensor
             result of subtraction as a new tensor
         """
+        self._test_configs_match(other)
         self._test_tensors_match(other)
         meta = _common_keys(self.A, other.A)
         a = self.copy_empty()
@@ -1105,6 +1117,7 @@ class Tensor:
         tensor : Tensor
             result of addition as a new tensor
         """
+        self._test_configs_match(other)
         self._test_tensors_match(other)
         meta = _common_keys(self.A, other.A)
         a = self.copy_empty()
@@ -1338,6 +1351,7 @@ class Tensor:
         -------
         x: number
         """
+        self._test_configs_match(other)
         self._test_tensors_match(other)
         k12, _, _ = _common_keys(self.A, other.A)
         if len(k12) > 0:
@@ -1418,6 +1432,7 @@ class Tensor:
         -------
             tansor: Tensor
         """
+        self._test_configs_match(other)
         la_con, lb_con = _clear_axes(*axes)  # contracted meta legs
         la_out = tuple(ii for ii in range(self.mlegs) if ii not in la_con)  # outgoing meta legs
         lb_out = tuple(ii for ii in range(other.mlegs) if ii not in lb_con)  # outgoing meta legs
@@ -1699,7 +1714,7 @@ class Tensor:
         meta_mrg = tuple((tuple(tn.flat), tuple(to.flat), *ls_l.dec[tuple(tel.flat)][tuple(tl.flat)][:2], *ls_r.dec[tuple(ter.flat)][tuple(tr.flat)][:2])
             for tn, to, tel, tl, ter, tr in zip(t_new, tset, teff_l, t_l, teff_r, t_r))
 
-        Anew = self.config.backend.merge_to_matrix(self.A, order, meta_new, meta_mrg, self.config.dtype, self.device)
+        Anew = self.config.backend.merge_to_matrix(self.A, order, meta_new, meta_mrg, self.config.dtype, self.config.device)
         return Anew, ls_l, ls_r, u_new_l, u_new_r
 
     def _unmerge_from_matrix(self, A, ls_l, ls_r):
@@ -1848,6 +1863,10 @@ class Tensor:
     #     aux function     #
     ########################
 
+    def _test_configs_match(self, other):
+        if self.config != other.config:
+            raise YastError('configs do not match')
+
     def _test_tensors_match(self, other):
         if _check_signatures_match and (not all(self.s == other.s) or not all(self.n == other.n)):
             raise YastError('Tensor signatures do not match')
@@ -1863,8 +1882,9 @@ class Tensor:
 
     def calculate_tDset(self):
         """Updates meta-information about charges and dimensions of all blocks."""
-        self.tset = np.array(list(self.A), dtype=int).reshape(len(self.A), self.nlegs, self.config.sym.nsym)
-        self.Dset = np.array([self.config.backend.get_shape(x) for x in self.A.values()], dtype=int).reshape(len(self.A), self.nlegs)
+        lA = sorted(self.A.keys())  # sorting tset and Dset according to tset
+        self.tset = np.array(lA, dtype=int).reshape(len(lA), self.nlegs, self.config.sym.nsym)
+        self.Dset = np.array([self.config.backend.get_shape(self.A[x]) for x in lA], dtype=int).reshape(len(lA), self.nlegs)
 
     def _unpack_axes(self, *args):
         """Unpack meta axes into native axes based on self.meta_fusion"""

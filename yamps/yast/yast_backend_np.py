@@ -23,6 +23,10 @@ def detach(x):
     return x
 
 
+def detach_(x):
+    return x
+
+
 def clone(x):
     return x.copy()
 
@@ -397,9 +401,10 @@ def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, *args, **kwargs):
     """ Outputs new dictionary of blocks after fusing one leg. """
     Anew = {u: np.zeros(Du, dtype=_data_dtype[dtype]) for (u, Du) in meta_new}
     for (tn, Ds, to, Do) in meta_mrg:
-        slc = [slice(None)] * len(Do)
-        slc[axis] = slice(*Ds)
-        Anew[tn][tuple(slc)] = A[to].transpose(order).reshape(Do)
+        if to in A:
+            slc = [slice(None)] * len(Do)
+            slc[axis] = slice(*Ds)
+            Anew[tn][tuple(slc)] = A[to].transpose(order).reshape(Do)
     return Anew
 
 

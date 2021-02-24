@@ -399,9 +399,10 @@ def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, device='cpu'):
     """ Outputs new dictionary of blocks after fusing one leg. """
     Anew = {u: torch.zeros(Du, dtype=_data_dtype[dtype], device=device) for (u, Du) in meta_new}
     for (tn, Ds, to, Do) in meta_mrg:
-        slc = [slice(None)] * len(Do)
-        slc[axis] = slice(*Ds)
-        Anew[tn][tuple(slc)] = A[to].permute(order).reshape(Do)
+        if to in A:
+            slc = [slice(None)] * len(Do)
+            slc[axis] = slice(*Ds)
+            Anew[tn][tuple(slc)] = A[to].permute(order).reshape(Do)
     return Anew
 
 

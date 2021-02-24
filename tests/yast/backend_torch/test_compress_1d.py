@@ -6,14 +6,15 @@ import config_U1_R
 import config_Z2_U1_R
 import numpy as np
 from math import isclose
+import pytest
 
 tol = 1e-12
 
 def test_compress_dense():
     # print('3d tensor:')
     A = yast.rand(config=config_dense_R, s=(-1, 1, 1), D=(1, 2, 3))
-    meta, r1d= A.compress_to_1d()
-    T= yast.decompress_from_1d(r1d, config=config_dense_R, d=meta)
+    r1d, meta= A.compress_to_1d()
+    T= yast.decompress_from_1d(r1d, config=config_dense_R, meta=meta)
     npa= A.to_numpy()
     npt= T.to_numpy()
     assert np.isrealobj(npt)
@@ -32,8 +33,8 @@ def test_compress_dense():
 
     # print('1d tensor:')
     A = yast.rand(config=config_dense_R, s=1, D=5)  # s=(1,)
-    meta, r1d= A.compress_to_1d()
-    T= yast.decompress_from_1d(r1d, config=config_dense_R, d=meta)
+    r1d, meta= A.compress_to_1d()
+    T= yast.decompress_from_1d(r1d, config=config_dense_R, meta=meta)
     npa= A.to_numpy()
     npt= T.to_numpy()
     assert np.isrealobj(npt)
@@ -44,8 +45,8 @@ def test_compress_dense():
 
     # print('diagonal tensor:')
     A = yast.rand(config=config_dense_R, isdiag=True, D=5)
-    meta, r1d= A.compress_to_1d()
-    T= yast.decompress_from_1d(r1d, config=config_dense_R, d=meta)
+    r1d, meta= A.compress_to_1d()
+    T= yast.decompress_from_1d(r1d, config=config_dense_R, meta=meta)
     npa= A.to_numpy()
     npt= T.to_numpy()
     assert np.isrealobj(npt)
@@ -59,8 +60,8 @@ def test_compress_U1():
     A = yast.ones(config=config_U1_R, s=(-1, 1, 1, 1),
                     t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
                     D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
-    meta, r1d= A.compress_to_1d()
-    T= yast.decompress_from_1d(r1d, config=config_U1_R, d=meta)
+    r1d, meta= A.compress_to_1d()
+    T= yast.decompress_from_1d(r1d, config=config_U1_R, meta=meta)
     npa= A.to_numpy()
     npt= T.to_numpy()
     assert np.isrealobj(npt)
@@ -80,8 +81,8 @@ def test_compress_U1():
 
     # print('1d tensor:')
     A = yast.ones(config=config_U1_R, s=-1, t=0, D=5)
-    meta, r1d= A.compress_to_1d()
-    T= yast.decompress_from_1d(r1d, config=config_U1_R, d=meta)
+    r1d, meta= A.compress_to_1d()
+    T= yast.decompress_from_1d(r1d, config=config_U1_R, meta=meta)
     npa= A.to_numpy()
     npt= T.to_numpy()
     assert np.isrealobj(npt)
@@ -92,8 +93,8 @@ def test_compress_U1():
 
     # print('diagonal tensor:')
     A = yast.rand(config=config_U1_R, isdiag=True, t=0, D=5)
-    meta, r1d= A.compress_to_1d()
-    T= yast.decompress_from_1d(r1d, config=config_U1_R, d=meta)
+    r1d, meta= A.compress_to_1d()
+    T= yast.decompress_from_1d(r1d, config=config_U1_R, meta=meta)
     npa= A.to_numpy()
     npt= T.to_numpy()
     assert np.isrealobj(npt)
@@ -104,8 +105,8 @@ def test_compress_U1():
 
     # print('diagonal tensor:')
     A = yast.randR(config=config_U1_R, isdiag=True, t=(-1, 0, 1), D=(2, 3, 4))
-    meta, r1d= A.compress_to_1d()
-    T= yast.decompress_from_1d(r1d, config=config_U1_R, d=meta)
+    r1d, meta= A.compress_to_1d()
+    T= yast.decompress_from_1d(r1d, config=config_U1_R, meta=meta)
     npa= A.to_numpy()
     npt= T.to_numpy()
     assert np.isrealobj(npt)
@@ -116,8 +117,8 @@ def test_compress_U1():
 
     # print('diagonal tensor:')
     A = yast.eye(config=config_U1_R, t=(-1, 0, 1), D=(2, 3, 4))
-    meta, r1d= A.compress_to_1d()
-    T= yast.decompress_from_1d(r1d, config=config_U1_R, d=meta)
+    r1d, meta= A.compress_to_1d()
+    T= yast.decompress_from_1d(r1d, config=config_U1_R, meta=meta)
     npa= A.to_numpy()
     npt= T.to_numpy()
     assert np.isrealobj(npt)
@@ -131,8 +132,8 @@ def test_compress_Z2_U1():
     A = yast.ones(config=config_Z2_U1_R, s=(-1, 1, 1),
                     t=[[(0, 1), (1, 0)], [(0, 0)], [(0, 1), (1, 0)]],
                     D=[[1, 2], 3, [1, 2]])
-    meta, r1d= A.compress_to_1d()
-    T= yast.decompress_from_1d(r1d, config=config_Z2_U1_R, d=meta)
+    r1d, meta= A.compress_to_1d()
+    T= yast.decompress_from_1d(r1d, config=config_Z2_U1_R, meta=meta)
     npa= A.to_numpy()
     npt= T.to_numpy()
     assert np.isrealobj(npt)
@@ -145,8 +146,8 @@ def test_compress_Z2_U1():
     A = yast.ones(config=config_Z2_U1_R, s=1,
                     t=[[(0, 0)]],
                     D=[[2]])
-    meta, r1d= A.compress_to_1d()
-    T= yast.decompress_from_1d(r1d, config=config_Z2_U1_R, d=meta)
+    r1d, meta= A.compress_to_1d()
+    T= yast.decompress_from_1d(r1d, config=config_Z2_U1_R, meta=meta)
     npa= A.to_numpy()
     npt= T.to_numpy()
     assert np.isrealobj(npt)
@@ -159,8 +160,8 @@ def test_compress_Z2_U1():
     A = yast.rand(config=config_Z2_U1_R, isdiag=True,
                     t=[[(0, 0), (1, 1), (0, 2)]],
                     D=[[2, 2, 2]])
-    meta, r1d= A.compress_to_1d()
-    T= yast.decompress_from_1d(r1d, config=config_Z2_U1_R, d=meta)
+    r1d, meta= A.compress_to_1d()
+    T= yast.decompress_from_1d(r1d, config=config_Z2_U1_R, meta=meta)
     npa= A.to_numpy()
     npt= T.to_numpy()
     assert np.isrealobj(npt)
@@ -173,8 +174,8 @@ def test_compress_Z2_U1():
     A = yast.randR(config=config_Z2_U1_R, isdiag=True,
                      t=[[(0, 1), (1, 0), (1, 1), (0, 0)]],
                      D=[4, 4, 4, 4])
-    meta, r1d= A.compress_to_1d()
-    T= yast.decompress_from_1d(r1d, config=config_Z2_U1_R, d=meta)
+    r1d, meta= A.compress_to_1d()
+    T= yast.decompress_from_1d(r1d, config=config_Z2_U1_R, meta=meta)
     npa= A.to_numpy()
     npt= T.to_numpy()
     assert np.isrealobj(npt)
@@ -184,7 +185,26 @@ def test_compress_Z2_U1():
     assert np.allclose(npa,npt)
 
 
+def test_meta_compress():
+    A = yast.Tensor(config=config_U1_R, s=(-1, 1, 1, 1))
+    A.set_block(ts=(2, 0, 1, 1), Ds=(1, 2, 3, 4))
+    A.set_block(ts=(0, 1, 0, -1), Ds=(5, 6, 7, 8))
+    B = yast.match_legs([A, A, A, A], legs=[0, 1, 2, 3], conjs=[1, 1, 1, 1])  # createstensor matching A for dot multiplication filling in all possible blocks.
+    _, meta = B.compress_to_1d()
+    r1d, _ = A.compress_to_1d(meta)
+    T = yast.decompress_from_1d(r1d, config=config_U1_R, meta=meta)
+    npa = A.to_dense()
+    npt = T.to_dense()
+    assert np.allclose(npa,npt)
+    assert A.norm_diff(T) < tol
+    # now adding some blocks with new charges
+    A.set_block(ts=(1, 1, 0, 0), Ds=(2, 6, 7, 1))
+    with pytest.raises(yast.YastError):
+        r1d, _ = A.compress_to_1d(meta)
+
+
 if __name__ == '__main__':
     test_compress_dense()
     test_compress_U1()
     test_compress_Z2_U1()
+    test_meta_compress()
