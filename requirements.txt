@@ -1,6 +1,6 @@
 
-numpy>=1.16
-scipy>=1.3.0
+numpy>=1.19.2
+scipy>=1.5.3
 fbpca
 
 # for docs
