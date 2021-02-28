@@ -1,4 +1,4 @@
-import yamps.yast as yast
+import yast
 import config_dense_R
 import config_U1_R
 from math import isclose

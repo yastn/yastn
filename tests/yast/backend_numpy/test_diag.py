@@ -1,4 +1,4 @@
-import yamps.yast as yast
+import yast
 import config_U1_R
 import numpy as np
 

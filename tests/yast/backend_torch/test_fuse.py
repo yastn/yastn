@@ -4,7 +4,7 @@ Test elements of logical leg's fusion.
 
 tol = 1e-10
 
-import yamps.yast as yast
+import yast
 import config_U1_R
 from math import isclose
 import numpy as np

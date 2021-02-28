@@ -1,4 +1,4 @@
-import yamps.yast as yast
+import yast
 import config_Z2_R
 
 tol = 1e-12

@@ -1,5 +1,4 @@
-import yamps.mps as mps
-import yamps.yast as yast
+import yast
 import numpy as np
 import config_dense_R as config
 
@@ -9,7 +8,7 @@ def mps_random(N=2, Dmax=2, d=2):
         d = [d]
     d *= (N + len(d) - 1) // len(d)
 
-    psi = mps.Mps(N, nr_phys=1)
+    psi =yast.mps.Mps(N, nr_phys=1)
     Dl, Dr = 1, Dmax
     for n in range(N):
         Dr = Dmax if n < N - 1 else 1
@@ -28,7 +27,7 @@ def mpo_random(N=2, Dmax=2, d_out=None, d=2):
         d_out = [d_out]
     d_out *= ((N + len(d_out) - 1) // len(d_out))
 
-    psi = mps.Mps(N, nr_phys=2)
+    psi =yast.mps.Mps(N, nr_phys=2)
     Dl, Dr = 1, Dmax
     for n in range(N):
         Dr = Dmax if n < N - 1 else 1
@@ -44,7 +43,7 @@ def mpo_XX_model(N, t, mu):
     ee = np.array([[1, 0], [0, 1]])
     oo = np.array([[0, 0], [0, 0]])
 
-    H = mps.Mps(N, nr_phys=2)
+    H =yast.mps.Mps(N, nr_phys=2)
     for n in H.g.sweep(to='last'):  # empty tensors
         H.A[n] = yast.Tensor(config=config, s=(1, 1, -1, -1))
         if n == H.g.first:
@@ -72,7 +71,7 @@ def mpo_occupation(N):
     ee = np.array([[1, 0], [0, 1]])
     oo = np.array([[0, 0], [0, 0]])
 
-    H = mps.Mps(N, nr_phys=2)
+    H =yast.mps.Mps(N, nr_phys=2)
     for n in H.g.sweep(to='last'):  # empty tensors
         H.A[n] = yast.Tensor(config=config, s=(1, 1, -1, -1))
         if n == H.g.first:

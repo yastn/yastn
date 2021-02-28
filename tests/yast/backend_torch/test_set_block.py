@@ -4,7 +4,7 @@ Test functions: set_block
 from math import isclose
 import numpy as np
 import pytest
-import yamps.yast as yast
+import yast
 import config_dense_R
 import config_dense_C
 import config_U1_R

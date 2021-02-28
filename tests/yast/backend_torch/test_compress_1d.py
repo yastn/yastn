@@ -1,5 +1,5 @@
 """ Test functions: reset_tensor (which is called in: rand, randR, zeros, ones), to_numpy, match_legs, norm_diff """
-import yamps.yast as yast
+import yast
 import config_dense_R
 import config_U1_R
 import config_U1_R

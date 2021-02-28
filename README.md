@@ -1,4 +1,4 @@
-# Yet another matrix product state
+# Yet another symmetric tensor
 
 Development of tensor supporting abelian symmetries with some examples and test employing it for matrix product states.
 
