@@ -1,4 +1,4 @@
-"""Setup script for yamps."""
+"""Setup script for yast."""
 from setuptools import setup, find_packages
 
 requirements = open('requirements.txt').readlines()
@@ -8,16 +8,16 @@ description = ('Basic operations for matrix product states.')
 # README file as long_description.
 long_description = open('README.md', encoding='utf-8').read()
 
-__version__ = '0.0.1'
+__version__ = '0.1.0'
 
 setup(
-    name='yamps',
+    name='yast',
     version=__version__,
-    author='Gabriela Wójtowicz, Marek M. Rams',
+    author='Marek M. Rams, Gabriela Wójtowicz, Piotr Czarnik, Juraj Hasik',
     author_email='marek.rams@uj.edu.pl',
     license='Apache License 2.0',
     platform=['any'],
-    python_requires=('>=3.6.0'),
+    python_requires=('>=3.7.0'),
     install_requires=requirements,
     description=description,
     long_description=long_description,

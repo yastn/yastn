@@ -1,10 +1,9 @@
-import yamps.mps as mps
-import yamps.yast as yast
+import yast.mps as mps
+import yast
 import ops_full
 import ops_Z2
 import numpy as np
 import pytest
-import logging
 
 
 def is_left_canonical(psi):

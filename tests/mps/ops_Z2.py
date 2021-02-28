@@ -1,11 +1,10 @@
-import yamps.mps as mps
-import yamps.yast as yast
+import yast
 import numpy as np
 import config_Z2_R as config
 
 
 def mps_random(N=2, Dblock=2, total_parity=0):
-    psi = mps.Mps(N, nr_phys=1)
+    psi = yast.mps.Mps(N, nr_phys=1)
     tc = (0, 1)
     Dc = (1, 1)
     for n in range(N):
@@ -18,7 +17,7 @@ def mps_random(N=2, Dblock=2, total_parity=0):
 
 
 def mpo_random(N=2, Dblock=2, total_parity=0, t_out=None, t_in=(0, 1)):
-    psi = mps.Mps(N, nr_phys=2)
+    psi = yast.mps.Mps(N, nr_phys=2)
     if t_out is None:
         t_out = t_in
     Din = (1,) * len(t_in)
@@ -33,7 +32,7 @@ def mpo_random(N=2, Dblock=2, total_parity=0, t_out=None, t_in=(0, 1)):
 
 
 def mpo_XX_model(N, t, mu):
-    H = mps.Mps(N, nr_phys=2)
+    H = yast.mps.Mps(N, nr_phys=2)
     for n in H.g.sweep(to='last'):
         H.A[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
         if n == H.g.first:
@@ -56,7 +55,7 @@ def mpo_XX_model(N, t, mu):
     return H
 
 def mpo_occupation(N):
-    H = mps.Mps(N, nr_phys=2)
+    H = yast.mps.Mps(N, nr_phys=2)
     for n in H.g.sweep(to='last'):
         H.A[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
         if n == H.g.first:

@@ -2,7 +2,7 @@
 Test yast.ncon
 """
 
-import yamps.yast as yast
+import yast
 import config_U1_R
 import config_dense_R
 from math import isclose

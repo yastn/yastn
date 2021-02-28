@@ -1,4 +1,4 @@
-import yamps.yast as yast
+import yast
 import config_dense_C
 import config_U1_R
 import config_Z2_U1_R
