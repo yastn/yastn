@@ -290,7 +290,7 @@ def block(tensors, common_legs=None):
         if tn.nlegs != tn0.nlegs or tn.meta_fusion != tn0.meta_fusion or\
            not np.all(tn.s == tn0.s) or not np.all(tn.n == tn0.n) or\
            tn.isdiag != tn0.isdiag :
-                raise YastError('Ndims, signatures, total charges or fusion trees of blocked tensors are inconsistent.')
+            raise YastError('Ndims, signatures, total charges or fusion trees of blocked tensors are inconsistent.')
 
     posa = np.ones((len(pos), tn0.nlegs), dtype=int)
     posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int).reshape(len(pos), -1)
@@ -477,10 +477,10 @@ class Tensor:
 
         ats = np.array(ts, dtype=int).reshape(1, self.nlegs, self.config.sym.nsym)
         if not np.all(self.config.sym.fuse(ats, self.s, 1) == self.n):
-            raise YastError('Charges ts are not consistent with the symmetry rules: t @ s - n != 0')            
+            raise YastError('Charges ts are not consistent with the symmetry rules: t @ s - n != 0')
 
         if isinstance(val, str):
-            if ts in self.A.keys(): 
+            if ts in self.A.keys():
                 if Ds is None:
                     # attempt to read Ds from existing block
                     Ds = []
@@ -493,7 +493,7 @@ class Tensor:
                     Ds = tuple(Ds)
                 else:
                     # TODO allow changing size of the sector ?
-                    pass  
+                    pass
             else:
                 assert Ds is not None, "No ts block "+str(ts)+" exists, Ds must be provided"
 
@@ -523,8 +523,8 @@ class Tensor:
     #######################
 
     def copy(self):
-        """ Return a copy of the tensor. 
-        
+        """ Return a copy of the tensor.
+
             Warning: thismight break autograd if you are using it.
         """
         a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
@@ -602,7 +602,7 @@ class Tensor:
         Parameters
         ----------
             meta: dict
-                If not None, uses this metainformation to merge into 1d structure (filling-in zeros if tensor does not have some blocks). 
+                If not None, uses this metainformation to merge into 1d structure (filling-in zeros if tensor does not have some blocks).
                 Raise error, if tensor has some blocks which are not included in meta; or otherwise meta does not match the tensor.
         """
         if meta is None:
@@ -1738,7 +1738,7 @@ class Tensor:
     def fuse_legs(self, axes, inplace=False):
         r"""
         Permutes tensor legs. Next, fuse groups of consecutive legs into new meta legs.
-        
+
         Parameters
         ----------
         axes: tuple
@@ -1977,16 +1977,17 @@ class _LegDecomposition:
                 high = low + D_keep[ind]
                 D_keep[ind] = sum((low <= order) & (order < high))
                 low = high
-        
+
         # check symmetry related blocks and truncate to equal length
         if 'keep_multiplets' in opts.keys() and opts['keep_multiplets']:
-            ind_list= [np.asarray(k) for k in D_keep.keys()]
+            ind_list= [np.asarray(k) for k in D_keep]
             for ind in ind_list:
                 t= tuple(ind)
                 tn= tuple(-ind)
                 minD_sector= min(D_keep[t],D_keep[tn])
                 D_keep[t]=D_keep[tn]= minD_sector
-                if -ind in ind_list: ind_list.remove(-ind)
+                if -ind in ind_list: 
+                    ind_list.remove(-ind)
 
         for ind in D_keep:
             if D_keep[ind] > 0:
