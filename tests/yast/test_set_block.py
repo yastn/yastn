@@ -92,8 +92,6 @@ def test_set1():
     assert nc2.shape == (5, 5)
     assert nc3.shape == (11, 3, 5, 6)
 
-    assert not ((nc1 is c1.A[()]) or (nc1.base is c1.A[()]) or (nc1 is c1.A[()].base))
-
     # print('4d tensor: ')
     a = yast.ones(config=config_U1_C, s=(-1, 1, 1, 1),
                     t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),

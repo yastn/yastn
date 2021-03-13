@@ -7,7 +7,7 @@ import config_Z2_U1_R
 
 def run_moveaxis(a, ad, source, destination, result):
     newa = a.moveaxis(source=source, destination=destination)
-    assert newa.to_dense().shape == result
+    assert newa.to_numpy().shape == result
     assert newa.get_shape() == result
     assert np.moveaxis(ad, source=source, destination=destination).shape == result
     assert newa.is_consistent()
@@ -16,7 +16,7 @@ def run_moveaxis(a, ad, source, destination, result):
 
 def run_transpose(a, ad, axes, result):
     newa = a.transpose(axes=axes)
-    assert newa.to_dense().shape == result
+    assert newa.to_numpy().shape == result
     assert newa.get_shape() == result
     assert np.transpose(ad, axes=axes).shape == result
     assert newa.is_consistent()
@@ -26,7 +26,7 @@ def run_transpose(a, ad, axes, result):
 def test_transpose_0():
     a = yast.ones(config=config_dense_R, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     assert a.get_shape() == (2, 3, 4, 5)
-    ad = a.to_dense()
+    ad = a.to_numpy()
     run_transpose(a, ad, axes=(1, 3, 2, 0), result=(3, 5, 4, 2))
     run_moveaxis(a, ad, source=1, destination=-1, result=(2, 4, 5, 3))
     run_moveaxis(a, ad, source=(1, 3), destination=(1, 0), result=(5, 3, 2, 4))
@@ -39,7 +39,7 @@ def test_transpose_1():
     a = yast.ones(config=config_U1_R, s=(-1, -1, -1, 1, 1, 1),
                     t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                     D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
-    ad = a.to_dense()
+    ad = a.to_numpy()
     assert a.get_shape() == (5, 9, 13, 11, 7, 3)
     
     run_transpose(a, ad, axes=(1, 2, 3, 0, 5, 4), result=(9, 13, 11, 5, 3, 7))
@@ -54,7 +54,7 @@ def test_transpose_2():
                     t=[t1, t1, t1, t1],
                     D=[(7, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
     assert a.get_shape() == (19, 14, 18, 10)
-    ad = a.to_dense()
+    ad = a.to_numpy()
     run_transpose(a, ad, axes=(1, 2, 3, 0), result=(14, 18, 10, 19))
     run_moveaxis(a, ad, source=-1, destination=-3, result=(19, 10, 14, 18))
 
