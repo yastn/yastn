@@ -47,8 +47,8 @@ def test_ncon_0():
 
     y4 = yast.ncon([a, a, b, b], [[1, 2, 3], [1, 2, 3], [6, 5, 4], [6, 5, 4]], [0, 1, 0, 1])
     y5 = yast.ncon([a, a, b, b], [[6, 5, 4], [6, 5, 4], [1, 3, 2], [1, 3, 2]], [0, 1, 0, 1])
-    assert isinstance(y4, complex)
-    assert isinstance(y5, complex)
+    assert isinstance(y4.item(), complex)
+    assert isinstance(y5.item(), complex)
     assert abs(y4 - y5) / abs(y4) < tol  # == 0.0
 
 
