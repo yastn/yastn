@@ -136,9 +136,8 @@ def ones(D, dtype='float64', device='cpu'):
 
 
 def randR(D, dtype='float64', device='cpu'):
-    # TODO: THIS SHOULD OUTPUT REAL VALUES FOR COMPLEX TENSOR TYPE
-    return 2 * torch.rand(D, dtype=_data_dtype[dtype], device=device) - 1
-
+    x = 2 * torch.rand(D, dtype=_data_dtype[dtype], device=device) - 1
+    return x if dtype=='float64' else torch.real(x)
 
 
 def rand(D, dtype='float64', device='cpu'):
