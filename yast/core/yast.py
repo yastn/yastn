@@ -220,7 +220,7 @@ def decompress_from_1d(r1d, config, meta):
     a = Tensor(config=config, **meta)
     A = {(): r1d}
     a.A = a.config.backend.unmerge_one_leg(A, 0, meta['meta_unmerge'])
-    a._calculate_tDset()
+    a._update_tD_arrays()
     return a
 
 
@@ -328,7 +328,7 @@ def block(tensors, common_legs=None):
 
     c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n, meta_fusion=tn0.meta_fusion)
     c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, a.config.dtype, c.config.device)
-    c._calculate_tDset()
+    c._update_tD_arrays()
     return c
 
 
@@ -363,7 +363,9 @@ class Tensor:
         self.meta_fusion = tuple(kwargs['meta_fusion']) if ('meta_fusion' in kwargs and kwargs['meta_fusion'] is not None) else ((1,),) * self.nlegs
         # self.meta_fusion is immutable for copying and comparison
         self.mlegs = len(self.meta_fusion)  # number of meta legs
-        self._calculate_tDset()
+        lA = sorted(self.A.keys())  # sorting tset and Dset according to tset
+        self.tset = np.zeros((0, self.nlegs, self.config.sym.nsym), dtype=int)
+        self.Dset = np.zeros((len(lA), self.nlegs), dtype=int)
 
     ######################
     #     fill tensor    #
@@ -515,7 +517,7 @@ class Tensor:
                 # TODO Ds is given implicitly by the val n-dim array
                 self.A[ts] = self.config.backend.to_tensor(val, Ds=Ds, dtype=self.config.dtype, device=self.config.device)
         # here it checkes the consistency of bond dimensions
-        self._calculate_tDset()
+        self._update_tD_arrays()
         tD = [self.get_leg_structure(n, native=True) for n in range(self.nlegs)]
 
     #######################
@@ -1075,7 +1077,7 @@ class Tensor:
         meta = _common_keys(self.A, other.A)
         a = self.copy_empty()
         a.A = a.config.backend.add(self.A, other.A, meta)
-        a._calculate_tDset()
+        a._update_tD_arrays()
         return a
 
     def __sub__(self, other):
@@ -1098,7 +1100,7 @@ class Tensor:
         meta = _common_keys(self.A, other.A)
         a = self.copy_empty()
         a.A = a.config.backend.sub(self.A, other.A, meta)
-        a._calculate_tDset()
+        a._update_tD_arrays()
         return a
 
     def apxb(self, other, x=1):
@@ -1122,7 +1124,7 @@ class Tensor:
         meta = _common_keys(self.A, other.A)
         a = self.copy_empty()
         a.A = a.config.backend.apxb(self.A, other.A, x, meta)
-        a._calculate_tDset()
+        a._update_tD_arrays()
         return a
 
     #############################
@@ -1247,7 +1249,7 @@ class Tensor:
             a.A = {ind: self.config.backend.diag_diag(self.A[ind]) for ind in self.A}
         else:
             raise YastError('Tensor cannot be changed into a diagonal one')
-        a._calculate_tDset()
+        a._update_tD_arrays()
         return a
 
     def swap_gate(self, axes, fermionic=(), inplace=True):
@@ -1407,7 +1409,7 @@ class Tensor:
         meta = [(tuple(to[n]), tuple(self.tset[n].flat), tuple(Drsh[n])) for n in ind]
         a = Tensor(config=self.config, s=self.s[aout], n=self.n, meta_fusion=tuple(self.meta_fusion[ii] for ii in lout))
         a.A = a.config.backend.trace(self.A, order, meta)
-        a._calculate_tDset()
+        a._update_tD_arrays()
         return a
 
     def dot(self, other, axes, conj=(0, 0), meta=None):
@@ -1472,7 +1474,7 @@ class Tensor:
         c_meta_fusion = [self.meta_fusion[ii] for ii in la_out] + [other.meta_fusion[ii] for ii in lb_out]
         c = Tensor(config=self.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion)
         c.A = self._unmerge_from_matrix(Cm, ls_l, ls_r)
-        c._calculate_tDset()
+        c._update_tD_arrays()
         return c
 
     ###########################
@@ -1554,9 +1556,9 @@ class Tensor:
         S.A = self._unmerge_from_diagonal(Sm, ls_s)
         V.A = self._unmerge_from_matrix(Vm, ls_s, ls_r)
 
-        U._calculate_tDset()
-        S._calculate_tDset()
-        V._calculate_tDset()
+        U._update_tD_arrays()
+        S._update_tD_arrays()
+        V._update_tD_arrays()
         U.moveaxis(source=-1, destination=Uaxis, inplace=True)
         V.moveaxis(source=0, destination=Vaxis, inplace=True)
         return U, S, V
@@ -1602,8 +1604,8 @@ class Tensor:
         Q.A = self._unmerge_from_matrix(Qm, ls_l, ls)
         R.A = self._unmerge_from_matrix(Rm, ls, ls_r)
 
-        Q._calculate_tDset()
-        R._calculate_tDset()
+        Q._update_tD_arrays()
+        R._update_tD_arrays()
 
         Q.moveaxis(source=-1, destination=Qaxis, inplace=True)
         R.moveaxis(source=0, destination=Raxis, inplace=True)
@@ -1671,8 +1673,8 @@ class Tensor:
         U.A = self._unmerge_from_matrix(Um, ls_l, ls_s)
         S.A = self._unmerge_from_diagonal(Sm, ls_s)
 
-        U._calculate_tDset()
-        S._calculate_tDset()
+        U._update_tD_arrays()
+        S._update_tD_arrays()
 
         U.moveaxis(source=-1, destination=Uaxis, inplace=True)
         return S, U
@@ -1880,7 +1882,7 @@ class Tensor:
             if not sorted(set(out_l+out_r)) == list(range(self.nlegs)):
                 raise YastError('Repeated axis')
 
-    def _calculate_tDset(self):
+    def _update_tD_arrays(self):
         """Updates meta-information about charges and dimensions of all blocks."""
         lA = sorted(self.A.keys())  # sorting tset and Dset according to tset
         self.tset = np.array(lA, dtype=int).reshape(len(lA), self.nlegs, self.config.sym.nsym)
@@ -1986,7 +1988,7 @@ class _LegDecomposition:
                 tn= tuple(-ind)
                 minD_sector= min(D_keep[t],D_keep[tn])
                 D_keep[t]=D_keep[tn]= minD_sector
-                if -ind in ind_list: 
+                if -ind in ind_list:
                     ind_list.remove(-ind)
 
         for ind in D_keep:
@@ -2101,7 +2103,7 @@ def _indices_common_rows(a, b):
 
 #     c = self.empty(s=tuple(self.s[legs_l]) + (new_s,) + tuple(self.s[legs_r]), n=self.n, isdiag=self.isdiag)
 #     c.A = self.config.backend.merge_one_leg(self.A, ig, order, meta_new , meta_mrg, self.config.dtype)
-#     c._calculate_tDset()
+#     c._update_tD_arrays()
 #     c.lss[ig] = ls_c
 #     for nnew, nold in enumerate(al+ (-1,) + ar):
 #         if nold in self.lss:
@@ -2145,7 +2147,7 @@ def _indices_common_rows(a, b):
 
 #     c = self.empty(s=s, n=self.n, isdiag=self.isdiag)
 #     c.A = self.config.backend.unmerge_one_leg(self.A, axis, meta)
-#     c._calculate_tDset()
+#     c._update_tD_arrays()
 #     for ii in range(axis):
 #         if ii in self.lss:
 #             c.lss[ii]=self.lss[ii].copy()

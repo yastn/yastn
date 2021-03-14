@@ -1,8 +1,9 @@
-from .yast import YastError
-from scipy import linalg as LA
+""" Krylov-based methods for yast tensor. """
 import time
 import tracemalloc
 import numpy as np
+from scipy import linalg as LA
+from .yast import YastError
 
 
 _select_dtype = {'float64': np.float64,
