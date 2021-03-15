@@ -13,7 +13,8 @@ def test_entropy():
     S.set_block(ts=-2, Ds=4, val='ones')
     S.set_block(ts=-1, Ds=12, val='ones')
     S.set_block(ts=0, Ds=25, val='ones')
-    a = (U.dot(S, axes=(2, 0))).dot(V, axes=(2, 0))
+    US = yast.tensordot(U, S, axes=(2, 0))
+    a = yast.tensordot(US, V, axes=(2, 0))
     
     entropy, Smin, normalization = a.entropy(axes=((0, 1), (2, 3)))
     assert isclose(entropy, np.log2(41), rel_tol=tol)

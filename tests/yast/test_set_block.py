@@ -65,9 +65,9 @@ def test_set1():
     b.set_block(ts=(1, 0, 1), Ds=(2, 6, 2), val='rand')
     b.set_block(ts=(2, 0, 2), Ds=(3, 6, 3), val='rand')
 
-    c1 = a.dot(a, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 1))
-    c2 = b.dot(b, axes=((1, 2), (1, 2)), conj=(0, 1))
-    c3 = a.dot(b, axes=(0, 2))
+    c1 = yast.tensordot(a, a, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 1))
+    c2 = yast.tensordot(b, b, axes=((1, 2), (1, 2)), conj=(0, 1))
+    c3 = yast.tensordot(a, b, axes=(0, 2))
 
     na = a.to_numpy()
     nb = b.to_numpy()
@@ -179,34 +179,34 @@ def test_set2():
 
 def test_dict():
     a = yast.randR(config=config_dense_R)  # s=()
-    d = a.to_dict()
-    b = yast.from_dict(config=config_dense_R, d=d)
-    assert a.norm_diff(b) < tol  # == 0.0
+    d = a.export_to_dict()
+    b = yast.import_from_dict(config=config_dense_R, d=d)
+    assert yast.norm_diff(a, b) < tol  # == 0.0
     assert a.is_consistent()
     assert a.is_independent(b)
 
     a = yast.rand(config=config_U1_R, isdiag=False, s=(1, -1, 1),
                   t=((0, 1, 2), (0, 1, 3), (-1, 0, 1)),
                   D=((3, 5, 2), (1, 2, 3), (2, 3, 4)))
-    d = a.to_dict()
-    b = yast.from_dict(config=config_U1_R, d=d)
-    assert a.norm_diff(b) < tol  # == 0.0
+    d = a.export_to_dict()
+    b = yast.import_from_dict(config=config_U1_R, d=d)
+    assert yast.norm_diff(a, b) < tol  # == 0.0
     assert a.is_consistent()
     assert a.is_independent(b)
 
     a = yast.rand(config=config_U1_R, isdiag=True, t=(0, 1), D=(3, 5))
-    d = a.to_dict()
-    b = yast.from_dict(config=config_U1_R, d=d)
-    assert a.norm_diff(b) < tol  # == 0.0
+    d = a.export_to_dict()
+    b = yast.import_from_dict(config=config_U1_R, d=d)
+    assert yast.norm_diff(a, b) < tol  # == 0.0
     assert a.is_consistent()
     assert a.is_independent(b)
 
     a = yast.ones(config=config_Z2_U1_R, s=(-1, 1, 1), n=(0, -2),
                     t=(((0, 0), (0, 2), (1, 0), (1, 2)), ((0, -2), (0, 2)), ((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2))),
                     D=((1, 2, 3, 4), (2, 1), (2, 3, 5, 4, 1, 6)))
-    d = a.to_dict()
-    b = yast.from_dict(config=config_Z2_U1_R, d=d)
-    assert a.norm_diff(b) < tol  # == 0.0
+    d = a.export_to_dict()
+    b = yast.import_from_dict(config=config_Z2_U1_R, d=d)
+    assert yast.norm_diff(a, b) < tol  # == 0.0
     assert b.is_consistent()
     assert a.is_independent(b)
 

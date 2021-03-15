@@ -12,6 +12,7 @@ import itertools
 import numpy as np
 from ..sym import sym_none
 
+__all__ = ['Tensor', 'block', 'YastError', 'check_signatures_match', 'check_consistency', 'allow_cache_meta']
 
 # flags that controls which checks are performed
 _check_signatures_match = True
@@ -41,220 +42,6 @@ def allow_cache_meta(value=True):
 
 class YastError(Exception):
     """Errors cought by checks in yast."""
-
-
-#######################################################
-#     Functions creating and filling in new tensor    #
-#######################################################
-
-def randR(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
-    r"""
-    Initialize tensor with all possible blocks filled with real random numbers in [-1, 1].
-
-    Initialize tensor and call :meth:`Tensor.fill_tensor`.
-
-    Parameters
-    ----------
-    s : tuple
-        a signature of tensor
-    n : int
-        total charge
-    t : list
-        a list of charges for each leg, see :meth:`Tensor.fill_tensor` for description.
-    D : list
-        a list of corresponding bond dimensions
-    isdiag : bool
-        makes tensor diagonal
-
-    Returns
-    -------
-    tensor : tensor
-        a random instance of a tensor
-    """
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, **kwargs)
-    a.fill_tensor(t=t, D=D, val='randR')
-    return a
-
-
-def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
-    r"""
-    Initialize tensor with all possible blocks filled with the random numbers in [-1, 1] and type specified in config.
-
-    Initialize tensor and call :meth:`Tensor.fill_tensor`.
-
-    Parameters
-    ----------
-    s : tuple
-        a signature of tensor
-    n : int
-        total charge
-    t : list
-        a list of charges for each leg, see :meth:`Tensor.fill_tensor` for description.
-    D : list
-        a list of corresponding bond dimensions
-    isdiag : bool
-        makes tensor diagonal
-
-    Returns
-    -------
-    tensor : tensor
-        a random instance of a tensor
-    """
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, **kwargs)
-    a.fill_tensor(t=t, D=D, val='rand')
-    return a
-
-
-def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
-    r"""
-    Initialize tensor with all possible blocks filled with zeros.
-
-    Initialize tensor and call :meth:`Tensor.fill_tensor`.
-
-    Parameters
-    ----------
-    s : tuple
-        a signature of tensor
-    n : int
-        total charge
-    t : list
-        a list of charges for each leg, see :meth:`Tensor.fill_tensor` for description.
-    D : list
-        a list of corresponding bond dimensions
-    isdiag : bool
-        makes tensor diagonal
-
-    Returns
-    -------
-    tensor : tensor
-        an instance of a tensor filled with zeros
-    """
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, **kwargs)
-    a.fill_tensor(t=t, D=D, val='zeros')
-    return a
-
-
-def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
-    r"""
-    Initialize tensor with all possible blocks filled with ones.
-
-    Initialize tensor and call :meth:`Tensor.fill_tensor`.
-
-    Parameters
-    ----------
-    s : tuple
-        a signature of tensor
-    n : int
-        total charge
-    t : list
-        a list of charges for each leg, see :meth:`Tensor.fill_tensor` for description.
-    D : list
-        a list of corresponding bond dimensions
-
-    Returns
-    -------
-    tensor : tensor
-        an instance of a tensor filled with ones
-    """
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, **kwargs)
-    a.fill_tensor(t=t, D=D, val='ones')
-    return a
-
-
-def eye(config=None, t=(), D=(), **kwargs):
-    r"""
-    Initialize diagonal tensor with all possible blocks filled with ones.
-
-    Initialize tensor and call :meth:`Tensor.fill_tensor`.
-
-    Parameters
-    ----------
-    t : list
-        a list of charges for each leg, see :meth:`Tensor.fill_tensor` for description.
-    D : list
-        a list of corresponding bond dimensions
-
-    Returns
-    -------
-    tensor : tensor
-        an instance of diagonal tensor filled with ones
-    """
-    a = Tensor(config=config, isdiag=True, **kwargs)
-    a.fill_tensor(t=t, D=D, val='ones')
-    return a
-
-
-def from_dict(config=None, d=None):
-    """
-    Generate tensor based on information in dictionary d.
-
-    Parameters
-    ----------
-    config: module
-            configuration with backend, symmetry, etc.
-
-    d : dict
-        information about tensor stored with :meth:`Tensor.to_dict`
-    """
-    if d is not None:
-        a = Tensor(config=config, **d)
-        for ind in d['A']:
-            a.set_block(ts=ind, Ds=d['A'][ind].shape, val=d['A'][ind])
-        return a
-    raise YastError("Dictionary d is required.")
-
-
-def decompress_from_1d(r1d, config, meta):
-    """
-    Generate tensor based on information in dictionary d and 1D array
-    r1d containing the serialized blocks
-
-    Parameters
-    ----------
-    config: module
-            configuration with backend, symmetry, etc.
-
-    d : dict
-        information about tensor stored with :meth:`Tensor.to_dict`
-    """
-    a = Tensor(config=config, **meta)
-    A = {(): r1d}
-    a.A = a.config.backend.unmerge_one_leg(A, 0, meta['meta_unmerge'])
-    a._update_tD_arrays()
-    return a
-
-
-def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=False):
-    r"""
-    Initialize tensor matching legs of existing tensors, so that it can be contracted with those tensors.
-
-    Finds all matching symmetry sectors and their bond dimensions and passes it to :meth:`Tensor.fill_tensor`.
-
-    Parameters
-    ----------
-    tensors: list
-        list of tensors -- they should not be diagonal to properly identify signature.
-    legs: list
-        and their corresponding legs to match
-    conjs: list
-        if tensors are entering dot as conjugated
-    val: str
-        'randR', 'rand', 'ones', 'zeros'
-    """
-    t, D, s, lf = [], [], [], []
-    if conjs is None:
-        conjs = (0,) * len(tensors)
-    for nf, te, cc in zip(legs, tensors, conjs):
-        lf.append(te.meta_fusion[nf])
-        un, = te._unpack_axes((nf,))
-        for nn in un:
-            tdn = te.get_leg_structure(nn, native=True)
-            t.append(tuple(tdn.keys()))
-            D.append(tuple(tdn.values()))
-            s.append(te.s[nn] * (2 * cc - 1))
-    a = Tensor(config=tensors[0].config, s=s, n=n, isdiag=isdiag, meta_fusion=lf)
-    a.fill_tensor(t=t, D=D, val=val)
-    return a
 
 
 def block(tensors, common_legs=None):
@@ -330,11 +117,6 @@ def block(tensors, common_legs=None):
     c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, a.config.dtype, c.config.device)
     c._update_tD_arrays()
     return c
-
-
-def tensordot(a, b, axes, conj=(0, 0)):
-    """ See 'tast.dot' """
-    return a.dot(b, axes=axes, conj=conj, meta=None)
 
 
 class Tensor:
@@ -582,7 +364,7 @@ class Tensor:
     #    export tensor    #
     #######################
 
-    def to_dict(self):
+    def export_to_dict(self):
         r"""
         Export relevant information about tensor to dictionary --  it can be saved using numpy.save
 
@@ -651,7 +433,6 @@ class Tensor:
         print("size        :", self.get_size())  # total number of elements in all blocks
         print("meta fusion :", self.meta_fusion, "\n")  # encoding meta fusion tree for each leg
 
-
     def __str__(self):
         # return str(self.A)
         ts, Ds= self.get_leg_charges_and_dims(native=False)
@@ -660,7 +441,6 @@ class Tensor:
         s+=f"leg charges  : {ts}\n"
         s+=f"dimensions   : {Ds}"
         return s
-
 
     def print_blocks(self):
         for ind, x in self.A.items():
@@ -913,6 +693,16 @@ class Tensor:
             return self.zero_of_dtype()
         return self.config.backend.norm(self.A, p)
 
+    def max_abs(self):
+        """
+        Largest element by magnitude.  THIS IS OBSOLATE norm(ord = 'inf') DOES THE SAME
+
+        Returns
+        -------
+        max_abs : scalar
+        """
+        return self.zero_of_dtype() if len(self.A) == 0 else self.config.backend.max_abs(self.A)
+
     def norm_diff(self, other, p='fro'):
         """
         Norm of the difference of two tensors.
@@ -970,16 +760,6 @@ class Tensor:
             Sm = {t: self.config.backend.diag_get(x) for t, x in self.A.items()}
         entropy, Smin, normalization = self.config.backend.entropy(Sm, alpha=alpha)
         return entropy, Smin, normalization
-
-    def max_abs(self):
-        """
-        Largest element by magnitude.  THIS IS OBSOLATE norm(ord = 'inf') DOES THE SAME
-
-        Returns
-        -------
-        max_abs : scalar
-        """
-        return self.zero_of_dtype() if len(self.A) == 0 else self.config.backend.max_abs(self.A)
 
     #############################
     #     linear operations     #
@@ -1341,6 +1121,72 @@ class Tensor:
     #     contraction operations     #
     ##################################
 
+    def tensordot(a, b, axes, conj=(0, 0)):
+        r"""
+        Compute tensor dot product of two tensor along specified axes.
+
+        Outgoing legs are ordered such that first ones are the remaining legs of the first tensor in the original order,
+        and than those of the second tensor.
+
+        Parameters
+        ----------
+        a, b: Tensors to contract
+
+        axes: tuple
+            legs of both tensors (for each it is specified by int or tuple of ints)
+            e.g. axes=(0, 3), axes=((0, 3), (1, 2))
+
+        conj: tuple
+            shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
+            Defult is (0, 0), i.e. no conjugation
+
+        Returns
+        -------
+            tansor: Tensor
+        """
+        a._test_configs_match(b)
+        la_con, lb_con = _clear_axes(*axes)  # contracted meta legs
+        la_out = tuple(ii for ii in range(a.mlegs) if ii not in la_con)  # outgoing meta legs
+        lb_out = tuple(ii for ii in range(b.mlegs) if ii not in lb_con)  # outgoing meta legs
+
+        a_con, a_out = a._unpack_axes(la_con, la_out)  # actual legs of a=self
+        b_con, b_out = b._unpack_axes(lb_con, lb_out)  # actual legs of b=other
+
+        na_con, na_out = np.array(a_con, dtype=np.intp), np.array(a_out, dtype=np.intp)
+        nb_con, nb_out = np.array(b_con, dtype=np.intp), np.array(b_out, dtype=np.intp)
+
+        conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
+        if not all(a.s[na_con] == (-conja * conjb) * b.s[nb_con]):
+            if a.isdiag:  # if tensor is diagonal, than freely changes the signature by a factor of -1
+                a.s *= -1
+            elif b.isdiag:
+                b.s *= -1
+            elif _check_signatures_match:
+                raise YastError('Signs do not match')
+
+        c_n = np.vstack([a.n, b.n]).reshape(1, 2, -1)
+        c_s = np.array([conja, conjb], dtype=int)
+        c_n = a.config.sym.fuse(c_n, c_s, 1)
+
+        inda, indb = _indices_common_rows(a.tset[:, na_con, :], b.tset[:, nb_con, :])
+
+        Am, ls_l, ls_ac, ua_l, ua_r = a._merge_to_matrix(a_out, a_con, conja, -conja, inda, sort_r=True)
+        Bm, ls_bc, ls_r, ub_l, ub_r = b._merge_to_matrix(b_con, b_out, conjb, -conjb, indb)
+
+        meta_dot = tuple((al + br, al + ar, bl + br)  for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
+
+        if _check_consistency and not (ua_r == ub_l and ls_ac.match(ls_bc)):
+            raise YastError('Something went wrong in matching the indices of the two tensors')
+
+        c_s = np.hstack([conja * a.s[na_out], conjb * b.s[nb_out]])
+        c_meta_fusion = [a.meta_fusion[ii] for ii in la_out] + [b.meta_fusion[ii] for ii in lb_out]
+        c = Tensor(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion)
+
+        Cm = c.config.backend.dot(Am, Bm, conj, meta_dot)
+        c.A = c._unmerge_from_matrix(Cm, ls_l, ls_r)
+        c._update_tD_arrays()
+        return c
+
     def scalar(self, other):
         r"""
         Compute scalar product x = <self|other> of two tensors. Self is conjugated.
@@ -1412,70 +1258,6 @@ class Tensor:
         a._update_tD_arrays()
         return a
 
-    def dot(self, other, axes, conj=(0, 0), meta=None):
-        r"""
-        Compute dot product of two tensor along specified axes.
-
-        Outgoing legs ordered such that first come remaining legs of the first tensor in the original order,
-        and than those of the second tensor.
-
-        Parameters
-        ----------
-        other: Tensor
-
-        axes: tuple
-            legs of both tensors (for each it is specified by int or tuple of ints)
-            e.g. axes=(0, 3), axes=((0, 3), (1, 2))
-
-        conj: tuple
-            shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
-
-        Returns
-        -------
-            tansor: Tensor
-        """
-        self._test_configs_match(other)
-        la_con, lb_con = _clear_axes(*axes)  # contracted meta legs
-        la_out = tuple(ii for ii in range(self.mlegs) if ii not in la_con)  # outgoing meta legs
-        lb_out = tuple(ii for ii in range(other.mlegs) if ii not in lb_con)  # outgoing meta legs
-
-        a_con, a_out = self._unpack_axes(la_con, la_out)  # actual legs of a=self
-        b_con, b_out = other._unpack_axes(lb_con, lb_out)  # actual legs of b=other
-
-        na_con, na_out = np.array(a_con, dtype=np.intp), np.array(a_out, dtype=np.intp)
-        nb_con, nb_out = np.array(b_con, dtype=np.intp), np.array(b_out, dtype=np.intp)
-
-        conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
-        if not all(self.s[na_con] == (-conja * conjb) * other.s[nb_con]):
-            if self.isdiag:  # if diagonal tensor, than freely changes the signature by a factor of -1
-                self.s *= -1
-            elif other.isdiag:
-                other.s *= -1
-            elif _check_signatures_match:
-                raise YastError('Signs do not match')
-
-        c_n = np.vstack([self.n, other.n]).reshape(1, 2, -1)
-        c_s = np.array([conja, conjb], dtype=int)
-        c_n = self.config.sym.fuse(c_n, c_s, 1)
-
-        t_a_con, t_b_con = self.tset[:, na_con, :], other.tset[:, nb_con, :]
-        inda, indb = _indices_common_rows(t_a_con, t_b_con)
-
-        Am, ls_l, ls_ac, ua_l, ua_r = self._merge_to_matrix(a_out, a_con, conja, -conja, inda, sort_r=True)
-        Bm, ls_bc, ls_r, ub_l, ub_r = other._merge_to_matrix(b_con, b_out, conjb, -conjb, indb)
-
-        meta_dot = tuple((al + br, al + ar, bl + br)  for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
-
-        if _check_consistency and not (ua_r == ub_l and ls_ac.match(ls_bc)):
-            raise YastError('Something went wrong in matching the indices of the two tensors')
-
-        Cm = self.config.backend.dot(Am, Bm, conj, meta_dot)
-        c_s = np.hstack([conja * self.s[na_out], conjb * other.s[nb_out]])
-        c_meta_fusion = [self.meta_fusion[ii] for ii in la_out] + [other.meta_fusion[ii] for ii in lb_out]
-        c = Tensor(config=self.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion)
-        c.A = self._unmerge_from_matrix(Cm, ls_l, ls_r)
-        c._update_tD_arrays()
-        return c
 
     ###########################
     #     spliting tensor     #

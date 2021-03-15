@@ -1,6 +1,7 @@
 """ ncon routine for automatic contraction of a list of tensors. """
-from .yast import YastError
+from .core import YastError
 
+__all__ = ['ncon']
 
 def ncon(ts, inds, conjs=None):
     """Execute series of tensor contractions"""
@@ -42,7 +43,7 @@ def ncon(ts, inds, conjs=None):
                     if ten == t1:
                         edges[ii] = (order, leg - sum(ii < leg for ii in ax12), ten)
             else:  # tensordot
-                ts[t1] = ts[t1].dot(ts[t2], axes=(ax1, ax2), conj=(conjs[t1], conjs[t2]))
+                ts[t1] = ts[t1].tensordot(ts[t2], axes=(ax1, ax2), conj=(conjs[t1], conjs[t2]))
                 conjs[t1], conjs[t2] = 0, 0
                 del ts[t2]
                 lt1 = sum(ii[2] == t1 for ii in edges)  # legs of t1
@@ -59,7 +60,7 @@ def ncon(ts, inds, conjs=None):
             edges = sorted(edges, key=lambda x: x[2])
             t1 = edges[0][2]
             t2 = [key for key in ts.keys() if key != t1][0]
-            ts[t1] = ts[t1].dot(ts[t2], axes=((), ()), conj=(conjs[t1], conjs[t2]))
+            ts[t1] = ts[t1].tensordot(ts[t2], axes=((), ()), conj=(conjs[t1], conjs[t2]))
             conjs[t1], conjs[t2] = 0, 0
             lt1 = sum(ii[2] == t1 for ii in edges)
             for ii, (order, leg, ten) in enumerate(edges):

@@ -3,7 +3,7 @@ import time
 import tracemalloc
 import numpy as np
 from scipy import linalg as LA
-from .yast import YastError
+from . import YastError
 
 
 _select_dtype = {'float64': np.float64,

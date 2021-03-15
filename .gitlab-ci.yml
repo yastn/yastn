@@ -128,7 +128,7 @@ test_python3.7_torch1.6:
   - ssh-add -l
   - git submodule update --init --recursive
   - cd tests/;
-  - pytest --run torch -v ./yast;
+  - pytest --backend torch -v ./yast;
 
 test_python3.8_torch1.6:
   stage: Test
@@ -143,4 +143,4 @@ test_python3.8_torch1.6:
   - ssh-add -l
   - git submodule update --init --recursive
   - cd tests/;
-  - pytest --run torch -v ./yast;
+  - pytest --backend torch -v ./yast;
