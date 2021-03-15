@@ -12,8 +12,8 @@ def scalar_vs_numpy(a, b):
     na = a.to_dense(tDsa)
     nb = b.to_dense(tDsb)
     ns = na.conj().reshape(-1) @ nb.reshape(-1)
-    sab = a.scalar(b)
-    sba = b.scalar(a)
+    sab = a.vdot(b)
+    sba = b.vdot(a)
     assert abs(ns - sab) < tol  # == 0.0
     assert abs(ns.conj() - sba) < tol  # == 0.0
 
@@ -75,11 +75,11 @@ def test_scalar_exceptions():
     d = d.fuse_legs(axes=(0, (1, 2), 3))
 
     with pytest.raises(yast.YastError):
-        a.scalar(b)
+        a.vdot(b)
     with pytest.raises(yast.YastError):
-        a.scalar(c)
+        a.vdot(c)
     with pytest.raises(yast.YastError):
-        a.scalar(d)
+        a.vdot(d)
 
 
 if __name__ == '__main__':

@@ -184,7 +184,7 @@ def transpose(A, axes, meta_transpose, inplace):
     return {new: np.transpose(A[old], axes=axes).copy() for old, new in meta_transpose}
 
 
-def invsqrt(A, cutoff=0):
+def rsqrt(A, cutoff=0):
     res = {t: 1./np.sqrt(x) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
@@ -192,7 +192,7 @@ def invsqrt(A, cutoff=0):
     return res
 
 
-def invsqrt_diag(A, cutoff=0):
+def rsqrt_diag(A, cutoff=0):
     res = {t: 1./np.sqrt(np.diag(x)) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
@@ -200,7 +200,7 @@ def invsqrt_diag(A, cutoff=0):
     return {t: np.diag(x) for t, x in res.items()}
 
 
-def inv(A, cutoff=0):
+def reciprocal(A, cutoff=0):
     res = {t: 1./x for t, x in A.items()}
     if cutoff > 0:
         for t in res:
@@ -208,7 +208,7 @@ def inv(A, cutoff=0):
     return res
 
 
-def inv_diag(A, cutoff=0):
+def reciprocal_diag(A, cutoff=0):
     res = {t: 1./ np.diag(x) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
@@ -228,17 +228,20 @@ def sqrt(A):
     return {t: np.sqrt(x) for t, x in A.items()}
 
 
+def svd_lowrank(A, meta, opts):
+    U, S, V = {}, {}, {}
+    for (iold, iU, iS, iV) in meta:
+        U[iU], S[iS], V[iV] = pca.pca(A[iold], k=opts['D_block'], raw=True, n_iter=opts['nbit'], l=opts['kfac'] * opts['D_block'])
+    return U, S, V
+
+
 def svd(A, meta, opts):
     U, S, V = {}, {}, {}
     for (iold, iU, iS, iV) in meta:
-        if opts['truncated_svd'] and min(A[iold].shape) > opts['kfac'] * opts['D_block']:
-            U[iU], S[iS], V[iV] = pca.pca(A[iold], k=opts['D_block'], raw=True,
-                                            n_iter=opts['nbit'], l=opts['kfac'] * opts['D_block'])
-        else:
-            try:
-                U[iU], S[iS], V[iV] = sp.linalg.svd(A[iold], full_matrices=False)
-            except sp.linalg.LinAlgError:
-                U[iU], S[iS], V[iV] = sp.linalg.svd(A[iold], full_matrices=False, lapack_driver='gesvd')
+        try:
+            U[iU], S[iS], V[iV] = sp.linalg.svd(A[iold], full_matrices=False)
+        except sp.linalg.LinAlgError:
+            U[iU], S[iS], V[iV] = sp.linalg.svd(A[iold], full_matrices=False, lapack_driver='gesvd')
     return U, S, V
 
 
@@ -338,7 +341,7 @@ def apxb(A, B, x, meta):
     return C
 
 
-def scalar(A, B, meta):
+def vdot(A, B, meta):
     return np.sum([(A[ind].conj().reshape(-1)) @ (B[ind].reshape(-1)) for ind in meta])
 
 

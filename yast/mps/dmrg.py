@@ -2,6 +2,7 @@
 various variants of the DMRG algorithm for mps
 """
 
+from yast import linalg
 import logging
 import numpy as np
 from .. import eigs
@@ -314,33 +315,33 @@ def dmrg_sweep_2site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
 
     for n in psi.g.sweep(to='last', dl=1):
         n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
-        init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
+        init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
         # update site n using eigs
         Av = lambda v: env.Heff2(v, n)
         Bv = lambda v: env.Heff2(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
         _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
                          sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
         # split and save
-        x, S, y = vec[0].split_svd(axes=(psi.left + psi.phys, tuple(
+        x, S, y = linalg.svd(vec[0], axes=(psi.left + psi.phys, tuple(
             a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
         psi.A[n] = x
-        psi.A[n1] = S.dot(y, axes=(1, 0))
+        psi.A[n1] = S.tensordot(y, axes=(1, 0))
         env.clear_site(n)
         env.clear_site(n1)
         env.update(n, towards=psi.g.last)
 
     for n in psi.g.sweep(to='first', dl=1):
         n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
-        init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
+        init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
         # update site n using eigs
         Av = lambda v: env.Heff2(v, n)
         Bv = lambda v: env.Heff2(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
         _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
                          sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
         # split and save
-        x, S, y = vec[0].split_svd(axes=(psi.left + psi.phys, tuple(
+        x, S, y = linalg.svd(vec[0], axes=(psi.left + psi.phys, tuple(
             a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-        psi.A[n] = x.dot(S, axes=(2, 0))
+        psi.A[n] = x.tensordot(S, axes=(2, 0))
         psi.A[n1] = y
         env.clear_site(n)
         env.clear_site(n1)
@@ -397,7 +398,7 @@ def dmrg_sweep_2site_group(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14
 
     for n in psi.g.sweep(to='last', dl=1):
         n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
-        init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
+        init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
         init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
         # init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
         # update site n using eigs
@@ -408,17 +409,17 @@ def dmrg_sweep_2site_group(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14
         init = vec[0].unfuse_legs(axes=1, inplace=True)
         # init = vec[0].ungroup_leg(axis=1, leg_order=leg_order)
         # split and save
-        x, S, y = init.split_svd(axes=(psi.left + psi.phys, tuple(
+        x, S, y = linalg.svd(init, axes=(psi.left + psi.phys, tuple(
             a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
         psi.A[n] = x
-        psi.A[n1] = S.dot(y, axes=(1, 0))
+        psi.A[n1] = S.tensordot(y, axes=(1, 0))
         env.clear_site(n)
         env.clear_site(n1)
         env.update(n, towards=psi.g.last)
 
     for n in psi.g.sweep(to='first', dl=1):
         n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
-        init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
+        init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
         init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
         #init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
         # update site n using eigs
@@ -429,9 +430,9 @@ def dmrg_sweep_2site_group(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14
         init = vec[0].unfuse_legs(axes=1, inplace=True)
         # init = vec[0].ungroup_leg(axis=1, leg_order=leg_order)
         # split and save
-        x, S, y = init.split_svd(axes=(psi.left + psi.phys, tuple(
+        x, S, y = linalg.svd(init, axes=(psi.left + psi.phys, tuple(
             a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-        psi.A[n] = x.dot(S, axes=(2, 0))
+        psi.A[n] = x.tensordot(S, axes=(2, 0))
         psi.A[n1] = y
         env.clear_site(n)
         env.clear_site(n1)
@@ -555,17 +556,17 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
                 env.update(n, towards=psi.g.first)
             else:
                 n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
-                init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
+                init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
                 # update site n using eigs
                 Av = lambda v: env.Heff2(v, n)
                 Bv = lambda v: env.Heff2(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
                 _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
                                  init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
                 # split and save
-                x, S, y = vec[0].split_svd(axes=(psi.left + psi.phys, tuple(
+                x, S, y = linalg.svd(vec[0], axes=(psi.left + psi.phys, tuple(
                     a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
                 psi.A[n] = x
-                psi.A[n1] = S.dot(y, axes=(1, 0))
+                psi.A[n1] = S.tensordot(y, axes=(1, 0))
                 env.clear_site(n)
                 env.clear_site(n1)
                 env.update(n, towards=psi.g.last)
@@ -575,7 +576,7 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
                 env.update(n, towards=psi.g.first)
             else:
                 n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
-                init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
+                init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
                 init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
                 # init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
                 # update site n using eigs
@@ -586,10 +587,10 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
                 init = vec[0].unfuse_legs(axes=1, inplace=True)
                 # init = vec[0].ungroup_leg(axis=1, leg_order=leg_order)
                 # split and save
-                x, S, y = init.split_svd(axes=(psi.left + psi.phys, tuple(
+                x, S, y = linalg.svd(init, axes=(psi.left + psi.phys, tuple(
                     a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
                 psi.A[n] = x
-                psi.A[n1] = S.dot(y, axes=(1, 0))
+                psi.A[n1] = S.tensordot(y, axes=(1, 0))
                 env.clear_site(n)
                 env.clear_site(n1)
                 env.update(n, towards=psi.g.last)
@@ -636,16 +637,16 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
                 env.update(n, towards=psi.g.first)
             else:
                 n1, _, _ = psi.g.from_site(n, towards=psi.g.first)
-                init = psi.A[n1].dot(psi.A[n], axes=(psi.right, psi.left))
+                init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
                 # update site n using eigs
                 Av = lambda v: env.Heff2(v, n)
                 Bv = lambda v: env.Heff2(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
                 _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
                                  init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
                 # split and save
-                x, S, y = vec[0].split_svd(axes=(psi.left + psi.phys, tuple(
+                x, S, y = linalg.svd(vec[0], axes=(psi.left + psi.phys, tuple(
                     a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-                psi.A[n1] = x.dot(S, axes=(2, 0))
+                psi.A[n1] = x.tensordot(S, axes=(2, 0))
                 psi.A[n] = y
                 env.clear_site(n)
                 env.update(n, towards=psi.g.first)
@@ -656,7 +657,7 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
                 env.update(n, towards=psi.g.first)
             else:
                 n1, _, _ = psi.g.from_site(n, towards=psi.g.first)
-                init = psi.A[n1].dot(psi.A[n], axes=(psi.right, psi.left))
+                init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
                 init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
                 # init, leg_order = init.group_legs(axes=(1, 2), new_s=1)
                 # update site n using eigs
@@ -667,9 +668,9 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
                 init = vec[0].unfuse_legs(axes=1, inplace=True)
                 # init = vec[0].ungroup_leg(axis=1, leg_order=leg_order)
                 # split and save
-                x, S, y = init.split_svd(axes=(psi.left + psi.phys, tuple(
+                x, S, y = linalg.svd(init, axes=(psi.left + psi.phys, tuple(
                     a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-                psi.A[n1] = x.dot(S, axes=(2, 0))
+                psi.A[n1] = x.tensordot(S, axes=(2, 0))
                 psi.A[n] = y
                 env.clear_site(n)
                 env.update(n, towards=psi.g.first)

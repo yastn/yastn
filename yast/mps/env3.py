@@ -81,11 +81,11 @@ class Env3:
         nnext, leg, nprev = self.g.from_site(n, towards)
 
         if self.nr_phys == 1 and leg == 1:
-            self.F[(n, nnext)] = self.F[(nprev, n)].dot(self.bra.A[n], axes=((0), (0)), conj=(0, 1)).dot(
-                self.op.A[n], axes=((0, 2), (0, 1))).dot(self.ket.A[n], axes=((0, 2), (0, 1)))
+            self.F[(n, nnext)] = self.F[(nprev, n)].tensordot(self.bra.A[n], axes=((0), (0)), conj=(0, 1)).tensordot(
+                self.op.A[n], axes=((0, 2), (0, 1))).tensordot(self.ket.A[n], axes=((0, 2), (0, 1)))
         elif self.nr_phys == 1 and leg == 0:
-            self.F[(n, nnext)] = self.ket.A[n].dot(self.F[(nprev, n)], axes=((2), (0))).dot(
-                self.op.A[n], axes=((1, 2), (2, 3))).dot(self.bra.A[n], axes=((3, 1), (1, 2)), conj=(0, 1))
+            self.F[(n, nnext)] = self.ket.A[n].tensordot(self.F[(nprev, n)], axes=((2), (0))).tensordot(
+                self.op.A[n], axes=((1, 2), (2, 3))).tensordot(self.bra.A[n], axes=((3, 1), (1, 2)), conj=(0, 1))
         elif self.nr_phys == 2 and leg == 1 and not self.on_aux:
             self.F[(n, nnext)] = ncon([self.bra.A[n], self.F[(nprev, n)], self.ket.A[n], self.op.A[n]], ((
                 4, 5, 6, -1), (4, 2, 1), (1, 3, 6, -3), (2, 5, 3, -2)), (1, 0, 0, 0))
@@ -135,7 +135,7 @@ class Env3:
             if n0 is not None:
                 self.F.pop((n0, n))
             n0 = n
-        return self.F[(None, n0)].dot(self.F[(n0, None)], axes=((0, 1, 2), (2, 1, 0))).to_number()
+        return self.F[(None, n0)].tensordot(self.F[(n0, None)], axes=((0, 1, 2), (2, 1, 0))).to_number()
 
     def measure(self, bd=None):
         r"""
@@ -153,7 +153,7 @@ class Env3:
         """
         if bd is None:
             bd = (None, self.g.first)
-        return self.F[bd].dot(self.F[bd[::-1]], axes=((0, 1, 2), (2, 1, 0))).to_number()
+        return self.F[bd].tensordot(self.F[bd[::-1]], axes=((0, 1, 2), (2, 1, 0))).to_number()
 
     def Heff0(self, C, bd, conj=False):
         r"""
@@ -175,9 +175,9 @@ class Env3:
         """
         bd = self.g.order_bond(bd)
         if conj:
-            return self.F[bd].dot(C, axes=((0), (0)), conj=(0, 1)).dot(self.F[bd[::-1]], axes=((0, 2), (1, 2))).conj()
+            return self.F[bd].tensordot(C, axes=((0), (0)), conj=(0, 1)).tensordot(self.F[bd[::-1]], axes=((0, 2), (1, 2))).conj()
         else:
-            return self.F[bd].dot(C, axes=((2), (0))).dot(self.F[bd[::-1]], axes=((1, 2), (1, 0)))
+            return self.F[bd].tensordot(C, axes=((2), (0))).tensordot(self.F[bd[::-1]], axes=((1, 2), (1, 0)))
 
     def Heff1(self, A, n, conj=False):
         r"""Action of Heff on central site.
@@ -199,14 +199,14 @@ class Env3:
         nl, nr = self.g.order_neighbours(n)
         if conj:
             if self.nr_phys == 1:
-                return self.F[(nl, n)].dot(A, axes=((0), (0)), conj=(0,1)).dot(self.op.A[n], axes=((0, 2), (0, 1))).dot(self.F[(nr, n)], axes=((1, 3), (2, 1))).conj()
+                return self.F[(nl, n)].tensordot(A, axes=((0), (0)), conj=(0,1)).tensordot(self.op.A[n], axes=((0, 2), (0, 1))).tensordot(self.F[(nr, n)], axes=((1, 3), (2, 1))).conj()
             elif self.nr_phys == 2:
                 return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((1, 2, -1), (1, 3, -3, 4), (2, 3, -2, 5), (-4, 5, 4)), (0, 1, 0, 0)).conj()
             else:  # self.nr_phys == 2 and self.on_aux:
                 return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((1, 2, -1), (1, -2, 3, 4), (2, 3, -3, 5), (-4, 5, 4)), (0, 1, 0, 0)).conj()
         else:
             if self.nr_phys == 1:
-                return self.F[(nl, n)].dot(A, axes=((2), (0))).dot(self.op.A[n], axes=((1, 2), (0, 2))).dot(self.F[(nr, n)], axes=((1, 3), (0, 1)))
+                return self.F[(nl, n)].tensordot(A, axes=((2), (0))).tensordot(self.op.A[n], axes=((1, 2), (0, 2))).tensordot(self.F[(nr, n)], axes=((1, 3), (0, 1)))
             elif self.nr_phys == 2 and not self.on_aux:
                 return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]], ((-1, 2, 1), (1, 3, -3, 4), (2, -2, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
             else:  # self.nr_phys == 2 and self.on_aux:
@@ -231,17 +231,17 @@ class Env3:
         """
         nl, nn = self.g.order_neighbours(n)
         _, nr = self.g.order_neighbours(nn)
-        OO = self.op.A[n].dot(self.op.A[nn], axes=((3), (0)))
+        OO = self.op.A[n].tensordot(self.op.A[nn], axes=((3), (0)))
         if conj:
             if self.nr_phys == 1:
-                return self.F[(nl, n)].dot(AA, axes=((0), (0)), conj=(0,1)).dot(OO, axes=((0,2,3), (0,1,3))).dot(self.F[(nr, nn)], axes=((1,4), (2,1))).conj()
+                return self.F[(nl, n)].tensordot(AA, axes=((0), (0)), conj=(0,1)).tensordot(OO, axes=((0,2,3), (0,1,3))).tensordot(self.F[(nr, nn)], axes=((1,4), (2,1))).conj()
             elif self.nr_phys == 2 and not self.on_aux:
                 return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, 3, 4, -4, -5, 5), (2, 3, 4, -2, -3, 6), (-6, 6, 5)), (0, 1, 0, 0)).conj()
             # else: self.nr_phys == 2 and self.on_aux:
             return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((1, 2, -1), (1, -2, -3, 3, 4, 5), (2, 3, 4, -4, -5, 6), (-6, 6, 5)), (0, 1, 0, 0)).conj()
         else:
             if self.nr_phys == 1:
-                return self.F[(nl, n)].dot(AA, axes=((2), (0))).dot(OO, axes=((1,2,3), (0,2,4))).dot(self.F[(nr, nn)], axes=((1,4), (0,1)))
+                return self.F[(nl, n)].tensordot(AA, axes=((2), (0))).tensordot(OO, axes=((1,2,3), (0,2,4))).tensordot(self.F[(nr, nn)], axes=((1,4), (0,1)))
             elif self.nr_phys == 2 and not self.on_aux:
                 return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, -4, -5, 5), (2, -2, 3, -3, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
             #else: self.nr_phys == 2 and self.on_aux:
@@ -270,7 +270,7 @@ class Env3:
         if not hasattr(self, 'op_merged'):
             self.op_merged = {}
         if not (n, nn) in self.op_merged:
-            OO = self.op.A[n].dot(self.op.A[nn], axes=((3), (0)))
+            OO = self.op.A[n].tensordot(self.op.A[nn], axes=((3), (0)))
             OO = OO.fuse_legs(axes=(0, (1, 3), (2, 4), 5))
             # OO, _ = OO.group_legs(axes=(2, 4), new_s=-1)
             # OO, _ = OO.group_legs(axes=(1, 3), new_s=1)
@@ -278,7 +278,7 @@ class Env3:
         OO = self.op_merged[(n, nn)]
         if conj:
             if self.nr_phys == 1:
-                return self.F[(nl, n)].dot(AA.conj(), axes=((0), (0))).dot(OO, axes=((0, 2), (0, 1))).dot(self.F[(nr, nn)], axes=((1, 3), (2, 1))).conj()
+                return self.F[(nl, n)].tensordot(AA.conj(), axes=((0), (0))).tensordot(OO, axes=((0, 2), (0, 1))).tensordot(self.F[(nr, nn)], axes=((1, 3), (2, 1))).conj()
         else:
             if self.nr_phys == 1:
                 return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))

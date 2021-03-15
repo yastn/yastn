@@ -13,8 +13,8 @@ def test_to_nonsymmetric_0():
 
     an = a.to_nonsymmetric()
     bn = b.to_nonsymmetric()
-    assert isclose(an.scalar(bn), a.scalar(b), rel_tol=tol)
-    assert isclose(a.scalar(bn), a.scalar(b), rel_tol=tol)   # for dense to_nonsymetric should result in the same config
+    assert isclose(an.vdot(bn), a.vdot(b), rel_tol=tol)
+    assert isclose(a.vdot(bn), a.vdot(b), rel_tol=tol)   # for dense to_nonsymetric should result in the same config
     assert an.is_independent(a)
     assert bn.is_independent(b)
     assert an.is_consistent()
@@ -34,9 +34,9 @@ def test_to_nonsymmetric_1():
     
     an = a.to_nonsymmetric(leg_structures=lsb)
     bn = b.to_nonsymmetric(leg_structures=lsa)
-    assert isclose(an.scalar(bn), a.scalar(b), rel_tol=tol)
+    assert isclose(an.vdot(bn), a.vdot(b), rel_tol=tol)
     with pytest.raises(yast.YastError):
-        a.scalar(bn)
+        a.vdot(bn)
     assert an.is_independent(a)
     assert bn.is_independent(b)
     assert an.is_consistent()
