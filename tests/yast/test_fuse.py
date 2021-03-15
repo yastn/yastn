@@ -34,8 +34,8 @@ def test_fuse_dot():
     af.fuse_legs(axes=((0, 1), 2), inplace=True)
     bf.fuse_legs(axes=((0, 1), 2), inplace=True)
 
-    r1 = a.dot(b, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 1))
-    r1f = af.dot(bf, axes=(0, 0), conj=(0, 1))
+    r1 = yast.tensordot(a, b, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 1))
+    r1f = yast.tensordot(af, bf, axes=(0, 0), conj=(0, 1))
     r1uf = r1f.unfuse_legs(axes=(0, 1))
     r1.norm_diff(r1uf) < tol  # == 0.0
 
@@ -53,9 +53,11 @@ def test_fuse_split():
     U.fuse_legs(axes=((0, 1), 2), inplace=True)
     V = V.fuse_legs(axes=(0, (1, 2)))
 
-    a2 = U.dot(S, axes=(1, 0)).dot(V, axes=(1, 0))
+    US = yast.tensordot(U, S, axes=(1, 0))
+    a2 = yast.tensordot(US, V, axes=(1, 0))
     assert af.norm_diff(a2) < tol  # == 0.0
-    a3 = Uf.dot(Sf, axes=(1, 0)).dot(Vf, axes=(1, 0))
+    USf = yast.tensordot(Uf, Sf, axes=(1, 0))
+    a3 = yast.tensordot(USf, Vf, axes=(1, 0))
     assert af.norm_diff(a3) < tol  # == 0.0
     a3.unfuse_legs(axes=0, inplace=True)
     a3.unfuse_legs(axes=(1, 2), inplace=True)
@@ -70,10 +72,11 @@ def test_fuse_split():
     Rf.unfuse_legs(axes=1, inplace=True)
     assert R.norm_diff(Rf) < tol  # == 0.0
 
-    aH = af.dot(af, axes=(1, 1), conj=(0, 1))
+    aH = yast.tensordot(af, af, axes=(1, 1), conj=(0, 1))
     Vf, Uf = aH.split_eigh(axes=(0, 1))
     Uf.unfuse_legs(axes=0, inplace = True)
-    aH2 = (Uf.dot(Vf, axes=(2, 0))).dot(Uf, axes=(2, 2), conj=(0, 1))
+    UVf = yast.tensordot(Uf, Vf, axes=(2, 0))
+    aH2 = yast.tensordot(UVf, Uf, axes=(2, 2), conj=(0, 1))
     aH.unfuse_legs(axes=(0, 1), inplace=True)
     assert aH2.norm_diff(aH) < tol  # == 0.0
 

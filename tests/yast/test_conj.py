@@ -24,7 +24,7 @@ def test_conj_2():
     b = a.conj()
     assert b.get_tensor_charge() == (1, -1)
     assert b.get_signature() == (-1, 1)
-    c = a.dot(b, axes=((0, 1), (0, 1)))
+    c = yast.tensordot(a, b, axes=((0, 1), (0, 1)))
     assert c.get_tensor_charge() == (0, 0)
     assert c.get_signature() == ()
 
