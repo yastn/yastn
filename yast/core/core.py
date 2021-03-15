@@ -7,12 +7,13 @@ In principle, any number of symmetries can be used (including no symmetries).
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
 
+from ._auxliary import _unpack_axes, _clear_axes, _common_keys, _indices_common_rows
 from collections import namedtuple
 import itertools
 import numpy as np
 from ..sym import sym_none
 
-__all__ = ['Tensor', 'block', 'YastError', 'check_signatures_match', 'check_consistency', 'allow_cache_meta']
+__all__ = ['Tensor', 'YastError', 'check_signatures_match', 'check_consistency', 'allow_cache_meta']
 
 # flags that controls which checks are performed
 _check_signatures_match = True
@@ -39,85 +40,8 @@ def allow_cache_meta(value=True):
     global _allow_cache_meta
     _allow_cache_meta = bool(value)
 
-
 class YastError(Exception):
     """Errors cought by checks in yast."""
-
-
-def block(tensors, common_legs=None):
-    """ Assemble new tensor by blocking a set of tensors.
-
-        Parameters
-        ----------
-        tensors : dict
-            dictionary of tensors {(x,y,...): tensor at position x,y,.. in the new, blocked super-tensor}.
-            Length of tuple should be equall to tensor.ndim - len(common_legs)
-
-        common_legs : list
-            Legs that are not blocked
-            (equivalently on common legs all tensors have the same position in the supertensor, and those positions are not given in tensors)
-
-    """
-    out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
-    tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
-    out_b = tuple((ii,) for ii in range(tn0.mlegs) if ii not in out_s)
-    pos = list(_clear_axes(*tensors))
-    lind = tn0.mlegs - len(out_s)
-    for ind in pos:
-        if len(ind) != lind:
-            raise YastError('Wrong number of coordinates encoded in tensors.keys()')
-
-    out_s, =  tn0._unpack_axes(out_s)
-    u_b = tuple(tn0._unpack_axes(*out_b))
-    out_b = tuple(itertools.chain(*u_b))
-    pos = tuple(tuple(itertools.chain.from_iterable(itertools.repeat(x, len(u)) for x, u in zip(ind, u_b))) for ind in pos)
-
-    for ind, tn in tensors.items():
-        ind, = _clear_axes(ind)
-        if tn.nlegs != tn0.nlegs or tn.meta_fusion != tn0.meta_fusion or\
-           not np.all(tn.s == tn0.s) or not np.all(tn.n == tn0.n) or\
-           tn.isdiag != tn0.isdiag :
-            raise YastError('Ndims, signatures, total charges or fusion trees of blocked tensors are inconsistent.')
-
-    posa = np.ones((len(pos), tn0.nlegs), dtype=int)
-    posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int).reshape(len(pos), -1)
-
-    tDs = []  # {leg: {charge: {position: D, 'D' : Dtotal}}}
-    for n in range(tn0.nlegs):
-        tDl = {}
-        for tn, pp in zip(tensors.values(), posa):
-            tDn = tn.get_leg_structure(n, native=True)
-            for t, D in tDn.items():
-                if t in tDl:
-                    if (pp[n] in tDl[t]) and (tDl[t][pp[n]] != D):
-                        raise YastError('Dimensions of blocked tensors are not consistent')
-                    tDl[t][pp[n]] = D
-                else:
-                    tDl[t] = {pp[n]: D}
-        for t, pD in tDl.items():
-            ps = sorted(pD.keys())
-            Ds = [pD[p] for p in ps]
-            tDl[t] = {p: (aD-D, aD)  for p, D, aD in zip(ps, Ds, itertools.accumulate(Ds))}
-            tDl[t]['Dtot'] = sum(Ds)
-        tDs.append(tDl)
-
-    # all unique blocks
-    # meta_new = {tind: Dtot};  #meta_block = [(tind, pos, Dslc)]
-    meta_new, meta_block = {}, []
-    for pind, pa in zip(tensors, posa):
-        a = tensors[pind]
-        for t in a.tset:
-            tind = tuple(t.flat)
-            if tind not in meta_new:
-                meta_new[tind] = tuple(tDs[n][tuple(t[n].flat)]['Dtot'] for n in range(a.nlegs))
-            meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.nlegs))))
-    meta_new = tuple((ts, Ds) for ts, Ds in meta_new.items())
-
-    c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n, meta_fusion=tn0.meta_fusion)
-    c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, a.config.dtype, c.config.device)
-    c._update_tD_arrays()
-    return c
-
 
 class Tensor:
     """ Class defining a tensor with abelian symmetries, and operations on such tensor(s). """
@@ -459,7 +383,7 @@ class Tensor:
         if native:
             return tuple(self.s)
         pn = tuple((n,) for n in range(self.mlegs)) if self.mlegs > 0 else ()
-        un = tuple(self._unpack_axes(*pn))
+        un = tuple(_unpack_axes(self, *pn))
         return tuple(self.s[p[0]] for p in un)
 
     def get_blocks_charges(self):
@@ -503,7 +427,7 @@ class Tensor:
         """
         axis, = _clear_axes(axis)
         if not native:
-            axis, = self._unpack_axes(axis)
+            axis, = _unpack_axes(self, axis)
         tset = self.tset[:, axis, :]
         Dset = self.Dset[:, axis]
         tset = tset.reshape(len(tset), len(axis) * self.config.sym.nsym)
@@ -545,6 +469,9 @@ class Tensor:
         """ Number of: meta legs if not native else native legs. """
         return self.nlegs if native else self.mlegs
 
+    def __getitem__(self, key):
+        """ Returns block based on its charges. """
+        return self.A[key]
 
     #########################
     #    output tensors     #
@@ -590,7 +517,7 @@ class Tensor:
                 Dlow = Dhigh
         axes = tuple((n,) for n in range(nlegs))
         if not native:
-            axes = tuple(self._unpack_axes(*axes))
+            axes = tuple(_unpack_axes(self, *axes))
         meta = []
         for tt in self.tset:
             tind = tuple(tt.flat)
@@ -637,9 +564,6 @@ class Tensor:
         T = Tensor(config=config_dense, s=news, n=None, isdiag=self.isdiag)
         T.set_block(val=self.to_dense(leg_structures, native))
         return T
-
-    def __getitem__(self, key):
-        return self.A[key]
 
     #########################
     #    output numbers     #
@@ -723,43 +647,6 @@ class Tensor:
             return self.zero_of_dtype()
         meta = _common_keys(self.A, other.A)
         return self.config.backend.norm_diff(self.A, other.A, meta, p)
-
-    def entropy(self, axes, alpha=1):
-        r"""
-        Calculate entropy from spliting the tensor using svd.
-
-        If diagonal, calculates entropy treating S^2 as probabilities. Normalizes S^2 if neccesary.
-        If not diagonal, calculates svd first to get the diagonal S.
-        Use base-2 log.
-
-        Parameters
-        ----------
-        axes: tuple
-            Specify two groups of legs between which to perform svd
-
-        alpha: float
-            Order of Renyi entropy.
-            alpha=1 is von Neuman entropy -Tr(S^2 log2(S^2))
-            otherwise: 1/(1-alpha) log2(Tr(S^(2*alpha)))
-
-        Returns
-        -------
-        entropy, minimal singular value, normalization : float64
-        """
-        if len(self.A) == 0:
-            return self.zero_of_dtype(), self.zero_of_dtype(), self.zero_of_dtype()
-
-        lout_l, lout_r = _clear_axes(*axes)
-        out_l, out_r = self._unpack_axes(lout_l, lout_r)
-        self._test_axes_split(out_l, out_r)
-
-        if not self.isdiag:
-            Am, *_ = self._merge_to_matrix(out_l, out_r, news_l=-1, news_r=1)
-            Sm = self.config.backend.svd_S(Am)
-        else:
-            Sm = {t: self.config.backend.diag_get(x) for t, x in self.A.items()}
-        entropy, Smin, normalization = self.config.backend.entropy(Sm, alpha=alpha)
-        return entropy, Smin, normalization
 
     #############################
     #     linear operations     #
@@ -980,7 +867,7 @@ class Tensor:
         axes: tuple of ints
             New order of the legs. Should be a permutation of (0, 1, ..., ndim-1)
         """
-        uaxes, = self._unpack_axes(axes)
+        uaxes, = _unpack_axes(self, axes)
         order = np.array(uaxes, dtype=np.intp)
         new_meta_fusion = tuple(self.meta_fusion[ii] for ii in axes)
         news = self.s[order]
@@ -1032,74 +919,68 @@ class Tensor:
         a._update_tD_arrays()
         return a
 
-    def swap_gate(self, axes, fermionic=(), inplace=True):
+    def rsqrt(self, cutoff=0):
         """
-        Return tensor after application of the swap gate.
+        Return element-wise 1/sqrt(A).
 
-        Multiply the block with odd charges on swaped legs by -1.
-        If one of the axes is -1, then swap with charge n.
-
-        TEST IT
+        The tensor elements with absolut value below the cutoff are set to zero.
 
         Parameters
         ----------
-        axes: tuple
-            two legs to be swaped
-
-        fermionic: tuple
-            which symmetries are fermionic
+            cutoff: float64
+            Cut-off for (elementwise) pseudo-inverse.
 
         Returns
         -------
-        tensor : Tensor
+        tansor: Tensor
         """
-        if any(fermionic):
-            fermionic = np.array(fermionic, dtype=bool)
-            axes = sorted(list(axes))
-            a = self.clone()
-            if axes[0] == axes[1]:
-                raise YastError('Cannot sweep the same index')
-            if not self.isdiag:
-                if (axes[0] == -1) and (np.sum(a.n[fermionic]) % 2 == 1):  # swap gate with local a.n
-                    for ind in a.tset:
-                        if np.sum(ind[axes[1], fermionic]) % 2 == 1:
-                            ind = tuple(ind.flat)
-                            a.A[ind] = -a.A[ind]
-                else:  # axes[0] != axes[1]:  # swap gate on 2 legs
-                    for ind in a.tset:
-                        if (np.sum(ind[axes[0], fermionic]) % 2 == 1) and (np.sum(ind[axes[1], fermionic]) % 2 == 1):
-                            a.A[ind] = -a.A[ind]
-            else:
-                for ind in a.tset:
-                    if np.sum(ind[axes[0], fermionic]) % 2 == 1:
-                        a.A[ind] = -a.A[ind]
-            return a
-        return self
-
-    def invsqrt(self, cutoff=0):
-        """ Element-wise 1/sqrt(A)"""
         a = self.copy_empty()
         if not a.isdiag:
-            a.A = self.config.backend.invsqrt(self.A, cutoff=cutoff)
+            a.A = self.config.backend.rsqrt(self.A, cutoff=cutoff)
         else:
-            a.A = self.config.backend.invsqrt_diag(self.A, cutoff=cutoff)
+            a.A = self.config.backend.rsqrt_diag(self.A, cutoff=cutoff)
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
         return a
 
-    def inv(self, cutoff=0):
-        """ Element-wise 1/sqrt(A)"""
+    def reciprocal(self, cutoff=0):
+        """
+        Return element-wise 1/A.
+
+        The tensor elements with absolut value below the cutoff are set to zero.
+
+        Parameters
+        ----------
+        cutoff: float64
+            Cut-off for (elementwise) pseudo-inverse.
+        
+        Returns
+        -------
+        tansor: Tensor
+        """
         a = self.copy_empty()
         if not a.isdiag:
-            a.A = self.config.backend.inv(self.A, cutoff=cutoff)
+            a.A = self.config.backend.reciprocal(self.A, cutoff=cutoff)
         else:
-            a.A = self.config.backend.inv_diag(self.A, cutoff=cutoff)
+            a.A = self.config.backend.reciprocal_diag(self.A, cutoff=cutoff)
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
         return a
 
     def exp(self, step=1.):
-        """ Element-wise exp(step * A)"""
+        """
+        Return element-wise exp(step * A).
+
+        This is calculated for existing blocks only.
+
+        Parameters
+        ----------
+        step: number
+
+        Returns
+        -------
+        tansor: Tensor
+        """
         a = self.copy_empty()
         if not a.isdiag:
             a.A = self.config.backend.exp(self.A, step)
@@ -1110,7 +991,17 @@ class Tensor:
         return a
 
     def sqrt(self):
-        """ Element-wise sqrt"""
+        """
+        Return element-wise sqrt(A).
+
+        Parameters
+        ----------
+        step: number
+
+        Returns
+        -------
+        tansor: Tensor
+        """
         a = self.copy_empty()
         a.A = self.config.backend.sqrt(self.A)
         a.tset = self.tset.copy()
@@ -1142,15 +1033,15 @@ class Tensor:
 
         Returns
         -------
-            tansor: Tensor
+        tansor: Tensor
         """
         a._test_configs_match(b)
         la_con, lb_con = _clear_axes(*axes)  # contracted meta legs
         la_out = tuple(ii for ii in range(a.mlegs) if ii not in la_con)  # outgoing meta legs
         lb_out = tuple(ii for ii in range(b.mlegs) if ii not in lb_con)  # outgoing meta legs
 
-        a_con, a_out = a._unpack_axes(la_con, la_out)  # actual legs of a=self
-        b_con, b_out = b._unpack_axes(lb_con, lb_out)  # actual legs of b=other
+        a_con, a_out = _unpack_axes(a, la_con, la_out)  # actual legs of a=self
+        b_con, b_out = _unpack_axes(b, lb_con, lb_out)  # actual legs of b=other
 
         na_con, na_out = np.array(a_con, dtype=np.intp), np.array(a_out, dtype=np.intp)
         nb_con, nb_out = np.array(b_con, dtype=np.intp), np.array(b_out, dtype=np.intp)
@@ -1187,7 +1078,7 @@ class Tensor:
         c._update_tD_arrays()
         return c
 
-    def scalar(self, other):
+    def vdot(self, other, conj=(1, 0)):
         r"""
         Compute scalar product x = <self|other> of two tensors. Self is conjugated.
 
@@ -1203,7 +1094,7 @@ class Tensor:
         self._test_tensors_match(other)
         k12, _, _ = _common_keys(self.A, other.A)
         if len(k12) > 0:
-            return self.config.backend.scalar(self.A, other.A, k12)
+            return self.config.backend.vdot(self.A, other.A, k12)
         return self.zero_of_dtype()
 
     def trace(self, axes=(0, 1)):
@@ -1222,7 +1113,7 @@ class Tensor:
         lin1, lin2 = _clear_axes(*axes)  # contracted legs
         lin12 = lin1 + lin2
         lout = tuple(ii for ii in range(self.mlegs) if ii not in lin12)
-        in1, in2, out = self._unpack_axes(lin1, lin2, lout)
+        in1, in2, out = _unpack_axes(self, lin1, lin2, lout)
 
         if len(in1) != len(in2) or len(lin1) != len(lin2):
             raise YastError('Number of axis to trace should be the same')
@@ -1258,208 +1149,6 @@ class Tensor:
         a._update_tD_arrays()
         return a
 
-
-    ###########################
-    #     spliting tensor     #
-    ###########################
-
-    def split_svd(self, axes, sU=1, nU=True, Uaxis=-1, Vaxis=0, tol=0, D_block=np.inf, \
-        D_total=np.inf, truncated_svd=False, truncated_nbit=60, truncated_kfac=6,\
-        keep_multiplets=False, eps_multiplet=1.0e-14):
-        r"""
-        Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
-
-        Truncate based on relative tolerance, bond dimension of each block,
-        and total bond dimension from all blocks (whichever gives smaller bond dimension).
-        By default, do not truncate.
-        Charge of tensor is attached to U if nU and to V if not nU
-
-        Parameters
-        ----------
-        axes: tuple
-            Specify two groups of legs between which to perform svd, as well as
-            their final order.
-
-        sU: int
-            signature of the new leg in U; equal 1 or -1. Default is 1.
-
-        Uaxis, Vaxis: int
-            specify which leg of U and V tensors are connecting with S. By default
-            it is the last leg of U and the first of V.
-
-        tol: float
-            relative tolerance of singular values below which to truncate.
-
-        D_block: int
-            largest number of singular values to keep in a single block.
-
-        D_total: int
-            largest total number of singular values to keep.
-
-        truncated_svd: bool
-            flag to employ truncated-svd algorithm.
-
-        truncated_nbit, truncated_kfac: int
-            parameters of the truncated-svd algorithm.
-
-        Returns
-        -------
-        U, S, V: Tensor
-            U and V are unitary projectors. S is diagonal.
-        """
-        lout_l, lout_r = _clear_axes(*axes)
-        out_l, out_r = self._unpack_axes(lout_l, lout_r)
-        self._test_axes_split(out_l, out_r)
-
-        Am, ls_l, ls_r, ul, ur = self._merge_to_matrix(out_l, out_r, news_l=-sU, news_r=sU)
-
-        if nU:
-            meta = tuple((il+ir, il+ir, ir, ir+ir) for il, ir in zip(ul, ur))
-            n_l, n_r = self.n, 0*self.n
-        else:
-            meta = tuple((il+ir, il+il, il, il+ir) for il, ir in zip(ul, ur))
-            n_l, n_r = 0*self.n, self.n
-
-        opts = {'truncated_svd': truncated_svd, 'D_block': D_block,
-               'nbit': truncated_nbit, 'kfac':truncated_kfac,
-               'tol': tol, 'D_total': D_total, 'keep_multiplets': keep_multiplets,
-               'eps_multiplet': eps_multiplet}
-
-        Um, Sm, Vm = self.config.backend.svd(Am, meta, opts)
-
-        U = Tensor(config=self.config, s=ls_l.s + (sU,), n=n_l, meta_fusion=[self.meta_fusion[ii] for ii in lout_l] + [(1,)])
-        S = Tensor(config=self.config, s=(-sU, sU), isdiag=True)
-        V = Tensor(config=self.config, s=(-sU,) + ls_r.s, n=n_r, meta_fusion=[(1,)] + [self.meta_fusion[ii] for ii in lout_r])
-
-        ls_s = _LegDecomposition(self.config)
-        ls_s.leg_struct_for_truncation(Sm, opts, 'svd')
-
-        U.A = self._unmerge_from_matrix(Um, ls_l, ls_s)
-        S.A = self._unmerge_from_diagonal(Sm, ls_s)
-        V.A = self._unmerge_from_matrix(Vm, ls_s, ls_r)
-
-        U._update_tD_arrays()
-        S._update_tD_arrays()
-        V._update_tD_arrays()
-        U.moveaxis(source=-1, destination=Uaxis, inplace=True)
-        V.moveaxis(source=0, destination=Vaxis, inplace=True)
-        return U, S, V
-
-    def split_qr(self, axes, sQ=1, Qaxis=-1, Raxis=0):
-        r"""
-        Split tensor using qr decomposition, tensor = Q * R.
-
-        Charge of R is zero.
-
-        Parameters
-        ----------
-        axes: tuple
-            Specify two groups of legs between which to perform svd, as well as their final order.
-
-        sQ: int
-            signature of connecting leg in Q; equal 1 or -1. Default is 1.
-
-        Qaxis, Raxis: int
-            specify which leg of Q and R tensors are connecting to the other tensor. By delault it is the last leg of Q and the first of R.
-
-        Returns
-        -------
-            Q, R: Tensor
-        """
-        lout_l, lout_r = _clear_axes(*axes)
-        out_l, out_r = self._unpack_axes(lout_l, lout_r)
-        self._test_axes_split(out_l, out_r)
-
-        Am, ls_l, ls_r, ul, ur = self._merge_to_matrix(out_l, out_r, news_l=-sQ, news_r=sQ)
-
-        meta = tuple((l+r, l+r, r+r) for l, r in zip(ul, ur))
-        Qm, Rm = self.config.backend.qr(Am, meta)
-
-        Qs = tuple(self.s[lg] for lg in out_l) + (sQ,)
-        Rs = (-sQ,) + tuple(self.s[lg] for lg in out_r)
-        Q = Tensor(config=self.config, s=Qs, n=self.n, meta_fusion=[self.meta_fusion[ii] for ii in lout_l] + [(1,)])
-        R = Tensor(config=self.config, s=Rs, meta_fusion=[(1,)] + [self.meta_fusion[ii] for ii in lout_r])
-
-        ls = _LegDecomposition(self.config, -sQ, -sQ)
-        ls.leg_struct_trivial(Rm, 0)
-
-        Q.A = self._unmerge_from_matrix(Qm, ls_l, ls)
-        R.A = self._unmerge_from_matrix(Rm, ls, ls_r)
-
-        Q._update_tD_arrays()
-        R._update_tD_arrays()
-
-        Q.moveaxis(source=-1, destination=Qaxis, inplace=True)
-        R.moveaxis(source=0, destination=Raxis, inplace=True)
-        return Q, R
-
-    def split_eigh(self, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf):
-        r"""
-        Split tensor using eig, tensor = U * S * U^dag. Truncate smallest eigenvalues if neccesary.
-
-        Tensor should be hermitian and has charge 0.
-        Truncate using (whichever gives smaller bond dimension) relative tolerance, bond dimension of each block, and total bond dimension from all blocks.
-        By default do not truncate. Truncate based on tolerance only if some eigenvalue is positive -- than all negative ones are discarded.
-        Function primarly intended to be used for positively defined tensors.
-
-        Parameters
-        ----------
-        axes: tuple
-            Specify two groups of legs between which to perform svd, as well as their final order.
-
-        sU: int
-            signature of connecting leg in U equall 1 or -1. Default is 1.
-
-        Uaxis: int
-            specify which leg of U is the new connecting leg. By delault it is the last leg.
-
-        tol: float
-            relative tolerance of singular values below which to truncate.
-
-        D_block: int
-            largest number of singular values to keep in a single block.
-
-        D_total: int
-            largest total number of singular values to keep.
-
-        Returns
-        -------
-            S, U: Tensor
-                U is unitary projector. S is diagonal.
-        """
-        lout_l, lout_r = _clear_axes(*axes)
-        out_l, out_r = self._unpack_axes(lout_l, lout_r)
-        self._test_axes_split(out_l, out_r)
-
-        if np.any(self.n != 0):
-            raise YastError('Charge should be zero')
-
-        Am, ls_l, ls_r, ul, ur = self._merge_to_matrix(out_l, out_r, news_l=-sU, news_r=sU)
-
-        if _check_consistency and not (ul == ur and ls_l.match(ls_r)):
-            raise YastError('Something went wrong in matching the indices of the two tensors')
-
-        # meta = (indA, indS, indU)
-        meta = tuple((l+r, l, l+r) for l, r in zip(ul, ur))
-        Sm, Um = self.config.backend.eigh(Am, meta)
-
-        opts = {'D_block': D_block, 'tol': tol, 'D_total': D_total}
-        ls_s = _LegDecomposition(self.config, -sU, -sU)
-        ls_s.leg_struct_for_truncation(Sm, opts, 'eigh')
-
-        Us = tuple(self.s[lg] for lg in out_l) + (sU,)
-
-        S = Tensor(config=self.config, s=(-sU, sU), isdiag=True)
-        U = Tensor(config=self.config, s=Us, meta_fusion=[self.meta_fusion[ii] for ii in lout_l] + [(1,)])
-
-        U.A = self._unmerge_from_matrix(Um, ls_l, ls_s)
-        S.A = self._unmerge_from_diagonal(Sm, ls_s)
-
-        U._update_tD_arrays()
-        S._update_tD_arrays()
-
-        U.moveaxis(source=-1, destination=Uaxis, inplace=True)
-        return S, U
 
     ##############################
     #     merging operations     #
@@ -1670,11 +1359,6 @@ class Tensor:
         self.tset = np.array(lA, dtype=int).reshape(len(lA), self.nlegs, self.config.sym.nsym)
         self.Dset = np.array([self.config.backend.get_shape(self.A[x]) for x in lA], dtype=int).reshape(len(lA), self.nlegs)
 
-    def _unpack_axes(self, *args):
-        """Unpack meta axes into native axes based on self.meta_fusion"""
-        clegs = tuple(itertools.accumulate(x[0] for x in self.meta_fusion))
-        return (tuple(itertools.chain(*(range(clegs[ii]-self.meta_fusion[ii][0], clegs[ii]) for ii in axes))) for axes in args)
-
 
 class _LegDecomposition:
     """Information about internal structure of leg resulting from fusions."""
@@ -1778,30 +1462,6 @@ class _LegDecomposition:
                 Dslc = self.config.backend.range_largest(D_keep[ind], Dmax[ind], sorting)
                 self.dec[ind] = {ind: (Dslc, D_keep[ind], (D_keep[ind],))}
 
-def _clear_axes(*args):
-    return ((axis,) if isinstance(axis, int) else tuple(axis) for axis in args)
-
-def _common_keys(d1, d2):
-    """
-    Divide keys into: common, only in d1 and only in d2.
-
-    Returns: keys12, keys1, keys2
-    """
-    s1 = set(d1)
-    s2 = set(d2)
-    return tuple(s1 & s2), tuple(s1 - s2), tuple(s2 - s1)
-
-def _indices_common_rows(a, b):
-    """
-    Return indices of a that are in b, and indices of b that are in a.
-    """
-    la = [tuple(x.flat) for x in a]
-    lb = [tuple(x.flat) for x in b]
-    sa = set(la)
-    sb = set(lb)
-    ia = np.array([ii for ii, el in enumerate(la) if el in sb], dtype=np.intp)
-    ib = np.array([ii for ii, el in enumerate(lb) if el in sa], dtype=np.intp)
-    return ia, ib
 
 
 # def group_legs(self, axes, new_s=None):

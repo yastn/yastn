@@ -1,3 +1,4 @@
+from yast import linalg
 import logging
 import numpy as np
 from .. import ncon
@@ -87,11 +88,9 @@ class Mps:
         if nnext is not None:
             self.pC = (n, nnext)
             if leg == 0:  # orthogonalize from right to left (last to first)
-                Q, R = self.A[n].split_qr(
-                    axes=(self.phys + self.right, self.left), sQ=1, Qaxis=0, Raxis=-1)
+                Q, R = linalg.qr(self.A[n], axes=(self.phys + self.right, self.left), sQ=1, Qaxis=0, Raxis=-1)
             else:  # leg == 1 or leg is None:  # orthogonalize from left to right (first to last)
-                Q, R = self.A[n].split_qr(
-                    axes=(self.left + self.phys, self.right), sQ=-1)
+                Q, R = linalg.qr(self.A[n], axes=(self.left + self.phys, self.right), sQ=-1)
             self.A[n] = Q
             self.A[self.pC] = (1 / R.norm()) * R if normalize else R
         else:
@@ -118,21 +117,21 @@ class Mps:
         """
         if self.pC is not None:
             normC = self.A[self.pC].norm()
-            U, S, V = self.A[self.pC].split_svd(axes=(0, 1), sU=-1, **opts)
+            U, S, V = linalg.svd(self.A[self.pC], axes=(0, 1), sU=-1, **opts)
             normS = S.norm()
 
             self.A[self.pC] = (1 / normS) * S if normalize else S
 
             nnext, leg, nprev = self.g.from_bond(self.pC, towards=self.g.first)
             if nprev is None:
-                UV = U.dot(V, axes=(0, 1))
+                UV = U.tensordot(V, axes=(0, 1))
                 if leg == 0:  # first site
-                    self.A[nprev] = UV.dot(self.A[nnext], axes=(1, self.left))
+                    self.A[nprev] = UV.tensordot(self.A[nnext], axes=(1, self.left))
                 else:  # leg == 1:  last site
-                    self.A[nprev] = self.A[nnext].dot(UV, axes=(self.right, 0))
+                    self.A[nprev] = self.A[nnext].tensordot(UV, axes=(self.right, 0))
             else:
-                self.A[nnext] = self.A[nnext].dot(U, axes=(self.right, 0))
-                self.A[nprev] = V.dot(self.A[nprev], axes=(1, self.left))
+                self.A[nnext] = self.A[nnext].tensordot(U, axes=(self.right, 0))
+                self.A[nprev] = V.tensordot(self.A[nprev], axes=(1, self.left))
             return normC / normS - 1
         else:
             return 0.
@@ -160,9 +159,9 @@ class Mps:
             self.pC = None
 
             if leg == 1:
-                self.A[nnext] = self.A[nnext].dot(C, axes=(self.right, 0))
+                self.A[nnext] = self.A[nnext].tensordot(C, axes=(self.right, 0))
             else:  # leg == 0:
-                self.A[nnext] = C.dot(self.A[nnext], axes=(1, self.left))
+                self.A[nnext] = C.tensordot(self.A[nnext], axes=(1, self.left))
 
     def canonize_sweep(self, to='last', normalize=True):
         r"""
@@ -247,7 +246,7 @@ class Mps:
         """
         _, nr = self.g.order_neighbours(n)
         if self.nr_phys == 1:
-            return self.A[n].dot(self.A[nr], axes=(self.right, self.left))
+            return self.A[n].tensordot(self.A[nr], axes=(self.right, self.left))
         else:  # self.nr_phys == 2:
             return ncon([self.A[n], self.A[nr]], ((-1, -2, -4, 1), (1, -3, -5, -6)), (0, 0))
 
@@ -307,10 +306,10 @@ class Mps:
         R= None
         for n in self.g.sweep(to='last', dl=1):
             if R:
-                _, R = R.dot(self.A[n], axes=((1), (self.left))).split_qr(axes=(self.left + self.phys, self.right), sQ=-1)
+                _, R = linalg.qr(R.tensordot(self.A[n], axes=((1), (self.left))), axes=(self.left + self.phys, self.right), sQ=-1)
             else:
-                _, R = self.A[n].split_qr(axes=(self.left + self.phys, self.right), sQ=-1)
-            _, s, _ = R.split_svd(axes=(0,1))
+                _, R = linalg.qr(self.A[n], axes=(self.left + self.phys, self.right), sQ=-1)
+            _, s, _ = linalg.svd(R, axes=(0,1))
             s = s.to_numpy().diagonal()
             Schmidt_spectrum[n, :len(s)] = s.real
             Smin[n] = min(s).real

@@ -12,7 +12,7 @@ def is_left_canonical(psi):
     """
     cl = (0, 1) if psi.nr_phys == 1 else (0, 1, 2)
     for n in range(psi.N):
-        x = psi.A[n].dot(psi.A[n], axes=(cl, cl), conj=(1, 0))
+        x = psi.A[n].tensordot(psi.A[n], axes=(cl, cl), conj=(1, 0))
         x0 = yast.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True, val='ones', conjs=[1, 1])
         assert pytest.approx(x.norm_diff(x0.diag())) == 0
 
@@ -23,7 +23,7 @@ def is_right_canonical(psi):
     """
     cl = (1, 2) if psi.nr_phys == 1 else (1, 2, 3)
     for n in range(psi.N):
-        x = psi.A[n].dot(psi.A[n], axes=(cl, cl), conj=(0, 1))
+        x = psi.A[n].tensordot(psi.A[n], axes=(cl, cl), conj=(0, 1))
         x0 = yast.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True, val='ones', conjs=[1, 1])
         assert pytest.approx(x.norm_diff(x0.diag())) == 0
 

@@ -1,7 +1,10 @@
 """ ncon routine for automatic contraction of a list of tensors. """
+import numpy as np
 from .core import YastError
+from ._auxliary import _clear_axes, _unpack_axes
 
-__all__ = ['ncon']
+__all__ = ['ncon', 'swap_gate', 'entropy']
+
 
 def ncon(ts, inds, conjs=None):
     """Execute series of tensor contractions"""
@@ -74,3 +77,85 @@ def ncon(ts, inds, conjs=None):
     for num in ts.values():
         result *= num.to_number()
     return result
+
+
+def swap_gate(self, axes, fermionic=(), inplace=True):
+    """
+    Return tensor after application of the swap gate.
+
+    Multiply the block with odd charges on swaped legs by -1.
+    If one of the axes is -1, then swap with charge n.
+
+    TEST IT
+
+    Parameters
+    ----------
+    axes: tuple
+        two legs to be swaped
+
+    fermionic: tuple
+        which symmetries are fermionic
+
+    Returns
+    -------
+    tensor : Tensor
+    """
+    if any(fermionic):
+        fermionic = np.array(fermionic, dtype=bool)
+        axes = sorted(list(axes))
+        a = self.clone()
+        if axes[0] == axes[1]:
+            raise YastError('Cannot sweep the same index')
+        if not self.isdiag:
+            if (axes[0] == -1) and (np.sum(a.n[fermionic]) % 2 == 1):  # swap gate with local a.n
+                for ind in a.tset:
+                    if np.sum(ind[axes[1], fermionic]) % 2 == 1:
+                        ind = tuple(ind.flat)
+                        a.A[ind] = -a.A[ind]
+            else:  # axes[0] != axes[1]:  # swap gate on 2 legs
+                for ind in a.tset:
+                    if (np.sum(ind[axes[0], fermionic]) % 2 == 1) and (np.sum(ind[axes[1], fermionic]) % 2 == 1):
+                        a.A[ind] = -a.A[ind]
+        else:
+            for ind in a.tset:
+                if np.sum(ind[axes[0], fermionic]) % 2 == 1:
+                    a.A[ind] = -a.A[ind]
+        return a
+    return self
+
+def entropy(self, axes, alpha=1):
+    r"""
+    Calculate entropy from spliting the tensor using svd.
+
+    If diagonal, calculates entropy treating S^2 as probabilities. Normalizes S^2 if neccesary.
+    If not diagonal, calculates svd first to get the diagonal S.
+    Use base-2 log.
+
+    Parameters
+    ----------
+    axes: tuple
+        Specify two groups of legs between which to perform svd
+
+    alpha: float
+        Order of Renyi entropy.
+        alpha=1 is von Neuman entropy -Tr(S^2 log2(S^2))
+        otherwise: 1/(1-alpha) log2(Tr(S^(2*alpha)))
+
+    Returns
+    -------
+    entropy, minimal singular value, normalization : float64
+    """
+    if len(self.A) == 0:
+        return self.zero_of_dtype(), self.zero_of_dtype(), self.zero_of_dtype()
+
+    lout_l, lout_r = _clear_axes(*axes)
+    out_l, out_r = _unpack_axes(self, lout_l, lout_r)
+    self._test_axes_split(out_l, out_r)
+
+    if not self.isdiag:
+        Am, *_ = self._merge_to_matrix(out_l, out_r, news_l=-1, news_r=1)
+        Sm = self.config.backend.svd_S(Am)
+    else:
+        Sm = {t: self.config.backend.diag_get(x) for t, x in self.A.items()}
+    entropy, Smin, normalization = self.config.backend.entropy(Sm, alpha=alpha)
+    return entropy, Smin, normalization

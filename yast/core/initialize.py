@@ -1,8 +1,10 @@
 """ Methods creating a new yast tensor """
-
+import numpy as np
+from itertools import chain, repeat, accumulate
 from .core import Tensor, YastError
+from ._auxliary import _clear_axes, _unpack_axes
 
-__all__ = ['rand', 'randR', 'zeros', 'ones', 'eye', 'import_from_dict', 'decompress_from_1d', 'match_legs']
+__all__ = ['rand', 'randR', 'zeros', 'ones', 'eye', 'import_from_dict', 'decompress_from_1d', 'match_legs', 'block']
 
 
 def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
@@ -204,7 +206,7 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
         conjs = (0,) * len(tensors)
     for nf, te, cc in zip(legs, tensors, conjs):
         lf.append(te.meta_fusion[nf])
-        un, = te._unpack_axes((nf,))
+        un, = _unpack_axes(te, (nf,))
         for nn in un:
             tdn = te.get_leg_structure(nn, native=True)
             t.append(tuple(tdn.keys()))
@@ -214,3 +216,77 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
     a.fill_tensor(t=t, D=D, val=val)
     return a
 
+
+def block(tensors, common_legs=None):
+    """ Assemble new tensor by blocking a set of tensors.
+
+        Parameters
+        ----------
+        tensors : dict
+            dictionary of tensors {(x,y,...): tensor at position x,y,.. in the new, blocked super-tensor}.
+            Length of tuple should be equall to tensor.ndim - len(common_legs)
+
+        common_legs : list
+            Legs that are not blocked
+            (equivalently on common legs all tensors have the same position in the supertensor, and those positions are not given in tensors)
+
+    """
+    out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
+    tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
+    out_b = tuple((ii,) for ii in range(tn0.mlegs) if ii not in out_s)
+    pos = list(_clear_axes(*tensors))
+    lind = tn0.mlegs - len(out_s)
+    for ind in pos:
+        if len(ind) != lind:
+            raise YastError('Wrong number of coordinates encoded in tensors.keys()')
+
+    out_s, =  _unpack_axes(tn0, out_s)
+    u_b = tuple(_unpack_axes(tn0, *out_b))
+    out_b = tuple(chain(*u_b))
+    pos = tuple(tuple(chain.from_iterable(repeat(x, len(u)) for x, u in zip(ind, u_b))) for ind in pos)
+
+    for ind, tn in tensors.items():
+        ind, = _clear_axes(ind)
+        if tn.nlegs != tn0.nlegs or tn.meta_fusion != tn0.meta_fusion or\
+           not np.all(tn.s == tn0.s) or not np.all(tn.n == tn0.n) or\
+           tn.isdiag != tn0.isdiag :
+            raise YastError('Ndims, signatures, total charges or fusion trees of blocked tensors are inconsistent.')
+
+    posa = np.ones((len(pos), tn0.nlegs), dtype=int)
+    posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int).reshape(len(pos), -1)
+
+    tDs = []  # {leg: {charge: {position: D, 'D' : Dtotal}}}
+    for n in range(tn0.nlegs):
+        tDl = {}
+        for tn, pp in zip(tensors.values(), posa):
+            tDn = tn.get_leg_structure(n, native=True)
+            for t, D in tDn.items():
+                if t in tDl:
+                    if (pp[n] in tDl[t]) and (tDl[t][pp[n]] != D):
+                        raise YastError('Dimensions of blocked tensors are not consistent')
+                    tDl[t][pp[n]] = D
+                else:
+                    tDl[t] = {pp[n]: D}
+        for t, pD in tDl.items():
+            ps = sorted(pD.keys())
+            Ds = [pD[p] for p in ps]
+            tDl[t] = {p: (aD-D, aD)  for p, D, aD in zip(ps, Ds, accumulate(Ds))}
+            tDl[t]['Dtot'] = sum(Ds)
+        tDs.append(tDl)
+
+    # all unique blocks
+    # meta_new = {tind: Dtot};  #meta_block = [(tind, pos, Dslc)]
+    meta_new, meta_block = {}, []
+    for pind, pa in zip(tensors, posa):
+        a = tensors[pind]
+        for t in a.tset:
+            tind = tuple(t.flat)
+            if tind not in meta_new:
+                meta_new[tind] = tuple(tDs[n][tuple(t[n].flat)]['Dtot'] for n in range(a.nlegs))
+            meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.nlegs))))
+    meta_new = tuple((ts, Ds) for ts, Ds in meta_new.items())
+
+    c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n, meta_fusion=tn0.meta_fusion)
+    c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, a.config.dtype, c.config.device)
+    c._update_tD_arrays()
+    return c

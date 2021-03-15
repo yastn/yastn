@@ -1,3 +1,4 @@
+from yast import linalg
 import logging
 import numpy as np
 from .. import expmw
@@ -120,11 +121,10 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
 
     for n in psi.g.sweep(to='last'):  # sweep from fist to last
         if M:  # apply the Kraus operator
-            tmp = M.A[n].dot(psi.A[n], axes=((2,), (1,)))
+            tmp = M.A[n].tensordot(psi.A[n], axes=((2,), (1,)))
             tmp.swap_gate(axes=(0, 2), fermionic=fermionic)
-            u, s, _ = tmp.split_svd(
-                axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
-            psi.A[n] = u.dot(s, axes=((3,), (0,))).transpose(axes=(0, 1, 3, 2))
+            u, s, _ = linalg.svd(tmp, axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
+            psi.A[n] = u.tensordot(s, axes=((3,), (0,))).transpose(axes=(0, 1, 3, 2))
 
         # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
         if H:
@@ -165,11 +165,10 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
             init = init[0]
 
         if M:  # apply the Kraus operator
-            tmp = M.A[n].dot(init, axes=((2,), (1,)))
+            tmp = M.A[n].tensordot(init, axes=((2,), (1,)))
             tmp.swap_gate(axes=(0, 2), fermionic=fermionic)
-            u, s, _ = tmp.split_svd(
-                axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
-            init = u.dot(s, axes=((3,), (0,)))
+            u, s, _ = linalg.svd(tmp, axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
+            init = u.tensordot(s, axes=((3,), (0,)))
             init = init.transpose(axes=(0, 1, 3, 2))
 
         # canonize and save
@@ -261,11 +260,10 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
     for n in psi.g.sweep(to='last', dl=1):
         if M:  # Apply the Kraus operator on n
             init = psi.A[n]
-            tmp = M.A[n].dot(init, axes=((2,), (1,)))
+            tmp = M.A[n].tensordot(init, axes=((2,), (1,)))
             tmp.swap_gate(axes=(0, 2), fermionic=fermionic)
-            u, s, _ = tmp.split_svd(
-                axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
-            init = u.dot(s, axes=((3,), (0,)))
+            u, s, _ = linalg.svd(tmp, axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
+            init = u.tensordot(s, axes=((3,), (0,)))
             psi.A[n] = init.transpose(axes=(0, 1, 3, 2))
             if not H:
                 psi.orthogonalize_site(n, towards=psi.g.last)
@@ -274,7 +272,7 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
         # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
         if H:
             n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
-            init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
+            init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(v, n, conj=True), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
@@ -282,10 +280,10 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
                 init = expmw(Av=lambda v: env.Heff2(v, n), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
-            A1, S, A2 = init[0].split_svd(axes=(psi.left + psi.phys, tuple(
+            A1, S, A2 = linalg.svd(init[0],axes=(psi.left + psi.phys, tuple(
                 a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
             psi.A[n] = A1
-            psi.A[n1] = S.dot(A2, axes=(1, psi.left))
+            psi.A[n1] = S.tensordot(A2, axes=(1, psi.left))
         env.clear_site(n)
         env.update(n, towards=psi.g.last)
 
@@ -303,11 +301,10 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
     for n in psi.g.sweep(to='first', df=1):
         if M:  # Apply the Kraus operator on n
             init = psi.A[n]
-            tmp = M.A[n].dot(init, axes=((2,), (1,)))
+            tmp = M.A[n].tensordot(init, axes=((2,), (1,)))
             tmp.swap_gate(axes=(0, 2), fermionic=fermionic)
-            u, s, _ = tmp.split_svd(
-                axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
-            init = u.dot(s, axes=((3,), (0,)))
+            u, s, _ = linalg.svd(tmp, axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
+            init = u.tensordot(s, axes=((3,), (0,)))
             psi.A[n] = init.transpose(axes=(0, 1, 3, 2))
             if not H:
                 psi.orthogonalize_site(n, towards=psi.g.first)
@@ -316,7 +313,7 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
         # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
         if H:
             n1, _, _ = psi.g.from_site(n, towards=psi.g.first)
-            init = psi.A[n1].dot(psi.A[n], axes=(psi.right, psi.left))
+            init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff2(v, n1), Bv=lambda v: env.Heff2(v, n1, conj=True), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
@@ -324,9 +321,9 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
                 init = expmw(Av=lambda v: env.Heff2(v, n1), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
-            A1, S, A2 = init[0].split_svd(axes=(psi.left + psi.phys, tuple(
+            A1, S, A2 = linalg.svd(init[0],axes=(psi.left + psi.phys, tuple(
                 a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-            psi.A[n1] = A1.dot(S, axes=(psi.right, 0))
+            psi.A[n1] = A1.tensordot(S, axes=(psi.right, 0))
             psi.A[n] = A2
         env.clear_site(n)
         env.update(n, towards=psi.g.first)
@@ -415,11 +412,10 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
     for n in psi.g.sweep(to='last', dl=1):
         if M:  # Apply the Kraus operator on n
             init = psi.A[n]
-            tmp = M.A[n].dot(init, axes=((2,), (1,)))
+            tmp = M.A[n].tensordot(init, axes=((2,), (1,)))
             tmp.swap_gate(axes=(0, 2), fermionic=fermionic)
-            u, s, _ = tmp.split_svd(
-                axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
-            init = u.dot(s, axes=((3,), (0,)))
+            u, s, _ = linalg.svd(tmp, axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
+            init = u.tensordot(s, axes=((3,), (0,)))
             psi.A[n] = init.transpose(axes=(0, 1, 3, 2))
             if not H:
                 psi.orthogonalize_site(n, towards=psi.g.last)
@@ -428,7 +424,7 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
         # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
         if H:
             n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
-            init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
+            init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
             init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[
@@ -438,10 +434,10 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
             init = init[0].unfuse_legs(axes=1, inplace=True)
-            A1, S, A2 = init.split_svd(axes=(psi.left + psi.phys, tuple(
+            A1, S, A2 = linalg.svd(init,axes=(psi.left + psi.phys, tuple(
                 a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
             psi.A[n] = A1
-            psi.A[n1] = S.dot(A2, axes=(1, psi.left))
+            psi.A[n1] = S.tensordot(A2, axes=(1, psi.left))
         env.clear_site(n)
         env.update(n, towards=psi.g.last)
 
@@ -459,11 +455,10 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
     for n in psi.g.sweep(to='first', df=1):
         if M:  # Apply the Kraus operator on n
             init = psi.A[n]
-            tmp = M.A[n].dot(init, axes=((2,), (1,)))
+            tmp = M.A[n].tensordot(init, axes=((2,), (1,)))
             tmp.swap_gate(axes=(0, 2), fermionic=fermionic)
-            u, s, _ = tmp.split_svd(
-                axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
-            init = u.dot(s, axes=((3,), (0,)))
+            u, s, _ = linalg.svd(tmp, axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
+            init = u.tensordot(s, axes=((3,), (0,)))
             psi.A[n] = init.transpose(axes=(0, 1, 3, 2))
             if not H:
                 psi.orthogonalize_site(n, towards=psi.g.first)
@@ -472,7 +467,7 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
         # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
         if H:
             n1, _, _ = psi.g.from_site(n, towards=psi.g.first)
-            init = psi.A[n1].dot(psi.A[n], axes=(psi.right, psi.left))
+            init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
             init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff2_group(v, n1), Bv=lambda v: env.Heff2_group(v, n1, conj=True), init=[
@@ -482,9 +477,9 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
             init = init[0].unfuse_legs(axes=1, inplace=True)
-            A1, S, A2 = init.split_svd(axes=(psi.left + psi.phys, tuple(
+            A1, S, A2 = linalg.svd(init,axes=(psi.left + psi.phys, tuple(
                 a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-            psi.A[n1] = A1.dot(S, axes=(psi.right, 0))
+            psi.A[n1] = A1.tensordot(S, axes=(psi.right, 0))
             psi.A[n] = A2
         env.clear_site(n)
         env.update(n, towards=psi.g.first)
@@ -598,11 +593,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
         opts_svd['tol'] = tol_svds[n]
         if M:  # Apply the Kraus operator on n
             init = psi.A[n]
-            tmp = M.A[n].dot(init, axes=((2,), (1,)))
+            tmp = M.A[n].tensordot(init, axes=((2,), (1,)))
             tmp.swap_gate(axes=(0, 2), fermionic=fermionic)
-            u, s, _ = tmp.split_svd(
-                axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
-            init = u.dot(s, axes=((3,), (0,)))
+            u, s, _ = linalg.svd(tmp, axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
+            init = u.tensordot(s, axes=((3,), (0,)))
             psi.A[n] = init.transpose(axes=(0, 1, 3, 2))
             if not H:
                 psi.orthogonalize_site(n, towards=psi.g.last)
@@ -649,7 +643,7 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                 # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
                 if H:
                     n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
-                    init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
+                    init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
                     if not hermitian:
                         init = expmw(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(v, n, conj=True), init=[
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
@@ -657,10 +651,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                         init = expmw(Av=lambda v: env.Heff2(v, n), init=[
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
-                    A1, S, A2 = init[0].split_svd(axes=(psi.left + psi.phys, tuple(
+                    A1, S, A2 = linalg.svd(init[0],axes=(psi.left + psi.phys, tuple(
                         a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
                     psi.A[n] = A1
-                    psi.A[n1] = S.dot(A2, axes=(1, psi.left))
+                    psi.A[n1] = S.tensordot(A2, axes=(1, psi.left))
                 env.clear_site(n)
                 env.update(n, towards=psi.g.last)
 
@@ -682,7 +676,7 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                 # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
                 if H:
                     n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
-                    init = psi.A[n].dot(psi.A[n1], axes=(psi.right, psi.left))
+                    init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
                     init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
                     if not hermitian:
                         init = expmw(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[init], 
@@ -692,10 +686,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                                     dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
                     init = init[0].unfuse_legs(axes=1, inplace=True)
-                    A1, S, A2 = init.split_svd(axes=(psi.left + psi.phys, tuple(
+                    A1, S, A2 = linalg.svd(init,axes=(psi.left + psi.phys, tuple(
                         a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
                     psi.A[n] = A1
-                    psi.A[n1] = S.dot(A2, axes=(1, psi.left))
+                    psi.A[n1] = S.tensordot(A2, axes=(1, psi.left))
                 env.clear_site(n)
                 env.update(n, towards=psi.g.last)
 
@@ -715,11 +709,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
         opts_svd['tol'] = tol_svds[n]
         if M:  # Apply the Kraus operator on n
             init = psi.A[n]
-            tmp = M.A[n].dot(init, axes=((2,), (1,)))
+            tmp = M.A[n].tensordot(init, axes=((2,), (1,)))
             tmp.swap_gate(axes=(0, 2), fermionic=fermionic)
-            u, s, _ = tmp.split_svd(
-                axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
-            init = u.dot(s, axes=((3,), (0,)))
+            u, s, _ = linalg.svd(tmp, axes=((2, 1, 4), (0, 3)), opts=optsK_svd)  # discard V
+            init = u.tensordot(s, axes=((3,), (0,)))
             psi.A[n] = init.transpose(axes=(0, 1, 3, 2))
             if not H:
                 psi.orthogonalize_site(n, towards=psi.g.first)
@@ -767,7 +760,7 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                 # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
                 if H:
                     n1, _, _ = psi.g.from_site(n, towards=psi.g.first)
-                    init = psi.A[n1].dot(psi.A[n], axes=(psi.right, psi.left))
+                    init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
                     if not hermitian:
                         init = expmw(Av=lambda v: env.Heff2(v, n1), Bv=lambda v: env.Heff2(v, n1, conj=True), init=[
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
@@ -775,9 +768,9 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                         init = expmw(Av=lambda v: env.Heff2(v, n1), init=[
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
-                    A1, S, A2 = init[0].split_svd(axes=(psi.left + psi.phys, tuple(
+                    A1, S, A2 = linalg.svd(init[0],axes=(psi.left + psi.phys, tuple(
                         a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-                    psi.A[n1] = A1.dot(S, axes=(psi.right, 0))
+                    psi.A[n1] = A1.tensordot(S, axes=(psi.right, 0))
                     psi.A[n] = A2
                 env.clear_site(n)
                 env.update(n, towards=psi.g.first)
@@ -800,7 +793,7 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                 # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
                 if H:
                     n1, _, _ = psi.g.from_site(n, towards=psi.g.first)
-                    init = psi.A[n1].dot(psi.A[n], axes=(psi.right, psi.left))
+                    init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
                     init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
                     if not hermitian:
                         init = expmw(Av=lambda v: env.Heff2_group(v, n1), Bv=lambda v: env.Heff2_group(v, n1, conj=True), init=[
@@ -810,9 +803,9 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
                     init = init[0].unfuse_legs(axes=1, inplace=True)
-                    A1, S, A2 = init.split_svd(axes=(psi.left + psi.phys, tuple(
+                    A1, S, A2 = linalg.svd(init,axes=(psi.left + psi.phys, tuple(
                         a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-                    psi.A[n1] = A1.dot(S, axes=(psi.right, 0))
+                    psi.A[n1] = A1.tensordot(S, axes=(psi.right, 0))
                     psi.A[n] = A2
                 env.clear_site(n)
                 env.update(n, towards=psi.g.first)

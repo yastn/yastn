@@ -12,7 +12,7 @@ def run_expm_hermitian(A, v, tau, eigs_tol, exp_tol, kp):
     A = (A + A.conj().transpose(axes=(2, 3, 0, 1))) / 2
     A /= A.norm()
     v /= v.norm()
-    Av = lambda x: A.dot(x, axes=((2, 3), (0, 1)))
+    Av = lambda x: yast.tensordot(A, x, axes=((2, 3), (0, 1)))
     out = yast.expmw(Av=Av, init=[v], Bv=None, dt=tau, eigs_tol=eigs_tol,
                      exp_tol=exp_tol, k=kp, hermitian=True, cost_estim=0)
     w = out[0].to_dense().reshape(-1)
@@ -27,9 +27,9 @@ def run_expm_hermitian(A, v, tau, eigs_tol, exp_tol, kp):
 def run_expmw_nonhermitian(A, v, tau, eigs_tol, exp_tol, kp):
     A /= A.norm()
     v /= v.norm()
-    Av = lambda x: A.dot(x, axes=((2, 3), (0, 1)))
+    Av = lambda x: yast.tensordot(A, x, axes=((2, 3), (0, 1)))
     At = A.transpose(axes=(2, 3, 0, 1)).conj()
-    Bv = lambda x: At.dot(x, axes=((2, 3), (0, 1)))
+    Bv = lambda x: yast.tensordot(At, x, axes=((2, 3), (0, 1)))
 
     out = yast.expmw(Av=Av, init=[v], Bv=Bv, dt=tau, eigs_tol=eigs_tol,
                      exp_tol=exp_tol, k=kp, hermitian=False, cost_estim=0)

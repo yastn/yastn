@@ -3,8 +3,9 @@ import time
 import tracemalloc
 import numpy as np
 from scipy import linalg as LA
-from . import YastError
+from .core import YastError
 
+__all__ = ['expmw', 'eigs', 'eigh']
 
 _select_dtype = {'float64': np.float64,
                  'complex128': np.complex128}
@@ -276,7 +277,7 @@ def arnoldi(Av, init, tol=1e-14, k=5):
     for jt in range(k):
         w = Av(Q[jt])
         for it in range(jt+1):
-            H[it, jt] = w.scalar(Q[it])
+            H[it, jt] = w.vdot(Q[it])
             w = w.apxb(Q[it], x=-H[it, jt])
         H[jt+1, jt] = w.norm()
         if H[jt+1, jt] < tol:
@@ -300,7 +301,7 @@ def lanczos_her(Av, init, tol=1e-14, k=5):
     Q[0] = init
     r = Av(Q[0])
     for it in range(k):
-        a[it] = Q[it].scalar(r)
+        a[it] = Q[it].vdot(r)
         r = r.apxb(Q[it], x=-a[it])
         b[it] = r.norm()
         if b[it] < tol:
@@ -310,7 +311,7 @@ def lanczos_her(Av, init, tol=1e-14, k=5):
         r = Av(Q[it+1])
         r = r.apxb(Q[it], x=-b[it])
     if beta is None:
-        a[it+1] = Q[it+1].scalar(r)
+        a[it+1] = Q[it+1].vdot(r)
         r = r.apxb(Q[it+1], x=-a[it+1])
         beta = r.norm()
         if beta < tol:
@@ -340,13 +341,13 @@ def lanczos_nher(Av, Bv, init, tol=1e-14, k=5, bi_orth=True):
     r = Av(Q[0])
     s = Bv(P[0])
     for it in range(k):
-        a[it] = P[it].scalar(r)
+        a[it] = P[it].vdot(r)
         r = r.apxb(Q[it], x=-a[it])
         s = s.apxb(P[it], x=-a[it].conj())
         if r.norm() < tol or s.norm() < tol:
             beta, happy = 0, 1
             break
-        w = r.scalar(s)
+        w = r.vdot(s)
         if abs(w) < tol:
             beta, happy = 0, 1
             break
@@ -357,22 +358,22 @@ def lanczos_nher(Av, Bv, init, tol=1e-14, k=5, bi_orth=True):
         # bi_orthogonalization
         if bi_orth:
             for io in range(it):
-                c1 = P[io].scalar(Q[it])
+                c1 = P[io].vdot(Q[it])
                 Q[it] = Q[it].apxb(Q[io], x=-c1)
-                c2 = Q[io].scalar(P[it])
+                c2 = Q[io].vdot(P[it])
                 P[it] = P[it].apxb(P[io], x=-c2)
         r = Av(Q[it+1])
         s = Bv(P[it+1])
         r = r.apxb(Q[it], x=-c[it])
         s = s.apxb(P[it], x=-b[it].conj())
     if beta is None:
-        a[it+1] = P[it+1].scalar(r)
+        a[it+1] = P[it+1].vdot(r)
         r = r.apxb(Q[it+1], x=-a[it+1])
         s = s.apxb(P[it+1], x=-a[it+1].conj())
         if r.norm() < tol or s.norm() < tol:
             beta, happy = 0, 1
         else:
-            w = r.scalar(s)
+            w = r.vdot(s)
             if abs(w) < tol:
                 beta, happy = 0, 1
                 it += 1

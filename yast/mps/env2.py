@@ -76,13 +76,13 @@ class Env2:
         nnext, leg, nprev = self.g.from_site(n, towards)
 
         if self.nr_phys == 1 and leg == 1:
-            self.F[(n, nnext)] = self.F[(nprev, n)].dot(self.bra.A[n], axes=((0),(0)), conj=(0,1)).dot(self.ket.A[n], axes=((0,1),(0,1)))
+            self.F[(n, nnext)] = self.F[(nprev, n)].tensordot(self.bra.A[n], axes=((0),(0)), conj=(0,1)).tensordot(self.ket.A[n], axes=((0,1),(0,1)))
         elif self.nr_phys == 1 and leg == 0:
-            self.F[(n, nnext)] = self.ket.A[n].dot(self.F[(nprev, n)], axes=((2),(0))).dot(self.bra.A[n], axes=((1,2),(1,2)), conj=(0,1))
+            self.F[(n, nnext)] = self.ket.A[n].tensordot(self.F[(nprev, n)], axes=((2),(0))).tensordot(self.bra.A[n], axes=((1,2),(1,2)), conj=(0,1))
         elif self.nr_phys == 2 and leg == 1:
-            self.F[(n, nnext)] = self.F[(nprev, n)].dot(self.bra.A[n], axes=((0),(0)), conj=(0,1)).dot(self.ket.A[n], axes=((0,1,2),(0,1,2)))
+            self.F[(n, nnext)] = self.F[(nprev, n)].tensordot(self.bra.A[n], axes=((0),(0)), conj=(0,1)).tensordot(self.ket.A[n], axes=((0,1,2),(0,1,2)))
         else:  # self.nr_phys == 2 and leg == 0:
-            self.F[(n, nnext)] = self.ket.A[n].dot(self.F[(nprev, n)], axes=((3),(0))).dot(self.bra.A[n], axes=((1,2,3),(1,2,3)), conj=(0,1))
+            self.F[(n, nnext)] = self.ket.A[n].tensordot(self.F[(nprev, n)], axes=((3),(0))).tensordot(self.bra.A[n], axes=((1,2,3),(1,2,3)), conj=(0,1))
 
     def setup_to_last(self):
         r"""
@@ -120,7 +120,7 @@ class Env2:
             if n0 is not None:
                 self.F.pop((n0, n))
             n0 = n
-        return self.F[(None, n0)].dot(self.F[(n0, None)], axes=((0, 1), (1, 0))).to_number()
+        return self.F[(None, n0)].tensordot(self.F[(n0, None)], axes=((0, 1), (1, 0))).to_number()
 
     def measure(self, bd=None):
         r"""
@@ -138,7 +138,7 @@ class Env2:
         """
         if bd is None:
             bd = (None, self.g.first)
-        return self.F[bd].dot(self.F[bd[::-1]], axes=((0, 1), (1, 0))).to_number()
+        return self.F[bd].tensordot(self.F[bd[::-1]], axes=((0, 1), (1, 0))).to_number()
 
     def project_ket_on_bra(self, n):
         r"""Project ket on a n-th site of bra.
@@ -159,5 +159,5 @@ class Env2:
         nl, nr = self.g.order_neighbours(n)
 
         if self.nr_phys == 1:
-            return self.F[(nl, n)].dot(self.ket.A[n], axes=(1, 0)).dot(self.F[(nr, n)], axes=(2, 0))
-        return self.F[(nl, n)].dot(self.ket.A[n], axes=(1, 0)).dot(self.F[(nr, n)], axes=(3, 0))
+            return self.F[(nl, n)].tensordot(self.ket.A[n], axes=(1, 0)).tensordot(self.F[(nr, n)], axes=(2, 0))
+        return self.F[(nl, n)].tensordot(self.ket.A[n], axes=(1, 0)).tensordot(self.F[(nr, n)], axes=(3, 0))

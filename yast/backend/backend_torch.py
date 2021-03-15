@@ -185,7 +185,7 @@ def transpose(A, axes, meta_transpose, inplace):
     return {new: A[old].permute(*axes).clone().contiguous() for old, new in meta_transpose}
     
 
-def invsqrt(A, cutoff=0):
+def rsqrt(A, cutoff=0):
     res = {t: x.rsqrt() for t, x in A.items()}
     if cutoff > 0:
         for t in res:
@@ -193,7 +193,7 @@ def invsqrt(A, cutoff=0):
     return res
 
 
-def invsqrt_diag(A, cutoff=0):
+def rsqrt_diag(A, cutoff=0):
     res = {t: torch.diag(x).rsqrt() for t, x in A.items()}
     if cutoff > 0:
         for t in res:
@@ -201,7 +201,7 @@ def invsqrt_diag(A, cutoff=0):
     return {t: torch.diag(x) for t, x in res.items()}
 
 
-def inv(A, cutoff=0):
+def reciprocal(A, cutoff=0):
     res = {t: 1./x for t, x in A.items()}
     if cutoff > 0:
         for t in res:
@@ -209,7 +209,7 @@ def inv(A, cutoff=0):
     return res
 
 
-def inv_diag(A, cutoff=0):
+def reciprocal_diag(A, cutoff=0):
     res = {t: 1./torch.diag(x) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
@@ -365,7 +365,7 @@ def apxb(A, B, x, meta):
     return C
 
 
-def scalar(A, B, meta):
+def vdot(A, B, meta):
     return torch.sum(torch.stack([(A[ind].conj().reshape(-1)) @ (B[ind].reshape(-1)) for ind in meta]))
 
 

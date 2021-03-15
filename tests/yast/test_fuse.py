@@ -46,9 +46,9 @@ def test_fuse_split():
     
     af = a.fuse_legs(axes=(0, (2, 1), (3, 4)))
     af.fuse_legs(axes=((0, 1), 2), inplace=True)
-    Uf, Sf, Vf = af.split_svd(axes=(0, 1))
+    Uf, Sf, Vf = yast.linalg.svd(af, axes=(0, 1))
 
-    U, S, V = a.split_svd(axes=((0, 1, 2), (3, 4)))
+    U, S, V = yast.linalg.svd(a, axes=((0, 1, 2), (3, 4)))
     U = U.fuse_legs(axes=(0, (2, 1), 3))
     U.fuse_legs(axes=((0, 1), 2), inplace=True)
     V = V.fuse_legs(axes=(0, (1, 2)))
@@ -64,8 +64,8 @@ def test_fuse_split():
     a3.moveaxis(source=2, destination=1, inplace=True)
     assert a.norm_diff(a3) < tol  # == 0.0
 
-    Qf, Rf = af.split_qr(axes=(0, 1))
-    Q, R = a.split_qr(axes=((0, 1, 2), (3, 4)))
+    Qf, Rf = yast.linalg.qr(af, axes=(0, 1))
+    Q, R = yast.linalg.qr(a, axes=((0, 1, 2), (3, 4)))
     Q = Q.fuse_legs(axes=(0, (2, 1), 3))
     Q.fuse_legs(axes=((0, 1), 2), inplace=True)
     assert Q.norm_diff(Qf) < tol  # == 0.0
@@ -73,7 +73,7 @@ def test_fuse_split():
     assert R.norm_diff(Rf) < tol  # == 0.0
 
     aH = yast.tensordot(af, af, axes=(1, 1), conj=(0, 1))
-    Vf, Uf = aH.split_eigh(axes=(0, 1))
+    Vf, Uf = yast.linalg.eigh(aH, axes=(0, 1))
     Uf.unfuse_legs(axes=0, inplace = True)
     UVf = yast.tensordot(Uf, Vf, axes=(2, 0))
     aH2 = yast.tensordot(UVf, Uf, axes=(2, 2), conj=(0, 1))
