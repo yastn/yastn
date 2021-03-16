@@ -153,9 +153,8 @@ def entropy(self, axes, alpha=1):
     self._test_axes_split(out_l, out_r)
 
     if not self.isdiag:
-        Am, *_ = self._merge_to_matrix(out_l, out_r, news_l=-1, news_r=1)
+        Am, *_ = self.merge_to_matrix(out_l, out_r, news_l=-1, news_r=1)
         Sm = self.config.backend.svd_S(Am)
     else:
         Sm = {t: self.config.backend.diag_get(x) for t, x in self.A.items()}
-    entropy, Smin, normalization = self.config.backend.entropy(Sm, alpha=alpha)
-    return entropy, Smin, normalization
+    return self.config.backend.entropy(Sm, alpha=alpha)  # entropy, Smin, normalization

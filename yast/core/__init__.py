@@ -1,3 +1,4 @@
+""" Consolidation of tensor functions. """
 from .core import *
 from . import core
 from .initialize import *
@@ -17,7 +18,7 @@ __all__ = ['copy', 'clone', 'detach', 'export_to_dict','compress_to_1d',
            'fuse_legs', 'unfuse_legs']
 
 for name in __all__:
-    exec(name + ' = Tensor.' + name)
+    globals()[name] =getattr(Tensor, name)
 
 __all__.extend(core.__all__)
 __all__.extend(initialize.__all__)

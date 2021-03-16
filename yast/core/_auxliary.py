@@ -1,6 +1,6 @@
 """ Auxliary functions for syntax """
-import numpy as np
 from itertools import accumulate, chain
+import numpy as np
 
 
 def _unpack_axes(a, *args):

@@ -1,6 +1,6 @@
 """ Methods creating a new yast tensor """
-import numpy as np
 from itertools import chain, repeat, accumulate
+import numpy as np
 from .core import Tensor, YastError
 from ._auxliary import _clear_axes, _unpack_axes
 
@@ -180,7 +180,7 @@ def decompress_from_1d(r1d, config, meta):
     a = Tensor(config=config, **meta)
     A = {(): r1d}
     a.A = a.config.backend.unmerge_one_leg(A, 0, meta['meta_unmerge'])
-    a._update_tD_arrays()
+    a.update_tD_arrays()
     return a
 
 
@@ -288,5 +288,5 @@ def block(tensors, common_legs=None):
 
     c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n, meta_fusion=tn0.meta_fusion)
     c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, a.config.dtype, c.config.device)
-    c._update_tD_arrays()
+    c.update_tD_arrays()
     return c

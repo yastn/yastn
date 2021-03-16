@@ -7,38 +7,34 @@ In principle, any number of symmetries can be used (including no symmetries).
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
 
-from ._auxliary import _unpack_axes, _clear_axes, _common_keys, _indices_common_rows
 from collections import namedtuple
-import itertools
+from itertools import product
 import numpy as np
+from ._auxliary import _unpack_axes, _clear_axes, _common_keys, _indices_common_rows
 from ..sym import sym_none
 
 __all__ = ['Tensor', 'YastError', 'check_signatures_match', 'check_consistency', 'allow_cache_meta']
 
-# flags that controls which checks are performed
-_check_signatures_match = True
-_check_consistency = True
-_allow_cache_meta = True
 
 _config = namedtuple('_config', ('backend', 'sym', 'dtype', 'device'), \
                     defaults = (None, sym_none, 'float64', 'cpu'))
 
+_check = {"signatures_match":True, "consistency":True, "cache_meta":True}
+
+
 def check_signatures_match(value=True):
     """Set the value of the flag check_signatures_match."""
-    global _check_signatures_match
-    _check_signatures_match = bool(value)
+    _check["signatures_match"] = bool(value)
 
 
 def check_consistency(value=True):
     """Set the value of the flag check_consistency."""
-    global _check_consistency
-    _check_consistency = bool(value)
+    _check["consistency"] = bool(value)
 
 
 def allow_cache_meta(value=True):
     """Set the value of the flag that permits to reuses some metadata."""
-    global _allow_cache_meta
-    _allow_cache_meta = bool(value)
+    _check["cache_meta"] = bool(value)
 
 class YastError(Exception):
     """Errors cought by checks in yast."""
@@ -135,8 +131,8 @@ class Tensor:
                 if len(x) != len(y):
                     raise YastError("Elements of t and D do not match")
 
-            comb_t = list(itertools.product(*t))
-            comb_D = list(itertools.product(*D))
+            comb_t = list(product(*t))
+            comb_D = list(product(*D))
             lcomb_t = len(comb_t)
             comb_t = np.array(comb_t, dtype=int).reshape(lcomb_t, self.nlegs, self.config.sym.nsym)
             comb_D = np.array(comb_D, dtype=int).reshape(lcomb_t, self.nlegs)
@@ -223,7 +219,7 @@ class Tensor:
                 # TODO Ds is given implicitly by the val n-dim array
                 self.A[ts] = self.config.backend.to_tensor(val, Ds=Ds, dtype=self.config.dtype, device=self.config.device)
         # here it checkes the consistency of bond dimensions
-        self._update_tD_arrays()
+        self.update_tD_arrays()
         tD = [self.get_leg_structure(n, native=True) for n in range(self.nlegs)]
 
     #######################
@@ -434,13 +430,14 @@ class Tensor:
         Dset = np.prod(Dset, axis=1) if len(axis) > 1 else Dset.reshape(-1)
 
         tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tset, Dset)}
-        if _check_consistency:
+        if _check["consistency"]:
             for tn, Dn in zip(tset, Dset):
                 if tDn[tuple(tn.flat)] != Dn:
                     raise YastError('Inconsistend bond dimension of charge.')
         return tDn
 
     def get_leg_charges_and_dims(self, native=False):
+        """ collect information about charges and dimensions on all legs into two lists. """
         _tmp= [self.get_leg_structure(n, native=native) for n in range(self.get_ndim(native))]
         ts, Ds= tuple(zip(*[tuple(zip(*l.items())) for l in _tmp]))
         return ts, Ds
@@ -744,7 +741,7 @@ class Tensor:
         meta = _common_keys(self.A, other.A)
         a = self.copy_empty()
         a.A = a.config.backend.add(self.A, other.A, meta)
-        a._update_tD_arrays()
+        a.update_tD_arrays()
         return a
 
     def __sub__(self, other):
@@ -767,7 +764,7 @@ class Tensor:
         meta = _common_keys(self.A, other.A)
         a = self.copy_empty()
         a.A = a.config.backend.sub(self.A, other.A, meta)
-        a._update_tD_arrays()
+        a.update_tD_arrays()
         return a
 
     def apxb(self, other, x=1):
@@ -791,7 +788,7 @@ class Tensor:
         meta = _common_keys(self.A, other.A)
         a = self.copy_empty()
         a.A = a.config.backend.apxb(self.A, other.A, x, meta)
-        a._update_tD_arrays()
+        a.update_tD_arrays()
         return a
 
     #############################
@@ -916,7 +913,7 @@ class Tensor:
             a.A = {ind: self.config.backend.diag_diag(self.A[ind]) for ind in self.A}
         else:
             raise YastError('Tensor cannot be changed into a diagonal one')
-        a._update_tD_arrays()
+        a.update_tD_arrays()
         return a
 
     def rsqrt(self, cutoff=0):
@@ -953,7 +950,7 @@ class Tensor:
         ----------
         cutoff: float64
             Cut-off for (elementwise) pseudo-inverse.
-        
+
         Returns
         -------
         tansor: Tensor
@@ -1052,7 +1049,7 @@ class Tensor:
                 a.s *= -1
             elif b.isdiag:
                 b.s *= -1
-            elif _check_signatures_match:
+            elif _check["signatures_match"]:
                 raise YastError('Signs do not match')
 
         c_n = np.vstack([a.n, b.n]).reshape(1, 2, -1)
@@ -1061,12 +1058,12 @@ class Tensor:
 
         inda, indb = _indices_common_rows(a.tset[:, na_con, :], b.tset[:, nb_con, :])
 
-        Am, ls_l, ls_ac, ua_l, ua_r = a._merge_to_matrix(a_out, a_con, conja, -conja, inda, sort_r=True)
-        Bm, ls_bc, ls_r, ub_l, ub_r = b._merge_to_matrix(b_con, b_out, conjb, -conjb, indb)
+        Am, ls_l, ls_ac, ua_l, ua_r = a.merge_to_matrix(a_out, a_con, conja, -conja, inda, sort_r=True)
+        Bm, ls_bc, ls_r, ub_l, ub_r = b.merge_to_matrix(b_con, b_out, conjb, -conjb, indb)
 
         meta_dot = tuple((al + br, al + ar, bl + br)  for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
-        if _check_consistency and not (ua_r == ub_l and ls_ac.match(ls_bc)):
+        if _check["consistency"] and not (ua_r == ub_l and ls_ac.match(ls_bc)):
             raise YastError('Something went wrong in matching the indices of the two tensors')
 
         c_s = np.hstack([conja * a.s[na_out], conjb * b.s[nb_out]])
@@ -1074,8 +1071,8 @@ class Tensor:
         c = Tensor(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion)
 
         Cm = c.config.backend.dot(Am, Bm, conj, meta_dot)
-        c.A = c._unmerge_from_matrix(Cm, ls_l, ls_r)
-        c._update_tD_arrays()
+        c.A = c.unmerge_from_matrix(Cm, ls_l, ls_r)
+        c.update_tD_arrays()
         return c
 
     def vdot(self, other, conj=(1, 0)):
@@ -1146,7 +1143,7 @@ class Tensor:
         meta = [(tuple(to[n]), tuple(self.tset[n].flat), tuple(Drsh[n])) for n in ind]
         a = Tensor(config=self.config, s=self.s[aout], n=self.n, meta_fusion=tuple(self.meta_fusion[ii] for ii in lout))
         a.A = a.config.backend.trace(self.A, order, meta)
-        a._update_tD_arrays()
+        a.update_tD_arrays()
         return a
 
 
@@ -1154,7 +1151,7 @@ class Tensor:
     #     merging operations     #
     ##############################
 
-    def _merge_to_matrix(self, out_l, out_r, news_l, news_r, ind=slice(None), sort_r=False):
+    def merge_to_matrix(self, out_l, out_r, news_l, news_r, ind=slice(None), sort_r=False):
         order = out_l + out_r
         legs_l, legs_r = np.array(out_l, np.int), np.array(out_r, np.int)
         tset, Dset = self.tset[ind], self.Dset[ind]
@@ -1190,16 +1187,16 @@ class Tensor:
         Anew = self.config.backend.merge_to_matrix(self.A, order, meta_new, meta_mrg, self.config.dtype, self.config.device)
         return Anew, ls_l, ls_r, u_new_l, u_new_r
 
-    def _unmerge_from_matrix(self, A, ls_l, ls_r):
+    def unmerge_from_matrix(self, A, ls_l, ls_r):
         meta = []
-        for il, ir in itertools.product(ls_l.dec, ls_r.dec):
+        for il, ir in product(ls_l.dec, ls_r.dec):
             ic = il + ir
             if ic in A:
-                for (tl, (sl, _, Dl)), (tr, (sr, _, Dr)) in itertools.product(ls_l.dec[il].items(), ls_r.dec[ir].items()):
+                for (tl, (sl, _, Dl)), (tr, (sr, _, Dr)) in product(ls_l.dec[il].items(), ls_r.dec[ir].items()):
                     meta.append((tl + tr, ic, sl, sr, Dl+Dr))
         return self.config.backend.unmerge_from_matrix(A, meta)
 
-    def _unmerge_from_diagonal(self, A, ls):
+    def unmerge_from_diagonal(self, A, ls):
         meta = tuple((ta + ta, ia, sa) for ia in ls.dec for ta, (sa, _, _) in ls.dec[ia].items())
         Anew = self.config.backend.unmerge_from_diagonal(A, meta)
         return {ind: self.config.backend.diag_create(Anew[ind]) for ind in Anew}
@@ -1341,19 +1338,19 @@ class Tensor:
             raise YastError('configs do not match')
 
     def _test_tensors_match(self, other):
-        if _check_signatures_match and (not all(self.s == other.s) or not all(self.n == other.n)):
+        if _check["signatures_match"] and (not all(self.s == other.s) or not all(self.n == other.n)):
             raise YastError('Tensor signatures do not match')
-        if _check_consistency and not self.meta_fusion == other.meta_fusion:
+        if _check["consistency"] and not self.meta_fusion == other.meta_fusion:
             raise YastError('Fusion trees do not match')
 
     def _test_axes_split(self, out_l, out_r):
-        if _check_consistency:
+        if _check["consistency"]:
             if not self.nlegs == len(out_l) + len(out_r):
                 raise YastError('Two few indices in axes')
             if not sorted(set(out_l+out_r)) == list(range(self.nlegs)):
                 raise YastError('Repeated axis')
 
-    def _update_tD_arrays(self):
+    def update_tD_arrays(self):
         """Updates meta-information about charges and dimensions of all blocks."""
         lA = sorted(self.A.keys())  # sorting tset and Dset according to tset
         self.tset = np.array(lA, dtype=int).reshape(len(lA), self.nlegs, self.config.sym.nsym)
@@ -1545,7 +1542,7 @@ class _LegDecomposition:
 
 #     c = self.empty(s=tuple(self.s[legs_l]) + (new_s,) + tuple(self.s[legs_r]), n=self.n, isdiag=self.isdiag)
 #     c.A = self.config.backend.merge_one_leg(self.A, ig, order, meta_new , meta_mrg, self.config.dtype)
-#     c._update_tD_arrays()
+#     c.update_tD_arrays()
 #     c.lss[ig] = ls_c
 #     for nnew, nold in enumerate(al+ (-1,) + ar):
 #         if nold in self.lss:
@@ -1589,7 +1586,7 @@ class _LegDecomposition:
 
 #     c = self.empty(s=s, n=self.n, isdiag=self.isdiag)
 #     c.A = self.config.backend.unmerge_one_leg(self.A, axis, meta)
-#     c._update_tD_arrays()
+#     c.update_tD_arrays()
 #     for ii in range(axis):
 #         if ii in self.lss:
 #             c.lss[ii]=self.lss[ii].copy()

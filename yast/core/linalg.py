@@ -1,5 +1,6 @@
+""" Linalg decompositions of yast tensor. """
 import numpy as np
-from .core import Tensor, _LegDecomposition, YastError, _check_consistency
+from .core import Tensor, _LegDecomposition, YastError, _check
 from ._auxliary import _clear_axes, _unpack_axes
 
 def svd_lowrank(a, truncated_nbit=60, truncated_kfac=6):
@@ -53,7 +54,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, \
     out_l, out_r = _unpack_axes(a, lout_l, lout_r)
     a._test_axes_split(out_l, out_r)
 
-    Am, ls_l, ls_r, ul, ur = a._merge_to_matrix(out_l, out_r, news_l=-sU, news_r=sU)
+    Am, ls_l, ls_r, ul, ur = a.merge_to_matrix(out_l, out_r, news_l=-sU, news_r=sU)
 
     if nU:
         meta = tuple((il+ir, il+ir, ir, ir+ir) for il, ir in zip(ul, ur))
@@ -74,13 +75,13 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, \
     ls_s = _LegDecomposition(a.config)
     ls_s.leg_struct_for_truncation(Sm, opts, 'svd')
 
-    U.A = a._unmerge_from_matrix(Um, ls_l, ls_s)
-    S.A = a._unmerge_from_diagonal(Sm, ls_s)
-    V.A = a._unmerge_from_matrix(Vm, ls_s, ls_r)
+    U.A = a.unmerge_from_matrix(Um, ls_l, ls_s)
+    S.A = a.unmerge_from_diagonal(Sm, ls_s)
+    V.A = a.unmerge_from_matrix(Vm, ls_s, ls_r)
 
-    U._update_tD_arrays()
-    S._update_tD_arrays()
-    V._update_tD_arrays()
+    U.update_tD_arrays()
+    S.update_tD_arrays()
+    V.update_tD_arrays()
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
     V.moveaxis(source=0, destination=Vaxis, inplace=True)
     return U, S, V
@@ -109,7 +110,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     out_l, out_r = _unpack_axes(a, lout_l, lout_r)
     a._test_axes_split(out_l, out_r)
 
-    Am, ls_l, ls_r, ul, ur = a._merge_to_matrix(out_l, out_r, news_l=-sQ, news_r=sQ)
+    Am, ls_l, ls_r, ul, ur = a.merge_to_matrix(out_l, out_r, news_l=-sQ, news_r=sQ)
 
     meta = tuple((l+r, l+r, r+r) for l, r in zip(ul, ur))
     Qm, Rm = a.config.backend.qr(Am, meta)
@@ -122,11 +123,11 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     ls = _LegDecomposition(a.config, -sQ, -sQ)
     ls.leg_struct_trivial(Rm, 0)
 
-    Q.A = a._unmerge_from_matrix(Qm, ls_l, ls)
-    R.A = a._unmerge_from_matrix(Rm, ls, ls_r)
+    Q.A = a.unmerge_from_matrix(Qm, ls_l, ls)
+    R.A = a.unmerge_from_matrix(Rm, ls, ls_r)
 
-    Q._update_tD_arrays()
-    R._update_tD_arrays()
+    Q.update_tD_arrays()
+    R.update_tD_arrays()
 
     Q.moveaxis(source=-1, destination=Qaxis, inplace=True)
     R.moveaxis(source=0, destination=Raxis, inplace=True)
@@ -173,9 +174,9 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf):
     if np.any(a.n != 0):
         raise YastError('Charge should be zero')
 
-    Am, ls_l, ls_r, ul, ur = a._merge_to_matrix(out_l, out_r, news_l=-sU, news_r=sU)
+    Am, ls_l, ls_r, ul, ur = a.merge_to_matrix(out_l, out_r, news_l=-sU, news_r=sU)
 
-    if _check_consistency and not (ul == ur and ls_l.match(ls_r)):
+    if _check["consistency"] and not (ul == ur and ls_l.match(ls_r)):
         raise YastError('Something went wrong in matching the indices of the two tensors')
 
     # meta = (indA, indS, indU)
@@ -191,11 +192,11 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf):
     S = Tensor(config=a.config, s=(-sU, sU), isdiag=True)
     U = Tensor(config=a.config, s=Us, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
 
-    U.A = a._unmerge_from_matrix(Um, ls_l, ls_s)
-    S.A = a._unmerge_from_diagonal(Sm, ls_s)
+    U.A = a.unmerge_from_matrix(Um, ls_l, ls_s)
+    S.A = a.unmerge_from_diagonal(Sm, ls_s)
 
-    U._update_tD_arrays()
-    S._update_tD_arrays()
+    U.update_tD_arrays()
+    S.update_tD_arrays()
 
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
     return S, U
