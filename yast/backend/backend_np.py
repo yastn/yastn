@@ -7,7 +7,7 @@ try:
 except ImportError as e:
     warnings.warn("fbpca not available", Warning)
 
-
+_backend_id= "numpy"
 _data_dtype = {'float64': np.float64,
                'complex128': np.complex128}
 
