@@ -229,10 +229,32 @@ class Tensor:
     def copy(self):
         """ Return a copy of the tensor.
 
-            Warning: thismight break autograd if you are using it.
+            Warning: this might break autograd if you are using it.
         """
         a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.A = {ts: self.config.backend.copy(x) for ts, x in self.A.items()}
+        a.tset = self.tset.copy()
+        a.Dset = self.Dset.copy()
+        return a
+
+    @property
+    def real(self):
+        if not self.is_complex():
+            raise RuntimeError("Supported only for complex tensors.")
+        config_real= self.config._replace(dtype="float64")
+        a = Tensor(config=config_real, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
+        a.A = {ts: self.config.backend.real(x) for ts, x in self.A.items()}
+        a.tset = self.tset.copy()
+        a.Dset = self.Dset.copy()
+        return a
+
+    @property
+    def imag(self):
+        if not self.is_complex():
+            raise RuntimeError("Supported only for complex tensors.")
+        config_real= self.config._replace(dtype="float64")
+        a = Tensor(config=config_real, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
+        a.A = {ts: self.config.backend.imag(x) for ts, x in self.A.items()}
         a.tset = self.tset.copy()
         a.Dset = self.Dset.copy()
         return a
@@ -365,6 +387,10 @@ class Tensor:
     def print_blocks(self):
         for ind, x in self.A.items():
             print(f"{ind} {self.config.backend.get_shape(x)}")
+
+    def is_complex(self):
+        """ Returns True if all blocks are complex. """
+        return all([self.config.backend.is_complex(x) for x in self.A.values()])
 
     def get_size(self):
         """ Total number of elements in the tensor. """
@@ -1334,7 +1360,11 @@ class Tensor:
     ########################
 
     def _test_configs_match(self, other):
-        if self.config != other.config:
+        # if self.config != other.config:
+        if not (self.config.dtype== other.config.dtype \
+            and self.config.dtype== other.config.dtype \
+            and self.config.sym.name== other.config.sym.name \
+            and self.config.backend._backend_id== other.config.backend._backend_id):
             raise YastError('configs do not match')
 
     def _test_tensors_match(self, other):

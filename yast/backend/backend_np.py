@@ -7,7 +7,7 @@ try:
 except ImportError as e:
     warnings.warn("fbpca not available", Warning)
 
-
+_backend_id= "numpy"
 _data_dtype = {'float64': np.float64,
                'complex128': np.complex128}
 
@@ -34,10 +34,12 @@ def clone(x):
 def copy(x):
     return x.copy()
 
+def real(x): return x.real
+
+def imag(x): return x.imag
 
 def to_numpy(x):
     return x.copy()
-
 
 def get_shape(x):
     return x.shape
@@ -455,6 +457,9 @@ def unmerge_one_leg(A, axis, meta):
 ##############
 #  tests
 ##############
+
+def is_complex(x):
+    return np.iscomplexobj(x)
 
 def is_independent(A, B):
     """

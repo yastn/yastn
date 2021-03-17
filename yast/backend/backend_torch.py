@@ -4,7 +4,7 @@ from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_eig_sym import SYMEIG
 from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
 
-
+_backend_id= "torch"
 _data_dtype = {'float64': torch.float64,
                'complex128': torch.complex128}
 
@@ -34,10 +34,12 @@ def clone(x):
 def copy(x):
     return x.detach().clone()
 
+def real(x): return x.real
+
+def imag(x): return x.imag
 
 def to_numpy(x):
     return x.detach().cpu().numpy()
-
 
 def get_shape(x):
     return x.size()
@@ -449,6 +451,9 @@ def unmerge_one_leg(A, axis, meta):
 ##############
 #  tests
 ##############
+
+def is_complex(x):
+    return x.is_complex()
 
 def is_independent(A, B):
     """
