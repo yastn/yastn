@@ -1360,7 +1360,11 @@ class Tensor:
     ########################
 
     def _test_configs_match(self, other):
-        if self.config != other.config:
+        # if self.config != other.config:
+        if not (self.config.dtype== other.config.dtype \
+            and self.config.dtype== other.config.dtype \
+            and self.config.sym.name== other.config.sym.name \
+            and self.config.backend._backend_id== other.config.backend._backend_id):
             raise YastError('configs do not match')
 
     def _test_tensors_match(self, other):
