@@ -1,4 +1,6 @@
-""" Krylov-based methods for yast tensor. """
+""" Krylov-based methods for yast tensor. 
+Based on http://www1.maths.leeds.ac.uk/~jitse/phikrylov.pdf  ADD PROPER CITATION DURING CLEANING
+"""
 import time
 import tracemalloc
 import numpy as np

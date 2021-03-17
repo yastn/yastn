@@ -1075,9 +1075,9 @@ class Tensor:
         c.update_tD_arrays()
         return c
 
-    def vdot(self, other, conj=(1, 0)):
+    def vdot(a, b, conj=(1, 0)):
         r"""
-        Compute scalar product x = <self|other> of two tensors. Self is conjugated.
+        Compute scalar product x = <a|b> of two tensors. a is conjugated.
 
         Parameters
         ----------
@@ -1087,12 +1087,12 @@ class Tensor:
         -------
         x: number
         """
-        self._test_configs_match(other)
-        self._test_tensors_match(other)
-        k12, _, _ = _common_keys(self.A, other.A)
+        a._test_configs_match(b)
+        a._test_tensors_match(b)
+        k12, _, _ = _common_keys(a.A, b.A)
         if len(k12) > 0:
-            return self.config.backend.vdot(self.A, other.A, k12)
-        return self.zero_of_dtype()
+            return a.config.backend.vdot(a.A, b.A, k12)
+        return a.zero_of_dtype()
 
     def trace(self, axes=(0, 1)):
         """
