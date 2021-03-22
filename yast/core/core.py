@@ -8,29 +8,29 @@ An instance of a Tensor is specified by a list of blocks (dense tensors) labeled
 """
 
 from collections import namedtuple
-from itertools import product
+from functools import lru_cache
+from itertools import product, groupby
+from operator import itemgetter
 import numpy as np
 from ._auxliary import _unpack_axes, _clear_axes, _common_keys, _indices_common_rows
 from ..sym import sym_none
 
 __all__ = ['Tensor', 'YastError', 'check_signatures_match', 'check_consistency', 'allow_cache_meta']
 
-
 _config = namedtuple('_config', ('backend', 'sym', 'dtype', 'device'), \
                     defaults = (None, sym_none, 'float64', 'cpu'))
 
-_check = {"signatures_match":True, "consistency":True, "cache_meta":True}
+_struct = namedtuple('_struct', ('t', 'D', 's', 'n'))
 
+_check = {"signatures_match":True, "consistency":True, "cache_meta":True}
 
 def check_signatures_match(value=True):
     """Set the value of the flag check_signatures_match."""
     _check["signatures_match"] = bool(value)
 
-
 def check_consistency(value=True):
     """Set the value of the flag check_consistency."""
     _check["consistency"] = bool(value)
-
 
 def allow_cache_meta(value=True):
     """Set the value of the flag that permits to reuses some metadata."""
@@ -58,16 +58,11 @@ class Tensor:
                 raise YastError("Tensor charge should be 0 in diagonal tensor")
             if not self.nlegs == 2:
                 raise YastError("Diagonal tensor should have ndim == 2")
-        # self.tset = np.zeros((0, self.nlegs, self.config.sym.nsym), dtype=int)  # list of blocks; 3d nparray of ints
-        # self.Dset = np.zeros((0, self.nlegs), dtype=int)  # shapes of blocks; 2d nparray of ints
         self.A = {}  # dictionary of blocks
-        # (meta) fusion tree for each leg: (number_of_consequative_legs_it_represents, tuple_with_inner_structure)
+        # (meta) fusion tree for each leg: (encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 -- 5 legs fused and history); is immutable
         self.meta_fusion = tuple(kwargs['meta_fusion']) if ('meta_fusion' in kwargs and kwargs['meta_fusion'] is not None) else ((1,),) * self.nlegs
-        # self.meta_fusion is immutable for copying and comparison
         self.mlegs = len(self.meta_fusion)  # number of meta legs
-        lA = sorted(self.A.keys())  # sorting tset and Dset according to tset
-        self.tset = np.zeros((0, self.nlegs, self.config.sym.nsym), dtype=int)
-        self.Dset = np.zeros((len(lA), self.nlegs), dtype=int)
+        self.struct = _struct((), (), tuple(self.s), tuple(self.n))
 
     ######################
     #     fill tensor    #
@@ -219,8 +214,8 @@ class Tensor:
                 # TODO Ds is given implicitly by the val n-dim array
                 self.A[ts] = self.config.backend.to_tensor(val, Ds=Ds, dtype=self.config.dtype, device=self.config.device)
         # here it checkes the consistency of bond dimensions
-        self.update_tD_arrays()
-        tD = [self.get_leg_structure(n, native=True) for n in range(self.nlegs)]
+        self.update_struct()
+        tD = [self.get_leg_structure(n, native=True) for n in range(self.nlegs)]  # here checks if struct is consistent
 
     #######################
     #     new tensors     #
@@ -233,8 +228,7 @@ class Tensor:
         """
         a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.A = {ts: self.config.backend.copy(x) for ts, x in self.A.items()}
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         return a
 
     @property
@@ -244,8 +238,7 @@ class Tensor:
         config_real= self.config._replace(dtype="float64")
         a = Tensor(config=config_real, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.A = {ts: self.config.backend.real(x) for ts, x in self.A.items()}
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         return a
 
     @property
@@ -255,16 +248,14 @@ class Tensor:
         config_real= self.config._replace(dtype="float64")
         a = Tensor(config=config_real, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.A = {ts: self.config.backend.imag(x) for ts, x in self.A.items()}
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         return a
 
     def clone(self):
         """ Return a copy of the tensor, tracking gradients. """
         a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.A = {ts: self.config.backend.clone(x) for ts, x in self.A.items()}
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         return a
 
     def detach(self, inplace=False):
@@ -273,8 +264,7 @@ class Tensor:
             for x in self.A.values(): self.config.backend.detach_(x)
             return self
         a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         a.A = {ts: self.config.backend.detach(x) for ts, x in self.A.items()}
         return a
 
@@ -293,8 +283,7 @@ class Tensor:
             return self
         config_d = self.config._replace(device=device)
         a = Tensor(config=config_d, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
-        a.tset= self.tset.copy()
-        a.Dset= self.Dset.copy()
+        a.struct = self.struct
         a.A = self.config.backend.move_to_device(self.A, device)
         return a
 
@@ -332,16 +321,14 @@ class Tensor:
                 Raise error, if tensor has some blocks which are not included in meta; or otherwise meta does not match the tensor.
         """
         if meta is None:
-            D_rsh = np.prod(self.Dset, axis=1)
+            D_rsh = np.prod(self._Darray(), axis=1)
             aD_rsh = np.cumsum(D_rsh)
             D_tot = np.sum(D_rsh)
             meta_new = (((), D_tot),)
             # meta_merge = ((tn, Ds, to, Do), ...)
-            meta_merge = tuple(((), (aD-D, aD), tuple(t.flat), (D,)) \
-                for t, D, aD in zip(self.tset, D_rsh, aD_rsh))
+            meta_merge = tuple(((), (aD-D, aD), t, (D,)) for t, D, aD in zip(self.struct.t, D_rsh, aD_rsh))
             # (told, tnew, Dsl, Dnew)
-            meta_unmerge = tuple((told, tnew, Dsl, tuple(Dnew)) \
-                for (told, Dsl, tnew, _), Dnew in zip(meta_merge, self.Dset))
+            meta_unmerge = tuple((told, tnew, Dsl, Dnew) for (told, Dsl, tnew, _), Dnew in zip(meta_merge, self.struct.D))
             meta = {'s': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, \
                 'meta_fusion': self.meta_fusion, 'meta_unmerge':meta_unmerge, 'meta_merge':meta_merge}
         else:
@@ -394,7 +381,7 @@ class Tensor:
 
     def get_size(self):
         """ Total number of elements in the tensor. """
-        return sum(np.prod(self.Dset, axis=1))
+        return sum(np.prod(self._Darray(), axis=1))
 
     def get_tensor_charge(self):
         """ Global charge of the tensor. """
@@ -410,11 +397,11 @@ class Tensor:
 
     def get_blocks_charges(self):
         """ Charges of all native blocks. """
-        return self.tset.copy()
+        return self.struct.t
 
     def get_blocks_shapes(self):
         """ Shapes fo all native blocks. """
-        return self.Dset.copy()
+        return self.struct.D
 
     def get_leg_fusion(self, axes=None):
         """
@@ -450,8 +437,10 @@ class Tensor:
         axis, = _clear_axes(axis)
         if not native:
             axis, = _unpack_axes(self, axis)
-        tset = self.tset[:, axis, :]
-        Dset = self.Dset[:, axis]
+        tset = self._tarray()
+        Dset = self._Darray()
+        tset = tset[:, axis, :]
+        Dset = Dset[:, axis]
         tset = tset.reshape(len(tset), len(axis) * self.config.sym.nsym)
         Dset = np.prod(Dset, axis=1) if len(axis) > 1 else Dset.reshape(-1)
 
@@ -542,8 +531,8 @@ class Tensor:
         if not native:
             axes = tuple(_unpack_axes(self, *axes))
         meta = []
-        for tt in self.tset:
-            tind = tuple(tt.flat)
+        tset = self._tarray()
+        for tind, tt in zip(self.struct.t, tset):
             meta.append((tind, tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
         return self.config.backend.merge_to_dense(self.A, Dtot, meta, self.config.dtype, self.config.device)
 
@@ -690,8 +679,7 @@ class Tensor:
         """
         a = self.copy_empty()
         a.A= {ind: other * x for ind, x in self.A.items()}
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         return a
 
     def __rmul__(self, other):
@@ -724,8 +712,7 @@ class Tensor:
         """
         a = self.copy_empty()
         a.A= {ind: x**exponent for ind, x in self.A.items()}
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         return a
 
     def __truediv__(self, other):
@@ -743,8 +730,7 @@ class Tensor:
         """
         a = self.copy_empty()
         a.A= {ind: x / other for ind, x in self.A.items()}
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         return a
 
     def __add__(self, other):
@@ -767,7 +753,7 @@ class Tensor:
         meta = _common_keys(self.A, other.A)
         a = self.copy_empty()
         a.A = a.config.backend.add(self.A, other.A, meta)
-        a.update_tD_arrays()
+        a.update_struct()
         return a
 
     def __sub__(self, other):
@@ -790,7 +776,7 @@ class Tensor:
         meta = _common_keys(self.A, other.A)
         a = self.copy_empty()
         a.A = a.config.backend.sub(self.A, other.A, meta)
-        a.update_tD_arrays()
+        a.update_struct()
         return a
 
     def apxb(self, other, x=1):
@@ -814,7 +800,7 @@ class Tensor:
         meta = _common_keys(self.A, other.A)
         a = self.copy_empty()
         a.A = a.config.backend.apxb(self.A, other.A, x, meta)
-        a.update_tD_arrays()
+        a.update_struct()
         return a
 
     #############################
@@ -835,10 +821,11 @@ class Tensor:
         if inplace:
             a = self
             a.n = newn
+            a.s *= -1
         else:
             a = Tensor(config=self.config, s=-self.s, n=newn, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
-            a.tset = self.tset.copy()
-            a.Dset = self.Dset.copy()
+        
+        a.struct = self.struct._replace(s=tuple(-self.s))
         a.A = a.config.backend.conj(self.A, inplace)
         return a
 
@@ -854,8 +841,7 @@ class Tensor:
             a = self
         else:
             a = self.copy_empty()
-            a.tset = self.tset.copy()
-            a.Dset = self.Dset.copy()
+            a.struct = self.struct
         a.A = a.config.backend.conj(self.A, inplace)
         return a
 
@@ -873,8 +859,7 @@ class Tensor:
             self.s = -self.s
             return self
         a = Tensor(config=self.config, s=-self.s, n=newn, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         a.A= {ind: self.config.backend.clone(self.A[ind]) for ind in self.A}
         return a
 
@@ -900,11 +885,11 @@ class Tensor:
             a = self
         else:
             a = Tensor(config=self.config, s=news, n=self.n, isdiag=self.isdiag, meta_fusion=new_meta_fusion)
-        newt = self.tset[:, order, :]
-        meta_transpose = tuple((tuple(old.flat), tuple(new.flat)) for old, new in zip(self.tset, newt))
+        tset = self._tarray()
+        newt = tset[:, order, :]
+        meta_transpose = tuple((told, tuple(tnew.flat)) for told, tnew in zip(self.struct.t, newt))
         a.A = a.config.backend.transpose(self.A, uaxes, meta_transpose, inplace)
-        a.tset = newt
-        a.Dset = self.Dset[:, order]
+        a.update_struct()
         return a
 
     def moveaxis(self, source, destination, inplace=False):
@@ -939,7 +924,7 @@ class Tensor:
             a.A = {ind: self.config.backend.diag_diag(self.A[ind]) for ind in self.A}
         else:
             raise YastError('Tensor cannot be changed into a diagonal one')
-        a.update_tD_arrays()
+        a.update_struct()
         return a
 
     def rsqrt(self, cutoff=0):
@@ -962,8 +947,7 @@ class Tensor:
             a.A = self.config.backend.rsqrt(self.A, cutoff=cutoff)
         else:
             a.A = self.config.backend.rsqrt_diag(self.A, cutoff=cutoff)
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         return a
 
     def reciprocal(self, cutoff=0):
@@ -986,8 +970,7 @@ class Tensor:
             a.A = self.config.backend.reciprocal(self.A, cutoff=cutoff)
         else:
             a.A = self.config.backend.reciprocal_diag(self.A, cutoff=cutoff)
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         return a
 
     def exp(self, step=1.):
@@ -1009,8 +992,7 @@ class Tensor:
             a.A = self.config.backend.exp(self.A, step)
         else:
             a.A = self.config.backend.exp_diag(self.A, step)
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         return a
 
     def sqrt(self):
@@ -1027,8 +1009,7 @@ class Tensor:
         """
         a = self.copy_empty()
         a.A = self.config.backend.sqrt(self.A)
-        a.tset = self.tset.copy()
-        a.Dset = self.Dset.copy()
+        a.struct = self.struct
         return a
 
     ##################################
@@ -1063,8 +1044,8 @@ class Tensor:
         la_out = tuple(ii for ii in range(a.mlegs) if ii not in la_con)  # outgoing meta legs
         lb_out = tuple(ii for ii in range(b.mlegs) if ii not in lb_con)  # outgoing meta legs
 
-        a_con, a_out = _unpack_axes(a, la_con, la_out)  # actual legs of a=self
-        b_con, b_out = _unpack_axes(b, lb_con, lb_out)  # actual legs of b=other
+        a_con, a_out = _unpack_axes(a, la_con, la_out)  # actual legs of a
+        b_con, b_out = _unpack_axes(b, lb_con, lb_out)  # actual legs of b
 
         na_con, na_out = np.array(a_con, dtype=np.intp), np.array(a_out, dtype=np.intp)
         nb_con, nb_out = np.array(b_con, dtype=np.intp), np.array(b_out, dtype=np.intp)
@@ -1082,7 +1063,7 @@ class Tensor:
         c_s = np.array([conja, conjb], dtype=int)
         c_n = a.config.sym.fuse(c_n, c_s, 1)
 
-        inda, indb = _indices_common_rows(a.tset[:, na_con, :], b.tset[:, nb_con, :])
+        inda, indb = _indices_common_rows(a._tarray()[:, na_con, :], b._tarray()[:, nb_con, :])
 
         Am, ls_l, ls_ac, ua_l, ua_r = a.merge_to_matrix(a_out, a_con, conja, -conja, inda, sort_r=True)
         Bm, ls_bc, ls_r, ub_l, ub_r = b.merge_to_matrix(b_con, b_out, conjb, -conjb, indb)
@@ -1098,7 +1079,7 @@ class Tensor:
 
         Cm = c.config.backend.dot(Am, Bm, conj, meta_dot)
         c.A = c.unmerge_from_matrix(Cm, ls_l, ls_r)
-        c.update_tD_arrays()
+        c.update_struct()
         return c
 
     def vdot(a, b, conj=(1, 0)):
@@ -1151,13 +1132,15 @@ class Tensor:
         if not all(self.s[ain1] == -self.s[ain2]):
             raise YastError('Signs do not match')
 
-        lt = len(self.tset)
-        t1 = self.tset[:, ain1, :].reshape(lt, -1)
-        t2 = self.tset[:, ain2, :].reshape(lt, -1)
-        to = self.tset[:, aout, :].reshape(lt, -1)
-        D1 = self.Dset[:, ain1]
-        D2 = self.Dset[:, ain2]
-        D3 = self.Dset[:, aout]
+        tset = self._tarray()
+        Dset = self._Darray()
+        lt = len(tset)
+        t1 = tset[:, ain1, :].reshape(lt, -1)
+        t2 = tset[:, ain2, :].reshape(lt, -1)
+        to = tset[:, aout, :].reshape(lt, -1)
+        D1 = Dset[:, ain1]
+        D2 = Dset[:, ain2]
+        D3 = Dset[:, aout]
         pD1 = np.prod(D1, axis=1).reshape(lt, 1)
         pD2 = np.prod(D2, axis=1).reshape(lt, 1)
         ind = (np.all(t1==t2, axis=1)).nonzero()[0]
@@ -1166,10 +1149,10 @@ class Tensor:
         if not np.all(D1[ind] == D2[ind]):
             raise YastError('Not all bond dimensions of the traced legs match')
 
-        meta = [(tuple(to[n]), tuple(self.tset[n].flat), tuple(Drsh[n])) for n in ind]
+        meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n])) for n in ind]
         a = Tensor(config=self.config, s=self.s[aout], n=self.n, meta_fusion=tuple(self.meta_fusion[ii] for ii in lout))
         a.A = a.config.backend.trace(self.A, order, meta)
-        a.update_tD_arrays()
+        a.update_struct()
         return a
 
 
@@ -1177,39 +1160,9 @@ class Tensor:
     #     merging operations     #
     ##############################
 
-    def merge_to_matrix(self, out_l, out_r, news_l, news_r, ind=slice(None), sort_r=False):
+    def merge_to_matrix(self, out_l, out_r, news_l, news_r, inds=None, sort_r=False):
         order = out_l + out_r
-        legs_l, legs_r = np.array(out_l, np.int), np.array(out_r, np.int)
-        tset, Dset = self.tset[ind], self.Dset[ind]
-        t_l, t_r = tset[:, legs_l, :], tset[:, legs_r, :]
-        D_l, D_r = Dset[:, legs_l], Dset[:, legs_r]
-        s_l, s_r = self.s[legs_l], self.s[legs_r]
-        Deff_l, Deff_r = np.prod(D_l, axis=1), np.prod(D_r, axis=1)
-
-        teff_l = self.config.sym.fuse(t_l, s_l, news_l)
-        teff_r = self.config.sym.fuse(t_r, s_r, news_r)
-        t_new = np.hstack([teff_l, teff_r])
-
-        ls_l = _LegDecomposition(self.config, s_l, news_l)
-        ls_r = _LegDecomposition(self.config, s_r, news_r)
-        ls_l.leg_struct_for_merged(teff_l, t_l, Deff_l, D_l)
-        ls_r.leg_struct_for_merged(teff_r, t_r, Deff_r, D_r)
-
-        u_new, iu_new = np.unique(t_new, return_index=True, axis=0)
-        u_new_l, u_new_r = teff_l[iu_new], teff_r[iu_new]
-
-        if sort_r and len(u_new_r) > 1:
-            iu_r = np.lexsort(u_new_r.T[::-1])
-            u_new, u_new_l, u_new_r = u_new[iu_r], u_new_l[iu_r], u_new_r[iu_r]
-
-        u_new_l = tuple(tuple(x.flat) for x in u_new_l)
-        u_new_r = tuple(tuple(x.flat) for x in u_new_r)
-        # meta_new = ((unew, Dnew), ...)
-        meta_new = tuple((tuple(u.flat), (ls_l.D[l], ls_r.D[r])) for u, l, r in zip(u_new, u_new_l, u_new_r))
-        # meta_mrg = ((tnew, told, Dslc_l, D_l, Dslc_r, D_r), ...)
-        meta_mrg = tuple((tuple(tn.flat), tuple(to.flat), *ls_l.dec[tuple(tel.flat)][tuple(tl.flat)][:2], *ls_r.dec[tuple(ter.flat)][tuple(tr.flat)][:2])
-            for tn, to, tel, tl, ter, tr in zip(t_new, tset, teff_l, t_l, teff_r, t_r))
-
+        meta_new, meta_mrg, ls_l, ls_r, u_new_l, u_new_r = _meta_merge_to_matrix(self.config, self.struct, out_l, out_r, news_l, news_r, inds, sort_r)
         Anew = self.config.backend.merge_to_matrix(self.A, order, meta_new, meta_mrg, self.config.dtype, self.config.device)
         return Anew, ls_l, ls_r, u_new_l, u_new_r
 
@@ -1327,8 +1280,6 @@ class Tensor:
         test.append(self.A is other.A)
         test.append(self.n is other.n)
         test.append(self.s is other.s)
-        test.append(self.tset is other.tset)
-        test.append(self.Dset is other.Dset)
         for key in self.A.keys():
             if key in other.A:
                 test.append(self.config.backend.is_independent(self.A[key], other.A[key]))
@@ -1342,14 +1293,14 @@ class Tensor:
         3) block dimensions are consistent (this requires config.test=True)
         """
         test = []
-        for ind, D in zip(self.tset, self.Dset):
-            ind = tuple(ind.flat)
+        for ind, D in zip(self.struct.t, self.struct.D):
             test.append(ind in self.A)
-            test.append(self.config.backend.get_shape(self.A[ind]) == tuple(D))
-        test.append(len(self.tset) == len(self.A))
-        test.append(len(self.tset) == len(self.Dset))
+            test.append(self.config.backend.get_shape(self.A[ind]) == D)
+        test.append(len(self.struct.t) == len(self.A))
+        test.append(len(self.struct.D) == len(self.A))
 
-        test.append(np.all(self.config.sym.fuse(self.tset, self.s, 1) == self.n))
+        tset = self._tarray()
+        test.append(np.all(self.config.sym.fuse(tset, self.s, 1) == self.n))
         for n in range(self.nlegs):
             self.get_leg_structure(n, native=True)
 
@@ -1358,6 +1309,13 @@ class Tensor:
     ########################
     #     aux function     #
     ########################
+
+    def _tarray(self):
+        return np.array(self.struct.t, dtype=int).reshape(len(self.struct.t), self.nlegs, self.config.sym.nsym)
+
+    def _Darray(self):
+        return np.array(self.struct.D, dtype=int).reshape(len(self.struct.D), self.nlegs)
+
 
     def _test_configs_match(self, other):
         # if self.config != other.config:
@@ -1380,12 +1338,81 @@ class Tensor:
             if not sorted(set(out_l+out_r)) == list(range(self.nlegs)):
                 raise YastError('Repeated axis')
 
-    def update_tD_arrays(self):
+    def update_struct(self):
         """Updates meta-information about charges and dimensions of all blocks."""
-        lA = sorted(self.A.keys())  # sorting tset and Dset according to tset
-        self.tset = np.array(lA, dtype=int).reshape(len(lA), self.nlegs, self.config.sym.nsym)
-        self.Dset = np.array([self.config.backend.get_shape(self.A[x]) for x in lA], dtype=int).reshape(len(lA), self.nlegs)
+        d = self.A
+        self.A = {k: d[k] for k in sorted(d)}
+        t = tuple(self.A.keys())
+        D = tuple(self.config.backend.get_shape(x) for x in self.A.values())
+        self.struct = _struct(t, D, tuple(self.s), tuple(self.n))
 
+@lru_cache(maxsize=256)
+def _meta_merge_to_matrix(config, struct, out_l, out_r, news_l, news_r, inds, sort_r):
+    legs_l = np.array(out_l, np.int)
+    legs_r = np.array(out_r, np.int)
+    nsym = len(struct.n)
+    nleg = len(struct.s)
+    told = struct.t if inds is None else [struct.t[ii] for ii in inds]
+    Dold = struct.D if inds is None else [struct.D[ii] for ii in inds]
+    tset = np.array(told, dtype=int).reshape(len(told), nleg, nsym)
+    Dset = np.array(Dold, dtype=int).reshape(len(Dold), nleg)
+    t_l = tset[:, legs_l, :]
+    t_r = tset[:, legs_r, :]
+    D_l = Dset[:, legs_l]
+    D_r = Dset[:, legs_r]
+    s_l = np.array([struct.s[ii] for ii in out_l], dtype=int)
+    s_r = np.array([struct.s[ii] for ii in out_r], dtype=int)
+    Deff_l = np.prod(D_l, axis=1)
+    Deff_r = np.prod(D_r, axis=1)
+    
+    te_l = config.sym.fuse(t_l, s_l, news_l)
+    te_r = config.sym.fuse(t_r, s_r, news_r)
+    tnew = np.hstack([te_l, te_r])
+
+    tnew = tuple(tuple(t.flat) for t in tnew)
+    te_l = tuple(tuple(t.flat) for t in te_l)
+    te_r = tuple(tuple(t.flat) for t in te_r)
+    t_l = tuple(tuple(t.flat) for t in t_l)
+    t_r = tuple(tuple(t.flat) for t in t_r)
+    D_l = tuple(tuple(x) for x in D_l)
+    D_r = tuple(tuple(x) for x in D_r)
+    dec_l, Dtot_l = _leg_structure_merge(te_l, t_l, Deff_l, D_l)
+    dec_r, Dtot_r = _leg_structure_merge(te_r, t_r, Deff_r, D_r)
+
+    ls_l = _LegDecomposition(config, s_l, news_l)
+    ls_r = _LegDecomposition(config, s_r, news_r)
+    ls_l.dec = dec_l
+    ls_r.dec = dec_r
+    ls_l.D = Dtot_l
+    ls_r.D = Dtot_r
+
+    meta_mrg = tuple((tn, to, *dec_l[tel][tl][:2], *dec_r[ter][tr][:2]) for tn, to, tel, tl, ter, tr in zip(tnew, told, te_l, t_l, te_r, t_r))
+    # meta_mrg = ((tnew, told, Dslc_l, D_l, Dslc_r, D_r), ...)
+
+    if sort_r:
+        tt = sorted(set(zip(te_r, te_l, tnew)))
+        unew_r, unew_l, unew = zip(*tt)  if len(tt) > 0 else ((), (), ())
+    else:
+        tt = sorted(set(zip(tnew, te_l, te_r)))
+        unew, unew_l, unew_r = zip(*tt) if len(tt) > 0 else ((), (), ())
+
+    meta_new = tuple((u, (ls_l.D[l], ls_r.D[r])) for u, l, r in zip(unew, unew_l, unew_r))
+    # meta_new = ((unew, Dnew), ...)
+    return meta_new, meta_mrg, ls_l, ls_r, unew_l, unew_r
+
+
+def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
+    tt = sorted(set(zip(teff, tlegs, Deff, Dlegs)))
+    dec, Dtot = {}, {}
+    for te, grp in groupby(tt, key=itemgetter(0)):
+        Dlow = 0
+        dec[te] = {}
+        for _, tl, De, Dl in grp:
+            Dtop = Dlow + De
+            dec[te][tl] = ((Dlow, Dtop), De, Dl)
+            Dlow = Dtop
+        Dtot[te] = Dtop
+    return dec, Dtot
 
 class _LegDecomposition:
     """Information about internal structure of leg resulting from fusions."""
@@ -1419,7 +1446,7 @@ class _LegDecomposition:
 
     def leg_struct_for_merged(self, teff, tlegs, Deff, Dlegs):
         """ Calculate meta-information about bond dimensions for merging into one leg. """
-        shape_t =list(tlegs.shape)
+        shape_t = list(tlegs.shape)
         shape_t[1] = shape_t[1] + 1
         tcom = np.empty(shape_t, dtype=int)
         tcom[:, 0, :] = teff
@@ -1572,7 +1599,7 @@ class _LegDecomposition:
 
 #     c = self.empty(s=tuple(self.s[legs_l]) + (new_s,) + tuple(self.s[legs_r]), n=self.n, isdiag=self.isdiag)
 #     c.A = self.config.backend.merge_one_leg(self.A, ig, order, meta_new , meta_mrg, self.config.dtype)
-#     c.update_tD_arrays()
+#     c.update_struct()
 #     c.lss[ig] = ls_c
 #     for nnew, nold in enumerate(al+ (-1,) + ar):
 #         if nold in self.lss:
@@ -1616,7 +1643,7 @@ class _LegDecomposition:
 
 #     c = self.empty(s=s, n=self.n, isdiag=self.isdiag)
 #     c.A = self.config.backend.unmerge_one_leg(self.A, axis, meta)
-#     c.update_tD_arrays()
+#     c.update_struct()
 #     for ii in range(axis):
 #         if ii in self.lss:
 #             c.lss[ii]=self.lss[ii].copy()

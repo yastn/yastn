@@ -106,18 +106,18 @@ def swap_gate(self, axes, fermionic=(), inplace=True):
         a = self.clone()
         if axes[0] == axes[1]:
             raise YastError('Cannot sweep the same index')
+        tset = self._tarray()
         if not self.isdiag:
             if (axes[0] == -1) and (np.sum(a.n[fermionic]) % 2 == 1):  # swap gate with local a.n
-                for ind in a.tset:
-                    if np.sum(ind[axes[1], fermionic]) % 2 == 1:
-                        ind = tuple(ind.flat)
+                for ind, tt in zip(self.struct.t, tset):
+                    if np.sum(tt[axes[1], fermionic]) % 2 == 1:
                         a.A[ind] = -a.A[ind]
             else:  # axes[0] != axes[1]:  # swap gate on 2 legs
-                for ind in a.tset:
-                    if (np.sum(ind[axes[0], fermionic]) % 2 == 1) and (np.sum(ind[axes[1], fermionic]) % 2 == 1):
+                for ind, tt in zip(self.struct.t, tset):
+                    if (np.sum(tt[axes[0], fermionic]) % 2 == 1) and (np.sum(tt[axes[1], fermionic]) % 2 == 1):
                         a.A[ind] = -a.A[ind]
         else:
-            for ind in a.tset:
+            for ind, tt in zip(self.struct.t, tset):
                 if np.sum(ind[axes[0], fermionic]) % 2 == 1:
                     a.A[ind] = -a.A[ind]
         return a

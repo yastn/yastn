@@ -22,7 +22,7 @@ def test_set0():
     assert np.iscomplexobj(npa)
     assert np.linalg.norm(npa - npa.conj()) < tol  # == 0.0
     assert npa.shape == (4, 5, 6)
-    assert a.tset.shape == (1, 3, 0)
+    assert a._tarray().shape == (1, 3, 0)
     assert a.is_consistent()
 
     # print('0d tensor:')
@@ -31,7 +31,7 @@ def test_set0():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == ()
-    assert a.tset.shape == (1, 0, 0)
+    assert a._tarray().shape == (1, 0, 0)
     assert isclose(a.to_number(), 3, rel_tol=tol)
     assert a.is_consistent()
 
@@ -41,7 +41,7 @@ def test_set0():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (5,)
-    assert a.tset.shape == (1, 1, 0)
+    assert a._tarray().shape == (1, 1, 0)
     assert a.is_consistent()
 
     # print('diagonal tensor:')
@@ -50,7 +50,7 @@ def test_set0():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (5, 5)
-    assert a.tset.shape == (1, 2, 0)
+    assert a._tarray().shape == (1, 2, 0)
     assert a.is_consistent()
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
     
@@ -100,7 +100,7 @@ def test_set1():
     npa = a.to_numpy()
     assert np.iscomplexobj(npa)
     assert npa.shape == (6, 3, 6, 1)
-    assert a.tset.shape == (5, 4, 1)
+    assert a._tarray().shape == (5, 4, 1)
     assert a.is_consistent()
 
     # print('0d tensor:')
@@ -109,7 +109,7 @@ def test_set1():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == ()
-    assert a.tset.shape == (1, 0, 1)
+    assert a._tarray().shape == (1, 0, 1)
     assert isclose(a.to_number(), 2, rel_tol=tol)
     assert a.is_consistent()
 
@@ -129,7 +129,7 @@ def test_set1():
 
     assert np.isrealobj(npa)
     assert npa.shape == (13, 13)
-    assert a.tset.shape == (3, 2, 1)
+    assert a._tarray().shape == (3, 2, 1)
     assert a.is_consistent()
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
     a.show_properties()
@@ -143,7 +143,7 @@ def test_set2():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (9, 8, 30)
-    assert a.tset.shape == (7, 3, 2)
+    assert a._tarray().shape == (7, 3, 2)
     assert a.is_consistent()
 
 
@@ -155,7 +155,7 @@ def test_set2():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (3, 8, 9)
-    assert a.tset.shape == (3, 3, 2)
+    assert a._tarray().shape == (3, 3, 2)
     assert a.is_consistent()
     
     # print('diagonal tensor:')
@@ -169,7 +169,7 @@ def test_set2():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (11, 11)
-    assert a.tset.shape == (4, 2, 2)
+    assert a._tarray().shape == (4, 2, 2)
     assert np.allclose(npa, np.eye(11), rtol=tol, atol=tol)
     assert a.is_consistent()
 

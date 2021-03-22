@@ -180,7 +180,7 @@ def decompress_from_1d(r1d, config, meta):
     a = Tensor(config=config, **meta)
     A = {(): r1d}
     a.A = a.config.backend.unmerge_one_leg(A, 0, meta['meta_unmerge'])
-    a.update_tD_arrays()
+    a.update_struct()
     return a
 
 
@@ -279,8 +279,8 @@ def block(tensors, common_legs=None):
     meta_new, meta_block = {}, []
     for pind, pa in zip(tensors, posa):
         a = tensors[pind]
-        for t in a.tset:
-            tind = tuple(t.flat)
+        tset = a._tarray()
+        for tind, t in zip(a.struct.t, tset):
             if tind not in meta_new:
                 meta_new[tind] = tuple(tDs[n][tuple(t[n].flat)]['Dtot'] for n in range(a.nlegs))
             meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.nlegs))))
@@ -288,5 +288,5 @@ def block(tensors, common_legs=None):
 
     c = Tensor(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n, meta_fusion=tn0.meta_fusion)
     c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, a.config.dtype, c.config.device)
-    c.update_tD_arrays()
+    c.update_struct()
     return c

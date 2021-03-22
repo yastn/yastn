@@ -32,6 +32,8 @@ def _indices_common_rows(a, b):
     lb = [tuple(x.flat) for x in b]
     sa = set(la)
     sb = set(lb)
-    ia = np.array([ii for ii, el in enumerate(la) if el in sb], dtype=np.intp)
-    ib = np.array([ii for ii, el in enumerate(lb) if el in sa], dtype=np.intp)
+    ia = tuple(ii for ii, el in enumerate(la) if el in sb)
+    ib = tuple(ii for ii, el in enumerate(lb) if el in sa)
+    # ia = np.array([ii for ii, el in enumerate(la) if el in sb], dtype=np.intp)
+    # ib = np.array([ii for ii, el in enumerate(lb) if el in sa], dtype=np.intp)
     return ia, ib

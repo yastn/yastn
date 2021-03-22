@@ -79,9 +79,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, \
     S.A = a.unmerge_from_diagonal(Sm, ls_s)
     V.A = a.unmerge_from_matrix(Vm, ls_s, ls_r)
 
-    U.update_tD_arrays()
-    S.update_tD_arrays()
-    V.update_tD_arrays()
+    U.update_struct()
+    S.update_struct()
+    V.update_struct()
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
     V.moveaxis(source=0, destination=Vaxis, inplace=True)
     return U, S, V
@@ -126,8 +126,8 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     Q.A = a.unmerge_from_matrix(Qm, ls_l, ls)
     R.A = a.unmerge_from_matrix(Rm, ls, ls_r)
 
-    Q.update_tD_arrays()
-    R.update_tD_arrays()
+    Q.update_struct()
+    R.update_struct()
 
     Q.moveaxis(source=-1, destination=Qaxis, inplace=True)
     R.moveaxis(source=0, destination=Raxis, inplace=True)
@@ -195,8 +195,8 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf):
     U.A = a.unmerge_from_matrix(Um, ls_l, ls_s)
     S.A = a.unmerge_from_diagonal(Sm, ls_s)
 
-    U.update_tD_arrays()
-    S.update_tD_arrays()
+    U.update_struct()
+    S.update_struct()
 
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
     return S, U
