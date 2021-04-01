@@ -3,7 +3,7 @@ import numpy as np
 from .core import YastError
 from ._auxliary import _clear_axes, _unpack_axes
 
-__all__ = ['ncon', 'swap_gate', 'entropy']
+__all__ = ['ncon', 'entropy']
 
 
 def ncon(ts, inds, conjs=None):
@@ -78,50 +78,6 @@ def ncon(ts, inds, conjs=None):
         result *= num.to_number()
     return result
 
-
-def swap_gate(self, axes, fermionic=(), inplace=True):
-    """
-    Return tensor after application of the swap gate.
-
-    Multiply the block with odd charges on swaped legs by -1.
-    If one of the axes is -1, then swap with charge n.
-
-    TEST IT
-
-    Parameters
-    ----------
-    axes: tuple
-        two legs to be swaped
-
-    fermionic: tuple
-        which symmetries are fermionic
-
-    Returns
-    -------
-    tensor : Tensor
-    """
-    if any(fermionic):
-        fermionic = np.array(fermionic, dtype=bool)
-        axes = sorted(list(axes))
-        a = self.clone()
-        if axes[0] == axes[1]:
-            raise YastError('Cannot sweep the same index')
-        tset = self._tarray()
-        if not self.isdiag:
-            if (axes[0] == -1) and (np.sum(a.n[fermionic]) % 2 == 1):  # swap gate with local a.n
-                for ind, tt in zip(self.struct.t, tset):
-                    if np.sum(tt[axes[1], fermionic]) % 2 == 1:
-                        a.A[ind] = -a.A[ind]
-            else:  # axes[0] != axes[1]:  # swap gate on 2 legs
-                for ind, tt in zip(self.struct.t, tset):
-                    if (np.sum(tt[axes[0], fermionic]) % 2 == 1) and (np.sum(tt[axes[1], fermionic]) % 2 == 1):
-                        a.A[ind] = -a.A[ind]
-        else:
-            for ind, tt in zip(self.struct.t, tset):
-                if np.sum(ind[axes[0], fermionic]) % 2 == 1:
-                    a.A[ind] = -a.A[ind]
-        return a
-    return self
 
 def entropy(self, axes, alpha=1):
     r"""

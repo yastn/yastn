@@ -3,7 +3,7 @@ import warnings
 import numpy as np
 import scipy as sp
 try:
-    import fbpca as pca
+    import fbpca
 except ImportError as e:
     warnings.warn("fbpca not available", Warning)
 
@@ -230,14 +230,19 @@ def sqrt(A):
     return {t: np.sqrt(x) for t, x in A.items()}
 
 
-def svd_lowrank(A, meta, opts):
+def absolute(A):
+    return {t: np.abs(x) for t, x in A.items()}
+
+
+def svd_lowrank(A, meta, D_block, n_iter, k_fac):
     U, S, V = {}, {}, {}
     for (iold, iU, iS, iV) in meta:
-        U[iU], S[iS], V[iV] = pca.pca(A[iold], k=opts['D_block'], raw=True, n_iter=opts['nbit'], l=opts['kfac'] * opts['D_block'])
+        k = min(min(A[iold].shape), D_block)
+        U[iU], S[iS], V[iV] = fbpca.pca(A[iold], k=k, raw=True, n_iter=n_iter, l=k_fac*k)
     return U, S, V
 
 
-def svd(A, meta, opts):
+def svd(A, meta):
     U, S, V = {}, {}, {}
     for (iold, iU, iS, iV) in meta:
         try:

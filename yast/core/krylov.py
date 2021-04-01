@@ -7,7 +7,7 @@ import numpy as np
 from scipy import linalg as LA
 from .core import YastError
 
-__all__ = ['expmw', 'eigs', 'eigh']
+__all__ = ['expmw', 'eigs', 'eigsh']
 
 _select_dtype = {'float64': np.float64,
                  'complex128': np.complex128}
@@ -242,7 +242,7 @@ def eigs(Av, v0, Bv=None, hermitian=True, k='all', sigma=None, ncv=5, which=None
     return val, [norm*Y[it] for it in range(len(Y))], good
 
 
-def eigh(Av, init, tol=1e-14, k=5, algorithm='arnoldi'):
+def eigsh(Av, init, tol=1e-14, k=5, algorithm='arnoldi'):
     norm = init[0].norm()
     init = [(1. / it.norm())*it for it in init]
     if algorithm == 'arnoldi':

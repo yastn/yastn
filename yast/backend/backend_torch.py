@@ -231,10 +231,22 @@ def sqrt(A):
     return {t: torch.sqrt(x) for t, x in A.items()}
 
 
+def absolute(A):
+    return {t: torch.abs(x) for t, x in A.items()}
+
+
+def svd_lowrank(A, meta, D_block, n_iter, k_fac):
+    U, S, V = {}, {}, {}
+    for (iold, iU, iS, iV) in meta:
+        q = min(min(A[iold].shape), D_block*k_fac)
+        U[iU], S[iS], V[iV] = torch.svd_lowrank(A[iold], q=q, niter=n_iter)
+        V[iV] = V[iV].T.conj()
+    return U, S, V
+
+
 ad_decomp_reg = 1.0e-12
 
-
-def svd(A, meta, opts):
+def svd(A, meta):
     U, S, V = {}, {}, {}
     tn = next(iter(A.values()))
     reg = torch.as_tensor(ad_decomp_reg, dtype=tn.dtype, device=tn.device)

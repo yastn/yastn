@@ -15,7 +15,14 @@ import numpy as np
 from ._auxliary import _unpack_axes, _clear_axes, _common_keys, _indices_common_rows
 from ..sym import sym_none
 
-__all__ = ['Tensor', 'YastError', 'check_signatures_match', 'check_consistency', 'allow_cache_meta']
+__all__ = ['Tensor', 'YastError', 'check_signatures_match', 'check_consistency', 'allow_cache_meta',
+            'copy', 'clone', 'detach', 'export_to_dict','compress_to_1d',
+            'apxb', 'conj', 'conj_blocks', 'flip_signature',
+            'transpose', 'moveaxis', 'diag', 'swap_gate',
+            'exp', 'sqrt', 'rsqrt', 'reciprocal', 'abs',
+            'tensordot', 'vdot', 'trace',
+            'fuse_legs', 'unfuse_legs']
+
 
 _config = namedtuple('_config', ('backend', 'sym', 'dtype', 'device'), \
                     defaults = (None, sym_none, 'float64', 'cpu'))
@@ -179,22 +186,15 @@ class Tensor:
             raise YastError('Charges ts are not consistent with the symmetry rules: t @ s - n != 0')
 
         if isinstance(val, str):
-            if ts in self.A.keys():
-                if Ds is None:
-                    # attempt to read Ds from existing block
-                    Ds = []
-                    tD = [self.get_leg_structure(n, native=True) for n in range(self.nlegs)]
-                    for n in range(self.nlegs):
-                        try:
-                            Ds.append(tD[n][tuple(ats[0, n, :].flat)])
-                        except KeyError:
-                            raise YastError('Cannot infer all bond dimensions')
-                    Ds = tuple(Ds)
-                else:
-                    # TODO allow changing size of the sector ?
-                    pass
-            else:
-                assert Ds is not None, "No ts block "+str(ts)+" exists, Ds must be provided"
+            if Ds is None:  # attempt to read Ds from existing block
+                Ds = []
+                tD = [self.get_leg_structure(n, native=True) for n in range(self.nlegs)]
+                for n in range(self.nlegs):
+                    try:
+                        Ds.append(tD[n][tuple(ats[0, n, :].flat)])
+                    except KeyError:
+                        raise YastError('Provided Ds. Cannot infer all bond dimensions from existing blocks.')
+                Ds = tuple(Ds)
 
             if val == 'zeros':
                 self.A[ts] = self.config.backend.zeros(Ds, dtype=self.config.dtype, device=self.config.device)
@@ -207,15 +207,13 @@ class Tensor:
             if self.isdiag:
                 self.A[ts] = self.config.backend.diag_get(self.A[ts])
                 self.A[ts] = self.config.backend.diag_create(self.A[ts])
-        else:
+        else:  # enforce that Ds is provided to increase clarity of the code
             if self.isdiag and val.ndim == 1 and np.prod(Ds)==(val.size**2):
                 self.A[ts] = self.config.backend.to_tensor(np.diag(val), Ds, dtype=self.config.dtype, device=self.config.device)
             else:
-                # TODO Ds is given implicitly by the val n-dim array
                 self.A[ts] = self.config.backend.to_tensor(val, Ds=Ds, dtype=self.config.dtype, device=self.config.device)
-        # here it checkes the consistency of bond dimensions
         self.update_struct()
-        tD = [self.get_leg_structure(n, native=True) for n in range(self.nlegs)]  # here checks if struct is consistent
+        tD = [self.get_leg_structure(n, native=True) for n in range(self.nlegs)]  # here checks the consistency of bond dimensions
 
     #######################
     #     new tensors     #
@@ -629,15 +627,15 @@ class Tensor:
             return self.zero_of_dtype()
         return self.config.backend.norm(self.A, p)
 
-    def max_abs(self):
-        """
-        Largest element by magnitude.  THIS IS OBSOLATE norm(ord = 'inf') DOES THE SAME
+    # def max_abs(self):
+    #     """
+    #     Largest element by magnitude.  THIS IS OBSOLATE norm(ord = 'inf') DOES THE SAME
 
-        Returns
-        -------
-        max_abs : scalar
-        """
-        return self.zero_of_dtype() if len(self.A) == 0 else self.config.backend.max_abs(self.A)
+    #     Returns
+    #     -------
+    #     max_abs : scalar
+    #     """
+    #     return self.zero_of_dtype() if len(self.A) == 0 else self.config.backend.max_abs(self.A)
 
     def norm_diff(self, other, p='fro'):
         """
@@ -927,6 +925,19 @@ class Tensor:
         a.update_struct()
         return a
 
+    def abs(self):
+        """
+        Return element-wise absolut value.
+
+        Returns
+        -------
+        tansor: Tensor
+        """
+        a = self.copy_empty()
+        a.A = self.config.backend.absolute(self.A)
+        a.struct = self.struct
+        return a
+
     def rsqrt(self, cutoff=0):
         """
         Return element-wise 1/sqrt(A).
@@ -1155,6 +1166,53 @@ class Tensor:
         a.update_struct()
         return a
 
+    #############################
+    #        swap gate          #
+    #############################
+
+    def swap_gate(self, axes, inplace=True):
+        """
+        Return tensor after application of the swap gate.
+
+        Multiply the block with odd charges on swaped legs by -1.
+        If one of the provided axes is -1, then swap with the charge n.
+
+        Parameters
+        ----------
+        axes: tuple
+            two groups of legs to be swaped
+
+        Returns
+        -------
+        tensor : Tensor
+        """
+        try:
+            fss = self.config.sym.fermionic  # fermionic symmetry sectors
+        except NameError:
+            return self
+        if any(fss):
+            a = self if inplace else self.clone()
+            tset = a._tarray()
+            l1, l2 = _clear_axes(*axes)  # swaped groups of legs
+            if len(set(l1) & set(l2)) > 0:
+                raise YastError('Cannot sweep the same index')
+            if l2 == (-1,):
+                l1, l2 = l2, l1
+            if l1 == (-1,):
+                l2, = _unpack_axes(self, l2)
+                t1 = a.n
+            else:
+                l1, l2 = _unpack_axes(self, l1, l2)
+                al1 = np.array(l1, dtype=np.intp)
+                t1 = np.sum(tset[:, al1, :], axis=1)
+            al2 = np.array(l2, dtype=np.intp)
+            t2 = np.sum(tset[:, al2, :], axis=1)
+            tp = np.sum(t1 * t2, axis=1) % 2 == 1
+            for ind, odd in zip(self.struct.t, tp):
+                if odd:
+                    a.A[ind] = -a.A[ind]
+            return a
+        return self
 
     ##############################
     #     merging operations     #
@@ -1205,19 +1263,18 @@ class Tensor:
         if self.isdiag:
             raise YastError('Cannot group legs of a diagonal tensor')
 
-        # TODO verify input ? Inner tuples can contain only integers
         meta_fusion, order = [], []
         for group in axes:
             if isinstance(group, int):
                 order.append(group)
                 meta_fusion.append(self.meta_fusion[group])
             else:
+                if not all(isinstance(x, int) for x in group):
+                    raise YastError('Inner touples of axes can only contain integers')
                 order.extend(group)
                 nlegs = [sum(self.meta_fusion[ii][0] for ii in group)]
                 for ii in group:
                     nlegs.extend(self.meta_fusion[ii])
-                # struct = tuple(self.meta_fusion[ii] for ii in group)
-                # nlegs = sum(x[0] for x in struct)
                 meta_fusion.append(tuple(nlegs))
         order = tuple(order)
         if inplace and order == tuple(ii for ii in range(self.mlegs)):
@@ -1316,7 +1373,6 @@ class Tensor:
     def _Darray(self):
         return np.array(self.struct.D, dtype=int).reshape(len(self.struct.D), self.nlegs)
 
-
     def _test_configs_match(self, other):
         # if self.config != other.config:
         if not (self.config.dtype== other.config.dtype \
@@ -1346,7 +1402,8 @@ class Tensor:
         D = tuple(self.config.backend.get_shape(x) for x in self.A.values())
         self.struct = _struct(t, D, tuple(self.s), tuple(self.n))
 
-@lru_cache(maxsize=256)
+
+# @lru_cache(maxsize=256)
 def _meta_merge_to_matrix(config, struct, out_l, out_r, news_l, news_r, inds, sort_r):
     legs_l = np.array(out_l, np.int)
     legs_r = np.array(out_r, np.int)
@@ -1651,3 +1708,7 @@ class _LegDecomposition:
 #         if ii in self.lss:
 #             c.lss[ii+ls.nlegs]=self.lss[ii].copy()
 #     return c
+
+for name in __all__:
+    if name not in globals():
+        globals()[name] =getattr(Tensor, name)

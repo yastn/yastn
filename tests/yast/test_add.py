@@ -15,6 +15,8 @@ def test_add_0():
     c2 = a.apxb(b, 2)
 
     assert c1.norm_diff(c2) < tol  # == 0.0
+    assert yast.norm(c1 - c2) < tol  # == 0.0
+    
 
     d = yast.rand(config=config_dense_R, isdiag=True, D=5)
     d1 = d.copy()
