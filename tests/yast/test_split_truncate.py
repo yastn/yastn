@@ -34,8 +34,10 @@ def test_svd_truncate():
     a = yast.tensordot(US, V, axes=(2, 0))
 
     
-    opts={'tol':0.01, 'D_block':100, 'D_total':12, 'truncated_svd':False}
+    opts={'tol':0.01, 'D_block':100, 'D_total':12}
     U1, S1, V1 = yast.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
+    assert S1.get_shape() == (12, 12)
+    U1, S1, V1 = yast.linalg.svd_lowrank(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
     assert S1.get_shape() == (12, 12)
 
 
