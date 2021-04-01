@@ -10,7 +10,7 @@ norm_diff = Tensor.norm_diff
 
 def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, \
     tol=0, D_block=6, D_total=np.inf, \
-    keep_multiplets=False, eps_multiplet=1.0e-14, 
+    keep_multiplets=False, eps_multiplet=1.0e-14,
     n_iter=60, k_fac=6, **kwargs):
     r"""
     Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
@@ -278,4 +278,3 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf):
 
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
     return S, U
-

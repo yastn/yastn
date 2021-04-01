@@ -225,6 +225,7 @@ class Tensor:
 
     @property
     def real(self):
+        """ return real part of tensor """
         if not self.is_complex():
             raise RuntimeError("Supported only for complex tensors.")
         config_real= self.config._replace(dtype="float64")
@@ -235,6 +236,7 @@ class Tensor:
 
     @property
     def imag(self):
+        """ return imaginary part of tensor """
         if not self.is_complex():
             raise RuntimeError("Supported only for complex tensors.")
         config_real= self.config._replace(dtype="float64")
@@ -253,9 +255,10 @@ class Tensor:
     def detach(self, inplace=False):
         """ Detach tensor from autograd; Can be called inplace (?) """
         if inplace:
-            for x in self.A.values(): self.config.backend.detach_(x)
+            for x in self.A.values():
+                self.config.backend.detach_(x)
             return self
-        a = Tensor(config=self.config, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
+        a = self.copy_empty()
         a.struct = self.struct
         a.A = {ts: self.config.backend.detach(x) for ts, x in self.A.items()}
         return a
@@ -364,6 +367,7 @@ class Tensor:
         return s
 
     def print_blocks(self):
+        """ print shapes of blocks """
         for ind, x in self.A.items():
             print(f"{ind} {self.config.backend.get_shape(x)}")
 
@@ -816,7 +820,7 @@ class Tensor:
             a.s *= -1
         else:
             a = Tensor(config=self.config, s=-self.s, n=newn, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
-        
+
         a.struct = self.struct._replace(s=tuple(-self.s))
         a.A = a.config.backend.conj(self.A, inplace)
         return a
@@ -1415,7 +1419,7 @@ def _meta_merge_to_matrix(config, struct, out_l, out_r, news_l, news_r, inds, so
     s_r = np.array([struct.s[ii] for ii in out_r], dtype=int)
     Deff_l = np.prod(D_l, axis=1)
     Deff_r = np.prod(D_r, axis=1)
-    
+
     te_l = config.sym.fuse(t_l, s_l, news_l)
     te_r = config.sym.fuse(t_r, s_r, news_r)
     tnew = np.hstack([te_l, te_r])
@@ -1702,5 +1706,3 @@ class _LegDecomposition:
 #         if ii in self.lss:
 #             c.lss[ii+ls.nlegs]=self.lss[ii].copy()
 #     return c
-
-
