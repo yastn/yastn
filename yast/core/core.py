@@ -15,13 +15,7 @@ import numpy as np
 from ._auxliary import _unpack_axes, _clear_axes, _common_keys, _indices_common_rows
 from ..sym import sym_none
 
-__all__ = ['Tensor', 'YastError', 'check_signatures_match', 'check_consistency', 'allow_cache_meta',
-            'copy', 'clone', 'detach', 'export_to_dict','compress_to_1d',
-            'apxb', 'conj', 'conj_blocks', 'flip_signature',
-            'transpose', 'moveaxis', 'diag', 'swap_gate',
-            'exp', 'sqrt', 'rsqrt', 'reciprocal', 'abs',
-            'tensordot', 'vdot', 'trace',
-            'fuse_legs', 'unfuse_legs']
+__all__ = ['Tensor', 'YastError', 'check_signatures_match', 'check_consistency', 'allow_cache_meta']
 
 
 _config = namedtuple('_config', ('backend', 'sym', 'dtype', 'device'), \
@@ -1709,6 +1703,4 @@ class _LegDecomposition:
 #             c.lss[ii+ls.nlegs]=self.lss[ii].copy()
 #     return c
 
-for name in __all__:
-    if name not in globals():
-        globals()[name] =getattr(Tensor, name)
+
