@@ -17,7 +17,6 @@ from ..sym import sym_none
 
 __all__ = ['Tensor', 'YastError', 'check_signatures_match', 'check_consistency', 'allow_cache_meta']
 
-
 _config = namedtuple('_config', ('backend', 'sym', 'dtype', 'device'), \
                     defaults = (None, sym_none, 'float64', 'cpu'))
 
@@ -1091,7 +1090,7 @@ class Tensor:
         c.update_struct()
         return c
 
-    def vdot(a, b, conj=(1, 0)):
+    def vdot(a, b):
         r"""
         Compute scalar product x = <a|b> of two tensors. a is conjugated.
 

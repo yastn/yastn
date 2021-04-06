@@ -1,11 +1,11 @@
 """ Define rules for Z2 symmetry"""
 import numpy as np
 
-nsym = 1  # single int is used to distinguish symmetry sectors
-
 name = 'U(1) fermionic'
 
-fermionic = np.array([True], dtype=np.bool)
+nsym = 1  # single int is used to distinguish symmetry sectors
+
+fermionic = np.array([True], dtype=bool)
 
 def fuse(charges, signatures, new_signature):
     """
