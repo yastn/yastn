@@ -12,7 +12,7 @@ from functools import lru_cache
 from itertools import product, groupby
 from operator import itemgetter
 import numpy as np
-from ._auxliary import _unpack_axes, _clear_axes, _common_keys, _indices_common_rows
+from ._auxliary import _unpack_axes, _clear_axes, _common_keys, _indices_common_rows, _flatten
 from ..sym import sym_none
 
 __all__ = ['Tensor', 'YastError', 'check_signatures_match', 'check_consistency', 'allow_cache_meta']
@@ -126,9 +126,11 @@ class Tensor:
                 if len(x) != len(y):
                     raise YastError("Elements of t and D do not match")
 
-            comb_t = list(product(*t))
+            # comb_t = list(tuple(tuple(t) if isinstance(t, int) else t for t in ts) for ts in product(*t))
             comb_D = list(product(*D))
+            comb_t = list(product(*t))
             lcomb_t = len(comb_t)
+            comb_t = list(_flatten(comb_t))
             comb_t = np.array(comb_t, dtype=int).reshape(lcomb_t, self.nlegs, self.config.sym.nsym)
             comb_D = np.array(comb_D, dtype=int).reshape(lcomb_t, self.nlegs)
             ind = np.all(self.config.sym.fuse(comb_t, self.s, 1) == self.n, axis=1)

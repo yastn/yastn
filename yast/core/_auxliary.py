@@ -3,6 +3,14 @@ from itertools import accumulate, chain
 import numpy as np
 
 
+def _flatten(nested_iterator):
+    for item in nested_iterator:
+        try:
+            yield from _flatten(item)
+        except TypeError:
+            yield item
+
+
 def _unpack_axes(a, *args):
     """Unpack meta axes into native axes based on self.meta_fusion"""
     clegs = tuple(accumulate(x[0] for x in a.meta_fusion))

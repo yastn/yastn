@@ -4,7 +4,7 @@ import numpy as np
 from .core import Tensor, YastError
 from ._auxliary import _clear_axes, _unpack_axes
 
-__all__ = ['rand', 'randR', 'zeros', 'ones', 'eye', 'import_from_dict', 'decompress_from_1d', 'match_legs', 'block']
+__all__ = ['rand', 'randR', 'zeros', 'ones', 'eye', 'import_from_dict', 'decompress_from_1d', 'match_legs', 'block', 'matching_tensor']
 
 
 def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
@@ -183,7 +183,6 @@ def decompress_from_1d(r1d, config, meta):
     a.update_struct()
     return a
 
-
 def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=False):
     r"""
     Initialize tensor matching legs of existing tensors, so that it can be contracted with those tensors.
@@ -215,6 +214,9 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
     a = Tensor(config=tensors[0].config, s=s, n=n, isdiag=isdiag, meta_fusion=lf)
     a.fill_tensor(t=t, D=D, val=val)
     return a
+
+
+matching_tensor = match_legs
 
 
 def block(tensors, common_legs=None):
