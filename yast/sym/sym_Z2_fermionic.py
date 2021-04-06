@@ -1,14 +1,16 @@
-from types import SimpleNamespace
+""" Define rules for Z2 symmetry"""
 
-""" Define trivial rules for dense tensor"""
+import numpy as np
 
-name = 'Dense'
+name = 'Z2 fermionic'
 
-nsym = 0  # nothing to distinguish symmetry sector
+nsym = 1  # single int is used to distinguish symmetry sectors
+
+fermionic = np.array([True], dtype=bool)
 
 def fuse(charges, signatures, new_signature):
     """
-    Full tensor
+    Fusion rule for Z2 symmetry
 
     Parameters
     ----------
@@ -25,7 +27,4 @@ def fuse(charges, signatures, new_signature):
         teff: nparray(int)
             matrix of effective fused charges of size k x nsym for new signature
     """
-    # charges is an empty matrix
-    return charges.swapaxes(1,2) @ signatures  # swap to properly match non-zero dimensions of tset;
-
-sym_none= SimpleNamespace(nsym=nsym, name=name, fuse=fuse)
+    return np.mod(new_signature * (charges.swapaxes(1,2) @ signatures), 2)

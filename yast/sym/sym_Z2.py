@@ -1,10 +1,9 @@
 """ Define rules for Z2 symmetry"""
-
 import numpy as np
 
-nsym = 1  # single int is used to distinguish symmetry sectors
-
 name = 'Z2'
+
+nsym = 1  # single int is used to distinguish symmetry sectors
 
 def fuse(charges, signatures, new_signature):
     """

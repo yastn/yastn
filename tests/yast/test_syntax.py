@@ -3,7 +3,7 @@ import config_U1_R
 
 tol = 1e-12
 
-def test_commands():
+def test_syntax():
     """ List of commands and syntax. Not all possible parameters of some functions are shown below."""
 
     # initialization:
@@ -130,7 +130,10 @@ def test_commands():
     # linalg / split
     U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)))
     U, S, V = yast.svd(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2)  # here with truncation
-    U, S, V = yast.svd_lowrank(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2, n_iter=5, k_fac=2)
+    try:
+        U, S, V = yast.svd_lowrank(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2, n_iter=5, k_fac=2)
+    except NameError:
+        pass
 
     Q, R = yast.linalg.qr(a, axes=((0, 1), (2, 3)))
     Q, R = yast.qr(a, axes=((0, 1), (2, 3)))
