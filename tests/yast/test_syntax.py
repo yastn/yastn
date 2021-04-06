@@ -164,6 +164,3 @@ def test_syntax():
     # tests
     a.is_consistent()
     a.is_independent(b)
-
-if __name__ == '__main__':
-    test_commands()
