@@ -1185,7 +1185,7 @@ class Tensor:
         """
         try:
             fss = self.config.sym.fermionic  # fermionic symmetry sectors
-        except NameError:
+        except AttributeError:
             return self
         if any(fss):
             a = self if inplace else self.clone()
