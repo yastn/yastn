@@ -1039,11 +1039,12 @@ class Tensor:
 
         axes: tuple
             legs of both tensors (for each it is specified by int or tuple of ints)
-            e.g. axes=(0, 3), axes=((0, 3), (1, 2))
+            e.g. axes=(0, 3) to contract 0th leg of a with 3rd leg of b
+                 axes=((0, 3), (1, 2)) to contract legs 0 and 3 of a with 1 and 2 of b, respectivly.
 
         conj: tuple
             shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
-            Defult is (0, 0), i.e. no conjugation
+            Defult is (0, 0), i.e. no tensor is conjugated
 
         Returns
         -------
@@ -1061,7 +1062,7 @@ class Tensor:
         nb_con, nb_out = np.array(b_con, dtype=np.intp), np.array(b_out, dtype=np.intp)
 
         conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
-        if not all(a.s[na_con] == (-conja * conjb) * b.s[nb_con]):
+        if not np.all(a.s[na_con] == (-conja * conjb) * b.s[nb_con]):
             if a.isdiag:  # if tensor is diagonal, than freely changes the signature by a factor of -1
                 a.s *= -1
             elif b.isdiag:
@@ -1092,23 +1093,35 @@ class Tensor:
         c.update_struct()
         return c
 
-    def vdot(a, b):
+    def vdot(a, b, conj=(1, 0)):
         r"""
-        Compute scalar product x = <a|b> of two tensors. a is conjugated.
+        Compute scalar product x = <a|b> of two tensors. a is conjugated by default.
 
         Parameters
         ----------
-        other: Tensor
+        a, b: Tensor
+
+        conj: tuple
+            shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
+            Defult is (1, 0), i.e. tensor a is conjugated.
 
         Returns
         -------
         x: number
         """
         a._test_configs_match(b)
-        a._test_tensors_match(b)
+        a._test_fusions_match(b)
+        conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
+        if not np.all(a.s == (- conja * conjb) * b.s):
+            raise YastError('Signs do not match')
+
+        c_n = np.vstack([a.n, b.n]).reshape(1, 2, -1)
+        c_s = np.array([conja, conjb], dtype=int)
+        c_n = a.config.sym.fuse(c_n, c_s, 1)
+
         k12, _, _ = _common_keys(a.A, b.A)
-        if len(k12) > 0:
-            return a.config.backend.vdot(a.A, b.A, k12)
+        if (len(k12) > 0) and np.all(c_n == 0):
+            return a.config.backend.vdot(a.A, b.A, conj, k12)
         return a.zero_of_dtype()
 
     def trace(self, axes=(0, 1)):
@@ -1139,7 +1152,7 @@ class Tensor:
         ain2 = np.array(in2, dtype=np.intp)
         aout = np.array(out, dtype=np.intp)
 
-        if not all(self.s[ain1] == -self.s[ain2]):
+        if not np.all(self.s[ain1] == -self.s[ain2]):
             raise YastError('Signs do not match')
 
         tset = self._tarray()
@@ -1169,7 +1182,7 @@ class Tensor:
     #        swap gate          #
     #############################
 
-    def swap_gate(self, axes, inplace=True):
+    def swap_gate(self, axes, inplace=False):
         """
         Return tensor after application of the swap gate.
 
@@ -1381,8 +1394,12 @@ class Tensor:
             raise YastError('configs do not match')
 
     def _test_tensors_match(self, other):
-        if _check["signatures_match"] and (not all(self.s == other.s) or not all(self.n == other.n)):
+        if _check["signatures_match"] and (not np.all(self.s == other.s) or not np.all(self.n == other.n)):
             raise YastError('Tensor signatures do not match')
+        if _check["consistency"] and not self.meta_fusion == other.meta_fusion:
+            raise YastError('Fusion trees do not match')
+
+    def _test_fusions_match(self, other):
         if _check["consistency"] and not self.meta_fusion == other.meta_fusion:
             raise YastError('Fusion trees do not match')
 
