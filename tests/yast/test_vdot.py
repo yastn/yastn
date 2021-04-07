@@ -62,20 +62,29 @@ def test_scalar_exceptions():
     a = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1), n=1,
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 0, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 2, 12)))
+
     b = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1), n=-1,
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
                   D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
+
     c = yast.rand(config=config_U1_C, s=(-1, -1, 1, -1), n=1,
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
                   D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
+
     d = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1), n=1,
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
                   D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
-
     d = d.fuse_legs(axes=(0, (1, 2), 3))
 
-    with pytest.raises(yast.YastError):
-        a.vdot(b)
+    e = yast.rand(config=config_U1_C, s=(1, -1, -1, 1), n=1,
+                  t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
+                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
+
+
+    assert abs(a.vdot(b)) < tol
+    assert abs(a.vdot(e, conj=(0, 0))) < tol
+    assert abs(a.vdot(e, conj=(1, 1))) < tol
+
     with pytest.raises(yast.YastError):
         a.vdot(c)
     with pytest.raises(yast.YastError):

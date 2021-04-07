@@ -379,14 +379,15 @@ def apxb(A, B, x, meta):
     return C
 
 
-def vdot(A, B, meta):
-    return torch.sum(torch.stack([(A[ind].conj().reshape(-1)) @ (B[ind].reshape(-1)) for ind in meta]))
-
-
 dot_dict = {(0, 0): lambda x, y: x @ y,
             (0, 1): lambda x, y: x @ y.conj(),
             (1, 0): lambda x, y: x.conj() @ y,
             (1, 1): lambda x, y: x.conj() @ y.conj()}
+
+
+def vdot(A, B, conj, meta):
+    f = dot_dict[conj]  # proper conjugations
+    return torch.sum(torch.stack([f(A[ind].reshape(-1), B[ind].reshape(-1)) for ind in meta]))
 
 
 def dot(A, B, conj, meta_dot):
