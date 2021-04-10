@@ -17,20 +17,23 @@ from ..sym import sym_none
 
 __all__ = ['Tensor', 'YastError', 'check_signatures_match', 'check_consistency', 'allow_cache_meta']
 
-_config = namedtuple('_config', ('backend', 'sym', 'dtype', 'device'), \
-                    defaults = (None, sym_none, 'float64', 'cpu'))
+_config = namedtuple('_config', ('backend', 'sym', 'dtype', 'device'),
+                     defaults = (None, sym_none, 'float64', 'cpu'))
 
 _struct = namedtuple('_struct', ('t', 'D', 's', 'n'))
 
-_check = {"signatures_match":True, "consistency":True, "cache_meta":True}
+_check = {"signatures_match": True, "consistency": True, "cache_meta": True}
+
 
 def check_signatures_match(value=True):
     """Set the value of the flag check_signatures_match."""
     _check["signatures_match"] = bool(value)
 
+
 def check_consistency(value=True):
     """Set the value of the flag check_consistency."""
     _check["consistency"] = bool(value)
+
 
 def allow_cache_meta(value=True):
     """Set the value of the flag that permits to reuses some metadata."""
@@ -43,7 +46,7 @@ class Tensor:
     """ Class defining a tensor with abelian symmetries, and operations on such tensor(s). """
 
     def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
-        self.config = config if isinstance(config, _config) else _config(**{a:getattr(config, a) for a in _config._fields if hasattr(config, a)})
+        self.config = config if isinstance(config, _config) else _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
         self.isdiag = isdiag
         self.nlegs = 1 if isinstance(s, int) else len(s)  # number of native legs
         self.s = np.array(s, dtype=int).reshape(self.nlegs)
@@ -229,7 +232,7 @@ class Tensor:
         """ return real part of tensor """
         if not self.is_complex():
             raise RuntimeError("Supported only for complex tensors.")
-        config_real= self.config._replace(dtype="float64")
+        config_real = self.config._replace(dtype="float64")
         a = Tensor(config=config_real, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.A = {ts: self.config.backend.real(x) for ts, x in self.A.items()}
         a.struct = self.struct
@@ -240,7 +243,7 @@ class Tensor:
         """ return imaginary part of tensor """
         if not self.is_complex():
             raise RuntimeError("Supported only for complex tensors.")
-        config_real= self.config._replace(dtype="float64")
+        config_real = self.config._replace(dtype="float64")
         a = Tensor(config=config_real, s=self.s, n=self.n, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.A = {ts: self.config.backend.imag(x) for ts, x in self.A.items()}
         a.struct = self.struct
@@ -322,11 +325,11 @@ class Tensor:
             D_tot = np.sum(D_rsh)
             meta_new = (((), D_tot),)
             # meta_merge = ((tn, Ds, to, Do), ...)
-            meta_merge = tuple(((), (aD-D, aD), t, (D,)) for t, D, aD in zip(self.struct.t, D_rsh, aD_rsh))
+            meta_merge = tuple(((), (aD - D, aD), t, (D,)) for t, D, aD in zip(self.struct.t, D_rsh, aD_rsh))
             # (told, tnew, Dsl, Dnew)
             meta_unmerge = tuple((told, tnew, Dsl, Dnew) for (told, Dsl, tnew, _), Dnew in zip(meta_merge, self.struct.D))
-            meta = {'s': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag, \
-                'meta_fusion': self.meta_fusion, 'meta_unmerge':meta_unmerge, 'meta_merge':meta_merge}
+            meta = {'s': tuple(self.s), 'n': tuple(self.n), 'isdiag': self.isdiag,
+                    'meta_fusion': self.meta_fusion, 'meta_unmerge': meta_unmerge, 'meta_merge': meta_merge}
         else:
             if tuple(self.s) != meta['s'] or tuple(self.n) != meta['n'] or self.isdiag != meta['isdiag'] or self.meta_fusion != meta['meta_fusion']:
                 raise YastError("Tensor do not match provided metadata.")
@@ -336,8 +339,8 @@ class Tensor:
             if len(self.A) != sum(ind in self.A for (_, _, ind, _) in meta_merge):
                 raise YastError("Tensor has blocks that do not appear in meta.")
 
-        A = self.config.backend.merge_one_leg(self.A, 0, tuple(range(self.nlegs)), \
-            meta_new, meta_merge, self.config.dtype, self.config.device)
+        A = self.config.backend.merge_one_leg(self.A, 0, tuple(range(self.nlegs)),
+                                              meta_new, meta_merge, self.config.dtype, self.config.device)
         return A[()], meta
 
     ############################
@@ -361,10 +364,10 @@ class Tensor:
     def __str__(self):
         # return str(self.A)
         ts, Ds= self.get_leg_charges_and_dims(native=False)
-        s=f"{self.config.sym.name} s= {self.s} n= {self.n}\n"
+        s = f"{self.config.sym.name} s= {self.s} n= {self.n}\n"
         # s+=f"charges      : {self.ts}\n"
-        s+=f"leg charges  : {ts}\n"
-        s+=f"dimensions   : {Ds}"
+        s += f"leg charges  : {ts}\n"
+        s += f"dimensions   : {Ds}"
         return s
 
     def print_blocks(self):
@@ -450,8 +453,8 @@ class Tensor:
 
     def get_leg_charges_and_dims(self, native=False):
         """ collect information about charges and dimensions on all legs into two lists. """
-        _tmp= [self.get_leg_structure(n, native=native) for n in range(self.get_ndim(native))]
-        ts, Ds= tuple(zip(*[tuple(zip(*l.items())) for l in _tmp]))
+        _tmp = [self.get_leg_structure(n, native=native) for n in range(self.get_ndim(native))]
+        ts, Ds = tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
         return ts, Ds
 
     def get_shape(self, axes=None, native=False):
@@ -675,7 +678,7 @@ class Tensor:
             result of multipcilation as a new tensor
         """
         a = self.copy_empty()
-        a.A= {ind: other * x for ind, x in self.A.items()}
+        a.A = {ind: other * x for ind, x in self.A.items()}
         a.struct = self.struct
         return a
 
@@ -708,7 +711,7 @@ class Tensor:
             result of element-wise exponentiation as a new tensor
         """
         a = self.copy_empty()
-        a.A= {ind: x**exponent for ind, x in self.A.items()}
+        a.A = {ind: x**exponent for ind, x in self.A.items()}
         a.struct = self.struct
         return a
 
@@ -726,7 +729,7 @@ class Tensor:
             result of element-wise division  as a new tensor
         """
         a = self.copy_empty()
-        a.A= {ind: x / other for ind, x in self.A.items()}
+        a.A = {ind: x / other for ind, x in self.A.items()}
         a.struct = self.struct
         return a
 
@@ -857,7 +860,7 @@ class Tensor:
             return self
         a = Tensor(config=self.config, s=-self.s, n=newn, isdiag=self.isdiag, meta_fusion=self.meta_fusion)
         a.struct = self.struct
-        a.A= {ind: self.config.backend.clone(self.A[ind]) for ind in self.A}
+        a.A = {ind: self.config.backend.clone(self.A[ind]) for ind in self.A}
         return a
 
     def transpose(self, axes, inplace=False):
@@ -1079,7 +1082,7 @@ class Tensor:
         Am, ls_l, ls_ac, ua_l, ua_r = a.merge_to_matrix(a_out, a_con, conja, -conja, inda, sort_r=True)
         Bm, ls_bc, ls_r, ub_l, ub_r = b.merge_to_matrix(b_con, b_out, conjb, -conjb, indb)
 
-        meta_dot = tuple((al + br, al + ar, bl + br)  for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
+        meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
         if _check["consistency"] and not (ua_r == ub_l and ls_ac.match(ls_bc)):
             raise YastError('Something went wrong in matching the indices of the two tensors')
@@ -1166,7 +1169,7 @@ class Tensor:
         D3 = Dset[:, aout]
         pD1 = np.prod(D1, axis=1).reshape(lt, 1)
         pD2 = np.prod(D2, axis=1).reshape(lt, 1)
-        ind = (np.all(t1==t2, axis=1)).nonzero()[0]
+        ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
         Drsh = np.hstack([pD1, pD2, D3])
 
         if not np.all(D1[ind] == D2[ind]):
@@ -1242,7 +1245,7 @@ class Tensor:
             ic = il + ir
             if ic in A:
                 for (tl, (sl, _, Dl)), (tr, (sr, _, Dr)) in product(ls_l.dec[il].items(), ls_r.dec[ir].items()):
-                    meta.append((tl + tr, ic, sl, sr, Dl+Dr))
+                    meta.append((tl + tr, ic, sl, sr, Dl + Dr))
         return self.config.backend.unmerge_from_matrix(A, meta)
 
     def unmerge_from_diagonal(self, A, ls):
@@ -1329,7 +1332,7 @@ class Tensor:
                     if stack[pos] == 1:
                         cum = cum - 1
                         if cum == 0:
-                            new_meta_fusion.append(stack[pos_init : pos + 1])
+                            new_meta_fusion.append(stack[pos_init: pos + 1])
                             pos_init = pos + 1
                 # new_meta_fusion.extend(a.meta_fusion[ii][1])
         a.meta_fusion = tuple(new_meta_fusion)
@@ -1387,10 +1390,10 @@ class Tensor:
 
     def _test_configs_match(self, other):
         # if self.config != other.config:
-        if not (self.config.dtype== other.config.dtype \
-            and self.config.dtype== other.config.dtype \
-            and self.config.sym.name== other.config.sym.name \
-            and self.config.backend._backend_id== other.config.backend._backend_id):
+        if not (self.config.dtype == other.config.dtype and
+                self.config.dtype == other.config.dtype and
+                self.config.sym.name == other.config.sym.name and
+                self.config.backend._backend_id == other.config.backend._backend_id):
             raise YastError('configs do not match')
 
     def _test_tensors_match(self, other):
@@ -1407,7 +1410,7 @@ class Tensor:
         if _check["consistency"]:
             if not self.nlegs == len(out_l) + len(out_r):
                 raise YastError('Two few indices in axes')
-            if not sorted(set(out_l+out_r)) == list(range(self.nlegs)):
+            if not sorted(set(out_l + out_r)) == list(range(self.nlegs)):
                 raise YastError('Repeated axis')
 
     def update_struct(self):
@@ -1487,13 +1490,14 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
         Dtot[te] = Dtop
     return dec, Dtot
 
+
 class _LegDecomposition:
     """Information about internal structure of leg resulting from fusions."""
     def __init__(self, config=None, s=(), news=1):
         self.s, = _clear_axes(s)  # signature of fused legs
         self.nlegs = len(self.s)  # number of fused legs
         self.config = config
-        self.news = news # signature of effective leg
+        self.news = news  # signature of effective leg
         self.D = {}
         self.dec = {}  # leg's structure/ decomposition
 
@@ -1542,7 +1546,7 @@ class _LegDecomposition:
         """ Meta-information for single leg. """
         nsym = self.config.sym.nsym
         for ind, val in A.items():
-            t = ind[nsym * axis: nsym*(axis + 1)]
+            t = ind[nsym * axis: nsym * (axis + 1)]
             D = self.config.backend.get_shape(val)[axis]
             self.dec[t] = {t: ((0, D), D, (D,))}
 
@@ -1563,8 +1567,8 @@ class _LegDecomposition:
                 D_keep[ind] = min(D_keep[ind], self.config.backend.count_greater(A[ind], maxS * opts['tol']))
         if sum(D_keep[ind] for ind in D_keep) > opts['D_total']:  # truncate to total bond dimension
             if 'keep_multiplets' in opts.keys():
-                order = self.config.backend.select_global_largest(A, D_keep, opts['D_total'], \
-                    sorting, keep_multiplets=opts['keep_multiplets'], eps_multiplet=opts['eps_multiplet'])
+                order = self.config.backend.select_global_largest(A, D_keep, opts['D_total'], sorting,
+                                                                  keep_multiplets=opts['keep_multiplets'], eps_multiplet=opts['eps_multiplet'])
             else:
                 order = self.config.backend.select_global_largest(A, D_keep, opts['D_total'], sorting)
             low = 0
@@ -1575,12 +1579,12 @@ class _LegDecomposition:
 
         # check symmetry related blocks and truncate to equal length
         if 'keep_multiplets' in opts.keys() and opts['keep_multiplets']:
-            ind_list= [np.asarray(k) for k in D_keep]
+            ind_list = [np.asarray(k) for k in D_keep]
             for ind in ind_list:
-                t= tuple(ind)
-                tn= tuple(-ind)
-                minD_sector= min(D_keep[t],D_keep[tn])
-                D_keep[t]=D_keep[tn]= minD_sector
+                t = tuple(ind)
+                tn = tuple(-ind)
+                minD_sector = min(D_keep[t],D_keep[tn])
+                D_keep[t] = D_keep[tn] = minD_sector
                 if -ind in ind_list:
                     ind_list.remove(-ind)
 
