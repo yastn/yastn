@@ -1,7 +1,8 @@
 """ Linalg methods for yast tensor. """
+
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys
-from ._testing import YastError, _check, _test_tensors_match, _test_axes_split
+from ._auxliary import YastError, _check, _test_tensors_match, _test_all_axes
 from ._merging import _LegDecomposition, _merge_to_matrix, _unmerge_from_matrix, _unmerge_from_diagonal
 
 __all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'norm_diff', 'entropy']
@@ -48,9 +49,9 @@ def norm_diff(a, b, p='fro'):
 
 
 def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
-    tol=0, D_block=6, D_total=np.inf,
-    keep_multiplets=False, eps_multiplet=1.0e-14,
-    n_iter=60, k_fac=6, **kwargs):
+                tol=0, D_block=6, D_total=np.inf,
+                keep_multiplets=False, eps_multiplet=1.0e-14,
+                n_iter=60, k_fac=6, **kwargs):
     r"""
     Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
 
@@ -84,7 +85,8 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         largest total number of singular values to keep.
 
     n_iter, k_fac: ints
-        number of iterations and multiplicative factor of stored singular values in lowrank svd procedure (if supported by the backend)
+        number of iterations and multiplicative factor of stored singular values in lowrank svd procedure
+        (relevant options might depend on backend)
 
     Returns
     -------
@@ -92,10 +94,11 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         U and V are unitary projectors. S is diagonal.
     """
     lout_l, lout_r = _clear_axes(*axes)
-    out_l, out_r = _unpack_axes(a, lout_l, lout_r)
-    _test_axes_split(a, out_l, out_r)
+    axes = _unpack_axes(a, lout_l, lout_r)
+    _test_all_axes(a, axes)
 
-    Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, out_l, out_r, news_l=-sU, news_r=sU)
+    s_eff = (-sU, sU)
+    Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
 
     if nU:
         meta = tuple((il+ir, il+ir, ir, ir+ir) for il, ir in zip(ul, ur))
@@ -107,7 +110,7 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     Um, Sm, Vm = a.config.backend.svd_lowrank(Am, meta, D_block, n_iter, k_fac)
 
     U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
-    S = a.__class__(config=a.config, s=(-sU, sU), isdiag=True)
+    S = a.__class__(config=a.config, s=s_eff, isdiag=True)
     V = a.__class__(config=a.config, s=(-sU,) + ls_r.s, n=n_r, meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
 
     opts = {'tol': tol, 'D_total': D_total, 'D_block': D_block,
@@ -129,8 +132,8 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
 
 def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
-    tol=0, D_block=np.inf, D_total=np.inf,
-    keep_multiplets=False, eps_multiplet=1.0e-14, **kwargs):
+        tol=0, D_block=np.inf, D_total=np.inf,
+        keep_multiplets=False, eps_multiplet=1.0e-14, **kwargs):
     r"""
     Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
 
@@ -168,10 +171,11 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         U and V are unitary projectors. S is diagonal.
     """
     lout_l, lout_r = _clear_axes(*axes)
-    out_l, out_r = _unpack_axes(a, lout_l, lout_r)
-    _test_axes_split(a, out_l, out_r)
+    axes = _unpack_axes(a, lout_l, lout_r)
+    _test_all_axes(a, axes)
 
-    Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, out_l, out_r, news_l=-sU, news_r=sU)
+    s_eff = (-sU, sU)
+    Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
 
     if nU:
         meta = tuple((il+ir, il+ir, ir, ir+ir) for il, ir in zip(ul, ur))
@@ -183,7 +187,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     Um, Sm, Vm = a.config.backend.svd(Am, meta)
 
     U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
-    S = a.__class__(config=a.config, s=(-sU, sU), isdiag=True)
+    S = a.__class__(config=a.config, s=s_eff, isdiag=True)
     V = a.__class__(config=a.config, s=(-sU,) + ls_r.s, n=n_r, meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
 
     opts = {'tol': tol, 'D_total': D_total, 'D_block': D_block,
@@ -218,23 +222,25 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
         signature of connecting leg in Q; equal 1 or -1. Default is 1.
 
     Qaxis, Raxis: int
-        specify which leg of Q and R tensors are connecting to the other tensor. By delault it is the last leg of Q and the first of R.
+        specify which leg of Q and R tensors are connecting to the other tensor.
+        By delault it is the last leg of Q and the first leg of R.
 
     Returns
     -------
         Q, R: Tensor
     """
     lout_l, lout_r = _clear_axes(*axes)
-    out_l, out_r = _unpack_axes(a, lout_l, lout_r)
-    _test_axes_split(a, out_l, out_r)
+    axes = _unpack_axes(a, lout_l, lout_r)
+    _test_all_axes(a, axes)
 
-    Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, out_l, out_r, news_l=-sQ, news_r=sQ)
+    s_eff = (-sQ, sQ)
+    Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
 
-    meta = tuple((l+r, l+r, r+r) for l, r in zip(ul, ur))
+    meta = tuple((il+ir, il+ir, ir+ir) for il, ir in zip(ul, ur))
     Qm, Rm = a.config.backend.qr(Am, meta)
 
-    Qs = tuple(a.s[lg] for lg in out_l) + (sQ,)
-    Rs = (-sQ,) + tuple(a.s[lg] for lg in out_r)
+    Qs = tuple(a.s[lg] for lg in axes[0]) + (sQ,)
+    Rs = (-sQ,) + tuple(a.s[lg] for lg in axes[1])
     Q = a.__class__(config=a.config, s=Qs, n=a.n, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
     R = a.__class__(config=a.config, s=Rs, meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
 
@@ -257,8 +263,10 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf):
     Split tensor using eig, tensor = U * S * U^dag. Truncate smallest eigenvalues if neccesary.
 
     Tensor should be hermitian and has charge 0.
-    Truncate using (whichever gives smaller bond dimension) relative tolerance, bond dimension of each block, and total bond dimension from all blocks.
-    By default do not truncate. Truncate based on tolerance only if some eigenvalue is positive -- than all negative ones are discarded.
+    Truncate using -- whichever gives smaller bond dimension:
+    relative tolerance, bond dimension of each block, and total bond dimension from all blocks.
+    By default do not truncate.
+    Truncate based on tolerance only if some eigenvalues are positive -- than all negative ones are discarded.
     Function primarly intended to be used for positively defined tensors.
 
     Parameters
@@ -287,26 +295,27 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf):
             U is unitary projector. S is diagonal.
     """
     lout_l, lout_r = _clear_axes(*axes)
-    out_l, out_r = _unpack_axes(a, lout_l, lout_r)
-    _test_axes_split(a, out_l, out_r)
+    axes = _unpack_axes(a, lout_l, lout_r)
+    _test_all_axes(a, axes)
 
     if np.any(a.n != 0):
         raise YastError('Charge should be zero')
 
-    Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, out_l, out_r, news_l=-sU, news_r=sU)
+    s_eff = (-sU, sU)
+    Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
 
     if _check["consistency"] and not (ul == ur and ls_l.match(ls_r)):
         raise YastError('Something went wrong in matching the indices of the two tensors')
 
     # meta = (indA, indS, indU)
-    meta = tuple((l+r, l, l+r) for l, r in zip(ul, ur))
+    meta = tuple((il+ir, il, il+ir) for il, ir in zip(ul, ur))
     Sm, Um = a.config.backend.eigh(Am, meta)
 
     opts = {'D_block': D_block, 'tol': tol, 'D_total': D_total}
     ls_s = _LegDecomposition(a.config, -sU, -sU)
     ls_s.leg_struct_for_truncation(Sm, opts, 'eigh')
 
-    Us = tuple(a.s[lg] for lg in out_l) + (sU,)
+    Us = tuple(a.s[lg] for lg in axes[0]) + (sU,)
 
     S = a.__class__(config=a.config, s=(-sU, sU), isdiag=True)
     U = a.__class__(config=a.config, s=Us, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
@@ -347,11 +356,11 @@ def entropy(a, axes=(0, 1), alpha=1):
         return a.zero_of_dtype(), a.zero_of_dtype(), a.zero_of_dtype()
 
     lout_l, lout_r = _clear_axes(*axes)
-    out_l, out_r = _unpack_axes(a, lout_l, lout_r)
-    _test_axes_split(a, out_l, out_r)
+    axes = _unpack_axes(a, lout_l, lout_r)
+    _test_all_axes(a, axes)
 
     if not a.isdiag:
-        Am, *_ = _merge_to_matrix(a, out_l, out_r, news_l=-1, news_r=1)
+        Am, *_ = _merge_to_matrix(a, axes, (-1, 1))
         Sm = a.config.backend.svd_S(Am)
     else:
         Sm = {t: a.config.backend.diag_get(x) for t, x in a.A.items()}

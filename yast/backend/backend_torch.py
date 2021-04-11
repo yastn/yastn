@@ -2,11 +2,11 @@
 import torch
 from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_eig_sym import SYMEIG
-from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
+# from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
 
-_backend_id= "torch"
-_data_dtype = {'float64': torch.float64,
-               'complex128': torch.complex128}
+BACKEND_ID = "torch"
+DTYPE = {'float64': torch.float64,
+         'complex128': torch.complex128}
 
 
 def random_seed(seed):
@@ -21,11 +21,14 @@ def set_num_threads(num_threads):
 #     single tensor operations     #
 ####################################
 
+
 def detach(x):
     return x.detach()
 
+
 def detach_(x):
     x.detach_()
+
 
 def clone(x):
     return x.clone()
@@ -34,12 +37,18 @@ def clone(x):
 def copy(x):
     return x.detach().clone()
 
-def real(x): return x.real
 
-def imag(x): return x.imag
+def real(x):
+    return x.real
+
+
+def imag(x):
+    return x.imag
+
 
 def to_numpy(x):
     return x.detach().cpu().numpy()
+
 
 def get_shape(x):
     return x.size()
@@ -54,15 +63,15 @@ def get_size(x):
 
 
 def diag_create(x):
-    return torch.diag(x)  ## TODO: PROBLEM WITH COMPLEX NUMBERS
+    return torch.diag(x)  # TODO: PROBLEM WITH COMPLEX NUMBERS
 
 
 def diag_get(x):
-    return torch.diag(x)  ## TODO: PROBLEM WITH COMPLEX NUMBERS
+    return torch.diag(x)  # TODO: PROBLEM WITH COMPLEX NUMBERS
 
 
 def diag_diag(x):
-    return torch.diag(torch.diag(x))  ## TODO: PROBLEM WITH COMPLEX NUMBERS
+    return torch.diag(torch.diag(x))  # TODO: PROBLEM WITH COMPLEX NUMBERS
 
 
 def count_greater(x, cutoff):
@@ -71,6 +80,7 @@ def count_greater(x, cutoff):
 #########################
 #    output numbers     #
 #########################
+
 
 def first_element(x):
     return x.view(-1)[0]
@@ -93,12 +103,12 @@ def norm(A, p):
 def norm_diff(A, B, meta, p):
     """ norm(A - B); meta = kab, ka, kb """
     if p == 'fro':
-        return torch.sum(torch.stack([torch.sum(A[k].abs() ** 2) for k in meta[1]] + \
-                                     [torch.sum(B[k].abs() ** 2) for k in meta[2]] + \
+        return torch.sum(torch.stack([torch.sum(A[k].abs() ** 2) for k in meta[1]] +
+                                     [torch.sum(B[k].abs() ** 2) for k in meta[2]] +
                                      [torch.sum((A[k]-B[k]).abs() ** 2) for k in meta[0]])).sqrt()
     if p == 'inf':
-        return torch.max(torch.stack([A[k].abs().max() for k in meta[1]] + \
-                                     [B[k].abs().max() for k in meta[2]] + \
+        return torch.max(torch.stack([A[k].abs().max() for k in meta[1]] +
+                                     [B[k].abs().max() for k in meta[2]] +
                                      [(A[k]-B[k]).abs().max() for k in meta[0]]))
 
 
@@ -121,38 +131,42 @@ def entropy(A, alpha=1, tol=1e-12):
         return ent, Smin, Snorm
     return Snorm, Snorm, Snorm  # this should be 0., 0., 0.
 
+
 ##########################
 #     setting values     #
 ##########################
 
+
 def zero_scalar(dtype='float64', device='cpu'):
-    return torch.tensor(0, dtype=_data_dtype[dtype], device=device)
+    return torch.tensor(0, dtype=DTYPE[dtype], device=device)
 
 
 def zeros(D, dtype='float64', device='cpu'):
-    return torch.zeros(D, dtype=_data_dtype[dtype], device=device)
+    return torch.zeros(D, dtype=DTYPE[dtype], device=device)
 
 
 def ones(D, dtype='float64', device='cpu'):
-    return torch.ones(D, dtype=_data_dtype[dtype], device=device)
+    return torch.ones(D, dtype=DTYPE[dtype], device=device)
 
 
 def randR(D, dtype='float64', device='cpu'):
-    x = 2 * torch.rand(D, dtype=_data_dtype[dtype], device=device) - 1
-    return x if dtype=='float64' else torch.real(x)
+    x = 2 * torch.rand(D, dtype=DTYPE[dtype], device=device) - 1
+    return x if dtype == 'float64' else torch.real(x)
 
 
 def rand(D, dtype='float64', device='cpu'):
-    return 2 * torch.rand(D, dtype=_data_dtype[dtype], device=device) - 1
+    return 2 * torch.rand(D, dtype=DTYPE[dtype], device=device) - 1
 
 
 def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
-    T = torch.as_tensor(val, dtype=_data_dtype[dtype], device=device)
+    T = torch.as_tensor(val, dtype=DTYPE[dtype], device=device)
     return T if Ds is None else T.reshape(Ds).contiguous()
+
 
 ##################################
 #     single dict operations     #
 ##################################
+
 
 def move_to_device(A, device):
     return {ind: x.to(device) for ind, x in A.items()}
@@ -185,7 +199,7 @@ def transpose(A, axes, meta_transpose, inplace):
     if inplace:
         return {new: A[old].permute(*axes) for old, new in meta_transpose}
     return {new: A[old].permute(*axes).clone().contiguous() for old, new in meta_transpose}
-    
+
 
 def rsqrt(A, cutoff=0):
     res = {t: x.rsqrt() for t, x in A.items()}
@@ -246,6 +260,7 @@ def svd_lowrank(A, meta, D_block, n_iter, k_fac):
 
 ad_decomp_reg = 1.0e-12
 
+
 def svd(A, meta):
     U, S, V = {}, {}, {}
     tn = next(iter(A.values()))
@@ -283,7 +298,7 @@ def qr(A, meta):
     Q, R = {}, {}
     for (ind, indQ, indR) in meta:
         Q[indQ], R[indR] = torch.qr(A[ind], some=True)
-        sR = torch.sign(torch.diag(R[indR])) ##  PROBLEM WITH COMPLEX NUMBERS
+        sR = torch.sign(torch.diag(R[indR]))  # PROBLEM WITH COMPLEX NUMBERS
         sR[sR == 0] = 1
         # positive diag of R
         Q[indQ] = Q[indQ] * sR
@@ -302,8 +317,8 @@ def qr(A, meta):
 #     return R, Q
 
 @torch.no_grad()
-def select_global_largest(S, D_keep, D_total, sorting, \
-    keep_multiplets=False, eps_multiplet=1.0e-14):
+def select_global_largest(S, D_keep, D_total, sorting,
+                          keep_multiplets=False, eps_multiplet=1.0e-14):
     if sorting == 'svd':
         s_all = torch.cat([S[ind][:D_keep[ind]] for ind in S])
         values, order= torch.topk(s_all, D_total+int(keep_multiplets))
@@ -313,16 +328,16 @@ def select_global_largest(S, D_keep, D_total, sorting, \
             gaps=torch.abs(values.clone())
             # compute gaps and normalize by larger sing. value. Introduce cutoff
             # for handling vanishing values set to exact zero
-            gaps=(gaps[:len(values)-1]-torch.abs(values[1:len(values)]))/(gaps[:len(values)-1]+1.0e-16)
-            gaps[gaps > 1.0]= 0.
+            gaps=(gaps[:len(values)-1] - torch.abs(values[1:len(values)])) / (gaps[:len(values)-1] + 1.0e-16)
+            gaps[gaps > 1.0] = 0.
 
             if gaps[D_total-1] < eps_multiplet:
                 # the chi is within the multiplet - find the largest chi_new < chi
                 # such that the complete multiplets are preserved
-                for i in range(D_total-1,-1,-1):
+                for i in range(D_total-1, -1, -1):
                     if gaps[i] > eps_multiplet:
-                        #chi_new= i
-                        order= order[:i+1]
+                        # chi_new= i
+                        order = order[:i+1]
                         break
         return order
         # return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
@@ -345,9 +360,11 @@ def maximum(A):
 def max_abs(A):
     return norm(A, p="inf")
 
+
 ################################
 #     two dicts operations     #
 ################################
+
 
 def add(A, B, meta):
     """ C = A + B. meta = kab, ka, kb """
@@ -397,13 +414,15 @@ def dot(A, B, conj, meta_dot):
         C[out] = f(A[ina], B[inb])
     return C
 
+
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
 
+
 def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, device='cpu'):
     """ New dictionary of blocks after merging into matrix. """
-    Anew = {u: torch.zeros(Du, dtype=_data_dtype[dtype], device=device) for (u, Du) in meta_new}
+    Anew = {u: torch.zeros(Du, dtype=DTYPE[dtype], device=device) for (u, Du) in meta_new}
     for (tn, to, Dsl, Dl, Dsr, Dr) in meta_mrg:
         Anew[tn][slice(*Dsl), slice(*Dsr)] = A[to].permute(order).reshape(Dl, Dr)
     return Anew
@@ -411,7 +430,7 @@ def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, device='cpu'):
 
 def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, device='cpu'):
     """ Outputs new dictionary of blocks after fusing one leg. """
-    Anew = {u: torch.zeros(Du, dtype=_data_dtype[dtype], device=device) for (u, Du) in meta_new}
+    Anew = {u: torch.zeros(Du, dtype=DTYPE[dtype], device=device) for (u, Du) in meta_new}
     for (tn, Ds, to, Do) in meta_mrg:
         if to in A:
             slc = [slice(None)] * len(Do)
@@ -422,17 +441,18 @@ def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, device='cpu'):
 
 def merge_to_dense(A, Dtot, meta, dtype, device='cpu'):
     """ Outputs full tensor. """
-    Anew = torch.zeros(Dtot, dtype=_data_dtype[dtype], device=device)
+    Anew = torch.zeros(Dtot, dtype=DTYPE[dtype], device=device)
     for (ind, Dss) in meta:
         Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
     return Anew
 
+
 def merge_super_blocks(pos_tens, meta_new, meta_block, dtype, device='cpu'):
     """ Outputs new dictionary of blocks after creating super-tensor. """
-    Anew = {u: torch.zeros(Du, dtype=_data_dtype[dtype], device=device) for (u, Du) in meta_new}
+    Anew = {u: torch.zeros(Du, dtype=DTYPE[dtype], device=device) for (u, Du) in meta_new}
     for (tind, pos, Dslc) in meta_block:
         slc = tuple(slice(*DD) for DD in Dslc)
-        Anew[tind][slc] = pos_tens[pos].A[tind]# .copy() # is copy required?
+        Anew[tind][slc] = pos_tens[pos].A[tind]  # .copy() # is copy required?
     return Anew
 
 
@@ -458,15 +478,19 @@ def unmerge_one_leg(A, axis, meta):
     for (told, tnew, Dsl, Dnew) in meta:
         slc = [slice(None)] * A[told].ndim
         slc[axis] = slice(*Dsl)
-        Anew[tnew] = torch.reshape(A[told][tuple(slc)], Dnew).clone()   # is this clone neccesary -- there is a test where it is neccesary for numpy
+        Anew[tnew] = torch.reshape(A[told][tuple(slc)], Dnew).clone()
+        # is this clone above neccesary ? -- there is a test where it is neccesary for numpy
     return Anew
 
-##############
-#  tests
-##############
+
+#############
+#   tests   #
+#############
+
 
 def is_complex(x):
     return x.is_complex()
+
 
 def is_independent(A, B):
     """

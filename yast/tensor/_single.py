@@ -1,10 +1,11 @@
 """ Linear operations and operations on a single yast tensor. """
+
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray
-from ._testing import YastError, _test_configs_match, _test_tensors_match
+from ._auxliary import YastError, _test_configs_match, _test_tensors_match
 
-
-__all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'abs', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'copy', 'clone', 'detach', 'to', 'fuse_legs', 'unfuse_legs']
+__all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'abs', 'real', 'imag',
+           'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'copy', 'clone', 'detach', 'to', 'fuse_legs', 'unfuse_legs']
 
 
 def copy(a):
@@ -37,6 +38,7 @@ def detach(a, inplace=False):
     c.A = {ts: a.config.backend.detach(x) for ts, x in a.A.items()}
     return c
 
+
 def to(a, device):
     r"""
     Move the ``Tensor`` to ``device``. Returns a copy of the tensor on `device``.
@@ -56,6 +58,7 @@ def to(a, device):
     c.A = a.config.backend.move_to_device(a.A, device)
     return c
 
+
 def __mul__(a, number):
     """
     Multiply tensor by a number, use: number * tensor.
@@ -73,6 +76,7 @@ def __mul__(a, number):
     c.A = {ind: number * x for ind, x in a.A.items()}
     c.struct = a.struct
     return c
+
 
 def __rmul__(a, number):
     """
@@ -107,6 +111,7 @@ def __pow__(a, exponent):
     c.A = {ind: x**exponent for ind, x in a.A.items()}
     c.struct = a.struct
     return c
+
 
 def __truediv__(a, number):
     """
@@ -150,6 +155,7 @@ def __add__(a, b):
     c.update_struct()
     return c
 
+
 def __sub__(a, b):
     """
     Subtract two tensors, use: tensor - tensor.
@@ -172,6 +178,7 @@ def __sub__(a, b):
     c.A = c.config.backend.sub(a.A, b.A, meta)
     c.update_struct()
     return c
+
 
 def apxb(a, b, x=1):
     """
@@ -525,7 +532,7 @@ def unfuse_legs(a, axes, inplace=False):
                 if stack[pos] == 1:
                     cum = cum - 1
                     if cum == 0:
-                        new_meta_fusion.append(stack[pos_init : pos + 1])
+                        new_meta_fusion.append(stack[pos_init: pos + 1])
                         pos_init = pos + 1
     c.meta_fusion = tuple(new_meta_fusion)
     c.mlegs = len(c.meta_fusion)

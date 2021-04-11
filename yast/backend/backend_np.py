@@ -4,20 +4,22 @@ import numpy as np
 import scipy as sp
 try:
     import fbpca
-except ImportError as e:
+except ImportError:
     warnings.warn("fbpca not available", Warning)
 
-_backend_id= "numpy"
-_data_dtype = {'float64': np.float64,
-               'complex128': np.complex128}
+BACKEND_ID = "numpy"
+DTYPE = {'float64': np.float64,
+         'complex128': np.complex128}
 
 
 def random_seed(seed):
     np.random.seed(seed)
 
+
 ###################################
 #     single tensor operations    #
 ###################################
+
 
 def detach(x):
     return x
@@ -34,12 +36,18 @@ def clone(x):
 def copy(x):
     return x.copy()
 
-def real(x): return x.real
 
-def imag(x): return x.imag
+def real(x):
+    return x.real
+
+
+def imag(x):
+    return x.imag
+
 
 def to_numpy(x):
     return x.copy()
+
 
 def get_shape(x):
     return x.shape
@@ -68,9 +76,11 @@ def diag_diag(x):
 def count_greater(x, cutoff):
     return np.sum(x > cutoff)
 
+
 #########################
 #    output numbers     #
 #########################
+
 
 def first_element(x):
     return x.flat[0]
@@ -89,15 +99,16 @@ def norm(A, p):
     else:
         raise RuntimeError("Invalid norm type: "+p)
 
+
 def norm_diff(A, B, meta, p):
     """ norm(A - B); meta = kab, ka, kb """
     if p == 'fro':
-        return np.linalg.norm([np.linalg.norm(A[ind]-B[ind]) for ind in meta[0]] +\
-                              [np.linalg.norm(A[ind]) for ind in meta[1]] +\
+        return np.linalg.norm([np.linalg.norm(A[ind]-B[ind]) for ind in meta[0]] +
+                              [np.linalg.norm(A[ind]) for ind in meta[1]] +
                               [np.linalg.norm(B[ind]) for ind in meta[2]])
     elif p == 'inf':
-        return max([np.abs(A[ind]-B[ind]).max() for ind in meta[0]] +\
-                   [np.abs(A[ind]).max() for ind in meta[1]] +\
+        return max([np.abs(A[ind]-B[ind]).max() for ind in meta[0]] +
+                   [np.abs(A[ind]).max() for ind in meta[1]] +
                    [np.abs(B[ind]).max() for ind in meta[2]])
 
 
@@ -120,24 +131,26 @@ def entropy(A, alpha=1, tol=1e-12):
         return ent, Smin, Snorm
     return Snorm, Snorm, Snorm  # this should be 0., 0., 0.
 
+
 ##########################
 #     setting values     #
 ##########################
 
+
 def zero_scalar(dtype='float64', *args, **kwargs):
-    return _data_dtype[dtype](0)
+    return DTYPE[dtype](0)
 
 
 def zeros(D, dtype='float64', *args, **kwargs):
-    return np.zeros(D, dtype=_data_dtype[dtype])
+    return np.zeros(D, dtype=DTYPE[dtype])
 
 
 def ones(D, dtype='float64', *args, **kwargs):
-    return np.ones(D, dtype=_data_dtype[dtype])
+    return np.ones(D, dtype=DTYPE[dtype])
 
 
 def randR(D, dtype='float64', *args, **kwargs):
-    return 2 * np.random.random_sample(D).astype(_data_dtype[dtype]) - 1
+    return 2 * np.random.random_sample(D).astype(DTYPE[dtype]) - 1
 
 
 def rand(D, dtype='float64', *args, **kwargs):
@@ -148,12 +161,14 @@ def rand(D, dtype='float64', *args, **kwargs):
 
 
 def to_tensor(val, Ds=None, dtype='float64', *args, **kwargs):
-    T = np.array(val, dtype=_data_dtype[dtype])
+    T = np.array(val, dtype=DTYPE[dtype])
     return T if Ds is None else T.reshape(Ds)
+
 
 ##################################
 #     single dict operations     #
 ##################################
+
 
 def move_to_device(A, *args, **kwargs):
     return A
@@ -211,7 +226,7 @@ def reciprocal(A, cutoff=0):
 
 
 def reciprocal_diag(A, cutoff=0):
-    res = {t: 1./ np.diag(x) for t, x in A.items()}
+    res = {t: 1. / np.diag(x) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
             res[t][abs(res[t]) > 1./cutoff] = 0
@@ -292,11 +307,11 @@ def qr(A, meta):
 #     return R, Q
 
 
-def select_global_largest(S, D_keep, D_total, sorting, \
-    keep_multiplets=False, eps_multiplet=1.0e-14):
+def select_global_largest(S, D_keep, D_total, sorting,
+                          keep_multiplets=False, eps_multiplet=1.0e-14):
     if sorting == 'svd':
         return np.hstack([S[ind][:D_keep[ind]] for ind in S]).argpartition(-D_total-1)[-D_total:]
-    if sorting == 'eigh':
+    elif sorting == 'eigh':
         return np.hstack([S[ind][-D_keep[ind]:] for ind in S]).argpartition(-D_total-1)[-D_total:]
 
 
@@ -314,9 +329,11 @@ def maximum(A):
 def max_abs(A):
     return norm(A, p="inf")
 
+
 ################################
 #     two dicts operations     #
 ################################
+
 
 def add(A, B, meta):
     """ C = A + B. meta = kab, ka, kb """
@@ -396,13 +413,15 @@ def dot(A, B, conj, meta_dot):
 #             C[out] = temp
 #     return C
 
+
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
 
+
 def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, *args, **kwargs):
     """ New dictionary of blocks after merging into matrix. """
-    Anew = {u: np.zeros(Du, dtype=_data_dtype[dtype]) for (u, Du) in meta_new}
+    Anew = {u: np.zeros(Du, dtype=DTYPE[dtype]) for (u, Du) in meta_new}
     for (tn, to, Dsl, Dl, Dsr, Dr) in meta_mrg:
         Anew[tn][slice(*Dsl), slice(*Dsr)] = A[to].transpose(order).reshape(Dl, Dr)
     return Anew
@@ -410,7 +429,7 @@ def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, *args, **kwargs):
 
 def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, *args, **kwargs):
     """ Outputs new dictionary of blocks after fusing one leg. """
-    Anew = {u: np.zeros(Du, dtype=_data_dtype[dtype]) for (u, Du) in meta_new}
+    Anew = {u: np.zeros(Du, dtype=DTYPE[dtype]) for (u, Du) in meta_new}
     for (tn, Ds, to, Do) in meta_mrg:
         if to in A:
             slc = [slice(None)] * len(Do)
@@ -421,17 +440,18 @@ def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, *args, **kwargs):
 
 def merge_to_dense(A, Dtot, meta, dtype, *args, **kwargs):
     """ Outputs full tensor. """
-    Anew = np.zeros(Dtot, dtype=_data_dtype[dtype])
+    Anew = np.zeros(Dtot, dtype=DTYPE[dtype])
     for (ind, Dss) in meta:
         Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
     return Anew
 
+
 def merge_super_blocks(pos_tens, meta_new, meta_block, dtype, *args, **kwargs):
     """ Outputs new dictionary of blocks after creating super-tensor. """
-    Anew = {u: np.zeros(Du, dtype=_data_dtype[dtype]) for (u, Du) in meta_new}
+    Anew = {u: np.zeros(Du, dtype=DTYPE[dtype]) for (u, Du) in meta_new}
     for (tind, pos, Dslc) in meta_block:
         slc = tuple(slice(*DD) for DD in Dslc)
-        Anew[tind][slc] = pos_tens[pos].A[tind]# .copy() # is copy required?
+        Anew[tind][slc] = pos_tens[pos].A[tind]  # .copy() # is copy required?
     return Anew
 
 
@@ -460,12 +480,15 @@ def unmerge_one_leg(A, axis, meta):
         Anew[tnew] = np.reshape(A[told][tuple(slc)], Dnew).copy()  # TODO check this copy()
     return Anew
 
-##############
-#  tests
-##############
+
+#############
+#   tests   #
+#############
+
 
 def is_complex(x):
     return np.iscomplexobj(x)
+
 
 def is_independent(A, B):
     """

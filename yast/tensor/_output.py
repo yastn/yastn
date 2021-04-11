@@ -1,15 +1,11 @@
+""" methods outputing data from yast tensor. """
+
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _tDarrays
-from ._testing import YastError, _check
+from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, YastError, _check
 from ..sym import sym_none
 
+__all__ = ['export_to_dict', 'compress_to_1d']
 
-__all__ = ['export_to_dict','compress_to_1d']
-
-
-#######################
-#    export tensor    #
-#######################
 
 def export_to_dict(a):
     r"""
@@ -26,6 +22,7 @@ def export_to_dict(a):
     out = {'A': AA, 's': tuple(a.s), 'n': tuple(a.n), 'isdiag': a.isdiag, 'meta_fusion': a.meta_fusion}
     return out
 
+
 def compress_to_1d(a, meta=None):
     """
     Store each block as 1D array within r1d in contiguous manner; outputs meta-information to reconstruct the original tensor
@@ -33,8 +30,9 @@ def compress_to_1d(a, meta=None):
     Parameters
     ----------
         meta: dict
-            If not None, uses this metainformation to merge into 1d structure (filling-in zeros if tensor does not have some blocks).
-            Raise error, if tensor has some blocks which are not included in meta; or otherwise meta does not match the tensor.
+            If not None, uses this metainformation to merge into 1d structure,
+            filling-in zeros if tensor does not have some blocks.
+            Raise error if tensor has some blocks which are not included in meta or otherwise meta does not match the tensor.
     """
     if meta is None:
         D_rsh = np.prod(_Darray(a), axis=1)
@@ -57,12 +55,13 @@ def compress_to_1d(a, meta=None):
             raise YastError("Tensor has blocks that do not appear in meta.")
 
     A = a.config.backend.merge_one_leg(a.A, 0, tuple(range(a.nlegs)),
-                                            meta_new, meta_merge, a.config.dtype, a.config.device)
+                                       meta_new, meta_merge, a.config.dtype, a.config.device)
     return A[()], meta
 
 ############################
 #    output information    #
 ############################
+
 
 def show_properties(a):
     """ Display basic properties of the tensor. """
@@ -78,31 +77,37 @@ def show_properties(a):
     print("size        :", a.get_size())  # total number of elements in all blocks
     print("meta fusion :", a.meta_fusion, "\n")  # encoding meta fusion tree for each leg
 
+
 def __str__(a):
     # return str(a.A)
-    ts, Ds= a.get_leg_charges_and_dims(native=False)
+    ts, Ds = a.get_leg_charges_and_dims(native=False)
     s = f"{a.config.sym.name} s= {a.s} n= {a.n}\n"
-    # s+=f"charges      : {a.ts}\n"
+    # s += f"charges      : {a.ts}\n"
     s += f"leg charges  : {ts}\n"
     s += f"dimensions   : {Ds}"
     return s
+
 
 def print_blocks(a):
     """ print shapes of blocks """
     for ind, x in a.A.items():
         print(f"{ind} {a.config.backend.get_shape(x)}")
 
+
 def is_complex(a):
     """ Returns True if all blocks are complex. """
-    return all([a.config.backend.is_complex(x) for x in a.A.values()])
+    return all(a.config.backend.is_complex(x) for x in a.A.values())
+
 
 def get_size(a):
     """ Total number of elements in the tensor. """
     return sum(np.prod(_Darray(a), axis=1))
 
+
 def get_tensor_charge(a):
     """ Global charge of the tensor. """
     return tuple(a.n)
+
 
 def get_signature(a, native=False):
     """ Tensor signatures. If not native, returns the signature of the first leg in each group."""
@@ -112,13 +117,16 @@ def get_signature(a, native=False):
     un = tuple(_unpack_axes(a, *pn))
     return tuple(a.s[p[0]] for p in un)
 
+
 def get_blocks_charges(a):
     """ Charges of all native blocks. """
     return a.struct.t
 
+
 def get_blocks_shapes(a):
     """ Shapes fo all native blocks. """
     return a.struct.D
+
 
 def get_leg_fusion(a, axes=None):
     """
@@ -134,6 +142,7 @@ def get_leg_fusion(a, axes=None):
     if isinstance(axes, int):
         return a.meta_fusion(axes)
     return tuple(a.meta_fusion(n) for n in axes)
+
 
 def get_leg_structure(a, axis, native=False):
     r"""
@@ -154,7 +163,7 @@ def get_leg_structure(a, axis, native=False):
     axis, = _clear_axes(axis)
     if not native:
         axis, = _unpack_axes(a, axis)
-    tset, Dset = _tDarrays(a)
+    tset, Dset = _tarray(a), _Darray(a)
     tset = tset[:, axis, :]
     Dset = Dset[:, axis]
     tset = tset.reshape(len(tset), len(axis) * a.config.sym.nsym)
@@ -167,11 +176,13 @@ def get_leg_structure(a, axis, native=False):
                 raise YastError('Inconsistend bond dimension of charge.')
     return tDn
 
+
 def get_leg_charges_and_dims(a, native=False):
     """ collect information about charges and dimensions on all legs into two lists. """
     _tmp = [a.get_leg_structure(n, native=native) for n in range(a.get_ndim(native))]
     ts, Ds = tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
     return ts, Ds
+
 
 def get_shape(a, axes=None, native=False):
     r"""
@@ -193,9 +204,11 @@ def get_shape(a, axes=None, native=False):
         return sum(a.get_leg_structure(axes, native=native).values())
     return tuple(sum(a.get_leg_structure(ii, native=native).values()) for ii in axes)
 
+
 def get_ndim(a, native=False):
     """ Number of: meta legs if not native else native legs. """
     return a.nlegs if native else a.mlegs
+
 
 def __getitem__(a, key):
     """ Returns block based on its charges. """
@@ -204,6 +217,7 @@ def __getitem__(a, key):
 #########################
 #    output tensors     #
 #########################
+
 
 def to_dense(a, leg_structures=None, native=False):
     r"""
@@ -252,11 +266,13 @@ def to_dense(a, leg_structures=None, native=False):
         meta.append((tind, tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
     return a.config.backend.merge_to_dense(a.A, Dtot, meta, a.config.dtype, a.config.device)
 
+
 def to_numpy(a, leg_structures=None, native=False):
     r"""
     Create full nparray corresponding to the symmetric tensor. See `yast.to_dense`
     """
     return a.config.backend.to_numpy(a.to_dense(leg_structures, native))
+
 
 def to_raw_tensor(a):
     """
@@ -266,6 +282,7 @@ def to_raw_tensor(a):
         key = next(iter(a.A))
         return a.A[key]
     raise YastError('Only tensor with a single block can be converted to raw tensor')
+
 
 def to_nonsymmetric(a, leg_structures=None, native=False):
     r"""
@@ -289,16 +306,19 @@ def to_nonsymmetric(a, leg_structures=None, native=False):
     """
     config_dense = a.config._replace(sym=sym_none)
     news = a.get_signature(native)
-    T = a.__class__(config=config_dense, s=news, n=None, isdiag=a.isdiag)
-    T.set_block(val=a.to_dense(leg_structures, native))
-    return T
+    c = a.__class__(config=config_dense, s=news, n=None, isdiag=a.isdiag)
+    c.set_block(val=a.to_dense(leg_structures, native))
+    return c
 
 #########################
 #    output numbers     #
 #########################
 
+
 def zero_of_dtype(a):
+    """ Return zero scalar of the instance specified by backend and dtype. """
     return a.config.backend.zero_scalar(dtype=a.config.dtype, device=a.config.device)
+
 
 def to_number(a):
     """
@@ -314,6 +334,7 @@ def to_number(a):
         return a.zero_of_dtype()
         # is there a better solution for torch autograd?
     raise YastError('Specified bond dimensions inconsistent with tensor.')
+
 
 def item(a):
     """

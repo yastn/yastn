@@ -1,17 +1,17 @@
-""" Krylov-based methods for yast tensor. 
-Based on http://www1.maths.leeds.ac.uk/~jitse/phikrylov.pdf  ADD PROPER CITATION DURING CLEANING
+""" 
+Krylov-based methods for yast tensor.
+Based on http://www1.maths.leeds.ac.uk/~jitse/phikrylov.pdf TODO: ADD PROPER CITATION DURING CLEANING.
 """
+
 import time
 import tracemalloc
 import numpy as np
 from scipy import linalg as LA
-from ._testing import YastError, _check
-
+from ._auxliary import YastError
 
 __all__ = ['expmw', 'eigs', 'eigsh']
 
-_select_dtype = {'float64': np.float64,
-                 'complex128': np.complex128}
+_select_dtype = {'float64': np.float64, 'complex128': np.complex128}
 
 
 def expmw(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=0, algorithm='arnoldi'):
