@@ -47,14 +47,14 @@ def fill_tensor(a, t=(), D=(), val='rand'):
     D = (D,) if isinstance(D, int) else D
     t = (t,) if isinstance(t, int) else t
 
-    if a.config.sym.nsym == 0:
+    if a.config.sym.NSYM == 0:
         if a.isdiag and len(D) == 1:
             D = D + D
         if len(D) != a.nlegs:
             raise YastError("Number of elements in D does not match tensor rank.")
-        tset = np.zeros((1, a.nlegs, a.config.sym.nsym))
+        tset = np.zeros((1, a.nlegs, a.config.sym.NSYM))
         Dset = np.array(D, dtype=int).reshape(1, a.nlegs)
-    else:  # a.config.sym.nsym >= 1
+    else:  # a.config.sym.NSYM >= 1
         D = (D,) if (a.nlegs == 1 or a.isdiag) and isinstance(D[0], int) else D
         t = (t,) if (a.nlegs == 1 or a.isdiag) and isinstance(t[0], int) else t
         D = D + D if a.isdiag and len(D) == 1 else D
@@ -76,7 +76,7 @@ def fill_tensor(a, t=(), D=(), val='rand'):
         comb_t = list(product(*t))
         lcomb_t = len(comb_t)
         comb_t = list(_flatten(comb_t))
-        comb_t = np.array(comb_t, dtype=int).reshape(lcomb_t, a.nlegs, a.config.sym.nsym)
+        comb_t = np.array(comb_t, dtype=int).reshape(lcomb_t, a.nlegs, a.config.sym.NSYM)
         comb_D = np.array(comb_D, dtype=int).reshape(lcomb_t, a.nlegs)
         ind = np.all(a.config.sym.fuse(comb_t, a.s, 1) == a.n, axis=1)
         tset = comb_t[ind]
@@ -114,15 +114,15 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         ts = (ts,)
     if a.isdiag and Ds is not None and len(Ds) == 1:
         Ds = Ds + Ds
-    if a.isdiag and len(ts) == a.config.sym.nsym:
+    if a.isdiag and len(ts) == a.config.sym.NSYM:
         ts = ts + ts
 
-    if len(ts) != a.nlegs * a.config.sym.nsym:
+    if len(ts) != a.nlegs * a.config.sym.NSYM:
         raise YastError('Wrong size of ts.')
     if Ds is not None and len(Ds) != a.nlegs:
         raise YastError('Wrong size of Ds.')
 
-    ats = np.array(ts, dtype=int).reshape(1, a.nlegs, a.config.sym.nsym)
+    ats = np.array(ts, dtype=int).reshape(1, a.nlegs, a.config.sym.NSYM)
     if not np.all(a.config.sym.fuse(ats, a.s, 1) == a.n):
         raise YastError('Charges ts are not consistent with the symmetry rules: t @ s - n != 0')
 

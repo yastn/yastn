@@ -1,6 +1,4 @@
-import numpy as np
 import torch
-import torch.nn.functional as Functional
 try:
     import scipy.sparse.linalg
     from scipy.sparse.linalg import LinearOperator
@@ -20,29 +18,29 @@ class SYMARNOLDI(torch.autograd.Function):
 
         **Note:** `depends on scipy`
 
-        Return leading k-eigenpairs of a matrix M, where M is symmetric 
-        :math:`M=M^T`, by computing the symmetric decomposition :math:`M= UDU^T` 
+        Return leading k-eigenpairs of a matrix M, where M is symmetric
+        :math:`M=M^T`, by computing the symmetric decomposition :math:`M= UDU^T`
         up to rank k. Partial eigendecomposition is done through Arnoldi method.
         """
         # input validation (M is square and symmetric) is provided by 
         # the scipy.sparse.linalg.eigsh
-        
+
         # get M as numpy ndarray and wrap back to torch
         # allow for mat-vec ops to be carried out on GPU
         def mv(v):
-            V= torch.as_tensor(v,dtype=M.dtype,device=M.device)
-            V= torch.mv(M,V)
+            V = torch.as_tensor(v, dtype=M.dtype, device=M.device)
+            V = torch.mv(M, V)
             return V.detach().cpu().numpy()
         M_nograd= LinearOperator(M.size(), matvec=mv)
 
-        D, U= scipy.sparse.linalg.eigsh(M_nograd, k=k)
-        D= torch.as_tensor(D,dtype=M.dtype,device=M.device)
-        U= torch.as_tensor(U,dtype=M.dtype,device=M.device)
+        D, U = scipy.sparse.linalg.eigsh(M_nograd, k=k)
+        D = torch.as_tensor(D, dtype=M.dtype, device=M.device)
+        U = torch.as_tensor(U, dtype=M.dtype, device=M.device)
 
         # reorder the eigenpairs by the largest magnitude of eigenvalues
-        absD, p= torch.sort(torch.abs(D),descending=True)
+        absD, p = torch.sort(torch.abs(D), descending=True)
         D= D[p]
-        U= U[:,p]
+        U= U[:, p]
 
         self.save_for_backward(D, U)
         return D, U
@@ -62,13 +60,13 @@ class SYMARNOLDI_2C(torch.autograd.Function):
 
         **Note:** `depends on scipy`
 
-        Return leading k-eigenpairs of a 2-cyclic symmetric matrix A, formed by 
+        Return leading k-eigenpairs of a 2-cyclic symmetric matrix A, formed by
         two non-zero blocks ``M`` and ``Mhc`` where :math:`M^\dag = M_{hc}` as follows::
             
             A = [0   M]
                 [Mhc 0]
 
-        by computing the symmetric decomposition :math:`M= UDU^T` up to rank k. 
+        by computing the symmetric decomposition :math:`M= UDU^T` up to rank k.
         Partial eigendecomposition is done through Arnoldi method. The eigenvectors
         and eigenvalues of A are related to SVD of M as follows::
 
@@ -87,27 +85,28 @@ class SYMARNOLDI_2C(torch.autograd.Function):
         # [0   M][v0] = [M v1   ]
         # [Mhc 0][v1] = [Mhc v0 ]
         def mv(v):
-            V= torch.as_tensor(v,dtype=M.dtype,device=M.device)
-            R= torch.zeros_like(V)
-            R[:M.size(0)]= torch.mv(M,V[-M.size(1):])
-            R[-Mhc.size(0):]= torch.mv(Mhc,V[:Mhc.size(1)])
+            V = torch.as_tensor(v, dtype=M.dtype, device=M.device)
+            R = torch.zeros_like(V)
+            R[:M.size(0)] = torch.mv(M, V[-M.size(1):])
+            R[-Mhc.size(0):] = torch.mv(Mhc, V[:Mhc.size(1)])
             return R.detach().cpu().numpy()
-        M_nograd= LinearOperator((M.size(0)+Mhc.size(0), (M.size(1)+Mhc.size(1))), matvec=mv)
+        M_nograd = LinearOperator((M.size(0) + Mhc.size(0), (M.size(1) + Mhc.size(1))), matvec=mv)
 
-        D, U= scipy.sparse.linalg.eigsh(M_nograd, k=k)
-        D= torch.as_tensor(D,dtype=M.dtype,device=M.device)
-        U= torch.as_tensor(U,dtype=M.dtype,device=M.device)
+        D, U = scipy.sparse.linalg.eigsh(M_nograd, k=k)
+        D = torch.as_tensor(D, dtype=M.dtype, device=M.device)
+        U = torch.as_tensor(U, dtype=M.dtype, device=M.device)
 
         # reorder the eigenvalues in descending fashion
-        D, p= torch.sort(D,descending=True)
-        U= U[:,p]
-        
+        D, p = torch.sort(D, descending=True)
+        U = U[:, p]
+
         self.save_for_backward(D, U)
         return D, U
+
 
     @staticmethod
     def backward(self, dD, dU):
         raise Exception("backward not implemented")
-        D, U= self.saved_tensors
-        dA= None
+        D, U = self.saved_tensors
+        dA = None
         return dA, None

@@ -6,9 +6,9 @@ from operator import itemgetter
 import numpy as np
 
 
-def _merge_to_matrix(a, axes, s_eff, inds=None, rsort=False):
+def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
     order = axes[0] + axes[1]
-    meta_new, meta_mrg, ls_l, ls_r, ul, ur = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds, rsort)
+    meta_new, meta_mrg, ls_l, ls_r, ul, ur = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds, sort_r)
     Anew = a.config.backend.merge_to_matrix(a.A, order, meta_new, meta_mrg, a.config.dtype, a.config.device)
     return Anew, ls_l, ls_r, ul, ur
 
@@ -17,12 +17,10 @@ def _merge_to_matrix(a, axes, s_eff, inds=None, rsort=False):
 def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
     legs_l = np.array(axes[0], np.int)
     legs_r = np.array(axes[1], np.int)
-    nsym = len(struct.n)
-    nleg = len(struct.s)
     told = struct.t if inds is None else [struct.t[ii] for ii in inds]
     Dold = struct.D if inds is None else [struct.D[ii] for ii in inds]
-    tset = np.array(told, dtype=int).reshape((len(told), nleg, nsym))
-    Dset = np.array(Dold, dtype=int).reshape(len(Dold), nleg)
+    tset = np.array(told, dtype=int).reshape((len(told), len(struct.s), config.sym.NSYM))
+    Dset = np.array(Dold, dtype=int).reshape(len(Dold), len(struct.s))
     t_l = tset[:, legs_l, :]
     t_r = tset[:, legs_r, :]
     D_l = Dset[:, legs_l]
@@ -32,44 +30,33 @@ def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
     Deff_l = np.prod(D_l, axis=1)
     Deff_r = np.prod(D_r, axis=1)
 
-    te_l = config.sym.fuse(t_l, s_l, s_eff[0])
-    te_r = config.sym.fuse(t_r, s_r, s_eff[1])
-    tnew = np.hstack([te_l, te_r])
+    teff_l = config.sym.fuse(t_l, s_l, s_eff[0])
+    teff_r = config.sym.fuse(t_r, s_r, s_eff[1])
+    tnew = np.hstack([teff_l, teff_r])
 
     tnew = tuple(tuple(t.flat) for t in tnew)
-    te_l = tuple(tuple(t.flat) for t in te_l)
-    te_r = tuple(tuple(t.flat) for t in te_r)
+    teff_l = tuple(tuple(t.flat) for t in teff_l)
+    teff_r = tuple(tuple(t.flat) for t in teff_r)
     t_l = tuple(tuple(t.flat) for t in t_l)
     t_r = tuple(tuple(t.flat) for t in t_r)
     D_l = tuple(tuple(x) for x in D_l)
     D_r = tuple(tuple(x) for x in D_r)
-    dec_l, Dtot_l = _leg_structure_merge(te_l, t_l, Deff_l, D_l)
-    dec_r, Dtot_r = _leg_structure_merge(te_r, t_r, Deff_r, D_r)
-
-    ls_l = _LegDecomposition(config, s_l, s_eff[0])
-    ls_r = _LegDecomposition(config, s_r, s_eff[1])
-    ls_l.dec = dec_l
-    ls_r.dec = dec_r
-    ls_l.D = Dtot_l
-    ls_r.D = Dtot_r
-
+    ls_l = _leg_structure_merge(config, teff_l, t_l, Deff_l, D_l, s_eff[0], s_l)
+    ls_r = _leg_structure_merge(config, teff_r, t_r, Deff_r, D_r, s_eff[1], s_r)
     # meta_mrg = ((tnew, told, Dslc_l, D_l, Dslc_r, D_r), ...)
-    meta_mrg = tuple((tn, to, *dec_l[tel][tl][:2], *dec_r[ter][tr][:2])
-                     for tn, to, tel, tl, ter, tr in zip(tnew, told, te_l, t_l, te_r, t_r))
-
+    meta_mrg = tuple((tn, to, *ls_l.dec[tel][tl][:2], *ls_r.dec[ter][tr][:2])
+                     for tn, to, tel, tl, ter, tr in zip(tnew, told, teff_l, t_l, teff_r, t_r))
     if sort_r:
-        tt = sorted(set(zip(te_r, te_l, tnew)))
-        unew_r, unew_l, unew = zip(*tt) if len(tt) > 0 else ((), (), ())
+        unew_r, unew_l, unew = zip(*sorted(set(zip(teff_r, teff_l, tnew)))) if len(tnew) > 0 else ((), (), ())
     else:
-        tt = sorted(set(zip(tnew, te_l, te_r)))
-        unew, unew_l, unew_r = zip(*tt) if len(tt) > 0 else ((), (), ())
+        unew, unew_l, unew_r = zip(*sorted(set(zip(tnew, teff_l, teff_r)))) if len(tnew) > 0 else ((), (), ())
     # meta_new = ((unew, Dnew), ...)
-
-    meta_new = tuple((u, (ls_l.D[l], ls_r.D[r])) for u, l, r in zip(unew, unew_l, unew_r))
+    meta_new = tuple((iu, (ls_l.D[il], ls_r.D[ir])) for iu, il, ir in zip(unew, unew_l, unew_r))
     return meta_new, meta_mrg, ls_l, ls_r, unew_l, unew_r
 
 
-def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
+def _leg_structure_merge(config, teff, tlegs, Deff, Dlegs, seff, slegs):
+    """ LegDecomposition for merging into a single leg. """
     tt = sorted(set(zip(teff, tlegs, Deff, Dlegs)))
     dec, Dtot = {}, {}
     for te, grp in groupby(tt, key=itemgetter(0)):
@@ -80,7 +67,61 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
             dec[te][tl] = ((Dlow, Dtop), De, Dl)
             Dlow = Dtop
         Dtot[te] = Dtop
-    return dec, Dtot
+    return _LegDecomposition(config, seff, slegs, dec, Dtot)
+
+
+def _leg_struct_trivial(a, axis=0):
+    """ trivial LegDecomposition for unfused leg. """
+    nsym = a.config.sym.NSYM
+    dec, Dtot = {}, {}
+    for ind, val in a.A.items():
+        t = ind[nsym * axis: nsym * (axis + 1)]
+        D = a.config.backend.get_shape(val)[axis]
+        dec[t] = {t: ((0, D), D, (D,))}
+        Dtot[t] = D
+    return _LegDecomposition(a.config, a.s[axis], a.s[axis], dec, Dtot)
+
+
+def _leg_struct_truncation(a, tol=0., D_block=np.inf, D_total=np.inf, keep_multiplets=False, eps_multiplet=1e-12, ordering='eigh'):
+    r"""
+    Gives slices for truncation of 1d matrices according to tolerance, D_block, D_total.
+
+    A should be dict of ordered 1d arrays.
+    Sorting gives information about ordering outputed by a particular splitting funcion:
+    Usual convention is that for svd A[ind][0] is largest; and for eigh A[ind][-1] is largest.
+    """
+    maxS = 0 if len(a.A) == 0 else a.config.backend.maximum(a.A)
+    Dmax, D_keep = {}, {}
+    for ind in a.A:
+        Dmax[ind] = a.config.backend.get_size(a.A[ind])
+        D_keep[ind] = min(D_block, Dmax[ind])
+    if (tol > 0) and (maxS > 0):  # truncate to relative tolerance
+        for ind in D_keep:
+            D_keep[ind] = min(D_keep[ind], a.config.backend.count_greater(a.A[ind], maxS * tol))
+    if sum(D_keep[ind] for ind in D_keep) > D_total:  # truncate to total bond dimension
+        order = a.config.backend.select_global_largest(a.A, D_keep, D_total, keep_multiplets, eps_multiplet, ordering)
+        low = 0
+        for ind in D_keep:
+            high = low + D_keep[ind]
+            D_keep[ind] = sum((low <= order) & (order < high))
+            low = high
+    # check symmetry related blocks and truncate to equal length
+    if keep_multiplets:
+        ind_list = [np.asarray(k) for k in D_keep]
+        for ind in ind_list:
+            t = tuple(ind)
+            tn = tuple(-ind)
+            minD_sector = min(D_keep[t], D_keep[tn])
+            D_keep[t] = D_keep[tn] = minD_sector
+            if -ind in ind_list:
+                ind_list.remove(-ind)
+    dec, Dtot = {}, {}
+    for ind in D_keep:
+        if D_keep[ind] > 0:
+            Dslc = a.config.backend.range_largest(D_keep[ind], Dmax[ind], ordering)
+            dec[ind] = {ind: (Dslc, D_keep[ind], (D_keep[ind],))}
+            Dtot[ind] = D_keep[ind]
+    return _LegDecomposition(a.config, a.s[0], a.s[0], dec, Dtot)
 
 
 def _unmerge_from_matrix(A, ls_l, ls_r):
@@ -101,13 +142,17 @@ def _unmerge_from_diagonal(A, ls):
 
 class _LegDecomposition:
     """Information about internal structure of leg resulting from fusions."""
-    def __init__(self, config=None, s=(), news=1):
-        self.s =  (s,) if isinstance(s, int) else tuple(s) # signature of fused legs
-        self.nlegs = len(self.s)  # number of fused legs
+    def __init__(self, config=None, s_eff=1, s=(), dec=None, D=None):
+        try:
+            self.nlegs = len(s)  # number of fused legs
+            self.s = tuple(s)  # signature of fused legs
+        except TypeError:
+            self.nlegs = 1
+            self.s = (s,)
         self.config = config
-        self.news = news  # signature of effective leg
-        self.D = {}
-        self.dec = {}  # leg's structure/ decomposition
+        self.s_eff = s_eff  # signature of effective leg
+        self.D = {} if D is None else D  # bond dimensions of effective charges
+        self.dec = {} if dec is None else dec  # leg's structure/ decomposition
 
     def match(self, other):
         """ Compare if decomposition match. This does not include signatures."""
@@ -128,78 +173,6 @@ class _LegDecomposition:
             print(te, ":")
             for to, Do in de.items():
                 print("   ", to, ":", Do)
-
-    def leg_struct_for_merged(self, teff, tlegs, Deff, Dlegs):
-        """ Calculate meta-information about bond dimensions for merging into one leg. """
-        shape_t = list(tlegs.shape)
-        shape_t[1] = shape_t[1] + 1
-        tcom = np.empty(shape_t, dtype=int)
-        tcom[:, 0, :] = teff
-        tcom[:, 1:, :] = tlegs
-        tcom = tcom.reshape((shape_t[0], shape_t[1]*shape_t[2]))
-        ucom, icom = np.unique(tcom, return_index=True, axis=0)
-        Dlow = 0
-        for ii, tt in zip(icom, ucom):
-            t0 = tuple(tt[:self.config.sym.nsym])
-            t1 = tuple(tt[self.config.sym.nsym:])
-            if t0 not in self.dec:
-                self.dec[t0] = {}
-                Dlow = 0
-            Dtop = Dlow + Deff[ii]
-            self.dec[t0][t1] = ((Dlow, Dtop), Deff[ii], tuple(Dlegs[ii]))
-            Dlow = Dtop
-            self.D[t0] = Dtop
-
-    def leg_struct_trivial(self, A, axis):
-        """ Meta-information for single leg. """
-        nsym = self.config.sym.nsym
-        for ind, val in A.items():
-            t = ind[nsym * axis: nsym * (axis + 1)]
-            D = self.config.backend.get_shape(val)[axis]
-            self.dec[t] = {t: ((0, D), D, (D,))}
-
-    def leg_struct_for_truncation(self, A, opts, sorting='svd'):
-        r"""Gives slices for truncation of 1d matrices according to tolerance, D_block, D_total.
-
-        A should be dict of ordered 1d arrays.
-        Sorting gives information about ordering outputed by a particular splitting funcion:
-        Usual convention is that for svd A[ind][0] is largest; and for eigh A[ind][-1] is largest.
-        """
-        maxS = 0 if len(A) == 0 else self.config.backend.maximum(A)
-        Dmax, D_keep = {}, {}
-        for ind in A:
-            Dmax[ind] = self.config.backend.get_size(A[ind])
-            D_keep[ind] = min(opts['D_block'], Dmax[ind])
-        if (opts['tol'] > 0) and (maxS > 0):  # truncate to relative tolerance
-            for ind in D_keep:
-                D_keep[ind] = min(D_keep[ind], self.config.backend.count_greater(A[ind], maxS * opts['tol']))
-        if sum(D_keep[ind] for ind in D_keep) > opts['D_total']:  # truncate to total bond dimension
-            if 'keep_multiplets' in opts.keys():
-                order = self.config.backend.select_global_largest(A, D_keep, opts['D_total'], sorting,
-                                                                  keep_multiplets=opts['keep_multiplets'], eps_multiplet=opts['eps_multiplet'])
-            else:
-                order = self.config.backend.select_global_largest(A, D_keep, opts['D_total'], sorting)
-            low = 0
-            for ind in D_keep:
-                high = low + D_keep[ind]
-                D_keep[ind] = sum((low <= order) & (order < high))
-                low = high
-
-        # check symmetry related blocks and truncate to equal length
-        if 'keep_multiplets' in opts.keys() and opts['keep_multiplets']:
-            ind_list = [np.asarray(k) for k in D_keep]
-            for ind in ind_list:
-                t = tuple(ind)
-                tn = tuple(-ind)
-                minD_sector = min(D_keep[t], D_keep[tn])
-                D_keep[t] = D_keep[tn] = minD_sector
-                if -ind in ind_list:
-                    ind_list.remove(-ind)
-
-        for ind in D_keep:
-            if D_keep[ind] > 0:
-                Dslc = self.config.backend.range_largest(D_keep[ind], Dmax[ind], sorting)
-                self.dec[ind] = {ind: (Dslc, D_keep[ind], (D_keep[ind],))}
 
 
 # def group_legs(self, axes, new_s=None):
@@ -265,7 +238,7 @@ class _LegDecomposition:
 #     ls_c = _LegDecomposition(self.config, s_grp, new_s)
 #     ls_c.leg_struct_for_merged(t_eff, t_grp, D_eff, D_grp)
 
-#     t_new = np.empty((len(self.A), new_ndim, self.config.sym.nsym), dtype=int)
+#     t_new = np.empty((len(self.A), new_ndim, self.config.sym.NSYM), dtype=int)
 #     t_new[:, :ig, :] = self.tset[:, legs_l, :]
 #     t_new[:, ig, :] = t_eff
 #     t_new[:, ig+1:, :] = self.tset[:, legs_r, :]

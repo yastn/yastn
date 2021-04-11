@@ -1,4 +1,4 @@
-""" 
+"""
 Krylov-based methods for yast tensor.
 Based on http://www1.maths.leeds.ac.uk/~jitse/phikrylov.pdf TODO: ADD PROPER CITATION DURING CLEANING.
 """

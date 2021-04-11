@@ -1,8 +1,7 @@
 import numpy as np
 
-name = "Mix_for_test"
-
-nsym = 2  # two ints used to distinguish symmetry sectors
+SYM_ID = "Mix_for_test"
+NSYM = 2  # two ints used to distinguish symmetry sectors
 
 def fuse(charges, signatures, new_signature):
     """

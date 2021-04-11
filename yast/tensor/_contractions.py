@@ -59,7 +59,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
     ind_a, ind_b = _common_rows(_tarray(a)[:, naxes_a[1], :], _tarray(b)[:, naxes_b[0], :])
     s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
 
-    Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, axes_a, s_eff_a, ind_a, rsort=True)
+    Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, axes_a, s_eff_a, ind_a, sort_r=True)
     Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(b, axes_b, s_eff_b, ind_b)
 
     meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
@@ -71,8 +71,8 @@ def tensordot(a, b, axes, conj=(0, 0)):
     c_meta_fusion = [a.meta_fusion[ii] for ii in la_out] + [b.meta_fusion[ii] for ii in lb_out]
     c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion)
 
-    Cm = c.config.backend.dot(Am, Bm, conj, meta_dot)
-    c.A = _unmerge_from_matrix(Cm, ls_l, ls_r)
+    c.A = c.config.backend.dot(Am, Bm, conj, meta_dot)
+    c.A = _unmerge_from_matrix(c.A, ls_l, ls_r)
     c.update_struct()
     return c
 
@@ -180,7 +180,7 @@ def swap_gate(a, axes, inplace=False):
     tensor : Tensor
     """
     try:
-        fss = a.config.sym.fermionic  # fermionic symmetry sectors
+        fss = a.config.sym.FERMIONIC  # fermionic symmetry sectors
     except AttributeError:
         return a
     if any(fss):
