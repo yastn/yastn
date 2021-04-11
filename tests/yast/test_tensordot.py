@@ -23,8 +23,8 @@ def dot_vs_numpy(a, b, axes, conj):
     c = yast.tensordot(a, b, axes, conj)
     nc = c.to_dense(tDs)
     assert c.is_consistent()
-    assert a.is_independent(c)
-    assert c.is_independent(b)
+    assert a.are_independent(c)
+    assert c.are_independent(b)
     assert np.linalg.norm(nc - nab) < tol  # == 0.0
 
 def test_dot_0():

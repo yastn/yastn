@@ -14,10 +14,10 @@ def test_diag_1():
     a4 = a3.diag()
     a5 = a4.diag()
 
-    assert a1.is_independent(a2)
-    assert a2.is_independent(a3)
-    assert a3.is_independent(a4)
-    assert a4.is_independent(a5)
+    assert a1.are_independent(a2)
+    assert a2.are_independent(a3)
+    assert a3.are_independent(a4)
+    assert a4.are_independent(a5)
 
     na1 = a1.to_dense()
     na2 = a2.to_dense()

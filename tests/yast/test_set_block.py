@@ -22,7 +22,6 @@ def test_set0():
     assert np.iscomplexobj(npa)
     assert np.linalg.norm(npa - npa.conj()) < tol  # == 0.0
     assert npa.shape == (4, 5, 6)
-    assert a._tarray().shape == (1, 3, 0)
     assert a.is_consistent()
 
     # print('0d tensor:')
@@ -31,7 +30,6 @@ def test_set0():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == ()
-    assert a._tarray().shape == (1, 0, 0)
     assert isclose(a.to_number(), 3, rel_tol=tol)
     assert a.is_consistent()
 
@@ -41,7 +39,6 @@ def test_set0():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (5,)
-    assert a._tarray().shape == (1, 1, 0)
     assert a.is_consistent()
 
     # print('diagonal tensor:')
@@ -50,7 +47,6 @@ def test_set0():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (5, 5)
-    assert a._tarray().shape == (1, 2, 0)
     assert a.is_consistent()
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
     
@@ -100,7 +96,6 @@ def test_set1():
     npa = a.to_numpy()
     assert np.iscomplexobj(npa)
     assert npa.shape == (6, 3, 6, 1)
-    assert a._tarray().shape == (5, 4, 1)
     assert a.is_consistent()
 
     # print('0d tensor:')
@@ -109,7 +104,6 @@ def test_set1():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == ()
-    assert a._tarray().shape == (1, 0, 1)
     assert isclose(a.to_number(), 2, rel_tol=tol)
     assert a.is_consistent()
 
@@ -129,7 +123,6 @@ def test_set1():
 
     assert np.isrealobj(npa)
     assert npa.shape == (13, 13)
-    assert a._tarray().shape == (3, 2, 1)
     assert a.is_consistent()
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
     a.show_properties()
@@ -143,7 +136,6 @@ def test_set2():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (9, 8, 30)
-    assert a._tarray().shape == (7, 3, 2)
     assert a.is_consistent()
 
 
@@ -155,7 +147,6 @@ def test_set2():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (3, 8, 9)
-    assert a._tarray().shape == (3, 3, 2)
     assert a.is_consistent()
     
     # print('diagonal tensor:')
@@ -169,7 +160,6 @@ def test_set2():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (11, 11)
-    assert a._tarray().shape == (4, 2, 2)
     assert np.allclose(npa, np.eye(11), rtol=tol, atol=tol)
     assert a.is_consistent()
 
@@ -183,7 +173,7 @@ def test_dict():
     b = yast.import_from_dict(config=config_dense_R, d=d)
     assert yast.norm_diff(a, b) < tol  # == 0.0
     assert a.is_consistent()
-    assert a.is_independent(b)
+    assert a.are_independent(b)
 
     a = yast.rand(config=config_U1_R, isdiag=False, s=(1, -1, 1),
                   t=((0, 1, 2), (0, 1, 3), (-1, 0, 1)),
@@ -192,14 +182,14 @@ def test_dict():
     b = yast.import_from_dict(config=config_U1_R, d=d)
     assert yast.norm_diff(a, b) < tol  # == 0.0
     assert a.is_consistent()
-    assert a.is_independent(b)
+    assert a.are_independent(b)
 
     a = yast.rand(config=config_U1_R, isdiag=True, t=(0, 1), D=(3, 5))
     d = a.export_to_dict()
     b = yast.import_from_dict(config=config_U1_R, d=d)
     assert yast.norm_diff(a, b) < tol  # == 0.0
     assert a.is_consistent()
-    assert a.is_independent(b)
+    assert a.are_independent(b)
 
     a = yast.ones(config=config_Z2_U1_R, s=(-1, 1, 1), n=(0, -2),
                     t=(((0, 0), (0, 2), (1, 0), (1, 2)), ((0, -2), (0, 2)), ((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2))),
@@ -208,7 +198,7 @@ def test_dict():
     b = yast.import_from_dict(config=config_Z2_U1_R, d=d)
     assert yast.norm_diff(a, b) < tol  # == 0.0
     assert b.is_consistent()
-    assert a.is_independent(b)
+    assert a.are_independent(b)
 
 if __name__ == '__main__':
     test_set0()

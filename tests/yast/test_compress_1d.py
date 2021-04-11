@@ -27,7 +27,6 @@ def test_compress_dense():
     npa = a.to_dense()
     assert np.isrealobj(npa)
     assert npa.shape == ()
-    assert a._tarray().shape == (1, 0, 0)
     assert isclose(a.to_number(), 1, rel_tol=tol)
     assert a.is_consistent()
 
@@ -39,7 +38,6 @@ def test_compress_dense():
     npt= T.to_dense()
     assert np.isrealobj(npt)
     assert npt.shape == (5,)
-    assert T._tarray().shape == (1, 1, 0)
     assert T.is_consistent()
     assert np.allclose(npa,npt)
 
@@ -51,7 +49,6 @@ def test_compress_dense():
     npt= T.to_dense()
     assert np.isrealobj(npt)
     assert npt.shape == (5, 5)
-    assert T._tarray().shape == (1, 2, 0)
     assert T.is_consistent()
     assert np.allclose(npa,npt)
 
@@ -66,7 +63,6 @@ def test_compress_U1():
     npt= T.to_dense()
     assert np.isrealobj(npt)
     assert npt.shape == (6, 3, 6, 1)
-    assert T._tarray().shape == (5, 4, 1)
     assert T.is_consistent()
     assert np.allclose(npa,npt)
 
@@ -75,7 +71,6 @@ def test_compress_U1():
     npa = a.to_dense()
     assert np.isrealobj(npa)
     assert npa.shape == ()
-    assert a._tarray().shape == (1, 0, 1)
     assert isclose(a.to_number(), 1, rel_tol=tol)
     assert a.is_consistent()
 
@@ -87,7 +82,6 @@ def test_compress_U1():
     npt= T.to_dense()
     assert np.isrealobj(npt)
     assert npt.shape == (5,)
-    assert T._tarray().shape == (1, 1, 1)
     assert T.is_consistent()
     assert np.allclose(npa,npt)
 
@@ -99,7 +93,6 @@ def test_compress_U1():
     npt= T.to_dense()
     assert np.isrealobj(npt)
     assert npt.shape == (5, 5)
-    assert T._tarray().shape == (1, 2, 1)
     assert T.is_consistent()
     assert np.allclose(npa,npt)
 
@@ -111,7 +104,6 @@ def test_compress_U1():
     npt= T.to_dense()
     assert np.iscomplexobj(npt)
     assert npt.shape == (9, 9)
-    assert T._tarray().shape == (3, 2, 1)
     assert T.is_consistent()
     assert np.allclose(npa,npt)
 
@@ -123,7 +115,6 @@ def test_compress_U1():
     npt= T.to_dense()
     assert np.iscomplexobj(npt)
     assert npt.shape == (9, 9)
-    assert T._tarray().shape == (3, 2, 1)
     assert T.is_consistent()
     assert np.allclose(npa,npt)
 
@@ -138,7 +129,6 @@ def test_compress_Z2_U1():
     npt= T.to_dense()
     assert np.isrealobj(npt)
     assert npt.shape == (3, 3, 3)
-    assert T._tarray().shape == (2, 3, 2)
     assert T.is_consistent()
     assert np.allclose(npa,npt)
 
@@ -152,7 +142,6 @@ def test_compress_Z2_U1():
     npt= T.to_dense()
     assert np.isrealobj(npt)
     assert npt.shape == (2,)
-    assert T._tarray().shape == (1, 1, 2)
     assert T.is_consistent()
     assert np.allclose(npa,npt)
 
@@ -166,7 +155,6 @@ def test_compress_Z2_U1():
     npt= T.to_dense()
     assert np.isrealobj(npt)
     assert npt.shape == (6, 6)
-    assert T._tarray().shape == (3, 2, 2)
     assert T.is_consistent()
     assert np.allclose(npa,npt)
 
@@ -180,7 +168,6 @@ def test_compress_Z2_U1():
     npt= T.to_dense()
     assert np.isrealobj(npt)
     assert npt.shape == (16, 16)
-    assert T._tarray().shape == (4, 2, 2)
     assert T.is_consistent()
     assert np.allclose(npa,npt)
 
