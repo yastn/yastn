@@ -1,5 +1,5 @@
 """ Methods creating a new yast tensor """
-from .tensor import Tensor
+from .tensor import Tensor, YastError
 
 
 __all__ = ['rand', 'randR', 'zeros', 'ones', 'eye', 'import_from_dict', 'decompress_from_1d']
