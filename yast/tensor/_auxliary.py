@@ -51,7 +51,7 @@ def _common_rows(a, b):
 
 
 def _tarray(a):
-    return np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), a.nlegs, a.config.sym.nsym))
+    return np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), a.nlegs, a.config.sym.NSYM))
 
 
 def _Darray(a):
@@ -65,7 +65,6 @@ def update_struct(a):
     t = tuple(a.A.keys())
     D = tuple(a.config.backend.get_shape(x) for x in a.A.values())
     a.struct = _struct(t, D, tuple(a.s), tuple(a.n))
-
 
 
 class YastError(Exception):
@@ -91,7 +90,7 @@ def _test_configs_match(a, b):
     # if a.config != b.config:
     if not (a.config.dtype == b.config.dtype and
             a.config.dtype == b.config.dtype and
-            a.config.sym.name == b.config.sym.name and
+            a.config.sym.SYM_ID == b.config.sym.SYM_ID and
             a.config.backend.BACKEND_ID == b.config.backend.BACKEND_ID):
         raise YastError('configs do not match')
 

@@ -19,21 +19,21 @@ class SYMEIG(torch.autograd.Function):
         Computes symmetric decomposition :math:`M= UDU^T`.
         """
         # input validation (A is square and symmetric) is provided by torch.symeig
-        
+
         D, U = torch.symeig(A, eigenvectors=True)
         # torch.symeig returns eigenpairs ordered in the ascending order with 
         # respect to eigenvalues. Reorder the eigenpairs by abs value of the eigenvalues
         # abs(D)
-        absD,p= torch.sort(torch.abs(D),descending=True)
+        absD, p = torch.sort(torch.abs(D), descending=True)
         D= D[p]
-        U= U[:,p]
-        
+        U= U[:, p]
+
         self.save_for_backward(D,U,ad_decomp_reg)
         return D,U
 
     @staticmethod
     def backward(self, dD, dU):
-        D, U, ad_decomp_reg= self.saved_tensors
+        D, U, ad_decomp_reg = self.saved_tensors
         Ut = U.t()
 
         F = (D - D[:, None])
@@ -45,58 +45,60 @@ class SYMEIG(torch.autograd.Function):
         dA = U @ (torch.diag(dD) + F*(Ut@dU)) @ Ut
         return dA
 
+
 def test_SYMEIG_random():
-    m= 50
-    M= torch.rand(m, m, dtype=torch.float64)
-    M= 0.5*(M+M.t())
+    m = 50
+    M = torch.rand(m, m, dtype=torch.float64)
+    M = 0.5 * (M + M.t())
 
     D,U= SYMEIG.apply(M)
-    assert( torch.norm(M-U@torch.diag(D)@U.t()) < D[0]*(m**2)*1e-14 )
+    assert torch.norm(M - U @ torch.diag(D) @ U.t()) < D[0] * (m ** 2) * 1e-14 
 
     # since we always assume matrix M to be symmetric, the finite difference
     # perturbations should be symmetric as well
     M.requires_grad_(True)
     def force_sym_eig(M):
-        M=0.5*(M+M.t())
+        M = 0.5 * (M + M.t())
         return SYMEIG.apply(M)
     assert(torch.autograd.gradcheck(force_sym_eig, M, eps=1e-6, atol=1e-4))
 
 def test_SYMEIG_3x3degenerate():
-    M= torch.zeros((3,3),dtype=torch.float64)
-    M[0,1]=M[0,2]=M[1,2]=1.
-    M= 0.5*(M+M.t())
+    M= torch.zeros((3, 3), dtype=torch.float64)
+    M[0, 1] = M[0, 2] = M[1, 2] = 1.
+    M = 0.5 * (M + M.t())
     print(M)
 
-    D,U= SYMEIG.apply(M)
-    assert( torch.norm(M-U@torch.diag(D)@U.t()) < D[0]*(M.size()[0]**2)*1e-14 )
+    D, U = SYMEIG.apply(M)
+    assert torch.norm(M - U @ torch.diag(D) @ U.t()) < D[0] * (M.size()[0] ** 2) * 1e-14
 
     M.requires_grad_(True)
     torch.set_printoptions(precision=9)
     def force_sym_eig(M):
-        M=0.5*(M+M.t())
+        M = 0.5 * (M + M.t())
         print(M)
-        D,U= SYMEIG.apply(M)
+        D, U = SYMEIG.apply(M)
         return U
     assert(torch.autograd.gradcheck(force_sym_eig, M, eps=1e-6, atol=1e-4))
 
 def test_SYMEIG_rank_deficient():
-    m= 50
-    r= 10
-    M= torch.rand((m,m),dtype=torch.float64)
-    M= M+M.t()
-    D,U= torch.symeig(M, eigenvectors=True)
+    m = 50
+    r = 10
+    M = torch.rand((m, m), dtype=torch.float64)
+    M = M+M.t()
+    D, U= torch.symeig(M, eigenvectors=True)
     D[-r:]=0
-    M= U@torch.diag(D)@U.t()
+    M = U @ torch.diag(D) @ U.t()
 
-    D,U= SYMEIG.apply(M)
-    assert( torch.norm(M-U@torch.diag(D)@U.t()) < D[0]*(M.size()[0]**2)*1e-14 )
+    D, U = SYMEIG.apply(M)
+    assert torch.norm(M - U @ torch.diag(D) @ U.t()) < D[0] * (M.size()[0] ** 2) * 1e-14
 
     M.requires_grad_(True)
+
     def force_sym_eig(M):
-        M=0.5*(M+M.t())
-        D,U= SYMEIG.apply(M)
+        M = 0.5 * (M + M.t())
+        D, U = SYMEIG.apply(M)
         return U
-    assert(torch.autograd.gradcheck(force_sym_eig, M, eps=1e-6, atol=1e-4))
+    assert torch.autograd.gradcheck(force_sym_eig, M, eps=1e-6, atol=1e-4)
 
 if __name__=='__main__':
     import os

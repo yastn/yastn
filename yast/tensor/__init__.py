@@ -40,10 +40,13 @@ class Tensor:
         self.config = config if isinstance(config, _config) else \
                      _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
         self.isdiag = isdiag
-        self.nlegs = 1 if isinstance(s, int) else len(s)  # number of native legs
-        self.s = np.array(s, dtype=int).reshape(self.nlegs)
-        self.n = np.zeros(self.config.sym.nsym, dtype=int) if n is None else \
-            np.array(n, dtype=int).reshape(self.config.sym.nsym)
+        try:
+            self.nlegs = len(s)  # number of native legs
+        except TypeError:
+            self.nlegs = 1
+        self.s = np.array(s, dtype=np.int).reshape(self.nlegs)
+        self.n = np.zeros(self.config.sym.NSYM, dtype=int) if n is None else \
+            np.array(n, dtype=int).reshape(self.config.sym.NSYM)
         if self.isdiag:
             if len(self.s) == 0:
                 self.s = np.array([1, -1], dtype=int)

@@ -1,9 +1,9 @@
 """ Define rules for Z2 symmetry"""
 import numpy as np
 
-name = 'Z2'
+SYM_ID = 'Z2'
+NSYM = 1  # single int is used to distinguish symmetry sectors
 
-nsym = 1  # single int is used to distinguish symmetry sectors
 
 def fuse(charges, signatures, new_signature):
     """
@@ -24,4 +24,4 @@ def fuse(charges, signatures, new_signature):
         teff: nparray(int)
             matrix of effective fused charges of size k x nsym for new signature
     """
-    return np.mod(new_signature * (charges.swapaxes(1,2) @ signatures), 2)
+    return np.mod(new_signature * (charges.swapaxes(1, 2) @ signatures), 2)

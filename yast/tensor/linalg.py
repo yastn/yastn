@@ -3,7 +3,8 @@
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys
 from ._auxliary import YastError, _check, _test_tensors_match, _test_all_axes
-from ._merging import _LegDecomposition, _merge_to_matrix, _unmerge_from_matrix, _unmerge_from_diagonal
+from ._merging import _merge_to_matrix, _unmerge_from_matrix, _unmerge_from_diagonal
+from ._merging import _leg_struct_trivial, _leg_struct_truncation
 
 __all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'norm_diff', 'entropy']
 
@@ -50,7 +51,7 @@ def norm_diff(a, b, p='fro'):
 
 def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
                 tol=0, D_block=6, D_total=np.inf,
-                keep_multiplets=False, eps_multiplet=1.0e-14,
+                keep_multiplets=False, eps_multiplet=1e-14,
                 n_iter=60, k_fac=6, **kwargs):
     r"""
     Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
@@ -106,23 +107,16 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     else:
         meta = tuple((il+ir, il+il, il, il+ir) for il, ir in zip(ul, ur))
         n_l, n_r = 0*a.n, a.n
-
-    Um, Sm, Vm = a.config.backend.svd_lowrank(Am, meta, D_block, n_iter, k_fac)
-
     U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
     V = a.__class__(config=a.config, s=(-sU,) + ls_r.s, n=n_r, meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
+    
+    U.A, S.A, V.A = a.config.backend.svd_lowrank(Am, meta, D_block, n_iter, k_fac)
 
-    opts = {'tol': tol, 'D_total': D_total, 'D_block': D_block,
-            'keep_multiplets': keep_multiplets, 'eps_multiplet': eps_multiplet}
-
-    ls_s = _LegDecomposition(a.config)
-    ls_s.leg_struct_for_truncation(Sm, opts, 'svd')
-
-    U.A = _unmerge_from_matrix(Um, ls_l, ls_s)
-    S.A = _unmerge_from_diagonal(Sm, ls_s)
-    V.A = _unmerge_from_matrix(Vm, ls_s, ls_r)
-
+    ls_s = _leg_struct_truncation(S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'svd')
+    U.A = _unmerge_from_matrix(U.A, ls_l, ls_s)
+    S.A = _unmerge_from_diagonal(S.A, ls_s)
+    V.A = _unmerge_from_matrix(V.A, ls_s, ls_r)
     U.update_struct()
     S.update_struct()
     V.update_struct()
@@ -133,7 +127,7 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
 def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         tol=0, D_block=np.inf, D_total=np.inf,
-        keep_multiplets=False, eps_multiplet=1.0e-14, **kwargs):
+        keep_multiplets=False, eps_multiplet=1e-14, **kwargs):
     r"""
     Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
 
@@ -183,23 +177,15 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     else:
         meta = tuple((il+ir, il+il, il, il+ir) for il, ir in zip(ul, ur))
         n_l, n_r = 0*a.n, a.n
-
-    Um, Sm, Vm = a.config.backend.svd(Am, meta)
-
     U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
     V = a.__class__(config=a.config, s=(-sU,) + ls_r.s, n=n_r, meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
+    U.A, S.A, V.A = a.config.backend.svd(Am, meta)
 
-    opts = {'tol': tol, 'D_total': D_total, 'D_block': D_block,
-            'keep_multiplets': keep_multiplets, 'eps_multiplet': eps_multiplet}
-
-    ls_s = _LegDecomposition(a.config)
-    ls_s.leg_struct_for_truncation(Sm, opts, 'svd')
-
-    U.A = _unmerge_from_matrix(Um, ls_l, ls_s)
-    S.A = _unmerge_from_diagonal(Sm, ls_s)
-    V.A = _unmerge_from_matrix(Vm, ls_s, ls_r)
-
+    ls_s = _leg_struct_truncation(S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'svd')
+    U.A = _unmerge_from_matrix(U.A, ls_l, ls_s)
+    S.A = _unmerge_from_diagonal(S.A, ls_s)
+    V.A = _unmerge_from_matrix(V.A, ls_s, ls_r)
     U.update_struct()
     S.update_struct()
     V.update_struct()
@@ -236,20 +222,17 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     s_eff = (-sQ, sQ)
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
 
-    meta = tuple((il+ir, il+ir, ir+ir) for il, ir in zip(ul, ur))
-    Qm, Rm = a.config.backend.qr(Am, meta)
-
     Qs = tuple(a.s[lg] for lg in axes[0]) + (sQ,)
     Rs = (-sQ,) + tuple(a.s[lg] for lg in axes[1])
     Q = a.__class__(config=a.config, s=Qs, n=a.n, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
     R = a.__class__(config=a.config, s=Rs, meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
 
-    ls = _LegDecomposition(a.config, -sQ, -sQ)
-    ls.leg_struct_trivial(Rm, 0)
+    meta = tuple((il+ir, il+ir, ir+ir) for il, ir in zip(ul, ur))
+    Q.A, R.A = a.config.backend.qr(Am, meta)
 
-    Q.A = _unmerge_from_matrix(Qm, ls_l, ls)
-    R.A = _unmerge_from_matrix(Rm, ls, ls_r)
-
+    ls = _leg_struct_trivial(R, axis=0)
+    Q.A = _unmerge_from_matrix(Q.A, ls_l, ls)
+    R.A = _unmerge_from_matrix(R.A, ls, ls_r)
     Q.update_struct()
     R.update_struct()
 
@@ -258,7 +241,8 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     return Q, R
 
 
-def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf):
+def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf,
+         keep_multiplets=False, eps_multiplet=1e-14):
     r"""
     Split tensor using eig, tensor = U * S * U^dag. Truncate smallest eigenvalues if neccesary.
 
@@ -307,21 +291,17 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf):
     if _check["consistency"] and not (ul == ur and ls_l.match(ls_r)):
         raise YastError('Something went wrong in matching the indices of the two tensors')
 
-    # meta = (indA, indS, indU)
-    meta = tuple((il+ir, il, il+ir) for il, ir in zip(ul, ur))
-    Sm, Um = a.config.backend.eigh(Am, meta)
-
-    opts = {'D_block': D_block, 'tol': tol, 'D_total': D_total}
-    ls_s = _LegDecomposition(a.config, -sU, -sU)
-    ls_s.leg_struct_for_truncation(Sm, opts, 'eigh')
-
     Us = tuple(a.s[lg] for lg in axes[0]) + (sU,)
-
     S = a.__class__(config=a.config, s=(-sU, sU), isdiag=True)
     U = a.__class__(config=a.config, s=Us, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
 
-    U.A = _unmerge_from_matrix(Um, ls_l, ls_s)
-    S.A = _unmerge_from_diagonal(Sm, ls_s)
+    # meta = (indA, indS, indU)
+    meta = tuple((il+ir, il, il+ir) for il, ir in zip(ul, ur))
+    S.A, U.A = a.config.backend.eigh(Am, meta)
+
+    ls_s = _leg_struct_truncation(S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'eigh')
+    U.A = _unmerge_from_matrix(U.A, ls_l, ls_s)
+    S.A = _unmerge_from_diagonal(S.A, ls_s)
 
     U.update_struct()
     S.update_struct()

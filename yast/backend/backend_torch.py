@@ -321,14 +321,14 @@ def select_global_largest(S, D_keep, D_total, sorting,
                           keep_multiplets=False, eps_multiplet=1.0e-14):
     if sorting == 'svd':
         s_all = torch.cat([S[ind][:D_keep[ind]] for ind in S])
-        values, order= torch.topk(s_all, D_total+int(keep_multiplets))
+        values, order= torch.topk(s_all, D_total + int(keep_multiplets))
         # if needed, preserve multiplets within each sector
         if keep_multiplets:
             # regularize by discarding small values
-            gaps=torch.abs(values.clone())
+            gaps = torch.abs(values.clone())
             # compute gaps and normalize by larger sing. value. Introduce cutoff
             # for handling vanishing values set to exact zero
-            gaps=(gaps[:len(values)-1] - torch.abs(values[1:len(values)])) / (gaps[:len(values)-1] + 1.0e-16)
+            gaps=(gaps[:len(values) - 1] - torch.abs(values[1:len(values)])) / (gaps[:len(values) - 1] + 1.0e-16)
             gaps[gaps > 1.0] = 0.
 
             if gaps[D_total-1] < eps_multiplet:

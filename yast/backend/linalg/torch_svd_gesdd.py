@@ -1,10 +1,10 @@
 import torch
 
 def safe_inverse(x, epsilon=1E-12):
-    return x/(x**2 + epsilon)
+    return x / (x**2 + epsilon)
 
 def safe_inverse_2(x, epsilon):
-    x[abs(x)<epsilon]=float('inf')
+    x[abs(x) < epsilon] = float('inf')
     return x.pow(-1)
 
 class SVDGESDD(torch.autograd.Function):
@@ -27,22 +27,22 @@ class SVDGESDD(torch.autograd.Function):
         #auto n = self.size(-1); # second dim of A
         #auto k = sigma.size(-1); # size of singular value vector
         # auto gsigma = grads[1]; # dS
-        U, S, V, ad_decomp_reg= self.saved_tensors
-        m= U.size(0)
-        n= V.size(0)
-        k= S.size(0)
-        sigma= S
-        sigma_scale= sigma[0]
-        gsigma= dS
+        U, S, V, ad_decomp_reg = self.saved_tensors
+        m = U.size(0)
+        n = V.size(0)
+        k = S.size(0)
+        sigma = S
+        sigma_scale = sigma[0]
+        gsigma = dS
 
         # auto u = raw_u;
         # auto v = raw_v;
         # auto gu = grads[0];
         # auto gv = grads[2];
-        u= U
-        v= V
-        gu= dU
-        gv= dV
+        u = U
+        v = V
+        gu = dU
+        gv = dV
 
         # some is always True here
         # if (!some) {
@@ -75,17 +75,17 @@ class SVDGESDD(torch.autograd.Function):
         #     return sigma_term;
         # }
         # we always compute gu, gv here
-        sigma_term= u * gsigma.unsqueeze(-2) @ vh
+        sigma_term = u * gsigma.unsqueeze(-2) @ vh
 
         # auto uh = u.conj().transpose(-2, -1);
         # auto sigma_inv = sigma.pow(-1);
         # auto sigma_sq = sigma.pow(2);
         # auto F = sigma_sq.unsqueeze(-2) - sigma_sq.unsqueeze(-1);
-        uh= u.conj().transpose(-2,-1)
+        uh = u.conj().transpose(-2, -1)
         # sigma_inv= sigma.pow(-1)
-        sigma_inv= safe_inverse_2(sigma.clone(), sigma_scale*1.0e-12)
-        sigma_sq= sigma.pow(2)
-        F= sigma_sq.unsqueeze(-2) - sigma_sq.unsqueeze(-1)
+        sigma_inv = safe_inverse_2(sigma.clone(), sigma_scale * 1.0e-12)
+        sigma_sq = sigma.pow(2)
+        F = sigma_sq.unsqueeze(-2) - sigma_sq.unsqueeze(-1)
 
         # F_ij = 1/(S^2_i - S^2_j)
         # // The following two lines invert values of F, and fills the diagonal with 0s.
@@ -93,9 +93,9 @@ class SVDGESDD(torch.autograd.Function):
         # // first to prevent nan from appearing in backward of this function.
         # F.diagonal(/*offset=*/0, /*dim1=*/-2, /*dim2=*/-1).fill_(INFINITY);
         # F = F.pow(-1);
-        F.diagonal(0,-2,-1).fill_(float('inf'))
+        F.diagonal(0, -2, -1).fill_(float('inf'))
         # F= F.pow(-1)
-        F= safe_inverse_2(F, sigma_scale*1.0e-12)
+        F = safe_inverse_2(F, sigma_scale * 1.0e-12)
 
         # Tensor u_term, v_term;
         # if (gu.defined()) {
@@ -112,11 +112,11 @@ class SVDGESDD(torch.autograd.Function):
         #     u_term = at::zeros_like(self, LEGACY_CONTIGUOUS_MEMORY_FORMAT);
         # }
         # gu is always defined here
-        guh= gu.conj().transpose(-2,-1)
+        guh = gu.conj().transpose(-2, -1)
         u_term = u @ (F.mul( uh @ gu - guh @ u) * sigma.unsqueeze(-2))
-        if m>k:
+        if m > k:
             # projection operator onto subspace orthogonal to span(U) defined as I - UU^H
-            proj_on_ortho_u= -u@uh
+            proj_on_ortho_u = -u@uh
             proj_on_ortho_u.diagonal(0, -2, -1).add_(1)
             u_term = u_term + proj_on_ortho_u @ (gu * sigma_inv.unsqueeze(-2))
         u_term = u_term @ vh
@@ -135,12 +135,12 @@ class SVDGESDD(torch.autograd.Function):
         #     v_term = at::zeros_like(self, LEGACY_CONTIGUOUS_MEMORY_FORMAT);
         # }
         # gv is always defined here
-        gvh = gv.conj().transpose(-2, -1);
+        gvh = gv.conj().transpose(-2, -1)
         v_term = sigma.unsqueeze(-1) * (F.mul(vh @ gv - gvh @ v) @ vh)
         if n > k:
             # projection operator onto subspace orthogonal to span(V) defined as I - VV^H
             proj_on_v_ortho = -v @ vh
-            proj_on_v_ortho.diagonal(0, -2, -1).add_(1);
+            proj_on_v_ortho.diagonal(0, -2, -1).add_(1)
             v_term = v_term + sigma_inv.unsqueeze(-1) * (gvh @ proj_on_v_ortho)
         v_term = u @ v_term
 

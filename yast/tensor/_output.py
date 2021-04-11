@@ -65,7 +65,7 @@ def compress_to_1d(a, meta=None):
 
 def show_properties(a):
     """ Display basic properties of the tensor. """
-    print("Symmetry    :", a.config.sym.name)
+    print("Symmetry    :", a.config.sym.SYM_ID)
     print("signature   :", a.s)  # signature
     print("charge      :", a.n)  # total charge of tensor
     print("isdiag      :", a.isdiag)
@@ -81,7 +81,7 @@ def show_properties(a):
 def __str__(a):
     # return str(a.A)
     ts, Ds = a.get_leg_charges_and_dims(native=False)
-    s = f"{a.config.sym.name} s= {a.s} n= {a.n}\n"
+    s = f"{a.config.sym.SYM_ID} s= {a.s} n= {a.n}\n"
     # s += f"charges      : {a.ts}\n"
     s += f"leg charges  : {ts}\n"
     s += f"dimensions   : {Ds}"
@@ -166,7 +166,7 @@ def get_leg_structure(a, axis, native=False):
     tset, Dset = _tarray(a), _Darray(a)
     tset = tset[:, axis, :]
     Dset = Dset[:, axis]
-    tset = tset.reshape(len(tset), len(axis) * a.config.sym.nsym)
+    tset = tset.reshape(len(tset), len(axis) * a.config.sym.NSYM)
     Dset = np.prod(Dset, axis=1) if len(axis) > 1 else Dset.reshape(-1)
 
     tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tset, Dset)}
