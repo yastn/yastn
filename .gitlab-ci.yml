@@ -48,10 +48,11 @@ pylint:
   allow_failure: true
   script:
   - pip install pylint
-  - pylint -d C0301,C0103,R0801 yast/core/*.py
-  - pylint -d C0301,C0103,R0801 yast/backend/*.py
-  - pylint -d C0301,C0103,R0801 yast/sym/*.py
-  - pylint -d C0301,C0103,R0801 yast/mps/*.py
+  - pylint yast/*.py
+  - pylint yast/tensor/*.py
+  - pylint yast/backend/*.py
+  - pylint yast/sym/*.py
+  - pylint yast/mps/*.py
 
 test_python3.7_conda_numpy1.19.1: 
   image: python:3.7
@@ -115,7 +116,7 @@ test_python3.8_numpy1.19.+:
   - cd tests/;
   - pytest -v ./yast;
 
-test_python3.7_torch1.6:
+test_python3.7_torch1.8:
   stage: Test
   image: python:3.7
   script:
@@ -130,7 +131,7 @@ test_python3.7_torch1.6:
   - cd tests/;
   - pytest --backend torch -v ./yast;
 
-test_python3.8_torch1.6:
+test_python3.8_torch1.8:
   stage: Test
   image: python:3.8
   script:
