@@ -28,7 +28,7 @@ def test_block_U1():
 
     assert A.norm_diff(B1) < tol  # == 0.0
     assert A.norm_diff(B2) < tol  # == 0.0
-    assert B1.is_independent(B2)
+    assert B1.are_independent(B2)
 
 
 if __name__ == "__main__":

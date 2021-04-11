@@ -5,7 +5,8 @@ import time
 import tracemalloc
 import numpy as np
 from scipy import linalg as LA
-from .core import YastError
+from ._testing import YastError, _check
+
 
 __all__ = ['expmw', 'eigs', 'eigsh']
 

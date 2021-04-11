@@ -27,11 +27,11 @@ def test_add_0():
     assert e1.norm() < tol  # == 0.0
     assert e2.norm() < tol  # == 0.0
 
-    assert a.is_independent(c1)
-    assert a.is_independent(c2)
-    assert b.is_independent(c1)
-    assert b.is_independent(c2)
-    assert d.is_independent(d1)
+    assert a.are_independent(c1)
+    assert a.are_independent(c2)
+    assert b.are_independent(c1)
+    assert b.are_independent(c2)
+    assert d.are_independent(d1)
 
 
 def test_add_1():
@@ -57,10 +57,10 @@ def test_add_1():
     assert isclose(e2.norm(), 5, rel_tol=tol)
     assert isclose(e3.norm(), 5, rel_tol=tol)
 
-    assert a.is_independent(c1)
-    assert a.is_independent(c2)
-    assert b.is_independent(c1)
-    assert b.is_independent(c2)
+    assert a.are_independent(c1)
+    assert a.are_independent(c2)
+    assert b.are_independent(c1)
+    assert b.are_independent(c2)
 
 
 def test_add_2():
@@ -83,10 +83,10 @@ def test_add_2():
 
     assert isclose(np.linalg.norm(nc - na + 2*nb), 0, rel_tol=tol, abs_tol=tol)
 
-    assert a.is_independent(c1)
-    assert a.is_independent(c2)
-    assert b.is_independent(c1)
-    assert b.is_independent(c2)
+    assert a.are_independent(c1)
+    assert a.are_independent(c2)
+    assert b.are_independent(c1)
+    assert b.are_independent(c2)
     assert c1.is_consistent()
     assert c2.is_consistent()
 

@@ -130,16 +130,21 @@ def test_syntax():
     # linalg / split
     U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)))
     U, S, V = yast.svd(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2)  # here with truncation
+    U, S, V = a.svd( axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2)  # here with truncation
     try:
         U, S, V = yast.svd_lowrank(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2, n_iter=5, k_fac=2)
+        U, S, V = a.svd_lowrank(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2, n_iter=5, k_fac=2)
     except NameError:
         pass
 
     Q, R = yast.linalg.qr(a, axes=((0, 1), (2, 3)))
     Q, R = yast.qr(a, axes=((0, 1), (2, 3)))
+    Q, R = a.qr(axes=((0, 1), (2, 3)))
 
     D, U = yast.linalg.eigh(a2, axes=((0, 1), (2, 3)))
     D, U = yast.eigh(a2, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2)  # here with truncation
+    D, U = a2.eigh(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2)  # here with truncation
+
 
     # linalg
     number = a.norm()
@@ -163,4 +168,4 @@ def test_syntax():
 
     # tests
     a.is_consistent()
-    a.is_independent(b)
+    a.are_independent(b)

@@ -11,7 +11,7 @@ def run_moveaxis(a, ad, source, destination, result):
     assert newa.get_shape() == result
     assert np.moveaxis(ad, source=source, destination=destination).shape == result
     assert newa.is_consistent()
-    assert a.is_independent(newa)
+    assert a.are_independent(newa)
 
 
 def run_transpose(a, ad, axes, result):
@@ -20,7 +20,7 @@ def run_transpose(a, ad, axes, result):
     assert newa.get_shape() == result
     assert np.transpose(ad, axes=axes).shape == result
     assert newa.is_consistent()
-    assert a.is_independent(newa)
+    assert a.are_independent(newa)
 
 
 def test_transpose_0():
