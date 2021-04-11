@@ -1,9 +1,8 @@
 """ Methods creating a new yast tensor """
+
 from itertools import chain, repeat, accumulate, product
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _flatten, _tarray
-from ._testing import YastError
-
+from ._auxliary import _clear_axes, _unpack_axes, _flatten, _tarray, YastError
 
 __all__ = ['match_legs', 'block', 'matching_tensor']
 
@@ -39,10 +38,11 @@ def fill_tensor(a, t=(), D=(), val='rand'):
 
     Examples
     --------
-    D = 5 # ndim = 1)
-    D = (1, 2, 3) # nsym = 0, ndim = 3
-    t = [0, (-2, 0), (2, 0)] D=[1, (1, 2), (1, 3)] # nsym = 1 ndim = 3
-    t = [[(0, 0)], [(-2, -2), (0, 0), (-2, 0), (0, -2)], [(2, 2), (0, 0), (2, 0), (0, 2)]] D=[1, (1, 4, 2, 2), (1, 9, 3, 3)] # nsym = 2 ndim = 3
+    D = 5  # ndim = 1
+    D = (1, 2, 3)  # nsym = 0, ndim = 3
+    t = [0, (-2, 0), (2, 0)], D = [1, (1, 2), (1, 3)]  # nsym = 1 ndim = 3
+    t = [[(0, 0)], [(-2, -2), (0, 0), (-2, 0), (0, -2)], [(2, 2), (0, 0), (2, 0), (0, 2)]], \
+    D = [1, (1, 4, 2, 2), (1, 9, 3, 3)]  # nsym = 2 ndim = 3
     """
     D = (D,) if isinstance(D, int) else D
     t = (t,) if isinstance(t, int) else t
@@ -133,8 +133,8 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
             for n in range(a.nlegs):
                 try:
                     Ds.append(tD[n][tuple(ats[0, n, :].flat)])
-                except KeyError:
-                    raise YastError('Provided Ds. Cannot infer all bond dimensions from existing blocks.')
+                except KeyError as err:
+                    raise YastError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
             Ds = tuple(Ds)
 
         if val == 'zeros':
@@ -149,7 +149,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
             a.A[ts] = a.config.backend.diag_get(a.A[ts])
             a.A[ts] = a.config.backend.diag_create(a.A[ts])
     else:  # enforce that Ds is provided to increase clarity of the code
-        if a.isdiag and val.ndim == 1 and np.prod(Ds)==(val.size**2):
+        if a.isdiag and val.ndim == 1 and np.prod(Ds) == (val.size**2):
             a.A[ts] = a.config.backend.to_tensor(np.diag(val), Ds, dtype=a.config.dtype, device=a.config.device)
         else:
             a.A[ts] = a.config.backend.to_tensor(val, Ds=Ds, dtype=a.config.dtype, device=a.config.device)
@@ -203,9 +203,8 @@ def block(tensors, common_legs=None):
             Length of tuple should be equall to tensor.ndim - len(common_legs)
 
         common_legs : list
-            Legs that are not blocked
-            (equivalently on common legs all tensors have the same position in the supertensor, and those positions are not given in tensors)
-
+            Legs that are not blocked.
+            This is equivalently to all tensors having the same position (not specified) in the supertensor on that leg.
     """
     out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
@@ -225,7 +224,7 @@ def block(tensors, common_legs=None):
         ind, = _clear_axes(ind)
         if tn.nlegs != tn0.nlegs or tn.meta_fusion != tn0.meta_fusion or\
            not np.all(tn.s == tn0.s) or not np.all(tn.n == tn0.n) or\
-           tn.isdiag != tn0.isdiag :
+           tn.isdiag != tn0.isdiag:
             raise YastError('Ndims, signatures, total charges or fusion trees of blocked tensors are inconsistent.')
 
     posa = np.ones((len(pos), tn0.nlegs), dtype=int)
@@ -246,7 +245,7 @@ def block(tensors, common_legs=None):
         for t, pD in tDl.items():
             ps = sorted(pD.keys())
             Ds = [pD[p] for p in ps]
-            tDl[t] = {p: (aD-D, aD)  for p, D, aD in zip(ps, Ds, accumulate(Ds))}
+            tDl[t] = {p: (aD-D, aD) for p, D, aD in zip(ps, Ds, accumulate(Ds))}
             tDl[t]['Dtot'] = sum(Ds)
         tDs.append(tDl)
 

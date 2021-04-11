@@ -1,54 +1,39 @@
-import numpy as np
+""" Support for merging blocks in yast tensors. """
+
 from functools import lru_cache
 from itertools import groupby, product
 from operator import itemgetter
-from ._auxliary import _clear_axes
+import numpy as np
 
 
-def _merge_to_matrix(a, out_l, out_r, news_l, news_r, inds=None, sort_r=False):
-    order = out_l + out_r
-    meta_new, meta_mrg, ls_l, ls_r, u_new_l, u_new_r = _meta_merge_to_matrix(a.config, a.struct, out_l, out_r, news_l, news_r, inds, sort_r)
+def _merge_to_matrix(a, axes, s_eff, inds=None, rsort=False):
+    order = axes[0] + axes[1]
+    meta_new, meta_mrg, ls_l, ls_r, ul, ur = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds, rsort)
     Anew = a.config.backend.merge_to_matrix(a.A, order, meta_new, meta_mrg, a.config.dtype, a.config.device)
-    return Anew, ls_l, ls_r, u_new_l, u_new_r
-
-
-def _unmerge_from_matrix(A, ls_l, ls_r):
-    meta = []
-    for il, ir in product(ls_l.dec, ls_r.dec):
-        ic = il + ir
-        if ic in A:
-            for (tl, (sl, _, Dl)), (tr, (sr, _, Dr)) in product(ls_l.dec[il].items(), ls_r.dec[ir].items()):
-                meta.append((tl + tr, ic, sl, sr, Dl + Dr))
-    return ls_l.config.backend.unmerge_from_matrix(A, meta)
-
-
-def _unmerge_from_diagonal(A, ls):
-    meta = tuple((ta + ta, ia, sa) for ia in ls.dec for ta, (sa, _, _) in ls.dec[ia].items())
-    Anew = ls.config.backend.unmerge_from_diagonal(A, meta)
-    return {ind: ls.config.backend.diag_create(Anew[ind]) for ind in Anew}
+    return Anew, ls_l, ls_r, ul, ur
 
 
 @lru_cache(maxsize=256)
-def _meta_merge_to_matrix(config, struct, out_l, out_r, news_l, news_r, inds, sort_r):
-    legs_l = np.array(out_l, np.int)
-    legs_r = np.array(out_r, np.int)
+def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
+    legs_l = np.array(axes[0], np.int)
+    legs_r = np.array(axes[1], np.int)
     nsym = len(struct.n)
     nleg = len(struct.s)
     told = struct.t if inds is None else [struct.t[ii] for ii in inds]
     Dold = struct.D if inds is None else [struct.D[ii] for ii in inds]
-    tset = np.array(told, dtype=int).reshape(len(told), nleg, nsym)
+    tset = np.array(told, dtype=int).reshape((len(told), nleg, nsym))
     Dset = np.array(Dold, dtype=int).reshape(len(Dold), nleg)
     t_l = tset[:, legs_l, :]
     t_r = tset[:, legs_r, :]
     D_l = Dset[:, legs_l]
     D_r = Dset[:, legs_r]
-    s_l = np.array([struct.s[ii] for ii in out_l], dtype=int)
-    s_r = np.array([struct.s[ii] for ii in out_r], dtype=int)
+    s_l = np.array([struct.s[ii] for ii in axes[0]], dtype=int)
+    s_r = np.array([struct.s[ii] for ii in axes[1]], dtype=int)
     Deff_l = np.prod(D_l, axis=1)
     Deff_r = np.prod(D_r, axis=1)
 
-    te_l = config.sym.fuse(t_l, s_l, news_l)
-    te_r = config.sym.fuse(t_r, s_r, news_r)
+    te_l = config.sym.fuse(t_l, s_l, s_eff[0])
+    te_r = config.sym.fuse(t_r, s_r, s_eff[1])
     tnew = np.hstack([te_l, te_r])
 
     tnew = tuple(tuple(t.flat) for t in tnew)
@@ -61,19 +46,20 @@ def _meta_merge_to_matrix(config, struct, out_l, out_r, news_l, news_r, inds, so
     dec_l, Dtot_l = _leg_structure_merge(te_l, t_l, Deff_l, D_l)
     dec_r, Dtot_r = _leg_structure_merge(te_r, t_r, Deff_r, D_r)
 
-    ls_l = _LegDecomposition(config, s_l, news_l)
-    ls_r = _LegDecomposition(config, s_r, news_r)
+    ls_l = _LegDecomposition(config, s_l, s_eff[0])
+    ls_r = _LegDecomposition(config, s_r, s_eff[1])
     ls_l.dec = dec_l
     ls_r.dec = dec_r
     ls_l.D = Dtot_l
     ls_r.D = Dtot_r
 
     # meta_mrg = ((tnew, told, Dslc_l, D_l, Dslc_r, D_r), ...)
-    meta_mrg = tuple((tn, to, *dec_l[tel][tl][:2], *dec_r[ter][tr][:2]) for tn, to, tel, tl, ter, tr in zip(tnew, told, te_l, t_l, te_r, t_r))
+    meta_mrg = tuple((tn, to, *dec_l[tel][tl][:2], *dec_r[ter][tr][:2])
+                     for tn, to, tel, tl, ter, tr in zip(tnew, told, te_l, t_l, te_r, t_r))
 
     if sort_r:
         tt = sorted(set(zip(te_r, te_l, tnew)))
-        unew_r, unew_l, unew = zip(*tt)  if len(tt) > 0 else ((), (), ())
+        unew_r, unew_l, unew = zip(*tt) if len(tt) > 0 else ((), (), ())
     else:
         tt = sorted(set(zip(tnew, te_l, te_r)))
         unew, unew_l, unew_r = zip(*tt) if len(tt) > 0 else ((), (), ())
@@ -97,10 +83,26 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
     return dec, Dtot
 
 
+def _unmerge_from_matrix(A, ls_l, ls_r):
+    meta = []
+    for il, ir in product(ls_l.dec, ls_r.dec):
+        ic = il + ir
+        if ic in A:
+            for (tl, (sl, _, Dl)), (tr, (sr, _, Dr)) in product(ls_l.dec[il].items(), ls_r.dec[ir].items()):
+                meta.append((tl + tr, ic, sl, sr, Dl + Dr))
+    return ls_l.config.backend.unmerge_from_matrix(A, meta)
+
+
+def _unmerge_from_diagonal(A, ls):
+    meta = tuple((ta + ta, ia, sa) for ia in ls.dec for ta, (sa, _, _) in ls.dec[ia].items())
+    Anew = ls.config.backend.unmerge_from_diagonal(A, meta)
+    return {ind: ls.config.backend.diag_create(Anew[ind]) for ind in Anew}
+
+
 class _LegDecomposition:
     """Information about internal structure of leg resulting from fusions."""
     def __init__(self, config=None, s=(), news=1):
-        self.s, = _clear_axes(s)  # signature of fused legs
+        self.s =  (s,) if isinstance(s, int) else tuple(s) # signature of fused legs
         self.nlegs = len(self.s)  # number of fused legs
         self.config = config
         self.news = news  # signature of effective leg
@@ -125,7 +127,7 @@ class _LegDecomposition:
         for te, de in self.dec.items():
             print(te, ":")
             for to, Do in de.items():
-                print("   ",to, ":", Do)
+                print("   ", to, ":", Do)
 
     def leg_struct_for_merged(self, teff, tlegs, Deff, Dlegs):
         """ Calculate meta-information about bond dimensions for merging into one leg. """
@@ -189,7 +191,7 @@ class _LegDecomposition:
             for ind in ind_list:
                 t = tuple(ind)
                 tn = tuple(-ind)
-                minD_sector = min(D_keep[t],D_keep[tn])
+                minD_sector = min(D_keep[t], D_keep[tn])
                 D_keep[t] = D_keep[tn] = minD_sector
                 if -ind in ind_list:
                     ind_list.remove(-ind)
@@ -198,8 +200,6 @@ class _LegDecomposition:
             if D_keep[ind] > 0:
                 Dslc = self.config.backend.range_largest(D_keep[ind], Dmax[ind], sorting)
                 self.dec[ind] = {ind: (Dslc, D_keep[ind], (D_keep[ind],))}
-
-
 
 
 # def group_legs(self, axes, new_s=None):

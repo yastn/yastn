@@ -1,14 +1,12 @@
 """ Contractions of yast tensors """
+
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _indices_common_rows, _common_keys, _tarray, _tDarrays
-from ._testing import YastError, _check, _test_configs_match, _test_fusions_match
+from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray
+from ._auxliary import YastError, _check, _test_configs_match, _test_fusions_match
 from ._merging import _merge_to_matrix, _unmerge_from_matrix
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon']
 
-####################
-#   contractions   #
-####################
 
 def tensordot(a, b, axes, conj=(0, 0)):
     r"""
@@ -39,14 +37,14 @@ def tensordot(a, b, axes, conj=(0, 0)):
     la_out = tuple(ii for ii in range(a.mlegs) if ii not in la_con)  # outgoing meta legs
     lb_out = tuple(ii for ii in range(b.mlegs) if ii not in lb_con)  # outgoing meta legs
 
-    a_con, a_out = _unpack_axes(a, la_con, la_out)  # actual legs of a
-    b_con, b_out = _unpack_axes(b, lb_con, lb_out)  # actual legs of b
+    axes_a = _unpack_axes(a, la_out, la_con)  # actual legs of a; tuple of two tuples
+    axes_b = _unpack_axes(b, lb_con, lb_out)  # actual legs of b; tuple of two tuples
 
-    na_con, na_out = np.array(a_con, dtype=np.intp), np.array(a_out, dtype=np.intp)
-    nb_con, nb_out = np.array(b_con, dtype=np.intp), np.array(b_out, dtype=np.intp)
+    naxes_a = tuple(np.array(x, dtype=np.intp) for x in axes_a)
+    naxes_b = tuple(np.array(x, dtype=np.intp) for x in axes_b)
 
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
-    if not np.all(a.s[na_con] == (-conja * conjb) * b.s[nb_con]):
+    if not np.all(a.s[naxes_a[1]] == (-conja * conjb) * b.s[naxes_b[0]]):
         if a.isdiag:  # if tensor is diagonal, than freely changes the signature by a factor of -1
             a.s *= -1
         elif b.isdiag:
@@ -58,17 +56,18 @@ def tensordot(a, b, axes, conj=(0, 0)):
     c_s = np.array([conja, conjb], dtype=int)
     c_n = a.config.sym.fuse(c_n, c_s, 1)
 
-    inda, indb = _indices_common_rows(_tarray(a)[:, na_con, :], _tarray(b)[:, nb_con, :])
+    ind_a, ind_b = _common_rows(_tarray(a)[:, naxes_a[1], :], _tarray(b)[:, naxes_b[0], :])
+    s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
 
-    Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, a_out, a_con, conja, -conja, inda, sort_r=True)
-    Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(b, b_con, b_out, conjb, -conjb, indb)
+    Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, axes_a, s_eff_a, ind_a, rsort=True)
+    Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(b, axes_b, s_eff_b, ind_b)
 
     meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
     if _check["consistency"] and not (ua_r == ub_l and ls_ac.match(ls_bc)):
         raise YastError('Something went wrong in matching the indices of the two tensors')
 
-    c_s = np.hstack([conja * a.s[na_out], conjb * b.s[nb_out]])
+    c_s = np.hstack([conja * a.s[naxes_a[0]], conjb * b.s[naxes_b[1]]])
     c_meta_fusion = [a.meta_fusion[ii] for ii in la_out] + [b.meta_fusion[ii] for ii in lb_out]
     c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion)
 
@@ -141,7 +140,7 @@ def trace(a, axes=(0, 1)):
     if not np.all(a.s[ain1] == -a.s[ain2]):
         raise YastError('Signs do not match')
 
-    tset, Dset = _tDarrays(a)
+    tset, Dset = _tarray(a), _Darray(a)
     lt = len(tset)
     t1 = tset[:, ain1, :].reshape(lt, -1)
     t2 = tset[:, ain2, :].reshape(lt, -1)
@@ -163,9 +162,6 @@ def trace(a, axes=(0, 1)):
     c.update_struct()
     return c
 
-#############################
-#        swap gate          #
-#############################
 
 def swap_gate(a, axes, inplace=False):
     """
@@ -211,9 +207,6 @@ def swap_gate(a, axes, inplace=False):
         return c
     return a
 
-############
-#   ncon   #
-############
 
 def ncon(ts, inds, conjs=None):
     """Execute series of tensor contractions"""
@@ -226,7 +219,8 @@ def ncon(ts, inds, conjs=None):
     ts = dict(enumerate(ts))
     cutoff = 512
     cutoff2 = 2 * cutoff
-    edges = [(order, leg, ten) if order >= 0 else (-order + cutoff2, leg, ten) for ten, el in enumerate(inds) for leg, order in enumerate(el)]
+    edges = [(order, leg, ten) if order >= 0 else (-order + cutoff2, leg, ten)
+             for ten, el in enumerate(inds) for leg, order in enumerate(el)]
 
     edges.append((cutoff, cutoff, cutoff))
     conjs = [0] * len(inds) if conjs is None else list(conjs)

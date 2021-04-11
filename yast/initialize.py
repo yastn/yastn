@@ -2,14 +2,16 @@
 from .tensor import Tensor, YastError
 
 
-__all__ = ['rand', 'randR', 'zeros', 'ones', 'eye', 'import_from_dict', 'decompress_from_1d']
+__all__ = ['rand', 'randR', 'zeros', 'ones', 'eye',
+           'import_from_dict', 'decompress_from_1d']
 
 
 def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     r"""
-    Initialize tensor with all possible blocks filled with the random numbers in [-1, 1] and type specified in config.
+    Initialize tensor with all possible blocks filled with the random numbers.
 
-    Initialize tensor and call :meth:`Tensor.fill_tensor`.
+    dtype is specified in config drawing from [-1, 1] or [-1, 1] + 1j * [-1, 1]
+    Initialize tensor and call :meth:`yast.fill_tensor`.
 
     Parameters
     ----------
@@ -18,7 +20,8 @@ def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     n : int
         total charge
     t : list
-        a list of charges for each leg, see :meth:`Tensor.fill_tensor` for description.
+        a list of charges for each leg,
+        see :meth:`Tensor.fill_tensor` for description.
     D : list
         a list of corresponding bond dimensions
     isdiag : bool
@@ -36,8 +39,9 @@ def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
 
 def randR(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     r"""
-    Initialize tensor with all possible blocks filled with real random numbers in [-1, 1].
+    Initialize tensor with all possible blocks filled with real random numbers.
 
+    drawing from uniform distribution in [-1, 1].
     Initialize tensor and call :meth:`Tensor.fill_tensor`.
 
     Parameters
@@ -47,7 +51,8 @@ def randR(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     n : int
         total charge
     t : list
-        a list of charges for each leg, see :meth:`Tensor.fill_tensor` for description.
+        a list of charges for each leg,
+        see :meth:`Tensor.fill_tensor` for description.
     D : list
         a list of corresponding bond dimensions
     isdiag : bool
@@ -76,7 +81,8 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     n : int
         total charge
     t : list
-        a list of charges for each leg, see :meth:`Tensor.fill_tensor` for description.
+        a list of charges for each leg,
+        see :meth:`Tensor.fill_tensor` for description.
     D : list
         a list of corresponding bond dimensions
     isdiag : bool
@@ -105,7 +111,8 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     n : int
         total charge
     t : list
-        a list of charges for each leg, see :meth:`Tensor.fill_tensor` for description.
+        a list of charges for each leg,
+        see :meth:`Tensor.fill_tensor` for description.
     D : list
         a list of corresponding bond dimensions
 
@@ -128,7 +135,8 @@ def eye(config=None, t=(), D=(), **kwargs):
     Parameters
     ----------
     t : list
-        a list of charges for each leg, see :meth:`Tensor.fill_tensor` for description.
+        a list of charges for each leg,
+        see :meth:`Tensor.fill_tensor` for description.
     D : list
         a list of corresponding bond dimensions
 

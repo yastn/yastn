@@ -1,15 +1,17 @@
-""" Auxliary functions for syntax """
+""" Testing and auxliary functions. """
+
 from collections import namedtuple
 from itertools import accumulate, chain
-from ..sym import sym_none
 import numpy as np
+from ..sym import sym_none
 
+__all__ = ['check_signatures_match', 'check_consistency', 'allow_cache_meta', 'are_independent', 'is_consistent']
+
+_check = {"signatures_match": True, "consistency": True, "cache_meta": True}
 
 _struct = namedtuple('_struct', ('t', 'D', 's', 'n'))
 
-
-_config = namedtuple('_config', ('backend', 'sym', 'dtype', 'device'),
-                     defaults = (None, sym_none, 'float64', 'cpu'))
+_config = namedtuple('_config', ('backend', 'sym', 'dtype', 'device'), defaults=(None, sym_none, 'float64', 'cpu'))
 
 
 def _flatten(nested_iterator):
@@ -23,7 +25,7 @@ def _flatten(nested_iterator):
 def _unpack_axes(a, *args):
     """Unpack meta axes into native axes based on a.meta_fusion"""
     clegs = tuple(accumulate(x[0] for x in a.meta_fusion))
-    return (tuple(chain(*(range(clegs[ii] - a.meta_fusion[ii][0], clegs[ii]) for ii in axes))) for axes in args)
+    return tuple(tuple(chain(*(range(clegs[ii] - a.meta_fusion[ii][0], clegs[ii]) for ii in axes))) for axes in args)
 
 
 def _clear_axes(*args):
@@ -31,41 +33,29 @@ def _clear_axes(*args):
 
 
 def _common_keys(d1, d2):
-    """
-    Divide keys into: common, only in d1 and only in d2.
-
-    Returns: keys12, keys1, keys2
-    """
+    """ Divide keys into: common, only in d1 and only in d2. Returns: keys12, keys1, keys2. """
     s1 = set(d1)
     s2 = set(d2)
     return tuple(s1 & s2), tuple(s1 - s2), tuple(s2 - s1)
 
 
-def _indices_common_rows(a, b):
-    """
-    Return indices of a that are in b, and indices of b that are in a.
-    """
+def _common_rows(a, b):
+    """ Return indices (as tuple) of nparray a rows that are in b, and vice versa. """
     la = [tuple(x.flat) for x in a]
     lb = [tuple(x.flat) for x in b]
     sa = set(la)
     sb = set(lb)
     ia = tuple(ii for ii, el in enumerate(la) if el in sb)
     ib = tuple(ii for ii, el in enumerate(lb) if el in sa)
-    # ia = np.array([ii for ii, el in enumerate(la) if el in sb], dtype=np.intp)
-    # ib = np.array([ii for ii, el in enumerate(lb) if el in sa], dtype=np.intp)
     return ia, ib
 
 
 def _tarray(a):
-    return np.array(a.struct.t, dtype=int).reshape(len(a.struct.t), a.nlegs, a.config.sym.nsym)
+    return np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), a.nlegs, a.config.sym.nsym))
 
 
 def _Darray(a):
     return np.array(a.struct.D, dtype=int).reshape(len(a.struct.D), a.nlegs)
-
-
-def _tDarrays(a):
-    return np.array(a.struct.t, dtype=int).reshape(len(a.struct.t), a.nlegs, a.config.sym.nsym), np.array(a.struct.D, dtype=int).reshape(len(a.struct.D), a.nlegs)
 
 
 def update_struct(a):
@@ -75,3 +65,92 @@ def update_struct(a):
     t = tuple(a.A.keys())
     D = tuple(a.config.backend.get_shape(x) for x in a.A.values())
     a.struct = _struct(t, D, tuple(a.s), tuple(a.n))
+
+
+
+class YastError(Exception):
+    """Errors cought by checks in yast."""
+
+
+def check_signatures_match(value=True):
+    """Set the value of the flag check_signatures_match."""
+    _check["signatures_match"] = bool(value)
+
+
+def check_consistency(value=True):
+    """Set the value of the flag check_consistency."""
+    _check["consistency"] = bool(value)
+
+
+def allow_cache_meta(value=True):
+    """Set the value of the flag that permits to reuses some metadata."""
+    _check["cache_meta"] = bool(value)
+
+
+def _test_configs_match(a, b):
+    # if a.config != b.config:
+    if not (a.config.dtype == b.config.dtype and
+            a.config.dtype == b.config.dtype and
+            a.config.sym.name == b.config.sym.name and
+            a.config.backend.BACKEND_ID == b.config.backend.BACKEND_ID):
+        raise YastError('configs do not match')
+
+
+def _test_tensors_match(a, b):
+    if _check["signatures_match"] and (not np.all(a.s == b.s) or not np.all(a.n == b.n)):
+        raise YastError('Tensor signatures do not match')
+    if _check["consistency"] and not a.meta_fusion == b.meta_fusion:
+        raise YastError('Fusion trees do not match')
+
+
+def _test_fusions_match(a, b):
+    if _check["consistency"] and a.meta_fusion != b.meta_fusion:
+        raise YastError('Fusion trees do not match')
+
+
+def _test_all_axes(a, axes):
+    if _check["consistency"]:
+        axes = tuple(_flatten(axes))
+        if a.nlegs != len(axes):
+            raise YastError('Two few indices in axes')
+        if sorted(set(axes)) != list(range(a.nlegs)):
+            raise YastError('Repeated axis')
+
+
+def are_independent(a, b):
+    """
+    Test if all elements of two yast tensors are independent objects in memory.
+    """
+    test = []
+    test.append(a is b)
+    test.append(a.A is b.A)
+    test.append(a.n is b.n)
+    test.append(a.s is b.s)
+    for key in a.A.keys():
+        if key in b.A:
+            test.append(a.config.backend.is_independent(a.A[key], b.A[key]))
+    return not any(test)
+
+
+def is_consistent(a):
+    """
+    Test is yast tensor is does not contain inconsistent structures
+
+    Check that:
+    1) tset and Dset correspond to A
+    2) tset follow symmetry rule f(s@t)==n
+    3) block dimensions are consistent (this requires config.test=True)
+    """
+    test = []
+    for ind, D in zip(a.struct.t, a.struct.D):
+        test.append(ind in a.A)
+        test.append(a.config.backend.get_shape(a.A[ind]) == D)
+    test.append(len(a.struct.t) == len(a.A))
+    test.append(len(a.struct.D) == len(a.A))
+
+    tset = _tarray(a)
+    test.append(np.all(a.config.sym.fuse(tset, a.s, 1) == a.n))
+    for n in range(a.nlegs):
+        a.get_leg_structure(n, native=True)
+
+    return all(test)
