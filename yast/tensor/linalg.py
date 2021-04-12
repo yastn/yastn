@@ -3,7 +3,7 @@
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys
 from ._auxliary import YastError, _check, _test_tensors_match, _test_all_axes
-from ._merging import _merge_to_matrix, _unmerge_from_matrix, _unmerge_from_diagonal
+from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal
 from ._merging import _leg_struct_trivial, _leg_struct_truncation
 
 __all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'norm_diff', 'entropy']
@@ -110,16 +110,13 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
     V = a.__class__(config=a.config, s=(-sU,) + ls_r.s, n=n_r, meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
-    
+
     U.A, S.A, V.A = a.config.backend.svd_lowrank(Am, meta, D_block, n_iter, k_fac)
 
     ls_s = _leg_struct_truncation(S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'svd')
-    U.A = _unmerge_from_matrix(U.A, ls_l, ls_s)
-    S.A = _unmerge_from_diagonal(S.A, ls_s)
-    V.A = _unmerge_from_matrix(V.A, ls_s, ls_r)
-    U.update_struct()
-    S.update_struct()
-    V.update_struct()
+    _unmerge_matrix(U, ls_l, ls_s)
+    _unmerge_diagonal(S, ls_s)
+    _unmerge_matrix(V, ls_s, ls_r)
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
     V.moveaxis(source=0, destination=Vaxis, inplace=True)
     return U, S, V
@@ -183,12 +180,10 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     U.A, S.A, V.A = a.config.backend.svd(Am, meta)
 
     ls_s = _leg_struct_truncation(S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'svd')
-    U.A = _unmerge_from_matrix(U.A, ls_l, ls_s)
-    S.A = _unmerge_from_diagonal(S.A, ls_s)
-    V.A = _unmerge_from_matrix(V.A, ls_s, ls_r)
-    U.update_struct()
-    S.update_struct()
-    V.update_struct()
+
+    _unmerge_matrix(U, ls_l, ls_s)
+    _unmerge_diagonal(S, ls_s)
+    _unmerge_matrix(V, ls_s, ls_r)
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
     V.moveaxis(source=0, destination=Vaxis, inplace=True)
     return U, S, V
@@ -231,11 +226,8 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     Q.A, R.A = a.config.backend.qr(Am, meta)
 
     ls = _leg_struct_trivial(R, axis=0)
-    Q.A = _unmerge_from_matrix(Q.A, ls_l, ls)
-    R.A = _unmerge_from_matrix(R.A, ls, ls_r)
-    Q.update_struct()
-    R.update_struct()
-
+    _unmerge_matrix(Q, ls_l, ls)
+    _unmerge_matrix(R, ls, ls_r)
     Q.moveaxis(source=-1, destination=Qaxis, inplace=True)
     R.moveaxis(source=0, destination=Raxis, inplace=True)
     return Q, R
@@ -300,12 +292,8 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf,
     S.A, U.A = a.config.backend.eigh(Am, meta)
 
     ls_s = _leg_struct_truncation(S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'eigh')
-    U.A = _unmerge_from_matrix(U.A, ls_l, ls_s)
-    S.A = _unmerge_from_diagonal(S.A, ls_s)
-
-    U.update_struct()
-    S.update_struct()
-
+    _unmerge_matrix(U, ls_l, ls_s)
+    _unmerge_diagonal(S, ls_s)
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
     return S, U
 

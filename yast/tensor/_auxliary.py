@@ -1,6 +1,6 @@
 """ Testing and auxliary functions. """
 
-from collections import namedtuple
+from typing import NamedTuple
 from itertools import accumulate, chain
 import numpy as np
 from ..sym import sym_none
@@ -9,9 +9,17 @@ __all__ = ['check_signatures_match', 'check_consistency', 'allow_cache_meta', 'a
 
 _check = {"signatures_match": True, "consistency": True, "cache_meta": True}
 
-_struct = namedtuple('_struct', ('t', 'D', 's', 'n'))
+class _struct(NamedTuple):
+    t: tuple
+    D: tuple
+    s: tuple
+    n: tuple
 
-_config = namedtuple('_config', ('backend', 'sym', 'dtype', 'device'), defaults=(None, sym_none, 'float64', 'cpu'))
+class _config(NamedTuple):
+    backend: any = None
+    sym: any = sym_none
+    dtype: str = 'float64'
+    device: str = 'cpu'
 
 
 def _flatten(nested_iterator):
