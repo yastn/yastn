@@ -317,9 +317,8 @@ def qr(A, meta):
 #     return R, Q
 
 @torch.no_grad()
-def select_global_largest(S, D_keep, D_total, sorting,
-                          keep_multiplets=False, eps_multiplet=1.0e-14):
-    if sorting == 'svd':
+def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
+    if ordering == 'svd':
         s_all = torch.cat([S[ind][:D_keep[ind]] for ind in S])
         values, order= torch.topk(s_all, D_total + int(keep_multiplets))
         # if needed, preserve multiplets within each sector
@@ -341,15 +340,15 @@ def select_global_largest(S, D_keep, D_total, sorting,
                         break
         return order
         # return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
-    elif sorting == 'eigh':
+    elif ordering == 'eigh':
         s_all = torch.cat([S[ind][-D_keep[ind]:] for ind in S])
         return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
 
 
-def range_largest(D_keep, D_total, sorting):
-    if sorting == 'svd':
+def range_largest(D_keep, D_total, ordering):
+    if ordering == 'svd':
         return (0, D_keep)
-    elif sorting == 'eigh':
+    elif ordering == 'eigh':
         return (D_total - D_keep, D_total)
 
 

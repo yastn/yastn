@@ -124,20 +124,22 @@ def _leg_struct_truncation(a, tol=0., D_block=np.inf, D_total=np.inf, keep_multi
     return _LegDecomposition(a.config, a.s[0], a.s[0], dec, Dtot)
 
 
-def _unmerge_from_matrix(A, ls_l, ls_r):
+def _unmerge_matrix(a, ls_l, ls_r):
     meta = []
     for il, ir in product(ls_l.dec, ls_r.dec):
         ic = il + ir
-        if ic in A:
+        if ic in a.A:
             for (tl, (sl, _, Dl)), (tr, (sr, _, Dr)) in product(ls_l.dec[il].items(), ls_r.dec[ir].items()):
                 meta.append((tl + tr, ic, sl, sr, Dl + Dr))
-    return ls_l.config.backend.unmerge_from_matrix(A, meta)
+    a.A = ls_l.config.backend.unmerge_from_matrix(a.A, meta)
+    a.update_struct()
 
 
-def _unmerge_from_diagonal(A, ls):
+def _unmerge_diagonal(a, ls):
     meta = tuple((ta + ta, ia, sa) for ia in ls.dec for ta, (sa, _, _) in ls.dec[ia].items())
-    Anew = ls.config.backend.unmerge_from_diagonal(A, meta)
-    return {ind: ls.config.backend.diag_create(Anew[ind]) for ind in Anew}
+    a.A = ls.config.backend.unmerge_from_diagonal(a.A, meta)
+    a.A = {ind: ls.config.backend.diag_create(x) for ind, x in a.A.items()}
+    a.update_struct()
 
 
 class _LegDecomposition:

@@ -3,7 +3,7 @@
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray
 from ._auxliary import YastError, _check, _test_configs_match, _test_fusions_match
-from ._merging import _merge_to_matrix, _unmerge_from_matrix
+from ._merging import _merge_to_matrix, _unmerge_matrix
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon']
 
@@ -72,8 +72,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
     c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion)
 
     c.A = c.config.backend.dot(Am, Bm, conj, meta_dot)
-    c.A = _unmerge_from_matrix(c.A, ls_l, ls_r)
-    c.update_struct()
+    _unmerge_matrix(c, ls_l, ls_r)
     return c
 
 
