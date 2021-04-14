@@ -1,10 +1,13 @@
 """ Linalg methods for yast tensor. """
 
 import numpy as np
+import time
+import tracemalloc
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys
 from ._auxliary import YastError, _check, _test_tensors_match, _test_all_axes
 from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal
 from ._merging import _leg_struct_trivial, _leg_struct_truncation
+from ._krylov import krylov
 
 __all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'norm_diff', 'entropy']
 
@@ -333,3 +336,233 @@ def entropy(a, axes=(0, 1), alpha=1):
     else:
         Sm = {t: a.config.backend.diag_get(x) for t, x in a.A.items()}
     return a.config.backend.entropy(Sm, alpha=alpha)  # entropy, Smin, normalization
+
+
+### Krylov based methods, handled by anonymous function dectibing action of matrix on a vector
+
+def expm_anm(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=0, algorithm='arnoldi'):
+    #return expA(Av=Av, Bv=Bv, init=init, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=hermitian, bi_orth=bi_orth, NA=NA, cost_estim=cost_estim, algorithm=algorithm)
+    #def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_estim, algorithm):
+    if not hermitian and not Bv:
+        raise YastError('expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
+    k_max = min([20, init[0].get_size()])
+    if not NA:
+        # n - cost of vector init
+        # NA - cost of matrix Av
+        # v_i - cost of exponatiation of size m(m-krylov dim)
+        T = init[0].config.backend.expm(np.diag(np.random.rand(k_max-1), -1) + np.diag(
+            np.random.rand(k_max), 0) + np.diag(np.random.rand(k_max-1), 1))
+        if cost_estim == 0:  # approach 0: defaoult based on matrix size
+            # in units of n
+            n = init[0].get_size()
+            NA = round(4.*n**(0.5), 2)
+            v_i = k_max**2/n
+            n = 1.
+        elif cost_estim == 1:  # approach 1: based on time usage. normalized to time of saving copy of the initial vector. Don't make measures to small
+            # in units of v_i
+            start_time = time.time()
+            init[0].copy()
+            n = time.time() - start_time
+
+            start_time = time.time()
+            init[0].config.backend.expm(T)
+            v_i = time.time() - start_time
+
+            start_time = time.time()
+            Av(init[0]).copy()
+            NA = (time.time() - start_time)/v_i
+
+            n *= (1./v_i)
+            NA *= (1./v_i)
+            v_i = 1.
+        elif cost_estim == 2:  # approach 2: based on memory usage
+            # in units of v_i
+            tracemalloc.start()
+            init[0].copy()
+            n, _ = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+
+            tracemalloc.start()
+            init[0].config.backend.expm(T)
+            v_i, _ = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+
+            tracemalloc.start()
+            Av(init[0])
+            NA, _ = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+
+            n *= (1./v_i)
+            NA *= (1./v_i)
+            v_i = 1.
+    # Krylov parameters
+    mmax = k_max
+    m = max([1, k])
+
+    # Initialize variables
+    step = 0
+    ireject = 0
+    reject = 0
+    happy = 0
+    sgn = np.sign(dt).real*1j if dt.real == 0. else np.sign(dt).real*1
+    tnow = 0
+    tout = abs(dt)
+    j = 0
+    tau = abs(dt)
+
+    # Set safety factors
+    gamma = 0.8
+    delta = 1.2
+
+    # Initial condition
+    w = init
+    oldm, oldtau, omega = np.nan, np.nan, np.nan
+    orderold, kestold = True, True
+
+    # Iterate until we reach the final t
+    while tnow < tout:
+        # Compute the exponential of the augmented matrix
+        err, evec, good = expm(Av=Av, Bv=Bv, init=w, tol=eigs_tol, k=m, hermitian=hermitian,
+                               bi_orth=bi_orth, tau=(sgn, tau.real), algorithm=algorithm)
+        happy = good[0]
+        j = good[1]
+
+        # Error per unit step
+        oldomega = omega
+        omega = (tout/tau)*(err/exp_tol)
+
+        # Estimate order
+        if m == oldm and tau != oldtau and ireject > 0:
+            order = max([1, np.log(omega/oldomega)/np.log(tau/oldtau)])
+            orderold = False
+        elif orderold or ireject == 0:
+            orderold = True
+            order = j*.25
+        else:
+            orderold = True
+
+        # Estimate k
+        if m != oldm and tau == oldtau and ireject > 0:
+            kest = max([1.1, (omega/oldomega)**(1./(oldm-m))]
+                       ) if omega > 0 else 1.1
+            kestold = False
+        elif kestold or ireject == 0:
+            kestold = True
+            kest = 2
+        else:
+            kestold = True
+
+        # This if statement is the main difference between fixed and variable m
+        oldtau, oldm = tau, m
+        if happy == 1:
+            # Happy breakdown; wrap up
+            omega = 0
+            taunew, mnew = tau, m
+        elif j == mmax and omega > delta:
+            # Krylov subspace to small and stepsize to large
+            taunew, mnew = tau*(omega/gamma)**(-1./order), j
+        else:
+            # Determine optimal tau and m
+            tauopt = tau*(omega/gamma)**(-1./order)
+            mopt = max([1, np.ceil(j+np.log(omega/gamma)/np.log(kest))])
+
+            # evaluate Cost functions
+            Ctau = (m * NA + 3 * m * n + (m/mmax)**2*v_i * (10 + 3 * (m - 1))
+                    * (m + 1) ** 3) * np.ceil((tout - tnow) / tauopt)
+
+            Ck = (mopt * NA + 3 * mopt * n + (mopt/mmax)**2*v_i * (10 + 3 * (mopt - 1))
+                  * (mopt + 1) ** 3) * np.ceil((tout - tnow) / tau)
+            if Ctau < Ck:
+                taunew, mnew = tauopt, m
+            else:
+                taunew, mnew = tau, mopt
+
+        # Check error against target
+        if omega <= delta:  # use this one
+            reject += ireject
+            step += 1
+            w = evec
+            # update time
+            tnow += tau
+            ireject = 0
+        else:  # try again
+            ireject += 1
+
+        # Another safety factors
+        tau = min([tout - tnow, max([.2 * tau, min([taunew, 2 * tau])])])
+        m = int(
+            max([1, min([mmax, max([np.floor(.75 * m), min([mnew, np.ceil(1.3333 * m)])])])]))
+
+    if abs(tnow/tout) < 1.:
+        raise YastError('eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = '+omega /
+                    delta+'\nRemaining time = '+abs(1.-tnow/tout)+'\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
+    return (w[0], step, j, tnow,)
+
+
+def expm(Av, init, tau, Bv=None, tol=1e-14, k=5, algorithm='arnoldi', bi_orth=False, hermitian=True):
+    norm = init[0].norm()
+    init = [(1. / it.norm())*it for it in init] # normalize
+    
+    val, Y, good = krylov(init, Av, Bv, tol, k, algorithm, hermitian, ncv, bi_orth)
+    return val, [norm*Y[it] for it in range(len(Y))], good
+
+
+#### Find lowest eigenstate
+
+def eigs_anm(Av, init, Bv=None, hermitian=True, k='all', sigma=None, ncv=5, which=None, tol=1e-14, bi_orth=True, return_eigenvectors=True, algorithm='arnoldi'):
+    r"""
+    Av, Bv: function handlers
+        Bv: default = None
+        Action of a matrix on a vector. For non-symmetric lanczos both have to be defined.
+    init: Tensor
+        Initial vector for iteration.
+    k: int
+        default = 'all', number of eigenvalues eqauls number of non-zero Krylov vectors
+        The number of eigenvalues and eigenvectors desired. It is not possible to compute all eigenvectors of a matrix.
+    sigma: float
+        default = None (search for smallest)
+        Find eigenvalues near sigma.
+    ncv: int
+        default = 5
+        The number of Lanczos vectors generated ncv must be greater than k; it is recommended that ncv > 2*k.
+    which: str, [‘LM’ | ‘SM’ | ‘LR’ | ‘SR’ | ‘LI’ | ‘SI’]
+        default = None (search for closest to sigma - if defined and for 'SR' else)
+        Which k eigenvectors and eigenvalues to find:
+            ‘LM’ : largest magnitude
+            ‘SM’ : smallest magnitude
+            ‘LR’ : largest real part
+            ‘SR’ : smallest real part
+            ‘LI’ : largest imaginary part
+            ‘SI’ : smallest imaginary part
+    tol: float
+        defoult = 1e-14
+        Relative accuracy for eigenvalues (stopping criterion) for Krylov subspace.
+    return_eigenvectors: bool
+        default = True
+        Return eigenvectors (True) in addition to eigenvalues.
+    bi_orth: bool
+        default = True
+        Option for non-symmetric Lanczos method. Whether to bi-orthonomalize Krylov-subspace vectors.
+    algorithm: str
+        default = 'arnoldi'
+        What method to use. Possible options: arnoldi, lanczos
+    """
+    norm, _ = init[0].norm(), None
+    init = [(1. / it.norm())*it for it in init]
+    val, Y, good = krylov(init, Av, Bv, tol, k, algorithm, hermitian, ncv, bi_orth, sigma, which, return_eigenvectors)
+    return val, [norm*Y[it] for it in range(len(Y))], good
+
+
+def eigh_anm(Av, init, tol=1e-14, k=5, algorithm='arnoldi'):
+    norm = init[0].norm()
+    init = [(1. / it.norm())*it for it in init]
+    val, Y, good = krylov(init, Av, None, tol, 'all', k, algorithm, True)
+    return val, [norm*Y[it] for it in range(len(Y))], good
+
+
+def eig_anm(Av, init, Bv=None, tol=1e-14, k=5, bi_orth=False, algorithm='lanczos'):
+    norm = init[0].norm()
+    init = [(1. / it.norm())*it for it in init]
+    val, Y, good = krylov(init, Av, Bv, tol, 'all', k, algorithm, False, bi_orth)
+    return val, [norm*Y[it] for it in range(len(Y))], good
+

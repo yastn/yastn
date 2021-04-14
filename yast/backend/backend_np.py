@@ -241,6 +241,10 @@ def exp_diag(A, step):
     return {t: np.diag(np.exp(step * np.diag(x))) for t, x in A.items()}
 
 
+def expm(A):
+    return sp.linalg.expm(A)
+
+
 def sqrt(A):
     return {t: np.sqrt(x) for t, x in A.items()}
 

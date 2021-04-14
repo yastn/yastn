@@ -241,6 +241,10 @@ def exp_diag(A, step):
     return {t: torch.diag(torch.exp(step * torch.diag(x))) for t, x in A.items()}
 
 
+def expm(A):
+    return torch.matrix_exp(A)
+
+
 def sqrt(A):
     return {t: torch.sqrt(x) for t, x in A.items()}
 
