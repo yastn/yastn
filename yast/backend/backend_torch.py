@@ -38,14 +38,6 @@ def copy(x):
     return x.detach().clone()
 
 
-def real(x):
-    return x.real
-
-
-def imag(x):
-    return x.imag
-
-
 def to_numpy(x):
     return x.detach().cpu().numpy()
 
@@ -247,6 +239,14 @@ def sqrt(A):
 
 def absolute(A):
     return {t: torch.abs(x) for t, x in A.items()}
+
+
+def real(A):
+    return {t: torch.real(x) if torch.is_complex(x) else x for t, x in A.items()}
+
+
+def imag(A):
+    return {t: torch.imag(x) if torch.is_complex(x) else 0 * x for t, x in A.items()}
 
 
 def svd_lowrank(A, meta, D_block, n_iter, k_fac):

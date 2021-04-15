@@ -10,10 +10,10 @@ tol=1e-8
 def run_tdvp_1site(psi, H, dt, sweeps,  Eng_gs, opts=None):
     """ Run a faw sweeps in imaginary time of tdvp_1site_sweep. """
     env = mps.dmrg.dmrg_sweep_1site(psi, H, env=None)
-    Eng_old = env.measure().real
+    Eng_old = env.measure()  #.real
     for _ in range(sweeps):
         env = mps.tdvp.tdvp_sweep_1site(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
-        Eng = env.measure().real
+        Eng = env.measure()  #.real
         assert Eng < Eng_old + tol
         Eng_old = Eng
     print('Eng =', Eng, ' Egs =', Eng_gs)
@@ -24,10 +24,10 @@ def run_tdvp_1site(psi, H, dt, sweeps,  Eng_gs, opts=None):
 def run_tdvp_2site(psi, H, dt, sweeps,  Eng_gs, opts=None):
     """ Run a faw sweeps in imaginary time of tdvp_2site_sweep. """
     env = mps.dmrg.dmrg_sweep_1site(psi, H, env=None)
-    Eng_old = env.measure().real
+    Eng_old = env.measure()  #.real
     for _ in range(sweeps):
         env = mps.tdvp.tdvp_sweep_2site(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
-        Eng = env.measure().real
+        Eng = env.measure()  #.real
         assert Eng < Eng_old + tol
         Eng_old = Eng
     print('Eng =', Eng, ' Egs =', Eng_gs)
@@ -38,10 +38,10 @@ def run_tdvp_2site(psi, H, dt, sweeps,  Eng_gs, opts=None):
 def run_tdvp_2site_group(psi, H, dt, sweeps,  Eng_gs, opts=None):
     """ Run a faw sweeps in imaginary time of tdvp_2site_group. """
     env = mps.dmrg.dmrg_sweep_1site(psi, H, env=None)
-    Eng_old = env.measure().real
+    Eng_old = env.measure()  #.real
     for _ in range(sweeps):
         env = mps.tdvp.tdvp_sweep_2site_group(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
-        Eng = env.measure().real
+        Eng = env.measure()  #.real
         assert Eng < Eng_old + tol
         Eng_old = Eng
     print('Eng =', Eng, ' Egs =', Eng_gs)

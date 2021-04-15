@@ -37,14 +37,6 @@ def copy(x):
     return x.copy()
 
 
-def real(x):
-    return x.real
-
-
-def imag(x):
-    return x.imag
-
-
 def to_numpy(x):
     return x.copy()
 
@@ -247,6 +239,14 @@ def sqrt(A):
 
 def absolute(A):
     return {t: np.abs(x) for t, x in A.items()}
+
+
+def real(A):
+    return {t: np.real(x) for t, x in A.items()}
+
+
+def imag(A):
+    return {t: np.imag(x) for t, x in A.items()}
 
 
 def svd_lowrank(A, meta, D_block, n_iter, k_fac):

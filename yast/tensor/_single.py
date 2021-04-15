@@ -346,23 +346,17 @@ def abs(a):
 
 
 def real(a):
-    """ return real part of tensor """
-    if not a.is_complex():
-        raise RuntimeError("Supported only for complex tensors.")
-    config_real = a.config._replace(dtype="float64")
-    c = a.__class__(config=config_real, s=a.s, n=a.n, isdiag=a.isdiag, meta_fusion=a.meta_fusion)
-    c.A = {ts: a.config.backend.real(x) for ts, x in a.A.items()}
+    """ return real part of tensor. Do not change dtype of yast.Tensor """
+    c = a.copy_empty()
+    c.A = a.config.backend.real(a.A)
     c.struct = a.struct
     return c
 
 
 def imag(a):
     """ return imaginary part of tensor """
-    if not a.is_complex():
-        raise RuntimeError("Supported only for complex tensors.")
-    config_real = a.config._replace(dtype="float64")
-    c = a.__class__(config=config_real, s=a.s, n=a.n, isdiag=a.isdiag, meta_fusion=a.meta_fusion)
-    c.A = {ts: a.config.backend.imag(x) for ts, x in a.A.items()}
+    c = a.copy_empty()
+    c.A = a.config.backend.imag(a.A)
     c.struct = a.struct
     return c
 

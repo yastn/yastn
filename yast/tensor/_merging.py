@@ -13,7 +13,7 @@ def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
     return Anew, ls_l, ls_r, ul, ur
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=1024)
 def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
     legs_l = np.array(axes[0], np.int)
     legs_r = np.array(axes[1], np.int)
