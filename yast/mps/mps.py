@@ -311,10 +311,10 @@ class Mps:
                 _, R = linalg.qr(self.A[n], axes=(self.left + self.phys, self.right), sQ=-1)
             _, s, _ = linalg.svd(R, axes=(0,1))
             s = s.to_numpy().diagonal()
-            Schmidt_spectrum[n, :len(s)] = s.real
-            Smin[n] = min(s).real
+            Schmidt_spectrum[n, :len(s)] = s
+            Smin[n] = min(s)
             if alpha == 1:  # von Neumann 
-                Entropy[n] = (-2.*sum(s*s*np.log2(s))).real
+                Entropy[n] = (-2.*sum(s*s*np.log2(s)))
             else:  # Renyi
-                Entropy[n] = (np.log2(sum(s**alpha))/(alpha-1.)).real
+                Entropy[n] = (np.log2(sum(s**alpha))/(alpha-1.))
         return Ds, Schmidt_spectrum, Smin, Entropy

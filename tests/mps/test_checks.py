@@ -18,7 +18,7 @@ def test_check_signs():
     yast.check_signatures_match(value=True)
 
 
-def test_cache():
+def atest_cache():
     a = yast.rand(config=config_Z2_R, s=(-1, 1, 1, -1),
                     t=((0, 1), (0, 1), (0, 1), (0, 1)),
                     D=((1, 2), (3, 4), (5, 6), (7, 8)))
