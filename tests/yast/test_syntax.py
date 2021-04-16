@@ -1,24 +1,29 @@
-import yast
+try:
+    import yast
+except ModuleNotFoundError:
+    import fix_path
+    import yast
 import config_U1_R
 
 tol = 1e-12
+
 
 def test_syntax():
     """ List of commands and syntax. Not all possible parameters of some functions are shown below."""
 
     # initialization:
     a = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
-                t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+                  t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
     # a = yast.randR(config=config_U1_R, s=(-1, 1, 1, -1),
     #             t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
     #             D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
     b = yast.ones(config=config_U1_R, s=(-1, 1, 1, -1),
-                t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+                  t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
     c = yast.zeros(config=config_U1_R, s=(-1, 1, 1, -1),
-                t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+                   t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
     d = yast.Tensor(config=config_U1_R, s=(-1, 1, 1, -1))
     d.set_block(ts=(1, -1, 2, 0), Ds=(2, 4, 9, 2), val='rand')
     d.set_block(ts=(2, 0, 2, 0), Ds=(3, 3, 9, 2), val='rand')
@@ -77,7 +82,7 @@ def test_syntax():
     # output dense
     array = a.to_dense()
     array = a.to_numpy()
-    ls = {1: b.get_leg_structure(axis=1)} 
+    ls = {1: b.get_leg_structure(axis=1)}
     array = a.to_dense(leg_structures=ls)  # on selected legs, enforce to include cherges read in previous line
     tensor = a.to_nonsymmetric()
 
@@ -90,9 +95,9 @@ def test_syntax():
     tensor = yast.flip_signature(a)
 
     # permute
-    tensor = a.transpose(axes=(2,3,0,1))
-    tensor = yast.transpose(a, axes=(2,3,0,1))
-    
+    tensor = a.transpose(axes=(2, 3, 0, 1))
+    tensor = yast.transpose(a, axes=(2, 3, 0, 1))
+
     tensor = a.moveaxis(source=2, destination=3)
     tensor = yast.moveaxis(a, source=2, destination=3)
 
@@ -129,11 +134,11 @@ def test_syntax():
 
     # linalg / split
     U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)))
-    U, S, V = yast.svd(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2)  # here with truncation
-    U, S, V = a.svd( axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2)  # here with truncation
+    U, S, V = yast.svd(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
+    U, S, V = a.svd(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
     try:
-        U, S, V = yast.svd_lowrank(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2, n_iter=5, k_fac=2)
-        U, S, V = a.svd_lowrank(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2, n_iter=5, k_fac=2)
+        U, S, V = yast.svd_lowrank(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2, n_iter=5, k_fac=2)
+        U, S, V = a.svd_lowrank(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2, n_iter=5, k_fac=2)
     except NameError:
         pass
 
@@ -142,9 +147,8 @@ def test_syntax():
     Q, R = a.qr(axes=((0, 1), (2, 3)))
 
     D, U = yast.linalg.eigh(a2, axes=((0, 1), (2, 3)))
-    D, U = yast.eigh(a2, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2)  # here with truncation
-    D, U = a2.eigh(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block = 2)  # here with truncation
-
+    D, U = yast.eigh(a2, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
+    D, U = a2.eigh(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
 
     # linalg
     number = a.norm()
@@ -162,7 +166,7 @@ def test_syntax():
     # fuse
     tensor = a.fuse_legs(axes=(0, (1, 3), 2))
     tensor = tensor.unfuse_legs(axes=1)
-    
+
     tensor = yast.fuse_legs(a, axes=(0, (1, 3), 2))
     yast.unfuse_legs(tensor, axes=(0, (1, 3), 2), inplace=True)
 

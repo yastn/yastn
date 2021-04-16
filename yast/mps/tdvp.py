@@ -16,7 +16,10 @@ logger = logging.getLogger('yast.tensor.tdvp')
 #           tdvp                #
 #################################
 
-def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, D_totals=None, tol_svds=None, SV_min=None, versions=('1site', '2site'), cutoff_dE=1e-9, hermitian=True, fermionic=False, k=4,  eigs_tol=1e-12, exp_tol=1e-12, bi_orth=False, NA=None, version='1site', opts_svd=None, optsK_svd=None, algorithm='arnoldi'):
+def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, D_totals=None, tol_svds=None, SV_min=None,
+             versions=('1site', '2site'), cutoff_dE=1e-9, hermitian=True, fermionic=False,
+             k=4, eigs_tol=1e-12, exp_tol=1e-12, bi_orth=False, NA=None, version='1site',
+             opts_svd=None, optsK_svd=None, algorithm='arnoldi'):
     # evolve with TDVP method, up to tmax and initial guess of the time step dt
     # opts - optional info for MPS truncation
     curr_t = 0
@@ -29,10 +32,9 @@ def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, D_totals=None, tol_svd
     else:
         E0, dE = 0, 0
     while abs(curr_t) < abs(tmax):
-        dt = min([abs(tmax - curr_t)/abs(dt), 1.]) * dt
+        dt = min([abs(tmax - curr_t) / abs(dt), 1.]) * dt
         if not H and not M:
-            logger.error(
-                'yast.tdvp: Neither Hamiltonian nor Kraus operators defined.')
+            logger.error('yast.tdvp: Neither Hamiltonian nor Kraus operators defined.')
         else:
             if version == '1site':
                 env = tdvp_sweep_1site(psi=psi, H=H, M=M, dt=dt, env=env, hermitian=hermitian, fermionic=fermionic,
@@ -45,10 +47,10 @@ def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, D_totals=None, tol_svd
                                              k=k, eigs_tol=eigs_tol, exp_tol=exp_tol, bi_orth=bi_orth, NA=NA, opts_svd=opts_svd, optsK_svd=optsK_svd, algorithm=algorithm)
             else:
                 env = tdvp_sweep_mix(psi=psi, H=H, M=M, dt=dt, env=env, hermitian=hermitian, fermionic=fermionic, versions=versions, D_totals=D_totals, tol_svds=tol_svds, SV_min=SV_min,
-                                           k=k, eigs_tol=eigs_tol, exp_tol=exp_tol, bi_orth=bi_orth, NA=NA, opts_svd=opts_svd, optsK_svd=optsK_svd, algorithm=algorithm)
+                                     k=k, eigs_tol=eigs_tol, exp_tol=exp_tol, bi_orth=bi_orth, NA=NA, opts_svd=opts_svd, optsK_svd=optsK_svd, algorithm=algorithm)
         E = env.measure()
         dE = abs(E - E0)
-        #print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE, ' D: ', max(psi.get_D()))
+        # print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE, ' D: ', max(psi.get_D()))
         E0 = E
         curr_t += dt
     return env, E, dE
@@ -134,7 +136,7 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
                     v, n, conj=True), dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
                 init = expmw(Av=lambda v: env.Heff1(v, n), init=[
-                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
         # canonize and save
         psi.A[n] = init[0]
         psi.orthogonalize_site(n, towards=psi.g.last)
@@ -146,10 +148,10 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
             init = psi.A[psi.pC]
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff0(v, psi.pC), init=[init], Bv=lambda v: env.Heff0(
-                    v, psi.pC, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                    v, psi.pC, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
                 init = expmw(Av=lambda v: env.Heff0(v, psi.pC), init=[
-                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
             psi.A[psi.pC] = init[0]
         psi.absorb_central(towards=psi.g.last)
 
@@ -158,10 +160,10 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
         if H:  # forward in time evolution of a central site: T(+dt*.5)
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff1(v, n), init=[init], Bv=lambda v: env.Heff1(
-                    v, n, conj=True), dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                    v, n, conj=True), dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
                 init = expmw(Av=lambda v: env.Heff1(v, n), init=[
-                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
             init = init[0]
 
         if M:  # apply the Kraus operator
@@ -182,17 +184,16 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
             init = psi.A[psi.pC]
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff0(v, psi.pC), init=[init], Bv=lambda v: env.Heff0(
-                    v, psi.pC, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                    v, psi.pC, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
                 init = expmw(Av=lambda v: env.Heff0(v, psi.pC), init=[
-                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
             psi.A[psi.pC] = init[0]
         psi.absorb_central(towards=psi.g.first)
-
     return env
 
 
-def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fermionic=False, k=4,  eigs_tol=1e-12, exp_tol=1e-12, bi_orth=True, NA=None, opts_svd=None, optsK_svd=None, algorithm='arnoldi'):
+def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fermionic=False, k=4, eigs_tol=1e-12, exp_tol=1e-12, bi_orth=True, NA=None, opts_svd=None, optsK_svd=None, algorithm='arnoldi'):
     r"""
     Perform sweep with 2site-TDVP.
     Procedure performs exponantiation: psi(dt) = exp( dt * H )*psi(0). For Hamiltonian real time evolution forward in time: sign(dt)= -1j, for Hamiltonian imaginary time evolution forward in time: sign(dt)= -1.
@@ -275,12 +276,12 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
             init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(v, n, conj=True), init=[
-                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
                 init = expmw(Av=lambda v: env.Heff2(v, n), init=[
-                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
-            A1, S, A2 = linalg.svd(init[0],axes=(psi.left + psi.phys, tuple(
+            A1, S, A2 = linalg.svd(init[0], axes=(psi.left + psi.phys, tuple(
                 a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
             psi.A[n] = A1
             psi.A[n1] = S.tensordot(A2, axes=(1, psi.left))
@@ -292,10 +293,10 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
             init = psi.A[n1]
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
-                    v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                    v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
                 init = expmw(Av=lambda v: env.Heff1(v, n1), init=[
-                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
             psi.A[n1] = init[0]
 
     for n in psi.g.sweep(to='first', df=1):
@@ -316,12 +317,12 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
             init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff2(v, n1), Bv=lambda v: env.Heff2(v, n1, conj=True), init=[
-                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
                 init = expmw(Av=lambda v: env.Heff2(v, n1), init=[
-                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
-            A1, S, A2 = linalg.svd(init[0],axes=(psi.left + psi.phys, tuple(
+            A1, S, A2 = linalg.svd(init[0], axes=(psi.left + psi.phys, tuple(
                 a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
             psi.A[n1] = A1.tensordot(S, axes=(psi.right, 0))
             psi.A[n] = A2
@@ -333,10 +334,10 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
             init = psi.A[n1]
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
-                    v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                    v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
                 init = expmw(Av=lambda v: env.Heff1(v, n1), init=[
-                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
             psi.A[n1] = init[0]
     env.clear_site(n1)
     env.update(n1, towards=psi.g.first)
@@ -344,7 +345,7 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
     return env
 
 
-def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True, fermionic=False, k=4,  eigs_tol=1e-12, exp_tol=1e-12, bi_orth=True, NA=None, opts_svd=None, optsK_svd=None, algorithm='arnoldi'):
+def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True, fermionic=False, k=4, eigs_tol=1e-12, exp_tol=1e-12, bi_orth=True, NA=None, opts_svd=None, optsK_svd=None, algorithm='arnoldi'):
     r"""
     Perform sweep with 2site-TDVP with grouping neigbouring sites.
     Procedure performs exponantiation: psi(dt) = exp( dt * H )*psi(0). For Hamiltonian real time evolution forward in time: sign(dt)= -1j, for Hamiltonian imaginary time evolution forward in time: sign(dt)= -1.
@@ -428,13 +429,13 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
             init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[
-                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
                 init = expmw(Av=lambda v: env.Heff2_group(v, n), init=[
-                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
             init = init[0].unfuse_legs(axes=1, inplace=True)
-            A1, S, A2 = linalg.svd(init,axes=(psi.left + psi.phys, tuple(
+            A1, S, A2 = linalg.svd(init, axes=(psi.left + psi.phys, tuple(
                 a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
             psi.A[n] = A1
             psi.A[n1] = S.tensordot(A2, axes=(1, psi.left))
@@ -446,10 +447,10 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
             init = psi.A[n1]
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
-                    v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                    v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
                 init = expmw(Av=lambda v: env.Heff1(v, n1), init=[
-                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
             psi.A[n1] = init[0]
 
     for n in psi.g.sweep(to='first', df=1):
@@ -471,13 +472,13 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
             init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff2_group(v, n1), Bv=lambda v: env.Heff2_group(v, n1, conj=True), init=[
-                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
                 init = expmw(Av=lambda v: env.Heff2_group(v, n1), init=[
-                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
             init = init[0].unfuse_legs(axes=1, inplace=True)
-            A1, S, A2 = linalg.svd(init,axes=(psi.left + psi.phys, tuple(
+            A1, S, A2 = linalg.svd(init, axes=(psi.left + psi.phys, tuple(
                 a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
             psi.A[n1] = A1.tensordot(S, axes=(psi.right, 0))
             psi.A[n] = A2
@@ -489,10 +490,10 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
             init = psi.A[n1]
             if not hermitian:
                 init = expmw(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
-                    v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                    v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
                 init = expmw(Av=lambda v: env.Heff1(v, n1), init=[
-                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
             psi.A[n1] = init[0]
     env.clear_site(n1)
     env.update(n1, towards=psi.g.first)
@@ -571,13 +572,13 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
     """
     Ds = psi.get_D()
     if not D_totals:
-        D_totals = [None]*(psi.N+1)
+        D_totals = [None] * (psi.N + 1)
         max_vdim = 1
         for n in range(psi.N):
             D_totals[n] = min([max_vdim, opts_svd['D_total']])
             max_vdim = D_totals[n] * np.prod(psi.A[n].get_shape(psi.phys))
         max_vdim = 1
-        for n in range(psi.N-1,-1,-1):
+        for n in range(psi.N - 1, -1, -1):
             max_vdim *= np.prod(psi.A[n].get_shape(psi.phys))
             D_totals[n] = min([D_totals[n], max_vdim, opts_svd['D_total']])
             max_vdim = D_totals[n]
@@ -607,7 +608,7 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
         else:  # choose 1site
             version = versions[0]
         #
-        #print(n, version, SV_min[n] , tol_svds[n] , Ds[n] , D_totals[n])
+        # print(n, version, SV_min[n] , tol_svds[n] , Ds[n] , D_totals[n])
         if version == '1site':
             # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
             if H:
@@ -617,7 +618,7 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                         v, n, conj=True), dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                 else:
                     init = expmw(Av=lambda v: env.Heff1(v, n), init=[
-                        init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                        init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # canonize and save
             psi.A[n] = init[0]
             psi.orthogonalize_site(n, towards=psi.g.last)
@@ -629,10 +630,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                 init = psi.A[psi.pC]
                 if not hermitian:
                     init = expmw(Av=lambda v: env.Heff0(v, psi.pC), init=[init], Bv=lambda v: env.Heff0(
-                        v, psi.pC, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                        v, psi.pC, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                 else:
                     init = expmw(Av=lambda v: env.Heff0(v, psi.pC), init=[
-                        init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                        init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
                 psi.A[psi.pC] = init[0]
             psi.absorb_central(towards=psi.g.last)
         elif version == '2site':
@@ -646,12 +647,12 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
                     if not hermitian:
                         init = expmw(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(v, n, conj=True), init=[
-                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
                         init = expmw(Av=lambda v: env.Heff2(v, n), init=[
-                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
-                    A1, S, A2 = linalg.svd(init[0],axes=(psi.left + psi.phys, tuple(
+                    A1, S, A2 = linalg.svd(init[0], axes=(psi.left + psi.phys, tuple(
                         a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
                     psi.A[n] = A1
                     psi.A[n1] = S.tensordot(A2, axes=(1, psi.left))
@@ -663,10 +664,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     init = psi.A[n1]
                     if not hermitian:
                         init = expmw(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
-                            v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                            v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
                         init = expmw(Av=lambda v: env.Heff1(v, n1), init=[
-                            init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                            init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     psi.A[n1] = init[0]
         elif version == '2site_group':
             if n == psi.g.sweep(to='last')[-1]:
@@ -679,14 +680,14 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
                     init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
                     if not hermitian:
-                        init = expmw(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[init], 
-                                    dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                        init = expmw(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[init],
+                                     dt=dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
-                        init = expmw(Av=lambda v: env.Heff2_group(v, n), init=[init], 
-                                    dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                        init = expmw(Av=lambda v: env.Heff2_group(v, n), init=[init],
+                                     dt=dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
                     init = init[0].unfuse_legs(axes=1, inplace=True)
-                    A1, S, A2 = linalg.svd(init,axes=(psi.left + psi.phys, tuple(
+                    A1, S, A2 = linalg.svd(init, axes=(psi.left + psi.phys, tuple(
                         a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
                     psi.A[n] = A1
                     psi.A[n1] = S.tensordot(A2, axes=(1, psi.left))
@@ -698,10 +699,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     init = psi.A[n1]
                     if not hermitian:
                         init = expmw(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
-                            v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                            v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
                         init = expmw(Av=lambda v: env.Heff1(v, n1), init=[
-                            init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                            init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     psi.A[n1] = init[0]
     Ds = psi.get_D()
     for n in psi.g.sweep(to='first'):
@@ -728,11 +729,11 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
             init = psi.A[n]
             if H:  # forward in time evolution of a central site: T(+dt*.5)
                 if not hermitian:
-                    init = expmw(Av=lambda v: env.Heff1(v, n), init=[init], Bv=lambda v: env.Heff1(
-                        v, n, conj=True), dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                    init = expmw(Av=lambda v: env.Heff1(v, n), init=[init], Bv=lambda v: env.Heff1(v, n, conj=True),
+                                 dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                 else:
-                    init = expmw(Av=lambda v: env.Heff1(v, n), init=[
-                        init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                    init = expmw(Av=lambda v: env.Heff1(v, n), init=[init],
+                                 dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
                 init = init[0]
 
             # canonize and save
@@ -746,10 +747,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                 init = psi.A[psi.pC]
                 if not hermitian:
                     init = expmw(Av=lambda v: env.Heff0(v, psi.pC), init=[init], Bv=lambda v: env.Heff0(
-                        v, psi.pC, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                        v, psi.pC, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                 else:
                     init = expmw(Av=lambda v: env.Heff0(v, psi.pC), init=[
-                        init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                        init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
                 psi.A[psi.pC] = init[0]
             psi.absorb_central(towards=psi.g.first)
         elif version == '2site':
@@ -763,12 +764,12 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
                     if not hermitian:
                         init = expmw(Av=lambda v: env.Heff2(v, n1), Bv=lambda v: env.Heff2(v, n1, conj=True), init=[
-                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
                         init = expmw(Av=lambda v: env.Heff2(v, n1), init=[
-                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
-                    A1, S, A2 = linalg.svd(init[0],axes=(psi.left + psi.phys, tuple(
+                    A1, S, A2 = linalg.svd(init[0], axes=(psi.left + psi.phys, tuple(
                         a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
                     psi.A[n1] = A1.tensordot(S, axes=(psi.right, 0))
                     psi.A[n] = A2
@@ -780,10 +781,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     init = psi.A[n1]
                     if not hermitian:
                         init = expmw(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
-                            v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                            v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
                         init = expmw(Av=lambda v: env.Heff1(v, n1), init=[
-                            init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                            init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     psi.A[n1] = init[0]
         elif version == '2site_group':
             if n == psi.g.sweep(to='first')[-1]:
@@ -797,13 +798,13 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
                     if not hermitian:
                         init = expmw(Av=lambda v: env.Heff2_group(v, n1), Bv=lambda v: env.Heff2_group(v, n1, conj=True), init=[
-                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
                         init = expmw(Av=lambda v: env.Heff2_group(v, n1), init=[
-                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                            init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
                     init = init[0].unfuse_legs(axes=1, inplace=True)
-                    A1, S, A2 = linalg.svd(init,axes=(psi.left + psi.phys, tuple(
+                    A1, S, A2 = linalg.svd(init, axes=(psi.left + psi.phys, tuple(
                         a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
                     psi.A[n1] = A1.tensordot(S, axes=(psi.right, 0))
                     psi.A[n] = A2
@@ -815,9 +816,9 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     init = psi.A[n1]
                     if not hermitian:
                         init = expmw(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
-                            v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
+                            v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
                         init = expmw(Av=lambda v: env.Heff1(v, n1), init=[
-                            init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
+                            init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     psi.A[n1] = init[0]
     return env

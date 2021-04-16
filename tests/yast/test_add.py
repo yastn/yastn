@@ -1,4 +1,8 @@
-import yast
+try:
+    import yast
+except ModuleNotFoundError:
+    import fix_path
+    import yast
 import config_dense_R
 import config_U1_R
 import config_Z2_U1_R
@@ -6,6 +10,7 @@ from math import isclose
 import numpy as np
 
 tol = 1e-12
+
 
 def test_add_0():
     a = yast.rand(config=config_dense_R, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
@@ -16,7 +21,6 @@ def test_add_0():
 
     assert c1.norm_diff(c2) < tol  # == 0.0
     assert yast.norm(c1 - c2) < tol  # == 0.0
-    
 
     d = yast.rand(config=config_dense_R, isdiag=True, D=5)
     d1 = d.copy()
@@ -36,12 +40,12 @@ def test_add_0():
 
 def test_add_1():
     a = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
-                    t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                    D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+                  t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
 
     b = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
-                    t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                    D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
 
     c1 = a + 2 * b
     c2 = a.apxb(b, 2)
@@ -65,11 +69,11 @@ def test_add_1():
 
 def test_add_2():
     a = yast.rand(config=config_Z2_U1_R, s=(-1, 1, 1, 1),
-                    t=[[(0, 0), (1, 0), (0, 2), (1, 2)], [(0, -2), (0, 2)], [(0, -2), (0, 2), (1, -2), (1, 0), (1, 2)], [(0, 0), (0, 2)]],
-                    D=((1, 2, 2, 4), (2, 3), (2, 6, 3, 6, 9), (4, 7)))
+                  t=[[(0, 0), (1, 0), (0, 2), (1, 2)], [(0, -2), (0, 2)], [(0, -2), (0, 2), (1, -2), (1, 0), (1, 2)], [(0, 0), (0, 2)]],
+                  D=((1, 2, 2, 4), (2, 3), (2, 6, 3, 6, 9), (4, 7)))
     b = yast.rand(config=config_Z2_U1_R, s=(-1, 1, 1, 1),
-                    t=[[(0, 0), (1, 0), (0, 2), (1, 2)], [(0, -2), (0, 2)], [(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)], [(0, 0)]],
-                    D=((1, 2, 2, 4), (2, 3), (2, 4, 6, 3, 6, 9), 4))
+                  t=[[(0, 0), (1, 0), (0, 2), (1, 2)], [(0, -2), (0, 2)], [(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)], [(0, 0)]],
+                  D=((1, 2, 2, 4), (2, 3), (2, 4, 6, 3, 6, 9), 4))
 
     c1 = a - b * 2
     c2 = a.apxb(b, -2)
@@ -81,7 +85,7 @@ def test_add_2():
     nb = b.to_numpy(leg_structures)
     nc = c1.to_numpy()
 
-    assert isclose(np.linalg.norm(nc - na + 2*nb), 0, rel_tol=tol, abs_tol=tol)
+    assert isclose(np.linalg.norm(nc - na + 2 * nb), 0, rel_tol=tol, abs_tol=tol)
 
     assert a.are_independent(c1)
     assert a.are_independent(c2)

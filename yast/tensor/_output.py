@@ -320,20 +320,26 @@ def zero_of_dtype(a):
     return a.config.backend.zero_scalar(dtype=a.config.dtype, device=a.config.device)
 
 
-def to_number(a):
+def to_number(a, part=None):
     """
     Return an element of the size-one tensor as a scalar of the same type as the
     type use by backend.
 
     For empty tensor, returns 0
+
+    Parameters
+    ----------
+    part : str
+        if 'real' return real part
     """
     size = a.get_size()
     if size == 1:
-        return a.config.backend.first_element(next(iter(a.A.values())))
-    if size == 0:
-        return a.zero_of_dtype()
-        # is there a better solution for torch autograd?
-    raise YastError('Specified bond dimensions inconsistent with tensor.')
+        x = a.config.backend.first_element(next(iter(a.A.values())))
+    elif size == 0:
+        x = a.zero_of_dtype()  # is there a better solution for torch autograd?
+    else:
+        raise YastError('Specified bond dimensions inconsistent with tensor.')
+    return a.config.backend.real(x) if part == 'real' else x
 
 
 def item(a):

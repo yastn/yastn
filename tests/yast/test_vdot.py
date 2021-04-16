@@ -1,10 +1,15 @@
-import pytest
-import yast
+try:
+    import yast
+except ModuleNotFoundError:
+    import fix_path
+    import yast
 import config_dense_C
 import config_U1_R
 import config_U1_C
+import pytest
 
 tol = 1e-12
+
 
 def scalar_vs_numpy(a, b):
     tDsa = {ii: b.get_leg_structure(ii) for ii in range(b.get_ndim())}
@@ -80,7 +85,6 @@ def test_scalar_exceptions():
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
                   D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
 
-
     assert abs(a.vdot(b)) < tol
     assert abs(a.vdot(e, conj=(0, 0))) < tol
     assert abs(a.vdot(e, conj=(1, 1))) < tol
@@ -96,4 +100,3 @@ if __name__ == '__main__':
     test_scalar_1R()
     test_scalar_1C()
     test_scalar_exceptions()
-    

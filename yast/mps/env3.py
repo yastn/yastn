@@ -244,7 +244,7 @@ class Env3:
                 return self.F[(nl, n)].tensordot(AA, axes=((2), (0))).tensordot(OO, axes=((1,2,3), (0,2,4))).tensordot(self.F[(nr, nn)], axes=((1,4), (0,1)))
             elif self.nr_phys == 2 and not self.on_aux:
                 return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, 3, 4, -4, -5, 5), (2, -2, 3, -3, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
-            #else: self.nr_phys == 2 and self.on_aux:
+            # else: self.nr_phys == 2 and self.on_aux:
             return ncon([self.F[(nl, n)], AA, OO, self.F[(nr, nn)]], ((-1, 2, 1), (1, -2, -3, 3, 4, 5), (2, -4, 3, -5, 4, 6), (5, 6, -6)), (0, 0, 0, 0))
 
     def Heff2_group(self, AA, n, conj=False):

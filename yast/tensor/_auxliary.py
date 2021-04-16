@@ -12,11 +12,13 @@ __all__ = ['check_signatures_match', 'check_consistency', 'set_cache_maxsize', '
 
 _check = {"signatures_match": True, "consistency": True}
 
+
 class _struct(NamedTuple):
     t: tuple
     D: tuple
     s: tuple
     n: tuple
+
 
 class _config(NamedTuple):
     backend: any = None
@@ -96,16 +98,17 @@ def set_cache_maxsize(maxsize=0):
     """Change maxsize of lru_cache to reuses some metadata."""
     _merging._meta_merge_to_matrix = lru_cache(maxsize)(_merging._meta_merge_to_matrix.__wrapped__)
 
+
 def get_cache_info():
     return _merging._meta_merge_to_matrix.cache_info()
 
 
 def _test_configs_match(a, b):
     # if a.config != b.config:
-    if not (a.config.dtype == b.config.dtype and
-            a.config.dtype == b.config.dtype and
-            a.config.sym.SYM_ID == b.config.sym.SYM_ID and
-            a.config.backend.BACKEND_ID == b.config.backend.BACKEND_ID):
+    if not (a.config.dtype == b.config.dtype
+            and a.config.dtype == b.config.dtype
+            and a.config.sym.SYM_ID == b.config.sym.SYM_ID
+            and a.config.backend.BACKEND_ID == b.config.backend.BACKEND_ID):
         raise YastError('configs do not match')
 
 

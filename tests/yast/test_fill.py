@@ -1,8 +1,10 @@
-""" 
-Test: fill_tensor (which is called in: rand, randR, zeros, ones), to_numpy, match_legs, norm_diff 
-"""
+""" Test: fill_tensor (which is called in: rand, randR, zeros, ones), to_numpy, match_legs, norm_diff """
 
-import yast
+try:
+    import yast
+except ModuleNotFoundError:
+    import fix_path
+    import yast
 import config_dense_R
 import config_U1_C
 import config_U1_R
@@ -11,6 +13,7 @@ from math import isclose
 import numpy as np
 
 tol = 1e-12
+
 
 def test_fill_0():
     # print('3d tensor:')
@@ -56,8 +59,8 @@ def test_fill_0():
 def test_fill_1():
     # print('4d tensor: ')
     a = yast.ones(config=config_U1_R, s=(-1, 1, 1, 1),
-                    t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
-                    D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
+                  t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
+                  D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (6, 3, 6, 1)
@@ -89,7 +92,7 @@ def test_fill_1():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (5, 5)
-    
+
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
     assert a.is_consistent()
 
@@ -115,8 +118,8 @@ def test_fill_1():
 def test_fill_2():
     # print('3d tensor:')
     a = yast.ones(config=config_Z2_U1_R, s=(-1, 1, 1),
-                    t=[[(0, 1), (1, 0)], [(0, 0)], [(0, 1), (1, 0)]],
-                    D=[[1, 2], 3, [1, 2]])
+                  t=[[(0, 1), (1, 0)], [(0, 0)], [(0, 1), (1, 0)]],
+                  D=[[1, 2], 3, [1, 2]])
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (3, 3, 3)
@@ -127,8 +130,7 @@ def test_fill_2():
 
     # print('1d tensor:')
     a = yast.ones(config=config_Z2_U1_R, s=1,
-                    t=[[(0, 0)]],
-                    D=[[2]])
+                  t=[[(0, 0)]], D=[[2]])
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (2,)
@@ -139,8 +141,8 @@ def test_fill_2():
 
     # print('diagonal tensor:')
     a = yast.rand(config=config_Z2_U1_R, isdiag=True,
-                    t=[[(0, 0), (1, 1), (0, 2)]],
-                    D=[[2, 2, 2]])
+                  t=[[(0, 0), (1, 1), (0, 2)]],
+                  D=[[2, 2, 2]])
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (6, 6)
@@ -149,8 +151,8 @@ def test_fill_2():
 
     # print('diagonal tensor:')
     a = yast.randR(config=config_Z2_U1_R, isdiag=True,
-                     t=[[(0, 1), (-1, 0)], [(0, 1), (2, 0)]],
-                     D=[[2, 5], [2, 7]])
+                   t=[[(0, 1), (-1, 0)], [(0, 1), (2, 0)]],
+                   D=[[2, 5], [2, 7]])
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (2, 2)
