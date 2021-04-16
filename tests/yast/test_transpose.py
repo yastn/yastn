@@ -1,4 +1,8 @@
-import yast
+try:
+    import yast
+except ModuleNotFoundError:
+    import fix_path
+    import yast
 import numpy as np
 import config_dense_R
 import config_U1_R
@@ -37,11 +41,11 @@ def test_transpose_0():
 
 def test_transpose_1():
     a = yast.ones(config=config_U1_R, s=(-1, -1, -1, 1, 1, 1),
-                    t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
-                    D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
+                  t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
+                  D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
     ad = a.to_numpy()
     assert a.get_shape() == (5, 9, 13, 11, 7, 3)
-    
+
     run_transpose(a, ad, axes=(1, 2, 3, 0, 5, 4), result=(9, 13, 11, 5, 3, 7))
     run_moveaxis(a, ad, source=1, destination=4, result=(5, 13, 11, 7, 9, 3))
     run_moveaxis(a, ad, source=(2, 0), destination=(0, 2), result=(13, 9, 5, 11, 7, 3))
@@ -51,8 +55,8 @@ def test_transpose_1():
 def test_transpose_2():
     t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
     a = yast.ones(config=config_Z2_U1_R, s=(-1, -1, 1, 1),
-                    t=[t1, t1, t1, t1],
-                    D=[(7, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
+                  t=[t1, t1, t1, t1],
+                  D=[(7, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
     assert a.get_shape() == (19, 14, 18, 10)
     ad = a.to_numpy()
     run_transpose(a, ad, axes=(1, 2, 3, 0), result=(14, 18, 10, 19))
@@ -61,15 +65,15 @@ def test_transpose_2():
 
 def test_transpose_inplace():
     a = yast.ones(config=config_U1_R, s=(-1, -1, -1, 1, 1, 1),
-                    t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
-                    D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
+                  t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
+                  D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
     assert a.get_shape() == (3, 5, 7, 9, 11, 13)
 
     a.transpose(axes=(5, 4, 3, 2, 1, 0), inplace=True)
     assert a.get_shape() == (13, 11, 9, 7, 5, 3)
     a.moveaxis(source=2, destination=3, inplace=True)
     assert a.get_shape() == (13, 11, 7, 9, 5, 3)
-    
+
 
 if __name__ == '__main__':
     test_transpose_0()

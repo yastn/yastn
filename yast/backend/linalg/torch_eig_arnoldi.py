@@ -2,8 +2,10 @@ import torch
 try:
     import scipy.sparse.linalg
     from scipy.sparse.linalg import LinearOperator
-except:
-    print("Warning: Missing scipy. ARNOLDISVD is not available.")
+except ImportError:
+    import warnings
+    warnings.warn("fbpca not available", Warning)
+
 
 class SYMARNOLDI(torch.autograd.Function):
     @staticmethod
@@ -22,7 +24,7 @@ class SYMARNOLDI(torch.autograd.Function):
         :math:`M=M^T`, by computing the symmetric decomposition :math:`M= UDU^T`
         up to rank k. Partial eigendecomposition is done through Arnoldi method.
         """
-        # input validation (M is square and symmetric) is provided by 
+        # input validation (M is square and symmetric) is provided by
         # the scipy.sparse.linalg.eigsh
 
         # get M as numpy ndarray and wrap back to torch
@@ -31,7 +33,7 @@ class SYMARNOLDI(torch.autograd.Function):
             V = torch.as_tensor(v, dtype=M.dtype, device=M.device)
             V = torch.mv(M, V)
             return V.detach().cpu().numpy()
-        M_nograd= LinearOperator(M.size(), matvec=mv)
+        M_nograd = LinearOperator(M.size(), matvec=mv)
 
         D, U = scipy.sparse.linalg.eigsh(M_nograd, k=k)
         D = torch.as_tensor(D, dtype=M.dtype, device=M.device)
@@ -39,11 +41,12 @@ class SYMARNOLDI(torch.autograd.Function):
 
         # reorder the eigenpairs by the largest magnitude of eigenvalues
         absD, p = torch.sort(torch.abs(D), descending=True)
-        D= D[p]
-        U= U[:, p]
+        D = D[p]
+        U = U[:, p]
 
         self.save_for_backward(D, U)
         return D, U
+
 
 class SYMARNOLDI_2C(torch.autograd.Function):
     @staticmethod
@@ -62,7 +65,7 @@ class SYMARNOLDI_2C(torch.autograd.Function):
 
         Return leading k-eigenpairs of a 2-cyclic symmetric matrix A, formed by
         two non-zero blocks ``M`` and ``Mhc`` where :math:`M^\dag = M_{hc}` as follows::
-            
+
             A = [0   M]
                 [Mhc 0]
 
@@ -102,7 +105,6 @@ class SYMARNOLDI_2C(torch.autograd.Function):
 
         self.save_for_backward(D, U)
         return D, U
-
 
     @staticmethod
     def backward(self, dD, dU):

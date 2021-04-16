@@ -245,7 +245,7 @@ def block(tensors, common_legs=None):
         for t, pD in tDl.items():
             ps = sorted(pD.keys())
             Ds = [pD[p] for p in ps]
-            tDl[t] = {p: (aD-D, aD) for p, D, aD in zip(ps, Ds, accumulate(Ds))}
+            tDl[t] = {p: (aD - D, aD) for p, D, aD in zip(ps, Ds, accumulate(Ds))}
             tDl[t]['Dtot'] = sum(Ds)
         tDs.append(tDl)
 

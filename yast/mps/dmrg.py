@@ -9,12 +9,11 @@ from .. import eigs
 from . import Env3
 
 
-class FatalError(Exception):
-    pass
-
-
 logger = logging.getLogger('yast.mps.dmrg')
 
+
+class FatalError(Exception):
+    pass
 
 #################################
 #           dmrg                #

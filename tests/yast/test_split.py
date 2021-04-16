@@ -1,9 +1,14 @@
-import yast
+try:
+    import yast
+except ModuleNotFoundError:
+    import fix_path
+    import yast
 import config_dense_R
 import config_U1_R
 import config_Z2_U1_R
 
 tol = 1e-10
+
 
 def svd_combine(a):
     U, S, V = yast.linalg.svd(a, axes=((3, 1), (2, 0)), sU=-1)
@@ -78,8 +83,8 @@ def test_svd_0():
 
 def test_svd_1():
     a = yast.rand(config=config_U1_R, s=(-1, -1, 1, 1), n=1,
-                    t=[(-1, 0, 1), (-2, 0, 2), (-2, -1, 0, 1, 2), (0, 1)],
-                    D=[(2, 3, 4), (5, 6, 7), (6, 5, 4, 3, 2), (2, 3)])
+                  t=[(-1, 0, 1), (-2, 0, 2), (-2, -1, 0, 1, 2), (0, 1)],
+                  D=[(2, 3, 4), (5, 6, 7), (6, 5, 4, 3, 2), (2, 3)])
     svd_combine(a)
     svd_order_combine(a)
     qr_combine(a)
@@ -91,8 +96,8 @@ def test_svd_1():
 def test_svd_2():
     t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
     a = yast.ones(config=config_Z2_U1_R, s=(-1, -1, 1, 1),
-                    t=[t1, t1, t1, t1],
-                    D=[(2, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
+                  t=[t1, t1, t1, t1],
+                  D=[(2, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
     svd_combine(a)
     svd_order_combine(a)
     qr_combine(a)

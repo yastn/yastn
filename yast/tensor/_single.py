@@ -348,7 +348,7 @@ def abs(a):
 def real(a):
     """ return real part of tensor. Do not change dtype of yast.Tensor """
     c = a.copy_empty()
-    c.A = a.config.backend.real(a.A)
+    c.A = {t: a.config.backend.real(x) for t, x in a.A.items()}
     c.struct = a.struct
     return c
 
@@ -356,7 +356,7 @@ def real(a):
 def imag(a):
     """ return imaginary part of tensor """
     c = a.copy_empty()
-    c.A = a.config.backend.imag(a.A)
+    c.A = {t: a.config.backend.imag(x) for t, x in a.A.items()}
     c.struct = a.struct
     return c
 

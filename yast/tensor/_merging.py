@@ -105,16 +105,15 @@ def _leg_struct_truncation(a, tol=0., D_block=np.inf, D_total=np.inf, keep_multi
             high = low + D_keep[ind]
             D_keep[ind] = sum((low <= order) & (order < high))
             low = high
-    # check symmetry related blocks and truncate to equal length
-    if keep_multiplets:
+    if keep_multiplets:  # check symmetry related blocks and truncate to equal length
         ind_list = [np.asarray(k) for k in D_keep]
         for ind in ind_list:
             t = tuple(ind)
             tn = tuple(-ind)
             minD_sector = min(D_keep[t], D_keep[tn])
             D_keep[t] = D_keep[tn] = minD_sector
-            if -ind in ind_list:
-                ind_list.remove(-ind)
+            # if -ind in ind_list:
+            #     ind_list.remove(-ind)  ## this might mess-up iterator
     dec, Dtot = {}, {}
     for ind in D_keep:
         if D_keep[ind] > 0:
