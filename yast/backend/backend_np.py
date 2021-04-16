@@ -4,7 +4,7 @@ import numpy as np
 import scipy as sp
 try:
     import fbpca
-except ImportError:
+except ModuleNotFoundError:
     warnings.warn("fbpca not available", Warning)
 
 BACKEND_ID = "numpy"
@@ -66,7 +66,7 @@ def diag_diag(x):
 
 
 def count_greater(x, cutoff):
-    return np.sum(x > cutoff)
+    return np.sum(x > cutoff).item()
 
 
 def real(x):
@@ -308,9 +308,25 @@ def qr(A, meta):
 
 def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
     if ordering == 'svd':
-        return np.hstack([S[ind][:D_keep[ind]] for ind in S]).argpartition(-D_total - 1)[-D_total:]
+        s_all =  np.hstack([S[ind][:D_keep[ind]] for ind in S])
     elif ordering == 'eigh':
-        return np.hstack([S[ind][-D_keep[ind]:] for ind in S]).argpartition(-D_total - 1)[-D_total:]
+        s_all =  np.hstack([S[ind][-D_keep[ind]:] for ind in S])
+    Darg = D_total + int(keep_multiplets)
+    order = s_all.argsort()[-1:-Darg-1:-1]
+    if keep_multiplets:  # if needed, preserve multiplets within each sector
+        s_all = s_all[order]
+        gaps = np.abs(s_all)
+        # compute gaps and normalize by larger singular value. Introduce cutoff
+        gaps = np.abs(gaps[:len(s_all) - 1] - gaps[1:len(s_all)]) / gaps[0] # / (gaps[:len(values) - 1] + 1.0e-16)  
+        gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
+        if gaps[D_total - 1] < eps_multiplet:
+            # the chi is within the multiplet - find the largest chi_new < chi
+            # such that the complete multiplets are preserved
+            for i in range(D_total - 1, -1, -1):
+                if gaps[i] > eps_multiplet:
+                    order = order[:i + 1]
+                    break
+    return order
 
 
 def range_largest(D_keep, D_total, ordering):

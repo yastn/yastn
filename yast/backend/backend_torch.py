@@ -66,8 +66,9 @@ def diag_diag(x):
     return torch.diag(torch.diag(x))  # TODO: PROBLEM WITH COMPLEX NUMBERS
 
 
+@torch.no_grad()
 def count_greater(x, cutoff):
-    return torch.sum(x > cutoff)
+    return torch.sum(x > cutoff).item()
 
 
 def real(x):
@@ -320,29 +321,23 @@ def qr(A, meta):
 def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
     if ordering == 'svd':
         s_all = torch.cat([S[ind][:D_keep[ind]] for ind in S])
-        values, order = torch.topk(s_all, D_total + int(keep_multiplets))
-        # if needed, preserve multiplets within each sector
-        if keep_multiplets:
-            # regularize by discarding small values
-            gaps = torch.abs(values.clone())
-            # compute gaps and normalize by larger sing. value. Introduce cutoff
-            # for handling vanishing values set to exact zero
-            gaps = (gaps[:len(values) - 1] - torch.abs(values[1:len(values)])) / (gaps[:len(values) - 1] + 1.0e-16)
-            gaps[gaps > 1.0] = 0.
-
-            if gaps[D_total - 1] < eps_multiplet:
-                # the chi is within the multiplet - find the largest chi_new < chi
-                # such that the complete multiplets are preserved
-                for i in range(D_total - 1, -1, -1):
-                    if gaps[i] > eps_multiplet:
-                        # chi_new= i
-                        order = order[:i + 1]
-                        break
-        return order
-        # return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
     elif ordering == 'eigh':
         s_all = torch.cat([S[ind][-D_keep[ind]:] for ind in S])
-        return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total - 1)[-D_total:])
+    values, order = torch.topk(s_all, D_total + int(keep_multiplets))
+    if keep_multiplets:  # if needed, preserve multiplets within each sector
+        gaps = torch.abs(values.clone())  # regularize by discarding small values
+        # compute gaps and normalize by larger singular value. Introduce cutoff
+        gaps = torch.abs(gaps[:len(values) - 1] - gaps[1:len(values)]) / gaps[0] # / (gaps[:len(values) - 1] + 1.0e-16)  
+        gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
+        if gaps[D_total - 1] < eps_multiplet:
+            # the chi is within the multiplet - find the largest chi_new < chi
+            # such that the complete multiplets are preserved
+            for i in range(D_total - 1, -1, -1):
+                if gaps[i] > eps_multiplet:
+                    order = order[:i + 1]
+                    break
+    return order
+
 
 
 def range_largest(D_keep, D_total, ordering):

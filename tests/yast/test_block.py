@@ -1,4 +1,8 @@
-import yast
+try:
+    import yast
+except ModuleNotFoundError:
+    import fix_path
+    import yast
 import config_U1_R
 
 tol = 1e-12
