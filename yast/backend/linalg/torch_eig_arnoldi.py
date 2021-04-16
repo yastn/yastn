@@ -2,7 +2,7 @@ import torch
 try:
     import scipy.sparse.linalg
     from scipy.sparse.linalg import LinearOperator
-except ImportError:
+except ModuleNotFoundError:
     import warnings
     warnings.warn("fbpca not available", Warning)
 

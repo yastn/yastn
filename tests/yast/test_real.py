@@ -31,6 +31,8 @@ def test_real_1():
 
     ar = a.real()
     ai = a.imag()
+    # TODO assert yast.are_independent(ar, a)
+    # TODO assert yast.are_independent(ai, a)
     assert yast.norm_diff(ar + 1j * ai, a) < tol
 
 
