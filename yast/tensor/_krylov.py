@@ -8,7 +8,7 @@ import numpy as np
 from scipy import linalg as LA
 from ._auxliary import YastError
 
-__all__ = ['arnoldi', 'lanczos']
+__all__ = ['arnoldi', 'lanczos', 'krylov']
 
 _select_dtype = {'float64': np.float64, 'complex128': np.complex128}
 
@@ -16,7 +16,7 @@ _select_dtype = {'float64': np.float64, 'complex128': np.complex128}
 
 
 def krylov(init, Av, Bv, tol, k, algorithm, hermitian, ncv=5, bi_orth=False, sigma=None, which=None, return_eigenvectors=True, tau=False):
-    if algorithm is 'lanczos':
+    if algorithm == 'lanczos':
         T, Q, P, good = lanczos(init, Av, Bv, tol, ncv, hermitian, bi_orth)
     else:
         T, Q, P, good = arnoldi(init, Av, tol, ncv)
@@ -46,7 +46,7 @@ def arnoldi(init, Av, tol, k):
             beta, happy = 0, True
             break
         Q[jt+1] = w*(1./H[jt+1, jt])
-    if beta is None:
+    if beta == None:
         beta, happy = H[jt+1, jt], 0
     H = H[:(jt+1), :(jt+1)]
     Q = Q[:(jt+1)]
@@ -81,7 +81,7 @@ def lanczos_her(init, Av, tol, k):
         Q[it+1] = (1. / b[it])*r
         r = Av(Q[it+1])
         r = r.apxb(Q[it], x=-b[it])
-    if beta is None:
+    if beta == None:
         a[it+1] = Q[it+1].vdot(r)
         r = r.apxb(Q[it+1], x=-a[it+1])
         beta = r.norm()
@@ -137,7 +137,7 @@ def lanczos_nher(init, Av, Bv, tol, k, bi_orth):
         s = Bv(P[it+1])
         r = r.apxb(Q[it], x=-c[it])
         s = s.apxb(P[it], x=-b[it].conj())
-    if beta is None:
+    if beta == None:
         a[it+1] = P[it+1].vdot(r)
         r = r.apxb(Q[it+1], x=-a[it+1])
         s = s.apxb(P[it+1], x=-a[it+1].conj())
@@ -212,7 +212,7 @@ def eigs_aug(T, Q, P=None, k=None, hermitian=True, sigma=None, which=None, retur
         'SI':   np.argsort(val.imag)        # ‘SI’ : smallest imaginary part
     }
 
-    if sigma is not None:  # target val closest to sigma on Re-Im plane
+    if sigma != None:  # target val closest to sigma on Re-Im plane
         id = np.argsort(abs(val-sigma))
     else:
         id = whicher.get(which, np.argsort(val))  # is 'SR' if not specified
