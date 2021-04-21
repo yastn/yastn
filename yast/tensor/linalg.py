@@ -1,6 +1,7 @@
 """ Linalg methods for yast tensor. """
 
 import numpy as np
+from scipy.linalg import expm as expm
 import time
 import tracemalloc
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys
@@ -364,7 +365,7 @@ def expm_anm(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermit
         # n - cost of vector init
         # NA - cost of matrix Av
         # v_i - cost of exponatiation of size m(m-krylov dim)
-        T = init[0].config.backend.expm(np.diag(np.random.rand(k_max-1), -1) + np.diag(
+        T = expm(np.diag(np.random.rand(k_max-1), -1) + np.diag(
             np.random.rand(k_max), 0) + np.diag(np.random.rand(k_max-1), 1))
         if cost_estim == 0:  # approach 0: defaoult based on matrix size
             # in units of n
@@ -379,7 +380,7 @@ def expm_anm(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermit
             n = time.time() - start_time
 
             start_time = time.time()
-            init[0].config.backend.expm(T)
+            expm(T)
             v_i = time.time() - start_time
 
             start_time = time.time()
@@ -397,7 +398,7 @@ def expm_anm(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermit
             tracemalloc.stop()
 
             tracemalloc.start()
-            init[0].config.backend.expm(T)
+            expm(T)
             v_i, _ = tracemalloc.get_traced_memory()
             tracemalloc.stop()
 
@@ -437,7 +438,7 @@ def expm_anm(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermit
     while tnow < tout:
         # Compute the exponential of the augmented matrix
         err, evec, good = krylov(
-            w, Av, Bv, eigs_tol, None, algorithm, hermitian, m, bi_orth, tau=(sgn, tau.real))
+            w, Av, Bv, eigs_tol, None, algorithm, hermitian, m, bi_orth, tau=(sgn, tau))
 
         happy = good[1]
         j = good[2]

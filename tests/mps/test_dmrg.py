@@ -12,8 +12,8 @@ def run_dmrg_0site(psi, H, occ, Etarget, occ_target, sweeps=10):
     env = None
     for _ in range(sweeps):
         env = mps.dmrg.dmrg_sweep_0site(psi, H, env=env)
-    assert pytest.approx(env.measure().real, rel=1e-4) == Etarget  # This seems to be coverging slowly
-    assert pytest.approx(mps.measure_mpo(psi, occ, psi).real, rel=1e-4) == occ_target  # This seems to be coverging slowly
+    assert pytest.approx(env.measure(), rel=1e-4) == Etarget  # This seems to be coverging slowly
+    assert pytest.approx(mps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
     return psi
 
 
@@ -22,8 +22,8 @@ def run_dmrg_1site(psi, H, occ, Etarget, occ_target, sweeps=5):
     env = None
     for _ in range(sweeps):
         env = mps.dmrg.dmrg_sweep_1site(psi, H, env=env)
-    assert pytest.approx(env.measure().real, rel=1e-6) == Etarget
-    assert pytest.approx(mps.measure_mpo(psi, occ, psi).real, rel=1e-4) == occ_target  # This seems to be coverging slowly
+    assert pytest.approx(env.measure(), rel=1e-6) == Etarget
+    assert pytest.approx(mps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
     return psi
 
 
@@ -33,8 +33,8 @@ def run_dmrg_2site(psi, H, occ, Etarget, occ_target, sweeps=5, D_total=32):
     opts_svd = {'tol': 1e-8, 'D_total': D_total}
     for _ in range(sweeps):
         env = mps.dmrg.dmrg_sweep_2site(psi, H, env=env, opts_svd=opts_svd)
-    assert pytest.approx(env.measure().real, rel=1e-6) == Etarget
-    assert pytest.approx(mps.measure_mpo(psi, occ, psi).real, rel=1e-4) == occ_target  # This seems to be coverging slowly
+    assert pytest.approx(env.measure(), rel=1e-6) == Etarget
+    assert pytest.approx(mps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
     return psi
 
 
@@ -44,8 +44,8 @@ def run_dmrg_2site_group(psi, H, occ, Etarget, occ_target, sweeps=5, D_total=32)
     opts_svd = {'tol': 1e-8, 'D_total': D_total}
     for _ in range(sweeps):
         env = mps.dmrg.dmrg_sweep_2site_group(psi, H, env=env, opts_svd=opts_svd)
-    assert pytest.approx(env.measure().real, rel=1e-6) == Etarget
-    assert pytest.approx(mps.measure_mpo(psi, occ, psi).real, rel=1e-4) == occ_target  # This seems to be coverging slowly
+    assert pytest.approx(env.measure(), rel=1e-6) == Etarget
+    assert pytest.approx(mps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
     return psi
 
 
