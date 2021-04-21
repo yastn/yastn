@@ -5,7 +5,6 @@ various variants of the DMRG algorithm for mps
 from yast import linalg
 import logging
 import numpy as np
-from .. import eigs
 from . import Env3
 
 
@@ -68,10 +67,10 @@ def dmrg_OBC(psi, H, env=None, version='1site', cutoff_sweep=1, cutoff_dE=-1, he
         Is MPO hermitian
     k: int
         default=4
-        Dimension of Krylov subspace for eigs(.)
+        Dimension of Krylov subspace for linalg.eigs_anm(.)
     eigs_tol: float
         default=1e-14
-        Cutoff for krylov subspace for eigs(.)
+        Cutoff for krylov subspace for linalg.eigs_anm(.)
     opts_svd: dict
         default=None
         options for truncation
@@ -140,10 +139,10 @@ def dmrg_sweep_0site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         Is MPO hermitian
     k: int
         default=4
-        Dimension of Krylov subspace for eigs(.)
+        Dimension of Krylov subspace for linalg.eigs_anm(.)
     eigs_tol: float
         default=1e-14
-        Cutoff for krylov subspace for eigs(.)
+        Cutoff for krylov subspace for linalg.eigs_anm(.)
     opts_svd: dict
         default=None
         options for truncation
@@ -170,7 +169,7 @@ def dmrg_sweep_0site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
             # update site n using eigs
             Av = lambda v: env.Heff0(v, psi.pC)
             Bv = lambda v: env.Heff0(v, psi.pC, conj=True) if algorithm == 'lanczos' and not hermitian else None
-            _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+            _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[init], hermitian=hermitian, k=1,
                              sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
             # canonize and save
             psi.A[psi.pC] = vec[0]
@@ -185,7 +184,7 @@ def dmrg_sweep_0site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
             # update site n using eigs
             Av = lambda v: env.Heff0(v, psi.pC)
             Bv = lambda v: env.Heff0(v, psi.pC, conj=True) if algorithm == 'lanczos' and not hermitian else None
-            _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+            _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[init], hermitian=hermitian, k=1,
                              sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
             # canonize and save
             psi.A[psi.pC] = vec[0]
@@ -218,10 +217,10 @@ def dmrg_sweep_1site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         Is MPO hermitian
     k: int
         default=4
-        Dimension of Krylov subspace for eigs(.)
+        Dimension of Krylov subspace for linalg.eigs_anm(.)
     eigs_tol: float
         default=1e-14
-        Cutoff for krylov subspace for eigs(.)
+        Cutoff for krylov subspace for linalg.eigs_anm(.)
     opts_svd: dict
         default=None
         options for truncation
@@ -244,7 +243,7 @@ def dmrg_sweep_1site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         init = psi.A[n]
         Av = lambda v: env.Heff1(v, n)
         Bv = lambda v: env.Heff1(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
-        _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+        _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[init], hermitian=hermitian, k=1,
                          sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
         # canonize and save
         psi.A[n] = vec[0]
@@ -257,7 +256,7 @@ def dmrg_sweep_1site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         init = psi.A[n]
         Av = lambda v: env.Heff1(v, n)
         Bv = lambda v: env.Heff1(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
-        _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+        _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[init], hermitian=hermitian, k=1,
                          sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
         # canonize and save
         psi.A[n] = vec[0]
@@ -293,10 +292,10 @@ def dmrg_sweep_2site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         Is MPO hermitian
     k: int
         default=4
-        Dimension of Krylov subspace for eigs(.)
+        Dimension of Krylov subspace for linalg.eigs_anm(.)
     eigs_tol: float
         default=1e-14
-        Cutoff for krylov subspace for eigs(.)
+        Cutoff for krylov subspace for linalg.eigs_anm(.)
     opts_svd: dict
         default=None
         options for truncation
@@ -319,7 +318,7 @@ def dmrg_sweep_2site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         # update site n using eigs
         Av = lambda v: env.Heff2(v, n)
         Bv = lambda v: env.Heff2(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
-        _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+        _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[init], hermitian=hermitian, k=1,
                          sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
         # split and save
         x, S, y = linalg.svd(vec[0], axes=(psi.left + psi.phys, tuple(
@@ -336,7 +335,7 @@ def dmrg_sweep_2site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         # update site n using eigs
         Av = lambda v: env.Heff2(v, n)
         Bv = lambda v: env.Heff2(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
-        _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+        _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[init], hermitian=hermitian, k=1,
                          sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
         # split and save
         x, S, y = linalg.svd(vec[0], axes=(psi.left + psi.phys, tuple(
@@ -376,10 +375,10 @@ def dmrg_sweep_2site_group(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14
         Is MPO hermitian
     k: int
         default=4
-        Dimension of Krylov subspace for eigs(.)
+        Dimension of Krylov subspace for linalg.eigs_anm(.)
     eigs_tol: float
         default=1e-14
-        Cutoff for krylov subspace for eigs(.)
+        Cutoff for krylov subspace for linalg.eigs_anm(.)
     opts_svd: dict
         default=None
         options for truncation
@@ -404,7 +403,7 @@ def dmrg_sweep_2site_group(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14
         # update site n using eigs
         Av = lambda v: env.Heff2_group(v, n)
         Bv = lambda v: env.Heff2_group(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
-        _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+        _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[init], hermitian=hermitian, k=1,
                          sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
         init = vec[0].unfuse_legs(axes=1, inplace=True)
         # init = vec[0].ungroup_leg(axis=1, leg_order=leg_order)
@@ -425,7 +424,7 @@ def dmrg_sweep_2site_group(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14
         # update site n using eigs
         Av = lambda v: env.Heff2_group(v, n)
         Bv = lambda v: env.Heff2_group(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
-        _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+        _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[init], hermitian=hermitian, k=1,
                          sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
         init = vec[0].unfuse_legs(axes=1, inplace=True)
         # init = vec[0].ungroup_leg(axis=1, leg_order=leg_order)
@@ -473,10 +472,10 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
         is MPO hermitian
     k: int
         default = 4
-        Dimension of Krylov subspace for eigs(.)
+        Dimension of Krylov subspace for linalg.eigs_anm(.)
     eigs_tol: float
         default = 1e-14
-        Cutoff for krylov subspace for eigs(.)
+        Cutoff for krylov subspace for linalg.eigs_anm(.)
     bi_orth: bool
         default = True
         Option for exponentiation = exp(). For True and non-Hermitian cases will bi-orthogonalize set of generated vectors.
@@ -533,7 +532,7 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
                 # update site n using eigs
                 Av = lambda v: env.Heff0(v, psi.pC)
                 Bv = lambda v: env.Heff0(v, psi.pC, conj=True) if algorithm == 'lanczos' and not hermitian else None
-                _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
+                _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[
                                  init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
                 # canonize and save
                 psi.A[psi.pC] = vec[0]
@@ -542,7 +541,7 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
             init = psi.A[n]
             Av = lambda v: env.Heff1(v, n)
             Bv = lambda v: env.Heff1(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
-            _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+            _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[init], hermitian=hermitian, k=1,
                              sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
             # canonize and save
             psi.A[n] = vec[0]
@@ -560,7 +559,7 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
                 # update site n using eigs
                 Av = lambda v: env.Heff2(v, n)
                 Bv = lambda v: env.Heff2(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
-                _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
+                _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[
                                  init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
                 # split and save
                 x, S, y = linalg.svd(vec[0], axes=(psi.left + psi.phys, tuple(
@@ -582,7 +581,7 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
                 # update site n using eigs
                 Av = lambda v: env.Heff2_group(v, n)
                 Bv = lambda v: env.Heff2_group(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
-                _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
+                _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[
                                  init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
                 init = vec[0].unfuse_legs(axes=1, inplace=True)
                 # init = vec[0].ungroup_leg(axis=1, leg_order=leg_order)
@@ -614,7 +613,7 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
                 # update site n using eigs
                 Av = lambda v: env.Heff0(v, psi.pC)
                 Bv = lambda v: env.Heff0(v, psi.pC, conj=True) if algorithm == 'lanczos' and not hermitian else None
-                _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
+                _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[
                                  init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
                 # canonize and save
                 psi.A[psi.pC] = vec[0]
@@ -623,7 +622,7 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
             init = psi.A[n]
             Av = lambda v: env.Heff1(v, n)
             Bv = lambda v: env.Heff1(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
-            _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[init], hermitian=hermitian, k=1,
+            _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[init], hermitian=hermitian, k=1,
                              sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
             # canonize and save
             psi.A[n] = vec[0]
@@ -641,7 +640,7 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
                 # update site n using eigs
                 Av = lambda v: env.Heff2(v, n)
                 Bv = lambda v: env.Heff2(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
-                _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
+                _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[
                                  init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
                 # split and save
                 x, S, y = linalg.svd(vec[0], axes=(psi.left + psi.phys, tuple(
@@ -663,7 +662,7 @@ def dmrg_sweep_mix(psi, SV_min, versions, H, env=None, hermitian=True, k=4, eigs
                 # update site n using eigs
                 Av = lambda v: env.Heff2_group(v, n)
                 Bv = lambda v: env.Heff2_group(v, n, conj=True) if algorithm == 'lanczos' and not hermitian else None
-                _, vec, _ = eigs(Av=Av, Bv=Bv, v0=[
+                _, vec, _ = linalg.eigs_anm(Av=Av, Bv=Bv, init=[
                                  init], hermitian=hermitian, k=1, sigma=None, ncv=k, which=None, tol=eigs_tol, algorithm=algorithm)
                 init = vec[0].unfuse_legs(axes=1, inplace=True)
                 # init = vec[0].ungroup_leg(axis=1, leg_order=leg_order)

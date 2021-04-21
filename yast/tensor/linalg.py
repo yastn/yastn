@@ -110,13 +110,17 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     else:
         meta = tuple((il+ir, il+il, il, il+ir) for il, ir in zip(ul, ur))
         n_l, n_r = 0*a.n, a.n
-    U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
+    U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l,
+                    meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
-    V = a.__class__(config=a.config, s=(-sU,) + ls_r.s, n=n_r, meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
+    V = a.__class__(config=a.config, s=(-sU,) + ls_r.s, n=n_r,
+                    meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
 
-    U.A, S.A, V.A = a.config.backend.svd_lowrank(Am, meta, D_block, n_iter, k_fac)
+    U.A, S.A, V.A = a.config.backend.svd_lowrank(
+        Am, meta, D_block, n_iter, k_fac)
 
-    ls_s = _leg_struct_truncation(S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'svd')
+    ls_s = _leg_struct_truncation(
+        S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'svd')
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
     _unmerge_matrix(V, ls_s, ls_r)
@@ -177,12 +181,15 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     else:
         meta = tuple((il+ir, il+il, il, il+ir) for il, ir in zip(ul, ur))
         n_l, n_r = 0*a.n, a.n
-    U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
+    U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l,
+                    meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
-    V = a.__class__(config=a.config, s=(-sU,) + ls_r.s, n=n_r, meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
+    V = a.__class__(config=a.config, s=(-sU,) + ls_r.s, n=n_r,
+                    meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
     U.A, S.A, V.A = a.config.backend.svd(Am, meta)
 
-    ls_s = _leg_struct_truncation(S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'svd')
+    ls_s = _leg_struct_truncation(
+        S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'svd')
 
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
@@ -222,8 +229,10 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
     Qs = tuple(a.s[lg] for lg in axes[0]) + (sQ,)
     Rs = (-sQ,) + tuple(a.s[lg] for lg in axes[1])
-    Q = a.__class__(config=a.config, s=Qs, n=a.n, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
-    R = a.__class__(config=a.config, s=Rs, meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
+    Q = a.__class__(config=a.config, s=Qs, n=a.n, meta_fusion=[
+                    a.meta_fusion[ii] for ii in lout_l] + [(1,)])
+    R = a.__class__(config=a.config, s=Rs, meta_fusion=[
+                    (1,)] + [a.meta_fusion[ii] for ii in lout_r])
 
     meta = tuple((il+ir, il+ir, ir+ir) for il, ir in zip(ul, ur))
     Q.A, R.A = a.config.backend.qr(Am, meta)
@@ -284,17 +293,20 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf,
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
 
     if _check["consistency"] and not (ul == ur and ls_l.match(ls_r)):
-        raise YastError('Something went wrong in matching the indices of the two tensors')
+        raise YastError(
+            'Something went wrong in matching the indices of the two tensors')
 
     Us = tuple(a.s[lg] for lg in axes[0]) + (sU,)
     S = a.__class__(config=a.config, s=(-sU, sU), isdiag=True)
-    U = a.__class__(config=a.config, s=Us, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
+    U = a.__class__(config=a.config, s=Us, meta_fusion=[
+                    a.meta_fusion[ii] for ii in lout_l] + [(1,)])
 
     # meta = (indA, indS, indU)
     meta = tuple((il+ir, il, il+ir) for il, ir in zip(ul, ur))
     S.A, U.A = a.config.backend.eigh(Am, meta)
 
-    ls_s = _leg_struct_truncation(S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'eigh')
+    ls_s = _leg_struct_truncation(
+        S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'eigh')
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
@@ -335,16 +347,18 @@ def entropy(a, axes=(0, 1), alpha=1):
         Sm = a.config.backend.svd_S(Am)
     else:
         Sm = {t: a.config.backend.diag_get(x) for t, x in a.A.items()}
-    return a.config.backend.entropy(Sm, alpha=alpha)  # entropy, Smin, normalization
+    # entropy, Smin, normalization
+    return a.config.backend.entropy(Sm, alpha=alpha)
 
 
-### Krylov based methods, handled by anonymous function dectibing action of matrix on a vector
+# Krylov based methods, handled by anonymous function decribing action of matrix on a vector
 
 def expm_anm(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=0, algorithm='arnoldi'):
-    #return expA(Av=Av, Bv=Bv, init=init, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=hermitian, bi_orth=bi_orth, NA=NA, cost_estim=cost_estim, algorithm=algorithm)
-    #def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_estim, algorithm):
+    # return expA(Av=Av, Bv=Bv, init=init, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=hermitian, bi_orth=bi_orth, NA=NA, cost_estim=cost_estim, algorithm=algorithm)
+    # def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_estim, algorithm):
     if not hermitian and not Bv:
-        raise YastError('expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
+        raise YastError(
+            'expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
     k_max = min([20, init[0].get_size()])
     if not NA:
         # n - cost of vector init
@@ -422,10 +436,11 @@ def expm_anm(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermit
     # Iterate until we reach the final t
     while tnow < tout:
         # Compute the exponential of the augmented matrix
-        err, evec, good = expm(Av=Av, Bv=Bv, init=w, tol=eigs_tol, k=m, hermitian=hermitian,
-                               bi_orth=bi_orth, tau=(sgn, tau.real), algorithm=algorithm)
-        happy = good[0]
-        j = good[1]
+        err, evec, good = krylov(
+            w, Av, Bv, eigs_tol, None, algorithm, hermitian, m, bi_orth, tau=(sgn, tau.real))
+
+        happy = good[1]
+        j = good[2]
 
         # Error per unit step
         oldomega = omega
@@ -433,7 +448,7 @@ def expm_anm(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermit
 
         # Estimate order
         if m == oldm and tau != oldtau and ireject > 0:
-            order = max([1, np.log(omega/oldomega)/np.log(tau/oldtau)])
+            order = max([1., np.log(omega/oldomega)/np.log(tau/oldtau)])
             orderold = False
         elif orderold or ireject == 0:
             orderold = True
@@ -464,14 +479,14 @@ def expm_anm(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermit
         else:
             # Determine optimal tau and m
             tauopt = tau*(omega/gamma)**(-1./order)
-            mopt = max([1, np.ceil(j+np.log(omega/gamma)/np.log(kest))])
+            mopt = max([1., np.ceil(j+np.log(omega/gamma)/np.log(kest))])
 
             # evaluate Cost functions
-            Ctau = (m * NA + 3 * m * n + (m/mmax)**2*v_i * (10 + 3 * (m - 1))
-                    * (m + 1) ** 3) * np.ceil((tout - tnow) / tauopt)
+            Ctau = (m * NA + 3. * m * n + (m/mmax)**2*v_i * (10. + 3. * (m - 1.))
+                    * (m + 1.) ** 3.) * np.ceil((tout - tnow) / tauopt)
 
-            Ck = (mopt * NA + 3 * mopt * n + (mopt/mmax)**2*v_i * (10 + 3 * (mopt - 1))
-                  * (mopt + 1) ** 3) * np.ceil((tout - tnow) / tau)
+            Ck = (mopt * NA + 3. * mopt * n + (mopt/mmax)**2*v_i * (10. + 3. * (mopt - 1.))
+                  * (mopt + 1.) ** 3) * np.ceil((tout - tnow) / tau)
             if Ctau < Ck:
                 taunew, mnew = tauopt, m
             else:
@@ -489,25 +504,15 @@ def expm_anm(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermit
             ireject += 1
 
         # Another safety factors
-        tau = min([tout - tnow, max([.2 * tau, min([taunew, 2 * tau])])])
+        tau = min([tout - tnow, max([.2 * tau, min([taunew, 2. * tau])])])
         m = int(
             max([1, min([mmax, max([np.floor(.75 * m), min([mnew, np.ceil(1.3333 * m)])])])]))
 
     if abs(tnow/tout) < 1.:
         raise YastError('eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = '+omega /
-                    delta+'\nRemaining time = '+abs(1.-tnow/tout)+'\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
+                        delta+'\nRemaining time = '+abs(1.-tnow/tout)+'\nChceck: max_iter - number of iteractions,\nk - Krylov dimension,\ndt - time step.')
     return (w[0], step, j, tnow,)
 
-
-def expm(Av, init, tau, Bv=None, tol=1e-14, k=5, algorithm='arnoldi', bi_orth=False, hermitian=True):
-    norm = init[0].norm()
-    init = [(1. / it.norm())*it for it in init] # normalize
-    
-    val, Y, good = krylov(init, Av, Bv, tol, k, algorithm, hermitian, ncv, bi_orth)
-    return val, [norm*Y[it] for it in range(len(Y))], good
-
-
-#### Find lowest eigenstate
 
 def eigs_anm(Av, init, Bv=None, hermitian=True, k='all', sigma=None, ncv=5, which=None, tol=1e-14, bi_orth=True, return_eigenvectors=True, algorithm='arnoldi'):
     r"""
@@ -549,20 +554,24 @@ def eigs_anm(Av, init, Bv=None, hermitian=True, k='all', sigma=None, ncv=5, whic
     """
     norm, _ = init[0].norm(), None
     init = [(1. / it.norm())*it for it in init]
-    val, Y, good = krylov(init, Av, Bv, tol, k, algorithm, hermitian, ncv, bi_orth, sigma, which, return_eigenvectors)
-    return val, [norm*Y[it] for it in range(len(Y))], good
+    val, Y, good = krylov(init, Av, Bv, tol, k, algorithm,
+                          hermitian, ncv, bi_orth, sigma, which, return_eigenvectors)
+    if return_eigenvectors:
+        return val, [norm*Y[it] for it in range(len(Y))], good
+    else:
+        return val, Y, good
 
 
 def eigh_anm(Av, init, tol=1e-14, k=5, algorithm='arnoldi'):
     norm = init[0].norm()
     init = [(1. / it.norm())*it for it in init]
-    val, Y, good = krylov(init, Av, None, tol, 'all', k, algorithm, True)
+    val, Y, good = krylov(init, Av, None, tol, 'all', algorithm, True, k)
     return val, [norm*Y[it] for it in range(len(Y))], good
 
 
 def eig_anm(Av, init, Bv=None, tol=1e-14, k=5, bi_orth=False, algorithm='lanczos'):
     norm = init[0].norm()
     init = [(1. / it.norm())*it for it in init]
-    val, Y, good = krylov(init, Av, Bv, tol, 'all', k, algorithm, False, bi_orth)
+    val, Y, good = krylov(init, Av, Bv, tol, 'all',
+                          algorithm, False, k, bi_orth)
     return val, [norm*Y[it] for it in range(len(Y))], good
-
