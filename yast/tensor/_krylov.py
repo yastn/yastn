@@ -13,22 +13,29 @@ __all__ = ['arnoldi', 'lanczos']
 _select_dtype = {'float64': np.float64, 'complex128': np.complex128}
 
 # leader
-def krylov(init, Av, Bv, tol, k, algorithm, hermitian, ncv=5, bi_orth=False, sigma=None, which=None, return_eigenvectors=None):
+
+
+def krylov(init, Av, Bv, tol, k, algorithm, hermitian, ncv=5, bi_orth=False, sigma=None, which=None, return_eigenvectors=True, tau=False):
     if algorithm is 'lanczos':
         T, Q, P, good = lanczos(init, Av, Bv, tol, ncv, hermitian, bi_orth)
     else:
         T, Q, P, good = arnoldi(init, Av, tol, ncv)
-    val, Y = eigs_aug(T, Q, P, k, hermitian, sigma, which, return_eigenvectors)
-    return val, Y, good
+    if not tau:
+        val, Y = eigs_aug(T, Q, P, k, hermitian, sigma,
+                          which, return_eigenvectors)
+        return val, Y, good
+    else:
+        err, Y = expm_aug(T, Q, tau, good[0])
+        return err, Y, good
 
 
 # Arnoldi method
 def arnoldi(init, Av, tol, k):
     beta = None
     Q = [None] * (k + 1)
-    H = np.zeros((k + 1, k + 1), dtype=init.config.dtype)
-    #
     Q[0] = init[0]
+    H = np.zeros((k + 1, k + 1), dtype=Q[0].config.dtype)
+    #
     for jt in range(k):
         w = Av(Q[jt])
         for it in range(jt+1):
@@ -59,10 +66,10 @@ def lanczos_her(init, Av, tol, k):
     # Lanczos algorithm for hermitian matrices
     beta = None
     Q = [None] * (k + 1)
-    a = np.zeros(k + 1, dtype=init.config.dtype)
-    b = np.zeros(k + 1, dtype=init.config.dtype)
-    #
     Q[0] = init
+    a = np.zeros(k + 1, dtype=Q[0].config.dtype)
+    b = np.zeros(k + 1, dtype=Q[0].config.dtype)
+    #
     r = Av(Q[0])
     for it in range(k):
         a[it] = Q[it].vdot(r)
@@ -164,11 +171,12 @@ def enlarged_aug_mat(T, p, dtype):
     out2 = np.zeros((m+p, m+p), dtype=dtype)
     out2[:m, :m] = T
     out2[0, m] = 1.
-    out2[m:(p-1), m+1] += 1.
+    if p>1:
+        out2[range(m, m+p, 1), m+1] += 1.
     return out2
 
 
-def expm_aug(T, Q, tau, beta, P=None):
+def expm_aug(T, Q, tau, beta):
     p = 1  # order of the Phi-function
     dtype = Q[0].config.dtype
     tau = tau[0] * tau[1]
@@ -195,20 +203,20 @@ def eigs_aug(T, Q, P=None, k=None, hermitian=True, sigma=None, which=None, retur
     else:
         val, _, vr = LA.eig(T, left=True, right=True)
 
-    whicher={
+    whicher = {
         'LM':   np.argsort(abs(val))[::-1],  # ‘LM’ : largest magnitude
-        'SM':   np.argsort(abs(val))      ,  # ‘SM’ : smallest magnitude
+        'SM':   np.argsort(abs(val)),  # ‘SM’ : smallest magnitude
         'LR':   np.argsort(val.real)[::-1],  # ‘LR’ : largest real part
-        'SR':   np.argsort(val.real)      ,  # ‘SR’ : smallest real part
+        'SR':   np.argsort(val.real),  # ‘SR’ : smallest real part
         'LI':   np.argsort(val.imag)[::-1],  # ‘LI’ : largest imaginary part
         'SI':   np.argsort(val.imag)        # ‘SI’ : smallest imaginary part
-        }
-        
+    }
+
     if sigma is not None:  # target val closest to sigma on Re-Im plane
         id = np.argsort(abs(val-sigma))
     else:
         id = whicher.get(which, np.argsort(val))  # is 'SR' if not specified
-    
+
     val, vr = val[id], vr[:, id]
     if return_eigenvectors:
         for it in range(len(Y)):

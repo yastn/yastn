@@ -14,18 +14,18 @@ from ._contractions import *
 from ._initialize import *
 from ._output import *
 from ._single import *
-from .krylov import *
+from ._krylov import *
 from .linalg import *
 from . import _auxliary
 from . import _contractions
 from . import _initialize
 from . import _output
 from . import _single
-from . import krylov
+from . import _krylov
 from . import linalg
 __all__ = ['Tensor', 'linalg', 'YastError']
 __all__.extend(_initialize.__all__)
-__all__.extend(krylov.__all__)
+__all__.extend(_krylov.__all__)
 __all__.extend(linalg.__all__)
 __all__.extend(_auxliary.__all__)
 __all__.extend(_contractions.__all__)
@@ -44,7 +44,7 @@ class Tensor:
             self.nlegs = len(s)  # number of native legs
         except TypeError:
             self.nlegs = 1
-        self.s = np.array(s, dtype=np.int).reshape(self.nlegs)
+        self.s = np.array(s, dtype=int).reshape(self.nlegs)
         self.n = np.zeros(self.config.sym.NSYM, dtype=int) if n is None else \
             np.array(n, dtype=int).reshape(self.config.sym.NSYM)
         if self.isdiag:
@@ -67,7 +67,7 @@ class Tensor:
         self.struct = _struct((), (), tuple(self.s), tuple(self.n))
 
     from ._initialize import set_block, fill_tensor, copy_empty
-    from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr
+    from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr, eigs_anm, eigh_anm, eig_anm, expm_anm
     from ._contractions import tensordot, vdot, trace, swap_gate
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, diag, abs, sqrt, rsqrt, reciprocal, exp
     from ._single import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__

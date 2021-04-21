@@ -15,8 +15,8 @@ def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
 
 @lru_cache(maxsize=256)
 def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
-    legs_l = np.array(axes[0], np.int)
-    legs_r = np.array(axes[1], np.int)
+    legs_l = np.array(axes[0], int)
+    legs_r = np.array(axes[1], int)
     told = struct.t if inds is None else [struct.t[ii] for ii in inds]
     Dold = struct.D if inds is None else [struct.D[ii] for ii in inds]
     tset = np.array(told, dtype=int).reshape((len(told), len(struct.s), config.sym.NSYM))
