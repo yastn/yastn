@@ -7,7 +7,7 @@ from yast.initialize import randR
 import config_U1_R
 import numpy as np
 from scipy.sparse.linalg import eigs, LinearOperator
-import torch
+# import torch
 
 tol = 1e-12
 
