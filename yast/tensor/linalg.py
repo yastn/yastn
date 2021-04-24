@@ -106,8 +106,8 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
 
     if nU:
-        meta = tuple((il+ir, il+ir, ir, ir+ir) for il, ir in zip(ul, ur))
-        n_l, n_r = a.n, 0*a.n
+        meta = tuple((il + ir, il + ir, ir, ir + ir) for il, ir in zip(ul, ur))
+        n_l, n_r = a.n, 0 * a.n
     else:
         meta = tuple((il+ir, il+il, il, il+ir) for il, ir in zip(ul, ur))
         n_l, n_r = 0*a.n, a.n
@@ -177,8 +177,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
 
     if nU:
-        meta = tuple((il+ir, il+ir, ir, ir+ir) for il, ir in zip(ul, ur))
-        n_l, n_r = a.n, 0*a.n
+        meta = tuple((il + ir, il + ir, ir, ir + ir) for il, ir in zip(ul, ur))
+        n_l, n_r = a.n, 0 * a.n
     else:
         meta = tuple((il+ir, il+il, il, il+ir) for il, ir in zip(ul, ur))
         n_l, n_r = 0*a.n, a.n
@@ -235,7 +235,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     R = a.__class__(config=a.config, s=Rs, meta_fusion=[
                     (1,)] + [a.meta_fusion[ii] for ii in lout_r])
 
-    meta = tuple((il+ir, il+ir, ir+ir) for il, ir in zip(ul, ur))
+    meta = tuple((il + ir, il + ir, ir + ir) for il, ir in zip(ul, ur))
     Q.A, R.A = a.config.backend.qr(Am, meta)
 
     ls = _leg_struct_trivial(R, axis=0)
@@ -303,7 +303,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf,
                     a.meta_fusion[ii] for ii in lout_l] + [(1,)])
 
     # meta = (indA, indS, indU)
-    meta = tuple((il+ir, il, il+ir) for il, ir in zip(ul, ur))
+    meta = tuple((il + ir, il, il + ir) for il, ir in zip(ul, ur))
     S.A, U.A = a.config.backend.eigh(Am, meta)
 
     ls_s = _leg_struct_truncation(

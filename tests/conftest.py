@@ -22,4 +22,3 @@ def pytest_configure(config):
     for conf in confs:
         conf = importlib.import_module(conf)
         conf.backend = backend
-

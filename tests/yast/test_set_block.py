@@ -1,11 +1,14 @@
 """
 Test functions: set_block
 """
-
 from math import isclose
 import numpy as np
 import pytest
-import yast
+try:
+    import yast
+except ModuleNotFoundError:
+    import fix_path
+    import yast
 import config_dense_R
 import config_dense_C
 import config_U1_R
@@ -13,6 +16,7 @@ import config_U1_C
 import config_Z2_U1_R
 
 tol = 1e-12
+
 
 def test_set0():
     # print('3d tensor:')
@@ -49,10 +53,9 @@ def test_set0():
     assert npa.shape == (5, 5)
     assert a.is_consistent()
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
-    
+
 
 def test_set1():
-    
     # print('3d tensors ')
     a = yast.Tensor(config=config_U1_R, s=(-1, 1, 1))
     a.set_block(ts=(1, -1, 2), Ds=(2, 5, 3), val='rand')
@@ -90,8 +93,8 @@ def test_set1():
 
     # print('4d tensor: ')
     a = yast.ones(config=config_U1_C, s=(-1, 1, 1, 1),
-                    t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
-                    D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
+                  t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
+                  D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
     a.set_block(ts=(-2, 0, -2, 0), val='randR')
     npa = a.to_numpy()
     assert np.iscomplexobj(npa)
@@ -112,7 +115,7 @@ def test_set1():
     b = a.copy()
     with pytest.raises(yast.YastError):
         a.set_block(ts=(0, 0, 0), Ds=(3, 4, 6))  # here (3, ...) is inconsistent bond dimension
-    b.set_block(ts=(0, 0, 0)) # here should infer bond dimensions
+    b.set_block(ts=(0, 0, 0))  # here should infer bond dimensions
 
     # print('diagonal tensor:')
     a = yast.rand(config=config_U1_R, isdiag=True, t=0, D=5)
@@ -127,32 +130,32 @@ def test_set1():
     assert np.linalg.norm(np.diag(np.diag(npa)) - npa) < tol  # == 0.0
     a.show_properties()
 
+
 def test_set2():
     # print('3d tensor: ')
     a = yast.ones(config=config_Z2_U1_R, s=(-1, 1, 1),
-                    t=(((0, 0), (1, 0), (0, 2), (1, 2)), ((0, -2), (0, 2)), ((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2))),
-                    D=((1, 2, 2, 4), (1, 2), (2, 4, 6, 3, 6, 9)))
+                  t=(((0, 0), (1, 0), (0, 2), (1, 2)), ((0, -2), (0, 2)), ((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2))),
+                  D=((1, 2, 2, 4), (1, 2), (2, 4, 6, 3, 6, 9)))
     a.set_block(ts=(0, 0, 0, 0, 0, 0), Ds=(1, 5, 4), val=np.arange(20))
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (9, 8, 30)
     assert a.is_consistent()
 
-
     # print('3d tensor:')
     a = yast.ones(config=config_Z2_U1_R, s=(-1, 1, 1),
-                    t=[[(0, 1), (1, 0)], [(0, 0)], [(0, 1), (1, 0)]],
-                    D=[[1, 2], 3, [1, 2]])
+                  t=[[(0, 1), (1, 0)], [(0, 0)], [(0, 1), (1, 0)]],
+                  D=[[1, 2], 3, [1, 2]])
     a.set_block(ts=(0, 1, 0, -2, 0, 3), Ds=(1, 5, 6))
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (3, 8, 9)
     assert a.is_consistent()
-    
+
     # print('diagonal tensor:')
     a = yast.rand(config=config_Z2_U1_R, isdiag=True,
-                    t=[[(0, 0), (1, 1), (0, 2)]],
-                    D=[[2, 3, 5]])
+                  t=[[(0, 0), (1, 1), (0, 2)]],
+                  D=[[2, 3, 5]])
     a.set_block(ts=(0, 0), val='ones')
     a.set_block(ts=(1, 1), val='ones')
     a.set_block(ts=(0, 2), val='ones')
@@ -192,13 +195,14 @@ def test_dict():
     assert a.are_independent(b)
 
     a = yast.ones(config=config_Z2_U1_R, s=(-1, 1, 1), n=(0, -2),
-                    t=(((0, 0), (0, 2), (1, 0), (1, 2)), ((0, -2), (0, 2)), ((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2))),
-                    D=((1, 2, 3, 4), (2, 1), (2, 3, 5, 4, 1, 6)))
+                  t=(((0, 0), (0, 2), (1, 0), (1, 2)), ((0, -2), (0, 2)), ((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2))),
+                  D=((1, 2, 3, 4), (2, 1), (2, 3, 5, 4, 1, 6)))
     d = a.export_to_dict()
     b = yast.import_from_dict(config=config_Z2_U1_R, d=d)
     assert yast.norm_diff(a, b) < tol  # == 0.0
     assert b.is_consistent()
     assert a.are_independent(b)
+
 
 if __name__ == '__main__':
     test_set0()

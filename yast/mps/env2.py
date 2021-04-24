@@ -2,6 +2,7 @@
 import logging
 from .. import match_legs
 
+
 class FatalError(Exception):
     pass
 
@@ -76,13 +77,13 @@ class Env2:
         nnext, leg, nprev = self.g.from_site(n, towards)
 
         if self.nr_phys == 1 and leg == 1:
-            self.F[(n, nnext)] = self.F[(nprev, n)].tensordot(self.bra.A[n], axes=((0),(0)), conj=(0,1)).tensordot(self.ket.A[n], axes=((0,1),(0,1)))
+            self.F[(n, nnext)] = self.F[(nprev, n)].tensordot(self.bra.A[n], axes=(0, 0), conj=(0, 1)).tensordot(self.ket.A[n], axes=((0, 1), (0, 1)))
         elif self.nr_phys == 1 and leg == 0:
-            self.F[(n, nnext)] = self.ket.A[n].tensordot(self.F[(nprev, n)], axes=((2),(0))).tensordot(self.bra.A[n], axes=((1,2),(1,2)), conj=(0,1))
+            self.F[(n, nnext)] = self.ket.A[n].tensordot(self.F[(nprev, n)], axes=(2, 0)).tensordot(self.bra.A[n], axes=((1, 2), (1, 2)), conj=(0, 1))
         elif self.nr_phys == 2 and leg == 1:
-            self.F[(n, nnext)] = self.F[(nprev, n)].tensordot(self.bra.A[n], axes=((0),(0)), conj=(0,1)).tensordot(self.ket.A[n], axes=((0,1,2),(0,1,2)))
+            self.F[(n, nnext)] = self.F[(nprev, n)].tensordot(self.bra.A[n], axes=(0, 0), conj=(0, 1)).tensordot(self.ket.A[n], axes=((0, 1, 2), (0, 1, 2)))
         else:  # self.nr_phys == 2 and leg == 0:
-            self.F[(n, nnext)] = self.ket.A[n].tensordot(self.F[(nprev, n)], axes=((3),(0))).tensordot(self.bra.A[n], axes=((1,2,3),(1,2,3)), conj=(0,1))
+            self.F[(n, nnext)] = self.ket.A[n].tensordot(self.F[(nprev, n)], axes=(3, 0)).tensordot(self.bra.A[n], axes=((1, 2, 3), (1, 2, 3)), conj=(0, 1))
 
     def setup_to_last(self):
         r"""

@@ -1,13 +1,18 @@
-import yast
+try:
+    import yast
+except ModuleNotFoundError:
+    import fix_path
+    import yast
 import config_U1_R
 import numpy as np
 
 tol = 1e-12
 
+
 def test_diag_1():
     a1 = yast.rand(config=config_U1_R, s=(-1, 1),
-                  t=((-1, 1, 2), (-1, 1, 2)),
-                  D=((4, 5, 6), (4, 5, 6)))
+                   t=((-1, 1, 2), (-1, 1, 2)),
+                   D=((4, 5, 6), (4, 5, 6)))
 
     a2 = a1.diag()
     a3 = a2.diag()
@@ -27,6 +32,7 @@ def test_diag_1():
     assert np.allclose(np.diag(np.diag(na1)), na5)
     assert a2.norm_diff(a4) < tol  # == 0.0
     assert a3.norm_diff(a5) < tol  # == 0.0
+
 
 if __name__ == '__main__':
     test_diag_1()

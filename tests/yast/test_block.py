@@ -1,10 +1,14 @@
-import yast
+try:
+    import yast
+except ModuleNotFoundError:
+    import fix_path
+    import yast
 import config_U1_R
 
 tol = 1e-12
 
-def test_block_U1():
 
+def test_block_U1():
     w = 0.6
     mu = -0.4
 
