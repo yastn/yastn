@@ -13,7 +13,7 @@ def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
     return Anew, ls_l, ls_r, ul, ur
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=1024)
 def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
     legs_l = np.array(axes[0], int)
     legs_r = np.array(axes[1], int)
@@ -103,18 +103,17 @@ def _leg_struct_truncation(a, tol=0., D_block=np.inf, D_total=np.inf, keep_multi
         low = 0
         for ind in D_keep:
             high = low + D_keep[ind]
-            D_keep[ind] = sum((low <= order) & (order < high))
+            D_keep[ind] = sum((low <= order) & (order < high)).item()
             low = high
-    # check symmetry related blocks and truncate to equal length
-    if keep_multiplets:
+    if keep_multiplets:  # check symmetry related blocks and truncate to equal length
         ind_list = [np.asarray(k) for k in D_keep]
         for ind in ind_list:
             t = tuple(ind)
             tn = tuple(-ind)
             minD_sector = min(D_keep[t], D_keep[tn])
             D_keep[t] = D_keep[tn] = minD_sector
-            if -ind in ind_list:
-                ind_list.remove(-ind)
+            # if -ind in ind_list:
+            #     ind_list.remove(-ind)  ## this might mess-up iterator
     dec, Dtot = {}, {}
     for ind in D_keep:
         if D_keep[ind] > 0:

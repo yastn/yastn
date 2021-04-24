@@ -1,4 +1,8 @@
-import yast
+try:
+    import yast
+except ModuleNotFoundError:
+    import fix_path
+    import yast
 import config_dense_C
 import config_Z2_C
 import config_U1_C

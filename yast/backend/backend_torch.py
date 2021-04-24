@@ -38,14 +38,6 @@ def copy(x):
     return x.detach().clone()
 
 
-def real(x):
-    return x.real
-
-
-def imag(x):
-    return x.imag
-
-
 def to_numpy(x):
     return x.detach().cpu().numpy()
 
@@ -74,8 +66,17 @@ def diag_diag(x):
     return torch.diag(torch.diag(x))  # TODO: PROBLEM WITH COMPLEX NUMBERS
 
 
+@torch.no_grad()
 def count_greater(x, cutoff):
-    return torch.sum(x > cutoff)
+    return torch.sum(x > cutoff).item()
+
+
+def real(x):
+    return torch.real(x) if torch.is_complex(x) else x
+
+
+def imag(x):
+    return torch.imag(x) if torch.is_complex(x) else 0 * x
 
 #########################
 #    output numbers     #
@@ -94,22 +95,22 @@ def norm(A, p):
     """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
     if p == "fro":
         return torch.sum(torch.stack([torch.sum(t.abs()**2) for t in A.values()])).sqrt()
-    elif p == "inf":
+    if p == "inf":
         return torch.max(torch.stack([t.abs().max() for t in A.values()]))
-    else:
-        raise RuntimeError("Invalid norm type: "+p)
+    raise RuntimeError("Invalid norm type: %s" % str(p))
 
 
 def norm_diff(A, B, meta, p):
     """ norm(A - B); meta = kab, ka, kb """
     if p == 'fro':
-        return torch.sum(torch.stack([torch.sum(A[k].abs() ** 2) for k in meta[1]] +
-                                     [torch.sum(B[k].abs() ** 2) for k in meta[2]] +
-                                     [torch.sum((A[k]-B[k]).abs() ** 2) for k in meta[0]])).sqrt()
+        return torch.sum(torch.stack([torch.sum(A[k].abs() ** 2) for k in meta[1]]
+                                     + [torch.sum(B[k].abs() ** 2) for k in meta[2]]
+                                     + [torch.sum((A[k] - B[k]).abs() ** 2) for k in meta[0]])).sqrt()
     if p == 'inf':
-        return torch.max(torch.stack([A[k].abs().max() for k in meta[1]] +
-                                     [B[k].abs().max() for k in meta[2]] +
-                                     [(A[k]-B[k]).abs().max() for k in meta[0]]))
+        return torch.max(torch.stack([A[k].abs().max() for k in meta[1]]
+                                     + [B[k].abs().max() for k in meta[2]]
+                                     + [(A[k] - B[k]).abs().max() for k in meta[0]]))
+    raise RuntimeError("Invalid norm type: %s" % str(p))
 
 
 def entropy(A, alpha=1, tol=1e-12):
@@ -205,7 +206,7 @@ def rsqrt(A, cutoff=0):
     res = {t: x.rsqrt() for t, x in A.items()}
     if cutoff > 0:
         for t in res:
-            res[t][abs(res[t]) > 1./cutoff] = 0
+            res[t][abs(res[t]) > 1. / cutoff] = 0
     return res
 
 
@@ -213,23 +214,23 @@ def rsqrt_diag(A, cutoff=0):
     res = {t: torch.diag(x).rsqrt() for t, x in A.items()}
     if cutoff > 0:
         for t in res:
-            res[t][abs(res[t]) > 1./cutoff] = 0
+            res[t][abs(res[t]) > 1. / cutoff] = 0
     return {t: torch.diag(x) for t, x in res.items()}
 
 
 def reciprocal(A, cutoff=0):
-    res = {t: 1./x for t, x in A.items()}
+    res = {t: 1. / x for t, x in A.items()}
     if cutoff > 0:
         for t in res:
-            res[t][abs(res[t]) > 1./cutoff] = 0
+            res[t][abs(res[t]) > 1. / cutoff] = 0
     return res
 
 
 def reciprocal_diag(A, cutoff=0):
-    res = {t: 1./torch.diag(x) for t, x in A.items()}
+    res = {t: 1. / torch.diag(x) for t, x in A.items()}
     if cutoff > 0:
         for t in res:
-            res[t][abs(res[t]) > 1./cutoff] = 0
+            res[t][abs(res[t]) > 1. / cutoff] = 0
     return {t: torch.diag(x) for t, x in res.items()}
 
 
@@ -256,7 +257,7 @@ def absolute(A):
 def svd_lowrank(A, meta, D_block, n_iter, k_fac):
     U, S, V = {}, {}, {}
     for (iold, iU, iS, iV) in meta:
-        q = min(min(A[iold].shape), D_block*k_fac)
+        q = min(min(A[iold].shape), D_block * k_fac)
         U[iU], S[iS], V[iV] = torch.svd_lowrank(A[iold], q=q, niter=n_iter)
         V[iV] = V[iV].T.conj()
     return U, S, V
@@ -324,29 +325,23 @@ def qr(A, meta):
 def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
     if ordering == 'svd':
         s_all = torch.cat([S[ind][:D_keep[ind]] for ind in S])
-        values, order= torch.topk(s_all, D_total + int(keep_multiplets))
-        # if needed, preserve multiplets within each sector
-        if keep_multiplets:
-            # regularize by discarding small values
-            gaps = torch.abs(values.clone())
-            # compute gaps and normalize by larger sing. value. Introduce cutoff
-            # for handling vanishing values set to exact zero
-            gaps=(gaps[:len(values) - 1] - torch.abs(values[1:len(values)])) / (gaps[:len(values) - 1] + 1.0e-16)
-            gaps[gaps > 1.0] = 0.
-
-            if gaps[D_total-1] < eps_multiplet:
-                # the chi is within the multiplet - find the largest chi_new < chi
-                # such that the complete multiplets are preserved
-                for i in range(D_total-1, -1, -1):
-                    if gaps[i] > eps_multiplet:
-                        # chi_new= i
-                        order = order[:i+1]
-                        break
-        return order
-        # return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
     elif ordering == 'eigh':
         s_all = torch.cat([S[ind][-D_keep[ind]:] for ind in S])
-        return torch.from_numpy(s_all.cpu().numpy().argpartition(-D_total-1)[-D_total:])
+    values, order = torch.topk(s_all, D_total + int(keep_multiplets))
+    if keep_multiplets:  # if needed, preserve multiplets within each sector
+        gaps = torch.abs(values.clone())  # regularize by discarding small values
+        # compute gaps and normalize by larger singular value. Introduce cutoff
+        gaps = torch.abs(gaps[:len(values) - 1] - gaps[1:len(values)]) / gaps[0] # / (gaps[:len(values) - 1] + 1.0e-16)
+        gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
+        if gaps[D_total - 1] < eps_multiplet:
+            # the chi is within the multiplet - find the largest chi_new < chi
+            # such that the complete multiplets are preserved
+            for i in range(D_total - 1, -1, -1):
+                if gaps[i] > eps_multiplet:
+                    order = order[:i + 1]
+                    break
+    return order
+
 
 
 def range_largest(D_keep, D_total, ordering):

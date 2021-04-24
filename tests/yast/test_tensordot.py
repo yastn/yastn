@@ -1,4 +1,8 @@
-import yast
+try:
+    import yast
+except ModuleNotFoundError:
+    import fix_path
+    import yast
 import config_dense_C
 import config_U1_R
 import config_Z2_U1_R
@@ -6,13 +10,14 @@ import numpy as np
 
 tol = 1e-12
 
+
 def dot_vs_numpy(a, b, axes, conj):
     outa = tuple(ii for ii in range(a.get_ndim()) if ii not in axes[0])
     outb = tuple(ii for ii in range(b.get_ndim()) if ii not in axes[1])
     tDs = {nn: a.get_leg_structure(ii) for nn, ii in enumerate(outa)}
     tDs.update({nn + len(outa): b.get_leg_structure(ii) for nn, ii in enumerate(outb)})
-    tDsa = {ia: b.get_leg_structure(ib) for  ia, ib in zip(*axes)}
-    tDsb = {ib: a.get_leg_structure(ia) for  ia, ib in zip(*axes)}
+    tDsa = {ia: b.get_leg_structure(ib) for ia, ib in zip(*axes)}
+    tDsb = {ib: a.get_leg_structure(ia) for ia, ib in zip(*axes)}
     na = a.to_dense(tDsa)
     nb = b.to_dense(tDsb)
     if conj[0]:
@@ -27,6 +32,7 @@ def dot_vs_numpy(a, b, axes, conj):
     assert c.are_independent(b)
     assert np.linalg.norm(nc - nab) < tol  # == 0.0
 
+
 def test_dot_0():
     a = yast.rand(config=config_dense_C, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     b = yast.rand(config=config_dense_C, s=(1, -1, 1), D=(2, 3, 5))
@@ -37,12 +43,12 @@ def test_dot_0():
 
 def test_dot_1():
     a = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
-                    t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                    D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
 
     b = yast.rand(config=config_U1_R, s=(1, -1, 1),
-                    t=((-1, 2), (1, 2), (-1, 1)),
-                    D=((1, 3), (5, 6), (10, 11)))
+                  t=((-1, 2), (1, 2), (-1, 1)),
+                  D=((1, 3), (5, 6), (10, 11)))
 
     dot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 0))
     dot_vs_numpy(a, b, axes=((1, 3), (1, 2)), conj=(0, 0))
@@ -79,11 +85,11 @@ def test_dot_2():
     t1 = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
     t2 = [(0, 0), (0, 2), (2, 0), (2, 2)]
     a = yast.rand(config=config_Z2_U1_R, s=(-1, 1, 1, -1),
-                    t=(t1, t1, t1, t1),
-                    D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8), (7, 8, 9, 10)))
+                  t=(t1, t1, t1, t1),
+                  D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8), (7, 8, 9, 10)))
     b = yast.rand(config=config_Z2_U1_R, s=(1, -1, 1),
-                    t=(t1, t1, t2),
-                    D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8,)))
+                  t=(t1, t1, t2),
+                  D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8,)))
 
     dot_vs_numpy(a, b, axes=((0, 1), (0, 1)), conj=(0, 0))
     dot_vs_numpy(b, a, axes=((1, 0), (1, 0)), conj=(0, 0))

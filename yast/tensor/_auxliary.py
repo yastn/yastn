@@ -1,19 +1,24 @@
 """ Testing and auxliary functions. """
 
+from functools import lru_cache
 from typing import NamedTuple
 from itertools import accumulate, chain
+from . import _merging
 import numpy as np
 from ..sym import sym_none
 
-__all__ = ['check_signatures_match', 'check_consistency', 'allow_cache_meta', 'are_independent', 'is_consistent']
+__all__ = ['check_signatures_match', 'check_consistency', 'set_cache_maxsize', 'get_cache_info',
+           'are_independent', 'is_consistent']
 
-_check = {"signatures_match": True, "consistency": True, "cache_meta": True}
+_check = {"signatures_match": True, "consistency": True}
+
 
 class _struct(NamedTuple):
     t: tuple
     D: tuple
     s: tuple
     n: tuple
+
 
 class _config(NamedTuple):
     backend: any = None
@@ -89,17 +94,21 @@ def check_consistency(value=True):
     _check["consistency"] = bool(value)
 
 
-def allow_cache_meta(value=True):
-    """Set the value of the flag that permits to reuses some metadata."""
-    _check["cache_meta"] = bool(value)
+def set_cache_maxsize(maxsize=0):
+    """Change maxsize of lru_cache to reuses some metadata."""
+    _merging._meta_merge_to_matrix = lru_cache(maxsize)(_merging._meta_merge_to_matrix.__wrapped__)
+
+
+def get_cache_info():
+    return _merging._meta_merge_to_matrix.cache_info()
 
 
 def _test_configs_match(a, b):
     # if a.config != b.config:
-    if not (a.config.dtype == b.config.dtype and
-            a.config.dtype == b.config.dtype and
-            a.config.sym.SYM_ID == b.config.sym.SYM_ID and
-            a.config.backend.BACKEND_ID == b.config.backend.BACKEND_ID):
+    if not (a.config.dtype == b.config.dtype
+            and a.config.dtype == b.config.dtype
+            and a.config.sym.SYM_ID == b.config.sym.SYM_ID
+            and a.config.backend.BACKEND_ID == b.config.backend.BACKEND_ID):
         raise YastError('configs do not match')
 
 

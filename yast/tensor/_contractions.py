@@ -275,7 +275,8 @@ def ncon(ts, inds, conjs=None):
         order = [ed[1] for ed in sorted(edges)]
         _, result = ts.popitem()
         return result.transpose(axes=order, inplace=True)
-    result = 1
-    for num in ts.values():
-        result *= num.to_number()
+    it = iter(ts.values())
+    result = next(it)
+    for num in it:
+        result.A[()] = result.A[()] * num.A[()]
     return result

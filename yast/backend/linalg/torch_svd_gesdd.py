@@ -1,11 +1,14 @@
 import torch
 
+
 def safe_inverse(x, epsilon=1E-12):
     return x / (x**2 + epsilon)
+
 
 def safe_inverse_2(x, epsilon):
     x[abs(x) < epsilon] = float('inf')
     return x.pow(-1)
+
 
 class SVDGESDD(torch.autograd.Function):
     @staticmethod
@@ -23,9 +26,9 @@ class SVDGESDD(torch.autograd.Function):
         #    "svd_backward: Setting compute_uv to false in torch.svd doesn't compute singular matrices, ",
         #    "and hence we cannot compute backward. Please use torch.svd(compute_uv=True)");
 
-        #auto m = self.size(-2); # first dim of original tensor A = USV^\dag 
-        #auto n = self.size(-1); # second dim of A
-        #auto k = sigma.size(-1); # size of singular value vector
+        # auto m = self.size(-2); # first dim of original tensor A = USV^\dag
+        # auto n = self.size(-1); # second dim of A
+        # auto k = sigma.size(-1); # size of singular value vector
         # auto gsigma = grads[1]; # dS
         U, S, V, ad_decomp_reg = self.saved_tensors
         m = U.size(0)
@@ -59,7 +62,7 @@ class SVDGESDD(torch.autograd.Function):
         #     }
         # }
         # auto vh = v.conj().transpose(-2, -1);
-        vh= v.conj().transpose(-2,-1)
+        vh = v.conj().transpose(-2, -1)
 
         # Tensor sigma_term;
         # if (gsigma.defined()) {
@@ -113,10 +116,10 @@ class SVDGESDD(torch.autograd.Function):
         # }
         # gu is always defined here
         guh = gu.conj().transpose(-2, -1)
-        u_term = u @ (F.mul( uh @ gu - guh @ u) * sigma.unsqueeze(-2))
+        u_term = u @ (F.mul(uh @ gu - guh @ u) * sigma.unsqueeze(-2))
         if m > k:
             # projection operator onto subspace orthogonal to span(U) defined as I - UU^H
-            proj_on_ortho_u = -u@uh
+            proj_on_ortho_u = -u @ uh
             proj_on_ortho_u.diagonal(0, -2, -1).add_(1)
             u_term = u_term + proj_on_ortho_u @ (gu * sigma_inv.unsqueeze(-2))
         u_term = u_term @ vh
@@ -155,10 +158,10 @@ class SVDGESDD(torch.autograd.Function):
         #     return u_term + sigma_term + v_term + imag_term;
         # }
         if U.is_complex() or V.is_complex():
-            L= (uh @ gu).diagonal(0,-2,-1)
+            L = (uh @ gu).diagonal(0, -2, -1)
             L.real.zero_()
             L.imag.mul_(sigma_inv)
-            imag_term= (u * L.unsqueeze(-2)) @ vh
+            imag_term = (u * L.unsqueeze(-2)) @ vh
             return u_term + sigma_term + v_term + imag_term, None
 
         return u_term + sigma_term + v_term, None

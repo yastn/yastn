@@ -4,12 +4,12 @@ import numpy as np
 from .. import ncon
 from .geometry import Geometry
 
+
 class FatalError(Exception):
     pass
 
 
 logger = logging.getLogger('yast.mps.mps')
-
 
 ###################################
 #     basic operations on MPS     #
@@ -210,7 +210,6 @@ class Mps:
         discarded : float
             maximal norm of discarded singular values
         """
-
         discarded_max = 0.
         if to == 'last':
             for n in self.g.sweep(to='last'):
@@ -225,7 +224,7 @@ class Mps:
                 discarded_max = max(discarded_max, discarded)
                 self.absorb_central(towards=self.g.first)
         else:
-            logger.exception("canonize_sweep: Option " + to +  " is not defined.")
+            logger.exception("canonize_sweep: Option %s is not defined.", str(to))
             raise FatalError
 
         return discarded_max
@@ -260,11 +259,9 @@ class Mps:
             list of bond dimensions on virtual legs from left to right,
             including "trivial" leftmost and rightmost virtual indices.
         """
-
         Ds = [self.A[n].get_shape(self.left[0]) for n in self.g.sweep(to='last')]
         Ds.append(self.A[self.g.last].get_shape(self.right[0]))
         return Ds
-
 
     def get_tD(self):
         r"""
@@ -276,14 +273,13 @@ class Mps:
             list of bond dimensions on virtual legs from left to right,
             including "trivial" leftmost and rightmost virtual indices.
         """
-
         Ds = [self.A[n].get_leg_structure(self.left[0]) for n in self.g.sweep(to='last')]
         Ds.append(self.A[self.g.last].get_leg__structure(self.right[0]))
         return Ds
 
-
     def get_S(self, alpha=1):
         r"""
+        Entropy and spectral information on a cut.
         
         Returns
         -------
@@ -299,22 +295,22 @@ class Mps:
             list of Schmidt values saved as a directory
         """
         Ds = self.get_D()
-        Entropy = [0]*self.N
+        Entropy = [0] * self.N
 
         Schmidt_spectrum = np.zeros((self.N, max(Ds)))
-        Smin = [0]*self.N
-        R= None
+        Smin = [0] * self.N
+        R = None
         for n in self.g.sweep(to='last', dl=1):
             if R:
                 _, R = linalg.qr(R.tensordot(self.A[n], axes=((1), (self.left))), axes=(self.left + self.phys, self.right), sQ=-1)
             else:
                 _, R = linalg.qr(self.A[n], axes=(self.left + self.phys, self.right), sQ=-1)
-            _, s, _ = linalg.svd(R, axes=(0,1))
+            _, s, _ = linalg.svd(R, axes=(0, 1))
             s = s.to_numpy().diagonal()
-            Schmidt_spectrum[n, :len(s)] = s.real
-            Smin[n] = min(s).real
-            if alpha == 1:  # von Neumann 
-                Entropy[n] = (-2.*sum(s*s*np.log2(s))).real
+            Schmidt_spectrum[n, :len(s)] = s
+            Smin[n] = min(s)
+            if alpha == 1:  # von Neumann
+                Entropy[n] = (-2. * sum(s * s * np.log2(s)))
             else:  # Renyi
-                Entropy[n] = (np.log2(sum(s**alpha))/(alpha-1.)).real
+                Entropy[n] = (np.log2(sum(s**alpha)) / (alpha - 1.))
         return Ds, Schmidt_spectrum, Smin, Entropy
