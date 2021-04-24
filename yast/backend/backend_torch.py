@@ -95,10 +95,9 @@ def norm(A, p):
     """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
     if p == "fro":
         return torch.sum(torch.stack([torch.sum(t.abs()**2) for t in A.values()])).sqrt()
-    elif p == "inf":
+    if p == "inf":
         return torch.max(torch.stack([t.abs().max() for t in A.values()]))
-    else:
-        raise RuntimeError("Invalid norm type: %s" % str(p))
+    raise RuntimeError("Invalid norm type: %s" % str(p))
 
 
 def norm_diff(A, B, meta, p):
@@ -111,6 +110,7 @@ def norm_diff(A, B, meta, p):
         return torch.max(torch.stack([A[k].abs().max() for k in meta[1]]
                                      + [B[k].abs().max() for k in meta[2]]
                                      + [(A[k] - B[k]).abs().max() for k in meta[0]]))
+    raise RuntimeError("Invalid norm type: %s" % str(p))
 
 
 def entropy(A, alpha=1, tol=1e-12):
@@ -327,7 +327,7 @@ def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, or
     if keep_multiplets:  # if needed, preserve multiplets within each sector
         gaps = torch.abs(values.clone())  # regularize by discarding small values
         # compute gaps and normalize by larger singular value. Introduce cutoff
-        gaps = torch.abs(gaps[:len(values) - 1] - gaps[1:len(values)]) / gaps[0] # / (gaps[:len(values) - 1] + 1.0e-16)  
+        gaps = torch.abs(gaps[:len(values) - 1] - gaps[1:len(values)]) / gaps[0] # / (gaps[:len(values) - 1] + 1.0e-16)
         gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
         if gaps[D_total - 1] < eps_multiplet:
             # the chi is within the multiplet - find the largest chi_new < chi

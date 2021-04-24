@@ -95,8 +95,7 @@ def norm(A, p):
         return np.linalg.norm([np.linalg.norm(x) for x in A.values()])
     if p == 'inf':
         return max([np.abs(x).max() for x in A.values()])
-    else:
-        raise RuntimeError("Invalid norm type: %s" % str(p))
+    raise RuntimeError("Invalid norm type: %s" % str(p))
 
 
 def norm_diff(A, B, meta, p):
@@ -105,10 +104,11 @@ def norm_diff(A, B, meta, p):
         return np.linalg.norm([np.linalg.norm(A[ind] - B[ind]) for ind in meta[0]]
                               + [np.linalg.norm(A[ind]) for ind in meta[1]]
                               + [np.linalg.norm(B[ind]) for ind in meta[2]])
-    elif p == 'inf':
+    if p == 'inf':
         return max([np.abs(A[ind] - B[ind]).max() for ind in meta[0]]
                    + [np.abs(A[ind]).max() for ind in meta[1]]
                    + [np.abs(B[ind]).max() for ind in meta[2]])
+    raise RuntimeError("Invalid norm type: %s" % str(p))
 
 
 def entropy(A, alpha=1, tol=1e-12):
@@ -317,7 +317,7 @@ def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, or
         s_all = s_all[order]
         gaps = np.abs(s_all)
         # compute gaps and normalize by larger singular value. Introduce cutoff
-        gaps = np.abs(gaps[:len(s_all) - 1] - gaps[1:len(s_all)]) / gaps[0] # / (gaps[:len(values) - 1] + 1.0e-16)  
+        gaps = np.abs(gaps[:len(s_all) - 1] - gaps[1:len(s_all)]) / gaps[0] # / (gaps[:len(values) - 1] + 1.0e-16)
         gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
         if gaps[D_total - 1] < eps_multiplet:
             # the chi is within the multiplet - find the largest chi_new < chi
