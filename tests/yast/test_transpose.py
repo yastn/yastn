@@ -1,12 +1,6 @@
-try:
-    import yast
-except ModuleNotFoundError:
-    import fix_path
-    import yast
+from context import yast
+from context import config_dense, config_U1, config_Z2_U1
 import numpy as np
-import config_dense_R
-import config_U1_R
-import config_Z2_U1_R
 
 
 def run_moveaxis(a, ad, source, destination, result):
@@ -28,7 +22,7 @@ def run_transpose(a, ad, axes, result):
 
 
 def test_transpose_0():
-    a = yast.ones(config=config_dense_R, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    a = yast.ones(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     assert a.get_shape() == (2, 3, 4, 5)
     ad = a.to_numpy()
     run_transpose(a, ad, axes=(1, 3, 2, 0), result=(3, 5, 4, 2))
@@ -40,7 +34,7 @@ def test_transpose_0():
 
 
 def test_transpose_1():
-    a = yast.ones(config=config_U1_R, s=(-1, -1, -1, 1, 1, 1),
+    a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
     ad = a.to_numpy()
@@ -54,7 +48,7 @@ def test_transpose_1():
 
 def test_transpose_2():
     t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
-    a = yast.ones(config=config_Z2_U1_R, s=(-1, -1, 1, 1),
+    a = yast.ones(config=config_Z2_U1, s=(-1, -1, 1, 1),
                   t=[t1, t1, t1, t1],
                   D=[(7, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
     assert a.get_shape() == (19, 14, 18, 10)
@@ -64,7 +58,7 @@ def test_transpose_2():
 
 
 def test_transpose_inplace():
-    a = yast.ones(config=config_U1_R, s=(-1, -1, -1, 1, 1, 1),
+    a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
     assert a.get_shape() == (3, 5, 7, 9, 11, 13)

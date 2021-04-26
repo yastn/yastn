@@ -1,19 +1,15 @@
-try:
-    import yast
-except ModuleNotFoundError:
-    import fix_path
-    import yast
-import config_Z2_R
+from context import yast
+from context import config_Z2
 
 tol = 1e-12
 
 
 def test_check_signs():
-    a = yast.rand(config=config_Z2_R, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_Z2, s=(-1, 1, 1, -1),
                   t=((0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8)))
 
-    b = yast.rand(config=config_Z2_R, s=(-1, 1, 1),
+    b = yast.rand(config=config_Z2, s=(-1, 1, 1),
                   t=((0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (7, 8)))
     yast.check_signatures_match(value=False)
@@ -24,7 +20,7 @@ def test_check_signs():
 
 
 def test_cache():
-    a = yast.rand(config=config_Z2_R, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_Z2, s=(-1, 1, 1, -1),
                   t=((0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8)))
     for _ in range(100):

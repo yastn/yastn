@@ -1,7 +1,7 @@
-import yast.mps as mps
 import ops_full
 import ops_Z2
 import ops_U1
+import yast.mps as mps
 import numpy as np
 import pytest
 

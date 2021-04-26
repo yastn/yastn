@@ -1,5 +1,6 @@
 """Support of torch as a data structure used by yast."""
 import torch
+from itertools import chain
 from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_eig_sym import SYMEIG
 # from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
@@ -7,6 +8,11 @@ from .linalg.torch_eig_sym import SYMEIG
 BACKEND_ID = "torch"
 DTYPE = {'float64': torch.float64,
          'complex128': torch.complex128}
+
+
+def get_dtype(iterator):
+    """ iterators of torch tensors; returns torch.complex128 if any tensor is complex else torch.float64"""
+    return torch.complex128 if any(torch.is_complex(x) for x in iterator) else torch.float64
 
 
 def random_seed(seed):
@@ -78,6 +84,10 @@ def real(x):
 def imag(x):
     return torch.imag(x) if torch.is_complex(x) else 0 * x
 
+
+def max_abs(x):
+    return x.abs().max()
+
 #########################
 #    output numbers     #
 #########################
@@ -138,29 +148,31 @@ def entropy(A, alpha=1, tol=1e-12):
 ##########################
 
 
-def zero_scalar(dtype='float64', device='cpu'):
-    return torch.tensor(0, dtype=DTYPE[dtype], device=device)
+def zero_scalar(device='cpu'):
+    return torch.tensor(0, dtype=DTYPE['float64'], device=device)
 
 
-def zeros(D, dtype='float64', device='cpu'):
-    return torch.zeros(D, dtype=DTYPE[dtype], device=device)
+def zeros(D, device='cpu'):
+    return torch.zeros(D, dtype=DTYPE['float64'], device=device)
 
 
-def ones(D, dtype='float64', device='cpu'):
-    return torch.ones(D, dtype=DTYPE[dtype], device=device)
+def ones(D, device='cpu'):
+    return torch.ones(D, dtype=DTYPE['float64'], device=device)
 
 
-def randR(D, dtype='float64', device='cpu'):
-    x = 2 * torch.rand(D, dtype=DTYPE[dtype], device=device) - 1
-    return x if dtype == 'float64' else torch.real(x)
+def randR(D, device='cpu'):
+    return 2 * torch.rand(D, dtype=DTYPE['float64'], device=device) - 1
 
 
-def rand(D, dtype='float64', device='cpu'):
-    return 2 * torch.rand(D, dtype=DTYPE[dtype], device=device) - 1
+def randC(D, dtype='float64', device='cpu'):
+    return 2 * torch.rand(D, dtype=DTYPE['complex128'], device=device) - 1
 
 
-def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
-    T = torch.as_tensor(val, dtype=DTYPE[dtype], device=device)
+def to_tensor(val, Ds=None, device='cpu'):
+    try:
+        T = torch.as_tensor(val, dtype=DTYPE['float64'], device=device)
+    except TypeError:
+        T = torch.as_tensor(val, dtype=DTYPE['complex128'], device=device)
     return T if Ds is None else T.reshape(Ds).contiguous()
 
 
@@ -355,10 +367,6 @@ def maximum(A):
     return max(torch.max(x) for x in A.values())
 
 
-def max_abs(A):
-    return norm(A, p="inf")
-
-
 ################################
 #     two dicts operations     #
 ################################
@@ -418,17 +426,19 @@ def dot(A, B, conj, meta_dot):
 #####################################################
 
 
-def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, device='cpu'):
+def merge_to_matrix(A, order, meta_new, meta_mrg, device='cpu'):
     """ New dictionary of blocks after merging into matrix. """
-    Anew = {u: torch.zeros(Du, dtype=DTYPE[dtype], device=device) for (u, Du) in meta_new}
+    dtype = get_dtype(A.values())
+    Anew = {u: torch.zeros(Du, dtype=dtype, device=device) for (u, Du) in meta_new}
     for (tn, to, Dsl, Dl, Dsr, Dr) in meta_mrg:
         Anew[tn][slice(*Dsl), slice(*Dsr)] = A[to].permute(order).reshape(Dl, Dr)
     return Anew
 
 
-def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, device='cpu'):
+def merge_one_leg(A, axis, order, meta_new, meta_mrg, device='cpu'):
     """ Outputs new dictionary of blocks after fusing one leg. """
-    Anew = {u: torch.zeros(Du, dtype=DTYPE[dtype], device=device) for (u, Du) in meta_new}
+    dtype = get_dtype(A.values())
+    Anew = {u: torch.zeros(Du, dtype=dtype, device=device) for (u, Du) in meta_new}
     for (tn, Ds, to, Do) in meta_mrg:
         if to in A:
             slc = [slice(None)] * len(Do)
@@ -437,17 +447,19 @@ def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, device='cpu'):
     return Anew
 
 
-def merge_to_dense(A, Dtot, meta, dtype, device='cpu'):
+def merge_to_dense(A, Dtot, meta, device='cpu'):
     """ Outputs full tensor. """
-    Anew = torch.zeros(Dtot, dtype=DTYPE[dtype], device=device)
+    dtype = get_dtype(A.values())
+    Anew = torch.zeros(Dtot, dtype=dtype, device=device)
     for (ind, Dss) in meta:
         Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
     return Anew
 
 
-def merge_super_blocks(pos_tens, meta_new, meta_block, dtype, device='cpu'):
+def merge_super_blocks(pos_tens, meta_new, meta_block, device='cpu'):
     """ Outputs new dictionary of blocks after creating super-tensor. """
-    Anew = {u: torch.zeros(Du, dtype=DTYPE[dtype], device=device) for (u, Du) in meta_new}
+    dtype = get_dtype(chain.from_iterable(t.A.values() for t in pos_tens.values()))
+    Anew = {u: torch.zeros(Du, dtype=dtype, device=device) for (u, Du) in meta_new}
     for (tind, pos, Dslc) in meta_block:
         slc = tuple(slice(*DD) for DD in Dslc)
         Anew[tind][slc] = pos_tens[pos].A[tind]  # .copy() # is copy required?

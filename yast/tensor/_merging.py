@@ -9,7 +9,7 @@ import numpy as np
 def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
     order = axes[0] + axes[1]
     meta_new, meta_mrg, ls_l, ls_r, ul, ur = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds, sort_r)
-    Anew = a.config.backend.merge_to_matrix(a.A, order, meta_new, meta_mrg, a.config.dtype, a.config.device)
+    Anew = a.config.backend.merge_to_matrix(a.A, order, meta_new, meta_mrg, a.config.device)
     return Anew, ls_l, ls_r, ul, ur
 
 

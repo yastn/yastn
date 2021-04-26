@@ -54,8 +54,7 @@ def compress_to_1d(a, meta=None):
         if len(a.A) != sum(ind in a.A for (_, _, ind, _) in meta_merge):
             raise YastError("Tensor has blocks that do not appear in meta.")
 
-    A = a.config.backend.merge_one_leg(a.A, 0, tuple(range(a.nlegs)),
-                                       meta_new, meta_merge, a.config.dtype, a.config.device)
+    A = a.config.backend.merge_one_leg(a.A, 0, tuple(range(a.nlegs)), meta_new, meta_merge, a.config.device)
     return A[()], meta
 
 ############################
@@ -264,7 +263,7 @@ def to_dense(a, leg_structures=None, native=False):
     tset = _tarray(a)
     for tind, tt in zip(a.struct.t, tset):
         meta.append((tind, tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
-    return a.config.backend.merge_to_dense(a.A, Dtot, meta, a.config.dtype, a.config.device)
+    return a.config.backend.merge_to_dense(a.A, Dtot, meta, a.config.device)
 
 
 def to_numpy(a, leg_structures=None, native=False):
@@ -317,7 +316,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False):
 
 def zero_of_dtype(a):
     """ Return zero scalar of the instance specified by backend and dtype. """
-    return a.config.backend.zero_scalar(dtype=a.config.dtype, device=a.config.device)
+    return a.config.backend.zero_scalar(device=a.config.device)
 
 
 def to_number(a, part=None):

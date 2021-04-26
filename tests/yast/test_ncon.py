@@ -1,26 +1,20 @@
 """ Test yast.ncon """
-
-from math import isclose
-try:
-    import yast
-except ModuleNotFoundError:
-    import fix_path
-    import yast
-import config_U1_R
-import config_dense_C
+from context import yast
+from context import config_dense, config_U1
+import pytest
 
 tol = 1e-12
 
 
 def test_ncon_0():
-    a = yast.rand(s=(1, 1, 1), D=(20, 3, 1), config=config_dense_C)
-    b = yast.rand(s=(1, 1, -1), D=(4, 2, 20), config=config_dense_C)
-    c = yast.rand(s=(-1, 1, 1, -1), D=(20, 30, 10, 10), config=config_dense_C)
-    d = yast.rand(s=(1, 1, 1, -1), D=(30, 10, 20, 10), config=config_dense_C)
-    e = yast.rand(s=(1, 1), D=(3, 1), config=config_dense_C)
-    f = yast.rand(s=(-1, -1), D=(2, 4), config=config_dense_C)
-    g = yast.rand(s=(1,), D=(5,), config=config_dense_C)
-    h = yast.rand(s=(-1,), D=(6,), config=config_dense_C)
+    a = yast.rand(s=(1, 1, 1), D=(20, 3, 1), config=config_dense, dtype='complex128')
+    b = yast.rand(s=(1, 1, -1), D=(4, 2, 20), config=config_dense, dtype='complex128')
+    c = yast.rand(s=(-1, 1, 1, -1), D=(20, 30, 10, 10), config=config_dense, dtype='complex128')
+    d = yast.rand(s=(1, 1, 1, -1), D=(30, 10, 20, 10), config=config_dense, dtype='complex128')
+    e = yast.rand(s=(1, 1), D=(3, 1), config=config_dense, dtype='complex128')
+    f = yast.rand(s=(-1, -1), D=(2, 4), config=config_dense, dtype='complex128')
+    g = yast.rand(s=(1,), D=(5,), config=config_dense, dtype='complex128')
+    h = yast.rand(s=(-1,), D=(6,), config=config_dense, dtype='complex128')
 
     x = yast.ncon([a, b], [[1, -2, -4], [-1, -3, 1]])
     assert x.get_shape() == (4, 3, 2, 1)
@@ -53,17 +47,17 @@ def test_ncon_0():
     assert isinstance(y4.item(), complex)
     assert isinstance(y5.item(), complex)
     assert yast.norm_diff(y4, y5) / yast.norm(y4) < tol  # == 0.0
-    assert isclose((a.norm() ** 2) * (b.norm() ** 2), abs(y4.item()), rel_tol=tol)
+    assert pytest.approx((a.norm() ** 2) * (b.norm() ** 2), rel=tol) == y4.item()
 
 
 def test_ncon_1():
-    a = yast.rand(config=config_U1_R, s=[-1, 1, -1], n=0,
+    a = yast.rand(config=config_U1, s=[-1, 1, -1], n=0,
                   D=((20, 10), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)))
-    b = yast.rand(config=config_U1_R, s=[1, 1, 1], n=1,
+    b = yast.rand(config=config_U1, s=[1, 1, 1], n=1,
                   D=((4, 4), (2, 2), (20, 10)), t=((1, 0), (1, 0), (1, 0)))
-    c = yast.rand(config=config_U1_R, s=[1, 1, 1, -1], n=1,
+    c = yast.rand(config=config_U1, s=[1, 1, 1, -1], n=1,
                   D=((20, 10), (30, 20), (10, 5), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)))
-    d = yast.rand(config=config_U1_R, s=[1, 1, -1, -1], n=0,
+    d = yast.rand(config=config_U1, s=[1, 1, -1, -1], n=0,
                   D=((30, 20), (10, 5), (20, 10), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)))
     
     e = yast.ncon([a, b], [[1, -2, -4], [-1, -3, 1]])

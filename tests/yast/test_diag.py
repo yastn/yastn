@@ -1,16 +1,12 @@
-try:
-    import yast
-except ModuleNotFoundError:
-    import fix_path
-    import yast
-import config_U1_R
+from context import yast
+from context import config_U1
 import numpy as np
 
 tol = 1e-12
 
 
 def test_diag_1():
-    a1 = yast.rand(config=config_U1_R, s=(-1, 1),
+    a1 = yast.rand(config=config_U1, s=(-1, 1),
                    t=((-1, 1, 2), (-1, 1, 2)),
                    D=((4, 5, 6), (4, 5, 6)))
 
