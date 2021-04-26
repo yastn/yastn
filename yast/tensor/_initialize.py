@@ -83,7 +83,10 @@ def fill_tensor(a, t=(), D=(), val='rand'):
         Dset = comb_D[ind]
 
     for ts, Ds in zip(tset, Dset):
-        set_block(a, tuple(ts.flat), tuple(Ds), val)
+        _set_block(a, ts=tuple(ts.flat), Ds=tuple(Ds), val=val)
+
+    a.update_struct()
+    tD = [a.get_leg_structure(n, native=True) for n in range(a.nlegs)]  # here checks the consistency of bond dimensions
 
 
 def set_block(a, ts=(), Ds=None, val='zeros'):
@@ -126,35 +129,43 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     if not np.all(a.config.sym.fuse(ats, a.s, 1) == a.n):
         raise YastError('Charges ts are not consistent with the symmetry rules: t @ s - n != 0')
 
-    if isinstance(val, str):
-        if Ds is None:  # attempt to read Ds from existing block
-            Ds = []
-            tD = [a.get_leg_structure(n, native=True) for n in range(a.nlegs)]
-            for n in range(a.nlegs):
-                try:
-                    Ds.append(tD[n][tuple(ats[0, n, :].flat)])
-                except KeyError as err:
-                    raise YastError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
-            Ds = tuple(Ds)
+    if isinstance(val, str) and Ds is None:  # attempt to read Ds from existing blocks.
+        Ds = []
+        tD = [a.get_leg_structure(n, native=True) for n in range(a.nlegs)]
+        for n in range(a.nlegs):
+            try:
+                Ds.append(tD[n][tuple(ats[0, n, :].flat)])
+            except KeyError as err:
+                raise YastError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
+        Ds = tuple(Ds)
 
+    _set_block(a, ts, Ds, val)
+
+    a.update_struct()
+    tD = [a.get_leg_structure(n, native=True) for n in range(a.nlegs)]  # here checks the consistency of bond dimensions
+
+
+def _set_block(a, ts, Ds, val):
+    if isinstance(val, str):
         if val == 'zeros':
-            a.A[ts] = a.config.backend.zeros(Ds, dtype=a.config.dtype, device=a.config.device)
-        elif val == 'randR':
-            a.A[ts] = a.config.backend.randR(Ds, dtype=a.config.dtype, device=a.config.device)
-        elif val == 'rand':
-            a.A[ts] = a.config.backend.rand(Ds, dtype=a.config.dtype, device=a.config.device)
+            a.A[ts] = a.config.backend.zeros(Ds, device=a.config.device)
+        elif val == 'randR' or val == 'rand':
+            a.A[ts] = a.config.backend.randR(Ds, device=a.config.device)
+        elif val == 'randC':
+            a.A[ts] = a.config.backend.randC(Ds, device=a.config.device)
         elif val == 'ones':
-            a.A[ts] = a.config.backend.ones(Ds, dtype=a.config.dtype, device=a.config.device)
+            a.A[ts] = a.config.backend.ones(Ds, device=a.config.device)
+
         if a.isdiag:
             a.A[ts] = a.config.backend.diag_get(a.A[ts])
             a.A[ts] = a.config.backend.diag_create(a.A[ts])
-    else:  # enforce that Ds is provided to increase clarity of the code
+    else:
         if a.isdiag and val.ndim == 1 and np.prod(Ds) == (val.size**2):
-            a.A[ts] = a.config.backend.to_tensor(np.diag(val), Ds, dtype=a.config.dtype, device=a.config.device)
+            a.A[ts] = a.config.backend.to_tensor(np.diag(val), Ds, device=a.config.device)
         else:
-            a.A[ts] = a.config.backend.to_tensor(val, Ds=Ds, dtype=a.config.dtype, device=a.config.device)
-    a.update_struct()
-    tD = [a.get_leg_structure(n, native=True) for n in range(a.nlegs)]  # here checks the consistency of bond dimensions
+            a.A[ts] = a.config.backend.to_tensor(val, Ds=Ds, device=a.config.device)
+
+
 
 
 def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=False):
@@ -262,6 +273,6 @@ def block(tensors, common_legs=None):
     meta_new = tuple((ts, Ds) for ts, Ds in meta_new.items())
 
     c = tn0.__class__(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n, meta_fusion=tn0.meta_fusion)
-    c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, a.config.dtype, c.config.device)
+    c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, c.config.device)
     c.update_struct()
     return c

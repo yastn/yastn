@@ -1,24 +1,18 @@
-try:
-    import yast
-except ModuleNotFoundError:
-    import fix_path
-    import yast
-import config_dense_R
-import config_U1_R
+from context import yast
+from context import config_dense, config_U1
 import pytest
-from math import isclose
 
 tol = 1e-12
 
 
 def test_to_nonsymmetric_0():
-    a = yast.rand(config=config_dense_R, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
-    b = yast.rand(config=config_dense_R, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    b = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
 
     an = a.to_nonsymmetric()
     bn = b.to_nonsymmetric()
-    assert isclose(an.vdot(bn), a.vdot(b), rel_tol=tol)
-    assert isclose(a.vdot(bn), a.vdot(b), rel_tol=tol)   # for dense to_nonsymetric should result in the same config
+    assert pytest.approx(an.vdot(bn), rel=tol) == a.vdot(b)
+    assert pytest.approx(a.vdot(bn), rel=tol) == a.vdot(b)  # for dense to_nonsymetric should result in the same config
     assert an.are_independent(a)
     assert bn.are_independent(b)
     assert an.is_consistent()
@@ -26,11 +20,11 @@ def test_to_nonsymmetric_0():
 
 
 def test_to_nonsymmetric_1():
-    a = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
 
-    b = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
+    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-2, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
 
@@ -39,7 +33,7 @@ def test_to_nonsymmetric_1():
     
     an = a.to_nonsymmetric(leg_structures=lsb)
     bn = b.to_nonsymmetric(leg_structures=lsa)
-    assert isclose(an.vdot(bn), a.vdot(b), rel_tol=tol)
+    assert pytest.approx(an.vdot(bn), rel=tol) == a.vdot(b)
     with pytest.raises(yast.YastError):
         a.vdot(bn)
     assert an.are_independent(a)

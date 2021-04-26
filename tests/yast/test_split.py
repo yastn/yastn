@@ -1,11 +1,6 @@
-try:
-    import yast
-except ModuleNotFoundError:
-    import fix_path
-    import yast
-import config_dense_R
-import config_U1_R
-import config_Z2_U1_R
+
+from context import yast
+from context import config_dense, config_U1, config_Z2_U1
 
 tol = 1e-10
 
@@ -72,7 +67,7 @@ def eigh_order_combine(a):
 
 
 def test_svd_0():
-    a = yast.rand(config=config_dense_R, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
+    a = yast.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
     svd_combine(a)
     svd_order_combine(a)
     qr_combine(a)
@@ -82,7 +77,7 @@ def test_svd_0():
 
 
 def test_svd_1():
-    a = yast.rand(config=config_U1_R, s=(-1, -1, 1, 1), n=1,
+    a = yast.rand(config=config_U1, s=(-1, -1, 1, 1), n=1,
                   t=[(-1, 0, 1), (-2, 0, 2), (-2, -1, 0, 1, 2), (0, 1)],
                   D=[(2, 3, 4), (5, 6, 7), (6, 5, 4, 3, 2), (2, 3)])
     svd_combine(a)
@@ -95,7 +90,7 @@ def test_svd_1():
 
 def test_svd_2():
     t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
-    a = yast.ones(config=config_Z2_U1_R, s=(-1, -1, 1, 1),
+    a = yast.ones(config=config_Z2_U1, s=(-1, -1, 1, 1),
                   t=[t1, t1, t1, t1],
                   D=[(2, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
     svd_combine(a)

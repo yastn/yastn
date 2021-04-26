@@ -1,11 +1,6 @@
-try:
-    import yast
-except ModuleNotFoundError:
-    import fix_path
-    import yast
-import config_dense_C
-import config_U1_R
-import config_U1_C
+from context import yast
+from context import config_dense, config_U1, config_Z2_U1
+import numpy as np
 import pytest
 
 tol = 1e-12
@@ -24,19 +19,19 @@ def scalar_vs_numpy(a, b):
 
 
 def test_scalar_0():
-    a = yast.rand(config=config_dense_C, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
-    b = yast.rand(config=config_dense_C, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5), dtype='complex128')
+    b = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5), dtype='complex128')
     scalar_vs_numpy(a, b)
 
 
 def test_scalar_1R():
-    a = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 0, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 2, 12)))
-    b = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
+    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
                   D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
-    c = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
+    c = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=(1, -1, 2, 0),
                   D=(2, 4, 9, 2))
     scalar_vs_numpy(a, b)
@@ -45,45 +40,45 @@ def test_scalar_1R():
 
 
 def test_scalar_1C():
-    a = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 0, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 2, 12)))
-    b = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1),
+                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 2, 12)), dtype='complex128')
+    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
-                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
-    c = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1),
+                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)), dtype='complex128')
+    c = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=(1, -1, 2, 0),
-                  D=(2, 4, 9, 2))
+                  D=(2, 4, 9, 2), dtype='complex128')
     scalar_vs_numpy(a, b)
     scalar_vs_numpy(a, c)
     scalar_vs_numpy(c, b)
 
 
 def test_scalar_exceptions():
-    a = yast.Tensor(config=config_U1_C, s=())
-    b = yast.Tensor(config=config_U1_C, s=())
+    a = yast.Tensor(config=config_U1, s=(), dtype='complex128')
+    b = yast.Tensor(config=config_U1, s=(), dtype='complex128')
     scalar_vs_numpy(a, b)
 
-    a = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1), n=1,
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1), n=1,
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 0, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 2, 12)))
+                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 2, 12)), dtype='complex128')
 
-    b = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1), n=-1,
+    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1), n=-1,
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
-                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
+                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)), dtype='complex128')
 
-    c = yast.rand(config=config_U1_C, s=(-1, -1, 1, -1), n=1,
+    c = yast.rand(config=config_U1, s=(-1, -1, 1, -1), n=1,
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
-                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
+                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)), dtype='complex128')
 
-    d = yast.rand(config=config_U1_C, s=(-1, 1, 1, -1), n=1,
+    d = yast.rand(config=config_U1, s=(-1, 1, 1, -1), n=1,
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
-                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
+                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)), dtype='complex128')
     d = d.fuse_legs(axes=(0, (1, 2), 3))
 
-    e = yast.rand(config=config_U1_C, s=(1, -1, -1, 1), n=1,
+    e = yast.rand(config=config_U1, s=(1, -1, -1, 1), n=1,
                   t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
-                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
+                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)), dtype='complex128')
 
     assert abs(a.vdot(b)) < tol
     assert abs(a.vdot(e, conj=(0, 0))) < tol

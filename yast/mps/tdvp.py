@@ -131,10 +131,10 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
         if H:
             init = psi.A[n]
             if not hermitian:
-                init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n), init=[init], Bv=lambda v: env.Heff1(
+                init = linalg.expmv(Av=lambda v: env.Heff1(v, n), init=[init], Bv=lambda v: env.Heff1(
                     v, n, conj=True), dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
-                init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff1(v, n), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
         # canonize and save
         psi.A[n] = init[0]
@@ -146,10 +146,10 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
         if H and n != psi.g.sweep(to='last')[-1]:
             init = psi.A[psi.pC]
             if not hermitian:
-                init = linalg.expm_anm(Av=lambda v: env.Heff0(v, psi.pC), init=[init], Bv=lambda v: env.Heff0(
+                init = linalg.expmv(Av=lambda v: env.Heff0(v, psi.pC), init=[init], Bv=lambda v: env.Heff0(
                     v, psi.pC, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
-                init = linalg.expm_anm(Av=lambda v: env.Heff0(v, psi.pC), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff0(v, psi.pC), init=[
                              init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             psi.A[psi.pC] = init[0]
         psi.absorb_central(towards=psi.g.last)
@@ -158,10 +158,10 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
         init = psi.A[n]
         if H:  # forward in time evolution of a central site: T(+dt*.5)
             if not hermitian:
-                init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n), init=[init], Bv=lambda v: env.Heff1(
+                init = linalg.expmv(Av=lambda v: env.Heff1(v, n), init=[init], Bv=lambda v: env.Heff1(
                     v, n, conj=True), dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
-                init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff1(v, n), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             init = init[0]
 
@@ -182,10 +182,10 @@ def tdvp_sweep_1site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
         if H and n != psi.g.sweep(to='first')[-1]:
             init = psi.A[psi.pC]
             if not hermitian:
-                init = linalg.expm_anm(Av=lambda v: env.Heff0(v, psi.pC), init=[init], Bv=lambda v: env.Heff0(
+                init = linalg.expmv(Av=lambda v: env.Heff0(v, psi.pC), init=[init], Bv=lambda v: env.Heff0(
                     v, psi.pC, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
-                init = linalg.expm_anm(Av=lambda v: env.Heff0(v, psi.pC), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff0(v, psi.pC), init=[
                              init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             psi.A[psi.pC] = init[0]
         psi.absorb_central(towards=psi.g.first)
@@ -274,10 +274,10 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
             n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
             init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
             if not hermitian:
-                init = linalg.expm_anm(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(v, n, conj=True), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(v, n, conj=True), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
-                init = linalg.expm_anm(Av=lambda v: env.Heff2(v, n), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff2(v, n), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
             A1, S, A2 = linalg.svd(init[0], axes=(psi.left + psi.phys, tuple(
@@ -291,10 +291,10 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
         if H and n != psi.g.sweep(to='last', dl=1)[-1]:
             init = psi.A[n1]
             if not hermitian:
-                init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
+                init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
                     v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
-                init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[
                              init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             psi.A[n1] = init[0]
 
@@ -315,10 +315,10 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
             n1, _, _ = psi.g.from_site(n, towards=psi.g.first)
             init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
             if not hermitian:
-                init = linalg.expm_anm(Av=lambda v: env.Heff2(v, n1), Bv=lambda v: env.Heff2(v, n1, conj=True), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff2(v, n1), Bv=lambda v: env.Heff2(v, n1, conj=True), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
-                init = linalg.expm_anm(Av=lambda v: env.Heff2(v, n1), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff2(v, n1), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
             A1, S, A2 = linalg.svd(init[0], axes=(psi.left + psi.phys, tuple(
@@ -332,10 +332,10 @@ def tdvp_sweep_2site(psi, H=False, M=False, dt=1., env=None, hermitian=True, fer
         if H and n != psi.g.sweep(to='first', df=1)[-1]:
             init = psi.A[n1]
             if not hermitian:
-                init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
+                init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
                     v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
-                init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[
                              init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             psi.A[n1] = init[0]
     env.clear_site(n1)
@@ -427,10 +427,10 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
             init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
             init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
             if not hermitian:
-                init = linalg.expm_anm(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
-                init = linalg.expm_anm(Av=lambda v: env.Heff2_group(v, n), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff2_group(v, n), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
             init = init[0].unfuse_legs(axes=1, inplace=True)
@@ -445,10 +445,10 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
         if H and n != psi.g.sweep(to='last', dl=1)[-1]:
             init = psi.A[n1]
             if not hermitian:
-                init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
+                init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
                     v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
-                init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[
                              init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             psi.A[n1] = init[0]
 
@@ -470,10 +470,10 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
             init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
             init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
             if not hermitian:
-                init = linalg.expm_anm(Av=lambda v: env.Heff2_group(v, n1), Bv=lambda v: env.Heff2_group(v, n1, conj=True), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff2_group(v, n1), Bv=lambda v: env.Heff2_group(v, n1, conj=True), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
-                init = linalg.expm_anm(Av=lambda v: env.Heff2_group(v, n1), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff2_group(v, n1), init=[
                              init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # split and save
             init = init[0].unfuse_legs(axes=1, inplace=True)
@@ -488,10 +488,10 @@ def tdvp_sweep_2site_group(psi, H=False, M=False, dt=1, env=None, hermitian=True
         if H and n != psi.g.sweep(to='first', df=1)[-1]:
             init = psi.A[n1]
             if not hermitian:
-                init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
+                init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
                     v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
             else:
-                init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[
+                init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[
                              init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             psi.A[n1] = init[0]
     env.clear_site(n1)
@@ -613,10 +613,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
             if H:
                 init = psi.A[n]
                 if not hermitian:
-                    init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n), init=[init], Bv=lambda v: env.Heff1(
+                    init = linalg.expmv(Av=lambda v: env.Heff1(v, n), init=[init], Bv=lambda v: env.Heff1(
                         v, n, conj=True), dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                 else:
-                    init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n), init=[
+                    init = linalg.expmv(Av=lambda v: env.Heff1(v, n), init=[
                         init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
             # canonize and save
             psi.A[n] = init[0]
@@ -628,10 +628,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
             if H and n != psi.g.sweep(to='last')[-1]:
                 init = psi.A[psi.pC]
                 if not hermitian:
-                    init = linalg.expm_anm(Av=lambda v: env.Heff0(v, psi.pC), init=[init], Bv=lambda v: env.Heff0(
+                    init = linalg.expmv(Av=lambda v: env.Heff0(v, psi.pC), init=[init], Bv=lambda v: env.Heff0(
                         v, psi.pC, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                 else:
-                    init = linalg.expm_anm(Av=lambda v: env.Heff0(v, psi.pC), init=[
+                    init = linalg.expmv(Av=lambda v: env.Heff0(v, psi.pC), init=[
                         init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                 psi.A[psi.pC] = init[0]
             psi.absorb_central(towards=psi.g.last)
@@ -645,10 +645,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     n1, _, _ = psi.g.from_site(n, towards=psi.g.last)
                     init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
                     if not hermitian:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(v, n, conj=True), init=[
+                        init = linalg.expmv(Av=lambda v: env.Heff2(v, n), Bv=lambda v: env.Heff2(v, n, conj=True), init=[
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff2(v, n), init=[
+                        init = linalg.expmv(Av=lambda v: env.Heff2(v, n), init=[
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
                     A1, S, A2 = linalg.svd(init[0], axes=(psi.left + psi.phys, tuple(
@@ -662,10 +662,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                 if H and n != psi.g.sweep(to='last', dl=1)[-1]:
                     init = psi.A[n1]
                     if not hermitian:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
+                        init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
                             v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[
+                        init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[
                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     psi.A[n1] = init[0]
         elif version == '2site_group':
@@ -679,10 +679,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
                     init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
                     if not hermitian:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[init], 
+                        init = linalg.expmv(Av=lambda v: env.Heff2_group(v, n), Bv=lambda v: env.Heff2_group(v, n, conj=True), init=[init], 
                                     dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff2_group(v, n), init=[init], 
+                        init = linalg.expmv(Av=lambda v: env.Heff2_group(v, n), init=[init], 
                                     dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
                     init = init[0].unfuse_legs(axes=1, inplace=True)
@@ -697,10 +697,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                 if H and n != psi.g.sweep(to='last', dl=1)[-1]:
                     init = psi.A[n1]
                     if not hermitian:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
+                        init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
                             v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[
+                        init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[
                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     psi.A[n1] = init[0]
     Ds = psi.get_D()
@@ -728,10 +728,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
             init = psi.A[n]
             if H:  # forward in time evolution of a central site: T(+dt*.5)
                 if not hermitian:
-                    init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n), init=[init], Bv=lambda v: env.Heff1(
+                    init = linalg.expmv(Av=lambda v: env.Heff1(v, n), init=[init], Bv=lambda v: env.Heff1(
                         v, n, conj=True), dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                 else:
-                    init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n), init=[
+                    init = linalg.expmv(Av=lambda v: env.Heff1(v, n), init=[
                         init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                 init = init[0]
 
@@ -745,10 +745,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
             if H and n != psi.g.sweep(to='first')[-1]:
                 init = psi.A[psi.pC]
                 if not hermitian:
-                    init = linalg.expm_anm(Av=lambda v: env.Heff0(v, psi.pC), init=[init], Bv=lambda v: env.Heff0(
+                    init = linalg.expmv(Av=lambda v: env.Heff0(v, psi.pC), init=[init], Bv=lambda v: env.Heff0(
                         v, psi.pC, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                 else:
-                    init = linalg.expm_anm(Av=lambda v: env.Heff0(v, psi.pC), init=[
+                    init = linalg.expmv(Av=lambda v: env.Heff0(v, psi.pC), init=[
                         init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                 psi.A[psi.pC] = init[0]
             psi.absorb_central(towards=psi.g.first)
@@ -762,10 +762,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     n1, _, _ = psi.g.from_site(n, towards=psi.g.first)
                     init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
                     if not hermitian:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff2(v, n1), Bv=lambda v: env.Heff2(v, n1, conj=True), init=[
+                        init = linalg.expmv(Av=lambda v: env.Heff2(v, n1), Bv=lambda v: env.Heff2(v, n1, conj=True), init=[
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff2(v, n1), init=[
+                        init = linalg.expmv(Av=lambda v: env.Heff2(v, n1), init=[
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
                     A1, S, A2 = linalg.svd(init[0], axes=(psi.left + psi.phys, tuple(
@@ -779,10 +779,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                 if H and n != psi.g.sweep(to='first', df=1)[-1]:
                     init = psi.A[n1]
                     if not hermitian:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
+                        init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
                             v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[
+                        init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[
                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     psi.A[n1] = init[0]
         elif version == '2site_group':
@@ -796,10 +796,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                     init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
                     init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
                     if not hermitian:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff2_group(v, n1), Bv=lambda v: env.Heff2_group(v, n1, conj=True), init=[
+                        init = linalg.expmv(Av=lambda v: env.Heff2_group(v, n1), Bv=lambda v: env.Heff2_group(v, n1, conj=True), init=[
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff2_group(v, n1), init=[
+                        init = linalg.expmv(Av=lambda v: env.Heff2_group(v, n1), init=[
                             init], dt=+dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     # split and save
                     init = init[0].unfuse_legs(axes=1, inplace=True)
@@ -814,10 +814,10 @@ def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, her
                 if H and n != psi.g.sweep(to='first', df=1)[-1]:
                     init = psi.A[n1]
                     if not hermitian:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
+                        init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[init], Bv=lambda v: env.Heff1(
                             v, n1, conj=True), dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=False, bi_orth=bi_orth, NA=NA, algorithm=algorithm)
                     else:
-                        init = linalg.expm_anm(Av=lambda v: env.Heff1(v, n1), init=[
+                        init = linalg.expmv(Av=lambda v: env.Heff1(v, n1), init=[
                             init], dt=-dt * .5, eigs_tol=eigs_tol, exp_tol=exp_tol,  k=k, hermitian=True, NA=NA, algorithm=algorithm)
                     psi.A[n1] = init[0]
     return env

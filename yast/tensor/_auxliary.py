@@ -23,7 +23,6 @@ class _struct(NamedTuple):
 class _config(NamedTuple):
     backend: any = None
     sym: any = sym_none
-    dtype: str = 'float64'
     device: str = 'cpu'
 
 
@@ -105,8 +104,7 @@ def get_cache_info():
 
 def _test_configs_match(a, b):
     # if a.config != b.config:
-    if not (a.config.dtype == b.config.dtype
-            and a.config.dtype == b.config.dtype
+    if not (a.config.device == b.config.device
             and a.config.sym.SYM_ID == b.config.sym.SYM_ID
             and a.config.backend.BACKEND_ID == b.config.backend.BACKEND_ID):
         raise YastError('configs do not match')

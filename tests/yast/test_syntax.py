@@ -1,9 +1,5 @@
-try:
-    import yast
-except ModuleNotFoundError:
-    import fix_path
-    import yast
-import config_U1_R
+from context import yast
+from context import config_U1
 
 tol = 1e-12
 
@@ -12,31 +8,31 @@ def test_syntax():
     """ List of commands and syntax. Not all possible parameters of some functions are shown below."""
 
     # initialization:
-    a = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    # a = yast.randR(config=config_U1_R, s=(-1, 1, 1, -1),
+    # a = yast.randR(config=config_U1, s=(-1, 1, 1, -1),
     #             t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
     #             D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    b = yast.ones(config=config_U1_R, s=(-1, 1, 1, -1),
+    b = yast.ones(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    c = yast.zeros(config=config_U1_R, s=(-1, 1, 1, -1),
+    c = yast.zeros(config=config_U1, s=(-1, 1, 1, -1),
                    t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                    D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    d = yast.Tensor(config=config_U1_R, s=(-1, 1, 1, -1))
+    d = yast.Tensor(config=config_U1, s=(-1, 1, 1, -1))
     d.set_block(ts=(1, -1, 2, 0), Ds=(2, 4, 9, 2), val='rand')
     d.set_block(ts=(2, 0, 2, 0), Ds=(3, 3, 9, 2), val='rand')
-    e = yast.eye(config=config_U1_R, t=(-1, 0, 1), D=(2, 3, 4))
+    e = yast.eye(config=config_U1, t=(-1, 0, 1), D=(2, 3, 4))
 
     # import and export
     vector, meta = yast.compress_to_1d(a)
     vector, meta = a.compress_to_1d(meta=meta)
-    tensor = yast.decompress_from_1d(vector, config_U1_R, meta)
+    tensor = yast.decompress_from_1d(vector, config_U1, meta)
 
     dictionary = yast.export_to_dict(a)
     dictionary = a.export_to_dict()
-    tensor = yast.import_from_dict(config=config_U1_R, d=dictionary)
+    tensor = yast.import_from_dict(config=config_U1, d=dictionary)
 
     # block tensors
     tensor = yast.block({(1, 1): a, (1, 2): b, (2, 1): c}, common_legs=(0, 1))
@@ -76,7 +72,8 @@ def test_syntax():
     a.get_blocks_shapes()
     a.get_leg_charges_and_dims()
     a.get_shape(axes=2)
-    a.get_leg_structure(axis=1)
+    ls = a.get_leg_structure(axis=1)
+    print(ls)
     a[(1, 1, 2, 2)]  # directly access block of charges (1, 1, 2, 2)
 
     # output dense
@@ -173,3 +170,7 @@ def test_syntax():
     # tests
     a.is_consistent()
     a.are_independent(b)
+
+
+if __name__ == '__main__':
+    test_syntax()

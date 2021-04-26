@@ -1,11 +1,6 @@
-try:
-    import yast
-except ModuleNotFoundError:
-    import fix_path
-    import yast
-import config_dense_R
-import config_U1_R
-from math import isclose
+from context import yast
+from context import config_dense, config_U1
+import pytest
 
 tol = 1e-12
 
@@ -23,27 +18,26 @@ def run_to_number(a, b):
     nb = b.to_numpy(tDa)
     ns = na.conj().reshape(-1) @ nb.reshape(-1)  # this is numpy scalar
 
-    assert isclose(it0, ns, rel_tol=tol)
-    assert isclose(it0, it0, rel_tol=tol)
+    assert pytest.approx(it0, rel=tol) == ns
+    assert pytest.approx(it0, rel=tol) == it0
     assert isinstance(it0, (float, int))  # in the examples it is real
     assert type(it0) is not type(nb0)
 
 
 def test_to_number_0():
-    a = yast.rand(config=config_dense_R, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
-    b = yast.rand(config=config_dense_R, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
-
+    a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    b = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     run_to_number(a, b)
 
 
 def test_to_number_1():
-    a = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    b = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
+    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-2, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    c = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
+    c = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-2, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
     run_to_number(a, b)

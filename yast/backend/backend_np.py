@@ -2,6 +2,7 @@
 import warnings
 import numpy as np
 import scipy as sp
+from itertools import chain
 try:
     import fbpca
 except ModuleNotFoundError:
@@ -10,6 +11,11 @@ except ModuleNotFoundError:
 BACKEND_ID = "numpy"
 DTYPE = {'float64': np.float64,
          'complex128': np.complex128}
+
+
+def get_dtype(iterator):
+    """ iterators of numpy arrays; returns np.complex128 if any array is complex else np.float64"""
+    return np.complex128 if any(np.iscomplexobj(x) for x in iterator) else np.float64
 
 
 def random_seed(seed):
@@ -76,6 +82,10 @@ def real(x):
 def imag(x):
     return np.imag(x)
 
+
+def max_abs(x):
+    return np.abs(x).max()
+
 #########################
 #    output numbers     #
 #########################
@@ -136,31 +146,31 @@ def entropy(A, alpha=1, tol=1e-12):
 ##########################
 
 
-def zero_scalar(dtype='float64', *args, **kwargs):
-    return DTYPE[dtype](0)
+def zero_scalar(**kwargs):
+    return DTYPE['float64'](0)
 
 
-def zeros(D, dtype='float64', *args, **kwargs):
-    return np.zeros(D, dtype=DTYPE[dtype])
+def zeros(D, **kwargs):
+    return np.zeros(D, dtype=DTYPE['float64'])
 
 
-def ones(D, dtype='float64', *args, **kwargs):
-    return np.ones(D, dtype=DTYPE[dtype])
+def ones(D, **kwargs):
+    return np.ones(D, dtype=DTYPE['float64'])
 
 
-def randR(D, dtype='float64', *args, **kwargs):
-    return 2 * np.random.random_sample(D).astype(DTYPE[dtype]) - 1
+def randR(D, **kwargs):
+    return 2 * np.random.random_sample(D) - 1
 
 
-def rand(D, dtype='float64', *args, **kwargs):
-    if dtype == 'float64':
-        return randR(D)
-    if dtype == 'complex128':
-        return 2 * np.random.random_sample(D) - 1 + 1j * (2 * np.random.random_sample(D) - 1)
+def randC(D, **kwargs):
+    return 2 * np.random.random_sample(D) - 1 + 1j * (2 * np.random.random_sample(D) - 1)
 
 
-def to_tensor(val, Ds=None, dtype='float64', *args, **kwargs):
-    T = np.array(val, dtype=DTYPE[dtype])
+def to_tensor(val, Ds=None, **kwargs):
+    try:
+        T = np.array(val, dtype=DTYPE['float64'])
+    except TypeError:
+        T = np.array(val, dtype=DTYPE['complex128'])
     return T if Ds is None else T.reshape(Ds)
 
 
@@ -344,10 +354,6 @@ def maximum(A):
     return max(np.max(x) for x in A.values())
 
 
-def max_abs(A):
-    return norm(A, p="inf")
-
-
 ################################
 #     two dicts operations     #
 ################################
@@ -437,17 +443,19 @@ def dot(A, B, conj, meta_dot):
 #####################################################
 
 
-def merge_to_matrix(A, order, meta_new, meta_mrg, dtype, *args, **kwargs):
+def merge_to_matrix(A, order, meta_new, meta_mrg, *args, **kwargs):
     """ New dictionary of blocks after merging into matrix. """
-    Anew = {u: np.zeros(Du, dtype=DTYPE[dtype]) for (u, Du) in meta_new}
+    dtype = get_dtype(A.values())
+    Anew = {u: np.zeros(Du, dtype=dtype) for (u, Du) in meta_new}
     for (tn, to, Dsl, Dl, Dsr, Dr) in meta_mrg:
         Anew[tn][slice(*Dsl), slice(*Dsr)] = A[to].transpose(order).reshape(Dl, Dr)
     return Anew
 
 
-def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, *args, **kwargs):
+def merge_one_leg(A, axis, order, meta_new, meta_mrg, *args, **kwargs):
     """ Outputs new dictionary of blocks after fusing one leg. """
-    Anew = {u: np.zeros(Du, dtype=DTYPE[dtype]) for (u, Du) in meta_new}
+    dtype = get_dtype(A.values())
+    Anew = {u: np.zeros(Du, dtype=dtype) for (u, Du) in meta_new}
     for (tn, Ds, to, Do) in meta_mrg:
         if to in A:
             slc = [slice(None)] * len(Do)
@@ -456,17 +464,19 @@ def merge_one_leg(A, axis, order, meta_new, meta_mrg, dtype, *args, **kwargs):
     return Anew
 
 
-def merge_to_dense(A, Dtot, meta, dtype, *args, **kwargs):
+def merge_to_dense(A, Dtot, meta, *args, **kwargs):
     """ Outputs full tensor. """
-    Anew = np.zeros(Dtot, dtype=DTYPE[dtype])
+    dtype = get_dtype(A.values())
+    Anew = np.zeros(Dtot, dtype=dtype)
     for (ind, Dss) in meta:
         Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
     return Anew
 
 
-def merge_super_blocks(pos_tens, meta_new, meta_block, dtype, *args, **kwargs):
+def merge_super_blocks(pos_tens, meta_new, meta_block, *args, **kwargs):
     """ Outputs new dictionary of blocks after creating super-tensor. """
-    Anew = {u: np.zeros(Du, dtype=DTYPE[dtype]) for (u, Du) in meta_new}
+    dtype = get_dtype(chain.from_iterable(t.A.values() for t in pos_tens.values()))
+    Anew = {u: np.zeros(Du, dtype=dtype) for (u, Du) in meta_new}
     for (tind, pos, Dslc) in meta_block:
         slc = tuple(slice(*DD) for DD in Dslc)
         Anew[tind][slc] = pos_tens[pos].A[tind]  # .copy() # is copy required?

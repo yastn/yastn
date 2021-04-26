@@ -1,9 +1,6 @@
-try:
-    import yast
-except ModuleNotFoundError:
-    import fix_path
-    import yast
-import config_U1_R
+
+from context import yast
+from context import config_U1
 import numpy as np
 
 # import yast.backend.backend_torch as backend
@@ -13,7 +10,7 @@ tol = 1e-12
 
 
 def test_svd_sparse():
-    a = yast.Tensor(config=config_U1_R, s=(-1, -1, -1, 1, 1, 1), n=0)
+    a = yast.Tensor(config=config_U1, s=(-1, -1, -1, 1, 1, 1), n=0)
     a.set_block(ts=(1, 0, 0, 1, 0, 0), Ds=(2, 2, 2, 2, 2, 2), val='rand')
     a.set_block(ts=(0, 1, 0, 0, 1, 0), Ds=(2, 2, 2, 2, 2, 2), val='rand')
     a.set_block(ts=(0, 0, 1, 0, 0, 1), Ds=(2, 2, 2, 2, 2, 2), val='rand')
@@ -31,7 +28,7 @@ def test_svd_sparse():
 
 
 def test_svd_truncate():
-    a = yast.rand(config=config_U1_R, s=(1, 1, -1, -1), n=1,
+    a = yast.rand(config=config_U1, s=(1, 1, -1, -1), n=1,
                   t=[(0, 1), (-1, 0), (-1, 0, 1), (-1, 0, 1)],
                   D=[(5, 6), (5, 6), (2, 3, 4), (2, 3, 4)])
     U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
@@ -54,7 +51,7 @@ def test_svd_truncate():
 
 
 def test_svd_multiplets():
-    a = yast.rand(config=config_U1_R, s=(1, 1, -1, -1), n=0,
+    a = yast.rand(config=config_U1, s=(1, 1, -1, -1), n=0,
                   t=[(-1, 0, 1), (-1, 0, 1), (-1, 0, 1), (-1, 0, 1)],
                   D=[(2, 3, 2), (3, 4, 3), (4, 5, 4), (5, 6, 5)])
     U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)))
@@ -85,7 +82,7 @@ def test_svd_multiplets():
 
 
 def test_svd_n_division():
-    a = yast.rand(config=config_U1_R, s=(-1, -1, 1, 1), n=3,
+    a = yast.rand(config=config_U1, s=(-1, -1, 1, 1), n=3,
                   t=[(-1, 0, 1), (-2, 0, 2), (-2, -1, 0, 1, 2), (0, 1)],
                   D=[(2, 3, 4), (5, 6, 7), (6, 5, 4, 3, 2), (2, 3)])
     U1, S1, V1 = yast.linalg.svd(a, axes=((0, 1), (2, 3)), nU=True, sU=1)

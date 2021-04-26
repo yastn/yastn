@@ -1,11 +1,5 @@
-try:
-    import yast
-except ModuleNotFoundError:
-    import fix_path
-    import yast
-import config_dense_C
-import config_U1_R
-import config_Z2_U1_R
+from context import yast
+from context import config_dense, config_U1, config_Z2_U1
 import numpy as np
 
 tol = 1e-12
@@ -34,19 +28,19 @@ def dot_vs_numpy(a, b, axes, conj):
 
 
 def test_dot_0():
-    a = yast.rand(config=config_dense_C, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
-    b = yast.rand(config=config_dense_C, s=(1, -1, 1), D=(2, 3, 5))
+    a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5), dtype='complex128')
+    b = yast.rand(config=config_dense, s=(1, -1, 1), D=(2, 3, 5), dtype='complex128')
 
     dot_vs_numpy(a, b, axes=((0, 3), (0, 2)), conj=(0, 0))
     dot_vs_numpy(b, a, axes=((2, 0), (3, 0)), conj=(1, 1))
 
 
 def test_dot_1():
-    a = yast.rand(config=config_U1_R, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
 
-    b = yast.rand(config=config_U1_R, s=(1, -1, 1),
+    b = yast.rand(config=config_U1, s=(1, -1, 1),
                   t=((-1, 2), (1, 2), (-1, 1)),
                   D=((1, 3), (5, 6), (10, 11)))
 
@@ -59,9 +53,9 @@ def test_dot_1():
 
 
 def test_dot_1_sparse():
-    a = yast.Tensor(config=config_U1_R, s=(-1, 1, 1, -1), n=-2)
+    a = yast.Tensor(config=config_U1, s=(-1, 1, 1, -1), n=-2)
     a.set_block(ts=(2, 1, 0, 1), Ds=(2, 1, 10, 1), val='rand')
-    b = yast.Tensor(config=config_U1_R, s=(-1, 1, 1, -1), n=1)
+    b = yast.Tensor(config=config_U1, s=(-1, 1, 1, -1), n=1)
     b.set_block(ts=(1, 2, 0, 0), Ds=(1, 2, 10, 10), val='rand')
 
     dot_vs_numpy(a, b, axes=((2, 1), (1, 2)), conj=(1, 0))
@@ -84,10 +78,10 @@ def test_dot_1_sparse():
 def test_dot_2():
     t1 = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
     t2 = [(0, 0), (0, 2), (2, 0), (2, 2)]
-    a = yast.rand(config=config_Z2_U1_R, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_Z2_U1, s=(-1, 1, 1, -1),
                   t=(t1, t1, t1, t1),
                   D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8), (7, 8, 9, 10)))
-    b = yast.rand(config=config_Z2_U1_R, s=(1, -1, 1),
+    b = yast.rand(config=config_Z2_U1, s=(1, -1, 1),
                   t=(t1, t1, t2),
                   D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8,)))
 

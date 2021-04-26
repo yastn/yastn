@@ -6,7 +6,6 @@ In principle, any number of symmetries can be used (including no symmetries).
 
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
-
 import numpy as np
 from ._auxliary import _struct, _config, YastError
 from ._auxliary import *
@@ -67,10 +66,10 @@ class Tensor:
         self.struct = _struct((), (), tuple(self.s), tuple(self.n))
 
     from ._initialize import set_block, fill_tensor, copy_empty
-    from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr, eigs_anm, eigh_anm, eig_anm, expm_anm
+    from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr, eigs_anm, eigh_anm, eig_anm, expmv
     from ._contractions import tensordot, vdot, trace, swap_gate
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, diag, abs, sqrt, rsqrt, reciprocal, exp
-    from ._single import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__
+    from ._single import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, remove_zero_blocks
     from ._single import copy, clone, detach, to, real, imag, fuse_legs, unfuse_legs
     from ._output import export_to_dict, compress_to_1d, show_properties, __str__, print_blocks, is_complex
     from ._output import get_blocks_charges, get_leg_charges_and_dims, zero_of_dtype, item, __getitem__

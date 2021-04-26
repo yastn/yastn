@@ -1,6 +1,6 @@
-import yast
+from context import yast
+from context import config_dense
 import numpy as np
-import config_dense_R as config
 
 
 def mps_random(N=2, Dmax=2, d=2):
@@ -13,7 +13,7 @@ def mps_random(N=2, Dmax=2, d=2):
     for n in range(N):
         Dr = Dmax if n < N - 1 else 1
         Dl = Dmax if n > 0 else 1
-        psi.A[n] = yast.rand(config=config, s=(1, 1, -1), D=[Dl, d[n], Dr])
+        psi.A[n] = yast.rand(config=config_dense, s=(1, 1, -1), D=[Dl, d[n], Dr])
     return psi
 
 
@@ -32,7 +32,7 @@ def mpo_random(N=2, Dmax=2, d_out=None, d=2):
     for n in range(N):
         Dr = Dmax if n < N - 1 else 1
         Dl = Dmax if n > 0 else 1
-        psi.A[n] = yast.rand(config=config, s=(1, 1, -1, -1), D=[Dl, d_out[n], d[n], Dr])
+        psi.A[n] = yast.rand(config=config_dense, s=(1, 1, -1, -1), D=[Dl, d_out[n], d[n], Dr])
     return psi
 
 
@@ -45,7 +45,7 @@ def mpo_XX_model(N, t, mu):
 
     H =yast.mps.Mps(N, nr_phys=2)
     for n in H.g.sweep(to='last'):  # empty tensors
-        H.A[n] = yast.Tensor(config=config, s=(1, 1, -1, -1))
+        H.A[n] = yast.Tensor(config=config_dense, s=(1, 1, -1, -1))
         if n == H.g.first:
             tmp = np.block([[mu * nn, t * cp, t * c, ee]])
             tmp = tmp.reshape((1, 2, 4, 2))
@@ -73,7 +73,7 @@ def mpo_occupation(N):
 
     H =yast.mps.Mps(N, nr_phys=2)
     for n in H.g.sweep(to='last'):  # empty tensors
-        H.A[n] = yast.Tensor(config=config, s=(1, 1, -1, -1))
+        H.A[n] = yast.Tensor(config=config_dense, s=(1, 1, -1, -1))
         if n == H.g.first:
             tmp = np.block([[nn, ee]])
             tmp = tmp.reshape((1, 2, 2, 2))

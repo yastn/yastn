@@ -4,7 +4,7 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray
 from ._auxliary import YastError, _test_configs_match, _test_tensors_match
 
-__all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'abs', 'real', 'imag',
+__all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'abs', 'real', 'imag', 'remove_zero_blocks',
            'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'copy', 'clone', 'detach', 'to', 'fuse_legs', 'unfuse_legs']
 
 
@@ -447,6 +447,14 @@ def exp(a, step=1.):
     else:
         c.A = a.config.backend.exp_diag(a.A, step)
     c.struct = a.struct
+    return c
+
+
+def remove_zero_blocks(a, rel=1e-12, abs=0, inplace=False):
+    cutoff = abs + rel * a.norm(p='inf')
+    c = a if inplace else a.copy_empty()
+    c.A = {k: t for k, t in a.A.items() if a.config.backend.max_abs(t) > cutoff}
+    c.update_struct()
     return c
 
 

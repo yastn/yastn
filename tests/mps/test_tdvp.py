@@ -1,8 +1,7 @@
-import yast.mps as mps
 import ops_full as ops_full
 import ops_Z2 as ops_Z2
 import ops_U1 as ops_U1
-import numpy as np
+import yast.mps as mps
 import pytest
 
 tol=1e-8
