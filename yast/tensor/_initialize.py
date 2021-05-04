@@ -12,7 +12,7 @@ def copy_empty(a):
     return a.__class__(config=a.config, s=a.s, n=a.n, isdiag=a.isdiag, meta_fusion=a.meta_fusion)
 
 
-def fill_tensor(a, t=(), D=(), val='rand'):
+def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
     r"""
     Create all possible blocks based on s, n and list of charges for all legs.
 
@@ -21,6 +21,8 @@ def fill_tensor(a, t=(), D=(), val='rand'):
 
     Parameters
     ----------
+    a : Tensor
+
     t : list
         All possible combination of charges for each leg:
         t = [[(leg1sym1, leg1sym2), ... ], [(leg2sym1, leg2sym2), ... )]
@@ -36,6 +38,9 @@ def fill_tensor(a, t=(), D=(), val='rand'):
     val : str
         'randR', 'rand' (use current dtype float or complex), 'ones', 'zeros'
 
+    dtype : str
+        desired dtype, overrides default_dtype specified in config of tensor `a`
+
     Examples
     --------
     D = 5  # ndim = 1
@@ -44,6 +49,11 @@ def fill_tensor(a, t=(), D=(), val='rand'):
     t = [[(0, 0)], [(-2, -2), (0, 0), (-2, 0), (0, -2)], [(2, 2), (0, 0), (2, 0), (0, 2)]], \
     D = [1, (1, 4, 2, 2), (1, 9, 3, 3)]  # nsym = 2 ndim = 3
     """
+
+    if not dtype:
+        assert hasattr(a.config,'default_dtype'), "Either dtype or valid config has to be provided"
+        dtype= a.config.default_dtype
+
     D = (D,) if isinstance(D, int) else D
     t = (t,) if isinstance(t, int) else t
 
@@ -83,13 +93,13 @@ def fill_tensor(a, t=(), D=(), val='rand'):
         Dset = comb_D[ind]
 
     for ts, Ds in zip(tset, Dset):
-        _set_block(a, ts=tuple(ts.flat), Ds=tuple(Ds), val=val)
+        _set_block(a, ts=tuple(ts.flat), Ds=tuple(Ds), val=val, dtype=dtype)
 
     a.update_struct()
     tD = [a.get_leg_structure(n, native=True) for n in range(a.nlegs)]  # here checks the consistency of bond dimensions
 
 
-def set_block(a, ts=(), Ds=None, val='zeros'):
+def set_block(a, ts=(), Ds=None, val='zeros', dtype=None, device=None):
     """
     Add new block to tensor or change the existing one.
 
@@ -99,6 +109,8 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
     Parameters
     ----------
+    a : Tensor
+
     ts : tuple
         charges identifing the block, t = (sym1leg1, sym2leg1, sym1leg2, sym2leg2, ...)
         If nsym == 0, it is not taken into account.
@@ -110,7 +122,20 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     val : str, nparray, list
         'randR', 'rand' (use current dtype float or complex), 'ones', 'zeros'
         for nparray setting Ds is needed.
+
+    dtype : str
+        desired dtype, overrides default_dtype specified in config of tensor `a`
+
+    device : str
+        device on which the block should be initialized. Currently, all blocks
+        of Tensor must reside on the same device. This may change in future.
     """
+    if not dtype:
+        assert hasattr(a.config,'default_dtype'), "Either dtype or valid config has to be provided"
+        dtype= a.config.default_dtype
+    if device:
+        assert a.device==device, "selected device does not match the device of the Tensor"
+
     if isinstance(Ds, int):
         Ds = (Ds,)
     if isinstance(ts, int):
@@ -139,31 +164,39 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
                 raise YastError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
         Ds = tuple(Ds)
 
-    _set_block(a, ts, Ds, val)
+    _set_block(a, ts, Ds, val, dtype=dtype, device=device)
 
     a.update_struct()
     tD = [a.get_leg_structure(n, native=True) for n in range(a.nlegs)]  # here checks the consistency of bond dimensions
 
 
-def _set_block(a, ts, Ds, val):
+def _set_block(a, ts, Ds, val, dtype=None, device=None):
+    if not dtype:
+        assert hasattr(a.config,'default_dtype'), "Either dtype or valid config has to be provided"
+        dtype= a.config.default_dtype
+    if device:
+        assert a.device==device, "selected device does not match the device of the Tensor"
+    else:
+        device= a.device
+
     if isinstance(val, str):
         if val == 'zeros':
-            a.A[ts] = a.config.backend.zeros(Ds, device=a.config.device)
+            a.A[ts] = a.config.backend.zeros(Ds, dtype=dtype, device=device)
         elif val == 'randR' or val == 'rand':
-            a.A[ts] = a.config.backend.randR(Ds, device=a.config.device)
+            a.A[ts] = a.config.backend.randR(Ds, dtype=dtype, device=device)
         elif val == 'randC':
-            a.A[ts] = a.config.backend.randC(Ds, device=a.config.device)
+            a.A[ts] = a.config.backend.randC(Ds, dtype=dtype, device=device)
         elif val == 'ones':
-            a.A[ts] = a.config.backend.ones(Ds, device=a.config.device)
+            a.A[ts] = a.config.backend.ones(Ds, dtype=dtype, device=device)
 
         if a.isdiag:
             a.A[ts] = a.config.backend.diag_get(a.A[ts])
             a.A[ts] = a.config.backend.diag_create(a.A[ts])
     else:
         if a.isdiag and val.ndim == 1 and np.prod(Ds) == (val.size**2):
-            a.A[ts] = a.config.backend.to_tensor(np.diag(val), Ds, device=a.config.device)
+            a.A[ts] = a.config.backend.to_tensor(np.diag(val), Ds, device=device)
         else:
-            a.A[ts] = a.config.backend.to_tensor(val, Ds=Ds, device=a.config.device)
+            a.A[ts] = a.config.backend.to_tensor(val, Ds=Ds, device=device)
 
 
 
@@ -173,6 +206,8 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
     Initialize tensor matching legs of existing tensors, so that it can be contracted with those tensors.
 
     Finds all matching symmetry sectors and their bond dimensions and passes it to :meth:`Tensor.fill_tensor`.
+
+    TODO: the set of tensors should reside on the same device. Optional destination device might be added
 
     Parameters
     ----------
@@ -205,17 +240,20 @@ matching_tensor = match_legs
 
 
 def block(tensors, common_legs=None):
-    """ Assemble new tensor by blocking a set of tensors.
+    """ 
+    Assemble new tensor by blocking a set of tensors.
 
-        Parameters
-        ----------
-        tensors : dict
-            dictionary of tensors {(x,y,...): tensor at position x,y,.. in the new, blocked super-tensor}.
-            Length of tuple should be equall to tensor.ndim - len(common_legs)
+    TODO: the set of tensors should reside on the same device. Optional destination device might be added
 
-        common_legs : list
-            Legs that are not blocked.
-            This is equivalently to all tensors having the same position (not specified) in the supertensor on that leg.
+    Parameters
+    ----------
+    tensors : dict
+        dictionary of tensors {(x,y,...): tensor at position x,y,.. in the new, blocked super-tensor}.
+        Length of tuple should be equall to tensor.ndim - len(common_legs)
+
+    common_legs : list
+        Legs that are not blocked.
+        This is equivalently to all tensors having the same position (not specified) in the supertensor on that leg.
     """
     out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values

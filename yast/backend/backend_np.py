@@ -17,6 +17,12 @@ def get_dtype(iterator):
     """ iterators of numpy arrays; returns np.complex128 if any array is complex else np.float64"""
     return np.complex128 if any(np.iscomplexobj(x) for x in iterator) else np.float64
 
+def unique_dtype(t):
+    dtypes= set(b.dtype for b in t.A.values())
+    if len(dtypes)==1:
+        return str(tuple(dtypes)[0])
+    else:
+        return False
 
 def random_seed(seed):
     np.random.seed(seed)
@@ -146,31 +152,31 @@ def entropy(A, alpha=1, tol=1e-12):
 ##########################
 
 
-def zero_scalar(**kwargs):
-    return DTYPE['float64'](0)
+def zero_scalar(dtype='float64', **kwargs):
+    return DTYPE[dtype](0)
 
 
-def zeros(D, **kwargs):
-    return np.zeros(D, dtype=DTYPE['float64'])
+def zeros(D, dtype='float64', **kwargs):
+    return np.zeros(D, dtype=DTYPE[dtype])
 
 
-def ones(D, **kwargs):
-    return np.ones(D, dtype=DTYPE['float64'])
+def ones(D, dtype='float64', **kwargs):
+    return np.ones(D, dtype=DTYPE[dtype])
 
 
-def randR(D, **kwargs):
+def randR(D, dtype='float64', **kwargs):
     return 2 * np.random.random_sample(D) - 1
 
 
-def randC(D, **kwargs):
+def randC(D, dtype='float64', **kwargs):
     return 2 * np.random.random_sample(D) - 1 + 1j * (2 * np.random.random_sample(D) - 1)
 
 
-def to_tensor(val, Ds=None, **kwargs):
+def to_tensor(val, Ds=None, dtype='float64', **kwargs):
     try:
-        T = np.array(val, dtype=DTYPE['float64'])
+        T = np.array(val, dtype=DTYPE[dtype])
     except TypeError:
-        T = np.array(val, dtype=DTYPE['complex128'])
+        T = np.array(val, dtype=DTYPE[dtype])
     return T if Ds is None else T.reshape(Ds)
 
 

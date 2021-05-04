@@ -8,7 +8,7 @@ import numpy as np
 from ..sym import sym_none
 
 __all__ = ['check_signatures_match', 'check_consistency', 'set_cache_maxsize', 'get_cache_info',
-           'are_independent', 'is_consistent']
+           'are_independent', 'is_consistent','unique_dtype']
 
 _check = {"signatures_match": True, "consistency": True}
 
@@ -24,6 +24,8 @@ class _config(NamedTuple):
     backend: any = None
     sym: any = sym_none
     device: str = 'cpu'
+    default_dtype: str = 'float64'
+    default_device: str = 'cpu'
 
 
 def _flatten(nested_iterator):
@@ -33,6 +35,8 @@ def _flatten(nested_iterator):
         except TypeError:
             yield item
 
+
+def unique_dtype(a): return a.config.backend.unique_dtype(a)
 
 def _unpack_axes(a, *args):
     """Unpack meta axes into native axes based on a.meta_fusion"""
