@@ -14,6 +14,12 @@ def get_dtype(iterator):
     """ iterators of torch tensors; returns torch.complex128 if any tensor is complex else torch.float64"""
     return torch.complex128 if any(torch.is_complex(x) for x in iterator) else torch.float64
 
+def unique_dtype(t):
+    dtypes= set(b.dtype for b in t.A.values())
+    if len(dtypes)==1:
+        return str(tuple(dtypes)[0])[len("torch."):]
+    else:
+        return False
 
 def random_seed(seed):
     torch.random.manual_seed(seed)
@@ -148,31 +154,31 @@ def entropy(A, alpha=1, tol=1e-12):
 ##########################
 
 
-def zero_scalar(device='cpu'):
-    return torch.tensor(0, dtype=DTYPE['float64'], device=device)
+def zero_scalar(dtype='float64', device='cpu'):
+    return torch.tensor(0, dtype=DTYPE[dtype], device=device)
 
 
-def zeros(D, device='cpu'):
-    return torch.zeros(D, dtype=DTYPE['float64'], device=device)
+def zeros(D, dtype='float64', device='cpu'):
+    return torch.zeros(D, dtype=DTYPE[dtype], device=device)
 
 
-def ones(D, device='cpu'):
-    return torch.ones(D, dtype=DTYPE['float64'], device=device)
+def ones(D, dtype='float64', device='cpu'):
+    return torch.ones(D, dtype=DTYPE[dtype], device=device)
 
 
-def randR(D, device='cpu'):
-    return 2 * torch.rand(D, dtype=DTYPE['float64'], device=device) - 1
+def randR(D, dtype='float64', device='cpu'):
+    return 2 * torch.rand(D, dtype=DTYPE[dtype], device=device) - 1
 
 
 def randC(D, dtype='float64', device='cpu'):
     return 2 * torch.rand(D, dtype=DTYPE['complex128'], device=device) - 1
 
 
-def to_tensor(val, Ds=None, device='cpu'):
+def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
     try:
-        T = torch.as_tensor(val, dtype=DTYPE['float64'], device=device)
+        T = torch.as_tensor(val, dtype=DTYPE[dtype], device=device)
     except TypeError:
-        T = torch.as_tensor(val, dtype=DTYPE['complex128'], device=device)
+        T = torch.as_tensor(val, dtype=DTYPE[dtype], device=device)
     return T if Ds is None else T.reshape(Ds).contiguous()
 
 

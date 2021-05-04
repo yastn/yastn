@@ -35,9 +35,13 @@ __all__.extend(_output.__all__)
 class Tensor:
     """ Class defining a tensor with abelian symmetries, and operations on such tensor(s). """
 
-    def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
+    def __init__(self, config=None, s=(), n=None, isdiag=False, device=None, **kwargs):
         self.config = config if isinstance(config, _config) else \
                       _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
+        if not device:
+            assert hasattr(self.config,'default_device'), "Either device or valid config has to be provided"
+            device= self.config.default_device
+        self.device = device
         self.isdiag = isdiag
         try:
             self.nlegs = len(s)  # number of native legs
@@ -75,4 +79,4 @@ class Tensor:
     from ._output import get_blocks_charges, get_leg_charges_and_dims, zero_of_dtype, item, __getitem__
     from ._output import get_blocks_shapes, get_leg_fusion, get_leg_structure, get_ndim, get_shape, get_signature
     from ._output import get_size, get_tensor_charge, to_dense, to_nonsymmetric, to_number, to_numpy, to_raw_tensor
-    from ._auxliary import update_struct, is_consistent, are_independent
+    from ._auxliary import unique_dtype, update_struct, is_consistent, are_independent

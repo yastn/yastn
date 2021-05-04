@@ -47,8 +47,10 @@ def tensordot(a, b, axes, conj=(0, 0)):
     if not np.all(a.s[naxes_a[1]] == (-conja * conjb) * b.s[naxes_b[0]]):
         if a.isdiag:  # if tensor is diagonal, than freely changes the signature by a factor of -1
             a.s *= -1
+            a.struct = a.struct._replace(s=tuple(a.s))
         elif b.isdiag:
             b.s *= -1
+            b.struct = b.struct._replace(s=tuple(b.s))
         elif _check["signatures_match"]:
             raise YastError('Signs do not match')
 
@@ -65,6 +67,8 @@ def tensordot(a, b, axes, conj=(0, 0)):
     meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
     if _check["consistency"] and not (ua_r == ub_l and ls_ac.match(ls_bc)):
+        import pdb
+        pdb.set_trace()
         raise YastError('Something went wrong in matching the indices of the two tensors')
 
     c_s = np.hstack([conja * a.s[naxes_a[0]], conjb * b.s[naxes_b[1]]])

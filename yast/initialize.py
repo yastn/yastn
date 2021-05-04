@@ -7,7 +7,7 @@ __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
            'import_from_dict', 'decompress_from_1d']
 
 
-def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype='float64', legs=None):
+def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=None, device=None):
     r"""
     Initialize tensor with all possible blocks filled with the random numbers.
 
@@ -27,40 +27,51 @@ def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype='float64', l
         a list of corresponding bond dimensions
     isdiag : bool
         makes tensor diagonal
+    dtype : str
+        desired dtype, overrides default_dtype specified in config
+    device : str
+        device on which the tensor should be initialized, overrides default_device 
+        specified in config
 
     Returns
     -------
     tensor : tensor
         a random instance of a tensor
     """
+    if not dtype:
+        assert hasattr(config,'default_dtype'), "Either dtype or valid config has to be provided"
+        dtype= config.default_dtype
+    if not device:
+        assert hasattr(config,'default_device'), "Either device or valid config has to be provided"
+        device= config.default_device
     if dtype == 'float64':
-        return randR(config, s, n, t, D, isdiag, legs)
+        return randR(config, s, n, t, D, isdiag, legs, dtype, device)
     if dtype == 'complex128':
-        return randC(config, s, n, t, D, isdiag, legs)
+        return randC(config, s, n, t, D, isdiag, legs, dtype, device)
     raise YastError('dtype should be float64 or complex128')
 
 
-def randR(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None):
+def randR(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=None, device=None):
     """ Shortcut for rand(..., dtype='float64')"""
     meta_fusion = None
     if legs is not None:
          t, D, s, meta_fusion = _tD_from_legs(legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion)
-    a.fill_tensor(t=t, D=D, val='randR')
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, device=device, meta_fusion=meta_fusion)
+    a.fill_tensor(t=t, D=D, val='randR', dtype=dtype)
     return a
 
 
-def randC(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None):
+def randC(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=None, device=None):
     """ Shortcut for rand(..., dtype='complex128')"""
     meta_fusion = None
     if legs is not None:
          t, D, s, meta_fusion = _tD_from_legs(legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion)
-    a.fill_tensor(t=t, D=D, val='randC')
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, device=device, meta_fusion=meta_fusion)
+    a.fill_tensor(t=t, D=D, val='randC', dtype=dtype)
     return a
 
 
-def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None):
+def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=None, device=None):
     r"""
     Initialize tensor with all possible blocks filled with zeros.
 
@@ -79,21 +90,32 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None):
         a list of corresponding bond dimensions
     isdiag : bool
         makes tensor diagonal
+    dtype : str
+        desired dtype, overrides default_dtype specified in config
+    device : str
+        device on which the tensor should be initialized, overrides default_device 
+        specified in config
 
     Returns
     -------
     tensor : tensor
         an instance of a tensor filled with zeros
     """
+    if not dtype:
+        assert hasattr(config,'default_dtype'), "Either dtype or valid config has to be provided"
+        dtype= config.default_dtype
+    if not device:
+        assert hasattr(config,'default_device'), "Either device or valid config has to be provided"
+        device= config.default_device
     meta_fusion = None
     if legs is not None:
          t, D, s, meta_fusion = _tD_from_legs(legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion)
-    a.fill_tensor(t=t, D=D, val='zeros')
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, device=device, meta_fusion=meta_fusion)
+    a.fill_tensor(t=t, D=D, val='zeros', dtype=dtype)
     return a
 
 
-def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None):
+def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=None, device=None):
     r"""
     Initialize tensor with all possible blocks filled with ones.
 
@@ -110,21 +132,32 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None):
         see :meth:`Tensor.fill_tensor` for description.
     D : list
         a list of corresponding bond dimensions
+    dtype : str
+        desired dtype, overrides default_dtype specified in config
+    device : str
+        device on which the tensor should be initialized, overrides default_device 
+        specified in config
 
     Returns
     -------
     tensor : tensor
         an instance of a tensor filled with ones
     """
+    if not dtype:
+        assert hasattr(config,'default_dtype'), "Either dtype or valid config has to be provided"
+        dtype= config.default_dtype
+    if not device:
+        assert hasattr(config,'default_device'), "Either device or valid config has to be provided"
+        device= config.default_device
     meta_fusion = None
     if legs is not None:
          t, D, s, meta_fusion = _tD_from_legs(legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion)
-    a.fill_tensor(t=t, D=D, val='ones')
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, device=device, meta_fusion=meta_fusion)
+    a.fill_tensor(t=t, D=D, val='ones', dtype=dtype)
     return a
 
 
-def eye(config=None, t=(), D=(), legs=None):
+def eye(config=None, t=(), D=(), legs=None, dtype=None, device=None):
     r"""
     Initialize diagonal tensor with all possible blocks filled with ones.
 
@@ -137,17 +170,28 @@ def eye(config=None, t=(), D=(), legs=None):
         see :meth:`Tensor.fill_tensor` for description.
     D : list
         a list of corresponding bond dimensions
+    dtype : str
+        desired dtype, overrides default_dtype specified in config
+    device : str
+        device on which the tensor should be initialized, overrides default_device 
+        specified in config
 
     Returns
     -------
     tensor : tensor
         an instance of diagonal tensor filled with ones
     """
+    if not dtype:
+        assert hasattr(config,'default_dtype'), "Either dtype or valid config has to be provided"
+        dtype= config.default_dtype
+    if not device:
+        assert hasattr(config,'default_device'), "Either device or valid config has to be provided"
+        device= config.default_device
     s = ()
     if legs is not None:
          t, D, s, _ = _tD_from_legs(legs)
-    a = Tensor(config=config, s=s, isdiag=True)
-    a.fill_tensor(t=t, D=D, val='ones')
+    a = Tensor(config=config, s=s, isdiag=True, device=device)
+    a.fill_tensor(t=t, D=D, val='ones', dtype=dtype)
     return a
 
 
@@ -192,7 +236,7 @@ def decompress_from_1d(r1d, config, meta):
 
 
 def _tD_from_legs(legs):
-    r""" Translates input of legs into t and D """
+    r""" Translates input of legs into charges t and block dimensions D """
     tlegs, Dlegs, slegs, lflegs = [], [], [], []
     for leg in legs:
         leg = [leg] if isinstance(leg, dict) else leg

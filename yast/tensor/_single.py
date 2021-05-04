@@ -50,10 +50,10 @@ def to(a, device):
     device: str
         device identifier
     """
-    if a.config.device == device:
+    if a.device == device:
         return a
-    config_d = a.config._replace(device=device)
-    c = a.__class__(config=config_d, s=a.s, n=a.n, isdiag=a.isdiag, meta_fusion=a.meta_fusion)
+    c = a.__class__(config=a.config, s=a.s, n=a.n, isdiag=a.isdiag, device=device,\
+        meta_fusion=a.meta_fusion)
     c.struct = a.struct
     c.A = a.config.backend.move_to_device(a.A, device)
     return c
