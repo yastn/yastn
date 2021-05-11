@@ -1,4 +1,4 @@
-# Yet another symmetric tensor
+ Yet another symmetric tensor
 
 Development of tensor supporting abelian symmetries with some examples and test employing it for matrix product states.
 
@@ -22,6 +22,14 @@ Tests, which are also examples, are in the folder /tests
 Documentation
 -------------
 Build documentation using sphinx.
+
+Prerequisites:
+   * sphinx
+   * sphinx_rtd_theme
+
+Get them e.g. by conda: `conda install sphinx sphinx_rtd_theme`
+Then
+
    ```
    cd docs && make html
    ```
