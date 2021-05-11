@@ -66,8 +66,8 @@ def get_size(x):
     return x.numel()
 
 
-def diag_create(x):
-    return torch.diag(x)  # TODO: PROBLEM WITH COMPLEX NUMBERS
+def diag_create(x, p=0):
+    return torch.diag(x, diagonal=p)  # TODO: PROBLEM WITH COMPLEX NUMBERS
 
 
 def diag_get(x):
@@ -89,6 +89,18 @@ def real(x):
 
 def imag(x):
     return torch.imag(x) if torch.is_complex(x) else 0 * x
+
+
+def floor(x):
+    return torch.floor(x)
+
+
+def ceil(x):
+    return torch.ceil(x)
+
+
+def log(x):
+    return torch.log(x)
 
 
 def max_abs(x):
@@ -294,16 +306,19 @@ def svd(A, meta):
     return U, S, V
 
 
-def eigh(A, meta, order_by_magnitude=False):
+def eigh(A, meta=None, order_by_magnitude=False):
     S, U = {}, {}
-    if order_by_magnitude:
-        tn = next(iter(A.values()))
-        reg = torch.as_tensor(ad_decomp_reg, dtype=tn.dtype, device=tn.device)
-        for ind in A:
-            S[ind], U[ind] = SYMEIG.apply(A[ind], reg)
+    if meta is not None:
+        if order_by_magnitude:
+            tn = next(iter(A.values()))
+            reg = torch.as_tensor(ad_decomp_reg, dtype=tn.dtype, device=tn.device)
+            for ind in A:
+                S[ind], U[ind] = SYMEIG.apply(A[ind], reg)
+        else:
+            for (ind, indS, indU) in meta:
+                S[indS], U[indU] = torch.symeig(A[ind], eigenvectors=True)
     else:
-        for (ind, indS, indU) in meta:
-            S[indS], U[indU] = torch.symeig(A[ind], eigenvectors=True)
+        S, U = torch.symeig(A, eigenvectors=True)
     return S, U
 
 

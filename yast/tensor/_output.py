@@ -19,7 +19,7 @@ def export_to_dict(a):
     AA = {ind: a.config.backend.to_numpy(a.A[ind]) for ind in a.A}
     if a.isdiag:
         AA = {t: np.diag(x) for t, x in AA.items()}
-    out = {'A': AA, 's': tuple(a.s), 'n': tuple(a.n), 'isdiag': a.isdiag, 'meta_fusion': a.meta_fusion}
+    out = {'A': AA, 's': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag, 'meta_fusion': a.meta_fusion}
     return out
 
 
@@ -43,10 +43,10 @@ def compress_to_1d(a, meta=None):
         meta_merge = tuple(((), (aD - D, aD), t, (D,)) for t, D, aD in zip(a.struct.t, D_rsh, aD_rsh))
         # (told, tnew, Dsl, Dnew)
         meta_unmerge = tuple((told, tnew, Dsl, Dnew) for (told, Dsl, tnew, _), Dnew in zip(meta_merge, a.struct.D))
-        meta = {'s': tuple(a.s), 'n': tuple(a.n), 'isdiag': a.isdiag,
+        meta = {'s': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag,
                 'meta_fusion': a.meta_fusion, 'meta_unmerge': meta_unmerge, 'meta_merge': meta_merge}
     else:
-        if tuple(a.s) != meta['s'] or tuple(a.n) != meta['n'] or a.isdiag != meta['isdiag'] or a.meta_fusion != meta['meta_fusion']:
+        if a.struct.s != meta['s'] or a.struct.n != meta['n'] or a.isdiag != meta['isdiag'] or a.meta_fusion != meta['meta_fusion']:
             raise YastError("Tensor do not match provided metadata.")
         meta_merge = meta['meta_merge']
         D_tot = meta_merge[-1][1][1]
@@ -65,8 +65,8 @@ def compress_to_1d(a, meta=None):
 def show_properties(a):
     """ Display basic properties of the tensor. """
     print("Symmetry    :", a.config.sym.SYM_ID)
-    print("signature   :", a.s)  # signature
-    print("charge      :", a.n)  # total charge of tensor
+    print("signature   :", a.struct.s)  # signature
+    print("charge      :", a.struct.n)  # total charge of tensor
     print("isdiag      :", a.isdiag)
     print("dim meta    :", a.mlegs)  # number of meta legs
     print("dim native  :", a.nlegs)  # number of native legs
@@ -80,7 +80,7 @@ def show_properties(a):
 def __str__(a):
     # return str(a.A)
     ts, Ds = a.get_leg_charges_and_dims(native=False)
-    s = f"{a.config.sym.SYM_ID} s= {a.s} n= {a.n}\n"
+    s = f"{a.config.sym.SYM_ID} s= {a.struct.s} n= {a.struct.n}\n"
     # s += f"charges      : {a.ts}\n"
     s += f"leg charges  : {ts}\n"
     s += f"dimensions   : {Ds}"
@@ -105,16 +105,16 @@ def get_size(a):
 
 def get_tensor_charge(a):
     """ Global charge of the tensor. """
-    return tuple(a.n)
+    return a.struct.n
 
 
 def get_signature(a, native=False):
     """ Tensor signatures. If not native, returns the signature of the first leg in each group."""
     if native:
-        return tuple(a.s)
+        return a.struct.s
     pn = tuple((n,) for n in range(a.mlegs)) if a.mlegs > 0 else ()
     un = tuple(_unpack_axes(a, *pn))
-    return tuple(a.s[p[0]] for p in un)
+    return tuple(a.struct.s[p[0]] for p in un)
 
 
 def get_blocks_charges(a):
@@ -207,6 +207,10 @@ def get_shape(a, axes=None, native=False):
 def get_ndim(a, native=False):
     """ Number of: meta legs if not native else native legs. """
     return a.nlegs if native else a.mlegs
+
+
+def unique_dtype(a): 
+    return a.config.backend.unique_dtype(a)
 
 
 def __getitem__(a, key):

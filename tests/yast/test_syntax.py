@@ -102,7 +102,8 @@ def test_syntax():
     tensor = a.exp(step=1)
     tensor = yast.exp(a, step=1)
     tensor = a.abs()
-    tensor = yast.abs(a)
+    tensor = a.absolute()
+    tensor = yast.absolute(a)
 
     tensor = a.abs().sqrt()
     tensor = yast.sqrt(a.abs())
