@@ -12,7 +12,7 @@ def run_expm_hermitian(A, v, tau, eigs_tol, exp_tol, kp):
     v /= v.norm()
     Av = lambda x: yast.tensordot(A, x, axes=((2, 3), (0, 1)))
     out = yast.expmv(Av=Av, init=[v], Bv=None, dt=tau, eigs_tol=eigs_tol,
-                     exp_tol=exp_tol, k=kp, hermitian=True, cost_estim=0)
+                     exp_tol=exp_tol, k=kp, hermitian=True, cost_estim=0, algorithm='lanczos')
     w = out[0].to_dense().reshape(-1)
     A = A.to_dense()
     sA = A.shape
@@ -95,4 +95,10 @@ def test_expmv_non_hermitian(D, k, tau, eigs_tol, exp_tol):
 
 
 if __name__ == '__main__':
-    pass
+    test_expmv_hermitian(6, 6, 1., 1e-14, 1e-14)
+    # test_expmv_hermitian(6, 6, 1j, 1e-14, 1e-14)
+    # test_expmv_non_hermitian(6, 6, 1., 1e-14, 1e-14)
+    # test_expmv_non_hermitian(6, 6, 1j, 1e-14, 1e-14)
+
+
+

@@ -79,7 +79,8 @@ def _leg_struct_trivial(a, axis=0):
         D = a.config.backend.get_shape(val)[axis]
         dec[t] = {t: ((0, D), D, (D,))}
         Dtot[t] = D
-    return _LegDecomposition(a.config, a.s[axis], a.s[axis], dec, Dtot)
+    sa = a.struct.s[axis]
+    return _LegDecomposition(a.config, sa, sa, dec, Dtot)
 
 
 def _leg_struct_truncation(a, tol=0., D_block=np.inf, D_total=np.inf, keep_multiplets=False, eps_multiplet=1e-12, ordering='eigh'):
@@ -120,7 +121,8 @@ def _leg_struct_truncation(a, tol=0., D_block=np.inf, D_total=np.inf, keep_multi
             Dslc = a.config.backend.range_largest(D_keep[ind], Dmax[ind], ordering)
             dec[ind] = {ind: (Dslc, D_keep[ind], (D_keep[ind],))}
             Dtot[ind] = D_keep[ind]
-    return _LegDecomposition(a.config, a.s[0], a.s[0], dec, Dtot)
+    s0 = a.struct.s[0]
+    return _LegDecomposition(a.config, s0, s0, dec, Dtot)
 
 
 def _unmerge_matrix(a, ls_l, ls_r):
