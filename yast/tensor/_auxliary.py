@@ -3,21 +3,23 @@
 from functools import lru_cache
 from typing import NamedTuple
 from itertools import accumulate, chain
+
+from numpy.lib.utils import safe_eval
 from . import _merging
 import numpy as np
 from ..sym import sym_none
 
 __all__ = ['check_signatures_match', 'check_consistency', 'set_cache_maxsize', 'get_cache_info',
-           'are_independent', 'is_consistent','unique_dtype']
+           'are_independent', 'is_consistent']
 
 _check = {"signatures_match": True, "consistency": True}
 
 
 class _struct(NamedTuple):
-    t: tuple
-    D: tuple
-    s: tuple
-    n: tuple
+    t: tuple = ()
+    D: tuple = ()
+    s: tuple = ()
+    n: tuple = ()
 
 
 class _config(NamedTuple):
@@ -35,8 +37,6 @@ def _flatten(nested_iterator):
         except TypeError:
             yield item
 
-
-def unique_dtype(a): return a.config.backend.unique_dtype(a)
 
 def _unpack_axes(a, *args):
     """Unpack meta axes into native axes based on a.meta_fusion"""
@@ -80,7 +80,7 @@ def update_struct(a):
     a.A = {k: d[k] for k in sorted(d)}
     t = tuple(a.A.keys())
     D = tuple(a.config.backend.get_shape(x) for x in a.A.values())
-    a.struct = _struct(t, D, tuple(a.s), tuple(a.n))
+    a.struct = _struct(t, D, a.struct.s, a.struct.n)
 
 
 class YastError(Exception):
@@ -115,7 +115,7 @@ def _test_configs_match(a, b):
 
 
 def _test_tensors_match(a, b):
-    if _check["signatures_match"] and (not np.all(a.s == b.s) or not np.all(a.n == b.n)):
+    if _check["signatures_match"] and (a.struct.s != b.struct.s or a.struct.n != b.struct.n):
         raise YastError('Tensor signatures do not match')
     if _check["consistency"] and not a.meta_fusion == b.meta_fusion:
         raise YastError('Fusion trees do not match')
@@ -142,8 +142,6 @@ def are_independent(a, b):
     test = []
     test.append(a is b)
     test.append(a.A is b.A)
-    test.append(a.n is b.n)
-    test.append(a.s is b.s)
     for key in a.A.keys():
         if key in b.A:
             test.append(a.config.backend.is_independent(a.A[key], b.A[key]))
@@ -167,7 +165,9 @@ def is_consistent(a):
     test.append(len(a.struct.D) == len(a.A))
 
     tset = _tarray(a)
-    test.append(np.all(a.config.sym.fuse(tset, a.s, 1) == a.n))
+    sa = np.array(a.struct.s, dtype=int)
+    na = np.array(a.struct.n, dtype=int)
+    test.append(np.all(a.config.sym.fuse(tset, sa, 1) == na))
     for n in range(a.nlegs):
         a.get_leg_structure(n, native=True)
 

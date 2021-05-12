@@ -10,10 +10,10 @@ def test_conj_1():
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
     b = a.conj()
-    assert np.linalg.norm(a.n - b.n) == 0
+    assert a.struct.n == b.struct.n
     na = a.to_numpy()
     nb = b.to_numpy()
-    assert np.linalg.norm(a.n - b.n) < tol
+    assert np.linalg.norm(na - nb) < tol
 
 
 def test_conj_2():

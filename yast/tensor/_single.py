@@ -1,10 +1,10 @@
 """ Linear operations and operations on a single yast tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray
+from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _struct
 from ._auxliary import YastError, _test_configs_match, _test_tensors_match
 
-__all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'abs', 'real', 'imag', 'remove_zero_blocks',
+__all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'absolute', 'real', 'imag', 'remove_zero_blocks',
            'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'copy', 'clone', 'detach', 'to', 'fuse_legs', 'unfuse_legs']
 
 
@@ -13,17 +13,15 @@ def copy(a):
 
         Warning: this might break autograd if you are using it.
     """
-    c = a.__class__(config=a.config, s=a.s, n=a.n, isdiag=a.isdiag, meta_fusion=a.meta_fusion)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = {ts: a.config.backend.copy(x) for ts, x in a.A.items()}
-    c.struct = a.struct
     return c
 
 
 def clone(a):
     """ Return a copy of the tensor, tracking gradients. """
-    c = a.__class__(config=a.config, s=a.s, n=a.n, isdiag=a.isdiag, meta_fusion=a.meta_fusion)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = {ts: a.config.backend.clone(x) for ts, x in a.A.items()}
-    c.struct = a.struct
     return c
 
 
@@ -33,8 +31,7 @@ def detach(a, inplace=False):
         for x in a.A.values():
             a.config.backend.detach_(x)
         return a
-    c = a.copy_empty()
-    c.struct = a.struct
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = {ts: a.config.backend.detach(x) for ts, x in a.A.items()}
     return c
 
@@ -52,9 +49,8 @@ def to(a, device):
     """
     if a.device == device:
         return a
-    c = a.__class__(config=a.config, s=a.s, n=a.n, isdiag=a.isdiag, device=device,\
-        meta_fusion=a.meta_fusion)
-    c.struct = a.struct
+    c = a.__class__(config=a.config, s=a.struct.s, n=a.struct.n, isdiag=a.isdiag, device=device,\
+        meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = a.config.backend.move_to_device(a.A, device)
     return c
 
@@ -72,9 +68,8 @@ def __mul__(a, number):
     tensor : Tensor
         result of multipcilation as a new tensor
     """
-    c = a.copy_empty()
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = {ind: number * x for ind, x in a.A.items()}
-    c.struct = a.struct
     return c
 
 
@@ -107,9 +102,8 @@ def __pow__(a, exponent):
     tensor : Tensor
         result of element-wise exponentiation as a new tensor
     """
-    c = a.copy_empty()
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = {ind: x**exponent for ind, x in a.A.items()}
-    c.struct = a.struct
     return c
 
 
@@ -126,9 +120,8 @@ def __truediv__(a, number):
     tensor : Tensor
         result of element-wise division  as a new tensor
     """
-    c = a.copy_empty()
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = {ind: x / number for ind, x in a.A.items()}
-    c.struct = a.struct
     return c
 
 
@@ -215,15 +208,15 @@ def conj(a, inplace=False):
     -------
     tensor : Tensor
     """
-    newn = a.config.sym.fuse(a.n.reshape(1, 1, -1), np.array([1], dtype=int), -1)[0]
+    an = np.array(a.struct.n, dtype=int).reshape(1, 1, -1)
+    newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
+    news = tuple(-x for x in a.struct.s)
+    struct = a.struct._replace(s=news, n=newn)
     if inplace:
         c = a
-        c.n = newn
-        c.s *= -1
+        c.struct = struct
     else:
-        c = a.__class__(config=a.config, s=-a.s, n=newn, isdiag=a.isdiag, meta_fusion=a.meta_fusion)
-
-    c.struct = a.struct._replace(s=tuple(-a.s))
+        c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=struct)
     c.A = c.config.backend.conj(a.A, inplace)
     return c
 
@@ -236,11 +229,7 @@ def conj_blocks(a, inplace=False):
     -------
     tensor : Tensor
     """
-    if inplace:
-        c = a
-    else:
-        c = a.copy_empty()
-        c.struct = a.struct
+    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = c.config.backend.conj(a.A, inplace)
     return c
 
@@ -253,13 +242,14 @@ def flip_signature(a, inplace=False):
     -------
     tensor : Tensor
     """
-    newn = a.config.sym.fuse(a.n.reshape(1, 1, -1), np.array([1], dtype=int), -1)[0]
+    an = np.array(a.struct.n, dtype=int).reshape(1, 1, -1)
+    newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
+    news = tuple(-x for x in a.struct.s)
+    struct = a.struct._replace(s=news, n=newn)
     if inplace:
-        a.n = newn
-        a.s = -a.s
+        a.struct = struct
         return a
-    c = a.__class__(config=a.config, s=-a.s, n=newn, isdiag=a.isdiag, meta_fusion=a.meta_fusion)
-    c.struct = a.struct
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=struct)
     c.A = {ind: a.config.backend.clone(a.A[ind]) for ind in a.A}
     return c
 
@@ -279,16 +269,15 @@ def transpose(a, axes, inplace=False):
     uaxes, = _unpack_axes(a, axes)
     order = np.array(uaxes, dtype=np.intp)
     new_meta_fusion = tuple(a.meta_fusion[ii] for ii in axes)
-    news = a.s[order]
-    if inplace:
-        a.s = news
-        a.meta_fusion = new_meta_fusion
-        c = a
-    else:
-        c = a.__class__(config=a.config, s=news, n=a.n, isdiag=a.isdiag, meta_fusion=new_meta_fusion)
+    news = tuple(a.struct.s[ii] for ii in uaxes)
+    struct = _struct(s=news, n=a.struct.n)
     tset = _tarray(a)
     newt = tset[:, order, :]
     meta_transpose = tuple((told, tuple(tnew.flat)) for told, tnew in zip(a.struct.t, newt))
+    if inplace:
+        a.struct = struct
+        a.meta_fusion = new_meta_fusion
+    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=new_meta_fusion, struct=struct)
     c.A = c.config.backend.transpose(a.A, uaxes, meta_transpose, inplace)
     c.update_struct()
     return c
@@ -320,18 +309,18 @@ def moveaxis(a, source, destination, inplace=False):
 def diag(a):
     """Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa. """
     if a.isdiag:
-        c = a.__class__(config=a.config, s=a.s, n=a.n, isdiag=False, meta_fusion=a.meta_fusion)
+        c = a.__class__(config=a.config, isdiag=False, meta_fusion=a.meta_fusion, struct=a.struct)
         c.A = {ind: a.config.backend.diag_diag(a.A[ind]) for ind in a.A}
-    elif a.nlegs == 2 and sum(np.abs(a.n)) == 0 and sum(a.s) == 0:
-        c = a.__class__(config=a.config, s=a.s, isdiag=True, meta_fusion=a.meta_fusion)
+    elif a.nlegs == 2 and sum(abs(x) for x in a.struct.n) == 0 and sum(a.struct.s) == 0:
+        c = a.__class__(config=a.config, isdiag=True, meta_fusion=a.meta_fusion, struct=a.struct)
         c.A = {ind: a.config.backend.diag_diag(a.A[ind]) for ind in a.A}
     else:
         raise YastError('Tensor cannot be changed into a diagonal one')
-    c.update_struct()
+    # c.update_struct()
     return c
 
 
-def abs(a):
+def absolute(a):
     """
     Return element-wise absolut value.
 
@@ -339,25 +328,22 @@ def abs(a):
     -------
     tansor: Tensor
     """
-    c = a.copy_empty()
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = a.config.backend.absolute(a.A)
-    c.struct = a.struct
     return c
 
 
 def real(a):
     """ return real part of tensor. Do not change dtype of yast.Tensor """
-    c = a.copy_empty()
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = {t: a.config.backend.real(x) for t, x in a.A.items()}
-    c.struct = a.struct
     return c
 
 
 def imag(a):
     """ return imaginary part of tensor """
-    c = a.copy_empty()
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = {t: a.config.backend.imag(x) for t, x in a.A.items()}
-    c.struct = a.struct
     return c
 
 
@@ -373,9 +359,8 @@ def sqrt(a):
     -------
     tansor: Tensor
     """
-    c = a.copy_empty()
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = a.config.backend.sqrt(a.A)
-    c.struct = a.struct
     return c
 
 
@@ -394,12 +379,8 @@ def rsqrt(a, cutoff=0):
     -------
     tansor: Tensor
     """
-    c = a.copy_empty()
-    if not c.isdiag:
-        c.A = a.config.backend.rsqrt(a.A, cutoff=cutoff)
-    else:
-        c.A = a.config.backend.rsqrt_diag(a.A, cutoff=cutoff)
-    c.struct = a.struct
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c.A = a.config.backend.rsqrt_diag(a.A, cutoff=cutoff) if c.isdiag else a.config.backend.rsqrt(a.A, cutoff=cutoff)
     return c
 
 
@@ -418,12 +399,8 @@ def reciprocal(a, cutoff=0):
     -------
     tansor: Tensor
     """
-    c = a.copy_empty()
-    if not c.isdiag:
-        c.A = a.config.backend.reciprocal(a.A, cutoff=cutoff)
-    else:
-        c.A = a.config.backend.reciprocal_diag(a.A, cutoff=cutoff)
-    c.struct = a.struct
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c.A = a.config.backend.reciprocal_diag(a.A, cutoff=cutoff) if c.isdiag else a.config.backend.reciprocal(a.A, cutoff=cutoff)
     return c
 
 
@@ -441,12 +418,8 @@ def exp(a, step=1.):
     -------
     tansor: Tensor
     """
-    c = a.copy_empty()
-    if not c.isdiag:
-        c.A = a.config.backend.exp(a.A, step)
-    else:
-        c.A = a.config.backend.exp_diag(a.A, step)
-    c.struct = a.struct
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c.A = a.config.backend.exp_diag(a.A, step) if c.isdiag else a.config.backend.exp(a.A, step)
     return c
 
 

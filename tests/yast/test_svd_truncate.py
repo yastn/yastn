@@ -89,15 +89,15 @@ def test_svd_n_division():
     US1 = yast.tensordot(U1, S1, axes=(2, 0))
     USV1 = yast.tensordot(US1, V1, axes=(2, 0))
     assert a.norm_diff(USV1) < tol  # == 0.0
-    assert abs(U1.n - 3) < tol  # == 0.0
-    assert abs(V1.n - 0) < tol  # == 0.0
+    assert U1.struct.n == (3,)
+    assert V1.struct.n == (0,)
 
     U2, S2, V2 = yast.linalg.svd(a, axes=((0, 1), (2, 3)), nU=False, sU=1)
     US2 = yast.tensordot(U2, S2, axes=(2, 0))
     USV2 = yast.tensordot(US2, V2, axes=(2, 0))
     assert a.norm_diff(USV2) < tol  # == 0.0
-    assert U2.n == 0
-    assert V2.n == 3
+    assert U2.struct.n == (0,)
+    assert V2.struct.n == (3,)
 
 
 if __name__ == '__main__':

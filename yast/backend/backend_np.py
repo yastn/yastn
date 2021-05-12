@@ -65,8 +65,8 @@ def get_size(x):
     return x.size
 
 
-def diag_create(x):
-    return np.diag(x)
+def diag_create(x, p=0):
+    return np.diag(x, k=p)
 
 
 def diag_get(x):
@@ -87,6 +87,18 @@ def real(x):
 
 def imag(x):
     return np.imag(x)
+
+
+def floor(x):
+    return np.floor(x)
+
+
+def ceil(x):
+    return np.ceil(x)
+
+
+def log(x):
+    return np.log(x)
 
 
 def max_abs(x):
@@ -286,10 +298,13 @@ def svd(A, meta):
     return U, S, V
 
 
-def eigh(A, meta):
+def eigh(A, meta=None):
     S, U = {}, {}
-    for (ind, indS, indU) in meta:
-        S[indS], U[indU] = np.linalg.eigh(A[ind])
+    if meta is not None:
+        for (ind, indS, indU) in meta:
+            S[indS], U[indU] = np.linalg.eigh(A[ind])
+    else:
+        S, U = np.linalg.eigh(A)
     return S, U
 
 

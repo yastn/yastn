@@ -10,7 +10,8 @@ from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal
 from ._merging import _leg_struct_trivial, _leg_struct_truncation
 from ._krylov import krylov
 
-__all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'norm_diff', 'entropy', 'expmv']
+
+__all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'norm_diff', 'entropy', 'expmv', 'eigsh']
 
 
 def norm(a, p='fro'):
@@ -107,21 +108,19 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     if nU:
         meta = tuple((il + ir, il + ir, ir, ir + ir) for il, ir in zip(ul, ur))
-        n_l, n_r = a.n, 0 * a.n
+        n_l, n_r = a.struct.n, None
     else:
-        meta = tuple((il+ir, il+il, il, il+ir) for il, ir in zip(ul, ur))
-        n_l, n_r = 0*a.n, a.n
+        meta = tuple((il + ir, il + il, il, il + ir) for il, ir in zip(ul, ur))
+        n_l, n_r = None, a.struct.n
     U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l,
                     meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
     V = a.__class__(config=a.config, s=(-sU,) + ls_r.s, n=n_r,
                     meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
 
-    U.A, S.A, V.A = a.config.backend.svd_lowrank(
-        Am, meta, D_block, n_iter, k_fac)
+    U.A, S.A, V.A = a.config.backend.svd_lowrank(Am, meta, D_block, n_iter, k_fac)
 
-    ls_s = _leg_struct_truncation(
-        S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'svd')
+    ls_s = _leg_struct_truncation(S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'svd')
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
     _unmerge_matrix(V, ls_s, ls_r)
@@ -178,10 +177,10 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     if nU:
         meta = tuple((il + ir, il + ir, ir, ir + ir) for il, ir in zip(ul, ur))
-        n_l, n_r = a.n, 0 * a.n
+        n_l, n_r = a.struct.n, None
     else:
         meta = tuple((il+ir, il+il, il, il+ir) for il, ir in zip(ul, ur))
-        n_l, n_r = 0*a.n, a.n
+        n_l, n_r = None, a.struct.n
     U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l,
                     meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
@@ -228,12 +227,10 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     s_eff = (-sQ, sQ)
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
 
-    Qs = tuple(a.s[lg] for lg in axes[0]) + (sQ,)
-    Rs = (-sQ,) + tuple(a.s[lg] for lg in axes[1])
-    Q = a.__class__(config=a.config, s=Qs, n=a.n, meta_fusion=[
-                    a.meta_fusion[ii] for ii in lout_l] + [(1,)])
-    R = a.__class__(config=a.config, s=Rs, meta_fusion=[
-                    (1,)] + [a.meta_fusion[ii] for ii in lout_r])
+    Qs = tuple(a.struct.s[lg] for lg in axes[0]) + (sQ,)
+    Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in axes[1])
+    Q = a.__class__(config=a.config, s=Qs, n=a.struct.n, meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)])
+    R = a.__class__(config=a.config, s=Rs, meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r])
 
     meta = tuple((il + ir, il + ir, ir + ir) for il, ir in zip(ul, ur))
     Q.A, R.A = a.config.backend.qr(Am, meta)
@@ -287,7 +284,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf,
     axes = _unpack_axes(a, lout_l, lout_r)
     _test_all_axes(a, axes)
 
-    if np.any(a.n != 0):
+    if any(x != 0 for x in a.struct.n):
         raise YastError('Charge should be zero')
 
     s_eff = (-sU, sU)
@@ -297,7 +294,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf,
         raise YastError(
             'Something went wrong in matching the indices of the two tensors')
 
-    Us = tuple(a.s[lg] for lg in axes[0]) + (sU,)
+    Us = tuple(a.struct.s[lg] for lg in axes[0]) + (sU,)
     S = a.__class__(config=a.config, s=(-sU, sU), isdiag=True)
     U = a.__class__(config=a.config, s=Us, meta_fusion=[
                     a.meta_fusion[ii] for ii in lout_l] + [(1,)])
@@ -357,6 +354,7 @@ def entropy(a, axes=(0, 1), alpha=1):
 def expmv(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=0, algorithm='arnoldi'):
     # return expA(Av=Av, Bv=Bv, init=init, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=hermitian, bi_orth=bi_orth, NA=NA, cost_estim=cost_estim, algorithm=algorithm)
     # def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_estim, algorithm):
+    backend = init[0].config.backend
     if not hermitian and not Bv:
         raise YastError(
             'expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
@@ -365,8 +363,11 @@ def expmv(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian
         # n - cost of vector init
         # NA - cost of matrix Av
         # v_i - cost of exponatiation of size m(m-krylov dim)
-        T = expm(np.diag(np.random.rand(k_max-1), -1) + np.diag(
-            np.random.rand(k_max), 0) + np.diag(np.random.rand(k_max-1), 1))
+        T = backend.expm(
+            backend.diag_create( backend.randR((k_max-1)), -1) + \
+            backend.diag_create( backend.randR((k_max-1)), +1) + \
+            backend.diag_create( backend.randR((k_max)), 0)
+            )
         if cost_estim == 0:  # approach 0: defaoult based on matrix size
             # in units of n
             n = init[0].get_size()
@@ -380,7 +381,7 @@ def expmv(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian
             n = time.time() - start_time
 
             start_time = time.time()
-            expm(T)
+            backend.expm(T)
             v_i = time.time() - start_time
 
             start_time = time.time()
@@ -398,7 +399,7 @@ def expmv(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian
             tracemalloc.stop()
 
             tracemalloc.start()
-            expm(T)
+            backend.expm(T)
             v_i, _ = tracemalloc.get_traced_memory()
             tracemalloc.stop()
 
@@ -419,7 +420,7 @@ def expmv(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian
     ireject = 0
     reject = 0
     happy = 0
-    sgn = np.sign(dt).real*1j if dt.real == 0. else np.sign(dt).real*1
+    sgn = (dt/abs(dt)).real*1j if dt.real == 0. else (dt/abs(dt)).real*1
     tnow = 0
     tout = abs(dt)
     j = 0
@@ -431,7 +432,7 @@ def expmv(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian
 
     # Initial condition
     w = init
-    oldm, oldtau, omega = np.nan, np.nan, np.nan
+    oldm, oldtau, omega = None, None, None
     orderold, kestold = True, True
 
     # Iterate until we reach the final t
@@ -449,7 +450,7 @@ def expmv(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian
 
         # Estimate order
         if m == oldm and tau != oldtau and ireject > 0:
-            order = max([1., np.log(omega/oldomega)/np.log(tau/oldtau)])
+            order = max([1., backend.log(omega/oldomega)/backend.log(tau/oldtau)])
             orderold = False
         elif orderold or ireject == 0:
             orderold = True
@@ -480,14 +481,14 @@ def expmv(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian
         else:
             # Determine optimal tau and m
             tauopt = tau*(omega/gamma)**(-1./order)
-            mopt = max([1., np.ceil(j+np.log(omega/gamma)/np.log(kest))])
+            mopt = max([1., backend.ceil(j+backend.log(omega/gamma)/backend.log(kest))])
 
             # evaluate Cost functions
             Ctau = (m * NA + 3. * m * n + (m/mmax)**2*v_i * (10. + 3. * (m - 1.))
-                    * (m + 1.) ** 3.) * np.ceil((tout - tnow) / tauopt)
+                    * (m + 1.) ** 3.) * backend.ceil((tout - tnow) / tauopt)
 
             Ck = (mopt * NA + 3. * mopt * n + (mopt/mmax)**2*v_i * (10. + 3. * (mopt - 1.))
-                  * (mopt + 1.) ** 3) * np.ceil((tout - tnow) / tau)
+                  * (mopt + 1.) ** 3) * backend.ceil((tout - tnow) / tau)
             if Ctau < Ck:
                 taunew, mnew = tauopt, m
             else:
@@ -507,7 +508,7 @@ def expmv(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian
         # Another safety factors
         tau = min([tout - tnow, max([.2 * tau, min([taunew, 2. * tau])])])
         m = int(
-            max([1, min([mmax, max([np.floor(.75 * m), min([mnew, np.ceil(1.3333 * m)])])])]))
+            max([1, min([mmax, max([backend.floor(.75 * m), min([mnew, backend.ceil(1.3333 * m)])])])]))
 
     if abs(tnow/tout) < 1.:
         raise YastError('eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = '+omega /
@@ -515,7 +516,7 @@ def expmv(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian
     return (w[0], step, j, tnow,)
 
 
-def eigs_anm(Av, init, Bv=None, hermitian=True, k='all', sigma=None, ncv=5, which=None, tol=1e-14, bi_orth=True, return_eigenvectors=True, algorithm='arnoldi'):
+def eigs(Av, init, Bv=None, hermitian=True, k='all', sigma=None, ncv=5, which=None, tol=1e-14, bi_orth=True, return_eigenvectors=True, algorithm='arnoldi'):
     r"""
     Av, Bv: function handlers
         Bv: default = None
@@ -563,16 +564,9 @@ def eigs_anm(Av, init, Bv=None, hermitian=True, k='all', sigma=None, ncv=5, whic
         return val, Y, good
 
 
-def eigh_anm(Av, init, tol=1e-14, k=5, algorithm='arnoldi'):
+def eigsh(Av, init, tol=1e-14, k=5, algorithm='arnoldi'):
     norm = init[0].norm()
     init = [(1. / it.norm())*it for it in init]
     val, Y, good = krylov(init, Av, None, tol, 'all', algorithm, True, k)
     return val, [norm*Y[it] for it in range(len(Y))], good
 
-
-def eig_anm(Av, init, Bv=None, tol=1e-14, k=5, bi_orth=False, algorithm='lanczos'):
-    norm = init[0].norm()
-    init = [(1. / it.norm())*it for it in init]
-    val, Y, good = krylov(init, Av, Bv, tol, 'all',
-                          algorithm, False, k, bi_orth)
-    return val, [norm*Y[it] for it in range(len(Y))], good

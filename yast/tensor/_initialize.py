@@ -4,12 +4,12 @@ from itertools import chain, repeat, accumulate, product
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _flatten, _tarray, YastError
 
-__all__ = ['match_legs', 'block', 'matching_tensor']
+__all__ = ['match_legs', 'block']
 
 
 def copy_empty(a):
     """ Return a copy of the tensor, but without copying blocks. """
-    return a.__class__(config=a.config, s=a.s, n=a.n, isdiag=a.isdiag, meta_fusion=a.meta_fusion)
+    return a.__class__(config=a.config, s=a.struct.s, n=a.struct.n, isdiag=a.isdiag, meta_fusion=a.meta_fusion)
 
 
 def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
@@ -88,7 +88,9 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
         comb_t = list(_flatten(comb_t))
         comb_t = np.array(comb_t, dtype=int).reshape(lcomb_t, a.nlegs, a.config.sym.NSYM)
         comb_D = np.array(comb_D, dtype=int).reshape(lcomb_t, a.nlegs)
-        ind = np.all(a.config.sym.fuse(comb_t, a.s, 1) == a.n, axis=1)
+        sa = np.array(a.struct.s, dtype=int)
+        na = np.array(a.struct.n, dtype=int)
+        ind = np.all(a.config.sym.fuse(comb_t, sa, 1) == na, axis=1)
         tset = comb_t[ind]
         Dset = comb_D[ind]
 
@@ -151,7 +153,9 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None, device=None):
         raise YastError('Wrong size of Ds.')
 
     ats = np.array(ts, dtype=int).reshape(1, a.nlegs, a.config.sym.NSYM)
-    if not np.all(a.config.sym.fuse(ats, a.s, 1) == a.n):
+    sa = np.array(a.struct.s, dtype=int)
+    na = np.array(a.struct.n, dtype=int)
+    if not np.all(a.config.sym.fuse(ats, sa, 1) == na):
         raise YastError('Charges ts are not consistent with the symmetry rules: t @ s - n != 0')
 
     if isinstance(val, str) and Ds is None:  # attempt to read Ds from existing blocks.
@@ -230,13 +234,10 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
             tdn = te.get_leg_structure(nn, native=True)
             t.append(tuple(tdn.keys()))
             D.append(tuple(tdn.values()))
-            s.append(te.s[nn] * (2 * cc - 1))
+            s.append(te.struct.s[nn] * (2 * cc - 1))
     a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, meta_fusion=lf)
     a.fill_tensor(t=t, D=D, val=val)
     return a
-
-
-matching_tensor = match_legs
 
 
 def block(tensors, common_legs=None):
@@ -272,7 +273,7 @@ def block(tensors, common_legs=None):
     for ind, tn in tensors.items():
         ind, = _clear_axes(ind)
         if tn.nlegs != tn0.nlegs or tn.meta_fusion != tn0.meta_fusion or\
-           not np.all(tn.s == tn0.s) or not np.all(tn.n == tn0.n) or\
+           tn.struct.s != tn0.struct.s or tn.struct.n != tn0.struct.n or\
            tn.isdiag != tn0.isdiag:
             raise YastError('Ndims, signatures, total charges or fusion trees of blocked tensors are inconsistent.')
 
@@ -310,7 +311,7 @@ def block(tensors, common_legs=None):
             meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.nlegs))))
     meta_new = tuple((ts, Ds) for ts, Ds in meta_new.items())
 
-    c = tn0.__class__(config=a.config, s=a.s, isdiag=a.isdiag, n=a.n, meta_fusion=tn0.meta_fusion)
+    c = tn0.__class__(config=a.config, s=a.struct.s, isdiag=a.isdiag, n=a.struct.n, meta_fusion=tn0.meta_fusion)
     c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, c.config.device)
     c.update_struct()
     return c

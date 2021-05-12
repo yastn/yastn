@@ -44,19 +44,18 @@ def tensordot(a, b, axes, conj=(0, 0)):
     naxes_b = tuple(np.array(x, dtype=np.intp) for x in axes_b)
 
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
-    if not np.all(a.s[naxes_a[1]] == (-conja * conjb) * b.s[naxes_b[0]]):
+    mconj = (-conja * conjb)
+    if not all(a.struct.s[i1] == mconj * b.struct.s[i2] for i1, i2 in zip(axes_a[1], axes_b[0])):
         if a.isdiag:  # if tensor is diagonal, than freely changes the signature by a factor of -1
-            a.s *= -1
-            a.struct = a.struct._replace(s=tuple(a.s))
+            a.flip_signature(inplace=True)
         elif b.isdiag:
-            b.s *= -1
-            b.struct = b.struct._replace(s=tuple(b.s))
+            b.flip_signature(inplace=True)
         elif _check["signatures_match"]:
             raise YastError('Signs do not match')
 
-    c_n = np.vstack([a.n, b.n]).reshape(1, 2, -1)
+    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape(1, 2, a.config.sym.NSYM)
     c_s = np.array([conja, conjb], dtype=int)
-    c_n = a.config.sym.fuse(c_n, c_s, 1)
+    c_n = a.config.sym.fuse(c_n, c_s, 1)[0]
 
     ind_a, ind_b = _common_rows(_tarray(a)[:, naxes_a[1], :], _tarray(b)[:, naxes_b[0], :])
     s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
@@ -71,7 +70,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
         pdb.set_trace()
         raise YastError('Something went wrong in matching the indices of the two tensors')
 
-    c_s = np.hstack([conja * a.s[naxes_a[0]], conjb * b.s[naxes_b[1]]])
+    c_s = tuple(conja * a.struct.s[i1] for i1 in axes_a[0]) + tuple(conjb * b.struct.s[i2] for i2 in axes_b[1])
     c_meta_fusion = [a.meta_fusion[ii] for ii in la_out] + [b.meta_fusion[ii] for ii in lb_out]
     c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion)
 
@@ -99,10 +98,12 @@ def vdot(a, b, conj=(1, 0)):
     _test_configs_match(a, b)
     _test_fusions_match(a, b)
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
-    if not np.all(a.s == (- conja * conjb) * b.s):
+
+    if not ((conja * conjb == -1 and a.struct.s == b.struct.s)
+            or (conja * conjb == 1 and all(s1 == -s2 for s1, s2 in zip(a.struct.s, b.struct.s)))):
         raise YastError('Signs do not match')
 
-    c_n = np.vstack([a.n, b.n]).reshape(1, 2, -1)
+    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape(1, 2, a.config.sym.NSYM)
     c_s = np.array([conja, conjb], dtype=int)
     c_n = a.config.sym.fuse(c_n, c_s, 1)
 
@@ -140,8 +141,12 @@ def trace(a, axes=(0, 1)):
     ain2 = np.array(in2, dtype=np.intp)
     aout = np.array(out, dtype=np.intp)
 
-    if not np.all(a.s[ain1] == -a.s[ain2]):
+    if not all(a.struct.s[i1] == -a.struct.s[i2] for i1, i2 in zip(in1, in2)):
         raise YastError('Signs do not match')
+
+    c_s = tuple(a.struct.s[i3] for i3 in out)
+    c_meta_fusion=tuple(a.meta_fusion[ii] for ii in lout)
+    c = a.__class__(config=a.config, s=c_s, n=a.struct.n, meta_fusion=c_meta_fusion)
 
     tset, Dset = _tarray(a), _Darray(a)
     lt = len(tset)
@@ -155,12 +160,9 @@ def trace(a, axes=(0, 1)):
     pD2 = np.prod(D2, axis=1).reshape(lt, 1)
     ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
     Drsh = np.hstack([pD1, pD2, D3])
-
     if not np.all(D1[ind] == D2[ind]):
         raise YastError('Not all bond dimensions of the traced legs match')
-
     meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n])) for n in ind]
-    c = a.__class__(config=a.config, s=a.s[aout], n=a.n, meta_fusion=tuple(a.meta_fusion[ii] for ii in lout))
     c.A = c.config.backend.trace(a.A, order, meta)
     c.update_struct()
     return c
