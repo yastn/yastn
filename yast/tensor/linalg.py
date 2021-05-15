@@ -9,7 +9,7 @@ from ._auxliary import YastError, _check, _test_tensors_match, _test_all_axes
 from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal
 from ._merging import _leg_struct_trivial, _leg_struct_truncation
 from ._krylov import krylov
-
+from ._contractions import vdot
 
 __all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'norm_diff', 'entropy', 'expmv', 'eigsh']
 
@@ -351,164 +351,128 @@ def entropy(a, axes=(0, 1), alpha=1):
 
 # Krylov based methods, handled by anonymous function decribing action of matrix on a vector
 
-def expmv(Av, init, Bv=None, dt=1, eigs_tol=1e-14, exp_tol=1e-14, k=5, hermitian=False, bi_orth=True, NA=None, cost_estim=0, algorithm='arnoldi'):
-    # return expA(Av=Av, Bv=Bv, init=init, dt=dt, eigs_tol=eigs_tol, exp_tol=exp_tol, k=k, hermitian=hermitian, bi_orth=bi_orth, NA=NA, cost_estim=cost_estim, algorithm=algorithm)
-    # def expA(Av, init, Bv, dt, eigs_tol, exp_tol, k, hermitian, bi_orth, NA, cost_estim, algorithm):
-    backend = init[0].config.backend
-    if not hermitian and not Bv:
-        raise YastError(
-            'expA: For non-hermitian case provide Av and Bv. In addition you can start with two')
-    k_max = min([20, init[0].get_size()])
-    if not NA:
-        # n - cost of vector init
-        # NA - cost of matrix Av
-        # v_i - cost of exponatiation of size m(m-krylov dim)
-        T = backend.expm(
-            backend.diag_create( backend.randR((k_max-1)), -1) + \
-            backend.diag_create( backend.randR((k_max-1)), +1) + \
-            backend.diag_create( backend.randR((k_max)), 0)
-            )
-        if cost_estim == 0:  # approach 0: defaoult based on matrix size
-            # in units of n
-            n = init[0].get_size()
-            NA = round(4.*n**(0.5), 2)
-            v_i = k_max**2/n
-            n = 1.
-        elif cost_estim == 1:  # approach 1: based on time usage. normalized to time of saving copy of the initial vector. Don't make measures to small
-            # in units of v_i
-            start_time = time.time()
-            init[0].copy()
-            n = time.time() - start_time
+def expmv(A, v, t=1, tol=1e-13, ncv=5, hermitian=False):
+    """ Calculate exp(t*A)*v, where v is a yast tensor, and A is linear operator acting on v.
+    """
+    backend = v.config.backend
 
-            start_time = time.time()
-            backend.expm(T)
-            v_i = time.time() - start_time
-
-            start_time = time.time()
-            Av(init[0]).copy()
-            NA = (time.time() - start_time)/v_i
-
-            n *= (1./v_i)
-            NA *= (1./v_i)
-            v_i = 1.
-        elif cost_estim == 2:  # approach 2: based on memory usage
-            # in units of v_i
-            tracemalloc.start()
-            init[0].copy()
-            n, _ = tracemalloc.get_traced_memory()
-            tracemalloc.stop()
-
-            tracemalloc.start()
-            backend.expm(T)
-            v_i, _ = tracemalloc.get_traced_memory()
-            tracemalloc.stop()
-
-            tracemalloc.start()
-            Av(init[0])
-            NA, _ = tracemalloc.get_traced_memory()
-            tracemalloc.stop()
-
-            n *= (1./v_i)
-            NA *= (1./v_i)
-            v_i = 1.
     # Krylov parameters
-    mmax = k_max
-    m = max([1, k])
+    ncv_max = min([20, v.get_size()])
+    ncv = max(1, ncv)
 
     # Initialize variables
-    step = 0
     ireject = 0
-    reject = 0
-    happy = 0
-    sgn = (dt/abs(dt)).real*1j if dt.real == 0. else (dt/abs(dt)).real*1
-    tnow = 0
-    tout = abs(dt)
-    j = 0
-    tau = abs(dt)
+    happy = False
 
-    # Set safety factors
-    gamma = 0.8
-    delta = 1.2
+    t_now = 0
+    t_out = abs(t)
+    sgn = t / t_out if t_out > 0 else 0
+    tau = abs(t_out)  # first quess for time-step
 
-    # Initial condition
-    w = init
+    gamma = 0.6  # Safety factors
+    delta = 1.4
+
+    j = 0  # size of krylov space
+    w = v
     oldm, oldtau, omega = None, None, None
     orderold, kestold = True, True
 
-    # Iterate until we reach the final t
-    while tnow < tout:
-        # Compute the exponential of the augmented matrix
-        err, evec, good = krylov(
-            w, Av, Bv, eigs_tol, None, algorithm, hermitian, m, bi_orth, tau=(sgn, tau))
+    while t_now < t_out:
+        if j == 0:
+            H = {}
+            beta = w.norm()
+            if beta == 0:  # multiply with a zero vector; result is zero # TODO handle this
+                tau = t_out - t_now
+                break
+            V = [w / beta]  # first vector in Krylov basis
+        while j < m:
+            w = A(V[-1])
+            for i in range(j + 1):
+                H[(i, j)] = vdot(V[i], w)
+                w = w.apxb(V[i], x=-H[(i, j)])
+            ss = w.norm()
+            if ss < tol:
+                happy = True
+                tau = t_out - t_now
+                break
+            H[(j + 1, j)] = ss
+            V.append(w / ss)
+            j += 1
 
-        happy = good[1]
-        j = good[2]
+        J = j
+        H[(0, j)] = 1
 
-        # Error per unit step
-        oldomega = omega
-        omega = (tout/tau)*(err/exp_tol)
 
-        # Estimate order
-        if m == oldm and tau != oldtau and ireject > 0:
-            order = max([1., backend.log(omega/oldomega)/backend.log(tau/oldtau)])
-            orderold = False
-        elif orderold or ireject == 0:
-            orderold = True
-            order = j*.25
+    err, evec, good = krylov(A, tol, ncv, hermitian)
+
+    happy = good[1]
+    j = good[2]
+
+    # Error per unit step
+    oldomega = omega
+    omega = (tout/tau)*(err/exp_tol)
+
+    # Estimate order
+    if m == oldm and tau != oldtau and ireject > 0:
+        order = max([1., backend.log(omega/oldomega)/backend.log(tau/oldtau)])
+        orderold = False
+    elif orderold or ireject == 0:
+        orderold = True
+        order = j*.25
+    else:
+        orderold = True
+
+    # Estimate k
+    if m != oldm and tau == oldtau and ireject > 0:
+        kest = max([1.1, (omega/oldomega)**(1./(oldm-m))]
+                    ) if omega > 0 else 1.1
+        kestold = False
+    elif kestold or ireject == 0:
+        kestold = True
+        kest = 2
+    else:
+        kestold = True
+
+    # This if statement is the main difference between fixed and variable m
+    oldtau, oldm = tau, m
+    if happy == 1:
+        # Happy breakdown; wrap up
+        omega = 0
+        taunew, mnew = tau, m
+    elif j == mmax and omega > delta:
+        # Krylov subspace to small and stepsize to large
+        taunew, mnew = tau*(omega/gamma)**(-1./order), j
+    else:
+        # Determine optimal tau and m
+        tauopt = tau*(omega/gamma)**(-1./order)
+        mopt = max([1., backend.ceil(j+backend.log(omega/gamma)/backend.log(kest))])
+
+        # evaluate Cost functions
+        Ctau = (m * NA + 3. * m * n + (m/mmax)**2*v_i * (10. + 3. * (m - 1.))
+                * (m + 1.) ** 3.) * backend.ceil((tout - tnow) / tauopt)
+
+        Ck = (mopt * NA + 3. * mopt * n + (mopt/mmax)**2*v_i * (10. + 3. * (mopt - 1.))
+                * (mopt + 1.) ** 3) * backend.ceil((tout - tnow) / tau)
+        if Ctau < Ck:
+            taunew, mnew = tauopt, m
         else:
-            orderold = True
+            taunew, mnew = tau, mopt
 
-        # Estimate k
-        if m != oldm and tau == oldtau and ireject > 0:
-            kest = max([1.1, (omega/oldomega)**(1./(oldm-m))]
-                       ) if omega > 0 else 1.1
-            kestold = False
-        elif kestold or ireject == 0:
-            kestold = True
-            kest = 2
-        else:
-            kestold = True
+    # Check error against target
+    if omega <= delta:  # use this one
+        reject += ireject
+        step += 1
+        w = evec
+        # update time
+        tnow += tau
+        ireject = 0
+    else:  # try again
+        ireject += 1
 
-        # This if statement is the main difference between fixed and variable m
-        oldtau, oldm = tau, m
-        if happy == 1:
-            # Happy breakdown; wrap up
-            omega = 0
-            taunew, mnew = tau, m
-        elif j == mmax and omega > delta:
-            # Krylov subspace to small and stepsize to large
-            taunew, mnew = tau*(omega/gamma)**(-1./order), j
-        else:
-            # Determine optimal tau and m
-            tauopt = tau*(omega/gamma)**(-1./order)
-            mopt = max([1., backend.ceil(j+backend.log(omega/gamma)/backend.log(kest))])
-
-            # evaluate Cost functions
-            Ctau = (m * NA + 3. * m * n + (m/mmax)**2*v_i * (10. + 3. * (m - 1.))
-                    * (m + 1.) ** 3.) * backend.ceil((tout - tnow) / tauopt)
-
-            Ck = (mopt * NA + 3. * mopt * n + (mopt/mmax)**2*v_i * (10. + 3. * (mopt - 1.))
-                  * (mopt + 1.) ** 3) * backend.ceil((tout - tnow) / tau)
-            if Ctau < Ck:
-                taunew, mnew = tauopt, m
-            else:
-                taunew, mnew = tau, mopt
-
-        # Check error against target
-        if omega <= delta:  # use this one
-            reject += ireject
-            step += 1
-            w = evec
-            # update time
-            tnow += tau
-            ireject = 0
-        else:  # try again
-            ireject += 1
-
-        # Another safety factors
-        tau = min([tout - tnow, max([.2 * tau, min([taunew, 2. * tau])])])
-        m = int(
-            max([1, min([mmax, max([backend.floor(.75 * m), min([mnew, backend.ceil(1.3333 * m)])])])]))
+    # Another safety factors
+    tau = min([tout - tnow, max([.2 * tau, min([taunew, 2. * tau])])])
+    m = int(
+        max([1, min([mmax, max([backend.floor(.75 * m), min([mnew, backend.ceil(1.3333 * m)])])])]))
 
     if abs(tnow/tout) < 1.:
         raise YastError('eigs/expA: Failed to approximate matrix exponent with given parameters.\nLast update of omega/delta = '+omega /

@@ -4,7 +4,7 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, YastError, _check
 from ..sym import sym_none
 
-__all__ = ['export_to_dict', 'compress_to_1d']
+__all__ = ['export_to_dict', 'compress_to_1d', 'leg_structures_for_dense']
 
 
 def export_to_dict(a):
@@ -221,6 +221,72 @@ def __getitem__(a, key):
 #    output tensors     #
 #########################
 
+def leg_structures_for_dense(tensors=[], native=False, leg_structures=None):
+    r"""
+    Combine and output charges and bond dimensions from legs of provided tensors.
+    Auxliary function to to_dense and to_numpy, to create dense tensors with consistent dimenstions
+
+    Rises expection if there are some inconsistencies in bond dimensions.
+    
+    Parameters
+    ----------
+    tensors : list
+        [tensor, {tensor_leg: targeted leg}]
+        If dict not present, assumes {n: n for n in tensor.nlegs}
+
+    native: bool
+        output native tensor (neglecting meta fusions).
+    """
+    lss = {}
+    itensors = iter(tensors)
+    a = next(itensors, None)
+    while a is not None:
+        b = next(itensors, None)
+        if isinstance(b, dict):
+            for la, lo in b.items():
+                if lo in lss:
+                    lss[lo].append(a.get_leg_structure(la, native=native))
+                else:
+                    lss[lo] = [a.get_leg_structure(la, native=native)]
+            a = next(itensors, None)
+        else:
+            for n in range(a.get_ndim(native=native)):
+                if n in lss:
+                    lss[n].append(a.get_leg_structure(n, native=native))
+                else:
+                    lss[n] = [a.get_leg_structure(n, native=native)]
+            a = b
+
+    if leg_structures is not None:
+        for n, ls in leg_structures.items():
+            if n in lss:
+                lss[n].append(ls)
+            else:
+                lss[n] = [ls]
+
+    for lo in lss:
+        lss[lo] = leg_structure_union(*lss[lo])
+    return lss
+
+
+def leg_structure_union(*args):
+    """ 
+    Makes a union of leg structures {t: D} specified in args. 
+
+    Raise error if there are inconsistencies.
+    """
+    ls_out = {}
+    len_t = -1
+    for tD in args:
+        for t, D in tD.items():
+            if (t in ls_out) and ls_out[t] != D:
+                raise YastError('Bond dimensions for charge %s are inconsistent.' % str(t))
+            ls_out[t] = D
+            if len(t) != len_t and len_t >= 0:
+                raise YastError('Inconsistent charge structure. Likely mixing merged and native legs.')
+            len_t = len(t)
+    return ls_out
+
 
 def to_dense(a, leg_structures=None, native=False):
     r"""
@@ -248,10 +314,7 @@ def to_dense(a, leg_structures=None, native=False):
         for n, tDn in leg_structures.items():
             if (n < 0) or (n >= nlegs):
                 raise YastError('Specified leg out of ndim')
-            for tn, Dn in tDn.items():
-                if (tn in tD[n]) and tD[n][tn] != Dn:
-                    raise YastError('Specified bond dimensions inconsistent with tensor.')
-                tD[n][tn] = Dn
+            tD[n] = leg_structure_union(tD[n], tDn)
     Dtot = [sum(tDn.values()) for tDn in tD]
     for tDn in tD:
         tns = sorted(tDn.keys())
