@@ -238,6 +238,7 @@ def decompress_from_1d(r1d, config, meta):
 def _tD_from_legs(legs):
     r""" Translates input of legs into charges t and block dimensions D """
     tlegs, Dlegs, slegs, lflegs = [], [], [], []
+    flip_str = ['flip', 'flip_s', 'f']
     for leg in legs:
         leg = [leg] if isinstance(leg, dict) else leg
         tns, lgs, fps, lss = [], [], [], []
@@ -251,9 +252,9 @@ def _tD_from_legs(legs):
                     raise YastError('Specifying leg number is required')
                 lgs.append(a)
                 a = next(ileg, None)
-                fps.append(-1 if isinstance(a, str) and (a == 'flip' or a == 'f') else 1)
+                fps.append(-1 if isinstance(a, str) and a in flip_str else 1)
                 if isinstance(a, int):
-                    raise YastError('Two leg numbers after each not understood.')
+                    raise YastError('Two leg numbers one after another not understood.')
                 if isinstance(a, str):
                     a = next(ileg, None)
             if isinstance(a, dict):

@@ -11,9 +11,9 @@ __all__ = ['arnoldi', 'lanczos', 'krylov']
 
 # leader
 
-def krylov(init, Av, Bv, tol, k, algorithm, hermitian, ncv=5, bi_orth=False, sigma=None, which=None, return_eigenvectors=True, tau=False):
-    if algorithm == 'lanczos':
-        T, Q, P, good = lanczos(init, Av, Bv, tol, ncv, hermitian, bi_orth)
+def krylov(Av, init, tol, ncv=5, sigma=None, which=None, return_eigenvectors=True, tau=False):
+    if hermitian:
+        T, Q, P, good = lanczos_her(init, Av, tol, k)
     else:
         T, Q, P, good = arnoldi(init, Av, tol, ncv)
     if not tau:
@@ -47,14 +47,6 @@ def arnoldi(init, Av, tol, k):
     H = H[:(jt+1), :(jt+1)]
     Q = Q[:(jt+1)]
     return H, Q, None, (beta, happy, len(Q))
-
-
-# Lanczos method
-def lanczos(init, Av, Bv, tol, k, hermitian, bi_orth):
-    # Lanczos method
-    if hermitian:
-        return lanczos_her(init[0], Av, tol, k)
-
 
 
 def lanczos_her(init, Av, tol, k):
