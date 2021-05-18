@@ -2,13 +2,10 @@
 
 import numpy as np
 from scipy.linalg import expm as expm
-import time
-import tracemalloc
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys
 from ._auxliary import YastError, _check, _test_tensors_match, _test_all_axes
 from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal
 from ._merging import _leg_struct_trivial, _leg_struct_truncation
-from ._krylov import krylov
 from ._contractions import vdot
 
 __all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'norm_diff', 'entropy', 'expmv', 'eigs']
