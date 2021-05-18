@@ -79,6 +79,10 @@ def diag_diag(x):
     return np.diag(np.diag(x))
 
 
+def get_device(x):
+    return 'cpu'
+
+
 def count_greater(x, cutoff):
     return np.sum(x > cutoff).item()
 
@@ -178,19 +182,19 @@ def ones(D, dtype='float64', **kwargs):
     return np.ones(D, dtype=DTYPE[dtype])
 
 
-def randR(D, dtype='float64', **kwargs):
-    return 2 * np.random.random_sample(D) - 1
+def randR(D, **kwargs):
+    return 2 * np.random.random_sample(D).astype(DTYPE['float64']) - 1
 
 
-def randC(D, dtype='float64', **kwargs):
-    return 2 * np.random.random_sample(D) - 1 + 1j * (2 * np.random.random_sample(D) - 1)
+def randC(D, **kwargs):
+    return 2 * (np.random.random_sample(D) + 1j * np.random.random_sample(D)).astype(DTYPE['complex128']) - (1 + 1j)
 
 
 def to_tensor(val, Ds=None, dtype='float64', **kwargs):
     try:
         T = np.array(val, dtype=DTYPE[dtype])
     except TypeError:
-        T = np.array(val, dtype=DTYPE[dtype])
+        T = np.array(val, dtype=DTYPE['complex128'])
     return T if Ds is None else T.reshape(Ds)
 
 
@@ -548,7 +552,7 @@ def unmerge_one_leg(A, axis, meta):
     for (told, tnew, Dsl, Dnew) in meta:
         slc = [slice(None)] * A[told].ndim
         slc[axis] = slice(*Dsl)
-        Anew[tnew] = np.reshape(A[told][tuple(slc)], Dnew).copy()  # TODO check this copy()
+        Anew[tnew] = np.reshape(A[told][tuple(slc)], Dnew).copy()  # TODO check if this copy() is neccesary
     return Anew
 
 

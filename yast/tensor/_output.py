@@ -224,18 +224,18 @@ def __getitem__(a, key):
 def leg_structures_for_dense(tensors=[], native=False, leg_structures=None):
     r"""
     Combine and output charges and bond dimensions from legs of provided tensors.
-    Auxliary function to to_dense and to_numpy, to create dense tensors with consistent dimenstions
+    Auxliary function to ```tensor.to_dense``` and ```tensor.to_numpy```, to create dense tensors with consistent dimenstions (charge sectors)
 
     Rises expection if there are some inconsistencies in bond dimensions.
     
     Parameters
     ----------
     tensors : list
-        [tensor, {tensor_leg: targeted leg}]
-        If dict not present, assumes {n: n for n in tensor.nlegs}
+        [reference_tensor, {leg of reference_tensor: leg of tensor to be made dense}]
+        If dict not present, assumes {n: n for n in reference_tensor.nlegs}
 
     native: bool
-        output native tensor (neglecting meta fusions).
+        output data for native tensor (neglecting meta fusions).
     """
     lss = {}
     itensors = iter(tensors)

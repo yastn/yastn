@@ -101,7 +101,7 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
     tD = [a.get_leg_structure(n, native=True) for n in range(a.nlegs)]  # here checks the consistency of bond dimensions
 
 
-def set_block(a, ts=(), Ds=None, val='zeros', dtype=None, device=None):
+def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
     """
     Add new block to tensor or change the existing one.
 
@@ -127,16 +127,10 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None, device=None):
 
     dtype : str
         desired dtype, overrides default_dtype specified in config of tensor `a`
-
-    device : str
-        device on which the block should be initialized. Currently, all blocks
-        of Tensor must reside on the same device. This may change in future.
     """
     if not dtype:
-        assert hasattr(a.config,'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype= a.config.default_dtype
-    if device:
-        assert a.device==device, "selected device does not match the device of the Tensor"
+        assert hasattr(a.config, 'default_dtype'), "Either dtype or valid config has to be provided"
+        dtype = a.config.default_dtype
 
     if isinstance(Ds, int):
         Ds = (Ds,)
@@ -168,39 +162,32 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None, device=None):
                 raise YastError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
         Ds = tuple(Ds)
 
-    _set_block(a, ts, Ds, val, dtype=dtype, device=device)
+    _set_block(a, ts=ts, Ds=Ds, val=val, dtype=dtype)
 
     a.update_struct()
     tD = [a.get_leg_structure(n, native=True) for n in range(a.nlegs)]  # here checks the consistency of bond dimensions
 
 
-def _set_block(a, ts, Ds, val, dtype=None, device=None):
-    if not dtype:
-        assert hasattr(a.config,'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype= a.config.default_dtype
-    if device:
-        assert a.device==device, "selected device does not match the device of the Tensor"
-    else:
-        device= a.device
-
+def _set_block(a, ts, Ds, val, dtype):
+    """ Filling in block according to input. """
     if isinstance(val, str):
         if val == 'zeros':
-            a.A[ts] = a.config.backend.zeros(Ds, dtype=dtype, device=device)
+            a.A[ts] = a.config.backend.zeros(Ds, dtype=dtype, device=a.config.device)
         elif val == 'randR' or val == 'rand':
-            a.A[ts] = a.config.backend.randR(Ds, dtype=dtype, device=device)
+            a.A[ts] = a.config.backend.randR(Ds, device=a.config.device)
         elif val == 'randC':
-            a.A[ts] = a.config.backend.randC(Ds, dtype=dtype, device=device)
+            a.A[ts] = a.config.backend.randC(Ds, device=a.config.device)
         elif val == 'ones':
-            a.A[ts] = a.config.backend.ones(Ds, dtype=dtype, device=device)
+            a.A[ts] = a.config.backend.ones(Ds, dtype=dtype, device=a.config.device)
 
         if a.isdiag:
             a.A[ts] = a.config.backend.diag_get(a.A[ts])
             a.A[ts] = a.config.backend.diag_create(a.A[ts])
     else:
         if a.isdiag and val.ndim == 1 and np.prod(Ds) == (val.size**2):
-            a.A[ts] = a.config.backend.to_tensor(np.diag(val), Ds, device=device)
+            a.A[ts] = a.config.backend.to_tensor(np.diag(val), Ds, device=a.config.device)
         else:
-            a.A[ts] = a.config.backend.to_tensor(val, Ds=Ds, device=device)
+            a.A[ts] = a.config.backend.to_tensor(val, Ds=Ds, device=a.config.device)
 
 
 

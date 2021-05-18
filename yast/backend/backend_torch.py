@@ -67,15 +67,19 @@ def get_size(x):
 
 
 def diag_create(x, p=0):
-    return torch.diag(x, diagonal=p)  # TODO: PROBLEM WITH COMPLEX NUMBERS
+    return torch.diag(x, diagonal=p)
 
 
 def diag_get(x):
-    return torch.diag(x)  # TODO: PROBLEM WITH COMPLEX NUMBERS
+    return torch.diag(x)
 
 
 def diag_diag(x):
-    return torch.diag(torch.diag(x))  # TODO: PROBLEM WITH COMPLEX NUMBERS
+    return torch.diag(torch.diag(x))
+
+
+def get_device(x):
+    return x.device.type
 
 
 @torch.no_grad()
@@ -178,19 +182,19 @@ def ones(D, dtype='float64', device='cpu'):
     return torch.ones(D, dtype=DTYPE[dtype], device=device)
 
 
-def randR(D, dtype='float64', device='cpu'):
-    return 2 * torch.rand(D, dtype=DTYPE[dtype], device=device) - 1
+def randR(D, device='cpu'):
+    return 2 * torch.rand(D, dtype=DTYPE['float64'], device=device) - 1
 
 
-def randC(D, dtype='float64', device='cpu'):
-    return 2 * torch.rand(D, dtype=DTYPE['complex128'], device=device) - 1
+def randC(D, device='cpu'):
+    return 2 * torch.rand(D, dtype=DTYPE['complex128'], device=device) - (1 + 1j)
 
 
 def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
     try:
         T = torch.as_tensor(val, dtype=DTYPE[dtype], device=device)
     except TypeError:
-        T = torch.as_tensor(val, dtype=DTYPE[dtype], device=device)
+        T = torch.as_tensor(val, dtype=DTYPE['complex128'], device=device)
     return T if Ds is None else T.reshape(Ds).contiguous()
 
 
@@ -325,9 +329,9 @@ def eigh(A, meta=None, order_by_magnitude=False):
                 S[ind], U[ind] = SYMEIG.apply(A[ind], reg)
         else:
             for (ind, indS, indU) in meta:
-                S[indS], U[indU] = torch.symeig(A[ind], eigenvectors=True, upper=False)
-    else:
-        S, U = torch.symeig(A, eigenvectors=True, upper=False)
+                S[indS], U[indU] = torch.linalg.eigh(A[ind])
+    else: 
+        S, U =  torch.linalg.eigh(A)
     return S, U
 
 
@@ -344,8 +348,8 @@ def svd_S(A):
 def qr(A, meta):
     Q, R = {}, {}
     for (ind, indQ, indR) in meta:
-        Q[indQ], R[indR] = torch.qr(A[ind], some=True)
-        sR = torch.sign(torch.diag(R[indR]))  # PROBLEM WITH COMPLEX NUMBERS
+        Q[indQ], R[indR] = torch.linalg.qr(A[ind])
+        sR = torch.sign(real(R[indR].diag()))
         sR[sR == 0] = 1
         # positive diag of R
         Q[indQ] = Q[indQ] * sR

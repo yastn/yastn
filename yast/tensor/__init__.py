@@ -30,22 +30,36 @@ __all__.extend(_output.__all__)
 
 
 class Tensor:
-    """ Class defining a tensor with abelian symmetries, and operations on such tensor(s). """
+    """
+    Class defining a tensor with abelian symmetries, and operations on such tensor(s). 
+    
+    Parameters
+    ----------
+        config : module
+            imported module containing configuration
+        s : tuple
+            a signature of tensor. Also determines the number of legs
+        n : int
+            total charge of the tensor 
+    """
+    def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
+        if isinstance(config, _config):
+            self.config = config
+        else:
+            temp_config = {a: getattr(config, a) for a in _config._fields if hasattr(config, a)}
+            if 'device' not in temp_config:
+                temp_config['device'] = config.default_device
+            self.config = _config(**temp_config)
+        if 'device' in kwargs and kwargs['device'] != self.config.device:
+            self.config._replace('device', kwargs['device'])
 
-    def __init__(self, config=None, s=(), n=None, isdiag=False, device=None, **kwargs):
-        self.config = config if isinstance(config, _config) else \
-                      _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
-        if device is None:
-            assert hasattr(self.config,'default_device'), "Either device or valid config has to be provided"
-            device = self.config.default_device
-        self.device = device
         self.isdiag = isdiag
         self.A = {}  # dictionary of blocks
 
-        if 'struct' in kwargs:
+        try:
             self.struct = kwargs['struct']
             self.nlegs = len(self.struct.s)  # number of native legs
-        else:
+        except KeyError:
             try:
                 self.nlegs = len(s)  # number of native legs
                 s = tuple(s)
@@ -90,3 +104,13 @@ class Tensor:
     from ._output import get_size, get_tensor_charge, to_dense, to_nonsymmetric, to_number, to_numpy, to_raw_tensor
     from ._auxliary import update_struct, is_consistent, are_independent
     abs = absolute
+
+    @property
+    def s(self):
+        """ Return signature of the tensor as a tuple. """
+        return self.struct.s
+
+    @property
+    def n(self):
+        """ Return total charge of the tensor as a tuple. """
+        return self.struct.n
