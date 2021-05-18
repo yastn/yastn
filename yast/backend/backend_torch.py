@@ -325,7 +325,7 @@ def eigh(A, meta=None, order_by_magnitude=False):
                 S[ind], U[ind] = SYMEIG.apply(A[ind], reg)
         else:
             for (ind, indS, indU) in meta:
-                S[indS], U[indU] = torch.linalg.eigh(A[ind], eigenvectors=True, upper=False)
+                S[indS], U[indU] = torch.symeig(A[ind], eigenvectors=True, upper=False)
     else:
         S, U = torch.symeig(A, eigenvectors=True, upper=False)
     return S, U
