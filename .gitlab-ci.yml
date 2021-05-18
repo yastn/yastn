@@ -66,6 +66,7 @@ test_python3.7_conda_numpy1.19.1:
   - git submodule update --init --recursive
   - cd tests/;
   - pytest -v ./yast;
+  - pytest -v ./mps;
 
 test_python3.7_pip_numpy1.19.1: 
   image: python:3.7
@@ -81,6 +82,7 @@ test_python3.7_pip_numpy1.19.1:
   - git submodule update --init --recursive
   - cd tests/;
   - pytest -v ./yast;
+  - pytest -v ./mps;
 
 test_python3.8_numpy1.19.1: 
   image: python:3.8
@@ -96,6 +98,7 @@ test_python3.8_numpy1.19.1:
   - git submodule update --init --recursive
   - cd tests/;
   - pytest -v ./yast;
+  - pytest -v ./mps;
 
 test_python3.8_numpy1.19.+: 
   image: python:3.8
@@ -111,6 +114,7 @@ test_python3.8_numpy1.19.+:
   - git submodule update --init --recursive
   - cd tests/;
   - pytest -v ./yast;
+  - pytest -v ./mps;
 
 test_python3.7_torch1.8:
   stage: Test
@@ -126,6 +130,7 @@ test_python3.7_torch1.8:
   - git submodule update --init --recursive
   - cd tests/;
   - pytest --backend torch -v ./yast;
+  - pytest --backend torch -v ./mps;
 
 test_python3.8_torch1.8:
   stage: Test
@@ -141,3 +146,4 @@ test_python3.8_torch1.8:
   - git submodule update --init --recursive
   - cd tests/;
   - pytest --backend torch -v ./yast;
+  - pytest --backend torch -v ./mps;

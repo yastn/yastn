@@ -26,8 +26,8 @@ class _config(NamedTuple):
     backend: any = None
     sym: any = sym_none
     device: str = 'cpu'
-    default_dtype: str = 'float64'
     default_device: str = 'cpu'
+    default_dtype: str = 'float64'
 
 
 def _flatten(nested_iterator):
@@ -107,11 +107,13 @@ def get_cache_info():
 
 
 def _test_configs_match(a, b):
-    # if a.config != b.config:
-    if not (a.config.device == b.config.device
-            and a.config.sym.SYM_ID == b.config.sym.SYM_ID
-            and a.config.backend.BACKEND_ID == b.config.backend.BACKEND_ID):
-        raise YastError('configs do not match')
+    """Check if config's of two tensors allow for performing operations mixing them. """
+    if a.config.device != b.config.device:
+        raise YastError('Devices of the two tensors do not match.')
+    if a.config.sym.SYM_ID != b.config.sym.SYM_ID:
+        raise YastError('Two tensors have different symmetries.')
+    if a.config.backend.BACKEND_ID != b.config.backend.BACKEND_ID:
+        raise YastError('Two tensors have different backends.')
 
 
 def _test_tensors_match(a, b):
@@ -157,18 +159,21 @@ def is_consistent(a):
     2) tset follow symmetry rule f(s@t)==n
     3) block dimensions are consistent (this requires config.test=True)
     """
-    test = []
     for ind, D in zip(a.struct.t, a.struct.D):
-        test.append(ind in a.A)
-        test.append(a.config.backend.get_shape(a.A[ind]) == D)
-    test.append(len(a.struct.t) == len(a.A))
-    test.append(len(a.struct.D) == len(a.A))
+        assert ind in a.A, 'index in struct.t not in dict A'
+        assert a.config.backend.get_shape(a.A[ind]) == D, 'block dimensions do not match struct.D'
+    assert len(a.struct.t) == len(a.A), 'length of struct.t do not match dict A'
+    assert len(a.struct.D) == len(a.A), 'length of struct.D do not match dict A'
 
     tset = _tarray(a)
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)
-    test.append(np.all(a.config.sym.fuse(tset, sa, 1) == na))
+    assert np.all(a.config.sym.fuse(tset, sa, 1) == na), 'charges of some block do not satisfy symmetry condition'
     for n in range(a.nlegs):
         a.get_leg_structure(n, native=True)
+    device = {a.config.backend.get_device(x) for x in a.A.values()}
+    assert len(device) <= 1, 'not all blocks reside on the same device'
+    if len(device) == 1:
+        assert device.pop() == a.config.device, 'device of blocks inconsistent with config.device'
 
-    return all(test)
+    return True

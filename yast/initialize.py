@@ -7,71 +7,71 @@ __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
            'import_from_dict', 'decompress_from_1d']
 
 
-def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=None, device=None):
+def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with the random numbers.
 
-    dtype is specified in config drawing from [-1, 1] or [-1, 1] + 1j * [-1, 1]
-    Initialize tensor and call :meth:`yast.fill_tensor`.
+    Draws from a uniform distribution in [-1, 1] or [-1, 1] + 1j * [-1, 1], depending on dtype.
 
     Parameters
     ----------
     s : tuple
-        a signature of tensor
+        Signature of tensor. Also determines the number of legs
     n : int
-        total charge
+        Total charge of the tensor
     t : list
-        a list of charges for each leg,
+        List of charges for each leg,
         see :meth:`Tensor.fill_tensor` for description.
     D : list
-        a list of corresponding bond dimensions
+        List of corresponding bond dimensions
     isdiag : bool
-        makes tensor diagonal
+        Makes tensor diagonal
     dtype : str
-        desired dtype, overrides default_dtype specified in config
+        Desired dtype, overrides default_dtype specified in config
     device : str
-        device on which the tensor should be initialized, overrides default_device 
-        specified in config
+        Device on which the tensor should be initialized, overrides default_device specified in config
+    legs : list
+        Specify t and D based on a list of lists of tensors and their legs.
+        e.q., legs = [[a, 0, b, 0], [a, 1], [b, 1]] gives tensor with 3 legs, whose
+        charges and dimension are consistent with specific legs of tensors a and b (simultaniously for the first leg).
+        Overrides t and D.
 
     Returns
     -------
     tensor : tensor
-        a random instance of a tensor
+        a random instance of a :meth:`Tensor`
     """
     if not dtype:
         assert hasattr(config,'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype= config.default_dtype
-    if not device:
-        assert hasattr(config,'default_device'), "Either device or valid config has to be provided"
-        device= config.default_device
+        dtype = config.default_dtype
     if dtype == 'float64':
-        return randR(config, s, n, t, D, isdiag, legs, dtype, device)
+        return randR(config, s, n, t, D, isdiag, **kwargs)
     if dtype == 'complex128':
-        return randC(config, s, n, t, D, isdiag, legs, dtype, device)
-    raise YastError('dtype should be float64 or complex128')
+        return randC(config, s, n, t, D, isdiag, **kwargs)
+    raise YastError('dtype should be "float64" or "complex128"')
 
 
-def randR(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=None, device=None):
+def randR(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     """ Shortcut for rand(..., dtype='float64')"""
     meta_fusion = None
-    if legs is not None:
-         t, D, s, meta_fusion = _tD_from_legs(legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, device=device, meta_fusion=meta_fusion)
-    a.fill_tensor(t=t, D=D, val='randR', dtype=dtype)
+    if 'legs' in kwargs:
+         t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
+    a.fill_tensor(t=t, D=D, val='randR')
     return a
 
 
-def randC(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=None, device=None):
+def randC(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     """ Shortcut for rand(..., dtype='complex128')"""
     meta_fusion = None
-    if legs is not None:
-         t, D, s, meta_fusion = _tD_from_legs(legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, device=device, meta_fusion=meta_fusion)
-    a.fill_tensor(t=t, D=D, val='randC', dtype=dtype)
+    if 'legs' in kwargs:
+         t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
+    a.fill_tensor(t=t, D=D, val='randC')
     return a
 
 
-def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=None, device=None):
+def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with zeros.
 
@@ -80,9 +80,9 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=
     Parameters
     ----------
     s : tuple
-        a signature of tensor
+        a signature of tensor. Also determines the number of legs
     n : int
-        total charge
+        total charge of the tensor
     t : list
         a list of charges for each leg,
         see :meth:`Tensor.fill_tensor` for description.
@@ -103,19 +103,16 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=
     """
     if not dtype:
         assert hasattr(config,'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype= config.default_dtype
-    if not device:
-        assert hasattr(config,'default_device'), "Either device or valid config has to be provided"
-        device= config.default_device
+        dtype = config.default_dtype
     meta_fusion = None
-    if legs is not None:
-         t, D, s, meta_fusion = _tD_from_legs(legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, device=device, meta_fusion=meta_fusion)
+    if 'legs' in kwargs:
+         t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
     a.fill_tensor(t=t, D=D, val='zeros', dtype=dtype)
     return a
 
 
-def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=None, device=None):
+def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with ones.
 
@@ -124,9 +121,9 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=N
     Parameters
     ----------
     s : tuple
-        a signature of tensor
+        a signature of tensor. Also determines the number of legs
     n : int
-        total charge
+        total charge of the tensor
     t : list
         a list of charges for each leg,
         see :meth:`Tensor.fill_tensor` for description.
@@ -146,18 +143,15 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, legs=None, dtype=N
     if not dtype:
         assert hasattr(config,'default_dtype'), "Either dtype or valid config has to be provided"
         dtype= config.default_dtype
-    if not device:
-        assert hasattr(config,'default_device'), "Either device or valid config has to be provided"
-        device= config.default_device
     meta_fusion = None
-    if legs is not None:
-         t, D, s, meta_fusion = _tD_from_legs(legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, device=device, meta_fusion=meta_fusion)
+    if 'legs' in kwargs:
+         t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
     a.fill_tensor(t=t, D=D, val='ones', dtype=dtype)
     return a
 
 
-def eye(config=None, t=(), D=(), legs=None, dtype=None, device=None):
+def eye(config=None, t=(), D=(), legs=None, dtype=None, **kwargs):
     r"""
     Initialize diagonal tensor with all possible blocks filled with ones.
 
@@ -184,13 +178,10 @@ def eye(config=None, t=(), D=(), legs=None, dtype=None, device=None):
     if not dtype:
         assert hasattr(config,'default_dtype'), "Either dtype or valid config has to be provided"
         dtype= config.default_dtype
-    if not device:
-        assert hasattr(config,'default_device'), "Either device or valid config has to be provided"
-        device= config.default_device
     s = ()
     if legs is not None:
          t, D, s, _ = _tD_from_legs(legs)
-    a = Tensor(config=config, s=s, isdiag=True, device=device)
+    a = Tensor(config=config, s=s, isdiag=True, **kwargs)
     a.fill_tensor(t=t, D=D, val='ones', dtype=dtype)
     return a
 
@@ -236,7 +227,7 @@ def decompress_from_1d(r1d, config, meta):
 
 
 def _tD_from_legs(legs):
-    r""" Translates input of legs into charges t and block dimensions D """
+    r""" Translates input specified in legs into charges t and block dimensions D. """
     tlegs, Dlegs, slegs, lflegs = [], [], [], []
     flip_str = ['flip', 'flip_s', 'f']
     for leg in legs:

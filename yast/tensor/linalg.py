@@ -348,9 +348,9 @@ def entropy(a, axes=(0, 1), alpha=1):
 
 # Krylov based methods, handled by anonymous function decribing action of matrix on a vector
 
-def expmv(f, v, t=1., tol=1e-13, ncv=5, hermitian=False):
+def expmv(f, v, t=1., tol=1e-13, ncv=5, hermitian=False, output_statistics=False):
     r"""
-    Calculate exp(t*A)*v, where v is a yast tensor, and A is linear operator acting on v.
+    Calculate exp(t*f)*v, where v is a yast tensor, and f is linear operator acting on v.
     """
     backend = v.config.backend
 

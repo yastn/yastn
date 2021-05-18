@@ -22,7 +22,7 @@ def test_eigs_simple():
     print(wn)
 
     ## initializing random tensor matching TM, with 3-rd leg extra carrying charges -1, 0, 1
-    vv = yast.randR(config=a.config, legs=[(a, 2, 'f'), (a, 2), {'s':1, -1:1, 0:1, 1:1}])
+    vv = yast.randR(config=a.config, legs=[(a, 2, 'flip_s'), (a, 2), {'s':1, -1:1, 0:1, 1:1}])
     r1d, meta = yast.compress_to_1d(vv)
 
     def f(x):  # change all that into a wraper aorund ncon part?
@@ -64,7 +64,7 @@ def test_eigs_exception():
     print(wn)
 
     ## initializing random tensor matching TM, with 3-rd leg extra carrying charges -1, 0, 1
-    vv = yast.randR(config=a.config, legs=[(a, 2, 'f', a, 0), (a, 2, a, 0, 'f'), {'s':1, -1:1, 0:1, 1:1}])
+    vv = yast.randR(config=a.config, legs=[(a, 2, 'flip_s', a, 0), (a, 2, a, 0, 'flip_s'), {'s':1, (-1,):1, (0,):1, (1,):1}])
     r1d, meta = yast.compress_to_1d(vv)
 
     def f(x):  # change all that into a wraper aorund ncon part?
@@ -80,7 +80,7 @@ def test_eigs_exception():
 
 
     # for tm with fused legs
-    vv2 = yast.randR(config=a.config, legs=[(tm, 1, 'f', tm, 0), {'s':1, -1:1, 0:1, 1:1}])
+    vv2 = yast.randR(config=a.config, legs=[(tm, 1, 'flip', tm, 0), {'s':1, -1:1, 0:1, 1:1}])
     r1d2, meta2 = yast.compress_to_1d(vv2)
 
     def f2(x):

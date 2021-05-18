@@ -45,13 +45,14 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
     mconj = (-conja * conjb)
-    if not all(a.struct.s[i1] == mconj * b.struct.s[i2] for i1, i2 in zip(axes_a[1], axes_b[0])):
-        if a.isdiag:  # if tensor is diagonal, than freely changes the signature by a factor of -1
-            a.flip_signature(inplace=True)
-        elif b.isdiag:
-            b.flip_signature(inplace=True)
-        elif _check["signatures_match"]:
-            raise YastError('Signs do not match')
+
+    if _check["signatures_match"] and not all(a.struct.s[i1] == mconj * b.struct.s[i2] for i1, i2 in zip(axes_a[1], axes_b[0])):
+        # if a.isdiag:  # if tensor is diagonal, than freely changes the signature by a factor of -1
+        #     a.flip_signature(inplace=True)
+        # elif b.isdiag:
+        #     b.flip_signature(inplace=True)
+        # elif _check["signatures_match"]:
+        raise YastError('Signs do not match')
 
     c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape(1, 2, a.config.sym.NSYM)
     c_s = np.array([conja, conjb], dtype=int)
