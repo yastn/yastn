@@ -7,10 +7,8 @@ Niesen, J., and W. Wright. "A Krylov subspace algorithm for evaluating the φ-fu
 from ._auxliary import YastError
 from ._contractions import vdot
 
-__all__ = ['arnoldi', 'lanczos', 'krylov']
-
+# __all__ = ['arnoldi', 'lanczos', 'krylov']
 # leader
-
 # def krylov(Av, init, tol, ncv=5, sigma=None, which=None, return_eigenvectors=True, tau=False):
 #     if hermitian:
 #         T, Q, P, good = lanczos_her(init, Av, tol, k)
