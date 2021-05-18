@@ -166,8 +166,8 @@ def entropy(A, alpha=1, tol=1e-12):
 ##########################
 
 
-def zero_scalar(dtype='float64', device='cpu'):
-    return torch.tensor(0, dtype=DTYPE[dtype], device=device)
+def dtype_scalar(x, dtype='float64', device='cpu'):
+    return torch.tensor(x, dtype=DTYPE[dtype], device=device)
 
 
 def zeros(D, dtype='float64', device='cpu'):
@@ -192,6 +192,15 @@ def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
     except TypeError:
         T = torch.as_tensor(val, dtype=DTYPE[dtype], device=device)
     return T if Ds is None else T.reshape(Ds).contiguous()
+
+
+def square_matrix_from_dict(H, D=None, device='cpu'):
+    dtype = get_dtype(H.values())
+    T = torch.zeros((D, D), dtype=dtype, device=device)
+    for (i, j), v in H.items():
+        if i < D and j < D:
+            T[i, j] = v
+    return T
 
 
 ##################################
@@ -316,9 +325,9 @@ def eigh(A, meta=None, order_by_magnitude=False):
                 S[ind], U[ind] = SYMEIG.apply(A[ind], reg)
         else:
             for (ind, indS, indU) in meta:
-                S[indS], U[indU] = torch.symeig(A[ind], eigenvectors=True)
+                S[indS], U[indU] = torch.linalg.eigh(A[ind], eigenvectors=True, upper=False)
     else:
-        S, U = torch.symeig(A, eigenvectors=True)
+        S, U = torch.symeig(A, eigenvectors=True, upper=False)
     return S, U
 
 
@@ -375,6 +384,17 @@ def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, or
                     break
     return order
 
+
+@torch.no_grad()
+def eigs_which(val, which):
+    if which == 'LM':
+        return (-abs(val)).argsort()
+    elif which == 'SM':
+        return abs(val).argsort()
+    elif which == 'LR':
+        return (-real(val)).argsort()
+    #elif which == 'SR':
+    return (real(val)).argsort()
 
 
 def range_largest(D_keep, D_total, ordering):
