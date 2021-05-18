@@ -11,18 +11,18 @@ __all__ = ['arnoldi', 'lanczos', 'krylov']
 
 # leader
 
-def krylov(Av, init, tol, ncv=5, sigma=None, which=None, return_eigenvectors=True, tau=False):
-    if hermitian:
-        T, Q, P, good = lanczos_her(init, Av, tol, k)
-    else:
-        T, Q, P, good = arnoldi(init, Av, tol, ncv)
-    if not tau:
-        val, Y = eigs_aug(T, Q, P, k, hermitian, sigma,
-                          which, return_eigenvectors)
-        return val, Y, good
-    else:
-        err, Y = expm_aug(T, Q, tau, good[0])
-        return err, Y, good
+# def krylov(Av, init, tol, ncv=5, sigma=None, which=None, return_eigenvectors=True, tau=False):
+#     if hermitian:
+#         T, Q, P, good = lanczos_her(init, Av, tol, k)
+#     else:
+#         T, Q, P, good = arnoldi(init, Av, tol, ncv)
+#     if not tau:
+#         val, Y = eigs_aug(T, Q, P, k, hermitian, sigma,
+#                           which, return_eigenvectors)
+#         return val, Y, good
+#     else:
+#         err, Y = expm_aug(T, Q, tau, good[0])
+#         return err, Y, good
 
 
 # Arnoldi method
