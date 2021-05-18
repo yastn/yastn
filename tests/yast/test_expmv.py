@@ -6,18 +6,18 @@ import pytest
 
 tol = 1e-12
 
+
 def run_expm_hermitian(A, v, tau, eigs_tol, exp_tol, kp):
     A = (A + A.conj().transpose(axes=(2, 3, 0, 1))) / 2
     A /= A.norm()
     v /= v.norm()
-    Av = lambda x: yast.tensordot(A, x, axes=((2, 3), (0, 1)))
-    out = yast.expmv(Av=Av, init=[v], Bv=None, dt=tau, eigs_tol=eigs_tol,
-                     exp_tol=exp_tol, k=kp, hermitian=True, cost_estim=0, algorithm='lanczos')
-    w = out[0].to_dense().reshape(-1)
-    A = A.to_dense()
+    f = lambda x: yast.tensordot(A, x, axes=((2, 3), (0, 1)))
+    out = yast.expmv(f, v, tau, eigs_tol, kp, hermitian=True)
+    w = out.to_numpy().reshape(-1)
+    A = A.to_numpy()
     sA = A.shape
     A = A.reshape((sA[0]*sA[1], sA[2]*sA[3]))
-    v = v.to_dense().reshape(-1)
+    v = v.to_numpy().reshape(-1)
     w_np = scipy.linalg.expm(tau * A) @ v
     w_np /= scipy.linalg.norm(w_np)
     assert np.allclose(w, w_np, rtol=1e-10, atol=1e-10)
@@ -25,17 +25,13 @@ def run_expm_hermitian(A, v, tau, eigs_tol, exp_tol, kp):
 def run_expmv_nonhermitian(A, v, tau, eigs_tol, exp_tol, kp):
     A /= A.norm()
     v /= v.norm()
-    Av = lambda x: yast.tensordot(A, x, axes=((2, 3), (0, 1)))
-    At = A.transpose(axes=(2, 3, 0, 1)).conj()
-    Bv = lambda x: yast.tensordot(At, x, axes=((2, 3), (0, 1)))
-
-    out = yast.expmv(Av=Av, init=[v], Bv=Bv, dt=tau, eigs_tol=eigs_tol,
-                     exp_tol=exp_tol, k=kp, hermitian=False, cost_estim=0)
-    w = out[0].to_dense().reshape(-1)
-    A = A.to_dense()
+    f = lambda x: yast.tensordot(A, x, axes=((2, 3), (0, 1)))
+    out = yast.expmv(f, v, tau, eigs_tol, kp, hermitian=False)
+    w = out.to_numpy().reshape(-1)
+    A = A.to_numpy()
     a1, a2, a3, a4 = A.shape
     A = A.reshape((a1 * a2, a3 * a4))
-    v = v.to_dense().reshape(-1)
+    v = v.to_numpy().reshape(-1)
     w_np = scipy.linalg.expm(tau*A).dot(v)
     w_np /= scipy.linalg.norm(w_np)
     print('FULL: Average error vector entry[%]:', sum(abs((w-w_np)))/len(w_np))
@@ -45,7 +41,7 @@ def run_expmv_nonhermitian(A, v, tau, eigs_tol, exp_tol, kp):
 def test_expmv_hermitian(D, k, tau, eigs_tol, exp_tol):
     # dense
     Ds = D
-    kp = k**2
+    kp = k
     A = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=[Ds, Ds, Ds, Ds], dtype='complex128')
     v = yast.rand(config=config_dense, s=(-1, 1), D=[Ds, Ds], dtype='complex128')
     run_expm_hermitian(A, v, tau, eigs_tol, exp_tol, kp)
@@ -53,7 +49,7 @@ def test_expmv_hermitian(D, k, tau, eigs_tol, exp_tol):
     # Z2
     ts = (0, 1)
     Ds = (D//2, D//2)
-    kp = (2*(k//2))**2
+    kp = (2*(k//2))
     A = yast.rand(config=config_Z2, s=(-1, 1, 1, -1), t=[ts, ts, ts, ts], D=[Ds, Ds, Ds, Ds], dtype='complex128')
     v = yast.rand(config=config_Z2, s=(-1, 1), t=[ts, ts], D=[Ds, Ds], dtype='complex128')
     run_expm_hermitian(A, v, tau, eigs_tol, exp_tol, kp)
@@ -61,7 +57,7 @@ def test_expmv_hermitian(D, k, tau, eigs_tol, exp_tol):
     # U1
     ts = (-1, 0, 1)
     Ds = (D//4, D//2, D//4)
-    kp = (2*(k//4)+(k//2))**2
+    kp = (2*(k//4)+(k//2))
     A = yast.rand(config=config_U1, s=(-1, 1, 1, -1), t=[ts, ts, ts, ts], D=[Ds, Ds, Ds, Ds], dtype='complex128')
     v = yast.rand(config=config_U1, s=(-1, 1), t=[ts, ts], D=[Ds, Ds], dtype='complex128')
     run_expm_hermitian(A, v, tau, eigs_tol, exp_tol, kp)
@@ -80,7 +76,7 @@ def test_expmv_non_hermitian(D, k, tau, eigs_tol, exp_tol):
     # Z2
     ts = (0, 1)
     Ds = (int(D/2), int(D/2),)
-    kp = (2*int(k/2))**2
+    kp = (2*int(k/2))
     A = yast.rand(config=config_Z2, s=(-1, 1, 1, -1), t=[ts, ts, ts, ts], D=[Ds, Ds, Ds, Ds], dtype='complex128')
     v = yast.rand(config=config_Z2, s=(-1, 1), t=[ts, ts], D=[Ds, Ds], dtype='complex128')
     run_expmv_nonhermitian(A, v, tau, eigs_tol, exp_tol, kp)
@@ -88,7 +84,7 @@ def test_expmv_non_hermitian(D, k, tau, eigs_tol, exp_tol):
     # U1
     ts = (-1, 0, 1)
     Ds = (int(D/4), int(D/2), int(D/4),)
-    kp = (2*int(k/4)+int(k/2))**2
+    kp = (2*int(k/4)+int(k/2))
     A = yast.rand(config=config_U1, s=(-1, 1, 1, -1), t=[ts, ts, ts, ts], D=[Ds, Ds, Ds, Ds], dtype='complex128')
     v = yast.rand(config=config_U1, s=(-1, 1), t=[ts, ts], D=[Ds, Ds], dtype='complex128')
     run_expmv_nonhermitian(A, v, tau, eigs_tol, exp_tol, kp)
@@ -96,9 +92,9 @@ def test_expmv_non_hermitian(D, k, tau, eigs_tol, exp_tol):
 
 if __name__ == '__main__':
     test_expmv_hermitian(6, 6, 1., 1e-14, 1e-14)
-    # test_expmv_hermitian(6, 6, 1j, 1e-14, 1e-14)
-    # test_expmv_non_hermitian(6, 6, 1., 1e-14, 1e-14)
-    # test_expmv_non_hermitian(6, 6, 1j, 1e-14, 1e-14)
+    test_expmv_hermitian(6, 6, 1j, 1e-14, 1e-14)
+    test_expmv_non_hermitian(6, 6, 1., 1e-14, 1e-14)
+    test_expmv_non_hermitian(6, 6, 1j, 1e-14, 1e-14)
 
 
 

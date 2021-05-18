@@ -17,12 +17,14 @@ def get_dtype(iterator):
     """ iterators of numpy arrays; returns np.complex128 if any array is complex else np.float64"""
     return np.complex128 if any(np.iscomplexobj(x) for x in iterator) else np.float64
 
+
 def unique_dtype(t):
     dtypes= set(b.dtype for b in t.A.values())
     if len(dtypes)==1:
         return str(tuple(dtypes)[0])
     else:
         return False
+
 
 def random_seed(seed):
     np.random.seed(seed)
@@ -164,8 +166,8 @@ def entropy(A, alpha=1, tol=1e-12):
 ##########################
 
 
-def zero_scalar(dtype='float64', **kwargs):
-    return DTYPE[dtype](0)
+def dtype_scalar(x, dtype='float64', **kwargs):
+    return DTYPE[dtype](x)
 
 
 def zeros(D, dtype='float64', **kwargs):
@@ -190,6 +192,15 @@ def to_tensor(val, Ds=None, dtype='float64', **kwargs):
     except TypeError:
         T = np.array(val, dtype=DTYPE[dtype])
     return T if Ds is None else T.reshape(Ds)
+
+
+def square_matrix_from_dict(H, D=None, **kwargs):
+    dtype = get_dtype(H.values())
+    T = np.zeros((D, D), dtype=dtype)
+    for (i, j), v in H.items():
+        if i < D and j < D:
+            T[i, j] = v
+    return T
 
 
 ##################################
@@ -362,6 +373,17 @@ def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, or
                     order = order[:i + 1]
                     break
     return order
+
+def eigs_which(val, which):
+    if which == 'LM':
+        return (-abs(val)).argsort()
+    elif which == 'SM':
+        return abs(val).argsort()
+    elif which == 'LR':
+        return (-val.real).argsort()
+    #elif which == 'SR':
+    return (val.real).argsort()
+
 
 
 def range_largest(D_keep, D_total, ordering):

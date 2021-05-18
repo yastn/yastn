@@ -383,7 +383,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False):
 
 def zero_of_dtype(a):
     """ Return zero scalar of the instance specified by backend and dtype. """
-    return a.config.backend.zero_scalar(device=a.config.device)
+    return a.config.backend.dtype_scalar(0, device=a.config.device)
 
 
 def to_number(a, part=None):
