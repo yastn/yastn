@@ -67,8 +67,6 @@ def tensordot(a, b, axes, conj=(0, 0)):
     meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
     if _check["consistency"] and not (ua_r == ub_l and ls_ac.match(ls_bc)):
-        import pdb
-        pdb.set_trace()
         raise YastError('Something went wrong in matching the indices of the two tensors')
 
     c_s = tuple(conja * a.struct.s[i1] for i1 in axes_a[0]) + tuple(conjb * b.struct.s[i2] for i2 in axes_b[1])

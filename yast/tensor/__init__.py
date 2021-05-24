@@ -31,8 +31,8 @@ __all__.extend(_output.__all__)
 
 class Tensor:
     """
-    Class defining a tensor with abelian symmetries, and operations on such tensor(s). 
-    
+    Class defining a tensor with abelian symmetries, and operations on such tensor(s).
+
     Parameters
     ----------
         config : module
@@ -40,7 +40,7 @@ class Tensor:
         s : tuple
             a signature of tensor. Also determines the number of legs
         n : int
-            total charge of the tensor 
+            total charge of the tensor
     """
     def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
         if isinstance(config, _config):

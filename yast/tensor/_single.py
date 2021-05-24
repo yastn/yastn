@@ -422,8 +422,8 @@ def exp(a, step=1.):
     return c
 
 
-def remove_zero_blocks(a, rel=1e-12, abs=0, inplace=False):
-    cutoff = abs + rel * a.norm(p='inf')
+def remove_zero_blocks(a, rtol=1e-12, atol=0, inplace=False):
+    cutoff = atol + rtol * a.norm(p='inf')
     c = a if inplace else a.copy_empty()
     c.A = {k: t for k, t in a.A.items() if a.config.backend.max_abs(t) > cutoff}
     c.update_struct()

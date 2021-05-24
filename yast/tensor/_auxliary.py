@@ -4,7 +4,6 @@ from functools import lru_cache
 from typing import NamedTuple
 from itertools import accumulate, chain
 
-from numpy.lib.utils import safe_eval
 from . import _merging
 import numpy as np
 from ..sym import sym_none

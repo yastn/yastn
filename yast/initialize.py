@@ -55,7 +55,7 @@ def randR(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     """ Shortcut for rand(..., dtype='float64')"""
     meta_fusion = None
     if 'legs' in kwargs:
-         t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
+        t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
     a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
     a.fill_tensor(t=t, D=D, val='randR')
     return a
@@ -65,7 +65,7 @@ def randC(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     """ Shortcut for rand(..., dtype='complex128')"""
     meta_fusion = None
     if 'legs' in kwargs:
-         t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
+        t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
     a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
     a.fill_tensor(t=t, D=D, val='randC')
     return a
@@ -93,7 +93,7 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwa
     dtype : str
         desired dtype, overrides default_dtype specified in config
     device : str
-        device on which the tensor should be initialized, overrides default_device 
+        device on which the tensor should be initialized, overrides default_device
         specified in config
 
     Returns
@@ -106,7 +106,7 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwa
         dtype = config.default_dtype
     meta_fusion = None
     if 'legs' in kwargs:
-         t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
+        t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
     a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
     a.fill_tensor(t=t, D=D, val='zeros', dtype=dtype)
     return a
@@ -132,7 +132,7 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwar
     dtype : str
         desired dtype, overrides default_dtype specified in config
     device : str
-        device on which the tensor should be initialized, overrides default_device 
+        device on which the tensor should be initialized, overrides default_device
         specified in config
 
     Returns
@@ -145,7 +145,7 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwar
         dtype= config.default_dtype
     meta_fusion = None
     if 'legs' in kwargs:
-         t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
+        t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
     a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
     a.fill_tensor(t=t, D=D, val='ones', dtype=dtype)
     return a
@@ -229,7 +229,6 @@ def decompress_from_1d(r1d, config, meta):
 def _tD_from_legs(legs):
     r""" Translates input specified in legs into charges t and block dimensions D. """
     tlegs, Dlegs, slegs, lflegs = [], [], [], []
-    flip_str = ['flip', 'flip_s', 'f']
     for leg in legs:
         leg = [leg] if isinstance(leg, dict) else leg
         tns, lgs, fps, lss = [], [], [], []
@@ -243,7 +242,7 @@ def _tD_from_legs(legs):
                     raise YastError('Specifying leg number is required')
                 lgs.append(a)
                 a = next(ileg, None)
-                fps.append(-1 if isinstance(a, str) and a in flip_str else 1)
+                fps.append(-1 if isinstance(a, str) and a in {'flip', 'flip_s', 'f'} else 1)
                 if isinstance(a, int):
                     raise YastError('Two leg numbers one after another not understood.')
                 if isinstance(a, str):

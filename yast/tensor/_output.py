@@ -209,7 +209,7 @@ def get_ndim(a, native=False):
     return a.nlegs if native else a.mlegs
 
 
-def unique_dtype(a): 
+def unique_dtype(a):
     return a.config.backend.unique_dtype(a)
 
 
@@ -221,13 +221,13 @@ def __getitem__(a, key):
 #    output tensors     #
 #########################
 
-def leg_structures_for_dense(tensors=[], native=False, leg_structures=None):
+def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
     r"""
     Combine and output charges and bond dimensions from legs of provided tensors.
     Auxliary function to ```tensor.to_dense``` and ```tensor.to_numpy```, to create dense tensors with consistent dimenstions (charge sectors)
 
     Rises expection if there are some inconsistencies in bond dimensions.
-    
+
     Parameters
     ----------
     tensors : list
@@ -270,8 +270,8 @@ def leg_structures_for_dense(tensors=[], native=False, leg_structures=None):
 
 
 def leg_structure_union(*args):
-    """ 
-    Makes a union of leg structures {t: D} specified in args. 
+    """
+    Makes a union of leg structures {t: D} specified in args.
 
     Raise error if there are inconsistencies.
     """

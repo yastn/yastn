@@ -95,18 +95,6 @@ def imag(x):
     return np.imag(x)
 
 
-def floor(x):
-    return np.floor(x)
-
-
-def ceil(x):
-    return np.ceil(x)
-
-
-def log(x):
-    return np.log(x)
-
-
 def max_abs(x):
     return np.abs(x).max()
 
