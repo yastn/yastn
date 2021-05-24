@@ -228,7 +228,7 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
 
 
 def block(tensors, common_legs=None):
-    """ 
+    """
     Assemble new tensor by blocking a set of tensors.
 
     TODO: the set of tensors should reside on the same device. Optional destination device might be added

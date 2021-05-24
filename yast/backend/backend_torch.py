@@ -95,18 +95,6 @@ def imag(x):
     return torch.imag(x) if torch.is_complex(x) else 0 * x
 
 
-def floor(x):
-    return torch.floor(x)
-
-
-def ceil(x):
-    return torch.ceil(x)
-
-
-def log(x):
-    return torch.log(x)
-
-
 def max_abs(x):
     return x.abs().max()
 

@@ -1,7 +1,6 @@
 """ Linalg methods for yast tensor. """
 
 import numpy as np
-from scipy.linalg import expm as expm
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys
 from ._auxliary import YastError, _check, _test_tensors_match, _test_all_axes
 from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal
@@ -348,63 +347,61 @@ def entropy(a, axes=(0, 1), alpha=1):
 
 
 # Krylov based methods, handled by anonymous function decribing action of matrix on a vector
-def expmv(f, v, t=1., tol=1e-13, ncv=10, hermitian=False, normalize=False, return_info=False):
+def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, return_info=False):
     r"""
     Calculate exp(t*f)*v, where v is a yast tensor, and f(v) is linear operator acting on v.
 
     Parameters
     ----------
-        f : function
+        f: function
             define an action of a 'square matrix' on the vector x.
             f(x) should preserve the signature of x.
-        
-        v : Tensor
 
-        t : number
+        v: Tensor
 
-        tol : number
+        t: number
+
+        tol: number
             targeted tolerance; it is used to update the time-step and size of Krylov space.
-            Result should have better tolerance, as corrected result is outputed.
-        
-        ncv : int
+           The result should have better tolerance, as corrected result is outputed.
+
+        ncv: int
             Initial guess for the size of the Krylov space
 
-        hermitian : bool
+        hermitian: bool
             Assume that f is a hermitian operator, in which case Lanczos iterations are used.
             Otherwise Arnoldi iterations are used to span the Krylov space.
-        
-        normalize : bool
+
+        normalize: bool
             The result is normalized to unity using 2-norm.
-        
-        return_info : bool
-            stat.ncv : guess of the Krylov-space size,
-            stat.error : estimate of error (likely over-estimate)
-            stat.krylov_steps : number of execution of f(x),
-            stat.steps : number of steps to reach t,
+
+        return_info: bool
+            info.ncv : guess of the Krylov-space size,
+            info.error : estimate of error (likely over-estimate)
+            info.krylov_steps : number of execution of f(x),
+            info.steps : number of steps to reach t,
 
         Returns
         -------
-        out : Tensor if not return_info else (out, stat)
+        out : Tensor if not return_info else (out, info)
 
         Note
         ----
-        We use the procedure of:
-         J. Niesen, W. M. Wright, ACM Trans. Math. Softw. 38, 22 (2012),
+        Employ the algorithm of:
+        J. Niesen, W. M. Wright, ACM Trans. Math. Softw. 38, 22 (2012),
         Algorithm 919: A Krylov subspace algorithm for evaluating
         the phi-functions appearing in exponential integrators.
     """
     backend = v.config.backend
-    ncv, ncv_max = max(1, ncv), min([30, v.get_size()])  # Krylov parameters
-    reject = False  # Initialize variables
+    ncv, ncv_max = max(1, ncv), min([30, v.get_size()])  # Krylov space parameters
     t_now, t_out = 0, abs(t)
     sgn = t / t_out if t_out > 0 else 0
     tau = t_out  # initial quess for a time-step
     gamma, delta = 0.8, 1.2  # Safety factors
-    info = {'ncv': ncv, 'error': 0., 'krylov_steps': 0, 'steps': 0}
-
     V, H = None, None  # reset Krylov space
     ncv_old, tau_old, omega = None, None, None
-    order_computed, ncv_computed = False, False
+    reject, order_computed, ncv_computed = False, False, False
+    info = {'ncv': ncv, 'error': 0., 'krylov_steps': 0, 'steps': 0}
 
     normv = v.norm()
     if normv == 0:
@@ -491,69 +488,53 @@ def expmv(f, v, t=1., tol=1e-13, ncv=10, hermitian=False, normalize=False, retur
     return (v, info) if return_info else v
 
 
-def eigs(f, v0, k=1, which=None, ncv=5, maxiter=None, tol=1e-13, hermitian=True):
+def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True):
     r"""
-    f: function handlers.
-        Action of a matrix on a vector. For non-symmetric lanczos both have to be defined.
+    Search for dominant eigenvalues of linear operator f using Arnoldi algorithm.
+    ONLY A SINGLE ITERATION FOR NOW
+
+    f: function
+        define an action of a 'square matrix' on the 'vector' x.
+        f(x) should preserve the signature of x.
+
     v0: Tensor
-        Initial vector for iteration.
+        Initial guess, 'vector' to span the Krylov space.
+
     k: int
-        default = 1, number of eigenvalues equals number of non-zero Krylov vectors
-        The number of eigenvalues and eigenvectors desired. It is not possible to compute all eigenvectors of a matrix.
-    sigma: float
-        default = None (search for smallest)
-        Find eigenvalues near sigma.
-    ncv: int
-        default = 5
-        The number of Lanczos vectors generated ncv must be greater than k; it is recommended that ncv > 2*k.
-    which: str, [‘LM’ | ‘SM’ | ‘LR’ | ‘SR’ | ‘LI’ | ‘SI’]
-        default = None (search for closest to sigma - if defined and for 'SR' else)
+        Number of desired eigenvalues and eigenvectors. default is 1.
+
+    which: str in [‘LM’, ‘SM’, ‘LR’, ‘SR’]
         Which k eigenvectors and eigenvalues to find:
             ‘LM’ : largest magnitude
             ‘SM’ : smallest magnitude
             ‘LR’ : largest real part
             ‘SR’ : smallest real part
-            ‘LI’ : largest imaginary part
-            ‘SI’ : smallest imaginary part
+
+    ncv: int
+        Dimension of the employed Krylov space. Default is 10.
+        Must be greated than k.
+
+    maxiter: int
+        Maximal number of restarts; NOT IMPLEMENTED FOR NOW.
+
     tol: float
-        defoult = 1e-14
-        Relative accuracy for eigenvalues (stopping criterion) for Krylov subspace.
-    return_eigenvectors: bool
-        default = True
-        Return eigenvectors (True) in addition to eigenvalues.
-    bi_orth: bool
-        default = True
-        Option for non-symmetric Lanczos method. Whether to bi-orthonomalize Krylov-subspace vectors.
-    algorithm: str
-        default = 'arnoldi'
-        What method to use. Possible options: arnoldi, lanczos
+        Relative accuracy for eigenvalues and th stopping criterion for Krylov subspace.
+        Default is 1e-13.
+
+    hermitian: bool
+        Assume that f is a hermitian operator, in which case Lanczos iterations are used.
+        Otherwise Arnoldi iterations are used to span the Krylov space.
     """
-    
     backend = v0.config.backend
-    beta = None
-    V = [v0]
-    H = {}
+    normv = v0.norm()
+    if normv == 0:
+        raise YastError('Initial vector v0 of eigs should be nonzero.')
+    V = [v0 / normv]
+    V, H, happy = _expand_krylov_space(f, tol, ncv, hermitian, V)
+    m = len(V) if happy else len(V) - 1
 
-    for j in range(ncv):
-        w = f(V[-1])
-        for i in range(j + 1):
-            H[(i, j)] = vdot(V[i], w)
-            w = w.apxb(V[i], x=-H[(i, j)])
-        H[(j + 1, j)] = w.norm()
-        if H[(j + 1, j)] < tol:
-            beta, happy = 0, True
-            break
-        V.append(w /H[(j + 1, j)])
-    if beta == None:
-        beta, happy = H[(j + 1, j)], False
-
-    T = backend.square_matrix_from_dict(H, j + 1, device=v0.config.device)
-
-    if hermitian:
-        val, vr = backend.eigh(T)
-    else:
-        val, vr = backend.eig(T)
-
+    T = backend.square_matrix_from_dict(H, m, device=v0.config.device)
+    val, vr = backend.eigh(T) if hermitian else backend.eig(T)
     ind = backend.eigs_which(val, which)
 
     val, vr = val[ind], vr[:, ind]
