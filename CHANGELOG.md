@@ -22,6 +22,7 @@
 - There is no property `Tensor.device`
 - `device` is in config (because config is inherited by new tensors).
   It cen be overriden when initializing Tensor(), e.g. in initialization functions, or using `Tensor.to_device`
+- `set_blocks` and `_set_blocks` do not accept argument `device`
 - new function get_device (of a block) in the backend
 - new test in function is_consistent, that check if all blocks are on the same device, 
   and if it matches config.device (this can be unwanted test in numpy ...)

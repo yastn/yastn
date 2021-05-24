@@ -110,6 +110,10 @@ def log(x):
 def max_abs(x):
     return x.abs().max()
 
+
+def norm_matrix(x):
+    return torch.linalg.norm(x)
+
 #########################
 #    output numbers     #
 #########################
@@ -551,4 +555,4 @@ def is_independent(A, B):
     """
     check if two arrays are identical, or share the same view.
     """
-    return (A is B) or (A.storage().data_ptr() is B.storage().data_ptr())
+    return (A is B) or (A.storage().data_ptr() is B.storage().data_ptr() and A.numel() > 0)

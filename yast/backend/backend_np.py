@@ -110,6 +110,10 @@ def log(x):
 def max_abs(x):
     return np.abs(x).max()
 
+
+def norm_matrix(x):
+    return np.linalg.norm(x)
+
 #########################
 #    output numbers     #
 #########################

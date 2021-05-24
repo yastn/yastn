@@ -1,26 +1,36 @@
-"""
-Krylov-based methods for yast tensor.
-Based on:
-Niesen, J., and W. Wright. "A Krylov subspace algorithm for evaluating the φ-functions in exponential integrators." arXiv preprint arXiv:0907.4631 (2009).(http://www1.maths.leeds.ac.uk/~jitse/phikrylov.pdf)
-"""
-
-from ._auxliary import YastError
+""" Building Krylov space. """
 from ._contractions import vdot
 
-# __all__ = ['arnoldi', 'lanczos', 'krylov']
-# leader
-# def krylov(Av, init, tol, ncv=5, sigma=None, which=None, return_eigenvectors=True, tau=False):
-#     if hermitian:
-#         T, Q, P, good = lanczos_her(init, Av, tol, k)
-#     else:
-#         T, Q, P, good = arnoldi(init, Av, tol, ncv)
-#     if not tau:
-#         val, Y = eigs_aug(T, Q, P, k, hermitian, sigma,
-#                           which, return_eigenvectors)
-#         return val, Y, good
-#     else:
-#         err, Y = expm_aug(T, Q, tau, good[0])
-#         return err, Y, good
+
+def _expand_krylov_space(f, tol, ncv, hermitian, V, H=None, info=None):
+    if H is None:
+        H = {}
+    happy = False
+    for j in range(len(V)-1, ncv):
+        w = f(V[-1])
+        if info is not None:
+            info['krylov_steps'] += 1
+        if not hermitian:  # Arnoldi
+            for i in range(j + 1):
+                H[(i, j)] = vdot(V[i], w)
+                w = w.apxb(V[i], x=-H[(i, j)])
+        else:  # Lanczos
+            if j > 0:
+                H[(j - 1, j)] = H[(j, j - 1)]
+                w = w.apxb(V[j - 1], x=-H[(j - 1, j)])
+            H[(j, j)] = vdot(V[j], w)
+            w = w.apxb(V[j], x=-H[(j, j)])
+        H[(j + 1, j)] = w.norm()
+        if H[(j + 1, j)] < tol:
+            happy = True
+            H.pop((j + 1, j))
+            break
+        V.append(w / H[(j + 1, j)])
+    return V, H, happy
+
+
+
+
 
 
 # Arnoldi method
