@@ -458,7 +458,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             tau_new, ncv_new = tau * (omega / gamma) ** (-1. / order), ncv_max
         else:
             tau_opt = tau * (omega / gamma) ** (-1. / order) if omega > 0 else t_out - t_now
-            ncv_opt = int(max([1, np.ceil(m + np.log(omega / gamma) / np.log(ncv_est))]))
+            ncv_opt = int(max([1, np.ceil(m + np.log(omega / gamma) / np.log(ncv_est))])) if omega > 0 else 1
             C1 = ncv * int(np.ceil((t_out - t_now) / tau_opt))
             C2 = ncv_opt * int(np.ceil((t_out - t_now) / tau))
             tau_new, ncv_new = (tau_opt, m) if C1 < C2 else (tau, ncv_opt)
@@ -530,7 +530,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True
     if normv == 0:
         raise YastError('Initial vector v0 of eigs should be nonzero.')
     V = [v0 / normv]
-    V, H, happy = _expand_krylov_space(f, tol, ncv, hermitian, V)
+    V, H, happy = _expand_krylov_space(f, 1e-13, ncv, hermitian, V)  # tol=1e-13
     m = len(V) if happy else len(V) - 1
 
     T = backend.square_matrix_from_dict(H, m, device=v0.config.device)

@@ -68,8 +68,8 @@ def test_expmv(D, ncv, tau, tol):
 
 
 
-@pytest.mark.parametrize("tol, tau", [(1e-10, 2.0j), (1e-4, 2.0j), (1e-10, -2.0j), (1e-4, -2.0j), (1e-10, 2.0), (1e-4, 2.0), (1e-10, -2.0), (1e-4, -2.0)])
-def test_expmv_tm(tol, tau):
+@pytest.mark.parametrize("t, tol", [(2.0j, 1e-10), (2.0j, 1e-4), (-2.0j, 1e-10), (-2.0j, 1e-4), (2.0, 1e-10), (2.0, 1e-4), (-2.0, 1e-10), (-2.0, 1e-4)])
+def test_expmv_tm(t, tol):
     a = yast.rand(config=config_U1, s=(1, 1, -1), n=0,
                   t=[(-1, 0, 1), (0, 1), (-1, 0, 1)],
                   D=[(2, 3, 4), (2, 3), (2, 3, 4)])
@@ -83,10 +83,10 @@ def test_expmv_tm(tol, tau):
     v = yast.randR(config=a.config, legs=[(a, 2, 'flip_s'), (a, 2), {'s': 1, -2: 1, -1: 1, 0: 1, 1: 1, 2: 1}])
 
     vn = np.sum(v.fuse_legs(axes=[(0, 1), 2]).to_numpy(), axis=1)
-    wn1 = scipy.linalg.expm(tau * tmn) @ vn
+    wn1 = scipy.linalg.expm(t * tmn) @ vn
 
     f = lambda x : yast.ncon([a, a, x], [(-1, 1, 2), (-2, 1, 3), (2, 3, -3)], conjs=(0, 1, 0))
-    out, info = yast.expmv(f, v, tau, tol, return_info=True)
+    out, info = yast.expmv(f, v, t, tol, return_info=True)
     assert out.are_independent(v)
 
     wn2 = np.sum(out.fuse_legs(axes=[(0, 1), 2]).to_numpy(), axis=1)
@@ -102,6 +102,6 @@ if __name__ == '__main__':
     test_expmv(8, 5, -2.0j, 1e-10)
     test_expmv(8, 5, 0, 1e-10)
     test_expmv(4, 20, 2.0, 1e-10)
-    test_expmv_tm(tol=1e-10, tau=0.5j)
-    test_expmv_tm(tol=1e-3, tau=0.5)
-    test_expmv_tm(tol=1e-3, tau=0)
+    test_expmv_tm(0.5j, 1e-10)
+    test_expmv_tm(0.5, 1e-3)
+    test_expmv_tm(0, 1e-3)
