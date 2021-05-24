@@ -173,7 +173,7 @@ def _set_block(a, ts, Ds, val, dtype):
     if isinstance(val, str):
         if val == 'zeros':
             a.A[ts] = a.config.backend.zeros(Ds, dtype=dtype, device=a.config.device)
-        elif val == 'randR' or val == 'rand':
+        elif val in ('randR', 'rand'):
             a.A[ts] = a.config.backend.randR(Ds, device=a.config.device)
         elif val == 'randC':
             a.A[ts] = a.config.backend.randC(Ds, device=a.config.device)

@@ -167,7 +167,7 @@ def eye(config=None, t=(), D=(), legs=None, dtype=None, **kwargs):
     dtype : str
         desired dtype, overrides default_dtype specified in config
     device : str
-        device on which the tensor should be initialized, overrides default_device 
+        device on which the tensor should be initialized, overrides default_device
         specified in config
 
     Returns
@@ -180,7 +180,7 @@ def eye(config=None, t=(), D=(), legs=None, dtype=None, **kwargs):
         dtype= config.default_dtype
     s = ()
     if legs is not None:
-         t, D, s, _ = _tD_from_legs(legs)
+        t, D, s, _ = _tD_from_legs(legs)
     a = Tensor(config=config, s=s, isdiag=True, **kwargs)
     a.fill_tensor(t=t, D=D, val='ones', dtype=dtype)
     return a
@@ -242,7 +242,7 @@ def _tD_from_legs(legs):
                     raise YastError('Specifying leg number is required')
                 lgs.append(a)
                 a = next(ileg, None)
-                fps.append(-1 if isinstance(a, str) and a in {'flip', 'flip_s', 'f'} else 1)
+                fps.append(-1 if isinstance(a, str) and a in ('flip', 'flip_s', 'f') else 1)
                 if isinstance(a, int):
                     raise YastError('Two leg numbers one after another not understood.')
                 if isinstance(a, str):

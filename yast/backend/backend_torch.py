@@ -1,6 +1,6 @@
 """Support of torch as a data structure used by yast."""
-import torch
 from itertools import chain
+import torch
 from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_eig_sym import SYMEIG
 # from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
@@ -18,8 +18,7 @@ def unique_dtype(t):
     dtypes= set(b.dtype for b in t.A.values())
     if len(dtypes)==1:
         return str(tuple(dtypes)[0])[len("torch."):]
-    else:
-        return False
+    return False
 
 def random_seed(seed):
     torch.random.manual_seed(seed)
@@ -322,7 +321,7 @@ def eigh(A, meta=None, order_by_magnitude=False):
         else:
             for (ind, indS, indU) in meta:
                 S[indS], U[indU] = torch.linalg.eigh(A[ind])
-    else: 
+    else:
         S, U =  torch.linalg.eigh(A)
     return S, U
 
@@ -385,9 +384,9 @@ def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, or
 def eigs_which(val, which):
     if which == 'LM':
         return (-abs(val)).argsort()
-    elif which == 'SM':
+    if which == 'SM':
         return abs(val).argsort()
-    elif which == 'LR':
+    if which == 'LR':
         return (-real(val)).argsort()
     #elif which == 'SR':
     return (real(val)).argsort()
@@ -396,7 +395,7 @@ def eigs_which(val, which):
 def range_largest(D_keep, D_total, ordering):
     if ordering == 'svd':
         return (0, D_keep)
-    elif ordering == 'eigh':
+    if ordering == 'eigh':
         return (D_total - D_keep, D_total)
 
 
