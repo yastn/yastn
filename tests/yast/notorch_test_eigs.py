@@ -41,6 +41,8 @@ def test_eigs_simple():
     vy = [yast.decompress_from_1d(x, config_U1, meta) for x in vy1d.T]
     # remove zero blocks
     vyr = [yast.remove_zero_blocks(a) for a in vy]
+    for a, b in zip(vy, vyr):
+        assert a.are_independent(b)
     assert all((yast.norm_diff(x, y) < tol for x, y in zip(vy, vyr)))
     # display charges of eigenvectors (only charge on last leg) -- now there is superposition between +1 and -1
     print([x.get_leg_structure(axis=2) for x in vyr])
