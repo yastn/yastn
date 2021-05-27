@@ -1,12 +1,12 @@
 """ Linalg methods for yast tensor. """
 
 import numpy as np
-from scipy.linalg import expm as expm
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys
 from ._auxliary import YastError, _check, _test_tensors_match, _test_all_axes
 from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal
 from ._merging import _leg_struct_trivial, _leg_struct_truncation
 from ._contractions import vdot
+from ._krylov import _expand_krylov_space
 
 __all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'norm_diff', 'entropy', 'expmv', 'eigs']
 
@@ -347,181 +347,194 @@ def entropy(a, axes=(0, 1), alpha=1):
 
 
 # Krylov based methods, handled by anonymous function decribing action of matrix on a vector
-
-def expmv(f, v, t=1., tol=1e-13, ncv=5, hermitian=False, output_statistics=False):
+def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, return_info=False):
     r"""
-    Calculate exp(t*f)*v, where v is a yast tensor, and f is linear operator acting on v.
+    Calculate exp(t*f)*v, where v is a yast tensor, and f(v) is linear operator acting on v.
+
+    Parameters
+    ----------
+        f: function
+            define an action of a 'square matrix' on the vector x.
+            f(x) should preserve the signature of x.
+
+        v: Tensor
+
+        t: number
+
+        tol: number
+            targeted tolerance; it is used to update the time-step and size of Krylov space.
+           The result should have better tolerance, as corrected result is outputed.
+
+        ncv: int
+            Initial guess for the size of the Krylov space
+
+        hermitian: bool
+            Assume that f is a hermitian operator, in which case Lanczos iterations are used.
+            Otherwise Arnoldi iterations are used to span the Krylov space.
+
+        normalize: bool
+            The result is normalized to unity using 2-norm.
+
+        return_info: bool
+            info.ncv : guess of the Krylov-space size,
+            info.error : estimate of error (likely over-estimate)
+            info.krylov_steps : number of execution of f(x),
+            info.steps : number of steps to reach t,
+
+        Returns
+        -------
+        out : Tensor if not return_info else (out, info)
+
+        Note
+        ----
+        Employ the algorithm of:
+        J. Niesen, W. M. Wright, ACM Trans. Math. Softw. 38, 22 (2012),
+        Algorithm 919: A Krylov subspace algorithm for evaluating
+        the phi-functions appearing in exponential integrators.
     """
     backend = v.config.backend
-
-    # Krylov parameters
-    ncv_max = min([20, v.get_size()])
-    ncv = max(1, ncv)
-
-    # Initialize variables
-    reject = False
-    happy = False
-
+    ncv, ncv_max = max(1, ncv), min([30, v.get_size()])  # Krylov space parameters
     t_now, t_out = 0, abs(t)
     sgn = t / t_out if t_out > 0 else 0
-    tau = t_out  # first quess for a time-step
-
-    gamma = 0.6  # Safety factors
-    delta = 1.4
-
-    j = 0  # size of krylov space
-    w = v
+    tau = t_out  # initial quess for a time-step
+    gamma, delta = 0.8, 1.2  # Safety factors
+    V, H = None, None  # reset Krylov space
     ncv_old, tau_old, omega = None, None, None
-    order_old, ncv_est_old = True, True
+    reject, order_computed, ncv_computed = False, False, False
+    info = {'ncv': ncv, 'error': 0., 'krylov_steps': 0, 'steps': 0}
+
+    normv = v.norm()
+    if normv == 0:
+        if normalize:
+            raise YastError('expmv got zero vector that cannot be normalized')
+        t_out = 0
+    else:
+        v = v / normv
 
     while t_now < t_out:
-        if j == 0:
-            H = {}
-            beta = w.norm()
-            if beta == 0:  # multiply with a zero vector; result is zero # TODO handle this
-                tau = t_out - t_now
-                break
-            V = [w / beta]  # first vector in Krylov basis
-        while j < ncv:
-            w = f(V[-1])
-            for i in range(j + 1):
-                H[(i, j)] = vdot(V[i], w)
-                w = w.apxb(V[i], x=-H[(i, j)])
-            ss = w.norm()
-            if ss < tol:
-                happy = True
-                tau = t_out - t_now
-                break
-            H[(j + 1, j)] = ss
-            V.append(w / ss)
-            j += 1
-
-        H[(0, j)] = backend.dtype_scalar(1, device=v.config.device)
-        h = H.pop((j, j - 1)) if (j, j - 1) in H else 0
-        T = backend.square_matrix_from_dict(H, j + 1, device=v.config.device)
+        if V is None:
+            V = [v]
+        V, H, happy = _expand_krylov_space(f, tol, ncv, hermitian, V, H, info)
+        if happy:
+            tau = t_out - t_now
+            m = len(V)
+            h = 0
+        else:
+            m = len(V) - 1
+            h = H.pop((m, m - 1))
+        H[(0, m)] = backend.dtype_scalar(1, device=v.config.device)
+        T = backend.square_matrix_from_dict(H, m + 1, device=v.config.device)
         F = backend.expm((sgn * tau) * T)
-        err = abs(beta * h * F[j - 1, j]).item()
+        err = abs(h * F[m - 1, m]).item()
 
-        # Error per unit step
-        omega_old = omega
-        omega = (t_out / tau) * (err / tol)
+        # renormalized error per unit step
+        omega_old, omega = omega, (t_out / tau) * (err / tol)
 
         # Estimate order
         if ncv == ncv_old and tau != tau_old and reject:
             order = max([1., np.log(omega / omega_old) / np.log(tau / tau_old)])
-            order_old = False
-        elif order_old or not reject:
-            order_old = True
-            order = 0.25 * j
+            order_computed = True
+        elif reject and order_computed:
+            order_computed = False
         else:
-            order_old = True
+            order_computed = False
+            order = 0.25 * m
 
-        # Estimate k
+        # Estimate ncv
         if ncv != ncv_old and tau == tau_old and reject:
             ncv_est = max([1.1, (omega / omega_old) ** (1. / (ncv_old - ncv))]) if omega > 0 else 1.1
-            ncv_est_old = False
-        elif ncv_est_old or not reject:
-            ncv_est_old = True
-            ncv_est = 2
+            ncv_computed = True
+        elif reject and ncv_computed:
+            ncv_computed = False
         else:
-            ncv_est_old = True
+            ncv_computed = False
+            ncv_est = 2
 
         tau_old, ncv_old = tau, ncv
         if happy:
             omega = 0
-            tau_new = tau
-            ncv_new = ncv
-        elif j == ncv_max and omega > delta:  # Krylov subspace to small and stepsize to large
-            tau_new, tau * (omega / gamma) ** (-1. / order)
-            ncv_new = j
-        else:  # Determine optimal tau and m
-            tau_opt = tau * (omega / gamma) ** (-1. / order)
-            ncv_opt = max([1., np.ceil(j + np.log(omega / gamma) / np.log(ncv_est))])
-            Ctau = ncv * np.ceil((t_out - t_now) / tau_opt)
-            Ck = ncv_opt * np.ceil((t_out - t_now) / tau)
-            tau_new, ncv_new = (tau_opt, j) if Ctau < Ck else (tau, ncv_opt)
+            tau_new, ncv_new = tau, ncv
+        elif m == ncv_max and omega > delta:
+            tau_new, ncv_new = tau * (omega / gamma) ** (-1. / order), ncv_max
+        else:
+            tau_opt = tau * (omega / gamma) ** (-1. / order) if omega > 0 else t_out - t_now
+            ncv_opt = int(max([1, np.ceil(m + np.log(omega / gamma) / np.log(ncv_est))])) if omega > 0 else 1
+            C1 = ncv * int(np.ceil((t_out - t_now) / tau_opt))
+            C2 = ncv_opt * int(np.ceil((t_out - t_now) / tau))
+            tau_new, ncv_new = (tau_opt, m) if C1 < C2 else (tau, ncv_opt)
 
         if omega <= delta:  # Check error against target
-            w = (beta * F[0, 0]) * V[0]
-            for it in range(1, j + 1):
-                w = w.apxb(V[it], x=(beta * F[it, 0]))
+            F[m, 0] = F[m - 1, m] * h
+            F = F[:, 0]
+            normF = backend.norm_matrix(F)
+            normv = normv * normF
+            F = F / normF
+            v = F[0] * V[0]
+            for it in range(1, len(V)):
+                v = v.apxb(V[it], x= F[it])
             t_now += tau
-            j = 0
-            reject = False
+            info['steps'] += 1
+            info['error'] += err
+            V, H, reject = None, None, False
         else:
             reject = True
-            H[(j, j - 1)] = h
-            H.pop((0, j))
+            H[(m, m - 1)] = h
+            H.pop((0, m))
+        tau = min(max(0.2 * tau, tau_new), t_out - t_now, 2 * tau)
+        ncv = int(max(1, min(ncv_max, np.ceil(1.3333 * m), max(np.floor(0.75 * m), ncv_new))))
+    info['ncv'] = ncv
+    if not normalize:
+        v = normv * v
+    return (v, info) if return_info else v
 
-        # Another safety factors
-        tau = min(t_out - t_now, max(0.2 * tau, min(tau_new, 2. * tau)))
-        ncv = max(1, min(ncv_max, max(np.floor(.75 * ncv), min(ncv_new, np.ceil(1.3333 * ncv)))))
-    return w / w.norm()
 
-
-def eigs(f, v0, k=1, which=None, ncv=5, maxiter=None, tol=1e-13, hermitian=True):
+def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True):
     r"""
-    f: function handlers.
-        Action of a matrix on a vector. For non-symmetric lanczos both have to be defined.
+    Search for dominant eigenvalues of linear operator f using Arnoldi algorithm.
+    ONLY A SINGLE ITERATION FOR NOW
+
+    f: function
+        define an action of a 'square matrix' on the 'vector' x.
+        f(x) should preserve the signature of x.
+
     v0: Tensor
-        Initial vector for iteration.
+        Initial guess, 'vector' to span the Krylov space.
+
     k: int
-        default = 1, number of eigenvalues equals number of non-zero Krylov vectors
-        The number of eigenvalues and eigenvectors desired. It is not possible to compute all eigenvectors of a matrix.
-    sigma: float
-        default = None (search for smallest)
-        Find eigenvalues near sigma.
-    ncv: int
-        default = 5
-        The number of Lanczos vectors generated ncv must be greater than k; it is recommended that ncv > 2*k.
-    which: str, [‘LM’ | ‘SM’ | ‘LR’ | ‘SR’ | ‘LI’ | ‘SI’]
-        default = None (search for closest to sigma - if defined and for 'SR' else)
+        Number of desired eigenvalues and eigenvectors. default is 1.
+
+    which: str in [‘LM’, ‘SM’, ‘LR’, ‘SR’]
         Which k eigenvectors and eigenvalues to find:
             ‘LM’ : largest magnitude
             ‘SM’ : smallest magnitude
             ‘LR’ : largest real part
             ‘SR’ : smallest real part
-            ‘LI’ : largest imaginary part
-            ‘SI’ : smallest imaginary part
+
+    ncv: int
+        Dimension of the employed Krylov space. Default is 10.
+        Must be greated than k.
+
+    maxiter: int
+        Maximal number of restarts; NOT IMPLEMENTED FOR NOW.
+
     tol: float
-        defoult = 1e-14
-        Relative accuracy for eigenvalues (stopping criterion) for Krylov subspace.
-    return_eigenvectors: bool
-        default = True
-        Return eigenvectors (True) in addition to eigenvalues.
-    bi_orth: bool
-        default = True
-        Option for non-symmetric Lanczos method. Whether to bi-orthonomalize Krylov-subspace vectors.
-    algorithm: str
-        default = 'arnoldi'
-        What method to use. Possible options: arnoldi, lanczos
+        Relative accuracy for eigenvalues and th stopping criterion for Krylov subspace.
+        Default is 1e-13.
+
+    hermitian: bool
+        Assume that f is a hermitian operator, in which case Lanczos iterations are used.
+        Otherwise Arnoldi iterations are used to span the Krylov space.
     """
-    
     backend = v0.config.backend
-    beta = None
-    V = [v0]
-    H = {}
+    normv = v0.norm()
+    if normv == 0:
+        raise YastError('Initial vector v0 of eigs should be nonzero.')
+    V = [v0 / normv]
+    V, H, happy = _expand_krylov_space(f, 1e-13, ncv, hermitian, V)  # tol=1e-13
+    m = len(V) if happy else len(V) - 1
 
-    for j in range(ncv):
-        w = f(V[-1])
-        for i in range(j + 1):
-            H[(i, j)] = vdot(V[i], w)
-            w = w.apxb(V[i], x=-H[(i, j)])
-        H[(j + 1, j)] = w.norm()
-        if H[(j + 1, j)] < tol:
-            beta, happy = 0, True
-            break
-        V.append(w /H[(j + 1, j)])
-    if beta == None:
-        beta, happy = H[(j + 1, j)], False
-
-    T = backend.square_matrix_from_dict(H, j + 1, device=v0.config.device)
-
-    if hermitian:
-        val, vr = backend.eigh(T)
-    else:
-        val, vr = backend.eig(T)
-
+    T = backend.square_matrix_from_dict(H, m, device=v0.config.device)
+    val, vr = backend.eigh(T) if hermitian else backend.eig(T)
     ind = backend.eigs_which(val, which)
 
     val, vr = val[ind], vr[:, ind]
