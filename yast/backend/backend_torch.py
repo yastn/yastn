@@ -211,6 +211,11 @@ def square_matrix_from_dict(H, D=None, device='cpu'):
 #     single dict operations     #
 ##################################
 
+def requires_grad_(A, requires_grad=True):
+    for b in A.values(): b.requires_grad_(requires_grad)
+
+def requires_grad(A):
+    return any([ b.requires_grad for b in A.values() ])
 
 def move_to_device(A, device):
     return {ind: x.to(device) for ind, x in A.items()}

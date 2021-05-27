@@ -5,7 +5,7 @@ from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _struct
 from ._auxliary import YastError, _test_configs_match, _test_tensors_match
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'absolute', 'real', 'imag', 'remove_zero_blocks',
-           'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'copy', 'clone', 'detach', 'to', 'fuse_legs', 'unfuse_legs']
+           'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'copy', 'clone', 'detach', 'to', 'fuse_legs', 'unfuse_legs', 'requires_grad_']
 
 
 def copy(a):
@@ -52,6 +52,16 @@ def to(a, device):
     c = a.__class__(config=a.config, isdiag=a.isdiag, device=device, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = a.config.backend.move_to_device(a.A, device)
     return c
+
+def requires_grad_(a, requires_grad=True):
+    r"""
+    Turn on recording of operations for the tensor for automatic differentiation.
+
+    Parameters
+    ----------
+    requires_grad: bool
+    """
+    a.config.backend.requires_grad_(a.A, requires_grad=requires_grad)
 
 
 def __mul__(a, number):

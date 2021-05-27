@@ -51,7 +51,7 @@ class Tensor:
                 temp_config['device'] = config.default_device
             self.config = _config(**temp_config)
         if 'device' in kwargs and kwargs['device'] != self.config.device:
-            self.config._replace('device', kwargs['device'])
+            self.config._replace(device= kwargs['device'])
 
         self.isdiag = isdiag
         self.A = {}  # dictionary of blocks
@@ -97,7 +97,7 @@ class Tensor:
     from ._contractions import tensordot, vdot, trace, swap_gate
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, diag, absolute, sqrt, rsqrt, reciprocal, exp
     from ._single import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, remove_zero_blocks
-    from ._single import copy, clone, detach, to, real, imag, fuse_legs, unfuse_legs
+    from ._single import copy, clone, detach, to, requires_grad_, real, imag, fuse_legs, unfuse_legs
     from ._output import export_to_dict, compress_to_1d, show_properties, __str__, print_blocks, is_complex
     from ._output import get_blocks_charges, get_leg_charges_and_dims, zero_of_dtype, item, __getitem__
     from ._output import get_blocks_shapes, get_leg_fusion, get_leg_structure, get_ndim, get_shape, get_signature, unique_dtype
@@ -114,3 +114,8 @@ class Tensor:
     def n(self):
         """ Return total charge of the tensor as a tuple. """
         return self.struct.n
+
+    @property
+    def requires_grad(self):
+        return requires_grad(self)
+    
