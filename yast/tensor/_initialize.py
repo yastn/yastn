@@ -128,7 +128,7 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
     dtype : str
         desired dtype, overrides default_dtype specified in config of tensor `a`
     """
-    if not dtype:
+    if dtype is None:
         assert hasattr(a.config, 'default_dtype'), "Either dtype or valid config has to be provided"
         dtype = a.config.default_dtype
 
@@ -185,9 +185,9 @@ def _set_block(a, ts, Ds, val, dtype):
             a.A[ts] = a.config.backend.diag_create(a.A[ts])
     else:
         if a.isdiag and val.ndim == 1 and np.prod(Ds) == (val.size**2):
-            a.A[ts] = a.config.backend.to_tensor(np.diag(val), Ds, device=a.config.device)
+            a.A[ts] = a.config.backend.to_tensor(np.diag(val), Ds, dtype=dtype, device=a.config.device)
         else:
-            a.A[ts] = a.config.backend.to_tensor(val, Ds=Ds, device=a.config.device)
+            a.A[ts] = a.config.backend.to_tensor(val, Ds=Ds, dtype=dtype, device=a.config.device)
 
 
 
