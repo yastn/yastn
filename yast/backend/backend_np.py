@@ -211,6 +211,11 @@ def square_matrix_from_dict(H, D=None, **kwargs):
 #     single dict operations     #
 ##################################
 
+def requires_grad_(A, requires_grad=True):
+    pass
+
+def requires_grad(A):
+    return False
 
 def move_to_device(A, *args, **kwargs):
     return A

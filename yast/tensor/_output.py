@@ -4,7 +4,7 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, YastError, _check
 from ..sym import sym_none
 
-__all__ = ['export_to_dict', 'compress_to_1d', 'leg_structures_for_dense']
+__all__ = ['export_to_dict', 'compress_to_1d', 'leg_structures_for_dense', 'requires_grad']
 
 
 def export_to_dict(a):
@@ -86,6 +86,9 @@ def __str__(a):
     s += f"dimensions   : {Ds}"
     return s
 
+def requires_grad(a):
+    """ returns `True` if any of the blocks of the tensor has enabled recording of operations """
+    return a.config.backend.requires_grad(a.A)
 
 def print_blocks(a):
     """ print shapes of blocks """

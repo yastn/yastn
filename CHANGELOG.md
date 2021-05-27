@@ -26,3 +26,7 @@
 - new test in function is_consistent, that check if all blocks are on the same device, 
   and if it matches config.device (this can be unwanted test in numpy ...)
 - flipping signature of diag tensor in tensordot is commented out (moving toward general signature of diagonal tensor)
+
+27-5-2021
+- `requires_grad_` function added to Tensor interface which allows to turn on operation tracking on all blocks
+- property `requires_grad` added to Tensor which returns `True` if any of the blocks has operation tracking enabled
