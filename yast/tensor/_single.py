@@ -152,9 +152,10 @@ def __add__(a, b):
     _test_configs_match(a, b)
     _test_tensors_match(a, b)
     meta = _common_keys(a.A, b.A)
-    c = a.copy_empty()
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = c.config.backend.add(a.A, b.A, meta)
-    c.update_struct()
+    if len(meta[1]) > 0 or len(meta[2]) > 0:
+        c.update_struct()
     return c
 
 
@@ -176,9 +177,10 @@ def __sub__(a, b):
     _test_configs_match(a, b)
     _test_tensors_match(a, b)
     meta = _common_keys(a.A, b.A)
-    c = a.copy_empty()
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = c.config.backend.sub(a.A, b.A, meta)
-    c.update_struct()
+    if len(meta[1]) > 0 or len(meta[2]) > 0:
+        c.update_struct()
     return c
 
 
@@ -201,9 +203,10 @@ def apxb(a, b, x=1):
     _test_configs_match(a, b)
     _test_tensors_match(a, b)
     meta = _common_keys(a.A, b.A)
-    c = a.copy_empty()
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = c.config.backend.apxb(a.A, b.A, x, meta)
-    c.update_struct()
+    if len(meta[1]) > 0 or len(meta[2]) > 0:
+        c.update_struct()
     return c
 
 
@@ -432,9 +435,13 @@ def exp(a, step=1.):
     return c
 
 
-def remove_zero_blocks(a, rel=1e-12, abs=0, inplace=False):
-    cutoff = abs + rel * a.norm(p='inf')
-    c = a if inplace else a.copy_empty()
+def remove_zero_blocks(a, rtol=1e-12, atol=0, inplace=False):
+    r"""
+    Remove from the tensor blocks where all elements are below a cutoff.
+    Cutoff is a combination of absolut tolerance and relative tolerance with respect to maximal element in the tensor.
+    """
+    cutoff = atol + rtol * a.norm(p='inf')
+    c = a if inplace else a.clone()
     c.A = {k: t for k, t in a.A.items() if a.config.backend.max_abs(t) > cutoff}
     c.update_struct()
     return c

@@ -3,10 +3,8 @@
 from functools import lru_cache
 from typing import NamedTuple
 from itertools import accumulate, chain
-
-from numpy.lib.utils import safe_eval
-from . import _merging
 import numpy as np
+from . import _merging
 from ..sym import sym_none
 
 __all__ = ['check_signatures_match', 'check_consistency', 'set_cache_maxsize', 'get_cache_info',

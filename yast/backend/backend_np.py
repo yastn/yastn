@@ -1,11 +1,11 @@
 """Support of numpy as a data structure used by yast."""
-import warnings
-import numpy as np
-import scipy as sp
 from itertools import chain
+import numpy as np
+import scipy.linalg
 try:
     import fbpca
 except ModuleNotFoundError:
+    import warnings
     warnings.warn("fbpca not available", Warning)
 
 BACKEND_ID = "numpy"
@@ -22,8 +22,7 @@ def unique_dtype(t):
     dtypes= set(b.dtype for b in t.A.values())
     if len(dtypes)==1:
         return str(tuple(dtypes)[0])
-    else:
-        return False
+    return False
 
 
 def random_seed(seed):
@@ -95,20 +94,12 @@ def imag(x):
     return np.imag(x)
 
 
-def floor(x):
-    return np.floor(x)
-
-
-def ceil(x):
-    return np.ceil(x)
-
-
-def log(x):
-    return np.log(x)
-
-
 def max_abs(x):
     return np.abs(x).max()
+
+
+def norm_matrix(x):
+    return np.linalg.norm(x)
 
 #########################
 #    output numbers     #
@@ -289,7 +280,7 @@ def exp_diag(A, step):
 
 
 def expm(A):
-    return sp.linalg.expm(A)
+    return scipy.linalg.expm(A)
 
 
 def sqrt(A):
@@ -312,9 +303,9 @@ def svd(A, meta):
     U, S, V = {}, {}, {}
     for (iold, iU, iS, iV) in meta:
         try:
-            U[iU], S[iS], V[iV] = sp.linalg.svd(A[iold], full_matrices=False)
-        except sp.linalg.LinAlgError:
-            U[iU], S[iS], V[iV] = sp.linalg.svd(A[iold], full_matrices=False, lapack_driver='gesvd')
+            U[iU], S[iS], V[iV] = scipy.linalg.svd(A[iold], full_matrices=False)
+        except scipy.linalg.LinAlgError:
+            U[iU], S[iS], V[iV] = scipy.linalg.svd(A[iold], full_matrices=False, lapack_driver='gesvd')
     return U, S, V
 
 
@@ -332,16 +323,16 @@ def svd_S(A):
     S = {}
     for ind in A:
         try:
-            S[ind] = sp.linalg.svd(A[ind], full_matrices=False, compute_uv=False)
-        except sp.linalg.LinAlgError:
-            S[ind] = sp.linalg.svd(A[ind], full_matrices=False, lapack_driver='gesvd', compute_uv=False)
+            S[ind] = scipy.linalg.svd(A[ind], full_matrices=False, compute_uv=False)
+        except scipy.linalg.LinAlgError:
+            S[ind] = scipy.linalg.svd(A[ind], full_matrices=False, lapack_driver='gesvd', compute_uv=False)
     return S
 
 
 def qr(A, meta):
     Q, R = {}, {}
     for (ind, indQ, indR) in meta:
-        Q[indQ], R[indR] = sp.linalg.qr(A[ind], mode='economic')
+        Q[indQ], R[indR] = scipy.linalg.qr(A[ind], mode='economic')
         sR = np.sign(np.real(np.diag(R[indR])))
         sR[sR == 0] = 1
         # positive diag of R
@@ -353,7 +344,7 @@ def qr(A, meta):
 # def rq(A):
 #     R, Q = {}, {}
 #     for ind in A:
-#         R[ind], Q[ind] = sp.linalg.rq(A[ind], mode='economic')
+#         R[ind], Q[ind] = scipy.linalg.rq(A[ind], mode='economic')
 #         sR = np.sign(np.real(np.diag(R[ind])))
 #         sR[sR == 0] = 1
 #         # positive diag of R
@@ -386,9 +377,9 @@ def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, or
 def eigs_which(val, which):
     if which == 'LM':
         return (-abs(val)).argsort()
-    elif which == 'SM':
+    if which == 'SM':
         return abs(val).argsort()
-    elif which == 'LR':
+    if which == 'LR':
         return (-val.real).argsort()
     #elif which == 'SR':
     return (val.real).argsort()
