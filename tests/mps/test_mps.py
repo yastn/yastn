@@ -1,7 +1,7 @@
 import ops_full
 import ops_Z2
-import yast.mps as mps
 import yast
+import yamps
 import numpy as np
 import pytest
 
@@ -15,6 +15,7 @@ def is_left_canonical(psi):
         x = psi.A[n].tensordot(psi.A[n], axes=(cl, cl), conj=(1, 0))
         x0 = yast.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True, val='ones', conjs=[1, 1])
         assert pytest.approx(x.norm_diff(x0.diag())) == 0
+    assert psi.pC is None
 
 
 def is_right_canonical(psi):
@@ -26,6 +27,7 @@ def is_right_canonical(psi):
         x = psi.A[n].tensordot(psi.A[n], axes=(cl, cl), conj=(0, 1))
         x0 = yast.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True, val='ones', conjs=[1, 1])
         assert pytest.approx(x.norm_diff(x0.diag())) == 0
+    assert psi.pC is None
 
 
 def check_canonize(psi):
@@ -42,26 +44,26 @@ def env2_measure(psi1, psi2):
     """
     Test if different overlaps of psi1 and psi2 give consistent results
     """
-    N = psi1.g.N
-    env = mps.Env2(bra=psi1, ket=psi2)
-    env.setup_to_first()
-    env.setup_to_last()
+    N = psi1.N
+    env = yamps.Env2(bra=psi1, ket=psi2)
+    env.setup(to='first')
+    env.setup(to='last')
 
     results = [env.measure()]
     for n in range(N - 1):
         results.append(env.measure(bd=(n, n + 1)))
-    results.append(env.measure(bd=(N - 1, None)))
-    results.append(env.measure(bd=(None, N - 1)))
+    results.append(env.measure(bd=(N - 1, N)))
+    results.append(env.measure(bd=(N, N - 1)))
     for n in range(N - 1, 0, -1):
         results.append(env.measure(bd=(n, n - 1)))
-    results.append(env.measure(bd=(0, None)))
+    results.append(env.measure(bd=(0, -1)))
 
-    env2 = mps.Env2(bra=psi2, ket=psi1)
-    env2.setup_to_last()
-    results.append(np.conj(env2.measure(bd=(None, N - 1))))
+    env2 = yamps.Env2(bra=psi2, ket=psi1)
+    env2.setup(to='last')
+    results.append(np.conj(env2.measure(bd=(N, N - 1))))
 
-    results.append(mps.measure_overlap(bra=psi1, ket=psi2))
-    results.append(mps.measure_overlap(bra=psi2, ket=psi1).conj())
+    results.append(yamps.measure_overlap(bra=psi1, ket=psi2))
+    results.append(yamps.measure_overlap(bra=psi2, ket=psi1).conj())
     assert(np.std(results) / abs(np.mean(results)) < 1e-12)
 
 
@@ -70,33 +72,32 @@ def env3_measure(psi1, op, psi2):
     Test if different overlaps of psi1 and psi2 give consistent results
     """
     N = psi1.N
-    env = mps.Env3(bra=psi1, op=op, ket=psi2)
-    env.setup_to_first()
-    env.setup_to_last()
+    env = yamps.Env3(bra=psi1, op=op, ket=psi2)
+    env.setup(to='first')
+    env.setup(to='last')
 
     results = [env.measure()]
     for n in range(N - 1):
         results.append(env.measure(bd=(n, n + 1)))
-    results.append(env.measure(bd=(N - 1, None)))
-    results.append(env.measure(bd=(None, N - 1)))
+    results.append(env.measure(bd=(N - 1, N)))
+    results.append(env.measure(bd=(N, N - 1)))
     for n in range(N - 1, 0, -1):
         results.append(env.measure(bd=(n, n - 1)))
-    results.append(env.measure(bd=(0, None)))
+    results.append(env.measure(bd=(0, -1)))
 
-    results.append(mps.measure_mpo(bra=psi1, op=op, ket=psi2))
+    results.append(yamps.measure_mpo(bra=psi1, op=op, ket=psi2))
     assert(np.std(results) / abs(np.mean(results)) < 1e-12)
 
 
 def env2_cononize(psi):
     psi.canonize_sweep(to='last')
-    env = mps.Env2(ket=psi)
-    env.setup_to_first()
+    env = yamps.Env2(ket=psi)
+    env.setup(to='first')
     assert(abs(env.measure() - 1) < 1e-12)
 
 
 def check_copy(psi1, psi2):
-    assert psi1.g is psi2.g
-    for n in psi1.g.sweep():
+    for n in psi1.sweep():
         assert np.allclose(psi1.A[n].to_numpy(), psi2.A[n].to_numpy())
 
 

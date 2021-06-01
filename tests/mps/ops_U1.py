@@ -1,10 +1,10 @@
-from context import yast
+from context import yast, yamps
 from context import config_U1
 
 
-def mps_random(N=2, Dblocks=[2], total_charge=1):
+def mps_random(N=2, Dblocks=(2,), total_charge=1):
     Dblocks = tuple(Dblocks)
-    psi = yast.mps.Mps(N, nr_phys=1)
+    psi = yamps.Mps(N, nr_phys=1)
     tc = (0, 1)
     Dc = (1, 1)
     nb = len(Dblocks)
@@ -19,8 +19,8 @@ def mps_random(N=2, Dblocks=[2], total_charge=1):
     return psi
 
 
-def mpo_random(N=2, Dblocks=[2], total_charge=1, t_out=None, t_in=(0, 1), dtype='float64'):
-    psi = yast.mps.Mps(N, nr_phys=2)
+def mpo_random(N=2, Dblocks=(2,), total_charge=1, t_out=None, t_in=(0, 1)):
+    psi = yamps.Mps(N, nr_phys=2)
     Dblocks = tuple(Dblocks)
     nb = len(Dblocks)
     if t_out is None:
@@ -39,17 +39,15 @@ def mpo_random(N=2, Dblocks=[2], total_charge=1, t_out=None, t_in=(0, 1), dtype=
 
 
 def mpo_XX_model(N, t, mu):
-    H = yast.mps.Mps(N, nr_phys=2)
-    m = mu
-    w = t
-    for n in H.g.sweep(to='last'):
+    H = yamps.Mps(N, nr_phys=2)
+    for n in H.sweep(to='last'):
         H.A[n] = yast.Tensor(config=config_U1, s=[1, 1, -1, -1], n=0)
-        if n == H.g.first:
+        if n == H.first:
             H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 1, 2))
             H.A[n].set_block(ts=(0, 1, 1, 0), val=[mu, 1], Ds=(1, 1, 1, 2))
-            H.A[n].set_block(ts=(0, 0, 1, -1), val=[w], Ds=(1, 1, 1, 1))
-            H.A[n].set_block(ts=(0, 1, 0, 1), val=[w], Ds=(1, 1, 1, 1))
-        elif n == H.g.last:
+            H.A[n].set_block(ts=(0, 0, 1, -1), val=[t], Ds=(1, 1, 1, 1))
+            H.A[n].set_block(ts=(0, 1, 0, 1), val=[t], Ds=(1, 1, 1, 1))
+        elif n == H.last:
             H.A[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
             H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, mu], Ds=(2, 1, 1, 1))
             H.A[n].set_block(ts=(-1, 1, 0, 0), val=[1], Ds=(1, 1, 1, 1))
@@ -57,20 +55,21 @@ def mpo_XX_model(N, t, mu):
         else:
             H.A[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 1, 2))
             H.A[n].set_block(ts=(0, 1, 1, 0), val=[[1, 0], [mu, 1]], Ds=(2, 1, 1, 2))
-            H.A[n].set_block(ts=(0, 0, 1, -1), val=[0, w], Ds=(2, 1, 1, 1))
-            H.A[n].set_block(ts=(0, 1, 0, 1), val=[0, w], Ds=(2, 1, 1, 1))
+            H.A[n].set_block(ts=(0, 0, 1, -1), val=[0, t], Ds=(2, 1, 1, 1))
+            H.A[n].set_block(ts=(0, 1, 0, 1), val=[0, t], Ds=(2, 1, 1, 1))
             H.A[n].set_block(ts=(-1, 1, 0, 0), val=[1, 0], Ds=(1, 1, 1, 2))
             H.A[n].set_block(ts=(1, 0, 1, 0), val=[1, 0], Ds=(1, 1, 1, 2))
     return H
 
+
 def mpo_occupation(N):
-    H = yast.mps.Mps(N, nr_phys=2)
-    for n in H.g.sweep(to='last'):
+    H = yamps.Mps(N, nr_phys=2)
+    for n in H.sweep(to='last'):
         H.A[n] = yast.Tensor(config=config_U1, s=[1, 1, -1, -1], n=0)
-        if n == H.g.first:
+        if n == H.first:
             H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 1, 2))
             H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(1, 1, 1, 2))
-        elif n == H.g.last:
+        elif n == H.last:
             H.A[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
             H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(2, 1, 1, 1))
         else:

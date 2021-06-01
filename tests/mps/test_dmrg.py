@@ -2,18 +2,18 @@
 import ops_full
 import ops_Z2
 import ops_U1
-import yast.mps as mps
+import yamps
 import pytest
 
 
 def run_dmrg_0site(psi, H, occ, Etarget, occ_target, sweeps=10):
     """ Run a faw sweeps of dmrg_0site_sweep. Returns energy. """
-    mps.dmrg.dmrg_sweep_1site(psi, H, env=None)
+    yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
     env = None
     for _ in range(sweeps):
-        env = mps.dmrg.dmrg_sweep_0site(psi, H, env=env)
+        env = yamps.dmrg.dmrg_sweep_0site(psi, H, env=env)
     assert pytest.approx(env.measure(), rel=1e-4) == Etarget  # This seems to be coverging slowly
-    assert pytest.approx(mps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
+    assert pytest.approx(yamps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
     return psi
 
 
@@ -21,9 +21,9 @@ def run_dmrg_1site(psi, H, occ, Etarget, occ_target, sweeps=5):
     """ Run a faw sweeps of dmrg_1site_sweep. Returns energy. """
     env = None
     for _ in range(sweeps):
-        env = mps.dmrg.dmrg_sweep_1site(psi, H, env=env)
+        env = yamps.dmrg.dmrg_sweep_1site(psi, H, env=env)
     assert pytest.approx(env.measure(), rel=1e-6) == Etarget
-    assert pytest.approx(mps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
+    assert pytest.approx(yamps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
     return psi
 
 
@@ -32,9 +32,9 @@ def run_dmrg_2site(psi, H, occ, Etarget, occ_target, sweeps=5, D_total=32):
     env = None
     opts_svd = {'tol': 1e-8, 'D_total': D_total}
     for _ in range(sweeps):
-        env = mps.dmrg.dmrg_sweep_2site(psi, H, env=env, opts_svd=opts_svd)
+        env = yamps.dmrg.dmrg_sweep_2site(psi, H, env=env, opts_svd=opts_svd)
     assert pytest.approx(env.measure(), rel=1e-6) == Etarget
-    assert pytest.approx(mps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
+    assert pytest.approx(yamps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
     return psi
 
 
@@ -43,9 +43,9 @@ def run_dmrg_2site_group(psi, H, occ, Etarget, occ_target, sweeps=5, D_total=32)
     env = None
     opts_svd = {'tol': 1e-8, 'D_total': D_total}
     for _ in range(sweeps):
-        env = mps.dmrg.dmrg_sweep_2site_group(psi, H, env=env, opts_svd=opts_svd)
+        env = yamps.dmrg.dmrg_sweep_2site_group(psi, H, env=env, opts_svd=opts_svd)
     assert pytest.approx(env.measure(), rel=1e-6) == Etarget
-    assert pytest.approx(mps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
+    assert pytest.approx(yamps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
     return psi
 
 
@@ -65,22 +65,22 @@ def test_full_dmrg():
     psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_0site(psi, H, occ, Eng_gs, Occ_gs)
-    print('0site      : Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+    print('0site      : Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
     psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_1site(psi, H, occ, Eng_gs, Occ_gs)
-    print('1site      : Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+    print('1site      : Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
     psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_2site(psi, H, occ, Eng_gs, Occ_gs, D_total=Dmax)
-    print('2site      : Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+    print('2site      : Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
     psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_2site_group(psi, H, occ, Eng_gs, Occ_gs, D_total=Dmax)
-    print('2site group: Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+    print('2site group: Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
 
 def test_Z2_dmrg():
@@ -102,44 +102,44 @@ def test_Z2_dmrg():
     psi = ops_Z2.mps_random(N=N, Dblock=Dmax/2, total_parity=0)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_0site(psi, H, occ, Eng_parity0, Occ_gs0)
-    print('0site      : Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+    print('0site      : Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
     psi = ops_Z2.mps_random(N=N, Dblock=Dmax/2, total_parity=1)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_1site(psi, H, occ, Eng_parity1, Occ_gs1)
-    print('1site      : Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+    print('1site      : Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
     psi = ops_Z2.mps_random(N=N, Dblock=Dmax/2, total_parity=1)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_2site(psi, H, occ, Eng_parity1, Occ_gs1, D_total=Dmax)
-    print('2site      : Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+    print('2site      : Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
     psi = ops_Z2.mps_random(N=N, Dblock=Dmax/2, total_parity=1)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_2site_group(psi, H, occ, Eng_parity1, Occ_gs1, D_total=Dmax)
-    print('2site group: Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+    print('2site group: Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
     print('Expected p=1: Energy =', Eng_parity1, ' Occupation = ', Occ_gs1)
 
     psi = ops_Z2.mps_random(N=N, Dblock=Dmax/2, total_parity=1)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_0site(psi, H, occ, Eng_parity1, Occ_gs1)
-    print('0site      : Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+    print('0site      : Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
     psi = ops_Z2.mps_random(N=N, Dblock=Dmax/2, total_parity=0)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_1site(psi, H, occ, Eng_parity0, Occ_gs0)
-    print('1site      : Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+    print('1site      : Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
     psi = ops_Z2.mps_random(N=N, Dblock=Dmax/2, total_parity=0)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_2site(psi, H, occ, Eng_parity0, Occ_gs0, D_total=Dmax)
-    print('2site      : Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+    print('2site      : Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
     psi = ops_Z2.mps_random(N=N, Dblock=Dmax/2, total_parity=0)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_2site_group(psi, H, occ, Eng_parity0, Occ_gs0, D_total=Dmax)
-    print('2site group: Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+    print('2site group: Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
 
 def test_U1_dmrg():
@@ -157,12 +157,12 @@ def test_U1_dmrg():
         psi = ops_U1.mps_random(N=N, Dblocks=[1, 2, 1], total_charge=tcharge)
         psi.canonize_sweep(to='first')
         psi = run_dmrg_2site(psi, H, occ, Eng_gs, tcharge, D_total=Dmax)
-        print('2site      : Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+        print('2site      : Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
         
         psi = ops_U1.mps_random(N=N, Dblocks=[1, 2, 1], total_charge=tcharge)
         psi.canonize_sweep(to='first')
         psi = run_dmrg_2site_group(psi, H, occ, Eng_gs, tcharge, D_total=Dmax)
-        print('2site group: Energy =', mps.measure_mpo(psi, H, psi), ' Occupation =', mps.measure_mpo(psi, occ, psi))
+        print('2site group: Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
 
 def test_OBC_dmrg():
@@ -181,28 +181,28 @@ def test_OBC_dmrg():
     version = '0site'
     psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2)
     psi.canonize_sweep(to='first')
-    _, E, _ = mps.dmrg.dmrg_OBC(psi=psi, H=H, env=None, version=version, cutoff_sweep=cutoff_sweep,
+    _, E, _ = yamps.dmrg.dmrg_OBC(psi=psi, H=H, env=None, version=version, cutoff_sweep=cutoff_sweep,
                                 cutoff_dE=cutoff_dE, hermitian=True, k=4, eigs_tol=1e-14, opts_svd=opts_svd)
     print('0site: Energy - Eref= ', E-Eng_gs)
 
     version = '1site'
     psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2)
     psi.canonize_sweep(to='first')
-    _, E, _ = mps.dmrg.dmrg_OBC(psi=psi, H=H, env=None, version=version, cutoff_sweep=cutoff_sweep,
+    _, E, _ = yamps.dmrg.dmrg_OBC(psi=psi, H=H, env=None, version=version, cutoff_sweep=cutoff_sweep,
                                 cutoff_dE=cutoff_dE, hermitian=True, k=4, eigs_tol=1e-14, opts_svd=opts_svd)
     print('1site: Energy - Eref= ', E-Eng_gs)
 
     version = '2site'
     psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2)
     psi.canonize_sweep(to='first')
-    _, E, _ = mps.dmrg.dmrg_OBC(psi=psi, H=H, env=None, version=version, cutoff_sweep=cutoff_sweep,
+    _, E, _ = yamps.dmrg.dmrg_OBC(psi=psi, H=H, env=None, version=version, cutoff_sweep=cutoff_sweep,
                                 cutoff_dE=cutoff_dE, hermitian=True, k=4, eigs_tol=1e-14, opts_svd=opts_svd)
     print('2site: Energy - Eref= ', E-Eng_gs)
 
     version = '2site_group'
     psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2)
     psi.canonize_sweep(to='first')
-    _, E, _ = mps.dmrg.dmrg_OBC(psi=psi, H=H, env=None, version=version, cutoff_sweep=cutoff_sweep,
+    _, E, _ = yamps.dmrg.dmrg_OBC(psi=psi, H=H, env=None, version=version, cutoff_sweep=cutoff_sweep,
                                 cutoff_dE=cutoff_dE, hermitian=True, k=4, eigs_tol=1e-14, opts_svd=opts_svd)
     print('2site_group: Energy - Eref= ', E-Eng_gs)
 

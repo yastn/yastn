@@ -1,17 +1,17 @@
 import ops_full as ops_full
 import ops_Z2 as ops_Z2
 import ops_U1 as ops_U1
-import yast.mps as mps
+import yamps
 import pytest
 
 tol=1e-8
 
 def run_tdvp_1site(psi, H, dt, sweeps,  Eng_gs, opts=None):
     """ Run a faw sweeps in imaginary time of tdvp_1site_sweep. """
-    env = mps.dmrg.dmrg_sweep_1site(psi, H, env=None)
+    env = yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
     Eng_old = env.measure()  #.real
     for _ in range(sweeps):
-        env = mps.tdvp.tdvp_sweep_1site(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
+        env = yamps.tdvp.tdvp_sweep_1site(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
         Eng = env.measure()  #.real
         assert Eng < Eng_old + tol
         Eng_old = Eng
@@ -22,10 +22,10 @@ def run_tdvp_1site(psi, H, dt, sweeps,  Eng_gs, opts=None):
 
 def run_tdvp_2site(psi, H, dt, sweeps,  Eng_gs, opts=None):
     """ Run a faw sweeps in imaginary time of tdvp_2site_sweep. """
-    env = mps.dmrg.dmrg_sweep_1site(psi, H, env=None)
+    env = yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
     Eng_old = env.measure()  #.real
     for _ in range(sweeps):
-        env = mps.tdvp.tdvp_sweep_2site(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
+        env = yamps.tdvp.tdvp_sweep_2site(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
         Eng = env.measure()  #.real
         assert Eng < Eng_old + tol
         Eng_old = Eng
@@ -36,10 +36,10 @@ def run_tdvp_2site(psi, H, dt, sweeps,  Eng_gs, opts=None):
 
 def run_tdvp_2site_group(psi, H, dt, sweeps,  Eng_gs, opts=None):
     """ Run a faw sweeps in imaginary time of tdvp_2site_group. """
-    env = mps.dmrg.dmrg_sweep_1site(psi, H, env=None)
+    env = yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
     Eng_old = env.measure()  #.real
     for _ in range(sweeps):
-        env = mps.tdvp.tdvp_sweep_2site_group(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
+        env = yamps.tdvp.tdvp_sweep_2site_group(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
         Eng = env.measure()  #.real
         assert Eng < Eng_old + tol
         Eng_old = Eng
@@ -154,22 +154,22 @@ def test_OBC_tdvp():
 
     version = '1site'
     psi = ops_full.mps_random(N=N, Dmax=D_total, d=2).canonize_sweep(to='first')
-    mps.dmrg.dmrg_sweep_1site(psi, H, env=None)
-    _, E, _ = mps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
+    yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
+    _, E, _ = yamps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
     print('1site: Energy =', E, ' Eref= ', Eng_gs)
     assert pytest.approx(E, rel=1e-1) == Eng_gs
 
     version = '2site'
     psi = ops_full.mps_random(N=N, Dmax=D_total, d=2).canonize_sweep(to='first')
-    mps.dmrg.dmrg_sweep_1site(psi, H, env=None)
-    _, E, _ = mps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
+    yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
+    _, E, _ = yamps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
     print('2site: Energy =', E, ' Eref= ', Eng_gs)
     assert pytest.approx(E, rel=1e-1) == Eng_gs
  
     version = '2site_group'
     psi = ops_full.mps_random(N=N, Dmax=D_total, d=2).canonize_sweep(to='first')
-    mps.dmrg.dmrg_sweep_1site(psi, H, env=None)
-    _, E, _ = mps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
+    yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
+    _, E, _ = yamps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
     print('2site_group: Energy =', E, ' Eref= ', Eng_gs)
     assert pytest.approx(E, rel=1e-1) == Eng_gs
 

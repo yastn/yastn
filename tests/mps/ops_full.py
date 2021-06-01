@@ -1,4 +1,4 @@
-from context import yast
+from context import yast, yamps
 from context import config_dense
 import numpy as np
 
@@ -8,7 +8,7 @@ def mps_random(N=2, Dmax=2, d=2):
         d = [d]
     d *= (N + len(d) - 1) // len(d)
 
-    psi =yast.mps.Mps(N, nr_phys=1)
+    psi = yamps.Mps(N, nr_phys=1)
     Dl, Dr = 1, Dmax
     for n in range(N):
         Dr = Dmax if n < N - 1 else 1
@@ -27,7 +27,7 @@ def mpo_random(N=2, Dmax=2, d_out=None, d=2):
         d_out = [d_out]
     d_out *= ((N + len(d_out) - 1) // len(d_out))
 
-    psi =yast.mps.Mps(N, nr_phys=2)
+    psi = yamps.Mps(N, nr_phys=2)
     Dl, Dr = 1, Dmax
     for n in range(N):
         Dr = Dmax if n < N - 1 else 1
@@ -43,14 +43,14 @@ def mpo_XX_model(N, t, mu):
     ee = np.array([[1, 0], [0, 1]])
     oo = np.array([[0, 0], [0, 0]])
 
-    H =yast.mps.Mps(N, nr_phys=2)
-    for n in H.g.sweep(to='last'):  # empty tensors
+    H = yamps.Mps(N, nr_phys=2)
+    for n in H.sweep(to='last'):  # empty tensors
         H.A[n] = yast.Tensor(config=config_dense, s=(1, 1, -1, -1))
-        if n == H.g.first:
+        if n == H.first:
             tmp = np.block([[mu * nn, t * cp, t * c, ee]])
             tmp = tmp.reshape((1, 2, 4, 2))
             Ds = (1, 2, 2, 4)
-        elif n == H.g.last:
+        elif n == H.last:
             tmp = np.block([[ee], [c], [cp], [mu * nn]])
             tmp = tmp.reshape((4, 2, 1, 2))
             Ds = (4, 2, 2, 1)
@@ -71,14 +71,14 @@ def mpo_occupation(N):
     ee = np.array([[1, 0], [0, 1]])
     oo = np.array([[0, 0], [0, 0]])
 
-    H =yast.mps.Mps(N, nr_phys=2)
-    for n in H.g.sweep(to='last'):  # empty tensors
+    H = yamps.Mps(N, nr_phys=2)
+    for n in H.sweep(to='last'):  # empty tensors
         H.A[n] = yast.Tensor(config=config_dense, s=(1, 1, -1, -1))
-        if n == H.g.first:
+        if n == H.first:
             tmp = np.block([[nn, ee]])
             tmp = tmp.reshape((1, 2, 2, 2))
             Ds = (1, 2, 2, 2)
-        elif n == H.g.last:
+        elif n == H.last:
             tmp = np.block([[ee], [nn]])
             tmp = tmp.reshape((2, 2, 1, 2))
             Ds = (2, 2, 2, 1)
