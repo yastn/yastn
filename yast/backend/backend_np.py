@@ -182,10 +182,10 @@ def randC(D, **kwargs):
 
 
 def to_tensor(val, Ds=None, dtype='float64', **kwargs):
-    try:
-        T = np.array(val, dtype=DTYPE[dtype])
-    except TypeError:
-        T = np.array(val, dtype=DTYPE['complex128'])
+    # try:
+    T = np.array(val, dtype=DTYPE[dtype])
+    # except TypeError:
+    #     T = np.array(val, dtype=DTYPE['complex128'])
     return T if Ds is None else T.reshape(Ds)
 
 
