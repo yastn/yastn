@@ -182,10 +182,10 @@ def randC(D, device='cpu'):
 
 
 def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
-    try:
-        T = torch.as_tensor(val, dtype=DTYPE[dtype], device=device)
-    except TypeError:
-        T = torch.as_tensor(val, dtype=DTYPE['complex128'], device=device)
+    # try:
+    T = torch.as_tensor(val, dtype=DTYPE[dtype], device=device)
+    # except TypeError:
+    #     T = torch.as_tensor(val, dtype=DTYPE['complex128'], device=device)
     return T if Ds is None else T.reshape(Ds).contiguous()
 
 

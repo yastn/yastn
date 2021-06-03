@@ -28,6 +28,10 @@
   and if it matches config.device (this can be unwanted test in numpy ...)
 - flipping signature of diag tensor in tensordot is commented out (moving toward general signature of diagonal tensor)
 
+24-04-2021
+- change syntax of `linalg.expmv` and `linalg.eigs` with support in _krylov
+
 27-5-2021
 - `requires_grad_` function added to Tensor interface which allows to turn on operation tracking on all blocks
 - property `requires_grad` added to Tensor which returns `True` if any of the blocks has operation tracking enabled
+- fix passing dtype to `backend.to_tensor`. The latter always uses specified dtype (without try ... except ...)
