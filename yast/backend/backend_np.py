@@ -101,6 +101,10 @@ def max_abs(x):
 def norm_matrix(x):
     return np.linalg.norm(x)
 
+
+def expand_dims(x, axis):
+    return np.expand_dims(x, axis)
+
 #########################
 #    output numbers     #
 #########################
