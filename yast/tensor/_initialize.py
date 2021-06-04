@@ -98,7 +98,8 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
         _set_block(a, ts=tuple(ts.flat), Ds=tuple(Ds), val=val, dtype=dtype)
 
     a.update_struct()
-    tD = [a.get_leg_structure(n, native=True) for n in range(a.nlegs)]  # here checks the consistency of bond dimensions
+    for n in range(a.nlegs):
+        a.get_leg_structure(n, native=True)  # here checks the consistency of bond dimensions
 
 
 def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
@@ -188,8 +189,6 @@ def _set_block(a, ts, Ds, val, dtype):
             a.A[ts] = a.config.backend.to_tensor(np.diag(val), Ds, dtype=dtype, device=a.config.device)
         else:
             a.A[ts] = a.config.backend.to_tensor(val, Ds=Ds, dtype=dtype, device=a.config.device)
-
-
 
 
 def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=False):
