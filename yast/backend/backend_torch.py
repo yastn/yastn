@@ -101,6 +101,10 @@ def max_abs(x):
 def norm_matrix(x):
     return torch.linalg.norm(x)
 
+
+def expand_dims(x, axis):
+    return torch.unsqueeze(x, axis)
+
 #########################
 #    output numbers     #
 #########################

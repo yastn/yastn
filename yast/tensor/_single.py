@@ -1,11 +1,12 @@
 """ Linear operations and operations on a single yast tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _struct
+from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _Darray, _struct
 from ._auxliary import YastError, _test_configs_match, _test_tensors_match
 
-__all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'absolute', 'real', 'imag', 'remove_zero_blocks',
-           'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'copy', 'clone', 'detach', 'to', 'fuse_legs', 'unfuse_legs', 'requires_grad_']
+__all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'remove_zero_blocks',
+           'absolute', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'add_leg',
+           'copy', 'clone', 'detach', 'to', 'requires_grad_', 'fuse_legs', 'unfuse_legs']
 
 
 def copy(a):
@@ -52,6 +53,7 @@ def to(a, device):
     c = a.__class__(config=a.config, isdiag=a.isdiag, device=device, meta_fusion=a.meta_fusion, struct=a.struct)
     c.A = a.config.backend.move_to_device(a.A, device)
     return c
+
 
 def requires_grad_(a, requires_grad=True):
     r"""
@@ -441,9 +443,63 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0, inplace=False):
     Cutoff is a combination of absolut tolerance and relative tolerance with respect to maximal element in the tensor.
     """
     cutoff = atol + rtol * a.norm(p='inf')
-    c = a if inplace else a.clone()
-    c.A = {k: t for k, t in a.A.items() if a.config.backend.max_abs(t) > cutoff}
+    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c.A = {k: t if inplace else a.config.backend.clone(t) for k, t in a.A.items() if a.config.backend.max_abs(t) > cutoff}
     c.update_struct()
+    return c
+
+
+def add_leg(a, axis=-1, s=1, t=None, inplace=False):
+    r"""
+    Creates a new auxiliary leg that explicitly carries charge (or part of it) associated with the tensor.
+
+    Parameters
+    ----------
+        axis: int
+            index of the new leg
+
+        s : int
+            signature of the new leg
+
+        t : charge on the new leg.
+            If None takes the charge of the tensor, making it zero
+
+        inplace : bool
+            If true, perform operation in place
+    """
+    if a.isdiag:
+        raise YastError('Cannot add a new leg to a diagonal tensor.')
+    tset, Dset = _tarray(a), _Darray(a)
+
+    axis = axis % (a.mlegs + 1)
+    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))
+
+    if s not in (-1, 1):
+        raise YastError('The signature s should be equal to 1 or -1.')
+    an = np.array(a.struct.n, dtype=int)
+    if t is None:
+        t = a.config.sym.fuse(an.reshape(1, 1, -1), np.array([1], dtype=int), -1)[0] if s == 1 else an  # s == -1
+    else:
+        t = a.config.sym.fuse(np.array(t, dtype=int).reshape(1, 1, -1), np.array([1], dtype=int), 1)[0]
+    if len(t) != a.config.sym.NSYM:
+        raise YastError('t does not have the proper number of symmetry charges')
+
+    news = np.insert(np.array(a.struct.s, dtype=int), axis, s)
+    newn = a.config.sym.fuse(np.hstack([an, t]).reshape(1, 2, -1), np.array([1, s], dtype=int), 1)[0]
+    new_tset = np.insert(tset, axis, t, axis=1)
+    new_Dset = np.insert(Dset, axis, 1, axis=1)
+
+    news = tuple(news)
+    newn = tuple(newn)
+    new_tset = tuple(tuple(x.flat) for x in new_tset)
+    new_Dset = tuple(tuple(x.flat) for x in new_Dset)
+
+    c = a if inplace else a.clone()
+    c.A = {tnew: a.config.backend.expand_dims(c.A[told], axis) for tnew, told in zip(new_tset, a.struct.t)}
+    c.struct = _struct(new_tset, new_Dset, news, newn)
+    c.meta_fusion = c.meta_fusion[:axis] + ((1,),) + c.meta_fusion[axis:]
+    c.nlegs += 1
+    c.mlegs += 1
     return c
 
 
