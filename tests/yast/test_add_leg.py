@@ -47,10 +47,15 @@ def test_aux_2():
     assert a.n == (0, 0)
     a.is_consistent()
 
+    assert b.get_shape() == (9, 5, 30)
     b.fuse_legs(axes=(0, (1, 2)), inplace=True)
+    assert b.get_shape() == (9, 75)
+
     b.add_leg(axis=1, inplace=True)
     b.add_leg(axis=3, inplace=True)
     assert b.get_shape() == (9, 1, 75, 1)
+    assert b.get_shape(native=True) == (9, 1, 5, 30, 1)
+
     b.is_consistent()
 
 
