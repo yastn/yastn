@@ -86,9 +86,11 @@ def __str__(a):
     s += f"dimensions   : {Ds}"
     return s
 
+
 def requires_grad(a):
     """ returns `True` if any of the blocks of the tensor has enabled recording of operations """
     return a.config.backend.requires_grad(a.A)
+
 
 def print_blocks(a):
     """ print shapes of blocks """
@@ -227,7 +229,8 @@ def __getitem__(a, key):
 def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
     r"""
     Combine and output charges and bond dimensions from legs of provided tensors.
-    Auxliary function to ```tensor.to_dense``` and ```tensor.to_numpy```, to create dense tensors with consistent dimenstions (charge sectors)
+    Auxliary function to ```tensor.to_dense``` and ```tensor.to_numpy```,
+    to create dense tensors with consistent dimenstions (charge sectors)
 
     Rises expection if there are some inconsistencies in bond dimensions.
 
