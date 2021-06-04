@@ -35,3 +35,6 @@
 - `requires_grad_` function added to Tensor interface which allows to turn on operation tracking on all blocks
 - property `requires_grad` added to Tensor which returns `True` if any of the blocks has operation tracking enabled
 - fix passing dtype to `backend.to_tensor`. The latter always uses specified dtype (without try ... except ...)
+
+04-06-2021
+- new function `add_leg` which addes an auxliary leg with dimension 1, carrying a charge of the tensor (or part of it)

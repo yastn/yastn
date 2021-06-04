@@ -173,5 +173,4 @@ def is_consistent(a):
     assert len(device) <= 1, 'not all blocks reside on the same device'
     if len(device) == 1:
         assert device.pop() == a.config.device, 'device of blocks inconsistent with config.device'
-
     return True
