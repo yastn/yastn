@@ -70,6 +70,7 @@ class Tensor:
                 n = tuple(n)
             except TypeError:
                 n = (0,) * self.config.sym.NSYM if n is None else (n,)
+
             if len(n) != self.config.sym.NSYM:
                 raise YastError('n does not match the number of symmetries')
 
@@ -96,7 +97,7 @@ class Tensor:
     from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr
     from ._contractions import tensordot, vdot, trace, swap_gate
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, diag, absolute, sqrt, rsqrt, reciprocal, exp
-    from ._single import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, remove_zero_blocks
+    from ._single import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, remove_zero_blocks, add_leg
     from ._single import copy, clone, detach, to, requires_grad_, real, imag, fuse_legs, unfuse_legs
     from ._output import export_to_dict, compress_to_1d, show_properties, __str__, print_blocks, is_complex
     from ._output import get_blocks_charges, get_leg_charges_and_dims, zero_of_dtype, item, __getitem__
@@ -118,4 +119,3 @@ class Tensor:
     @property
     def requires_grad(self):
         return requires_grad(self)
-    
