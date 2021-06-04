@@ -1,6 +1,5 @@
 import torch
 
-
 def randR(D, device='cpu'):
     return 2 * torch.rand(D, device=device) - 1
 
@@ -8,7 +7,7 @@ def randR(D, device='cpu'):
 def dot(A, B, meta_dot):
     C = {}
     for (out, ina, inb) in meta_dot:
-        C[out] = A[ina] @  B[inb]
+        C[out] = A[ina] @ B[inb]
     return C
 
 def merge_to_matrix(A, order, meta_new, meta_mrg, device='cpu'):
