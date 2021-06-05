@@ -34,19 +34,6 @@ def run_tdvp_2site(psi, H, dt, sweeps,  Eng_gs, opts=None):
     return psi
 
 
-def run_tdvp_2site_group(psi, H, dt, sweeps,  Eng_gs, opts=None):
-    """ Run a faw sweeps in imaginary time of tdvp_2site_group. """
-    env = yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
-    Eng_old = env.measure()  #.real
-    for _ in range(sweeps):
-        env = yamps.tdvp.tdvp_sweep_2site_group(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
-        Eng = env.measure()  #.real
-        assert Eng < Eng_old + tol
-        Eng_old = Eng
-    print('Eng =', Eng, ' Egs =', Eng_gs)
-    assert pytest.approx(Eng, rel=1e-1) == Eng_gs
-    return psi
-
 def test_full_tdvp():
     """
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
@@ -67,10 +54,6 @@ def test_full_tdvp():
     psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
     psi.canonize_sweep(to='first')
     psi = run_tdvp_2site(psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_gs)
-
-    psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
-    psi.canonize_sweep(to='first')
-    psi = run_tdvp_2site_group(psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_gs)
 
 
 def test_Z2_tdvp():
@@ -100,10 +83,6 @@ def test_Z2_tdvp():
     psi.canonize_sweep(to='first')
     _ = run_tdvp_2site(psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_parity0)
 
-    psi = ops_Z2.mps_random(N=N, Dblock=D_total/2, total_parity=0)
-    psi.canonize_sweep(to='first')
-    _ = run_tdvp_2site_group(psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_parity0)
-
 
 def test_U1_tdvp():
     """
@@ -132,10 +111,6 @@ def test_U1_tdvp():
     psi.canonize_sweep(to='first')
     _ = run_tdvp_2site(psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_ch1)
 
-    psi = ops_U1.mps_random(N=N, Dblocks=[1, 2, 1], total_charge=1)
-    psi.canonize_sweep(to='first')
-    _ = run_tdvp_2site_group(psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_ch1)
-
 
 def test_OBC_tdvp():
     """
@@ -153,25 +128,21 @@ def test_OBC_tdvp():
     tmax = dt*2.
 
     version = '1site'
-    psi = ops_full.mps_random(N=N, Dmax=D_total, d=2).canonize_sweep(to='first')
+    psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
+    psi.canonize_sweep(to='first')
     yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
     _, E, _ = yamps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
     print('1site: Energy =', E, ' Eref= ', Eng_gs)
     assert pytest.approx(E, rel=1e-1) == Eng_gs
 
     version = '2site'
-    psi = ops_full.mps_random(N=N, Dmax=D_total, d=2).canonize_sweep(to='first')
+    psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
+    psi.canonize_sweep(to='first')
     yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
     _, E, _ = yamps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
     print('2site: Energy =', E, ' Eref= ', Eng_gs)
     assert pytest.approx(E, rel=1e-1) == Eng_gs
- 
-    version = '2site_group'
-    psi = ops_full.mps_random(N=N, Dmax=D_total, d=2).canonize_sweep(to='first')
-    yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
-    _, E, _ = yamps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
-    print('2site_group: Energy =', E, ' Eref= ', Eng_gs)
-    assert pytest.approx(E, rel=1e-1) == Eng_gs
+
 
 if __name__ == "__main__":
     test_full_tdvp()

@@ -1,5 +1,4 @@
-from ._env2 import Env2
-from ._env3 import Env3
+from ._env import Env2, Env3
 
 
 def sweep_variational(psi, psi_target, env=None, op=None):
@@ -32,23 +31,23 @@ def sweep_variational(psi, psi_target, env=None, op=None):
         environments which can be used during next sweep, or to calculated updated overlap
     """
 
-    if not env:
+    if env is None:
         env = Env2(bra=psi, ket=psi_target) if op is None else Env3(bra=psi, op=op, ket=psi_target)
-        env.setup_to_first()  # setup all environments in the direction from last site to first site
+        env.setup(to='first')
 
-    for n in psi.g.sweep(to='last'):  # sweep from first to last site
+    for n in psi.sweep(to='last'):  # sweep from first to last site
         # update site n, canonize and save
         psi.remove_central()
         psi.A[n] = env.project_ket_on_bra(n)
-        psi.orthogonalize_site(n, towards=psi.g.last)
+        psi.orthogonalize_site(n, to='last')
         env.clear_site(n)
-        env.update(n, towards=psi.g.last)
+        env.update(n, to='last')
 
-    for n in psi.g.sweep(to='first'):  # sweep from last to first site
+    for n in psi.sweep(to='first'):  # sweep from last to first site
         # update site n, canonize and save
         psi.remove_central()
         psi.A[n] = env.project_ket_on_bra(n)
-        psi.orthogonalize_site(n, towards=psi.g.first)
+        psi.orthogonalize_site(n, to='first')
         env.clear_site(n)
-        env.update(n, towards=psi.g.first)
+        env.update(n, to='first')
     return env
