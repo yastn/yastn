@@ -99,36 +99,36 @@ def tdvp_sweep_1site(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup(to='first')
 
-    for n in psi.sweep(to='last'):  # sweep from first to last
-        psi.absorb_central(to='last')
+    for n in psi.sweep(to='last'):
         f = lambda v: env.Heff1(v, n)
         psi.A[n] = expmv(f, psi.A[n], 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
         psi.orthogonalize_site(n, to='last')
         env.clear_site(n)
-        env.update(n, to='last')
         if n != psi.last:
+            env.update(n, to='last')
             f = lambda v: env.Heff0(v, psi.pC)
             psi.A[psi.pC] = expmv(f, psi.A[psi.pC], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+        psi.absorb_central(to='last')
 
     for n in psi.sweep(to='first'):
-        psi.absorb_central(to='first')
         f = lambda v: env.Heff1(v, n)
         psi.A[n] = expmv(f, psi.A[n], 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
         psi.orthogonalize_site(n, to='first')
         env.clear_site(n)
-        env.update(n, to='first')
         if n != psi.first:
+            env.update(n, to='first')
             f = lambda v: env.Heff0(v, psi.pC)
             psi.A[psi.pC] = expmv(f, psi.A[psi.pC], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+        psi.absorb_central(to='first')
+    env.update(0, to='first')
     return env
 
 
 def tdvp_sweep_2site(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol=1e-12, opts_svd=None, **kwargs):
     r"""
-    Perform sweep with 2site-TDVP.
-    Procedure performs exponantiation: psi(dt) = exp( dt * H )*psi(0). For Hamiltonian real time evolution forward in time: sign(dt)= -1j, for Hamiltonian imaginary time evolution forward in time: sign(dt)= -1.
-    Assume input psi is right canonical.
-    Sweep consists of iterative updates from last site to first and back to the first one.
+    Perform sweep with 2-site TDVP, calculating the update psi(dt) = exp( dt * H ) @ psi(0).
+
+    Assume input psi is canonized to first site.
 
     Parameters
     ----------
@@ -173,7 +173,7 @@ def tdvp_sweep_2site(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol
     psi is updated.
     """
 
-    if env is None:
+    if env is None: 
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup(to='first')
 
@@ -208,254 +208,97 @@ def tdvp_sweep_2site(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol
     return env
 
 
-def tdvp_sweep_mix(psi, SV_min, versions, H=False, M=False, dt=1., env=None, hermitian=True, k=4, exp_tol=1e-12, D_totals=None, tol_svds=None, opts_svd=None, **kwargs):
+def tdvp_sweep_mix(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol=1e-12, D_totals=None, tol_svds=None, opts_svd=None, **kwargs):
     r"""
     Perform mixed 1site-2site sweep of TDVP basing on SV_min (smallest Schmidt value on the bond).
-    Procedure performs exponantiation: psi(dt) = exp( dt * H )*psi(0). For Hamiltonian real time evolution forward in time: sign(dt)= -1j, for Hamiltonian imaginary time evolution forward in time: sign(dt)= -1.
+    Procedure performs exponantiation: psi(dt) = exp( dt * H )*psi(0).
     Assume input psi is right canonical.
     Sweep consists of iterative updates from last site to first and back to the first one.
 
     Parameters
     ----------
-    psi: Mps, nr_phys=1
+    psi: Mps
         initial state.
-    H: Mps, nr_phys=2
-        operator given in MPO decomposition.
-        legs are [left-virtual, ket-physical, bra-physical, right-virtual]
-    M: Mps, nr_phys=1
-        Kraus operators.
-        legs are [Kraus dimension, ket-physical, bra-physical]
-    env: Env3
-        default = None
-        initial overlap <psi| H |psi>
-        initial environments must be set up with respect to the last site.
-    SV_min: list
-        list of minimal Schmidt values on each bond
-    D_totals: list
-        list of upper bound on bond dimension
-    tol_svds: list
-        list of lower bound on Schmidt values.
-    versions: 2-element tuple
-        version = (else, version to increase bond_dimension)
-        tuple with what algorithm to use during a sweep. Algorithm is chosen basing on Schmidt values.
-    dt: double
-        default = 1
-        time interval for matrix expontiation. May be divided into smaller intervals according to the cost function.
-    dtype: str
-        default='complex128'
-        Type of Tensor.
-    hermitian: bool
-        default = True
-        is MPO hermitian
-    fermionic: bool
-        default = False
-        use while pllying a SWAP gate. True for fermionic systems.
-    k: int
-        default = 4
-        Dimension of Krylov subspace for eigs(.)
-    eigs_tol: float
-        default = 1e-14
-        Cutoff for krylov subspace for eigs(.)
-    bi_orth: bool
-        default = True
-        Option for exponentiation = exp(). For True and non-Hermitian cases will bi-orthogonalize set of generated vectors.
-    NA: bool
-        default = None
-        The cost of matrix-vector multiplication used to optimize Krylov subspace and time intervals.
-        Option for exponentiation = exp().
-    opts_svd: dict
-        default=None
-        options for truncation on virtual d.o.f.
-    optsK_svd: dict
-        default=None
-        options for truncation on auxilliary d.o.f.
 
     Returns
     -------
     env: Env3
-     Overlap <psi| H |psi> as Env3.
-    psi: Mps
-        Is self updated.
+        Overlap <psi| H |psi> as Env3.
     """
-    Ds = psi.get_D()
-    if not D_totals:
-        D_totals = [None] * (psi.N + 1)
-        max_vdim = 1
-        for n in range(psi.N):
-            D_totals[n] = min([max_vdim, opts_svd['D_total']])
-            max_vdim = D_totals[n] * np.prod(psi.A[n].get_shape(psi.phys))
-        max_vdim = 1
-        for n in range(psi.N - 1, -1, -1):
-            max_vdim *= np.prod(psi.A[n].get_shape(psi.phys))
-            D_totals[n] = min([D_totals[n], max_vdim, opts_svd['D_total']])
-            max_vdim = D_totals[n]
-        D_totals[-1] = 1
-    if not tol_svds:
-        tol_svds = [opts_svd['tol'] for n in Ds]
-    #
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup(to='first')
+
+    update_two = False
     for n in psi.sweep(to='last'):
-        opts_svd['D_total'] = D_totals[n]
-        opts_svd['tol'] = tol_svds[n]
-        if M:  # Apply the Kraus operator on n
-            init = psi.A[n]
-            tmp = tensordot(M.A[n], init, axes=(2, 1))
-            tmp.swap_gate(axes=(0, 2), inplace=True)
-            u, s, _ = svd(tmp, axes=((2, 1, 4), (0, 3)), **optsK_svd)  # discard V
-            init = tensordot(u, s, axes=(3, 0))
-            psi.A[n] = init.transpose(axes=(0, 1, 3, 2))
-            if not H:
+        if not update_two:
+            if env.enlarge_bond[(n, n + 1)]:
+                update_two = True
+            else:
+                f = lambda v: env.Heff1(v, n)
+                psi.A[n] = expmv(f, psi.A[n], 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
                 psi.orthogonalize_site(n, to='last')
+                env.clear_site(n)
+                env.update(n, to='last')
+                if n != psi.last:
+                    f = lambda v: env.Heff0(v, psi.pC)
+                    psi.A[psi.pC] = expmv(f, psi.A[psi.pC], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
                 psi.absorb_central(to='last')
-        #
-        if (SV_min[n] > tol_svds[n] and Ds[n] < D_totals[n]) or (Ds[n] > D_totals[n]):  # choose 2site
-            version = versions[1]
-        else:  # choose 1site
-            version = versions[0]
-        #
-        # print(n, version, SV_min[n] , tol_svds[n] , Ds[n] , D_totals[n])
-        if version == '1site':
-            # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
-            if H:
-                f = lambda v: env.Heff1(v, n)
-                psi.A[n] = expmv(f, psi.A[n], t=0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-            # canonize and save
-            psi.orthogonalize_site(n, to='last')
-            env.clear_site(n)
-            env.update(n, to='last')
-
-            # backward in time evolution of a central site: T(-dt*.5)
-            if H and n != psi.sweep(to='last')[-1]:
-                f = lambda v: env.Heff0(v, psi.pC)
-                psi.A[psi.pC] = expmv(f, psi.A[psi.pC], t=-dt * .5, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+        else:
+            bd = (n - 1, n)
+            AA = psi.merge_two_sites(bd)
+            f = lambda v: env.Heff2(v, bd)
+            AA = expmv(f, AA, 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+            psi.unmerge_two_sites(AA, bd, opts_svd)
             psi.absorb_central(to='last')
-        elif version == '2site':
-            if n == psi.sweep(to='last')[-1]:
-                env.clear_site(n)
-                env.update(n, to='first')
+            env.clear_site(n - 1, n)
+            env.update(n - 1, to='last')
+            if env.enlarge_bond[(n, n + 1)]:
+                if n + 1 != psi.last:
+                    f = lambda v: env.Heff1(v, n + 1)
+                    psi.A[n + 1] = expmv(f, psi.A[n + 1], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
             else:
-                # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
-                if H:
-                    n1, _, _ = psi.g.from_site(n, to='last')
-                    init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
-                    f = lambda v: env.Heff2(v, n)
-                    init = expmv(f, v=init, t=0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-                    # split and save
-                    A1, S, A2 = svd(init, axes=(psi.left + psi.phys, tuple(a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-                    psi.A[n] = A1
-                    psi.A[n1] = S.tensordot(A2, axes=(1, psi.left))
-                env.clear_site(n)
+                psi.ortogonalize_site(n, to='last')
                 env.update(n, to='last')
+                if n != psi.last:
+                    f = lambda v: env.Heff0(v, psi.pC)
+                    psi.A[psi.pC] = expmv(f, psi.A[psi.pC], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                psi.absorb_central(to='last')
 
-                # matrix exponentiation, backward in time evolution of a single site: T(-dt*.5)
-                if H and n != psi.sweep(to='last', dl=1)[-1]:
-                    f = lambda v: env.Heff1(v, n1)
-                    psi.A[n1] = expmv(f, psi.A[n1], t=-dt * .5, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-        elif version == '2site_group':
-            if n == psi.sweep(to='last')[-1]:
-                env.clear_site(n)
-                env.update(n, to='first')
-            else:
-                # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
-                if H:
-                    n1, _, _ = psi.g.from_site(n, to='last')
-                    init = psi.A[n].tensordot(psi.A[n1], axes=(psi.right, psi.left))
-                    init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
-                    f = lambda v: env.Heff2(v, n)
-                    init = expmv(f, v=init, t=0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-                    # split and save
-                    init.unfuse_legs(axes=1, inplace=True)
-                    A1, S, A2 = svd(init, axes=(psi.left + psi.phys, tuple(a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-                    psi.A[n] = A1
-                    psi.A[n1] = S.tensordot(A2, axes=(1, psi.left))
-                env.clear_site(n)
-                env.update(n, to='last')
-
-                # matrix exponentiation, backward in time evolution of a single site: T(-dt*.5)
-                if H and n != psi.sweep(to='last', dl=1)[-1]:
-                    f = lambda v: env.Heff1(v, n1)
-                    psi.A = expmv(f, psi.A[n1], t=-dt * .5, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-    Ds = psi.get_D()
     for n in psi.sweep(to='first'):
-        opts_svd['D_total'] = D_totals[n]
-        opts_svd['tol'] = tol_svds[n]
-        if M:  # Apply the Kraus operator on n
-            init = psi.A[n]
-            tmp = tensordot(M.A[n], init, axes=(2, 1))
-            tmp.swap_gate(axes=(0, 2), inplace=True)
-            u, s, _ = svd(tmp, axes=((2, 1, 4), (0, 3)), **optsK_svd)  # discard V
-            init = tensordot(u, s, axes=(3, 0))
-            psi.A[n] = init.transpose(axes=(0, 1, 3, 2))
-            if not H:
-                psi.orthogonalize_site(n, to='first')
-                psi.absorb_central(to='first')
-        #
-        if (SV_min[n] > tol_svds[n] and Ds[n] < D_totals[n]) or (Ds[n] > D_totals[n]):  # choose 2site
-            version = versions[1]
-        else:  # choose 1site
-            version = versions[0]
-        #print(n, version, SV_min[n] , tol_svds[n] , Ds[n] , D_totals[n])
-        #
-        if version == '1site':
-            if H:  # forward in time evolution of a central site: T(+dt*.5)
+        if not update_two:
+            if env.enlarge_bond[(n - 1, n)]:
+                update_two = True
+            else:
                 f = lambda v: env.Heff1(v, n)
-                psi.A[n] = expmv(f, psi.A[n], t=0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-
-            psi.orthogonalize_site(n, to='first')
-            env.clear_site(n)
-            env.update(n, to='first')
-
-            # backward in time evolution of a central site: T(-dt*.5)
-            if H and n != psi.sweep(to='first')[-1]:
-                f = lambda v: env.Heff0(v, psi.pC)
-                psi.A[psi.pC] = expmv(f, psi.A[psi.pC], t=-dt * .5, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                psi.A[n] = expmv(f, psi.A[n], 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                psi.orthogonalize_site(n, to='first')
+                env.clear_site(n)
+                if n != psi.last:
+                    env.update(n, to='first')
+                    f = lambda v: env.Heff0(v, psi.pC)
+                    psi.A[psi.pC] = expmv(f, psi.A[psi.pC], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                psi.absorb_central(to='last')
+        else:
+            bd = (n, n + 1)
+            AA = psi.merge_two_sites(bd)
+            f = lambda v: env.Heff2(v, bd)
+            AA = expmv(f, AA, 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+            psi.unmerge_two_sites(AA, bd, opts_svd)
             psi.absorb_central(to='first')
-        elif version == '2site':
-            if n == psi.sweep(to='first')[-1]:
-                env.clear_site(n)
-                env.update(n, to='first')
+            env.clear_site(n, n + 1)
+            env.update(n + 1, to='first')
+            if env.enlarge_bond[(n - 1, n)]:
+                if n != psi.first:
+                    f = lambda v: env.Heff1(v, n + 1)
+                    psi.A[n + 1] = expmv(f, psi.A[n + 1], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
             else:
-                # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
-                if H:
-                    n1, _, _ = psi.g.from_site(n, to='first')
-                    init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
-                    f = lambda v: env.Heff2(v, n1)
-                    init = expmv(f, v=init, t=0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-                    # split and save
-                    A1, S, A2 = svd(init, axes=(psi.left + psi.phys, tuple(a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-                    psi.A[n1] = A1.tensordot(S, axes=(psi.right, 0))
-                    psi.A[n] = A2
-                env.clear_site(n)
-                env.update(n, to='first')
-
-                # matrix exponentiation, backward in time evolution of a single site: T(-dt*.5)
-                if H and n != psi.sweep(to='first', df=1)[-1]:
-                    f = lambda v: env.Heff1(v, n1)
-                    psi.A[n1] = expmv(f, psi.A[n1], t=-dt * .5, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-        elif version == '2site':
-            if n == psi.sweep(to='first')[-1]:
-                env.clear_site(n)
-                env.update(n, to='first')
-            else:
-                # matrix exponentiation, forward in time evolution of a single site: T(+dt*.5)
-                if H:
-                    n1, _, _ = psi.g.from_site(n, to='first')
-                    init = psi.A[n1].tensordot(psi.A[n], axes=(psi.right, psi.left))
-                    init.fuse_legs(axes=(0, (1, 2), 3), inplace=True)
-                    f = lambda v: env.Heff2(v, n1)
-                    init = expmv(format, v=init, t=0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-                    # split and save
-                    init.unfuse_legs(axes=1, inplace=True)
-                    A1, S, A2 = svd(init, axes=(psi.left + psi.phys, tuple(a + psi.right[0] - 1 for a in psi.phys + psi.right)), sU=-1, **opts_svd)
-                    psi.A[n1] = A1.tensordot(S, axes=(psi.right, 0))
-                    psi.A[n] = A2
-                env.clear_site(n)
-                env.update(n, to='first')
-
-                # matrix exponentiation, backward in time evolution of a single site: T(-dt*.5)
-                if H and n != psi.sweep(to='first', df=1)[-1]:
-                    f = lambda v: env.Heff1(v, n1)
-                    psi.A[n1] = expmv(f, psi.A[n1], t=-dt * .5, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                psi.ortogonalize_site(n, to='first')
+                if n != psi.first:
+                    env.update(n, to='first')
+                    f = lambda v: env.Heff0(v, psi.pC)
+                    psi.A[psi.pC] = expmv(f, psi.A[psi.pC], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                psi.absorb_central(to='last')
+    env.clear_site(0)
+    env.update(0, to='first')
     return env
