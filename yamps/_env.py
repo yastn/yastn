@@ -1,5 +1,4 @@
-""" Common functions for Env2 and Env3. """
-""" Environments for the <mps| mpo |mps> contractions. """
+""" Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
 from yast import ncon, match_legs, tensordot
 from ._mps import YampsError
 

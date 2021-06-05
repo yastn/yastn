@@ -1,5 +1,4 @@
-import numpy as np
-
+""" Mps structure and its basic manipulations. """
 
 class YampsError(Exception):
     pass
@@ -351,23 +350,4 @@ class Mps:
         SV : list
             list of Schmidt values saved as a directory
         """
-        Ds = self.get_D()
-        Entropy = [0] * self.N
-
-        Schmidt_spectrum = np.zeros((self.N, max(Ds)))
-        Smin = [0] * self.N
-        R = None
-        for n in self.sweep(to='last', dl=1):
-            if R:
-                _, R = linalg.qr(R.tensordot(self.A[n], axes=(1, self.left)), axes=(self.left + self.phys, self.right), sQ=-1)
-            else:
-                _, R = linalg.qr(self.A[n], axes=(self.left + self.phys, self.right), sQ=-1)
-            _, s, _ = linalg.svd(R, axes=(0, 1))
-            s = s.to_numpy().diagonal()
-            Schmidt_spectrum[n, :len(s)] = s
-            Smin[n] = min(s)
-            if alpha == 1:  # von Neumann
-                Entropy[n] = (-2. * sum(s * s * np.log2(s)))
-            else:  # Renyi
-                Entropy[n] = (np.log2(sum(s**alpha)) / (alpha - 1.))
-        return Ds, Schmidt_spectrum, Smin, Entropy
+        pass

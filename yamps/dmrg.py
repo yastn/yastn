@@ -1,6 +1,6 @@
 """ Various variants of the DMRG algorithm for mps."""
 
-from yast import linalg
+from yast import eigs
 from ._env import Env3
 
 
@@ -56,10 +56,10 @@ def dmrg_OBC(psi, H, env=None, version='1site', cutoff_sweep=1, cutoff_dE=-1, he
         Is MPO hermitian
     k: int
         default=4
-        Dimension of Krylov subspace for linalg.eigs(.)
+        Dimension of Krylov subspace for eigs(.)
     eigs_tol: float
         default=1e-14
-        Cutoff for krylov subspace for linalg.eigs(.)
+        Cutoff for krylov subspace for eigs(.)
     opts_svd: dict
         default=None
         options for truncation
@@ -118,10 +118,10 @@ def dmrg_sweep_1site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14):
         Is MPO hermitian
     k: int
         default=4
-        Dimension of Krylov subspace for linalg.eigs(.)
+        Dimension of Krylov subspace for eigs(.)
     eigs_tol: float
         default=1e-14
-        Cutoff for krylov subspace for linalg.eigs(.)
+        Cutoff for krylov subspace for eigs(.)
 
     Returns
     -------
@@ -134,7 +134,7 @@ def dmrg_sweep_1site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14):
 
     for n in psi.sweep(to='last'):
         f = lambda v: env.Heff1(v, n)
-        _, (psi.A[n],) = linalg.eigs(f, psi.A[n], k=1, which='SR', ncv=k, tol=eigs_tol, hermitian=hermitian)
+        _, (psi.A[n],) = eigs(f, psi.A[n], k=1, which='SR', ncv=k, tol=eigs_tol, hermitian=hermitian)
         psi.orthogonalize_site(n, to='last')
         psi.absorb_central(to='last')
         env.clear_site(n)
@@ -142,7 +142,7 @@ def dmrg_sweep_1site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14):
 
     for n in psi.sweep(to='first'):
         f = lambda v: env.Heff1(v, n)
-        _, (psi.A[n],) = linalg.eigs(f, psi.A[n], k=1, which='SR', ncv=k, tol=eigs_tol, hermitian=hermitian)
+        _, (psi.A[n],) = eigs(f, psi.A[n], k=1, which='SR', ncv=k, tol=eigs_tol, hermitian=hermitian)
         psi.orthogonalize_site(n, to='first')
         psi.absorb_central(to='first')
         env.clear_site(n)
@@ -172,10 +172,10 @@ def dmrg_sweep_2site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         Is MPO hermitian
     k: int
         default=4
-        Dimension of Krylov subspace for linalg.eigs(.)
+        Dimension of Krylov subspace for eigs(.)
     eigs_tol: float
         default=1e-14
-        Cutoff for krylov subspace for linalg.eigs(.)
+        Cutoff for krylov subspace for eigs(.)
     opts_svd: dict
         default=None
         options for truncation
@@ -194,7 +194,7 @@ def dmrg_sweep_2site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         bd = (n, n + 1)
         AA = psi.merge_two_sites(bd)
         f = lambda v: env.Heff2(v, bd)
-        _, (AA,) = linalg.eigs(f, AA, hermitian=hermitian, k=1, ncv=k, which='SR', tol=eigs_tol)
+        _, (AA,) = eigs(f, AA, hermitian=hermitian, k=1, ncv=k, which='SR', tol=eigs_tol)
         psi.unmerge_two_sites(AA, bd, opts_svd)
         psi.absorb_central(to='last')
         env.clear_site(n, n + 1)
@@ -204,7 +204,7 @@ def dmrg_sweep_2site(psi, H, env=None, hermitian=True, k=4, eigs_tol=1e-14, opts
         bd = (n, n + 1)
         AA = psi.merge_two_sites(bd)
         f = lambda v: env.Heff2(v, bd)
-        _, (AA,) = linalg.eigs(f, AA, hermitian=hermitian, k=1, ncv=k, which='SR', tol=eigs_tol)
+        _, (AA,) = eigs(f, AA, hermitian=hermitian, k=1, ncv=k, which='SR', tol=eigs_tol)
         psi.unmerge_two_sites(AA, bd, opts_svd)
         psi.absorb_central(to='first')
         env.clear_site(n, n + 1)

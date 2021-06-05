@@ -1,3 +1,4 @@
+""" Algorithm for variational optimization of mps to match the target state."""
 from ._env import Env2, Env3
 
 

@@ -1,10 +1,6 @@
-from yast import expmv, tensordot, svd
-import logging
-import numpy as np
+""" Various variants of the TDVP algorithm for mps."""
+from yast import expmv
 from ._env import Env3
-
-
-logger = logging.getLogger('yast.tensor.tdvp')
 
 
 #################################
