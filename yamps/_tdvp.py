@@ -7,39 +7,6 @@ from ._env import Env3
 #           tdvp                #
 #################################
 
-def tdvp_OBC(psi, tmax, dt=1, H=False, M=False, env=None, D_totals=None, tol_svds=None, SV_min=None,
-             versions=('1site', '2site'), cutoff_dE=1e-9, hermitian=True, fermionic=False,
-             k=4, eigs_tol=1e-12, exp_tol=1e-12, bi_orth=False, NA=None, version='1site',
-             opts_svd=None, optsK_svd=None, algorithm='arnoldi'):
-    # evolve with TDVP method, up to tmax and initial guess of the time step dt
-    # opts - optional info for MPS truncation
-    curr_t = 0
-    if not env and H:
-        env = Env3(bra=psi, op=H, ket=psi)
-        env.setup(to='first')
-    if H:
-        E0 = env.measure()
-        dE = cutoff_dE + 1
-    else:
-        E0, dE = 0, 0
-    while abs(curr_t) < abs(tmax):
-        dt = min([abs(tmax - curr_t) / abs(dt), 1.]) * dt
-        if version == '1site':
-            env = tdvp_sweep_1site(psi=psi, H=H, M=M, dt=dt, env=env, hermitian=hermitian,
-                                    k=k, eigs_tol=eigs_tol, exp_tol=exp_tol, bi_orth=bi_orth, NA=NA, opts_svd=opts_svd, optsK_svd=optsK_svd, algorithm=algorithm)
-        elif version == '2site':
-            env = tdvp_sweep_2site(psi=psi, H=H, M=M, dt=dt, env=env, hermitian=hermitian,
-                                    k=k, eigs_tol=eigs_tol, exp_tol=exp_tol, bi_orth=bi_orth, NA=NA, opts_svd=opts_svd, optsK_svd=optsK_svd, algorithm=algorithm)
-        else:
-            env = tdvp_sweep_mix(psi=psi, H=H, M=M, dt=dt, env=env, hermitian=hermitian, versions=versions, D_totals=D_totals, tol_svds=tol_svds, SV_min=SV_min,
-                                    k=k, eigs_tol=eigs_tol, exp_tol=exp_tol, bi_orth=bi_orth, NA=NA, opts_svd=opts_svd, optsK_svd=optsK_svd, algorithm=algorithm)
-        E = env.measure()
-        dE = abs(E - E0)
-        # print('Iteration: ', sweep, ' energy: ', E, ' dE: ', dE, ' D: ', max(psi.get_D()))
-        E0 = E
-        curr_t += dt
-    return env, E, dE
-
 
 def tdvp_sweep_1site(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol=1e-12, optsK_svd=None, **kwargs):
     r"""

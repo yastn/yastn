@@ -318,7 +318,7 @@ class Mps:
         return Ds
 
 
-    def get_bond_charges_and_dimensions(self):
+    def get_bond_charges_dimensions(self):
         r"""
         Returns charges and dimensions of all virtual mps bonds.
 
