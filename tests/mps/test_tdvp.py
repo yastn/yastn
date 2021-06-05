@@ -8,10 +8,10 @@ tol=1e-8
 
 def run_tdvp_1site(psi, H, dt, sweeps,  Eng_gs, opts=None):
     """ Run a faw sweeps in imaginary time of tdvp_1site_sweep. """
-    env = yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
+    env = yamps.dmrg_sweep_1site(psi, H, env=None)
     Eng_old = env.measure()  #.real
     for _ in range(sweeps):
-        env = yamps.tdvp.tdvp_sweep_1site(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
+        env = yamps.tdvp_sweep_1site(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
         Eng = env.measure()  #.real
         assert Eng < Eng_old + tol
         Eng_old = Eng
@@ -22,10 +22,10 @@ def run_tdvp_1site(psi, H, dt, sweeps,  Eng_gs, opts=None):
 
 def run_tdvp_2site(psi, H, dt, sweeps,  Eng_gs, opts=None):
     """ Run a faw sweeps in imaginary time of tdvp_2site_sweep. """
-    env = yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
+    env = yamps.dmrg_sweep_1site(psi, H, env=None)
     Eng_old = env.measure()  #.real
     for _ in range(sweeps):
-        env = yamps.tdvp.tdvp_sweep_2site(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
+        env = yamps.tdvp_sweep_2site(psi, H, env=env, dt=dt, hermitian=True, opts_svd=opts)
         Eng = env.measure()  #.real
         assert Eng < Eng_old + tol
         Eng_old = Eng
@@ -112,40 +112,7 @@ def test_U1_tdvp():
     _ = run_tdvp_2site(psi, H, dt=dt, sweeps=sweeps, opts=opts_svd, Eng_gs=Eng_ch1)
 
 
-def test_OBC_tdvp():
-    """
-    Check tdvp_OBC with measuring additional expectation values
-    """
-    N = 5
-    D_total = 4
-    opts_svd = {'tol': 1e-6, 'D_total': D_total}
-
-    H = ops_full.mpo_XX_model(N=N, t=1, mu=0.25)
-    M = None
-
-    Eng_gs = -2.232050807568877
-    dt = -.25
-    tmax = dt*2.
-
-    version = '1site'
-    psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
-    psi.canonize_sweep(to='first')
-    yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
-    _, E, _ = yamps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
-    print('1site: Energy =', E, ' Eref= ', Eng_gs)
-    assert pytest.approx(E, rel=1e-1) == Eng_gs
-
-    version = '2site'
-    psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
-    psi.canonize_sweep(to='first')
-    yamps.dmrg.dmrg_sweep_1site(psi, H, env=None)
-    _, E, _ = yamps.tdvp.tdvp_OBC(psi=psi, tmax=tmax, dt=dt, H=H, M=M, version=version, opts_svd=opts_svd)
-    print('2site: Energy =', E, ' Eref= ', Eng_gs)
-    assert pytest.approx(E, rel=1e-1) == Eng_gs
-
-
 if __name__ == "__main__":
     test_full_tdvp()
     test_Z2_tdvp()
     test_U1_tdvp()
-    test_OBC_tdvp()

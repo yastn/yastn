@@ -10,7 +10,7 @@ def run_dmrg_1site(psi, H, occ, Etarget, occ_target, sweeps=5):
     """ Run a faw sweeps of dmrg_1site_sweep. Returns energy. """
     env = None
     for _ in range(sweeps):
-        env = yamps.dmrg.dmrg_sweep_1site(psi, H, env=env)
+        env = yamps.dmrg_sweep_1site(psi, H, env=env)
     assert pytest.approx(env.measure(), rel=1e-6) == Etarget
     assert pytest.approx(yamps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
     return psi
@@ -21,7 +21,7 @@ def run_dmrg_2site(psi, H, occ, Etarget, occ_target, sweeps=5, D_total=32):
     env = None
     opts_svd = {'tol': 1e-8, 'D_total': D_total}
     for _ in range(sweeps):
-        env = yamps.dmrg.dmrg_sweep_2site(psi, H, env=env, opts_svd=opts_svd)
+        env = yamps.dmrg_sweep_2site(psi, H, env=env, opts_svd=opts_svd)
     assert pytest.approx(env.measure(), rel=1e-6) == Etarget
     assert pytest.approx(yamps.measure_mpo(psi, occ, psi), rel=1e-4) == occ_target  # This seems to be coverging slowly
     return psi
@@ -108,37 +108,30 @@ def test_U1_dmrg():
         print('2site      : Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
 
-def test_OBC_dmrg():
+def test_dmrg():
     """
-    Check dmrg_OBC with measuring additional expectation values
+    Check dmrg with measuring additional expectation values
     """
     N = 7
     H = ops_full.mpo_XX_model(N=N, t=1, mu=0.2)
     Eng_gs = -3.427339492125848
 
     Dmax = 8
-    cutoff_sweep = 1
-    cutoff_dE = 1e-9
     opts_svd = {'tol': 1e-6, 'D_total': Dmax}
 
-
-    version = '1site'
     psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2)
     psi.canonize_sweep(to='first')
-    _, E, _ = yamps.dmrg.dmrg_OBC(psi=psi, H=H, env=None, version=version, cutoff_sweep=cutoff_sweep,
-                                cutoff_dE=cutoff_dE, hermitian=True, k=4, eigs_tol=1e-14, opts_svd=opts_svd)
-    print('1site: Energy - Eref= ', E-Eng_gs)
+    env = yamps.dmrg(psi=psi, H=H, env=None, version='1site', tol_dE=1e-10, opts_svd=opts_svd)
+    print('1site: Energy - Eref= ', env.measure()-Eng_gs)
 
-    version = '2site'
     psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2)
     psi.canonize_sweep(to='first')
-    _, E, _ = yamps.dmrg.dmrg_OBC(psi=psi, H=H, env=None, version=version, cutoff_sweep=cutoff_sweep,
-                                cutoff_dE=cutoff_dE, hermitian=True, k=4, eigs_tol=1e-14, opts_svd=opts_svd)
-    print('2site: Energy - Eref= ', E-Eng_gs)
+    env = yamps.dmrg(psi=psi, H=H, env=None, version='2site', tol_dE=1e-10, opts_svd=opts_svd)
+    print('1site: Energy - Eref= ', env.measure()-Eng_gs)
 
 
 if __name__ == "__main__":
     test_full_dmrg()
     test_Z2_dmrg()
     test_U1_dmrg()
-    test_OBC_dmrg()
+    test_dmrg()

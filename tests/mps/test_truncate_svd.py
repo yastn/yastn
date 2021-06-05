@@ -10,7 +10,7 @@ def run_dmrg_1site(psi, H, sweeps=10):
     """ Run a few sweeps of dmrg_1site_sweep. Returns energy. """
     env = None
     for _ in range(sweeps):
-        env = yamps.dmrg.dmrg_sweep_1site(psi, H, env=env)
+        env = yamps.dmrg_sweep_1site(psi, H, env=env)
     return env.measure()
 
 
@@ -26,7 +26,7 @@ def run_truncation(psi, H, Egs, sweeps=2):
     psi2.canonize_sweep(to='first')
     env = None
     for _ in range(sweeps):
-        env = yamps.sweep_variational(psi2, psi_target=psi, env=env)
+        env = yamps.variational_sweep(psi2, psi_target=psi, env=env)
 
     ov_v = yamps.measure_overlap(psi, psi2)
     Eng_v = yamps.measure_mpo(psi2, H, psi2)
