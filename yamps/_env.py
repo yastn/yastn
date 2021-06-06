@@ -1,5 +1,5 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
-from yast import ncon, match_legs, tensordot, expmv
+from yast import ncon, match_legs, tensordot, expmv, vdot
 from ._mps import YampsError
 
 
@@ -40,12 +40,21 @@ class _EnvParent:
         self.ortho = [] if orthogonal is None else orthogonal
         self.nr_ortho = len(self.ortho)
         self.Fortho = [{} for _ in range(self.nr_ortho)]
+        self.Aortho = []
 
         if self.bra.nr_phys != self.ket.nr_phys:
             raise YampsError('bra and ket should have the same number of physical legs.')
         if self.bra.N != self.ket.N:
             raise YampsError('bra and ket should have the same number of sites.')
 
+        ll = self.N - 1
+        for ii in range(self.nr_ortho):
+            self.Fortho[ii][(-1, 0)] = match_legs(tensors=[self.ortho[ii].A[0], self.ket.A[0]],
+                                            legs=[self.ortho[ii].left[0], self.ket.left[0]],
+                                            conjs=[1, 0], val='ones')
+            self.Fortho[ii][(ll + 1, ll)] = match_legs(tensors=[self.ket.A[ll], self.ortho[ii].A[ll]],
+                                            legs=[self.ket.right[0], self.ortho[ii].right[0]],
+                                            conjs=[0, 1], val='ones')
 
     def setup(self, to='last'):
         r"""
@@ -123,6 +132,15 @@ class _EnvParent:
         for ii in range(self.nr_ortho):
             _update2(n, self.Fortho[ii], self.ortho[ii], self.ket, to, self.nr_phys)
 
+
+    def update_Aortho(self, n):
+        """ Update projection of states to be orthogonal to on psi. """
+        self.Aortho = []
+        for ii in range(self.nr_ortho):
+            T1 = tensordot(self.Fortho[ii][(n - 1, n)], self.ortho[ii].A[n], axes=(0, 0), conj=(0, 1))
+            self.Aortho.append(tensordot(T1, self.Fortho[ii][(n + 1, n)], axes=(self.nr_phys + 1, 1)))
+
+
 class Env2(_EnvParent):
     """
     The class combines environments of mps+mps for calculation of expectation values, overlaps, etc.
@@ -177,7 +195,7 @@ class Env3(_EnvParent):
     The class combines environments of mps+mps for calculation of expectation values, overlaps, etc.
     """
 
-    def __init__(self, bra=None, op=None, ket=None, on_aux=False):
+    def __init__(self, bra=None, op=None, ket=None, on_aux=False, orthogonal=None):
         r"""
         Initialize structure for :math:`\langle {\rm bra} | {\rm opp} | {\rm ket} \rangle` related operations.
 
@@ -190,7 +208,7 @@ class Env3(_EnvParent):
         ket : mps
             mps for :math:`| {\rm ket} \rangle`.
         """
-        super().__init__(bra, ket)
+        super().__init__(bra, ket, orthogonal)
         self.op = op
         self.nr_layers = 3
         self.on_aux = on_aux
@@ -248,14 +266,18 @@ class Env3(_EnvParent):
         """
         nl, nr = n - 1, n + 1
         if self.nr_phys == 1:
-            return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
+            T1 = ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
                         ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))
-        if self.nr_phys == 2 and not self.on_aux:
-            return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
+        elif self.nr_phys == 2 and not self.on_aux:
+            T1 = ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
                         ((-1, 2, 1), (1, 3, -3, 4), (2, -2, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
-        return ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
+        else:
+            T1 = ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
                     ((-1, 2, 1), (1, -2, 3, 4), (2, -3, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
-
+        for ii in range(self.nr_ortho):
+            x = vdot(self.Aortho[ii], T1)
+            T1 = T1.apxb(self.Aortho[ii], -x)
+        return T1
 
     def Heff2(self, AA, bd):
         r"""Action of Heff on central site.

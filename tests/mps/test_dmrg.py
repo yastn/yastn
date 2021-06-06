@@ -84,6 +84,14 @@ def test_Z2_dmrg():
     psi = run_dmrg_1site(psi, H, occ, Eng_parity0, Occ_gs0)
     print('1site      : Energy =', yamps.measure_mpo(psi, H, psi), ' Occupation =', yamps.measure_mpo(psi, occ, psi))
 
+    psi2 = ops_Z2.mps_random(N=N, Dblock=Dmax/2, total_parity=0)
+    psi2.canonize_sweep(to='first')
+    env = yamps.Env3(ket=psi2, op=H, orthogonal=[psi])
+    env.setup(to='first')
+    for _ in range(5):
+        env = yamps.dmrg_sweep_1site(psi2, H, env=env)
+        print("excited energy", env.measure())
+
     psi = ops_Z2.mps_random(N=N, Dblock=Dmax/2, total_parity=0)
     psi.canonize_sweep(to='first')
     psi = run_dmrg_2site(psi, H, occ, Eng_parity0, Occ_gs0, D_total=Dmax)

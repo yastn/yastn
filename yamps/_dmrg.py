@@ -103,16 +103,16 @@ def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None):
         raise YampsError('Require environment env where ket is bra is psi')
 
     for n in psi.sweep(to='last'):
-        f = lambda v: env.Heff1(v, n)
-        _, (psi.A[n],) = eigs(f, psi.A[n], k=1, **opts_eigs)
+        env.update_Aortho(n)
+        _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
         psi.orthogonalize_site(n, to='last')
         psi.absorb_central(to='last')
         env.clear_site(n)
         env.update(n, to='last')
 
     for n in psi.sweep(to='first'):
-        f = lambda v: env.Heff1(v, n)
-        _, (psi.A[n],) = eigs(f, psi.A[n], k=1, **opts_eigs)
+        env.update_Aortho(n)
+        _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
         psi.orthogonalize_site(n, to='first')
         psi.absorb_central(to='first')
         env.clear_site(n)
