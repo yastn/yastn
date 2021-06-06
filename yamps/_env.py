@@ -1,5 +1,5 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
-from yast import ncon, match_legs, tensordot
+from yast import ncon, match_legs, tensordot, expmv
 from ._mps import YampsError
 
 
@@ -30,13 +30,16 @@ def measure_mpo(bra, op, ket):
 
 
 class _EnvParent:
-    def __init__(self, bra=None, ket=None) -> None:
+    def __init__(self, bra=None, ket=None, orthogonal=None) -> None:
         self.ket = ket
         self.bra = bra if bra is not None else ket
         self.N = ket.N
         self.nr_phys = ket.nr_phys
         self.nr_layers = 2
         self.F = {}  # dict for environments
+        self.ortho = [] if orthogonal is None else orthogonal
+        self.nr_ortho = len(self.ortho)
+        self.Fortho = [{} for _ in range(self.nr_ortho)]
 
         if self.bra.nr_phys != self.ket.nr_phys:
             raise YampsError('bra and ket should have the same number of physical legs.')
@@ -101,6 +104,25 @@ class _EnvParent:
         return self.Heff1(self.ket.A[n], n)
 
 
+    def update(self, n, to='last'):
+        r"""
+        Update environment including site n, in the direction given by to.
+
+        Parameters
+        ----------
+        n: int
+            index of site to include to the environment
+
+        to : str
+            'first' or 'last'.
+        """
+        if self.nr_layers == 2:
+            _update2(n, self.F, self.bra, self.ket, to, self.nr_phys)
+        else:
+            _update3(n, self.F, self.bra, self.op, self.ket, to, self.nr_phys, self.on_aux)
+        for ii in range(self.nr_ortho):
+            _update2(n, self.Fortho[ii], self.ortho[ii], self.ket, to, self.nr_phys)
+
 class Env2(_EnvParent):
     """
     The class combines environments of mps+mps for calculation of expectation values, overlaps, etc.
@@ -128,34 +150,6 @@ class Env2(_EnvParent):
         self.F[(ll + 1, ll)] = match_legs(tensors=[self.ket.A[ll], self.bra.A[ll]],
                                         legs=[self.ket.right[0], self.bra.right[0]],
                                         conjs=[0, 1], val='ones')
-
-
-    def update(self, n, to='last'):
-        r"""
-        Update environment including site n, in the direction given by to.
-
-        Parameters
-        ----------
-        n: int
-            index of site to include to the environment
-
-        to : str
-            'first' or 'last'.
-        """
-        if to == 'first':
-            if self.nr_phys == 1:
-                T1 = tensordot(self.ket.A[n], self.F[(n + 1, n)], axes=(2, 0))
-                self.F[(n, n - 1)] = tensordot(T1, self.bra.A[n], axes=((1, 2), (1, 2)), conj=(0, 1))
-            else:
-                T1 = tensordot(self.ket.A[n], self.F[(n + 1, n)], axes=(3, 0))
-                self.F[(n, n - 1)] = tensordot(T1, self.bra.A[n], axes=((1, 2, 3), (1, 2, 3)), conj=(0, 1))
-        elif to == 'last':
-            if self.nr_phys == 1:
-                T1 = tensordot(self.F[(n - 1, n)], self.bra.A[n], axes=(0, 0), conj=(0, 1))
-                self.F[(n, n + 1)] = tensordot(T1, self.ket.A[n], axes=((0, 1), (0, 1)))
-            else:
-                T1 = tensordot(self.F[(n - 1, n)], self.bra.A[n], axes=(0, 0), conj=(0, 1))
-                self.F[(n, n + 1)] = tensordot(T1, self.ket.A[n], axes=((0, 1, 2), (0, 1, 2)))
 
 
     def Heff1(self, x, n):
@@ -200,6 +194,7 @@ class Env3(_EnvParent):
         self.op = op
         self.nr_layers = 3
         self.on_aux = on_aux
+        self._expmv_ncv = {}
         if self.op.N != self.N:
             raise YampsError('op should should have the same number of sites as ket.')
 
@@ -212,41 +207,6 @@ class Env3(_EnvParent):
         self.F[(ll + 1, ll)] = match_legs(tensors=[self.ket.A[ll], self.op.A[ll], self.bra.A[ll]],
                                         legs=[self.ket.right[0], self.op.right[0], self.bra.right[0]],
                                         conjs=[0, 0, 1], val='ones')
-
-
-    def update(self, n, to='last'):
-        r"""
-        Update environment including site n, in the direction given by to.
-
-        Parameters
-        ----------
-        n: int
-            index of site to include to the environment
-
-        to : str
-            'first' or 'last'.
-        """
-
-        if to == 'last':
-            if self.nr_phys == 1:
-                self.F[(n, n + 1)] = ncon([self.bra.A[n], self.F[(n - 1, n)], self.ket.A[n], self.op.A[n]],
-                                            ((4, 5, -1), (4, 2, 1), (1, 3, -3), (2, 5, 3, -2)), conjs=(1, 0, 0, 0))
-            elif self.nr_phys == 2 and not self.on_aux:
-                self.F[(n, n + 1)] = ncon([self.bra.A[n], self.F[(n - 1, n)], self.ket.A[n], self.op.A[n]],
-                                            ((4, 5, 6, -1), (4, 2, 1), (1, 3, 6, -3), (2, 5, 3, -2)), (1, 0, 0, 0))
-            else:  # self.nr_phys == 2 and self.on_aux:
-                self.F[(n, n + 1)] = ncon([self.bra.A[n], self.F[(n - 1, n)], self.ket.A[n], self.op.A[n]],
-                                            ((4, 6, 5, -1), (4, 2, 1), (1, 6, 3, -3), (2, 5, 3, -2)), (1, 0, 0, 0))
-        elif to == 'first':
-            if self.nr_phys == 1:
-                self.F[(n, n - 1)] = ncon([self.ket.A[n], self.F[(n + 1, n)], self.op.A[n], self.bra.A[n]],
-                                            ((-1, 2, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 4, 5)), (0, 0, 0, 1))
-            elif self.nr_phys == 2 and not self.on_aux:
-                self.F[(n, n - 1)] = ncon([self.ket.A[n], self.F[(n + 1, n)], self.op.A[n], self.bra.A[n]],
-                                            ((-1, 2, 6, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 4, 6, 5)), (0, 0, 0, 1))
-            else:  # self.nr_phys == 2 and self.on_aux:
-                self.F[(n, n - 1)] = ncon([self.ket.A[n], self.F[(n + 1, n)], self.op.A[n], self.bra.A[n]],
-                                            ((-1, 6, 2, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 6, 4, 5)), (0, 0, 0, 1))
 
 
     def Heff0(self, C, bd):
@@ -332,3 +292,76 @@ class Env3(_EnvParent):
                         ((-1, 2, 1), (1, 3, -3, 4), (2, -2, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
         return ncon([self.F[(nl, n1)], AA, OO, self.F[(nr, n2)]],
                     ((-1, 2, 1), (1, -2, 3, 4), (2, -3, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
+
+
+    def update_A(self, n, dt, opts):
+        """ Updates env.psi.A[n] by exp(dt Heff1). """
+        if n in self._expmv_ncv:
+            opts['ncv'] = self._expmv_ncv[n]
+        f = lambda x: self.Heff1(x, n)
+        self.ket.A[n], info = expmv(f, self.ket.A[n], dt, **opts, normalize=True, return_info=True)
+        self._expmv_ncv[n] = info['ncv']
+
+
+    def update_C(self, dt, opts):
+        """ Updates env.psi.A[bd] by exp(dt Heff0). """
+        bd = self.ket.pC
+        if bd[0] != -1 and bd[1] != self.N:  # do not update central sites outsite of the chain
+            if bd in self._expmv_ncv:
+                opts['ncv'] = self._expmv_ncv[bd]
+            f = lambda x: self.Heff0(x, bd)
+            self.ket.A[bd], info = expmv(f, self.ket.A[bd], dt, **opts, normalize=True, return_info=True)
+            self._expmv_ncv[bd] = info['ncv']
+
+
+    def update_AA(self, bd, dt, opts, opts_svd):
+        """ Merge two sites given in bd into AA, updates AA by exp(dt Heff2) and unmerge the sites. """
+        ibd = bd[::-1]
+        if ibd in self._expmv_ncv:
+            opts['ncv'] = self._expmv_ncv[ibd]
+        AA = self.ket.merge_two_sites(bd)
+        f = lambda v: self.Heff2(v, bd)
+        AA, info = expmv(f, AA, dt, **opts, normalize=True, return_info=True)
+        self._expmv_ncv[ibd] = info['ncv']
+        self.ket.unmerge_two_sites(AA, bd, opts_svd)
+
+
+def _update2(n, F, bra, ket, to, nr_phys):
+    """ Contractions for 2-layer environment update. """
+    if to == 'first':
+        if nr_phys == 1:
+            T1 = tensordot(ket.A[n], F[(n + 1, n)], axes=(2, 0))
+            F[(n, n - 1)] = tensordot(T1, bra.A[n], axes=((1, 2), (1, 2)), conj=(0, 1))
+        else:
+            T1 = tensordot(ket.A[n], F[(n + 1, n)], axes=(3, 0))
+            F[(n, n - 1)] = tensordot(T1, bra.A[n], axes=((1, 2, 3), (1, 2, 3)), conj=(0, 1))
+    elif to == 'last':
+        if nr_phys == 1:
+            T1 = tensordot(F[(n - 1, n)], bra.A[n], axes=(0, 0), conj=(0, 1))
+            F[(n, n + 1)] = tensordot(T1, ket.A[n], axes=((0, 1), (0, 1)))
+        else:
+            T1 = tensordot(F[(n - 1, n)], bra.A[n], axes=(0, 0), conj=(0, 1))
+            F[(n, n + 1)] = tensordot(T1, ket.A[n], axes=((0, 1, 2), (0, 1, 2)))
+
+
+def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
+    if to == 'last':
+        if nr_phys == 1:
+            F[(n, n + 1)] = ncon([bra.A[n], F[(n - 1, n)], ket.A[n], op.A[n]],
+                                        ((4, 5, -1), (4, 2, 1), (1, 3, -3), (2, 5, 3, -2)), conjs=(1, 0, 0, 0))
+        elif nr_phys == 2 and not on_aux:
+            F[(n, n + 1)] = ncon([bra.A[n], F[(n - 1, n)], ket.A[n], op.A[n]],
+                                        ((4, 5, 6, -1), (4, 2, 1), (1, 3, 6, -3), (2, 5, 3, -2)), (1, 0, 0, 0))
+        else:  # nr_phys == 2 and on_aux:
+            F[(n, n + 1)] = ncon([bra.A[n], F[(n - 1, n)], ket.A[n], op.A[n]],
+                                        ((4, 6, 5, -1), (4, 2, 1), (1, 6, 3, -3), (2, 5, 3, -2)), (1, 0, 0, 0))
+    elif to == 'first':
+        if nr_phys == 1:
+            F[(n, n - 1)] = ncon([ket.A[n], F[(n + 1, n)], op.A[n], bra.A[n]],
+                                        ((-1, 2, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 4, 5)), (0, 0, 0, 1))
+        elif nr_phys == 2 and not on_aux:
+            F[(n, n - 1)] = ncon([ket.A[n], F[(n + 1, n)], op.A[n], bra.A[n]],
+                                        ((-1, 2, 6, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 4, 6, 5)), (0, 0, 0, 1))
+        else:  # nr_phys == 2 and on_aux:
+            F[(n, n - 1)] = ncon([ket.A[n], F[(n + 1, n)], op.A[n], bra.A[n]],
+                                        ((-1, 6, 2, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 6, 4, 5)), (0, 0, 0, 1))

@@ -2,6 +2,7 @@
 import logging
 from yast import eigs
 from ._env import Env3
+from ._mps import YampsError
 
 
 logger = logging.Logger('dmrg')
@@ -16,7 +17,7 @@ def dmrg(psi, H, env=None, version='1site', max_sweeps=1, tol_dE=-1, opts_eigs=N
     r"""
     Perform dmrg sweeps until convergence.
 
-    Assume input psi is cannonized to first site.
+    Assume that psi is cannonized to first site.
     Sweep consists of iterative updates from last site to first and back to the first one.
     Updates the state psi.
 
@@ -66,46 +67,44 @@ def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None):
     r"""
     Perform sweep with 1-site DMRG.
 
-    Assume input psi is cannonized to first site.
+    Assume that psi is cannonized to first site.
     Sweep consists of iterative updates from last site to first and back to the first one.
-    Updates the state psi.
+    Updates psi.
 
     Parameters
     ----------
     psi: Mps
         Initial state.
+
     H: Mps, nr_phys=2
-        Operator given as an MPO.
+        Operator to minimize given in the form of mpo.
         Legs are [left-virtual, ket-physical, bra-physical, right-virtual]
+
     env: Env3
         default = None
         Initial overlap <psi| H |psi>
         Initial environments must be set-up with respect to the last site.
-    hermitian: bool
-        default=True
-        Is MPO hermitian
-    k: int
-        default=4
-        Dimension of Krylov subspace for eigs(.)
-    eigs_tol: float
-        default=1e-14
-        Cutoff for krylov subspace for eigs(.)
+
+    opts_eigs: dict
+        options passed to eigs
 
     Returns
     -------
     env: Env3
-        Overlap <psi| H |psi> as Env3.
+        Environment of the <psi|H|psi> ready for the next iteration.
     """
+    if opts_eigs is None:
+        opts_eigs={'hermitian': True, 'ncv': 3, 'which': 'SR'}
+
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup(to='first')
-
-    if opts_eigs is None:
-        opts_eigs={'hermitian': True, 'ncv': 3}
+    if not (env.bra is psi and env.ket is psi):
+        raise YampsError('Require environment env where ket is bra is psi')
 
     for n in psi.sweep(to='last'):
         f = lambda v: env.Heff1(v, n)
-        _, (psi.A[n],) = eigs(f, psi.A[n], k=1, which='SR', **opts_eigs)
+        _, (psi.A[n],) = eigs(f, psi.A[n], k=1, **opts_eigs)
         psi.orthogonalize_site(n, to='last')
         psi.absorb_central(to='last')
         env.clear_site(n)
@@ -113,7 +112,7 @@ def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None):
 
     for n in psi.sweep(to='first'):
         f = lambda v: env.Heff1(v, n)
-        _, (psi.A[n],) = eigs(f, psi.A[n], k=1, which='SR', **opts_eigs)
+        _, (psi.A[n],) = eigs(f, psi.A[n], k=1, **opts_eigs)
         psi.orthogonalize_site(n, to='first')
         psi.absorb_central(to='first')
         env.clear_site(n)
@@ -123,7 +122,7 @@ def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None):
 
 def dmrg_sweep_2site(psi, H, env=None, opts_eigs=None, opts_svd=None):
     r"""
-    Perform sweep with 2site-DMRG.
+    Perform sweep with 2-site DMRG.
     Assume input psi is right canonical.
     Sweep consists of iterative updates from last site to first and back to the first one.
 
@@ -157,14 +156,16 @@ def dmrg_sweep_2site(psi, H, env=None, opts_eigs=None, opts_svd=None):
      Overlap <psi| H |psi> as Env3.
     """
 
+    if opts_svd is None:
+        opts_svd = {'tol': 1e-12}
+    if opts_eigs is None:
+        opts_eigs={'hermitian': True, 'ncv': 3, 'which': 'SR'}
+
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup(to='first')
-
-    if opts_eigs is None:
-        opts_eigs={'hermitian': True, 'ncv': 3, 'which': 'SR'}
-    if opts_svd is None:
-        opts_svd = {'tol': 1e-12}
+    if not (env.bra is psi and env.ket is psi):
+        raise YampsError('Require environment env where ket is bra is psi')
 
     for n in psi.sweep(to='last', dl=1):
         bd = (n, n + 1)

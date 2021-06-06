@@ -1,90 +1,71 @@
 """ Various variants of the TDVP algorithm for mps."""
-from yast import expmv
 from ._env import Env3
-
+from ._mps import YampsError
 
 #################################
 #           tdvp                #
 #################################
 
 
-def tdvp_sweep_1site(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol=1e-12, optsK_svd=None, **kwargs):
+def tdvp_sweep_1site(psi, H=False, dt=0.1, env=None, opts_expmv=None):
     r"""
-    Perform sweep with 1site-TDVP by applying exp(-i*dt*H) on initial vector. Note the convention for time step sign.
-    Procedure performs exponantiation: psi(dt) = exp( dt * H )*psi(0). For Hamiltonian real time evolution forward in time: sign(dt)= -1j, for Hamiltonian imaginary time evolution forward in time: sign(dt)= -1.. For Hamiltonian real time evolution forward in time: sign(dt)= -1j, for Hamiltonian imaginary time evolution forward in time: sign(dt)= -1.
-    Assume input psi is right canonical.
-    Sweep consists of iterative updates from last site to first and back to the first one.
+    Perform sweep with 1-site TDVP, calculating the update psi(dt) = exp( dt * H ) @ psi(0).
+
+    Assume input psi is canonized to first site.
 
     Parameters
     ----------
-    psi: Mps, nr_phys=1
-        initial state.
+    psi: Mps
+        initial state. It is updated during the execution
+
     H: Mps, nr_phys=2
-        operator given in MPO decomposition.
-        legs are [left-virtual, ket-physical, bra-physical, right-virtual]
-    M: Mps, nr_phys=1
-        Kraus operators.
-        legs are [Kraus dimension, ket-physical, bra-physical]
-    env: Env3
-        default = None
-        initial overlap <psi| H |psi>
-        initial environments must be set up with respect to the last site.
+        evolution generator given in the form of mpo.
+
     dt: double
-        default = 1
-        time interval for matrix expontiation. May be divided into smaller intervals according to the cost function.
-    hermitian: bool
-        default =True
-        is MPO hermitian
-    k: int
-        default=4
-        Dimension of Krylov subspace for eigs(.)
-    eigs_tol: float
-        default=1e-14
-        Cutoff for krylov subspace for eigs(.)
-    optsK_svd: dict
-        default=None
-        options for truncation on auxilliary d.o.f.
+        time step
+
+    env: Env3
+        Can provide environment <psi|H|psi> from the previous sweep.
+        It is initialized if set to None
+
+    opts_expmv: dict
+        options passed to expmv;
+        If there is information from previous excecutions stored in env,
+        overrid the initial guess of the size of krylov space opts_expmv['ncv'] will be overriden.
 
     Returns
     -------
     env: Env3
-     Overlap <psi| H |psi> as Env3.
-
-    Note
-    ----
-    psi is updated.
+        Environment of the <psi|H|psi> ready for the next iteration.
     """
-
+    opts = {} if opts_expmv is None else opts_expmv.copy()
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup(to='first')
+    if not (env.bra is psi and env.ket is psi):
+        raise YampsError('Require environment env where ket is bra is psi')
 
     for n in psi.sweep(to='last'):
-        f = lambda v: env.Heff1(v, n)
-        psi.A[n] = expmv(f, psi.A[n], 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+        env.update_A(n, 0.5 * dt, opts)
         psi.orthogonalize_site(n, to='last')
         env.clear_site(n)
-        if n != psi.last:
-            env.update(n, to='last')
-            f = lambda v: env.Heff0(v, psi.pC)
-            psi.A[psi.pC] = expmv(f, psi.A[psi.pC], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+        env.update(n, to='last')
+        env.update_C(-0.5 * dt, opts)
         psi.absorb_central(to='last')
 
     for n in psi.sweep(to='first'):
-        f = lambda v: env.Heff1(v, n)
-        psi.A[n] = expmv(f, psi.A[n], 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+        env.update_A(n, 0.5 * dt, opts)
         psi.orthogonalize_site(n, to='first')
         env.clear_site(n)
-        if n != psi.first:
-            env.update(n, to='first')
-            f = lambda v: env.Heff0(v, psi.pC)
-            psi.A[psi.pC] = expmv(f, psi.A[psi.pC], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+        env.update(n, to='first')
+        env.update_C(-0.5 * dt, opts)
         psi.absorb_central(to='first')
+
     env.update(0, to='first')
     return env
 
 
-def tdvp_sweep_2site(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol=1e-12, opts_svd=None, **kwargs):
+def tdvp_sweep_2site(psi, H=False, dt=0.1, env=None, opts_expmv=None, opts_svd=None):
     r"""
     Perform sweep with 2-site TDVP, calculating the update psi(dt) = exp( dt * H ) @ psi(0).
 
@@ -92,83 +73,61 @@ def tdvp_sweep_2site(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol
 
     Parameters
     ----------
-    psi: Mps, nr_phys=1
-        initial state.
+    psi: Mps
+        initial state. It is updated during the execution
+
     H: Mps, nr_phys=2
-        operator given in MPO decomposition.
-        legs are [left-virtual, ket-physical, bra-physical, right-virtual]
-    M: Mps, nr_phys=1
-        Kraus operators.
-        legs are [Kraus dimension, ket-physical, bra-physical]
-    env: Env3
-        default = None
-        initial overlap <psi| H |psi>
-        initial environments must be set up with respect to the last site.
+        evolution generator given in the form of mpo.
+
     dt: double
-        default = 1
-        time interval for matrix expontiation. May be divided into smaller intervals according to the cost function.
-    hermitian: bool
-        default = True
-        is MPO hermitian
-    k: int
-        default = 4
-        Dimension of Krylov subspace for eigs(.)
-    eigs_tol: float
-        default = 1e-14
-        Cutoff for krylov subspace for eigs(.)
+        time step
+
+    env: Env3
+        Can provide environment <psi|H|psi> from the previous sweep.
+        It is initialized if set to None
+
+    opts_expmv: dict
+        options passed to expmv;
+        If there is information from previous excecutions stored in env,
+        overrid the initial guess of the size of krylov space opts_expmv['ncv'] will be overriden.
+
     opts_svd: dict
-        default=None
-        options for truncation on virtual d.o.f.
-    optsK_svd: dict
-        default=None
-        options for truncation on auxilliary d.o.f.
+        options passed to svd to truncate virtual bond dimensions when unmerging two merged sites.
 
     Returns
     -------
     env: Env3
-        Overlap <psi| H |psi> as Env3.
-
-    Note
-    ----
-    psi is updated.
+        Environment of the <psi|H|psi> ready for the next iteration.
     """
-
-    if env is None: 
+    opts = {} if opts_expmv is None else opts_expmv.copy()
+    if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup(to='first')
+    if not (env.bra is psi and env.ket is psi):
+        raise YampsError('Require environment env where ket is bra is psi')
 
     for n in psi.sweep(to='last', dl=1):
-        bd = (n, n + 1)
-        AA = psi.merge_two_sites(bd)
-        f = lambda v: env.Heff2(v, bd)
-        AA = expmv(f, AA, 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-        psi.unmerge_two_sites(AA, bd, opts_svd)
+        env.update_AA((n, n + 1), 0.5 * dt, opts, opts_svd)
         psi.absorb_central(to='last')
         env.clear_site(n, n + 1)
         env.update(n, to='last')
         if n + 1 != psi.last:
-            f = lambda v: env.Heff1(v, n + 1)
-            psi.A[n + 1] = expmv(f, psi.A[n + 1], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+            env.update_A(n + 1, -0.5 * dt, opts)
 
     for n in psi.sweep(to='first', dl=1):
-        bd = (n, n + 1)
-        AA = psi.merge_two_sites(bd)
-        f = lambda v: env.Heff2(v, bd)
-        AA = expmv(f, AA, 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-        psi.unmerge_two_sites(AA, bd, opts_svd)
+        env.update_AA((n, n + 1), 0.5 * dt, opts, opts_svd)
         psi.absorb_central(to='first')
         env.clear_site(n, n + 1)
         env.update(n + 1, to='first')
         if n != psi.first:
-            f = lambda v: env.Heff1(v, n)
-            psi.A[n] = expmv(f, psi.A[n], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+            env.update_A(n, -0.5 * dt, opts)
 
     env.clear_site(0)
     env.update(0, to='first')
     return env
 
 
-def tdvp_sweep_mix(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol=1e-12, D_totals=None, tol_svds=None, opts_svd=None, **kwargs):
+def tdvp_sweep_mix(psi, H=False, dt=1., env=None, opts_expmv=None, opts_svd=None):
     r"""
     Perform mixed 1site-2site sweep of TDVP basing on SV_min (smallest Schmidt value on the bond).
     Procedure performs exponantiation: psi(dt) = exp( dt * H )*psi(0).
@@ -185,6 +144,7 @@ def tdvp_sweep_mix(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol=1
     env: Env3
         Overlap <psi| H |psi> as Env3.
     """
+    opts = {} if opts_expmv is None else opts_expmv.copy()
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup(to='first')
@@ -195,34 +155,24 @@ def tdvp_sweep_mix(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol=1
             if env.enlarge_bond[(n, n + 1)]:
                 update_two = True
             else:
-                f = lambda v: env.Heff1(v, n)
-                psi.A[n] = expmv(f, psi.A[n], 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                env.update_A(n, 0.5 * dt, opts)
                 psi.orthogonalize_site(n, to='last')
                 env.clear_site(n)
                 env.update(n, to='last')
-                if n != psi.last:
-                    f = lambda v: env.Heff0(v, psi.pC)
-                    psi.A[psi.pC] = expmv(f, psi.A[psi.pC], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                env.update_C(-0.5 * dt, opts)
                 psi.absorb_central(to='last')
         else:
-            bd = (n - 1, n)
-            AA = psi.merge_two_sites(bd)
-            f = lambda v: env.Heff2(v, bd)
-            AA = expmv(f, AA, 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-            psi.unmerge_two_sites(AA, bd, opts_svd)
+            env.update_AA((n - 1, n), 0.5 * dt, opts, opts_svd)
             psi.absorb_central(to='last')
             env.clear_site(n - 1, n)
             env.update(n - 1, to='last')
             if env.enlarge_bond[(n, n + 1)]:
                 if n + 1 != psi.last:
-                    f = lambda v: env.Heff1(v, n + 1)
-                    psi.A[n + 1] = expmv(f, psi.A[n + 1], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                    env.update_A(n + 1, -0.5 * dt, opts)
             else:
                 psi.ortogonalize_site(n, to='last')
                 env.update(n, to='last')
-                if n != psi.last:
-                    f = lambda v: env.Heff0(v, psi.pC)
-                    psi.A[psi.pC] = expmv(f, psi.A[psi.pC], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                env.update_C(-0.5 * dt, opts)
                 psi.absorb_central(to='last')
 
     for n in psi.sweep(to='first'):
@@ -230,35 +180,24 @@ def tdvp_sweep_mix(psi, H=False, dt=1., env=None, hermitian=True, k=4, exp_tol=1
             if env.enlarge_bond[(n - 1, n)]:
                 update_two = True
             else:
-                f = lambda v: env.Heff1(v, n)
-                psi.A[n] = expmv(f, psi.A[n], 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                env.update_A(n, 0.5 * dt, opts)
                 psi.orthogonalize_site(n, to='first')
                 env.clear_site(n)
-                if n != psi.last:
-                    env.update(n, to='first')
-                    f = lambda v: env.Heff0(v, psi.pC)
-                    psi.A[psi.pC] = expmv(f, psi.A[psi.pC], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                env.update_C(-0.5 * dt, opts)
                 psi.absorb_central(to='last')
         else:
-            bd = (n, n + 1)
-            AA = psi.merge_two_sites(bd)
-            f = lambda v: env.Heff2(v, bd)
-            AA = expmv(f, AA, 0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
-            psi.unmerge_two_sites(AA, bd, opts_svd)
+            env.update_AA((n, n + 1), 0.5 * dt, opts, opts_svd)
             psi.absorb_central(to='first')
             env.clear_site(n, n + 1)
             env.update(n + 1, to='first')
             if env.enlarge_bond[(n - 1, n)]:
                 if n != psi.first:
-                    f = lambda v: env.Heff1(v, n + 1)
-                    psi.A[n + 1] = expmv(f, psi.A[n + 1], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                    env.update_A(n, -0.5 * dt, opts)
             else:
                 psi.ortogonalize_site(n, to='first')
-                if n != psi.first:
-                    env.update(n, to='first')
-                    f = lambda v: env.Heff0(v, psi.pC)
-                    psi.A[psi.pC] = expmv(f, psi.A[psi.pC], -0.5 * dt, tol=exp_tol, ncv=k, hermitian=hermitian, normalize=True)
+                env.update_C(-0.5 * dt, opts)
                 psi.absorb_central(to='last')
+
     env.clear_site(0)
     env.update(0, to='first')
     return env
