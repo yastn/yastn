@@ -294,7 +294,7 @@ def leg_structure_union(*args):
     return ls_out
 
 
-def to_dense(a, leg_structures=None, native=False):
+def to_dense(a, leg_structures=None, native=False, reverse=False):
     r"""
     Create full tensor corresponding to the symmetric tensor.
 
@@ -310,6 +310,10 @@ def to_dense(a, leg_structures=None, native=False):
     native: bool
         output native tensor (neglecting meta fusions).
 
+    reverse: bool
+        reverse the order in which blocks are sorted. Default order is ascending in 
+        values of block's charges.
+
     Returns
     -------
     out : tensor of the type used by backend
@@ -323,7 +327,7 @@ def to_dense(a, leg_structures=None, native=False):
             tD[n] = leg_structure_union(tD[n], tDn)
     Dtot = [sum(tDn.values()) for tDn in tD]
     for tDn in tD:
-        tns = sorted(tDn.keys())
+        tns = sorted(tDn.keys(), reverse=reverse)
         Dlow = 0
         for tn in tns:
             Dhigh = Dlow + tDn[tn]
@@ -339,11 +343,11 @@ def to_dense(a, leg_structures=None, native=False):
     return a.config.backend.merge_to_dense(a.A, Dtot, meta, a.config.device)
 
 
-def to_numpy(a, leg_structures=None, native=False):
+def to_numpy(a, leg_structures=None, native=False, reverse=False):
     r"""
     Create full nparray corresponding to the symmetric tensor. See `yast.to_dense`
     """
-    return a.config.backend.to_numpy(a.to_dense(leg_structures, native))
+    return a.config.backend.to_numpy(a.to_dense(leg_structures, native, reverse))
 
 
 def to_raw_tensor(a):
@@ -356,7 +360,7 @@ def to_raw_tensor(a):
     raise YastError('Only tensor with a single block can be converted to raw tensor')
 
 
-def to_nonsymmetric(a, leg_structures=None, native=False):
+def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     r"""
     Create full tensor corresponding to the symmetric tensor. Output it as yast tensor with no symmetry.
 
@@ -372,6 +376,10 @@ def to_nonsymmetric(a, leg_structures=None, native=False):
     native: bool
         output native tensor (neglecting meta fusions).
 
+    reverse: bool
+        reverse the order in which blocks are sorted. Default order is ascending in 
+        values of block's charges.
+
     Returns
     -------
     out : tensor of the type used by backend
@@ -379,7 +387,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False):
     config_dense = a.config._replace(sym=sym_none)
     news = a.get_signature(native)
     c = a.__class__(config=config_dense, s=news, n=None, isdiag=a.isdiag)
-    c.set_block(val=a.to_dense(leg_structures, native))
+    c.set_block(val=a.to_dense(leg_structures, native, reverse))
     return c
 
 #########################
