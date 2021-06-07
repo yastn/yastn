@@ -17,7 +17,6 @@ def run_tdvp_1site(psi, H, dt, sweeps, Eng_gs):
         assert Eng < Eng_old + tol
         Eng_old = Eng
     print('Eng =', Eng, ' Egs =', Eng_gs)
-    print(env._expmv_ncv)
     assert pytest.approx(Eng, rel=1e-1) == Eng_gs
     return psi
 
@@ -33,7 +32,6 @@ def run_tdvp_2site(psi, H, dt, sweeps,  Eng_gs, opts_svd=None):
         assert Eng < Eng_old + tol
         Eng_old = Eng
     print('Eng =', Eng, ' Egs =', Eng_gs)
-    print(env._expmv_ncv)
     assert pytest.approx(Eng, rel=1e-1) == Eng_gs
     return psi
 

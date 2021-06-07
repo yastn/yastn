@@ -2,7 +2,7 @@ from context import yast, yamps
 from context import config_U1
 
 
-def mps_random(N=2, Dblocks=(2,), total_charge=1):
+def mps_random(N=2, Dblocks=(2,), total_charge=1, dtype='float64'):
     Dblocks = tuple(Dblocks)
     psi = yamps.Mps(N, nr_phys=1)
     tc = (0, 1)
@@ -15,7 +15,7 @@ def mps_random(N=2, Dblocks=(2,), total_charge=1):
         tr = ((n + 1) * total_charge) // N
         tr = tuple(tr + ii for ii in range((-nb + 1) // 2, (nb + 1) // 2)) if n < N - 1 else (total_charge,)
         Dr = Dblocks if n < N - 1 else (1,)
-        psi.A[n] = yast.rand(config=config_U1, s=(1, 1, -1), t=[tl, tc, tr], D=[Dl, Dc, Dr])
+        psi.A[n] = yast.rand(config=config_U1, s=(1, 1, -1), t=[tl, tc, tr], D=[Dl, Dc, Dr], dtype=dtype)
     return psi
 
 
