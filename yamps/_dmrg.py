@@ -63,7 +63,7 @@ def dmrg(psi, H, env=None, version='1site', max_sweeps=1, tol_dE=-1, opts_eigs=N
     return env
 
 
-def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None):
+def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None, project=None):
     r"""
     Perform sweep with 1-site DMRG.
 
@@ -97,13 +97,13 @@ def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None):
         opts_eigs={'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
     if env is None:
-        env = Env3(bra=psi, op=H, ket=psi)
+        env = Env3(bra=psi, op=H, ket=psi, project=project)
         env.setup(to='first')
     if not (env.bra is psi and env.ket is psi):
         raise YampsError('Require environment env where ket is bra is psi')
 
     for n in psi.sweep(to='last'):
-        env.update_Aortho(n)
+        env.update_Aort(n)
         _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
         psi.orthogonalize_site(n, to='last')
         psi.absorb_central(to='last')
@@ -111,7 +111,7 @@ def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None):
         env.update(n, to='last')
 
     for n in psi.sweep(to='first'):
-        env.update_Aortho(n)
+        env.update_Aort(n)
         _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
         psi.orthogonalize_site(n, to='first')
         psi.absorb_central(to='first')
@@ -120,7 +120,7 @@ def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None):
     return env
 
 
-def dmrg_sweep_2site(psi, H, env=None, opts_eigs=None, opts_svd=None):
+def dmrg_sweep_2site(psi, H, env=None, opts_eigs=None, opts_svd=None, project=None):
     r"""
     Perform sweep with 2-site DMRG.
     Assume input psi is right canonical.
@@ -162,16 +162,16 @@ def dmrg_sweep_2site(psi, H, env=None, opts_eigs=None, opts_svd=None):
         opts_eigs={'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
     if env is None:
-        env = Env3(bra=psi, op=H, ket=psi)
+        env = Env3(bra=psi, op=H, ket=psi, project=project)
         env.setup(to='first')
     if not (env.bra is psi and env.ket is psi):
         raise YampsError('Require environment env where ket is bra is psi')
 
     for n in psi.sweep(to='last', dl=1):
         bd = (n, n + 1)
+        env.update_AAort(bd)
         AA = psi.merge_two_sites(bd)
-        f = lambda v: env.Heff2(v, bd)
-        _, (AA,) = eigs(f, AA, k=1, **opts_eigs)
+        _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
         psi.unmerge_two_sites(AA, bd, opts_svd)
         psi.absorb_central(to='last')
         env.clear_site(n, n + 1)
@@ -179,9 +179,9 @@ def dmrg_sweep_2site(psi, H, env=None, opts_eigs=None, opts_svd=None):
 
     for n in psi.sweep(to='first', dl=1):
         bd = (n, n + 1)
+        env.update_AAort(bd)
         AA = psi.merge_two_sites(bd)
-        f = lambda v: env.Heff2(v, bd)
-        _, (AA,) = eigs(f, AA, k=1, **opts_eigs)
+        _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
         psi.unmerge_two_sites(AA, bd, opts_svd)
         psi.absorb_central(to='first')
         env.clear_site(n, n + 1)

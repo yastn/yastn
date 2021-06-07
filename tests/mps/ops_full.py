@@ -3,7 +3,7 @@ from context import config_dense
 import numpy as np
 
 
-def mps_random(N=2, Dmax=2, d=2):
+def mps_random(N=2, Dmax=2, d=2, dtype='float64'):
     if isinstance(d, int):
         d = [d]
     d *= (N + len(d) - 1) // len(d)
@@ -13,7 +13,7 @@ def mps_random(N=2, Dmax=2, d=2):
     for n in range(N):
         Dr = Dmax if n < N - 1 else 1
         Dl = Dmax if n > 0 else 1
-        psi.A[n] = yast.rand(config=config_dense, s=(1, 1, -1), D=[Dl, d[n], Dr])
+        psi.A[n] = yast.rand(config=config_dense, s=(1, 1, -1), D=[Dl, d[n], Dr], dtype=dtype)
     return psi
 
 

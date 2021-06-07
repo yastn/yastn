@@ -30,17 +30,18 @@ def measure_mpo(bra, op, ket):
 
 
 class _EnvParent:
-    def __init__(self, bra=None, ket=None, orthogonal=None) -> None:
+    def __init__(self, bra=None, ket=None, project=None) -> None:
         self.ket = ket
         self.bra = bra if bra is not None else ket
         self.N = ket.N
         self.nr_phys = ket.nr_phys
         self.nr_layers = 2
         self.F = {}  # dict for environments
-        self.ortho = [] if orthogonal is None else orthogonal
-        self.nr_ortho = len(self.ortho)
-        self.Fortho = [{} for _ in range(self.nr_ortho)]
-        self.Aortho = []
+        self.ort = [] if project is None else project
+        self.nr_ort = len(self.ort)
+        self.Fort = [{} for _ in range(self.nr_ort)]
+        self.temp = {}
+        self.reset_temp()
 
         if self.bra.nr_phys != self.ket.nr_phys:
             raise YampsError('bra and ket should have the same number of physical legs.')
@@ -48,13 +49,19 @@ class _EnvParent:
             raise YampsError('bra and ket should have the same number of sites.')
 
         ll = self.N - 1
-        for ii in range(self.nr_ortho):
-            self.Fortho[ii][(-1, 0)] = match_legs(tensors=[self.ortho[ii].A[0], self.ket.A[0]],
-                                            legs=[self.ortho[ii].left[0], self.ket.left[0]],
+        for ii in range(self.nr_ort):
+            self.Fort[ii][(-1, 0)] = match_legs(tensors=[self.ort[ii].A[0], self.ket.A[0]],
+                                            legs=[self.ort[ii].left[0], self.ket.left[0]],
                                             conjs=[1, 0], val='ones')
-            self.Fortho[ii][(ll + 1, ll)] = match_legs(tensors=[self.ket.A[ll], self.ortho[ii].A[ll]],
-                                            legs=[self.ket.right[0], self.ortho[ii].right[0]],
+            self.Fort[ii][(ll + 1, ll)] = match_legs(tensors=[self.ket.A[ll], self.ort[ii].A[ll]],
+                                            legs=[self.ket.right[0], self.ort[ii].right[0]],
                                             conjs=[0, 1], val='ones')
+
+
+    def reset_temp(self):
+        """ Reset temporary objects stored to speed-up some simulations. """
+        self.temp = {'Aort': [], 'op_2site': {}, 'expmv_ncv': {}}
+
 
     def setup(self, to='last'):
         r"""
@@ -129,16 +136,35 @@ class _EnvParent:
             _update2(n, self.F, self.bra, self.ket, to, self.nr_phys)
         else:
             _update3(n, self.F, self.bra, self.op, self.ket, to, self.nr_phys, self.on_aux)
-        for ii in range(self.nr_ortho):
-            _update2(n, self.Fortho[ii], self.ortho[ii], self.ket, to, self.nr_phys)
+        for ii in range(self.nr_ort):
+            _update2(n, self.Fort[ii], self.bra, self.ort[ii], to, self.nr_phys)
 
 
-    def update_Aortho(self, n):
-        """ Update projection of states to be orthogonal to on psi. """
-        self.Aortho = []
-        for ii in range(self.nr_ortho):
-            T1 = tensordot(self.Fortho[ii][(n - 1, n)], self.ortho[ii].A[n], axes=(0, 0), conj=(0, 1))
-            self.Aortho.append(tensordot(T1, self.Fortho[ii][(n + 1, n)], axes=(self.nr_phys + 1, 1)))
+    def update_Aort(self, n):
+        """ Update projection of states to be project to on psi. """
+        Aort = []
+        for ii in range(self.nr_ort):
+            T1 = tensordot(self.Fort[ii][(n - 1, n)], self.ort[ii].A[n], axes=(1, 0))
+            Aort.append(tensordot(T1, self.Fort[ii][(n + 1, n)], axes=(self.nr_phys + 1, 0)))
+        self.temp['Aort'] = Aort
+
+
+    def update_AAort(self, bd):
+        """ Update projection of states to be project to on psi. """
+        Aort = []
+        nl, nr = bd
+        for ii in range(self.nr_ort):
+            AA = self.ort[ii].merge_two_sites(bd)
+            T1 = tensordot(self.Fort[ii][(nl - 1, nl)], AA, axes=(1, 0))
+            Aort.append(tensordot(T1, self.Fort[ii][(nr + 1, nr)], axes=(self.nr_phys + 1, 0)))
+        self.temp['Aort'] = Aort
+
+
+    def _project_ort(self, A):
+        for ii in range(self.nr_ort):
+            x = vdot(self.temp['Aort'][ii], A)
+            A = A.apxb(self.temp['Aort'][ii], -x)
+        return A
 
 
 class Env2(_EnvParent):
@@ -195,7 +221,7 @@ class Env3(_EnvParent):
     The class combines environments of mps+mps for calculation of expectation values, overlaps, etc.
     """
 
-    def __init__(self, bra=None, op=None, ket=None, on_aux=False, orthogonal=None):
+    def __init__(self, bra=None, op=None, ket=None, on_aux=False, project=None):
         r"""
         Initialize structure for :math:`\langle {\rm bra} | {\rm opp} | {\rm ket} \rangle` related operations.
 
@@ -208,11 +234,10 @@ class Env3(_EnvParent):
         ket : mps
             mps for :math:`| {\rm ket} \rangle`.
         """
-        super().__init__(bra, ket, orthogonal)
+        super().__init__(bra, ket, project)
         self.op = op
         self.nr_layers = 3
         self.on_aux = on_aux
-        self._expmv_ncv = {}
         if self.op.N != self.N:
             raise YampsError('op should should have the same number of sites as ket.')
 
@@ -265,6 +290,7 @@ class Env3(_EnvParent):
             Heff1 * A
         """
         nl, nr = n - 1, n + 1
+        A = self._project_ort(A)
         if self.nr_phys == 1:
             T1 = ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
                         ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))
@@ -274,10 +300,9 @@ class Env3(_EnvParent):
         else:
             T1 = ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
                     ((-1, 2, 1), (1, -2, 3, 4), (2, -3, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
-        for ii in range(self.nr_ortho):
-            x = vdot(self.Aortho[ii], T1)
-            T1 = T1.apxb(self.Aortho[ii], -x)
+        T1 = self._project_ort(T1)
         return T1
+
 
     def Heff2(self, AA, bd):
         r"""Action of Heff on central site.
@@ -298,14 +323,12 @@ class Env3(_EnvParent):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
 
-        if not hasattr(self, 'op_merged'):
-            self.op_merged = {}
-        if bd not in self.op_merged:
+        if bd not in self.temp['op_2site']:
             OO = tensordot(self.op.A[n1], self.op.A[n2], axes=(3, 0))
-            OO = OO.fuse_legs(axes=(0, (1, 3), (2, 4), 5))
-            self.op_merged[bd] = OO
-        OO = self.op_merged[bd]
+            self.temp['op_2site'][bd] = OO.fuse_legs(axes=(0, (1, 3), (2, 4), 5))
+        OO = self.temp['op_2site'][bd]
 
+        AA = self._project_ort(AA)
         if self.nr_phys == 1:
             return ncon([self.F[(nl, n1)], AA, OO, self.F[(nr, n2)]],
                         ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))
@@ -318,33 +341,33 @@ class Env3(_EnvParent):
 
     def update_A(self, n, dt, opts):
         """ Updates env.psi.A[n] by exp(dt Heff1). """
-        if n in self._expmv_ncv:
-            opts['ncv'] = self._expmv_ncv[n]
+        if n in self.temp['expmv_ncv']:
+            opts['ncv'] = self.temp['expmv_ncv'][n]
         f = lambda x: self.Heff1(x, n)
         self.ket.A[n], info = expmv(f, self.ket.A[n], dt, **opts, normalize=True, return_info=True)
-        self._expmv_ncv[n] = info['ncv']
+        self.temp['expmv_ncv'][n] = info['ncv']
 
 
     def update_C(self, dt, opts):
         """ Updates env.psi.A[bd] by exp(dt Heff0). """
         bd = self.ket.pC
         if bd[0] != -1 and bd[1] != self.N:  # do not update central sites outsite of the chain
-            if bd in self._expmv_ncv:
-                opts['ncv'] = self._expmv_ncv[bd]
+            if bd in self.temp['expmv_ncv']:
+                opts['ncv'] = self.temp['expmv_ncv'][bd]
             f = lambda x: self.Heff0(x, bd)
             self.ket.A[bd], info = expmv(f, self.ket.A[bd], dt, **opts, normalize=True, return_info=True)
-            self._expmv_ncv[bd] = info['ncv']
+            self.temp['expmv_ncv'][bd] = info['ncv']
 
 
     def update_AA(self, bd, dt, opts, opts_svd):
         """ Merge two sites given in bd into AA, updates AA by exp(dt Heff2) and unmerge the sites. """
         ibd = bd[::-1]
-        if ibd in self._expmv_ncv:
-            opts['ncv'] = self._expmv_ncv[ibd]
+        if ibd in self.temp['expmv_ncv']:
+            opts['ncv'] = self.temp['expmv_ncv'][ibd]
         AA = self.ket.merge_two_sites(bd)
         f = lambda v: self.Heff2(v, bd)
         AA, info = expmv(f, AA, dt, **opts, normalize=True, return_info=True)
-        self._expmv_ncv[ibd] = info['ncv']
+        self.temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)
 
 
