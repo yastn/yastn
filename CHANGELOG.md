@@ -38,3 +38,7 @@
 
 04-06-2021
 - new function `add_leg` which addes an auxliary leg with dimension 1, carrying a charge of the tensor (or part of it)
+
+07-06-2021
+- option `reverse` added to `to_dense()`, `to_numpy()` and `to_nonsymmetric()` functions allowing for reverse
+  ordering of blocks. If `True`, the blocks are ordered by their charges in descending order.
