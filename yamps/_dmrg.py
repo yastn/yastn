@@ -13,57 +13,21 @@ logger = logging.Logger('dmrg')
 #################################
 
 
-def dmrg(psi, H, env=None, version='1site', max_sweeps=1, tol_dE=-1, opts_eigs=None, opts_svd=None):
-    r"""
-    Perform dmrg sweeps until convergence.
-
-    Assume that psi is cannonized to first site.
-    Sweep consists of iterative updates from last site to first and back to the first one.
-    Updates the state psi.
-
-    Parameters
-    ----------
-    psi: Mps
-        Initial state.
-    H: Mps, nr_phys=2
-        Operator given in MPO decomposition.
-        Legs are [left-virtual, ket-physical, bra-physical, right-virtual]
-    env: Env3
-        default = None
-        Initial overlap <psi| H |psi>
-        Initial environments must be set up with respect to the last site.
-    version: str
-        Version of dmrg to use. Options: 1site, 2site
-    max_sweeps: int
-        Maximal number of dmrg sweeps.
-    opts_svd: dict
-        default=None
-        options for truncation
-
-    Returns
-    -------
-    env: Env3
-        Overlap <psi| H |psi> as Env3.
-    """
+def _init_dmrg(psi, H, env, project, opts_eigs):
+    """ tests and initializations for all dmrg methods. """
     if opts_eigs is None:
-        opts_eigs={'hermitian': True, 'ncv': 3}
-    if opts_svd is None:
-        opts_svd = {'tol': 1e-12}
+        opts_eigs={'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
-    Eold = 100
-    sweep = 0
-    for sweep in range(max_sweeps):
-        env = dmrg_sweep_1site(psi, H=H, env=env, opts_eigs=opts_eigs) if version == '1site' else\
-                dmrg_sweep_2site(psi, H=H, env=env, opts_eigs=opts_eigs, opts_svd=opts_svd)
-        E = env.measure()
-        dE, Eold = Eold - E, E
-        logger.info('Iteration = %03d  Energy = %0.14f dE = %0.14f', sweep, E, dE)
-        if abs(dE) < tol_dE:
-            break
-    return env
+    if env is None:
+        env = Env3(bra=psi, op=H, ket=psi, project=project).setup(to='first')
+
+    if not (env.bra is psi and env.ket is psi):
+        raise YampsError('Require environment env where ket == bra == psi')
+    return env, opts_eigs
 
 
-def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None, project=None):
+def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', atol=-1, max_sweeps=1,
+            opts_eigs=None, opts_svd=None, return_info=False):
     r"""
     Perform sweep with 1-site DMRG.
 
@@ -74,33 +38,84 @@ def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None, project=None):
     Parameters
     ----------
     psi: Mps
-        Initial state.
+        initial state.
 
     H: Mps, nr_phys=2
-        Operator to minimize given in the form of mpo.
-        Legs are [left-virtual, ket-physical, bra-physical, right-virtual]
+        operator to minimize given in the form of mpo.
 
     env: Env3
-        default = None
-        Initial overlap <psi| H |psi>
-        Initial environments must be set-up with respect to the last site.
+        can provide environment <psi|H|psi> from the previous sweep.
+        It is initialized if None
 
-    opts_eigs: dict
-        options passed to eigs
+    project: list
+        optimizes psi in the subspace orthogonal to Mps's in the list
+
+    version: str
+        which tdvp procedure to use from ('1site', '2site')
+
+    converge: str
+        defines convergence criteria from ('energy', 'schmidt')
+        'energy' uses the expectation value of H
+        'schmidt' uses the schmidt values on the worst cut
+
+    atol: float
+        stop sweeping if converged quantity changes by less than atol in a single sweep
+
+    max_sweeps: int
+        maximal number of sweeps
+
+    opts_expmv: dict
+        options passed to :meth:`yast.eigs`
+
+    opts_svd: dict
+        options passed to :meth:`yast.svd` to truncate virtual bond dimensions when unmerging two merged sites.
+
+    return_info: bool
+        if True, return additional information regarding conergence
+
+    Returns
+    -------
+    env: Env3
+        Environment of the <psi|H|psi> ready for the next iteration.
+        Can contain temporary objects to reuse from previous sweeps.
+
+
+    info: dict
+        if return_info is True
+    """
+    env, opts_eigs =_init_dmrg(psi, H, env, project, opts_eigs)
+    if opts_svd is None:
+        opts_svd = {'tol': 1e-12}
+
+    Eold = env.measure()
+    for sweep in range(max_sweeps):
+        if version == '1site':
+            env = dmrg_sweep_1site(psi, H=H, env=env, project=project, opts_eigs=opts_eigs)
+        elif version == '2site':
+            env = dmrg_sweep_2site(psi, H=H, env=env, project=project, opts_eigs=opts_eigs, opts_svd=opts_svd)
+        else:
+            raise YampsError('dmrg version %s not recognized' % version)
+        E = env.measure()
+        dE, Eold = Eold - E, E
+        logger.info('Iteration = %03d  Energy = %0.14f dE = %0.14f', sweep, E, dE)
+        if converge == 'energy' and abs(dE) < atol:
+            break
+    if return_info:
+        return env, {'sweeps': sweep + 1, 'dEng': dE}
+    return env
+
+
+def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None):
+    r"""
+    Perform sweep with 1-site DMRG, see :meth:`dmrg` for description.
 
     Returns
     -------
     env: Env3
         Environment of the <psi|H|psi> ready for the next iteration.
     """
-    if opts_eigs is None:
-        opts_eigs={'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
-    if env is None:
-        env = Env3(bra=psi, op=H, ket=psi, project=project)
-        env.setup(to='first')
-    if not (env.bra is psi and env.ket is psi):
-        raise YampsError('Require environment env where ket is bra is psi')
+    env, opts_eigs =_init_dmrg(psi, H, env, project, opts_eigs)
 
     for n in psi.sweep(to='last'):
         env.update_Aort(n)
@@ -108,7 +123,7 @@ def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None, project=None):
         psi.orthogonalize_site(n, to='last')
         psi.absorb_central(to='last')
         env.clear_site(n)
-        env.update(n, to='last')
+        env.update_env(n, to='last')
 
     for n in psi.sweep(to='first'):
         env.update_Aort(n)
@@ -116,56 +131,23 @@ def dmrg_sweep_1site(psi, H, env=None, opts_eigs=None, project=None):
         psi.orthogonalize_site(n, to='first')
         psi.absorb_central(to='first')
         env.clear_site(n)
-        env.update(n, to='first')
+        env.update_env(n, to='first')
     return env
 
 
-def dmrg_sweep_2site(psi, H, env=None, opts_eigs=None, opts_svd=None, project=None):
+def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=None):
     r"""
-    Perform sweep with 2-site DMRG.
-    Assume input psi is right canonical.
-    Sweep consists of iterative updates from last site to first and back to the first one.
-
-    Parameters
-    ----------
-    psi: Mps, nr_phys=1
-        Initial state.
-    H: Mps, nr_phys=2
-        Operator given in MPO decomposition.
-        Legs are [left-virtual, ket-physical, bra-physical, right-virtual]
-    env: Env3
-        default = None
-        Initial overlap <psi| H |psi>
-        Initial environments must be set up with respect to the last site.
-    hermitian: bool
-        default=True
-        Is MPO hermitian
-    k: int
-        default=4
-        Dimension of Krylov subspace for eigs(.)
-    eigs_tol: float
-        default=1e-14
-        Cutoff for krylov subspace for eigs(.)
-    opts_svd: dict
-        default=None
-        options for truncation
+    Perform sweep with 2-site DMRG, see :meth:`dmrg` for description.
 
     Returns
     -------
     env: Env3
-     Overlap <psi| H |psi> as Env3.
+        Environment of the <psi|H|psi> ready for the next iteration.
     """
 
+    env, opts_eigs =_init_dmrg(psi, H, env, project, opts_eigs)
     if opts_svd is None:
         opts_svd = {'tol': 1e-12}
-    if opts_eigs is None:
-        opts_eigs={'hermitian': True, 'ncv': 3, 'which': 'SR'}
-
-    if env is None:
-        env = Env3(bra=psi, op=H, ket=psi, project=project)
-        env.setup(to='first')
-    if not (env.bra is psi and env.ket is psi):
-        raise YampsError('Require environment env where ket is bra is psi')
 
     for n in psi.sweep(to='last', dl=1):
         bd = (n, n + 1)
@@ -175,7 +157,7 @@ def dmrg_sweep_2site(psi, H, env=None, opts_eigs=None, opts_svd=None, project=No
         psi.unmerge_two_sites(AA, bd, opts_svd)
         psi.absorb_central(to='last')
         env.clear_site(n, n + 1)
-        env.update(n, to='last')
+        env.update_env(n, to='last')
 
     for n in psi.sweep(to='first', dl=1):
         bd = (n, n + 1)
@@ -185,7 +167,7 @@ def dmrg_sweep_2site(psi, H, env=None, opts_eigs=None, opts_svd=None, project=No
         psi.unmerge_two_sites(AA, bd, opts_svd)
         psi.absorb_central(to='first')
         env.clear_site(n, n + 1)
-        env.update(n + 1, to='first')
+        env.update_env(n + 1, to='first')
 
-    env.update(0, to='first')
+    env.update_env(0, to='first')
     return env

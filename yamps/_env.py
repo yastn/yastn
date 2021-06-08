@@ -38,9 +38,8 @@ class _EnvParent:
         self.nr_layers = 2
         self.F = {}  # dict for environments
         self.ort = [] if project is None else project
-        self.nr_ort = len(self.ort)
-        self.Fort = [{} for _ in range(self.nr_ort)]
-        self.temp = {}
+        self.Fort = [{} for _ in range(len(self.ort))]
+        self._temp = {}
         self.reset_temp()
 
         if self.bra.nr_phys != self.ket.nr_phys:
@@ -49,7 +48,7 @@ class _EnvParent:
             raise YampsError('bra and ket should have the same number of sites.')
 
         ll = self.N - 1
-        for ii in range(self.nr_ort):
+        for ii in range(len(self.ort)):
             self.Fort[ii][(-1, 0)] = match_legs(tensors=[self.ort[ii].A[0], self.ket.A[0]],
                                             legs=[self.ort[ii].left[0], self.ket.left[0]],
                                             conjs=[1, 0], val='ones')
@@ -60,7 +59,7 @@ class _EnvParent:
 
     def reset_temp(self):
         """ Reset temporary objects stored to speed-up some simulations. """
-        self.temp = {'Aort': [], 'op_2site': {}, 'expmv_ncv': {}}
+        self._temp = {'Aort': [], 'op_2site': {}, 'expmv_ncv': {}}
 
 
     def setup(self, to='last'):
@@ -73,7 +72,8 @@ class _EnvParent:
             'first' or 'last'.
         """
         for n in self.ket.sweep(to=to):
-            self.update(n, to=to)
+            self.update_env(n, to=to)
+        return self
 
 
     def clear_site(self, *args):
@@ -120,7 +120,7 @@ class _EnvParent:
         return self.Heff1(self.ket.A[n], n)
 
 
-    def update(self, n, to='last'):
+    def update_env(self, n, to='last'):
         r"""
         Update environment including site n, in the direction given by to.
 
@@ -136,34 +136,34 @@ class _EnvParent:
             _update2(n, self.F, self.bra, self.ket, to, self.nr_phys)
         else:
             _update3(n, self.F, self.bra, self.op, self.ket, to, self.nr_phys, self.on_aux)
-        for ii in range(self.nr_ort):
+        for ii in range(len(self.ort)):
             _update2(n, self.Fort[ii], self.bra, self.ort[ii], to, self.nr_phys)
 
 
     def update_Aort(self, n):
         """ Update projection of states to be project to on psi. """
         Aort = []
-        for ii in range(self.nr_ort):
+        for ii in range(len(self.ort)):
             T1 = tensordot(self.Fort[ii][(n - 1, n)], self.ort[ii].A[n], axes=(1, 0))
             Aort.append(tensordot(T1, self.Fort[ii][(n + 1, n)], axes=(self.nr_phys + 1, 0)))
-        self.temp['Aort'] = Aort
+        self._temp['Aort'] = Aort
 
 
     def update_AAort(self, bd):
         """ Update projection of states to be project to on psi. """
         Aort = []
         nl, nr = bd
-        for ii in range(self.nr_ort):
+        for ii in range(len(self.ort)):
             AA = self.ort[ii].merge_two_sites(bd)
             T1 = tensordot(self.Fort[ii][(nl - 1, nl)], AA, axes=(1, 0))
             Aort.append(tensordot(T1, self.Fort[ii][(nr + 1, nr)], axes=(self.nr_phys + 1, 0)))
-        self.temp['Aort'] = Aort
+        self._temp['Aort'] = Aort
 
 
     def _project_ort(self, A):
-        for ii in range(self.nr_ort):
-            x = vdot(self.temp['Aort'][ii], A)
-            A = A.apxb(self.temp['Aort'][ii], -x)
+        for ii in range(len(self.ort)):
+            x = vdot(self._temp['Aort'][ii], A)
+            A = A.apxb(self._temp['Aort'][ii], -x)
         return A
 
 
@@ -323,10 +323,10 @@ class Env3(_EnvParent):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
 
-        if bd not in self.temp['op_2site']:
+        if bd not in self._temp['op_2site']:
             OO = tensordot(self.op.A[n1], self.op.A[n2], axes=(3, 0))
-            self.temp['op_2site'][bd] = OO.fuse_legs(axes=(0, (1, 3), (2, 4), 5))
-        OO = self.temp['op_2site'][bd]
+            self._temp['op_2site'][bd] = OO.fuse_legs(axes=(0, (1, 3), (2, 4), 5))
+        OO = self._temp['op_2site'][bd]
 
         AA = self._project_ort(AA)
         if self.nr_phys == 1:
@@ -341,33 +341,33 @@ class Env3(_EnvParent):
 
     def update_A(self, n, dt, opts):
         """ Updates env.psi.A[n] by exp(dt Heff1). """
-        if n in self.temp['expmv_ncv']:
-            opts['ncv'] = self.temp['expmv_ncv'][n]
+        if n in self._temp['expmv_ncv']:
+            opts['ncv'] = self._temp['expmv_ncv'][n]
         f = lambda x: self.Heff1(x, n)
         self.ket.A[n], info = expmv(f, self.ket.A[n], dt, **opts, normalize=True, return_info=True)
-        self.temp['expmv_ncv'][n] = info['ncv']
+        self._temp['expmv_ncv'][n] = info['ncv']
 
 
     def update_C(self, dt, opts):
         """ Updates env.psi.A[bd] by exp(dt Heff0). """
         bd = self.ket.pC
         if bd[0] != -1 and bd[1] != self.N:  # do not update central sites outsite of the chain
-            if bd in self.temp['expmv_ncv']:
-                opts['ncv'] = self.temp['expmv_ncv'][bd]
+            if bd in self._temp['expmv_ncv']:
+                opts['ncv'] = self._temp['expmv_ncv'][bd]
             f = lambda x: self.Heff0(x, bd)
             self.ket.A[bd], info = expmv(f, self.ket.A[bd], dt, **opts, normalize=True, return_info=True)
-            self.temp['expmv_ncv'][bd] = info['ncv']
+            self._temp['expmv_ncv'][bd] = info['ncv']
 
 
     def update_AA(self, bd, dt, opts, opts_svd):
         """ Merge two sites given in bd into AA, updates AA by exp(dt Heff2) and unmerge the sites. """
         ibd = bd[::-1]
-        if ibd in self.temp['expmv_ncv']:
-            opts['ncv'] = self.temp['expmv_ncv'][ibd]
+        if ibd in self._temp['expmv_ncv']:
+            opts['ncv'] = self._temp['expmv_ncv'][ibd]
         AA = self.ket.merge_two_sites(bd)
         f = lambda v: self.Heff2(v, bd)
         AA, info = expmv(f, AA, dt, **opts, normalize=True, return_info=True)
-        self.temp['expmv_ncv'][ibd] = info['ncv']
+        self._temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)
 
 

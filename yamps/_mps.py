@@ -147,7 +147,7 @@ class Mps:
         if self.pC is not None:
             normC = self.A[self.pC].norm()
             if opts is None:
-                opts = {}
+                opts = {'tol': 1e-12}
             U, S, V = self.A[self.pC].svd(axes=(0, 1), sU=-1, **opts)
 
             normS = S.norm()
@@ -218,6 +218,7 @@ class Mps:
         for n in self.sweep(to=to):
             self.orthogonalize_site(n=n, to=to, normalize=normalize)
             self.absorb_central(to=to)
+        return self
 
 
     def truncate_sweep(self, to='last', normalize=True, opts=None):
@@ -244,7 +245,7 @@ class Mps:
         """
         discarded_max = 0.
         if opts is None:
-            opts = {}
+            opts = {'tol': 1e-12}
         for n in self.sweep(to=to):
             self.orthogonalize_site(n=n, to=to, normalize=normalize)
             discarded = self.diagonalize_central(opts=opts, normalize=normalize)
@@ -351,3 +352,7 @@ class Mps:
             list of Schmidt values saved as a directory
         """
         pass
+
+
+def add(states=None, weights=None):
+    pass

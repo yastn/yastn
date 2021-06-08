@@ -42,7 +42,7 @@ def variational_sweep(psi, psi_target, env=None, op=None):
         psi.A[n] = env.project_ket_on_bra(n)
         psi.orthogonalize_site(n, to='last')
         env.clear_site(n)
-        env.update(n, to='last')
+        env.update_env(n, to='last')
 
     for n in psi.sweep(to='first'):  # sweep from last to first site
         # update site n, canonize and save
@@ -50,5 +50,5 @@ def variational_sweep(psi, psi_target, env=None, op=None):
         psi.A[n] = env.project_ket_on_bra(n)
         psi.orthogonalize_site(n, to='first')
         env.clear_site(n)
-        env.update(n, to='first')
+        env.update_env(n, to='first')
     return env
