@@ -59,7 +59,47 @@ def test_aux_2():
     b.is_consistent()
 
 
+def test_operators_chain():
+    """
+    consider a sequence of operators "cdag cdag c c"
+    add virtual legs connecting them, starting from the end
+    """
+
+    cdag = yast.Tensor(config=config_U1, s=(1, -1), n=1)
+    cdag.set_block(ts=(1, 0), Ds=(1, 1), val=1)
+    c = yast.Tensor(config=config_U1, s=(1, -1), n=-1)
+    c.set_block(ts=(0, 1), Ds=(1, 1), val=1)
+
+    nn = (0,) * len(c.n)
+    o4 = yast.add_leg(c, axis=-1, t=nn, s=-1)
+    o4 = yast.add_leg(o4, axis=0, s=1)
+    tD = o4.get_leg_structure(axis=0)
+    nn = next(iter(tD))
+
+    o3 = yast.add_leg(c, axis=-1, t=nn, s=-1)
+    o3 = yast.add_leg(o3, axis=0, s=1)
+    tD = o3.get_leg_structure(axis=0)
+    nn = next(iter(tD))
+    
+    o2 = yast.add_leg(cdag, axis=-1, t=nn, s=-1)
+    o2 = yast.add_leg(o2, axis=0, s=1)
+    tD = o2.get_leg_structure(axis=0)
+    nn = next(iter(tD))
+
+    o1 = yast.add_leg(cdag, axis=-1, t=nn, s=-1)
+    o1 = yast.add_leg(o1, axis=0, s=1)
+    tD = o1.get_leg_structure(axis=0)
+    nn = next(iter(tD))
+
+    assert nn == (0,) * len(c.n)
+
+    T1 = yast.ncon([cdag, cdag, c, c], [(-1, -5), (-2, -6), (-3 ,-7), (-4, -8)])
+    T2 = yast.ncon([o1, o2, o3, o4], [(4, -1, -5, 1), (1, -2, -6, 2), (2, -3 ,-7, 3), (3, -4, -8, 4)])
+    assert yast.norm_diff(T1, T2) < tol
+
+
 if __name__ == '__main__':
     test_aux_0()
     test_aux_1()
     test_aux_2()
+    test_operators_chain()
