@@ -29,11 +29,11 @@ def _init_dmrg(psi, H, env, project, opts_eigs):
 def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', atol=-1, max_sweeps=1,
             opts_eigs=None, opts_svd=None, return_info=False):
     r"""
-    Perform sweep with 1-site DMRG.
+    Perform dmrg sweeps until convergence.
 
     Assume that psi is cannonized to first site.
-    Sweep consists of iterative updates from last site to first and back to the first one.
-    Updates psi.
+    Sweeps consists of iterative updates from last site to first and back to the first one.
+    Updates psi, returning it in canonical form to the first site.
 
     Parameters
     ----------
@@ -79,9 +79,8 @@ def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', ato
         Environment of the <psi|H|psi> ready for the next iteration.
         Can contain temporary objects to reuse from previous sweeps.
 
-
     info: dict
-        if return_info is True
+        if return_info is True, return some information about reached convergence.
     """
     env, opts_eigs =_init_dmrg(psi, H, env, project, opts_eigs)
     if opts_svd is None:
@@ -117,21 +116,15 @@ def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None):
 
     env, opts_eigs =_init_dmrg(psi, H, env, project, opts_eigs)
 
-    for n in psi.sweep(to='last'):
-        env.update_Aort(n)
-        _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
-        psi.orthogonalize_site(n, to='last')
-        psi.absorb_central(to='last')
-        env.clear_site(n)
-        env.update_env(n, to='last')
+    for to in ('last', 'first'):
+        for n in psi.sweep(to=to):
+            env.update_Aort(n)
+            _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
+            psi.orthogonalize_site(n, to=to)
+            psi.absorb_central(to=to)
+            env.clear_site(n)
+            env.update_env(n, to=to)
 
-    for n in psi.sweep(to='first'):
-        env.update_Aort(n)
-        _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
-        psi.orthogonalize_site(n, to='first')
-        psi.absorb_central(to='first')
-        env.clear_site(n)
-        env.update_env(n, to='first')
     return env
 
 
@@ -149,25 +142,16 @@ def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=No
     if opts_svd is None:
         opts_svd = {'tol': 1e-12}
 
-    for n in psi.sweep(to='last', dl=1):
-        bd = (n, n + 1)
-        env.update_AAort(bd)
-        AA = psi.merge_two_sites(bd)
-        _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
-        psi.unmerge_two_sites(AA, bd, opts_svd)
-        psi.absorb_central(to='last')
-        env.clear_site(n, n + 1)
-        env.update_env(n, to='last')
-
-    for n in psi.sweep(to='first', dl=1):
-        bd = (n, n + 1)
-        env.update_AAort(bd)
-        AA = psi.merge_two_sites(bd)
-        _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
-        psi.unmerge_two_sites(AA, bd, opts_svd)
-        psi.absorb_central(to='first')
-        env.clear_site(n, n + 1)
-        env.update_env(n + 1, to='first')
+    for to, dn in (('last', 0), ('first', 1)):
+        for n in psi.sweep(to=to, dl=1):
+            bd = (n, n + 1)
+            env.update_AAort(bd)
+            AA = psi.merge_two_sites(bd)
+            _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
+            psi.unmerge_two_sites(AA, bd, opts_svd)
+            psi.absorb_central(to=to)
+            env.clear_site(n, n + 1)
+            env.update_env(n + dn, to=to)
 
     env.update_env(0, to='first')
     return env

@@ -7,11 +7,11 @@ from ._mps import YampsError
 #################################
 
 
-def tdvp(psi, H, dt=0.1, env=None, version='1site', opts_expmv=None, opts_svd=None):
+def tdvp(psi, H, dt=0.1, env=None, version='1site', order='2nd', opts_expmv=None, opts_svd=None):
     r"""
     Perform TDVP sweep, calculating the update psi(dt) = exp( dt * H ) @ psi(0).
 
-    Assume input psi is canonized to first site.
+    Assume input psi is canonized to the first site.
 
     Parameters
     ----------
@@ -31,6 +31,10 @@ def tdvp(psi, H, dt=0.1, env=None, version='1site', opts_expmv=None, opts_svd=No
     version: str
         which tdvp procedure to use in ('1site', '2site', 'mix')
 
+    order: str
+        order of Suzuki-Trotter decomposition in ('2nd', '4th')
+        4th order is composed from 5 sweeps with 2nd order.
+
     opts_expmv: dict
         options passed to :meth:`yast.expmv`
         If there is information from previous excecutions stored in env,
@@ -45,14 +49,15 @@ def tdvp(psi, H, dt=0.1, env=None, version='1site', opts_expmv=None, opts_svd=No
         Environment of the <psi|H|psi> ready for the next iteration.
         Can contain temporary objects to reuse from previous sweeps.
     """
-    if version == '1site':
+    if version == '1site' and order == '2nd':
         env = tdvp_sweep_1site(psi, H, dt, env, opts_expmv)
-    elif version == '2site':
+    elif version == '2site'and order == '2nd':
         env = tdvp_sweep_2site(psi, H, dt, env, opts_expmv, opts_svd)
-    elif version == 'mix':
-        env = tdvp_sweep_mix(psi, H, dt, env, opts_expmv, opts_svd)
+    # elif version == 'mix'and order == '2nd':
+        #env = tdvp_sweep_mix(psi, H, dt, env, opts_expmv, opts_svd)
+    # elif version == '1site' and order = '4th':
     else:
-        raise YampsError('tdvp version %s not recognized' % version)
+        raise YampsError('tdvp version %s or order %s not recognized' % version, order)
     return env
 
 
@@ -61,21 +66,14 @@ def tdvp_sweep_1site(psi, H, dt=0.1, env=None, opts_expmv=None):
 
     env, opts = _init_tdvp(psi, H, env, opts_expmv)
 
-    for n in psi.sweep(to='last'):
-        env.update_A(n, 0.5 * dt, opts)
-        psi.orthogonalize_site(n, to='last')
-        env.clear_site(n)
-        env.update_env(n, to='last')
-        env.update_C(-0.5 * dt, opts)
-        psi.absorb_central(to='last')
-
-    for n in psi.sweep(to='first'):
-        env.update_A(n, 0.5 * dt, opts)
-        psi.orthogonalize_site(n, to='first')
-        env.clear_site(n)
-        env.update_env(n, to='first')
-        env.update_C(-0.5 * dt, opts)
-        psi.absorb_central(to='first')
+    for to in ('last', 'first'):
+        for n in psi.sweep(to=to):
+            env.update_A(n, 0.5 * dt, opts)
+            psi.orthogonalize_site(n, to=to)
+            env.clear_site(n)
+            env.update_env(n, to=to)
+            env.update_C(-0.5 * dt, opts)
+            psi.absorb_central(to=to)
 
     env.update_env(0, to='first')
     return env
