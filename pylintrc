@@ -550,7 +550,7 @@ valid-metaclass-classmethod-first-arg=cls
 [DESIGN]
 
 # Maximum number of arguments for function / method.
-max-args=7
+max-args=8
 
 # Maximum number of attributes for a class (see R0902).
 max-attributes=7
@@ -568,7 +568,7 @@ max-locals=30
 max-parents=7
 
 # Maximum number of public methods for a class (see R0904).
-max-public-methods=20
+max-public-methods=50
 
 # Maximum number of return / yield for function / method body.
 max-returns=6

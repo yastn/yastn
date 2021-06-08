@@ -42,7 +42,7 @@ def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwar
         a random instance of a :meth:`Tensor`
     """
     if not dtype:
-        assert hasattr(config,'default_dtype'), "Either dtype or valid config has to be provided"
+        assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
         dtype = config.default_dtype
     if dtype == 'float64':
         return randR(config, s, n, t, D, isdiag, **kwargs)
@@ -102,7 +102,7 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwa
         an instance of a tensor filled with zeros
     """
     if not dtype:
-        assert hasattr(config,'default_dtype'), "Either dtype or valid config has to be provided"
+        assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
         dtype = config.default_dtype
     meta_fusion = None
     if 'legs' in kwargs:
@@ -141,7 +141,7 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwar
         an instance of a tensor filled with ones
     """
     if not dtype:
-        assert hasattr(config,'default_dtype'), "Either dtype or valid config has to be provided"
+        assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
         dtype= config.default_dtype
     meta_fusion = None
     if 'legs' in kwargs:
@@ -176,7 +176,7 @@ def eye(config=None, t=(), D=(), legs=None, dtype=None, **kwargs):
         an instance of diagonal tensor filled with ones
     """
     if not dtype:
-        assert hasattr(config,'default_dtype'), "Either dtype or valid config has to be provided"
+        assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
         dtype= config.default_dtype
     s = ()
     if legs is not None:

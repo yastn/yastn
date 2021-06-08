@@ -1,10 +1,12 @@
 try:
     import yast
+    import yamps
 except ModuleNotFoundError:
     import os
     import sys
     sys.path.append(os.path.join(os.path.dirname(__file__), './../..'))  # folder with yast
     import yast
+    import yamps
 try:
     import config_dense
 except ModuleNotFoundError:
