@@ -12,17 +12,20 @@ std::vector< std::pair<std::vector<int64_t>, torch::Tensor> > mtm_forward(
 		std::vector<int64_t>, 
 		int64_t, 
 		std::vector<int64_t>, 
-		int64_t> > meta_mrg
+		int64_t> > meta_mrg,
+	std::string	device_str = "cpu"
 	){
 
 	std::map< std::vector<int64_t>, torch::Tensor > A_new;
-	auto options = torch::TensorOptions()
+	auto options= torch::TensorOptions()
 	    .dtype(torch::kFloat64)
 	    .layout(torch::kStrided)
-	    .device(torch::kCPU);
+		.device(device_str);
 	for ( auto const &t : meta_new ) {
 		A_new[t[0]]= torch::zeros( at::IntArrayRef(t[1]), options );
 	}
+
+	#pragma omp parallel for
 	for ( auto const &t : meta_mrg ) {
 		// tn, to, Dsl, Dl, Dsr, Dr <=> &t
 		A_new[std::get<0>(t)].index_put_({
