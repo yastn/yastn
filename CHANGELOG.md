@@ -42,3 +42,7 @@
 07-06-2021
 - option `reverse` added to `to_dense()`, `to_numpy()` and `to_nonsymmetric()` functions allowing for reverse
   ordering of blocks. If `True`, the blocks are ordered by their charges in descending order.
+
+08-06-2021
+- refactoring of mps. Moved to folder yamps in the main catalogue.
+  It is fully operational, but we still need to add some functionality.
