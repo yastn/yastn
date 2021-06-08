@@ -3,6 +3,8 @@ from ._contractions import vdot
 
 
 def _expand_krylov_space(f, tol, ncv, hermitian, V, H=None, info=None):
+    """
+    Expand the Krylov base up to ncv states or until reaching tolerance tol. """
     if H is None:
         H = {}
     happy = False
