@@ -1,7 +1,8 @@
 """ methods outputing data from yast tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, YastError, _check
+from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray
+from ._controls import YastError, _check
 from ..sym import sym_none
 
 __all__ = ['export_to_dict', 'compress_to_1d', 'leg_structures_for_dense', 'requires_grad']
@@ -19,7 +20,7 @@ def export_to_dict(a):
     AA = {ind: a.config.backend.to_numpy(a.A[ind]) for ind in a.A}
     if a.isdiag:
         AA = {t: np.diag(x) for t, x in AA.items()}
-    out = {'A': AA, 's': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag, 'meta_fusion': a.meta_fusion}
+    out = {'A': AA, 's': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag, 'meta_fusion': a.meta_fusion, 'hard_fusion': a.hard_fusion}
     return out
 
 
@@ -43,10 +44,10 @@ def compress_to_1d(a, meta=None):
         meta_merge = tuple(((), (aD - D, aD), t, (D,)) for t, D, aD in zip(a.struct.t, D_rsh, aD_rsh))
         # (told, tnew, Dsl, Dnew)
         meta_unmerge = tuple((told, tnew, Dsl, Dnew) for (told, Dsl, tnew, _), Dnew in zip(meta_merge, a.struct.D))
-        meta = {'s': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag,
+        meta = {'s': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag, 'hard_fusion': a.hard_fusion,
                 'meta_fusion': a.meta_fusion, 'meta_unmerge': meta_unmerge, 'meta_merge': meta_merge}
     else:
-        if a.struct.s != meta['s'] or a.struct.n != meta['n'] or a.isdiag != meta['isdiag'] or a.meta_fusion != meta['meta_fusion']:
+        if a.struct.s != meta['s'] or a.struct.n != meta['n'] or a.isdiag != meta['isdiag'] or a.meta_fusion != meta['meta_fusion'] or a.hard_fusion != meta['hard_fusion']:
             raise YastError("Tensor do not match provided metadata.")
         meta_merge = meta['meta_merge']
         D_tot = meta_merge[-1][1][1]
@@ -74,7 +75,8 @@ def show_properties(a):
     print("shape native:", a.get_shape(native=True))
     print("no. blocks  :", len(a.A))  # number of blocks
     print("size        :", a.get_size())  # total number of elements in all blocks
-    print("meta fusion :", a.meta_fusion, "\n")  # encoding meta fusion tree for each leg
+    print("meta fusion :", a.meta_fusion)  # encoding meta fusion tree for each leg
+    print("hard fusion :", a.hard_fusion, "\n")  # encoding info on hard fusion for each leg
 
 
 def __str__(a):
@@ -184,6 +186,7 @@ def get_leg_structure(a, axis, native=False):
 def get_leg_charges_and_dims(a, native=False):
     """ collect information about charges and dimensions on all legs into two lists. """
     _tmp = [a.get_leg_structure(n, native=native) for n in range(a.get_ndim(native))]
+    _tmp = [{k: lst[k] for k in sorted(lst)} for lst in _tmp]
     ts, Ds = tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
     return ts, Ds
 

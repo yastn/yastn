@@ -273,7 +273,7 @@ class Mps:
         nl, nr = bd
         AA = self.A[nl].tensordot(self.A[nr], axes=(self.right, self.left))
         axes = (0, (1, 2), 3) if self.nr_phys == 1 else (0, (1, 3), (2, 4), 5)
-        AA.fuse_legs(axes=axes, inplace=True)
+        AA.fuse_legs_hard(axes=axes, inplace=True)
         return AA
 
 
@@ -298,7 +298,7 @@ class Mps:
         """
         nl, nr = bd
         axes = (1,) if self.nr_phys == 1 else (1, 2)
-        AA.unfuse_legs(axes=axes, inplace=True)
+        AA.unfuse_legs_hard(axes=axes, inplace=True)
         axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 3), (2, 4, 5))
         self.pC = bd
         self.A[nl], self.A[bd], self.A[nr] = AA.svd(axes=axes, sU=-1, **opts_svd)

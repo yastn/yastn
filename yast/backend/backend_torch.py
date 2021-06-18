@@ -480,6 +480,18 @@ def merge_to_matrix(A, order, meta_new, meta_mrg, device='cpu'):
     return Anew
 
 
+def merge_to_array(A, order, meta_new, meta_mrg, device='cpu'):
+    """ New dictionary of blocks after merging into matrix. """
+    dtype = get_dtype(A.values())
+    Anew = {u: torch.zeros(Du, dtype=dtype, device=device) for (u, Du) in meta_new}
+    for (tn, to, Ds) in meta_mrg:
+        slc = tuple(slice(*x[0]) for x in Ds)
+        Drsh = tuple(x[1] for x in Ds)
+        Anew[tn][slc] = A[to].permute(order).reshape(Drsh)
+    return Anew
+
+
+
 def merge_one_leg(A, axis, order, meta_new, meta_mrg, device='cpu'):
     """ Outputs new dictionary of blocks after fusing one leg. """
     dtype = get_dtype(A.values())
@@ -516,6 +528,15 @@ def unmerge_from_matrix(A, meta):
     Anew = {}
     for (ind, indm, sl, sr, D) in meta:
         Anew[ind] = A[indm][slice(*sl), slice(*sr)].reshape(D)
+    return Anew
+
+
+def unmerge_from_array(A, meta):
+    """ unmerge matrix into single blocks """
+    Anew = {}
+    for (tn, to, slc, D) in meta:
+        sl = tuple(slice(*x) for x in slc)
+        Anew[tn] = A[to][sl].reshape(D)
     return Anew
 
 

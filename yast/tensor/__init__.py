@@ -7,26 +7,30 @@ In principle, any number of symmetries can be used (including no symmetries).
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
 import numpy as np
-from ._auxliary import _struct, _config, YastError
-from ._auxliary import *
+from ._auxliary import _struct, _config, _hard_fusion
+from ._controls import *
+from ._controls import YastError
 from ._contractions import *
 from ._initialize import *
 from ._output import *
 from ._single import *
+from ._merging import *
 from .linalg import *
-from . import _auxliary
+from . import _controls
 from . import _contractions
 from . import _initialize
 from . import _output
 from . import _single
 from . import linalg
+from . import _merging
 __all__ = ['Tensor', 'linalg', 'YastError']
 __all__.extend(_initialize.__all__)
 __all__.extend(linalg.__all__)
-__all__.extend(_auxliary.__all__)
+__all__.extend(_controls.__all__)
 __all__.extend(_contractions.__all__)
 __all__.extend(_single.__all__)
 __all__.extend(_output.__all__)
+__all__.extend(_merging.__all__)
 
 
 class Tensor:
@@ -91,9 +95,14 @@ class Tensor:
             self.meta_fusion = tuple(kwargs['meta_fusion'])
         except (KeyError, TypeError):
             self.meta_fusion = ((1,),) * self.nlegs
+        try:
+            self.hard_fusion = tuple(kwargs['hard_fusion'])
+        except (KeyError, TypeError):
+            self.hard_fusion = (_hard_fusion(),) * self.nlegs
+
         self.mlegs = len(self.meta_fusion)  # number of meta legs
 
-    from ._initialize import set_block, fill_tensor, copy_empty
+    from ._initialize import set_block, fill_tensor
     from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr
     from ._contractions import tensordot, vdot, trace, swap_gate
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, diag, absolute, sqrt, rsqrt, reciprocal, exp
@@ -103,18 +112,21 @@ class Tensor:
     from ._output import get_blocks_charges, get_leg_charges_and_dims, zero_of_dtype, item, __getitem__
     from ._output import get_blocks_shapes, get_leg_fusion, get_leg_structure, get_ndim, get_shape, get_signature, unique_dtype
     from ._output import get_size, get_tensor_charge, to_dense, to_nonsymmetric, to_number, to_numpy, to_raw_tensor
-    from ._auxliary import update_struct, is_consistent, are_independent
+    from ._controls import is_consistent, are_independent
+    from ._auxliary import update_struct
+    from ._merging import fuse_legs_hard, unfuse_legs_hard
+
     abs = absolute
 
     @property
     def s(self):
         """ Return signature of the tensor as a tuple. """
-        return self.struct.s
+        return np.array(self.struct.s, dtype=int)
 
     @property
     def n(self):
         """ Return total charge of the tensor as a tuple. """
-        return self.struct.n
+        return np.array(self.struct.n, dtype=int)
 
     @property
     def requires_grad(self):

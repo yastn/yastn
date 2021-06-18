@@ -58,7 +58,6 @@ def test_syntax():
     tensor = a.detach()
     tensor = yast.detach(a)
     tensor = a.to(device='cpu')
-    tensor = a.copy_empty()
 
     # get info
     a.show_properties()

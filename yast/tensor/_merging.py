@@ -4,6 +4,168 @@ from functools import lru_cache
 from itertools import groupby, product
 from operator import itemgetter
 import numpy as np
+from ._auxliary import _flatten, _tarray, _Darray, _hard_fusion, _unpack_axes, _clear_axes
+
+__all__ = ['fuse_legs_hard', 'unfuse_legs_hard']
+
+
+def _leg_structure_from_charges(config, t_in, D_in, t_out, seff, slegs):
+    """ Auxilliary function that takes a combination of charges and dimensions on a number of legs,
+        and combines them into effective charges and dimensions.
+    """
+    comb_t = list(product(*t_in))
+    comb_t = np.array(comb_t, dtype=int).reshape(len(comb_t), len(slegs), config.sym.NSYM)
+    comb_D = list(product(*D_in))
+    comb_D = np.array(comb_D, dtype=int).reshape(len(comb_D), len(slegs))
+    teff = config.sym.fuse(comb_t, slegs, seff)
+    ind = np.array([ii for ii, te in enumerate(teff) if tuple(te.flat) in t_out], dtype=int)
+    comb_D, comb_t, teff = comb_D[ind], comb_t[ind], teff[ind]
+    Deff = tuple(np.prod(comb_D, axis=1))
+    Dlegs = tuple(tuple(x.flat) for x in comb_D)
+    teff = tuple(tuple(x.flat) for x in teff)
+    tlegs = tuple(tuple(x.flat) for x in comb_t)
+    return _leg_structure_merge(config, teff, tlegs, Deff, Dlegs, seff, slegs)
+
+
+def _fuse_leg_fusion(lf, t_legs, D_legs, ss, axis=None):
+    if axis is None:
+        axis = list(range(len(lf)))
+    tfl, Dfl, sfl, msfl = [], [], [], []
+    treefl = [sum(lf[n].tree[0] for n in axis)]
+    for n in axis:
+        tfl.append(t_legs[n])
+        tfl.extend(lf[n].t)
+        Dfl.append(D_legs[n])
+        Dfl.extend(lf[n].D)
+        sfl.append(ss[n])
+        sfl.extend(lf[n].s)
+        msfl.append(-ss[n])
+        msfl.extend(lf[n].ms)
+        treefl.extend(lf[n].tree)
+    return _hard_fusion(tuple(treefl), tuple(sfl), tuple(msfl), tuple(tfl), tuple(Dfl))
+
+
+def _unfuse_leg_fusion(lf):
+    """ one layer of unfuse """
+    tt, DD, ss, lfs = [], [], [], []
+    n_init, cum = 1, 0
+    for n in range(1, len(lf.tree)):
+        if cum == 0:
+            cum = lf.tree[n]
+        if lf.tree[n] == 1:
+            cum = cum - 1
+            if cum == 0:
+                tt.append(lf.t[n_init - 1])
+                DD.append(lf.D[n_init - 1])
+                ss.append(lf.s[n_init - 1])
+                slc = slice(n_init, n)
+                lfs.append(_hard_fusion(lf.tree[n_init : n + 1], lf.s[slc], lf.ms[slc], lf.t[slc], lf.D[slc]))
+                n_init = n + 1
+    return tt, DD, ss, lfs
+
+
+def fuse_legs_hard(a, axes, inplace=False):
+    """ fuse """
+    tset, Dset, ss = _tarray(a), _Darray(a), a.s
+    axes = list(_clear_axes(*axes))
+    axes = list(_unpack_axes(a, *axes))
+    nsym = tset.shape[2]
+    t_legs, D_legs = a.get_leg_charges_and_dims(native=True)
+    order = tuple(_flatten(axes))
+    aaxes, news, slegs, ls, lf, mf = [], [], [], [], [], []
+    for axis in axes:
+        aaxis = np.array(axis, dtype=int).reshape(-1)
+        aaxes.append(aaxis)
+        news.append(ss[aaxis[0]])
+        slegs.append(ss[aaxis])
+        if len(axis) == 1:
+            axis = axis[0]
+            dec = {t: {t: ((0, D), D, (D,))} for t, D in zip(t_legs[axis], D_legs[axis])}
+            Dtot = {t: D for t, D in zip(t_legs[axis], D_legs[axis])}
+            ls.append(_LegDecomposition(a.config, news[-1], news[-1], dec, Dtot))
+            lf.append(a.hard_fusion[axis])
+            mf.append(a.meta_fusion[axis])
+        else:
+            teff_set = a.config.sym.fuse(tset[:, aaxis, :], slegs[-1], news[-1])
+            teff_set = set(tuple(x.flat) for x in teff_set)
+            t_in = tuple(t_legs[n] for n in axis)
+            D_in = tuple(D_legs[n] for n in axis)
+            ls.append(_leg_structure_from_charges(a.config, t_in, D_in, teff_set, news[-1], slegs[-1]))
+            lf.append(_fuse_leg_fusion(a.hard_fusion, t_legs, D_legs, ss, axis))
+            mf.append((1,))
+    tset, Dset = _tarray(a), _Darray(a)
+    teff = np.zeros((tset.shape[0], len(aaxes), tset.shape[2]), dtype=int)
+    Deff = np.zeros((Dset.shape[0], len(aaxes)), dtype=int)
+
+    for n, aa in enumerate(aaxes):
+        teff[:, n, :] = a.config.sym.fuse(tset[:, aa, :], slegs[n], news[n])
+        Deff[:, n] = np.prod(Dset[:, aa], axis=1)
+
+    told = tuple(tuple(tuple(x[aa, :].flat) for aa in aaxes) for x in tset)
+    tnew = tuple(tuple(x.flat) for x in teff)
+    teff = tuple(tuple(tuple(x.flat) for x in y) for y in teff)
+
+    meta_mrg = tuple((tn, to, tuple(l.dec[e][o][:2] for l, e, o in zip(ls, tes, tos)))
+                        for tn, to, tes, tos in zip(tnew, a.struct.t, teff, told))
+    meta_new = tuple((x, tuple(l.D[x[i * nsym : (i + 1) * nsym]] for i, l in enumerate(ls))) for x in set(tnew))
+
+    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=tuple(mf), hard_fusion=tuple(lf), n=a.n, s=news)
+    c.A = a.config.backend.merge_to_array(a.A, order, meta_new, meta_mrg)
+    if inplace:
+        c.struct = c.struct._replace(s=tuple(news))
+        c.nlegs = len(tuple(news))
+        c.hard_fusion = tuple(lf)
+        c.meta_fusion = tuple(mf)
+        c.mlegs = len(c.meta_fusion)
+    c.update_struct()
+    return c
+
+
+def unfuse_legs_hard(a, axes, inplace=False):
+    if isinstance(axes, int):
+        axes = (axes,)
+    axes, = _unpack_axes(a, axes)
+
+    t_legs, D_legs = a.get_leg_charges_and_dims(native=True)
+    ss = a.s
+
+    ls, lf, mf = [], [], []
+    for n in range(a.nlegs):
+        if n in axes:
+            t_in, D_in, slegs, lfs = _unfuse_leg_fusion(a.hard_fusion[n])
+            ls.append(_leg_structure_from_charges(a.config, t_in, D_in, t_legs[n], ss[n], slegs))
+            lf.extend(lfs)
+            mf.extend( [(1,)] * len(lfs))
+        else:
+            dec = {t: {t: ((0, D), D, (D,))} for t, D in zip(t_legs[n], D_legs[n])}
+            Dtot = {t: D for t, D in zip(t_legs[n], D_legs[n])}
+            ls.append(_LegDecomposition(a.config, ss[n], ss[n], dec, Dtot))
+            lf.append(a.hard_fusion[n])
+            mf.append(a.meta_fusion[n])
+
+    meta = []
+    tt = tuple(tuple(ls[n].dec) for n in range(a.nlegs))
+    for ind in product(*tt):
+        to = sum(ind, ())
+        if to in a.A:
+            kkk = tuple(tuple(ls[n].dec[ii].items()) for n, ii in enumerate(ind))
+            for tt in product(*kkk):
+                tn = sum((x[0] for x in tt), ())
+                slc = tuple(x[1][0] for x in tt)
+                Dn = tuple(_flatten((x[1][2] for x in tt)))
+                meta.append((tn, to, slc, Dn))
+    news = sum((x.s for x in ls), ())
+
+    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, n=a.n, s=news, meta_fusion=tuple(mf), hard_fusion=tuple(lf))
+    c.A = a.config.backend.unmerge_from_array(a.A, meta)
+    if inplace:
+        c.struct = c.struct._replace(s=tuple(news))
+        c.nlegs = len(tuple(news))
+        c.hard_fusion = tuple(lf)
+        c.meta_fusion = tuple(mf)
+        c.mlegs = len(c.meta_fusion)
+    c.update_struct()
+    return c
 
 
 def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
@@ -15,44 +177,76 @@ def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
 
 @lru_cache(maxsize=1024)
 def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
-    legs_l = np.array(axes[0], int)
-    legs_r = np.array(axes[1], int)
     told = struct.t if inds is None else [struct.t[ii] for ii in inds]
     Dold = struct.D if inds is None else [struct.D[ii] for ii in inds]
     tset = np.array(told, dtype=int).reshape((len(told), len(struct.s), config.sym.NSYM))
     Dset = np.array(Dold, dtype=int).reshape(len(Dold), len(struct.s))
-    t_l = tset[:, legs_l, :]
-    t_r = tset[:, legs_r, :]
-    D_l = Dset[:, legs_l]
-    D_r = Dset[:, legs_r]
-    s_l = np.array([struct.s[ii] for ii in axes[0]], dtype=int)
-    s_r = np.array([struct.s[ii] for ii in axes[1]], dtype=int)
-    Deff_l = np.prod(D_l, axis=1)
-    Deff_r = np.prod(D_r, axis=1)
+    legs, t, D, Deff, teff, s, ls = [], [], [], [], [], [], []
+    for n in (0, 1):
+        legs.append(np.array(axes[n], int))
+        t.append(tset[:, legs[n], :])
+        D.append(Dset[:, legs[n]])
+        Deff.append(np.prod(D[n], axis=1))
+        s.append(np.array([struct.s[ii] for ii in axes[n]], dtype=int))
+        teff.append(config.sym.fuse(t[n], s[n], s_eff[n]))
+        teff[n] = tuple(tuple(t.flat) for t in teff[n])
+        t[n] = tuple(tuple(t.flat) for t in t[n])
+        D[n] = tuple(tuple(x) for x in D[n])
+        ls.append(_leg_structure_merge(config, teff[n], t[n], Deff[n], D[n], s_eff[n], s[n]))
 
-    teff_l = config.sym.fuse(t_l, s_l, s_eff[0])
-    teff_r = config.sym.fuse(t_r, s_r, s_eff[1])
-    tnew = np.hstack([teff_l, teff_r])
-
-    tnew = tuple(tuple(t.flat) for t in tnew)
-    teff_l = tuple(tuple(t.flat) for t in teff_l)
-    teff_r = tuple(tuple(t.flat) for t in teff_r)
-    t_l = tuple(tuple(t.flat) for t in t_l)
-    t_r = tuple(tuple(t.flat) for t in t_r)
-    D_l = tuple(tuple(x) for x in D_l)
-    D_r = tuple(tuple(x) for x in D_r)
-    ls_l = _leg_structure_merge(config, teff_l, t_l, Deff_l, D_l, s_eff[0], s_l)
-    ls_r = _leg_structure_merge(config, teff_r, t_r, Deff_r, D_r, s_eff[1], s_r)
+    tnew = tuple(tuple(t.flat) for t in np.hstack([teff[0], teff[1]]))
     # meta_mrg = ((tnew, told, Dslc_l, D_l, Dslc_r, D_r), ...)
-    meta_mrg = tuple((tn, to, *ls_l.dec[tel][tl][:2], *ls_r.dec[ter][tr][:2])
-                     for tn, to, tel, tl, ter, tr in zip(tnew, told, teff_l, t_l, teff_r, t_r))
+    meta_mrg = tuple((tn, to, *ls[0].dec[tel][tl][:2], *ls[1].dec[ter][tr][:2])
+                     for tn, to, tel, tl, ter, tr in zip(tnew, told, teff[0], t[0], teff[1], t[1]))
     if sort_r:
-        unew_r, unew_l, unew = zip(*sorted(set(zip(teff_r, teff_l, tnew)))) if len(tnew) > 0 else ((), (), ())
+        unew_r, unew_l, unew = zip(*sorted(set(zip(teff[1], teff[0], tnew)))) if len(tnew) > 0 else ((), (), ())
     else:
-        unew, unew_l, unew_r = zip(*sorted(set(zip(tnew, teff_l, teff_r)))) if len(tnew) > 0 else ((), (), ())
+        unew, unew_l, unew_r = zip(*sorted(set(zip(tnew, teff[0], teff[1])))) if len(tnew) > 0 else ((), (), ())
     # meta_new = ((unew, Dnew), ...)
-    meta_new = tuple((iu, (ls_l.D[il], ls_r.D[ir])) for iu, il, ir in zip(unew, unew_l, unew_r))
-    return meta_new, meta_mrg, ls_l, ls_r, unew_l, unew_r
+    meta_new = tuple((iu, (ls[0].D[il], ls[1].D[ir])) for iu, il, ir in zip(unew, unew_l, unew_r))
+    return meta_new, meta_mrg, ls[0], ls[1], unew_l, unew_r
+
+
+# @lru_cache(maxsize=1024)
+# def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
+#     legs_l = np.array(axes[0], int)
+#     legs_r = np.array(axes[1], int)
+#     told = struct.t if inds is None else [struct.t[ii] for ii in inds]
+#     Dold = struct.D if inds is None else [struct.D[ii] for ii in inds]
+#     tset = np.array(told, dtype=int).reshape((len(told), len(struct.s), config.sym.NSYM))
+#     Dset = np.array(Dold, dtype=int).reshape(len(Dold), len(struct.s))
+#     t_l = tset[:, legs_l, :]
+#     t_r = tset[:, legs_r, :]
+#     D_l = Dset[:, legs_l]
+#     D_r = Dset[:, legs_r]
+#     s_l = np.array([struct.s[ii] for ii in axes[0]], dtype=int)
+#     s_r = np.array([struct.s[ii] for ii in axes[1]], dtype=int)
+#     Deff_l = np.prod(D_l, axis=1)
+#     Deff_r = np.prod(D_r, axis=1)
+
+#     teff_l = config.sym.fuse(t_l, s_l, s_eff[0])
+#     teff_r = config.sym.fuse(t_r, s_r, s_eff[1])
+#     tnew = np.hstack([teff_l, teff_r])
+
+#     tnew = tuple(tuple(t.flat) for t in tnew)
+#     teff_l = tuple(tuple(t.flat) for t in teff_l)
+#     teff_r = tuple(tuple(t.flat) for t in teff_r)
+#     t_l = tuple(tuple(t.flat) for t in t_l)
+#     t_r = tuple(tuple(t.flat) for t in t_r)
+#     D_l = tuple(tuple(x) for x in D_l)
+#     D_r = tuple(tuple(x) for x in D_r)
+#     ls_l = _leg_structure_merge(config, teff_l, t_l, Deff_l, D_l, s_eff[0], s_l)
+#     ls_r = _leg_structure_merge(config, teff_r, t_r, Deff_r, D_r, s_eff[1], s_r)
+#     # meta_mrg = ((tnew, told, Dslc_l, D_l, Dslc_r, D_r), ...)
+#     meta_mrg = tuple((tn, to, *ls_l.dec[tel][tl][:2], *ls_r.dec[ter][tr][:2])
+#                      for tn, to, tel, tl, ter, tr in zip(tnew, told, teff_l, t_l, teff_r, t_r))
+#     if sort_r:
+#         unew_r, unew_l, unew = zip(*sorted(set(zip(teff_r, teff_l, tnew)))) if len(tnew) > 0 else ((), (), ())
+#     else:
+#         unew, unew_l, unew_r = zip(*sorted(set(zip(tnew, teff_l, teff_r)))) if len(tnew) > 0 else ((), (), ())
+#     # meta_new = ((unew, Dnew), ...)
+#     meta_new = tuple((iu, (ls_l.D[il], ls_r.D[ir])) for iu, il, ir in zip(unew, unew_l, unew_r))
+#     return meta_new, meta_mrg, ls_l, ls_r, unew_l, unew_r
 
 
 def _leg_structure_merge(config, teff, tlegs, Deff, Dlegs, seff, slegs):
@@ -164,7 +358,7 @@ class _LegDecomposition:
 
     def copy(self):
         """ Copy leg structure. """
-        ls = _LegDecomposition(s=self.s, news=self.news)
+        ls = _LegDecomposition(s=self.s, s_eff=self.s_eff)
         for te, de in self.dec.items():
             ls.dec[te] = de.copy()
         ls.D = self.D.copy()
@@ -177,138 +371,3 @@ class _LegDecomposition:
             print(te, ":")
             for to, Do in de.items():
                 print("   ", to, ":", Do)
-
-
-# def group_legs(self, axes, new_s=None):
-#     """
-#     Permutes tensor legs. Next, fuse a specified group of legs into a new single leg.
-
-#     Parameters
-#     ----------
-#     axes: tuple
-#         tuple of leg indices for transpose. Group of legs to be fused forms inner tuple.
-#         If there is not internal tuple, fuse given indices and a new leg is placed at the position of the first fused oned.
-
-#     new_s: int
-#         signature of a new leg. If not given, the signature of the first fused leg is given.
-
-#     Returns
-#     -------
-#     tensor : Tensor
-
-#     Example
-#     -------
-#     For tensor with 5 legs: tensor.fuse_legs1(axes=(2, 0, (1, 4), 3))
-#     tensor.fuse_legs1(axes=(2, 0)) is equivalent to tensor.fuse_legs1(axes=(1, (2, 0), 3, 4))
-#     """
-#     if self.isdiag:
-#         raise YastError('Cannot group legs of a diagonal tensor')
-
-#     ituple = [ii for ii, ax in enumerate(axes) if isinstance(ax, tuple)]
-#     if len(ituple) == 1:
-#         ig = ituple[0]
-#         al, ag, ar = axes[:ig], axes[ig], axes[ig+1:]
-#     elif len(ituple) == 0:
-#         al = tuple(ii for ii in range(axes[0]) if ii not in axes)
-#         ar = tuple(ii for ii in range(axes[0]+1, self.nlegs) if ii not in axes)
-#         ag = axes
-#         ig = len(al)
-#     else:
-#         raise YastError('Too many groups to fuse')
-#     if len(ag) < 2:
-#         raise YastError('Need at least two legs to fuse')
-
-#     order = al+ag+ar  # order for permute
-#     legs_l = np.array(al, dtype=np.intp)
-#     legs_r = np.array(ar, dtype=np.intp)
-#     legs_c = np.array(ag, dtype=np.intp)
-
-#     if new_s is None:
-#         new_s = self.s[ag[0]]
-
-#     new_ndim = len(al) + 1 + len(ar)
-
-#     t_grp = self.tset[:, legs_c, :]
-#     D_grp = self.Dset[:, legs_c]
-#     s_grp = self.s[legs_c]
-#     t_eff = self.config.sym.fuse(t_grp, s_grp, new_s)
-#     D_eff = np.prod(D_grp, axis=1)
-
-#     D_rsh = np.empty((len(self.A), new_ndim), dtype=int)
-#     D_rsh[:, :ig] = self.Dset[:, legs_l]
-#     D_rsh[:, ig] = D_eff
-#     D_rsh[:, ig+1:] = self.Dset[:, legs_r]
-
-#     ls_c = _LegDecomposition(self.config, s_grp, new_s)
-#     ls_c.leg_struct_for_merged(t_eff, t_grp, D_eff, D_grp)
-
-#     t_new = np.empty((len(self.A), new_ndim, self.config.sym.NSYM), dtype=int)
-#     t_new[:, :ig, :] = self.tset[:, legs_l, :]
-#     t_new[:, ig, :] = t_eff
-#     t_new[:, ig+1:, :] = self.tset[:, legs_r, :]
-
-#     t_new = t_new.reshape(len(t_new), -1)
-#     u_new, iu_new = np.unique(t_new, return_index=True, axis=0)
-#     Du_new = D_rsh[iu_new]
-#     Du_new[:, ig] = np.array([ls_c.D[tuple(t_eff[ii].flat)] for ii in iu_new], dtype=int)
-
-#     # meta_new = ((u, Du), ...)
-#     meta_new = tuple((tuple(u.flat), tuple(Du)) for u, Du in zip(u_new, Du_new))
-#     # meta_mrg = ((tn, Ds, to, Do), ...)
-#     meta_mrg = tuple((tuple(tn.flat), ls_c.dec[tuple(te.flat)][tuple(tg.flat)][0], tuple(to.flat), tuple(Do))
-#         for tn, te, tg, to, Do in zip(t_new, t_eff, t_grp, self.tset, D_rsh))
-
-#     c = self.empty(s=tuple(self.s[legs_l]) + (new_s,) + tuple(self.s[legs_r]), n=self.n, isdiag=self.isdiag)
-#     c.A = self.config.backend.merge_one_leg(self.A, ig, order, meta_new , meta_mrg, self.config.dtype)
-#     c.update_struct()
-#     c.lss[ig] = ls_c
-#     for nnew, nold in enumerate(al+ (-1,) + ar):
-#         if nold in self.lss:
-#             c.lss[nnew] = self.lss[nold].copy()
-#     return c
-
-# def ungroup_leg(self, axis):
-#     """
-#     Unfuse a single tensor leg.
-
-#     New legs are inserted in place of the unfused one.
-
-#     Parameters
-#     ----------
-#     axis: int
-#         index of leg to ungroup.
-
-#     Returns
-#     -------
-#     tensor : Tensor
-#     """
-#     try:
-#         ls = self.lss[axis]
-#     except KeyError:
-#         return self
-
-#     meta = []
-#     for tt, DD in zip(self.tset, self.Dset):
-#         tl = tuple(tt[:axis, :].flat)
-#         tc = tuple(tt[axis, :].flat)
-#         tr = tuple(tt[axis+1:, :].flat)
-#         told = tuple(tt.flat)
-#         Dl = tuple(DD[:axis])
-#         Dr = tuple(DD[axis+1:])
-#         for tcom, (Dsl, _, Dc) in ls.dec[tc].items():
-#             tnew = tl + tcom + tr
-#             Dnew = Dl + Dc + Dr
-#             meta.append((told, tnew, Dsl, Dnew))
-#     meta = tuple(meta)
-#     s = tuple(self.s[:axis]) + ls.s + tuple(self.s[axis+1:])
-
-#     c = self.empty(s=s, n=self.n, isdiag=self.isdiag)
-#     c.A = self.config.backend.unmerge_one_leg(self.A, axis, meta)
-#     c.update_struct()
-#     for ii in range(axis):
-#         if ii in self.lss:
-#             c.lss[ii]=self.lss[ii].copy()
-#     for ii in range(axis+1, self.nlegs):
-#         if ii in self.lss:
-#             c.lss[ii+ls.nlegs]=self.lss[ii].copy()
-#     return c
