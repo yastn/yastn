@@ -2,14 +2,10 @@
 
 from itertools import chain, repeat, accumulate, product
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _flatten, _tarray, YastError
+from ._auxliary import _clear_axes, _unpack_axes, _flatten, _tarray, _flip_sign_hard_fusion
+from ._controls import YastError
 
 __all__ = ['match_legs', 'block']
-
-
-def copy_empty(a):
-    """ Return a copy of the tensor, but without copying blocks. """
-    return a.__class__(config=a.config, s=a.struct.s, n=a.struct.n, isdiag=a.isdiag, meta_fusion=a.meta_fusion)
 
 
 def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
@@ -210,7 +206,7 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
     val: str
         'randR', 'rand', 'ones', 'zeros'
     """
-    t, D, s, lf = [], [], [], []
+    t, D, s, lf, hf = [], [], [], [], []
     if conjs is None:
         conjs = (0,) * len(tensors)
     for nf, te, cc in zip(legs, tensors, conjs):
@@ -221,7 +217,8 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
             t.append(tuple(tdn.keys()))
             D.append(tuple(tdn.values()))
             s.append(te.struct.s[nn] * (2 * cc - 1))
-    a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, meta_fusion=lf)
+            hf.append(te.hard_fusion[nf] if cc == 1 else _flip_sign_hard_fusion(te.hard_fusion[nf]))
+    a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, meta_fusion=lf, hard_fusion=hf)
     a.fill_tensor(t=t, D=D, val=val)
     return a
 
@@ -260,7 +257,7 @@ def block(tensors, common_legs=None):
         ind, = _clear_axes(ind)
         if tn.nlegs != tn0.nlegs or tn.meta_fusion != tn0.meta_fusion or\
            tn.struct.s != tn0.struct.s or tn.struct.n != tn0.struct.n or\
-           tn.isdiag != tn0.isdiag:
+           tn.isdiag != tn0.isdiag or tn.hard_fusion != tn0.hard_fusion:
             raise YastError('Ndims, signatures, total charges or fusion trees of blocked tensors are inconsistent.')
 
     posa = np.ones((len(pos), tn0.nlegs), dtype=int)
@@ -297,7 +294,7 @@ def block(tensors, common_legs=None):
             meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.nlegs))))
     meta_new = tuple((ts, Ds) for ts, Ds in meta_new.items())
 
-    c = tn0.__class__(config=a.config, s=a.struct.s, isdiag=a.isdiag, n=a.struct.n, meta_fusion=tn0.meta_fusion)
+    c = tn0.__class__(config=a.config, s=a.struct.s, isdiag=a.isdiag, n=a.struct.n, meta_fusion=tn0.meta_fusion, hard_fusion=tn0.hard_fusion)
     c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, c.config.device)
     c.update_struct()
     return c

@@ -44,7 +44,7 @@ def test_aux_2():
 
     a.add_leg(s=1, t=(1, 0), inplace=True)
     a.add_leg(s=-1, axis=0, t=(0, 2), inplace=True)
-    assert a.n == (0, 0)
+    assert a.struct.n == (0, 0)
     a.is_consistent()
 
     assert b.get_shape() == (9, 5, 30)

@@ -1,8 +1,9 @@
 """ Linear operations and operations on a single yast tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _Darray, _struct
-from ._auxliary import YastError, _test_configs_match, _test_tensors_match
+from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _Darray
+from ._auxliary import _struct, _hard_fusion, _flip_sign_hard_fusion
+from ._controls import YastError, _test_configs_match, _test_tensors_match
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'remove_zero_blocks',
            'absolute', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'add_leg',
@@ -14,14 +15,14 @@ def copy(a):
 
         Warning: this might break autograd if you are using it.
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {ts: a.config.backend.copy(x) for ts, x in a.A.items()}
     return c
 
 
 def clone(a):
     """ Return a copy of the tensor, tracking gradients. """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {ts: a.config.backend.clone(x) for ts, x in a.A.items()}
     return c
 
@@ -32,7 +33,7 @@ def detach(a, inplace=False):
         for x in a.A.values():
             a.config.backend.detach_(x)
         return a
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {ts: a.config.backend.detach(x) for ts, x in a.A.items()}
     return c
 
@@ -50,7 +51,7 @@ def to(a, device):
     """
     if a.config.device == device:
         return a
-    c = a.__class__(config=a.config, isdiag=a.isdiag, device=device, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, device=device, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.move_to_device(a.A, device)
     return c
 
@@ -79,7 +80,7 @@ def __mul__(a, number):
     tensor : Tensor
         result of multipcilation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {ind: number * x for ind, x in a.A.items()}
     return c
 
@@ -113,7 +114,7 @@ def __pow__(a, exponent):
     tensor : Tensor
         result of element-wise exponentiation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {ind: x**exponent for ind, x in a.A.items()}
     return c
 
@@ -131,7 +132,7 @@ def __truediv__(a, number):
     tensor : Tensor
         result of element-wise division  as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {ind: x / number for ind, x in a.A.items()}
     return c
 
@@ -154,7 +155,7 @@ def __add__(a, b):
     _test_configs_match(a, b)
     _test_tensors_match(a, b)
     meta = _common_keys(a.A, b.A)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = c.config.backend.add(a.A, b.A, meta)
     if len(meta[1]) > 0 or len(meta[2]) > 0:
         c.update_struct()
@@ -179,7 +180,7 @@ def __sub__(a, b):
     _test_configs_match(a, b)
     _test_tensors_match(a, b)
     meta = _common_keys(a.A, b.A)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = c.config.backend.sub(a.A, b.A, meta)
     if len(meta[1]) > 0 or len(meta[2]) > 0:
         c.update_struct()
@@ -205,7 +206,7 @@ def apxb(a, b, x=1):
     _test_configs_match(a, b)
     _test_tensors_match(a, b)
     meta = _common_keys(a.A, b.A)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = c.config.backend.apxb(a.A, b.A, x, meta)
     if len(meta[1]) > 0 or len(meta[2]) > 0:
         c.update_struct()
@@ -226,11 +227,13 @@ def conj(a, inplace=False):
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
+    new_hf = tuple(_flip_sign_hard_fusion(x) for x in a.hard_fusion)
     if inplace:
         c = a
         c.struct = struct
+        a.hard_fusion = new_hf
     else:
-        c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=struct)
+        c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=new_hf, struct=struct)
     c.A = c.config.backend.conj(a.A, inplace)
     return c
 
@@ -243,7 +246,8 @@ def conj_blocks(a, inplace=False):
     -------
     tensor : Tensor
     """
-    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
+                                        hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = c.config.backend.conj(a.A, inplace)
     return c
 
@@ -260,10 +264,12 @@ def flip_signature(a, inplace=False):
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
+    new_hf = tuple(_flip_sign_hard_fusion(x) for x in a.hard_fusion)
     if inplace:
         a.struct = struct
+        a.hard_fusion = new_hf
         return a
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=new_hf, struct=struct)
     c.A = {ind: a.config.backend.clone(a.A[ind]) for ind in a.A}
     return c
 
@@ -283,6 +289,7 @@ def transpose(a, axes, inplace=False):
     uaxes, = _unpack_axes(a, axes)
     order = np.array(uaxes, dtype=np.intp)
     new_meta_fusion = tuple(a.meta_fusion[ii] for ii in axes)
+    new_hard_fusion = tuple(a.hard_fusion[ii] for ii in uaxes)
     news = tuple(a.struct.s[ii] for ii in uaxes)
     struct = _struct(s=news, n=a.struct.n)
     tset = _tarray(a)
@@ -291,7 +298,8 @@ def transpose(a, axes, inplace=False):
     if inplace:
         a.struct = struct
         a.meta_fusion = new_meta_fusion
-    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=new_meta_fusion, struct=struct)
+        a.hard_fusion = new_hard_fusion
+    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=new_meta_fusion, hard_fusion=new_hard_fusion, struct=struct)
     c.A = c.config.backend.transpose(a.A, uaxes, meta_transpose, inplace)
     c.update_struct()
     return c
@@ -323,10 +331,10 @@ def moveaxis(a, source, destination, inplace=False):
 def diag(a):
     """Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa. """
     if a.isdiag:
-        c = a.__class__(config=a.config, isdiag=False, meta_fusion=a.meta_fusion, struct=a.struct)
+        c = a.__class__(config=a.config, isdiag=False, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
         c.A = {ind: a.config.backend.diag_diag(a.A[ind]) for ind in a.A}
     elif a.nlegs == 2 and sum(abs(x) for x in a.struct.n) == 0 and sum(a.struct.s) == 0:
-        c = a.__class__(config=a.config, isdiag=True, meta_fusion=a.meta_fusion, struct=a.struct)
+        c = a.__class__(config=a.config, isdiag=True, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
         c.A = {ind: a.config.backend.diag_diag(a.A[ind]) for ind in a.A}
     else:
         raise YastError('Tensor cannot be changed into a diagonal one')
@@ -342,21 +350,21 @@ def absolute(a):
     -------
     tansor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.absolute(a.A)
     return c
 
 
 def real(a):
     """ return real part of tensor. Do not change dtype of yast.Tensor """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {t: a.config.backend.real(x) for t, x in a.A.items()}
     return c
 
 
 def imag(a):
     """ return imaginary part of tensor """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {t: a.config.backend.imag(x) for t, x in a.A.items()}
     return c
 
@@ -373,7 +381,7 @@ def sqrt(a):
     -------
     tansor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.sqrt(a.A)
     return c
 
@@ -393,7 +401,7 @@ def rsqrt(a, cutoff=0):
     -------
     tansor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.rsqrt_diag(a.A, cutoff=cutoff) if c.isdiag else a.config.backend.rsqrt(a.A, cutoff=cutoff)
     return c
 
@@ -413,7 +421,7 @@ def reciprocal(a, cutoff=0):
     -------
     tansor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.reciprocal_diag(a.A, cutoff=cutoff) if c.isdiag else a.config.backend.reciprocal(a.A, cutoff=cutoff)
     return c
 
@@ -432,7 +440,7 @@ def exp(a, step=1.):
     -------
     tansor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.exp_diag(a.A, step) if c.isdiag else a.config.backend.exp(a.A, step)
     return c
 
@@ -443,7 +451,7 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0, inplace=False):
     Cutoff is a combination of absolut tolerance and relative tolerance with respect to maximal element in the tensor.
     """
     cutoff = atol + rtol * a.norm(p='inf')
-    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, struct=a.struct)
+    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {k: t if inplace else a.config.backend.clone(t) for k, t in a.A.items() if a.config.backend.max_abs(t) > cutoff}
     c.update_struct()
     return c
@@ -472,7 +480,10 @@ def add_leg(a, axis=-1, s=1, t=None, inplace=False):
     tset, Dset = _tarray(a), _Darray(a)
 
     axis = axis % (a.mlegs + 1)
-    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))
+
+    new_meta_fusion = a.meta_fusion[:axis] + ((1,),) + a.meta_fusion[axis:]
+
+    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack
 
     if s not in (-1, 1):
         raise YastError('The signature s should be equal to 1 or -1.')
@@ -497,7 +508,9 @@ def add_leg(a, axis=-1, s=1, t=None, inplace=False):
     c = a if inplace else a.clone()
     c.A = {tnew: a.config.backend.expand_dims(c.A[told], axis) for tnew, told in zip(new_tset, a.struct.t)}
     c.struct = _struct(new_tset, new_Dset, news, newn)
-    c.meta_fusion = c.meta_fusion[:axis] + ((1,),) + c.meta_fusion[axis:]
+    c.meta_fusion = new_meta_fusion
+    c.hard_fusion = c.hard_fusion[:axis] + (_hard_fusion(),) + c.hard_fusion[axis:]
+
     c.nlegs += 1
     c.mlegs += 1
     return c

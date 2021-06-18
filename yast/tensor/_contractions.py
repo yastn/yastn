@@ -1,8 +1,8 @@
 """ Contractions of yast tensors """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray
-from ._auxliary import YastError, _check, _test_configs_match, _test_fusions_match
+from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray, _flip_sign_hard_fusion
+from ._controls import YastError, _check, _test_configs_match, _test_fusions_match, _test_hard_fusion_match
 from ._merging import _merge_to_matrix, _unmerge_matrix
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon']
@@ -52,7 +52,9 @@ def tensordot(a, b, axes, conj=(0, 0)):
         # elif b.isdiag:
         #     b.flip_signature(inplace=True)
         # elif _check["signatures_match"]:
-        raise YastError('Signs do not match')
+        raise YastError('Signs do not match in tensordot')
+    for i1, i2 in zip(axes_a[1], axes_b[0]):
+        _test_hard_fusion_match(a.hard_fusion[i1], b.hard_fusion[i2], mconj)
 
     c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape(1, 2, a.config.sym.NSYM)
     c_s = np.array([conja, conjb], dtype=int)
@@ -71,7 +73,11 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
     c_s = tuple(conja * a.struct.s[i1] for i1 in axes_a[0]) + tuple(conjb * b.struct.s[i2] for i2 in axes_b[1])
     c_meta_fusion = [a.meta_fusion[ii] for ii in la_out] + [b.meta_fusion[ii] for ii in lb_out]
-    c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion)
+    c_hard_fusion = [a.hard_fusion[ii] for ii in axes_a[0]] if conj[0] == 0 else \
+                    [_flip_sign_hard_fusion(a.hard_fusion[ii]) for ii in axes_a[0]]
+    c_hard_fusion += [b.hard_fusion[ii] for ii in axes_b[1]] if conj[1] == 0 else \
+                    [_flip_sign_hard_fusion(b.hard_fusion[ii]) for ii in axes_b[1]]
+    c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
 
     c.A = c.config.backend.dot(Am, Bm, conj, meta_dot)
     _unmerge_matrix(c, ls_l, ls_r)
@@ -145,7 +151,9 @@ def trace(a, axes=(0, 1)):
 
     c_s = tuple(a.struct.s[i3] for i3 in out)
     c_meta_fusion=tuple(a.meta_fusion[ii] for ii in lout)
-    c = a.__class__(config=a.config, s=c_s, n=a.struct.n, meta_fusion=c_meta_fusion)
+    c_hard_fusion=tuple(a.hard_fusion[ii] for ii in out)
+
+    c = a.__class__(config=a.config, s=c_s, n=a.struct.n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
 
     tset, Dset = _tarray(a), _Darray(a)
     lt = len(tset)

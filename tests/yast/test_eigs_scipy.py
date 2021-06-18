@@ -2,12 +2,15 @@ from context import yast
 from context import config_U1
 import numpy as np
 from scipy.sparse.linalg import eigs, LinearOperator
+import pytest
 
 tol = 1e-10
 
 # import yast.backend.backend_torch as backend
 # config_U1_R.backend = backend
 
+
+@pytest.mark.skipif(config_U1.backend.BACKEND_ID=="torch", reason="uses scipy procedures for raw data")
 def test_eigs_simple():
     a = yast.rand(config=config_U1, s=(1, 1, -1), n=0,
                   t=[(-1, 0, 1), (0, 1), (-1, 0, 1)],
@@ -19,7 +22,7 @@ def test_eigs_simple():
     tmn = tm.to_numpy()
 
     wn, vn = eigs(tmn, k=9, which='LM')
-    print(wn)
+    # print(wn)
 
     ## initializing random tensor matching TM, with 3-rd leg extra carrying charges -1, 0, 1
     vv = yast.randR(config=a.config, legs=[(a, 2, 'flip_s'), (a, 2), {'s':1, -1:1, 0:1, 1:1}])
@@ -35,7 +38,7 @@ def test_eigs_simple():
 
     # eigs going though yast.tensor
     wy, vy1d = eigs(ff, v0=r1d, k=9, which='LM', tol=1e-10)
-    print(wy)  # eigenvalues
+    # print(wy)  # eigenvalues
 
     # transform eigenvectors into yast tensors
     vy = [yast.decompress_from_1d(x, config_U1, meta) for x in vy1d.T]
@@ -45,10 +48,10 @@ def test_eigs_simple():
         assert a.are_independent(b)
     assert all((yast.norm_diff(x, y) < tol for x, y in zip(vy, vyr)))
     # display charges of eigenvectors (only charge on last leg) -- now there is superposition between +1 and -1
-    print([x.get_leg_structure(axis=2) for x in vyr])
+    # print([x.get_leg_structure(axis=2) for x in vyr])
 
 
-
+@pytest.mark.skipif(config_U1.backend.BACKEND_ID=="torch", reason="uses scipy procedures for raw data")
 def test_eigs_exception():
     a = yast.rand(config=config_U1, s=(1, 1, -1), n=0,
                   t=[(-2, -1, 0, 1), (0, 1), (-1, 0, 1, 2)],
@@ -63,7 +66,7 @@ def test_eigs_exception():
     tmn = tm.to_numpy(leg_structures={0: ls1, 1: ls0})
 
     wn, vn = eigs(tmn, k=9, which='LM')
-    print(wn)
+    # print(wn)
 
     ## initializing random tensor matching TM, with 3-rd leg extra carrying charges -1, 0, 1
     vv = yast.randR(config=a.config, legs=[(a, 2, 'flip_s', a, 0), (a, 2, a, 0, 'flip_s'), {'s':1, (-1,):1, (0,):1, (1,):1}])
@@ -78,7 +81,7 @@ def test_eigs_exception():
 
     # eigs going though yast.tensor
     wy, vy1d = eigs(ff, v0=r1d, k=9, which='LM', tol=1e-10)
-    print(wy)  # eigenvalues
+    # print(wy)  # eigenvalues
 
 
     # for tm with fused legs
@@ -94,7 +97,7 @@ def test_eigs_exception():
     ff2 = LinearOperator(shape=(len(r1d2), len(r1d2)), matvec=f2, dtype=np.float64)
 
     wy, vy2d = eigs(ff2, v0=r1d2, k=9, which='LM', tol=1e-10)
-    print(wy)  # eigenvalues
+    # print(wy)  # eigenvalues
 
 
     # transform eigenvectors into yast tensors
@@ -103,7 +106,8 @@ def test_eigs_exception():
     vyr = [yast.remove_zero_blocks(a, rtol=1e-12) for a in vy]
     assert all((yast.norm_diff(x, y) < tol for x, y in zip(vy, vyr)))
     # display charges of eigenvectors (only charge on last leg) -- now there is superposition between +1 and -1
-    print([x.get_leg_structure(axis=2) for x in vyr])
+    # print([x.get_leg_structure(axis=2) for x in vyr])
 
 if __name__ == '__main__':
+    test_eigs_simple()
     test_eigs_exception()
