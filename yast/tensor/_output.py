@@ -40,22 +40,22 @@ def compress_to_1d(a, meta=None):
         aD_rsh = np.cumsum(D_rsh)
         D_tot = np.sum(D_rsh)
         meta_new = (((), D_tot),)
-        # meta_merge = ((tn, Ds, to, Do), ...)
-        meta_merge = tuple(((), (aD - D, aD), t, (D,)) for t, D, aD in zip(a.struct.t, D_rsh, aD_rsh))
-        # (told, tnew, Dsl, Dnew)
-        meta_unmerge = tuple((told, tnew, Dsl, Dnew) for (told, Dsl, tnew, _), Dnew in zip(meta_merge, a.struct.D))
+        # meta_merge = ((tn, to, Dslc, Drsh), ...)
+        meta_merge = tuple(((), t, ((aD - D, aD),), D) for t, D, aD in zip(a.struct.t, D_rsh, aD_rsh))
+        # (told, tnew, Dslc, Dnew)
+        meta_unmerge = tuple(((), t, (aD - D, aD), Dnew) for t, D, aD, Dnew in zip(a.struct.t, D_rsh, aD_rsh, a.struct.D))
         meta = {'s': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag, 'hard_fusion': a.hard_fusion,
                 'meta_fusion': a.meta_fusion, 'meta_unmerge': meta_unmerge, 'meta_merge': meta_merge}
     else:
         if a.struct.s != meta['s'] or a.struct.n != meta['n'] or a.isdiag != meta['isdiag'] or a.meta_fusion != meta['meta_fusion'] or a.hard_fusion != meta['hard_fusion']:
             raise YastError("Tensor do not match provided metadata.")
         meta_merge = meta['meta_merge']
-        D_tot = meta_merge[-1][1][1]
+        D_tot = meta_merge[-1][2][0][1]
         meta_new = (((), D_tot),)
-        if len(a.A) != sum(ind in a.A for (_, _, ind, _) in meta_merge):
+        if len(a.A) != sum(ind in a.A for (_, ind, _, _) in meta_merge):
             raise YastError("Tensor has blocks that do not appear in meta.")
 
-    A = a.config.backend.merge_one_leg(a.A, 0, tuple(range(a.nlegs)), meta_new, meta_merge, a.config.device)
+    A = a.config.backend.merge_blocks(a.A, tuple(range(a.nlegs)), meta_new, meta_merge, a.config.device)
     return A[()], meta
 
 ############################

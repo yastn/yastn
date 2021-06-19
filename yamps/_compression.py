@@ -2,7 +2,7 @@
 from ._env import Env2, Env3
 
 
-def variational_sweep(psi, psi_target, env=None, op=None):
+def variational_sweep_1site(psi, psi_target, env=None, op=None):
     r"""
     Perform a sweep updating psi to maximize the overlap with the target state.
 

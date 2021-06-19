@@ -62,13 +62,10 @@ class Tensor:
 
         try:
             self.struct = kwargs['struct']
-            self.nlegs = len(self.struct.s)  # number of native legs
         except KeyError:
             try:
-                self.nlegs = len(s)  # number of native legs
                 s = tuple(s)
             except TypeError:
-                self.nlegs = 1
                 s = (s,)
             try:
                 n = tuple(n)
@@ -81,12 +78,11 @@ class Tensor:
             if self.isdiag:
                 if len(s) == 0:
                     s = (1, -1)
-                    self.nlegs = 2
                 if sum(s) != 0:
                     raise YastError("Signature should be (-1, 1) or (1, -1) in diagonal tensor")
                 if sum(abs(x) for x in n) != 0:
                     raise YastError("Tensor charge should be 0 in diagonal tensor")
-                if self.nlegs != 2:
+                if len(s) != 2:
                     raise YastError("Diagonal tensor should have ndim == 2")
             self.struct = _struct(t=(), D=(), s=s, n=n)
 
@@ -94,13 +90,12 @@ class Tensor:
         try:
             self.meta_fusion = tuple(kwargs['meta_fusion'])
         except (KeyError, TypeError):
-            self.meta_fusion = ((1,),) * self.nlegs
+            self.meta_fusion = ((1,),) * len(s)
         try:
             self.hard_fusion = tuple(kwargs['hard_fusion'])
         except (KeyError, TypeError):
-            self.hard_fusion = (_hard_fusion(),) * self.nlegs
+            self.hard_fusion = (_hard_fusion(),) * len(s)
 
-        self.mlegs = len(self.meta_fusion)  # number of meta legs
 
     from ._initialize import set_block, fill_tensor
     from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr
@@ -129,5 +124,17 @@ class Tensor:
         return np.array(self.struct.n, dtype=int)
 
     @property
+    def nlegs(self):
+        """ Return the number of legs (native) """
+        return len(self.struct.s)
+
+    @property
+    def mlegs(self):
+        """ Return the number of legs (native) """
+        return len(self.meta_fusion)
+
+    @property
     def requires_grad(self):
         return requires_grad(self)
+
+

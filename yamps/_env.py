@@ -325,7 +325,7 @@ class Env3(_EnvParent):
 
         if bd not in self._temp['op_2site']:
             OO = tensordot(self.op.A[n1], self.op.A[n2], axes=(3, 0))
-            self._temp['op_2site'][bd] = OO.fuse_legs_hard(axes=(0, (1, 3), (2, 4), 5))
+            self._temp['op_2site'][bd] = OO.fuse_legs(axes=(0, (1, 3), (2, 4), 5))
         OO = self._temp['op_2site'][bd]
 
         AA = self._project_ort(AA)

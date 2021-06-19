@@ -66,6 +66,6 @@ def time_U1_dmrg():
     run_dmrg_2_site(psi, H, Dmax=Dmax)
 
 if __name__ == "__main__":
-    time_full_dmrg()
-    time_Z2_dmrg()
+    # time_full_dmrg()
+    # time_Z2_dmrg()
     time_U1_dmrg()
