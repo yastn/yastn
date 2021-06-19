@@ -9,6 +9,7 @@ from ._auxliary import _flatten, _tarray, _Darray, _hard_fusion, _unpack_axes, _
 __all__ = ['fuse_legs_hard', 'unfuse_legs_hard']
 
 
+
 def _leg_structure_from_charges(config, t_in, D_in, t_out, seff, slegs):
     """ Auxilliary function that takes a combination of charges and dimensions on a number of legs,
         and combines them into effective charges and dimensions.
@@ -82,7 +83,7 @@ def fuse_legs_hard(a, axes, inplace=False):
             axis = axis[0]
             dec = {t: {t: ((0, D), D, (D,))} for t, D in zip(t_legs[axis], D_legs[axis])}
             Dtot = {t: D for t, D in zip(t_legs[axis], D_legs[axis])}
-            ls.append(_LegDecomposition(a.config, news[-1], news[-1], dec, Dtot))
+            ls.append(_LegDecomposition(news[-1], news[-1], dec, Dtot))
             lf.append(a.hard_fusion[axis])
             mf.append(a.meta_fusion[axis])
         else:
@@ -105,18 +106,16 @@ def fuse_legs_hard(a, axes, inplace=False):
     tnew = tuple(tuple(x.flat) for x in teff)
     teff = tuple(tuple(tuple(x.flat) for x in y) for y in teff)
 
-    meta_mrg = tuple((tn, to, tuple(l.dec[e][o][:2] for l, e, o in zip(ls, tes, tos)))
+    meta_mrg = tuple((tn, to, tuple(l.dec[e][o][0] for l, e, o in zip(ls, tes, tos)), tuple(l.dec[e][o][1] for l, e, o in zip(ls, tes, tos)))
                         for tn, to, tes, tos in zip(tnew, a.struct.t, teff, told))
     meta_new = tuple((x, tuple(l.D[x[i * nsym : (i + 1) * nsym]] for i, l in enumerate(ls))) for x in set(tnew))
 
     c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=tuple(mf), hard_fusion=tuple(lf), n=a.n, s=news)
-    c.A = a.config.backend.merge_to_array(a.A, order, meta_new, meta_mrg)
+    c.A = a.config.backend.merge_blocks(a.A, order, meta_new, meta_mrg)
     if inplace:
         c.struct = c.struct._replace(s=tuple(news))
-        c.nlegs = len(tuple(news))
         c.hard_fusion = tuple(lf)
         c.meta_fusion = tuple(mf)
-        c.mlegs = len(c.meta_fusion)
     c.update_struct()
     return c
 
@@ -139,7 +138,7 @@ def unfuse_legs_hard(a, axes, inplace=False):
         else:
             dec = {t: {t: ((0, D), D, (D,))} for t, D in zip(t_legs[n], D_legs[n])}
             Dtot = {t: D for t, D in zip(t_legs[n], D_legs[n])}
-            ls.append(_LegDecomposition(a.config, ss[n], ss[n], dec, Dtot))
+            ls.append(_LegDecomposition(ss[n], ss[n], dec, Dtot))
             lf.append(a.hard_fusion[n])
             mf.append(a.meta_fusion[n])
 
@@ -160,10 +159,8 @@ def unfuse_legs_hard(a, axes, inplace=False):
     c.A = a.config.backend.unmerge_from_array(a.A, meta)
     if inplace:
         c.struct = c.struct._replace(s=tuple(news))
-        c.nlegs = len(tuple(news))
         c.hard_fusion = tuple(lf)
         c.meta_fusion = tuple(mf)
-        c.mlegs = len(c.meta_fusion)
     c.update_struct()
     return c
 
@@ -171,7 +168,7 @@ def unfuse_legs_hard(a, axes, inplace=False):
 def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
     order = axes[0] + axes[1]
     meta_new, meta_mrg, ls_l, ls_r, ul, ur = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds, sort_r)
-    Anew = a.config.backend.merge_to_matrix(a.A, order, meta_new, meta_mrg, a.config.device)
+    Anew = a.config.backend.merge_blocks(a.A, order, meta_new, meta_mrg, a.config.device)
     return Anew, ls_l, ls_r, ul, ur
 
 
@@ -195,8 +192,8 @@ def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
         ls.append(_leg_structure_merge(config, teff[n], t[n], Deff[n], D[n], s_eff[n], s[n]))
 
     tnew = tuple(tuple(t.flat) for t in np.hstack([teff[0], teff[1]]))
-    # meta_mrg = ((tnew, told, Dslc_l, D_l, Dslc_r, D_r), ...)
-    meta_mrg = tuple((tn, to, *ls[0].dec[tel][tl][:2], *ls[1].dec[ter][tr][:2])
+    # meta_mrg = ((tnew, told, Dslc, Drsh), ...)
+    meta_mrg = tuple((tn, to, (ls[0].dec[tel][tl][0], ls[1].dec[ter][tr][0]), (ls[0].dec[tel][tl][1], ls[1].dec[ter][tr][1]))
                      for tn, to, tel, tl, ter, tr in zip(tnew, told, teff[0], t[0], teff[1], t[1]))
     if sort_r:
         unew_r, unew_l, unew = zip(*sorted(set(zip(teff[1], teff[0], tnew)))) if len(tnew) > 0 else ((), (), ())
@@ -205,48 +202,6 @@ def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
     # meta_new = ((unew, Dnew), ...)
     meta_new = tuple((iu, (ls[0].D[il], ls[1].D[ir])) for iu, il, ir in zip(unew, unew_l, unew_r))
     return meta_new, meta_mrg, ls[0], ls[1], unew_l, unew_r
-
-
-# @lru_cache(maxsize=1024)
-# def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
-#     legs_l = np.array(axes[0], int)
-#     legs_r = np.array(axes[1], int)
-#     told = struct.t if inds is None else [struct.t[ii] for ii in inds]
-#     Dold = struct.D if inds is None else [struct.D[ii] for ii in inds]
-#     tset = np.array(told, dtype=int).reshape((len(told), len(struct.s), config.sym.NSYM))
-#     Dset = np.array(Dold, dtype=int).reshape(len(Dold), len(struct.s))
-#     t_l = tset[:, legs_l, :]
-#     t_r = tset[:, legs_r, :]
-#     D_l = Dset[:, legs_l]
-#     D_r = Dset[:, legs_r]
-#     s_l = np.array([struct.s[ii] for ii in axes[0]], dtype=int)
-#     s_r = np.array([struct.s[ii] for ii in axes[1]], dtype=int)
-#     Deff_l = np.prod(D_l, axis=1)
-#     Deff_r = np.prod(D_r, axis=1)
-
-#     teff_l = config.sym.fuse(t_l, s_l, s_eff[0])
-#     teff_r = config.sym.fuse(t_r, s_r, s_eff[1])
-#     tnew = np.hstack([teff_l, teff_r])
-
-#     tnew = tuple(tuple(t.flat) for t in tnew)
-#     teff_l = tuple(tuple(t.flat) for t in teff_l)
-#     teff_r = tuple(tuple(t.flat) for t in teff_r)
-#     t_l = tuple(tuple(t.flat) for t in t_l)
-#     t_r = tuple(tuple(t.flat) for t in t_r)
-#     D_l = tuple(tuple(x) for x in D_l)
-#     D_r = tuple(tuple(x) for x in D_r)
-#     ls_l = _leg_structure_merge(config, teff_l, t_l, Deff_l, D_l, s_eff[0], s_l)
-#     ls_r = _leg_structure_merge(config, teff_r, t_r, Deff_r, D_r, s_eff[1], s_r)
-#     # meta_mrg = ((tnew, told, Dslc_l, D_l, Dslc_r, D_r), ...)
-#     meta_mrg = tuple((tn, to, *ls_l.dec[tel][tl][:2], *ls_r.dec[ter][tr][:2])
-#                      for tn, to, tel, tl, ter, tr in zip(tnew, told, teff_l, t_l, teff_r, t_r))
-#     if sort_r:
-#         unew_r, unew_l, unew = zip(*sorted(set(zip(teff_r, teff_l, tnew)))) if len(tnew) > 0 else ((), (), ())
-#     else:
-#         unew, unew_l, unew_r = zip(*sorted(set(zip(tnew, teff_l, teff_r)))) if len(tnew) > 0 else ((), (), ())
-#     # meta_new = ((unew, Dnew), ...)
-#     meta_new = tuple((iu, (ls_l.D[il], ls_r.D[ir])) for iu, il, ir in zip(unew, unew_l, unew_r))
-#     return meta_new, meta_mrg, ls_l, ls_r, unew_l, unew_r
 
 
 def _leg_structure_merge(config, teff, tlegs, Deff, Dlegs, seff, slegs):
@@ -261,7 +216,7 @@ def _leg_structure_merge(config, teff, tlegs, Deff, Dlegs, seff, slegs):
             dec[te][tl] = ((Dlow, Dtop), De, Dl)
             Dlow = Dtop
         Dtot[te] = Dtop
-    return _LegDecomposition(config, seff, slegs, dec, Dtot)
+    return _LegDecomposition(seff, slegs, dec, Dtot)
 
 
 def _leg_struct_trivial(a, axis=0):
@@ -274,7 +229,7 @@ def _leg_struct_trivial(a, axis=0):
         dec[t] = {t: ((0, D), D, (D,))}
         Dtot[t] = D
     sa = a.struct.s[axis]
-    return _LegDecomposition(a.config, sa, sa, dec, Dtot)
+    return _LegDecomposition(sa, sa, dec, Dtot)
 
 
 def _leg_struct_truncation(a, tol=0., D_block=np.inf, D_total=np.inf,
@@ -317,7 +272,7 @@ def _leg_struct_truncation(a, tol=0., D_block=np.inf, D_total=np.inf,
             dec[ind] = {ind: (Dslc, D_keep[ind], (D_keep[ind],))}
             Dtot[ind] = D_keep[ind]
     s0 = a.struct.s[0]
-    return _LegDecomposition(a.config, s0, s0, dec, Dtot)
+    return _LegDecomposition(s0, s0, dec, Dtot)
 
 
 def _unmerge_matrix(a, ls_l, ls_r):
@@ -327,27 +282,26 @@ def _unmerge_matrix(a, ls_l, ls_r):
         if ic in a.A:
             for (tl, (sl, _, Dl)), (tr, (sr, _, Dr)) in product(ls_l.dec[il].items(), ls_r.dec[ir].items()):
                 meta.append((tl + tr, ic, sl, sr, Dl + Dr))
-    a.A = ls_l.config.backend.unmerge_from_matrix(a.A, meta)
+    a.A = a.config.backend.unmerge_from_matrix(a.A, meta)
     a.update_struct()
 
 
 def _unmerge_diagonal(a, ls):
     meta = tuple((ta + ta, ia, sa) for ia in ls.dec for ta, (sa, _, _) in ls.dec[ia].items())
-    a.A = ls.config.backend.unmerge_from_diagonal(a.A, meta)
-    a.A = {ind: ls.config.backend.diag_create(x) for ind, x in a.A.items()}
+    a.A = a.config.backend.unmerge_from_diagonal(a.A, meta)
+    a.A = {ind: a.config.backend.diag_create(x) for ind, x in a.A.items()}
     a.update_struct()
 
 
 class _LegDecomposition:
     """Information about internal structure of leg resulting from fusions."""
-    def __init__(self, config=None, s_eff=1, s=(), dec=None, D=None):
+    def __init__(self, s_eff=1, s=(), dec=None, D=None):
         try:
             self.nlegs = len(s)  # number of fused legs
             self.s = tuple(s)  # signature of fused legs
         except TypeError:
             self.nlegs = 1
             self.s = (s,)
-        self.config = config
         self.s_eff = s_eff  # signature of effective leg
         self.D = {} if D is None else D  # bond dimensions of effective charges
         self.dec = {} if dec is None else dec  # leg's structure/ decomposition
@@ -355,19 +309,3 @@ class _LegDecomposition:
     def match(self, other):
         """ Compare if decomposition match. This does not include signatures."""
         return self.nlegs == other.nlegs and self.D == other.D and self.dec == other.dec
-
-    def copy(self):
-        """ Copy leg structure. """
-        ls = _LegDecomposition(s=self.s, s_eff=self.s_eff)
-        for te, de in self.dec.items():
-            ls.dec[te] = de.copy()
-        ls.D = self.D.copy()
-        return ls
-
-    def show(self):
-        """ Print information about leg structure. """
-        print("Leg structure: fused = ", self.nlegs)
-        for te, de in self.dec.items():
-            print(te, ":")
-            for to, Do in de.items():
-                print("   ", to, ":", Do)

@@ -490,35 +490,14 @@ def dot(A, B, conj, meta_dot):
 #####################################################
 
 
-def merge_to_matrix(A, order, meta_new, meta_mrg, *args, **kwargs):
-    """ New dictionary of blocks after merging into matrix. """
-    dtype = get_dtype(A.values())
-    Anew = {u: np.zeros(Du, dtype=dtype) for (u, Du) in meta_new}
-    for (tn, to, Dsl, Dl, Dsr, Dr) in meta_mrg:
-        Anew[tn][slice(*Dsl), slice(*Dsr)] = A[to].transpose(order).reshape(Dl, Dr)
-    return Anew
-
-
-def merge_to_array(A, order, meta_new, meta_mrg, *args, **kwargs):
+def merge_blocks(A, order, meta_new, meta_mrg, *args, **kwargs):
     """ New dictionary of blocks after merging into n-dimensional array """
     dtype = get_dtype(A.values())
     Anew = {u: np.zeros(Du, dtype=dtype) for (u, Du) in meta_new}
-    for (tn, to, Ds) in meta_mrg:
-        slc = tuple(slice(*x[0]) for x in Ds)
-        Drsh = tuple(x[1] for x in Ds)
-        Anew[tn][slc] = A[to].transpose(order).reshape(Drsh)
-    return Anew
-
-
-def merge_one_leg(A, axis, order, meta_new, meta_mrg, *args, **kwargs):
-    """ Outputs new dictionary of blocks after fusing one leg. """
-    dtype = get_dtype(A.values())
-    Anew = {u: np.zeros(Du, dtype=dtype) for (u, Du) in meta_new}
-    for (tn, Ds, to, Do) in meta_mrg:
+    for (tn, to, Dslc, Drsh) in meta_mrg:
         if to in A:
-            slc = [slice(None)] * len(Do)
-            slc[axis] = slice(*Ds)
-            Anew[tn][tuple(slc)] = A[to].transpose(order).reshape(Do)
+            slc = tuple(slice(*x) for x in Dslc)
+            Anew[tn][slc] = A[to].transpose(order).reshape(Drsh)
     return Anew
 
 

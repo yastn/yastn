@@ -511,8 +511,6 @@ def add_leg(a, axis=-1, s=1, t=None, inplace=False):
     c.meta_fusion = new_meta_fusion
     c.hard_fusion = c.hard_fusion[:axis] + (_hard_fusion(),) + c.hard_fusion[axis:]
 
-    c.nlegs += 1
-    c.mlegs += 1
     return c
 
 
@@ -556,7 +554,6 @@ def fuse_legs(a, axes, inplace=False):
     else:
         c = a.transpose(axes=order, inplace=inplace)
     c.meta_fusion = tuple(meta_fusion)
-    c.mlegs = len(c.meta_fusion)
     return c
 
 
@@ -595,5 +592,4 @@ def unfuse_legs(a, axes, inplace=False):
                         new_meta_fusion.append(stack[pos_init: pos + 1])
                         pos_init = pos + 1
     c.meta_fusion = tuple(new_meta_fusion)
-    c.mlegs = len(c.meta_fusion)
     return c

@@ -26,7 +26,7 @@ def run_truncation(psi, H, Egs, sweeps=2):
     psi2.canonize_sweep(to='first')
     env = None
     for _ in range(sweeps):
-        env = yamps.variational_sweep(psi2, psi_target=psi, env=env)
+        env = yamps.variational_sweep_1site(psi2, psi_target=psi, env=env)
 
     ov_v = yamps.measure_overlap(psi, psi2)
     Eng_v = yamps.measure_mpo(psi2, H, psi2)
