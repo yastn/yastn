@@ -56,7 +56,7 @@ def time_U1_dmrg():
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
     N = 32
-    Dmax = 128
+    Dmax = 256
     H = ops_U1.mpo_XX_model(N=N, t=1, mu=0)
     # Egs = -20.01638790048514
     psi = ops_U1.mps_random(N=N, Dblocks=[Dmax/8, 3*Dmax/8, Dmax/2, 3*Dmax/8, Dmax/8], total_charge=16)
