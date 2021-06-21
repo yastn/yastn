@@ -108,11 +108,15 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     else:
         meta = tuple((il + ir, il + il, il, il + ir) for il, ir in zip(ul, ur))
         n_l, n_r = None, a.struct.n
-    U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l,
+    
+    Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
+    Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
+
+    U = a.__class__(config=a.config, s=Us , n=n_l,
                     meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
                     hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_hard_fusion()])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
-    V = a.__class__(config=a.config, s=(-sU,) + ls_r.s, n=n_r,
+    V = a.__class__(config=a.config, s=Vs, n=n_r,
                     meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r],
                     hard_fusion=[_hard_fusion()] + [a.hard_fusion[ii] for ii in axes[1]])
 
@@ -180,11 +184,14 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         meta = tuple((il+ir, il+il, il, il+ir) for il, ir in zip(ul, ur))
         n_l, n_r = None, a.struct.n
 
-    U = a.__class__(config=a.config, s=ls_l.s + (sU,), n=n_l,
+    Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
+    Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
+
+    U = a.__class__(config=a.config, s=Us, n=n_l,
                     meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
                     hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_hard_fusion()])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
-    V = a.__class__(config=a.config, s=(-sU,) + ls_r.s, n=n_r,
+    V = a.__class__(config=a.config, s=Vs, n=n_r,
                     meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r],
                     hard_fusion=[_hard_fusion()] + [a.hard_fusion[ii] for ii in axes[1]])
 
@@ -296,7 +303,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf,
     s_eff = (-sU, sU)
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
 
-    if _check["consistency"] and not (ul == ur and ls_l.match(ls_r)):
+    if _check["consistency"] and not (ul == ur and ls_l == ls_r):
         raise YastError(
             'Something went wrong in matching the indices of the two tensors')
 

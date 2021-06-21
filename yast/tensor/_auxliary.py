@@ -20,7 +20,6 @@ class _config(NamedTuple):
     default_device: str = 'cpu'
     default_dtype: str = 'float64'
 
-
 class _hard_fusion(NamedTuple):
     tree: tuple = (1,)
     s: tuple = ()
