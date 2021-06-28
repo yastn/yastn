@@ -193,6 +193,10 @@ def to_tensor(val, Ds=None, dtype='float64', **kwargs):
     return T if Ds is None else T.reshape(Ds)
 
 
+def to_mask(val):
+    return val.astype(bool).ravel()
+
+
 def square_matrix_from_dict(H, D=None, **kwargs):
     dtype = get_dtype(H.values())
     T = np.zeros((D, D), dtype=dtype)

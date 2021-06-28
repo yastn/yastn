@@ -6,6 +6,7 @@ from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
 from ._auxliary import _flatten, _tarray, _Darray, _hard_fusion, _unpack_axes, _clear_axes
+from ._controls import YastError
 
 
 __all__ = ['fuse_legs_hard', 'unfuse_legs_hard']
@@ -76,23 +77,107 @@ def _fuse_hfs(hfs, t_legs, D_legs, ss, axis=None):
     return _hard_fusion(tuple(treefl), tuple(sfl), tuple(msfl), tuple(tfl), tuple(Dfl))
 
 
-def _unfuse_leg_fusion(lf):
+def _merge_masks(config, ls, ms):
+    msk = {te: np.ones(D, dtype=bool) for te, D in ls.Dtot.items()}
+    nsym = config.sym.NSYM
+    for te, dec in ls.dec.items():
+        for t, Dr in dec.items():
+            x = ms[0][t[:config.sym.NSYM]]
+            for i in range(1, len(ms)):
+                x = np.outer(x, ms[i][t[i * nsym: (i + 1) * nsym]]).ravel()
+            msk[te][slice(*Dr.Dslc)] = x
+    return msk
+
+
+def _intersect_hfs(config, t1, D1, hf1, seff1, t2, D2, hf2, seff2):
+    """ returns mask1 mask2 for each teff """
+    if hf1.tree != hf2.tree:
+        raise YastError('merge order does not match')
+    teff = tuple(sorted((set(t1) & set(t2))))
+    if len(hf1.tree) == 1:
+        msk1 = {t: np.ones(D, dtype=bool) for t, D in zip(t1, D1) if t in teff}
+        msk2 = {t: np.ones(D, dtype=bool) for t, D in zip(t2, D2) if t in teff}
+        return msk1, msk2
+
+    s1 = [seff1] + list(hf1.s)
+    s2 = [seff2] + list(hf2.s)
+    t1 = [teff] + list(hf1.t)
+    t2 = [teff] + list(hf2.t)
+    D1 = [()] + list(hf1.D)
+    D2 = [()] + list(hf2.D)
+    msk1 = [{t: np.ones(D, dtype=bool) for t, D in zip(hf1.t[i], hf1.D[i])} for i, l in enumerate(hf1.tree[1:]) if l == 1]
+    msk2 = [{t: np.ones(D, dtype=bool) for t, D in zip(hf2.t[i], hf2.D[i])} for i, l in enumerate(hf2.tree[1:]) if l == 1]
+
+    for ms1, ms2 in zip(msk1, msk2):
+        for t in ms1:
+            if t in ms2 and ms1[t].size != ms2[t].size:
+                raise YastError('Mismatch of bond dimension of native legs for charge %s' %str(t))
+            if t not in ms2:
+                ms1[t] *= False
+        for t in ms2:
+            if t not in ms1:
+                ms2[t] *= False
+
+    tree = list(hf1.tree)
+    while len(tree) > 1:
+        leg, nlegs, count, parents, ltree = 0, 0, 1, [], -1
+        for cnt in tree:  # partisng tree to searhc for a group of legs to merge
+            ltree += 1
+            if cnt > 1:
+                nlegs = 0
+                count = cnt
+                parents.append(ltree)
+            else:
+                leg += 1
+                nlegs += 1
+                count -= 1
+            if count == 0:
+                break
+        for _ in range(nlegs):  # remove leaves
+            tree.pop(ltree - nlegs + 1)
+        for i in parents:
+            tree[i] -= nlegs - 1
+        ss1 = tuple(s1.pop(ltree - nlegs + 1) for _ in range(nlegs))
+        ss2 = tuple(s2.pop(ltree - nlegs + 1) for _ in range(nlegs))
+        tt1 = tuple(t1.pop(ltree - nlegs + 1) for _ in range(nlegs))
+        tt2 = tuple(t2.pop(ltree - nlegs + 1) for _ in range(nlegs))
+        DD1 = tuple(D1.pop(ltree - nlegs + 1) for _ in range(nlegs))
+        DD2 = tuple(D2.pop(ltree - nlegs + 1) for _ in range(nlegs))
+        ms1 = [msk1.pop(leg - nlegs) for _ in range(nlegs)]
+        ms2 = [msk2.pop(leg - nlegs) for _ in range(nlegs)]
+        ls1 = _leg_structure_combine_charges(config, tt1, DD1, t1[ltree - nlegs], s1[ltree - nlegs], ss1)
+        ls2 = _leg_structure_combine_charges(config, tt2, DD2, t2[ltree - nlegs], s2[ltree - nlegs], ss2)
+        m1 = _merge_masks(config, ls1, ms1)
+        m2 = _merge_masks(config, ls2, ms2)
+
+        for t in m1:
+            if t not in m2:
+                m1[t] *= False
+        for t in m2:
+            if t not in m1:
+                m2[t] *= False
+        msk1.insert(leg - nlegs, m1)
+        msk2.insert(leg - nlegs, m2)
+    return msk1.pop(), msk2.pop()
+
+
+def _unfuse_leg_fusion(hf):
     """ one layer of unfuse """
-    tt, DD, ss, lfs = [], [], [], []
+    tt, DD, ss, hfs = [], [], [], []
     n_init, cum = 1, 0
-    for n in range(1, len(lf.tree)):
+    for n in range(1, len(hf.tree)):
         if cum == 0:
-            cum = lf.tree[n]
-        if lf.tree[n] == 1:
+            cum = hf.tree[n]
+        if hf.tree[n] == 1:
             cum = cum - 1
             if cum == 0:
-                tt.append(lf.t[n_init - 1])
-                DD.append(lf.D[n_init - 1])
-                ss.append(lf.s[n_init - 1])
+                tt.append(hf.t[n_init - 1])
+                DD.append(hf.D[n_init - 1])
+                ss.append(hf.s[n_init - 1])
                 slc = slice(n_init, n)
-                lfs.append(_hard_fusion(lf.tree[n_init : n + 1], lf.s[slc], lf.ms[slc], lf.t[slc], lf.D[slc]))
+                hfs.append(_hard_fusion(hf.tree[n_init : n + 1], hf.s[slc], hf.ms[slc], hf.t[slc], hf.D[slc]))
                 n_init = n + 1
-    return tt, DD, ss, lfs
+    return tt, DD, ss, hfs
 
 
 def fuse_legs_hard(a, axes, inplace=False):

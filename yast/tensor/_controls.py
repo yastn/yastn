@@ -1,11 +1,8 @@
 """ Testing and controls. """
 import numpy as np
-from functools import lru_cache
-from . import _merging
 from ._auxliary import _flatten, _tarray
 
-__all__ = ['check_signatures_match', 'check_consistency', 'set_cache_maxsize', 'get_cache_info',
-           'are_independent', 'is_consistent']
+__all__ = ['check_signatures_match', 'check_consistency', 'are_independent', 'is_consistent']
 
 _check = {"signatures_match": True, "consistency": True}
 
@@ -21,15 +18,6 @@ def check_signatures_match(value=True):
 def check_consistency(value=True):
     """Set the value of the flag check_consistency."""
     _check["consistency"] = bool(value)
-
-
-def set_cache_maxsize(maxsize=0):
-    """Change maxsize of lru_cache to reuses some metadata."""
-    _merging._meta_merge_to_matrix = lru_cache(maxsize)(_merging._meta_merge_to_matrix.__wrapped__)
-
-
-def get_cache_info():
-    return _merging._meta_merge_to_matrix.cache_info()
 
 
 def _test_configs_match(a, b):

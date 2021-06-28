@@ -158,10 +158,49 @@ def test_merge_transpose():
     assert c.get_shape() == (3, 5, 9, 11, 7, 13)
 
 
+def test_dot_1_sparse():
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+                t=((0,), (0,), (-1, 0, 1), (-1, 0, 1)),
+                D=((2,), (5,), (7, 8, 9), (10, 11, 12)))
+    a.set_block(ts=(1, 1, 0, 0), Ds=(3, 6, 8, 11))
+    # a.set_block(ts=(-1, -1, 0, 0), Ds=(1, 4, 8, 11))
+
+
+    b = yast.rand(config=config_U1, s=(1, -1, -1, 1),
+                t=((-1, 0, 1), (-1, 0, 1), (-1, 0, 2), (-1, 0, 2)),
+                D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+
+
+    ab = yast.tensordot(a, b, axes=((0, 1, 2, 3), (0, 1, 2, 3)))
+
+    fa = yast.fuse_legs_hard(a, axes=(0, (1, 2), 3))
+    fb = yast.fuse_legs_hard(b, axes=(0, (1, 2), 3))
+    fab = yast.tensordot(fa, fb, axes=((0, 1, 2), (0, 1, 2)))
+
+    ffa = yast.fuse_legs_hard(fa, axes=((0, 1), 2))
+    ffb = yast.fuse_legs_hard(fb, axes=((0, 1), 2))
+    ffab = yast.tensordot(ffa, ffb, axes=((0, 1), (0, 1)))
+
+    fffa = yast.fuse_legs_hard(ffa, axes=((0, 1),))
+    fffb = yast.fuse_legs_hard(ffb, axes=((0, 1),))
+    fffab = yast.tensordot(fffa, fffb, axes=((0,), (0,)))
+
+    assert yast.norm_diff(ab, fab) < tol
+    assert yast.norm_diff(ab, ffab) < tol
+    assert yast.norm_diff(ab, fffab) < tol
+
+    ffa = yast.fuse_legs_hard(fa, axes= ((0, 2), 1))
+    ffb = yast.fuse_legs_hard(fb, axes= ((0, 2), 1))
+    ffab = yast.tensordot(ffa, ffb, axes=(0, 0))
+    ab = yast.tensordot(a, b, axes=((0, 3), (0, 3)))
+    uab = yast.unfuse_legs_hard(ffab, axes=(0, 1))
+    assert yast.norm_diff(ab, uab) < tol
+
 if __name__ == '__main__':
-    test_merge_split()
-    test_dot_1()
     test_dot_1_sparse()
-    test_dot_2()
-    test_merge_transpose()
-    test_merge_trace()
+    # test_merge_split()
+    # test_dot_1()
+    # test_dot_1_sparse()
+    # test_dot_2()
+    # test_merge_transpose()
+    # test_merge_trace()
