@@ -195,7 +195,7 @@ def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
 
 @torch.no_grad()
 def to_mask(val):
-    return val.bool().ravel()
+    return torch.as_tensor(val, dtype=torch.bool).ravel()
 
 
 def square_matrix_from_dict(H, D=None, device='cpu'):

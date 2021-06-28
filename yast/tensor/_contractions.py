@@ -90,6 +90,8 @@ def tensordot(a, b, axes, conj=(0, 0)):
             msk_b.append(mb)
         msk_a = _merge_masks(a.config, ls_ac, msk_a)
         msk_b = _merge_masks(b.config, ls_bc, msk_b)
+        msk_a = {t: a.config.backend.to_mask(x) for t, x in msk_a.items()}
+        msk_b = {t: a.config.backend.to_mask(x) for t, x in msk_b.items()}
         Am = {ul + ur: Am[ul + ur][:, msk_a[ur]] for ul, ur in zip(ua_l, ua_r)}
         Bm = {ul + ur: Bm[ul + ur][msk_b[ul]] for ul, ur in zip(ub_l, ub_r)}
 
