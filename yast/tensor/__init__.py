@@ -9,6 +9,7 @@ An instance of a Tensor is specified by a list of blocks (dense tensors) labeled
 import numpy as np
 from ._auxliary import _struct, _config, _hard_fusion
 from ._controls import *
+from ._controls_lru import *
 from ._controls import YastError
 from ._contractions import *
 from ._initialize import *
@@ -17,6 +18,7 @@ from ._single import *
 from ._merging import *
 from .linalg import *
 from . import _controls
+from . import _controls_lru
 from . import _contractions
 from . import _initialize
 from . import _output
@@ -27,6 +29,7 @@ __all__ = ['Tensor', 'linalg', 'YastError']
 __all__.extend(_initialize.__all__)
 __all__.extend(linalg.__all__)
 __all__.extend(_controls.__all__)
+__all__.extend(_controls_lru.__all__)
 __all__.extend(_contractions.__all__)
 __all__.extend(_single.__all__)
 __all__.extend(_output.__all__)
