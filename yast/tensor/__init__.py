@@ -8,7 +8,7 @@ An instance of a Tensor is specified by a list of blocks (dense tensors) labeled
 """
 import numpy as np
 from ._auxliary import _struct, _config
-from ._merging import _hard_fusion
+from ._merging import _Fusion
 from ._tests import YastError
 from ._tests import *
 from ._control_lru import *
@@ -98,7 +98,7 @@ class Tensor:
         try:
             self.hard_fusion = tuple(kwargs['hard_fusion'])
         except (KeyError, TypeError):
-            self.hard_fusion = tuple(_hard_fusion(s=(x,), ms=(-x,)) for x in s)
+            self.hard_fusion = tuple(_Fusion(s=(x,), ms=(-x,)) for x in s)
 
 
     from ._initialize import set_block, fill_tensor
@@ -106,14 +106,14 @@ class Tensor:
     from ._contractions import tensordot, vdot, trace, swap_gate
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, diag, absolute, sqrt, rsqrt, reciprocal, exp
     from ._single import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, remove_zero_blocks, add_leg
-    from ._single import copy, clone, detach, to, requires_grad_, real, imag, fuse_legs, unfuse_legs
+    from ._single import copy, clone, detach, to, requires_grad_, real, imag
     from ._output import export_to_dict, compress_to_1d, show_properties, __str__, print_blocks, is_complex
     from ._output import get_blocks_charges, get_leg_charges_and_dims, zero_of_dtype, item, __getitem__
     from ._output import get_blocks_shapes, get_leg_fusion, get_leg_structure, get_ndim, get_shape, get_signature, unique_dtype
     from ._output import get_size, get_tensor_charge, to_dense, to_nonsymmetric, to_number, to_numpy, to_raw_tensor
     from ._tests import is_consistent, are_independent
     from ._auxliary import update_struct
-    from ._merging import fuse_legs_hard, unfuse_legs_hard
+    from ._merging import fuse_legs_hard, unfuse_legs_hard, fuse_legs, unfuse_legs
 
     abs = absolute
 

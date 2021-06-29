@@ -2,12 +2,12 @@
 
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _Darray, _struct
-from ._merging import _hard_fusion, _flip_sign_hf
+from ._merging import _Fusion, _flip_sign_hf
 from ._tests import YastError, _test_configs_match, _test_tensors_match
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'remove_zero_blocks',
            'absolute', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'add_leg',
-           'copy', 'clone', 'detach', 'to', 'requires_grad_', 'fuse_legs', 'unfuse_legs']
+           'copy', 'clone', 'detach', 'to', 'requires_grad_']
 
 
 def copy(a):
@@ -509,87 +509,6 @@ def add_leg(a, axis=-1, s=1, t=None, inplace=False):
     c.A = {tnew: a.config.backend.expand_dims(c.A[told], axis) for tnew, told in zip(new_tset, a.struct.t)}
     c.struct = _struct(new_tset, new_Dset, news, newn)
     c.meta_fusion = new_meta_fusion
-    c.hard_fusion = c.hard_fusion[:axis] + (_hard_fusion(s=(s,), ms=(-s,)),) + c.hard_fusion[axis:]
+    c.hard_fusion = c.hard_fusion[:axis] + (_Fusion(s=(s,), ms=(-s,)),) + c.hard_fusion[axis:]
 
-    return c
-
-
-def fuse_legs(a, axes, inplace=False):
-    r"""
-    Permutes tensor legs. Next, fuse groups of consecutive legs into new meta legs.
-
-    Parameters
-    ----------
-    axes: tuple
-        tuple of leg's indices for transpose. Groups of legs to be fused together form inner tuples.
-
-    Returns
-    -------
-    tensor : Tensor
-
-    Example
-    -------
-    tensor.fuse_legs(axes=(2, 0, (1, 4), 3)) gives 4 efective legs from original 5; with one metaly non-trivial one
-    tensor.fuse_legs(axes=((2, 0), (1, 4), (3, 5))) gives 3 effective legs from original 6
-    """
-    if a.isdiag:
-        raise YastError('Cannot group legs of a diagonal tensor')
-
-    meta_fusion, order = [], []
-    for group in axes:
-        if isinstance(group, int):
-            order.append(group)
-            meta_fusion.append(a.meta_fusion[group])
-        else:
-            if not all(isinstance(x, int) for x in group):
-                raise YastError('Inner touples of axes can only contain integers')
-            order.extend(group)
-            nlegs = [sum(a.meta_fusion[ii][0] for ii in group)]
-            for ii in group:
-                nlegs.extend(a.meta_fusion[ii])
-            meta_fusion.append(tuple(nlegs))
-    order = tuple(order)
-    if inplace and order == tuple(ii for ii in range(a.mlegs)):
-        c = a
-    else:
-        c = a.transpose(axes=order, inplace=inplace)
-    c.meta_fusion = tuple(meta_fusion)
-    return c
-
-
-def unfuse_legs(a, axes, inplace=False):
-    """
-    Unfuse meta legs reverting one layer of fusion. Operation can be done in-place.
-
-    New legs are inserted in place of the unfused one.
-
-    Parameters
-    ----------
-    axis: int or tuple of ints
-        leg(s) to ungroup.
-
-    Returns
-    -------
-    tensor : Tensor
-    """
-    if isinstance(axes, int):
-        axes = (axes,)
-    c = a if inplace else a.clone()
-    new_meta_fusion = []
-    for ii in range(c.mlegs):
-        if ii not in axes or c.meta_fusion[ii][0] == 1:
-            new_meta_fusion.append(c.meta_fusion[ii])
-        else:
-            stack = c.meta_fusion[ii]
-            lstack = len(stack)
-            pos_init, cum = 1, 0
-            for pos in range(1, lstack):
-                if cum == 0:
-                    cum = stack[pos]
-                if stack[pos] == 1:
-                    cum = cum - 1
-                    if cum == 0:
-                        new_meta_fusion.append(stack[pos_init: pos + 1])
-                        pos_init = pos + 1
-    c.meta_fusion = tuple(new_meta_fusion)
     return c
