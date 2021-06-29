@@ -1,9 +1,9 @@
 """ Linear operations and operations on a single yast tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _Darray
-from ._auxliary import _struct, _hard_fusion, _flip_sign_hard_fusion
-from ._controls import YastError, _test_configs_match, _test_tensors_match
+from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _Darray, _struct
+from ._merging import _hard_fusion, _flip_sign_hf
+from ._tests import YastError, _test_configs_match, _test_tensors_match
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'remove_zero_blocks',
            'absolute', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'add_leg',
@@ -227,7 +227,7 @@ def conj(a, inplace=False):
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
-    new_hf = tuple(_flip_sign_hard_fusion(x) for x in a.hard_fusion)
+    new_hf = tuple(_flip_sign_hf(x) for x in a.hard_fusion)
     if inplace:
         c = a
         c.struct = struct
@@ -264,7 +264,7 @@ def flip_signature(a, inplace=False):
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
-    new_hf = tuple(_flip_sign_hard_fusion(x) for x in a.hard_fusion)
+    new_hf = tuple(_flip_sign_hf(x) for x in a.hard_fusion)
     if inplace:
         a.struct = struct
         a.hard_fusion = new_hf
@@ -509,7 +509,7 @@ def add_leg(a, axis=-1, s=1, t=None, inplace=False):
     c.A = {tnew: a.config.backend.expand_dims(c.A[told], axis) for tnew, told in zip(new_tset, a.struct.t)}
     c.struct = _struct(new_tset, new_Dset, news, newn)
     c.meta_fusion = new_meta_fusion
-    c.hard_fusion = c.hard_fusion[:axis] + (_hard_fusion(),) + c.hard_fusion[axis:]
+    c.hard_fusion = c.hard_fusion[:axis] + (_hard_fusion(s=(s,), ms=(-s,)),) + c.hard_fusion[axis:]
 
     return c
 

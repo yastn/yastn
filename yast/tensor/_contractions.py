@@ -1,9 +1,9 @@
 """ Contractions of yast tensors """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray, _flip_sign_hard_fusion
-from ._controls import YastError, _check, _test_configs_match, _test_fusions_match, _test_hard_fusion_match
-from ._merging import _merge_to_matrix, _unmerge_matrix, _intersect_hfs, _merge_masks
+from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray
+from ._tests import YastError, _check, _test_configs_match, _test_fusions_match, _test_hard_fusion_match
+from ._merging import _merge_to_matrix, _unmerge_matrix, _intersect_hfs, _merge_masks, _flip_sign_hf
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon']
 
@@ -47,18 +47,13 @@ def tensordot(a, b, axes, conj=(0, 0)):
     mconj = (-conja * conjb)
 
     if _check["signatures_match"] and not all(a.struct.s[i1] == mconj * b.struct.s[i2] for i1, i2 in zip(axes_a[1], axes_b[0])):
-        # if a.isdiag:  # if tensor is diagonal, than freely changes the signature by a factor of -1
-        #     a.flip_signature(inplace=True)
-        # elif b.isdiag:
-        #     b.flip_signature(inplace=True)
-        # elif _check["signatures_match"]:
         raise YastError('Signs do not match in tensordot')
 
     needs_mask = False
     for i1, i2 in zip(axes_a[1], axes_b[0]):
         if a.hard_fusion[i1].tree != b.hard_fusion[i2].tree:
             raise YastError('Order of hard fusions on leg %1d of a and leg %1d of b do not match' % (i1, i2))
-        if (mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms):
+        if _check["signatures_match"] and ((mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms)):
             raise YastError('Hard fusions do not match. Singnature problem.')
         if  a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
             needs_mask = True
@@ -77,7 +72,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
 
     if _check["consistency"] and not needs_mask and not (ua_r == ub_l and ls_ac == ls_bc):
-       raise YastError('Something went wrong in matching the indices of the two tensors')
+        raise YastError('Something went wrong in matching the indices of the two tensors')
 
 
     if needs_mask:
@@ -85,7 +80,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
         tlb, Dlb = b.get_leg_charges_and_dims(native=True)
         msk_a, msk_b = [], []
         for i1, i2 in zip(axes_a[1], axes_b[0]):
-            ma, mb = _intersect_hfs(a.config, tla[i1], Dla[i1], a.hard_fusion[i1], a.struct.s[i1], tlb[i2], Dlb[i2], b.hard_fusion[i2], b.struct.s[i2])
+            ma, mb = _intersect_hfs(a.config, tla[i1], Dla[i1], a.hard_fusion[i1], tlb[i2], Dlb[i2], b.hard_fusion[i2])
             msk_a.append(ma)
             msk_b.append(mb)
         msk_a = _merge_masks(a.config, ls_ac, msk_a)
@@ -98,9 +93,9 @@ def tensordot(a, b, axes, conj=(0, 0)):
     c_s = tuple(conja * a.struct.s[i1] for i1 in axes_a[0]) + tuple(conjb * b.struct.s[i2] for i2 in axes_b[1])
     c_meta_fusion = [a.meta_fusion[ii] for ii in la_out] + [b.meta_fusion[ii] for ii in lb_out]
     c_hard_fusion = [a.hard_fusion[ii] for ii in axes_a[0]] if conj[0] == 0 else \
-                    [_flip_sign_hard_fusion(a.hard_fusion[ii]) for ii in axes_a[0]]
+                    [_flip_sign_hf(a.hard_fusion[ii]) for ii in axes_a[0]]
     c_hard_fusion += [b.hard_fusion[ii] for ii in axes_b[1]] if conj[1] == 0 else \
-                    [_flip_sign_hard_fusion(b.hard_fusion[ii]) for ii in axes_b[1]]
+                    [_flip_sign_hf(b.hard_fusion[ii]) for ii in axes_b[1]]
     c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
 
     c.A = c.config.backend.dot(Am, Bm, conj, meta_dot)

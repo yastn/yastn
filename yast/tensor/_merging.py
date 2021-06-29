@@ -5,8 +5,8 @@ from itertools import groupby, product
 from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
-from ._auxliary import _flatten, _tarray, _Darray, _hard_fusion, _unpack_axes, _clear_axes
-from ._controls import YastError
+from ._auxliary import _flatten, _tarray, _Darray, _unpack_axes, _clear_axes
+from ._tests import YastError
 
 
 __all__ = ['fuse_legs_hard', 'unfuse_legs_hard']
@@ -25,9 +25,22 @@ class _DecRec(NamedTuple):
     Drsh: tuple = ()  # original shape of fused dims in a block
 
 
+class _hard_fusion(NamedTuple):
+    tree: tuple = (1,)
+    s: tuple = (1,)
+    ms: tuple = (-1,)  # minus s
+    t: tuple = ()
+    D: tuple = ()
+
+
+def _flip_sign_hf(x):
+    return x._replace(s=x.ms, ms=x.s)
+
+
 def _leg_structure_combine_charges(config, t_in, D_in, t_out, seff, slegs):
-    """ Auxilliary function that takes a combination of charges and dimensions on a number of legs,
-        and combines them into effective charges and dimensions.
+    """
+    Auxilliary function that takes a combination of charges and dimensions on a number of legs,
+    and combines them into effective charges and dimensions.
     """
     comb_t = tuple(product(*t_in))
     comb_t = np.array(comb_t, dtype=int).reshape((len(comb_t), len(slegs), config.sym.NSYM))
@@ -58,20 +71,18 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
     return _LegDec(dec, Dtot)
 
 
-def _fuse_hfs(hfs, t_legs, D_legs, ss, axis=None):
+def _fuse_hfs(hfs, t_legs, D_legs, seff, axis=None):
     """ Fuse _hard_fusions, including charges and dimensions present on the fused legs. """
     if axis is None:
         axis = list(range(len(hfs)))
-    tfl, Dfl, sfl, msfl = [], [], [], []
+    tfl, Dfl, sfl, msfl = [], [], [seff], [-seff]
     treefl = [sum(hfs[n].tree[0] for n in axis)]
     for n in axis:
         tfl.append(t_legs[n])
         tfl.extend(hfs[n].t)
         Dfl.append(D_legs[n])
         Dfl.extend(hfs[n].D)
-        sfl.append(ss[n])
         sfl.extend(hfs[n].s)
-        msfl.append(-ss[n])
         msfl.extend(hfs[n].ms)
         treefl.extend(hfs[n].tree)
     return _hard_fusion(tuple(treefl), tuple(sfl), tuple(msfl), tuple(tfl), tuple(Dfl))
@@ -89,7 +100,7 @@ def _merge_masks(config, ls, ms):
     return msk
 
 
-def _intersect_hfs(config, t1, D1, hf1, seff1, t2, D2, hf2, seff2):
+def _intersect_hfs(config, t1, D1, hf1, t2, D2, hf2):
     """ returns mask1 mask2 for each teff """
     if hf1.tree != hf2.tree:
         raise YastError('merge order does not match')
@@ -99,8 +110,8 @@ def _intersect_hfs(config, t1, D1, hf1, seff1, t2, D2, hf2, seff2):
         msk2 = {t: np.ones(D, dtype=bool) for t, D in zip(t2, D2) if t in teff}
         return msk1, msk2
 
-    s1 = [seff1] + list(hf1.s)
-    s2 = [seff2] + list(hf2.s)
+    s1 = list(hf1.s)
+    s2 = list(hf2.s)
     t1 = [teff] + list(hf1.t)
     t2 = [teff] + list(hf2.t)
     D1 = [()] + list(hf1.D)
@@ -173,9 +184,8 @@ def _unfuse_leg_fusion(hf):
             if cum == 0:
                 tt.append(hf.t[n_init - 1])
                 DD.append(hf.D[n_init - 1])
-                ss.append(hf.s[n_init - 1])
-                slc = slice(n_init, n)
-                hfs.append(_hard_fusion(hf.tree[n_init : n + 1], hf.s[slc], hf.ms[slc], hf.t[slc], hf.D[slc]))
+                ss.append(hf.s[n_init])
+                hfs.append(_hard_fusion(hf.tree[n_init : n + 1], hf.s[n_init : n + 1], hf.ms[n_init : n + 1], hf.t[n_init : n], hf.D[n_init : n]))
                 n_init = n + 1
     return tt, DD, ss, hfs
 
@@ -207,7 +217,7 @@ def fuse_legs_hard(a, axes, inplace=False):
             t_in = tuple(t_legs[n] for n in axis)
             D_in = tuple(D_legs[n] for n in axis)
             ls.append(_leg_structure_combine_charges(a.config, t_in, D_in, teff_set, news[-1], slegs[-1]))
-            fh.append(_fuse_hfs(a.hard_fusion, t_legs, D_legs, ss, axis))
+            fh.append(_fuse_hfs(a.hard_fusion, t_legs, D_legs, news[-1], axis))
             fm.append((1,))
     tset, Dset = _tarray(a), _Darray(a)
     teff = np.zeros((tset.shape[0], len(aaxes), tset.shape[2]), dtype=int)

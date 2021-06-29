@@ -2,8 +2,9 @@
 
 from itertools import chain, repeat, accumulate, product
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _flatten, _tarray, _flip_sign_hard_fusion
-from ._controls import YastError
+from ._auxliary import _clear_axes, _unpack_axes, _flatten, _tarray
+from ._merging import _flip_sign_hf
+from ._tests import YastError
 
 __all__ = ['match_legs', 'block']
 
@@ -217,7 +218,7 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
             t.append(tuple(tdn.keys()))
             D.append(tuple(tdn.values()))
             s.append(te.struct.s[nn] * (2 * cc - 1))
-            hf.append(te.hard_fusion[nf] if cc == 1 else _flip_sign_hard_fusion(te.hard_fusion[nf]))
+            hf.append(te.hard_fusion[nn] if cc == 1 else _flip_sign_hf(te.hard_fusion[nn]))
     a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, meta_fusion=lf, hard_fusion=hf)
     a.fill_tensor(t=t, D=D, val=val)
     return a
