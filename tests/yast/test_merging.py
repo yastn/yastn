@@ -198,9 +198,9 @@ def test_dot_1_sparse():
 
 if __name__ == '__main__':
     test_dot_1_sparse()
-    # test_merge_split()
-    # test_dot_1()
-    # test_dot_1_sparse()
-    # test_dot_2()
-    # test_merge_transpose()
-    # test_merge_trace()
+    test_merge_split()
+    test_dot_1()
+    test_dot_1_sparse()
+    test_dot_2()
+    test_merge_transpose()
+    test_merge_trace()

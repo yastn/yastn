@@ -20,17 +20,6 @@ class _config(NamedTuple):
     default_device: str = 'cpu'
     default_dtype: str = 'float64'
 
-class _hard_fusion(NamedTuple):
-    tree: tuple = (1,)
-    s: tuple = ()
-    ms: tuple = ()  # negated s
-    t: tuple = ()
-    D: tuple = ()
-
-
-def _flip_sign_hard_fusion(x):
-    return x._replace(s=x.ms, ms=x.s)
-
 
 def _flatten(nested_iterator):
     for item in nested_iterator:

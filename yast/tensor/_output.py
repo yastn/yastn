@@ -2,7 +2,7 @@
 
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray
-from ._controls import YastError, _check
+from ._tests import YastError, _check
 from ..sym import sym_none
 
 __all__ = ['export_to_dict', 'compress_to_1d', 'leg_structures_for_dense', 'requires_grad']

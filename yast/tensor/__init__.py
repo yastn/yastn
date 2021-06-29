@@ -7,18 +7,19 @@ In principle, any number of symmetries can be used (including no symmetries).
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
 import numpy as np
-from ._auxliary import _struct, _config, _hard_fusion
-from ._controls import *
-from ._controls_lru import *
-from ._controls import YastError
+from ._auxliary import _struct, _config
+from ._merging import _hard_fusion
+from ._tests import YastError
+from ._tests import *
+from ._control_lru import *
 from ._contractions import *
 from ._initialize import *
 from ._output import *
 from ._single import *
 from ._merging import *
 from .linalg import *
-from . import _controls
-from . import _controls_lru
+from . import _tests
+from . import _control_lru
 from . import _contractions
 from . import _initialize
 from . import _output
@@ -28,8 +29,8 @@ from . import _merging
 __all__ = ['Tensor', 'linalg', 'YastError']
 __all__.extend(_initialize.__all__)
 __all__.extend(linalg.__all__)
-__all__.extend(_controls.__all__)
-__all__.extend(_controls_lru.__all__)
+__all__.extend(_tests.__all__)
+__all__.extend(_control_lru.__all__)
 __all__.extend(_contractions.__all__)
 __all__.extend(_single.__all__)
 __all__.extend(_output.__all__)
@@ -97,7 +98,7 @@ class Tensor:
         try:
             self.hard_fusion = tuple(kwargs['hard_fusion'])
         except (KeyError, TypeError):
-            self.hard_fusion = (_hard_fusion(),) * len(s)
+            self.hard_fusion = tuple(_hard_fusion(s=(x,), ms=(-x,)) for x in s)
 
 
     from ._initialize import set_block, fill_tensor
@@ -110,7 +111,7 @@ class Tensor:
     from ._output import get_blocks_charges, get_leg_charges_and_dims, zero_of_dtype, item, __getitem__
     from ._output import get_blocks_shapes, get_leg_fusion, get_leg_structure, get_ndim, get_shape, get_signature, unique_dtype
     from ._output import get_size, get_tensor_charge, to_dense, to_nonsymmetric, to_number, to_numpy, to_raw_tensor
-    from ._controls import is_consistent, are_independent
+    from ._tests import is_consistent, are_independent
     from ._auxliary import update_struct
     from ._merging import fuse_legs_hard, unfuse_legs_hard
 
