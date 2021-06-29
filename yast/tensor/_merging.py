@@ -9,7 +9,7 @@ from ._auxliary import _flatten, _tarray, _Darray, _unpack_axes, _clear_axes
 from ._tests import YastError
 
 
-__all__ = ['fuse_legs_hard', 'unfuse_legs_hard']
+__all__ = ['fuse_legs_hard', 'unfuse_legs_hard', 'fuse_legs', 'unfuse_legs']
 
 
 class _LegDec(NamedTuple):
@@ -25,28 +25,27 @@ class _DecRec(NamedTuple):
     Drsh: tuple = ()  # original shape of fused dims in a block
 
 
-class _hard_fusion(NamedTuple):
-    tree: tuple = (1,)
-    s: tuple = (1,)
+class _Fusion(NamedTuple):
+    """ Information identifying the structure of hard fusion"""
+    tree: tuple = (1,)  # order of fusions
+    s: tuple = (1,)  # signatures len(s) = len(tree)
     ms: tuple = (-1,)  # minus s
-    t: tuple = ()
-    D: tuple = ()
+    t: tuple = ()  # fused leg charges at each step len(t) = len(tree) - 1
+    D: tuple = ()  # fused dimensions  at each step len(t) = len(tree) - 1
 
 
 def _flip_sign_hf(x):
+    """ _Fusion with fliped signature. """
     return x._replace(s=x.ms, ms=x.s)
 
-
-def _leg_structure_combine_charges(config, t_in, D_in, t_out, seff, slegs):
-    """
-    Auxilliary function that takes a combination of charges and dimensions on a number of legs,
-    and combines them into effective charges and dimensions.
-    """
+@lru_cache(maxsize=1024)
+def _leg_structure_combine_charges(config, t_in, D_in, s_in, t_out, s_out):
+    """ Combine effectibe charges and dimensions from a list of charges and dimensions for a few legs. """
     comb_t = tuple(product(*t_in))
-    comb_t = np.array(comb_t, dtype=int).reshape((len(comb_t), len(slegs), config.sym.NSYM))
+    comb_t = np.array(comb_t, dtype=int).reshape((len(comb_t), len(s_in), config.sym.NSYM))
     comb_D = tuple(product(*D_in))
-    comb_D = np.array(comb_D, dtype=int).reshape((len(comb_D), len(slegs)))
-    teff = config.sym.fuse(comb_t, slegs, seff)
+    comb_D = np.array(comb_D, dtype=int).reshape((len(comb_D), len(s_in)))
+    teff = config.sym.fuse(comb_t, s_in, s_out)
     ind = np.array([ii for ii, te in enumerate(teff) if tuple(te.flat) in t_out], dtype=int)
     comb_D, comb_t, teff = comb_D[ind], comb_t[ind], teff[ind]
     Deff = tuple(np.prod(comb_D, axis=1))
@@ -71,21 +70,21 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
     return _LegDec(dec, Dtot)
 
 
-def _fuse_hfs(hfs, t_legs, D_legs, seff, axis=None):
-    """ Fuse _hard_fusions, including charges and dimensions present on the fused legs. """
+def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
+    """ Fuse _Fusion(s), including charges and dimensions present on the fused legs. """
     if axis is None:
         axis = list(range(len(hfs)))
-    tfl, Dfl, sfl, msfl = [], [], [seff], [-seff]
+    tfl, Dfl, sfl, msfl = [], [], [s_out], [-s_out]
     treefl = [sum(hfs[n].tree[0] for n in axis)]
     for n in axis:
-        tfl.append(t_legs[n])
+        tfl.append(t_in[n])
         tfl.extend(hfs[n].t)
-        Dfl.append(D_legs[n])
+        Dfl.append(D_in[n])
         Dfl.extend(hfs[n].D)
         sfl.extend(hfs[n].s)
         msfl.extend(hfs[n].ms)
         treefl.extend(hfs[n].tree)
-    return _hard_fusion(tuple(treefl), tuple(sfl), tuple(msfl), tuple(tfl), tuple(Dfl))
+    return _Fusion(tuple(treefl), tuple(sfl), tuple(msfl), tuple(tfl), tuple(Dfl))
 
 
 def _merge_masks(config, ls, ms):
@@ -100,79 +99,86 @@ def _merge_masks(config, ls, ms):
     return msk
 
 
-def _intersect_hfs(config, t1, D1, hf1, t2, D2, hf2):
-    """ returns mask1 mask2 for each teff """
-    if hf1.tree != hf2.tree:
-        raise YastError('merge order does not match')
-    teff = tuple(sorted((set(t1) & set(t2))))
-    if len(hf1.tree) == 1:
-        msk1 = {t: np.ones(D, dtype=bool) for t, D in zip(t1, D1) if t in teff}
-        msk2 = {t: np.ones(D, dtype=bool) for t, D in zip(t2, D2) if t in teff}
-        return msk1, msk2
+def _masks_for_tensordot(config, tla, Dla, hfa, axa, lsa, tlb, Dlb, hfb, axb, lsb):
+    msk_a, msk_b = [], []
+    for i1, i2 in zip(axa, axb):
+        ma, mb = _intersect_hfs(config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (hfa[i1], hfb[i2]))
+        msk_a.append(ma)
+        msk_b.append(mb)
+    msk_a = _merge_masks(config, lsa, msk_a)
+    msk_b = _merge_masks(config, lsb, msk_b)
+    msk_a = {t: config.backend.to_mask(x) for t, x in msk_a.items()}
+    msk_b = {t: config.backend.to_mask(x) for t, x in msk_b.items()}
+    return msk_a, msk_b
 
-    s1 = list(hf1.s)
-    s2 = list(hf2.s)
-    t1 = [teff] + list(hf1.t)
-    t2 = [teff] + list(hf2.t)
-    D1 = [()] + list(hf1.D)
-    D2 = [()] + list(hf2.D)
-    msk1 = [{t: np.ones(D, dtype=bool) for t, D in zip(hf1.t[i], hf1.D[i])} for i, l in enumerate(hf1.tree[1:]) if l == 1]
-    msk2 = [{t: np.ones(D, dtype=bool) for t, D in zip(hf2.t[i], hf2.D[i])} for i, l in enumerate(hf2.tree[1:]) if l == 1]
 
-    for ms1, ms2 in zip(msk1, msk2):
-        for t in ms1:
-            if t in ms2 and ms1[t].size != ms2[t].size:
+def _mask_falsify_mismatches(ms1, ms2):
+    """ Multiply masks by False for indices that are not in both dictionaries ms1 and ms2. """
+    set1, set2 = set(ms1), set(ms2)
+    for t in set1 - set2:
+        ms1[t] *= False
+    for t in set2 - set1:
+        ms2[t] *= False
+    return ms1, ms2
+
+
+@lru_cache(maxsize=1024)
+def _intersect_hfs(config, ts, Ds, hfs):
+    """
+    Returns mask1 and mask2, finding common leg indices for each teff. 
+    Consumes fusion trees from the bottom, identifying common elements and building the masks.
+    """
+    if hfs[0].tree != hfs[1].tree:
+        raise YastError('Orders of merges do not match. ')
+    teff = tuple(sorted((set(ts[0]) & set(ts[1]))))
+
+    tree = list(hfs[0].tree)
+    if len(tree) == 1:
+        msks = [[{t: np.ones(D, dtype=bool) for t, D in zip(ts[n], Ds[n]) if t in teff}] for n in (0, 1)]
+    else:
+        msks = [[{t: np.ones(D, dtype=bool) for t, D in zip(hf.t[i], hf.D[i])} for i, l in enumerate(tree[1:]) if l == 1] for hf in hfs]
+
+    for ms1, ms2 in zip(*msks):
+        for t in set(ms1) & set(ms2):
+            if ms1[t].size != ms2[t].size:
                 raise YastError('Mismatch of bond dimension of native legs for charge %s' %str(t))
-            if t not in ms2:
-                ms1[t] *= False
-        for t in ms2:
-            if t not in ms1:
-                ms2[t] *= False
+        _mask_falsify_mismatches(ms1, ms2)
 
-    tree = list(hf1.tree)
+    if len(tree) == 1:
+        return msks[0].pop(), msks[1].pop()
+
+    s = [list(hf.s) for hf in hfs]  # to be consumed during parsing of the tree
+    t = [[teff] + list(hf.t) for hf in hfs]  # to be consumed during parsing of the tree
+    D = [[()] + list(hf.D) for hf in hfs]  # to be consumed during parsing of the tree
     while len(tree) > 1:
         leg, nlegs, count, parents, ltree = 0, 0, 1, [], -1
         for cnt in tree:  # partisng tree to searhc for a group of legs to merge
             ltree += 1
             if cnt > 1:
-                nlegs = 0
-                count = cnt
+                nlegs, count = 0, cnt
                 parents.append(ltree)
             else:
-                leg += 1
-                nlegs += 1
-                count -= 1
+                leg, nlegs, count = leg + 1, nlegs + 1, count - 1
             if count == 0:
                 break
         for _ in range(nlegs):  # remove leaves
             tree.pop(ltree - nlegs + 1)
         for i in parents:
             tree[i] -= nlegs - 1
-        ss1 = tuple(s1.pop(ltree - nlegs + 1) for _ in range(nlegs))
-        ss2 = tuple(s2.pop(ltree - nlegs + 1) for _ in range(nlegs))
-        tt1 = tuple(t1.pop(ltree - nlegs + 1) for _ in range(nlegs))
-        tt2 = tuple(t2.pop(ltree - nlegs + 1) for _ in range(nlegs))
-        DD1 = tuple(D1.pop(ltree - nlegs + 1) for _ in range(nlegs))
-        DD2 = tuple(D2.pop(ltree - nlegs + 1) for _ in range(nlegs))
-        ms1 = [msk1.pop(leg - nlegs) for _ in range(nlegs)]
-        ms2 = [msk2.pop(leg - nlegs) for _ in range(nlegs)]
-        ls1 = _leg_structure_combine_charges(config, tt1, DD1, t1[ltree - nlegs], s1[ltree - nlegs], ss1)
-        ls2 = _leg_structure_combine_charges(config, tt2, DD2, t2[ltree - nlegs], s2[ltree - nlegs], ss2)
-        m1 = _merge_masks(config, ls1, ms1)
-        m2 = _merge_masks(config, ls2, ms2)
-
-        for t in m1:
-            if t not in m2:
-                m1[t] *= False
-        for t in m2:
-            if t not in m1:
-                m2[t] *= False
-        msk1.insert(leg - nlegs, m1)
-        msk2.insert(leg - nlegs, m2)
-    return msk1.pop(), msk2.pop()
+        ss = [tuple(s1.pop(ltree - nlegs + 1) for _ in range(nlegs)) for s1 in s]
+        tt = [tuple(t1.pop(ltree - nlegs + 1) for _ in range(nlegs)) for t1 in t]
+        DD = [tuple(D1.pop(ltree - nlegs + 1) for _ in range(nlegs)) for D1 in D]
+        lss = [_leg_structure_combine_charges(config, tt1, DD1, ss1, t1[ltree - nlegs], s1[ltree - nlegs])
+                for tt1, DD1, ss1, t1, s1 in zip(tt, DD, ss, t, s)]
+        mss = [[msk.pop(leg - nlegs) for _ in range(nlegs)] for msk in msks]
+        ma = [_merge_masks(config, ls1, ms1) for ls1, ms1 in zip(lss, mss)]
+        _mask_falsify_mismatches(ma[0], ma[1])
+        msks[0].insert(leg - nlegs, ma[0])
+        msks[1].insert(leg - nlegs, ma[1])
+    return msks[0].pop(), msks[1].pop()
 
 
-def _unfuse_leg_fusion(hf):
+def _unfuse_Fusion(hf):
     """ one layer of unfuse """
     tt, DD, ss, hfs = [], [], [], []
     n_init, cum = 1, 0
@@ -185,9 +191,9 @@ def _unfuse_leg_fusion(hf):
                 tt.append(hf.t[n_init - 1])
                 DD.append(hf.D[n_init - 1])
                 ss.append(hf.s[n_init])
-                hfs.append(_hard_fusion(hf.tree[n_init : n + 1], hf.s[n_init : n + 1], hf.ms[n_init : n + 1], hf.t[n_init : n], hf.D[n_init : n]))
+                hfs.append(_Fusion(hf.tree[n_init : n + 1], hf.s[n_init : n + 1], hf.ms[n_init : n + 1], hf.t[n_init : n], hf.D[n_init : n]))
                 n_init = n + 1
-    return tt, DD, ss, hfs
+    return tuple(tt), tuple(DD), tuple(ss), hfs
 
 
 def fuse_legs_hard(a, axes, inplace=False):
@@ -213,10 +219,10 @@ def fuse_legs_hard(a, axes, inplace=False):
             fm.append(a.meta_fusion[axis])
         else:
             teff_set = a.config.sym.fuse(tset[:, aaxis, :], slegs[-1], news[-1])
-            teff_set = set(tuple(x.flat) for x in teff_set)
+            teff_set = tuple(set(tuple(x.flat) for x in teff_set))
             t_in = tuple(t_legs[n] for n in axis)
             D_in = tuple(D_legs[n] for n in axis)
-            ls.append(_leg_structure_combine_charges(a.config, t_in, D_in, teff_set, news[-1], slegs[-1]))
+            ls.append(_leg_structure_combine_charges(a.config, t_in, D_in, tuple(slegs[-1]), teff_set, news[-1]))
             fh.append(_fuse_hfs(a.hard_fusion, t_legs, D_legs, news[-1], axis))
             fm.append((1,))
     tset, Dset = _tarray(a), _Darray(a)
@@ -259,10 +265,10 @@ def unfuse_legs_hard(a, axes, inplace=False):
     ls, fh, fm, news = [], [], [], []
     for n in range(a.nlegs):
         if n in axes:
-            t_in, D_in, slegs, lfs = _unfuse_leg_fusion(a.hard_fusion[n])
-            ls.append(_leg_structure_combine_charges(a.config, t_in, D_in, t_legs[n], ss[n], slegs))
-            fh.extend(lfs)
-            fm.extend([(1,)] * len(lfs))
+            t_in, D_in, slegs, hfs = _unfuse_Fusion(a.hard_fusion[n])
+            ls.append(_leg_structure_combine_charges(a.config, t_in, D_in, slegs, t_legs[n], ss[n]))
+            fh.extend(hfs)
+            fm.extend([(1,)] * len(hfs))
             news.extend(slegs)
         else:
             dec = {t: {t: _DecRec((0, D), D, (D,))} for t, D in zip(t_legs[n], D_legs[n])}
@@ -406,3 +412,84 @@ def _unmerge_diagonal(a, ls):
     a.A = a.config.backend.unmerge_from_diagonal(a.A, meta)
     a.A = {ind: a.config.backend.diag_create(x) for ind, x in a.A.items()}
     a.update_struct()
+
+
+def fuse_legs(a, axes, inplace=False):
+    r"""
+    Permutes tensor legs. Next, fuse groups of consecutive legs into new meta legs.
+
+    Parameters
+    ----------
+    axes: tuple
+        tuple of leg's indices for transpose. Groups of legs to be fused together form inner tuples.
+
+    Returns
+    -------
+    tensor : Tensor
+
+    Example
+    -------
+    tensor.fuse_legs(axes=(2, 0, (1, 4), 3)) gives 4 efective legs from original 5; with one metaly non-trivial one
+    tensor.fuse_legs(axes=((2, 0), (1, 4), (3, 5))) gives 3 effective legs from original 6
+    """
+    if a.isdiag:
+        raise YastError('Cannot group legs of a diagonal tensor')
+
+    meta_fusion, order = [], []
+    for group in axes:
+        if isinstance(group, int):
+            order.append(group)
+            meta_fusion.append(a.meta_fusion[group])
+        else:
+            if not all(isinstance(x, int) for x in group):
+                raise YastError('Inner touples of axes can only contain integers')
+            order.extend(group)
+            nlegs = [sum(a.meta_fusion[ii][0] for ii in group)]
+            for ii in group:
+                nlegs.extend(a.meta_fusion[ii])
+            meta_fusion.append(tuple(nlegs))
+    order = tuple(order)
+    if inplace and order == tuple(ii for ii in range(a.mlegs)):
+        c = a
+    else:
+        c = a.transpose(axes=order, inplace=inplace)
+    c.meta_fusion = tuple(meta_fusion)
+    return c
+
+
+def unfuse_legs(a, axes, inplace=False):
+    """
+    Unfuse meta legs reverting one layer of fusion. Operation can be done in-place.
+
+    New legs are inserted in place of the unfused one.
+
+    Parameters
+    ----------
+    axis: int or tuple of ints
+        leg(s) to ungroup.
+
+    Returns
+    -------
+    tensor : Tensor
+    """
+    if isinstance(axes, int):
+        axes = (axes,)
+    c = a if inplace else a.clone()
+    new_meta_fusion = []
+    for ii in range(c.mlegs):
+        if ii not in axes or c.meta_fusion[ii][0] == 1:
+            new_meta_fusion.append(c.meta_fusion[ii])
+        else:
+            stack = c.meta_fusion[ii]
+            lstack = len(stack)
+            pos_init, cum = 1, 0
+            for pos in range(1, lstack):
+                if cum == 0:
+                    cum = stack[pos]
+                if stack[pos] == 1:
+                    cum = cum - 1
+                    if cum == 0:
+                        new_meta_fusion.append(stack[pos_init: pos + 1])
+                        pos_init = pos + 1
+    c.meta_fusion = tuple(new_meta_fusion)
+    return c

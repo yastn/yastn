@@ -3,7 +3,7 @@
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray
 from ._tests import YastError, _check, _test_configs_match, _test_fusions_match, _test_hard_fusion_match
-from ._merging import _merge_to_matrix, _unmerge_matrix, _intersect_hfs, _merge_masks, _flip_sign_hf
+from ._merging import _merge_to_matrix, _unmerge_matrix, _masks_for_tensordot, _flip_sign_hf
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon']
 
@@ -78,15 +78,8 @@ def tensordot(a, b, axes, conj=(0, 0)):
     if needs_mask:
         tla, Dla = a.get_leg_charges_and_dims(native=True)
         tlb, Dlb = b.get_leg_charges_and_dims(native=True)
-        msk_a, msk_b = [], []
-        for i1, i2 in zip(axes_a[1], axes_b[0]):
-            ma, mb = _intersect_hfs(a.config, tla[i1], Dla[i1], a.hard_fusion[i1], tlb[i2], Dlb[i2], b.hard_fusion[i2])
-            msk_a.append(ma)
-            msk_b.append(mb)
-        msk_a = _merge_masks(a.config, ls_ac, msk_a)
-        msk_b = _merge_masks(b.config, ls_bc, msk_b)
-        msk_a = {t: a.config.backend.to_mask(x) for t, x in msk_a.items()}
-        msk_b = {t: a.config.backend.to_mask(x) for t, x in msk_b.items()}
+        msk_a, msk_b = _masks_for_tensordot(a.config, tla, Dla, a.hard_fusion, axes_a[1], ls_ac,
+                                                        tlb, Dlb, b.hard_fusion, axes_b[0], ls_bc)
         Am = {ul + ur: Am[ul + ur][:, msk_a[ur]] for ul, ur in zip(ua_l, ua_r)}
         Bm = {ul + ur: Bm[ul + ur][msk_b[ul]] for ul, ur in zip(ub_l, ub_r)}
 

@@ -16,88 +16,6 @@ def test_merge_trace():
     assert yast.norm_diff(tra, traf) < tol
 
 
-def test_dot_1():
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-
-    b = yast.rand(config=config_U1, s=(1, -1, 1),
-                  t=((-1, 1, 2), (-1, 1, 2), (-1, 0, 1)),
-                  D=((1, 2, 3), (4, 5, 6), (10, 7, 11)))
-
-    bb = yast.fuse_legs_hard(b, axes=((0, 1), 2))
-    aa =  yast.fuse_legs_hard(a, axes=((0, 1), 2, 3))
-
-    aaa = yast.unfuse_legs_hard(aa, axes=0)
-    bbb = yast.unfuse_legs_hard(bb, axes=0)
-
-    c = yast.tensordot(a, b, axes=((0, 1), (0, 1)))
-    cc = yast.tensordot(aa, bb, axes=(0, 0))
-
-
-    assert yast.norm_diff(c, cc) < tol
-    assert yast.norm_diff(a, aaa) < tol
-    assert yast.norm_diff(b, bbb) < tol
-
-
-def test_dot_1_sparse():
-    a = yast.Tensor(config=config_U1, s=(-1, 1, 1, -1), n=-2)
-    a.set_block(ts=(2, 1, 0, 1), Ds=(2, 1, 5, 3), val='rand')
-    a.set_block(ts=(1, 1, -1, 1), Ds=(1, 1, 6, 3), val='rand')
-    a.set_block(ts=(1, 2, -1, 2), Ds=(1, 2, 6, 4), val='rand')
-
-    b = yast.Tensor(config=config_U1, s=(-1, 1, 1, -1), n=1)
-    b.set_block(ts=(1, 2, 0, 0), Ds=(1, 2, 4, 4), val='rand')
-    b.set_block(ts=(1, 1, 1, 0), Ds=(1, 1, 3, 4), val='rand')
-    b.set_block(ts=(2, 2, 1, 0), Ds=(2, 2, 3, 4), val='rand')
-
-    aa = yast.fuse_legs_hard(a, axes=((1, 0), 2, 3))
-    bb = yast.fuse_legs_hard(b, axes=((1, 0), 2, 3))
-    xx = yast.match_legs([aa, aa], legs=[0, 0], conjs=[1, 0], val='rand')
-    yast.tensordot(xx, aa, axes=(1, 0))
-    yast.tensordot(xx, aa, axes=(0, 0), conj = (1, 0))
-
-    c = yast.tensordot(a, b, axes=((0, 1), (0, 1)), conj=(1, 0))
-    cc = yast.tensordot(aa, bb, axes=(0, 0), conj=(1, 0))
-    assert yast.norm_diff(c, cc) < tol
-
-    aaa = yast.unfuse_legs_hard(aa, axes=0).transpose(axes=(1, 0, 2, 3))
-    bbb = yast.unfuse_legs_hard(bb, axes=0).transpose(axes=(1, 0, 2, 3))
-    assert yast.norm_diff(a, aaa) < tol
-    assert yast.norm_diff(b, bbb) < tol
-
-
-def test_dot_2():
-    t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
-    t2 = [(0, 0), (0, 2), (1, 0), (1, 2)]
-    a = yast.rand(config=config_Z2_U1, s=(-1, 1, 1, -1, -1),
-                  t=(t1, t1, t2, t2, t2),
-                  D=((1, 2, 2, 4), (9, 4, 3, 2), (7, 8, 9, 10), (5, 6, 7, 8), (1, 2, 2, 4)))
-    b = yast.rand(config=config_Z2_U1, s=(1, -1, 1, 1),
-                  t=(t1, t1, t2, t2),
-                  D=((1, 2, 2, 4), (9, 4, 3, 2), (1, 2, 2, 4), (5, 6, 7, 8)))
-
-    aa = yast.fuse_legs_hard(a, axes=((0, 3), (4, 1), 2))
-    bb = yast.fuse_legs_hard(b, axes=((0, 3), (2, 1)))
-
-    c = yast.tensordot(a, b, axes=((0, 1, 3, 4), (0, 1, 3, 2)))
-    cc = yast.tensordot(aa, bb, axes=((0, 1), (0, 1)))
-    assert yast.norm_diff(c, cc) < tol
-
-    aaa = yast.unfuse_legs_hard(aa, axes=(0, 1)).transpose(axes=(0, 3, 4, 1, 2))
-    assert yast.norm_diff(a, aaa) < tol
-    bbb = yast.unfuse_legs_hard(bb, axes=0)
-    bbb = yast.unfuse_legs_hard(bbb, axes=2).transpose(axes=(0, 3, 2, 1))
-    assert yast.norm_diff(b, bbb) < tol
-
-    aa = yast.fuse_legs_hard(aa, axes=(0, (1, 2)))
-    aa = yast.fuse_legs_hard(aa, axes=[(0, 1)])
-    aaa = yast.unfuse_legs_hard(aa, axes=0)
-    aaa = yast.unfuse_legs_hard(aaa, axes=1)
-    aaa = yast.unfuse_legs_hard(aaa, axes=(0, 1)).transpose(axes=(0, 3, 4, 1, 2))
-    assert yast.norm_diff(a, aaa) < tol
-
-
 def test_merge_split():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
@@ -158,18 +76,98 @@ def test_merge_transpose():
     assert c.get_shape() == (3, 5, 9, 11, 7, 13)
 
 
+def test_dot_2():
+    t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
+    t2 = [(0, 0), (0, 2), (1, 0), (1, 2)]
+    a = yast.rand(config=config_Z2_U1, s=(-1, 1, 1, -1, -1),
+                  t=(t1, t1, t2, t2, t2),
+                  D=((1, 2, 2, 4), (9, 4, 3, 2), (7, 8, 9, 10), (5, 6, 7, 8), (1, 2, 2, 4)))
+    b = yast.rand(config=config_Z2_U1, s=(1, -1, 1, 1),
+                  t=(t1, t1, t2, t2),
+                  D=((1, 2, 2, 4), (9, 4, 3, 2), (1, 2, 2, 4), (5, 6, 7, 8)))
+
+    aa = yast.fuse_legs_hard(a, axes=((0, 3), (4, 1), 2))
+    bb = yast.fuse_legs_hard(b, axes=((0, 3), (2, 1)))
+
+    c = yast.tensordot(a, b, axes=((0, 1, 3, 4), (0, 1, 3, 2)))
+    cc = yast.tensordot(aa, bb, axes=((0, 1), (0, 1)))
+    assert yast.norm_diff(c, cc) < tol
+
+    aaa = yast.unfuse_legs_hard(aa, axes=(0, 1)).transpose(axes=(0, 3, 4, 1, 2))
+    assert yast.norm_diff(a, aaa) < tol
+    bbb = yast.unfuse_legs_hard(bb, axes=0)
+    bbb = yast.unfuse_legs_hard(bbb, axes=2).transpose(axes=(0, 3, 2, 1))
+    assert yast.norm_diff(b, bbb) < tol
+
+    aa = yast.fuse_legs_hard(aa, axes=(0, (1, 2)))
+    aa = yast.fuse_legs_hard(aa, axes=[(0, 1)])
+    aaa = yast.unfuse_legs_hard(aa, axes=0)
+    aaa = yast.unfuse_legs_hard(aaa, axes=1)
+    aaa = yast.unfuse_legs_hard(aaa, axes=(0, 1)).transpose(axes=(0, 3, 4, 1, 2))
+    assert yast.norm_diff(a, aaa) < tol
+
+
+def test_dot_1():
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+
+    b = yast.rand(config=config_U1, s=(1, -1, 1),
+                  t=((-1, 1, 2), (-1, 1, 2), (-1, 0, 1)),
+                  D=((1, 2, 3), (4, 5, 6), (10, 7, 11)))
+
+    bb = yast.fuse_legs_hard(b, axes=((0, 1), 2))
+    aa =  yast.fuse_legs_hard(a, axes=((0, 1), 2, 3))
+
+    aaa = yast.unfuse_legs_hard(aa, axes=0)
+    bbb = yast.unfuse_legs_hard(bb, axes=0)
+
+    c = yast.tensordot(a, b, axes=((0, 1), (0, 1)))
+    cc = yast.tensordot(aa, bb, axes=(0, 0))
+
+
+    assert yast.norm_diff(c, cc) < tol
+    assert yast.norm_diff(a, aaa) < tol
+    assert yast.norm_diff(b, bbb) < tol
+
+
 def test_dot_1_sparse():
+    a = yast.Tensor(config=config_U1, s=(-1, 1, 1, -1), n=-2)
+    a.set_block(ts=(2, 1, 0, 1), Ds=(2, 1, 5, 3), val='rand')
+    a.set_block(ts=(1, 1, -1, 1), Ds=(1, 1, 6, 3), val='rand')
+    a.set_block(ts=(1, 2, -1, 2), Ds=(1, 2, 6, 4), val='rand')
+
+    b = yast.Tensor(config=config_U1, s=(-1, 1, 1, -1), n=1)
+    b.set_block(ts=(1, 2, 0, 0), Ds=(1, 2, 4, 4), val='rand')
+    b.set_block(ts=(1, 1, 1, 0), Ds=(1, 1, 3, 4), val='rand')
+    b.set_block(ts=(2, 2, 1, 0), Ds=(2, 2, 3, 4), val='rand')
+
+    aa = yast.fuse_legs_hard(a, axes=((1, 0), 2, 3))
+    bb = yast.fuse_legs_hard(b, axes=((1, 0), 2, 3))
+    xx = yast.match_legs([aa, aa], legs=[0, 0], conjs=[1, 0], val='rand')
+    yast.tensordot(xx, aa, axes=(1, 0))
+    yast.tensordot(xx, aa, axes=(0, 0), conj = (1, 0))
+
+    c = yast.tensordot(a, b, axes=((0, 1), (0, 1)), conj=(1, 0))
+    cc = yast.tensordot(aa, bb, axes=(0, 0), conj=(1, 0))
+    assert yast.norm_diff(c, cc) < tol
+
+    aaa = yast.unfuse_legs_hard(aa, axes=0).transpose(axes=(1, 0, 2, 3))
+    bbb = yast.unfuse_legs_hard(bb, axes=0).transpose(axes=(1, 0, 2, 3))
+    assert yast.norm_diff(a, aaa) < tol
+    assert yast.norm_diff(b, bbb) < tol
+
+
+def test_dot_1_super_sparse():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                 t=((0,), (0,), (-1, 0, 1), (-1, 0, 1)),
                 D=((2,), (5,), (7, 8, 9), (10, 11, 12)))
     a.set_block(ts=(1, 1, 0, 0), Ds=(3, 6, 8, 11))
     # a.set_block(ts=(-1, -1, 0, 0), Ds=(1, 4, 8, 11))
 
-
     b = yast.rand(config=config_U1, s=(1, -1, -1, 1),
-                t=((-1, 0, 1), (-1, 0, 1), (-1, 0, 2), (-1, 0, 2)),
+                t=((-1, 0, 1), (-1, 0, 1), (-1, 0, 1), (-2, 0, 2)),
                 D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-
 
     ab = yast.tensordot(a, b, axes=((0, 1, 2, 3), (0, 1, 2, 3)))
 
@@ -196,11 +194,13 @@ def test_dot_1_sparse():
     uab = yast.unfuse_legs_hard(ffab, axes=(0, 1))
     assert yast.norm_diff(ab, uab) < tol
 
+
 if __name__ == '__main__':
-    test_dot_1_sparse()
-    test_merge_split()
-    test_dot_1()
-    test_dot_1_sparse()
-    test_dot_2()
-    test_merge_transpose()
     test_merge_trace()
+    test_merge_split()
+    test_merge_transpose()
+    test_dot_1()
+    test_dot_2()
+    test_dot_1_sparse()
+    test_dot_1_super_sparse()
+    
