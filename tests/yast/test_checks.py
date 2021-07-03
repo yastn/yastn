@@ -1,6 +1,6 @@
 from context import yast
 from context import config_Z2
-from test_merging import test_dot_1_super_sparse
+from test_fuse_hard import test_dot_1_super_sparse
 
 tol = 1e-12
 
@@ -16,7 +16,7 @@ def test_cache():
 
     yast.set_cache_maxsize(maxsize=10)
     cache_info = yast.get_cache_info()
-    assert cache_info[0] == (0, 0, 10, 0)
+    assert cache_info["meta_merge_to_matrix"] == (0, 0, 10, 0)
 
     for _ in range(100):
         a.svd(axes=((0, 1), (2, 3)))
@@ -24,7 +24,7 @@ def test_cache():
         a.svd(axes=((1, 3), (2, 0)))
 
     cache_info = yast.get_cache_info()
-    assert cache_info[0] == (297, 3, 10, 3)
+    assert cache_info["meta_merge_to_matrix"] == (297, 3, 10, 3)
 
 
 def test_cache2():
