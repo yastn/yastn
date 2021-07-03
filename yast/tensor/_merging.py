@@ -5,11 +5,11 @@ from itertools import groupby, product
 from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
-from ._auxliary import _flatten, _unpack_axes, _struct, _clear_axes
-from ._tests import YastError
+from ._auxliary import _flatten, _struct, _clear_axes
+from ._tests import YastError,  _test_all_axes
 
 
-__all__ = ['fuse_legs_hard', 'unfuse_legs_hard', 'fuse_legs', 'unfuse_legs']
+__all__ = ['fuse_legs', 'unfuse_legs']
 
 
 class _LegDec(NamedTuple):
@@ -239,7 +239,7 @@ def _consume_mfs_lowest(mfs):
     for mf in mfs:
         if mf == (1,):
             new_mfs.append((1,))
-            axes.append(leg)
+            axes.append((leg,))
             leg += 1
         else:
             group, count = [], 0
@@ -302,7 +302,7 @@ def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
 
 
 @lru_cache(maxsize=1024)
-def _meta_fuse_legs_hard(config, struct, axes):
+def _meta_fuse_hard(config, struct, axes):
     nblocks, ndim, nsym = len(struct.t), len(struct.s), config.sym.NSYM
     tset = np.array(struct.t, dtype=int).reshape(nblocks, ndim, nsym)
     Dset = np.array(struct.D, dtype=int).reshape(nblocks, ndim)
@@ -345,6 +345,45 @@ def _meta_fuse_legs_hard(config, struct, axes):
                         for tn, to, tes, tos in zip(teff, struct.t, teff_split, told_split))
     struct_new = _struct(t=tnew, D=Dnew, s=tuple(snew), n=struct.n)
     return struct_new, meta_mrg, t_in, D_in
+
+
+@lru_cache(maxsize=1024)
+def _meta_unfuse_hard(config, struct, axes, hfs):
+    nblocks, ndim, nsym = len(struct.t), len(struct.s), config.sym.NSYM
+    tset = np.array(struct.t, dtype=int).reshape(nblocks, ndim, nsym)
+    Dset = np.array(struct.D, dtype=int).reshape(nblocks, ndim)
+    tD_legs = [sorted(set((tuple(t.flat), D) for t, D in zip(tset[:, n, :], Dset[:, n]))) for n in range(ndim)]
+    tD_dict = [dict(tD) for tD in tD_legs]
+    if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
+        raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
+    t_in = [tuple(tD.keys()) for tD in tD_dict]
+
+    ls, hfs_new, snew, nlegs_unfused = [], [], [], []
+    for n, hf in enumerate(hfs):
+        if n in axes:
+            t_part, D_part, s_part, hfs_part = _unfuse_Fusion(hf)
+            ls.append(_leg_structure_combine_charges(config, t_part, D_part, s_part, t_in[n], struct.s[n]))
+            hfs_new.extend(hfs_part)
+            nlegs_unfused.append(len(hfs_part))
+            snew.extend(s_part)
+        else:
+            dec = {t: {t: _DecRec((0, D), D, (D,))} for t, D in tD_dict[n].items()}
+            ls.append(_LegDec(dec, tD_dict[n]))
+            hfs_new.append(hf)
+            snew.append(struct.s[n])
+
+    meta = []
+    tall = tuple(tuple(l.dec) for l in ls)
+    for ind in product(*tall):
+        to = sum(ind, ())
+        if to in struct.t:
+            tpart = tuple(tuple(ls[n].dec[ii].items()) for n, ii in enumerate(ind))
+            for tt in product(*tpart):
+                tn = sum((x[0] for x in tt), ())
+                slc = tuple(x[1].Dslc for x in tt)
+                Dn = tuple(_flatten((x[1].Drsh for x in tt)))
+                meta.append((tn, to, slc, Dn))
+    return meta, tuple(snew), tuple(nlegs_unfused), tuple(hfs_new)
 
 
 def _leg_struct_trivial(a, axis=0):
@@ -419,29 +458,13 @@ def _unmerge_diagonal(a, ls):
     a.update_struct()
 
 
-def fuse_meta_to_hard(a, inplace=False):
-    """ Changes all meta fusions into a hard fusions. If there are no meta fusions, do nothing. """
-    while any(mf != (1,) for mf in a.meta_fusion):
-        axes, new_mfs = _consume_mfs_lowest(a.meta_fusion)
-    return a
-
-
-def fuse_legs_hard(a, axes, inplace=False):
-    """ funtion performing hard fusion. axes are for native legs."""
-    axes = tuple(_clear_axes(*axes))
-    struct_new, meta_mrg, t_in, D_in = _meta_fuse_legs_hard(a.config, a.struct, axes)
-    order = tuple(_flatten(axes))
-
+def _fuse_legs_hard(a, axes, order, inplace=False):
+    """ funtion performing hard fusion. axes are for native legs and are cleaned outside."""
+    struct_new, meta_mrg, t_in, D_in = _meta_fuse_hard(a.config, a.struct, axes)
     meta_new = tuple((t, D) for t, D in zip(struct_new.t, struct_new.D))
-
     fm = ((1,),) * len(struct_new.s)
-    fh = []
-    for n, axis in enumerate(axes):
-        if len(axis) > 1:
-            fh.append(_fuse_hfs(a.hard_fusion, t_in, D_in, struct_new.s[n], axis))
-        else:
-            fh.append(a.hard_fusion[axis[0]])
-    fh = tuple(fh)
+    fh = tuple(_fuse_hfs(a.hard_fusion, t_in, D_in, struct_new.s[n], axis) if len(axis) > 1 else a.hard_fusion[axis[0]] 
+                for n, axis in enumerate(axes))
     if inplace:
         c = a
         c.struct = struct_new
@@ -451,6 +474,16 @@ def fuse_legs_hard(a, axes, inplace=False):
         c = a.__class__(config=a.config, meta_fusion=tuple(fm), hard_fusion=tuple(fh), struct=struct_new)
     c.A = a.config.backend.merge_blocks(a.A, order, meta_new, meta_mrg)
     return c
+
+
+def fuse_meta_to_hard(a, inplace=False):
+    """ Changes all meta fusions into a hard fusions. If there are no meta fusions, do nothing. """
+    while any(mf != (1,) for mf in a.meta_fusion):
+        axes, new_mfs = _consume_mfs_lowest(a.meta_fusion)
+        order = tuple(range(a.nlegs))
+        a = _fuse_legs_hard(a, axes, order, inplace)
+        a.meta_fusion = new_mfs
+    return a
 
 
 def fuse_legs(a, axes, inplace=False, mode=None):
@@ -489,38 +522,33 @@ def fuse_legs(a, axes, inplace=False, mode=None):
     """
     if a.isdiag:
         raise YastError('Cannot fuse legs of a diagonal tensor')
-
     if mode is None:
         mode = a.config.default_fuse
     if a.config.force_fuse is not None:
         mode = a.config.force_fuse
 
+    order = tuple(_flatten(axes))
+    _test_all_axes(a, order)
+    axes = tuple(_clear_axes(*axes))
+
     if mode == 'meta':
-        meta_fusion, order = [], []
+        mfs = []
         for group in axes:
-            if isinstance(group, int):
-                order.append(group)
-                meta_fusion.append(a.meta_fusion[group])
+            if len(group) == 1:
+                mfs.append(a.meta_fusion[group[0]])
             else:
-                if not all(isinstance(x, int) for x in group):
-                    raise YastError('Inner touples of axes can only contain integers')
-                if len(group) < 2:
-                    raise YastError('Need at least two legs in a tuple to perform fusion on.')
-                order.extend(group)
                 new_mf = [sum(a.meta_fusion[ii][0] for ii in group)]
                 for ii in group:
                     new_mf.extend(a.meta_fusion[ii])
-                meta_fusion.append(tuple(new_mf))
-        order = tuple(order)
+                mfs.append(tuple(new_mf))
         if inplace and order == tuple(ii for ii in range(a.mlegs)):
             c = a
         else:
             c = a.transpose(axes=order, inplace=inplace)
-        c.meta_fusion = tuple(meta_fusion)
+        c.meta_fusion = tuple(mfs)
     elif mode == 'hard':
-
-
-        pass
+        c = fuse_meta_to_hard(a, inplace)
+        c = _fuse_legs_hard(c, axes, order, inplace)
     else:
         raise YastError('fuse_legs mode should be `meta` or `hard`; can be also set in config file.')
     return c
@@ -528,7 +556,7 @@ def fuse_legs(a, axes, inplace=False, mode=None):
 
 def unfuse_legs(a, axes, inplace=False):
     """
-    Unfuse meta legs reverting one layer of fusion. Operation can be done in-place.
+    Unfuse legs reverting one layer of fusion. Operation can be done in-place.
 
     New legs are inserted in place of the unfused one.
 
@@ -543,13 +571,13 @@ def unfuse_legs(a, axes, inplace=False):
     """
     if isinstance(axes, int):
         axes = (axes,)
-    c = a if inplace else a.clone()
-    new_meta_fusion = []
-    for ii in range(c.mlegs):
-        if ii not in axes or c.meta_fusion[ii][0] == 1:
-            new_meta_fusion.append(c.meta_fusion[ii])
-        else:
-            stack = c.meta_fusion[ii]
+    ni, new_mfs, axes_hf = 0, [], []
+    for mi in range(a.mlegs):
+        dni = a.meta_fusion[mi][0]
+        if mi not in axes or (a.meta_fusion[mi][0] == 1 and a.hard_fusion[ni].tree[0] == 1):
+            new_mfs.append(a.meta_fusion[mi])
+        elif a.meta_fusion[mi][0] > 1:  #and mi in axes
+            stack = a.meta_fusion[mi]
             lstack = len(stack)
             pos_init, cum = 1, 0
             for pos in range(1, lstack):
@@ -558,56 +586,26 @@ def unfuse_legs(a, axes, inplace=False):
                 if stack[pos] == 1:
                     cum = cum - 1
                     if cum == 0:
-                        new_meta_fusion.append(stack[pos_init: pos + 1])
+                        new_mfs.append(stack[pos_init: pos + 1])
                         pos_init = pos + 1
-    c.meta_fusion = tuple(new_meta_fusion)
-    return c
-
-
-def unfuse_legs_hard(a, axes, inplace=False):
-    if isinstance(axes, int):
-        axes = (axes,)
-    axes, = _unpack_axes(a, axes)
-
-    t_legs, D_legs = a.get_leg_charges_and_dims(native=True)
-    ss = a.s
-
-    ls, fh, fm, news = [], [], [], []
-    for n in range(a.nlegs):
-        if n in axes:
-            t_in, D_in, slegs, hfs = _unfuse_Fusion(a.hard_fusion[n])
-            ls.append(_leg_structure_combine_charges(a.config, t_in, D_in, slegs, t_legs[n], ss[n]))
-            fh.extend(hfs)
-            fm.extend([(1,)] * len(hfs))
-            news.extend(slegs)
+        else:  # c.hard_fusion[ni].tree[0] > 1 and c.meta_fusion[mi][0] == 1 and mi in axes
+            axes_hf.append(ni)
+            new_mfs.append(a.meta_fusion[mi])
+        ni += dni
+    if axes_hf:
+        meta, snew, nlegs, new_hfs = _meta_unfuse_hard(a.config, a.struct, tuple(axes_hf), tuple(a.hard_fusion))
+        for unfused, n in zip(nlegs[::-1], axes_hf[::-1]):
+            new_mfs = new_mfs[:n] + [new_mfs[n]] * unfused + new_mfs[n+1:]
+        if inplace:
+            c = a
+            c.struct = c.struct._replace(s=snew)
+            c.hard_fusion = tuple(new_hfs)
+            c.meta_fusion = tuple(new_mfs)
         else:
-            dec = {t: {t: _DecRec((0, D), D, (D,))} for t, D in zip(t_legs[n], D_legs[n])}
-            Dtot = {t: D for t, D in zip(t_legs[n], D_legs[n])}
-            ls.append(_LegDec(dec, Dtot))
-            fh.append(a.hard_fusion[n])
-            fm.append(a.meta_fusion[n])
-            news.append(ss[n])
-
-    meta = []
-    tt = tuple(tuple(ls[n].dec) for n in range(a.nlegs))
-    for ind in product(*tt):
-        to = sum(ind, ())
-        if to in a.A:
-            kkk = tuple(tuple(ls[n].dec[ii].items()) for n, ii in enumerate(ind))
-            for tt in product(*kkk):
-                tn = sum((x[0] for x in tt), ())
-                slc = tuple(x[1].Dslc for x in tt)
-                Dn = tuple(_flatten((x[1].Drsh for x in tt)))
-                meta.append((tn, to, slc, Dn))
-
-    if inplace:
-        c = a
-        c.struct = c.struct._replace(s=tuple(news))
-        c.hard_fusion = tuple(fh)
-        c.meta_fusion = tuple(fm)
+            c = a.__class__(config=a.config, n=a.n, s=snew, meta_fusion=tuple(new_mfs), hard_fusion=tuple(new_hfs))
+        c.A = a.config.backend.unmerge_from_array(a.A, meta)
+        c.update_struct()
     else:
-        c = a.__class__(config=a.config, isdiag=a.isdiag, n=a.n, s=news, meta_fusion=tuple(fm), hard_fusion=tuple(fh))
-
-    c.A = a.config.backend.unmerge_from_array(a.A, meta)
-    c.update_struct()
+        c = a if inplace else a.clone()
+        c.meta_fusion = tuple(new_mfs)
     return c

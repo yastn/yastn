@@ -3,6 +3,7 @@ import ops_Z2
 import ops_U1
 import yamps
 import time
+import yast
 
 
 def run_dmrg_2_site(psi, H, sweeps=20, Dmax=128):
@@ -69,3 +70,4 @@ if __name__ == "__main__":
     # time_full_dmrg()
     # time_Z2_dmrg()
     time_U1_dmrg()
+    print(yast.get_cache_info())
