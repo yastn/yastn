@@ -95,9 +95,9 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     U, S, V: Tensor
         U and V are unitary projectors. S is diagonal.
     """
+    _test_all_axes(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a, lout_l, lout_r)
-    _test_all_axes(a, axes)
 
     s_eff = (-sU, sU)
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
@@ -170,9 +170,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     U, S, V: Tensor
         U and V are unitary projectors. S is diagonal.
     """
+    _test_all_axes(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a, lout_l, lout_r)
-    _test_all_axes(a, axes)
 
     s_eff = (-sU, sU)
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
@@ -229,9 +229,9 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     -------
         Q, R: Tensor
     """
+    _test_all_axes(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a, lout_l, lout_r)
-    _test_all_axes(a, axes)
 
     s_eff = (-sQ, sQ)
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
@@ -293,9 +293,9 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf,
         S, U: Tensor
             U is unitary projector. S is diagonal.
     """
+    _test_all_axes(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a, lout_l, lout_r)
-    _test_all_axes(a, axes)
 
     if any(x != 0 for x in a.struct.n):
         raise YastError('Charge should be zero')
@@ -350,9 +350,9 @@ def entropy(a, axes=(0, 1), alpha=1):
     if len(a.A) == 0:
         return a.zero_of_dtype(), a.zero_of_dtype(), a.zero_of_dtype()
 
+    _test_all_axes(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a, lout_l, lout_r)
-    _test_all_axes(a, axes)
 
     if not a.isdiag:
         Am, *_ = _merge_to_matrix(a, axes, (-1, 1))

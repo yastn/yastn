@@ -45,13 +45,14 @@ def _test_fusions_match(a, b):
         raise YastError('Fusion trees do not match')
 
 
-def _test_all_axes(a, axes):
+def _test_all_axes(a, axes, native=False):
     if _check["consistency"]:
         axes = tuple(_flatten(axes))
-        if a.nlegs != len(axes):
-            raise YastError('Two few indices in axes')
-        if sorted(set(axes)) != list(range(a.nlegs)):
-            raise YastError('Repeated axis')
+        ndim = a.nlegs if native else a.mlegs
+        if ndim != len(axes):
+            raise YastError('Wrong number of axis indices in axes')
+        if sorted(set(axes)) != list(range(ndim)):
+            raise YastError('Repeated axis index in axes')
 
 
 def _test_hard_fusion_match(hf1, hf2, mconj):

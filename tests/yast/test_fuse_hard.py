@@ -195,6 +195,36 @@ def test_dot_1_super_sparse():
     assert yast.norm_diff(ab, uab) < tol
 
 
+def test_auxliary_merging_functions():
+    mf1 = (1,)
+    nt = yast.tensor._merging._mf_to_ntree(mf1)
+    mfx = yast.tensor._merging._ntree_to_mf(nt)
+    assert mf1 == mfx
+    yast.tensor._merging._ntree_eliminate_lowest(nt)
+    new_mf1 = tuple(yast.tensor._merging._ntree_to_mf(nt))
+    assert new_mf1 == (1,)
+
+    mf2 = (9, 5, 1, 3, 2, 1, 1, 1, 1, 4, 1, 3, 1, 1, 1)
+    nt = yast.tensor._merging._mf_to_ntree(mf2)
+    mfx = yast.tensor._merging._ntree_to_mf(nt)
+    assert mf2 == mfx
+    yast.tensor._merging._ntree_eliminate_lowest(nt)
+    new_mf2 = tuple(yast.tensor._merging._ntree_to_mf(nt))
+    assert new_mf2 == (6, 4, 1, 2, 1, 1, 1, 2, 1, 1)
+
+    mf3 = (8, 2, 1, 1, 1, 5, 3, 1, 1, 1, 1, 1)
+    nt = yast.tensor._merging._mf_to_ntree(mf3)
+    mfx = yast.tensor._merging._ntree_to_mf(nt)
+    assert mf3 == mfx
+    yast.tensor._merging._ntree_eliminate_lowest(nt)
+    new_mf3 = tuple(yast.tensor._merging._ntree_to_mf(nt))
+    assert new_mf3 == (5, 1, 1, 3, 1, 1, 1)
+
+    axes, new_mfs = yast.tensor._merging._consume_mfs_lowest((mf1, mf2, mf3))
+    assert axes == (0, 1, (2, 3), 4, 5, 6, (7, 8, 9), (10, 11), 12, (13, 14, 15), 16, 17)
+    assert (new_mf1, new_mf2, new_mf3) == new_mfs
+
+
 if __name__ == '__main__':
     test_merge_trace()
     test_merge_split()
@@ -203,4 +233,4 @@ if __name__ == '__main__':
     test_dot_2()
     test_dot_1_sparse()
     test_dot_1_super_sparse()
-    
+    test_auxliary_merging_functions()

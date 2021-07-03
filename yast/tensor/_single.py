@@ -3,7 +3,7 @@
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _Darray, _struct
 from ._merging import _Fusion, _flip_sign_hf
-from ._tests import YastError, _test_configs_match, _test_tensors_match
+from ._tests import YastError, _test_configs_match, _test_tensors_match, _test_all_axes
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'remove_zero_blocks',
            'absolute', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'add_leg',
@@ -286,6 +286,7 @@ def transpose(a, axes, inplace=False):
     axes: tuple of ints
         New order of the legs. Should be a permutation of (0, 1, ..., ndim-1)
     """
+    _test_all_axes(a, axes, native=False)
     uaxes, = _unpack_axes(a, axes)
     order = np.array(uaxes, dtype=np.intp)
     new_meta_fusion = tuple(a.meta_fusion[ii] for ii in axes)
@@ -320,7 +321,7 @@ def moveaxis(a, source, destination, inplace=False):
     lsrc = tuple(xx + a.mlegs if xx < 0 else xx for xx in lsrc)
     ldst = tuple(xx + a.mlegs if xx < 0 else xx for xx in ldst)
     if lsrc == ldst:
-        return a if inplace else a.copy()
+        return a if inplace else a.clone()
     axes = [ii for ii in range(a.mlegs) if ii not in lsrc]
     ds = sorted(((d, s) for d, s in zip(ldst, lsrc)))
     for d, s in ds:
