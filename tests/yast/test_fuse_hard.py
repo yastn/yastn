@@ -170,17 +170,17 @@ def test_dot_1_super_sparse():
 
     ab = yast.tensordot(a, b, axes=((0, 1, 2, 3), (0, 1, 2, 3)))
 
-    fa = yast.fuse_legs(a, axes=(0, (1, 2), 3), mode='hard')
-    fb = yast.fuse_legs(b, axes=(0, (1, 2), 3), mode='hard')
+    fa = yast.fuse_legs(a, axes=(0, (2, 3), 1), mode='hard')
+    fb = yast.fuse_legs(b, axes=(0, (2, 3), 1), mode='hard')
     fab = yast.tensordot(fa, fb, axes=((0, 1, 2), (0, 1, 2)))
 
     ffa = yast.fuse_legs(fa, axes=((0, 1), 2), mode='hard')
     ffb = yast.fuse_legs(fb, axes=((0, 1), 2), mode='hard')
     ffab = yast.tensordot(ffa, ffb, axes=((0, 1), (0, 1)))
 
-    fffa = yast.fuse_legs(ffa, axes=((0, 1),), mode='hard')
-    fffb = yast.fuse_legs(ffb, axes=((0, 1),), mode='hard')
-    fffab = yast.tensordot(fffa, fffb, axes=((0,), (0,)))
+    fffa = yast.fuse_legs(ffa, axes=[[0, 1]], mode='hard')
+    fffb = yast.fuse_legs(ffb, axes=[[0, 1]], mode='hard')
+    fffab = yast.tensordot(fffa, fffb, axes=(0, 0))
 
     assert yast.norm_diff(ab, fab) < tol
     assert yast.norm_diff(ab, ffab) < tol
@@ -189,9 +189,46 @@ def test_dot_1_super_sparse():
     ffa = yast.fuse_legs(fa, axes= ((0, 2), 1), mode='hard')
     ffb = yast.fuse_legs(fb, axes= ((0, 2), 1), mode='hard')
     ffab = yast.tensordot(ffa, ffb, axes=(0, 0))
-    ab = yast.tensordot(a, b, axes=((0, 3), (0, 3)))
     uab = yast.unfuse_legs(ffab, axes=(0, 1))
+    ab = yast.tensordot(a, b, axes=((0, 1), (0, 1)))
     assert yast.norm_diff(ab, uab) < tol
+
+
+def _test_fuse_mix(a):
+    ma = a.fuse_legs(axes=((0, 1), (2, 3), (4, 5)), mode='meta')
+    assert (ma.nlegs, ma.mlegs) == (6, 3)
+    ha = a.fuse_legs(axes=((0, 1), (2, 3), (4, 5)), mode='hard')
+    assert (ha.nlegs, ha.mlegs) == (3, 3)
+
+    hma = ma.fuse_legs(axes=((2, 0), 1), mode='hard')
+    assert (hma.nlegs, hma.mlegs) == (2, 2)
+    hha = ha.fuse_legs(axes=((2, 0), 1), mode='hard')
+    assert (hha.nlegs, hha.mlegs) == (2, 2)
+    mma = ma.fuse_legs(axes=((2, 0), 1), mode='meta')
+    assert (mma.nlegs, mma.mlegs) == (6, 2)
+    mha = ha.fuse_legs(axes=((2, 0), 1), mode='meta')
+    assert (mha.nlegs, mha.mlegs) == (3, 2)
+
+    assert yast.norm_diff(hma, hha) < tol
+
+    fmma = yast.fuse_meta_to_hard(mma)
+    fmha = yast.fuse_meta_to_hard(mha)
+    fhha = yast.fuse_meta_to_hard(hha)
+    assert yast.norm_diff(fmma, hha) < tol
+    assert yast.norm_diff(fmha, hha) < tol
+    assert yast.norm_diff(fhha, hha) < tol
+
+
+def test_fuse_mix():
+    a = yast.randR(config=config_U1, s=(1, -1, 1, 1, -1, 1),
+                    t=[(-3, -2), (-2, -1), (-1, 0), (0, 1), (1, 2), (2, 3)],
+                    D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
+    _test_fuse_mix(a)
+
+    a = yast.Tensor(config=config_U1, s=(1, -1, 1, 1, -1, 1))
+    a.set_block(ts=(1, 2, -1, 2, 0, 0), Ds=(1, 2, 3, 4, 5, 6), val='randR')
+    a.set_block(ts=(2, 1, 1, -2, 1, 1), Ds=(6, 5, 4, 3, 2, 1), val='randR')
+    _test_fuse_mix(a)
 
 
 def test_auxliary_merging_functions():
@@ -220,7 +257,7 @@ def test_auxliary_merging_functions():
     assert new_mf3 == (5, 1, 1, 3, 1, 1, 1)
 
     axes, new_mfs = yast.tensor._merging._consume_mfs_lowest((mf1, mf2, mf3))
-    assert axes == (0, 1, (2, 3), 4, 5, 6, (7, 8, 9), (10, 11), 12, (13, 14, 15), 16, 17)
+    assert axes == ((0,), (1,), (2, 3), (4,), (5,), (6,), (7, 8, 9), (10, 11), (12,), (13, 14, 15), (16,), (17,))
     assert (new_mf1, new_mf2, new_mf3) == new_mfs
 
 
@@ -232,4 +269,5 @@ if __name__ == '__main__':
     test_dot_2()
     test_dot_1_sparse()
     test_dot_1_super_sparse()
+    test_fuse_mix()
     test_auxliary_merging_functions()

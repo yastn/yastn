@@ -113,7 +113,7 @@ class Tensor:
     from ._output import get_size, get_tensor_charge, to_dense, to_nonsymmetric, to_number, to_numpy, to_raw_tensor
     from ._tests import is_consistent, are_independent
     from ._auxliary import update_struct
-    from ._merging import fuse_legs, unfuse_legs
+    from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
 
     abs = absolute
 

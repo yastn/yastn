@@ -46,3 +46,13 @@
 08-06-2021
 - refactoring of mps. Moved to folder yamps in the main catalogue.
   It is fully operational, but we still need to add some functionality.
+
+04-07-2021
+- fuse_legs has parameter mode = None, 'meta', 'hard', providing support for hard fusion
+  None uses default that can be set in config.default_fusion (if not set, default_fusion='meta').
+  config.force_fusion overrides mode set in the code
+  hard-fusion applied on tensor that have been meta-fused first changes all (!) meta-fusions into hard fusions
+- function `fuse_meta_to_hard()` changes all meta fusionsinto hard fusions; 
+  and do nothing if there are no meta fusions
+- hard fusion keeps the information about history. mismatches in hard-fusions are cought and 
+  resolved in tensordot (todo: add such support for vdot, trace, norm_diff, _add__, ...)
