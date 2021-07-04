@@ -194,8 +194,7 @@ def to_tensor(val, Ds=None, dtype='float64', **kwargs):
 
 
 def to_mask(val):
-    return val.astype(bool).ravel()
-
+    return val.nonzero()[0].ravel()
 
 def square_matrix_from_dict(H, D=None, **kwargs):
     dtype = get_dtype(H.values())

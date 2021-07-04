@@ -81,7 +81,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
         msk_a, msk_b = _masks_for_tensordot(a.config, tla, Dla, a.hard_fusion, axes_a[1], ls_ac,
                                                         tlb, Dlb, b.hard_fusion, axes_b[0], ls_bc)
         Am = {ul + ur: Am[ul + ur][:, msk_a[ur]] for ul, ur in zip(ua_l, ua_r)}
-        Bm = {ul + ur: Bm[ul + ur][msk_b[ul]] for ul, ur in zip(ub_l, ub_r)}
+        Bm = {ul + ur: Bm[ul + ur][msk_b[ul], :] for ul, ur in zip(ub_l, ub_r)}
 
     c_s = tuple(conja * a.struct.s[i1] for i1 in axes_a[0]) + tuple(conjb * b.struct.s[i2] for i2 in axes_b[1])
     c_meta_fusion = [a.meta_fusion[ii] for ii in la_out] + [b.meta_fusion[ii] for ii in lb_out]

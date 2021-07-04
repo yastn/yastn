@@ -19,8 +19,8 @@ class _config(NamedTuple):
     device: str = 'cpu'
     default_device: str = 'cpu'
     default_dtype: str = 'float64'
-    default_fuse: str = 'meta'
-    force_fuse: str = None
+    default_fusion: str = 'meta'
+    force_fusion: str = None
 
 
 def _flatten(nested_iterator):
