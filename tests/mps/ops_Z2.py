@@ -1,5 +1,5 @@
-from context import yast, yamps
-from context import config_Z2
+from .context import yast, yamps
+from .context import config_Z2
 
 
 def mps_random(N=2, Dblock=2, total_parity=0, dtype='float64'):

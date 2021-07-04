@@ -1,7 +1,7 @@
 """ methods outputing data from yast tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray
+from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _mf_to_ntree
 from ._tests import YastError, _check
 from ..sym import sym_none
 
@@ -20,7 +20,8 @@ def export_to_dict(a):
     AA = {ind: a.config.backend.to_numpy(a.A[ind]) for ind in a.A}
     if a.isdiag:
         AA = {t: np.diag(x) for t, x in AA.items()}
-    out = {'A': AA, 's': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag, 'meta_fusion': a.meta_fusion, 'hard_fusion': a.hard_fusion}
+    out = {'A': AA, 's': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag,
+            'meta_fusion': a.meta_fusion, 'hard_fusion': a.hard_fusion}
     return out
 
 
@@ -39,7 +40,7 @@ def compress_to_1d(a, meta=None):
         D_rsh = np.prod(_Darray(a), axis=1)
         aD_rsh = np.cumsum(D_rsh)
         D_tot = np.sum(D_rsh)
-        meta_new = (((), D_tot),)
+        meta_new = (((),), (D_tot,))
         # meta_merge = ((tn, to, Dslc, Drsh), ...)
         meta_merge = tuple(((), t, ((aD - D, aD),), D) for t, D, aD in zip(a.struct.t, D_rsh, aD_rsh))
         # (told, tnew, Dslc, Dnew)
@@ -47,11 +48,12 @@ def compress_to_1d(a, meta=None):
         meta = {'s': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag, 'hard_fusion': a.hard_fusion,
                 'meta_fusion': a.meta_fusion, 'meta_unmerge': meta_unmerge, 'meta_merge': meta_merge}
     else:
-        if a.struct.s != meta['s'] or a.struct.n != meta['n'] or a.isdiag != meta['isdiag'] or a.meta_fusion != meta['meta_fusion'] or a.hard_fusion != meta['hard_fusion']:
+        if a.struct.s != meta['s'] or a.struct.n != meta['n'] or a.isdiag != meta['isdiag'] \
+            or a.meta_fusion != meta['meta_fusion'] or a.hard_fusion != meta['hard_fusion']:
             raise YastError("Tensor do not match provided metadata.")
         meta_merge = meta['meta_merge']
         D_tot = meta_merge[-1][2][0][1]
-        meta_new = (((), D_tot),)
+        meta_new = (((),), (D_tot,))
         if len(a.A) != sum(ind in a.A for (_, ind, _, _) in meta_merge):
             raise YastError("Tensor has blocks that do not appear in meta.")
 
@@ -75,8 +77,10 @@ def show_properties(a):
     print("shape native:", a.get_shape(native=True))
     print("no. blocks  :", len(a.A))  # number of blocks
     print("size        :", a.get_size())  # total number of elements in all blocks
-    print("meta fusion :", a.meta_fusion)  # encoding meta fusion tree for each leg
-    print("hard fusion :", a.hard_fusion, "\n")  # encoding info on hard fusion for each leg
+    mfs = {i: _mf_to_ntree(mf) for i, mf in enumerate(a.meta_fusion)}
+    print("meta fusion :", mfs)  # encoding meta fusion tree for each leg
+    hfs = {i: _mf_to_ntree(hf.tree) for i, hf in enumerate(a.hard_fusion)}
+    print("hard fusion :", hfs, "\n")  # encoding info on hard fusion for each leg
 
 
 def __str__(a):
@@ -144,10 +148,10 @@ def get_leg_fusion(a, axes=None):
         indices of legs; If axes is None returns all (default).
     """
     if axes is None:
-        return a.meta_fusion
+        return {'meta': a.meta_fusion, 'hard': a.hard_fusion}
     if isinstance(axes, int):
         return a.meta_fusion(axes)
-    return tuple(a.meta_fusion(n) for n in axes)
+    return {'meta': tuple(a.meta_fusion(n) for n in axes), 'hard': tuple(a.hard_fusion(n) for n in axes)}
 
 
 def get_leg_structure(a, axis, native=False):

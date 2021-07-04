@@ -1,7 +1,7 @@
 import logging
-import ops_full as ops_full
-import ops_Z2 as ops_Z2
-import ops_U1 as ops_U1
+from . import ops_full
+from . import ops_Z2
+from . import ops_U1
 import yamps
 import pytest
 

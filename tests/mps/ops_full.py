@@ -1,5 +1,5 @@
-from context import yast, yamps
-from context import config_dense
+from .context import yast, yamps
+from .context import config_dense
 import numpy as np
 
 
