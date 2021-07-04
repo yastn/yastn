@@ -1,5 +1,5 @@
-import ops_full
-import ops_Z2
+from . import ops_full
+from . import ops_Z2
 import yast
 import yamps
 import numpy as np

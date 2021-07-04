@@ -1,9 +1,9 @@
 
 import logging
 import pytest
-import ops_full
-import ops_Z2
-import ops_U1
+from . import ops_full
+from . import ops_Z2
+from . import ops_U1
 import yamps
 
 tol = 1e-6

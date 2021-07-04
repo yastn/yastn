@@ -479,7 +479,7 @@ def dot(A, B, conj, meta_dot):
 def merge_blocks(A, order, meta_new, meta_mrg, device='cpu'):
     """ New dictionary of blocks after merging into matrix. """
     dtype = get_dtype(A.values())
-    Anew = {u: torch.zeros(Du, dtype=dtype, device=device) for (u, Du) in meta_new}
+    Anew = {u: torch.zeros(Du, dtype=dtype, device=device) for u, Du in zip(*meta_new)}
     for (tn, to, Dslc, Drsh) in meta_mrg:
         if to in A:
             slc = tuple(slice(*x) for x in Dslc)

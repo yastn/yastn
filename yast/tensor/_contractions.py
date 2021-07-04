@@ -2,7 +2,7 @@
 
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray
-from ._tests import YastError, _check, _test_configs_match, _test_fusions_match, _test_hard_fusion_match
+from ._tests import YastError, _check, _test_configs_match, _test_fusions_match
 from ._merging import _merge_to_matrix, _unmerge_matrix, _masks_for_tensordot, _flip_sign_hf
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon']
@@ -46,14 +46,15 @@ def tensordot(a, b, axes, conj=(0, 0)):
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
     mconj = (-conja * conjb)
 
-    if _check["signatures_match"] and not all(a.struct.s[i1] == mconj * b.struct.s[i2] for i1, i2 in zip(axes_a[1], axes_b[0])):
+    if _check["signatures_match"] and not all(a.struct.s[i] == mconj * b.struct.s[j] for i, j in zip(axes_a[1], axes_b[0])):
         raise YastError('Signs do not match in tensordot')
 
     needs_mask = False
     for i1, i2 in zip(axes_a[1], axes_b[0]):
         if a.hard_fusion[i1].tree != b.hard_fusion[i2].tree:
             raise YastError('Order of hard fusions on leg %1d of a and leg %1d of b do not match' % (i1, i2))
-        if _check["signatures_match"] and ((mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms)):
+        if _check["signatures_match"] and ((mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or
+                                            (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms)):
             raise YastError('Hard fusions do not match. Singnature problem.')
         if  a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
             needs_mask = True
@@ -70,16 +71,12 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
     meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
-
     if _check["consistency"] and not needs_mask and not (ua_r == ub_l and ls_ac == ls_bc):
-        raise YastError('Something went wrong in matching the indices of the two tensors')
-
+        raise YastError('CRITICAL ERROR. Something went wrong in matching the indices of the two tensors.')
 
     if needs_mask:
-        tla, Dla = a.get_leg_charges_and_dims(native=True)
-        tlb, Dlb = b.get_leg_charges_and_dims(native=True)
-        msk_a, msk_b = _masks_for_tensordot(a.config, tla, Dla, a.hard_fusion, axes_a[1], ls_ac,
-                                                        tlb, Dlb, b.hard_fusion, axes_b[0], ls_bc)
+        msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hard_fusion, axes_a[1], ls_ac,
+                                                    b.struct, b.hard_fusion, axes_b[0], ls_bc)
         Am = {ul + ur: Am[ul + ur][:, msk_a[ur]] for ul, ur in zip(ua_l, ua_r)}
         Bm = {ul + ur: Bm[ul + ur][msk_b[ul], :] for ul, ur in zip(ub_l, ub_r)}
 

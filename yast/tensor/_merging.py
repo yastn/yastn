@@ -5,7 +5,7 @@ from itertools import groupby, product
 from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
-from ._auxliary import _flatten, _struct, _clear_axes
+from ._auxliary import _flatten, _struct, _clear_axes, _ntree_to_mf, _mf_to_ntree
 from ._tests import YastError,  _test_all_axes
 
 
@@ -88,6 +88,7 @@ def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
 
 
 def _merge_masks(config, ls, ms):
+    """ combine masks using information from LegDec"""
     msk = {te: np.ones(D, dtype=bool) for te, D in ls.Dtot.items()}
     nsym = config.sym.NSYM
     for te, dec in ls.dec.items():
@@ -99,8 +100,24 @@ def _merge_masks(config, ls, ms):
     return msk
 
 
-def _masks_for_tensordot(config, tla, Dla, hfa, axa, lsa, tlb, Dlb, hfb, axb, lsb):
+def _get_tD_legs(struct):
+    """ different views on struct.t and struct.D """
+    tset = np.array(struct.t, dtype=int).reshape(len(struct.t), len(struct.s), len(struct.n))
+    Dset = np.array(struct.D, dtype=int).reshape(len(struct.t), len(struct.s))
+    tD_legs = [sorted(set((tuple(t.flat), D) for t, D in zip(tset[:, n, :], Dset[:, n]))) for n in range(len(struct.s))]
+    tD_dict = [dict(tD) for tD in tD_legs]
+    if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
+        raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
+    tlegs = [tuple(tD.keys()) for tD in tD_dict]
+    Dlegs= [tuple(tD.values()) for tD in tD_dict]
+    return tlegs, Dlegs, tD_dict, tset, Dset
+
+
+def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
+    """ masks to get the intersecting parts of legs from two tensors """
     msk_a, msk_b = [], []
+    tla, Dla, _, _, _ = _get_tD_legs(structa)
+    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
     for i1, i2 in zip(axa, axb):
         ma, mb = _intersect_hfs(config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (hfa[i1], hfb[i2]))
         msk_a.append(ma)
@@ -127,7 +144,7 @@ def _mask_falsify_mismatches(ms1, ms2):
 @lru_cache(maxsize=1024)
 def _intersect_hfs(config, ts, Ds, hfs):
     """
-    Returns mask1 and mask2, finding common leg indices for each teff. 
+    Returns mask1 and mask2, finding common leg indices for each teff.
     Consumes fusion trees from the bottom, identifying common elements and building the masks.
     """
     if hfs[0].tree != hfs[1].tree:
@@ -200,39 +217,6 @@ def _unfuse_Fusion(hf):
     return tuple(tt), tuple(DD), tuple(ss), hfs
 
 
-def _ntree_to_mf(ntree):
-    """ Change linear fusion tree into nested lists. """
-    mf = ()
-    for subtree in ntree:
-        mf = mf + _ntree_to_mf(subtree)
-    nlegs = max(1, sum(x == 1 for x in mf))
-    return (nlegs,) + mf
-
-
-def  _mf_to_ntree(mf):
-    """ Change nested lists into linear fusion tree. """
-    ntree = []
-    if mf[0] > 1:
-        pos_init, cum = 1, 0
-        for pos, nlegs in enumerate(mf[1:]):
-            if cum == 0:
-                cum = nlegs
-            if nlegs == 1:
-                cum = cum - 1
-                if cum == 0:
-                    ntree.append(_mf_to_ntree(mf[pos_init:pos + 2]))
-                    pos_init = pos + 2
-    return ntree
-
-
-def _ntree_eliminate_lowest(ntree):
-    if all(len(x) == 0 for x in ntree):
-        ntree.clear()
-    else:
-        for x in ntree:
-            _ntree_eliminate_lowest(x)
-
-
 def _consume_mfs_lowest(mfs):
     """
     Collects all fusions to be done in the lowest layer, based on fusion trees.
@@ -267,7 +251,18 @@ def _consume_mfs_lowest(mfs):
     return tuple(axes), tuple(new_mfs)
 
 
+
+def _ntree_eliminate_lowest(ntree):
+    """ Eliminates lowest possible layer of merges """
+    if all(len(x) == 0 for x in ntree):
+        ntree.clear()
+    else:
+        for x in ntree:
+            _ntree_eliminate_lowest(x)
+
+
 def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
+    """ Main function merging tensor into effective block matrix. """
     order = axes[0] + axes[1]
     meta_new, meta_mrg, ls_l, ls_r, ul, ur = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds, sort_r)
     Anew = a.config.backend.merge_blocks(a.A, order, meta_new, meta_mrg, a.config.device)
@@ -276,6 +271,7 @@ def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
 
 @lru_cache(maxsize=1024)
 def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
+    """ Meta information for backend needed to merge tensor into effective block matrix. """
     told = struct.t if inds is None else [struct.t[ii] for ii in inds]
     Dold = struct.D if inds is None else [struct.D[ii] for ii in inds]
     tset = np.array(told, dtype=int).reshape((len(told), len(struct.s), config.sym.NSYM))
@@ -295,29 +291,23 @@ def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
 
     tnew = tuple(tuple(t.flat) for t in np.hstack([teff[0], teff[1]]))
     # meta_mrg = ((tnew, told, Dslc, Drsh), ...)
-    meta_mrg = tuple((tn, to, (ls[0].dec[tel][tl].Dslc, ls[1].dec[ter][tr].Dslc), (ls[0].dec[tel][tl].Dprod, ls[1].dec[ter][tr].Dprod))
-                     for tn, to, tel, tl, ter, tr in zip(tnew, told, teff[0], t[0], teff[1], t[1]))
+    meta_mrg = tuple((tn, to, (ls[0].dec[tel][tl].Dslc, ls[1].dec[ter][tr].Dslc),
+                        (ls[0].dec[tel][tl].Dprod, ls[1].dec[ter][tr].Dprod))
+                        for tn, to, tel, tl, ter, tr in zip(tnew, told, teff[0], t[0], teff[1], t[1]))
     if sort_r:
         unew_r, unew_l, unew = zip(*sorted(set(zip(teff[1], teff[0], tnew)))) if len(tnew) > 0 else ((), (), ())
     else:
         unew, unew_l, unew_r = zip(*sorted(set(zip(tnew, teff[0], teff[1])))) if len(tnew) > 0 else ((), (), ())
     # meta_new = ((unew, Dnew), ...)
-    meta_new = tuple((iu, (ls[0].Dtot[il], ls[1].Dtot[ir])) for iu, il, ir in zip(unew, unew_l, unew_r))
+    meta_new = (unew, tuple((ls[0].Dtot[il], ls[1].Dtot[ir]) for il, ir in zip(unew_l, unew_r)))
     return meta_new, meta_mrg, ls[0], ls[1], unew_l, unew_r
 
 
 @lru_cache(maxsize=1024)
 def _meta_fuse_hard(config, struct, axes):
-    nblocks, ndim, nsym = len(struct.t), len(struct.s), config.sym.NSYM
-    tset = np.array(struct.t, dtype=int).reshape(nblocks, ndim, nsym)
-    Dset = np.array(struct.D, dtype=int).reshape(nblocks, ndim)
-    tD_legs = [sorted(set((tuple(t.flat), D) for t, D in zip(tset[:, n, :], Dset[:, n]))) for n in range(ndim)]
-    tD_dict = [dict(tD) for tD in tD_legs]
-    if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
-        raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
-    t_in = [tuple(tD.keys()) for tD in tD_dict]
-    D_in = [tuple(tD.values()) for tD in tD_dict]
-
+    """ Meta information for backend needed to hard-fuse some legs. """
+    nblocks, ndim, nsym = len(struct.t), len(struct.s), len(struct.n)
+    t_in, D_in, tD_dict, tset, Dset = _get_tD_legs(struct)
     slegs = tuple(tuple(struct.s[n] for n in a) for a in axes)
     snew = tuple(struct.s[axis[0]] for axis in axes)
     teff = np.zeros((nblocks, len(snew), nsym), dtype=int)
@@ -351,14 +341,8 @@ def _meta_fuse_hard(config, struct, axes):
 
 @lru_cache(maxsize=1024)
 def _meta_unfuse_hard(config, struct, axes, hfs):
-    tset = np.array(struct.t, dtype=int).reshape(len(struct.t), len(struct.s), config.sym.NSYM)
-    Dset = np.array(struct.D, dtype=int).reshape(len(struct.t), len(struct.s))
-    tD_legs = [sorted(set((tuple(t.flat), D) for t, D in zip(tset[:, n, :], Dset[:, n]))) for n in range(len(struct.s))]
-    tD_dict = [dict(tD) for tD in tD_legs]
-    if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
-        raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
-    t_in = [tuple(tD.keys()) for tD in tD_dict]
-
+    """ Meta information for backend needed to hard-unfuse some legs. """
+    t_in, _, tD_dict, _, _ = _get_tD_legs(struct)
     ls, hfs_new, snew, nlegs_unfused = [], [], [], []
     for n, hf in enumerate(hfs):
         if n in axes:
@@ -388,13 +372,13 @@ def _meta_unfuse_hard(config, struct, axes, hfs):
 
 
 def _fuse_legs_hard(a, axes, order, inplace=False):
-    """ funtion performing hard fusion. axes are for native legs and are cleaned outside."""
+    """ Funtion performing hard fusion. axes are for native legs and are cleaned outside."""
     assert all(isinstance(x, tuple) for x in axes)
     for x in axes:
         assert all(isinstance(y, int) for y in x)
 
     struct_new, meta_mrg, t_in, D_in = _meta_fuse_hard(a.config, a.struct, axes)
-    meta_new = tuple((t, D) for t, D in zip(struct_new.t, struct_new.D))
+    meta_new = (struct_new.t, struct_new.D)
     fm = ((1,),) * len(struct_new.s)
     fh = tuple(_fuse_hfs(a.hard_fusion, t_in, D_in, struct_new.s[n], axis) if len(axis) > 1 else a.hard_fusion[axis[0]]
                 for n, axis in enumerate(axes))
@@ -505,6 +489,8 @@ def unfuse_legs(a, axes, inplace=False):
     -------
     tensor : Tensor
     """
+    if a.isdiag:
+        raise YastError('Cannot unfuse legs of a diagonal tensor')
     if isinstance(axes, int):
         axes = (axes,)
     ni, new_mfs, axes_hf = 0, [], []

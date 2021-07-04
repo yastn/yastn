@@ -496,7 +496,7 @@ def dot(A, B, conj, meta_dot):
 def merge_blocks(A, order, meta_new, meta_mrg, *args, **kwargs):
     """ New dictionary of blocks after merging into n-dimensional array """
     dtype = get_dtype(A.values())
-    Anew = {u: np.zeros(Du, dtype=dtype) for (u, Du) in meta_new}
+    Anew = {u: np.zeros(Du, dtype=dtype) for u, Du in zip(*meta_new)}
     for (tn, to, Dslc, Drsh) in meta_mrg:
         if to in A:
             slc = tuple(slice(*x) for x in Dslc)
