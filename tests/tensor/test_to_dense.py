@@ -1,6 +1,6 @@
-from .context import yast
-from .context import config_dense, config_U1, config_Z2_U1
 import numpy as np
+import yast
+from .configs import config_U1
 
 tol = 1e-12
 

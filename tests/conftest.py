@@ -1,9 +1,6 @@
-import sys
 import os
 from fnmatch import fnmatch
 import importlib
-
-sys.path.append(os.path.join(os.path.dirname(__file__), './..'))  # folder with yast
 
 
 def pytest_addoption(parser):
@@ -18,9 +15,8 @@ def pytest_configure(config):
         print('Using numpy backend')
         import yast.backend.backend_np as backend
 
-    for folder in ["tensor", "mps"]:
-        confs = [name[:-3] for name in os.listdir(folder) if fnmatch(name, 'config*.py')]
+    for folder in ["tensor"]:
+        confs = [name[:-3] for name in os.listdir(folder + "\configs") if fnmatch(name, 'config*.py')]
         for conf in confs:
-            conf = importlib.import_module(folder + "." + conf)
+            conf = importlib.import_module(folder + ".configs." + conf)
             conf.backend = backend
-

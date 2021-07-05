@@ -51,6 +51,7 @@ class Tensor:
             total charge of the tensor
     """
     def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
+        """ init new tensor """
         if isinstance(config, _config):
             self.config = config
         else:
@@ -98,7 +99,7 @@ class Tensor:
         try:
             self.hard_fusion = tuple(kwargs['hard_fusion'])
         except (KeyError, TypeError):
-            self.hard_fusion = tuple(_Fusion(s=(x,), ms=(-x,)) for x in s)
+            self.hard_fusion = tuple(_Fusion(s=(x,), ms=(-1 * x,)) for x in s)
 
 
     from ._initialize import set_block, fill_tensor
@@ -140,5 +141,3 @@ class Tensor:
     @property
     def requires_grad(self):
         return requires_grad(self)
-
-

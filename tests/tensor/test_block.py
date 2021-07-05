@@ -1,5 +1,6 @@
-from .context import yast
-from .context import config_U1
+""" test yast.block """
+import yast
+from .configs import config_U1
 
 tol = 1e-12
 

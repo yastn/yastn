@@ -562,11 +562,11 @@ def _leg_struct_truncation(a, tol=0., D_block=np.inf, D_total=np.inf,
     if (tol > 0) and (maxS > 0):  # truncate to relative tolerance
         for ind in D_keep:
             D_keep[ind] = min(D_keep[ind], a.config.backend.count_greater(a.A[ind], maxS * tol))
-    if sum(D_keep[ind] for ind in D_keep) > D_total:  # truncate to total bond dimension
+    if sum(D_keep.values()) > D_total:  # truncate to total bond dimension
         order = a.config.backend.select_global_largest(a.A, D_keep, D_total, keep_multiplets, eps_multiplet, ordering)
         low = 0
-        for ind in D_keep:
-            high = low + D_keep[ind]
+        for ind, D_ind in D_keep.items():
+            high = low + D_ind
             D_keep[ind] = sum((low <= order) & (order < high)).item()
             low = high
     if keep_multiplets:  # check symmetry related blocks and truncate to equal length
@@ -579,11 +579,11 @@ def _leg_struct_truncation(a, tol=0., D_block=np.inf, D_total=np.inf,
             # if -ind in ind_list:
             #     ind_list.remove(-ind)  ## this might mess-up iterator
     dec, Dtot = {}, {}
-    for ind in D_keep:
-        if D_keep[ind] > 0:
-            Dslc = a.config.backend.range_largest(D_keep[ind], Dmax[ind], ordering)
-            dec[ind] = {ind: _DecRec(Dslc, D_keep[ind], (D_keep[ind],))}
-            Dtot[ind] = D_keep[ind]
+    for ind, D_ind in D_keep.items():
+        if D_ind > 0:
+            Dslc = a.config.backend.range_largest(D_ind, Dmax[ind], ordering)
+            dec[ind] = {ind: _DecRec(Dslc, D_ind, (D_ind,))}
+            Dtot[ind] = D_ind
     return _LegDec(dec, Dtot)
 
 

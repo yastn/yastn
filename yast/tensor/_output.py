@@ -222,6 +222,7 @@ def get_ndim(a, native=False):
 
 
 def unique_dtype(a):
+    """ Return dtype if all blocks have the same type. Otherwise, return False. """
     return a.config.backend.unique_dtype(a)
 
 
@@ -318,7 +319,7 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
         output native tensor (neglecting meta fusions).
 
     reverse: bool
-        reverse the order in which blocks are sorted. Default order is ascending in 
+        reverse the order in which blocks are sorted. Default order is ascending in
         values of block's charges.
 
     Returns
@@ -384,7 +385,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
         output native tensor (neglecting meta fusions).
 
     reverse: bool
-        reverse the order in which blocks are sorted. Default order is ascending in 
+        reverse the order in which blocks are sorted. Default order is ascending in
         values of block's charges.
 
     Returns

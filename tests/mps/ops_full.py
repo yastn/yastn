@@ -1,6 +1,7 @@
-from .context import yast, yamps
-from .context import config_dense
 import numpy as np
+import yast
+import yamps
+from .configs import config_dense
 
 
 def mps_random(N=2, Dmax=2, d=2, dtype='float64'):

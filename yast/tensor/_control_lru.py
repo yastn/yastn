@@ -1,6 +1,7 @@
+# pylint: disable=protected-access
 """ Dynamical changing of lru_cache maxsize. """
-from . import _merging
 from functools import lru_cache
+from . import _merging
 
 
 __all__ = ['set_cache_maxsize', 'get_cache_info']
@@ -16,6 +17,7 @@ def set_cache_maxsize(maxsize=0):
 
 
 def get_cache_info():
+    """Return statistics of lru_caches used in yast."""
     return {"meta_merge_to_matrix": _merging._meta_merge_to_matrix.cache_info(),
             "meta_fuse_hard": _merging._meta_fuse_hard.cache_info(),
             "meta_unfuse_hard": _merging._meta_unfuse_hard.cache_info(),

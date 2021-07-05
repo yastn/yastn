@@ -1,11 +1,7 @@
-"""
-Test functions: set_block
-"""
-
-
-from .context import yast
-from .context import config_U1_fermionic
+""" yast.set_block """
 import pytest
+import yast
+from .configs import config_U1_fermionic
 
 tol = 1e-12
 
