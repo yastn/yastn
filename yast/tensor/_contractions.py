@@ -1,5 +1,4 @@
 """ Contractions of yast tensors """
-
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray
 from ._tests import YastError, _check, _test_configs_match, _test_fusions_match
@@ -59,7 +58,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
         if  a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
             needs_mask = True
 
-    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape(1, 2, a.config.sym.NSYM)
+    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
     c_s = np.array([conja, conjb], dtype=int)
     c_n = a.config.sym.fuse(c_n, c_s, 1)[0]
 
@@ -117,7 +116,7 @@ def vdot(a, b, conj=(1, 0)):
             or (conja * conjb == 1 and all(s1 == -s2 for s1, s2 in zip(a.struct.s, b.struct.s)))):
         raise YastError('Signs do not match')
 
-    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape(1, 2, a.config.sym.NSYM)
+    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
     c_s = np.array([conja, conjb], dtype=int)
     c_n = a.config.sym.fuse(c_n, c_s, 1)
 

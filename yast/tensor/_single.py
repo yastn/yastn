@@ -1,5 +1,4 @@
 """ Linear operations and operations on a single yast tensor. """
-
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _Darray, _struct
 from ._merging import _Fusion, _flip_sign_hf
@@ -223,7 +222,7 @@ def conj(a, inplace=False):
     -------
     tensor : Tensor
     """
-    an = np.array(a.struct.n, dtype=int).reshape(1, 1, -1)
+    an = np.array(a.struct.n, dtype=int).reshape((1, 1, -1))
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
@@ -260,7 +259,7 @@ def flip_signature(a, inplace=False):
     -------
     tensor : Tensor
     """
-    an = np.array(a.struct.n, dtype=int).reshape(1, 1, -1)
+    an = np.array(a.struct.n, dtype=int).reshape((1, 1, -1))
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
@@ -490,14 +489,14 @@ def add_leg(a, axis=-1, s=1, t=None, inplace=False):
         raise YastError('The signature s should be equal to 1 or -1.')
     an = np.array(a.struct.n, dtype=int)
     if t is None:
-        t = a.config.sym.fuse(an.reshape(1, 1, -1), np.array([1], dtype=int), -1)[0] if s == 1 else an  # s == -1
+        t = a.config.sym.fuse(an.reshape((1, 1, -1)), np.array([1], dtype=int), -1)[0] if s == 1 else an  # s == -1
     else:
-        t = a.config.sym.fuse(np.array(t, dtype=int).reshape(1, 1, -1), np.array([1], dtype=int), 1)[0]
+        t = a.config.sym.fuse(np.array(t, dtype=int).reshape((1, 1, -1)), np.array([1], dtype=int), 1)[0]
     if len(t) != a.config.sym.NSYM:
         raise YastError('t does not have the proper number of symmetry charges')
 
     news = np.insert(np.array(a.struct.s, dtype=int), axis, s)
-    newn = a.config.sym.fuse(np.hstack([an, t]).reshape(1, 2, -1), np.array([1, s], dtype=int), 1)[0]
+    newn = a.config.sym.fuse(np.hstack([an, t]).reshape((1, 2, -1)), np.array([1, s], dtype=int), 1)[0]
     new_tset = np.insert(tset, axis, t, axis=1)
     new_Dset = np.insert(Dset, axis, 1, axis=1)
 

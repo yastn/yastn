@@ -1,5 +1,5 @@
-from .configs import config_U1
 import yast
+from .configs import config_U1
 
 tol = 1e-12
 

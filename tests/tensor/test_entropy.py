@@ -1,7 +1,8 @@
-import yast
-from .configs import config_U1
+""" yast.linalg.entropy """
 import numpy as np
 import pytest
+import yast
+from .configs import config_U1
 
 tol = 1e-12
 

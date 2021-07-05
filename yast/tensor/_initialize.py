@@ -83,8 +83,8 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
         comb_t = list(product(*t))
         lcomb_t = len(comb_t)
         comb_t = list(_flatten(comb_t))
-        comb_t = np.array(comb_t, dtype=int).reshape(lcomb_t, a.nlegs, a.config.sym.NSYM)
-        comb_D = np.array(comb_D, dtype=int).reshape(lcomb_t, a.nlegs)
+        comb_t = np.array(comb_t, dtype=int).reshape((lcomb_t, a.nlegs, a.config.sym.NSYM))
+        comb_D = np.array(comb_D, dtype=int).reshape((lcomb_t, a.nlegs))
         sa = np.array(a.struct.s, dtype=int)
         na = np.array(a.struct.n, dtype=int)
         ind = np.all(a.config.sym.fuse(comb_t, sa, 1) == na, axis=1)
@@ -144,7 +144,7 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
     if Ds is not None and len(Ds) != a.nlegs:
         raise YastError('Wrong size of Ds.')
 
-    ats = np.array(ts, dtype=int).reshape(1, a.nlegs, a.config.sym.NSYM)
+    ats = np.array(ts, dtype=int).reshape((1, a.nlegs, a.config.sym.NSYM))
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)
     if not np.all(a.config.sym.fuse(ats, sa, 1) == na):
