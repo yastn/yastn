@@ -1,8 +1,8 @@
-""" Test elements of logical leg's fusion. """
+""" Test elements of fuse_legs(... mode='meta') """
+import numpy as np
+import pytest
 import yast
 from .configs import config_U1
-import pytest
-import numpy as np
 
 
 tol = 1e-10

@@ -1,7 +1,7 @@
 """ Test yast.ncon """
+import pytest
 import yast
 from .configs import config_dense, config_U1
-import pytest
 
 tol = 1e-12
 
@@ -59,7 +59,7 @@ def test_ncon_1():
                   D=((20, 10), (30, 20), (10, 5), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)))
     d = yast.rand(config=config_U1, s=[1, 1, -1, -1], n=0,
                   D=((30, 20), (10, 5), (20, 10), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)))
-    
+
     e = yast.ncon([a, b], [[1, -2, -4], [-1, -3, 1]])
     assert e.get_shape() == (8, 6, 4, 2)
     assert e.is_consistent()

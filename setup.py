@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 requirements = open('requirements.txt').readlines()
 
-description = ('Basic operations for matrix product states.')
+description = ('Yet another symmetric tensor.')
 
 # README file as long_description.
 long_description = open('README.md', encoding='utf-8').read()

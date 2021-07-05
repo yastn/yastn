@@ -102,8 +102,8 @@ def _merge_masks(config, ls, ms):
 
 def _get_tD_legs(struct):
     """ different views on struct.t and struct.D """
-    tset = np.array(struct.t, dtype=int).reshape(len(struct.t), len(struct.s), len(struct.n))
-    Dset = np.array(struct.D, dtype=int).reshape(len(struct.t), len(struct.s))
+    tset = np.array(struct.t, dtype=int).reshape((len(struct.t), len(struct.s), len(struct.n)))
+    Dset = np.array(struct.D, dtype=int).reshape((len(struct.t), len(struct.s)))
     tD_legs = [sorted(set((tuple(t.flat), D) for t, D in zip(tset[:, n, :], Dset[:, n]))) for n in range(len(struct.s))]
     tD_dict = [dict(tD) for tD in tD_legs]
     if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):

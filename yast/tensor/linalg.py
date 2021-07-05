@@ -1,5 +1,4 @@
 """ Linalg methods for yast tensor. """
-
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys
 from ._tests import YastError, _check, _test_tensors_match, _test_all_axes

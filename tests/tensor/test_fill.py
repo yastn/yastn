@@ -1,8 +1,8 @@
 """ Test: fill_tensor (which is called in: rand, zeros, ones), to_numpy, match_legs, norm_diff """
+import numpy as np
+import pytest
 import yast
 from .configs import config_dense, config_U1, config_Z2_U1
-from math import isclose
-import numpy as np
 
 tol = 1e-12
 
@@ -26,7 +26,7 @@ def test_fill_0():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == ()
-    assert isclose(a.to_number(), 1, rel_tol=tol)
+    assert pytest.approx(a.to_number(), rel=tol) == 1
     assert a.is_consistent()
 
     # print('1d tensor:')
@@ -68,7 +68,7 @@ def test_fill_1():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == ()
-    assert isclose(a.to_number(), 1, rel_tol=tol)
+    assert pytest.approx(a.to_number(), rel=tol) == 1
     assert a.is_consistent()
 
     # print('1d tensor:')

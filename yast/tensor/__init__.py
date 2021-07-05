@@ -101,7 +101,7 @@ class Tensor:
         except (KeyError, TypeError):
             self.hard_fusion = tuple(_Fusion(s=(x,), ms=(-1 * x,)) for x in s)
 
-
+    # pylint disable=import-outside-toplevel
     from ._initialize import set_block, fill_tensor
     from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr
     from ._contractions import tensordot, vdot, trace, swap_gate
@@ -109,9 +109,11 @@ class Tensor:
     from ._single import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, remove_zero_blocks, add_leg
     from ._single import copy, clone, detach, to, requires_grad_, real, imag
     from ._output import export_to_dict, compress_to_1d, show_properties, __str__, print_blocks, is_complex
-    from ._output import get_blocks_charges, get_leg_charges_and_dims, zero_of_dtype, item, __getitem__
-    from ._output import get_blocks_shapes, get_leg_fusion, get_leg_structure, get_ndim, get_shape, get_signature, unique_dtype
-    from ._output import get_size, get_tensor_charge, to_dense, to_nonsymmetric, to_number, to_numpy, to_raw_tensor
+    from ._output import get_blocks_charges, get_blocks_shapes, get_leg_charges_and_dims, get_leg_structure
+    from ._output import zero_of_dtype, item, __getitem__
+    from ._output import get_leg_fusion, get_ndim, get_shape, get_signature, unique_dtype
+    from ._output import get_size, get_tensor_charge
+    from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric
     from ._tests import is_consistent, are_independent
     from ._auxliary import update_struct
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
@@ -140,4 +142,5 @@ class Tensor:
 
     @property
     def requires_grad(self):
+        """ Return value of requires_grad """
         return requires_grad(self)

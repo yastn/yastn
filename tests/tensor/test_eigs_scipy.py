@@ -1,8 +1,8 @@
+import numpy as np
+import pytest
+from scipy.sparse.linalg import eigs, LinearOperator
 import yast
 from .configs import config_U1
-import numpy as np
-from scipy.sparse.linalg import eigs, LinearOperator
-import pytest
 
 tol = 1e-10
 

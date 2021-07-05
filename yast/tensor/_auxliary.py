@@ -1,5 +1,4 @@
 """ Auxliary functions. """
-
 from typing import NamedTuple
 from itertools import accumulate, chain
 import numpy as np

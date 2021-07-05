@@ -1,4 +1,4 @@
-import numpy as np
+""" yast.add_leg """
 import yast
 from .configs import config_dense, config_U1, config_Z2_U1
 
@@ -6,6 +6,7 @@ tol = 1e-12
 
 
 def test_aux_0():
+    """ add_leg for dense; nsym=0 """
     a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     c = yast.add_leg(a)
     c.is_consistent()
@@ -16,6 +17,7 @@ def test_aux_0():
 
 
 def test_aux_1():
+    """ add_leg with nsym=0 """
     a = yast.Tensor(config=config_U1, s=(-1, 1), n=-1)
     a.set_block(ts=(1, 0), Ds=(1, 1), val=1)
 
@@ -34,6 +36,7 @@ def test_aux_1():
 
 
 def test_aux_2():
+    """ add_leg with nsym=2 """
     a = yast.rand(config=config_Z2_U1, s=(-1, 1, 1), n=(1, 2),
                   t=[[(0, 0), (1, 0), (0, 2), (1, 2)], [(0, -2), (0, 2)], [(0, -2), (0, 2), (1, -2), (1, 0), (1, 2)]],
                   D=((1, 2, 2, 4), (2, 3), (2, 6, 3, 6, 9)), dtype='float64')
@@ -60,7 +63,7 @@ def test_aux_2():
 
 def test_operators_chain():
     """
-    consider a sequence of operators "cdag cdag c c"
+    Consider a sequence of operators "cdag cdag c c"
     add virtual legs connecting them, starting from the end
     """
 
@@ -79,7 +82,7 @@ def test_operators_chain():
     o3 = yast.add_leg(o3, axis=0, s=1)
     tD = o3.get_leg_structure(axis=0)
     nn = next(iter(tD))
-    
+
     o2 = yast.add_leg(cdag, axis=-1, t=nn, s=-1)
     o2 = yast.add_leg(o2, axis=0, s=1)
     tD = o2.get_leg_structure(axis=0)
