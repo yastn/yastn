@@ -1,6 +1,6 @@
 """ Test yast.ncon """
-from .context import yast
-from .context import config_dense, config_U1
+import yast
+from .configs import config_dense, config_U1
 import pytest
 
 tol = 1e-12

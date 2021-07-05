@@ -1,5 +1,6 @@
-from .context import yast
-from .context import config_Z2
+from .configs import config_Z2
+from .configs import config_Z2
+import yast
 from .test_fuse_hard import test_dot_1_super_sparse
 
 tol = 1e-12

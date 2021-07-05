@@ -1,7 +1,6 @@
-
-from .context import yast
-from .context import config_U1
 import numpy as np
+import yast
+from .configs import config_U1
 
 # import yast.backend.backend_torch as backend
 # config_U1_R.backend = backend

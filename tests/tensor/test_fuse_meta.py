@@ -1,6 +1,6 @@
 """ Test elements of logical leg's fusion. """
-from .context import yast
-from .context import config_U1
+import yast
+from .configs import config_U1
 import pytest
 import numpy as np
 

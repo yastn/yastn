@@ -2,8 +2,8 @@
 Test functions: fill_tensor (which is called in: rand, zeros, ones),
 to_numpy, match_legs, norm_diff
 """
-from .context import yast
-from .context import config_dense, config_U1, config_Z2_U1
+import yast
+from .configs import config_dense, config_U1, config_Z2_U1
 
 import numpy as np
 from math import isclose
