@@ -1,7 +1,9 @@
 import os
+import sys
 from fnmatch import fnmatch
 import importlib
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 def pytest_addoption(parser):
     parser.addoption("--backend", help='np or torch', default='np', action='store')
