@@ -2,7 +2,7 @@
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray
 from ._tests import YastError, _check, _test_configs_match, _test_fusions_match
-from ._merging import _merge_to_matrix, _unmerge_matrix, _masks_for_tensordot, _flip_sign_hf
+from ._merging import _merge_to_matrix, _unmerge_matrix, _masks_for_tensordot, _flip_sign_hf, _masks_for_vdot
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon']
 
@@ -54,7 +54,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
             raise YastError('Order of hard fusions on leg %1d of a and leg %1d of b do not match' % (i1, i2))
         if _check["signatures_match"] and ((mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or
                                             (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms)):
-            raise YastError('Hard fusions do not match. Singnature problem.')
+            raise YastError('Hard fusions do not match. Signature problem.')
         if  a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
             needs_mask = True
 
@@ -112,17 +112,26 @@ def vdot(a, b, conj=(1, 0)):
     _test_fusions_match(a, b)
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
 
-    if not ((conja * conjb == -1 and a.struct.s == b.struct.s)
-            or (conja * conjb == 1 and all(s1 == -s2 for s1, s2 in zip(a.struct.s, b.struct.s)))):
-        raise YastError('Signs do not match')
+    if _check["signatures_match"]:
+        if conja * conjb == -1 and any(ha.s != hb.s for ha, hb in zip(a.hard_fusion, b.hard_fusion)):
+            raise YastError('Signatures do not match.')
+        if conja * conjb == 1 and any(ha.s != hb.ms for ha, hb in zip(a.hard_fusion, b.hard_fusion)):
+            raise YastError('Signatures do not match.')
 
-    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
-    c_s = np.array([conja, conjb], dtype=int)
-    c_n = a.config.sym.fuse(c_n, c_s, 1)
+    needs_mask = any(ha.t != hb.t or ha.D != hb.D for ha, hb in zip(a.hard_fusion, b.hard_fusion))
+    nsym = a.config.sym.NSYM
+    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, nsym))
+    c_n = a.config.sym.fuse(c_n, (conja, conjb), 1)
 
     k12, _, _ = _common_keys(a.A, b.A)
     if (len(k12) > 0) and np.all(c_n == 0):
-        return a.config.backend.vdot(a.A, b.A, conj, k12)
+        if needs_mask:
+            sla, slb = _masks_for_vdot(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion, k12)
+            Aa = {t: a.A[t][sla[t]] for t in k12}
+            Ab = {t: b.A[t][slb[t]] for t in k12}
+        else:
+            Aa, Ab = a.A, b.A
+        return a.config.backend.vdot(Aa, Ab, conj, k12)
     return a.zero_of_dtype()
 
 

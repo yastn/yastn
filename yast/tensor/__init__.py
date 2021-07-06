@@ -101,7 +101,7 @@ class Tensor:
         except (KeyError, TypeError):
             self.hard_fusion = tuple(_Fusion(s=(x,), ms=(-1 * x,)) for x in s)
 
-    # pylint disable=import-outside-toplevel
+    # pylint: disable=C0415
     from ._initialize import set_block, fill_tensor
     from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr
     from ._contractions import tensordot, vdot, trace, swap_gate

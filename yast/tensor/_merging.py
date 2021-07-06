@@ -114,7 +114,7 @@ def _get_tD_legs(struct):
 
 
 def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
-    """ masks to get the intersecting parts of legs from two tensors """
+    """ masks to get the intersecting parts of legs from two tensors as single masks """
     msk_a, msk_b = [], []
     tla, Dla, _, _, _ = _get_tD_legs(structa)
     tlb, Dlb, _, _, _ = _get_tD_legs(structb)
@@ -129,6 +129,26 @@ def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb)
     for t, x in msk_b.items():
         msk_b[t] = config.backend.to_mask(x)
     return msk_a, msk_b
+
+
+def _masks_for_vdot(config, structa, hfa, structb, hfb, ind_ab=None):
+    """ masks to get the intersecting parts on all legs from two tensors """
+    msk_a, msk_b = [], []
+    tla, Dla, _, _, _ = _get_tD_legs(structa)
+    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
+    nsym, ndim = config.sym.NSYM, len(tla) 
+    for n in range(ndim):
+        ss = tuple(-1 if i == n else 1 for i in range(ndim))
+        ma, mb = _intersect_hfs(config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (hfa[n], hfb[n]))
+        ma = {t: config.backend.to_mask(x).reshape(ss) for t, x in ma.items()}
+        mb = {t: config.backend.to_mask(x).reshape(ss) for t, x in mb.items()}
+        msk_a.append(ma)
+        msk_b.append(mb)
+    inda = structa.t if ind_ab is None else ind_ab
+    indb = structb.t if ind_ab is None else ind_ab
+    sla = {t: tuple(ma[t[n * nsym : n * nsym + nsym]] for n, ma in enumerate(msk_a)) for t in inda}
+    slb = {t: tuple(mb[t[n * nsym : n * nsym + nsym]] for n, mb in enumerate(msk_b)) for t in indb}
+    return sla, slb
 
 
 def _mask_falsify_mismatches(ms1, ms2):
@@ -148,7 +168,7 @@ def _intersect_hfs(config, ts, Ds, hfs):
     Consumes fusion trees from the bottom, identifying common elements and building the masks.
     """
     if hfs[0].tree != hfs[1].tree:
-        raise YastError('Orders of merges do not match. ')
+        raise YastError('Orders or number of merged legs do not match. ')
     teff = tuple(sorted((set(ts[0]) & set(ts[1]))))
 
     tree = list(hfs[0].tree)
