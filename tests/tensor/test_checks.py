@@ -1,6 +1,6 @@
 import yast
 from .configs import config_Z2
-from .test_fuse_hard import test_dot_1_super_sparse
+from .test_fuse_hard import test_hard_to_scalar
 
 tol = 1e-12
 
@@ -31,7 +31,7 @@ def test_cache2():
     yast.set_cache_maxsize(maxsize=100)
     print(yast.get_cache_info())
     for _ in range(100):
-        test_dot_1_super_sparse()
+        test_hard_to_scalar()
     print(yast.get_cache_info())
 
 

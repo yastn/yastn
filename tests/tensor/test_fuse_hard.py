@@ -1,11 +1,12 @@
 import numpy as np
+import pytest
 import yast
 from .configs import config_U1, config_Z2_U1
 
 tol = 1e-10
 
 
-def test_merge_trace():
+def test_hard_trace():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 2, 3), (4, 5, 6), (1, 2, 3), (4, 5, 6)))
@@ -16,7 +17,7 @@ def test_merge_trace():
     assert yast.norm_diff(tra, traf) < tol
 
 
-def test_merge_split():
+def test_hard_split():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
@@ -58,7 +59,7 @@ def test_merge_split():
     assert aH2.norm_diff(aH) < tol  # == 0.0
 
 
-def test_merge_transpose():
+def test_hard_transpose():
     a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
@@ -76,7 +77,7 @@ def test_merge_transpose():
     assert c.get_shape() == (3, 5, 9, 11, 7, 13)
 
 
-def test_dot_2():
+def test_hard_dot_2():
     t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
     t2 = [(0, 0), (0, 2), (1, 0), (1, 2)]
     a = yast.rand(config=config_Z2_U1, s=(-1, 1, 1, -1, -1),
@@ -107,7 +108,7 @@ def test_dot_2():
     assert yast.norm_diff(a, aaa) < tol
 
 
-def test_dot_1():
+def test_hard_dot_1():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
@@ -130,7 +131,7 @@ def test_dot_1():
     assert yast.norm_diff(b, bbb) < tol
 
 
-def test_dot_1_sparse():
+def test_hard_dot_1_sparse():
     a = yast.Tensor(config=config_U1, s=(-1, 1, 1, -1), n=-2)
     a.set_block(ts=(2, 1, 0, 1), Ds=(2, 1, 5, 3), val='rand')
     a.set_block(ts=(1, 1, -1, 1), Ds=(1, 1, 6, 3), val='rand')
@@ -157,34 +158,33 @@ def test_dot_1_sparse():
     assert yast.norm_diff(b, bbb) < tol
 
 
-def test_dot_1_super_sparse():
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                t=((0,), (0,), (-1, 0, 1), (-1, 0, 1)),
-                D=((2,), (5,), (7, 8, 9), (10, 11, 12)))
-    a.set_block(ts=(1, 1, 0, 0), Ds=(3, 6, 8, 11))
-    # a.set_block(ts=(-1, -1, 0, 0), Ds=(1, 4, 8, 11))
-
-    b = yast.rand(config=config_U1, s=(1, -1, -1, 1),
-                t=((-1, 0, 1), (-1, 0, 1), (-1, 0, 1), (-2, 0, 2)),
-                D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-
+def _test_hard_to_scalar(a, b):
     ab = yast.tensordot(a, b, axes=((0, 1, 2, 3), (0, 1, 2, 3)))
+    s0 = yast.vdot(a, b, conj=(0, 0))
 
     fa = yast.fuse_legs(a, axes=(0, (2, 3), 1), mode='hard')
     fb = yast.fuse_legs(b, axes=(0, (2, 3), 1), mode='hard')
     fab = yast.tensordot(fa, fb, axes=((0, 1, 2), (0, 1, 2)))
+    s1 = yast.vdot(fa, fb, conj=(0, 0))
 
     ffa = yast.fuse_legs(fa, axes=((0, 1), 2), mode='hard')
     ffb = yast.fuse_legs(fb, axes=((0, 1), 2), mode='hard')
     ffab = yast.tensordot(ffa, ffb, axes=((0, 1), (0, 1)))
+    s2 = yast.vdot(ffa, ffb, conj=(0, 0))
 
     fffa = yast.fuse_legs(ffa, axes=[[0, 1]], mode='hard')
     fffb = yast.fuse_legs(ffb, axes=[[0, 1]], mode='hard')
     fffab = yast.tensordot(fffa, fffb, axes=(0, 0))
+    s3 = yast.vdot(fffa, fffb, conj=(0, 0))
 
     assert yast.norm_diff(ab, fab) < tol
     assert yast.norm_diff(ab, ffab) < tol
     assert yast.norm_diff(ab, fffab) < tol
+    assert pytest.approx(ab.to_number(), rel=tol) == s0
+    assert pytest.approx(s0, rel=tol) == s1
+    assert pytest.approx(s0, rel=tol) == s2
+    assert pytest.approx(s0, rel=tol) == s3
+
 
     ffa = yast.fuse_legs(fa, axes= ((0, 2), 1), mode='hard')
     ffb = yast.fuse_legs(fb, axes= ((0, 2), 1), mode='hard')
@@ -192,6 +192,38 @@ def test_dot_1_super_sparse():
     uab = yast.unfuse_legs(ffab, axes=(0, 1))
     ab = yast.tensordot(a, b, axes=((0, 1), (0, 1)))
     assert yast.norm_diff(ab, uab) < tol
+
+
+def test_hard_to_scalar():
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+                t=((0,), (0,), (-1, 0, 1), (-1, 0, 1)),
+                D=((2,), (5,), (7, 8, 9), (10, 11, 12)))
+    a.set_block(ts=(1, 1, 0, 0), Ds=(3, 6, 8, 11))
+    b = yast.rand(config=config_U1, s=(1, -1, -1, 1),
+                t=((-1, 0, 1), (-1, 0, 1), (-1, 0, 1), (-2, 0, 2)),
+                D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+    c = yast.rand(config=config_U1, s=(1, -1, -1, 1),
+                t=((1,), (1,), (0, 1), (0, 1)),
+                D=((3,), (6,), (8, 9), (11, 12)))
+
+    _test_hard_to_scalar(a, b)
+    _test_hard_to_scalar(a, c)
+
+    t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
+    D1 = (1, 2, 3, 4)
+    t2 = [(0, 0), (0, 1), (1, 1)]
+    D2 = (5, 2, 4)
+    a2 = yast.rand(config=config_Z2_U1, s=(-1, 1, 1, -1),
+                  t=(t2, t2, t1, t1),
+                  D=(D2, D2, D1, D1))
+    b2 = yast.rand(config=config_Z2_U1, s=(1, -1, -1, 1),
+                  t=(t1, t1, t2, t2),
+                  D=(D1, D1, D2, D2))
+    _test_hard_to_scalar(a2, b2)
+
+    a2.set_block(ts=((1, 2, 1, 2, 1, 2, 1, 2)), Ds=(6, 6, 6, 6), val='rand')
+    a2.set_block(ts=((1, -1, 1, -1, 1, -1, 1, -1)), Ds=(3, 3, 3, 3), val='rand')
+    _test_hard_to_scalar(a2, b2)
 
 
 def _test_fuse_mix(a):
@@ -262,12 +294,12 @@ def test_auxliary_merging_functions():
 
 
 if __name__ == '__main__':
-    test_merge_trace()
-    test_merge_split()
-    test_merge_transpose()
-    test_dot_1()
-    test_dot_2()
-    test_dot_1_sparse()
-    test_dot_1_super_sparse()
+    test_hard_trace()
+    test_hard_split()
+    test_hard_transpose()
+    test_hard_dot_1()
+    test_hard_dot_2()
+    test_hard_dot_1_sparse()
+    test_hard_to_scalar()
     test_fuse_mix()
     test_auxliary_merging_functions()
