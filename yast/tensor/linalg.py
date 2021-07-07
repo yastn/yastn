@@ -50,7 +50,7 @@ def norm_diff(a, b, p='fro'):
 
 
 def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
-                tol=0, D_block=6, D_total=np.inf,
+                tol=0, tol_block=0, D_block=6, D_total=np.inf,
                 keep_multiplets=False, eps_multiplet=1e-14,
                 n_iter=60, k_fac=6, **kwargs):
     r"""
@@ -76,7 +76,10 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         it is the last leg of U and the first of V.
 
     tol: float
-        relative tolerance of singular values below which to truncate.
+        relative tolerance of singular values below which to truncate across all blocks.
+
+    tol_block: float
+        relative tolerance of singular values below which to truncate within individual blocks
 
     D_block: int
         largest number of singular values to keep in a single block.
@@ -121,7 +124,9 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     U.A, S.A, V.A = a.config.backend.svd_lowrank(Am, meta, D_block, n_iter, k_fac)
 
-    ls_s = _leg_struct_truncation(S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'svd')
+    ls_s = _leg_struct_truncation(
+        S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
+        keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='svd')
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
     _unmerge_matrix(V, ls_s, ls_r)
@@ -131,7 +136,7 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
 
 def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
-        tol=0, D_block=np.inf, D_total=np.inf,
+        tol=0, tol_block=0, D_block=np.inf, D_total=np.inf,
         keep_multiplets=False, eps_multiplet=1e-14, **kwargs):
     r"""
     Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
@@ -156,7 +161,10 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         it is the last leg of U and the first of V.
 
     tol: float
-        relative tolerance of singular values below which to truncate.
+        relative tolerance of singular values below which to truncate across all blocks
+
+    tol_block: float
+        relative tolerance of singular values below which to truncate within individual blocks
 
     D_block: int
         largest number of singular values to keep in a single block.
@@ -197,7 +205,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     U.A, S.A, V.A = a.config.backend.svd(Am, meta)
 
     ls_s = _leg_struct_truncation(
-        S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'svd')
+        S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
+        keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='svd')
 
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
@@ -255,7 +264,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     return Q, R
 
 
-def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf,
+def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np.inf,
          keep_multiplets=False, eps_multiplet=1e-14):
     r"""
     Split tensor using eig, tensor = U * S * U^dag. Truncate smallest eigenvalues if neccesary.
@@ -279,7 +288,10 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf,
         specify which leg of U is the new connecting leg. By delault it is the last leg.
 
     tol: float
-        relative tolerance of singular values below which to truncate.
+        relative tolerance of singular values below which to truncate across all blocks.
+
+    tol_block: float
+        relative tolerance of singular values below which to truncate within individual blocks
 
     D_block: int
         largest number of singular values to keep in a single block.
@@ -317,7 +329,8 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, D_block=np.inf, D_total=np.inf,
     S.A, U.A = a.config.backend.eigh(Am, meta)
 
     ls_s = _leg_struct_truncation(
-        S, tol, D_block, D_total, keep_multiplets, eps_multiplet, 'eigh')
+        S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
+        keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='eigh')
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)

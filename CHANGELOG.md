@@ -56,3 +56,7 @@
   and do nothing if there are no meta fusions
 - hard fusion keeps the information about history. mismatches in hard-fusions are cought and 
   resolved in tensordot (todo: add such support for vdot, trace, norm_diff, _add__, ...)
+
+07-07-2021
+- `_leg_struct_truncation` accepts `tol_block` parameter, which truncates spectral values
+  in each block individually relative to spectral value of largest magnitude within the block 
