@@ -39,8 +39,8 @@ def tensordot(a, b, axes, conj=(0, 0)):
     axes_a = _unpack_axes(a, la_out, la_con)  # actual legs of a; tuple of two tuples
     axes_b = _unpack_axes(b, lb_con, lb_out)  # actual legs of b; tuple of two tuples
 
-    naxes_a = tuple(np.array(x, dtype=np.intp) for x in axes_a)
-    naxes_b = tuple(np.array(x, dtype=np.intp) for x in axes_b)
+    # naxes_a = tuple(np.array(x, dtype=np.intp) for x in axes_a)
+    # naxes_b = tuple(np.array(x, dtype=np.intp) for x in axes_b)
 
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
     mconj = (-conja * conjb)
@@ -62,7 +62,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
     c_s = np.array([conja, conjb], dtype=int)
     c_n = a.config.sym.fuse(c_n, c_s, 1)[0]
 
-    ind_a, ind_b = _common_rows(_tarray(a)[:, naxes_a[1], :], _tarray(b)[:, naxes_b[0], :])
+    ind_a, ind_b = _common_rows(_tarray(a)[:, axes_a[1], :], _tarray(b)[:, axes_b[0], :])
     s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
 
     Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, axes_a, s_eff_a, ind_a, sort_r=True)
@@ -149,8 +149,7 @@ def trace(a, axes=(0, 1)):
         tensor: Tensor
     """
     lin1, lin2 = _clear_axes(*axes)  # contracted legs
-    lin12 = lin1 + lin2
-    lout = tuple(ii for ii in range(a.mlegs) if ii not in lin12)
+    lout = tuple(ii for ii in range(a.mlegs) if ii not in lin1 + lin2)
     in1, in2, out = _unpack_axes(a, lin1, lin2, lout)
 
     if len(in1) != len(in2) or len(lin1) != len(lin2):
@@ -159,9 +158,6 @@ def trace(a, axes=(0, 1)):
         return a
 
     order = in1 + in2 + out
-    ain1 = np.array(in1, dtype=np.intp)
-    ain2 = np.array(in2, dtype=np.intp)
-    aout = np.array(out, dtype=np.intp)
 
     if not all(a.struct.s[i1] == -a.struct.s[i2] for i1, i2 in zip(in1, in2)):
         raise YastError('Signs do not match')
@@ -174,12 +170,12 @@ def trace(a, axes=(0, 1)):
 
     tset, Dset = _tarray(a), _Darray(a)
     lt = len(tset)
-    t1 = tset[:, ain1, :].reshape(lt, -1)
-    t2 = tset[:, ain2, :].reshape(lt, -1)
-    to = tset[:, aout, :].reshape(lt, -1)
-    D1 = Dset[:, ain1]
-    D2 = Dset[:, ain2]
-    D3 = Dset[:, aout]
+    t1 = tset[:, in1, :].reshape(lt, -1)
+    t2 = tset[:, in2, :].reshape(lt, -1)
+    to = tset[:, out, :].reshape(lt, -1)
+    D1 = Dset[:, in1]
+    D2 = Dset[:, in2]
+    D3 = Dset[:, out]
     pD1 = np.prod(D1, axis=1).reshape(lt, 1)
     pD2 = np.prod(D2, axis=1).reshape(lt, 1)
     ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
