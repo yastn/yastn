@@ -1,5 +1,9 @@
 import yast
-from .configs import config_dense, config_U1, config_Z2_U1
+if __name__ == '__main__':
+    from configs import config_dense, config_U1, config_Z2_U1
+else:
+    from .configs import config_dense, config_U1, config_Z2_U1
+
 
 tol = 1e-10
 

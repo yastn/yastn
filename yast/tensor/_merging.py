@@ -113,44 +113,6 @@ def _get_tD_legs(struct):
     return tlegs, Dlegs, tD_dict, tset, Dset
 
 
-def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
-    """ masks to get the intersecting parts of legs from two tensors as single masks """
-    msk_a, msk_b = [], []
-    tla, Dla, _, _, _ = _get_tD_legs(structa)
-    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
-    for i1, i2 in zip(axa, axb):
-        ma, mb = _intersect_hfs(config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (hfa[i1], hfb[i2]))
-        msk_a.append(ma)
-        msk_b.append(mb)
-    msk_a = _merge_masks(config, lsa, msk_a)
-    msk_b = _merge_masks(config, lsb, msk_b)
-    for t, x in msk_a.items():
-        msk_a[t] = config.backend.to_mask(x)
-    for t, x in msk_b.items():
-        msk_b[t] = config.backend.to_mask(x)
-    return msk_a, msk_b
-
-
-def _masks_for_vdot(config, structa, hfa, structb, hfb, ind_ab=None):
-    """ masks to get the intersecting parts on all legs from two tensors """
-    msk_a, msk_b = [], []
-    tla, Dla, _, _, _ = _get_tD_legs(structa)
-    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
-    nsym, ndim = config.sym.NSYM, len(tla) 
-    for n in range(ndim):
-        ss = tuple(-1 if i == n else 1 for i in range(ndim))
-        ma, mb = _intersect_hfs(config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (hfa[n], hfb[n]))
-        ma = {t: config.backend.to_mask(x).reshape(ss) for t, x in ma.items()}
-        mb = {t: config.backend.to_mask(x).reshape(ss) for t, x in mb.items()}
-        msk_a.append(ma)
-        msk_b.append(mb)
-    inda = structa.t if ind_ab is None else ind_ab
-    indb = structb.t if ind_ab is None else ind_ab
-    sla = {t: tuple(ma[t[n * nsym : n * nsym + nsym]] for n, ma in enumerate(msk_a)) for t in inda}
-    slb = {t: tuple(mb[t[n * nsym : n * nsym + nsym]] for n, mb in enumerate(msk_b)) for t in indb}
-    return sla, slb
-
-
 def _mask_falsify_mismatches(ms1, ms2):
     """ Multiply masks by False for indices that are not in both dictionaries ms1 and ms2. """
     set1, set2 = set(ms1), set(ms2)
@@ -181,7 +143,7 @@ def _intersect_hfs(config, ts, Ds, hfs):
     for ms1, ms2 in zip(*msks):
         for t in set(ms1) & set(ms2):
             if ms1[t].size != ms2[t].size:
-                raise YastError('Mismatch of bond dimension of native legs for charge %s' %str(t))
+                raise YastError('Mismatch of bond dimensions of combined native legs for charge %s' %str(t))
         _mask_falsify_mismatches(ms1, ms2)
 
     if len(tree) == 1:
@@ -218,6 +180,75 @@ def _intersect_hfs(config, ts, Ds, hfs):
     return msks[0].pop(), msks[1].pop()
 
 
+def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
+    """ masks to get the intersecting parts of legs from two tensors as single masks """
+    msk_a, msk_b = [], []
+    tla, Dla, _, _, _ = _get_tD_legs(structa)
+    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
+    for i1, i2 in zip(axa, axb):
+        ma, mb = _intersect_hfs(config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (hfa[i1], hfb[i2]))
+        msk_a.append(ma)
+        msk_b.append(mb)
+    msk_a = _merge_masks(config, lsa, msk_a)
+    msk_b = _merge_masks(config, lsb, msk_b)
+    for t, x in msk_a.items():
+        msk_a[t] = config.backend.to_mask(x)
+    for t, x in msk_b.items():
+        msk_b[t] = config.backend.to_mask(x)
+    return msk_a, msk_b
+
+
+def _masks_for_vdot(config, structa, hfa, structb, hfb, ind_ab=None):
+    """ masks to get the intersecting parts on all legs from two tensors """
+    msk_a, msk_b = [], []
+    tla, Dla, _, _, _ = _get_tD_legs(structa)
+    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
+    nsym, ndim = config.sym.NSYM, len(tla)
+    for n in range(ndim):
+        ss = tuple(-1 if i == n else 1 for i in range(ndim))
+        ma, mb = _intersect_hfs(config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (hfa[n], hfb[n]))
+        ma = {t: config.backend.to_mask(x).reshape(ss) for t, x in ma.items()}
+        mb = {t: config.backend.to_mask(x).reshape(ss) for t, x in mb.items()}
+        msk_a.append(ma)
+        msk_b.append(mb)
+    inda = structa.t if ind_ab is None else ind_ab
+    indb = structb.t if ind_ab is None else ind_ab
+    sla = {t: tuple(ma[t[n * nsym : n * nsym + nsym]] for n, ma in enumerate(msk_a)) for t in inda}
+    slb = {t: tuple(mb[t[n * nsym : n * nsym + nsym]] for n, mb in enumerate(msk_b)) for t in indb}
+    return sla, slb
+
+
+def _masks_for_trace(config, t12, D1, D2, hfs, ax1, ax2):
+    """ masks to get the intersecting part of a combination of legs. """
+    nsym = config.sym.NSYM
+    msk1, msk2 = [], []
+
+    tDDset = set(zip(t12, D1, D2))
+    tset = set(t12)
+    if len(tset) != len(tDDset):
+        raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
+
+    for n, (i1, i2) in enumerate(zip(ax1, ax2)):
+        tdn = tuple(set((t[n * nsym : n * nsym + nsym], d1[n], d2[n]) for t, d1, d2 in tDDset))
+        tn, D1n, D2n = zip(*tdn)
+        m1, m2 = _intersect_hfs(config, (tn, tn), (D1n, D2n), (hfs[i1], hfs[i2]))
+        msk1.append(m1)
+        msk2.append(m2)
+
+    msk12 = {}
+    for t in tset:
+        m1 = msk1[0][t[:nsym]]
+        m2 = msk2[0][t[:nsym]]
+        for n in range(1, len(msk1)):
+            ind = t[n * nsym: (n + 1) * nsym]
+            m1 = np.outer(m1, msk1[n][ind]).ravel()
+            m2 = np.outer(m2, msk2[n][ind]).ravel()
+        msk12[t] = (config.backend.to_mask(m1), config.backend.to_mask(m2))
+    return msk12
+
+
+
+
 def _unfuse_Fusion(hf):
     """ one layer of unfuse """
     tt, DD, ss, hfs = [], [], [], []
@@ -250,7 +281,7 @@ def _consume_mfs_lowest(mfs):
             leg += 1
         else:
             group, count = [], 0
-            for nlegs in mf:  # parsing the tree to identify the lowest layer
+            for nlegs in mf:  # parsing m tree to identify the lowest layer
                 if nlegs > 1:
                     count = nlegs
                     for x in group:

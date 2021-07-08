@@ -1,6 +1,10 @@
 import yast
-from .configs import config_Z2
-from .test_fuse_hard import test_hard_to_scalar
+if __name__ == '__main__':
+    from configs import config_Z2
+    from test_fuse_hard import test_hard_to_scalar
+else:
+    from .configs import config_Z2
+    from .test_fuse_hard import test_hard_to_scalar
 
 tol = 1e-12
 

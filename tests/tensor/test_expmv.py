@@ -2,7 +2,10 @@ import numpy as np
 import pytest
 import scipy.linalg
 import yast
-from .configs import config_dense, config_Z2, config_U1
+if __name__ == '__main__':
+    from configs import config_dense, config_Z2, config_U1
+else:
+    from .configs import config_dense, config_Z2, config_U1
 
 
 def run_expmv(A, v, tau, tol, ncv, hermitian):

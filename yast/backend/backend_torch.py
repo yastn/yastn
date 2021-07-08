@@ -242,6 +242,20 @@ def trace(A, order, meta):
     return Aout
 
 
+def trace_with_mask(A, order, meta, msk12):
+    """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
+        Repeating tnew are added."""
+    Aout = {}
+    for (tnew, told, Drsh, tt) in meta:
+        Atemp = torch.reshape(A[told].permute(*order), Drsh)
+        Atemp = torch.sum(Atemp[msk12[tt][0], msk12[tt][1]], axis=0)
+        if tnew in Aout:
+            Aout[tnew] += Atemp
+        else:
+            Aout[tnew] = Atemp
+    return Aout
+
+
 def transpose(A, axes, meta_transpose, inplace):
     """ Transpose; Force a copy if not inplace. """
     # check this inplace ...

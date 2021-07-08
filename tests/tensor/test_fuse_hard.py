@@ -1,7 +1,10 @@
 import numpy as np
 import pytest
 import yast
-from .configs import config_U1, config_Z2_U1
+if __name__ == '__main__':
+    from configs import config_U1, config_Z2_U1
+else:
+    from .configs import config_U1, config_Z2_U1
 
 tol = 1e-10
 
@@ -10,11 +13,35 @@ def test_hard_trace():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                   t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 2, 3), (4, 5, 6), (1, 2, 3), (4, 5, 6)))
-
     af = yast.fuse_legs(a, axes=((1, 2), (3, 0)), mode='hard')
     tra = yast.trace(a, axes=((1, 2), (3, 0)))
     traf = yast.trace(af, axes=(0, 1))
     assert yast.norm_diff(tra, traf) < tol
+
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+                  t=((-1, 1), (-1, 2), (-1, 1), (1, 2)),
+                  D=((1, 2), (4, 6), (1, 2), (5, 6)))
+    af = yast.fuse_legs(a, axes=((1, 2), (3, 0)), mode='hard')
+    tra = yast.trace(a, axes=((1, 2), (3, 0)))
+    traf = yast.trace(af, axes=(0, 1))
+    assert yast.norm_diff(tra, traf) < tol
+
+    a = yast.Tensor(config=config_U1, s=(1, -1, 1, 1, -1, -1))
+    a.set_block(ts=(1, 2, 0, 2, 1, 0), Ds=(2, 3, 4, 3, 2, 4), val='randR')
+    a.set_block(ts=(2, 1, 1, 1, 2, 1), Ds=(6, 5, 4, 5, 6, 4), val='randR')
+    a.set_block(ts=(3, 2, 1, 2, 2, 2), Ds=(1, 3, 4, 3, 6, 2), val='randR')
+
+    af = yast.fuse_legs(a, axes=((0, 1), 2, (4, 3), 5), mode='hard')
+    tra = yast.trace(a, axes=((0, 1), (4, 3)))
+    traf = yast.trace(af, axes=(0, 2))
+    assert yast.norm_diff(tra, traf) < tol
+
+    aff = yast.fuse_legs(af, axes=((0, 1), (2, 3)), mode='hard')
+    tra = yast.trace(a, axes=((0, 1, 2), (4, 3, 5)))
+    traff = yast.trace(aff, axes=(0, 1))
+    assert yast.norm_diff(tra, traff) < tol
+
+
 
 
 def test_hard_split():

@@ -1,7 +1,10 @@
 """ yast.vdot yast.moveaxis"""
 import numpy as np
 import yast
-from .configs import config_dense, config_U1, config_Z2_U1
+if __name__ == '__main__':
+    from configs import config_dense, config_U1, config_Z2_U1
+else:
+    from .configs import config_dense, config_U1, config_Z2_U1
 
 
 def run_moveaxis(a, ad, source, destination, result):

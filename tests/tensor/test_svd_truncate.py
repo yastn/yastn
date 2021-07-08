@@ -1,7 +1,9 @@
 import numpy as np
 import yast
-from .configs import config_U1
-
+if __name__ == '__main__':
+    from configs import config_U1
+else:
+    from .configs import config_U1
 # import yast.backend.backend_torch as backend
 # config_U1_R.backend = backend
 
