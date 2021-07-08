@@ -2,7 +2,8 @@
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray
 from ._tests import YastError, _check, _test_configs_match, _test_fusions_match
-from ._merging import _merge_to_matrix, _unmerge_matrix, _masks_for_tensordot, _flip_sign_hf, _masks_for_vdot
+from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_sign_hf
+from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon']
 
@@ -36,11 +37,8 @@ def tensordot(a, b, axes, conj=(0, 0)):
     la_out = tuple(ii for ii in range(a.mlegs) if ii not in la_con)  # outgoing meta legs
     lb_out = tuple(ii for ii in range(b.mlegs) if ii not in lb_con)  # outgoing meta legs
 
-    axes_a = _unpack_axes(a, la_out, la_con)  # actual legs of a; tuple of two tuples
-    axes_b = _unpack_axes(b, lb_con, lb_out)  # actual legs of b; tuple of two tuples
-
-    # naxes_a = tuple(np.array(x, dtype=np.intp) for x in axes_a)
-    # naxes_b = tuple(np.array(x, dtype=np.intp) for x in axes_b)
+    axes_a = _unpack_axes(a, la_out, la_con)  # native legs of a; tuple of two tuples
+    axes_b = _unpack_axes(b, lb_con, lb_out)  # native legs of b; tuple of two tuples
 
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
     mconj = (-conja * conjb)
@@ -55,7 +53,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
         if _check["signatures_match"] and ((mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or
                                             (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms)):
             raise YastError('Hard fusions do not match. Signature problem.')
-        if  a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
+        if a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
             needs_mask = True
 
     c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
@@ -70,14 +68,13 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
     meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
-    if _check["consistency"] and not needs_mask and not (ua_r == ub_l and ls_ac == ls_bc):
-        raise YastError('CRITICAL ERROR. Something went wrong in matching the indices of the two tensors.')
-
     if needs_mask:
         msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hard_fusion, axes_a[1], ls_ac,
                                                     b.struct, b.hard_fusion, axes_b[0], ls_bc)
         Am = {ul + ur: Am[ul + ur][:, msk_a[ur]] for ul, ur in zip(ua_l, ua_r)}
         Bm = {ul + ur: Bm[ul + ur][msk_b[ul], :] for ul, ur in zip(ub_l, ub_r)}
+    elif _check["consistency"] and (ua_r != ub_l or ls_ac != ls_bc):
+        raise YastError('Mismatch in bond dimensions of contracted legs.')
 
     c_s = tuple(conja * a.struct.s[i1] for i1 in axes_a[0]) + tuple(conjb * b.struct.s[i2] for i2 in axes_b[1])
     c_meta_fusion = [a.meta_fusion[ii] for ii in la_out] + [b.meta_fusion[ii] for ii in lb_out]
@@ -118,12 +115,11 @@ def vdot(a, b, conj=(1, 0)):
         if conja * conjb == 1 and any(ha.s != hb.ms for ha, hb in zip(a.hard_fusion, b.hard_fusion)):
             raise YastError('Signatures do not match.')
 
-    needs_mask = any(ha.t != hb.t or ha.D != hb.D for ha, hb in zip(a.hard_fusion, b.hard_fusion))
-    nsym = a.config.sym.NSYM
-    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, nsym))
+    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
     c_n = a.config.sym.fuse(c_n, (conja, conjb), 1)
 
     k12, _, _ = _common_keys(a.A, b.A)
+    needs_mask = any(ha.t != hb.t or ha.D != hb.D for ha, hb in zip(a.hard_fusion, b.hard_fusion))
     if (len(k12) > 0) and np.all(c_n == 0):
         if needs_mask:
             sla, slb = _masks_for_vdot(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion, k12)
@@ -153,7 +149,7 @@ def trace(a, axes=(0, 1)):
     in1, in2, out = _unpack_axes(a, lin1, lin2, lout)
 
     if len(in1) != len(in2) or len(lin1) != len(lin2):
-        raise YastError('Number of axis to trace should be the same')
+        raise YastError('Number of axes to trace should be the same')
     if len(in1) == 0:
         return a
 
@@ -161,6 +157,9 @@ def trace(a, axes=(0, 1)):
 
     if not all(a.struct.s[i1] == -a.struct.s[i2] for i1, i2 in zip(in1, in2)):
         raise YastError('Signs do not match')
+
+    needs_mask = any(a.hard_fusion[i1].t != a.hard_fusion[i2].t or a.hard_fusion[i1].D != a.hard_fusion[i2].D
+                    for i1, i2 in zip(in1, in2))
 
     c_s = tuple(a.struct.s[i3] for i3 in out)
     c_meta_fusion=tuple(a.meta_fusion[ii] for ii in lout)
@@ -180,10 +179,18 @@ def trace(a, axes=(0, 1)):
     pD2 = np.prod(D2, axis=1).reshape(lt, 1)
     ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
     Drsh = np.hstack([pD1, pD2, D3])
-    if not np.all(D1[ind] == D2[ind]):
-        raise YastError('Not all bond dimensions of the traced legs match')
-    meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n])) for n in ind]
-    c.A = c.config.backend.trace(a.A, order, meta)
+    if needs_mask:
+        t12 = tuple(tuple(t.flat) for t in t1[ind])
+        D1 = tuple(tuple(x.flat) for x in D1[ind])
+        D2 = tuple(tuple(x.flat) for x in D2[ind])
+        msk12 = _masks_for_trace(a.config, t12, D1, D2, a.hard_fusion, in1, in2)
+        meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n]), tt) for n, tt in zip(ind, t12)]
+        c.A = c.config.backend.trace_with_mask(a.A, order, meta, msk12)
+    else:
+        if not np.all(D1[ind] == D2[ind]):
+            raise YastError('Not all bond dimensions of the traced legs match')
+        meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n])) for n in ind]
+        c.A = c.config.backend.trace(a.A, order, meta)
     c.update_struct()
     return c
 

@@ -1,7 +1,10 @@
 """ yast.set_block """
 import pytest
 import yast
-from .configs import config_U1_fermionic
+if __name__ == '__main__':
+    from configs import config_U1_fermionic
+else:
+    from .configs import config_U1_fermionic
 
 tol = 1e-12
 

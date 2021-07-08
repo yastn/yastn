@@ -2,7 +2,10 @@ import numpy as np
 import pytest
 from scipy.sparse.linalg import eigs, LinearOperator
 import yast
-from .configs import config_U1
+if __name__ == '__main__':
+    from configs import config_U1
+else:
+    from .configs import config_U1
 
 tol = 1e-10
 
