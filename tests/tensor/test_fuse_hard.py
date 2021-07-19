@@ -1,12 +1,13 @@
+""" Test elements of fuse_legs(... mode='hard') """
 import numpy as np
 import pytest
 import yast
-if __name__ == '__main__':
-    from configs import config_U1, config_Z2_U1
-else:
+try:
     from .configs import config_U1, config_Z2_U1
+except ImportError:
+    from configs import config_U1, config_Z2_U1
 
-tol = 1e-10
+tol = 1e-10  #pylint: disable=invalid-name
 
 
 def test_hard_trace():
@@ -201,8 +202,12 @@ def _test_hard_to_scalar(a, b):
 
     fffa = yast.fuse_legs(ffa, axes=[[0, 1]], mode='hard')
     fffb = yast.fuse_legs(ffb, axes=[[0, 1]], mode='hard')
+
     fffab = yast.tensordot(fffa, fffb, axes=(0, 0))
     s3 = yast.vdot(fffa, fffb, conj=(0, 0))
+    fffb=fffb.conj()
+    m1, m2, h = yast.tensor._merging._union_hfs(a.config, [[(0,)],[(0,)]], [1,1], [fffa.hard_fusion[0], fffb.hard_fusion[0]])
+
 
     assert yast.norm_diff(ab, fab) < tol
     assert yast.norm_diff(ab, ffab) < tol
@@ -288,6 +293,10 @@ def test_fuse_mix():
     a.set_block(ts=(1, 2, -1, 2, 0, 0), Ds=(1, 2, 3, 4, 5, 6), val='randR')
     a.set_block(ts=(2, 1, 1, -2, 1, 1), Ds=(6, 5, 4, 3, 2, 1), val='randR')
     _test_fuse_mix(a)
+
+def test_hfs_union():
+    pass
+
 
 
 def test_auxliary_merging_functions():

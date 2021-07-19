@@ -2,15 +2,12 @@ import numpy as np
 import pytest
 from scipy.sparse.linalg import eigs, LinearOperator
 import yast
-if __name__ == '__main__':
-    from configs import config_U1
-else:
+try:
     from .configs import config_U1
+except ImportError:
+    from configs import config_U1
 
-tol = 1e-10
-
-# import yast.backend.backend_torch as backend
-# config_U1_R.backend = backend
+tol = 1e-10  #pylint: disable=invalid-name
 
 
 @pytest.mark.skipif(config_U1.backend.BACKEND_ID=="torch", reason="uses scipy procedures for raw data")

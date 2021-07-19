@@ -91,7 +91,7 @@ class Tensor:
                     raise YastError("Diagonal tensor should have ndim == 2")
             self.struct = _struct(t=(), D=(), s=s, n=n)
 
-        # immutable fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 -- 5 legs fused and history
+        # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]
         try:
             self.meta_fusion = tuple(kwargs['meta_fusion'])
         except (KeyError, TypeError):

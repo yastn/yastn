@@ -1,9 +1,15 @@
-from . import ops_full
-from . import ops_Z2
-from . import ops_U1
-import yamps
+""" timing of dmrg """
 import time
+import yamps
 import yast
+try:
+    from . import ops_dense
+    from . import ops_Z2
+    from . import ops_U1
+except ImportError:
+    import ops_dense
+    import ops_Z2
+    import ops_U1
 
 
 def run_dmrg_2_site(psi, H, sweeps=20, Dmax=128):
@@ -27,10 +33,10 @@ def time_full_dmrg():
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
     N = 32
-    H = ops_full.mpo_XX_model(N=N, t=1, mu=0)
+    H = ops_dense.mpo_XX_model(N=N, t=1, mu=0)
     # Egs = -20.01638790048514
     Dmax = 128
-    psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2)
+    psi = ops_dense.mps_random(N=N, Dmax=Dmax, d=2)
     psi.canonize_sweep(to='first')
 
     print('*** Dense ***')
@@ -57,7 +63,7 @@ def time_U1_dmrg():
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
     N = 32
-    Dmax = 256
+    Dmax = 128
     H = ops_U1.mpo_XX_model(N=N, t=1, mu=0)
     # Egs = -20.01638790048514
     psi = ops_U1.mps_random(N=N, Dblocks=[Dmax/8, 3*Dmax/8, Dmax/2, 3*Dmax/8, Dmax/8], total_charge=16)
@@ -67,7 +73,7 @@ def time_U1_dmrg():
     run_dmrg_2_site(psi, H, Dmax=Dmax)
 
 if __name__ == "__main__":
-    # time_full_dmrg()
-    # time_Z2_dmrg()
+    time_full_dmrg()
+    time_Z2_dmrg()
     time_U1_dmrg()
     print(yast.get_cache_info())

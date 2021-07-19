@@ -1,12 +1,11 @@
 import numpy as np
 import yast
-if __name__ == '__main__':
-    from configs import config_dense, config_U1, config_Z2_U1
-else:
+try:
     from .configs import config_dense, config_U1, config_Z2_U1
+except ImportError:
+    from configs import config_dense, config_U1, config_Z2_U1
 
-
-tol = 1e-12
+tol = 1e-12  #pylint: disable=invalid-name
 
 
 def dot_vs_numpy(a, b, axes, conj):

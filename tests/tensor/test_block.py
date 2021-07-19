@@ -1,11 +1,11 @@
 """ test yast.block """
 import yast
-if __name__ == '__main__':
-    from configs import config_U1
-else:
+try:
     from .configs import config_U1
+except ImportError:
+    from configs import config_U1
 
-tol = 1e-12
+tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_block_U1():

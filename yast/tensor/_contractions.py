@@ -251,7 +251,7 @@ def ncon(ts, inds, conjs=None):
     ts = dict(enumerate(ts))
     cutoff = 512
     cutoff2 = 2 * cutoff
-    edges = [(order, leg, ten) if order >= 0 else (-order + cutoff2, leg, ten)
+    edges = [(order, leg, ten) if order > 0 else (-order + cutoff2, leg, ten)
              for ten, el in enumerate(inds) for leg, order in enumerate(el)]
 
     edges.append((cutoff, cutoff, cutoff))

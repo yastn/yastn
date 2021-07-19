@@ -1,12 +1,12 @@
 import numpy as np
 import yast
-if __name__ == '__main__':
-    from configs import config_U1
-else:
+try:
     from .configs import config_U1
+except ImportError:
+    from configs import config_U1
 
+tol = 1e-12  #pylint: disable=invalid-name
 
-tol = 1e-12
 
 def test_dense_1():
     a = yast.rand(config=config_U1, s=(-1, -1, 1),

@@ -1,9 +1,11 @@
-from . import ops_full
-from . import ops_Z2
-from . import ops_U1
+""" truncation of mps """
 import yamps
-import numpy as np
-import pytest
+try:
+    from . import ops_dense
+    from . import ops_Z2
+except ImportError:
+    import ops_dense
+    import ops_Z2
 
 
 def run_dmrg_1site(psi, H, sweeps=10):
@@ -42,9 +44,9 @@ def test_truncate_svd_full():
     N = 8
     Eng_gs = -4.758770483143633
     D_total = 8
-    H = ops_full.mpo_XX_model(N=N, t=1, mu=0)
+    H = ops_dense.mpo_XX_model(N=N, t=1, mu=0)
 
-    psi = ops_full.mps_random(N=N, Dmax=D_total, d=2)
+    psi = ops_dense.mps_random(N=N, Dmax=D_total, d=2)
     psi.canonize_sweep(to='first')
     run_dmrg_1site(psi, H)
     run_truncation(psi, H, Eng_gs)

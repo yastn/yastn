@@ -1,6 +1,9 @@
 import yast
 import yamps
-from .configs import config_U1
+try:
+    from .configs import config_U1
+except ImportError:
+    from configs import config_U1
 
 
 def mps_random(N=2, Dblocks=(2,), total_charge=1, dtype='float64'):

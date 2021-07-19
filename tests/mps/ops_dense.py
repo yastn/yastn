@@ -1,7 +1,10 @@
 import numpy as np
 import yast
 import yamps
-from .configs import config_dense
+try:
+    from .configs import config_dense
+except ImportError:
+    from configs import config_dense
 
 
 def mps_random(N=2, Dmax=2, d=2, dtype='float64'):

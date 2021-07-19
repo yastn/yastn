@@ -1,12 +1,12 @@
 """ yast.set_block """
 import pytest
 import yast
-if __name__ == '__main__':
-    from configs import config_U1_fermionic
-else:
+try:
     from .configs import config_U1_fermionic
+except ImportError:
+    from configs import config_U1_fermionic
 
-tol = 1e-12
+tol = 1e-12  #pylint: disable=invalid-name
 
 
 def calculate_c3cp1(psi):
