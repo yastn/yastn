@@ -202,12 +202,8 @@ def _test_hard_to_scalar(a, b):
 
     fffa = yast.fuse_legs(ffa, axes=[[0, 1]], mode='hard')
     fffb = yast.fuse_legs(ffb, axes=[[0, 1]], mode='hard')
-
     fffab = yast.tensordot(fffa, fffb, axes=(0, 0))
     s3 = yast.vdot(fffa, fffb, conj=(0, 0))
-    fffb=fffb.conj()
-    m1, m2, h = yast.tensor._merging._union_hfs(a.config, [[(0,)],[(0,)]], [1,1], [fffa.hard_fusion[0], fffb.hard_fusion[0]])
-
 
     assert yast.norm_diff(ab, fab) < tol
     assert yast.norm_diff(ab, ffab) < tol
@@ -217,7 +213,6 @@ def _test_hard_to_scalar(a, b):
     assert pytest.approx(s0, rel=tol) == s2
     assert pytest.approx(s0, rel=tol) == s3
 
-
     ffa = yast.fuse_legs(fa, axes= ((0, 2), 1), mode='hard')
     ffb = yast.fuse_legs(fb, axes= ((0, 2), 1), mode='hard')
     ffab = yast.tensordot(ffa, ffb, axes=(0, 0))
@@ -226,7 +221,66 @@ def _test_hard_to_scalar(a, b):
     assert yast.norm_diff(ab, uab) < tol
 
 
-def test_hard_to_scalar():
+def _test_hard_add(a, b):
+    c = a + b
+    fa = yast.fuse_legs(a, axes=(0, (2, 3), 1), mode='hard')
+    fb = yast.fuse_legs(b, axes=(0, (2, 3), 1), mode='hard')
+    fc = fa + fb
+    fd = yast.fuse_legs(c, axes=(0, (2, 3), 1), mode='hard')
+
+    ffa = yast.fuse_legs(fa, axes=((0, 1), 2), mode='hard')
+    ffb = yast.fuse_legs(fb, axes=((0, 1), 2), mode='hard')
+    ffc = ffa + ffb
+    ffd = yast.fuse_legs(fd, axes=((0, 1), 2), mode='hard')
+
+    fffa = yast.fuse_legs(ffa, axes=[[0, 1]], mode='hard')
+    fffb = yast.fuse_legs(ffb, axes=[[0, 1]], mode='hard')
+    fffc = fffa + fffb
+    fffd = yast.fuse_legs(ffd, axes=[(0, 1)], mode='hard')
+
+    assert yast.norm_diff(fc, fd) < tol
+    assert yast.norm_diff(ffc, ffd) < tol
+    assert yast.norm_diff(fffc, fffd) < tol
+    uffc = fffc.unfuse_legs(axes=0)
+    uufc = uffc.unfuse_legs(axes=0)
+    uuuc = uufc.unfuse_legs(axes=1).transpose(axes=(0, 3, 1, 2))
+    assert yast.norm_diff(c, uuuc) < tol
+
+    c = a - b
+    cc = a.apxb(b, -1)
+    fa = yast.fuse_legs(a, axes=(0, (2, 3), 1), mode='hard')
+    fb = yast.fuse_legs(b, axes=(0, (2, 3), 1), mode='hard')
+    fc = fa - fb
+    fcc = fa.apxb(fb, -1)
+    fd = yast.fuse_legs(c, axes=(0, (2, 3), 1), mode='hard')
+
+    ffa = yast.fuse_legs(fa, axes=((0, 1), 2), mode='hard')
+    ffb = yast.fuse_legs(fb, axes=((0, 1), 2), mode='hard')
+    ffc = ffa - ffb
+    ffcc = ffa.apxb(ffb, -1)
+    ffd = yast.fuse_legs(fd, axes=((0, 1), 2), mode='hard')
+
+    fffa = yast.fuse_legs(ffa, axes=[[0, 1]], mode='hard')
+    fffb = yast.fuse_legs(ffb, axes=[[0, 1]], mode='hard')
+    fffc = fffa - fffb
+    fffcc = fffa.apxb(fffb, -1)
+    fffd = yast.fuse_legs(ffd, axes=[(0, 1)], mode='hard')
+
+    assert yast.norm_diff(fc, fd) < tol
+    assert yast.norm_diff(ffc, ffd) < tol
+    assert yast.norm_diff(fffc, fffd) < tol
+    assert yast.norm_diff(c, cc) < tol
+    assert yast.norm_diff(fc, fcc) < tol
+    assert yast.norm_diff(ffc, ffcc) < tol
+    assert yast.norm_diff(fffc, fffcc) < tol
+
+    uffc = fffc.unfuse_legs(axes=0)
+    uufc = uffc.unfuse_legs(axes=0)
+    uuuc = uufc.unfuse_legs(axes=1).transpose(axes=(0, 3, 1, 2))
+    assert yast.norm_diff(c, uuuc) < tol
+
+
+def test_hard_masks():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                 t=((0,), (0,), (-1, 0, 1), (-1, 0, 1)),
                 D=((2,), (5,), (7, 8, 9), (10, 11, 12)))
@@ -240,6 +294,11 @@ def test_hard_to_scalar():
 
     _test_hard_to_scalar(a, b)
     _test_hard_to_scalar(a, c)
+    _test_hard_to_scalar(b, c.conj())
+
+    _test_hard_add(b, c)
+    _test_hard_add(a.conj(), c)
+    _test_hard_add(a, b.conj())
 
     t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
     D1 = (1, 2, 3, 4)
@@ -256,6 +315,7 @@ def test_hard_to_scalar():
     a2.set_block(ts=((1, 2, 1, 2, 1, 2, 1, 2)), Ds=(6, 6, 6, 6), val='rand')
     a2.set_block(ts=((1, -1, 1, -1, 1, -1, 1, -1)), Ds=(3, 3, 3, 3), val='rand')
     _test_hard_to_scalar(a2, b2)
+    _test_hard_add(a2, b2.conj())
 
 
 def _test_fuse_mix(a):
@@ -293,10 +353,6 @@ def test_fuse_mix():
     a.set_block(ts=(1, 2, -1, 2, 0, 0), Ds=(1, 2, 3, 4, 5, 6), val='randR')
     a.set_block(ts=(2, 1, 1, -2, 1, 1), Ds=(6, 5, 4, 3, 2, 1), val='randR')
     _test_fuse_mix(a)
-
-def test_hfs_union():
-    pass
-
 
 
 def test_auxliary_merging_functions():
@@ -336,6 +392,6 @@ if __name__ == '__main__':
     test_hard_dot_1()
     test_hard_dot_2()
     test_hard_dot_1_sparse()
-    test_hard_to_scalar()
+    test_hard_masks()
     test_fuse_mix()
     test_auxliary_merging_functions()

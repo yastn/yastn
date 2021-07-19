@@ -1,7 +1,7 @@
 """ Support for merging blocks in yast tensors. """
 
 from functools import lru_cache
-from itertools import groupby, product
+from itertools import groupby, product, chain
 from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
@@ -325,6 +325,28 @@ def _masks_for_trace(config, t12, D1, D2, hfs, ax1, ax2):
             m2 = np.outer(m2, msk2[n][ind]).ravel()
         msk12[t] = (config.backend.to_mask(m1), config.backend.to_mask(m2))
     return msk12
+
+
+def _masks_for_add(config, structa, hfa, structb, hfb):
+    msk_a, msk_b, tDsa, tDsb, hfs = [], [], [], [], []
+    tla, Dla, _, _, _ = _get_tD_legs(structa)
+    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
+    nsym, ndim = config.sym.NSYM, len(tla)
+    for n in range(ndim):
+        ss = tuple(-1 if i == n else 1 for i in range(ndim))
+        ma, mb, hf = _union_hfs(config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (hfa[n], hfb[n]))
+        tDsa.append({t: m.size for t, m in ma.items()})
+        tDsb.append({t: m.size for t, m in mb.items()})
+        ma = {t: config.backend.to_mask(x).reshape(ss) for t, x in ma.items()}
+        mb = {t: config.backend.to_mask(x).reshape(ss) for t, x in mb.items()}
+        msk_a.append(ma)
+        msk_b.append(mb)
+        hfs.append(hf)
+    sla = {t: tuple(ma[t[n * nsym : n * nsym + nsym]] for n, ma in enumerate(msk_a)) for t in structa.t}
+    slb = {t: tuple(mb[t[n * nsym : n * nsym + nsym]] for n, mb in enumerate(msk_b)) for t in structb.t}
+    tDa = {t: tuple(tD[t[n * nsym : n * nsym + nsym]] for n, tD in enumerate(tDsa)) for t in structa.t}
+    tDb = {t: tuple(tD[t[n * nsym : n * nsym + nsym]] for n, tD in enumerate(tDsb)) for t in structb.t}
+    return sla, tDa, slb, tDb, tuple(hfs)
 
 
 def _unfuse_Fusion(hf):

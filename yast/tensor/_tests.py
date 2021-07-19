@@ -36,8 +36,8 @@ def _test_tensors_match(a, b):
         raise YastError('Tensor signatures do not match')
     if _check["consistency"] and a.meta_fusion != b.meta_fusion:
         raise YastError('Fusion trees do not match')
-    if a.hard_fusion != b.hard_fusion:
-        raise YastError('Hard fusions of the two tensors do not match')
+    # if a.hard_fusion != b.hard_fusion:
+    #    raise YastError('Hard fusions of the two tensors do not match')
 
 
 def _test_fusions_match(a, b):

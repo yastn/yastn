@@ -2,10 +2,10 @@
 import yast
 try:
     from .configs import config_Z2
-    from .test_fuse_hard import test_hard_to_scalar
+    from .test_fuse_hard import test_hard_masks
 except ImportError:
     from configs import config_Z2
-    from test_fuse_hard import test_hard_to_scalar
+    from test_fuse_hard import test_hard_masks
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -35,10 +35,9 @@ def test_cache():
 def test_cache2():
     yast.set_cache_maxsize(maxsize=100)
     print(yast.get_cache_info())
-    for _ in range(100):
-        test_hard_to_scalar()
+    for _ in range(50):
+        test_hard_masks()
     print(yast.get_cache_info())
-
 
 
 if __name__ == '__main__':
