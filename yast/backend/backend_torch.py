@@ -428,7 +428,18 @@ def range_largest(D_keep, D_total, ordering):
 
 
 def maximum(A):
+    """ maximal element of A """
     return max(torch.max(x) for x in A.values())
+
+
+def embed(A, sl, tD):
+    """ embeds old tensors A into larger zero blocks based on slices. """
+    dtype = get_dtype(A.values())
+    C = {}
+    for t, val in A.items():
+        C[t] = torch.zeros(tD[t], dtype=dtype, device=val.device)
+        C[t][sl[t]] = val
+    return C
 
 
 ################################

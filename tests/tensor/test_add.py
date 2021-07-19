@@ -98,8 +98,8 @@ def test_add_mismatch():
     a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
     b = yast.Tensor(config=config_U1, s=(1, -1, 1, -1))
     b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
-    c = a + b
-    # c.is_consistent()
+    with pytest.raises(yast.YastError):
+        a + b
 
 
 if __name__ == '__main__':

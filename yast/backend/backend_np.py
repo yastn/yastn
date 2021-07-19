@@ -415,7 +415,18 @@ def range_largest(D_keep, D_total, ordering):
 
 
 def maximum(A):
+    """ maximal element of A """
     return max(np.max(x) for x in A.values())
+
+
+def embed(A, sl, tD):
+    """ embeds old tensors A into larger zero blocks based on slices. """
+    dtype = get_dtype(A.values())
+    C = {}
+    for t, val in A.items():
+        C[t] = np.zeros(tD[t], dtype=dtype)
+        C[t][sl[t]] = val
+    return C
 
 
 ################################
