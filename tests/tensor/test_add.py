@@ -1,13 +1,12 @@
 import numpy as np
 import pytest
 import yast
-if __name__ == '__main__':
-    from configs import config_dense, config_U1, config_Z2_U1
-else:
+try:
     from .configs import config_dense, config_U1, config_Z2_U1
+except ImportError:
+    from configs import config_dense, config_U1, config_Z2_U1
 
-
-tol = 1e-12
+tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_add_0():
@@ -93,7 +92,18 @@ def test_add_2():
     assert c2.is_consistent()
 
 
+def test_add_mismatch():
+    """ handling pathological examples """
+    a = yast.Tensor(config=config_U1, s=(1, -1, 1, -1))
+    a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
+    b = yast.Tensor(config=config_U1, s=(1, -1, 1, -1))
+    b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
+    c = a + b
+    # c.is_consistent()
+
+
 if __name__ == '__main__':
     test_add_0()
     test_add_1()
     test_add_2()
+    test_add_mismatch()

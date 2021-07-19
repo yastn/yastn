@@ -1,13 +1,12 @@
+""" truncation of singular values in yast.linalg.svd() """
 import numpy as np
 import yast
-if __name__ == '__main__':
-    from configs import config_U1
-else:
+try:
     from .configs import config_U1
-# import yast.backend.backend_torch as backend
-# config_U1_R.backend = backend
+except ImportError:
+    from configs import config_U1
 
-tol = 1e-12
+tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_svd_sparse():

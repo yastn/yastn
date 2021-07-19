@@ -1,12 +1,13 @@
+""" changing tests controls and size of lru_cache in some auxliary functions """
 import yast
-if __name__ == '__main__':
-    from configs import config_Z2
-    from test_fuse_hard import test_hard_to_scalar
-else:
+try:
     from .configs import config_Z2
     from .test_fuse_hard import test_hard_to_scalar
+except ImportError:
+    from configs import config_Z2
+    from test_fuse_hard import test_hard_to_scalar
 
-tol = 1e-12
+tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_cache():

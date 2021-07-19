@@ -1,10 +1,16 @@
-
+""" dmrg tested on XX model. """
 import logging
 import pytest
-from . import ops_full
-from . import ops_Z2
-from . import ops_U1
 import yamps
+try:
+    from . import ops_dense
+    from . import ops_Z2
+    from . import ops_U1
+except ImportError:
+    import ops_dense
+    import ops_Z2
+    import ops_U1
+
 
 tol = 1e-6
 
@@ -37,11 +43,11 @@ def test_full_dmrg():
 
     Eng_gs = [-3.427339492125848, -3.227339492125848, -2.8619726273956685]
     Occ_gs = [3, 4, 2]
-    H = ops_full.mpo_XX_model(N=N, t=1, mu=0.2)
-    occ = ops_full.mpo_occupation(N=N)
+    H = ops_dense.mpo_XX_model(N=N, t=1, mu=0.2)
+    occ = ops_dense.mpo_occupation(N=N)
 
     for version in ('1site', '2site'):
-        psi = ops_full.mps_random(N=N, Dmax=Dmax, d=2).canonize_sweep(to='first')
+        psi = ops_dense.mps_random(N=N, Dmax=Dmax, d=2).canonize_sweep(to='first')
         psi = run_dmrg(psi, H, occ, Eng_gs, Occ_gs, version=version, opts_svd=opts_svd)
 
 

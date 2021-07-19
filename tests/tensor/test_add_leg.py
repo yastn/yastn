@@ -1,11 +1,11 @@
 """ yast.add_leg """
 import yast
-if __name__ == '__main__':
-    from configs import config_dense, config_U1, config_Z2_U1
-else:
+try:
     from .configs import config_dense, config_U1, config_Z2_U1
+except ImportError:
+    from configs import config_dense, config_U1, config_Z2_U1
 
-tol = 1e-12
+tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_aux_0():
@@ -20,7 +20,7 @@ def test_aux_0():
 
 
 def test_aux_1():
-    """ add_leg with nsym=0 """
+    """ add_leg with nsym=1 """
     a = yast.Tensor(config=config_U1, s=(-1, 1), n=-1)
     a.set_block(ts=(1, 0), Ds=(1, 1), val=1)
 

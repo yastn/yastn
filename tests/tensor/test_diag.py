@@ -1,11 +1,11 @@
 import numpy as np
 import yast
-if __name__ == '__main__':
-    from configs import config_U1
-else:
+try:
     from .configs import config_U1
+except ImportError:
+    from configs import config_U1
 
-tol = 1e-12
+tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_diag_1():
@@ -24,9 +24,9 @@ def test_diag_1():
     assert a4.are_independent(a5)
 
     na1 = a1.to_dense()
-    na2 = a2.to_dense()
-    na3 = a3.to_dense()
-    na4 = a4.to_dense()
+    # na2 = a2.to_dense()
+    # na3 = a3.to_dense()
+    # na4 = a4.to_dense()
     na5 = a5.to_dense()
     assert np.allclose(np.diag(np.diag(na1)), na5)
     assert a2.norm_diff(a4) < tol  # == 0.0

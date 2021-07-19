@@ -1,9 +1,14 @@
-import yast
-import yamps
+""" basic procedures of single mps """
 import numpy as np
 import pytest
-from . import ops_full
-from . import ops_Z2
+import yast
+import yamps
+try:
+    from . import ops_dense
+    from . import ops_Z2
+except ImportError:
+    import ops_dense
+    import ops_Z2
 
 
 def is_left_canonical(psi):
@@ -94,34 +99,34 @@ def check_copy(psi1, psi2):
 
 def test_full_copy():
     """ Initialize random mps of full tensors and checks copying. """
-    psi = ops_full.mps_random(N=16, Dmax=15, d=2)
+    psi = ops_dense.mps_random(N=16, Dmax=15, d=2)
     phi = psi.copy()
     check_copy(psi, phi)
 
-    psi = ops_full.mps_random(N=16, Dmax=19, d=[2, 3])
+    psi = ops_dense.mps_random(N=16, Dmax=19, d=[2, 3])
     phi = psi.copy()
     check_copy(psi, phi)
 
-    psi = ops_full.mpo_random(N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
+    psi = ops_dense.mpo_random(N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
     phi = psi.copy()
     check_copy(psi, phi)
 
 
 def test_full_canonize():
     """ Initialize random mps of full tensors and checks canonization. """
-    psi1 = ops_full.mps_random(N=16, Dmax=9, d=2)
+    psi1 = ops_dense.mps_random(N=16, Dmax=9, d=2)
     check_canonize(psi1)
-    psi2 = ops_full.mps_random(N=16, Dmax=19, d=[2, 3])
+    psi2 = ops_dense.mps_random(N=16, Dmax=19, d=[2, 3])
     check_canonize(psi2)
-    psi3 = ops_full.mpo_random(N=16, Dmax=36, d=[2, 3], d_out=[2, 1])
+    psi3 = ops_dense.mpo_random(N=16, Dmax=36, d=[2, 3], d_out=[2, 1])
     check_canonize(psi3)
 
 
 def test_full_env2_update():
     """ Initialize random mps' and check if overlaps are calculated consistently. """
     N = 13
-    psi1 = ops_full.mps_random(N=N, Dmax=15, d=3)
-    psi2 = ops_full.mps_random(N=N, Dmax=7, d=3)
+    psi1 = ops_dense.mps_random(N=N, Dmax=15, d=3)
+    psi2 = ops_dense.mps_random(N=N, Dmax=7, d=3)
     env2_measure(psi1, psi2)
     env2_cononize(psi1)
     env2_cononize(psi2)
@@ -130,9 +135,9 @@ def test_full_env2_update():
 def test_full_env3_update():
     """ Initialize random mps' and check if overlaps are calculated consistently. """
     N = 13
-    psi1 = ops_full.mps_random(N=N, Dmax=15, d=3)
-    psi2 = ops_full.mps_random(N=N, Dmax=7, d=3)
-    op = ops_full.mpo_random(N=N, Dmax=5, d=3)
+    psi1 = ops_dense.mps_random(N=N, Dmax=15, d=3)
+    psi2 = ops_dense.mps_random(N=N, Dmax=7, d=3)
+    op = ops_dense.mpo_random(N=N, Dmax=5, d=3)
     env3_measure(psi1, op, psi2)
 
 

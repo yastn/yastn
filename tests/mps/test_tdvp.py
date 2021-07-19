@@ -1,9 +1,15 @@
+""" yamps.tdvp """
 import logging
-from . import ops_full
-from . import ops_Z2
-from . import ops_U1
-import yamps
 import pytest
+import yamps
+try:
+    from . import ops_dense
+    from . import ops_Z2
+    from . import ops_U1
+except ImportError:
+    import ops_dense
+    import ops_Z2
+    import ops_U1
 
 tol=1e-8
 
@@ -36,10 +42,10 @@ def test_full_tdvp():
     logging.info(' Tensor : dense ')
 
     Eng_gs = -2.232050807568877
-    H = ops_full.mpo_XX_model(N=N, t=1, mu=0.25)
+    H = ops_dense.mpo_XX_model(N=N, t=1, mu=0.25)
 
     for version in ('1site', '2site'):
-        psi = ops_full.mps_random(N=N, Dmax=D_total, d=2).canonize_sweep(to='first')
+        psi = ops_dense.mps_random(N=N, Dmax=D_total, d=2).canonize_sweep(to='first')
         run_tdvp_imag(psi, H, dt=dt, Eng_gs=Eng_gs, sweeps=sweeps, version=version, opts_svd=opts_svd)
 
 

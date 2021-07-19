@@ -1,11 +1,11 @@
+""" yast.linalg.svd() yast.linalg.qr() yast.linalg.eigh() """
 import yast
-if __name__ == '__main__':
-    from configs import config_dense, config_U1, config_Z2_U1
-else:
+try:
     from .configs import config_dense, config_U1, config_Z2_U1
+except ImportError:
+    from configs import config_dense, config_U1, config_Z2_U1
 
-
-tol = 1e-10
+tol = 1e-10  #pylint: disable=invalid-name
 
 
 def svd_combine(a):
