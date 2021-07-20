@@ -26,6 +26,12 @@ def test_entropy():
     assert pytest.approx(Smin, rel=tol) == 1
     assert pytest.approx(normalization, rel=tol) == np.sqrt(41)
 
+    entropy2, Smin, normalization = yast.entropy(a, axes=((0, 1), (2, 3)), alpha=2)
+    assert pytest.approx(entropy2, rel=tol) == np.log2(41)
+    assert pytest.approx(Smin, rel=tol) == 1
+    assert pytest.approx(normalization, rel=tol) == np.sqrt(41)
+
+
 
 if __name__ == '__main__':
     test_entropy()

@@ -2,7 +2,7 @@
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys
 from ._tests import YastError, _check, _test_tensors_match, _test_all_axes
-from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal
+from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal, _masks_for_add
 from ._merging import _leg_struct_trivial, _leg_struct_truncation, _Fusion
 from ._krylov import _expand_krylov_space
 
@@ -46,6 +46,11 @@ def norm_diff(a, b, p='fro'):
     if (len(a.A) == 0) and (len(b.A) == 0):
         return a.zero_of_dtype()
     meta = _common_keys(a.A, b.A)
+    masks_needed = any(ha != hb for ha, hb in zip(a.hard_fusion, b.hard_fusion))
+    if masks_needed:
+        sla, tDa, slb, tDb, _ = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
+        return a.config.backend.norm_diff(a.config.backend.embed(a.A, sla, tDa),
+                                        a.config.backend.embed(b.A, slb, tDb), meta, p)
     return a.config.backend.norm_diff(a.A, b.A, meta, p)
 
 

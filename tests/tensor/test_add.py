@@ -100,6 +100,10 @@ def test_add_mismatch():
     b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
     with pytest.raises(yast.YastError):
         a + b
+    with pytest.raises(yast.YastError):
+        b - a
+    with pytest.raises(yast.YastError):
+        a.apxb(b, x=2.0)
 
 
 if __name__ == '__main__':

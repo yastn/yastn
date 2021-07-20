@@ -152,7 +152,7 @@ def entropy(A, alpha=1, tol=1e-12):
             if alpha == 1:
                 ent.append(-2 * np.sum(x * x * np.log2(x)))
             else:
-                ent.append(x**(2 * alpha))
+                ent.append(np.sum(x**(2 * alpha)))
         ent = np.sum(ent)
         if alpha != 1:
             ent = np.log2(ent) / (1 - alpha)

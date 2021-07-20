@@ -152,7 +152,7 @@ def entropy(A, alpha=1, tol=1e-12):
             if alpha == 1:
                 ent.append(-2 * torch.sum(x * x * torch.log2(x)))
             else:
-                ent.append(x**(2 * alpha))
+                ent.append(torch.sum(x**(2 * alpha)))
         ent = torch.sum(torch.stack(ent))
         if alpha != 1:
             ent = torch.log2(ent) / (1 - alpha)

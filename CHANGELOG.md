@@ -52,7 +52,7 @@
   None uses default that can be set in config.default_fusion (if not set, default_fusion='meta').
   config.force_fusion overrides mode set in the code
   hard-fusion applied on tensor that have been meta-fused first changes all (!) meta-fusions into hard fusions
-- function `fuse_meta_to_hard()` changes all meta fusionsinto hard fusions; 
+- function `fuse_meta_to_hard()` changes all meta fusions into hard fusions; 
   and do nothing if there are no meta fusions
 - hard fusion keeps the information about history. mismatches in hard-fusions are cought and 
   resolved in tensordot (todo: add such support for vdot, trace, norm_diff, _add__, ...)
@@ -60,3 +60,9 @@
 07-07-2021
 - `_leg_struct_truncation` accepts `tol_block` parameter, which truncates spectral values
   in each block individually relative to spectral value of largest magnitude within the block 
+
+20-07-2021
+- `ncon` numerates dangling legs with indices starting from 0 (or -0) towards negative.
+  This allows to match python numbering conventions.
+- handling hard-fusion mismatches in `__add__`, `__sub__`, `apxb`, `norm_diff`.
+  In the first three also catches a possibility to introduce bond dimension mismatch in the result.
