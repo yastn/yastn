@@ -40,6 +40,17 @@ def test_hard_trace():
     aff = yast.fuse_legs(af, axes=((0, 1), (2, 3)), mode='hard')
     tra = yast.trace(a, axes=((0, 1, 2), (4, 3, 5)))
     traff = yast.trace(aff, axes=(0, 1))
+
+    a = yast.Tensor(config=config_U1, s=(1, -1, 1, -1, 1, -1, 1, -1))
+    a.set_block(ts=(1, 1, 2, 2, 0, 0, 1, 1), Ds=(1, 1, 2, 2, 4, 4, 1, 1), val='randR')
+    a.set_block(ts=(2, 1, 1, 2, 0, 0, 1, 1), Ds=(2, 1, 1, 2, 4, 4, 1, 1), val='randR')
+    a.set_block(ts=(3, 1, 1, 2, 1, 1, 0, 1), Ds=(3, 1, 1, 2, 1, 1, 4, 1), val='randR')
+    af = yast.fuse_legs(a, axes=((0, 2), (1, 3), (4, 6), (5, 7)), mode='hard')
+    aff = yast.fuse_legs(af, axes=((0, 2), (1, 3)), mode='hard')
+    tra = yast.trace(a, axes=((0, 2, 4, 6), (1, 3, 5, 7)))
+    traf = yast.trace(af, axes=((0, 2), (1, 3)))
+    traff = yast.trace(aff, axes=(0, 1))
+    assert yast.norm_diff(tra, traf) < tol
     assert yast.norm_diff(tra, traff) < tol
 
 
@@ -273,6 +284,12 @@ def _test_hard_add(a, b):
     assert yast.norm_diff(fc, fcc) < tol
     assert yast.norm_diff(ffc, ffcc) < tol
     assert yast.norm_diff(fffc, fffcc) < tol
+    assert pytest.approx(yast.norm_diff(fffa, fffb), rel=tol) == c.norm()
+    assert pytest.approx(yast.norm_diff(ffa, ffb), rel=tol) == c.norm()
+    assert pytest.approx(yast.norm_diff(fa, fb), rel=tol) == c.norm()
+    assert pytest.approx(yast.norm_diff(fffa, fffb, p='inf'), rel=tol) == c.norm(p='inf')
+    assert pytest.approx(yast.norm_diff(ffa, ffb, p='inf'), rel=tol) == c.norm(p='inf')
+    assert pytest.approx(yast.norm_diff(fa, fb, p='inf'), rel=tol) == c.norm(p='inf')
 
     uffc = fffc.unfuse_legs(axes=0)
     uufc = uffc.unfuse_legs(axes=0)
