@@ -128,10 +128,6 @@ def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to
     M = add(bunch_tens, bunch_amp, new_common_legs)
     M.canonize_sweep(to='last', normalize=False)
     M.truncate_sweep(to='first', opts=opts, normalize=False)
-    #?M.sweep_truncate(to='last', opts=opts, normalize=False)
-    #?for n in range(int(M.N/2)):
-    #?    M.orthogonalize_site(n=n, towards=M.g.last, normalize=False)
-    #?    M.absorb_central(towards=M.g.last)
     return M
 
 
