@@ -1,7 +1,163 @@
 """ Mps structure and its basic manipulations. """
+from yast.tensor import block
+from numpy import array, nonzero
 
 class YampsError(Exception):
     pass
+
+
+def generate_Mij(amp, connect, N, nr_phys):
+    x_from = connect['from']
+    x_to = connect['to']
+    x_conn = connect['conn']
+    x_else = connect['else']
+    jL, T_from = x_from
+    jR, T_to = x_to
+    T_conn = x_conn
+    T_else = x_else
+
+    M = Mps(N, nr_phys=nr_phys)
+    for n in range(M.N):
+        if jL == jR:
+            M.A[n] = amp*T_from.copy() if n == jL else T_else.copy()
+        else:
+            if n == jL:
+                M.A[n] = amp*T_from.copy()
+            elif n == jR:
+                M.A[n] = T_to.copy()
+            elif n > jL and n < jR:
+                M.A[n] = T_conn.copy()
+            else:
+                M.A[n] = T_else.copy()
+        if n == 0:
+            tt = (0,) * len(M.A[n].n)
+        M.A[n].add_leg(axis=0, t=tt, s=1, inplace=True)
+        M.A[n].add_leg(axis=-1, s=-1, inplace=True)
+        tD = M.A[n].get_leg_structure(axis=-1)
+        tt = next(iter(tD))
+    return M
+
+
+def add(tens, amp, common_legs):
+    if len(tens) is not len(amp):
+        raise YampsError('Number of Mps-s must be equal to number of cooeficients.')
+    elif sum([tens[j].N-tens[0].N for j in range(len(tens))])!=0:
+        raise YampsError('Mps-s must have equal lengths.')
+
+    c = tens[0].copy()
+    N = c.N
+    for n in range(N):
+        d={}
+        if n == 0:
+            for j in range(len(tens)):
+                d[(j,)] = amp[j]*tens[j].A[n] if amp[j]!=1. else tens[j].A[n]
+            common_lgs = (0,)+common_legs
+        elif n == N-1:
+            for j in range(len(tens)):
+                d[(j,)] = tens[j].A[n]
+            common_lgs = common_legs+(common_legs[-1]+1,)
+        else:
+            for j in range(len(tens)):
+                d[(j,j)] = tens[j].A[n]
+            common_lgs = common_legs
+        c.A[n] = block(d, common_lgs)
+    return c
+
+
+def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys, common_legs, opts={'tol': 1e-14}):
+    r"""
+    Generate Mps representuing sum of two-point operators M=\sum_i,j Mij Op_i Op_j with possibility to include jordan-Wigner chain for these.
+
+    Parameters
+    ----------
+    amplitude : iterable list of numbers
+        Mij, amplitudes for an operator
+    from_it : int iterable list
+        first index of Mij
+    to_it : int iterable list
+        second index of Mij
+    permute_amp : iterable list of numbers
+        accounds for commuation/anticommutation rule while Op_j, Opj have to be permuted.
+    Tensor_from: list of Tensor-s
+        list of Op_i for Mij-th element
+    Tensor_to: list of Tensor-s
+        list of Op_j for Mij-th element
+    Tensor_conn: list of Tensor-s
+        list of operators to put in cetween Op_i and Opj for Mij-th element
+    Tensor_other: list of Tensor-s
+        list of operators outside i-j for Mij-th element
+    N : int
+        number of sites of Mps
+    nr_phys : int
+        number of physical legs: _1_ for mps; _2_ for mpo;
+    common_legs : tuple of int
+        common legs for Tensors
+    opts : dict
+        Options passed for svd -- including information how to truncate.
+    """
+    new_common_legs = tuple([n+1 for n in common_legs])
+    given = nonzero(array(amplitude))[0]
+    bunch_tens, bunch_amp = [None]*len(given), [None]*len(given)
+    for ik in range(len(given)):
+        it = given[ik]
+        if from_it[it] > to_it[it]:
+            conn, other = Tensor_conn[it], Tensor_other[it]
+            if nr_phys > 1:
+                left, right = Tensor_to[it].tensordot(conn, axes=common_legs[::-1]), Tensor_from[it]
+            else:
+                left, right = Tensor_to[it], Tensor_from[it]
+            il, ir = to_it[it], from_it[it]
+            amp = amplitude[it]*permute_amp[it]
+        else:
+            conn, other = Tensor_conn[it], Tensor_other[it]
+            left, right = Tensor_from[it], Tensor_to[it]
+            il, ir = from_it[it], to_it[it]
+            amp = amplitude[it]
+
+            if il == ir and right:
+                left, right = left.tensordot(right, axes=common_legs[::-1]), None
+
+        connect = {'from': (il, left),
+                'to': (ir, right),
+                'conn': conn,
+                'else': other}
+        
+        bunch_tens[ik] = generate_Mij(1., connect, N, nr_phys)
+        bunch_amp[ik] = amp
+
+    M = add(bunch_tens, bunch_amp, new_common_legs)
+    M.canonize_sweep(to='last', normalize=False)
+    M.truncate_sweep(to='first', opts=opts, normalize=False)
+    #?M.sweep_truncate(to='last', opts=opts, normalize=False)
+    #?for n in range(int(M.N/2)):
+    #?    M.orthogonalize_site(n=n, towards=M.g.last, normalize=False)
+    #?    M.absorb_central(towards=M.g.last)
+    return M
+
+
+def apxb(a, b, common_legs, x=1):
+    """
+    if inplace=false a+a*b will be a new Mps otherwise I will replace mb and delete b
+    """
+    if a.N is not a.N:
+        YampsError('Mps-s must have equal number of Tensor-s.')
+
+    c = a.copy()
+    for n in range(c.N):
+        if n == 0:
+            if x != 1:
+                d = {(0,): x*a.A[n], (1,): x*b.A[n]}
+            else:
+                d = {(0,): a.A[n], (1,): b.A[n]}
+            common_lgs = (0,)+common_legs
+        elif n == a.N-1:
+            d = {(0,): a.A[n], (1,): b.A[n]}
+            common_lgs = common_legs+(common_legs[-1]+1,)
+        else:
+            d = {(0, 0): a.A[n], (1, 1): b.A[n]}
+            common_lgs = common_legs
+        c.A[n] = block(d, common_lgs)
+    return c
 
 
 ###################################
@@ -352,7 +508,3 @@ class Mps:
             list of Schmidt values saved as a directory
         """
         pass
-
-
-def add(states=None, weights=None):
-    pass
