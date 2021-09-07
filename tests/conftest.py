@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 def pytest_addoption(parser):
     parser.addoption("--backend", help='np or torch', default='np', action='store')
+    parser.addoption("--device", help='cpu or cuda', default='cpu', action='store')
 
 
 def pytest_configure(config):
@@ -22,3 +23,4 @@ def pytest_configure(config):
         for conf in confs:
             conf = importlib.import_module(folder + ".configs." + conf)
             conf.backend = backend
+            conf.default_device = config.option.device
