@@ -428,64 +428,64 @@ def ncon(ts, inds, conjs=None):
 
 
 
-def trace_dot_diag(self, other, axis1=0, axis2=1, conj=(0, 0)):
-    r""" Contract two legs of a tensor with a diagonal tensor -- equivalent to dot_diag and trace of the result.
+# def trace_dot_diag(self, other, axis1=0, axis2=1, conj=(0, 0)):
+#     r""" Contract two legs of a tensor with a diagonal tensor -- equivalent to dot_diag and trace of the result.
 
-    Other tensor should be diagonal.
-    Legs of a new tensor are ordered in the same way as those of the first one.
+#     Other tensor should be diagonal.
+#     Legs of a new tensor are ordered in the same way as those of the first one.
 
-    Parameters
-    ----------
-    other: Tensor
-        diagonal tensor
+#     Parameters
+#     ----------
+#     other: Tensor
+#         diagonal tensor
 
-    axis1, axis2: int
-        2 legs of the first tensor to be multiplied by the diagonal one.
-        they are ignored if the first tensor is diagonal.
+#     axis1, axis2: int
+#         2 legs of the first tensor to be multiplied by the diagonal one.
+#         they are ignored if the first tensor is diagonal.
 
-    conj: tuple
-        shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
-    """
-    if self.isdiag:
-        return self.dot_diag(other, axis=0, conj=conj).trace()
+#     conj: tuple
+#         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
+#     """
+#     if self.isdiag:
+#         return self.dot_diag(other, axis=0, conj=conj).trace()
 
-    if self.s[axis1] != -self.s[axis2]:
-        logger.exception('Signs do not match')
-        raise FatalError
+#     if self.s[axis1] != -self.s[axis2]:
+#         logger.exception('Signs do not match')
+#         raise FatalError
 
-    conja = (1 - 2 * conj[0])
-    na_con = np.array([axis1, axis2], dtype=np.int)
-    out = tuple(ii for ii in range(self._ndim) if ii != axis1 and ii != axis2)
-    nout = np.array(out, dtype=np.int)
+#     conja = (1 - 2 * conj[0])
+#     na_con = np.array([axis1, axis2], dtype=np.int)
+#     out = tuple(ii for ii in range(self._ndim) if ii != axis1 and ii != axis2)
+#     nout = np.array(out, dtype=np.int)
 
-    ind = np.all(self.tset[:, axis1, :] == self.tset[:, axis2, :], axis=1)
-    tset = self.tset[ind]
-    t_a_con = tset[:, axis1, :]
-    t_a_out = tset[:, nout, :]
+#     ind = np.all(self.tset[:, axis1, :] == self.tset[:, axis2, :], axis=1)
+#     tset = self.tset[ind]
+#     t_a_con = tset[:, axis1, :]
+#     t_a_out = tset[:, nout, :]
 
-    block_a = sorted([(tuple(x.flat), tuple(y.flat), tuple(z.flat)) for x, y, z in zip(t_a_con, tset, t_a_out)], key=lambda x: x[0])
-    block_b = sorted([tuple(x.flat) for x in other.tset])
-    block_a = itertools.groupby(block_a, key=lambda x: x[0])
-    block_b = iter(block_b)
+#     block_a = sorted([(tuple(x.flat), tuple(y.flat), tuple(z.flat)) for x, y, z in zip(t_a_con, tset, t_a_out)], key=lambda x: x[0])
+#     block_b = sorted([tuple(x.flat) for x in other.tset])
+#     block_a = itertools.groupby(block_a, key=lambda x: x[0])
+#     block_b = iter(block_b)
 
-    to_execute = []
-    try:
-        tta, ga = next(block_a)
-        ttb = next(block_b)
-        while True:
-            if tta == ttb:
-                for ta in ga:
-                    to_execute.append((ta[1], ttb, ta[2]))
-                tta, ga = next(block_a)
-                ttb = next(block_b)
-            elif tta < ttb:
-                tta, ga = next(block_a)
-            elif tta > ttb:
-                ttb = next(block_b)
-    except StopIteration:
-        pass
+#     to_execute = []
+#     try:
+#         tta, ga = next(block_a)
+#         ttb = next(block_b)
+#         while True:
+#             if tta == ttb:
+#                 for ta in ga:
+#                     to_execute.append((ta[1], ttb, ta[2]))
+#                 tta, ga = next(block_a)
+#                 ttb = next(block_b)
+#             elif tta < ttb:
+#                 tta, ga = next(block_a)
+#             elif tta > ttb:
+#                 ttb = next(block_b)
+#     except StopIteration:
+#         pass
 
-    c = Tensor(settings=self.conf, s=conja * self.s[nout], n=conja * self.n, isdiag=False)
-    c.A = self.conf.back.trace_dot_diag(self.A, other.A, conj, to_execute, axis1, axis2, self._ndim)
-    c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
-    return c
+#     c = Tensor(settings=self.conf, s=conja * self.s[nout], n=conja * self.n, isdiag=False)
+#     c.A = self.conf.back.trace_dot_diag(self.A, other.A, conj, to_execute, axis1, axis2, self._ndim)
+#     c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
+#     return c
