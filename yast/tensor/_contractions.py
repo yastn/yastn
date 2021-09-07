@@ -89,6 +89,63 @@ def tensordot(a, b, axes, conj=(0, 0)):
     return c
 
 
+
+def diagdot(a, b, axes, conj=(0, 0)):
+    r"""
+    Compute tensor dot product of a tensor with a diagonal tensor.
+
+    Other tensors should be diagonal.
+    Legs of a new tensor are ordered in the same way as those of the first one.
+    Produce diagonal tensor if both are diagonal.
+
+    Parameters
+    ----------
+    other: Tensor
+        diagonal tensor
+
+    axis: int or tuple
+        leg of non-diagonal tensor to be multiplied by the diagonal one.
+
+    conj: tuple
+        shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
+    """
+
+    if not b.isdiag:
+        raise YastError('Second tensor should be diagonal')
+
+    conja = (1 - 2 * conj[0])
+    na_con = 0 if self.isdiag else axis if isinstance(axis, int) else axis[0]
+
+    t_a_con = self.tset[:, na_con, :]
+    block_a = sorted([(tuple(x.flat), tuple(y.flat)) for x, y in zip(t_a_con, self.tset)], key=lambda x: x[0])
+    block_b = sorted([tuple(x.flat) for x in other.tset])
+    block_a = itertools.groupby(block_a, key=lambda x: x[0])
+    block_b = iter(block_b)
+
+    to_execute = []
+    try:
+        tta, ga = next(block_a)
+        ttb = next(block_b)
+        while True:
+            if tta == ttb:
+                for ta in ga:
+                    to_execute.append((ta[1], ttb, ta[1]))
+                tta, ga = next(block_a)
+                ttb = next(block_b)
+            elif tta < ttb:
+                tta, ga = next(block_a)
+            elif tta > ttb:
+                ttb = next(block_b)
+    except StopIteration:
+        pass
+
+    c = Tensor(settings=self.conf, s=conja * self.s, n=conja * self.n, isdiag=self.isdiag)
+    c.A = self.conf.back.dot_diag(self.A, other.A, conj, to_execute, na_con, self._ndim)
+    c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
+    return c
+
+
+
 def vdot(a, b, conj=(1, 0)):
     r"""
     Compute scalar product x = <a|b> of two tensors. a is conjugated by default.
@@ -194,6 +251,57 @@ def trace(a, axes=(0, 1)):
     c.update_struct()
     return c
 
+
+
+# def trace(self, axes=(0, 1)):
+#     """
+#     Compute trace of legs specified by axes.
+
+#     For diagonal tensor, return 0-rank tensor
+#     """
+#     try:
+#         in1 = tuple(axes[0])
+#     except TypeError:
+#         in1 = (axes[0],)  # indices going u
+#     try:
+#         in2 = tuple(axes[1])
+#     except TypeError:
+#         in2 = (axes[1],)  # indices going v
+
+#     if len(in1) != len(in2):
+#         logger.exception('Number of axis to trace should be the same')
+#         raise FatalError
+
+#     if self.isdiag:
+#         if in1 == in2 == ():
+#             return self.copy()
+#         elif in1 + in2 == (0, 1) or in1 + in2 == (1, 0):
+#             a = Tensor(settings=self.conf)
+#             to_execute = []
+#             for tt in self.tset:
+#                 to_execute.append((tuple(tt.flat), ()))  # old, new
+#             a.A = a.conf.back.trace_axis(A=self.A, to_execute=to_execute, axis=0)
+#         else:
+#             logger.exception('Wrong axes for diagonal tensor')
+#             raise FatalError
+#     else:
+#         out = tuple(ii for ii in range(self._ndim) if ii not in in1 + in2)
+#         nout = np.array(out, dtype=np.int)
+#         nin1 = np.array(in1, dtype=np.int)
+#         nin2 = np.array(in2, dtype=np.int)
+#         if not all(self.s[nin1] == -self.s[nin2]):
+#             logger.exception('Signs do not match')
+#             raise FatalError
+
+#         to_execute = []
+#         for tt in self.tset:
+#             if np.all(tt[nin1, :] == tt[nin2, :]):
+#                 to_execute.append((tuple(tt.flat), tuple(tt[nout].flat)))  # old, new
+#         a = Tensor(settings=self.conf, s=self.s[nout], n=self.n)
+#         a.A = a.conf.back.trace(A=self.A, to_execute=to_execute, in1=in1, in2=in2, out=out)
+
+#     a.tset = np.array([ind for ind in a.A], dtype=np.int).reshape(len(a.A), a._ndim, a.nsym)
+#     return a
 
 def swap_gate(a, axes, inplace=False):
     """
@@ -313,3 +421,71 @@ def ncon(ts, inds, conjs=None):
     for num in it:
         result.A[()] = result.A[()] * num.A[()]
     return result
+
+
+
+
+
+
+
+def trace_dot_diag(self, other, axis1=0, axis2=1, conj=(0, 0)):
+    r""" Contract two legs of a tensor with a diagonal tensor -- equivalent to dot_diag and trace of the result.
+
+    Other tensor should be diagonal.
+    Legs of a new tensor are ordered in the same way as those of the first one.
+
+    Parameters
+    ----------
+    other: Tensor
+        diagonal tensor
+
+    axis1, axis2: int
+        2 legs of the first tensor to be multiplied by the diagonal one.
+        they are ignored if the first tensor is diagonal.
+
+    conj: tuple
+        shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
+    """
+    if self.isdiag:
+        return self.dot_diag(other, axis=0, conj=conj).trace()
+
+    if self.s[axis1] != -self.s[axis2]:
+        logger.exception('Signs do not match')
+        raise FatalError
+
+    conja = (1 - 2 * conj[0])
+    na_con = np.array([axis1, axis2], dtype=np.int)
+    out = tuple(ii for ii in range(self._ndim) if ii != axis1 and ii != axis2)
+    nout = np.array(out, dtype=np.int)
+
+    ind = np.all(self.tset[:, axis1, :] == self.tset[:, axis2, :], axis=1)
+    tset = self.tset[ind]
+    t_a_con = tset[:, axis1, :]
+    t_a_out = tset[:, nout, :]
+
+    block_a = sorted([(tuple(x.flat), tuple(y.flat), tuple(z.flat)) for x, y, z in zip(t_a_con, tset, t_a_out)], key=lambda x: x[0])
+    block_b = sorted([tuple(x.flat) for x in other.tset])
+    block_a = itertools.groupby(block_a, key=lambda x: x[0])
+    block_b = iter(block_b)
+
+    to_execute = []
+    try:
+        tta, ga = next(block_a)
+        ttb = next(block_b)
+        while True:
+            if tta == ttb:
+                for ta in ga:
+                    to_execute.append((ta[1], ttb, ta[2]))
+                tta, ga = next(block_a)
+                ttb = next(block_b)
+            elif tta < ttb:
+                tta, ga = next(block_a)
+            elif tta > ttb:
+                ttb = next(block_b)
+    except StopIteration:
+        pass
+
+    c = Tensor(settings=self.conf, s=conja * self.s[nout], n=conja * self.n, isdiag=False)
+    c.A = self.conf.back.trace_dot_diag(self.A, other.A, conj, to_execute, axis1, axis2, self._ndim)
+    c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
+    return c
