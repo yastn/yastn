@@ -90,59 +90,59 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
 
 
-def diagdot(a, b, axes, conj=(0, 0)):
-    r"""
-    Compute tensor dot product of a tensor with a diagonal tensor.
+# def diagdot(a, b, axes, conj=(0, 0)):
+#     r"""
+#     Compute tensor dot product of a tensor with a diagonal tensor.
 
-    Other tensors should be diagonal.
-    Legs of a new tensor are ordered in the same way as those of the first one.
-    Produce diagonal tensor if both are diagonal.
+#     Other tensors should be diagonal.
+#     Legs of a new tensor are ordered in the same way as those of the first one.
+#     Produce diagonal tensor if both are diagonal.
 
-    Parameters
-    ----------
-    other: Tensor
-        diagonal tensor
+#     Parameters
+#     ----------
+#     other: Tensor
+#         diagonal tensor
 
-    axis: int or tuple
-        leg of non-diagonal tensor to be multiplied by the diagonal one.
+#     axis: int or tuple
+#         leg of non-diagonal tensor to be multiplied by the diagonal one.
 
-    conj: tuple
-        shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
-    """
+#     conj: tuple
+#         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
+#     """
 
-    if not b.isdiag:
-        raise YastError('Second tensor should be diagonal')
+#     if not b.isdiag:
+#         raise YastError('Second tensor should be diagonal')
 
-    conja = (1 - 2 * conj[0])
-    na_con = 0 if self.isdiag else axis if isinstance(axis, int) else axis[0]
+#     conja = (1 - 2 * conj[0])
+#     na_con = 0 if self.isdiag else axis if isinstance(axis, int) else axis[0]
 
-    t_a_con = self.tset[:, na_con, :]
-    block_a = sorted([(tuple(x.flat), tuple(y.flat)) for x, y in zip(t_a_con, self.tset)], key=lambda x: x[0])
-    block_b = sorted([tuple(x.flat) for x in other.tset])
-    block_a = itertools.groupby(block_a, key=lambda x: x[0])
-    block_b = iter(block_b)
+#     t_a_con = self.tset[:, na_con, :]
+#     block_a = sorted([(tuple(x.flat), tuple(y.flat)) for x, y in zip(t_a_con, self.tset)], key=lambda x: x[0])
+#     block_b = sorted([tuple(x.flat) for x in other.tset])
+#     block_a = itertools.groupby(block_a, key=lambda x: x[0])
+#     block_b = iter(block_b)
 
-    to_execute = []
-    try:
-        tta, ga = next(block_a)
-        ttb = next(block_b)
-        while True:
-            if tta == ttb:
-                for ta in ga:
-                    to_execute.append((ta[1], ttb, ta[1]))
-                tta, ga = next(block_a)
-                ttb = next(block_b)
-            elif tta < ttb:
-                tta, ga = next(block_a)
-            elif tta > ttb:
-                ttb = next(block_b)
-    except StopIteration:
-        pass
+#     to_execute = []
+#     try:
+#         tta, ga = next(block_a)
+#         ttb = next(block_b)
+#         while True:
+#             if tta == ttb:
+#                 for ta in ga:
+#                     to_execute.append((ta[1], ttb, ta[1]))
+#                 tta, ga = next(block_a)
+#                 ttb = next(block_b)
+#             elif tta < ttb:
+#                 tta, ga = next(block_a)
+#             elif tta > ttb:
+#                 ttb = next(block_b)
+#     except StopIteration:
+#         pass
 
-    c = Tensor(settings=self.conf, s=conja * self.s, n=conja * self.n, isdiag=self.isdiag)
-    c.A = self.conf.back.dot_diag(self.A, other.A, conj, to_execute, na_con, self._ndim)
-    c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
-    return c
+#     c = Tensor(settings=self.conf, s=conja * self.s, n=conja * self.n, isdiag=self.isdiag)
+#     c.A = self.conf.back.dot_diag(self.A, other.A, conj, to_execute, na_con, self._ndim)
+#     c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
+#     return c
 
 
 
