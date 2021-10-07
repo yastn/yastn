@@ -102,5 +102,5 @@ def is_consistent(a):
         assert s == -hf.ms[0]
     assert len(device) <= 1, 'not all blocks reside on the same device'
     if len(device) == 1:
-        assert device.pop() == a.config.device, 'device of blocks inconsistent with config.device'
+        assert  device.pop().startswith(a.config.device), 'device of blocks inconsistent with config.device'
     return True
