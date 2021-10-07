@@ -25,8 +25,8 @@ def run_dmrg(psi, H, occ, E_target, occ_target, version='1site', opts_svd=None):
         logging.info("%s dmrg; Energy: %0.8f / %0.8f   Occupation: %0.8f / %0.8f",
                         version, EE, E_target[ii], Eocc, occ_target[ii])
         logging.info(" Convergence info: %s", info)
-        assert pytest.approx(EE, rel=tol) == Eng_ii
-        assert pytest.approx(Eocc, rel=10 * tol) == occ_target[ii]
+        assert pytest.approx(EE.item(), rel=tol) == Eng_ii
+        assert pytest.approx(Eocc.item(), rel=10 * tol) == occ_target[ii]
         project.append(psi2)
     return project[0]
 

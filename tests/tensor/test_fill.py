@@ -29,7 +29,7 @@ def test_fill_0():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == ()
-    assert pytest.approx(a.to_number(), rel=tol) == 1
+    assert pytest.approx(a.item(), rel=tol) == 1
     assert a.is_consistent()
 
     # print('1d tensor:')
@@ -71,7 +71,7 @@ def test_fill_1():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == ()
-    assert pytest.approx(a.to_number(), rel=tol) == 1
+    assert pytest.approx(a.item(), rel=tol) == 1
     assert a.is_consistent()
 
     # print('1d tensor:')

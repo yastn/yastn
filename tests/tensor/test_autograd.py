@@ -40,7 +40,7 @@ def test_trace_0():
     g.set_block(Ds=(2, 2), val=expected_grad)
 
     for t in inds_v:
-        assert pytest.approx( v.A[()].grad[t].item(), rel=tol ) == g.A[()][t]
+        assert pytest.approx(v.A[()].grad[t].item(), rel=tol) == g.A[()][t].item()
 
 
 @pytest.mark.skipif(config_U1.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")

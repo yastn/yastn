@@ -16,13 +16,13 @@ def test_trace_0():
     x = np.trace(np.reshape(x, (x.shape[0] * x.shape[1], -1)))
     b = a.trace(axes=(0, 2))
     c = b.trace(axes=(0, 1))
-    assert pytest.approx(c.to_number(), rel=tol) == x
+    assert pytest.approx(c.item(), rel=tol) == x
 
     a = yast.eye(config=config_dense, D=5)
     x1 = a.trace(axes=((), ()))
     x2 = a.trace()
     assert a.norm_diff(x1) < tol  # == 0.0
-    assert pytest.approx(x2.to_number(), rel=tol) == 5
+    assert pytest.approx(x2.item(), rel=tol) == 5
 
 
 def test_trace_1():
@@ -34,13 +34,13 @@ def test_trace_1():
     b = a.trace(axes=(0, 5))
     b = b.trace(axes=(0, 3))
     b = b.trace(axes=(0, 1))
-    assert pytest.approx(b.to_number(), rel=tol) == x
+    assert pytest.approx(b.item(), rel=tol) == x
 
     a = yast.eye(config=config_U1, t=(1, 2, 3), D=(3, 4, 5))
     x1 = a.trace(axes=((), ()))
     x2 = a.trace()
     assert a.norm_diff(x1) < tol  # == 0.0
-    assert pytest.approx(x2.to_number(), rel=tol) == 12
+    assert pytest.approx(x2.item(), rel=tol) == 12
 
 
 def test_trace_2():
@@ -54,8 +54,8 @@ def test_trace_2():
     b = a.trace(axes=(0, 3))
     b = b.trace(axes=(0, 1))
     c = a.trace(axes=((0, 1), (3, 2)))
-    assert pytest.approx(b.to_number(), rel=tol) == x
-    assert pytest.approx(c.to_number(), rel=tol) == x
+    assert pytest.approx(b.item(), rel=tol) == x
+    assert pytest.approx(c.item(), rel=tol) == x
 
     a = yast.ones(config=config_Z2_U1, isdiag=True,
                   t=[[(0, 0), (1, 1), (2, 2)]],
@@ -63,7 +63,7 @@ def test_trace_2():
     x1 = a.trace(axes=((), ()))
     x2 = a.trace()
     assert a.norm_diff(x1) < tol  # == 0.0
-    assert pytest.approx(x2.to_number(), rel=tol) == 6
+    assert pytest.approx(x2.item(), rel=tol) == 6
 
 
 if __name__ == '__main__':

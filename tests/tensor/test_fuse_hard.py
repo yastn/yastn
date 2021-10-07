@@ -219,10 +219,10 @@ def _test_hard_to_scalar(a, b):
     assert yast.norm_diff(ab, fab) < tol
     assert yast.norm_diff(ab, ffab) < tol
     assert yast.norm_diff(ab, fffab) < tol
-    assert pytest.approx(ab.to_number(), rel=tol) == s0
-    assert pytest.approx(s0, rel=tol) == s1
-    assert pytest.approx(s0, rel=tol) == s2
-    assert pytest.approx(s0, rel=tol) == s3
+    assert pytest.approx(ab.item(), rel=tol) == s0.item()
+    assert pytest.approx(s0.item(), rel=tol) == s1.item()
+    assert pytest.approx(s0.item(), rel=tol) == s2.item()
+    assert pytest.approx(s0.item(), rel=tol) == s3.item()
 
     ffa = yast.fuse_legs(fa, axes= ((0, 2), 1), mode='hard')
     ffb = yast.fuse_legs(fb, axes= ((0, 2), 1), mode='hard')
@@ -284,12 +284,12 @@ def _test_hard_add(a, b):
     assert yast.norm_diff(fc, fcc) < tol
     assert yast.norm_diff(ffc, ffcc) < tol
     assert yast.norm_diff(fffc, fffcc) < tol
-    assert pytest.approx(yast.norm_diff(fffa, fffb), rel=tol) == c.norm()
-    assert pytest.approx(yast.norm_diff(ffa, ffb), rel=tol) == c.norm()
-    assert pytest.approx(yast.norm_diff(fa, fb), rel=tol) == c.norm()
-    assert pytest.approx(yast.norm_diff(fffa, fffb, p='inf'), rel=tol) == c.norm(p='inf')
-    assert pytest.approx(yast.norm_diff(ffa, ffb, p='inf'), rel=tol) == c.norm(p='inf')
-    assert pytest.approx(yast.norm_diff(fa, fb, p='inf'), rel=tol) == c.norm(p='inf')
+    assert pytest.approx(yast.norm_diff(fffa, fffb).item(), rel=tol) == c.norm().item()
+    assert pytest.approx(yast.norm_diff(ffa, ffb).item(), rel=tol) == c.norm().item()
+    assert pytest.approx(yast.norm_diff(fa, fb).item(), rel=tol) == c.norm().item()
+    assert pytest.approx(yast.norm_diff(fffa, fffb, p='inf').item(), rel=tol) == c.norm(p='inf').item()
+    assert pytest.approx(yast.norm_diff(ffa, ffb, p='inf').item(), rel=tol) == c.norm(p='inf').item()
+    assert pytest.approx(yast.norm_diff(fa, fb, p='inf').item(), rel=tol) == c.norm(p='inf').item()
 
     uffc = fffc.unfuse_legs(axes=0)
     uufc = uffc.unfuse_legs(axes=0)

@@ -23,11 +23,11 @@ def test_diag_1():
     assert a3.are_independent(a4)
     assert a4.are_independent(a5)
 
-    na1 = a1.to_dense()
-    # na2 = a2.to_dense()
-    # na3 = a3.to_dense()
-    # na4 = a4.to_dense()
-    na5 = a5.to_dense()
+    na1 = a1.to_numpy()
+    # na2 = a2.to_numpy()
+    # na3 = a3.to_numpy()
+    # na4 = a4.to_numpy()
+    na5 = a5.to_numpy()
     assert np.allclose(np.diag(np.diag(na1)), na5)
     assert a2.norm_diff(a4) < tol  # == 0.0
     assert a3.norm_diff(a5) < tol  # == 0.0
