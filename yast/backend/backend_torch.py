@@ -78,7 +78,7 @@ def diag_diag(x):
 
 
 def get_device(x):
-    return x.device.type
+    return str(x.device)
 
 
 @torch.no_grad()

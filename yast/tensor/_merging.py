@@ -540,7 +540,7 @@ def _fuse_legs_hard(a, axes, order, inplace=False):
         c.meta_fusion = tuple(fm)
     else:
         c = a.__class__(config=a.config, meta_fusion=tuple(fm), hard_fusion=tuple(fh), struct=struct_new)
-    c.A = a.config.backend.merge_blocks(a.A, order, meta_new, meta_mrg)
+    c.A = a.config.backend.merge_blocks(a.A, order, meta_new, meta_mrg, a.config.device)
     return c
 
 

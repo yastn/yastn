@@ -30,8 +30,8 @@ def test_swap_1():
     a.set_block(ts=(1, 0, 0, 1), Ds=(1, 1, 1, 1), val=0.5)
     a.set_block(ts=(1, 1, 0, 0), Ds=(1, 1, 1, 1), val=0.5)
 
-    assert pytest.approx(yast.norm(a), rel=tol) == 1
-    assert pytest.approx(calculate_c3cp1(a), abs=tol) == 0
+    assert pytest.approx(yast.norm(a).item(), rel=tol) == 1
+    assert pytest.approx(calculate_c3cp1(a).item(), abs=tol) == 0
 
 
 if __name__ == '__main__':

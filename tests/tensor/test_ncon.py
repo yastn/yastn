@@ -50,7 +50,7 @@ def test_ncon_0():
     assert isinstance(y4.item(), complex)
     assert isinstance(y5.item(), complex)
     assert yast.norm_diff(y4, y5) / yast.norm(y4) < tol  # == 0.0
-    assert pytest.approx((a.norm() ** 2) * (b.norm() ** 2), rel=tol) == y4.item()
+    assert pytest.approx((a.norm().item() ** 2) * (b.norm().item() ** 2), rel=tol) == y4.item()
 
 
 def test_ncon_1():

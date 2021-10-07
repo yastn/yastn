@@ -25,7 +25,7 @@ def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, version='1site', opts_svd=None):
         assert Eng < Eng_old + tol
         Eng_old = Eng
     logging.info("%s tdvp; Energy: %0.8f / %0.8f", version, Eng, Eng_gs)
-    assert pytest.approx(Eng, rel=1e-1) == Eng_gs
+    assert pytest.approx(Eng.item(), rel=1e-1) == Eng_gs
     return psi
 
 

@@ -10,6 +10,8 @@ except ImportError:
     import ops_dense
     import ops_Z2
 
+tol = 1e-12
+
 
 def is_left_canonical(psi):
     """ Assert if each mps tensor is left canonical. """
@@ -17,7 +19,7 @@ def is_left_canonical(psi):
     for n in range(psi.N):
         x = psi.A[n].tensordot(psi.A[n], axes=(cl, cl), conj=(1, 0))
         x0 = yast.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True, val='ones', conjs=[1, 1])
-        assert pytest.approx(x.norm_diff(x0.diag())) == 0
+        assert x.norm_diff(x0.diag()) < tol  # == 0
     assert psi.pC is None
 
 
@@ -27,7 +29,7 @@ def is_right_canonical(psi):
     for n in range(psi.N):
         x = psi.A[n].tensordot(psi.A[n], axes=(cl, cl), conj=(0, 1))
         x0 = yast.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True, val='ones', conjs=[1, 1])
-        assert pytest.approx(x.norm_diff(x0.diag())) == 0
+        assert x.norm_diff(x0.diag()) < tol  # == 0
     assert psi.pC is None
 
 
@@ -57,11 +59,12 @@ def env2_measure(psi1, psi2):
 
     env2 = yamps.Env2(bra=psi2, ket=psi1)
     env2.setup(to='last')
-    results.append(np.conj(env2.measure(bd=(N, N - 1))))
+    results.append(env2.measure(bd=(N, N - 1)).conj())
 
     results.append(yamps.measure_overlap(bra=psi1, ket=psi2))
     results.append(yamps.measure_overlap(bra=psi2, ket=psi1).conj())
-    assert np.std(results) / abs(np.mean(results)) < 1e-12
+    results = [x.item() for x in results]  # added for cuda
+    assert np.std(results) / abs(np.mean(results)) < tol
 
 
 def env3_measure(psi1, op, psi2):
@@ -79,16 +82,16 @@ def env3_measure(psi1, op, psi2):
     for n in range(N - 1, 0, -1):
         results.append(env.measure(bd=(n, n - 1)))
     results.append(env.measure(bd=(0, -1)))
-
     results.append(yamps.measure_mpo(bra=psi1, op=op, ket=psi2))
-    assert np.std(results) / abs(np.mean(results)) < 1e-12
+    results = [x.item() for x in results]  # added for cuda
+    assert np.std(results) / abs(np.mean(results)) < tol
 
 
 def env2_cononize(psi):
     """ Test if state is normalized after canonization """
     psi.canonize_sweep(to='last')
     env = yamps.Env2(ket=psi).setup(to='first')
-    assert abs(env.measure() - 1) < 1e-12
+    assert abs(env.measure() - 1) < tol
 
 
 def check_copy(psi1, psi2):

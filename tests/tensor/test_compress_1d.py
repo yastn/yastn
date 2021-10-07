@@ -27,7 +27,7 @@ def test_compress_dense():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == ()
-    assert pytest.approx(a.to_number(), rel=tol) == 1
+    assert pytest.approx(a.item(), rel=tol) == 1
     assert a.is_consistent()
 
     # print('1d tensor:')
@@ -72,7 +72,7 @@ def test_compress_U1():
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == ()
-    assert pytest.approx(a.to_number(), rel=tol) == 1
+    assert pytest.approx(a.item(), rel=tol) == 1
     assert a.is_consistent()
 
     # print('1d tensor:')

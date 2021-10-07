@@ -15,15 +15,15 @@ def dot_vs_numpy(a, b, axes, conj):
     tDs.update({nn + len(outa): b.get_leg_structure(ii) for nn, ii in enumerate(outb)})
     tDsa = {ia: b.get_leg_structure(ib) for ia, ib in zip(*axes)}
     tDsb = {ib: a.get_leg_structure(ia) for ia, ib in zip(*axes)}
-    na = a.to_dense(tDsa)
-    nb = b.to_dense(tDsb)
+    na = a.to_numpy(tDsa)
+    nb = b.to_numpy(tDsb)
     if conj[0]:
         na = na.conj()
     if conj[1]:
         nb = nb.conj()
     nab = np.tensordot(na, nb, axes)
     c = yast.tensordot(a, b, axes, conj)
-    nc = c.to_dense(tDs)
+    nc = c.to_numpy(tDs)
     assert c.is_consistent()
     assert a.are_independent(c)
     assert c.are_independent(b)

@@ -54,9 +54,9 @@ def test_add_1():
     e1 = 2 * d + d1
     e2 = d - 2 * d1
     e3 = d1 - 2 * d
-    assert pytest.approx(e1.norm(), rel=tol) == 5
-    assert pytest.approx(e2.norm(), rel=tol) == 5
-    assert pytest.approx(e3.norm(), rel=tol) == 5
+    assert pytest.approx(e1.norm().item(), rel=tol) == 5
+    assert pytest.approx(e2.norm().item(), rel=tol) == 5
+    assert pytest.approx(e3.norm().item(), rel=tol) == 5
 
     assert a.are_independent(c1)
     assert a.are_independent(c2)
@@ -75,14 +75,14 @@ def test_add_2():
     c1 = a - b * 2
     c2 = a.apxb(b, -2)
 
-    assert pytest.approx(c1.norm_diff(c2), abs=tol) == 0
+    assert c1.norm_diff(c2) < tol  # == 0
 
     leg_structures = {2: b.get_leg_structure(2), 3: a.get_leg_structure(3)}
     na = a.to_numpy(leg_structures)
     nb = b.to_numpy(leg_structures)
     nc = c1.to_numpy()
 
-    assert pytest.approx(np.linalg.norm(nc - na + 2 * nb), abs=tol) == 0
+    assert np.linalg.norm(nc - na + 2 * nb) < tol  # == 0
 
     assert a.are_independent(c1)
     assert a.are_independent(c2)

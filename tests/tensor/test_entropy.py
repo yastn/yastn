@@ -22,14 +22,14 @@ def test_entropy():
     a = yast.tensordot(US, V, axes=(2, 0))
 
     entropy, Smin, normalization = yast.entropy(a, axes=((0, 1), (2, 3)))
-    assert pytest.approx(entropy, rel=tol) == np.log2(41)
-    assert pytest.approx(Smin, rel=tol) == 1
-    assert pytest.approx(normalization, rel=tol) == np.sqrt(41)
+    assert pytest.approx(entropy.item(), rel=tol) == np.log2(41)
+    assert pytest.approx(Smin.item(), rel=tol) == 1
+    assert pytest.approx(normalization.item(), rel=tol) == np.sqrt(41)
 
     entropy2, Smin, normalization = yast.entropy(a, axes=((0, 1), (2, 3)), alpha=2)
-    assert pytest.approx(entropy2, rel=tol) == np.log2(41)
-    assert pytest.approx(Smin, rel=tol) == 1
-    assert pytest.approx(normalization, rel=tol) == np.sqrt(41)
+    assert pytest.approx(entropy2.item(), rel=tol) == np.log2(41)
+    assert pytest.approx(Smin.item(), rel=tol) == 1
+    assert pytest.approx(normalization.item(), rel=tol) == np.sqrt(41)
 
 
 
