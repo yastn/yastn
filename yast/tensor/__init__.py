@@ -2,7 +2,7 @@ r"""
 Yet another symmetric tensor
 
 This class defines generic arbitrary-rank tensor supporting abelian symmetries.
-In principle, any number of symmetries can be used (including no symmetries).
+In principle, any number of symmetries can be used, including no symmetries.
 
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
@@ -60,9 +60,9 @@ class Tensor:
                 temp_config['device'] = config.default_device
             self.config = _config(**temp_config)
         if 'device' in kwargs and kwargs['device'] != self.config.device:
-            self.config._replace(device= kwargs['device'])
+            self.config._replace(device=kwargs['device'])
 
-        self.isdiag = isdiag
+        self._isdiag = isdiag
         self.A = {}  # dictionary of blocks
 
         try:
@@ -76,17 +76,13 @@ class Tensor:
                 n = tuple(n)
             except TypeError:
                 n = (0,) * self.config.sym.NSYM if n is None else (n,)
-
             if len(n) != self.config.sym.NSYM:
                 raise YastError('n does not match the number of symmetries')
-
             if self.isdiag:
                 if len(s) == 0:
-                    s = (1, -1)
-                if sum(s) != 0:
-                    raise YastError("Signature should be (-1, 1) or (1, -1) in diagonal tensor")
-                if sum(abs(x) for x in n) != 0:
-                    raise YastError("Tensor charge should be 0 in diagonal tensor")
+                    s = (1, -1)  # default
+                if any(x != 0 for x in n):
+                    raise YastError("Tensor charge of a diagonal tensor should be 0")
                 if len(s) != 2:
                     raise YastError("Diagonal tensor should have ndim == 2")
             self.struct = _struct(t=(), D=(), s=s, n=n)
@@ -118,7 +114,7 @@ class Tensor:
     from ._auxliary import update_struct
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
 
-    abs = absolute
+    abs = absolute  # allow yest.abs(tensor)
 
     @property
     def s(self):
@@ -137,8 +133,13 @@ class Tensor:
 
     @property
     def mlegs(self):
-        """ Return the number of legs (native) """
+        """ Return the number of meta legs (meta-fusion of native legs) """
         return len(self.meta_fusion)
+
+    @property
+    def isdiag(self):
+        """ Return  """
+        return self._isdiag
 
     @property
     def requires_grad(self):
