@@ -86,7 +86,10 @@ def is_consistent(a):
     """
     for ind, D in zip(a.struct.t, a.struct.D):
         assert ind in a.A, 'index in struct.t not in dict A'
-        assert a.config.backend.get_shape(a.A[ind]) == D, 'block dimensions do not match struct.D'
+        d = a.config.backend.get_shape(a.A[ind])
+        if a.isdiag:
+            d = d + d
+        assert d == D, 'block dimensions do not match struct.D'
     assert len(a.struct.t) == len(a.A), 'length of struct.t do not match dict A'
     assert len(a.struct.D) == len(a.A), 'length of struct.D do not match dict A'
 

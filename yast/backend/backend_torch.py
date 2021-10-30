@@ -73,10 +73,6 @@ def diag_get(x):
     return torch.diag(x)
 
 
-def diag_diag(x):
-    return torch.diag(torch.diag(x))
-
-
 def get_device(x):
     return str(x.device)
 
@@ -272,14 +268,6 @@ def rsqrt(A, cutoff=0):
     return res
 
 
-def rsqrt_diag(A, cutoff=0):
-    res = {t: torch.diag(x).rsqrt() for t, x in A.items()}
-    if cutoff > 0:
-        for t in res:
-            res[t][abs(res[t]) > 1. / cutoff] = 0
-    return {t: torch.diag(x) for t, x in res.items()}
-
-
 def reciprocal(A, cutoff=0):
     res = {t: 1. / x for t, x in A.items()}
     if cutoff > 0:
@@ -288,20 +276,8 @@ def reciprocal(A, cutoff=0):
     return res
 
 
-def reciprocal_diag(A, cutoff=0):
-    res = {t: 1. / torch.diag(x) for t, x in A.items()}
-    if cutoff > 0:
-        for t in res:
-            res[t][abs(res[t]) > 1. / cutoff] = 0
-    return {t: torch.diag(x) for t, x in res.items()}
-
-
 def exp(A, step):
     return {t: torch.exp(step * x) for t, x in A.items()}
-
-
-def exp_diag(A, step):
-    return {t: torch.diag(torch.exp(step * torch.diag(x))) for t, x in A.items()}
 
 
 def expm(A):
@@ -512,12 +488,13 @@ def merge_blocks(A, order, meta_new, meta_mrg, device='cpu'):
     return Anew
 
 
-def merge_to_dense(A, Dtot, meta, device='cpu'):
+def merge_to_dense(A, Dtot, meta, isdiag, device='cpu'):
     """ Outputs full tensor. """
     dtype = get_dtype(A.values())
     Anew = torch.zeros(Dtot, dtype=dtype, device=device)
     for (ind, Dss) in meta:
-        Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
+        x = torch.diag(A[ind]) if isdiag else A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
+        Anew[tuple(slice(*Ds) for Ds in Dss)] = x
     return Anew
 
 
