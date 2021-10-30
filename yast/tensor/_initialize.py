@@ -48,8 +48,8 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
     """
 
     if not dtype:
-        assert hasattr(a.config,'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype= a.config.default_dtype
+        assert hasattr(a.config, 'default_dtype'), "Either dtype or valid config has to be provided"
+        dtype = a.config.default_dtype
 
     D = (D,) if isinstance(D, int) else D
     t = (t,) if isinstance(t, int) else t
@@ -148,7 +148,7 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)
     if not np.all(a.config.sym.fuse(ats, sa, 1) == na):
-        raise YastError('Charges ts are not consistent with the symmetry rules: t @ s - n != 0')
+        raise YastError('Charges ts are not consistent with the symmetry rules: t @ s == n')
 
     if isinstance(val, str) and Ds is None:  # attempt to read Ds from existing blocks.
         Ds = []
@@ -180,10 +180,14 @@ def _set_block(a, ts, Ds, val, dtype):
 
         if a.isdiag:
             a.A[ts] = a.config.backend.diag_get(a.A[ts])
-            a.A[ts] = a.config.backend.diag_create(a.A[ts])
+
     else:
-        if a.isdiag and val.ndim == 1 and np.prod(Ds) == (val.size**2):
-            a.A[ts] = a.config.backend.to_tensor(np.diag(val), Ds, dtype=dtype, device=a.config.device)
+        if a.isdiag:
+            if Ds is not None and Ds[0] != Ds[1]:
+                raise YastError('Diagonal tensors requires Ds[0] == Ds[1].')
+            vald = np.diag(val) if val.ndim == 2 else val
+            Ds0 = Ds[0] if Ds is not None else None
+            a.A[ts] = a.config.backend.to_tensor(vald, Ds=Ds0, dtype=dtype, device=a.config.device)
         else:
             a.A[ts] = a.config.backend.to_tensor(val, Ds=Ds, dtype=dtype, device=a.config.device)
 

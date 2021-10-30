@@ -91,11 +91,11 @@ class Tensor:
         try:
             self.meta_fusion = tuple(kwargs['meta_fusion'])
         except (KeyError, TypeError):
-            self.meta_fusion = ((1,),) * len(s)
+            self.meta_fusion = ((1,),) * len(self.struct.s)
         try:
             self.hard_fusion = tuple(kwargs['hard_fusion'])
         except (KeyError, TypeError):
-            self.hard_fusion = tuple(_Fusion(s=(x,), ms=(-1 * x,)) for x in s)
+            self.hard_fusion = tuple(_Fusion(s=(x,), ms=(-1 * x,)) for x in self.struct.s)
 
     # pylint: disable=C0415
     from ._initialize import set_block, fill_tensor
@@ -118,12 +118,12 @@ class Tensor:
 
     @property
     def s(self):
-        """ Return signature of the tensor as a tuple. """
+        """ Return signature of the tensor as nparray. """
         return np.array(self.struct.s, dtype=int)
 
     @property
     def n(self):
-        """ Return total charge of the tensor as a tuple. """
+        """ Return total charge of the tensor as aparray. """
         return np.array(self.struct.n, dtype=int)
 
     @property

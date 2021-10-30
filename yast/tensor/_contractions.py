@@ -63,8 +63,11 @@ def tensordot(a, b, axes, conj=(0, 0)):
     ind_a, ind_b = _common_rows(_tarray(a)[:, axes_a[1], :], _tarray(b)[:, axes_b[0], :])
     s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
 
-    Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, axes_a, s_eff_a, ind_a, sort_r=True)
-    Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(b, axes_b, s_eff_b, ind_b)
+    aa = a.diag() if a.isdiag else a
+    bb = b.diag() if b.isdiag else b
+
+    Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(aa, axes_a, s_eff_a, ind_a, sort_r=True)
+    Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(bb, axes_b, s_eff_b, ind_b)
 
     meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
@@ -236,18 +239,19 @@ def trace(a, axes=(0, 1)):
     pD2 = np.prod(D2, axis=1).reshape(lt, 1)
     ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
     Drsh = np.hstack([pD1, pD2, D3])
+    AA = {ind: a.config.backend.diag_create(x) for ind, x in a.A.items()} if a.isdiag else a.A
     if needs_mask:
         t12 = tuple(tuple(t.flat) for t in t1[ind])
         D1 = tuple(tuple(x.flat) for x in D1[ind])
         D2 = tuple(tuple(x.flat) for x in D2[ind])
         msk12 = _masks_for_trace(a.config, t12, D1, D2, a.hard_fusion, in1, in2)
         meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n]), tt) for n, tt in zip(ind, t12)]
-        c.A = c.config.backend.trace_with_mask(a.A, order, meta, msk12)
+        c.A = c.config.backend.trace_with_mask(AA, order, meta, msk12)
     else:
         if not np.all(D1[ind] == D2[ind]):
             raise YastError('Not all bond dimensions of the traced legs match')
         meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n])) for n in ind]
-        c.A = c.config.backend.trace(a.A, order, meta)
+        c.A = c.config.backend.trace(AA, order, meta)
     c.update_struct()
     return c
 

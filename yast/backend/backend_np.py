@@ -71,11 +71,7 @@ def diag_create(x, p=0):
 
 
 def diag_get(x):
-    return np.diag(x)
-
-
-def diag_diag(x):
-    return np.diag(np.diag(x))
+    return np.diag(x).copy()
 
 
 def get_device(x):
@@ -268,14 +264,6 @@ def rsqrt(A, cutoff=0):
     return res
 
 
-def rsqrt_diag(A, cutoff=0):
-    res = {t: 1. / np.sqrt(np.diag(x)) for t, x in A.items()}
-    if cutoff > 0:
-        for t in res:
-            res[t][abs(res[t]) > 1. / cutoff] = 0
-    return {t: np.diag(x) for t, x in res.items()}
-
-
 def reciprocal(A, cutoff=0):
     res = {t: 1. / x for t, x in A.items()}
     if cutoff > 0:
@@ -284,20 +272,8 @@ def reciprocal(A, cutoff=0):
     return res
 
 
-def reciprocal_diag(A, cutoff=0):
-    res = {t: 1. / np.diag(x) for t, x in A.items()}
-    if cutoff > 0:
-        for t in res:
-            res[t][abs(res[t]) > 1. / cutoff] = 0
-    return {t: np.diag(x) for t, x in res.items()}
-
-
 def exp(A, step):
     return {t: np.exp(step * x) for t, x in A.items()}
-
-
-def exp_diag(A, step):
-    return {t: np.diag(np.exp(step * np.diag(x))) for t, x in A.items()}
 
 
 def expm(A):
@@ -529,12 +505,13 @@ def merge_blocks(A, order, meta_new, meta_mrg, *args, **kwargs):
     return Anew
 
 
-def merge_to_dense(A, Dtot, meta, *args, **kwargs):
+def merge_to_dense(A, Dtot, meta, isdiag, *args, **kwargs):
     """ Outputs full tensor. """
     dtype = get_dtype(A.values())
     Anew = np.zeros(Dtot, dtype=dtype)
     for (ind, Dss) in meta:
-        Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
+        x = np.diag(A[ind]) if isdiag else A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
+        Anew[tuple(slice(*Ds) for Ds in Dss)] = x
     return Anew
 
 

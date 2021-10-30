@@ -48,7 +48,7 @@ def _common_keys(d1, d2):
 
 
 def _common_rows(a, b):
-    """ Return indices (as tuple) of nparray a rows that are in b, and vice versa. """
+    """ Return row indices of nparray a that are in b, and vice versa.  Outputs tuples."""
     la = [tuple(x.flat) for x in a]
     lb = [tuple(x.flat) for x in b]
     sa = set(la)
@@ -72,6 +72,8 @@ def update_struct(a):
     a.A = {k: d[k] for k in sorted(d)}
     t = tuple(a.A.keys())
     D = tuple(a.config.backend.get_shape(x) for x in a.A.values())
+    if a.isdiag:
+        D = tuple(d + d for d in D)
     a.struct = _struct(t, D, a.struct.s, a.struct.n)
 
 

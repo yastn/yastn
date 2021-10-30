@@ -754,5 +754,4 @@ def _unmerge_matrix(a, ls_l, ls_r):
 def _unmerge_diagonal(a, ls):
     meta = tuple((ta + ta, ia, ra.Dslc) for ia in ls.dec for ta, ra in ls.dec[ia].items())
     a.A = a.config.backend.unmerge_from_diagonal(a.A, meta)
-    a.A = {ind: a.config.backend.diag_create(x) for ind, x in a.A.items()}
     a.update_struct()

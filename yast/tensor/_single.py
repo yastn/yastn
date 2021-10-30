@@ -324,6 +324,8 @@ def transpose(a, axes, inplace=False):
     axes: tuple of ints
         New order of the legs. Should be a permutation of (0, 1, ..., ndim-1)
     """
+    if a.isdiag:
+        raise YastError("Cannot transpose diagonal tensor")
     _test_all_axes(a, axes, native=False)
     uaxes, = _unpack_axes(a, axes)
     order = np.array(uaxes, dtype=np.intp)
@@ -371,14 +373,13 @@ def diag(a):
     """Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa. """
     if a.isdiag:
         c = a.__class__(config=a.config, isdiag=False, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-        c.A = {ind: a.config.backend.diag_diag(a.A[ind]) for ind in a.A}
-    elif a.nlegs == 2 and sum(abs(x) for x in a.struct.n) == 0 and sum(a.struct.s) == 0:
+        c.A = {ind: a.config.backend.diag_create(a.A[ind]) for ind in a.A}
+        return c
+    if a.nlegs == 2 and all(x == 0 for x in a.struct.n):
         c = a.__class__(config=a.config, isdiag=True, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-        c.A = {ind: a.config.backend.diag_diag(a.A[ind]) for ind in a.A}
-    else:
-        raise YastError('Tensor cannot be changed into a diagonal one')
-    # c.update_struct()
-    return c
+        c.A = {ind: a.config.backend.diag_get(a.A[ind]) for ind in a.A}
+        return c
+    raise YastError('Tensor cannot be changed into a diagonal one')
 
 
 def absolute(a):
@@ -441,7 +442,7 @@ def rsqrt(a, cutoff=0):
     tansor: Tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.rsqrt_diag(a.A, cutoff=cutoff) if c.isdiag else a.config.backend.rsqrt(a.A, cutoff=cutoff)
+    c.A = a.config.backend.rsqrt(a.A, cutoff=cutoff)
     return c
 
 
@@ -461,7 +462,7 @@ def reciprocal(a, cutoff=0):
     tansor: Tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.reciprocal_diag(a.A, cutoff=cutoff) if c.isdiag else a.config.backend.reciprocal(a.A, cutoff=cutoff)
+    c.A = a.config.backend.reciprocal(a.A, cutoff=cutoff)
     return c
 
 
@@ -480,7 +481,7 @@ def exp(a, step=1.):
     tansor: Tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.exp_diag(a.A, step) if c.isdiag else a.config.backend.exp(a.A, step)
+    c.A = a.config.backend.exp(a.A, step)
     return c
 
 

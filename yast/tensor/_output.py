@@ -18,8 +18,6 @@ def export_to_dict(a):
         dictionary containing all the information needed to recreate the tensor.
     """
     AA = {ind: a.config.backend.to_numpy(a.A[ind]) for ind in a.A}
-    if a.isdiag:
-        AA = {t: np.diag(x) for t, x in AA.items()}
     out = {'A': AA, 's': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag,
             'meta_fusion': a.meta_fusion, 'hard_fusion': a.hard_fusion}
     return out
@@ -37,14 +35,15 @@ def compress_to_1d(a, meta=None):
             Raise error if tensor has some blocks which are not included in meta or otherwise meta does not match the tensor.
     """
     if meta is None:
-        D_rsh = np.prod(_Darray(a), axis=1)
+        D_rsh = _Darray(a)[:, 0] if a.isdiag else np.prod(_Darray(a), axis=1)
         aD_rsh = np.cumsum(D_rsh)
         D_tot = np.sum(D_rsh)
         meta_new = (((),), (D_tot,))
         # meta_merge = ((tn, to, Dslc, Drsh), ...)
         meta_merge = tuple(((), t, ((aD - D, aD),), D) for t, D, aD in zip(a.struct.t, D_rsh, aD_rsh))
         # (told, tnew, Dslc, Dnew)
-        meta_unmerge = tuple(((), t, (aD - D, aD), Dnew) for t, D, aD, Dnew in zip(a.struct.t, D_rsh, aD_rsh, a.struct.D))
+        DD = tuple((x[0],) for x in a.struct.D) if a.isdiag else a.struct.D
+        meta_unmerge = tuple(((), t, (aD - D, aD), Dnew) for t, D, aD, Dnew in zip(a.struct.t, D_rsh, aD_rsh, DD))
         meta = {'s': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag, 'hard_fusion': a.hard_fusion,
                 'meta_fusion': a.meta_fusion, 'meta_unmerge': meta_unmerge, 'meta_merge': meta_merge}
     else:
@@ -57,7 +56,8 @@ def compress_to_1d(a, meta=None):
         if len(a.A) != sum(ind in a.A for (_, ind, _, _) in meta_merge):
             raise YastError("Tensor has blocks that do not appear in meta.")
 
-    A = a.config.backend.merge_blocks(a.A, tuple(range(a.nlegs)), meta_new, meta_merge, a.config.device)
+    order = (0,) if a.isdiag else tuple(range(a.nlegs))
+    A = a.config.backend.merge_blocks(a.A, order, meta_new, meta_merge, a.config.device)
     return A[()], meta
 
 ############################
@@ -279,11 +279,11 @@ def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
                 lss[n] = [ls]
 
     for lo in lss:
-        lss[lo] = leg_structure_union(*lss[lo])
+        lss[lo] = leg_structures_union(*lss[lo])
     return lss
 
 
-def leg_structure_union(*args):
+def leg_structures_union(*args):
     """
     Makes a union of leg structures {t: D} specified in args.
 
@@ -332,7 +332,7 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
         for n, tDn in leg_structures.items():
             if (n < 0) or (n >= nlegs):
                 raise YastError('Specified leg out of ndim')
-            tD[n] = leg_structure_union(tD[n], tDn)
+            tD[n] = leg_structures_union(tD[n], tDn)
     Dtot = [sum(tDn.values()) for tDn in tD]
     for tDn in tD:
         tns = sorted(tDn.keys(), reverse=reverse)
@@ -348,7 +348,7 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
     tset = _tarray(a)
     for tind, tt in zip(a.struct.t, tset):
         meta.append((tind, tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
-    return a.config.backend.merge_to_dense(a.A, Dtot, meta, a.config.device)
+    return a.config.backend.merge_to_dense(a.A, Dtot, meta, a.isdiag, a.config.device)
 
 
 def to_numpy(a, leg_structures=None, native=False, reverse=False):
@@ -395,7 +395,9 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     config_dense = a.config._replace(sym=sym_none)
     news = a.get_signature(native)
     c = a.__class__(config=config_dense, s=news, n=None, isdiag=a.isdiag)
-    c.set_block(val=a.to_dense(leg_structures, native, reverse))
+    x = a.to_dense(leg_structures, native, reverse)
+    c.A[()] = c.config.backend.diag_get(x) if a.isdiag else x
+    c.update_struct()
     return c
 
 #########################
