@@ -98,7 +98,7 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         (relevant options might depend on backend)
     
     untruncated_S: bool
-        returns U, S, V, uS  with dict uS with a copy of untruncated singular values.
+        returns U, S, V, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
 
     Returns
     -------
@@ -187,7 +187,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         largest total number of singular values to keep.
 
     untruncated_S: bool
-        returns U, S, V, uS  with dict uS with a copy of untruncated singular values.
+        returns U, S, V, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
 
     Returns
     -------
@@ -322,7 +322,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
         largest total number of singular values to keep.
 
     untruncated_S: bool
-        returns S, U, uS  with dict uS with a copy of untruncated eigenvalues.
+        returns S, U, uS  with dict uS with a copy of untruncated eigenvalues and truncated bond dimensions.
 
     Returns
     -------
