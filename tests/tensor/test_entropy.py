@@ -21,11 +21,6 @@ def test_entropy():
     US = yast.tensordot(U, S, axes=(2, 0))
     a = yast.tensordot(US, V, axes=(2, 0))
 
-    _, _, _, uS = yast.svd(a, axes=((0, 1), (2, 3)), sU=-1, untruncated_S=True)
-    assert pytest.approx(sum(uS[(-2,)]).item(), rel=tol) == 4.
-    assert pytest.approx(sum(uS[(-1,)]).item(), rel=tol) == 12.
-    assert pytest.approx(sum(uS[(0,)]).item(), rel=tol) == 25.
-
     entropy, Smin, normalization = yast.entropy(a, axes=((0, 1), (2, 3)))
     assert pytest.approx(entropy.item(), rel=tol) == np.log2(41)
     assert pytest.approx(Smin.item(), rel=tol) == 1
@@ -36,6 +31,10 @@ def test_entropy():
     assert pytest.approx(Smin.item(), rel=tol) == 1
     assert pytest.approx(normalization.item(), rel=tol) == np.sqrt(41)
 
+    _, _, _, uS = yast.svd(a, axes=((0, 1), (2, 3)), sU=-1, untruncated_S=True)
+    assert pytest.approx(sum(uS[(-2,)]).item(), rel=tol) == 4.
+    assert pytest.approx(sum(uS[(-1,)]).item(), rel=tol) == 12.
+    assert pytest.approx(sum(uS[(0,)]).item(), rel=tol) == 25.
 
 
 if __name__ == '__main__':

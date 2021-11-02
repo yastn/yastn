@@ -132,12 +132,14 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     U.A, S.A, V.A = a.config.backend.svd_lowrank(Am, meta, D_block, n_iter, k_fac)
 
-    if untruncated_S:
-        uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
-
     ls_s = _leg_struct_truncation(
         S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
         keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='svd')
+
+    if untruncated_S:
+        uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
+        us['D': ls_s.Dtot.copy()]
+
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
     _unmerge_matrix(V, ls_s, ls_r)
@@ -219,12 +221,14 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     U.A, S.A, V.A = a.config.backend.svd(Am, meta)
 
-    if untruncated_S:
-        uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
-
+    
     ls_s = _leg_struct_truncation(
         S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
         keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='svd')
+
+    if untruncated_S:
+        uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
+        us['D': ls_s.Dtot.copy()]
 
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
@@ -349,12 +353,14 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
     meta = tuple((il + ir, il, il + ir) for il, ir in zip(ul, ur))
     S.A, U.A = a.config.backend.eigh(Am, meta)
 
-    if untruncated_S:
-        uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
-
     ls_s = _leg_struct_truncation(
         S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
         keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='eigh')
+
+    if untruncated_S:
+        uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
+        us['D': ls_s.Dtot.copy()]
+
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)

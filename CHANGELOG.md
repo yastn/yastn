@@ -68,8 +68,12 @@
   In the first three also catches a possibility to introduce bond dimension mismatch in the result.
 
 02-11-2021
+- new funciton `broadcast_diag(a, b, axes)`. It has the same syntax as tensordot
+  but tensor b has to be diagonal. Perform broadcasted multiplication of tensor a 
+  by diagonal tensor b. Do not change the order of legs in tensor a (unlike tensordot).
+  It is linked in tensordot for operations involving diagonal tensor.
 - in `set_block` allow to have ts as a tuple of tuples.
   This is more natural syntax when number of symmetry charges is greater than one.
-- in `svd` and `eigh` new option `untruncated_S` addtionally returns dict with a copy (i.e. not a clone) 
-  of singular- or eigen-values. 
-- new funciton `broadcast_diag(a, b, axes)`. The same syntax as tensordot but tensor b has to be diagonal. Perform broadcasted multiplication of tensor a by diagonal tensor b. Do not change the order of legs in tensor a (unlike tensordot). It is linked in tensordot for operations involving diagonal tensor.
+- in `svd` and `eigh` new option `untruncated_S` addtionally returns dict uS with a copy 
+  (i.e. not a clone) of singular- or eigenvalues. uS also has field `D` with 
+  truncated bond dimensions.
