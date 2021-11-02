@@ -83,8 +83,8 @@ class Tensor:
                     s = (1, -1)  # default
                 if any(x != 0 for x in n):
                     raise YastError("Tensor charge of a diagonal tensor should be 0")
-                if len(s) != 2:
-                    raise YastError("Diagonal tensor should have ndim == 2")
+                if s not in ((-1, 1), (1, -1)):
+                    raise YastError("Diagonal tensor should have s = (1, -1) or (-1, 1)")
             self.struct = _struct(t=(), D=(), s=s, n=n)
 
         # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]
@@ -100,7 +100,7 @@ class Tensor:
     # pylint: disable=C0415
     from ._initialize import set_block, fill_tensor
     from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr
-    from ._contractions import tensordot, vdot, trace, swap_gate
+    from ._contractions import tensordot, vdot, trace, swap_gate, broadcast_diag
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, diag, absolute, sqrt, rsqrt, reciprocal, exp
     from ._single import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, remove_zero_blocks, add_leg
     from ._single import copy, clone, detach, to, requires_grad_, real, imag

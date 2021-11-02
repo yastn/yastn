@@ -136,6 +136,7 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
         ts = (ts,)
     if a.isdiag and Ds is not None and len(Ds) == 1:
         Ds = Ds + Ds
+    ts = tuple(_flatten(ts))
     if a.isdiag and len(ts) == a.config.sym.NSYM:
         ts = ts + ts
 
