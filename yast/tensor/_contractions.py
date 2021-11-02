@@ -1,11 +1,11 @@
 """ Contractions of yast tensors """
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray
+from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray, _struct
 from ._tests import YastError, _check, _test_configs_match, _test_fusions_match
 from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_sign_hf
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
 
-__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon']
+__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'broadcast_diag']
 
 
 def tensordot(a, b, axes, conj=(0, 0)):
@@ -41,7 +41,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
     axes_b = _unpack_axes(b, lb_con, lb_out)  # native legs of b; tuple of two tuples
 
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
-    mconj = (-conja * conjb)
+    mconj = - conja * conjb
 
     if _check["signatures_match"] and not all(a.struct.s[i] == mconj * b.struct.s[j] for i, j in zip(axes_a[1], axes_b[0])):
         raise YastError('Signs do not match in tensordot')
@@ -93,60 +93,67 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
 
 
-# def diagdot(a, b, axes, conj=(0, 0)):
-#     r"""
-#     Compute tensor dot product of a tensor with a diagonal tensor.
+def broadcast_diag(a, b, axes, conj=(0, 0)):
+    r"""
+    Compute tensor dot product of tensor a with diagonal tensor b.
 
-#     Other tensors should be diagonal.
-#     Legs of a new tensor are ordered in the same way as those of the first one.
-#     Produce diagonal tensor if both are diagonal.
+    Legs of resulting tensor are ordered in the same way as those of tensor a.
+    Produce diagonal tensor if both are diagonal.
 
-#     Parameters
-#     ----------
-#     other: Tensor
-#         diagonal tensor
+    Parameters
+    ----------
+    a, b: Tensors
+        b is a diagonal tensor
 
-#     axis: int or tuple
-#         leg of non-diagonal tensor to be multiplied by the diagonal one.
+    axis: int or tuple
+        leg of non-diagonal tensor to be multiplied by the diagonal one.
 
-#     conj: tuple
-#         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
-#     """
+    conj: tuple
+        shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
+    """
 
-#     if not b.isdiag:
-#         raise YastError('Second tensor should be diagonal')
+    if not b.isdiag:
+        raise YastError('Tensor b should be diagonal')
 
-#     conja = (1 - 2 * conj[0])
-#     na_con = 0 if self.isdiag else axis if isinstance(axis, int) else axis[0]
+    _test_configs_match(a, b)
+    la_con, lb_con = _clear_axes(*axes)  # contracted meta legs
+    if len(la_con) != 1 or len(lb_con) != 1:
+        raise YastError('For broadcast_diag, axes should specify exactly one leg of a and b')
+    if a.meta_fusion[la_con[0]] != (1,):
+        raise YastError('For broadcast_diag, contracted leg of tensor a cannot be fused')
 
-#     t_a_con = self.tset[:, na_con, :]
-#     block_a = sorted([(tuple(x.flat), tuple(y.flat)) for x, y in zip(t_a_con, self.tset)], key=lambda x: x[0])
-#     block_b = sorted([tuple(x.flat) for x in other.tset])
-#     block_a = itertools.groupby(block_a, key=lambda x: x[0])
-#     block_b = iter(block_b)
+    la_con, = _unpack_axes(a, la_con)
+    la_con, lb_con = la_con[0], lb_con[0]
 
-#     to_execute = []
-#     try:
-#         tta, ga = next(block_a)
-#         ttb = next(block_b)
-#         while True:
-#             if tta == ttb:
-#                 for ta in ga:
-#                     to_execute.append((ta[1], ttb, ta[1]))
-#                 tta, ga = next(block_a)
-#                 ttb = next(block_b)
-#             elif tta < ttb:
-#                 tta, ga = next(block_a)
-#             elif tta > ttb:
-#                 ttb = next(block_b)
-#     except StopIteration:
-#         pass
+    if a.hard_fusion[la_con].tree != (1,):
+        raise YastError('For broadcast_diag, contracted leg of tensor a cannot be fused')
 
-#     c = Tensor(settings=self.conf, s=conja * self.s, n=conja * self.n, isdiag=self.isdiag)
-#     c.A = self.conf.back.dot_diag(self.A, other.A, conj, to_execute, na_con, self._ndim)
-#     c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
-#     return c
+    conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
+    if _check["signatures_match"] and a.struct.s[la_con] != - conja * conjb * b.struct.s[lb_con]:
+        raise YastError('Signs do not match in broadcast_diag')
 
+    c_n = np.array(a.struct.n, dtype=int).reshape((1, 1, -1))
+    c_n = tuple(a.config.sym.fuse(c_n, (1,), conja)[0])
+    c_s = a.struct.s if conja == 1 else tuple(-x for x in a.struct.s)
+    c_hard_fusion = a.hard_fusion if conja == 1 else tuple(_flip_sign_hf(x) for x in a.hard_fusion)
+
+    nsym = b.config.sym.NSYM
+    ind_tb = tuple(x[:nsym] for x in b.struct.t)
+    ind_ta = tuple(x[la_con * nsym : (la_con + 1) * nsym] for x in a.struct.t)
+
+    meta = tuple((ta, ia + ia, ta) for ta, ia in zip(a.struct.t, ind_ta) if ia in ind_tb)
+    tD = tuple((ta, da) for ta, da, ia in zip(a.struct.t, a.struct.D, ind_ta) if ia in ind_tb)
+    c_t, c_D = zip(*tD)
+    c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
+
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=c_hard_fusion, struct=c_struct)
+    a_ndim, la_con = (1, 1) if a.isdiag else (a.nlegs, la_con)
+    c.A = a.config.backend.dot_diag(a.A, b.A, conj, meta, la_con, a_ndim)
+    return c
+
+
+def _meta_broadcast_diag():
+    return None
 
 
 def vdot(a, b, conj=(1, 0)):
@@ -227,6 +234,13 @@ def trace(a, axes=(0, 1)):
 
     c = a.__class__(config=a.config, s=c_s, n=a.struct.n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
 
+    if a.isdiag:
+        if needs_mask:
+            raise YastError('Diagonal tensor cannot have nontrivial leg fusion -- this should not have happend ')
+        c.A = {(): c.config.backend.sum_elements(a.A)}
+        c.update_struct()
+        return c
+
     tset, Dset = _tarray(a), _Darray(a)
     lt = len(tset)
     t1 = tset[:, in1, :].reshape(lt, -1)
@@ -239,73 +253,21 @@ def trace(a, axes=(0, 1)):
     pD2 = np.prod(D2, axis=1).reshape(lt, 1)
     ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
     Drsh = np.hstack([pD1, pD2, D3])
-    AA = {ind: a.config.backend.diag_create(x) for ind, x in a.A.items()} if a.isdiag else a.A
     if needs_mask:
         t12 = tuple(tuple(t.flat) for t in t1[ind])
         D1 = tuple(tuple(x.flat) for x in D1[ind])
         D2 = tuple(tuple(x.flat) for x in D2[ind])
         msk12 = _masks_for_trace(a.config, t12, D1, D2, a.hard_fusion, in1, in2)
         meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n]), tt) for n, tt in zip(ind, t12)]
-        c.A = c.config.backend.trace_with_mask(AA, order, meta, msk12)
+        c.A = c.config.backend.trace_with_mask(a.A, order, meta, msk12)
     else:
         if not np.all(D1[ind] == D2[ind]):
             raise YastError('Not all bond dimensions of the traced legs match')
         meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n])) for n in ind]
-        c.A = c.config.backend.trace(AA, order, meta)
+        c.A = c.config.backend.trace(a.A, order, meta)
     c.update_struct()
     return c
 
-
-
-# def trace(self, axes=(0, 1)):
-#     """
-#     Compute trace of legs specified by axes.
-
-#     For diagonal tensor, return 0-rank tensor
-#     """
-#     try:
-#         in1 = tuple(axes[0])
-#     except TypeError:
-#         in1 = (axes[0],)  # indices going u
-#     try:
-#         in2 = tuple(axes[1])
-#     except TypeError:
-#         in2 = (axes[1],)  # indices going v
-
-#     if len(in1) != len(in2):
-#         logger.exception('Number of axis to trace should be the same')
-#         raise FatalError
-
-#     if self.isdiag:
-#         if in1 == in2 == ():
-#             return self.copy()
-#         elif in1 + in2 == (0, 1) or in1 + in2 == (1, 0):
-#             a = Tensor(settings=self.conf)
-#             to_execute = []
-#             for tt in self.tset:
-#                 to_execute.append((tuple(tt.flat), ()))  # old, new
-#             a.A = a.conf.back.trace_axis(A=self.A, to_execute=to_execute, axis=0)
-#         else:
-#             logger.exception('Wrong axes for diagonal tensor')
-#             raise FatalError
-#     else:
-#         out = tuple(ii for ii in range(self._ndim) if ii not in in1 + in2)
-#         nout = np.array(out, dtype=np.int)
-#         nin1 = np.array(in1, dtype=np.int)
-#         nin2 = np.array(in2, dtype=np.int)
-#         if not all(self.s[nin1] == -self.s[nin2]):
-#             logger.exception('Signs do not match')
-#             raise FatalError
-
-#         to_execute = []
-#         for tt in self.tset:
-#             if np.all(tt[nin1, :] == tt[nin2, :]):
-#                 to_execute.append((tuple(tt.flat), tuple(tt[nout].flat)))  # old, new
-#         a = Tensor(settings=self.conf, s=self.s[nout], n=self.n)
-#         a.A = a.conf.back.trace(A=self.A, to_execute=to_execute, in1=in1, in2=in2, out=out)
-
-#     a.tset = np.array([ind for ind in a.A], dtype=np.int).reshape(len(a.A), a._ndim, a.nsym)
-#     return a
 
 def swap_gate(a, axes, inplace=False):
     """
@@ -425,71 +387,3 @@ def ncon(ts, inds, conjs=None):
     for num in it:
         result.A[()] = result.A[()] * num.A[()]
     return result
-
-
-
-
-
-
-
-# def trace_dot_diag(self, other, axis1=0, axis2=1, conj=(0, 0)):
-#     r""" Contract two legs of a tensor with a diagonal tensor -- equivalent to dot_diag and trace of the result.
-
-#     Other tensor should be diagonal.
-#     Legs of a new tensor are ordered in the same way as those of the first one.
-
-#     Parameters
-#     ----------
-#     other: Tensor
-#         diagonal tensor
-
-#     axis1, axis2: int
-#         2 legs of the first tensor to be multiplied by the diagonal one.
-#         they are ignored if the first tensor is diagonal.
-
-#     conj: tuple
-#         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
-#     """
-#     if self.isdiag:
-#         return self.dot_diag(other, axis=0, conj=conj).trace()
-
-#     if self.s[axis1] != -self.s[axis2]:
-#         logger.exception('Signs do not match')
-#         raise FatalError
-
-#     conja = (1 - 2 * conj[0])
-#     na_con = np.array([axis1, axis2], dtype=np.int)
-#     out = tuple(ii for ii in range(self._ndim) if ii != axis1 and ii != axis2)
-#     nout = np.array(out, dtype=np.int)
-
-#     ind = np.all(self.tset[:, axis1, :] == self.tset[:, axis2, :], axis=1)
-#     tset = self.tset[ind]
-#     t_a_con = tset[:, axis1, :]
-#     t_a_out = tset[:, nout, :]
-
-#     block_a = sorted([(tuple(x.flat), tuple(y.flat), tuple(z.flat)) for x, y, z in zip(t_a_con, tset, t_a_out)], key=lambda x: x[0])
-#     block_b = sorted([tuple(x.flat) for x in other.tset])
-#     block_a = itertools.groupby(block_a, key=lambda x: x[0])
-#     block_b = iter(block_b)
-
-#     to_execute = []
-#     try:
-#         tta, ga = next(block_a)
-#         ttb = next(block_b)
-#         while True:
-#             if tta == ttb:
-#                 for ta in ga:
-#                     to_execute.append((ta[1], ttb, ta[2]))
-#                 tta, ga = next(block_a)
-#                 ttb = next(block_b)
-#             elif tta < ttb:
-#                 tta, ga = next(block_a)
-#             elif tta > ttb:
-#                 ttb = next(block_b)
-#     except StopIteration:
-#         pass
-
-#     c = Tensor(settings=self.conf, s=conja * self.s[nout], n=conja * self.n, isdiag=False)
-#     c.A = self.conf.back.trace_dot_diag(self.A, other.A, conj, to_execute, axis1, axis2, self._ndim)
-#     c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
-#     return c
