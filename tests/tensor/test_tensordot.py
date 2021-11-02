@@ -79,7 +79,7 @@ def test_dot_1_sparse():
 
 
 def test_dot_2():
-    t1 = [(-1, -1), (-1, 1), (1, -1), (1, 1)]
+    t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
     t2 = [(0, 0), (0, 2), (2, 0), (2, 2)]
     a = yast.rand(config=config_Z2_U1, s=(-1, 1, 1, -1),
                   t=(t1, t1, t1, t1),
@@ -92,8 +92,31 @@ def test_dot_2():
     dot_vs_numpy(b, a, axes=((1, 0), (1, 0)), conj=(0, 0))
 
 
+def test_broadcast():
+    t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
+    D1 = (1, 2, 2, 4)
+
+    t2 = [(0, -1), (0, 1), (1, -1), (0, 0)]
+    D2 = (1, 2, 2, 5)
+
+    a = yast.rand(config=config_Z2_U1, s=(-1, 1, 1, -1),
+                  t=(t1, t1, t1, t1),
+                  D=(D1, (9, 4, 3, 2), (5, 6, 7, 8), (7, 8, 9, 10)))
+    b = yast.rand(config=config_Z2_U1, s=(1, -1), t = [t2, t2], D=[D2, D2], isdiag=True)
+    b2 = b.diag()
+
+    c1 = a.broadcast_diag(b, axes=(0, 0))
+    c2 = a.broadcast_diag(b, axes=(0, 1), conj=(0, 1))
+    c3 = b2.tensordot(a, axes=(0, 0))
+
+    assert(yast.norm_diff(c1, c2)) < tol
+    assert(yast.norm_diff(c1, c3)) < tol
+    assert c3.get_shape() == (5, 18, 26, 34)
+
+
 if __name__ == '__main__':
     test_dot_0()
     test_dot_1()
     test_dot_1_sparse()
     test_dot_2()
+    test_broadcast()

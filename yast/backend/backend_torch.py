@@ -114,6 +114,11 @@ def item(x):
     return x.item()
 
 
+def sum_elements(A):
+    """ sum of all elements of all tensors in A """
+    return sum(x.sum() for x in A.values())
+
+
 def norm(A, p):
     """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
     if p == "fro":
@@ -469,6 +474,21 @@ def dot(A, B, conj, meta_dot):
     C = {}
     for (out, ina, inb) in meta_dot:
         C[out] = f(A[ina], B[inb])
+    return C
+
+
+dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
+                (0, 1): lambda x, y, dim: x * y.reshape(dim).conj(),
+                (1, 0): lambda x, y, dim: x.conj() * y.reshape(dim),
+                (1, 1): lambda x, y, dim: x.conj() * y.reshape(dim).conj()}
+
+def dot_diag(A, B, conj, to_execute, a_con, a_ndim):
+    dim = [1] * a_ndim
+    dim[a_con] = -1
+    f = dotdiag_dict[conj]
+    C = {}
+    for in1, in2, out in to_execute:
+        C[out] = f(A[in1], B[in2], dim)
     return C
 
 

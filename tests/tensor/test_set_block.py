@@ -139,7 +139,12 @@ def test_set2():
     a = yast.ones(config=config_Z2_U1, s=(-1, 1, 1),
                   t=[[(0, 1), (1, 0)], [(0, 0)], [(0, 1), (1, 0)]],
                   D=[[1, 2], 3, [1, 2]])
+    npa = a.to_numpy()
+    assert npa.shape == (3, 3, 3)
+
     a.set_block(ts=(0, 1, 0, -2, 0, 3), Ds=(1, 5, 6))
+    a.set_block(ts=((0, 1), (0, -2), (0, 3)), Ds=(1, 5, 6))  # those two have the same effect
+
     npa = a.to_numpy()
     assert np.isrealobj(npa)
     assert npa.shape == (3, 8, 9)

@@ -1,6 +1,6 @@
 import numpy as np
 
-SYM_ID = "Mix_for_test"
+SYM_ID = "Z2xU1"
 NSYM = 2  # two ints used to distinguish symmetry sectors
 
 def fuse(charges, signatures, new_signature):
