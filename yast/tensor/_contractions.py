@@ -34,9 +34,35 @@ def tensordot(a, b, axes, conj=(0, 0)):
     """
     _test_configs_match(a, b)
     la_con, lb_con = _clear_axes(*axes)  # contracted meta legs
+
+    if b.isdiag:
+        if len(lb_con) == 1:
+            c = a.broadcast_diag(b, axes=(la_con, lb_con), conj=conj)
+            c.moveaxis(source=la_con, destination=(-1,), inplace=True)
+        elif len(lb_con) == 2:
+            c = a.broadcast_diag(b, axes=(la_con[0], lb_con[0]), conj=conj)
+            c = c.trace(axes=la_con)
+        elif len(lb_con) == 0:
+            raise YastError('Cannot do outer product with diagonal tensor -- call b.diag() first.')
+        else:
+            raise YastError('Too many axis to contract.')
+        return c
+
+    if a.isdiag:
+        if len(la_con) == 1:
+            c = b.broadcast_diag(a, axes=(lb_con, la_con), conj=conj[::-1])
+            c.moveaxis(source=lb_con, destination=(0,), inplace=True)
+        elif len(la_con) == 2:
+            c = b.broadcast_diag(a, axes=(lb_con[0], la_con[0]), conj=conj)
+            c = c.trace(axes=lb_con)
+        elif len(la_con) == 0:
+            raise YastError('Cannot do outer product with diagonal tensor -- call b.diag() first.')
+        else:
+            raise YastError('Too many axis to contract.')
+        return c
+
     la_out = tuple(ii for ii in range(a.mlegs) if ii not in la_con)  # outgoing meta legs
     lb_out = tuple(ii for ii in range(b.mlegs) if ii not in lb_con)  # outgoing meta legs
-
     axes_a = _unpack_axes(a, la_out, la_con)  # native legs of a; tuple of two tuples
     axes_b = _unpack_axes(b, lb_con, lb_out)  # native legs of b; tuple of two tuples
 

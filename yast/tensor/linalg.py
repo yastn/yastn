@@ -56,7 +56,7 @@ def norm_diff(a, b, p='fro'):
 
 def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
                 tol=0, tol_block=0, D_block=6, D_total=np.inf,
-                keep_multiplets=False, eps_multiplet=1e-14,
+                keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False,
                 n_iter=60, k_fac=6, **kwargs):
     r"""
     Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
@@ -96,6 +96,9 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     n_iter, k_fac: ints
         number of iterations and multiplicative factor of stored singular values in lowrank svd procedure
         (relevant options might depend on backend)
+    
+    untruncated_S: bool
+        returns U, S, V, uS  with dict uS with a copy of untruncated singular values.
 
     Returns
     -------
@@ -129,6 +132,9 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     U.A, S.A, V.A = a.config.backend.svd_lowrank(Am, meta, D_block, n_iter, k_fac)
 
+    if untruncated_S:
+        uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
+
     ls_s = _leg_struct_truncation(
         S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
         keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='svd')
@@ -137,12 +143,13 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     _unmerge_matrix(V, ls_s, ls_r)
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
     V.moveaxis(source=0, destination=Vaxis, inplace=True)
-    return U, S, V
+    return (U, S, V, uS) if untruncated_S else (U, S, V)
+
 
 
 def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         tol=0, tol_block=0, D_block=np.inf, D_total=np.inf,
-        keep_multiplets=False, eps_multiplet=1e-14, **kwargs):
+        keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False, **kwargs):
     r"""
     Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
 
@@ -177,10 +184,13 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     D_total: int
         largest total number of singular values to keep.
 
+    untruncated_S: bool
+        returns U, S, V, uS  with dict uS with a copy of untruncated singular values.
+
     Returns
     -------
     U, S, V: Tensor
-        U and V are unitary projectors. S is diagonal.
+        U and V are unitary projectors. S is a diagonal tensor.
     """
     _test_all_axes(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -209,6 +219,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     U.A, S.A, V.A = a.config.backend.svd(Am, meta)
 
+    if untruncated_S:
+        uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
+
     ls_s = _leg_struct_truncation(
         S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
         keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='svd')
@@ -218,7 +231,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     _unmerge_matrix(V, ls_s, ls_r)
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
     V.moveaxis(source=0, destination=Vaxis, inplace=True)
-    return U, S, V
+    return (U, S, V, uS) if untruncated_S else (U, S, V)
 
 
 def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
@@ -270,7 +283,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
 
 def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np.inf,
-         keep_multiplets=False, eps_multiplet=1e-14):
+         keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False):
     r"""
     Split tensor using eig, tensor = U * S * U^dag. Truncate smallest eigenvalues if neccesary.
 
@@ -304,10 +317,13 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
     D_total: int
         largest total number of singular values to keep.
 
+    untruncated_S: bool
+        returns S, U, uS  with dict uS with a copy of untruncated eigenvalues.
+
     Returns
     -------
         S, U: Tensor
-            U is unitary projector. S is diagonal.
+            U is unitary projector. S is a diagonal tensor.
     """
     _test_all_axes(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -333,13 +349,17 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
     meta = tuple((il + ir, il, il + ir) for il, ir in zip(ul, ur))
     S.A, U.A = a.config.backend.eigh(Am, meta)
 
+    if untruncated_S:
+        uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
+
     ls_s = _leg_struct_truncation(
         S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
         keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='eigh')
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
-    return S, U
+    return (S, U, uS) if untruncated_S else (S, U)
+
 
 
 def entropy(a, axes=(0, 1), alpha=1):
