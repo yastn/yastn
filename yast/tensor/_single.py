@@ -324,8 +324,6 @@ def transpose(a, axes, inplace=False):
     axes: tuple of ints
         New order of the legs. Should be a permutation of (0, 1, ..., ndim-1)
     """
-    if a.isdiag:
-        raise YastError("Cannot transpose diagonal tensor")
     _test_all_axes(a, axes, native=False)
     uaxes, = _unpack_axes(a, axes)
     order = np.array(uaxes, dtype=np.intp)
@@ -341,7 +339,10 @@ def transpose(a, axes, inplace=False):
         a.meta_fusion = new_meta_fusion
         a.hard_fusion = new_hard_fusion
     c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=new_meta_fusion, hard_fusion=new_hard_fusion, struct=struct)
-    c.A = c.config.backend.transpose(a.A, uaxes, meta_transpose, inplace)
+    if a.isdiag and not inplace:
+        c.A = {k: c.config.backend.clone(v) for k, v in a.A.items()}
+    elif not a.isdiag:
+        c.A = c.config.backend.transpose(a.A, uaxes, meta_transpose, inplace)
     c.update_struct()
     return c
 
