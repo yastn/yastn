@@ -173,7 +173,7 @@ def broadcast_diag(a, b, axes, conj=(0, 0)):
     c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
 
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=c_hard_fusion, struct=c_struct)
-    a_ndim, la_con = (1, 1) if a.isdiag else (a.nlegs, la_con)
+    a_ndim, la_con = (1, 0) if a.isdiag else (a.nlegs, la_con)
     c.A = a.config.backend.dot_diag(a.A, b.A, conj, meta, la_con, a_ndim)
     return c
 
