@@ -72,9 +72,18 @@ def test_transpose_inplace():
     a.moveaxis(source=2, destination=3, inplace=True)
     assert a.get_shape() == (13, 11, 7, 9, 5, 3)
 
+def test_transpose_diag():
+    a = yast.eye(config=config_U1, t=(-1, 0, 2), D=(2, 2 ,4))
+    at = a.transpose(axes=(1, 0))
+    assert yast.tensordot(a, at, axes=((0, 1), (0, 1))).item() == 8.
+    assert yast.vdot(a, at, conj=(0, 0)).item() == 8.
+    a.transpose(axes=(1, 0), inplace=True)
+    assert yast.vdot(a, at).item() == 8.
+
 
 if __name__ == '__main__':
     test_transpose_0()
     test_transpose_1()
     test_transpose_2()
     test_transpose_inplace()
+    test_transpose_diag()
