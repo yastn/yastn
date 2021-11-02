@@ -138,7 +138,7 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     if untruncated_S:
         uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
-        us['D': ls_s.Dtot.copy()]
+        uS['D'] = ls_s.Dtot.copy()
 
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
@@ -228,7 +228,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     if untruncated_S:
         uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
-        us['D': ls_s.Dtot.copy()]
+        uS['D'] = ls_s.Dtot.copy()
 
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
@@ -359,7 +359,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
 
     if untruncated_S:
         uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
-        us['D': ls_s.Dtot.copy()]
+        uS['D'] = ls_s.Dtot.copy()
 
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
