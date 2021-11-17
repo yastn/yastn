@@ -89,7 +89,7 @@ def test_broadcast_diag1():
     assert len(ls) == 1
     assert (1,) in ls and ls[(1,)] == bd
 
-    d1 = b.mask(bb, axis=1)
+    d1 = b.mask(bb, axis=-1)
     ls = d1.get_leg_structure(axis=1)
     assert len(ls) == 1 and (1,) in ls and ls[(1,)] == bd
 
