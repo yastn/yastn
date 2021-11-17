@@ -202,7 +202,7 @@ def mask(a, b, axis=0):
         raise YastError('Tensor b should be diagonal')
     if not isinstance(axis, int):
         raise YastError('axis should be int')
-    axis = axis % (a.mlegs + 1)
+    axis = axis % a.mlegs
     if a.meta_fusion[axis] != (1,):
         raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
     axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack
