@@ -79,6 +79,25 @@ def test_broadcast_diag1():
     assert r1.norm_diff(r2) < tol
     assert r1.norm_diff(r3) < tol
 
+    bb = b.copy()
+    bb.A[(-1, -1)] = bb.A[(-1, -1)] < -2
+    bb.A[(1, 1)] = bb.A[(1, 1)] > 0
+
+    bd = bb.trace(axes=(0, 1)).item()
+    c = a.mask(bb, axis=2)
+    ls = c.get_leg_structure(axis=2)
+    assert len(ls) == 1
+    assert (1,) in ls and ls[(1,)] == bd
+
+    d1 = b.mask(bb, axis=1)
+    ls = d1.get_leg_structure(axis=1)
+    assert len(ls) == 1 and (1,) in ls and ls[(1,)] == bd
+
+    d0 = b.mask(bb, axis=0)
+    ls = d0.get_leg_structure(axis=1)
+    assert len(ls) == 1 and (1,) in ls and ls[(1,)] == bd
+    assert yast.norm_diff(d0, d1) < tol
+
 
 def test_broadcast_diag2():
     a = yast.rand(config=config_Z2_U1, s=(-1, -1, 1, 1),

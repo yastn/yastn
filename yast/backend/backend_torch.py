@@ -101,6 +101,11 @@ def norm_matrix(x):
 def expand_dims(x, axis):
     return torch.unsqueeze(x, axis)
 
+
+def any_nonzero(x):
+    return torch.any(x).item()
+
+
 #########################
 #    output numbers     #
 #########################
@@ -490,6 +495,13 @@ def dot_diag(A, B, conj, to_execute, a_con, a_ndim):
     for in1, in2, out in to_execute:
         C[out] = f(A[in1], B[in2], dim)
     return C
+
+
+def mask_diag(A, B, meta, axis, a_ndim):
+    slc1 = (slice(None),) * axis
+    slc2 = (slice(None),) * (a_ndim - (axis + 1))
+    Bslc = {k: v.nonzero(as_tuple=True) for k, v in B.items()}
+    return {out: A[in1][slc1 + Bslc[in2] + slc2] for in1, in2, out in meta}
 
 
 #####################################################

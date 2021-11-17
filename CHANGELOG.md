@@ -71,9 +71,14 @@
 - new funciton `broadcast_diag(a, b, axes)`. It has the same syntax as tensordot
   but tensor b has to be diagonal. Perform broadcasted multiplication of tensor a 
   by diagonal tensor b. Do not change the order of legs in tensor a (unlike tensordot).
-  It is linked in tensordot for operations involving diagonal tensor.
+  It is linked in tensordot (together with transpose) for operations involving diagonal tensor.
 - in `set_block` allow to have ts as a tuple of tuples.
   This is more natural syntax when number of symmetry charges is greater than one.
 - in `svd` and `eigh` new option `untruncated_S` addtionally returns dict uS with a copy 
   (i.e. not a clone) of singular- or eigenvalues. uS also has field `D` with 
   truncated bond dimensions.
+
+17-11-2021
+- new function `mask(a, b, axis)` where tensor b is diagonal. 
+  Applies mask based on nonzero elements of b on specified axis of tensor a. 
+  Results in a new projected tensor with truncated bond dimensions (also possibly removed charges) on leg of a given by axis.

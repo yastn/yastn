@@ -5,7 +5,7 @@ from ._tests import YastError, _check, _test_configs_match, _test_fusions_match
 from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_sign_hf
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
 
-__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'broadcast_diag']
+__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'broadcast_diag', 'mask']
 
 
 def tensordot(a, b, axes, conj=(0, 0)):
@@ -180,6 +180,43 @@ def broadcast_diag(a, b, axes, conj=(0, 0)):
 
 def _meta_broadcast_diag():
     return None
+
+
+def mask(a, b, axis=0):
+    r"""
+    Apply mask given by nonzero elements of diagonal tensor b on specified axis of tensor a.
+
+    Legs of resulting tensor are ordered in the same way as those of tensor a.
+    Bond dimensions of specified axis of a are truncated according to the mask.
+    Produce diagonal tensor if both are diagonal.
+
+    Parameters
+    ----------
+    a, b: Tensors
+        b is a diagonal tensor
+
+    axis: int
+        leg of tensor a where the mask is applied.
+    """
+    if not b.isdiag:
+        raise YastError('Tensor b should be diagonal')
+    if not isinstance(axis, int):
+        raise YastError('axis should be int')
+    axis = axis % (a.mlegs + 1)
+    if a.meta_fusion[axis] != (1,):
+        raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
+    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack
+    if a.hard_fusion[axis].tree != (1,):
+        raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
+    nsym = b.config.sym.NSYM
+    ind_tb = tuple(x[:nsym] for x in b.struct.t if b.config.backend.any_nonzero(b.A[x]))
+    ind_ta = tuple(x[axis * nsym : (axis + 1) * nsym] for x in a.struct.t)
+    meta = tuple((ta, ia + ia, ta) for ta, ia in zip(a.struct.t, ind_ta) if ia in ind_tb)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+    a_ndim, axis = (1, 0) if a.isdiag else (a.nlegs, axis)
+    c.A = a.config.backend.mask_diag(a.A, b.A, meta, axis, a_ndim)
+    c.update_struct()
+    return c
 
 
 def vdot(a, b, conj=(1, 0)):

@@ -101,6 +101,11 @@ def norm_matrix(x):
 def expand_dims(x, axis):
     return np.expand_dims(x, axis)
 
+
+def any_nonzero(x):
+    return np.any(x)
+
+
 #########################
 #    output numbers     #
 #########################
@@ -476,14 +481,21 @@ dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
                 (1, 1): lambda x, y, dim: x.conj() * y.reshape(dim).conj()}
 
 
-def dot_diag(A, B, conj, to_execute, a_con, a_ndim):
+def dot_diag(A, B, conj, meta, a_con, a_ndim):
     dim = [1] * a_ndim
     dim[a_con] = -1
     f = dotdiag_dict[conj]
     C = {}
-    for in1, in2, out in to_execute:
+    for in1, in2, out in meta:
         C[out] = f(A[in1], B[in2], dim)
     return C
+
+
+def mask_diag(A, B, meta, axis, a_ndim):
+    slc1 = (slice(None),) * axis
+    slc2 = (slice(None),) * (a_ndim - (axis + 1))
+    Bslc = {k: v.nonzero() for k, v in B.items()}
+    return {out: A[in1][slc1 + Bslc[in2] + slc2] for in1, in2, out in meta}
 
 
 #####################################################
