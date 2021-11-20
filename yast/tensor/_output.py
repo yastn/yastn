@@ -238,9 +238,9 @@ def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
     r"""
     Combine and output charges and bond dimensions from legs of provided tensors.
     Auxliary function to ```tensor.to_dense``` and ```tensor.to_numpy```,
-    to create dense tensors with consistent dimenstions (charge sectors)
+    to create dense tensors with consistent dimensions (charge sectors)
 
-    Rises expection if there are some inconsistencies in bond dimensions.
+    Rises exception if there are some inconsistencies in bond dimensions.
 
     Parameters
     ----------
