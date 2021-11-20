@@ -397,7 +397,7 @@ def transpose(a, axes, inplace=False):
     Return transposed tensor.
 
     Operation can be done in-place, in which case copying of the data is not forced.
-    Othersiwe, new tensor is created and the data are copied.
+    Otherwise, new tensor is created and the data are copied.
 
     Parameters
     ----------
