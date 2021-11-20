@@ -21,15 +21,20 @@ def test_cache():
 
     yast.set_cache_maxsize(maxsize=10)
     cache_info = yast.get_cache_info()
-    assert cache_info["meta_merge_to_matrix"] == (0, 0, 10, 0)
+    assert cache_info["merge_to_matrix"] == (0, 0, 10, 0)
 
     for _ in range(100):
         a.svd(axes=((0, 1), (2, 3)))
         a.svd(axes=((0, 2), (1, 3)))
         a.svd(axes=((1, 3), (2, 0)))
 
+    b = yast.eye(config=config_Z2, t=(0, 1), D=(7, 8))
+    for _ in range(100):
+        a.broadcast(b, axis=3)
+
     cache_info = yast.get_cache_info()
-    assert cache_info["meta_merge_to_matrix"] == (297, 3, 10, 3)
+    assert cache_info["merge_to_matrix"] == (297, 3, 10, 3)
+    assert cache_info["broadcast"] == (99, 1, 10, 1)
 
 
 def test_cache2():
@@ -42,4 +47,4 @@ def test_cache2():
 
 if __name__ == '__main__':
     test_cache()
-    test_cache2()
+    # test_cache2()

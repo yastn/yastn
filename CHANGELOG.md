@@ -68,10 +68,12 @@
   In the first three also catches a possibility to introduce bond dimension mismatch in the result.
 
 02-11-2021
-- new funciton `broadcast_diag(a, b, axes)`. It has the same syntax as tensordot
-  but tensor b has to be diagonal. Perform broadcasted multiplication of tensor a 
-  by diagonal tensor b. Do not change the order of legs in tensor a (unlike tensordot).
-  It is linked in tensordot (together with transpose) for operations involving diagonal tensor.
+- new funciton `broadcast(a, b, axis, conj)`. 
+  Perform broadcasted multiplication of leg axis of tensor a by diagonal tensor b. 
+  Only axis of tensor a is specified, following convention that diagonal tensor 
+  has signature (1, -1) or (-1, 1). [for real b, there is no chance for uncatched error of wrong conjugation of b].
+  Do not change the order of legs in tensor a (unlike tensordot).
+  It is called by tensordot (together with moveaxis) for operations involving diagonal tensor.
 - in `set_block` allow to have ts as a tuple of tuples.
   This is more natural syntax when number of symmetry charges is greater than one.
 - in `svd` and `eigh` new option `untruncated_S` addtionally returns dict uS with a copy 
@@ -82,3 +84,5 @@
 - new function `mask(a, b, axis)` where tensor b is diagonal. 
   Applies mask based on nonzero elements of b on specified axis of tensor a. 
   Results in a new projected tensor with truncated bond dimensions (also possibly removed charges) on leg of a given by axis.
+- define magic methods for <, <=, >, >= to create logical tensors -- intended as diagonal masks.
+  It passes <, <=, >, >= on the level of backend block tensors.

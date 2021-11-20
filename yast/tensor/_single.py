@@ -66,6 +66,86 @@ def requires_grad_(a, requires_grad=True):
     a.config.backend.requires_grad_(a.A, requires_grad=requires_grad)
 
 
+def __lt__(a, number):
+    """
+    Logical tensor with elements less-than a number (if it makes sense for backend data tensors)
+
+    Parameters
+    ----------
+    number: number
+
+    Intended for diagonal tensor to be applied as a truncation mask.
+
+    Returns
+    -------
+    tensor : Tensor
+        result of logical element-wise operation as a new tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = {ind: x < number for ind, x in a.A.items()}
+    return c
+
+
+def __gt__(a, number):
+    """
+    Logical tensor with elements greater-than a number (if it makes sense for backend data tensors)
+
+    Intended for diagonal tensor to be applied as a truncation mask.
+
+    Parameters
+    ----------
+    number: number
+
+    Returns
+    -------
+    tensor : Tensor
+        result of logical element-wise operation as a new tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = {ind: x > number for ind, x in a.A.items()}
+    return c
+
+
+def __le__(a, number):
+    """
+    Logical tensor with elements less-than-or-equal-to a number (if it makes sense for backend data tensors)
+
+    Intended for diagonal tensor to be applied as a truncation mask.
+
+    Parameters
+    ----------
+    number: number
+
+    Returns
+    -------
+    tensor : Tensor
+        result of logical element-wise operation as a new tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = {ind: x <= number for ind, x in a.A.items()}
+    return c
+
+
+def __ge__(a, number):
+    """
+    Logical tensor with elements greater-than-or-equal-to a number (if it makes sense for backend data tensors)
+
+    Intended for diagonal tensor to be applied as a truncation mask.
+
+    Parameters
+    ----------
+    number: number
+
+    Returns
+    -------
+    tensor : Tensor
+        result of logical element-wise operation as a new tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = {ind: x >= number for ind, x in a.A.items()}
+    return c
+
+
 def __mul__(a, number):
     """
     Multiply tensor by a number, use: number * tensor.
