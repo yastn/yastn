@@ -1,5 +1,6 @@
 """ Mps structure and its basic manipulations. """
-from yast.tensor import block
+import numpy as np
+from yast.tensor import block, entropy
 from numpy import array, nonzero
 
 class YampsError(Exception):
@@ -135,7 +136,7 @@ def apxb(a, b, common_legs, x=1):
     """
     if inplace=false a+a*b will be a new Mps otherwise I will replace mb and delete b
     """
-    if a.N is not a.N:
+    if a.N is not b.N:
         YampsError('Mps-s must have equal number of Tensor-s.')
 
     c = a.copy()
@@ -153,6 +154,19 @@ def apxb(a, b, common_legs, x=1):
             d = {(0, 0): a.A[n], (1, 1): b.A[n]}
             common_lgs = common_legs
         c.A[n] = block(d, common_lgs)
+    return c
+
+
+def x_a_times_b(a, b, axes, axes_fin, conj=(0,0), x=1, inplace=True, mode='hard'):
+    # make multiplication x*a*b, with conj if necessary
+    if a.N is not b.N:
+        YampsError('Mps-s must have equal number of Tensor-s.')
+    c = a.copy()
+    for n in range(c.N):
+        if n==0:
+            c.A[n] = x*a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, inplace, mode)
+        else:
+            c.A[n] = a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, inplace, mode)
     return c
 
 
@@ -488,19 +502,18 @@ class Mps:
 
     def get_entropy(self, alpha=1):
         r"""
-        Entropy and spectral information on a cut.
+        Entropy for a bipartition on each bond
 
         Returns
         -------
-        Ds : list
-            set of bond dimension on cuts
-        Schmidt_spectrum : list
-            Schmidt spectrum on each bond
-        Smin : list
-            smallest singular value on a cut
         Entropy : list
             list of bond entropies on virtual legs.
-        SV : list
-            list of Schmidt values saved as a directory
         """
-        pass
+        Entropy = [0]*self.N
+        self.canonize_sweep(to='last', normalize=False)
+        self.absorb_central(to='first')
+        for n in self.sweep(to='first'):
+            self.orthogonalize_site(n=n, to='first')
+            Entropy[n] = entropy(self.A[self.pC], alpha=alpha)[0]
+            self.absorb_central(to='first')
+        return Entropy
