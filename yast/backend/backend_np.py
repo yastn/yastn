@@ -481,9 +481,9 @@ dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
                 (1, 1): lambda x, y, dim: x.conj() * y.reshape(dim).conj()}
 
 
-def dot_diag(A, B, conj, meta, a_con, a_ndim):
+def dot_diag(A, B, conj, meta, axis, a_ndim):
     dim = [1] * a_ndim
-    dim[a_con] = -1
+    dim[axis] = -1
     f = dotdiag_dict[conj]
     C = {}
     for in1, in2, out in meta:

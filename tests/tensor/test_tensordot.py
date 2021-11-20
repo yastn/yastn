@@ -105,8 +105,8 @@ def test_broadcast():
     b = yast.rand(config=config_Z2_U1, s=(1, -1), t = [t2, t2], D=[D2, D2], isdiag=True)
     b2 = b.diag()
 
-    c1 = a.broadcast_diag(b, axes=(0, 0))
-    c2 = a.broadcast_diag(b, axes=(0, 1), conj=(0, 1))
+    c1 = a.broadcast(b, axis=0)
+    c2 = a.broadcast(b, axis=0, conj=(0, 1))
     c3 = b2.tensordot(a, axes=(0, 0))
 
     assert(yast.norm_diff(c1, c2)) < tol

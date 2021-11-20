@@ -1,11 +1,12 @@
 """ Contractions of yast tensors """
+from functools import lru_cache
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray, _struct
 from ._tests import YastError, _check, _test_configs_match, _test_fusions_match
 from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_sign_hf
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
 
-__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'broadcast_diag', 'mask']
+__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'broadcast', 'mask']
 
 
 def tensordot(a, b, axes, conj=(0, 0)):
@@ -32,15 +33,15 @@ def tensordot(a, b, axes, conj=(0, 0)):
     -------
     tansor: Tensor
     """
-    _test_configs_match(a, b)
+
     la_con, lb_con = _clear_axes(*axes)  # contracted meta legs
 
     if b.isdiag:
         if len(lb_con) == 1:
-            c = a.broadcast_diag(b, axes=(la_con, lb_con), conj=conj)
+            c = a.broadcast(b, axis=la_con[0], conj=conj)
             c.moveaxis(source=la_con, destination=(-1,), inplace=True)
         elif len(lb_con) == 2:
-            c = a.broadcast_diag(b, axes=(la_con[0], lb_con[0]), conj=conj)
+            c = a.broadcast(b, axis=la_con[0], conj=conj)
             c = c.trace(axes=la_con)
         elif len(lb_con) == 0:
             raise YastError('Cannot do outer product with diagonal tensor -- call b.diag() first.')
@@ -50,10 +51,10 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
     if a.isdiag:
         if len(la_con) == 1:
-            c = b.broadcast_diag(a, axes=(lb_con, la_con), conj=conj[::-1])
+            c = b.broadcast(a, axis=lb_con[0], conj=conj[::-1])
             c.moveaxis(source=lb_con, destination=(0,), inplace=True)
         elif len(la_con) == 2:
-            c = b.broadcast_diag(a, axes=(lb_con[0], la_con[0]), conj=conj)
+            c = b.broadcast(a, axis=lb_con[0], conj=conj[::-1])
             c = c.trace(axes=lb_con)
         elif len(la_con) == 0:
             raise YastError('Cannot do outer product with diagonal tensor -- call b.diag() first.')
@@ -61,6 +62,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
             raise YastError('Too many axis to contract.')
         return c
 
+    _test_configs_match(a, b)
     la_out = tuple(ii for ii in range(a.mlegs) if ii not in la_con)  # outgoing meta legs
     lb_out = tuple(ii for ii in range(b.mlegs) if ii not in lb_con)  # outgoing meta legs
     axes_a = _unpack_axes(a, la_out, la_con)  # native legs of a; tuple of two tuples
@@ -118,8 +120,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
     return c
 
 
-
-def broadcast_diag(a, b, axes, conj=(0, 0)):
+def broadcast(a, b, axis, conj=(0, 0)):
     r"""
     Compute tensor dot product of tensor a with diagonal tensor b.
 
@@ -131,55 +132,49 @@ def broadcast_diag(a, b, axes, conj=(0, 0)):
     a, b: Tensors
         b is a diagonal tensor
 
-    axis: int or tuple
+    axis: int
         leg of non-diagonal tensor to be multiplied by the diagonal one.
 
     conj: tuple
         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
     """
-
+    _test_configs_match(a, b)
     if not b.isdiag:
         raise YastError('Tensor b should be diagonal')
+    if not isinstance(axis, int):
+        raise YastError('axis should be int')
 
-    _test_configs_match(a, b)
-    la_con, lb_con = _clear_axes(*axes)  # contracted meta legs
-    if len(la_con) != 1 or len(lb_con) != 1:
-        raise YastError('For broadcast_diag, axes should specify exactly one leg of a and b')
-    if a.meta_fusion[la_con[0]] != (1,):
-        raise YastError('For broadcast_diag, contracted leg of tensor a cannot be fused')
+    axis = axis % a.mlegs
+    if a.meta_fusion[axis] != (1,):
+        raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
+    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack
+    if a.hard_fusion[axis].tree != (1,):
+        raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
 
-    la_con, = _unpack_axes(a, la_con)
-    la_con, lb_con = la_con[0], lb_con[0]
-
-    if a.hard_fusion[la_con].tree != (1,):
-        raise YastError('For broadcast_diag, contracted leg of tensor a cannot be fused')
-
-    conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
-    if _check["signatures_match"] and a.struct.s[la_con] != - conja * conjb * b.struct.s[lb_con]:
-        raise YastError('Signs do not match in broadcast_diag')
-
-    c_n = np.array(a.struct.n, dtype=int).reshape((1, 1, -1))
-    c_n = tuple(a.config.sym.fuse(c_n, (1,), conja)[0])
-    c_s = a.struct.s if conja == 1 else tuple(-x for x in a.struct.s)
+    conja = (1 - 2 * conj[0])
     c_hard_fusion = a.hard_fusion if conja == 1 else tuple(_flip_sign_hf(x) for x in a.hard_fusion)
-
-    nsym = b.config.sym.NSYM
-    ind_tb = tuple(x[:nsym] for x in b.struct.t)
-    ind_ta = tuple(x[la_con * nsym : (la_con + 1) * nsym] for x in a.struct.t)
-
-    meta = tuple((ta, ia + ia, ta) for ta, ia in zip(a.struct.t, ind_ta) if ia in ind_tb)
-    tD = tuple((ta, da) for ta, da, ia in zip(a.struct.t, a.struct.D, ind_ta) if ia in ind_tb)
-    c_t, c_D = zip(*tD)
-    c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
+    meta, c_struct = _meta_broadcast(a.config, a.struct, b.struct, conja, axis)
 
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=c_hard_fusion, struct=c_struct)
-    a_ndim, la_con = (1, 0) if a.isdiag else (a.nlegs, la_con)
-    c.A = a.config.backend.dot_diag(a.A, b.A, conj, meta, la_con, a_ndim)
+    a_ndim, axis = (1, 0) if a.isdiag else (a.nlegs, axis)
+    c.A = a.config.backend.dot_diag(a.A, b.A, conj, meta, axis, a_ndim)
     return c
 
 
-def _meta_broadcast_diag():
-    return None
+@lru_cache(maxsize=1024)
+def _meta_broadcast(config, a_struct, b_struct, conja, axis):
+    """ meta information for backend, and new tensor structure for brodcast """
+    nsym = config.sym.NSYM
+    ind_tb = tuple(x[:nsym] for x in b_struct.t)
+    ind_ta = tuple(x[axis * nsym : (axis + 1) * nsym] for x in a_struct.t)
+    meta = tuple((ta, ia + ia, ta) for ta, ia in zip(a_struct.t, ind_ta) if ia in ind_tb)
+    c_n = np.array(a_struct.n, dtype=int).reshape((1, 1, -1))
+    c_n = tuple(config.sym.fuse(c_n, (1,), conja)[0])
+    c_s = a_struct.s if conja == 1 else tuple(-x for x in a_struct.s)
+    tD = tuple((ta, da) for ta, da, ia in zip(a_struct.t, a_struct.D, ind_ta) if ia in ind_tb)
+    c_t, c_D = zip(*tD)
+    c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
+    return meta, c_struct
 
 
 def mask(a, b, axis=0):
@@ -202,6 +197,8 @@ def mask(a, b, axis=0):
         raise YastError('Tensor b should be diagonal')
     if not isinstance(axis, int):
         raise YastError('axis should be int')
+    _test_configs_match(a, b)
+
     axis = axis % a.mlegs
     if a.meta_fusion[axis] != (1,):
         raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
