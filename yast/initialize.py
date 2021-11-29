@@ -269,7 +269,7 @@ def _tD_from_legs(legs):
             for nn in range(lf[0]):
                 ss = []
                 for t, l, f in zip(tns, lgs, fps):
-                    un, = _unpack_axes(t, (l,))
+                    un, = _unpack_axes(t.meta_fusion, (l,))
                     lss.append(t.get_leg_structure(un[nn], native=True))
                     ss.append(f * t.s[un[nn]])
                 d, s = _dict_union(lss)

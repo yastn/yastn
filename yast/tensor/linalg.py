@@ -96,7 +96,7 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     n_iter, k_fac: ints
         number of iterations and multiplicative factor of stored singular values in lowrank svd procedure
         (relevant options might depend on backend)
-    
+
     untruncated_S: bool
         returns U, S, V, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
 
@@ -107,7 +107,7 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     """
     _test_all_axes(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a, lout_l, lout_r)
+    axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
 
     s_eff = (-sU, sU)
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
@@ -196,7 +196,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     """
     _test_all_axes(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a, lout_l, lout_r)
+    axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
 
     s_eff = (-sU, sU)
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
@@ -221,7 +221,6 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     U.A, S.A, V.A = a.config.backend.svd(Am, meta)
 
-    
     ls_s = _leg_struct_truncation(
         S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
         keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='svd')
@@ -261,7 +260,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     """
     _test_all_axes(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a, lout_l, lout_r)
+    axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
 
     s_eff = (-sQ, sQ)
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
@@ -331,7 +330,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
     """
     _test_all_axes(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a, lout_l, lout_r)
+    axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
 
     if any(x != 0 for x in a.struct.n):
         raise YastError('Charge should be zero')
@@ -395,7 +394,7 @@ def entropy(a, axes=(0, 1), alpha=1):
 
     _test_all_axes(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a, lout_l, lout_r)
+    axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
 
     if not a.isdiag:
         Am, *_ = _merge_to_matrix(a, axes, (-1, 1))

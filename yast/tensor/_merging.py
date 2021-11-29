@@ -1,7 +1,7 @@
 """ Support for merging blocks in yast tensors. """
 
 from functools import lru_cache
-from itertools import groupby, product, chain
+from itertools import groupby, product
 from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
@@ -144,7 +144,7 @@ def _intersect_hfs(config, ts, Ds, hfs):
     for ms1, ms2 in zip(*msks):
         for t in set(ms1) & set(ms2):
             if ms1[t].size != ms2[t].size:
-                raise YastError('Mismatch of bond dimensions of combined native legs for charge %s' %str(t))
+                raise YastError(f'Mismatch of bond dimensions of combined native legs for charge {t}')
         _mask_falsify_mismatches(ms1, ms2)
 
     if len(tree) == 1:
@@ -712,7 +712,7 @@ def _leg_struct_truncation(a, tol=0., tol_block=0, D_block=np.inf, D_total=np.in
         D_keep[ind] = min(D_block, Dmax[ind])
     if (tol > 0) and (maxS > 0):  # truncate to relative tolerance
         for ind in D_keep:
-            local_maxS= a.config.backend.max_abs(a.A[ind]) 
+            local_maxS= a.config.backend.max_abs(a.A[ind])
             local_tol= max(local_maxS*tol_block, maxS*tol) if tol_block>0 else maxS*tol
             D_keep[ind] = min(D_keep[ind], a.config.backend.count_greater(a.A[ind], local_tol))
     if sum(D_keep.values()) > D_total:  # truncate to total bond dimension
