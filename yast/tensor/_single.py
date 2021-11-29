@@ -405,7 +405,7 @@ def transpose(a, axes, inplace=False):
         New order of the legs. Should be a permutation of (0, 1, ..., ndim-1)
     """
     _test_all_axes(a, axes, native=False)
-    uaxes, = _unpack_axes(a, axes)
+    uaxes, = _unpack_axes(a.meta_fusion, axes)
     order = np.array(uaxes, dtype=np.intp)
     new_meta_fusion = tuple(a.meta_fusion[ii] for ii in axes)
     new_hard_fusion = tuple(a.hard_fusion[ii] for ii in uaxes)

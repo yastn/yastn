@@ -124,7 +124,7 @@ def get_signature(a, native=False):
     if native:
         return a.struct.s
     pn = tuple((n,) for n in range(a.mlegs)) if a.mlegs > 0 else ()
-    un = tuple(_unpack_axes(a, *pn))
+    un = tuple(_unpack_axes(a.meta_fusion, *pn))
     return tuple(a.struct.s[p[0]] for p in un)
 
 
@@ -172,7 +172,7 @@ def get_leg_structure(a, axis, native=False):
     """
     axis, = _clear_axes(axis)
     if not native:
-        axis, = _unpack_axes(a, axis)
+        axis, = _unpack_axes(a.meta_fusion, axis)
     tset, Dset = _tarray(a), _Darray(a)
     tset = tset[:, axis, :]
     Dset = Dset[:, axis]
@@ -294,7 +294,7 @@ def leg_structures_union(*args):
     for tD in args:
         for t, D in tD.items():
             if (t in ls_out) and ls_out[t] != D:
-                raise YastError('Bond dimensions for charge %s are inconsistent.' % str(t))
+                raise YastError(f'Bond dimensions for charge {t} are inconsistent.')
             ls_out[t] = D
             if len(t) != len_t and len_t >= 0:
                 raise YastError('Inconsistent charge structure. Likely mixing merged and native legs.')
@@ -343,7 +343,7 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
             Dlow = Dhigh
     axes = tuple((n,) for n in range(nlegs))
     if not native:
-        axes = tuple(_unpack_axes(a, *axes))
+        axes = tuple(_unpack_axes(a.meta_fusion, *axes))
     meta = []
     tset = _tarray(a)
     for tind, tt in zip(a.struct.t, tset):

@@ -27,6 +27,8 @@ def _test_configs_match(a, b):
         raise YastError('Devices of the two tensors do not match.')
     if a.config.sym.SYM_ID != b.config.sym.SYM_ID:
         raise YastError('Two tensors have different symmetries.')
+    if a.config.fermionic != b.config.fermionic:
+        raise YastError('Two tensors have different assigment of fermionic statistics.')
     if a.config.backend.BACKEND_ID != b.config.backend.BACKEND_ID:
         raise YastError('Two tensors have different backends.')
 

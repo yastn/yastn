@@ -15,6 +15,7 @@ class _struct(NamedTuple):
 class _config(NamedTuple):
     backend: any = None
     sym: any = sym_none
+    fermionic: tuple = None
     device: str = 'cpu'
     default_device: str = 'cpu'
     default_dtype: str = 'float64'
@@ -30,10 +31,10 @@ def _flatten(nested_iterator):
             yield item
 
 
-def _unpack_axes(a, *args):
+def _unpack_axes(meta_fusion, *args):
     """Unpack meta axes into native axes based on a.meta_fusion"""
-    clegs = tuple(accumulate(x[0] for x in a.meta_fusion))
-    return tuple(tuple(chain(*(range(clegs[ii] - a.meta_fusion[ii][0], clegs[ii]) for ii in axes))) for axes in args)
+    clegs = tuple(accumulate(x[0] for x in meta_fusion))
+    return tuple(tuple(chain(*(range(clegs[ii] - meta_fusion[ii][0], clegs[ii]) for ii in axes))) for axes in args)
 
 
 def _clear_axes(*args):

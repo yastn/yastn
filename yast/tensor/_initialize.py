@@ -217,7 +217,7 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
         conjs = (0,) * len(tensors)
     for nf, te, cc in zip(legs, tensors, conjs):
         lf.append(te.meta_fusion[nf])
-        un, = _unpack_axes(te, (nf,))
+        un, = _unpack_axes(te.meta_fusion, (nf,))
         for nn in un:
             tdn = te.get_leg_structure(nn, native=True)
             t.append(tuple(tdn.keys()))
@@ -254,8 +254,8 @@ def block(tensors, common_legs=None):
         if len(ind) != lind:
             raise YastError('Wrong number of coordinates encoded in tensors.keys()')
 
-    out_s, =  _unpack_axes(tn0, out_s)
-    u_b = tuple(_unpack_axes(tn0, *out_b))
+    out_s, =  _unpack_axes(tn0.meta_fusion, out_s)
+    u_b = tuple(_unpack_axes(tn0.meta_fusion, *out_b))
     out_b = tuple(chain(*u_b))
     pos = tuple(tuple(chain.from_iterable(repeat(x, len(u)) for x, u in zip(ind, u_b))) for ind in pos)
 

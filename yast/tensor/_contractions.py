@@ -65,8 +65,8 @@ def tensordot(a, b, axes, conj=(0, 0)):
     _test_configs_match(a, b)
     la_out = tuple(ii for ii in range(a.mlegs) if ii not in la_con)  # outgoing meta legs
     lb_out = tuple(ii for ii in range(b.mlegs) if ii not in lb_con)  # outgoing meta legs
-    axes_a = _unpack_axes(a, la_out, la_con)  # native legs of a; tuple of two tuples
-    axes_b = _unpack_axes(b, lb_con, lb_out)  # native legs of b; tuple of two tuples
+    axes_a = _unpack_axes(a.meta_fusion, la_out, la_con)  # native legs of a; tuple of two tuples
+    axes_b = _unpack_axes(b.meta_fusion, lb_con, lb_out)  # native legs of b; tuple of two tuples
 
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
     mconj = - conja * conjb
@@ -77,7 +77,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
     needs_mask = False
     for i1, i2 in zip(axes_a[1], axes_b[0]):
         if a.hard_fusion[i1].tree != b.hard_fusion[i2].tree:
-            raise YastError('Order of hard fusions on leg %1d of a and leg %1d of b do not match' % (i1, i2))
+            raise YastError(f'Order of hard fusions on leg {i1} of a and leg {i2} of b do not match')
         if _check["signatures_match"] and ((mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or
                                             (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms)):
             raise YastError('Hard fusions do not match. Signature problem.')
@@ -273,7 +273,7 @@ def trace(a, axes=(0, 1)):
     """
     lin1, lin2 = _clear_axes(*axes)  # contracted legs
     lout = tuple(ii for ii in range(a.mlegs) if ii not in lin1 + lin2)
-    in1, in2, out = _unpack_axes(a, lin1, lin2, lout)
+    in1, in2, out = _unpack_axes(a.meta_fusion, lin1, lin2, lout)
 
     if len(in1) != len(in2) or len(lin1) != len(lin2):
         raise YastError('Number of axes to trace should be the same')
@@ -345,33 +345,56 @@ def swap_gate(a, axes, inplace=False):
     -------
     tensor : Tensor
     """
-    try:
-        fss = a.config.sym.FERMIONIC  # fermionic symmetry sectors
-    except AttributeError:
-        return a
-    if any(fss):
-        c = a if inplace else a.clone()
-        tset = _tarray(c)
-        l1, l2 = _clear_axes(*axes)  # swaped groups of legs
+    if a.config.fermionic is not None and any(a.config.fermionic):
+        axes = tuple(_clear_axes(*axes))  # swapped groups of legs
+        tp = _meta_swap_gate(a.struct.t, a.struct.n, a.meta_fusion, a.nlegs, axes, a.config.fermionic)
+        if inplace:
+            for ts, odd in zip(a.struct.t, tp):
+                if odd:
+                    a.A[ts] = -a.A[ts]
+            return a
+        c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+        c.A = {ts: -a.A[ts] if odd else a.config.backend.clone(a.A[ts]) for ts, odd in zip(a.struct.t, tp)}
+        return c
+    return a
+
+
+@lru_cache(maxsize=1024)
+def _meta_swap_gate(t, n, mf, nlegs, axes, fss):
+    ind_n = [i for i, x in enumerate(axes) if x == (-1,)]
+    if len(ind_n) == 0:
+        axes = _unpack_axes(mf, *axes)
+    else:
+        axes = list(axes)
+        for ind in ind_n[::-1]:
+            axes.pop(ind)
+        axes = list(_unpack_axes(mf, *axes))
+        for ind in ind_n:
+            axes.insert(ind, (-1,))
+        axes = tuple(axes)
+
+    tset = np.array(t, dtype=int).reshape((len(t), nlegs, len(n)))
+    iaxes = iter(axes)
+    tp = np.zeros(len(t), dtype=int)
+
+    if len(axes) % 2 == 1:
+        raise YastError('Odd number of elements in axes -- needs even.')
+    for l1, l2 in zip(*(iaxes, iaxes)):
         if len(set(l1) & set(l2)) > 0:
             raise YastError('Cannot sweep the same index')
         if l2 == (-1,):
-            l1, l2 = l2, l1
-        if l1 == (-1,):
-            l2, = _unpack_axes(a, l2)
-            t1 = c.n
+            t1 = np.sum(tset[:, l1, :], axis=1)
+            t2 = np.array(n, dtype=int).reshape(1, -1)
+        elif l1 == (-1,):
+            t2 = np.sum(tset[:, l2, :], axis=1)
+            t1 = np.array(n, dtype=int).reshape(1, -1)
         else:
-            l1, l2 = _unpack_axes(a, l1, l2)
-            al1 = np.array(l1, dtype=np.intp)
-            t1 = np.sum(tset[:, al1, :], axis=1)
-        al2 = np.array(l2, dtype=np.intp)
-        t2 = np.sum(tset[:, al2, :], axis=1)
-        tp = np.sum(t1 * t2, axis=1) % 2 == 1
-        for ind, odd in zip(a.struct.t, tp):
-            if odd:
-                c.A[ind] = -c.A[ind]
-        return c
-    return a
+            if (-1,) in l1 or (-1,) in l2:
+                raise YastError('Swap with tensor charge, i.e. -1, has to be provided as a separate axis.')
+            t1 = np.sum(tset[:, l1, :], axis=1) % 2
+            t2 = np.sum(tset[:, l2, :], axis=1) % 2
+        tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)
+    return tuple(tp % 2)
 
 
 def ncon(ts, inds, conjs=None):
@@ -380,7 +403,7 @@ def ncon(ts, inds, conjs=None):
         raise YastError('Wrong number of tensors')
     for ii, ind in enumerate(inds):
         if ts[ii].get_ndim() != len(ind):
-            raise YastError('Wrong number of legs in %02d-th tensors.' % ii)
+            raise YastError(f'Wrong number of legs in {ii}-th input tensor.')
 
     ts = dict(enumerate(ts))
     cutoff = 512
