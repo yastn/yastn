@@ -345,18 +345,19 @@ def swap_gate(a, axes, inplace=False):
     -------
     tensor : Tensor
     """
-    if a.config.fermionic is not None and any(a.config.fermionic):
-        axes = tuple(_clear_axes(*axes))  # swapped groups of legs
-        tp = _meta_swap_gate(a.struct.t, a.struct.n, a.meta_fusion, a.nlegs, axes, a.config.fermionic)
-        if inplace:
-            for ts, odd in zip(a.struct.t, tp):
-                if odd:
-                    a.A[ts] = -a.A[ts]
-            return a
-        c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-        c.A = {ts: -a.A[ts] if odd else a.config.backend.clone(a.A[ts]) for ts, odd in zip(a.struct.t, tp)}
-        return c
-    return a
+    if not a.config.fermionic:
+        return a
+    fss = (True,) * len(a.struct.n) if a.config.fermionic is True else a.config.fermionic
+    axes = tuple(_clear_axes(*axes))  # swapped groups of legs
+    tp = _meta_swap_gate(a.struct.t, a.struct.n, a.meta_fusion, a.nlegs, axes, fss)
+    if inplace:
+        for ts, odd in zip(a.struct.t, tp):
+            if odd:
+                a.A[ts] = -a.A[ts]
+        return a
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = {ts: -a.A[ts] if odd else a.config.backend.clone(a.A[ts]) for ts, odd in zip(a.struct.t, tp)}
+    return c
 
 
 @lru_cache(maxsize=1024)
