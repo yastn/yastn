@@ -1,6 +1,7 @@
 """ Methods creating a new yast tensor """
 from .tensor import Tensor, YastError
 from .tensor._auxliary import _unpack_axes
+from .tensor._initialize import _set_block
 
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
@@ -200,8 +201,12 @@ def import_from_dict(config=None, d=None):
     """
     if d is not None:
         a = Tensor(config=config, **d)
+        dtype = a.config.default_dtype
         for ind in d['A']:
-            a.set_block(ts=ind, Ds=d['A'][ind].shape, val=d['A'][ind])
+            Ds = d['A'][ind].shape * 2 if a.isdiag else d['A'][ind].shape
+            _set_block(a, ts=ind, Ds=Ds, val=d['A'][ind], dtype=dtype)
+        a.update_struct()
+        a.is_consistent()
         return a
     raise YastError("Dictionary d is required.")
 
