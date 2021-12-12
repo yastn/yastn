@@ -191,6 +191,16 @@ def test_hard_dot_1_sparse():
     cc = yast.tensordot(aa, bb, axes=(0, 0), conj=(1, 0))
     assert yast.norm_diff(c, cc) < tol
 
+    aat = aa.fuse_legs(axes=((1, 2), 0), mode='hard').conj()
+    bbt = bb.fuse_legs(axes=(0, (1, 2)), mode='hard')
+    aat.show_properties()
+    bbt.show_properties()
+    ccc = yast.tensordot(aat, bbt, axes=(1, 0))
+    ccc1 = yast.matmul(aat, bbt)
+    assert yast.norm_diff(c, ccc.unfuse_legs(axes=(0, 1))) < tol
+    assert yast.norm_diff(ccc1, ccc) < tol
+    
+
     aaa = yast.unfuse_legs(aa, axes=0).transpose(axes=(1, 0, 2, 3))
     bbb = yast.unfuse_legs(bb, axes=0).transpose(axes=(1, 0, 2, 3))
     assert yast.norm_diff(a, aaa) < tol

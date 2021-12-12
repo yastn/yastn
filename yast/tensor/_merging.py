@@ -260,6 +260,16 @@ def _union_hfs(config, ts, Ds, hfs):
     return msk1.pop(), msk2.pop(), hfu.pop()
 
 
+def _masks_for_matmul(config, structa, hfa, axa, structb, hfb, axb):
+    """ masks to get the intersecting parts of single legs from two tensors. """
+    tla, Dla, _, _, _ = _get_tD_legs(structa)
+    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
+    ma, mb = _intersect_hfs(config, (tla[axa], tlb[axb]), (Dla[axa], Dlb[axb]), (hfa[axa], hfb[axb]))
+    mam = {t:  config.backend.to_mask(x) for t, x in ma.items()}
+    mbm = {t:  config.backend.to_mask(x) for t, x in mb.items()}
+    return mam, mbm
+
+
 def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
     """ masks to get the intersecting parts of legs from two tensors as single masks """
     msk_a, msk_b = [], []
