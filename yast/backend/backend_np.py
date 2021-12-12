@@ -498,6 +498,19 @@ def mask_diag(A, B, meta, axis, a_ndim):
     return {out: A[in1][slc1 + Bslc[in2] + slc2] for in1, in2, out in meta}
 
 
+def matmul(A, B, meta):
+    C = {}
+    for in1, in2, out, _ in meta:
+        C[out] = A[in1] @ B[in2]
+    return C
+
+def matmul_masks(A, B, meta, ma, mb):
+    C = {}
+    for in1, in2, out, ii in meta:
+        C[out] = A[in1][:, ma[ii]] @ B[in2][mb[ii], :]
+    return C
+
+
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
