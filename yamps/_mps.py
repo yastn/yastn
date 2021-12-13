@@ -1,11 +1,19 @@
 """ Mps structure and its basic manipulations. """
 import numpy as np
-from yast.tensor import block, entropy
+from yast.tensor import block, entropy, export_to_hdf5
+from yast.tensor import import_from_hdf5 as Tensor_from_hdf5
 from numpy import array, nonzero
 
 class YampsError(Exception):
     pass
 
+
+def import_from_hdf5(config, nr_phys, file, in_file_path):
+    N = len(file[in_file_path].keys())
+    M = Mps(N, nr_phys=nr_phys)
+    for n in range(M.N):
+        M.A[n] = Tensor_from_hdf5(config, file, in_file_path+str(n))
+    return M
 
 def generate_Mij(amp, connect, N, nr_phys):
     x_from = connect['from']
@@ -517,3 +525,10 @@ class Mps:
             Entropy[n] = entropy(self.A[self.pC], alpha=alpha)[0]
             self.absorb_central(to='first')
         return Entropy
+
+
+    def export_to_hdf5(self, file, in_file_path):
+        for n in self.sweep(to='first'):
+            export_to_hdf5(self.A[n], file, in_file_path+str(n))
+
+
