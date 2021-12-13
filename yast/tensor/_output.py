@@ -5,7 +5,9 @@ from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _mf_to_ntree
 from ._tests import YastError, _check
 from ..sym import sym_none
 
-__all__ = ['export_to_dict', 'compress_to_1d', 'leg_structures_for_dense', 'requires_grad']
+
+__all__ = ['export_to_dict', 'import_from_dict', 'compress_to_1d', 'leg_structures_for_dense',
+        'requires_grad', 'export_to_hdf5', 'import_from_hdf5']
 
 
 def export_to_dict(a):
@@ -59,6 +61,70 @@ def compress_to_1d(a, meta=None):
     order = (0,) if a.isdiag else tuple(range(a.nlegs))
     A = a.config.backend.merge_blocks(a.A, order, meta_new, meta_merge, a.config.device)
     return A[()], meta
+
+
+def export_to_hdf5(a, file, path):
+    """
+    Export tensor into hdf5 type file.
+
+    EXPAND DESCRIPTION
+    """
+    vec, _ = a.compress_to_1d()
+    file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
+    file.create_group(path+'/meta/'+str(a.meta_fusion))
+    file.create_dataset(path+'/n', data=a.struct.n)
+    file.create_dataset(path+'/s', data=a.struct.s)
+    file.create_dataset(path+'/ts', data=a.struct.t)
+    file.create_dataset(path+'/Ds', data=a.struct.D)
+    file.create_dataset(path+'/matrix', data=vec)
+
+
+
+def import_from_dict(config=None, d=None):
+    """
+    Generate tensor based on information in dictionary d.
+
+    Parameters
+    ----------
+    config: module
+            configuration with backend, symmetry, etc.
+
+    d : dict
+        information about tensor stored with :meth:`Tensor.to_dict`
+    """
+    if d is not None:
+        a = Tensor(config=config, **d)
+        for ind in d['A']:
+            a.set_block(ts=ind, Ds=d['A'][ind].shape, val=d['A'][ind])
+        return a
+    raise YastError("Dictionary d is required.")
+
+
+def import_from_hdf5(config, file, path):
+    """
+    Generate tensor based on information in hdf5 file.
+
+    EXPAND DESCRIPTION
+    """
+    g = file.get(path)
+
+    d = {'n': g.get('n')[:], 's': g.get('s')[:]}
+    d['isdiag'] = bool(g.get('isdiag')[:][0])
+    d['meta_fusion'] = eval(tuple(file.get(path+'/meta').keys())[0])
+
+    a = Tensor(config=config, **d)
+
+    ts = g.get('ts')[:]
+    Ds = g.get('Ds')[:]
+    vmat = g.get('matrix')[:]
+
+    pointer = 0
+    for its, iDs in zip(ts, Ds):
+        a.set_block(ts=tuple(its), Ds=tuple(iDs), val=vmat[pointer : (pointer + prod(iDs))], dtype=vmat.dtype.name)
+        pointer += prod(iDs)
+    return a
+
+
 
 ############################
 #    output information    #
