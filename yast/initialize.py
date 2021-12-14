@@ -1,11 +1,12 @@
 """ Methods creating a new yast tensor """
 from .tensor import Tensor, YastError
+import numpy as np
 from .tensor._auxliary import _unpack_axes
 from .tensor._initialize import _set_block
 
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
-           'import_from_dict', 'decompress_from_1d']
+           'import_from_dict', 'import_from_hdf5',  'decompress_from_1d']
 
 
 def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwargs):
@@ -209,6 +210,31 @@ def import_from_dict(config=None, d=None):
         a.is_consistent()
         return a
     raise YastError("Dictionary d is required.")
+
+
+def import_from_hdf5(config, file, path):
+    """
+    Generate tensor based on information in hdf5 file.
+
+    EXPAND DESCRIPTION
+    """
+    g = file.get(path)
+
+    d = {'n': g.get('n')[:], 's': g.get('s')[:]}
+    d['isdiag'] = bool(g.get('isdiag')[:][0])
+    d['meta_fusion'] = eval(tuple(file.get(path+'/meta').keys())[0])
+
+    a = Tensor(config=config, **d)
+
+    ts = g.get('ts')[:]
+    Ds = g.get('Ds')[:]
+    vmat = g.get('matrix')[:]
+
+    pointer = 0
+    for its, iDs in zip(ts, Ds):
+        a.set_block(ts=tuple(its), Ds=tuple(iDs), val=vmat[pointer : (pointer + np.prod(iDs))], dtype=vmat.dtype.name)
+        pointer += np.prod(iDs)
+    return a
 
 
 def decompress_from_1d(r1d, config, meta):
