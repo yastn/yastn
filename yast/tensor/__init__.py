@@ -38,20 +38,23 @@ __all__.extend(_merging.__all__)
 
 
 class Tensor:
-    """
-    Class defining a tensor with abelian symmetries, and operations on such tensor(s).
+    # Class defining a tensor with abelian symmetries, and operations on such tensor(s).
 
-    Parameters
-    ----------
-        config : module
-            imported module containing configuration
-        s : tuple
-            a signature of tensor. Also determines the number of legs
-        n : int
-            total charge of the tensor
-    """
     def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
-        """ init new tensor """
+        r"""
+        Initialize empty (no allocated blocks) YAST tensor
+
+        Parameters
+        ----------
+            config : module
+                imported module containing configuration
+            s : tuple
+                a signature of tensor. Also determines the number of legs
+            n : int or tuple
+                total charge of the tensor. In case of direct product of several
+                abelian symmetries `n` is tuple with total charge for each individual
+                symmetry
+        """
         if isinstance(config, _config):
             self.config = config
         else:

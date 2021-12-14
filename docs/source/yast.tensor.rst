@@ -1,15 +1,7 @@
-yast.tensor package
-====================
+YAST
+====
 
-Submodules
-----------
+.. toctree::
+   :glob:
 
-
-
-Module contents
----------------
-
-.. automodule:: yast.tensor
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   tensor/*
