@@ -1,7 +1,8 @@
 """ Mps structure and its basic manipulations. """
 import numpy as np
-from yast.tensor import block, entropy, export_to_hdf5
-from yast.tensor import import_from_hdf5 as Tensor_from_hdf5
+from yast.tensor import block, entropy
+from yast.tensor import export_to_hdf5 as Tensor_to_hdf5
+from yast import import_from_hdf5 as Tensor_from_hdf5
 from numpy import array, nonzero
 
 class YampsError(Exception):
@@ -529,6 +530,4 @@ class Mps:
 
     def export_to_hdf5(self, file, in_file_path):
         for n in self.sweep(to='first'):
-            export_to_hdf5(self.A[n], file, in_file_path+str(n))
-
-
+            Tensor_to_hdf5(self.A[n], file, in_file_path+str(n))
