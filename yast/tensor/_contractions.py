@@ -786,3 +786,80 @@ def ncon(ts, inds, conjs=None):
 #             c.A = self.conf.back.dot(self.A, other.A, conj, to_execute, a_out, a_con, b_con, b_out, self.conf.dtype)
 #             c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
 #             return c
+
+
+
+# def dot(A, B, conj, to_execute, a_out, a_con, b_con, b_out, dtype='float64'):
+#     a_all = a_out + a_con  # order for transpose in A
+#     b_all = b_con + b_out  # order for transpose in B
+#     f = dot_dict[conj]  # proper conjugations
+#     if len(to_execute) == 1:
+#         in1, in2, out = to_execute[0]
+#         AA, BB = A[in1], B[in2]
+#         Dl = tuple(AA.shape[ii] for ii in a_out)
+#         Dc = tuple(AA.shape[ii] for ii in a_con)
+#         Dr = tuple(BB.shape[ii] for ii in b_out)
+#         pDl = reduce(mul, Dl, 1)
+#         pDc = reduce(mul, Dc, 1)
+#         pDr = reduce(mul, Dr, 1)
+#         C = {out: f(AA.transpose(a_all).reshape(pDl, pDc), BB.transpose(b_all).reshape(pDc, pDr)).reshape(Dl + Dr)}
+#     else:
+#         Andim = len(a_con) + len(a_out)
+#         Bndim = len(b_con) + len(b_out)
+#         DA = np.array([A[ind].shape for ind in A], dtype=np.int).reshape(len(A), Andim)  # bond dimensions of A
+#         DB = np.array([B[ind].shape for ind in B], dtype=np.int).reshape(len(B), Bndim)  # bond dimensions of B
+#         Dl = DA[:, np.array(a_out, dtype=np.int)]  # bond dimension on left legs
+#         Dlc = DA[:, np.array(a_con, dtype=np.int)]  # bond dimension on contracted legs
+#         Dcr = DB[:, np.array(b_con, dtype=np.int)]  # bond dimension on contracted legs
+#         Dr = DB[:, np.array(b_out, dtype=np.int)]  # bond dimension on right legs
+#         pDl = np.multiply.reduce(Dl, axis=1, dtype=np.int)  # their product
+#         pDlc = np.multiply.reduce(Dlc, axis=1, dtype=np.int)
+#         pDcr = np.multiply.reduce(Dcr, axis=1, dtype=np.int)
+#         pDr = np.multiply.reduce(Dr, axis=1, dtype=np.int)
+
+#         Atemp = {in1: A[in1].transpose(a_all).reshape(d1, d2) for in1, d1, d2 in zip(A, pDl, pDlc)}
+#         Btemp = {in2: B[in2].transpose(b_all).reshape(d1, d2) for in2, d1, d2 in zip(B, pDcr, pDr)}
+
+#         Dl = {in1: tuple(dl) for in1, dl in zip(A, Dl)}
+#         Dr = {in2: tuple(dr) for in2, dr in zip(B, Dr)}
+#         C = {}
+
+#         # DC = {}
+#         # for in1, in2, out in to_execute:   # can use if in place of try;exept
+#         #     temp = f(Atemp[in1], Btemp[in2])
+#         #     try:
+#         #         C[out] += temp
+#         #     except KeyError:
+#         #         C[out] = temp
+#         #         DC[out] = Dl[in1] + Dr[in2]
+#         # for out in C:
+#         #     C[out] = C[out].reshape(DC[out])
+
+#         # to_execute = groupby(sorted(to_execute, key=lambda x: x[2]), key=lambda x: x[2])
+#         # for out, execute in to_execute:
+#         #     execute = list(execute)
+#         #     le = len(execute)
+#         #     in1, in2, _ = execute[-1]
+#         #     dl = Dl[in1]
+#         #     dr = Dr[in2]
+#         #     if le > 1:
+#         #         pdl = Atemp[in1].shape[0]
+#         #         pdr = Btemp[in2].shape[1]
+#         #         temp = np.empty((le, pdl, pdr), dtype=_select_dtype[dtype])
+#         #         for ii in range(le):
+#         #             in1, in2, _ = execute[ii]
+#         #             np.matmul(Atemp[in1], Btemp[in2], out=temp[ii])
+#         #         C[out] = np.sum(temp, axis=0).reshape(dl + dr)
+#         #     else:
+#         #         C[out] = np.matmul(Atemp[in1], Btemp[in2]).reshape(dl + dr)
+
+#         to_execute = sorted(to_execute, key=lambda x: x[2])
+#         multiplied = [f(Atemp[in1], Btemp[in2]) for in1, in2, _ in to_execute[::-1]]
+#         to_execute = groupby(to_execute, key=lambda x: x[2])
+#         for out, execute in to_execute:
+#             C[out] = multiplied.pop()
+#             in1, in2, _ = next(execute)
+#             for _ in execute:
+#                 C[out] += multiplied.pop()
+#             C[out] = C[out].reshape(Dl[in1] + Dr[in2])
+#     return C
