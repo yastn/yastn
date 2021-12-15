@@ -69,7 +69,7 @@ def compress_to_1d(a, meta=None):
     else:
         if a.struct.s != meta['s'] or a.struct.n != meta['n'] or a.isdiag != meta['isdiag'] \
             or a.meta_fusion != meta['meta_fusion'] or a.hard_fusion != meta['hard_fusion']:
-            raise YastError("Tensor do not match provided metadata.")
+            raise YastError("Tensor structure does not match provided metadata.")
         meta_merge = meta['meta_merge']
         D_tot = meta_merge[-1][2][0][1]
         meta_new = (((),), (D_tot,))
