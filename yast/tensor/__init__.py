@@ -110,6 +110,7 @@ class Tensor:
     from ._output import get_leg_fusion, get_ndim, get_shape, get_signature, unique_dtype
     from ._output import get_size, get_tensor_charge
     from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric
+    from ._output import export_to_hdf5, export_to_dict
     from ._tests import is_consistent, are_independent
     from ._auxliary import update_struct
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard

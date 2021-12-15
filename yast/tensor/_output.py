@@ -5,7 +5,9 @@ from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _mf_to_ntree
 from ._tests import YastError, _check
 from ..sym import sym_none
 
-__all__ = ['export_to_dict', 'compress_to_1d', 'leg_structures_for_dense', 'requires_grad']
+
+__all__ = ['export_to_dict', 'compress_to_1d', 'leg_structures_for_dense',
+        'requires_grad', 'export_to_hdf5']
 
 
 def export_to_dict(a):
@@ -59,6 +61,27 @@ def compress_to_1d(a, meta=None):
     order = (0,) if a.isdiag else tuple(range(a.nlegs))
     A = a.config.backend.merge_blocks(a.A, order, meta_new, meta_merge, a.config.device)
     return A[()], meta
+
+
+def export_to_hdf5(a, file, path):
+    """
+    Export tensor into hdf5 type file.
+
+    EXPAND DESCRIPTION
+    """
+    vec, _ = a.compress_to_1d()
+    file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
+    file.create_group(path+'/meta/'+str(a.meta_fusion))
+    file.create_dataset(path+'/n', data=a.struct.n)
+    file.create_dataset(path+'/s', data=a.struct.s)
+    file.create_dataset(path+'/ts', data=a.struct.t)
+    file.create_dataset(path+'/Ds', data=a.struct.D)
+    file.create_dataset(path+'/matrix', data=vec)
+
+
+
+
+
 
 ############################
 #    output information    #
