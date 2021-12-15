@@ -47,6 +47,7 @@ pylint:
   stage: Static Analysis
   allow_failure: true
   script:
+  - pip install numpy==1.19.1
   - pip install pylint
   - pylint -d C0301,C0103 ./yast/tensor/
   - pylint -d C0301,C0103 ./yamps/
@@ -60,7 +61,7 @@ test_python3.7_conda_numpy1.19.1:
   - conda config --set always_yes yes --set changeps1 no
   - conda install python=3.7
   - conda update -q conda
-  - conda install numpy=1.19.1 scipy pytest
+  - conda install numpy=1.19.1 scipy pytest h5py
   - export PYTHONPATH=$(pwd)
   - git submodule status
   - ssh-add -l
@@ -75,6 +76,7 @@ test_python3.7_pip_numpy1.19.1:
   script:
   - pip install numpy==1.19.1
   - pip install scipy
+  - pip install h5py
   - pip install pytest
   - pip install .
   - export PYTHONPATH=$(pwd)
@@ -91,6 +93,7 @@ test_python3.8_numpy1.19.1:
   script:
   - pip install numpy==1.19.1
   - pip install scipy
+  - pip install h5py
   - pip install pytest
   - pip install .
   - export PYTHONPATH=$(pwd)
@@ -107,6 +110,7 @@ test_python3.8_numpy1.19.+:
   script:
   - pip install numpy
   - pip install scipy
+  - pip install h5py
   - pip install pytest
   - pip install .
   - export PYTHONPATH=$(pwd)
@@ -123,6 +127,7 @@ test_python3.7_torch1.8:
   script:
   - pip install torch==1.8.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
   - pip install scipy
+  - pip install h5py
   - pip install pytest
   - pip install .
   - export PYTHONPATH=$(pwd)
@@ -139,6 +144,7 @@ test_python3.8_torch1.8:
   script:
   - pip install torch==1.8.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
   - pip install scipy
+  - pip install h5py
   - pip install pytest
   - pip install .
   - export PYTHONPATH=$(pwd)

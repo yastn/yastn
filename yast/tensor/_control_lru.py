@@ -26,4 +26,4 @@ def get_cache_info():
             "fuse_hard": _merging._meta_fuse_hard.cache_info(),
             "unfuse_hard": _merging._meta_unfuse_hard.cache_info(),
             "intersect_hfs": _merging._intersect_hfs.cache_info(),
-            "combind_leg_structure": _merging._leg_structure_combine_charges.cache_info()}
+            "combine_leg_structure": _merging._leg_structure_combine_charges.cache_info()}
