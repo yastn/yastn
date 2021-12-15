@@ -181,7 +181,6 @@ def _set_block(a, ts, Ds, val, dtype):
 
         if a.isdiag:
             a.A[ts] = a.config.backend.diag_get(a.A[ts])
-
     else:
         if a.isdiag:
             if Ds is not None and Ds[0] != Ds[1]:

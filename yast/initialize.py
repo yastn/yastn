@@ -216,7 +216,9 @@ def import_from_hdf5(config, file, path):
     """
     Generate tensor based on information in hdf5 file.
 
-    EXPAND DESCRIPTION
+    Parameters
+    ----------
+    ADD DESCRIPTION
     """
     g = file.get(path)
 

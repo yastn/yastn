@@ -6,13 +6,13 @@ from ._tests import YastError, _check
 from ..sym import sym_none
 
 
-__all__ = ['export_to_dict', 'compress_to_1d', 'leg_structures_for_dense',
-        'requires_grad', 'export_to_hdf5']
+__all__ = ['compress_to_1d', 'export_to_dict', 'export_to_hdf5',
+            'leg_structures_for_dense','requires_grad']
 
 
 def export_to_dict(a):
     r"""
-    Export relevant information about tensor to dictionary --  it can be saved using numpy.save
+    Export relevant information about tensor to dictionary that can be saved using numpy.save
 
     Returns
     -------
@@ -23,6 +23,24 @@ def export_to_dict(a):
     out = {'A': AA, 's': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag,
             'meta_fusion': a.meta_fusion, 'hard_fusion': a.hard_fusion}
     return out
+
+
+def export_to_hdf5(a, file, path):
+    """
+    Export tensor into hdf5 type file.
+
+    Parameters
+    ----------
+    ADD DESCRIPTION
+    """
+    vec, _ = a.compress_to_1d()
+    file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
+    file.create_group(path+'/meta/'+str(a.meta_fusion))
+    file.create_dataset(path+'/n', data=a.struct.n)
+    file.create_dataset(path+'/s', data=a.struct.s)
+    file.create_dataset(path+'/ts', data=a.struct.t)
+    file.create_dataset(path+'/Ds', data=a.struct.D)
+    file.create_dataset(path+'/matrix', data=vec)
 
 
 def compress_to_1d(a, meta=None):
@@ -61,26 +79,6 @@ def compress_to_1d(a, meta=None):
     order = (0,) if a.isdiag else tuple(range(a.nlegs))
     A = a.config.backend.merge_blocks(a.A, order, meta_new, meta_merge, a.config.device)
     return A[()], meta
-
-
-def export_to_hdf5(a, file, path):
-    """
-    Export tensor into hdf5 type file.
-
-    EXPAND DESCRIPTION
-    """
-    vec, _ = a.compress_to_1d()
-    file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
-    file.create_group(path+'/meta/'+str(a.meta_fusion))
-    file.create_dataset(path+'/n', data=a.struct.n)
-    file.create_dataset(path+'/s', data=a.struct.s)
-    file.create_dataset(path+'/ts', data=a.struct.t)
-    file.create_dataset(path+'/Ds', data=a.struct.D)
-    file.create_dataset(path+'/matrix', data=vec)
-
-
-
-
 
 
 ############################
