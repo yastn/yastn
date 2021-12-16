@@ -260,7 +260,7 @@ def _union_hfs(config, ts, Ds, hfs):
     return msk1.pop(), msk2.pop(), hfu.pop()
 
 
-def _masks_for_matmul(config, structa, hfa, axa, structb, hfb, axb):
+def _masks_for_axis(config, structa, hfa, axa, structb, hfb, axb):
     """ masks to get the intersecting parts of single legs from two tensors. """
     tla, Dla, _, _, _ = _get_tD_legs(structa)
     tlb, Dlb, _, _, _ = _get_tD_legs(structb)
