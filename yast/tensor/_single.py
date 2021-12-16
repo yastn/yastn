@@ -10,9 +10,15 @@ __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'di
 
 
 def copy(a):
-    """ Return a copy of the tensor.
+    r""" 
+    Return a copy of the tensor.
 
-        Warning: this might break autograd if you are using it.
+    .. warning::
+        this operation doesn't preserve autograd on returned :class:`yast.Tensor`
+
+    Returns
+    -------
+    tensor : Tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {ts: a.config.backend.copy(x) for ts, x in a.A.items()}
@@ -20,14 +26,28 @@ def copy(a):
 
 
 def clone(a):
-    """ Return a copy of the tensor, tracking gradients. """
+    r""" 
+    Return a copy of the tensor preserving the autograd (resulting clone is a part 
+    of the computational graph) 
+
+    Returns
+    -------
+    tensor : Tensor 
+    """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {ts: a.config.backend.clone(x) for ts, x in a.A.items()}
     return c
 
 
+# TODO inplace ?
 def detach(a, inplace=False):
-    """ Detach tensor from autograd; Can be called inplace (?) """
+    r""" 
+    Detach tensor from computational graph.
+
+    Returns
+    -------
+    tensor : Tensor
+    """
     if inplace:
         for x in a.A.values():
             a.config.backend.detach_(x)
@@ -335,10 +355,13 @@ def apxb(a, b, x=1):
 
 
 def conj(a, inplace=False):
-    """
-    Return conjugated tensor.
-
-    Changes sign of signature s and total charge n, as well as complex conjugate each block.
+    r"""
+    Return conjugated tensor. In particular, change the sign of the signature `s` to `-s`, 
+    the total charge `n` to `-n`, and complex conjugate each block of the tensor.    
+    
+    Parameters
+    ----------
+    inplace : bool
 
     Returns
     -------
@@ -361,7 +384,12 @@ def conj(a, inplace=False):
 
 def conj_blocks(a, inplace=False):
     """
-    Conjugated each block, leaving symmetry structure unchanged.
+    Complex-conjugate each block leaving symmetry structure (signature, blocks charge, and 
+    total charge) unchanged.
+
+    Parameters
+    ----------
+    inplace : bool
 
     Returns
     -------
@@ -372,7 +400,7 @@ def conj_blocks(a, inplace=False):
     c.A = c.config.backend.conj(a.A, inplace)
     return c
 
-
+# TODO add axis
 def flip_signature(a, inplace=False):
     """
     Conjugated each block, leaving symmetry structure unchanged.
@@ -390,7 +418,8 @@ def flip_signature(a, inplace=False):
         a.struct = struct
         a.hard_fusion = new_hf
         return a
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=new_hf, struct=struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
+        hard_fusion=new_hf, struct=struct)
     c.A = {ind: a.config.backend.clone(a.A[ind]) for ind in a.A}
     return c
 
@@ -453,6 +482,75 @@ def moveaxis(a, source, destination, inplace=False):
     return transpose(a, axes, inplace)
 
 
+def remove_zero_blocks(a, rtol=1e-12, atol=0, inplace=False):
+    r"""
+    Remove from the tensor blocks where all elements are below a cutoff.
+    Cutoff is a combination of absolut tolerance and relative tolerance with respect to maximal element in the tensor.
+    """
+    cutoff = atol + rtol * a.norm(p='inf')
+    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = {k: t if inplace else a.config.backend.clone(t) for k, t in a.A.items() if a.config.backend.max_abs(t) > cutoff}
+    c.update_struct()
+    return c
+
+
+def add_leg(a, axis=-1, s=1, t=None, inplace=False):
+    r"""
+    Creates a new auxiliary leg that explicitly carries charge (or part of it) associated with the tensor.
+
+    Parameters
+    ----------
+        axis: int
+            index of the new leg
+
+        s : int
+            signature of the new leg
+
+        t : charge on the new leg.
+            If None takes the charge of the tensor, making it zero
+
+        inplace : bool
+            If true, perform operation in place
+    """
+    if a.isdiag:
+        raise YastError('Cannot add a new leg to a diagonal tensor.')
+    tset, Dset = _tarray(a), _Darray(a)
+
+    axis = axis % (a.mlegs + 1)
+
+    new_meta_fusion = a.meta_fusion[:axis] + ((1,),) + a.meta_fusion[axis:]
+
+    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack
+
+    if s not in (-1, 1):
+        raise YastError('The signature s should be equal to 1 or -1.')
+    an = np.array(a.struct.n, dtype=int)
+    if t is None:
+        t = a.config.sym.fuse(an.reshape((1, 1, -1)), np.array([1], dtype=int), -1)[0] if s == 1 else an  # s == -1
+    else:
+        t = a.config.sym.fuse(np.array(t, dtype=int).reshape((1, 1, -1)), np.array([1], dtype=int), 1)[0]
+    if len(t) != a.config.sym.NSYM:
+        raise YastError('t does not have the proper number of symmetry charges')
+
+    news = np.insert(np.array(a.struct.s, dtype=int), axis, s)
+    newn = a.config.sym.fuse(np.hstack([an, t]).reshape((1, 2, -1)), np.array([1, s], dtype=int), 1)[0]
+    new_tset = np.insert(tset, axis, t, axis=1)
+    new_Dset = np.insert(Dset, axis, 1, axis=1)
+
+    news = tuple(news)
+    newn = tuple(newn)
+    new_tset = tuple(tuple(x.flat) for x in new_tset)
+    new_Dset = tuple(tuple(x.flat) for x in new_Dset)
+
+    c = a if inplace else a.clone()
+    c.A = {tnew: a.config.backend.expand_dims(c.A[told], axis) for tnew, told in zip(new_tset, a.struct.t)}
+    c.struct = _struct(new_tset, new_Dset, news, newn)
+    c.meta_fusion = new_meta_fusion
+    c.hard_fusion = c.hard_fusion[:axis] + (_Fusion(s=(s,), ms=(-s,)),) + c.hard_fusion[axis:]
+
+    return c
+
+
 def diag(a):
     """Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa. """
     if a.isdiag:
@@ -467,28 +565,49 @@ def diag(a):
 
 
 def absolute(a):
-    """
-    Return element-wise absolut value.
+    r"""
+    Return tensor with element-wise absolute values
 
     Returns
     -------
-    tansor: Tensor
+    tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
+        hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.absolute(a.A)
     return c
 
 
 def real(a):
-    """ return real part of tensor. Do not change dtype of yast.Tensor """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+    r"""
+    Return tensor with imaginary part set to zero.
+
+    .. note::
+        Returned :class:`yast.Tensor` has the same dtype
+
+    Returns
+    -------
+    tensor: Tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
+        hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {t: a.config.backend.real(x) for t, x in a.A.items()}
     return c
 
 
 def imag(a):
-    """ return imaginary part of tensor """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+    r"""
+    Return tensor with real part set to zero.
+
+    .. note::
+        Returned :class:`yast.Tensor` has the same dtype
+
+    Returns
+    -------
+    tensor: Tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
+        hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {t: a.config.backend.imag(x) for t, x in a.A.items()}
     return c
 
@@ -497,13 +616,9 @@ def sqrt(a):
     """
     Return element-wise sqrt(A).
 
-    Parameters
-    ----------
-    step: number
-
     Returns
     -------
-    tansor: Tensor
+    tensor: Tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.sqrt(a.A)
@@ -514,16 +629,16 @@ def rsqrt(a, cutoff=0):
     """
     Return element-wise 1/sqrt(A).
 
-    The tensor elements with absolut value below the cutoff are set to zero.
+    The tensor elements with absolute value below the cutoff are set to zero.
 
     Parameters
     ----------
-        cutoff: float64
-        Cut-off for (elementwise) pseudo-inverse.
+    cutoff: real scalar 
+        (element-wise) cutoff for inversion
 
     Returns
     -------
-    tansor: Tensor
+    tensor: Tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.rsqrt(a.A, cutoff=cutoff)
@@ -534,16 +649,16 @@ def reciprocal(a, cutoff=0):
     """
     Return element-wise 1/A.
 
-    The tensor elements with absolut value below the cutoff are set to zero.
+    The tensor elements with absolute value below the cutoff are set to zero.
 
     Parameters
     ----------
-    cutoff: float64
-        Cut-off for (elementwise) pseudo-inverse.
+    cutoff: real scalar
+        (element-wise) cutoff for inversion
 
     Returns
     -------
-    tansor: Tensor
+    tensor: Tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.reciprocal(a.A, cutoff=cutoff)
@@ -551,18 +666,19 @@ def reciprocal(a, cutoff=0):
 
 
 def exp(a, step=1.):
-    """
-    Return element-wise exp(step * A).
+    r"""
+    Return element-wise `exp(step * A)`.
 
-    This is calculated for existing blocks only.
+    ..note ::
+        This applies only to non-empty blocks of A
 
     Parameters
     ----------
-    step: number
+    step: scalar
 
     Returns
     -------
-    tansor: Tensor
+    tensor: Tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.exp(a.A, step)

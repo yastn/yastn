@@ -87,7 +87,21 @@ def compress_to_1d(a, meta=None):
 
 
 def show_properties(a):
-    """ Display basic properties of the tensor. """
+    """ 
+    Print basic properties of the tensor: 
+        * it's symmetry
+        * signature
+        * total charge
+        * whether it is a diagonal tensor
+        * meta/logical rank - treating fused legs as single leg 
+        * native rank
+        * total dimension of all existing charge sectors for each leg, treating fused legs as single leg
+        * total dimension of all existing charge sectors for native leg  
+        * number of non-empty blocks
+        * total number of elements across all non-empty blocks
+        * fusion tree for each leg
+        * metadata for fused legs
+    """
     print("Symmetry    :", a.config.sym.SYM_ID)
     print("signature   :", a.struct.s)  # signature
     print("charge      :", a.struct.n)  # total charge of tensor
@@ -115,45 +129,145 @@ def __str__(a):
 
 
 def requires_grad(a):
-    """ returns `True` if any of the blocks of the tensor has enabled recording of operations """
+    """
+    Returns
+    -------
+    bool : bool
+            ``True`` if any of the blocks of the tensor has autograd enabled 
+    """
     return a.config.backend.requires_grad(a.A)
 
 
-def print_blocks(a):
-    """ print shapes of blocks """
+def print_blocks_shape(a):
+    """
+    Print shapes of blocks as a sequence of block's charge followed by its shape 
+    """
     for ind, x in a.A.items():
         print(f"{ind} {a.config.backend.get_shape(x)}")
 
 
 def is_complex(a):
-    """ Returns True if all blocks are complex. """
+    """ 
+    Returns
+    -------
+    bool : bool
+        ``True`` if all of the blocks of the tensor are complex 
+    """
     return all(a.config.backend.is_complex(x) for x in a.A.values())
 
 
 def get_tensor_charge(a):
-    """ Global charge of the tensor. """
+    """ 
+    Returns
+    -------
+    n : int or tuple(int)
+        total charge of the tensor. In case of direct product of abelian symmetries, total
+        charges for each symmetry are returned in a tuple 
+    """
     return a.struct.n
 
 
 def get_signature(a, native=False):
-    """ Tensor signatures. If not native, returns the signature of the first leg in each group forming meta-legs. """
+    """ 
+    Returns
+    -------
+    s : tuple
+        Tensor signature. If native, returns the original signature.
+        Otherwise the signature of the first native leg for each leg obtained by fusion is returned.
+    """
     return a.s_n if native else a.s
 
 
 def get_rank(a, native=False):
-    """ Return tensor rank. If not native, returns the number of meta-legs. """
+    """ 
+    Returns
+    -------
+    n : int
+        Tensor rank. If native is ``True``, the rank of the tensor with all legs unfused is returned. 
+    """
     return a.ndim_n if native else a.ndim
 
 
-def get_blocks_charges(a):
-    """ Charges of all native blocks. """
+def get_blocks_charge(a):
+    """ 
+    Returns
+    -------
+    t : tuple(tuple(int))
+        Charges of all native blocks. In case of product of abelian symmetries,
+        for each block the individual symmetry charges are flattened into a single tuple.  
+    """
     return a.struct.t
 
 
-def get_blocks_shapes(a):
-    """ Shapes fo all native blocks. """
+def get_blocks_shape(a):
+    """ 
+    Returns
+    -------
+    D : tuple(tuple(int))
+        Shapes of all native blocks. 
+    """
     return a.struct.D
 
+
+def get_shape(a, axes=None, native=False):
+    r"""
+    Return total bond dimension, sum of dimensions along sectors, of meta legs.
+
+    Parameters
+    ----------
+    axes : Int or tuple of ints
+        indices of legs; If axes is None returns all (default).
+
+    Returns
+    -------
+    shape : Int or tuple(int)
+        shapes of legs specified by axes
+    """
+    if axes is None:
+        axes = tuple(n for n in range(a.nlegs if native else a.mlegs))
+    if isinstance(axes, int):
+        return sum(a.get_leg_structure(axes, native=native).values())
+    return tuple(sum(a.get_leg_structure(ii, native=native).values()) for ii in axes)
+
+
+def get_ndim(a, native=False):
+    """ 
+    Returns
+    -------
+    n : int
+        Number of native legs if native is ``True`` otherwise number of meta/fused legs. 
+    """
+    return a.nlegs if native else a.mlegs
+
+
+def unique_dtype(a):
+    """ 
+    Returns
+    -------
+    dtype : dtype or bool
+        Returns common ``dtype`` if all blocks have the same type. Otherwise, returns False.
+    """
+    return a.config.backend.unique_dtype(a)
+
+
+def __getitem__(a, key):
+    """ 
+    Parameters
+    ----------
+    key : tuple(int)
+        charges of the block
+
+    Returns 
+    -------
+    out : tensor
+        The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
+    """
+    return a.A[key]
+
+
+##################################################
+#    output tensors info - advanced structure    #
+##################################################
 
 def get_leg_fusion(a, axes=None):
     """
@@ -314,14 +428,18 @@ def leg_structures_union(*args):
             len_t = len(t)
     return ls_out
 
+  
+############################
+#   Down-casting tensors   #
+############################
 
 def to_dense(a, leg_structures=None, native=False, reverse=False):
     r"""
     Create full tensor corresponding to the symmetric tensor.
 
-    Blockes are ordered according to increasing charges on each leg.
-    It is possible to supply a list of charges and bond dimensions to be included
-    (should be consistent with the tensor). This allows to fill in some zero blocks.
+    Blocks are ordered according to increasing charges on each leg.
+    It is possible to supply a list of additional charge sectors with dimensions to be included.
+    (should be consistent with the tensor). This allows to fill in some explicit zero blocks.
 
     Parameters
     ----------
@@ -329,7 +447,7 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
         {n: {tn: Dn}} specify charges and dimensions to include on some legs (indicated by keys n).
 
     native: bool
-        output native tensor (neglecting meta fusions).
+        output native tensor (ignoring fusion of legs).
 
     reverse: bool
         reverse the order in which blocks are sorted. Default order is ascending in
@@ -337,7 +455,8 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
 
     Returns
     -------
-    out : tensor of the type used by backend
+    out : tensor 
+        The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
     c = a.to_nonsymmetric(leg_structures, native, reverse)
     x = c.A[()] if not c.isdiag else c.config.backend.diag_create(c.A[()])
@@ -346,14 +465,25 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
 
 def to_numpy(a, leg_structures=None, native=False, reverse=False):
     r"""
-    Create full nparray corresponding to the symmetric tensor. See `yast.to_dense`
+    Create full ``numpy.ndarray`` corresponding to the symmetric tensor. See :func:`yast.to_dense`
+    
+    Returns
+    -------
+    out : numpy.ndarray
+        NumPy array equivalent to symmetric tensor
     """
     return a.config.backend.to_numpy(a.to_dense(leg_structures, native, reverse))
 
 
 def to_raw_tensor(a):
     """
-    For tensor with a single block, return raw tensor representing that block.
+    If the symmetric tensor has just a single non-empty block, return raw tensor representing 
+    that block.
+
+    Returns
+    -------
+    out : tensor
+        The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
     if len(a.A) == 1:
         key = next(iter(a.A))
@@ -363,11 +493,11 @@ def to_raw_tensor(a):
 
 def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     r"""
-    Create full tensor corresponding to the symmetric tensor. Output it as yast tensor with no symmetry.
+    Create equivalent ``yast.Tensor`` with no explict symmetry (equivalent to single dense tensor).
 
-    Blockes are ordered according to increasing charges on each leg.
-    It is possible to supply a list of charges and bond dimensions to be included
-    (should be consistent with the tensor). This allows to fill in some zero blocks.
+    Blocks are ordered according to increasing charges on each leg.
+    It is possible to supply a list of additional charge sectors with dimensions to be included.
+    (should be consistent with the tensor). This allows to fill in some explicit zero blocks.
 
     Parameters
     ----------
@@ -375,7 +505,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
         {n: {tn: Dn}} specify charges and dimensions to include on some legs (indicated by keys n).
 
     native: bool
-        output native tensor (neglecting meta fusions).
+        output native tensor (ignoring fusion of legs).
 
     reverse: bool
         reverse the order in which blocks are sorted. Default order is ascending in
@@ -383,7 +513,8 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
 
     Returns
     -------
-    out : tensor of the type used by backend
+    out : tensor
+        The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
     config_dense = a.config._replace(sym=sym_none)
     news = a.get_signature(native)
@@ -418,10 +549,6 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     c.update_struct()
     return c
 
-#########################
-#    output numbers     #
-#########################
-
 
 def zero_of_dtype(a):
     """ Return zero scalar of the instance specified by backend and dtype. """
@@ -429,16 +556,24 @@ def zero_of_dtype(a):
 
 
 def to_number(a, part=None):
-    """
-    Return an element of the size-one tensor as a scalar of the same type as the
-    type use by backend.
+    r"""
+    Assuming the symmetric tensor has just a single non-empty block of total dimension one,
+    return this element as a scalar.
 
-    For empty tensor, returns 0
+    For empty tensor return 0.
+
+    .. note::
+        This operation preserves autograd.
 
     Parameters
     ----------
     part : str
-        if 'real' return real part
+        if 'real' return real part only
+    
+    Returns
+    -------
+    out : scalar
+        the type of the scalar is given by the backend.
     """
     size = a.size
     if size == 1:
@@ -452,9 +587,14 @@ def to_number(a, part=None):
 
 def item(a):
     """
-    Return an element of the size-one tensor as a standard Python scalar.
+    Assuming the symmetric tensor has just a single non-empty block of total dimension one,
+    return this element as standard Python scalar.
 
-    For empty tensor, returns 0
+    For empty tensor, returns 0.
+
+    Returns
+    -------
+    out : scalar
     """
     size = a.size
     if size == 1:
