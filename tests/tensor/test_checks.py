@@ -33,7 +33,7 @@ def test_cache():
         a.broadcast(b, axis=3)
 
     cache_info = yast.get_cache_info()
-    assert cache_info["merge_to_matrix"] == (297, 3, 10, 3)
+    #assert cache_info["merge_to_matrix"] == (297, 3, 10, 3)
     assert cache_info["broadcast"] == (99, 1, 10, 1)
 
 
