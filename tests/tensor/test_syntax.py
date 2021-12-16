@@ -73,7 +73,7 @@ class TestSyntaxTensorCreation(unittest.TestCase):
 
         #
         # Once the dimension is assigned to charge sector on a leg of the tensor
-        # attempt to create block with different dimension will lead raise an error. 
+        # attempt to create block with different dimension will raise an error. 
         # In the example above sector with charge 2 on 3rd leg has dimension 9.
         #
         # Attempting to create new block with different dimension for the same
@@ -148,6 +148,18 @@ class TestSyntaxTensorExportImport(unittest.TestCase):
         tensor = yast.import_from_dict(config=config_U1, d=dictionary)
 
 
+class TestSyntaxBlockAccess(unittest.TestCase):
+
+    def test_syntax_block_access(self):
+        a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+                      t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                      D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+
+        #
+        # directly access block with charges (1, 1, 2, 2).
+        #
+        a[(1, 1, 2, 2)]
+
 class TestSyntaxTensorBlocking(unittest.TestCase):
 
     def test_syntax_block_tensors(self):
@@ -203,7 +215,7 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
         a.get_shape(axes=2)
         ls = a.get_leg_structure(axis=1)
         print(ls)
-        a[(1, 1, 2, 2)]  # directly access block of charges (1, 1, 2, 2)
+        
 
         # output dense
         array = a.to_dense()

@@ -1,6 +1,7 @@
 Creating symmetric YAST tensors
 ===============================
 
+
 Initializing symmetric tensors from scratch
 -------------------------------------------
 
@@ -14,6 +15,7 @@ See examples: :ref:`examples/init:create empty tensor and fill it block by block
 .. autoclass:: yast.Tensor
 	:members: __init__
 
+
 Basic creation operations 
 -------------------------
 
@@ -26,6 +28,14 @@ See examples: :ref:`examples/init:create tensors from scratch`.
    :members: rand, randR, randC, zeros, ones, eye
    :show-inheritance:
 
+
+Copying and cloning with autograd
+---------------------------------
+
+.. autoclass:: yast.Tensor
+	:noindex:
+	:members: copy, clone, detach
+	
 
 Importing YAST tensor from different formats
 --------------------------------------------
