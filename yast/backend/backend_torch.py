@@ -517,6 +517,22 @@ def matmul_masks(A, B, meta, ma, mb):
         C[out] = A[in1][:, ma[ii]] @ B[in2][mb[ii], :]
     return C
 
+
+def dot_nomerge(A, B, conj, oA, oB, meta):
+    f = dot_dict[conj]  # proper conjugations
+    C = {}
+    for (ina, inb, out, Da, Db, Dout, _) in meta:
+        C[out] = f(A[ina].permute(*oA).reshape(Da), B[inb].permute(*oB).reshape(Db)).reshape(Dout)
+    return C
+
+
+def dot_nomerge_masks(A, B, conj, oA, oB, meta, ma, mb):
+    f = dot_dict[conj]  # proper conjugations
+    C = {}
+    for (ina, inb, out, Da, Db, Dout, tt) in meta:
+        C[out] = f(A[ina].permute(*oA).reshape(Da)[:, ma[tt]], B[inb].permute(*oB).reshape(Db)[mb[tt], :]).reshape(Dout)
+    return C
+
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
