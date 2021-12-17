@@ -5,13 +5,13 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray, _struct
 from ._tests import YastError, _check, _test_configs_match, _test_fusions_match
 from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_sign_hf
-from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axis, _masks_for_axes
+from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
 
 
-__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'broadcast', 'mask', 'matmul']
+__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'broadcast', 'mask']
 
 
-def tensordot(a, b, axes, conj=(0, 0)):
+def tensordot(a, b, axes, conj=(0, 0), policy=None):
     r"""
     Compute tensor dot product of two tensor along specified axes.
 
@@ -29,7 +29,15 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
     conj: tuple
         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
-        Defult is (0, 0), i.e. no tensor is conjugated
+        Defult is (0, 0), i.e. neither tensor is conjugated
+
+    policy: str
+        method of executing contraction.
+        `merge` is merging blocks into effective 2d matrices before executing matrix multiplication
+        (typically peferable for many small blocks).
+        `direct` is performing multiplication block by block
+        (might be preferable for tensors with fewer legs, or contracting over single axis).
+        `hybrid` switches between those methods based on simple heuristics.
 
     Returns
     -------
@@ -99,7 +107,10 @@ def tensordot(a, b, axes, conj=(0, 0)):
     c_hard_fusion += [b.hard_fusion[ii] for ii in axes_b[1]] if conj[1] == 0 else \
                     [_flip_sign_hf(b.hard_fusion[ii]) for ii in axes_b[1]]
 
-    if len(axes_a[1]) != 1 and a.config.sym.NSYM > 0:
+    if policy is None:
+        policy = a.config.default_tensordot
+
+    if policy == 'merge' or (policy == 'hybrid' and len(axes_a[1]) != 1) or a.config.sym.NSYM == 0:
         ind_a, ind_b = _common_rows(_tarray(a)[:, axes_a[1], :], _tarray(b)[:, axes_b[0], :])
         s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
 
@@ -131,6 +142,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
         else:
             c.A = a.config.backend.dot_nomerge(a.A, b.A, conj, oA, oB, meta)
     return c
+
 
 @lru_cache(maxsize=1024)
 def _meta_tensordot_nomerge(a_struct, b_struct, axes_a, axes_b):
@@ -246,62 +258,6 @@ def _meta_broadcast(config, a_struct, b_struct, conja, axis):
     c_t, c_D = zip(*tD)
     c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
     return meta, c_struct
-
-
-def matmul(a, b, conj=(0, 0)):
-    r"""
-    Experimental.
-
-    Parameters
-    ----------
-    a, b: 2D Tensors
-
-    # axis: int
-    #     leg of non-diagonal tensor to be multiplied by the diagonal one.
-
-    conj: tuple
-        shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
-    """
-
-    axis = a.mlegs - 1
-    if a.meta_fusion[axis] != (1,) or b.meta_fusion[0] != (1,):
-        raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
-    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack
-
-    c_hard_fusion = a.hard_fusion[:-1] + b.hard_fusion[1:]
-    meta, c_struct = _meta_matmul(a.config, a.struct, b.struct)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=c_hard_fusion, struct=c_struct)
-
-    if a.hard_fusion[-1].t != b.hard_fusion[0].t or a.hard_fusion[-1].D != b.hard_fusion[0].D:
-        ma, mb = _masks_for_axis(a.config, a.struct, a.hard_fusion, axis, b.struct, b.hard_fusion, 0)
-        c.A = a.config.backend.matmul_masks(a.A, b.A, meta, ma, mb)
-    else:
-        c.A = a.config.backend.matmul(a.A, b.A, meta)
-    c.update_struct()
-    return c
-
-
-@lru_cache(maxsize=1024)
-def _meta_matmul(config, a_struct, b_struct):
-    """ meta information for backend, and new tensor structure for brodcast """
-    nsym = config.sym.NSYM
-    ita = tuple(t[-nsym:] for t in a_struct.t)
-    itb = {t[:nsym]: t[nsym:] for t in b_struct.t}
-
-    meta = tuple((t, i + itb[i], t[:-nsym] + itb[i], i) for i, t in zip(ita, a_struct.t) if i in itb)
-
-    c_n = np.array(a_struct.n + b_struct.n, dtype=int).reshape((1, 2, nsym))
-    c_n = tuple(config.sym.fuse(c_n, (1, 1), 1)[0])
-
-    c_s = a_struct.s[:-1] + b_struct.s[1:]
-    iDa = {t[-nsym:]: D[:-1] for t, D in zip(a_struct.t, a_struct.D)}
-    iDb = {t[:nsym]: D[1:] for t, D in zip(b_struct.t, b_struct.D)}
-
-    c_t = tuple(mm[2] for mm in meta)
-    c_D = tuple(iDa[mm[3]] + iDb[mm[3]] for mm in meta)
-    c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
-    return meta, c_struct
-
 
 
 def mask(a, b, axis=0):
