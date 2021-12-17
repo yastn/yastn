@@ -27,7 +27,7 @@ def copy(a):
 
 def clone(a):
     r""" 
-    Return a copy of the tensor preserving the autograd (resulting clone is a part 
+    Return a copy of the tensor preserving the autograd (resulting clone is a part
     of the computational graph) 
 
     Returns
@@ -59,9 +59,7 @@ def detach(a, inplace=False):
 
 def to(a, device, dtype=None):
     r"""
-    Move the ``Tensor`` to ``device``. Returns a copy of the tensor on `device``.
-
-    If the tensor already resides on ``device``, return a
+    Move tensor to device.
 
     Parameters
     ----------
