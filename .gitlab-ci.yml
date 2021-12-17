@@ -48,6 +48,7 @@ pylint:
   allow_failure: true
   script:
   - pip install pylint
+  - pip install numpy==1.19.1
   - pylint -d C0301,C0103 ./yast/tensor/
   - pylint -d C0301,C0103 ./yamps/
 

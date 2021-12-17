@@ -1,15 +1,17 @@
 """ Contractions of yast tensors """
 from functools import lru_cache
+from itertools import groupby, product
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray, _struct
 from ._tests import YastError, _check, _test_configs_match, _test_fusions_match
 from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_sign_hf
-from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
+from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
+
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'broadcast', 'mask']
 
 
-def tensordot(a, b, axes, conj=(0, 0)):
+def tensordot(a, b, axes, conj=(0, 0), policy=None):
     r"""
     Compute tensor dot product of two tensor along specified axes.
 
@@ -27,7 +29,15 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
     conj: tuple
         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
-        Defult is (0, 0), i.e. no tensor is conjugated
+        Defult is (0, 0), i.e. neither tensor is conjugated
+
+    policy: str
+        method of executing contraction.
+        `merge` is merging blocks into effective 2d matrices before executing matrix multiplication
+        (typically peferable for many small blocks).
+        `direct` is performing multiplication block by block
+        (might be preferable for tensors with fewer legs, or contracting over single axis).
+        `hybrid` switches between those methods based on simple heuristics.
 
     Returns
     -------
@@ -35,6 +45,8 @@ def tensordot(a, b, axes, conj=(0, 0)):
     """
 
     la_con, lb_con = _clear_axes(*axes)  # contracted meta legs
+    if len(la_con) != len(lb_con):
+        raise YastError('Number of contracted axes of two tensors should be the same.')
 
     if b.isdiag:
         if len(lb_con) == 1:
@@ -67,57 +79,128 @@ def tensordot(a, b, axes, conj=(0, 0)):
     lb_out = tuple(ii for ii in range(b.mlegs) if ii not in lb_con)  # outgoing meta legs
     axes_a = _unpack_axes(a.meta_fusion, la_out, la_con)  # native legs of a; tuple of two tuples
     axes_b = _unpack_axes(b.meta_fusion, lb_con, lb_out)  # native legs of b; tuple of two tuples
+    if len(axes_a[1]) != len(axes_b[0]):
+        raise YastError('Number of contracted native axes of two tensors should be the same.')
 
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
     mconj = - conja * conjb
 
     if _check["signatures_match"] and not all(a.struct.s[i] == mconj * b.struct.s[j] for i, j in zip(axes_a[1], axes_b[0])):
-        raise YastError('Signs do not match in tensordot')
+        raise YastError('Signatures of contracted legs do not match.')
 
-    needs_mask = False
+    needs_mask = False  # for hard-fused legs
     for i1, i2 in zip(axes_a[1], axes_b[0]):
         if a.hard_fusion[i1].tree != b.hard_fusion[i2].tree:
-            raise YastError(f'Order of hard fusions on leg {i1} of a and leg {i2} of b do not match')
+            raise YastError(f'Hard fusions of leg {i1} of a and leg {i2} of b are not compatible: mismatch in the number of fused legs or fusion order.')
         if _check["signatures_match"] and ((mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or
                                             (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms)):
-            raise YastError('Hard fusions do not match. Signature problem.')
+            raise YastError('Hard fusions of leg {i1} of a and leg {i2} of b are not compatible: signatures do not match.')
         if a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
             needs_mask = True
 
-    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
-    c_s = np.array([conja, conjb], dtype=int)
-    c_n = a.config.sym.fuse(c_n, c_s, 1)[0]
-
-    ind_a, ind_b = _common_rows(_tarray(a)[:, axes_a[1], :], _tarray(b)[:, axes_b[0], :])
-    s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
-
-    aa = a.diag() if a.isdiag else a
-    bb = b.diag() if b.isdiag else b
-
-    Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(aa, axes_a, s_eff_a, ind_a, sort_r=True)
-    Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(bb, axes_b, s_eff_b, ind_b)
-
-    meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
-
-    if needs_mask:
-        msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hard_fusion, axes_a[1], ls_ac,
-                                                    b.struct, b.hard_fusion, axes_b[0], ls_bc)
-        Am = {ul + ur: Am[ul + ur][:, msk_a[ur]] for ul, ur in zip(ua_l, ua_r)}
-        Bm = {ul + ur: Bm[ul + ur][msk_b[ul], :] for ul, ur in zip(ub_l, ub_r)}
-    elif _check["consistency"] and (ua_r != ub_l or ls_ac != ls_bc):
-        raise YastError('Mismatch in bond dimensions of contracted legs.')
-
     c_s = tuple(conja * a.struct.s[i1] for i1 in axes_a[0]) + tuple(conjb * b.struct.s[i2] for i2 in axes_b[1])
+    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
+    c_n = tuple(a.config.sym.fuse(c_n, (conja, conjb), 1)[0])
     c_meta_fusion = [a.meta_fusion[ii] for ii in la_out] + [b.meta_fusion[ii] for ii in lb_out]
     c_hard_fusion = [a.hard_fusion[ii] for ii in axes_a[0]] if conj[0] == 0 else \
                     [_flip_sign_hf(a.hard_fusion[ii]) for ii in axes_a[0]]
     c_hard_fusion += [b.hard_fusion[ii] for ii in axes_b[1]] if conj[1] == 0 else \
                     [_flip_sign_hf(b.hard_fusion[ii]) for ii in axes_b[1]]
-    c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
 
-    c.A = c.config.backend.dot(Am, Bm, conj, meta_dot)
-    _unmerge_matrix(c, ls_l, ls_r)
+    if policy is None:
+        policy = a.config.default_tensordot
+
+    if policy == 'merge' or (policy == 'hybrid' and len(axes_a[1]) != 1) or a.config.sym.NSYM == 0:
+        ind_a, ind_b = _common_rows(_tarray(a)[:, axes_a[1], :], _tarray(b)[:, axes_b[0], :])
+        s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
+
+        Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, axes_a, s_eff_a, ind_a, sort_r=True)
+        Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(b, axes_b, s_eff_b, ind_b)
+
+        meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
+
+        if needs_mask:
+            msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hard_fusion, axes_a[1], ls_ac,
+                                                        b.struct, b.hard_fusion, axes_b[0], ls_bc)
+            Am = {ul + ur: Am[ul + ur][:, msk_a[ur]] for ul, ur in zip(ua_l, ua_r)}
+            Bm = {ul + ur: Bm[ul + ur][msk_b[ul], :] for ul, ur in zip(ub_l, ub_r)}
+        elif _check["consistency"] and (ua_r != ub_l or ls_ac != ls_bc):
+            raise YastError('Mismatch in bond dimensions of contracted legs.')
+
+        c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
+        c.A = c.config.backend.dot(Am, Bm, conj, meta_dot)
+        _unmerge_matrix(c, ls_l, ls_r)
+    else:
+        meta, c_t, c_D = _meta_tensordot_nomerge(a.struct, b.struct, axes_a, axes_b)
+        c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
+        c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion, struct=c_struct)
+        oA = tuple(axes_a[0] + axes_a[1])
+        oB = tuple(axes_b[0] + axes_b[1])
+        if needs_mask:
+            ma, mb = _masks_for_axes(a.config, a.struct, a.hard_fusion, axes_a[1], b.struct, b.hard_fusion, axes_b[0], meta)
+            c.A = a.config.backend.dot_nomerge_masks(a.A, b.A, conj, oA, oB, meta, ma, mb)
+        else:
+            c.A = a.config.backend.dot_nomerge(a.A, b.A, conj, oA, oB, meta)
     return c
+
+
+@lru_cache(maxsize=1024)
+def _meta_tensordot_nomerge(a_struct, b_struct, axes_a, axes_b):
+    """ meta information for backend, and new tensor structure for tensordot_nomerge """
+    nsym = len(a_struct.n)
+    a_ndim, b_ndim = len(a_struct.s), len(b_struct.s)
+
+    ta = np.array(a_struct.t, dtype=int).reshape(len(a_struct.t), a_ndim, nsym)
+    tb = np.array(b_struct.t, dtype=int).reshape(len(b_struct.t), b_ndim, nsym)
+    Da = np.array(a_struct.D, dtype=int).reshape(len(a_struct.D), a_ndim)
+    Db = np.array(b_struct.D, dtype=int).reshape(len(b_struct.D), b_ndim)
+
+    ta_con = ta[:, axes_a[1], :]
+    tb_con = tb[:, axes_b[0], :]
+    ta_out = ta[:, axes_a[0], :]
+    tb_out = tb[:, axes_b[1], :]
+
+    Da_con = np.prod(Da[:, axes_a[1]], axis=1)
+    Db_con = np.prod(Db[:, axes_b[0]], axis=1)
+    Da_out = Da[:, axes_a[0]]
+    Db_out = Db[:, axes_b[1]]
+    Da_pro = np.prod(Da_out, axis=1)
+    Db_pro = np.prod(Db_out, axis=1)
+
+    block_a = [(tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), D1, tuple(D2), D3) for t1, t2, t3, D1, D2, D3 in zip(ta_con, ta_out, ta, Da_con, Da_out, Da_pro)]
+    block_a = groupby(sorted(block_a, key=lambda x: x[0]), key=lambda x: x[0])
+
+    block_b = [(tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), D1, tuple(D2), D3) for t1, t2, t3, D1, D2, D3 in zip(tb_con, tb_out, tb, Db_con, Db_out, Db_pro)]
+    block_b = groupby(sorted(block_b, key=lambda x: x[0]), key=lambda x: x[0])
+
+    meta = []
+    try:
+        tta, ga = next(block_a)
+        ttb, gb = next(block_b)
+        while True:
+            if tta == ttb:
+                for ta, tb in product(ga, gb):
+                    meta.append((ta[2], tb[2], ta[1] + tb[1], (ta[5], ta[3]), (tb[3], tb[5]), ta[4] + tb[4], ta[0]))
+                tta, ga = next(block_a)
+                ttb, gb = next(block_b)
+            elif tta < ttb:
+                tta, ga = next(block_a)
+            elif tta > ttb:
+                ttb, gb = next(block_b)
+    except StopIteration:
+        pass
+
+    meta = tuple(sorted(meta, key=lambda x: x[2]))
+    if len(axes_a[1]) == 1:
+        c_t = tuple(mm[2] for mm in meta)
+        c_D = tuple(mm[5] for mm in meta)
+    else:
+        if len(meta) > 0:
+            ctD = tuple((kk, next(mm)[5]) for kk, mm in groupby(meta, key=lambda x: x[2]))
+            c_t, c_D = zip(*ctD)
+        else:
+            c_t, c_D = tuple(), tuple()
+    return meta, c_t, c_D
 
 
 def broadcast(a, b, axis, conj=(0, 0)):

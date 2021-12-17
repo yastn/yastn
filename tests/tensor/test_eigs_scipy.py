@@ -28,7 +28,7 @@ def test_eigs_simple():
     vv = yast.randR(config=a.config, legs=[(a, 2, 'flip_s'), (a, 2), {'s':1, -1:1, 0:1, 1:1}])
     r1d, meta = yast.compress_to_1d(vv)
 
-    def f(x):  # change all that into a wraper aorund ncon part?
+    def f(x):  # change all that into a wraper around ncon part?
         t = yast.decompress_from_1d(x, config_U1, meta)
         t2 = yast.ncon([a, a, t], [(-1, 1, 2), (-2, 1, 3), (2, 3, -3)], conjs=(0, 1, 0))
         t3, _ = yast.compress_to_1d(t2, meta=meta)
@@ -57,7 +57,7 @@ def test_eigs_exception():
                   t=[(-2, -1, 0, 1), (0, 1), (-1, 0, 1, 2)],
                   D=[(1, 2, 3, 4), (2, 3), (2, 3, 4, 5)])
 
-    # dense transfer matrix build from a -- here a has some un-matching blocks
+    # dense transfer matrix build from a -- here a has some un-matching blocks between first and last legs
     tm = yast.ncon([a, a], [(-1, 1, -3), (-2, 1, -4)], conjs=(0, 1))
     tm.fuse_legs(axes=((0, 1), (2, 3)), inplace=True)
     # make sure to fill-in zero blocks
