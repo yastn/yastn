@@ -33,6 +33,25 @@ default:
 stages:
   - Static Analysis
   - Test
+  - deploy
+
+pages:
+  stage: deploy
+  script:
+    - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh && bash Miniconda3-latest-Linux-x86_64.sh -b -p _miniconda
+    - export PATH="$PWD/_miniconda/bin:$PATH"
+    - conda config --set always_yes yes --set changeps1 no
+    - conda install python=3.9
+    - conda update -q conda
+    - conda install sphinx  
+    - conda install -c conda-forge sphinx_rtd_theme
+    - cd docs
+    - make html
+    - cp build/html/* public/
+  artifacts:
+    paths:
+      - public
+
 
 flake8:
   image: python:3.8
