@@ -239,7 +239,7 @@ def trace(A, order, meta):
         Repeating tnew are added."""
     Aout = {}
     for (tnew, told, Drsh) in meta:
-        Atemp = torch.reshape(A[told].permute(*order), Drsh)
+        Atemp = torch.reshape(A[told].permute(order), Drsh)
         Atemp = torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=-1)
         if tnew in Aout:
             Aout[tnew] += Atemp
@@ -253,7 +253,7 @@ def trace_with_mask(A, order, meta, msk12):
         Repeating tnew are added."""
     Aout = {}
     for (tnew, told, Drsh, tt) in meta:
-        Atemp = torch.reshape(A[told].permute(*order), Drsh)
+        Atemp = torch.reshape(A[told].permute(order), Drsh)
         Atemp = torch.sum(Atemp[msk12[tt][0], msk12[tt][1]], axis=0)
         if tnew in Aout:
             Aout[tnew] += Atemp
@@ -266,8 +266,8 @@ def transpose(A, axes, meta_transpose, inplace):
     """ Transpose; Force a copy if not inplace. """
     # check this inplace ...
     if inplace:
-        return {new: A[old].permute(*axes) for old, new in meta_transpose}
-    return {new: A[old].permute(*axes).clone().contiguous() for old, new in meta_transpose}
+        return {new: A[old].permute(axes) for old, new in meta_transpose}
+    return {new: A[old].permute(axes).clone().contiguous() for old, new in meta_transpose}
 
 
 def rsqrt(A, cutoff=0):
@@ -522,7 +522,11 @@ def dot_nomerge(A, B, conj, oA, oB, meta):
     f = dot_dict[conj]  # proper conjugations
     C = {}
     for (ina, inb, out, Da, Db, Dout, _) in meta:
-        C[out] = f(A[ina].permute(*oA).reshape(Da), B[inb].permute(*oB).reshape(Db)).reshape(Dout)
+        temp = f(A[ina].permute(oA).reshape(Da), B[inb].permute(oB).reshape(Db)).reshape(Dout)
+        try:
+            C[out] += temp
+        except KeyError:
+            C[out] = temp
     return C
 
 
@@ -530,7 +534,11 @@ def dot_nomerge_masks(A, B, conj, oA, oB, meta, ma, mb):
     f = dot_dict[conj]  # proper conjugations
     C = {}
     for (ina, inb, out, Da, Db, Dout, tt) in meta:
-        C[out] = f(A[ina].permute(*oA).reshape(Da)[:, ma[tt]], B[inb].permute(*oB).reshape(Db)[mb[tt], :]).reshape(Dout)
+        temp = f(A[ina].permute(oA).reshape(Da)[:, ma[tt]], B[inb].permute(oB).reshape(Db)[mb[tt], :]).reshape(Dout)
+        try:
+            C[out] += temp
+        except KeyError:
+            C[out] = temp
     return C
 
 #####################################################
