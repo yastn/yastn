@@ -37,7 +37,7 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
         (typically peferable for many small blocks).
         `direct` is performing multiplication block by block
         (might be preferable for tensors with fewer legs, or contracting over single axis).
-        `hybrid` switches between those methods based on simple heuristics.
+        `hybrid` (default) switches between those methods using simple heuristic.
 
     Returns
     -------
