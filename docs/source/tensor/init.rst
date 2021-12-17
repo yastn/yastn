@@ -1,6 +1,13 @@
 Creating symmetric YAST tensors
 ===============================
 
+YAST configuration
+------------------
+
+TODO
+
+Backend, symmetry, ...
+
 
 Initializing symmetric tensors from scratch
 -------------------------------------------
@@ -16,7 +23,7 @@ See examples: :ref:`examples/init:create empty tensor and fill it block by block
 	:members: __init__
 
 
-Basic creation operations 
+Basic creation operations
 -------------------------
 
 Basic creation operations such as random tensors,
@@ -35,7 +42,21 @@ Copying and cloning with autograd
 .. autoclass:: yast.Tensor
 	:noindex:
 	:members: copy, clone, detach
-	
+
+
+Moving tensors between devices
+------------------------------
+
+Support for different compute devices, i.e. `CPU`, `GPU`, or others,
+depends on the selected backend. For example 
+    
+    * `NumPy` backend supports only `CPU`
+    * `PyTorch` backend supports also `GPU` (and other devices)
+
+Tensors can be moved between devices
+
+.. automethod:: yast.Tensor.to
+
 
 Importing YAST tensor from different formats
 --------------------------------------------

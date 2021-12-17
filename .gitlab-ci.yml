@@ -30,24 +30,29 @@ default:
     #- chmod 600 ~/.ssh/config
     - ssh-keyscan -t rsa github.com 2>&1 >> ~/.ssh/known_hosts
 
+.default_rules:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "docs"
+      when: never
+
 stages:
   - Static Analysis
   - Test
   - deploy
 
 pages:
+  image: python:3.8
   stage: deploy
   script:
     - wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh && bash Miniconda3-latest-Linux-x86_64.sh -b -p _miniconda
     - export PATH="$PWD/_miniconda/bin:$PATH"
     - conda config --set always_yes yes --set changeps1 no
-    - conda install python=3.9
     - conda update -q conda
-    - conda install sphinx  
+    - conda install numpy sphinx  
     - conda install -c conda-forge sphinx_rtd_theme
-    - cd docs
+    - mkdir public && cd docs
     - make html
-    - cp build/html/* public/
+    - cp -r build/html/* ../public/
   artifacts:
     paths:
       - public
@@ -89,6 +94,8 @@ test_python3.7_conda_numpy1.19.1:
   - cd tests/;
   - pytest -v ./tensor;
   - pytest -v ./mps;
+  rules:
+    - !reference [.default_rules, rules]
 
 test_python3.7_pip_numpy1.19.1: 
   image: python:3.7
@@ -106,6 +113,8 @@ test_python3.7_pip_numpy1.19.1:
   - cd tests/;
   - pytest -v ./tensor;
   - pytest -v ./mps;
+  rules:
+    - !reference [.default_rules, rules]
 
 test_python3.8_numpy1.19.1: 
   image: python:3.8
@@ -123,6 +132,8 @@ test_python3.8_numpy1.19.1:
   - cd tests/;
   - pytest -v ./tensor;
   - pytest -v ./mps;
+  rules:
+    - !reference [.default_rules, rules]
 
 test_python3.8_numpy1.19.+: 
   image: python:3.8
@@ -140,6 +151,8 @@ test_python3.8_numpy1.19.+:
   - cd tests/;
   - pytest -v ./tensor;
   - pytest -v ./mps;
+  rules:
+    - !reference [.default_rules, rules]
 
 test_python3.7_torch1.8:
   stage: Test
@@ -157,6 +170,8 @@ test_python3.7_torch1.8:
   - cd tests/;
   - pytest --backend torch -v ./tensor;
   - pytest --backend torch -v ./mps;
+  rules:
+    - !reference [.default_rules, rules]
 
 test_python3.8_torch1.8:
   stage: Test
@@ -174,3 +189,5 @@ test_python3.8_torch1.8:
   - cd tests/;
   - pytest --backend torch -v ./tensor;
   - pytest --backend torch -v ./mps;
+  rules:
+    - !reference [.default_rules, rules]
