@@ -94,11 +94,16 @@ def _merge_masks(config, ls, ms):
     nsym = config.sym.NSYM
     for te, dec in ls.dec.items():
         for t, Dr in dec.items():
-            x = ms[0][t[:config.sym.NSYM]]
-            for i in range(1, len(ms)):
-                x = np.outer(x, ms[i][t[i * nsym: (i + 1) * nsym]]).ravel()
-            msk[te][slice(*Dr.Dslc)] = x
+            msk[te][slice(*Dr.Dslc)] = _outer_masks(t, ms, nsym)
     return msk
+
+
+def _outer_masks(t, ms, nsym):
+    """ Outer product of masks for different axes, mask of reshaped block. """
+    x = ms[0][t[:nsym]]
+    for i in range(1, len(ms)):
+        x = np.outer(x, ms[i][t[i * nsym: (i + 1) * nsym]]).ravel()
+    return x
 
 
 def _get_tD_legs(struct):
@@ -269,6 +274,21 @@ def _masks_for_axis(config, structa, hfa, axa, structb, hfb, axb):
     mbm = {t:  config.backend.to_mask(x) for t, x in mb.items()}
     return mam, mbm
 
+
+def _masks_for_axes(config, structa, hfa, axa, structb, hfb, axb, meta):
+    """ masks to get the intersecting parts of single legs from two tensors. """
+    msk_a, msk_b = [], []
+    tla, Dla, _, _, _ = _get_tD_legs(structa)
+    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
+    for i1, i2 in zip(axa, axb):
+        ma, mb = _intersect_hfs(config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (hfa[i1], hfb[i2]))
+        msk_a.append(ma)
+        msk_b.append(mb)
+    nsym = config.sym.NSYM
+    tab = {mm[-1] for mm in meta}
+    mam = {t: config.backend.to_mask(_outer_masks(t, msk_a, nsym)) for t in tab}
+    mbm = {t: config.backend.to_mask(_outer_masks(t, msk_b, nsym)) for t in tab}
+    return mam, mbm
 
 def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
     """ masks to get the intersecting parts of legs from two tensors as single masks """

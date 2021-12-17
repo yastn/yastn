@@ -5,7 +5,7 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray, _struct
 from ._tests import YastError, _check, _test_configs_match, _test_fusions_match
 from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_sign_hf
-from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axis
+from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axis, _masks_for_axes
 
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'broadcast', 'mask', 'matmul']
@@ -72,21 +72,21 @@ def tensordot(a, b, axes, conj=(0, 0)):
     axes_a = _unpack_axes(a.meta_fusion, la_out, la_con)  # native legs of a; tuple of two tuples
     axes_b = _unpack_axes(b.meta_fusion, lb_con, lb_out)  # native legs of b; tuple of two tuples
     if len(axes_a[1]) != len(axes_b[0]):
-        raise YastError('Number of contracted nativeaxes of two tensors should be the same')
+        raise YastError('Number of contracted native axes of two tensors should be the same.')
 
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
     mconj = - conja * conjb
 
     if _check["signatures_match"] and not all(a.struct.s[i] == mconj * b.struct.s[j] for i, j in zip(axes_a[1], axes_b[0])):
-        raise YastError('Signs do not match in tensordot')
+        raise YastError('Signatures of contracted legs do not match.')
 
-    needs_mask = False
+    needs_mask = False  # for hard-fused legs
     for i1, i2 in zip(axes_a[1], axes_b[0]):
         if a.hard_fusion[i1].tree != b.hard_fusion[i2].tree:
-            raise YastError(f'Hard fusions on leg {i1} of a and leg {i2} of b are not compatible: mismatch in the number of fused legs or fusion order.')
+            raise YastError(f'Hard fusions of leg {i1} of a and leg {i2} of b are not compatible: mismatch in the number of fused legs or fusion order.')
         if _check["signatures_match"] and ((mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or
                                             (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms)):
-            raise YastError('Hard fusions on leg {i1} of a and leg {i2} of b are not compatible for tensordot: signatures do not match.')
+            raise YastError('Hard fusions of leg {i1} of a and leg {i2} of b are not compatible: signatures do not match.')
         if a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
             needs_mask = True
 
@@ -99,7 +99,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
     c_hard_fusion += [b.hard_fusion[ii] for ii in axes_b[1]] if conj[1] == 0 else \
                     [_flip_sign_hf(b.hard_fusion[ii]) for ii in axes_b[1]]
 
-    if len(axes_a[1]) != 1: # and a.config.sym.NSYM > 0:
+    if len(axes_a[1]) != 1 and a.config.sym.NSYM > 0:
         ind_a, ind_b = _common_rows(_tarray(a)[:, axes_a[1], :], _tarray(b)[:, axes_b[0], :])
         s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
 
@@ -120,22 +120,21 @@ def tensordot(a, b, axes, conj=(0, 0)):
         c.A = c.config.backend.dot(Am, Bm, conj, meta_dot)
         _unmerge_matrix(c, ls_l, ls_r)
     else:
-        meta, c_t, c_D = _meta_tensordot_nomerge(a.struct, b.struct, axes_a[1][0], axes_b[0][0])
+        meta, c_t, c_D = _meta_tensordot_nomerge(a.struct, b.struct, axes_a, axes_b)
         c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
         c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion, struct=c_struct)
         oA = tuple(axes_a[0] + axes_a[1])
         oB = tuple(axes_b[0] + axes_b[1])
         if needs_mask:
-            ma, mb = _masks_for_axis(a.config, a.struct, a.hard_fusion, axes_a[1][0], b.struct, b.hard_fusion, axes_b[0][0])
+            ma, mb = _masks_for_axes(a.config, a.struct, a.hard_fusion, axes_a[1], b.struct, b.hard_fusion, axes_b[0], meta)
             c.A = a.config.backend.dot_nomerge_masks(a.A, b.A, conj, oA, oB, meta, ma, mb)
         else:
             c.A = a.config.backend.dot_nomerge(a.A, b.A, conj, oA, oB, meta)
     return c
 
 @lru_cache(maxsize=1024)
-def _meta_tensordot_nomerge(a_struct, b_struct, axis_a, axis_b):
+def _meta_tensordot_nomerge(a_struct, b_struct, axes_a, axes_b):
     """ meta information for backend, and new tensor structure for tensordot_nomerge """
-
     nsym = len(a_struct.n)
     a_ndim, b_ndim = len(a_struct.s), len(b_struct.s)
 
@@ -144,20 +143,15 @@ def _meta_tensordot_nomerge(a_struct, b_struct, axis_a, axis_b):
     Da = np.array(a_struct.D, dtype=int).reshape(len(a_struct.D), a_ndim)
     Db = np.array(b_struct.D, dtype=int).reshape(len(b_struct.D), b_ndim)
 
-    out_a = list(range(a_ndim))
-    out_a.pop(axis_a)
-    out_b = list(range(b_ndim))
-    out_b.pop(axis_b)
+    ta_con = ta[:, axes_a[1], :]
+    tb_con = tb[:, axes_b[0], :]
+    ta_out = ta[:, axes_a[0], :]
+    tb_out = tb[:, axes_b[1], :]
 
-    ta_con = ta[:, axis_a, :]
-    tb_con = tb[:, axis_b, :]
-    ta_out = ta[:, out_a, :]
-    tb_out = tb[:, out_b, :]
-
-    Da_con = Da[:, axis_a]
-    Db_con = Db[:, axis_b]
-    Da_out = Da[:, out_a]
-    Db_out = Db[:, out_b]
+    Da_con = np.prod(Da[:, axes_a[1]], axis=1)
+    Db_con = np.prod(Db[:, axes_b[0]], axis=1)
+    Da_out = Da[:, axes_a[0]]
+    Db_out = Db[:, axes_b[1]]
     Da_pro = np.prod(Da_out, axis=1)
     Db_pro = np.prod(Db_out, axis=1)
 
@@ -185,8 +179,15 @@ def _meta_tensordot_nomerge(a_struct, b_struct, axis_a, axis_b):
         pass
 
     meta = tuple(sorted(meta, key=lambda x: x[2]))
-    c_t = tuple(mm[2] for mm in meta)
-    c_D = tuple(mm[5] for mm in meta)
+    if len(axes_a[1]) == 1:
+        c_t = tuple(mm[2] for mm in meta)
+        c_D = tuple(mm[5] for mm in meta)
+    else:
+        if len(meta) > 0:
+            ctD = tuple((kk, next(mm)[5]) for kk, mm in groupby(meta, key=lambda x: x[2]))
+            c_t, c_D = zip(*ctD)
+        else:
+            c_t, c_D = tuple(), tuple()
     return meta, c_t, c_D
 
 
@@ -597,115 +598,3 @@ def ncon(ts, inds, conjs=None):
     for num in it:
         result.A[()] = result.A[()] * num.A[()]
     return result
-
-
-# t_a_con = self.tset[:, na_con, :]
-#             t_b_con = other.tset[:, nb_con, :]
-#             t_a_out = self.tset[:, na_out, :]
-#             t_b_out = other.tset[:, nb_out, :]
-
-#             block_a = sorted([(tuple(x.flat), tuple(y.flat), tuple(z.flat)) for x, y, z in zip(t_a_con, t_a_out, self.tset)], key=lambda x: x[0])
-#             block_b = sorted([(tuple(x.flat), tuple(y.flat), tuple(z.flat)) for x, y, z in zip(t_b_con, t_b_out, other.tset)], key=lambda x: x[0])
-
-#             block_a = itertools.groupby(block_a, key=lambda x: x[0])
-#             block_b = itertools.groupby(block_b, key=lambda x: x[0])
-
-#             to_execute = []
-#             try:
-#                 tta, ga = next(block_a)
-#                 ttb, gb = next(block_b)
-#                 while True:
-#                     if tta == ttb:
-#                         for ta, tb in itertools.product(ga, gb):
-#                             to_execute.append((ta[2], tb[2], ta[1] + tb[1]))
-#                         tta, ga = next(block_a)
-#                         ttb, gb = next(block_b)
-#                     elif tta < ttb:
-#                         tta, ga = next(block_a)
-#                     elif tta > ttb:
-#                         ttb, gb = next(block_b)
-#             except StopIteration:
-#                 pass
-
-#             c_s = np.hstack([conja * self.s[na_out], conjb * other.s[nb_out]])
-#             c = Tensor(settings=self.conf, s=c_s, n=c_n)
-#             c.A = self.conf.back.dot(self.A, other.A, conj, to_execute, a_out, a_con, b_con, b_out, self.conf.dtype)
-#             c.tset = np.array([ind for ind in c.A], dtype=np.int).reshape(len(c.A), c._ndim, c.nsym)
-#             return c
-
-
-
-# def dot(A, B, conj, to_execute, a_out, a_con, b_con, b_out, dtype='float64'):
-#     a_all = a_out + a_con  # order for transpose in A
-#     b_all = b_con + b_out  # order for transpose in B
-#     f = dot_dict[conj]  # proper conjugations
-#     if len(to_execute) == 1:
-#         in1, in2, out = to_execute[0]
-#         AA, BB = A[in1], B[in2]
-#         Dl = tuple(AA.shape[ii] for ii in a_out)
-#         Dc = tuple(AA.shape[ii] for ii in a_con)
-#         Dr = tuple(BB.shape[ii] for ii in b_out)
-#         pDl = reduce(mul, Dl, 1)
-#         pDc = reduce(mul, Dc, 1)
-#         pDr = reduce(mul, Dr, 1)
-#         C = {out: f(AA.transpose(a_all).reshape(pDl, pDc), BB.transpose(b_all).reshape(pDc, pDr)).reshape(Dl + Dr)}
-#     else:
-#         Andim = len(a_con) + len(a_out)
-#         Bndim = len(b_con) + len(b_out)
-#         DA = np.array([A[ind].shape for ind in A], dtype=np.int).reshape(len(A), Andim)  # bond dimensions of A
-#         DB = np.array([B[ind].shape for ind in B], dtype=np.int).reshape(len(B), Bndim)  # bond dimensions of B
-#         Dl = DA[:, np.array(a_out, dtype=np.int)]  # bond dimension on left legs
-#         Dlc = DA[:, np.array(a_con, dtype=np.int)]  # bond dimension on contracted legs
-#         Dcr = DB[:, np.array(b_con, dtype=np.int)]  # bond dimension on contracted legs
-#         Dr = DB[:, np.array(b_out, dtype=np.int)]  # bond dimension on right legs
-#         pDl = np.multiply.reduce(Dl, axis=1, dtype=np.int)  # their product
-#         pDlc = np.multiply.reduce(Dlc, axis=1, dtype=np.int)
-#         pDcr = np.multiply.reduce(Dcr, axis=1, dtype=np.int)
-#         pDr = np.multiply.reduce(Dr, axis=1, dtype=np.int)
-
-#         Atemp = {in1: A[in1].transpose(a_all).reshape(d1, d2) for in1, d1, d2 in zip(A, pDl, pDlc)}
-#         Btemp = {in2: B[in2].transpose(b_all).reshape(d1, d2) for in2, d1, d2 in zip(B, pDcr, pDr)}
-
-#         Dl = {in1: tuple(dl) for in1, dl in zip(A, Dl)}
-#         Dr = {in2: tuple(dr) for in2, dr in zip(B, Dr)}
-#         C = {}
-
-#         # DC = {}
-#         # for in1, in2, out in to_execute:   # can use if in place of try;exept
-#         #     temp = f(Atemp[in1], Btemp[in2])
-#         #     try:
-#         #         C[out] += temp
-#         #     except KeyError:
-#         #         C[out] = temp
-#         #         DC[out] = Dl[in1] + Dr[in2]
-#         # for out in C:
-#         #     C[out] = C[out].reshape(DC[out])
-
-#         # to_execute = groupby(sorted(to_execute, key=lambda x: x[2]), key=lambda x: x[2])
-#         # for out, execute in to_execute:
-#         #     execute = list(execute)
-#         #     le = len(execute)
-#         #     in1, in2, _ = execute[-1]
-#         #     dl = Dl[in1]
-#         #     dr = Dr[in2]
-#         #     if le > 1:
-#         #         pdl = Atemp[in1].shape[0]
-#         #         pdr = Btemp[in2].shape[1]
-#         #         temp = np.empty((le, pdl, pdr), dtype=_select_dtype[dtype])
-#         #         for ii in range(le):
-#         #             in1, in2, _ = execute[ii]
-#         #             np.matmul(Atemp[in1], Btemp[in2], out=temp[ii])
-#         #         C[out] = np.sum(temp, axis=0).reshape(dl + dr)
-#         #     else:
-#         #         C[out] = np.matmul(Atemp[in1], Btemp[in2]).reshape(dl + dr)
-
-#         to_execute = sorted(to_execute, key=lambda x: x[2])
-#         multiplied = [f(Atemp[in1], Btemp[in2]) for in1, in2, _ in to_execute[::-1]]
-#         to_execute = groupby(to_execute, key=lambda x: x[2])
-#         for out, execute in to_execute:
-#             C[out] = multiplied.pop()
-#             in1, in2, _ = next(execute)
-#             for _ in execute:
-#                 C[out] += multiplied.pop()
-#             C[out] = C[out].reshape(Dl[in1] + Dr[in2])
-#     return C

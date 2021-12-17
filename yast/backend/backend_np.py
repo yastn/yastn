@@ -515,7 +515,11 @@ def dot_nomerge(A, B, conj, oA, oB, meta):
     f = dot_dict[conj]  # proper conjugations
     C = {}
     for (ina, inb, out, Da, Db, Dout, _) in meta:
-        C[out] = f(A[ina].transpose(oA).reshape(Da), B[inb].transpose(oB).reshape(Db)).reshape(Dout)
+        temp = f(A[ina].transpose(oA).reshape(Da), B[inb].transpose(oB).reshape(Db)).reshape(Dout)
+        try:
+            C[out] += temp
+        except KeyError:
+            C[out] = temp
     return C
 
 
@@ -523,7 +527,11 @@ def dot_nomerge_masks(A, B, conj, oA, oB, meta, ma, mb):
     f = dot_dict[conj]  # proper conjugations
     C = {}
     for (ina, inb, out, Da, Db, Dout, tt) in meta:
-        C[out] = f(A[ina].transpose(oA).reshape(Da)[:, ma[tt]], B[inb].transpose(oB).reshape(Db)[mb[tt], :]).reshape(Dout)
+        temp = f(A[ina].transpose(oA).reshape(Da)[:, ma[tt]], B[inb].transpose(oB).reshape(Db)[mb[tt], :]).reshape(Dout)
+        try:
+            C[out] += temp
+        except KeyError:
+            C[out] = temp
     return C
 #####################################################
 #     block merging, truncations and un-merging     #
