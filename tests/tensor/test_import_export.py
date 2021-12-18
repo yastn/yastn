@@ -13,6 +13,7 @@ tol = 1e-12
 
 def check_import_export(a):
     """ Test if two Tensor-s have the same values. """
+    os.remove("tmp.h5")
     with h5py.File('tmp.h5', 'a') as f:
         a.export_to_hdf5(f, './')
     with h5py.File('tmp.h5', 'r') as f:
