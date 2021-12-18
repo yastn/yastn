@@ -2,7 +2,7 @@ r"""
 Yet another symmetric tensor
 
 This class defines generic arbitrary-rank tensor supporting abelian symmetries.
-In principle, any number of symmetries can be used, including no symmetries.
+In principle, any number of symmetries can be used, including dense tensor with no symmetries.
 
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
@@ -115,7 +115,7 @@ class Tensor:
     from ._auxliary import update_struct
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
 
-    abs = absolute  # allow yest.abs(tensor)
+    abs = absolute  # allow yast.abs(tensor)
 
     @property
     def s(self):
