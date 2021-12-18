@@ -75,8 +75,8 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
         return c
 
     _test_configs_match(a, b)
-    la_out = tuple(ii for ii in range(a.mlegs) if ii not in la_con)  # outgoing meta legs
-    lb_out = tuple(ii for ii in range(b.mlegs) if ii not in lb_con)  # outgoing meta legs
+    la_out = tuple(ii for ii in range(a.ndim) if ii not in la_con)  # outgoing meta legs
+    lb_out = tuple(ii for ii in range(b.ndim) if ii not in lb_con)  # outgoing meta legs
     axes_a = _unpack_axes(a.meta_fusion, la_out, la_con)  # native legs of a; tuple of two tuples
     axes_b = _unpack_axes(b.meta_fusion, lb_con, lb_out)  # native legs of b; tuple of two tuples
     if len(axes_a[1]) != len(axes_b[0]):
@@ -227,7 +227,7 @@ def broadcast(a, b, axis, conj=(0, 0)):
     if not isinstance(axis, int):
         raise YastError('axis should be int')
 
-    axis = axis % a.mlegs
+    axis = axis % a.ndim
     if a.meta_fusion[axis] != (1,):
         raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
     axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack
@@ -239,7 +239,7 @@ def broadcast(a, b, axis, conj=(0, 0)):
     meta, c_struct = _meta_broadcast(a.config, a.struct, b.struct, conja, axis)
 
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=c_hard_fusion, struct=c_struct)
-    a_ndim, axis = (1, 0) if a.isdiag else (a.nlegs, axis)
+    a_ndim, axis = (1, 0) if a.isdiag else (a.ndimn, axis)
     c.A = a.config.backend.dot_diag(a.A, b.A, conj, meta, axis, a_ndim)
     return c
 
@@ -249,7 +249,7 @@ def _meta_broadcast(config, a_struct, b_struct, conja, axis):
     """ meta information for backend, and new tensor structure for brodcast """
     nsym = config.sym.NSYM
     ind_tb = tuple(x[:nsym] for x in b_struct.t)
-    ind_ta = tuple(x[axis * nsym : (axis + 1) * nsym] for x in a_struct.t)
+    ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a_struct.t)
     meta = tuple((ta, ia + ia, ta) for ta, ia in zip(a_struct.t, ind_ta) if ia in ind_tb)
     c_n = np.array(a_struct.n, dtype=int).reshape((1, 1, -1))
     c_n = tuple(config.sym.fuse(c_n, (1,), conja)[0])
@@ -282,7 +282,7 @@ def mask(a, b, axis=0):
         raise YastError('axis should be int')
     _test_configs_match(a, b)
 
-    axis = axis % a.mlegs
+    axis = axis % a.ndim
     if a.meta_fusion[axis] != (1,):
         raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
     axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack
@@ -290,10 +290,10 @@ def mask(a, b, axis=0):
         raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
     nsym = b.config.sym.NSYM
     ind_tb = tuple(x[:nsym] for x in b.struct.t if b.config.backend.any_nonzero(b.A[x]))
-    ind_ta = tuple(x[axis * nsym : (axis + 1) * nsym] for x in a.struct.t)
+    ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a.struct.t)
     meta = tuple((ta, ia + ia, ta) for ta, ia in zip(a.struct.t, ind_ta) if ia in ind_tb)
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    a_ndim, axis = (1, 0) if a.isdiag else (a.nlegs, axis)
+    a_ndim, axis = (1, 0) if a.isdiag else (a.ndimn, axis)
     c.A = a.config.backend.mask_diag(a.A, b.A, meta, axis, a_ndim)
     c.update_struct()
     return c
@@ -355,7 +355,7 @@ def trace(a, axes=(0, 1)):
         tensor: Tensor
     """
     lin1, lin2 = _clear_axes(*axes)  # contracted legs
-    lout = tuple(ii for ii in range(a.mlegs) if ii not in lin1 + lin2)
+    lout = tuple(ii for ii in range(a.ndim) if ii not in lin1 + lin2)
     in1, in2, out = _unpack_axes(a.meta_fusion, lin1, lin2, lout)
 
     if len(in1) != len(in2) or len(lin1) != len(lin2):
@@ -372,8 +372,8 @@ def trace(a, axes=(0, 1)):
                     for i1, i2 in zip(in1, in2))
 
     c_s = tuple(a.struct.s[i3] for i3 in out)
-    c_meta_fusion=tuple(a.meta_fusion[ii] for ii in lout)
-    c_hard_fusion=tuple(a.hard_fusion[ii] for ii in out)
+    c_meta_fusion = tuple(a.meta_fusion[ii] for ii in lout)
+    c_hard_fusion = tuple(a.hard_fusion[ii] for ii in out)
 
     c = a.__class__(config=a.config, s=c_s, n=a.struct.n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
 
@@ -432,7 +432,7 @@ def swap_gate(a, axes, inplace=False):
         return a
     fss = (True,) * len(a.struct.n) if a.config.fermionic is True else a.config.fermionic
     axes = tuple(_clear_axes(*axes))  # swapped groups of legs
-    tp = _meta_swap_gate(a.struct.t, a.struct.n, a.meta_fusion, a.nlegs, axes, fss)
+    tp = _meta_swap_gate(a.struct.t, a.struct.n, a.meta_fusion, a.ndimn, axes, fss)
     if inplace:
         for ts, odd in zip(a.struct.t, tp):
             if odd:
@@ -444,7 +444,7 @@ def swap_gate(a, axes, inplace=False):
 
 
 @lru_cache(maxsize=1024)
-def _meta_swap_gate(t, n, mf, nlegs, axes, fss):
+def _meta_swap_gate(t, n, mf, ndim, axes, fss):
     ind_n = [i for i, x in enumerate(axes) if x == (-1,)]
     if len(ind_n) == 0:
         axes = _unpack_axes(mf, *axes)
@@ -457,7 +457,7 @@ def _meta_swap_gate(t, n, mf, nlegs, axes, fss):
             axes.insert(ind, (-1,))
         axes = tuple(axes)
 
-    tset = np.array(t, dtype=int).reshape((len(t), nlegs, len(n)))
+    tset = np.array(t, dtype=int).reshape((len(t), ndim, len(n)))
     iaxes = iter(axes)
     tp = np.zeros(len(t), dtype=int)
 
@@ -486,7 +486,7 @@ def ncon(ts, inds, conjs=None):
     if len(ts) != len(inds):
         raise YastError('Wrong number of tensors')
     for ii, ind in enumerate(inds):
-        if ts[ii].get_ndim() != len(ind):
+        if ts[ii].ndim != len(ind):
             raise YastError(f'Wrong number of legs in {ii}-th input tensor.')
 
     ts = dict(enumerate(ts))

@@ -65,8 +65,7 @@ def test_syntax():
 
     # get info
     a.show_properties()
-    a.get_ndim()
-    a.get_size()
+    a.size
     a.get_tensor_charge()
     a.get_signature()
     a.get_leg_fusion()

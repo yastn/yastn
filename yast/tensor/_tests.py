@@ -50,7 +50,7 @@ def _test_fusions_match(a, b):
 def _test_all_axes(a, axes, native=False):
     if _check["consistency"]:
         axes = tuple(_flatten(axes))
-        ndim = a.nlegs if native else a.mlegs
+        ndim = a.ndimn if native else a.ndim
         if ndim != len(axes):
             raise YastError('Wrong number of axis indices in axes')
         if sorted(set(axes)) != list(range(ndim)):
@@ -99,7 +99,7 @@ def is_consistent(a):
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)
     assert np.all(a.config.sym.fuse(tset, sa, 1) == na), 'charges of some block do not satisfy symmetry condition'
-    for n in range(a.nlegs):
+    for n in range(a.ndimn):
         a.get_leg_structure(n, native=True)
     device = {a.config.backend.get_device(x) for x in a.A.values()}
     for s, hf in zip(a.struct.s, a.hard_fusion):
@@ -107,5 +107,5 @@ def is_consistent(a):
         assert s == -hf.ms[0]
     assert len(device) <= 1, 'not all blocks reside on the same device'
     if len(device) == 1:
-        assert  device.pop().startswith(a.config.device), 'device of blocks inconsistent with config.device'
+        assert device.pop().startswith(a.config.device), 'device of blocks inconsistent with config.device'
     return True

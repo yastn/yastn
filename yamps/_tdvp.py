@@ -51,10 +51,10 @@ def tdvp(psi, H, dt=0.1, env=None, version='1site', order='2nd', opts_expmv=None
     """
     if version == '1site' and order == '2nd':
         env = tdvp_sweep_1site(psi, H, dt, env, opts_expmv)
-    elif version == '2site'and order == '2nd':
+    elif version == '2site' and order == '2nd':
         env = tdvp_sweep_2site(psi, H, dt, env, opts_expmv, opts_svd)
     # elif version == 'mix'and order == '2nd':
-        #env = tdvp_sweep_mix(psi, H, dt, env, opts_expmv, opts_svd)
+    #     env = tdvp_sweep_mix(psi, H, dt, env, opts_expmv, opts_svd)
     # elif version == '1site' and order = '4th':
     else:
         raise YampsError('tdvp version %s or order %s not recognized' % version, order)

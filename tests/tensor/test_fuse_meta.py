@@ -144,11 +144,11 @@ def test_get_shapes():
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 
     a.fuse_legs(axes=[(0, 1)], inplace=True)
-    assert a.get_shape() == (a.get_size(), )
+    assert a.get_shape() == (a.size, )
     assert a.get_signature() == (-1,)
-    assert a.to_numpy().shape == (a.get_size(),)
+    assert a.to_numpy().shape == (a.size,)
     b = a.to_nonsymmetric()
-    assert b.get_shape() == (a.get_size(),)
+    assert b.get_shape() == (a.size,)
     b = a.to_nonsymmetric(native=True)
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 

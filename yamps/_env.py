@@ -56,11 +56,9 @@ class _EnvParent:
                                             legs=[self.ket.right[0], self.ort[ii].right[0]],
                                             conjs=[0, 1], val='ones')
 
-
     def reset_temp(self):
         """ Reset temporary objects stored to speed-up some simulations. """
         self._temp = {'Aort': [], 'op_2site': {}, 'expmv_ncv': {}}
-
 
     def setup(self, to='last'):
         r"""
@@ -82,7 +80,6 @@ class _EnvParent:
             self.F.pop((n, n - 1), None)
             self.F.pop((n, n + 1), None)
 
-
     def measure(self, bd=None):
         r"""
         Calculate overlap between environments at bd bond
@@ -101,7 +98,6 @@ class _EnvParent:
         axes = ((0, 1), (1, 0)) if self.nr_layers == 2 else ((0, 1, 2), (2, 1, 0))
         return tensordot(self.F[bd], self.F[bd[::-1]], axes=axes).to_number()
 
-
     def project_ket_on_bra(self, n):
         r"""Project ket on a n-th site of bra.
 
@@ -118,7 +114,6 @@ class _EnvParent:
             result of projection
         """
         return self.Heff1(self.ket.A[n], n)
-
 
     def update_env(self, n, to='last'):
         r"""
@@ -139,7 +134,6 @@ class _EnvParent:
         for ii in range(len(self.ort)):
             _update2(n, self.Fort[ii], self.bra, self.ort[ii], to, self.nr_phys)
 
-
     def update_Aort(self, n):
         """ Update projection of states to be project to on psi. """
         Aort = []
@@ -158,7 +152,6 @@ class _EnvParent:
             T1 = tensordot(self.Fort[ii][(nl - 1, nl)], AA, axes=(1, 0))
             Aort.append(tensordot(T1, self.Fort[ii][(nr + 1, nr)], axes=(self.nr_phys + 1, 0)))
         self._temp['Aort'] = Aort
-
 
     def _project_ort(self, A):
         for ii in range(len(self.ort)):
@@ -194,7 +187,6 @@ class Env2(_EnvParent):
         self.F[(ll + 1, ll)] = match_legs(tensors=[self.ket.A[ll], self.bra.A[ll]],
                                         legs=[self.ket.right[0], self.bra.right[0]],
                                         conjs=[0, 1], val='ones')
-
 
     def Heff1(self, x, n):
         r"""
@@ -251,7 +243,6 @@ class Env3(_EnvParent):
                                         legs=[self.ket.right[0], self.op.right[0], self.bra.right[0]],
                                         conjs=[0, 0, 1], val='ones')
 
-
     def Heff0(self, C, bd):
         r"""
         Action of Heff on central site.
@@ -270,7 +261,6 @@ class Env3(_EnvParent):
         """
         bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
         return tensordot(tensordot(self.F[bd], C, axes=(2, 0)), self.F[ibd], axes=((1, 2), (1, 0)))
-
 
     def Heff1(self, A, n):
         r"""
@@ -302,7 +292,6 @@ class Env3(_EnvParent):
                     ((-1, 2, 1), (1, -2, 3, 4), (2, -3, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
         T1 = self._project_ort(T1)
         return T1
-
 
     def Heff2(self, AA, bd):
         r"""Action of Heff on central site.
@@ -338,7 +327,6 @@ class Env3(_EnvParent):
         return ncon([self.F[(nl, n1)], AA, OO, self.F[(nr, n2)]],
                     ((-1, 2, 1), (1, -2, 3, 4), (2, -3, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
 
-
     def update_A(self, n, dt, opts):
         """ Updates env.psi.A[n] by exp(dt Heff1). """
         if n in self._temp['expmv_ncv']:
@@ -346,7 +334,6 @@ class Env3(_EnvParent):
         f = lambda x: self.Heff1(x, n)
         self.ket.A[n], info = expmv(f, self.ket.A[n], dt, **opts, normalize=True, return_info=True)
         self._temp['expmv_ncv'][n] = info['ncv']
-
 
     def update_C(self, dt, opts):
         """ Updates env.psi.A[bd] by exp(dt Heff0). """
@@ -358,7 +345,6 @@ class Env3(_EnvParent):
             self.ket.A[bd], info = expmv(f, self.ket.A[bd], dt, **opts, normalize=True, return_info=True)
             self._temp['expmv_ncv'][bd] = info['ncv']
 
-
     def update_AA(self, bd, dt, opts, opts_svd):
         """ Merge two sites given in bd into AA, updates AA by exp(dt Heff2) and unmerge the sites. """
         ibd = bd[::-1]
@@ -369,7 +355,6 @@ class Env3(_EnvParent):
         AA, info = expmv(f, AA, dt, **opts, normalize=True, return_info=True)
         self._temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)
-
 
 def _update2(n, F, bra, ket, to, nr_phys):
     """ Contractions for 2-layer environment update. """
@@ -387,7 +372,6 @@ def _update2(n, F, bra, ket, to, nr_phys):
         else:
             T1 = tensordot(F[(n - 1, n)], bra.A[n], axes=(0, 0), conj=(0, 1))
             F[(n, n + 1)] = tensordot(T1, ket.A[n], axes=((0, 1, 2), (0, 1, 2)))
-
 
 def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
     if to == 'last':

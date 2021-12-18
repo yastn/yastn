@@ -16,7 +16,7 @@ logger = logging.Logger('dmrg')
 def _init_dmrg(psi, H, env, project, opts_eigs):
     """ tests and initializations for all dmrg methods. """
     if opts_eigs is None:
-        opts_eigs={'hermitian': True, 'ncv': 3, 'which': 'SR'}
+        opts_eigs = {'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi, project=project).setup(to='first')
@@ -82,7 +82,7 @@ def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', ato
     info: dict
         if return_info is True, return some information about reached convergence.
     """
-    env, opts_eigs =_init_dmrg(psi, H, env, project, opts_eigs)
+    env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
     if opts_svd is None:
         opts_svd = {'tol': 1e-12}
 
@@ -114,7 +114,7 @@ def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None):
         Environment of the <psi|H|psi> ready for the next iteration.
     """
 
-    env, opts_eigs =_init_dmrg(psi, H, env, project, opts_eigs)
+    env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
 
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
@@ -138,7 +138,7 @@ def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=No
         Environment of the <psi|H|psi> ready for the next iteration.
     """
 
-    env, opts_eigs =_init_dmrg(psi, H, env, project, opts_eigs)
+    env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
     if opts_svd is None:
         opts_svd = {'tol': 1e-12}
 

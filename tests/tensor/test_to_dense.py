@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 import yast
 try:
     from .configs import config_U1
@@ -63,6 +64,15 @@ def test_dense_1():
     assert np.allclose(ad.to_numpy(leg_structures=lssad), nad)
 
 
+def test_dense_diag():
+    a = yast.rand(config=config_U1, t=(-1, 0, 1), D=(2, 3, 4), isdiag=True)
+    b = a.to_nonsymmetric()
+    na = a.to_numpy()
+    da = np.diag(np.diag(na))
+    assert np.allclose(na, da)
+    assert pytest.approx(a.trace().item(), rel=tol) == np.trace(da)
+
+
 if __name__ == '__main__':
     test_dense_1()
-
+    test_dense_diag()

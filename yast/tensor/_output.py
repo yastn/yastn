@@ -7,7 +7,7 @@ from ..sym import sym_none
 
 
 __all__ = ['compress_to_1d', 'export_to_dict', 'export_to_hdf5',
-            'leg_structures_for_dense','requires_grad']
+            'leg_structures_for_dense', 'requires_grad']
 
 
 def export_to_dict(a):
@@ -76,7 +76,7 @@ def compress_to_1d(a, meta=None):
         if len(a.A) != sum(ind in a.A for (_, ind, _, _) in meta_merge):
             raise YastError("Tensor has blocks that do not appear in meta.")
 
-    order = (0,) if a.isdiag else tuple(range(a.nlegs))
+    order = (0,) if a.isdiag else tuple(range(a.ndimn))
     A = a.config.backend.merge_blocks(a.A, order, meta_new, meta_merge, a.config.device)
     return A[()], meta
 
@@ -92,12 +92,12 @@ def show_properties(a):
     print("signature   :", a.struct.s)  # signature
     print("charge      :", a.struct.n)  # total charge of tensor
     print("isdiag      :", a.isdiag)
-    print("dim meta    :", a.mlegs)  # number of meta legs
-    print("dim native  :", a.nlegs)  # number of native legs
+    print("dim meta    :", a.ndim)  # number of meta legs
+    print("dim native  :", a.ndimn)  # number of native legs
     print("shape meta  :", a.get_shape(native=False))
     print("shape native:", a.get_shape(native=True))
     print("no. blocks  :", len(a.A))  # number of blocks
-    print("size        :", a.get_size())  # total number of elements in all blocks
+    print("size        :", a.size)  # total number of elements in all blocks
     mfs = {i: _mf_to_ntree(mf) for i, mf in enumerate(a.meta_fusion)}
     print("meta fusion :", mfs)  # encoding meta fusion tree for each leg
     hfs = {i: _mf_to_ntree(hf.tree) for i, hf in enumerate(a.hard_fusion)}
@@ -130,11 +130,6 @@ def is_complex(a):
     return all(a.config.backend.is_complex(x) for x in a.A.values())
 
 
-def get_size(a):
-    """ Total number of elements in the tensor. """
-    return sum(np.prod(_Darray(a), axis=1))
-
-
 def get_tensor_charge(a):
     """ Global charge of the tensor. """
     return a.struct.n
@@ -144,7 +139,7 @@ def get_signature(a, native=False):
     """ Tensor signatures. If not native, returns the signature of the first leg in each group."""
     if native:
         return a.struct.s
-    pn = tuple((n,) for n in range(a.mlegs)) if a.mlegs > 0 else ()
+    pn = tuple((n,) for n in range(a.ndim)) if a.ndim > 0 else ()
     un = tuple(_unpack_axes(a.meta_fusion, *pn))
     return tuple(a.struct.s[p[0]] for p in un)
 
@@ -210,7 +205,7 @@ def get_leg_structure(a, axis, native=False):
 
 def get_leg_charges_and_dims(a, native=False):
     """ collect information about charges and dimensions on all legs into two lists. """
-    _tmp = [a.get_leg_structure(n, native=native) for n in range(a.get_ndim(native))]
+    _tmp = [a.get_leg_structure(n, native=native) for n in range(a.ndimn if native else a.ndim)]
     _tmp = [{k: lst[k] for k in sorted(lst)} for lst in _tmp]
     ts, Ds = tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
     return ts, Ds
@@ -231,15 +226,10 @@ def get_shape(a, axes=None, native=False):
         shapes of legs specified by axes
     """
     if axes is None:
-        axes = tuple(n for n in range(a.nlegs if native else a.mlegs))
+        axes = tuple(n for n in range(a.ndimn if native else a.ndim))
     if isinstance(axes, int):
         return sum(a.get_leg_structure(axes, native=native).values())
     return tuple(sum(a.get_leg_structure(ii, native=native).values()) for ii in axes)
-
-
-def get_ndim(a, native=False):
-    """ Number of: meta legs if not native else native legs. """
-    return a.nlegs if native else a.mlegs
 
 
 def unique_dtype(a):
@@ -251,9 +241,11 @@ def __getitem__(a, key):
     """ Returns block based on its charges. """
     return a.A[key]
 
+
 #########################
 #    output tensors     #
 #########################
+
 
 def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
     r"""
@@ -267,7 +259,7 @@ def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
     ----------
     tensors : list
         [reference_tensor, {leg of reference_tensor: leg of tensor to be made dense}]
-        If dict not present, assumes {n: n for n in reference_tensor.nlegs}
+        If dict not present, assumes {n: n for n in reference_tensor.ndimn}
 
     native: bool
         output data for native tensor (neglecting meta fusions).
@@ -285,7 +277,7 @@ def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
                     lss[lo] = [a.get_leg_structure(la, native=native)]
             a = next(itensors, None)
         else:
-            for n in range(a.get_ndim(native=native)):
+            for n in range(a.ndimn if native else a.ndim):
                 if n in lss:
                     lss[n].append(a.get_leg_structure(n, native=native))
                 else:
@@ -347,29 +339,9 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
     -------
     out : tensor of the type used by backend
     """
-    nlegs = a.get_ndim(native=native)
-    tD = [a.get_leg_structure(n, native=native) for n in range(nlegs)]
-    if leg_structures is not None:
-        for n, tDn in leg_structures.items():
-            if (n < 0) or (n >= nlegs):
-                raise YastError('Specified leg out of ndim')
-            tD[n] = leg_structures_union(tD[n], tDn)
-    Dtot = [sum(tDn.values()) for tDn in tD]
-    for tDn in tD:
-        tns = sorted(tDn.keys(), reverse=reverse)
-        Dlow = 0
-        for tn in tns:
-            Dhigh = Dlow + tDn[tn]
-            tDn[tn] = (Dlow, Dhigh)
-            Dlow = Dhigh
-    axes = tuple((n,) for n in range(nlegs))
-    if not native:
-        axes = tuple(_unpack_axes(a.meta_fusion, *axes))
-    meta = []
-    tset = _tarray(a)
-    for tind, tt in zip(a.struct.t, tset):
-        meta.append((tind, tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
-    return a.config.backend.merge_to_dense(a.A, Dtot, meta, a.isdiag, a.config.device)
+    c = a.to_nonsymmetric(leg_structures, native, reverse)
+    x = c.A[()] if not c.isdiag else c.config.backend.diag_create(c.A[()])
+    return c.config.backend.clone(x)
 
 
 def to_numpy(a, leg_structures=None, native=False, reverse=False):
@@ -416,8 +388,33 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     config_dense = a.config._replace(sym=sym_none)
     news = a.get_signature(native)
     c = a.__class__(config=config_dense, s=news, n=None, isdiag=a.isdiag)
-    x = a.to_dense(leg_structures, native, reverse)
-    c.A[()] = c.config.backend.diag_get(x) if a.isdiag else x
+
+    ndim = a.ndimn if native else a.ndim
+    tD = [a.get_leg_structure(n, native=native) for n in range(ndim)]
+    if leg_structures is not None:
+        for n, tDn in leg_structures.items():
+            if (n < 0) or (n >= ndim):
+                raise YastError('Specified leg out of ndim')
+            tD[n] = leg_structures_union(tD[n], tDn)
+    Dtot = tuple(sum(tDn.values()) for tDn in tD)
+    for tDn in tD:
+        tns = sorted(tDn.keys(), reverse=reverse)
+        Dlow = 0
+        for tn in tns:
+            Dhigh = Dlow + tDn[tn]
+            tDn[tn] = (Dlow, Dhigh)
+            Dlow = Dhigh
+    axes = tuple((n,) for n in range(ndim))
+    if not native:
+        axes = tuple(_unpack_axes(a.meta_fusion, *axes))
+    meta = []
+    tset = _tarray(a)
+    for tind, tt in zip(a.struct.t, tset):
+        meta.append((tind, tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
+    if a.isdiag:
+        Dtot = Dtot[:1]
+        meta = [(t, D[:1]) for t, D in meta]
+    c.A[()] = a.config.backend.merge_to_dense(a.A, Dtot, meta, a.config.device)
     c.update_struct()
     return c
 
@@ -443,7 +440,7 @@ def to_number(a, part=None):
     part : str
         if 'real' return real part
     """
-    size = a.get_size()
+    size = a.size
     if size == 1:
         x = a.config.backend.first_element(next(iter(a.A.values())))
     elif size == 0:
@@ -459,7 +456,7 @@ def item(a):
 
     For empty tensor, returns 0
     """
-    size = a.get_size()
+    size = a.size
     if size == 1:
         return a.config.backend.item(next(iter(a.A.values())))
     if size == 0:

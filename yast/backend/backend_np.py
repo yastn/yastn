@@ -19,8 +19,8 @@ def get_dtype(iterator):
 
 
 def unique_dtype(t):
-    dtypes= set(b.dtype for b in t.A.values())
-    if len(dtypes)==1:
+    dtypes = set(b.dtype for b in t.A.values())
+    if len(dtypes) == 1:
         return str(tuple(dtypes)[0])
     return False
 
@@ -56,10 +56,6 @@ def to_numpy(x):
 
 def get_shape(x):
     return x.shape
-
-
-def get_ndim(x):
-    return x.ndim
 
 
 def get_size(x):
@@ -202,6 +198,7 @@ def to_tensor(val, Ds=None, dtype='float64', **kwargs):
 def to_mask(val):
     return val.nonzero()[0].ravel()
 
+
 def square_matrix_from_dict(H, D=None, **kwargs):
     dtype = get_dtype(H.values())
     T = np.zeros((D, D), dtype=dtype)
@@ -218,8 +215,10 @@ def square_matrix_from_dict(H, D=None, **kwargs):
 def requires_grad_(A, requires_grad=True):
     pass
 
+
 def requires_grad(A):
     return False
+
 
 def move_to_device(A, *args, **kwargs):
     return A
@@ -243,12 +242,6 @@ def trace(A, order, meta):
         else:
             Aout[tnew] = Atemp
     return Aout
-
-
-def trace_diag(A):
-    Aout = {}
-
-    return 
 
 
 def trace_with_mask(A, order, meta, msk12):
@@ -367,16 +360,16 @@ def qr(A, meta):
 
 def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
     if ordering == 'svd':
-        s_all =  np.hstack([S[ind][:D_keep[ind]] for ind in S])
+        s_all = np.hstack([S[ind][:D_keep[ind]] for ind in S])
     elif ordering == 'eigh':
-        s_all =  np.hstack([S[ind][-D_keep[ind]:] for ind in S])
+        s_all = np.hstack([S[ind][-D_keep[ind]:] for ind in S])
     Darg = D_total + int(keep_multiplets)
     order = s_all.argsort()[-1:-Darg-1:-1]
     if keep_multiplets:  # if needed, preserve multiplets within each sector
         s_all = s_all[order]
         gaps = np.abs(s_all)
         # compute gaps and normalize by larger singular value. Introduce cutoff
-        gaps = np.abs(gaps[:len(s_all) - 1] - gaps[1:len(s_all)]) / gaps[0] # / (gaps[:len(values) - 1] + 1.0e-16)
+        gaps = np.abs(gaps[:len(s_all) - 1] - gaps[1:len(s_all)]) / gaps[0]  # / (gaps[:len(values) - 1] + 1.0e-16)
         gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
         if gaps[D_total - 1] < eps_multiplet:
             # the chi is within the multiplet - find the largest chi_new < chi
@@ -387,6 +380,7 @@ def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, or
                     break
     return order
 
+
 def eigs_which(val, which):
     if which == 'LM':
         return (-abs(val)).argsort()
@@ -394,9 +388,8 @@ def eigs_which(val, which):
         return abs(val).argsort()
     if which == 'LR':
         return (-val.real).argsort()
-    #elif which == 'SR':
+    # elif which == 'SR':
     return (val.real).argsort()
-
 
 
 def range_largest(D_keep, D_total, ordering):
@@ -504,6 +497,7 @@ def matmul(A, B, meta):
         C[out] = A[in1] @ B[in2]
     return C
 
+
 def matmul_masks(A, B, meta, ma, mb):
     C = {}
     for in1, in2, out, ii in meta:
@@ -549,13 +543,12 @@ def merge_blocks(A, order, meta_new, meta_mrg, *args, **kwargs):
     return Anew
 
 
-def merge_to_dense(A, Dtot, meta, isdiag, *args, **kwargs):
+def merge_to_dense(A, Dtot, meta, *args, **kwargs):
     """ Outputs full tensor. """
     dtype = get_dtype(A.values())
     Anew = np.zeros(Dtot, dtype=dtype)
     for (ind, Dss) in meta:
-        x = np.diag(A[ind]) if isdiag else A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
-        Anew[tuple(slice(*Ds) for Ds in Dss)] = x
+        Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
     return Anew
 
 

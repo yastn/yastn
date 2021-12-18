@@ -14,11 +14,13 @@ def get_dtype(iterator):
     """ iterators of torch tensors; returns torch.complex128 if any tensor is complex else torch.float64"""
     return torch.complex128 if any(torch.is_complex(x) for x in iterator) else torch.float64
 
+
 def unique_dtype(t):
-    dtypes= set(b.dtype for b in t.A.values())
-    if len(dtypes)==1:
+    dtypes = set(b.dtype for b in t.A.values())
+    if len(dtypes) == 1:
         return str(tuple(dtypes)[0])[len("torch."):]
     return False
+
 
 def random_seed(seed):
     torch.random.manual_seed(seed)
@@ -55,10 +57,6 @@ def to_numpy(x):
 
 def get_shape(x):
     return x.size()
-
-
-def get_ndim(x):
-    return len(x.size())
 
 
 def get_size(x):
@@ -220,8 +218,10 @@ def square_matrix_from_dict(H, D=None, device='cpu'):
 def requires_grad_(A, requires_grad=True):
     for b in A.values(): b.requires_grad_(requires_grad)
 
+
 def requires_grad(A):
-    return any([ b.requires_grad for b in A.values() ])
+    return any([b.requires_grad for b in A.values()])
+
 
 def move_to_device(A, device):
     return {ind: x.to(device) for ind, x in A.items()}
@@ -336,7 +336,7 @@ def eigh(A, meta=None, order_by_magnitude=False):
             for (ind, indS, indU) in meta:
                 S[indS], U[indU] = torch.linalg.eigh(A[ind])
     else:
-        S, U =  torch.linalg.eigh(A)
+        S, U = torch.linalg.eigh(A)
     return S, U
 
 
@@ -382,7 +382,7 @@ def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, or
     if keep_multiplets:  # if needed, preserve multiplets within each sector
         gaps = torch.abs(values.clone())  # regularize by discarding small values
         # compute gaps and normalize by larger singular value. Introduce cutoff
-        gaps = torch.abs(gaps[:len(values) - 1] - gaps[1:len(values)]) / gaps[0] # / (gaps[:len(values) - 1] + 1.0e-16)
+        gaps = torch.abs(gaps[:len(values) - 1] - gaps[1:len(values)]) / gaps[0]  # / (gaps[:len(values) - 1] + 1.0e-16)
         gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
         if gaps[D_total - 1] < eps_multiplet:
             # the chi is within the multiplet - find the largest chi_new < chi
@@ -487,6 +487,7 @@ dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
                 (1, 0): lambda x, y, dim: x.conj() * y.reshape(dim),
                 (1, 1): lambda x, y, dim: x.conj() * y.reshape(dim).conj()}
 
+
 def dot_diag(A, B, conj, to_execute, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
@@ -502,20 +503,6 @@ def mask_diag(A, B, meta, axis, a_ndim):
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
     Bslc = {k: v.nonzero(as_tuple=True) for k, v in B.items()}
     return {out: A[in1][slc1 + Bslc[in2] + slc2] for in1, in2, out in meta}
-
-
-def matmul(A, B, meta):
-    C = {}
-    for in1, in2, out, _ in meta:
-        C[out] = A[in1] @ B[in2]
-    return C
-
-
-def matmul_masks(A, B, meta, ma, mb):
-    C = {}
-    for in1, in2, out, ii in meta:
-        C[out] = A[in1][:, ma[ii]] @ B[in2][mb[ii], :]
-    return C
 
 
 def dot_nomerge(A, B, conj, oA, oB, meta):
@@ -557,13 +544,12 @@ def merge_blocks(A, order, meta_new, meta_mrg, device='cpu'):
     return Anew
 
 
-def merge_to_dense(A, Dtot, meta, isdiag, device='cpu'):
+def merge_to_dense(A, Dtot, meta, device='cpu'):
     """ Outputs full tensor. """
     dtype = get_dtype(A.values())
     Anew = torch.zeros(Dtot, dtype=dtype, device=device)
     for (ind, Dss) in meta:
-        x = torch.diag(A[ind]) if isdiag else A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
-        Anew[tuple(slice(*Ds) for Ds in Dss)] = x
+        Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
     return Anew
 
 

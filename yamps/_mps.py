@@ -1,9 +1,9 @@
 """ Mps structure and its basic manipulations. """
-import numpy as np
 from yast.tensor import block, entropy
 from yast.tensor import export_to_hdf5 as Tensor_to_hdf5
 from yast import import_from_hdf5 as Tensor_from_hdf5
 from numpy import array, nonzero
+
 
 class YampsError(Exception):
     pass
@@ -15,6 +15,7 @@ def import_from_hdf5(config, nr_phys, file, in_file_path):
     for n in range(M.N):
         M.A[n] = Tensor_from_hdf5(config, file, in_file_path+str(n))
     return M
+
 
 def generate_Mij(amp, connect, N, nr_phys):
     x_from = connect['from']
@@ -51,24 +52,24 @@ def generate_Mij(amp, connect, N, nr_phys):
 def add(tens, amp, common_legs):
     if len(tens) is not len(amp):
         raise YampsError('Number of Mps-s must be equal to number of cooeficients.')
-    elif sum([tens[j].N-tens[0].N for j in range(len(tens))])!=0:
+    elif sum([tens[j].N-tens[0].N for j in range(len(tens))]) != 0:
         raise YampsError('Mps-s must have equal lengths.')
 
     c = tens[0].copy()
     N = c.N
     for n in range(N):
-        d={}
+        d = {}
         if n == 0:
             for j in range(len(tens)):
-                d[(j,)] = amp[j]*tens[j].A[n] if amp[j]!=1. else tens[j].A[n]
-            common_lgs = (0,)+common_legs
+                d[(j,)] = amp[j]*tens[j].A[n] if amp[j] != 1. else tens[j].A[n]
+            common_lgs = (0,) + common_legs
         elif n == N-1:
             for j in range(len(tens)):
                 d[(j,)] = tens[j].A[n]
             common_lgs = common_legs+(common_legs[-1]+1,)
         else:
             for j in range(len(tens)):
-                d[(j,j)] = tens[j].A[n]
+                d[(j, j)] = tens[j].A[n]
             common_lgs = common_legs
         c.A[n] = block(d, common_lgs)
     return c
@@ -131,7 +132,7 @@ def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to
                 'to': (ir, right),
                 'conn': conn,
                 'else': other}
-        
+
         bunch_tens[ik] = generate_Mij(1., connect, N, nr_phys)
         bunch_amp[ik] = amp
 
@@ -166,13 +167,13 @@ def apxb(a, b, common_legs, x=1):
     return c
 
 
-def x_a_times_b(a, b, axes, axes_fin, conj=(0,0), x=1, inplace=True, mode='hard'):
+def x_a_times_b(a, b, axes, axes_fin, conj=(0, 0), x=1, inplace=True, mode='hard'):
     # make multiplication x*a*b, with conj if necessary
     if a.N is not b.N:
         YampsError('Mps-s must have equal number of Tensor-s.')
     c = a.copy()
     for n in range(c.N):
-        if n==0:
+        if n == 0:
             c.A[n] = x*a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, inplace, mode)
         else:
             c.A[n] = a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, inplace, mode)
@@ -218,7 +219,6 @@ class Mps:
         self.first = 0
         self.last = self.N - 1
 
-
     def sweep(self, to='last', df=0, dl=0):
         r"""
         Generator of indices of all sites going from first to last or vice-versa
@@ -236,7 +236,6 @@ class Mps:
             return range(self.N - 1 - dl, df - 1, -1)
         raise YampsError('Argument "to" should be in ("first", "last")')
 
-
     def clone(self):
         r"""
         Makes a copy of mps. Copy all mps tensors, tracking gradients.
@@ -251,7 +250,6 @@ class Mps:
         phi.A = {ind: ten.clone() for ind, ten in self.A.items()}
         phi.pC = self.pC
         return phi
-
 
     def copy(self):
         r"""
@@ -268,7 +266,6 @@ class Mps:
         phi.A = {ind: ten.copy() for ind, ten in self.A.items()}
         phi.pC = self.pC
         return phi
-
 
     def orthogonalize_site(self, n, to='last', normalize=True):
         r"""
@@ -298,7 +295,6 @@ class Mps:
             self.A[self.pC] = R / R.norm() if normalize else R
         else:
             raise YampsError('Argument "to" should be in ("first", "last")')
-
 
     def diagonalize_central(self, opts=None, normalize=True):
         r"""
@@ -342,7 +338,6 @@ class Mps:
             return (normC -  normS) / normS
         return 0.
 
-
     def remove_central(self):
         r"""
         Removes (ignores) the central site. Do nothing if is does not exist.
@@ -350,7 +345,6 @@ class Mps:
         if self.pC is not None:
             del self.A[self.pC]
             self.pC = None
-
 
     def absorb_central(self, to='last'):
         r"""
@@ -374,7 +368,6 @@ class Mps:
             else:  # (to == 'last' and n2 < self.N) or n1 < 0
                 self.A[n2] = C.tensordot(self.A[n2], axes=(1, self.left))
 
-
     def canonize_sweep(self, to='last', normalize=True):
         r"""
         Sweep though the mps and cannonize it toward the first of last site.
@@ -394,7 +387,6 @@ class Mps:
             self.orthogonalize_site(n=n, to=to, normalize=normalize)
             self.absorb_central(to=to)
         return self
-
 
     def truncate_sweep(self, to='last', normalize=True, opts=None):
         r"""
@@ -428,7 +420,6 @@ class Mps:
             self.absorb_central(to=to)
         return discarded_max
 
-
     def merge_two_sites(self, bd):
         r"""
         Merge two neighbouring mps sites and return the resulting tensor. 
@@ -450,7 +441,6 @@ class Mps:
         axes = (0, (1, 2), 3) if self.nr_phys == 1 else (0, (1, 3), (2, 4), 5)
         AA.fuse_legs(axes=axes, inplace=True)
         return AA
-
 
     def unmerge_two_sites(self, AA, bd, opts_svd):
         r"""
@@ -478,7 +468,6 @@ class Mps:
         self.pC = bd
         self.A[nl], self.A[bd], self.A[nr] = AA.svd(axes=axes, sU=-1, **opts_svd)
 
-
     def get_bond_dimensions(self):
         r"""
         Returns bond dimensions of mps.
@@ -493,7 +482,6 @@ class Mps:
         Ds.append(self.A[self.last].get_shape(self.right[0]))
         return Ds
 
-
     def get_bond_charges_dimensions(self):
         r"""
         Returns charges and dimensions of all virtual mps bonds.
@@ -507,7 +495,6 @@ class Mps:
         tDs = [self.A[n].get_leg_structure(self.left[0]) for n in self.sweep(to='last')]
         tDs.append(self.A[self.last].get_leg_structure(self.right[0]))
         return tDs
-
 
     def get_entropy(self, alpha=1):
         r"""
@@ -526,7 +513,6 @@ class Mps:
             Entropy[n] = entropy(self.A[self.pC], alpha=alpha)[0]
             self.absorb_central(to='first')
         return Entropy
-
 
     def export_to_hdf5(self, file, in_file_path):
         for n in self.sweep(to='first'):

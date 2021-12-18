@@ -439,11 +439,11 @@ def moveaxis(a, source, destination, inplace=False):
     source, destination: ints
     """
     lsrc, ldst = _clear_axes(source, destination)
-    lsrc = tuple(xx + a.mlegs if xx < 0 else xx for xx in lsrc)
-    ldst = tuple(xx + a.mlegs if xx < 0 else xx for xx in ldst)
+    lsrc = tuple(xx + a.ndim if xx < 0 else xx for xx in lsrc)
+    ldst = tuple(xx + a.ndim if xx < 0 else xx for xx in ldst)
     if lsrc == ldst:
         return a if inplace else a.clone()
-    axes = [ii for ii in range(a.mlegs) if ii not in lsrc]
+    axes = [ii for ii in range(a.ndim) if ii not in lsrc]
     ds = sorted(((d, s) for d, s in zip(ldst, lsrc)))
     for d, s in ds:
         axes.insert(d, s)
@@ -456,7 +456,7 @@ def diag(a):
         c = a.__class__(config=a.config, isdiag=False, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
         c.A = {ind: a.config.backend.diag_create(a.A[ind]) for ind in a.A}
         return c
-    if a.nlegs == 2 and all(x == 0 for x in a.struct.n):
+    if a.ndimn == 2 and all(x == 0 for x in a.struct.n):
         c = a.__class__(config=a.config, isdiag=True, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
         c.A = {ind: a.config.backend.diag_get(a.A[ind]) for ind in a.A}
         return c
@@ -600,7 +600,7 @@ def add_leg(a, axis=-1, s=1, t=None, inplace=False):
         raise YastError('Cannot add a new leg to a diagonal tensor.')
     tset, Dset = _tarray(a), _Darray(a)
 
-    axis = axis % (a.mlegs + 1)
+    axis = axis % (a.ndim + 1)
 
     new_meta_fusion = a.meta_fusion[:axis] + ((1,),) + a.meta_fusion[axis:]
 

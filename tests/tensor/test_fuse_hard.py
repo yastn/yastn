@@ -344,18 +344,18 @@ def test_hard_masks():
 
 def _test_fuse_mix(a):
     ma = a.fuse_legs(axes=((0, 1), (2, 3), (4, 5)), mode='meta')
-    assert (ma.nlegs, ma.mlegs) == (6, 3)
+    assert (ma.ndimn, ma.ndim) == (6, 3)
     ha = a.fuse_legs(axes=((0, 1), (2, 3), (4, 5)), mode='hard')
-    assert (ha.nlegs, ha.mlegs) == (3, 3)
+    assert (ha.ndimn, ha.ndim) == (3, 3)
 
     hma = ma.fuse_legs(axes=((2, 0), 1), mode='hard')
-    assert (hma.nlegs, hma.mlegs) == (2, 2)
+    assert (hma.ndimn, hma.ndim) == (2, 2)
     hha = ha.fuse_legs(axes=((2, 0), 1), mode='hard')
-    assert (hha.nlegs, hha.mlegs) == (2, 2)
+    assert (hha.ndimn, hha.ndim) == (2, 2)
     mma = ma.fuse_legs(axes=((2, 0), 1), mode='meta')
-    assert (mma.nlegs, mma.mlegs) == (6, 2)
+    assert (mma.ndimn, mma.ndim) == (6, 2)
     mha = ha.fuse_legs(axes=((2, 0), 1), mode='meta')
-    assert (mha.nlegs, mha.mlegs) == (3, 2)
+    assert (mha.ndimn, mha.ndim) == (3, 2)
 
     assert yast.norm_diff(hma, hha) < tol
 
