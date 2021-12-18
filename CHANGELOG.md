@@ -92,3 +92,6 @@
 
 17-12-2021
 - `tensordot` has a new parameter `policy` switching between dot that marges and unmerges effective 2d blocks (`merge`) and direct block by block multiplication (`direct`). Default is `hybrid` that switches between those two based on a simple heuristics. It can be fixed in config files under variable `default_tensordot`.
+
+18-12-2021
+- introduce property `tensor.ndim` replacing `tensor.mlegs` and `tensor.ndimn` replacing `tensor.nlegs`. `tensor.get_ndim()` is removed. Property `tensor.size` replaces `tensor.get_size()`

@@ -57,22 +57,22 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
     if a.config.sym.NSYM == 0:
         if a.isdiag and len(D) == 1:
             D = D + D
-        if len(D) != a.nlegs:
+        if len(D) != a.ndimn:
             raise YastError("Number of elements in D does not match tensor rank.")
-        tset = np.zeros((1, a.nlegs, a.config.sym.NSYM))
-        Dset = np.array(D, dtype=int).reshape(1, a.nlegs)
+        tset = np.zeros((1, a.ndimn, a.config.sym.NSYM))
+        Dset = np.array(D, dtype=int).reshape(1, a.ndimn)
     else:  # a.config.sym.NSYM >= 1
-        D = (D,) if (a.nlegs == 1 or a.isdiag) and isinstance(D[0], int) else D
-        t = (t,) if (a.nlegs == 1 or a.isdiag) and isinstance(t[0], int) else t
+        D = (D,) if (a.ndimn == 1 or a.isdiag) and isinstance(D[0], int) else D
+        t = (t,) if (a.ndimn == 1 or a.isdiag) and isinstance(t[0], int) else t
         D = D + D if a.isdiag and len(D) == 1 else D
         t = t + t if a.isdiag and len(t) == 1 else t
 
         D = list((x,) if isinstance(x, int) else x for x in D)
         t = list((x,) if isinstance(x, int) else x for x in t)
 
-        if len(D) != a.nlegs:
+        if len(D) != a.ndimn:
             raise YastError("Number of elements in D does not match tensor rank.")
-        if len(t) != a.nlegs:
+        if len(t) != a.ndimn:
             raise YastError("Number of elements in t does not match tensor rank.")
         for x, y in zip(D, t):
             if len(x) != len(y):
@@ -83,8 +83,8 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
         comb_t = list(product(*t))
         lcomb_t = len(comb_t)
         comb_t = list(_flatten(comb_t))
-        comb_t = np.array(comb_t, dtype=int).reshape((lcomb_t, a.nlegs, a.config.sym.NSYM))
-        comb_D = np.array(comb_D, dtype=int).reshape((lcomb_t, a.nlegs))
+        comb_t = np.array(comb_t, dtype=int).reshape((lcomb_t, a.ndimn, a.config.sym.NSYM))
+        comb_D = np.array(comb_D, dtype=int).reshape((lcomb_t, a.ndimn))
         sa = np.array(a.struct.s, dtype=int)
         na = np.array(a.struct.n, dtype=int)
         ind = np.all(a.config.sym.fuse(comb_t, sa, 1) == na, axis=1)
@@ -95,7 +95,7 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
         _set_block(a, ts=tuple(ts.flat), Ds=tuple(Ds), val=val, dtype=dtype)
 
     a.update_struct()
-    for n in range(a.nlegs):
+    for n in range(a.ndimn):
         a.get_leg_structure(n, native=True)  # here checks the consistency of bond dimensions
 
 
@@ -140,12 +140,12 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
     if a.isdiag and len(ts) == a.config.sym.NSYM:
         ts = ts + ts
 
-    if len(ts) != a.nlegs * a.config.sym.NSYM:
+    if len(ts) != a.ndimn * a.config.sym.NSYM:
         raise YastError('Wrong size of ts.')
-    if Ds is not None and len(Ds) != a.nlegs:
+    if Ds is not None and len(Ds) != a.ndimn:
         raise YastError('Wrong size of Ds.')
 
-    ats = np.array(ts, dtype=int).reshape((1, a.nlegs, a.config.sym.NSYM))
+    ats = np.array(ts, dtype=int).reshape((1, a.ndimn, a.config.sym.NSYM))
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)
     if not np.all(a.config.sym.fuse(ats, sa, 1) == na):
@@ -153,8 +153,8 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
 
     if isinstance(val, str) and Ds is None:  # attempt to read Ds from existing blocks.
         Ds = []
-        tD = [a.get_leg_structure(n, native=True) for n in range(a.nlegs)]
-        for n in range(a.nlegs):
+        tD = [a.get_leg_structure(n, native=True) for n in range(a.ndimn)]
+        for n in range(a.ndimn):
             try:
                 Ds.append(tD[n][tuple(ats[0, n, :].flat)])
             except KeyError as err:
@@ -164,7 +164,7 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
     _set_block(a, ts=ts, Ds=Ds, val=val, dtype=dtype)
 
     a.update_struct()
-    tD = [a.get_leg_structure(n, native=True) for n in range(a.nlegs)]  # here checks the consistency of bond dimensions
+    tD = [a.get_leg_structure(n, native=True) for n in range(a.ndimn)]  # here checks the consistency of bond dimensions
 
 
 def _set_block(a, ts, Ds, val, dtype):
@@ -246,9 +246,9 @@ def block(tensors, common_legs=None):
     """
     out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
-    out_b = tuple((ii,) for ii in range(tn0.mlegs) if ii not in out_s)
+    out_b = tuple((ii,) for ii in range(tn0.ndim) if ii not in out_s)
     pos = list(_clear_axes(*tensors))
-    lind = tn0.mlegs - len(out_s)
+    lind = tn0.ndim - len(out_s)
     for ind in pos:
         if len(ind) != lind:
             raise YastError('Wrong number of coordinates encoded in tensors.keys()')
@@ -260,16 +260,16 @@ def block(tensors, common_legs=None):
 
     for ind, tn in tensors.items():
         ind, = _clear_axes(ind)
-        if tn.nlegs != tn0.nlegs or tn.meta_fusion != tn0.meta_fusion or\
+        if tn.ndimn != tn0.ndimn or tn.meta_fusion != tn0.meta_fusion or\
            tn.struct.s != tn0.struct.s or tn.struct.n != tn0.struct.n or\
            tn.isdiag != tn0.isdiag or tn.hard_fusion != tn0.hard_fusion:
             raise YastError('Ndims, signatures, total charges or fusion trees of blocked tensors are inconsistent.')
 
-    posa = np.ones((len(pos), tn0.nlegs), dtype=int)
+    posa = np.ones((len(pos), tn0.ndimn), dtype=int)
     posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int).reshape(len(pos), -1)
 
     tDs = []  # {leg: {charge: {position: D, 'D' : Dtotal}}}
-    for n in range(tn0.nlegs):
+    for n in range(tn0.ndimn):
         tDl = {}
         for tn, pp in zip(tensors.values(), posa):
             tDn = tn.get_leg_structure(n, native=True)
@@ -295,8 +295,8 @@ def block(tensors, common_legs=None):
         tset = _tarray(a)
         for tind, t in zip(a.struct.t, tset):
             if tind not in meta_new:
-                meta_new[tind] = tuple(tDs[n][tuple(t[n].flat)]['Dtot'] for n in range(a.nlegs))
-            meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.nlegs))))
+                meta_new[tind] = tuple(tDs[n][tuple(t[n].flat)]['Dtot'] for n in range(a.ndimn))
+            meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.ndimn))))
     meta_new = tuple((ts, Ds) for ts, Ds in meta_new.items())
 
     c = tn0.__class__(config=a.config, s=a.struct.s, isdiag=a.isdiag, n=a.struct.n, meta_fusion=tn0.meta_fusion, hard_fusion=tn0.hard_fusion)

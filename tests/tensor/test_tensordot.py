@@ -9,8 +9,8 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 def dot_vs_numpy(a, b, axes, conj):
-    outa = tuple(ii for ii in range(a.get_ndim()) if ii not in axes[0])
-    outb = tuple(ii for ii in range(b.get_ndim()) if ii not in axes[1])
+    outa = tuple(ii for ii in range(a.ndim) if ii not in axes[0])
+    outb = tuple(ii for ii in range(b.ndim) if ii not in axes[1])
     tDs = {nn: a.get_leg_structure(ii) for nn, ii in enumerate(outa)}
     tDs.update({nn + len(outa): b.get_leg_structure(ii) for nn, ii in enumerate(outb)})
     tDsa = {ia: b.get_leg_structure(ib) for ia, ib in zip(*axes)}

@@ -122,7 +122,7 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
 
-    U = a.__class__(config=a.config, s=Us , n=n_l,
+    U = a.__class__(config=a.config, s=Us, n=n_l,
                     meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
                     hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sU,), ms=(-sU,))])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
@@ -133,7 +133,7 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     U.A, S.A, V.A = a.config.backend.svd_lowrank(Am, meta, D_block, n_iter, k_fac)
 
     ls_s = _leg_struct_truncation(
-        S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
+        S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
         keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='svd')
 
     if untruncated_S:
@@ -146,7 +146,6 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
     V.moveaxis(source=0, destination=Vaxis, inplace=True)
     return (U, S, V, uS) if untruncated_S else (U, S, V)
-
 
 
 def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
@@ -222,7 +221,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     U.A, S.A, V.A = a.config.backend.svd(Am, meta)
 
     ls_s = _leg_struct_truncation(
-        S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
+        S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
         keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='svd')
 
     if untruncated_S:
@@ -353,7 +352,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
     S.A, U.A = a.config.backend.eigh(Am, meta)
 
     ls_s = _leg_struct_truncation(
-        S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,\
+        S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
         keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='eigh')
 
     if untruncated_S:
@@ -364,7 +363,6 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
     _unmerge_diagonal(S, ls_s)
     U.moveaxis(source=-1, destination=Uaxis, inplace=True)
     return (S, U, uS) if untruncated_S else (S, U)
-
 
 
 def entropy(a, axes=(0, 1), alpha=1):
@@ -452,7 +450,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
         the phi-functions appearing in exponential integrators.
     """
     backend = v.config.backend
-    ncv, ncv_max = max(1, ncv), min([30, v.get_size()])  # Krylov space parameters
+    ncv, ncv_max = max(1, ncv), min([30, v.size])  # Krylov space parameters
     t_now, t_out = 0, abs(t)
     sgn = t / t_out if t_out > 0 else 0
     tau = t_out  # initial quess for a time-step

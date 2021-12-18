@@ -313,8 +313,8 @@ def _masks_for_vdot(config, structa, hfa, structb, hfb, ind_ab=None):
         msk_b.append(mb)
     inda = structa.t if ind_ab is None else ind_ab
     indb = structb.t if ind_ab is None else ind_ab
-    sla = {t: tuple(ma[t[n * nsym : n * nsym + nsym]] for n, ma in enumerate(msk_a)) for t in inda}
-    slb = {t: tuple(mb[t[n * nsym : n * nsym + nsym]] for n, mb in enumerate(msk_b)) for t in indb}
+    sla = {t: tuple(ma[t[n * nsym: n * nsym + nsym]] for n, ma in enumerate(msk_a)) for t in inda}
+    slb = {t: tuple(mb[t[n * nsym: n * nsym + nsym]] for n, mb in enumerate(msk_b)) for t in indb}
     return sla, slb
 
 
@@ -329,7 +329,7 @@ def _masks_for_trace(config, t12, D1, D2, hfs, ax1, ax2):
         raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
 
     for n, (i1, i2) in enumerate(zip(ax1, ax2)):
-        tdn = tuple(set((t[n * nsym : n * nsym + nsym], d1[n], d2[n]) for t, d1, d2 in tDDset))
+        tdn = tuple(set((t[n * nsym: n * nsym + nsym], d1[n], d2[n]) for t, d1, d2 in tDDset))
         tn, D1n, D2n = zip(*tdn)
         m1, m2 = _intersect_hfs(config, (tn, tn), (D1n, D2n), (hfs[i1], hfs[i2]))
         msk1.append(m1)
@@ -362,10 +362,10 @@ def _masks_for_add(config, structa, hfa, structb, hfb):
         msk_a.append(ma)
         msk_b.append(mb)
         hfs.append(hf)
-    sla = {t: tuple(ma[t[n * nsym : n * nsym + nsym]] for n, ma in enumerate(msk_a)) for t in structa.t}
-    slb = {t: tuple(mb[t[n * nsym : n * nsym + nsym]] for n, mb in enumerate(msk_b)) for t in structb.t}
-    tDa = {t: tuple(tD[t[n * nsym : n * nsym + nsym]] for n, tD in enumerate(tDsa)) for t in structa.t}
-    tDb = {t: tuple(tD[t[n * nsym : n * nsym + nsym]] for n, tD in enumerate(tDsb)) for t in structb.t}
+    sla = {t: tuple(ma[t[n * nsym: n * nsym + nsym]] for n, ma in enumerate(msk_a)) for t in structa.t}
+    slb = {t: tuple(mb[t[n * nsym: n * nsym + nsym]] for n, mb in enumerate(msk_b)) for t in structb.t}
+    tDa = {t: tuple(tD[t[n * nsym: n * nsym + nsym]] for n, tD in enumerate(tDsa)) for t in structa.t}
+    tDb = {t: tuple(tD[t[n * nsym: n * nsym + nsym]] for n, tD in enumerate(tDsb)) for t in structb.t}
     return sla, tDa, slb, tDb, tuple(hfs)
 
 
@@ -382,8 +382,8 @@ def _unfuse_Fusion(hf):
                 tt.append(hf.t[n_init - 1])
                 DD.append(hf.D[n_init - 1])
                 ss.append(hf.s[n_init])
-                hfs.append(_Fusion(hf.tree[n_init : n + 1], hf.s[n_init : n + 1], hf.ms[n_init : n + 1],\
-                                    hf.t[n_init : n], hf.D[n_init : n]))
+                hfs.append(_Fusion(hf.tree[n_init: n + 1], hf.s[n_init: n + 1], hf.ms[n_init: n + 1],
+                                    hf.t[n_init: n], hf.D[n_init: n]))
                 n_init = n + 1
     return tuple(tt), tuple(DD), tuple(ss), hfs
 
@@ -420,7 +420,6 @@ def _consume_mfs_lowest(mfs):
             _ntree_eliminate_lowest(nt)
             new_mfs.append(_ntree_to_mf(nt))
     return tuple(axes), tuple(new_mfs)
-
 
 
 def _ntree_eliminate_lowest(ntree):
@@ -568,7 +567,7 @@ def fuse_meta_to_hard(a, inplace=False):
     """ Changes all meta fusions into a hard fusions. If there are no meta fusions, do nothing. """
     while any(mf != (1,) for mf in a.meta_fusion):
         axes, new_mfs = _consume_mfs_lowest(a.meta_fusion)
-        order = tuple(range(a.nlegs))
+        order = tuple(range(a.ndimn))
         a = _fuse_legs_hard(a, axes, order, inplace)
         a.meta_fusion = new_mfs
     return a
@@ -629,7 +628,7 @@ def fuse_legs(a, axes, inplace=False, mode=None):
                 for ii in group:
                     new_mf.extend(a.meta_fusion[ii])
                 mfs.append(tuple(new_mf))
-        if inplace and order == tuple(ii for ii in range(a.mlegs)):
+        if inplace and order == tuple(ii for ii in range(a.ndim)):
             c = a
         else:
             c = a.transpose(axes=order, inplace=inplace)
@@ -665,7 +664,7 @@ def unfuse_legs(a, axes, inplace=False):
     if isinstance(axes, int):
         axes = (axes,)
     ni, new_mfs, axes_hf = 0, [], []
-    for mi in range(a.mlegs):
+    for mi in range(a.ndim):
         dni = a.meta_fusion[mi][0]
         if mi not in axes or (a.meta_fusion[mi][0] == 1 and a.hard_fusion[ni].tree[0] == 1):
             new_mfs.append(a.meta_fusion[mi])

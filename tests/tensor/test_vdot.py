@@ -10,8 +10,8 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 def scalar_vs_numpy(a, b):
-    tDsa = {ii: b.get_leg_structure(ii) for ii in range(b.get_ndim())}
-    tDsb = {ii: a.get_leg_structure(ii) for ii in range(a.get_ndim())}
+    tDsa = {ii: b.get_leg_structure(ii) for ii in range(b.ndim)}
+    tDsb = {ii: a.get_leg_structure(ii) for ii in range(a.ndim)}
     na = a.to_dense(tDsa)
     nb = b.to_dense(tDsb)
     ns = na.conj().reshape(-1) @ nb.reshape(-1)

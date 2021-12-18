@@ -107,8 +107,8 @@ class Tensor:
     from ._output import show_properties, __str__, print_blocks, is_complex
     from ._output import get_blocks_charges, get_blocks_shapes, get_leg_charges_and_dims, get_leg_structure
     from ._output import zero_of_dtype, item, __getitem__
-    from ._output import get_leg_fusion, get_ndim, get_shape, get_signature, unique_dtype
-    from ._output import get_size, get_tensor_charge
+    from ._output import get_leg_fusion, get_shape, get_signature, unique_dtype
+    from ._output import get_tensor_charge
     from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric
     from ._output import export_to_hdf5, export_to_dict, compress_to_1d
     from ._tests import is_consistent, are_independent
@@ -124,17 +124,17 @@ class Tensor:
 
     @property
     def n(self):
-        """ Return total charge of the tensor as aparray. """
+        """ Return total charge of the tensor as nparray. """
         return np.array(self.struct.n, dtype=int)
 
     @property
-    def nlegs(self):
-        """ Return the number of legs (native) """
+    def ndimn(self):
+        """ Return the number of dimensions (native) """
         return len(self.struct.s)
 
     @property
-    def mlegs(self):
-        """ Return the number of meta legs (meta-fusion of native legs) """
+    def ndim(self):
+        """ Return the number of meta dimensions (meta-fusion of native dimensions) """
         return len(self.meta_fusion)
 
     @property
@@ -146,3 +146,9 @@ class Tensor:
     def requires_grad(self):
         """ Return value of requires_grad """
         return requires_grad(self)
+
+    @property
+    def size(self):
+        """ Total number of elements in the tensor. """
+        Dset = np.array(self.struct.D, dtype=int).reshape((len(self.struct.D), len(self.struct.s)))
+        return sum(np.prod(Dset, axis=1))
