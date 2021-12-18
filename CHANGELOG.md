@@ -89,3 +89,6 @@
 
 8-12-2021
 - in `import_from_dict` perform checks only after loading all the block; this speeds up loading if there are many blocks.
+
+17-12-2021
+- `tensordot` has a new parameter `policy` switching between dot that marges and unmerges effective 2d blocks (`merge`) and direct block by block multiplication (`direct`). Default is `hybrid` that switches between those two based on a simple heuristics. It can be fixed in config files under variable `default_tensordot`.

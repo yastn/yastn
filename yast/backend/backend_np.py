@@ -498,6 +498,41 @@ def mask_diag(A, B, meta, axis, a_ndim):
     return {out: A[in1][slc1 + Bslc[in2] + slc2] for in1, in2, out in meta}
 
 
+def matmul(A, B, meta):
+    C = {}
+    for in1, in2, out, _ in meta:
+        C[out] = A[in1] @ B[in2]
+    return C
+
+def matmul_masks(A, B, meta, ma, mb):
+    C = {}
+    for in1, in2, out, ii in meta:
+        C[out] = A[in1][:, ma[ii]] @ B[in2][mb[ii], :]
+    return C
+
+
+def dot_nomerge(A, B, conj, oA, oB, meta):
+    f = dot_dict[conj]  # proper conjugations
+    C = {}
+    for (ina, inb, out, Da, Db, Dout, _) in meta:
+        temp = f(A[ina].transpose(oA).reshape(Da), B[inb].transpose(oB).reshape(Db)).reshape(Dout)
+        try:
+            C[out] += temp
+        except KeyError:
+            C[out] = temp
+    return C
+
+
+def dot_nomerge_masks(A, B, conj, oA, oB, meta, ma, mb):
+    f = dot_dict[conj]  # proper conjugations
+    C = {}
+    for (ina, inb, out, Da, Db, Dout, tt) in meta:
+        temp = f(A[ina].transpose(oA).reshape(Da)[:, ma[tt]], B[inb].transpose(oB).reshape(Db)[mb[tt], :]).reshape(Dout)
+        try:
+            C[out] += temp
+        except KeyError:
+            C[out] = temp
+    return C
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
