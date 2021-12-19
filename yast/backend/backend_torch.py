@@ -223,8 +223,9 @@ def requires_grad(A):
     return any([b.requires_grad for b in A.values()])
 
 
-def move_to_device(A, device):
-    return {ind: x.to(device) for ind, x in A.items()}
+def move_to(A, *args, **kwargs):
+    if "dtype" in kwargs: kwargs["dtype"]= DTYPE[kwargs["dtype"]]
+    return {ind: x.to(*args,**kwargs) for ind, x in A.items()}
 
 
 def conj(A, inplace):

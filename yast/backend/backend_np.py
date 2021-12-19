@@ -220,7 +220,7 @@ def requires_grad(A):
     return False
 
 
-def move_to_device(A, *args, **kwargs):
+def move_to(A, *args, **kwargs):
     return A
 
 
