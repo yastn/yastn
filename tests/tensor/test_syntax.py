@@ -312,7 +312,6 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
         # tests
         a.is_consistent()
         a.are_independent(b)
->>>>>>> links to examples in tests
 
 
 if __name__ == '__main__':

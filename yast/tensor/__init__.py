@@ -110,8 +110,8 @@ class Tensor:
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, diag, absolute, sqrt, rsqrt, reciprocal, exp
     from ._single import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
     from ._single import copy, clone, detach, to, requires_grad_, real, imag,  remove_zero_blocks, add_leg
-    from ._output import show_properties, __str__, print_blocks, is_complex
-    from ._output import get_blocks_charges, get_blocks_shapes, get_leg_charges_and_dims, get_leg_structure
+    from ._output import show_properties, __str__, print_blocks_shape, is_complex
+    from ._output import get_blocks_charge, get_blocks_shape, get_leg_charges_and_dims, get_leg_structure
     from ._output import zero_of_dtype, item, __getitem__
     from ._output import get_leg_fusion, get_shape, get_signature, unique_dtype
     from ._output import get_tensor_charge, get_rank, get_signature
