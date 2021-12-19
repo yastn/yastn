@@ -37,7 +37,7 @@ def detach(a, inplace=False):
     return c
 
 
-def to(a, device):
+def to(a, device, dtype=None):
     r"""
     Move the ``Tensor`` to ``device``. Returns a copy of the tensor on `device``.
 
@@ -47,11 +47,23 @@ def to(a, device):
     ----------
     device: str
         device identifier
+    dtype: str
+        desired dtype
+
+    Returns
+    -------
+    tensor : Tensor
+        returns a clone of the tensor residing on ``device`` in desired ``dtype``. If tensor already 
+        resides on ``device``, returns ``self``. This operation preserves autograd.
     """
-    if a.config.device == device:
+    a_dtype= a.unique_dtype()
+    if (dtype is None and device is None) or \
+        (dtype is None and a.config.device == device) or \
+        (a_dtype == dtype and device is None) or \
+        (a_dtype == dtype and a.config.device == device):
         return a
     c = a.__class__(config=a.config, isdiag=a.isdiag, device=device, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.move_to_device(a.A, device)
+    c.A = a.config.backend.move_to(a.A, dtype=dtype, device=device)
     return c
 
 

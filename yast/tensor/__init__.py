@@ -58,10 +58,13 @@ class Tensor:
             temp_config = {a: getattr(config, a) for a in _config._fields if hasattr(config, a)}
             if 'device' not in temp_config:
                 temp_config['device'] = config.default_device
+            if 'dtype' not in temp_config:
+                temp_config['dtype'] = config.default_dtype
             self.config = _config(**temp_config)
         if 'device' in kwargs and kwargs['device'] != self.config.device:
             self.config._replace(device=kwargs['device'])
-
+        if 'dtype' in kwargs and kwargs['dtype'] != self.config.dtype:
+            self.config._replace(device=kwargs['dtype'])
         self._isdiag = isdiag
         self.A = {}  # dictionary of blocks
 

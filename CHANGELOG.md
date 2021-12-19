@@ -1,3 +1,7 @@
+19-12-2021
+- `move_to_device` in backend is renamed to `move_to` and now handles both device and dtype
+  conversions
+
 4-5-2021 
 - config is now assumed to contain default_dtype and default_device. Property `device` is no
   longer part of the config
