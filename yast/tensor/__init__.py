@@ -121,17 +121,26 @@ class Tensor:
     abs = absolute  # allow yast.abs(tensor)
 
     @property
+    def s_n(self):
+        """ Return signature of (native) tensor legs. """
+        return self.struct.s
+
+    @property
     def s(self):
-        """ Return signature of the tensor as nparray. """
-        return np.array(self.struct.s, dtype=int)
+        """ Return signature of (meta-fused) tensor legs. """
+        inds, n = [], 0
+        for mf in self.meta_fusion:
+            inds.append(n)
+            n += mf[0]
+        return tuple(self.struct.s[ind] for ind in inds)
 
     @property
     def n(self):
-        """ Return total charge of the tensor as nparray. """
-        return np.array(self.struct.n, dtype=int)
+        """ Return total tensor charge. """
+        return self.struct.n
 
     @property
-    def ndimn(self):
+    def ndim_n(self):
         """ Return the number of dimensions (native) """
         return len(self.struct.s)
 

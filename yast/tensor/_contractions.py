@@ -239,7 +239,7 @@ def broadcast(a, b, axis, conj=(0, 0)):
     meta, c_struct = _meta_broadcast(a.config, a.struct, b.struct, conja, axis)
 
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=c_hard_fusion, struct=c_struct)
-    a_ndim, axis = (1, 0) if a.isdiag else (a.ndimn, axis)
+    a_ndim, axis = (1, 0) if a.isdiag else (a.ndim_n, axis)
     c.A = a.config.backend.dot_diag(a.A, b.A, conj, meta, axis, a_ndim)
     return c
 
@@ -293,7 +293,7 @@ def mask(a, b, axis=0):
     ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a.struct.t)
     meta = tuple((ta, ia + ia, ta) for ta, ia in zip(a.struct.t, ind_ta) if ia in ind_tb)
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    a_ndim, axis = (1, 0) if a.isdiag else (a.ndimn, axis)
+    a_ndim, axis = (1, 0) if a.isdiag else (a.ndim_n, axis)
     c.A = a.config.backend.mask_diag(a.A, b.A, meta, axis, a_ndim)
     c.update_struct()
     return c
@@ -432,7 +432,7 @@ def swap_gate(a, axes, inplace=False):
         return a
     fss = (True,) * len(a.struct.n) if a.config.fermionic is True else a.config.fermionic
     axes = tuple(_clear_axes(*axes))  # swapped groups of legs
-    tp = _meta_swap_gate(a.struct.t, a.struct.n, a.meta_fusion, a.ndimn, axes, fss)
+    tp = _meta_swap_gate(a.struct.t, a.struct.n, a.meta_fusion, a.ndim_n, axes, fss)
     if inplace:
         for ts, odd in zip(a.struct.t, tp):
             if odd:
