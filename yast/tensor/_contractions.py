@@ -3,7 +3,7 @@ from functools import lru_cache
 from itertools import groupby, product
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray, _struct
-from ._tests import YastError, _check, _test_configs_match, _test_fusions_match
+from ._tests import YastError, _test_configs_match, _test_fusions_match
 from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_sign_hf
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
 
@@ -85,15 +85,15 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
     mconj = - conja * conjb
 
-    if _check["signatures_match"] and not all(a.struct.s[i] == mconj * b.struct.s[j] for i, j in zip(axes_a[1], axes_b[0])):
+    if not all(a.struct.s[i] == mconj * b.struct.s[j] for i, j in zip(axes_a[1], axes_b[0])):
         raise YastError('Signatures of contracted legs do not match.')
 
     needs_mask = False  # for hard-fused legs
     for i1, i2 in zip(axes_a[1], axes_b[0]):
         if a.hard_fusion[i1].tree != b.hard_fusion[i2].tree:
             raise YastError(f'Hard fusions of leg {i1} of a and leg {i2} of b are not compatible: mismatch in the number of fused legs or fusion order.')
-        if _check["signatures_match"] and ((mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or
-                                            (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms)):
+        if ((mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or
+            (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms)):
             raise YastError('Hard fusions of leg {i1} of a and leg {i2} of b are not compatible: signatures do not match.')
         if a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
             needs_mask = True
@@ -124,7 +124,7 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
                                                         b.struct, b.hard_fusion, axes_b[0], ls_bc)
             Am = {ul + ur: Am[ul + ur][:, msk_a[ur]] for ul, ur in zip(ua_l, ua_r)}
             Bm = {ul + ur: Bm[ul + ur][msk_b[ul], :] for ul, ur in zip(ub_l, ub_r)}
-        elif _check["consistency"] and (ua_r != ub_l or ls_ac != ls_bc):
+        elif ua_r != ub_l or ls_ac != ls_bc:
             raise YastError('Mismatch in bond dimensions of contracted legs.')
 
         c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
@@ -319,11 +319,10 @@ def vdot(a, b, conj=(1, 0)):
     _test_fusions_match(a, b)
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
 
-    if _check["signatures_match"]:
-        if conja * conjb == -1 and any(ha.s != hb.s for ha, hb in zip(a.hard_fusion, b.hard_fusion)):
-            raise YastError('Signatures do not match.')
-        if conja * conjb == 1 and any(ha.s != hb.ms for ha, hb in zip(a.hard_fusion, b.hard_fusion)):
-            raise YastError('Signatures do not match.')
+    if conja * conjb == -1 and any(ha.s != hb.s for ha, hb in zip(a.hard_fusion, b.hard_fusion)):
+        raise YastError('Signatures do not match.')
+    if conja * conjb == 1 and any(ha.s != hb.ms for ha, hb in zip(a.hard_fusion, b.hard_fusion)):
+        raise YastError('Signatures do not match.')
 
     c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
     c_n = a.config.sym.fuse(c_n, (conja, conjb), 1)

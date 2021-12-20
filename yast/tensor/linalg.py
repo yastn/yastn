@@ -1,7 +1,7 @@
 """ Linalg methods for yast tensor. """
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys
-from ._tests import YastError, _check, _test_tensors_match, _test_all_axes
+from ._tests import YastError, _test_tensors_match, _test_all_axes
 from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal, _masks_for_add
 from ._merging import _leg_struct_trivial, _leg_struct_truncation, _Fusion
 from ._krylov import _expand_krylov_space
@@ -337,7 +337,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
     s_eff = (-sU, sU)
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
 
-    if _check["consistency"] and not (ul == ur and ls_l == ls_r):
+    if ul != ur or ls_l != ls_r:
         raise YastError(
             'Something went wrong in matching the indices of the two tensors')
 

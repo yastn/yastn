@@ -2,7 +2,7 @@
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _Darray, _struct
 from ._merging import _Fusion, _flip_sign_hf, _masks_for_add
-from ._tests import YastError, _test_configs_match, _test_tensors_match, _test_all_axes
+from ._tests import YastError, _test_configs_match, _test_tensors_match, _test_all_axes, _get_tD_legs
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'remove_zero_blocks',
            'absolute', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'apxb', 'add_leg',
@@ -228,15 +228,6 @@ def __truediv__(a, number):
     return c
 
 
-def _check_struct_consistency(struct):
-    tset = np.array(struct.t, dtype=int).reshape((len(struct.t), len(struct.s), len(struct.n)))
-    Dset = np.array(struct.D, dtype=int).reshape((len(struct.t), len(struct.s)))
-    tD_legs = [sorted(set((tuple(t.flat), D) for t, D in zip(tset[:, n, :], Dset[:, n]))) for n in range(len(struct.s))]
-    tD_dict = [dict(tD) for tD in tD_legs]
-    if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
-        raise YastError('Bond dimensions of two added tensor are inconsistent.')
-
-
 def __add__(a, b):
     """
     Add two tensors, use: tensor + tensor.
@@ -268,7 +259,7 @@ def __add__(a, b):
     if len(meta[1]) > 0 or len(meta[2]) > 0 or masks_needed:
         c.update_struct()
     if len(meta[1]) > 0 or len(meta[2]) > 0:
-        _check_struct_consistency(c.struct)
+        _get_tD_legs(c.struct)
     return c
 
 
@@ -303,7 +294,7 @@ def __sub__(a, b):
     if len(meta[1]) > 0 or len(meta[2]) > 0 or masks_needed:
         c.update_struct()
     if len(meta[1]) > 0 or len(meta[2]) > 0:
-        _check_struct_consistency(c.struct)
+        _get_tD_legs(c.struct)
     return c
 
 
@@ -339,7 +330,7 @@ def apxb(a, b, x=1):
     if len(meta[1]) > 0 or len(meta[2]) > 0 or masks_needed:
         c.update_struct()
     if len(meta[1]) > 0 or len(meta[2]) > 0:
-        _check_struct_consistency(c.struct)
+        _get_tD_legs(c.struct)
     return c
 
 

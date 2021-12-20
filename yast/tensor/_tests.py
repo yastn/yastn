@@ -2,23 +2,11 @@
 import numpy as np
 from ._auxliary import _flatten, _tarray
 
-__all__ = ['check_signatures_match', 'check_consistency', 'are_independent', 'is_consistent']
-
-_check = {"signatures_match": True, "consistency": True}
+__all__ = ['are_independent', 'is_consistent']
 
 
 class YastError(Exception):
     """Errors cought by checks in yast."""
-
-
-def check_signatures_match(value=True):
-    """Set the value of the flag check_signatures_match."""
-    _check["signatures_match"] = bool(value)
-
-
-def check_consistency(value=True):
-    """Set the value of the flag check_consistency."""
-    _check["consistency"] = bool(value)
 
 
 def _test_configs_match(a, b):
@@ -34,27 +22,26 @@ def _test_configs_match(a, b):
 
 
 def _test_tensors_match(a, b):
-    if _check["signatures_match"] and (a.struct.s != b.struct.s or a.struct.n != b.struct.n):
+    if a.struct.s != b.struct.s or a.struct.n != b.struct.n:
         raise YastError('Tensor signatures do not match')
-    if _check["consistency"] and a.meta_fusion != b.meta_fusion:
+    if a.meta_fusion != b.meta_fusion:
         raise YastError('Fusion trees do not match')
     # if a.hard_fusion != b.hard_fusion:
     #    raise YastError('Hard fusions of the two tensors do not match')
 
 
 def _test_fusions_match(a, b):
-    if _check["consistency"] and a.meta_fusion != b.meta_fusion:
+    if a.meta_fusion != b.meta_fusion:
         raise YastError('Fusion trees do not match')
 
 
 def _test_all_axes(a, axes, native=False):
-    if _check["consistency"]:
-        axes = tuple(_flatten(axes))
-        ndim = a.ndim_n if native else a.ndim
-        if ndim != len(axes):
-            raise YastError('Wrong number of axis indices in axes')
-        if sorted(set(axes)) != list(range(ndim)):
-            raise YastError('Repeated axis index in axes')
+    axes = tuple(_flatten(axes))
+    ndim = a.ndim_n if native else a.ndim
+    if ndim != len(axes):
+        raise YastError('Wrong number of axis indices in axes')
+    if sorted(set(axes)) != list(range(ndim)):
+        raise YastError('Repeated axis index in axes')
 
 
 def _test_hard_fusion_match(hf1, hf2, mconj):
@@ -109,3 +96,16 @@ def is_consistent(a):
     if len(device) == 1:
         assert device.pop().startswith(a.config.device), 'device of blocks inconsistent with config.device'
     return True
+
+
+def _get_tD_legs(struct):
+    """ different views on struct.t and struct.D """
+    tset = np.array(struct.t, dtype=int).reshape((len(struct.t), len(struct.s), len(struct.n)))
+    Dset = np.array(struct.D, dtype=int).reshape((len(struct.t), len(struct.s)))
+    tD_legs = [sorted(set((tuple(t.flat), D) for t, D in zip(tset[:, n, :], Dset[:, n]))) for n in range(len(struct.s))]
+    tD_dict = [dict(tD) for tD in tD_legs]
+    if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
+        raise YastError('Bond dimensions related to some charge are not consistent.')
+    tlegs = [tuple(tD.keys()) for tD in tD_dict]
+    Dlegs= [tuple(tD.values()) for tD in tD_dict]
+    return tlegs, Dlegs, tD_dict, tset, Dset

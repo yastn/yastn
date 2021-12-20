@@ -6,7 +6,7 @@ from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
 from ._auxliary import _flatten, _struct, _clear_axes, _ntree_to_mf, _mf_to_ntree
-from ._tests import YastError,  _test_all_axes
+from ._tests import YastError, _test_all_axes, _get_tD_legs
 
 
 __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard']
@@ -104,19 +104,6 @@ def _outer_masks(t, ms, nsym):
     for i in range(1, len(ms)):
         x = np.outer(x, ms[i][t[i * nsym: (i + 1) * nsym]]).ravel()
     return x
-
-
-def _get_tD_legs(struct):
-    """ different views on struct.t and struct.D """
-    tset = np.array(struct.t, dtype=int).reshape((len(struct.t), len(struct.s), len(struct.n)))
-    Dset = np.array(struct.D, dtype=int).reshape((len(struct.t), len(struct.s)))
-    tD_legs = [sorted(set((tuple(t.flat), D) for t, D in zip(tset[:, n, :], Dset[:, n]))) for n in range(len(struct.s))]
-    tD_dict = [dict(tD) for tD in tD_legs]
-    if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
-        raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
-    tlegs = [tuple(tD.keys()) for tD in tD_dict]
-    Dlegs= [tuple(tD.values()) for tD in tD_dict]
-    return tlegs, Dlegs, tD_dict, tset, Dset
 
 
 def _mask_falsify_mismatches(ms1, ms2):
