@@ -2,7 +2,7 @@
 
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _mf_to_ntree
-from ._tests import YastError, _check
+from ._tests import YastError
 from ..sym import sym_none
 
 
@@ -197,10 +197,9 @@ def get_leg_structure(a, axis, native=False):
     Dset = np.prod(Dset, axis=1) if len(axis) > 1 else Dset.reshape(-1)
 
     tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tset, Dset)}
-    if _check["consistency"]:
-        for tn, Dn in zip(tset, Dset):
-            if tDn[tuple(tn.flat)] != Dn:
-                raise YastError('Inconsistend bond dimension of charge.')
+    for tn, Dn in zip(tset, Dset):
+        if tDn[tuple(tn.flat)] != Dn:
+            raise YastError('Inconsistend bond dimension of charge.')
     return tDn
 
 
