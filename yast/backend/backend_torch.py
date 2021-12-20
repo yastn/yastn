@@ -224,8 +224,12 @@ def requires_grad(A):
 
 
 def move_to(A, *args, **kwargs):
-    if "dtype" in kwargs: kwargs["dtype"]= DTYPE[kwargs["dtype"]]
-    return {ind: x.to(*args,**kwargs) for ind, x in A.items()}
+    if "dtype" in kwargs:
+        if kwargs["dtype"] is None:
+            del kwargs["dtype"]
+        else:
+            kwargs["dtype"] = DTYPE[kwargs["dtype"]]
+    return {ind: x.to(*args, **kwargs) for ind, x in A.items()}
 
 
 def conj(A, inplace):

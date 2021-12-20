@@ -98,4 +98,7 @@
 - `tensordot` has a new parameter `policy` switching between dot that marges and unmerges effective 2d blocks (`merge`) and direct block by block multiplication (`direct`). Default is `hybrid` that switches between those two based on a simple heuristics. It can be fixed in config files under variable `default_tensordot`.
 
 18-12-2021
-- introduce property `tensor.ndim` replacing `tensor.mlegs` and `tensor.ndimn` replacing `tensor.nlegs`. `tensor.get_ndim()` is removed. Property `tensor.size` replaces `tensor.get_size()`
+- introduce property `tensor.ndim` replacing `tensor.mlegs` and `tensor.ndim_n` replacing `tensor.nlegs`.  Property `tensor.size` replaces `tensor.get_size()`
+  property `tensor.s` returns signature of meta-fused legs (i.e. showing only part of native signeture). property `tensor.s_n` return full (native) signature.
+  `tensor.s`, `tensor.s_n` and `tensor.n` return tuple. `tensor.get_rank(native)` and `tensor.get_signature(native)` are unified getters.
+

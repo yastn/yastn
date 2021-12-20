@@ -567,7 +567,7 @@ def fuse_meta_to_hard(a, inplace=False):
     """ Changes all meta fusions into a hard fusions. If there are no meta fusions, do nothing. """
     while any(mf != (1,) for mf in a.meta_fusion):
         axes, new_mfs = _consume_mfs_lowest(a.meta_fusion)
-        order = tuple(range(a.ndimn))
+        order = tuple(range(a.ndim_n))
         a = _fuse_legs_hard(a, axes, order, inplace)
         a.meta_fusion = new_mfs
     return a

@@ -468,7 +468,7 @@ def diag(a):
         c = a.__class__(config=a.config, isdiag=False, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
         c.A = {ind: a.config.backend.diag_create(a.A[ind]) for ind in a.A}
         return c
-    if a.ndimn == 2 and all(x == 0 for x in a.struct.n):
+    if a.ndim_n == 2 and all(x == 0 for x in a.struct.n):
         c = a.__class__(config=a.config, isdiag=True, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
         c.A = {ind: a.config.backend.diag_get(a.A[ind]) for ind in a.A}
         return c

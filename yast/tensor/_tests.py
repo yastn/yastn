@@ -50,7 +50,7 @@ def _test_fusions_match(a, b):
 def _test_all_axes(a, axes, native=False):
     if _check["consistency"]:
         axes = tuple(_flatten(axes))
-        ndim = a.ndimn if native else a.ndim
+        ndim = a.ndim_n if native else a.ndim
         if ndim != len(axes):
             raise YastError('Wrong number of axis indices in axes')
         if sorted(set(axes)) != list(range(ndim)):
@@ -99,7 +99,7 @@ def is_consistent(a):
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)
     assert np.all(a.config.sym.fuse(tset, sa, 1) == na), 'charges of some block do not satisfy symmetry condition'
-    for n in range(a.ndimn):
+    for n in range(a.ndim_n):
         a.get_leg_structure(n, native=True)
     device = {a.config.backend.get_device(x) for x in a.A.values()}
     for s, hf in zip(a.struct.s, a.hard_fusion):

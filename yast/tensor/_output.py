@@ -76,7 +76,7 @@ def compress_to_1d(a, meta=None):
         if len(a.A) != sum(ind in a.A for (_, ind, _, _) in meta_merge):
             raise YastError("Tensor has blocks that do not appear in meta.")
 
-    order = (0,) if a.isdiag else tuple(range(a.ndimn))
+    order = (0,) if a.isdiag else tuple(range(a.ndim_n))
     A = a.config.backend.merge_blocks(a.A, order, meta_new, meta_merge, a.config.device)
     return A[()], meta
 
@@ -93,7 +93,7 @@ def show_properties(a):
     print("charge      :", a.struct.n)  # total charge of tensor
     print("isdiag      :", a.isdiag)
     print("dim meta    :", a.ndim)  # number of meta legs
-    print("dim native  :", a.ndimn)  # number of native legs
+    print("dim native  :", a.ndim_n)  # number of native legs
     print("shape meta  :", a.get_shape(native=False))
     print("shape native:", a.get_shape(native=True))
     print("no. blocks  :", len(a.A))  # number of blocks
@@ -136,12 +136,13 @@ def get_tensor_charge(a):
 
 
 def get_signature(a, native=False):
-    """ Tensor signatures. If not native, returns the signature of the first leg in each group."""
-    if native:
-        return a.struct.s
-    pn = tuple((n,) for n in range(a.ndim)) if a.ndim > 0 else ()
-    un = tuple(_unpack_axes(a.meta_fusion, *pn))
-    return tuple(a.struct.s[p[0]] for p in un)
+    """ Tensor signatures. If not native, returns the signature of the first leg in each group forming meta-legs. """
+    return a.s_n if native else a.s
+
+
+def get_rank(a, native=False):
+    """ Return tensor rank. If not native, returns the number of meta-legs. """
+    return a.ndim_n if native else a.ndim
 
 
 def get_blocks_charges(a):
@@ -205,7 +206,7 @@ def get_leg_structure(a, axis, native=False):
 
 def get_leg_charges_and_dims(a, native=False):
     """ collect information about charges and dimensions on all legs into two lists. """
-    _tmp = [a.get_leg_structure(n, native=native) for n in range(a.ndimn if native else a.ndim)]
+    _tmp = [a.get_leg_structure(n, native=native) for n in range(a.ndim_n if native else a.ndim)]
     _tmp = [{k: lst[k] for k in sorted(lst)} for lst in _tmp]
     ts, Ds = tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
     return ts, Ds
@@ -226,7 +227,7 @@ def get_shape(a, axes=None, native=False):
         shapes of legs specified by axes
     """
     if axes is None:
-        axes = tuple(n for n in range(a.ndimn if native else a.ndim))
+        axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
     if isinstance(axes, int):
         return sum(a.get_leg_structure(axes, native=native).values())
     return tuple(sum(a.get_leg_structure(ii, native=native).values()) for ii in axes)
@@ -259,7 +260,7 @@ def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
     ----------
     tensors : list
         [reference_tensor, {leg of reference_tensor: leg of tensor to be made dense}]
-        If dict not present, assumes {n: n for n in reference_tensor.ndimn}
+        If dict not present, assumes {n: n for n in reference_tensor.ndim_n}
 
     native: bool
         output data for native tensor (neglecting meta fusions).
@@ -277,7 +278,7 @@ def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
                     lss[lo] = [a.get_leg_structure(la, native=native)]
             a = next(itensors, None)
         else:
-            for n in range(a.ndimn if native else a.ndim):
+            for n in range(a.ndim_n if native else a.ndim):
                 if n in lss:
                     lss[n].append(a.get_leg_structure(n, native=native))
                 else:
@@ -389,7 +390,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     news = a.get_signature(native)
     c = a.__class__(config=config_dense, s=news, n=None, isdiag=a.isdiag)
 
-    ndim = a.ndimn if native else a.ndim
+    ndim = a.ndim_n if native else a.ndim
     tD = [a.get_leg_structure(n, native=native) for n in range(ndim)]
     if leg_structures is not None:
         for n, tDn in leg_structures.items():
