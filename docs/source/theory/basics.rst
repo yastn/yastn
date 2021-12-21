@@ -26,7 +26,7 @@ In YAST, similar to other implementations [cite ITensor, TenPy], the distinction
 :math:`\langle bra |` and :math:`|ket \rangle` spaces, or Hilbert space :math:`\mathcal{H}` and its dual :math:`\mathcal{H}^*`, is encoded through `signature`.
 
 .. note::
-    `signature`, :attribute:`yast.Tensor.s`, is a tuple/list/1-D array of signs :math:`\pm 1`
+    `signature`, :py:attr:`yast.Tensor.s`, is a tuple/list/1-D array of signs :math:`\pm 1`
 
 
 Conjugation
