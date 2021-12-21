@@ -21,6 +21,7 @@ See examples: :ref:`examples/init:create empty tensor and fill it block by block
 
 .. autoclass:: yast.Tensor
 	:members: __init__
+	:exclude-members: __new__
 
 
 Basic creation operations
@@ -41,6 +42,7 @@ Copying and cloning with autograd
 
 .. autoclass:: yast.Tensor
 	:noindex:
+	:exclude-members: __init__, __new__
 	:members: copy, clone, detach
 
 

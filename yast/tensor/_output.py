@@ -161,8 +161,7 @@ def get_tensor_charge(a):
     Returns
     -------
     n : int or tuple(int)
-        total charge of the tensor. In case of direct product of abelian symmetries, total
-        charges for each symmetry are returned in a tuple 
+        see :attr:`yast.Tensor.n`
     """
     return a.struct.n
 
@@ -172,8 +171,8 @@ def get_signature(a, native=False):
     Returns
     -------
     s : tuple
-        Tensor signature. If native, returns the original signature.
-        Otherwise the signature of the first native leg for each leg obtained by fusion is returned.
+        Tensor signature, equivalent to :attr:`yast.Tensor.s`. 
+        If native, returns the signature of tensors's native legs, see :attr:`yast.Tensor.s_n`.  
     """
     return a.s_n if native else a.s
 
@@ -183,7 +182,8 @@ def get_rank(a, native=False):
     Returns
     -------
     n : int
-        Tensor rank. If native is ``True``, the rank of the tensor with all legs unfused is returned. 
+        Tensor rank equivalent to :attr:`yast.Tensor.ndim`. 
+        If native, the native rank of the tensor is returned, see :attr:`yast.Tensor.ndim_n`. 
     """
     return a.ndim_n if native else a.ndim
 
@@ -467,8 +467,8 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
 
     Returns
     -------
-    out : tensor
-        The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
+    out : Tensor
+        the config of returned tensor does not use any symmetry
     """
     config_dense = a.config._replace(sym=sym_none)
     news = a.get_signature(native)

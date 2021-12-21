@@ -125,12 +125,25 @@ class Tensor:
 
     @property
     def s_n(self):
-        """ Return signature of (native) tensor legs. """
+        """ 
+        Returns
+        -------
+        s_n : tuple(int)
+            signature of tensor's native legs. This includes legs (spaces) which have been 
+            fused together by :meth:`yast.Tensor.fuse`.
+        """
         return self.struct.s
 
     @property
     def s(self):
-        """ Return signature of (meta-fused) tensor legs. """
+        """ 
+        Returns 
+        -------
+        s : tuple(int) 
+            signature of tensor's effective legs. Legs (spaces) fused together
+            by :meth:`yast.Tensor.fuse` are treated as single leg. The signature 
+            of each fused leg is given by the first native leg in the fused space.
+        """
         inds, n = [], 0
         for mf in self.meta_fusion:
             inds.append(n)
@@ -139,31 +152,64 @@ class Tensor:
 
     @property
     def n(self):
-        """ Return total tensor charge. """
+        """ 
+        Returns
+        -------
+        n : tuple(int)
+            total charge of the tensor. In case of direct product of abelian symmetries, total
+            charge for each symmetry, accummulated in a tuple.
+        """
         return self.struct.n
 
     @property
     def ndim_n(self):
-        """ Return the number of dimensions (native) """
+        """ 
+        Returns
+        -------
+        ndim_n : int
+            native rank of the tensor. This includes legs (spaces) which have been 
+            fused together by :meth:`yast.Tensor.fuse`.
+        """
         return len(self.struct.s)
 
     @property
     def ndim(self):
-        """ Return the number of meta dimensions (meta-fusion of native dimensions) """
+        """ 
+        Returns
+        -------
+        ndim : int
+            effective rank of the tensor. Legs (spaces) fused together by :meth:`yast.Tensor.fuse` 
+            are treated as single leg.
+        """
         return len(self.meta_fusion)
 
     @property
     def isdiag(self):
-        """ Return  """
+        """ 
+        Returns
+        -------
+        isdiag : bool
+            ``True`` if the tensor is diagonal.  
+        """
         return self._isdiag
 
     @property
     def requires_grad(self):
-        """ Return value of requires_grad """
+        """
+        Returns
+        -------
+        requires_grad : bool
+            ``True`` if any block of the tensor has autograd enabled 
+        """
         return requires_grad(self)
 
     @property
     def size(self):
-        """ Total number of elements in the tensor. """
+        """ 
+        Returns
+        -------
+        size : int
+            total number of elements in all non-empty blocks of the tensor 
+        """
         Dset = np.array(self.struct.D, dtype=int).reshape((len(self.struct.D), len(self.struct.s)))
         return sum(np.prod(Dset, axis=1))
