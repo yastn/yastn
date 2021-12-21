@@ -1,3 +1,7 @@
+21-12-2021
+- `get_blocks_charges` renamed to `get_blocks_charge`, `get_blocks_shapes` renamed to `get_blocks_shape`,
+  `print_blocks` renamed to `print_blocks_shape`
+
 19-12-2021
 - `move_to_device` in backend is renamed to `move_to` and now handles both device and dtype
   conversions

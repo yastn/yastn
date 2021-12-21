@@ -224,7 +224,7 @@ def get_shape(a, axes=None, native=False):
         shapes of legs specified by axes
     """
     if axes is None:
-        axes = tuple(n for n in range(a.nlegs if native else a.mlegs))
+        axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
     if isinstance(axes, int):
         return sum(a.get_leg_structure(axes, native=native).values())
     return tuple(sum(a.get_leg_structure(ii, native=native).values()) for ii in axes)
