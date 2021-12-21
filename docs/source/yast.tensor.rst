@@ -17,6 +17,7 @@ API: yast and yast.Tensor
    tensor/access
    tensor/algebra
    tensor/output
+   tensor/autograd
 
 Examples: basics of usage
 -------------------------
