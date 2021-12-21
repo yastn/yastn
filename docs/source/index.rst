@@ -8,7 +8,7 @@ together with MPS implementation powered by YAST.
 
 .. toctree::
    :maxdepth: 2
-   :caption: Package description:
+   :caption: Table of contents:
 
    yast.tensor
    yast.mps
