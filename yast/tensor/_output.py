@@ -230,16 +230,6 @@ def get_shape(a, axes=None, native=False):
     return tuple(sum(a.get_leg_structure(ii, native=native).values()) for ii in axes)
 
 
-def get_ndim(a, native=False):
-    """ 
-    Returns
-    -------
-    n : int
-        Number of native legs if native is ``True`` otherwise number of meta/fused legs. 
-    """
-    return a.nlegs if native else a.mlegs
-
-
 def unique_dtype(a):
     """ 
     Returns
@@ -323,42 +313,6 @@ def get_leg_charges_and_dims(a, native=False):
     _tmp = [{k: lst[k] for k in sorted(lst)} for lst in _tmp]
     ts, Ds = tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
     return ts, Ds
-
-
-def get_shape(a, axes=None, native=False):
-    r"""
-    Return total bond dimension of meta legs.
-
-    Parameters
-    ----------
-    axes : Int or tuple of ints
-        indices of legs; If axes is None returns all (default).
-
-    Returns
-    -------
-    shape : Int or tuple of ints
-        shapes of legs specified by axes
-    """
-    if axes is None:
-        axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
-    if isinstance(axes, int):
-        return sum(a.get_leg_structure(axes, native=native).values())
-    return tuple(sum(a.get_leg_structure(ii, native=native).values()) for ii in axes)
-
-
-def unique_dtype(a):
-    """ Return dtype if all blocks have the same type. Otherwise, return False. """
-    return a.config.backend.unique_dtype(a)
-
-
-def __getitem__(a, key):
-    """ Returns block based on its charges. """
-    return a.A[key]
-
-
-#########################
-#    output tensors     #
-#########################
 
 
 def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
