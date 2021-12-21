@@ -203,14 +203,14 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
 
         # get info
         a.show_properties()
-        a.get_ndim()
-        a.get_size()
+        a.get_rank()
+        a.size
         a.get_tensor_charge()
         a.get_signature()
         a.get_leg_fusion()
         str(a)
-        a.get_blocks_charges()
-        a.get_blocks_shapes()
+        a.get_blocks_charge()
+        a.get_blocks_shape()
         a.get_leg_charges_and_dims()
         a.get_shape(axes=2)
         ls = a.get_leg_structure(axis=1)
