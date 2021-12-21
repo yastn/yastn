@@ -1,4 +1,6 @@
-""" Methods creating a new yast tensor """
+# Methods creating new YAST tensors from scratch
+# and importing tensors from different formats
+# such as 1D+metadata or dictionary representation
 from .tensor import Tensor, YastError
 import numpy as np
 from .tensor._auxliary import _unpack_axes
@@ -190,7 +192,7 @@ def eye(config=None, t=(), D=(), legs=None, dtype=None, **kwargs):
 
 def import_from_dict(config=None, d=None):
     """
-    Generate tensor based on information in dictionary d.
+    Generate tensor based on information in dictionary `d`.
 
     Parameters
     ----------
@@ -198,7 +200,8 @@ def import_from_dict(config=None, d=None):
             configuration with backend, symmetry, etc.
 
     d : dict
-        information about tensor stored with :meth:`Tensor.to_dict`
+        Tensor stored in form of a dictionary. Typically provided by an output 
+        of :meth:`~yast.Tensor.export_to_dict`
     """
     if d is not None:
         a = Tensor(config=config, **d)
@@ -241,16 +244,24 @@ def import_from_hdf5(config, file, path):
 
 def decompress_from_1d(r1d, config, meta):
     """
-    Generate tensor based on information in dictionary d and 1D array
-    r1d containing the serialized blocks
+    Generate tensor from dictionary `meta` describing the structure of the tensor, 
+    charges and dimensions of its non-zero blocks, and 1-D array `r1d` containing 
+    serialized data of non-zero blocks.
+
+    Typically, the pair `r1d` and `meta` is obtained from :func:`~yast.Tensor.compress_to_1d`.
 
     Parameters
     ----------
+    r1d : rank-1 tensor
+        1-D array (of backend type) holding serialized blocks.
+
     config: module
             configuration with backend, symmetry, etc.
 
-    d : dict
-        information about tensor stored with :meth:`Tensor.to_dict`
+    meta : dict
+        structure of symmetric tensor. Non-zero blocks are indexed by associated charges.
+        Each such entry contains block's dimensions and the location of its data
+        in rank-1 tensor `r1d`
     """
     a = Tensor(config=config, **meta)
     A = {(): r1d}
