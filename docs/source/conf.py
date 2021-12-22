@@ -29,10 +29,16 @@ author = 'Gabriela Wojtowicz, Juraj Hasik, Marek M. Rams'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.autosectionlabel',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
     'sphinx.ext.mathjax'
 ]
+
+autodoc_class_signature = "separated"
+
+# Make sure the target is unique
+autosectionlabel_prefix_document = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
