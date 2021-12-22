@@ -15,7 +15,7 @@ class _struct(NamedTuple):
 class _config(NamedTuple):
     backend: any = None
     sym: any = sym_none
-    fermionic: tuple = False 
+    fermionic: tuple = False
     device: str = 'cpu'
     dtype: str = 'float64'
     default_device: str = 'cpu'

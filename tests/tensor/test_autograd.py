@@ -18,8 +18,8 @@ def test_trace_0():
         H.A[()][t] = val
     v = yast.Tensor(config=config_dense, s=(-1, -1))
     v.set_block(Ds=(2, 2), val='zeros')
-    inds_v= [(0, 0), (0, 1), (1, 0), (1, 1)]
-    vals_v= [0.1, 0.9,-0.9, 0.1]
+    inds_v = [(0, 0), (0, 1), (1, 0), (1, 1)]
+    vals_v = [0.1, 0.9, -0.9, 0.1]
     for t, val in zip(inds_v, vals_v):
         v.A[()][t] = val
 
@@ -27,10 +27,10 @@ def test_trace_0():
     v.requires_grad_()
     assert v.requires_grad is True
 
-    Hv= yast.tensordot(H,v,([2,3],[0,1]))
-    vHv= yast.tensordot(v.conj(),Hv,([0,1],[0,1]))
-    vv= yast.vdot(v,v)
-    vHv_vv= vHv/vv
+    Hv = yast.tensordot(H, v, ((2, 3), (0, 1)))
+    vHv = yast.tensordot(v, Hv, ((0, 1), (0, 1)), conj=(1, 0))
+    vv = yast.vdot(v,v)
+    vHv_vv = vHv / vv
     loss= vHv_vv.to_number()
 
     loss.backward()
@@ -51,8 +51,8 @@ def test_trace_1():
     for t, b in zip(ta, ba):
         H.set_block(ts=t, Ds=(1, 1, 1, 1), val=b)
     v = yast.Tensor(config=config_U1, s=(-1, -1, 1))
-    tv= [(-1, -1, -2), (-1, 1, 0), (1, -1, 0), (1, 1, 2)]
-    bv= [0.1, 0.9,-0.9, 0.1]
+    tv = [(-1, -1, -2), (-1, 1, 0), (1, -1, 0), (1, 1, 2)]
+    bv = [0.1, 0.9, -0.9, 0.1]
     for t, b in zip(tv, bv):
         v.set_block(ts=t, Ds=(1, 1, 1), val=b)
 
@@ -60,10 +60,10 @@ def test_trace_1():
     v.requires_grad_()
     assert v.requires_grad is True
 
-    Hv= yast.tensordot(H,v,([2, 3], [0, 1]))
-    vHv= yast.tensordot(v.conj(),Hv,([0, 1, 2], [0, 1, 2]))
-    vv= yast.vdot(v,v)
-    vHv_vv= vHv/vv
+    Hv = yast.tensordot(H, v, ((2, 3), (0, 1)))
+    vHv = yast.tensordot(v, Hv, ((0, 1, 2), (0, 1, 2)), conj=(1, 0))
+    vv = yast.vdot(v,v)
+    vHv_vv = vHv / vv
     loss= vHv_vv.to_number()
 
     loss.backward()

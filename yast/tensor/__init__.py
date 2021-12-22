@@ -111,7 +111,7 @@ class Tensor:
     from ._output import get_blocks_charges, get_blocks_shapes, get_leg_charges_and_dims, get_leg_structure
     from ._output import zero_of_dtype, item, __getitem__
     from ._output import get_leg_fusion, get_shape, get_signature, unique_dtype
-    from ._output import get_tensor_charge, get_rank, get_signature
+    from ._output import get_tensor_charge, get_rank
     from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric
     from ._output import export_to_hdf5, export_to_dict, compress_to_1d
     from ._tests import is_consistent, are_independent

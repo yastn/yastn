@@ -53,7 +53,7 @@ def to(a, device, dtype=None):
     Returns
     -------
     tensor : Tensor
-        returns a clone of the tensor residing on ``device`` in desired ``dtype``. If tensor already 
+        returns a clone of the tensor residing on ``device`` in desired ``dtype``. If tensor already
         resides on ``device``, returns ``self``. This operation preserves autograd.
     """
     a_dtype= a.unique_dtype()
