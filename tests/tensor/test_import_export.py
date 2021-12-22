@@ -1,7 +1,11 @@
 """ basic procedures of single mps """
+import warnings
 import numpy as np
 import pytest
-import h5py
+try:
+    import h5py
+except ImportError:
+    warnings.warn("h5py module not available", ImportWarning)
 import os
 import yast
 try:
@@ -10,6 +14,7 @@ except ImportError:
     from configs import config_dense, config_U1, config_Z2_U1
 
 tol = 1e-12
+
 
 def check_import_export(a):
     """ Test if two Tensor-s have the same values. """

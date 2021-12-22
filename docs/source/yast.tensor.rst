@@ -1,15 +1,28 @@
-yast.tensor package
-====================
+YAST
+====
 
-Submodules
-----------
+What are abelian-symmetric tensors
+----------------------------------
 
+.. toctree::
+   theory/basics
 
+API: yast and yast.Tensor
+-------------------------
 
-Module contents
----------------
+.. toctree::
+   :glob:
 
-.. automodule:: yast.tensor
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   tensor/init
+   tensor/access
+   tensor/algebra
+   tensor/output
+   tensor/autograd
+
+Examples: basics of usage
+-------------------------
+
+.. toctree::
+   :glob:
+   
+   examples/*
