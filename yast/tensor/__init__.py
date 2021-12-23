@@ -59,6 +59,10 @@ class Tensor:
             self.config = config
         else:
             temp_config = {a: getattr(config, a) for a in _config._fields if hasattr(config, a)}
+            if 'device' in kwargs:
+                temp_config['device'] = kwargs['device']
+            if 'dtype' in kwargs:
+                temp_config['dtype'] = kwargs['dtype']
             if 'device' not in temp_config:
                 temp_config['device'] = config.default_device
             if 'dtype' not in temp_config:
