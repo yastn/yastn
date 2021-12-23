@@ -57,7 +57,7 @@ def detach(a, inplace=False):
     return c
 
 
-def to(a, device, dtype=None):
+def to(a, device=None, dtype=None):
     r"""
     Move tensor to device.
 
@@ -80,7 +80,12 @@ def to(a, device, dtype=None):
         (a_dtype == dtype and device is None) or \
         (a_dtype == dtype and a.config.device == device):
         return a
-    c = a.__class__(config=a.config, isdiag=a.isdiag, device=device, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+    c_config = a.config
+    if device is not None:
+        c_config = c_config._replace(device=device)
+    if dtype is not None:
+        c_config = c_config._replace(dtype=dtype)
+    c = a.__class__(config=c_config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.move_to(a.A, dtype=dtype, device=device)
     return c
 
