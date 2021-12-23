@@ -112,4 +112,5 @@
 23-12-2021
 - add option `force_tensordot` to config, that enforces specific policy used by tensordot
 - BUGFIX: fuse_legs(.. mode='hard') was breaking for dense tensor -- this is now fixed (even though using hard fusion for dense tensor does not give anything)
+- BUGFIX: fix some issues with passing device to config during initialization
 
