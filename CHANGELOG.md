@@ -108,3 +108,8 @@
 
 20-12-2021
 - removed flag _check["check_signature"] and _check["check_consistency"]. Performing tests of correctness is fast, so it is not critical to switch it off.
+
+23-12-2021
+- add option `force_tensordot` to config, that enforces specific policy used by tensordot
+- BUGFIX: fuse_legs(.. mode='hard') was breaking for dense tensor -- this is now fixed (even though using hard fusion for dense tensor does not give anything)
+

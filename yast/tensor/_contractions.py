@@ -107,7 +107,9 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
     c_hard_fusion += [b.hard_fusion[ii] for ii in axes_b[1]] if conj[1] == 0 else \
                     [_flip_sign_hf(b.hard_fusion[ii]) for ii in axes_b[1]]
 
-    if policy is None:
+    if a.config.force_fusion is not None:
+        policy = a.config.force_fusion
+    elif policy is None:
         policy = a.config.default_tensordot
 
     if policy == 'merge' or (policy == 'hybrid' and len(axes_a[1]) != 1) or a.config.sym.NSYM == 0:
@@ -130,7 +132,7 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
         c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
         c.A = c.config.backend.dot(Am, Bm, conj, meta_dot)
         _unmerge_matrix(c, ls_l, ls_r)
-    else:
+    elif policy == 'hybrid' or policy == 'direct':
         meta, c_t, c_D = _meta_tensordot_nomerge(a.struct, b.struct, axes_a, axes_b)
         c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
         c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion, struct=c_struct)
@@ -141,6 +143,8 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
             c.A = a.config.backend.dot_nomerge_masks(a.A, b.A, conj, oA, oB, meta, ma, mb)
         else:
             c.A = a.config.backend.dot_nomerge(a.A, b.A, conj, oA, oB, meta)
+    else:
+        raise YastError("Unknown policy for tensordot. policy should be: 'hybrid', 'direct', or 'merge'.")
     return c
 
 
