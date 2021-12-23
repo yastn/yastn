@@ -481,7 +481,8 @@ def _meta_fuse_hard(config, struct, axes):
     told_split = [tuple(tuple(x[a, :].flat) for a in axes) for x in tset]
     teff = tuple(tuple(x.flat) for x in teff)
     tnew = tuple(sorted(set(teff)))
-    tnew_split = [tuple(x[i: i + nsym] for i in range(0, nsym * ndim, nsym)) for x in tnew]
+    ndimnew = len(snew)
+    tnew_split = [tuple(x[i * nsym: (i + 1) * nsym] for i in range(ndimnew)) for x in tnew]
     Dnew = tuple(tuple(l.Dtot[y] for l, y in zip(ls, x)) for x in tnew_split)
     meta_mrg = tuple((tn, to, tuple(l.dec[e][o].Dslc for l, e, o in zip(ls, tes, tos)),
                         tuple(l.dec[e][o].Dprod for l, e, o in zip(ls, tes, tos)))

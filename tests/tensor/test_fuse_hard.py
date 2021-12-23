@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 import yast
 try:
-    from .configs import config_U1, config_Z2_U1
+    from .configs import config_U1, config_Z2_U1, config_dense
 except ImportError:
-    from configs import config_U1, config_Z2_U1
+    from configs import config_U1, config_Z2_U1, config_dense
 
 tol = 1e-10  #pylint: disable=invalid-name
 
@@ -53,6 +53,12 @@ def test_hard_trace():
     assert yast.norm_diff(tra, traf) < tol
     assert yast.norm_diff(tra, traff) < tol
 
+    # for dense
+    a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(6, 2, 6, 2), dtype='float64')
+    af = yast.fuse_legs(a, axes=((1, 2), (3, 0)), mode='hard')
+    tra = yast.trace(a, axes=((1, 2), (3, 0)))
+    traf = yast.trace(af, axes=(0, 1))
+    assert yast.norm_diff(tra, traf) < tol
 
 
 
