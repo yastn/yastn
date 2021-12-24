@@ -1,11 +1,11 @@
 """Support of numpy as a data structure used by yast."""
 from itertools import chain
+import warnings
 import numpy as np
 import scipy.linalg
 try:
     import fbpca
 except ModuleNotFoundError:
-    import warnings
     warnings.warn("fbpca not available", Warning)
 
 BACKEND_ID = "numpy"
@@ -213,6 +213,7 @@ def square_matrix_from_dict(H, D=None, **kwargs):
 ##################################
 
 def requires_grad_(A, requires_grad=True):
+    warnings.warn("Current backend does not support autograd.", Warning)
     pass
 
 
@@ -609,5 +610,6 @@ def is_complex(x):
 def is_independent(A, B):
     """
     check if two arrays are identical, or share the same view.
-    """
-    return (A is B) or (A.base is B) or (A is B.base)
+    """ 
+    # return not ((A is B) or (A.__array_interface__['data'][0] == B.__array_interface__['data'][0]))
+    return not ((A is B) or (A.base is B) or (A is B.base))

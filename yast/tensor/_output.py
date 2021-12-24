@@ -389,7 +389,7 @@ def leg_structures_union(*args):
 
 def to_dense(a, leg_structures=None, native=False, reverse=False):
     r"""
-    Create full tensor corresponding to the symmetric tensor.
+    Create dense tensor corresponding to the symmetric tensor.
 
     Blocks are ordered according to increasing charges on each leg.
     It is possible to supply a list of additional charge sectors with dimensions to be included.
@@ -447,11 +447,16 @@ def to_raw_tensor(a):
 
 def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     r"""
-    Create equivalent ``yast.Tensor`` with no explict symmetry (equivalent to single dense tensor).
+    Create equivalent ``yast.Tensor`` with no explict symmetry. All blocks of the original
+    tensor are accummulated into a single block. 
 
     Blocks are ordered according to increasing charges on each leg.
     It is possible to supply a list of additional charge sectors with dimensions to be included.
     (should be consistent with the tensor). This allows to fill in some explicit zero blocks.
+
+    .. note::
+        yast structure can be redundant since resulting tensor is effectively just
+        a single dense block. If that's the case, use :meth:`yast.Tensor.to_dense`.  
 
     Parameters
     ----------

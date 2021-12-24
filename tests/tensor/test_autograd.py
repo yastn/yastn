@@ -32,6 +32,40 @@ class TestSyntaxAutograd(unittest.TestCase):
         c= a.tensordot(b, axes=((2,3),(0,1)))
         assert c.requires_grad
 
+    def test_clone_copy(self):
+        #
+        # create random U(1) symmetric tensor and flag it for autograd
+        #
+        a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+                      t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                      D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+        a.requires_grad_(True)
+
+        #
+        # Clone the tensor a resulting in a new, numerically identical, tensor b.
+        # However, tensors a and b do not share data - their blocks are independent. 
+        # Further operations on b would be correctly differentiated when computing gradients 
+        # with respect to a.
+        b= a.clone()
+        assert b.requires_grad
+        assert yast.are_independent(a,b) 
+
+        #
+        # Tensor tracked by autograd can be "detached" from the computational 
+        # graph. This might be useful, if one wishes to perform some computations 
+        # with the tensor outside of autograd. 
+        # The original and detached tensor still share data (blocks).
+        c= a.detach()
+        assert not c.requires_grad
+        assert not yast.are_independent(a,c)
+
+        #
+        # Copy of tensor is both detached from the computational graph
+        # and does not share data with the original
+        d= a.copy()
+        assert not d.requires_grad
+        assert yast.are_independent(a,d)
+
 
 @pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
 def test_trace_0():

@@ -8,6 +8,13 @@ Basic algebra operations
    :pyobject: TestSyntaxBasicAlgebra.test_syntax_basic_algebra
 
 
+Transposition
+-------------
+
+.. literalinclude:: /../../tests/tensor/test_transpose.py
+   :pyobject: TestSyntaxTranspose.test_transpose_syntax
+
+
 Conjugation of symmetric tensors
 --------------------------------
 

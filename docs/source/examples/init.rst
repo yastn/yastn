@@ -14,6 +14,13 @@ Create empty tensor and fill it block by block
    :pyobject: TestSyntaxTensorCreation.test_syntax_create_empty_tensor_and_fill
 
 
+Clone, detach or copy tensors
+-----------------------------
+
+.. literalinclude:: /../../tests/tensor/test_autograd.py
+   :pyobject: TestSyntaxAutograd.test_clone_copy
+
+
 Serialization of symmetric tensors
 ==================================
 
