@@ -40,6 +40,14 @@ See examples: :ref:`examples/init:create tensors from scratch`.
 Copying and cloning with autograd
 ---------------------------------
 
+TODO add link
+
+YAST follows the semantics of PyTorch with regards to creating
+differentiable `clones` or non-differentiable `copies` of symmetric
+tensors.
+
+See examples: :ref:`examples/init:clone, detach or copy tensors`.
+
 .. autoclass:: yast.Tensor
 	:noindex:
 	:exclude-members: __init__, __new__

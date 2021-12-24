@@ -56,12 +56,12 @@ def are_independent(a, b):
     Test if all elements of two yast tensors are independent objects in memory.
     """
     test = []
-    test.append(a is b)
-    test.append(a.A is b.A)
+    test.append(not a is b)
+    test.append(not a.A is b.A)
     for key in a.A.keys():
         if key in b.A:
             test.append(a.config.backend.is_independent(a.A[key], b.A[key]))
-    return not any(test)
+    return all(test)
 
 
 def is_consistent(a):

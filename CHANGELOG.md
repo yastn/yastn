@@ -1,3 +1,6 @@
+24-12-2021
+- is_independent for pytorch backend now compares values of pointers 
+
 21-12-2021
 - `get_blocks_charges` renamed to `get_blocks_charge`, `get_blocks_shapes` renamed to `get_blocks_shape`,
   `print_blocks` renamed to `print_blocks_shape`

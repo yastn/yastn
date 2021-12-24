@@ -28,6 +28,8 @@ Simple element-wise operations
 Transposition
 -------------
 
+See examples: :ref:`examples/algebra:transposition`.
+
 .. autoclass:: yast.Tensor
 	:exclude-members: __init__, __new__
 	:noindex:

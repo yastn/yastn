@@ -211,7 +211,7 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
         yast.ncon([tensor, a, b], [(1, 2, 3), (-1, 1, 2, -2), (3, -4, -5, -6)], conjs=(0, 0, 1))
 
 
-class TestSyntax_noDocs(unittest.TestCase):
+class TestSyntaxGeneral(unittest.TestCase):
 
     def test_syntax_noDocs(self):
         a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
@@ -221,7 +221,7 @@ class TestSyntax_noDocs(unittest.TestCase):
                       t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                       D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
 
-        # conj
+        # conj - documented example in test_conj.py
         tensor = a.conj()
         tensor = yast.conj(a)
         tensor = a.conj_blocks()
@@ -229,13 +229,15 @@ class TestSyntax_noDocs(unittest.TestCase):
         tensor = a.flip_signature()
         tensor = yast.flip_signature(a)
 
-        # coping/cloning
+        # coping/cloning - documented example in test_autograd.py
         tensor = a.copy()
         tensor = yast.copy(a)
         tensor = a.clone()
         tensor = yast.clone(a)
         tensor = a.detach()
         tensor = yast.detach(a)
+
+        # to
         tensor = a.to(device='cpu')
 
         # get info
@@ -261,7 +263,7 @@ class TestSyntax_noDocs(unittest.TestCase):
         array = a.to_dense(leg_structures=ls)  # on selected legs, enforce to include cherges read in previous line
         tensor = a.to_nonsymmetric()
 
-        # permute
+        # permute - documented example in test_transpose.py
         tensor = a.transpose(axes=(2, 3, 0, 1))
         tensor = yast.transpose(a, axes=(2, 3, 0, 1))
 
