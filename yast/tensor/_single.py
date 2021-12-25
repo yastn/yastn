@@ -1,7 +1,7 @@
 """ Linear operations and operations on a single yast tensor. """
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_keys, _tarray, _Darray, _struct
-from ._merging import _Fusion, _flip_sign_hf, _masks_for_add
+from ._merging import _Fusion, _flip_hf, _masks_for_add
 from ._tests import YastError, _test_configs_match, _test_tensors_match, _test_all_axes, _get_tD_legs
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'remove_zero_blocks',
@@ -376,7 +376,7 @@ def conj(a, inplace=False):
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
-    new_hf = tuple(_flip_sign_hf(x) for x in a.hard_fusion)
+    new_hf = tuple(_flip_hf(x) for x in a.hard_fusion)
     if inplace:
         c = a
         c.struct = struct
@@ -428,7 +428,7 @@ def flip_signature(a, inplace=False):
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
-    new_hf = tuple(_flip_sign_hf(x) for x in a.hard_fusion)
+    new_hf = tuple(_flip_hf(x) for x in a.hard_fusion)
     if inplace:
         a.struct = struct
         a.hard_fusion = new_hf
