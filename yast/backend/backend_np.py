@@ -235,7 +235,7 @@ def trace(A, order, meta):
     """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
         Repeating tnew are added."""
     Aout = {}
-    for (tnew, told, Drsh) in meta:
+    for (tnew, told, Drsh, _) in meta:
         Atemp = np.trace(np.reshape(np.transpose(A[told], order), Drsh))
         if tnew in Aout:
             Aout[tnew] += Atemp

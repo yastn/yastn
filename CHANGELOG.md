@@ -114,3 +114,5 @@
 - BUGFIX: fuse_legs(.. mode='hard') was breaking for dense tensor -- this is now fixed (even though using hard fusion for dense tensor does not give anything)
 - BUGFIX: fix some issues with passing device to config during initialization
 
+25-12-2021
+- add function yast.clear_cache() to clear caches of all lru_cache employed to speed-up precomputing.
