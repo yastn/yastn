@@ -358,37 +358,41 @@ def trace(a, axes=(0, 1)):
         tensor: Tensor
     """
     lin1, lin2 = _clear_axes(*axes)  # contracted legs
-    lout = tuple(ii for ii in range(a.ndim) if ii not in lin1 + lin2)
-    in1, in2, out = _unpack_axes(a.meta_fusion, lin1, lin2, lout)
+    in1, in2, out, order, c_mf = _trace_input(lin1, lin2, a.struct.s, a.meta_fusion)
 
-    if len(in1) != len(in2) or len(lin1) != len(lin2):
-        raise YastError('Number of axes to trace should be the same')
     if len(in1) == 0:
         return a
 
-    order = in1 + in2 + out
-
-    if not all(a.struct.s[i1] == -a.struct.s[i2] for i1, i2 in zip(in1, in2)):
-        raise YastError('Signs do not match')
-
-    needs_mask = any(a.hard_fusion[i1].t != a.hard_fusion[i2].t or a.hard_fusion[i1].D != a.hard_fusion[i2].D
+    c_hf = tuple(a.hard_fusion[ii] for ii in out)
+    needs_mask = any(a.hard_fusion[i1].t != a.hard_fusion[i2].t
+                    or a.hard_fusion[i1].D != a.hard_fusion[i2].D
                     for i1, i2 in zip(in1, in2))
 
-    c_s = tuple(a.struct.s[i3] for i3 in out)
-    c_meta_fusion = tuple(a.meta_fusion[ii] for ii in lout)
-    c_hard_fusion = tuple(a.hard_fusion[ii] for ii in out)
-
-    c = a.__class__(config=a.config, s=c_s, n=a.struct.n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
-
     if a.isdiag:
-        if needs_mask:
-            raise YastError('Diagonal tensor cannot have nontrivial leg fusion -- this should not have happend ')
+        # if needs_mask: raise YastError('Should not have happend')
+        c_struct = _struct(s=(), n=a.struct.n, t=((),), D=((),))
+        c = a.__class__(config=a.config, struct=c_struct, meta_fusion=c_mf, hard_fusion=c_hf)
         c.A = {(): c.config.backend.sum_elements(a.A)}
-        c.update_struct()
         return c
 
-    tset, Dset = _tarray(a), _Darray(a)
-    lt = len(tset)
+    meta, c_struct, t12, D1, D2 = _trace_meta(a.struct, in1, in2, out)
+    c = a.__class__(config=a.config, meta_fusion=c_mf, hard_fusion=c_hf, struct=c_struct)
+    if needs_mask:
+        msk12 = _masks_for_trace(a.config, t12, D1, D2, a.hard_fusion, in1, in2)
+        c.A = c.config.backend.trace_with_mask(a.A, order, meta, msk12)
+    else:
+        if not all(d1 == d2 for d1, d2 in zip(D1, D2)):
+            raise YastError('Error in trace: bond dimensions of traced legs do not match')
+        c.A = c.config.backend.trace(a.A, order, meta)
+    return c
+
+
+@lru_cache(maxsize=1024)
+def _trace_meta(struct, in1, in2, out):
+    """ meta-information for backend and struct of traced tensor. """
+    lt = len(struct.t)
+    tset = np.array(struct.t, dtype=int).reshape((lt, len(struct.s), len(struct.n)))
+    Dset = np.array(struct.D, dtype=int).reshape((lt, len(struct.s)))
     t1 = tset[:, in1, :].reshape(lt, -1)
     t2 = tset[:, in2, :].reshape(lt, -1)
     to = tset[:, out, :].reshape(lt, -1)
@@ -399,20 +403,44 @@ def trace(a, axes=(0, 1)):
     pD2 = np.prod(D2, axis=1).reshape(lt, 1)
     ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
     Drsh = np.hstack([pD1, pD2, D3])
-    if needs_mask:
-        t12 = tuple(tuple(t.flat) for t in t1[ind])
-        D1 = tuple(tuple(x.flat) for x in D1[ind])
-        D2 = tuple(tuple(x.flat) for x in D2[ind])
-        msk12 = _masks_for_trace(a.config, t12, D1, D2, a.hard_fusion, in1, in2)
-        meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n]), tt) for n, tt in zip(ind, t12)]
-        c.A = c.config.backend.trace_with_mask(a.A, order, meta, msk12)
+    t12 = tuple(tuple(t.flat) for t in t1[ind])
+    D1 = tuple(tuple(x.flat) for x in D1[ind])
+    D2 = tuple(tuple(x.flat) for x in D2[ind])
+    meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n]), tt) for n, tt in zip(ind, t12)]
+    meta = tuple(sorted(meta, key=lambda x: x[0]))
+    newtD = [(m[0], m[2][2:]) for m in meta]
+    newtD = tuple(k for k, _ in groupby(newtD))
+    if len(newtD) > 0:
+        newt, newD = zip(*newtD)
     else:
-        if not np.all(D1[ind] == D2[ind]):
-            raise YastError('Not all bond dimensions of the traced legs match')
-        meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n])) for n in ind]
-        c.A = c.config.backend.trace(a.A, order, meta)
-    c.update_struct()
-    return c
+        newt, newD = (), ()
+    c_s = tuple(struct.s[i] for i in out)
+    c_struct = _struct(t=newt, D=newD, s=c_s, n=struct.n)
+    return meta, c_struct, t12, D1, D2
+
+
+@lru_cache(maxsize=1024)
+def _trace_input(lin1, lin2, s, mf):
+    """ Auxliary function processing and testing axes of trace. """
+    lin = lin1 + lin2
+    slegs = set(range(len(mf)))
+    if any(i not in slegs for i in lin):
+        raise YastError('Error in trace: axis outside of tensor ndim.')
+    slin1, slin2 = set(lin1), set(lin2)
+    if len(slin1 & slin2) > 0 or (len(lin1) != len(slin1)) or (len(lin2) != len(slin2)):
+        raise YastError('Error in trace: repeated axis in axes.')
+    if len(lin1) != len(lin2):
+        raise YastError('Error in trace: unmatching axis to trace.')
+    lout = tuple(ii for ii in range(len(mf)) if ii not in lin)
+    in1, in2, out = _unpack_axes(mf, lin1, lin2, lout)
+    if len(in1) != len(in2):
+        raise YastError('Error in trace: unmatching native axis to trace.')
+    if not all(s[i1] == -s[i2] for i1, i2 in zip(in1, in2)):
+        raise YastError('Error in trace: signatures do not match.')
+    order = in1 + in2 + out
+    c_mf = tuple(mf[ii] for ii in lout)
+    return in1, in2, out, order, c_mf
+
 
 
 def swap_gate(a, axes, inplace=False):
@@ -435,7 +463,7 @@ def swap_gate(a, axes, inplace=False):
         return a
     fss = (True,) * len(a.struct.n) if a.config.fermionic is True else a.config.fermionic
     axes = tuple(_clear_axes(*axes))  # swapped groups of legs
-    tp = _meta_swap_gate(a.struct.t, a.struct.n, a.meta_fusion, a.ndim_n, axes, fss)
+    tp = _swap_gate_meta(a.struct.t, a.struct.n, a.meta_fusion, a.ndim_n, axes, fss)
     if inplace:
         for ts, odd in zip(a.struct.t, tp):
             if odd:
@@ -447,7 +475,7 @@ def swap_gate(a, axes, inplace=False):
 
 
 @lru_cache(maxsize=1024)
-def _meta_swap_gate(t, n, mf, ndim, axes, fss):
+def _swap_gate_meta(t, n, mf, ndim, axes, fss):
     ind_n = [i for i, x in enumerate(axes) if x == (-1,)]
     if len(ind_n) == 0:
         axes = _unpack_axes(mf, *axes)
@@ -468,7 +496,7 @@ def _meta_swap_gate(t, n, mf, ndim, axes, fss):
         raise YastError('Odd number of elements in axes -- needs even.')
     for l1, l2 in zip(*(iaxes, iaxes)):
         if len(set(l1) & set(l2)) > 0:
-            raise YastError('Cannot sweep the same index')
+            raise YastError('Cannot swap the same index')
         if l2 == (-1,):
             t1 = np.sum(tset[:, l1, :], axis=1)
             t2 = np.array(n, dtype=int).reshape(1, -1)

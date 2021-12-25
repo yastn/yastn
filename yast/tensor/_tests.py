@@ -82,6 +82,9 @@ def is_consistent(a):
     assert len(a.struct.t) == len(a.A), 'length of struct.t do not match dict A'
     assert len(a.struct.D) == len(a.A), 'length of struct.D do not match dict A'
 
+    for i in range(len(a.struct.t) - 1):
+        assert a.struct.t[i] < a.struct.t[i + 1]
+
     tset = _tarray(a)
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)

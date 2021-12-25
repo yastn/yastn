@@ -243,7 +243,7 @@ def trace(A, order, meta):
     """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
         Repeating tnew are added."""
     Aout = {}
-    for (tnew, told, Drsh) in meta:
+    for (tnew, told, Drsh, _) in meta:
         Atemp = torch.reshape(A[told].permute(order), Drsh)
         Atemp = torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=-1)
         if tnew in Aout:
