@@ -34,7 +34,7 @@ class _Fusion(NamedTuple):
     D: tuple = ()  # fused dimensions  at each step len(t) = len(tree) - 1
 
 
-def _flip_sign_hf(x):
+def _flip_hf(x):
     """ _Fusion with fliped signature. """
     return x._replace(s=x.ms, ms=x.s)
 
@@ -317,7 +317,7 @@ def _masks_for_trace(config, t12, D1, D2, hfs, ax1, ax2):
 
     for n, (i1, i2) in enumerate(zip(ax1, ax2)):
         tdn = tuple(set((t[n * nsym: n * nsym + nsym], d1[n], d2[n]) for t, d1, d2 in tDDset))
-        tn, D1n, D2n = zip(*tdn)
+        tn, D1n, D2n = zip(*tdn)  # this can triggerexception when tdn is empty -- fix and test in test_trace
         m1, m2 = _intersect_hfs(config, (tn, tn), (D1n, D2n), (hfs[i1], hfs[i2]))
         msk1.append(m1)
         msk2.append(m2)

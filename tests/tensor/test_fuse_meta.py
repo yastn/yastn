@@ -41,17 +41,6 @@ def test_fuse_dot():
     r1.norm_diff(r1uf) < tol  # == 0.0
 
 
-def test_fuse_trace():
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (1, 2, 3), (4, 5, 6)))
-
-    af = yast.fuse_legs(a, axes=((1, 2), (3, 0)))
-    tra = yast.trace(a, axes=((1, 2), (3, 0)))
-    traf = yast.trace(af, axes=(0, 1))
-    assert yast.norm_diff(tra, traf) < tol
-
-
 def test_fuse_split():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
