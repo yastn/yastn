@@ -16,6 +16,7 @@ from ._contractions import *
 from ._initialize import *
 from ._output import *
 from ._single import *
+from ._magic import *
 from ._merging import *
 from .linalg import *
 from . import _tests
@@ -24,6 +25,7 @@ from . import _contractions
 from . import _initialize
 from . import _output
 from . import _single
+from . import _magic
 from . import linalg
 from . import _merging
 __all__ = ['Tensor', 'linalg', 'YastError']
@@ -33,6 +35,7 @@ __all__.extend(_tests.__all__)
 __all__.extend(_control_lru.__all__)
 __all__.extend(_contractions.__all__)
 __all__.extend(_single.__all__)
+__all__.extend(_magic.__all__)
 __all__.extend(_output.__all__)
 __all__.extend(_merging.__all__)
 
@@ -111,8 +114,8 @@ class Tensor:
     from ._initialize import set_block, fill_tensor
     from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr
     from ._contractions import tensordot, vdot, trace, swap_gate, broadcast, mask
+    from ._magic import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, diag, absolute, sqrt, rsqrt, reciprocal, exp
-    from ._single import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
     from ._single import copy, clone, detach, to, requires_grad_, real, imag,  remove_zero_blocks, add_leg
     from ._output import show_properties, __str__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_leg_charges_and_dims, get_leg_structure
@@ -129,23 +132,23 @@ class Tensor:
 
     @property
     def s_n(self):
-        """ 
+        """
         Returns
         -------
         s_n : tuple(int)
-            signature of tensor's native legs. This includes legs (spaces) which have been 
+            signature of tensor's native legs. This includes legs (spaces) which have been
             fused together by :meth:`yast.Tensor.fuse`.
         """
         return self.struct.s
 
     @property
     def s(self):
-        """ 
-        Returns 
+        """
+        Returns
         -------
-        s : tuple(int) 
+        s : tuple(int)
             signature of tensor's effective legs. Legs (spaces) fused together
-            by :meth:`yast.Tensor.fuse` are treated as single leg. The signature 
+            by :meth:`yast.Tensor.fuse` are treated as single leg. The signature
             of each fused leg is given by the first native leg in the fused space.
         """
         inds, n = [], 0
@@ -156,7 +159,7 @@ class Tensor:
 
     @property
     def n(self):
-        """ 
+        """
         Returns
         -------
         n : tuple(int)
@@ -167,33 +170,33 @@ class Tensor:
 
     @property
     def ndim_n(self):
-        """ 
+        """
         Returns
         -------
         ndim_n : int
-            native rank of the tensor. This includes legs (spaces) which have been 
+            native rank of the tensor. This includes legs (spaces) which have been
             fused together by :meth:`yast.Tensor.fuse`.
         """
         return len(self.struct.s)
 
     @property
     def ndim(self):
-        """ 
+        """
         Returns
         -------
         ndim : int
-            effective rank of the tensor. Legs (spaces) fused together by :meth:`yast.Tensor.fuse` 
+            effective rank of the tensor. Legs (spaces) fused together by :meth:`yast.Tensor.fuse`
             are treated as single leg.
         """
         return len(self.meta_fusion)
 
     @property
     def isdiag(self):
-        """ 
+        """
         Returns
         -------
         isdiag : bool
-            ``True`` if the tensor is diagonal.  
+            ``True`` if the tensor is diagonal.
         """
         return self._isdiag
 
@@ -203,17 +206,17 @@ class Tensor:
         Returns
         -------
         requires_grad : bool
-            ``True`` if any block of the tensor has autograd enabled 
+            ``True`` if any block of the tensor has autograd enabled
         """
         return requires_grad(self)
 
     @property
     def size(self):
-        """ 
+        """
         Returns
         -------
         size : int
-            total number of elements in all non-empty blocks of the tensor 
+            total number of elements in all non-empty blocks of the tensor
         """
         Dset = np.array(self.struct.D, dtype=int).reshape((len(self.struct.D), len(self.struct.s)))
         return sum(np.prod(Dset, axis=1))
