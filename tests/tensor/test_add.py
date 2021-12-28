@@ -15,9 +15,12 @@ def test_add_0():
 
     c1 = a + 2 * b
     c2 = a.apxb(b, 2)
+    c3 = 2 * b + a
 
     assert c1.norm_diff(c2) < tol  # == 0.0
     assert yast.norm(c1 - c2) < tol  # == 0.0
+    assert c1.norm_diff(c3) < tol  # == 0.0
+    assert yast.norm(c1 - c3) < tol  # == 0.0
 
     d = yast.rand(config=config_dense, isdiag=True, D=5, dtype='float64')
     d1 = d.copy()
@@ -30,6 +33,7 @@ def test_add_0():
 
     assert a.are_independent(c1)
     assert a.are_independent(c2)
+    assert a.are_independent(c3)
     assert b.are_independent(c1)
     assert b.are_independent(c2)
     assert d.are_independent(d1)
@@ -46,7 +50,12 @@ def test_add_1():
 
     c1 = a + 2 * b
     c2 = a.apxb(b, 2)
+    c3 = 2 * b + a
     assert c1.norm_diff(c2) < tol  # == 0.0
+    assert yast.norm(c1 - c2) < tol  # == 0.0
+    assert c1.norm_diff(c3) < tol  # == 0.0
+    assert yast.norm(c1 - c3) < tol  # == 0.0
+
 
     d = yast.eye(config=config_U1, t=1, D=5)
     d1 = yast.eye(config=config_U1, t=2, D=5)
@@ -74,8 +83,12 @@ def test_add_2():
 
     c1 = a - b * 2
     c2 = a.apxb(b, -2)
+    c3 = -2 * b + a
 
-    assert c1.norm_diff(c2) < tol  # == 0
+    assert yast.norm_diff(c1, c2) < tol  # == 0
+    assert yast.norm_diff(c1, c3) < tol  # == 0
+    assert yast.norm(c1 - c2) < tol  # == 0.0
+    assert yast.norm(c1 - c3) < tol  # == 0.0
 
     leg_structures = {2: b.get_leg_structure(2), 3: a.get_leg_structure(3)}
     na = a.to_numpy(leg_structures)
@@ -92,22 +105,48 @@ def test_add_2():
     assert c2.is_consistent()
 
 
-def test_add_mismatch():
-    """ handling pathological examples """
-    a = yast.Tensor(config=config_U1, s=(1, -1, 1, -1))
-    a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
-    b = yast.Tensor(config=config_U1, s=(1, -1, 1, -1))
-    b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
+def test_add_exceptions():
+    """ handling exceptions """
+    t1 = (-1, 0, 1)
+    D1, D2 = (2, 3, 4), (2, 3, 5)
+    t3, D3 = (-1, 0), (2, 4)
     with pytest.raises(yast.YastError):
-        a + b
+        a = yast.rand(config=config_U1, s=(-1, 1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
+        b = yast.rand(config=config_U1, s=(1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
+        _ = a + b  # Error in add: tensor signatures do not match.
     with pytest.raises(yast.YastError):
-        b - a
+        a = yast.rand(config=config_U1, s=(-1, 1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
+        b = yast.rand(config=config_U1, s=(-1, 1, 1), t=(t1, t1, t1), D=(D1, D2, D1))
+        _ = a + b  # Error in add: tensor signatures do not match.
     with pytest.raises(yast.YastError):
-        a.apxb(b, x=2.0)
+        a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
+        b = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D2, D1))
+        _ = a + b  # Error in addition: bond dimensions do not match.
+    with pytest.raises(yast.YastError):
+        a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
+        b = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t3, t1), D=(D1, D3, D1))
+        _ = a + b  # Error in addition: bond dimensions do not match.
+    # Here, blocks in a na db are consistent, but cannot form consistent sum
+    with pytest.raises(yast.YastError):
+        a = yast.Tensor(config=config_U1, s=(1, -1, 1, -1))
+        a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
+        b = yast.Tensor(config=config_U1, s=(1, -1, 1, -1))
+        b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
+        _ = a + b  # Bond dimensions related to some charge are not consistent.
+    with pytest.raises(yast.YastError):
+        a = yast.rand(config=config_U1, s=(1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
+        b = yast.rand(config=config_U1, s=(1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
+        a = a.fuse_legs(axes=(0, 1, (2, 3)), mode='meta')
+        b = b.fuse_legs(axes=((0, 1), 2, 3), mode='meta')
+        _ = a + b  # Error in add: fusion trees do not match.
+    with pytest.raises(yast.YastError):
+        a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D2, D1), n=1)
+        b = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D2, D1), n=0)
+        _ = a + b  # Error in add: tensor charges do not match.
 
 
 if __name__ == '__main__':
     test_add_0()
     test_add_1()
     test_add_2()
-    test_add_mismatch()
+    test_add_exceptions()
