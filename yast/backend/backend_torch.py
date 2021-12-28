@@ -445,9 +445,9 @@ def add(A, B, meta):
         if ab == 'AB':
             C[t] = A[t] + B[t]
         elif ab == 'A':
-            C[t] = A[t].copy()
+            C[t] = A[t].clone()
         else:  # ab == 'B'
-            C[t] = B[t].copy()
+            C[t] = B[t].clone()
     return C
 
 
@@ -458,7 +458,7 @@ def sub(A, B, meta):
         if ab == 'AB':
             C[t] = A[t] - B[t]
         elif ab == 'A':
-            C[t] = A[t].copy()
+            C[t] = A[t].clone()
         else:  # ab == 'B'
             C[t] = -B[t]
     return C
@@ -471,7 +471,7 @@ def apxb(A, B, x, meta):
         if ab == 'AB':
             C[t] = A[t] + x * B[t]
         elif ab == 'A':
-            C[t] = A[t].copy()
+            C[t] = A[t].clone()
         else:  # ab == 'B'
             C[t] = x * B[t]
     return C
@@ -502,13 +502,13 @@ dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
                 (1, 1): lambda x, y, dim: x.conj() * y.reshape(dim).conj()}
 
 
-def dot_diag(A, B, cc, to_execute, axis, a_ndim):
+def dot_diag(A, B, cc, meta, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
     f = dotdiag_dict[cc]
     C = {}
-    for in1, in2, out in to_execute:
-        C[out] = f(A[in1], B[in2], dim)
+    for ind_a, ind_b in meta:
+        C[ind_a] = f(A[ind_a], B[ind_b], dim)
     return C
 
 
@@ -516,7 +516,7 @@ def mask_diag(A, B, meta, axis, a_ndim):
     slc1 = (slice(None),) * axis
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
     Bslc = {k: v.nonzero(as_tuple=True) for k, v in B.items()}
-    return {out: A[in1][slc1 + Bslc[in2] + slc2] for in1, in2, out in meta}
+    return {ind_a: A[ind_a][slc1 + Bslc[ind_b] + slc2] for ind_a, ind_b in meta}
 
 
 def dot_nomerge(A, B, cc, oA, oB, meta):
@@ -573,7 +573,7 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, device='cpu'):
     Anew = {u: torch.zeros(Du, dtype=dtype, device=device) for (u, Du) in meta_new}
     for (tind, pos, Dslc) in meta_block:
         slc = tuple(slice(*DD) for DD in Dslc)
-        Anew[tind][slc] = pos_tens[pos].A[tind]  # .copy() # is copy required?
+        Anew[tind][slc] = pos_tens[pos].A[tind]  # .clone() # is copy required?
     return Anew
 
 
