@@ -381,9 +381,9 @@ def apxb(a, b, x=1):
 
 def conj(a, inplace=False):
     r"""
-    Return conjugated tensor. In particular, change the sign of the signature `s` to `-s`, 
-    the total charge `n` to `-n`, and complex conjugate each block of the tensor.    
-    
+    Return conjugated tensor. In particular, change the sign of the signature `s` to `-s`,
+    the total charge `n` to `-n`, and complex conjugate each block of the tensor.
+
     Parameters
     ----------
     inplace : bool
