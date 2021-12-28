@@ -43,7 +43,7 @@ def test_cache():
 def test_cache2():
     yast.set_cache_maxsize(maxsize=100)
     print(yast.get_cache_info())
-    for _ in range(50):
+    for _ in range(10):
         test_hard_masks()
     print(yast.get_cache_info())
 

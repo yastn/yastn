@@ -46,8 +46,8 @@ def norm_diff(a, b, p='fro'):
     if (len(a.A) == 0) and (len(b.A) == 0):
         return a.zero_of_dtype()
     meta = _common_keys(a.A, b.A)
-    masks_needed = any(ha != hb for ha, hb in zip(a.hard_fusion, b.hard_fusion))
-    if masks_needed:
+    needs_mask = any(ha != hb for ha, hb in zip(a.hard_fusion, b.hard_fusion))
+    if needs_mask:
         sla, tDa, slb, tDb, _ = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
         return a.config.backend.norm_diff(a.config.backend.embed(a.A, sla, tDa),
                                         a.config.backend.embed(b.A, slb, tDb), meta, p)

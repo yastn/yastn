@@ -1,7 +1,7 @@
 """ methods outputing data from yast tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _mf_to_ntree
+from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _mf_to_ntree, _struct
 from ._tests import YastError
 from ..sym import sym_none
 
@@ -471,8 +471,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
         the config of returned tensor does not use any symmetry
     """
     config_dense = a.config._replace(sym=sym_none)
-    news = a.get_signature(native)
-    c = a.__class__(config=config_dense, s=news, n=None, isdiag=a.isdiag)
+    
 
     ndim = a.ndim_n if native else a.ndim
     tD = [a.get_leg_structure(n, native=native) for n in range(ndim)]
@@ -499,8 +498,13 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     if a.isdiag:
         Dtot = Dtot[:1]
         meta = [(t, D[:1]) for t, D in meta]
+
+    c_s = a.get_signature(native)
+    c_t = ((),)
+    c_D = (Dtot,) if not a.isdiag else (Dtot + Dtot,)
+    c_struct = _struct(t=c_t, D=c_D, s=c_s, n=())
+    c = a.__class__(config=config_dense, isdiag=a.isdiag, struct=c_struct)
     c.A[()] = a.config.backend.merge_to_dense(a.A, Dtot, meta, a.config.device)
-    c.update_struct()
     return c
 
 

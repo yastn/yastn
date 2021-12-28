@@ -300,8 +300,8 @@ def _masks_for_vdot(config, structa, hfa, structb, hfb, ind_ab=None):
         msk_b.append(mb)
     inda = structa.t if ind_ab is None else ind_ab
     indb = structb.t if ind_ab is None else ind_ab
-    sla = {t: tuple(ma[t[n * nsym: n * nsym + nsym]] for n, ma in enumerate(msk_a)) for t in inda}
-    slb = {t: tuple(mb[t[n * nsym: n * nsym + nsym]] for n, mb in enumerate(msk_b)) for t in indb}
+    sla = {t: tuple(ma[t[n * nsym: (n + 1) * nsym]] for n, ma in enumerate(msk_a)) for t in inda}
+    slb = {t: tuple(mb[t[n * nsym: (n + 1) * nsym]] for n, mb in enumerate(msk_b)) for t in indb}
     return sla, slb
 
 
@@ -316,7 +316,7 @@ def _masks_for_trace(config, t12, D1, D2, hfs, ax1, ax2):
         raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
 
     for n, (i1, i2) in enumerate(zip(ax1, ax2)):
-        tdn = tuple(set((t[n * nsym: n * nsym + nsym], d1[n], d2[n]) for t, d1, d2 in tDDset))
+        tdn = tuple(set((t[n * nsym: (n + 1) * nsym], d1[n], d2[n]) for t, d1, d2 in tDDset))
         tn, D1n, D2n = zip(*tdn)  # this can triggerexception when tdn is empty -- fix and test in test_trace
         m1, m2 = _intersect_hfs(config, (tn, tn), (D1n, D2n), (hfs[i1], hfs[i2]))
         msk1.append(m1)
@@ -349,10 +349,10 @@ def _masks_for_add(config, structa, hfa, structb, hfb):
         msk_a.append(ma)
         msk_b.append(mb)
         hfs.append(hf)
-    sla = {t: tuple(ma[t[n * nsym: n * nsym + nsym]] for n, ma in enumerate(msk_a)) for t in structa.t}
-    slb = {t: tuple(mb[t[n * nsym: n * nsym + nsym]] for n, mb in enumerate(msk_b)) for t in structb.t}
-    tDa = {t: tuple(tD[t[n * nsym: n * nsym + nsym]] for n, tD in enumerate(tDsa)) for t in structa.t}
-    tDb = {t: tuple(tD[t[n * nsym: n * nsym + nsym]] for n, tD in enumerate(tDsb)) for t in structb.t}
+    sla = {t: tuple(ma[t[n * nsym: (n + 1) * nsym]] for n, ma in enumerate(msk_a)) for t in structa.t}
+    slb = {t: tuple(mb[t[n * nsym: (n + 1) * nsym]] for n, mb in enumerate(msk_b)) for t in structb.t}
+    tDa = {t: tuple(tD[t[n * nsym: (n + 1) * nsym]] for n, tD in enumerate(tDsa)) for t in structa.t}
+    tDb = {t: tuple(tD[t[n * nsym: (n + 1) * nsym]] for n, tD in enumerate(tDsb)) for t in structb.t}
     return sla, tDa, slb, tDb, tuple(hfs)
 
 
