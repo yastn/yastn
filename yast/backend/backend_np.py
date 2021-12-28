@@ -500,20 +500,6 @@ def mask_diag(A, B, meta, axis, a_ndim):
     return {ind_a: A[ind_a][slc1 + Bslc[ind_b] + slc2] for ind_a, ind_b in meta}
 
 
-def matmul(A, B, meta):
-    C = {}
-    for in1, in2, out, _ in meta:
-        C[out] = A[in1] @ B[in2]
-    return C
-
-
-def matmul_masks(A, B, meta, ma, mb):
-    C = {}
-    for in1, in2, out, ii in meta:
-        C[out] = A[in1][:, ma[ii]] @ B[in2][mb[ii], :]
-    return C
-
-
 def dot_nomerge(A, B, cc, oA, oB, meta):
     f = dot_dict[cc]  # proper conjugations
     C = {}

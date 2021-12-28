@@ -420,7 +420,7 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
 def to_numpy(a, leg_structures=None, native=False, reverse=False):
     r"""
     Create full ``numpy.ndarray`` corresponding to the symmetric tensor. See :func:`yast.to_dense`
-    
+
     Returns
     -------
     out : numpy.ndarray

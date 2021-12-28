@@ -196,70 +196,6 @@ def _test_hard_to_scalar(a, b):
     assert yast.norm_diff(ab, uab) < tol
 
 
-def _test_hard_add(a, b):
-    c = a + b
-    fa = yast.fuse_legs(a, axes=(0, (2, 3), 1), mode='hard')
-    fb = yast.fuse_legs(b, axes=(0, (2, 3), 1), mode='hard')
-    fc = fa + fb
-    fd = yast.fuse_legs(c, axes=(0, (2, 3), 1), mode='hard')
-
-    ffa = yast.fuse_legs(fa, axes=((0, 1), 2), mode='hard')
-    ffb = yast.fuse_legs(fb, axes=((0, 1), 2), mode='hard')
-    ffc = ffa + ffb
-    ffd = yast.fuse_legs(fd, axes=((0, 1), 2), mode='hard')
-
-    fffa = yast.fuse_legs(ffa, axes=[[0, 1]], mode='hard')
-    fffb = yast.fuse_legs(ffb, axes=[[0, 1]], mode='hard')
-    fffc = fffa + fffb
-    fffd = yast.fuse_legs(ffd, axes=[(0, 1)], mode='hard')
-
-    assert yast.norm_diff(fc, fd) < tol
-    assert yast.norm_diff(ffc, ffd) < tol
-    assert yast.norm_diff(fffc, fffd) < tol
-    uffc = fffc.unfuse_legs(axes=0)
-    uufc = uffc.unfuse_legs(axes=0)
-    uuuc = uufc.unfuse_legs(axes=1).transpose(axes=(0, 3, 1, 2))
-    assert yast.norm_diff(c, uuuc) < tol
-
-    c = a - b
-    cc = a.apxb(b, -1)
-    fa = yast.fuse_legs(a, axes=(0, (2, 3), 1), mode='hard')
-    fb = yast.fuse_legs(b, axes=(0, (2, 3), 1), mode='hard')
-    fc = fa - fb
-    fcc = fa.apxb(fb, -1)
-    fd = yast.fuse_legs(c, axes=(0, (2, 3), 1), mode='hard')
-
-    ffa = yast.fuse_legs(fa, axes=((0, 1), 2), mode='hard')
-    ffb = yast.fuse_legs(fb, axes=((0, 1), 2), mode='hard')
-    ffc = ffa - ffb
-    ffcc = ffa.apxb(ffb, -1)
-    ffd = yast.fuse_legs(fd, axes=((0, 1), 2), mode='hard')
-
-    fffa = yast.fuse_legs(ffa, axes=[[0, 1]], mode='hard')
-    fffb = yast.fuse_legs(ffb, axes=[[0, 1]], mode='hard')
-    fffc = fffa - fffb
-    fffcc = fffa.apxb(fffb, -1)
-    fffd = yast.fuse_legs(ffd, axes=[(0, 1)], mode='hard')
-
-    assert yast.norm_diff(fc, fd) < tol
-    assert yast.norm_diff(ffc, ffd) < tol
-    assert yast.norm_diff(fffc, fffd) < tol
-    assert yast.norm_diff(c, cc) < tol
-    assert yast.norm_diff(fc, fcc) < tol
-    assert yast.norm_diff(ffc, ffcc) < tol
-    assert yast.norm_diff(fffc, fffcc) < tol
-    assert pytest.approx(yast.norm_diff(fffa, fffb).item(), rel=tol) == c.norm().item()
-    assert pytest.approx(yast.norm_diff(ffa, ffb).item(), rel=tol) == c.norm().item()
-    assert pytest.approx(yast.norm_diff(fa, fb).item(), rel=tol) == c.norm().item()
-    assert pytest.approx(yast.norm_diff(fffa, fffb, p='inf').item(), rel=tol) == c.norm(p='inf').item()
-    assert pytest.approx(yast.norm_diff(ffa, ffb, p='inf').item(), rel=tol) == c.norm(p='inf').item()
-    assert pytest.approx(yast.norm_diff(fa, fb, p='inf').item(), rel=tol) == c.norm(p='inf').item()
-
-    uffc = fffc.unfuse_legs(axes=0)
-    uufc = uffc.unfuse_legs(axes=0)
-    uuuc = uufc.unfuse_legs(axes=1).transpose(axes=(0, 3, 1, 2))
-    assert yast.norm_diff(c, uuuc) < tol
-
 
 def test_hard_masks():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
@@ -277,10 +213,6 @@ def test_hard_masks():
     _test_hard_to_scalar(a, c)
     _test_hard_to_scalar(b, c.conj())
 
-    _test_hard_add(b, c)
-    _test_hard_add(a.conj(), c)
-    _test_hard_add(a, b.conj())
-
     t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
     D1 = (1, 2, 3, 4)
     t2 = [(0, 0), (0, 1), (1, 1)]
@@ -296,7 +228,6 @@ def test_hard_masks():
     a2.set_block(ts=((1, 2, 1, 2, 1, 2, 1, 2)), Ds=(6, 6, 6, 6), val='rand')
     a2.set_block(ts=((1, -1, 1, -1, 1, -1, 1, -1)), Ds=(3, 3, 3, 3), val='rand')
     _test_hard_to_scalar(a2, b2)
-    _test_hard_add(a2, b2.conj())
 
 
 def _test_fuse_mix(a):
