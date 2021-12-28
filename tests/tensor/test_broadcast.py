@@ -1,4 +1,6 @@
+"""Test yaps.broadcast """
 import numpy as np
+import pytest
 import yast
 try:
     from .configs import config_dense, config_U1, config_Z2_U1
@@ -8,7 +10,7 @@ except ImportError:
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_broadcast0():
+def test_broadcast_0():
     a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
     b = yast.rand(config=config_dense, s=(1, -1), isdiag=True, D=5)
     b1 = b.diag()
@@ -18,9 +20,7 @@ def test_broadcast0():
     r3 = a.tensordot(b, axes=(1, 1)).transpose((0, 3, 1, 2))
     r4 = b.tensordot(a, axes=(1, 1)).transpose((1, 0, 2, 3))
 
-    assert r1.norm_diff(r2) < tol
-    assert r1.norm_diff(r3) < tol
-    assert r1.norm_diff(r4) < tol
+    assert all(r1.norm_diff(x) < tol for x in (r2, r3, r4))
 
     a = yast.randR(config=config_dense, s=(1, -1, 1, -1), D=(2, 5, 2, 5))
     b = yast.randR(config=config_dense, s=(-1, 1), D=(5, 5))
@@ -47,7 +47,7 @@ def test_broadcast0():
 
 
 
-def test_broadcast1():
+def test_broadcast_1():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                     t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                     D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
@@ -76,7 +76,7 @@ def test_broadcast1():
     assert all(r1.norm_diff(x) < tol for x in [r2, r3])
 
 
-def test_broadcast2():
+def test_broadcast_2():
     a = yast.rand(config=config_Z2_U1, s=(-1, -1, 1, 1),
                     t=[((0, 0), (0, 2), (1, 0), (1, 2)),
                        ((0, 0), (0, 2)),
@@ -107,9 +107,28 @@ def test_broadcast2():
     assert np.trace(r5) == 3.
 
 
+def test_broadcast_exceptions():
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+                    t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                    D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+    b = yast.rand(config=config_U1, isdiag=True, t=(-1, 1), D=(7, 8))
+    b_nondiag = b.diag()
+    with pytest.raises(yast.YastError):
+        a.broadcast(b_nondiag, axis=2)  # Error in broadcast/mask: tensor b should be diagonal.
+    with pytest.raises(yast.YastError):
+        a.broadcast(b, axis=(1,))  # Error in broadcast/mask: axis should be an int.
+    with pytest.raises(yast.YastError):
+        amf = a.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
+        amf.broadcast(b, axis=1)  # Error in broadcast/mask: leg of tensor a specified by axis cannot be fused.
+    with pytest.raises(yast.YastError):
+        ahf = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
+        ahf.broadcast(b, axis=1)  # Error in broadcast: leg of tensor a specified by axis cannot be fused.
+    with pytest.raises(yast.YastError):
+        a.broadcast(b, axis=1)  # Error in broadcast: bond dimensions do not match.
+
+
 if __name__ == '__main__':
-    test_broadcast0()
-    test_broadcast1()
-    test_broadcast2()
-
-
+    test_broadcast_0()
+    test_broadcast_1()
+    test_broadcast_2()
+    test_broadcast_exceptions()

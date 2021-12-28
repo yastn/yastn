@@ -15,7 +15,8 @@ def test_to_nonsymmetric_0():
     an = a.to_nonsymmetric()
     bn = b.to_nonsymmetric()
     assert pytest.approx(an.vdot(bn).item(), rel=tol) == a.vdot(b).item()
-    assert pytest.approx(a.vdot(bn).item(), rel=tol) == a.vdot(b).item() # for dense to_nonsymetric should result in the same config
+    assert pytest.approx(a.vdot(bn).item(), rel=tol) == a.vdot(b).item()
+    # for dense to_nonsymetric should result in the same config
     assert an.are_independent(a)
     assert bn.are_independent(b)
     assert an.is_consistent()
@@ -33,7 +34,7 @@ def test_to_nonsymmetric_1():
 
     lsa = {0: a.get_leg_structure(axis=0)}
     lsb = {0: b.get_leg_structure(axis=0)}
-    
+
     an = a.to_nonsymmetric(leg_structures=lsb)
     bn = b.to_nonsymmetric(leg_structures=lsa)
     assert pytest.approx(an.vdot(bn).item(), rel=tol) == a.vdot(b).item()

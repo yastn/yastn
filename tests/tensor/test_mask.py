@@ -1,15 +1,15 @@
-
-import numpy as np
+""" Test yaps.mask """
+import pytest
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2_U1
+    from .configs import config_U1, config_Z2_U1
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2_U1
+    from configs import config_U1, config_Z2_U1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_mask1():
+def test_mask_1():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                     t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                     D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
@@ -36,7 +36,7 @@ def test_mask1():
     assert yast.norm_diff(d0, d1) < tol
 
 
-def test_mask2():
+def test_mask_2():
     a = yast.rand(config=config_Z2_U1, s=(-1, -1, 1, 1),
                     t=[((0, 0), (0, 2), (1, 0), (1, 2)),
                        ((0, 0), (0, 2)),
@@ -68,6 +68,28 @@ def test_mask2():
     assert yast.mask(bgt, ble, axis=1).trace() < tol
 
 
+def test_mask_exceptions():
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+                    t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                    D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+
+    b = yast.rand(config=config_U1, isdiag=True, t=(-1, 1), D=(7, 8))
+    b_nondiag = b.diag()
+    with pytest.raises(yast.YastError):
+        a.mask(b_nondiag, axis=2)  # Error in broadcast/mask: tensor b should be diagonal.
+    with pytest.raises(yast.YastError):
+        a.mask(b, axis=(1,))  # Error in broadcast/mask: axis should be an int.
+    with pytest.raises(yast.YastError):
+        amf = a.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
+        amf.mask(b, axis=1)  # Error in broadcast/mask: leg of tensor a specified by axis cannot be fused.
+    with pytest.raises(yast.YastError):
+        ahf = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
+        ahf.mask(b, axis=1)  # Error in mask: leg of tensor a specified by axis cannot be fused.
+    with pytest.raises(yast.YastError):
+        a.mask(b, axis=1)  # Error in mask: bond dimensions do not match.
+
+
 if __name__ == '__main__':
-    test_mask1()
-    test_mask2()
+    test_mask_1()
+    test_mask_2()
+    test_mask_exceptions()

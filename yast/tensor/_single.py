@@ -270,23 +270,67 @@ def __add__(a, b):
         result of addition as a new tensor
     """
     _test_configs_match(a, b)
-    _test_tensors_match(a, b)
-    meta = _common_keys(a.A, b.A)
-    masks_needed = any(ha != hb for ha, hb in zip(a.hard_fusion, b.hard_fusion))
-    if masks_needed:
+    aA, bA, hfs, meta, c_struct = _addition_meta(a, b)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
+                    meta_fusion=a.meta_fusion, hard_fusion=hfs)
+    c.A = c.config.backend.add(aA, bA, meta)
+    return c
+
+
+def _addition_meta(a, b):
+    """ meta-information for backend and new tensor charges and dimensions. """
+    if a.struct.s != b.struct.s:
+        raise YastError('Error in add: tensor signatures do not match.')
+    if a.struct.n != b.struct.n:
+        raise YastError('Error in add: tensor charges do not match')
+    if a.meta_fusion != b.meta_fusion:
+        raise YastError('Error in add: fusion trees do not match')
+    needs_mask = any(ha != hb for ha, hb in zip(a.hard_fusion, b.hard_fusion))
+    if needs_mask:
         sla, tDa, slb, tDb, hfs = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
         aA = a.config.backend.embed(a.A, sla, tDa)
         bA = a.config.backend.embed(b.A, slb, tDb)
+        aDset = tuple(tDa[t] for t in a.struct.t)
+        bDset = tuple(tDb[t] for t in b.struct.t)
     else:
-        aA, bA = a.A, b.A
-        hfs = a.hard_fusion
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=hfs, struct=a.struct)
-    c.A = c.config.backend.add(aA, bA, meta)
-    if len(meta[1]) > 0 or len(meta[2]) > 0 or masks_needed:
-        c.update_struct()
-    if len(meta[1]) > 0 or len(meta[2]) > 0:
-        _get_tD_legs(c.struct)
-    return c
+        aA, bA, hfs = a.A, b.A, a.hard_fusion
+        aDset, bDset = a.struct.D, b.struct.D
+
+    if a.struct.t == b.struct.t:
+        if aDset != bDset:
+            raise YastError('Error in addition: bond dimensions do not match.')
+        c_struct = a.struct._replace(D=aDset)
+        meta = tuple((ta, 'AB') for ta in a.struct.t)
+        return aA, bA, hfs, meta, c_struct
+
+    ia, ib, meta = 0, 0, []
+    while ia < len(aDset) and ib < len(bDset):
+        ta, Da = a.struct.t[ia], aDset[ia]
+        tb, Db = b.struct.t[ib], bDset[ib]
+        if ta == tb:
+            if Da != Db:
+                raise YastError('Error in addition: bond dimensions do not match.')
+            meta.append((ta, Da, 'AB'))
+            ia += 1
+            ib += 1
+        elif ta < tb:
+            meta.append((ta, Da, 'A'))
+            ia += 1
+        else:
+            meta.append((tb, Db, 'B'))
+            ib += 1
+    for ta, Da in zip(a.struct.t[ia:], aDset[ia:]):
+        meta.append((ta, Da, 'A'))
+    for tb, Db in zip(b.struct.t[ib:], bDset[ib:]):
+        meta.append((tb, Db, 'B'))
+
+    c_t = tuple(t for t, _, _ in meta)
+    c_D = tuple(D for _, D, _ in meta)
+    meta = tuple((t, ab) for t, _, ab in meta)
+    c_struct = _struct(t=c_t, D=c_D, s=a.struct.s, n=a.struct.n)
+    if any(ab != 'AB' for _, ab in meta):
+        _get_tD_legs(c_struct)
+    return aA, bA, hfs, meta, c_struct
 
 
 def __sub__(a, b):
@@ -305,22 +349,10 @@ def __sub__(a, b):
         result of subtraction as a new tensor
     """
     _test_configs_match(a, b)
-    _test_tensors_match(a, b)
-    meta = _common_keys(a.A, b.A)
-    masks_needed = any(ha != hb for ha, hb in zip(a.hard_fusion, b.hard_fusion))
-    if masks_needed:
-        sla, tDa, slb, tDb, hfs = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
-        aA = a.config.backend.embed(a.A, sla, tDa)
-        bA = a.config.backend.embed(b.A, slb, tDb)
-    else:
-        aA, bA = a.A, b.A
-        hfs = a.hard_fusion
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=hfs, struct=a.struct)
+    aA, bA, hfs, meta, c_struct = _addition_meta(a, b)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
+                    meta_fusion=a.meta_fusion, hard_fusion=hfs)
     c.A = c.config.backend.sub(aA, bA, meta)
-    if len(meta[1]) > 0 or len(meta[2]) > 0 or masks_needed:
-        c.update_struct()
-    if len(meta[1]) > 0 or len(meta[2]) > 0:
-        _get_tD_legs(c.struct)
     return c
 
 
@@ -340,22 +372,10 @@ def apxb(a, b, x=1):
     tensor : Tensor
     """
     _test_configs_match(a, b)
-    _test_tensors_match(a, b)
-    meta = _common_keys(a.A, b.A)
-    masks_needed = any(ha != hb for ha, hb in zip(a.hard_fusion, b.hard_fusion))
-    if masks_needed:
-        sla, tDa, slb, tDb, hfs = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
-        aA = a.config.backend.embed(a.A, sla, tDa)
-        bA = a.config.backend.embed(b.A, slb, tDb)
-    else:
-        aA, bA = a.A, b.A
-        hfs = a.hard_fusion
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=hfs, struct=a.struct)
+    aA, bA, hfs, meta, c_struct = _addition_meta(a, b)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
+                    meta_fusion=a.meta_fusion, hard_fusion=hfs)
     c.A = c.config.backend.apxb(aA, bA, x, meta)
-    if len(meta[1]) > 0 or len(meta[2]) > 0 or masks_needed:
-        c.update_struct()
-    if len(meta[1]) > 0 or len(meta[2]) > 0:
-        _get_tD_legs(c.struct)
     return c
 
 
@@ -455,28 +475,32 @@ def transpose(a, axes, inplace=False):
     Returns
     -------
     tensor : Tensor
-        transposed tensor 
+        transposed tensor
     """
     _test_all_axes(a, axes, native=False)
     uaxes, = _unpack_axes(a.meta_fusion, axes)
     order = np.array(uaxes, dtype=np.intp)
-    new_meta_fusion = tuple(a.meta_fusion[ii] for ii in axes)
-    new_hard_fusion = tuple(a.hard_fusion[ii] for ii in uaxes)
-    news = tuple(a.struct.s[ii] for ii in uaxes)
-    struct = _struct(s=news, n=a.struct.n)
-    tset = _tarray(a)
+    new_mf = tuple(a.meta_fusion[ii] for ii in axes)
+    new_hf = tuple(a.hard_fusion[ii] for ii in uaxes)
+    c_s = tuple(a.struct.s[ii] for ii in uaxes)
+    tset, Dset = _tarray(a), _Darray(a)
     newt = tset[:, order, :]
-    meta_transpose = tuple((told, tuple(tnew.flat)) for told, tnew in zip(a.struct.t, newt))
+    newD = Dset[:, order]
+    meta = sorted(((tuple(tn.flat), to, tuple(Dn)) for tn, to, Dn in zip(newt, a.struct.t, newD)), key=lambda x: x[0])
+    c_t = tuple(tn for tn, _, _ in meta)
+    c_D = tuple(Dn for _, _, Dn in meta)
+    meta = tuple((tn, to) for tn, to, _ in meta)
+    struct = _struct(t=c_t, D=c_D, s=c_s, n=a.struct.n)
+
     if inplace:
         a.struct = struct
-        a.meta_fusion = new_meta_fusion
-        a.hard_fusion = new_hard_fusion
-    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=new_meta_fusion, hard_fusion=new_hard_fusion, struct=struct)
+        a.meta_fusion = new_mf
+        a.hard_fusion = new_hf
+    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=new_mf, hard_fusion=new_hf, struct=struct)
     if a.isdiag and not inplace:
         c.A = {k: c.config.backend.clone(v) for k, v in a.A.items()}
     elif not a.isdiag:
-        c.A = c.config.backend.transpose(a.A, uaxes, meta_transpose, inplace)
-    c.update_struct()
+        c.A = c.config.backend.transpose(a.A, uaxes, meta, inplace)
     return c
 
 
@@ -712,7 +736,14 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0, inplace=False):
     Cutoff is a combination of absolut tolerance and relative tolerance with respect to maximal element in the tensor.
     """
     cutoff = atol + rtol * a.norm(p='inf')
-    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {k: t if inplace else a.config.backend.clone(t) for k, t in a.A.items() if a.config.backend.max_abs(t) > cutoff}
-    c.update_struct()
+    newtD = [(t, D) for t, D in zip(a.struct.t, a.struct.D) if a.config.backend.max_abs(a.A[t]) > cutoff]
+    c_t = tuple(t for t, _ in newtD)
+    c_D = tuple(D for _, D in newtD)
+    struct = a.struct._replace(t=c_t, D=c_D)
+    if inplace:
+        c = a
+        a.struct = struct
+    else:
+        c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=struct)
+    c.A = {t: a.A[t] if inplace else a.config.backend.clone(a.A[t]) for t in c_t}
     return c
