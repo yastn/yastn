@@ -62,25 +62,36 @@ def test_vdot_basic():
 
 
 def test_vdot_fuse_hard():
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                t=((0,), (0,), (-1, 0, 1), (-1, 0, 1)),
-                D=((2,), (5,), (7, 8, 9), (10, 11, 12)))
-    a.set_block(ts=(1, 1, 0, 0), Ds=(3, 6, 8, 11))
-    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                t=((-1, 0, 1), (-1, 0, 1), (-1, 0, 1), (-2, 0, 2)),
-                D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    c = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                t=((1,), (1,), (0, 1), (0, 1)),
-                D=((3,), (6,), (8, 9), (11, 12)))
+    t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
+    D1, D2, D3 = (1, 3, 2), (3, 3, 4), (5, 3, 6)
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
+                t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2))
+    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
+                t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2))
+    vdot_hf(a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
+    vdot_hf(a, b, hf_axes1=((0, 4), (3, 1), (5, 2)))
 
-    vdot_hf(a, b)
-    vdot_hf(a, c)
-    vdot_hf(b.conj(), c.conj())
+    b.set_block(ts=(2, 2, 1, -2, -3, 0), Ds=(4, 6, 1, 1, 1, 3), val='randR')
+    vdot_hf(a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
 
-    t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
-    D1 = (1, 2, 3, 4)
-    t2 = [(0, 0), (0, 1), (1, 1)]
-    D2 = (5, 2, 4)
+
+    # a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+    #             t=((0,), (0,), (-1, 0, 1), (-1, 0, 1)), D=((2,), (5,), (7, 8, 9), (10, 11, 12)))
+    # a.set_block(ts=(1, 1, 0, 0), Ds=(3, 6, 8, 11))
+    # b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+    #             t=((-1, 0, 1), (-1, 0, 1), (-1, 0, 1), (-2, 0, 2)),
+    #             D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+    # c = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+    #             t=((1,), (1,), (0, 1), (0, 1)), D=((3,), (6,), (8, 9), (11, 12)))
+
+    # vdot_hf(a, b)
+    # vdot_hf(a, c)
+    # vdot_hf(b.conj(), c.conj())
+
+    # t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
+    # D1 = (1, 2, 3, 4)
+    # t2 = [(0, 0), (0, 1), (1, 1)]
+    # D2 = (5, 2, 4)
     # a2 = yast.rand(config=config_Z2_U1, s=(-1, 1, 1, -1),
     #               t=(t2, t2, t1, t1),
     #               D=(D2, D2, D1, D1))
@@ -111,8 +122,6 @@ def vdot_hf(a, b, hf_axes1=(0, (2, 3), 1)):
     ffs2 = yast.vdot(ffb, ffa)
     fffs2 = yast.vdot(fffb, fffa)
     assert all(abs(s - x.item()) < tol for x in (fs, ffs, fffs, fs2.conj(), ffs2.conj(), fffs2.conj()))
-
-
 
 
 def test_vdot_exceptions():
