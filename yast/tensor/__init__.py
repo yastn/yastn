@@ -16,7 +16,7 @@ from ._contractions import *
 from ._initialize import *
 from ._output import *
 from ._single import *
-from ._magic import *
+from ._algebra import *
 from ._merging import *
 from .linalg import *
 from . import _tests
@@ -25,7 +25,7 @@ from . import _contractions
 from . import _initialize
 from . import _output
 from . import _single
-from . import _magic
+from . import _algebra
 from . import linalg
 from . import _merging
 __all__ = ['Tensor', 'linalg', 'YastError']
@@ -35,7 +35,7 @@ __all__.extend(_tests.__all__)
 __all__.extend(_control_lru.__all__)
 __all__.extend(_contractions.__all__)
 __all__.extend(_single.__all__)
-__all__.extend(_magic.__all__)
+__all__.extend(_algebra.__all__)
 __all__.extend(_output.__all__)
 __all__.extend(_merging.__all__)
 
@@ -114,7 +114,7 @@ class Tensor:
     from ._initialize import set_block, fill_tensor
     from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr
     from ._contractions import tensordot, vdot, trace, swap_gate, broadcast, mask
-    from ._magic import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
+    from ._algebra import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, diag, absolute, sqrt, rsqrt, reciprocal, exp
     from ._single import copy, clone, detach, to, requires_grad_, real, imag,  remove_zero_blocks, add_leg
     from ._output import show_properties, __str__, print_blocks_shape, is_complex

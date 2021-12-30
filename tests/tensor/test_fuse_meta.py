@@ -203,4 +203,3 @@ if __name__ == '__main__':
     test_get_shapes()
     test_fuse_match_legs()
     test_fuse_block()
-    test_fuse_trace()
