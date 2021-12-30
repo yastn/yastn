@@ -30,11 +30,6 @@ def _test_tensors_match(a, b):
     #    raise YastError('Hard fusions of the two tensors do not match')
 
 
-def _test_fusions_match(a, b):
-    if a.meta_fusion != b.meta_fusion:
-        raise YastError('Fusion trees do not match')
-
-
 def _test_all_axes(a, axes, native=False):
     axes = tuple(_flatten(axes))
     ndim = a.ndim_n if native else a.ndim

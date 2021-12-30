@@ -3,7 +3,7 @@ from functools import lru_cache
 from itertools import groupby, product
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _struct
-from ._tests import YastError, _test_configs_match, _test_fusions_match
+from ._tests import YastError, _test_configs_match
 from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_hf
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
 
@@ -351,7 +351,11 @@ def vdot(a, b, conj=(1, 0)):
     x: number
     """
     _test_configs_match(a, b)
-    _test_fusions_match(a, b)
+    if a.meta_fusion != b.meta_fusion:
+        if len(a.meta_fusion) != len(b.meta_fusion):
+            raise YastError('Error in vdot: mismatch in number of legs.')
+        raise YastError('Error in vdot: mismatch in number of fused legs or fusion order.')
+
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
 
     if (conja * conjb == -1 and any(ha.s != hb.s for ha, hb in zip(a.hard_fusion, b.hard_fusion))) or\

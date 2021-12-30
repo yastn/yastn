@@ -12,30 +12,34 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 def trace_vs_numpy(a, axes):
     """ Compares yast.trace vs dense operations in numpy. Return traced yast tensor. """
-    naxes = ((axes[0],), (axes[1],)) if isinstance(axes[0], int) else axes
-    out = set(range(a.ndim)) - set(naxes[0]) - set(naxes[1])
-    out = tuple(sorted(out))
-    if not (a.isdiag or len(naxes[0]) == 0):
-        ma = a.fuse_legs(axes=naxes+out, mode='meta')
-        tDin = {0: ma.get_leg_structure(1), 1: ma.get_leg_structure(0)}
-    else:
-        ma, tDin = a, {}
-    na = ma.to_numpy(tDin)
-    nat = np.trace(na) if len(naxes[0]) > 0 else na
+    if isinstance(axes[0], int):
+        axes = ((axes[0],), (axes[1],))
+    out = tuple(i for i in range(a.ndim) if i not in axes[0] + axes[1])
 
+    if not (a.isdiag or len(axes[0]) == 0):
+        ma = a.fuse_legs(axes=axes+out, mode='meta')
+        tDin = {0: ma.get_leg_structure(1), 1: ma.get_leg_structure(0)}
+        na = ma.to_numpy(tDin)  # to_numpy() with 2 matching axes to be traced
+    else:
+        na = a.to_numpy() # no trace is axes=((),())
+
+    nat = np.trace(na) if len(axes[0]) > 0 else na
     c = yast.trace(a, axes)
 
     assert c.is_consistent()
-    if len(naxes[0]) > 0:
+    if len(axes[0]) > 0:
         assert a.are_independent(c)
 
     tDout = {nn: a.get_leg_structure(ii) for nn, ii in enumerate(out)}
-    nc = c.to_numpy(tDout)
+    # trace might have removed some charges on remaining legs
+    nc = c.to_numpy(tDout) # for comparison they have to be filled in.
     assert np.linalg.norm(nc - nat) < tol
     return c
 
 
-def test_trace_0():
+def test_trace_basic():
+    """ test trace for different symmetries. """
+    # dense
     a = yast.ones(config=config_dense, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
     b = trace_vs_numpy(a, axes=(0, 2))
     c = trace_vs_numpy(b, axes=(1, 0))
@@ -47,8 +51,7 @@ def test_trace_0():
     c = trace_vs_numpy(a, axes=(0, 1))
     assert pytest.approx(c.item(), rel=tol) == 5.
 
-
-def test_trace_1():
+    # U1
     t1, D1, D2, D3 = (0, 1), (2, 3), (4, 5), (6, 7)
     a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                 t=[t1, t1, t1, t1, t1, t1], D=[D1, D2, D3, D3, D2, D1])
@@ -67,8 +70,7 @@ def test_trace_1():
     b = trace_vs_numpy(a, axes=(0, 2))
     assert b.norm() < tol  # == 0
 
-
-def test_trace_2():
+    # Z2xU1
     t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
     D1, D2 = (6, 4, 9, 6), (20, 16, 25, 20)
     a = yast.randC(config=config_Z2_U1, s=(-1, -1, 1, 1),
@@ -87,6 +89,7 @@ def test_trace_2():
 
 
 def test_trace_fuse_meta():
+    """ test trace of meta-fused tensor. """
     t1 = (-1, 1, 2)
     D1, D2 = (1, 2, 3), (4, 5, 6)
     a = yast.randR(config=config_U1, s=(-1, 1, 1, -1, 1, -1),
@@ -100,6 +103,7 @@ def test_trace_fuse_meta():
 
 
 def test_trace_fuse_hard():
+    """ test trace of hard-fused tensor. """
     # to_numpy() does not handle fixing mismatches between hard-fused legs,
     # so here tests do not use function trave_vs_numpy
     t1 = (-1, 1, 2)
@@ -113,7 +117,7 @@ def test_trace_fuse_hard():
     bf.unfuse_legs(axes=0, inplace=True)
     assert yast.norm_diff(bf, b) < tol
 
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1),
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1),  # TODO
                   t=((-1, 1), (-1, 2), (-1, 1), (1, 2), (0, 1)),  # change last to (1, 2) to trigger exception in merge -- fix
                   D=((1, 2), (4, 6), (1, 2), (5, 6), (3, 4)))
     af = yast.fuse_legs(a, axes=((1, 2), (3, 0), 4), mode='hard')
@@ -154,6 +158,7 @@ def test_trace_fuse_hard():
 
 
 def test_trace_exceptions():
+    """ test trigerring some expections """
     t1, D1, D2 = (0, 1), (2, 3), (4, 5)
     a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                 t=[t1, t1, t1, t1, t1, t1], D=[D1, D2, D2, D2, D2, D2])
@@ -184,9 +189,7 @@ def test_trace_exceptions():
 
 
 if __name__ == '__main__':
-    test_trace_0()
-    test_trace_1()
-    test_trace_2()
+    test_trace_basic()
     test_trace_fuse_meta()
     test_trace_fuse_hard()
     test_trace_exceptions()

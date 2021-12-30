@@ -126,9 +126,7 @@ def norm(A, p):
     """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
     if p == "fro":
         return torch.sum(torch.stack([torch.sum(t.abs()**2) for t in A.values()])).sqrt()
-    if p == "inf":
-        return torch.max(torch.stack([t.abs().max() for t in A.values()]))
-    raise RuntimeError("Invalid norm type: %s" % str(p))
+    return torch.max(torch.stack([t.abs().max() for t in A.values()]))  # else p == "inf":
 
 
 def norm_diff(A, B, meta, p):
@@ -137,11 +135,10 @@ def norm_diff(A, B, meta, p):
         return torch.sum(torch.stack([torch.sum(A[k].abs() ** 2) for k in meta[1]]
                                      + [torch.sum(B[k].abs() ** 2) for k in meta[2]]
                                      + [torch.sum((A[k] - B[k]).abs() ** 2) for k in meta[0]])).sqrt()
-    if p == 'inf':
-        return torch.max(torch.stack([A[k].abs().max() for k in meta[1]]
-                                     + [B[k].abs().max() for k in meta[2]]
-                                     + [(A[k] - B[k]).abs().max() for k in meta[0]]))
-    raise RuntimeError("Invalid norm type: %s" % str(p))
+    # else p == 'inf':
+    return torch.max(torch.stack([A[k].abs().max() for k in meta[1]]
+                                + [B[k].abs().max() for k in meta[2]]
+                                + [(A[k] - B[k]).abs().max() for k in meta[0]]))
 
 
 def entropy(A, alpha=1, tol=1e-12):

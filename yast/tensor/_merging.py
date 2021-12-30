@@ -181,11 +181,11 @@ def _union_hfs(config, ts, Ds, hfs):
     and identifying contribution of each to the union.
     """
     if hfs[0].tree != hfs[1].tree:
-        raise YastError('Numbers of merged legs or their merging order do not match. ')
+        raise YastError('Error in union: mismatch in number of fused legs or fusion order. ')
     tree = list(hfs[0].tree)
 
     if hfs[0].s != hfs[1].s:
-        raise YastError('Union of two hard fusions requires the same signatures. ')
+        raise YastError('Error in union: mismatch in native signatures of fused legs. ')
     s = list(hfs[0].s)  # to be consumed during parsing of the tree
 
     if len(tree) == 1:
@@ -193,7 +193,7 @@ def _union_hfs(config, ts, Ds, hfs):
         msk1 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[0], Ds[0])}
         msk2 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[1], Ds[1])}
         if any(msk1[t].size != msk2[t].size for t in set(msk1) & set(msk2)):
-            raise YastError('Mismatch of bond dimensions between two legs. ')
+            raise YastError('Error in union: mismatch of bond dimensions of unfused legs. ')
         return msk1, msk2, hfu
 
     ind_native = [i for i, l in enumerate(tree[1:]) if l == 1]
@@ -202,7 +202,7 @@ def _union_hfs(config, ts, Ds, hfs):
         tD1 = dict(zip(hfs[0].t[i], hfs[0].D[i]))
         tD2 = dict(zip(hfs[1].t[i], hfs[1].D[i]))
         if any(tD1[t] != tD2[t] for t in set(tD1) & set(tD2)):
-            raise YastError('Mismatch of native bond dimensions between two fused legs. ')
+            raise YastError('Error in union: mismatch of native bond dimensions of fused legs. ')
         tD12 = {**tD1, **tD2}
         tu.append(tuple(sorted(tD12)))
         Du.append(tuple(tD12[t] for t in tu[-1]))
@@ -616,7 +616,7 @@ def fuse_legs(a, axes, inplace=False, mode=None):
                 for ii in group:
                     new_mf.extend(a.meta_fusion[ii])
                 mfs.append(tuple(new_mf))
-        if inplace and order == tuple(ii for ii in range(a.ndim)):
+        if inplace and order == tuple(range(a.ndim)):
             c = a
         else:
             c = a.transpose(axes=order, inplace=inplace)

@@ -22,6 +22,8 @@ def norm(a, p='fro'):
     -------
     norm : float64
     """
+    if p not in ('fro', 'inf'):
+        raise YastError("Error in norm: p not in ('fro', 'inf'). ")
     if len(a.A) == 0:
         return a.zero_of_dtype()
     return a.config.backend.norm(a.A, p)
@@ -42,6 +44,8 @@ def norm_diff(a, b, p='fro'):
     -------
     norm : float64
     """
+    if p not in ('fro', 'inf'):
+        raise YastError("Error in norm_diff: p not in ('fro', 'inf'). ")
     _test_tensors_match(a, b)
     if (len(a.A) == 0) and (len(b.A) == 0):
         return a.zero_of_dtype()
