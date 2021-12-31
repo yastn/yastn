@@ -115,8 +115,8 @@ def test_broadcast():
     c2 = a.broadcast(b, axis=0, conj=(0, 1))
     c3 = b2.tensordot(a, axes=(0, 0))
 
-    assert(yast.norm_diff(c1, c2)) < tol
-    assert(yast.norm_diff(c1, c3)) < tol
+    assert(yast.norm(c1 - c2)) < tol
+    assert(yast.norm(c1 - c3)) < tol
     assert c3.get_shape() == (5, 18, 26, 34)
 
 

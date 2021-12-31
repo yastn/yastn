@@ -294,9 +294,9 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
         number = yast.norm(a, p='fro')  # p = 'for', i.e. frobenius is default
         number = yast.linalg.norm(a, p='inf')
 
-        number = a.norm_diff(b)
-        number = yast.norm_diff(a, b)
-        number = yast.linalg.norm_diff(a, b)
+        number = yast.norm(a - b)
+        number = yast.norm(a - b)
+        number = yast.linalg.norm(a - b)
         number = yast.norm(a - b)
 
         # utils

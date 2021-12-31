@@ -19,7 +19,7 @@ def test_fuse():
     c.unfuse_legs(axes=1, inplace=True)
     c.unfuse_legs(axes=2, inplace=True)
     d = c.moveaxis(source=1, destination=0)
-    assert a.norm_diff(d) < tol  # == 0.0
+    assert yast.norm(a - d) < tol  # == 0.0
 
 
 def test_fuse_dot():
@@ -38,7 +38,7 @@ def test_fuse_dot():
     r1 = yast.tensordot(a, b, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 1))
     r1f = yast.tensordot(af, bf, axes=(0, 0), conj=(0, 1))
     r1uf = r1f.unfuse_legs(axes=(0, 1))
-    r1.norm_diff(r1uf) < tol  # == 0.0
+    yast.norm(r1 - r1uf) < tol  # == 0.0
 
 
 def test_fuse_split():
@@ -57,22 +57,22 @@ def test_fuse_split():
 
     US = yast.tensordot(U, S, axes=(1, 0))
     a2 = yast.tensordot(US, V, axes=(1, 0))
-    assert af.norm_diff(a2) < tol  # == 0.0
+    assert yast.norm(af - a2) < tol  # == 0.0
     USf = yast.tensordot(Uf, Sf, axes=(1, 0))
     a3 = yast.tensordot(USf, Vf, axes=(1, 0))
-    assert af.norm_diff(a3) < tol  # == 0.0
+    assert yast.norm(af - a3) < tol  # == 0.0
     a3.unfuse_legs(axes=0, inplace=True)
     a3.unfuse_legs(axes=(1, 2), inplace=True)
     a3.moveaxis(source=2, destination=1, inplace=True)
-    assert a.norm_diff(a3) < tol  # == 0.0
+    assert yast.norm(a - a3) < tol  # == 0.0
 
     Qf, Rf = yast.linalg.qr(af, axes=(0, 1))
     Q, R = yast.linalg.qr(a, axes=((0, 1, 2), (3, 4)))
     Q = Q.fuse_legs(axes=(0, (2, 1), 3))
     Q.fuse_legs(axes=((0, 1), 2), inplace=True)
-    assert Q.norm_diff(Qf) < tol  # == 0.0
+    assert yast.norm(Q - Qf) < tol  # == 0.0
     Rf.unfuse_legs(axes=1, inplace=True)
-    assert R.norm_diff(Rf) < tol  # == 0.0
+    assert yast.norm(R - Rf) < tol  # == 0.0
 
     aH = yast.tensordot(af, af, axes=(1, 1), conj=(0, 1))
     Vf, Uf = yast.linalg.eigh(aH, axes=(0, 1))
@@ -80,7 +80,7 @@ def test_fuse_split():
     UVf = yast.tensordot(Uf, Vf, axes=(2, 0))
     aH2 = yast.tensordot(UVf, Uf, axes=(2, 2), conj=(0, 1))
     aH.unfuse_legs(axes=(0, 1), inplace=True)
-    assert aH2.norm_diff(aH) < tol  # == 0.0
+    assert yast.norm(aH2 - aH) < tol  # == 0.0
 
 
 def test_fuse_transpose():
@@ -162,9 +162,9 @@ def test_fuse_match_legs():
     c3 = c2.unfuse_legs(axes=1)  # partial unfuse
     r3 = yast.ncon([af, bf, c3], [[-1, 1, -2], [-3, 2, 3, -4], [1, 2, 3]], [0, 1, 0])
 
-    assert r3.norm_diff(r2) < tol  # == 0.0
+    assert yast.norm(r3 - r2) < tol  # == 0.0
     r2.unfuse_legs(axes=0, inplace=True)
-    assert r1.norm_diff(r2) < tol  # == 0.0
+    assert yast.norm(r1 - r2) < tol  # == 0.0
 
 
 def test_fuse_block():
@@ -191,7 +191,7 @@ def test_fuse_block():
     bc = yast.block({(1, 1): c1, (2, 2): c2})
     br = yast.block({1: r1, 2: r2})
     s2 = yast.ncon([bl, bc, br], [[1], [1, 2], [2]])
-    assert yast.norm_diff(s1, s2) < tol
+    assert yast.norm(s1 - s2) < tol
     assert pytest.approx(s1.item(), rel=tol) == s2.item()
 
 

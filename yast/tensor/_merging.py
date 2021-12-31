@@ -136,7 +136,9 @@ def _intersect_hfs(config, ts, Ds, hfs):
     for ms1, ms2 in zip(*msks):
         for t in set(ms1) & set(ms2):
             if ms1[t].size != ms2[t].size:
-                raise YastError(f'Mismatch of bond dimensions of combined native legs for charge {t}')
+                if len(tree) == 1:
+                    raise YastError('Error in union: mismatch of bond dimensions of unfused legs.')
+                raise YastError('Error in intersect: mismatch of native bond dimensions of fused legs.')
         _mask_falsify_mismatches(ms1, ms2)
 
     if len(tree) == 1:

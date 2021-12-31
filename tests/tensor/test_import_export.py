@@ -26,7 +26,7 @@ def check_import_export(a):
     os.remove("tmp.h5")
     b.is_consistent()
     assert yast.are_independent(a, b)
-    assert yast.norm_diff(a, b) < tol
+    assert yast.norm(a - b) < tol
 
 
 def test_full_io():

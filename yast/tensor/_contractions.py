@@ -357,10 +357,18 @@ def vdot(a, b, conj=(1, 0)):
         raise YastError('Error in vdot: mismatch in number of fused legs or fusion order.')
 
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
+    mconj = conja * conjb
 
-    if (conja * conjb == -1 and any(ha.s != hb.s for ha, hb in zip(a.hard_fusion, b.hard_fusion))) or\
-        (conja * conjb == 1 and any(ha.s != hb.ms for ha, hb in zip(a.hard_fusion, b.hard_fusion))):
+    # if (conja * conjb == -1 and any(ha.s != hb.s for ha, hb in zip(a.hard_fusion, b.hard_fusion))) or\
+    #     (conja * conjb == 1 and any(ha.s != hb.ms for ha, hb in zip(a.hard_fusion, b.hard_fusion))):
+    if (mconj == -1 and a.struct.s != b.struct.s) or\
+       (mconj == 1 and any(s1 == s2 for s1, s2 in zip(a.struct.s, b.struct.s))):
         raise YastError('Error in vdot: signatures do not match.')
+
+    if (mconj == -1 and any(h1.s != h2.s for h1, h2 in zip(a.hard_fusion, b.hard_fusion))) or\
+       (mconj == 1 and any(h1.s != h2.ms for h1, h2 in zip(a.hard_fusion, b.hard_fusion))):
+        raise YastError('Error in vdot: signatures of fused legs do not match.')
+
 
     c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
     c_n = a.config.sym.fuse(c_n, (conja, conjb), 1)

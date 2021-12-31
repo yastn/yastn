@@ -172,7 +172,7 @@ def test_dict():
     a = yast.rand(config=config_dense)  # s=()
     d = a.export_to_dict()
     b = yast.import_from_dict(config=config_dense, d=d)
-    assert yast.norm_diff(a, b) < tol  # == 0.0
+    assert yast.norm(a - b) < tol  # == 0.0
     assert a.is_consistent()
     assert a.are_independent(b)
 
@@ -181,14 +181,14 @@ def test_dict():
                   D=((3, 5, 2), (1, 2, 3), (2, 3, 4)))
     d = a.export_to_dict()
     b = yast.import_from_dict(config=config_U1, d=d)
-    assert yast.norm_diff(a, b) < tol  # == 0.0
+    assert yast.norm(a - b) < tol  # == 0.0
     assert a.is_consistent()
     assert a.are_independent(b)
 
     a = yast.rand(config=config_U1, isdiag=True, t=(0, 1), D=(3, 5))
     d = a.export_to_dict()
     b = yast.import_from_dict(config=config_U1, d=d)
-    assert yast.norm_diff(a, b) < tol  # == 0.0
+    assert yast.norm(a - b) < tol  # == 0.0
     assert a.is_consistent()
     assert a.are_independent(b)
 
@@ -197,7 +197,7 @@ def test_dict():
                   D=((1, 2, 3, 4), (2, 1), (2, 3, 5, 4, 1, 6)))
     d = a.export_to_dict()
     b = yast.import_from_dict(config=config_Z2_U1, d=d)
-    assert yast.norm_diff(a, b) < tol  # == 0.0
+    assert yast.norm(a - b) < tol  # == 0.0
     assert b.is_consistent()
     assert a.are_independent(b)
 

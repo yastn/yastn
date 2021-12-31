@@ -129,18 +129,6 @@ def norm(A, p):
     return torch.max(torch.stack([t.abs().max() for t in A.values()]))  # else p == "inf":
 
 
-def norm_diff(A, B, meta, p):
-    """ norm(A - B); meta = kab, ka, kb """
-    if p == 'fro':
-        return torch.sum(torch.stack([torch.sum(A[k].abs() ** 2) for k in meta[1]]
-                                     + [torch.sum(B[k].abs() ** 2) for k in meta[2]]
-                                     + [torch.sum((A[k] - B[k]).abs() ** 2) for k in meta[0]])).sqrt()
-    # else p == 'inf':
-    return torch.max(torch.stack([A[k].abs().max() for k in meta[1]]
-                                + [B[k].abs().max() for k in meta[2]]
-                                + [(A[k] - B[k]).abs().max() for k in meta[0]]))
-
-
 def entropy(A, alpha=1, tol=1e-12):
     """ von Neuman or Renyi entropy from svd's"""
     Snorm = torch.sum(torch.stack([torch.sum(x ** 2) for x in A.values()])).sqrt()

@@ -24,7 +24,7 @@ def test_svd_sparse():
     US = yast.tensordot(U, S, axes=(ll, 0))
     USV = yast.tensordot(US, V, axes=(ll, 0))
     b = a.transpose(axes=axes[0] + axes[1])
-    assert b.norm_diff(USV) < tol  # == 0.0
+    assert yast.norm(b - USV) < tol  # == 0.0
 
 
 def test_svd_truncate():
@@ -88,14 +88,14 @@ def test_svd_n_division():
     U1, S1, V1 = yast.linalg.svd(a, axes=((0, 1), (2, 3)), nU=True, sU=1)
     US1 = yast.tensordot(U1, S1, axes=(2, 0))
     USV1 = yast.tensordot(US1, V1, axes=(2, 0))
-    assert a.norm_diff(USV1) < tol  # == 0.0
+    assert yast.norm(a - USV1) < tol  # == 0.0
     assert U1.struct.n == (3,)
     assert V1.struct.n == (0,)
 
     U2, S2, V2 = yast.linalg.svd(a, axes=((0, 1), (2, 3)), nU=False, sU=1)
     US2 = yast.tensordot(U2, S2, axes=(2, 0))
     USV2 = yast.tensordot(US2, V2, axes=(2, 0))
-    assert a.norm_diff(USV2) < tol  # == 0.0
+    assert yast.norm(a - USV2) < tol  # == 0.0
     assert U2.struct.n == (0,)
     assert V2.struct.n == (3,)
 
