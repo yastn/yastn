@@ -1,7 +1,7 @@
 """ Linear operations and operations on a single yast tensor. """
 from ._auxliary import _struct
 from ._merging import _masks_for_add
-from ._tests import YastError, _test_configs_match, _get_tD_legs
+from ._tests import YastError, _test_configs_match, _get_tD_legs, _test_axes_match
 
 __all__ = ['apxb']
 
@@ -77,13 +77,9 @@ def apxb(a, b, x=1):
 
 def _addition_meta(a, b):
     """ meta-information for backend and new tensor charges and dimensions. """
-    if a.struct.s != b.struct.s:
-        raise YastError('Error in add: tensor signatures do not match.')
     if a.struct.n != b.struct.n:
         raise YastError('Error in add: tensor charges do not match')
-    if a.meta_fusion != b.meta_fusion:
-        raise YastError('Error in add: fusion trees do not match')
-    needs_mask = any(ha != hb for ha, hb in zip(a.hard_fusion, b.hard_fusion))
+    needs_mask, _ = _test_axes_match(a, b, sgn=1)
     if needs_mask:
         sla, tDa, slb, tDb, hfs = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
         aA = a.config.backend.embed(a.A, sla, tDa)
@@ -96,7 +92,7 @@ def _addition_meta(a, b):
 
     if a.struct.t == b.struct.t:
         if aDset != bDset:
-            raise YastError('Error in addition: bond dimensions do not match.')
+            raise YastError('Bond dimensions do not match.')
         c_struct = a.struct._replace(D=aDset)
         meta = tuple((ta, 'AB') for ta in a.struct.t)
         return aA, bA, hfs, meta, c_struct
@@ -107,7 +103,7 @@ def _addition_meta(a, b):
         tb, Db = b.struct.t[ib], bDset[ib]
         if ta == tb:
             if Da != Db:
-                raise YastError('Error in addition: bond dimensions do not match.')
+                raise YastError('Bond dimensions do not match.')
             meta.append((ta, Da, 'AB'))
             ia += 1
             ib += 1

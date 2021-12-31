@@ -1,7 +1,7 @@
 """ Linalg methods for yast tensor. """
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _common_keys
-from ._tests import YastError, _test_tensors_match, _test_all_axes
+from ._auxliary import _clear_axes, _unpack_axes
+from ._tests import YastError, _test_all_axes
 from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal, _masks_for_add
 from ._merging import _leg_struct_trivial, _leg_struct_truncation, _Fusion
 from ._krylov import _expand_krylov_space

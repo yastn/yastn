@@ -165,6 +165,13 @@ def test_vdot_exceptions():
         bf = a.fuse_legs(axes=(0, (1, 2, 3)), mode='meta')
         af.vdot(bf)  # Error in vdot: mismatch in number of fused legs or fusion order.
 
+    t1, t2 = (-1, 0, 1), (-1, 0, 2)
+    D1, D2 = (2, 3, 4), (2, 4, 5)
+    with pytest.raises(yast.YastError):
+        a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
+        b = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t2, t1), D=(D1, D2, D1))
+        yast.vdot(a, b)  # Bond dimensions do not match.
+
 
 def test_hf_intersect_exceptions():
     """ exceptions happening in resolving hard-fusion mismatches. """
