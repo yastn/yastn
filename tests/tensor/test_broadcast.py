@@ -20,7 +20,7 @@ def test_broadcast_0():
     r3 = a.tensordot(b, axes=(1, 1)).transpose((0, 3, 1, 2))
     r4 = b.tensordot(a, axes=(1, 1)).transpose((1, 0, 2, 3))
 
-    assert all(r1.norm_diff(x) < tol for x in (r2, r3, r4))
+    assert all(yast.norm(r1 - x) < tol for x in (r2, r3, r4))
 
     a = yast.randR(config=config_dense, s=(1, -1, 1, -1), D=(2, 5, 2, 5))
     b = yast.randR(config=config_dense, s=(-1, 1), D=(5, 5))
@@ -33,7 +33,7 @@ def test_broadcast_0():
     r4 = b.tensordot(a, axes=(0, 1), conj=(0, 1)).transpose((1, 0, 2, 3))
     r5 = a.tensordot(b, axes=(1, 0), conj=(1, 0)).transpose((0, 3, 1, 2))
 
-    assert all(r1.norm_diff(x) < tol for x in [r2, r3, r4, r5])
+    assert all(yast.norm(r1 - x) < tol for x in [r2, r3, r4, r5])
     assert all(x.is_consistent() for x in [r1, r2, r3, r4, r5])
 
     a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 5, 3, 5))
@@ -43,7 +43,7 @@ def test_broadcast_0():
     r1 = a.tensordot(b1, axes=((1, 3), (1, 0)))
     r2 = a.tensordot(b, axes=((1, 3), (1, 0)))
     r3 = b.tensordot(a, axes=((0, 1), (3, 1)))
-    assert all(r1.norm_diff(x) < tol for x in [r2, r3])
+    assert all(yast.norm(r1 - x) < tol for x in [r2, r3])
 
 
 
@@ -60,7 +60,7 @@ def test_broadcast_1():
     r4 = b.tensordot(a, axes=(1, 2)).transpose((1, 2, 0, 3))
 
     assert all(x.is_consistent() for x in [r1, r2, r3, r4])
-    assert all(r1.norm_diff(x) < tol for x in [r2, r3, r4])
+    assert all(yast.norm(r1 - x) < tol for x in [r2, r3, r4])
 
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                     t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
@@ -73,7 +73,7 @@ def test_broadcast_1():
     r3 = b.tensordot(a, axes=((0, 1), (3, 2)))
 
     assert all(x.is_consistent() for x in [r1, r2, r3])
-    assert all(r1.norm_diff(x) < tol for x in [r2, r3])
+    assert all(yast.norm(r1 - x) < tol for x in [r2, r3])
 
 
 def test_broadcast_2():
@@ -95,7 +95,7 @@ def test_broadcast_2():
     r3 = b.tensordot(a, axes=(0, 0))
 
     assert all(x.is_consistent() for x in [r1, r2, r3])
-    assert all(a.norm_diff(x) < tol for x in [r1, r2, r3])
+    assert all(yast.norm(a - x) < tol for x in [r1, r2, r3])
     assert not any((r1.isdiag, r2.isdiag, r3.isdiag))
 
     r4 = b.broadcast(c, axis=1)

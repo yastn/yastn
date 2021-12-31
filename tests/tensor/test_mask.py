@@ -33,7 +33,7 @@ def test_mask_1():
     d0 = b0.mask(b, axis=0)
     ls = d0.get_leg_structure(axis=1)
     assert len(ls) == 1 and (1,) in ls and ls[(1,)] == bd
-    assert yast.norm_diff(d0, d1) < tol
+    assert yast.norm(d0 - d1) < tol
 
 
 def test_mask_2():

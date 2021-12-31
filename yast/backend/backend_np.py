@@ -127,18 +127,6 @@ def norm(A, p):
     return max([np.abs(x).max() for x in A.values()])  # else p == 'inf'
 
 
-def norm_diff(A, B, meta, p):
-    """ norm(A - B); meta = kab, ka, kb """
-    if p == 'fro':
-        return np.linalg.norm([np.linalg.norm(A[ind] - B[ind]) for ind in meta[0]]
-                              + [np.linalg.norm(A[ind]) for ind in meta[1]]
-                              + [np.linalg.norm(B[ind]) for ind in meta[2]])
-    # else p == 'inf':
-    return max([np.abs(A[ind] - B[ind]).max() for ind in meta[0]]
-                + [np.abs(A[ind]).max() for ind in meta[1]]
-                + [np.abs(B[ind]).max() for ind in meta[2]])
-    
-
 def entropy(A, alpha=1, tol=1e-12):
     """ von Neuman or Renyi entropy from svd's"""
     Snorm = np.sqrt(np.sum([np.sum(x ** 2) for x in A.values()]))

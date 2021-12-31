@@ -15,7 +15,7 @@ def test_aux_0():
     c.is_consistent()
     assert a.are_independent(c)
     a.add_leg(inplace=True)
-    assert yast.norm_diff(a, c) < tol
+    assert yast.norm(a - c) < tol
     assert a.are_independent(c)
 
 
@@ -35,7 +35,7 @@ def test_aux_1():
     b.is_consistent()
 
     ab2 = yast.tensordot(a, b, axes=(2, 2))
-    assert yast.norm_diff(ab1, ab2) < tol
+    assert yast.norm(ab1 - ab2) < tol
 
 
 def test_aux_2():
@@ -100,7 +100,7 @@ def test_operators_chain():
 
     T1 = yast.ncon([cdag, cdag, c, c], [(-1, -5), (-2, -6), (-3 ,-7), (-4, -8)])
     T2 = yast.ncon([o1, o2, o3, o4], [(4, -1, -5, 1), (1, -2, -6, 2), (2, -3 ,-7, 3), (3, -4, -8, 4)])
-    assert yast.norm_diff(T1, T2) < tol
+    assert yast.norm(T1 -  T2) < tol
 
 
 if __name__ == '__main__':

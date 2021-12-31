@@ -6,7 +6,7 @@ from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal, _mas
 from ._merging import _leg_struct_trivial, _leg_struct_truncation, _Fusion
 from ._krylov import _expand_krylov_space
 
-__all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'norm_diff', 'entropy', 'expmv', 'eigs']
+__all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'entropy', 'expmv', 'eigs']
 
 
 def norm(a, p='fro'):
@@ -27,35 +27,6 @@ def norm(a, p='fro'):
     if len(a.A) == 0:
         return a.zero_of_dtype()
     return a.config.backend.norm(a.A, p)
-
-
-def norm_diff(a, b, p='fro'):
-    """
-    Norm of the difference of two tensors.
-
-    Parameters
-    ----------
-    other: Tensor
-
-    ord: str
-        'fro' = Frobenious; 'inf' = max(abs())
-
-    Returns
-    -------
-    norm : float64
-    """
-    if p not in ('fro', 'inf'):
-        raise YastError("Error in norm_diff: p not in ('fro', 'inf'). ")
-    _test_tensors_match(a, b)
-    if (len(a.A) == 0) and (len(b.A) == 0):
-        return a.zero_of_dtype()
-    meta = _common_keys(a.A, b.A)
-    needs_mask = any(ha != hb for ha, hb in zip(a.hard_fusion, b.hard_fusion))
-    if needs_mask:
-        sla, tDa, slb, tDb, _ = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
-        return a.config.backend.norm_diff(a.config.backend.embed(a.A, sla, tDa),
-                                        a.config.backend.embed(b.A, slb, tDb), meta, p)
-    return a.config.backend.norm_diff(a.A, b.A, meta, p)
 
 
 def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,

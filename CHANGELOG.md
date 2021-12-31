@@ -116,3 +116,6 @@
 
 25-12-2021
 - add function yast.clear_cache() to clear caches of all lru_cache employed to speed-up precomputing.
+
+31-12-2021
+- remove function `norm_diff(a, b)`. Use `norm(a - b)` instead.

@@ -33,7 +33,7 @@ def test_ncon_0():
     assert z2.get_shape() == (1, 2, 3, 4)
     assert z3.get_shape() == (1, 2, 3, 4)
     assert z4.get_shape() == (1, 2, 3, 4)
-    assert z1.norm_diff(z2) < tol  # == 0.0
+    assert yast.norm(z1 - z2) < tol  # == 0.0
     assert (z3 - z4.conj()).norm() < tol  # == 0.0
 
     y1 = yast.ncon([a, b, c, d, g, h], [[4, -2, -0], [-3, -1, 5], [4, 3, 1, 1], [3, 2, 5, 2], [-4], [-5]], [1, 0, 1, 0, 1, 0])
@@ -49,7 +49,7 @@ def test_ncon_0():
     y5 = yast.ncon([a, a, b, b], [[6, 5, 4], [6, 5, 4], [1, 3, 2], [1, 3, 2]], [0, 1, 0, 1])
     assert isinstance(y4.item(), complex)
     assert isinstance(y5.item(), complex)
-    assert yast.norm_diff(y4, y5) / yast.norm(y4) < tol  # == 0.0
+    assert yast.norm(y4 - y5) / yast.norm(y4) < tol  # == 0.0
     assert pytest.approx((a.norm().item() ** 2) * (b.norm().item() ** 2), rel=tol) == y4.item()
 
 

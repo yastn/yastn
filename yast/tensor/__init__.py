@@ -112,7 +112,7 @@ class Tensor:
 
     # pylint: disable=C0415
     from ._initialize import set_block, fill_tensor
-    from .linalg import norm, norm_diff, svd, svd_lowrank, eigh, qr
+    from .linalg import norm, svd, svd_lowrank, eigh, qr
     from ._contractions import tensordot, vdot, trace, swap_gate, broadcast, mask
     from ._algebra import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, diag, absolute, sqrt, rsqrt, reciprocal, exp

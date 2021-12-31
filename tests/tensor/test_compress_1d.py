@@ -1,4 +1,4 @@
-""" fill_tensor (which is called in: rand, zeros, ones), yast.to_numpy, yast.match_legs, yast.norm_diff """
+""" fill_tensor (which is called in: rand, zeros, ones), yast.to_numpy, yast.match_legs """
 import numpy as np
 import pytest
 import yast
@@ -183,7 +183,7 @@ def test_meta_compress():
     npa = A.to_numpy()
     npt = T.to_numpy()
     assert np.allclose(npa, npt)
-    assert A.norm_diff(T) < tol
+    assert yast.norm(A - T) < tol
     # now adding some blocks with new charges
     A.set_block(ts=(1, 1, 0, 0), Ds=(2, 6, 7, 1))
     with pytest.raises(yast.YastError):

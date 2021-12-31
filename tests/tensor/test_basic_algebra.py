@@ -35,10 +35,8 @@ def combine_tests(a, b):
     r1 = algebra_vs_numpy(lambda x, y: x + 2 * y, a, b)
     r2 = a.apxb(b, 2)
     r3 = algebra_vs_numpy(lambda x, y: 2 * x + y, b, a)
-    assert all(yast.norm_diff(r1, x, p=p) < tol for x in (r2, r3) for p in ('fro', 'inf'))  # == 0.0
     assert all(yast.norm(r1 - x, p=p) < tol for x in (r2, r3) for p in ('fro', 'inf'))  # == 0.0
-    # additionally tests norm and norm_diff
-
+    # additionally tests norm
 
 def test_algebra_basic():
     """ test basic algebra for various symmetries """
@@ -123,13 +121,13 @@ def algebra_hf(f, a, b, hf_axes1=(0, (1, 2), 3)):
     ffc = f(ffa, ffb)
     ffcf = yast.fuse_legs(ffc, axes=[(0, 1)], mode='hard')
     fffc = f(fffa, fffb)
-    assert all(yast.norm_diff(x, y) < tol for x, y in zip((fc, ffc, fffc), (cf, fcf, ffcf)))
+    assert all(yast.norm(x - y) < tol for x, y in zip((fc, ffc, fffc), (cf, fcf, ffcf)))
 
     uffc = fffc.unfuse_legs(axes=0)
     uufc = uffc.unfuse_legs(axes=1).transpose(axes=(2, 0, 1))
     uf_axes = tuple(i for i, a in enumerate(hf_axes1) if not isinstance(a, int))
     uuuc = uufc.unfuse_legs(axes=uf_axes)
-    assert all(yast.norm_diff(x, y) < tol for x, y in zip((ffc, fc, c), (uffc, uufc, uuuc)))
+    assert all(yast.norm(x - y) < tol for x, y in zip((ffc, fc, c), (uffc, uufc, uuuc)))
     assert all(x.is_consistent() for x in (fc, fcf, ffc, ffcf, fffc, uffc, uufc, uuuc))
 
 

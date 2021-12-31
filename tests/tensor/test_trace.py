@@ -47,7 +47,7 @@ def test_trace_basic():
 
     a = yast.eye(config=config_dense, D=5)
     b = trace_vs_numpy(a, axes=((), ()))
-    assert yast.norm_diff(a, b) < tol
+    assert yast.norm(a - b) < tol
     c = trace_vs_numpy(a, axes=(0, 1))
     assert pytest.approx(c.item(), rel=tol) == 5.
 
@@ -83,7 +83,7 @@ def test_trace_basic():
     a = yast.ones(config=config_Z2_U1, isdiag=True,
                   t=[((0, 0), (1, 1), (0, 2))], D=[(2, 2, 2)])
     b = trace_vs_numpy(a, axes=((), ())) # no trace
-    assert yast.norm_diff(a, b) < tol
+    assert yast.norm(a - b) < tol
     b = trace_vs_numpy(a, axes=(0, 1))
     assert pytest.approx(b.item(), rel=tol) == 6
 
@@ -99,7 +99,7 @@ def test_trace_fuse_meta():
     b = trace_vs_numpy(a, axes=((1, 2), (3, 0)))
     bf = trace_vs_numpy(af, axes=(0, 1))
     bf.unfuse_legs(axes=0, inplace=True)
-    assert yast.norm_diff(bf, b) < tol
+    assert yast.norm(bf - b) < tol
 
 
 def test_trace_fuse_hard():
@@ -115,7 +115,7 @@ def test_trace_fuse_hard():
     b = trace_vs_numpy(a, axes=((1, 2), (3, 0)))
     bf = trace_vs_numpy(af, axes=(0, 1))
     bf.unfuse_legs(axes=0, inplace=True)
-    assert yast.norm_diff(bf, b) < tol
+    assert yast.norm(bf - b) < tol
 
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1),  # TODO
                   t=((-1, 1), (-1, 2), (-1, 1), (1, 2), (0, 1)),  # change last to (1, 2) to trigger exception in merge -- fix
@@ -123,7 +123,7 @@ def test_trace_fuse_hard():
     af = yast.fuse_legs(a, axes=((1, 2), (3, 0), 4), mode='hard')
     tra = yast.trace(a, axes=((1, 2), (3, 0)))
     traf = yast.trace(af, axes=(0, 1))
-    assert yast.norm_diff(tra, traf) < tol
+    assert yast.norm(tra - traf) < tol
 
     a = yast.Tensor(config=config_U1, s=(1, -1, 1, 1, -1, -1))
     a.set_block(ts=(1, 2, 0, 2, 1, 0), Ds=(2, 3, 4, 3, 2, 4), val='randR')
@@ -133,7 +133,7 @@ def test_trace_fuse_hard():
     af = yast.fuse_legs(a, axes=((0, 1), 2, (4, 3), 5), mode='hard')
     tra = yast.trace(a, axes=((0, 1), (4, 3)))
     traf = yast.trace(af, axes=(0, 2))
-    assert yast.norm_diff(tra, traf) < tol
+    assert yast.norm(tra - traf) < tol
 
     aff = yast.fuse_legs(af, axes=((0, 1), (2, 3)), mode='hard')
     tra = yast.trace(a, axes=((0, 1, 2), (4, 3, 5)))
@@ -148,13 +148,13 @@ def test_trace_fuse_hard():
     tra = yast.trace(a, axes=((0, 2, 4, 6), (1, 3, 5, 7)))
     traf = yast.trace(af, axes=((0, 2), (1, 3)))
     traff = yast.trace(aff, axes=(0, 1))
-    assert yast.norm_diff(tra, traf) < tol
-    assert yast.norm_diff(tra, traff) < tol
+    assert yast.norm(tra - traf) < tol
+    assert yast.norm(tra - traff) < tol
 
     b = yast.trace(a, axes=((0, 2), (1, 3)))
     bf = yast.trace(af, axes=(0, 1))
     bf = bf.unfuse_legs(axes=(0, 1), inplace=True).transpose(axes=(0, 2, 1, 3))
-    assert yast.norm_diff(b, bf) < tol
+    assert yast.norm(b - bf) < tol
 
 
 def test_trace_exceptions():

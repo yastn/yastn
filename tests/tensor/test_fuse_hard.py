@@ -29,22 +29,22 @@ def test_hard_split():
 
     US = yast.tensordot(U, S, axes=(1, 0))
     a2 = yast.tensordot(US, V, axes=(1, 0))
-    assert af.norm_diff(a2) < tol  # == 0.0
+    assert yast.norm(af - a2) < tol  # == 0.0
     USf = yast.tensordot(Uf, Sf, axes=(1, 0))
     a3 = yast.tensordot(USf, Vf, axes=(1, 0))
-    assert af.norm_diff(a3) < tol  # == 0.0
+    assert yast.norm(af - a3) < tol  # == 0.0
     a3.unfuse_legs(axes=0, inplace=True)
     a3.unfuse_legs(axes=(1, 2), inplace=True)
     a3.moveaxis(source=2, destination=1, inplace=True)
-    assert a.norm_diff(a3) < tol  # == 0.0
+    assert yast.norm(a - a3) < tol  # == 0.0
 
     Qf, Rf = yast.linalg.qr(af, axes=(0, 1))
     Q, R = yast.linalg.qr(a, axes=((0, 1, 2), (3, 4)))
     Q = Q.fuse_legs(axes=(0, (2, 1), 3), mode='hard')
     Q.fuse_legs(axes=((0, 1), 2), inplace=True, mode='hard')
-    assert Q.norm_diff(Qf) < tol  # == 0.0
+    assert yast.norm(Q - Qf) < tol  # == 0.0
     Rf.unfuse_legs(axes=1, inplace=True)
-    assert R.norm_diff(Rf) < tol  # == 0.0
+    assert yast.norm(R - Rf) < tol  # == 0.0
 
     aH = yast.tensordot(af, af, axes=(1, 1), conj=(0, 1))
     Vf, Uf = yast.linalg.eigh(aH, axes=(0, 1))
@@ -52,7 +52,7 @@ def test_hard_split():
     UVf = yast.tensordot(Uf, Vf, axes=(2, 0))
     aH2 = yast.tensordot(UVf, Uf, axes=(2, 2), conj=(0, 1))
     aH.unfuse_legs(axes=(0, 1), inplace=True)
-    assert aH2.norm_diff(aH) < tol  # == 0.0
+    assert yast.norm(aH2 - aH) < tol  # == 0.0
 
 
 def test_hard_transpose():
@@ -88,20 +88,20 @@ def test_hard_dot_2():
 
     c = yast.tensordot(a, b, axes=((0, 1, 3, 4), (0, 1, 3, 2)))
     cc = yast.tensordot(aa, bb, axes=((0, 1), (0, 1)))
-    assert yast.norm_diff(c, cc) < tol
+    assert yast.norm(c -  cc) < tol
 
     aaa = yast.unfuse_legs(aa, axes=(0, 1)).transpose(axes=(0, 3, 4, 1, 2))
-    assert yast.norm_diff(a, aaa) < tol
+    assert yast.norm(a - aaa) < tol
     bbb = yast.unfuse_legs(bb, axes=0)
     bbb = yast.unfuse_legs(bbb, axes=2).transpose(axes=(0, 3, 2, 1))
-    assert yast.norm_diff(b, bbb) < tol
+    assert yast.norm(b - bbb) < tol
 
     aa = yast.fuse_legs(aa, axes=(0, (1, 2)), mode='hard')
     aa = yast.fuse_legs(aa, axes=[(0, 1)], mode='hard')
     aaa = yast.unfuse_legs(aa, axes=0)
     aaa = yast.unfuse_legs(aaa, axes=1)
     aaa = yast.unfuse_legs(aaa, axes=(0, 1)).transpose(axes=(0, 3, 4, 1, 2))
-    assert yast.norm_diff(a, aaa) < tol
+    assert yast.norm(a - aaa) < tol
 
 
 def test_hard_dot_1():
@@ -122,9 +122,9 @@ def test_hard_dot_1():
     c = yast.tensordot(a, b, axes=((0, 1), (0, 1)))
     cc = yast.tensordot(aa, bb, axes=(0, 0))
 
-    assert yast.norm_diff(c, cc) < tol
-    assert yast.norm_diff(a, aaa) < tol
-    assert yast.norm_diff(b, bbb) < tol
+    assert yast.norm(c -  cc) < tol
+    assert yast.norm(a - aaa) < tol
+    assert yast.norm(b - bbb) < tol
 
 
 def test_hard_dot_1_sparse():
@@ -146,19 +146,19 @@ def test_hard_dot_1_sparse():
 
     c = yast.tensordot(a, b, axes=((0, 1), (0, 1)), conj=(1, 0))
     cc = yast.tensordot(aa, bb, axes=(0, 0), conj=(1, 0))
-    assert yast.norm_diff(c, cc) < tol
+    assert yast.norm(c -  cc) < tol
 
     aat = aa.fuse_legs(axes=((1, 2), 0), mode='hard').conj()
     bbt = bb.fuse_legs(axes=(0, (1, 2)), mode='hard')
     aat.show_properties()
     bbt.show_properties()
     ccc = yast.tensordot(aat, bbt, axes=(1, 0))
-    assert yast.norm_diff(c, ccc.unfuse_legs(axes=(0, 1))) < tol
+    assert yast.norm(c -  ccc.unfuse_legs(axes=(0, 1))) < tol
 
     aaa = yast.unfuse_legs(aa, axes=0).transpose(axes=(1, 0, 2, 3))
     bbb = yast.unfuse_legs(bb, axes=0).transpose(axes=(1, 0, 2, 3))
-    assert yast.norm_diff(a, aaa) < tol
-    assert yast.norm_diff(b, bbb) < tol
+    assert yast.norm(a - aaa) < tol
+    assert yast.norm(b - bbb) < tol
 
 
 
@@ -178,14 +178,14 @@ def _test_fuse_mix(a):
     mha = ha.fuse_legs(axes=((2, 0), 1), mode='meta')
     assert (mha.ndim_n, mha.ndim) == (3, 2)
 
-    assert yast.norm_diff(hma, hha) < tol
+    assert yast.norm(hma - hha) < tol
 
     fmma = yast.fuse_meta_to_hard(mma)
     fmha = yast.fuse_meta_to_hard(mha)
     fhha = yast.fuse_meta_to_hard(hha)
-    assert yast.norm_diff(fmma, hha) < tol
-    assert yast.norm_diff(fmha, hha) < tol
-    assert yast.norm_diff(fhha, hha) < tol
+    assert yast.norm(fmma - hha) < tol
+    assert yast.norm(fmha - hha) < tol
+    assert yast.norm(fhha - hha) < tol
 
 
 def test_fuse_mix():
@@ -236,7 +236,7 @@ def test_fuse_hard_dense():
     af = yast.fuse_legs(a, axes=((1, 2), (3, 0)), mode='hard')
     tra = yast.trace(a, axes=((1, 2), (3, 0)))
     traf = yast.trace(af, axes=(0, 1))
-    assert yast.norm_diff(tra, traf) < tol
+    assert yast.norm(tra - traf) < tol
 
 
 if __name__ == '__main__':
@@ -246,6 +246,5 @@ if __name__ == '__main__':
     test_hard_dot_1()
     test_hard_dot_2()
     test_hard_dot_1_sparse()
-    test_hard_masks()
     test_fuse_mix()
     test_auxliary_merging_functions()
