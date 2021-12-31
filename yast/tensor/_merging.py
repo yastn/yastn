@@ -182,12 +182,7 @@ def _union_hfs(config, ts, Ds, hfs):
     Consumes fusion trees from the bottom, building the union
     and identifying contribution of each to the union.
     """
-    if hfs[0].tree != hfs[1].tree:
-        raise YastError('Error in union: mismatch in number of fused legs or fusion order. ')
     tree = list(hfs[0].tree)
-
-    if hfs[0].s != hfs[1].s:
-        raise YastError('Error in union: mismatch in native signatures of fused legs. ')
     s = list(hfs[0].s)  # to be consumed during parsing of the tree
 
     if len(tree) == 1:
@@ -195,7 +190,7 @@ def _union_hfs(config, ts, Ds, hfs):
         msk1 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[0], Ds[0])}
         msk2 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[1], Ds[1])}
         if any(msk1[t].size != msk2[t].size for t in set(msk1) & set(msk2)):
-            raise YastError('Error in union: mismatch of bond dimensions of unfused legs. ')
+            raise YastError('Bond dimensions do not match.')
         return msk1, msk2, hfu
 
     ind_native = [i for i, l in enumerate(tree[1:]) if l == 1]
@@ -204,7 +199,7 @@ def _union_hfs(config, ts, Ds, hfs):
         tD1 = dict(zip(hfs[0].t[i], hfs[0].D[i]))
         tD2 = dict(zip(hfs[1].t[i], hfs[1].D[i]))
         if any(tD1[t] != tD2[t] for t in set(tD1) & set(tD2)):
-            raise YastError('Error in union: mismatch of native bond dimensions of fused legs. ')
+            raise YastError('Bond dimensions of fused legs do not match.')
         tD12 = {**tD1, **tD2}
         tu.append(tuple(sorted(tD12)))
         Du.append(tuple(tD12[t] for t in tu[-1]))
