@@ -43,117 +43,87 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
     -------
     tansor: Tensor
     """
-
-    la_con, lb_con = _clear_axes(*axes)  # contracted meta legs
-    if len(la_con) != len(lb_con):
-        raise YastError('Number of contracted axes of two tensors should be the same.')
+    in_a, in_b = _clear_axes(*axes)  # contracted meta legs
+    conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
+    needs_mask, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-conja * conjb, axes=(in_a, in_b))
 
     if b.isdiag:
-        if len(lb_con) == 1:
-            c = a.broadcast(b, axis=la_con[0], conj=conj)
-            c.moveaxis(source=la_con, destination=(-1,), inplace=True)
-        elif len(lb_con) == 2:
-            c = a.broadcast(b, axis=la_con[0], conj=conj)
-            c = c.trace(axes=la_con)
-        elif len(lb_con) == 0:
-            raise YastError('Cannot do outer product with diagonal tensor -- call b.diag() first.')
-        else:
-            raise YastError('Too many axis to contract.')
-        return c
-
+        return _tensordot_diag(a, b, in_a, (-1,), conj)
     if a.isdiag:
-        if len(la_con) == 1:
-            c = b.broadcast(a, axis=lb_con[0], conj=conj[::-1])
-            c.moveaxis(source=lb_con, destination=(0,), inplace=True)
-        elif len(la_con) == 2:
-            c = b.broadcast(a, axis=lb_con[0], conj=conj[::-1])
-            c = c.trace(axes=lb_con)
-        elif len(la_con) == 0:
-            raise YastError('Cannot do outer product with diagonal tensor -- call b.diag() first.')
-        else:
-            raise YastError('Too many axis to contract.')
-        return c
+        return _tensordot_diag(b, a, in_b, (0,), conj[::-1])
 
     _test_configs_match(a, b)
-    la_out = tuple(ii for ii in range(a.ndim) if ii not in la_con)  # outgoing meta legs
-    lb_out = tuple(ii for ii in range(b.ndim) if ii not in lb_con)  # outgoing meta legs
-    axes_a = _unpack_axes(a.meta_fusion, la_out, la_con)  # native legs of a; tuple of two tuples
-    axes_b = _unpack_axes(b.meta_fusion, lb_con, lb_out)  # native legs of b; tuple of two tuples
-    if len(axes_a[1]) != len(axes_b[0]):
-        raise YastError('Number of contracted native axes of two tensors should be the same.')
+    nout_a = tuple(ii for ii in range(a.ndim_n) if ii not in nin_a)  # outgoing native legs
+    nout_b = tuple(ii for ii in range(b.ndim_n) if ii not in nin_b)  # outgoing native legs
 
-    conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
-    mconj = - conja * conjb
-
-    if not all(a.struct.s[i] == mconj * b.struct.s[j] for i, j in zip(axes_a[1], axes_b[0])):
-        raise YastError('Signatures of contracted legs do not match.')
-
-    needs_mask = False  # for hard-fused legs
-    for i1, i2 in zip(axes_a[1], axes_b[0]):
-        if a.hard_fusion[i1].tree != b.hard_fusion[i2].tree:
-            raise YastError(f'Hard fusions of leg {i1} of a and leg {i2} of b are not compatible:\
-                            mismatch in the number of fused legs or fusion order.')
-        if ((mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or
-            (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms)):
-            raise YastError(f'Hard fusions of leg {i1} of a and leg {i2} of b are not compatible: signatures do not match.')
-        if a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
-            needs_mask = True
-
-    c_s = tuple(conja * a.struct.s[i1] for i1 in axes_a[0]) + tuple(conjb * b.struct.s[i2] for i2 in axes_b[1])
+    c_s = tuple(conja * a.struct.s[i1] for i1 in nout_a) + tuple(conjb * b.struct.s[i2] for i2 in nout_b)
     c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
     c_n = tuple(a.config.sym.fuse(c_n, (conja, conjb), 1)[0])
-    c_meta_fusion = [a.meta_fusion[ii] for ii in la_out] + [b.meta_fusion[ii] for ii in lb_out]
-    c_hard_fusion = [a.hard_fusion[ii] for ii in axes_a[0]] if conj[0] == 0 else \
-                    [_flip_hf(a.hard_fusion[ii]) for ii in axes_a[0]]
-    c_hard_fusion += [b.hard_fusion[ii] for ii in axes_b[1]] if conj[1] == 0 else \
-                    [_flip_hf(b.hard_fusion[ii]) for ii in axes_b[1]]
+    c_mfs = [a.meta_fusion[ii] for ii in range(a.ndim) if ii not in in_a] 
+    c_mfs += [b.meta_fusion[ii] for ii in range(b.ndim) if ii not in in_b]
+    c_hfs = [a.hard_fusion[ii] for ii in nout_a] if conj[0] == 0 else \
+            [_flip_hf(a.hard_fusion[ii]) for ii in nout_a]
+    c_hfs += [b.hard_fusion[ii] for ii in nout_b] if conj[1] == 0 else \
+             [_flip_hf(b.hard_fusion[ii]) for ii in nout_b]
 
     if a.config.force_fusion is not None:
         policy = a.config.force_fusion
     elif policy is None:
         policy = a.config.default_tensordot
 
-    if policy == 'merge' or (policy == 'hybrid' and len(axes_a[1]) != 1 and a.config.sym.NSYM > 0):
+    if policy == 'merge' or (policy == 'hybrid' and len(nin_a) != 1 and a.config.sym.NSYM > 0):
         t_a = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
         t_b = np.array(b.struct.t, dtype=int).reshape((len(b.struct.t), len(b.struct.s), len(b.struct.n)))
-        ind_a, ind_b = _common_rows(t_a[:, axes_a[1], :], t_b[:, axes_b[0], :])
+        ind_a, ind_b = _common_rows(t_a[:, nin_a, :], t_b[:, nin_b, :])
         s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
 
-        Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, axes_a, s_eff_a, ind_a, sort_r=True)
-        Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(b, axes_b, s_eff_b, ind_b)
+        Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, (nout_a, nin_a), s_eff_a, ind_a, sort_r=True)
+        Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(b, (nin_b, nout_b), s_eff_b, ind_b)
 
         meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
         if needs_mask:
-            msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hard_fusion, axes_a[1], ls_ac,
-                                                        b.struct, b.hard_fusion, axes_b[0], ls_bc)
+            msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hard_fusion, nin_a, ls_ac,
+                                                        b.struct, b.hard_fusion, nin_b, ls_bc)
             Am = {ul + ur: Am[ul + ur][:, msk_a[ur]] for ul, ur in zip(ua_l, ua_r)}
             Bm = {ul + ur: Bm[ul + ur][msk_b[ul], :] for ul, ur in zip(ub_l, ub_r)}
         elif ua_r != ub_l or ls_ac != ls_bc:
-            raise YastError('Mismatch in bond dimensions of contracted legs.')
+            raise YastError('Bond dimensions do not match.')
 
-        c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
+        c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_mfs, hard_fusion=c_hfs)
         c.A = c.config.backend.dot(Am, Bm, conj, meta_dot)
         _unmerge_matrix(c, ls_l, ls_r)
     elif policy in ('hybrid', 'direct'):
-        meta, c_t, c_D = _meta_tensordot_nomerge(a.struct, b.struct, axes_a, axes_b)
+        meta, c_t, c_D = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
         c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
         c = a.__class__(config=a.config, isdiag=a.isdiag,
-                        meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion, struct=c_struct)
-        oA = tuple(axes_a[0] + axes_a[1])
-        oB = tuple(axes_b[0] + axes_b[1])
+                        meta_fusion=c_mfs, hard_fusion=c_hfs, struct=c_struct)
+        oA = tuple(nout_a + nin_a)
+        oB = tuple(nin_b + nout_b)
         if needs_mask:
-            ma, mb = _masks_for_axes(a.config, a.struct, a.hard_fusion, axes_a[1], b.struct, b.hard_fusion, axes_b[0], meta)
+            ma, mb = _masks_for_axes(a.config, a.struct, a.hard_fusion, nin_a, b.struct, b.hard_fusion, nin_b, meta)
             c.A = a.config.backend.dot_nomerge_masks(a.A, b.A, conj, oA, oB, meta, ma, mb)
         else:
             c.A = a.config.backend.dot_nomerge(a.A, b.A, conj, oA, oB, meta)
     else:
-        raise YastError("Unknown policy for tensordot. policy should be: 'hybrid', 'direct', or 'merge'.")
+        raise YastError("Unknown policy for tensordot. policy should be in ('hybrid', 'direct', 'merge').")
     return c
 
 
+def _tensordot_diag(a, b, in_a, destination, conj): # (-1,)
+    """ executes broadcast and transpose into order expected by tensordot. """
+    if len(in_a) == 1:
+        c = a.broadcast(b, axis=in_a[0], conj=conj)
+        c.moveaxis(source=in_a, destination=destination, inplace=True)
+        return c
+    if len(in_a) == 2:
+        c = a.broadcast(b, axis=in_a[0], conj=conj)
+        return c.trace(axes=in_a)
+    raise YastError('Cannot do outer product with diagonal tensor. Use yast.diag() first.')  # len(in_a) == 0
+
+
 @lru_cache(maxsize=1024)
-def _meta_tensordot_nomerge(a_struct, b_struct, axes_a, axes_b):
+def _meta_tensordot_nomerge(a_struct, b_struct, nout_a, nin_a, nin_b, nout_b):
     """ meta information for backend, and new tensor structure for tensordot_nomerge """
     nsym = len(a_struct.n)
     a_ndim, b_ndim = len(a_struct.s), len(b_struct.s)
@@ -163,15 +133,15 @@ def _meta_tensordot_nomerge(a_struct, b_struct, axes_a, axes_b):
     Da = np.array(a_struct.D, dtype=int).reshape((len(a_struct.D), a_ndim))
     Db = np.array(b_struct.D, dtype=int).reshape((len(b_struct.D), b_ndim))
 
-    ta_con = ta[:, axes_a[1], :]
-    tb_con = tb[:, axes_b[0], :]
-    ta_out = ta[:, axes_a[0], :]
-    tb_out = tb[:, axes_b[1], :]
+    ta_con = ta[:, nin_a, :]
+    tb_con = tb[:, nin_b, :]
+    ta_out = ta[:, nout_a, :]
+    tb_out = tb[:, nout_b, :]
 
-    Da_con = np.prod(Da[:, axes_a[1]], axis=1)
-    Db_con = np.prod(Db[:, axes_b[0]], axis=1)
-    Da_out = Da[:, axes_a[0]]
-    Db_out = Db[:, axes_b[1]]
+    Da_con = np.prod(Da[:, nin_a], axis=1)
+    Db_con = np.prod(Db[:, nin_b], axis=1)
+    Da_out = Da[:, nout_a]
+    Db_out = Db[:, nout_b]
     Da_pro = np.prod(Da_out, axis=1)
     Db_pro = np.prod(Db_out, axis=1)
 
@@ -201,7 +171,7 @@ def _meta_tensordot_nomerge(a_struct, b_struct, axes_a, axes_b):
         pass
 
     meta = tuple(sorted(meta, key=lambda x: x[2]))
-    if len(axes_a[1]) == 1:
+    if len(nin_a) == 1:
         c_t = tuple(mm[2] for mm in meta)
         c_D = tuple(mm[5] for mm in meta)
     else:
@@ -352,7 +322,7 @@ def vdot(a, b, conj=(1, 0)):
     """
     _test_configs_match(a, b)
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
-    needs_mask, _ = _test_axes_match(a, b, sgn= -conja * conjb)
+    needs_mask, _ = _test_axes_match(a, b, sgn=-conja * conjb)
 
     c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
     c_n = a.config.sym.fuse(c_n, (conja, conjb), 1)
@@ -403,8 +373,6 @@ def trace(a, axes=(0, 1)):
         tensor: Tensor
     """
     lin1, lin2 = _clear_axes(*axes)  # contracted legs
-
-
     if len(set(lin1) & set(lin2)) > 0:
         raise YastError('The same axis in axes[0] and axes[1].')
     needs_mask, (in1, in2) = _test_axes_match(a, a, sgn=-1, axes=(lin1, lin2))
