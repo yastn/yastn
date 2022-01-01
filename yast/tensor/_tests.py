@@ -71,13 +71,6 @@ def _test_all_axes(a, axes, native=False):
         raise YastError('Repeated axis index in axes')
 
 
-def _test_hard_fusion_match(hf1, hf2, mconj):
-    if hf1.t != hf2.t or hf1.D != hf2.D or hf1.tree != hf2.tree:
-        raise YastError('Hard fusions do not match')
-    if (mconj == 1 and hf1.s != hf2.s) or (mconj == -1 and hf1.s != hf2.ms):
-        raise YastError('Hard fusions do not match. Singnature problem.')
-
-
 def are_independent(a, b):
     """
     Test if all elements of two yast tensors are independent objects in memory.

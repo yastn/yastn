@@ -3,7 +3,7 @@ from ._auxliary import _struct
 from ._merging import _masks_for_add
 from ._tests import YastError, _test_configs_match, _get_tD_legs, _test_axes_match
 
-__all__ = ['apxb']
+__all__ = ['apxb', 'absolute', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp']
 
 
 def __add__(a, b):
@@ -274,4 +274,129 @@ def __truediv__(a, number):
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {ind: x / number for ind, x in a.A.items()}
+    return c
+
+
+def absolute(a):
+    r"""
+    Return tensor with element-wise absolute values
+
+    Returns
+    -------
+    tensor: Tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
+        hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = a.config.backend.absolute(a.A)
+    return c
+
+
+def real(a):
+    r"""
+    Return tensor with imaginary part set to zero.
+
+    .. note::
+        Returned :class:`yast.Tensor` has the same dtype
+
+    Returns
+    -------
+    tensor: Tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
+        hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = {t: a.config.backend.real(x) for t, x in a.A.items()}
+    return c
+
+
+def imag(a):
+    r"""
+    Return tensor with real part set to zero.
+
+    .. note::
+        Returned :class:`yast.Tensor` has the same dtype
+
+    Returns
+    -------
+    tensor: Tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
+        hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = {t: a.config.backend.imag(x) for t, x in a.A.items()}
+    return c
+
+
+def sqrt(a):
+    """
+    Return element-wise sqrt(A).
+
+    Returns
+    -------
+    tensor: Tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, \
+        hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = a.config.backend.sqrt(a.A)
+    return c
+
+
+def rsqrt(a, cutoff=0):
+    """
+    Return element-wise 1/sqrt(A).
+
+    The tensor elements with absolute value below the cutoff are set to zero.
+
+    Parameters
+    ----------
+    cutoff: real scalar 
+        (element-wise) cutoff for inversion
+
+    Returns
+    -------
+    tensor: Tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, \
+        hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = a.config.backend.rsqrt(a.A, cutoff=cutoff)
+    return c
+
+
+def reciprocal(a, cutoff=0):
+    """
+    Return element-wise 1/A.
+
+    The tensor elements with absolute value below the cutoff are set to zero.
+
+    Parameters
+    ----------
+    cutoff: real scalar
+        (element-wise) cutoff for inversion
+
+    Returns
+    -------
+    tensor: Tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, \
+        hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = a.config.backend.reciprocal(a.A, cutoff=cutoff)
+    return c
+
+
+def exp(a, step=1.):
+    r"""
+    Return element-wise `exp(step * A)`.
+
+    .. note::
+        This applies only to non-empty blocks of A
+
+    Parameters
+    ----------
+    step: scalar
+
+    Returns
+    -------
+    tensor: Tensor
+    """
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, \
+        hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = a.config.backend.exp(a.A, step)
     return c

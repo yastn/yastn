@@ -122,10 +122,7 @@ def _intersect_hfs(config, ts, Ds, hfs):
     Returns mask1 and mask2, finding common leg indices for each teff.
     Consumes fusion trees from the bottom, identifying common elements and building the masks.
     """
-    if hfs[0].tree != hfs[1].tree:
-        raise YastError('Numbers of merged legs or their merging order do not match. ')
     teff = tuple(sorted((set(ts[0]) & set(ts[1]))))
-
     tree = list(hfs[0].tree)
     if len(tree) == 1:
         msks = [[{t: np.ones(D, dtype=bool) for t, D in zip(ts[n], Ds[n]) if t in teff}] for n in (0, 1)]
@@ -137,8 +134,8 @@ def _intersect_hfs(config, ts, Ds, hfs):
         for t in set(ms1) & set(ms2):
             if ms1[t].size != ms2[t].size:
                 if len(tree) == 1:
-                    raise YastError('Error in union: mismatch of bond dimensions of unfused legs.')
-                raise YastError('Error in intersect: mismatch of native bond dimensions of fused legs.')
+                    raise YastError('Bond dimensions do not match.')
+                raise YastError('Bond dimensions of fused legs do not match.')
         _mask_falsify_mismatches(ms1, ms2)
 
     if len(tree) == 1:
@@ -309,8 +306,8 @@ def _masks_for_trace(config, t12, D1, D2, hfs, ax1, ax2):
 
     tDDset = set(zip(t12, D1, D2))
     tset = set(t12)
-    if len(tset) != len(tDDset):
-        raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
+    # if len(tset) != len(tDDset):
+    #     raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
 
     for n, (i1, i2) in enumerate(zip(ax1, ax2)):
         tdn = tuple(set((t[n * nsym: (n + 1) * nsym], d1[n], d2[n]) for t, d1, d2 in tDDset))
@@ -523,7 +520,11 @@ def _meta_unfuse_hard(config, struct, axes, hfs):
                 slc = tuple(x[1].Dslc for x in tt)
                 Dn = tuple(_flatten((x[1].Drsh for x in tt)))
                 meta.append((tn, to, slc, Dn))
-    return meta, tuple(snew), tuple(nlegs_unfused), tuple(hfs_new)
+    meta = tuple(sorted(meta, key=lambda x: x[0]))
+    tnew = tuple(x[0] for x in meta)
+    Dnew = tuple(x[3] for x in meta)
+    new_struct = struct._replace(s=tuple(snew), t=tnew, D=Dnew)
+    return meta, new_struct, tuple(nlegs_unfused), tuple(hfs_new)
 
 
 def _fuse_legs_hard(a, axes, order, inplace=False):
@@ -593,7 +594,7 @@ def fuse_legs(a, axes, inplace=False, mode=None):
     tensor.fuse_legs(axes=[(2, 0), (1, 4), (3, 5)]) gives 3 effective legs from original 6
     """
     if a.isdiag:
-        raise YastError('Cannot fuse legs of a diagonal tensor')
+        raise YastError('Cannot fuse legs of a diagonal tensor.')
     if mode is None:
         mode = a.config.default_fusion
     if a.config.force_fusion is not None:
@@ -618,12 +619,11 @@ def fuse_legs(a, axes, inplace=False, mode=None):
         else:
             c = a.transpose(axes=order, inplace=inplace)
         c.meta_fusion = tuple(mfs)
-    elif mode == 'hard':
+        return c
+    if mode == 'hard':
         c = fuse_meta_to_hard(a, inplace)
-        c = _fuse_legs_hard(c, axes, order, inplace)
-    else:
-        raise YastError('fuse_legs mode should be `meta` or `hard`; can be also set in config file.')
-    return c
+        return _fuse_legs_hard(c, axes, order, inplace)
+    raise YastError('mode not in (`meta`, `hard`). Mode can be specified in config file.')
 
 
 def unfuse_legs(a, axes, inplace=False):
@@ -645,7 +645,7 @@ def unfuse_legs(a, axes, inplace=False):
     tensor : Tensor
     """
     if a.isdiag:
-        raise YastError('Cannot unfuse legs of a diagonal tensor')
+        raise YastError('Cannot unfuse legs of a diagonal tensor.')
     if isinstance(axes, int):
         axes = (axes,)
     ni, new_mfs, axes_hf = 0, [], []
@@ -670,18 +670,18 @@ def unfuse_legs(a, axes, inplace=False):
             new_mfs.append(a.meta_fusion[mi])
         ni += dni
     if axes_hf:
-        meta, snew, nlegs, new_hfs = _meta_unfuse_hard(a.config, a.struct, tuple(axes_hf), tuple(a.hard_fusion))
+        meta, c_struct, nlegs, new_hfs = _meta_unfuse_hard(a.config, a.struct, tuple(axes_hf), tuple(a.hard_fusion))
         for unfused, n in zip(nlegs[::-1], axes_hf[::-1]):
             new_mfs = new_mfs[:n] + [new_mfs[n]] * unfused + new_mfs[n+1:]
         if inplace:
             c = a
-            c.struct = c.struct._replace(s=snew)
+            c.struct = c_struct
             c.hard_fusion = tuple(new_hfs)
             c.meta_fusion = tuple(new_mfs)
         else:
-            c = a.__class__(config=a.config, n=a.n, s=snew, meta_fusion=tuple(new_mfs), hard_fusion=tuple(new_hfs))
+            c = a.__class__(config=a.config, struct=c_struct,
+                            meta_fusion=tuple(new_mfs), hard_fusion=tuple(new_hfs))
         c.A = a.config.backend.unmerge_from_array(a.A, meta)
-        c.update_struct()
     else:
         c = a if inplace else a.clone()
         c.meta_fusion = tuple(new_mfs)
@@ -751,11 +751,17 @@ def _unmerge_matrix(a, ls_l, ls_r):
         if ic in a.A:
             for (tl, rl), (tr, rr) in product(ls_l.dec[il].items(), ls_r.dec[ir].items()):
                 meta.append((tl + tr, ic, rl.Dslc, rr.Dslc, rl.Drsh + rr.Drsh))
+    meta = sorted(meta, key=lambda x: x[0])
+    c_t = tuple(x[0] for x in meta)
+    c_D = tuple(x[4] for x in meta)
     a.A = a.config.backend.unmerge_from_matrix(a.A, meta)
-    a.update_struct()
+    a.struct = a.struct._replace(t=c_t, D=c_D)
 
 
 def _unmerge_diagonal(a, ls):
-    meta = tuple((ta + ta, ia, ra.Dslc) for ia in ls.dec for ta, ra in ls.dec[ia].items())
+    meta = list((ta + ta, ia, ra.Dslc) for ia in ls.dec for ta, ra in ls.dec[ia].items())
+    meta = tuple(sorted(meta, key=lambda x: x[0]))
+    c_t = tuple(t for t, _, _ in meta)
+    c_D = tuple((D[1] - D[0], D[1] - D[0]) for _, _, D in meta)
     a.A = a.config.backend.unmerge_from_diagonal(a.A, meta)
-    a.update_struct()
+    a.struct = a.struct._replace(t=c_t, D=c_D)
