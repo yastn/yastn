@@ -162,7 +162,7 @@ def test_vdot_exceptions():
         a.vdot(d)  # Error in vdot: mismatch in number of legs.
     with pytest.raises(yast.YastError):
         af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
-        bf = a.fuse_legs(axes=(0, (1, 2, 3)), mode='meta')
+        bf = b.fuse_legs(axes=(0, (1, 2, 3)), mode='meta')
         af.vdot(bf)  # Error in vdot: mismatch in number of fused legs or fusion order.
 
     t1, t2 = (-1, 0, 1), (-1, 0, 2)

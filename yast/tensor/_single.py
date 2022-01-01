@@ -5,8 +5,7 @@ from ._merging import _Fusion, _flip_hf
 from ._tests import YastError, _test_all_axes
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'remove_zero_blocks',
-           'absolute', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'add_leg',
-           'copy', 'clone', 'detach', 'to', 'requires_grad_']
+           'add_leg', 'copy', 'clone', 'detach', 'to', 'requires_grad_']
 
 
 def copy(a):
@@ -328,131 +327,6 @@ def diag(a):
         c.A = {ind: a.config.backend.diag_get(a.A[ind]) for ind in a.A}
         return c
     raise YastError('Tensor cannot be changed into a diagonal one')
-
-
-def absolute(a):
-    r"""
-    Return tensor with element-wise absolute values
-
-    Returns
-    -------
-    tensor: Tensor
-    """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.absolute(a.A)
-    return c
-
-
-def real(a):
-    r"""
-    Return tensor with imaginary part set to zero.
-
-    .. note::
-        Returned :class:`yast.Tensor` has the same dtype
-
-    Returns
-    -------
-    tensor: Tensor
-    """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {t: a.config.backend.real(x) for t, x in a.A.items()}
-    return c
-
-
-def imag(a):
-    r"""
-    Return tensor with real part set to zero.
-
-    .. note::
-        Returned :class:`yast.Tensor` has the same dtype
-
-    Returns
-    -------
-    tensor: Tensor
-    """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {t: a.config.backend.imag(x) for t, x in a.A.items()}
-    return c
-
-
-def sqrt(a):
-    """
-    Return element-wise sqrt(A).
-
-    Returns
-    -------
-    tensor: Tensor
-    """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, \
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.sqrt(a.A)
-    return c
-
-
-def rsqrt(a, cutoff=0):
-    """
-    Return element-wise 1/sqrt(A).
-
-    The tensor elements with absolute value below the cutoff are set to zero.
-
-    Parameters
-    ----------
-    cutoff: real scalar 
-        (element-wise) cutoff for inversion
-
-    Returns
-    -------
-    tensor: Tensor
-    """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, \
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.rsqrt(a.A, cutoff=cutoff)
-    return c
-
-
-def reciprocal(a, cutoff=0):
-    """
-    Return element-wise 1/A.
-
-    The tensor elements with absolute value below the cutoff are set to zero.
-
-    Parameters
-    ----------
-    cutoff: real scalar
-        (element-wise) cutoff for inversion
-
-    Returns
-    -------
-    tensor: Tensor
-    """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, \
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.reciprocal(a.A, cutoff=cutoff)
-    return c
-
-
-def exp(a, step=1.):
-    r"""
-    Return element-wise `exp(step * A)`.
-
-    .. note::
-        This applies only to non-empty blocks of A
-
-    Parameters
-    ----------
-    step: scalar
-
-    Returns
-    -------
-    tensor: Tensor
-    """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, \
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.exp(a.A, step)
-    return c
 
 
 def remove_zero_blocks(a, rtol=1e-12, atol=0, inplace=False):

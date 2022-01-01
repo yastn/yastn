@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 import yast
 try:
-    from .configs import config_U1
+    from .configs import config_U1, config_U1_force
 except ImportError:
-    from configs import config_U1
+    from configs import config_U1, config_U1_force
 
 tol = 1e-10  #pylint: disable=invalid-name
 
@@ -21,24 +21,11 @@ def test_fuse():
     d = c.moveaxis(source=1, destination=0)
     assert yast.norm(a - d) < tol  # == 0.0
 
+    e = yast.rand(config=config_U1_force, s=(-1, 1),
+                  t=((0, 1), (0, 1)), D=((1, 2), (3, 4)))
+    e.fuse_legs(axes=(0, 1), inplace=True)
 
-def test_fuse_dot():
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
-                  t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
-                  D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
-    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
-                  t=((-1, 0, 1), (1,), (-1, 1), (0, 1), (0, 1, 2)),
-                  D=((2, 1, 2), (4,), (4, 6), (7, 8), (9, 10, 11)))
 
-    af = a.fuse_legs(axes=(0, (2, 1), (3, 4)))
-    bf = b.fuse_legs(axes=(0, (2, 1), (3, 4)))
-    af.fuse_legs(axes=((0, 1), 2), inplace=True)
-    bf.fuse_legs(axes=((0, 1), 2), inplace=True)
-
-    r1 = yast.tensordot(a, b, axes=((0, 1, 2), (0, 1, 2)), conj=(0, 1))
-    r1f = yast.tensordot(af, bf, axes=(0, 0), conj=(0, 1))
-    r1uf = r1f.unfuse_legs(axes=(0, 1))
-    yast.norm(r1 - r1uf) < tol  # == 0.0
 
 
 def test_fuse_split():
@@ -195,11 +182,27 @@ def test_fuse_block():
     assert pytest.approx(s1.item(), rel=tol) == s2.item()
 
 
+def test_fuse_legs_exceptions():
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
+                  t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
+                  D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
+    b = yast.rand(config=config_U1, isdiag=True, t=(0, 1), D=(1, 2))
+    with pytest.raises(yast.YastError):
+        b.fuse_legs(axes=((0, 1),), mode='meta')
+        # Cannot fuse legs of a diagonal tensor.
+    with pytest.raises(yast.YastError):
+        b.unfuse_legs(axes=0)
+        # Cannot unfuse legs of a diagonal tensor.
+    with pytest.raises(yast.YastError):
+        a.fuse_legs(axes=((0, 1, 2, 3, 4),), mode='wrong')
+    # mode not in (`meta`, `hard`). Mode can be specified in config file.
+
+
 if __name__ == '__main__':
     test_fuse()
-    test_fuse_dot()
     test_fuse_split()
     test_fuse_transpose()
     test_get_shapes()
     test_fuse_match_legs()
     test_fuse_block()
+    test_fuse_legs_exceptions()

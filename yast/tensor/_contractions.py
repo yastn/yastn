@@ -59,15 +59,15 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
     c_s = tuple(conja * a.struct.s[i1] for i1 in nout_a) + tuple(conjb * b.struct.s[i2] for i2 in nout_b)
     c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
     c_n = tuple(a.config.sym.fuse(c_n, (conja, conjb), 1)[0])
-    c_mfs = [a.meta_fusion[ii] for ii in range(a.ndim) if ii not in in_a] 
+    c_mfs = [a.meta_fusion[ii] for ii in range(a.ndim) if ii not in in_a]
     c_mfs += [b.meta_fusion[ii] for ii in range(b.ndim) if ii not in in_b]
     c_hfs = [a.hard_fusion[ii] for ii in nout_a] if conj[0] == 0 else \
             [_flip_hf(a.hard_fusion[ii]) for ii in nout_a]
     c_hfs += [b.hard_fusion[ii] for ii in nout_b] if conj[1] == 0 else \
              [_flip_hf(b.hard_fusion[ii]) for ii in nout_b]
 
-    if a.config.force_fusion is not None:
-        policy = a.config.force_fusion
+    if a.config.force_tensordot is not None:
+        policy = a.config.force_tensordot
     elif policy is None:
         policy = a.config.default_tensordot
 
@@ -104,6 +104,9 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
             ma, mb = _masks_for_axes(a.config, a.struct, a.hard_fusion, nin_a, b.struct, b.hard_fusion, nin_b, meta)
             c.A = a.config.backend.dot_nomerge_masks(a.A, b.A, conj, oA, oB, meta, ma, mb)
         else:
+            if any(Da[1] != Db[0] for _, _, _, Da, Db, _, _ in meta):
+                raise YastError('Bond dimensions do not match.')
+
             c.A = a.config.backend.dot_nomerge(a.A, b.A, conj, oA, oB, meta)
     else:
         raise YastError("Unknown policy for tensordot. policy should be in ('hybrid', 'direct', 'merge').")
@@ -119,7 +122,7 @@ def _tensordot_diag(a, b, in_a, destination, conj): # (-1,)
     if len(in_a) == 2:
         c = a.broadcast(b, axis=in_a[0], conj=conj)
         return c.trace(axes=in_a)
-    raise YastError('Cannot do outer product with diagonal tensor. Use yast.diag() first.')  # len(in_a) == 0
+    raise YastError('Outer product with diagonal tensor not supported. Use yast.diag() first.')  # len(in_a) == 0
 
 
 @lru_cache(maxsize=1024)
@@ -292,7 +295,7 @@ def _meta_mask(a_struct, a_isdiag, b_struct, Dbnew, axis):
 
     Db = dict(zip(b_struct.t, b_struct.D))
     if any(Da[axis] != Db[tb][0] for _, tb, Da in meta):
-        raise YastError('Error in mask: bond dimensions do not match.')
+        raise YastError('Bond dimensions do not match.')
     c_t = tuple(ta for ta, _, _ in meta)
     Db = dict(zip(b_struct.t, Dbnew))
     if a_isdiag:
