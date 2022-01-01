@@ -119,3 +119,5 @@
 
 31-12-2021
 - remove function `norm_diff(a, b)`. Use `norm(a - b)` instead.
+- `svd` got argument `policy` = `fullrank` (default) or `lowrank`.
+  `svd_lowrank` calls `svd` with policy = `lowrank`

@@ -292,7 +292,7 @@ def absolute(A):
     return {t: torch.abs(x) for t, x in A.items()}
 
 
-def svd_lowrank(A, meta, D_block, n_iter, k_fac):
+def svd_lowrank(A, meta, D_block, n_iter=60, k_fac=6):
     U, S, V = {}, {}, {}
     for (iold, iU, iS, iV) in meta:
         q = min(min(A[iold].shape), D_block * k_fac)
@@ -509,9 +509,9 @@ def dot_nomerge(A, B, cc, oA, oB, meta):
     C = {}
     for (ina, inb, out, Da, Db, Dout, _) in meta:
         temp = f(A[ina].permute(oA).reshape(Da), B[inb].permute(oB).reshape(Db)).reshape(Dout)
-        try:
+        if out in C:
             C[out] += temp
-        except KeyError:
+        else:
             C[out] = temp
     return C
 
@@ -521,9 +521,9 @@ def dot_nomerge_masks(A, B, cc, oA, oB, meta, ma, mb):
     C = {}
     for (ina, inb, out, Da, Db, Dout, tt) in meta:
         temp = f(A[ina].permute(oA).reshape(Da)[:, ma[tt]], B[inb].permute(oB).reshape(Db)[mb[tt], :]).reshape(Dout)
-        try:
+        if out in C:
             C[out] += temp
-        except KeyError:
+        else:
             C[out] = temp
     return C
 

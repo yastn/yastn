@@ -4,7 +4,7 @@ import numpy as np
 import scipy.linalg
 try:
     import fbpca
-except ModuleNotFoundError:
+except ModuleNotFoundError:  # pragma: no cover
     import warnings
     warnings.warn("fbpca not available", Warning)
 
@@ -282,7 +282,7 @@ def absolute(A):
     return {t: np.abs(x) for t, x in A.items()}
 
 
-def svd_lowrank(A, meta, D_block, n_iter, k_fac):
+def svd_lowrank(A, meta, D_block, n_iter=60, k_fac=6):
     U, S, V = {}, {}, {}
     for (iold, iU, iS, iV) in meta:
         k = min(min(A[iold].shape), D_block)
@@ -295,7 +295,7 @@ def svd(A, meta):
     for (iold, iU, iS, iV) in meta:
         try:
             U[iU], S[iS], V[iV] = scipy.linalg.svd(A[iold], full_matrices=False)
-        except scipy.linalg.LinAlgError:
+        except scipy.linalg.LinAlgError:  # pragma: no cover
             U[iU], S[iS], V[iV] = scipy.linalg.svd(A[iold], full_matrices=False, lapack_driver='gesvd')
     return U, S, V
 
@@ -315,7 +315,7 @@ def svd_S(A):
     for ind in A:
         try:
             S[ind] = scipy.linalg.svd(A[ind], full_matrices=False, compute_uv=False)
-        except scipy.linalg.LinAlgError:
+        except scipy.linalg.LinAlgError:  # pragma: no cover
             S[ind] = scipy.linalg.svd(A[ind], full_matrices=False, lapack_driver='gesvd', compute_uv=False)
     return S
 
@@ -490,9 +490,9 @@ def dot_nomerge(A, B, cc, oA, oB, meta):
     C = {}
     for (ina, inb, out, Da, Db, Dout, _) in meta:
         temp = f(A[ina].transpose(oA).reshape(Da), B[inb].transpose(oB).reshape(Db)).reshape(Dout)
-        try:
+        if out in C:
             C[out] += temp
-        except KeyError:
+        else:
             C[out] = temp
     return C
 
@@ -502,9 +502,9 @@ def dot_nomerge_masks(A, B, cc, oA, oB, meta, ma, mb):
     C = {}
     for (ina, inb, out, Da, Db, Dout, tt) in meta:
         temp = f(A[ina].transpose(oA).reshape(Da)[:, ma[tt]], B[inb].transpose(oB).reshape(Db)[mb[tt], :]).reshape(Dout)
-        try:
+        if out in C:
             C[out] += temp
-        except KeyError:
+        else:
             C[out] = temp
     return C
 #####################################################

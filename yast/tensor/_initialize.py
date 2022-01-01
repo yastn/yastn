@@ -206,7 +206,8 @@ def _set_block(a, ts, Ds, val, dtype):
         if a.isdiag:
             if Ds is not None and Ds[0] != Ds[1]:
                 raise YastError('Diagonal tensors requires Ds[0] == Ds[1].')
-            vald = np.diag(val) if val.ndim == 2 else val
+            vald = np.array(val)
+            if vald.ndim == 2: vald = np.diag(vald)
             Ds0 = Ds[0] if Ds is not None else None
             a.A[ts] = a.config.backend.to_tensor(vald, Ds=Ds0, dtype=dtype, device=a.config.device)
         else:

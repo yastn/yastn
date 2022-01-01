@@ -87,6 +87,25 @@ def test_algebra_basic():
     combine_tests(a, b)
 
 
+def test_algebra_functions():
+    a = yast.Tensor(config=config_U1, isdiag=True)
+    a.set_block(ts=1, Ds=3, val=[1, 0.01, 0.0001])
+    a.set_block(ts=-1, Ds=3, val=[1, 0.01, 0.0001])
+    b = yast.sqrt(a)
+    assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(2.0202)
+    b = yast.rsqrt(a, cutoff=0.02)
+    assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(202)
+    b = yast.reciprocal(a, cutoff=0.001)
+    assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(20002)
+    b = yast.exp(1j * a)
+    assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(6)
+
+    c = a * (4j + 3)
+    assert yast.norm(c.imag() - 4 * a) < tol
+    assert yast.norm(c.real() - 3 * a) < tol
+    assert yast.norm(c.absolute() - 5 * a) < tol
+
+
 def test_algebra_fuse_meta():
     """ test basic algebra on meta-fused tensor. """
     a = yast.rand(config=config_Z2, s=(-1, 1, 1, -1),
@@ -249,6 +268,7 @@ def test_hf_union_exceptions():
 
 if __name__ == '__main__':
     test_algebra_basic()
+    test_algebra_functions()
     test_algebra_fuse_meta()
     test_algebra_fuse_hard()
     test_algebra_exceptions()

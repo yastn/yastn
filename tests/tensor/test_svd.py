@@ -1,12 +1,55 @@
-""" truncation of singular values in yast.linalg.svd() """
+""" yast.linalg.svd() and truncation of its singular values """
 import numpy as np
 import yast
 try:
-    from .configs import config_U1
+    from .configs import config_dense, config_U1, config_Z2_U1
 except ImportError:
-    from configs import config_U1
+    from configs import config_dense, config_U1, config_Z2_U1
 
-tol = 1e-12  #pylint: disable=invalid-name
+tol = 1e-10  #pylint: disable=invalid-name
+
+
+def svd_combine(a):
+    """ decompose and contracts tensor using svd decomposition """
+    U, S, V = yast.linalg.svd(a, axes=((3, 1), (2, 0)), sU=-1)
+    US = yast.tensordot(U, S, axes=(2, 0))
+    USV = yast.tensordot(US, V, axes=(2, 0))
+    USV = USV.transpose(axes=(3, 1, 2, 0))
+    assert yast.norm(a - USV) < tol  # == 0.0
+    assert a.is_consistent()
+    assert U.is_consistent()
+    assert S.is_consistent()
+    assert V.is_consistent()
+
+    # changes signature of new leg; and position of new leg
+    U, S, V = yast.linalg.svd(a, axes=((3, 1), (2, 0)), sU=1, Uaxis=0, Vaxis=-1)
+    US = yast.tensordot(S, U, axes=(0, 0))
+    USV = yast.tensordot(US, V, axes=(0, 2))
+    USV = USV.transpose(axes=(3, 1, 2, 0))
+    assert yast.norm(a - USV) < tol  # == 0.0
+    assert U.is_consistent()
+    assert S.is_consistent()
+    assert V.is_consistent()
+
+
+def test_svd_basic():
+    """ test svd decomposition for various symmetries """
+    # dense
+    a = yast.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
+    svd_combine(a)
+
+    # U1
+    a = yast.rand(config=config_U1, s=(-1, -1, 1, 1), n=1,
+                  t=[(-1, 0, 1), (-2, 0, 2), (-2, -1, 0, 1, 2), (0, 1)],
+                  D=[(2, 3, 4), (5, 6, 7), (6, 5, 4, 3, 2), (2, 3)])
+    svd_combine(a)
+
+    # Z2xU1
+    t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
+    a = yast.ones(config=config_Z2_U1, s=(-1, -1, 1, 1),
+                  t=[t1, t1, t1, t1],
+                  D=[(2, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
+    svd_combine(a)
 
 
 def test_svd_sparse():
@@ -101,6 +144,7 @@ def test_svd_n_division():
 
 
 if __name__ == '__main__':
+    test_svd_basic()
     test_svd_sparse()
     test_svd_truncate()
     test_svd_n_division()

@@ -27,11 +27,11 @@ def copy(a):
 def clone(a):
     r"""
     Return a copy of the tensor preserving the autograd (resulting clone is a part
-    of the computational graph) 
+    of the computational graph)
 
     Returns
     -------
-    tensor : Tensor 
+    tensor : Tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {ts: a.config.backend.clone(x) for ts, x in a.A.items()}
@@ -133,7 +133,7 @@ def conj(a, inplace=False):
 
 def conj_blocks(a, inplace=False):
     """
-    Complex-conjugate each block leaving symmetry structure (signature, blocks charge, and 
+    Complex-conjugate each block leaving symmetry structure (signature, blocks charge, and
     total charge) unchanged.
 
     Parameters
@@ -163,8 +163,8 @@ def flip_signature(a, inplace=False):
     Returns
     -------
     tensor : Tensor
-        clone of the tensor with modified signature `-s` and total 
-        charge `-n`. If inplace is ``True`` modify only the structural data of tensor, 
+        clone of the tensor with modified signature `-s` and total
+        charge `-n`. If inplace is ``True`` modify only the structural data of tensor,
         not its blocks, and return ``self``.
 
     """
@@ -185,7 +185,7 @@ def flip_signature(a, inplace=False):
 
 def transpose(a, axes, inplace=False):
     r"""
-    Transpose tensor by permuting the order of its legs (spaces). 
+    Transpose tensor by permuting the order of its legs (spaces).
     Transpose can be done in-place, in which case copying of the data is not forced.
     Otherwise, new tensor is created and its data (blocks) is cloned.
 
@@ -232,7 +232,7 @@ def moveaxis(a, source, destination, inplace=False):
     r"""
     Change the position of an axis (or a group of axes) of the tensor.
     This is a convenience function for subset of possible permutations. It
-    computes the corresponding permutation and then calls :meth:`yast.Tensor.transpose`. 
+    computes the corresponding permutation and then calls :meth:`yast.Tensor.transpose`.
 
     Parameters
     ----------
@@ -256,7 +256,7 @@ def moveaxis(a, source, destination, inplace=False):
 
 def add_leg(a, axis=-1, s=1, t=None, inplace=False):
     r"""
-    Creates a new auxiliary leg that explicitly carries charge 
+    Creates a new auxiliary leg that explicitly carries charge
     (or part of it) associated with the tensor.
 
     Parameters
@@ -268,7 +268,7 @@ def add_leg(a, axis=-1, s=1, t=None, inplace=False):
             signature :math:`\pm1` of the new leg
 
         t : ?
-            charge carried by the new leg. If ``None``, takes the total charge `n` 
+            charge carried by the new leg. If ``None``, takes the total charge `n`
             of the original tensor resulting in uncharged tensor with `n=0`.
 
         inplace : bool
