@@ -56,7 +56,7 @@ def apxb(a, b, x=1):
     r"""
     Directly compute the result of :math:`a + x \times b`.
     This `composite` operation is faster than first performing multiplication
-    and then addition. 
+    and then addition.
 
     Parameters
     ----------
@@ -343,11 +343,11 @@ def rsqrt(a, cutoff=0):
     """
     Return element-wise 1/sqrt(A).
 
-    The tensor elements with absolute value below the cutoff are set to zero.
+    The tensor elements with square root of absolute value below the cutoff are set to zero.
 
     Parameters
     ----------
-    cutoff: real scalar 
+    cutoff: real scalar
         (element-wise) cutoff for inversion
 
     Returns
