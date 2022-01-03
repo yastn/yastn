@@ -158,3 +158,32 @@ if __name__ == '__main__':
     test_swap_gate_basic()
     test_swap_gate_exceptions()
     test_operators()
+
+
+
+
+    # n_loc_up = yast.tensordot(fcdag_up, fc_up, axes = (1, 0))
+    # n_loc_down = yast.tensordot(fcdag_down, fc_down, axes = (1, 0))
+    # iden = yast.tensordot(fid, fid, axes=((),()))
+    # n1_up = yast.tensordot(n_loc_up, fid, axes=((),()))
+    # n2_up = yast.tensordot(fid, n_loc_up, axes=((),()))
+    # n1_down = yast.tensordot(n_loc_down, fid, axes=((),()))
+    # n2_down = yast.tensordot(fid, n_loc_down, axes=((),()))
+    # n1n2_up = yast.tensordot(n_loc_up, n_loc_up, axes=((),()))
+    # n1n2_down = yast.tensordot(n_loc_down, n_loc_down, axes=((),()))
+    # hop_up = yast.tensordot(fcdag_up, fc_up, axes=((),())) + yast.tensordot(fc_up, fcdag_up, axes=((),()))
+    # hop_down = yast.tensordot(fcdag_down, fc_down, axes=((),())) + yast.tensordot(fc_down, fcdag_down, axes=((),()))
+    # n_int = yast.tensordot(n_loc_up, n_loc_down, axes=(1, 0))
+
+    # def nn_Gate_spinfull_hop(t_up, t_down, beta):
+    #     # nn term
+    #     U_nn_up =   iden -(1 - np.cosh(-0.25 * t_up * beta)) * (n1_up + n2_up - 2*n1n2_up) - np.sinh(-0.25 * t_up * beta) * hop_up
+    #     U_nn_down =  iden - (1 - np.cosh(-0.25 * t_down * beta)) * (n1_down + n2_down - 2*n1n2_down) - np.sinh(-0.25 * t_down * beta) * hop_down
+
+    #     Aup, Xup, Bup = yast.svd(U_nn_up, axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15)
+    #     GA_nn_up = yast.ncon((Aup, Xup.sqrt()), ([-1, -3, 1], [1, -2]))
+    #     GB_nn_up = yast.ncon((Xup.sqrt(), Bup), ([-2, 1], [1, -1, -3]))
+
+    #     Adown, Xdown, Bdown = yast.svd(U_nn_down, axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15)
+    #     GA_nn_down = yast.ncon((Adown, Xdown.sqrt()), ([-1, -3, 1], [1, -2]))
+    #     GB_nn_down = yast.ncon((Xdown.sqrt(), Bdown), ([-2, 1], [1, -1, -3]))
