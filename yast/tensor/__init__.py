@@ -108,7 +108,7 @@ class Tensor:
         try:
             self.hard_fusion = tuple(kwargs['hard_fusion'])
         except (KeyError, TypeError):
-            self.hard_fusion = tuple(_Fusion(s=(x,), ms=(-1 * x,)) for x in self.struct.s)
+            self.hard_fusion = tuple(_Fusion(s=(x,)) for x in self.struct.s)
 
     # pylint: disable=C0415
     from ._initialize import set_block, fill_tensor

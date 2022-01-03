@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2_U1, config_U1_force
+    from .configs import config_dense, config_U1, config_U1_force, config_Z2xU1
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2_U1, config_U1_force
+    from configs import config_dense, config_U1, config_Z2xU1, config_U1_force
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -72,10 +72,10 @@ def test_dot_basic(policy):
     # Z2xU1
     t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
     t2 = [(0, 0), (0, 2), (2, 0), (2, 2)]
-    a = yast.rand(config=config_Z2_U1, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_Z2xU1, s=(-1, 1, 1, -1),
                   t=(t1, t1, t1, t1),
                   D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8), (7, 8, 9, 10)))
-    b = yast.rand(config=config_Z2_U1, s=(1, -1, 1),
+    b = yast.rand(config=config_Z2xU1, s=(1, -1, 1),
                   t=(t1, t1, t2),
                   D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8,)))
 
@@ -95,10 +95,10 @@ def test_tensordot_diag():
     t2 = [(0, -1), (0, 1), (1, -1), (0, 0)]
     D2 = (1, 2, 2, 5)
 
-    a = yast.rand(config=config_Z2_U1, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_Z2xU1, s=(-1, 1, 1, -1),
                   t=(t1, t1, t1, t1),
                   D=(D1, (9, 4, 3, 2), (5, 6, 7, 8), (7, 8, 9, 10)))
-    b = yast.rand(config=config_Z2_U1, s=(1, -1), t = [t2, t2], D=[D2, D2], isdiag=True)
+    b = yast.rand(config=config_Z2xU1, s=(1, -1), t = [t2, t2], D=[D2, D2], isdiag=True)
     b2 = b.diag()
 
     c1 = a.broadcast(b, axis=0)

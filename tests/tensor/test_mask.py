@@ -2,9 +2,9 @@
 import pytest
 import yast
 try:
-    from .configs import config_U1, config_Z2_U1
+    from .configs import config_U1, config_Z2xU1
 except ImportError:
-    from configs import config_U1, config_Z2_U1
+    from configs import config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -37,13 +37,13 @@ def test_mask_1():
 
 
 def test_mask_2():
-    a = yast.rand(config=config_Z2_U1, s=(-1, -1, 1, 1),
+    a = yast.rand(config=config_Z2xU1, s=(-1, -1, 1, 1),
                     t=[((0, 0), (0, 2), (1, 0), (1, 2)),
                        ((0, 0), (0, 2)),
                        ((0, 1), (1, 0), (0, 0), (1, 1)),
                        ((0, 0), (0, 2))],
                     D=[(6, 3, 9, 6), (3, 2), (4, 5, 6, 3), (2, 3)])
-    b = yast.rand(config=config_Z2_U1, isdiag=True,
+    b = yast.rand(config=config_Z2xU1, isdiag=True,
                    t=[[(0, 0), (0, 2), (1, 0), (1, 2)]],
                    D=[[6, 3, 9, 6]])
     b.A[(0, 0, 0, 0)] *= 0

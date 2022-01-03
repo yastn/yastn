@@ -114,7 +114,6 @@ def is_consistent(a):
     device = {a.config.backend.get_device(x) for x in a.A.values()}
     for s, hf in zip(a.struct.s, a.hard_fusion):
         assert s == hf.s[0]
-        assert s == -hf.ms[0]
     assert len(device) <= 1, 'not all blocks reside on the same device'
     if len(device) == 1:
         assert device.pop().startswith(a.config.device), 'device of blocks inconsistent with config.device'

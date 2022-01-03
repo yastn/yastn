@@ -1,9 +1,9 @@
 """ yast.add_leg """
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2_U1
+    from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2_U1
+    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -40,10 +40,10 @@ def test_aux_1():
 
 def test_aux_2():
     """ add_leg with nsym=2 """
-    a = yast.rand(config=config_Z2_U1, s=(-1, 1, 1), n=(1, 2),
+    a = yast.rand(config=config_Z2xU1, s=(-1, 1, 1), n=(1, 2),
                   t=[[(0, 0), (1, 0), (0, 2), (1, 2)], [(0, -2), (0, 2)], [(0, -2), (0, 2), (1, -2), (1, 0), (1, 2)]],
                   D=((1, 2, 2, 4), (2, 3), (2, 6, 3, 6, 9)), dtype='float64')
-    b = yast.rand(config=config_Z2_U1, s=(-1, 1, 1), n=(1, 0),
+    b = yast.rand(config=config_Z2xU1, s=(-1, 1, 1), n=(1, 0),
                   t=[[(0, 0), (1, 0), (0, 2), (1, 2)], [(0, -2), (0, 2)], [(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)]],
                   D=((1, 2, 2, 4), (2, 3), (2, 4, 6, 3, 6, 9)), dtype='float64')
 

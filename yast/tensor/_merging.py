@@ -29,14 +29,13 @@ class _Fusion(NamedTuple):
     """ Information identifying the structure of hard fusion"""
     tree: tuple = (1,)  # order of fusions
     s: tuple = (1,)  # signatures len(s) = len(tree)
-    ms: tuple = (-1,)  # minus s
     t: tuple = ()  # fused leg charges at each step len(t) = len(tree) - 1
     D: tuple = ()  # fused dimensions  at each step len(t) = len(tree) - 1
 
 
 def _flip_hf(x):
     """ _Fusion with fliped signature. """
-    return x._replace(s=x.ms, ms=x.s)
+    return x._replace(s=tuple(-s for s in x.s))
 
 
 @lru_cache(maxsize=1024)
@@ -83,9 +82,8 @@ def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
         Dfl.append(D_in[n])
         Dfl.extend(hfs[n].D)
         sfl.extend(hfs[n].s)
-        msfl.extend(hfs[n].ms)
         treefl.extend(hfs[n].tree)
-    return _Fusion(tuple(treefl), tuple(sfl), tuple(msfl), tuple(tfl), tuple(Dfl))
+    return _Fusion(tuple(treefl), tuple(sfl), tuple(tfl), tuple(Dfl))
 
 
 def _merge_masks(config, ls, ms):
@@ -183,7 +181,7 @@ def _union_hfs(config, ts, Ds, hfs):
     s = list(hfs[0].s)  # to be consumed during parsing of the tree
 
     if len(tree) == 1:
-        hfu = _Fusion(s=hfs[0].s, ms=hfs[0].ms)
+        hfu = _Fusion(s=hfs[0].s)
         msk1 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[0], Ds[0])}
         msk2 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[1], Ds[1])}
         if any(msk1[t].size != msk2[t].size for t in set(msk1) & set(msk2)):
@@ -202,7 +200,7 @@ def _union_hfs(config, ts, Ds, hfs):
         Du.append(tuple(tD12[t] for t in tu[-1]))
         msk1.append({t: np.ones(D, dtype=bool) if t in tD1 else np.zeros(D, dtype=bool) for t, D in zip(tu[-1], Du[-1])})
         msk2.append({t: np.ones(D, dtype=bool) if t in tD2 else np.zeros(D, dtype=bool) for t, D in zip(tu[-1], Du[-1])})
-        hfu.append(_Fusion(s=(s[i + 1],), ms=(-s[i + 1],)))  # len(s) == 1 + len(t)
+        hfu.append(_Fusion(s=(s[i + 1],)))  # len(s) == 1 + len(t)
 
     teff = tuple(sorted(set(ts[0]) | set(ts[1])))
     t1 = [teff] + list(hfs[0].t)  # to be consumed during parsing of the tree
@@ -363,7 +361,7 @@ def _unfuse_Fusion(hf):
                 tt.append(hf.t[n_init - 1])
                 DD.append(hf.D[n_init - 1])
                 ss.append(hf.s[n_init])
-                hfs.append(_Fusion(hf.tree[n_init: n + 1], hf.s[n_init: n + 1], hf.ms[n_init: n + 1],
+                hfs.append(_Fusion(hf.tree[n_init: n + 1], hf.s[n_init: n + 1],
                                     hf.t[n_init: n], hf.D[n_init: n]))
                 n_init = n + 1
     return tuple(tt), tuple(DD), tuple(ss), hfs

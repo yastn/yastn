@@ -308,7 +308,7 @@ def add_leg(a, axis=-1, s=1, t=None, inplace=False):
     c.A = {tnew: a.config.backend.expand_dims(c.A[told], axis) for tnew, told in zip(new_tset, a.struct.t)}
     c.struct = _struct(new_tset, new_Dset, news, newn)
     c.meta_fusion = new_meta_fusion
-    c.hard_fusion = c.hard_fusion[:axis] + (_Fusion(s=(s,), ms=(-s,)),) + c.hard_fusion[axis:]
+    c.hard_fusion = c.hard_fusion[:axis] + (_Fusion(s=(s,)),) + c.hard_fusion[axis:]
 
     return c
 

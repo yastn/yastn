@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 import yast
 try:
-    from .configs import config_U1, config_Z2_U1, config_dense
+    from .configs import config_U1, config_dense, config_Z2xU1
 except ImportError:
-    from configs import config_U1, config_Z2_U1, config_dense
+    from configs import config_U1, config_Z2xU1, config_dense
 
 tol = 1e-10  #pylint: disable=invalid-name
 
@@ -76,10 +76,10 @@ def test_hard_transpose():
 def test_hard_dot_2():
     t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
     t2 = [(0, 0), (0, 2), (1, 0), (1, 2)]
-    a = yast.rand(config=config_Z2_U1, s=(-1, 1, 1, -1, -1),
+    a = yast.rand(config=config_Z2xU1, s=(-1, 1, 1, -1, -1),
                   t=(t1, t1, t2, t2, t2),
                   D=((1, 2, 2, 4), (9, 4, 3, 2), (7, 8, 9, 10), (5, 6, 7, 8), (1, 2, 2, 4)))
-    b = yast.rand(config=config_Z2_U1, s=(1, -1, 1, 1),
+    b = yast.rand(config=config_Z2xU1, s=(1, -1, 1, 1),
                   t=(t1, t1, t2, t2),
                   D=((1, 2, 2, 4), (9, 4, 3, 2), (1, 2, 2, 4), (5, 6, 7, 8)))
 

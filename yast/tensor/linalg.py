@@ -145,11 +145,11 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     U = a.__class__(config=a.config, s=Us, n=n_l,
                     meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
-                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sU,), ms=(-sU,))])
+                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sU,))])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
     V = a.__class__(config=a.config, s=Vs, n=n_r,
                     meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r],
-                    hard_fusion=[_Fusion(s=(-sU,), ms=(sU,))] + [a.hard_fusion[ii] for ii in axes[1]])
+                    hard_fusion=[_Fusion(s=(-sU,))] + [a.hard_fusion[ii] for ii in axes[1]])
 
     if policy == 'fullrank':
         U.A, S.A, V.A = a.config.backend.svd(Am, meta)
@@ -206,10 +206,10 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in axes[1])
     Q = a.__class__(config=a.config, s=Qs, n=a.struct.n,
                     meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
-                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sQ,), ms=(-sQ,))])
+                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sQ,))])
     R = a.__class__(config=a.config, s=Rs,
                     meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r],
-                    hard_fusion=[_Fusion(s=(-sQ,), ms=(sQ,))] + [a.hard_fusion[ii] for ii in axes[1]])
+                    hard_fusion=[_Fusion(s=(-sQ,))] + [a.hard_fusion[ii] for ii in axes[1]])
 
     meta = tuple((il + ir, il + ir, ir + ir) for il, ir in zip(ul, ur))
     Q.A, R.A = a.config.backend.qr(Am, meta)
@@ -283,7 +283,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
     S = a.__class__(config=a.config, s=(-sU, sU), isdiag=True)
     U = a.__class__(config=a.config, s=Us,
                     meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
-                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sU,), ms=(-sU,))])
+                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sU,))])
 
     # meta = (indA, indS, indU)
     meta = tuple((il + ir, il, il + ir) for il, ir in zip(ul, ur))

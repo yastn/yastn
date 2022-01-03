@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2_U1
+    from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2_U1
+    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -77,16 +77,16 @@ def test_broadcast_1():
 
 
 def test_broadcast_2():
-    a = yast.rand(config=config_Z2_U1, s=(-1, -1, 1, 1),
+    a = yast.rand(config=config_Z2xU1, s=(-1, -1, 1, 1),
                     t=[((0, 0), (0, 2), (1, 0), (1, 2)),
                        ((0, 0), (0, 2)),
                        ((0, 1), (1, 0), (0, 0), (1, 1)),
                        ((0, 0), (0, 2))],
                     D=[(6, 3, 9, 6), (3, 2), (4, 5, 6, 3), (2, 3)])
-    b = yast.eye(config=config_Z2_U1,
+    b = yast.eye(config=config_Z2xU1,
                    t=[[(0, 0), (0, 2), (1, 0), (1, 2), (1, 3)]],
                    D=[[6, 3, 9, 6, 5]])
-    c = yast.eye(config=config_Z2_U1,
+    c = yast.eye(config=config_Z2xU1,
                    t=[[(0, 2), (0, 3)]],
                    D=[[3, 4]])
 
