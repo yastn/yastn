@@ -2,6 +2,7 @@
 import warnings
 import numpy as np
 import pytest
+
 try:
     import h5py
 except ImportError:
@@ -9,9 +10,9 @@ except ImportError:
 import os
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2_U1
+    from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2_U1
+    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12
 
@@ -43,10 +44,10 @@ def test_U1_io():
     #check_import_export(a)
 
 
-def test_Z2_U1_io():
+def test_Z2xU1_io():
     """ Initialize random Tensor of Z2xU1 tensors and checks copying. """
     t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
-    a = yast.ones(config=config_Z2_U1, s=(-1, -1, 1, 1),
+    a = yast.ones(config=config_Z2xU1, s=(-1, -1, 1, 1),
                   t=[t1, t1, t1, t1],
                   D=[(2, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
     afh = a.fuse_legs(axes=((1, 0), (2, 3)), mode='hard')
@@ -60,4 +61,4 @@ def test_Z2_U1_io():
 if __name__ == "__main__":
     test_full_io()
     test_U1_io()
-    test_Z2_U1_io()
+    test_Z2xU1_io()

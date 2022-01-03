@@ -2,9 +2,9 @@
 import numpy as np
 import yast
 try:
-    from .configs import config_Z2, config_Z2_U1
+    from .configs import config_Z2, config_Z2xU1
 except ImportError:
-    from configs import config_Z2, config_Z2_U1
+    from configs import config_Z2, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -21,7 +21,7 @@ def test_conj_1():
 
 
 def test_conj_2():
-    a = yast.rand(config=config_Z2_U1, s=(1, -1), n=(1, 1),
+    a = yast.rand(config=config_Z2xU1, s=(1, -1), n=(1, 1),
                   t=[[(0, 0), (1, 1), (0, 2)], [(0, 1), (0, 0), (1, 1)]],
                   D=[[1, 2, 3], [4, 5, 6]])
     b = a.conj()

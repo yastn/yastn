@@ -92,10 +92,10 @@ def test_vdot_fuse_hard():
     # D1 = (1, 2, 3, 4)
     # t2 = [(0, 0), (0, 1), (1, 1)]
     # D2 = (5, 2, 4)
-    # a2 = yast.rand(config=config_Z2_U1, s=(-1, 1, 1, -1),
+    # a2 = yast.rand(config=config_Z2xU1, s=(-1, 1, 1, -1),
     #               t=(t2, t2, t1, t1),
     #               D=(D2, D2, D1, D1))
-    # b2 = yast.rand(config=config_Z2_U1, s=(1, -1, -1, 1),
+    # b2 = yast.rand(config=config_Z2xU1, s=(1, -1, -1, 1),
     #               t=(t1, t1, t2, t2),
     #               D=(D1, D1, D2, D2))
     # vdot_hf(a2, b2)

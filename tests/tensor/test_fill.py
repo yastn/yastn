@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2_U1
+    from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2_U1
+    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -112,7 +112,7 @@ def test_fill_1():
 
 def test_fill_2():
     # print('3d tensor:')
-    a = yast.ones(config=config_Z2_U1, s=(-1, 1, 1),
+    a = yast.ones(config=config_Z2xU1, s=(-1, 1, 1),
                   t=[[(0, 1), (1, 0)], [(0, 0)], [(0, 1), (1, 0)]],
                   D=[[1, 2], 3, [1, 2]])
     npa = a.to_numpy()
@@ -124,7 +124,7 @@ def test_fill_2():
     assert yast.norm(a - b) < tol  # == 0.0
 
     # print('1d tensor:')
-    a = yast.ones(config=config_Z2_U1, s=1,
+    a = yast.ones(config=config_Z2xU1, s=1,
                   t=[[(0, 0)]], D=[[2]])
     npa = a.to_numpy()
     assert np.isrealobj(npa)
@@ -135,7 +135,7 @@ def test_fill_2():
     assert yast.norm(a - b) < tol  # == 0.0
 
     # print('diagonal tensor:')
-    a = yast.rand(config=config_Z2_U1, isdiag=True,
+    a = yast.rand(config=config_Z2xU1, isdiag=True,
                   t=[[(0, 0), (1, 1), (0, 2)]],
                   D=[[2, 2, 2]])
     npa = a.to_numpy()
@@ -145,7 +145,7 @@ def test_fill_2():
     assert a.is_consistent()
 
     # print('diagonal tensor:')
-    a = yast.rand(config=config_Z2_U1, isdiag=True,
+    a = yast.rand(config=config_Z2xU1, isdiag=True,
                   t=[[(0, 1), (-1, 0)], [(0, 1), (2, 0)]],
                   D=[[2, 5], [2, 7]])
     npa = a.to_numpy()

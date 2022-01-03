@@ -9,7 +9,8 @@ except ImportError:
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_ncon_0():
+def test_ncon_basic():
+    """ tests of ncon executing a series of tensor contractions. """
     a = yast.rand(s=(1, 1, 1), D=(20, 3, 1), config=config_dense, dtype='complex128')
     b = yast.rand(s=(1, 1, -1), D=(4, 2, 20), config=config_dense, dtype='complex128')
     c = yast.rand(s=(-1, 1, 1, -1), D=(20, 30, 10, 10), config=config_dense, dtype='complex128')
@@ -52,8 +53,6 @@ def test_ncon_0():
     assert yast.norm(y4 - y5) / yast.norm(y4) < tol  # == 0.0
     assert pytest.approx((a.norm().item() ** 2) * (b.norm().item() ** 2), rel=tol) == y4.item()
 
-
-def test_ncon_1():
     a = yast.rand(config=config_U1, s=[-1, 1, -1], n=0,
                   D=((20, 10), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)))
     b = yast.rand(config=config_U1, s=[1, 1, 1], n=1,
@@ -74,6 +73,24 @@ def test_ncon_1():
     assert g.is_consistent()
 
 
+def test_ncon_exceptions():
+    """ capturing some exception by ncon. """
+    a = yast.rand(config=config_U1, s=[-1, 1, -1], n=0,
+                  D=((3, 3), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)))
+    with pytest.raises(yast.YastError):
+        _ = yast.ncon([a, a], [(1, 2, 3)])
+        # Number of tensors and indices do not match.
+    with pytest.raises(yast.YastError):
+        _ = yast.ncon([a, a], [(1, 2, -1), (1, 2)])
+        # Number of legs of one of the tensors do not match provided indices.
+    with pytest.raises(yast.YastError):
+        _ = yast.ncon([a, a], [(1, 2, -1), (1, 3, -2)])
+        # Indices of legs to contract do not match
+    with pytest.raises(yast.YastError):
+        _ = yast.ncon([a, a], [(1, 2, -1), (1, 1, -2)])
+        # Indices of legs to contract do not match
+    
+
 if __name__ == '__main__':
-    test_ncon_0()
-    test_ncon_1()
+    test_ncon_basic()
+    test_ncon_exceptions()

@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2_U1
+    from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2_U1
+    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -73,14 +73,14 @@ def test_trace_basic():
     # Z2xU1
     t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
     D1, D2 = (6, 4, 9, 6), (20, 16, 25, 20)
-    a = yast.randC(config=config_Z2_U1, s=(-1, -1, 1, 1),
+    a = yast.randC(config=config_Z2xU1, s=(-1, -1, 1, 1),
                 t=[t1, t1, t1, t1], D=[D1, D2, D2, D1])
     b = trace_vs_numpy(a, axes=(0, 3))
     b = trace_vs_numpy(b, axes=(1, 0))
     c = a.trace(axes=((0, 1), (3, 2)))
     assert pytest.approx(c.item(), rel=tol) == b.item()
 
-    a = yast.ones(config=config_Z2_U1, isdiag=True,
+    a = yast.ones(config=config_Z2xU1, isdiag=True,
                   t=[((0, 0), (1, 1), (0, 2))], D=[(2, 2, 2)])
     b = trace_vs_numpy(a, axes=((), ())) # no trace
     assert yast.norm(a - b) < tol

@@ -473,49 +473,67 @@ def swap_gate(a, axes, inplace=False):
 
 @lru_cache(maxsize=1024)
 def _swap_gate_meta(t, n, mf, ndim, axes, fss):
-    ind_n = [i for i, x in enumerate(axes) if x == (-1,)]
-    if len(ind_n) == 0:
-        axes = _unpack_axes(mf, *axes)
-    else:
-        axes = list(axes)
-        for ind in ind_n[::-1]:
-            axes.pop(ind)
-        axes = list(_unpack_axes(mf, *axes))
-        for ind in ind_n:
-            axes.insert(ind, (-1,))
-        axes = tuple(axes)
-
+    axes = _unpack_axes(mf, *axes)
     tset = np.array(t, dtype=int).reshape((len(t), ndim, len(n)))
     iaxes = iter(axes)
     tp = np.zeros(len(t), dtype=int)
 
     if len(axes) % 2 == 1:
-        raise YastError('Odd number of elements in axes -- needs even.')
+        raise YastError('Odd number of elements in axes. Elements of axes should come in pairs.')
     for l1, l2 in zip(*(iaxes, iaxes)):
         if len(set(l1) & set(l2)) > 0:
-            raise YastError('Cannot swap the same index')
-        if l2 == (-1,):
-            t1 = np.sum(tset[:, l1, :], axis=1)
-            t2 = np.array(n, dtype=int).reshape(1, -1)
-        elif l1 == (-1,):
-            t2 = np.sum(tset[:, l2, :], axis=1)
-            t1 = np.array(n, dtype=int).reshape(1, -1)
-        else:
-            if (-1,) in l1 or (-1,) in l2:
-                raise YastError('Swap with tensor charge, i.e. -1, has to be provided as a separate axis.')
-            t1 = np.sum(tset[:, l1, :], axis=1) % 2
-            t2 = np.sum(tset[:, l2, :], axis=1) % 2
+            raise YastError('Cannot swap the same index.')
+        t1 = np.sum(tset[:, l1, :], axis=1) % 2
+        t2 = np.sum(tset[:, l2, :], axis=1) % 2
         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)
     return tuple(tp % 2)
+
+
+# @lru_cache(maxsize=1024)
+# def _swap_gate_meta(t, n, mf, ndim, axes, fss):
+#     ind_n = [i for i, x in enumerate(axes) if x == (-1,)]
+#     if len(ind_n) == 0:
+#         axes = _unpack_axes(mf, *axes)
+#     else:
+#         axes = list(axes)
+#         for ind in ind_n[::-1]:
+#             axes.pop(ind)
+#         axes = list(_unpack_axes(mf, *axes))
+#         for ind in ind_n:
+#             axes.insert(ind, (-1,))
+#         axes = tuple(axes)
+
+#     tset = np.array(t, dtype=int).reshape((len(t), ndim, len(n)))
+#     iaxes = iter(axes)
+#     tp = np.zeros(len(t), dtype=int)
+
+#     if len(axes) % 2 == 1:
+#         raise YastError('Odd number of elements in axes -- needs even.')
+#     for l1, l2 in zip(*(iaxes, iaxes)):
+#         if len(set(l1) & set(l2)) > 0:
+#             raise YastError('Cannot swap the same index')
+#         if l2 == (-1,):
+#             t1 = np.sum(tset[:, l1, :], axis=1)
+#             t2 = np.array(n, dtype=int).reshape(1, -1)
+#         elif l1 == (-1,):
+#             t2 = np.sum(tset[:, l2, :], axis=1)
+#             t1 = np.array(n, dtype=int).reshape(1, -1)
+#         else:
+#             if (-1,) in l1 or (-1,) in l2:
+#                 raise YastError('Swap with tensor charge, i.e. -1, has to be provided as a separate axis.')
+#             t1 = np.sum(tset[:, l1, :], axis=1) % 2
+#             t2 = np.sum(tset[:, l2, :], axis=1) % 2
+#         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)
+#     return tuple(tp % 2)
 
 
 def ncon(ts, inds, conjs=None):
     """Execute series of tensor contractions"""
     if len(ts) != len(inds):
-        raise YastError('Wrong number of tensors')
+        raise YastError('Number of tensors and indices do not match.')
     for ii, ind in enumerate(inds):
         if ts[ii].ndim != len(ind):
-            raise YastError(f'Wrong number of legs in {ii}-th input tensor.')
+            raise YastError('Number of legs of one of the tensors do not match provided indices.')
 
     ts = dict(enumerate(ts))
     cutoff = 512
@@ -532,7 +550,7 @@ def ncon(ts, inds, conjs=None):
     while order1 != cutoff:  # tensordot two tensors; or trace one tensor
         order2, leg2, ten2 = edges.pop()
         if order1 != order2:
-            raise YastError('Contracted legs do not match')
+            raise YastError('Indices of legs to contract do not match.')
         if ten1 < ten2:
             (t1, t2) = (ten1, ten2)
             ax1.append(leg1)
