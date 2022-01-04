@@ -153,6 +153,23 @@ def test_operators():
         assert yast.norm((ccp[('up', 'down')] + inter_sgn * cpc[('down', 'up')])) < tol
         assert yast.norm((ccp[('down', 'up')] + inter_sgn * cpc[('up', 'down')])) < tol
 
+        n_up = yast.tensordot(c['up'], cp['up'], axes = (1, 0))   # !!!!!!!!!!!!!!!!!!!!!!!
+
+        cc_hop = {}
+        for s in ('up', 'down'):
+            a1dag = cp[s].add_leg(s=1)
+            a2 =  c[s].add_leg(s=-1)
+            a1dag.swap_gate(axes=(0, 2), inplace=True)
+            a1daga2 = yast.tensordot(a1dag, a2, axes=(2, 2))
+
+            a1 = c[s].add_leg(s=1)
+            a1.swap_gate(axes=(1, 2), inplace=True)
+            a2dag =  cp[s].add_leg(s=-1)
+            a1a2dag = yast.tensordot(a1, a2dag, axes=(2, 2))
+            cc_hop[s] = a1daga2 +  a1a2dag
+
+        temp = cc_hop['up'].fuse_legs(axes=((0,1),(2,3)), mode='meta')
+        print(temp.to_numpy())
 
 if __name__ == '__main__':
     test_swap_gate_basic()
@@ -162,8 +179,10 @@ if __name__ == '__main__':
 
 
 
-    # n_loc_up = yast.tensordot(fcdag_up, fc_up, axes = (1, 0))
-    # n_loc_down = yast.tensordot(fcdag_down, fc_down, axes = (1, 0))
+    # n_loc_up = yast.tensordot(fc_up, fcdag_up, axes = (1, 0))
+    # n_loc_down = yast.tensordot(fc_down, fcdag_down, axes = (1, 0))
+
+
     # iden = yast.tensordot(fid, fid, axes=((),()))
     # n1_up = yast.tensordot(n_loc_up, fid, axes=((),()))
     # n2_up = yast.tensordot(fid, n_loc_up, axes=((),()))
@@ -177,7 +196,7 @@ if __name__ == '__main__':
 
     # def nn_Gate_spinfull_hop(t_up, t_down, beta):
     #     # nn term
-    #     U_nn_up =   iden -(1 - np.cosh(-0.25 * t_up * beta)) * (n1_up + n2_up - 2*n1n2_up) - np.sinh(-0.25 * t_up * beta) * hop_up
+    #     U_nn_up =   iden + (np.cosh(0.25 * t_up * beta) - 1) * (n1_up + n2_up - 2*n1n2_up) + np.sinh(0.25 * t_up * beta) * hop_up
     #     U_nn_down =  iden - (1 - np.cosh(-0.25 * t_down * beta)) * (n1_down + n2_down - 2*n1n2_down) - np.sinh(-0.25 * t_down * beta) * hop_down
 
     #     Aup, Xup, Bup = yast.svd(U_nn_up, axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15)
