@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2, config_Z2xU1
+    from .configs import config_dense, config_U1, config_Z2, config_Z2xU1, config_Z2_fermionic
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2, config_Z2xU1
+    from configs import config_dense, config_U1, config_Z2, config_Z2xU1, config_Z2_fermionic
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -232,6 +232,14 @@ def test_algebra_exceptions():
         a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D2, D1), n=1)
         b = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D2, D1), n=0)
         _ = a + b  # Error in add: tensor charges do not match.
+    with pytest.raises(yast.YastError):
+        a = yast.rand(config=config_U1, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
+        b = yast.rand(config=config_Z2, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
+        _ = a + b  # Two tensors have different symmetry rules.
+    with pytest.raises(yast.YastError):
+        a = yast.rand(config=config_Z2, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
+        b = yast.rand(config=config_Z2_fermionic, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
+        _ = a + b  # Two tensors have different assigment of fermionic statistics.
 
 
 def test_hf_union_exceptions():

@@ -1,7 +1,7 @@
 """ Linalg methods for yast tensor. """
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes
-from ._tests import YastError, _test_all_axes
+from ._tests import YastError, _test_axes_all
 from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal, _masks_for_add
 from ._merging import _leg_struct_trivial, _leg_struct_truncation, _Fusion
 from ._krylov import _expand_krylov_space
@@ -126,7 +126,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     U, S, V: Tensor
         U and V are unitary projectors. S is a diagonal tensor.
     """
-    _test_all_axes(a, axes)
+    _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
 
@@ -195,7 +195,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     -------
         Q, R: Tensor
     """
-    _test_all_axes(a, axes)
+    _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
 
@@ -265,7 +265,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
         S, U: Tensor
             U is unitary projector. S is a diagonal tensor.
     """
-    _test_all_axes(a, axes)
+    _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
 
@@ -328,7 +328,7 @@ def entropy(a, axes=(0, 1), alpha=1):
     if len(a.A) == 0:
         return a.zero_of_dtype(), a.zero_of_dtype(), a.zero_of_dtype()
 
-    _test_all_axes(a, axes)
+    _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
 

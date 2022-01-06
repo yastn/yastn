@@ -1,5 +1,6 @@
 """ yast.vdot yast.moveaxis"""
 import numpy as np
+import pytest
 import yast
 try:
     from .configs import config_dense, config_U1, config_Z2xU1
@@ -25,7 +26,9 @@ def run_transpose(a, ad, axes, result):
     assert a.are_independent(newa)
 
 
-def test_transpose_0():
+def test_transpose_basic():
+    """ test transpose for different symmetries. """
+    # dense
     a = yast.ones(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     assert a.get_shape() == (2, 3, 4, 5)
     ad = a.to_numpy()
@@ -36,21 +39,18 @@ def test_transpose_0():
     run_moveaxis(a, ad, source=(3, 1), destination=(1, 0), result=(3, 5, 2, 4))
     run_moveaxis(a, ad, source=(1, 3), destination=(0, 1), result=(3, 5, 2, 4))
 
-
-def test_transpose_1():
+    # U1
     a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
     ad = a.to_numpy()
     assert a.get_shape() == (5, 9, 13, 11, 7, 3)
-
     run_transpose(a, ad, axes=(1, 2, 3, 0, 5, 4), result=(9, 13, 11, 5, 3, 7))
     run_moveaxis(a, ad, source=1, destination=4, result=(5, 13, 11, 7, 9, 3))
     run_moveaxis(a, ad, source=(2, 0), destination=(0, 2), result=(13, 9, 5, 11, 7, 3))
     run_moveaxis(a, ad, source=(2, -1, 0), destination=(-1, 2, -2), result=(9, 11, 3, 7, 5, 13))
 
-
-def test_transpose_2():
+    # Z2xU1
     t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
     a = yast.ones(config=config_Z2xU1, s=(-1, -1, 1, 1),
                   t=[t1, t1, t1, t1],
@@ -72,6 +72,7 @@ def test_transpose_inplace():
     a.moveaxis(source=2, destination=3, inplace=True)
     assert a.get_shape() == (13, 11, 7, 9, 5, 3)
 
+
 def test_transpose_diag():
     a = yast.eye(config=config_U1, t=(-1, 0, 2), D=(2, 2 ,4))
     at = a.transpose(axes=(1, 0))
@@ -81,9 +82,19 @@ def test_transpose_diag():
     assert yast.vdot(a, at).item() == 8.
 
 
+def test_transpose_exceptions():
+    """ test handling expections """
+    a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
+                  t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
+                  D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
+    with pytest.raises(yast.YastError):
+        _ = a.transpose(axes=(0, 1, 3, 5))  # Provided axes do not match tensor ndim.
+    with pytest.raises(yast.YastError):
+        _ = a.transpose(axes=(0, 1, 1, 2, 2, 3))  # Provided axes do not match tensor ndim.
+
+
 if __name__ == '__main__':
-    test_transpose_0()
-    test_transpose_1()
-    test_transpose_2()
+    test_transpose_basic()
     test_transpose_inplace()
     test_transpose_diag()
+    test_transpose_exceptions()
