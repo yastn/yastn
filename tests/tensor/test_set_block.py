@@ -168,42 +168,8 @@ def test_set2():
     assert b.get_shape() == (11, 11)
 
 
-def test_dict():
-    a = yast.rand(config=config_dense)  # s=()
-    d = a.export_to_dict()
-    b = yast.import_from_dict(config=config_dense, d=d)
-    assert yast.norm(a - b) < tol  # == 0.0
-    assert a.is_consistent()
-    assert a.are_independent(b)
-
-    a = yast.rand(config=config_U1, isdiag=False, s=(1, -1, 1),
-                  t=((0, 1, 2), (0, 1, 3), (-1, 0, 1)),
-                  D=((3, 5, 2), (1, 2, 3), (2, 3, 4)))
-    d = a.export_to_dict()
-    b = yast.import_from_dict(config=config_U1, d=d)
-    assert yast.norm(a - b) < tol  # == 0.0
-    assert a.is_consistent()
-    assert a.are_independent(b)
-
-    a = yast.rand(config=config_U1, isdiag=True, t=(0, 1), D=(3, 5))
-    d = a.export_to_dict()
-    b = yast.import_from_dict(config=config_U1, d=d)
-    assert yast.norm(a - b) < tol  # == 0.0
-    assert a.is_consistent()
-    assert a.are_independent(b)
-
-    a = yast.ones(config=config_Z2xU1, s=(-1, 1, 1), n=(0, -2),
-                  t=(((0, 0), (0, 2), (1, 0), (1, 2)), ((0, -2), (0, 2)), ((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2))),
-                  D=((1, 2, 3, 4), (2, 1), (2, 3, 5, 4, 1, 6)))
-    d = a.export_to_dict()
-    b = yast.import_from_dict(config=config_Z2xU1, d=d)
-    assert yast.norm(a - b) < tol  # == 0.0
-    assert b.is_consistent()
-    assert a.are_independent(b)
-
 
 if __name__ == '__main__':
     test_set0()
     test_set1()
     test_set2()
-    test_dict()

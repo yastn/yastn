@@ -1,6 +1,7 @@
 """ yast.swap_gate() to introduce fermionic statistics. """
-import pytest
 from itertools import product
+import numpy as np
+import pytest
 import yast
 try:
     from .configs import config_Z2, config_Z2_fermionic
@@ -145,31 +146,36 @@ def test_operators():
     for sym, inter_sgn in [('Z2', 1), ('U1xU1_ind', 1), ('U1xU1_dis', -1)]:
         c = {s: operator_c(s=s, sym=sym) for s in spins}
         cp = {s: operator_cdag(s=s, sym=sym) for s in spins}
-        iden = operator_id(sym=sym)
+        one = operator_id(sym=sym)
         ccp = {(s1, s2): yast.tensordot(c[s1], cp[s2], axes=(1, 0)) for s1, s2 in product(spins, spins)}
         cpc = {(s1, s2): yast.tensordot(cp[s1], c[s2], axes=(1, 0)) for s1, s2 in product(spins, spins)}
-        assert yast.norm((ccp[('up', 'up')] + cpc[('up', 'up')]) - iden) < tol
-        assert yast.norm((ccp[('down', 'down')] + cpc[('down', 'down')]) - iden) < tol
+        assert yast.norm((ccp[('up', 'up')] + cpc[('up', 'up')]) - one) < tol
+        assert yast.norm((ccp[('down', 'down')] + cpc[('down', 'down')]) - one) < tol
         assert yast.norm((ccp[('up', 'down')] + inter_sgn * cpc[('down', 'up')])) < tol
         assert yast.norm((ccp[('down', 'up')] + inter_sgn * cpc[('up', 'down')])) < tol
 
-        n_up = yast.tensordot(c['up'], cp['up'], axes = (1, 0))   # !!!!!!!!!!!!!!!!!!!!!!!
+        n = {s: yast.tensordot(c[s], cp[s], axes = (1, 0)) for s in spins}
+        # here c and cp are 'transposed' w.r.t typical matrix representation
 
-        cc_hop = {}
+        hop = {}
         for s in ('up', 'down'):
-            a1dag = cp[s].add_leg(s=1)
-            a2 =  c[s].add_leg(s=-1)
-            a1dag.swap_gate(axes=(0, 2), inplace=True)
-            a1daga2 = yast.tensordot(a1dag, a2, axes=(2, 2))
+            cp1 = cp[s].add_leg(s=1).swap_gate(axes=(0, 2))
+            c2 = c[s].add_leg(s=-1)
+            cp2 =  cp[s].add_leg(s=-1)
+            c1 = c[s].add_leg(s=1).swap_gate(axes=(1, 2))
+            hop[s] = yast.tensordot(cp1, c2, axes=(2, 2)) + yast.tensordot(c1, cp2, axes=(2, 2))
+            # cp1 c2 + cp2 c1
+        nn = {s: yast.tensordot(n[s], one - n[s], axes=((),()))
+                + yast.tensordot(one - n[s], n[s], axes=((),())) for s in spins}
+        one2 = yast.tensordot(one, one, axes=((),()))
+        bt = 1.
+        op = {s: one2 + (np.cosh(bt) - 1) * nn[s] + np.sinh(bt) * hop[s] for s in spins}
 
-            a1 = c[s].add_leg(s=1)
-            a1.swap_gate(axes=(1, 2), inplace=True)
-            a2dag =  cp[s].add_leg(s=-1)
-            a1a2dag = yast.tensordot(a1, a2dag, axes=(2, 2))
-            cc_hop[s] = a1daga2 +  a1a2dag
+        # psi = yast.Tensor(config=one.config, s=(1, 1, 1, 1), n=0)
+        # psi.set_block(ts=(0, 0, 1, 1), Ds=(1, 1, 1, 1), val=0.5)
+        # psi.set_block(ts=(0, 1, 1, 0), Ds=(1, 1, 1, 1), val=0.5)
+        # psi.set_block(ts=(1, 0, 0, 1), Ds=(1, 1, 1, 1), val=0.5)
 
-        temp = cc_hop['up'].fuse_legs(axes=((0,1),(2,3)), mode='meta')
-        print(temp.to_numpy())
 
 if __name__ == '__main__':
     test_swap_gate_basic()

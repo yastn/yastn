@@ -143,9 +143,9 @@ class TestSyntaxTensorExportImport(unittest.TestCase):
         # 
         # Tensors can be also serialized directly into basic Python dictionary
         #
-        dictionary = yast.export_to_dict(a)
-        dictionary = a.export_to_dict()
-        tensor = yast.import_from_dict(config=config_U1, d=dictionary)
+        dictionary = yast.save_to_dict(a)
+        dictionary = a.save_to_dict()
+        tensor = yast.load_from_dict(config=config_U1, d=dictionary)
 
 
 class TestSyntaxBlockAccess(unittest.TestCase):

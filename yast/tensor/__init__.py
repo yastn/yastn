@@ -124,7 +124,7 @@ class Tensor:
     from ._output import get_leg_fusion, get_shape, get_signature, unique_dtype
     from ._output import get_tensor_charge, get_rank
     from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric
-    from ._output import export_to_hdf5, export_to_dict, compress_to_1d
+    from ._output import save_to_hdf5, save_to_dict, compress_to_1d
     from ._tests import is_consistent, are_independent
     from ._auxliary import update_struct
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
