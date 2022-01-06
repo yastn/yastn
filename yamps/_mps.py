@@ -1,7 +1,7 @@
 """ Mps structure and its basic manipulations. """
 from yast.tensor import block, entropy
-from yast.tensor import export_to_hdf5 as Tensor_to_hdf5
-from yast import import_from_hdf5 as Tensor_from_hdf5
+from yast.tensor import save_to_hdf5 as Tensor_to_hdf5
+from yast import load_from_hdf5 as Tensor_from_hdf5
 from numpy import array, nonzero
 
 
@@ -9,7 +9,7 @@ class YampsError(Exception):
     pass
 
 
-def import_from_hdf5(config, nr_phys, file, in_file_path):
+def load_from_hdf5(config, nr_phys, file, in_file_path):
     N = len(file[in_file_path].keys())
     M = Mps(N, nr_phys=nr_phys)
     for n in range(M.N):
@@ -514,6 +514,6 @@ class Mps:
             self.absorb_central(to='first')
         return Entropy
 
-    def export_to_hdf5(self, file, in_file_path):
+    def save_to_hdf5(self, file, in_file_path):
         for n in self.sweep(to='first'):
             Tensor_to_hdf5(self.A[n], file, in_file_path+str(n))

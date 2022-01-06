@@ -6,11 +6,11 @@ from ._tests import YastError
 from ..sym import sym_none
 
 
-__all__ = ['compress_to_1d', 'export_to_dict', 'export_to_hdf5',
+__all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5',
             'leg_structures_for_dense', 'requires_grad']
 
 
-def export_to_dict(a):
+def save_to_dict(a):
     r"""
     Export relevant information about tensor to dictionary that can be saved using numpy.save
 
@@ -19,13 +19,16 @@ def export_to_dict(a):
     d: dict
         dictionary containing all the information needed to recreate the tensor.
     """
-    AA = {ind: a.config.backend.to_numpy(a.A[ind]) for ind in a.A}
-    out = {'A': AA, 's': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag,
-            'meta_fusion': a.meta_fusion, 'hard_fusion': a.hard_fusion}
-    return out
+    _d, _ = a.compress_to_1d()
+    _d = a.config.backend.to_numpy(_d)
+    hfs = [hf._asdict() for hf in a.hard_fusion]
+    return {'_d': _d, 's': a.struct.s, 'n': a.struct.n,
+            't': a.struct.t, 'D': a.struct.D, 'isdiag': a.isdiag,
+            'mfs': a.meta_fusion, 'hfs': hfs}
 
 
-def export_to_hdf5(a, file, path):
+
+def save_to_hdf5(a, file, path):
     """
     Export tensor into hdf5 type file.
 
