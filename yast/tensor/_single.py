@@ -2,7 +2,7 @@
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _struct
 from ._merging import _Fusion, _flip_hf
-from ._tests import YastError, _test_all_axes
+from ._tests import YastError, _test_axes_all
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'remove_zero_blocks',
            'add_leg', 'copy', 'clone', 'detach', 'to', 'requires_grad_']
@@ -201,7 +201,7 @@ def transpose(a, axes, inplace=False):
     tensor : Tensor
         transposed tensor
     """
-    _test_all_axes(a, axes, native=False)
+    _test_axes_all(a, axes, native=False)
     uaxes, = _unpack_axes(a.meta_fusion, axes)
     order = np.array(uaxes, dtype=np.intp)
     new_mf = tuple(a.meta_fusion[ii] for ii in axes)

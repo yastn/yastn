@@ -62,13 +62,11 @@ def _test_axes_match(a, b, sgn=1, axes=None):
     return needs_mask, uaxes
 
 
-def _test_all_axes(a, axes, native=False):
+def _test_axes_all(a, axes, native=False):
     axes = tuple(_flatten(axes))
     ndim = a.ndim_n if native else a.ndim
-    if ndim != len(axes):
-        raise YastError('Wrong number of axis indices in axes')
-    if sorted(set(axes)) != list(range(ndim)):
-        raise YastError('Repeated axis index in axes')
+    if ndim != len(axes) or sorted(set(axes)) != list(range(ndim)):
+        raise YastError('Provided axes do not match tensor ndim.')
 
 
 def are_independent(a, b):

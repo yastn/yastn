@@ -24,7 +24,7 @@ def save_to_dict(a):
     hfs = [hf._asdict() for hf in a.hard_fusion]
     return {'_d': _d, 's': a.struct.s, 'n': a.struct.n,
             't': a.struct.t, 'D': a.struct.D, 'isdiag': a.isdiag,
-            'mfs': a.meta_fusion, 'hfs': hfs}
+            'mfs': a.meta_fusion, 'hfs': hfs, 'SYM_ID':a.config.sym.SYM_ID, 'fermionic':a.config.fermionic}
 
 
 
@@ -67,10 +67,10 @@ def compress_to_1d(a, meta=None):
         # (told, tnew, Dslc, Dnew)
         DD = tuple((x[0],) for x in a.struct.D) if a.isdiag else a.struct.D
         meta_unmerge = tuple(((), t, (aD - D, aD), Dnew) for t, D, aD, Dnew in zip(a.struct.t, D_rsh, aD_rsh, DD))
-        meta = {'s': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag, 'hard_fusion': a.hard_fusion,
+        meta = {'struct': a.struct, 'isdiag': a.isdiag, 'hard_fusion': a.hard_fusion,
                 'meta_fusion': a.meta_fusion, 'meta_unmerge': meta_unmerge, 'meta_merge': meta_merge}
     else:
-        if a.struct.s != meta['s'] or a.struct.n != meta['n'] or a.isdiag != meta['isdiag'] \
+        if a.struct.s != meta['struct'].s or a.struct.n != meta['struct'].n or a.isdiag != meta['isdiag'] \
             or a.meta_fusion != meta['meta_fusion'] or a.hard_fusion != meta['hard_fusion']:
             raise YastError("Tensor structure does not match provided metadata.")
         meta_merge = meta['meta_merge']
