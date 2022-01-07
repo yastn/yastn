@@ -100,6 +100,10 @@ def expand_dims(x, axis):
     return torch.unsqueeze(x, axis)
 
 
+def squeeze(x, axis):
+    return torch.squeeze(x, axis)
+
+
 def count_nonzero(x):
     return torch.count_nonzero(x).item()
 
