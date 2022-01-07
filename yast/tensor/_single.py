@@ -354,17 +354,24 @@ def remove_axis(a, axis=-1, inplace=False):
 def diag(a):
     """
     Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa. """
-    if a.isdiag:
+    if a.isdiag:  # isdiag=True -> isdiag=False
         c = a.__class__(config=a.config, isdiag=False, meta_fusion=a.meta_fusion, \
             hard_fusion=a.hard_fusion, struct=a.struct)
         c.A = {ind: a.config.backend.diag_create(a.A[ind]) for ind in a.A}
         return c
-    if a.ndim_n == 2 and all(x == 0 for x in a.struct.n):
-        c = a.__class__(config=a.config, isdiag=True, meta_fusion=a.meta_fusion, \
-            hard_fusion=a.hard_fusion, struct=a.struct)
-        c.A = {ind: a.config.backend.diag_get(a.A[ind]) for ind in a.A}
-        return c
-    raise YastError('Tensor cannot be changed into a diagonal one')
+    # isdiag=False -> isdiag=True
+    if a.ndim_n != 2 or sum(a.struct.s) != 0:
+        raise YastError('Diagonal tensor requires 2 legs with opposite signatures.')
+    if any(x != 0 for x in a.struct.n):
+        raise YastError('Diagonal tensor requires zero tensor charge.')
+    if any(mf != (1,) for mf in a.meta_fusion) or any(hf.tree != (1,) for hf in a.hard_fusion):
+        raise YastError('Diagonal tensor cannot have fused legs.')
+    if any(d0 != d1 for d0, d1 in a.struct.D):
+        raise YastError('yast.diag() allowed only for square blocks.')
+    c = a.__class__(config=a.config, isdiag=True, meta_fusion=a.meta_fusion, \
+        hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = {ind: a.config.backend.diag_get(a.A[ind]) for ind in a.A}
+    return c
 
 
 def remove_zero_blocks(a, rtol=1e-12, atol=0, inplace=False):
