@@ -159,10 +159,10 @@ def test_operators():
 
         hop = {}
         for s in ('up', 'down'):
-            cp1 = cp[s].add_leg(s=1).swap_gate(axes=(0, 2))
-            c2 = c[s].add_leg(s=-1)
-            cp2 =  cp[s].add_leg(s=-1)
-            c1 = c[s].add_leg(s=1).swap_gate(axes=(1, 2))
+            cp1 = cp[s].add_axis(s=1).swap_gate(axes=(0, 2))
+            c2 = c[s].add_axis(s=-1)
+            cp2 =  cp[s].add_axis(s=-1)
+            c1 = c[s].add_axis(s=1).swap_gate(axes=(1, 2))
             hop[s] = yast.tensordot(cp1, c2, axes=(2, 2)) + yast.tensordot(c1, cp2, axes=(2, 2))
             # cp1 c2 + cp2 c1
         nn = {s: yast.tensordot(n[s], one - n[s], axes=((),()))

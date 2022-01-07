@@ -42,8 +42,8 @@ def generate_Mij(amp, connect, N, nr_phys):
                 M.A[n] = T_else.copy()
         if n == 0:
             tt = (0,) * len(M.A[n].n)
-        M.A[n].add_leg(axis=0, t=tt, s=1, inplace=True)
-        M.A[n].add_leg(axis=-1, s=-1, inplace=True)
+        M.A[n].add_axis(axis=0, t=tt, s=1, inplace=True)
+        M.A[n].add_axis(axis=-1, s=-1, inplace=True)
         tD = M.A[n].get_leg_structure(axis=-1)
         tt = next(iter(tD))
     return M

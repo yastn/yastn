@@ -98,6 +98,10 @@ def expand_dims(x, axis):
     return np.expand_dims(x, axis)
 
 
+def squeeze(x, axis):
+    return np.squeeze(x, axis)
+
+
 def count_nonzero(x):
     return np.count_nonzero(x)
 
