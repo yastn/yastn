@@ -1,7 +1,7 @@
 """ methods outputing data from yast tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _mf_to_ntree, _struct
+from ._auxliary import _clear_axes, _unpack_axes, _mf_to_ntree, _struct
 from ._tests import YastError
 from ..sym import sym_none
 
@@ -58,7 +58,8 @@ def compress_to_1d(a, meta=None):
             Raise error if tensor has some blocks which are not included in meta or otherwise meta does not match the tensor.
     """
     if meta is None:
-        D_rsh = _Darray(a)[:, 0] if a.isdiag else np.prod(_Darray(a), axis=1)
+        Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
+        D_rsh = Dset[:, 0] if a.isdiag else np.prod(Dset, axis=1)
         aD_rsh = np.cumsum(D_rsh)
         D_tot = np.sum(D_rsh)
         meta_new = (((),), (D_tot,))
@@ -297,7 +298,8 @@ def get_leg_structure(a, axis, native=False):
     axis, = _clear_axes(axis)
     if not native:
         axis, = _unpack_axes(a.meta_fusion, axis)
-    tset, Dset = _tarray(a), _Darray(a)
+    tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+    Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
     tset = tset[:, axis, :]
     Dset = Dset[:, axis]
     tset = tset.reshape(len(tset), len(axis) * a.config.sym.NSYM)
@@ -494,7 +496,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     if not native:
         axes = tuple(_unpack_axes(a.meta_fusion, *axes))
     meta = []
-    tset = _tarray(a)
+    tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     for tind, tt in zip(a.struct.t, tset):
         meta.append((tind, tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
     if a.isdiag:

@@ -9,7 +9,7 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 @pytest.mark.skipif(config_U1.backend.BACKEND_ID=="numpy", reason="numpy works on single device and does not have problems with promoting types")
-def test_to_1():
+def test_to():
     ta = yast.rand(config=config_U1, s=(1, 1, -1),
                     t=((-1, 0, 1), (-1, 0, 1), (-1, 0, 1)),
                     D=((1, 2, 3), (1, 2, 3), (1, 2, 3)),
@@ -38,4 +38,4 @@ def test_to_1():
 
 
 if __name__ == '__main__':
-    test_to_1()
+    test_to()

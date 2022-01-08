@@ -3,7 +3,7 @@ from ._auxliary import _struct
 from ._merging import _masks_for_add
 from ._tests import YastError, _test_configs_match, _get_tD_legs, _test_axes_match
 
-__all__ = ['apxb', 'absolute', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp']
+__all__ = ['apxb', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp']
 
 
 def __add__(a, b):
@@ -277,7 +277,7 @@ def __truediv__(a, number):
     return c
 
 
-def absolute(a):
+def __abs__(a):
     r"""
     Return tensor with element-wise absolute values
 
