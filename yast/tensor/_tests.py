@@ -1,6 +1,6 @@
 """ Testing and controls. """
 import numpy as np
-from ._auxliary import _flatten, _tarray, _unpack_axes
+from ._auxliary import _flatten, _unpack_axes
 
 __all__ = ['are_independent', 'is_consistent']
 
@@ -103,7 +103,7 @@ def is_consistent(a):
     for i in range(len(a.struct.t) - 1):
         assert a.struct.t[i] < a.struct.t[i + 1]
 
-    tset = _tarray(a)
+    tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)
     assert np.all(a.config.sym.fuse(tset, sa, 1) == na), 'charges of some block do not satisfy symmetry condition'

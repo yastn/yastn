@@ -128,3 +128,9 @@
 - save/load functions are changed to use 1d data container.
   It is now also more robust, using only native python/numpy data structures, i.e. no NamedTuples used by yast.
   WARNING: Backward compatibility is broken!
+
+08-01-2021
+- change function name: `add_leg` to `add_axis`.  New function `remove_axis`
+- define `abs` as a magic method `__abs__`. Function `absolut` has been removed.
+- define `__matmul__`, giving shorthand a @ b == yast.tensordot(a, b, axes=(a.ndim - 1, 0))
+- BUGFIX: raising exceptions when .diag() cannot be used to creat diagonal tensor

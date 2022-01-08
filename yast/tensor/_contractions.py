@@ -11,6 +11,10 @@ from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'broadcast', 'mask']
 
 
+def __matmul__(a, b):
+    return tensordot(a, b, axes=(a.ndim - 1, 0))
+
+
 def tensordot(a, b, axes, conj=(0, 0), policy=None):
     r"""
     Compute tensor dot product of two tensor along specified axes.
@@ -487,44 +491,6 @@ def _swap_gate_meta(t, n, mf, ndim, axes, fss):
         t2 = np.sum(tset[:, l2, :], axis=1) % 2
         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)
     return tuple(tp % 2)
-
-
-# @lru_cache(maxsize=1024)
-# def _swap_gate_meta(t, n, mf, ndim, axes, fss):
-#     ind_n = [i for i, x in enumerate(axes) if x == (-1,)]
-#     if len(ind_n) == 0:
-#         axes = _unpack_axes(mf, *axes)
-#     else:
-#         axes = list(axes)
-#         for ind in ind_n[::-1]:
-#             axes.pop(ind)
-#         axes = list(_unpack_axes(mf, *axes))
-#         for ind in ind_n:
-#             axes.insert(ind, (-1,))
-#         axes = tuple(axes)
-
-#     tset = np.array(t, dtype=int).reshape((len(t), ndim, len(n)))
-#     iaxes = iter(axes)
-#     tp = np.zeros(len(t), dtype=int)
-
-#     if len(axes) % 2 == 1:
-#         raise YastError('Odd number of elements in axes -- needs even.')
-#     for l1, l2 in zip(*(iaxes, iaxes)):
-#         if len(set(l1) & set(l2)) > 0:
-#             raise YastError('Cannot swap the same index')
-#         if l2 == (-1,):
-#             t1 = np.sum(tset[:, l1, :], axis=1)
-#             t2 = np.array(n, dtype=int).reshape(1, -1)
-#         elif l1 == (-1,):
-#             t2 = np.sum(tset[:, l2, :], axis=1)
-#             t1 = np.array(n, dtype=int).reshape(1, -1)
-#         else:
-#             if (-1,) in l1 or (-1,) in l2:
-#                 raise YastError('Swap with tensor charge, i.e. -1, has to be provided as a separate axis.')
-#             t1 = np.sum(tset[:, l1, :], axis=1) % 2
-#             t2 = np.sum(tset[:, l2, :], axis=1) % 2
-#         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)
-#     return tuple(tp % 2)
 
 
 def ncon(ts, inds, conjs=None):
