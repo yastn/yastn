@@ -134,3 +134,5 @@
 - define `abs` as a magic method `__abs__`. Function `absolut` has been removed.
 - define `__matmul__`, giving shorthand a @ b == yast.tensordot(a, b, axes=(a.ndim - 1, 0))
 - BUGFIX: raising exceptions when .diag() cannot be used to create diagonal tensor
+- BUGFIX: ncon in some special cases could ignore content of conjs.
+- new function `einsum` (for now a place holder doing nothing).
