@@ -34,21 +34,21 @@ def test_ncon_basic():
     assert yast.norm(z1 - z2) < tol  # == 0.0
     assert yast.norm(z3 - z4.conj()) < tol  # == 0.0
 
-    y1 = yast.ncon([a, b, c, d, g, h], [[4, -2, -0], [-3, -1, 5], [4, 3, 1, 1], [3, 2, 5, 2], [-4], [-5]],
+    y1 = yast.ncon([a, b, c, d, g, h], ((4, -2, -0), (-3, -1, 5), (4, 3, 1, 1), (3, 2, 5, 2), (-4,), (-5,)),
                     conjs=(1, 0, 1, 0, 1, 0))
     assert y1.get_shape() == (1, 2, 3, 4, 5, 6)
 
-    y2 = yast.ncon([a, g, a], [[1, 2, 3], [-0], [1, 2, 3]], conjs=[0, 0, 1])
+    y2 = yast.ncon([a, g, a], ((1, 2, 3), (-0,), (1, 2, 3)), conjs=(0, 0, 1))
     assert y2.get_shape() == (5,)
 
     y3 = yast.ncon([a, g, a, b, a], [[1, 2, 3], [-4], [1, 2, 3], [-3, -1, 4], [4, -2, -0]],
-                    conjs=[0, 0, 1, 0, 0])
+                    conjs=(0, 0, 1, 0, 0))
     assert y3.get_shape() == (1, 2, 3, 4, 5)
 
     y4 = yast.ncon([a, a, b, b], [[1, 2, 3], [1, 2, 3], [6, 5, 4], [6, 5, 4]],
-                    conjs=[0, 1, 0, 1])
+                    conjs=(0, 1, 0, 1))
     y5 = yast.ncon([a, a, b, b], [[6, 5, 4], [6, 5, 4], [1, 3, 2], [1, 3, 2]],
-                    conjs=[0, 1, 0, 1])
+                    conjs=(0, 1, 0, 1))
     assert isinstance(y4.item(), complex)
     assert isinstance(y5.item(), complex)
     assert yast.norm(y4 - y5) < tol
@@ -66,10 +66,10 @@ def test_ncon_basic():
     e = yast.ncon([a, b], [[1, -1, -3], [-0, -2, 1]])
     assert e.get_shape() == (8, 6, 4, 2)
     f = yast.ncon([a, b, c, d], [[4, -2, -0], [-3, -1, 5], [4, 3, 1, 1], [3, 2, 5, 2]],
-                  conjs=[0, 1, 0, 1])
+                  conjs=(0, 1, 0, 1))
     assert f.get_shape() == (2, 4, 6, 8)
     g = yast.ncon([a, a, a, b], [[1, 2, 3], [1, 2, 3], [4, -2, -0], [-3, -1, 4]],
-                  conjs=[0, 1, 1, 1])
+                  conjs=(0, 1, 1, 1))
     assert g.get_shape() == (2, 4, 6, 8)
 
     a = 1j * yast.ones(config=config_dense, s=(1, 1, -1, -1), D=(1, 1, 1, 1))

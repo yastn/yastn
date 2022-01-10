@@ -503,8 +503,68 @@ def _swap_gate_meta(t, n, mf, ndim, axes, fss):
     return tuple(tp % 2)
 
 
+def einsum(subscripts, *operants, order='Alphabetic'):
+    """
+    Execute series of tensor contractions.
+
+    Covering trace, tensordot (including outter product), and transpose.
+    Follows notation of `np.einsum` as close as possible.
+
+    Parameters
+    ----------
+    subscripts: str
+
+    *operants: tensors to be contracted
+
+    order: str
+    Specify order in which repeated indices from subscipt are contracted.
+    By default, follows alphabetic order.
+
+    Example
+    -------
+    yast.einsum('*ij,jh->ih', t1, t2)  # matrix-matrix multiplication, where first matrix is conjugated.
+    Equivalent to t1.conj() @ t2
+
+    yast.einsum('ab,al,bm->lm', t1, t2, t3, order='ba')
+    Contract along b first, and a second.
+
+    Returns
+    -------
+    tensor : Tensor
+    """
+    pass
+
+
 def ncon(ts, inds, conjs=None):
-    """Execute series of tensor contractions"""
+    """
+    Execute series of tensor contractions.
+
+    Parameters
+    ----------
+    ts: list
+        list of tensors to be contracted
+
+    inds: tuple of tuples of ints (or list of lists of ints)
+        each inner tuple marks axis of respectiv tensor with ints.
+        Positive values mark legs to be contracted,
+        where two axis to be contracted have the same number.
+        Legs are contracted in order of increasing number.
+        Non-positive numbers mark legs of resulting tensor, in reversed order.
+
+    conjs: tuple of ints
+        For each tensor in ts, it contains
+        1 if the tensor should be conjugated and 0 otherwise.
+
+    Example
+    ------
+    yast.ncon([a, b], ((-0, 1), (1, -1)), conjs=(1, 0)) is
+    matrix-matrix multiplication where first matrix is conjugated.
+    yast.ncon([a, b], ((-0, -2), (-1, -3))) is outter product.
+
+    Returns
+    -------
+    tensor : Tensor
+    """
     if len(ts) != len(inds):
         raise YastError('Number of tensors and indices do not match.')
     for ii, ind in enumerate(inds):

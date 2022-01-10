@@ -133,4 +133,4 @@
 - change function name: `add_leg` to `add_axis`.  New function `remove_axis`
 - define `abs` as a magic method `__abs__`. Function `absolut` has been removed.
 - define `__matmul__`, giving shorthand a @ b == yast.tensordot(a, b, axes=(a.ndim - 1, 0))
-- BUGFIX: raising exceptions when .diag() cannot be used to creat diagonal tensor
+- BUGFIX: raising exceptions when .diag() cannot be used to create diagonal tensor
