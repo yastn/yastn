@@ -578,8 +578,8 @@ def fuse_legs(a, axes, inplace=False, mode=None):
     mode: str
         can select 'hard' or 'meta' fusion. If None, use default from config.
         It can also be overriden by config.force_fuse.
-        Applying hard fusion of tensor with meta fusion first
-        replaces meta fusion with hard fusion.
+        Applying hard fusion of tensor with meta fusion
+        first replaces meta fusion with hard fusion.
         Meta fusion can be applied on top of hard fusion.
 
     Returns

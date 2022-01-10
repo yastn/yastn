@@ -35,7 +35,7 @@ def test_full_tdvp():
     """
     N = 5
     dt = -.25
-    sweeps = 5
+    sweeps = 6
     D_total = 4
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
@@ -56,7 +56,7 @@ def test_Z2_tdvp():
     N = 5
     D_total = 4
     dt = -.25
-    sweeps = 5
+    sweeps = 6
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
     logging.info(' Tensor : Z2 ')
@@ -78,7 +78,7 @@ def test_U1_tdvp():
     N = 5
     D_total = 4
     dt = -.25
-    sweeps = 5
+    sweeps = 6
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
     logging.info(' Tensor : U1 ')
