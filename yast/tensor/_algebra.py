@@ -279,7 +279,7 @@ def __truediv__(a, number):
 
 def __abs__(a):
     r"""
-    Return tensor with element-wise absolute values
+    Return tensor with element-wise absolute values.
 
     Returns
     -------
