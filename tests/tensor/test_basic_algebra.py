@@ -103,7 +103,7 @@ def test_algebra_functions():
     c = a * (4j + 3)
     assert yast.norm(c.imag() - 4 * a) < tol
     assert yast.norm(c.real() - 3 * a) < tol
-    assert yast.norm(c.absolute() - 5 * a) < tol
+    assert yast.norm(abs(c) - 5 * a) < tol
 
 
 def test_algebra_fuse_meta():

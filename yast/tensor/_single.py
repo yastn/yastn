@@ -1,11 +1,11 @@
 """ Linear operations and operations on a single yast tensor. """
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _struct
+from ._auxliary import _clear_axes, _unpack_axes, _struct
 from ._merging import _Fusion, _flip_hf
-from ._tests import YastError, _test_all_axes
+from ._tests import YastError, _test_axes_all
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'remove_zero_blocks',
-           'add_leg', 'copy', 'clone', 'detach', 'to', 'requires_grad_']
+           'add_axis', 'remove_axis', 'copy', 'clone', 'detach', 'to', 'requires_grad_']
 
 
 def copy(a):
@@ -58,7 +58,7 @@ def detach(a, inplace=False):
 
 def to(a, device=None, dtype=None):
     r"""
-    Move tensor to device.
+    Move tensor to device and cast to dtype.
 
     Parameters
     ----------
@@ -201,13 +201,14 @@ def transpose(a, axes, inplace=False):
     tensor : Tensor
         transposed tensor
     """
-    _test_all_axes(a, axes, native=False)
+    _test_axes_all(a, axes, native=False)
     uaxes, = _unpack_axes(a.meta_fusion, axes)
     order = np.array(uaxes, dtype=np.intp)
     new_mf = tuple(a.meta_fusion[ii] for ii in axes)
     new_hf = tuple(a.hard_fusion[ii] for ii in uaxes)
     c_s = tuple(a.struct.s[ii] for ii in uaxes)
-    tset, Dset = _tarray(a), _Darray(a)
+    tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+    Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
     newt = tset[:, order, :]
     newD = Dset[:, order]
     meta = sorted(((tuple(tn.flat), to, tuple(Dn)) for tn, to, Dn in zip(newt, a.struct.t, newD)), key=lambda x: x[0])
@@ -254,79 +255,123 @@ def moveaxis(a, source, destination, inplace=False):
     return transpose(a, axes, inplace)
 
 
-def add_leg(a, axis=-1, s=1, t=None, inplace=False):
+def add_axis(a, axis=-1, s=1, t=None, inplace=False):
     r"""
-    Creates a new auxiliary leg that explicitly carries charge
+    Creates a new auxiliary axis that explicitly carries charge
     (or part of it) associated with the tensor.
 
     Parameters
     ----------
         axis: int
-            index of the new leg
+            index of the new axis
 
         s : int
-            signature :math:`\pm1` of the new leg
+            signature :math:`\pm1` of the new axis
 
-        t : ?
+        t : tuple
             charge carried by the new leg. If ``None``, takes the total charge `n`
             of the original tensor resulting in uncharged tensor with `n=0`.
 
         inplace : bool
-            If ``True``, perform operation in place
+            If ``True``, perform operation in place, otherwise data are cloned
     """
     if a.isdiag:
-        raise YastError('Cannot add a new leg to a diagonal tensor.')
-    tset, Dset = _tarray(a), _Darray(a)
+        raise YastError('Cannot add axis to a diagonal tensor.')
+    if s not in (-1, 1):
+        raise YastError('Signature of the new axis should be 1 or -1.')
 
     axis = axis % (a.ndim + 1)
+    mfs = a.meta_fusion[:axis] + ((1,),) + a.meta_fusion[axis:]
 
-    new_meta_fusion = a.meta_fusion[:axis] + ((1,),) + a.meta_fusion[axis:]
-
-    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack
-
-    if s not in (-1, 1):
-        raise YastError('The signature s should be equal to 1 or -1.')
-    an = np.array(a.struct.n, dtype=int)
+    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack meta_fusion
+    nsym = a.config.sym.NSYM
     if t is None:
-        t = a.config.sym.fuse(an.reshape((1, 1, -1)), np.array([1], dtype=int), -1)[0] if s == 1 else an  # s == -1
+        t = tuple(a.config.sym.fuse(np.array(a.struct.n, dtype=int).reshape((1, 1, nsym)), (-1,), s).flat)
     else:
-        t = a.config.sym.fuse(np.array(t, dtype=int).reshape((1, 1, -1)), np.array([1], dtype=int), 1)[0]
-    if len(t) != a.config.sym.NSYM:
-        raise YastError('t does not have the proper number of symmetry charges')
+        if (isinstance(t, int) and nsym != 1) or len(t) != nsym:
+            raise YastError('len(t) does not match the number of symmetry charges.')
+        t = tuple(a.config.sym.fuse(np.array(t, dtype=int).reshape((1, 1, nsym)), (s,), s).flat)
 
-    news = np.insert(np.array(a.struct.s, dtype=int), axis, s)
-    newn = a.config.sym.fuse(np.hstack([an, t]).reshape((1, 2, -1)), np.array([1, s], dtype=int), 1)[0]
-    new_tset = np.insert(tset, axis, t, axis=1)
-    new_Dset = np.insert(Dset, axis, 1, axis=1)
-
-    news = tuple(news)
-    newn = tuple(newn)
-    new_tset = tuple(tuple(x.flat) for x in new_tset)
-    new_Dset = tuple(tuple(x.flat) for x in new_Dset)
+    news = a.struct.s[:axis] + (s,) + a.struct.s[axis:]
+    newn = tuple(a.config.sym.fuse(np.array(a.struct.n + t, dtype=int).reshape((1, 2, nsym)), (1, s), 1).flat)
+    newt = tuple(x[:axis * nsym] + t + x[axis * nsym:] for x in a.struct.t)
+    newD = tuple(x[:axis] + (1,) + x[axis:] for x in a.struct.D)
 
     c = a if inplace else a.clone()
-    c.A = {tnew: a.config.backend.expand_dims(c.A[told], axis) for tnew, told in zip(new_tset, a.struct.t)}
-    c.struct = _struct(new_tset, new_Dset, news, newn)
-    c.meta_fusion = new_meta_fusion
+    c.A = {tnew: a.config.backend.expand_dims(c.A[told], axis) for tnew, told in zip(newt, a.struct.t)}
+    c.struct = _struct(newt, newD, news, newn)
+    c.meta_fusion = mfs
     c.hard_fusion = c.hard_fusion[:axis] + (_Fusion(s=(s,)),) + c.hard_fusion[axis:]
+    return c
 
+
+def remove_axis(a, axis=-1, inplace=False):
+    r"""
+    Removes axis of single charge with dimension one.
+
+    The charge carried by that axis is added to the tensors charge.
+
+    Parameters
+    ----------
+        axis: int
+            index of the axis to be removed
+
+        inplace : bool
+            If ``True``, perform operation in place, otherwise data are cloned
+    """
+    if a.isdiag:
+        raise YastError('Cannot remove axis to a diagonal tensor.')
+    if a.ndim == 0:
+        raise YastError('Cannot remove axis of a scalar tensor.')
+
+    axis = axis % a.ndim
+    if a.meta_fusion[axis] != (1,):
+        raise YastError('Axis to be removed cannot be fused.')
+    mfs = a.meta_fusion[:axis] + a.meta_fusion[axis + 1:]
+
+    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack meta_fusion
+    if a.hard_fusion[axis].tree != (1,):
+        raise YastError('Axis to be removed cannot be fused.')
+
+    nsym = a.config.sym.NSYM
+    t = a.struct.t[0][axis * nsym: (axis + 1) * nsym] if len(a.struct.t) > 0 else (0,) * nsym
+    if any(x[axis] != 1 for x in a.struct.D) or any(x[axis * nsym: (axis + 1) * nsym] != t for x in a.struct.t):
+        raise YastError('Axis to be removed must have single charge of dimension one.')
+
+    news = a.struct.s[:axis] + a.struct.s[axis + 1:]
+    newn = tuple(a.config.sym.fuse(np.array(a.struct.n + t, dtype=int).reshape((1, 2, nsym)), (-1, a.struct.s[axis]), -1).flat)
+    newt = tuple(x[: axis * nsym] + x[(axis + 1) * nsym:] for x in a.struct.t)
+    newD = tuple(x[: axis] + x[axis + 1:] for x in a.struct.D)
+
+    c = a if inplace else a.clone()
+    c.A = {tnew: a.config.backend.squeeze(c.A[told], axis) for tnew, told in zip(newt, a.struct.t)}
+    c.struct = _struct(newt, newD, news, newn)
+    c.meta_fusion = mfs
+    c.hard_fusion = c.hard_fusion[:axis] + c.hard_fusion[axis + 1:]
     return c
 
 
 def diag(a):
     """
     Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa. """
-    if a.isdiag:
+    if a.isdiag:  # isdiag=True -> isdiag=False
         c = a.__class__(config=a.config, isdiag=False, meta_fusion=a.meta_fusion, \
             hard_fusion=a.hard_fusion, struct=a.struct)
         c.A = {ind: a.config.backend.diag_create(a.A[ind]) for ind in a.A}
         return c
-    if a.ndim_n == 2 and all(x == 0 for x in a.struct.n):
-        c = a.__class__(config=a.config, isdiag=True, meta_fusion=a.meta_fusion, \
-            hard_fusion=a.hard_fusion, struct=a.struct)
-        c.A = {ind: a.config.backend.diag_get(a.A[ind]) for ind in a.A}
-        return c
-    raise YastError('Tensor cannot be changed into a diagonal one')
+    # isdiag=False -> isdiag=True
+    if a.ndim_n != 2 or sum(a.struct.s) != 0:
+        raise YastError('Diagonal tensor requires 2 legs with opposite signatures.')
+    if any(x != 0 for x in a.struct.n):
+        raise YastError('Diagonal tensor requires zero tensor charge.')
+    if any(mf != (1,) for mf in a.meta_fusion) or any(hf.tree != (1,) for hf in a.hard_fusion):
+        raise YastError('Diagonal tensor cannot have fused legs.')
+    if any(d0 != d1 for d0, d1 in a.struct.D):
+        raise YastError('yast.diag() allowed only for square blocks.')
+    c = a.__class__(config=a.config, isdiag=True, meta_fusion=a.meta_fusion, \
+        hard_fusion=a.hard_fusion, struct=a.struct)
+    c.A = {ind: a.config.backend.diag_get(a.A[ind]) for ind in a.A}
+    return c
 
 
 def remove_zero_blocks(a, rtol=1e-12, atol=0, inplace=False):

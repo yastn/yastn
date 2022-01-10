@@ -1,6 +1,6 @@
 """ Testing and controls. """
 import numpy as np
-from ._auxliary import _flatten, _tarray, _unpack_axes
+from ._auxliary import _flatten, _unpack_axes
 
 __all__ = ['are_independent', 'is_consistent']
 
@@ -62,13 +62,11 @@ def _test_axes_match(a, b, sgn=1, axes=None):
     return needs_mask, uaxes
 
 
-def _test_all_axes(a, axes, native=False):
+def _test_axes_all(a, axes, native=False):
     axes = tuple(_flatten(axes))
     ndim = a.ndim_n if native else a.ndim
-    if ndim != len(axes):
-        raise YastError('Wrong number of axis indices in axes')
-    if sorted(set(axes)) != list(range(ndim)):
-        raise YastError('Repeated axis index in axes')
+    if ndim != len(axes) or sorted(set(axes)) != list(range(ndim)):
+        raise YastError('Provided axes do not match tensor ndim.')
 
 
 def are_independent(a, b):
@@ -105,7 +103,7 @@ def is_consistent(a):
     for i in range(len(a.struct.t) - 1):
         assert a.struct.t[i] < a.struct.t[i + 1]
 
-    tset = _tarray(a)
+    tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)
     assert np.all(a.config.sym.fuse(tset, sa, 1) == na), 'charges of some block do not satisfy symmetry condition'

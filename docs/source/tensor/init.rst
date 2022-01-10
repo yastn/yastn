@@ -54,8 +54,8 @@ See examples: :ref:`examples/init:clone, detach or copy tensors`.
 	:members: copy, clone, detach
 
 
-Moving tensors between devices
-------------------------------
+Changing tensor's device or dtype
+---------------------------------
 
 Support for different compute devices, i.e. `CPU`, `GPU`, or others,
 depends on the selected backend. For example 
@@ -63,7 +63,7 @@ depends on the selected backend. For example
     * `NumPy` backend supports only `CPU`
     * `PyTorch` backend supports also `GPU` (and other devices)
 
-Tensors can be moved between devices
+Tensors can be moved between devices and/or their `dtype` changed 
 
 .. automethod:: yast.Tensor.to
 
