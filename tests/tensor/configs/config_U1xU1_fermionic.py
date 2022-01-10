@@ -1,4 +1,5 @@
 import yast.backend.backend_np as backend
-from .syms import sym_Z2_U1 as sym
+import yast.sym.sym_U1xU1 as sym
+fermionic = (True, True)
 default_device = 'cpu'
 default_dtype = 'float64'

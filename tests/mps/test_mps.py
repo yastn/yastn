@@ -19,7 +19,7 @@ def is_left_canonical(psi):
     for n in range(psi.N):
         x = psi.A[n].tensordot(psi.A[n], axes=(cl, cl), conj=(1, 0))
         x0 = yast.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True, val='ones', conjs=[1, 1])
-        assert x.norm_diff(x0.diag()) < tol  # == 0
+        assert yast.norm(x - x0.diag()) < tol  # == 0
     assert psi.pC is None
 
 
@@ -29,7 +29,7 @@ def is_right_canonical(psi):
     for n in range(psi.N):
         x = psi.A[n].tensordot(psi.A[n], axes=(cl, cl), conj=(0, 1))
         x0 = yast.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True, val='ones', conjs=[1, 1])
-        assert x.norm_diff(x0.diag()) < tol  # == 0
+        assert yast.norm(x - x0.diag()) < tol  # == 0
     assert psi.pC is None
 
 

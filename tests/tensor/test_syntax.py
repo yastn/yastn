@@ -172,9 +172,9 @@ class TestSyntaxTensorExportImport(unittest.TestCase):
         # 
         # Tensors can be also serialized directly into basic Python dictionary
         #
-        dictionary = yast.export_to_dict(a)
-        dictionary = a.export_to_dict()
-        tensor = yast.import_from_dict(config=config_U1, d=dictionary)
+        dictionary = yast.save_to_dict(a)
+        dictionary = a.save_to_dict()
+        tensor = yast.load_from_dict(config=config_U1, d=dictionary)
 
 
 class TestSyntaxBlockAccess(unittest.TestCase):
@@ -311,9 +311,9 @@ class TestSyntaxGeneral(unittest.TestCase):
         number = yast.norm(a, p='fro')  # p = 'for', i.e. frobenius is default
         number = yast.linalg.norm(a, p='inf')
 
-        number = a.norm_diff(b)
-        number = yast.norm_diff(a, b)
-        number = yast.linalg.norm_diff(a, b)
+        number = yast.norm(a - b)
+        number = yast.norm(a - b)
+        number = yast.linalg.norm(a - b)
         number = yast.norm(a - b)
 
         # utils

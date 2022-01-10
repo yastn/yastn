@@ -99,7 +99,7 @@
   It passes <, <=, >, >= on the level of backend block tensors.
 
 8-12-2021
-- in `import_from_dict` perform checks only after loading all the block; this speeds up loading if there are many blocks.
+- in `load_from_dict` perform checks only after loading all the block; this speeds up loading if there are many blocks.
 
 17-12-2021
 - `tensordot` has a new parameter `policy` switching between dot that marges and unmerges effective 2d blocks (`merge`) and direct block by block multiplication (`direct`). Default is `hybrid` that switches between those two based on a simple heuristics. It can be fixed in config files under variable `default_tensordot`.
@@ -117,3 +117,17 @@
 - BUGFIX: fuse_legs(.. mode='hard') was breaking for dense tensor -- this is now fixed (even though using hard fusion for dense tensor does not give anything)
 - BUGFIX: fix some issues with passing device to config during initialization
 
+25-12-2021
+- add function yast.clear_cache() to clear caches of all lru_cache employed to speed-up precomputing.
+
+01-01-2022
+- remove function `norm_diff(a, b)`. Use `norm(a - b)` instead.
+- `svd` got argument `policy` = `fullrank` (default) or `lowrank`.
+  `svd_lowrank` calls `svd` with policy = `lowrank`
+
+06-01-2021
+- change function names `export_to_dict` to `save_to_dict`, `export_to_hdf5` to `save_to_hdf5`
+  `import_from_dict` to `load_from_dict`; `import_from_hdf5` to `load_from_hdf5`
+- save/load functions are changed to use 1d data container.
+  It is now also more robust, using only native python/numpy data structures, i.e. no NamedTuples used by yast.
+  WARNING: Backward compatibility is broken!

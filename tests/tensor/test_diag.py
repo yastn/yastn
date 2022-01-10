@@ -26,9 +26,9 @@ def test_diag_1():
     na1 = a1.to_numpy()
     na5 = a5.to_numpy()
     assert np.allclose(np.diag(np.diag(na1)), na5)
-    assert a2.norm_diff(a4) < tol  # == 0.0
-    assert a3.norm_diff(a5) < tol  # == 0.0
-    assert a1.norm_diff(a5) > tol  # are not identical
+    assert yast.norm(a2 - a4) < tol  # == 0.0
+    assert yast.norm(a3 - a5) < tol  # == 0.0
+    assert yast.norm(a1 - a5) > tol  # are not identical
     
 
 

@@ -1,6 +1,6 @@
 """ Testing and controls. """
 import numpy as np
-from ._auxliary import _flatten, _tarray
+from ._auxliary import _flatten, _tarray, _unpack_axes
 
 __all__ = ['are_independent', 'is_consistent']
 
@@ -14,25 +14,52 @@ def _test_configs_match(a, b):
     if a.config.device != b.config.device:
         raise YastError('Devices of the two tensors do not match.')
     if a.config.sym.SYM_ID != b.config.sym.SYM_ID:
-        raise YastError('Two tensors have different symmetries.')
+        raise YastError('Two tensors have different symmetry rules.')
     if a.config.fermionic != b.config.fermionic:
         raise YastError('Two tensors have different assigment of fermionic statistics.')
     if a.config.backend.BACKEND_ID != b.config.backend.BACKEND_ID:
         raise YastError('Two tensors have different backends.')
 
 
-def _test_tensors_match(a, b):
-    if a.struct.s != b.struct.s or a.struct.n != b.struct.n:
-        raise YastError('Tensor signatures do not match')
-    if a.meta_fusion != b.meta_fusion:
-        raise YastError('Fusion trees do not match')
-    # if a.hard_fusion != b.hard_fusion:
-    #    raise YastError('Hard fusions of the two tensors do not match')
+def _test_axes_match(a, b, sgn=1, axes=None):
+    """
+    Test if legs of a in axes[0] and legs ob b in axes[1] have matching signature and fusion structures.
+    sgn in (-1, 1) is the sign of required match between signatures.
 
+    Return meta-unfused axes and information if hard-fusion mask will be required.
+    """
 
-def _test_fusions_match(a, b):
-    if a.meta_fusion != b.meta_fusion:
-        raise YastError('Fusion trees do not match')
+    if axes is None:
+        if a.ndim != b.ndim:
+            raise YastError('Tensors have different number of legs.')
+        axes = (tuple(range(a.ndim)), tuple(range(b.ndim)))
+        uaxes = (tuple(range(a.ndim_n)), tuple(range(b.ndim_n)))
+    else:
+        if axes is not None and len(axes[0]) != len(axes[1]):
+            raise YastError('axes[0] and axes[1] indicated different number of legs.')
+        if len(set(axes[0])) != len(axes[0]) or (len(set(axes[1])) != len(axes[1])):
+            raise YastError('Repeated axis in axes[0] or axes[1].')
+        if len(set(axes[0]) - set(range(a.ndim))) > 0 or len(set(axes[1]) - set(range(b.ndim))) > 0:
+            raise YastError('Axis outside of tensor ndim.')
+        ua, = _unpack_axes(a.meta_fusion, axes[0])
+        ub, = _unpack_axes(b.meta_fusion, axes[1])
+        uaxes = (ua, ub)
+
+    if not all(a.struct.s[i1] == sgn * b.struct.s[i2] for i1, i2 in zip(*uaxes)):
+        raise YastError('Signatures do not match.')
+
+    if any(a.meta_fusion[i1] != b.meta_fusion[i2] for i1, i2 in zip(*axes)):
+        raise YastError('Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order.')
+
+    needs_mask = False  # for hard-fused legs
+    for i1, i2 in zip(*uaxes):
+        if a.hard_fusion[i1].tree != b.hard_fusion[i2].tree:
+            raise YastError('Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.')
+        if any(s1 != sgn * s2 for s1, s2 in zip(a.hard_fusion[i1].s, b.hard_fusion[i2].s)):
+            raise YastError('Signatures of hard-fused legs do not match.')
+        if a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
+            needs_mask = True
+    return needs_mask, uaxes
 
 
 def _test_all_axes(a, axes, native=False):
@@ -42,13 +69,6 @@ def _test_all_axes(a, axes, native=False):
         raise YastError('Wrong number of axis indices in axes')
     if sorted(set(axes)) != list(range(ndim)):
         raise YastError('Repeated axis index in axes')
-
-
-def _test_hard_fusion_match(hf1, hf2, mconj):
-    if hf1.t != hf2.t or hf1.D != hf2.D or hf1.tree != hf2.tree:
-        raise YastError('Hard fusions do not match')
-    if (mconj == 1 and hf1.s != hf2.s) or (mconj == -1 and hf1.s != hf2.ms):
-        raise YastError('Hard fusions do not match. Singnature problem.')
 
 
 def are_independent(a, b):
@@ -82,6 +102,9 @@ def is_consistent(a):
     assert len(a.struct.t) == len(a.A), 'length of struct.t do not match dict A'
     assert len(a.struct.D) == len(a.A), 'length of struct.D do not match dict A'
 
+    for i in range(len(a.struct.t) - 1):
+        assert a.struct.t[i] < a.struct.t[i + 1]
+
     tset = _tarray(a)
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)
@@ -91,7 +114,6 @@ def is_consistent(a):
     device = {a.config.backend.get_device(x) for x in a.A.values()}
     for s, hf in zip(a.struct.s, a.hard_fusion):
         assert s == hf.s[0]
-        assert s == -hf.ms[0]
     assert len(device) <= 1, 'not all blocks reside on the same device'
     if len(device) == 1:
         assert device.pop().startswith(a.config.device), 'device of blocks inconsistent with config.device'

@@ -1,12 +1,12 @@
 """ Linalg methods for yast tensor. """
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _common_keys
-from ._tests import YastError, _test_tensors_match, _test_all_axes
+from ._auxliary import _clear_axes, _unpack_axes
+from ._tests import YastError, _test_all_axes
 from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal, _masks_for_add
 from ._merging import _leg_struct_trivial, _leg_struct_truncation, _Fusion
 from ._krylov import _expand_krylov_space
 
-__all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'norm_diff', 'entropy', 'expmv', 'eigs']
+__all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'entropy', 'expmv', 'eigs']
 
 
 def norm(a, p='fro'):
@@ -22,42 +22,14 @@ def norm(a, p='fro'):
     -------
     norm : float64
     """
+    if p not in ('fro', 'inf'):
+        raise YastError("Error in norm: p not in ('fro', 'inf'). ")
     if len(a.A) == 0:
         return a.zero_of_dtype()
     return a.config.backend.norm(a.A, p)
 
 
-def norm_diff(a, b, p='fro'):
-    """
-    Norm of the difference of two tensors.
-
-    Parameters
-    ----------
-    other: Tensor
-
-    ord: str
-        'fro' = Frobenious; 'inf' = max(abs())
-
-    Returns
-    -------
-    norm : float64
-    """
-    _test_tensors_match(a, b)
-    if (len(a.A) == 0) and (len(b.A) == 0):
-        return a.zero_of_dtype()
-    meta = _common_keys(a.A, b.A)
-    masks_needed = any(ha != hb for ha, hb in zip(a.hard_fusion, b.hard_fusion))
-    if masks_needed:
-        sla, tDa, slb, tDb, _ = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
-        return a.config.backend.norm_diff(a.config.backend.embed(a.A, sla, tDa),
-                                        a.config.backend.embed(b.A, slb, tDb), meta, p)
-    return a.config.backend.norm_diff(a.A, b.A, meta, p)
-
-
-def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
-                tol=0, tol_block=0, D_block=6, D_total=np.inf,
-                keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False,
-                n_iter=60, k_fac=6, **kwargs):
+def svd_lowrank(a, axes=(0, 1), n_iter=60, k_fac=6, **kwargs):
     r"""
     Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
 
@@ -105,52 +77,13 @@ def svd_lowrank(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     U, S, V: Tensor
         U and V are unitary projectors. S is diagonal.
     """
-    _test_all_axes(a, axes)
-    lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
-
-    s_eff = (-sU, sU)
-    Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
-
-    if nU:
-        meta = tuple((il + ir, il + ir, ir, ir + ir) for il, ir in zip(ul, ur))
-        n_l, n_r = a.struct.n, None
-    else:
-        meta = tuple((il + ir, il + il, il, il + ir) for il, ir in zip(ul, ur))
-        n_l, n_r = None, a.struct.n
-
-    Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
-    Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
-
-    U = a.__class__(config=a.config, s=Us, n=n_l,
-                    meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
-                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sU,), ms=(-sU,))])
-    S = a.__class__(config=a.config, s=s_eff, isdiag=True)
-    V = a.__class__(config=a.config, s=Vs, n=n_r,
-                    meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r],
-                    hard_fusion=[_Fusion(s=(-sU,), ms=(sU,))] + [a.hard_fusion[ii] for ii in axes[1]])
-
-    U.A, S.A, V.A = a.config.backend.svd_lowrank(Am, meta, D_block, n_iter, k_fac)
-
-    ls_s = _leg_struct_truncation(
-        S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
-        keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='svd')
-
-    if untruncated_S:
-        uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
-        uS['D'] = ls_s.Dtot.copy()
-
-    _unmerge_matrix(U, ls_l, ls_s)
-    _unmerge_diagonal(S, ls_s)
-    _unmerge_matrix(V, ls_s, ls_r)
-    U.moveaxis(source=-1, destination=Uaxis, inplace=True)
-    V.moveaxis(source=0, destination=Vaxis, inplace=True)
-    return (U, S, V, uS) if untruncated_S else (U, S, V)
+    return svd(a, axes=axes, policy='lowrank', n_iter=n_iter, k_fac=k_fac, **kwargs)
 
 
 def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         tol=0, tol_block=0, D_block=np.inf, D_total=np.inf,
-        keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False, **kwargs):
+        keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False,
+        policy='fullrank', **kwargs):
     r"""
     Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
 
@@ -212,13 +145,18 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     U = a.__class__(config=a.config, s=Us, n=n_l,
                     meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
-                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sU,), ms=(-sU,))])
+                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sU,))])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
     V = a.__class__(config=a.config, s=Vs, n=n_r,
                     meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r],
-                    hard_fusion=[_Fusion(s=(-sU,), ms=(sU,))] + [a.hard_fusion[ii] for ii in axes[1]])
+                    hard_fusion=[_Fusion(s=(-sU,))] + [a.hard_fusion[ii] for ii in axes[1]])
 
-    U.A, S.A, V.A = a.config.backend.svd(Am, meta)
+    if policy == 'fullrank':
+        U.A, S.A, V.A = a.config.backend.svd(Am, meta)
+    elif policy == 'lowrank':
+        U.A, S.A, V.A = a.config.backend.svd_lowrank(Am, meta, D_block, **kwargs)
+    else:
+        raise YastError('svd policy should be in (`lowrank`, `fullrank`)')
 
     ls_s = _leg_struct_truncation(
         S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
@@ -268,10 +206,10 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in axes[1])
     Q = a.__class__(config=a.config, s=Qs, n=a.struct.n,
                     meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
-                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sQ,), ms=(-sQ,))])
+                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sQ,))])
     R = a.__class__(config=a.config, s=Rs,
                     meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r],
-                    hard_fusion=[_Fusion(s=(-sQ,), ms=(sQ,))] + [a.hard_fusion[ii] for ii in axes[1]])
+                    hard_fusion=[_Fusion(s=(-sQ,))] + [a.hard_fusion[ii] for ii in axes[1]])
 
     meta = tuple((il + ir, il + ir, ir + ir) for il, ir in zip(ul, ur))
     Q.A, R.A = a.config.backend.qr(Am, meta)
@@ -345,7 +283,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
     S = a.__class__(config=a.config, s=(-sU, sU), isdiag=True)
     U = a.__class__(config=a.config, s=Us,
                     meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
-                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sU,), ms=(-sU,))])
+                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sU,))])
 
     # meta = (indA, indS, indU)
     meta = tuple((il + ir, il, il + ir) for il, ir in zip(ul, ur))

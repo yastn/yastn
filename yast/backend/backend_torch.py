@@ -100,8 +100,8 @@ def expand_dims(x, axis):
     return torch.unsqueeze(x, axis)
 
 
-def any_nonzero(x):
-    return torch.any(x).item()
+def count_nonzero(x):
+    return torch.count_nonzero(x).item()
 
 
 #########################
@@ -126,22 +126,7 @@ def norm(A, p):
     """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
     if p == "fro":
         return torch.sum(torch.stack([torch.sum(t.abs()**2) for t in A.values()])).sqrt()
-    if p == "inf":
-        return torch.max(torch.stack([t.abs().max() for t in A.values()]))
-    raise RuntimeError("Invalid norm type: %s" % str(p))
-
-
-def norm_diff(A, B, meta, p):
-    """ norm(A - B); meta = kab, ka, kb """
-    if p == 'fro':
-        return torch.sum(torch.stack([torch.sum(A[k].abs() ** 2) for k in meta[1]]
-                                     + [torch.sum(B[k].abs() ** 2) for k in meta[2]]
-                                     + [torch.sum((A[k] - B[k]).abs() ** 2) for k in meta[0]])).sqrt()
-    if p == 'inf':
-        return torch.max(torch.stack([A[k].abs().max() for k in meta[1]]
-                                     + [B[k].abs().max() for k in meta[2]]
-                                     + [(A[k] - B[k]).abs().max() for k in meta[0]]))
-    raise RuntimeError("Invalid norm type: %s" % str(p))
+    return torch.max(torch.stack([t.abs().max() for t in A.values()]))  # else p == "inf":
 
 
 def entropy(A, alpha=1, tol=1e-12):
@@ -236,14 +221,14 @@ def conj(A, inplace):
     """ Conjugate dict of tensors. Force a copy if not inplace. """
     if inplace:
         return {t: x.conj() for t, x in A.items()}
-    return {t: x.conj() for t, x in A.items()}   # TODO is it a copy or not
+    return {t: x.conj() for t, x in A.items()}  # TODO is it a copy or not
 
 
 def trace(A, order, meta):
     """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
         Repeating tnew are added."""
     Aout = {}
-    for (tnew, told, Drsh) in meta:
+    for (tnew, told, Drsh, _) in meta:
         Atemp = torch.reshape(A[told].permute(order), Drsh)
         Atemp = torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=-1)
         if tnew in Aout:
@@ -271,8 +256,8 @@ def transpose(A, axes, meta_transpose, inplace):
     """ Transpose; Force a copy if not inplace. """
     # check this inplace ...
     if inplace:
-        return {new: A[old].permute(axes) for old, new in meta_transpose}
-    return {new: A[old].permute(axes).clone().contiguous() for old, new in meta_transpose}
+        return {new: A[old].permute(axes) for new, old in meta_transpose}
+    return {new: A[old].permute(axes).clone().contiguous() for new, old in meta_transpose}
 
 
 def rsqrt(A, cutoff=0):
@@ -307,7 +292,7 @@ def absolute(A):
     return {t: torch.abs(x) for t, x in A.items()}
 
 
-def svd_lowrank(A, meta, D_block, n_iter, k_fac):
+def svd_lowrank(A, meta, D_block, n_iter=60, k_fac=6):
     U, S, V = {}, {}, {}
     for (iold, iU, iS, iV) in meta:
         q = min(min(A[iold].shape), D_block * k_fac)
@@ -440,31 +425,40 @@ def embed(A, sl, tD):
 
 def add(A, B, meta):
     """ C = A + B. meta = kab, ka, kb """
-    C = {ind: A[ind] + B[ind] for ind in meta[0]}
-    for ind in meta[1]:
-        C[ind] = A[ind].clone()
-    for ind in meta[2]:
-        C[ind] = B[ind].clone()
+    C = {}
+    for t, ab in meta:
+        if ab == 'AB':
+            C[t] = A[t] + B[t]
+        elif ab == 'A':
+            C[t] = A[t].clone()
+        else:  # ab == 'B'
+            C[t] = B[t].clone()
     return C
 
 
 def sub(A, B, meta):
     """ C = A - B. meta = kab, ka, kb """
-    C = {ind: A[ind] - B[ind] for ind in meta[0]}
-    for ind in meta[1]:
-        C[ind] = A[ind].clone()
-    for ind in meta[2]:
-        C[ind] = -B[ind]
+    C = {}
+    for t, ab in meta:
+        if ab == 'AB':
+            C[t] = A[t] - B[t]
+        elif ab == 'A':
+            C[t] = A[t].clone()
+        else:  # ab == 'B'
+            C[t] = -B[t]
     return C
 
 
 def apxb(A, B, x, meta):
     """ C = A + x * B. meta = kab, ka, kb """
-    C = {ind: A[ind] + x * B[ind] for ind in meta[0]}
-    for ind in meta[1]:
-        C[ind] = A[ind].clone()
-    for ind in meta[2]:
-        C[ind] = x * B[ind]
+    C = {}
+    for t, ab in meta:
+        if ab == 'AB':
+            C[t] = A[t] + x * B[t]
+        elif ab == 'A':
+            C[t] = A[t].clone()
+        else:  # ab == 'B'
+            C[t] = x * B[t]
     return C
 
 
@@ -474,13 +468,13 @@ dot_dict = {(0, 0): lambda x, y: x @ y,
             (1, 1): lambda x, y: x.conj() @ y.conj()}
 
 
-def vdot(A, B, conj, meta):
-    f = dot_dict[conj]  # proper conjugations
+def vdot(A, B, cc, meta):
+    f = dot_dict[cc]  # proper conjugations
     return torch.sum(torch.stack([f(A[ind].reshape(-1), B[ind].reshape(-1)) for ind in meta]))
 
 
-def dot(A, B, conj, meta_dot):
-    f = dot_dict[conj]  # proper conjugations
+def dot(A, B, cc, meta_dot):
+    f = dot_dict[cc]  # proper conjugations
     C = {}
     for (out, ina, inb) in meta_dot:
         C[out] = f(A[ina], B[inb])
@@ -493,13 +487,13 @@ dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
                 (1, 1): lambda x, y, dim: x.conj() * y.reshape(dim).conj()}
 
 
-def dot_diag(A, B, conj, to_execute, axis, a_ndim):
+def dot_diag(A, B, cc, meta, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
-    f = dotdiag_dict[conj]
+    f = dotdiag_dict[cc]
     C = {}
-    for in1, in2, out in to_execute:
-        C[out] = f(A[in1], B[in2], dim)
+    for ind_a, ind_b in meta:
+        C[ind_a] = f(A[ind_a], B[ind_b], dim)
     return C
 
 
@@ -507,29 +501,29 @@ def mask_diag(A, B, meta, axis, a_ndim):
     slc1 = (slice(None),) * axis
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
     Bslc = {k: v.nonzero(as_tuple=True) for k, v in B.items()}
-    return {out: A[in1][slc1 + Bslc[in2] + slc2] for in1, in2, out in meta}
+    return {ind_a: A[ind_a][slc1 + Bslc[ind_b] + slc2] for ind_a, ind_b in meta}
 
 
-def dot_nomerge(A, B, conj, oA, oB, meta):
-    f = dot_dict[conj]  # proper conjugations
+def dot_nomerge(A, B, cc, oA, oB, meta):
+    f = dot_dict[cc]  # proper conjugations
     C = {}
     for (ina, inb, out, Da, Db, Dout, _) in meta:
         temp = f(A[ina].permute(oA).reshape(Da), B[inb].permute(oB).reshape(Db)).reshape(Dout)
-        try:
+        if out in C:
             C[out] += temp
-        except KeyError:
+        else:
             C[out] = temp
     return C
 
 
-def dot_nomerge_masks(A, B, conj, oA, oB, meta, ma, mb):
-    f = dot_dict[conj]  # proper conjugations
+def dot_nomerge_masks(A, B, cc, oA, oB, meta, ma, mb):
+    f = dot_dict[cc]  # proper conjugations
     C = {}
     for (ina, inb, out, Da, Db, Dout, tt) in meta:
         temp = f(A[ina].permute(oA).reshape(Da)[:, ma[tt]], B[inb].permute(oB).reshape(Db)[mb[tt], :]).reshape(Dout)
-        try:
+        if out in C:
             C[out] += temp
-        except KeyError:
+        else:
             C[out] = temp
     return C
 
@@ -564,7 +558,7 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, device='cpu'):
     Anew = {u: torch.zeros(Du, dtype=dtype, device=device) for (u, Du) in meta_new}
     for (tind, pos, Dslc) in meta_block:
         slc = tuple(slice(*DD) for DD in Dslc)
-        Anew[tind][slc] = pos_tens[pos].A[tind]  # .copy() # is copy required?
+        Anew[tind][slc] = pos_tens[pos].A[tind]  # .clone() # is copy required?
     return Anew
 
 

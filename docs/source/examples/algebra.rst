@@ -19,4 +19,4 @@ Conjugation of symmetric tensors
 --------------------------------
 
 .. literalinclude:: /../../tests/tensor/test_conj.py
-   :pyobject: TestConj_Z2U1.test_conj_Z2U1
+   :pyobject: TestConj_Z2xU1.test_conj_Z2xU1
