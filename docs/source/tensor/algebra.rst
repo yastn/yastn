@@ -9,6 +9,7 @@ through usual operations ``+``, ``-``, ``*``, ``/``.
 You can also raise each element of tensor to some power using 
 standard power operation ``**``. 
 
+See examples: :ref:`examples/algebra:basic algebra operations`.
 
 Simple element-wise operations
 ------------------------------
@@ -27,6 +28,8 @@ Simple element-wise operations
 Transposition
 -------------
 
+See examples: :ref:`examples/algebra:transposition`.
+
 .. autoclass:: yast.Tensor
 	:exclude-members: __init__, __new__
 	:noindex:
@@ -36,7 +39,24 @@ Transposition
 Conjugation of symmetric tensors
 --------------------------------
 
+See examples: :ref:`examples/algebra:conjugation of symmetric tensors`.
+
 .. autoclass:: yast.Tensor
 	:exclude-members: __init__, __new__
 	:noindex:
 	:members: conj, conj_blocks, flip_signature
+
+
+Tensor norms
+------------
+
+.. automodule:: yast.linalg
+	:noindex:
+	:members: norm
+
+Spectral decompositions
+-----------------------
+
+.. automodule:: yast.linalg
+	:noindex:
+	:members: svd, svd_lowrank, qr, eigh

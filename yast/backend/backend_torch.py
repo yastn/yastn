@@ -615,4 +615,4 @@ def is_independent(A, B):
     """
     check if two arrays are identical, or share the same view.
     """
-    return (A is B) or (A.storage().data_ptr() is B.storage().data_ptr() and A.numel() > 0)
+    return not ((A is B) or (A.storage().data_ptr() == B.storage().data_ptr() and A.numel() > 0))

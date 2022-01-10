@@ -58,7 +58,7 @@ def detach(a, inplace=False):
 
 def to(a, device=None, dtype=None):
     r"""
-    Move tensor to device.
+    Move tensor to device and cast to dtype.
 
     Parameters
     ----------
@@ -91,10 +91,10 @@ def to(a, device=None, dtype=None):
 
 def requires_grad_(a, requires_grad=True):
     r"""
-    Turn on recording of operations on the tensor for automatic differentiation.
+    Activate or deactivate recording of operations on the tensor for automatic differentiation.
 
     .. note::
-        This operation sets autograd for `all` non-empty blocks of the tensor.
+        This operation sets requires_grad flag for `all` non-empty blocks of the tensor.
 
     Parameters
     ----------

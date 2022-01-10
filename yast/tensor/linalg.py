@@ -1,4 +1,4 @@
-""" Linalg methods for yast tensor. """
+# Linalg methods for yast tensor.
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes
 from ._tests import YastError, _test_axes_all
@@ -11,12 +11,12 @@ __all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'entropy', 'expmv', 'eigs
 
 def norm(a, p='fro'):
     r"""
-    Norm of the rensor.
+    Norm of the tensor.
 
     Parameters
     ----------
     p: str
-        'fro' = Frobenious; 'inf' = max(abs())
+        ``'fro'`` for Frobenius norm;  ``'inf'`` for :math:`l^\infty` (or supremum) norm
 
     Returns
     -------
@@ -31,13 +31,14 @@ def norm(a, p='fro'):
 
 def svd_lowrank(a, axes=(0, 1), n_iter=60, k_fac=6, **kwargs):
     r"""
-    Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
+    Split tensor into :math:`a \approx USV` using approximate singular value decomposition (SVD),
+    where `U` and `V` are orthonormal and `S` is positive and diagonal matrix.
+    The approximate SVD is computed using stochastic method (TODO add ref).
 
-    Truncate based on relative tolerance, bond dimension of each block,
-    and total bond dimension from all blocks (whichever gives smaller bond dimension).
-    By default, do not truncate.
+    Truncation can be based on relative tolerance, bond dimension of each block,
+    and total bond dimension across all blocks (whichever gives smaller total dimension).
 
-    Charge of tensor a is attached to U if nU and to V otherwise.
+    Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
 
     Parameters
     ----------
@@ -85,18 +86,19 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False,
         policy='fullrank', **kwargs):
     r"""
-    Split tensor into U @ S @ V using svd. Can truncate smallest singular values.
+    Split tensor into :math:`a=USV` using exact singular value decomposition (SVD), 
+    where `U` and `V` are orthonormal bases and `S` is positive and diagonal matrix.
+    Optionally, truncate the result.
 
-    Truncate based on relative tolerance, bond dimension of each block,
-    and total bond dimension from all blocks (whichever gives smaller bond dimension).
-    By default, do not truncate.
+    Truncation can be based on relative tolerance, bond dimension of each block,
+    and total bond dimension across all blocks (whichever gives smaller total dimension).
 
-    Charge of tensor a is attached to U if nU and to V otherwise.
+    Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
 
     Parameters
     ----------
     axes: tuple
-        Specify two groups of legs between which to perform svd, as well as
+        Specify two groups of legs between which to perform SVD, as well as
         their final order.
 
     sU: int
@@ -156,7 +158,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     elif policy == 'lowrank':
         U.A, S.A, V.A = a.config.backend.svd_lowrank(Am, meta, D_block, **kwargs)
     else:
-        raise YastError('svd policy should be in (`lowrank`, `fullrank`)')
+        raise YastError('svd policy should be one of (`lowrank`, `fullrank`)')
 
     ls_s = _leg_struct_truncation(
         S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
@@ -225,14 +227,13 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np.inf,
          keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False):
     r"""
-    Split tensor using eig, tensor = U * S * U^dag. Truncate smallest eigenvalues if neccesary.
+    Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`. 
+    Optionally, truncate the resulting decomposition.
 
-    Tensor should be hermitian and has charge 0.
-    Truncate using -- whichever gives smaller bond dimension:
-    relative tolerance, bond dimension of each block, and total bond dimension from all blocks.
-    By default do not truncate.
+    Tensor is expected to be symmetric (hermitian) with total charge 0.
+    Truncation can be based on relative tolerance, bond dimension of each block,
+    and total bond dimension across all blocks (whichever gives smaller total dimension).
     Truncate based on tolerance only if some eigenvalues are positive -- than all negative ones are discarded.
-    Function primarly intended to be used for positively defined tensors.
 
     Parameters
     ----------
