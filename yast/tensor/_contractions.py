@@ -8,7 +8,7 @@ from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_hf
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
 
 
-__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'broadcast', 'mask']
+__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'mask']
 
 
 def __matmul__(a, b):
@@ -653,83 +653,11 @@ def _consume_edges(edges, conjs):
         for ii, (order, leg, ten) in enumerate(edges):
             if ten == t2:
                 edges[ii] = (order, leg + lt1, t1)
-    order = tuple(ed[1] for ed in sorted(edges)) # final order for transpose
-    if order == tuple(range(len(order))):
-        order = None
-    meta_transpose = (t1, order, conjs[t1])
+    unique_out = tuple(ed[0] for ed in edges)
+    if len(unique_out) != len(set(unique_out)):
+        raise YastError("Repeated non-positive (outgoing) index is ambiguous.")
+    axes = tuple(ed[1] for ed in sorted(edges)) # final order for transpose
+    if axes == tuple(range(len(axes))):
+        axes = None
+    meta_transpose = (t1, axes, conjs[t1])
     return tuple(meta_trace), tuple(meta_dot), meta_transpose
-
-
-    # def ncon(ts, inds, conjs=None):
-    #     """Execute series of tensor contractions"""
-    #     if len(ts) != len(inds):
-    #         raise YastError('Number of tensors and indices do not match.')
-    #     for ii, ind in enumerate(inds):
-    #         if ts[ii].ndim != len(ind):
-    #             raise YastError('Number of legs of one of the tensors do not match provided indices.')
-
-    #     ts = dict(enumerate(ts))
-    #     cutoff = 512
-    #     cutoff2 = 2 * cutoff
-    #     edges = [(order, leg, ten) if order > 0 else (-order + cutoff2, leg, ten)
-    #              for ten, el in enumerate(inds) for leg, order in enumerate(el)]
-
-    #     edges.append((cutoff, cutoff, cutoff))
-    #     conjs = [0] * len(inds) if conjs is None else list(conjs)
-    #     edges = sorted(edges, reverse=True, key=lambda x: x[0])  # order of contraction with info on tensor and axis
-
-    #     order1, leg1, ten1 = edges.pop()
-    #     ax1, ax2 = [], []
-    #     while order1 != cutoff:  # tensordot two tensors; or trace one tensor
-    #         order2, leg2, ten2 = edges.pop()
-    #         if order1 != order2:
-    #             raise YastError('Indices of legs to contract do not match.')
-    #         if ten1 < ten2:
-    #             (t1, t2) = (ten1, ten2)
-    #             ax1.append(leg1)
-    #             ax2.append(leg2)
-    #         else:
-    #             (t1, t2) = (ten2, ten1)
-    #             ax1.append(leg2)
-    #             ax2.append(leg1)
-    #         if edges[-1][0] == cutoff or min(edges[-1][2], edges[-2][2]) != t1 or max(edges[-1][2], edges[-2][2]) != t2:
-    #             # execute contraction
-    #             if t1 == t2:  # trace
-    #                 ts[t1] = ts[t1].trace(axes=(ax1, ax2))
-    #                 ax12 = ax1 + ax2
-    #                 for ii, (order, leg, ten) in enumerate(edges):
-    #                     if ten == t1:
-    #                         edges[ii] = (order, leg - sum(ii < leg for ii in ax12), ten)
-    #             else:  # tensordot
-    #                 ts[t1] = ts[t1].tensordot(ts[t2], axes=(ax1, ax2), conj=(conjs[t1], conjs[t2]))
-    #                 conjs[t1], conjs[t2] = 0, 0
-    #                 del ts[t2]
-    #                 lt1 = sum(ii[2] == t1 for ii in edges)  # legs of t1
-    #                 for ii, (order, leg, ten) in enumerate(edges):
-    #                     if ten == t1:
-    #                         edges[ii] = (order, leg - sum(ii < leg for ii in ax1), ten)
-    #                     elif ten == t2:
-    #                         edges[ii] = (order, lt1 + leg - sum(ii < leg for ii in ax2), t1)
-    #             ax1, ax2 = [], []
-    #         order1, leg1, ten1 = edges.pop()
-
-    #     if edges:
-    #         while len(ts) > 1:
-    #             edges = sorted(edges, key=lambda x: x[2])
-    #             t1 = edges[0][2]
-    #             t2 = [key for key in ts.keys() if key != t1][0]
-    #             ts[t1] = ts[t1].tensordot(ts[t2], axes=((), ()), conj=(conjs[t1], conjs[t2]))
-    #             conjs[t1], conjs[t2] = 0, 0
-    #             lt1 = sum(ii[2] == t1 for ii in edges)
-    #             for ii, (order, leg, ten) in enumerate(edges):
-    #                 if ten == t2:
-    #                     edges[ii] = (order, leg + lt1, t1)
-    #             del ts[t2]
-    #         order = [ed[1] for ed in sorted(edges)]
-    #         _, result = ts.popitem()
-    #         return result.transpose(axes=order, inplace=True)
-    #     it = iter(ts.values())
-    #     result = next(it)
-    #     for num in it:
-    #         result.A[()] = result.A[()] * num.A[()]
-    #     return result

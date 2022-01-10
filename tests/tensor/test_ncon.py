@@ -104,6 +104,9 @@ def test_ncon_exceptions():
         _ = yast.ncon([a, a, a], [(1, 2, 3), (1, 3, 4), (2, 4, -0)], conjs=[0, 1, 0])
         # Likely inefficient order of contractions. Do all traces before tensordot.
         # Call all axes connecting two tensors one after another.
+    with pytest.raises(yast.YastError):
+        yast.ncon([a], [(-1, -1, -0)])
+        # Repeated non-positive (outgoing) index is ambiguous.
 
 
 if __name__ == '__main__':
