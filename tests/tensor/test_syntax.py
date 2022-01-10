@@ -124,18 +124,16 @@ class TestSyntaxBasicAlgebra(unittest.TestCase):
         tensor = a.exp(step=1)
         tensor = yast.exp(a, step=1)
         
-        tensor = a.abs()
-        tensor = a.absolute()
-        tensor = yast.absolute(a)
+        tensor = abs(a)
 
         tensor = a.reciprocal(cutoff=1e-12)
         tensor = yast.reciprocal(a, cutoff=1e-12)
         
-        tensor = a.abs().sqrt()
-        tensor = yast.sqrt(a.abs())
+        tensor = abs(a).sqrt()
+        tensor = yast.sqrt(abs(a))
         
-        tensor = a.abs().rsqrt(cutoff=1e-12)
-        tensor = yast.rsqrt(a.abs(), cutoff=1e-12)
+        tensor = abs(a).rsqrt(cutoff=1e-12)
+        tensor = yast.rsqrt(abs(a), cutoff=1e-12)
         
 
         #
@@ -220,6 +218,10 @@ class TestSyntaxGeneral(unittest.TestCase):
         b = yast.ones(config=config_U1, s=(-1, 1, 1, -1),
                       t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                       D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+        c = yast.rand(config=config_U1, s=(1, 1, -1),
+                      t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                      D=((10, 11, 12), (7, 8, 9), (4, 5, 6)))
+
 
         # conj - documented example in test_conj.py
         tensor = a.conj()
@@ -273,6 +275,8 @@ class TestSyntaxGeneral(unittest.TestCase):
         # contraction
         tensor = yast.tensordot(a, b, axes=((1, 2), (1, 2)), conj=(1, 0))
         tensor = a.tensordot(b, axes=((1, 2), (1, 2)), conj=(1, 0))
+
+        tensor = a @ c  # = yast.tensordot(a, c, axes=(a.ndim - 1, 0))
 
         tensor = a.tensordot(b, axes=((0, 1, 2, 3), (0, 1, 2, 3)), conj=(1, 0))
         number = tensor.to_number()

@@ -2,13 +2,26 @@
 from functools import lru_cache
 from itertools import groupby, product
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _struct
+from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _struct, _flatten
 from ._tests import YastError, _test_configs_match, _test_axes_match
 from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_hf
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
 
 
-__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'broadcast', 'mask']
+__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'mask']
+
+
+def __matmul__(a, b):
+    """
+    Compute tensor dot product, contracting the last axis of a with the first axis of b.
+
+    Shorthand for yast.tensordot(a, b, axes=(a.ndim - 1, 0)).
+
+    Returns
+    -------
+    tansor: Tensor
+    """
+    return tensordot(a, b, axes=(a.ndim - 1, 0))
 
 
 def tensordot(a, b, axes, conj=(0, 0), policy=None):
@@ -114,7 +127,7 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
 
 
 def _tensordot_diag(a, b, in_a, destination, conj): # (-1,)
-    """ executes broadcast and transpose into order expected by tensordot. """
+    """ executes broadcast and then transpose into order expected by tensordot. """
     if len(in_a) == 1:
         c = a.broadcast(b, axis=in_a[0], conj=conj)
         c.moveaxis(source=in_a, destination=destination, inplace=True)
@@ -473,6 +486,7 @@ def swap_gate(a, axes, inplace=False):
 
 @lru_cache(maxsize=1024)
 def _swap_gate_meta(t, n, mf, ndim, axes, fss):
+    """ calculate which blocks to negate. """
     axes = _unpack_axes(mf, *axes)
     tset = np.array(t, dtype=int).reshape((len(t), ndim, len(n)))
     iaxes = iter(axes)
@@ -489,114 +503,161 @@ def _swap_gate_meta(t, n, mf, ndim, axes, fss):
     return tuple(tp % 2)
 
 
-# @lru_cache(maxsize=1024)
-# def _swap_gate_meta(t, n, mf, ndim, axes, fss):
-#     ind_n = [i for i, x in enumerate(axes) if x == (-1,)]
-#     if len(ind_n) == 0:
-#         axes = _unpack_axes(mf, *axes)
-#     else:
-#         axes = list(axes)
-#         for ind in ind_n[::-1]:
-#             axes.pop(ind)
-#         axes = list(_unpack_axes(mf, *axes))
-#         for ind in ind_n:
-#             axes.insert(ind, (-1,))
-#         axes = tuple(axes)
+def einsum(subscripts, *operants, order='Alphabetic'):
+    """
+    Execute series of tensor contractions.
 
-#     tset = np.array(t, dtype=int).reshape((len(t), ndim, len(n)))
-#     iaxes = iter(axes)
-#     tp = np.zeros(len(t), dtype=int)
+    Covering trace, tensordot (including outter product), and transpose.
+    Follows notation of `np.einsum` as close as possible.
 
-#     if len(axes) % 2 == 1:
-#         raise YastError('Odd number of elements in axes -- needs even.')
-#     for l1, l2 in zip(*(iaxes, iaxes)):
-#         if len(set(l1) & set(l2)) > 0:
-#             raise YastError('Cannot swap the same index')
-#         if l2 == (-1,):
-#             t1 = np.sum(tset[:, l1, :], axis=1)
-#             t2 = np.array(n, dtype=int).reshape(1, -1)
-#         elif l1 == (-1,):
-#             t2 = np.sum(tset[:, l2, :], axis=1)
-#             t1 = np.array(n, dtype=int).reshape(1, -1)
-#         else:
-#             if (-1,) in l1 or (-1,) in l2:
-#                 raise YastError('Swap with tensor charge, i.e. -1, has to be provided as a separate axis.')
-#             t1 = np.sum(tset[:, l1, :], axis=1) % 2
-#             t2 = np.sum(tset[:, l2, :], axis=1) % 2
-#         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)
-#     return tuple(tp % 2)
+    Parameters
+    ----------
+    subscripts: str
+
+    *operants: tensors to be contracted
+
+    order: str
+    Specify order in which repeated indices from subscipt are contracted.
+    By default, follows alphabetic order.
+
+    Example
+    -------
+    yast.einsum('*ij,jh->ih', t1, t2)  # matrix-matrix multiplication, where first matrix is conjugated.
+    Equivalent to t1.conj() @ t2
+
+    yast.einsum('ab,al,bm->lm', t1, t2, t3, order='ba')
+    Contract along b first, and a second.
+
+    Returns
+    -------
+    tensor : Tensor
+    """
+    pass
 
 
 def ncon(ts, inds, conjs=None):
-    """Execute series of tensor contractions"""
+    """
+    Execute series of tensor contractions.
+
+    Parameters
+    ----------
+    ts: list
+        list of tensors to be contracted
+
+    inds: tuple of tuples of ints (or list of lists of ints)
+        each inner tuple marks axis of respectiv tensor with ints.
+        Positive values mark legs to be contracted,
+        where two axis to be contracted have the same number.
+        Legs are contracted in order of increasing number.
+        Non-positive numbers mark legs of resulting tensor, in reversed order.
+
+    conjs: tuple of ints
+        For each tensor in ts, it contains
+        1 if the tensor should be conjugated and 0 otherwise.
+
+    Example
+    ------
+    yast.ncon([a, b], ((-0, 1), (1, -1)), conjs=(1, 0)) is
+    matrix-matrix multiplication where first matrix is conjugated.
+    yast.ncon([a, b], ((-0, -2), (-1, -3))) is outter product.
+
+    Returns
+    -------
+    tensor : Tensor
+    """
     if len(ts) != len(inds):
         raise YastError('Number of tensors and indices do not match.')
     for ii, ind in enumerate(inds):
         if ts[ii].ndim != len(ind):
             raise YastError('Number of legs of one of the tensors do not match provided indices.')
 
+    inds = tuple(_clear_axes(*inds))
+    if conjs is not None:
+        conjs = tuple(conjs)
+
+    meta_trace, meta_dot, meta_transpose = _ncom_meta(inds, conjs)
     ts = dict(enumerate(ts))
-    cutoff = 512
-    cutoff2 = 2 * cutoff
-    edges = [(order, leg, ten) if order > 0 else (-order + cutoff2, leg, ten)
+    for command in meta_trace:
+        t, axes = command
+        ts[t] = trace(ts[t], axes=axes)
+    for command in meta_dot:
+        (t1, t2), axes, conj = command
+        ts[t1] = tensordot(ts[t1], ts[t2], axes=axes, conj=conj)
+        del ts[t2]
+    t, axes, to_conj = meta_transpose
+    if axes is not None:
+        ts[t].transpose(axes=axes, inplace=True)
+    return ts[t].conj() if to_conj else ts[t]
+
+
+@lru_cache(maxsize=1024)
+def _ncom_meta(inds, conjs):
+    """ turning information in inds and conjs into list of contraction commands """
+    if not all( -256 < x < 256 for x in _flatten(inds)):
+        raise YastError('ncon requires indices to be between -256 and 256.')
+
+    edges = [(order, leg, ten) if order > 0 else (-order + 1024, leg, ten)
              for ten, el in enumerate(inds) for leg, order in enumerate(el)]
-
-    edges.append((cutoff, cutoff, cutoff))
+    edges.append((512, 512, 512)) # this will mark the end of contractions.
     conjs = [0] * len(inds) if conjs is None else list(conjs)
-    edges = sorted(edges, reverse=True, key=lambda x: x[0])  # order of contraction with info on tensor and axis
 
+    # order of contraction with info on tensor and axis
+    edges = sorted(edges, reverse=True, key=lambda x: x[0])
+    return _consume_edges(edges, conjs)
+
+
+def _consume_edges(edges, conjs):
+    """ consumes edges to generate order of contractions. """
+    eliminated, ntensors = [], len(conjs)
+    meta_trace, meta_dot = [], []
     order1, leg1, ten1 = edges.pop()
     ax1, ax2 = [], []
-    while order1 != cutoff:  # tensordot two tensors; or trace one tensor
+    while order1 != 512:  # tensordot two tensors, or trace one tensor; 512 is cutoff marking end of truncation
         order2, leg2, ten2 = edges.pop()
         if order1 != order2:
             raise YastError('Indices of legs to contract do not match.')
-        if ten1 < ten2:
-            (t1, t2) = (ten1, ten2)
-            ax1.append(leg1)
-            ax2.append(leg2)
-        else:
-            (t1, t2) = (ten2, ten1)
-            ax1.append(leg2)
-            ax2.append(leg1)
-        if edges[-1][0] == cutoff or min(edges[-1][2], edges[-2][2]) != t1 or max(edges[-1][2], edges[-2][2]) != t2:
+        t1, t2, leg1, leg2 = (ten1, ten2, leg1, leg2) if ten1 < ten2 else (ten2, ten1, leg2, leg1)
+        ax1.append(leg1)
+        ax2.append(leg2)
+        if edges[-1][0] == 512 or min(edges[-1][2], edges[-2][2]) != t1 or max(edges[-1][2], edges[-2][2]) != t2:
             # execute contraction
             if t1 == t2:  # trace
-                ts[t1] = ts[t1].trace(axes=(ax1, ax2))
+                if len(meta_dot) > 0:
+                    raise YastError("Likely inefficient order of contractions. Do all traces before tensordot. " +
+                        "Call all axes connecting two tensors one after another.")
+                meta_trace.append((t1, (tuple(ax1), tuple(ax2))))
                 ax12 = ax1 + ax2
                 for ii, (order, leg, ten) in enumerate(edges):
                     if ten == t1:
-                        edges[ii] = (order, leg - sum(ii < leg for ii in ax12), ten)
-            else:  # tensordot
-                ts[t1] = ts[t1].tensordot(ts[t2], axes=(ax1, ax2), conj=(conjs[t1], conjs[t2]))
+                        edges[ii] = (order, leg - sum(i < leg for i in ax12), ten)
+            else:  # tensordot (tensor numbers, axes, conj)
+                meta_dot.append(((t1, t2), (tuple(ax1), tuple(ax2)), (conjs[t1], conjs[t2])))
+                eliminated.append(t2)
                 conjs[t1], conjs[t2] = 0, 0
-                del ts[t2]
                 lt1 = sum(ii[2] == t1 for ii in edges)  # legs of t1
                 for ii, (order, leg, ten) in enumerate(edges):
                     if ten == t1:
-                        edges[ii] = (order, leg - sum(ii < leg for ii in ax1), ten)
+                        edges[ii] = (order, leg - sum(i < leg for i in ax1), ten)
                     elif ten == t2:
-                        edges[ii] = (order, lt1 + leg - sum(ii < leg for ii in ax2), t1)
+                        edges[ii] = (order, lt1 + leg - sum(i < leg for i in ax2), t1)
             ax1, ax2 = [], []
         order1, leg1, ten1 = edges.pop()
 
-    if edges:
-        while len(ts) > 1:
-            edges = sorted(edges, key=lambda x: x[2])
-            t1 = edges[0][2]
-            t2 = [key for key in ts.keys() if key != t1][0]
-            ts[t1] = ts[t1].tensordot(ts[t2], axes=((), ()), conj=(conjs[t1], conjs[t2]))
-            conjs[t1], conjs[t2] = 0, 0
-            lt1 = sum(ii[2] == t1 for ii in edges)
-            for ii, (order, leg, ten) in enumerate(edges):
-                if ten == t2:
-                    edges[ii] = (order, leg + lt1, t1)
-            del ts[t2]
-        order = [ed[1] for ed in sorted(edges)]
-        _, result = ts.popitem()
-        return result.transpose(axes=order, inplace=True)
-    it = iter(ts.values())
-    result = next(it)
-    for num in it:
-        result.A[()] = result.A[()] * num.A[()]
-    return result
+    remaining = [i for i in range(ntensors) if i not in eliminated]
+    t1 = remaining[0]
+    for t2 in remaining[1:]:
+        meta_dot.append(((t1, t2), ((), ()), (conjs[t1], conjs[t2])))
+        eliminated.append(t2)
+        conjs[t1], conjs[t2] = 0, 0
+        lt1 = sum(tt == t1 for _, _, tt in edges)
+        for ii, (order, leg, ten) in enumerate(edges):
+            if ten == t2:
+                edges[ii] = (order, leg + lt1, t1)
+    unique_out = tuple(ed[0] for ed in edges)
+    if len(unique_out) != len(set(unique_out)):
+        raise YastError("Repeated non-positive (outgoing) index is ambiguous.")
+    axes = tuple(ed[1] for ed in sorted(edges)) # final order for transpose
+    if axes == tuple(range(len(axes))):
+        axes = None
+    meta_transpose = (t1, axes, conjs[t1])
+    return tuple(meta_trace), tuple(meta_dot), meta_transpose

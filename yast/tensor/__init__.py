@@ -113,11 +113,11 @@ class Tensor:
     # pylint: disable=C0415
     from ._initialize import set_block, fill_tensor
     from .linalg import norm, svd, svd_lowrank, eigh, qr
-    from ._contractions import tensordot, vdot, trace, swap_gate, broadcast, mask
+    from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, mask
     from ._algebra import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
-    from ._algebra import absolute, real, imag, sqrt, rsqrt, reciprocal, exp
+    from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, diag
-    from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_leg
+    from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_axis, remove_axis
     from ._output import show_properties, __str__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_leg_charges_and_dims, get_leg_structure
     from ._output import zero_of_dtype, item, __getitem__
@@ -126,10 +126,8 @@ class Tensor:
     from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric
     from ._output import save_to_hdf5, save_to_dict, compress_to_1d
     from ._tests import is_consistent, are_independent
-    from ._auxliary import update_struct
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
 
-    abs = absolute  # allow yast.abs(tensor)
 
     @property
     def s_n(self):

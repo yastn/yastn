@@ -45,3 +45,18 @@ See examples: :ref:`examples/algebra:conjugation of symmetric tensors`.
 	:exclude-members: __init__, __new__
 	:noindex:
 	:members: conj, conj_blocks, flip_signature
+
+
+Tensor norms
+------------
+
+.. automodule:: yast.linalg
+	:noindex:
+	:members: norm
+
+Spectral decompositions
+-----------------------
+
+.. automodule:: yast.linalg
+	:noindex:
+	:members: svd, svd_lowrank, qr, eigh

@@ -10,9 +10,9 @@ except ImportError:
     warnings.warn("h5py module not available", ImportWarning)
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2xU1
+    from .configs import config_dense, config_U1, config_Z2xU1, config_Z2, config_Z2_fermionic
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1
+    from configs import config_dense, config_U1, config_Z2xU1, config_Z2, config_Z2_fermionic
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -72,10 +72,30 @@ def test_dict():
                   D=((1, 2, 3, 4), (2, 1), (2, 3, 5, 4, 1, 6)))
     check_to_numpy(a, config_Z2xU1)
 
+    a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
+                  t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
+                  D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
+    b = a.fuse_legs(axes=((0, 2), 1, (4, 3), 5), mode='hard', inplace=True)
+    b.fuse_legs(axes=((0, 2), 1, 3), mode='hard', inplace=True)
+    b.fuse_legs(axes=((0, 2), 1), mode='meta', inplace=True)
+    check_to_numpy(b, config_U1)
+
+
 
 def test_load_exceptions():
+    """ handling exceptions """
     with pytest.raises(yast.YastError):
         _ = yast.load_from_dict(config=config_U1)  # Dictionary d is required
+
+    a = yast.randC(config=config_Z2, isdiag=False, s=(1, -1, 1), n=1,
+                  t=((0, 1), (0, 1), (0, 1)),
+                  D=((1, 2), (3, 4), (5, 6)))
+    check_to_numpy(a, config_Z2)  # OK
+
+    with pytest.raises(yast.YastError):
+        check_to_numpy(a, config_U1)  # Symmetry rule in config do not match loaded one.
+    with pytest.raises(yast.YastError):
+        check_to_numpy(a, config_Z2_fermionic)  # Fermionic statistics in config do not match loaded one.
 
 
 if __name__ == '__main__':

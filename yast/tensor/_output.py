@@ -1,7 +1,7 @@
 """ methods outputing data from yast tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _mf_to_ntree, _struct
+from ._auxliary import _clear_axes, _unpack_axes, _mf_to_ntree, _struct
 from ._tests import YastError
 from ..sym import sym_none
 
@@ -25,7 +25,7 @@ def save_to_dict(a):
     hfs = [hf._asdict() for hf in a.hard_fusion]
     return {'_d': _d, 's': a.struct.s, 'n': a.struct.n,
             't': a.struct.t, 'D': a.struct.D, 'isdiag': a.isdiag,
-            'mfs': a.meta_fusion, 'hfs': hfs}
+            'mfs': a.meta_fusion, 'hfs': hfs, 'SYM_ID':a.config.sym.SYM_ID, 'fermionic':a.config.fermionic}
 
 
 def save_to_hdf5(a, file, path):
@@ -60,7 +60,8 @@ def compress_to_1d(a, meta=None):
             meta does not match the tensor.
     """
     if meta is None:
-        D_rsh = _Darray(a)[:, 0] if a.isdiag else np.prod(_Darray(a), axis=1)
+        Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
+        D_rsh = Dset[:, 0] if a.isdiag else np.prod(Dset, axis=1)
         aD_rsh = np.cumsum(D_rsh)
         D_tot = np.sum(D_rsh)
         meta_new = (((),), (D_tot,))
@@ -69,10 +70,10 @@ def compress_to_1d(a, meta=None):
         # (told, tnew, Dslc, Dnew)
         DD = tuple((x[0],) for x in a.struct.D) if a.isdiag else a.struct.D
         meta_unmerge = tuple(((), t, (aD - D, aD), Dnew) for t, D, aD, Dnew in zip(a.struct.t, D_rsh, aD_rsh, DD))
-        meta = {'s': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag, 'hard_fusion': a.hard_fusion,
+        meta = {'struct': a.struct, 'isdiag': a.isdiag, 'hard_fusion': a.hard_fusion,
                 'meta_fusion': a.meta_fusion, 'meta_unmerge': meta_unmerge, 'meta_merge': meta_merge}
     else:
-        if a.struct.s != meta['s'] or a.struct.n != meta['n'] or a.isdiag != meta['isdiag'] \
+        if a.struct.s != meta['struct'].s or a.struct.n != meta['struct'].n or a.isdiag != meta['isdiag'] \
             or a.meta_fusion != meta['meta_fusion'] or a.hard_fusion != meta['hard_fusion']:
             raise YastError("Tensor structure does not match provided metadata.")
         meta_merge = meta['meta_merge']
@@ -299,7 +300,8 @@ def get_leg_structure(a, axis, native=False):
     axis, = _clear_axes(axis)
     if not native:
         axis, = _unpack_axes(a.meta_fusion, axis)
-    tset, Dset = _tarray(a), _Darray(a)
+    tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+    Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
     tset = tset[:, axis, :]
     Dset = Dset[:, axis]
     tset = tset.reshape(len(tset), len(axis) * a.config.sym.NSYM)
@@ -501,7 +503,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     if not native:
         axes = tuple(_unpack_axes(a.meta_fusion, *axes))
     meta = []
-    tset = _tarray(a)
+    tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     for tind, tt in zip(a.struct.t, tset):
         meta.append((tind, tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
     if a.isdiag:

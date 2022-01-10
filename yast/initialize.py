@@ -209,6 +209,10 @@ def load_from_dict(config=None, d=None):
         hfs = tuple(_Fusion(**hf) for hf in d['hfs'])
         a = Tensor(config=config, struct=struct, isdiag=d['isdiag'],
                     hard_fusion=hfs, meta_fusion=d['mfs'])
+        if 'SYM_ID' in d and a.config.sym.SYM_ID != d['SYM_ID']:
+            raise YastError("Symmetry rule in config do not match loaded one.")
+        if 'fermionic' in d and a.config.fermionic != d['fermionic']:
+            raise YastError("Fermionic statistics in config do not match loaded one.")
         pointer = 0
         dtype = d['_d'].dtype.name
         for ts, Ds in zip(struct.t, struct.D):
@@ -249,8 +253,8 @@ def load_from_hdf5(config, file, path):
 
 def decompress_from_1d(r1d, config, meta):
     """
-    Generate tensor from dictionary `meta` describing the structure of the tensor, 
-    charges and dimensions of its non-zero blocks, and 1-D array `r1d` containing 
+    Generate tensor from dictionary `meta` describing the structure of the tensor,
+    charges and dimensions of its non-zero blocks, and 1-D array `r1d` containing
     serialized data of non-zero blocks.
 
     Typically, the pair `r1d` and `meta` is obtained from :func:`~yast.Tensor.compress_to_1d`.
@@ -269,9 +273,7 @@ def decompress_from_1d(r1d, config, meta):
         in rank-1 tensor `r1d`
     """
     a = Tensor(config=config, **meta)
-    A = {(): r1d}
-    a.A = a.config.backend.unmerge_one_leg(A, 0, meta['meta_unmerge'])
-    a.update_struct()
+    a.A = a.config.backend.unmerge_one_leg({(): r1d}, 0, meta['meta_unmerge'])
     return a
 
 

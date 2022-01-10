@@ -6,7 +6,7 @@ from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
 from ._auxliary import _flatten, _struct, _clear_axes, _ntree_to_mf, _mf_to_ntree
-from ._tests import YastError, _test_all_axes, _get_tD_legs
+from ._tests import YastError, _test_axes_all, _get_tD_legs
 
 
 __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard']
@@ -578,8 +578,8 @@ def fuse_legs(a, axes, inplace=False, mode=None):
     mode: str
         can select 'hard' or 'meta' fusion. If None, use default from config.
         It can also be overriden by config.force_fuse.
-        Applying hard fusion of tensor with meta fusion first
-        replaces meta fusion with hard fusion.
+        Applying hard fusion of tensor with meta fusion
+        first replaces meta fusion with hard fusion.
         Meta fusion can be applied on top of hard fusion.
 
     Returns
@@ -599,7 +599,7 @@ def fuse_legs(a, axes, inplace=False, mode=None):
         mode = a.config.force_fusion
 
     order = tuple(_flatten(axes))
-    _test_all_axes(a, order)
+    _test_axes_all(a, order)
     axes = tuple(_clear_axes(*axes))
 
     if mode == 'meta':

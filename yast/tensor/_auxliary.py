@@ -55,25 +55,6 @@ def _common_rows(a, b):
     return ia, ib
 
 
-def _tarray(a):
-    return np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-
-
-def _Darray(a):
-    return np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
-
-
-def update_struct(a):
-    """Updates meta-information about charges and dimensions of all blocks."""
-    d = a.A
-    a.A = {k: d[k] for k in sorted(d)}
-    t = tuple(a.A.keys())
-    D = tuple(a.config.backend.get_shape(x) for x in a.A.values())
-    if a.isdiag:
-        D = tuple(d + d for d in D)
-    a.struct = _struct(t, D, a.struct.s, a.struct.n)
-
-
 def _ntree_to_mf(ntree):
     """ Change nested lists into linear fusion tree. """
     mf = ()
