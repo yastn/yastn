@@ -3,9 +3,9 @@ import unittest
 import numpy as np
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2_U1
+    from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2_U1
+    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -87,7 +87,7 @@ def test_transpose_1():
 
 def test_transpose_2():
     t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
-    a = yast.ones(config=config_Z2_U1, s=(-1, -1, 1, 1),
+    a = yast.ones(config=config_Z2xU1, s=(-1, -1, 1, 1),
                   t=[t1, t1, t1, t1],
                   D=[(7, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
     assert a.get_shape() == (19, 14, 18, 10)

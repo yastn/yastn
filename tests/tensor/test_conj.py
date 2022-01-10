@@ -3,9 +3,9 @@ import unittest
 import numpy as np
 import yast
 try:
-    from .configs import config_Z2, config_Z2_U1, config_U1
+    from .configs import config_Z2, config_Z2xU1
 except ImportError:
-    from configs import config_Z2, config_Z2_U1, config_U1
+    from configs import config_Z2, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -21,9 +21,9 @@ class TestConj_Z2(unittest.TestCase):
         nb = b.to_numpy()
         assert np.linalg.norm(na - nb) < tol
 
-class TestConj_Z2U1(unittest.TestCase):
+class TestConj_Z2xU1(unittest.TestCase):
 
-    def test_conj_Z2U1(self):
+    def test_conj_Z2xU1(self):
         #
         # create random complex-valued symmetric tensor with symmetry Z2 x U(1)
         #

@@ -2,8 +2,8 @@
 
 from itertools import chain, repeat, accumulate, product
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _flatten, _tarray
-from ._merging import _flip_sign_hf
+from ._auxliary import _clear_axes, _unpack_axes, _flatten, _struct
+from ._merging import _flip_hf
 from ._tests import YastError
 
 __all__ = ['match_legs', 'block']
@@ -91,10 +91,16 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
         tset = comb_t[ind]
         Dset = comb_D[ind]
 
-    for ts, Ds in zip(tset, Dset):
-        _set_block(a, ts=tuple(ts.flat), Ds=tuple(Ds), val=val, dtype=dtype)
+    meta = [(tuple(ts.flat), tuple(Ds)) for ts, Ds in zip(tset, Dset)]
+    meta = sorted(meta, key=lambda x: x[0])
 
-    a.update_struct()
+    for ts, Ds in meta:
+        _set_block(a, ts=ts, Ds=Ds, val=val, dtype=dtype)
+
+    if len(meta) > 0:
+        a_t, a_D = zip(*meta)
+        a.struct = a.struct._replace(t=a_t, D=a_D)
+
     for n in range(a.ndim_n):
         a.get_leg_structure(n, native=True)  # here checks the consistency of bond dimensions
 
@@ -163,8 +169,23 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
 
     _set_block(a, ts=ts, Ds=Ds, val=val, dtype=dtype)
 
-    a.update_struct()
-    tD = [a.get_leg_structure(n, native=True) for n in range(a.ndim_n)]  # here checks the consistency of bond dimensions
+    if Ds is None:
+        Ds = a.config.backend.get_shape(a.A[ts])
+        if a.isdiag:
+            Ds = Ds + Ds
+
+    ii = sum(t < ts for t in a.struct.t)
+    if ii < len(a.struct.t) and a.struct.t[ii] == ts:
+        a_D = a.struct.D[:ii] + (Ds,) + a.struct.D[ii + 1:]
+        a.struct = a.struct._replace(D=a_D)
+    else:
+        a_t = a.struct.t[:ii] + (ts,) + a.struct.t[ii:]
+        a_D = a.struct.D[:ii] + (Ds,) + a.struct.D[ii:]
+        a.struct = a.struct._replace(t=a_t, D=a_D)
+    a.A = {k: a.A[k] for k in sorted(a.A)}
+
+    for n in range(a.ndim_n):
+        a.get_leg_structure(n, native=True)  # here checks the consistency of bond dimensions
 
 
 def _set_block(a, ts, Ds, val, dtype):
@@ -185,7 +206,8 @@ def _set_block(a, ts, Ds, val, dtype):
         if a.isdiag:
             if Ds is not None and Ds[0] != Ds[1]:
                 raise YastError('Diagonal tensors requires Ds[0] == Ds[1].')
-            vald = np.diag(val) if val.ndim == 2 else val
+            vald = np.array(val)
+            if vald.ndim == 2: vald = np.diag(vald)
             Ds0 = Ds[0] if Ds is not None else None
             a.A[ts] = a.config.backend.to_tensor(vald, Ds=Ds0, dtype=dtype, device=a.config.device)
         else:
@@ -222,7 +244,7 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
             t.append(tuple(tdn.keys()))
             D.append(tuple(tdn.values()))
             s.append(te.struct.s[nn] * (2 * cc - 1))
-            hf.append(te.hard_fusion[nn] if cc == 1 else _flip_sign_hf(te.hard_fusion[nn]))
+            hf.append(te.hard_fusion[nn] if cc == 1 else _flip_hf(te.hard_fusion[nn]))
     a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, meta_fusion=lf, hard_fusion=hf)
     a.fill_tensor(t=t, D=D, val=val)
     return a
@@ -292,14 +314,17 @@ def block(tensors, common_legs=None):
     meta_new, meta_block = {}, []
     for pind, pa in zip(tensors, posa):
         a = tensors[pind]
-        tset = _tarray(a)
+        tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
         for tind, t in zip(a.struct.t, tset):
             if tind not in meta_new:
                 meta_new[tind] = tuple(tDs[n][tuple(t[n].flat)]['Dtot'] for n in range(a.ndim_n))
             meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.ndim_n))))
-    meta_new = tuple((ts, Ds) for ts, Ds in meta_new.items())
+    meta_new = tuple(sorted(meta_new.items()))
+    c_t = tuple(t for t, _ in meta_new)
+    c_D = tuple(D for _, D in meta_new)
+    c_struct = _struct(t=c_t, D=c_D, n=a.struct.n, s=a.struct.s)
 
-    c = tn0.__class__(config=a.config, s=a.struct.s, isdiag=a.isdiag, n=a.struct.n, meta_fusion=tn0.meta_fusion, hard_fusion=tn0.hard_fusion)
+    c = tn0.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
+                        meta_fusion=tn0.meta_fusion, hard_fusion=tn0.hard_fusion)
     c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, c.config.device)
-    c.update_struct()
     return c

@@ -5,7 +5,7 @@ import numpy as np
 import scipy.linalg
 try:
     import fbpca
-except ModuleNotFoundError:
+except ModuleNotFoundError:  # pragma: no cover
     warnings.warn("fbpca not available", Warning)
 
 BACKEND_ID = "numpy"
@@ -98,8 +98,8 @@ def expand_dims(x, axis):
     return np.expand_dims(x, axis)
 
 
-def any_nonzero(x):
-    return np.any(x)
+def count_nonzero(x):
+    return np.count_nonzero(x)
 
 
 #########################
@@ -124,22 +124,7 @@ def norm(A, p):
     """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
     if p == 'fro':
         return np.linalg.norm([np.linalg.norm(x) for x in A.values()])
-    if p == 'inf':
-        return max([np.abs(x).max() for x in A.values()])
-    raise RuntimeError("Invalid norm type: %s" % str(p))
-
-
-def norm_diff(A, B, meta, p):
-    """ norm(A - B); meta = kab, ka, kb """
-    if p == 'fro':
-        return np.linalg.norm([np.linalg.norm(A[ind] - B[ind]) for ind in meta[0]]
-                              + [np.linalg.norm(A[ind]) for ind in meta[1]]
-                              + [np.linalg.norm(B[ind]) for ind in meta[2]])
-    if p == 'inf':
-        return max([np.abs(A[ind] - B[ind]).max() for ind in meta[0]]
-                   + [np.abs(A[ind]).max() for ind in meta[1]]
-                   + [np.abs(B[ind]).max() for ind in meta[2]])
-    raise RuntimeError("Invalid norm type: %s" % str(p))
+    return max([np.abs(x).max() for x in A.values()])  # else p == 'inf'
 
 
 def entropy(A, alpha=1, tol=1e-12):
@@ -236,7 +221,7 @@ def trace(A, order, meta):
     """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
         Repeating tnew are added."""
     Aout = {}
-    for (tnew, told, Drsh) in meta:
+    for (tnew, told, Drsh, _) in meta:
         Atemp = np.trace(np.reshape(np.transpose(A[told], order), Drsh))
         if tnew in Aout:
             Aout[tnew] += Atemp
@@ -262,8 +247,8 @@ def trace_with_mask(A, order, meta, msk12):
 def transpose(A, axes, meta_transpose, inplace):
     """ Transpose; Force a copy if not inplace. """
     if inplace:
-        return {new: np.transpose(A[old], axes=axes) for old, new in meta_transpose}
-    return {new: np.transpose(A[old], axes=axes).copy() for old, new in meta_transpose}
+        return {new: np.transpose(A[old], axes=axes) for new, old in meta_transpose}
+    return {new: np.transpose(A[old], axes=axes).copy() for new, old in meta_transpose}
 
 
 def rsqrt(A, cutoff=0):
@@ -298,7 +283,7 @@ def absolute(A):
     return {t: np.abs(x) for t, x in A.items()}
 
 
-def svd_lowrank(A, meta, D_block, n_iter, k_fac):
+def svd_lowrank(A, meta, D_block, n_iter=60, k_fac=6):
     U, S, V = {}, {}, {}
     for (iold, iU, iS, iV) in meta:
         k = min(min(A[iold].shape), D_block)
@@ -311,7 +296,7 @@ def svd(A, meta):
     for (iold, iU, iS, iV) in meta:
         try:
             U[iU], S[iS], V[iV] = scipy.linalg.svd(A[iold], full_matrices=False)
-        except scipy.linalg.LinAlgError:
+        except scipy.linalg.LinAlgError:  # pragma: no cover
             U[iU], S[iS], V[iV] = scipy.linalg.svd(A[iold], full_matrices=False, lapack_driver='gesvd')
     return U, S, V
 
@@ -331,7 +316,7 @@ def svd_S(A):
     for ind in A:
         try:
             S[ind] = scipy.linalg.svd(A[ind], full_matrices=False, compute_uv=False)
-        except scipy.linalg.LinAlgError:
+        except scipy.linalg.LinAlgError:  # pragma: no cover
             S[ind] = scipy.linalg.svd(A[ind], full_matrices=False, lapack_driver='gesvd', compute_uv=False)
     return S
 
@@ -422,31 +407,40 @@ def embed(A, sl, tD):
 
 def add(A, B, meta):
     """ C = A + B. meta = kab, ka, kb """
-    C = {ind: A[ind] + B[ind] for ind in meta[0]}
-    for ind in meta[1]:
-        C[ind] = A[ind].copy()
-    for ind in meta[2]:
-        C[ind] = B[ind].copy()
+    C = {}
+    for t, ab in meta:
+        if ab == 'AB':
+            C[t] = A[t] + B[t]
+        elif ab == 'A':
+            C[t] = A[t].copy()
+        else:  # ab == 'B'
+            C[t] = B[t].copy()
     return C
 
 
 def sub(A, B, meta):
     """ C = A - B. meta = kab, ka, kb """
-    C = {ind: A[ind] - B[ind] for ind in meta[0]}
-    for ind in meta[1]:
-        C[ind] = A[ind].copy()
-    for ind in meta[2]:
-        C[ind] = -B[ind]
+    C = {}
+    for t, ab in meta:
+        if ab == 'AB':
+            C[t] = A[t] - B[t]
+        elif ab == 'A':
+            C[t] = A[t].copy()
+        else:  # ab == 'B'
+            C[t] = -B[t]
     return C
 
 
 def apxb(A, B, x, meta):
     """ C = A + x * B. meta = kab, ka, kb """
-    C = {ind: A[ind] + x * B[ind] for ind in meta[0]}
-    for ind in meta[1]:
-        C[ind] = A[ind].copy()
-    for ind in meta[2]:
-        C[ind] = x * B[ind]
+    C = {}
+    for t, ab in meta:
+        if ab == 'AB':
+            C[t] = A[t] + x * B[t]
+        elif ab == 'A':
+            C[t] = A[t].copy()
+        else:  # ab == 'B'
+            C[t] = x * B[t]
     return C
 
 
@@ -456,13 +450,13 @@ dot_dict = {(0, 0): lambda x, y: x @ y,
             (1, 1): lambda x, y: x.conj() @ y.conj()}
 
 
-def vdot(A, B, conj, meta):
-    f = dot_dict[conj]  # proper conjugations
+def vdot(A, B, cc, meta):
+    f = dot_dict[cc]  # proper conjugations
     return np.sum([f(A[ind].reshape(-1), B[ind].reshape(-1)) for ind in meta])
 
 
-def dot(A, B, conj, meta_dot):
-    f = dot_dict[conj]  # proper conjugations
+def dot(A, B, cc, meta_dot):
+    f = dot_dict[cc]  # proper conjugations
     C = {}
     for (out, ina, inb) in meta_dot:
         C[out] = f(A[ina], B[inb])
@@ -475,13 +469,13 @@ dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
                 (1, 1): lambda x, y, dim: x.conj() * y.reshape(dim).conj()}
 
 
-def dot_diag(A, B, conj, meta, axis, a_ndim):
+def dot_diag(A, B, cc, meta, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
-    f = dotdiag_dict[conj]
+    f = dotdiag_dict[cc]
     C = {}
-    for in1, in2, out in meta:
-        C[out] = f(A[in1], B[in2], dim)
+    for ind_a, ind_b in meta:
+        C[ind_a] = f(A[ind_a], B[ind_b], dim)
     return C
 
 
@@ -489,43 +483,29 @@ def mask_diag(A, B, meta, axis, a_ndim):
     slc1 = (slice(None),) * axis
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
     Bslc = {k: v.nonzero() for k, v in B.items()}
-    return {out: A[in1][slc1 + Bslc[in2] + slc2] for in1, in2, out in meta}
+    return {ind_a: A[ind_a][slc1 + Bslc[ind_b] + slc2] for ind_a, ind_b in meta}
 
 
-def matmul(A, B, meta):
-    C = {}
-    for in1, in2, out, _ in meta:
-        C[out] = A[in1] @ B[in2]
-    return C
-
-
-def matmul_masks(A, B, meta, ma, mb):
-    C = {}
-    for in1, in2, out, ii in meta:
-        C[out] = A[in1][:, ma[ii]] @ B[in2][mb[ii], :]
-    return C
-
-
-def dot_nomerge(A, B, conj, oA, oB, meta):
-    f = dot_dict[conj]  # proper conjugations
+def dot_nomerge(A, B, cc, oA, oB, meta):
+    f = dot_dict[cc]  # proper conjugations
     C = {}
     for (ina, inb, out, Da, Db, Dout, _) in meta:
         temp = f(A[ina].transpose(oA).reshape(Da), B[inb].transpose(oB).reshape(Db)).reshape(Dout)
-        try:
+        if out in C:
             C[out] += temp
-        except KeyError:
+        else:
             C[out] = temp
     return C
 
 
-def dot_nomerge_masks(A, B, conj, oA, oB, meta, ma, mb):
-    f = dot_dict[conj]  # proper conjugations
+def dot_nomerge_masks(A, B, cc, oA, oB, meta, ma, mb):
+    f = dot_dict[cc]  # proper conjugations
     C = {}
     for (ina, inb, out, Da, Db, Dout, tt) in meta:
         temp = f(A[ina].transpose(oA).reshape(Da)[:, ma[tt]], B[inb].transpose(oB).reshape(Db)[mb[tt], :]).reshape(Dout)
-        try:
+        if out in C:
             C[out] += temp
-        except KeyError:
+        else:
             C[out] = temp
     return C
 #####################################################

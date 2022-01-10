@@ -32,7 +32,7 @@ def test_real_1():
     ai = a.imag()
     # TODO assert yast.are_independent(ar, a)
     # TODO assert yast.are_independent(ai, a)
-    assert yast.norm_diff(ar + 1j * ai, a) < tol
+    assert yast.norm(ar + 1j * ai - a) < tol
 
 
 if __name__ == '__main__':

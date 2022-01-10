@@ -44,13 +44,6 @@ def _clear_axes(*args):
     return ((axis,) if isinstance(axis, int) else tuple(axis) for axis in args)
 
 
-def _common_keys(d1, d2):
-    """ Divide keys into: common, only in d1 and only in d2. Returns: keys12, keys1, keys2. """
-    s1 = set(d1)
-    s2 = set(d2)
-    return tuple(s1 & s2), tuple(s1 - s2), tuple(s2 - s1)
-
-
 def _common_rows(a, b):
     """ Return row indices of nparray a that are in b, and vice versa.  Outputs tuples."""
     la = [tuple(x.flat) for x in a]

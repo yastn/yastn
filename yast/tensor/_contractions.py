@@ -2,9 +2,9 @@
 from functools import lru_cache
 from itertools import groupby, product
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _common_keys, _tarray, _Darray, _struct
-from ._tests import YastError, _test_configs_match, _test_fusions_match
-from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_sign_hf
+from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _struct
+from ._tests import YastError, _test_configs_match, _test_axes_match
+from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_hf
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
 
 
@@ -43,138 +43,117 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
     -------
     tansor: Tensor
     """
-
-    la_con, lb_con = _clear_axes(*axes)  # contracted meta legs
-    if len(la_con) != len(lb_con):
-        raise YastError('Number of contracted axes of two tensors should be the same.')
+    in_a, in_b = _clear_axes(*axes)  # contracted meta legs
+    conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
+    needs_mask, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-conja * conjb, axes=(in_a, in_b))
 
     if b.isdiag:
-        if len(lb_con) == 1:
-            c = a.broadcast(b, axis=la_con[0], conj=conj)
-            c.moveaxis(source=la_con, destination=(-1,), inplace=True)
-        elif len(lb_con) == 2:
-            c = a.broadcast(b, axis=la_con[0], conj=conj)
-            c = c.trace(axes=la_con)
-        elif len(lb_con) == 0:
-            raise YastError('Cannot do outer product with diagonal tensor -- call b.diag() first.')
-        else:
-            raise YastError('Too many axis to contract.')
-        return c
-
+        return _tensordot_diag(a, b, in_a, (-1,), conj)
     if a.isdiag:
-        if len(la_con) == 1:
-            c = b.broadcast(a, axis=lb_con[0], conj=conj[::-1])
-            c.moveaxis(source=lb_con, destination=(0,), inplace=True)
-        elif len(la_con) == 2:
-            c = b.broadcast(a, axis=lb_con[0], conj=conj[::-1])
-            c = c.trace(axes=lb_con)
-        elif len(la_con) == 0:
-            raise YastError('Cannot do outer product with diagonal tensor -- call b.diag() first.')
-        else:
-            raise YastError('Too many axis to contract.')
-        return c
+        return _tensordot_diag(b, a, in_b, (0,), conj[::-1])
 
     _test_configs_match(a, b)
-    la_out = tuple(ii for ii in range(a.ndim) if ii not in la_con)  # outgoing meta legs
-    lb_out = tuple(ii for ii in range(b.ndim) if ii not in lb_con)  # outgoing meta legs
-    axes_a = _unpack_axes(a.meta_fusion, la_out, la_con)  # native legs of a; tuple of two tuples
-    axes_b = _unpack_axes(b.meta_fusion, lb_con, lb_out)  # native legs of b; tuple of two tuples
-    if len(axes_a[1]) != len(axes_b[0]):
-        raise YastError('Number of contracted native axes of two tensors should be the same.')
+    nout_a = tuple(ii for ii in range(a.ndim_n) if ii not in nin_a)  # outgoing native legs
+    nout_b = tuple(ii for ii in range(b.ndim_n) if ii not in nin_b)  # outgoing native legs
 
-    conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
-    mconj = - conja * conjb
-
-    if not all(a.struct.s[i] == mconj * b.struct.s[j] for i, j in zip(axes_a[1], axes_b[0])):
-        raise YastError('Signatures of contracted legs do not match.')
-
-    needs_mask = False  # for hard-fused legs
-    for i1, i2 in zip(axes_a[1], axes_b[0]):
-        if a.hard_fusion[i1].tree != b.hard_fusion[i2].tree:
-            raise YastError(f'Hard fusions of leg {i1} of a and leg {i2} of b are not compatible: mismatch in the number of fused legs or fusion order.')
-        if ((mconj == 1 and a.hard_fusion[i1].s != b.hard_fusion[i2].s) or
-            (mconj == -1 and a.hard_fusion[i1].s != b.hard_fusion[i2].ms)):
-            raise YastError('Hard fusions of leg {i1} of a and leg {i2} of b are not compatible: signatures do not match.')
-        if a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
-            needs_mask = True
-
-    c_s = tuple(conja * a.struct.s[i1] for i1 in axes_a[0]) + tuple(conjb * b.struct.s[i2] for i2 in axes_b[1])
+    c_s = tuple(conja * a.struct.s[i1] for i1 in nout_a) + tuple(conjb * b.struct.s[i2] for i2 in nout_b)
     c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
     c_n = tuple(a.config.sym.fuse(c_n, (conja, conjb), 1)[0])
-    c_meta_fusion = [a.meta_fusion[ii] for ii in la_out] + [b.meta_fusion[ii] for ii in lb_out]
-    c_hard_fusion = [a.hard_fusion[ii] for ii in axes_a[0]] if conj[0] == 0 else \
-                    [_flip_sign_hf(a.hard_fusion[ii]) for ii in axes_a[0]]
-    c_hard_fusion += [b.hard_fusion[ii] for ii in axes_b[1]] if conj[1] == 0 else \
-                    [_flip_sign_hf(b.hard_fusion[ii]) for ii in axes_b[1]]
+    c_mfs = [a.meta_fusion[ii] for ii in range(a.ndim) if ii not in in_a]
+    c_mfs += [b.meta_fusion[ii] for ii in range(b.ndim) if ii not in in_b]
+    c_hfs = [a.hard_fusion[ii] for ii in nout_a] if conj[0] == 0 else \
+            [_flip_hf(a.hard_fusion[ii]) for ii in nout_a]
+    c_hfs += [b.hard_fusion[ii] for ii in nout_b] if conj[1] == 0 else \
+             [_flip_hf(b.hard_fusion[ii]) for ii in nout_b]
 
-    if a.config.force_fusion is not None:
-        policy = a.config.force_fusion
+    if a.config.force_tensordot is not None:
+        policy = a.config.force_tensordot
     elif policy is None:
         policy = a.config.default_tensordot
 
-    if policy == 'merge' or (policy == 'hybrid' and len(axes_a[1]) != 1) or a.config.sym.NSYM == 0:
-        ind_a, ind_b = _common_rows(_tarray(a)[:, axes_a[1], :], _tarray(b)[:, axes_b[0], :])
+    if policy == 'merge' or (policy == 'hybrid' and len(nin_a) != 1 and a.config.sym.NSYM > 0):
+        t_a = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+        t_b = np.array(b.struct.t, dtype=int).reshape((len(b.struct.t), len(b.struct.s), len(b.struct.n)))
+        ind_a, ind_b = _common_rows(t_a[:, nin_a, :], t_b[:, nin_b, :])
         s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
 
-        Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, axes_a, s_eff_a, ind_a, sort_r=True)
-        Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(b, axes_b, s_eff_b, ind_b)
+        Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, (nout_a, nin_a), s_eff_a, ind_a, sort_r=True)
+        Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(b, (nin_b, nout_b), s_eff_b, ind_b)
 
         meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
         if needs_mask:
-            msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hard_fusion, axes_a[1], ls_ac,
-                                                        b.struct, b.hard_fusion, axes_b[0], ls_bc)
+            msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hard_fusion, nin_a, ls_ac,
+                                                        b.struct, b.hard_fusion, nin_b, ls_bc)
             Am = {ul + ur: Am[ul + ur][:, msk_a[ur]] for ul, ur in zip(ua_l, ua_r)}
             Bm = {ul + ur: Bm[ul + ur][msk_b[ul], :] for ul, ur in zip(ub_l, ub_r)}
         elif ua_r != ub_l or ls_ac != ls_bc:
-            raise YastError('Mismatch in bond dimensions of contracted legs.')
+            raise YastError('Bond dimensions do not match.')
 
-        c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
+        c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_mfs, hard_fusion=c_hfs)
         c.A = c.config.backend.dot(Am, Bm, conj, meta_dot)
         _unmerge_matrix(c, ls_l, ls_r)
-    elif policy == 'hybrid' or policy == 'direct':
-        meta, c_t, c_D = _meta_tensordot_nomerge(a.struct, b.struct, axes_a, axes_b)
+    elif policy in ('hybrid', 'direct'):
+        meta, c_t, c_D = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
         c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
-        c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion, struct=c_struct)
-        oA = tuple(axes_a[0] + axes_a[1])
-        oB = tuple(axes_b[0] + axes_b[1])
+        c = a.__class__(config=a.config, isdiag=a.isdiag,
+                        meta_fusion=c_mfs, hard_fusion=c_hfs, struct=c_struct)
+        oA = tuple(nout_a + nin_a)
+        oB = tuple(nin_b + nout_b)
         if needs_mask:
-            ma, mb = _masks_for_axes(a.config, a.struct, a.hard_fusion, axes_a[1], b.struct, b.hard_fusion, axes_b[0], meta)
+            ma, mb = _masks_for_axes(a.config, a.struct, a.hard_fusion, nin_a, b.struct, b.hard_fusion, nin_b, meta)
             c.A = a.config.backend.dot_nomerge_masks(a.A, b.A, conj, oA, oB, meta, ma, mb)
         else:
+            if any(Da[1] != Db[0] for _, _, _, Da, Db, _, _ in meta):
+                raise YastError('Bond dimensions do not match.')
+
             c.A = a.config.backend.dot_nomerge(a.A, b.A, conj, oA, oB, meta)
     else:
-        raise YastError("Unknown policy for tensordot. policy should be: 'hybrid', 'direct', or 'merge'.")
+        raise YastError("Unknown policy for tensordot. policy should be in ('hybrid', 'direct', 'merge').")
     return c
 
 
+def _tensordot_diag(a, b, in_a, destination, conj): # (-1,)
+    """ executes broadcast and transpose into order expected by tensordot. """
+    if len(in_a) == 1:
+        c = a.broadcast(b, axis=in_a[0], conj=conj)
+        c.moveaxis(source=in_a, destination=destination, inplace=True)
+        return c
+    if len(in_a) == 2:
+        c = a.broadcast(b, axis=in_a[0], conj=conj)
+        return c.trace(axes=in_a)
+    raise YastError('Outer product with diagonal tensor not supported. Use yast.diag() first.')  # len(in_a) == 0
+
+
 @lru_cache(maxsize=1024)
-def _meta_tensordot_nomerge(a_struct, b_struct, axes_a, axes_b):
+def _meta_tensordot_nomerge(a_struct, b_struct, nout_a, nin_a, nin_b, nout_b):
     """ meta information for backend, and new tensor structure for tensordot_nomerge """
     nsym = len(a_struct.n)
     a_ndim, b_ndim = len(a_struct.s), len(b_struct.s)
 
-    ta = np.array(a_struct.t, dtype=int).reshape(len(a_struct.t), a_ndim, nsym)
-    tb = np.array(b_struct.t, dtype=int).reshape(len(b_struct.t), b_ndim, nsym)
-    Da = np.array(a_struct.D, dtype=int).reshape(len(a_struct.D), a_ndim)
-    Db = np.array(b_struct.D, dtype=int).reshape(len(b_struct.D), b_ndim)
+    ta = np.array(a_struct.t, dtype=int).reshape((len(a_struct.t), a_ndim, nsym))
+    tb = np.array(b_struct.t, dtype=int).reshape((len(b_struct.t), b_ndim, nsym))
+    Da = np.array(a_struct.D, dtype=int).reshape((len(a_struct.D), a_ndim))
+    Db = np.array(b_struct.D, dtype=int).reshape((len(b_struct.D), b_ndim))
 
-    ta_con = ta[:, axes_a[1], :]
-    tb_con = tb[:, axes_b[0], :]
-    ta_out = ta[:, axes_a[0], :]
-    tb_out = tb[:, axes_b[1], :]
+    ta_con = ta[:, nin_a, :]
+    tb_con = tb[:, nin_b, :]
+    ta_out = ta[:, nout_a, :]
+    tb_out = tb[:, nout_b, :]
 
-    Da_con = np.prod(Da[:, axes_a[1]], axis=1)
-    Db_con = np.prod(Db[:, axes_b[0]], axis=1)
-    Da_out = Da[:, axes_a[0]]
-    Db_out = Db[:, axes_b[1]]
+    Da_con = np.prod(Da[:, nin_a], axis=1)
+    Db_con = np.prod(Db[:, nin_b], axis=1)
+    Da_out = Da[:, nout_a]
+    Db_out = Db[:, nout_b]
     Da_pro = np.prod(Da_out, axis=1)
     Db_pro = np.prod(Db_out, axis=1)
 
-    block_a = [(tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), D1, tuple(D2), D3) for t1, t2, t3, D1, D2, D3 in zip(ta_con, ta_out, ta, Da_con, Da_out, Da_pro)]
+    block_a = [(tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), D1, tuple(D2), D3)
+            for t1, t2, t3, D1, D2, D3 in zip(ta_con, ta_out, ta, Da_con, Da_out, Da_pro)]
     block_a = groupby(sorted(block_a, key=lambda x: x[0]), key=lambda x: x[0])
 
-    block_b = [(tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), D1, tuple(D2), D3) for t1, t2, t3, D1, D2, D3 in zip(tb_con, tb_out, tb, Db_con, Db_out, Db_pro)]
+    block_b = [(tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), D1, tuple(D2), D3)
+            for t1, t2, t3, D1, D2, D3 in zip(tb_con, tb_out, tb, Db_con, Db_out, Db_pro)]
     block_b = groupby(sorted(block_b, key=lambda x: x[0]), key=lambda x: x[0])
 
     meta = []
@@ -195,7 +174,7 @@ def _meta_tensordot_nomerge(a_struct, b_struct, axes_a, axes_b):
         pass
 
     meta = tuple(sorted(meta, key=lambda x: x[2]))
-    if len(axes_a[1]) == 1:
+    if len(nin_a) == 1:
         c_t = tuple(mm[2] for mm in meta)
         c_D = tuple(mm[5] for mm in meta)
     else:
@@ -226,41 +205,52 @@ def broadcast(a, b, axis, conj=(0, 0)):
         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
     """
     _test_configs_match(a, b)
-    if not b.isdiag:
-        raise YastError('Tensor b should be diagonal')
-    if not isinstance(axis, int):
-        raise YastError('axis should be int')
-
-    axis = axis % a.ndim
-    if a.meta_fusion[axis] != (1,):
-        raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
-    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack
+    axis = _broadcast_input(axis, a.meta_fusion, b.isdiag)
     if a.hard_fusion[axis].tree != (1,):
-        raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
+        raise YastError('First tensor`s leg specified by axis cannot be fused.')
 
     conja = (1 - 2 * conj[0])
-    c_hard_fusion = a.hard_fusion if conja == 1 else tuple(_flip_sign_hf(x) for x in a.hard_fusion)
-    meta, c_struct = _meta_broadcast(a.config, a.struct, b.struct, conja, axis)
+    c_hf = a.hard_fusion if conja == 1 else tuple(_flip_hf(x) for x in a.hard_fusion)
+    meta, c_struct = _meta_broadcast(a.config, a.struct, b.struct, axis, conja)
 
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=c_hard_fusion, struct=c_struct)
+    c = a.__class__(config=a.config, isdiag=a.isdiag,
+                    meta_fusion=a.meta_fusion, hard_fusion=c_hf, struct=c_struct)
     a_ndim, axis = (1, 0) if a.isdiag else (a.ndim_n, axis)
     c.A = a.config.backend.dot_diag(a.A, b.A, conj, meta, axis, a_ndim)
     return c
 
 
+def _broadcast_input(axis, mf, isdiag):
+    if not isdiag:
+        raise YastError('Second tensor should be diagonal.')
+    if not isinstance(axis, int):
+        raise YastError('axis should be an int.')
+    axis = axis % len(mf)
+    if mf[axis] != (1,):
+        raise YastError('First tensor`s leg specified by axis cannot be fused.')
+    axis = sum(mf[ii][0] for ii in range(axis))  # unpack
+    return axis
+
+
 @lru_cache(maxsize=1024)
-def _meta_broadcast(config, a_struct, b_struct, conja, axis):
+def _meta_broadcast(config, a_struct, b_struct, axis, conja):
     """ meta information for backend, and new tensor structure for brodcast """
     nsym = config.sym.NSYM
-    ind_tb = tuple(x[:nsym] for x in b_struct.t)
     ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a_struct.t)
-    meta = tuple((ta, ia + ia, ta) for ta, ia in zip(a_struct.t, ind_ta) if ia in ind_tb)
+    ind_tb = tuple(x[:nsym] for x in b_struct.t)
+    meta = tuple((ta, ia + ia, Da) for ta, ia, Da in zip(a_struct.t, ind_ta, a_struct.D) if ia in ind_tb)
+
     c_n = np.array(a_struct.n, dtype=int).reshape((1, 1, -1))
     c_n = tuple(config.sym.fuse(c_n, (1,), conja)[0])
     c_s = a_struct.s if conja == 1 else tuple(-x for x in a_struct.s)
-    tD = tuple((ta, da) for ta, da, ia in zip(a_struct.t, a_struct.D, ind_ta) if ia in ind_tb)
-    c_t, c_D = zip(*tD)
+
+    Db = dict(zip(b_struct.t, b_struct.D))
+    if any(Da[axis] != Db[tb][0] for _, tb, Da in meta):
+        raise YastError("Bond dimensions do not match.")
+    c_t = tuple(ta for ta, _, _ in meta)
+    c_D = tuple(Da for _, _, Da in meta)
     c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
+    meta = tuple((ta, tb) for ta, tb, _ in meta)
     return meta, c_struct
 
 
@@ -280,27 +270,41 @@ def mask(a, b, axis=0):
     axis: int
         leg of tensor a where the mask is applied.
     """
-    if not b.isdiag:
-        raise YastError('Tensor b should be diagonal')
-    if not isinstance(axis, int):
-        raise YastError('axis should be int')
     _test_configs_match(a, b)
-
-    axis = axis % a.ndim
-    if a.meta_fusion[axis] != (1,):
-        raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
-    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack
+    axis = _broadcast_input(axis, a.meta_fusion, b.isdiag)
     if a.hard_fusion[axis].tree != (1,):
-        raise YastError('For applying diagonal mask, leg of tensor a specified by axis cannot be fused')
-    nsym = b.config.sym.NSYM
-    ind_tb = tuple(x[:nsym] for x in b.struct.t if b.config.backend.any_nonzero(b.A[x]))
-    ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a.struct.t)
-    meta = tuple((ta, ia + ia, ta) for ta, ia in zip(a.struct.t, ind_ta) if ia in ind_tb)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+        raise YastError('First tensor`s leg specified by axis cannot be fused.')
+
+    Dbnew = tuple(b.config.backend.count_nonzero(b.A[tb]) for tb in b.struct.t)
+    meta, c_struct = _meta_mask(a.struct, a.isdiag, b.struct, Dbnew, axis)
+
+    c = a.__class__(config=a.config, isdiag=a.isdiag,
+                    meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=c_struct)
     a_ndim, axis = (1, 0) if a.isdiag else (a.ndim_n, axis)
     c.A = a.config.backend.mask_diag(a.A, b.A, meta, axis, a_ndim)
-    c.update_struct()
     return c
+
+
+@lru_cache(maxsize=1024)
+def _meta_mask(a_struct, a_isdiag, b_struct, Dbnew, axis):
+    """ meta information for backend, and new tensor structure for mask."""
+    nsym = len(a_struct.n)
+    ind_tb = tuple(x[:nsym] for x, d in zip(b_struct.t, Dbnew) if d > 0)
+    ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a_struct.t)
+    meta = tuple((ta, ia + ia, Da) for ta, ia, Da in zip(a_struct.t, ind_ta, a_struct.D) if ia in ind_tb)
+
+    Db = dict(zip(b_struct.t, b_struct.D))
+    if any(Da[axis] != Db[tb][0] for _, tb, Da in meta):
+        raise YastError('Bond dimensions do not match.')
+    c_t = tuple(ta for ta, _, _ in meta)
+    Db = dict(zip(b_struct.t, Dbnew))
+    if a_isdiag:
+        c_D = tuple((Db[tb], Db[tb] ) for _, tb, _ in meta)
+    else:
+        c_D = tuple(Da[:axis] + (Db[tb],) + Da[axis + 1:] for _, tb, Da in meta)
+    c_struct = a_struct._replace(t=c_t, D=c_D)
+    meta = tuple((ta, tb) for ta, tb, _ in meta)
+    return meta, c_struct
 
 
 def vdot(a, b, conj=(1, 0)):
@@ -320,28 +324,42 @@ def vdot(a, b, conj=(1, 0)):
     x: number
     """
     _test_configs_match(a, b)
-    _test_fusions_match(a, b)
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
-
-    if conja * conjb == -1 and any(ha.s != hb.s for ha, hb in zip(a.hard_fusion, b.hard_fusion)):
-        raise YastError('Signatures do not match.')
-    if conja * conjb == 1 and any(ha.s != hb.ms for ha, hb in zip(a.hard_fusion, b.hard_fusion)):
-        raise YastError('Signatures do not match.')
+    needs_mask, _ = _test_axes_match(a, b, sgn=-conja * conjb)
 
     c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
     c_n = a.config.sym.fuse(c_n, (conja, conjb), 1)
 
-    k12, _, _ = _common_keys(a.A, b.A)
-    needs_mask = any(ha.t != hb.t or ha.D != hb.D for ha, hb in zip(a.hard_fusion, b.hard_fusion))
-    if (len(k12) > 0) and np.all(c_n == 0):
+    meta = _vdot_meta(a.struct, b.struct)
+    if len(meta) > 0 and np.all(c_n == 0):
+        meta, Da, Db = zip(*meta)
         if needs_mask:
-            sla, slb = _masks_for_vdot(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion, k12)
-            Aa = {t: a.A[t][sla[t]] for t in k12}
-            Ab = {t: b.A[t][slb[t]] for t in k12}
+            sla, slb = _masks_for_vdot(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion, meta)
+            Aa = {t: a.A[t][sla[t]] for t in meta}
+            Ab = {t: b.A[t][slb[t]] for t in meta}
         else:
+            if Da != Db:
+                raise YastError('Bond dimensions do not match.')
             Aa, Ab = a.A, b.A
-        return a.config.backend.vdot(Aa, Ab, conj, k12)
+        return a.config.backend.vdot(Aa, Ab, conj, meta)
     return a.zero_of_dtype()
+
+
+def _vdot_meta(a_struct, b_struct):
+    """ instruction for backend of vdot and """
+    ia, ib, meta = 0, 0, []
+    while ia < len(a_struct.t) and ib < len(b_struct.t):
+        ta, Da = a_struct.t[ia], a_struct.D[ia]
+        tb, Db = b_struct.t[ib], b_struct.D[ib]
+        if ta == tb:
+            meta.append((ta, Da, Db))
+            ia += 1
+            ib += 1
+        elif ta < tb:
+            ia += 1
+        else:
+            ib += 1
+    return meta
 
 
 def trace(a, axes=(0, 1)):
@@ -358,37 +376,44 @@ def trace(a, axes=(0, 1)):
         tensor: Tensor
     """
     lin1, lin2 = _clear_axes(*axes)  # contracted legs
-    lout = tuple(ii for ii in range(a.ndim) if ii not in lin1 + lin2)
-    in1, in2, out = _unpack_axes(a.meta_fusion, lin1, lin2, lout)
+    if len(set(lin1) & set(lin2)) > 0:
+        raise YastError('The same axis in axes[0] and axes[1].')
+    needs_mask, (in1, in2) = _test_axes_match(a, a, sgn=-1, axes=(lin1, lin2))
 
-    if len(in1) != len(in2) or len(lin1) != len(lin2):
-        raise YastError('Number of axes to trace should be the same')
     if len(in1) == 0:
         return a
 
-    order = in1 + in2 + out
-
-    if not all(a.struct.s[i1] == -a.struct.s[i2] for i1, i2 in zip(in1, in2)):
-        raise YastError('Signs do not match')
-
-    needs_mask = any(a.hard_fusion[i1].t != a.hard_fusion[i2].t or a.hard_fusion[i1].D != a.hard_fusion[i2].D
-                    for i1, i2 in zip(in1, in2))
-
-    c_s = tuple(a.struct.s[i3] for i3 in out)
-    c_meta_fusion = tuple(a.meta_fusion[ii] for ii in lout)
-    c_hard_fusion = tuple(a.hard_fusion[ii] for ii in out)
-
-    c = a.__class__(config=a.config, s=c_s, n=a.struct.n, meta_fusion=c_meta_fusion, hard_fusion=c_hard_fusion)
+    order = in1 + in2
+    out = tuple(i for i in range(a.ndim_n) if i not in order)
+    order = order + out
+    c_mfs = tuple(a.meta_fusion[i] for i in range(a.ndim) if i not in lin1 + lin2)
+    c_hfs = tuple(a.hard_fusion[ii] for ii in out)
 
     if a.isdiag:
-        if needs_mask:
-            raise YastError('Diagonal tensor cannot have nontrivial leg fusion -- this should not have happend ')
+        # if needs_mask: raise YastError('Should not have happend')
+        c_struct = _struct(s=(), n=a.struct.n, t=((),), D=((),))
+        c = a.__class__(config=a.config, struct=c_struct, meta_fusion=c_mfs, hard_fusion=c_hfs)
         c.A = {(): c.config.backend.sum_elements(a.A)}
-        c.update_struct()
         return c
 
-    tset, Dset = _tarray(a), _Darray(a)
-    lt = len(tset)
+    meta, c_struct, t12, D1, D2 = _trace_meta(a.struct, in1, in2, out)
+    c = a.__class__(config=a.config, meta_fusion=c_mfs, hard_fusion=c_hfs, struct=c_struct)
+    if needs_mask:
+        msk12 = _masks_for_trace(a.config, t12, D1, D2, a.hard_fusion, in1, in2)
+        c.A = c.config.backend.trace_with_mask(a.A, order, meta, msk12)
+    else:
+        if D1 != D2:
+            raise YastError('Bond dimensions do not match.')
+        c.A = c.config.backend.trace(a.A, order, meta)
+    return c
+
+
+@lru_cache(maxsize=1024)
+def _trace_meta(struct, in1, in2, out):
+    """ meta-information for backend and struct of traced tensor. """
+    lt = len(struct.t)
+    tset = np.array(struct.t, dtype=int).reshape((lt, len(struct.s), len(struct.n)))
+    Dset = np.array(struct.D, dtype=int).reshape((lt, len(struct.s)))
     t1 = tset[:, in1, :].reshape(lt, -1)
     t2 = tset[:, in2, :].reshape(lt, -1)
     to = tset[:, out, :].reshape(lt, -1)
@@ -399,20 +424,20 @@ def trace(a, axes=(0, 1)):
     pD2 = np.prod(D2, axis=1).reshape(lt, 1)
     ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
     Drsh = np.hstack([pD1, pD2, D3])
-    if needs_mask:
-        t12 = tuple(tuple(t.flat) for t in t1[ind])
-        D1 = tuple(tuple(x.flat) for x in D1[ind])
-        D2 = tuple(tuple(x.flat) for x in D2[ind])
-        msk12 = _masks_for_trace(a.config, t12, D1, D2, a.hard_fusion, in1, in2)
-        meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n]), tt) for n, tt in zip(ind, t12)]
-        c.A = c.config.backend.trace_with_mask(a.A, order, meta, msk12)
+    t12 = tuple(tuple(t.flat) for t in t1[ind])
+    D1 = tuple(tuple(x.flat) for x in D1[ind])
+    D2 = tuple(tuple(x.flat) for x in D2[ind])
+    meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n]), tt) for n, tt in zip(ind, t12)]
+    meta = tuple(sorted(meta, key=lambda x: x[0]))
+    newtD = [(m[0], m[2][2:]) for m in meta]
+    newtD = tuple(k for k, _ in groupby(newtD))
+    if len(newtD) > 0:
+        newt, newD = zip(*newtD)
     else:
-        if not np.all(D1[ind] == D2[ind]):
-            raise YastError('Not all bond dimensions of the traced legs match')
-        meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n])) for n in ind]
-        c.A = c.config.backend.trace(a.A, order, meta)
-    c.update_struct()
-    return c
+        newt, newD = (), ()
+    c_s = tuple(struct.s[i] for i in out)
+    c_struct = _struct(t=newt, D=newD, s=c_s, n=struct.n)
+    return meta, c_struct, t12, D1, D2
 
 
 def swap_gate(a, axes, inplace=False):
@@ -435,7 +460,7 @@ def swap_gate(a, axes, inplace=False):
         return a
     fss = (True,) * len(a.struct.n) if a.config.fermionic is True else a.config.fermionic
     axes = tuple(_clear_axes(*axes))  # swapped groups of legs
-    tp = _meta_swap_gate(a.struct.t, a.struct.n, a.meta_fusion, a.ndim_n, axes, fss)
+    tp = _swap_gate_meta(a.struct.t, a.struct.n, a.meta_fusion, a.ndim_n, axes, fss)
     if inplace:
         for ts, odd in zip(a.struct.t, tp):
             if odd:
@@ -447,50 +472,68 @@ def swap_gate(a, axes, inplace=False):
 
 
 @lru_cache(maxsize=1024)
-def _meta_swap_gate(t, n, mf, ndim, axes, fss):
-    ind_n = [i for i, x in enumerate(axes) if x == (-1,)]
-    if len(ind_n) == 0:
-        axes = _unpack_axes(mf, *axes)
-    else:
-        axes = list(axes)
-        for ind in ind_n[::-1]:
-            axes.pop(ind)
-        axes = list(_unpack_axes(mf, *axes))
-        for ind in ind_n:
-            axes.insert(ind, (-1,))
-        axes = tuple(axes)
-
+def _swap_gate_meta(t, n, mf, ndim, axes, fss):
+    axes = _unpack_axes(mf, *axes)
     tset = np.array(t, dtype=int).reshape((len(t), ndim, len(n)))
     iaxes = iter(axes)
     tp = np.zeros(len(t), dtype=int)
 
     if len(axes) % 2 == 1:
-        raise YastError('Odd number of elements in axes -- needs even.')
+        raise YastError('Odd number of elements in axes. Elements of axes should come in pairs.')
     for l1, l2 in zip(*(iaxes, iaxes)):
         if len(set(l1) & set(l2)) > 0:
-            raise YastError('Cannot sweep the same index')
-        if l2 == (-1,):
-            t1 = np.sum(tset[:, l1, :], axis=1)
-            t2 = np.array(n, dtype=int).reshape(1, -1)
-        elif l1 == (-1,):
-            t2 = np.sum(tset[:, l2, :], axis=1)
-            t1 = np.array(n, dtype=int).reshape(1, -1)
-        else:
-            if (-1,) in l1 or (-1,) in l2:
-                raise YastError('Swap with tensor charge, i.e. -1, has to be provided as a separate axis.')
-            t1 = np.sum(tset[:, l1, :], axis=1) % 2
-            t2 = np.sum(tset[:, l2, :], axis=1) % 2
+            raise YastError('Cannot swap the same index.')
+        t1 = np.sum(tset[:, l1, :], axis=1) % 2
+        t2 = np.sum(tset[:, l2, :], axis=1) % 2
         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)
     return tuple(tp % 2)
+
+
+# @lru_cache(maxsize=1024)
+# def _swap_gate_meta(t, n, mf, ndim, axes, fss):
+#     ind_n = [i for i, x in enumerate(axes) if x == (-1,)]
+#     if len(ind_n) == 0:
+#         axes = _unpack_axes(mf, *axes)
+#     else:
+#         axes = list(axes)
+#         for ind in ind_n[::-1]:
+#             axes.pop(ind)
+#         axes = list(_unpack_axes(mf, *axes))
+#         for ind in ind_n:
+#             axes.insert(ind, (-1,))
+#         axes = tuple(axes)
+
+#     tset = np.array(t, dtype=int).reshape((len(t), ndim, len(n)))
+#     iaxes = iter(axes)
+#     tp = np.zeros(len(t), dtype=int)
+
+#     if len(axes) % 2 == 1:
+#         raise YastError('Odd number of elements in axes -- needs even.')
+#     for l1, l2 in zip(*(iaxes, iaxes)):
+#         if len(set(l1) & set(l2)) > 0:
+#             raise YastError('Cannot swap the same index')
+#         if l2 == (-1,):
+#             t1 = np.sum(tset[:, l1, :], axis=1)
+#             t2 = np.array(n, dtype=int).reshape(1, -1)
+#         elif l1 == (-1,):
+#             t2 = np.sum(tset[:, l2, :], axis=1)
+#             t1 = np.array(n, dtype=int).reshape(1, -1)
+#         else:
+#             if (-1,) in l1 or (-1,) in l2:
+#                 raise YastError('Swap with tensor charge, i.e. -1, has to be provided as a separate axis.')
+#             t1 = np.sum(tset[:, l1, :], axis=1) % 2
+#             t2 = np.sum(tset[:, l2, :], axis=1) % 2
+#         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)
+#     return tuple(tp % 2)
 
 
 def ncon(ts, inds, conjs=None):
     """Execute series of tensor contractions"""
     if len(ts) != len(inds):
-        raise YastError('Wrong number of tensors')
+        raise YastError('Number of tensors and indices do not match.')
     for ii, ind in enumerate(inds):
         if ts[ii].ndim != len(ind):
-            raise YastError(f'Wrong number of legs in {ii}-th input tensor.')
+            raise YastError('Number of legs of one of the tensors do not match provided indices.')
 
     ts = dict(enumerate(ts))
     cutoff = 512
@@ -507,7 +550,7 @@ def ncon(ts, inds, conjs=None):
     while order1 != cutoff:  # tensordot two tensors; or trace one tensor
         order2, leg2, ten2 = edges.pop()
         if order1 != order2:
-            raise YastError('Contracted legs do not match')
+            raise YastError('Indices of legs to contract do not match.')
         if ten1 < ten2:
             (t1, t2) = (ten1, ten2)
             ax1.append(leg1)

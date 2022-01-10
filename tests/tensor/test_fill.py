@@ -1,11 +1,11 @@
-""" Test: fill_tensor (which is called in: rand, zeros, ones), to_numpy, match_legs, norm_diff """
+""" Test: fill_tensor (which is called in: rand, zeros, ones), to_numpy, match_legs """
 import numpy as np
 import pytest
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2_U1
+    from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2_U1
+    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -21,7 +21,7 @@ def test_fill_0():
     # b = yast(legs=([a, 0, 'conj', a, 1, 'conj', {'s'=(1,), (1,): 5}]))
 
     b = yast.match_legs(tensors=[a, a, a], legs=[0, 1, 2], conjs=[1, 1, 1])
-    assert a.norm_diff(b) < tol  # == 0.0
+    assert yast.norm(a - b) < tol  # == 0.0
     assert b.is_consistent()
 
     # print('0d tensor:')
@@ -40,7 +40,7 @@ def test_fill_0():
     assert a.is_consistent()
 
     b = yast.match_legs(tensors=[a], legs=[0], conjs=[1], val='zeros')
-    assert a.norm_diff(b) < tol  # == 0.0
+    assert yast.norm(a - b) < tol  # == 0.0
     assert b.is_consistent()
 
     # print('diagonal tensor:')
@@ -64,7 +64,7 @@ def test_fill_1():
     assert a.is_consistent()
 
     b = yast.match_legs(tensors=[a, a, a, a], legs=[0, 1, 2, 3], conjs=[1, 1, 1, 1], val='ones')
-    assert a.norm_diff(b) < tol  # == 0.0
+    assert yast.norm(a - b) < tol  # == 0.0
 
     # print('0d tensor:')
     a = yast.ones(config=config_U1)  # s=()  # t=(), D=()
@@ -82,7 +82,7 @@ def test_fill_1():
     assert a.is_consistent()
 
     b = yast.match_legs(tensors=[a], legs=[0], conjs=[1], val='ones')
-    assert a.norm_diff(b) < tol  # == 0.0
+    assert yast.norm(a - b) < tol  # == 0.0
 
     # print('diagonal tensor:')
     a = yast.rand(config=config_U1, isdiag=True, t=0, D=5)
@@ -112,7 +112,7 @@ def test_fill_1():
 
 def test_fill_2():
     # print('3d tensor:')
-    a = yast.ones(config=config_Z2_U1, s=(-1, 1, 1),
+    a = yast.ones(config=config_Z2xU1, s=(-1, 1, 1),
                   t=[[(0, 1), (1, 0)], [(0, 0)], [(0, 1), (1, 0)]],
                   D=[[1, 2], 3, [1, 2]])
     npa = a.to_numpy()
@@ -121,10 +121,10 @@ def test_fill_2():
     assert a.is_consistent()
 
     b = yast.match_legs(tensors=[a, a, a], legs=[0, 1, 2], conjs=[1, 1, 1], val='ones')
-    assert a.norm_diff(b) < tol  # == 0.0
+    assert yast.norm(a - b) < tol  # == 0.0
 
     # print('1d tensor:')
-    a = yast.ones(config=config_Z2_U1, s=1,
+    a = yast.ones(config=config_Z2xU1, s=1,
                   t=[[(0, 0)]], D=[[2]])
     npa = a.to_numpy()
     assert np.isrealobj(npa)
@@ -132,10 +132,10 @@ def test_fill_2():
     assert a.is_consistent()
 
     b = yast.match_legs(tensors=[a], legs=[0], conjs=[1], val='ones')
-    assert a.norm_diff(b) < tol  # == 0.0
+    assert yast.norm(a - b) < tol  # == 0.0
 
     # print('diagonal tensor:')
-    a = yast.rand(config=config_Z2_U1, isdiag=True,
+    a = yast.rand(config=config_Z2xU1, isdiag=True,
                   t=[[(0, 0), (1, 1), (0, 2)]],
                   D=[[2, 2, 2]])
     npa = a.to_numpy()
@@ -145,7 +145,7 @@ def test_fill_2():
     assert a.is_consistent()
 
     # print('diagonal tensor:')
-    a = yast.rand(config=config_Z2_U1, isdiag=True,
+    a = yast.rand(config=config_Z2xU1, isdiag=True,
                   t=[[(0, 1), (-1, 0)], [(0, 1), (2, 0)]],
                   D=[[2, 5], [2, 7]])
     npa = a.to_numpy()

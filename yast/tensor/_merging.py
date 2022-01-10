@@ -29,14 +29,13 @@ class _Fusion(NamedTuple):
     """ Information identifying the structure of hard fusion"""
     tree: tuple = (1,)  # order of fusions
     s: tuple = (1,)  # signatures len(s) = len(tree)
-    ms: tuple = (-1,)  # minus s
     t: tuple = ()  # fused leg charges at each step len(t) = len(tree) - 1
     D: tuple = ()  # fused dimensions  at each step len(t) = len(tree) - 1
 
 
-def _flip_sign_hf(x):
+def _flip_hf(x):
     """ _Fusion with fliped signature. """
-    return x._replace(s=x.ms, ms=x.s)
+    return x._replace(s=tuple(-s for s in x.s))
 
 
 @lru_cache(maxsize=1024)
@@ -83,9 +82,8 @@ def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
         Dfl.append(D_in[n])
         Dfl.extend(hfs[n].D)
         sfl.extend(hfs[n].s)
-        msfl.extend(hfs[n].ms)
         treefl.extend(hfs[n].tree)
-    return _Fusion(tuple(treefl), tuple(sfl), tuple(msfl), tuple(tfl), tuple(Dfl))
+    return _Fusion(tuple(treefl), tuple(sfl), tuple(tfl), tuple(Dfl))
 
 
 def _merge_masks(config, ls, ms):
@@ -122,10 +120,7 @@ def _intersect_hfs(config, ts, Ds, hfs):
     Returns mask1 and mask2, finding common leg indices for each teff.
     Consumes fusion trees from the bottom, identifying common elements and building the masks.
     """
-    if hfs[0].tree != hfs[1].tree:
-        raise YastError('Numbers of merged legs or their merging order do not match. ')
     teff = tuple(sorted((set(ts[0]) & set(ts[1]))))
-
     tree = list(hfs[0].tree)
     if len(tree) == 1:
         msks = [[{t: np.ones(D, dtype=bool) for t, D in zip(ts[n], Ds[n]) if t in teff}] for n in (0, 1)]
@@ -136,7 +131,9 @@ def _intersect_hfs(config, ts, Ds, hfs):
     for ms1, ms2 in zip(*msks):
         for t in set(ms1) & set(ms2):
             if ms1[t].size != ms2[t].size:
-                raise YastError(f'Mismatch of bond dimensions of combined native legs for charge {t}')
+                if len(tree) == 1:
+                    raise YastError('Bond dimensions do not match.')
+                raise YastError('Bond dimensions of fused legs do not match.')
         _mask_falsify_mismatches(ms1, ms2)
 
     if len(tree) == 1:
@@ -180,20 +177,15 @@ def _union_hfs(config, ts, Ds, hfs):
     Consumes fusion trees from the bottom, building the union
     and identifying contribution of each to the union.
     """
-    if hfs[0].tree != hfs[1].tree:
-        raise YastError('Numbers of merged legs or their merging order do not match. ')
     tree = list(hfs[0].tree)
-
-    if hfs[0].s != hfs[1].s:
-        raise YastError('Union of two hard fusions requires the same signatures. ')
     s = list(hfs[0].s)  # to be consumed during parsing of the tree
 
     if len(tree) == 1:
-        hfu = _Fusion(s=hfs[0].s, ms=hfs[0].ms)
+        hfu = _Fusion(s=hfs[0].s)
         msk1 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[0], Ds[0])}
         msk2 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[1], Ds[1])}
         if any(msk1[t].size != msk2[t].size for t in set(msk1) & set(msk2)):
-            raise YastError('Mismatch of bond dimensions between two legs. ')
+            raise YastError('Bond dimensions do not match.')
         return msk1, msk2, hfu
 
     ind_native = [i for i, l in enumerate(tree[1:]) if l == 1]
@@ -202,13 +194,13 @@ def _union_hfs(config, ts, Ds, hfs):
         tD1 = dict(zip(hfs[0].t[i], hfs[0].D[i]))
         tD2 = dict(zip(hfs[1].t[i], hfs[1].D[i]))
         if any(tD1[t] != tD2[t] for t in set(tD1) & set(tD2)):
-            raise YastError('Mismatch of native bond dimensions between two fused legs. ')
+            raise YastError('Bond dimensions of fused legs do not match.')
         tD12 = {**tD1, **tD2}
         tu.append(tuple(sorted(tD12)))
         Du.append(tuple(tD12[t] for t in tu[-1]))
         msk1.append({t: np.ones(D, dtype=bool) if t in tD1 else np.zeros(D, dtype=bool) for t, D in zip(tu[-1], Du[-1])})
         msk2.append({t: np.ones(D, dtype=bool) if t in tD2 else np.zeros(D, dtype=bool) for t, D in zip(tu[-1], Du[-1])})
-        hfu.append(_Fusion(s=(s[i + 1],), ms=(-s[i + 1],)))  # len(s) == 1 + len(t)
+        hfu.append(_Fusion(s=(s[i + 1],)))  # len(s) == 1 + len(t)
 
     teff = tuple(sorted(set(ts[0]) | set(ts[1])))
     t1 = [teff] + list(hfs[0].t)  # to be consumed during parsing of the tree
@@ -300,8 +292,8 @@ def _masks_for_vdot(config, structa, hfa, structb, hfb, ind_ab=None):
         msk_b.append(mb)
     inda = structa.t if ind_ab is None else ind_ab
     indb = structb.t if ind_ab is None else ind_ab
-    sla = {t: tuple(ma[t[n * nsym: n * nsym + nsym]] for n, ma in enumerate(msk_a)) for t in inda}
-    slb = {t: tuple(mb[t[n * nsym: n * nsym + nsym]] for n, mb in enumerate(msk_b)) for t in indb}
+    sla = {t: tuple(ma[t[n * nsym: (n + 1) * nsym]] for n, ma in enumerate(msk_a)) for t in inda}
+    slb = {t: tuple(mb[t[n * nsym: (n + 1) * nsym]] for n, mb in enumerate(msk_b)) for t in indb}
     return sla, slb
 
 
@@ -312,12 +304,12 @@ def _masks_for_trace(config, t12, D1, D2, hfs, ax1, ax2):
 
     tDDset = set(zip(t12, D1, D2))
     tset = set(t12)
-    if len(tset) != len(tDDset):
-        raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
+    # if len(tset) != len(tDDset):
+    #     raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
 
     for n, (i1, i2) in enumerate(zip(ax1, ax2)):
-        tdn = tuple(set((t[n * nsym: n * nsym + nsym], d1[n], d2[n]) for t, d1, d2 in tDDset))
-        tn, D1n, D2n = zip(*tdn)
+        tdn = tuple(set((t[n * nsym: (n + 1) * nsym], d1[n], d2[n]) for t, d1, d2 in tDDset))
+        tn, D1n, D2n = zip(*tdn)  # this can triggerexception when tdn is empty -- fix and test in test_trace
         m1, m2 = _intersect_hfs(config, (tn, tn), (D1n, D2n), (hfs[i1], hfs[i2]))
         msk1.append(m1)
         msk2.append(m2)
@@ -349,10 +341,10 @@ def _masks_for_add(config, structa, hfa, structb, hfb):
         msk_a.append(ma)
         msk_b.append(mb)
         hfs.append(hf)
-    sla = {t: tuple(ma[t[n * nsym: n * nsym + nsym]] for n, ma in enumerate(msk_a)) for t in structa.t}
-    slb = {t: tuple(mb[t[n * nsym: n * nsym + nsym]] for n, mb in enumerate(msk_b)) for t in structb.t}
-    tDa = {t: tuple(tD[t[n * nsym: n * nsym + nsym]] for n, tD in enumerate(tDsa)) for t in structa.t}
-    tDb = {t: tuple(tD[t[n * nsym: n * nsym + nsym]] for n, tD in enumerate(tDsb)) for t in structb.t}
+    sla = {t: tuple(ma[t[n * nsym: (n + 1) * nsym]] for n, ma in enumerate(msk_a)) for t in structa.t}
+    slb = {t: tuple(mb[t[n * nsym: (n + 1) * nsym]] for n, mb in enumerate(msk_b)) for t in structb.t}
+    tDa = {t: tuple(tD[t[n * nsym: (n + 1) * nsym]] for n, tD in enumerate(tDsa)) for t in structa.t}
+    tDb = {t: tuple(tD[t[n * nsym: (n + 1) * nsym]] for n, tD in enumerate(tDsb)) for t in structb.t}
     return sla, tDa, slb, tDb, tuple(hfs)
 
 
@@ -369,7 +361,7 @@ def _unfuse_Fusion(hf):
                 tt.append(hf.t[n_init - 1])
                 DD.append(hf.D[n_init - 1])
                 ss.append(hf.s[n_init])
-                hfs.append(_Fusion(hf.tree[n_init: n + 1], hf.s[n_init: n + 1], hf.ms[n_init: n + 1],
+                hfs.append(_Fusion(hf.tree[n_init: n + 1], hf.s[n_init: n + 1],
                                     hf.t[n_init: n], hf.D[n_init: n]))
                 n_init = n + 1
     return tuple(tt), tuple(DD), tuple(ss), hfs
@@ -526,7 +518,11 @@ def _meta_unfuse_hard(config, struct, axes, hfs):
                 slc = tuple(x[1].Dslc for x in tt)
                 Dn = tuple(_flatten((x[1].Drsh for x in tt)))
                 meta.append((tn, to, slc, Dn))
-    return meta, tuple(snew), tuple(nlegs_unfused), tuple(hfs_new)
+    meta = tuple(sorted(meta, key=lambda x: x[0]))
+    tnew = tuple(x[0] for x in meta)
+    Dnew = tuple(x[3] for x in meta)
+    new_struct = struct._replace(s=tuple(snew), t=tnew, D=Dnew)
+    return meta, new_struct, tuple(nlegs_unfused), tuple(hfs_new)
 
 
 def _fuse_legs_hard(a, axes, order, inplace=False):
@@ -596,7 +592,7 @@ def fuse_legs(a, axes, inplace=False, mode=None):
     tensor.fuse_legs(axes=[(2, 0), (1, 4), (3, 5)]) gives 3 effective legs from original 6
     """
     if a.isdiag:
-        raise YastError('Cannot fuse legs of a diagonal tensor')
+        raise YastError('Cannot fuse legs of a diagonal tensor.')
     if mode is None:
         mode = a.config.default_fusion
     if a.config.force_fusion is not None:
@@ -616,17 +612,16 @@ def fuse_legs(a, axes, inplace=False, mode=None):
                 for ii in group:
                     new_mf.extend(a.meta_fusion[ii])
                 mfs.append(tuple(new_mf))
-        if inplace and order == tuple(ii for ii in range(a.ndim)):
+        if inplace and order == tuple(range(a.ndim)):
             c = a
         else:
             c = a.transpose(axes=order, inplace=inplace)
         c.meta_fusion = tuple(mfs)
-    elif mode == 'hard':
+        return c
+    if mode == 'hard':
         c = fuse_meta_to_hard(a, inplace)
-        c = _fuse_legs_hard(c, axes, order, inplace)
-    else:
-        raise YastError('fuse_legs mode should be `meta` or `hard`; can be also set in config file.')
-    return c
+        return _fuse_legs_hard(c, axes, order, inplace)
+    raise YastError('mode not in (`meta`, `hard`). Mode can be specified in config file.')
 
 
 def unfuse_legs(a, axes, inplace=False):
@@ -648,7 +643,7 @@ def unfuse_legs(a, axes, inplace=False):
     tensor : Tensor
     """
     if a.isdiag:
-        raise YastError('Cannot unfuse legs of a diagonal tensor')
+        raise YastError('Cannot unfuse legs of a diagonal tensor.')
     if isinstance(axes, int):
         axes = (axes,)
     ni, new_mfs, axes_hf = 0, [], []
@@ -673,18 +668,18 @@ def unfuse_legs(a, axes, inplace=False):
             new_mfs.append(a.meta_fusion[mi])
         ni += dni
     if axes_hf:
-        meta, snew, nlegs, new_hfs = _meta_unfuse_hard(a.config, a.struct, tuple(axes_hf), tuple(a.hard_fusion))
+        meta, c_struct, nlegs, new_hfs = _meta_unfuse_hard(a.config, a.struct, tuple(axes_hf), tuple(a.hard_fusion))
         for unfused, n in zip(nlegs[::-1], axes_hf[::-1]):
             new_mfs = new_mfs[:n] + [new_mfs[n]] * unfused + new_mfs[n+1:]
         if inplace:
             c = a
-            c.struct = c.struct._replace(s=snew)
+            c.struct = c_struct
             c.hard_fusion = tuple(new_hfs)
             c.meta_fusion = tuple(new_mfs)
         else:
-            c = a.__class__(config=a.config, n=a.n, s=snew, meta_fusion=tuple(new_mfs), hard_fusion=tuple(new_hfs))
+            c = a.__class__(config=a.config, struct=c_struct,
+                            meta_fusion=tuple(new_mfs), hard_fusion=tuple(new_hfs))
         c.A = a.config.backend.unmerge_from_array(a.A, meta)
-        c.update_struct()
     else:
         c = a if inplace else a.clone()
         c.meta_fusion = tuple(new_mfs)
@@ -754,11 +749,17 @@ def _unmerge_matrix(a, ls_l, ls_r):
         if ic in a.A:
             for (tl, rl), (tr, rr) in product(ls_l.dec[il].items(), ls_r.dec[ir].items()):
                 meta.append((tl + tr, ic, rl.Dslc, rr.Dslc, rl.Drsh + rr.Drsh))
+    meta = sorted(meta, key=lambda x: x[0])
+    c_t = tuple(x[0] for x in meta)
+    c_D = tuple(x[4] for x in meta)
     a.A = a.config.backend.unmerge_from_matrix(a.A, meta)
-    a.update_struct()
+    a.struct = a.struct._replace(t=c_t, D=c_D)
 
 
 def _unmerge_diagonal(a, ls):
-    meta = tuple((ta + ta, ia, ra.Dslc) for ia in ls.dec for ta, ra in ls.dec[ia].items())
+    meta = list((ta + ta, ia, ra.Dslc) for ia in ls.dec for ta, ra in ls.dec[ia].items())
+    meta = tuple(sorted(meta, key=lambda x: x[0]))
+    c_t = tuple(t for t, _, _ in meta)
+    c_D = tuple((D[1] - D[0], D[1] - D[0]) for _, _, D in meta)
     a.A = a.config.backend.unmerge_from_diagonal(a.A, meta)
-    a.update_struct()
+    a.struct = a.struct._replace(t=c_t, D=c_D)

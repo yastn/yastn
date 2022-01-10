@@ -1,31 +1,34 @@
 """ methods outputing data from yast tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _mf_to_ntree
+from ._auxliary import _clear_axes, _unpack_axes, _tarray, _Darray, _mf_to_ntree, _struct
 from ._tests import YastError
 from ..sym import sym_none
 
 
-__all__ = ['compress_to_1d', 'export_to_dict', 'export_to_hdf5',
+__all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5',
             'leg_structures_for_dense', 'requires_grad']
 
 
-def export_to_dict(a):
+def save_to_dict(a):
     r"""
-    Export relevant information about tensor to dictionary that can be saved using numpy.save
+    Export relevant information about tensor to dictionary. Such dictionary can be then 
+    stored in file using i.e. numpy.save
 
     Returns
     -------
     d: dict
         dictionary containing all the information needed to recreate the tensor.
     """
-    AA = {ind: a.config.backend.to_numpy(a.A[ind]) for ind in a.A}
-    out = {'A': AA, 's': a.struct.s, 'n': a.struct.n, 'isdiag': a.isdiag,
-            'meta_fusion': a.meta_fusion, 'hard_fusion': a.hard_fusion}
-    return out
+    _d, _ = a.compress_to_1d()
+    _d = a.config.backend.to_numpy(_d)
+    hfs = [hf._asdict() for hf in a.hard_fusion]
+    return {'_d': _d, 's': a.struct.s, 'n': a.struct.n,
+            't': a.struct.t, 'D': a.struct.D, 'isdiag': a.isdiag,
+            'mfs': a.meta_fusion, 'hfs': hfs}
 
 
-def export_to_hdf5(a, file, path):
+def save_to_hdf5(a, file, path):
     """
     Export tensor into hdf5 type file.
 
@@ -45,14 +48,16 @@ def export_to_hdf5(a, file, path):
 
 def compress_to_1d(a, meta=None):
     """
-    Store each block as 1D array within r1d in contiguous manner; outputs meta-information to reconstruct the original tensor
+    Store each block as 1D array within r1d in contiguous manner; outputs meta-information 
+    to reconstruct the original tensor
 
     Parameters
     ----------
         meta: dict
             If not None, uses this metainformation to merge into 1d structure,
             filling-in zeros if tensor does not have some blocks.
-            Raise error if tensor has some blocks which are not included in meta or otherwise meta does not match the tensor.
+            Raise error if tensor has some blocks which are not included in meta or otherwise 
+            meta does not match the tensor.
     """
     if meta is None:
         D_rsh = _Darray(a)[:, 0] if a.isdiag else np.prod(_Darray(a), axis=1)
@@ -87,16 +92,16 @@ def compress_to_1d(a, meta=None):
 
 
 def show_properties(a):
-    """ 
-    Print basic properties of the tensor: 
+    """
+    Print basic properties of the tensor:
         * it's symmetry
         * signature
         * total charge
         * whether it is a diagonal tensor
-        * meta/logical rank - treating fused legs as single leg 
+        * meta/logical rank - treating fused legs as single leg
         * native rank
         * total dimension of all existing charge sectors for each leg, treating fused legs as single leg
-        * total dimension of all existing charge sectors for native leg  
+        * total dimension of all existing charge sectors for native leg
         * number of non-empty blocks
         * total number of elements across all non-empty blocks
         * fusion tree for each leg
@@ -133,31 +138,31 @@ def requires_grad(a):
     Returns
     -------
     bool : bool
-            ``True`` if any of the blocks of the tensor has autograd enabled 
+            ``True`` if any of the blocks of the tensor has autograd enabled
     """
     return a.config.backend.requires_grad(a.A)
 
 
 def print_blocks_shape(a):
     """
-    Print shapes of blocks as a sequence of block's charge followed by its shape 
+    Print shapes of blocks as a sequence of block's charge followed by its shape
     """
     for ind, x in a.A.items():
         print(f"{ind} {a.config.backend.get_shape(x)}")
 
 
 def is_complex(a):
-    """ 
+    """
     Returns
     -------
     bool : bool
-        ``True`` if all of the blocks of the tensor are complex 
+        ``True`` if all of the blocks of the tensor are complex
     """
     return all(a.config.backend.is_complex(x) for x in a.A.values())
 
 
 def get_tensor_charge(a):
-    """ 
+    """
     Returns
     -------
     n : int or tuple(int)
@@ -167,44 +172,44 @@ def get_tensor_charge(a):
 
 
 def get_signature(a, native=False):
-    """ 
+    """
     Returns
     -------
     s : tuple
-        Tensor signature, equivalent to :attr:`yast.Tensor.s`. 
-        If native, returns the signature of tensors's native legs, see :attr:`yast.Tensor.s_n`.  
+        Tensor signature, equivalent to :attr:`yast.Tensor.s`.
+        If native, returns the signature of tensors's native legs, see :attr:`yast.Tensor.s_n`.
     """
     return a.s_n if native else a.s
 
 
 def get_rank(a, native=False):
-    """ 
+    """
     Returns
     -------
     n : int
-        Tensor rank equivalent to :attr:`yast.Tensor.ndim`. 
-        If native, the native rank of the tensor is returned, see :attr:`yast.Tensor.ndim_n`. 
+        Tensor rank equivalent to :attr:`yast.Tensor.ndim`.
+        If native, the native rank of the tensor is returned, see :attr:`yast.Tensor.ndim_n`.
     """
     return a.ndim_n if native else a.ndim
 
 
 def get_blocks_charge(a):
-    """ 
+    """
     Returns
     -------
     t : tuple(tuple(int))
         Charges of all native blocks. In case of product of abelian symmetries,
-        for each block the individual symmetry charges are flattened into a single tuple.  
+        for each block the individual symmetry charges are flattened into a single tuple.
     """
     return a.struct.t
 
 
 def get_blocks_shape(a):
-    """ 
+    """
     Returns
     -------
     D : tuple(tuple(int))
-        Shapes of all native blocks. 
+        Shapes of all native blocks.
     """
     return a.struct.D
 
@@ -231,7 +236,7 @@ def get_shape(a, axes=None, native=False):
 
 
 def unique_dtype(a):
-    """ 
+    """
     Returns
     -------
     dtype : dtype or bool
@@ -241,13 +246,13 @@ def unique_dtype(a):
 
 
 def __getitem__(a, key):
-    """ 
+    """
     Parameters
     ----------
     key : tuple(int)
         charges of the block
 
-    Returns 
+    Returns
     -------
     out : tensor
         The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
@@ -382,7 +387,7 @@ def leg_structures_union(*args):
             len_t = len(t)
     return ls_out
 
-  
+
 ############################
 #   Down-casting tensors   #
 ############################
@@ -409,7 +414,7 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
 
     Returns
     -------
-    out : tensor 
+    out : tensor
         The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
     c = a.to_nonsymmetric(leg_structures, native, reverse)
@@ -420,7 +425,7 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
 def to_numpy(a, leg_structures=None, native=False, reverse=False):
     r"""
     Create full ``numpy.ndarray`` corresponding to the symmetric tensor. See :func:`yast.to_dense`
-    
+
     Returns
     -------
     out : numpy.ndarray
@@ -431,7 +436,7 @@ def to_numpy(a, leg_structures=None, native=False, reverse=False):
 
 def to_raw_tensor(a):
     """
-    If the symmetric tensor has just a single non-empty block, return raw tensor representing 
+    If the symmetric tensor has just a single non-empty block, return raw tensor representing
     that block.
 
     Returns
@@ -476,8 +481,6 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
         the config of returned tensor does not use any symmetry
     """
     config_dense = a.config._replace(sym=sym_none)
-    news = a.get_signature(native)
-    c = a.__class__(config=config_dense, s=news, n=None, isdiag=a.isdiag)
 
     ndim = a.ndim_n if native else a.ndim
     tD = [a.get_leg_structure(n, native=native) for n in range(ndim)]
@@ -504,8 +507,13 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     if a.isdiag:
         Dtot = Dtot[:1]
         meta = [(t, D[:1]) for t, D in meta]
+
+    c_s = a.get_signature(native)
+    c_t = ((),)
+    c_D = (Dtot,) if not a.isdiag else (Dtot + Dtot,)
+    c_struct = _struct(t=c_t, D=c_D, s=c_s, n=())
+    c = a.__class__(config=config_dense, isdiag=a.isdiag, struct=c_struct)
     c.A[()] = a.config.backend.merge_to_dense(a.A, Dtot, meta, a.config.device)
-    c.update_struct()
     return c
 
 
@@ -528,7 +536,7 @@ def to_number(a, part=None):
     ----------
     part : str
         if 'real' return real part only
-    
+
     Returns
     -------
     out : scalar

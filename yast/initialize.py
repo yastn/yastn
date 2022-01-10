@@ -1,14 +1,15 @@
 # Methods creating new YAST tensors from scratch
 # and importing tensors from different formats
 # such as 1D+metadata or dictionary representation
-from .tensor import Tensor, YastError
 import numpy as np
-from .tensor._auxliary import _unpack_axes
+from .tensor import Tensor, YastError
+from .tensor._auxliary import _unpack_axes, _struct
+from .tensor._merging import _Fusion
 from .tensor._initialize import _set_block
 
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
-           'import_from_dict', 'import_from_hdf5',  'decompress_from_1d']
+           'load_from_dict', 'load_from_hdf5',  'decompress_from_1d']
 
 
 def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwargs):
@@ -190,7 +191,7 @@ def eye(config=None, t=(), D=(), legs=None, dtype=None, **kwargs):
     return a
 
 
-def import_from_dict(config=None, d=None):
+def load_from_dict(config=None, d=None):
     """
     Generate tensor based on information in dictionary `d`.
 
@@ -200,22 +201,26 @@ def import_from_dict(config=None, d=None):
             configuration with backend, symmetry, etc.
 
     d : dict
-        Tensor stored in form of a dictionary. Typically provided by an output 
-        of :meth:`~yast.Tensor.export_to_dict`
+        Tensor stored in form of a dictionary. Typically provided by an output
+        of :meth:`~yast.Tensor.save_to_dict`
     """
     if d is not None:
-        a = Tensor(config=config, **d)
-        dtype = a.config.default_dtype
-        for ind in d['A']:
-            Ds = d['A'][ind].shape * 2 if a.isdiag else d['A'][ind].shape
-            _set_block(a, ts=ind, Ds=Ds, val=d['A'][ind], dtype=dtype)
-        a.update_struct()
+        struct = _struct(s=d['s'], n=d['n'], t=d['t'], D=d['D'])
+        hfs = tuple(_Fusion(**hf) for hf in d['hfs'])
+        a = Tensor(config=config, struct=struct, isdiag=d['isdiag'],
+                    hard_fusion=hfs, meta_fusion=d['mfs'])
+        pointer = 0
+        dtype = d['_d'].dtype.name
+        for ts, Ds in zip(struct.t, struct.D):
+            step = np.prod(Ds, dtype=int) if not d['isdiag'] else Ds[0]
+            _set_block(a, ts=ts, Ds=Ds, val=d['_d'][pointer: pointer + step], dtype=dtype)
+            pointer += step
         a.is_consistent()
         return a
     raise YastError("Dictionary d is required.")
 
 
-def import_from_hdf5(config, file, path):
+def load_from_hdf5(config, file, path):
     """
     Generate tensor based on information in hdf5 file.
 
