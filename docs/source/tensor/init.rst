@@ -40,14 +40,22 @@ See examples: :ref:`examples/init:create tensors from scratch`.
 Copying and cloning with autograd
 ---------------------------------
 
+TODO add link
+
+YAST follows the semantics of PyTorch with regards to creating
+differentiable `clones` or non-differentiable `copies` of symmetric
+tensors.
+
+See examples: :ref:`examples/init:clone, detach or copy tensors`.
+
 .. autoclass:: yast.Tensor
 	:noindex:
 	:exclude-members: __init__, __new__
 	:members: copy, clone, detach
 
 
-Moving tensors between devices
-------------------------------
+Changing tensor's device or dtype
+---------------------------------
 
 Support for different compute devices, i.e. `CPU`, `GPU`, or others,
 depends on the selected backend. For example 
@@ -55,7 +63,7 @@ depends on the selected backend. For example
     * `NumPy` backend supports only `CPU`
     * `PyTorch` backend supports also `GPU` (and other devices)
 
-Tensors can be moved between devices
+Tensors can be moved between devices and/or their `dtype` changed 
 
 .. automethod:: yast.Tensor.to
 
@@ -67,8 +75,8 @@ These utility operations can re-create tensors from
 different formats. For example, 1D representation or dictionary.
 Their export counterparts are
 	
-	* yast.save_to_dict 
-	* yast.compress_to_1d 
+	* :meth:`yast.save_to_dict` 
+	* :meth:`yast.compress_to_1d` 
 
 See examples: :ref:`examples/init:serialization of symmetric tensors`.
 

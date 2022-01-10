@@ -6,3 +6,17 @@ Basic algebra operations
 
 .. literalinclude:: /../../tests/tensor/test_syntax.py
    :pyobject: TestSyntaxBasicAlgebra.test_syntax_basic_algebra
+
+
+Transposition
+-------------
+
+.. literalinclude:: /../../tests/tensor/test_transpose.py
+   :pyobject: TestSyntaxTranspose.test_transpose_syntax
+
+
+Conjugation of symmetric tensors
+--------------------------------
+
+.. literalinclude:: /../../tests/tensor/test_conj.py
+   :pyobject: TestConj_Z2xU1.test_conj_Z2xU1

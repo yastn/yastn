@@ -117,6 +117,33 @@ class TestSyntaxBasicAlgebra(unittest.TestCase):
         with self.assertRaises(Exception):
             tensor = a + c
 
+        # 
+        # element-wise exponentiation, absolute value, reciprocal i.e. x -> 1/x, 
+        # square root and its reciprocal x -> 1/sqrt(x)
+        #
+        tensor = a.exp(step=1)
+        tensor = yast.exp(a, step=1)
+        
+        tensor = abs(a)
+
+        tensor = a.reciprocal(cutoff=1e-12)
+        tensor = yast.reciprocal(a, cutoff=1e-12)
+        
+        tensor = abs(a).sqrt()
+        tensor = yast.sqrt(abs(a))
+        
+        tensor = abs(a).rsqrt(cutoff=1e-12)
+        tensor = yast.rsqrt(abs(a), cutoff=1e-12)
+        
+
+        #
+        # Sometimes a composite operation is faster than serial execution of individual 
+        # operations. For example, multiplication by scalar and addition, a + x*b, 
+        # are handled by specialized function
+        # 
+        tensor = a.apxb(b, x=1)
+        tensor = yast.apxb(a, b, x=1)
+
 
 class TestSyntaxTensorExportImport(unittest.TestCase):
 
@@ -160,6 +187,7 @@ class TestSyntaxBlockAccess(unittest.TestCase):
         #
         a[(1, 1, 2, 2)]
 
+
 class TestSyntaxTensorBlocking(unittest.TestCase):
 
     def test_syntax_block_tensors(self):
@@ -180,7 +208,10 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
         # combined with ncon
         yast.ncon([tensor, a, b], [(1, 2, 3), (-1, 1, 2, -2), (3, -4, -5, -6)], conjs=(0, 0, 1))
 
-    def test_syntax_general_operations(self):
+
+class TestSyntaxGeneral(unittest.TestCase):
+
+    def test_syntax_noDocs(self):
         a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                       t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                       D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
@@ -192,17 +223,23 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
                       D=((10, 11, 12), (7, 8, 9), (4, 5, 6)))
 
 
-        # algebra
-        tensor = a.apxb(b, x=1)
-        tensor = yast.apxb(a, b, x=1)
+        # conj - documented example in test_conj.py
+        tensor = a.conj()
+        tensor = yast.conj(a)
+        tensor = a.conj_blocks()
+        tensor = yast.conj_blocks(a)
+        tensor = a.flip_signature()
+        tensor = yast.flip_signature(a)
 
-        # coping/cloning
+        # coping/cloning - documented example in test_autograd.py
         tensor = a.copy()
         tensor = yast.copy(a)
         tensor = a.clone()
         tensor = yast.clone(a)
         tensor = a.detach()
         tensor = yast.detach(a)
+
+        # to
         tensor = a.to(device='cpu')
 
         # get info
@@ -228,32 +265,12 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
         array = a.to_dense(leg_structures=ls)  # on selected legs, enforce to include cherges read in previous line
         tensor = a.to_nonsymmetric()
 
-        # conj
-        tensor = a.conj()
-        tensor = yast.conj(a)
-        tensor = a.conj_blocks()
-        tensor = yast.conj_blocks(a)
-        tensor = a.flip_signature()
-        tensor = yast.flip_signature(a)
-
-        # permute
+        # permute - documented example in test_transpose.py
         tensor = a.transpose(axes=(2, 3, 0, 1))
         tensor = yast.transpose(a, axes=(2, 3, 0, 1))
 
         tensor = a.moveaxis(source=2, destination=3)
         tensor = yast.moveaxis(a, source=2, destination=3)
-
-        # elementwise operations
-        tensor = a.exp(step=1)
-        tensor = yast.exp(a, step=1)
-        tensor = abs(a)
-
-        tensor = abs(a).sqrt()
-        tensor = yast.sqrt(abs(a))
-        tensor = abs(a).rsqrt(cutoff=1e-12)
-        tensor = yast.rsqrt(abs(a), cutoff=1e-12)
-        tensor = a.reciprocal(cutoff=1e-12)
-        tensor = yast.reciprocal(a, cutoff=1e-12)
 
         # contraction
         tensor = yast.tensordot(a, b, axes=((1, 2), (1, 2)), conj=(1, 0))

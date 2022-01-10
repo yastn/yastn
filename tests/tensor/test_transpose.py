@@ -1,4 +1,5 @@
 """ yast.vdot yast.moveaxis"""
+import unittest
 import numpy as np
 import pytest
 import yast
@@ -7,6 +8,7 @@ try:
 except ImportError:
     from configs import config_dense, config_U1, config_Z2xU1
 
+tol = 1e-12  #pylint: disable=invalid-name
 
 def run_moveaxis(a, ad, source, destination, result):
     newa = a.moveaxis(source=source, destination=destination)
@@ -24,6 +26,39 @@ def run_transpose(a, ad, axes, result):
     assert np.transpose(ad, axes=axes).shape == result
     assert newa.is_consistent()
     assert a.are_independent(newa)
+
+
+class TestSyntaxTranspose(unittest.TestCase):
+
+    def test_transpose_syntax(self):
+        #
+        # define rank-6 U(1)-symmetric tensor
+        #
+        a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
+                  t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
+                  D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
+
+        #
+        # for each leg its dense dimension is given by the sum of dimensions
+        # of individual sectors. Hence, the (dense) shape of this tensor
+        # is (2+3, 4+5, 6+7, 6+5, 4+3, 2+1)
+        assert a.get_shape() ==  (5, 9, 13, 11, 7, 3)
+
+        #
+        # permute the legs of the tensor and check the shape is changed
+        # accordingly
+        b= a.transpose( (0,2,4,1,3,5) )
+        assert b.get_shape() == (5,13,7,9,11,3)
+
+        #
+        # sometimes, instead of writing explicit permutation of all legs
+        # it is more convenient to only specify pairs of legs to switched.
+        # In this example, we reverse the permutation done previously thus
+        # ending up with tensor numerically identical to a.
+        #
+        c= b.moveaxis(source=(1,2), destination=(2,4))
+        assert c.get_shape() == a.get_shape()
+        assert yast.norm(a-c)<tol
 
 
 def test_transpose_basic():
@@ -98,3 +133,4 @@ if __name__ == '__main__':
     test_transpose_inplace()
     test_transpose_diag()
     test_transpose_exceptions()
+    unittest.main()
