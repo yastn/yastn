@@ -74,8 +74,8 @@ def are_independent(a, b):
     Test if all elements of two yast tensors are independent objects in memory.
     """
     test = []
-    test.append(not a is b)
-    test.append(not a.A is b.A)
+    test.append(a is not b)
+    test.append(a.A is not b.A)
     for key in a.A.keys():
         if key in b.A:
             test.append(a.config.backend.is_independent(a.A[key], b.A[key]))
@@ -127,5 +127,5 @@ def _get_tD_legs(struct):
     if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
         raise YastError('Bond dimensions related to some charge are not consistent.')
     tlegs = [tuple(tD.keys()) for tD in tD_dict]
-    Dlegs= [tuple(tD.values()) for tD in tD_dict]
+    Dlegs = [tuple(tD.values()) for tD in tD_dict]
     return tlegs, Dlegs, tD_dict, tset, Dset

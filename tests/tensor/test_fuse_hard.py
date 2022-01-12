@@ -35,7 +35,7 @@ def test_hard_split():
     assert yast.norm(af - a3) < tol  # == 0.0
     a3.unfuse_legs(axes=0, inplace=True)
     a3.unfuse_legs(axes=(1, 2), inplace=True)
-    a3.moveaxis(source=2, destination=1, inplace=True)
+    a3.move_leg(source=2, destination=1, inplace=True)
     assert yast.norm(a - a3) < tol  # == 0.0
 
     Qf, Rf = yast.linalg.qr(af, axes=(0, 1))
@@ -67,7 +67,7 @@ def test_hard_transpose():
     c.unfuse_legs(axes=(1, 3), inplace=True)
     assert c.get_shape() == (13, 9, 11, 7, 3, 5)
 
-    c = b.moveaxis(source=1, destination=2)
+    c = b.move_leg(source=1, destination=2)
     assert c.get_shape() == (15, 99, 7, 13)
     c.unfuse_legs(axes=(1, 0), inplace=True)
     assert c.get_shape() == (3, 5, 9, 11, 7, 13)

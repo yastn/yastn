@@ -269,8 +269,8 @@ class TestSyntaxGeneral(unittest.TestCase):
         tensor = a.transpose(axes=(2, 3, 0, 1))
         tensor = yast.transpose(a, axes=(2, 3, 0, 1))
 
-        tensor = a.moveaxis(source=2, destination=3)
-        tensor = yast.moveaxis(a, source=2, destination=3)
+        tensor = a.move_leg(source=2, destination=3)
+        tensor = yast.move_leg(a, source=2, destination=3)
 
         # contraction
         tensor = yast.tensordot(a, b, axes=((1, 2), (1, 2)), conj=(1, 0))

@@ -1,4 +1,4 @@
-""" yast.vdot yast.moveaxis"""
+""" yast.vdot yast.move_leg"""
 import unittest
 import numpy as np
 import pytest
@@ -10,8 +10,8 @@ except ImportError:
 
 tol = 1e-12  #pylint: disable=invalid-name
 
-def run_moveaxis(a, ad, source, destination, result):
-    newa = a.moveaxis(source=source, destination=destination)
+def run_move_leg(a, ad, source, destination, result):
+    newa = a.move_leg(source=source, destination=destination)
     assert newa.to_numpy().shape == result
     assert newa.get_shape() == result
     assert np.moveaxis(ad, source=source, destination=destination).shape == result
@@ -47,7 +47,7 @@ class TestSyntaxTranspose(unittest.TestCase):
         #
         # permute the legs of the tensor and check the shape is changed
         # accordingly
-        b= a.transpose( (0,2,4,1,3,5) )
+        b = a.transpose(axes=(0,2,4,1,3,5))
         assert b.get_shape() == (5,13,7,9,11,3)
 
         #
@@ -56,7 +56,7 @@ class TestSyntaxTranspose(unittest.TestCase):
         # In this example, we reverse the permutation done previously thus
         # ending up with tensor numerically identical to a.
         #
-        c= b.moveaxis(source=(1,2), destination=(2,4))
+        c = b.move_leg(source=(1,2), destination=(2,4))
         assert c.get_shape() == a.get_shape()
         assert yast.norm(a-c)<tol
 
@@ -68,11 +68,11 @@ def test_transpose_basic():
     assert a.get_shape() == (2, 3, 4, 5)
     ad = a.to_numpy()
     run_transpose(a, ad, axes=(1, 3, 2, 0), result=(3, 5, 4, 2))
-    run_moveaxis(a, ad, source=1, destination=-1, result=(2, 4, 5, 3))
-    run_moveaxis(a, ad, source=(1, 3), destination=(1, 0), result=(5, 3, 2, 4))
-    run_moveaxis(a, ad, source=(3, 1), destination=(0, 1), result=(5, 3, 2, 4))
-    run_moveaxis(a, ad, source=(3, 1), destination=(1, 0), result=(3, 5, 2, 4))
-    run_moveaxis(a, ad, source=(1, 3), destination=(0, 1), result=(3, 5, 2, 4))
+    run_move_leg(a, ad, source=1, destination=-1, result=(2, 4, 5, 3))
+    run_move_leg(a, ad, source=(1, 3), destination=(1, 0), result=(5, 3, 2, 4))
+    run_move_leg(a, ad, source=(3, 1), destination=(0, 1), result=(5, 3, 2, 4))
+    run_move_leg(a, ad, source=(3, 1), destination=(1, 0), result=(3, 5, 2, 4))
+    run_move_leg(a, ad, source=(1, 3), destination=(0, 1), result=(3, 5, 2, 4))
 
     # U1
     a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
@@ -81,9 +81,9 @@ def test_transpose_basic():
     ad = a.to_numpy()
     assert a.get_shape() == (5, 9, 13, 11, 7, 3)
     run_transpose(a, ad, axes=(1, 2, 3, 0, 5, 4), result=(9, 13, 11, 5, 3, 7))
-    run_moveaxis(a, ad, source=1, destination=4, result=(5, 13, 11, 7, 9, 3))
-    run_moveaxis(a, ad, source=(2, 0), destination=(0, 2), result=(13, 9, 5, 11, 7, 3))
-    run_moveaxis(a, ad, source=(2, -1, 0), destination=(-1, 2, -2), result=(9, 11, 3, 7, 5, 13))
+    run_move_leg(a, ad, source=1, destination=4, result=(5, 13, 11, 7, 9, 3))
+    run_move_leg(a, ad, source=(2, 0), destination=(0, 2), result=(13, 9, 5, 11, 7, 3))
+    run_move_leg(a, ad, source=(2, -1, 0), destination=(-1, 2, -2), result=(9, 11, 3, 7, 5, 13))
 
     # Z2xU1
     t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
@@ -93,7 +93,7 @@ def test_transpose_basic():
     assert a.get_shape() == (19, 14, 18, 10)
     ad = a.to_numpy()
     run_transpose(a, ad, axes=(1, 2, 3, 0), result=(14, 18, 10, 19))
-    run_moveaxis(a, ad, source=-1, destination=-3, result=(19, 10, 14, 18))
+    run_move_leg(a, ad, source=-1, destination=-3, result=(19, 10, 14, 18))
 
 
 def test_transpose_inplace():
@@ -104,8 +104,11 @@ def test_transpose_inplace():
 
     a.transpose(axes=(5, 4, 3, 2, 1, 0), inplace=True)
     assert a.get_shape() == (13, 11, 9, 7, 5, 3)
-    a.moveaxis(source=2, destination=3, inplace=True)
+    a.move_leg(source=2, destination=3, inplace=True)
     assert a.get_shape() == (13, 11, 7, 9, 5, 3)
+    a.moveaxis(source=2, destination=3, inplace=True)  # moveaxis is alias for move_leg
+    assert a.get_shape() == (13, 11, 9, 7, 5, 3)
+
 
 
 def test_transpose_diag():
