@@ -86,7 +86,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False,
         policy='fullrank', **kwargs):
     r"""
-    Split tensor into :math:`a=USV` using exact singular value decomposition (SVD), 
+    Split tensor into :math:`a=USV` using exact singular value decomposition (SVD),
     where `U` and `V` are orthonormal bases and `S` is positive and diagonal matrix.
     Optionally, truncate the result.
 
@@ -171,8 +171,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
     _unmerge_matrix(V, ls_s, ls_r)
-    U.moveaxis(source=-1, destination=Uaxis, inplace=True)
-    V.moveaxis(source=0, destination=Vaxis, inplace=True)
+    U.move_leg(source=-1, destination=Uaxis, inplace=True)
+    V.move_leg(source=0, destination=Vaxis, inplace=True)
     return (U, S, V, uS) if untruncated_S else (U, S, V)
 
 
@@ -219,15 +219,15 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     ls = _leg_struct_trivial(R, axis=0)
     _unmerge_matrix(Q, ls_l, ls)
     _unmerge_matrix(R, ls, ls_r)
-    Q.moveaxis(source=-1, destination=Qaxis, inplace=True)
-    R.moveaxis(source=0, destination=Raxis, inplace=True)
+    Q.move_leg(source=-1, destination=Qaxis, inplace=True)
+    R.move_leg(source=0, destination=Raxis, inplace=True)
     return Q, R
 
 
 def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np.inf,
          keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False):
     r"""
-    Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`. 
+    Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
     Optionally, truncate the resulting decomposition.
 
     Tensor is expected to be symmetric (hermitian) with total charge 0.
@@ -300,7 +300,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
 
     _unmerge_matrix(U, ls_l, ls_s)
     _unmerge_diagonal(S, ls_s)
-    U.moveaxis(source=-1, destination=Uaxis, inplace=True)
+    U.move_leg(source=-1, destination=Uaxis, inplace=True)
     return (S, U, uS) if untruncated_S else (S, U)
 
 
@@ -467,7 +467,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             F = F / normF
             v = F[0] * V[0]
             for it in range(1, len(V)):
-                v = v.apxb(V[it], x= F[it])
+                v = v.apxb(V[it], x=F[it])
             t_now += tau
             info['steps'] += 1
             info['error'] += err

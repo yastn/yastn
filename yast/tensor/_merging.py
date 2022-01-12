@@ -74,7 +74,7 @@ def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
     """ Fuse _Fusion(s), including charges and dimensions present on the fused legs. """
     if axis is None:
         axis = list(range(len(hfs)))
-    tfl, Dfl, sfl, msfl = [], [], [s_out], [-s_out]
+    tfl, Dfl, sfl = [], [], [s_out]
     treefl = [sum(hfs[n].tree[0] for n in axis)]
     for n in axis:
         tfl.append(t_in[n])
@@ -455,7 +455,7 @@ def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
 @lru_cache(maxsize=1024)
 def _meta_fuse_hard(config, struct, axes):
     """ Meta information for backend needed to hard-fuse some legs. """
-    nblocks, ndim, nsym = len(struct.t), len(struct.s), len(struct.n)
+    nblocks, nsym = len(struct.t), len(struct.n)
     t_in, D_in, tD_dict, tset, Dset = _get_tD_legs(struct)
     slegs = tuple(tuple(struct.s[n] for n in a) for a in axes)
     snew = tuple(struct.s[axis[0]] for axis in axes)
@@ -714,8 +714,8 @@ def _leg_struct_truncation(a, tol=0., tol_block=0, D_block=np.inf, D_total=np.in
         D_keep[ind] = min(D_block, Dmax[ind])
     if (tol > 0) and (maxS > 0):  # truncate to relative tolerance
         for ind in D_keep:
-            local_maxS= a.config.backend.max_abs(a.A[ind])
-            local_tol= max(local_maxS*tol_block, maxS*tol) if tol_block>0 else maxS*tol
+            local_maxS = a.config.backend.max_abs(a.A[ind])
+            local_tol = max(local_maxS * tol_block, maxS * tol) if tol_block > 0 else maxS * tol
             D_keep[ind] = min(D_keep[ind], a.config.backend.count_greater(a.A[ind], local_tol))
     if sum(D_keep.values()) > D_total:  # truncate to total bond dimension
         order = a.config.backend.select_global_largest(a.A, D_keep, D_total, keep_multiplets, eps_multiplet, ordering)
