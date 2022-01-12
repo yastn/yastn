@@ -17,7 +17,7 @@ Simple element-wise operations
 .. autoclass:: yast.Tensor
 	:exclude-members: __init__, __new__
 	:noindex:
-	:members: absolute, real, imag, sqrt, rsqrt, reciprocal, exp
+	:members: __abs__, real, imag, sqrt, rsqrt, reciprocal, exp
 
 
 .. automodule::	yast
@@ -34,6 +34,17 @@ See examples: :ref:`examples/algebra:transposition`.
 	:exclude-members: __init__, __new__
 	:noindex:
 	:members: transpose, move_leg, moveaxis
+
+
+Fusion of legs (reshaping)
+--------------------------
+
+See examples: :ref:`examples/algebra:fusion`.
+
+.. autoclass:: yast.Tensor
+	:exclude-members: __init__, __new__
+	:noindex:
+	:members: fuse_legs, unfuse_legs
 
 
 Conjugation of symmetric tensors
