@@ -4,8 +4,8 @@ from ._auxliary import _clear_axes, _unpack_axes, _struct
 from ._merging import _Fusion, _flip_hf
 from ._tests import YastError, _test_axes_all
 
-__all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'diag', 'remove_zero_blocks',
-           'add_axis', 'remove_axis', 'copy', 'clone', 'detach', 'to', 'requires_grad_']
+__all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',
+           'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to', 'requires_grad_']
 
 
 def copy(a):
@@ -229,7 +229,7 @@ def transpose(a, axes, inplace=False):
     return c
 
 
-def moveaxis(a, source, destination, inplace=False):
+def move_leg(a, source, destination, inplace=False):
     r"""
     Change the position of an axis (or a group of axes) of the tensor.
     This is a convenience function for subset of possible permutations. It
@@ -255,9 +255,28 @@ def moveaxis(a, source, destination, inplace=False):
     return transpose(a, axes, inplace)
 
 
-def add_axis(a, axis=-1, s=1, t=None, inplace=False):
+def moveaxis(a, source, destination, inplace=False):
     r"""
-    Creates a new auxiliary axis that explicitly carries charge
+    Change the position of an axis (or a group of axes) of the tensor.
+    This is a convenience function for subset of possible permutations. It
+    computes the corresponding permutation and then calls :meth:`yast.Tensor.transpose`.
+
+    This function is an alias for :meth:`yast.Tensor.move_leg`.
+
+    Parameters
+    ----------
+    source, destination: int or tuple(int)
+
+    Returns
+    -------
+    tensor : Tensor
+    """
+    return  move_leg(a, source, destination, inplace)
+
+
+def add_leg(a, axis=-1, s=1, t=None, inplace=False):
+    r"""
+    Creates a new auxiliary leg that explicitly carries charge
     (or part of it) associated with the tensor.
 
     Parameters
@@ -305,9 +324,9 @@ def add_axis(a, axis=-1, s=1, t=None, inplace=False):
     return c
 
 
-def remove_axis(a, axis=-1, inplace=False):
+def remove_leg(a, axis=-1, inplace=False):
     r"""
-    Removes axis of single charge with dimension one.
+    Removes leg of single charge with dimension one.
 
     The charge carried by that axis is added to the tensors charge.
 

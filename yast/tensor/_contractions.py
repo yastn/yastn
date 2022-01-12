@@ -126,7 +126,7 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
     return c
 
 
-def _tensordot_diag(a, b, in_a, destination, conj): # (-1,)
+def _tensordot_diag(a, b, in_a, destination, conj):  # (-1,)
     """ executes broadcast and then transpose into order expected by tensordot. """
     if len(in_a) == 1:
         c = a.broadcast(b, axis=in_a[0], conj=conj)
@@ -312,7 +312,7 @@ def _meta_mask(a_struct, a_isdiag, b_struct, Dbnew, axis):
     c_t = tuple(ta for ta, _, _ in meta)
     Db = dict(zip(b_struct.t, Dbnew))
     if a_isdiag:
-        c_D = tuple((Db[tb], Db[tb] ) for _, tb, _ in meta)
+        c_D = tuple((Db[tb], Db[tb]) for _, tb, _ in meta)
     else:
         c_D = tuple(Da[:axis] + (Db[tb],) + Da[axis + 1:] for _, tb, Da in meta)
     c_struct = a_struct._replace(t=c_t, D=c_D)
@@ -522,7 +522,8 @@ def einsum(subscripts, *operants, order='Alphabetic'):
 
     Example
     -------
-    yast.einsum('*ij,jh->ih', t1, t2)  # matrix-matrix multiplication, where first matrix is conjugated.
+    yast.einsum('*ij,jh->ih', t1, t2) 
+    matrix-matrix multiplication, where first matrix is conjugated.
     Equivalent to t1.conj() @ t2
 
     yast.einsum('ab,al,bm->lm', t1, t2, t3, order='ba')
@@ -567,8 +568,8 @@ def ncon(ts, inds, conjs=None):
     """
     if len(ts) != len(inds):
         raise YastError('Number of tensors and indices do not match.')
-    for ii, ind in enumerate(inds):
-        if ts[ii].ndim != len(ind):
+    for tensor, ind in zip(ts, inds):
+        if tensor.ndim != len(ind):
             raise YastError('Number of legs of one of the tensors do not match provided indices.')
 
     inds = tuple(_clear_axes(*inds))
@@ -593,12 +594,12 @@ def ncon(ts, inds, conjs=None):
 @lru_cache(maxsize=1024)
 def _ncom_meta(inds, conjs):
     """ turning information in inds and conjs into list of contraction commands """
-    if not all( -256 < x < 256 for x in _flatten(inds)):
+    if not all(-256 < x < 256 for x in _flatten(inds)):
         raise YastError('ncon requires indices to be between -256 and 256.')
 
-    edges = [(order, leg, ten) if order > 0 else (-order + 1024, leg, ten)
+    edges = [[order, leg, ten] if order > 0 else [-order + 1024, leg, ten]
              for ten, el in enumerate(inds) for leg, order in enumerate(el)]
-    edges.append((512, 512, 512)) # this will mark the end of contractions.
+    edges.append([512, 512, 512])  # this will mark the end of contractions.
     conjs = [0] * len(inds) if conjs is None else list(conjs)
 
     # order of contraction with info on tensor and axis
@@ -627,19 +628,18 @@ def _consume_edges(edges, conjs):
                         "Call all axes connecting two tensors one after another.")
                 meta_trace.append((t1, (tuple(ax1), tuple(ax2))))
                 ax12 = ax1 + ax2
-                for ii, (order, leg, ten) in enumerate(edges):
-                    if ten == t1:
-                        edges[ii] = (order, leg - sum(i < leg for i in ax12), ten)
+                for edge in edges:  # edge = (order, leg, tensor)
+                    edge[1] -= sum(i < edge[1] for i in ax12) if edge[2] == t1 else 0
             else:  # tensordot (tensor numbers, axes, conj)
                 meta_dot.append(((t1, t2), (tuple(ax1), tuple(ax2)), (conjs[t1], conjs[t2])))
                 eliminated.append(t2)
                 conjs[t1], conjs[t2] = 0, 0
                 lt1 = sum(ii[2] == t1 for ii in edges)  # legs of t1
-                for ii, (order, leg, ten) in enumerate(edges):
-                    if ten == t1:
-                        edges[ii] = (order, leg - sum(i < leg for i in ax1), ten)
-                    elif ten == t2:
-                        edges[ii] = (order, lt1 + leg - sum(i < leg for i in ax2), t1)
+                for edge in edges:  # edge = (order, leg, tensor)
+                    if edge[2] == t1:
+                        edge[1] = edge[1] - sum(i < edge[1] for i in ax1)
+                    elif edge[2] == t2:
+                        edge[1:] = edge[1] + lt1 - sum(i < edge[1] for i in ax2), t1
             ax1, ax2 = [], []
         order1, leg1, ten1 = edges.pop()
 
@@ -650,13 +650,13 @@ def _consume_edges(edges, conjs):
         eliminated.append(t2)
         conjs[t1], conjs[t2] = 0, 0
         lt1 = sum(tt == t1 for _, _, tt in edges)
-        for ii, (order, leg, ten) in enumerate(edges):
-            if ten == t2:
-                edges[ii] = (order, leg + lt1, t1)
+        for edge in edges:  # edge = (order, leg, tensor)
+            if edge[2] == t2:
+                edge[1:] = edge[1] + lt1, t1
     unique_out = tuple(ed[0] for ed in edges)
     if len(unique_out) != len(set(unique_out)):
         raise YastError("Repeated non-positive (outgoing) index is ambiguous.")
-    axes = tuple(ed[1] for ed in sorted(edges)) # final order for transpose
+    axes = tuple(ed[1] for ed in sorted(edges))  # final order for transpose
     if axes == tuple(range(len(axes))):
         axes = None
     meta_transpose = (t1, axes, conjs[t1])

@@ -285,7 +285,7 @@ def __abs__(a):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.absolute(a.A)
     return c
@@ -302,7 +302,7 @@ def real(a):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {t: a.config.backend.real(x) for t, x in a.A.items()}
     return c
@@ -319,7 +319,7 @@ def imag(a):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = {t: a.config.backend.imag(x) for t, x in a.A.items()}
     return c
@@ -333,7 +333,7 @@ def sqrt(a):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, \
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.sqrt(a.A)
     return c
@@ -354,7 +354,7 @@ def rsqrt(a, cutoff=0):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, \
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.rsqrt(a.A, cutoff=cutoff)
     return c
@@ -375,7 +375,7 @@ def reciprocal(a, cutoff=0):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, \
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.reciprocal(a.A, cutoff=cutoff)
     return c
@@ -396,7 +396,7 @@ def exp(a, step=1.):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, \
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
     c.A = a.config.backend.exp(a.A, step)
     return c

@@ -33,7 +33,7 @@ See examples: :ref:`examples/algebra:transposition`.
 .. autoclass:: yast.Tensor
 	:exclude-members: __init__, __new__
 	:noindex:
-	:members: transpose, moveaxis
+	:members: transpose, move_leg, moveaxis
 
 
 Conjugation of symmetric tensors

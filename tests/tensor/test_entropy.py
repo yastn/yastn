@@ -18,8 +18,7 @@ def test_entropy():
     S.set_block(ts=-2, Ds=4, val='ones')
     S.set_block(ts=-1, Ds=12, val='ones')
     S.set_block(ts=0, Ds=25, val='ones')
-    US = yast.tensordot(U, S, axes=(2, 0))
-    a = yast.tensordot(US, V, axes=(2, 0))
+    a = U @ S @ V
 
     entropy, Smin, normalization = yast.entropy(a, axes=((0, 1), (2, 3)))
     assert pytest.approx(entropy.item(), rel=tol) == np.log2(41)
@@ -31,10 +30,11 @@ def test_entropy():
     assert pytest.approx(Smin.item(), rel=tol) == 1
     assert pytest.approx(normalization.item(), rel=tol) == np.sqrt(41)
 
-    _, _, _, uS = yast.svd(a, axes=((0, 1), (2, 3)), sU=-1, untruncated_S=True)
-    assert pytest.approx(sum(uS[(-2,)]).item(), rel=tol) == 4.
-    assert pytest.approx(sum(uS[(-1,)]).item(), rel=tol) == 12.
-    assert pytest.approx(sum(uS[(0,)]).item(), rel=tol) == 25.
+    b = yast.Tensor(config=config_U1, s=(1, 1, -1, -1))  # speciac case of empty tensor
+    entropy, Smin, normalization = yast.entropy(b, axes=((0, 1), (2, 3)))
+    assert entropy == 0
+    assert Smin == 0
+    assert normalization == 0
 
 
 if __name__ == '__main__':

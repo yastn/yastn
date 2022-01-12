@@ -133,9 +133,10 @@
   WARNING: Backward compatibility is broken!
 
 08-01-2021
-- change function name: `add_leg` to `add_axis`.  New function `remove_axis`
+- New function `remove_leg`
 - define `abs` as a magic method `__abs__`. Function `absolut` has been removed.
 - define `__matmul__`, giving shorthand a @ b == yast.tensordot(a, b, axes=(a.ndim - 1, 0))
 - BUGFIX: raising exceptions when .diag() cannot be used to create diagonal tensor
-- BUGFIX: ncon in some special cases could ignore content of conjs.
+- BUGFIX: ncon in some rare special case could ignore content of conjs.
 - new function `einsum` (for now a place holder doing nothing).
+- new function `move_leg` which is an alias to `moveaxis`

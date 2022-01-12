@@ -47,11 +47,11 @@ def apply_operator(psi, c, site):
     Fermionic order from first to last site.
     """
     ndim = psi.ndim
-    ca = c.add_axis(axis=-1)
+    ca = c.add_leg(axis=-1)
     cpsi = yast.tensordot(psi, ca, axes=(site, 1))
-    cpsi.moveaxis(source=ndim - 1, destination=site, inplace=True)
+    cpsi.move_leg(source=ndim - 1, destination=site, inplace=True)
     cpsi.swap_gate(axes=(tuple(range(site)), ndim), inplace=True)
-    cpsi.remove_axis(axis=-1, inplace=True)
+    cpsi.remove_leg(axis=-1, inplace=True)
     return cpsi
 
 

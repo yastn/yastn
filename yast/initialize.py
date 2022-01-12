@@ -147,7 +147,7 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwar
     """
     if not dtype:
         assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype= config.default_dtype
+        dtype = config.default_dtype
     meta_fusion = None
     if 'legs' in kwargs:
         t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
@@ -182,7 +182,7 @@ def eye(config=None, t=(), D=(), legs=None, dtype=None, **kwargs):
     """
     if not dtype:
         assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype= config.default_dtype
+        dtype = config.default_dtype
     s = ()
     if legs is not None:
         t, D, s, _ = _tD_from_legs(legs)
@@ -246,7 +246,7 @@ def load_from_hdf5(config, file, path):
 
     pointer = 0
     for its, iDs in zip(ts, Ds):
-        a.set_block(ts=tuple(its), Ds=tuple(iDs), val=vmat[pointer : (pointer + np.prod(iDs))], dtype=vmat.dtype.name)
+        a.set_block(ts=tuple(its), Ds=tuple(iDs), val=vmat[pointer: (pointer + np.prod(iDs))], dtype=vmat.dtype.name)
         pointer += np.prod(iDs)
     return a
 
