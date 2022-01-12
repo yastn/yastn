@@ -6,7 +6,7 @@ try:
 except ImportError:
     from configs import config_dense, config_U1
 
-tol = 1e-12  #pylint: disable=invalid-name
+tol = 1e-12  # pylint: disable=invalid-name
 
 
 def test_ncon_basic():
@@ -35,23 +35,23 @@ def test_ncon_basic():
     assert yast.norm(z3 - z4.conj()) < tol  # == 0.0
 
     y1 = yast.ncon([a, b, c, d, g, h], ((4, -2, -0), (-3, -1, 5), (4, 3, 1, 1), (3, 2, 5, 2), (-4,), (-5,)),
-                    conjs=(1, 0, 1, 0, 1, 0))
+                   conjs=(1, 0, 1, 0, 1, 0))
     assert y1.get_shape() == (1, 2, 3, 4, 5, 6)
 
     y2 = yast.ncon([a, g, a], ((1, 2, 3), (-0,), (1, 2, 3)), conjs=(0, 0, 1))
     assert y2.get_shape() == (5,)
 
     y3 = yast.ncon([a, g, a, b, a], [[1, 2, 3], [-4], [1, 2, 3], [-3, -1, 4], [4, -2, -0]],
-                    conjs=(0, 0, 1, 0, 0))
+                   conjs=(0, 0, 1, 0, 0))
     assert y3.get_shape() == (1, 2, 3, 4, 5)
 
     y4 = yast.ncon([a, a, b, b], [[1, 2, 3], [1, 2, 3], [6, 5, 4], [6, 5, 4]],
-                    conjs=(0, 1, 0, 1))
+                   conjs=(0, 1, 0, 1))
     y5 = yast.ncon([a, a, b, b], [[6, 5, 4], [6, 5, 4], [1, 3, 2], [1, 3, 2]],
-                    conjs=(0, 1, 0, 1))
+                   conjs=(0, 1, 0, 1))
     assert isinstance(y4.item(), complex)
     assert isinstance(y5.item(), complex)
-    assert yast.norm(y4 - y5) < tol
+    assert yast.norm(y4 - y5) / yast.norm(y4) < tol
     assert pytest.approx((a.norm().item() ** 2) * (b.norm().item() ** 2), rel=tol) == y4.item()
 
     a = yast.rand(config=config_U1, s=[-1, 1, -1], n=0,
