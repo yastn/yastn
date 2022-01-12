@@ -12,7 +12,7 @@ __all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5',
 
 def save_to_dict(a):
     r"""
-    Export relevant information about tensor to dictionary. Such dictionary can be then 
+    Export relevant information about tensor to dictionary. Such dictionary can be then
     stored in file using i.e. numpy.save
 
     Returns
@@ -25,7 +25,8 @@ def save_to_dict(a):
     hfs = [hf._asdict() for hf in a.hard_fusion]
     return {'_d': _d, 's': a.struct.s, 'n': a.struct.n,
             't': a.struct.t, 'D': a.struct.D, 'isdiag': a.isdiag,
-            'mfs': a.meta_fusion, 'hfs': hfs, 'SYM_ID':a.config.sym.SYM_ID, 'fermionic':a.config.fermionic}
+            'mfs': a.meta_fusion, 'hfs': hfs,
+            'SYM_ID': a.config.sym.SYM_ID, 'fermionic': a.config.fermionic}
 
 
 def save_to_hdf5(a, file, path):
@@ -48,7 +49,7 @@ def save_to_hdf5(a, file, path):
 
 def compress_to_1d(a, meta=None):
     """
-    Store each block as 1D array within r1d in contiguous manner; outputs meta-information 
+    Store each block as 1D array within r1d in contiguous manner; outputs meta-information
     to reconstruct the original tensor
 
     Parameters
@@ -56,7 +57,7 @@ def compress_to_1d(a, meta=None):
         meta: dict
             If not None, uses this metainformation to merge into 1d structure,
             filling-in zeros if tensor does not have some blocks.
-            Raise error if tensor has some blocks which are not included in meta or otherwise 
+            Raise error if tensor has some blocks which are not included in meta or otherwise
             meta does not match the tensor.
     """
     if meta is None:
@@ -455,7 +456,7 @@ def to_raw_tensor(a):
 def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     r"""
     Create equivalent ``yast.Tensor`` with no explict symmetry. All blocks of the original
-    tensor are accummulated into a single block. 
+    tensor are accummulated into a single block.
 
     Blocks are ordered according to increasing charges on each leg.
     It is possible to supply a list of additional charge sectors with dimensions to be included.
@@ -463,7 +464,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
 
     .. note::
         yast structure can be redundant since resulting tensor is effectively just
-        a single dense block. If that's the case, use :meth:`yast.Tensor.to_dense`.  
+        a single dense block. If that's the case, use :meth:`yast.Tensor.to_dense`.
 
     Parameters
     ----------

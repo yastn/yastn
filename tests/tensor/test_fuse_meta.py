@@ -18,7 +18,7 @@ def test_fuse():
     c = b.fuse_legs(axes=(1, (0, 2)))
     c.unfuse_legs(axes=1, inplace=True)
     c.unfuse_legs(axes=2, inplace=True)
-    d = c.moveaxis(source=1, destination=0)
+    d = c.move_leg(source=1, destination=0)
     assert yast.norm(a - d) < tol  # == 0.0
 
     e = yast.rand(config=config_U1_force, s=(-1, 1),
@@ -50,7 +50,7 @@ def test_fuse_split():
     assert yast.norm(af - a3) < tol  # == 0.0
     a3.unfuse_legs(axes=0, inplace=True)
     a3.unfuse_legs(axes=(1, 2), inplace=True)
-    a3.moveaxis(source=2, destination=1, inplace=True)
+    a3.move_leg(source=2, destination=1, inplace=True)
     assert yast.norm(a - a3) < tol  # == 0.0
 
     Qf, Rf = yast.linalg.qr(af, axes=(0, 1))
@@ -82,7 +82,7 @@ def test_fuse_transpose():
     c.unfuse_legs(axes=(1, 3), inplace=True)
     assert c.get_shape() == (13, 9, 11, 7, 3, 5)
 
-    c = b.moveaxis(source=1, destination=2)
+    c = b.move_leg(source=1, destination=2)
     assert c.get_shape() == (15, 99, 7, 13)
     c.unfuse_legs(axes=(1, 0), inplace=True)
     assert c.get_shape() == (3, 5, 9, 11, 7, 13)
