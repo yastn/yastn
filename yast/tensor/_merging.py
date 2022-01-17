@@ -507,17 +507,17 @@ def _meta_unfuse_hard(config, struct, axes, hfs):
             hfs_new.append(hf)
             snew.append(struct.s[n])
 
-    meta = []
-    tall = tuple(tuple(l.dec) for l in ls)
-    for ind in product(*tall):
-        to = sum(ind, ())
-        if to in struct.t:
-            tpart = tuple(tuple(ls[n].dec[ii].items()) for n, ii in enumerate(ind))
-            for tt in product(*tpart):
-                tn = sum((x[0] for x in tt), ())
-                slc = tuple(x[1].Dslc for x in tt)
-                Dn = tuple(_flatten((x[1].Drsh for x in tt)))
-                meta.append((tn, to, slc, Dn))
+    meta, nsym = [], config.sym.NSYM
+    for to in struct.t:
+        tfused = tuple(to[n * nsym: (n + 1) * nsym] for n in range(len(struct.s)))
+        tunfused = tuple(tuple(l.dec[ts].items()) for l, ts in zip(ls, tfused))
+        for tt in product(*tunfused):
+            tn = sum((x[0] for x in tt), ())
+            slc = tuple(x[1].Dslc for x in tt)
+            Dn = sum((x[1].Drsh for x in tt), ())
+            meta.append((tn, to, slc, Dn))
+
+
     meta = tuple(sorted(meta, key=lambda x: x[0]))
     tnew = tuple(x[0] for x in meta)
     Dnew = tuple(x[3] for x in meta)
