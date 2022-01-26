@@ -1,5 +1,14 @@
 import torch
-
+try:
+    import pkg_resources
+    USE_LINALGSVD= pkg_resources.parse_version(torch.__version__) > pkg_resources.parse_version("1.8.1")
+except ModuleNotFoundError:
+    try:
+        from packaging import version
+        USE_LINALGSVD= version.parse(torch.__version__) > version.parse("1.8.1")
+    except ModuleNotFoundError:
+        tokens= torch.__version__.split('.')
+        USE_LINALGSVD= int(tokens[0]) > 1 or (int(tokens[0]) >= 1 and int(tokens[1]) > 8)   
 
 def safe_inverse(x, epsilon=1E-12):
     return x / (x**2 + epsilon)
@@ -11,11 +20,19 @@ def safe_inverse_2(x, epsilon):
 
 
 class SVDGESDD(torch.autograd.Function):
-    @staticmethod
-    def forward(self, A, ad_decomp_reg):
-        U, S, V = torch.svd(A)
-        self.save_for_backward(U, S, V, ad_decomp_reg)
-        return U, S, V
+    if USE_LINALGSVD:
+        @staticmethod
+        def forward(self, A, ad_decomp_reg):
+            U, S, Vh = torch.linalg.svd(A)
+            V = Vh.transpose(-2, -1).conj()
+            self.save_for_backward(U, S, V, ad_decomp_reg)
+            return U, S, V
+    else:
+        @staticmethod
+        def forward(self, A, ad_decomp_reg):
+            U, S, V = torch.svd(A)
+            self.save_for_backward(U, S, V, ad_decomp_reg)
+            return U, S, V
 
     @staticmethod
     def backward(self, dU, dS, dV):
