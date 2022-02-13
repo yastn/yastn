@@ -559,18 +559,45 @@ def fuse_meta_to_hard(a, inplace=False):
 
 def fuse_legs(a, axes, inplace=False, mode=None):
     r"""
-    Fuse groups of legs into new effective ones.
+    Fuse groups of legs into effective legs, reducing the rank of the tensor.
+    
+        .. note::
+            Fusion can be reverted back by :meth:`yast.Tensor.unfuse_legs`
 
-    Legs are first permuted -- groups of consequative legs are then fused.
-    Two types of fusion are supported: `meta` and `hard`.
-    `meta` adds a layer of logical information that allows
-    to interpret a group of native legs as a single logical leg.
-    `hard` is creating merged blocks characterised by fused charges.
+    First, the legs are permuted into desired order. Then, selected groups of consecutive legs 
+    are fused. The desired order of the legs is given by a tuple `axes` 
+    of leg indices where the groups of legs to be fused are denoted by inner tuples ::
+
+        axes=(0,1,(2,3,4),5)  keep order, fuse legs (2,3,4) into new leg
+        ->   (0,1, 2,     3)
+            __              __
+        0--|  |--3      0--|  |--3<-5
+        1--|  |--4  =>  1--|__|         
+        2--|__|--5          |
+                            2<-(2,3,4)
+
+
+        axes=(2,(3,1),4,(7,6),5,0)  permute indices, then fuse legs (3,1) into new leg 
+        ->   (0, 1,   2, 3,   4,5)  and legs (7,6) into another new leg
+            __                   __
+        0--|  |--4        0->5--|  |--2<-4
+        1--|  |--5 =>           |  |--4<-5
+        2--|  |--6        2->0--|  |--3<-(7,6) 
+        3--|__|--7    (3,1)->1--|__|
+    
+
+    Two types of fusion are supported: `meta` and `hard`:
+
+    * `meta` performs the fusion only at the level of tensor structure: changing its rank, 
+      signature, charge sectors. The tensor data (blocks) is not affected. 
+    
+    * `hard` changes both the structure and data, by aggregating smaller blocks into larger
+      ones. Such fusion allows to balance number of non-zero blocks and typical block size.
 
     Parameters
     ----------
-    axes: tuple
-        tuple of leg's indices for transpose. Groups of legs to be fused together form inner tuples.
+    axes: tuple(tuple(int))
+        tuple of leg's indices. Groups of legs to be fused together are accumulated within inner tuples.
 
     inplace: bool
         If true, perform operation in place.
@@ -585,11 +612,6 @@ def fuse_legs(a, axes, inplace=False, mode=None):
     Returns
     -------
     tensor : Tensor
-
-    Example
-    -------
-    tensor.fuse_legs(axes=(2, 0, (1, 4), 3)) gives 4 efective legs from original 5; with one metaly non-trivial one
-    tensor.fuse_legs(axes=[(2, 0), (1, 4), (3, 5)]) gives 3 effective legs from original 6
     """
     if a.isdiag:
         raise YastError('Cannot fuse legs of a diagonal tensor.')
@@ -625,15 +647,50 @@ def fuse_legs(a, axes, inplace=False, mode=None):
 
 
 def unfuse_legs(a, axes, inplace=False):
-    """
-    Unfuse legs reverting one layer of fusion. Operation can be done in-place.
+    r"""
+    Unfuse legs, reverting one layer of fusion. 
 
-    New legs are inserted in place of the unfused one.
+    If the tensor has been obtained by fusing some legs together, `unfuse_legs`
+    can revert such fusion. The legs to be unfused are passed in `axes` as `int` 
+    or `tuple(int)` in case of more legs to be unfused. The unfused legs follow 
+    the original position of the fused legs. The remaining legs are shifted accordingly ::
+
+        axes=2              unfuse leg 2 into legs 2,3,4
+        ->   (0,1,2,3,4,5)
+            __                 __ 
+        0--|  |--3         0--|  |--3    
+        1--|__|        =>  1--|  |--4
+            |              2--|__|--5<-3
+            2=(2,3,4)
+
+
+        axes=(    2,      5  )  unfuse leg 2 into legs 2,3 and leg 5 into legs 6,7
+        ->   (0,1,2,3,4,5,6,7)
+                  __                   __
+              0--|  |--3           0--|  |--4
+                 |  |--4       =>  1--|  |--5
+              1--|  |--5=(6,7)     2--|  |--6
+        (2,3)=2--|__|              3--|__|--7
+
+    
+    Unfusing a leg obtained by fusing together other previously fused legs, unfuses
+    only the last fusion ::
+    
+        axes=2              unfuse leg 2 into legs 2,3
+        ->   (0,1,2,3,4)
+            __                    __
+        0--|  |--3            0--|  |--3=(3,4)    
+        1--|__|           =>  1--|  |
+            |                 2--|__|--4<-3
+            2=(2,3=(3,4))
+
+
+    This operation can be done in-place.
 
     Parameters
     ----------
     axis: int or tuple of ints
-        leg(s) to ungroup.
+        leg(s) to unfuse.
 
     inplace: bool
         If true, perform operation in place.

@@ -226,11 +226,14 @@ def load_from_dict(config=None, d=None):
 
 def load_from_hdf5(config, file, path):
     """
-    Generate tensor based on information in hdf5 file.
+    Create tensor from hdf5 file.
 
     Parameters
     ----------
-    ADD DESCRIPTION
+    config: module
+            configuration with backend, symmetry, etc.
+    file: TODO
+    path: TODO
     """
     g = file.get(path)
 

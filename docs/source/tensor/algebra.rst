@@ -17,12 +17,27 @@ Simple element-wise operations
 .. autoclass:: yast.Tensor
 	:exclude-members: __init__, __new__
 	:noindex:
-	:members: absolute, real, imag, sqrt, rsqrt, reciprocal, exp
+	:members: __abs__, real, imag, sqrt, rsqrt, reciprocal, exp
 
 
 .. automodule::	yast
 	:noindex:
 	:members: apxb
+
+
+Tensor contractions
+-------------------
+
+See examples: :ref:`examples/algebra:contractions`.
+
+.. autoclass:: yast.Tensor
+	:exclude-members: __init__, __new__
+	:noindex:
+	:members: __matmul__
+
+.. automodule:: yast
+	:noindex:
+	:members: tensordot, vdot, trace, einsum, ncon
 
 
 Transposition
@@ -34,6 +49,17 @@ See examples: :ref:`examples/algebra:transposition`.
 	:exclude-members: __init__, __new__
 	:noindex:
 	:members: transpose, move_leg, moveaxis
+
+
+Fusion of legs (reshaping)
+--------------------------
+
+See examples: :ref:`examples/algebra:fusion`.
+
+.. autoclass:: yast.Tensor
+	:exclude-members: __init__, __new__
+	:noindex:
+	:members: fuse_legs, unfuse_legs
 
 
 Conjugation of symmetric tensors
