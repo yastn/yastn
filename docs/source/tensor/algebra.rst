@@ -25,6 +25,21 @@ Simple element-wise operations
 	:members: apxb
 
 
+Tensor contractions
+-------------------
+
+See examples: :ref:`examples/algebra:contractions`.
+
+.. autoclass:: yast.Tensor
+	:exclude-members: __init__, __new__
+	:noindex:
+	:members: __matmul__
+
+.. automodule:: yast
+	:noindex:
+	:members: tensordot, vdot, trace, einsum, ncon
+
+
 Transposition
 -------------
 
