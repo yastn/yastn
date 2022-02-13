@@ -561,9 +561,8 @@ def fuse_legs(a, axes, inplace=False, mode=None):
     r"""
     Fuse groups of legs into effective legs, reducing the rank of the tensor.
     
-    .. note::
-
-        Fusion can be reverted back by :meth:`yast.Tensor.unfuse_legs`
+        .. note::
+            Fusion can be reverted back by :meth:`yast.Tensor.unfuse_legs`
 
     First, the legs are permuted into desired order. Then, selected groups of consecutive legs 
     are fused. The desired order of the legs is given by a tuple `axes` 

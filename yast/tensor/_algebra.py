@@ -54,7 +54,7 @@ def __sub__(a, b):
 
 def apxb(a, b, x=1):
     r"""
-    Directly compute the result of :math:`a + x \times b`.
+    Directly compute the result of :math:`a + x b`.
     This `composite` operation is faster than first performing multiplication
     and then addition.
 
@@ -294,10 +294,11 @@ def __abs__(a):
 
 def real(a):
     r"""
+
     Return tensor with imaginary part set to zero.
 
-    .. note::
-        Returned :class:`yast.Tensor` has the same dtype
+        .. note::
+            Returned :class:`yast.Tensor` has the same dtype
 
     Returns
     -------
@@ -313,8 +314,8 @@ def imag(a):
     r"""
     Return tensor with real part set to zero.
 
-    .. note::
-        Returned :class:`yast.Tensor` has the same dtype
+        .. note::
+            Returned :class:`yast.Tensor` has the same dtype
 
     Returns
     -------
@@ -386,8 +387,8 @@ def exp(a, step=1.):
     r"""
     Return element-wise `exp(step * A)`.
 
-    .. note::
-        This applies only to non-empty blocks of A
+        .. note::
+            This applies only to non-empty blocks of A
 
     Parameters
     ----------
