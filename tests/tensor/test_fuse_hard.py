@@ -1,6 +1,6 @@
 """ Test elements of fuse_legs(... mode='hard') """
 import numpy as np
-import pytest
+import unittest
 import yast
 try:
     from .configs import config_U1, config_dense, config_Z2xU1
@@ -10,7 +10,76 @@ except ImportError:
 tol = 1e-10  #pylint: disable=invalid-name
 
 
+class FusionSyntax(unittest.TestCase):
+    
+    def test_fuse_hard(self):
+        # define a rank-5 U(1)-symmetric tensor
+        a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
+                      t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
+                      D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
 
+        # this tensor has 10 non-zero blocks, the largest one being
+        # of shape (2, 4, 6, 8, 9) with total number of 3456 elements
+        a.print_blocks_shape()
+        #
+        # charges         shape
+        # (0, 0, 0, 0, 0) (1, 3, 5, 7, 9)
+        # (0, 0, 0, 1, 1) (1, 3, 5, 8, 10)
+        # (0, 0, 1, 1, 0) (1, 3, 6, 8, 9)
+        # (0, 1, 0, 1, 0) (1, 4, 5, 8, 9)
+        # (1, 0, 0, 0, 1) (2, 3, 5, 7, 10)
+        # (1, 0, 1, 0, 0) (2, 3, 6, 7, 9)
+        # (1, 0, 1, 1, 1) (2, 3, 6, 8, 10)
+        # (1, 1, 0, 0, 0) (2, 4, 5, 7, 9)
+        # (1, 1, 0, 1, 1) (2, 4, 5, 8, 10)
+        # (1, 1, 1, 1, 0) (2, 4, 6, 8, 9)
+
+        # Lets fuse last three legs of the tensor a into a new leg
+        b = a.fuse_legs(axes=(0, 1, (2, 3, 4)), mode='hard')
+
+        # resulting tensor has just four non-zero blocks, with the largest
+        # one holding 9176 elements
+        b.print_blocks_shape()
+        #
+        # (0, 0, 0) (1, 3, 1147)
+        # (0, 1, -1) (1, 4, 360)
+        # (1, 0, 1) (2, 3, 1208)
+        # (1, 1, 0) (2, 4, 1147)
+
+        # We can also fuse more than a single group of indices.
+        # Their order can be permuted as well
+        c0 = a.fuse_legs(axes=(0, (3,4), (2,1)), mode='hard')
+
+        # Fusion can be applied succesively - fusing fused spaces together.
+        # This results in a rank-2 tensor, equivalent to block-sparse matrix
+        c1 = c0.fuse_legs(axes=((0,1),2), mode='hard')
+
+        # Resulting matrix has three blocks and the largest block holds 13604 elements
+        assert c1.s == (-1,1)
+        c1.print_blocks_shape()
+        #
+        # (0, 0) (283, 15)
+        # (1, 1) (358, 38)
+        # (2, 2) (144, 24)
+        
+        # The fusion can be simply reverted, proceeding step-by-step in reverse
+        # order of the applied fusions. 
+        # NOTE: Unfusing an index *does not* permute the resulting indices into
+        #       into their original order
+        #
+        # fusion step 1: 0 1 2 3 4 -> permute -> 0 3 4 2 1 -> fuse -> 0 (3 4) (2 1) = 0 1 2
+        # fusion step 2: 0 1 2 -> fuse -> (0 1) 2 = 0 1 
+        #
+        # unfuse step 2: 0 1 -> unfuse -> (0 1) 1->2 = 0 1 2
+        c0_0= c1.unfuse_legs(axes=0)
+        assert yast.norm(c0_0 - c0) < tol
+
+        # unfuse step 1: 0 1 2 -> unfuse -> 0 (3->1 4->2) (2->3 1->4) = 0 1 2 3 4
+        # 
+        # Hence, to retrieve original tensor, we have to permute its indices
+        a_0= c0_0.unfuse_legs(axes=(1,2))
+        a_0= a_0.transpose(axes=(0,4,3,1,2))
+        assert yast.norm(a - a_0) < tol
 
 
 def test_hard_split():
@@ -161,8 +230,6 @@ def test_hard_dot_1_sparse():
     assert yast.norm(b - bbb) < tol
 
 
-
-
 def _test_fuse_mix(a):
     ma = a.fuse_legs(axes=((0, 1), (2, 3), (4, 5)), mode='meta')
     assert (ma.ndim_n, ma.ndim) == (6, 3)
@@ -240,6 +307,7 @@ def test_fuse_hard_dense():
 
 
 if __name__ == '__main__':
+    unittest.main()
     test_fuse_hard_dense()
     test_hard_split()
     test_hard_transpose()

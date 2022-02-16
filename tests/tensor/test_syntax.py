@@ -209,6 +209,82 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
         yast.ncon([tensor, a, b], [(1, 2, 3), (-1, 1, 2, -2), (3, -4, -5, -6)], conjs=(0, 0, 1))
 
 
+class TestSyntaxContractions(unittest.TestCase):
+
+    def test_syntax_contraction(self):
+        # create a set of U(1)-symmetric tensors
+        a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+                      t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                      D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+        b = yast.ones(config=config_U1, s=(-1, 1, 1, -1),
+                      t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                      D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+        c = yast.rand(config=config_U1, s=(1, 1, -1),
+                      t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                      D=((10, 11, 12), (7, 8, 9), (4, 5, 6)))
+
+        # Contract a and b by two indices. The a tensor is conjugated, which
+        # reverses the signature on its indices
+        #       __           _                ___
+        #  0->-|a*|->-1 1->-|b|->-0 =    0->-|a*b|->-0->2
+        #  3->-|__|->-2 2->-|_|->-3   1<-3->-|___|->-3
+        #
+        # The order of the indices on the resulting tensor is as follows:
+        # First, the outgoing indices of a (the first argument to tensordot), then
+        # the outgoing indices of tensor b
+        tensor = yast.tensordot(a, b, axes=((1, 2), (1, 2)), conj=(1, 0))
+        
+        # tensordot can also be invoked also as a function of the tensor itself
+        #
+        tensor = a.tensordot(b, axes=((1, 2), (1, 2)), conj=(1, 0))
+
+        # If no axes are specified, the outer product of two tensors is returned
+        tensor = yast.tensordot( c,c, axes=((),()) )
+        assert tensor.get_rank()==6
+
+
+        # A shorthand notation for the specific contraction
+        #      _           _             __
+        # 0-<-|a|-<-2     |c|-<-1 = 0-<-|ac|-<-2
+        # 1->-|_|->-3 0->-|_|->-2   1->-|  |-<-1->3
+        #                               |__|->-2->4
+        t0= yast.tensordot(a, c, axes=(a.ndim - 1, 0)) 
+        # 
+        # is the @ operator. For rank-2 tensor it is thus equivalent to matrix multiplication
+        t1 = a @ c
+        assert yast.norm(t0-t1) < tol
+
+
+        # Another special case of tensor contraction is a dot product of vectorized tensors
+        #  __           _
+        # |a*|-<-0 0-<-|b| = scalar
+        # |  |->-1 1->-| |
+        # |  |->-2 2->-| | 
+        # |__|-<-3 3-<-|_|
+        tensor = a.tensordot(b, axes=((0, 1, 2, 3), (0, 1, 2, 3)), conj=(1, 0))
+        assert isinstance(tensor,yast.Tensor)
+        #
+        # such single element symmetric Tensor can be converted to a single-element
+        # tensor of the backend type, or even further to python scalar
+        number = tensor.to_number()
+        python_scalar = tensor.item()
+        assert isinstance(python_scalar,float)
+
+        # A shorthand function for computing dot products is vdot
+        number = yast.vdot(a, b)
+        number = a.vdot(b)
+
+        # Trace over certain indices can be computed using identically named function.
+        # In this case, a2_ijil = a2_jl
+        a2 = yast.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(1, 0))
+        tensor = a2.trace(axes=(0, 2))
+        assert tensor.get_rank()==2
+        # 
+        # More pairs of indices can be traced at once a_ijij = scalar
+        tensor = a2.trace(axes=((0, 1), (2, 3)))
+        number = tensor.to_number()
+
+
 class TestSyntaxGeneral(unittest.TestCase):
 
     def test_syntax_noDocs(self):
@@ -272,26 +348,7 @@ class TestSyntaxGeneral(unittest.TestCase):
         tensor = a.move_leg(source=2, destination=3)
         tensor = yast.move_leg(a, source=2, destination=3)
 
-        # contraction
-        tensor = yast.tensordot(a, b, axes=((1, 2), (1, 2)), conj=(1, 0))
-        tensor = a.tensordot(b, axes=((1, 2), (1, 2)), conj=(1, 0))
-
-        tensor = a @ c  # = yast.tensordot(a, c, axes=(a.ndim - 1, 0))
-
-        tensor = a.tensordot(b, axes=((0, 1, 2, 3), (0, 1, 2, 3)), conj=(1, 0))
-        number = tensor.to_number()
-        python_scalar = tensor.item()
-
-        # scalar product
-        number = yast.vdot(a, b)
-        number = a.vdot(b)
-
-        # trace
         a2 = yast.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(1, 0))
-        tensor = a2.trace(axes=(0, 2))
-        tensor = a2.trace(axes=((0, 1), (2, 3)))
-        number = tensor.to_number()
-
         # linalg / split
         U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)))
         U, S, V = yast.svd(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
