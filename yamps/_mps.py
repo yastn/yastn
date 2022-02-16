@@ -221,7 +221,7 @@ class Mps:
 
     def sweep(self, to='last', df=0, dl=0):
         r"""
-        Generator of indices of all sites going from first to last or vice-versa
+        Generator of indices of all sites going from the first site to the last site, or vice-versa.
 
         Parameters
         ----------

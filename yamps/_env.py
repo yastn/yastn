@@ -1,5 +1,5 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
-from yast import ncon, match_legs, tensordot, expmv, vdot
+from yast import ncon, match_legs, tensordot, expmv, vdot, qr, svd
 from ._mps import YampsError
 
 
@@ -355,6 +355,33 @@ class Env3(_EnvParent):
         AA, info = expmv(f, AA, dt, **opts, normalize=True, return_info=True)
         self._temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)
+    
+    def enlarge_bond(self, bd, opts_svd):
+        if bd[0] < 0 or bd[1] >= self.N:  # do not enlarge bond outside of the chain
+            return False
+        AL = self.psi.A[bd[0]]
+        AR = self.psi.A[bd[1]]
+        if len(self.op.A[bd[0]].get_leg_structure(axis=1)) > len(AL.get_leg_structure(axis=1)) or \
+           len(self.op.A[bd[1]].get_leg_structure(axis=1)) > len(AR.get_leg_structure(axis=1)):
+            return True  # true if not all possible charge sectors on physical legs of psi
+
+        AL = AL.fuse_legs(axes=((0, 1), 2))
+        AR = AR.fuse_legs(axes=(0, (1, 2)))
+        shapeL = AL.get_shape()
+        shapeR = AR.get_shape()
+        if shapeL[0] == shapeL[1] or shapeR[0] == shapeR[1]:
+            return False  # maximal bond dimension
+
+        _, R0 = qr(AL, axes=(0, 1), sQ=-1)
+        _, R1 = qr(AR, axes=(1, 0), Raxis=1, sQ=1)
+        _, _, _, S= svd(R0 @ R1, untruncated_S=True)
+        Dtot = S.pop('D')
+
+        if 'tol' in opts_svd and any(st[-1] > opts_svd['tol'] * 1.5 for st in S.values()):
+            return True
+
+
+
 
 def _update2(n, F, bra, ket, to, nr_phys):
     """ Contractions for 2-layer environment update. """

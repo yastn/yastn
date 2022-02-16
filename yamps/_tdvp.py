@@ -75,7 +75,7 @@ def tdvp_sweep_1site(psi, H, dt=0.1, env=None, opts_expmv=None):
             env.update_C(-0.5 * dt, opts)
             psi.absorb_central(to=to)
 
-    env.update_env(0, to='first')
+    env.update_env(psi.first, to='first')
     return env
 
 
@@ -84,24 +84,17 @@ def tdvp_sweep_2site(psi, H, dt=0.1, env=None, opts_expmv=None, opts_svd=None):
 
     env, opts = _init_tdvp(psi, H, env, opts_expmv)
 
-    for n in psi.sweep(to='last', dl=1):
-        env.update_AA((n, n + 1), 0.5 * dt, opts, opts_svd)
-        psi.absorb_central(to='last')
-        env.clear_site(n, n + 1)
-        env.update_env(n, to='last')
-        if n + 1 != psi.last:
-            env.update_A(n + 1, -0.5 * dt, opts)
+    for to, dn in (('last', 1), ('first', 0)):
+        for n in psi.sweep(to=to, dl=1):
+            env.update_AA((n, n + 1), 0.5 * dt, opts, opts_svd)
+            psi.absorb_central(to=to)
+            env.clear_site(n, n + 1)
+            env.update_env(n + 1 - dn, to=to)
+            if n + dn != getattr(psi, to):
+                env.update_A(n + dn, -0.5 * dt, opts)
 
-    for n in psi.sweep(to='first', dl=1):
-        env.update_AA((n, n + 1), 0.5 * dt, opts, opts_svd)
-        psi.absorb_central(to='first')
-        env.clear_site(n, n + 1)
-        env.update_env(n + 1, to='first')
-        if n != psi.first:
-            env.update_A(n, -0.5 * dt, opts)
-
-    env.clear_site(0)
-    env.update_env(0, to='first')
+    env.clear_site(psi.first)
+    env.update_env(psi.first, to='first')
     return env
 
 
@@ -116,57 +109,35 @@ def tdvp_sweep_mix(psi, H=False, dt=1., env=None, opts_expmv=None, opts_svd=None
 
     env, opts = _init_tdvp(psi, H, env, opts_expmv)
 
-    update_two = False
-    for n in psi.sweep(to='last'):
-        if not update_two:
-            if env.enlarge_bond[(n, n + 1)]:
-                update_two = True
+    for to, dn in (('last', 1), ('first', 0)):
+        update_two = False
+        for n in psi.sweep(to=to):
+            if not update_two:
+                if env.enlarge_bond[(n - 1 + dn, n + dn), opts_svd]:
+                    update_two = True
+                else:
+                    env.update_A(n, 0.5 * dt, opts)
+                    psi.orthogonalize_site(n, to=to)
+                    env.clear_site(n)
+                    env.update_env(n, to=to)
+                    env.update_C(-0.5 * dt, opts)
+                    psi.absorb_central(to=to)
             else:
-                env.update_A(n, 0.5 * dt, opts)
-                psi.orthogonalize_site(n, to='last')
-                env.clear_site(n)
-                env.update_env(n, to='last')
-                env.update_C(-0.5 * dt, opts)
-                psi.absorb_central(to='last')
-        else:
-            env.update_AA((n - 1, n), 0.5 * dt, opts, opts_svd)
-            psi.absorb_central(to='last')
-            env.clear_site(n - 1, n)
-            env.update_env(n - 1, to='last')
-            if env.enlarge_bond[(n, n + 1)]:
-                if n + 1 != psi.last:
-                    env.update_A(n + 1, -0.5 * dt, opts)
-            else:
-                psi.ortogonalize_site(n, to='last')
-                env.update_env(n, to='last')
-                env.update_C(-0.5 * dt, opts)
-                psi.absorb_central(to='last')
-
-    for n in psi.sweep(to='first'):
-        if not update_two:
-            if env.enlarge_bond[(n - 1, n)]:
-                update_two = True
-            else:
-                env.update_A(n, 0.5 * dt, opts)
-                psi.orthogonalize_site(n, to='first')
-                env.clear_site(n)
-                env.update_C(-0.5 * dt, opts)
-                psi.absorb_central(to='last')
-        else:
-            env.update_AA((n, n + 1), 0.5 * dt, opts, opts_svd)
-            psi.absorb_central(to='first')
-            env.clear_site(n, n + 1)
-            env.update_env(n + 1, to='first')
-            if env.enlarge_bond[(n - 1, n)]:
-                if n != psi.first:
+                env.update_AA((n - dn , n - dn + 1), 0.5 * dt, opts, opts_svd)
+                psi.absorb_central(to=to)
+                env.clear_site(n - dn, n - dn + 1)
+                env.update_env(n + 1 - 2 * dn, to=to)
+                if env.enlarge_bond[(n - 1 + dn, n + dn), opts_svd]:
                     env.update_A(n, -0.5 * dt, opts)
-            else:
-                psi.ortogonalize_site(n, to='first')
-                env.update_C(-0.5 * dt, opts)
-                psi.absorb_central(to='last')
+                else:
+                    psi.ortogonalize_site(n, to=to)
+                    env.update_env(n, to=to)
+                    env.update_C(-0.5 * dt, opts)
+                    psi.absorb_central(to=to)
+                    update_two = False
 
-    env.clear_site(0)
-    env.update_env(0, to='first')
+    env.clear_site(psi.first)
+    env.update_env(psi.first, to='first')
     return env
 
 
