@@ -13,13 +13,14 @@ __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadca
 
 def __matmul__(a, b):
     """
-    Compute tensor dot product, contracting the last axis of a with the first axis of b.
+    The ``@`` operator computes tensor dot product, contracting the last axis
+    of `a` with the first axis of `b`.
 
     Shorthand for yast.tensordot(a, b, axes=(a.ndim - 1, 0)).
 
     Returns
     -------
-    tansor: Tensor
+    tensor: Tensor
     """
     return tensordot(a, b, axes=(a.ndim - 1, 0))
 
@@ -28,8 +29,9 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
     r"""
     Compute tensor dot product of two tensor along specified axes.
 
-    Outgoing legs are ordered such that first ones are the remaining legs of the first tensor in the original order,
-    and than those of the second tensor.
+    Outgoing legs are ordered such that first ones are the remaining legs 
+    of the first tensor in the original order, and than those 
+    of the second tensor.
 
     Parameters
     ----------
@@ -37,24 +39,25 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
 
     axes: tuple
         legs of both tensors (for each it is specified by int or tuple of ints)
-        e.g. axes=(0, 3) to contract 0th leg of a with 3rd leg of b
-                axes=((0, 3), (1, 2)) to contract legs 0 and 3 of a with 1 and 2 of b, respectivly.
+        e.g. axes=(0, 3) to contract 0th leg of `a` with 3rd leg of `b`
+        axes=((0, 3), (1, 2)) to contract legs 0 and 3 of `a` with 1 and 2 of `b`, respectively.
 
     conj: tuple
-        shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
-        Defult is (0, 0), i.e. neither tensor is conjugated
+        shows which tensors to conjugate: (0, 0), (0, 1), (1, 0), or (1, 1).
+        Default is (0, 0), i.e. neither tensor is conjugated
 
     policy: str
-        method of executing contraction.
-        `merge` is merging blocks into effective 2d matrices before executing matrix multiplication
-        (typically peferable for many small blocks).
-        `direct` is performing multiplication block by block
-        (might be preferable for tensors with fewer legs, or contracting over single axis).
-        `hybrid` (default) switches between those methods using simple heuristic.
+        method of executing contraction
+        
+            * ``merge`` merges blocks into matrices before executing matrix multiplication.
+              Typically peferable for many small blocks.
+            * ``direct`` performs the multiplication block by block.
+              Might be preferable for tensors with fewer legs, or contracting over a single axis).
+            * ``hybrid`` (default) switches between those methods using simple heuristic.
 
     Returns
     -------
-    tansor: Tensor
+    tensor: Tensor
     """
     in_a, in_b = _clear_axes(*axes)  # contracted meta legs
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
@@ -322,19 +325,19 @@ def _meta_mask(a_struct, a_isdiag, b_struct, Dbnew, axis):
 
 def vdot(a, b, conj=(1, 0)):
     r"""
-    Compute scalar product x = <a|b> of two tensors. a is conjugated by default.
+    Compute scalar product :math:`x = \langle a|b \rangle` of two tensors.
 
     Parameters
     ----------
     a, b: Tensor
 
-    conj: tuple
-        shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1).
-        Defult is (1, 0), i.e. tensor a is conjugated.
+    conj: tuple(int)
+        shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), or (1, 1).
+        Default is (1, 0), i.e. tensor `a` is conjugated.
 
     Returns
     -------
-    x: number
+    x: scalar
     """
     _test_configs_match(a, b)
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
@@ -381,8 +384,8 @@ def trace(a, axes=(0, 1)):
 
     Parameters
     ----------
-        axes: tuple
-        Legs to be traced out, e.g axes=(0, 1); or axes=((2, 3, 4), (0, 1, 5))
+        axes: tuple(int) or tuple(tuple(int))
+            Legs to be traced out, e.g axes=(0, 1); or axes=((2, 3, 4), (0, 1, 5))
 
     Returns
     -------
@@ -503,31 +506,38 @@ def _swap_gate_meta(t, n, mf, ndim, axes, fss):
     return tuple(tp % 2)
 
 
-def einsum(subscripts, *operants, order='Alphabetic'):
+def einsum(subscripts, *operands, order='Alphabetic'):
     """
     Execute series of tensor contractions.
 
-    Covering trace, tensordot (including outter product), and transpose.
+    Covering trace, tensordot (including outer products), and transpose.
     Follows notation of `np.einsum` as close as possible.
 
     Parameters
     ----------
     subscripts: str
 
-    *operants: tensors to be contracted
+    operands: tensors to be contracted
 
     order: str
-    Specify order in which repeated indices from subscipt are contracted.
-    By default, follows alphabetic order.
+        Specify order in which repeated indices from subscipt are contracted.
+        By default, follows alphabetic order.
 
     Example
     -------
-    yast.einsum('*ij,jh->ih', t1, t2) 
-    matrix-matrix multiplication, where first matrix is conjugated.
-    Equivalent to t1.conj() @ t2
+    
+    ::
+    
+        yast.einsum('*ij,jh->ih', t1, t2) 
+        
+        # matrix-matrix multiplication, where the first matrix is conjugated.
+        # Equivalent to 
 
-    yast.einsum('ab,al,bm->lm', t1, t2, t3, order='ba')
-    Contract along b first, and a second.
+        t1.conj() @ t2
+
+        yast.einsum('ab,al,bm->lm', t1, t2, t3, order='ba')
+        
+        # Contract along b first, and a second.
 
     Returns
     -------
@@ -546,21 +556,28 @@ def ncon(ts, inds, conjs=None):
         list of tensors to be contracted
 
     inds: tuple of tuples of ints (or list of lists of ints)
-        each inner tuple marks axis of respectiv tensor with ints.
-        Positive values mark legs to be contracted,
-        where two axis to be contracted have the same number.
-        Legs are contracted in order of increasing number.
-        Non-positive numbers mark legs of resulting tensor, in reversed order.
+        each inner tuple labels axes of respective tensor with ints.
+        Positive values labels legs to be contracted,
+        with pairs of axes to be contracted denoted by the same integer label.
+        Legs are contracted in the order of ascending integer value.
+        Non-positive numbers label the legs of resulting tensor, in reversed order.
 
     conjs: tuple of ints
         For each tensor in ts, it contains
         1 if the tensor should be conjugated and 0 otherwise.
 
     Example
-    ------
-    yast.ncon([a, b], ((-0, 1), (1, -1)), conjs=(1, 0)) is
-    matrix-matrix multiplication where first matrix is conjugated.
-    yast.ncon([a, b], ((-0, -2), (-1, -3))) is outter product.
+    -------
+
+    ::
+        
+        # matrix-matrix multiplication where the first matrix is conjugated
+        
+        yast.ncon([a, b], ((-0, 1), (1, -1)), conjs=(1, 0))
+        
+        # outer product
+    
+        yast.ncon([a, b], ((-0, -2), (-1, -3))) 
 
     Returns
     -------
