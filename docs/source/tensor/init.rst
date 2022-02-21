@@ -75,12 +75,13 @@ These utility operations can re-create tensors from
 different formats. For example, 1D representation or dictionary.
 Their export counterparts are
 	
-	* :meth:`yast.save_to_dict` 
+	* :meth:`yast.save_to_dict`
+	* :meth:`yast.save_to_hdf5` 
 	* :meth:`yast.compress_to_1d` 
 
 See examples: :ref:`examples/init:serialization of symmetric tensors`.
 
 .. automodule:: yast
-   :members: load_from_dict, decompress_from_1d
+   :members: load_from_dict, load_from_hdf5, decompress_from_1d
    :noindex:
    :show-inheritance:

@@ -9,6 +9,44 @@ except ImportError:
 tol = 1e-12  # pylint: disable=invalid-name
 
 
+def test_ncon_syntax():
+    # create a set of U(1)-symmetric tensors
+    a = yast.rand(config=config_U1, s=[-1, 1, -1], n=0,
+                  D=((20, 10), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)))
+    b = yast.rand(config=config_U1, s=[1, 1, 1], n=1,
+                  D=((4, 4), (2, 2), (20, 10)), t=((1, 0), (1, 0), (1, 0)))
+    c = yast.rand(config=config_U1, s=[1, 1, 1, -1], n=1,
+                  D=((20, 10), (30, 20), (10, 5), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)))
+    d = yast.rand(config=config_U1, s=[1, 1, -1, -1], n=0,
+                  D=((30, 20), (10, 5), (20, 10), (10, 5)), t=((1, 0), (1, 0), (1, 0), (1, 0)))
+
+    # Perform basic contraction of two tensors - equivalent to a single tensordot call
+    #           _                 _                        _    _
+    #  (-1) 1--|a|--0 (1) (1) 2--|b|--0 (-0) = (-1)    1--|a|--|b|--0    (-0)
+    #  (-3) 2--|_|               |_|--1 (-2)   (-3) 3<-2--|_|  |_|--1->2 (-2)
+    #
+    # The uncontracted indices, labeled by negative integers, are ordered according in
+    # descending fashion on resulting tensor 
+    e = yast.ncon([a, b], [[1, -1, -3], [-0, -2, 1]])
+    assert e.get_shape() == (8, 6, 4, 2)
+
+    # Network composed of several tensors can be contracted by a single ncon call,
+    # including traces and conjugations
+    #           _                 _                       _    _    __    __
+    #  (-2) 1--|a|--0 (4) (4) 0--|c|--2 (1) = (-2) 2<-1--|a|--|c|--|d*|--|b*|--0->3 (-3)
+    #  (-0) 2--|_|               |_|--3 (1)   (-0) 0<-2--|_|  |_|  |__|  |__|--1->1 (-1)
+    #                             |
+    #                             1 (3)
+    #                             0 (3) 
+    #           __                |_
+    #  (-3) 0--|b*|--2(5) (5) 2--|d*|--1 (2)
+    #  (-1) 1--|__|              |__|--3 (2)
+    #
+    f = yast.ncon([a, b, c, d], [[4, -2, -0], [-3, -1, 5], [4, 3, 1, 1], [3, 2, 5, 2]],
+                  conjs=(0, 1, 0, 1))
+    assert f.get_shape() == (2, 4, 6, 8)
+    
+
 def test_ncon_basic():
     """ tests of ncon executing a series of tensor contractions. """
     a = yast.rand(s=(1, 1, 1), D=(20, 3, 1), config=config_dense, dtype='complex128')
