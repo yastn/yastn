@@ -328,7 +328,7 @@ class Env3(_EnvParent):
                     ((-1, 2, 1), (1, -2, 3, 4), (2, -3, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
 
     def update_A(self, n, dt, opts):
-        """ Updates env.psi.A[n] by exp(dt Heff1). """
+        """ Updates env.ket.A[n] by exp(dt Heff1). """
         if n in self._temp['expmv_ncv']:
             opts['ncv'] = self._temp['expmv_ncv'][n]
         f = lambda x: self.Heff1(x, n)
@@ -336,7 +336,7 @@ class Env3(_EnvParent):
         self._temp['expmv_ncv'][n] = info['ncv']
 
     def update_C(self, dt, opts):
-        """ Updates env.psi.A[bd] by exp(dt Heff0). """
+        """ Updates env.ket.A[bd] by exp(dt Heff0). """
         bd = self.ket.pC
         if bd[0] != -1 and bd[1] != self.N:  # do not update central sites outsite of the chain
             if bd in self._temp['expmv_ncv']:
@@ -355,32 +355,32 @@ class Env3(_EnvParent):
         AA, info = expmv(f, AA, dt, **opts, normalize=True, return_info=True)
         self._temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)
-    
+
+
     def enlarge_bond(self, bd, opts_svd):
         if bd[0] < 0 or bd[1] >= self.N:  # do not enlarge bond outside of the chain
             return False
-        AL = self.psi.A[bd[0]]
-        AR = self.psi.A[bd[1]]
+        AL = self.ket.A[bd[0]]
+        AR = self.ket.A[bd[1]]
         if len(self.op.A[bd[0]].get_leg_structure(axis=1)) > len(AL.get_leg_structure(axis=1)) or \
            len(self.op.A[bd[1]].get_leg_structure(axis=1)) > len(AR.get_leg_structure(axis=1)):
-            return True  # true if not all possible charge sectors on physical legs of psi
+            return True  # true if not some charges are missing on physical legs of psi
 
         AL = AL.fuse_legs(axes=((0, 1), 2))
         AR = AR.fuse_legs(axes=(0, (1, 2)))
         shapeL = AL.get_shape()
         shapeR = AR.get_shape()
-        if shapeL[0] == shapeL[1] or shapeR[0] == shapeR[1]:
+        if shapeL[0] == shapeL[1] or shapeR[0] == shapeR[1] or \
+           ('D_total' in opts_svd and shapeL[0] >= opts_svd['D_total']):
             return False  # maximal bond dimension
-
-        _, R0 = qr(AL, axes=(0, 1), sQ=-1)
-        _, R1 = qr(AR, axes=(1, 0), Raxis=1, sQ=1)
-        _, _, _, S= svd(R0 @ R1, untruncated_S=True)
-        Dtot = S.pop('D')
-
-        if 'tol' in opts_svd and any(st[-1] > opts_svd['tol'] * 1.5 for st in S.values()):
-            return True
-
-
+        if 'tol' in opts_svd:
+            _, R0 = qr(AL, axes=(0, 1), sQ=-1)
+            _, R1 = qr(AR, axes=(1, 0), Raxis=1, sQ=1)
+            _, _, _, S= svd(R0 @ R1, untruncated_S=True)
+            S.pop('D')
+            if any(st[-1] > opts_svd['tol'] * 1.1 for st in S.values()):
+                return True
+        return False
 
 
 def _update2(n, F, bra, ket, to, nr_phys):

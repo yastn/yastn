@@ -53,8 +53,8 @@ def tdvp(psi, H, dt=0.1, env=None, version='1site', order='2nd', opts_expmv=None
         env = tdvp_sweep_1site(psi, H, dt, env, opts_expmv)
     elif version == '2site' and order == '2nd':
         env = tdvp_sweep_2site(psi, H, dt, env, opts_expmv, opts_svd)
-    # elif version == 'mix'and order == '2nd':
-    #     env = tdvp_sweep_mix(psi, H, dt, env, opts_expmv, opts_svd)
+    elif version == '12site' and order == '2nd':
+        env = tdvp_sweep_12site(psi, H, dt, env, opts_expmv, opts_svd)
     # elif version == '1site' and order = '4th':
     else:
         raise YampsError('tdvp version %s or order %s not recognized' % version, order)
@@ -98,7 +98,7 @@ def tdvp_sweep_2site(psi, H, dt=0.1, env=None, opts_expmv=None, opts_svd=None):
     return env
 
 
-def tdvp_sweep_mix(psi, H=False, dt=1., env=None, opts_expmv=None, opts_svd=None):
+def tdvp_sweep_12site(psi, H=False, dt=1., env=None, opts_expmv=None, opts_svd=None):
     r"""
     Perform sweep with mixed TDVP update, see :meth:`tdvp` for description.
 
@@ -113,7 +113,7 @@ def tdvp_sweep_mix(psi, H=False, dt=1., env=None, opts_expmv=None, opts_svd=None
         update_two = False
         for n in psi.sweep(to=to):
             if not update_two:
-                if env.enlarge_bond[(n - 1 + dn, n + dn), opts_svd]:
+                if env.enlarge_bond((n - 1 + dn, n + dn), opts_svd):
                     update_two = True
                 else:
                     env.update_A(n, 0.5 * dt, opts)
@@ -127,10 +127,10 @@ def tdvp_sweep_mix(psi, H=False, dt=1., env=None, opts_expmv=None, opts_svd=None
                 psi.absorb_central(to=to)
                 env.clear_site(n - dn, n - dn + 1)
                 env.update_env(n + 1 - 2 * dn, to=to)
-                if env.enlarge_bond[(n - 1 + dn, n + dn), opts_svd]:
+                if env.enlarge_bond((n - 1 + dn, n + dn), opts_svd):
                     env.update_A(n, -0.5 * dt, opts)
                 else:
-                    psi.ortogonalize_site(n, to=to)
+                    psi.orthogonalize_site(n, to=to)
                     env.update_env(n, to=to)
                     env.update_C(-0.5 * dt, opts)
                     psi.absorb_central(to=to)

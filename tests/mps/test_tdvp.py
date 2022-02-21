@@ -87,7 +87,7 @@ def test_U1_tdvp():
     H = ops_U1.mpo_XX_model(N=N, t=1, mu=0.25)
 
     for charge in (1, 2):
-        for version in ('1site', '2site'):
+        for version in ('1site', '2site', '12site'):
             psi = ops_U1.mps_random(N=N, Dblocks=[1, 2, 1], total_charge=charge)
             psi.canonize_sweep(to='first')
             run_tdvp_imag(psi, H, dt=dt, Eng_gs=Eng_gs[charge], sweeps=sweeps, version=version, opts_svd=opts_svd)
