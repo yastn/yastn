@@ -414,7 +414,7 @@ def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
     """ Main function merging tensor into effective block matrix. """
     order = axes[0] + axes[1]
     meta_new, meta_mrg, ls_l, ls_r, ul, ur = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds, sort_r)
-    Anew = a.config.backend.merge_blocks(a.A, order, meta_new, meta_mrg, a.config.device)
+    Anew = a.config.backend.merge_blocks(a._data, order, meta_new, meta_mrg, a.config.device)
     return Anew, ls_l, ls_r, ul, ur
 
 
@@ -439,11 +439,11 @@ def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
         D[n] = tuple(tuple(x) for x in D[n])
         ls.append(_leg_structure_merge(teff[n], t[n], Deff[n], D[n]))
 
-    tnew = tuple(tuple(t.flat) for t in np.hstack([teff[0], teff[1]]))
+    tnew = tuple(t1 + t2 for t1, t2 in zip(teff[0], teff[1]))
     # meta_mrg = ((tnew, told, Dslc, Drsh), ...)
-    meta_mrg = tuple((tn, to, (ls[0].dec[tel][tl].Dslc, ls[1].dec[ter][tr].Dslc),
+    meta_mrg = tuple((tn, slo, Do, (ls[0].dec[tel][tl].Dslc, ls[1].dec[ter][tr].Dslc),
                         (ls[0].dec[tel][tl].Dprod, ls[1].dec[ter][tr].Dprod))
-                        for tn, to, tel, tl, ter, tr in zip(tnew, told, teff[0], t[0], teff[1], t[1]))
+                        for tn, slo, Do, tel, tl, ter, tr in zip(tnew, slold, Dold, teff[0], t[0], teff[1], t[1]))
     if sort_r:
         unew_r, unew_l, unew = zip(*sorted(set(zip(teff[1], teff[0], tnew)))) if len(tnew) > 0 else ((), (), ())
     else:
@@ -566,32 +566,32 @@ def fuse_legs(a, axes, inplace=False, mode=None):
             Fusion can be reverted back by :meth:`yast.Tensor.unfuse_legs`
 
     First, the legs are permuted into desired order. Then, selected groups of consecutive legs 
-    are fused. The desired order of the legs is given by a tuple `axes` 
+    are fused. The desired order of the legs is given by a tuple `axes`
     of leg indices where the groups of legs to be fused are denoted by inner tuples ::
 
         axes=(0,1,(2,3,4),5)  keep order, fuse legs (2,3,4) into new leg
         ->   (0,1, 2,     3)
             __              __
         0--|  |--3      0--|  |--3<-5
-        1--|  |--4  =>  1--|__|         
+        1--|  |--4  =>  1--|__|
         2--|__|--5          |
                             2<-(2,3,4)
 
 
-        axes=(2,(3,1),4,(7,6),5,0)  permute indices, then fuse legs (3,1) into new leg 
+        axes=(2,(3,1),4,(7,6),5,0)  permute indices, then fuse legs (3,1) into new leg
         ->   (0, 1,   2, 3,   4,5)  and legs (7,6) into another new leg
             __                   __
         0--|  |--4        0->5--|  |--2<-4
         1--|  |--5 =>           |  |--4<-5
-        2--|  |--6        2->0--|  |--3<-(7,6) 
+        2--|  |--6        2->0--|  |--3<-(7,6)
         3--|__|--7    (3,1)->1--|__|
-    
+
 
     Two types of fusion are supported: `meta` and `hard`:
 
-    * `meta` performs the fusion only at the level of tensor structure: changing its rank, 
+    * `meta` performs the fusion only at the level of tensor structure: changing its rank,
       signature, charge sectors. The tensor data (blocks) is not affected. 
-    
+
     * `hard` changes both the structure and data, by aggregating smaller blocks into larger
       ones. Such fusion allows to balance number of non-zero blocks and typical block size.
 
@@ -806,12 +806,15 @@ def _unmerge_matrix(a, ls_l, ls_r):
         ic = il + ir
         if ic in a.A:
             for (tl, rl), (tr, rr) in product(ls_l.dec[il].items(), ls_r.dec[ir].items()):
-                meta.append((tl + tr, ic, rl.Dslc, rr.Dslc, rl.Drsh + rr.Drsh))
+                meta.append((tl + tr, ic, rl.Dslc, rr.Dslc, rl.Drsh + rr.Drsh, rl.Dprod * rr.Dprod))
     meta = sorted(meta, key=lambda x: x[0])
     c_t = tuple(x[0] for x in meta)
     c_D = tuple(x[4] for x in meta)
-    a.A = a.config.backend.unmerge_from_matrix(a.A, meta)
-    a.struct = a.struct._replace(t=c_t, D=c_D)
+    c_Dp = tuple(x[5] for x in meta)
+    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+    Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
+    a._data = a.config.backend.unmerge_from_matrix(a.A, meta, c_sl, Dsize)
+    a.struct = a.struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
 
 
 def _unmerge_diagonal(a, ls):

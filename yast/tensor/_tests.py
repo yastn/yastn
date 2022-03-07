@@ -91,7 +91,7 @@ def is_consistent(a):
     2) tset follow symmetry rule f(s@t)==n
     3) block dimensions are consistent (this requires config.test=True)
     """
-    low = 0
+    low, high = 0, 0
     for D, Dp, sl in zip(a.struct.D, a.struct.Dp, a.struct.sl):
         assert D[0] == Dp if a.isdiag else np.prod(D) == Dp
         high = low + Dp
