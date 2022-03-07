@@ -125,14 +125,14 @@
 - `svd` got argument `policy` = `fullrank` (default) or `lowrank`.
   `svd_lowrank` calls `svd` with policy = `lowrank`
 
-06-01-2021
+06-01-2022
 - change function names `export_to_dict` to `save_to_dict`, `export_to_hdf5` to `save_to_hdf5`
   `import_from_dict` to `load_from_dict`; `import_from_hdf5` to `load_from_hdf5`
 - save/load functions are changed to use 1d data container.
   It is now also more robust, using only native python/numpy data structures, i.e. no NamedTuples used by yast.
   WARNING: Backward compatibility is broken!
 
-08-01-2021
+08-01-2022
 - New function `remove_leg`
 - define `abs` as a magic method `__abs__`. Function `absolut` has been removed.
 - define `__matmul__`, giving shorthand a @ b == yast.tensordot(a, b, axes=(a.ndim - 1, 0))
@@ -140,3 +140,7 @@
 - BUGFIX: ncon in some rare special case could ignore content of conjs.
 - new function `einsum` (for now a place holder doing nothing).
 - new function `move_leg` which is an alias to `moveaxis`
+
+06-03-2022
+- Transition to 1d data structure
+- `unique_dtype` replaced by `get_dtype`

@@ -24,9 +24,7 @@ def norm(a, p='fro'):
     """
     if p not in ('fro', 'inf'):
         raise YastError("Error in norm: p not in ('fro', 'inf'). ")
-    if len(a.A) == 0:
-        return a.zero_of_dtype()
-    return a.config.backend.norm(a.A, p)
+    return a.config.backend.norm(a._data, p)
 
 
 def svd_lowrank(a, axes=(0, 1), n_iter=60, k_fac=6, **kwargs):

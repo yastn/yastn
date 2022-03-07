@@ -91,14 +91,17 @@ def is_consistent(a):
     2) tset follow symmetry rule f(s@t)==n
     3) block dimensions are consistent (this requires config.test=True)
     """
-    for ind, D in zip(a.struct.t, a.struct.D):
-        assert ind in a.A, 'index in struct.t not in dict A'
-        d = a.config.backend.get_shape(a.A[ind])
-        if a.isdiag:
-            d = d + d
-        assert d == D, 'block dimensions do not match struct.D'
-    assert len(a.struct.t) == len(a.A), 'length of struct.t do not match dict A'
-    assert len(a.struct.D) == len(a.A), 'length of struct.D do not match dict A'
+    low = 0
+    for D, Dp, sl in zip(a.struct.D, a.struct.Dp, a.struct.sl):
+        assert D[0] == Dp if a.isdiag else np.prod(D) == Dp
+        high = low + Dp
+        assert sl == (low, high)
+        low = high
+    assert a.config.backend.get_shape(a._data) == (high,)
+
+    assert len(a.struct.t) == len(a.struct.D)
+    assert len(a.struct.t) == len(a.struct.Dp)
+    assert len(a.struct.t) == len(a.struct.sl)
 
     for i in range(len(a.struct.t) - 1):
         assert a.struct.t[i] < a.struct.t[i + 1]
@@ -109,12 +112,8 @@ def is_consistent(a):
     assert np.all(a.config.sym.fuse(tset, sa, 1) == na), 'charges of some block do not satisfy symmetry condition'
     for n in range(a.ndim_n):
         a.get_leg_structure(n, native=True)
-    device = {a.config.backend.get_device(x) for x in a.A.values()}
     for s, hf in zip(a.struct.s, a.hard_fusion):
         assert s == hf.s[0]
-    assert len(device) <= 1, 'not all blocks reside on the same device'
-    if len(device) == 1:
-        assert device.pop().startswith(a.config.device), 'device of blocks inconsistent with config.device'
     return True
 
 

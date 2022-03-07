@@ -423,6 +423,7 @@ def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
     """ Meta information for backend needed to merge tensor into effective block matrix. """
     told = struct.t if inds is None else [struct.t[ii] for ii in inds]
     Dold = struct.D if inds is None else [struct.D[ii] for ii in inds]
+    slold = struct.sl if inds is None else [struct.sl[ii] for ii in inds]
     tset = np.array(told, dtype=int).reshape((len(told), len(struct.s), config.sym.NSYM))
     Dset = np.array(Dold, dtype=int).reshape(len(Dold), len(struct.s))
     legs, t, D, Deff, teff, s, ls = [], [], [], [], [], [], []

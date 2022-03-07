@@ -13,16 +13,8 @@ DTYPE = {'float64': np.float64,
          'complex128': np.complex128}
 
 
-def get_dtype(iterator):
-    """ iterators of numpy arrays; returns np.complex128 if any array is complex else np.float64"""
-    return np.complex128 if any(np.iscomplexobj(x) for x in iterator) else np.float64
-
-
-def unique_dtype(t):
-    dtypes = set(b.dtype for b in t.A.values())
-    if len(dtypes) == 1:
-        return str(tuple(dtypes)[0])
-    return False
+def get_dtype(t):
+    return t.dtype
 
 
 def random_seed(seed):
@@ -106,6 +98,14 @@ def count_nonzero(x):
     return np.count_nonzero(x)
 
 
+def delete(x, sl):
+    return np.delete(x, sl)
+
+
+def insert(x, start, values):
+    return np.insert(x, start, values)
+
+
 #########################
 #    output numbers     #
 #########################
@@ -127,8 +127,8 @@ def sum_elements(A):
 def norm(A, p):
     """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
     if p == 'fro':
-        return np.linalg.norm([np.linalg.norm(x) for x in A.values()])
-    return max([np.abs(x).max() for x in A.values()])  # else p == 'inf'
+        return np.linalg.norm(A)
+    return max(np.abs(A)) if len(A) > 0  else np.float64(0.)
 
 
 def entropy(A, alpha=1, tol=1e-12):
@@ -409,43 +409,43 @@ def embed(A, sl, tD):
 ################################
 
 
-def add(A, B, meta):
-    """ C = A + B. meta = kab, ka, kb """
-    C = {}
-    for t, ab in meta:
+def add(A, B, meta, Dsize):
+    """ C = A + B. """
+    data = np.zeros((Dsize,), dtype=np.find_common_type(A, B))
+    for sl_c, sl_a, sl_b, ab in meta:
         if ab == 'AB':
-            C[t] = A[t] + B[t]
+            data[sl_c] = A[sl_a] + B[sl_b]
         elif ab == 'A':
-            C[t] = A[t].copy()
+            data[sl_c] = A[sl_a]
         else:  # ab == 'B'
-            C[t] = B[t].copy()
-    return C
+            data[sl_c] = B[sl_b]
+    return data
 
 
-def sub(A, B, meta):
+def sub(A, B, meta, Dsize):
     """ C = A - B. meta = kab, ka, kb """
-    C = {}
-    for t, ab in meta:
+    data = np.zeros((Dsize,), dtype=np.find_common_type(A, B))
+    for sl_c, sl_a, sl_b, ab in meta:
         if ab == 'AB':
-            C[t] = A[t] - B[t]
+            data[sl_c] = A[sl_a] - B[sl_b]
         elif ab == 'A':
-            C[t] = A[t].copy()
+            data[sl_c] = A[sl_a]
         else:  # ab == 'B'
-            C[t] = -B[t]
-    return C
+            data[sl_c] = -B[sl_b]
+    return data
 
 
-def apxb(A, B, x, meta):
+def apxb(A, B, x, meta, Dsize):
     """ C = A + x * B. meta = kab, ka, kb """
-    C = {}
-    for t, ab in meta:
+    data = np.zeros((Dsize,), dtype=np.find_common_type(A, B))
+    for sl_c, sl_a, sl_b, ab in meta:
         if ab == 'AB':
-            C[t] = A[t] + x * B[t]
+            data[sl_c] = A[sl_a] + x * B[sl_b]
         elif ab == 'A':
-            C[t] = A[t].copy()
+            data[sl_c] = A[sl_a]
         else:  # ab == 'B'
-            C[t] = x * B[t]
-    return C
+            data[sl_c] = x * B[sl_b]
+    return data
 
 
 dot_dict = {(0, 0): lambda x, y: x @ y,
@@ -528,13 +528,13 @@ def merge_blocks(A, order, meta_new, meta_mrg, *args, **kwargs):
     return Anew
 
 
-def merge_to_dense(A, Dtot, meta, *args, **kwargs):
+def merge_to_dense(data, Dtot, meta, *args, **kwargs):
     """ Outputs full tensor. """
-    dtype = get_dtype(A.values())
-    Anew = np.zeros(Dtot, dtype=dtype)
-    for (ind, Dss) in meta:
-        Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
-    return Anew
+    newdata = np.zeros(Dtot, dtype=data.dtype)
+    for (sl, Dss) in meta:
+        newdata[tuple(slice(*Ds) for Ds in Dss)] = data[sl].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
+    newdata
+    return newdata.ravel()
 
 
 def merge_super_blocks(pos_tens, meta_new, meta_block, *args, **kwargs):

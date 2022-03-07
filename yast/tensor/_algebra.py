@@ -22,10 +22,10 @@ def __add__(a, b):
         result of addition as a new tensor
     """
     _test_configs_match(a, b)
-    aA, bA, hfs, meta, c_struct = _addition_meta(a, b)
+    aA, bA, hfs, meta, c_struct, Dsize = _addition_meta(a, b)
     c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
                     meta_fusion=a.meta_fusion, hard_fusion=hfs)
-    c.A = c.config.backend.add(aA, bA, meta)
+    c.A = c.config.backend.add(aA, bA, meta, Dsize)
     return c
 
 
@@ -45,10 +45,10 @@ def __sub__(a, b):
         result of subtraction as a new tensor
     """
     _test_configs_match(a, b)
-    aA, bA, hfs, meta, c_struct = _addition_meta(a, b)
+    aA, bA, hfs, meta, c_struct, Dsize = _addition_meta(a, b)
     c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
                     meta_fusion=a.meta_fusion, hard_fusion=hfs)
-    c.A = c.config.backend.sub(aA, bA, meta)
+    c.A = c.config.backend.sub(aA, bA, meta, Dsize)
     return c
 
 
@@ -68,10 +68,10 @@ def apxb(a, b, x=1):
     tensor : Tensor
     """
     _test_configs_match(a, b)
-    aA, bA, hfs, meta, c_struct = _addition_meta(a, b)
+    aA, bA, hfs, meta, c_struct, Dsize = _addition_meta(a, b)
     c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
                     meta_fusion=a.meta_fusion, hard_fusion=hfs)
-    c.A = c.config.backend.apxb(aA, bA, x, meta)
+    c.A = c.config.backend.apxb(aA, bA, x, meta, Dsize)
     return c
 
 
@@ -82,49 +82,81 @@ def _addition_meta(a, b):
     needs_mask, _ = _test_axes_match(a, b, sgn=1)
     if needs_mask:
         sla, tDa, slb, tDb, hfs = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
-        aA = a.config.backend.embed(a.A, sla, tDa)
-        bA = a.config.backend.embed(b.A, slb, tDb)
+        aA = a.config.backend.embed(a._data, sla, tDa)
+        bA = a.config.backend.embed(b._data, slb, tDb)
         aDset = tuple(tDa[t] for t in a.struct.t)
         bDset = tuple(tDb[t] for t in b.struct.t)
     else:
-        aA, bA, hfs = a.A, b.A, a.hard_fusion
+        aA, bA, hfs = a._data, b._data, a.hard_fusion
         aDset, bDset = a.struct.D, b.struct.D
+        aDpset, bDpset = a.struct.Dp, b.struct.Dp
+        aslset, bslset = a.struct.sl, b.struct.sl
 
     if a.struct.t == b.struct.t:
         if aDset != bDset:
             raise YastError('Bond dimensions do not match.')
-        c_struct = a.struct._replace(D=aDset)
-        meta = tuple((ta, 'AB') for ta in a.struct.t)
-        return aA, bA, hfs, meta, c_struct
+        c_struct = a.struct._replace(D=aDset, Dp=aDpset, sl=aslset)
+        high = aslset[-1][1]
+        one_sl = slice(0, high)
+        meta = ((one_sl, one_sl, one_sl, 'AB'),)
+        return aA, bA, hfs, meta, c_struct, high
 
-    ia, ib, meta = 0, 0, []
+    ia, ib, meta, c_t, c_D, c_Dp, c_sl = 0, 0, [], [], [], [], []
+    low = 0
     while ia < len(aDset) and ib < len(bDset):
-        ta, Da = a.struct.t[ia], aDset[ia]
-        tb, Db = b.struct.t[ib], bDset[ib]
+        ta, Da, Dpa, asl = a.struct.t[ia], aDset[ia], aDpset[ia], aslset[ia]
+        tb, Db, Dpb, bsl = b.struct.t[ib], bDset[ib], bDpset[ib], bslset[ib]
         if ta == tb:
             if Da != Db:
                 raise YastError('Bond dimensions do not match.')
-            meta.append((ta, Da, 'AB'))
+            high = low + Dpa
+            meta.append((slice(low, high), asl, bsl, 'AB'))
+            c_t.append(ta)
+            c_D.append(Da)
+            c_Dp.append(Dpa)
+            c_sl.append((low, high))
+            low = high
             ia += 1
             ib += 1
         elif ta < tb:
-            meta.append((ta, Da, 'A'))
+            high = low + Dpa
+            meta.append((slice(low, high), asl, None, 'A'))
+            c_t.append(ta)
+            c_D.append(Da)
+            c_Dp.append(Dpa)
+            c_sl.append((low, high))
+            low = high
             ia += 1
         else:
-            meta.append((tb, Db, 'B'))
+            high = low + Dpb
+            meta.append((slice(low, high), None, bsl, 'B'))
+            c_t.append(tb)
+            c_D.append(Db)
+            c_Dp.append(Dpb)
+            c_sl.append((low, high))
+            low = high
             ib += 1
-    for ta, Da in zip(a.struct.t[ia:], aDset[ia:]):
-        meta.append((ta, Da, 'A'))
-    for tb, Db in zip(b.struct.t[ib:], bDset[ib:]):
-        meta.append((tb, Db, 'B'))
+    for ta, Da, Dpa, asl in zip(a.struct.t[ia:], aDset[ia:], aDpset[ia:], aslset[ia:]):
+        high = low + Dpa
+        meta.append((slice(low, high), asl, None, 'A'))
+        c_t.append(ta)
+        c_D.append(Da)
+        c_Dp.append(Dpa)
+        c_sl.append((low, high))
+        low = high
+    for tb, Db, Dpb, bsl in zip(b.struct.t[ib:], bDset[ib:], bDpset[ib:], bslset[ib:]):
+        high = low + Dpa
+        meta.append((slice(low, high), None, bsl, 'B'))
+        c_t.append(tb)
+        c_D.append(Db)
+        c_Dp.append(Dpb)
+        c_sl.append((low, high))
+        low = high
 
-    c_t = tuple(t for t, _, _ in meta)
-    c_D = tuple(D for _, D, _ in meta)
-    meta = tuple((t, ab) for t, _, ab in meta)
-    c_struct = _struct(t=c_t, D=c_D, s=a.struct.s, n=a.struct.n)
-    if any(ab != 'AB' for _, ab in meta):
+    c_struct = _struct(s=a.struct.s, n=a.struct.n, t=tuple(c_t), D=tuple(c_D), Dp=tuple(c_Dp), sl=tuple(c_sl))
+    if any(mt[3] != 'AB' for mt in meta):
         _get_tD_legs(c_struct)
-    return aA, bA, hfs, meta, c_struct
+    return aA, bA, hfs, meta, c_struct, high
 
 
 def __lt__(a, number):
