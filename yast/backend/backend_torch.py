@@ -10,16 +10,8 @@ DTYPE = {'float64': torch.float64,
          'complex128': torch.complex128}
 
 
-def get_dtype(iterator):
-    """ iterators of torch tensors; returns torch.complex128 if any tensor is complex else torch.float64"""
-    return torch.complex128 if any(torch.is_complex(x) for x in iterator) else torch.float64
-
-
-def unique_dtype(t):
-    dtypes = set(b.dtype for b in t.A.values())
-    if len(dtypes) == 1:
-        return str(tuple(dtypes)[0])[len("torch."):]
-    return False
+def get_dtype(t):
+    return t.dtype
 
 
 def random_seed(seed):

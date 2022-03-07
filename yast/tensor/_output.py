@@ -1,7 +1,7 @@
 """ methods outputing data from yast tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _mf_to_ntree, _struct
+from ._auxliary import _clear_axes, _unpack_axes, _mf_to_ntree, _struct, _flatten
 from ._tests import YastError
 from ..sym import sym_none
 
@@ -237,14 +237,14 @@ def get_shape(a, axes=None, native=False):
     return tuple(sum(a.get_leg_structure(ii, native=native).values()) for ii in axes)
 
 
-def unique_dtype(a):
+def get_dtype(a):
     """
     Returns
     -------
-    dtype : dtype or bool
-        Returns common ``dtype`` if all blocks have the same type. Otherwise, returns False.
+    dtype : dtype
+        Returns data ``dtype``.
     """
-    return a.config.backend.unique_dtype(a)
+    return a.config.backend.get_dtype(a._data)
 
 
 def __getitem__(a, key):
@@ -259,7 +259,12 @@ def __getitem__(a, key):
     out : tensor
         The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
-    return a.A[key]
+    key = tuple(_flatten(key))
+    try:
+        ind = a.struct.t.index(key)
+    except ValueError:
+        raise YastError('tensor does not have block specify by key')
+    return a._data[slice(*a.struct.sl[ind])]
 
 
 ##################################################
@@ -421,8 +426,9 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
         The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
     c = a.to_nonsymmetric(leg_structures, native, reverse)
-    x = c.A[()] if not c.isdiag else c.config.backend.diag_create(c.A[()])
-    return c.config.backend.clone(x)
+    x = c.config.backend.clone(c._data)
+    x = c.config.backend.diag_create(x) if c.isdiag else x.reshape(c.struct.D[0])
+    return x
 
 
 def to_numpy(a, leg_structures=None, native=False, reverse=False):
@@ -447,9 +453,8 @@ def to_raw_tensor(a):
     out : tensor
         The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
-    if len(a.A) == 1:
-        key = next(iter(a.A))
-        return a.A[key]
+    if len(a.struct.D) == 1:
+        return a._data.reshape(a.struct.D[0])
     raise YastError('Only tensor with a single block can be converted to raw tensor')
 
 
@@ -505,18 +510,21 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
         axes = tuple(_unpack_axes(a.meta_fusion, *axes))
     meta = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-    for tind, tt in zip(a.struct.t, tset):
-        meta.append((tind, tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
+    for t_sl, tt in zip(a.struct.sl, tset):
+        meta.append((slice(*t_sl), tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
     if a.isdiag:
         Dtot = Dtot[:1]
-        meta = [(t, D[:1]) for t, D in meta]
+        meta = [(sl, D[:1]) for sl, D in meta]
 
     c_s = a.get_signature(native)
     c_t = ((),)
     c_D = (Dtot,) if not a.isdiag else (Dtot + Dtot,)
-    c_struct = _struct(t=c_t, D=c_D, s=c_s, n=())
+    Dp = np.prod(Dtot)
+    c_Dp = (Dp,)
+    c_sl = ((0, Dp),)
+    c_struct = _struct(t=c_t, D=c_D, s=c_s, n=(), Dp=c_Dp, sl=c_sl)
     c = a.__class__(config=config_dense, isdiag=a.isdiag, struct=c_struct)
-    c.A[()] = a.config.backend.merge_to_dense(a.A, Dtot, meta, a.config.device)
+    c._data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
     return c
 
 
@@ -547,9 +555,9 @@ def to_number(a, part=None):
     """
     size = a.size
     if size == 1:
-        x = a.config.backend.first_element(next(iter(a.A.values())))
+        x = a.config.backend.first_element(x._data)
     elif size == 0:
-        x = a.zero_of_dtype()  # is there a better solution for torch autograd?
+        x = a.zero_of_dtype()
     else:
         raise YastError('Specified bond dimensions inconsistent with tensor.')
     return a.config.backend.real(x) if part == 'real' else x
@@ -568,7 +576,7 @@ def item(a):
     """
     size = a.size
     if size == 1:
-        return a.config.backend.item(next(iter(a.A.values())))
+        return a.config.backend.item(a._data)
     if size == 0:
         return 0
     raise YastError("only single-element (symmetric) Tensor can be converted to scalar")

@@ -76,6 +76,7 @@ class Tensor:
         if 'dtype' in kwargs and kwargs['dtype'] != self.config.dtype:
             self.config._replace(device=kwargs['dtype'])
         self._isdiag = isdiag
+        self._data = self.config.backend.zeros((0,))  # 1d container for tensor data
         self.A = {}  # dictionary of blocks
 
         try:
@@ -121,7 +122,7 @@ class Tensor:
     from ._output import show_properties, __str__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_leg_charges_and_dims, get_leg_structure
     from ._output import zero_of_dtype, item, __getitem__
-    from ._output import get_leg_fusion, get_shape, get_signature, unique_dtype
+    from ._output import get_leg_fusion, get_shape, get_signature, get_dtype
     from ._output import get_tensor_charge, get_rank
     from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric
     from ._output import save_to_hdf5, save_to_dict, compress_to_1d
@@ -217,5 +218,4 @@ class Tensor:
         size : int
             total number of elements in all non-empty blocks of the tensor
         """
-        Dset = np.array(self.struct.D, dtype=int).reshape((len(self.struct.D), len(self.struct.s)))
-        return sum(np.prod(Dset, axis=1))
+        return self.config.backend.get_size(self._data)

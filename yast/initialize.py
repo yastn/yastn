@@ -5,7 +5,6 @@ import numpy as np
 from .tensor import Tensor, YastError
 from .tensor._auxliary import _unpack_axes, _struct
 from .tensor._merging import _Fusion
-from .tensor._initialize import _set_block
 
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
@@ -217,7 +216,7 @@ def load_from_dict(config=None, d=None):
         dtype = d['_d'].dtype.name
         for ts, Ds in zip(struct.t, struct.D):
             step = np.prod(Ds, dtype=int) if not d['isdiag'] else Ds[0]
-            _set_block(a, ts=ts, Ds=Ds, val=d['_d'][pointer: pointer + step], dtype=dtype)
+            # _set_block(a, ts=ts, Ds=Ds, val=d['_d'][pointer: pointer + step], dtype=dtype)
             pointer += step
         a.is_consistent()
         return a
