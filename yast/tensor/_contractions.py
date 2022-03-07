@@ -110,20 +110,20 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
         c.A = c.config.backend.dot(Am, Bm, conj, meta_dot)
         _unmerge_matrix(c, ls_l, ls_r)
     elif policy in ('hybrid', 'direct'):
-        meta, c_t, c_D = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
-        c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
+        meta, c_t, c_D, c_Dp, c_sl, tcon = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
+        c_struct = _struct(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl, s=c_s, n=c_n)
+        Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
         c = a.__class__(config=a.config, isdiag=a.isdiag,
                         meta_fusion=c_mfs, hard_fusion=c_hfs, struct=c_struct)
         oA = tuple(nout_a + nin_a)
         oB = tuple(nin_b + nout_b)
         if needs_mask:
             ma, mb = _masks_for_axes(a.config, a.struct, a.hard_fusion, nin_a, b.struct, b.hard_fusion, nin_b, meta)
-            c.A = a.config.backend.dot_nomerge_masks(a.A, b.A, conj, oA, oB, meta, ma, mb)
+            c._data = a.config.backend.dot_nomerge_masks(a._data, b._data, conj, oA, oB, meta, Dsize, tcon, ma, mb)
         else:
-            if any(Da[1] != Db[0] for _, _, _, Da, Db, _, _ in meta):
+            if any(mt[3][1] != mt[6][0] for mt in meta):
                 raise YastError('Bond dimensions do not match.')
-
-            c.A = a.config.backend.dot_nomerge(a.A, b.A, conj, oA, oB, meta)
+            c._data = a.config.backend.dot_nomerge(a._data, b._data, conj, oA, oB, meta, Dsize)
     else:
         raise YastError("Unknown policy for tensordot. policy should be in ('hybrid', 'direct', 'merge').")
     return c
@@ -152,24 +152,22 @@ def _meta_tensordot_nomerge(a_struct, b_struct, nout_a, nin_a, nin_b, nout_b):
     Da = np.array(a_struct.D, dtype=int).reshape((len(a_struct.D), a_ndim))
     Db = np.array(b_struct.D, dtype=int).reshape((len(b_struct.D), b_ndim))
 
-    ta_con = ta[:, nin_a, :]
-    tb_con = tb[:, nin_b, :]
-    ta_out = ta[:, nout_a, :]
-    tb_out = tb[:, nout_b, :]
+    ta_con = tuple(tuple(t.flat) for t in ta[:, nin_a, :])
+    tb_con = tuple(tuple(t.flat) for t in tb[:, nin_b, :])
+    ta_out = tuple(tuple(t.flat) for t in ta[:, nout_a, :])
+    tb_out = tuple(tuple(t.flat) for t in tb[:, nout_b, :])
 
-    Da_con = np.prod(Da[:, nin_a], axis=1)
-    Db_con = np.prod(Db[:, nin_b], axis=1)
-    Da_out = Da[:, nout_a]
-    Db_out = Db[:, nout_b]
-    Da_pro = np.prod(Da_out, axis=1)
-    Db_pro = np.prod(Db_out, axis=1)
+    Da_pcon = np.prod(Da[:, nin_a], axis=1)
+    Db_pcon = np.prod(Db[:, nin_b], axis=1)
+    Da_out = tuple(tuple(D.flat) for D in Da[:, nout_a])
+    Db_out = tuple(tuple(D.flat) for D in Db[:, nout_b])
+    Da_pout = np.prod(Da_out, axis=1)
+    Db_pout = np.prod(Db_out, axis=1)
 
-    block_a = [(tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), D1, tuple(D2), D3)
-            for t1, t2, t3, D1, D2, D3 in zip(ta_con, ta_out, ta, Da_con, Da_out, Da_pro)]
+    block_a = [x for x in zip(ta_con, ta_out, a_struct.sl, Da, Da_pcon, Da_out, Da_pout)]
     block_a = groupby(sorted(block_a, key=lambda x: x[0]), key=lambda x: x[0])
 
-    block_b = [(tuple(t1.flat), tuple(t2.flat), tuple(t3.flat), D1, tuple(D2), D3)
-            for t1, t2, t3, D1, D2, D3 in zip(tb_con, tb_out, tb, Db_con, Db_out, Db_pro)]
+    block_b = [x for x in zip(tb_con, tb_out, b_struct.sl, Db, Db_pcon, Db_out, Db_pout)]
     block_b = groupby(sorted(block_b, key=lambda x: x[0]), key=lambda x: x[0])
 
     meta = []
@@ -179,7 +177,7 @@ def _meta_tensordot_nomerge(a_struct, b_struct, nout_a, nin_a, nin_b, nout_b):
         while True:
             if tta == ttb:
                 for ta, tb in product(ga, gb):
-                    meta.append((ta[2], tb[2], ta[1] + tb[1], (ta[5], ta[3]), (tb[3], tb[5]), ta[4] + tb[4], ta[0]))
+                    meta.append((ta[1] + tb[1], ta[2], ta[3], (ta[6], ta[4]), tb[2], tb[3], (tb[4], tb[6]), ta[5] + tb[5], ta[6] * tb[6], ta[0]))
                 tta, ga = next(block_a)
                 ttb, gb = next(block_b)
             elif tta < ttb:
@@ -189,17 +187,33 @@ def _meta_tensordot_nomerge(a_struct, b_struct, nout_a, nin_a, nin_b, nout_b):
     except StopIteration:
         pass
 
-    meta = tuple(sorted(meta, key=lambda x: x[2]))
+    meta = tuple(sorted(meta, key=lambda x: x[0]))
+    tcon = tuple(mm[9] for mm in meta)
     if len(nin_a) == 1:
-        c_t = tuple(mm[2] for mm in meta)
-        c_D = tuple(mm[5] for mm in meta)
-    else:
-        if len(meta) > 0:
-            ctD = tuple((kk, next(mm)[5]) for kk, mm in groupby(meta, key=lambda x: x[2]))
-            c_t, c_D = zip(*ctD)
-        else:
-            c_t, c_D = tuple(), tuple()
-    return meta, c_t, c_D
+        c_t = tuple(mm[0] for mm in meta)
+        c_D = tuple(mm[7] for mm in meta)
+        c_Dp = tuple(mm[8] for mm in meta)
+        c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+        meta = tuple((sl, *mt[1:7]) for sl, mt in zip(c_sl, meta))
+        return meta, c_t, c_D, c_Dp, c_sl, tcon
+    if len(meta) > 0:
+        low, high = 0, 0
+        c_t, c_D, c_Dp, c_sl, meta2 = [], [], [], [], []
+        for t, group in groupby(meta, key=lambda x: x[0]):
+            c_t.append(t)
+            mt = next(group)
+            c_D.append(mt[7])
+            c_Dp.append(mt[8])
+            high = low + mt[8]
+            sl = (low, high)
+            low = high
+            c_sl.append(sl)
+            meta2.append((sl, *mt[1:7]))
+            for mt in group:
+                meta2.append((sl, *mt[1:7]))
+        return meta2, c_t, c_D, c_Dp, c_sl, tcon
+    return meta, (), (), (), (), tcon
+
 
 
 def broadcast(a, b, axis, conj=(0, 0)):
@@ -593,7 +607,7 @@ def ncon(ts, inds, conjs=None):
     if conjs is not None:
         conjs = tuple(conjs)
 
-    meta_trace, meta_dot, meta_transpose = _ncom_meta(inds, conjs)
+    meta_trace, meta_dot, meta_transpose = _ncon_meta(inds, conjs)
     ts = dict(enumerate(ts))
     for command in meta_trace:
         t, axes = command
@@ -609,7 +623,7 @@ def ncon(ts, inds, conjs=None):
 
 
 @lru_cache(maxsize=1024)
-def _ncom_meta(inds, conjs):
+def _ncon_meta(inds, conjs):
     """ turning information in inds and conjs into list of contraction commands """
     if not all(-256 < x < 256 for x in _flatten(inds)):
         raise YastError('ncon requires indices to be between -256 and 256.')

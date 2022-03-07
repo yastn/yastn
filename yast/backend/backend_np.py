@@ -490,41 +490,35 @@ def mask_diag(A, B, meta, axis, a_ndim):
     return {ind_a: A[ind_a][slc1 + Bslc[ind_b] + slc2] for ind_a, ind_b in meta}
 
 
-def dot_nomerge(A, B, cc, oA, oB, meta):
+def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
     f = dot_dict[cc]  # proper conjugations
-    C = {}
-    for (ina, inb, out, Da, Db, Dout, _) in meta:
-        temp = f(A[ina].transpose(oA).reshape(Da), B[inb].transpose(oB).reshape(Db)).reshape(Dout)
-        if out in C:
-            C[out] += temp
-        else:
-            C[out] = temp
-    return C
+    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+    for (sln, sla, Dao, Dan, slb, Dbo, Dbn) in meta:
+        newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan), \
+                                  Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn)).ravel()
+    return newdata
 
 
-def dot_nomerge_masks(A, B, cc, oA, oB, meta, ma, mb):
+def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
     f = dot_dict[cc]  # proper conjugations
-    C = {}
-    for (ina, inb, out, Da, Db, Dout, tt) in meta:
-        temp = f(A[ina].transpose(oA).reshape(Da)[:, ma[tt]], B[inb].transpose(oB).reshape(Db)[mb[tt], :]).reshape(Dout)
-        if out in C:
-            C[out] += temp
-        else:
-            C[out] = temp
-    return C
+    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+    for (sln, sla, Dao, Dan, slb, Dbo, Dbn), tt in zip(meta, tcon):
+        newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan)[:, ma[tt]], \
+                                  Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn)[mb[tt], :]).ravel()
+    return newdata
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
 
 
-def merge_blocks(A, order, meta_new, meta_mrg, *args, **kwargs):
+def merge_blocks(data, order, meta_new, meta_mrg, *args, **kwargs):
     """ New dictionary of blocks after merging into n-dimensional array """
-    dtype = get_dtype(A.values())
+    dtype = data.dtype
     Anew = {u: np.zeros(Du, dtype=dtype) for u, Du in zip(*meta_new)}
-    for (tn, to, Dslc, Drsh) in meta_mrg:
-        if to in A:
-            slc = tuple(slice(*x) for x in Dslc)
-            Anew[tn][slc] = A[to].transpose(order).reshape(Drsh)
+    for (tn, slo, Do, Dslc, Drsh) in meta_mrg:
+        slc = tuple(slice(*x) for x in Dslc)
+        slo = slice(*slo)
+        Anew[tn][slc] = data[slo].reshape(Do).transpose(order).reshape(Drsh)
     return Anew
 
 
@@ -547,12 +541,13 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, *args, **kwargs):
     return Anew
 
 
-def unmerge_from_matrix(A, meta):
+def unmerge_from_matrix(A, meta, new_sl, Dsize):
     """ unmerge matrix into single blocks """
-    Anew = {}
-    for (ind, indm, sl, sr, D) in meta:
-        Anew[ind] = A[indm][slice(*sl), slice(*sr)].reshape(D)
-    return Anew
+    dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
+    data = np.zeros((Dsize,), dtype=dtype)
+    for (ind, indm, sl, sr, _, _), snew in zip(meta, new_sl):
+        data[slice(*snew)] = A[indm][slice(*sl), slice(*sr)].ravel()
+    return data
 
 
 def unmerge_from_array(A, meta):
