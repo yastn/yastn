@@ -106,6 +106,10 @@ def insert(x, start, values):
     return np.insert(x, start, values)
 
 
+def expm(x):
+    return scipy.linalg.expm(x)
+
+
 #########################
 #    output numbers     #
 #########################
@@ -202,7 +206,7 @@ def square_matrix_from_dict(H, D=None, **kwargs):
 ##################################
 
 def requires_grad_(A, requires_grad=True):
-    warnings.warn("Current backend does not support autograd.", Warning)
+    warnings.warn("backend_np does not support autograd.", Warning)
     pass
 
 
@@ -254,36 +258,30 @@ def transpose(Adata, axes, meta_transpose):
     return newdata
 
 
-def rsqrt(A, cutoff=0):
-    res = {t: 1. / np.sqrt(x) for t, x in A.items()}
-    if cutoff > 0:
-        for t in res:
-            res[t][abs(res[t]) > 1. / cutoff] = 0
+def rsqrt(Adata, cutoff=0):
+    res = np.zeros_like(Adata)
+    ind = np.abs(Adata) > cutoff
+    res[ind] = 1. / np.sqrt(Adata[ind])
     return res
 
 
-def reciprocal(A, cutoff=0):
-    res = {t: 1. / x for t, x in A.items()}
-    if cutoff > 0:
-        for t in res:
-            res[t][abs(res[t]) > 1. / cutoff] = 0
+def reciprocal(Adata, cutoff=0):
+    res = np.zeros_like(Adata)
+    ind = np.abs(Adata) > cutoff
+    res[ind] = 1. / Adata[ind]
     return res
 
 
-def exp(A, step):
-    return {t: np.exp(step * x) for t, x in A.items()}
+def exp(Adata, step):
+    return np.exp(step * Adata)
 
 
-def expm(A):
-    return scipy.linalg.expm(A)
+def sqrt(Adata):
+    return np.sqrt(Adata)
 
 
-def sqrt(A):
-    return {t: np.sqrt(x) for t, x in A.items()}
-
-
-def absolute(A):
-    return {t: np.abs(x) for t, x in A.items()}
+def absolute(Adata):
+    return np.abs(Adata)
 
 
 def svd_lowrank(A, meta, D_block, n_iter=60, k_fac=6):

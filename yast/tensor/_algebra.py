@@ -175,7 +175,7 @@ def __lt__(a, number):
         result of logical element-wise operation as a new tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: x < number for ind, x in a.A.items()}
+    c._data = a._data < number
     return c
 
 
@@ -195,7 +195,7 @@ def __gt__(a, number):
         result of logical element-wise operation as a new tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: x > number for ind, x in a.A.items()}
+    c._data = a._data > number
     return c
 
 
@@ -215,7 +215,7 @@ def __le__(a, number):
         result of logical element-wise operation as a new tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: x <= number for ind, x in a.A.items()}
+    c._data = a._data <= number
     return c
 
 
@@ -235,7 +235,7 @@ def __ge__(a, number):
         result of logical element-wise operation as a new tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: x >= number for ind, x in a.A.items()}
+    c._data = a._data >= number
     return c
 
 
@@ -253,7 +253,7 @@ def __mul__(a, number):
         result of multipcilation as a new tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: number * x for ind, x in a.A.items()}
+    c._data = number * a._data
     return c
 
 
@@ -287,7 +287,7 @@ def __pow__(a, exponent):
         result of element-wise exponentiation as a new tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: x**exponent for ind, x in a.A.items()}
+    c._data = a._data ** exponent
     return c
 
 
@@ -305,7 +305,7 @@ def __truediv__(a, number):
         result of element-wise division  as a new tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: x / number for ind, x in a.A.items()}
+    c._data = a._data / number
     return c
 
 
@@ -320,7 +320,7 @@ def __abs__(a):
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.absolute(a.A)
+    c._data = a.config.backend.absolute(a._data)
     return c
 
 
