@@ -242,11 +242,17 @@ def broadcast(a, b, axis, conj=(0, 0)):
     conja = (1 - 2 * conj[0])
     c_hf = a.hard_fusion if conja == 1 else tuple(_flip_hf(x) for x in a.hard_fusion)
     meta, c_struct = _meta_broadcast(a.config, a.struct, b.struct, axis, conja)
+    Dsize = c_struct.sl[-1][1] if len(c_struct.sl) > 0 else 0
 
     c = a.__class__(config=a.config, isdiag=a.isdiag,
                     meta_fusion=a.meta_fusion, hard_fusion=c_hf, struct=c_struct)
-    a_ndim, axis = (1, 0) if a.isdiag else (a.ndim_n, axis)
-    c.A = a.config.backend.dot_diag(a.A, b.A, conj, meta, axis, a_ndim)
+
+    if a.isdiag:
+        a_ndim, axis = (1, 0)
+        meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
+    else:
+        a_ndim = a.ndim_n
+    c._data = a.config.backend.dot_diag(a._data, b._data, conj, meta, Dsize, axis, a_ndim)
     return c
 
 
@@ -268,19 +274,28 @@ def _meta_broadcast(config, a_struct, b_struct, axis, conja):
     nsym = config.sym.NSYM
     ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a_struct.t)
     ind_tb = tuple(x[:nsym] for x in b_struct.t)
-    meta = tuple((ta, ia + ia, Da) for ta, ia, Da in zip(a_struct.t, ind_ta, a_struct.D) if ia in ind_tb)
+    sl_b = dict(zip(ind_tb, b_struct.sl))
+
+    meta = tuple((ta, sla, Da, Dap, sl_b[ia]) for ta, sla, Da, Dap, ia in \
+                 zip(a_struct.t, a_struct.sl, a_struct.D, a_struct.Dp, ind_ta) if ia in ind_tb)
 
     c_n = np.array(a_struct.n, dtype=int).reshape((1, 1, -1))
     c_n = tuple(config.sym.fuse(c_n, (1,), conja)[0])
     c_s = a_struct.s if conja == 1 else tuple(-x for x in a_struct.s)
 
-    Db = dict(zip(b_struct.t, b_struct.D))
-    if any(Da[axis] != Db[tb][0] for _, tb, Da in meta):
+    if any(Da[axis] != slb[1] - slb[0] for _, _, Da, _, slb in meta):
         raise YastError("Bond dimensions do not match.")
-    c_t = tuple(ta for ta, _, _ in meta)
-    c_D = tuple(Da for _, _, Da in meta)
-    c_struct = _struct(t=c_t, D=c_D, s=c_s, n=c_n)
-    meta = tuple((ta, tb) for ta, tb, _ in meta)
+
+    if len(meta) < len(a_struct.t):
+        c_t = tuple(mt[0] for mt in meta)
+        c_D = tuple(mt[2] for mt in meta)
+        c_Dp = tuple(mt[3] for mt in meta)
+        c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+        c_struct = _struct(s=c_s, n=c_n, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    else:
+        c_struct = a_struct._replace(s=c_s, n=c_n)
+
+    meta = tuple((sln, sla, Da, slb) for (_, sla, Da, _, slb), sln in zip(meta, c_struct.sl))
     return meta, c_struct
 
 

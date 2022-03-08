@@ -25,7 +25,7 @@ def __add__(a, b):
     aA, bA, hfs, meta, c_struct, Dsize = _addition_meta(a, b)
     c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
                     meta_fusion=a.meta_fusion, hard_fusion=hfs)
-    c.A = c.config.backend.add(aA, bA, meta, Dsize)
+    c._data = c.config.backend.add(aA, bA, meta, Dsize)
     return c
 
 
@@ -48,7 +48,7 @@ def __sub__(a, b):
     aA, bA, hfs, meta, c_struct, Dsize = _addition_meta(a, b)
     c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
                     meta_fusion=a.meta_fusion, hard_fusion=hfs)
-    c.A = c.config.backend.sub(aA, bA, meta, Dsize)
+    c._data = c.config.backend.sub(aA, bA, meta, Dsize)
     return c
 
 
@@ -71,7 +71,7 @@ def apxb(a, b, x=1):
     aA, bA, hfs, meta, c_struct, Dsize = _addition_meta(a, b)
     c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
                     meta_fusion=a.meta_fusion, hard_fusion=hfs)
-    c.A = c.config.backend.apxb(aA, bA, x, meta, Dsize)
+    c._data = c.config.backend.apxb(aA, bA, x, meta, Dsize)
     return c
 
 
