@@ -214,11 +214,9 @@ def move_to(A, *args, **kwargs):
     return A
 
 
-def conj(A, inplace):
+def conj(Adata):
     """ Conjugate dict of tensors; Force a copy in not in place. """
-    if inplace:
-        return {t: x.conj() for t, x in A.items()}
-    return {t: x.copy().conj() for t, x in A.items()}
+    return Adata.conj()
 
 
 def trace(A, order, meta):
@@ -248,11 +246,12 @@ def trace_with_mask(A, order, meta, msk12):
     return Aout
 
 
-def transpose(A, axes, meta_transpose, inplace):
+def transpose(Adata, axes, meta_transpose):
     """ Transpose; Force a copy if not inplace. """
-    if inplace:
-        return {new: np.transpose(A[old], axes=axes) for new, old in meta_transpose}
-    return {new: np.transpose(A[old], axes=axes).copy() for new, old in meta_transpose}
+    newdata = np.empty(Adata.shape, dtype=Adata.dtype)
+    for sln, slo, Do in meta_transpose:
+        newdata[slice(*sln)] = Adata[slice(*slo)].reshape(Do).transpose(axes).ravel()
+    return newdata
 
 
 def rsqrt(A, cutoff=0):
@@ -459,6 +458,27 @@ def vdot(A, B, cc, meta):
     return np.sum([f(A[ind].reshape(-1), B[ind].reshape(-1)) for ind in meta])
 
 
+def diag_make2d(Adata, meta, Dsize):
+    newdata = np.zeros((Dsize,), dtype=Adata.dtype)
+    for sln, slo in meta:
+        newdata[slice(*sln)] = np.diag(Adata[slice(*slo)]).ravel()
+    return newdata
+
+
+def diag_1dto2d(Adata, meta, Dsize):
+    newdata = np.zeros((Dsize,), dtype=Adata.dtype)
+    for sln, slo in meta:
+        newdata[slice(*sln)] = np.diag(Adata[slice(*slo)]).ravel()
+    return newdata
+
+
+def diag_2dto1d(Adata, meta, Dsize):
+    newdata = np.zeros((Dsize,), dtype=Adata.dtype)
+    for sln, slo, Do in meta:
+        newdata[slice(*sln)] = np.diag(Adata[slice(*slo)].reshape(Do))
+    return newdata
+
+
 def dot(A, B, cc, meta_dot):
     f = dot_dict[cc]  # proper conjugations
     C = {}
@@ -473,14 +493,14 @@ dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
                 (1, 1): lambda x, y, dim: x.conj() * y.reshape(dim).conj()}
 
 
-def dot_diag(A, B, cc, meta, axis, a_ndim):
+def dot_diag(Adata, Bdata, cc, meta, Dsize, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
     f = dotdiag_dict[cc]
-    C = {}
-    for ind_a, ind_b in meta:
-        C[ind_a] = f(A[ind_a], B[ind_b], dim)
-    return C
+    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+    for sln, sla, Da, slb in meta:
+        newdata[slice(*sln)] = f(Adata[slice(*sla)].reshape(Da), Bdata[slice(*slb)], dim).ravel()
+    return newdata
 
 
 def mask_diag(A, B, meta, axis, a_ndim):

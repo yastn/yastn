@@ -103,7 +103,7 @@ def requires_grad_(a, requires_grad=True):
     a.config.backend.requires_grad_(a.A, requires_grad=requires_grad)
 
 
-def conj(a, inplace=False):
+def conj(a):
     r"""
     Return conjugated tensor. In particular, change the sign of the signature `s` to `-s`,
     the total charge `n` to `-n`, and complex conjugate each block of the tensor.
@@ -121,13 +121,8 @@ def conj(a, inplace=False):
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
     new_hf = tuple(_flip_hf(x) for x in a.hard_fusion)
-    if inplace:
-        c = a
-        c.struct = struct
-        a.hard_fusion = new_hf
-    else:
-        c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=new_hf, struct=struct)
-    c.A = c.config.backend.conj(a.A, inplace)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=new_hf, struct=struct)
+    c._data = c.config.backend.conj(a._data)
     return c
 
 
@@ -209,23 +204,30 @@ def transpose(a, axes, inplace=False):
     c_s = tuple(a.struct.s[ii] for ii in uaxes)
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
-    newt = tset[:, order, :]
-    newD = Dset[:, order]
-    meta = sorted(((tuple(tn.flat), to, tuple(Dn)) for tn, to, Dn in zip(newt, a.struct.t, newD)), key=lambda x: x[0])
-    c_t = tuple(tn for tn, _, _ in meta)
-    c_D = tuple(Dn for _, _, Dn in meta)
-    meta = tuple((tn, to) for tn, to, _ in meta)
-    struct = _struct(t=c_t, D=c_D, s=c_s, n=a.struct.n)
+    newt = tuple(tuple(x.flat) for x in tset[:, order, :])
+    newD = tuple(tuple(x.flat) for x in Dset[:, order])
+
+    meta = sorted(zip(newt, newD, a.struct.Dp, a.struct.sl, a.struct.D), key=lambda x: x[0])
+
+    c_t = tuple(mt[0] for mt in meta)
+    c_D = tuple(mt[1] for mt in meta)
+    c_Dp = tuple(mt[2] for mt in meta)
+    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+
+    meta = tuple((sln, *mt[3:]) for sln, mt, in zip(c_sl, meta))
+    c_struct = _struct(s=c_s, n=a.struct.n, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
 
     if inplace:
-        a.struct = struct
+        a.struct = c_struct
         a.meta_fusion = new_mf
         a.hard_fusion = new_hf
-    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=new_mf, hard_fusion=new_hf, struct=struct)
+        c = a
+    else:
+        c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=new_mf, hard_fusion=new_hf, struct=c_struct)
     if a.isdiag and not inplace:
-        c.A = {k: c.config.backend.clone(v) for k, v in a.A.items()}
+        c._data = c.config.backend.clone(a._data)
     elif not a.isdiag:
-        c.A = c.config.backend.transpose(a.A, uaxes, meta, inplace)
+        c._data = c.config.backend.transpose(a._data, uaxes, meta)
     return c
 
 
@@ -373,23 +375,29 @@ def remove_leg(a, axis=-1, inplace=False):
 def diag(a):
     """
     Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa. """
+    if not a.isdiag:  # isdiag=False -> isdiag=True
+        if a.ndim_n != 2 or sum(a.struct.s) != 0:
+            raise YastError('Diagonal tensor requires 2 legs with opposite signatures.')
+        if any(x != 0 for x in a.struct.n):
+            raise YastError('Diagonal tensor requires zero tensor charge.')
+        if any(mf != (1,) for mf in a.meta_fusion) or any(hf.tree != (1,) for hf in a.hard_fusion):
+            raise YastError('Diagonal tensor cannot have fused legs.')
+        if any(d0 != d1 for d0, d1 in a.struct.D):
+            raise YastError('yast.diag() allowed only for square blocks.')
+        #     isdiag=True -> isdiag=False                        isdiag=False -> isdiag=True
+    c_Dp = tuple(x ** 2 for x in a.struct.Dp) if a.isdiag else tuple(D[0] for D in a.struct.D)
+    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+    c_struct = a.struct._replace(Dp=c_Dp, sl=c_sl)
+    c = a.__class__(config=a.config, isdiag=not a.isdiag, meta_fusion=a.meta_fusion, \
+        hard_fusion=a.hard_fusion, struct=c_struct)
+
+    Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
     if a.isdiag:  # isdiag=True -> isdiag=False
-        c = a.__class__(config=a.config, isdiag=False, meta_fusion=a.meta_fusion, \
-            hard_fusion=a.hard_fusion, struct=a.struct)
-        c.A = {ind: a.config.backend.diag_create(a.A[ind]) for ind in a.A}
-        return c
-    # isdiag=False -> isdiag=True
-    if a.ndim_n != 2 or sum(a.struct.s) != 0:
-        raise YastError('Diagonal tensor requires 2 legs with opposite signatures.')
-    if any(x != 0 for x in a.struct.n):
-        raise YastError('Diagonal tensor requires zero tensor charge.')
-    if any(mf != (1,) for mf in a.meta_fusion) or any(hf.tree != (1,) for hf in a.hard_fusion):
-        raise YastError('Diagonal tensor cannot have fused legs.')
-    if any(d0 != d1 for d0, d1 in a.struct.D):
-        raise YastError('yast.diag() allowed only for square blocks.')
-    c = a.__class__(config=a.config, isdiag=True, meta_fusion=a.meta_fusion, \
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: a.config.backend.diag_get(a.A[ind]) for ind in a.A}
+        meta = tuple(zip(c_sl, a.struct.sl))
+        c._data = a.config.backend.diag_1dto2d(a._data, meta, Dsize)
+    else:  # isdiag=False -> isdiag=True
+        meta = tuple(zip(c_sl, a.struct.sl, a.struct.D))
+        c._data = a.config.backend.diag_2dto1d(a._data, meta, Dsize)
     return c
 
 
