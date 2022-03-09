@@ -117,7 +117,7 @@ def show_properties(a):
     print("dim native  :", a.ndim_n)  # number of native legs
     print("shape meta  :", a.get_shape(native=False))
     print("shape native:", a.get_shape(native=True))
-    print("no. blocks  :", len(a.A))  # number of blocks
+    print("no. blocks  :", len(a.struct.t))  # number of blocks
     print("size        :", a.size)  # total number of elements in all blocks
     mfs = {i: _mf_to_ntree(mf) for i, mf in enumerate(a.meta_fusion)}
     print("meta fusion :", mfs)  # encoding meta fusion tree for each leg

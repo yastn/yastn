@@ -542,11 +542,11 @@ def merge_to_1d(data, order, meta_new, meta_mrg, Dsize, *args, **kwargs):
     """ New dictionary of blocks after merging into matrix. """
     dtype = data.dtype
     newdata = np.zeros((Dsize,), dtype=dtype)
-    for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
+    for (tn, Dn, sln), (t1, gr) in zip(zip(*meta_new), groupby(meta_mrg, key=lambda x: x[0])):
         assert tn == t1
         temp = np.zeros(Dn, dtype=dtype)
         for (_, slo, Do, Dslc, Drsh) in gr:
-            temp[tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
+            temp[tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
         newdata[slice(*sln)] = temp.ravel()
     return newdata
 
