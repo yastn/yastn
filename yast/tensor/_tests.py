@@ -75,10 +75,8 @@ def are_independent(a, b):
     """
     test = []
     test.append(a is not b)
-    test.append(a.A is not b.A)
-    for key in a.A.keys():
-        if key in b.A:
-            test.append(a.config.backend.is_independent(a.A[key], b.A[key]))
+    test.append(a._data is not b._data)
+    test.append(a.config.backend.is_independent(a._data, b._data))
     return all(test)
 
 
