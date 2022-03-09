@@ -20,7 +20,7 @@ def copy(a):
     tensor : Tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ts: a.config.backend.copy(x) for ts, x in a.A.items()}
+    c._data = a.config.backend.copy(a._data)
     return c
 
 
@@ -34,7 +34,7 @@ def clone(a):
     tensor : Tensor
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ts: a.config.backend.clone(x) for ts, x in a.A.items()}
+    c._data = a.config.backend.clone(a._data)
     return c
 
 

@@ -39,7 +39,7 @@ def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
     """ Main function merging tensor into effective block matrix. """
     order = axes[0] + axes[1]
     meta_new, meta_mrg, ls_l, ls_r, ul, ur = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds, sort_r)
-    Anew = a.config.backend.merge_blocks(a._data, order, meta_new, meta_mrg, a.config.device)
+    Anew = a.config.backend.merge_to_2d(a._data, order, meta_new, meta_mrg, a.config.device)
     return Anew, ls_l, ls_r, ul, ur
 
 
@@ -92,7 +92,7 @@ def _unmerge_matrix(a, Am, ls_l, ls_r):
     meta = tuple(mt[1:4] for mt in meta)
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
-    a._data = a.config.backend.unmerge_from_matrix(Am, meta, c_sl, Dsize)
+    a._data = a.config.backend.unmerge_from_2d(Am, meta, c_sl, Dsize)
     a.struct = a.struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
 
 
@@ -105,7 +105,7 @@ def _unmerge_diagonal(a, Am, ls):
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
     a.struct = a.struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
-    a._data = a.config.backend.unmerge_from_diagonal(Am, meta, c_sl, Dsize)
+    a._data = a.config.backend.unmerge_from_2ddiag(Am, meta, c_sl, Dsize)
 
 
 def _leg_struct_trivial(config, Am, axis=0):
@@ -261,7 +261,9 @@ def _fuse_legs_hard(a, axes, order, inplace=False):
         assert all(isinstance(y, int) for y in x)
 
     struct_new, meta_mrg, t_in, D_in = _meta_fuse_hard(a.config, a.struct, axes)
-    meta_new = (struct_new.t, struct_new.D)
+    meta_new = (struct_new.t, struct_new.D, struct_new.sl)
+    Dsize = struct_new.sl[-1][1] if len(struct_new.sl) > 0 else 0
+
     fm = ((1,),) * len(struct_new.s)
     fh = tuple(_fuse_hfs(a.hard_fusion, t_in, D_in, struct_new.s[n], axis) if len(axis) > 1 else a.hard_fusion[axis[0]]
                 for n, axis in enumerate(axes))
@@ -272,7 +274,7 @@ def _fuse_legs_hard(a, axes, order, inplace=False):
         c.meta_fusion = tuple(fm)
     else:
         c = a.__class__(config=a.config, meta_fusion=tuple(fm), hard_fusion=tuple(fh), struct=struct_new)
-    c.A = a.config.backend.merge_blocks(a.A, order, meta_new, meta_mrg, a.config.device)
+    c._data = a.config.backend.merge_to_1d(a._data, order, meta_new, meta_mrg, Dsize, a.config.device)
     return c
 
 
@@ -302,14 +304,19 @@ def _meta_fuse_hard(config, struct, axes):
     teff_split = [tuple(tuple(y.flat) for y in x) for x in teff]
     told_split = [tuple(tuple(x[a, :].flat) for a in axes) for x in tset]
     teff = tuple(tuple(x.flat) for x in teff)
+
     tnew = tuple(sorted(set(teff)))
     ndimnew = len(snew)
     tnew_split = [tuple(x[i * nsym: (i + 1) * nsym] for i in range(ndimnew)) for x in tnew]
     Dnew = tuple(tuple(l.Dtot[y] for l, y in zip(ls, x)) for x in tnew_split)
-    meta_mrg = tuple((tn, to, tuple(l.dec[e][o].Dslc for l, e, o in zip(ls, tes, tos)),
-                        tuple(l.dec[e][o].Dprod for l, e, o in zip(ls, tes, tos)))
-                        for tn, to, tes, tos in zip(teff, struct.t, teff_split, told_split))
-    struct_new = _struct(t=tnew, D=Dnew, s=tuple(snew), n=struct.n)
+    Dpnew = np.prod(Dnew, axis=1, dtype=int)
+    slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
+    Dpnew = tuple(Dpnew)
+
+    meta_mrg = tuple(sorted(((tn, slo, Do, tuple(l.dec[e][o].Dslc for l, e, o in zip(ls, tes, tos)),
+                             tuple(l.dec[e][o].Dprod for l, e, o in zip(ls, tes, tos)))
+                             for tn, slo, Do, tes, tos in zip(teff, struct.sl, struct.D, teff_split, told_split)), key=lambda x : x[0]))
+    struct_new = _struct(t=tnew, D=Dnew, Dp=Dpnew, sl=slnew, s=tuple(snew), n=struct.n)
     return struct_new, meta_mrg, t_in, D_in
 
 
@@ -414,7 +421,8 @@ def unfuse_legs(a, axes, inplace=False):
         else:
             c = a.__class__(config=a.config, struct=c_struct,
                             meta_fusion=tuple(new_mfs), hard_fusion=tuple(new_hfs))
-        c.A = a.config.backend.unmerge_from_array(a.A, meta)
+        Dsize = c_struct.sl[-1][1] if len(c_struct.sl) > 0 else 0
+        c._data = a.config.backend.unmerge_from_1d(a._data, meta, c_struct.sl, Dsize)
     else:
         c = a if inplace else a.clone()
         c.meta_fusion = tuple(new_mfs)
@@ -441,20 +449,23 @@ def _meta_unfuse_hard(config, struct, axes, hfs):
             snew.append(struct.s[n])
 
     meta, nsym = [], config.sym.NSYM
-    for to in struct.t:
+    for to, slo, Do in zip(struct.t, struct.sl, struct.D):
         tfused = tuple(to[n * nsym: (n + 1) * nsym] for n in range(len(struct.s)))
         tunfused = tuple(tuple(l.dec[ts].items()) for l, ts in zip(ls, tfused))
         for tt in product(*tunfused):
             tn = sum((x[0] for x in tt), ())
-            slc = tuple(x[1].Dslc for x in tt)
+            sub_slc = tuple(x[1].Dslc for x in tt)
             Dn = sum((x[1].Drsh for x in tt), ())
-            meta.append((tn, to, slc, Dn))
+            Dp = np.prod(list(x[1].Dprod for x in tt),  dtype=int)
+            meta.append((tn, Dn, Dp, slo, Do, sub_slc))
 
-
-    meta = tuple(sorted(meta, key=lambda x: x[0]))
+    meta = sorted(meta, key=lambda x: x[0])
     tnew = tuple(x[0] for x in meta)
-    Dnew = tuple(x[3] for x in meta)
-    new_struct = struct._replace(s=tuple(snew), t=tnew, D=Dnew)
+    Dnew = tuple(x[1] for x in meta)
+    Dpnew = tuple(x[2] for x in meta)
+    slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
+    new_struct = struct._replace(s=tuple(snew), t=tnew, D=Dnew, Dp=Dpnew, sl=slnew)
+    meta = tuple(x[3:] for x in meta)
     return meta, new_struct, tuple(nlegs_unfused), tuple(hfs_new)
 
 #  =========== masks ======================
