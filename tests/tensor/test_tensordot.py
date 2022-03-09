@@ -220,7 +220,7 @@ def test_tensordot_exceptions():
 
 if __name__ == '__main__':
     test_dot_basic(policy="direct")
-    # test_tensordot_fuse_hard(policy=None)
-    # test_tensordot_diag()
-    # test_tensordot_fuse_meta()
-    # test_tensordot_exceptions()
+    test_tensordot_fuse_hard(policy=None)
+    test_tensordot_diag()
+    test_tensordot_fuse_meta()
+    test_tensordot_exceptions()

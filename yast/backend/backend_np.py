@@ -123,9 +123,9 @@ def item(x):
     return x.item()
 
 
-def sum_elements(A):
+def sum_elements(Adata):
     """ sum of all elements of all tensors in A """
-    return sum(x.sum() for x in A.values())
+    return Adata.sum().reshape(1)
 
 
 def norm(A, p):
@@ -223,31 +223,23 @@ def conj(Adata):
     return Adata.conj()
 
 
-def trace(A, order, meta):
+def trace(data, order, meta, Dsize):
     """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
         Repeating tnew are added."""
-    Aout = {}
-    for (tnew, told, Drsh, _) in meta:
-        Atemp = np.trace(np.reshape(np.transpose(A[told], order), Drsh))
-        if tnew in Aout:
-            Aout[tnew] += Atemp
-        else:
-            Aout[tnew] = Atemp
-    return Aout
+    newdata = np.zeros((Dsize,), dtype=data.dtype)
+    for (sln, slo, Do, Drsh) in meta:
+        newdata[slice(*sln)] += np.trace(data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)).ravel()
+    return newdata
 
 
-def trace_with_mask(A, order, meta, msk12):
+def trace_with_mask(data, order, meta, Dsize, tcon, msk12):
     """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
         Repeating tnew are added."""
-    Aout = {}
-    for (tnew, told, Drsh, tt) in meta:
-        Atemp = np.reshape(np.transpose(A[told], order), Drsh)
-        Atemp = np.sum(Atemp[msk12[tt][0], msk12[tt][1]], axis=0)
-        if tnew in Aout:
-            Aout[tnew] += Atemp
-        else:
-            Aout[tnew] = Atemp
-    return Aout
+    newdata = np.zeros((Dsize,), dtype=data.dtype)
+    for (sln, slo, Do, Drsh), tt in zip(meta, tcon):
+        temp = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
+        newdata[slice(*sln)] += np.sum(temp[msk12[tt][0], msk12[tt][1]], axis=0).ravel()
+    return newdata
 
 
 def transpose(Adata, axes, meta_transpose):

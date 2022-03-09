@@ -118,7 +118,7 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
         oA = tuple(nout_a + nin_a)
         oB = tuple(nin_b + nout_b)
         if needs_mask:
-            ma, mb = _masks_for_axes(a.config, a.struct, a.hard_fusion, nin_a, b.struct, b.hard_fusion, nin_b, meta)
+            ma, mb = _masks_for_axes(a.config, a.struct, a.hard_fusion, nin_a, b.struct, b.hard_fusion, nin_b, tcon)
             c._data = a.config.backend.dot_nomerge_masks(a._data, b._data, conj, oA, oB, meta, Dsize, tcon, ma, mb)
         else:
             if any(mt[3][1] != mt[6][0] for mt in meta):
@@ -436,20 +436,21 @@ def trace(a, axes=(0, 1)):
 
     if a.isdiag:
         # if needs_mask: raise YastError('Should not have happend')
-        c_struct = _struct(s=(), n=a.struct.n, t=((),), D=((),))
+        c_struct = _struct(s=(), n=a.struct.n, t=((),), D=((),), Dp=(1,), sl=((0, 1),))
         c = a.__class__(config=a.config, struct=c_struct, meta_fusion=c_mfs, hard_fusion=c_hfs)
-        c.A = {(): c.config.backend.sum_elements(a.A)}
+        c._data = c.config.backend.sum_elements(a._data)
         return c
 
-    meta, c_struct, t12, D1, D2 = _trace_meta(a.struct, in1, in2, out)
+    meta, c_struct, tcon, D1, D2 = _trace_meta(a.struct, in1, in2, out)
+    Dsize = c_struct.sl[-1][1] if len(c_struct.sl) > 0 else 0
     c = a.__class__(config=a.config, meta_fusion=c_mfs, hard_fusion=c_hfs, struct=c_struct)
     if needs_mask:
-        msk12 = _masks_for_trace(a.config, t12, D1, D2, a.hard_fusion, in1, in2)
-        c.A = c.config.backend.trace_with_mask(a.A, order, meta, msk12)
+        msk12 = _masks_for_trace(a.config, tcon, D1, D2, a.hard_fusion, in1, in2)
+        c._data = c.config.backend.trace_with_mask(a._data, order, meta, Dsize, tcon, msk12)
     else:
         if D1 != D2:
             raise YastError('Bond dimensions do not match.')
-        c.A = c.config.backend.trace(a.A, order, meta)
+        c._data = c.config.backend.trace(a._data, order, meta, Dsize)
     return c
 
 
@@ -461,28 +462,45 @@ def _trace_meta(struct, in1, in2, out):
     Dset = np.array(struct.D, dtype=int).reshape((lt, len(struct.s)))
     t1 = tset[:, in1, :].reshape(lt, -1)
     t2 = tset[:, in2, :].reshape(lt, -1)
-    to = tset[:, out, :].reshape(lt, -1)
+    tn = tset[:, out, :].reshape(lt, -1)
     D1 = Dset[:, in1]
     D2 = Dset[:, in2]
-    D3 = Dset[:, out]
+    Dn = Dset[:, out]
+    Dnp = np.prod(Dn, axis=1, dtype=int)
     pD1 = np.prod(D1, axis=1, dtype=int).reshape(lt, 1)
     pD2 = np.prod(D2, axis=1, dtype=int).reshape(lt, 1)
     ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
-    Drsh = np.hstack([pD1, pD2, D3])
+    Drsh = np.hstack([pD1, pD2, Dn])
     t12 = tuple(tuple(t.flat) for t in t1[ind])
+    tn = tuple(tuple(x.flat) for x in tn[ind])
     D1 = tuple(tuple(x.flat) for x in D1[ind])
     D2 = tuple(tuple(x.flat) for x in D2[ind])
-    meta = [(tuple(to[n]), tuple(tset[n].flat), tuple(Drsh[n]), tt) for n, tt in zip(ind, t12)]
-    meta = tuple(sorted(meta, key=lambda x: x[0]))
-    newtD = [(m[0], m[2][2:]) for m in meta]
-    newtD = tuple(k for k, _ in groupby(newtD))
-    if len(newtD) > 0:
-        newt, newD = zip(*newtD)
-    else:
-        newt, newD = (), ()
-    c_s = tuple(struct.s[i] for i in out)
-    c_struct = _struct(t=newt, D=newD, s=c_s, n=struct.n)
-    return meta, c_struct, t12, D1, D2
+    Dn = tuple(tuple(x.flat) for x in Dn[ind])
+    Dnp = Dnp[ind]
+    slo = tuple(struct.sl[n] for n in ind)
+    Do = tuple(struct.D[n] for n in ind)
+    Drsh = tuple(tuple(x.flat) for x in Drsh[ind])
+
+    meta = tuple(sorted(zip(tn, Dn, Dnp, t12, slo, Do, Drsh), key=lambda x: x[0]))
+
+    low, high = 0, 0
+    c_t, c_D, c_Dp, c_sl, meta2, tcon = [], [], [], [], [], []
+    for t, group in groupby(meta, key=lambda x: x[0]):
+        c_t.append(t)
+        mt = next(group)
+        c_D.append(mt[1])
+        c_Dp.append(mt[2])
+        tcon.append(mt[3])
+        high = low + mt[2]
+        sl = (low, high)
+        low = high
+        c_sl.append(sl)
+        meta2.append((sl, *mt[4:]))
+        for mt in group:
+            meta2.append((sl, *mt[4:]))
+    c_struct = struct._replace(t=tuple(c_t), D=tuple(c_D), Dp=tuple(c_Dp), sl=tuple(c_sl))
+    return tuple(meta2), c_struct, tuple(tcon), D1, D2
+
 
 
 def swap_gate(a, axes, inplace=False):
