@@ -528,7 +528,7 @@ def dot_nomerge_masks(A, B, cc, oA, oB, meta, ma, mb):
 #####################################################
 
 
-def merge_blocks(A, order, meta_new, meta_mrg, device='cpu'):
+def merge_2d(A, order, meta_new, meta_mrg, device='cpu'):
     """ New dictionary of blocks after merging into matrix. """
     dtype = get_dtype(A.values())
     Anew = {u: torch.zeros(Du, dtype=dtype, device=device) for u, Du in zip(*meta_new)}
@@ -558,7 +558,7 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, device='cpu'):
     return Anew
 
 
-def unmerge_from_matrix(A, meta):
+def unmerge_from_2d(A, meta):
     """ unmerge matrix into single blocks """
     Anew = {}
     for (ind, indm, sl, sr, D) in meta:
@@ -566,7 +566,7 @@ def unmerge_from_matrix(A, meta):
     return Anew
 
 
-def unmerge_from_array(A, meta):
+def unmerge_from_1d(A, meta):
     """ unmerge matrix into single blocks """
     Anew = {}
     for (tn, to, slc, D) in meta:
@@ -575,7 +575,7 @@ def unmerge_from_array(A, meta):
     return Anew
 
 
-def unmerge_from_diagonal(A, meta):
+def unmerge_from_2ddiag(A, meta):
     """ unmerge matrix into single blocks """
     Anew = {}
     for (inew, iold, slc) in meta:

@@ -1,5 +1,5 @@
 """Support of numpy as a data structure used by yast."""
-from itertools import chain
+from itertools import chain, groupby
 import warnings
 import numpy as np
 import scipy.linalg
@@ -529,15 +529,26 @@ def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
 #####################################################
 
 
-def merge_blocks(data, order, meta_new, meta_mrg, *args, **kwargs):
+def merge_to_2d(data, order, meta_new, meta_mrg, *args, **kwargs):
     """ New dictionary of blocks after merging into n-dimensional array """
     dtype = data.dtype
     Anew = {u: np.zeros(Du, dtype=dtype) for u, Du in zip(*meta_new)}
     for (tn, slo, Do, Dslc, Drsh) in meta_mrg:
-        slc = tuple(slice(*x) for x in Dslc)
-        slo = slice(*slo)
-        Anew[tn][slc] = data[slo].reshape(Do).transpose(order).reshape(Drsh)
+        Anew[tn][tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
     return Anew
+
+
+def merge_to_1d(data, order, meta_new, meta_mrg, Dsize, *args, **kwargs):
+    """ New dictionary of blocks after merging into matrix. """
+    dtype = data.dtype
+    newdata = np.zeros((Dsize,), dtype=dtype)
+    for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
+        assert tn == t1
+        temp = np.zeros(Dn, dtype=dtype)
+        for (_, slo, Do, Dslc, Drsh) in gr:
+            temp[tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
+        newdata[slice(*sln)] = temp.ravel()
+    return newdata
 
 
 def merge_to_dense(data, Dtot, meta, *args, **kwargs):
@@ -559,31 +570,30 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, *args, **kwargs):
     return Anew
 
 
-def unmerge_from_matrix(A, meta, new_sl, Dsize):
+def unmerge_from_2d(A, meta, new_sl, Dsize):
     """ unmerge matrix into single blocks """
     dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
-    data = np.zeros((Dsize,), dtype=dtype)
+    newdata = np.zeros((Dsize,), dtype=dtype)
     for (indm, sl, sr), snew in zip(meta, new_sl):
-        data[slice(*snew)] = A[indm][slice(*sl), slice(*sr)].ravel()
-    return data
+        newdata[slice(*snew)] = A[indm][slice(*sl), slice(*sr)].ravel()
+    return newdata
 
 
-def unmerge_from_array(A, meta):
-    """ unmerge matrix into single blocks """
-    Anew = {}
-    for (tn, to, slc, D) in meta:
-        sl = tuple(slice(*x) for x in slc)
-        Anew[tn] = A[to][sl].reshape(D)
-    return Anew
-
-
-def unmerge_from_diagonal(A, meta, new_sl, Dsize):
+def unmerge_from_2ddiag(A, meta, new_sl, Dsize):
     """ unmerge matrix into single blocks """
     dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
-    data = np.zeros((Dsize,), dtype=dtype)
-    for (_, iold, slc), sln in zip(meta, new_sl):
-        data[slice(*sln)] = A[iold][slice(*slc)]
-    return data
+    newdata = np.zeros((Dsize,), dtype=dtype)
+    for (_, iold, slc), snew in zip(meta, new_sl):
+        newdata[slice(*snew)] = A[iold][slice(*slc)]
+    return newdata
+
+
+def unmerge_from_1d(data, meta, new_sl, Dsize):
+    """ unmerge matrix into single blocks """
+    newdata = np.zeros((Dsize,), dtype=data.dtype)
+    for (slo, Do, sub_slc), snew in zip(meta, new_sl):
+        newdata[slice(*snew)] = data[slice(*slo)].reshape(Do)[tuple(slice(*x) for x in sub_slc)].ravel()
+    return newdata
 
 
 def unmerge_one_leg(A, axis, meta):

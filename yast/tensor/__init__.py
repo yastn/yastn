@@ -77,7 +77,6 @@ class Tensor:
             self.config._replace(device=kwargs['dtype'])
         self._isdiag = isdiag
         self._data = self.config.backend.zeros((0,))  # 1d container for tensor data
-        self.A = {}  # dictionary of blocks
 
         try:
             self.struct = kwargs['struct']

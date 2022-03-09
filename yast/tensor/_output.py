@@ -84,7 +84,7 @@ def compress_to_1d(a, meta=None):
             raise YastError("Tensor has blocks that do not appear in meta.")
 
     order = (0,) if a.isdiag else tuple(range(a.ndim_n))
-    A = a.config.backend.merge_blocks(a.A, order, meta_new, meta_merge, a.config.device)
+    A = a.config.backend.merge_2d(a.A, order, meta_new, meta_merge, a.config.device)
     return A[()], meta
 
 
@@ -149,8 +149,8 @@ def print_blocks_shape(a):
     """
     Print shapes of blocks as a sequence of block's charge followed by its shape
     """
-    for ind, x in a.A.items():
-        print(f"{ind} {a.config.backend.get_shape(x)}")
+    for t, D in zip(a.struct.t, a.struct.D):
+        print(f"{t} {D}")
 
 
 def is_complex(a):
