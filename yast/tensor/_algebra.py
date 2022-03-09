@@ -97,7 +97,7 @@ def _addition_meta(a, b):
             raise YastError('Bond dimensions do not match.')
         c_struct = a.struct._replace(D=aDset, Dp=aDpset, sl=aslset)
         high = aslset[-1][1]
-        one_sl = slice(0, high)
+        one_sl = (0, high)
         meta = ((one_sl, one_sl, one_sl, 'AB'),)
         return aA, bA, hfs, meta, c_struct, high
 
@@ -110,7 +110,7 @@ def _addition_meta(a, b):
             if Da != Db:
                 raise YastError('Bond dimensions do not match.')
             high = low + Dpa
-            meta.append((slice(low, high), asl, bsl, 'AB'))
+            meta.append(((low, high), asl, bsl, 'AB'))
             c_t.append(ta)
             c_D.append(Da)
             c_Dp.append(Dpa)
@@ -120,7 +120,7 @@ def _addition_meta(a, b):
             ib += 1
         elif ta < tb:
             high = low + Dpa
-            meta.append((slice(low, high), asl, None, 'A'))
+            meta.append(((low, high), asl, None, 'A'))
             c_t.append(ta)
             c_D.append(Da)
             c_Dp.append(Dpa)
@@ -129,7 +129,7 @@ def _addition_meta(a, b):
             ia += 1
         else:
             high = low + Dpb
-            meta.append((slice(low, high), None, bsl, 'B'))
+            meta.append(((low, high), None, bsl, 'B'))
             c_t.append(tb)
             c_D.append(Db)
             c_Dp.append(Dpb)
@@ -138,7 +138,7 @@ def _addition_meta(a, b):
             ib += 1
     for ta, Da, Dpa, asl in zip(a.struct.t[ia:], aDset[ia:], aDpset[ia:], aslset[ia:]):
         high = low + Dpa
-        meta.append((slice(low, high), asl, None, 'A'))
+        meta.append(((low, high), asl, None, 'A'))
         c_t.append(ta)
         c_D.append(Da)
         c_Dp.append(Dpa)
@@ -146,7 +146,7 @@ def _addition_meta(a, b):
         low = high
     for tb, Db, Dpb, bsl in zip(b.struct.t[ib:], bDset[ib:], bDpset[ib:], bslset[ib:]):
         high = low + Dpa
-        meta.append((slice(low, high), None, bsl, 'B'))
+        meta.append(((low, high), None, bsl, 'B'))
         c_t.append(tb)
         c_D.append(Db)
         c_Dp.append(Dpb)
@@ -338,7 +338,7 @@ def real(a):
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {t: a.config.backend.real(x) for t, x in a.A.items()}
+    c._data = a.config.backend.real(a._data)
     return c
 
 
@@ -355,7 +355,7 @@ def imag(a):
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {t: a.config.backend.imag(x) for t, x in a.A.items()}
+    c._data = a.config.backend.imag(a._data)
     return c
 
 
@@ -369,7 +369,7 @@ def sqrt(a):
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.sqrt(a.A)
+    c._data = a.config.backend.sqrt(a._data)
     return c
 
 
@@ -390,7 +390,7 @@ def rsqrt(a, cutoff=0):
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.rsqrt(a.A, cutoff=cutoff)
+    c._data = a.config.backend.rsqrt(a._data, cutoff=cutoff)
     return c
 
 
@@ -411,7 +411,7 @@ def reciprocal(a, cutoff=0):
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.reciprocal(a.A, cutoff=cutoff)
+    c._data = a.config.backend.reciprocal(a._data, cutoff=cutoff)
     return c
 
 
@@ -432,5 +432,5 @@ def exp(a, step=1.):
     """
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
         hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.exp(a.A, step)
+    c._data = a.config.backend.exp(a._data, step)
     return c

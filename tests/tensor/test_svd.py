@@ -90,8 +90,9 @@ def test_svd_truncate():
     assert all(pytest.approx(sum(uS[t]).item(), rel=tol) == sum(S[t + t]).item() for t in [(-2,), (-1,), (0,)])
 
     try:
-        _, S1, _ = yast.linalg.svd_lowrank(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
-        assert S1.get_shape() == (12, 12)
+        _, S2, _ = yast.linalg.svd_lowrank(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
+        assert S2.get_shape() == (12, 12)
+        assert yast.norm(S1 - S2) < tol
     except NameError:
         pass
 
