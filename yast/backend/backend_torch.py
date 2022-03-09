@@ -528,7 +528,7 @@ def dot_nomerge_masks(A, B, cc, oA, oB, meta, ma, mb):
 #####################################################
 
 
-def merge_2d(A, order, meta_new, meta_mrg, device='cpu'):
+def merge_to_2d(A, order, meta_new, meta_mrg, device='cpu'):
     """ New dictionary of blocks after merging into matrix. """
     dtype = get_dtype(A.values())
     Anew = {u: torch.zeros(Du, dtype=dtype, device=device) for u, Du in zip(*meta_new)}

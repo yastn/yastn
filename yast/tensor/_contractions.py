@@ -490,15 +490,17 @@ def _trace_meta(struct, in1, in2, out):
         mt = next(group)
         c_D.append(mt[1])
         c_Dp.append(mt[2])
-        tcon.append(mt[3])
         high = low + mt[2]
         sl = (low, high)
         low = high
         c_sl.append(sl)
+        tcon.append(mt[3])
         meta2.append((sl, *mt[4:]))
         for mt in group:
+            tcon.append(mt[3])
             meta2.append((sl, *mt[4:]))
-    c_struct = struct._replace(t=tuple(c_t), D=tuple(c_D), Dp=tuple(c_Dp), sl=tuple(c_sl))
+    c_s = tuple(struct.s[i] for i in out)
+    c_struct = _struct(s=c_s, n=struct.n, t=tuple(c_t), D=tuple(c_D), Dp=tuple(c_Dp), sl=tuple(c_sl))
     return tuple(meta2), c_struct, tuple(tcon), D1, D2
 
 

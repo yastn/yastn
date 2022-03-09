@@ -84,7 +84,7 @@ def compress_to_1d(a, meta=None):
             raise YastError("Tensor has blocks that do not appear in meta.")
 
     order = (0,) if a.isdiag else tuple(range(a.ndim_n))
-    A = a.config.backend.merge_2d(a.A, order, meta_new, meta_merge, a.config.device)
+    A = a.config.backend.merge_to_2d(a.A, order, meta_new, meta_merge, a.config.device)
     return A[()], meta
 
 
