@@ -152,23 +152,23 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
                     hard_fusion=[_Fusion(s=(-sU,))] + [a.hard_fusion[ii] for ii in axes[1]])
 
     if policy == 'fullrank':
-        U.A, S.A, V.A = a.config.backend.svd(Am, meta)
+        Um, Sm, Vm = a.config.backend.svd(Am, meta)
     elif policy == 'lowrank':
-        U.A, S.A, V.A = a.config.backend.svd_lowrank(Am, meta, D_block, **kwargs)
+        Um, Sm, Vm = a.config.backend.svd_lowrank(Am, meta, D_block, **kwargs)
     else:
         raise YastError('svd policy should be one of (`lowrank`, `fullrank`)')
 
-    ls_s = _leg_struct_truncation(
-        S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
+    ls_s = _leg_struct_truncation(a.config,
+        Sm, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
         keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='svd')
 
     if untruncated_S:
-        uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
+        uS = {k: a.config.backend.copy(v) for k, v in Sm.items()}
         uS['D'] = ls_s.Dtot.copy()
 
-    _unmerge_matrix(U, ls_l, ls_s)
-    _unmerge_diagonal(S, ls_s)
-    _unmerge_matrix(V, ls_s, ls_r)
+    _unmerge_matrix(U, Um, ls_l, ls_s)
+    _unmerge_diagonal(S, Sm, ls_s)
+    _unmerge_matrix(V, Vm, ls_s, ls_r)
     U.move_leg(source=-1, destination=Uaxis, inplace=True)
     V.move_leg(source=0, destination=Vaxis, inplace=True)
     return (U, S, V, uS) if untruncated_S else (U, S, V)
@@ -212,11 +212,11 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
                     hard_fusion=[_Fusion(s=(-sQ,))] + [a.hard_fusion[ii] for ii in axes[1]])
 
     meta = tuple((il + ir, il + ir, ir + ir) for il, ir in zip(ul, ur))
-    Q.A, R.A = a.config.backend.qr(Am, meta)
+    Qm, Rm = a.config.backend.qr(Am, meta)
 
-    ls = _leg_struct_trivial(R, axis=0)
-    _unmerge_matrix(Q, ls_l, ls)
-    _unmerge_matrix(R, ls, ls_r)
+    ls = _leg_struct_trivial(a.config, Rm, axis=0)
+    _unmerge_matrix(Q, Qm, ls_l, ls)
+    _unmerge_matrix(R, Rm, ls, ls_r)
     Q.move_leg(source=-1, destination=Qaxis, inplace=True)
     R.move_leg(source=0, destination=Raxis, inplace=True)
     return Q, R
@@ -286,18 +286,18 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
 
     # meta = (indA, indS, indU)
     meta = tuple((il + ir, il, il + ir) for il, ir in zip(ul, ur))
-    S.A, U.A = a.config.backend.eigh(Am, meta)
+    Sm, Um = a.config.backend.eigh(Am, meta)
 
-    ls_s = _leg_struct_truncation(
-        S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
+    ls_s = _leg_struct_truncation(a.config,
+        Sm, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
         keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='eigh')
 
     if untruncated_S:
-        uS = {k: a.config.backend.copy(v) for k, v in S.A.items()}
+        uS = {k: a.config.backend.copy(v) for k, v in Sm.items()}
         uS['D'] = ls_s.Dtot.copy()
 
-    _unmerge_matrix(U, ls_l, ls_s)
-    _unmerge_diagonal(S, ls_s)
+    _unmerge_matrix(U, Um, ls_l, ls_s)
+    _unmerge_diagonal(S, Sm, ls_s)
     U.move_leg(source=-1, destination=Uaxis, inplace=True)
     return (S, U, uS) if untruncated_S else (S, U)
 
@@ -324,7 +324,7 @@ def entropy(a, axes=(0, 1), alpha=1):
     -------
     entropy, minimal singular value, normalization : float64
     """
-    if len(a.A) == 0:
+    if len(a._data) == 0:
         return a.zero_of_dtype(), a.zero_of_dtype(), a.zero_of_dtype()
 
     _test_axes_all(a, axes)
@@ -335,7 +335,8 @@ def entropy(a, axes=(0, 1), alpha=1):
         Am, *_ = _merge_to_matrix(a, axes, (-1, 1))
         Sm = a.config.backend.svd_S(Am)
     else:
-        Sm = {t: a.config.backend.diag_get(x) for t, x in a.A.items()}
+        Sm = {t: a.config.backend.clone(a._data[slice(*sl)]) \
+              for t, sl in zip(a.struct.t, a.struct.sl)}
     # entropy, Smin, normalization
     return a.config.backend.entropy(Sm, alpha=alpha)
 

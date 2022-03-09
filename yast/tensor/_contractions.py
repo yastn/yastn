@@ -107,8 +107,8 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
             raise YastError('Bond dimensions do not match.')
 
         c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_mfs, hard_fusion=c_hfs)
-        c.A = c.config.backend.dot(Am, Bm, conj, meta_dot)
-        _unmerge_matrix(c, ls_l, ls_r)
+        Cm = c.config.backend.dot(Am, Bm, conj, meta_dot)
+        _unmerge_matrix(c, Cm, ls_l, ls_r)
     elif policy in ('hybrid', 'direct'):
         meta, c_t, c_D, c_Dp, c_sl, tcon = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
         c_struct = _struct(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl, s=c_s, n=c_n)
@@ -157,12 +157,12 @@ def _meta_tensordot_nomerge(a_struct, b_struct, nout_a, nin_a, nin_b, nout_b):
     ta_out = tuple(tuple(t.flat) for t in ta[:, nout_a, :])
     tb_out = tuple(tuple(t.flat) for t in tb[:, nout_b, :])
 
-    Da_pcon = np.prod(Da[:, nin_a], axis=1)
-    Db_pcon = np.prod(Db[:, nin_b], axis=1)
+    Da_pcon = np.prod(Da[:, nin_a], axis=1, dtype=int)
+    Db_pcon = np.prod(Db[:, nin_b], axis=1, dtype=int)
     Da_out = tuple(tuple(D.flat) for D in Da[:, nout_a])
     Db_out = tuple(tuple(D.flat) for D in Db[:, nout_b])
-    Da_pout = np.prod(Da_out, axis=1)
-    Db_pout = np.prod(Db_out, axis=1)
+    Da_pout = np.prod(Da_out, axis=1, dtype=int)
+    Db_pout = np.prod(Db_out, axis=1, dtype=int)
 
     block_a = [x for x in zip(ta_con, ta_out, a_struct.sl, Da, Da_pcon, Da_out, Da_pout)]
     block_a = groupby(sorted(block_a, key=lambda x: x[0]), key=lambda x: x[0])
@@ -211,7 +211,7 @@ def _meta_tensordot_nomerge(a_struct, b_struct, nout_a, nin_a, nin_b, nout_b):
             meta2.append((sl, *mt[1:7]))
             for mt in group:
                 meta2.append((sl, *mt[1:7]))
-        return meta2, c_t, c_D, c_Dp, c_sl, tcon
+        return tuple(meta2), tuple(c_t), tuple(c_D), tuple(c_Dp), tuple(c_sl), tcon
     return meta, (), (), (), (), tcon
 
 
@@ -465,8 +465,8 @@ def _trace_meta(struct, in1, in2, out):
     D1 = Dset[:, in1]
     D2 = Dset[:, in2]
     D3 = Dset[:, out]
-    pD1 = np.prod(D1, axis=1).reshape(lt, 1)
-    pD2 = np.prod(D2, axis=1).reshape(lt, 1)
+    pD1 = np.prod(D1, axis=1, dtype=int).reshape(lt, 1)
+    pD2 = np.prod(D2, axis=1, dtype=int).reshape(lt, 1)
     ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
     Drsh = np.hstack([pD1, pD2, D3])
     t12 = tuple(tuple(t.flat) for t in t1[ind])

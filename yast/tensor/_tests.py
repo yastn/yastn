@@ -93,7 +93,7 @@ def is_consistent(a):
     """
     low, high = 0, 0
     for D, Dp, sl in zip(a.struct.D, a.struct.Dp, a.struct.sl):
-        assert D[0] == Dp if a.isdiag else np.prod(D) == Dp
+        assert D[0] == Dp if a.isdiag else np.prod(D, dtype=int) == Dp
         high = low + Dp
         assert sl == (low, high)
         low = high

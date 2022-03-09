@@ -411,11 +411,11 @@ def add(A, B, meta, Dsize):
     data = np.zeros((Dsize,), dtype=np.find_common_type(A, B))
     for sl_c, sl_a, sl_b, ab in meta:
         if ab == 'AB':
-            data[sl_c] = A[sl_a] + B[sl_b]
+            data[slice(*sl_c)] = A[slice(*sl_a)] + B[slice(*sl_b)]
         elif ab == 'A':
-            data[sl_c] = A[sl_a]
+            data[slice(*sl_c)] = A[slice(*sl_a)]
         else:  # ab == 'B'
-            data[sl_c] = B[sl_b]
+            data[slice(*sl_c)] = B[slice(*sl_b)]
     return data
 
 
@@ -424,11 +424,11 @@ def sub(A, B, meta, Dsize):
     data = np.zeros((Dsize,), dtype=np.find_common_type(A, B))
     for sl_c, sl_a, sl_b, ab in meta:
         if ab == 'AB':
-            data[sl_c] = A[sl_a] - B[sl_b]
+            data[slice(*sl_c)] = A[slice(*sl_a)] - B[slice(*sl_b)]
         elif ab == 'A':
-            data[sl_c] = A[sl_a]
+            data[slice(*sl_c)] = A[slice(*sl_a)]
         else:  # ab == 'B'
-            data[sl_c] = -B[sl_b]
+            data[slice(*sl_c)] = -B[slice(*sl_b)]
     return data
 
 
@@ -437,11 +437,11 @@ def apxb(A, B, x, meta, Dsize):
     data = np.zeros((Dsize,), dtype=np.find_common_type(A, B))
     for sl_c, sl_a, sl_b, ab in meta:
         if ab == 'AB':
-            data[sl_c] = A[sl_a] + x * B[sl_b]
+            data[slice(*sl_c)] = A[slice(*sl_a)] + x * B[slice(*sl_b)]
         elif ab == 'A':
-            data[sl_c] = A[sl_a]
+            data[slice(*sl_c)] = A[slice(*sl_a)]
         else:  # ab == 'B'
-            data[sl_c] = x * B[sl_b]
+            data[slice(*sl_c)] = x * B[slice(*sl_b)]
     return data
 
 
@@ -563,7 +563,7 @@ def unmerge_from_matrix(A, meta, new_sl, Dsize):
     """ unmerge matrix into single blocks """
     dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
     data = np.zeros((Dsize,), dtype=dtype)
-    for (ind, indm, sl, sr, _, _), snew in zip(meta, new_sl):
+    for (indm, sl, sr), snew in zip(meta, new_sl):
         data[slice(*snew)] = A[indm][slice(*sl), slice(*sr)].ravel()
     return data
 
@@ -577,12 +577,13 @@ def unmerge_from_array(A, meta):
     return Anew
 
 
-def unmerge_from_diagonal(A, meta):
+def unmerge_from_diagonal(A, meta, new_sl, Dsize):
     """ unmerge matrix into single blocks """
-    Anew = {}
-    for (inew, iold, slc) in meta:
-        Anew[inew] = A[iold][slice(*slc)]
-    return Anew
+    dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
+    data = np.zeros((Dsize,), dtype=dtype)
+    for (_, iold, slc), sln in zip(meta, new_sl):
+        data[slice(*sln)] = A[iold][slice(*slc)]
+    return data
 
 
 def unmerge_one_leg(A, axis, meta):

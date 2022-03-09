@@ -248,8 +248,8 @@ def load_from_hdf5(config, file, path):
 
     pointer = 0
     for its, iDs in zip(ts, Ds):
-        a.set_block(ts=tuple(its), Ds=tuple(iDs), val=vmat[pointer: (pointer + np.prod(iDs))], dtype=vmat.dtype.name)
-        pointer += np.prod(iDs)
+        a.set_block(ts=tuple(its), Ds=tuple(iDs), val=vmat[pointer: (pointer + np.prod(iDs, dtype=int))], dtype=vmat.dtype.name)
+        pointer += np.prod(iDs, dtype=int)
     return a
 
 

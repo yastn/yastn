@@ -62,7 +62,7 @@ def compress_to_1d(a, meta=None):
     """
     if meta is None:
         Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
-        D_rsh = Dset[:, 0] if a.isdiag else np.prod(Dset, axis=1)
+        D_rsh = Dset[:, 0] if a.isdiag else np.prod(Dset, axis=1, dtype=int)
         aD_rsh = np.cumsum(D_rsh)
         D_tot = np.sum(D_rsh)
         meta_new = (((),), (D_tot,))
@@ -311,7 +311,7 @@ def get_leg_structure(a, axis, native=False):
     tset = tset[:, axis, :]
     Dset = Dset[:, axis]
     tset = tset.reshape(len(tset), len(axis) * a.config.sym.NSYM)
-    Dset = np.prod(Dset, axis=1) if len(axis) > 1 else Dset.reshape(-1)
+    Dset = np.prod(Dset, axis=1, dtype=int) if len(axis) > 1 else Dset.reshape(-1)
 
     tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tset, Dset)}
     for tn, Dn in zip(tset, Dset):
@@ -519,7 +519,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     c_s = a.get_signature(native)
     c_t = ((),)
     c_D = (Dtot,) if not a.isdiag else (Dtot + Dtot,)
-    Dp = np.prod(Dtot)
+    Dp = np.prod(Dtot, dtype=int)
     c_Dp = (Dp,)
     c_sl = ((0, Dp),)
     c_struct = _struct(t=c_t, D=c_D, s=c_s, n=(), Dp=c_Dp, sl=c_sl)
