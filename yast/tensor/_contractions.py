@@ -271,7 +271,7 @@ def _broadcast_input(axis, mf, isdiag):
 @lru_cache(maxsize=1024)
 def _meta_broadcast(config, a_struct, b_struct, axis, conja):
     """ meta information for backend, and new tensor structure for brodcast """
-    nsym = config.sym.NSYM
+    nsym = len(a_struct.n)
     ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a_struct.t)
     ind_tb = tuple(x[:nsym] for x in b_struct.t)
     sl_b = dict(zip(ind_tb, b_struct.sl))
@@ -320,13 +320,18 @@ def mask(a, b, axis=0):
     if a.hard_fusion[axis].tree != (1,):
         raise YastError('First tensor`s leg specified by axis cannot be fused.')
 
-    Dbnew = tuple(b.config.backend.count_nonzero(b.A[tb]) for tb in b.struct.t)
+    Dbnew = tuple(b.config.backend.count_nonzero(b._data[slice(*sl)]) for sl in b.struct.sl)
     meta, c_struct = _meta_mask(a.struct, a.isdiag, b.struct, Dbnew, axis)
+    Dsize = c_struct.sl[-1][1] if len(c_struct.sl) > 0 else 0
 
     c = a.__class__(config=a.config, isdiag=a.isdiag,
                     meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=c_struct)
-    a_ndim, axis = (1, 0) if a.isdiag else (a.ndim_n, axis)
-    c.A = a.config.backend.mask_diag(a.A, b.A, meta, axis, a_ndim)
+    if a.isdiag:
+        a_ndim, axis = (1, 0)
+        meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
+    else:
+        a_ndim = a.ndim_n
+    c._data = a.config.backend.mask_diag(a._data, b._data, meta, Dsize, axis, a_ndim)
     return c
 
 
@@ -334,21 +339,26 @@ def mask(a, b, axis=0):
 def _meta_mask(a_struct, a_isdiag, b_struct, Dbnew, axis):
     """ meta information for backend, and new tensor structure for mask."""
     nsym = len(a_struct.n)
-    ind_tb = tuple(x[:nsym] for x, d in zip(b_struct.t, Dbnew) if d > 0)
+    ind_tb = {x[:nsym]: (sl, d) for x, d, sl in zip(b_struct.t, Dbnew, b_struct.sl) if d > 0}
     ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a_struct.t)
-    meta = tuple((ta, ia + ia, Da) for ta, ia, Da in zip(a_struct.t, ind_ta, a_struct.D) if ia in ind_tb)
 
-    Db = dict(zip(b_struct.t, b_struct.D))
-    if any(Da[axis] != Db[tb][0] for _, tb, Da in meta):
-        raise YastError('Bond dimensions do not match.')
-    c_t = tuple(ta for ta, _, _ in meta)
-    Db = dict(zip(b_struct.t, Dbnew))
+    meta = tuple((ta, sla, Da, *ind_tb[ia]) for ta, sla, Da, ia in \
+                zip(a_struct.t, a_struct.sl, a_struct.D, ind_ta) if ia in ind_tb)
+
+    if any(Da[axis] != slb[1] - slb[0] for _, _, Da, slb, _ in meta):
+        raise YastError("Bond dimensions do not match.")
+
+    # mt = (ta, sla, Da, slb, Db)
+    c_t = tuple(mt[0] for mt in meta)
     if a_isdiag:
-        c_D = tuple((Db[tb], Db[tb]) for _, tb, _ in meta)
+        c_D = tuple((mt[4], mt[4]) for mt in meta)
+        c_Dp = tuple(x[0] for x in c_D)
     else:
-        c_D = tuple(Da[:axis] + (Db[tb],) + Da[axis + 1:] for _, tb, Da in meta)
-    c_struct = a_struct._replace(t=c_t, D=c_D)
-    meta = tuple((ta, tb) for ta, tb, _ in meta)
+        c_D = tuple(mt[2][:axis] + (mt[4],) + mt[2][axis + 1:] for mt in meta)
+        c_Dp = tuple(np.prod(c_D, axis=1))
+    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+    c_struct = a_struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    meta = tuple((sln, sla, Da, slb) for (_, sla, Da, slb, _), sln in zip(meta, c_struct.sl))
     return meta, c_struct
 
 
@@ -531,13 +541,10 @@ def swap_gate(a, axes, inplace=False):
     fss = (True,) * len(a.struct.n) if a.config.fermionic is True else a.config.fermionic
     axes = tuple(_clear_axes(*axes))  # swapped groups of legs
     tp = _swap_gate_meta(a.struct.t, a.struct.n, a.meta_fusion, a.ndim_n, axes, fss)
-    if inplace:
-        for ts, odd in zip(a.struct.t, tp):
-            if odd:
-                a.A[ts] = -a.A[ts]
-        return a
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ts: -a.A[ts] if odd else a.config.backend.clone(a.A[ts]) for ts, odd in zip(a.struct.t, tp)}
+    c = a if inplace else a.clone()
+    for sl, odd in zip(a.struct.sl, tp):
+        if odd:
+            c._data[slice(*sl)] *= -1
     return c
 
 

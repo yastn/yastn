@@ -86,14 +86,6 @@ def norm_matrix(x):
     return np.linalg.norm(x)
 
 
-def expand_dims(x, axis):
-    return np.expand_dims(x, axis)
-
-
-def squeeze(x, axis):
-    return np.squeeze(x, axis)
-
-
 def count_nonzero(x):
     return np.count_nonzero(x)
 
@@ -383,14 +375,11 @@ def maximum(A):
     return max(np.max(x) for x in A.values())
 
 
-def embed(A, sl, tD):
+def embed(data, msk, Dsize):
     """ embeds old tensors A into larger zero blocks based on slices. """
-    dtype = get_dtype(A.values())
-    C = {}
-    for t, val in A.items():
-        C[t] = np.zeros(tD[t], dtype=dtype)
-        C[t][sl[t]] = val
-    return C
+    newdata = np.zeros((Dsize,), dtype=data.dtype)
+    newdata[msk] = data
+    return newdata
 
 
 ################################
@@ -501,11 +490,14 @@ def dot_diag(Adata, Bdata, cc, meta, Dsize, axis, a_ndim):
     return newdata
 
 
-def mask_diag(A, B, meta, axis, a_ndim):
+def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     slc1 = (slice(None),) * axis
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
-    Bslc = {k: v.nonzero() for k, v in B.items()}
-    return {ind_a: A[ind_a][slc1 + Bslc[ind_b] + slc2] for ind_a, ind_b in meta}
+    newdata = np.zeros((Dsize,), dtype=Adata.dtype)
+    for sln, sla, Da, slb in meta:
+        cut = Bdata[slice(*slb)].nonzero()
+        newdata[slice(*sln)] = Adata[slice(*sla)].reshape(Da)[slc1 + cut + slc2].ravel()
+    return newdata
 
 
 def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
