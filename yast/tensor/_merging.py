@@ -503,24 +503,41 @@ def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb)
     return msk_a, msk_b
 
 
-def _masks_for_vdot(config, structa, hfa, structb, hfb, ind_ab=None):
+def _merge_masks_struct(config, struct, ms):
+    """ combine masks using information from struct"""
+    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
+    msk = np.ones((Dsize,), dtype=bool)
+    nsym = config.sym.NSYM
+    Dnew, Dpnew, slnew, low, high = [], [], [], 0, 0
+    for t, sl in zip(struct.t, struct.sl):
+        x = ms[0][t[:nsym]]
+        Dt = [np.sum(x)]
+        for i in range(1, len(ms)):
+            xi = ms[i][t[i * nsym: (i + 1) * nsym]]
+            Dt.append(np.sum(xi))
+            x = np.outer(x, xi).ravel()
+        msk[slice(*sl)] = x
+        Dnew.append(tuple(Dt))
+        Dpnew.append(np.prod(Dnew[-1]))
+        high = low + Dpnew[-1]
+        slnew.append((low, high))
+    structnew = struct._replace(D=tuple(Dnew), Dp=tuple(Dpnew), sl=tuple(slnew))
+    return msk, structnew
+
+
+def _masks_for_vdot(config, structa, hfa, structb, hfb):
     """ masks to get the intersecting parts on all legs from two tensors """
     msk_a, msk_b = [], []
     tla, Dla, _, _, _ = _get_tD_legs(structa)
     tlb, Dlb, _, _, _ = _get_tD_legs(structb)
-    nsym, ndim = config.sym.NSYM, len(tla)
+    ndim = len(tla)
     for n in range(ndim):
-        ss = tuple(-1 if i == n else 1 for i in range(ndim))
         ma, mb = _intersect_hfs(config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (hfa[n], hfb[n]))
-        ma = {t: config.backend.to_mask(x).reshape(ss) for t, x in ma.items()}
-        mb = {t: config.backend.to_mask(x).reshape(ss) for t, x in mb.items()}
         msk_a.append(ma)
         msk_b.append(mb)
-    inda = structa.t if ind_ab is None else ind_ab
-    indb = structb.t if ind_ab is None else ind_ab
-    sla = {t: tuple(ma[t[n * nsym: (n + 1) * nsym]] for n, ma in enumerate(msk_a)) for t in inda}
-    slb = {t: tuple(mb[t[n * nsym: (n + 1) * nsym]] for n, mb in enumerate(msk_b)) for t in indb}
-    return sla, slb
+    msk_a, struct_a = _merge_masks_struct(config, structa, msk_a)
+    msk_b, struct_b = _merge_masks_struct(config, structb, msk_b)
+    return msk_a, msk_b, struct_a, struct_b
 
 
 def _masks_for_trace(config, t12, D1, D2, hfs, ax1, ax2):
