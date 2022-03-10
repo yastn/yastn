@@ -443,9 +443,17 @@ dot_dict = {(0, 0): lambda x, y: x @ y,
             (1, 1): lambda x, y: x.conj() @ y.conj()}
 
 
-def vdot(A, B, cc, meta):
+def apply_slice(data, slcn, slco):
+    Dsize = slcn[-1][1] if len(slcn) > 0 else 0
+    newdata = np.zeros((Dsize,), dtype=data.dtype)
+    for sn, so in zip(slcn, slco):
+        newdata[slice(*sn)] = data[slice(*so)]
+    return newdata
+
+
+def vdot(Adata, Bdata, cc):
     f = dot_dict[cc]  # proper conjugations
-    return np.sum([f(A[ind].reshape(-1), B[ind].reshape(-1)) for ind in meta])
+    return f(Adata, Bdata)
 
 
 def diag_make2d(Adata, meta, Dsize):

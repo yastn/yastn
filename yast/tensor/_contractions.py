@@ -371,40 +371,45 @@ def vdot(a, b, conj=(1, 0)):
     _test_configs_match(a, b)
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
     needs_mask, _ = _test_axes_match(a, b, sgn=-conja * conjb)
+    if a.struct.t == b.struct.t:
+        Adata, Bdata = a._data, b._data
+        struct_a, struct_b = a.struct, b.struct
+    else:
+        ia, ib, ta, Da, Dpa, inter_sla,  tb, Db, Dpb, inter_slb,  = 0, 0, [], [], [], [], [], [], [], []
+        while ia < len(a.struct.t) and ib < len(b.struct.t):
+            if a.struct.t[ia] == b.struct.t[ib]:
+                ta.append(a.struct.t[ia])
+                tb.append(b.struct.t[ib])
+                Da.append(a.struct.D[ia])
+                Db.append(b.struct.D[ib])
+                Dpa.append(a.struct.Dp[ia])
+                Dpb.append(b.struct.Dp[ib])
+                inter_sla.append(a.struct.sl[ia])
+                inter_slb.append(b.struct.sl[ib])
+                ia += 1
+                ib += 1
+            elif a.struct.t[ia] < b.struct.t[ib]:
+                ia += 1
+            else:
+                ib += 1
+        sla = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpa), Dpa))
+        slb = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpb), Dpb))
+        struct_a = a.struct._replace(t=tuple(ta), D=tuple(Da), Dp=tuple(Dpa), sl=sla)
+        struct_b = b.struct._replace(t=tuple(tb), D=tuple(Db), Dp=tuple(Dpb), sl=slb)
+        Adata = a.config.backend.apply_slice(a._data, sla, inter_sla)
+        Bdata = b.config.backend.apply_slice(b._data, slb, inter_slb)
+    if needs_mask:
+        msk_a, msk_b, struct_a, struct_b = _masks_for_vdot(a.config, struct_a, a.hard_fusion, struct_b, b.hard_fusion)
+        Adata = Adata[msk_a]
+        Bdata = Bdata[msk_b]
+    if struct_a.D != struct_b.D:
+        raise YastError('Bond dimensions do not match.')
 
     c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
     c_n = a.config.sym.fuse(c_n, (conja, conjb), 1)
-
-    meta = _vdot_meta(a.struct, b.struct)
-    if len(meta) > 0 and np.all(c_n == 0):
-        meta, Da, Db = zip(*meta)
-        if needs_mask:
-            sla, slb = _masks_for_vdot(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion, meta)
-            Aa = {t: a.A[t][sla[t]] for t in meta}
-            Ab = {t: b.A[t][slb[t]] for t in meta}
-        else:
-            if Da != Db:
-                raise YastError('Bond dimensions do not match.')
-            Aa, Ab = a.A, b.A
-        return a.config.backend.vdot(Aa, Ab, conj, meta)
+    if len(struct_a.D) > 0 and np.all(c_n == 0):
+        return a.config.backend.vdot(Adata, Bdata, conj)
     return a.zero_of_dtype()
-
-
-def _vdot_meta(a_struct, b_struct):
-    """ instruction for backend of vdot and """
-    ia, ib, meta = 0, 0, []
-    while ia < len(a_struct.t) and ib < len(b_struct.t):
-        ta, Da = a_struct.t[ia], a_struct.D[ia]
-        tb, Db = b_struct.t[ib], b_struct.D[ib]
-        if ta == tb:
-            meta.append((ta, Da, Db))
-            ia += 1
-            ib += 1
-        elif ta < tb:
-            ia += 1
-        else:
-            ib += 1
-    return meta
 
 
 def trace(a, axes=(0, 1)):
