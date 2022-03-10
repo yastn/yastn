@@ -81,31 +81,31 @@ def _addition_meta(a, b):
         raise YastError('Error in add: tensor charges do not match')
     needs_mask, _ = _test_axes_match(a, b, sgn=1)
     if needs_mask:
-        sla, tDa, slb, tDb, hfs = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
-        aA = a.config.backend.embed(a._data, sla, tDa)
-        bA = a.config.backend.embed(b._data, slb, tDb)
-        aDset = tuple(tDa[t] for t in a.struct.t)
-        bDset = tuple(tDb[t] for t in b.struct.t)
+        msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
+        Dsize = struct_a.sl[-1][1] if len(struct_a.sl) > 0 else 0
+        Adata = a.config.backend.embed(a._data, msk_a, Dsize)
+        Dsize = struct_b.sl[-1][1] if len(struct_b.sl) > 0 else 0
+        Bdata = a.config.backend.embed(b._data, msk_b, Dsize)
+        del Dsize
     else:
-        aA, bA, hfs = a._data, b._data, a.hard_fusion
-        aDset, bDset = a.struct.D, b.struct.D
-        aDpset, bDpset = a.struct.Dp, b.struct.Dp
-        aslset, bslset = a.struct.sl, b.struct.sl
+        Adata, Bdata = a._data, b._data
+        struct_a, struct_b = a.struct, b.struct
+        hfs = a.hard_fusion
 
-    if a.struct.t == b.struct.t:
-        if aDset != bDset:
+
+    if struct_a.t == struct_b.t:
+        if struct_a != struct_b:
             raise YastError('Bond dimensions do not match.')
-        c_struct = a.struct._replace(D=aDset, Dp=aDpset, sl=aslset)
-        high = aslset[-1][1]
-        one_sl = (0, high)
-        meta = ((one_sl, one_sl, one_sl, 'AB'),)
-        return aA, bA, hfs, meta, c_struct, high
+        c_struct = struct_a
+        Dsize = c_struct.sl[-1][1] if len(c_struct.sl) > 0 else 0
+        meta = (((0, Dsize), (0, Dsize), (0, Dsize), 'AB'),)
+        return Adata, Bdata, hfs, meta, c_struct, Dsize
 
     ia, ib, meta, c_t, c_D, c_Dp, c_sl = 0, 0, [], [], [], [], []
     low = 0
-    while ia < len(aDset) and ib < len(bDset):
-        ta, Da, Dpa, asl = a.struct.t[ia], aDset[ia], aDpset[ia], aslset[ia]
-        tb, Db, Dpb, bsl = b.struct.t[ib], bDset[ib], bDpset[ib], bslset[ib]
+    while ia < len(struct_a.t) and ib < len(struct_b.t):
+        ta, Da, Dpa, asl = struct_a.t[ia], struct_a.D[ia], struct_a.Dp[ia], struct_a.sl[ia]
+        tb, Db, Dpb, bsl = struct_b.t[ib], struct_b.D[ib], struct_b.Dp[ib], struct_b.sl[ib]
         if ta == tb:
             if Da != Db:
                 raise YastError('Bond dimensions do not match.')
@@ -136,7 +136,7 @@ def _addition_meta(a, b):
             c_sl.append((low, high))
             low = high
             ib += 1
-    for ta, Da, Dpa, asl in zip(a.struct.t[ia:], aDset[ia:], aDpset[ia:], aslset[ia:]):
+    for ta, Da, Dpa, asl in zip(struct_a.t[ia:], struct_a.D[ia:], struct_a.Dp[ia:], struct_a.sl[ia:]):
         high = low + Dpa
         meta.append(((low, high), asl, None, 'A'))
         c_t.append(ta)
@@ -144,8 +144,8 @@ def _addition_meta(a, b):
         c_Dp.append(Dpa)
         c_sl.append((low, high))
         low = high
-    for tb, Db, Dpb, bsl in zip(b.struct.t[ib:], bDset[ib:], bDpset[ib:], bslset[ib:]):
-        high = low + Dpa
+    for tb, Db, Dpb, bsl in zip(struct_b.t[ib:], struct_b.D[ib:], struct_b.Dp[ib:], struct_b.sl[ib:]):
+        high = low + Dpb
         meta.append(((low, high), None, bsl, 'B'))
         c_t.append(tb)
         c_D.append(Db)
@@ -153,10 +153,10 @@ def _addition_meta(a, b):
         c_sl.append((low, high))
         low = high
 
-    c_struct = _struct(s=a.struct.s, n=a.struct.n, t=tuple(c_t), D=tuple(c_D), Dp=tuple(c_Dp), sl=tuple(c_sl))
+    c_struct = _struct(s=struct_a.s, n=struct_a.n, t=tuple(c_t), D=tuple(c_D), Dp=tuple(c_Dp), sl=tuple(c_sl))
     if any(mt[3] != 'AB' for mt in meta):
         _get_tD_legs(c_struct)
-    return aA, bA, hfs, meta, c_struct, high
+    return Adata, Bdata, hfs, meta, c_struct, high
 
 
 def __lt__(a, number):

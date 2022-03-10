@@ -264,7 +264,24 @@ def __getitem__(a, key):
         ind = a.struct.t.index(key)
     except ValueError:
         raise YastError('tensor does not have block specify by key')
-    return a._data[slice(*a.struct.sl[ind])]
+    return a._data[slice(*a.struct.sl[ind])].reshape(a.struct.D[ind])
+
+
+def __setitem__(a, key, newvalue):
+    """
+    Parameters
+    ----------
+    key : tuple(int)
+        charges of the block
+
+    Update data corresponding the block. The data should be consistent with shape
+    """
+    key = tuple(_flatten(key))
+    try:
+        ind = a.struct.t.index(key)
+    except ValueError:
+        raise YastError('tensor does not have block specify by key')
+    a._data[slice(*a.struct.sl[ind])] = newvalue
 
 
 ##################################################
@@ -555,7 +572,7 @@ def to_number(a, part=None):
     """
     size = a.size
     if size == 1:
-        x = a.config.backend.first_element(x._data)
+        x = a.config.backend.first_element(a._data)
     elif size == 0:
         x = a.zero_of_dtype()
     else:

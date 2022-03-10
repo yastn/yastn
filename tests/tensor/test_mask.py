@@ -17,8 +17,8 @@ def test_mask_1():
     b0 = yast.rand(config=config_U1, isdiag=True, t=(-1, 1), D=(7, 8))
 
     b = b0.copy()
-    b.A[(-1, -1)] = b.A[(-1, -1)] < -2
-    b.A[(1, 1)] = b.A[(1, 1)] > 0
+    b[(-1, -1)] = b[(-1, -1)] < -2
+    b[(1, 1)] = b[(1, 1)] > 0
 
     bd = b.trace(axes=(0, 1)).item()
     c = a.mask(b, axis=2)
@@ -46,7 +46,7 @@ def test_mask_2():
     b = yast.rand(config=config_Z2xU1, isdiag=True,
                    t=[[(0, 0), (0, 2), (1, 0), (1, 2)]],
                    D=[[6, 3, 9, 6]])
-    b.A[(0, 0, 0, 0)] *= 0
+    b[(0, 0, 0, 0)] *= 0
 
     bgt = b > 0
     blt = b < 0

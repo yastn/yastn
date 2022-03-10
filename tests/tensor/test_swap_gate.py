@@ -110,7 +110,7 @@ def vacum_spinfull(sites=4, sym='Z2'):
     s = (1,) * sites
     if sym == 'Z2':
         psi = yast.zeros(config=config_Z2_fermionic, s=s, t=[((0,),)] * sites, D=(2,) * sites)
-        psi.A[(0,) * sites][(0, ) * sites] = 1.
+        psi[(0,) * sites][0] = 1.
     if sym == 'U1xU1_ind':
         psi = yast.ones(config=config_U1xU1xZ2_fermionic, s=s, t=[((0, 0, 0),)] * sites, D=(1,) * sites)
     if sym == 'U1xU1_dis':

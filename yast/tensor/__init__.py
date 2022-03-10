@@ -120,7 +120,7 @@ class Tensor:
     from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_leg, remove_leg
     from ._output import show_properties, __str__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_leg_charges_and_dims, get_leg_structure
-    from ._output import zero_of_dtype, item, __getitem__
+    from ._output import zero_of_dtype, item, __getitem__, __setitem__
     from ._output import get_leg_fusion, get_shape, get_signature, get_dtype
     from ._output import get_tensor_charge, get_rank
     from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric

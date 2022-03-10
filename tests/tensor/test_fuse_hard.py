@@ -307,7 +307,7 @@ def test_fuse_hard_dense():
 
 
 if __name__ == '__main__':
-    unittest.main()
+    #unittest.main()
     test_fuse_hard_dense()
     test_hard_split()
     test_hard_transpose()

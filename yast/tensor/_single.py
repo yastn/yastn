@@ -48,11 +48,10 @@ def detach(a, inplace=False):
     tensor : Tensor
     """
     if inplace:
-        for x in a.A.values():
-            a.config.backend.detach_(x)
+        a.config.backend.detach_(a._data)
         return a
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ts: a.config.backend.detach(x) for ts, x in a.A.items()}
+    c._data = a.config.backend.detach(a._data)
     return c
 
 
@@ -139,9 +138,8 @@ def conj_blocks(a, inplace=False):
     -------
     tensor : Tensor
     """
-    c = a if inplace else a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-                                        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = c.config.backend.conj(a.A, inplace)
+    c = a if inplace else a.clone()
+    c._data = c.config.backend.conj(c._data)
     return c
 
 # TODO add axis
@@ -174,7 +172,7 @@ def flip_signature(a, inplace=False):
         return a
     c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
         hard_fusion=new_hf, struct=struct)
-    c.A = {ind: a.config.backend.clone(a.A[ind]) for ind in a.A}
+    c._data = a.config.backend.clone(a._data)
     return c
 
 
@@ -319,8 +317,7 @@ def add_leg(a, axis=-1, s=1, t=None, inplace=False):
     newD = tuple(x[:axis] + (1,) + x[axis:] for x in a.struct.D)
 
     c = a if inplace else a.clone()
-    c.A = {tnew: a.config.backend.expand_dims(c.A[told], axis) for tnew, told in zip(newt, a.struct.t)}
-    c.struct = _struct(newt, newD, news, newn)
+    c.struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
     c.meta_fusion = mfs
     c.hard_fusion = c.hard_fusion[:axis] + (_Fusion(s=(s,)),) + c.hard_fusion[axis:]
     return c
@@ -365,8 +362,7 @@ def remove_leg(a, axis=-1, inplace=False):
     newD = tuple(x[: axis] + x[axis + 1:] for x in a.struct.D)
 
     c = a if inplace else a.clone()
-    c.A = {tnew: a.config.backend.squeeze(c.A[told], axis) for tnew, told in zip(newt, a.struct.t)}
-    c.struct = _struct(newt, newD, news, newn)
+    c.struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
     c.meta_fusion = mfs
     c.hard_fusion = c.hard_fusion[:axis] + c.hard_fusion[axis + 1:]
     return c
@@ -407,14 +403,18 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0, inplace=False):
     Cutoff is a combination of absolut tolerance and relative tolerance with respect to maximal element in the tensor.
     """
     cutoff = atol + rtol * a.norm(p='inf')
-    newtD = [(t, D) for t, D in zip(a.struct.t, a.struct.D) if a.config.backend.max_abs(a.A[t]) > cutoff]
-    c_t = tuple(t for t, _ in newtD)
-    c_D = tuple(D for _, D in newtD)
-    struct = a.struct._replace(t=c_t, D=c_D)
+    meta = [(t, D, Dp, sl) for t, D, Dp, sl in zip(a.struct.t, a.struct.D, a.struct.Dp, a.struct.sl) \
+             if a.config.backend.max_abs(a._data[slice(*sl)]) > cutoff]
+    c_t = tuple(mt[0] for mt in meta)
+    c_D = tuple(mt[1] for mt in meta)
+    c_Dp = tuple(mt[2] for mt in meta)
+    old_sl = tuple(mt[3] for mt in meta)
+    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+    struct = a.struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     if inplace:
         c = a
         a.struct = struct
     else:
         c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=struct)
-    c.A = {t: a.A[t] if inplace else a.config.backend.clone(a.A[t]) for t in c_t}
+    c._data = a.config.backend.apply_slice(a._data, c_sl, old_sl)
     return c
