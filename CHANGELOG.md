@@ -144,3 +144,4 @@
 06-03-2022
 - Transition to 1d data structure
 - `unique_dtype` replaced by `get_dtype`
+- new function '__setitem__()' that gives direct access to change existing blocks

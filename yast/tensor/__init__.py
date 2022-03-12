@@ -6,7 +6,6 @@ In principle, any number of symmetries can be used, including dense tensor with 
 
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
-import numpy as np
 from ._auxliary import _struct, _config
 from ._merging import _Fusion
 from ._tests import YastError
@@ -136,7 +135,7 @@ class Tensor:
         -------
         s_n : tuple(int)
             signature of tensor's native legs. This includes legs (spaces) which have been
-            fused together by :meth:`yast.Tensor.fuse`.
+            fused together by :meth:`yast.Tensor.fuse` using mode=`meta`.
         """
         return self.struct.s
 
@@ -174,7 +173,7 @@ class Tensor:
         -------
         ndim_n : int
             native rank of the tensor. This includes legs (spaces) which have been
-            fused together by :meth:`yast.Tensor.fuse`.
+            fused together by :meth:`yast.Tensor.fuse` using mode=`meta`.
         """
         return len(self.struct.s)
 

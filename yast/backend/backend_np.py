@@ -185,7 +185,7 @@ def to_mask(val):
 
 
 def square_matrix_from_dict(H, D=None, **kwargs):
-    dtype = get_dtype(H.values())
+    dtype = np.common_type(*tuple(H.values()))
     T = np.zeros((D, D), dtype=dtype)
     for (i, j), v in H.items():
         if i < D and j < D:
@@ -375,10 +375,17 @@ def maximum(A):
     return max(np.max(x) for x in A.values())
 
 
-def embed(data, msk, Dsize):
+def embed_msk(data, msk, Dsize):
     """ embeds old tensors A into larger zero blocks based on slices. """
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     newdata[msk] = data
+    return newdata
+
+def embed_slc(data, meta, Dsize):
+    """ embeds old tensors A into larger zero blocks based on slices. """
+    newdata = np.zeros((Dsize,), dtype=data.dtype)
+    for sln, slo in meta:
+        newdata[slice(*sln)] = data[slice(*slo)]
     return newdata
 
 
@@ -552,14 +559,18 @@ def merge_to_dense(data, Dtot, meta, *args, **kwargs):
     return newdata.ravel()
 
 
-def merge_super_blocks(pos_tens, meta_new, meta_block, *args, **kwargs):
+def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     """ Outputs new dictionary of blocks after creating super-tensor. """
-    dtype = get_dtype(chain.from_iterable(t.A.values() for t in pos_tens.values()))
-    Anew = {u: np.zeros(Du, dtype=dtype) for (u, Du) in meta_new}
-    for (tind, pos, Dslc) in meta_block:
-        slc = tuple(slice(*DD) for DD in Dslc)
-        Anew[tind][slc] = pos_tens[pos].A[tind]  # .copy() # is copy required?
-    return Anew
+    dtype = np.common_type(*list(a._data for a in pos_tens.values()))
+    newdata = np.zeros((Dsize,), dtype=dtype)
+    for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_block, key=lambda x: x[0])):
+        assert tn == t1
+        temp = np.zeros(Dn, dtype=dtype)
+        for (_, slo, Do, pos, Dslc) in gr:
+            slc = tuple(slice(*x) for x in Dslc)
+            temp[slc] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
+        newdata[slice(*sln)] = temp.ravel()
+    return newdata
 
 
 def unmerge_from_2d(A, meta, new_sl, Dsize):

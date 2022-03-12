@@ -278,10 +278,14 @@ def block(tensors, common_legs=None):
 
     for ind, tn in tensors.items():
         ind, = _clear_axes(ind)
-        if tn.ndim_n != tn0.ndim_n or tn.meta_fusion != tn0.meta_fusion or\
-           tn.struct.s != tn0.struct.s or tn.struct.n != tn0.struct.n or\
-           tn.isdiag != tn0.isdiag or tn.hard_fusion != tn0.hard_fusion:
-            raise YastError('Ndims, signatures, total charges or fusion trees of blocked tensors are inconsistent.')
+        if tn.struct.s != tn0.struct.s:
+            raise YastError('Signatues of blocked tensors are inconsistent.')
+        if tn.struct.n != tn0.struct.n:
+            raise YastError('Tensor charges of blocked tensors are inconsistent.')
+        if tn.meta_fusion != tn0.meta_fusion or tn.hard_fusion != tn0.hard_fusion:
+            raise YastError('Fusion structures of blocked tensors are inconsistent.')
+        if tn.isdiag != tn0.isdiag:
+            raise YastError('Block can talk either only diagonal of only nondiagonal tensors.')
 
     posa = np.ones((len(pos), tn0.ndim_n), dtype=int)
     posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int).reshape(len(pos), -1)
@@ -311,16 +315,21 @@ def block(tensors, common_legs=None):
     for pind, pa in zip(tensors, posa):
         a = tensors[pind]
         tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-        for tind, t in zip(a.struct.t, tset):
+        for tind, slind, Dind, t in zip(a.struct.t, a.struct.sl, a.struct.D, tset):
             if tind not in meta_new:
                 meta_new[tind] = tuple(tDs[n][tuple(t[n].flat)]['Dtot'] for n in range(a.ndim_n))
-            meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.ndim_n))))
+            meta_block.append((tind, slind, Dind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.ndim_n))))
+    meta_block = tuple(sorted(meta_block, key=lambda x: x[0]))
     meta_new = tuple(sorted(meta_new.items()))
     c_t = tuple(t for t, _ in meta_new)
     c_D = tuple(D for _, D in meta_new)
-    c_struct = _struct(t=c_t, D=c_D, n=a.struct.n, s=a.struct.s)
+    c_Dp = tuple(np.prod(c_D, axis=1))
+    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+    c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    meta_new = tuple(zip(c_t, c_D, c_sl))
+    Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
 
     c = tn0.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
                         meta_fusion=tn0.meta_fusion, hard_fusion=tn0.hard_fusion)
-    c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, c.config.device)
+    c._data = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, Dsize)
     return c

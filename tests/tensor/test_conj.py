@@ -30,12 +30,9 @@ def conj_vs_numpy(a, expected_n):
     assert abs(yast.vdot(a, a).item() - yast.vdot(b, a, conj=(0, 0)).item()) < tol
     assert abs(yast.vdot(a, a).item() - yast.vdot(d, c, conj=(0, 0)).item()) < tol
 
-    b.conj(inplace=True)
-    assert yast.norm(a - b) < tol
-    c.flip_signature(inplace=True)
-    assert yast.norm(a - c) < tol
-    d.conj_blocks(inplace=True)
-    assert yast.norm(a - d) < tol
+    assert yast.norm(a - b.conj()) < tol
+    assert yast.norm(a - c.flip_signature()) < tol
+    assert yast.norm(a - d.conj_blocks()) < tol
 
 
 def test_conj_basic():

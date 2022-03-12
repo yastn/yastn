@@ -20,8 +20,7 @@ def save_to_dict(a):
     d: dict
         dictionary containing all the information needed to recreate the tensor.
     """
-    _d, _ = a.compress_to_1d()
-    _d = a.config.backend.to_numpy(_d)
+    _d = a.config.backend.to_numpy(a._data)
     hfs = [hf._asdict() for hf in a.hard_fusion]
     return {'_d': _d, 's': a.struct.s, 'n': a.struct.n,
             't': a.struct.t, 'D': a.struct.D, 'isdiag': a.isdiag,
@@ -37,20 +36,20 @@ def save_to_hdf5(a, file, path):
     ----------
     ADD DESCRIPTION
     """
-    vec, _ = a.compress_to_1d()
+    _d = a.config.backend.to_numpy(a._data)
     file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
     file.create_group(path+'/meta/'+str(a.meta_fusion))
     file.create_dataset(path+'/n', data=a.struct.n)
     file.create_dataset(path+'/s', data=a.struct.s)
     file.create_dataset(path+'/ts', data=a.struct.t)
     file.create_dataset(path+'/Ds', data=a.struct.D)
-    file.create_dataset(path+'/matrix', data=vec)
+    file.create_dataset(path+'/matrix', data=_d)
 
 
 def compress_to_1d(a, meta=None):
     """
-    Store each block as 1D array within r1d in contiguous manner; outputs meta-information
-    to reconstruct the original tensor
+    Store each block as 1D array within r1d in contiguous manner (do not clone the data if not necceaary);
+    outputs meta-information to reconstruct the original tensor
 
     Parameters
     ----------
@@ -61,31 +60,35 @@ def compress_to_1d(a, meta=None):
             meta does not match the tensor.
     """
     if meta is None:
-        Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
-        D_rsh = Dset[:, 0] if a.isdiag else np.prod(Dset, axis=1, dtype=int)
-        aD_rsh = np.cumsum(D_rsh)
-        D_tot = np.sum(D_rsh)
-        meta_new = (((),), (D_tot,))
-        # meta_merge = ((tn, to, Dslc, Drsh), ...)
-        meta_merge = tuple(((), t, ((aD - D, aD),), D) for t, D, aD in zip(a.struct.t, D_rsh, aD_rsh))
-        # (told, tnew, Dslc, Dnew)
-        DD = tuple((x[0],) for x in a.struct.D) if a.isdiag else a.struct.D
-        meta_unmerge = tuple(((), t, (aD - D, aD), Dnew) for t, D, aD, Dnew in zip(a.struct.t, D_rsh, aD_rsh, DD))
         meta = {'struct': a.struct, 'isdiag': a.isdiag, 'hard_fusion': a.hard_fusion,
-                'meta_fusion': a.meta_fusion, 'meta_unmerge': meta_unmerge, 'meta_merge': meta_merge}
-    else:
-        if a.struct.s != meta['struct'].s or a.struct.n != meta['struct'].n or a.isdiag != meta['isdiag'] \
-            or a.meta_fusion != meta['meta_fusion'] or a.hard_fusion != meta['hard_fusion']:
-            raise YastError("Tensor structure does not match provided metadata.")
-        meta_merge = meta['meta_merge']
-        D_tot = meta_merge[-1][2][0][1]
-        meta_new = (((),), (D_tot,))
-        if len(a.A) != sum(ind in a.A for (_, ind, _, _) in meta_merge):
-            raise YastError("Tensor has blocks that do not appear in meta.")
+                'meta_fusion': a.meta_fusion}
+        return a._data, meta
+    # else:
+    if a.struct.s != meta['struct'].s:
+        raise YastError("Tensor has different signature than metadata.")
+    if a.struct.n != meta['struct'].n:
+        raise YastError("Tensor has different tensor charge than metadata.")
+    if a.isdiag != meta['isdiag']:
+        raise YastError("Tensor has different diagonality than metadata.")
+    if a.meta_fusion != meta['meta_fusion'] or a.hard_fusion != meta['hard_fusion']:
+        raise YastError("Tensor has different leg fusion structure than metadata.")
+    Dsize = meta['struct'].sl[-1][1] if len(meta['struct'].sl) > 0 else 0
 
-    order = (0,) if a.isdiag else tuple(range(a.ndim_n))
-    A = a.config.backend.merge_to_2d(a.A, order, meta_new, meta_merge, a.config.device)
-    return A[()], meta
+    if a.struct == meta['struct']:
+        return a._data, meta
+    # else: embed filling in missing zero blocks
+    ia, im, meta_merge = 0, 0, []
+    while ia < len(a.struct.t):
+        if a.struct.t[ia] < meta['struct'].t[im] or im >= len(meta['struct'].t):
+            raise YastError("Tensor has blocks that do not appear in meta.")
+        elif a.struct.t[ia] == meta['struct'].t[im]:
+            meta_merge.append((meta['struct'].sl[im], a.struct.sl[ia]))
+            ia += 1
+            im += 1
+        else: #a.struct.t[ia] > meta['struct'].t[im]:
+            im += 1
+    data = a.config.backend.embed_slc(a._data, meta_merge, Dsize)
+    return data, meta
 
 
 ############################
@@ -258,13 +261,16 @@ def __getitem__(a, key):
     -------
     out : tensor
         The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
+        Output 1d array for diagonal tensor, outherwise reshape into n-dim array.
     """
     key = tuple(_flatten(key))
     try:
         ind = a.struct.t.index(key)
     except ValueError:
         raise YastError('tensor does not have block specify by key')
-    return a._data[slice(*a.struct.sl[ind])].reshape(a.struct.D[ind])
+    x = a._data[slice(*a.struct.sl[ind])]
+    
+    return x if a.isdiag else x.reshape(a.struct.D[ind])
 
 
 def __setitem__(a, key, newvalue):
