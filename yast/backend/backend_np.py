@@ -8,6 +8,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     warnings.warn("fbpca not available", Warning)
 
+rng = {'rng': np.random.default_rng()}  # initialize random number generator
 BACKEND_ID = "numpy"
 DTYPE = {'float64': np.float64,
          'complex128': np.complex128}
@@ -18,7 +19,12 @@ def get_dtype(t):
 
 
 def random_seed(seed):
-    np.random.seed(seed)
+    rng['rng'] = np.random.default_rng(seed)
+
+
+def set_num_threads(num_threads):
+    warnings.warn("backend_np does not support set_num_threads.", Warning)
+    pass
 
 
 ###################################
@@ -91,7 +97,7 @@ def count_nonzero(x):
 
 
 def delete(x, sl):
-    return np.delete(x, sl)
+    return np.delete(x, slice(*sl))
 
 
 def insert(x, start, values):
@@ -115,16 +121,16 @@ def item(x):
     return x.item()
 
 
-def sum_elements(Adata):
+def sum_elements(data):
     """ sum of all elements of all tensors in A """
-    return Adata.sum().reshape(1)
+    return data.sum().reshape(1)
 
 
-def norm(A, p):
+def norm(data, p):
     """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
     if p == 'fro':
-        return np.linalg.norm(A)
-    return max(np.abs(A)) if len(A) > 0  else np.float64(0.)
+        return np.linalg.norm(data)
+    return max(np.abs(data)) if len(data) > 0  else np.float64(0.)
 
 
 def entropy(A, alpha=1, tol=1e-12):
@@ -165,11 +171,11 @@ def ones(D, dtype='float64', **kwargs):
 
 
 def randR(D, **kwargs):
-    return 2 * np.random.random_sample(D).astype(DTYPE['float64']) - 1
+    return 2 * rng['rng'].random(D) - 1
 
 
 def randC(D, **kwargs):
-    return 2 * (np.random.random_sample(D) + 1j * np.random.random_sample(D)).astype(DTYPE['complex128']) - (1 + 1j)
+    return 2 * (rng['rng'].random(D) + 1j *  rng['rng'].random(D)) - (1 + 1j)
 
 
 def to_tensor(val, Ds=None, dtype='float64', **kwargs):
@@ -193,26 +199,21 @@ def square_matrix_from_dict(H, D=None, **kwargs):
     return T
 
 
-##################################
-#     single dict operations     #
-##################################
-
-def requires_grad_(A, requires_grad=True):
+def requires_grad_(data, requires_grad=True):
     warnings.warn("backend_np does not support autograd.", Warning)
     pass
 
 
-def requires_grad(A):
+def requires_grad(data):
     return False
 
 
-def move_to(A, *args, **kwargs):
-    return A
+def move_to(data, *args, **kwargs):
+    return data
 
 
-def conj(Adata):
-    """ Conjugate dict of tensors; Force a copy in not in place. """
-    return Adata.conj()
+def conj(data):
+    return data.conj()
 
 
 def trace(data, order, meta, Dsize):
@@ -234,38 +235,37 @@ def trace_with_mask(data, order, meta, Dsize, tcon, msk12):
     return newdata
 
 
-def transpose(Adata, axes, meta_transpose):
-    """ Transpose; Force a copy if not inplace. """
-    newdata = np.empty(Adata.shape, dtype=Adata.dtype)
+def transpose(data, axes, meta_transpose):
+    newdata = np.zeros_like(data)
     for sln, slo, Do in meta_transpose:
-        newdata[slice(*sln)] = Adata[slice(*slo)].reshape(Do).transpose(axes).ravel()
+        newdata[slice(*sln)] = data[slice(*slo)].reshape(Do).transpose(axes).ravel()
     return newdata
 
 
-def rsqrt(Adata, cutoff=0):
-    res = np.zeros_like(Adata)
-    ind = np.abs(Adata) > cutoff
-    res[ind] = 1. / np.sqrt(Adata[ind])
+def rsqrt(data, cutoff=0):
+    res = np.zeros_like(data)
+    ind = np.abs(data) > cutoff
+    res[ind] = 1. / np.sqrt(data[ind])
     return res
 
 
-def reciprocal(Adata, cutoff=0):
-    res = np.zeros_like(Adata)
-    ind = np.abs(Adata) > cutoff
-    res[ind] = 1. / Adata[ind]
+def reciprocal(data, cutoff=0):
+    res = np.zeros_like(data)
+    ind = np.abs(data) > cutoff
+    res[ind] = 1. / data[ind]
     return res
 
 
-def exp(Adata, step):
-    return np.exp(step * Adata)
+def exp(data, step):
+    return np.exp(step * data)
 
 
-def sqrt(Adata):
-    return np.sqrt(Adata)
+def sqrt(data):
+    return np.sqrt(data)
 
 
-def absolute(Adata):
-    return np.abs(Adata)
+def absolute(data):
+    return np.abs(data)
 
 
 def svd_lowrank(A, meta, D_block, n_iter=60, k_fac=6):
@@ -376,13 +376,11 @@ def maximum(A):
 
 
 def embed_msk(data, msk, Dsize):
-    """ embeds old tensors A into larger zero blocks based on slices. """
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     newdata[msk] = data
     return newdata
 
 def embed_slc(data, meta, Dsize):
-    """ embeds old tensors A into larger zero blocks based on slices. """
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     for sln, slo in meta:
         newdata[slice(*sln)] = data[slice(*slo)]
@@ -394,43 +392,40 @@ def embed_slc(data, meta, Dsize):
 ################################
 
 
-def add(A, B, meta, Dsize):
-    """ C = A + B. """
-    data = np.zeros((Dsize,), dtype=np.find_common_type(A, B))
+def add(Adata, Bdata, meta, Dsize):
+    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
     for sl_c, sl_a, sl_b, ab in meta:
         if ab == 'AB':
-            data[slice(*sl_c)] = A[slice(*sl_a)] + B[slice(*sl_b)]
+            newdata[slice(*sl_c)] = Adata[slice(*sl_a)] + Bdata[slice(*sl_b)]
         elif ab == 'A':
-            data[slice(*sl_c)] = A[slice(*sl_a)]
+            newdata[slice(*sl_c)] = Adata[slice(*sl_a)]
         else:  # ab == 'B'
-            data[slice(*sl_c)] = B[slice(*sl_b)]
-    return data
+            newdata[slice(*sl_c)] = Bdata[slice(*sl_b)]
+    return newdata
 
 
-def sub(A, B, meta, Dsize):
-    """ C = A - B. meta = kab, ka, kb """
-    data = np.zeros((Dsize,), dtype=np.find_common_type(A, B))
+def sub(Adata, Bdata, meta, Dsize):
+    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
     for sl_c, sl_a, sl_b, ab in meta:
         if ab == 'AB':
-            data[slice(*sl_c)] = A[slice(*sl_a)] - B[slice(*sl_b)]
+            newdata[slice(*sl_c)] = Adata[slice(*sl_a)] - Bdata[slice(*sl_b)]
         elif ab == 'A':
-            data[slice(*sl_c)] = A[slice(*sl_a)]
+            newdata[slice(*sl_c)] = Adata[slice(*sl_a)]
         else:  # ab == 'B'
-            data[slice(*sl_c)] = -B[slice(*sl_b)]
-    return data
+            newdata[slice(*sl_c)] = -Bdata[slice(*sl_b)]
+    return newdata
 
 
-def apxb(A, B, x, meta, Dsize):
-    """ C = A + x * B. meta = kab, ka, kb """
-    data = np.zeros((Dsize,), dtype=np.find_common_type(A, B))
+def apxb(Adata, Bdata, x, meta, Dsize):
+    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
     for sl_c, sl_a, sl_b, ab in meta:
         if ab == 'AB':
-            data[slice(*sl_c)] = A[slice(*sl_a)] + x * B[slice(*sl_b)]
+            newdata[slice(*sl_c)] = Adata[slice(*sl_a)] + x * Bdata[slice(*sl_b)]
         elif ab == 'A':
-            data[slice(*sl_c)] = A[slice(*sl_a)]
+            newdata[slice(*sl_c)] = Adata[slice(*sl_a)]
         else:  # ab == 'B'
-            data[slice(*sl_c)] = x * B[slice(*sl_b)]
-    return data
+            newdata[slice(*sl_c)] = x * Bdata[slice(*sl_b)]
+    return newdata
 
 
 dot_dict = {(0, 0): lambda x, y: x @ y,
@@ -450,13 +445,6 @@ def apply_slice(data, slcn, slco):
 def vdot(Adata, Bdata, cc):
     f = dot_dict[cc]  # proper conjugations
     return f(Adata, Bdata)
-
-
-def diag_make2d(Adata, meta, Dsize):
-    newdata = np.zeros((Dsize,), dtype=Adata.dtype)
-    for sln, slo in meta:
-        newdata[slice(*sln)] = np.diag(Adata[slice(*slo)]).ravel()
-    return newdata
 
 
 def diag_1dto2d(Adata, meta, Dsize):
@@ -529,21 +517,17 @@ def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
 
 
 def merge_to_2d(data, order, meta_new, meta_mrg, *args, **kwargs):
-    """ New dictionary of blocks after merging into n-dimensional array """
-    dtype = data.dtype
-    Anew = {u: np.zeros(Du, dtype=dtype) for u, Du in zip(*meta_new)}
+    Anew = {u: np.zeros(Du, dtype=data.dtype) for u, Du in zip(*meta_new)}
     for (tn, slo, Do, Dslc, Drsh) in meta_mrg:
         Anew[tn][tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
     return Anew
 
 
 def merge_to_1d(data, order, meta_new, meta_mrg, Dsize, *args, **kwargs):
-    """ New dictionary of blocks after merging into matrix. """
-    dtype = data.dtype
-    newdata = np.zeros((Dsize,), dtype=dtype)
+    newdata = np.zeros((Dsize,), dtype=data.dtype)
     for (tn, Dn, sln), (t1, gr) in zip(zip(*meta_new), groupby(meta_mrg, key=lambda x: x[0])):
         assert tn == t1
-        temp = np.zeros(Dn, dtype=dtype)
+        temp = np.zeros(Dn, dtype=data.dtype)
         for (_, slo, Do, Dslc, Drsh) in gr:
             temp[tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
         newdata[slice(*sln)] = temp.ravel()
@@ -551,16 +535,13 @@ def merge_to_1d(data, order, meta_new, meta_mrg, Dsize, *args, **kwargs):
 
 
 def merge_to_dense(data, Dtot, meta, *args, **kwargs):
-    """ Outputs full tensor. """
     newdata = np.zeros(Dtot, dtype=data.dtype)
     for (sl, Dss) in meta:
         newdata[tuple(slice(*Ds) for Ds in Dss)] = data[sl].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
-    newdata
     return newdata.ravel()
 
 
 def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
-    """ Outputs new dictionary of blocks after creating super-tensor. """
     dtype = np.common_type(*list(a._data for a in pos_tens.values()))
     newdata = np.zeros((Dsize,), dtype=dtype)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_block, key=lambda x: x[0])):
@@ -573,8 +554,7 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     return newdata
 
 
-def unmerge_from_2d(A, meta, new_sl, Dsize):
-    """ unmerge matrix into single blocks """
+def unmerge_from_2d(A, meta, new_sl, Dsize, *args, **kwargs):
     dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
     newdata = np.zeros((Dsize,), dtype=dtype)
     for (indm, sl, sr), snew in zip(meta, new_sl):
@@ -582,8 +562,7 @@ def unmerge_from_2d(A, meta, new_sl, Dsize):
     return newdata
 
 
-def unmerge_from_2ddiag(A, meta, new_sl, Dsize):
-    """ unmerge matrix into single blocks """
+def unmerge_from_2ddiag(A, meta, new_sl, Dsize, *args, **kwargs):
     dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
     newdata = np.zeros((Dsize,), dtype=dtype)
     for (_, iold, slc), snew in zip(meta, new_sl):
@@ -592,21 +571,10 @@ def unmerge_from_2ddiag(A, meta, new_sl, Dsize):
 
 
 def unmerge_from_1d(data, meta, new_sl, Dsize):
-    """ unmerge matrix into single blocks """
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     for (slo, Do, sub_slc), snew in zip(meta, new_sl):
         newdata[slice(*snew)] = data[slice(*slo)].reshape(Do)[tuple(slice(*x) for x in sub_slc)].ravel()
     return newdata
-
-
-def unmerge_one_leg(A, axis, meta):
-    """ unmerge single leg """
-    Anew = {}
-    for (told, tnew, Dsl, Dnew) in meta:
-        slc = [slice(None)] * A[told].ndim
-        slc[axis] = slice(*Dsl)
-        Anew[tnew] = np.reshape(A[told][tuple(slc)], Dnew).copy()  # TODO check if this copy() is neccesary
-    return Anew
 
 
 #############
@@ -618,9 +586,8 @@ def is_complex(x):
     return np.iscomplexobj(x)
 
 
-def is_independent(A, B):
+def is_independent(x, y):
     """
     check if two arrays are identical, or share the same view.
     """ 
-    # return not ((A is B) or (A.__array_interface__['data'][0] == B.__array_interface__['data'][0]))
-    return not ((A is B) or (A.base is B) or (A is B.base))
+    return not ((x is y) or (x.base is y) or (x is y.base))

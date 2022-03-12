@@ -129,10 +129,8 @@ def show_properties(a):
 
 
 def __str__(a):
-    # return str(a.A)
     ts, Ds = a.get_leg_charges_and_dims(native=False)
     s = f"{a.config.sym.SYM_ID} s= {a.struct.s} n= {a.struct.n}\n"
-    # s += f"charges      : {a.ts}\n"
     s += f"leg charges  : {ts}\n"
     s += f"dimensions   : {Ds}"
     return s
@@ -145,7 +143,7 @@ def requires_grad(a):
     bool : bool
             ``True`` if any of the blocks of the tensor has autograd enabled
     """
-    return a.config.backend.requires_grad(a.A)
+    return a.config.backend.requires_grad(a._data)
 
 
 def print_blocks_shape(a):
@@ -163,7 +161,7 @@ def is_complex(a):
     bool : bool
         ``True`` if all of the blocks of the tensor are complex
     """
-    return all(a.config.backend.is_complex(x) for x in a.A.values())
+    return a.config.backend.is_complex(a._data)
 
 
 def get_tensor_charge(a):

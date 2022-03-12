@@ -5,7 +5,7 @@ from ._merging import _Fusion, _flip_hf
 from ._tests import YastError, _test_axes_all
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',
-           'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to', 'requires_grad_']
+           'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to', 'requires_grad_', 'grad']
 
 
 def copy(a):
@@ -84,7 +84,13 @@ def to(a, device=None, dtype=None):
     if dtype is not None:
         c_config = c_config._replace(dtype=dtype)
     c = a.__class__(config=c_config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.move_to(a.A, dtype=dtype, device=device)
+    c._data = a.config.backend.move_to(a._data, dtype=dtype, device=device)
+    return c
+
+
+def grad(a):
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
+    c._data = a._data.grad
     return c
 
 
@@ -99,7 +105,7 @@ def requires_grad_(a, requires_grad=True):
     ----------
     requires_grad: bool
     """
-    a.config.backend.requires_grad_(a.A, requires_grad=requires_grad)
+    a.config.backend.requires_grad_(a._data, requires_grad=requires_grad)
 
 
 def conj(a):
