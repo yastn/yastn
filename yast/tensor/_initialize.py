@@ -178,7 +178,7 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
     ind2 = ind
     if ind < len(a.struct.t) and a.struct.t[ind] == ts:
         ind2 += 1
-        a._data = a.config.backend.delete(a._data, slice(*a.struct.sl[ind]))
+        a._data = a.config.backend.delete(a._data, a.struct.sl[ind])
 
     pos = 0 if ind == 0 else a.struct.sl[ind - 1][1]
     a._data = a.config.backend.insert(a._data, pos, _init_block(a.config, Dsize, val, dtype))

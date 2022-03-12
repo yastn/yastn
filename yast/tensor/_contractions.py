@@ -164,10 +164,10 @@ def _meta_tensordot_nomerge(a_struct, b_struct, nout_a, nin_a, nin_b, nout_b):
     Da_pout = np.prod(Da_out, axis=1, dtype=int)
     Db_pout = np.prod(Db_out, axis=1, dtype=int)
 
-    block_a = [x for x in zip(ta_con, ta_out, a_struct.sl, Da, Da_pcon, Da_out, Da_pout)]
+    block_a = [x for x in zip(ta_con, ta_out, a_struct.sl, a_struct.D, Da_pcon, Da_out, Da_pout)]
     block_a = groupby(sorted(block_a, key=lambda x: x[0]), key=lambda x: x[0])
 
-    block_b = [x for x in zip(tb_con, tb_out, b_struct.sl, Db, Db_pcon, Db_out, Db_pout)]
+    block_b = [x for x in zip(tb_con, tb_out, b_struct.sl, b_struct.D, Db_pcon, Db_out, Db_pout)]
     block_b = groupby(sorted(block_b, key=lambda x: x[0]), key=lambda x: x[0])
 
     meta = []

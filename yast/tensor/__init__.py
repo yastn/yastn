@@ -115,7 +115,7 @@ class Tensor:
     from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, mask
     from ._algebra import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
     from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp
-    from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, move_leg, diag
+    from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, move_leg, diag, grad
     from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_leg, remove_leg
     from ._output import show_properties, __str__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_leg_charges_and_dims, get_leg_structure

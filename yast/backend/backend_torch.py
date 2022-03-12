@@ -1,5 +1,5 @@
 """Support of torch as a data structure used by yast."""
-from itertools import chain
+from itertools import chain, groupby
 import torch
 from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_eig_sym import SYMEIG
@@ -8,6 +8,10 @@ from .linalg.torch_eig_sym import SYMEIG
 BACKEND_ID = "torch"
 DTYPE = {'float64': torch.float64,
          'complex128': torch.complex128}
+
+
+def _common_type(iterator):
+    return torch.complex128 if any(x.is_complex() for x in iterator) else torch.float64
 
 
 def get_dtype(t):
@@ -88,17 +92,20 @@ def norm_matrix(x):
     return torch.linalg.norm(x)
 
 
-def expand_dims(x, axis):
-    return torch.unsqueeze(x, axis)
-
-
-def squeeze(x, axis):
-    return torch.squeeze(x, axis)
-
-
 def count_nonzero(x):
     return torch.count_nonzero(x).item()
 
+
+def delete(x, sl):
+    return torch.cat([x[:sl[0]], x[sl[1]:]])
+
+
+def insert(x, start, values):
+    return torch.cat([x[:start], values, x[start:]])
+
+
+def expm(x):
+    return torch.matrix_exp(x)
 
 #########################
 #    output numbers     #
@@ -113,16 +120,16 @@ def item(x):
     return x.item()
 
 
-def sum_elements(A):
+def sum_elements(data):
     """ sum of all elements of all tensors in A """
-    return sum(x.sum() for x in A.values())
+    return data.sum().reshape(1)
 
 
-def norm(A, p):
+def norm(data, p):
     """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
     if p == "fro":
-        return torch.sum(torch.stack([torch.sum(t.abs()**2) for t in A.values()])).sqrt()
-    return torch.max(torch.stack([t.abs().max() for t in A.values()]))  # else p == "inf":
+        return data.norm()
+    return data.abs().max() if len(data) > 0 else torch.tensor(0.) # else p == "inf":
 
 
 def entropy(A, alpha=1, tol=1e-12):
@@ -183,8 +190,9 @@ def to_mask(val):
     return torch.as_tensor(val).nonzero().ravel()
 
 
-def square_matrix_from_dict(H, D=None, device='cpu'):
-    dtype = get_dtype(H.values())
+def square_matrix_from_dict(H, D=None, **kwargs):
+    dtype = _common_type(H.values())
+    device = next(iter(H.values())).device
     T = torch.zeros((D, D), dtype=dtype, device=device)
     for (i, j), v in H.items():
         if i < D and j < D:
@@ -192,100 +200,78 @@ def square_matrix_from_dict(H, D=None, device='cpu'):
     return T
 
 
-##################################
-#     single dict operations     #
-##################################
-
-def requires_grad_(A, requires_grad=True):
-    for b in A.values(): b.requires_grad_(requires_grad)
+def requires_grad_(data, requires_grad=True):
+    data.requires_grad_(requires_grad)
 
 
-def requires_grad(A):
-    return any([b.requires_grad for b in A.values()])
+def requires_grad(data):
+    return data.requires_grad
 
 
-def move_to(A, *args, **kwargs):
+def move_to(data, *args, **kwargs):
     if "dtype" in kwargs:
         if kwargs["dtype"] is None:
             del kwargs["dtype"]
         else:
             kwargs["dtype"] = DTYPE[kwargs["dtype"]]
-    return {ind: x.to(*args, **kwargs) for ind, x in A.items()}
+    return data.to(*args, **kwargs)
 
 
-def conj(A, inplace):
-    """ Conjugate dict of tensors. Force a copy if not inplace. """
-    if inplace:
-        return {t: x.conj() for t, x in A.items()}
-    return {t: x.conj() for t, x in A.items()}  # TODO is it a copy or not
+def conj(data):
+    return data.conj()
 
 
-def trace(A, order, meta):
+def trace(data, order, meta, Dsize):
     """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
         Repeating tnew are added."""
-    Aout = {}
-    for (tnew, told, Drsh, _) in meta:
-        Atemp = torch.reshape(A[told].permute(order), Drsh)
-        Atemp = torch.sum(torch.diagonal(Atemp, dim1=0, dim2=1), dim=-1)
-        if tnew in Aout:
-            Aout[tnew] += Atemp
-        else:
-            Aout[tnew] = Atemp
-    return Aout
+    newdata = torch.zeros((Dsize,), dtype=data.dtype)
+    for (sln, slo, Do, Drsh) in meta:
+        temp = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
+        newdata[slice(*sln)] += torch.sum(torch.diagonal(temp, dim1=0, dim2=1), dim=-1).ravel()
+    return newdata
 
 
-def trace_with_mask(A, order, meta, msk12):
+def trace_with_mask(data, order, meta, Dsize, tcon, msk12):
     """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
         Repeating tnew are added."""
-    Aout = {}
-    for (tnew, told, Drsh, tt) in meta:
-        Atemp = torch.reshape(A[told].permute(order), Drsh)
-        Atemp = torch.sum(Atemp[msk12[tt][0], msk12[tt][1]], axis=0)
-        if tnew in Aout:
-            Aout[tnew] += Atemp
-        else:
-            Aout[tnew] = Atemp
-    return Aout
+    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    for (sln, slo, Do, Drsh), tt in zip(meta, tcon):
+        temp = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
+        newdata[slice(*sln)] += torch.sum(temp[msk12[tt][0], msk12[tt][1]], axis=0).ravel()
+    return newdata
 
 
-def transpose(A, axes, meta_transpose, inplace):
-    """ Transpose; Force a copy if not inplace. """
-    # check this inplace ...
-    if inplace:
-        return {new: A[old].permute(axes) for new, old in meta_transpose}
-    return {new: A[old].permute(axes).clone().contiguous() for new, old in meta_transpose}
+def transpose(data, axes, meta_transpose):
+    newdata = torch.zeros_like(data)
+    for sln, slo, Do in meta_transpose:
+        newdata[slice(*sln)] = data[slice(*slo)].reshape(Do).permute(axes).ravel()
+    return newdata
 
 
-def rsqrt(A, cutoff=0):
-    res = {t: x.rsqrt() for t, x in A.items()}
-    if cutoff > 0:
-        for t in res:
-            res[t][abs(res[t]) > 1. / cutoff] = 0
+def rsqrt(data, cutoff=0):
+    res = torch.zeros_like(data)
+    ind = data.abs() > cutoff
+    res[ind] = data[ind].rsqrt()
     return res
 
 
-def reciprocal(A, cutoff=0):
-    res = {t: 1. / x for t, x in A.items()}
-    if cutoff > 0:
-        for t in res:
-            res[t][abs(res[t]) > 1. / cutoff] = 0
+def reciprocal(data, cutoff=0):
+    res = torch.zeros_like(data)
+    ind = data.abs() > cutoff
+    res[ind] = 1. / data[ind]
     return res
 
 
-def exp(A, step):
-    return {t: torch.exp(step * x) for t, x in A.items()}
+def exp(data, step):
+    return torch.exp(step * data)
 
 
-def expm(A):
-    return torch.matrix_exp(A)
+def sqrt(data):
+    return torch.sqrt(data)
 
 
-def sqrt(A):
-    return {t: torch.sqrt(x) for t, x in A.items()}
-
-
-def absolute(A):
-    return {t: torch.abs(x) for t, x in A.items()}
+def absolute(data):
+    return torch.abs(data)
 
 
 def svd_lowrank(A, meta, D_block, n_iter=60, k_fac=6):
@@ -404,14 +390,17 @@ def maximum(A):
     return max(torch.max(x) for x in A.values())
 
 
-def embed(A, sl, tD):
-    """ embeds old tensors A into larger zero blocks based on slices. """
-    dtype = get_dtype(A.values())
-    C = {}
-    for t, val in A.items():
-        C[t] = torch.zeros(tD[t], dtype=dtype, device=val.device)
-        C[t][sl[t]] = val
-    return C
+def embed_msk(data, msk, Dsize):
+    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    newdata[msk] = data
+    return newdata
+
+
+def embed_slc(data, meta, Dsize):
+    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    for sln, slo in meta:
+        newdata[slice(*sln)] = data[slice(*slo)]
+    return newdata
 
 
 ################################
@@ -419,43 +408,43 @@ def embed(A, sl, tD):
 ################################
 
 
-def add(A, B, meta):
-    """ C = A + B. meta = kab, ka, kb """
-    C = {}
-    for t, ab in meta:
+def add(Adata, Bdata, meta, Dsize):
+    dtype = _common_type((Adata, Bdata))
+    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    for sl_c, sl_a, sl_b, ab in meta:
         if ab == 'AB':
-            C[t] = A[t] + B[t]
+            newdata[slice(*sl_c)] = Adata[slice(*sl_a)] + Bdata[slice(*sl_b)]
         elif ab == 'A':
-            C[t] = A[t].clone()
+            newdata[slice(*sl_c)] = Adata[slice(*sl_a)]
         else:  # ab == 'B'
-            C[t] = B[t].clone()
-    return C
+            newdata[slice(*sl_c)] = Bdata[slice(*sl_b)]
+    return newdata
 
 
-def sub(A, B, meta):
-    """ C = A - B. meta = kab, ka, kb """
-    C = {}
-    for t, ab in meta:
+def sub(Adata, Bdata, meta, Dsize):
+    dtype = _common_type((Adata, Bdata))
+    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    for sl_c, sl_a, sl_b, ab in meta:
         if ab == 'AB':
-            C[t] = A[t] - B[t]
+            newdata[slice(*sl_c)] = Adata[slice(*sl_a)] - Bdata[slice(*sl_b)]
         elif ab == 'A':
-            C[t] = A[t].clone()
+            newdata[slice(*sl_c)] = Adata[slice(*sl_a)]
         else:  # ab == 'B'
-            C[t] = -B[t]
-    return C
+            newdata[slice(*sl_c)] = -Bdata[slice(*sl_b)]
+    return newdata
 
 
-def apxb(A, B, x, meta):
-    """ C = A + x * B. meta = kab, ka, kb """
-    C = {}
-    for t, ab in meta:
+def apxb(Adata, Bdata, x, meta, Dsize):
+    dtype = _common_type((Adata, Bdata))
+    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    for sl_c, sl_a, sl_b, ab in meta:
         if ab == 'AB':
-            C[t] = A[t] + x * B[t]
+            newdata[slice(*sl_c)] = Adata[slice(*sl_a)] + x * Bdata[slice(*sl_b)]
         elif ab == 'A':
-            C[t] = A[t].clone()
+            newdata[slice(*sl_c)] = Adata[slice(*sl_a)]
         else:  # ab == 'B'
-            C[t] = x * B[t]
-    return C
+            newdata[slice(*sl_c)] = x * Bdata[slice(*sl_b)]
+    return newdata
 
 
 dot_dict = {(0, 0): lambda x, y: x @ y,
@@ -464,9 +453,31 @@ dot_dict = {(0, 0): lambda x, y: x @ y,
             (1, 1): lambda x, y: x.conj() @ y.conj()}
 
 
-def vdot(A, B, cc, meta):
+def apply_slice(data, slcn, slco):
+    Dsize = slcn[-1][1] if len(slcn) > 0 else 0
+    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    for sn, so in zip(slcn, slco):
+        newdata[slice(*sn)] = data[slice(*so)]
+    return newdata
+
+
+def vdot(Adata, Bdata, cc):
     f = dot_dict[cc]  # proper conjugations
-    return torch.sum(torch.stack([f(A[ind].reshape(-1), B[ind].reshape(-1)) for ind in meta]))
+    return f(Adata, Bdata)
+
+
+def diag_1dto2d(data, meta, Dsize):
+    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    for sln, slo in meta:
+        newdata[slice(*sln)] = torch.diag(data[slice(*slo)]).ravel()
+    return newdata
+
+
+def diag_2dto1d(data, meta, Dsize):
+    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    for sln, slo, Do in meta:
+        newdata[slice(*sln)] = torch.diag(data[slice(*slo)].reshape(Do))
+    return newdata
 
 
 def dot(A, B, cc, meta_dot):
@@ -483,115 +494,113 @@ dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
                 (1, 1): lambda x, y, dim: x.conj() * y.reshape(dim).conj()}
 
 
-def dot_diag(A, B, cc, meta, axis, a_ndim):
+def dot_diag(Adata, Bdata, cc, meta, Dsize, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
     f = dotdiag_dict[cc]
-    C = {}
-    for ind_a, ind_b in meta:
-        C[ind_a] = f(A[ind_a], B[ind_b], dim)
-    return C
+    dtype = _common_type((Adata, Bdata))
+    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    for sln, sla, Da, slb in meta:
+        newdata[slice(*sln)] = f(Adata[slice(*sla)].reshape(Da), Bdata[slice(*slb)], dim).ravel()
+    return newdata
 
 
-def mask_diag(A, B, meta, axis, a_ndim):
+def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     slc1 = (slice(None),) * axis
     slc2 = (slice(None),) * (a_ndim - (axis + 1))
-    Bslc = {k: v.nonzero(as_tuple=True) for k, v in B.items()}
-    return {ind_a: A[ind_a][slc1 + Bslc[ind_b] + slc2] for ind_a, ind_b in meta}
+    newdata = torch.zeros((Dsize,), dtype=Adata.dtype, device=Adata.device)
+    for sln, sla, Da, slb in meta:
+        cut = (Bdata[slice(*slb)].nonzero(),)
+        newdata[slice(*sln)] = Adata[slice(*sla)].reshape(Da)[slc1 + cut + slc2].ravel()
+    return newdata
 
 
-def dot_nomerge(A, B, cc, oA, oB, meta):
+def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
     f = dot_dict[cc]  # proper conjugations
-    C = {}
-    for (ina, inb, out, Da, Db, Dout, _) in meta:
-        temp = f(A[ina].permute(oA).reshape(Da), B[inb].permute(oB).reshape(Db)).reshape(Dout)
-        if out in C:
-            C[out] += temp
-        else:
-            C[out] = temp
-    return C
+    dtype = _common_type((Adata, Bdata))
+    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    for (sln, sla, Dao, Dan, slb, Dbo, Dbn) in meta:
+        newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).permute(oA).reshape(Dan), \
+                                  Bdata[slice(*slb)].reshape(Dbo).permute(oB).reshape(Dbn)).ravel()
+    return newdata
 
 
-def dot_nomerge_masks(A, B, cc, oA, oB, meta, ma, mb):
+
+def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
     f = dot_dict[cc]  # proper conjugations
-    C = {}
-    for (ina, inb, out, Da, Db, Dout, tt) in meta:
-        temp = f(A[ina].permute(oA).reshape(Da)[:, ma[tt]], B[inb].permute(oB).reshape(Db)[mb[tt], :]).reshape(Dout)
-        if out in C:
-            C[out] += temp
-        else:
-            C[out] = temp
-    return C
+    dtype = _common_type((Adata, Bdata))
+    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    for (sln, sla, Dao, Dan, slb, Dbo, Dbn), tt in zip(meta, tcon):
+        newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).permute(oA).reshape(Dan)[:, ma[tt]], \
+                                  Bdata[slice(*slb)].reshape(Dbo).permute(oB).reshape(Dbn)[mb[tt], :]).ravel()
+    return newdata
+
 
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
 
 
-def merge_to_2d(A, order, meta_new, meta_mrg, device='cpu'):
-    """ New dictionary of blocks after merging into matrix. """
-    dtype = get_dtype(A.values())
-    Anew = {u: torch.zeros(Du, dtype=dtype, device=device) for u, Du in zip(*meta_new)}
-    for (tn, to, Dslc, Drsh) in meta_mrg:
-        if to in A:
+def merge_to_2d(data, order, meta_new, meta_mrg, *args, **kwargs):
+    Anew = {u: torch.zeros(Du, dtype=data.dtype, device=data.device) for u, Du in zip(*meta_new)}
+    for (tn, slo, Do, Dslc, Drsh) in meta_mrg:
+        Anew[tn][tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
+    return Anew
+
+
+def merge_to_1d(data, order, meta_new, meta_mrg, Dsize, *args, **kwargs):
+    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    for (tn, Dn, sln), (t1, gr) in zip(zip(*meta_new), groupby(meta_mrg, key=lambda x: x[0])):
+        assert tn == t1
+        temp = torch.zeros(Dn, dtype=data.dtype, device=data.device)
+        for (_, slo, Do, Dslc, Drsh) in gr:
+            temp[tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
+        newdata[slice(*sln)] = temp.ravel()
+    return newdata
+
+
+def merge_to_dense(data, Dtot, meta, *args, **kwargs):
+    newdata = torch.zeros(Dtot, dtype=data.dtype, device=data.device)
+    for (sl, Dss) in meta:
+        newdata[tuple(slice(*Ds) for Ds in Dss)] = data[sl].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
+    return newdata.ravel()
+
+
+def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
+    dtype = _common_type(pos_tens.values())
+    device = next(iter(pos_tens.values()))._data.device
+    newdata = torch.zeros((Dsize,), dtype=dtype, device=device)
+    for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_block, key=lambda x: x[0])):
+        assert tn == t1
+        temp = torch.zeros(Dn, dtype=dtype, device=device)
+        for (_, slo, Do, pos, Dslc) in gr:
             slc = tuple(slice(*x) for x in Dslc)
-            Anew[tn][slc] = A[to].permute(order).reshape(Drsh)
-    return Anew
+            temp[slc] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
+        newdata[slice(*sln)] = temp.ravel()
+    return newdata
 
 
-def merge_to_dense(A, Dtot, meta, device='cpu'):
-    """ Outputs full tensor. """
-    dtype = get_dtype(A.values())
-    Anew = torch.zeros(Dtot, dtype=dtype, device=device)
-    for (ind, Dss) in meta:
-        Anew[tuple(slice(*Ds) for Ds in Dss)] = A[ind].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
-    return Anew
+def unmerge_from_2d(A, meta, new_sl, Dsize, device='cpu'):
+    dtype = next(iter(A.values())).dtype if len(A) > 0 else torch.float64
+    newdata = torch.zeros((Dsize,), dtype=dtype, device=device)
+    for (indm, sl, sr), snew in zip(meta, new_sl):
+        newdata[slice(*snew)] = A[indm][slice(*sl), slice(*sr)].ravel()
+    return newdata
 
 
-def merge_super_blocks(pos_tens, meta_new, meta_block, device='cpu'):
-    """ Outputs new dictionary of blocks after creating super-tensor. """
-    dtype = get_dtype(chain.from_iterable(t.A.values() for t in pos_tens.values()))
-    Anew = {u: torch.zeros(Du, dtype=dtype, device=device) for (u, Du) in meta_new}
-    for (tind, pos, Dslc) in meta_block:
-        slc = tuple(slice(*DD) for DD in Dslc)
-        Anew[tind][slc] = pos_tens[pos].A[tind]  # .clone() # is copy required?
-    return Anew
+def unmerge_from_2ddiag(A, meta, new_sl, Dsize, device='cpu'):
+    dtype = next(iter(A.values())).dtype if len(A) > 0 else torch.float64
+    newdata = torch.zeros((Dsize,), dtype=dtype, device=device)
+    for (_, iold, slc), snew in zip(meta, new_sl):
+        newdata[slice(*snew)] = A[iold][slice(*slc)]
+    return newdata
 
 
-def unmerge_from_2d(A, meta):
-    """ unmerge matrix into single blocks """
-    Anew = {}
-    for (ind, indm, sl, sr, D) in meta:
-        Anew[ind] = A[indm][slice(*sl), slice(*sr)].reshape(D)
-    return Anew
-
-
-def unmerge_from_1d(A, meta):
-    """ unmerge matrix into single blocks """
-    Anew = {}
-    for (tn, to, slc, D) in meta:
-        sl = tuple(slice(*x) for x in slc)
-        Anew[tn] = A[to][sl].reshape(D)
-    return Anew
-
-
-def unmerge_from_2ddiag(A, meta):
-    """ unmerge matrix into single blocks """
-    Anew = {}
-    for (inew, iold, slc) in meta:
-        Anew[inew] = A[iold][slice(*slc)]
-    return Anew
-
-
-def unmerge_one_leg(A, axis, meta):
-    """ unmerge single leg """
-    Anew = {}
-    for (told, tnew, Dsl, Dnew) in meta:
-        slc = [slice(None)] * A[told].ndim
-        slc[axis] = slice(*Dsl)
-        Anew[tnew] = torch.reshape(A[told][tuple(slc)], Dnew).clone()
-        # is this clone above neccesary ? -- there is a test where it is neccesary for numpy
-    return Anew
+def unmerge_from_1d(data, meta, new_sl, Dsize):
+    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+    for (slo, Do, sub_slc), snew in zip(meta, new_sl):
+        newdata[slice(*snew)] = data[slice(*slo)].reshape(Do)[tuple(slice(*x) for x in sub_slc)].ravel()
+    return newdata
 
 
 #############
@@ -603,8 +612,8 @@ def is_complex(x):
     return x.is_complex()
 
 
-def is_independent(A, B):
+def is_independent(x, y):
     """
     check if two arrays are identical, or share the same view.
     """
-    return not ((A is B) or (A.storage().data_ptr() == B.storage().data_ptr() and A.numel() > 0))
+    return not ((x is y) or (x.numel() > 0 and x.storage().data_ptr() == y.storage().data_ptr()))
