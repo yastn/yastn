@@ -542,9 +542,9 @@ def swap_gate(a, axes, inplace=False):
     axes = tuple(_clear_axes(*axes))  # swapped groups of legs
     tp = _swap_gate_meta(a.struct.t, a.struct.n, a.meta_fusion, a.ndim_n, axes, fss)
     c = a if inplace else a.clone()
-    for sl, odd in zip(a.struct.sl, tp):
+    for sl, odd in zip(c.struct.sl, tp):
         if odd:
-            c._data[slice(*sl)] *= -1
+            c._data[slice(*sl)] = -1 * c._data[slice(*sl)]
     return c
 
 
