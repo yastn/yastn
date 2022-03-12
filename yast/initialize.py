@@ -204,22 +204,20 @@ def load_from_dict(config=None, d=None):
         of :meth:`~yast.Tensor.save_to_dict`
     """
     if d is not None:
-        struct = _struct(s=d['s'], n=d['n'], t=d['t'], D=d['D'])
+        c_isdiag = bool(d['isdiag'])
+        c_Dp = tuple(x[0] for x in d['D']) if c_isdiag else tuple(np.prod(d['D'], axis=1))
+        c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+        struct = _struct(s=d['s'], n=d['n'], t=d['t'], D=d['D'], Dp=c_Dp, sl=c_sl)
         hfs = tuple(_Fusion(**hf) for hf in d['hfs'])
-        a = Tensor(config=config, struct=struct, isdiag=d['isdiag'],
+        c = Tensor(config=config, struct=struct, isdiag=c_isdiag,
                     hard_fusion=hfs, meta_fusion=d['mfs'])
-        if 'SYM_ID' in d and a.config.sym.SYM_ID != d['SYM_ID']:
+        if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID']:
             raise YastError("Symmetry rule in config do not match loaded one.")
-        if 'fermionic' in d and a.config.fermionic != d['fermionic']:
+        if 'fermionic' in d and c.config.fermionic != d['fermionic']:
             raise YastError("Fermionic statistics in config do not match loaded one.")
-        pointer = 0
-        dtype = d['_d'].dtype.name
-        for ts, Ds in zip(struct.t, struct.D):
-            step = np.prod(Ds, dtype=int) if not d['isdiag'] else Ds[0]
-            # _set_block(a, ts=ts, Ds=Ds, val=d['_d'][pointer: pointer + step], dtype=dtype)
-            pointer += step
-        a.is_consistent()
-        return a
+        c._data = c.config.backend.to_tensor(d['_d'], dtype=d['_d'].dtype.name)
+        c.is_consistent()
+        return c
     raise YastError("Dictionary d is required.")
 
 
@@ -235,22 +233,23 @@ def load_from_hdf5(config, file, path):
     path: TODO
     """
     g = file.get(path)
+    c_isdiag = bool(g.get('isdiag')[:][0])
+    c_n = tuple(g.get('n')[:])
+    c_s = tuple(g.get('s')[:])
+    c_t = tuple(tuple(x.flat) for x in g.get('ts')[:])
+    c_D = tuple(tuple(x.flat) for x in g.get('Ds')[:])
+    c_Dp = tuple(x[0] for x in c_D) if c_isdiag else tuple(np.prod(c_D, axis=1))
+    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+    struct = _struct(s=c_s, n=c_n, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
 
-    d = {'n': g.get('n')[:], 's': g.get('s')[:]}
-    d['isdiag'] = bool(g.get('isdiag')[:][0])
-    d['meta_fusion'] = eval(tuple(file.get(path+'/meta').keys())[0])
-
-    a = Tensor(config=config, **d)
-
-    ts = g.get('ts')[:]
-    Ds = g.get('Ds')[:]
+    mfs = eval(tuple(file.get(path+'/meta').keys())[0])
+    c = Tensor(config=config, struct=struct,
+               isdiag=c_isdiag, meta_fusion=mfs)
+    # hard_fusion=hfs
     vmat = g.get('matrix')[:]
-
-    pointer = 0
-    for its, iDs in zip(ts, Ds):
-        a.set_block(ts=tuple(its), Ds=tuple(iDs), val=vmat[pointer: (pointer + np.prod(iDs, dtype=int))], dtype=vmat.dtype.name)
-        pointer += np.prod(iDs, dtype=int)
-    return a
+    c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name)
+    c.is_consistent()
+    return c
 
 
 def decompress_from_1d(r1d, config, meta):
@@ -275,7 +274,7 @@ def decompress_from_1d(r1d, config, meta):
         in rank-1 tensor `r1d`
     """
     a = Tensor(config=config, **meta)
-    a.A = a.config.backend.unmerge_one_leg({(): r1d}, 0, meta['meta_unmerge'])
+    a._data = r1d
     return a
 
 

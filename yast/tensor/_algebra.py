@@ -83,9 +83,9 @@ def _addition_meta(a, b):
     if needs_mask:
         msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
         Dsize = struct_a.sl[-1][1] if len(struct_a.sl) > 0 else 0
-        Adata = a.config.backend.embed(a._data, msk_a, Dsize)
+        Adata = a.config.backend.embed_msk(a._data, msk_a, Dsize)
         Dsize = struct_b.sl[-1][1] if len(struct_b.sl) > 0 else 0
-        Bdata = a.config.backend.embed(b._data, msk_b, Dsize)
+        Bdata = a.config.backend.embed_msk(b._data, msk_b, Dsize)
         del Dsize
     else:
         Adata, Bdata = a._data, b._data
