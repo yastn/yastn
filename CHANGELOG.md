@@ -146,3 +146,4 @@
 - `unique_dtype` replaced by `get_dtype`
 - new function '__setitem__()' that gives direct access to change existing blocks
 - in rsqrt(x, cutoff) cutoff is done with respect to x, not sqrt(x)
+- new function `grad()` that generates gradient yast tensor
