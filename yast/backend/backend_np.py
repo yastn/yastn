@@ -1,5 +1,5 @@
 """Support of numpy as a data structure used by yast."""
-from itertools import chain, groupby
+from itertools import groupby
 import warnings
 import numpy as np
 import scipy.linalg
