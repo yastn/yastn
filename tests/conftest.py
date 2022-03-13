@@ -24,4 +24,4 @@ def pytest_configure(config):
             conf = importlib.import_module(folder + ".configs." + conf)
             conf.backend = backend
             conf.default_device = config.option.device
-            conf.device = config.option.device
+

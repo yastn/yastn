@@ -11,7 +11,7 @@ __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
            'load_from_dict', 'load_from_hdf5',  'decompress_from_1d']
 
 
-def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwargs):
+def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with the random numbers.
 
@@ -45,9 +45,7 @@ def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwar
     tensor : tensor
         a random instance of a :meth:`Tensor`
     """
-    if not dtype:
-        assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype = config.default_dtype
+    dtype = kwargs['dtype'] if 'dtype' in kwargs else config.default_dtype
     if dtype == 'float64':
         return randR(config, s, n, t, D, isdiag, **kwargs)
     if dtype == 'complex128':
@@ -75,7 +73,7 @@ def randC(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     return a
 
 
-def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwargs):
+def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with zeros.
 
@@ -105,18 +103,15 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwa
     tensor : tensor
         an instance of a tensor filled with zeros
     """
-    if not dtype:
-        assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype = config.default_dtype
     meta_fusion = None
     if 'legs' in kwargs:
         t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
     a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
-    a.fill_tensor(t=t, D=D, val='zeros', dtype=dtype)
+    a.fill_tensor(t=t, D=D, val='zeros')
     return a
 
 
-def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwargs):
+def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with ones.
 
@@ -144,18 +139,15 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwar
     tensor : tensor
         an instance of a tensor filled with ones
     """
-    if not dtype:
-        assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype = config.default_dtype
     meta_fusion = None
     if 'legs' in kwargs:
         t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
     a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
-    a.fill_tensor(t=t, D=D, val='ones', dtype=dtype)
+    a.fill_tensor(t=t, D=D, val='ones')
     return a
 
 
-def eye(config=None, t=(), D=(), legs=None, dtype=None, **kwargs):
+def eye(config=None, t=(), D=(), legs=None, **kwargs):
     r"""
     Initialize diagonal tensor with all possible blocks filled with ones.
 
@@ -179,14 +171,11 @@ def eye(config=None, t=(), D=(), legs=None, dtype=None, **kwargs):
     tensor : tensor
         an instance of diagonal tensor filled with ones
     """
-    if not dtype:
-        assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype = config.default_dtype
     s = ()
     if legs is not None:
         t, D, s, _ = _tD_from_legs(legs)
     a = Tensor(config=config, s=s, isdiag=True, **kwargs)
-    a.fill_tensor(t=t, D=D, val='ones', dtype=dtype)
+    a.fill_tensor(t=t, D=D, val='ones')
     return a
 
 
@@ -215,7 +204,7 @@ def load_from_dict(config=None, d=None):
             raise YastError("Symmetry rule in config do not match loaded one.")
         if 'fermionic' in d and c.config.fermionic != d['fermionic']:
             raise YastError("Fermionic statistics in config do not match loaded one.")
-        c._data = c.config.backend.to_tensor(d['_d'], dtype=d['_d'].dtype.name)
+        c._data = c.config.backend.to_tensor(d['_d'], dtype=d['_d'].dtype.name, device=c.device)
         c.is_consistent()
         return c
     raise YastError("Dictionary d is required.")
@@ -247,7 +236,7 @@ def load_from_hdf5(config, file, path):
                isdiag=c_isdiag, meta_fusion=mfs)
     # hard_fusion=hfs
     vmat = g.get('matrix')[:]
-    c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name)
+    c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name, device=c.device)
     c.is_consistent()
     return c
 

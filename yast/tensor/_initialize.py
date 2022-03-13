@@ -9,7 +9,7 @@ from ._tests import YastError
 __all__ = ['match_legs', 'block']
 
 
-def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
+def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     r"""
     Create all possible blocks based on s, n and list of charges for all legs.
 
@@ -37,7 +37,7 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
         'randR', 'rand' (use current dtype float or complex), 'ones', 'zeros'
 
     dtype : str
-        desired dtype, overrides default_dtype specified in config of tensor `a`
+        desired dtype, overrides current dtype of 'a'
 
     Examples
     --------
@@ -48,9 +48,7 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
     D = [1, (1, 4, 2, 2), (1, 9, 3, 3)]  # nsym = 2 ndim = 3
     """
 
-    if not dtype:
-        assert hasattr(a.config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype = a.config.default_dtype
+    # if dtype is None:
 
     D = (D,) if isinstance(D, int) else D
     t = (t,) if isinstance(t, int) else t
@@ -103,12 +101,12 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
     a_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(a_Dp), a_Dp))
     a.struct = a.struct._replace(t=a_t, D=a_D, Dp=a_Dp, sl=a_sl)
 
-    a._data = _init_block(a.config, Dsize, val, dtype)
+    a._data = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
     for n in range(a.ndim_n):
         a.get_leg_structure(n, native=True)  # here checks the consistency of bond dimensions
 
 
-def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
+def set_block(a, ts=(), Ds=None, val='zeros'):
     """
     Add new block to tensor or change the existing one.
 
@@ -135,10 +133,6 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
     dtype : str
         desired dtype, overrides default_dtype specified in config of tensor `a`
     """
-    if dtype is None:
-        assert hasattr(a.config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype = a.config.default_dtype
-
     if isinstance(Ds, int):
         Ds = (Ds,)
     if isinstance(ts, int):
@@ -181,7 +175,8 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
         a._data = a.config.backend.delete(a._data, a.struct.sl[ind])
 
     pos = 0 if ind == 0 else a.struct.sl[ind - 1][1]
-    a._data = a.config.backend.insert(a._data, pos, _init_block(a.config, Dsize, val, dtype))
+    new_block = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
+    a._data = a.config.backend.insert(a._data, pos, new_block)
 
     a_t = a.struct.t[:ind] + (ts,) + a.struct.t[ind2:]
     a_D = a.struct.D[:ind] + (Ds,) + a.struct.D[ind2:]
@@ -193,18 +188,18 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
         a.get_leg_structure(n, native=True)  # here checks the consistency of bond dimensions
 
 
-def _init_block(config, Dsize, val, dtype):
+def _init_block(config, Dsize, val, dtype, device):
     if isinstance(val, str):
         if val == 'zeros':
-            return config.backend.zeros((Dsize,), dtype=dtype, device=config.device)
+            return config.backend.zeros((Dsize,), dtype=dtype, device=device)
         if val in ('randR', 'rand'):
-            return config.backend.randR((Dsize,), device=config.device)
+            return config.backend.randR((Dsize,), device=device)
         elif val == 'randC':
-            return config.backend.randC((Dsize,), device=config.device)
+            return config.backend.randC((Dsize,), device=device)
         elif val == 'ones':
-            return config.backend.ones((Dsize,), dtype=dtype, device=config.device)
+            return config.backend.ones((Dsize,), dtype=dtype, device=device)
     else:
-        x = config.backend.to_tensor(val, Ds=Dsize, dtype=dtype, device=config.device)
+        x = config.backend.to_tensor(val, Ds=Dsize, dtype=dtype, device=device)
         if config.backend.get_size(x) == Dsize ** 2:
             x = config.backend.diag_get(x.reshape(Dsize, Dsize))
         return x
@@ -229,6 +224,7 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
     val: str
         'randR', 'rand', 'ones', 'zeros'
     """
+
     t, D, s, lf, hf = [], [], [], [], []
     if conjs is None:
         conjs = (0,) * len(tensors)
@@ -241,7 +237,8 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
             D.append(tuple(tdn.values()))
             s.append(te.struct.s[nn] * (2 * cc - 1))
             hf.append(te.hard_fusion[nn] if cc == 1 else _flip_hf(te.hard_fusion[nn]))
-    a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, meta_fusion=lf, hard_fusion=hf)
+    a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, meta_fusion=lf, hard_fusion=hf,
+                            dtype=tensors[0].yast_dtype, device=tensors[0].device)
     a.fill_tensor(t=t, D=D, val=val)
     return a
 
@@ -329,7 +326,7 @@ def block(tensors, common_legs=None):
     meta_new = tuple(zip(c_t, c_D, c_sl))
     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
 
-    c = tn0.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
+    data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, Dsize)
+    c = tn0.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct, data=data,
                         meta_fusion=tn0.meta_fusion, hard_fusion=tn0.hard_fusion)
-    c._data = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, Dsize)
     return c

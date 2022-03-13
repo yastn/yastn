@@ -17,8 +17,6 @@ class _config(NamedTuple):
     backend: any = None
     sym: any = sym_none
     fermionic: tuple = False
-    device: str = 'cpu'
-    dtype: str = 'float64'
     default_device: str = 'cpu'
     default_dtype: str = 'float64'
     default_fusion: str = 'meta'

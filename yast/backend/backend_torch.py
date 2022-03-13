@@ -18,6 +18,14 @@ def get_dtype(t):
     return t.dtype
 
 
+def is_complex(x):
+    return x.is_complex()
+
+
+def get_device(x):
+    return str(x.device)
+
+
 def random_seed(seed):
     torch.random.manual_seed(seed)
 
@@ -65,10 +73,6 @@ def diag_create(x, p=0):
 
 def diag_get(x):
     return torch.diag(x)
-
-
-def get_device(x):
-    return str(x.device)
 
 
 @torch.no_grad()
@@ -157,10 +161,6 @@ def entropy(A, alpha=1, tol=1e-12):
 ##########################
 
 
-def dtype_scalar(x, dtype='float64', device='cpu'):
-    return torch.tensor(x, dtype=DTYPE[dtype], device=device)
-
-
 def zeros(D, dtype='float64', device='cpu'):
     return torch.zeros(D, dtype=DTYPE[dtype], device=device)
 
@@ -224,7 +224,7 @@ def conj(data):
 def trace(data, order, meta, Dsize):
     """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
         Repeating tnew are added."""
-    newdata = torch.zeros((Dsize,), dtype=data.dtype)
+    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
     for (sln, slo, Do, Drsh) in meta:
         temp = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
         newdata[slice(*sln)] += torch.sum(torch.diagonal(temp, dim1=0, dim2=1), dim=-1).ravel()
@@ -541,14 +541,14 @@ def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
 #####################################################
 
 
-def merge_to_2d(data, order, meta_new, meta_mrg, *args, **kwargs):
+def merge_to_2d(data, order, meta_new, meta_mrg):
     Anew = {u: torch.zeros(Du, dtype=data.dtype, device=data.device) for u, Du in zip(*meta_new)}
     for (tn, slo, Do, Dslc, Drsh) in meta_mrg:
         Anew[tn][tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
     return Anew
 
 
-def merge_to_1d(data, order, meta_new, meta_mrg, Dsize, *args, **kwargs):
+def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
     newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
     for (tn, Dn, sln), (t1, gr) in zip(zip(*meta_new), groupby(meta_mrg, key=lambda x: x[0])):
         assert tn == t1
@@ -559,7 +559,7 @@ def merge_to_1d(data, order, meta_new, meta_mrg, Dsize, *args, **kwargs):
     return newdata
 
 
-def merge_to_dense(data, Dtot, meta, *args, **kwargs):
+def merge_to_dense(data, Dtot, meta):
     newdata = torch.zeros(Dtot, dtype=data.dtype, device=data.device)
     for (sl, Dss) in meta:
         newdata[tuple(slice(*Ds) for Ds in Dss)] = data[sl].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
@@ -580,17 +580,17 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     return newdata
 
 
-def unmerge_from_2d(A, meta, new_sl, Dsize, device='cpu'):
-    dtype = next(iter(A.values())).dtype if len(A) > 0 else torch.float64
-    newdata = torch.zeros((Dsize,), dtype=dtype, device=device)
+def unmerge_from_2d(A, meta, new_sl, Dsize):
+    tn = next(iter(A.values()))
+    newdata = torch.zeros((Dsize,), dtype=tn.dtype, device=tn.device)
     for (indm, sl, sr), snew in zip(meta, new_sl):
         newdata[slice(*snew)] = A[indm][slice(*sl), slice(*sr)].ravel()
     return newdata
 
 
-def unmerge_from_2ddiag(A, meta, new_sl, Dsize, device='cpu'):
-    dtype = next(iter(A.values())).dtype if len(A) > 0 else torch.float64
-    newdata = torch.zeros((Dsize,), dtype=dtype, device=device)
+def unmerge_from_2ddiag(A, meta, new_sl, Dsize):
+    tn = next(iter(A.values()))
+    newdata = torch.zeros((Dsize,), dtype=tn.dtype, device=tn.device)
     for (_, iold, slc), snew in zip(meta, new_sl):
         newdata[slice(*snew)] = A[iold][slice(*slc)]
     return newdata
@@ -608,8 +608,7 @@ def unmerge_from_1d(data, meta, new_sl, Dsize):
 #############
 
 
-def is_complex(x):
-    return x.is_complex()
+
 
 
 def is_independent(x, y):
