@@ -72,19 +72,11 @@ def to(a, device=None, dtype=None):
         returns a clone of the tensor residing on ``device`` in desired ``dtype``. If tensor already
         resides on ``device``, returns ``self``. This operation preserves autograd.
     """
-    a_dtype= a.get_dtype()
-    if (dtype is None and device is None) or \
-        (dtype is None and a.config.device == device) or \
-        (a_dtype == dtype and device is None) or \
-        (a_dtype == dtype and a.config.device == device):
+    if dtype in (None, a.yast_dtype) and device in (None, a.device):
         return a
-    c_config = a.config
-    if device is not None:
-        c_config = c_config._replace(device=device)
-    if dtype is not None:
-        c_config = c_config._replace(dtype=dtype)
-    c = a.__class__(config=c_config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a.config.backend.move_to(a._data, dtype=dtype, device=device)
+    data = a.config.backend.move_to(a._data, dtype=dtype, device=device)
+    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, 
+                    struct=a.struct, data=data)
     return c
 
 

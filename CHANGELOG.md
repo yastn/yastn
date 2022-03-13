@@ -36,7 +36,7 @@
 - `set_blocks` and `_set_blocks` do not accept argument `device`
 - new function get_device (of a block) in the backend
 - new test in function is_consistent, that check if all blocks are on the same device, 
-  and if it matches config.device (this can be unwanted test in numpy ...)
+  and if it matches device (this can be unwanted test in numpy ...)
 - flipping signature of diag tensor in tensordot is commented out (moving toward general signature of diagonal tensor)
 
 24-04-2021
@@ -141,9 +141,11 @@
 - new function `einsum` (for now a place holder doing nothing).
 - new function `move_leg` which is an alias to `moveaxis`
 
-06-03-2022
+13-03-2022
 - Transition to 1d data structure
+- dtype and device removed from config
 - `unique_dtype` replaced by `get_dtype`
+- properties `tensor.dtype`, `tensor.yast_dtype`, `tensor.device`
 - new function '__setitem__()' that gives direct access to change existing blocks
 - in rsqrt(x, cutoff) cutoff is done with respect to x, not sqrt(x)
 - new function `grad()` that generates gradient yast tensor

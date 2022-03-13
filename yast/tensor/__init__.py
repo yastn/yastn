@@ -57,25 +57,15 @@ class Tensor:
                 abelian symmetries `n` is tuple with total charge for each individual
                 symmetry
         """
-        if isinstance(config, _config):
-            self.config = config
-        else:
-            temp_config = {a: getattr(config, a) for a in _config._fields if hasattr(config, a)}
-            if 'device' in kwargs:
-                temp_config['device'] = kwargs['device']
-            if 'dtype' in kwargs:
-                temp_config['dtype'] = kwargs['dtype']
-            if 'device' not in temp_config:
-                temp_config['device'] = config.default_device
-            if 'dtype' not in temp_config:
-                temp_config['dtype'] = config.default_dtype
-            self.config = _config(**temp_config)
-        if 'device' in kwargs and kwargs['device'] != self.config.device:
-            self.config._replace(device=kwargs['device'])
-        if 'dtype' in kwargs and kwargs['dtype'] != self.config.dtype:
-            self.config._replace(device=kwargs['dtype'])
+        self.config = config if isinstance(config, _config) else _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
         self._isdiag = isdiag
-        self._data = self.config.backend.zeros((0,))  # 1d container for tensor data
+
+        if 'data' in kwargs:
+            self._data = kwargs['data']  # 1d container for tensor data
+        else:
+            dev = kwargs['device'] if 'device' in kwargs else self.config.default_device
+            dty = kwargs['dtype'] if 'dtype' in kwargs else self.config.default_dtype
+            self._data = self.config.backend.zeros((0,), dtype=dty, device=dev)
 
         try:
             self.struct = kwargs['struct']
@@ -89,14 +79,14 @@ class Tensor:
             except TypeError:
                 n = (0,) * self.config.sym.NSYM if n is None else (n,)
             if len(n) != self.config.sym.NSYM:
-                raise YastError('n does not match the number of symmetries')
+                raise YastError('n does not match the number of symmetry sectors')
             if self.isdiag:
                 if len(s) == 0:
                     s = (1, -1)  # default
-                if any(x != 0 for x in n):
-                    raise YastError("Tensor charge of a diagonal tensor should be 0")
                 if s not in ((-1, 1), (1, -1)):
                     raise YastError("Diagonal tensor should have s = (1, -1) or (-1, 1)")
+                if any(x != 0 for x in n):
+                    raise YastError("Tensor charge of a diagonal tensor should be 0")
             self.struct = _struct(t=(), D=(), s=s, n=n)
 
         # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]
@@ -127,18 +117,6 @@ class Tensor:
     from ._tests import is_consistent, are_independent
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
 
-
-    @property
-    def s_n(self):
-        """
-        Returns
-        -------
-        s_n : tuple(int)
-            signature of tensor's native legs. This includes legs (spaces) which have been
-            fused together by :meth:`yast.Tensor.fuse` using mode=`meta`.
-        """
-        return self.struct.s
-
     @property
     def s(self):
         """
@@ -156,6 +134,17 @@ class Tensor:
         return tuple(self.struct.s[ind] for ind in inds)
 
     @property
+    def s_n(self):
+        """
+        Returns
+        -------
+        s_n : tuple(int)
+            signature of tensor's native legs. This includes legs (spaces) which have been
+            fused together by :meth:`yast.Tensor.fuse` using mode=`meta`.
+        """
+        return self.struct.s
+
+    @property
     def n(self):
         """
         Returns
@@ -167,17 +156,6 @@ class Tensor:
         return self.struct.n
 
     @property
-    def ndim_n(self):
-        """
-        Returns
-        -------
-        ndim_n : int
-            native rank of the tensor. This includes legs (spaces) which have been
-            fused together by :meth:`yast.Tensor.fuse` using mode=`meta`.
-        """
-        return len(self.struct.s)
-
-    @property
     def ndim(self):
         """
         Returns
@@ -187,6 +165,17 @@ class Tensor:
             are treated as single leg.
         """
         return len(self.meta_fusion)
+
+    @property
+    def ndim_n(self):
+        """
+        Returns
+        -------
+        ndim_n : int
+            native rank of the tensor. This includes legs (spaces) which have been
+            fused together by :meth:`yast.Tensor.fuse` using mode=`meta`.
+        """
+        return len(self.struct.s)
 
     @property
     def isdiag(self):
@@ -217,3 +206,33 @@ class Tensor:
             total number of elements in all non-empty blocks of the tensor
         """
         return self.config.backend.get_size(self._data)
+
+    @property
+    def device(self):
+        """
+        Returns
+        -------
+        device : str
+            name of device on which the data reside
+        """
+        return self.config.backend.get_device(self._data)
+
+    @property
+    def dtype(self):
+        """
+        Returns
+        -------
+        dtype :
+            dtype of tensor data used by the backend
+        """
+        return self.config.backend.get_dtype(self._data)
+
+    @property
+    def yast_dtype(self):
+        """
+        Returns
+        -------
+        dtype : str
+            'complex128' if tensor data are complex else 'float64'
+        """
+        return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'

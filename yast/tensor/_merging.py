@@ -39,7 +39,7 @@ def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
     """ Main function merging tensor into effective block matrix. """
     order = axes[0] + axes[1]
     meta_new, meta_mrg, ls_l, ls_r, ul, ur = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds, sort_r)
-    Anew = a.config.backend.merge_to_2d(a._data, order, meta_new, meta_mrg, a.config.device)
+    Anew = a.config.backend.merge_to_2d(a._data, order, meta_new, meta_mrg)
     return Anew, ls_l, ls_r, ul, ur
 
 
@@ -92,7 +92,8 @@ def _unmerge_matrix(a, Am, ls_l, ls_r):
     meta = tuple(mt[1:4] for mt in meta)
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
-    a._data = a.config.backend.unmerge_from_2d(Am, meta, c_sl, Dsize)
+    if len(Am) > 0:
+        a._data = a.config.backend.unmerge_from_2d(Am, meta, c_sl, Dsize)
     a.struct = a.struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
 
 
@@ -105,7 +106,8 @@ def _unmerge_diagonal(a, Am, ls):
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
     a.struct = a.struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
-    a._data = a.config.backend.unmerge_from_2ddiag(Am, meta, c_sl, Dsize)
+    if len(Am) > 0:
+        a._data = a.config.backend.unmerge_from_2ddiag(Am, meta, c_sl, Dsize)
 
 
 def _leg_struct_trivial(config, Am, axis=0):
@@ -274,7 +276,7 @@ def _fuse_legs_hard(a, axes, order, inplace=False):
         c.meta_fusion = tuple(fm)
     else:
         c = a.__class__(config=a.config, meta_fusion=tuple(fm), hard_fusion=tuple(fh), struct=struct_new)
-    c._data = a.config.backend.merge_to_1d(a._data, order, meta_new, meta_mrg, Dsize, a.config.device)
+    c._data = a.config.backend.merge_to_1d(a._data, order, meta_new, meta_mrg, Dsize)
     return c
 
 

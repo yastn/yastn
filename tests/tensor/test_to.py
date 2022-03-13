@@ -16,24 +16,21 @@ def test_to():
                     dtype='float64', device='cpu')
 
     tb = ta.to(dtype='complex128')
-    assert tb.config.dtype == 'complex128'
-    assert tb[(0, 0, 0)].dtype == config_U1.backend.DTYPE['complex128']
-    assert tb[(0, 0, 0)].device.type == 'cpu'
+    assert tb.yast_dtype == 'complex128'
+    assert tb.dtype == config_U1.backend.DTYPE['complex128']
     assert tb.is_consistent()
 
     if config_U1.backend.torch.cuda.is_available():
-        tc = ta.to(device='cuda')
-        assert tc.config.device == 'cuda'
-        assert tc.config.dtype == 'float64'
-        assert tc[(0, 0, 0)].dtype == config_U1.backend.DTYPE['float64']
-        assert tc[(0, 0, 0)].device.type == 'cuda'
+        tc = ta.to(device='cuda:0')
+        assert tc.device == 'cuda:0'
+        assert tc.yast_dtype == 'float64'
+        assert tc.dtype == config_U1.backend.DTYPE['float64']
         assert tc.is_consistent()
 
-        td = ta.to(device='cuda', dtype='complex128')
-        assert td.config.device == 'cuda'
-        assert td.config.dtype == 'complex128'
-        assert td[(0, 0, 0)].dtype == config_U1.backend.DTYPE['complex128']
-        assert td[(0, 0, 0)].device.type == 'cuda'
+        td = ta.to(device='cuda:0', dtype='complex128')
+        assert td.device == 'cuda:0'
+        assert td.yast_dtype == 'complex128'
+        assert td.dtype == config_U1.backend.DTYPE['complex128']
         assert td.is_consistent()
 
 

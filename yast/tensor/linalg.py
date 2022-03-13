@@ -417,8 +417,8 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
         else:
             m = len(V) - 1
             h = H.pop((m, m - 1))
-        H[(0, m)] = backend.dtype_scalar(1, device=v.config.device)
-        T = backend.square_matrix_from_dict(H, m + 1, device=v.config.device)
+        H[(0, m)] = backend.ones((), dtype=v.yast_dtype, device=v.device)
+        T = backend.square_matrix_from_dict(H, m + 1, device=v.device)
         F = backend.expm((sgn * tau) * T)
         err = abs(h * F[m - 1, m]).item()
 
@@ -528,7 +528,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True
     V, H, happy = _expand_krylov_space(f, 1e-13, ncv, hermitian, V)  # tol=1e-13
     m = len(V) if happy else len(V) - 1
 
-    T = backend.square_matrix_from_dict(H, m, device=v0.config.device)
+    T = backend.square_matrix_from_dict(H, m, device=v0.device)
     val, vr = backend.eigh(T) if hermitian else backend.eig(T)
     ind = backend.eigs_which(val, which)
 

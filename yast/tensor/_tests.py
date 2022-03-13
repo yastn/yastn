@@ -11,7 +11,7 @@ class YastError(Exception):
 
 def _test_configs_match(a, b):
     """Check if config's of two tensors allow for performing operations mixing them. """
-    if a.config.device != b.config.device:
+    if a.device != b.device:
         raise YastError('Devices of the two tensors do not match.')
     if a.config.sym.SYM_ID != b.config.sym.SYM_ID:
         raise YastError('Two tensors have different symmetry rules.')

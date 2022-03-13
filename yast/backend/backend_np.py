@@ -18,6 +18,14 @@ def get_dtype(t):
     return t.dtype
 
 
+def is_complex(x):
+    return np.iscomplexobj(x)
+
+
+def get_device(x):
+    return 'cpu'
+
+
 def random_seed(seed):
     rng['rng'] = np.random.default_rng(seed)
 
@@ -68,8 +76,7 @@ def diag_get(x):
     return np.diag(x).copy()
 
 
-def get_device(x):
-    return 'cpu'
+
 
 
 def count_greater(x, cutoff):
@@ -158,10 +165,6 @@ def entropy(A, alpha=1, tol=1e-12):
 ##########################
 
 
-def dtype_scalar(x, dtype='float64', **kwargs):
-    return DTYPE[dtype](x)
-
-
 def zeros(D, dtype='float64', **kwargs):
     return np.zeros(D, dtype=DTYPE[dtype])
 
@@ -208,8 +211,8 @@ def requires_grad(data):
     return False
 
 
-def move_to(data, *args, **kwargs):
-    return data
+def move_to(data, dtype, **kwargs):
+    return dtype.astype[DTYPE[dtype]] if dtype in DTYPE else data
 
 
 def conj(data):
@@ -516,14 +519,14 @@ def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
 #####################################################
 
 
-def merge_to_2d(data, order, meta_new, meta_mrg, *args, **kwargs):
+def merge_to_2d(data, order, meta_new, meta_mrg):
     Anew = {u: np.zeros(Du, dtype=data.dtype) for u, Du in zip(*meta_new)}
     for (tn, slo, Do, Dslc, Drsh) in meta_mrg:
         Anew[tn][tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
     return Anew
 
 
-def merge_to_1d(data, order, meta_new, meta_mrg, Dsize, *args, **kwargs):
+def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     for (tn, Dn, sln), (t1, gr) in zip(zip(*meta_new), groupby(meta_mrg, key=lambda x: x[0])):
         assert tn == t1
@@ -534,7 +537,7 @@ def merge_to_1d(data, order, meta_new, meta_mrg, Dsize, *args, **kwargs):
     return newdata
 
 
-def merge_to_dense(data, Dtot, meta, *args, **kwargs):
+def merge_to_dense(data, Dtot, meta):
     newdata = np.zeros(Dtot, dtype=data.dtype)
     for (sl, Dss) in meta:
         newdata[tuple(slice(*Ds) for Ds in Dss)] = data[sl].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
@@ -554,7 +557,7 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     return newdata
 
 
-def unmerge_from_2d(A, meta, new_sl, Dsize, *args, **kwargs):
+def unmerge_from_2d(A, meta, new_sl, Dsize):
     dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
     newdata = np.zeros((Dsize,), dtype=dtype)
     for (indm, sl, sr), snew in zip(meta, new_sl):
@@ -562,7 +565,7 @@ def unmerge_from_2d(A, meta, new_sl, Dsize, *args, **kwargs):
     return newdata
 
 
-def unmerge_from_2ddiag(A, meta, new_sl, Dsize, *args, **kwargs):
+def unmerge_from_2ddiag(A, meta, new_sl, Dsize):
     dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
     newdata = np.zeros((Dsize,), dtype=dtype)
     for (_, iold, slc), snew in zip(meta, new_sl):
@@ -581,9 +584,6 @@ def unmerge_from_1d(data, meta, new_sl, Dsize):
 #   tests   #
 #############
 
-
-def is_complex(x):
-    return np.iscomplexobj(x)
 
 
 def is_independent(x, y):
