@@ -1,10 +1,10 @@
-Algebra with MPS/MPO objects
+Input/Output the MPS/MPO
 =========================
 
-Copying the object 
+Export the MPS/MPO object
 ---------------------------------
 
-# show how to copy things  +  test file 
+# export this object to the dictionary and export it to hdf5 + export-test-file
 
 See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
@@ -14,10 +14,11 @@ See examples: :ref:`examples/init:clone, detach or copy tensors`.
 	:members: copy, clone, detach
 
 
-Addition
+Import the MPS/MPO object
 ---------------------------------
 
-#example for addition, checks for nr_phys 
+# import this object from the dictionary and export it to hdf5 + export-test-file
+# what aboot the configuration files, I shuld export them as well. That will be more convenient
 
 See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
@@ -25,17 +26,3 @@ See examples: :ref:`examples/init:clone, detach or copy tensors`.
 	:noindex:
 	:exclude-members: __init__, __new__
 	:members: copy, clone, detach
-
-
-Multiplication
----------------------------------
-
-#multiplication by a number and multiplication by an operator.? + test
-
-See examples: :ref:`examples/init:clone, detach or copy tensors`.
-
-.. autoclass:: yast.Tensor
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: copy, clone, detach
-
