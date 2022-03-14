@@ -1,21 +1,30 @@
-Creating symmetric YAST tensors
+Setting up matrix product state and operators
 ===============================
 
-YAST configuration
+Properties of MPS objects
 ------------------
 
-TODO
+The product operator is a numered list of tensors created using YAST with additional parameters which define their properties as a collection of elements. 
+For now, the object support one-dimensional structures with open boundary conditions.
 
-Backend, symmetry, ...
+# main elements, how is the Tensor saved there, nr_phys, how does the ends are being handled, 
 
 
-Initializing symmetric tensors from scratch
+Configuration of symmetries
 -------------------------------------------
 
-Symmetric tensor can be initialized as "blank" or more precisely empty.
-In this case only its rank (specified through signature) and symmetry
-needs to known when initializing such empty symmetric tensors. 
-The data, in form of non-zero blocks, can be added at later time.
+#configuration of the symmetries, see test/configs, comment on the default flags /is that dictionary/, 
+
+See examples: :ref:`examples/init:create empty tensor and fill it block by block`.
+
+.. autoclass:: yast.Tensor
+	:members: __init__
+	:exclude-members: __new__
+
+Configuration of backend
+-------------------------------------------
+
+#backed is should be added in the configuration, 
 
 See examples: :ref:`examples/init:create empty tensor and fill it block by block`.
 
@@ -24,11 +33,12 @@ See examples: :ref:`examples/init:create empty tensor and fill it block by block
 	:exclude-members: __new__
 
 
-Basic creation operations
+Creating MPS/MPO from scratch
 -------------------------
 
-Basic creation operations such as random tensors,
-tensors filled with zeros, or diagonal identity tensors.
+MPS/MPO can be initialized as random. It is initialized from scratch with a symmetric given by configuration.
+#make separate test for initialization
+# random and automatic 
 
 See examples: :ref:`examples/init:create tensors from scratch`.
 
@@ -37,51 +47,16 @@ See examples: :ref:`examples/init:create tensors from scratch`.
    :show-inheritance:
 
 
-Copying and cloning with autograd
----------------------------------
+Creating MPO using Tensor-s
+-------------------------
 
-TODO add link
+MPS/MPO can be composed using Tensor-s. 
 
-YAST follows the semantics of PyTorch with regards to creating
-differentiable `clones` or non-differentiable `copies` of symmetric
-tensors.
+# push a tensor to each site in MPS/MPO. No checkes for the validity of your choice.
+# clock tensor into a big tensor, cite the block for for the prodcut state, cite example for Hamiltonian generation, sepatate example file.
 
-See examples: :ref:`examples/init:clone, detach or copy tensors`.
-
-.. autoclass:: yast.Tensor
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: copy, clone, detach
-
-
-Changing tensor's device or dtype
----------------------------------
-
-Support for different compute devices, i.e. `CPU`, `GPU`, or others,
-depends on the selected backend. For example 
-    
-    * `NumPy` backend supports only `CPU`
-    * `PyTorch` backend supports also `GPU` (and other devices)
-
-Tensors can be moved between devices and/or their `dtype` changed 
-
-.. automethod:: yast.Tensor.to
-
-
-Importing YAST tensor from different formats
---------------------------------------------
-
-These utility operations can re-create tensors from
-different formats. For example, 1D representation or dictionary.
-Their export counterparts are
-	
-	* :meth:`yast.save_to_dict`
-	* :meth:`yast.save_to_hdf5` 
-	* :meth:`yast.compress_to_1d` 
-
-See examples: :ref:`examples/init:serialization of symmetric tensors`.
+See examples: :ref:`examples/init:create tensors from scratch`.
 
 .. automodule:: yast
-   :members: load_from_dict, load_from_hdf5, decompress_from_1d
-   :noindex:
+   :members: rand, randR, randC, zeros, ones, eye
    :show-inheritance:

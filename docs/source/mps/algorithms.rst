@@ -1,10 +1,10 @@
-Algebra with MPS/MPO objects
+Algorithms for a state
 =========================
 
-Copying the object 
+DMRG
 ---------------------------------
 
-# show how to copy things  +  test file 
+#dmrg described brifly + test file for many symmetries
 
 See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
@@ -14,23 +14,10 @@ See examples: :ref:`examples/init:clone, detach or copy tensors`.
 	:members: copy, clone, detach
 
 
-Addition
+TDVP
 ---------------------------------
 
-#example for addition, checks for nr_phys 
-
-See examples: :ref:`examples/init:clone, detach or copy tensors`.
-
-.. autoclass:: yast.Tensor
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: copy, clone, detach
-
-
-Multiplication
----------------------------------
-
-#multiplication by a number and multiplication by an operator.? + test
+#tdvp described brifly + test file for many symmetries
 
 See examples: :ref:`examples/init:clone, detach or copy tensors`.
 

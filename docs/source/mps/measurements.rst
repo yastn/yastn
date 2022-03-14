@@ -1,10 +1,10 @@
-Algebra with MPS/MPO objects
+OVERLAPS to get expectation values and overlaps
 =========================
 
-Copying the object 
+Overlaps of MPS-s
 ---------------------------------
 
-# show how to copy things  +  test file 
+#explain in graph + simple test file 
 
 See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
@@ -14,23 +14,10 @@ See examples: :ref:`examples/init:clone, detach or copy tensors`.
 	:members: copy, clone, detach
 
 
-Addition
+Expectation value of MPO
 ---------------------------------
 
-#example for addition, checks for nr_phys 
-
-See examples: :ref:`examples/init:clone, detach or copy tensors`.
-
-.. autoclass:: yast.Tensor
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: copy, clone, detach
-
-
-Multiplication
----------------------------------
-
-#multiplication by a number and multiplication by an operator.? + test
+#explain in graph + simple test file 
 
 See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
