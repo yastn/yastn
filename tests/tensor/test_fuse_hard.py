@@ -88,12 +88,12 @@ def test_hard_split():
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
 
     af = a.fuse_legs(axes=(0, (2, 1), (3, 4)), mode='hard')
-    af.fuse_legs(axes=((0, 1), 2), inplace=True, mode='hard')
+    af = af.fuse_legs(axes=((0, 1), 2), mode='hard')
     Uf, Sf, Vf = yast.linalg.svd(af, axes=(0, 1))
 
     U, S, V = yast.linalg.svd(a, axes=((0, 1, 2), (3, 4)))
     U = U.fuse_legs(axes=(0, (2, 1), 3), mode='hard')
-    U.fuse_legs(axes=((0, 1), 2), inplace=True, mode='hard')
+    U = U.fuse_legs(axes=((0, 1), 2), mode='hard')
     V = V.fuse_legs(axes=(0, (1, 2)), mode='hard')
 
     US = yast.tensordot(U, S, axes=(1, 0))
@@ -102,25 +102,24 @@ def test_hard_split():
     USf = yast.tensordot(Uf, Sf, axes=(1, 0))
     a3 = yast.tensordot(USf, Vf, axes=(1, 0))
     assert yast.norm(af - a3) < tol  # == 0.0
-    a3.unfuse_legs(axes=0, inplace=True)
-    a3.unfuse_legs(axes=(1, 2), inplace=True)
-    a3.move_leg(source=2, destination=1, inplace=True)
+    a3 = a3.unfuse_legs(axes=0)
+    a3 = a3.unfuse_legs(axes=(1, 2)).move_leg(source=2, destination=1)
     assert yast.norm(a - a3) < tol  # == 0.0
 
     Qf, Rf = yast.linalg.qr(af, axes=(0, 1))
     Q, R = yast.linalg.qr(a, axes=((0, 1, 2), (3, 4)))
     Q = Q.fuse_legs(axes=(0, (2, 1), 3), mode='hard')
-    Q.fuse_legs(axes=((0, 1), 2), inplace=True, mode='hard')
+    Q = Q.fuse_legs(axes=((0, 1), 2), mode='hard')
     assert yast.norm(Q - Qf) < tol  # == 0.0
-    Rf.unfuse_legs(axes=1, inplace=True)
+    Rf = Rf.unfuse_legs(axes=1)
     assert yast.norm(R - Rf) < tol  # == 0.0
 
     aH = yast.tensordot(af, af, axes=(1, 1), conj=(0, 1))
     Vf, Uf = yast.linalg.eigh(aH, axes=(0, 1))
-    Uf.unfuse_legs(axes=0, inplace=True)
+    Uf = Uf.unfuse_legs(axes=0)
     UVf = yast.tensordot(Uf, Vf, axes=(2, 0))
     aH2 = yast.tensordot(UVf, Uf, axes=(2, 2), conj=(0, 1))
-    aH.unfuse_legs(axes=(0, 1), inplace=True)
+    aH = aH.unfuse_legs(axes=(0, 1))
     assert yast.norm(aH2 - aH) < tol  # == 0.0
 
 
@@ -133,12 +132,12 @@ def test_hard_transpose():
 
     c = np.transpose(b, axes=(3, 2, 1, 0))
     assert c.get_shape() == (13, 99, 7, 15)
-    c.unfuse_legs(axes=(1, 3), inplace=True)
+    c = c.unfuse_legs(axes=(1, 3))
     assert c.get_shape() == (13, 9, 11, 7, 3, 5)
 
     c = b.move_leg(source=1, destination=2)
     assert c.get_shape() == (15, 99, 7, 13)
-    c.unfuse_legs(axes=(1, 0), inplace=True)
+    c = c.unfuse_legs(axes=(1, 0))
     assert c.get_shape() == (3, 5, 9, 11, 7, 13)
 
 

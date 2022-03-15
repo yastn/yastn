@@ -169,8 +169,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     _unmerge_matrix(U, Um, ls_l, ls_s)
     _unmerge_diagonal(S, Sm, ls_s)
     _unmerge_matrix(V, Vm, ls_s, ls_r)
-    U.move_leg(source=-1, destination=Uaxis, inplace=True)
-    V.move_leg(source=0, destination=Vaxis, inplace=True)
+    U = U.move_leg(source=-1, destination=Uaxis)
+    V = V.move_leg(source=0, destination=Vaxis)
     return (U, S, V, uS) if untruncated_S else (U, S, V)
 
 
@@ -217,8 +217,8 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     ls = _leg_struct_trivial(a.config, Rm, axis=0)
     _unmerge_matrix(Q, Qm, ls_l, ls)
     _unmerge_matrix(R, Rm, ls, ls_r)
-    Q.move_leg(source=-1, destination=Qaxis, inplace=True)
-    R.move_leg(source=0, destination=Raxis, inplace=True)
+    Q = Q.move_leg(source=-1, destination=Qaxis)
+    R = R.move_leg(source=0, destination=Raxis)
     return Q, R
 
 
@@ -298,7 +298,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
 
     _unmerge_matrix(U, Um, ls_l, ls_s)
     _unmerge_diagonal(S, Sm, ls_s)
-    U.move_leg(source=-1, destination=Uaxis, inplace=True)
+    U = U.move_leg(source=-1, destination=Uaxis)
     return (S, U, uS) if untruncated_S else (S, U)
 
 

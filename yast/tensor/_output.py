@@ -271,21 +271,21 @@ def __getitem__(a, key):
     return x if a.isdiag else x.reshape(a.struct.D[ind])
 
 
-def __setitem__(a, key, newvalue):
-    """
-    Parameters
-    ----------
-    key : tuple(int)
-        charges of the block
+# def __setitem__(a, key, newvalue):
+#     """
+#     Parameters
+#     ----------
+#     key : tuple(int)
+#         charges of the block
 
-    Update data corresponding the block. The data should be consistent with shape
-    """
-    key = tuple(_flatten(key))
-    try:
-        ind = a.struct.t.index(key)
-    except ValueError:
-        raise YastError('tensor does not have block specify by key')
-    a._data[slice(*a.struct.sl[ind])] = newvalue
+#     Update data corresponding the block. The data should be consistent with shape
+#     """
+#     key = tuple(_flatten(key))
+#     try:
+#         ind = a.struct.t.index(key)
+#     except ValueError:
+#         raise YastError('tensor does not have block specify by key')
+#     a._data[slice(*a.struct.sl[ind])] = newvalue
 
 
 ##################################################

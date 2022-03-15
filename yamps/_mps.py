@@ -42,8 +42,8 @@ def generate_Mij(amp, connect, N, nr_phys):
                 M.A[n] = T_else.copy()
         if n == 0:
             tt = (0,) * len(M.A[n].n)
-        M.A[n].add_leg(axis=0, t=tt, s=1, inplace=True)
-        M.A[n].add_leg(axis=-1, s=-1, inplace=True)
+        M.A[n] = M.A[n].add_leg(axis=0, t=tt, s=1)
+        M.A[n] = M.A[n].add_leg(axis=-1, s=-1)
         tD = M.A[n].get_leg_structure(axis=-1)
         tt = next(iter(tD))
     return M
@@ -167,16 +167,16 @@ def apxb(a, b, common_legs, x=1):
     return c
 
 
-def x_a_times_b(a, b, axes, axes_fin, conj=(0, 0), x=1, inplace=True, mode='hard'):
+def x_a_times_b(a, b, axes, axes_fin, conj=(0, 0), x=1, mode='hard'):
     # make multiplication x*a*b, with conj if necessary
     if a.N is not b.N:
         YampsError('Mps-s must have equal number of Tensor-s.')
     c = a.copy()
     for n in range(c.N):
         if n == 0:
-            c.A[n] = x*a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, inplace, mode)
+            c.A[n] = x*a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, mode)
         else:
-            c.A[n] = a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, inplace, mode)
+            c.A[n] = a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, mode)
     return c
 
 
@@ -439,8 +439,7 @@ class Mps:
         nl, nr = bd
         AA = self.A[nl].tensordot(self.A[nr], axes=(self.right, self.left))
         axes = (0, (1, 2), 3) if self.nr_phys == 1 else (0, (1, 3), (2, 4), 5)
-        AA.fuse_legs(axes=axes, inplace=True)
-        return AA
+        return AA.fuse_legs(axes=axes)
 
     def unmerge_two_sites(self, AA, bd, opts_svd):
         r"""
@@ -463,7 +462,7 @@ class Mps:
         """
         nl, nr = bd
         axes = (1,) if self.nr_phys == 1 else (1, 2)
-        AA.unfuse_legs(axes=axes, inplace=True)
+        AA = AA.unfuse_legs(axes=axes)
         axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 3), (2, 4, 5))
         self.pC = bd
         self.A[nl], self.A[bd], self.A[nr] = AA.svd(axes=axes, sU=-1, **opts_svd)

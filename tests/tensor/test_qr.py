@@ -21,8 +21,7 @@ def qr_combine(a):
 
     # changes signature of new leg; and position of new leg
     Q2, R2 = yast.qr(a, axes=((3, 1), (2, 0)), sQ=-1, Qaxis=0, Raxis=-1)
-    QR2 = yast.tensordot(R2, Q2, axes=(2, 0))
-    QR2.transpose(axes=(1, 3, 0, 2), inplace=True)
+    QR2 = yast.tensordot(R2, Q2, axes=(2, 0)).transpose(axes=(1, 3, 0, 2))
     assert yast.norm(a - QR2) < tol  # == 0.0
     assert Q2.is_consistent()
     assert R2.is_consistent()

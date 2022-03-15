@@ -53,8 +53,8 @@ def test_conj_hard_fusion():
     a = yast.randC(config=config_Z2, s=(1, -1, 1, -1, 1, -1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
-    a.fuse_legs(axes=((0, 1), (2, 3), (4, 5)), inplace=True)
-    a.fuse_legs(axes=((0, 1), 2), inplace=True)
+    a = a.fuse_legs(axes=((0, 1), (2, 3), (4, 5)))
+    a = a.fuse_legs(axes=((0, 1), 2))
     b = a.conj()
     c = a.flip_signature()
     d = a.conj_blocks()
