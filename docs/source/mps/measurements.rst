@@ -10,8 +10,7 @@ See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
 .. autoclass:: yast.Tensor
 	:noindex:
-	:exclude-members: __init__, __new__
-	:members: copy, clone, detach
+	:members: measure_overlap
 
 
 Expectation value of MPO
@@ -23,6 +22,5 @@ See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
 .. autoclass:: yast.Tensor
 	:noindex:
-	:exclude-members: __init__, __new__
-	:members: copy, clone, detach
+	:members: measure_mpo
 
