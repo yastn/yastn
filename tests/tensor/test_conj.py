@@ -62,9 +62,9 @@ def test_conj_hard_fusion():
     assert all(sa + sc == 0 for sa, sc in zip(a.struct.s, c.struct.s))
     assert a.struct.s == d.struct.s
 
-    assert all(sa + sb == 0 for hfa, hfb in zip(a.hard_fusion, b.hard_fusion) for sa, sb in zip(hfa.s, hfb.s))
-    assert all(sa + sc == 0 for hfa, hfc in zip(a.hard_fusion, c.hard_fusion) for sa, sc in zip(hfa.s, hfc.s))
-    assert all(hfa.s == hfd.s for hfa, hfd in zip(a.hard_fusion, d.hard_fusion))
+    assert all(sa + sb == 0 for hfa, hfb in zip(a.hfs, b.hfs) for sa, sb in zip(hfa.s, hfb.s))
+    assert all(sa + sc == 0 for hfa, hfc in zip(a.hfs, c.hfs) for sa, sc in zip(hfa.s, hfc.s))
+    assert all(hfa.s == hfd.s for hfa, hfd in zip(a.hfs, d.hfs))
 
 
 class TestConj_Z2xU1(unittest.TestCase):

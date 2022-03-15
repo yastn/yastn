@@ -236,14 +236,14 @@ def fuse_legs(a, axes, mode=None):
         mfs = []
         for group in axes:
             if len(group) == 1:
-                mfs.append(a.meta_fusion[group[0]])
+                mfs.append(a.mfs[group[0]])
             else:
-                new_mf = [sum(a.meta_fusion[ii][0] for ii in group)]
+                new_mf = [sum(a.mfs[ii][0] for ii in group)]
                 for ii in group:
-                    new_mf.extend(a.meta_fusion[ii])
+                    new_mf.extend(a.mfs[ii])
                 mfs.append(tuple(new_mf))
         c = a.transpose(axes=order)
-        c.meta_fusion = tuple(mfs)
+        c.mfs = tuple(mfs)
         return c
     if mode == 'hard':
         c = fuse_meta_to_hard(a)
@@ -262,10 +262,10 @@ def _fuse_legs_hard(a, axes, order):
     Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
 
     mfs = ((1,),) * len(struct.s)
-    hfs = tuple(_fuse_hfs(a.hard_fusion, t_in, D_in, struct.s[n], axis) if len(axis) > 1 else a.hard_fusion[axis[0]]
+    hfs = tuple(_fuse_hfs(a.hfs, t_in, D_in, struct.s[n], axis) if len(axis) > 1 else a.hfs[axis[0]]
                 for n, axis in enumerate(axes))
     data = a.config.backend.merge_to_1d(a._data, order, meta_new, meta_mrg, Dsize)
-    return a._replace(meta_fusion=mfs, hard_fusion=hfs, struct=struct, data=data)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
 
 
 @lru_cache(maxsize=1024)
@@ -312,11 +312,11 @@ def _meta_fuse_hard(config, struct, axes):
 
 def fuse_meta_to_hard(a):
     """ Changes all meta fusions into a hard fusions. If there are no meta fusions, do nothing. """
-    while any(mf != (1,) for mf in a.meta_fusion):
-        axes, new_mfs = _consume_mfs_lowest(a.meta_fusion)
+    while any(mf != (1,) for mf in a.mfs):
+        axes, new_mfs = _consume_mfs_lowest(a.mfs)
         order = tuple(range(a.ndim_n))
         a = _fuse_legs_hard(a, axes, order)
-        a.meta_fusion = new_mfs
+        a.mfs = new_mfs
     return a
 
 #  =========== unfuse legs ======================
@@ -377,11 +377,11 @@ def unfuse_legs(a, axes):
         axes = (axes,)
     ni, mfs, axes_hf = 0, [], []
     for mi in range(a.ndim):
-        dni = a.meta_fusion[mi][0]
-        if mi not in axes or (a.meta_fusion[mi][0] == 1 and a.hard_fusion[ni].tree[0] == 1):
-            mfs.append(a.meta_fusion[mi])
-        elif a.meta_fusion[mi][0] > 1:  #and mi in axes
-            stack = a.meta_fusion[mi]
+        dni = a.mfs[mi][0]
+        if mi not in axes or (a.mfs[mi][0] == 1 and a.hfs[ni].tree[0] == 1):
+            mfs.append(a.mfs[mi])
+        elif a.mfs[mi][0] > 1:  #and mi in axes
+            stack = a.mfs[mi]
             lstack = len(stack)
             pos_init, cum = 1, 0
             for pos in range(1, lstack):
@@ -392,18 +392,18 @@ def unfuse_legs(a, axes):
                     if cum == 0:
                         mfs.append(stack[pos_init: pos + 1])
                         pos_init = pos + 1
-        else:  # c.hard_fusion[ni].tree[0] > 1 and c.meta_fusion[mi][0] == 1 and mi in axes
+        else:  # c.hfs[ni].tree[0] > 1 and c.mfs[mi][0] == 1 and mi in axes
             axes_hf.append(ni)
-            mfs.append(a.meta_fusion[mi])
+            mfs.append(a.mfs[mi])
         ni += dni
     if axes_hf:
-        meta, struct, nlegs, hfs = _meta_unfuse_hard(a.config, a.struct, tuple(axes_hf), tuple(a.hard_fusion))
+        meta, struct, nlegs, hfs = _meta_unfuse_hard(a.config, a.struct, tuple(axes_hf), tuple(a.hfs))
         for unfused, n in zip(nlegs[::-1], axes_hf[::-1]):
             mfs = mfs[:n] + [mfs[n]] * unfused + mfs[n+1:]
         Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
         data = a.config.backend.unmerge_from_1d(a._data, meta, struct.sl, Dsize)
-        return a._replace(struct=struct, meta_fusion=tuple(mfs), hard_fusion=hfs, data=data)
-    return a._replace(meta_fusion=tuple(mfs))
+        return a._replace(struct=struct, mfs=tuple(mfs), hfs=hfs, data=data)
+    return a._replace(mfs=tuple(mfs))
 
 
 
