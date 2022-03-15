@@ -9,6 +9,23 @@ from ._tests import YastError
 __all__ = ['match_legs', 'block']
 
 
+def __setitem__(a, key, newvalue):
+    """
+    Parameters
+    ----------
+    key : tuple(int)
+        charges of the block
+
+    Update data corresponding the block. The data should be consistent with shape
+    """
+    key = tuple(_flatten(key))
+    try:
+        ind = a.struct.t.index(key)
+    except ValueError:
+        raise YastError('tensor does not have block specify by key')
+    a._data[slice(*a.struct.sl[ind])] = newvalue
+
+
 def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     r"""
     Create all possible blocks based on s, n and list of charges for all legs.

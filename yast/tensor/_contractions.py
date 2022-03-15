@@ -133,8 +133,7 @@ def _tensordot_diag(a, b, in_a, destination, conj):  # (-1,)
     """ executes broadcast and then transpose into order expected by tensordot. """
     if len(in_a) == 1:
         c = a.broadcast(b, axis=in_a[0], conj=conj)
-        c.moveaxis(source=in_a, destination=destination, inplace=True)
-        return c
+        return c.moveaxis(source=in_a, destination=destination)
     if len(in_a) == 2:
         c = a.broadcast(b, axis=in_a[0], conj=conj)
         return c.trace(axes=in_a)
@@ -520,7 +519,7 @@ def _trace_meta(struct, in1, in2, out):
 
 
 
-def swap_gate(a, axes, inplace=False):
+def swap_gate(a, axes):
     """
     Return tensor after application of the swap gate.
 
@@ -541,7 +540,7 @@ def swap_gate(a, axes, inplace=False):
     fss = (True,) * len(a.struct.n) if a.config.fermionic is True else a.config.fermionic
     axes = tuple(_clear_axes(*axes))  # swapped groups of legs
     tp = _swap_gate_meta(a.struct.t, a.struct.n, a.meta_fusion, a.ndim_n, axes, fss)
-    c = a if inplace else a.clone()
+    c = a.clone()
     for sl, odd in zip(c.struct.sl, tp):
         if odd:
             c._data[slice(*sl)] = -1 * c._data[slice(*sl)]
@@ -665,7 +664,7 @@ def ncon(ts, inds, conjs=None):
         del ts[t2]
     t, axes, to_conj = meta_transpose
     if axes is not None:
-        ts[t].transpose(axes=axes, inplace=True)
+        ts[t] = ts[t].transpose(axes=axes)
     return ts[t].conj() if to_conj else ts[t]
 
 

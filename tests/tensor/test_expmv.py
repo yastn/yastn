@@ -79,7 +79,7 @@ def test_expmv_tm(t, tol):
 
     # dense transfer matrix build from a
     tm = yast.ncon([a, a], [(-1, 1, -3), (-2, 1, -4)], conjs=(0, 1))
-    tm.fuse_legs(axes=((0, 1), (2, 3)), inplace=True)
+    tm = tm.fuse_legs(axes=((0, 1), (2, 3)))
     tmn = tm.to_numpy()
 
     ## initializing random tensor matching TM
