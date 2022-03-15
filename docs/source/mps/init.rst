@@ -58,5 +58,4 @@ MPS/MPO can be composed using Tensor-s.
 See examples: :ref:`examples/init:create tensors from scratch`.
 
 .. automodule:: yast
-   :members: rand, randR, randC, zeros, ones, eye
-   :show-inheritance:
+   :members: generate_Mij, automatic_Mps

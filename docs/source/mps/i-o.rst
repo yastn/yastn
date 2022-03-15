@@ -1,6 +1,17 @@
 Input/Output the MPS/MPO
 =========================
 
+Entropy, and bond dimension
+---------------------------------
+
+See examples: :ref:`examples/init:clone, detach or copy tensors`.
+
+.. autoclass:: yast.Mps
+	:noindex:
+	:exclude-members: __init__, __new__
+	:members: get_bond_dimensions, get_bond_charges_dimensions, get_entropy
+
+
 Export the MPS/MPO object
 ---------------------------------
 
@@ -8,10 +19,9 @@ Export the MPS/MPO object
 
 See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
-.. autoclass:: yast.Tensor
+.. autoclass:: yast.Mps
 	:noindex:
-	:exclude-members: __init__, __new__
-	:members: copy, clone, detach
+	:members: save_to_hdf5
 
 
 Import the MPS/MPO object
@@ -22,7 +32,6 @@ Import the MPS/MPO object
 
 See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
-.. autoclass:: yast.Tensor
+.. autoclass:: yast._mps
 	:noindex:
-	:exclude-members: __init__, __new__
-	:members: copy, clone, detach
+	:members: load_from_hdf5
