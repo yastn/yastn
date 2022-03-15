@@ -19,9 +19,8 @@ def copy(a):
     -------
     tensor : Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a.config.backend.copy(a._data)
-    return c
+    data = a.config.backend.copy(a._data)
+    return a._replace(data=data)
 
 
 def clone(a):
@@ -33,9 +32,8 @@ def clone(a):
     -------
     tensor : Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a.config.backend.clone(a._data)
-    return c
+    data = a.config.backend.clone(a._data)
+    return a._replace(data=data)
 
 
 def to(a, device=None, dtype=None):
@@ -58,9 +56,7 @@ def to(a, device=None, dtype=None):
     if dtype in (None, a.yast_dtype) and device in (None, a.device):
         return a
     data = a.config.backend.move_to(a._data, dtype=dtype, device=device)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, 
-                    struct=a.struct, data=data)
-    return c
+    return a._replace(data=data)
 
 
 def detach(a):
@@ -71,15 +67,13 @@ def detach(a):
     -------
     tensor : Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a.config.backend.detach(a._data)
-    return c
+    data = a.config.backend.detach(a._data)
+    return a._replace(data=data)
 
 
 def grad(a):
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a._data.grad
-    return c
+    data = a._data.grad
+    return a._replace(data=data)
 
 
 def requires_grad_(a, requires_grad=True):
@@ -109,10 +103,9 @@ def conj(a):
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
-    new_hf = tuple(_flip_hf(x) for x in a.hard_fusion)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=new_hf, struct=struct)
-    c._data = c.config.backend.conj(a._data)
-    return c
+    hfs = tuple(_flip_hf(x) for x in a.hard_fusion)
+    data = a.config.backend.conj(a._data)
+    return a._replace(hard_fusion=hfs, struct=struct, data=data)
 
 
 def conj_blocks(a):
@@ -125,8 +118,7 @@ def conj_blocks(a):
     tensor : Tensor
     """
     data = a.config.backend.conj(a._data)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct, data=data)
-    return c
+    return a._replace(data=data)
 
 
 def flip_signature(a):
@@ -146,11 +138,8 @@ def flip_signature(a):
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
-    new_hf = tuple(_flip_hf(x) for x in a.hard_fusion)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,\
-        hard_fusion=new_hf, struct=struct)
-    c._data = a._data
-    return c
+    hfs = tuple(_flip_hf(x) for x in a.hard_fusion)
+    return a._replace(hard_fusion=hfs, struct=struct)
 
 
 def transpose(a, axes):
@@ -171,11 +160,11 @@ def transpose(a, axes):
     """
     _test_axes_all(a, axes, native=False)
     if axes == tuple(range(a.ndim)):
-        return a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct, data=a._data)
+        return a._replace()
     uaxes, = _unpack_axes(a.meta_fusion, axes)
     order = np.array(uaxes, dtype=np.intp)
-    new_mf = tuple(a.meta_fusion[ii] for ii in axes)
-    new_hf = tuple(a.hard_fusion[ii] for ii in uaxes)
+    mfs = tuple(a.meta_fusion[ii] for ii in axes)
+    hfs = tuple(a.hard_fusion[ii] for ii in uaxes)
     c_s = tuple(a.struct.s[ii] for ii in uaxes)
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
@@ -190,14 +179,9 @@ def transpose(a, axes):
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
 
     meta = tuple((sln, *mt[3:]) for sln, mt, in zip(c_sl, meta))
-    c_struct = _struct(s=c_s, n=a.struct.n, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
-
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=new_mf, hard_fusion=new_hf, struct=c_struct)
-    if a.isdiag:
-        c._data = a._data
-    else:
-        c._data = c.config.backend.transpose(a._data, uaxes, meta)
-    return c
+    struct = _struct(s=c_s, n=a.struct.n, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    data = a._data if a.isdiag else a.config.backend.transpose(a._data, uaxes, meta)
+    return a._replace(meta_fusion=mfs, hard_fusion=hfs, struct=struct, data=data)
 
 
 def move_leg(a, source, destination):
@@ -218,7 +202,7 @@ def move_leg(a, source, destination):
     lsrc = tuple(xx + a.ndim if xx < 0 else xx for xx in lsrc)
     ldst = tuple(xx + a.ndim if xx < 0 else xx for xx in ldst)
     if lsrc == ldst:
-        return a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct, data=a._data)
+        return a._replace()
     axes = [ii for ii in range(a.ndim) if ii not in lsrc]
     ds = sorted(((d, s) for d, s in zip(ldst, lsrc)))
     for d, s in ds:
@@ -242,7 +226,7 @@ def moveaxis(a, source, destination):
     -------
     tensor : Tensor
     """
-    return  move_leg(a, source, destination)
+    return move_leg(a, source, destination)
 
 
 def add_leg(a, axis=-1, s=1, t=None):
@@ -283,11 +267,9 @@ def add_leg(a, axis=-1, s=1, t=None):
     newn = tuple(a.config.sym.fuse(np.array(a.struct.n + t, dtype=int).reshape((1, 2, nsym)), (1, s), 1).flat)
     newt = tuple(x[:axis * nsym] + t + x[axis * nsym:] for x in a.struct.t)
     newD = tuple(x[:axis] + (1,) + x[axis:] for x in a.struct.D)
-
-    c_struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
+    struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
     hfs = a.hard_fusion[:axis] + (_Fusion(s=(s,)),) + a.hard_fusion[axis:]
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=mfs, hard_fusion=hfs, struct=c_struct, data=a._data)
-    return c
+    return a._replace(meta_fusion=mfs, hard_fusion=hfs, struct=struct)
 
 
 def remove_leg(a, axis=-1):
@@ -324,16 +306,16 @@ def remove_leg(a, axis=-1):
     newn = tuple(a.config.sym.fuse(np.array(a.struct.n + t, dtype=int).reshape((1, 2, nsym)), (-1, a.struct.s[axis]), -1).flat)
     newt = tuple(x[: axis * nsym] + x[(axis + 1) * nsym:] for x in a.struct.t)
     newD = tuple(x[: axis] + x[axis + 1:] for x in a.struct.D)
+    struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
 
-    c_struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
     hfs = a.hard_fusion[:axis] + a.hard_fusion[axis + 1:]
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=mfs, hard_fusion=hfs, struct=c_struct, data=a._data)
-    return c
+    return a._replace(meta_fusion=mfs, hard_fusion=hfs, struct=struct)
 
 
 def diag(a):
     """
-    Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa. """
+    Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa.
+    """
     if not a.isdiag:  # isdiag=False -> isdiag=True
         if a.ndim_n != 2 or sum(a.struct.s) != 0:
             raise YastError('Diagonal tensor requires 2 legs with opposite signatures.')
@@ -343,21 +325,19 @@ def diag(a):
             raise YastError('Diagonal tensor cannot have fused legs.')
         if any(d0 != d1 for d0, d1 in a.struct.D):
             raise YastError('yast.diag() allowed only for square blocks.')
-        #     isdiag=True -> isdiag=False                        isdiag=False -> isdiag=True
-    c_Dp = tuple(x ** 2 for x in a.struct.Dp) if a.isdiag else tuple(D[0] for D in a.struct.D)
-    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-    c_struct = a.struct._replace(Dp=c_Dp, sl=c_sl)
-    c = a.__class__(config=a.config, isdiag=not a.isdiag, meta_fusion=a.meta_fusion, \
-        hard_fusion=a.hard_fusion, struct=c_struct)
+        #     isdiag=True -> isdiag=False                    isdiag=False -> isdiag=True
+    Dp = tuple(x ** 2 for x in a.struct.Dp) if a.isdiag else tuple(D[0] for D in a.struct.D)
+    sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp), Dp))
+    struct = a.struct._replace(Dp=Dp, sl=sl)
 
-    Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
+    Dsize = sl[-1][1] if len(sl) > 0 else 0
     if a.isdiag:  # isdiag=True -> isdiag=False
-        meta = tuple(zip(c_sl, a.struct.sl))
-        c._data = a.config.backend.diag_1dto2d(a._data, meta, Dsize)
+        meta = tuple(zip(sl, a.struct.sl))
+        data = a.config.backend.diag_1dto2d(a._data, meta, Dsize)
     else:  # isdiag=False -> isdiag=True
-        meta = tuple(zip(c_sl, a.struct.sl, a.struct.D))
-        c._data = a.config.backend.diag_2dto1d(a._data, meta, Dsize)
-    return c
+        meta = tuple(zip(sl, a.struct.sl, a.struct.D))
+        data = a.config.backend.diag_2dto1d(a._data, meta, Dsize)
+    return a._replace(isdiag=not a.isdiag, struct=struct, data=data)
 
 
 def remove_zero_blocks(a, rtol=1e-12, atol=0):
@@ -374,6 +354,5 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0):
     old_sl = tuple(mt[3] for mt in meta)
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
     struct = a.struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=struct)
-    c._data = a.config.backend.apply_slice(a._data, c_sl, old_sl)
-    return c
+    data = a.config.backend.apply_slice(a._data, c_sl, old_sl)
+    return a._replace(struct=struct, data=data)

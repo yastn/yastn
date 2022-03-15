@@ -117,6 +117,12 @@ class Tensor:
     from ._tests import is_consistent, are_independent
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
 
+    def _replace(self, **kwargs):
+        for arg in ('config', 'isdiag', 'struct', 'meta_fusion', 'hard_fusion', 'data'):
+            if arg not in kwargs:
+                kwargs[arg] = getattr(self, arg)
+        return Tensor(**kwargs)
+
     @property
     def s(self):
         """
@@ -236,3 +242,12 @@ class Tensor:
             'complex128' if tensor data are complex else 'float64'
         """
         return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
+    
+    @property
+    def data(self):
+        """
+        Returns
+        -------
+        data : backend 1d array
+        """
+        return self._data
