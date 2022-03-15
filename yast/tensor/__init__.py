@@ -91,13 +91,13 @@ class Tensor:
 
         # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]
         try:
-            self.meta_fusion = tuple(kwargs['meta_fusion'])
+            self.mfs = tuple(kwargs['mfs'])
         except (KeyError, TypeError):
-            self.meta_fusion = ((1,),) * len(self.struct.s)
+            self.mfs = ((1,),) * len(self.struct.s)
         try:
-            self.hard_fusion = tuple(kwargs['hard_fusion'])
+            self.hfs = tuple(kwargs['hfs'])
         except (KeyError, TypeError):
-            self.hard_fusion = tuple(_Fusion(s=(x,)) for x in self.struct.s)
+            self.hfs = tuple(_Fusion(s=(x,)) for x in self.struct.s)
 
     # pylint: disable=C0415
     from ._initialize import set_block, fill_tensor, __setitem__
@@ -118,7 +118,7 @@ class Tensor:
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
 
     def _replace(self, **kwargs):
-        for arg in ('config', 'isdiag', 'struct', 'meta_fusion', 'hard_fusion', 'data'):
+        for arg in ('config', 'isdiag', 'struct', 'mfs', 'hfs', 'data'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
         return Tensor(**kwargs)
@@ -134,7 +134,7 @@ class Tensor:
             of each fused leg is given by the first native leg in the fused space.
         """
         inds, n = [], 0
-        for mf in self.meta_fusion:
+        for mf in self.mfs:
             inds.append(n)
             n += mf[0]
         return tuple(self.struct.s[ind] for ind in inds)
@@ -170,7 +170,7 @@ class Tensor:
             effective rank of the tensor. Legs (spaces) fused together by :meth:`yast.Tensor.fuse`
             are treated as single leg.
         """
-        return len(self.meta_fusion)
+        return len(self.mfs)
 
     @property
     def ndim_n(self):

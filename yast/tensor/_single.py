@@ -103,9 +103,9 @@ def conj(a):
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
-    hfs = tuple(_flip_hf(x) for x in a.hard_fusion)
+    hfs = tuple(_flip_hf(x) for x in a.hfs)
     data = a.config.backend.conj(a._data)
-    return a._replace(hard_fusion=hfs, struct=struct, data=data)
+    return a._replace(hfs=hfs, struct=struct, data=data)
 
 
 def conj_blocks(a):
@@ -138,8 +138,8 @@ def flip_signature(a):
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
-    hfs = tuple(_flip_hf(x) for x in a.hard_fusion)
-    return a._replace(hard_fusion=hfs, struct=struct)
+    hfs = tuple(_flip_hf(x) for x in a.hfs)
+    return a._replace(hfs=hfs, struct=struct)
 
 
 def transpose(a, axes):
@@ -161,10 +161,10 @@ def transpose(a, axes):
     _test_axes_all(a, axes, native=False)
     if axes == tuple(range(a.ndim)):
         return a._replace()
-    uaxes, = _unpack_axes(a.meta_fusion, axes)
+    uaxes, = _unpack_axes(a.mfs, axes)
     order = np.array(uaxes, dtype=np.intp)
-    mfs = tuple(a.meta_fusion[ii] for ii in axes)
-    hfs = tuple(a.hard_fusion[ii] for ii in uaxes)
+    mfs = tuple(a.mfs[ii] for ii in axes)
+    hfs = tuple(a.hfs[ii] for ii in uaxes)
     c_s = tuple(a.struct.s[ii] for ii in uaxes)
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
@@ -181,7 +181,7 @@ def transpose(a, axes):
     meta = tuple((sln, *mt[3:]) for sln, mt, in zip(c_sl, meta))
     struct = _struct(s=c_s, n=a.struct.n, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     data = a._data if a.isdiag else a.config.backend.transpose(a._data, uaxes, meta)
-    return a._replace(meta_fusion=mfs, hard_fusion=hfs, struct=struct, data=data)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
 
 
 def move_leg(a, source, destination):
@@ -252,9 +252,9 @@ def add_leg(a, axis=-1, s=1, t=None):
         raise YastError('Signature of the new axis should be 1 or -1.')
 
     axis = axis % (a.ndim + 1)
-    mfs = a.meta_fusion[:axis] + ((1,),) + a.meta_fusion[axis:]
+    mfs = a.mfs[:axis] + ((1,),) + a.mfs[axis:]
 
-    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack meta_fusion
+    axis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
     nsym = a.config.sym.NSYM
     if t is None:
         t = tuple(a.config.sym.fuse(np.array(a.struct.n, dtype=int).reshape((1, 1, nsym)), (-1,), s).flat)
@@ -268,8 +268,8 @@ def add_leg(a, axis=-1, s=1, t=None):
     newt = tuple(x[:axis * nsym] + t + x[axis * nsym:] for x in a.struct.t)
     newD = tuple(x[:axis] + (1,) + x[axis:] for x in a.struct.D)
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
-    hfs = a.hard_fusion[:axis] + (_Fusion(s=(s,)),) + a.hard_fusion[axis:]
-    return a._replace(meta_fusion=mfs, hard_fusion=hfs, struct=struct)
+    hfs = a.hfs[:axis] + (_Fusion(s=(s,)),) + a.hfs[axis:]
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct)
 
 
 def remove_leg(a, axis=-1):
@@ -289,12 +289,12 @@ def remove_leg(a, axis=-1):
         raise YastError('Cannot remove axis of a scalar tensor.')
 
     axis = axis % a.ndim
-    if a.meta_fusion[axis] != (1,):
+    if a.mfs[axis] != (1,):
         raise YastError('Axis to be removed cannot be fused.')
-    mfs = a.meta_fusion[:axis] + a.meta_fusion[axis + 1:]
+    mfs = a.mfs[:axis] + a.mfs[axis + 1:]
 
-    axis = sum(a.meta_fusion[ii][0] for ii in range(axis))  # unpack meta_fusion
-    if a.hard_fusion[axis].tree != (1,):
+    axis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
+    if a.hfs[axis].tree != (1,):
         raise YastError('Axis to be removed cannot be fused.')
 
     nsym = a.config.sym.NSYM
@@ -308,8 +308,8 @@ def remove_leg(a, axis=-1):
     newD = tuple(x[: axis] + x[axis + 1:] for x in a.struct.D)
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
 
-    hfs = a.hard_fusion[:axis] + a.hard_fusion[axis + 1:]
-    return a._replace(meta_fusion=mfs, hard_fusion=hfs, struct=struct)
+    hfs = a.hfs[:axis] + a.hfs[axis + 1:]
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct)
 
 
 def diag(a):
@@ -321,7 +321,7 @@ def diag(a):
             raise YastError('Diagonal tensor requires 2 legs with opposite signatures.')
         if any(x != 0 for x in a.struct.n):
             raise YastError('Diagonal tensor requires zero tensor charge.')
-        if any(mf != (1,) for mf in a.meta_fusion) or any(hf.tree != (1,) for hf in a.hard_fusion):
+        if any(mf != (1,) for mf in a.mfs) or any(hf.tree != (1,) for hf in a.hfs):
             raise YastError('Diagonal tensor cannot have fused legs.')
         if any(d0 != d1 for d0, d1 in a.struct.D):
             raise YastError('yast.diag() allowed only for square blocks.')

@@ -24,7 +24,7 @@ def __add__(a, b):
     _test_configs_match(a, b)
     aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
     data = a.config.backend.add(aA, bA, meta, Dsize)
-    return a._replace(hard_fusion=hfs, struct=struct, data=data)
+    return a._replace(hfs=hfs, struct=struct, data=data)
 
 
 def __sub__(a, b):
@@ -45,7 +45,7 @@ def __sub__(a, b):
     _test_configs_match(a, b)
     aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
     data = a.config.backend.sub(aA, bA, meta, Dsize)
-    return a._replace(hard_fusion=hfs, struct=struct, data=data)
+    return a._replace(hfs=hfs, struct=struct, data=data)
 
 
 def apxb(a, b, x=1):
@@ -66,7 +66,7 @@ def apxb(a, b, x=1):
     _test_configs_match(a, b)
     aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
     data = a.config.backend.apxb(aA, bA, x, meta, Dsize)
-    return a._replace(hard_fusion=hfs, struct=struct, data=data)
+    return a._replace(hfs=hfs, struct=struct, data=data)
 
 
 def _addition_meta(a, b):
@@ -75,7 +75,7 @@ def _addition_meta(a, b):
         raise YastError('Error in add: tensor charges do not match')
     needs_mask, _ = _test_axes_match(a, b, sgn=1)
     if needs_mask:
-        msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
+        msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hfs, b.struct, b.hfs)
         Dsize = struct_a.sl[-1][1] if len(struct_a.sl) > 0 else 0
         Adata = a.config.backend.embed_msk(a._data, msk_a, Dsize)
         Dsize = struct_b.sl[-1][1] if len(struct_b.sl) > 0 else 0
@@ -84,7 +84,7 @@ def _addition_meta(a, b):
     else:
         Adata, Bdata = a._data, b._data
         struct_a, struct_b = a.struct, b.struct
-        hfs = a.hard_fusion
+        hfs = a.hfs
 
 
     if struct_a.t == struct_b.t:
