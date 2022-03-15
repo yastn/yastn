@@ -109,24 +109,22 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
         c = a.__class__(config=a.config, s=c_s, n=c_n, meta_fusion=c_mfs, hard_fusion=c_hfs)
         Cm = c.config.backend.dot(Am, Bm, conj, meta_dot)
         _unmerge_matrix(c, Cm, ls_l, ls_r)
-    elif policy in ('hybrid', 'direct'):
+        return c
+    if policy in ('hybrid', 'direct'):
         meta, c_t, c_D, c_Dp, c_sl, tcon = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
         c_struct = _struct(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl, s=c_s, n=c_n)
         Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
-        c = a.__class__(config=a.config, isdiag=a.isdiag,
-                        meta_fusion=c_mfs, hard_fusion=c_hfs, struct=c_struct)
         oA = tuple(nout_a + nin_a)
         oB = tuple(nin_b + nout_b)
         if needs_mask:
             ma, mb = _masks_for_axes(a.config, a.struct, a.hard_fusion, nin_a, b.struct, b.hard_fusion, nin_b, tcon)
-            c._data = a.config.backend.dot_nomerge_masks(a._data, b._data, conj, oA, oB, meta, Dsize, tcon, ma, mb)
+            data = a.config.backend.dot_nomerge_masks(a._data, b._data, conj, oA, oB, meta, Dsize, tcon, ma, mb)
         else:
             if any(mt[3][1] != mt[6][0] for mt in meta):
                 raise YastError('Bond dimensions do not match.')
-            c._data = a.config.backend.dot_nomerge(a._data, b._data, conj, oA, oB, meta, Dsize)
-    else:
-        raise YastError("Unknown policy for tensordot. policy should be in ('hybrid', 'direct', 'merge').")
-    return c
+            data = a.config.backend.dot_nomerge(a._data, b._data, conj, oA, oB, meta, Dsize)
+        return a._replace(meta_fusion=c_mfs, hard_fusion=c_hfs, struct=c_struct, data=data)
+    raise YastError("Unknown policy for tensordot. policy should be in ('hybrid', 'direct', 'merge').")
 
 
 def _tensordot_diag(a, b, in_a, destination, conj):  # (-1,)
@@ -239,20 +237,17 @@ def broadcast(a, b, axis, conj=(0, 0)):
         raise YastError('First tensor`s leg specified by axis cannot be fused.')
 
     conja = (1 - 2 * conj[0])
-    c_hf = a.hard_fusion if conja == 1 else tuple(_flip_hf(x) for x in a.hard_fusion)
-    meta, c_struct = _meta_broadcast(a.config, a.struct, b.struct, axis, conja)
-    Dsize = c_struct.sl[-1][1] if len(c_struct.sl) > 0 else 0
-
-    c = a.__class__(config=a.config, isdiag=a.isdiag,
-                    meta_fusion=a.meta_fusion, hard_fusion=c_hf, struct=c_struct)
-
+    hfs = a.hard_fusion if conja == 1 else tuple(_flip_hf(x) for x in a.hard_fusion)
+    meta, struct = _meta_broadcast(a.config, a.struct, b.struct, axis, conja)
+    
     if a.isdiag:
         a_ndim, axis = (1, 0)
         meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
     else:
         a_ndim = a.ndim_n
-    c._data = a.config.backend.dot_diag(a._data, b._data, conj, meta, Dsize, axis, a_ndim)
-    return c
+    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
+    data = a.config.backend.dot_diag(a._data, b._data, conj, meta, Dsize, axis, a_ndim)
+    return a._replace(hard_fusion=hfs, struct=struct, data=data)
 
 
 def _broadcast_input(axis, mf, isdiag):
@@ -320,18 +315,16 @@ def mask(a, b, axis=0):
         raise YastError('First tensor`s leg specified by axis cannot be fused.')
 
     Dbnew = tuple(b.config.backend.count_nonzero(b._data[slice(*sl)]) for sl in b.struct.sl)
-    meta, c_struct = _meta_mask(a.struct, a.isdiag, b.struct, Dbnew, axis)
-    Dsize = c_struct.sl[-1][1] if len(c_struct.sl) > 0 else 0
+    meta, struct = _meta_mask(a.struct, a.isdiag, b.struct, Dbnew, axis)
+    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
 
-    c = a.__class__(config=a.config, isdiag=a.isdiag,
-                    meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=c_struct)
     if a.isdiag:
         a_ndim, axis = (1, 0)
         meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
     else:
         a_ndim = a.ndim_n
-    c._data = a.config.backend.mask_diag(a._data, b._data, meta, Dsize, axis, a_ndim)
-    return c
+    data = a.config.backend.mask_diag(a._data, b._data, meta, Dsize, axis, a_ndim)
+    return a._replace(struct=struct, data=data)
 
 
 @lru_cache(maxsize=1024)
@@ -445,27 +438,26 @@ def trace(a, axes=(0, 1)):
     order = in1 + in2
     out = tuple(i for i in range(a.ndim_n) if i not in order)
     order = order + out
-    c_mfs = tuple(a.meta_fusion[i] for i in range(a.ndim) if i not in lin1 + lin2)
-    c_hfs = tuple(a.hard_fusion[ii] for ii in out)
+    mfs = tuple(a.meta_fusion[i] for i in range(a.ndim) if i not in lin1 + lin2)
+    hfs = tuple(a.hard_fusion[ii] for ii in out)
 
     if a.isdiag:
         # if needs_mask: raise YastError('Should not have happend')
-        c_struct = _struct(s=(), n=a.struct.n, t=((),), D=((),), Dp=(1,), sl=((0, 1),))
-        c = a.__class__(config=a.config, struct=c_struct, meta_fusion=c_mfs, hard_fusion=c_hfs)
-        c._data = c.config.backend.sum_elements(a._data)
-        return c
+        struct = _struct(s=(), n=a.struct.n, t=((),), D=((),), Dp=(1,), sl=((0, 1),))
+        data = a.config.backend.sum_elements(a._data)
+        return a._replace(struct=struct, meta_fusion=mfs, hard_fusion=hfs, isdiag=False, data=data)
 
-    meta, c_struct, tcon, D1, D2 = _trace_meta(a.struct, in1, in2, out)
-    Dsize = c_struct.sl[-1][1] if len(c_struct.sl) > 0 else 0
-    c = a.__class__(config=a.config, meta_fusion=c_mfs, hard_fusion=c_hfs, struct=c_struct)
+    meta, struct, tcon, D1, D2 = _trace_meta(a.struct, in1, in2, out)
+    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
     if needs_mask:
         msk12 = _masks_for_trace(a.config, tcon, D1, D2, a.hard_fusion, in1, in2)
-        c._data = c.config.backend.trace_with_mask(a._data, order, meta, Dsize, tcon, msk12)
+        data = a.config.backend.trace_with_mask(a._data, order, meta, Dsize, tcon, msk12)
     else:
         if D1 != D2:
             raise YastError('Bond dimensions do not match.')
-        c._data = c.config.backend.trace(a._data, order, meta, Dsize)
-    return c
+        data = a.config.backend.trace(a._data, order, meta, Dsize)
+    return a._replace(meta_fusion=mfs, hard_fusion=hfs, struct=struct, data=data)
+
 
 
 @lru_cache(maxsize=1024)

@@ -527,9 +527,8 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     c_Dp = (Dp,)
     c_sl = ((0, Dp),)
     c_struct = _struct(t=c_t, D=c_D, s=c_s, n=(), Dp=c_Dp, sl=c_sl)
-    c = a.__class__(config=config_dense, isdiag=a.isdiag, struct=c_struct)
-    c._data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
-    return c
+    data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
+    return a._replace(config=config_dense, struct=c_struct, data=data, meta_fusion=None, hard_fusion=None)
 
 
 def zero_of_dtype(a):
