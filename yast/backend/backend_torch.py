@@ -476,7 +476,8 @@ def diag_1dto2d(data, meta, Dsize):
 def diag_2dto1d(data, meta, Dsize):
     newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
     for sln, slo, Do in meta:
-        newdata[slice(*sln)] = torch.diag(data[slice(*slo)].reshape(Do))
+        #newdata[slice(*sln)] = torch.diag(data[slice(*slo)].reshape(Do))
+        torch.diag(data[slice(*slo)].reshape(Do), out=newdata[slice(*sln)])
     return newdata
 
 

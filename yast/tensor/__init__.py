@@ -6,6 +6,7 @@ In principle, any number of symmetries can be used, including dense tensor with 
 
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
+
 from ._auxliary import _struct, _config
 from ._merging import _Fusion
 from ._tests import YastError
@@ -18,6 +19,7 @@ from ._single import *
 from ._algebra import *
 from ._merging import *
 from .linalg import *
+from ._legs import *
 from . import _tests
 from . import _control_lru
 from . import _contractions
@@ -27,6 +29,7 @@ from . import _single
 from . import _algebra
 from . import linalg
 from . import _merging
+from . import _legs
 __all__ = ['Tensor', 'linalg', 'YastError']
 __all__.extend(_initialize.__all__)
 __all__.extend(linalg.__all__)
@@ -37,6 +40,7 @@ __all__.extend(_single.__all__)
 __all__.extend(_algebra.__all__)
 __all__.extend(_output.__all__)
 __all__.extend(_merging.__all__)
+__all__.extend(_legs.__all__)
 
 
 class Tensor:
@@ -108,7 +112,7 @@ class Tensor:
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, move_leg, diag, grad
     from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_leg, remove_leg
     from ._output import show_properties, __str__, print_blocks_shape, is_complex
-    from ._output import get_blocks_charge, get_blocks_shape, get_leg_charges_and_dims, get_leg_structure
+    from ._output import get_blocks_charge, get_blocks_shape, get_leg_charges_and_dims, get_leg_structure, get_leg_structure2
     from ._output import zero_of_dtype, item, __getitem__
     from ._output import get_leg_fusion, get_shape, get_signature, get_dtype
     from ._output import get_tensor_charge, get_rank
