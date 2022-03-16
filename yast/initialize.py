@@ -7,8 +7,52 @@ from .tensor._auxliary import _unpack_axes, _struct
 from .tensor._merging import _Fusion
 
 
-__all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
+__all__ = ['rand', 'rand2', 'randR', 'randC', 'zeros', 'ones', 'eye',
            'load_from_dict', 'load_from_hdf5',  'decompress_from_1d']
+
+
+def rand2(config=None, n=None, isdiag=False, legs=(), **kwargs):
+    r"""
+    Initialize tensor with all possible blocks filled with the random numbers.
+
+    Draws from a uniform distribution in [-1, 1] or [-1, 1] + 1j * [-1, 1], depending on dtype.
+
+    Parameters
+    ----------
+    s : tuple
+        Signature of tensor. Also determines the number of legs
+    n : int
+        Total charge of the tensor
+    t : list
+        List of charges for each leg,
+        see :meth:`Tensor.fill_tensor` for description.
+    D : list
+        List of corresponding bond dimensions
+    isdiag : bool
+        Makes tensor diagonal
+    dtype : str
+        Desired dtype, overrides default_dtype specified in config
+    device : str
+        Device on which the tensor should be initialized, overrides default_device specified in config
+    legs : list
+        Specify t and D based on a list of lists of tensors and their legs.
+        e.q., legs = [[a, 0, b, 0], [a, 1], [b, 1]] gives tensor with 3 legs, whose
+        charges and dimension are consistent with specific legs of tensors a and b (simultaniously for the first leg).
+        Overrides t and D.
+
+    Returns
+    -------
+    tensor : tensor
+        a random instance of a :meth:`Tensor`
+    """
+    mfs = None
+    s = tuple(leg.s for leg in legs)
+    t = tuple(leg.t for leg in legs)
+    D = tuple(leg.D for leg in legs)
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
+    a.fill_tensor(t=t, D=D, val='randR')
+    return a
+
 
 
 def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
