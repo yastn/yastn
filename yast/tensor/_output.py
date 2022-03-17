@@ -21,10 +21,10 @@ def save_to_dict(a):
         dictionary containing all the information needed to recreate the tensor.
     """
     _d = a.config.backend.to_numpy(a._data)
-    hfs = [hf._asdict() for hf in a.hard_fusion]
+    hfs = [hf._asdict() for hf in a.hfs]
     return {'_d': _d, 's': a.struct.s, 'n': a.struct.n,
             't': a.struct.t, 'D': a.struct.D, 'isdiag': a.isdiag,
-            'mfs': a.meta_fusion, 'hfs': hfs,
+            'mfs': a.mfs, 'hfs': hfs,
             'SYM_ID': a.config.sym.SYM_ID, 'fermionic': a.config.fermionic}
 
 
@@ -38,7 +38,7 @@ def save_to_hdf5(a, file, path):
     """
     _d = a.config.backend.to_numpy(a._data)
     file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
-    file.create_group(path+'/meta/'+str(a.meta_fusion))
+    file.create_group(path+'/meta/'+str(a.mfs))
     file.create_dataset(path+'/n', data=a.struct.n)
     file.create_dataset(path+'/s', data=a.struct.s)
     file.create_dataset(path+'/ts', data=a.struct.t)
@@ -60,8 +60,8 @@ def compress_to_1d(a, meta=None):
             meta does not match the tensor.
     """
     if meta is None:
-        meta = {'struct': a.struct, 'isdiag': a.isdiag, 'hard_fusion': a.hard_fusion,
-                'meta_fusion': a.meta_fusion}
+        meta = {'struct': a.struct, 'isdiag': a.isdiag, 'hfs': a.hfs,
+                'mfs': a.mfs}
         return a._data, meta
     # else:
     if a.struct.s != meta['struct'].s:
@@ -70,7 +70,7 @@ def compress_to_1d(a, meta=None):
         raise YastError("Tensor has different tensor charge than metadata.")
     if a.isdiag != meta['isdiag']:
         raise YastError("Tensor has different diagonality than metadata.")
-    if a.meta_fusion != meta['meta_fusion'] or a.hard_fusion != meta['hard_fusion']:
+    if a.mfs != meta['mfs'] or a.hfs != meta['hfs']:
         raise YastError("Tensor has different leg fusion structure than metadata.")
     Dsize = meta['struct'].sl[-1][1] if len(meta['struct'].sl) > 0 else 0
 
@@ -122,9 +122,9 @@ def show_properties(a):
     print("shape native:", a.get_shape(native=True))
     print("no. blocks  :", len(a.struct.t))  # number of blocks
     print("size        :", a.size)  # total number of elements in all blocks
-    mfs = {i: _mf_to_ntree(mf) for i, mf in enumerate(a.meta_fusion)}
+    mfs = {i: _mf_to_ntree(mf) for i, mf in enumerate(a.mfs)}
     print("meta fusion :", mfs)  # encoding meta fusion tree for each leg
-    hfs = {i: _mf_to_ntree(hf.tree) for i, hf in enumerate(a.hard_fusion)}
+    hfs = {i: _mf_to_ntree(hf.tree) for i, hf in enumerate(a.hfs)}
     print("hard fusion :", hfs, "\n")  # encoding info on hard fusion for each leg
 
 
@@ -271,23 +271,6 @@ def __getitem__(a, key):
     return x if a.isdiag else x.reshape(a.struct.D[ind])
 
 
-def __setitem__(a, key, newvalue):
-    """
-    Parameters
-    ----------
-    key : tuple(int)
-        charges of the block
-
-    Update data corresponding the block. The data should be consistent with shape
-    """
-    key = tuple(_flatten(key))
-    try:
-        ind = a.struct.t.index(key)
-    except ValueError:
-        raise YastError('tensor does not have block specify by key')
-    a._data[slice(*a.struct.sl[ind])] = newvalue
-
-
 ##################################################
 #    output tensors info - advanced structure    #
 ##################################################
@@ -302,10 +285,10 @@ def get_leg_fusion(a, axes=None):
         indices of legs; If axes is None returns all (default).
     """
     if axes is None:
-        return {'meta': a.meta_fusion, 'hard': a.hard_fusion}
+        return {'meta': a.mfs, 'hard': a.hfs}
     if isinstance(axes, int):
-        return a.meta_fusion(axes)
-    return {'meta': tuple(a.meta_fusion(n) for n in axes), 'hard': tuple(a.hard_fusion(n) for n in axes)}
+        return a.mfs(axes)
+    return {'meta': tuple(a.mfs(n) for n in axes), 'hard': tuple(a.hfs(n) for n in axes)}
 
 
 def get_leg_structure(a, axis, native=False):
@@ -326,7 +309,7 @@ def get_leg_structure(a, axis, native=False):
     """
     axis, = _clear_axes(axis)
     if not native:
-        axis, = _unpack_axes(a.meta_fusion, axis)
+        axis, = _unpack_axes(a.mfs, axis)
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
     tset = tset[:, axis, :]
@@ -528,7 +511,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
             Dlow = Dhigh
     axes = tuple((n,) for n in range(ndim))
     if not native:
-        axes = tuple(_unpack_axes(a.meta_fusion, *axes))
+        axes = tuple(_unpack_axes(a.mfs, *axes))
     meta = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     for t_sl, tt in zip(a.struct.sl, tset):
@@ -544,9 +527,8 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     c_Dp = (Dp,)
     c_sl = ((0, Dp),)
     c_struct = _struct(t=c_t, D=c_D, s=c_s, n=(), Dp=c_Dp, sl=c_sl)
-    c = a.__class__(config=config_dense, isdiag=a.isdiag, struct=c_struct)
-    c._data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
-    return c
+    data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
+    return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
 
 
 def zero_of_dtype(a):

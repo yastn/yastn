@@ -22,11 +22,9 @@ def __add__(a, b):
         result of addition as a new tensor
     """
     _test_configs_match(a, b)
-    aA, bA, hfs, meta, c_struct, Dsize = _addition_meta(a, b)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
-                    meta_fusion=a.meta_fusion, hard_fusion=hfs)
-    c._data = c.config.backend.add(aA, bA, meta, Dsize)
-    return c
+    aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
+    data = a.config.backend.add(aA, bA, meta, Dsize)
+    return a._replace(hfs=hfs, struct=struct, data=data)
 
 
 def __sub__(a, b):
@@ -45,11 +43,9 @@ def __sub__(a, b):
         result of subtraction as a new tensor
     """
     _test_configs_match(a, b)
-    aA, bA, hfs, meta, c_struct, Dsize = _addition_meta(a, b)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
-                    meta_fusion=a.meta_fusion, hard_fusion=hfs)
-    c._data = c.config.backend.sub(aA, bA, meta, Dsize)
-    return c
+    aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
+    data = a.config.backend.sub(aA, bA, meta, Dsize)
+    return a._replace(hfs=hfs, struct=struct, data=data)
 
 
 def apxb(a, b, x=1):
@@ -68,11 +64,9 @@ def apxb(a, b, x=1):
     tensor : Tensor
     """
     _test_configs_match(a, b)
-    aA, bA, hfs, meta, c_struct, Dsize = _addition_meta(a, b)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
-                    meta_fusion=a.meta_fusion, hard_fusion=hfs)
-    c._data = c.config.backend.apxb(aA, bA, x, meta, Dsize)
-    return c
+    aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
+    data = a.config.backend.apxb(aA, bA, x, meta, Dsize)
+    return a._replace(hfs=hfs, struct=struct, data=data)
 
 
 def _addition_meta(a, b):
@@ -81,7 +75,7 @@ def _addition_meta(a, b):
         raise YastError('Error in add: tensor charges do not match')
     needs_mask, _ = _test_axes_match(a, b, sgn=1)
     if needs_mask:
-        msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
+        msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hfs, b.struct, b.hfs)
         Dsize = struct_a.sl[-1][1] if len(struct_a.sl) > 0 else 0
         Adata = a.config.backend.embed_msk(a._data, msk_a, Dsize)
         Dsize = struct_b.sl[-1][1] if len(struct_b.sl) > 0 else 0
@@ -90,7 +84,7 @@ def _addition_meta(a, b):
     else:
         Adata, Bdata = a._data, b._data
         struct_a, struct_b = a.struct, b.struct
-        hfs = a.hard_fusion
+        hfs = a.hfs
 
 
     if struct_a.t == struct_b.t:
@@ -174,9 +168,8 @@ def __lt__(a, number):
     tensor : Tensor
         result of logical element-wise operation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a._data < number
-    return c
+    data = a._data < number
+    return a._replace(data=data)
 
 
 def __gt__(a, number):
@@ -194,9 +187,8 @@ def __gt__(a, number):
     tensor : Tensor
         result of logical element-wise operation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a._data > number
-    return c
+    data = a._data > number
+    return a._replace(data=data)
 
 
 def __le__(a, number):
@@ -214,9 +206,8 @@ def __le__(a, number):
     tensor : Tensor
         result of logical element-wise operation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a._data <= number
-    return c
+    data = a._data <= number
+    return a._replace(data=data)
 
 
 def __ge__(a, number):
@@ -234,9 +225,8 @@ def __ge__(a, number):
     tensor : Tensor
         result of logical element-wise operation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a._data >= number
-    return c
+    data = a._data >= number
+    return a._replace(data=data)
 
 
 def __mul__(a, number):
@@ -252,9 +242,8 @@ def __mul__(a, number):
     tensor : Tensor
         result of multipcilation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = number * a._data
-    return c
+    data = number * a._data
+    return a._replace(data=data)
 
 
 def __rmul__(a, number):
@@ -286,9 +275,8 @@ def __pow__(a, exponent):
     tensor : Tensor
         result of element-wise exponentiation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a._data ** exponent
-    return c
+    data = a._data ** exponent
+    return a._replace(data=data)
 
 
 def __truediv__(a, number):
@@ -304,9 +292,9 @@ def __truediv__(a, number):
     tensor : Tensor
         result of element-wise division  as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a._data / number
-    return c
+    data = a._data / number
+    return a._replace(data=data)
+
 
 
 def __abs__(a):
@@ -318,10 +306,9 @@ def __abs__(a):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a.config.backend.absolute(a._data)
-    return c
+    data = a.config.backend.absolute(a._data)
+    return a._replace(data=data)
+
 
 
 def real(a):
@@ -336,10 +323,8 @@ def real(a):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a.config.backend.real(a._data)
-    return c
+    data = a.config.backend.real(a._data)
+    return a._replace(data=data)
 
 
 def imag(a):
@@ -353,10 +338,8 @@ def imag(a):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a.config.backend.imag(a._data)
-    return c
+    data = a.config.backend.imag(a._data)
+    return a._replace(data=data)
 
 
 def sqrt(a):
@@ -367,10 +350,8 @@ def sqrt(a):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a.config.backend.sqrt(a._data)
-    return c
+    data = a.config.backend.sqrt(a._data)
+    return a._replace(data=data)
 
 
 def rsqrt(a, cutoff=0):
@@ -388,10 +369,8 @@ def rsqrt(a, cutoff=0):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a.config.backend.rsqrt(a._data, cutoff=cutoff)
-    return c
+    data = a.config.backend.rsqrt(a._data, cutoff=cutoff)
+    return a._replace(data=data)
 
 
 def reciprocal(a, cutoff=0):
@@ -409,10 +388,8 @@ def reciprocal(a, cutoff=0):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a.config.backend.reciprocal(a._data, cutoff=cutoff)
-    return c
+    data = a.config.backend.reciprocal(a._data, cutoff=cutoff)
+    return a._replace(data=data)
 
 
 def exp(a, step=1.):
@@ -430,7 +407,5 @@ def exp(a, step=1.):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c._data = a.config.backend.exp(a._data, step)
-    return c
+    data = a.config.backend.exp(a._data, step)
+    return a._replace(data=data)

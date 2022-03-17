@@ -128,7 +128,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
+    axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
     s_eff = (-sU, sU)
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
@@ -144,12 +144,12 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
 
     U = a.__class__(config=a.config, s=Us, n=n_l,
-                    meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
-                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sU,))])
+                    mfs=[a.mfs[ii] for ii in lout_l] + [(1,)],
+                    hfs=[a.hfs[ii] for ii in axes[0]] + [_Fusion(s=(sU,))])
     S = a.__class__(config=a.config, s=s_eff, isdiag=True)
     V = a.__class__(config=a.config, s=Vs, n=n_r,
-                    meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r],
-                    hard_fusion=[_Fusion(s=(-sU,))] + [a.hard_fusion[ii] for ii in axes[1]])
+                    mfs=[(1,)] + [a.mfs[ii] for ii in lout_r],
+                    hfs=[_Fusion(s=(-sU,))] + [a.hfs[ii] for ii in axes[1]])
 
     if policy == 'fullrank':
         Um, Sm, Vm = a.config.backend.svd(Am, meta)
@@ -169,8 +169,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     _unmerge_matrix(U, Um, ls_l, ls_s)
     _unmerge_diagonal(S, Sm, ls_s)
     _unmerge_matrix(V, Vm, ls_s, ls_r)
-    U.move_leg(source=-1, destination=Uaxis, inplace=True)
-    V.move_leg(source=0, destination=Vaxis, inplace=True)
+    U = U.move_leg(source=-1, destination=Uaxis)
+    V = V.move_leg(source=0, destination=Vaxis)
     return (U, S, V, uS) if untruncated_S else (U, S, V)
 
 
@@ -197,7 +197,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
+    axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
     s_eff = (-sQ, sQ)
     Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
@@ -205,11 +205,11 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     Qs = tuple(a.struct.s[lg] for lg in axes[0]) + (sQ,)
     Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in axes[1])
     Q = a.__class__(config=a.config, s=Qs, n=a.struct.n,
-                    meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
-                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sQ,))])
+                    mfs=[a.mfs[ii] for ii in lout_l] + [(1,)],
+                    hfs=[a.hfs[ii] for ii in axes[0]] + [_Fusion(s=(sQ,))])
     R = a.__class__(config=a.config, s=Rs,
-                    meta_fusion=[(1,)] + [a.meta_fusion[ii] for ii in lout_r],
-                    hard_fusion=[_Fusion(s=(-sQ,))] + [a.hard_fusion[ii] for ii in axes[1]])
+                    mfs=[(1,)] + [a.mfs[ii] for ii in lout_r],
+                    hfs=[_Fusion(s=(-sQ,))] + [a.hfs[ii] for ii in axes[1]])
 
     meta = tuple((il + ir, il + ir, ir + ir) for il, ir in zip(ul, ur))
     Qm, Rm = a.config.backend.qr(Am, meta)
@@ -217,8 +217,8 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     ls = _leg_struct_trivial(a.config, Rm, axis=0)
     _unmerge_matrix(Q, Qm, ls_l, ls)
     _unmerge_matrix(R, Rm, ls, ls_r)
-    Q.move_leg(source=-1, destination=Qaxis, inplace=True)
-    R.move_leg(source=0, destination=Raxis, inplace=True)
+    Q = Q.move_leg(source=-1, destination=Qaxis)
+    R = R.move_leg(source=0, destination=Raxis)
     return Q, R
 
 
@@ -266,7 +266,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
+    axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
     if any(x != 0 for x in a.struct.n):
         raise YastError('Charge should be zero')
@@ -281,8 +281,8 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
     Us = tuple(a.struct.s[lg] for lg in axes[0]) + (sU,)
     S = a.__class__(config=a.config, s=(-sU, sU), isdiag=True)
     U = a.__class__(config=a.config, s=Us,
-                    meta_fusion=[a.meta_fusion[ii] for ii in lout_l] + [(1,)],
-                    hard_fusion=[a.hard_fusion[ii] for ii in axes[0]] + [_Fusion(s=(sU,))])
+                    mfs=[a.mfs[ii] for ii in lout_l] + [(1,)],
+                    hfs=[a.hfs[ii] for ii in axes[0]] + [_Fusion(s=(sU,))])
 
     # meta = (indA, indS, indU)
     meta = tuple((il + ir, il, il + ir) for il, ir in zip(ul, ur))
@@ -298,7 +298,7 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
 
     _unmerge_matrix(U, Um, ls_l, ls_s)
     _unmerge_diagonal(S, Sm, ls_s)
-    U.move_leg(source=-1, destination=Uaxis, inplace=True)
+    U = U.move_leg(source=-1, destination=Uaxis)
     return (S, U, uS) if untruncated_S else (S, U)
 
 
@@ -329,7 +329,7 @@ def entropy(a, axes=(0, 1), alpha=1):
 
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
+    axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
     if not a.isdiag:
         Am, *_ = _merge_to_matrix(a, axes, (-1, 1))

@@ -96,27 +96,12 @@ def test_transpose_basic():
     run_move_leg(a, ad, source=-1, destination=-3, result=(19, 10, 14, 18))
 
 
-def test_transpose_inplace():
-    a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
-                  t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
-                  D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
-    assert a.get_shape() == (3, 5, 7, 9, 11, 13)
-
-    a.transpose(axes=(5, 4, 3, 2, 1, 0), inplace=True)
-    assert a.get_shape() == (13, 11, 9, 7, 5, 3)
-    a.move_leg(source=2, destination=3, inplace=True)
-    assert a.get_shape() == (13, 11, 7, 9, 5, 3)
-    a.moveaxis(source=2, destination=3, inplace=True)  # moveaxis is alias for move_leg
-    assert a.get_shape() == (13, 11, 9, 7, 5, 3)
-
-
-
 def test_transpose_diag():
     a = yast.eye(config=config_U1, t=(-1, 0, 2), D=(2, 2 ,4))
     at = a.transpose(axes=(1, 0))
     assert yast.tensordot(a, at, axes=((0, 1), (0, 1))).item() == 8.
     assert yast.vdot(a, at, conj=(0, 0)).item() == 8.
-    a.transpose(axes=(1, 0), inplace=True)
+    a = a.transpose(axes=(1, 0))
     assert yast.vdot(a, at).item() == 8.
 
 
@@ -154,7 +139,6 @@ def test_transpose_backward():
 
 if __name__ == '__main__':
     test_transpose_basic()
-    test_transpose_inplace()
     test_transpose_diag()
     test_transpose_exceptions()
     test_transpose_backward()
