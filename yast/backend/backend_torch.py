@@ -1,5 +1,6 @@
 """Support of torch as a data structure used by yast."""
 from itertools import chain, groupby
+import numpy as np
 import torch
 from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_eig_sym import SYMEIG
@@ -8,7 +9,6 @@ from .linalg.torch_eig_sym import SYMEIG
 BACKEND_ID = "torch"
 DTYPE = {'float64': torch.float64,
          'complex128': torch.complex128}
-
 
 def _common_type(iterator):
     return torch.complex128 if any(x.is_complex() for x in iterator) else torch.float64
@@ -242,11 +242,30 @@ def trace_with_mask(data, order, meta, Dsize, tcon, msk12):
 
 
 def transpose(data, axes, meta_transpose):
-    newdata = torch.zeros_like(data)
-    for sln, slo, Do in meta_transpose:
-        newdata[slice(*sln)] = data[slice(*slo)].reshape(Do).permute(axes).ravel()
-    return newdata
+    return kernel_transpose.apply(data, axes, meta_transpose)
 
+class kernel_transpose(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, data, axes, meta_transpose):
+        ctx.axes= axes
+        ctx.meta_transpose= meta_transpose
+        
+        newdata = torch.zeros_like(data)
+        for slice_to, slice_from, Do in meta_transpose:
+            newdata[slice(*slice_to)] = data[slice(*slice_from)].view(Do).permute(axes).ravel()
+        return newdata
+
+    @staticmethod
+    def backward(ctx, data_b):
+        axes= ctx.axes
+        meta_transpose= ctx.meta_transpose
+        
+        newdata_b = torch.zeros_like(data_b)
+        for slice_to, slice_from, D_from in meta_transpose:
+            inv_axes= tuple(np.argsort(axes))
+            newdata_b[slice(*slice_from)] = data_b[slice(*slice_to)]\
+                .view(tuple(np.array(D_from)[[axes]])).permute(inv_axes).ravel()
+        return newdata_b, None, None
 
 def rsqrt(data, cutoff=0):
     res = torch.zeros_like(data)
@@ -549,14 +568,60 @@ def merge_to_2d(data, order, meta_new, meta_mrg):
 
 
 def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
-    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
-    for (tn, Dn, sln), (t1, gr) in zip(zip(*meta_new), groupby(meta_mrg, key=lambda x: x[0])):
-        assert tn == t1
-        temp = torch.zeros(Dn, dtype=data.dtype, device=data.device)
-        for (_, slo, Do, Dslc, Drsh) in gr:
-            temp[tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
-        newdata[slice(*sln)] = temp.ravel()
-    return newdata
+    return kernel_merge_to_1d.apply(data, order, meta_new, meta_mrg, Dsize)
+
+
+class kernel_merge_to_1d(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, data, order, meta_new, meta_mrg, Dsize):
+        ctx.order= order
+        ctx.meta_new= meta_new
+        ctx.meta_mrg= meta_mrg
+        ctx.D_source= data.numel()
+
+        # Dsize - total size of fused representation (might include some zero-blocks)
+        newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+
+        # meta_new -> originaly long columns, transposed to single column of rows by zip(*meta_new)
+        #             where each row has
+        #             tn -> effective charge for block in fused tensor
+        #             Dn -> effective shape of block tn in fused tensor
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+        #
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+        #             this source block will belong to destination block tn
+        #          -> gr: tuple holding description of source data
+        #                 slo -> specifies the location of source block in 1d data
+        #                 Do  -> shape of the source block
+        #                 Dscl-> list of slice data which specifies the location of the "transformed"
+        #                        source block in the destination block tn
+        #                 Drsh-> the shape of the "transformed" source block in the destination block tn
+        # 
+        for (tn, Dn, sln), (t1, gr) in zip(zip(*meta_new), groupby(meta_mrg, key=lambda x: x[0])):
+            assert tn == t1
+            temp = torch.zeros(Dn, dtype=data.dtype, device=data.device)
+            for (_, slo, Do, Dslc, Drsh) in gr:
+                temp[tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
+            newdata[slice(*sln)] = temp.ravel()
+        return newdata
+
+    @staticmethod
+    def backward(ctx, data_b):
+        print("Hi")
+        order= ctx.order
+        meta_new= ctx.meta_new
+        meta_mrg= ctx.meta_mrg
+        D_source= ctx.D_source
+
+        inv_order= tuple(np.argsort(order))
+
+        newdata_b = torch.zeros((D_source,), dtype=data_b.dtype, device=data_b.device)
+        for (tn, D_source, slice_source), (t1, gr) in zip(zip(*meta_new), groupby(meta_mrg, key=lambda x: x[0])):
+            tmp_b= data_b[slice(*slice_source)].view(D_source)
+            for (_, slice_destination, D_destination, slice_source_block, D_source_block) in gr:
+                newdata_b[slice(*slice_destination)]= tmp_b[tuple(slice(*x) for x in slice_source_block)]\
+                    .reshape( tuple(np.array(D_destination)[[order]]) ).permute(inv_order).ravel()
+        return newdata_b, None, None, None, None
 
 
 def merge_to_dense(data, Dtot, meta):
@@ -597,8 +662,12 @@ def unmerge_from_2ddiag(A, meta, new_sl, Dsize):
 
 
 def unmerge_from_1d(data, meta, new_sl, Dsize):
+    # slo -> slice in source tensor, specifying location of t_effective(fused) block
+    # Do  -> shape of the fused block with t_eff
     newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
     for (slo, Do, sub_slc), snew in zip(meta, new_sl):
+        #                                                     take a "subblock" of t_eff block
+        #                                                     specified by a list of slices sub_slc
         newdata[slice(*snew)] = data[slice(*slo)].reshape(Do)[tuple(slice(*x) for x in sub_slc)].ravel()
     return newdata
 
