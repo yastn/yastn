@@ -34,6 +34,10 @@ def set_num_threads(num_threads):
     torch.set_num_threads(num_threads)
 
 
+def grad(x):
+    return x.grad
+
+
 ####################################
 #     single tensor operations     #
 ####################################
