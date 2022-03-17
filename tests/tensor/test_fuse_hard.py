@@ -1,6 +1,7 @@
 """ Test elements of fuse_legs(... mode='hard') """
 import numpy as np
 import unittest
+import pytest
 import yast
 try:
     from .configs import config_U1, config_dense, config_Z2xU1
@@ -306,6 +307,29 @@ def test_fuse_hard_dense():
     assert yast.norm(tra - traf) < tol
 
 
+@pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
+def test_merge_to_1d_backward():
+    import torch
+
+    # U1
+    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
+                  D=((1, 2, 3), (4, 5, 6), (3, 8, 9), (3, 11, 12)))
+    b= yast.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
+
+    target_block=(1,1,-1,-1)
+    target_block_size= a[target_block].size()
+
+    def test_f(block):
+        a.set_block(ts=target_block, val=block)
+        tmp_a= yast.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
+        ab= b.vdot(tmp_a)
+        return ab
+
+    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(),requires_grad=True), )
+    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+    assert test
+
 if __name__ == '__main__':
     #unittest.main()
     test_fuse_hard_dense()
@@ -316,3 +340,4 @@ if __name__ == '__main__':
     test_hard_dot_1_sparse()
     test_fuse_mix()
     test_auxliary_merging_functions()
+    test_merge_to_1d_backward()
