@@ -385,7 +385,7 @@ class TestSyntaxGeneral(unittest.TestCase):
         tensor = tensor.unfuse_legs(axes=1)
 
         tensor = yast.fuse_legs(a, axes=(0, (1, 3), 2))
-        yast.unfuse_legs(tensor, axes=(0, (1, 3), 2), inplace=True)
+        tensor = yast.unfuse_legs(tensor, axes=(0, (1, 3), 2))
 
         # tests
         a.is_consistent()

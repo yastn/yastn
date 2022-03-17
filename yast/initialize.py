@@ -55,20 +55,20 @@ def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
 
 def randR(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     """ Shortcut for rand(..., dtype='float64')"""
-    meta_fusion = None
+    mfs = None
     if 'legs' in kwargs:
-        t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
+        t, D, s, mfs = _tD_from_legs(kwargs['legs'])
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
     a.fill_tensor(t=t, D=D, val='randR')
     return a
 
 
 def randC(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     """ Shortcut for rand(..., dtype='complex128')"""
-    meta_fusion = None
+    mfs = None
     if 'legs' in kwargs:
-        t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
+        t, D, s, mfs = _tD_from_legs(kwargs['legs'])
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
     a.fill_tensor(t=t, D=D, val='randC')
     return a
 
@@ -103,10 +103,10 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     tensor : tensor
         an instance of a tensor filled with zeros
     """
-    meta_fusion = None
+    mfs = None
     if 'legs' in kwargs:
-        t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
+        t, D, s, mfs = _tD_from_legs(kwargs['legs'])
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
     a.fill_tensor(t=t, D=D, val='zeros')
     return a
 
@@ -139,10 +139,10 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     tensor : tensor
         an instance of a tensor filled with ones
     """
-    meta_fusion = None
+    mfs = None
     if 'legs' in kwargs:
-        t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
+        t, D, s, mfs = _tD_from_legs(kwargs['legs'])
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
     a.fill_tensor(t=t, D=D, val='ones')
     return a
 
@@ -199,7 +199,7 @@ def load_from_dict(config=None, d=None):
         struct = _struct(s=d['s'], n=d['n'], t=d['t'], D=d['D'], Dp=c_Dp, sl=c_sl)
         hfs = tuple(_Fusion(**hf) for hf in d['hfs'])
         c = Tensor(config=config, struct=struct, isdiag=c_isdiag,
-                    hard_fusion=hfs, meta_fusion=d['mfs'])
+                    hfs=hfs, mfs=d['mfs'])
         if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID']:
             raise YastError("Symmetry rule in config do not match loaded one.")
         if 'fermionic' in d and c.config.fermionic != d['fermionic']:
@@ -233,8 +233,8 @@ def load_from_hdf5(config, file, path):
 
     mfs = eval(tuple(file.get(path+'/meta').keys())[0])
     c = Tensor(config=config, struct=struct,
-               isdiag=c_isdiag, meta_fusion=mfs)
-    # hard_fusion=hfs
+               isdiag=c_isdiag, mfs=mfs)
+    # hfs=hfs
     vmat = g.get('matrix')[:]
     c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name, device=c.device)
     c.is_consistent()
@@ -291,7 +291,7 @@ def _tD_from_legs(legs):
             if isinstance(a, dict):
                 lss.append(a)
                 a = next(ileg, None)
-        lf = set(a.meta_fusion[n] for a, n in zip(tns, lgs))
+        lf = set(a.mfs[n] for a, n in zip(tns, lgs))
         if len(lf) > 1:
             raise YastError('Provided tensors fusions do not match.')
         if len(lf) == 0:
@@ -310,7 +310,7 @@ def _tD_from_legs(legs):
             for nn in range(lf[0]):
                 ss = []
                 for t, l, f in zip(tns, lgs, fps):
-                    un, = _unpack_axes(t.meta_fusion, (l,))
+                    un, = _unpack_axes(t.mfs, (l,))
                     lss.append(t.get_leg_structure(un[nn], native=True))
                     ss.append(f * np.array(t.s_n, dtype=int)[un[nn]])
                 d, s = _dict_union(lss)

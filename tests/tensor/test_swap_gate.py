@@ -22,7 +22,7 @@ def test_swap_gate_basic():
     assert pytest.approx(sum(b.to_numpy().ravel()), rel=tol) == 4
 
     c = a.swap_gate(axes=(0, 2))
-    c.swap_gate(axes=(1, 2), inplace=True)
+    c = c.swap_gate(axes=(1, 2))
     assert pytest.approx(sum(c.to_numpy().ravel()), rel=tol) == 4
     c1 = a.swap_gate(axes=((0, 1), 2))  # swap between group of (0, 1) and 2
     c2 = a.swap_gate(axes=(0, 2, 1, 2)) # swap between 0, 2 and then 1, 2

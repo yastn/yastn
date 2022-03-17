@@ -41,23 +41,23 @@ def _test_axes_match(a, b, sgn=1, axes=None):
             raise YastError('Repeated axis in axes[0] or axes[1].')
         if len(set(axes[0]) - set(range(a.ndim))) > 0 or len(set(axes[1]) - set(range(b.ndim))) > 0:
             raise YastError('Axis outside of tensor ndim.')
-        ua, = _unpack_axes(a.meta_fusion, axes[0])
-        ub, = _unpack_axes(b.meta_fusion, axes[1])
+        ua, = _unpack_axes(a.mfs, axes[0])
+        ub, = _unpack_axes(b.mfs, axes[1])
         uaxes = (ua, ub)
 
     if not all(a.struct.s[i1] == sgn * b.struct.s[i2] for i1, i2 in zip(*uaxes)):
         raise YastError('Signatures do not match.')
 
-    if any(a.meta_fusion[i1] != b.meta_fusion[i2] for i1, i2 in zip(*axes)):
+    if any(a.mfs[i1] != b.mfs[i2] for i1, i2 in zip(*axes)):
         raise YastError('Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order.')
 
     needs_mask = False  # for hard-fused legs
     for i1, i2 in zip(*uaxes):
-        if a.hard_fusion[i1].tree != b.hard_fusion[i2].tree:
+        if a.hfs[i1].tree != b.hfs[i2].tree:
             raise YastError('Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.')
-        if any(s1 != sgn * s2 for s1, s2 in zip(a.hard_fusion[i1].s, b.hard_fusion[i2].s)):
+        if any(s1 != sgn * s2 for s1, s2 in zip(a.hfs[i1].s, b.hfs[i2].s)):
             raise YastError('Signatures of hard-fused legs do not match.')
-        if a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
+        if a.hfs[i1].t != b.hfs[i2].t or a.hfs[i1].D != b.hfs[i2].D:
             needs_mask = True
     return needs_mask, uaxes
 
@@ -110,7 +110,7 @@ def is_consistent(a):
     assert np.all(a.config.sym.fuse(tset, sa, 1) == na), 'charges of some block do not satisfy symmetry condition'
     for n in range(a.ndim_n):
         a.get_leg_structure(n, native=True)
-    for s, hf in zip(a.struct.s, a.hard_fusion):
+    for s, hf in zip(a.struct.s, a.hfs):
         assert s == hf.s[0]
     return True
 

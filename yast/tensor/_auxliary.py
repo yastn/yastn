@@ -33,10 +33,10 @@ def _flatten(nested_iterator):
             yield item
 
 
-def _unpack_axes(meta_fusion, *args):
-    """Unpack meta axes into native axes based on a.meta_fusion"""
-    clegs = tuple(accumulate(x[0] for x in meta_fusion))
-    return tuple(tuple(chain(*(range(clegs[ii] - meta_fusion[ii][0], clegs[ii]) for ii in axes))) for axes in args)
+def _unpack_axes(mfs, *args):
+    """Unpack meta axes into native axes based on a.mfs"""
+    clegs = tuple(accumulate(x[0] for x in mfs))
+    return tuple(tuple(chain(*(range(clegs[ii] - mfs[ii][0], clegs[ii]) for ii in axes))) for axes in args)
 
 
 def _clear_axes(*args):

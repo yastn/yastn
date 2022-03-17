@@ -154,11 +154,11 @@ def test_tensordot_fuse_meta():
     fa = a.fuse_legs(axes=(0, (1, 2), (4, 3)), mode='meta')
     fb = b.fuse_legs(axes=(0, (1, 2), (4, 3)), mode='meta')
     fc = tensordot_vs_numpy(fa, fb, axes=((2, 0), (2, 0)), conj=(0, 1))
-    fc.unfuse_legs(axes=(0, 1), inplace=True)
-    fa.fuse_legs(axes=((0, 2), 1), inplace=True)
-    fb.fuse_legs(axes=((0, 2), 1), inplace=True)
+    fc = fc.unfuse_legs(axes=(0, 1))
+    fa = fa.fuse_legs(axes=((0, 2), 1))
+    fb = fb.fuse_legs(axes=((0, 2), 1))
     ffc = tensordot_vs_numpy(fa, fb, axes=((0,), (0,)), conj=(0, 1))
-    ffc.unfuse_legs(axes=(0, 1), inplace=True)
+    ffc = ffc.unfuse_legs(axes=(0, 1))
     assert all(yast.norm(c - x) < tol for x in (fc, ffc))
 
 

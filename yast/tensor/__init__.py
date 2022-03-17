@@ -91,16 +91,16 @@ class Tensor:
 
         # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]
         try:
-            self.meta_fusion = tuple(kwargs['meta_fusion'])
+            self.mfs = tuple(kwargs['mfs'])
         except (KeyError, TypeError):
-            self.meta_fusion = ((1,),) * len(self.struct.s)
+            self.mfs = ((1,),) * len(self.struct.s)
         try:
-            self.hard_fusion = tuple(kwargs['hard_fusion'])
+            self.hfs = tuple(kwargs['hfs'])
         except (KeyError, TypeError):
-            self.hard_fusion = tuple(_Fusion(s=(x,)) for x in self.struct.s)
+            self.hfs = tuple(_Fusion(s=(x,)) for x in self.struct.s)
 
     # pylint: disable=C0415
-    from ._initialize import set_block, fill_tensor
+    from ._initialize import set_block, fill_tensor, __setitem__
     from .linalg import norm, svd, svd_lowrank, eigh, qr
     from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, mask
     from ._algebra import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
@@ -109,13 +109,19 @@ class Tensor:
     from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_leg, remove_leg
     from ._output import show_properties, __str__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_leg_charges_and_dims, get_leg_structure
-    from ._output import zero_of_dtype, item, __getitem__, __setitem__
+    from ._output import zero_of_dtype, item, __getitem__
     from ._output import get_leg_fusion, get_shape, get_signature, get_dtype
     from ._output import get_tensor_charge, get_rank
     from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric
     from ._output import save_to_hdf5, save_to_dict, compress_to_1d
     from ._tests import is_consistent, are_independent
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
+
+    def _replace(self, **kwargs):
+        for arg in ('config', 'isdiag', 'struct', 'mfs', 'hfs', 'data'):
+            if arg not in kwargs:
+                kwargs[arg] = getattr(self, arg)
+        return Tensor(**kwargs)
 
     @property
     def s(self):
@@ -128,7 +134,7 @@ class Tensor:
             of each fused leg is given by the first native leg in the fused space.
         """
         inds, n = [], 0
-        for mf in self.meta_fusion:
+        for mf in self.mfs:
             inds.append(n)
             n += mf[0]
         return tuple(self.struct.s[ind] for ind in inds)
@@ -164,7 +170,7 @@ class Tensor:
             effective rank of the tensor. Legs (spaces) fused together by :meth:`yast.Tensor.fuse`
             are treated as single leg.
         """
-        return len(self.meta_fusion)
+        return len(self.mfs)
 
     @property
     def ndim_n(self):
@@ -236,3 +242,12 @@ class Tensor:
             'complex128' if tensor data are complex else 'float64'
         """
         return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
+    
+    @property
+    def data(self):
+        """
+        Returns
+        -------
+        data : backend 1d array
+        """
+        return self._data

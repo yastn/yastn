@@ -9,6 +9,23 @@ from ._tests import YastError
 __all__ = ['match_legs', 'block']
 
 
+def __setitem__(a, key, newvalue):
+    """
+    Parameters
+    ----------
+    key : tuple(int)
+        charges of the block
+
+    Update data corresponding the block. The data should be consistent with shape
+    """
+    key = tuple(_flatten(key))
+    try:
+        ind = a.struct.t.index(key)
+    except ValueError:
+        raise YastError('tensor does not have block specify by key')
+    a._data[slice(*a.struct.sl[ind])] = newvalue
+
+
 def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     r"""
     Create all possible blocks based on s, n and list of charges for all legs.
@@ -225,19 +242,19 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
         'randR', 'rand', 'ones', 'zeros'
     """
 
-    t, D, s, lf, hf = [], [], [], [], []
+    t, D, s, mfs, hfs = [], [], [], [], []
     if conjs is None:
         conjs = (0,) * len(tensors)
     for nf, te, cc in zip(legs, tensors, conjs):
-        lf.append(te.meta_fusion[nf])
-        un, = _unpack_axes(te.meta_fusion, (nf,))
+        mfs.append(te.mfs[nf])
+        un, = _unpack_axes(te.mfs, (nf,))
         for nn in un:
             tdn = te.get_leg_structure(nn, native=True)
             t.append(tuple(tdn.keys()))
             D.append(tuple(tdn.values()))
             s.append(te.struct.s[nn] * (2 * cc - 1))
-            hf.append(te.hard_fusion[nn] if cc == 1 else _flip_hf(te.hard_fusion[nn]))
-    a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, meta_fusion=lf, hard_fusion=hf,
+            hfs.append(te.hfs[nn] if cc == 1 else _flip_hf(te.hfs[nn]))
+    a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, mfs=mfs, hfs=hfs,
                             dtype=tensors[0].yast_dtype, device=tensors[0].device)
     a.fill_tensor(t=t, D=D, val=val)
     return a
@@ -268,8 +285,8 @@ def block(tensors, common_legs=None):
         if len(ind) != lind:
             raise YastError('Wrong number of coordinates encoded in tensors.keys()')
 
-    out_s, =  _unpack_axes(tn0.meta_fusion, out_s)
-    u_b = tuple(_unpack_axes(tn0.meta_fusion, *out_b))
+    out_s, =  _unpack_axes(tn0.mfs, out_s)
+    u_b = tuple(_unpack_axes(tn0.mfs, *out_b))
     out_b = tuple(chain(*u_b))
     pos = tuple(tuple(chain.from_iterable(repeat(x, len(u)) for x, u in zip(ind, u_b))) for ind in pos)
 
@@ -279,7 +296,7 @@ def block(tensors, common_legs=None):
             raise YastError('Signatues of blocked tensors are inconsistent.')
         if tn.struct.n != tn0.struct.n:
             raise YastError('Tensor charges of blocked tensors are inconsistent.')
-        if tn.meta_fusion != tn0.meta_fusion or tn.hard_fusion != tn0.hard_fusion:
+        if tn.mfs != tn0.mfs or tn.hfs != tn0.hfs:
             raise YastError('Fusion structures of blocked tensors are inconsistent.')
         if tn.isdiag != tn0.isdiag:
             raise YastError('Block can talk either only diagonal of only nondiagonal tensors.')
@@ -327,6 +344,4 @@ def block(tensors, common_legs=None):
     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
 
     data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, Dsize)
-    c = tn0.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct, data=data,
-                        meta_fusion=tn0.meta_fusion, hard_fusion=tn0.hard_fusion)
-    return c
+    return tn0._replace(struct=c_struct, data=data)

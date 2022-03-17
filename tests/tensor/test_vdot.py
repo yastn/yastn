@@ -182,26 +182,26 @@ def test_hf_intersect_exceptions():
         a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
         b = yast.Tensor(config=config_U1, s=(1, -1, 1, -1))
         b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
-        a.fuse_legs(axes=[(0, 1, 2, 3)], inplace=True, mode='hard')
-        b.fuse_legs(axes=[(0, 1, 2, 3)], inplace=True, mode='hard')
+        a = a.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
+        b = b.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
         yast.vdot(a, b)  # Error in intersect: mismatch of native bond dimensions of fused legs.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
         b = yast.rand(config=config_U1, s=(1, -1, 1), t=(t2, t2, t2), D=(D1, D2, D1))
-        a.fuse_legs(axes=((0, 2), 1), inplace=True, mode='hard')
-        b.fuse_legs(axes=((0, 2), 1), inplace=True, mode='hard')
+        a = a.fuse_legs(axes=((0, 2), 1), mode='hard')
+        b = b.fuse_legs(axes=((0, 2), 1), mode='hard')
         yast.vdot(a, b)  # Error in union: mismatch of bond dimensions of unfused legs.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(-1, 1, -1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
         b = yast.rand(config=config_U1, s=(-1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
-        a.fuse_legs(axes=((0, 1, 2), 3), inplace=True, mode='hard')
-        b.fuse_legs(axes=((0, 1, 2), 3), inplace=True, mode='hard')
+        a = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
+        b = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         yast.vdot(a, b)  # Error in vdot: signatures of fused legs do not match.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(-1, 1, -1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
         b = yast.rand(config=config_U1, s=(-1, 1, -1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
-        a.fuse_legs(axes=((0, 1), (2, 3)), inplace=True, mode='hard')
-        b.fuse_legs(axes=((0, 1, 2), 3), inplace=True, mode='hard')
+        a = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+        b = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         yast.vdot(a, b)  # Error in vdot: signatures of fused legs do not match.
 
 
