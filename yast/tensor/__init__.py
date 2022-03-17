@@ -56,6 +56,8 @@ class Tensor:
                 total charge of the tensor. In case of direct product of several
                 abelian symmetries `n` is tuple with total charge for each individual
                 symmetry
+            isdiag : bool
+                distinguish diagonal tensor as a special case of a tensor
         """
         self.config = config if isinstance(config, _config) else _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
         self._isdiag = isdiag
@@ -118,6 +120,7 @@ class Tensor:
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
 
     def _replace(self, **kwargs):
+        """ Creates a shallow copy replacing fields specified in kwargs """
         for arg in ('config', 'isdiag', 'struct', 'mfs', 'hfs', 'data'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
