@@ -34,6 +34,9 @@ def set_num_threads(num_threads):
     warnings.warn("backend_np does not support set_num_threads.", Warning)
     pass
 
+def grad(x):
+    warnings.warn("backend_np does not support automatic differentiation.", Warning)
+    return None
 
 ###################################
 #     single tensor operations    #

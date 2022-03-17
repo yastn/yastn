@@ -52,9 +52,11 @@ def to(a, device=None, dtype=None):
     tensor : Tensor
         returns a clone of the tensor residing on ``device`` in desired ``dtype``. If tensor already
         resides on ``device``, returns ``self``. This operation preserves autograd.
+
+        Makes a shallow copy of Tensor data if nothing is to change.
     """
     if dtype in (None, a.yast_dtype) and device in (None, a.device):
-        return a
+        return a._replace()
     data = a.config.backend.move_to(a._data, dtype=dtype, device=device)
     return a._replace(data=data)
 
@@ -72,7 +74,10 @@ def detach(a):
 
 
 def grad(a):
-    data = a._data.grad
+    """
+    TODO ADD description
+    """
+    data = a.config.backend.grad(a._data)
     return a._replace(data=data)
 
 
@@ -95,6 +100,8 @@ def conj(a):
     Return conjugated tensor. In particular, change the sign of the signature `s` to `-s`,
     the total charge `n` to `-n`, and complex conjugate each block of the tensor.
 
+    Follows the behavior of the backend.conj() when it comes to creating a new copy of the data.
+
     Returns
     -------
     tensor : Tensor
@@ -113,6 +120,8 @@ def conj_blocks(a):
     Complex-conjugate all blocks leaving symmetry structure (signature, blocks charge, and
     total charge) unchanged.
 
+    Follows the behavior of the backend.conj() when it comes to creating a new copy of the data.
+
     Returns
     -------
     tensor : Tensor
@@ -127,12 +136,13 @@ def flip_signature(a):
     reverse the direction of in- and out-going legs, and also the total charge
     of the tensor `n` to `-n`. Does not complex-conjugate the elements of the tensor.
 
+    Creates a shallow copy of the data.
+
     Returns
     -------
     tensor : Tensor
         clone of the tensor with modified signature `-s` and total
         charge `-n`.
-
     """
     an = np.array(a.struct.n, dtype=int).reshape((1, 1, -1))
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
@@ -147,6 +157,8 @@ def transpose(a, axes):
     Transpose tensor by permuting the order of its legs (spaces).
     Transpose can be done in-place, in which case copying of the data is not forced.
     Otherwise, new tensor is created and its data (blocks) is cloned.
+
+    Makes a shallow copy of Tensor data if the order is not changed.
 
     Parameters
     ----------
@@ -189,6 +201,8 @@ def move_leg(a, source, destination):
     Change the position of an axis (or a group of axes) of the tensor.
     This is a convenience function for subset of possible permutations. It
     computes the corresponding permutation and then calls :meth:`yast.Tensor.transpose`.
+
+    Makes a shallow copy of Tensor data if the order is not changed.
 
     Parameters
     ----------
@@ -234,6 +248,8 @@ def add_leg(a, axis=-1, s=1, t=None):
     Creates a new auxiliary leg that explicitly carries charge
     (or part of it) associated with the tensor.
 
+    Makes a shallow copy of Tensor data.
+
     Parameters
     ----------
         axis: int
@@ -277,6 +293,8 @@ def remove_leg(a, axis=-1):
     Removes leg of single charge with dimension one.
 
     The charge carried by that axis is added to the tensors charge.
+
+    Makes a shallow copy of Tensor data.
 
     Parameters
     ----------
