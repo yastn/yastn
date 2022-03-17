@@ -259,7 +259,7 @@ def __getitem__(a, key):
     -------
     out : tensor
         The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
-        Output 1d array for diagonal tensor, outherwise reshape into n-dim array.
+        Output 1d array for diagonal tensor, otherwise reshape into n-dim array.
     """
     key = tuple(_flatten(key))
     try:
@@ -268,6 +268,7 @@ def __getitem__(a, key):
         raise YastError('tensor does not have block specify by key')
     x = a._data[slice(*a.struct.sl[ind])]
     
+    # TODO this should be reshape called from backend ?
     return x if a.isdiag else x.reshape(a.struct.D[ind])
 
 

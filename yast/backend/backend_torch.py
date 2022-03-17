@@ -607,7 +607,6 @@ class kernel_merge_to_1d(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, data_b):
-        print("Hi")
         order= ctx.order
         meta_new= ctx.meta_new
         meta_mrg= ctx.meta_mrg
