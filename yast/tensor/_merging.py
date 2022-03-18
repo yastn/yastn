@@ -5,7 +5,7 @@ from itertools import groupby, product
 from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
-from ._auxliary import _flatten, _struct, _clear_axes, _ntree_to_mf, _mf_to_ntree
+from ._auxliary import _flatten, _clear_axes, _ntree_to_mf, _mf_to_ntree
 from ._tests import YastError, _test_axes_all, _get_tD_legs
 
 
@@ -106,7 +106,7 @@ def _unmerge_diagonal(a, Am, ls):
     c_Dp = tuple(x[0] for x in c_D)
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
-    a.struct = a.struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    a.struct = a.struct._replace(t=c_t, D=c_D, diag=True, Dp=c_Dp, sl=c_sl)
     if len(Am) > 0:
         a._data = a.config.backend.unmerge_from_2ddiag(Am, meta, c_sl, Dsize)
 
@@ -306,7 +306,7 @@ def _meta_fuse_hard(config, struct, axes):
     meta_mrg = tuple(sorted(((tn, slo, Do, tuple(l.dec[e][o].Dslc for l, e, o in zip(ls, tes, tos)),
                              tuple(l.dec[e][o].Dprod for l, e, o in zip(ls, tes, tos)))
                              for tn, slo, Do, tes, tos in zip(teff, struct.sl, struct.D, teff_split, told_split)), key=lambda x : x[0]))
-    struct_new = _struct(t=tnew, D=Dnew, Dp=Dpnew, sl=slnew, s=tuple(snew), n=struct.n)
+    struct_new = struct._replace(t=tnew, D=Dnew, Dp=Dpnew, sl=slnew, s=tuple(snew))
     return struct_new, meta_mrg, t_in, D_in
 
 
