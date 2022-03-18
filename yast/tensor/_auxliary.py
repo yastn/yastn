@@ -5,10 +5,11 @@ from ..sym import sym_none
 
 
 class _struct(NamedTuple):
-    t: tuple = ()  # list of block charges
-    D: tuple = ()  # list of block shapes
     s: tuple = ()  # leg signatures
     n: tuple = ()  # tensor charge
+    diag: bool = False  # isdiag
+    t: tuple = ()  # list of block charges
+    D: tuple = ()  # list of block shapes
     Dp: tuple = ()  # list of block sizes (products of shapes)
     sl: tuple = ()  # slices in 1d data
 
