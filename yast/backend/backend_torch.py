@@ -263,12 +263,11 @@ class kernel_transpose(torch.autograd.Function):
     def backward(ctx, data_b):
         axes= ctx.axes
         meta_transpose= ctx.meta_transpose
-        
+        inv_axes= tuple(np.argsort(axes))
         newdata_b = torch.zeros_like(data_b)
         for slice_to, slice_from, D_from in meta_transpose:
-            inv_axes= tuple(np.argsort(axes))
-            newdata_b[slice(*slice_from)] = data_b[slice(*slice_to)]\
-                .view(tuple(np.array(D_from)[[axes]])).permute(inv_axes).ravel()
+            Drsh = tuple(D_from[n] for n in axes)
+            newdata_b[slice(*slice_from)] = data_b[slice(*slice_to)].view(Drsh).permute(inv_axes).ravel()
         return newdata_b, None, None
 
 def rsqrt(data, cutoff=0):
@@ -586,8 +585,7 @@ class kernel_merge_to_1d(torch.autograd.Function):
         # Dsize - total size of fused representation (might include some zero-blocks)
         newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
 
-        # meta_new -> originaly long columns, transposed to single column of rows by zip(*meta_new)
-        #             where each row has
+        # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
         #             Dn -> effective shape of block tn in fused tensor
         #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
@@ -601,7 +599,7 @@ class kernel_merge_to_1d(torch.autograd.Function):
         #                        source block in the destination block tn
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
         # 
-        for (tn, Dn, sln), (t1, gr) in zip(zip(*meta_new), groupby(meta_mrg, key=lambda x: x[0])):
+        for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
             assert tn == t1
             temp = torch.zeros(Dn, dtype=data.dtype, device=data.device)
             for (_, slo, Do, Dslc, Drsh) in gr:
@@ -619,11 +617,12 @@ class kernel_merge_to_1d(torch.autograd.Function):
         inv_order= tuple(np.argsort(order))
 
         newdata_b = torch.zeros((D_source,), dtype=data_b.dtype, device=data_b.device)
-        for (tn, D_source, slice_source), (t1, gr) in zip(zip(*meta_new), groupby(meta_mrg, key=lambda x: x[0])):
-            tmp_b= data_b[slice(*slice_source)].view(D_source)
+        for (tn, D_source, slice_source), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
+            tmp_b = data_b[slice(*slice_source)].view(D_source)
             for (_, slice_destination, D_destination, slice_source_block, D_source_block) in gr:
-                newdata_b[slice(*slice_destination)]= tmp_b[tuple(slice(*x) for x in slice_source_block)]\
-                    .reshape( tuple(np.array(D_destination)[[order]]) ).permute(inv_order).ravel()
+                slc = tuple(slice(*x) for x in slice_source_block)
+                Drsh = tuple(D_destination[n] for n in order)
+                newdata_b[slice(*slice_destination)] = tmp_b[slc].reshape(Drsh).permute(inv_order).ravel()
         return newdata_b, None, None, None, None
 
 

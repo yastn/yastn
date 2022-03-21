@@ -96,6 +96,7 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
         Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, (nout_a, nin_a), s_eff_a, ind_a, sort_r=True)
         Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(b, (nin_b, nout_b), s_eff_b, ind_b)
 
+
         meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
         if needs_mask:
