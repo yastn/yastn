@@ -96,6 +96,7 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
         Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, (nout_a, nin_a), s_eff_a, ind_a, sort_r=True)
         Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(b, (nin_b, nout_b), s_eff_b, ind_b)
 
+
         meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
 
         if needs_mask:
@@ -285,7 +286,7 @@ def _meta_broadcast(config, a_struct, b_struct, axis, conja):
         c_D = tuple(mt[2] for mt in meta)
         c_Dp = tuple(mt[3] for mt in meta)
         c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-        c_struct = _struct(s=c_s, n=c_n, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+        c_struct = a_struct._replace(s=c_s, n=c_n, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     else:
         c_struct = a_struct._replace(s=c_s, n=c_n)
 
@@ -443,7 +444,7 @@ def trace(a, axes=(0, 1)):
 
     if a.isdiag:
         # if needs_mask: raise YastError('Should not have happend')
-        struct = _struct(s=(), n=a.struct.n, t=((),), D=((),), Dp=(1,), sl=((0, 1),))
+        struct = a.struct._replace(s=(), diag=False, t=((),), D=((),), Dp=(1,), sl=((0, 1),))
         data = a.config.backend.sum_elements(a._data)
         return a._replace(struct=struct, mfs=mfs, hfs=hfs, isdiag=False, data=data)
 

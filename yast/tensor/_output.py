@@ -60,7 +60,7 @@ def compress_to_1d(a, meta=None):
             meta does not match the tensor.
     """
     if meta is None:
-        meta = {'struct': a.struct, 'isdiag': a.isdiag, 'hfs': a.hfs,
+        meta = {'struct': a.struct, 'hfs': a.hfs,
                 'mfs': a.mfs}
         return a._data, meta
     # else:
@@ -68,7 +68,7 @@ def compress_to_1d(a, meta=None):
         raise YastError("Tensor has different signature than metadata.")
     if a.struct.n != meta['struct'].n:
         raise YastError("Tensor has different tensor charge than metadata.")
-    if a.isdiag != meta['isdiag']:
+    if a.isdiag != meta['struct'].diag:
         raise YastError("Tensor has different diagonality than metadata.")
     if a.mfs != meta['mfs'] or a.hfs != meta['hfs']:
         raise YastError("Tensor has different leg fusion structure than metadata.")
@@ -527,7 +527,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     Dp = np.prod(Dtot, dtype=int)
     c_Dp = (Dp,)
     c_sl = ((0, Dp),)
-    c_struct = _struct(t=c_t, D=c_D, s=c_s, n=(), Dp=c_Dp, sl=c_sl)
+    c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
 

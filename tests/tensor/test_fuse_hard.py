@@ -365,5 +365,5 @@ if __name__ == '__main__':
     test_hard_dot_1_sparse()
     test_fuse_mix()
     test_auxliary_merging_functions()
-    # test_merge_to_1d_backward()
+    test_merge_to_1d_backward()
     test_unmerge_to_1d_backward()
