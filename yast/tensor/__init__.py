@@ -60,7 +60,6 @@ class Tensor:
                 distinguish diagonal tensor as a special case of a tensor
         """
         self.config = config if isinstance(config, _config) else _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
-        self._isdiag = isdiag
 
         if 'data' in kwargs:
             self._data = kwargs['data']  # 1d container for tensor data
@@ -81,15 +80,15 @@ class Tensor:
             except TypeError:
                 n = (0,) * self.config.sym.NSYM if n is None else (n,)
             if len(n) != self.config.sym.NSYM:
-                raise YastError('n does not match the number of symmetry sectors')
-            if self.isdiag:
+                raise YastError("n does not match the number of symmetry sectors")
+            if isdiag:
                 if len(s) == 0:
                     s = (1, -1)  # default
                 if s not in ((-1, 1), (1, -1)):
-                    raise YastError("Diagonal tensor should have s = (1, -1) or (-1, 1)")
+                    raise YastError("Diagonal tensor should have s equal (1, -1) or (-1, 1)")
                 if any(x != 0 for x in n):
                     raise YastError("Tensor charge of a diagonal tensor should be 0")
-            self.struct = _struct(t=(), D=(), s=s, n=n)
+            self.struct = _struct(s=s, n=n, diag=isdiag)
 
         # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]
         try:
@@ -121,7 +120,7 @@ class Tensor:
 
     def _replace(self, **kwargs):
         """ Creates a shallow copy replacing fields specified in kwargs """
-        for arg in ('config', 'isdiag', 'struct', 'mfs', 'hfs', 'data'):
+        for arg in ('config', 'struct', 'mfs', 'hfs', 'data'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
         return Tensor(**kwargs)
@@ -194,7 +193,7 @@ class Tensor:
         isdiag : bool
             ``True`` if the tensor is diagonal.
         """
-        return self._isdiag
+        return self.struct.diag
 
     @property
     def requires_grad(self):

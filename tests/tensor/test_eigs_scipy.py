@@ -59,7 +59,7 @@ def test_eigs_exception():
 
     # dense transfer matrix build from a -- here a has some un-matching blocks between first and last legs
     tm = yast.ncon([a, a], [(-1, 1, -3), (-2, 1, -4)], conjs=(0, 1))
-    tm = tm.fuse_legs(axes=((0, 1), (2, 3)))
+    tm = tm.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
     # make sure to fill-in zero blocks
     ls0 = tm.get_leg_structure(axis=0)
     ls1 = tm.get_leg_structure(axis=1)

@@ -531,7 +531,7 @@ def merge_to_2d(data, order, meta_new, meta_mrg):
 
 def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
-    for (tn, Dn, sln), (t1, gr) in zip(zip(*meta_new), groupby(meta_mrg, key=lambda x: x[0])):
+    for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
         assert tn == t1
         temp = np.zeros(Dn, dtype=data.dtype)
         for (_, slo, Do, Dslc, Drsh) in gr:

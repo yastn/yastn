@@ -196,9 +196,9 @@ def load_from_dict(config=None, d=None):
         c_isdiag = bool(d['isdiag'])
         c_Dp = tuple(x[0] for x in d['D']) if c_isdiag else tuple(np.prod(d['D'], axis=1))
         c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-        struct = _struct(s=d['s'], n=d['n'], t=d['t'], D=d['D'], Dp=c_Dp, sl=c_sl)
+        struct = _struct(s=d['s'], n=d['n'], diag=c_isdiag, t=d['t'], D=d['D'], Dp=c_Dp, sl=c_sl)
         hfs = tuple(_Fusion(**hf) for hf in d['hfs'])
-        c = Tensor(config=config, struct=struct, isdiag=c_isdiag,
+        c = Tensor(config=config, struct=struct,
                     hfs=hfs, mfs=d['mfs'])
         if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID']:
             raise YastError("Symmetry rule in config do not match loaded one.")
@@ -229,11 +229,10 @@ def load_from_hdf5(config, file, path):
     c_D = tuple(tuple(x.flat) for x in g.get('Ds')[:])
     c_Dp = tuple(x[0] for x in c_D) if c_isdiag else tuple(np.prod(c_D, axis=1))
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-    struct = _struct(s=c_s, n=c_n, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
 
     mfs = eval(tuple(file.get(path+'/meta').keys())[0])
-    c = Tensor(config=config, struct=struct,
-               isdiag=c_isdiag, mfs=mfs)
+    c = Tensor(config=config, struct=struct, mfs=mfs)
     # hfs=hfs
     vmat = g.get('matrix')[:]
     c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name, device=c.device)

@@ -1,6 +1,6 @@
 """ Linear operations and operations on a single yast tensor. """
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _struct
+from ._auxliary import _clear_axes, _unpack_axes
 from ._merging import _Fusion, _flip_hf
 from ._tests import YastError, _test_axes_all
 
@@ -191,7 +191,7 @@ def transpose(a, axes):
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
 
     meta = tuple((sln, *mt[3:]) for sln, mt, in zip(c_sl, meta))
-    struct = _struct(s=c_s, n=a.struct.n, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    struct = a.struct._replace(s=c_s, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     data = a._data if a.isdiag else a.config.backend.transpose(a._data, uaxes, meta)
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
 
@@ -346,7 +346,7 @@ def diag(a):
         #     isdiag=True -> isdiag=False                    isdiag=False -> isdiag=True
     Dp = tuple(x ** 2 for x in a.struct.Dp) if a.isdiag else tuple(D[0] for D in a.struct.D)
     sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp), Dp))
-    struct = a.struct._replace(Dp=Dp, sl=sl)
+    struct = a.struct._replace(Dp=Dp, sl=sl, diag=not a.isdiag)
 
     Dsize = sl[-1][1] if len(sl) > 0 else 0
     if a.isdiag:  # isdiag=True -> isdiag=False
@@ -355,7 +355,7 @@ def diag(a):
     else:  # isdiag=False -> isdiag=True
         meta = tuple(zip(sl, a.struct.sl, a.struct.D))
         data = a.config.backend.diag_2dto1d(a._data, meta, Dsize)
-    return a._replace(isdiag=not a.isdiag, struct=struct, data=data)
+    return a._replace(struct=struct, data=data)
 
 
 def remove_zero_blocks(a, rtol=1e-12, atol=0):
