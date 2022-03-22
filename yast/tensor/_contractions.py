@@ -4,7 +4,7 @@ from itertools import groupby, product
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _struct, _flatten
 from ._tests import YastError, _test_configs_match, _test_axes_match
-from ._merging import _merge_to_matrix, _unmerge_matrix, _flip_hf
+from ._merging import _merge_to_matrix, _merge_to_matrix2, _unmerge_matrix, _flip_hf, _meta_unfuse_legdec
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
 
 
@@ -87,45 +87,62 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
     elif policy is None:
         policy = a.config.default_tensordot
 
-    if policy == 'merge' or (policy == 'hybrid' and len(nin_a) != 1 and a.config.sym.NSYM > 0):
-        t_a = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-        t_b = np.array(b.struct.t, dtype=int).reshape((len(b.struct.t), len(b.struct.s), len(b.struct.n)))
-        ind_a, ind_b = _common_rows(t_a[:, nin_a, :], t_b[:, nin_b, :])
-        s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
+    # if policy == 'merge' or (policy == 'hybrid' and len(nin_a) != 1 and a.config.sym.NSYM > 0):
+    t_a = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+    t_b = np.array(b.struct.t, dtype=int).reshape((len(b.struct.t), len(b.struct.s), len(b.struct.n)))
+    ind_a, ind_b = _common_rows(t_a[:, nin_a, :], t_b[:, nin_b, :])
+    s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
 
-        Am, ls_l, ls_ac, ua_l, ua_r = _merge_to_matrix(a, (nout_a, nin_a), s_eff_a, ind_a, sort_r=True)
-        Bm, ls_bc, ls_r, ub_l, ub_r = _merge_to_matrix(b, (nin_b, nout_b), s_eff_b, ind_b)
+    data_a, struct_a, ls_l, ls_ac = _merge_to_matrix2(a, (nout_a, nin_a), s_eff_a, ind_a, sort_r=True)
+    data_b, struct_b, ls_bc, ls_r = _merge_to_matrix2(b, (nin_b, nout_b), s_eff_b, ind_b)
 
+    nsym = len(a.struct.n)
 
-        meta_dot = tuple((al + br, al + ar, bl + br) for al, ar, bl, br in zip(ua_l, ua_r, ub_l, ub_r))
+    tc = tuple(ta[:nsym] + tb[nsym:] for ta, tb in zip(struct_a.t, struct_b.t))
+    Dc = tuple((Da[0], Db[1]) for Da, Db in zip(struct_a.D, struct_b.D))
 
-        if needs_mask:
-            msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hfs, nin_a, ls_ac,
+    # tc Dc sla Da, slb, Db, ia, ib
+    meta_dot = tuple(sorted(zip(tc, Dc, struct_a.sl, struct_a.D, struct_b.sl, struct_b.D, struct_a.t, struct_b.t)))
+    tc = tuple(x[0] for x in meta_dot)
+    Dc = tuple(x[1] for x in meta_dot)
+    Dpc = tuple(D[0] * D[1] for D in Dc)
+    slc = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpc), Dpc))
+    Dsize = slc[-1][1] if len(slc) > 0 else 0
+
+    if needs_mask:
+        msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hfs, nin_a, ls_ac,
                                                         b.struct, b.hfs, nin_b, ls_bc)
-            Am = {ul + ur: Am[ul + ur][:, msk_a[ur]] for ul, ur in zip(ua_l, ua_r)}
-            Bm = {ul + ur: Bm[ul + ur][msk_b[ul], :] for ul, ur in zip(ub_l, ub_r)}
-        elif ua_r != ub_l or ls_ac != ls_bc:
+        meta_dot = tuple((sl, *mt[2:6], mt[6][nsym:], mt[7][:nsym]) for sl, mt in zip(slc, meta_dot))
+        data = a.config.backend.dot_with_mask(data_a, data_b, conj, meta_dot, Dsize, msk_a, msk_b)
+    else:
+        if not all(ta[nsym:] == tb[:nsym] for ta, tb in zip(struct_a.t, struct_b.t)) or ls_ac != ls_bc:
             raise YastError('Bond dimensions do not match.')
+        meta_dot = tuple((sl, *mt[2:6]) for sl, mt in zip(slc, meta_dot))
+        data = a.config.backend.dot(data_a, data_b, conj, meta_dot, Dsize)
 
-        c = a.__class__(config=a.config, s=c_s, n=c_n, mfs=c_mfs, hfs=c_hfs)
-        Cm = c.config.backend.dot(Am, Bm, conj, meta_dot)
-        _unmerge_matrix(c, Cm, ls_l, ls_r)
-        return c
-    if policy in ('hybrid', 'direct'):
-        meta, c_t, c_D, c_Dp, c_sl, tcon = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
-        c_struct = _struct(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl, s=c_s, n=c_n)
-        Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
-        oA = tuple(nout_a + nin_a)
-        oB = tuple(nin_b + nout_b)
-        if needs_mask:
-            ma, mb = _masks_for_axes(a.config, a.struct, a.hfs, nin_a, b.struct, b.hfs, nin_b, tcon)
-            data = a.config.backend.dot_nomerge_masks(a._data, b._data, conj, oA, oB, meta, Dsize, tcon, ma, mb)
-        else:
-            if any(mt[3][1] != mt[6][0] for mt in meta):
-                raise YastError('Bond dimensions do not match.')
-            data = a.config.backend.dot_nomerge(a._data, b._data, conj, oA, oB, meta, Dsize)
-        return a._replace(mfs=c_mfs, hfs=c_hfs, struct=c_struct, data=data)
-    raise YastError("Unknown policy for tensordot. policy should be in ('hybrid', 'direct', 'merge').")
+    struct = a.struct._replace(t=tc, D=Dc, Dp=Dpc, sl=slc, n=c_n, s=(s_eff_a[0], s_eff_b[1]))
+    meta_unmerge, struct = _meta_unfuse_legdec(a.config, struct, [ls_l, ls_r], c_s)
+
+    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
+    data = a.config.backend.unmerge_from_1d(data, meta_unmerge, struct.sl, Dsize)
+
+    c = a._replace(data=data, struct=struct, mfs=c_mfs, hfs=c_hfs)
+    return c
+    # if policy in ('hybrid', 'direct'):
+    #     meta, c_t, c_D, c_Dp, c_sl, tcon = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
+    #     c_struct = _struct(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl, s=c_s, n=c_n)
+    #     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
+    #     oA = tuple(nout_a + nin_a)
+    #     oB = tuple(nin_b + nout_b)
+    #     if needs_mask:
+    #         ma, mb = _masks_for_axes(a.config, a.struct, a.hfs, nin_a, b.struct, b.hfs, nin_b, tcon)
+    #         data = a.config.backend.dot_nomerge_masks(a._data, b._data, conj, oA, oB, meta, Dsize, tcon, ma, mb)
+    #     else:
+    #         if any(mt[3][1] != mt[6][0] for mt in meta):
+    #             raise YastError('Bond dimensions do not match.')
+    #         data = a.config.backend.dot_nomerge(a._data, b._data, conj, oA, oB, meta, Dsize)
+    #     return a._replace(mfs=c_mfs, hfs=c_hfs, struct=c_struct, data=data)
+    # raise YastError("Unknown policy for tensordot. policy should be in ('hybrid', 'direct', 'merge').")
 
 
 def _tensordot_diag(a, b, in_a, destination, conj):  # (-1,)

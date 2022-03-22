@@ -502,12 +502,25 @@ def diag_2dto1d(data, meta, Dsize):
     return newdata
 
 
-def dot(A, B, cc, meta_dot):
+
+def dot(Adata, Bdata, cc, meta_dot, Dsize):
+    dtype = _common_type((Adata, Bdata))
+    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
     f = dot_dict[cc]  # proper conjugations
-    C = {}
-    for (out, ina, inb) in meta_dot:
-        C[out] = f(A[ina], B[inb])
-    return C
+    for (slc, sla, Da, slb, Db) in meta_dot:
+        newdata[slice(*slc)] = f(Adata[slice(*sla)].view(Da), \
+                                 Bdata[slice(*slb)].view(Db)).ravel()
+    return newdata
+
+
+def dot_with_mask(Adata, Bdata, cc, meta_dot, Dsize, msk_a, msk_b):
+    dtype = _common_type((Adata, Bdata))
+    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    f = dot_dict[cc]  # proper conjugations
+    for (slc, sla, Da, slb, Db, ia, ib) in meta_dot:
+        newdata[slice(*slc)] = f(Adata[slice(*sla)].view(Da)[:, msk_a[ia]], \
+                                 Bdata[slice(*slb)].view(Db)[msk_b[ib], :]).ravel()
+    return newdata
 
 
 dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
