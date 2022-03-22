@@ -677,23 +677,40 @@ def unmerge_from_2ddiag(A, meta, new_sl, Dsize):
 
 
 def unmerge_from_1d(data, meta, new_sl, Dsize):
-    # slo -> slice in source tensor, specifying location of t_effective(fused) block
-    # Do  -> shape of the fused block with t_eff
-    newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
-    for (slo, Do, sub_slc), snew in zip(meta, new_sl):
-        #                                                     take a "subblock" of t_eff block
-        #                                                     specified by a list of slices sub_slc
-        newdata[slice(*snew)] = data[slice(*slo)].reshape(Do)[tuple(slice(*x) for x in sub_slc)].ravel()
-    return newdata
+    return kernel_unmerge_from_1d.apply(data, meta, new_sl, Dsize)
 
+class kernel_unmerge_from_1d(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, data, meta, new_sl, Dsize):
+        ctx.meta= meta
+        ctx.new_sl= new_sl
+        ctx.fwd_data_size= data.size()
+
+        # slo -> slice in source tensor, specifying location of t_effective(fused) block
+        # Do  -> shape of the fused block with t_eff
+        newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+        for (slo, Do, sub_slc), snew in zip(meta, new_sl):
+            #                                                     take a "subblock" of t_eff block
+            #                                                     specified by a list of slices sub_slc
+            newdata[slice(*snew)] = data[slice(*slo)].reshape(Do)[tuple(slice(*x) for x in sub_slc)].ravel()
+        return newdata
+
+    @staticmethod
+    def backward(ctx, data_b):
+        meta= ctx.meta
+        new_sl= ctx.new_sl
+        fwd_data_size= ctx.fwd_data_size
+
+        newdata_b = torch.zeros(fwd_data_size, dtype=data_b.dtype, device=data_b.device)
+        for (slice_destination, D_eff_block, sub_slc), slice_source in zip(meta, new_sl):
+            slc= tuple(slice(*x) for x in sub_slc)
+            Drsh= tuple(x[1]-x[0] for x in sub_slc)
+            newdata_b[slice(*slice_destination)].view(D_eff_block)[slc]=data_b[slice(*slice_source)].view(Drsh)
+        return newdata_b, None, None, None
 
 #############
 #   tests   #
 #############
-
-
-
-
 
 def is_independent(x, y):
     """
