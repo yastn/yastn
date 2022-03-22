@@ -219,7 +219,7 @@ def test_tensordot_exceptions():
         # Outer product with diagonal tensor not supported. Use yast.diag() first.
 
 if __name__ == '__main__':
-    test_dot_basic(policy="direct")
+    test_dot_basic(policy="merge")
     test_tensordot_fuse_hard(policy=None)
     test_tensordot_diag()
     test_tensordot_fuse_meta()

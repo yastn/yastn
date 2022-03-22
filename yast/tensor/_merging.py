@@ -81,11 +81,11 @@ def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
 def _merge_to_matrix2(a, axes, s_eff, inds=None, sort_r=False):
     """ Main function merging tensor into effective block matrix. """
     order = axes[0] + axes[1]
-    meta_new, meta_mrg, ls_l, ls_r, ul, ur = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds, sort_r)
-    Dsize = meta_new[2][-1][1] if len(meta_new[2]) > 0 else 0
-    meta_1d = tuple(zip(*meta_new[:3]))
+    struct, meta_mrg, ls_l, ls_r = _meta_merge_to_matrix2(a.config, a.struct, axes, s_eff, inds, sort_r)
+    meta_1d = tuple(sorted(zip(struct.t, struct.D, struct.sl)))
+    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
     newdata = a.config.backend.merge_to_1d(a._data, order, meta_1d, meta_mrg, Dsize)
-    return newdata, meta_new, ls_l, ls_r
+    return newdata, struct, ls_l, ls_r
 
 
 @lru_cache(maxsize=1024)
@@ -123,8 +123,8 @@ def _meta_merge_to_matrix2(config, struct, axes, s_eff, inds, sort_r):
     D_new = tuple((ls[0].Dtot[il], ls[1].Dtot[ir]) for il, ir in zip(unew_l, unew_r))
     Dp_new = tuple(x[0] * x[1] for x in D_new)
     sl_new = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp_new), Dp_new))
-    meta_new = tuple(unew, D_new, sl_new, unew_l, unew_r)
-    return meta_new, meta_mrg, ls[0], ls[1]
+    struct_new = struct._replace(t=unew, D=D_new, Dp=Dp_new, sl=sl_new, s=tuple(s_eff))
+    return struct_new, meta_mrg, ls[0], ls[1]
 
 
 def _unmerge_matrix(a, Am, ls_l, ls_r):
@@ -454,7 +454,6 @@ def unfuse_legs(a, axes):
     return a._replace(mfs=tuple(mfs))
 
 
-
 @lru_cache(maxsize=1024)
 def _meta_unfuse_hard(config, struct, axes, hfs):
     """ Meta information for backend needed to hard-unfuse some legs. """
@@ -472,7 +471,11 @@ def _meta_unfuse_hard(config, struct, axes, hfs):
             ls.append(_LegDec(dec, tD_dict[n]))
             hfs_new.append(hf)
             snew.append(struct.s[n])
+    meta, new_struct = _meta_unfuse_legdec(config, struct, ls, snew)
+    return meta, new_struct, tuple(nlegs_unfused), tuple(hfs_new)
 
+
+def _meta_unfuse_legdec(config, struct, ls, snew):
     meta, nsym = [], config.sym.NSYM
     for to, slo, Do in zip(struct.t, struct.sl, struct.D):
         tfused = tuple(to[n * nsym: (n + 1) * nsym] for n in range(len(struct.s)))
@@ -491,7 +494,8 @@ def _meta_unfuse_hard(config, struct, axes, hfs):
     slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
     new_struct = struct._replace(s=tuple(snew), t=tnew, D=Dnew, Dp=Dpnew, sl=slnew)
     meta = tuple(x[3:] for x in meta)
-    return meta, new_struct, tuple(nlegs_unfused), tuple(hfs_new)
+    return meta, new_struct
+
 
 #  =========== masks ======================
 

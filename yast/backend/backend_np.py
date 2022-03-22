@@ -467,12 +467,22 @@ def diag_2dto1d(Adata, meta, Dsize):
     return newdata
 
 
-def dot(A, B, cc, meta_dot):
+def dot(Adata, Bdata, cc, meta_dot, Dsize):
+    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
     f = dot_dict[cc]  # proper conjugations
-    C = {}
-    for (out, ina, inb) in meta_dot:
-        C[out] = f(A[ina], B[inb])
-    return C
+    for (slc, sla, Da, slb, Db) in meta_dot:
+        newdata[slice(*slc)] = f(Adata[slice(*sla)].reshape(Da), \
+                                 Bdata[slice(*slb)].reshape(Db)).ravel()
+    return newdata
+
+
+def dot_with_mask(Adata, Bdata, cc, meta_dot, Dsize, msk_a, msk_b):
+    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+    f = dot_dict[cc]  # proper conjugations
+    for (slc, sla, Da, slb, Db, ia, ib) in meta_dot:
+        newdata[slice(*slc)] = f(Adata[slice(*sla)].reshape(Da)[:, msk_a[ia]], \
+                                 Bdata[slice(*slb)].reshape(Db)[msk_b[ib], :]).ravel()
+    return newdata
 
 
 dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
