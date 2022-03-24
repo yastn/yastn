@@ -218,9 +218,33 @@ def test_tensordot_exceptions():
         _ = yast.tensordot(c, a, axes=((),()))
         # Outer product with diagonal tensor not supported. Use yast.diag() first.
 
+
+@pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
+def test_tensordot_backward():
+    import torch
+
+    # U1
+    a= yast.rand(config=config_U1, s=(-1, -1, 1, 1),
+                  t=[(0, 1), (0, 1), (0, 1), (0, 1)],
+                  D=[(2, 3), (4, 5), (4, 3), (2, 1)])
+    b= a.clone()
+    target_block=(0,1,1,0)
+    target_block_size= a[target_block].size()
+
+    def test_f(block):
+        a.set_block(ts=target_block, val=block)
+        ab= yast.tensordot(a,b.conj(),([1,2],[1,2]))
+        ab= ab.norm()
+        return ab
+
+    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(),requires_grad=True), )
+    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+    assert test
+
 if __name__ == '__main__':
     test_dot_basic(policy="merge")
     test_tensordot_fuse_hard(policy=None)
     test_tensordot_diag()
     test_tensordot_fuse_meta()
     test_tensordot_exceptions()
+    test_tensordot_backward()
