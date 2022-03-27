@@ -576,13 +576,6 @@ def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
 #####################################################
 
 
-def merge_to_2d(data, order, meta_new, meta_mrg):
-    Anew = {u: torch.zeros(Du, dtype=data.dtype, device=data.device) for u, Du in zip(*meta_new)}
-    for (tn, slo, Do, Dslc, Drsh) in meta_mrg:
-        Anew[tn][tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
-    return Anew
-
-
 def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
     return kernel_merge_to_1d.apply(data, order, meta_new, meta_mrg, Dsize)
 
@@ -657,22 +650,6 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
             slc = tuple(slice(*x) for x in Dslc)
             temp[slc] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
         newdata[slice(*sln)] = temp.ravel()
-    return newdata
-
-
-def unmerge_from_2d(A, meta, new_sl, Dsize):
-    tn = next(iter(A.values()))
-    newdata = torch.zeros((Dsize,), dtype=tn.dtype, device=tn.device)
-    for (indm, sl, sr), snew in zip(meta, new_sl):
-        newdata[slice(*snew)] = A[indm][slice(*sl), slice(*sr)].ravel()
-    return newdata
-
-
-def unmerge_from_2ddiag(A, meta, new_sl, Dsize):
-    tn = next(iter(A.values()))
-    newdata = torch.zeros((Dsize,), dtype=tn.dtype, device=tn.device)
-    for (_, iold, slc), snew in zip(meta, new_sl):
-        newdata[slice(*snew)] = A[iold][slice(*slc)]
     return newdata
 
 
