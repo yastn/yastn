@@ -34,6 +34,7 @@ def set_num_threads(num_threads):
     warnings.warn("backend_np does not support set_num_threads.", Warning)
     pass
 
+
 def grad(x):
     warnings.warn("backend_np does not support automatic differentiation.", Warning)
     return None
@@ -77,9 +78,6 @@ def diag_create(x, p=0):
 
 def diag_get(x):
     return np.diag(x).copy()
-
-
-
 
 
 def count_greater(x, cutoff):
@@ -296,7 +294,6 @@ def svd(data, meta, Usize, Ssize, Vsize):
         Udata[slice(*slU)] = U.ravel()
         Sdata[slice(*slS)] = S.ravel()
         Vdata[slice(*slV)] = V.ravel()
-
     return Udata, Sdata, Vdata
 
 
@@ -365,15 +362,11 @@ def range_largest(D_keep, D_total, ordering):
         return (D_total - D_keep, D_total)
 
 
-def maximum(A):
-    """ maximal element of A """
-    return max(np.max(x) for x in A.values())
-
-
 def embed_msk(data, msk, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     newdata[msk] = data
     return newdata
+
 
 def embed_slc(data, meta, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
@@ -516,10 +509,10 @@ def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan)[:, ma[tt]], \
                                   Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn)[mb[tt], :]).ravel()
     return newdata
+
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
-
 
 
 def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
@@ -553,19 +546,15 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     return newdata
 
 
-
 def unmerge_from_1d(data, meta, new_sl, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     for (slo, Do, sub_slc), snew in zip(meta, new_sl):
         newdata[slice(*snew)] = data[slice(*slo)].reshape(Do)[tuple(slice(*x) for x in sub_slc)].ravel()
     return newdata
 
-
 #############
 #   tests   #
 #############
-
-
 
 def is_independent(x, y):
     """
