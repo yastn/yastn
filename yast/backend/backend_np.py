@@ -34,6 +34,7 @@ def set_num_threads(num_threads):
     warnings.warn("backend_np does not support set_num_threads.", Warning)
     pass
 
+
 def grad(x):
     warnings.warn("backend_np does not support automatic differentiation.", Warning)
     return None
@@ -77,9 +78,6 @@ def diag_create(x, p=0):
 
 def diag_get(x):
     return np.diag(x).copy()
-
-
-
 
 
 def count_greater(x, cutoff):
@@ -143,20 +141,17 @@ def norm(data, p):
     return max(np.abs(data)) if len(data) > 0  else np.float64(0.)
 
 
-def entropy(A, alpha=1, tol=1e-12):
+def entropy(data, alpha=1, tol=1e-12):
     """ von Neuman or Renyi entropy from svd's"""
-    Snorm = np.sqrt(np.sum([np.sum(x ** 2) for x in A.values()]))
+    Snorm = np.linalg.norm(data)
     if Snorm > 0:
-        Smin = min([min(x) for x in A.values()])
-        ent = []
-        for x in A.values():
-            x = x / Snorm
-            x = x[x > tol]
-            if alpha == 1:
-                ent.append(-2 * np.sum(x * x * np.log2(x)))
-            else:
-                ent.append(np.sum(x**(2 * alpha)))
-        ent = np.sum(ent)
+        Smin = min(data)
+        data = data / Snorm
+        data = data[data > tol]
+        if alpha == 1:
+            ent = -2 * np.sum(data * data * np.log2(data))
+        else:
+            ent = np.sum(data **(2 * alpha))
         if alpha != 1:
             ent = np.log2(ent) / (1 - alpha)
         return ent, Smin, Snorm
@@ -274,72 +269,63 @@ def absolute(data):
     return np.abs(data)
 
 
-def svd_lowrank(A, meta, D_block, n_iter=60, k_fac=6):
-    U, S, V = {}, {}, {}
-    for (iold, iU, iS, iV) in meta:
-        k = min(min(A[iold].shape), D_block)
-        U[iU], S[iS], V[iV] = fbpca.pca(A[iold], k=k, raw=True, n_iter=n_iter, l=k_fac * k)
-    return U, S, V
+def svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, n_iter=60, k_fac=6):
+    Udata = np.zeros((Usize,), dtype=data.dtype)
+    Sdata = np.zeros((Ssize,), dtype=DTYPE['float64'])
+    Vdata = np.zeros((Vsize,), dtype=data.dtype)
+    for (sl, D, slU, slS, slV) in meta:
+        k = min(min(D), D_block)
+        U, S, V = fbpca.pca(data[slice(*sl)].reshape(D), k=k, raw=True, n_iter=n_iter, l=k_fac * k)
+        Udata[slice(*slU)] = U.ravel()
+        Sdata[slice(*slS)] = S.ravel()
+        Vdata[slice(*slV)] = V.ravel()
+    return Udata, Sdata, Vdata
 
 
-def svd(A, meta):
-    U, S, V = {}, {}, {}
-    for (iold, iU, iS, iV) in meta:
+def svd(data, meta, Usize, Ssize, Vsize):
+    Udata = np.zeros((Usize,), dtype=data.dtype)
+    Sdata = np.zeros((Ssize,), dtype=DTYPE['float64'])
+    Vdata = np.zeros((Vsize,), dtype=data.dtype)
+    for (sl, D, slU, slS, slV) in meta:
         try:
-            U[iU], S[iS], V[iV] = scipy.linalg.svd(A[iold], full_matrices=False)
+            U, S, V = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False)
         except scipy.linalg.LinAlgError:  # pragma: no cover
-            U[iU], S[iS], V[iV] = scipy.linalg.svd(A[iold], full_matrices=False, lapack_driver='gesvd')
-    return U, S, V
+            U, S, V = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, lapack_driver='gesvd')
+        Udata[slice(*slU)] = U.ravel()
+        Sdata[slice(*slS)] = S.ravel()
+        Vdata[slice(*slV)] = V.ravel()
+    return Udata, Sdata, Vdata
 
 
-def eigh(A, meta=None):
-    S, U = {}, {}
+def eigh(data, meta=None, Ssize=1, Usize=1):
+    Udata = np.zeros((Usize,), dtype=data.dtype)
+    Sdata = np.zeros((Ssize,), dtype=DTYPE['float64'])
     if meta is not None:
-        for (ind, indS, indU) in meta:
-            S[indS], U[indU] = np.linalg.eigh(A[ind])
-    else:
-        S, U = np.linalg.eigh(A)
-    return S, U
+        for (sl, D, slS) in meta:
+            S, U = np.linalg.eigh(data[slice(*sl)].reshape(D))
+            Sdata[slice(*slS)] = S.ravel()
+            Udata[slice(*sl)] = U.ravel()
+        return Sdata, Udata
+    return np.linalg.eigh(data)  # S, U
 
 
-def svd_S(A):
-    S = {}
-    for ind in A:
-        try:
-            S[ind] = scipy.linalg.svd(A[ind], full_matrices=False, compute_uv=False)
-        except scipy.linalg.LinAlgError:  # pragma: no cover
-            S[ind] = scipy.linalg.svd(A[ind], full_matrices=False, lapack_driver='gesvd', compute_uv=False)
-    return S
-
-
-def qr(A, meta):
-    Q, R = {}, {}
-    for (ind, indQ, indR) in meta:
-        Q[indQ], R[indR] = scipy.linalg.qr(A[ind], mode='economic')
-        sR = np.sign(np.real(np.diag(R[indR])))
+def qr(data, meta, Qsize, Rsize):
+    Qdata = np.zeros((Qsize,), dtype=data.dtype)
+    Rdata = np.zeros((Rsize,), dtype=data.dtype)
+    for (sl, D, slQ, slR) in meta:
+        Q, R = scipy.linalg.qr(data[slice(*sl)].reshape(D), mode='economic')
+        sR = np.sign(np.real(np.diag(R)))
         sR[sR == 0] = 1
-        # positive diag of R
-        Q[indQ] = Q[indQ] * sR
-        R[indR] = sR.reshape([-1, 1]) * R[indR]
-    return Q, R
+        Qdata[slice(*slQ)] = (Q * sR).ravel()  # positive diag of R
+        Rdata[slice(*slR)] = (sR.reshape([-1, 1]) * R).ravel()
+    return Qdata, Rdata
 
 
-# def rq(A):
-#     R, Q = {}, {}
-#     for ind in A:
-#         R[ind], Q[ind] = scipy.linalg.rq(A[ind], mode='economic')
-#         sR = np.sign(np.real(np.diag(R[ind])))
-#         sR[sR == 0] = 1
-#         # positive diag of R
-#         R[ind], Q[ind] = R[ind] * sR, sR.reshape([-1, 1]) * Q[ind]
-#     return R, Q
-
-
-def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
+def select_global_largest(Sdata, St, Ssl, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
     if ordering == 'svd':
-        s_all = np.hstack([S[ind][:D_keep[ind]] for ind in S])
+        s_all = np.hstack([Sdata[slice(*sl)][:D_keep[t]] for t, sl in zip(St, Ssl)])
     elif ordering == 'eigh':
-        s_all = np.hstack([S[ind][-D_keep[ind]:] for ind in S])
+        s_all = np.hstack([Sdata[slice(*sl)][-D_keep[t]:] for t, sl in zip(St, Ssl)])
     Darg = D_total + int(keep_multiplets)
     order = s_all.argsort()[-1:-Darg-1:-1]
     if keep_multiplets:  # if needed, preserve multiplets within each sector
@@ -376,15 +362,11 @@ def range_largest(D_keep, D_total, ordering):
         return (D_total - D_keep, D_total)
 
 
-def maximum(A):
-    """ maximal element of A """
-    return max(np.max(x) for x in A.values())
-
-
 def embed_msk(data, msk, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     newdata[msk] = data
     return newdata
+
 
 def embed_slc(data, meta, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
@@ -527,16 +509,10 @@ def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan)[:, ma[tt]], \
                                   Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn)[mb[tt], :]).ravel()
     return newdata
+
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
-
-
-def merge_to_2d(data, order, meta_new, meta_mrg):
-    Anew = {u: np.zeros(Du, dtype=data.dtype) for u, Du in zip(*meta_new)}
-    for (tn, slo, Do, Dslc, Drsh) in meta_mrg:
-        Anew[tn][tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
-    return Anew
 
 
 def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
@@ -570,34 +546,15 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     return newdata
 
 
-def unmerge_from_2d(A, meta, new_sl, Dsize):
-    dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
-    newdata = np.zeros((Dsize,), dtype=dtype)
-    for (indm, sl, sr), snew in zip(meta, new_sl):
-        newdata[slice(*snew)] = A[indm][slice(*sl), slice(*sr)].ravel()
-    return newdata
-
-
-def unmerge_from_2ddiag(A, meta, new_sl, Dsize):
-    dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
-    newdata = np.zeros((Dsize,), dtype=dtype)
-    for (_, iold, slc), snew in zip(meta, new_sl):
-        newdata[slice(*snew)] = A[iold][slice(*slc)]
-    return newdata
-
-
 def unmerge_from_1d(data, meta, new_sl, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     for (slo, Do, sub_slc), snew in zip(meta, new_sl):
         newdata[slice(*snew)] = data[slice(*slo)].reshape(Do)[tuple(slice(*x) for x in sub_slc)].ravel()
     return newdata
 
-
 #############
 #   tests   #
 #############
-
-
 
 def is_independent(x, y):
     """

@@ -23,14 +23,14 @@ class SVDGESDD(torch.autograd.Function):
     if USE_LINALGSVD:
         @staticmethod
         def forward(self, A, ad_decomp_reg):
-            U, S, Vh = torch.linalg.svd(A)
+            U, S, Vh = torch.linalg.svd(A, full_matrices=False)
             V = Vh.transpose(-2, -1).conj()
             self.save_for_backward(U, S, V, ad_decomp_reg)
             return U, S, V
     else:
         @staticmethod
         def forward(self, A, ad_decomp_reg):
-            U, S, V = torch.svd(A)
+            U, S, V = torch.svd(A, full_matrices=False)
             self.save_for_backward(U, S, V, ad_decomp_reg)
             return U, S, V
 

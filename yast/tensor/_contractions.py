@@ -4,7 +4,7 @@ from itertools import groupby, product
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _common_rows, _struct, _flatten
 from ._tests import YastError, _test_configs_match, _test_axes_match
-from ._merging import _merge_to_matrix, _merge_to_matrix2, _unmerge_matrix, _flip_hf, _meta_unfuse_legdec
+from ._merging import _merge_to_matrix, _flip_hf, _meta_unfuse_legdec
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
 
 
@@ -93,8 +93,8 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
     ind_a, ind_b = _common_rows(t_a[:, nin_a, :], t_b[:, nin_b, :])
     s_eff_a, s_eff_b = (conja, -conja), (conjb, -conjb)
 
-    data_a, struct_a, ls_l, ls_ac = _merge_to_matrix2(a, (nout_a, nin_a), s_eff_a, ind_a, sort_r=True)
-    data_b, struct_b, ls_bc, ls_r = _merge_to_matrix2(b, (nin_b, nout_b), s_eff_b, ind_b)
+    data_a, struct_a, ls_l, ls_ac = _merge_to_matrix(a, (nout_a, nin_a), s_eff_a, ind_a, sort_r=True)
+    data_b, struct_b, ls_bc, ls_r = _merge_to_matrix(b, (nin_b, nout_b), s_eff_b, ind_b)
 
     nsym = len(a.struct.n)
 
