@@ -37,7 +37,6 @@ def set_num_threads(num_threads):
 def grad(x):
     return x.grad
 
-
 ####################################
 #     single tensor operations     #
 ####################################
@@ -140,20 +139,17 @@ def norm(data, p):
     return data.abs().max() if len(data) > 0 else torch.tensor(0.) # else p == "inf":
 
 
-def entropy(A, alpha=1, tol=1e-12):
+def entropy(data, alpha=1, tol=1e-12):
     """ von Neuman or Renyi entropy from svd's"""
-    Snorm = torch.sum(torch.stack([torch.sum(x ** 2) for x in A.values()])).sqrt()
+    Snorm = data.norm()
     if Snorm > 0:
-        ent = []
-        Smin = min([min(x) for x in A.values()])
-        for x in A.values():
-            x = x / Snorm
-            x = x[x > tol]
-            if alpha == 1:
-                ent.append(-2 * torch.sum(x * x * torch.log2(x)))
-            else:
-                ent.append(torch.sum(x**(2 * alpha)))
-        ent = torch.sum(torch.stack(ent))
+        Smin = min(data)
+        data = data / Snorm
+        data = data[data > tol]
+        if alpha == 1:
+            ent = -2 * torch.sum(data * data * torch.log2(data))
+        else:
+            ent = torch.sum(data **(2 * alpha))
         if alpha != 1:
             ent = torch.log2(ent) / (1 - alpha)
         return ent, Smin, Snorm
@@ -296,82 +292,72 @@ def absolute(data):
     return torch.abs(data)
 
 
-def svd_lowrank(A, meta, D_block, n_iter=60, k_fac=6):
-    U, S, V = {}, {}, {}
-    for (iold, iU, iS, iV) in meta:
-        q = min(min(A[iold].shape), D_block * k_fac)
-        U[iU], S[iS], V[iV] = torch.svd_lowrank(A[iold], q=q, niter=n_iter)
-        V[iV] = V[iV].T.conj()
-    return U, S, V
+def svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, n_iter=60, k_fac=6):
+    Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
+    Sdata = torch.zeros((Ssize,), dtype=data.dtype, device=data.device)
+    Vdata = torch.zeros((Vsize,), dtype=data.dtype, device=data.device)
+    reg = torch.as_tensor(ad_decomp_reg, dtype=data.dtype, device=data.device)
+    for (sl, D, slU, slS, slV) in meta:
+        q = min(min(D), D_block)
+        U, S, V = torch.svd_lowrank(data[slice(*sl)].view(D), q=q, niter=n_iter)
+        Udata[slice(*slU)] = U.ravel()
+        Sdata[slice(*slS)] = S.ravel()
+        Vdata[slice(*slV)] = V.t().conj().ravel()
+    return Udata, Sdata, Vdata
 
 
 ad_decomp_reg = 1.0e-12
 
 
-def svd(A, meta):
-    U, S, V = {}, {}, {}
-    tn = next(iter(A.values()))
-    reg = torch.as_tensor(ad_decomp_reg, dtype=tn.dtype, device=tn.device)
-    for (iold, iU, iS, iV) in meta:
-        U[iU], S[iS], V[iV] = SVDGESDD.apply(A[iold], reg)
-        V[iV] = V[iV].t().conj()
-    return U, S, V
+def svd(data, meta, Usize, Ssize, Vsize):
+    Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
+    Sdata = torch.zeros((Ssize,), dtype=data.dtype, device=data.device)
+    Vdata = torch.zeros((Vsize,), dtype=data.dtype, device=data.device)
+    reg = torch.as_tensor(ad_decomp_reg, dtype=data.dtype, device=data.device)
+    for (sl, D, slU, slS, slV) in meta:
+        U, S, V = SVDGESDD.apply(data[slice(*sl)].view(D), reg)
+        Udata[slice(*slU)] = U.ravel()
+        Sdata[slice(*slS)] = S.ravel()
+        Vdata[slice(*slV)] = V.t().conj().ravel()
+    return Udata, Sdata, Vdata
 
 
-def eigh(A, meta=None, order_by_magnitude=False):
-    S, U = {}, {}
+
+def eigh(data, meta=None, Ssize=1, Usize=1, order_by_magnitude=False,):
+    Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
+    Sdata = torch.zeros((Ssize,), dtype=data.dtype, device=data.device)
     if meta is not None:
         if order_by_magnitude:
-            tn = next(iter(A.values()))
-            reg = torch.as_tensor(ad_decomp_reg, dtype=tn.dtype, device=tn.device)
-            for ind in A:
-                S[ind], U[ind] = SYMEIG.apply(A[ind], reg)
+            reg = torch.as_tensor(ad_decomp_reg, dtype=data.dtype, device=data.device)
+            f = lambda x: SYMEIG.apply(x, reg)
         else:
-            for (ind, indS, indU) in meta:
-                S[indS], U[indU] = torch.linalg.eigh(A[ind])
-    else:
-        S, U = torch.linalg.eigh(A)
-    return S, U
+            f = lambda x: torch.linalg.eigh(x)
+        for (sl, D, slS) in meta:
+            S, U = f(data[slice(*sl)].view(D))
+            Sdata[slice(*slS)] = S.ravel()
+            Udata[slice(*sl)] = U.ravel()
+        return Sdata, Udata
+    return torch.linalg.eigh(data)  # S, U
 
 
-def svd_S(A):
-    S = {}
-    tn = next(iter(A.values()))
-    reg = torch.as_tensor(ad_decomp_reg, dtype=tn.dtype, device=tn.device)
-    for ind in A:
-        _, S[ind], _ = SVDGESDD.apply(A[ind], reg)
-        # S[ind] = torch.svd(A[ind], some=True, compute_uv=False)
-    return S
-
-
-def qr(A, meta):
-    Q, R = {}, {}
-    for (ind, indQ, indR) in meta:
-        Q[indQ], R[indR] = torch.linalg.qr(A[ind])
-        sR = torch.sign(real(R[indR].diag()))
+def qr(data, meta, Qsize, Rsize):
+    Qdata = torch.zeros((Qsize,), dtype=data.dtype, device=data.device)
+    Rdata = torch.zeros((Rsize,), dtype=data.dtype, device=data.device)
+    for (sl, D, slQ, slR) in meta:
+        Q, R = torch.linalg.qr(data[slice(*sl)].view(D))
+        sR = torch.sign(real(R.diag()))
         sR[sR == 0] = 1
-        # positive diag of R
-        Q[indQ] = Q[indQ] * sR
-        R[indR] = sR.reshape([-1, 1]) * R[indR]
-    return Q, R
+        Qdata[slice(*slQ)] = (Q * sR).ravel()  # positive diag of R
+        Rdata[slice(*slR)] = (sR.reshape([-1, 1]) * R).ravel()
+    return Qdata, Rdata
 
-
-# def rq(A):
-#     R, Q = {}, {}
-#     for ind in A:
-#         R[ind], Q[ind] = torch.qr(torch.t(A[ind]), some=True)
-#         sR = torch.sign(torch.real(torch.diag(R[ind])))
-#         sR[sR == 0] = 1
-#         # positive diag of R
-#         R[ind], Q[ind] = torch.t(R[ind]) * sR, sR.reshape([-1, 1]) * torch.t(Q[ind])
-#     return R, Q
 
 @torch.no_grad()
-def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
+def select_global_largest(Sdata, St, Ssl, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
     if ordering == 'svd':
-        s_all = torch.cat([S[ind][:D_keep[ind]] for ind in S])
+        s_all = torch.cat([Sdata[slice(*sl)][:D_keep[t]] for t, sl in zip(St, Ssl)])
     elif ordering == 'eigh':
-        s_all = torch.cat([S[ind][-D_keep[ind]:] for ind in S])
+        s_all = torch.cat([Sdata[slice(*sl)][-D_keep[t]:] for t, sl in zip(St, Ssl)])
     values, order = torch.topk(s_all, D_total + int(keep_multiplets))
     if keep_multiplets:  # if needed, preserve multiplets within each sector
         gaps = torch.abs(values.clone())  # regularize by discarding small values
@@ -405,11 +391,6 @@ def range_largest(D_keep, D_total, ordering):
         return (0, D_keep)
     if ordering == 'eigh':
         return (D_total - D_keep, D_total)
-
-
-def maximum(A):
-    """ maximal element of A """
-    return max(torch.max(x) for x in A.values())
 
 
 def embed_msk(data, msk, Dsize):
@@ -502,7 +483,6 @@ def diag_2dto1d(data, meta, Dsize):
     return newdata
 
 
-
 def dot(Adata, Bdata, cc, meta_dot, Dsize):
     dtype = _common_type((Adata, Bdata))
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
@@ -560,7 +540,6 @@ def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
     return newdata
 
 
-
 def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
     f = dot_dict[cc]  # proper conjugations
     dtype = _common_type((Adata, Bdata))
@@ -570,17 +549,9 @@ def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
                                   Bdata[slice(*slb)].reshape(Dbo).permute(oB).reshape(Dbn)[mb[tt], :]).ravel()
     return newdata
 
-
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
-
-
-def merge_to_2d(data, order, meta_new, meta_mrg):
-    Anew = {u: torch.zeros(Du, dtype=data.dtype, device=data.device) for u, Du in zip(*meta_new)}
-    for (tn, slo, Do, Dslc, Drsh) in meta_mrg:
-        Anew[tn][tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
-    return Anew
 
 
 def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
@@ -657,22 +628,6 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
             slc = tuple(slice(*x) for x in Dslc)
             temp[slc] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
         newdata[slice(*sln)] = temp.ravel()
-    return newdata
-
-
-def unmerge_from_2d(A, meta, new_sl, Dsize):
-    tn = next(iter(A.values()))
-    newdata = torch.zeros((Dsize,), dtype=tn.dtype, device=tn.device)
-    for (indm, sl, sr), snew in zip(meta, new_sl):
-        newdata[slice(*snew)] = A[indm][slice(*sl), slice(*sr)].ravel()
-    return newdata
-
-
-def unmerge_from_2ddiag(A, meta, new_sl, Dsize):
-    tn = next(iter(A.values()))
-    newdata = torch.zeros((Dsize,), dtype=tn.dtype, device=tn.device)
-    for (_, iold, slc), snew in zip(meta, new_sl):
-        newdata[slice(*snew)] = A[iold][slice(*slc)]
     return newdata
 
 
