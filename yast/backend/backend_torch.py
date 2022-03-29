@@ -293,10 +293,10 @@ def absolute(data):
 
 
 def svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, n_iter=60, k_fac=6):
+    real_dtype= data.real.dtype if data.is_complex() else data.dtype
     Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
-    Sdata = torch.zeros((Ssize,), dtype=data.dtype, device=data.device)
+    Sdata = torch.zeros((Ssize,), dtype=real_dtype, device=data.device)
     Vdata = torch.zeros((Vsize,), dtype=data.dtype, device=data.device)
-    reg = torch.as_tensor(ad_decomp_reg, dtype=data.dtype, device=data.device)
     for (sl, D, slU, slS, slV) in meta:
         q = min(min(D), D_block)
         U, S, V = torch.svd_lowrank(data[slice(*sl)].view(D), q=q, niter=n_iter)
@@ -306,24 +306,22 @@ def svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, n_iter=60, k_fac=6):
     return Udata, Sdata, Vdata
 
 
-ad_decomp_reg = 1.0e-12
-
-
-def svd(data, meta, Usize, Ssize, Vsize):
+def svd(data, meta, Usize, Ssize, Vsize, fullrank_uv=False, ad_decomp_reg=1.0e-12):
+    real_dtype= data.real.dtype if data.is_complex() else data.dtype
     Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
-    Sdata = torch.zeros((Ssize,), dtype=data.dtype, device=data.device)
+    Sdata = torch.zeros((Ssize,), dtype=real_dtype, device=data.device)
     Vdata = torch.zeros((Vsize,), dtype=data.dtype, device=data.device)
-    reg = torch.as_tensor(ad_decomp_reg, dtype=data.dtype, device=data.device)
+    reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
     for (sl, D, slU, slS, slV) in meta:
-        U, S, V = SVDGESDD.apply(data[slice(*sl)].view(D), reg)
+        U, S, V = SVDGESDD.apply(data[slice(*sl)].view(D), reg, fullrank_uv)
         Udata[slice(*slU)] = U.ravel()
         Sdata[slice(*slS)] = S.ravel()
-        Vdata[slice(*slV)] = V.t().conj().ravel()
+        Vdata[slice(*slV)] = V.ravel()
     return Udata, Sdata, Vdata
 
 
 
-def eigh(data, meta=None, Ssize=1, Usize=1, order_by_magnitude=False,):
+def eigh(data, meta=None, Ssize=1, Usize=1, order_by_magnitude=False, ad_decomp_reg=1.0e-12):
     Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
     Sdata = torch.zeros((Ssize,), dtype=data.dtype, device=data.device)
     if meta is not None:
@@ -359,18 +357,18 @@ def select_global_largest(Sdata, St, Ssl, D_keep, D_total, keep_multiplets, eps_
     elif ordering == 'eigh':
         s_all = torch.cat([Sdata[slice(*sl)][-D_keep[t]:] for t, sl in zip(St, Ssl)])
     values, order = torch.topk(s_all, D_total + int(keep_multiplets))
-    if keep_multiplets:  # if needed, preserve multiplets within each sector
-        gaps = torch.abs(values.clone())  # regularize by discarding small values
-        # compute gaps and normalize by larger singular value. Introduce cutoff
-        gaps = torch.abs(gaps[:len(values) - 1] - gaps[1:len(values)]) / gaps[0]  # / (gaps[:len(values) - 1] + 1.0e-16)
-        gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
-        if gaps[D_total - 1] < eps_multiplet:
-            # the chi is within the multiplet - find the largest chi_new < chi
-            # such that the complete multiplets are preserved
-            for i in range(D_total - 1, -1, -1):
-                if gaps[i] > eps_multiplet:
-                    order = order[:i + 1]
-                    break
+    # if keep_multiplets:  # if needed, preserve multiplets within each sector
+    #     gaps = torch.abs(values.clone())  # regularize by discarding small values
+    #     # compute gaps and normalize by larger singular value. Introduce cutoff
+    #     gaps = torch.abs(gaps[:len(values) - 1] - gaps[1:len(values)]) / gaps[0]  # / (gaps[:len(values) - 1] + 1.0e-16)
+    #     gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
+    #     if gaps[D_total - 1] < eps_multiplet:
+    #         # the chi is within the multiplet - find the largest chi_new < chi
+    #         # such that the complete multiplets are preserved
+    #         for i in range(D_total - 1, -1, -1):
+    #             if gaps[i] > eps_multiplet:
+    #                 order = order[:i + 1]
+    #                 break
     return order
 
 
