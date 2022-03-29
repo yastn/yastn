@@ -147,9 +147,81 @@ def test_svd_tensor_charge_division():
     assert V2.struct.n == (3,)
 
 
+@pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
+def test_svd_backward_1():
+    import torch
+
+    # U1
+    for dtype in ["float64", "complex128"]:
+        a= yast.rand(config=config_U1, s=(-1, -1, 1, 1),
+                  t=[(0, 1), (0, 1), (0, 1), (0, 1)],
+                  D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+
+        def test_f(data):
+            a._data=data
+            U,S,V= a.svd(axes=([0,1],[2,3]))
+            return S.norm(p='inf')
+
+        op_args = (torch.randn_like(a.data,requires_grad=True), )
+        test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+        assert test
+
+@pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
+def test_svd_backward_full():
+    import torch
+
+    # U1
+    for dtype in ["float64", "complex128"]:
+        a= yast.rand(config=config_U1, s=(-1, -1, 1, 1),
+                      t=[(0, 1), (0, 1), (0, 1), (0, 1)],
+                      D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+
+        def test_f(data):
+            a._data=data
+            U,S,V= a.svd(axes=([0,1],[2,3]))
+            return S.norm(p='fro')
+
+        op_args = (torch.randn_like(a.data,requires_grad=True), )
+        test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+        assert test
+
+@pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
+def test_svd_backward_truncate():
+    import torch
+
+    # U1
+    for dtype in ["float64", "complex128"]:
+        a= yast.rand(config=config_U1, s=(-1, -1, 1, 1),
+                      t=[(0, 1), (0, 1), (0, 1), (0, 1)],
+                      D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+
+        b= yast.rand(config=config_U1, s=(-1, -1),
+                      t=[(0, 1), (0, 1)],
+                      D=[(4, 3), (2, 1)], dtype=dtype)
+
+        c= yast.rand(config=config_U1, s=(1, 1),
+                      t=[(0, 1), (0, 1)],
+                      D=[(2, 3), (4, 5)], dtype=dtype)
+
+        def test_f(data):
+            a._data=data
+            U,S,Vh= a.svd(axes=([0,1],[2,3]), D_total=10)
+            r= c.tensordot(U,([0,1],[0,1]))
+            r= r.tensordot(S,(0,0))
+            r= r.tensordot(Vh,([0],[0]))
+            r= r.tensordot(b,([0,1],[0,1]))
+            return r.to_number()
+
+        op_args = (torch.randn_like(a.data,requires_grad=True), )
+        test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+        assert test
+
 if __name__ == '__main__':
     test_svd_basic()
     test_svd_sparse()
     test_svd_truncate()
     test_svd_tensor_charge_division()
     test_svd_multiplets()
+    test_svd_backward_1()
+    test_svd_backward_full()
+    test_svd_backward_truncate()

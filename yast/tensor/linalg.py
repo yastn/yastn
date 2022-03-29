@@ -84,7 +84,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False,
         policy='fullrank', **kwargs):
     r"""
-    Split tensor into :math:`a=USV` using exact singular value decomposition (SVD),
+    Split tensor into :math:`a=USV^\dag` using exact singular value decomposition (SVD),
     where `U` and `V` are orthonormal bases and `S` is positive and diagonal matrix.
     Optionally, truncate the result.
 
@@ -119,12 +119,12 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         largest total number of singular values to keep.
 
     untruncated_S: bool
-        returns U, S, V, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
+        returns U, S, V^\dag, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
 
     Returns
     -------
-    U, S, V: Tensor
-        U and V are unitary projectors. S is a diagonal tensor.
+    U, S, V^\dag: Tensor
+        U and V are unitary projectors. S is a real diagonal tensor.
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
