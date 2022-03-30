@@ -29,14 +29,14 @@ def norm(a, p='fro'):
 
 def svd_lowrank(a, axes=(0, 1), n_iter=60, k_fac=6, **kwargs):
     r"""
-    Split tensor into :math:`a \approx USV` using approximate singular value decomposition (SVD),
+    Split tensor into :math:`a \approx USV^\dag` using approximate singular value decomposition (SVD),
     where `U` and `V` are orthonormal and `S` is positive and diagonal matrix.
     The approximate SVD is computed using stochastic method (TODO add ref).
 
     Truncation can be based on relative tolerance, bond dimension of each block,
     and total bond dimension across all blocks (whichever gives smaller total dimension).
 
-    Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
+    Charge of input tensor `a` is attached to `U` if `nU` and to `Vh` otherwise.
 
     Parameters
     ----------
@@ -69,12 +69,12 @@ def svd_lowrank(a, axes=(0, 1), n_iter=60, k_fac=6, **kwargs):
         (relevant options might depend on backend)
 
     untruncated_S: bool
-        returns U, S, V, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
+        returns U, S, Vh, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
 
     Returns
     -------
-    U, S, V: Tensor
-        U and V are unitary projectors. S is diagonal.
+    U, S, Vh: Tensor
+        U and Vh are unitary projectors. S is real diagonal.
     """
     return svd(a, axes=axes, policy='lowrank', n_iter=n_iter, k_fac=k_fac, **kwargs)
 
@@ -91,7 +91,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     Truncation can be based on relative tolerance, bond dimension of each block,
     and total bond dimension across all blocks (whichever gives smaller total dimension).
 
-    Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
+    Charge of input tensor `a` is attached to `U` if `nU` and to `Vh` otherwise.
 
     Parameters
     ----------
@@ -119,12 +119,12 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         largest total number of singular values to keep.
 
     untruncated_S: bool
-        returns U, S, V^\dag, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
+        returns U, S, Vh, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
 
     Returns
     -------
-    U, S, V^\dag: Tensor
-        U and V are unitary projectors. S is a real diagonal tensor.
+    U, S, Vh: Tensor
+        U and Vh are unitary projectors. S is a real diagonal tensor.
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)

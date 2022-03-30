@@ -293,6 +293,8 @@ def absolute(data):
 
 
 def svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, n_iter=60, k_fac=6):
+    # torch.svd_lowrank decomposes A = USV^T and return U,S,V
+    # complex A is not supported 
     real_dtype= data.real.dtype if data.is_complex() else data.dtype
     Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
     Sdata = torch.zeros((Ssize,), dtype=real_dtype, device=data.device)
@@ -307,6 +309,7 @@ def svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, n_iter=60, k_fac=6):
 
 
 def svd(data, meta, Usize, Ssize, Vsize, fullrank_uv=False, ad_decomp_reg=1.0e-12):
+    # SVDGESDD decomposes A = USV^\dag and return U,S,V^\dag
     real_dtype= data.real.dtype if data.is_complex() else data.dtype
     Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
     Sdata = torch.zeros((Ssize,), dtype=real_dtype, device=data.device)
@@ -357,18 +360,21 @@ def select_global_largest(Sdata, St, Ssl, D_keep, D_total, keep_multiplets, eps_
     elif ordering == 'eigh':
         s_all = torch.cat([Sdata[slice(*sl)][-D_keep[t]:] for t, sl in zip(St, Ssl)])
     values, order = torch.topk(s_all, D_total + int(keep_multiplets))
-    # if keep_multiplets:  # if needed, preserve multiplets within each sector
-    #     gaps = torch.abs(values.clone())  # regularize by discarding small values
-    #     # compute gaps and normalize by larger singular value. Introduce cutoff
-    #     gaps = torch.abs(gaps[:len(values) - 1] - gaps[1:len(values)]) / gaps[0]  # / (gaps[:len(values) - 1] + 1.0e-16)
-    #     gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
-    #     if gaps[D_total - 1] < eps_multiplet:
-    #         # the chi is within the multiplet - find the largest chi_new < chi
-    #         # such that the complete multiplets are preserved
-    #         for i in range(D_total - 1, -1, -1):
-    #             if gaps[i] > eps_multiplet:
-    #                 order = order[:i + 1]
-    #                 break
+    # if needed, preserve multiplets within each sector
+    # this is relevant only if higher symmetry is realized, which is not resolved
+    # by abelian subgroup
+    if keep_multiplets:  
+        gaps = torch.abs(values.clone())  # regularize by discarding small values
+        # compute gaps and normalize by larger singular value. Introduce cutoff
+        gaps = torch.abs(gaps[:len(values) - 1] - gaps[1:len(values)]) / gaps[0]  # / (gaps[:len(values) - 1] + 1.0e-16)
+        gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
+        if gaps[D_total - 1] < eps_multiplet:
+            # the chi is within the multiplet - find the largest chi_new < chi
+            # such that the complete multiplets are preserved
+            for i in range(D_total - 1, -1, -1):
+                if gaps[i] > eps_multiplet:
+                    order = order[:i + 1]
+                    break
     return order
 
 
