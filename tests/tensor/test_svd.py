@@ -33,6 +33,25 @@ def svd_combine(a):
     assert V.is_consistent()
 
 
+def test_svd_complex():
+    """ test svd decomposition for various symmetries """
+    # dense
+    a = yast.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21], dtype='complex128')
+    U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
+    assert U.yast_dtype == 'complex128'
+    assert S.yast_dtype == 'float64'
+
+    US = yast.tensordot(U, S, axes=(2, 0))  # here tensordot goes though broadcasting
+    USV = yast.tensordot(US, V, axes=(2, 0))
+    assert yast.norm(a - USV) < tol  # == 0.0
+
+    SS = yast.diag(S)
+    assert SS.yast_dtype == 'float64'
+    US = yast.tensordot(U, SS, axes=(2, 0))  # here tensordot uses @ in the backend
+    USV = yast.tensordot(US, V, axes=(2, 0))
+    assert yast.norm(a - USV) < tol  # == 0.0
+
+
 def test_svd_basic():
     """ test svd decomposition for various symmetries """
     # dense
@@ -219,6 +238,7 @@ def test_svd_backward_truncate():
 if __name__ == '__main__':
     test_svd_basic()
     test_svd_sparse()
+    test_svd_complex()
     test_svd_truncate()
     test_svd_tensor_charge_division()
     test_svd_multiplets()
