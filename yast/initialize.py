@@ -236,12 +236,13 @@ def load_from_hdf5(config, file, path):
     path: TODO
     """
     g = file.get(path)
+    struct = _struct(s=g.get('s')[:], n=g.get('n')[:])
+    hfs = tuple(_Fusion(**hf) for hf in g.get('hfs'))
+    mfs=eval(tuple(file.get(path+'/mfs').keys())[0])
 
-    d = {'n': g.get('n')[:], 's': g.get('s')[:]}
-    d['isdiag'] = bool(g.get('isdiag')[:][0])
-    d['meta_fusion'] = eval(tuple(file.get(path+'/meta').keys())[0])
-
-    a = Tensor(config=config, **d)
+    a = Tensor(config=config, struct=struct, isdiag=bool(g.get('isdiag')[:][0]),
+                hard_fusion=hfs, meta_fusion=mfs)
+                
 
     ts = g.get('ts')[:]
     Ds = g.get('Ds')[:]
