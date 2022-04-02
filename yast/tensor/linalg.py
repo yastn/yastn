@@ -187,23 +187,20 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
     Umeta_unmerge, Ustruct = _meta_unfuse_legdec(a.config, Ustruct, [ls_l, ls_s], Us)
-    Usize = Ustruct.sl[-1][1] if len(Ustruct.sl) > 0 else 0
-    Udata = a.config.backend.unmerge_from_1d(Udata, Umeta_unmerge, Ustruct.sl, Usize)
+    Udata = a.config.backend.unmerge_from_1d(Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=Ustruct, data=Udata, mfs=Umfs, hfs=Uhfs)
 
     Smeta_unmerge, Sstruct = _meta_unfuse_legdec(a.config, Sstruct, [ls_s], s_eff)
-    Ssize = Sstruct.sl[-1][1] if len(Sstruct.sl) > 0 else 0
-    Sdata = a.config.backend.unmerge_from_1d(Sdata, Smeta_unmerge, Sstruct.sl, Ssize)
+    Sdata = a.config.backend.unmerge_from_1d(Sdata, Smeta_unmerge)
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
     S = a._replace(struct=Sstruct, data=Sdata, mfs=Smfs, hfs=Shfs)
 
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
     Vmeta_unmerge, Vstruct = _meta_unfuse_legdec(a.config, Vstruct, [ls_s, ls_r], Vs)
-    Vsize = Vstruct.sl[-1][1] if len(Vstruct.sl) > 0 else 0
-    Vdata = a.config.backend.unmerge_from_1d(Vdata, Vmeta_unmerge, Vstruct.sl, Vsize)
+    Vdata = a.config.backend.unmerge_from_1d(Vdata, Vmeta_unmerge)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in axes[1])
     V = a._replace(struct=Vstruct, data=Vdata, mfs=Vmfs, hfs=Vhfs)
@@ -265,16 +262,14 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
     Qs = tuple(a.struct.s[lg] for lg in axes[0]) + (sQ,)
     Qmeta_unmerge, Qstruct = _meta_unfuse_legdec(a.config, Qstruct, [ls_l, ls], Qs)
-    Qsize = Qstruct.sl[-1][1] if len(Qstruct.sl) > 0 else 0
-    Qdata = a.config.backend.unmerge_from_1d(Qdata, Qmeta_unmerge, Qstruct.sl, Qsize)
+    Qdata = a.config.backend.unmerge_from_1d(Qdata, Qmeta_unmerge)
     Qmfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Qhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sQ,)),)
     Q = a._replace(struct=Qstruct, data=Qdata, mfs=Qmfs, hfs=Qhfs)
 
     Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in axes[1])
     Rmeta_unmerge, Rstruct = _meta_unfuse_legdec(a.config, Rstruct, [ls, ls_r], Rs)
-    Rsize = Rstruct.sl[-1][1] if len(Rstruct.sl) > 0 else 0
-    Rdata = a.config.backend.unmerge_from_1d(Rdata, Rmeta_unmerge, Rstruct.sl, Rsize)
+    Rdata = a.config.backend.unmerge_from_1d(Rdata, Rmeta_unmerge)
     Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
     Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in axes[1])
     R = a._replace(struct=Rstruct, data=Rdata, mfs=Rmfs, hfs=Rhfs)
@@ -364,15 +359,13 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
 
     Us = tuple(a.struct.s[lg] for lg in axes[0]) + (sU,)
     Umeta_unmerge, Ustruct = _meta_unfuse_legdec(a.config, struct, [ls_l, ls_s], Us)
-    Usize = Ustruct.sl[-1][1] if len(Ustruct.sl) > 0 else 0
-    Udata = a.config.backend.unmerge_from_1d(Udata, Umeta_unmerge, Ustruct.sl, Usize)
+    Udata = a.config.backend.unmerge_from_1d(Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=Ustruct, data=Udata, mfs=Umfs, hfs=Uhfs)
 
     Smeta_unmerge, Sstruct = _meta_unfuse_legdec(a.config, Sstruct, [ls_s], s_eff)
-    Ssize = Sstruct.sl[-1][1] if len(Sstruct.sl) > 0 else 0
-    Sdata = a.config.backend.unmerge_from_1d(Sdata, Smeta_unmerge, Sstruct.sl, Ssize)
+    Sdata = a.config.backend.unmerge_from_1d(Sdata, Smeta_unmerge)
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
     S = a._replace(struct=Sstruct, data=Sdata, mfs=Smfs, hfs=Shfs)

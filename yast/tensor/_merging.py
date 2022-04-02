@@ -387,10 +387,9 @@ def unfuse_legs(a, axes):
         ni += dni
     if axes_hf:
         meta, struct, nlegs, hfs = _meta_unfuse_hard(a.config, a.struct, tuple(axes_hf), tuple(a.hfs))
+        data = a.config.backend.unmerge_from_1d(a._data, meta)
         for unfused, n in zip(nlegs[::-1], axes_hf[::-1]):
             mfs = mfs[:n] + [mfs[n]] * unfused + mfs[n+1:]
-        Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
-        data = a.config.backend.unmerge_from_1d(a._data, meta, struct.sl, Dsize)
         return a._replace(struct=struct, mfs=tuple(mfs), hfs=hfs, data=data)
     return a._replace(mfs=tuple(mfs))
 
@@ -426,17 +425,18 @@ def _meta_unfuse_legdec(config, struct, ls, snew):
                 tn = sum((x[0] for x in tt), ())
                 sub_slc = tuple(x[1].Dslc for x in tt)
                 Dn = sum((x[1].Drsh for x in tt), ())
-                Dp = np.prod(list(x[1].Dprod for x in tt), dtype=int)
-                meta.append((tn, Dn, Dp, slo, Do, sub_slc))
+                Dsln = tuple(x[1].Dprod for x in tt)
+                Dp = np.prod(Dsln, dtype=int)
+                meta.append((tn, Dn, Dp, Dsln, slo, Do, sub_slc))
 
     meta = sorted(meta, key=lambda x: x[0])
     tnew = tuple(x[0] for x in meta)
     Dnew = tuple(x[1] for x in meta)
     Dpnew = tuple(x[2] for x in meta)
     slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
-    meta = tuple(x[3:] for x in meta)
+    meta = tuple((x, *y[3:]) for x, y in zip(slnew, meta))
     if struct.diag:
-        meta = tuple((slo, Do[0], sub_slc) for slo, Do, sub_slc in meta)
+        meta = tuple((sln, Dslc, slo, Do[0], sub_slc) for sln, Dslc, slo, Do, sub_slc in meta)
         tnew = tuple(t + t for t in tnew)
         Dnew = tuple(D + D for D in Dnew)
     new_struct = struct._replace(s=tuple(snew), t=tnew, D=Dnew, Dp=Dpnew, sl=slnew)
