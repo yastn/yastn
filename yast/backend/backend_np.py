@@ -277,7 +277,7 @@ def svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, n_iter=60, k_fac=6):
         k = min(min(D), D_block)
         U, S, V = fbpca.pca(data[slice(*sl)].reshape(D), k=k, raw=True, n_iter=n_iter, l=k_fac * k)
         Udata[slice(*slU)] = U.ravel()
-        Sdata[slice(*slS)] = S.ravel()
+        Sdata[slice(*slS)] = S
         Vdata[slice(*slV)] = V.ravel()
     return Udata, Sdata, Vdata
 
@@ -292,7 +292,7 @@ def svd(data, meta, Usize, Ssize, Vsize):
         except scipy.linalg.LinAlgError:  # pragma: no cover
             U, S, V = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, lapack_driver='gesvd')
         Udata[slice(*slU)] = U.ravel()
-        Sdata[slice(*slS)] = S.ravel()
+        Sdata[slice(*slS)] = S
         Vdata[slice(*slV)] = V.ravel()
     return Udata, Sdata, Vdata
 
@@ -303,7 +303,7 @@ def eigh(data, meta=None, Ssize=1, Usize=1):
     if meta is not None:
         for (sl, D, slS) in meta:
             S, U = np.linalg.eigh(data[slice(*sl)].reshape(D))
-            Sdata[slice(*slS)] = S.ravel()
+            Sdata[slice(*slS)] = S
             Udata[slice(*sl)] = U.ravel()
         return Sdata, Udata
     return np.linalg.eigh(data)  # S, U
@@ -416,12 +416,6 @@ def apxb(Adata, Bdata, x, meta, Dsize):
     return newdata
 
 
-dot_dict = {(0, 0): lambda x, y: x @ y,
-            (0, 1): lambda x, y: x @ y.conj(),
-            (1, 0): lambda x, y: x.conj() @ y,
-            (1, 1): lambda x, y: x.conj() @ y.conj()}
-
-
 def apply_slice(data, slcn, slco):
     Dsize = slcn[-1][1] if len(slcn) > 0 else 0
     newdata = np.zeros((Dsize,), dtype=data.dtype)
@@ -430,9 +424,15 @@ def apply_slice(data, slcn, slco):
     return newdata
 
 
+dot_dict = {(0, 0): lambda x, y, out: np.matmul(x, y, out=out),
+            (0, 1): lambda x, y, out: np.matmul(x, y.conj(), out=out),
+            (1, 0): lambda x, y, out: np.matmul(x.conj(), y, out=out),
+            (1, 1): lambda x, y, out: np.matmul(x.conj(), y.conj(), out=out)}
+
+
 def vdot(Adata, Bdata, cc):
     f = dot_dict[cc]  # proper conjugations
-    return f(Adata, Bdata)
+    return f(Adata, Bdata, None)
 
 
 def diag_1dto2d(Adata, meta, Dsize):
@@ -450,20 +450,19 @@ def diag_2dto1d(Adata, meta, Dsize):
 
 
 def dot(Adata, Bdata, cc, meta_dot, Dsize):
-    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
-    f = dot_dict[cc]  # proper conjugations
+    newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
+    fdot = dot_dict[cc]  # proper conjugations
     for (slc, sla, Da, slb, Db) in meta_dot:
-        newdata[slice(*slc)] = f(Adata[slice(*sla)].reshape(Da), \
-                                 Bdata[slice(*slb)].reshape(Db)).ravel()
+        fdot(Adata[slice(*sla)].reshape(Da), Bdata[slice(*slb)].reshape(Db), newdata[slice(*slc)].reshape(Da[0], Db[1]))
     return newdata
 
 
 def dot_with_mask(Adata, Bdata, cc, meta_dot, Dsize, msk_a, msk_b):
-    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+    newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
     f = dot_dict[cc]  # proper conjugations
     for (slc, sla, Da, slb, Db, ia, ib) in meta_dot:
-        newdata[slice(*slc)] = f(Adata[slice(*sla)].reshape(Da)[:, msk_a[ia]], \
-                                 Bdata[slice(*slb)].reshape(Db)[msk_b[ib], :]).ravel()
+        f(Adata[slice(*sla)].reshape(Da)[:, msk_a[ia]], Bdata[slice(*slb)].reshape(Db)[msk_b[ib], :], \
+            newdata[slice(*slc)].reshape(Da[0], Db[1]))
     return newdata
 
 
@@ -493,22 +492,22 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     return newdata
 
 
-def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
-    f = dot_dict[cc]  # proper conjugations
-    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
-    for (sln, sla, Dao, Dan, slb, Dbo, Dbn) in meta:
-        newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan), \
-                                  Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn)).ravel()
-    return newdata
+# def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
+#     f = dot_dict[cc]  # proper conjugations
+#     newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+#     for (sln, sla, Dao, Dan, slb, Dbo, Dbn) in meta:
+#         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan), \
+#                                   Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn), None).ravel()
+#     return newdata
 
 
-def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
-    f = dot_dict[cc]  # proper conjugations
-    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
-    for (sln, sla, Dao, Dan, slb, Dbo, Dbn), tt in zip(meta, tcon):
-        newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan)[:, ma[tt]], \
-                                  Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn)[mb[tt], :]).ravel()
-    return newdata
+# def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
+#     f = dot_dict[cc]  # proper conjugations
+#     newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+#     for (sln, sla, Dao, Dan, slb, Dbo, Dbn), tt in zip(meta, tcon):
+#         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan)[:, ma[tt]], \
+#                                   Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn)[mb[tt], :], None).ravel()
+#     return newdata
 
 #####################################################
 #     block merging, truncations and un-merging     #
@@ -519,10 +518,10 @@ def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
         assert tn == t1
-        temp = np.zeros(Dn, dtype=data.dtype)
+        temp = newdata[slice(*sln)].reshape(Dn)
         for (_, slo, Do, Dslc, Drsh) in gr:
-            temp[tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
-        newdata[slice(*sln)] = temp.ravel()
+            slcs = tuple(slice(*x) for x in Dslc)
+            temp[slcs] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
     return newdata
 
 
@@ -530,7 +529,7 @@ def merge_to_dense(data, Dtot, meta):
     newdata = np.zeros(Dtot, dtype=data.dtype)
     for (sl, Dss) in meta:
         newdata[tuple(slice(*Ds) for Ds in Dss)] = data[sl].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
-    return newdata.ravel()
+    return newdata.reshape(-1)
 
 
 def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
@@ -538,18 +537,18 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     newdata = np.zeros((Dsize,), dtype=dtype)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_block, key=lambda x: x[0])):
         assert tn == t1
-        temp = np.zeros(Dn, dtype=dtype)
         for (_, slo, Do, pos, Dslc) in gr:
-            slc = tuple(slice(*x) for x in Dslc)
-            temp[slc] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
-        newdata[slice(*sln)] = temp.ravel()
+            slcs = tuple(slice(*x) for x in Dslc)
+            newdata[slice(*sln)].reshape(Dn)[slcs] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
     return newdata
 
 
-def unmerge_from_1d(data, meta, new_sl, Dsize):
-    newdata = np.zeros((Dsize,), dtype=data.dtype)
-    for (slo, Do, sub_slc), snew in zip(meta, new_sl):
-        newdata[slice(*snew)] = data[slice(*slo)].reshape(Do)[tuple(slice(*x) for x in sub_slc)].ravel()
+def unmerge_from_1d(data, meta):
+    Dsize = meta[-1][0][1] if len(meta) > 0 else 0
+    newdata = np.empty((Dsize,), dtype=data.dtype)
+    for sln, Dn, slo, Do, sub_slc in meta:
+        slcs = tuple(slice(*x) for x in sub_slc)
+        newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do)[slcs]
     return newdata
 
 #############

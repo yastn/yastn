@@ -122,12 +122,8 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
 
     struct = a.struct._replace(t=tc, D=Dc, Dp=Dpc, sl=slc, n=c_n, s=(s_eff_a[0], s_eff_b[1]))
     meta_unmerge, struct = _meta_unfuse_legdec(a.config, struct, [ls_l, ls_r], c_s)
-
-    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
-    data = a.config.backend.unmerge_from_1d(data, meta_unmerge, struct.sl, Dsize)
-
-    c = a._replace(data=data, struct=struct, mfs=c_mfs, hfs=c_hfs)
-    return c
+    data = a.config.backend.unmerge_from_1d(data, meta_unmerge)
+    return a._replace(data=data, struct=struct, mfs=c_mfs, hfs=c_hfs)
     # if policy in ('hybrid', 'direct'):
     #     meta, c_t, c_D, c_Dp, c_sl, tcon = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
     #     c_struct = _struct(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl, s=c_s, n=c_n)
