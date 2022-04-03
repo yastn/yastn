@@ -354,6 +354,11 @@ def qr(data, meta, Qsize, Rsize):
 
 
 @torch.no_grad()
+def nth_largest(data, n):
+    return torch.topk(data, n).values[-1]  # sorted=False ? i.e. is it equivalent to np.partition?
+
+
+@torch.no_grad()
 def select_global_largest(Sdata, St, Ssl, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
     if ordering == 'svd':
         s_all = torch.cat([Sdata[slice(*sl)][:D_keep[t]] for t, sl in zip(St, Ssl)])

@@ -321,6 +321,10 @@ def qr(data, meta, Qsize, Rsize):
     return Qdata, Rdata
 
 
+def nth_largest(data, n):
+    return np.partition(data, -n)[-n]
+
+
 def select_global_largest(Sdata, St, Ssl, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
     if ordering == 'svd':
         s_all = np.hstack([Sdata[slice(*sl)][:D_keep[t]] for t, sl in zip(St, Ssl)])

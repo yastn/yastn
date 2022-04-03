@@ -12,7 +12,7 @@ tol = 1e-10  #pylint: disable=invalid-name
 
 def svd_combine(a):
     """ decompose and contracts tensor using svd decomposition """
-    U, S, V = yast.linalg.svd(a, axes=((3, 1), (2, 0)), sU=-1)
+    U, S, V = yast.linalg.svd_pure(a, axes=((3, 1), (2, 0)), sU=-1)
     US = yast.tensordot(U, S, axes=(2, 0))
     USV = yast.tensordot(US, V, axes=(2, 0))
     USV = USV.transpose(axes=(3, 1, 2, 0))
@@ -23,7 +23,7 @@ def svd_combine(a):
     assert V.is_consistent()
 
     # changes signature of new leg; and position of new leg
-    U, S, V = yast.linalg.svd(a, axes=((3, 1), (2, 0)), sU=1, Uaxis=0, Vaxis=-1)
+    U, S, V = yast.linalg.svd_pure(a, axes=((3, 1), (2, 0)), sU=1, Uaxis=0, Vaxis=-1)
     US = yast.tensordot(S, U, axes=(0, 0))
     USV = yast.tensordot(US, V, axes=(0, 2))
     USV = USV.transpose(axes=(3, 1, 2, 0))
@@ -31,25 +31,6 @@ def svd_combine(a):
     assert U.is_consistent()
     assert S.is_consistent()
     assert V.is_consistent()
-
-
-def test_svd_complex():
-    """ test svd decomposition for various symmetries """
-    # dense
-    a = yast.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21], dtype='complex128')
-    U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
-    assert U.yast_dtype == 'complex128'
-    assert S.yast_dtype == 'float64'
-
-    US = yast.tensordot(U, S, axes=(2, 0))  # here tensordot goes though broadcasting
-    USV = yast.tensordot(US, V, axes=(2, 0))
-    assert yast.norm(a - USV) < tol  # == 0.0
-
-    SS = yast.diag(S)
-    assert SS.yast_dtype == 'float64'
-    US = yast.tensordot(U, SS, axes=(2, 0))  # here tensordot uses @ in the backend
-    USV = yast.tensordot(US, V, axes=(2, 0))
-    assert yast.norm(a - USV) < tol  # == 0.0
 
 
 def test_svd_basic():
@@ -70,6 +51,29 @@ def test_svd_basic():
                   t=[t1, t1, t1, t1],
                   D=[(2, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
     svd_combine(a)
+
+def test_svd_complex():
+    """ test svd decomposition for various symmetries """
+    # dense
+    a = yast.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21], dtype='complex128')
+    U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
+    assert U.yast_dtype == 'complex128'
+    assert S.yast_dtype == 'float64'
+
+    US = yast.tensordot(U, S, axes=(2, 0))  # here tensordot goes though broadcasting
+    USV = yast.tensordot(US, V, axes=(2, 0))
+    assert yast.norm(a - USV) < tol  # == 0.0
+
+    SS = yast.diag(S)
+    assert SS.yast_dtype == 'float64'
+    if SS.config.backend.BACKEND_ID == 'torch':
+        with pytest.raises(RuntimeError):
+            US = yast.tensordot(U, SS, axes=(2, 0))  # here tensordot uses @ in the backend
+            # torch throws an error for: complex128 @ float64
+        SS = SS.to(dtype='complex128')
+    US = yast.tensordot(U, SS, axes=(2, 0))
+    USV = yast.tensordot(US, V, axes=(2, 0))
+    assert yast.norm(a - USV) < tol  # == 0.0
 
 
 def test_svd_sparse():
@@ -141,7 +145,7 @@ def test_svd_multiplets():
     print(sorted(np.diag(S1.to_numpy())))
     assert S1.get_shape() == (30, 30)
 
-    opts = {'tol': 0.00001, 'D_block': 7, 'D_total': 30, 'keep_multiplets': True, 'eps_multiplet': 0.0001}
+    opts = {'tol': 0.00001, 'D_block': 7, 'D_total': 30, 'keep_multiplets': True, 'eps_multiplet': 0.001}
     _, S1, _ = yast.linalg.svd(a, axes=((0, 1), (2, 3)), **opts)
     print(sorted(np.diag(S1.to_numpy())))
     assert S1.get_shape() == (24, 24)
