@@ -1,8 +1,8 @@
 # Methods creating new YAST tensors from scratch
 # and importing tensors from different formats
 # such as 1D+metadata or dictionary representation
-import numpy as np
 from ast import literal_eval
+import numpy as np
 from .tensor import Tensor, YastError
 from .tensor._auxliary import _unpack_axes, _struct
 from .tensor._merging import _Fusion

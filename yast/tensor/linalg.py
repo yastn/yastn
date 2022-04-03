@@ -1,6 +1,5 @@
 # Linalg methods for yast tensor.
 import numpy as np
-from ast import literal_eval
 from ._auxliary import _clear_axes, _unpack_axes
 from ._tests import YastError, _test_axes_all
 from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal
