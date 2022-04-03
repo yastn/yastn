@@ -103,7 +103,7 @@ class Tensor:
     # pylint: disable=C0415
     from ._initialize import set_block, fill_tensor, __setitem__
     from .linalg import norm, svd, svd_lowrank, eigh, qr
-    from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, mask
+    from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, mask, mask_apply
     from ._algebra import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
     from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, move_leg, diag, grad

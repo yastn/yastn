@@ -8,7 +8,7 @@ from ._merging import _merge_to_matrix, _flip_hf, _meta_unfuse_legdec
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
 
 
-__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'mask']
+__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'mask', 'mask_apply']
 
 
 def __matmul__(a, b):
@@ -339,6 +339,41 @@ def mask(a, b, axis=0):
         a_ndim = a.ndim_n
     data = a.config.backend.mask_diag(a._data, b._data, meta, Dsize, axis, a_ndim)
     return a._replace(struct=struct, data=data)
+
+
+def mask_apply(a, b, axis=0):
+    r"""
+    Apply mask given by nonzero elements of diagonal tensor b on specified axis of tensor a.
+
+    Legs of resulting tensor are ordered in the same way as those of tensor a.
+    Bond dimensions of specified axis of a are truncated according to the mask.
+    Produce diagonal tensor if both are diagonal.
+
+    Parameters
+    ----------
+    a, b: Tensors
+        a is a diagonal tensor
+
+    axis: int
+        leg of tensor a where the mask is applied.
+    """
+    _test_configs_match(a, b)
+    axis = _broadcast_input(axis, b.mfs, a.isdiag)
+    if b.hfs[axis].tree != (1,):
+        raise YastError('First tensor`s leg specified by axis cannot be fused.')
+
+    Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl)]) for sl in a.struct.sl)
+    meta, struct = _meta_mask(b.struct, b.isdiag, a.struct, Dbnew, axis)
+    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
+
+    if b.isdiag:
+        b_ndim, axis = (1, 0)
+        meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
+    else:
+        b_ndim = b.ndim_n
+    data = b.config.backend.mask_diag(b._data, a._data, meta, Dsize, axis, b_ndim)
+    return b._replace(struct=struct, data=data)
+
 
 
 @lru_cache(maxsize=1024)
