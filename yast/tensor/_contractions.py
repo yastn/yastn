@@ -59,6 +59,12 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
     -------
     tensor: Tensor
     """
+    if conj[0] == 1:
+        a = a.conj()
+    if conj[1] == 1:
+        b = b.conj()
+    conj = (0, 0)
+
     in_a, in_b = _clear_axes(*axes)  # contracted meta legs
     conja, conjb = (1 - 2 * conj[0]), (1 - 2 * conj[1])
     needs_mask, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-conja * conjb, axes=(in_a, in_b))
