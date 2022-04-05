@@ -5,7 +5,7 @@ What are abelian-symmetric tensors
 ----------------------------------
 
 .. toctree::
-   theory/basics
+   theory/tensor/basics
 
 API: yast and yast.Tensor
 -------------------------
@@ -25,4 +25,4 @@ Examples: basics of usage
 .. toctree::
    :glob:
    
-   examples/*
+   examples/tensor/*
