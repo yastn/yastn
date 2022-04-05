@@ -6,9 +6,10 @@ Matrix producs state and operator
 
 .. toctree::
    :glob:
-
+   .. do it later
    theory/mps/basics
    mps/init
+   .. in progress
    mps/algebra
    mps/i-o
 
