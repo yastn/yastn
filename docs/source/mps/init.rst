@@ -1,61 +1,33 @@
 Setting up matrix product state and operators
 ===============================
 
-Properties of MPS objects
-------------------
+General information on Mps class
+--------------------------------
 
-The product operator is a numered list of tensors created using YAST with additional parameters which define their properties as a collection of elements. 
-For now, the object support one-dimensional structures with open boundary conditions.
+The class `yamps.Mps` allows to create an object which represents a product operator. It consists of the numbered list of YAST tensors (members of class `yast.Tensor`, together with 
+properties definying waht do the matrix product represents.
 
-# main elements, how is the Tensor saved there, nr_phys, how does the ends are being handled, 
+The `yamps` module supports one-dimensional structures with open boundary conditions. It allows to manipulate matrix product states and matrix product operators and use algorithms such as density matrix renormalisation group (:ref:`mps/algorithms:DMRG`) and time-dependend variational principle (:ref:`mps/algorithms:TDVP`) algorithms.
 
 
-Configuration of symmetries
--------------------------------------------
+Creating `yamps.Mps` matrix product
+---------------------------------------------
 
-#configuration of the symmetries, see test/configs, comment on the default flags /is that dictionary/, 
+The object of class `yamps.Mps` are designed to represent one-dimensional matrix products with open-boundary 
+condition. The bond dimension on the edges is 1 by default.
 
-See examples: :ref:`examples/init:create empty tensor and fill it block by block`.
-
-.. autoclass:: yast.Tensor
+.. autoclass:: yamps.Mps
 	:members: __init__
 	:exclude-members: __new__
 
-Configuration of backend
--------------------------------------------
+Empty `yamps.Mps` matrix product state of 10 tensors is created using :code:`mps = yamps.Mps(N=10, nr_phys=1)`
+while the matrix producs operator :code:`mpo = yamps.Mps(N=10, nr_phys=2)`.
 
-#backed is should be added in the configuration, 
+The symmetry of `yamps.Mps` is inherited by its building blocks. Its building blocks can be assigned directly to `yamps.Mps` by :ref:`examples/mps/mps:Filling matrix product with tensors`.
 
-See examples: :ref:`examples/init:create empty tensor and fill it block by block`.
+The matrix product can be generated automatically basing on the structure defined by a user
 
-.. autoclass:: yast.Tensor
-	:members: __init__
-	:exclude-members: __new__
+.. automodule:: yamps
+   :members: automatic_Mps
 
-
-Creating MPS/MPO from scratch
--------------------------
-
-MPS/MPO can be initialized as random. It is initialized from scratch with a symmetric given by configuration.
-#make separate test for initialization
-# random and automatic 
-
-See examples: :ref:`examples/init:create tensors from scratch`.
-
-.. automodule:: yast
-   :members: rand, randR, randC, zeros, ones, eye
-   :show-inheritance:
-
-
-Creating MPO using Tensor-s
--------------------------
-
-MPS/MPO can be composed using Tensor-s. 
-
-# push a tensor to each site in MPS/MPO. No checkes for the validity of your choice.
-# clock tensor into a big tensor, cite the block for for the prodcut state, cite example for Hamiltonian generation, sepatate example file.
-
-See examples: :ref:`examples/init:create tensors from scratch`.
-
-.. automodule:: yast
-   :members: generate_Mij, automatic_Mps
+For examples for the function see the code in :ref:`examples/mps/mps:Automatically generated matrix product`.
