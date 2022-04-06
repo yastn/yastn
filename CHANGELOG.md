@@ -149,3 +149,9 @@
 - new function '__setitem__()' that gives direct access to change existing blocks
 - in rsqrt(x, cutoff) cutoff is done with respect to x, not sqrt(x)
 - new function `grad()` that generates gradient yast tensor
+
+07-04-2022
+- `apply_mask` replaces function `mask`. `apply_mask` can apply the same mask to a few tensors in a single-line execution.
+- `apply_mask` and `broadcast` take diagonal tensor (to be use as a mask or to broadcast) as the first argument. 
+  Previously it was the second argument.
+  

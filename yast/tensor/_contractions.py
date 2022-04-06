@@ -8,7 +8,7 @@ from ._merging import _merge_to_matrix, _flip_hf, _meta_unfuse_legdec
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
 
 
-__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'mask', 'mask_apply']
+__all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask']
 
 
 def __matmul__(a, b):
@@ -313,46 +313,13 @@ def _meta_broadcast(config, a_struct, b_struct, axis, conja):
     return meta, c_struct
 
 
-def mask(a, b, axis=0):
+def apply_mask(a, *args, axis=0):
     r"""
-    Apply mask given by nonzero elements of diagonal tensor b on specified axis of tensor a.
+    Apply mask given by nonzero elements of diagonal tensor a on specified axis of tensor b.
+    Can provide arbitrary number of tensors b, in which case axis is a list of corresponding length.
 
-    Legs of resulting tensor are ordered in the same way as those of tensor a.
-    Bond dimensions of specified axis of a are truncated according to the mask.
-    Produce diagonal tensor if both are diagonal.
-
-    Parameters
-    ----------
-    a, b: Tensors
-        b is a diagonal tensor
-
-    axis: int
-        leg of tensor a where the mask is applied.
-    """
-    _test_configs_match(a, b)
-    axis = _broadcast_input(axis, a.mfs, b.isdiag)
-    if a.hfs[axis].tree != (1,):
-        raise YastError('First tensor`s leg specified by axis cannot be fused.')
-
-    Dbnew = tuple(b.config.backend.count_nonzero(b._data[slice(*sl)]) for sl in b.struct.sl)
-    meta, struct = _meta_mask(a.struct, a.isdiag, b.struct, Dbnew, axis)
-    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
-
-    if a.isdiag:
-        a_ndim, axis = (1, 0)
-        meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
-    else:
-        a_ndim = a.ndim_n
-    data = a.config.backend.mask_diag(a._data, b._data, meta, Dsize, axis, a_ndim)
-    return a._replace(struct=struct, data=data)
-
-
-def mask_apply(a, b, axis=0):
-    r"""
-    Apply mask given by nonzero elements of diagonal tensor b on specified axis of tensor a.
-
-    Legs of resulting tensor are ordered in the same way as those of tensor a.
-    Bond dimensions of specified axis of a are truncated according to the mask.
+    Legs of resulting tensor are ordered in the same way as those of tensor b.
+    Bond dimensions of specified axis of b are truncated according to the mask a.
     Produce diagonal tensor if both are diagonal.
 
     Parameters
@@ -360,26 +327,32 @@ def mask_apply(a, b, axis=0):
     a, b: Tensors
         a is a diagonal tensor
 
-    axis: int
+    axis: int or tuple of ints
         leg of tensor a where the mask is applied.
     """
-    _test_configs_match(a, b)
-    axis = _broadcast_input(axis, b.mfs, a.isdiag)
-    if b.hfs[axis].tree != (1,):
-        raise YastError('First tensor`s leg specified by axis cannot be fused.')
+    if not hasattr(axis, '__iter__'):
+        axis = (axis,)
+    if len(axis) != len(args):
+        raise YastError("There should be exactly one axis for each tensor to be projected.")
+    results = []
+    for b, ax in zip(args, axis):
+        _test_configs_match(a, b)
+        ax = _broadcast_input(ax, b.mfs, a.isdiag)
+        if b.hfs[ax].tree != (1,):
+            raise YastError('First tensor`s leg specified by axis cannot be fused.')
 
-    Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl)]) for sl in a.struct.sl)
-    meta, struct = _meta_mask(b.struct, b.isdiag, a.struct, Dbnew, axis)
-    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
+        Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl)]) for sl in a.struct.sl)
+        meta, struct = _meta_mask(b.struct, b.isdiag, a.struct, Dbnew, ax)
+        Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
 
-    if b.isdiag:
-        b_ndim, axis = (1, 0)
-        meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
-    else:
-        b_ndim = b.ndim_n
-    data = b.config.backend.mask_diag(b._data, a._data, meta, Dsize, axis, b_ndim)
-    return b._replace(struct=struct, data=data)
-
+        if b.isdiag:
+            b_ndim, ax = (1, 0)
+            meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
+        else:
+            b_ndim = b.ndim_n
+        data = b.config.backend.mask_diag(b._data, a._data, meta, Dsize, ax, b_ndim)
+        results.append(b._replace(struct=struct, data=data))
+    return results.pop() if len(results) == 1 else results
 
 
 @lru_cache(maxsize=1024)

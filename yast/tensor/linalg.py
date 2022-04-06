@@ -269,9 +269,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         uS = {t[:nsym]: a.config.backend.copy(S.data[slice(*sl)]) for t, sl in zip(S.struct.t, S.struct.sl)}
         uS['D'] = Smask.trace(axes=(0, 1))
 
-    U = Smask.mask_apply(U, axis=-1)
-    S = Smask.mask_apply(S, axis=0)
-    V = Smask.mask_apply(V, axis=0)
+    U, S, V = Smask.apply_mask(U, S, V, axis=(-1, 0, 0))
 
     # tensor.mask(mask, tensor_axis)
     # mask.apply_mask( (tensor, rensor, tensor), axis=())
@@ -722,8 +720,8 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=2 ** 32, D_total=2
         uS = {t[:nsym]: a.config.backend.copy(S.data[slice(*sl)]) for t, sl in zip(S.struct.t, S.struct.sl)}
         uS['D'] = Smask.trace(axes=(0, 1))
 
-    U = Smask.mask_apply(U, axis=-1)
-    S = Smask.mask_apply(S, axis=0)
+    U = Smask.apply_mask(U, axis=-1)
+    S = Smask.apply_mask(S, axis=0)
 
     U = U.move_leg(source=-1, destination=Uaxis)
     return (S, U, uS) if untruncated_S else (S, U)

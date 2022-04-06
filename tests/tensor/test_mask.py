@@ -21,19 +21,24 @@ def test_mask_1():
     b[(1, 1)] = b[(1, 1)] > 0
 
     bd = b.trace(axes=(0, 1)).item()
-    c = b.mask_apply(a, axis=2)
+    c = b.apply_mask(a, axis=2)
     ls = c.get_leg_structure(axis=2)
     assert len(ls) == 1
     assert (1,) in ls and ls[(1,)] == bd
 
-    d1 = b.mask_apply(b0, axis=-1)
+    d1 = b.apply_mask(b0, axis=-1)
     ls = d1.get_leg_structure(axis=1)
     assert len(ls) == 1 and (1,) in ls and ls[(1,)] == bd
 
-    d0 = b.mask_apply(b0, axis=0)
+    d0 = b.apply_mask(b0, axis=0)
     ls = d0.get_leg_structure(axis=1)
     assert len(ls) == 1 and (1,) in ls and ls[(1,)] == bd
     assert yast.norm(d0 - d1) < tol
+
+
+    d00, d11 = b.apply_mask(b0, b0, axis=(-1, 0))
+    assert (d00 - d0).norm() < tol
+    assert (d11 - d1).norm() < tol
 
 
 def test_mask_2():
@@ -57,15 +62,15 @@ def test_mask_2():
 
     def mask_and_shape(aa, bb):
         bd = bb.trace(axes=(0, 1)).item()
-        c = bb.mask_apply(aa, axis=0)
+        c = bb.apply_mask(aa, axis=0)
         ls = c.get_leg_structure(axis=0)
         assert sum(ls.values()) == bd
 
     for bb in [bgt, blt, bge, ble]:
         mask_and_shape(a, bb)
 
-    assert blt.mask_apply(bge, axis=0).trace() < tol
-    assert ble.mask_apply(bgt, axis=1).trace() < tol
+    assert blt.apply_mask(bge, axis=0).trace() < tol
+    assert ble.apply_mask(bgt, axis=1).trace() < tol
 
 
 def test_mask_exceptions():
@@ -76,17 +81,17 @@ def test_mask_exceptions():
     b = yast.rand(config=config_U1, isdiag=True, t=(-1, 1), D=(7, 8))
     b_nondiag = b.diag()
     with pytest.raises(yast.YastError):
-        b_nondiag.mask_apply(a, axis=2)  # Error in broadcast/mask: tensor b should be diagonal.
+        b_nondiag.apply_mask(a, axis=2)  # Error in broadcast/mask: tensor b should be diagonal.
     with pytest.raises(yast.YastError):
-        b.mask_apply(a, axis=(1,))  # Error in broadcast/mask: axis should be an int.
+        b.apply_mask(a, axis=(1,))  # Error in broadcast/mask: axis should be an int.
     with pytest.raises(yast.YastError):
         amf = a.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
-        b.mask_apply(amf, axis=1)  # Error in broadcast/mask: leg of tensor a specified by axis cannot be fused.
+        b.apply_mask(amf, axis=1)  # Error in broadcast/mask: leg of tensor a specified by axis cannot be fused.
     with pytest.raises(yast.YastError):
         ahf = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
-        b.mask_apply(ahf, axis=1)  # Error in mask: leg of tensor a specified by axis cannot be fused.
+        b.apply_mask(ahf, axis=1)  # Error in mask: leg of tensor a specified by axis cannot be fused.
     with pytest.raises(yast.YastError):
-        b.mask_apply(a, axis=1)  # Error in mask: bond dimensions do not match.
+        b.apply_mask(a, axis=1)  # Error in mask: bond dimensions do not match.
 
 
 if __name__ == '__main__':

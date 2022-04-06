@@ -283,11 +283,6 @@ class kernel_transpose(torch.autograd.Function):
             newdata_b[slice(*slo)].view(Do)[:] = data_b[slice(*sln)].view(Dn).permute(inv_axes)
         return newdata_b, None, None
 
-        # for slice_to, slice_from, D_from in meta_transpose:
-        #     Drsh = tuple(D_from[n] for n in axes)
-        #     newdata_b[slice(*slice_from)] = data_b[slice(*slice_to)].view(Drsh).permute(inv_axes).ravel()
-        # return newdata_b, None, None
-
 
 def rsqrt(data, cutoff=0):
     res = torch.zeros_like(data)
@@ -645,25 +640,6 @@ class kernel_merge_to_1d(torch.autograd.Function):
                 inv_Do = tuple(Do[n] for n in order)
                 newdata_b[slice(*slo)].reshape(Do)[:] = tmp_b[slcs].reshape(inv_Do).permute(inv_order)
         return newdata_b, None, None, None, None
-
-    # @staticmethod
-    # def backward(ctx, data_b):
-    #     order= ctx.order
-    #     meta_new= ctx.meta_new
-    #     meta_mrg= ctx.meta_mrg
-    #     D_source= ctx.D_source
-
-    #     inv_order= tuple(np.argsort(order))
-
-    #     newdata_b = torch.zeros((D_source,), dtype=data_b.dtype, device=data_b.device)
-    #     for (tn, D_source, slice_source), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
-    #         tmp_b = data_b[slice(*slice_source)].view(D_source)
-    #         for (_, slice_destination, D_destination, slice_source_block, D_source_block) in gr:
-    #             slc = tuple(slice(*x) for x in slice_source_block)
-    #             Drsh = tuple(D_destination[n] for n in order)
-    #             newdata_b[slice(*slice_destination)] = tmp_b[slc].reshape(Drsh).permute(inv_order).ravel()
-    #     return newdata_b, None, None, None, None
-
 
 
 def merge_to_dense(data, Dtot, meta):
