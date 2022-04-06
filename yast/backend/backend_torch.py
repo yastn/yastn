@@ -2,9 +2,26 @@
 from itertools import chain, groupby
 import numpy as np
 import torch
+
+def _torch_version_check():
+    try:
+        import pkg_resources
+        USE_TORCHLINALG= pkg_resources.parse_version(torch.__version__) > pkg_resources.parse_version("1.8.1")
+    except ModuleNotFoundError:
+        try:
+            from packaging import version
+            USE_TORCHLINALG= version.parse(torch.__version__) > version.parse("1.8.1")
+        except ModuleNotFoundError:
+            tokens= torch.__version__.split('.')
+            USE_TORCHLINALG= int(tokens[0]) > 1 or (int(tokens[0]) >= 1 and int(tokens[1]) > 8) 
+    return USE_TORCHLINALG
+
 from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_eig_sym import SYMEIG
 # from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
+
+
+USE_TORCHLINALG= _torch_version_check()
 
 BACKEND_ID = "torch"
 DTYPE = {'float64': torch.float64,
@@ -308,7 +325,8 @@ def svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, n_iter=60, k_fac=6):
     return Udata, Sdata, Vdata
 
 
-def svd(data, meta, Usize, Ssize, Vsize, fullrank_uv=False, ad_decomp_reg=1.0e-12):
+def svd(data, meta, Usize, Ssize, Vsize, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
+    diagnostics=None, **kwargs):
     # SVDGESDD decomposes A = USV^\dag and return U,S,V^\dag
     real_dtype= data.real.dtype if data.is_complex() else data.dtype
     Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
@@ -316,7 +334,10 @@ def svd(data, meta, Usize, Ssize, Vsize, fullrank_uv=False, ad_decomp_reg=1.0e-1
     Vdata = torch.zeros((Vsize,), dtype=data.dtype, device=data.device)
     reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
     for (sl, D, slU, slS, slV) in meta:
-        U, S, V = SVDGESDD.apply(data[slice(*sl)].view(D), reg, fullrank_uv)
+        is_zero_block= torch.linalg.vector_norm(data[slice(*sl)])==0. if USE_TORCHLINALG\
+            else data[slice(*sl)].norm()==0.
+        if is_zero_block: continue
+        U, S, V = SVDGESDD.apply(data[slice(*sl)].view(D), reg, fullrank_uv, diagnostics)
         Udata[slice(*slU)] = U.ravel()
         Sdata[slice(*slS)] = S.ravel()
         Vdata[slice(*slV)] = V.ravel()
@@ -325,11 +346,12 @@ def svd(data, meta, Usize, Ssize, Vsize, fullrank_uv=False, ad_decomp_reg=1.0e-1
 
 
 def eigh(data, meta=None, Ssize=1, Usize=1, order_by_magnitude=False, ad_decomp_reg=1.0e-12):
+    real_dtype= data.real.dtype if data.is_complex() else data.dtype
     Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
-    Sdata = torch.zeros((Ssize,), dtype=data.dtype, device=data.device)
+    Sdata = torch.zeros((Ssize,), dtype=real_dtype, device=data.device)
     if meta is not None:
         if order_by_magnitude:
-            reg = torch.as_tensor(ad_decomp_reg, dtype=data.dtype, device=data.device)
+            reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
             f = lambda x: SYMEIG.apply(x, reg)
         else:
             f = lambda x: torch.linalg.eigh(x)

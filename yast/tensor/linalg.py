@@ -171,7 +171,8 @@ def svd_old(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
     meta = tuple(zip(struct.sl, struct.D, Ustruct.sl, Sstruct.sl, Vstruct.sl))
     if policy == 'fullrank':
-        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, Usize, Ssize, Vsize)
+        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, Usize, Ssize, Vsize,\
+            diagnostics=kwargs['diagonostics'] if 'diagonostics' in kwargs else None)
     elif policy == 'lowrank':
         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, **kwargs)
     else:
@@ -257,7 +258,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     U, S, Vh: Tensor
         U and Vh are unitary projectors. S is a real diagonal tensor.
     """
-    U, S, V = svd_pure(a, axes=axes, sU=sU, nU=nU)
+    U, S, V = svd_pure(a, axes=axes, sU=sU, nU=nU, diagnostics=kwargs['diagonostics']\
+        if 'diagonostics' in kwargs else None)
 
     Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
                             keep_multiplets= keep_multiplets, eps_multiplet=eps_multiplet)
@@ -346,7 +348,8 @@ def svd_pure(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank'
 
     meta = tuple(zip(struct.sl, struct.D, Ustruct.sl, Sstruct.sl, Vstruct.sl))
     if policy == 'fullrank':
-        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, Usize, Ssize, Vsize)
+        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, Usize, Ssize, Vsize,\
+            diagnostics=kwargs['diagnostics'] if 'diagnostics' in kwargs else None)
     elif policy == 'lowrank':
         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, **kwargs)
     else:
