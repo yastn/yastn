@@ -183,14 +183,14 @@ def transpose(a, axes):
     newt = tuple(tuple(x.flat) for x in tset[:, order, :])
     newD = tuple(tuple(x.flat) for x in Dset[:, order])
 
-    meta = sorted(zip(newt, newD, a.struct.Dp, a.struct.sl, a.struct.D), key=lambda x: x[0])
+    meta = sorted(zip(newt, a.struct.Dp, newD, a.struct.sl, a.struct.D), key=lambda x: x[0])
 
     c_t = tuple(mt[0] for mt in meta)
-    c_D = tuple(mt[1] for mt in meta)
-    c_Dp = tuple(mt[2] for mt in meta)
+    c_D = tuple(mt[2] for mt in meta)
+    c_Dp = tuple(mt[1] for mt in meta)
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
 
-    meta = tuple((sln, *mt[3:]) for sln, mt, in zip(c_sl, meta))
+    meta = tuple((sln, *mt[2:]) for sln, mt, in zip(c_sl, meta))
     struct = a.struct._replace(s=c_s, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     data = a._data if a.isdiag else a.config.backend.transpose(a._data, uaxes, meta)
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
