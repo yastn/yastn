@@ -282,7 +282,7 @@ def svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, n_iter=60, k_fac=6):
     return Udata, Sdata, Vdata
 
 
-def svd(data, meta, Usize, Ssize, Vsize):
+def svd(data, meta, Usize, Ssize, Vsize, **kwargs):
     Udata = np.zeros((Usize,), dtype=data.dtype)
     Sdata = np.zeros((Ssize,), dtype=DTYPE['float64'])
     Vdata = np.zeros((Vsize,), dtype=data.dtype)
