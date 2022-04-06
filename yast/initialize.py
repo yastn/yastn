@@ -1,6 +1,7 @@
 # Methods creating new YAST tensors from scratch
 # and importing tensors from different formats
 # such as 1D+metadata or dictionary representation
+from ast import literal_eval
 import numpy as np
 from .tensor import Tensor, YastError
 from .tensor._auxliary import _unpack_axes, _struct
@@ -236,12 +237,13 @@ def load_from_hdf5(config, file, path):
     path: TODO
     """
     g = file.get(path)
-
-    d = {'n': g.get('n')[:], 's': g.get('s')[:]}
-    d['isdiag'] = bool(g.get('isdiag')[:][0])
-    d['meta_fusion'] = eval(tuple(file.get(path+'/meta').keys())[0])
-
-    a = Tensor(config=config, **d)
+    struct = _struct(s=g.get('s')[:], n=g.get('n')[:])
+    mfs = eval(tuple(file.get(path+'/mfs').keys())[0])
+    hfs = tuple(_Fusion(**hf) for hf in literal_eval(tuple(g.get('hfs').keys())[0]))
+    
+    a = Tensor(config=config, struct=struct, isdiag=bool(g.get('isdiag')[:][0]),
+                hard_fusion=hfs, meta_fusion=mfs)
+                
 
     ts = g.get('ts')[:]
     Ds = g.get('Ds')[:]
