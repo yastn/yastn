@@ -473,10 +473,10 @@ def dot_with_mask(Adata, Bdata, cc, meta_dot, Dsize, msk_a, msk_b):
     return newdata
 
 
-dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
-                (0, 1): lambda x, y, dim: x * y.reshape(dim).conj(),
-                (1, 0): lambda x, y, dim: x.conj() * y.reshape(dim),
-                (1, 1): lambda x, y, dim: x.conj() * y.reshape(dim).conj()}
+dotdiag_dict = {(0, 0): lambda x, y: x * y,
+                (0, 1): lambda x, y: x * y.conj(),
+                (1, 0): lambda x, y: x.conj() * y,
+                (1, 1): lambda x, y: x.conj() * y.conj()}
 
 
 def dot_diag(Adata, Bdata, cc, meta, Dsize, axis, a_ndim):
@@ -484,8 +484,8 @@ def dot_diag(Adata, Bdata, cc, meta, Dsize, axis, a_ndim):
     dim[axis] = -1
     f = dotdiag_dict[cc]
     newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
-    for sln, sla, Da, slb in meta:
-        newdata[slice(*sln)] = f(Adata[slice(*sla)].reshape(Da), Bdata[slice(*slb)], dim).ravel()
+    for sln, slb, Db, sla in meta:
+        newdata[slice(*sln)].reshape(Db)[:] = f(Adata[slice(*sla)].reshape(dim), Bdata[slice(*slb)].reshape(Db))
     return newdata
 
 
