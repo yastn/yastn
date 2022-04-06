@@ -1,40 +1,32 @@
 import torch
 import warnings
-try:
-    import pkg_resources
-    USE_LINALGSVD= pkg_resources.parse_version(torch.__version__) > pkg_resources.parse_version("1.8.1")
-except ModuleNotFoundError:
-    try:
-        from packaging import version
-        USE_LINALGSVD= version.parse(torch.__version__) > version.parse("1.8.1")
-    except ModuleNotFoundError:
-        tokens= torch.__version__.split('.')
-        USE_LINALGSVD= int(tokens[0]) > 1 or (int(tokens[0]) >= 1 and int(tokens[1]) > 8)   
+from ..backend_torch import _torch_version_check
+USE_TORCHLINALG= _torch_version_check()
 
 def safe_inverse(x, epsilon=1E-12):
     return x / (x**2 + epsilon)
-
 
 def safe_inverse_2(x, epsilon):
     x[abs(x) < epsilon] = float('inf')
     return x.pow(-1)
 
-
 class SVDGESDD(torch.autograd.Function):
-    if USE_LINALGSVD:
+    if USE_TORCHLINALG:
         @staticmethod
-        def forward(self, A, ad_decomp_reg, fullrank_uv):
+        def forward(self, A, ad_decomp_reg, fullrank_uv, diagnostics):
             U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
             # A = U @ diag(S) @ Vh
             self.save_for_backward(U, S, Vh, ad_decomp_reg)
+            self.diagnostics= diagnostics
             return U, S, Vh
     else:
         @staticmethod
-        def forward(self, A, ad_decomp_reg, fullrank_uv):
+        def forward(self, A, ad_decomp_reg, fullrank_uv, diagnostics):
             U, S, V = torch.svd(A, some=not fullrank_uv)
             # A = U @ diag(S) @ V.transpose(-2, -1).conj()
             Vh = V.transpose(-2, -1).conj()
             self.save_for_backward(U, S, Vh, ad_decomp_reg)
+            self.diagnostics= diagnostics
             return U, S, Vh
 
     # From https://github.com/pytorch/pytorch/blob/master/torch/csrc/autograd/FunctionsManual.cpp
@@ -49,6 +41,7 @@ class SVDGESDD(torch.autograd.Function):
     @staticmethod
     def backward(self, gU, gS, gVh):
         U, S, Vh, ad_decomp_reg = self.saved_tensors
+        diagnostics = self.diagnostics
         #   // Throughout both the real and complex case we assume A has distinct singular values.
         #   // Furthermore, if A is rectangular or complex, we assume it's full-rank.
         #   //
@@ -206,6 +199,7 @@ class SVDGESDD(torch.autograd.Function):
                 warnings.warn("svd_backward: The singular vectors in the complex case are "\
                 +"specified up to multiplication by e^{i phi}. The specified loss function depends on "\
                 +"this phase term, making it ill-defined.",RuntimeWarning)
+                # import pdb; pdb.set_trace()
 
         #   // gA = ((U^H gU) / E) S +  S (((V^H gV) / E) + I o (gS + diag(U^H gU) / (2 * S))
         #   Tensor gA = [&] {
@@ -248,7 +242,7 @@ class SVDGESDD(torch.autograd.Function):
             return x_reg
 
         S2= S*S
-        E= S2.unsqueeze(-2) - S2.unsqueeze(-1)
+        E= S2.unsqueeze(-2) - S2.unsqueeze(-1) # S^2_i-S^2_j
         E.diagonal(0,-2,-1).fill_(1)
         
         gA= (UhgU * S.unsqueeze(-2) + S.unsqueeze(-1) * VhgV) * (1./reg_preinv(E)) + gS.diag_embed()
@@ -289,4 +283,8 @@ class SVDGESDD(torch.autograd.Function):
 
         #   return gA;
         # }
-        return gA, None, None
+        if not (diagnostics is None):
+            print(f"{diagnostics} {gA.size()} {gA.abs().max()} {S.max()}")
+        if torch.any(torch.isnan(gA)):
+            import pdb; pdb.set_trace()
+        return gA, None, None, None
