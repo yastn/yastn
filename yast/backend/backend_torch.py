@@ -247,24 +247,30 @@ def transpose(data, axes, meta_transpose):
 class kernel_transpose(torch.autograd.Function):
     @staticmethod
     def forward(ctx, data, axes, meta_transpose):
-        ctx.axes= axes
-        ctx.meta_transpose= meta_transpose
+        ctx.axes = axes
+        ctx.meta_transpose = meta_transpose
         
         newdata = torch.zeros_like(data)
-        for slice_to, slice_from, Do in meta_transpose:
-            newdata[slice(*slice_to)] = data[slice(*slice_from)].view(Do).permute(axes).ravel()
+        for sln, Dn, slo, Do in meta_transpose:
+            newdata[slice(*sln)].view(Dn)[:] = data[slice(*slo)].view(Do).permute(axes)
         return newdata
 
     @staticmethod
     def backward(ctx, data_b):
-        axes= ctx.axes
-        meta_transpose= ctx.meta_transpose
-        inv_axes= tuple(np.argsort(axes))
+        axes = ctx.axes
+        inv_axes = tuple(np.argsort(axes))
+        meta_transpose = ctx.meta_transpose
+
         newdata_b = torch.zeros_like(data_b)
-        for slice_to, slice_from, D_from in meta_transpose:
-            Drsh = tuple(D_from[n] for n in axes)
-            newdata_b[slice(*slice_from)] = data_b[slice(*slice_to)].view(Drsh).permute(inv_axes).ravel()
+        for sln, Dn, slo, Do in meta_transpose:
+            newdata_b[slice(*slo)].view(Do)[:] = data_b[slice(*sln)].view(Dn).permute(inv_axes)
         return newdata_b, None, None
+
+        # for slice_to, slice_from, D_from in meta_transpose:
+        #     Drsh = tuple(D_from[n] for n in axes)
+        #     newdata_b[slice(*slice_from)] = data_b[slice(*slice_to)].view(Drsh).permute(inv_axes).ravel()
+        # return newdata_b, None, None
+
 
 def rsqrt(data, cutoff=0):
     res = torch.zeros_like(data)
@@ -459,18 +465,18 @@ def apxb(Adata, Bdata, x, meta, Dsize):
     return newdata
 
 
-dot_dict = {(0, 0): lambda x, y: x @ y,
-            (0, 1): lambda x, y: x @ y.conj(),
-            (1, 0): lambda x, y: x.conj() @ y,
-            (1, 1): lambda x, y: x.conj() @ y.conj()}
-
-
 def apply_slice(data, slcn, slco):
     Dsize = slcn[-1][1] if len(slcn) > 0 else 0
     newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
     for sn, so in zip(slcn, slco):
         newdata[slice(*sn)] = data[slice(*so)]
     return newdata
+
+
+dot_dict = {(0, 0): lambda x, y: x @ y,
+            (0, 1): lambda x, y: x @ y.conj(),
+            (1, 0): lambda x, y: x.conj() @ y,
+            (1, 1): lambda x, y: x.conj() @ y.conj()}
 
 
 def vdot(Adata, Bdata, cc):
@@ -495,20 +501,20 @@ def diag_2dto1d(data, meta, Dsize):
 def dot(Adata, Bdata, cc, meta_dot, Dsize):
     dtype = _common_type((Adata, Bdata))
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-    f = dot_dict[cc]  # proper conjugations
+    fdot = dot_dict[cc]  # proper conjugations
     for (slc, sla, Da, slb, Db) in meta_dot:
-        newdata[slice(*slc)] = f(Adata[slice(*sla)].view(Da), \
-                                 Bdata[slice(*slb)].view(Db)).ravel()
+        newdata[slice(*slc)].view(Da[0], Db[1])[:] = fdot(Adata[slice(*sla)].view(Da), \
+                                                          Bdata[slice(*slb)].view(Db))
     return newdata
 
 
 def dot_with_mask(Adata, Bdata, cc, meta_dot, Dsize, msk_a, msk_b):
     dtype = _common_type((Adata, Bdata))
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-    f = dot_dict[cc]  # proper conjugations
+    fdot = dot_dict[cc]  # proper conjugations
     for (slc, sla, Da, slb, Db, ia, ib) in meta_dot:
-        newdata[slice(*slc)] = f(Adata[slice(*sla)].view(Da)[:, msk_a[ia]], \
-                                 Bdata[slice(*slb)].view(Db)[msk_b[ib], :]).ravel()
+        newdata[slice(*slc)].view(Da[0], Db[1])[:] = fdot(Adata[slice(*sla)].view(Da)[:, msk_a[ia]], \
+                                                          Bdata[slice(*slb)].view(Db)[msk_b[ib], :])
     return newdata
 
 
@@ -539,24 +545,24 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     return newdata
 
 
-def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
-    f = dot_dict[cc]  # proper conjugations
-    dtype = _common_type((Adata, Bdata))
-    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-    for (sln, sla, Dao, Dan, slb, Dbo, Dbn) in meta:
-        newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).permute(oA).reshape(Dan), \
-                                  Bdata[slice(*slb)].reshape(Dbo).permute(oB).reshape(Dbn)).ravel()
-    return newdata
+# def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
+#     f = dot_dict[cc]  # proper conjugations
+#     dtype = _common_type((Adata, Bdata))
+#     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+#     for (sln, sla, Dao, Dan, slb, Dbo, Dbn) in meta:
+#         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).permute(oA).reshape(Dan), \
+#                                   Bdata[slice(*slb)].reshape(Dbo).permute(oB).reshape(Dbn)).ravel()
+#     return newdata
 
 
-def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
-    f = dot_dict[cc]  # proper conjugations
-    dtype = _common_type((Adata, Bdata))
-    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-    for (sln, sla, Dao, Dan, slb, Dbo, Dbn), tt in zip(meta, tcon):
-        newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).permute(oA).reshape(Dan)[:, ma[tt]], \
-                                  Bdata[slice(*slb)].reshape(Dbo).permute(oB).reshape(Dbn)[mb[tt], :]).ravel()
-    return newdata
+# def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
+#     f = dot_dict[cc]  # proper conjugations
+#     dtype = _common_type((Adata, Bdata))
+#     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+#     for (sln, sla, Dao, Dan, slb, Dbo, Dbn), tt in zip(meta, tcon):
+#         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).permute(oA).reshape(Dan)[:, ma[tt]], \
+#                                   Bdata[slice(*slb)].reshape(Dbo).permute(oB).reshape(Dbn)[mb[tt], :]).ravel()
+#     return newdata
 
 #####################################################
 #     block merging, truncations and un-merging     #
@@ -570,10 +576,10 @@ def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
 class kernel_merge_to_1d(torch.autograd.Function):
     @staticmethod
     def forward(ctx, data, order, meta_new, meta_mrg, Dsize):
-        ctx.order= order
-        ctx.meta_new= meta_new
-        ctx.meta_mrg= meta_mrg
-        ctx.D_source= data.numel()
+        ctx.order = order
+        ctx.meta_new = meta_new
+        ctx.meta_mrg = meta_mrg
+        ctx.D_source = data.numel()
 
         # Dsize - total size of fused representation (might include some zero-blocks)
         newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
@@ -594,29 +600,48 @@ class kernel_merge_to_1d(torch.autograd.Function):
         # 
         for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
             assert tn == t1
-            temp = torch.zeros(Dn, dtype=data.dtype, device=data.device)
+            temp = newdata[slice(*sln)].reshape(Dn)
             for (_, slo, Do, Dslc, Drsh) in gr:
-                temp[tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
-            newdata[slice(*sln)] = temp.ravel()
+                slcs = tuple(slice(*x) for x in Dslc)
+                temp[slcs] = data[slice(*slo)].reshape(Do).permute(order).reshape(Drsh)
         return newdata
 
     @staticmethod
     def backward(ctx, data_b):
-        order= ctx.order
-        meta_new= ctx.meta_new
-        meta_mrg= ctx.meta_mrg
-        D_source= ctx.D_source
-
+        order = ctx.order
         inv_order= tuple(np.argsort(order))
+        meta_new = ctx.meta_new
+        meta_mrg = ctx.meta_mrg
+        D_source = ctx.D_source
 
         newdata_b = torch.zeros((D_source,), dtype=data_b.dtype, device=data_b.device)
-        for (tn, D_source, slice_source), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
-            tmp_b = data_b[slice(*slice_source)].view(D_source)
-            for (_, slice_destination, D_destination, slice_source_block, D_source_block) in gr:
-                slc = tuple(slice(*x) for x in slice_source_block)
-                Drsh = tuple(D_destination[n] for n in order)
-                newdata_b[slice(*slice_destination)] = tmp_b[slc].reshape(Drsh).permute(inv_order).ravel()
+        for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
+            assert tn == t1
+            tmp_b = data_b[slice(*sln)].view(Dn)
+            for (_, slo, Do, Dslc, _) in gr:
+                slcs = tuple(slice(*x) for x in Dslc)
+                inv_Do = tuple(Do[n] for n in order)
+                newdata_b[slice(*slo)].reshape(Do)[:] = tmp_b[slcs].reshape(inv_Do).permute(inv_order)
         return newdata_b, None, None, None, None
+
+    # @staticmethod
+    # def backward(ctx, data_b):
+    #     order= ctx.order
+    #     meta_new= ctx.meta_new
+    #     meta_mrg= ctx.meta_mrg
+    #     D_source= ctx.D_source
+
+    #     inv_order= tuple(np.argsort(order))
+
+    #     newdata_b = torch.zeros((D_source,), dtype=data_b.dtype, device=data_b.device)
+    #     for (tn, D_source, slice_source), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
+    #         tmp_b = data_b[slice(*slice_source)].view(D_source)
+    #         for (_, slice_destination, D_destination, slice_source_block, D_source_block) in gr:
+    #             slc = tuple(slice(*x) for x in slice_source_block)
+    #             Drsh = tuple(D_destination[n] for n in order)
+    #             newdata_b[slice(*slice_destination)] = tmp_b[slc].reshape(Drsh).permute(inv_order).ravel()
+    #     return newdata_b, None, None, None, None
+
 
 
 def merge_to_dense(data, Dtot, meta):

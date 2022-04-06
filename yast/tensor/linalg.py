@@ -271,9 +271,17 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     S = Smask.mask_apply(S, axis=0)
     V = Smask.mask_apply(V, axis=0)
 
+    # tensor.mask(mask, tensor_axis)
+    # mask.apply_mask( (tensor, rensor, tensor), axis=())
+
     U = U.move_leg(source=-1, destination=Uaxis)
     V = V.move_leg(source=0, destination=Vaxis)
     return (U, S, V, uS) if untruncated_S else (U, S, V)
+
+## def svd  -- current svd_pure
+## def svd_truncated  -- current svd
+## def truncation_mask 
+## def apply_mask
 
 
 def svd_pure(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **kwargs):
@@ -407,14 +415,20 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
         Smask.data[slice(*sl)] = S.data[slice(*sl)] > tol_tru
 
     S._data = S.data * Smask.data
+
+
     tol_abs = tol * S.config.backend.max_abs(S.data)
     D_total = min(D_total, sum(Smask.data > 0))
     tol_D = S.config.backend.nth_largest(S._data, D_total)
+
     tol_tru = max(tol_D, tol_abs) * (1 - 1e-15)
+
     if keep_multiplets and eps_multiplet > 0:
-            while sum(S.data > tol_tru) != sum(S.data > (tol_tru - eps_multiplet)):
-                tol_tru = tol_tru + eps_multiplet
+        while sum(S.data > tol_tru) != sum(S.data > (tol_tru - eps_multiplet)):
+            tol_tru = tol_tru + eps_multiplet
+
     Smask._data = S.data > tol_tru
+
     return Smask
 
 

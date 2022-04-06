@@ -238,8 +238,8 @@ def trace_with_mask(data, order, meta, Dsize, tcon, msk12):
 
 def transpose(data, axes, meta_transpose):
     newdata = np.zeros_like(data)
-    for sln, slo, Do in meta_transpose:
-        newdata[slice(*sln)] = data[slice(*slo)].reshape(Do).transpose(axes).ravel()
+    for sln, Dn, slo, Do in meta_transpose:
+        newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do).transpose(axes)
     return newdata
 
 
@@ -457,16 +457,19 @@ def dot(Adata, Bdata, cc, meta_dot, Dsize):
     newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
     fdot = dot_dict[cc]  # proper conjugations
     for (slc, sla, Da, slb, Db) in meta_dot:
-        fdot(Adata[slice(*sla)].reshape(Da), Bdata[slice(*slb)].reshape(Db), newdata[slice(*slc)].reshape(Da[0], Db[1]))
+        fdot(Adata[slice(*sla)].reshape(Da), \
+             Bdata[slice(*slb)].reshape(Db), \
+             newdata[slice(*slc)].reshape(Da[0], Db[1]))
     return newdata
 
 
 def dot_with_mask(Adata, Bdata, cc, meta_dot, Dsize, msk_a, msk_b):
     newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
-    f = dot_dict[cc]  # proper conjugations
+    fdot = dot_dict[cc]  # proper conjugations
     for (slc, sla, Da, slb, Db, ia, ib) in meta_dot:
-        f(Adata[slice(*sla)].reshape(Da)[:, msk_a[ia]], Bdata[slice(*slb)].reshape(Db)[msk_b[ib], :], \
-            newdata[slice(*slc)].reshape(Da[0], Db[1]))
+        fdot(Adata[slice(*sla)].reshape(Da)[:, msk_a[ia]], \
+             Bdata[slice(*slb)].reshape(Db)[msk_b[ib], :], \
+             newdata[slice(*slc)].reshape(Da[0], Db[1]))
     return newdata
 
 
