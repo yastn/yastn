@@ -325,27 +325,27 @@ def nth_largest(data, n):
     return np.partition(data, -n)[-n]
 
 
-def select_global_largest(Sdata, St, Ssl, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
-    if ordering == 'svd':
-        s_all = np.hstack([Sdata[slice(*sl)][:D_keep[t]] for t, sl in zip(St, Ssl)])
-    elif ordering == 'eigh':
-        s_all = np.hstack([Sdata[slice(*sl)][-D_keep[t]:] for t, sl in zip(St, Ssl)])
-    Darg = D_total + int(keep_multiplets)
-    order = s_all.argsort()[-1:-Darg-1:-1]
-    if keep_multiplets:  # if needed, preserve multiplets within each sector
-        s_all = s_all[order]
-        gaps = np.abs(s_all)
-        # compute gaps and normalize by larger singular value. Introduce cutoff
-        gaps = np.abs(gaps[:len(s_all) - 1] - gaps[1:len(s_all)]) / gaps[0]  # / (gaps[:len(values) - 1] + 1.0e-16)
-        gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
-        if gaps[D_total - 1] < eps_multiplet:
-            # the chi is within the multiplet - find the largest chi_new < chi
-            # such that the complete multiplets are preserved
-            for i in range(D_total - 1, -1, -1):
-                if gaps[i] > eps_multiplet:
-                    order = order[:i + 1]
-                    break
-    return order
+# def select_global_largest(Sdata, St, Ssl, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
+#     if ordering == 'svd':
+#         s_all = np.hstack([Sdata[slice(*sl)][:D_keep[t]] for t, sl in zip(St, Ssl)])
+#     elif ordering == 'eigh':
+#         s_all = np.hstack([Sdata[slice(*sl)][-D_keep[t]:] for t, sl in zip(St, Ssl)])
+#     Darg = D_total + int(keep_multiplets)
+#     order = s_all.argsort()[-1:-Darg-1:-1]
+#     if keep_multiplets:  # if needed, preserve multiplets within each sector
+#         s_all = s_all[order]
+#         gaps = np.abs(s_all)
+#         # compute gaps and normalize by larger singular value. Introduce cutoff
+#         gaps = np.abs(gaps[:len(s_all) - 1] - gaps[1:len(s_all)]) / gaps[0]  # / (gaps[:len(values) - 1] + 1.0e-16)
+#         gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
+#         if gaps[D_total - 1] < eps_multiplet:
+#             # the chi is within the multiplet - find the largest chi_new < chi
+#             # such that the complete multiplets are preserved
+#             for i in range(D_total - 1, -1, -1):
+#                 if gaps[i] > eps_multiplet:
+#                     order = order[:i + 1]
+#                     break
+#     return order
 
 
 def eigs_which(val, which):
@@ -359,11 +359,11 @@ def eigs_which(val, which):
     return (val.real).argsort()
 
 
-def range_largest(D_keep, D_total, ordering):
-    if ordering == 'svd':
-        return (0, D_keep)
-    if ordering == 'eigh':
-        return (D_total - D_keep, D_total)
+# def range_largest(D_keep, D_total, ordering):
+#     if ordering == 'svd':
+#         return (0, D_keep)
+#     if ordering == 'eigh':
+#         return (D_total - D_keep, D_total)
 
 
 def embed_msk(data, msk, Dsize):

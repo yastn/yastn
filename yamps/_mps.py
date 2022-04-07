@@ -319,7 +319,7 @@ class Mps:
             normC = self.A[self.pC].norm()
             if opts is None:
                 opts = {'tol': 1e-12}
-            U, S, V = self.A[self.pC].svd(axes=(0, 1), sU=-1, **opts)
+            U, S, V = self.A[self.pC].svd_with_truncation(axes=(0, 1), sU=-1, **opts)
 
             normS = S.norm()
             self.A[self.pC] = S / normS if normalize else S
@@ -465,7 +465,7 @@ class Mps:
         AA = AA.unfuse_legs(axes=axes)
         axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 3), (2, 4, 5))
         self.pC = bd
-        self.A[nl], self.A[bd], self.A[nr] = AA.svd(axes=axes, sU=-1, **opts_svd)
+        self.A[nl], self.A[bd], self.A[nr] = AA.svd_with_truncation(axes=axes, sU=-1, **opts_svd)
 
     def get_bond_dimensions(self):
         r"""

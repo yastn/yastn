@@ -74,24 +74,22 @@ def test_mask_2():
 
 
 def test_mask_exceptions():
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
+    a = yast.rand(config=config_U1, isdiag=True, t=(-1, 1), D=(7, 8))
+    a_nondiag = a.diag()
+    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
                     t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                     D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
 
-    b = yast.rand(config=config_U1, isdiag=True, t=(-1, 1), D=(7, 8))
-    b_nondiag = b.diag()
     with pytest.raises(yast.YastError):
-        b_nondiag.apply_mask(a, axis=2)  # Error in broadcast/mask: tensor b should be diagonal.
+        a_nondiag.apply_mask(b, axis=2)  # Error in broadcast/mask: tensor b should be diagonal.
     with pytest.raises(yast.YastError):
-        b.apply_mask(a, axis=(1,))  # Error in broadcast/mask: axis should be an int.
+        bmf = a.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
+        a.apply_mask(bmf, axis=1)  # Error in broadcast/mask: leg of tensor a specified by axis cannot be fused.
     with pytest.raises(yast.YastError):
-        amf = a.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
-        b.apply_mask(amf, axis=1)  # Error in broadcast/mask: leg of tensor a specified by axis cannot be fused.
+        bhf = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
+        a.apply_mask(bhf, axis=1)  # Error in mask: leg of tensor a specified by axis cannot be fused.
     with pytest.raises(yast.YastError):
-        ahf = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
-        b.apply_mask(ahf, axis=1)  # Error in mask: leg of tensor a specified by axis cannot be fused.
-    with pytest.raises(yast.YastError):
-        b.apply_mask(a, axis=1)  # Error in mask: bond dimensions do not match.
+        a.apply_mask(b, axis=1)  # Error in mask: bond dimensions do not match.
 
 
 if __name__ == '__main__':
