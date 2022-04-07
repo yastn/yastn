@@ -233,7 +233,7 @@ def _meta_tensordot_nomerge(a_struct, b_struct, nout_a, nin_a, nin_b, nout_b):
 
 
 
-def broadcast(a, b, axis, conj=(0, 0)):
+def broadcast(a, *args, axis=0, conj=(0, 0)):
     r"""
     Compute tensor dot product of diagonal tensor a with tensor b.
 
@@ -251,30 +251,34 @@ def broadcast(a, b, axis, conj=(0, 0)):
     conj: tuple
         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
     """
-    _test_configs_match(a, b)
-    axis = _broadcast_input(axis, b.mfs, a.isdiag)
-    if b.hfs[axis].tree != (1,):
-        raise YastError('Second tensor`s leg specified by axis cannot be fused.')
+    axes = (axis,) if not hasattr(axis, '__iter__') else axis
+    if len(axes) != len(args):
+        raise YastError("There should be exactly one axis for each tensor to be projected.")
+    results = []
+    for b, axis in zip(args, axes):
+        _test_configs_match(a, b)
+        axis = _broadcast_input(axis, b.mfs, a.isdiag)
+        if b.hfs[axis].tree != (1,):
+            raise YastError('Second tensor`s leg specified by axis cannot be fused.')
 
-    conjb = (1 - 2 * conj[1])
-    hfs = b.hfs if conjb == 1 else tuple(_flip_hf(x) for x in b.hfs)
-    meta, struct = _meta_broadcast(b.config, b.struct, a.struct, axis, conjb)
+        conjb = (1 - 2 * conj[1])
+        hfs = b.hfs if conjb == 1 else tuple(_flip_hf(x) for x in b.hfs)
+        meta, struct = _meta_broadcast(b.config, b.struct, a.struct, axis, conjb)
 
-    if b.isdiag:
-        b_ndim, axis = (1, 0)
-        meta = tuple((sln, slb, Db[0], sla) for sln, slb, Db, sla in meta)
-    else:
-        b_ndim = b.ndim_n
-    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
-    data = b.config.backend.dot_diag(a._data, b._data, conj, meta, Dsize, axis, b_ndim)
-    return b._replace(hfs=hfs, struct=struct, data=data)
+        if b.isdiag:
+            b_ndim, axis = (1, 0)
+            meta = tuple((sln, slb, Db[0], sla) for sln, slb, Db, sla in meta)
+        else:
+            b_ndim = b.ndim_n
+        Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
+        data = b.config.backend.dot_diag(a._data, b._data, conj, meta, Dsize, axis, b_ndim)
+        results.append(b._replace(hfs=hfs, struct=struct, data=data))
+    return results.pop() if len(results) == 1 else results
 
 
 def _broadcast_input(axis, mf, isdiag):
     if not isdiag:
         raise YastError('First tensor should be diagonal.')
-    if not isinstance(axis, int):
-        raise YastError('axis should be an int.')
     axis = axis % len(mf)
     if mf[axis] != (1,):
         raise YastError('Second tensor`s leg specified by axis cannot be fused.')
@@ -330,27 +334,26 @@ def apply_mask(a, *args, axis=0):
     axis: int or tuple of ints
         leg of tensor a where the mask is applied.
     """
-    if not hasattr(axis, '__iter__'):
-        axis = (axis,)
-    if len(axis) != len(args):
+    axes = (axis,) if not hasattr(axis, '__iter__') else axis
+    if len(axes) != len(args):
         raise YastError("There should be exactly one axis for each tensor to be projected.")
     results = []
-    for b, ax in zip(args, axis):
+    for b, axis in zip(args, axes):
         _test_configs_match(a, b)
-        ax = _broadcast_input(ax, b.mfs, a.isdiag)
-        if b.hfs[ax].tree != (1,):
+        axis = _broadcast_input(axis, b.mfs, a.isdiag)
+        if b.hfs[axis].tree != (1,):
             raise YastError('First tensor`s leg specified by axis cannot be fused.')
 
         Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl)]) for sl in a.struct.sl)
-        meta, struct = _meta_mask(b.struct, b.isdiag, a.struct, Dbnew, ax)
+        meta, struct = _meta_mask(b.struct, b.isdiag, a.struct, Dbnew, axis)
         Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
 
         if b.isdiag:
-            b_ndim, ax = (1, 0)
+            b_ndim, axis = (1, 0)
             meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
         else:
             b_ndim = b.ndim_n
-        data = b.config.backend.mask_diag(b._data, a._data, meta, Dsize, ax, b_ndim)
+        data = b.config.backend.mask_diag(b._data, a._data, meta, Dsize, axis, b_ndim)
         results.append(b._replace(struct=struct, data=data))
     return results.pop() if len(results) == 1 else results
 

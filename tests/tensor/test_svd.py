@@ -12,7 +12,7 @@ tol = 1e-10  #pylint: disable=invalid-name
 
 def svd_combine(a):
     """ decompose and contracts tensor using svd decomposition """
-    U, S, V = yast.linalg.svd_pure(a, axes=((3, 1), (2, 0)), sU=-1)
+    U, S, V = yast.linalg.svd(a, axes=((3, 1), (2, 0)), sU=-1)
     US = yast.tensordot(U, S, axes=(2, 0))
     USV = yast.tensordot(US, V, axes=(2, 0))
     USV = USV.transpose(axes=(3, 1, 2, 0))
@@ -23,7 +23,7 @@ def svd_combine(a):
     assert V.is_consistent()
 
     # changes signature of new leg; and position of new leg
-    U, S, V = yast.linalg.svd_pure(a, axes=((3, 1), (2, 0)), sU=1, Uaxis=0, Vaxis=-1)
+    U, S, V = yast.linalg.svd(a, axes=((3, 1), (2, 0)), sU=1, Uaxis=0, Vaxis=-1)
     US = yast.tensordot(S, U, axes=(0, 0))
     USV = yast.tensordot(US, V, axes=(0, 2))
     USV = USV.transpose(axes=(3, 1, 2, 0))
@@ -108,14 +108,11 @@ def test_svd_truncate():
     a = yast.ncon([U, S, V], [(-1, -2, 1), (1, 2), (2, -3, -4)])
 
     opts = {'tol': 0.01, 'D_block': 100, 'D_total': 12}
-    _, S1, _, uS = yast.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1, **opts, untruncated_S=True)
+    _, S1, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
     assert S1.get_shape() == (12, 12)
-    assert all(pytest.approx(sum(uS[t]).item(), rel=tol) == sum(S[t + t]).item() for t in [(-2,), (-1,), (0,)])
-
     try:
-        _, S2, _ = yast.linalg.svd_lowrank(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
+        _, S2, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts, policy='lowrank')
         assert S2.get_shape() == (12, 12)
-        assert yast.norm(S1 - S2) < tol
     except NameError:
         pass
 
@@ -141,12 +138,12 @@ def test_svd_multiplets():
     a = yast.ncon([U, S, V], [(-1, -2, 1), (1, 2), (2, -3, -4)])
 
     opts = {'tol': 0.0001, 'D_block': 7, 'D_total': 30}
-    _, S1, _ = yast.linalg.svd(a, axes=((0, 1), (2, 3)), **opts)
+    _, S1, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
     print(sorted(np.diag(S1.to_numpy())))
     assert S1.get_shape() == (30, 30)
 
     opts = {'tol': 0.00001, 'D_block': 7, 'D_total': 30, 'keep_multiplets': True, 'eps_multiplet': 0.001}
-    _, S1, _ = yast.linalg.svd(a, axes=((0, 1), (2, 3)), **opts)
+    _, S1, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
     print(sorted(np.diag(S1.to_numpy())))
     assert S1.get_shape() == (24, 24)
 

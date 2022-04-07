@@ -364,8 +364,8 @@ class TestSyntaxGeneral(unittest.TestCase):
         Q, R = a.qr(axes=((0, 1), (2, 3)))
 
         D, U = yast.linalg.eigh(a2, axes=((0, 1), (2, 3)))
-        D, U = yast.eigh(a2, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
-        D, U = a2.eigh(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
+        D, U = yast.eigh_with_truncation(a2, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
+        D, U = a2.eigh_with_truncation(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
 
         # linalg
         number = a.norm()

@@ -93,11 +93,17 @@ def test_broadcast_2():
     assert not any((r1.isdiag, r2.isdiag, r3.isdiag))
 
     r4 = c.broadcast(b, axis=1)
+    r5 = b.broadcast(c, axis=1)
     assert r4.is_consistent()
     assert r4.isdiag
-    r5 = r4.to_numpy()
-    assert r5.shape == (3, 3)
-    assert np.trace(r5) == 3.
+    nr4 = r4.to_numpy()
+    assert nr4.shape == (3, 3)
+    assert np.trace(nr4) == 3.
+    assert (r4 - r5).norm() < tol
+
+    r1p, r5p = b.broadcast(a, c, axis=(0, 1))
+    assert (r1 - r1p).norm() < tol
+    assert (r5 - r5p).norm() < tol
 
 
 def test_broadcast_exceptions():
@@ -108,8 +114,6 @@ def test_broadcast_exceptions():
                     D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
     with pytest.raises(yast.YastError):
         a_nondiag.broadcast(b, axis=2)  # Error in broadcast/mask: tensor b should be diagonal.
-    with pytest.raises(yast.YastError):
-        a.broadcast(b, axis=(2,))  # Error in broadcast/mask: axis should be an int.
     with pytest.raises(yast.YastError):
         bmf = b.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
         a.broadcast(bmf, axis=1)  # Error in broadcast/mask: leg of tensor a specified by axis cannot be fused.
