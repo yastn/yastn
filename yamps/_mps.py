@@ -1,12 +1,104 @@
 """ Mps structure and its basic manipulations. """
+from numpy import array, nonzero
 from yast.tensor import block, entropy
 from yast.tensor import save_to_hdf5 as Tensor_to_hdf5
 from yast import load_from_hdf5 as Tensor_from_hdf5
-from numpy import array, nonzero
 
 
 class YampsError(Exception):
     pass
+
+
+def apxb(a, b, common_legs, x=1):
+    r"""
+    Adds two Mps-s with multiplicative prefactor x, and creates a new object as an output.
+    In short: c = a + x * b
+
+
+    Parameters
+    ----------
+        a, b : Mps
+            matrix products to be added
+
+        common_legs : tuple
+            which legs of individual tensors in Mps objects are common and are expanded by an addition. The addition is done on remaining legs
+
+        x : float/complex
+            multiplicative prefactor for tensor b
+
+    Returns
+    -------
+        c : Mps
+            new Mps, sum of a and b which is independent of them
+    """
+    if a.N is not b.N:
+        YampsError('Mps-s must have equal number of Tensor-s.')
+
+    c = a.copy()
+    for n in range(c.N):
+        if n == 0:
+            if x != 1:
+                d = {(0,): x*a.A[n], (1,): x*b.A[n]}
+            else:
+                d = {(0,): a.A[n], (1,): b.A[n]}
+            common_lgs = (0,)+common_legs
+        elif n == a.N-1:
+            d = {(0,): a.A[n], (1,): b.A[n]}
+            common_lgs = common_legs+(common_legs[-1]+1,)
+        else:
+            d = {(0, 0): a.A[n], (1, 1): b.A[n]}
+            common_lgs = common_legs
+        c.A[n] = block(d, common_lgs)
+    return c
+
+
+def add(tens, amp, common_legs):
+    r"""
+    Adds any number of Mps-s stored in tens with multiplicative prefactors specified in amp. It creates a new Mps as an output.
+    In short: c = \sum_j amp[j] * tens[j]
+    Number of Mps-s should be the same as the number of prefactors.
+
+
+    Parameters
+    ----------
+        tens : list of Mps-s
+            Each element of the list should contain a single Mps.
+
+        tens : list of float/complex-s
+            Each element of the list should contain a single number.
+
+        common_legs : tuple
+            which legs of individual tensors in Mps objects are common and are expanded by an addition. The addition is done on remaining legs
+
+    Returns
+    -------
+        c : Mps
+            new Mps, sum of all Mps-s in tens. It is independent of them
+    """
+    if len(tens) is not len(amp):
+        raise YampsError('Number of Mps-s must be equal to number of coefficients in amp.')
+
+    elif sum([tens[j].N-tens[0].N for j in range(len(tens))]) != 0:
+        raise YampsError('Mps-s must have equal lengths.')
+
+    c = tens[0].copy()
+    N = c.N
+    for n in range(N):
+        d = {}
+        if n == 0:
+            for j in range(len(tens)):
+                d[(j,)] = amp[j]*tens[j].A[n] if amp[j] != 1. else tens[j].A[n]
+            common_lgs = (0,) + common_legs
+        elif n == N-1:
+            for j in range(len(tens)):
+                d[(j,)] = tens[j].A[n]
+            common_lgs = common_legs+(common_legs[-1]+1,)
+        else:
+            for j in range(len(tens)):
+                d[(j, j)] = tens[j].A[n]
+            common_lgs = common_legs
+        c.A[n] = block(d, common_lgs)
+    return c
 
 
 def load_from_hdf5(config, nr_phys, file, in_file_path):
@@ -47,32 +139,6 @@ def generate_Mij(amp, connect, N, nr_phys):
         tD = M.A[n].get_leg_structure(axis=-1)
         tt = next(iter(tD))
     return M
-
-
-def add(tens, amp, common_legs):
-    if len(tens) is not len(amp):
-        raise YampsError('Number of Mps-s must be equal to number of cooeficients.')
-    elif sum([tens[j].N-tens[0].N for j in range(len(tens))]) != 0:
-        raise YampsError('Mps-s must have equal lengths.')
-
-    c = tens[0].copy()
-    N = c.N
-    for n in range(N):
-        d = {}
-        if n == 0:
-            for j in range(len(tens)):
-                d[(j,)] = amp[j]*tens[j].A[n] if amp[j] != 1. else tens[j].A[n]
-            common_lgs = (0,) + common_legs
-        elif n == N-1:
-            for j in range(len(tens)):
-                d[(j,)] = tens[j].A[n]
-            common_lgs = common_legs+(common_legs[-1]+1,)
-        else:
-            for j in range(len(tens)):
-                d[(j, j)] = tens[j].A[n]
-            common_lgs = common_legs
-        c.A[n] = block(d, common_lgs)
-    return c
 
 
 def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys, common_legs, opts={'tol': 1e-14}):
@@ -141,30 +207,6 @@ def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to
     M.truncate_sweep(to='first', opts=opts, normalize=False)
     return M
 
-
-def apxb(a, b, common_legs, x=1):
-    """
-    if inplace=false a+a*b will be a new Mps otherwise I will replace mb and delete b
-    """
-    if a.N is not b.N:
-        YampsError('Mps-s must have equal number of Tensor-s.')
-
-    c = a.copy()
-    for n in range(c.N):
-        if n == 0:
-            if x != 1:
-                d = {(0,): x*a.A[n], (1,): x*b.A[n]}
-            else:
-                d = {(0,): a.A[n], (1,): b.A[n]}
-            common_lgs = (0,)+common_legs
-        elif n == a.N-1:
-            d = {(0,): a.A[n], (1,): b.A[n]}
-            common_lgs = common_legs+(common_legs[-1]+1,)
-        else:
-            d = {(0, 0): a.A[n], (1, 1): b.A[n]}
-            common_lgs = common_legs
-        c.A[n] = block(d, common_lgs)
-    return c
 
 
 def x_a_times_b(a, b, axes, axes_fin, conj=(0, 0), x=1, inplace=True, mode='hard'):
