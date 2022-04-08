@@ -4,6 +4,8 @@ Setting up matrix product state and operators
 General information on Mps class
 --------------------------------
 
+.. todo:: can we change the name Mps to e.g. Mp (or MP or TP for tensor product) to make it more general between MPS and MPO objects
+
 The class `yamps.Mps` allows to create an object which represents a product operator. It consists of the numbered list of YAST tensors (members of class `yast.Tensor`, together with 
 properties definying waht do the matrix product represents.
 
@@ -31,3 +33,5 @@ The matrix product can be generated automatically basing on the structure define
    :members: automatic_Mps
 
 For examples for the function see the code in :ref:`examples/mps/mps:Automatically generated matrix product`.
+
+.. todo:: make automatic_Mps better and erase *Mij version for automatically generated MP

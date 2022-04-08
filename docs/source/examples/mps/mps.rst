@@ -48,8 +48,17 @@ The other way to get a canonical form of the object is to use the SVD decomposit
 .. literalinclude:: /../../tests/mps/test_truncate_svd.py
 
 
+
+.. FOR ALGEBRA 
+
 Copying
 ------------------------
 
 .. literalinclude:: /../../tests/mps/test_copy.py
+
+
+Addition
+------------------------
+
+.. literalinclude:: /../../tests/mps/test_addition.py
 
