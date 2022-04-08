@@ -11,6 +11,17 @@ See examples: :ref:`examples/init:clone, detach or copy tensors`.
 	:exclude-members: __init__, __new__
 	:members: get_bond_dimensions, get_bond_charges_dimensions, get_entropy
 
+Get structure
+-------------
+
+This should be about the bond dimension, entropy and Schmidt values.
+
+.. autoclass:: yamps.Mps
+	:noindex:
+	:members: get_entropy, get_bond_charges_dimensions
+	
+ADD get_Schmidt_values !!!
+
 
 Export the MPS/MPO object
 ---------------------------------
@@ -19,7 +30,7 @@ Export the MPS/MPO object
 
 See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
-.. autoclass:: yast.Mps
+.. autoclass:: yamps.Mps
 	:noindex:
 	:members: save_to_hdf5
 
@@ -32,6 +43,6 @@ Import the MPS/MPO object
 
 See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
-.. autoclass:: yast._mps
+.. autoclass:: yamps
 	:noindex:
 	:members: load_from_hdf5
