@@ -414,15 +414,8 @@ def eigs_which(val, which):
         return abs(val).argsort()
     if which == 'LR':
         return (-real(val)).argsort()
-    #elif which == 'SR':
+    #if which == 'SR':
     return (real(val)).argsort()
-
-
-# def range_largest(D_keep, D_total, ordering):
-#     if ordering == 'svd':
-#         return (0, D_keep)
-#     if ordering == 'eigh':
-#         return (D_total - D_keep, D_total)
 
 
 def embed_msk(data, msk, Dsize):
