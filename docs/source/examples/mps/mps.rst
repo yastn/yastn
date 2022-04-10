@@ -36,18 +36,6 @@ XX Hamiltonian generated automatically for the case with imposed U(1) symmetry f
         :pyobject: mpo_gen_XX
 
 
-Canonical form
-------------------------
-
-Matrix-product state/operator can be brought to the canonical form using QR decomposition. In the 1D objects you can choose it to be put into left or right canonical version.
-
-.. literalinclude:: /../../tests/mps/test_canonical.py
-
-The other way to get a canonical form of the object is to use the SVD decomposition. As the SVD progress throuth 1D chain you can choose to keep Schmidt vectors of custom coefficient.
-
-.. literalinclude:: /../../tests/mps/test_truncate_svd.py
-
-
 
 .. FOR ALGEBRA 
 
@@ -61,4 +49,31 @@ Addition
 ------------------------
 
 .. literalinclude:: /../../tests/mps/test_addition.py
+
+
+Multiplication
+------------------------
+
+.. literalinclude:: /../../tests/mps/test_multiplication.py
+
+
+.. QR and SVD
+
+Canonical form by QR decomposition
+---------------------------------------
+
+.. literalinclude:: /../../tests/mps/test_canonical.py
+
+
+Canonical form by SVD decomposition
+----------------------------------------
+
+.. literalinclude:: /../../tests/mps/test_truncate_svd.py
+
+
+.. outside world
+Save and load
+----------------------------------------
+
+.. literalinclude:: /../../tests/mps/test_save_load.py
 
