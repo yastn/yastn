@@ -1,26 +1,19 @@
-OVERLAPS to get expectation values and overlaps
+Overlaps of MPS-s
 =========================
 
-Overlaps of MPS-s
----------------------------------
+To calculate an overlap of one MPS-state and conjucation of another MPS-state use:
 
-#explain in graph + simple test file 
-
-See examples: :ref:`examples/init:clone, detach or copy tensors`.
-
-.. autoclass:: yast.Tensor
+.. automodule:: yamps
 	:noindex:
 	:members: measure_overlap
 
 
 Expectation value of MPO
----------------------------------
+=========================
 
-#explain in graph + simple test file 
+To calculate an overlap of one MPS-state, MPO-operator and conjucation of another MPS-state use:
 
-See examples: :ref:`examples/init:clone, detach or copy tensors`.
-
-.. autoclass:: yast.Tensor
+.. automodule:: yamps
 	:noindex:
 	:members: measure_mpo
 
