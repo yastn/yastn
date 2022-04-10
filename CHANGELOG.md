@@ -160,3 +160,4 @@
   but this is not the only way such mask can be obtianed.
  - `svd_with_truncation` and `eigh_with_truncation` combine pure `svd` with `truncation_mask` and `apply_mask`
  - `broadcast` does not take conj argument anymore
+ - `svd_lowrank` is depreciated. Call it though `policy='lowrank'` in `svd`
