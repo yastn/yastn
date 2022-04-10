@@ -9,9 +9,9 @@ Matrix producs state and operator
 
    theory/mps/basics
    mps/init
-   .. in progress
    mps/algebra
-   .. mps/i-o
+   .. in progress
+   mps/i-o
 
 
 Algorithms

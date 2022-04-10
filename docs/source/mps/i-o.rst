@@ -1,48 +1,42 @@
-Input/Output the MPS/MPO
+I-O for the matrix products
 =========================
+
 
 Entropy, and bond dimension
 ---------------------------------
 
-See examples: :ref:`examples/init:clone, detach or copy tensors`.
+The properties of virtual bond dimensions for the matrix product can be extracted by calling `get_*` functions on `yamps.Mps` object. 
+Those information can be used to quantify the entanaglemnt encoded by the virtual dimension as well as the structure of singlets encoding the correlations. 
+This can be used both for matrix-producs state and matrix product operator.
 
-.. autoclass:: yast.Mps
+.. autoclass:: yamps.Mps
 	:noindex:
 	:exclude-members: __init__, __new__
 	:members: get_bond_dimensions, get_bond_charges_dimensions, get_entropy
 
-Get structure
--------------
-
-This should be about the bond dimension, entropy and Schmidt values.
+Full information on the structure of virtual dimension is given by Schmidt values which is obtained by SVD. If the symmetries are present the Schmidt values are split to blocks.
 
 .. autoclass:: yamps.Mps
 	:noindex:
-	:members: get_entropy, get_bond_charges_dimensions
-	
-ADD get_Schmidt_values !!!
+	:exclude-members: __init__, __new__
+	:members: get_Schmidt_values
 
 
-Export the MPS/MPO object
----------------------------------
+Saving and loading `yamps.Mps`
+-------------------------------------------
 
-# export this object to the dictionary and export it to hdf5 + export-test-file
-
-See examples: :ref:`examples/init:clone, detach or copy tensors`.
+The Mps object can be convenienty saved as a dictionary or to a HDF5 file.
 
 .. autoclass:: yamps.Mps
 	:noindex:
-	:members: save_to_hdf5
+	:exclude-members: __init__, __new__
+	:members: save_to_dict, save_to_hdf5
 
+It can be later loaded from a dictionary or to a HDF5 file into `yamps.Mps`.
 
-Import the MPS/MPO object
----------------------------------
+.. automodule:: yamps
+	:members: load_from_dict, load_from_hdf5
 
-# import this object from the dictionary and export it to hdf5 + export-test-file
-# what aboot the configuration files, I shuld export them as well. That will be more convenient
+.. todo:: can I simplify the export smh, what about the configuration files, nr_phys etc, I shuld export them as well.
 
-See examples: :ref:`examples/init:clone, detach or copy tensors`.
-
-.. autoclass:: yamps
-	:noindex:
-	:members: load_from_hdf5
+Examples for saving and loading matrix products can be found in :ref:`examples/mps/mps:save and load`.
