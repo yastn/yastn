@@ -310,38 +310,38 @@ def absolute(data):
     return torch.abs(data)
 
 
-def svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, n_iter=60, k_fac=6):
+def svd_lowrank(data, meta, sizes, D_block, n_iter=60, k_fac=6):
     # torch.svd_lowrank decomposes A = USV^T and return U,S,V
     # complex A is not supported 
-    real_dtype= data.real.dtype if data.is_complex() else data.dtype
-    Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
-    Sdata = torch.zeros((Ssize,), dtype=real_dtype, device=data.device)
-    Vdata = torch.zeros((Vsize,), dtype=data.dtype, device=data.device)
+    real_dtype = data.real.dtype if data.is_complex() else data.dtype
+    Udata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
+    Sdata = torch.zeros((sizes[1],), dtype=real_dtype, device=data.device)
+    Vdata = torch.zeros((sizes[2],), dtype=data.dtype, device=data.device)
     for (sl, D, slU, slS, slV) in meta:
-        q = min(min(D), D_block)
+        k = slS[1] - slS[0]
         U, S, V = torch.svd_lowrank(data[slice(*sl)].view(D), q=q, niter=n_iter)
-        Udata[slice(*slU)] = U.ravel()
-        Sdata[slice(*slS)] = S.ravel()
-        Vdata[slice(*slV)] = V.t().conj().ravel()
+        Udata[slice(*slU)].reshape(DU)[:] = U
+        Sdata[slice(*slS)] = S
+        Vdata[slice(*slV)].reshape(DV)[:] = V.t().conj()
     return Udata, Sdata, Vdata
 
 
-def svd(data, meta, Usize, Ssize, Vsize, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
+def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
     diagnostics=None, **kwargs):
     # SVDGESDD decomposes A = USV^\dag and return U,S,V^\dag
-    real_dtype= data.real.dtype if data.is_complex() else data.dtype
-    Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
-    Sdata = torch.zeros((Ssize,), dtype=real_dtype, device=data.device)
-    Vdata = torch.zeros((Vsize,), dtype=data.dtype, device=data.device)
+    real_dtype = data.real.dtype if data.is_complex() else data.dtype
+    Udata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
+    Sdata = torch.zeros((sizes[1],), dtype=real_dtype, device=data.device)
+    Vdata = torch.zeros((sizes[2],), dtype=data.dtype, device=data.device)
     reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
-    for (sl, D, slU, slS, slV) in meta:
-        is_zero_block= torch.linalg.vector_norm(data[slice(*sl)])==0. if USE_TORCHLINALG\
-            else data[slice(*sl)].norm()==0.
+    for (sl, D, slU, DU, slS, slV, DV) in meta:
+        is_zero_block = torch.linalg.vector_norm(data[slice(*sl)]) == 0. if USE_TORCHLINALG\
+            else data[slice(*sl)].norm() == 0.
         if is_zero_block: continue
         U, S, V = SVDGESDD.apply(data[slice(*sl)].view(D), reg, fullrank_uv, diagnostics)
-        Udata[slice(*slU)] = U.ravel()
-        Sdata[slice(*slS)] = S.ravel()
-        Vdata[slice(*slV)] = V.ravel()
+        Udata[slice(*slU)].reshape(DU)[:] = U
+        Sdata[slice(*slS)] = S
+        Vdata[slice(*slV)].reshape(DV)[:] = V
     return Udata, Sdata, Vdata
 
 
@@ -364,9 +364,9 @@ def eigh(data, meta=None, Ssize=1, Usize=1, order_by_magnitude=False, ad_decomp_
     return torch.linalg.eigh(data)  # S, U
 
 
-def qr(data, meta, Qsize, Rsize):
-    Qdata = torch.zeros((Qsize,), dtype=data.dtype, device=data.device)
-    Rdata = torch.zeros((Rsize,), dtype=data.dtype, device=data.device)
+def qr(data, meta, sizes):
+    Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
+    Rdata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
     for (sl, D, slQ, DQ, slR, DR) in meta:
         Q, R = torch.linalg.qr(data[slice(*sl)].view(D))
         sR = torch.sign(real(R.diag()))

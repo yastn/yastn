@@ -269,31 +269,31 @@ def absolute(data):
     return np.abs(data)
 
 
-def svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, n_iter=60, k_fac=6):
-    Udata = np.zeros((Usize,), dtype=data.dtype)
-    Sdata = np.zeros((Ssize,), dtype=DTYPE['float64'])
-    Vdata = np.zeros((Vsize,), dtype=data.dtype)
-    for (sl, D, slU, slS, slV) in meta:
-        k = min(min(D), D_block)
+def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6):
+    Udata = np.empty((sizes[0],), dtype=data.dtype)
+    Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
+    Vdata = np.empty((sizes[2],), dtype=data.dtype)
+    for (sl, D, slU, DU, slS, slV, DV) in meta:
+        k = slS[1] - slS[0]
         U, S, V = fbpca.pca(data[slice(*sl)].reshape(D), k=k, raw=True, n_iter=n_iter, l=k_fac * k)
-        Udata[slice(*slU)] = U.ravel()
+        Udata[slice(*slU)].reshape(DU)[:] = U
         Sdata[slice(*slS)] = S
-        Vdata[slice(*slV)] = V.ravel()
+        Vdata[slice(*slV)].reshape(DV)[:] = V
     return Udata, Sdata, Vdata
 
 
-def svd(data, meta, Usize, Ssize, Vsize, **kwargs):
-    Udata = np.zeros((Usize,), dtype=data.dtype)
-    Sdata = np.zeros((Ssize,), dtype=DTYPE['float64'])
-    Vdata = np.zeros((Vsize,), dtype=data.dtype)
-    for (sl, D, slU, slS, slV) in meta:
+def svd(data, meta, sizes, **kwargs):
+    Udata = np.empty((sizes[0],), dtype=data.dtype)
+    Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
+    Vdata = np.empty((sizes[2],), dtype=data.dtype)
+    for (sl, D, slU, DU, slS, slV, DV) in meta:
         try:
             U, S, V = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False)
         except scipy.linalg.LinAlgError:  # pragma: no cover
             U, S, V = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, lapack_driver='gesvd')
-        Udata[slice(*slU)] = U.ravel()
+        Udata[slice(*slU)].reshape(DU)[:] = U
         Sdata[slice(*slS)] = S
-        Vdata[slice(*slV)] = V.ravel()
+        Vdata[slice(*slV)].reshape(DV)[:] = V
     return Udata, Sdata, Vdata
 
 
@@ -309,9 +309,9 @@ def eigh(data, meta=None, Ssize=1, Usize=1):
     return np.linalg.eigh(data)  # S, U
 
 
-def qr(data, meta, Qsize, Rsize):
-    Qdata = np.empty((Qsize,), dtype=data.dtype)
-    Rdata = np.empty((Rsize,), dtype=data.dtype)
+def qr(data, meta, sizes):
+    Qdata = np.empty((sizes[0],), dtype=data.dtype)
+    Rdata = np.empty((sizes[1],), dtype=data.dtype)
     for (sl, D, slQ, DQ, slR, DR) in meta:
         Q, R = scipy.linalg.qr(data[slice(*sl)].reshape(D), mode='economic')
         sR = np.sign(np.real(np.diag(R)))
