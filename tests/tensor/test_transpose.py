@@ -120,20 +120,20 @@ def test_transpose_backward():
     import torch
 
     # U1
-    a= yast.rand(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
+    a = yast.rand(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
-    b= a.transpose(axes=(1, 2, 3, 0, 5, 4))
-    target_block=(0,1,0,0,1,0)
-    target_block_size= a[target_block].size()
+    b = a.transpose(axes=(1, 2, 3, 0, 5, 4))
+    target_block = (0, 1, 0, 0, 1, 0)
+    target_block_size = a[target_block].size()
 
     def test_f(block):
         a.set_block(ts=target_block, val=block)
-        tmp_a= a.transpose(axes=(1, 2, 3, 0, 5, 4))
-        ab= b.vdot(tmp_a)
+        tmp_a = a.transpose(axes=(1, 2, 3, 0, 5, 4))
+        ab = b.vdot(tmp_a)
         return ab
 
-    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(),requires_grad=True), )
+    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
     test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
     assert test
 
