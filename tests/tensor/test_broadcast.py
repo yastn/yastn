@@ -26,8 +26,8 @@ def test_broadcast_0():
     a1 = a.diag()
     b = yast.randC(config=config_dense, s=(1, -1, 1, -1), D=(2, 5, 2, 5))
 
-    r1 = a.broadcast(b, axis=1, conj=(1, 0))
-    r2 = a.broadcast(b, axis=1, conj=(0, 1)).conj()
+    r1 = a.conj().broadcast(b, axis=1)
+    r2 = a.broadcast(b.conj(), axis=1).conj()
     r3 = a1.tensordot(b, axes=(0, 1), conj=(1, 0)).transpose((1, 0, 2, 3))
     r5 = a.tensordot(b, axes=(0, 1), conj=(1, 0)).transpose((1, 0, 2, 3))
     r4 = b.tensordot(a, axes=(1, 0), conj=(0, 1)).transpose((0, 3, 1, 2))

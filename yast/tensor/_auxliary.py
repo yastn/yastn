@@ -44,17 +44,6 @@ def _clear_axes(*args):
     return ((axis,) if isinstance(axis, int) else tuple(axis) for axis in args)
 
 
-def _common_rows(a, b):
-    """ Return row indices of nparray a that are in b, and vice versa.  Outputs tuples."""
-    la = [tuple(x.flat) for x in a]
-    lb = [tuple(x.flat) for x in b]
-    sa = set(la)
-    sb = set(lb)
-    ia = tuple(ii for ii, el in enumerate(la) if el in sb)
-    ib = tuple(ii for ii, el in enumerate(lb) if el in sa)
-    return ia, ib
-
-
 def _ntree_to_mf(ntree):
     """ Change nested lists into linear fusion tree. """
     mf = ()

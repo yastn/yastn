@@ -102,7 +102,7 @@ def test_tensordot_diag():
     b2 = b.diag()
 
     c1 = b.broadcast(a, axis=0)
-    c2 = b.broadcast(a, axis=0, conj=(1, 0))
+    c2 = b.conj().broadcast(a, axis=0)
     c3 = b2.tensordot(a, axes=(0, 0))
 
     assert(yast.norm(c1 - c2)) < tol
