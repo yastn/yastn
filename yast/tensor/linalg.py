@@ -6,7 +6,7 @@ from ._merging import _merge_to_matrix, _meta_unfuse_legdec
 from ._merging import _leg_struct_trivial, _leg_struct_truncation, _Fusion
 from ._krylov import _expand_krylov_space
 
-__all__ = ['svd', 'svd', 'svd_with_truncation', 'svd_lowrank', 'qr', 'eigh', 'eigh_with_truncation', 'norm', 'entropy', 'expmv', 'eigs']
+__all__ = ['svd', 'svd', 'svd_with_truncation', 'qr', 'eigh', 'eigh_with_truncation', 'norm', 'entropy', 'expmv', 'eigs']
 
 
 def norm(a, p='fro'):
@@ -27,56 +27,56 @@ def norm(a, p='fro'):
     return a.config.backend.norm(a._data, p)
 
 
-def svd_lowrank(a, axes=(0, 1), n_iter=60, k_fac=6, **kwargs):
-    r"""
-    Split tensor into :math:`a \approx USV^\dag` using approximate singular value decomposition (SVD),
-    where `U` and `V` are orthonormal and `S` is positive and diagonal matrix.
-    The approximate SVD is computed using stochastic method (TODO add ref).
+# def svd_lowrank(a, axes=(0, 1), n_iter=60, k_fac=6, **kwargs):
+#     r"""
+#     Split tensor into :math:`a \approx USV^\dag` using approximate singular value decomposition (SVD),
+#     where `U` and `V` are orthonormal and `S` is positive and diagonal matrix.
+#     The approximate SVD is computed using stochastic method (TODO add ref).
 
-    Truncation can be based on relative tolerance, bond dimension of each block,
-    and total bond dimension across all blocks (whichever gives smaller total dimension).
+#     Truncation can be based on relative tolerance, bond dimension of each block,
+#     and total bond dimension across all blocks (whichever gives smaller total dimension).
 
-    Charge of input tensor `a` is attached to `U` if `nU` and to `Vh` otherwise.
+#     Charge of input tensor `a` is attached to `U` if `nU` and to `Vh` otherwise.
 
-    Parameters
-    ----------
-    axes: tuple
-        Specify two groups of legs between which to perform svd, as well as
-        their final order.
+#     Parameters
+#     ----------
+#     axes: tuple
+#         Specify two groups of legs between which to perform svd, as well as
+#         their final order.
 
-    sU: int
-        signature of the new leg in U; equal 1 or -1. Default is 1.
+#     sU: int
+#         signature of the new leg in U; equal 1 or -1. Default is 1.
 
-    Uaxis, Vaxis: int
-        specify which leg of U and V tensors are connecting with S. By default
-        it is the last leg of U and the first of V.
+#     Uaxis, Vaxis: int
+#         specify which leg of U and V tensors are connecting with S. By default
+#         it is the last leg of U and the first of V.
 
-    tol: float
-        relative tolerance of singular values below which to truncate across all blocks.
+#     tol: float
+#         relative tolerance of singular values below which to truncate across all blocks.
 
-    tol_block: float
-        relative tolerance of singular values below which to truncate within individual blocks
+#     tol_block: float
+#         relative tolerance of singular values below which to truncate within individual blocks
 
-    D_block: int
-        largest number of singular values to keep in a single block.
-        also used in lowrank svd in the backend
+#     D_block: int
+#         largest number of singular values to keep in a single block.
+#         also used in lowrank svd in the backend
 
-    D_total: int
-        largest total number of singular values to keep.
+#     D_total: int
+#         largest total number of singular values to keep.
 
-    n_iter, k_fac: ints
-        number of iterations and multiplicative factor of stored singular values in lowrank svd procedure
-        (relevant options might depend on backend)
+#     n_iter, k_fac: ints
+#         number of iterations and multiplicative factor of stored singular values in lowrank svd procedure
+#         (relevant options might depend on backend)
 
-    untruncated_S: bool
-        returns U, S, Vh, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
+#     untruncated_S: bool
+#         returns U, S, Vh, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
 
-    Returns
-    -------
-    U, S, Vh: Tensor
-        U and Vh are unitary projectors. S is real diagonal.
-    """
-    return svd(a, axes=axes, policy='lowrank', n_iter=n_iter, k_fac=k_fac, **kwargs)
+#     Returns
+#     -------
+#     U, S, Vh: Tensor
+#         U and Vh are unitary projectors. S is real diagonal.
+#     """
+#     return svd(a, axes=axes, policy='lowrank', n_iter=n_iter, k_fac=k_fac, **kwargs)
 
 
 def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
@@ -311,7 +311,6 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
     s_eff = (-sQ, sQ)
-
     data, struct, ls_l, ls_r = _merge_to_matrix(a, axes, s_eff)
     minD = tuple(min(ds) for ds in struct.D)
 
