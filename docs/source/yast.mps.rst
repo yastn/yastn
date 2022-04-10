@@ -1,8 +1,11 @@
 Matrix products and algorithms 
 ==============================
 
+
+.. todo:: how to get rid of titles for module files?
+
 Matrix producs state and operator
---------------------------------
+---------------------------------------
 
 .. toctree::
    :glob:
@@ -19,7 +22,6 @@ Algorithms
 .. toctree::
    :glob:
 
-   .. in progress
    mps/algorithms
 
 
@@ -38,13 +40,13 @@ Examples
 .. toctree::
    :glob:
 
-   mps/examples
+   examples/mps/mps
 
 
 Module contents
----------------
+-----------------
 
-.. automodule:: yast.mps
+.. automodule:: yamps
    :members:
    :undoc-members:
    :show-inheritance:

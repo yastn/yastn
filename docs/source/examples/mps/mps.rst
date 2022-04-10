@@ -77,3 +77,14 @@ Save and load
 
 .. literalinclude:: /../../tests/mps/test_save_load.py
 
+
+.. algorithms
+DMRG
+-----
+
+.. literalinclude:: /../../tests/mps/test_dmrg.py
+
+TDVP
+-----
+
+.. literalinclude:: /../../tests/mps/test_tdvp.py
