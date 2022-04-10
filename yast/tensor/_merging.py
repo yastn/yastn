@@ -35,24 +35,30 @@ class _Fusion(NamedTuple):
 
 #  =========== merging blocks ======================
 
-def _merge_to_matrix(a, axes, s_eff, inds=None, sort_r=False):
+def _merge_to_matrix(a, axes, s_eff, inds=None):
     """ Main function merging tensor into effective block matrix. """
     order = axes[0] + axes[1]
-    struct, meta_mrg, ls_l, ls_r = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds, sort_r)
-    meta_1d = tuple(sorted(zip(struct.t, struct.D, struct.sl)))
+    struct, meta_mrg, ls_l, ls_r = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds)
+    meta_1d = tuple(zip(struct.t, struct.D, struct.sl))
     Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
     newdata = a.config.backend.merge_to_1d(a._data, order, meta_1d, meta_mrg, Dsize)
     return newdata, struct, ls_l, ls_r
 
 
 @lru_cache(maxsize=1024)
-def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
+def _meta_merge_to_matrix(config, struct, axes, s_eff, inds):
     """ Meta information for backend needed to merge tensor into effective block matrix. """
-    told = struct.t if inds is None else [struct.t[ii] for ii in inds]
-    Dold = struct.D if inds is None else [struct.D[ii] for ii in inds]
-    slold = struct.sl if inds is None else [struct.sl[ii] for ii in inds]
-    tset = np.array(told, dtype=int).reshape((len(told), len(struct.s), config.sym.NSYM))
-    Dset = np.array(Dold, dtype=int).reshape(len(Dold), len(struct.s))
+    if s_eff is None:
+        s_eff = [1, -1]
+        if len(axes[0]) > 0:
+            s_eff[0] = struct.s[axes[0][0]]
+        if len(axes[1]) > 0:
+            s_eff[1] = struct.s[axes[1][0]]
+    t_old = struct.t if inds is None else [struct.t[ii] for ii in inds]
+    D_old = struct.D if inds is None else [struct.D[ii] for ii in inds]
+    sl_old = struct.sl if inds is None else [struct.sl[ii] for ii in inds]
+    tset = np.array(t_old, dtype=int).reshape((len(t_old), len(struct.s), config.sym.NSYM))
+    Dset = np.array(D_old, dtype=int).reshape(len(D_old), len(struct.s))
     legs, t, D, Deff, teff, s, ls = [], [], [], [], [], [], []
     for n in (0, 1):
         legs.append(np.array(axes[n], int))
@@ -66,21 +72,17 @@ def _meta_merge_to_matrix(config, struct, axes, s_eff, inds, sort_r):
         D[n] = tuple(tuple(x) for x in D[n])
         ls.append(_leg_structure_merge(teff[n], t[n], Deff[n], D[n]))
 
-    tnew = tuple(t1 + t2 for t1, t2 in zip(teff[0], teff[1]))
-    # meta_mrg = ((tnew, told, Dslc, Drsh), ...)
+    t_new = tuple(t1 + t2 for t1, t2 in zip(teff[0], teff[1]))
     meta_mrg = tuple(sorted((tn, slo, Do,
                              (ls[0].dec[tel][tl].Dslc, ls[1].dec[ter][tr].Dslc),
                              (ls[0].dec[tel][tl].Dprod, ls[1].dec[ter][tr].Dprod))
-                    for tn, slo, Do, tel, tl, ter, tr in zip(tnew, slold, Dold, teff[0], t[0], teff[1], t[1])))
-    if sort_r:
-        unew_r, unew_l, unew = zip(*sorted(set(zip(teff[1], teff[0], tnew)))) if len(tnew) > 0 else ((), (), ())
-    else:
-        unew, unew_l, unew_r = zip(*sorted(set(zip(tnew, teff[0], teff[1])))) if len(tnew) > 0 else ((), (), ())
-    # meta_new = ((unew, Dnew), ...)
-    D_new = tuple((ls[0].Dtot[il], ls[1].Dtot[ir]) for il, ir in zip(unew_l, unew_r))
+                    for tn, slo, Do, tel, tl, ter, tr in zip(t_new, sl_old, D_old, teff[0], t[0], teff[1], t[1])))
+
+    t_new, tl_new, tr_new = zip(*sorted(set(zip(t_new, teff[0], teff[1])))) if len(t_new) > 0 else ((), (), ())
+    D_new = tuple((ls[0].Dtot[il], ls[1].Dtot[ir]) for il, ir in zip(tl_new, tr_new))
     Dp_new = tuple(x[0] * x[1] for x in D_new)
     sl_new = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp_new), Dp_new))
-    struct_new = struct._replace(t=unew, D=D_new, Dp=Dp_new, sl=sl_new, s=tuple(s_eff))
+    struct_new = struct._replace(t=t_new, D=D_new, Dp=Dp_new, sl=sl_new, s=tuple(s_eff))
     return struct_new, meta_mrg, ls[0], ls[1]
 
 

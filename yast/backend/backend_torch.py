@@ -483,15 +483,9 @@ def apply_slice(data, slcn, slco):
     return newdata
 
 
-dot_dict = {(0, 0): lambda x, y: x @ y,
-            (0, 1): lambda x, y: x @ y.conj(),
-            (1, 0): lambda x, y: x.conj() @ y,
-            (1, 1): lambda x, y: x.conj() @ y.conj()}
 
-
-def vdot(Adata, Bdata, cc):
-    f = dot_dict[cc]  # proper conjugations
-    return f(Adata, Bdata)
+def vdot(Adata, Bdata):
+    return Adata @ Bdata
 
 
 def diag_1dto2d(data, meta, Dsize):
@@ -508,40 +502,29 @@ def diag_2dto1d(data, meta, Dsize):
     return newdata
 
 
-def dot(Adata, Bdata, cc, meta_dot, Dsize):
+def dot(Adata, Bdata, meta_dot, Dsize):
     dtype = _common_type((Adata, Bdata))
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-    fdot = dot_dict[cc]  # proper conjugations
-    for (slc, sla, Da, slb, Db) in meta_dot:
-        newdata[slice(*slc)].view(Da[0], Db[1])[:] = fdot(Adata[slice(*sla)].view(Da), \
-                                                          Bdata[slice(*slb)].view(Db))
+    for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
+        newdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da) @ Bdata[slice(*slb)].view(Db)
     return newdata
 
 
-def dot_with_mask(Adata, Bdata, cc, meta_dot, Dsize, msk_a, msk_b):
+def dot_with_mask(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
     dtype = _common_type((Adata, Bdata))
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-    fdot = dot_dict[cc]  # proper conjugations
-    for (slc, sla, Da, slb, Db, ia, ib) in meta_dot:
-        newdata[slice(*slc)].view(Da[0], Db[1])[:] = fdot(Adata[slice(*sla)].view(Da)[:, msk_a[ia]], \
-                                                          Bdata[slice(*slb)].view(Db)[msk_b[ib], :])
+    for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
+        newdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da)[:, msk_a[ia]] @ Bdata[slice(*slb)].view(Db)[msk_b[ib], :]
     return newdata
 
 
-dotdiag_dict = {(0, 0): lambda x, y: x * y,
-                (0, 1): lambda x, y: x * y.conj(),
-                (1, 0): lambda x, y: x.conj() * y,
-                (1, 1): lambda x, y: x.conj() * y.conj()}
-
-
-def dot_diag(Adata, Bdata, cc, meta, Dsize, axis, a_ndim):
+def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
-    f = dotdiag_dict[cc]
     dtype = _common_type((Adata, Bdata))
-    newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
+    newdata = torch.empty((Dsize,), dtype=dtype, device=Adata.device)
     for sln, slb, Db, sla in meta:
-        newdata[slice(*sln)].reshape(Db)[:] = f(Adata[slice(*sla)].reshape(dim), Bdata[slice(*slb)].reshape(Db))
+        newdata[slice(*sln)].reshape(Db)[:] = Adata[slice(*sla)].reshape(dim) * Bdata[slice(*slb)].reshape(Db)
     return newdata
 
 
@@ -553,6 +536,12 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
         cut = (Bdata[slice(*slb)].nonzero(),)
         newdata[slice(*sln)] = Adata[slice(*sla)].reshape(Da)[slc1 + cut + slc2].ravel()
     return newdata
+
+
+# dot_dict = {(0, 0): lambda x, y: x @ y,
+#             (0, 1): lambda x, y: x @ y.conj(),
+#             (1, 0): lambda x, y: x.conj() @ y,
+#             (1, 1): lambda x, y: x.conj() @ y.conj()}
 
 
 # def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):

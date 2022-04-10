@@ -398,15 +398,8 @@ def apply_slice(data, slcn, slco):
     return newdata
 
 
-dot_dict = {(0, 0): lambda x, y, out: np.matmul(x, y, out=out),
-            (0, 1): lambda x, y, out: np.matmul(x, y.conj(), out=out),
-            (1, 0): lambda x, y, out: np.matmul(x.conj(), y, out=out),
-            (1, 1): lambda x, y, out: np.matmul(x.conj(), y.conj(), out=out)}
-
-
-def vdot(Adata, Bdata, cc):
-    f = dot_dict[cc]  # proper conjugations
-    return f(Adata, Bdata, None)
+def vdot(Adata, Bdata):
+    return Adata @ Bdata
 
 
 def diag_1dto2d(Adata, meta, Dsize):
@@ -423,39 +416,30 @@ def diag_2dto1d(Adata, meta, Dsize):
     return newdata
 
 
-def dot(Adata, Bdata, cc, meta_dot, Dsize):
+def dot(Adata, Bdata, meta_dot, Dsize):
     newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
-    fdot = dot_dict[cc]  # proper conjugations
-    for (slc, sla, Da, slb, Db) in meta_dot:
-        fdot(Adata[slice(*sla)].reshape(Da), \
-             Bdata[slice(*slb)].reshape(Db), \
-             newdata[slice(*slc)].reshape(Da[0], Db[1]))
+    for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
+        np.matmul(Adata[slice(*sla)].reshape(Da), \
+                  Bdata[slice(*slb)].reshape(Db), \
+                  out=newdata[slice(*slc)].reshape(Dc))
     return newdata
 
 
-def dot_with_mask(Adata, Bdata, cc, meta_dot, Dsize, msk_a, msk_b):
+def dot_with_mask(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
     newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
-    fdot = dot_dict[cc]  # proper conjugations
-    for (slc, sla, Da, slb, Db, ia, ib) in meta_dot:
-        fdot(Adata[slice(*sla)].reshape(Da)[:, msk_a[ia]], \
-             Bdata[slice(*slb)].reshape(Db)[msk_b[ib], :], \
-             newdata[slice(*slc)].reshape(Da[0], Db[1]))
+    for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
+        np.matmul(Adata[slice(*sla)].reshape(Da)[:, msk_a[ia]], \
+                  Bdata[slice(*slb)].reshape(Db)[msk_b[ib], :], \
+                  out=newdata[slice(*slc)].reshape(Dc))
     return newdata
 
 
-dotdiag_dict = {(0, 0): lambda x, y: x * y,
-                (0, 1): lambda x, y: x * y.conj(),
-                (1, 0): lambda x, y: x.conj() * y,
-                (1, 1): lambda x, y: x.conj() * y.conj()}
-
-
-def dot_diag(Adata, Bdata, cc, meta, Dsize, axis, a_ndim):
+def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
-    f = dotdiag_dict[cc]
-    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+    newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
     for sln, slb, Db, sla in meta:
-        newdata[slice(*sln)].reshape(Db)[:] = f(Adata[slice(*sla)].reshape(dim), Bdata[slice(*slb)].reshape(Db))
+        newdata[slice(*sln)].reshape(Db)[:] = Adata[slice(*sla)].reshape(dim) * Bdata[slice(*slb)].reshape(Db)
     return newdata
 
 
@@ -469,6 +453,12 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     return newdata
 
 
+# dot_dict = {(0, 0): lambda x, y, out: np.matmul(x, y, out=out),
+#             (0, 1): lambda x, y, out: np.matmul(x, y.conj(), out=out),
+#             (1, 0): lambda x, y, out: np.matmul(x.conj(), y, out=out),
+#             (1, 1): lambda x, y, out: np.matmul(x.conj(), y.conj(), out=out)}
+#
+#
 # def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
 #     f = dot_dict[cc]  # proper conjugations
 #     newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
