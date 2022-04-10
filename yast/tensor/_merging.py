@@ -35,7 +35,7 @@ class _Fusion(NamedTuple):
 
 #  =========== merging blocks ======================
 
-def _merge_to_matrix(a, axes, s_eff, inds=None):
+def _merge_to_matrix(a, axes, s_eff=None, inds=None):
     """ Main function merging tensor into effective block matrix. """
     order = axes[0] + axes[1]
     struct, meta_mrg, ls_l, ls_r = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds)
