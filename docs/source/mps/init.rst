@@ -19,6 +19,7 @@ The object of class `yamps.Mps` are designed to represent one-dimensional matrix
 condition. The bond dimension on the edges is 1 by default.
 
 .. autoclass:: yamps.Mps
+	:noindex:
 	:members: __init__
 	:exclude-members: __new__
 
@@ -30,7 +31,8 @@ The symmetry of `yamps.Mps` is inherited by its building blocks. Its building bl
 The matrix product can be generated automatically basing on the structure defined by a user
 
 .. automodule:: yamps
-   :members: automatic_Mps
+	:noindex:
+	:members: automatic_Mps
 
 For examples for the function see the code in :ref:`examples/mps/mps:Automatically generated matrix product`.
 

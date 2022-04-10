@@ -10,7 +10,6 @@ Matrix producs state and operator
    theory/mps/basics
    mps/init
    mps/algebra
-   .. in progress
    mps/i-o
 
 
@@ -20,6 +19,7 @@ Algorithms
 .. toctree::
    :glob:
 
+   .. in progress
    mps/algorithms
 
 
