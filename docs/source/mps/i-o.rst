@@ -35,6 +35,7 @@ The Mps object can be convenienty saved as a dictionary or to a HDF5 file.
 It can be later loaded from a dictionary or to a HDF5 file into `yamps.Mps`.
 
 .. automodule:: yamps
+	:noindex:
 	:members: load_from_dict, load_from_hdf5
 
 .. todo:: can I simplify the export smh, what about the configuration files, nr_phys etc, I shuld export them as well.

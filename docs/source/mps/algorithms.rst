@@ -1,19 +1,18 @@
-Algorithms for a state
-=========================
-# GW: I ignored the project* functions
+MPS based algorithms
+=====================
+
+.. todo:: I ignored the project* functions
+
 
 Maximize overlap
 ---------------------------------
 
 This is the procedure which performs DMRG sweep such that the initial state has the maximal ovelap with the target state.
 
-See examples: :ref:`examples/init:clone, detach or copy tensors`.
-
-.. autoclass:: yast
-	:noindex:
+.. automodule:: yamps
 	:members: variational_sweep_1site
 
-
+.. todo:: I wasn't using it a lot, maybe there is sth more to say.
 DMRG
 ---------------------------------
 
@@ -21,8 +20,7 @@ DMRG
 
 See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
-.. autoclass:: yast._dmrg
-	:noindex:
+.. automodule:: yamps
 	:members: dmrg
 
 
@@ -33,7 +31,6 @@ TDVP
 
 See examples: :ref:`examples/init:clone, detach or copy tensors`.
 
-.. autoclass:: yast._tdvp
-	:noindex:
+.. automodule:: yamps
 	:members: tdvp
 

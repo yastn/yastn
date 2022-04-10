@@ -24,11 +24,13 @@ In order to make a direct sum of two matrix products make sure they have the sam
 The addition of two matrix products can be done using `apxb()`, where you can additionally specify the prefactor which will be multiply to the second Mps you give.
 
 .. automodule:: yamps
+	:noindex:
 	:members: apxb
 
 The addition of any number of matrix products can be done using `add()`, where you can additionally specify the list of prefactors which will be multiplied to each Mps.
 
 .. automodule:: yamps
+	:noindex:
 	:members: add
 
 See examples here :ref:`examples/mps/mps:Addition`.
@@ -43,6 +45,7 @@ In order to multiply two Mps-s you need to know interpretation of their legs. Th
 Additionally, you can multiply the product of Mps-s by setting a prefactor to by any number.
 
 .. automodule:: yamps
+	:noindex:
 	:members: x_a_times_b
 
 See examples here :ref:`examples/mps/mps:Multiplication`.
