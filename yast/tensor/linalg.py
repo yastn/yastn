@@ -310,26 +310,11 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
-    s_eff = (-sQ, sQ)
-    data, struct, ls_l, ls_r = _merge_to_matrix(a, axes, s_eff)
-    minD = tuple(min(ds) for ds in struct.D)
+    data, struct, ls_l, ls_r = _merge_to_matrix(a, axes)
+    meta, Qstruct, Rstruct = _meta_qr(a.config, struct, sQ)
 
-    Qt = struct.t
-    QD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
-    QDp = tuple(np.prod(QD, axis=1))
-    Qsl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(QDp), QDp))
-    Qstruct = a.struct._replace(t=Qt, D=QD, Dp=QDp, sl=Qsl, s=s_eff)
     Qsize = Qstruct.sl[-1][1] if len(Qstruct.sl) > 0 else 0
-
-    nsym = len(struct.n)
-    Rt = tuple(x[nsym:] * 2 for x in struct.t)
-    RD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
-    RDp = tuple(np.prod(RD, axis=1))
-    Rsl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(RDp), RDp))
-    Rstruct = a.struct._replace(t=Rt, D=RD, Dp=RDp, sl=Rsl, s=s_eff, n=(0,) * nsym)
     Rsize = Rstruct.sl[-1][1] if len(Rstruct.sl) > 0 else 0
-
-    meta = tuple(zip(struct.sl, struct.D, Qstruct.sl, Rstruct.sl))
     Qdata, Rdata = a.config.backend.qr(data, meta, Qsize, Rsize)
 
     ls = _leg_struct_trivial(Rstruct, axis=0)
@@ -351,6 +336,39 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     Q = Q.move_leg(source=-1, destination=Qaxis)
     R = R.move_leg(source=0, destination=Raxis)
     return Q, R
+
+
+def _meta_qr(config, struct, sQ):
+    """ meta and struct for qr"""
+    minD = tuple(min(ds) for ds in struct.D)
+    nsym = len(struct.n)
+
+    if sQ == struct.s[1]:
+        t_con = tuple(x[nsym:] for x in struct.t)
+    else: # -sQ == struct.s[1]
+        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
+        t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, 1:, :], (1,), -1))
+
+    Qt = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
+    Rt = tuple(y + x[nsym:] for y, x in zip(t_con, struct.t))
+    QD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
+    RD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
+    QDp = tuple(np.prod(QD, axis=1))
+    Qsl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(QDp), QDp))
+
+    meta = tuple(zip(struct.sl, struct.D, Qsl, QD, Rt, RD))
+
+    temp = sorted(zip(Rt, RD))
+    Rt = tuple(x[0] for x in temp)
+    RD = tuple(x[1] for x in temp)
+    RDp = tuple(np.prod(RD, axis=1))
+    Rsl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(RDp), RDp))
+    Rdict = dict(zip(Rt, Rsl))
+
+    meta = tuple((sl, d, slq, dq, Rdict[tr], dr) for sl, d, slq, dq, tr, dr in meta)
+    Qstruct = struct._replace(t=Qt, D=QD, Dp=QDp, sl=Qsl, s=(struct.s[0], sQ))
+    Rstruct = struct._replace(t=Rt, D=RD, Dp=RDp, sl=Rsl, s=(-sQ, struct.s[1]), n=(0,) * nsym)
+    return meta, Qstruct, Rstruct
 
 
 def eigh(a, axes, sU=1, Uaxis=-1):

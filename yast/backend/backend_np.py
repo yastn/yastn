@@ -310,14 +310,14 @@ def eigh(data, meta=None, Ssize=1, Usize=1):
 
 
 def qr(data, meta, Qsize, Rsize):
-    Qdata = np.zeros((Qsize,), dtype=data.dtype)
-    Rdata = np.zeros((Rsize,), dtype=data.dtype)
-    for (sl, D, slQ, slR) in meta:
+    Qdata = np.empty((Qsize,), dtype=data.dtype)
+    Rdata = np.empty((Rsize,), dtype=data.dtype)
+    for (sl, D, slQ, DQ, slR, DR) in meta:
         Q, R = scipy.linalg.qr(data[slice(*sl)].reshape(D), mode='economic')
         sR = np.sign(np.real(np.diag(R)))
         sR[sR == 0] = 1
-        Qdata[slice(*slQ)] = (Q * sR).ravel()  # positive diag of R
-        Rdata[slice(*slR)] = (sR.reshape([-1, 1]) * R).ravel()
+        Qdata[slice(*slQ)].reshape(DQ)[:] = Q * sR  # positive diag of R
+        Rdata[slice(*slR)].reshape(DR)[:] = sR.reshape([-1, 1]) * R
     return Qdata, Rdata
 
 

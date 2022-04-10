@@ -367,13 +367,15 @@ def eigh(data, meta=None, Ssize=1, Usize=1, order_by_magnitude=False, ad_decomp_
 def qr(data, meta, Qsize, Rsize):
     Qdata = torch.zeros((Qsize,), dtype=data.dtype, device=data.device)
     Rdata = torch.zeros((Rsize,), dtype=data.dtype, device=data.device)
-    for (sl, D, slQ, slR) in meta:
+    for (sl, D, slQ, DQ, slR, DR) in meta:
         Q, R = torch.linalg.qr(data[slice(*sl)].view(D))
         sR = torch.sign(real(R.diag()))
         sR[sR == 0] = 1
-        Qdata[slice(*slQ)] = (Q * sR).ravel()  # positive diag of R
-        Rdata[slice(*slR)] = (sR.reshape([-1, 1]) * R).ravel()
+        Qdata[slice(*slQ)].view(DQ)[:] = Q * sR  # positive diag of R
+        Rdata[slice(*slR)].view(DR)[:] = sR.reshape([-1, 1]) * R
     return Qdata, Rdata
+
+
 
 
 @torch.no_grad()
