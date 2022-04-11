@@ -6,7 +6,7 @@ from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal
 from ._merging import _leg_struct_trivial, _leg_struct_truncation, _Fusion
 from ._krylov import _expand_krylov_space
 
-__all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'entropy', 'expmv', 'eigs']
+__all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'entropy', 'Schmidt_values', 'expmv', 'eigs']
 
 
 def norm(a, p='fro'):
@@ -340,6 +340,35 @@ def entropy(a, axes=(0, 1), alpha=1):
         Sm = {t: a.config.backend.diag_get(x) for t, x in a.A.items()}
     # entropy, Smin, normalization
     return a.config.backend.entropy(Sm, alpha=alpha)
+
+
+def Schmidt_values(a, axes=(0, 1)):
+    r"""
+    Get Schmidt values by spliting the tensor using svd.
+
+    Parameters
+    ----------
+    axes: tuple
+        Specify two groups of legs between which to perform svd
+
+    Returns
+    -------
+    Schmidt values : dictionary
+        shows the Schmidt values for each block if the symmetries are present
+    """
+    if len(a.A) == 0:
+        return a.zero_of_dtype(), a.zero_of_dtype(), a.zero_of_dtype()
+
+    _test_axes_all(a, axes)
+    lout_l, lout_r = _clear_axes(*axes)
+    axes = _unpack_axes(a.meta_fusion, lout_l, lout_r)
+
+    if not a.isdiag:
+        Am, *_ = _merge_to_matrix(a, axes, (-1, 1))
+        return a.config.backend.svd_S(Am)
+    else:
+        Sm = {t: a.config.backend.diag_get(x) for t, x in a.A.items()}
+        return sum([Sm[it] for it in Sm], [])
 
 
 # Krylov based methods, handled by anonymous function decribing action of matrix on a vector

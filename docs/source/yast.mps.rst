@@ -1,62 +1,52 @@
-yast.mps package
-=================
+Matrix products and algorithms 
+==============================
 
-Submodules
-----------
 
-yast.mps.dmrg module
+.. todo:: how to get rid of titles for module files?
+
+Matrix producs state and operator
+---------------------------------------
+
+.. toctree::
+   :glob:
+
+   theory/mps/basics
+   mps/init
+   mps/algebra
+   mps/i-o
+
+
+Algorithms
 ---------------------
 
-.. automodule:: yast.mps.dmrg
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. toctree::
+   :glob:
 
-yast.mps.env2 module
----------------------
+   mps/algorithms
 
-.. automodule:: yast.mps.env2
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
-yast.mps.env3 module
----------------------
+Expectation values for MPS
+---------------------------
 
-.. automodule:: yast.mps.env3
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. toctree::
+   :glob:
 
-yast.mps.geometry module
--------------------------
+   mps/measurements
 
-.. automodule:: yast.mps.geometry
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
-yast.mps.measure module
-------------------------
+Examples
+---------------------------
 
-.. automodule:: yast.mps.measure
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. toctree::
+   :glob:
 
-yast.mps.mps module
---------------------
-
-.. automodule:: yast.mps.mps
-   :members:
-   :undoc-members:
-   :show-inheritance:
+   examples/mps/mps
 
 
 Module contents
----------------
+-----------------
 
-.. automodule:: yast.mps
+.. automodule:: yamps
    :members:
    :undoc-members:
    :show-inheritance:
