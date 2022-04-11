@@ -29,7 +29,7 @@ The convergence of the DMRG is controlled either by the expectational values in 
 
 See examples: :ref:`examples/mps/mps:dmrg`.
 
-.. todo:: why option for eigs is called opts_expmv? can I use some other case then the smalles energy, e.g. the highest EV, should I say more on info from returns?
+.. todo:: why option for eigs is called opts_expmv? can I use some other case then the smalles energy, e.g. the highest EV, should I say more on info from returns? say sth on fing excited states
 
 
 Time-dependent variational principle (TDVP) algorithm
