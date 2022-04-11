@@ -1,6 +1,6 @@
 """ Mps structure and its basic manipulations. """
 from numpy import array, nonzero
-from yast.tensor import block, entropy
+from yast.tensor import block, entropy, Schmidt_values
 from yast.tensor import save_to_hdf5 as Tensor_to_hdf5
 from yast.tensor import save_to_dict as Tensor_to_dict
 from yast import load_from_dict as Tensor_from_dict
