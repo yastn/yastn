@@ -1,11 +1,12 @@
 """ yast.linalg.svd() and truncation of its singular values """
 import pytest
 import numpy as np
+from itertools import product
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2xU1
+    from .configs import config_dense, config_U1, config_Z2xU1, config_Z3
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1
+    from configs import config_dense, config_U1, config_Z2xU1, config_Z3
 
 tol = 1e-10  #pylint: disable=invalid-name
 
@@ -51,6 +52,22 @@ def test_svd_basic():
                   t=[t1, t1, t1, t1],
                   D=[(2, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
     svd_combine(a)
+
+
+def test_svd_Z3():
+    # Z3
+    sset = ((1, 1), (1, -1), (-1, 1), (-1, -1))
+    nset = (0, 1, 2)
+    sUset = (-1, 1)
+    nUset = (True, False)
+    for s, n, sU, nU in product(sset, nset, sUset, nUset):
+        a = yast.rand(config=config_Z3, s=s, n=n, t=[(0, 1, 2), (0, 1, 2)], D=[(2, 5, 3), (5, 2, 3)], dtype='complex128')
+        U, S, V = yast.linalg.svd(a, axes=(0, 1), sU=sU, nU=nU)
+        assert yast.norm(a - U @ S @ V) < tol  # == 0.0
+        assert U.is_consistent()
+        assert S.is_consistent()
+        assert V.is_consistent()
+
 
 def test_svd_complex():
     """ test svd decomposition for various symmetries """
@@ -238,6 +255,7 @@ def test_svd_backward_truncate():
 
 if __name__ == '__main__':
     test_svd_basic()
+    test_svd_Z3()
     test_svd_sparse()
     test_svd_complex()
     test_svd_truncate()

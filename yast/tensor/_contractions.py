@@ -81,8 +81,8 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
 
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
 
-    data_a, struct_a, ls_l, ls_ac = _merge_to_matrix(a, (nout_a, nin_a), None, ind_a)
-    data_b, struct_b, ls_bc, ls_r = _merge_to_matrix(b, (nin_b, nout_b), None, ind_b)
+    data_a, struct_a, ls_l, ls_ac = _merge_to_matrix(a, (nout_a, nin_a), ind_a)
+    data_b, struct_b, ls_bc, ls_r = _merge_to_matrix(b, (nin_b, nout_b), ind_b)
 
     meta_dot, struct_c = _meta_tensordot(a.config, struct_a, struct_b)
     Dsize = struct_c.sl[-1][1] if len(struct_c.sl) > 0 else 0

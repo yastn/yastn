@@ -35,10 +35,10 @@ class _Fusion(NamedTuple):
 
 #  =========== merging blocks ======================
 
-def _merge_to_matrix(a, axes, s_eff=None, inds=None):
+def _merge_to_matrix(a, axes, inds=None):
     """ Main function merging tensor into effective block matrix. """
     order = axes[0] + axes[1]
-    struct, meta_mrg, ls_l, ls_r = _meta_merge_to_matrix(a.config, a.struct, axes, s_eff, inds)
+    struct, meta_mrg, ls_l, ls_r = _meta_merge_to_matrix(a.config, a.struct, axes, inds)
     meta_1d = tuple(zip(struct.t, struct.D, struct.sl))
     Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
     newdata = a.config.backend.merge_to_1d(a._data, order, meta_1d, meta_mrg, Dsize)
@@ -46,14 +46,12 @@ def _merge_to_matrix(a, axes, s_eff=None, inds=None):
 
 
 @lru_cache(maxsize=1024)
-def _meta_merge_to_matrix(config, struct, axes, s_eff, inds):
+def _meta_merge_to_matrix(config, struct, axes, inds):
     """ Meta information for backend needed to merge tensor into effective block matrix. """
-    if s_eff is None:
-        s_eff = [1, -1]
-        if len(axes[0]) > 0:
-            s_eff[0] = struct.s[axes[0][0]]
-        if len(axes[1]) > 0:
-            s_eff[1] = struct.s[axes[1][0]]
+    s_eff = []
+    s_eff.append(struct.s[axes[0][0]] if len(axes[0]) > 0 else 1)
+    s_eff.append(struct.s[axes[1][0]] if len(axes[1]) > 0 else -1)
+
     t_old = struct.t if inds is None else [struct.t[ii] for ii in inds]
     D_old = struct.D if inds is None else [struct.D[ii] for ii in inds]
     sl_old = struct.sl if inds is None else [struct.sl[ii] for ii in inds]
