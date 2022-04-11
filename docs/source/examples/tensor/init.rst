@@ -1,6 +1,21 @@
 Basic tensor initialization and creation operations
 ===================================================
 
+
+Configuration of the symmetries
+-------------------------------------------
+
+.. The matrix product `yamps.Mps` is build using tensors `yast.Tensor`. The symmetry of the tensors determines the symmetry of the full matrix product.
+.. The `yamps.Mps` has to be initialised using particular symmetries.
+.. #configuration of the symmetries, see test/configs, comment on the default flags /is that dictionary/, 
+
+
+Configuration of backend
+-------------------------------------------
+
+.. backed is should be added in the configuration, 
+
+
 Create tensors from scratch
 ---------------------------
 

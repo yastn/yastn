@@ -28,6 +28,7 @@ author = 'Gabriela Wojtowicz, Juraj Hasik, Marek M. Rams'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
+    'sphinx.ext.todo',
     'sphinx.ext.autodoc',
     'sphinx.ext.autosectionlabel',
     'sphinx.ext.viewcode',
@@ -39,6 +40,7 @@ autodoc_class_signature = "separated"
 
 # Make sure the target is unique
 autosectionlabel_prefix_document = True
+todo_include_todos = True
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
