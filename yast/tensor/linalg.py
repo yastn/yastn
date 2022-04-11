@@ -171,6 +171,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
 
     minD = tuple(min(ds) for ds in struct.D)
     if policy == 'lowrank':
+        if 'D_block' not in kwargs:
+            raise YastError("lowrank policy in svd requires passing argument D_block.")
+        D_block = kwargs['D_block']
         minD =  tuple(min(D_block, d) for d in minD) if not isinstance(D_block, dict) else \
                 tuple(min(D_block.get(t, 0), d) for t, d in zip(struct.t, minD))
 
@@ -233,7 +236,7 @@ def _meta_svd(config, struct, minD, sU, nU):
         t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, 1:, :], (1,), -1))
     elif sU == -struct.s[0]: # and nV (not nU)
         t_con = tuple(x[:nsym] for x in struct.t)
-    elif nU: # and -sQ == struct.s[0]
+    else: # not nU and sU == struct.s[0]
         t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
         t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, :1, :], (1,), -1))
     Un, Vn = (struct.n, n0) if nU else (n0, struct.n)
@@ -263,109 +266,6 @@ def _meta_svd(config, struct, minD, sU, nU):
     Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, Dp=SDp, sl=Ssl)
     Vstruct = _struct(s=(-sU, struct.s[1]), n=Vn, diag=False, t=Vt, D=VD, Dp=VDp, sl=Vsl)
     return meta, Ustruct, Sstruct, Vstruct
-
-
-# def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **kwargs):
-#     r"""
-#     Split tensor into :math:`a=U @ S @ V` using exact singular value decomposition (SVD),
-#     where `U` and `V` are orthonormal bases and `S` is positive and diagonal matrix.
-
-#     Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
-
-#     Parameters
-#     ----------
-#     axes: tuple
-#         Specify two groups of legs between which to perform SVD, as well as
-#         their final order.
-
-#     sU: int
-#         signature of the new leg in U; equal 1 or -1. Default is 1.
-
-#     Uaxis, Vaxis: int
-#         specify which leg of U and V tensors are connecting with S. By default
-#         it is the last leg of U and the first of V.
-
-#     Returns
-#     -------
-#     U, S, V: Tensor
-#         U and V are unitary projectors. S is a real diagonal tensor.
-#     """
-#     _test_axes_all(a, axes)
-#     lout_l, lout_r = _clear_axes(*axes)
-#     axes = _unpack_axes(a.mfs, lout_l, lout_r)
-
-#     s_eff = (-sU, sU)
-#     data, struct, ls_l, ls_r = _merge_to_matrix(a, axes, s_eff)
-#     minD = tuple(min(ds) for ds in struct.D)
-#     if policy == 'lowrank':
-#         minD = tuple(min(D_block, d) for d in minD)
-
-#     nsym = len(a.struct.n)
-#     n0 = (0,) * nsym
-#     if nU:
-#         Ut = struct.t
-#         St = tuple(x[nsym:] * 2 for x in struct.t)
-#         Vt = tuple(x[nsym:] * 2 for x in struct.t)
-#         Un, Vn = a.struct.n, n0
-#     else:
-#         Ut = tuple(x[:nsym] * 2 for x in struct.t)
-#         St = tuple(x[:nsym] * 2 for x in struct.t)
-#         Vt = struct.t
-#         Un, Vn = n0, a.struct.n
-
-#     UD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
-#     SD = tuple((dm, dm) for dm in minD)
-#     VD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
-
-#     UDp = tuple(np.prod(UD, axis=1))
-#     SDp = tuple(dd[0] for dd in SD)
-#     VDp = tuple(np.prod(VD, axis=1))
-
-#     Usl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(UDp), UDp))
-#     Ssl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(SDp), SDp))
-#     Vsl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(VDp), VDp))
-
-#     Ustruct = _struct(s=s_eff, n=Un, diag=False, t=Ut, D=UD, Dp=UDp, sl=Usl)
-#     Sstruct = _struct(s=s_eff, n=n0, diag=True, t=St, D=SD, Dp=SDp, sl=Ssl)
-#     Vstruct = _struct(s=s_eff, n=Vn, diag=False, t=Vt, D=VD, Dp=VDp, sl=Vsl)
-
-#     Usize = Ustruct.sl[-1][1] if len(Ustruct.sl) > 0 else 0
-#     Ssize = Sstruct.sl[-1][1] if len(Sstruct.sl) > 0 else 0
-#     Vsize = Vstruct.sl[-1][1] if len(Vstruct.sl) > 0 else 0
-
-#     meta = tuple(zip(struct.sl, struct.D, Ustruct.sl, Sstruct.sl, Vstruct.sl))
-#     if policy == 'fullrank':
-#         Udata, Sdata, Vdata = a.config.backend.svd(data, meta, Usize, Ssize, Vsize,\
-#             diagnostics=kwargs['diagnostics'] if 'diagnostics' in kwargs else None)
-#     elif policy == 'lowrank':
-#         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, Usize, Ssize, Vsize, D_block, **kwargs)
-#     else:
-#         raise YastError('svd policy should be one of (`lowrank`, `fullrank`)')
-
-#     ls_s = _leg_struct_trivial(Sstruct, axis=0)
-
-#     Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
-#     Umeta_unmerge, Ustruct = _meta_unfuse_legdec(a.config, Ustruct, [ls_l, ls_s], Us)
-#     Udata = a.config.backend.unmerge_from_1d(Udata, Umeta_unmerge)
-#     Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
-#     Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
-#     U = a._replace(struct=Ustruct, data=Udata, mfs=Umfs, hfs=Uhfs)
-
-#     Smfs = ((1,), (1,))
-#     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
-#     S = a._replace(struct=Sstruct, data=Sdata, mfs=Smfs, hfs=Shfs)
-
-#     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
-#     Vmeta_unmerge, Vstruct = _meta_unfuse_legdec(a.config, Vstruct, [ls_s, ls_r], Vs)
-#     Vdata = a.config.backend.unmerge_from_1d(Vdata, Vmeta_unmerge)
-#     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
-#     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in axes[1])
-#     V = a._replace(struct=Vstruct, data=Vdata, mfs=Vmfs, hfs=Vhfs)
-
-#     U = U.move_leg(source=-1, destination=Uaxis)
-#     V = V.move_leg(source=0, destination=Vaxis)
-#     return U, S, V
-
 
 
 def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
@@ -531,34 +431,23 @@ def eigh(a, axes, sU=1, Uaxis=-1):
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
-    nsym = len(a.struct.n)
-    n0 = (0,) * nsym
-
-    if a.struct.n != n0:
+    if not all(x == 0 for x in a.struct.n):
         raise YastError('Charge should be zero')
 
-    s_eff = (-sU, sU)
-    data, struct, ls_l, ls_r = _merge_to_matrix(a, axes, s_eff)
+    data, struct, ls_l, ls_r = _merge_to_matrix(a, axes)
 
     if ls_l != ls_r:
         raise YastError('Something went wrong in matching the indices of the two tensors')
 
-    SDp = tuple(dd[0] for dd in struct.D)
-    Ssl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(SDp), SDp))
-    # Ustruct = struct
-    Sstruct = struct._replace(Dp=SDp, sl=Ssl, diag=True)
+    meta, Sstruct, Ustruct = _meta_eigh(a.config, struct, sU)
+    sizes = tuple(x.sl[-1][1] if len(x.sl) > 0 else 0 for x in (Sstruct, Ustruct))
 
-    Usize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
-    Ssize = Sstruct.sl[-1][1] if len(Sstruct.sl) > 0 else 0
+    Sdata, Udata = a.config.backend.eigh(data, meta, sizes)
 
-    # meta = (indA, indS, indU)
-    meta = tuple(zip(struct.sl, struct.D, Sstruct.sl))
-    Sdata, Udata = a.config.backend.eigh(data, meta, Ssize, Usize)
-
-    ls_s = _leg_struct_trivial(Sstruct, axis=0)
+    ls_s = _leg_struct_trivial(Sstruct, axis=1)
 
     Us = tuple(a.struct.s[lg] for lg in axes[0]) + (sU,)
-    Umeta_unmerge, Ustruct = _meta_unfuse_legdec(a.config, struct, [ls_l, ls_s], Us)
+    Umeta_unmerge, Ustruct = _meta_unfuse_legdec(a.config, Ustruct, [ls_l, ls_s], Us)
     Udata = a.config.backend.unmerge_from_1d(Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
@@ -570,6 +459,40 @@ def eigh(a, axes, sU=1, Uaxis=-1):
 
     U = U.move_leg(source=-1, destination=Uaxis)
     return S, U
+
+
+def _meta_eigh(config, struct, sU):
+    """ 
+    meta and struct for eigh
+    U has signature = (struct.s[0], sU)
+    S has signature = (-sU, sU)
+    """
+    nsym = len(struct.n)
+    n0 = (0,) * nsym
+
+    if sU == -struct.s[0]:
+        t_con = tuple(x[:nsym] for x in struct.t)
+    else: # and sU == struct.s[0]
+        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
+        t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, :1, :], (1,), -1))
+
+    Ut = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
+    Ustruct = struct._replace(t=Ut, s=(struct.s[0], sU))
+
+    St = tuple(y + y for y in t_con)
+    SD = struct.D
+
+    meta = tuple(zip(struct.sl, struct.D, Ustruct.sl, Ustruct.D, St))
+
+    St, SD = zip(*sorted(zip(St, SD))) if len(St) > 0 else ((), ())
+    SDp = tuple(dd[0] for dd in SD)
+    Ssl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(SDp), SDp))
+    Sdict = dict(zip(St, Ssl))
+
+    meta = tuple((sl, d, slu, du, Sdict[ts]) for sl, d, slu, du, ts in meta)
+
+    Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, Dp=SDp, sl=Ssl)
+    return meta, Sstruct, Ustruct
 
 
 def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,

@@ -244,7 +244,7 @@ class Tensor:
             'complex128' if tensor data are complex else 'float64'
         """
         return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
-    
+
     @property
     def data(self):
         """

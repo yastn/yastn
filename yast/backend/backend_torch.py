@@ -310,15 +310,15 @@ def absolute(data):
     return torch.abs(data)
 
 
-def svd_lowrank(data, meta, sizes, D_block, n_iter=60, k_fac=6):
+def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
     # torch.svd_lowrank decomposes A = USV^T and return U,S,V
     # complex A is not supported 
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Udata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
     Sdata = torch.zeros((sizes[1],), dtype=real_dtype, device=data.device)
     Vdata = torch.zeros((sizes[2],), dtype=data.dtype, device=data.device)
-    for (sl, D, slU, slS, slV) in meta:
-        k = slS[1] - slS[0]
+    for (sl, D, slU, DU, slS, slV, DV) in meta:
+        q = slS[1] - slS[0]
         U, S, V = torch.svd_lowrank(data[slice(*sl)].view(D), q=q, niter=n_iter)
         Udata[slice(*slU)].reshape(DU)[:] = U
         Sdata[slice(*slS)] = S
@@ -330,9 +330,11 @@ def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
     diagnostics=None, **kwargs):
     # SVDGESDD decomposes A = USV^\dag and return U,S,V^\dag
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
-    Udata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
-    Sdata = torch.zeros((sizes[1],), dtype=real_dtype, device=data.device)
-    Vdata = torch.zeros((sizes[2],), dtype=data.dtype, device=data.device)
+    device = data.device
+    data = data.to(device='cpu')  # switch device to cpu as svd on cuda seems to be very slow.
+    Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
+    Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
+    Vdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
     reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
         is_zero_block = torch.linalg.vector_norm(data[slice(*sl)]) == 0. if USE_TORCHLINALG\
@@ -342,24 +344,24 @@ def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
         Udata[slice(*slU)].reshape(DU)[:] = U
         Sdata[slice(*slS)] = S
         Vdata[slice(*slV)].reshape(DV)[:] = V
-    return Udata, Sdata, Vdata
+    return Udata.to(device=device), Sdata.to(device=device), Vdata.to(device=device)
 
 
 
-def eigh(data, meta=None, Ssize=1, Usize=1, order_by_magnitude=False, ad_decomp_reg=1.0e-12):
+def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=1.0e-12):
     real_dtype= data.real.dtype if data.is_complex() else data.dtype
-    Udata = torch.zeros((Usize,), dtype=data.dtype, device=data.device)
-    Sdata = torch.zeros((Ssize,), dtype=real_dtype, device=data.device)
+    Sdata = torch.zeros((sizes[0],), dtype=real_dtype, device=data.device)
+    Udata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
     if meta is not None:
         if order_by_magnitude:
             reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
             f = lambda x: SYMEIG.apply(x, reg)
         else:
             f = lambda x: torch.linalg.eigh(x)
-        for (sl, D, slS) in meta:
+        for (sl, D, slU, DU, slS) in meta:
             S, U = f(data[slice(*sl)].view(D))
-            Sdata[slice(*slS)] = S.ravel()
-            Udata[slice(*sl)] = U.ravel()
+            Sdata[slice(*slS)] = S
+            Udata[slice(*slU)].view(DU)[:] = U
         return Sdata, Udata
     return torch.linalg.eigh(data)  # S, U
 
@@ -374,8 +376,6 @@ def qr(data, meta, sizes):
         Qdata[slice(*slQ)].view(DQ)[:] = Q * sR  # positive diag of R
         Rdata[slice(*slR)].view(DR)[:] = sR.reshape([-1, 1]) * R
     return Qdata, Rdata
-
-
 
 
 @torch.no_grad()

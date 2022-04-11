@@ -269,7 +269,7 @@ def absolute(data):
     return np.abs(data)
 
 
-def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6):
+def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
     Vdata = np.empty((sizes[2],), dtype=data.dtype)
@@ -297,14 +297,14 @@ def svd(data, meta, sizes, **kwargs):
     return Udata, Sdata, Vdata
 
 
-def eigh(data, meta=None, Ssize=1, Usize=1):
-    Udata = np.zeros((Usize,), dtype=data.dtype)
-    Sdata = np.zeros((Ssize,), dtype=DTYPE['float64'])
+def eigh(data, meta=None, sizes=(1, 1)):
+    Sdata = np.zeros((sizes[0],), dtype=DTYPE['float64'])
+    Udata = np.zeros((sizes[1],), dtype=data.dtype)
     if meta is not None:
-        for (sl, D, slS) in meta:
+        for (sl, D, slU, DU, slS) in meta:
             S, U = np.linalg.eigh(data[slice(*sl)].reshape(D))
             Sdata[slice(*slS)] = S
-            Udata[slice(*sl)] = U.ravel()
+            Udata[slice(*slU)].reshape(DU)[:] = U
         return Sdata, Udata
     return np.linalg.eigh(data)  # S, U
 
