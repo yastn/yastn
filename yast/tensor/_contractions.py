@@ -59,9 +59,9 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
     -------
     tensor: Tensor
     """
-    if conj[0] == 1:
+    if conj[0]:
          a = a.conj()
-    if conj[1] == 1:
+    if conj[1]:
          b = b.conj()
 
     in_a, in_b = _clear_axes(*axes)  # contracted meta legs
