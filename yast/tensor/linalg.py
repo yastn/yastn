@@ -192,7 +192,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
 
     Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
     Umeta_unmerge, Ustruct = _meta_unfuse_legdec(a.config, Ustruct, [ls_l, ls_s], Us)
-    Udata = a.config.backend.unmerge_from_1d(Udata, Umeta_unmerge)
+    Udata = a.config.backend.reshape(Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=Ustruct, data=Udata, mfs=Umfs, hfs=Uhfs)
@@ -203,7 +203,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
 
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
     Vmeta_unmerge, Vstruct = _meta_unfuse_legdec(a.config, Vstruct, [ls_s, ls_r], Vs)
-    Vdata = a.config.backend.unmerge_from_1d(Vdata, Vmeta_unmerge)
+    Vdata = a.config.backend.reshape(Vdata, Vmeta_unmerge)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in axes[1])
     V = a._replace(struct=Vstruct, data=Vdata, mfs=Vmfs, hfs=Vhfs)
@@ -348,14 +348,14 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
     Qs = tuple(a.struct.s[lg] for lg in axes[0]) + (sQ,)
     Qmeta_unmerge, Qstruct = _meta_unfuse_legdec(a.config, Qstruct, [ls_l, ls], Qs)
-    Qdata = a.config.backend.unmerge_from_1d(Qdata, Qmeta_unmerge)
+    Qdata = a.config.backend.reshape(Qdata, Qmeta_unmerge)
     Qmfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Qhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sQ,)),)
     Q = a._replace(struct=Qstruct, data=Qdata, mfs=Qmfs, hfs=Qhfs)
 
     Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in axes[1])
     Rmeta_unmerge, Rstruct = _meta_unfuse_legdec(a.config, Rstruct, [ls, ls_r], Rs)
-    Rdata = a.config.backend.unmerge_from_1d(Rdata, Rmeta_unmerge)
+    Rdata = a.config.backend.reshape(Rdata, Rmeta_unmerge)
     Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
     Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in axes[1])
     R = a._replace(struct=Rstruct, data=Rdata, mfs=Rmfs, hfs=Rhfs)
@@ -448,7 +448,7 @@ def eigh(a, axes, sU=1, Uaxis=-1):
 
     Us = tuple(a.struct.s[lg] for lg in axes[0]) + (sU,)
     Umeta_unmerge, Ustruct = _meta_unfuse_legdec(a.config, Ustruct, [ls_l, ls_s], Us)
-    Udata = a.config.backend.unmerge_from_1d(Udata, Umeta_unmerge)
+    Udata = a.config.backend.reshape(Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=Ustruct, data=Udata, mfs=Umfs, hfs=Uhfs)

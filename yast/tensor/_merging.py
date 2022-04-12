@@ -41,7 +41,9 @@ def _merge_to_matrix(a, axes, inds=None):
     struct, meta_mrg, ls_l, ls_r = _meta_merge_to_matrix(a.config, a.struct, axes, inds)
     meta_1d = tuple(zip(struct.t, struct.D, struct.sl))
     Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
-    newdata = a.config.backend.merge_to_1d(a._data, order, meta_1d, meta_mrg, Dsize)
+    # if inds is None and order == tuple(range(len(order))) and Dsize == len(a._data) and all(mt[] == mt[] for mt in mera_mrg):
+    #     return a._data, struct, ls_l, ls_r
+    newdata = a.config.backend.transpose_and_reshape(a._data, order, meta_1d, meta_mrg, Dsize)
     return newdata, struct, ls_l, ls_r
 
 
@@ -253,7 +255,7 @@ def _fuse_legs_hard(a, axes, order):
     mfs = ((1,),) * len(struct.s)
     hfs = tuple(_fuse_hfs(a.hfs, t_in, D_in, struct.s[n], axis) if len(axis) > 1 else a.hfs[axis[0]]
                 for n, axis in enumerate(axes))
-    data = a.config.backend.merge_to_1d(a._data, order, meta_new, meta_mrg, Dsize)
+    data = a.config.backend.transpose_and_reshape(a._data, order, meta_new, meta_mrg, Dsize)
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
 
 
@@ -387,7 +389,7 @@ def unfuse_legs(a, axes):
         ni += dni
     if axes_hf:
         meta, struct, nlegs, hfs = _meta_unfuse_hard(a.config, a.struct, tuple(axes_hf), tuple(a.hfs))
-        data = a.config.backend.unmerge_from_1d(a._data, meta)
+        data = a.config.backend.reshape(a._data, meta)
         for unfused, n in zip(nlegs[::-1], axes_hf[::-1]):
             mfs = mfs[:n] + [mfs[n]] * unfused + mfs[n+1:]
         return a._replace(struct=struct, mfs=tuple(mfs), hfs=hfs, data=data)
