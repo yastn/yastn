@@ -95,7 +95,7 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
             raise YastError('Bond dimensions do not match.')
         data = a.config.backend.dot(data_a, data_b, meta_dot, Dsize)
     meta_unmerge, struct_c = _meta_unfuse_legdec(a.config, struct_c, [ls_l, ls_r], s_c)
-    data = a.config.backend.unmerge_from_1d(data, meta_unmerge)
+    data = a.config.backend.reshape(data, meta_unmerge)
     return a._replace(data=data, struct=struct_c, mfs=mfs_c, hfs=hfs_c)
 
 
@@ -110,6 +110,10 @@ def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym):
     sb = set(lb)
     ia = tuple(ii for ii, el in enumerate(la) if el in sb)
     ib = tuple(ii for ii, el in enumerate(lb) if el in sa)
+    if len(ia) == len(la):
+        ia = None
+    if len(ib) == len(lb):
+        ib = None
     return ia, ib
 
 

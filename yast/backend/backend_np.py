@@ -1,5 +1,6 @@
 """Support of numpy as a data structure used by yast."""
 from itertools import groupby
+import logging
 import warnings
 import numpy as np
 import scipy.linalg
@@ -481,7 +482,7 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
 #####################################################
 
 
-def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
+def transpose_and_reshape(data, order, meta_new, meta_mrg, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
         assert tn == t1
@@ -510,12 +511,13 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     return newdata
 
 
-def unmerge_from_1d(data, meta):
+def reshape(data, meta):
     Dsize = meta[-1][0][1] if len(meta) > 0 else 0
     newdata = np.empty((Dsize,), dtype=data.dtype)
     for sln, Dn, slo, Do, sub_slc in meta:
         slcs = tuple(slice(*x) for x in sub_slc)
         newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do)[slcs]
+    logging.info(0 if np.allclose(data, newdata) else 1)
     return newdata
 
 #############

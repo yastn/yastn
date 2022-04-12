@@ -570,11 +570,11 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
 #####################################################
 
 
-def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
-    return kernel_merge_to_1d.apply(data, order, meta_new, meta_mrg, Dsize)
+def transpose_and_reshape(data, order, meta_new, meta_mrg, Dsize):
+    return kernel_transpose_and_reshape.apply(data, order, meta_new, meta_mrg, Dsize)
 
 
-class kernel_merge_to_1d(torch.autograd.Function):
+class kernel_transpose_and_reshape(torch.autograd.Function):
     @staticmethod
     def forward(ctx, data, order, meta_new, meta_mrg, Dsize):
         ctx.order = order
@@ -647,10 +647,10 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     return newdata
 
 
-def unmerge_from_1d(data, meta):
-    return kernel_unmerge_from_1d.apply(data, meta)
+def reshape(data, meta):
+    return kernel_reshape.apply(data, meta)
 
-class kernel_unmerge_from_1d(torch.autograd.Function):
+class kernel_reshape(torch.autograd.Function):
     @staticmethod
     def forward(ctx, data, meta):
         ctx.meta = meta
