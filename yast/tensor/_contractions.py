@@ -4,7 +4,7 @@ from itertools import groupby, product
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
 from ._tests import YastError, _test_configs_match, _test_axes_match
-from ._merging import _merge_to_matrix, _flip_hf, _meta_unfuse_legdec
+from ._merging import _merge_to_matrix, _flip_hf, _meta_unfuse_legdec, _unmerge
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
 
 
@@ -95,7 +95,7 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
             raise YastError('Bond dimensions do not match.')
         data = a.config.backend.dot(data_a, data_b, meta_dot, Dsize)
     meta_unmerge, struct_c = _meta_unfuse_legdec(a.config, struct_c, [ls_l, ls_r], s_c)
-    data = a.config.backend.reshape(data, meta_unmerge)
+    data = _unmerge(a.config, data, meta_unmerge)
     return a._replace(data=data, struct=struct_c, mfs=mfs_c, hfs=hfs_c)
 
 

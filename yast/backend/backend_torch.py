@@ -570,11 +570,11 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
 #####################################################
 
 
-def transpose_and_reshape(data, order, meta_new, meta_mrg, Dsize):
-    return kernel_transpose_and_reshape.apply(data, order, meta_new, meta_mrg, Dsize)
+def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):
+    return kernel_transpose_and_merge.apply(data, order, meta_new, meta_mrg, Dsize)
 
 
-class kernel_transpose_and_reshape(torch.autograd.Function):
+class kernel_transpose_and_merge(torch.autograd.Function):
     @staticmethod
     def forward(ctx, data, order, meta_new, meta_mrg, Dsize):
         ctx.order = order
@@ -647,18 +647,16 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     return newdata
 
 
-def reshape(data, meta):
-    return kernel_reshape.apply(data, meta)
+def unmerge(data, meta, Dsize):
+    return kernel_unmerge.apply(data, meta, Dsize)
 
-class kernel_reshape(torch.autograd.Function):
+class kernel_unmerge(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, data, meta):
+    def forward(ctx, data, meta, Dsize):
         ctx.meta = meta
         ctx.fwd_data_size = data.size()
-
         # slo -> slice in source tensor, specifying location of t_effective(fused) block
         # Do  -> shape of the fused block with t_eff
-        Dsize = meta[-1][0][1] if len(meta) > 0 else 0
         newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
         for sln, Dn, slo, Do, sub_slc in meta:
             #                                                     take a "subblock" of t_eff block

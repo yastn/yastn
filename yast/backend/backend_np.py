@@ -237,11 +237,7 @@ def trace_with_mask(data, order, meta, Dsize, tcon, msk12):
     return newdata
 
 
-def transpose(data, axes, meta_transpose):
-    newdata = np.zeros_like(data)
-    for sln, Dn, slo, Do in meta_transpose:
-        newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do).transpose(axes)
-    return newdata
+
 
 
 def rsqrt(data, cutoff=0):
@@ -481,8 +477,14 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
 #     block merging, truncations and un-merging     #
 #####################################################
 
+def transpose(data, axes, meta_transpose):
+    newdata = np.empty_like(data)
+    for sln, Dn, slo, Do in meta_transpose:
+        newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do).transpose(axes)
+    return newdata
 
-def transpose_and_reshape(data, order, meta_new, meta_mrg, Dsize):
+
+def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
         assert tn == t1
@@ -490,6 +492,14 @@ def transpose_and_reshape(data, order, meta_new, meta_mrg, Dsize):
         for (_, slo, Do, Dslc, Drsh) in gr:
             slcs = tuple(slice(*x) for x in Dslc)
             temp[slcs] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
+    return newdata
+
+
+def unmerge(data, meta, Dsize):
+    newdata = np.zeros((Dsize,), dtype=data.dtype)
+    for sln, Dn, slo, Do, sub_slc in meta:
+        slcs = tuple(slice(*x) for x in sub_slc)
+        newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do)[slcs]
     return newdata
 
 
@@ -510,15 +520,6 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
             newdata[slice(*sln)].reshape(Dn)[slcs] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
     return newdata
 
-
-def reshape(data, meta):
-    Dsize = meta[-1][0][1] if len(meta) > 0 else 0
-    newdata = np.empty((Dsize,), dtype=data.dtype)
-    for sln, Dn, slo, Do, sub_slc in meta:
-        slcs = tuple(slice(*x) for x in sub_slc)
-        newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do)[slcs]
-    logging.info(0 if np.allclose(data, newdata) else 1)
-    return newdata
 
 #############
 #   tests   #
