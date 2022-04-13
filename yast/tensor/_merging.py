@@ -39,12 +39,61 @@ def _merge_to_matrix(a, axes, inds=None):
     """ Main function merging tensor into effective block matrix. """
     order = axes[0] + axes[1]
     struct, meta_mrg, ls_l, ls_r = _meta_merge_to_matrix(a.config, a.struct, axes, inds)
-    meta_1d = tuple(zip(struct.t, struct.D, struct.sl))
+    data = _transpose_and_merge(a.config, a._data, order, struct, meta_mrg, inds)
+    return data, struct, ls_l, ls_r
+
+
+def _transpose_and_merge(config, data, order, struct, meta_mrg, inds=None):
+    meta_new = tuple(zip(struct.t, struct.D, struct.sl))
     Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
-    # if inds is None and order == tuple(range(len(order))) and Dsize == len(a._data) and all(mt[] == mt[] for mt in mera_mrg):
-    #     return a._data, struct, ls_l, ls_r
-    newdata = a.config.backend.transpose_and_reshape(a._data, order, meta_1d, meta_mrg, Dsize)
-    return newdata, struct, ls_l, ls_r
+    if inds is None and tuple(range(len(order))) == order and Dsize == len(data) \
+       and _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
+        return data
+    return config.backend.transpose_and_merge(data, order, meta_new, meta_mrg, Dsize)
+
+
+def _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
+    """ Assumes C ordering on backend reshape """
+    low = 0
+    for _, slo, _, _, _ in meta_mrg:
+        if slo[0] != low:
+            return False
+        low = slo[1]
+    if low != Dsize:
+        return False
+    for (_, Dn, _), (_, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
+        low = 0
+        for _, _, _, Dslc, _ in gr:
+            if Dslc[0][0] != low:
+                return False
+            low = Dslc[0][1]
+        if low != Dn[0]:
+            return False
+    return True
+
+
+def _unmerge(config, data, meta):
+    Dsize = meta[-1][0][1] if len(meta) > 0 else 0
+    # low = 0
+    # for _, _, slo, _, _ in meta:
+    #     if slo[0] != low:
+    #         return False
+    #     low = slo[1]
+    # if low != Dsize:
+    #     return False
+    
+    # for _, gr in groupby(meta, key=lambda x: x[0])):
+    #     low = 0
+    #     for _, _, _, Dslc, _ in gr:
+    #         if Dslc[0][0] != low:
+    #             return False
+    #         low = Dslc[0][1]
+    #     if low != Dn[0]:
+    #         return False
+
+    # sln, Dn, slo, Do, sub_slc in meta
+
+    return config.backend.unmerge(data, meta, Dsize)
 
 
 @lru_cache(maxsize=1024)
@@ -247,15 +296,11 @@ def _fuse_legs_hard(a, axes, order):
     assert all(isinstance(x, tuple) for x in axes)
     for x in axes:
         assert all(isinstance(y, int) for y in x)
-
     struct, meta_mrg, t_in, D_in = _meta_fuse_hard(a.config, a.struct, axes)
-    meta_new = tuple(zip(struct.t, struct.D, struct.sl))
-    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
-
+    data = _transpose_and_merge(a.config, a._data, order, struct, meta_mrg)
     mfs = ((1,),) * len(struct.s)
     hfs = tuple(_fuse_hfs(a.hfs, t_in, D_in, struct.s[n], axis) if len(axis) > 1 else a.hfs[axis[0]]
                 for n, axis in enumerate(axes))
-    data = a.config.backend.transpose_and_reshape(a._data, order, meta_new, meta_mrg, Dsize)
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
 
 
@@ -389,7 +434,7 @@ def unfuse_legs(a, axes):
         ni += dni
     if axes_hf:
         meta, struct, nlegs, hfs = _meta_unfuse_hard(a.config, a.struct, tuple(axes_hf), tuple(a.hfs))
-        data = a.config.backend.reshape(a._data, meta)
+        data = _unmerge(a.config, a._data, meta)
         for unfused, n in zip(nlegs[::-1], axes_hf[::-1]):
             mfs = mfs[:n] + [mfs[n]] * unfused + mfs[n+1:]
         return a._replace(struct=struct, mfs=tuple(mfs), hfs=hfs, data=data)

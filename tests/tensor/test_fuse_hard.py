@@ -307,7 +307,7 @@ def test_fuse_hard_dense():
 
 
 @pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
-def test_transpose_and_reshape_backward():
+def test_transpose_and_merge_backward():
     import torch
 
     # U1
@@ -331,7 +331,7 @@ def test_transpose_and_reshape_backward():
 
 
 @pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
-def test_reshape_backward():
+def test_unmerge_backward():
     import torch
 
     # U1
@@ -365,5 +365,5 @@ if __name__ == '__main__':
     test_hard_dot_1_sparse()
     test_fuse_mix()
     test_auxliary_merging_functions()
-    test_transpose_and_reshape_backward()
-    test_reshape_backward()
+    test_transpose_and_merge_backward()
+    test_unmerge_backward()
