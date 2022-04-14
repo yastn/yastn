@@ -381,7 +381,7 @@ def qr(data, meta, sizes):
 @torch.no_grad()
 def nth_largest(data, n):
     return torch.topk(data, n).values[-1]  # sorted=False ? i.e. is it equivalent to np.partition?
-
+    # return torch.sort(data).indices
 
 @torch.no_grad()
 def eigs_which(val, which):

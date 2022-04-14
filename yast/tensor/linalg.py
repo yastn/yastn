@@ -140,7 +140,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
 
 def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **kwargs):
     r"""
-    Split tensor into :math:`a=U @ S @ V` using exact singular value decomposition (SVD),
+    Split tensor into :math:`a = U @ S @ Vh` using exact singular value decomposition (SVD),
     where `U` and `V` are orthonormal bases and `S` is positive and diagonal matrix.
 
     Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
@@ -156,12 +156,12 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
 
     Uaxis, Vaxis: int
         specify which leg of U and V tensors are connecting with S. By default
-        it is the last leg of U and the first of V.
+        it is the last leg of U and the first of Vh.
 
     Returns
     -------
-    U, S, V: Tensor
-        U and V are unitary projectors. S is a real diagonal tensor.
+    U, S, Vh: Tensor
+        U and Vh are unitary projectors. S is a real diagonal tensor.
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -284,7 +284,7 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
 
     nsym = S.config.sym.NSYM
     tol_null = 0. if isinstance(tol_block, dict) else tol_block
-    D_null = 2 ** 32 if isinstance(D_block, dict) else D_block
+    D_null = 0 if isinstance(D_block, dict) else D_block
     for t, Db, sl in zip(S.struct.t, S.struct.Dp, S.struct.sl):
         t = t[:nsym]
         tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
@@ -299,7 +299,6 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
         Smask.data[slice(*sl)] = S.data[slice(*sl)] > tol_tru
 
     S._data = S.data * Smask.data
-
     tol_abs = tol * S.config.backend.max_abs(S.data)
     D_total = min(D_total, sum(Smask.data > 0))
     tol_D = S.config.backend.nth_largest(S._data, D_total)
@@ -309,8 +308,11 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
     if keep_multiplets and eps_multiplet > 0:
         while sum(S.data > tol_tru) != sum(S.data > (tol_tru - eps_multiplet)):
             tol_tru = tol_tru + eps_multiplet
-
     Smask._data = S.data > tol_tru
+
+    if keep_multiplets:
+        pass
+        # modify mask to enforce the same D on conjugated charges
     return Smask
 
 
