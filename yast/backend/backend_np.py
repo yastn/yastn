@@ -1,6 +1,5 @@
 """Support of numpy as a data structure used by yast."""
 from itertools import groupby
-import logging
 import warnings
 import numpy as np
 import scipy.linalg
@@ -320,6 +319,7 @@ def qr(data, meta, sizes):
 
 def nth_largest(data, n):
     return np.partition(data, -n)[-n]
+    # return np.argsort(data)
 
 
 def eigs_which(val, which):
