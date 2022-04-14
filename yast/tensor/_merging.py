@@ -74,26 +74,26 @@ def _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
 
 def _unmerge(config, data, meta):
     Dsize = meta[-1][0][1] if len(meta) > 0 else 0
-    # low = 0
-    # for _, _, slo, _, _ in meta:
-    #     if slo[0] != low:
-    #         return False
-    #     low = slo[1]
-    # if low != Dsize:
-    #     return False
-    
-    # for _, gr in groupby(meta, key=lambda x: x[0])):
-    #     low = 0
-    #     for _, _, _, Dslc, _ in gr:
-    #         if Dslc[0][0] != low:
-    #             return False
-    #         low = Dslc[0][1]
-    #     if low != Dn[0]:
-    #         return False
+    assert len(data) == Dsize
+    newdata = config.backend.unmerge(data, meta)
+    if _no_change_in_unmerge(meta):
+        pass #assert np.allclose(data, newdata)
+    return newdata
 
-    # sln, Dn, slo, Do, sub_slc in meta
 
-    return config.backend.unmerge(data, meta, Dsize)
+def _no_change_in_unmerge(meta):
+    local_low, Dn_last, sl_last, sln = 0, 0, (0, 0), (0, 0)
+    for sln, Dn, slo, _, sub_slc in meta:
+        if slo != sl_last:  # new group
+            if (slo[0] != sl_last[1]) or (local_low != Dn_last):
+                return False
+            sl_last, Dn_last, local_low = slo, Dn[0], 0
+        if local_low != sub_slc[0][0]:
+            return False
+        local_low = sub_slc[0][1]
+    if sl_last[1] != sln[1]:
+        return False
+    return True
 
 
 @lru_cache(maxsize=1024)

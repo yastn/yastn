@@ -383,31 +383,6 @@ def nth_largest(data, n):
     return torch.topk(data, n).values[-1]  # sorted=False ? i.e. is it equivalent to np.partition?
 
 
-# @torch.no_grad()
-# def select_global_largest(Sdata, St, Ssl, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
-#     if ordering == 'svd':
-#         s_all = torch.cat([Sdata[slice(*sl)][:D_keep[t]] for t, sl in zip(St, Ssl)])
-#     elif ordering == 'eigh':
-#         s_all = torch.cat([Sdata[slice(*sl)][-D_keep[t]:] for t, sl in zip(St, Ssl)])
-#     values, order = torch.topk(s_all, D_total + int(keep_multiplets))
-#     # if needed, preserve multiplets within each sector
-#     # this is relevant only if higher symmetry is realized, which is not resolved
-#     # by abelian subgroup
-#     if keep_multiplets:  
-#         gaps = torch.abs(values.clone())  # regularize by discarding small values
-#         # compute gaps and normalize by larger singular value. Introduce cutoff
-#         gaps = torch.abs(gaps[:len(values) - 1] - gaps[1:len(values)]) / gaps[0]  # / (gaps[:len(values) - 1] + 1.0e-16)
-#         gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
-#         if gaps[D_total - 1] < eps_multiplet:
-#             # the chi is within the multiplet - find the largest chi_new < chi
-#             # such that the complete multiplets are preserved
-#             for i in range(D_total - 1, -1, -1):
-#                 if gaps[i] > eps_multiplet:
-#                     order = order[:i + 1]
-#                     break
-#     return order
-
-
 @torch.no_grad()
 def eigs_which(val, which):
     if which == 'LM':
@@ -483,7 +458,6 @@ def apply_slice(data, slcn, slco):
     for sn, so in zip(slcn, slco):
         newdata[slice(*sn)] = data[slice(*so)]
     return newdata
-
 
 
 def vdot(Adata, Bdata):
@@ -647,17 +621,19 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     return newdata
 
 
-def unmerge(data, meta, Dsize):
-    return kernel_unmerge.apply(data, meta, Dsize)
+def unmerge(data, meta):
+    return kernel_unmerge.apply(data, meta)
 
 class kernel_unmerge(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, data, meta, Dsize):
+    def forward(ctx, data, meta):
+        Dsize = data.size()
         ctx.meta = meta
-        ctx.fwd_data_size = data.size()
+        ctx.fwd_data_size = Dsize
         # slo -> slice in source tensor, specifying location of t_effective(fused) block
         # Do  -> shape of the fused block with t_eff
-        newdata = torch.zeros((Dsize,), dtype=data.dtype, device=data.device)
+        # no zero blocks should be introduces here
+        newdata = torch.empty(Dsize, dtype=data.dtype, device=data.device)
         for sln, Dn, slo, Do, sub_slc in meta:
             #                                                     take a "subblock" of t_eff block
             #                                                     specified by a list of slices sub_slc
@@ -669,8 +645,8 @@ class kernel_unmerge(torch.autograd.Function):
     def backward(ctx, data_b):
         meta = ctx.meta
         fwd_data_size = ctx.fwd_data_size
-
-        newdata_b = torch.zeros(fwd_data_size, dtype=data_b.dtype, device=data_b.device)
+        # no zero blocks should be introduces here
+        newdata_b = torch.empty(fwd_data_size, dtype=data_b.dtype, device=data_b.device)
         for sln, Dn, slo, Do, sub_slc in meta:
             slcs = tuple(slice(*x) for x in sub_slc)
             newdata_b[slice(*slo)].view(Do)[slcs] = data_b[slice(*sln)].view(Dn)
