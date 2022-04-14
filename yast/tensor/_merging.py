@@ -75,10 +75,9 @@ def _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
 def _unmerge(config, data, meta):
     Dsize = meta[-1][0][1] if len(meta) > 0 else 0
     assert len(data) == Dsize
-    newdata = config.backend.unmerge(data, meta)
     if _no_change_in_unmerge(meta):
-        pass #assert np.allclose(data, newdata)
-    return newdata
+        return data
+    return config.backend.unmerge(data, meta)
 
 
 def _no_change_in_unmerge(meta):
