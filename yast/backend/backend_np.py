@@ -495,8 +495,8 @@ def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):
     return newdata
 
 
-def unmerge(data, meta, Dsize):
-    newdata = np.zeros((Dsize,), dtype=data.dtype)
+def unmerge(data, meta):
+    newdata = np.empty_like(data)  # this does not introduce zero blocks
     for sln, Dn, slo, Do, sub_slc in meta:
         slcs = tuple(slice(*x) for x in sub_slc)
         newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do)[slcs]
