@@ -3,25 +3,27 @@ from itertools import chain, groupby
 import numpy as np
 import torch
 
-def _torch_version_check():
+def _torch_version_check(version):
+    # for version="X.Y.Z" checks if current version is higher or equal to X.Y
+    assert version.count('.')==2 and version.replace('.','').isdigit(),"Invalid version string"
     try:
         import pkg_resources
-        USE_TORCHLINALG= pkg_resources.parse_version(torch.__version__) > pkg_resources.parse_version("1.8.1")
+        return pkg_resources.parse_version(torch.__version__) >= pkg_resources.parse_version(version)
     except ModuleNotFoundError:
         try:
             from packaging import version
-            USE_TORCHLINALG= version.parse(torch.__version__) > version.parse("1.8.1")
+            return version.parse(torch.__version__) >= version.parse(version)
         except ModuleNotFoundError:
             tokens= torch.__version__.split('.')
-            USE_TORCHLINALG= int(tokens[0]) > 1 or (int(tokens[0]) >= 1 and int(tokens[1]) > 8) 
-    return USE_TORCHLINALG
+            tokens_v= version.split('.')
+            return int(tokens[0]) > int(tokens_v[0]) or \
+                (int(tokens[0])==int(tokens_v[0]) and int(tokens[1]) >= int(tokens_v[1])) 
+    return True
 
 from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_eig_sym import SYMEIG
 # from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
 
-
-USE_TORCHLINALG= _torch_version_check()
 
 BACKEND_ID = "torch"
 DTYPE = {'float64': torch.float64,
@@ -233,10 +235,15 @@ def move_to(data, *args, **kwargs):
             kwargs["dtype"] = DTYPE[kwargs["dtype"]]
     return data.to(*args, **kwargs)
 
-
-def conj(data):
-    return data.conj()
-
+if _torch_version_check("1.11.0"):
+    def conj(data):
+        return data.conj()
+elif _torch_version_check("1.10.0"):
+    def conj(data):
+        return data.conj().resolve_conj()
+else:
+    def conj(data):
+        return data.conj()
 
 def trace(data, order, meta, Dsize):
     """ Trace dict of tensors according to meta = [(tnew, told, Dreshape), ...].
@@ -329,22 +336,26 @@ def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
 def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
     diagnostics=None, **kwargs):
     # SVDGESDD decomposes A = USV^\dag and return U,S,V^\dag
+    #
+    # NOTE: switch device to cpu as svd on cuda seems to be very slow.
+    # device = data.device
+    # data = data.to(device='cpu')
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
-    device = data.device
-    data = data.to(device='cpu')  # switch device to cpu as svd on cuda seems to be very slow.
     Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
     Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
-    Vdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
+    Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
     reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
     for (sl, D, slU, DU, slS, slV, DV) in meta:
-        is_zero_block = torch.linalg.vector_norm(data[slice(*sl)]) == 0. if USE_TORCHLINALG\
-            else data[slice(*sl)].norm() == 0.
-        if is_zero_block: continue
-        U, S, V = SVDGESDD.apply(data[slice(*sl)].view(D), reg, fullrank_uv, diagnostics)
+        # is_zero_block = torch.linalg.vector_norm(data[slice(*sl)]) == 0. if _torch_version_check("1.7.0") \
+        #     else data[slice(*sl)].norm() == 0.
+        # if is_zero_block: continue
+        U, S, Vh = SVDGESDD.apply(data[slice(*sl)].view(D), reg, fullrank_uv, diagnostics)
         Udata[slice(*slU)].reshape(DU)[:] = U
         Sdata[slice(*slS)] = S
-        Vdata[slice(*slV)].reshape(DV)[:] = V
-    return Udata.to(device=device), Sdata.to(device=device), Vdata.to(device=device)
+        Vhdata[slice(*slV)].reshape(DV)[:] = Vh
+    #
+    # Udata.to(device=device), Sdata.to(device=device), Vhdata.to(device=device)
+    return Udata, Sdata, Vhdata
 
 
 

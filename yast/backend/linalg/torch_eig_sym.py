@@ -4,14 +4,13 @@ which follows derivation given in https://people.maths.ox.ac.uk/gilesm/files/NA-
 '''
 import torch
 from ..backend_torch import _torch_version_check
-USE_TORCHLINALG= _torch_version_check()
 
 def safe_inverse(x, epsilon=1e-12):
     return x / (x**2 + epsilon)
 
 
 class SYMEIG(torch.autograd.Function):
-    if USE_TORCHLINALG:
+    if _torch_version_check("1.8.1"):
         @staticmethod
         def forward(self, A, ad_decomp_reg):
             r"""

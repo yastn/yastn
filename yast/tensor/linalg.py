@@ -81,7 +81,8 @@ def norm(a, p='fro'):
 
 def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
-        keep_multiplets=False, eps_multiplet=1e-14, policy='fullrank', **kwargs):
+        keep_multiplets=False, eps_multiplet=1e-14, policy='fullrank',
+        mask_f=None, **kwargs):
     r"""
     Split tensor into :math:`a=USV^\dag` using exact singular value decomposition (SVD),
     where `U` and `V` are orthonormal bases and `S` is positive and diagonal matrix.
@@ -128,7 +129,10 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, diagnostics=kwargs['diagonostics']\
         if 'diagonostics' in kwargs else None)
 
-    Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
+    if mask_f:
+        Smask = mask_f(S)
+    else:
+        Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
                             keep_multiplets= keep_multiplets, eps_multiplet=eps_multiplet)
 
     U, S, V = Smask.apply_mask(U, S, V, axis=(-1, 0, 0))
@@ -269,11 +273,82 @@ def _meta_svd(config, struct, minD, sU, nU):
     return meta, Ustruct, Sstruct, Vstruct
 
 
+def truncation_mask_multiplets(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,\
+            keep_multiplets=False, eps_multiplet=1e-14):
+    """
+    Generate mask tensor based on diagonal and real tensor S.
+    It can be then used for truncation.
+
+    Per block options ``D_block`` and ``tol_block`` govern truncation of within individual blocks,
+    keeping at most D_block values which are larger than relative cutoff tol_block 
+    """
+    if not (S.isdiag and S.yast_dtype == "float64"):
+        raise YastError("Truncation_mask requires S to be real and diagonal")
+
+    # makes a copy for partial truncations; also detaches from autograd computation graph
+    Smask = S.copy()
+    Smask._data = Smask.data > float('inf') # all False ?
+    S_global_max= None
+
+    # find all multiplets in the spectrum
+    # 0) convert to plain dense numpy vector and sort in descending order
+    s = S.config.backend.to_numpy(S.data)
+    inds= np.argsort(s)[::-1].copy() # make descending
+    s = s[inds]
+
+    S_global_max= s[0]
+    D_trunc= min(sum(s > (S_global_max * tol)), D_total)
+    if D_trunc>=len(s):
+        # no truncation
+        Smask._data = S.data > -float('inf') # all True ?
+        return Smask
+
+    # compute gaps and normalize by magnitude of (abs) larger value.
+    # value of gaps[i] gives gap between i-th and i+1 the element of s
+    gaps = np.abs(s[:len(s) - 1] - s[1:len(s)])/\
+        (np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16)
+    
+    # multiplet boundary
+    if gaps[D_trunc] > eps_multiplet:
+        Smask._data[inds[:D_trunc]]= True
+        return Smask
+
+    # the chi is within the multiplet - find the largest chi_new < chi
+    # such that the complete multiplets are preserved
+    for i in range(D_trunc - 1, -1, -1):
+        if gaps[i] > eps_multiplet:
+            D_trunc = i
+            break
+
+    Smask._data[inds[:D_trunc]]= True
+
+    # check symmetry related blocks and truncate to equal length
+    active_sectors= filter( lambda x: any(Smask[x]), Smask.struct.t )
+    for t in active_sectors:
+        tn = np.array(t, dtype=int).reshape((1, 1, -1))
+        tn = tuple(S.config.sym.fuse(tn, np.array([1], dtype=int), -1)[0])
+        if t==tn: continue
+
+        common_size= min(len(Smask[t]), len(Smask[tn]))
+        # if related blocks do not have equal length
+        if common_size<max(len(Smask[t]), len(Smask[tn])):
+            assert sum(Smask[t][common_size:])>0 or sum(Smask[tn][common_size:])>0,\
+                "Symmetry-related blocks do not match"
+        
+        if not all(Smask[t]==Smask[tn]):
+                Smask[t] = Smask[tn] = Smask[t] & Smask[tn]
+
+    return Smask
+
+
 def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
              keep_multiplets=False, eps_multiplet=1e-14):
     """
     Generate mask tensor based on diagonal and real tensor S.
     It can be then used for truncation.
+
+    Per block options ``D_block`` and ``tol_block`` govern truncation of within individual blocks,
+    keeping at most D_block values which are larger than relative cutoff tol_block 
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
         raise YastError("Truncation_mask requires S to be real and diagonal")
