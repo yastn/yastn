@@ -1,17 +1,16 @@
 import torch
 import warnings
 from ..backend_torch import _torch_version_check
-USE_TORCHLINALG= _torch_version_check()
 
-def safe_inverse(x, epsilon=1E-12):
-    return x / (x**2 + epsilon)
+def safe_inverse(x, eps_rel=1.0e-12, eps_abs=1.0e-12):
+    return x / (x**2 + eps_abs)
 
 def safe_inverse_2(x, epsilon):
     x[abs(x) < epsilon] = float('inf')
     return x.pow(-1)
 
 class SVDGESDD(torch.autograd.Function):
-    if USE_TORCHLINALG:
+    if _torch_version_check("1.8.1"):
         @staticmethod
         def forward(self, A, ad_decomp_reg, fullrank_uv, diagnostics):
             U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
@@ -320,7 +319,6 @@ class SVDGESDD(torch.autograd.Function):
             vh = vh.narrow(-2, 0, k)
             if not (gu is None): gu = gu.narrow(-1, 0, k)
             if not (gvh is None): gvh = gvh.narrow(-2, 0, k)
-        v= vh.conj().transpose(-2,-1)
 
         if not (gsigma is None):
             # computes u @ diag(gsigma) @ vh
@@ -331,26 +329,26 @@ class SVDGESDD(torch.autograd.Function):
         # calls below
         if (gu is None) and (gvh is None):
             if not (diagnostics is None):
-                print(f"{diagnostics} {dA.abs().max()} {S.max()}")
+                print(f"{diagnostics} {sigma_term.abs().max()} {sigma.max()}")
             return sigma_term, None, None, None
 
-        sigma_inv= safe_inverse_2(sigma.clone(), sigma_scale*eps)
+        sigma_inv= safe_inverse(sigma.clone(), eps_abs=eps)
 
         F = sigma.unsqueeze(-2) - sigma.unsqueeze(-1)
-        F = safe_inverse(F, sigma_scale*eps)
+        F = safe_inverse(F, eps_abs=eps)
         F.diagonal(0,-2,-1).fill_(0)
 
         G = sigma.unsqueeze(-2) + sigma.unsqueeze(-1)
-        G = safe_inverse(G, sigma_scale*eps)
+        G = safe_inverse(G, eps_abs=eps)
         G.diagonal(0,-2,-1).fill_(0)
 
-        uh= u.conj().transpose(-2,-1)
+        def skew(A): return A - A.transpose(-2, -1).conj()
         if not (gu is None):
-            guh = gu.conj().transpose(-2, -1);
-            u_term = u @ ( (F+G).mul( uh @ gu - guh @ u) ) * 0.5
+            UhgU= skew( u.transpose(-2, -1).conj()@gu )
+            u_term = u @ ( (F+G).mul( UhgU ) ) * 0.5
             if m > k:
                 # projection operator onto subspace orthogonal to span(U) defined as I - UU^H
-                proj_on_ortho_u = -u @ uh
+                proj_on_ortho_u = -u @ u.conj().transpose(-2,-1)
                 proj_on_ortho_u.diagonal(0, -2, -1).add_(1);
                 u_term = u_term + proj_on_ortho_u @ (gu * sigma_inv.unsqueeze(-2)) 
             u_term = u_term @ vh
@@ -358,11 +356,11 @@ class SVDGESDD(torch.autograd.Function):
             u_term = torch.zeros(m,n,dtype=u.dtype,device=u.device)
         
         if not (gvh is None):
-            gv = gvh.conj().transpose(-2, -1);
-            v_term = ( (F-G).mul(vh @ gv - gvh @ v) ) @ vh * 0.5
+            VhgV= skew( vh@gvh.transpose(-2, -1).conj() )
+            v_term = ( (F-G).mul( VhgV ) ) @ vh * 0.5
             if n > k:
                 # projection operator onto subspace orthogonal to span(V) defined as I - VV^H
-                proj_on_v_ortho =  -v @ vh
+                proj_on_v_ortho =  -vh.conj().transpose(-2,-1) @ vh
                 proj_on_v_ortho.diagonal(0, -2, -1).add_(1);
                 v_term = v_term + sigma_inv.unsqueeze(-1) * (gvh @ proj_on_v_ortho)
             v_term = u @ v_term
@@ -373,17 +371,17 @@ class SVDGESDD(torch.autograd.Function):
         # // for complex-valued input there is an additional term
         # // https://giggleliu.github.io/2019/04/02/einsumbp.html
         # // https://arxiv.org/abs/1909.02659
-        if u.is_complex() or v.is_complex():
-            imdiag_UhgU= (uh @ gu - guh @ u).diagonal(0, -2, -1).imag
-            imdiag_VhgV= (vh @ gv - gvh @ v).diagonal(0, -2, -1).imag
+        if (u.is_complex() or vh.is_complex()) and not (gvh is None) and not (gu is None):
+            imdiag_UhgU= UhgU.diagonal(0, -2, -1).imag
+            imdiag_VhgV= VhgV.diagonal(0, -2, -1).imag
             if not torch.allclose( imdiag_UhgU, -imdiag_VhgV, 1e-2, 1e-2 ):
                 warnings.warn("svd_backward: The singular vectors in the complex case are "\
                 +"specified up to multiplication by e^{i phi}. The specified loss function depends on "\
                 +"this phase term, making it ill-defined.",RuntimeWarning)
 
         dA= u_term + sigma_term + v_term
-        if u.is_complex() or v.is_complex():
-            L= (uh @ gu).diagonal(0,-2,-1)
+        if u.is_complex() or vh.is_complex():
+            L= (u.conj().transpose(-2,-1) @ gu).diagonal(0,-2,-1)
             L.real.zero_()
             L.imag.mul_(sigma_inv)
             imag_term= (u * L.unsqueeze(-2)) @ vh
