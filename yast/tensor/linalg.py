@@ -308,16 +308,12 @@ def truncation_mask_multiplets(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2
     gaps = np.abs(s[:len(s) - 1] - s[1:len(s)])/\
         (np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16)
     
-    # multiplet boundary
-    if gaps[D_trunc] > eps_multiplet:
-        Smask._data[inds[:D_trunc]]= True
-        return Smask
-
-    # the chi is within the multiplet - find the largest chi_new < chi
-    # such that the complete multiplets are preserved
+    # find nearest multiplet boundary, keeping at most D_trunc elements 
+    # i-th element of gaps gives gap between i-th and (i+1)-th element of s
+    # Note, s[:D_trunc] selects D_trunc values: from 0th to (D_trunc-1)-th element
     for i in range(D_trunc - 1, -1, -1):
         if gaps[i] > eps_multiplet:
-            D_trunc = i
+            D_trunc = i+1
             break
 
     Smask._data[inds[:D_trunc]]= True
@@ -331,12 +327,17 @@ def truncation_mask_multiplets(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2
 
         common_size= min(len(Smask[t]), len(Smask[tn]))
         # if related blocks do not have equal length
-        if common_size<max(len(Smask[t]), len(Smask[tn])):
-            assert sum(Smask[t][common_size:])>0 or sum(Smask[tn][common_size:])>0,\
-                "Symmetry-related blocks do not match"
-        
-        if not all(Smask[t]==Smask[tn]):
-                Smask[t] = Smask[tn] = Smask[t] & Smask[tn]
+        if common_size>len(Smask[t]):
+            # assert sum(Smask[t][common_size:])<=0 ,\
+            #     "Symmetry-related blocks do not match"
+            Smask[t][common_size:]=False
+        if common_size>len(Smask[tn]):
+            # assert sum(Smask[tn][common_size:])<=0,\
+            #     "Symmetry-related blocks do not match"
+            Smask[tn][common_size:]=False
+            
+        if not all(Smask[t][:common_size]==Smask[tn][:common_size]):
+            Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
 
     return Smask
 

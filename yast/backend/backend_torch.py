@@ -237,10 +237,11 @@ def move_to(data, *args, **kwargs):
 
 if _torch_version_check("1.11.0"):
     def conj(data):
-        return data.clone().conj_physical()
+        return data.conj()
 elif _torch_version_check("1.10.0"):
     def conj(data):
-        return data.clone().conj_physical()
+        return data.conj_physical() 
+        # return data.conj()
 else:
     def conj(data):
         return data.conj()
