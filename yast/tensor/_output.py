@@ -329,7 +329,10 @@ def get_leg_charges_and_dims(a, native=False):
     """ collect information about charges and dimensions on all legs into two lists. """
     _tmp = [a.get_leg_structure(n, native=native) for n in range(a.ndim_n if native else a.ndim)]
     _tmp = [{k: lst[k] for k in sorted(lst)} for lst in _tmp]
-    ts, Ds = tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
+    ts_and_Ds= tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
+    if len(ts_and_Ds)<1:
+        return None, None
+    ts, Ds= ts_and_Ds
     return ts, Ds
 
 
