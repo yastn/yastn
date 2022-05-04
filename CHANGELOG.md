@@ -140,3 +140,5 @@
 - BUGFIX: ncon in some rare special case could ignore content of conjs.
 - new function `einsum` (for now a place holder doing nothing).
 - new function `move_leg` which is an alias to `moveaxis`
+
+v0.9 is the last version employing dictionary of blocks befor the transition to single 1d data structure
