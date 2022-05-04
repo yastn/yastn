@@ -46,11 +46,11 @@ def test_diag_exceptions():
         a.diag()  # Diagonal tensor requires zero tensor charge.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(-1, 1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
-        a.fuse_legs(axes=((0, 1), 2), mode='hard', inplace=True)
+        a = a.fuse_legs(axes=((0, 1), 2), mode='hard')
         a.diag()  # Diagonal tensor cannot have fused legs.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(-1, 1), t=(t1, t1), D=(D1, D1))
-        a.fuse_legs(axes=((0, 1),), mode='meta', inplace=True)
+        a = a.fuse_legs(axes=((0, 1),), mode='meta')
         a.diag()  # Diagonal tensor cannot have fused legs.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(-1, 1), t=(t1, t1), D=(D1, D2))

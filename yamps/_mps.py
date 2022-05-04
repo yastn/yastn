@@ -1,6 +1,6 @@
 """ Mps structure and its basic manipulations. """
 from numpy import array, nonzero
-from yast.tensor import block, entropy, Schmidt_values
+from yast.tensor import block, entropy
 from yast.tensor import save_to_hdf5 as Tensor_to_hdf5
 from yast.tensor import save_to_dict as Tensor_to_dict
 from yast import load_from_dict as Tensor_from_dict
@@ -219,8 +219,8 @@ def generate_Mij(amp, connect, N, nr_phys):
                 M.A[n] = T_else.copy()
         if n == 0:
             tt = (0,) * len(M.A[n].n)
-        M.A[n].add_leg(axis=0, t=tt, s=1, inplace=True)
-        M.A[n].add_leg(axis=-1, s=-1, inplace=True)
+        M.A[n] = M.A[n].add_leg(axis=0, t=tt, s=1)
+        M.A[n] = M.A[n].add_leg(axis=-1, s=-1)
         tD = M.A[n].get_leg_structure(axis=-1)
         tt = next(iter(tD))
     return M
@@ -291,6 +291,44 @@ def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to
     M.canonize_sweep(to='last', normalize=False)
     M.truncate_sweep(to='first', opts=opts, normalize=False)
     return M
+
+
+def apxb(a, b, common_legs, x=1):
+    """
+    if inplace=false a+a*b will be a new Mps otherwise I will replace mb and delete b
+    """
+    if a.N is not b.N:
+        YampsError('Mps-s must have equal number of Tensor-s.')
+
+    c = a.copy()
+    for n in range(c.N):
+        if n == 0:
+            if x != 1:
+                d = {(0,): x*a.A[n], (1,): x*b.A[n]}
+            else:
+                d = {(0,): a.A[n], (1,): b.A[n]}
+            common_lgs = (0,)+common_legs
+        elif n == a.N-1:
+            d = {(0,): a.A[n], (1,): b.A[n]}
+            common_lgs = common_legs+(common_legs[-1]+1,)
+        else:
+            d = {(0, 0): a.A[n], (1, 1): b.A[n]}
+            common_lgs = common_legs
+        c.A[n] = block(d, common_lgs)
+    return c
+
+
+def x_a_times_b(a, b, axes, axes_fin, conj=(0, 0), x=1, mode='hard'):
+    # make multiplication x*a*b, with conj if necessary
+    if a.N is not b.N:
+        YampsError('Mps-s must have equal number of Tensor-s.')
+    c = a.copy()
+    for n in range(c.N):
+        if n == 0:
+            c.A[n] = x*a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, mode)
+        else:
+            c.A[n] = a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, mode)
+    return c
 
 
 ###################################
@@ -432,7 +470,7 @@ class Mps:
             normC = self.A[self.pC].norm()
             if opts is None:
                 opts = {'tol': 1e-12}
-            U, S, V = self.A[self.pC].svd(axes=(0, 1), sU=-1, **opts)
+            U, S, V = self.A[self.pC].svd_with_truncation(axes=(0, 1), sU=-1, **opts)
 
             normS = S.norm()
             self.A[self.pC] = S / normS if normalize else S
@@ -552,8 +590,7 @@ class Mps:
         nl, nr = bd
         AA = self.A[nl].tensordot(self.A[nr], axes=(self.right, self.left))
         axes = (0, (1, 2), 3) if self.nr_phys == 1 else (0, (1, 3), (2, 4), 5)
-        AA.fuse_legs(axes=axes, inplace=True)
-        return AA
+        return AA.fuse_legs(axes=axes)
 
     def unmerge_two_sites(self, AA, bd, opts_svd):
         r"""
@@ -576,10 +613,10 @@ class Mps:
         """
         nl, nr = bd
         axes = (1,) if self.nr_phys == 1 else (1, 2)
-        AA.unfuse_legs(axes=axes, inplace=True)
+        AA = AA.unfuse_legs(axes=axes)
         axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 3), (2, 4, 5))
         self.pC = bd
-        self.A[nl], self.A[bd], self.A[nr] = AA.svd(axes=axes, sU=-1, **opts_svd)
+        self.A[nl], self.A[bd], self.A[nr] = AA.svd_with_truncation(axes=axes, sU=-1, **opts_svd)
 
     def get_bond_dimensions(self):
         r"""
@@ -641,7 +678,8 @@ class Mps:
         self.absorb_central(to='first')
         for n in self.sweep(to='first'):
             self.orthogonalize_site(n=n, to='first')
-            SV[n] = Schmidt_values(self.A[self.pC])
+            _, sv, _ = self.A[self.pC].svd()
+            SV[n] = sv
             self.absorb_central(to='first')
         return SV
 

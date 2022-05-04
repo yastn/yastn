@@ -6,7 +6,6 @@ In principle, any number of symmetries can be used, including dense tensor with 
 
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
-import numpy as np
 from ._auxliary import _struct, _config
 from ._merging import _Fusion
 from ._tests import YastError
@@ -57,26 +56,17 @@ class Tensor:
                 total charge of the tensor. In case of direct product of several
                 abelian symmetries `n` is tuple with total charge for each individual
                 symmetry
+            isdiag : bool
+                distinguish diagonal tensor as a special case of a tensor
         """
-        if isinstance(config, _config):
-            self.config = config
+        self.config = config if isinstance(config, _config) else _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
+
+        if 'data' in kwargs:
+            self._data = kwargs['data']  # 1d container for tensor data
         else:
-            temp_config = {a: getattr(config, a) for a in _config._fields if hasattr(config, a)}
-            if 'device' in kwargs:
-                temp_config['device'] = kwargs['device']
-            if 'dtype' in kwargs:
-                temp_config['dtype'] = kwargs['dtype']
-            if 'device' not in temp_config:
-                temp_config['device'] = config.default_device
-            if 'dtype' not in temp_config:
-                temp_config['dtype'] = config.default_dtype
-            self.config = _config(**temp_config)
-        if 'device' in kwargs and kwargs['device'] != self.config.device:
-            self.config._replace(device=kwargs['device'])
-        if 'dtype' in kwargs and kwargs['dtype'] != self.config.dtype:
-            self.config._replace(device=kwargs['dtype'])
-        self._isdiag = isdiag
-        self.A = {}  # dictionary of blocks
+            dev = kwargs['device'] if 'device' in kwargs else self.config.default_device
+            dty = kwargs['dtype'] if 'dtype' in kwargs else self.config.default_dtype
+            self._data = self.config.backend.zeros((0,), dtype=dty, device=dev)
 
         try:
             self.struct = kwargs['struct']
@@ -90,55 +80,50 @@ class Tensor:
             except TypeError:
                 n = (0,) * self.config.sym.NSYM if n is None else (n,)
             if len(n) != self.config.sym.NSYM:
-                raise YastError('n does not match the number of symmetries')
-            if self.isdiag:
+                raise YastError("n does not match the number of symmetry sectors")
+            if isdiag:
                 if len(s) == 0:
                     s = (1, -1)  # default
+                if s not in ((-1, 1), (1, -1)):
+                    raise YastError("Diagonal tensor should have s equal (1, -1) or (-1, 1)")
                 if any(x != 0 for x in n):
                     raise YastError("Tensor charge of a diagonal tensor should be 0")
-                if s not in ((-1, 1), (1, -1)):
-                    raise YastError("Diagonal tensor should have s = (1, -1) or (-1, 1)")
-            self.struct = _struct(t=(), D=(), s=s, n=n)
+            self.struct = _struct(s=s, n=n, diag=isdiag)
 
         # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]
         try:
-            self.meta_fusion = tuple(kwargs['meta_fusion'])
+            self.mfs = tuple(kwargs['mfs'])
         except (KeyError, TypeError):
-            self.meta_fusion = ((1,),) * len(self.struct.s)
+            self.mfs = ((1,),) * len(self.struct.s)
         try:
-            self.hard_fusion = tuple(kwargs['hard_fusion'])
+            self.hfs = tuple(kwargs['hfs'])
         except (KeyError, TypeError):
-            self.hard_fusion = tuple(_Fusion(s=(x,)) for x in self.struct.s)
+            self.hfs = tuple(_Fusion(s=(x,)) for x in self.struct.s)
 
     # pylint: disable=C0415
-    from ._initialize import set_block, fill_tensor
-    from .linalg import norm, svd, svd_lowrank, eigh, qr
-    from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, mask
+    from ._initialize import set_block, fill_tensor, __setitem__
+    from .linalg import norm, svd, svd_with_truncation, eigh, eigh_with_truncation, qr
+    from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, apply_mask
     from ._algebra import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
     from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp
-    from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, move_leg, diag
+    from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, move_leg, diag, grad
     from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_leg, remove_leg
     from ._output import show_properties, __str__, print_blocks_shape, is_complex
     from ._output import get_blocks_charge, get_blocks_shape, get_leg_charges_and_dims, get_leg_structure
     from ._output import zero_of_dtype, item, __getitem__
-    from ._output import get_leg_fusion, get_shape, get_signature, unique_dtype
+    from ._output import get_leg_fusion, get_shape, get_signature, get_dtype
     from ._output import get_tensor_charge, get_rank
     from ._output import to_number, to_dense, to_numpy, to_raw_tensor, to_nonsymmetric
     from ._output import save_to_hdf5, save_to_dict, compress_to_1d
     from ._tests import is_consistent, are_independent
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
 
-
-    @property
-    def s_n(self):
-        """
-        Returns
-        -------
-        s_n : tuple(int)
-            signature of tensor's native legs. This includes legs (spaces) which have been
-            fused together by :meth:`yast.Tensor.fuse`.
-        """
-        return self.struct.s
+    def _replace(self, **kwargs):
+        """ Creates a shallow copy replacing fields specified in kwargs """
+        for arg in ('config', 'struct', 'mfs', 'hfs', 'data'):
+            if arg not in kwargs:
+                kwargs[arg] = getattr(self, arg)
+        return Tensor(**kwargs)
 
     @property
     def s(self):
@@ -151,10 +136,21 @@ class Tensor:
             of each fused leg is given by the first native leg in the fused space.
         """
         inds, n = [], 0
-        for mf in self.meta_fusion:
+        for mf in self.mfs:
             inds.append(n)
             n += mf[0]
         return tuple(self.struct.s[ind] for ind in inds)
+
+    @property
+    def s_n(self):
+        """
+        Returns
+        -------
+        s_n : tuple(int)
+            signature of tensor's native legs. This includes legs (spaces) which have been
+            fused together by :meth:`yast.Tensor.fuse` using mode=`meta`.
+        """
+        return self.struct.s
 
     @property
     def n(self):
@@ -168,17 +164,6 @@ class Tensor:
         return self.struct.n
 
     @property
-    def ndim_n(self):
-        """
-        Returns
-        -------
-        ndim_n : int
-            native rank of the tensor. This includes legs (spaces) which have been
-            fused together by :meth:`yast.Tensor.fuse`.
-        """
-        return len(self.struct.s)
-
-    @property
     def ndim(self):
         """
         Returns
@@ -187,7 +172,18 @@ class Tensor:
             effective rank of the tensor. Legs (spaces) fused together by :meth:`yast.Tensor.fuse`
             are treated as single leg.
         """
-        return len(self.meta_fusion)
+        return len(self.mfs)
+
+    @property
+    def ndim_n(self):
+        """
+        Returns
+        -------
+        ndim_n : int
+            native rank of the tensor. This includes legs (spaces) which have been
+            fused together by :meth:`yast.Tensor.fuse` using mode=`meta`.
+        """
+        return len(self.struct.s)
 
     @property
     def isdiag(self):
@@ -197,7 +193,7 @@ class Tensor:
         isdiag : bool
             ``True`` if the tensor is diagonal.
         """
-        return self._isdiag
+        return self.struct.diag
 
     @property
     def requires_grad(self):
@@ -217,5 +213,43 @@ class Tensor:
         size : int
             total number of elements in all non-empty blocks of the tensor
         """
-        Dset = np.array(self.struct.D, dtype=int).reshape((len(self.struct.D), len(self.struct.s)))
-        return sum(np.prod(Dset, axis=1))
+        return self.config.backend.get_size(self._data)
+
+    @property
+    def device(self):
+        """
+        Returns
+        -------
+        device : str
+            name of device on which the data reside
+        """
+        return self.config.backend.get_device(self._data)
+
+    @property
+    def dtype(self):
+        """
+        Returns
+        -------
+        dtype :
+            dtype of tensor data used by the backend
+        """
+        return self.config.backend.get_dtype(self._data)
+
+    @property
+    def yast_dtype(self):
+        """
+        Returns
+        -------
+        dtype : str
+            'complex128' if tensor data are complex else 'float64'
+        """
+        return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
+
+    @property
+    def data(self):
+        """
+        Returns
+        -------
+        data : backend 1d array
+        """
+        return self._data

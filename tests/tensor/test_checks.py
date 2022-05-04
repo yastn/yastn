@@ -30,7 +30,7 @@ def test_cache():
 
     b = yast.eye(config=config_Z2, t=(0, 1), D=(7, 8))
     for _ in range(100):
-        a.broadcast(b, axis=3)
+        b.broadcast(a, axis=3)
 
     cache_info = yast.get_cache_info()
     #assert cache_info["merge_to_matrix"] == (297, 3, 10, 3)

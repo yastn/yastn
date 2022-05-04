@@ -5,18 +5,19 @@ from ..sym import sym_none
 
 
 class _struct(NamedTuple):
-    t: tuple = ()
-    D: tuple = ()
-    s: tuple = ()
-    n: tuple = ()
+    s: tuple = ()  # leg signatures
+    n: tuple = ()  # tensor charge
+    diag: bool = False  # isdiag
+    t: tuple = ()  # list of block charges
+    D: tuple = ()  # list of block shapes
+    Dp: tuple = ()  # list of block sizes (products of shapes)
+    sl: tuple = ()  # slices in 1d data
 
 
 class _config(NamedTuple):
     backend: any = None
     sym: any = sym_none
     fermionic: tuple = False
-    device: str = 'cpu'
-    dtype: str = 'float64'
     default_device: str = 'cpu'
     default_dtype: str = 'float64'
     default_fusion: str = 'meta'
@@ -33,25 +34,14 @@ def _flatten(nested_iterator):
             yield item
 
 
-def _unpack_axes(meta_fusion, *args):
-    """Unpack meta axes into native axes based on a.meta_fusion"""
-    clegs = tuple(accumulate(x[0] for x in meta_fusion))
-    return tuple(tuple(chain(*(range(clegs[ii] - meta_fusion[ii][0], clegs[ii]) for ii in axes))) for axes in args)
+def _unpack_axes(mfs, *args):
+    """Unpack meta axes into native axes based on a.mfs"""
+    clegs = tuple(accumulate(x[0] for x in mfs))
+    return tuple(tuple(chain(*(range(clegs[ii] - mfs[ii][0], clegs[ii]) for ii in axes))) for axes in args)
 
 
 def _clear_axes(*args):
     return ((axis,) if isinstance(axis, int) else tuple(axis) for axis in args)
-
-
-def _common_rows(a, b):
-    """ Return row indices of nparray a that are in b, and vice versa.  Outputs tuples."""
-    la = [tuple(x.flat) for x in a]
-    lb = [tuple(x.flat) for x in b]
-    sa = set(la)
-    sb = set(lb)
-    ia = tuple(ii for ii, el in enumerate(la) if el in sb)
-    ib = tuple(ii for ii, el in enumerate(lb) if el in sa)
-    return ia, ib
 
 
 def _ntree_to_mf(ntree):

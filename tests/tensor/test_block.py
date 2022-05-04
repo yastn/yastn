@@ -30,9 +30,11 @@ def test_block_U1():
     B1 = yast.block({(0, 0): II, (1, 0): cp10, (2, 0): c10, (3, 0): mu * nn, (3, 1): w * c01, (3, 2): w * cp01, (3, 3): II}, common_legs=(1, 2))
     B2 = yast.block({(1, 1): II, (3, 1): cp10, (5, 1): c10, (7, 1): mu * nn, (7, 3): w * c01, (7, 5): w * cp01, (7, 9): II}, common_legs=(1, 2))
 
+    assert all(x.is_consistent() for x in (A, B1, B2))
+    assert all(A.are_independent(x) for x in (B1, B2))
     assert yast.norm(A - B1) < tol  # == 0.0
     assert yast.norm(A - B2) < tol  # == 0.0
-    assert B1.are_independent(B2)
+
 
 
 if __name__ == "__main__":

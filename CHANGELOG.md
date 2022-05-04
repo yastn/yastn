@@ -36,7 +36,7 @@
 - `set_blocks` and `_set_blocks` do not accept argument `device`
 - new function get_device (of a block) in the backend
 - new test in function is_consistent, that check if all blocks are on the same device, 
-  and if it matches config.device (this can be unwanted test in numpy ...)
+  and if it matches device (this can be unwanted test in numpy ...)
 - flipping signature of diag tensor in tensordot is commented out (moving toward general signature of diagonal tensor)
 
 24-04-2021
@@ -125,14 +125,14 @@
 - `svd` got argument `policy` = `fullrank` (default) or `lowrank`.
   `svd_lowrank` calls `svd` with policy = `lowrank`
 
-06-01-2021
+06-01-2022
 - change function names `export_to_dict` to `save_to_dict`, `export_to_hdf5` to `save_to_hdf5`
   `import_from_dict` to `load_from_dict`; `import_from_hdf5` to `load_from_hdf5`
 - save/load functions are changed to use 1d data container.
   It is now also more robust, using only native python/numpy data structures, i.e. no NamedTuples used by yast.
   WARNING: Backward compatibility is broken!
 
-08-01-2021
+08-01-2022
 - New function `remove_leg`
 - define `abs` as a magic method `__abs__`. Function `absolut` has been removed.
 - define `__matmul__`, giving shorthand a @ b == yast.tensordot(a, b, axes=(a.ndim - 1, 0))
@@ -141,4 +141,30 @@
 - new function `einsum` (for now a place holder doing nothing).
 - new function `move_leg` which is an alias to `moveaxis`
 
-v0.9 is the last version employing dictionary of blocks befor the transition to single 1d data structure
+v0.9
+  the last version employing dictionary of blocks befor the transition to a single 1d data structure
+
+13-03-2022
+- Transition to 1d data structure
+- dtype and device removed from config
+- `unique_dtype` replaced by `get_dtype`
+- properties `tensor.dtype`, `tensor.yast_dtype`, `tensor.device`
+- new function '__setitem__()' that gives direct access to change existing blocks
+- in rsqrt(x, cutoff) cutoff is done with respect to x, not sqrt(x)
+- new function `grad()` that generates gradient yast tensor
+
+07-04-2022
+- `apply_mask` replaces function `mask`.
+- `apply_mask` and `broadcast` take diagonal tensor (to be use as a mask or to broadcast) as the first argument. 
+  Previously it was the second argument.
+- `apply_mask` and `broadcast` can apply the same mask to a few tensors in a single-line execution.
+- `svd` and `eigh` do not support truncation
+- new function `truncation_mask` generates a mask tensor that can be used for truncation, 
+  but this is not the only way such mask can be obtianed.
+ - `svd_with_truncation` and `eigh_with_truncation` combine pure `svd` with `truncation_mask` and `apply_mask`
+ - `broadcast` does not take conj argument anymore
+ - `svd_lowrank` is depreciated. Call it though `policy='lowrank'` in `svd`
+
+01-05-2022
+- svd_with_truncation can take mask-generating funcion as an argument
+- function `truncation_mask_multiplets` to retain multiplets in generating mask for truncation

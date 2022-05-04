@@ -93,7 +93,7 @@ def test_algebra_functions():
     a.set_block(ts=-1, Ds=3, val=[1, 0.01, 0.0001])
     b = yast.sqrt(a)
     assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(2.0202)
-    b = yast.rsqrt(a, cutoff=0.02)
+    b = yast.rsqrt(a, cutoff=0.004)
     assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(202)
     b = yast.reciprocal(a, cutoff=0.001)
     assert pytest.approx(b.norm().item(), rel=tol) == np.sqrt(20002)
@@ -243,26 +243,26 @@ def test_hf_union_exceptions():
         a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
         b = yast.Tensor(config=config_U1, s=(1, -1, 1, -1))
         b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
-        a.fuse_legs(axes=[(0, 1, 2, 3)], inplace=True, mode='hard')
-        b.fuse_legs(axes=[(0, 1, 2, 3)], inplace=True, mode='hard')
+        a = a.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
+        b = b.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
         _ = a + b  # Error in union: mismatch of native bond dimensions of fused legs.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
         b = yast.rand(config=config_U1, s=(1, -1, 1), t=(t2, t2, t2), D=(D1, D2, D1))
-        a.fuse_legs(axes=((0, 2), 1), inplace=True, mode='hard')
-        b.fuse_legs(axes=((0, 2), 1), inplace=True, mode='hard')
+        a = a.fuse_legs(axes=((0, 2), 1), mode='hard')
+        b = b.fuse_legs(axes=((0, 2), 1), mode='hard')
         _ = a + b  # Error in union: mismatch of bond dimensions of unfused legs.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(-1, 1, -1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
         b = yast.rand(config=config_U1, s=(-1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
-        a.fuse_legs(axes=((0, 1, 2), 3), inplace=True, mode='hard')
-        b.fuse_legs(axes=((0, 1, 2), 3), inplace=True, mode='hard')
+        a = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
+        b = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         _ = a + b  # Error in union: mismatch in native signatures of fused legs.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(-1, 1, -1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
         b = yast.rand(config=config_U1, s=(-1, 1, -1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
-        a.fuse_legs(axes=((0, 1), (2, 3)), inplace=True, mode='hard')
-        b.fuse_legs(axes=((0, 1, 2), 3), inplace=True, mode='hard')
+        a = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+        b = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         _ = a + b  # Error in union: mismatch in number of fused legs or fusion order.
 
 
@@ -272,4 +272,4 @@ if __name__ == '__main__':
     test_algebra_fuse_meta()
     test_algebra_fuse_hard()
     test_algebra_exceptions()
-    test_hf_union_exceptions()
+    # test_hf_union_exceptions()

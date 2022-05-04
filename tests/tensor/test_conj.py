@@ -30,12 +30,9 @@ def conj_vs_numpy(a, expected_n):
     assert abs(yast.vdot(a, a).item() - yast.vdot(b, a, conj=(0, 0)).item()) < tol
     assert abs(yast.vdot(a, a).item() - yast.vdot(d, c, conj=(0, 0)).item()) < tol
 
-    b.conj(inplace=True)
-    assert yast.norm(a - b) < tol
-    c.flip_signature(inplace=True)
-    assert yast.norm(a - c) < tol
-    d.conj_blocks(inplace=True)
-    assert yast.norm(a - d) < tol
+    assert yast.norm(a - b.conj()) < tol
+    assert yast.norm(a - c.flip_signature()) < tol
+    assert yast.norm(a - d.conj_blocks()) < tol
 
 
 def test_conj_basic():
@@ -56,8 +53,8 @@ def test_conj_hard_fusion():
     a = yast.randC(config=config_Z2, s=(1, -1, 1, -1, 1, -1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
-    a.fuse_legs(axes=((0, 1), (2, 3), (4, 5)), inplace=True)
-    a.fuse_legs(axes=((0, 1), 2), inplace=True)
+    a = a.fuse_legs(axes=((0, 1), (2, 3), (4, 5)))
+    a = a.fuse_legs(axes=((0, 1), 2))
     b = a.conj()
     c = a.flip_signature()
     d = a.conj_blocks()
@@ -65,9 +62,9 @@ def test_conj_hard_fusion():
     assert all(sa + sc == 0 for sa, sc in zip(a.struct.s, c.struct.s))
     assert a.struct.s == d.struct.s
 
-    assert all(sa + sb == 0 for hfa, hfb in zip(a.hard_fusion, b.hard_fusion) for sa, sb in zip(hfa.s, hfb.s))
-    assert all(sa + sc == 0 for hfa, hfc in zip(a.hard_fusion, c.hard_fusion) for sa, sc in zip(hfa.s, hfc.s))
-    assert all(hfa.s == hfd.s for hfa, hfd in zip(a.hard_fusion, d.hard_fusion))
+    assert all(sa + sb == 0 for hfa, hfb in zip(a.hfs, b.hfs) for sa, sb in zip(hfa.s, hfb.s))
+    assert all(sa + sc == 0 for hfa, hfc in zip(a.hfs, c.hfs) for sa, sc in zip(hfa.s, hfc.s))
+    assert all(hfa.s == hfd.s for hfa, hfd in zip(a.hfs, d.hfs))
 
 
 class TestConj_Z2xU1(unittest.TestCase):

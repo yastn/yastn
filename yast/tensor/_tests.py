@@ -11,7 +11,7 @@ class YastError(Exception):
 
 def _test_configs_match(a, b):
     """Check if config's of two tensors allow for performing operations mixing them. """
-    if a.config.device != b.config.device:
+    if a.device != b.device:
         raise YastError('Devices of the two tensors do not match.')
     if a.config.sym.SYM_ID != b.config.sym.SYM_ID:
         raise YastError('Two tensors have different symmetry rules.')
@@ -41,23 +41,23 @@ def _test_axes_match(a, b, sgn=1, axes=None):
             raise YastError('Repeated axis in axes[0] or axes[1].')
         if len(set(axes[0]) - set(range(a.ndim))) > 0 or len(set(axes[1]) - set(range(b.ndim))) > 0:
             raise YastError('Axis outside of tensor ndim.')
-        ua, = _unpack_axes(a.meta_fusion, axes[0])
-        ub, = _unpack_axes(b.meta_fusion, axes[1])
+        ua, = _unpack_axes(a.mfs, axes[0])
+        ub, = _unpack_axes(b.mfs, axes[1])
         uaxes = (ua, ub)
 
     if not all(a.struct.s[i1] == sgn * b.struct.s[i2] for i1, i2 in zip(*uaxes)):
         raise YastError('Signatures do not match.')
 
-    if any(a.meta_fusion[i1] != b.meta_fusion[i2] for i1, i2 in zip(*axes)):
+    if any(a.mfs[i1] != b.mfs[i2] for i1, i2 in zip(*axes)):
         raise YastError('Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order.')
 
     needs_mask = False  # for hard-fused legs
     for i1, i2 in zip(*uaxes):
-        if a.hard_fusion[i1].tree != b.hard_fusion[i2].tree:
+        if a.hfs[i1].tree != b.hfs[i2].tree:
             raise YastError('Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.')
-        if any(s1 != sgn * s2 for s1, s2 in zip(a.hard_fusion[i1].s, b.hard_fusion[i2].s)):
+        if any(s1 != sgn * s2 for s1, s2 in zip(a.hfs[i1].s, b.hfs[i2].s)):
             raise YastError('Signatures of hard-fused legs do not match.')
-        if a.hard_fusion[i1].t != b.hard_fusion[i2].t or a.hard_fusion[i1].D != b.hard_fusion[i2].D:
+        if a.hfs[i1].t != b.hfs[i2].t or a.hfs[i1].D != b.hfs[i2].D:
             needs_mask = True
     return needs_mask, uaxes
 
@@ -75,10 +75,8 @@ def are_independent(a, b):
     """
     test = []
     test.append(a is not b)
-    test.append(a.A is not b.A)
-    for key in a.A.keys():
-        if key in b.A:
-            test.append(a.config.backend.is_independent(a.A[key], b.A[key]))
+    test.append(a._data is not b._data)
+    test.append(a.config.backend.is_independent(a._data, b._data))
     return all(test)
 
 
@@ -91,14 +89,17 @@ def is_consistent(a):
     2) tset follow symmetry rule f(s@t)==n
     3) block dimensions are consistent (this requires config.test=True)
     """
-    for ind, D in zip(a.struct.t, a.struct.D):
-        assert ind in a.A, 'index in struct.t not in dict A'
-        d = a.config.backend.get_shape(a.A[ind])
-        if a.isdiag:
-            d = d + d
-        assert d == D, 'block dimensions do not match struct.D'
-    assert len(a.struct.t) == len(a.A), 'length of struct.t do not match dict A'
-    assert len(a.struct.D) == len(a.A), 'length of struct.D do not match dict A'
+    low, high = 0, 0
+    for D, Dp, sl in zip(a.struct.D, a.struct.Dp, a.struct.sl):
+        assert D[0] == Dp if a.isdiag else np.prod(D, dtype=int) == Dp
+        high = low + Dp
+        assert sl == (low, high)
+        low = high
+    assert a.config.backend.get_shape(a._data) == (high,)
+
+    assert len(a.struct.t) == len(a.struct.D)
+    assert len(a.struct.t) == len(a.struct.Dp)
+    assert len(a.struct.t) == len(a.struct.sl)
 
     for i in range(len(a.struct.t) - 1):
         assert a.struct.t[i] < a.struct.t[i + 1]
@@ -109,12 +110,8 @@ def is_consistent(a):
     assert np.all(a.config.sym.fuse(tset, sa, 1) == na), 'charges of some block do not satisfy symmetry condition'
     for n in range(a.ndim_n):
         a.get_leg_structure(n, native=True)
-    device = {a.config.backend.get_device(x) for x in a.A.values()}
-    for s, hf in zip(a.struct.s, a.hard_fusion):
+    for s, hf in zip(a.struct.s, a.hfs):
         assert s == hf.s[0]
-    assert len(device) <= 1, 'not all blocks reside on the same device'
-    if len(device) == 1:
-        assert device.pop().startswith(a.config.device), 'device of blocks inconsistent with config.device'
     return True
 
 

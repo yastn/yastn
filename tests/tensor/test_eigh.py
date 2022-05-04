@@ -1,9 +1,10 @@
 """ yast.linalg.eigh() """
+from itertools import product
 import yast
 try:
-    from .configs import config_dense, config_U1, config_Z2xU1
+    from .configs import config_dense, config_U1, config_Z2xU1, config_Z3
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1
+    from configs import config_dense, config_U1, config_Z2xU1, config_Z3
 
 tol = 1e-10  #pylint: disable=invalid-name
 
@@ -47,5 +48,19 @@ def test_eigh_basic():
     eigh_combine(a)
 
 
+def test_eigh_Z3():
+    # Z3
+    sset = ((1, -1), (-1, 1))
+    sUset = (-1, 1)
+    for s, sU in product(sset, sUset):
+        a = yast.rand(config=config_Z3, s=s, t=[(0, 1, 2), (0, 1, 2)], D=[(2, 5, 3), (2, 5, 3)], dtype='complex128')
+        a = a + a.transpose(axes=(1, 0)).conj()
+        S, U = yast.linalg.eigh(a, axes=(0, 1), sU=sU)
+        assert yast.norm(a - U @ S @ U.transpose(axes=(1, 0)).conj()) < tol  # == 0.0
+        assert U.is_consistent()
+        assert S.is_consistent()
+
+
 if __name__ == '__main__':
     test_eigh_basic()
+    test_eigh_Z3()

@@ -22,7 +22,7 @@ def test_swap_gate_basic():
     assert pytest.approx(sum(b.to_numpy().ravel()), rel=tol) == 4
 
     c = a.swap_gate(axes=(0, 2))
-    c.swap_gate(axes=(1, 2), inplace=True)
+    c = c.swap_gate(axes=(1, 2))
     assert pytest.approx(sum(c.to_numpy().ravel()), rel=tol) == 4
     c1 = a.swap_gate(axes=((0, 1), 2))  # swap between group of (0, 1) and 2
     c2 = a.swap_gate(axes=(0, 2, 1, 2)) # swap between 0, 2 and then 1, 2
@@ -49,9 +49,9 @@ def apply_operator(psi, c, site):
     ndim = psi.ndim
     ca = c.add_leg(axis=-1)
     cpsi = yast.tensordot(psi, ca, axes=(site, 1))
-    cpsi.move_leg(source=ndim - 1, destination=site, inplace=True)
-    cpsi.swap_gate(axes=(tuple(range(site)), ndim), inplace=True)
-    cpsi.remove_leg(axis=-1, inplace=True)
+    cpsi = cpsi.move_leg(source=ndim - 1, destination=site)
+    cpsi = cpsi.swap_gate(axes=(tuple(range(site)), ndim))
+    cpsi = cpsi.remove_leg(axis=-1)
     return cpsi
 
 
@@ -62,7 +62,7 @@ def test_apply_operators():
         ann = {s: operator_spinfull('ann', s=s, sym=sym) for s in spins}
         cre = {s: operator_spinfull('cre', s=s, sym=sym) for s in spins}
 
-        vac = vacum_spinfull(sites=5, sym=sym)
+        vac = vacum_spinfull(sites=4, sym=sym)
         psi = vac
         for s in spins:
             psi0 = None
@@ -110,7 +110,8 @@ def vacum_spinfull(sites=4, sym='Z2'):
     s = (1,) * sites
     if sym == 'Z2':
         psi = yast.zeros(config=config_Z2_fermionic, s=s, t=[((0,),)] * sites, D=(2,) * sites)
-        psi.A[(0,) * sites][(0, ) * sites] = 1.
+        psi[(0,) * sites][(0,) * sites] = 1.  # here first [(0,0,..)] is the block charge -- here outputed as ndim object. 
+        # The second [(0,0,..)] is index in the block.
     if sym == 'U1xU1_ind':
         psi = yast.ones(config=config_U1xU1xZ2_fermionic, s=s, t=[((0, 0, 0),)] * sites, D=(1,) * sites)
     if sym == 'U1xU1_dis':
@@ -200,6 +201,6 @@ def test_swap_gate_exceptions():
 
 if __name__ == '__main__':
     test_swap_gate_basic()
-    test_operators()
     test_apply_operators()
+    test_operators()
     test_swap_gate_exceptions()

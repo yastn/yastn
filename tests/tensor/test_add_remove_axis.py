@@ -13,15 +13,15 @@ def _test_add_remove_leg(a):
     """ run a sequence of adding and removing axis operations. """
     b = yast.add_leg(a)  # new axis with s=1 added as the last one; makes copy
     assert b.is_consistent()
-    assert yast.are_independent(a, b)
+    assert not yast.are_independent(a, b)
     assert all(x == 0 for x in b.struct.n)  # tensor charge is set here to 0
-    b.add_leg(axis=1, s=-1, inplace=True)
+    b = b.add_leg(axis=1, s=-1)
     b.is_consistent()
 
     c = b.remove_leg()  # removes last axis by default
     assert c.is_consistent()
     assert c.struct.n == a.struct.n
-    c.remove_leg(axis=1, inplace=True)
+    c = c.remove_leg(axis=1)
     assert c.is_consistent()
     assert yast.norm(a - c) < tol
 
@@ -41,8 +41,8 @@ def test_add_leg_basic():
     _test_add_remove_leg(b)
 
     ab1 = yast.tensordot(a, b, axes=((), ()))
-    a.add_leg(s=1, inplace='True')
-    b.add_leg(s=-1, inplace='True')
+    a = a.add_leg(s=1)
+    b = b.add_leg(s=-1)
     ab2 = yast.tensordot(a, b, axes=(2, 2))
     assert yast.norm(ab1 - ab2) < tol
 
@@ -54,27 +54,27 @@ def test_add_leg_basic():
     _test_add_remove_leg(a)
 
     # new axis with tensor charge set by hand.
-    a.add_leg(s=-1, axis=0, t=(0, 2), inplace=True)
+    a = a.add_leg(s=-1, axis=0, t=(0, 2))
     assert a.struct.n == (1, 0)
     a.is_consistent()
-    a.add_leg(s=1, t=(1, 0), inplace=True)
+    a = a.add_leg(s=1, t=(1, 0))
     assert a.struct.n == (0, 0)
     a.is_consistent()
 
     # mix adding/removing axes with fusions
     assert a.get_shape() == (1, 9, 3, 25, 1)
-    a.fuse_legs(axes=((1, 0), 2, (3, 4)), inplace=True, mode='hard')
+    a = a.fuse_legs(axes=((1, 0), 2, (3, 4)), mode='hard')
     assert a.get_shape() == (9, 3, 25)
-    a.fuse_legs(axes=((0, 1), 2), inplace=True, mode='meta')
+    a = a.fuse_legs(axes=((0, 1), 2), mode='meta')
     assert a.get_shape() == (27, 25)
 
-    a.add_leg(axis=1, inplace=True)
+    a = a.add_leg(axis=1)
     assert a.get_shape() == (27, 1, 25)
-    a.add_leg(axis=3, inplace=True)
+    a = a.add_leg(axis=3)
     assert a.get_shape() == (27, 1, 25, 1)
-    a.unfuse_legs(axes=0, inplace=True)
+    a = a.unfuse_legs(axes=0)
     assert a.get_shape() == (9, 3, 1, 25, 1)
-    a.unfuse_legs(axes=(0, 3), inplace=True)
+    a = a.unfuse_legs(axes=(0, 3))
     assert a.get_shape(native=True) == (9, 1, 3, 1, 25, 1, 1)
     a.is_consistent()
 
@@ -119,9 +119,9 @@ def test_operators_chain():
 
     # special case when there are no blocks in the tensor
     a = yast.Tensor(config=config_U1, s=(1, -1, 1, -1), n=1)
-    a.remove_leg(axis=1, inplace=True)
+    a = a.remove_leg(axis=1)
     assert a.struct.s == (1, 1, -1)
-    a.remove_leg(axis=1, inplace=True)
+    a = a.remove_leg(axis=1)
     assert a.struct.s == (1, -1)
     assert a.struct.n == (1,)
 
@@ -151,12 +151,12 @@ def test_remove_leg_exceptions():
         _ = scalar.remove_leg(axis=0)  # Cannot remove axis of a scalar tensor.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t, t, t), D=(D, D, D))
-        a.fuse_legs(axes=((0, 1), 2), mode='meta', inplace=True)
+        a = a.fuse_legs(axes=((0, 1), 2), mode='meta')
         _ = a.remove_leg(axis=0)  # Axis to be removed cannot be fused.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(1, -1, 1, 1), t=(t, t, t, t), D=(D, D, D, D))
-        a.fuse_legs(axes=((0, 1), 2, 3), mode='meta', inplace=True)
-        a.fuse_legs(axes=(0, (1, 2)), mode='hard', inplace=True)
+        a = a.fuse_legs(axes=((0, 1), 2, 3), mode='meta')
+        a = a.fuse_legs(axes=(0, (1, 2)), mode='hard')
         _ = a.remove_leg(axis=0)  # Axis to be removed cannot be fused.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(1, -1, 1, 1), t=(t, t, t, t), D=(D, D, D, D))
