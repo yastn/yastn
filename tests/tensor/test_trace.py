@@ -97,8 +97,7 @@ def test_trace_fuse_meta():
 
     af = yast.fuse_legs(a, axes=((1, 2), (3, 0), (4, 5)), mode='meta')
     b = trace_vs_numpy(a, axes=((1, 2), (3, 0)))
-    bf = trace_vs_numpy(af, axes=(0, 1))
-    bf.unfuse_legs(axes=0, inplace=True)
+    bf = trace_vs_numpy(af, axes=(0, 1)).unfuse_legs(axes=0)
     assert yast.norm(bf - b) < tol
 
 
@@ -113,8 +112,7 @@ def test_trace_fuse_hard():
 
     af = yast.fuse_legs(a, axes=((1, 2), (3, 0), (4, 5)), mode='hard')
     b = trace_vs_numpy(a, axes=((1, 2), (3, 0)))
-    bf = trace_vs_numpy(af, axes=(0, 1))
-    bf.unfuse_legs(axes=0, inplace=True)
+    bf = trace_vs_numpy(af, axes=(0, 1)).unfuse_legs(axes=0)
     assert yast.norm(bf - b) < tol
 
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1),  # TODO
@@ -153,7 +151,7 @@ def test_trace_fuse_hard():
 
     b = yast.trace(a, axes=((0, 2), (1, 3)))
     bf = yast.trace(af, axes=(0, 1))
-    bf = bf.unfuse_legs(axes=(0, 1), inplace=True).transpose(axes=(0, 2, 1, 3))
+    bf = bf.unfuse_legs(axes=(0, 1)).transpose(axes=(0, 2, 1, 3))
     assert yast.norm(b - bf) < tol
 
 

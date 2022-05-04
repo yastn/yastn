@@ -6,14 +6,13 @@ import numpy as np
 from .tensor import Tensor, YastError
 from .tensor._auxliary import _unpack_axes, _struct
 from .tensor._merging import _Fusion
-from .tensor._initialize import _set_block
 
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
            'load_from_dict', 'load_from_hdf5',  'decompress_from_1d']
 
 
-def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwargs):
+def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with the random numbers.
 
@@ -47,9 +46,7 @@ def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwar
     tensor : tensor
         a random instance of a :meth:`Tensor`
     """
-    if not dtype:
-        assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype = config.default_dtype
+    dtype = kwargs['dtype'] if 'dtype' in kwargs else config.default_dtype
     if dtype == 'float64':
         return randR(config, s, n, t, D, isdiag, **kwargs)
     if dtype == 'complex128':
@@ -59,25 +56,25 @@ def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwar
 
 def randR(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     """ Shortcut for rand(..., dtype='float64')"""
-    meta_fusion = None
+    mfs = None
     if 'legs' in kwargs:
-        t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
+        t, D, s, mfs = _tD_from_legs(kwargs['legs'])
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
     a.fill_tensor(t=t, D=D, val='randR')
     return a
 
 
 def randC(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     """ Shortcut for rand(..., dtype='complex128')"""
-    meta_fusion = None
+    mfs = None
     if 'legs' in kwargs:
-        t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
+        t, D, s, mfs = _tD_from_legs(kwargs['legs'])
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
     a.fill_tensor(t=t, D=D, val='randC')
     return a
 
 
-def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwargs):
+def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with zeros.
 
@@ -107,18 +104,15 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwa
     tensor : tensor
         an instance of a tensor filled with zeros
     """
-    if not dtype:
-        assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype = config.default_dtype
-    meta_fusion = None
+    mfs = None
     if 'legs' in kwargs:
-        t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
-    a.fill_tensor(t=t, D=D, val='zeros', dtype=dtype)
+        t, D, s, mfs = _tD_from_legs(kwargs['legs'])
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
+    a.fill_tensor(t=t, D=D, val='zeros')
     return a
 
 
-def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwargs):
+def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with ones.
 
@@ -146,18 +140,15 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, dtype=None, **kwar
     tensor : tensor
         an instance of a tensor filled with ones
     """
-    if not dtype:
-        assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype = config.default_dtype
-    meta_fusion = None
+    mfs = None
     if 'legs' in kwargs:
-        t, D, s, meta_fusion = _tD_from_legs(kwargs['legs'])
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, meta_fusion=meta_fusion, **kwargs)
-    a.fill_tensor(t=t, D=D, val='ones', dtype=dtype)
+        t, D, s, mfs = _tD_from_legs(kwargs['legs'])
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
+    a.fill_tensor(t=t, D=D, val='ones')
     return a
 
 
-def eye(config=None, t=(), D=(), legs=None, dtype=None, **kwargs):
+def eye(config=None, t=(), D=(), legs=None, **kwargs):
     r"""
     Initialize diagonal tensor with all possible blocks filled with ones.
 
@@ -181,14 +172,11 @@ def eye(config=None, t=(), D=(), legs=None, dtype=None, **kwargs):
     tensor : tensor
         an instance of diagonal tensor filled with ones
     """
-    if not dtype:
-        assert hasattr(config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype = config.default_dtype
     s = ()
     if legs is not None:
         t, D, s, _ = _tD_from_legs(legs)
     a = Tensor(config=config, s=s, isdiag=True, **kwargs)
-    a.fill_tensor(t=t, D=D, val='ones', dtype=dtype)
+    a.fill_tensor(t=t, D=D, val='ones')
     return a
 
 
@@ -206,22 +194,20 @@ def load_from_dict(config=None, d=None):
         of :meth:`~yast.Tensor.save_to_dict`
     """
     if d is not None:
-        struct = _struct(s=d['s'], n=d['n'], t=d['t'], D=d['D'])
+        c_isdiag = bool(d['isdiag'])
+        c_Dp = tuple(x[0] for x in d['D']) if c_isdiag else tuple(np.prod(d['D'], axis=1))
+        c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+        struct = _struct(s=d['s'], n=d['n'], diag=c_isdiag, t=d['t'], D=d['D'], Dp=c_Dp, sl=c_sl)
         hfs = tuple(_Fusion(**hf) for hf in d['hfs'])
-        a = Tensor(config=config, struct=struct, isdiag=d['isdiag'],
-                    hard_fusion=hfs, meta_fusion=d['mfs'])
-        if 'SYM_ID' in d and a.config.sym.SYM_ID != d['SYM_ID']:
+        c = Tensor(config=config, struct=struct,
+                    hfs=hfs, mfs=d['mfs'])
+        if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID']:
             raise YastError("Symmetry rule in config do not match loaded one.")
-        if 'fermionic' in d and a.config.fermionic != d['fermionic']:
+        if 'fermionic' in d and c.config.fermionic != d['fermionic']:
             raise YastError("Fermionic statistics in config do not match loaded one.")
-        pointer = 0
-        dtype = d['_d'].dtype.name
-        for ts, Ds in zip(struct.t, struct.D):
-            step = np.prod(Ds, dtype=int) if not d['isdiag'] else Ds[0]
-            _set_block(a, ts=ts, Ds=Ds, val=d['_d'][pointer: pointer + step], dtype=dtype)
-            pointer += step
-        a.is_consistent()
-        return a
+        c._data = c.config.backend.to_tensor(d['_d'], dtype=d['_d'].dtype.name, device=c.device)
+        c.is_consistent()
+        return c
     raise YastError("Dictionary d is required.")
 
 
@@ -237,23 +223,23 @@ def load_from_hdf5(config, file, path):
     path: TODO
     """
     g = file.get(path)
-    struct = _struct(s=g.get('s')[:], n=g.get('n')[:])
+    c_isdiag = bool(g.get('isdiag')[:][0])
+    c_n = tuple(g.get('n')[:])
+    c_s = tuple(g.get('s')[:])
+    c_t = tuple(tuple(x.flat) for x in g.get('ts')[:])
+    c_D = tuple(tuple(x.flat) for x in g.get('Ds')[:])
+    c_Dp = tuple(x[0] for x in c_D) if c_isdiag else tuple(np.prod(c_D, axis=1))
+    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+    struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+
     mfs = eval(tuple(file.get(path+'/mfs').keys())[0])
     hfs = tuple(_Fusion(**hf) for hf in literal_eval(tuple(g.get('hfs').keys())[0]))
-    
-    a = Tensor(config=config, struct=struct, isdiag=bool(g.get('isdiag')[:][0]),
-                hard_fusion=hfs, meta_fusion=mfs)
-                
+    c = Tensor(config=config, struct=struct, mfs=mfs, hfs=hfs)
 
-    ts = g.get('ts')[:]
-    Ds = g.get('Ds')[:]
     vmat = g.get('matrix')[:]
-
-    pointer = 0
-    for its, iDs in zip(ts, Ds):
-        a.set_block(ts=tuple(its), Ds=tuple(iDs), val=vmat[pointer: (pointer + np.prod(iDs))], dtype=vmat.dtype.name)
-        pointer += np.prod(iDs)
-    return a
+    c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name, device=c.device)
+    c.is_consistent()
+    return c
 
 
 def decompress_from_1d(r1d, config, meta):
@@ -278,7 +264,7 @@ def decompress_from_1d(r1d, config, meta):
         in rank-1 tensor `r1d`
     """
     a = Tensor(config=config, **meta)
-    a.A = a.config.backend.unmerge_one_leg({(): r1d}, 0, meta['meta_unmerge'])
+    a._data = r1d
     return a
 
 
@@ -306,7 +292,7 @@ def _tD_from_legs(legs):
             if isinstance(a, dict):
                 lss.append(a)
                 a = next(ileg, None)
-        lf = set(a.meta_fusion[n] for a, n in zip(tns, lgs))
+        lf = set(a.mfs[n] for a, n in zip(tns, lgs))
         if len(lf) > 1:
             raise YastError('Provided tensors fusions do not match.')
         if len(lf) == 0:
@@ -325,7 +311,7 @@ def _tD_from_legs(legs):
             for nn in range(lf[0]):
                 ss = []
                 for t, l, f in zip(tns, lgs, fps):
-                    un, = _unpack_axes(t.meta_fusion, (l,))
+                    un, = _unpack_axes(t.mfs, (l,))
                     lss.append(t.get_leg_structure(un[nn], native=True))
                     ss.append(f * np.array(t.s_n, dtype=int)[un[nn]])
                 d, s = _dict_union(lss)

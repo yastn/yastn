@@ -9,12 +9,30 @@ from ._tests import YastError
 __all__ = ['match_legs', 'block']
 
 
-def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
+def __setitem__(a, key, newvalue):
+    """
+    Parameters
+    ----------
+    key : tuple(int)
+        charges of the block
+
+    Update data corresponding the block. The data should be consistent with shape
+    """
+    key = tuple(_flatten(key))
+    try:
+        ind = a.struct.t.index(key)
+    except ValueError:
+        raise YastError('tensor does not have block specify by key')
+    a._data[slice(*a.struct.sl[ind])] = newvalue
+
+
+def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     r"""
     Create all possible blocks based on s, n and list of charges for all legs.
 
     Brute-force check all possibilities and select the ones satisfying f(t@s) == n for each symmetry generator f.
     Initialize each possible block with sizes given by D.
+    Old data in the tensor are reset.
 
     Parameters
     ----------
@@ -36,7 +54,7 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
         'randR', 'rand' (use current dtype float or complex), 'ones', 'zeros'
 
     dtype : str
-        desired dtype, overrides default_dtype specified in config of tensor `a`
+        desired dtype, overrides current dtype of 'a'
 
     Examples
     --------
@@ -47,9 +65,7 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
     D = [1, (1, 4, 2, 2), (1, 9, 3, 3)]  # nsym = 2 ndim = 3
     """
 
-    if not dtype:
-        assert hasattr(a.config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype = a.config.default_dtype
+    # if dtype is None:
 
     D = (D,) if isinstance(D, int) else D
     t = (t,) if isinstance(t, int) else t
@@ -78,34 +94,36 @@ def fill_tensor(a, t=(), D=(), val='rand', dtype=None):
             if len(x) != len(y):
                 raise YastError("Elements of t and D do not match")
 
-        # comb_t = list(tuple(tuple(t) if isinstance(t, int) else t for t in ts) for ts in product(*t))
         comb_D = list(product(*D))
         comb_t = list(product(*t))
         lcomb_t = len(comb_t)
         comb_t = list(_flatten(comb_t))
-        comb_t = np.array(comb_t, dtype=int).reshape((lcomb_t, a.ndim_n, a.config.sym.NSYM))
-        comb_D = np.array(comb_D, dtype=int).reshape((lcomb_t, a.ndim_n))
+        comb_t = np.array(comb_t, dtype=int).reshape((lcomb_t, len(a.struct.s), len(a.struct.n)))
+        comb_D = np.array(comb_D, dtype=int).reshape((lcomb_t, len(a.struct.s)))
         sa = np.array(a.struct.s, dtype=int)
         na = np.array(a.struct.n, dtype=int)
         ind = np.all(a.config.sym.fuse(comb_t, sa, 1) == na, axis=1)
         tset = comb_t[ind]
         Dset = comb_D[ind]
 
-    meta = [(tuple(ts.flat), tuple(Ds)) for ts, Ds in zip(tset, Dset)]
+    if a.isdiag and np.any(Dset[:, 0] != Dset[:, 1]):
+        raise YastError("Diagonal tensor requires the same bond dimensions on both legs.")
+    Dp = Dset[:, 0] if a.isdiag else np.prod(Dset, axis=1, dtype=int)
+    Dsize = np.sum(Dp)
+
+    meta = [(tuple(ts.flat), tuple(Ds), dp) for ts, Ds, dp in zip(tset, Dset, Dp)]
     meta = sorted(meta, key=lambda x: x[0])
 
-    for ts, Ds in meta:
-        _set_block(a, ts=ts, Ds=Ds, val=val, dtype=dtype)
+    a_t, a_D, a_Dp = zip(*meta) if len(meta) > 0 else ((), (), ())
+    a_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(a_Dp), a_Dp))
+    a.struct = a.struct._replace(t=a_t, D=a_D, Dp=a_Dp, sl=a_sl)
 
-    if len(meta) > 0:
-        a_t, a_D = zip(*meta)
-        a.struct = a.struct._replace(t=a_t, D=a_D)
-
+    a._data = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
     for n in range(a.ndim_n):
         a.get_leg_structure(n, native=True)  # here checks the consistency of bond dimensions
 
 
-def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
+def set_block(a, ts=(), Ds=None, val='zeros'):
     """
     Add new block to tensor or change the existing one.
 
@@ -132,10 +150,6 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
     dtype : str
         desired dtype, overrides default_dtype specified in config of tensor `a`
     """
-    if dtype is None:
-        assert hasattr(a.config, 'default_dtype'), "Either dtype or valid config has to be provided"
-        dtype = a.config.default_dtype
-
     if isinstance(Ds, int):
         Ds = (Ds,)
     if isinstance(ts, int):
@@ -155,9 +169,9 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)
     if not np.all(a.config.sym.fuse(ats, sa, 1) == na):
-        raise YastError('Charges ts are not consistent with the symmetry rules: t @ s == n')
+        raise YastError('Charges ts are not consistent with the symmetry rules: f(t @ s) == n')
 
-    if isinstance(val, str) and Ds is None:  # attempt to read Ds from existing blocks.
+    if Ds is None:  # attempt to read Ds from existing blocks.
         Ds = []
         tD = [a.get_leg_structure(n, native=True) for n in range(a.ndim_n)]
         for n in range(a.ndim_n):
@@ -167,51 +181,45 @@ def set_block(a, ts=(), Ds=None, val='zeros', dtype=None):
                 raise YastError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
         Ds = tuple(Ds)
 
-    _set_block(a, ts=ts, Ds=Ds, val=val, dtype=dtype)
+    if a.isdiag and Ds[0] != Ds[1]:
+        raise YastError("Diagonal tensor requires the same bond dimensions on both legs.")
+    Dsize = Ds[0] if a.isdiag else np.prod(Ds, dtype=int)
 
-    if Ds is None:
-        Ds = a.config.backend.get_shape(a.A[ts])
-        if a.isdiag:
-            Ds = Ds + Ds
+    ind = sum(t < ts for t in a.struct.t)
+    ind2 = ind
+    if ind < len(a.struct.t) and a.struct.t[ind] == ts:
+        ind2 += 1
+        a._data = a.config.backend.delete(a._data, a.struct.sl[ind])
 
-    ii = sum(t < ts for t in a.struct.t)
-    if ii < len(a.struct.t) and a.struct.t[ii] == ts:
-        a_D = a.struct.D[:ii] + (Ds,) + a.struct.D[ii + 1:]
-        a.struct = a.struct._replace(D=a_D)
-    else:
-        a_t = a.struct.t[:ii] + (ts,) + a.struct.t[ii:]
-        a_D = a.struct.D[:ii] + (Ds,) + a.struct.D[ii:]
-        a.struct = a.struct._replace(t=a_t, D=a_D)
-    a.A = {k: a.A[k] for k in sorted(a.A)}
+    pos = 0 if ind == 0 else a.struct.sl[ind - 1][1]
+    new_block = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
+    a._data = a.config.backend.insert(a._data, pos, new_block)
+
+    a_t = a.struct.t[:ind] + (ts,) + a.struct.t[ind2:]
+    a_D = a.struct.D[:ind] + (Ds,) + a.struct.D[ind2:]
+    a_Dp = a.struct.Dp[:ind] + (Dsize,) + a.struct.Dp[ind2:]
+    a_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(a_Dp), a_Dp))
+    a.struct = a.struct._replace(t=a_t, D=a_D, Dp=a_Dp, sl=a_sl)
 
     for n in range(a.ndim_n):
         a.get_leg_structure(n, native=True)  # here checks the consistency of bond dimensions
 
 
-def _set_block(a, ts, Ds, val, dtype):
-    """ Filling in block according to input. """
+def _init_block(config, Dsize, val, dtype, device):
     if isinstance(val, str):
         if val == 'zeros':
-            a.A[ts] = a.config.backend.zeros(Ds, dtype=dtype, device=a.config.device)
-        elif val in ('randR', 'rand'):
-            a.A[ts] = a.config.backend.randR(Ds, device=a.config.device)
+            return config.backend.zeros((Dsize,), dtype=dtype, device=device)
+        if val in ('randR', 'rand'):
+            return config.backend.randR((Dsize,), device=device)
         elif val == 'randC':
-            a.A[ts] = a.config.backend.randC(Ds, device=a.config.device)
+            return config.backend.randC((Dsize,), device=device)
         elif val == 'ones':
-            a.A[ts] = a.config.backend.ones(Ds, dtype=dtype, device=a.config.device)
-
-        if a.isdiag:
-            a.A[ts] = a.config.backend.diag_get(a.A[ts])
+            return config.backend.ones((Dsize,), dtype=dtype, device=device)
     else:
-        if a.isdiag:
-            if Ds is not None and Ds[0] != Ds[1]:
-                raise YastError('Diagonal tensors requires Ds[0] == Ds[1].')
-            vald = np.array(val)
-            if vald.ndim == 2: vald = np.diag(vald)
-            Ds0 = Ds[0] if Ds is not None else None
-            a.A[ts] = a.config.backend.to_tensor(vald, Ds=Ds0, dtype=dtype, device=a.config.device)
-        else:
-            a.A[ts] = a.config.backend.to_tensor(val, Ds=Ds, dtype=dtype, device=a.config.device)
+        x = config.backend.to_tensor(val, Ds=Dsize, dtype=dtype, device=device)
+        if config.backend.get_size(x) == Dsize ** 2:
+            x = config.backend.diag_get(x.reshape(Dsize, Dsize))
+        return x
 
 
 def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=False):
@@ -233,19 +241,21 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
     val: str
         'randR', 'rand', 'ones', 'zeros'
     """
-    t, D, s, lf, hf = [], [], [], [], []
+
+    t, D, s, mfs, hfs = [], [], [], [], []
     if conjs is None:
         conjs = (0,) * len(tensors)
     for nf, te, cc in zip(legs, tensors, conjs):
-        lf.append(te.meta_fusion[nf])
-        un, = _unpack_axes(te.meta_fusion, (nf,))
+        mfs.append(te.mfs[nf])
+        un, = _unpack_axes(te.mfs, (nf,))
         for nn in un:
             tdn = te.get_leg_structure(nn, native=True)
             t.append(tuple(tdn.keys()))
             D.append(tuple(tdn.values()))
             s.append(te.struct.s[nn] * (2 * cc - 1))
-            hf.append(te.hard_fusion[nn] if cc == 1 else _flip_hf(te.hard_fusion[nn]))
-    a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, meta_fusion=lf, hard_fusion=hf)
+            hfs.append(te.hfs[nn] if cc == 1 else _flip_hf(te.hfs[nn]))
+    a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, mfs=mfs, hfs=hfs,
+                            dtype=tensors[0].yast_dtype, device=tensors[0].device)
     a.fill_tensor(t=t, D=D, val=val)
     return a
 
@@ -275,17 +285,21 @@ def block(tensors, common_legs=None):
         if len(ind) != lind:
             raise YastError('Wrong number of coordinates encoded in tensors.keys()')
 
-    out_s, =  _unpack_axes(tn0.meta_fusion, out_s)
-    u_b = tuple(_unpack_axes(tn0.meta_fusion, *out_b))
+    out_s, =  _unpack_axes(tn0.mfs, out_s)
+    u_b = tuple(_unpack_axes(tn0.mfs, *out_b))
     out_b = tuple(chain(*u_b))
     pos = tuple(tuple(chain.from_iterable(repeat(x, len(u)) for x, u in zip(ind, u_b))) for ind in pos)
 
     for ind, tn in tensors.items():
         ind, = _clear_axes(ind)
-        if tn.ndim_n != tn0.ndim_n or tn.meta_fusion != tn0.meta_fusion or\
-           tn.struct.s != tn0.struct.s or tn.struct.n != tn0.struct.n or\
-           tn.isdiag != tn0.isdiag or tn.hard_fusion != tn0.hard_fusion:
-            raise YastError('Ndims, signatures, total charges or fusion trees of blocked tensors are inconsistent.')
+        if tn.struct.s != tn0.struct.s:
+            raise YastError('Signatues of blocked tensors are inconsistent.')
+        if tn.struct.n != tn0.struct.n:
+            raise YastError('Tensor charges of blocked tensors are inconsistent.')
+        if tn.mfs != tn0.mfs or tn.hfs != tn0.hfs:
+            raise YastError('Fusion structures of blocked tensors are inconsistent.')
+        if tn.isdiag != tn0.isdiag:
+            raise YastError('Block can talk either only diagonal of only nondiagonal tensors.')
 
     posa = np.ones((len(pos), tn0.ndim_n), dtype=int)
     posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int).reshape(len(pos), -1)
@@ -315,16 +329,19 @@ def block(tensors, common_legs=None):
     for pind, pa in zip(tensors, posa):
         a = tensors[pind]
         tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-        for tind, t in zip(a.struct.t, tset):
+        for tind, slind, Dind, t in zip(a.struct.t, a.struct.sl, a.struct.D, tset):
             if tind not in meta_new:
                 meta_new[tind] = tuple(tDs[n][tuple(t[n].flat)]['Dtot'] for n in range(a.ndim_n))
-            meta_block.append((tind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.ndim_n))))
+            meta_block.append((tind, slind, Dind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.ndim_n))))
+    meta_block = tuple(sorted(meta_block, key=lambda x: x[0]))
     meta_new = tuple(sorted(meta_new.items()))
     c_t = tuple(t for t, _ in meta_new)
     c_D = tuple(D for _, D in meta_new)
-    c_struct = _struct(t=c_t, D=c_D, n=a.struct.n, s=a.struct.s)
+    c_Dp = tuple(np.prod(c_D, axis=1))
+    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+    c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    meta_new = tuple(zip(c_t, c_D, c_sl))
+    Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
 
-    c = tn0.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
-                        meta_fusion=tn0.meta_fusion, hard_fusion=tn0.hard_fusion)
-    c.A = c.config.backend.merge_super_blocks(tensors, meta_new, meta_block, c.config.device)
-    return c
+    data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, Dsize)
+    return tn0._replace(struct=c_struct, data=data)

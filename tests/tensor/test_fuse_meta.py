@@ -14,16 +14,16 @@ def test_fuse():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
-    b = a.fuse_legs(axes=(0, 1, (2, 3, 4)))
-    c = b.fuse_legs(axes=(1, (0, 2)))
-    c.unfuse_legs(axes=1, inplace=True)
-    c.unfuse_legs(axes=2, inplace=True)
+    b = a.fuse_legs(axes=(0, 1, (2, 3, 4)), mode='meta')
+    c = b.fuse_legs(axes=(1, (0, 2)), mode='meta')
+    c = c.unfuse_legs(axes=1)
+    c = c.unfuse_legs(axes=2)
     d = c.move_leg(source=1, destination=0)
     assert yast.norm(a - d) < tol  # == 0.0
 
     e = yast.rand(config=config_U1_force, s=(-1, 1),
                   t=((0, 1), (0, 1)), D=((1, 2), (3, 4)))
-    e.fuse_legs(axes=(0, 1), inplace=True)
+    e = e.fuse_legs(axes=(0, 1), mode='meta')
 
 
 
@@ -33,14 +33,14 @@ def test_fuse_split():
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
 
-    af = a.fuse_legs(axes=(0, (2, 1), (3, 4)))
-    af.fuse_legs(axes=((0, 1), 2), inplace=True)
+    af = a.fuse_legs(axes=(0, (2, 1), (3, 4)), mode='meta')
+    af = af.fuse_legs(axes=((0, 1), 2), mode='meta')
     Uf, Sf, Vf = yast.linalg.svd(af, axes=(0, 1))
 
     U, S, V = yast.linalg.svd(a, axes=((0, 1, 2), (3, 4)))
-    U = U.fuse_legs(axes=(0, (2, 1), 3))
-    U.fuse_legs(axes=((0, 1), 2), inplace=True)
-    V = V.fuse_legs(axes=(0, (1, 2)))
+    U = U.fuse_legs(axes=(0, (2, 1), 3), mode='meta')
+    U = U.fuse_legs(axes=((0, 1), 2), mode='meta')
+    V = V.fuse_legs(axes=(0, (1, 2)), mode='meta')
 
     US = yast.tensordot(U, S, axes=(1, 0))
     a2 = yast.tensordot(US, V, axes=(1, 0))
@@ -48,25 +48,24 @@ def test_fuse_split():
     USf = yast.tensordot(Uf, Sf, axes=(1, 0))
     a3 = yast.tensordot(USf, Vf, axes=(1, 0))
     assert yast.norm(af - a3) < tol  # == 0.0
-    a3.unfuse_legs(axes=0, inplace=True)
-    a3.unfuse_legs(axes=(1, 2), inplace=True)
-    a3.move_leg(source=2, destination=1, inplace=True)
+    a3 = a3.unfuse_legs(axes=0)
+    a3 = a3.unfuse_legs(axes=(1, 2)).move_leg(source=2, destination=1)
     assert yast.norm(a - a3) < tol  # == 0.0
 
     Qf, Rf = yast.linalg.qr(af, axes=(0, 1))
     Q, R = yast.linalg.qr(a, axes=((0, 1, 2), (3, 4)))
-    Q = Q.fuse_legs(axes=(0, (2, 1), 3))
-    Q.fuse_legs(axes=((0, 1), 2), inplace=True)
+    Q = Q.fuse_legs(axes=(0, (2, 1), 3), mode='meta')
+    Q = Q.fuse_legs(axes=((0, 1), 2), mode='meta')
     assert yast.norm(Q - Qf) < tol  # == 0.0
-    Rf.unfuse_legs(axes=1, inplace=True)
+    Rf = Rf.unfuse_legs(axes=1)
     assert yast.norm(R - Rf) < tol  # == 0.0
 
     aH = yast.tensordot(af, af, axes=(1, 1), conj=(0, 1))
     Vf, Uf = yast.linalg.eigh(aH, axes=(0, 1))
-    Uf.unfuse_legs(axes=0, inplace=True)
+    Uf = Uf.unfuse_legs(axes=0)
     UVf = yast.tensordot(Uf, Vf, axes=(2, 0))
     aH2 = yast.tensordot(UVf, Uf, axes=(2, 2), conj=(0, 1))
-    aH.unfuse_legs(axes=(0, 1), inplace=True)
+    aH = aH.unfuse_legs(axes=(0, 1))
     assert yast.norm(aH2 - aH) < tol  # == 0.0
 
 
@@ -75,16 +74,16 @@ def test_fuse_transpose():
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
     # assert a.get_shape() == (3, 5, 7, 9, 11, 13)
-    b = a.fuse_legs(axes=((0, 1), 2, (3, 4), 5))
+    b = a.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='meta')
 
     c = np.transpose(b, axes=(3, 2, 1, 0))
     assert c.get_shape() == (13, 99, 7, 15)
-    c.unfuse_legs(axes=(1, 3), inplace=True)
+    c = c.unfuse_legs(axes=(1, 3))
     assert c.get_shape() == (13, 9, 11, 7, 3, 5)
 
     c = b.move_leg(source=1, destination=2)
     assert c.get_shape() == (15, 99, 7, 13)
-    c.unfuse_legs(axes=(1, 0), inplace=True)
+    c = c.unfuse_legs(axes=(1, 0))
     assert c.get_shape() == (3, 5, 9, 11, 7, 13)
 
 
@@ -101,7 +100,7 @@ def test_get_shapes():
     b = a.to_nonsymmetric(native=True)
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 
-    a.fuse_legs(axes=[0, 1, (2, 3), (4, 5)], inplace=True)
+    a = a.fuse_legs(axes=[0, 1, (2, 3), (4, 5)], mode='meta')
     assert a.get_shape() == (3, 5, 63, 143)
     assert a.get_signature() == (-1, -1, -1, 1)
     assert a.to_numpy().shape == (3, 5, 63, 143)
@@ -110,7 +109,7 @@ def test_get_shapes():
     b = a.to_nonsymmetric(native=True)
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 
-    a.fuse_legs(axes=[0, (1, 2, 3)], inplace=True)
+    a = a.fuse_legs(axes=[0, (1, 2, 3)], mode='meta')
     assert a.get_shape() == (3, 28389)
     assert a.get_signature() == (-1, -1)
     assert a.to_numpy().shape == (3, 28389)
@@ -119,7 +118,7 @@ def test_get_shapes():
     b = a.to_nonsymmetric(native=True)
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 
-    a.fuse_legs(axes=[(0, 1)], inplace=True)
+    a = a.fuse_legs(axes=[(0, 1)], mode='meta')
     assert a.get_shape() == (a.size, )
     assert a.get_signature() == (-1,)
     assert a.to_numpy().shape == (a.size,)
@@ -136,9 +135,9 @@ def test_fuse_match_legs():
     b = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((-1, 0, 1), (1,), (-1, 1), (0, 1), (0, 1, 2)),
                   D=((2, 1, 2), (4,), (4, 6), (7, 8), (9, 10, 11)))
-    af = a.fuse_legs(axes=((0, 1), (2, 3, 4), 5))
-    bf = b.fuse_legs(axes=(0, (1, 2), 3, 4))
-    bff = bf.fuse_legs(axes=(0, (1, 2), 3))
+    af = a.fuse_legs(axes=((0, 1), (2, 3, 4), 5), mode='meta')
+    bf = b.fuse_legs(axes=(0, (1, 2), 3, 4), mode='meta')
+    bff = bf.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
 
     c1 = yast.match_legs(tensors=[a, a, a, b, b, b], legs=[2, 3, 4, 1, 2, 3], conjs=[0, 0, 0, 1, 1, 1], val='ones')
     r1 = yast.ncon([a, b, c1], [[-1, -2, 1, 2, 3, -3], [-4, 4, 5, 6, -5], [1, 2, 3, 4, 5, 6]], [0, 1, 0])
@@ -150,7 +149,7 @@ def test_fuse_match_legs():
     r3 = yast.ncon([af, bf, c3], [[-1, 1, -2], [-3, 2, 3, -4], [1, 2, 3]], [0, 1, 0])
 
     assert yast.norm(r3 - r2) < tol  # == 0.0
-    r2.unfuse_legs(axes=0, inplace=True)
+    r2 = r2.unfuse_legs(axes=0)
     assert yast.norm(r1 - r2) < tol  # == 0.0
 
 
@@ -168,12 +167,12 @@ def test_fuse_block():
 
     s1 = yast.ncon([l1, c1, r1], [[1, 2], [1, 2, 3, 4], [3, 4]])
     s1 = s1 + yast.ncon([l2, c2, r2], [[1, 2], [1, 2, 3, 4], [3, 4]])
-    l1.fuse_legs(axes=[(0, 1)], inplace=True)
-    l2.fuse_legs(axes=[(0, 1)], inplace=True)
-    c1.fuse_legs(axes=((0, 1), (2, 3)), inplace=True)
-    c2.fuse_legs(axes=((0, 1), (2, 3)), inplace=True)
-    r1.fuse_legs(axes=[(0, 1)], inplace=True)
-    r2.fuse_legs(axes=[(0, 1)], inplace=True)
+    l1 = l1.fuse_legs(axes=[(0, 1)], mode='meta')
+    l2 = l2.fuse_legs(axes=[(0, 1)], mode='meta')
+    c1 = c1.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
+    c2 = c2.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
+    r1 = r1.fuse_legs(axes=[(0, 1)], mode='meta')
+    r2 = r2.fuse_legs(axes=[(0, 1)], mode='meta')
     bl = yast.block({1: l1, 2: l2})
     bc = yast.block({(1, 1): c1, (2, 2): c2})
     br = yast.block({1: r1, 2: r2})

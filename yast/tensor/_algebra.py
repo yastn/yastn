@@ -1,5 +1,4 @@
 """ Linear operations and operations on a single yast tensor. """
-from ._auxliary import _struct
 from ._merging import _masks_for_add
 from ._tests import YastError, _test_configs_match, _get_tD_legs, _test_axes_match
 
@@ -22,11 +21,9 @@ def __add__(a, b):
         result of addition as a new tensor
     """
     _test_configs_match(a, b)
-    aA, bA, hfs, meta, c_struct = _addition_meta(a, b)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
-                    meta_fusion=a.meta_fusion, hard_fusion=hfs)
-    c.A = c.config.backend.add(aA, bA, meta)
-    return c
+    aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
+    data = a.config.backend.add(aA, bA, meta, Dsize)
+    return a._replace(hfs=hfs, struct=struct, data=data)
 
 
 def __sub__(a, b):
@@ -45,11 +42,9 @@ def __sub__(a, b):
         result of subtraction as a new tensor
     """
     _test_configs_match(a, b)
-    aA, bA, hfs, meta, c_struct = _addition_meta(a, b)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
-                    meta_fusion=a.meta_fusion, hard_fusion=hfs)
-    c.A = c.config.backend.sub(aA, bA, meta)
-    return c
+    aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
+    data = a.config.backend.sub(aA, bA, meta, Dsize)
+    return a._replace(hfs=hfs, struct=struct, data=data)
 
 
 def apxb(a, b, x=1):
@@ -68,11 +63,9 @@ def apxb(a, b, x=1):
     tensor : Tensor
     """
     _test_configs_match(a, b)
-    aA, bA, hfs, meta, c_struct = _addition_meta(a, b)
-    c = a.__class__(config=a.config, isdiag=a.isdiag, struct=c_struct,
-                    meta_fusion=a.meta_fusion, hard_fusion=hfs)
-    c.A = c.config.backend.apxb(aA, bA, x, meta)
-    return c
+    aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
+    data = a.config.backend.apxb(aA, bA, x, meta, Dsize)
+    return a._replace(hfs=hfs, struct=struct, data=data)
 
 
 def _addition_meta(a, b):
@@ -81,50 +74,82 @@ def _addition_meta(a, b):
         raise YastError('Error in add: tensor charges do not match')
     needs_mask, _ = _test_axes_match(a, b, sgn=1)
     if needs_mask:
-        sla, tDa, slb, tDb, hfs = _masks_for_add(a.config, a.struct, a.hard_fusion, b.struct, b.hard_fusion)
-        aA = a.config.backend.embed(a.A, sla, tDa)
-        bA = a.config.backend.embed(b.A, slb, tDb)
-        aDset = tuple(tDa[t] for t in a.struct.t)
-        bDset = tuple(tDb[t] for t in b.struct.t)
+        msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hfs, b.struct, b.hfs)
+        Dsize = struct_a.sl[-1][1] if len(struct_a.sl) > 0 else 0
+        Adata = a.config.backend.embed_msk(a._data, msk_a, Dsize)
+        Dsize = struct_b.sl[-1][1] if len(struct_b.sl) > 0 else 0
+        Bdata = a.config.backend.embed_msk(b._data, msk_b, Dsize)
+        del Dsize
     else:
-        aA, bA, hfs = a.A, b.A, a.hard_fusion
-        aDset, bDset = a.struct.D, b.struct.D
+        Adata, Bdata = a._data, b._data
+        struct_a, struct_b = a.struct, b.struct
+        hfs = a.hfs
 
-    if a.struct.t == b.struct.t:
-        if aDset != bDset:
+
+    if struct_a.t == struct_b.t:
+        if struct_a != struct_b:
             raise YastError('Bond dimensions do not match.')
-        c_struct = a.struct._replace(D=aDset)
-        meta = tuple((ta, 'AB') for ta in a.struct.t)
-        return aA, bA, hfs, meta, c_struct
+        c_struct = struct_a
+        Dsize = c_struct.sl[-1][1] if len(c_struct.sl) > 0 else 0
+        meta = (((0, Dsize), (0, Dsize), (0, Dsize), 'AB'),)
+        return Adata, Bdata, hfs, meta, c_struct, Dsize
 
-    ia, ib, meta = 0, 0, []
-    while ia < len(aDset) and ib < len(bDset):
-        ta, Da = a.struct.t[ia], aDset[ia]
-        tb, Db = b.struct.t[ib], bDset[ib]
+    ia, ib, meta, c_t, c_D, c_Dp, c_sl = 0, 0, [], [], [], [], []
+    low = 0
+    while ia < len(struct_a.t) and ib < len(struct_b.t):
+        ta, Da, Dpa, asl = struct_a.t[ia], struct_a.D[ia], struct_a.Dp[ia], struct_a.sl[ia]
+        tb, Db, Dpb, bsl = struct_b.t[ib], struct_b.D[ib], struct_b.Dp[ib], struct_b.sl[ib]
         if ta == tb:
             if Da != Db:
                 raise YastError('Bond dimensions do not match.')
-            meta.append((ta, Da, 'AB'))
+            high = low + Dpa
+            meta.append(((low, high), asl, bsl, 'AB'))
+            c_t.append(ta)
+            c_D.append(Da)
+            c_Dp.append(Dpa)
+            c_sl.append((low, high))
+            low = high
             ia += 1
             ib += 1
         elif ta < tb:
-            meta.append((ta, Da, 'A'))
+            high = low + Dpa
+            meta.append(((low, high), asl, None, 'A'))
+            c_t.append(ta)
+            c_D.append(Da)
+            c_Dp.append(Dpa)
+            c_sl.append((low, high))
+            low = high
             ia += 1
         else:
-            meta.append((tb, Db, 'B'))
+            high = low + Dpb
+            meta.append(((low, high), None, bsl, 'B'))
+            c_t.append(tb)
+            c_D.append(Db)
+            c_Dp.append(Dpb)
+            c_sl.append((low, high))
+            low = high
             ib += 1
-    for ta, Da in zip(a.struct.t[ia:], aDset[ia:]):
-        meta.append((ta, Da, 'A'))
-    for tb, Db in zip(b.struct.t[ib:], bDset[ib:]):
-        meta.append((tb, Db, 'B'))
+    for ta, Da, Dpa, asl in zip(struct_a.t[ia:], struct_a.D[ia:], struct_a.Dp[ia:], struct_a.sl[ia:]):
+        high = low + Dpa
+        meta.append(((low, high), asl, None, 'A'))
+        c_t.append(ta)
+        c_D.append(Da)
+        c_Dp.append(Dpa)
+        c_sl.append((low, high))
+        low = high
+    for tb, Db, Dpb, bsl in zip(struct_b.t[ib:], struct_b.D[ib:], struct_b.Dp[ib:], struct_b.sl[ib:]):
+        high = low + Dpb
+        meta.append(((low, high), None, bsl, 'B'))
+        c_t.append(tb)
+        c_D.append(Db)
+        c_Dp.append(Dpb)
+        c_sl.append((low, high))
+        low = high
 
-    c_t = tuple(t for t, _, _ in meta)
-    c_D = tuple(D for _, D, _ in meta)
-    meta = tuple((t, ab) for t, _, ab in meta)
-    c_struct = _struct(t=c_t, D=c_D, s=a.struct.s, n=a.struct.n)
-    if any(ab != 'AB' for _, ab in meta):
+    c_struct = struct_a._replace(t=tuple(c_t), D=tuple(c_D), Dp=tuple(c_Dp), sl=tuple(c_sl))
+    if any(mt[3] != 'AB' for mt in meta):
         _get_tD_legs(c_struct)
-    return aA, bA, hfs, meta, c_struct
+    return Adata, Bdata, hfs, meta, c_struct, high
 
 
 def __lt__(a, number):
@@ -142,9 +167,8 @@ def __lt__(a, number):
     tensor : Tensor
         result of logical element-wise operation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: x < number for ind, x in a.A.items()}
-    return c
+    data = a._data < number
+    return a._replace(data=data)
 
 
 def __gt__(a, number):
@@ -162,9 +186,8 @@ def __gt__(a, number):
     tensor : Tensor
         result of logical element-wise operation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: x > number for ind, x in a.A.items()}
-    return c
+    data = a._data > number
+    return a._replace(data=data)
 
 
 def __le__(a, number):
@@ -182,9 +205,8 @@ def __le__(a, number):
     tensor : Tensor
         result of logical element-wise operation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: x <= number for ind, x in a.A.items()}
-    return c
+    data = a._data <= number
+    return a._replace(data=data)
 
 
 def __ge__(a, number):
@@ -202,9 +224,8 @@ def __ge__(a, number):
     tensor : Tensor
         result of logical element-wise operation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: x >= number for ind, x in a.A.items()}
-    return c
+    data = a._data >= number
+    return a._replace(data=data)
 
 
 def __mul__(a, number):
@@ -220,9 +241,8 @@ def __mul__(a, number):
     tensor : Tensor
         result of multipcilation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: number * x for ind, x in a.A.items()}
-    return c
+    data = number * a._data
+    return a._replace(data=data)
 
 
 def __rmul__(a, number):
@@ -254,9 +274,8 @@ def __pow__(a, exponent):
     tensor : Tensor
         result of element-wise exponentiation as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: x**exponent for ind, x in a.A.items()}
-    return c
+    data = a._data ** exponent
+    return a._replace(data=data)
 
 
 def __truediv__(a, number):
@@ -272,9 +291,9 @@ def __truediv__(a, number):
     tensor : Tensor
         result of element-wise division  as a new tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion, hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {ind: x / number for ind, x in a.A.items()}
-    return c
+    data = a._data / number
+    return a._replace(data=data)
+
 
 
 def __abs__(a):
@@ -286,10 +305,9 @@ def __abs__(a):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.absolute(a.A)
-    return c
+    data = a.config.backend.absolute(a._data)
+    return a._replace(data=data)
+
 
 
 def real(a):
@@ -304,10 +322,8 @@ def real(a):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {t: a.config.backend.real(x) for t, x in a.A.items()}
-    return c
+    data = a.config.backend.real(a._data)
+    return a._replace(data=data)
 
 
 def imag(a):
@@ -321,10 +337,8 @@ def imag(a):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = {t: a.config.backend.imag(x) for t, x in a.A.items()}
-    return c
+    data = a.config.backend.imag(a._data)
+    return a._replace(data=data)
 
 
 def sqrt(a):
@@ -335,10 +349,8 @@ def sqrt(a):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.sqrt(a.A)
-    return c
+    data = a.config.backend.sqrt(a._data)
+    return a._replace(data=data)
 
 
 def rsqrt(a, cutoff=0):
@@ -356,10 +368,8 @@ def rsqrt(a, cutoff=0):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.rsqrt(a.A, cutoff=cutoff)
-    return c
+    data = a.config.backend.rsqrt(a._data, cutoff=cutoff)
+    return a._replace(data=data)
 
 
 def reciprocal(a, cutoff=0):
@@ -377,10 +387,8 @@ def reciprocal(a, cutoff=0):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.reciprocal(a.A, cutoff=cutoff)
-    return c
+    data = a.config.backend.reciprocal(a._data, cutoff=cutoff)
+    return a._replace(data=data)
 
 
 def exp(a, step=1.):
@@ -398,7 +406,5 @@ def exp(a, step=1.):
     -------
     tensor: Tensor
     """
-    c = a.__class__(config=a.config, isdiag=a.isdiag, meta_fusion=a.meta_fusion,
-        hard_fusion=a.hard_fusion, struct=a.struct)
-    c.A = a.config.backend.exp(a.A, step)
-    return c
+    data = a.config.backend.exp(a._data, step)
+    return a._replace(data=data)
