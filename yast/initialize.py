@@ -223,16 +223,19 @@ def load_from_hdf5(config, file, path):
     path: TODO
     """
     g = file.get(path)
-    struct = _struct(s=g.get('s')[:], n=g.get('n')[:])
+    c_isdiag = bool(g.get('isdiag')[:][0])
+    c_n = tuple(g.get('n')[:])
+    c_s = tuple(g.get('s')[:])
+    c_t = tuple(tuple(x.flat) for x in g.get('ts')[:])
+    c_D = tuple(tuple(x.flat) for x in g.get('Ds')[:])
+    c_Dp = tuple(x[0] for x in c_D) if c_isdiag else tuple(np.prod(c_D, axis=1))
+    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+    struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+
     mfs = eval(tuple(file.get(path+'/mfs').keys())[0])
     hfs = tuple(_Fusion(**hf) for hf in literal_eval(tuple(g.get('hfs').keys())[0]))
-    
-    a = Tensor(config=config, struct=struct, isdiag=bool(g.get('isdiag')[:][0]),
-                hard_fusion=hfs, meta_fusion=mfs)
-                
+    c = Tensor(config=config, struct=struct, mfs=mfs, hfs=hfs)
 
-    ts = g.get('ts')[:]
-    Ds = g.get('Ds')[:]
     vmat = g.get('matrix')[:]
     c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name, device=c.device)
     c.is_consistent()

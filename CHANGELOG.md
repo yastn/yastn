@@ -141,6 +141,9 @@
 - new function `einsum` (for now a place holder doing nothing).
 - new function `move_leg` which is an alias to `moveaxis`
 
+v0.9
+  the last version employing dictionary of blocks befor the transition to a single 1d data structure
+
 13-03-2022
 - Transition to 1d data structure
 - dtype and device removed from config
