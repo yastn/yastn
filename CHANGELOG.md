@@ -151,7 +151,7 @@
 - new function `grad()` that generates gradient yast tensor
 
 07-04-2022
-- `apply_mask` replaces function `mask`. 
+- `apply_mask` replaces function `mask`.
 - `apply_mask` and `broadcast` take diagonal tensor (to be use as a mask or to broadcast) as the first argument. 
   Previously it was the second argument.
 - `apply_mask` and `broadcast` can apply the same mask to a few tensors in a single-line execution.
@@ -161,3 +161,7 @@
  - `svd_with_truncation` and `eigh_with_truncation` combine pure `svd` with `truncation_mask` and `apply_mask`
  - `broadcast` does not take conj argument anymore
  - `svd_lowrank` is depreciated. Call it though `policy='lowrank'` in `svd`
+
+01-05-2022
+- svd_with_truncation can take mask-generating funcion as an argument
+- function `truncation_mask_multiplets` to retain multiplets in generating mask for truncation
