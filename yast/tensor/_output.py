@@ -36,10 +36,10 @@ def save_to_hdf5(a, file, path):
     ----------
     ADD DESCRIPTION
     """
-    vec, _ = a.compress_to_1d()
-    hfs = [hf._asdict() for hf in a.hard_fusion]
+    _d = a.config.backend.to_numpy(a._data)
+    hfs = [hf._asdict() for hf in a.hfs]
     file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
-    file.create_group(path+'/mfs/'+str(a.meta_fusion))
+    file.create_group(path+'/mfs/'+str(a.mfs))
     file.create_group(path+'/hfs/'+str(hfs))
     file.create_dataset(path+'/n', data=a.struct.n)
     file.create_dataset(path+'/s', data=a.struct.s)
