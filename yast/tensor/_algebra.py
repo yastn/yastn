@@ -1,5 +1,4 @@
 """ Linear operations and operations on a single yast tensor. """
-from ._auxliary import _struct
 from ._merging import _masks_for_add
 from ._tests import YastError, _test_configs_match, _get_tD_legs, _test_axes_match
 
@@ -147,7 +146,7 @@ def _addition_meta(a, b):
         c_sl.append((low, high))
         low = high
 
-    c_struct = _struct(s=struct_a.s, n=struct_a.n, t=tuple(c_t), D=tuple(c_D), Dp=tuple(c_Dp), sl=tuple(c_sl))
+    c_struct = struct_a._replace(t=tuple(c_t), D=tuple(c_D), Dp=tuple(c_Dp), sl=tuple(c_sl))
     if any(mt[3] != 'AB' for mt in meta):
         _get_tD_legs(c_struct)
     return Adata, Bdata, hfs, meta, c_struct, high

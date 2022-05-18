@@ -17,7 +17,7 @@ setup(
     author_email='marek.rams@uj.edu.pl',
     license='Apache License 2.0',
     platform=['any'],
-    python_requires=('>=3.7.0'),
+    python_requires=('>=3.6.5'),
     install_requires=requirements,
     description=description,
     long_description=long_description,

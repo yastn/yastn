@@ -141,6 +141,9 @@
 - new function `einsum` (for now a place holder doing nothing).
 - new function `move_leg` which is an alias to `moveaxis`
 
+v0.9
+  the last version employing dictionary of blocks befor the transition to a single 1d data structure
+
 13-03-2022
 - Transition to 1d data structure
 - dtype and device removed from config
@@ -149,3 +152,19 @@
 - new function '__setitem__()' that gives direct access to change existing blocks
 - in rsqrt(x, cutoff) cutoff is done with respect to x, not sqrt(x)
 - new function `grad()` that generates gradient yast tensor
+
+07-04-2022
+- `apply_mask` replaces function `mask`.
+- `apply_mask` and `broadcast` take diagonal tensor (to be use as a mask or to broadcast) as the first argument. 
+  Previously it was the second argument.
+- `apply_mask` and `broadcast` can apply the same mask to a few tensors in a single-line execution.
+- `svd` and `eigh` do not support truncation
+- new function `truncation_mask` generates a mask tensor that can be used for truncation, 
+  but this is not the only way such mask can be obtianed.
+ - `svd_with_truncation` and `eigh_with_truncation` combine pure `svd` with `truncation_mask` and `apply_mask`
+ - `broadcast` does not take conj argument anymore
+ - `svd_lowrank` is depreciated. Call it though `policy='lowrank'` in `svd`
+
+01-05-2022
+- svd_with_truncation can take mask-generating funcion as an argument
+- function `truncation_mask_multiplets` to retain multiplets in generating mask for truncation

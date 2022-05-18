@@ -35,6 +35,10 @@ def set_num_threads(num_threads):
     pass
 
 
+def grad(x):
+    warnings.warn("backend_np does not support automatic differentiation.", Warning)
+    return None
+
 ###################################
 #     single tensor operations    #
 ###################################
@@ -74,9 +78,6 @@ def diag_create(x, p=0):
 
 def diag_get(x):
     return np.diag(x).copy()
-
-
-
 
 
 def count_greater(x, cutoff):
@@ -140,20 +141,17 @@ def norm(data, p):
     return max(np.abs(data)) if len(data) > 0  else np.float64(0.)
 
 
-def entropy(A, alpha=1, tol=1e-12):
+def entropy(data, alpha=1, tol=1e-12):
     """ von Neuman or Renyi entropy from svd's"""
-    Snorm = np.sqrt(np.sum([np.sum(x ** 2) for x in A.values()]))
+    Snorm = np.linalg.norm(data)
     if Snorm > 0:
-        Smin = min([min(x) for x in A.values()])
-        ent = []
-        for x in A.values():
-            x = x / Snorm
-            x = x[x > tol]
-            if alpha == 1:
-                ent.append(-2 * np.sum(x * x * np.log2(x)))
-            else:
-                ent.append(np.sum(x**(2 * alpha)))
-        ent = np.sum(ent)
+        Smin = min(data)
+        data = data / Snorm
+        data = data[data > tol]
+        if alpha == 1:
+            ent = -2 * np.sum(data * data * np.log2(data))
+        else:
+            ent = np.sum(data **(2 * alpha))
         if alpha != 1:
             ent = np.log2(ent) / (1 - alpha)
         return ent, Smin, Snorm
@@ -238,11 +236,7 @@ def trace_with_mask(data, order, meta, Dsize, tcon, msk12):
     return newdata
 
 
-def transpose(data, axes, meta_transpose):
-    newdata = np.zeros_like(data)
-    for sln, slo, Do in meta_transpose:
-        newdata[slice(*sln)] = data[slice(*slo)].reshape(Do).transpose(axes).ravel()
-    return newdata
+
 
 
 def rsqrt(data, cutoff=0):
@@ -271,88 +265,61 @@ def absolute(data):
     return np.abs(data)
 
 
-def svd_lowrank(A, meta, D_block, n_iter=60, k_fac=6):
-    U, S, V = {}, {}, {}
-    for (iold, iU, iS, iV) in meta:
-        k = min(min(A[iold].shape), D_block)
-        U[iU], S[iS], V[iV] = fbpca.pca(A[iold], k=k, raw=True, n_iter=n_iter, l=k_fac * k)
-    return U, S, V
+def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
+    Udata = np.empty((sizes[0],), dtype=data.dtype)
+    Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
+    Vdata = np.empty((sizes[2],), dtype=data.dtype)
+    for (sl, D, slU, DU, slS, slV, DV) in meta:
+        k = slS[1] - slS[0]
+        U, S, V = fbpca.pca(data[slice(*sl)].reshape(D), k=k, raw=True, n_iter=n_iter, l=k_fac * k)
+        Udata[slice(*slU)].reshape(DU)[:] = U
+        Sdata[slice(*slS)] = S
+        Vdata[slice(*slV)].reshape(DV)[:] = V
+    return Udata, Sdata, Vdata
 
 
-def svd(A, meta):
-    U, S, V = {}, {}, {}
-    for (iold, iU, iS, iV) in meta:
+def svd(data, meta, sizes, **kwargs):
+    Udata = np.empty((sizes[0],), dtype=data.dtype)
+    Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
+    Vdata = np.empty((sizes[2],), dtype=data.dtype)
+    for (sl, D, slU, DU, slS, slV, DV) in meta:
         try:
-            U[iU], S[iS], V[iV] = scipy.linalg.svd(A[iold], full_matrices=False)
+            U, S, V = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False)
         except scipy.linalg.LinAlgError:  # pragma: no cover
-            U[iU], S[iS], V[iV] = scipy.linalg.svd(A[iold], full_matrices=False, lapack_driver='gesvd')
-    return U, S, V
+            U, S, V = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, lapack_driver='gesvd')
+        Udata[slice(*slU)].reshape(DU)[:] = U
+        Sdata[slice(*slS)] = S
+        Vdata[slice(*slV)].reshape(DV)[:] = V
+    return Udata, Sdata, Vdata
 
 
-def eigh(A, meta=None):
-    S, U = {}, {}
+def eigh(data, meta=None, sizes=(1, 1)):
+    Sdata = np.zeros((sizes[0],), dtype=DTYPE['float64'])
+    Udata = np.zeros((sizes[1],), dtype=data.dtype)
     if meta is not None:
-        for (ind, indS, indU) in meta:
-            S[indS], U[indU] = np.linalg.eigh(A[ind])
-    else:
-        S, U = np.linalg.eigh(A)
-    return S, U
+        for (sl, D, slU, DU, slS) in meta:
+            S, U = np.linalg.eigh(data[slice(*sl)].reshape(D))
+            Sdata[slice(*slS)] = S
+            Udata[slice(*slU)].reshape(DU)[:] = U
+        return Sdata, Udata
+    return np.linalg.eigh(data)  # S, U
 
 
-def svd_S(A):
-    S = {}
-    for ind in A:
-        try:
-            S[ind] = scipy.linalg.svd(A[ind], full_matrices=False, compute_uv=False)
-        except scipy.linalg.LinAlgError:  # pragma: no cover
-            S[ind] = scipy.linalg.svd(A[ind], full_matrices=False, lapack_driver='gesvd', compute_uv=False)
-    return S
-
-
-def qr(A, meta):
-    Q, R = {}, {}
-    for (ind, indQ, indR) in meta:
-        Q[indQ], R[indR] = scipy.linalg.qr(A[ind], mode='economic')
-        sR = np.sign(np.real(np.diag(R[indR])))
+def qr(data, meta, sizes):
+    Qdata = np.empty((sizes[0],), dtype=data.dtype)
+    Rdata = np.empty((sizes[1],), dtype=data.dtype)
+    for (sl, D, slQ, DQ, slR, DR) in meta:
+        Q, R = scipy.linalg.qr(data[slice(*sl)].reshape(D), mode='economic')
+        sR = np.sign(np.real(np.diag(R)))
         sR[sR == 0] = 1
-        # positive diag of R
-        Q[indQ] = Q[indQ] * sR
-        R[indR] = sR.reshape([-1, 1]) * R[indR]
-    return Q, R
+        Qdata[slice(*slQ)].reshape(DQ)[:] = Q * sR  # positive diag of R
+        Rdata[slice(*slR)].reshape(DR)[:] = sR.reshape([-1, 1]) * R
+    return Qdata, Rdata
 
 
-# def rq(A):
-#     R, Q = {}, {}
-#     for ind in A:
-#         R[ind], Q[ind] = scipy.linalg.rq(A[ind], mode='economic')
-#         sR = np.sign(np.real(np.diag(R[ind])))
-#         sR[sR == 0] = 1
-#         # positive diag of R
-#         R[ind], Q[ind] = R[ind] * sR, sR.reshape([-1, 1]) * Q[ind]
-#     return R, Q
-
-
-def select_global_largest(S, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
-    if ordering == 'svd':
-        s_all = np.hstack([S[ind][:D_keep[ind]] for ind in S])
-    elif ordering == 'eigh':
-        s_all = np.hstack([S[ind][-D_keep[ind]:] for ind in S])
-    Darg = D_total + int(keep_multiplets)
-    order = s_all.argsort()[-1:-Darg-1:-1]
-    if keep_multiplets:  # if needed, preserve multiplets within each sector
-        s_all = s_all[order]
-        gaps = np.abs(s_all)
-        # compute gaps and normalize by larger singular value. Introduce cutoff
-        gaps = np.abs(gaps[:len(s_all) - 1] - gaps[1:len(s_all)]) / gaps[0]  # / (gaps[:len(values) - 1] + 1.0e-16)
-        gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
-        if gaps[D_total - 1] < eps_multiplet:
-            # the chi is within the multiplet - find the largest chi_new < chi
-            # such that the complete multiplets are preserved
-            for i in range(D_total - 1, -1, -1):
-                if gaps[i] > eps_multiplet:
-                    order = order[:i + 1]
-                    break
-    return order
+def nth_largest(data, n):
+    return np.partition(data, -n)[-n]
+    # return np.argsort(data)
 
 
 def eigs_which(val, which):
@@ -366,22 +333,11 @@ def eigs_which(val, which):
     return (val.real).argsort()
 
 
-def range_largest(D_keep, D_total, ordering):
-    if ordering == 'svd':
-        return (0, D_keep)
-    if ordering == 'eigh':
-        return (D_total - D_keep, D_total)
-
-
-def maximum(A):
-    """ maximal element of A """
-    return max(np.max(x) for x in A.values())
-
-
 def embed_msk(data, msk, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
     newdata[msk] = data
     return newdata
+
 
 def embed_slc(data, meta, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
@@ -431,12 +387,6 @@ def apxb(Adata, Bdata, x, meta, Dsize):
     return newdata
 
 
-dot_dict = {(0, 0): lambda x, y: x @ y,
-            (0, 1): lambda x, y: x @ y.conj(),
-            (1, 0): lambda x, y: x.conj() @ y,
-            (1, 1): lambda x, y: x.conj() @ y.conj()}
-
-
 def apply_slice(data, slcn, slco):
     Dsize = slcn[-1][1] if len(slcn) > 0 else 0
     newdata = np.zeros((Dsize,), dtype=data.dtype)
@@ -445,9 +395,8 @@ def apply_slice(data, slcn, slco):
     return newdata
 
 
-def vdot(Adata, Bdata, cc):
-    f = dot_dict[cc]  # proper conjugations
-    return f(Adata, Bdata)
+def vdot(Adata, Bdata):
+    return Adata @ Bdata
 
 
 def diag_1dto2d(Adata, meta, Dsize):
@@ -464,27 +413,30 @@ def diag_2dto1d(Adata, meta, Dsize):
     return newdata
 
 
-def dot(A, B, cc, meta_dot):
-    f = dot_dict[cc]  # proper conjugations
-    C = {}
-    for (out, ina, inb) in meta_dot:
-        C[out] = f(A[ina], B[inb])
-    return C
+def dot(Adata, Bdata, meta_dot, Dsize):
+    newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
+    for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
+        np.matmul(Adata[slice(*sla)].reshape(Da), \
+                  Bdata[slice(*slb)].reshape(Db), \
+                  out=newdata[slice(*slc)].reshape(Dc))
+    return newdata
 
 
-dotdiag_dict = {(0, 0): lambda x, y, dim: x * y.reshape(dim),
-                (0, 1): lambda x, y, dim: x * y.reshape(dim).conj(),
-                (1, 0): lambda x, y, dim: x.conj() * y.reshape(dim),
-                (1, 1): lambda x, y, dim: x.conj() * y.reshape(dim).conj()}
+def dot_with_mask(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
+    newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
+    for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
+        np.matmul(Adata[slice(*sla)].reshape(Da)[:, msk_a[ia]], \
+                  Bdata[slice(*slb)].reshape(Db)[msk_b[ib], :], \
+                  out=newdata[slice(*slc)].reshape(Dc))
+    return newdata
 
 
-def dot_diag(Adata, Bdata, cc, meta, Dsize, axis, a_ndim):
+def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
-    f = dotdiag_dict[cc]
-    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
-    for sln, sla, Da, slb in meta:
-        newdata[slice(*sln)] = f(Adata[slice(*sla)].reshape(Da), Bdata[slice(*slb)], dim).ravel()
+    newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
+    for sln, slb, Db, sla in meta:
+        newdata[slice(*sln)].reshape(Db)[:] = Adata[slice(*sla)].reshape(dim) * Bdata[slice(*slb)].reshape(Db)
     return newdata
 
 
@@ -498,42 +450,56 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     return newdata
 
 
-def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
-    f = dot_dict[cc]  # proper conjugations
-    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
-    for (sln, sla, Dao, Dan, slb, Dbo, Dbn) in meta:
-        newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan), \
-                                  Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn)).ravel()
-    return newdata
+# dot_dict = {(0, 0): lambda x, y, out: np.matmul(x, y, out=out),
+#             (0, 1): lambda x, y, out: np.matmul(x, y.conj(), out=out),
+#             (1, 0): lambda x, y, out: np.matmul(x.conj(), y, out=out),
+#             (1, 1): lambda x, y, out: np.matmul(x.conj(), y.conj(), out=out)}
+#
+#
+# def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
+#     f = dot_dict[cc]  # proper conjugations
+#     newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+#     for (sln, sla, Dao, Dan, slb, Dbo, Dbn) in meta:
+#         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan), \
+#                                   Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn), None).ravel()
+#     return newdata
 
 
-def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
-    f = dot_dict[cc]  # proper conjugations
-    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
-    for (sln, sla, Dao, Dan, slb, Dbo, Dbn), tt in zip(meta, tcon):
-        newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan)[:, ma[tt]], \
-                                  Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn)[mb[tt], :]).ravel()
-    return newdata
+# def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
+#     f = dot_dict[cc]  # proper conjugations
+#     newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+#     for (sln, sla, Dao, Dan, slb, Dbo, Dbn), tt in zip(meta, tcon):
+#         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan)[:, ma[tt]], \
+#                                   Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn)[mb[tt], :], None).ravel()
+#     return newdata
+
 #####################################################
 #     block merging, truncations and un-merging     #
 #####################################################
 
+def transpose(data, axes, meta_transpose):
+    newdata = np.empty_like(data)
+    for sln, Dn, slo, Do in meta_transpose:
+        newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do).transpose(axes)
+    return newdata
 
-def merge_to_2d(data, order, meta_new, meta_mrg):
-    Anew = {u: np.zeros(Du, dtype=data.dtype) for u, Du in zip(*meta_new)}
-    for (tn, slo, Do, Dslc, Drsh) in meta_mrg:
-        Anew[tn][tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
-    return Anew
 
-
-def merge_to_1d(data, order, meta_new, meta_mrg, Dsize):
+def transpose_and_merge(data, order, meta_new, meta_mrg, Dsize):
     newdata = np.zeros((Dsize,), dtype=data.dtype)
-    for (tn, Dn, sln), (t1, gr) in zip(zip(*meta_new), groupby(meta_mrg, key=lambda x: x[0])):
+    for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
         assert tn == t1
-        temp = np.zeros(Dn, dtype=data.dtype)
+        temp = newdata[slice(*sln)].reshape(Dn)
         for (_, slo, Do, Dslc, Drsh) in gr:
-            temp[tuple(slice(*x) for x in Dslc)] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
-        newdata[slice(*sln)] = temp.ravel()
+            slcs = tuple(slice(*x) for x in Dslc)
+            temp[slcs] = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
+    return newdata
+
+
+def unmerge(data, meta):
+    newdata = np.empty_like(data)  # this does not introduce zero blocks
+    for sln, Dn, slo, Do, sub_slc in meta:
+        slcs = tuple(slice(*x) for x in sub_slc)
+        newdata[slice(*sln)].reshape(Dn)[:] = data[slice(*slo)].reshape(Do)[slcs]
     return newdata
 
 
@@ -541,7 +507,7 @@ def merge_to_dense(data, Dtot, meta):
     newdata = np.zeros(Dtot, dtype=data.dtype)
     for (sl, Dss) in meta:
         newdata[tuple(slice(*Ds) for Ds in Dss)] = data[sl].reshape(tuple(Ds[1] - Ds[0] for Ds in Dss))
-    return newdata.ravel()
+    return newdata.reshape(-1)
 
 
 def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
@@ -549,42 +515,15 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     newdata = np.zeros((Dsize,), dtype=dtype)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_block, key=lambda x: x[0])):
         assert tn == t1
-        temp = np.zeros(Dn, dtype=dtype)
         for (_, slo, Do, pos, Dslc) in gr:
-            slc = tuple(slice(*x) for x in Dslc)
-            temp[slc] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
-        newdata[slice(*sln)] = temp.ravel()
-    return newdata
-
-
-def unmerge_from_2d(A, meta, new_sl, Dsize):
-    dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
-    newdata = np.zeros((Dsize,), dtype=dtype)
-    for (indm, sl, sr), snew in zip(meta, new_sl):
-        newdata[slice(*snew)] = A[indm][slice(*sl), slice(*sr)].ravel()
-    return newdata
-
-
-def unmerge_from_2ddiag(A, meta, new_sl, Dsize):
-    dtype = next(iter(A.values())).dtype if len(A) > 0 else np.float64
-    newdata = np.zeros((Dsize,), dtype=dtype)
-    for (_, iold, slc), snew in zip(meta, new_sl):
-        newdata[slice(*snew)] = A[iold][slice(*slc)]
-    return newdata
-
-
-def unmerge_from_1d(data, meta, new_sl, Dsize):
-    newdata = np.zeros((Dsize,), dtype=data.dtype)
-    for (slo, Do, sub_slc), snew in zip(meta, new_sl):
-        newdata[slice(*snew)] = data[slice(*slo)].reshape(Do)[tuple(slice(*x) for x in sub_slc)].ravel()
+            slcs = tuple(slice(*x) for x in Dslc)
+            newdata[slice(*sln)].reshape(Dn)[slcs] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
     return newdata
 
 
 #############
 #   tests   #
 #############
-
-
 
 def is_independent(x, y):
     """

@@ -38,8 +38,10 @@ def save_to_hdf5(a, file, path):
     ADD DESCRIPTION
     """
     _d = a.config.backend.to_numpy(a._data)
+    hfs = [hf._asdict() for hf in a.hfs]
     file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
-    file.create_group(path+'/meta/'+str(a.mfs))
+    file.create_group(path+'/mfs/'+str(a.mfs))
+    file.create_group(path+'/hfs/'+str(hfs))
     file.create_dataset(path+'/n', data=a.struct.n)
     file.create_dataset(path+'/s', data=a.struct.s)
     file.create_dataset(path+'/ts', data=a.struct.t)
@@ -61,7 +63,7 @@ def compress_to_1d(a, meta=None):
             meta does not match the tensor.
     """
     if meta is None:
-        meta = {'struct': a.struct, 'isdiag': a.isdiag, 'hfs': a.hfs,
+        meta = {'struct': a.struct, 'hfs': a.hfs,
                 'mfs': a.mfs}
         return a._data, meta
     # else:
@@ -69,7 +71,7 @@ def compress_to_1d(a, meta=None):
         raise YastError("Tensor has different signature than metadata.")
     if a.struct.n != meta['struct'].n:
         raise YastError("Tensor has different tensor charge than metadata.")
-    if a.isdiag != meta['isdiag']:
+    if a.isdiag != meta['struct'].diag:
         raise YastError("Tensor has different diagonality than metadata.")
     if a.mfs != meta['mfs'] or a.hfs != meta['hfs']:
         raise YastError("Tensor has different leg fusion structure than metadata.")
@@ -260,7 +262,7 @@ def __getitem__(a, key):
     -------
     out : tensor
         The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
-        Output 1d array for diagonal tensor, outherwise reshape into n-dim array.
+        Output 1d array for diagonal tensor, otherwise reshape into n-dim array.
     """
     key = tuple(_flatten(key))
     try:
@@ -269,6 +271,7 @@ def __getitem__(a, key):
         raise YastError('tensor does not have block specify by key')
     x = a._data[slice(*a.struct.sl[ind])]
     
+    # TODO this should be reshape called from backend ?
     return x if a.isdiag else x.reshape(a.struct.D[ind])
 
 
@@ -363,7 +366,10 @@ def get_leg_charges_and_dims(a, native=False):
     """ collect information about charges and dimensions on all legs into two lists. """
     _tmp = [a.get_leg_structure(n, native=native) for n in range(a.ndim_n if native else a.ndim)]
     _tmp = [{k: lst[k] for k in sorted(lst)} for lst in _tmp]
-    ts, Ds = tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
+    ts_and_Ds= tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
+    if len(ts_and_Ds) < 1:
+        return (), ()
+    ts, Ds = ts_and_Ds
     return ts, Ds
 
 
@@ -561,7 +567,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     Dp = np.prod(Dtot, dtype=int)
     c_Dp = (Dp,)
     c_sl = ((0, Dp),)
-    c_struct = _struct(t=c_t, D=c_D, s=c_s, n=(), Dp=c_Dp, sl=c_sl)
+    c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
 

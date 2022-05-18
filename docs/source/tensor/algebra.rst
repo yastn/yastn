@@ -102,4 +102,4 @@ Spectral decompositions
 
 .. automodule:: yast.linalg
 	:noindex:
-	:members: svd, svd_lowrank, qr, eigh
+	:members: svd, svd_with_truncation, qr, eigh, eigh_with_truncation

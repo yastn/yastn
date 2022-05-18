@@ -60,9 +60,10 @@ class Tensor:
                 total charge of the tensor. In case of direct product of several
                 abelian symmetries `n` is tuple with total charge for each individual
                 symmetry
+            isdiag : bool
+                distinguish diagonal tensor as a special case of a tensor
         """
         self.config = config if isinstance(config, _config) else _config(**{a: getattr(config, a) for a in _config._fields if hasattr(config, a)})
-        self._isdiag = isdiag
 
         if 'data' in kwargs:
             self._data = kwargs['data']  # 1d container for tensor data
@@ -83,15 +84,15 @@ class Tensor:
             except TypeError:
                 n = (0,) * self.config.sym.NSYM if n is None else (n,)
             if len(n) != self.config.sym.NSYM:
-                raise YastError('n does not match the number of symmetry sectors')
-            if self.isdiag:
+                raise YastError("n does not match the number of symmetry sectors")
+            if isdiag:
                 if len(s) == 0:
                     s = (1, -1)  # default
                 if s not in ((-1, 1), (1, -1)):
-                    raise YastError("Diagonal tensor should have s = (1, -1) or (-1, 1)")
+                    raise YastError("Diagonal tensor should have s equal (1, -1) or (-1, 1)")
                 if any(x != 0 for x in n):
                     raise YastError("Tensor charge of a diagonal tensor should be 0")
-            self.struct = _struct(t=(), D=(), s=s, n=n)
+            self.struct = _struct(s=s, n=n, diag=isdiag)
 
         # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]
         try:
@@ -105,8 +106,8 @@ class Tensor:
 
     # pylint: disable=C0415
     from ._initialize import set_block, fill_tensor, __setitem__
-    from .linalg import norm, svd, svd_lowrank, eigh, qr
-    from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, mask
+    from .linalg import norm, svd, svd_with_truncation, eigh, eigh_with_truncation, qr
+    from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, apply_mask
     from ._algebra import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
     from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, move_leg, diag, grad
@@ -122,7 +123,8 @@ class Tensor:
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
 
     def _replace(self, **kwargs):
-        for arg in ('config', 'isdiag', 'struct', 'mfs', 'hfs', 'data'):
+        """ Creates a shallow copy replacing fields specified in kwargs """
+        for arg in ('config', 'struct', 'mfs', 'hfs', 'data'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
         return Tensor(**kwargs)
@@ -195,7 +197,7 @@ class Tensor:
         isdiag : bool
             ``True`` if the tensor is diagonal.
         """
-        return self._isdiag
+        return self.struct.diag
 
     @property
     def requires_grad(self):
@@ -246,7 +248,7 @@ class Tensor:
             'complex128' if tensor data are complex else 'float64'
         """
         return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
-    
+
     @property
     def data(self):
         """
