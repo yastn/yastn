@@ -376,9 +376,8 @@ class Env3(_EnvParent):
         if 'tol' in opts_svd:
             _, R0 = qr(AL, axes=(0, 1), sQ=-1)
             _, R1 = qr(AR, axes=(1, 0), Raxis=1, sQ=1)
-            _, _, _, S= svd(R0 @ R1, untruncated_S=True)
-            S.pop('D')
-            if any(st[-1] > opts_svd['tol'] * 1.1 for st in S.values()):
+            _, S, _ = svd(R0 @ R1)
+            if any(S[t][-1] > opts_svd['tol'] * 1.1 for t in S.struct.t):
                 return True
         return False
 

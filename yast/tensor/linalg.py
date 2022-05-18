@@ -1,12 +1,12 @@
 # Linalg methods for yast tensor.
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes
+from ._auxliary import _clear_axes, _unpack_axes, _struct
 from ._tests import YastError, _test_axes_all
-from ._merging import _merge_to_matrix, _unmerge_matrix, _unmerge_diagonal
+from ._merging import _merge_to_matrix, _meta_unfuse_legdec, _unmerge
 from ._merging import _leg_struct_trivial, _leg_struct_truncation, _Fusion
 from ._krylov import _expand_krylov_space
 
-__all__ = ['svd', 'svd_lowrank', 'qr', 'eigh', 'norm', 'entropy', 'expmv', 'eigs']
+__all__ = ['svd', 'svd_with_truncation', 'qr', 'eigh', 'eigh_with_truncation', 'norm', 'entropy', 'expmv', 'eigs']
 
 
 def norm(a, p='fro'):
@@ -27,71 +27,71 @@ def norm(a, p='fro'):
     return a.config.backend.norm(a._data, p)
 
 
-def svd_lowrank(a, axes=(0, 1), n_iter=60, k_fac=6, **kwargs):
+# def svd_lowrank(a, axes=(0, 1), n_iter=60, k_fac=6, **kwargs):
+#     r"""
+#     Split tensor into :math:`a \approx USV^\dag` using approximate singular value decomposition (SVD),
+#     where `U` and `V` are orthonormal and `S` is positive and diagonal matrix.
+#     The approximate SVD is computed using stochastic method (TODO add ref).
+
+#     Truncation can be based on relative tolerance, bond dimension of each block,
+#     and total bond dimension across all blocks (whichever gives smaller total dimension).
+
+#     Charge of input tensor `a` is attached to `U` if `nU` and to `Vh` otherwise.
+
+#     Parameters
+#     ----------
+#     axes: tuple
+#         Specify two groups of legs between which to perform svd, as well as
+#         their final order.
+
+#     sU: int
+#         signature of the new leg in U; equal 1 or -1. Default is 1.
+
+#     Uaxis, Vaxis: int
+#         specify which leg of U and V tensors are connecting with S. By default
+#         it is the last leg of U and the first of V.
+
+#     tol: float
+#         relative tolerance of singular values below which to truncate across all blocks.
+
+#     tol_block: float
+#         relative tolerance of singular values below which to truncate within individual blocks
+
+#     D_block: int
+#         largest number of singular values to keep in a single block.
+#         also used in lowrank svd in the backend
+
+#     D_total: int
+#         largest total number of singular values to keep.
+
+#     n_iter, k_fac: ints
+#         number of iterations and multiplicative factor of stored singular values in lowrank svd procedure
+#         (relevant options might depend on backend)
+
+#     untruncated_S: bool
+#         returns U, S, Vh, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
+
+#     Returns
+#     -------
+#     U, S, Vh: Tensor
+#         U and Vh are unitary projectors. S is real diagonal.
+#     """
+#     return svd(a, axes=axes, policy='lowrank', n_iter=n_iter, k_fac=k_fac, **kwargs)
+
+
+def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
+        tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
+        keep_multiplets=False, eps_multiplet=1e-14, policy='fullrank',
+        mask_f=None, **kwargs):
     r"""
-    Split tensor into :math:`a \approx USV` using approximate singular value decomposition (SVD),
-    where `U` and `V` are orthonormal and `S` is positive and diagonal matrix.
-    The approximate SVD is computed using stochastic method (TODO add ref).
-
-    Truncation can be based on relative tolerance, bond dimension of each block,
-    and total bond dimension across all blocks (whichever gives smaller total dimension).
-
-    Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
-
-    Parameters
-    ----------
-    axes: tuple
-        Specify two groups of legs between which to perform svd, as well as
-        their final order.
-
-    sU: int
-        signature of the new leg in U; equal 1 or -1. Default is 1.
-
-    Uaxis, Vaxis: int
-        specify which leg of U and V tensors are connecting with S. By default
-        it is the last leg of U and the first of V.
-
-    tol: float
-        relative tolerance of singular values below which to truncate across all blocks.
-
-    tol_block: float
-        relative tolerance of singular values below which to truncate within individual blocks
-
-    D_block: int
-        largest number of singular values to keep in a single block.
-        also used in lowrank svd in the backend
-
-    D_total: int
-        largest total number of singular values to keep.
-
-    n_iter, k_fac: ints
-        number of iterations and multiplicative factor of stored singular values in lowrank svd procedure
-        (relevant options might depend on backend)
-
-    untruncated_S: bool
-        returns U, S, V, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
-
-    Returns
-    -------
-    U, S, V: Tensor
-        U and V are unitary projectors. S is diagonal.
-    """
-    return svd(a, axes=axes, policy='lowrank', n_iter=n_iter, k_fac=k_fac, **kwargs)
-
-
-def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
-        tol=0, tol_block=0, D_block=np.inf, D_total=np.inf,
-        keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False,
-        policy='fullrank', **kwargs):
-    r"""
-    Split tensor into :math:`a=USV` using exact singular value decomposition (SVD),
+    Split tensor into :math:`a=USV^\dag` using exact singular value decomposition (SVD),
     where `U` and `V` are orthonormal bases and `S` is positive and diagonal matrix.
     Optionally, truncate the result.
 
     Truncation can be based on relative tolerance, bond dimension of each block,
     and total bond dimension across all blocks (whichever gives smaller total dimension).
 
-    Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
+    Charge of input tensor `a` is attached to `U` if `nU` and to `Vh` otherwise.
 
     Parameters
     ----------
@@ -119,59 +119,302 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0,
         largest total number of singular values to keep.
 
     untruncated_S: bool
-        returns U, S, V, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
+        returns U, S, Vh, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
 
     Returns
     -------
-    U, S, V: Tensor
-        U and V are unitary projectors. S is a diagonal tensor.
+    U, S, Vh: Tensor
+        U and Vh are unitary projectors. S is a real diagonal tensor.
+    """
+    U, S, V = svd(a, axes=axes, sU=sU, nU=nU, diagnostics=kwargs['diagonostics']\
+        if 'diagonostics' in kwargs else None)
+
+    if mask_f:
+        Smask = mask_f(S)
+    else:
+        Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
+                            keep_multiplets= keep_multiplets, eps_multiplet=eps_multiplet)
+
+    U, S, V = Smask.apply_mask(U, S, V, axis=(-1, 0, 0))
+
+    U = U.move_leg(source=-1, destination=Uaxis)
+    V = V.move_leg(source=0, destination=Vaxis)
+    return U, S, V
+
+
+def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **kwargs):
+    r"""
+    Split tensor into :math:`a = U @ S @ Vh` using exact singular value decomposition (SVD),
+    where `U` and `V` are orthonormal bases and `S` is positive and diagonal matrix.
+
+    Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
+
+    Parameters
+    ----------
+    axes: tuple
+        Specify two groups of legs between which to perform SVD, as well as
+        their final order.
+
+    sU: int
+        signature of the new leg in U; equal 1 or -1. Default is 1.
+
+    Uaxis, Vaxis: int
+        specify which leg of U and V tensors are connecting with S. By default
+        it is the last leg of U and the first of Vh.
+
+    Returns
+    -------
+    U, S, Vh: Tensor
+        U and Vh are unitary projectors. S is a real diagonal tensor.
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
-    s_eff = (-sU, sU)
-    Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
+    data, struct, ls_l, ls_r = _merge_to_matrix(a, axes)
 
-    if nU:
-        meta = tuple((il + ir, il + ir, ir, ir + ir) for il, ir in zip(ul, ur))
-        n_l, n_r = a.struct.n, None
-    else:
-        meta = tuple((il+ir, il+il, il, il+ir) for il, ir in zip(ul, ur))
-        n_l, n_r = None, a.struct.n
+    minD = tuple(min(ds) for ds in struct.D)
+    if policy == 'lowrank':
+        if 'D_block' not in kwargs:
+            raise YastError("lowrank policy in svd requires passing argument D_block.")
+        D_block = kwargs['D_block']
+        minD =  tuple(min(D_block, d) for d in minD) if not isinstance(D_block, dict) else \
+                tuple(min(D_block.get(t, 0), d) for t, d in zip(struct.t, minD))
 
-    Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
-    Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
-
-    U = a.__class__(config=a.config, s=Us, n=n_l,
-                    mfs=[a.mfs[ii] for ii in lout_l] + [(1,)],
-                    hfs=[a.hfs[ii] for ii in axes[0]] + [_Fusion(s=(sU,))])
-    S = a.__class__(config=a.config, s=s_eff, isdiag=True)
-    V = a.__class__(config=a.config, s=Vs, n=n_r,
-                    mfs=[(1,)] + [a.mfs[ii] for ii in lout_r],
-                    hfs=[_Fusion(s=(-sU,))] + [a.hfs[ii] for ii in axes[1]])
+    meta, Ustruct, Sstruct, Vstruct = _meta_svd(a.config, struct, minD, sU, nU)
+    sizes = tuple(x.sl[-1][1] if len(x.sl) > 0 else 0 for x in (Ustruct, Sstruct, Vstruct))
 
     if policy == 'fullrank':
-        Um, Sm, Vm = a.config.backend.svd(Am, meta)
+        Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, \
+            diagnostics=kwargs['diagnostics'] if 'diagnostics' in kwargs else None)
     elif policy == 'lowrank':
-        Um, Sm, Vm = a.config.backend.svd_lowrank(Am, meta, D_block, **kwargs)
+        Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs)
     else:
         raise YastError('svd policy should be one of (`lowrank`, `fullrank`)')
 
-    ls_s = _leg_struct_truncation(a.config,
-        Sm, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
-        keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='svd')
+    ls_s = _leg_struct_trivial(Sstruct, axis=0)
 
-    if untruncated_S:
-        uS = {k: a.config.backend.copy(v) for k, v in Sm.items()}
-        uS['D'] = ls_s.Dtot.copy()
+    Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
+    Umeta_unmerge, Ustruct = _meta_unfuse_legdec(a.config, Ustruct, [ls_l, ls_s], Us)
+    
+    Udata = _unmerge(a.config, Udata, Umeta_unmerge)
+    Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
+    Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
+    U = a._replace(struct=Ustruct, data=Udata, mfs=Umfs, hfs=Uhfs)
 
-    _unmerge_matrix(U, Um, ls_l, ls_s)
-    _unmerge_diagonal(S, Sm, ls_s)
-    _unmerge_matrix(V, Vm, ls_s, ls_r)
+    Smfs = ((1,), (1,))
+    Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
+    S = a._replace(struct=Sstruct, data=Sdata, mfs=Smfs, hfs=Shfs)
+
+    Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
+    Vmeta_unmerge, Vstruct = _meta_unfuse_legdec(a.config, Vstruct, [ls_s, ls_r], Vs)
+    Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge)
+    Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
+    Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in axes[1])
+    V = a._replace(struct=Vstruct, data=Vdata, mfs=Vmfs, hfs=Vhfs)
+
     U = U.move_leg(source=-1, destination=Uaxis)
     V = V.move_leg(source=0, destination=Vaxis)
-    return (U, S, V, uS) if untruncated_S else (U, S, V)
+    return U, S, V
+
+
+def _meta_svd(config, struct, minD, sU, nU):
+    """ 
+    meta and struct for svd 
+    U has signature = (struct.s[0], sU)
+    S has signature = (-sU, sU)
+    V has signature = (-sU, struct.s[1])
+    if nU than U carries struct.n, otherwise V
+    """
+    nsym = len(struct.n)
+    n0 = (0,) * nsym
+
+    if any(D == 0 for D in minD):
+        temp = [(at, aD, asl, mD) for at, aD, asl, mD in zip(struct.t, struct.D, struct.sl, minD) if mD > 0]
+        at, aD, asl, mD = zip(*temp) if len(temp) > 0 else ((), (), (), ())
+        struct = struct._replace(t=at, D=aD, sl=asl)
+
+    if nU and sU == struct.s[1]:
+        t_con = tuple(x[nsym:] for x in struct.t)
+    elif nU: # and -sQ == struct.s[1]
+        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
+        t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, 1:, :], (1,), -1))
+    elif sU == -struct.s[0]: # and nV (not nU)
+        t_con = tuple(x[:nsym] for x in struct.t)
+    else: # not nU and sU == struct.s[0]
+        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
+        t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, :1, :], (1,), -1))
+    Un, Vn = (struct.n, n0) if nU else (n0, struct.n)
+
+    Ut = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
+    St = tuple(y + y for y in t_con)
+    Vt = tuple(y + x[nsym:] for y, x in zip(t_con, struct.t))
+    UD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
+    SD = tuple((dm, dm) for dm in minD)
+    VD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
+    UDp = tuple(np.prod(UD, axis=1))
+    Usl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(UDp), UDp))
+
+    meta = tuple(zip(struct.sl, struct.D, Usl, UD, St, Vt, VD))
+
+    St, Vt, SD, VD = zip(*sorted(zip(St, Vt, SD, VD))) if len(St) > 0 else ((), (), (), ())
+    SDp = tuple(dd[0] for dd in SD)
+    VDp = tuple(np.prod(VD, axis=1))
+    Ssl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(SDp), SDp))
+    Vsl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(VDp), VDp))
+    Sdict = dict(zip(St, Ssl))
+    Vdict = dict(zip(Vt, Vsl))
+
+    meta = tuple((sl, d, slu, du, Sdict[ts], Vdict[tv], dv) for sl, d, slu, du, ts, tv, dv in meta)
+
+    Ustruct = _struct(s=(struct.s[0], sU), n=Un, diag=False, t=Ut, D=UD, Dp=UDp, sl=Usl)
+    Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, Dp=SDp, sl=Ssl)
+    Vstruct = _struct(s=(-sU, struct.s[1]), n=Vn, diag=False, t=Vt, D=VD, Dp=VDp, sl=Vsl)
+    return meta, Ustruct, Sstruct, Vstruct
+
+
+def truncation_mask_multiplets(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,\
+            keep_multiplets=False, eps_multiplet=1e-14):
+    """
+    Generate mask tensor based on diagonal and real tensor S.
+    It can be then used for truncation.
+
+    Per block options ``D_block`` and ``tol_block`` govern truncation of within individual blocks,
+    keeping at most D_block values which are larger than relative cutoff tol_block 
+    """
+    if not (S.isdiag and S.yast_dtype == "float64"):
+        raise YastError("Truncation_mask requires S to be real and diagonal")
+
+    # makes a copy for partial truncations; also detaches from autograd computation graph
+    Smask = S.copy()
+    Smask._data = Smask.data > float('inf') # all False ?
+    S_global_max= None
+
+    # find all multiplets in the spectrum
+    # 0) convert to plain dense numpy vector and sort in descending order
+    s = S.config.backend.to_numpy(S.data)
+    inds= np.argsort(s)[::-1].copy() # make descending
+    s = s[inds]
+
+    S_global_max= s[0]
+    D_trunc= min(sum(s > (S_global_max * tol)), D_total)
+    if D_trunc>=len(s):
+        # no truncation
+        Smask._data = S.data > -float('inf') # all True ?
+        return Smask
+
+    # compute gaps and normalize by magnitude of (abs) larger value.
+    # value of gaps[i] gives gap between i-th and i+1 the element of s
+    gaps = np.abs(s[:len(s) - 1] - s[1:len(s)])/\
+        (np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16)
+    
+    # find nearest multiplet boundary, keeping at most D_trunc elements 
+    # i-th element of gaps gives gap between i-th and (i+1)-th element of s
+    # Note, s[:D_trunc] selects D_trunc values: from 0th to (D_trunc-1)-th element
+    for i in range(D_trunc - 1, -1, -1):
+        if gaps[i] > eps_multiplet:
+            D_trunc = i+1
+            break
+
+    Smask._data[inds[:D_trunc]]= True
+
+    # check symmetry related blocks and truncate to equal length
+    active_sectors= filter( lambda x: any(Smask[x]), Smask.struct.t )
+    for t in active_sectors:
+        tn = np.array(t, dtype=int).reshape((1, 1, -1))
+        tn = tuple(S.config.sym.fuse(tn, np.array([1], dtype=int), -1)[0])
+        if t==tn: continue
+
+        common_size= min(len(Smask[t]), len(Smask[tn]))
+        # if related blocks do not have equal length
+        if common_size>len(Smask[t]):
+            # assert sum(Smask[t][common_size:])<=0 ,\
+            #     "Symmetry-related blocks do not match"
+            Smask[t][common_size:]=False
+        if common_size>len(Smask[tn]):
+            # assert sum(Smask[tn][common_size:])<=0,\
+            #     "Symmetry-related blocks do not match"
+            Smask[tn][common_size:]=False
+            
+        if not all(Smask[t][:common_size]==Smask[tn][:common_size]):
+            Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
+
+    return Smask
+
+
+def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
+             keep_multiplets=False, eps_multiplet=1e-14):
+    """
+    Generate mask tensor based on diagonal and real tensor S.
+    It can be then used for truncation.
+
+    Per block options ``D_block`` and ``tol_block`` govern truncation of within individual blocks,
+    keeping at most D_block values which are larger than relative cutoff tol_block 
+    """
+    if not (S.isdiag and S.yast_dtype == "float64"):
+        raise YastError("Truncation_mask requires S to be real and diagonal")
+
+    # makes a copy for partial truncations; also detaches from autograd computation graph
+    S = S.copy()
+    Smask = S.copy()
+
+    nsym = S.config.sym.NSYM
+    tol_null = 0. if isinstance(tol_block, dict) else tol_block
+    D_null = 0 if isinstance(D_block, dict) else D_block
+    for t, Db, sl in zip(S.struct.t, S.struct.Dp, S.struct.sl):
+        t = t[:nsym]
+        tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
+        tol_abs = tol_rel * S.config.backend.max_abs(S.data[slice(*sl)])
+        D_bl = D_block[t] if (isinstance(D_block, dict) and t in D_block) else D_null
+        D_bl = min(D_bl, Db)
+        tol_D = S.config.backend.nth_largest(S.data[slice(*sl)], D_bl)
+        tol_tru = max(tol_D, tol_abs) * (1 - 1e-15)
+        if keep_multiplets and eps_multiplet > 0:
+            while sum(S.data[slice(*sl)] > tol_tru) != sum(S.data[slice(*sl)] > (tol_tru - eps_multiplet)):
+                tol_tru = tol_tru + eps_multiplet
+        Smask.data[slice(*sl)] = S.data[slice(*sl)] > tol_tru
+
+    S._data = S.data * Smask.data
+    tol_abs = tol * S.config.backend.max_abs(S.data)
+    D_total = min(D_total, sum(Smask.data > 0))
+    tol_D = S.config.backend.nth_largest(S._data, D_total)
+
+    tol_tru = max(tol_D, tol_abs) * (1 - 1e-15)
+
+    if keep_multiplets and eps_multiplet > 0:
+        while sum(S.data > tol_tru) != sum(S.data > (tol_tru - eps_multiplet)):
+            tol_tru = tol_tru + eps_multiplet
+    Smask._data = S.data > tol_tru
+
+    if keep_multiplets:
+        pass
+        # modify mask to enforce the same D on conjugated charges
+    return Smask
+
+
+# @torch.no_grad()
+# def select_global_largest(Sdata, St, Ssl, D_keep, D_total, keep_multiplets, eps_multiplet, ordering):
+#     if ordering == 'svd':
+#         s_all = torch.cat([Sdata[slice(*sl)][:D_keep[t]] for t, sl in zip(St, Ssl)])
+#     elif ordering == 'eigh':
+#         s_all = torch.cat([Sdata[slice(*sl)][-D_keep[t]:] for t, sl in zip(St, Ssl)])
+#     values, order = torch.topk(s_all, D_total + int(keep_multiplets))
+#     # if needed, preserve multiplets within each sector
+#     # this is relevant only if higher symmetry is realized, which is not resolved
+#     # by abelian subgroup
+#     if keep_multiplets:  
+#         gaps = torch.abs(values.clone())  # regularize by discarding small values
+#         # compute gaps and normalize by larger singular value. Introduce cutoff
+#         gaps = torch.abs(gaps[:len(values) - 1] - gaps[1:len(values)]) / gaps[0]  # / (gaps[:len(values) - 1] + 1.0e-16)
+#         gaps[gaps > 1.0] = 0.  # for handling vanishing values set to exact zero
+#         if gaps[D_total - 1] < eps_multiplet:
+#             # the chi is within the multiplet - find the largest chi_new < chi
+#             # such that the complete multiplets are preserved
+#             for i in range(D_total - 1, -1, -1):
+#                 if gaps[i] > eps_multiplet:
+#                     order = order[:i + 1]
+#                     break
+#     return order
 
 
 def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
@@ -199,30 +442,164 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
-    s_eff = (-sQ, sQ)
-    Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
+    data, struct, ls_l, ls_r = _merge_to_matrix(a, axes)
+    meta, Qstruct, Rstruct = _meta_qr(a.config, struct, sQ)
+
+    sizes = tuple(x.sl[-1][1] if len(x.sl) > 0 else 0 for x in (Qstruct, Rstruct))
+    Qdata, Rdata = a.config.backend.qr(data, meta, sizes)
+
+    ls = _leg_struct_trivial(Rstruct, axis=0)
 
     Qs = tuple(a.struct.s[lg] for lg in axes[0]) + (sQ,)
+    Qmeta_unmerge, Qstruct = _meta_unfuse_legdec(a.config, Qstruct, [ls_l, ls], Qs)
+    Qdata = _unmerge(a.config, Qdata, Qmeta_unmerge)
+    Qmfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
+    Qhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sQ,)),)
+    Q = a._replace(struct=Qstruct, data=Qdata, mfs=Qmfs, hfs=Qhfs)
+
     Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in axes[1])
-    Q = a.__class__(config=a.config, s=Qs, n=a.struct.n,
-                    mfs=[a.mfs[ii] for ii in lout_l] + [(1,)],
-                    hfs=[a.hfs[ii] for ii in axes[0]] + [_Fusion(s=(sQ,))])
-    R = a.__class__(config=a.config, s=Rs,
-                    mfs=[(1,)] + [a.mfs[ii] for ii in lout_r],
-                    hfs=[_Fusion(s=(-sQ,))] + [a.hfs[ii] for ii in axes[1]])
+    Rmeta_unmerge, Rstruct = _meta_unfuse_legdec(a.config, Rstruct, [ls, ls_r], Rs)
+    Rdata = _unmerge(a.config, Rdata, Rmeta_unmerge)
+    Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
+    Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in axes[1])
+    R = a._replace(struct=Rstruct, data=Rdata, mfs=Rmfs, hfs=Rhfs)
 
-    meta = tuple((il + ir, il + ir, ir + ir) for il, ir in zip(ul, ur))
-    Qm, Rm = a.config.backend.qr(Am, meta)
-
-    ls = _leg_struct_trivial(a.config, Rm, axis=0)
-    _unmerge_matrix(Q, Qm, ls_l, ls)
-    _unmerge_matrix(R, Rm, ls, ls_r)
     Q = Q.move_leg(source=-1, destination=Qaxis)
     R = R.move_leg(source=0, destination=Raxis)
     return Q, R
 
 
-def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np.inf,
+def _meta_qr(config, struct, sQ):
+    """ 
+    meta and struct for qr. 
+    Q has signature = (struct.s[0], sQ)
+    R has signature = (-sQ, struct.s[1])
+    """
+    minD = tuple(min(ds) for ds in struct.D)
+    nsym = len(struct.n)
+    n0 = (0,) * nsym
+
+    if sQ == struct.s[1]:
+        t_con = tuple(x[nsym:] for x in struct.t)
+    else: # -sQ == struct.s[1]
+        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
+        t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, 1:, :], (1,), -1))
+
+    Qt = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
+    Rt = tuple(y + x[nsym:] for y, x in zip(t_con, struct.t))
+    QD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
+    RD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
+    QDp = tuple(np.prod(QD, axis=1))
+    Qsl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(QDp), QDp))
+
+    meta = tuple(zip(struct.sl, struct.D, Qsl, QD, Rt, RD))
+
+    Rt, RD = zip(*sorted(zip(Rt, RD))) if len(Rt) > 0 else ((), ())
+    RDp = tuple(np.prod(RD, axis=1))
+    Rsl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(RDp), RDp))
+    Rdict = dict(zip(Rt, Rsl))
+
+    meta = tuple((sl, d, slq, dq, Rdict[tr], dr) for sl, d, slq, dq, tr, dr in meta)
+    Qstruct = struct._replace(t=Qt, D=QD, Dp=QDp, sl=Qsl, s=(struct.s[0], sQ))
+    Rstruct = struct._replace(t=Rt, D=RD, Dp=RDp, sl=Rsl, s=(-sQ, struct.s[1]), n=n0)
+    return meta, Qstruct, Rstruct
+
+
+def eigh(a, axes, sU=1, Uaxis=-1):
+    r"""
+    Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
+    Optionally, truncate the resulting decomposition.
+
+    Tensor is expected to be symmetric (hermitian) with total charge 0.
+    Truncation can be based on relative tolerance, bond dimension of each block,
+    and total bond dimension across all blocks (whichever gives smaller total dimension).
+    Truncate based on tolerance only if some eigenvalues are positive -- than all negative ones are discarded.
+
+    Parameters
+    ----------
+    axes: tuple
+        Specify two groups of legs between which to perform svd, as well as their final order.
+
+    sU: int
+        signature of connecting leg in U equall 1 or -1. Default is 1.
+
+    Uaxis: int
+        specify which leg of U is the new connecting leg. By delault it is the last leg.
+
+    Returns
+    -------
+        S, U: Tensor
+            U is unitary projector. S is a diagonal tensor.
+    """
+    _test_axes_all(a, axes)
+    lout_l, lout_r = _clear_axes(*axes)
+    axes = _unpack_axes(a.mfs, lout_l, lout_r)
+
+    if not all(x == 0 for x in a.struct.n):
+        raise YastError('Charge should be zero')
+
+    data, struct, ls_l, ls_r = _merge_to_matrix(a, axes)
+
+    if ls_l != ls_r:
+        raise YastError('Something went wrong in matching the indices of the two tensors')
+
+    meta, Sstruct, Ustruct = _meta_eigh(a.config, struct, sU)
+    sizes = tuple(x.sl[-1][1] if len(x.sl) > 0 else 0 for x in (Sstruct, Ustruct))
+
+    Sdata, Udata = a.config.backend.eigh(data, meta, sizes)
+
+    ls_s = _leg_struct_trivial(Sstruct, axis=1)
+
+    Us = tuple(a.struct.s[lg] for lg in axes[0]) + (sU,)
+    Umeta_unmerge, Ustruct = _meta_unfuse_legdec(a.config, Ustruct, [ls_l, ls_s], Us)
+    Udata = _unmerge(a.config, Udata, Umeta_unmerge)
+    Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
+    Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
+    U = a._replace(struct=Ustruct, data=Udata, mfs=Umfs, hfs=Uhfs)
+
+    Smfs = ((1,), (1,))
+    Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
+    S = a._replace(struct=Sstruct, data=Sdata, mfs=Smfs, hfs=Shfs)
+
+    U = U.move_leg(source=-1, destination=Uaxis)
+    return S, U
+
+
+def _meta_eigh(config, struct, sU):
+    """ 
+    meta and struct for eigh
+    U has signature = (struct.s[0], sU)
+    S has signature = (-sU, sU)
+    """
+    nsym = len(struct.n)
+    n0 = (0,) * nsym
+
+    if sU == -struct.s[0]:
+        t_con = tuple(x[:nsym] for x in struct.t)
+    else: # and sU == struct.s[0]
+        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
+        t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, :1, :], (1,), -1))
+
+    Ut = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
+    Ustruct = struct._replace(t=Ut, s=(struct.s[0], sU))
+
+    St = tuple(y + y for y in t_con)
+    SD = struct.D
+
+    meta = tuple(zip(struct.sl, struct.D, Ustruct.sl, Ustruct.D, St))
+
+    St, SD = zip(*sorted(zip(St, SD))) if len(St) > 0 else ((), ())
+    SDp = tuple(dd[0] for dd in SD)
+    Ssl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(SDp), SDp))
+    Sdict = dict(zip(St, Ssl))
+
+    meta = tuple((sl, d, slu, du, Sdict[ts]) for sl, d, slu, du, ts in meta)
+
+    Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, Dp=SDp, sl=Ssl)
+    return meta, Sstruct, Ustruct
+
+
+def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
          keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False):
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
@@ -264,42 +641,14 @@ def eigh(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=np.inf, D_total=np
         S, U: Tensor
             U is unitary projector. S is a diagonal tensor.
     """
-    _test_axes_all(a, axes)
-    lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a.mfs, lout_l, lout_r)
+    S, U = eigh(a, axes=axes, sU=sU)
 
-    if any(x != 0 for x in a.struct.n):
-        raise YastError('Charge should be zero')
+    Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
+                            keep_multiplets= keep_multiplets, eps_multiplet=eps_multiplet)
 
-    s_eff = (-sU, sU)
-    Am, ls_l, ls_r, ul, ur = _merge_to_matrix(a, axes, s_eff)
-
-    if ul != ur or ls_l != ls_r:
-        raise YastError(
-            'Something went wrong in matching the indices of the two tensors')
-
-    Us = tuple(a.struct.s[lg] for lg in axes[0]) + (sU,)
-    S = a.__class__(config=a.config, s=(-sU, sU), isdiag=True)
-    U = a.__class__(config=a.config, s=Us,
-                    mfs=[a.mfs[ii] for ii in lout_l] + [(1,)],
-                    hfs=[a.hfs[ii] for ii in axes[0]] + [_Fusion(s=(sU,))])
-
-    # meta = (indA, indS, indU)
-    meta = tuple((il + ir, il, il + ir) for il, ir in zip(ul, ur))
-    Sm, Um = a.config.backend.eigh(Am, meta)
-
-    ls_s = _leg_struct_truncation(a.config,
-        Sm, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
-        keep_multiplets=keep_multiplets, eps_multiplet=eps_multiplet, ordering='eigh')
-
-    if untruncated_S:
-        uS = {k: a.config.backend.copy(v) for k, v in Sm.items()}
-        uS['D'] = ls_s.Dtot.copy()
-
-    _unmerge_matrix(U, Um, ls_l, ls_s)
-    _unmerge_diagonal(S, Sm, ls_s)
+    S, U = Smask.apply_mask(S, U, axis=(0, -1))
     U = U.move_leg(source=-1, destination=Uaxis)
-    return (S, U, uS) if untruncated_S else (S, U)
+    return S, U
 
 
 def entropy(a, axes=(0, 1), alpha=1):
@@ -326,19 +675,10 @@ def entropy(a, axes=(0, 1), alpha=1):
     """
     if len(a._data) == 0:
         return a.zero_of_dtype(), a.zero_of_dtype(), a.zero_of_dtype()
-
-    _test_axes_all(a, axes)
-    lout_l, lout_r = _clear_axes(*axes)
-    axes = _unpack_axes(a.mfs, lout_l, lout_r)
-
     if not a.isdiag:
-        Am, *_ = _merge_to_matrix(a, axes, (-1, 1))
-        Sm = a.config.backend.svd_S(Am)
-    else:
-        Sm = {t: a.config.backend.clone(a._data[slice(*sl)]) \
-              for t, sl in zip(a.struct.t, a.struct.sl)}
+        _, a, _ = svd(a, axes=axes)
     # entropy, Smin, normalization
-    return a.config.backend.entropy(Sm, alpha=alpha)
+    return a.config.backend.entropy(a._data, alpha=alpha)
 
 
 # Krylov based methods, handled by anonymous function decribing action of matrix on a vector

@@ -354,8 +354,8 @@ class TestSyntaxGeneral(unittest.TestCase):
         U, S, V = yast.svd(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
         U, S, V = a.svd(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
         try:
-            U, S, V = yast.svd_lowrank(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2, n_iter=5, k_fac=2)
-            U, S, V = a.svd_lowrank(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2, n_iter=5, k_fac=2)
+            U, S, V = yast.svd(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2, n_iter=5, k_fac=2, policy='lowrank')
+            U, S, V = a.svd(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2, n_iter=5, k_fac=2, policy='lowrank')
         except NameError:
             pass
 
@@ -364,8 +364,8 @@ class TestSyntaxGeneral(unittest.TestCase):
         Q, R = a.qr(axes=((0, 1), (2, 3)))
 
         D, U = yast.linalg.eigh(a2, axes=((0, 1), (2, 3)))
-        D, U = yast.eigh(a2, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
-        D, U = a2.eigh(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
+        D, U = yast.eigh_with_truncation(a2, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
+        D, U = a2.eigh_with_truncation(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
 
         # linalg
         number = a.norm()

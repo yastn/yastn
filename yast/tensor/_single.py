@@ -1,6 +1,6 @@
 """ Linear operations and operations on a single yast tensor. """
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _struct
+from ._auxliary import _clear_axes, _unpack_axes
 from ._merging import _Fusion, _flip_hf
 from ._tests import YastError, _test_axes_all
 
@@ -52,9 +52,11 @@ def to(a, device=None, dtype=None):
     tensor : Tensor
         returns a clone of the tensor residing on ``device`` in desired ``dtype``. If tensor already
         resides on ``device``, returns ``self``. This operation preserves autograd.
+
+        Makes a shallow copy of Tensor data if nothing is to change.
     """
     if dtype in (None, a.yast_dtype) and device in (None, a.device):
-        return a
+        return a._replace()
     data = a.config.backend.move_to(a._data, dtype=dtype, device=device)
     return a._replace(data=data)
 
@@ -72,7 +74,10 @@ def detach(a):
 
 
 def grad(a):
-    data = a._data.grad
+    """
+    TODO ADD description
+    """
+    data = a.config.backend.grad(a._data)
     return a._replace(data=data)
 
 
@@ -95,6 +100,8 @@ def conj(a):
     Return conjugated tensor. In particular, change the sign of the signature `s` to `-s`,
     the total charge `n` to `-n`, and complex conjugate each block of the tensor.
 
+    Follows the behavior of the backend.conj() when it comes to creating a new copy of the data.
+
     Returns
     -------
     tensor : Tensor
@@ -113,6 +120,8 @@ def conj_blocks(a):
     Complex-conjugate all blocks leaving symmetry structure (signature, blocks charge, and
     total charge) unchanged.
 
+    Follows the behavior of the backend.conj() when it comes to creating a new copy of the data.
+
     Returns
     -------
     tensor : Tensor
@@ -127,12 +136,13 @@ def flip_signature(a):
     reverse the direction of in- and out-going legs, and also the total charge
     of the tensor `n` to `-n`. Does not complex-conjugate the elements of the tensor.
 
+    Creates a shallow copy of the data.
+
     Returns
     -------
     tensor : Tensor
         clone of the tensor with modified signature `-s` and total
         charge `-n`.
-
     """
     an = np.array(a.struct.n, dtype=int).reshape((1, 1, -1))
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
@@ -147,6 +157,8 @@ def transpose(a, axes):
     Transpose tensor by permuting the order of its legs (spaces).
     Transpose can be done in-place, in which case copying of the data is not forced.
     Otherwise, new tensor is created and its data (blocks) is cloned.
+
+    Makes a shallow copy of Tensor data if the order is not changed.
 
     Parameters
     ----------
@@ -171,15 +183,15 @@ def transpose(a, axes):
     newt = tuple(tuple(x.flat) for x in tset[:, order, :])
     newD = tuple(tuple(x.flat) for x in Dset[:, order])
 
-    meta = sorted(zip(newt, newD, a.struct.Dp, a.struct.sl, a.struct.D), key=lambda x: x[0])
+    meta = sorted(zip(newt, a.struct.Dp, newD, a.struct.sl, a.struct.D), key=lambda x: x[0])
 
     c_t = tuple(mt[0] for mt in meta)
-    c_D = tuple(mt[1] for mt in meta)
-    c_Dp = tuple(mt[2] for mt in meta)
+    c_D = tuple(mt[2] for mt in meta)
+    c_Dp = tuple(mt[1] for mt in meta)
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
 
-    meta = tuple((sln, *mt[3:]) for sln, mt, in zip(c_sl, meta))
-    struct = _struct(s=c_s, n=a.struct.n, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    meta = tuple((sln, *mt[2:]) for sln, mt, in zip(c_sl, meta))
+    struct = a.struct._replace(s=c_s, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     data = a._data if a.isdiag else a.config.backend.transpose(a._data, uaxes, meta)
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
 
@@ -189,6 +201,8 @@ def move_leg(a, source, destination):
     Change the position of an axis (or a group of axes) of the tensor.
     This is a convenience function for subset of possible permutations. It
     computes the corresponding permutation and then calls :meth:`yast.Tensor.transpose`.
+
+    Makes a shallow copy of Tensor data if the order is not changed.
 
     Parameters
     ----------
@@ -234,6 +248,8 @@ def add_leg(a, axis=-1, s=1, t=None):
     Creates a new auxiliary leg that explicitly carries charge
     (or part of it) associated with the tensor.
 
+    Makes a shallow copy of Tensor data.
+
     Parameters
     ----------
         axis: int
@@ -277,6 +293,8 @@ def remove_leg(a, axis=-1):
     Removes leg of single charge with dimension one.
 
     The charge carried by that axis is added to the tensors charge.
+
+    Makes a shallow copy of Tensor data.
 
     Parameters
     ----------
@@ -328,7 +346,7 @@ def diag(a):
         #     isdiag=True -> isdiag=False                    isdiag=False -> isdiag=True
     Dp = tuple(x ** 2 for x in a.struct.Dp) if a.isdiag else tuple(D[0] for D in a.struct.D)
     sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp), Dp))
-    struct = a.struct._replace(Dp=Dp, sl=sl)
+    struct = a.struct._replace(Dp=Dp, sl=sl, diag=not a.isdiag)
 
     Dsize = sl[-1][1] if len(sl) > 0 else 0
     if a.isdiag:  # isdiag=True -> isdiag=False
@@ -337,7 +355,7 @@ def diag(a):
     else:  # isdiag=False -> isdiag=True
         meta = tuple(zip(sl, a.struct.sl, a.struct.D))
         data = a.config.backend.diag_2dto1d(a._data, meta, Dsize)
-    return a._replace(isdiag=not a.isdiag, struct=struct, data=data)
+    return a._replace(struct=struct, data=data)
 
 
 def remove_zero_blocks(a, rtol=1e-12, atol=0):
