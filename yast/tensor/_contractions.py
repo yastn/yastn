@@ -551,7 +551,52 @@ def einsum(subscripts, *operands, order='Alphabetic'):
     -------
     tensor : Tensor
     """
-    pass
+    if not isinstance(subscripts, str):
+        raise YastError('The first argument should be a string.')
+
+    subscripts = subscripts.replace(' ', '')
+
+    tmp = subscripts.split('->')
+    if len(tmp) == 1:
+        sin, sout = tmp[0], ''
+    elif len(tmp) == 2:
+        sin, sout = tmp
+    else:
+        raise YastError('Subscript should have at most one separator ->')
+
+    alphabet1 = 'ABCDEFGHIJKLMNOPQRSTUWXYZabcdefghijklmnopqrstuvwxyz'
+    alphabet2 = alphabet1 + ',*'
+    if any(v not in alphabet1 for v in sout) or \
+       any(v not in alphabet2 for v in sin):
+        raise YastError('Only alphabetic characters can be used to index legs.')
+
+    conjs = [1 if '*' in ss else 0 for ss in sin.split(',')]
+    sin = sin.replace('*', '')
+
+    if sout == '':
+        for v in sin.replace(',', ''):
+            if sin.count(v) == 1:
+                sout += v
+    elif len(sout) != len(set(sout)):
+        raise YastError('Repeated index after ->')
+
+    if order in ('Alphabetic', 'alphabetic'):
+        order = []
+        for v in sin.replace(',', ''):
+            if sin.count(v) > 1:
+                order.append(v)
+        order = ''.join(sorted(order))
+
+    din = {v: i + 1 for i, v in enumerate(order)}
+    dout = {v: -i for i, v in enumerate(sout)}
+    d = {**din, **dout}
+    d[','] = 0
+
+    if any(v not in d for v in sin):
+        raise YastError('order does not cover all contracted indices')
+    inds = [tuple(d[v] for v in ss) for ss in sin.split(',')]
+    ts = list(operands)
+    return ncon(ts, inds, conjs)
 
 
 def ncon(ts, inds, conjs=None):

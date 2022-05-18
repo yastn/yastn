@@ -30,6 +30,10 @@ def test_ncon_syntax():
     e = yast.ncon([a, b], [[1, -1, -3], [-0, -2, 1]])
     assert e.get_shape() == (8, 6, 4, 2)
 
+    # The same can be obtained using einsum function
+    e1 = yast.einsum('xbd,acx->abcd', a, b)
+    assert yast.norm(e1 - e) < tol
+
     # Network composed of several tensors can be contracted by a single ncon call,
     # including traces and conjugations
     #           _                 _                       _    _    __    __
@@ -45,7 +49,14 @@ def test_ncon_syntax():
     f = yast.ncon([a, b, c, d], [[4, -2, -0], [-3, -1, 5], [4, 3, 1, 1], [3, 2, 5, 2]],
                   conjs=(0, 1, 0, 1))
     assert f.get_shape() == (2, 4, 6, 8)
-    
+
+    # in yast.einsum(subscripts, *operands, order='Alphabetic')
+    # order specify the order of contraction, otherwise alphabetic order of contracted indices is used
+    # * can be used in einsum subscripts to conjugate respective tensor
+    # ' ' in subscripts are ignored
+    f1 = yast.einsum('nCA, *DBo, nmkk, *mlol -> ABCD', a, b, c, d, order='klmno')
+    assert yast.norm(f1 - f) < tol
+
 
 def test_ncon_basic():
     """ tests of ncon executing a series of tensor contractions. """
@@ -60,9 +71,14 @@ def test_ncon_basic():
 
     x = yast.ncon([a, b], ((1, -1, -3), (-0, -2, 1)))
     assert x.get_shape() == (4, 3, 2, 1)
+    x1 = yast.einsum('abc,dea->dbec', a, b)
+    assert yast.norm(x - x1) < tol
 
     y = yast.ncon([a, b, c, d], ((4, -2, -0), (-3, -1, 5), (4, 3, 1, 1), (3, 2, 5, 2)), (0, 1, 0, 1))
     assert y.get_shape() == (1, 2, 3, 4)
+    y1 = yast.einsum('abc, def*, aghh, gifi* -> cebd', a, b, c, d, order='higaf')
+    assert yast.norm(y - y1) < tol
+
 
     z1 = yast.ncon([e, f], ((-2, -0), (-1, -3)), conjs=[0, 1])
     z2 = yast.ncon([f, e], ((-1, -3), (-2, -0)), conjs=[1, 0])
@@ -148,5 +164,6 @@ def test_ncon_exceptions():
 
 
 if __name__ == '__main__':
+    test_ncon_syntax()
     test_ncon_basic()
     test_ncon_exceptions()
