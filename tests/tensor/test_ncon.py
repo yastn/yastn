@@ -9,7 +9,7 @@ except ImportError:
 tol = 1e-12  # pylint: disable=invalid-name
 
 
-def test_ncon_syntax():
+def test_ncon_einsum_syntax():
     # create a set of U(1)-symmetric tensors
     a = yast.rand(config=config_U1, s=[-1, 1, -1], n=0,
                   D=((20, 10), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)))
@@ -30,7 +30,7 @@ def test_ncon_syntax():
     e = yast.ncon([a, b], [[1, -1, -3], [-0, -2, 1]])
     assert e.get_shape() == (8, 6, 4, 2)
 
-    # The same can be obtained using einsum function
+    # The same can be obtained using einsum function, which tries to mimic the syntax of np.einsum
     e1 = yast.einsum('xbd,acx->abcd', a, b)
     assert yast.norm(e1 - e) < tol
 
@@ -58,7 +58,7 @@ def test_ncon_syntax():
     assert yast.norm(f1 - f) < tol
 
 
-def test_ncon_basic():
+def test_ncon_einsum_basic():
     """ tests of ncon executing a series of tensor contractions. """
     a = yast.rand(s=(1, 1, 1), D=(20, 3, 1), config=config_dense, dtype='complex128')
     b = yast.rand(s=(1, 1, -1), D=(4, 2, 20), config=config_dense, dtype='complex128')
@@ -133,7 +133,7 @@ def test_ncon_basic():
     assert abs(yast.ncon([a], [(1, 2, 2, 1)], conjs=[0]).item() - 1j) < tol
 
 
-def test_ncon_exceptions():
+def test_ncon_einsum_exceptions():
     """ capturing some exception by ncon. """
     t, D = (0, 1), (2, 3)
     a = yast.rand(config=config_U1, s=[-1, 1, -1], n=0,
@@ -164,6 +164,6 @@ def test_ncon_exceptions():
 
 
 if __name__ == '__main__':
-    test_ncon_syntax()
-    test_ncon_basic()
-    test_ncon_exceptions()
+    test_ncon_einsum_syntax()
+    test_ncon_einsum_basic()
+    test_ncon_einsum_exceptions()
