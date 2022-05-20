@@ -52,8 +52,8 @@ class Tensor:
 
         Parameters
         ----------
-            config : module
-                imported module containing configuration
+            config : module, types.SimpleNamespace, or typing.NamedTuple
+                :ref:`YAST configuration <tensor/configuration:yast configuration>`
             s : tuple
                 a signature of tensor. Also determines the number of legs
             n : int or tuple

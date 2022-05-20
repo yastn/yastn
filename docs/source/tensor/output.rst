@@ -13,4 +13,5 @@ Get information about tensor's structure and properties
    :noindex:
    :exclude-members: __init__, __new__
    :members: show_properties, print_blocks_shape, is_complex, get_rank,
-             get_tensor_charge, get_signature, get_blocks_charge, get_blocks_shape, get_shape, get_dtype
+             get_tensor_charge, get_signature, get_leg_structure, get_blocks_charge, 
+             get_blocks_shape, get_shape, get_dtype

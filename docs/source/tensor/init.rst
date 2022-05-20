@@ -1,14 +1,6 @@
 Creating symmetric YAST tensors
 ===============================
 
-YAST configuration
-------------------
-
-TODO
-
-Backend, symmetry, ...
-
-
 Initializing symmetric tensors from scratch
 -------------------------------------------
 
@@ -17,7 +9,7 @@ In this case only its rank (specified through signature) and symmetry
 needs to known when initializing such empty symmetric tensors. 
 The data, in form of non-zero blocks, can be added at later time.
 
-See examples: :ref:`examples/init:create empty tensor and fill it block by block`.
+See examples: :ref:`examples/tensor/init:create empty tensor and fill it block by block`.
 
 .. autoclass:: yast.Tensor
 	:members: __init__
@@ -30,7 +22,7 @@ Basic creation operations
 Basic creation operations such as random tensors,
 tensors filled with zeros, or diagonal identity tensors.
 
-See examples: :ref:`examples/init:create tensors from scratch`.
+See examples: :ref:`examples/tensor/init:create tensors from scratch`.
 
 .. automodule:: yast
    :members: rand, randR, randC, zeros, ones, eye
@@ -46,7 +38,7 @@ YAST follows the semantics of PyTorch with regards to creating
 differentiable `clones` or non-differentiable `copies` of symmetric
 tensors.
 
-See examples: :ref:`examples/init:clone, detach or copy tensors`.
+See examples: :ref:`examples/tensor/init:clone, detach or copy tensors`.
 
 .. autoclass:: yast.Tensor
 	:noindex:
@@ -79,7 +71,7 @@ Their export counterparts are
 	* :meth:`yast.save_to_hdf5` 
 	* :meth:`yast.compress_to_1d` 
 
-See examples: :ref:`examples/init:serialization of symmetric tensors`.
+See examples: :ref:`examples/tensor/init:serialization of symmetric tensors`.
 
 .. automodule:: yast
    :members: load_from_dict, load_from_hdf5, decompress_from_1d

@@ -9,7 +9,7 @@ through usual operations ``+``, ``-``, ``*``, ``/``.
 You can also raise each element of tensor to some power using 
 standard power operation ``**``. 
 
-See examples: :ref:`examples/algebra:basic algebra operations`.
+See examples: :ref:`examples/tensor/algebra:basic algebra operations`.
 
 Simple element-wise operations
 ------------------------------
@@ -39,7 +39,7 @@ Functions below facilitate the computation of
 or composition of such operations over several tensors.
 
 
-See examples: :ref:`examples/algebra:tensor contractions`.
+See examples: :ref:`examples/tensor/algebra:tensor contractions`.
 
 .. autoclass:: yast.Tensor
 	:exclude-members: __init__, __new__
@@ -54,7 +54,7 @@ See examples: :ref:`examples/algebra:tensor contractions`.
 Transposition
 -------------
 
-See examples: :ref:`examples/algebra:transposition`.
+See examples: :ref:`examples/tensor/algebra:transposition`.
 
 .. autoclass:: yast.Tensor
 	:exclude-members: __init__, __new__
@@ -71,7 +71,7 @@ For dense tensors, this operation corresponds to reshaping.
 
 Fusion can be used to vary compression between (unfused) symmetric tensors with many small non-zero blocks and tensors with several fused spaces having just few, but large non-zero blocks.
 
-See examples: :ref:`examples/algebra:fusion (reshaping)`.
+See examples: :ref:`examples/tensor/algebra:fusion (reshaping)`.
 
 .. autoclass:: yast.Tensor
 	:exclude-members: __init__, __new__
@@ -82,7 +82,7 @@ See examples: :ref:`examples/algebra:fusion (reshaping)`.
 Conjugation of symmetric tensors
 --------------------------------
 
-See examples: :ref:`examples/algebra:conjugation of symmetric tensors`.
+See examples: :ref:`examples/tensor/algebra:conjugation of symmetric tensors`.
 
 .. autoclass:: yast.Tensor
 	:exclude-members: __init__, __new__

@@ -20,6 +20,8 @@ def rand2(config=None, n=None, isdiag=False, legs=(), **kwargs):
 
     Parameters
     ----------
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
     s : tuple
         Signature of tensor. Also determines the number of legs
     n : int
@@ -43,7 +45,7 @@ def rand2(config=None, n=None, isdiag=False, legs=(), **kwargs):
 
     Returns
     -------
-    tensor : tensor
+    tensor : yast.Tensor
         a random instance of a :meth:`Tensor`
     """
     mfs = None
@@ -64,6 +66,8 @@ def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
 
     Parameters
     ----------
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
     s : tuple
         Signature of tensor. Also determines the number of legs
     n : int
@@ -87,7 +91,7 @@ def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
 
     Returns
     -------
-    tensor : tensor
+    tensor : yast.Tensor
         a random instance of a :meth:`Tensor`
     """
     dtype = kwargs['dtype'] if 'dtype' in kwargs else config.default_dtype
@@ -126,6 +130,8 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
 
     Parameters
     ----------
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
     s : tuple
         a signature of tensor. Also determines the number of legs
     n : int
@@ -145,7 +151,7 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
 
     Returns
     -------
-    tensor : tensor
+    tensor : yast.Tensor
         an instance of a tensor filled with zeros
     """
     mfs = None
@@ -164,6 +170,8 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
 
     Parameters
     ----------
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
     s : tuple
         a signature of tensor. Also determines the number of legs
     n : int
@@ -181,7 +189,7 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
 
     Returns
     -------
-    tensor : tensor
+    tensor : yast.Tensor
         an instance of a tensor filled with ones
     """
     mfs = None
@@ -200,6 +208,8 @@ def eye(config=None, t=(), D=(), legs=None, **kwargs):
 
     Parameters
     ----------
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
     t : list
         a list of charges for each leg,
         see :meth:`Tensor.fill_tensor` for description.
@@ -213,7 +223,7 @@ def eye(config=None, t=(), D=(), legs=None, **kwargs):
 
     Returns
     -------
-    tensor : tensor
+    tensor : yast.Tensor
         an instance of diagonal tensor filled with ones
     """
     s = ()
@@ -230,8 +240,8 @@ def load_from_dict(config=None, d=None):
 
     Parameters
     ----------
-    config: module
-            configuration with backend, symmetry, etc.
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
 
     d : dict
         Tensor stored in form of a dictionary. Typically provided by an output
@@ -261,8 +271,8 @@ def load_from_hdf5(config, file, path):
 
     Parameters
     ----------
-    config: module
-            configuration with backend, symmetry, etc.
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
     file: TODO
     path: TODO
     """
@@ -299,8 +309,8 @@ def decompress_from_1d(r1d, config, meta):
     r1d : rank-1 tensor
         1-D array (of backend type) holding serialized blocks.
 
-    config: module
-            configuration with backend, symmetry, etc.
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
 
     meta : dict
         structure of symmetric tensor. Non-zero blocks are indexed by associated charges.
