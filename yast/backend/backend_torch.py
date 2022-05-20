@@ -473,6 +473,11 @@ def apply_slice(data, slcn, slco):
 
 
 def vdot(Adata, Bdata):
+    dtype = _common_type((Adata, Bdata))
+    if dtype != Adata.dtype:
+        Adata = Adata.to(dtype=dtype)
+    if dtype != Bdata.dtype:
+        Bdata = Bdata.to(dtype=dtype)
     return Adata @ Bdata
 
 
@@ -493,6 +498,10 @@ def diag_2dto1d(data, meta, Dsize):
 
 def dot(Adata, Bdata, meta_dot, Dsize):
     dtype = _common_type((Adata, Bdata))
+    if dtype != Adata.dtype:
+        Adata = Adata.to(dtype=dtype)
+    if dtype != Bdata.dtype:
+        Bdata = Bdata.to(dtype=dtype)
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
     for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
         newdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da) @ Bdata[slice(*slb)].view(Db)
@@ -501,6 +510,10 @@ def dot(Adata, Bdata, meta_dot, Dsize):
 
 def dot_with_mask(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
     dtype = _common_type((Adata, Bdata))
+    if dtype != Adata.dtype:
+        Adata = Adata.to(dtype=dtype)
+    if dtype != Bdata.dtype:
+        Bdata = Bdata.to(dtype=dtype)
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
     for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
         newdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da)[:, msk_a[ia]] @ Bdata[slice(*slb)].view(Db)[msk_b[ib], :]
