@@ -88,7 +88,7 @@ def test_Z2_dict():
 
 
 if __name__ == "__main__":
-    test_full_hdf5()
-    test_Z2_hdf5()
+    atest_full_hdf5()
+    atest_Z2_hdf5()
     test_full_dict()
     test_Z2_dict()
