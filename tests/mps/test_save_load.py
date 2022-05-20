@@ -1,6 +1,5 @@
 """ basic procedures of single mps """
 import numpy as np
-import pytest
 import h5py
 import os
 import yast
@@ -23,6 +22,10 @@ def check_copy(psi1, psi2):
 def test_full_hdf5():
     """ Initialize random mps of full tensors and checks copying. """
     psi = ops_dense.mps_random(N=16, Dmax=15, d=2)
+    try:
+        os.remove("tmp.h5")
+    except OSError:
+        pass
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
@@ -49,6 +52,10 @@ def test_full_hdf5():
 
 def test_Z2_hdf5():
     psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
+    try:
+        os.remove("tmp.h5")
+    except OSError:
+        pass
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
