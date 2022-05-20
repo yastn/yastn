@@ -50,10 +50,11 @@ def test_ncon_einsum_syntax():
                   conjs=(0, 1, 0, 1))
     assert f.get_shape() == (2, 4, 6, 8)
 
-    # in yast.einsum(subscripts, *operands, order='Alphabetic')
-    # order specify the order of contraction, otherwise alphabetic order of contracted indices is used
-    # * can be used in einsum subscripts to conjugate respective tensor
-    # ' ' in subscripts are ignored
+    # In yast.einsum(subscripts, *operands, order='Alphabetic') 
+    # 
+    # order specifies the order of contraction, otherwise alphabetic order of contracted indices is used
+    # character '*' can be used in einsum subscripts to conjugate respective tensor
+    # spaces in subscripts are ignored
     f1 = yast.einsum('nCA, *DBo, nmkk, *mlol -> ABCD', a, b, c, d, order='klmno')
     assert yast.norm(f1 - f) < tol
 
