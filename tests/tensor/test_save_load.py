@@ -38,6 +38,10 @@ def check_to_numpy(a1, config):
 def check_to_hdf5(a):
     """ Test if two Tensor-s have the same values. """
     # os.remove("tmp.h5") remove if exists .. perhaps 'w' in the line below
+    try:
+        os.remove("tmp.h5")
+    except OSError:
+        pass
     with h5py.File('tmp.h5', 'a') as f:
         a.save_to_hdf5(f, './')
     with h5py.File('tmp.h5', 'r') as f:
