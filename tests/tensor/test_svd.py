@@ -83,11 +83,12 @@ def test_svd_complex():
 
     SS = yast.diag(S)
     assert SS.yast_dtype == 'float64'
-    if SS.config.backend.BACKEND_ID == 'torch':
-        with pytest.raises(RuntimeError):
-            US = yast.tensordot(U, SS, axes=(2, 0))  # here tensordot uses @ in the backend
-            # torch throws an error for: complex128 @ float64
-        SS = SS.to(dtype='complex128')
+    # Added manual type promotion in torch backend when @ is executed
+    # if SS.config.backend.BACKEND_ID == 'torch':
+    #     with pytest.raises(RuntimeError):
+    #         US = yast.tensordot(U, SS, axes=(2, 0))  # here tensordot uses @ in the backend
+    #         # torch throws an error for: complex128 @ float64
+    #     SS = SS.to(dtype='complex128')
     US = yast.tensordot(U, SS, axes=(2, 0))
     USV = yast.tensordot(US, V, axes=(2, 0))
     assert yast.norm(a - USV) < tol  # == 0.0
