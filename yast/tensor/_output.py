@@ -343,7 +343,7 @@ def get_leg_structure(a, axis, native=False):
 
     Returns
     -------
-        tDn : dict of {tn: Dn}
+        tDn : dict of {charge of the sector: size of the sector}
     """
     axis, = _clear_axes(axis)
     if not native:

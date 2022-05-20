@@ -23,9 +23,9 @@ allowing for automatic differentiation (autograd) on backends which provide it.
 
 - Matrix product states (MPS) and algorithms powered by YAST 
 
-   Explore the entire [MPS module](https://marekrams.gitlab.io/yast-dev/yast.mps.html#) or 
-   try out code examples running [DMRG](https://marekrams.gitlab.io/yast-dev/examples/mps/mps.html#dmrg)
-   or [TDVP](https://marekrams.gitlab.io/yast-dev/examples/mps/mps.html#tdvp) optimizations
+   Explore the entire [MPS module](https://marekrams.gitlab.io/yast/yast.mps.html#) or 
+   try out code examples running [DMRG](https://marekrams.gitlab.io/yast/examples/mps/mps.html#dmrg)
+   or [TDVP](https://marekrams.gitlab.io/yast/examples/mps/mps.html#tdvp) optimizations
 
 <br />
 
@@ -35,7 +35,7 @@ allowing for automatic differentiation (autograd) on backends which provide it.
 
 <br />
 
-### Jump to [full Documentation](https://marekrams.gitlab.io/yast/index.html) or get started with [Examples](https://marekrams.gitlab.io/yast-dev/yast.tensor.html#examples-basics-of-usage)
+### Jump to [full Documentation](https://marekrams.gitlab.io/yast/index.html) or get started with [Examples](https://marekrams.gitlab.io/yast/yast.tensor.html#examples-basics-of-usage)
 
 <br />
 
