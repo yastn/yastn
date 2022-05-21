@@ -25,7 +25,7 @@ def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, version='1site', opts_svd=None):
         assert Eng < Eng_old + tol
         Eng_old = Eng
     logging.info("%s tdvp; Energy: %0.8f / %0.8f", version, Eng, Eng_gs)
-    assert pytest.approx(Eng.item(), rel=1e-1) == Eng_gs
+    assert pytest.approx(Eng.item(), rel=2e-2) == Eng_gs
     return psi
 
 
@@ -33,9 +33,10 @@ def test_full_tdvp():
     """
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
+    ops_dense.random_seed(seed=0)
     N = 5
     dt = -.25
-    sweeps = 8
+    sweeps = 10
     D_total = 4
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
@@ -53,10 +54,11 @@ def test_Z2_tdvp():
     """
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
+    ops_Z2.random_seed(seed=0)
     N = 5
     D_total = 4
     dt = -.25
-    sweeps = 8
+    sweeps = 10
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
     logging.info(' Tensor : Z2 ')
@@ -75,10 +77,11 @@ def test_U1_tdvp():
     """
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
+    ops_U1.random_seed(seed=0)
     N = 5
     D_total = 4
     dt = -.25
-    sweeps = 8
+    sweeps = 10
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
     logging.info(' Tensor : U1 ')

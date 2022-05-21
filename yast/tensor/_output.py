@@ -38,7 +38,7 @@ def save_to_hdf5(a, file, path):
     ADD DESCRIPTION
     """
     _d = a.config.backend.to_numpy(a._data)
-    hfs = [hf._asdict() for hf in a.hfs]
+    hfs = [tuple(hf) for hf in a.hfs]
     file.create_dataset(path+'/isdiag', data=[int(a.isdiag)])
     file.create_group(path+'/mfs/'+str(a.mfs))
     file.create_group(path+'/hfs/'+str(hfs))

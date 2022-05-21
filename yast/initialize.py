@@ -287,7 +287,8 @@ def load_from_hdf5(config, file, path):
     struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
 
     mfs = eval(tuple(file.get(path+'/mfs').keys())[0])
-    hfs = tuple(_Fusion(**hf) for hf in literal_eval(str(tuple(g.get('hfs').keys())[0])))
+    hfs = tuple(_Fusion(*hf) if isinstance(hf, tuple) else _Fusion(**hf) \
+                for hf in literal_eval(tuple(g.get('hfs').keys())[0]))
     c = Tensor(config=config, struct=struct, mfs=mfs, hfs=hfs)
 
     vmat = g.get('matrix')[:]

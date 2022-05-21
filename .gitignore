@@ -1,3 +1,7 @@
+# temp files
+tmp.h5
+tmp.npy
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
