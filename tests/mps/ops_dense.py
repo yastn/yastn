@@ -7,6 +7,10 @@ except ImportError:
     from configs import config_dense
 
 
+def random_seed(seed):
+    config_dense.backend.random_seed(seed)
+
+
 def mps_random(N=2, Dmax=2, d=2, dtype='float64'):
     if isinstance(d, int):
         d = [d]

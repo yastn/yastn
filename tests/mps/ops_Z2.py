@@ -6,6 +6,10 @@ except ImportError:
     from configs import config_Z2
 
 
+def random_seed(seed):
+    config_Z2.backend.random_seed(seed)
+
+
 def mps_random(N=2, Dblock=2, total_parity=0, dtype='float64'):
     psi = yamps.Mps(N, nr_phys=1)
     tc = (0, 1)

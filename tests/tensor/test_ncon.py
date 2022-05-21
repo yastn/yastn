@@ -162,6 +162,24 @@ def test_ncon_einsum_exceptions():
     with pytest.raises(yast.YastError):
         yast.ncon([a], [(-1, -1, -0)])
         # Repeated non-positive (outgoing) index is ambiguous.
+    with pytest.raises(yast.YastError):
+        yast.einsum(a, a, order='alphabetic')
+        # The first argument should be a string
+    with pytest.raises(yast.YastError):
+        yast.einsum('xkl, xmn-> klmm -> kl', a, a)
+        # Subscript should have at most one separator ->
+    with pytest.raises(yast.YastError):
+        yast.einsum('xy;, xyn -> ;n', a, a)
+        # Only alphabetic characters can be used to index legs.
+    with pytest.raises(yast.YastError):
+        yast.einsum('-;k, -;l -> kl', a, a)
+        # Only alphabetic characters can be used to index legs.
+    with pytest.raises(yast.YastError):
+        yast.einsum('klm, klm-> mm', a, a)
+        # Repeated index after ->
+    with pytest.raises(yast.YastError):
+        yast.einsum('klm, *klm->', a, a, order='kl')
+        # order does not cover all contracted indices
 
 
 if __name__ == '__main__':

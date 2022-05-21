@@ -7,6 +7,10 @@ except ImportError:
     from configs import config_U1
 
 
+def random_seed(seed):
+    config_U1.backend.random_seed(seed)
+
+
 def mps_random(N=2, Dblocks=(2,), total_charge=1, dtype='float64'):
     Dblocks = tuple(Dblocks)
     psi = yamps.Mps(N, nr_phys=1)

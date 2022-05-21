@@ -10,13 +10,7 @@ except ImportError:
     import ops_Z2
 
 
-def check_overlap(psi1, psi2):
-    """ Test if two mps-s are the same. """
-    psi1.canonize_sweep(to='last')
-    psi2.canonize_sweep(to='last')
-    env = yamps.Env2(bra=psi1, ket=psi2)
-    env.setup(to='first')
-    assert env.measure() > .7
+tol = 1e-6
 
 
 def test_full_addition():
@@ -26,7 +20,7 @@ def test_full_addition():
 
     out0 = yamps.apxb(a=psi0, b=psi1, common_legs=(1,), x=2.)
     out1 = yamps.add(tens=[psi0, psi1], amp=[1., 2.], common_legs=(1,))
-    check_overlap(out0, out1)
+    assert yamps.measure_overlap(out0, out1) > 1 - tol
 
 
 def test_Z2_addition():
@@ -36,7 +30,7 @@ def test_Z2_addition():
 
     out0 = yamps.apxb(a=psi0, b=psi1, common_legs=(1,), x=2.)
     out1 = yamps.add(tens=[psi0, psi1], amp=[1., 2.], common_legs=(1,))
-    check_overlap(out0, out1)
+    assert yamps.measure_overlap(out0, out1) > 1 - tol
 
 
 if __name__ == "__main__":

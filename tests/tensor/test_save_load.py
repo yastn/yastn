@@ -57,24 +57,29 @@ def test_dict():
         that allows robust saving/loading with np.save/load."""
     a = yast.rand(config=config_dense)  # s=() i.e. scalar
     check_to_numpy(a, config_dense)
+    check_to_hdf5(a)
 
     a = yast.rand(config=config_U1, isdiag=False, s=(1, -1, 1),
                   t=((0, 1, 2), (0, 1, 3), (-1, 0, 1)),
                   D=((3, 5, 2), (1, 2, 3), (2, 3, 4)))
     check_to_numpy(a, config_U1)
+    check_to_hdf5(a)
 
     a = yast.randC(config=config_U1, isdiag=False, s=(1, -1, 1),
                   t=((0, 1, 2), (0, 1, 3), (-1, 0, 1)),
                   D=((3, 5, 2), (1, 2, 3), (2, 3, 4)))
-    check_to_numpy(a, config_U1) # here a is complex
+    check_to_numpy(a, config_U1) # here a is 
+    check_to_hdf5(a)
 
     a = yast.rand(config=config_U1, isdiag=True, t=(0, 1), D=(3, 5))
     check_to_numpy(a, config_U1)
+    check_to_hdf5(a)
 
     a = yast.ones(config=config_Z2xU1, s=(-1, 1, 1), n=(0, -2),
                   t=(((0, 0), (0, 2), (1, 0), (1, 2)), ((0, -2), (0, 2)), ((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2))),
                   D=((1, 2, 3, 4), (2, 1), (2, 3, 5, 4, 1, 6)))
     check_to_numpy(a, config_Z2xU1)
+    check_to_hdf5(a)
 
     a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
@@ -83,6 +88,7 @@ def test_dict():
     b = b.fuse_legs(axes=((0, 2), 1, 3), mode='hard')
     b = b.fuse_legs(axes=((0, 2), 1), mode='meta')
     check_to_numpy(b, config_U1)
+    check_to_hdf5(a)
 
 
 

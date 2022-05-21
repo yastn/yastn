@@ -35,7 +35,6 @@ def test_mask_1():
     assert len(ls) == 1 and (1,) in ls and ls[(1,)] == bd
     assert yast.norm(d0 - d1) < tol
 
-
     d00, d11 = b.apply_mask(b0, b0, axis=(-1, 0))
     assert (d00 - d0).norm() < tol
     assert (d11 - d1).norm() < tol

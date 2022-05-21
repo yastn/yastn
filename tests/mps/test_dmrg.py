@@ -11,7 +11,6 @@ except ImportError:
     import ops_Z2
     import ops_U1
 
-
 tol = 1e-6
 
 def run_dmrg(psi, H, occ, E_target, occ_target, version='1site', opts_svd=None):
@@ -35,6 +34,7 @@ def test_full_dmrg():
     """
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
+    ops_dense.random_seed(seed=0)
     N = 7
     Dmax = 8
     opts_svd = {'tol': 1e-8, 'D_total': Dmax}
@@ -55,6 +55,7 @@ def test_Z2_dmrg():
     """
     Initialize random mps of full tensors and checks canonization
     """
+    ops_Z2.random_seed(seed=0)
     N = 7
     Dmax = 8
     opts_svd = {'tol': 1e-8, 'D_total': Dmax}
@@ -78,6 +79,7 @@ def test_U1_dmrg():
     """
     Initialize random mps of full tensors and checks canonization
     """
+    ops_U1.random_seed(seed=0)
     N = 7
     Dmax = 8
     opts_svd = {'tol': 1e-8, 'D_total': Dmax}
