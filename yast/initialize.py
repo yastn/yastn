@@ -4,12 +4,67 @@
 from ast import literal_eval
 import numpy as np
 from .tensor import Tensor, YastError
-from .tensor._auxliary import _unpack_axes, _struct
+from .tensor._auxliary import _unpack_axes, _struct, _config
 from .tensor._merging import _Fusion
 
-
-__all__ = ['rand', 'rand2', 'randR', 'randC', 'zeros', 'ones', 'eye',
+__all__ = ['make_config', 'rand', 'rand2', 'randR', 'randC', 'zeros', 'ones', 'eye',
            'load_from_dict', 'load_from_hdf5',  'decompress_from_1d']
+
+# def make_config(backend= backend_np, sym=sym_none, default_device='cpu', 
+#     default_dtype='float64', fermionic= False,    
+#     default_fusion= 'meta', force_fusion= None,
+#     default_tensordot= 'hybrid', force_tensordot= None, **kwargs):
+def make_config(**kwargs):
+    r"""
+    Parameters
+    ----------
+        backend : backend module or compatible object
+            Specify ``backend`` providing Linear algebra and base dense tensors.
+            Currently support backends
+
+                * NumPy as ``yast.backend.backend_np``
+                * PyTorch as ``yast.backend.backend_torch``
+
+            Defaults to NumPy backend.
+        
+        sym : symmetry module or compatible object
+            Specify abelian symmetry. To see how YAST defines symmetries,
+            see :class:`yast.sym.sym_abelian`.
+            Defaults to ``yast.sym.sym_none``, effectively a dense tensor.
+        default_device : str
+            Base tensors can be stored on various devices as supported by ``backend`` 
+                
+                * NumPy supports only ``'cpu'`` device
+                * PyTorch supports multiple devices, see 
+                  https://pytorch.org/docs/stable/tensor_attributes.html#torch.torch.device
+        
+            If not specified, the default device is ``'cpu'``.
+
+        default_dtype: str
+            Default data type (dtype) of YAST tensors. Supported options are: 'float64', 'complex128'.
+            If not specified, the default dtype is ``'float64'``.
+        fermionic : bool or tuple[bool,...]
+            Specify behavior of swap_gate function, allowing to introduce fermionic symmetries.
+            Allowed values: ``False``, ``True``, or a tuple ``(True, False, ...)`` with one bool for each component 
+            charge vector i.e. of length sym.NSYM. Default is ``False``.
+        default_fusion: str
+            Specify default strategy to handle leg fusion: 'hard' or 'meta'. See yast.tensor.fuse_legs 
+            for details. Default is ``'meta'``.
+        force_fusion : str
+            Overrides fusion strategy provided in yast.tensor.fuse_legs. Default is ``None``.
+        default_tensordot : str
+            Specify policy used during execution of tensordot: 'merge', 'hybrid, or 'direct'.
+            See yast.tensor.tensordot for details. Default is ``'hybrid'``.
+        force_tensordot : str
+            Overrides tensordot policy that can be provided in :meth:`yast.tensordot`. Default is ``None``.
+    """
+    if "backend" not in kwargs:
+        from .backend import backend_np
+        kwargs["backend"]= backend_np
+    if "sym" not in kwargs:
+        from .sym import sym_none
+        kwargs["sym"]= sym_none
+    return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
 
 
 def rand2(config=None, n=None, isdiag=False, legs=(), **kwargs):
@@ -55,7 +110,6 @@ def rand2(config=None, n=None, isdiag=False, legs=(), **kwargs):
     a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
     a.fill_tensor(t=t, D=D, val='randR')
     return a
-
 
 
 def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
