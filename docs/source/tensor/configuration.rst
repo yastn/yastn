@@ -15,6 +15,10 @@ The configuration can be a Python module, :class:`types.SimpleNamespace`, :class
 * optional: ``default_device``, ``default_dtype``, ``default_fusion``, ``default_tensordot``,
   ``fermionic``, ``force_fusion``, ``force_tensordot``
 
-See example of such `configuration`, with description of individual options
+For easy way to generate `configurations`, a convenience function is provided
 
+.. autofunction:: yast.make_config
+
+See example module with `configuration`, using NumPy backend and U(1) symmetry, 
+ 
 .. literalinclude::  /../../tests/tensor/configs/config_U1.py
