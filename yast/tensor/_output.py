@@ -295,7 +295,7 @@ def get_leg_fusion(a, axes=None):
     return {'meta': tuple(a.mfs(n) for n in axes), 'hard': tuple(a.hfs(n) for n in axes)}
 
 
-def get_leg_structure2(a, axis, native=False):
+def get_leg(a, axis, native=False):
     r"""
     Find all charges and the corresponding bond dimension for n-th leg.
 
@@ -326,7 +326,7 @@ def get_leg_structure2(a, axis, native=False):
         if tDn[tuple(tn.flat)] != Dn:
             raise YastError('Inconsistend bond dimension of charge.')
     t, D = tuple(tDn.keys()), tuple(tDn.values())
-    return Leg(s=a.s[axis[0]], t=t, D=D)
+    return Leg(a.config, s=a.s[axis[0]], t=t, D=D)
 
 
 def get_leg_structure(a, axis, native=False):
