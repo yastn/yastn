@@ -52,11 +52,6 @@ def make_config(**kwargs):
             for details. Default is ``'meta'``.
         force_fusion : str
             Overrides fusion strategy provided in yast.tensor.fuse_legs. Default is ``None``.
-        default_tensordot : str
-            Specify policy used during execution of tensordot: 'merge', 'hybrid, or 'direct'.
-            See yast.tensor.tensordot for details. Default is ``'hybrid'``.
-        force_tensordot : str
-            Overrides tensordot policy that can be provided in :meth:`yast.tensordot`. Default is ``None``.
     """
     if "backend" not in kwargs:
         from .backend import backend_np

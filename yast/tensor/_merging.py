@@ -210,7 +210,7 @@ def _leg_struct_truncation(config, Sdata, St, Ssl,
 def fuse_legs(a, axes, mode=None):
     r"""
     Fuse groups of legs into effective legs, reducing the rank of the tensor.
-    
+
         .. note::
             Fusion can be reverted back by :meth:`yast.Tensor.unfuse_legs`
 
