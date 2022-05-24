@@ -37,5 +37,10 @@ def Leg(config, s=1, t=(), D=(), **kwargs):
     newt = tuple(tuple(x.flat) for x in sym.fuse(np.array(t).reshape((len(D), 1, sym.NSYM)), (s,), s))
     oldt = tuple(tuple(x.flat) for x in np.array(t).reshape(len(D), sym.NSYM))
     if oldt != newt:
-        raise YastError('Provided charges are outside of the natural range for symmetry')
-    return _Leg(sym=sym, s=s, t=newt, D=D)
+        raise YastError('Provided charges are outside of the natural range for specified symmetry.')
+    if len(set(newt)) != len(newt):
+        raise YastError('Repeated charge index.')
+    tD = {x: d for x, d in zip(newt, D)}
+    t = tuple(sorted(newt))
+    D = tuple(tD[x] for x in t)
+    return _Leg(sym=sym, s=s, t=t, D=D)
