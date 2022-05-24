@@ -25,7 +25,7 @@ def __matmul__(a, b):
     return tensordot(a, b, axes=(a.ndim - 1, 0))
 
 
-def tensordot(a, b, axes, conj=(0, 0), policy=None):
+def tensordot(a, b, axes, conj=(0, 0)):
     r"""
     Compute tensor dot product of two tensor along specified axes.
 
@@ -47,13 +47,7 @@ def tensordot(a, b, axes, conj=(0, 0), policy=None):
         Default is (0, 0), i.e. neither tensor is conjugated
 
     policy: str
-        method of executing contraction
-        
-            * ``merge`` merges blocks into matrices before executing matrix multiplication.
-              Typically peferable for many small blocks.
-            * ``direct`` performs the multiplication block by block.
-              Might be preferable for tensors with fewer legs, or contracting over a single axis).
-            * ``hybrid`` (default) switches between those methods using simple heuristic.
+        method of executing contraction (reserved for future extensions)
 
     Returns
     -------
