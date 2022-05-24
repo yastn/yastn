@@ -176,7 +176,7 @@ def test_algebra_fuse_hard():
     b = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
                 t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2))
     algebra_hf(lambda x, y: x / 0.5 + y * 3, a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
-    b.set_block(ts=(2, 2, 1, -2, -3, 0), Ds=(4, 6, 1, 1, 1, 3), val='randR')
+    b.set_block(ts=(2, 2, 1, -2, -3, 0), Ds=(4, 6, 1, 1, 1, 3), val='rand')
     algebra_hf(lambda x, y: x - 3 * y, a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
 
     # Z2xU1 with 4 legs

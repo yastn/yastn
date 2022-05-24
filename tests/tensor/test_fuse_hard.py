@@ -262,8 +262,8 @@ def test_fuse_mix():
     _test_fuse_mix(a)
 
     a = yast.Tensor(config=config_U1, s=(1, -1, 1, 1, -1, 1))
-    a.set_block(ts=(1, 2, -1, 2, 0, 0), Ds=(1, 2, 3, 4, 5, 6), val='randR')
-    a.set_block(ts=(2, 1, 1, -2, 1, 1), Ds=(6, 5, 4, 3, 2, 1), val='randR')
+    a.set_block(ts=(1, 2, -1, 2, 0, 0), Ds=(1, 2, 3, 4, 5, 6), val='rand')
+    a.set_block(ts=(2, 1, 1, -2, 1, 1), Ds=(6, 5, 4, 3, 2, 1), val='rand')
     _test_fuse_mix(a)
 
 

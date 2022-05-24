@@ -8,11 +8,12 @@ from .tensor._auxliary import _unpack_axes, _struct
 from .tensor._merging import _Fusion
 
 
-__all__ = ['rand', 'rand2', 'randR', 'randC', 'zeros', 'ones', 'eye',
+__all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
            'load_from_dict', 'load_from_hdf5',  'decompress_from_1d']
 
 
-def rand2(config=None, n=None, isdiag=False, legs=(), **kwargs):
+
+def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with the random numbers.
 
@@ -20,8 +21,6 @@ def rand2(config=None, n=None, isdiag=False, legs=(), **kwargs):
 
     Parameters
     ----------
-    config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yast configuration>`
     s : tuple
         Signature of tensor. Also determines the number of legs
     n : int
@@ -45,84 +44,30 @@ def rand2(config=None, n=None, isdiag=False, legs=(), **kwargs):
 
     Returns
     -------
-    tensor : yast.Tensor
+    tensor : tensor
         a random instance of a :meth:`Tensor`
     """
-    mfs = None
-    s = tuple(leg.s for leg in legs)
-    t = tuple(leg.t for leg in legs)
-    D = tuple(leg.D for leg in legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
-    a.fill_tensor(t=t, D=D, val='randR')
+    s = kwargs.pop('s') if 's' in kwargs else tuple(leg.s for leg in legs)
+    t = kwargs.pop('t') if 't' in kwargs else tuple(leg.t for leg in legs)
+    D = kwargs.pop('D') if 'D' in kwargs else tuple(leg.D for leg in legs)
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=None, **kwargs)
+    a.fill_tensor(t=t, D=D, val='rand')
     return a
 
 
-
-def rand(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
-    r"""
-    Initialize tensor with all possible blocks filled with the random numbers.
-
-    Draws from a uniform distribution in [-1, 1] or [-1, 1] + 1j * [-1, 1], depending on dtype.
-
-    Parameters
-    ----------
-    config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yast configuration>`
-    s : tuple
-        Signature of tensor. Also determines the number of legs
-    n : int
-        Total charge of the tensor
-    t : list
-        List of charges for each leg,
-        see :meth:`Tensor.fill_tensor` for description.
-    D : list
-        List of corresponding bond dimensions
-    isdiag : bool
-        Makes tensor diagonal
-    dtype : str
-        Desired dtype, overrides default_dtype specified in config
-    device : str
-        Device on which the tensor should be initialized, overrides default_device specified in config
-    legs : list
-        Specify t and D based on a list of lists of tensors and their legs.
-        e.q., legs = [[a, 0, b, 0], [a, 1], [b, 1]] gives tensor with 3 legs, whose
-        charges and dimension are consistent with specific legs of tensors a and b (simultaniously for the first leg).
-        Overrides t and D.
-
-    Returns
-    -------
-    tensor : yast.Tensor
-        a random instance of a :meth:`Tensor`
-    """
-    dtype = kwargs['dtype'] if 'dtype' in kwargs else config.default_dtype
-    if dtype == 'float64':
-        return randR(config, s, n, t, D, isdiag, **kwargs)
-    if dtype == 'complex128':
-        return randC(config, s, n, t, D, isdiag, **kwargs)
-    raise YastError('dtype should be "float64" or "complex128"')
+def randR(config=None, legs=(), n=None, isdiag=False, **kwargs):
+    if 'dtype' in kwargs:
+        del kwargs['dtype']
+    return rand(config=config, legs=legs, n=n, isdiag=isdiag, dtype='float64', **kwargs)
 
 
-def randR(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
-    """ Shortcut for rand(..., dtype='float64')"""
-    mfs = None
-    if 'legs' in kwargs:
-        t, D, s, mfs = _tD_from_legs(kwargs['legs'])
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
-    a.fill_tensor(t=t, D=D, val='randR')
-    return a
+def randC(config=None, legs=(), n=None, isdiag=False, **kwargs):
+    if 'dtype' in kwargs:
+        del kwargs['dtype']
+    return rand(config=config, legs=legs, n=n, isdiag=isdiag, dtype='float64', **kwargs)
 
 
-def randC(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
-    """ Shortcut for rand(..., dtype='complex128')"""
-    mfs = None
-    if 'legs' in kwargs:
-        t, D, s, mfs = _tD_from_legs(kwargs['legs'])
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
-    a.fill_tensor(t=t, D=D, val='randC')
-    return a
-
-
-def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
+def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with zeros.
 
@@ -130,8 +75,6 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
 
     Parameters
     ----------
-    config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yast configuration>`
     s : tuple
         a signature of tensor. Also determines the number of legs
     n : int
@@ -151,18 +94,18 @@ def zeros(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
 
     Returns
     -------
-    tensor : yast.Tensor
+    tensor : tensor
         an instance of a tensor filled with zeros
     """
-    mfs = None
-    if 'legs' in kwargs:
-        t, D, s, mfs = _tD_from_legs(kwargs['legs'])
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
+    s = kwargs.pop('s') if 's' in kwargs else tuple(leg.s for leg in legs)
+    t = kwargs.pop('t') if 't' in kwargs else tuple(leg.t for leg in legs)
+    D = kwargs.pop('D') if 'D' in kwargs else tuple(leg.D for leg in legs)
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=None, **kwargs)
     a.fill_tensor(t=t, D=D, val='zeros')
     return a
 
 
-def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
+def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with ones.
 
@@ -170,8 +113,6 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
 
     Parameters
     ----------
-    config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yast configuration>`
     s : tuple
         a signature of tensor. Also determines the number of legs
     n : int
@@ -189,18 +130,18 @@ def ones(config=None, s=(), n=None, t=(), D=(), isdiag=False, **kwargs):
 
     Returns
     -------
-    tensor : yast.Tensor
+    tensor : tensor
         an instance of a tensor filled with ones
     """
-    mfs = None
-    if 'legs' in kwargs:
-        t, D, s, mfs = _tD_from_legs(kwargs['legs'])
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
+    s = kwargs.pop('s') if 's' in kwargs else tuple(leg.s for leg in legs)
+    t = kwargs.pop('t') if 't' in kwargs else tuple(leg.t for leg in legs)
+    D = kwargs.pop('D') if 'D' in kwargs else tuple(leg.D for leg in legs)
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=None, **kwargs)
     a.fill_tensor(t=t, D=D, val='ones')
     return a
 
 
-def eye(config=None, t=(), D=(), legs=None, **kwargs):
+def eye(config=None, legs=(), n=None, **kwargs):
     r"""
     Initialize diagonal tensor with all possible blocks filled with ones.
 
@@ -208,8 +149,6 @@ def eye(config=None, t=(), D=(), legs=None, **kwargs):
 
     Parameters
     ----------
-    config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yast configuration>`
     t : list
         a list of charges for each leg,
         see :meth:`Tensor.fill_tensor` for description.
@@ -223,13 +162,14 @@ def eye(config=None, t=(), D=(), legs=None, **kwargs):
 
     Returns
     -------
-    tensor : yast.Tensor
+    tensor : tensor
         an instance of diagonal tensor filled with ones
     """
     s = ()
-    if legs is not None:
-        t, D, s, _ = _tD_from_legs(legs)
-    a = Tensor(config=config, s=s, isdiag=True, **kwargs)
+    s = kwargs.pop('s') if 's' in kwargs else tuple(leg.s for leg in legs)
+    t = kwargs.pop('t') if 't' in kwargs else tuple(leg.t for leg in legs)
+    D = kwargs.pop('D') if 'D' in kwargs else tuple(leg.D for leg in legs)
+    a = Tensor(config=config, s=s, n=n, isdiag=True, mfs=None, **kwargs)
     a.fill_tensor(t=t, D=D, val='ones')
     return a
 
@@ -286,7 +226,7 @@ def load_from_hdf5(config, file, path):
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
     struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
 
-    mfs = eval(tuple(file.get(path+'/mfs').keys())[0])
+    mfs = literal_eval(tuple(file.get(path+'/mfs').keys())[0])
     hfs = tuple(_Fusion(*hf) if isinstance(hf, tuple) else _Fusion(**hf) \
                 for hf in literal_eval(tuple(g.get('hfs').keys())[0]))
     c = Tensor(config=config, struct=struct, mfs=mfs, hfs=hfs)

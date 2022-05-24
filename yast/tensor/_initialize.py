@@ -51,7 +51,7 @@ def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         When somewhere there is only one value tuple can typically be replaced by int.
 
     val : str
-        'randR', 'rand' (use current dtype float or complex), 'ones', 'zeros'
+        'rand' (use current dtype float or complex), 'ones', 'zeros'
 
     dtype : str
         desired dtype, overrides current dtype of 'a'
@@ -144,7 +144,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         If Ds not given, tries to read it from existing blocks.
 
     val : str, nparray, list
-        'randR', 'rand' (use current dtype float or complex), 'ones', 'zeros'
+        'rand' (use current dtype float or complex), 'ones', 'zeros'
         for nparray setting Ds is needed.
 
     dtype : str
@@ -209,12 +209,11 @@ def _init_block(config, Dsize, val, dtype, device):
     if isinstance(val, str):
         if val == 'zeros':
             return config.backend.zeros((Dsize,), dtype=dtype, device=device)
-        if val in ('randR', 'rand'):
-            return config.backend.randR((Dsize,), device=device)
-        elif val == 'randC':
-            return config.backend.randC((Dsize,), device=device)
-        elif val == 'ones':
+        if val == 'rand':
+            return config.backend.rand((Dsize,), dtype=dtype, device=device)
+        if val == 'ones':
             return config.backend.ones((Dsize,), dtype=dtype, device=device)
+        raise YastError('val should be in ("zeros", "ones", "rand")')
     else:
         x = config.backend.to_tensor(val, Ds=Dsize, dtype=dtype, device=device)
         if config.backend.get_size(x) == Dsize ** 2:
@@ -239,7 +238,7 @@ def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=F
     conjs: list
         if tensors are entering dot as conjugated
     val: str
-        'randR', 'rand', 'ones', 'zeros'
+        'rand', 'ones', 'zeros'
     """
 
     t, D, s, mfs, hfs = [], [], [], [], []
