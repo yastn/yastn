@@ -2,29 +2,32 @@
 import pytest
 import yast
 try:
-    from .configs import config_U1
+    from .configs import config_U1, config_Z3
 except ImportError:
-    from configs import config_U1
+    from configs import config_U1, config_Z3
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_leg():
-    leg = yast.Leg(config_U1, s=1, t=(1, 0, 1), D=(2, 3, 4))
+    leg = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
 
+    # flipping signature
     legc = leg.conj()
     assert leg.s == -legc.s
 
-    a = yast.ones(config=config_U1, s=(-1, 1, 1, 1),
-                  t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
-                  D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
+    # order of provided charges (with corresponding bond dimensions) does not matter
+    leg_unsorted = yast.Leg(config_U1, s=1, t=(1, 0, -1), D=(4, 3, 2))
+    assert leg_unsorted == leg
 
-    legs = [a.get_leg(n) for n in range(a.ndim)]
 
-    print(legs)
+    legs = [yast.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(1, 2, 3)),
+            yast.Leg(config_U1, s=1, t=(0, 2), D=(1, 2)),
+            yast.Leg(config_U1, s=1, t=(-2, 0, 2), D=(1, 2, 3)),
+            yast.Leg(config_U1, s=1, t=(0,), D=(1,))]
 
-    b = yast.rand(config=config_U1, legs=legs)
-    b.show_properties()
+    a = yast.ones(config=config_U1, legs=legs)
+    assert all(a.get_leg(n) == legs[n] for n in range(a.ndim))
 
 
 def test_leg_exceptions():
@@ -43,6 +46,12 @@ def test_leg_exceptions():
     with pytest.raises(yast.YastError):
         _ = yast.Leg(config=config_U1, s=1, t=(1.5,), D=(2,))
         # Charges should be ints
+    with pytest.raises(yast.YastError):
+        _ = yast.Leg(config=config_U1, s=1, t=(1, 1), D=(2, 2))
+        # Repeated charge index.
+    with pytest.raises(yast.YastError):
+        _ = yast.Leg(config=config_Z3, s=1, t=(4,), D=(2,))
+        # Provided charges are outside of the natural range for specified symmetry.
 
 
 if __name__ == '__main__':
