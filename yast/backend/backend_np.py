@@ -171,12 +171,10 @@ def ones(D, dtype='float64', **kwargs):
     return np.ones(D, dtype=DTYPE[dtype])
 
 
-def randR(D, **kwargs):
-    return 2 * rng['rng'].random(D) - 1
-
-
-def randC(D, **kwargs):
-    return 2 * (rng['rng'].random(D) + 1j *  rng['rng'].random(D)) - (1 + 1j)
+def rand(D, dtype='float64', **kwargs):
+    if dtype == 'float64':
+        return 2 * rng['rng'].random(D) - 1
+    return 2 * (rng['rng'].random(D) + 1j *  rng['rng'].random(D)) - (1 + 1j)  # dtype == 'complex128
 
 
 def to_tensor(val, Ds=None, dtype='float64', **kwargs):

@@ -22,19 +22,19 @@ class _Leg(NamedTuple):
 def Leg(config, s=1, t=(), D=(), **kwargs):
     """ Check input to create a new _Leg. """
 
-    sym = config if 'SYM_ID' in config else config.sym
+    sym = config if hasattr(config, 'SYM_ID') else config.sym
     if s not in (-1, 1):
         raise YastError('Signature of Leg should be 1 or -1')
 
     D = tuple(_flatten(D))
     t = tuple(_flatten(t))
-    if not all(isinstance(x, int) and x > 0 for x in D):
+    if not all(int(x) == x and x > 0 for x in D):
         raise YastError('D should be a tuple of positive ints')
-    if not all(isinstance(x, int) for x in t):
+    if not all(int(x) == x for x in t):
         raise YastError('Charges should be ints')
     if len(D) * sym.NSYM != len(t) or (sym.NSYM == 0 and len(D) != 1):
         raise YastError('Number of provided charges and bond dimensions do not match sym.NSYM')
-    newt = tuple(tuple(x.flat) for x in sym.fuse(np.array(t).reshape((len(D), 1, sym.NSYM)), s, s))
+    newt = tuple(tuple(x.flat) for x in sym.fuse(np.array(t).reshape((len(D), 1, sym.NSYM)), (s,), s))
     oldt = tuple(tuple(x.flat) for x in np.array(t).reshape(len(D), sym.NSYM))
     if oldt != newt:
         raise YastError('Provided charges are outside of the natural range for symmetry')
