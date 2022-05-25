@@ -19,6 +19,11 @@ class _Leg(NamedTuple):
         return self._replace(s=-self.s)
 
 
+class _metaLeg(NamedTuple):
+    legs: tuple = ()
+    mf: tuple = (1,)  # order of (meta) fusions
+
+
 def Leg(config, s=1, t=(), D=(), **kwargs):
     """ Check input to create a new _Leg. """
 

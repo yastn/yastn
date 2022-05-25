@@ -30,6 +30,21 @@ def test_leg():
     assert all(a.get_leg(n) == legs[n] for n in range(a.ndim))
 
 
+def test_leg_meta():
+    """ test get_leg with meta-fused tensor"""
+    leg = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
+    a = yast.ones(config=config_U1, legs=[leg, leg, leg, leg.conj(), leg.conj()])
+    assert a.get_leg([1, 3, 2, 4]) == (leg, leg.conj(), leg, leg.conj())
+
+    a = a.fuse_legs(axes=((0, 1), (2, 3), 4), mode='meta')
+    a = a.fuse_legs(axes=((0, 1), 2), mode='meta')
+    legm = a.get_leg(0)
+    assert legm.mf == a.mfs[0] and legm.legs == (leg, leg, leg, leg.conj())
+    legt = a.get_leg((1, 0))
+    assert legt[0] == leg.conj()
+    assert legt[1] == legm
+
+
 def test_leg_exceptions():
     with pytest.raises(yast.YastError):
         _ = yast.Leg(config=config_U1, s=2, t=(), D=())
@@ -57,3 +72,4 @@ def test_leg_exceptions():
 if __name__ == '__main__':
     test_leg()
     test_leg_exceptions()
+    test_leg_meta()
