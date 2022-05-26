@@ -48,6 +48,22 @@ def test_leg_meta():
     assert yast.norm(a - b) < tol
 
 
+def test_leg_initialization_exceptions():
+    legU1 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
+
+    a = yast.ones(config=config_U1, legs=[legU1, legU1.conj()])
+    with pytest.raises(yast.YastError):
+        b = a.fuse_legs(axes=[(0, 1)], mode='meta')
+        yast.eye(config_U1, legs=[b.get_leg(0)])
+
+    legZ3 = yast.Leg(config_Z3, s=1, t=(0, 1, 2), D=(2, 3, 4))
+    with pytest.raises(yast.YastError):
+        a = yast.ones(config=config_U1, legs=[legU1, legZ3])
+        # Different symmetry of initialized tensor and some of the legs.
+
+
+
+
 def test_leg_exceptions():
     with pytest.raises(yast.YastError):
         _ = yast.Leg(config=config_U1, s=2, t=(), D=())
@@ -76,3 +92,4 @@ if __name__ == '__main__':
     test_leg()
     test_leg_meta()
     test_leg_exceptions()
+    test_leg_initialization_exceptions()

@@ -25,13 +25,15 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
         ulegs, mfs = [], []
         for leg in legs:
             if hasattr(leg, 'legs'):  # metaLeg
+                if isdiag:
+                    raise YastError('Diagonal tensor cannot be initialized with fused legs')
                 ulegs.extend(leg.legs)
                 mfs.append(leg.mf)
             else:
                 ulegs.append(leg)
                 mfs.append((1,))
         if any(config.sym.SYM_ID != leg.sym.SYM_ID for leg in ulegs):
-            raise YastError('Different symmetry of the tensor and some leg.')
+            raise YastError('Different symmetry of initialized tensor and some of the legs.')
         s = tuple(leg.s for leg in ulegs)
         t = tuple(leg.t for leg in ulegs)
         D = tuple(leg.D for leg in ulegs)
@@ -266,73 +268,3 @@ def decompress_from_1d(r1d, config, meta):
     a = Tensor(config=config, **meta)
     a._data = r1d
     return a
-
-
-def _tD_from_legs(legs):
-    r""" Translates input specified in legs into charges t and block dimensions D. """
-    tlegs, Dlegs, slegs, lflegs = [], [], [], []
-    for leg in legs:
-        leg = [leg] if isinstance(leg, dict) else leg
-        tns, lgs, fps, lss = [], [], [], []
-        ileg = iter(leg)
-        a = next(ileg, None)
-        while a is not None:
-            if isinstance(a, Tensor):
-                tns.append(a)
-                a = next(ileg, None)
-                if not isinstance(a, int):
-                    raise YastError('Specifying leg number is required')
-                lgs.append(a)
-                a = next(ileg, None)
-                fps.append(-1 if isinstance(a, str) and a in ('flip', 'flip_s', 'f') else 1)
-                if isinstance(a, int):
-                    raise YastError('Two leg numbers one after another not understood.')
-                if isinstance(a, str):
-                    a = next(ileg, None)
-            if isinstance(a, dict):
-                lss.append(a)
-                a = next(ileg, None)
-        lf = set(a.mfs[n] for a, n in zip(tns, lgs))
-        if len(lf) > 1:
-            raise YastError('Provided tensors fusions do not match.')
-        if len(lf) == 0:
-            d, s = _dict_union(lss)
-            if s is None:
-                raise YastError('Dictionary should include singnature s.')
-            tlegs.append(tuple(d.keys()))
-            Dlegs.append(tuple(d.values()))
-            slegs.append(s)
-            lflegs.append((1,))
-        else:
-            lf = lf.pop()
-            lflegs.append(lf)
-            if (lf[0] > 1) and len(lss) > 0:
-                raise YastError('For fused legs, do not support mix input. ')
-            for nn in range(lf[0]):
-                ss = []
-                for t, l, f in zip(tns, lgs, fps):
-                    un, = _unpack_axes(t.mfs, (l,))
-                    lss.append(t.get_leg_structure(un[nn], native=True))
-                    ss.append(f * np.array(t.s_n, dtype=int)[un[nn]])
-                d, s = _dict_union(lss)
-                if s is not None:
-                    ss.append(s)
-                ss = set(ss)
-                if len(ss) > 1:
-                    raise YastError('Signature of tensors do not match.')
-                tlegs.append(tuple(d.keys()))
-                Dlegs.append(tuple(d.values()))
-                slegs.append(ss.pop())
-    return tlegs, Dlegs, slegs, lflegs
-
-
-def _dict_union(ldict):
-    d = {}
-    for pd in ldict:
-        for k, v in pd.items():
-            k = (k,) if isinstance(k, int) else k
-            if k in d and d[k] != v:
-                raise YastError('provided dimensions of charge %s do not match' % str(k))
-            d[k] = v
-    s = d.pop('s') if 's' in d else None
-    return d, s
