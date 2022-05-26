@@ -40,9 +40,12 @@ def test_leg_meta():
     a = a.fuse_legs(axes=((0, 1), 2), mode='meta')
     legm = a.get_leg(0)
     assert legm.mf == a.mfs[0] and legm.legs == (leg, leg, leg, leg.conj())
-    legt = a.get_leg((1, 0))
-    assert legt[0] == leg.conj()
-    assert legt[1] == legm
+    legt = a.get_leg((0, 1))
+    assert legt[0] == legm
+    assert legt[1] == leg.conj()
+
+    b = yast.ones(config=config_U1, legs=a.get_leg((0, 1)))
+    assert yast.norm(a - b) < tol
 
 
 def test_leg_exceptions():
@@ -71,5 +74,5 @@ def test_leg_exceptions():
 
 if __name__ == '__main__':
     test_leg()
-    test_leg_exceptions()
     test_leg_meta()
+    test_leg_exceptions()
