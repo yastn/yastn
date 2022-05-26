@@ -13,7 +13,7 @@ tol = 1e-12  #pylint: disable=invalid-name
 def test_set0():
     # print('3d tensor:')
     a = yast.Tensor(config=config_dense, s=(-1, 1, 1))
-    a.set_block(Ds=(4, 5, 6), val='randR')
+    a.set_block(Ds=(4, 5, 6), val='rand')
     npa = a.to_numpy()
     # assert np.iscomplexobj(npa)
     assert np.linalg.norm(npa - npa.conj()) < tol  # == 0.0
@@ -88,7 +88,7 @@ def test_set1():
     a = yast.ones(config=config_U1, s=(-1, 1, 1, 1),
                   t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
                   D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
-    a.set_block(ts=(-2, 0, -2, 0), val='randC')
+    a.set_block(ts=(-2, 0, -2, 0), val='rand')
     npa = a.to_numpy()
     # assert np.iscomplexobj(npa)
     assert npa.shape == (6, 3, 6, 1)
@@ -114,7 +114,7 @@ def test_set1():
     a = yast.rand(config=config_U1, isdiag=True, t=0, D=5)
     a.set_block(ts=0, val='rand')
     a.set_block(ts=1, val='rand', Ds=4)
-    a.set_block(ts=-1, val='randC', Ds=4)
+    a.set_block(ts=-1, val='rand', Ds=4)
     npa = a.to_numpy()
 
     # assert np.iscomplexobj(npa)

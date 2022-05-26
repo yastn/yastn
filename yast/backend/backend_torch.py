@@ -188,12 +188,9 @@ def ones(D, dtype='float64', device='cpu'):
     return torch.ones(D, dtype=DTYPE[dtype], device=device)
 
 
-def randR(D, device='cpu'):
-    return 2 * torch.rand(D, dtype=DTYPE['float64'], device=device) - 1
-
-
-def randC(D, device='cpu'):
-    return 2 * torch.rand(D, dtype=DTYPE['complex128'], device=device) - (1 + 1j)
+def rand(D, dtype='float64', device='cpu'):
+    ds = 1 if dtype=='float64' else 1 + 1j
+    return 2 * torch.rand(D, dtype=DTYPE[dtype], device=device) - ds
 
 
 def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
