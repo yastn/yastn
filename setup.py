@@ -8,16 +8,16 @@ description = ('Yet another symmetric tensor.')
 # README file as long_description.
 long_description = open('README.md', encoding='utf-8').read()
 
-__version__ = '0.1.0'
+__version__ = '0.9.9'
 
 setup(
     name='yast',
     version=__version__,
-    author='Marek M. Rams, Gabriela Wójtowicz, Piotr Czarnik, Juraj Hasik',
+    author='Marek M. Rams, Gabriela Wójtowicz, Juraj Hasik',
     author_email='marek.rams@uj.edu.pl',
     license='Apache License 2.0',
     platform=['any'],
-    python_requires=('>=3.6.5'),
+    python_requires=('>=3.7'),
     install_requires=requirements,
     description=description,
     long_description=long_description,

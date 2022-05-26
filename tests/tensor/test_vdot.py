@@ -71,7 +71,7 @@ def test_vdot_fuse_hard():
     vdot_hf(a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
     vdot_hf(a, b, hf_axes1=(0, (4, 3, 1), (5, 2)))
 
-    b.set_block(ts=(1, 1, -2, -2, -3, 3), Ds=(2, 4, 3, 1, 1, 4), val='randR')
+    b.set_block(ts=(1, 1, -2, -2, -3, 3), Ds=(2, 4, 3, 1, 1, 4), val='rand')
     vdot_hf(a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
 
 

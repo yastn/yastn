@@ -4,7 +4,7 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _mf_to_ntree, _struct, _flatten
 from ._tests import YastError
 from ..sym import sym_none
-from ._legs import Leg
+from ._legs import Leg, _metaLeg
 
 
 __all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5',
@@ -295,13 +295,13 @@ def get_leg_fusion(a, axes=None):
     return {'meta': tuple(a.mfs(n) for n in axes), 'hard': tuple(a.hfs(n) for n in axes)}
 
 
-def get_leg_structure2(a, axis, native=False):
+def get_leg(a, axis, native=False):
     r"""
     Find all charges and the corresponding bond dimension for n-th leg.
 
     Parameters
     ----------
-    axis : int
+    axis : int or tuple of ints
         Index of a leg.
 
     native : bool
@@ -309,24 +309,35 @@ def get_leg_structure2(a, axis, native=False):
 
     Returns
     -------
-        tDn : dict of {tn: Dn}
+        _Leg or _metaLeg (for nontrivial meta fusion) if axis is int
+        Return tuple of such objects if axis is tuple/list of ints
     """
-    axis, = _clear_axes(axis)
-    if not native:
-        axis, = _unpack_axes(a.mfs, axis)
+    legs = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
-    tset = tset[:, axis, :]
-    Dset = Dset[:, axis]
-    tset = tset.reshape(len(tset), len(axis) * a.config.sym.NSYM)
-    Dset = np.prod(Dset, axis=1, dtype=int) if len(axis) > 1 else Dset.reshape(-1)
 
-    tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tset, Dset)}
-    for tn, Dn in zip(tset, Dset):
-        if tDn[tuple(tn.flat)] != Dn:
-            raise YastError('Inconsistend bond dimension of charge.')
-    t, D = tuple(tDn.keys()), tuple(tDn.values())
-    return Leg(s=a.s[axis[0]], t=t, D=D)
+    axes, = _clear_axes(axis)
+    for ax in axes:
+        legs_ax = []
+        if not native:
+            mf = a.mfs[ax]
+            nax, = _unpack_axes(a.mfs, (ax,))
+        else:
+            nax = (ax,)
+        for i in nax:
+            tseta = tset[:, i, :].reshape(len(tset), a.config.sym.NSYM)
+            Dseta = Dset[:, i].reshape(-1)
+            tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tseta, Dseta)}
+            for tn, Dn in zip(tseta, Dseta):
+                if tDn[tuple(tn.flat)] != Dn:
+                    raise YastError('Inconsistend bond dimension of charge.')
+            t, D = tuple(tDn.keys()), tuple(tDn.values())
+            legs_ax.append(Leg(a.config, s=a.struct.s[i], t=t, D=D))
+        if not native and mf[0] > 1:
+            legs.append(_metaLeg(legs=tuple(legs_ax), mf=mf))
+        else:
+            legs.append(legs_ax.pop())
+    return tuple(legs) if hasattr(axis, '__iter__') else legs.pop()
 
 
 def get_leg_structure(a, axis, native=False):
