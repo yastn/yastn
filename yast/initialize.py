@@ -13,6 +13,34 @@ __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
 
 
 
+def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
+    if 's' in kwargs or 't' in kwargs or 'D' in kwargs:
+        # if not (legs or ('s' in kwargs and 't' in kwargs and 'D' in kwargs)):
+        #     raise YastError('Initialization of a new tensor overriding `legs` requires all `s`, `t`, `D`.')
+        s = kwargs.pop('s') if 's' in kwargs else ()
+        t = kwargs.pop('t') if 't' in kwargs else ()
+        D = kwargs.pop('D') if 'D' in kwargs else ()
+        mfs = None
+    else:
+        ulegs, mfs = [], []
+        for leg in legs:
+            if hasattr(leg, 'legs'):  # metaLeg
+                ulegs.extend(leg.legs)
+                mfs.append(leg.mf)
+            else:
+                ulegs.append(leg)
+                mfs.append((1,))
+        if any(config.sym.SYM_ID != leg.sym.SYM_ID for leg in ulegs):
+            raise YastError('Different symmetry of the tensor and some leg.')
+        s = tuple(leg.s for leg in ulegs)
+        t = tuple(leg.t for leg in ulegs)
+        D = tuple(leg.D for leg in ulegs)
+        mfs = tuple(mfs)
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
+    a.fill_tensor(t=t, D=D, val=val)
+    return a
+
+
 def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
     Initialize tensor with all possible blocks filled with the random numbers.
@@ -47,24 +75,17 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
     tensor : tensor
         a random instance of a :meth:`Tensor`
     """
-    s = kwargs.pop('s') if 's' in kwargs else tuple(leg.s for leg in legs)
-    t = kwargs.pop('t') if 't' in kwargs else tuple(leg.t for leg in legs)
-    D = kwargs.pop('D') if 'D' in kwargs else tuple(leg.D for leg in legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=None, **kwargs)
-    a.fill_tensor(t=t, D=D, val='rand')
-    return a
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
 
 def randR(config=None, legs=(), n=None, isdiag=False, **kwargs):
-    if 'dtype' in kwargs:
-        del kwargs['dtype']
-    return rand(config=config, legs=legs, n=n, isdiag=isdiag, dtype='float64', **kwargs)
+    kwargs['dtype'] = 'float64'
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
 
 def randC(config=None, legs=(), n=None, isdiag=False, **kwargs):
-    if 'dtype' in kwargs:
-        del kwargs['dtype']
-    return rand(config=config, legs=legs, n=n, isdiag=isdiag, dtype='float64', **kwargs)
+    kwargs['dtype'] = 'complex128'
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
 
 def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
@@ -97,12 +118,7 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
     tensor : tensor
         an instance of a tensor filled with zeros
     """
-    s = kwargs.pop('s') if 's' in kwargs else tuple(leg.s for leg in legs)
-    t = kwargs.pop('t') if 't' in kwargs else tuple(leg.t for leg in legs)
-    D = kwargs.pop('D') if 'D' in kwargs else tuple(leg.D for leg in legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=None, **kwargs)
-    a.fill_tensor(t=t, D=D, val='zeros')
-    return a
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='zeros', **kwargs)
 
 
 def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
@@ -133,12 +149,7 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
     tensor : tensor
         an instance of a tensor filled with ones
     """
-    s = kwargs.pop('s') if 's' in kwargs else tuple(leg.s for leg in legs)
-    t = kwargs.pop('t') if 't' in kwargs else tuple(leg.t for leg in legs)
-    D = kwargs.pop('D') if 'D' in kwargs else tuple(leg.D for leg in legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=None, **kwargs)
-    a.fill_tensor(t=t, D=D, val='ones')
-    return a
+    return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='ones', **kwargs)
 
 
 def eye(config=None, legs=(), n=None, **kwargs):
@@ -165,13 +176,7 @@ def eye(config=None, legs=(), n=None, **kwargs):
     tensor : tensor
         an instance of diagonal tensor filled with ones
     """
-    s = ()
-    s = kwargs.pop('s') if 's' in kwargs else tuple(leg.s for leg in legs)
-    t = kwargs.pop('t') if 't' in kwargs else tuple(leg.t for leg in legs)
-    D = kwargs.pop('D') if 'D' in kwargs else tuple(leg.D for leg in legs)
-    a = Tensor(config=config, s=s, n=n, isdiag=True, mfs=None, **kwargs)
-    a.fill_tensor(t=t, D=D, val='ones')
-    return a
+    return _fill(config=config, legs=legs, n=n, isdiag=True, val='ones', **kwargs)
 
 
 def load_from_dict(config=None, d=None):
