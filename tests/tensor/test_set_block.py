@@ -48,7 +48,7 @@ def test_set0():
 
 
 def test_set1():
-    # print('3d tensors ')
+    # U1
     a = yast.Tensor(config=config_U1, s=(-1, 1, 1))
     a.set_block(ts=(1, -1, 2), Ds=(2, 5, 3), val='rand')
     a.set_block(ts=(2, 0, 2), Ds=(3, 6, 3), val='rand')
@@ -84,7 +84,6 @@ def test_set1():
     # assert nc2.shape == (5, 5)
     # assert nc3.shape == (11, 3, 5, 6)
 
-    # print('4d tensor: ')
     a = yast.ones(config=config_U1, s=(-1, 1, 1, 1),
                   t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
                   D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
