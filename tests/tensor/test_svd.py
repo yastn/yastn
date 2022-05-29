@@ -83,12 +83,6 @@ def test_svd_complex():
 
     SS = yast.diag(S)
     assert SS.yast_dtype == 'float64'
-    # Added manual type promotion in torch backend when @ is executed
-    # if SS.config.backend.BACKEND_ID == 'torch':
-    #     with pytest.raises(RuntimeError):
-    #         US = yast.tensordot(U, SS, axes=(2, 0))  # here tensordot uses @ in the backend
-    #         # torch throws an error for: complex128 @ float64
-    #     SS = SS.to(dtype='complex128')
     US = yast.tensordot(U, SS, axes=(2, 0))
     USV = yast.tensordot(US, V, axes=(2, 0))
     assert yast.norm(a - USV) < tol  # == 0.0
@@ -134,6 +128,18 @@ def test_svd_truncate():
     except NameError:
         pass
 
+    opts = {'tol': 0.02, 'D_block': 5, 'D_total': 100}
+    _, S1, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=1, **opts)
+    assert S1.get_shape() == (11, 11)
+
+    opts = {'tol': 0, 'tol_block': 0.2, 'D_total': 100}
+    _, S1, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=1, **opts)
+    assert S1.get_shape() == (9, 9)
+
+    opts = {'D_block': {(0,): 2, (-1,): 3}, 'tol_block': {(0,): 0.6, (-1,): 0.1}}
+    _, S1, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
+    assert S1.get_shape() == (4, 4)
+
 
 def test_svd_multiplets():
     a = yast.rand(config=config_U1, s=(1, 1, -1, -1), n=0,
@@ -160,9 +166,8 @@ def test_svd_multiplets():
     print(sorted(np.diag(S1.to_numpy())))
     assert S1.get_shape() == (30, 30)
 
-    opts = {'tol': 0.00001, 'D_block': 7, 'D_total': 30, 'keep_multiplets': True, 'eps_multiplet': 0.001}
-    _, S1, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
-    print(sorted(np.diag(S1.to_numpy())))
+    mask_f = lambda x: yast.truncation_mask_multiplets(x, tol=0.00001, D_total=30, eps_multiplet=0.001)
+    _, S1, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), mask_f=mask_f)
     assert S1.get_shape() == (24, 24)
 
 

@@ -3,10 +3,10 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct
 from ._tests import YastError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unfuse_legdec, _unmerge
-from ._merging import _leg_struct_trivial, _leg_struct_truncation, _Fusion
+from ._merging import _leg_struct_trivial, _Fusion
 from ._krylov import _expand_krylov_space
 
-__all__ = ['svd', 'svd_with_truncation', 'qr', 'eigh', 'eigh_with_truncation', 'norm', 'entropy', 'expmv', 'eigs']
+__all__ = ['svd', 'svd_with_truncation', 'qr', 'eigh', 'eigh_with_truncation', 'norm', 'entropy', 'expmv', 'eigs', 'truncation_mask', 'truncation_mask_multiplets']
 
 
 def norm(a, p='fro'):
@@ -273,8 +273,7 @@ def _meta_svd(config, struct, minD, sU, nU):
     return meta, Ustruct, Sstruct, Vstruct
 
 
-def truncation_mask_multiplets(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,\
-            keep_multiplets=False, eps_multiplet=1e-14):
+def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-14, **kwargs):
     """
     Generate mask tensor based on diagonal and real tensor S.
     It can be then used for truncation.
@@ -288,26 +287,26 @@ def truncation_mask_multiplets(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2
     # makes a copy for partial truncations; also detaches from autograd computation graph
     Smask = S.copy()
     Smask._data = Smask.data > float('inf') # all False ?
-    S_global_max= None
+    S_global_max = None
 
     # find all multiplets in the spectrum
     # 0) convert to plain dense numpy vector and sort in descending order
     s = S.config.backend.to_numpy(S.data)
-    inds= np.argsort(s)[::-1].copy() # make descending
+    inds = np.argsort(s)[::-1].copy() # make descending
     s = s[inds]
 
-    S_global_max= s[0]
-    D_trunc= min(sum(s > (S_global_max * tol)), D_total)
-    if D_trunc>=len(s):
+    S_global_max = s[0]
+    D_trunc = min(sum(s > (S_global_max * tol)), D_total)
+    if D_trunc >= len(s):
         # no truncation
         Smask._data = S.data > -float('inf') # all True ?
         return Smask
 
     # compute gaps and normalize by magnitude of (abs) larger value.
     # value of gaps[i] gives gap between i-th and i+1 the element of s
-    gaps = np.abs(s[:len(s) - 1] - s[1:len(s)])/\
-        (np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16)
-    
+    maxgap = np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16
+    gaps = np.abs(s[:len(s) - 1] - s[1:len(s)]) / maxgap
+
     # find nearest multiplet boundary, keeping at most D_trunc elements 
     # i-th element of gaps gives gap between i-th and (i+1)-th element of s
     # Note, s[:D_trunc] selects D_trunc values: from 0th to (D_trunc-1)-th element
@@ -316,34 +315,33 @@ def truncation_mask_multiplets(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2
             D_trunc = i+1
             break
 
-    Smask._data[inds[:D_trunc]]= True
+    Smask._data[inds[:D_trunc]] = True
 
     # check symmetry related blocks and truncate to equal length
-    active_sectors= filter( lambda x: any(Smask[x]), Smask.struct.t )
+    active_sectors = filter(lambda x: any(Smask[x]), Smask.struct.t)
     for t in active_sectors:
         tn = np.array(t, dtype=int).reshape((1, 1, -1))
-        tn = tuple(S.config.sym.fuse(tn, np.array([1], dtype=int), -1)[0])
-        if t==tn: continue
+        tn = tuple(S.config.sym.fuse(tn, (1,), -1).flat)
+        if t == tn:
+            continue
 
-        common_size= min(len(Smask[t]), len(Smask[tn]))
+        common_size = min(len(Smask[t]), len(Smask[tn]))
         # if related blocks do not have equal length
-        if common_size>len(Smask[t]):
-            # assert sum(Smask[t][common_size:])<=0 ,\
+        if common_size > len(Smask[t]):
+            # assert sum(Smask[t][common_size:]) <= 0 ,\
             #     "Symmetry-related blocks do not match"
-            Smask[t][common_size:]=False
-        if common_size>len(Smask[tn]):
+            Smask[t][common_size:] = False
+        if common_size > len(Smask[tn]):
             # assert sum(Smask[tn][common_size:])<=0,\
             #     "Symmetry-related blocks do not match"
-            Smask[tn][common_size:]=False
-            
-        if not all(Smask[t][:common_size]==Smask[tn][:common_size]):
-            Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
+            Smask[tn][common_size:] = False
 
+        if not all(Smask[t][:common_size] == Smask[tn][:common_size]):
+            Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
     return Smask
 
 
-def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
-             keep_multiplets=False, eps_multiplet=1e-14):
+def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32, **kwargs):
     """
     Generate mask tensor based on diagonal and real tensor S.
     It can be then used for truncation.
@@ -357,6 +355,7 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
     # makes a copy for partial truncations; also detaches from autograd computation graph
     S = S.copy()
     Smask = S.copy()
+    Smask._data[:] = True # all True
 
     nsym = S.config.sym.NSYM
     tol_null = 0. if isinstance(tol_block, dict) else tol_block
@@ -364,31 +363,23 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
     for t, Db, sl in zip(S.struct.t, S.struct.Dp, S.struct.sl):
         t = t[:nsym]
         tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
-        tol_abs = tol_rel * S.config.backend.max_abs(S.data[slice(*sl)])
+        D_tol = sum(S.data[slice(*sl)] > tol_rel * S.config.backend.max_abs(S.data[slice(*sl)])).item()
         D_bl = D_block[t] if (isinstance(D_block, dict) and t in D_block) else D_null
-        D_bl = min(D_bl, Db)
-        tol_D = S.config.backend.nth_largest(S.data[slice(*sl)], D_bl)
-        tol_tru = max(tol_D, tol_abs) * (1 - 1e-15)
-        if keep_multiplets and eps_multiplet > 0:
-            while sum(S.data[slice(*sl)] > tol_tru) != sum(S.data[slice(*sl)] > (tol_tru - eps_multiplet)):
-                tol_tru = tol_tru + eps_multiplet
-        Smask.data[slice(*sl)] = S.data[slice(*sl)] > tol_tru
+        D_bl = min(D_bl, D_tol)
+        if 0 < D_bl < Db:  # no block truncation
+            inds = S.config.backend.argsort(S.data[slice(*sl)])
+            Smask._data[slice(*sl)][inds[:-D_bl]] = False
+        elif D_bl == 0:
+            Smask._data[slice(*sl)] = False
 
-    S._data = S.data * Smask.data
-    tol_abs = tol * S.config.backend.max_abs(S.data)
-    D_total = min(D_total, sum(Smask.data > 0))
-    tol_D = S.config.backend.nth_largest(S._data, D_total)
-
-    tol_tru = max(tol_D, tol_abs) * (1 - 1e-15)
-
-    if keep_multiplets and eps_multiplet > 0:
-        while sum(S.data > tol_tru) != sum(S.data > (tol_tru - eps_multiplet)):
-            tol_tru = tol_tru + eps_multiplet
-    Smask._data = S.data > tol_tru
-
-    if keep_multiplets:
-        pass
-        # modify mask to enforce the same D on conjugated charges
+    temp_data = S._data * Smask.data
+    D_tol = sum(temp_data > tol * S.config.backend.max_abs(temp_data)).item()
+    D_total = min(D_total, D_tol)
+    if 0 < D_total < sum(Smask.data):
+        inds = S.config.backend.argsort(temp_data)
+        Smask._data[inds[:-D_total]] = False
+    elif D_total == 0:
+        Smask._data[:] = False
     return Smask
 
 

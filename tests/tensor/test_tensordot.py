@@ -41,7 +41,7 @@ def test_dot_basic():
     b = yast.rand(config=config_dense, s=(1, -1, 1), D=(2, 3, 5), dtype='complex128')
     c1 = tensordot_vs_numpy(a, b, axes=((0, 3), (0, 2)), conj=(0, 0))
     c2 = tensordot_vs_numpy(b, a, axes=((2, 0), (3, 0)), conj=(1, 1))
-    # assert yast.norm(c1.conj() - c2.transpose(axes=(1, 2, 0)))
+    assert yast.norm(c1.conj() - c2.transpose(axes=(1, 2, 0)))
 
     # U1
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
@@ -102,13 +102,6 @@ def test_tensordot_diag():
     assert(yast.norm(c1 - c2)) < tol
     assert(yast.norm(c1 - c3)) < tol
     assert c3.get_shape() == (5, 18, 26, 34)
-
-    # fa = a.fuse_legs(axes=(0, 2, (1, 3)))
-    # fb = b.fuse_legs(axes=((1, 2), 0))
-    # tensordot_vs_numpy(fa, fb, axes=((2,), (0,)), conj=(0, 0))
-    # fa = a.fuse_legs(axes=((1, 0), (3, 2)))
-    # fb = b.fuse_legs(axes=((1, 0), (3, 2)))
-    # tensordot_vs_numpy(fa, fb, axes=((0,), (0,)), conj=(0, 1))
 
 
 def tensordot_hf(a, b, hf_axes1):

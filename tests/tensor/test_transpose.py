@@ -42,13 +42,13 @@ class TestSyntaxTranspose(unittest.TestCase):
         # for each leg its dense dimension is given by the sum of dimensions
         # of individual sectors. Hence, the (dense) shape of this tensor
         # is (2+3, 4+5, 6+7, 6+5, 4+3, 2+1)
-        assert a.get_shape() ==  (5, 9, 13, 11, 7, 3)
+        assert a.get_shape() == (5, 9, 13, 11, 7, 3)
 
         #
         # permute the legs of the tensor and check the shape is changed
         # accordingly
-        b = a.transpose(axes=(0,2,4,1,3,5))
-        assert b.get_shape() == (5,13,7,9,11,3)
+        b = a.transpose(axes=(0, 2, 4, 1, 3, 5))
+        assert b.get_shape() == (5, 13, 7, 9, 11, 3)
 
         #
         # sometimes, instead of writing explicit permutation of all legs
@@ -56,9 +56,9 @@ class TestSyntaxTranspose(unittest.TestCase):
         # In this example, we reverse the permutation done previously thus
         # ending up with tensor numerically identical to a.
         #
-        c = b.move_leg(source=(1,2), destination=(2,4))
+        c = b.move_leg(source=(1, 2), destination=(2, 4))
         assert c.get_shape() == a.get_shape()
-        assert yast.norm(a-c)<tol
+        assert yast.norm(a - c) < tol
 
 
 def test_transpose_basic():
