@@ -71,6 +71,10 @@ def test_Z2xU1():
     assert a.get_shape() == (9, 8, 30)
     assert a.is_consistent()
 
+    # setting values in the exhisting block are also possible using __setitem__
+    a[(0, 0, 0, 0, 0, 0)] = a[(0, 0, 0, 0, 0, 0)] * 2
+    assert pytest.approx(a.norm() ** 2, rel=tol) == 864  # sum(4 * range(20)) == 760
+
     # 3-dim tensor
     legs = [yast.Leg(config_Z2xU1, s=-1, t=[(0, 1), (1, 0)], D=[1, 2]),
             yast.Leg(config_Z2xU1, s=1, t=[(0, 0)], D=[3]),
@@ -137,13 +141,42 @@ def test_dense():
 
 def test_set_block_exceptions():
     """ test raise YaseError by set_block()"""
+    # 3-dim tensor
     leg = yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
     a = yast.ones(config=config_U1, legs=[leg, leg, leg.conj()])
     b = a.copy()
     with pytest.raises(yast.YastError):
-        a.set_block(ts=(0, 0, 0), Ds=(3, 2, 2))  # here (3, ...) is inconsistent bond dimension
+        b = a.copy()
+        b.set_block(ts=(0, 0, 0), Ds=(3, 2, 2), val='ones')  # here (3, ...) is inconsistent bond dimension
         # Inconsistend bond dimension of charge.
-    b.set_block(ts=(0, 0, 0), val='zeros')  # here should infer bond dimensions
+    with pytest.raises(yast.YastError):
+        b = a.copy()
+        b.set_block(ts=(0, 0), Ds=(2, 2), val='ones')
+        # Size of ts is not consistent with tensor rank and the number of symmetry sectors.
+    with pytest.raises(yast.YastError):
+        b = a.copy()
+        b.set_block(ts=(0, 0, 0), Ds=(2, 2), val='ones')
+        # 'Size of Ds is not consistent with tensor rank.'
+    with pytest.raises(yast.YastError):
+        b = a.copy()
+        b.set_block(ts=(3, 0, 0), Ds=(2, 2, 2), val='ones')
+        # Charges ts are not consistent with the symmetry rules: f(t @ s) == n
+    with pytest.raises(yast.YastError):
+        a.set_block(ts=(1, 1, 2), val='ones')
+        # Provided Ds. Cannot infer all bond dimensions from existing blocks.
+    with pytest.raises(yast.YastError):
+        b = yast.Tensor(config=config_U1, isdiag=True)
+        b.set_block(ts=(0, 0), Ds=(1, 2), val='ones')
+        # Diagonal tensor requires the same bond dimensions on both legs.
+    with pytest.raises(yast.YastError):
+        a.set_block(ts=(0, 0, 0), val='four')
+        # val should be in ("zeros", "ones", "rand")
+    with pytest.raises(yast.YastError):
+        a[(1, 1, 1)] = np.ones((3, 3, 3))
+        # tensor does not have block specify by key
+    with pytest.raises(yast.YastError):
+        a[(1, 1, 1)]
+        # tensor does not have block specify by key
 
 
 if __name__ == '__main__':

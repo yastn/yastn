@@ -3,6 +3,7 @@ from typing import NamedTuple
 from ._auxliary import _flatten
 from ._tests import YastError
 from ..sym import sym_none
+from ._merging import _Fusion
 
 __all__ = ['Leg', 'leg_union']
 
@@ -12,19 +13,25 @@ class _Leg(NamedTuple):
     s: int = 1  # leg signature in (1, -1)
     t: tuple = ()  # leg charges
     D: tuple = ()  # and their dimensions
-    fused: tuple = ()  # subspaces
+    hf: tuple = ()  # fused subspaces
 
     def conj(self):
         """ switch leg signature """
-        return self._replace(s=-self.s)
+        return self._replace(s=-self.s, hf=self.hf.conj())
 
 
 class _metaLeg(NamedTuple):
     legs: tuple = ()
     mf: tuple = (1,)  # order of (meta) fusions
+    t: tuple = ()  # meta-leg charges combinations
+    D: tuple = ()  # and their dimensions
+
+    def conj(self):
+        """ switch leg signature """
+        return self._replace(legs=tuple(leg.conj() for leg in self.legs))
 
 
-def Leg(config, s=1, t=(), D=(), **kwargs):
+def Leg(config, s=1, t=(), D=(), hf=None):
     """ 
     Create a new _Leg.
 
@@ -52,7 +59,12 @@ def Leg(config, s=1, t=(), D=(), **kwargs):
     tD = {x: d for x, d in zip(newt, D)}
     t = tuple(sorted(newt))
     D = tuple(tD[x] for x in t)
-    return _Leg(sym=sym, s=s, t=t, D=D)
+
+    if hf is None:
+        hf = _Fusion(s=(s,))
+    if hf.s[0] != s:
+        raise YastError('Provided hard_fusion and signature do not match')
+    return _Leg(sym=sym, s=s, t=t, D=D, hf=hf)
 
 
 def leg_union(*args):
@@ -64,6 +76,8 @@ def leg_union(*args):
         raise YastError('Legs have different symmetries')
     if any(leg.s != legs[0].s for leg in legs):
         raise YastError('Legs have different signatures')
+    if any(leg.hf != legs[0].hf for leg in legs):
+        raise YastError('Leg union does not support union of fused spaces - TODO')
 
     tD = {}
     for leg in legs:
@@ -72,5 +86,6 @@ def leg_union(*args):
                 raise YastError('Legs have inconsistent dimensions')
             tD[t] = D
     t, D = tuple(tD.keys()), tuple(tD.values())
-    return _Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D)
+
+    return _Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D, hf=legs[0].hf)
 

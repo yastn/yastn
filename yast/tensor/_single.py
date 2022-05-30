@@ -1,7 +1,7 @@
 """ Linear operations and operations on a single yast tensor. """
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes
-from ._merging import _Fusion, _flip_hf
+from ._merging import _Fusion
 from ._tests import YastError, _test_axes_all
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',
@@ -110,7 +110,7 @@ def conj(a):
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
-    hfs = tuple(_flip_hf(x) for x in a.hfs)
+    hfs = tuple(hf.conj() for hf in a.hfs)
     data = a.config.backend.conj(a._data)
     return a._replace(hfs=hfs, struct=struct, data=data)
 
@@ -148,7 +148,7 @@ def flip_signature(a):
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
-    hfs = tuple(_flip_hf(x) for x in a.hfs)
+    hfs = tuple(hf.conj() for hf in a.hfs)
     return a._replace(hfs=hfs, struct=struct)
 
 

@@ -128,7 +128,7 @@ def test_get_shapes():
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 
 
-def test_fuse_match_legs():
+def test_fuse_get_legs():
     a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
@@ -139,10 +139,12 @@ def test_fuse_match_legs():
     bf = b.fuse_legs(axes=(0, (1, 2), 3, 4), mode='meta')
     bff = bf.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
 
-    c1 = yast.match_legs(tensors=[a, a, a, b, b, b], legs=[2, 3, 4, 1, 2, 3], conjs=[0, 0, 0, 1, 1, 1], val='ones')
+    legs1 = [a.get_leg(2).conj(), a.get_leg(3).conj(), a.get_leg(4).conj(), b.get_leg(1), b.get_leg(2), b.get_leg(3)]
+    c1 = yast.ones(config=a.config, legs=legs1)
     r1 = yast.ncon([a, b, c1], [[-1, -2, 1, 2, 3, -3], [-4, 4, 5, 6, -5], [1, 2, 3, 4, 5, 6]], [0, 1, 0])
 
-    c2 = yast.match_legs(tensors=[af, bff], legs=[1, 1], conjs=[0, 1], val='ones')
+    legs2 = [af.get_leg(1).conj(), bff.get_leg(1)]
+    c2 = yast.ones(config=af.config, legs=legs2)
     r2 = yast.ncon([af, bff, c2], [[-1, 1, -2], [-3, 2, -4], [1, 2]], [0, 1, 0])
 
     c3 = c2.unfuse_legs(axes=1)  # partial unfuse
@@ -202,6 +204,6 @@ if __name__ == '__main__':
     test_fuse_split()
     test_fuse_transpose()
     test_get_shapes()
-    test_fuse_match_legs()
+    test_fuse_get_legs()
     test_fuse_block()
     test_fuse_legs_exceptions()

@@ -4,8 +4,8 @@ from itertools import groupby, product
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
 from ._tests import YastError, _test_configs_match, _test_axes_match
-from ._merging import _merge_to_matrix, _flip_hf, _meta_unfuse_legdec, _unmerge
-from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
+from ._merging import _merge_to_matrix, _meta_unfuse_legdec, _unmerge
+from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
 
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask']

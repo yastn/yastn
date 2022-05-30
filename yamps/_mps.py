@@ -370,6 +370,15 @@ class Mps:
         self.first = 0
         self.last = self.N - 1
 
+
+    def get_leftmost_leg(self):
+        return self.A[self.first].get_leg(self.left[0])
+
+
+    def get_rightmost_leg(self):
+        return self.A[self.last].get_leg(self.right[0])
+
+
     def sweep(self, to='last', df=0, dl=0):
         r"""
         Generator of indices of all sites going from the first site to the last site, or vice-versa.

@@ -69,7 +69,7 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
         s = kwargs.pop('s') if 's' in kwargs else ()
         t = kwargs.pop('t') if 't' in kwargs else ()
         D = kwargs.pop('D') if 'D' in kwargs else ()
-        mfs = None
+        mfs, hfs = None, None
     else:
         ulegs, mfs = [], []
         for leg in legs:
@@ -86,8 +86,10 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
         s = tuple(leg.s for leg in ulegs)
         t = tuple(leg.t for leg in ulegs)
         D = tuple(leg.D for leg in ulegs)
+        hfs = tuple(leg.hf for leg in ulegs)
         mfs = tuple(mfs)
-    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, **kwargs)
+
+    a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, hfs=hfs, **kwargs)
     a.fill_tensor(t=t, D=D, val=val)
     return a
 

@@ -1,4 +1,4 @@
-""" Test: fill_tensor (which is called in: rand, zeros, ones), to_numpy, match_legs """
+""" Test: yast.Leg, get_leg() """
 import pytest
 import yast
 try:

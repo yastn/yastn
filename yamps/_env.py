@@ -1,5 +1,5 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
-from yast import ncon, match_legs, tensordot, expmv, vdot, qr, svd
+from yast import ncon, tensordot, expmv, vdot, qr, svd, ones
 from ._mps import YampsError
 
 
@@ -47,14 +47,12 @@ class _EnvParent:
         if self.bra.N != self.ket.N:
             raise YampsError('bra and ket should have the same number of sites.')
 
-        ll = self.N - 1
+        config = self.ket.A[0].config
         for ii in range(len(self.ort)):
-            self.Fort[ii][(-1, 0)] = match_legs(tensors=[self.ort[ii].A[0], self.ket.A[0]],
-                                            legs=[self.ort[ii].left[0], self.ket.left[0]],
-                                            conjs=[1, 0], val='ones')
-            self.Fort[ii][(ll + 1, ll)] = match_legs(tensors=[self.ket.A[ll], self.ort[ii].A[ll]],
-                                            legs=[self.ket.right[0], self.ort[ii].right[0]],
-                                            conjs=[0, 1], val='ones')
+            legs = [self.ort[ii].get_leftmost_leg(), self.ket.get_leftmost_leg().conj()]
+            self.Fort[ii][(-1, 0)] = ones(config=config, legs=legs)
+            legs = [self.ket.get_rightmost_leg().conj(), self.ort[ii].get_rightmost_leg()]
+            self.Fort[ii][(self.N, self.N - 1)] = ones(config=config, legs=legs)
 
     def reset_temp(self):
         """ Reset temporary objects stored to speed-up some simulations. """
@@ -179,14 +177,12 @@ class Env2(_EnvParent):
         super().__init__(bra, ket)
 
         # left boundary
-        self.F[(-1, 0)] = match_legs(tensors=[self.bra.A[0], self.ket.A[0]],
-                                        legs=[self.bra.left[0], self.ket.left[0]],
-                                        conjs=[1, 0], val='ones')
+        config = self.bra.A[0].config
+        legs = [self.bra.get_leftmost_leg(), self.ket.get_leftmost_leg().conj()]
+        self.F[(-1, 0)] = ones(config=config, legs=legs)
         # right boundary
-        ll = self.N - 1
-        self.F[(ll + 1, ll)] = match_legs(tensors=[self.ket.A[ll], self.bra.A[ll]],
-                                        legs=[self.ket.right[0], self.bra.right[0]],
-                                        conjs=[0, 1], val='ones')
+        legs = [self.ket.get_rightmost_leg().conj(), self.bra.get_rightmost_leg()]
+        self.F[(self.N, self.N - 1)] = ones(config=config, legs=legs)
 
     def Heff1(self, x, n):
         r"""
@@ -234,14 +230,13 @@ class Env3(_EnvParent):
             raise YampsError('op should should have the same number of sites as ket.')
 
         # left boundary
-        self.F[(-1, 0)] = match_legs(tensors=[self.bra.A[0], self.op.A[0], self.ket.A[0]],
-                                        legs=[self.bra.left[0], self.op.left[0], self.ket.left[0]],
-                                        conjs=[1, 0, 0], val='ones')
+        config = self.ket.A[0].config
+        legs = [self.bra.get_leftmost_leg(), self.op.get_leftmost_leg().conj(), self.ket.get_leftmost_leg().conj()]
+        self.F[(-1, 0)] = ones(config=config, legs=legs)
+
         # right boundary
-        ll = self.N - 1
-        self.F[(ll + 1, ll)] = match_legs(tensors=[self.ket.A[ll], self.op.A[ll], self.bra.A[ll]],
-                                        legs=[self.ket.right[0], self.op.right[0], self.bra.right[0]],
-                                        conjs=[0, 0, 1], val='ones')
+        legs = [self.ket.get_rightmost_leg().conj(), self.op.get_rightmost_leg().conj(), self.bra.get_rightmost_leg()]
+        self.F[(self.N, self.N - 1)] = ones(config=config, legs=legs)
 
     def Heff0(self, C, bd):
         r"""

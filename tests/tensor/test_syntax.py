@@ -204,7 +204,8 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
         # block tensors
         tensor = yast.block({(1, 1): a, (1, 2): b, (2, 1): c}, common_legs=(0, 1))
         # new tensor filled with ones, matching structure of selected legs -- to be used for e.g. dot
-        tensor = yast.match_legs([a, a, b], legs=[1, 2, 0], conjs=[0, 0, 1], val='ones')
+
+        tensor = yast.ones(config=a.config, legs=[a.get_leg(1).conj(), a.get_leg(2).conj(), b.get_leg(0)])
         # combined with ncon
         yast.ncon([tensor, a, b], [(1, 2, 3), (-1, 1, 2, -2), (3, -4, -5, -6)], conjs=(0, 0, 1))
 
