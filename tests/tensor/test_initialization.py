@@ -1,4 +1,8 @@
-""" Test: fill_tensor (which is called in: yast.rand, yast.zeros, yast.ones), to_numpy """
+"""
+Test initialization with yast.rand, yast.zeros, yast.ones, yast.eye.
+
+Also creating a dense tensor with to_numpy()
+"""
 import numpy as np
 import pytest
 import yast
@@ -11,7 +15,7 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_dense():
-    """ initialization of dense tensor"""
+    """ initialization of dense tensor with no symmetry """
     # 3-dim tensor
     a = yast.ones(config=config_dense, s=(-1, 1, 1), D=(1, 2, 3))
     npa = a.to_numpy()
