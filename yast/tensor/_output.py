@@ -332,9 +332,14 @@ def get_leg(a, axis, native=False):
                 if tDn[tuple(tn.flat)] != Dn:
                     raise YastError('Inconsistend bond dimension of charge.')
             t, D = tuple(tDn.keys()), tuple(tDn.values())
-            legs_ax.append(Leg(a.config, s=a.struct.s[i], t=t, D=D))
+            legs_ax.append(Leg(a.config, s=a.struct.s[i], t=t, D=D, hf=a.hfs[i]))
         if not native and mf[0] > 1:
-            legs.append(_metaLeg(legs=tuple(legs_ax), mf=mf))
+            tseta = tset[:, nax, :].reshape(len(tset), len(nax) * a.config.sym.NSYM)
+            Dseta = np.prod(Dset[:, nax], axis=1, dtype=int)  
+            tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tseta, Dseta)}
+            t = tuple(sorted(tDn.keys()))
+            D = tuple(tDn[x] for x in t)
+            legs.append(_metaLeg(legs=tuple(legs_ax), mf=mf, t=t, D=D))
         else:
             legs.append(legs_ax.pop())
     return tuple(legs) if hasattr(axis, '__iter__') else legs.pop()
@@ -614,7 +619,7 @@ def to_number(a, part=None):
     elif size == 0:
         x = a.zero_of_dtype()
     else:
-        raise YastError('Specified bond dimensions inconsistent with tensor.')
+        raise YastError('Only single-element (symmetric) Tensor can be converted to scalar')
     return a.config.backend.real(x) if part == 'real' else x
 
 
@@ -634,4 +639,4 @@ def item(a):
         return a.config.backend.item(a._data)
     if size == 0:
         return 0
-    raise YastError("only single-element (symmetric) Tensor can be converted to scalar")
+    raise YastError("Only single-element (symmetric) Tensor can be converted to scalar")

@@ -3,10 +3,9 @@
 from itertools import chain, repeat, accumulate, product
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _flatten, _struct
-from ._merging import _flip_hf
 from ._tests import YastError
 
-__all__ = ['match_legs', 'block']
+__all__ = ['block']
 
 
 def __setitem__(a, key, newvalue):
@@ -23,7 +22,7 @@ def __setitem__(a, key, newvalue):
         ind = a.struct.t.index(key)
     except ValueError:
         raise YastError('tensor does not have block specify by key')
-    a._data[slice(*a.struct.sl[ind])] = newvalue
+    a._data[slice(*a.struct.sl[ind])] = newvalue.reshape(-1)
 
 
 def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
@@ -161,9 +160,9 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         ts = ts + ts
 
     if len(ts) != a.ndim_n * a.config.sym.NSYM:
-        raise YastError('Wrong size of ts.')
+        raise YastError('Size of ts is not consistent with tensor rank and the number of symmetry sectors.')
     if Ds is not None and len(Ds) != a.ndim_n:
-        raise YastError('Wrong size of Ds.')
+        raise YastError('Size of Ds is not consistent with tensor rank.')
 
     ats = np.array(ts, dtype=int).reshape((1, a.ndim_n, a.config.sym.NSYM))
     sa = np.array(a.struct.s, dtype=int)
@@ -213,7 +212,7 @@ def _init_block(config, Dsize, val, dtype, device):
             return config.backend.rand((Dsize,), dtype=dtype, device=device)
         if val == 'ones':
             return config.backend.ones((Dsize,), dtype=dtype, device=device)
-        raise YastError('val should be in ("zeros", "ones", "rand")')
+        raise YastError('val should be in ("zeros", "ones", "rand") or an array of the correct size')
     else:
         x = config.backend.to_tensor(val, Ds=Dsize, dtype=dtype, device=device)
         if config.backend.get_size(x) == Dsize ** 2:
@@ -221,42 +220,42 @@ def _init_block(config, Dsize, val, dtype, device):
         return x
 
 
-def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=False):
-    r"""
-    Initialize tensor matching legs of existing tensors, so that it can be contracted with those tensors.
+# def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=False):
+#     r"""
+#     Initialize tensor matching legs of existing tensors, so that it can be contracted with those tensors.
 
-    Finds all matching symmetry sectors and their bond dimensions and passes it to :meth:`Tensor.fill_tensor`.
+#     Finds all matching symmetry sectors and their bond dimensions and passes it to :meth:`Tensor.fill_tensor`.
 
-    TODO: the set of tensors should reside on the same device. Optional destination device might be added
+#     TODO: the set of tensors should reside on the same device. Optional destination device might be added
 
-    Parameters
-    ----------
-    tensors: list
-        list of tensors -- they should not be diagonal to properly identify signature.
-    legs: list
-        and their corresponding legs to match
-    conjs: list
-        if tensors are entering dot as conjugated
-    val: str
-        'rand', 'ones', 'zeros'
-    """
+#     Parameters
+#     ----------
+#     tensors: list
+#         list of tensors -- they should not be diagonal to properly identify signature.
+#     legs: list
+#         and their corresponding legs to match
+#     conjs: list
+#         if tensors are entering dot as conjugated
+#     val: str
+#         'rand', 'ones', 'zeros'
+#     """
 
-    t, D, s, mfs, hfs = [], [], [], [], []
-    if conjs is None:
-        conjs = (0,) * len(tensors)
-    for nf, te, cc in zip(legs, tensors, conjs):
-        mfs.append(te.mfs[nf])
-        un, = _unpack_axes(te.mfs, (nf,))
-        for nn in un:
-            tdn = te.get_leg_structure(nn, native=True)
-            t.append(tuple(tdn.keys()))
-            D.append(tuple(tdn.values()))
-            s.append(te.struct.s[nn] * (2 * cc - 1))
-            hfs.append(te.hfs[nn] if cc == 1 else _flip_hf(te.hfs[nn]))
-    a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, mfs=mfs, hfs=hfs,
-                            dtype=tensors[0].yast_dtype, device=tensors[0].device)
-    a.fill_tensor(t=t, D=D, val=val)
-    return a
+#     t, D, s, mfs, hfs = [], [], [], [], []
+#     if conjs is None:
+#         conjs = (0,) * len(tensors)
+#     for nf, te, cc in zip(legs, tensors, conjs):
+#         mfs.append(te.mfs[nf])
+#         un, = _unpack_axes(te.mfs, (nf,))
+#         for nn in un:
+#             tdn = te.get_leg_structure(nn, native=True)
+#             t.append(tuple(tdn.keys()))
+#             D.append(tuple(tdn.values()))
+#             s.append(te.struct.s[nn] * (2 * cc - 1))
+#             hfs.append(te.hfs[nn] if cc == 1 else te.hfs[nn].conj())
+#     a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, mfs=mfs, hfs=hfs,
+#                             dtype=tensors[0].yast_dtype, device=tensors[0].device)
+#     a.fill_tensor(t=t, D=D, val=val)
+#     return a
 
 
 def block(tensors, common_legs=None):

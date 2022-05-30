@@ -32,6 +32,9 @@ class _Fusion(NamedTuple):
     t: tuple = ()  # fused leg charges at each step len(t) = len(tree) - 1
     D: tuple = ()  # fused dimensions  at each step len(t) = len(tree) - 1
 
+    def conj(self):
+        return self._replace(s=tuple(-x for x in self.s))
+
 
 #  =========== merging blocks ======================
 
@@ -145,65 +148,6 @@ def _leg_struct_trivial(struct, axis=0):
         Dtot[t] = D
     return _LegDec(dec, Dtot)
 
-
-def _leg_struct_trivial2(config, Am, axis=0):
-    """ trivial LegDecomposition for unfused leg. """
-    nsym = config.sym.NSYM
-    dec, Dtot = {}, {}
-    for ind, val in Am.items():
-        t = ind[nsym * axis: nsym * (axis + 1)]
-        D = config.backend.get_shape(val)[axis]
-        dec[t] = {t: _DecRec((0, D), D, (D,))}
-        Dtot[t] = D
-    return _LegDec(dec, Dtot)
-
-
-def _leg_struct_truncation(config, Sdata, St, Ssl,
-                            tol=0., tol_block=0, D_block=np.inf, D_total=np.inf,
-                            keep_multiplets=False, eps_multiplet=1e-12, ordering='eigh'):
-    r"""
-    Gives slices for truncation of 1d matrices according to tolerance, D_block, D_total.
-
-    A should be dict of ordered 1d arrays.
-    Sorting gives information about ordering outputed by a particular splitting funcion:
-    Usual convention is that for svd A[ind][0] is largest; and for eigh A[ind][-1] is largest.
-    """
-    maxS = 0 if len(Sdata) == 0 else config.backend.max_abs(Sdata)
-    Dmax, D_keep = {}, {}
-
-    nsym = config.sym.NSYM
-    St = tuple(x[:nsym] for x in St)
-
-    for t, sl, in zip(St, Ssl):
-        Dmax[t] = sl[1] - sl[0]
-        D_keep[t] = min(D_block, Dmax[t])
-
-    if (tol > 0) and (maxS > 0):  # truncate to relative tolerance
-        for t, sl, in zip(St, Ssl):
-            local_maxS = config.backend.max_abs(Sdata[slice(*sl)])
-            local_tol = max(local_maxS * tol_block, maxS * tol) if tol_block > 0 else maxS * tol
-            D_keep[t] = min(D_keep[t], config.backend.count_greater(Sdata[slice(*sl)], local_tol))
-
-    if sum(D_keep.values()) > D_total:  # truncate to total bond dimension
-        order = config.backend.select_global_largest(Sdata, St, Ssl, D_keep, D_total, keep_multiplets, eps_multiplet, ordering)
-        low = 0
-        for ind, D_ind in D_keep.items():
-            high = low + D_ind
-            D_keep[ind] = sum((low <= order) & (order < high)).item()
-            low = high
-    if keep_multiplets:  # check symmetry related blocks and truncate to equal length
-        for t in D_keep:
-            tn = np.array(t, dtype=int).reshape((1, 1, -1))
-            tn = tuple(config.sym.fuse(tn, np.array([1], dtype=int), -1)[0])
-            minD_sector = min(D_keep[t], D_keep[tn])
-            D_keep[t] = D_keep[tn] = minD_sector
-    dec, Dtot = {}, {}
-    for ind, D_ind in D_keep.items():
-        if D_ind > 0:
-            Dslc = config.backend.range_largest(D_ind, Dmax[ind], ordering)
-            dec[ind] = {ind: _DecRec(Dslc, D_ind, (D_ind,))}
-            Dtot[ind] = D_ind
-    return _LegDec(dec, Dtot)
 
 #  =========== fuse legs ======================
 
@@ -491,19 +435,19 @@ def _meta_unfuse_legdec(config, struct, ls, snew):
 
 #  =========== masks ======================
 
-def _masks_for_axes(config, structa, hfa, axa, structb, hfb, axb, tcon):
-    """ masks to get the intersecting parts of single legs from two tensors. """
-    msk_a, msk_b = [], []
-    tla, Dla, _, _, _ = _get_tD_legs(structa)
-    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
-    for i1, i2 in zip(axa, axb):
-        ma, mb = _intersect_hfs(config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (hfa[i1], hfb[i2]))
-        msk_a.append(ma)
-        msk_b.append(mb)
-    nsym = config.sym.NSYM
-    mam = {t: config.backend.to_mask(_outer_masks(t, msk_a, nsym)) for t in tcon}
-    mbm = {t: config.backend.to_mask(_outer_masks(t, msk_b, nsym)) for t in tcon}
-    return mam, mbm
+# def _masks_for_axes(config, structa, hfa, axa, structb, hfb, axb, tcon):
+#     """ masks to get the intersecting parts of single legs from two tensors. """
+#     msk_a, msk_b = [], []
+#     tla, Dla, _, _, _ = _get_tD_legs(structa)
+#     tlb, Dlb, _, _, _ = _get_tD_legs(structb)
+#     for i1, i2 in zip(axa, axb):
+#         ma, mb = _intersect_hfs(config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (hfa[i1], hfb[i2]))
+#         msk_a.append(ma)
+#         msk_b.append(mb)
+#     nsym = config.sym.NSYM
+#     mam = {t: config.backend.to_mask(_outer_masks(t, msk_a, nsym)) for t in tcon}
+#     mbm = {t: config.backend.to_mask(_outer_masks(t, msk_b, nsym)) for t in tcon}
+#     return mam, mbm
 
 
 def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
@@ -633,11 +577,6 @@ def _masks_for_add(config, structa, hfa, structb, hfb):
     return msk_a, msk_b, struct_a, struct_b, tuple(hfs)
 
 #  =========== auxliary functions handling fusion logic ======================
-
-def _flip_hf(x):
-    """ _Fusion with fliped signature. """
-    return x._replace(s=tuple(-s for s in x.s))
-
 
 @lru_cache(maxsize=1024)
 def _leg_structure_combine_charges(config, t_in, D_in, s_in, t_out, s_out):
