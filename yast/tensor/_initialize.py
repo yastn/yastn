@@ -292,9 +292,9 @@ def block(tensors, common_legs=None):
         if tn.struct.n != tn0.struct.n:
             raise YastError('Tensor charges of blocked tensors are inconsistent.')
         if tn.mfs != tn0.mfs or tn.hfs != tn0.hfs:
-            raise YastError('Fusion structures of blocked tensors are inconsistent.')
-        if tn.isdiag != tn0.isdiag:
-            raise YastError('Block can talk either only diagonal of only nondiagonal tensors.')
+            raise YastError('Meta-fusion structures of blocked tensors are inconsistent; Contact authors to add exception handling if this is due to hard-fusion.')
+        if tn.isdiag == True:
+            raise YastError('Block does not support diagonal tensors. Use .diag() first.')
 
     posa = np.ones((len(pos), tn0.ndim_n), dtype=int)
     posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int).reshape(len(pos), -1)

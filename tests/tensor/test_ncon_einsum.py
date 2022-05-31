@@ -120,6 +120,11 @@ def test_ncon_einsum_basic():
 
     e = yast.ncon([a, b], [[1, -1, -3], [-0, -2, 1]])
     assert e.get_shape() == (8, 6, 4, 2)
+    e = yast.ncon([b, a], [[-0, -1, 1], [1, -2, -3]])
+    e1 = yast.einsum('abc,cde', b, a)
+    assert yast.norm(e - e1) < tol
+    assert e.get_shape() == (8, 4, 6, 2)
+
     f = yast.ncon([a, b, c, d], [[4, -2, -0], [-3, -1, 5], [4, 3, 1, 1], [3, 2, 5, 2]],
                   conjs=(0, 1, 0, 1))
     assert f.get_shape() == (2, 4, 6, 8)
@@ -132,6 +137,7 @@ def test_ncon_einsum_basic():
     assert abs(yast.ncon([a], [(1, -1, -0, 1)], conjs=[1]).item() + 1j) < tol
     assert abs(yast.ncon([a], [(-0, -1, -2, -3)], conjs=[1]).item() + 1j) < tol
     assert abs(yast.ncon([a], [(1, 2, 2, 1)], conjs=[0]).item() - 1j) < tol
+
 
 
 def test_ncon_einsum_exceptions():
@@ -162,6 +168,9 @@ def test_ncon_einsum_exceptions():
     with pytest.raises(yast.YastError):
         yast.ncon([a], [(-1, -1, -0)])
         # Repeated non-positive (outgoing) index is ambiguous.
+    with pytest.raises(yast.YastError):
+        yast.ncon([a], [(-555, -542, -0)])
+        # ncon requires indices to be between -256 and 256.
     with pytest.raises(yast.YastError):
         yast.einsum(a, a, order='alphabetic')
         # The first argument should be a string

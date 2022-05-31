@@ -258,7 +258,7 @@ def apply_mask(a, *args, axis=0):
         _test_configs_match(a, b)
         axis = _broadcast_input(axis, b.mfs, a.isdiag)
         if b.hfs[axis].tree != (1,):
-            raise YastError('First tensor`s leg specified by axis cannot be fused.')
+            raise YastError('Second tensor`s leg specified by axis cannot be fused.')
 
         Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl)]) for sl in a.struct.sl)
         meta, struct = _meta_mask(b.struct, b.isdiag, a.struct, Dbnew, axis)
