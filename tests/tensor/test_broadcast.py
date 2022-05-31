@@ -113,15 +113,21 @@ def test_broadcast_exceptions():
                     t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                     D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
     with pytest.raises(yast.YastError):
-        a_nondiag.broadcast(b, axis=2)  # Error in broadcast/mask: tensor b should be diagonal.
+        _ = a_nondiag.broadcast(b, axis=2)
+        # First tensor should be diagonal.
     with pytest.raises(yast.YastError):
         bmf = b.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
-        a.broadcast(bmf, axis=1)  # Error in broadcast/mask: leg of tensor a specified by axis cannot be fused.
+        _ = a.broadcast(bmf, axis=1)  
+        # Second tensor`s leg specified by axis cannot be fused.
     with pytest.raises(yast.YastError):
         bhf = b.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
-        a.broadcast(bhf, axis=1)  # Error in broadcast: leg of tensor a specified by axis cannot be fused.
+        _ = a.broadcast(bhf, axis=1)
+        # Second tensor`s leg specified by axis cannot be fused.
     with pytest.raises(yast.YastError):
-        a.broadcast(b, axis=1)  # Error in broadcast: bond dimensions do not match.
+        a.broadcast(b, axis=1)  # Bond dimensions do not match.
+    with pytest.raises(yast.YastError):
+        _, _ = a.broadcast(b, b, axis=(1, 1, 1))
+        # There should be exactly one axis for each tensor to be projected.
 
 
 if __name__ == '__main__':
