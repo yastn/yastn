@@ -372,11 +372,11 @@ class Mps:
 
 
     def get_leftmost_leg(self):
-        return self.A[self.first].get_leg(self.left[0])
+        return self.A[self.first].get_legs(self.left[0])
 
 
     def get_rightmost_leg(self):
-        return self.A[self.last].get_leg(self.right[0])
+        return self.A[self.last].get_legs(self.right[0])
 
 
     def sweep(self, to='last', df=0, dl=0):

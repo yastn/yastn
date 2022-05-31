@@ -71,7 +71,7 @@ def apxb(a, b, x=1):
 def _addition_meta(a, b):
     """ meta-information for backend and new tensor charges and dimensions. """
     if a.struct.n != b.struct.n:
-        raise YastError('Error in add: tensor charges do not match')
+        raise YastError('Tensor charges do not match.')
     needs_mask, _ = _test_axes_match(a, b, sgn=1)
     if needs_mask:
         msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hfs, b.struct, b.hfs)

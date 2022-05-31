@@ -139,11 +139,11 @@ def test_fuse_get_legs():
     bf = b.fuse_legs(axes=(0, (1, 2), 3, 4), mode='meta')
     bff = bf.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
 
-    legs1 = [a.get_leg(2).conj(), a.get_leg(3).conj(), a.get_leg(4).conj(), b.get_leg(1), b.get_leg(2), b.get_leg(3)]
+    legs1 = [a.get_legs(2).conj(), a.get_legs(3).conj(), a.get_legs(4).conj(), b.get_legs(1), b.get_legs(2), b.get_legs(3)]
     c1 = yast.ones(config=a.config, legs=legs1)
     r1 = yast.ncon([a, b, c1], [[-1, -2, 1, 2, 3, -3], [-4, 4, 5, 6, -5], [1, 2, 3, 4, 5, 6]], [0, 1, 0])
 
-    legs2 = [af.get_leg(1).conj(), bff.get_leg(1)]
+    legs2 = [af.get_legs(1).conj(), bff.get_legs(1)]
     c2 = yast.ones(config=af.config, legs=legs2)
     r2 = yast.ncon([af, bff, c2], [[-1, 1, -2], [-3, 2, -4], [1, 2]], [0, 1, 0])
 

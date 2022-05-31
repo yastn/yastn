@@ -205,7 +205,7 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
         tensor = yast.block({(1, 1): a, (1, 2): b, (2, 1): c}, common_legs=(0, 1))
         # new tensor filled with ones, matching structure of selected legs -- to be used for e.g. dot
 
-        tensor = yast.ones(config=a.config, legs=[a.get_leg(1).conj(), a.get_leg(2).conj(), b.get_leg(0)])
+        tensor = yast.ones(config=a.config, legs=[a.get_legs(1).conj(), a.get_legs(2).conj(), b.get_legs(0)])
         # combined with ncon
         yast.ncon([tensor, a, b], [(1, 2, 3), (-1, 1, 2, -2), (3, -4, -5, -6)], conjs=(0, 0, 1))
 
@@ -338,7 +338,7 @@ class TestSyntaxGeneral(unittest.TestCase):
         # output dense
         array = a.to_dense()
         array = a.to_numpy()
-        ls = {1: b.get_leg(axis=1)}
+        ls = {1: b.get_legs(axis=1)}
         array = a.to_dense(legs=ls)  # on selected legs, enforce to include cherges read in previous line
         tensor = a.to_nonsymmetric()
 

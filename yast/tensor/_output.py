@@ -7,8 +7,7 @@ from ..sym import sym_none
 from ._legs import Leg, _metaLeg, leg_union
 
 
-__all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5',
-            'leg_structures_for_dense', 'requires_grad']
+__all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5', 'requires_grad']
 
 
 def save_to_dict(a):
@@ -237,8 +236,8 @@ def get_shape(a, axes=None, native=False):
     if axes is None:
         axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
     if isinstance(axes, int):
-        return sum(a.get_leg(axes, native=native).D)
-    return tuple(sum(leg.D) for leg in a.get_leg(axes, native=native))
+        return sum(a.get_legs(axes, native=native).D)
+    return tuple(sum(leg.D) for leg in a.get_legs(axes, native=native))
 
 
 def get_dtype(a):
@@ -295,14 +294,14 @@ def get_leg_fusion(a, axes=None):
     return {'meta': tuple(a.mfs(n) for n in axes), 'hard': tuple(a.hfs(n) for n in axes)}
 
 
-def get_leg(a, axis, native=False):
+def get_legs(a, axis=None, native=False):
     r"""
     Find all charges and the corresponding bond dimension for n-th leg.
 
     Parameters
     ----------
-    axis : int or tuple of ints
-        Index of a leg.
+    axis : int or tuple of ints or None
+        Indices of legs. Output data for all tensor legs if None.
 
     native : bool
         consider native legs if True; otherwise meta/fused legs (default).
@@ -315,7 +314,8 @@ def get_leg(a, axis, native=False):
     legs = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
-
+    if axis is None:
+        axis = tuple(range(a.ndim))
     axes, = _clear_axes(axis)
     for ax in axes:
         legs_ax = []
@@ -328,9 +328,9 @@ def get_leg(a, axis, native=False):
             tseta = tset[:, i, :].reshape(len(tset), a.config.sym.NSYM)
             Dseta = Dset[:, i].reshape(-1)
             tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tseta, Dseta)}
-            for tn, Dn in zip(tseta, Dseta):
-                if tDn[tuple(tn.flat)] != Dn:
-                    raise YastError('Inconsistend bond dimension of charge.')
+            # for tn, Dn in zip(tseta, Dseta):
+            #     if tDn[tuple(tn.flat)] != Dn:
+            #         raise YastError('Inconsistend bond dimension of charge.')
             t, D = tuple(tDn.keys()), tuple(tDn.values())
             legs_ax.append(Leg(a.config, s=a.struct.s[i], t=t, D=D, hf=a.hfs[i]))
         if not native and mf[0] > 1:
@@ -372,9 +372,9 @@ def get_leg_structure(a, axis, native=False):
     Dset = np.prod(Dset, axis=1, dtype=int) if len(axis) > 1 else Dset.reshape(-1)
 
     tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tset, Dset)}
-    for tn, Dn in zip(tset, Dset):
-        if tDn[tuple(tn.flat)] != Dn:
-            raise YastError('Inconsistend bond dimension of charge.')
+    # for tn, Dn in zip(tset, Dset):
+    #     if tDn[tuple(tn.flat)] != Dn:
+    #         raise YastError('Inconsistend bond dimension of charge.')
     return tDn
 
 
@@ -389,72 +389,72 @@ def get_leg_charges_and_dims(a, native=False):
     return ts, Ds
 
 
-def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
-    r"""
-    Combine and output charges and bond dimensions from legs of provided tensors.
-    Auxliary function to ```tensor.to_dense``` and ```tensor.to_numpy```,
-    to create dense tensors with consistent dimensions (charge sectors)
+# def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
+#     r"""
+#     Combine and output charges and bond dimensions from legs of provided tensors.
+#     Auxliary function to ```tensor.to_dense``` and ```tensor.to_numpy```,
+#     to create dense tensors with consistent dimensions (charge sectors)
 
-    Rises exception if there are some inconsistencies in bond dimensions.
+#     Rises exception if there are some inconsistencies in bond dimensions.
 
-    Parameters
-    ----------
-    tensors : list
-        [reference_tensor, {leg of reference_tensor: leg of tensor to be made dense}]
-        If dict not present, assumes {n: n for n in reference_tensor.ndim_n}
+#     Parameters
+#     ----------
+#     tensors : list
+#         [reference_tensor, {leg of reference_tensor: leg of tensor to be made dense}]
+#         If dict not present, assumes {n: n for n in reference_tensor.ndim_n}
 
-    native: bool
-        output data for native tensor (neglecting meta fusions).
-    """
-    lss = {}
-    itensors = iter(tensors)
-    a = next(itensors, None)
-    while a is not None:
-        b = next(itensors, None)
-        if isinstance(b, dict):
-            for la, lo in b.items():
-                if lo in lss:
-                    lss[lo].append(a.get_leg_structure(la, native=native))
-                else:
-                    lss[lo] = [a.get_leg_structure(la, native=native)]
-            a = next(itensors, None)
-        else:
-            for n in range(a.ndim_n if native else a.ndim):
-                if n in lss:
-                    lss[n].append(a.get_leg_structure(n, native=native))
-                else:
-                    lss[n] = [a.get_leg_structure(n, native=native)]
-            a = b
+#     native: bool
+#         output data for native tensor (neglecting meta fusions).
+#     """
+#     lss = {}
+#     itensors = iter(tensors)
+#     a = next(itensors, None)
+#     while a is not None:
+#         b = next(itensors, None)
+#         if isinstance(b, dict):
+#             for la, lo in b.items():
+#                 if lo in lss:
+#                     lss[lo].append(a.get_leg_structure(la, native=native))
+#                 else:
+#                     lss[lo] = [a.get_leg_structure(la, native=native)]
+#             a = next(itensors, None)
+#         else:
+#             for n in range(a.ndim_n if native else a.ndim):
+#                 if n in lss:
+#                     lss[n].append(a.get_leg_structure(n, native=native))
+#                 else:
+#                     lss[n] = [a.get_leg_structure(n, native=native)]
+#             a = b
 
-    if leg_structures is not None:
-        for n, ls in leg_structures.items():
-            if n in lss:
-                lss[n].append(ls)
-            else:
-                lss[n] = [ls]
+#     if leg_structures is not None:
+#         for n, ls in leg_structures.items():
+#             if n in lss:
+#                 lss[n].append(ls)
+#             else:
+#                 lss[n] = [ls]
 
-    for lo in lss:
-        lss[lo] = leg_structures_union(*lss[lo])
-    return lss
+#     for lo in lss:
+#         lss[lo] = leg_structures_union(*lss[lo])
+#     return lss
 
 
-def leg_structures_union(*args):
-    """
-    Makes a union of leg structures {t: D} specified in args.
+# def leg_structures_union(*args):
+#     """
+#     Makes a union of leg structures {t: D} specified in args.
 
-    Raise error if there are inconsistencies.
-    """
-    ls_out = {}
-    len_t = -1
-    for tD in args:
-        for t, D in tD.items():
-            if (t in ls_out) and ls_out[t] != D:
-                raise YastError(f'Bond dimensions for charge {t} are inconsistent.')
-            ls_out[t] = D
-            if len(t) != len_t and len_t >= 0:
-                raise YastError('Inconsistent charge structure. Likely mixing merged and native legs.')
-            len_t = len(t)
-    return ls_out
+#     Raise error if there are inconsistencies.
+#     """
+#     ls_out = {}
+#     len_t = -1
+#     for tD in args:
+#         for t, D in tD.items():
+#             if (t in ls_out) and ls_out[t] != D:
+#                 raise YastError(f'Bond dimensions for charge {t} are inconsistent.')
+#             ls_out[t] = D
+#             if len(t) != len_t and len_t >= 0:
+#                 raise YastError('Inconsistent charge structure. Likely mixing merged and native legs.')
+#             len_t = len(t)
+#     return ls_out
 
 
 ############################
@@ -552,7 +552,7 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     config_dense = a.config._replace(sym=sym_none)
 
     ndim = a.ndim_n if native else a.ndim
-    legs_a = list(a.get_leg(range(ndim), native=native))
+    legs_a = list(a.get_legs(range(ndim), native=native))
     if legs is not None:
         for n, leg in legs.items():
             if (n < 0) or (n >= ndim):

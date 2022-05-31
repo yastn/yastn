@@ -23,7 +23,7 @@ def test_eigs_simple():
     wn, vn = eigs(tmn, k=9, which='LM')
 
     ## initializing random tensor matching TM, with 3-rd leg extra carrying charges -1, 0, 1
-    legs = [a.get_leg(2).conj(), a.get_leg(2), yast.Leg(a.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))]
+    legs = [a.get_legs(2).conj(), a.get_legs(2), yast.Leg(a.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))]
     vv = yast.rand(config=a.config, legs=legs, dtype='float64')
     r1d, meta = yast.compress_to_1d(vv)
 
@@ -54,7 +54,7 @@ def test_eigs_exception():
     tm = yast.ncon([a, a], [(-1, 1, -3), (-2, 1, -4)], conjs=(0, 1))
     tm = tm.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
     # make sure to fill-in zero blocks, as in this example tm is not a square matrix
-    legs_for_tm = {0: tm.get_leg(1).conj(), 1: tm.get_leg(0).conj()}
+    legs_for_tm = {0: tm.get_legs(1).conj(), 1: tm.get_legs(0).conj()}
     tmn = tm.to_numpy(legs=legs_for_tm)
 
     wn, vn = eigs(tmn, k=9, which='LM')
@@ -82,7 +82,7 @@ def test_eigs_exception():
 
     # # for tm with fused legs
 
-    # vv2 = yast.rand(config=a.config, legs=[(tm.get_leg(1).conj(), tm.get_leg(0), leg_aux)], dtype='float64')
+    # vv2 = yast.rand(config=a.config, legs=[(tm.get_legs(1).conj(), tm.get_legs(0), leg_aux)], dtype='float64')
     # r1d2, meta2 = yast.compress_to_1d(vv2)
 
     # def f2(x):
