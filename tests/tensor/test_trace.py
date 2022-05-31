@@ -18,7 +18,7 @@ def trace_vs_numpy(a, axes):
 
     if not (a.isdiag or len(axes[0]) == 0):
         ma = a.fuse_legs(axes=axes+out, mode='meta')
-        tDin = {0: ma.get_leg_structure(1), 1: ma.get_leg_structure(0)}
+        tDin = {0: ma.get_leg(1).conj(), 1: ma.get_leg(0).conj()}
         na = ma.to_numpy(tDin)  # to_numpy() with 2 matching axes to be traced
     else:
         na = a.to_numpy() # no trace is axes=((),())
@@ -30,9 +30,9 @@ def trace_vs_numpy(a, axes):
     if len(axes[0]) > 0:
         assert a.are_independent(c)
 
-    tDout = {nn: a.get_leg_structure(ii) for nn, ii in enumerate(out)}
+    legs_out = {nn: a.get_leg(ii) for nn, ii in enumerate(out)}
     # trace might have removed some charges on remaining legs
-    nc = c.to_numpy(tDout) # for comparison they have to be filled in.
+    nc = c.to_numpy(legs=legs_out) # for comparison they have to be filled in.
     assert np.linalg.norm(nc - nat) < tol
     return c
 

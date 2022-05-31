@@ -15,10 +15,10 @@ def algebra_vs_numpy(f, a, b):
     f is lambda expresion using magic methods on a and b tensors
     e.g. f = lambda x, y: x + y
     """
-    tDsa = {ia: a.get_leg_structure(ia) for ia in range(a.ndim)}
-    tDsb = {ib: b.get_leg_structure(ib) for ib in range(b.ndim)}
-    na = a.to_numpy(leg_structures=tDsb) # makes sure nparrays have consistent shapes
-    nb = b.to_numpy(leg_structures=tDsa) # makes sure nparrays have consistent shapes
+    legs_for_a = {ib: leg for ib, leg in enumerate(b.get_leg(range(b.ndim)))}
+    legs_for_b = {ia: leg for ia, leg in enumerate(a.get_leg(range(a.ndim)))}
+    na = a.to_numpy(legs=legs_for_a) # makes sure nparrays have consistent shapes
+    nb = b.to_numpy(legs=legs_for_b) # makes sure nparrays have consistent shapes
     nc = f(na, nb)
 
     c = f(a, b)

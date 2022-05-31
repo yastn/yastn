@@ -67,25 +67,46 @@ def Leg(config, s=1, t=(), D=(), hf=None):
     return _Leg(sym=sym, s=s, t=t, D=D, hf=hf)
 
 
-def leg_union(*args):
-    """
-    Output _Leg that represent space being an union of spaces of a list of legs.
-    """
-    legs = list(args)
-    if any(leg.sym.SYM_ID != legs[0].sym.SYM_ID for leg in legs):
-        raise YastError('Legs have different symmetries')
-    if any(leg.s != legs[0].s for leg in legs):
-        raise YastError('Legs have different signatures')
-    if any(leg.hf != legs[0].hf for leg in legs):
-        raise YastError('Leg union does not support union of fused spaces - TODO')
 
+def _combine_tD(*legs):
     tD = {}
     for leg in legs:
         for t, D in zip(leg.t, leg.D):
             if t in tD and tD[t] != D:
                 raise YastError('Legs have inconsistent dimensions')
             tD[t] = D
-    t, D = tuple(tD.keys()), tuple(tD.values())
+    t = tuple(sorted(tD.keys()))
+    D = tuple(tD[x] for x in t)
+    return t, D
 
+
+def _leg_union(*legs):
+    """
+    Output _Leg that represent space being an union of spaces of a list of legs.
+    """
+    legs = list(legs)
+    if any(leg.sym.SYM_ID != legs[0].sym.SYM_ID for leg in legs):
+        raise YastError('Legs have different symmetries')
+    if any(leg.s != legs[0].s for leg in legs):
+        raise YastError('Legs have different signatures')
+    if any(leg.hf != legs[0].hf for leg in legs):
+        raise YastError('Leg union does not support union of fused spaces - TODO')
+    t, D = _combine_tD(*legs)
     return _Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D, hf=legs[0].hf)
 
+
+def leg_union(*legs):
+    """
+    Output _Leg that represent space being an union of spaces of a list of legs.
+    """
+    legs = list(legs)
+    if all(isinstance(leg, _Leg) for leg in legs):
+        return _leg_union(*legs)
+    if all(isinstance(leg, _metaLeg) for leg in legs):
+        mf = legs[0].mf
+        if any(leg.mf != mf for leg in legs):
+            raise YastError('Meta-fusions do not match')
+        new_nlegs = tuple(_leg_union(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
+        t, D = _combine_tD(*legs)
+        return _metaLeg(legs=new_nlegs, mf=legs[0].mf, t=t, D=D)
+    raise YastError('All arguments of leg_union should be Legs or meta-fused Legs.')

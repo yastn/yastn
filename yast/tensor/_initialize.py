@@ -3,7 +3,7 @@
 from itertools import chain, repeat, accumulate, product
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _flatten, _struct
-from ._tests import YastError
+from ._tests import YastError, _test_tD_consistency
 
 __all__ = ['block']
 
@@ -118,8 +118,7 @@ def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     a.struct = a.struct._replace(t=a_t, D=a_D, Dp=a_Dp, sl=a_sl)
 
     a._data = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
-    for n in range(a.ndim_n):
-        a.get_leg_structure(n, native=True)  # here checks the consistency of bond dimensions
+    _test_tD_consistency(a.struct)
 
 
 def set_block(a, ts=(), Ds=None, val='zeros'):
@@ -172,11 +171,11 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
     if Ds is None:  # attempt to read Ds from existing blocks.
         Ds = []
-        tD = [a.get_leg_structure(n, native=True) for n in range(a.ndim_n)]
-        for n in range(a.ndim_n):
+        legs = a.get_leg(range(a.ndim_n), native=True)
+        for n, leg in enumerate(legs):
             try:
-                Ds.append(tD[n][tuple(ats[0, n, :].flat)])
-            except KeyError as err:
+                Ds.append(leg.D[leg.t.index(tuple(ats[0, n, :].flat))])
+            except ValueError as err:
                 raise YastError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
         Ds = tuple(Ds)
 
@@ -199,9 +198,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     a_Dp = a.struct.Dp[:ind] + (Dsize,) + a.struct.Dp[ind2:]
     a_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(a_Dp), a_Dp))
     a.struct = a.struct._replace(t=a_t, D=a_D, Dp=a_Dp, sl=a_sl)
-
-    for n in range(a.ndim_n):
-        a.get_leg_structure(n, native=True)  # here checks the consistency of bond dimensions
+    _test_tD_consistency(a.struct)
 
 
 def _init_block(config, Dsize, val, dtype, device):

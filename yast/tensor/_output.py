@@ -4,7 +4,7 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _mf_to_ntree, _struct, _flatten
 from ._tests import YastError
 from ..sym import sym_none
-from ._legs import Leg, _metaLeg
+from ._legs import Leg, _metaLeg, leg_union
 
 
 __all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5',
@@ -237,8 +237,8 @@ def get_shape(a, axes=None, native=False):
     if axes is None:
         axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
     if isinstance(axes, int):
-        return sum(a.get_leg_structure(axes, native=native).values())
-    return tuple(sum(a.get_leg_structure(ii, native=native).values()) for ii in axes)
+        return sum(a.get_leg(axes, native=native).D)
+    return tuple(sum(leg.D) for leg in a.get_leg(axes, native=native))
 
 
 def get_dtype(a):
@@ -461,7 +461,7 @@ def leg_structures_union(*args):
 #   Down-casting tensors   #
 ############################
 
-def to_dense(a, leg_structures=None, native=False, reverse=False):
+def to_dense(a, legs=None, native=False, reverse=False):
     r"""
     Create dense tensor corresponding to the symmetric tensor.
 
@@ -486,13 +486,13 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
     out : tensor
         The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
-    c = a.to_nonsymmetric(leg_structures, native, reverse)
+    c = a.to_nonsymmetric(legs, native, reverse)
     x = c.config.backend.clone(c._data)
     x = c.config.backend.diag_create(x) if c.isdiag else x.reshape(c.struct.D[0])
     return x
 
 
-def to_numpy(a, leg_structures=None, native=False, reverse=False):
+def to_numpy(a, legs=None, native=False, reverse=False):
     r"""
     Create full ``numpy.ndarray`` corresponding to the symmetric tensor. See :func:`yast.to_dense`
 
@@ -501,7 +501,7 @@ def to_numpy(a, leg_structures=None, native=False, reverse=False):
     out : numpy.ndarray
         NumPy array equivalent to symmetric tensor
     """
-    return a.config.backend.to_numpy(a.to_dense(leg_structures, native, reverse))
+    return a.config.backend.to_numpy(a.to_dense(legs, native, reverse))
 
 
 def to_raw_tensor(a):
@@ -519,7 +519,7 @@ def to_raw_tensor(a):
     raise YastError('Only tensor with a single block can be converted to raw tensor')
 
 
-def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
+def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     r"""
     Create equivalent ``yast.Tensor`` with no explict symmetry. All blocks of the original
     tensor are accummulated into a single block.
@@ -534,7 +534,7 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
 
     Parameters
     ----------
-    leg_structures : dict
+    legs : dict
         {n: {tn: Dn}} specify charges and dimensions to include on some legs (indicated by keys n).
 
     native: bool
@@ -552,27 +552,28 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     config_dense = a.config._replace(sym=sym_none)
 
     ndim = a.ndim_n if native else a.ndim
-    tD = [a.get_leg_structure(n, native=native) for n in range(ndim)]
-    if leg_structures is not None:
-        for n, tDn in leg_structures.items():
+    legs_a = list(a.get_leg(range(ndim), native=native))
+    if legs is not None:
+        for n, leg in legs.items():
             if (n < 0) or (n >= ndim):
                 raise YastError('Specified leg out of ndim')
-            tD[n] = leg_structures_union(tD[n], tDn)
-    Dtot = tuple(sum(tDn.values()) for tDn in tD)
-    for tDn in tD:
-        tns = sorted(tDn.keys(), reverse=reverse)
-        Dlow = 0
-        for tn in tns:
-            Dhigh = Dlow + tDn[tn]
+            legs_a[n] = leg_union(legs_a[n], leg)
+    Dtot = tuple(sum(leg.D) for leg in legs_a)
+    tD, step = [], -1 if reverse else 1
+    for n, leg in enumerate(legs_a):
+        Dlow, tDn = 0, {}
+        for tn, Dn in zip(leg.t[::step], leg.D[::step]):
+            Dhigh = Dlow + Dn
             tDn[tn] = (Dlow, Dhigh)
             Dlow = Dhigh
+        tD.append(tDn)
     axes = tuple((n,) for n in range(ndim))
     if not native:
         axes = tuple(_unpack_axes(a.mfs, *axes))
     meta = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     for t_sl, tt in zip(a.struct.sl, tset):
-        meta.append((slice(*t_sl), tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
+        meta.append((slice(*t_sl), tuple(tD[n][tuple(tt[ax, :].flat)] for n, ax in enumerate(axes))))
     if a.isdiag:
         Dtot = Dtot[:1]
         meta = [(sl, D[:1]) for sl, D in meta]
@@ -587,6 +588,74 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
 
+
+# def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
+#     r"""
+#     Create equivalent ``yast.Tensor`` with no explict symmetry. All blocks of the original
+#     tensor are accummulated into a single block.
+
+#     Blocks are ordered according to increasing charges on each leg.
+#     It is possible to supply a list of additional charge sectors with dimensions to be included.
+#     (should be consistent with the tensor). This allows to fill in some explicit zero blocks.
+
+#     .. note::
+#         yast structure can be redundant since resulting tensor is effectively just
+#         a single dense block. If that's the case, use :meth:`yast.Tensor.to_dense`.
+
+#     Parameters
+#     ----------
+#     leg_structures : dict
+#         {n: {tn: Dn}} specify charges and dimensions to include on some legs (indicated by keys n).
+
+#     native: bool
+#         output native tensor (ignoring fusion of legs).
+
+#     reverse: bool
+#         reverse the order in which blocks are sorted. Default order is ascending in
+#         values of block's charges.
+
+#     Returns
+#     -------
+#     out : Tensor
+#         the config of returned tensor does not use any symmetry
+#     """
+#     config_dense = a.config._replace(sym=sym_none)
+
+#     ndim = a.ndim_n if native else a.ndim
+#     tD = [a.get_leg_structure(n, native=native) for n in range(ndim)]
+#     if leg_structures is not None:
+#         for n, tDn in leg_structures.items():
+#             if (n < 0) or (n >= ndim):
+#                 raise YastError('Specified leg out of ndim')
+#             tD[n] = leg_structures_union(tD[n], tDn)
+#     Dtot = tuple(sum(tDn.values()) for tDn in tD)
+#     for tDn in tD:
+#         tns = sorted(tDn.keys(), reverse=reverse)
+#         Dlow = 0
+#         for tn in tns:
+#             Dhigh = Dlow + tDn[tn]
+#             tDn[tn] = (Dlow, Dhigh)
+#             Dlow = Dhigh
+#     axes = tuple((n,) for n in range(ndim))
+#     if not native:
+#         axes = tuple(_unpack_axes(a.mfs, *axes))
+#     meta = []
+#     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+#     for t_sl, tt in zip(a.struct.sl, tset):
+#         meta.append((slice(*t_sl), tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
+#     if a.isdiag:
+#         Dtot = Dtot[:1]
+#         meta = [(sl, D[:1]) for sl, D in meta]
+
+#     c_s = a.get_signature(native)
+#     c_t = ((),)
+#     c_D = (Dtot,) if not a.isdiag else (Dtot + Dtot,)
+#     Dp = np.prod(Dtot, dtype=int)
+#     c_Dp = (Dp,)
+#     c_sl = ((0, Dp),)
+#     c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+#     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
+#     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
 
 def zero_of_dtype(a):
     """ Return zero scalar of the instance specified by backend and dtype. """
