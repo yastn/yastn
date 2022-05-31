@@ -64,16 +64,22 @@ def test_Z2xU1():
             yast.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)], D=[2, 4, 6, 3, 6, 9])]
     a = yast.ones(config=config_Z2xU1, legs=legs)
     assert a.get_shape() == (9, 3, 30)
-    assert pytest.approx(a.norm() ** 2, rel=tol) == a.size == 104
+    assert pytest.approx(a.norm().item() ** 2, rel=tol) == a.size == 104
 
     a.set_block(ts=((0, 0), (0, 0), (0, 0)), Ds=(1, 5, 4), val=np.sqrt(np.arange(20)))
-    assert pytest.approx(a.norm() ** 2, rel=tol) == 294  # sum(range(20)) == 190
+    assert pytest.approx(a.norm().item() ** 2, rel=tol) == 294  # sum(range(20)) == 190
     assert a.get_shape() == (9, 8, 30)
     assert a.is_consistent()
 
     # setting values in the exhisting block are also possible using __setitem__
     a[(0, 0, 0, 0, 0, 0)] = a[(0, 0, 0, 0, 0, 0)] * 2
-    assert pytest.approx(a.norm() ** 2, rel=tol) == 864  # sum(4 * range(20)) == 760
+    assert pytest.approx(a.norm().item() ** 2, rel=tol) == 864  # sum(4 * range(20)) == 760
+
+    a = a.fuse_legs(axes=((0, 1), 2), mode='meta')  # if tensor is meta-fused, have to refer to unfused blocks
+    a.set_block(ts=((0, 0), (0, 0), (0, 0)), Ds=(1, 5, 4), val=np.sqrt(np.arange(20)))
+    assert pytest.approx(a.norm().item() ** 2, rel=tol) == 294  # sum(range(20)) == 190
+    assert a.get_shape() == (26, 30)
+    assert a.get_shape(native=True) == (9, 8, 30)
 
     # 3-dim tensor
     legs = [yast.Leg(config_Z2xU1, s=-1, t=[(0, 1), (1, 0)], D=[1, 2]),

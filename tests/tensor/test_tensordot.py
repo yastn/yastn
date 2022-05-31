@@ -12,21 +12,27 @@ tol = 1e-12  #pylint: disable=invalid-name
 def tensordot_vs_numpy(a, b, axes, conj):
     outa = tuple(ii for ii in range(a.ndim) if ii not in axes[0])
     outb = tuple(ii for ii in range(b.ndim) if ii not in axes[1])
-    tDs = {nn: a.get_leg_structure(ii) for nn, ii in enumerate(outa)}
-    tDs.update({nn + len(outa): b.get_leg_structure(ii) for nn, ii in enumerate(outb)})
-    tDsa = {ia: b.get_leg_structure(ib) for ia, ib in zip(*axes)}
-    tDsb = {ib: a.get_leg_structure(ia) for ia, ib in zip(*axes)}
-    na = a.to_numpy(tDsa)
-    nb = b.to_numpy(tDsb)
+
+    legs_a = a.get_leg(range(a.ndim))
+    legs_b = b.get_leg(range(b.ndim))
+
+    legs_a_out = {nn: legs_a[ii] for nn, ii in enumerate(outa)}
+    legs_b_out = {nn + len(outa): legs_b[ii] for nn, ii in enumerate(outb)}
+
+    conj_in = False if conj[0] + conj[1] == 1 else True
+    na = a.to_numpy(legs={ia: legs_b[ib].conj() if conj_in else legs_b[ib] for ia, ib in zip(*axes)})
+    nb = b.to_numpy(legs={ib: legs_a[ia].conj() if conj_in else legs_a[ia] for ia, ib in zip(*axes)})
     if conj[0]:
         na = na.conj()
+        legs_a_out = {nn: leg.conj() for nn, leg in legs_a_out.items()}
     if conj[1]:
         nb = nb.conj()
+        legs_b_out = {nn: leg.conj() for nn, leg in legs_b_out.items()}
     nab = np.tensordot(na, nb, axes)
 
     c = yast.tensordot(a, b, axes, conj)
 
-    nc = c.to_numpy(tDs)
+    nc = c.to_numpy(legs={**legs_a_out, **legs_b_out})
     assert c.is_consistent()
     assert a.are_independent(c)
     assert c.are_independent(b)
@@ -70,7 +76,7 @@ def test_dot_basic():
 
     # Z2xU1
     t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
-    t2 = [(0, 0), (0, 2), (2, 0), (2, 2)]
+    t2 = [(0, 0), (0, 2), (1, 0), (1, 2)]
     a = yast.rand(config=config_Z2xU1, s=(-1, 1, 1, -1),
                   t=(t1, t1, t1, t1),
                   D=((1, 2, 2, 4), (9, 4, 3, 2), (5, 6, 7, 8), (7, 8, 9, 10)))

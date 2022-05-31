@@ -32,11 +32,8 @@ def test_to_nonsymmetric_1():
                   t=((-2, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                   D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
 
-    lsa = {0: a.get_leg_structure(axis=0)}
-    lsb = {0: b.get_leg_structure(axis=0)}
-
-    an = a.to_nonsymmetric(leg_structures=lsb)
-    bn = b.to_nonsymmetric(leg_structures=lsa)
+    an = a.to_nonsymmetric(legs={0: b.get_leg(axis=0)})
+    bn = b.to_nonsymmetric(legs={0: a.get_leg(axis=0)})
     assert pytest.approx(an.vdot(bn).item(), rel=tol) == a.vdot(b).item()
     with pytest.raises(yast.YastError):
         a.vdot(bn)

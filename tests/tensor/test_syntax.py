@@ -333,13 +333,13 @@ class TestSyntaxGeneral(unittest.TestCase):
         a.get_shape(axes=2)
         ls = a.get_leg_structure(axis=1)
         print(ls)
-        
+
 
         # output dense
         array = a.to_dense()
         array = a.to_numpy()
-        ls = {1: b.get_leg_structure(axis=1)}
-        array = a.to_dense(leg_structures=ls)  # on selected legs, enforce to include cherges read in previous line
+        ls = {1: b.get_leg(axis=1)}
+        array = a.to_dense(legs=ls)  # on selected legs, enforce to include cherges read in previous line
         tensor = a.to_nonsymmetric()
 
         # permute - documented example in test_transpose.py
