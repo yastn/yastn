@@ -16,8 +16,8 @@ def run_to_number(a, b):
     nb0 = t0.to_number()  # this is backend-type number
     it0 = t0.item()  # this is python float (or int)
 
-    legs_for_b = {ii: leg for ii, leg in enumerate(a.get_leg(range(a.ndim)))}  # info on charges and dimensions on all legs
-    legs_for_a = {ii: leg for ii, leg in enumerate(b.get_leg(range(b.ndim)))}
+    legs_for_b = {ii: leg for ii, leg in enumerate(a.get_legs())}  # info on charges and dimensions on all legs
+    legs_for_a = {ii: leg for ii, leg in enumerate(b.get_legs())}
     na = a.to_numpy(legs_for_a)  # use tDb to fill in missing zero blocks to make sure that na and nb match
     nb = b.to_numpy(legs_for_b)
     ns = na.conj().reshape(-1) @ nb.reshape(-1)  # this is numpy scalar

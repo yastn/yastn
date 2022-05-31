@@ -13,8 +13,8 @@ def tensordot_vs_numpy(a, b, axes, conj):
     outa = tuple(ii for ii in range(a.ndim) if ii not in axes[0])
     outb = tuple(ii for ii in range(b.ndim) if ii not in axes[1])
 
-    legs_a = a.get_leg(range(a.ndim))
-    legs_b = b.get_leg(range(b.ndim))
+    legs_a = a.get_legs()
+    legs_b = b.get_legs()
 
     legs_a_out = {nn: legs_a[ii] for nn, ii in enumerate(outa)}
     legs_b_out = {nn + len(outa): legs_b[ii] for nn, ii in enumerate(outb)}

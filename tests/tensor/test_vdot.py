@@ -11,8 +11,8 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 def vdot_vs_numpy(a, b):
     """ test vdot vs numpy """
-    legs_for_a = {ii: leg for ii, leg in enumerate(b.get_leg(range(b.ndim)))}
-    legs_for_b = {ii: leg for ii, leg in enumerate(a.get_leg(range(a.ndim)))}
+    legs_for_a = {ii: leg for ii, leg in enumerate(b.get_legs())}
+    legs_for_b = {ii: leg for ii, leg in enumerate(a.get_legs())}
     na = a.to_numpy(legs=legs_for_a)  # makes sure nparrays have consistent shapes
     nb = b.to_numpy(legs=legs_for_b)  # makes sure nparrays have consistent shapes
     ns = na.conj().reshape(-1) @ nb.reshape(-1)

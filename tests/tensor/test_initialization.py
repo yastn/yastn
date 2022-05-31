@@ -24,8 +24,7 @@ def test_initialize_dense():
     assert a.size == np.sum(npa != 0.)
     assert a.is_consistent()
 
-    legs = a.get_leg([0, 1, 2])
-    b = yast.ones(config=config_dense, legs=legs)
+    b = yast.ones(config=config_dense, legs=a.get_legs())
     assert yast.norm(a - b) < tol  # == 0.0
     assert b.is_consistent()
 
@@ -45,7 +44,7 @@ def test_initialize_dense():
     assert npa.shape == a.get_shape() == (5,)
     assert a.is_consistent()
 
-    b = yast.zeros(config=config_dense, legs=a.get_leg([0]))
+    b = yast.zeros(config=config_dense, legs=a.get_legs())
     assert yast.norm(a - b) < tol  # == 0.0
     assert a.struct == b.struct
 
@@ -71,7 +70,7 @@ def test_initialize_U1():
     a2 = yast.ones(config=config_U1, s=(-1, 1, 1, 1),
                   t=((-2, 0, 2), (0, 2), (-2, 0, 2), 0),
                   D=((1, 2, 3), (1, 2), (1, 2, 3), 1))
-    a3 = yast.ones(config=config_U1, legs=a2.get_leg([0, 1, 2, 3]))
+    a3 = yast.ones(config=config_U1, legs=a2.get_legs())
 
     assert yast.norm(a1 - a2) < tol  # == 0.0
     assert yast.norm(a1 - a3) < tol  # == 0.0
@@ -94,7 +93,7 @@ def test_initialize_U1():
     # 1-dim tensor
     a1 = yast.ones(config=config_U1, s=-1, t=0, D=5)
     a2 = yast.ones(config=config_U1, legs=[yast.Leg(config_U1, s=-1, t=[0], D=[5])])
-    a3 = yast.ones(config=config_U1, legs=a2.get_leg([0]))
+    a3 = yast.ones(config=config_U1, legs=a2.get_legs())
 
     assert yast.norm(a1 - a2) < tol  # == 0.0
     assert yast.norm(a1 - a3) < tol  # == 0.0
@@ -155,7 +154,7 @@ def test_initialize_Z2xU1():
     a2 = yast.ones(config=config_Z2xU1, s=(-1, 1, 1),
                    t=[[(0, 1), (1, 0)], [(0, 0)], [(0, 1), (1, 0)]],
                    D=[[1, 2], 3, [1, 2]])
-    a3 = yast.ones(config=config_Z2xU1, legs=a2.get_leg([0, 1, 2]))
+    a3 = yast.ones(config=config_Z2xU1, legs=a2.get_legs())
 
     assert yast.norm(a1 - a2) < tol  # == 0.0
     assert yast.norm(a1 - a3) < tol  # == 0.0
@@ -168,7 +167,7 @@ def test_initialize_Z2xU1():
     # 1-dim tensor
     a1 = yast.ones(config=config_Z2xU1, legs=[yast.Leg(config_Z2xU1, s=1, t=[(0, 0)], D=[2])])
     a2 = yast.ones(config=config_Z2xU1, s=1, t=[[(0, 0)]], D=[[2]])
-    a3 = yast.ones(config=config_Z2xU1, legs=a2.get_leg([0]))
+    a3 = yast.ones(config=config_Z2xU1, legs=a2.get_legs())
 
     assert yast.norm(a1 - a2) < tol  # == 0.0
     assert yast.norm(a1 - a3) < tol  # == 0.0

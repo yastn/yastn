@@ -210,7 +210,7 @@ def test_hard_dot_1_sparse():
     aa = yast.fuse_legs(a, axes=((1, 0), 2, 3), mode='hard')
     bb = yast.fuse_legs(b, axes=((1, 0), 2, 3), mode='hard')
 
-    leg = aa.get_leg(0)
+    leg = aa.get_legs(0)
     xx = yast.rand(config=aa.config, legs=[leg, leg.conj()])
 
     yast.tensordot(xx, aa, axes=(1, 0))

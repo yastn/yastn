@@ -171,7 +171,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
     if Ds is None:  # attempt to read Ds from existing blocks.
         Ds = []
-        legs = a.get_leg(range(a.ndim_n), native=True)
+        legs = a.get_legs(range(a.ndim_n), native=True)
         for n, leg in enumerate(legs):
             try:
                 Ds.append(leg.D[leg.t.index(tuple(ats[0, n, :].flat))])

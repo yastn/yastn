@@ -24,9 +24,9 @@ def test_dense_1():
     assert b.to_numpy().shape == (3, 11, 5)
     assert c.to_numpy().shape == (5, 10, 7)
 
-    legs_a = a.get_leg(range(a.ndim))
-    legs_b = b.get_leg(range(b.ndim))
-    legs_c = c.get_leg(range(c.ndim))
+    legs_a = a.get_legs()
+    legs_b = b.get_legs()
+    legs_c = c.get_legs()
     
     lss = {ii: yast.leg_union(legs_a[ii], legs_b[ii], legs_c[ii]) for ii in range(a.ndim)}
     # all dense tensors will have matching shapes
@@ -47,21 +47,21 @@ def test_dense_1():
     assert d.to_numpy().shape == (3, 7, 9)
 
     ad = yast.tensordot(a, d, axes=((1, 0), (1, 2)))
-    lssa = {1: d.get_leg(1).conj(), 0: d.get_leg(2).conj()}
-    lssd = {1: a.get_leg(1).conj(), 2: a.get_leg(0).conj()}
+    lssa = {1: d.get_legs(1).conj(), 0: d.get_legs(2).conj()}
+    lssd = {1: a.get_legs(1).conj(), 2: a.get_legs(0).conj()}
     na = a.to_numpy(legs=lssa)
     nd = d.to_numpy(legs=lssd)
 
     nad = np.tensordot(na, nd, axes=((1, 0), (1, 2)))
-    lssad = {0: a.get_leg(2), 1: d.get_leg(0)}
+    lssad = {0: a.get_legs(2), 1: d.get_legs(0)}
     assert np.allclose(ad.to_numpy(legs=lssad), nad)
 
     # the same with leg fusion
     a = a.fuse_legs(axes=(2, (1, 0)), mode='meta')
     d = d.fuse_legs(axes=((1, 2), 0), mode='meta')
     fad = yast.tensordot(a, d, axes=(1, 0))
-    na = a.to_numpy(legs={1: d.get_leg(0).conj()})   # TODO: support of leg_union for hard fusion
-    nd = d.to_numpy(legs={0: a.get_leg(1).conj()})
+    na = a.to_numpy(legs={1: d.get_legs(0).conj()})   # TODO: support of leg_union for hard fusion
+    nd = d.to_numpy(legs={0: a.get_legs(1).conj()})
     nad = np.tensordot(na, nd, axes=(1, 0))
     assert np.allclose(ad.to_numpy(legs=lssad), nad)
     assert np.allclose(fad.to_numpy(legs=lssad), nad)

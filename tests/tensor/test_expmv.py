@@ -83,7 +83,7 @@ def test_expmv_tm(t, tol):
     tmn = tm.to_numpy()
 
     ## initializing random tensor matching TM
-    legs = [a.get_leg(2).conj(), a.get_leg(2), yast.Leg(a.config, s=1, t=(-2, -1, 0, 1, 2), D=(1, 1, 1, 1, 1))]
+    legs = [a.get_legs(2).conj(), a.get_legs(2), yast.Leg(a.config, s=1, t=(-2, -1, 0, 1, 2), D=(1, 1, 1, 1, 1))]
     v = yast.rand(config=a.config, legs=legs, dtype='float64')
 
     vn = np.sum(v.fuse_legs(axes=[(0, 1), 2]).to_numpy(), axis=1)

@@ -176,7 +176,7 @@ def test_meta_compress():
     A.set_block(ts=(2, 0, 1, 1), Ds=(1, 2, 3, 4))
     A.set_block(ts=(0, 1, 0, -1), Ds=(5, 6, 7, 8))
     # creates tensor matching A for dot multiplication filling in all possible blocks.
-    B = yast.zeros(config=A.config, legs=A.get_leg([0, 1, 2, 3]))
+    B = yast.zeros(config=A.config, legs=A.get_legs())
     _, meta = B.compress_to_1d()
     r1d, _ = A.compress_to_1d(meta)
     T = yast.decompress_from_1d(r1d, config=config_U1, meta=meta)
