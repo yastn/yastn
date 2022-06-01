@@ -10,8 +10,9 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_block_U1():
-    w = 0.6
-    mu = -0.4
+    """ test yast.block() to create Hamiltonian MPO U1-tensor. """
+    w = 0.6  # hopping
+    mu = -0.4  # chemical potential
 
     H0 = yast.Tensor(config=config_U1, s=(1, 1, -1, -1))  
     H0.set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 1, 2))
@@ -44,6 +45,7 @@ def test_block_U1():
     
 
 def test_block_exceptions():
+    """ raising exceptions while using yast.block()"""
     II = yast.ones(config=config_U1, t=(0, (0, 1), (0, 1), 0), D=(1, (1, 1), (1, 1), 1), s=(1, 1, -1, -1))
     nn = yast.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
     # MPO tensor for chemical potential
