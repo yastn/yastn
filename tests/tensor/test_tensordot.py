@@ -208,7 +208,6 @@ def test_tensordot_exceptions():
 @pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
 def test_tensordot_backward():
     import torch
-
     # U1
     a = yast.rand(config=config_U1, s=(-1, -1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1)],
