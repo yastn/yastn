@@ -26,8 +26,6 @@ def test_fuse():
     e = e.fuse_legs(axes=(0, 1), mode='meta')
 
 
-
-
 def test_fuse_split():
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
@@ -155,32 +153,6 @@ def test_fuse_get_legs():
     assert yast.norm(r1 - r2) < tol  # == 0.0
 
 
-def test_fuse_block():
-    l1 = yast.rand(config=config_U1, s=(1, 1), t=[(0, 1), (0, 1)], D=[(1, 2), (2, 3)])
-    l2 = yast.rand(config=config_U1, s=(1, 1), t=[(0, 1), (0, 1)], D=[(2, 3), (3, 4)])
-    c1 = yast.rand(config=config_U1, s=(-1, -1, 1, 1),
-                   t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                   D=[(1, 2), (2, 3), (3, 4), (4, 5)])
-    c2 = yast.rand(config=config_U1, s=(-1, -1, 1, 1),
-                   t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                   D=[(2, 3), (3, 4), (4, 5), (5, 6)])
-    r1 = yast.rand(config=config_U1, s=(-1, -1), t=[(0, 1), (0, 1)], D=[(3, 4), (4, 5)])
-    r2 = yast.rand(config=config_U1, s=(-1, -1), t=[(0, 1), (0, 1)], D=[(4, 5), (5, 6)])
-
-    s1 = yast.ncon([l1, c1, r1], [[1, 2], [1, 2, 3, 4], [3, 4]])
-    s1 = s1 + yast.ncon([l2, c2, r2], [[1, 2], [1, 2, 3, 4], [3, 4]])
-    l1 = l1.fuse_legs(axes=[(0, 1)], mode='meta')
-    l2 = l2.fuse_legs(axes=[(0, 1)], mode='meta')
-    c1 = c1.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
-    c2 = c2.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
-    r1 = r1.fuse_legs(axes=[(0, 1)], mode='meta')
-    r2 = r2.fuse_legs(axes=[(0, 1)], mode='meta')
-    bl = yast.block({1: l1, 2: l2})
-    bc = yast.block({(1, 1): c1, (2, 2): c2})
-    br = yast.block({1: r1, 2: r2})
-    s2 = yast.ncon([bl, bc, br], [[1], [1, 2], [2]])
-    assert yast.norm(s1 - s2) < tol
-    assert pytest.approx(s1.item(), rel=tol) == s2.item()
 
 
 def test_fuse_legs_exceptions():

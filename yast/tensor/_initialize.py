@@ -269,7 +269,7 @@ def block(tensors, common_legs=None):
 
     common_legs : list
         Legs that are not blocked.
-        This is equivalently to all tensors having the same position (not specified) in the supertensor on that leg.
+        This is equivalently to all tensors having the same position (not specified explicitly) in the super-tensor on that leg.
     """
     out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
@@ -285,14 +285,17 @@ def block(tensors, common_legs=None):
     out_b = tuple(chain(*u_b))
     pos = tuple(tuple(chain.from_iterable(repeat(x, len(u)) for x, u in zip(ind, u_b))) for ind in pos)
 
-    for ind, tn in tensors.items():
-        ind, = _clear_axes(ind)
+    for tn in tensors.values():
         if tn.struct.s != tn0.struct.s:
             raise YastError('Signatues of blocked tensors are inconsistent.')
         if tn.struct.n != tn0.struct.n:
             raise YastError('Tensor charges of blocked tensors are inconsistent.')
-        if tn.mfs != tn0.mfs or tn.hfs != tn0.hfs:
-            raise YastError('Meta-fusion structures of blocked tensors are inconsistent; Contact authors to add exception handling if this is due to hard-fusion.')
+        if tn.mfs != tn0.mfs:
+            raise YastError('Meta fusions of blocked tensors are inconsistent.')
+        if any(tn.hfs[n].tree != (1,) for n in range(tn.ndim_n) if n not in out_s):
+            raise YastError('Blocking of hard-fused legs is currently not supported. Go through meta-fusion. Only common_legs can be hard-fused.')
+        if any(tn.hfs[n] != tn0.hfs[n] for n in out_s):
+            raise YastError('Hard-fusions of common_legs do not match.')  # TODO: HANDLED THIS
         if tn.isdiag == True:
             raise YastError('Block does not support diagonal tensors. Use .diag() first.')
 
@@ -307,7 +310,7 @@ def block(tensors, common_legs=None):
             for t, D in tDn.items():
                 if t in tDl:
                     if (pp[n] in tDl[t]) and (tDl[t][pp[n]] != D):
-                        raise YastError('Dimensions of blocked tensors are not consistent')
+                        raise YastError('Dimensions of blocked tensors are not consistent.')
                     tDl[t][pp[n]] = D
                 else:
                     tDl[t] = {pp[n]: D}
