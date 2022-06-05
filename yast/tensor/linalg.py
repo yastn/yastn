@@ -68,6 +68,9 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
     untruncated_S: bool
         returns U, S, Vh, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
 
+    mask_f: function(yast.Tensor)->yast.Tensor
+        custom truncation mask
+
     Returns
     -------
     U, S, Vh: Tensor
@@ -142,7 +145,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
 
     Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
     Umeta_unmerge, Ustruct = _meta_unfuse_legdec(a.config, Ustruct, [ls_l, ls_s], Us)
-    
+
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
@@ -165,8 +168,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
 
 
 def _meta_svd(config, struct, minD, sU, nU):
-    """ 
-    meta and struct for svd 
+    """
+    meta and struct for svd
     U has signature = (struct.s[0], sU)
     S has signature = (-sU, sU)
     V has signature = (-sU, struct.s[1])
@@ -221,11 +224,27 @@ def _meta_svd(config, struct, minD, sU, nU):
 
 def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-14, **kwargs):
     """
-    Generate mask tensor based on diagonal and real tensor S.
-    It can be then used for truncation.
+    Generate a mask tensor from real positive spectrum S, while preserving
+    degenerate multiplets. This is achieved by truncating the spectrum
+    at the boundary between multiplets.
 
-    Per block options ``D_block`` and ``tol_block`` govern truncation of within individual blocks,
-    keeping at most D_block values which are larger than relative cutoff tol_block 
+    Parameters
+    ----------
+    S: yast.Tensor
+        Diagonal tensor with spectrum.
+    tol: float
+        relative tolerance
+    D_total: int
+        maximum number of elements kept
+    eps_multiplet:
+        relative tolerance on multiplet splitting. If relative difference between
+        two consecutive elements of S is larger than ``eps_multiplet``, these
+        elements are not considered as part of the same multiplet.
+
+    Returns
+    -------
+    mask : yast.Tensor
+        mask tensor
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
         raise YastError("Truncation_mask requires S to be real and diagonal")
@@ -253,7 +272,7 @@ def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-14, *
     maxgap = np.maximum(np.abs(s[:len(s) - 1]), np.abs(s[1:len(s)])) + 1.0e-16
     gaps = np.abs(s[:len(s) - 1] - s[1:len(s)]) / maxgap
 
-    # find nearest multiplet boundary, keeping at most D_trunc elements 
+    # find nearest multiplet boundary, keeping at most D_trunc elements
     # i-th element of gaps gives gap between i-th and (i+1)-th element of s
     # Note, s[:D_trunc] selects D_trunc values: from 0th to (D_trunc-1)-th element
     for i in range(D_trunc - 1, -1, -1):
@@ -292,8 +311,26 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32, **k
     Generate mask tensor based on diagonal and real tensor S.
     It can be then used for truncation.
 
-    Per block options ``D_block`` and ``tol_block`` govern truncation of within individual blocks,
-    keeping at most D_block values which are larger than relative cutoff tol_block 
+    Per block options ``D_block`` and ``tol_block`` govern truncation within individual blocks,
+    keeping at most ``D_block`` values which are larger than relative cutoff ``tol_block``.
+
+    Parameters
+    ----------
+    S: yast.Tensor
+        Diagonal tensor with spectrum.
+    tol: float
+        relative tolerance
+    tol_block: float
+        relative tolerance per block
+    D_total: int
+        maximum number of elements kept
+    D_block: int
+        maximum number of elements kept per block
+
+    Returns
+    -------
+    mask : yast.Tensor
+        mask tensor
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
         raise YastError("Truncation_mask requires S to be real and diagonal")
@@ -382,8 +419,8 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
 
 def _meta_qr(config, struct, sQ):
-    """ 
-    meta and struct for qr. 
+    """
+    meta and struct for qr.
     Q has signature = (struct.s[0], sQ)
     R has signature = (-sQ, struct.s[1])
     """
@@ -478,7 +515,7 @@ def eigh(a, axes, sU=1, Uaxis=-1):
 
 
 def _meta_eigh(config, struct, sU):
-    """ 
+    """
     meta and struct for eigh
     U has signature = (struct.s[0], sU)
     S has signature = (-sU, sU)
@@ -511,8 +548,8 @@ def _meta_eigh(config, struct, sU):
     return meta, Sstruct, Ustruct
 
 
-def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
-         keep_multiplets=False, eps_multiplet=1e-14, untruncated_S=False):
+def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
+    D_block=2 ** 32, D_total=2 ** 32):
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
     Optionally, truncate the resulting decomposition.
@@ -555,8 +592,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, D_block=2 
     """
     S, U = eigh(a, axes=axes, sU=sU)
 
-    Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total,
-                            keep_multiplets= keep_multiplets, eps_multiplet=eps_multiplet)
+    Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total)
 
     S, U = Smask.apply_mask(S, U, axis=(0, -1))
     U = U.move_leg(source=-1, destination=Uaxis)
