@@ -3,6 +3,9 @@
 SYM_ID= 'U(1)'
 NSYM= 1
 
+def __rept__():
+    return  'dupa'
+
 def fuse(charges, signatures, new_signature):
     """
     Fusion rule for U(1) symmetry.
