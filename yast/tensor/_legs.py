@@ -1,11 +1,59 @@
 import numpy as np
+from dataclasses import dataclass
+
 from typing import NamedTuple
 from ._auxliary import _flatten
 from ._tests import YastError
 from ..sym import sym_none
 from ._merging import _Fusion
 
-__all__ = ['Leg', 'leg_union']
+__all__ = ['Leg', 'leg_union', 'Legtest']
+
+
+class _Leg(NamedTuple):
+    sym: any = sym_none
+    s: int = 1  # leg signature in (1, -1)
+    t: tuple = ()  # leg charges
+    D: tuple = ()  # and their dimensions
+    hf: tuple = ()  # fused subspaces
+
+    def conj(self):
+        """ switch leg signature """
+        return self._replace(s=-self.s, hf=self.hf.conj())
+
+
+@dataclass(frozen=True)
+class Legtest:
+    sym: any = sym_none
+    s: int = 1  # leg signature in (1, -1)
+    t: tuple = ()  # leg charges
+    D: tuple = ()  # and their dimensions
+    hf: tuple = ()  # fused subspaces
+    to_verify: bool = True
+
+    def __post_init__(self):
+        if self.to_verify:
+            if self.s not in (-1, 1):
+                raise YastError('Signature of Leg should be 1 or -1')
+            D = tuple(_flatten(self.D))
+            t = tuple(_flatten(self.t))
+            if not all(int(x) == x and x > 0 for x in D):
+                raise YastError('D should be a tuple of positive ints')
+            if not all(int(x) == x for x in t):
+                raise YastError('Charges should be ints')
+            if len(D) * self.sym.NSYM != len(t) or (self.sym.NSYM == 0 and len(D) != 1):
+                raise YastError('Number of provided charges and bond dimensions do not match sym.NSYM')
+            newt = tuple(tuple(x.flat) for x in self.sym.fuse(np.array(t).reshape((len(D), 1, self.sym.NSYM)), (self.s,), self.s))
+            oldt = tuple(tuple(x.flat) for x in np.array(t).reshape(len(D), self.sym.NSYM))
+            if oldt != newt:
+                raise YastError('Provided charges are outside of the natural range for specified symmetry.')
+            if len(set(newt)) != len(newt):
+                raise YastError('Repeated charge index.')
+            tD = {x: d for x, d in zip(newt, D)}
+            t =  tuple(sorted(newt))
+            object.__setattr__(self, "t", t)
+            object.__setattr__(self, "D", tuple(tD[x] for x in t))
+            object.__setattr__(self, "to_verify", False)
 
 
 class _Leg(NamedTuple):
