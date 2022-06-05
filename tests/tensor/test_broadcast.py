@@ -52,11 +52,11 @@ def test_broadcast_dense():
 
 def test_broadcast_U1():
     """ test broadcast on U1 tensors """
-    leg0 = yast.Leg(config=config_U1, s=1, t=(-1, 1), D=(7, 8))
-    leg1 = yast.Leg(config=config_U1, s=1, t=(-1, 1, 2), D=(1, 2, 3))
-    leg2 = yast.Leg(config=config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
-    leg3 = yast.Leg(config=config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
-    leg4 = yast.Leg(config=config_U1, s=1, t=(-1, 1, 2), D=(10, 11, 12))
+    leg0 = yast.Leg(config_U1, s=1, t=(-1, 1), D=(7, 8))
+    leg1 = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(1, 2, 3))
+    leg2 = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
+    leg3 = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
+    leg4 = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(10, 11, 12))
 
     a = yast.rand(config=config_U1, isdiag=True, legs=(leg0, leg0.conj()))
     a1 = a.diag()

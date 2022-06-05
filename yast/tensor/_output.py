@@ -4,7 +4,7 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _mf_to_ntree, _struct, _flatten
 from ._tests import YastError
 from ..sym import sym_none
-from ._legs import Leg, _metaLeg, leg_union
+from ._legs import Leg, leg_union
 
 
 __all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5', 'requires_grad']
@@ -308,8 +308,7 @@ def get_legs(a, axis=None, native=False):
 
     Returns
     -------
-        _Leg or _metaLeg (for nontrivial meta fusion) if axis is `int`.
-        tuple[_Leg] or tuple[_metaleg] otherwise.
+        Leg if axis is `int`, otherwise tuple[Leg].
     """
     legs = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
@@ -328,18 +327,15 @@ def get_legs(a, axis=None, native=False):
             tseta = tset[:, i, :].reshape(len(tset), a.config.sym.NSYM)
             Dseta = Dset[:, i].reshape(-1)
             tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tseta, Dseta)}
-            # for tn, Dn in zip(tseta, Dseta):
-            #     if tDn[tuple(tn.flat)] != Dn:
-            #         raise YastError('Inconsistend bond dimension of charge.')
             t, D = tuple(tDn.keys()), tuple(tDn.values())
-            legs_ax.append(Leg(a.config, s=a.struct.s[i], t=t, D=D, hf=a.hfs[i]))
+            legs_ax.append(Leg(a.config, s=a.struct.s[i], t=t, D=D, legs=(a.hfs[i],)))
         if not native and mf[0] > 1:
             tseta = tset[:, nax, :].reshape(len(tset), len(nax) * a.config.sym.NSYM)
             Dseta = np.prod(Dset[:, nax], axis=1, dtype=int)
             tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tseta, Dseta)}
             t = tuple(sorted(tDn.keys()))
             D = tuple(tDn[x] for x in t)
-            legs.append(_metaLeg(legs=tuple(legs_ax), mf=mf, t=t, D=D))
+            legs.append(Leg(a.config.sym, s=legs_ax[0].s, t=t, D=D, fusion=mf, legs=tuple(legs_ax), _verified=True))
         else:
             legs.append(legs_ax.pop())
     return tuple(legs) if hasattr(axis, '__iter__') else legs.pop()

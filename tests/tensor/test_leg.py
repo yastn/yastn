@@ -12,33 +12,13 @@ tol = 1e-12  #pylint: disable=invalid-name
 def test_leg():
     leg = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
 
-    print(repr(leg.sym))
-    print(leg.sym)
-    print(str(leg.sym))
+    # flipping signature
+    legc = leg.conj()
+    assert leg.s == -legc.s
 
-
-    # leg0 = yast.Legtest(sym=config_U1.sym, s=1, t=(-1, 0, 1), D=(2, 3, 4))
-    # print(leg0)
-    # print(hash(leg))
-    # print(hash(leg0))
-    # leg1 = yast.Legtest(sym=config_U1.sym, s=1, t=(-1, 0, 1), D=(2, 3, 4))
-    # print(hash(leg1))
-
-    # leg2 = yast.Legtest(sym=config_U1.sym, s=1, t=(1, 0, -1), D=(4, 3, 2))
-    # print(hash(leg2))
-
-    # leg3 = yast.Legtest(sym=config_U1.sym, s=1, t=(1, 0, -1), D=(4, 3, 2), to_verify=False)
-    # print(hash(leg3))
-
-    # assert leg2 == leg1
-
-    # # flipping signature
-    # legc = leg.conj()
-    # assert leg.s == -legc.s
-
-    # # order of provided charges (with corresponding bond dimensions) does not matter
-    # leg_unsorted = yast.Leg(config_U1, s=1, t=(1, 0, -1), D=(4, 3, 2))
-    # assert leg_unsorted == leg
+    # order of provided charges (with corresponding bond dimensions) does not matter
+    leg_unsorted = yast.Leg(config_U1, s=1, t=(1, 0, -1), D=(4, 3, 2))
+    assert leg_unsorted == leg
 
     print(leg)
 
@@ -60,7 +40,7 @@ def test_leg_meta():
     a = a.fuse_legs(axes=((0, 1), (2, 3), 4), mode='meta')
     a = a.fuse_legs(axes=((0, 1), 2), mode='meta')
     legm = a.get_legs(0)
-    assert legm.mf == a.mfs[0] and legm.legs == (leg, leg, leg, leg.conj())
+    assert legm.fusion == a.mfs[0] and legm.legs == (leg, leg, leg, leg.conj())
     legt = a.get_legs((0, 1))
     assert legt[0] == legm
     assert legt[1] == leg.conj()
@@ -95,25 +75,25 @@ def test_leg_initialization_exceptions():
 
 def test_leg_exceptions():
     with pytest.raises(yast.YastError):
-        _ = yast.Leg(config=config_U1, s=2, t=(), D=())
+        _ = yast.Leg(config_U1, s=2, t=(), D=())
         # Signature of Leg should be 1 or -1
     with pytest.raises(yast.YastError):
-        _ = yast.Leg(config=config_U1, s=1, t=(1, 0), D=(1,))
+        _ = yast.Leg(config_U1, s=1, t=(1, 0), D=(1,))
         # Number of provided charges and bond dimensions do not match sym.NSYM
     with pytest.raises(yast.YastError):
-        _ = yast.Leg(config=config_U1, s=1, t=(1,), D=(0,))
+        _ = yast.Leg(config_U1, s=1, t=(1,), D=(0,))
         # D should be a tuple of positive ints
     with pytest.raises(yast.YastError):
-        _ = yast.Leg(config=config_U1, s=1, t=(1,), D=(1.5,))
+        _ = yast.Leg(config_U1, s=1, t=(1,), D=(1.5,))
         # D should be a tuple of positive ints
     with pytest.raises(yast.YastError):
-        _ = yast.Leg(config=config_U1, s=1, t=(1.5,), D=(2,))
+        _ = yast.Leg(config_U1, s=1, t=(1.5,), D=(2,))
         # Charges should be ints
     with pytest.raises(yast.YastError):
-        _ = yast.Leg(config=config_U1, s=1, t=(1, 1), D=(2, 2))
+        _ = yast.Leg(config_U1, s=1, t=(1, 1), D=(2, 2))
         # Repeated charge index.
     with pytest.raises(yast.YastError):
-        _ = yast.Leg(config=config_Z3, s=1, t=(4,), D=(2,))
+        _ = yast.Leg(config_Z3, s=1, t=(4,), D=(2,))
         # Provided charges are outside of the natural range for specified symmetry.
 
 
