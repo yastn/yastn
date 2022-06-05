@@ -8,28 +8,36 @@ or class instance which defines
 * addition of charges through function `fuse`
 """
 
-SYM_ID= 'symmetry-name'
-NSYM= len('length-of-charge-vector')
+class Meta(type):
+    """ This metaclass is defined to get human-readable print """
+    def __repr__(cls):
+        return cls.SYM_ID
 
-def fuse(charges, signatures, new_signature):
-    """
-    Fusion rule for abelian symmetry. An `i`-th row ``charges[i,:,:]`` contains `n` length-`NSYM`
-    charge vectors. For each row, the charge vectors are added up (fused) with selected ``signature`` 
-    according to the group addition rules.
+class sym_abelian(metaclass=Meta):
+    """ template that can be inherited """
+    SYM_ID = 'symmetry-name'
+    NSYM = len('length-of-charge-vector')
 
-    Parameters
-    ----------
-        charges: numpy.ndarray
-            rank-3 integer tensor with shape (k, n, NSYM)
+    @classmethod
+    def fuse(cls, charges, signatures, new_signature):
+        """
+        Fusion rule for abelian symmetry. An `i`-th row ``charges[i,:,:]`` contains `n` length-`NSYM`
+        charge vectors. For each row, the charge vectors are added up (fused) with selected ``signature`` 
+        according to the group addition rules.
 
-        signatures: numpy.ndarray
-            integer vector with `n` +1 or -1 elements 
+        Parameters
+        ----------
+            charges: numpy.ndarray
+                rank-3 integer tensor with shape (k, n, NSYM)
 
-        new_signature: int
+            signatures: numpy.ndarray
+                integer vector with `n` +1 or -1 elements 
 
-    Returns
-    -------
-        teff: numpy.ndarray
-            integer matrix with shape (k,NSYM) of fused charges and multiplied by ``new_signature``
-    """
-    pass
+            new_signature: int
+
+        Returns
+        -------
+            teff: numpy.ndarray
+                integer matrix with shape (k,NSYM) of fused charges and multiplied by ``new_signature``
+        """
+        pass

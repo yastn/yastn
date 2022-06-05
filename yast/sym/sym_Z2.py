@@ -1,26 +1,30 @@
 """Z2 symmetry"""
 import numpy as np
+from .sym_abelian import sym_abelian
 
-SYM_ID = 'Z2'
-NSYM = 1
+class sym_Z2(sym_abelian):
+    """Z2 symmetry"""
 
-def fuse(charges, signatures, new_signature):
-    """
-    Fusion rule for :math:`Z_2` symmetry.
+    SYM_ID = 'Z2'
+    NSYM = 1
 
-    Parameters
-    ----------
-        charges: numpy.ndarray
-            rank-3 integer tensor with shape (k, n, NSYM)
+    def fuse(charges, signatures, new_signature):
+        """
+        Fusion rule for :math:`Z_2` symmetry.
 
-        signatures: numpy.ndarray
-            integer vector with `n` +1 or -1 elements 
+        Parameters
+        ----------
+            charges: numpy.ndarray
+                rank-3 integer tensor with shape (k, n, NSYM)
 
-        new_signature: int
+            signatures: numpy.ndarray
+                integer vector with `n` +1 or -1 elements 
 
-    Returns
-    -------
-        teff: numpy.ndarray
-            integer matrix with shape (k,NSYM) of fused charges and multiplied by ``new_signature``
-    """
-    return np.mod(new_signature * (charges.swapaxes(1, 2) @ signatures), 2)
+            new_signature: int
+
+        Returns
+        -------
+            teff: numpy.ndarray
+                integer matrix with shape (k,NSYM) of fused charges and multiplied by ``new_signature``
+        """
+        return np.mod(new_signature * (charges.swapaxes(1, 2) @ signatures), 2)
