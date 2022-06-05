@@ -12,28 +12,28 @@ tol = 1e-12  #pylint: disable=invalid-name
 def test_leg():
     leg = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
 
-    leg0 = yast.Legtest(sym=config_U1.sym, s=1, t=(-1, 0, 1), D=(2, 3, 4))
-    print(leg0)
-    print(hash(leg))
-    print(hash(leg0))
-    leg1 = yast.Legtest(sym=config_U1.sym, s=1, t=(-1, 0, 1), D=(2, 3, 4))
-    print(hash(leg1))
+    # leg0 = yast.Legtest(sym=config_U1.sym, s=1, t=(-1, 0, 1), D=(2, 3, 4))
+    # print(leg0)
+    # print(hash(leg))
+    # print(hash(leg0))
+    # leg1 = yast.Legtest(sym=config_U1.sym, s=1, t=(-1, 0, 1), D=(2, 3, 4))
+    # print(hash(leg1))
 
-    leg2 = yast.Legtest(sym=config_U1.sym, s=1, t=(1, 0, -1), D=(4, 3, 2))
-    print(hash(leg2))
+    # leg2 = yast.Legtest(sym=config_U1.sym, s=1, t=(1, 0, -1), D=(4, 3, 2))
+    # print(hash(leg2))
 
-    leg3 = yast.Legtest(sym=config_U1.sym, s=1, t=(1, 0, -1), D=(4, 3, 2), to_verify=False)
-    print(hash(leg3))
+    # leg3 = yast.Legtest(sym=config_U1.sym, s=1, t=(1, 0, -1), D=(4, 3, 2), to_verify=False)
+    # print(hash(leg3))
 
-    assert leg2 == leg1
+    # assert leg2 == leg1
 
-    # flipping signature
-    legc = leg.conj()
-    assert leg.s == -legc.s
+    # # flipping signature
+    # legc = leg.conj()
+    # assert leg.s == -legc.s
 
-    # order of provided charges (with corresponding bond dimensions) does not matter
-    leg_unsorted = yast.Leg(config_U1, s=1, t=(1, 0, -1), D=(4, 3, 2))
-    assert leg_unsorted == leg
+    # # order of provided charges (with corresponding bond dimensions) does not matter
+    # leg_unsorted = yast.Leg(config_U1, s=1, t=(1, 0, -1), D=(4, 3, 2))
+    # assert leg_unsorted == leg
 
 
     legs = [yast.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(1, 2, 3)),

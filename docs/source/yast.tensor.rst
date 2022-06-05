@@ -15,6 +15,7 @@ API: yast and yast.Tensor
 
    tensor/configuration
    tensor/symmetry
+   tensor/leg
    tensor/init
    tensor/access
    tensor/algebra
@@ -26,5 +27,5 @@ Examples: basics of usage
 
 .. toctree::
    :glob:
-   
+
    examples/tensor/*
