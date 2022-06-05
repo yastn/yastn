@@ -44,9 +44,9 @@ def test_eigs_simple():
 @pytest.mark.skipif(config_U1.backend.BACKEND_ID=="torch", reason="uses scipy procedures for raw data")
 def test_eigs_exception():
 
-    leg0 = yast.Leg(config=config_U1, s=1, t=(-2, -1, 0, 1), D=(1, 2, 3 ,4))
-    leg1 = yast.Leg(config=config_U1, s=1, t=(0, 1), D=(2, 3))
-    leg2 = yast.Leg(config=config_U1, s=1, t=(-1, 0, 1, 2), D=(2, 3 ,4, 5))
+    leg0 = yast.Leg(config_U1, s=1, t=(-2, -1, 0, 1), D=(1, 2, 3 ,4))
+    leg1 = yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
+    leg2 = yast.Leg(config_U1, s=1, t=(-1, 0, 1, 2), D=(2, 3 ,4, 5))
 
     a = yast.rand(config=config_U1, legs=(leg0, leg1, leg2.conj()), n=0)
     
