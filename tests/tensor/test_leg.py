@@ -12,6 +12,11 @@ tol = 1e-12  #pylint: disable=invalid-name
 def test_leg():
     leg = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
 
+    print(repr(leg.sym))
+    print(leg.sym)
+    print(str(leg.sym))
+
+
     # leg0 = yast.Legtest(sym=config_U1.sym, s=1, t=(-1, 0, 1), D=(2, 3, 4))
     # print(leg0)
     # print(hash(leg))
@@ -35,6 +40,7 @@ def test_leg():
     # leg_unsorted = yast.Leg(config_U1, s=1, t=(1, 0, -1), D=(4, 3, 2))
     # assert leg_unsorted == leg
 
+    print(leg)
 
     legs = [yast.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(1, 2, 3)),
             yast.Leg(config_U1, s=1, t=(0, 2), D=(1, 2)),
