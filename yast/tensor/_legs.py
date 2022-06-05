@@ -115,11 +115,11 @@ def leg_union(*legs):
     if all(isinstance(leg.fusion, tuple) for leg in legs):
         mf = legs[0].fusion
         if any(mf != leg.fusion for leg in legs):
-            raise YastError('Meta-fusions do not match')
+            raise YastError('Meta-fusions do not match.')
         new_nlegs = tuple(_leg_union(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
         t, D = _combine_tD(*legs)
         return replace(legs[0], t=t, D=D, legs=new_nlegs)
-    raise YastError('All arguments of leg_union should have consistent fusions')
+    raise YastError('All arguments of leg_union should have consistent fusions.')
 
 
 def _leg_union(*legs):
@@ -128,11 +128,11 @@ def _leg_union(*legs):
     """
     legs = list(legs)
     if any(leg.sym.SYM_ID != legs[0].sym.SYM_ID for leg in legs):
-        raise YastError('Legs have different symmetries')
+        raise YastError('Provided legs have different symmetries.')
     if any(leg.s != legs[0].s for leg in legs):
-        raise YastError('Legs have different signatures')
+        raise YastError('Provided legs have different signatures.')
     if any(leg.legs != legs[0].legs for leg in legs):
-        raise YastError('Leg union does not support union of fused spaces - TODO')
+        raise YastError('Leg union does not support union of fused spaces - TODO.')
     t, D = _combine_tD(*legs)
     return Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D, legs=legs[0].legs)
 
@@ -142,7 +142,7 @@ def _combine_tD(*legs):
     for leg in legs:
         for t, D in zip(leg.t, leg.D):
             if t in tD and tD[t] != D:
-                raise YastError('Legs have inconsistent dimensions')
+                raise YastError('Legs have inconsistent dimensions.')
             tD[t] = D
     t = tuple(sorted(tD.keys()))
     D = tuple(tD[x] for x in t)

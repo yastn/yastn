@@ -425,10 +425,10 @@ def _meta_unfuse_legdec(config, struct, ls, snew):
     Dpnew = tuple(x[2] for x in meta)
     slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
     meta = tuple((x, *y[3:]) for x, y in zip(slnew, meta))
-    if struct.diag:
-        meta = tuple((sln, Dslc, slo, Do[0], sub_slc) for sln, Dslc, slo, Do, sub_slc in meta)
-        tnew = tuple(t + t for t in tnew)
-        Dnew = tuple(D + D for D in Dnew)
+    # if struct.diag:
+    #     meta = tuple((sln, Dslc, slo, Do[0], sub_slc) for sln, Dslc, slo, Do, sub_slc in meta)
+    #     tnew = tuple(t + t for t in tnew)
+    #     Dnew = tuple(D + D for D in Dnew)
     new_struct = struct._replace(s=tuple(snew), t=tnew, D=Dnew, Dp=Dpnew, sl=slnew)
     return meta, new_struct
 
