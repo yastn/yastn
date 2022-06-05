@@ -269,7 +269,7 @@ def __getitem__(a, key):
     except ValueError:
         raise YastError('tensor does not have block specify by key')
     x = a._data[slice(*a.struct.sl[ind])]
-    
+
     # TODO this should be reshape called from backend ?
     return x if a.isdiag else x.reshape(a.struct.D[ind])
 
@@ -296,20 +296,20 @@ def get_leg_fusion(a, axes=None):
 
 def get_legs(a, axis=None, native=False):
     r"""
-    Find all charges and the corresponding bond dimension for n-th leg.
+    Return a leg or a set of legs of a Tensor.
 
     Parameters
     ----------
-    axis : int or tuple of ints or None
-        Indices of legs. Output data for all tensor legs if None.
+    axis : int or tuple[int] or None
+        indices of legs to retrieve. If ```None`` return list with all legs.
 
     native : bool
-        consider native legs if True; otherwise meta/fused legs (default).
+        consider native legs if ``True``; otherwise meta/fused legs (default).
 
     Returns
     -------
-        _Leg or _metaLeg (for nontrivial meta fusion) if axis is int
-        Return tuple of such objects if axis is tuple/list of ints
+        _Leg or _metaLeg (for nontrivial meta fusion) if axis is `int`.
+        tuple[_Leg] or tuple[_metaleg] otherwise.
     """
     legs = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
@@ -335,7 +335,7 @@ def get_legs(a, axis=None, native=False):
             legs_ax.append(Leg(a.config, s=a.struct.s[i], t=t, D=D, hf=a.hfs[i]))
         if not native and mf[0] > 1:
             tseta = tset[:, nax, :].reshape(len(tset), len(nax) * a.config.sym.NSYM)
-            Dseta = np.prod(Dset[:, nax], axis=1, dtype=int)  
+            Dseta = np.prod(Dset[:, nax], axis=1, dtype=int)
             tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tseta, Dseta)}
             t = tuple(sorted(tDn.keys()))
             D = tuple(tDn[x] for x in t)
@@ -546,8 +546,8 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
 
     Returns
     -------
-    out : Tensor
-        the config of returned tensor does not use any symmetry
+    out : yast.Tensor
+        returned tensor does not use any symmetry
     """
     config_dense = a.config._replace(sym=sym_none)
 
