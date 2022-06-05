@@ -6,8 +6,8 @@ Basic algebra operations with symmetric tensors
 
 Symmetric tensors can be added and multiplied by a scalar
 through usual operations ``+``, ``-``, ``*``, ``/``.
-You can also raise each element of tensor to some power using 
-standard power operation ``**``. 
+You can also raise each element of tensor to some power using
+standard power operation ``**``.
 
 See examples: :ref:`examples/tensor/algebra:basic algebra operations`.
 
@@ -29,9 +29,9 @@ Tensor contractions
 -------------------
 
 Tensor contractions are the main building block of tensor network algorithms.
-Functions below facilitate the computation of 
+Functions below facilitate the computation of
 
-	* `Trace`: :math:`B_{jl}= \sum_{i} T_{ijil}` or using Einstein's summation convention 
+	* `Trace`: :math:`B_{jl}= \sum_{i} T_{ijil}` or using Einstein's summation convention
 	  for repeated indices :math:`B_{jl} = T_{ijil}`.
 	* `Contractions`: in the usual form :math:`C_{abc} = A_{aijb} \times B_{cij}` and also
 	  outer products :math:`M_{abkl} = A_{ak} \times B_{bl}`
@@ -102,4 +102,5 @@ Spectral decompositions
 
 .. automodule:: yast.linalg
 	:noindex:
-	:members: svd, svd_with_truncation, qr, eigh, eigh_with_truncation
+	:members: svd, svd_with_truncation, qr, eigh, eigh_with_truncation,
+           	truncation_mask, truncation_mask_multiplets

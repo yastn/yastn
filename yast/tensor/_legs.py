@@ -4,11 +4,37 @@ from ._auxliary import _flatten
 from ._tests import YastError
 from ..sym import sym_none
 from ._merging import _Fusion
+from ...Initialize import zeros
 
-__all__ = ['Leg', 'leg_union']
+__all__ = ['Leg', 'leg_union', 'invert_signature_tensor']
 
 
 class _Leg(NamedTuple):
+    r"""
+    Abelian symmetric vector space - leg of a tensor.
+
+    .. py:attribute:: sym : symmetry module or compatible object
+
+        Specify abelian symmetry. To see how YAST defines symmetries,
+        see :class:`yast.sym.sym_abelian`.
+        Defaults to ``yast.sym.sym_none``, effectively a dense tensor.
+
+    .. py:attribute:: s
+
+            Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
+
+    .. py:attribute:: t : iterable[int] or iterable[iterable[int]]
+
+        List of charge sectors
+
+    .. py:attribute:: D : iterable[int]
+
+        List of corresponding charge sector dimensions.
+
+    .. py:attribute:: hf
+
+        fusion tree
+    """
     sym: any = sym_none
     s: int = 1  # leg signature in (1, -1)
     t: tuple = ()  # leg charges
@@ -19,6 +45,8 @@ class _Leg(NamedTuple):
         """ switch leg signature """
         return self._replace(s=-self.s, hf=self.hf.conj())
 
+    def conj_charges(self):
+        return self._replace()
 
 class _metaLeg(NamedTuple):
     legs: tuple = ()
@@ -32,10 +60,34 @@ class _metaLeg(NamedTuple):
 
 
 def Leg(config, s=1, t=(), D=(), hf=None):
-    """ 
-    Create a new _Leg.
+    """
+    Define new vector space, encoded through hashable ``NamedTuple`` :class:`_Leg`.
 
-    Verifies if the input is consistent.
+    An abelian symmetric vector space can be specified as a direct
+    sum of vector spaces (sectors), each labeled by charge `t`
+
+    .. math::
+        V = \oplus_t V_t
+
+    The action of abelian symmetry on elements of such space
+    depend only on the charge `t` of the element.
+
+    .. math::
+        g \in G:\quad U(g)V = \oplus_t U(g)_t V_t
+
+    The size of individual sectors :math:`dim(V_t)` is arbitrary.
+
+    Parameters
+    ----------
+        config : module, types.SimpleNamespace, or typing.NamedTuple
+            :ref:`YAST configuration <tensor/configuration:yast configuration>`
+        s : int
+            Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
+        t : iterable[int] or iterable[iterable[int]]
+            List of charge sectors
+        D : iterable[int]
+            List of corresponding charge sector dimensions.
+            The lengths `len(D)` and `len(t)` must be equal.
     """
 
     sym = config if hasattr(config, 'SYM_ID') else config.sym
@@ -65,7 +117,6 @@ def Leg(config, s=1, t=(), D=(), hf=None):
     if hf.s[0] != s:
         raise YastError('Provided hard_fusion and signature do not match')
     return _Leg(sym=sym, s=s, t=t, D=D, hf=hf)
-
 
 
 def _combine_tD(*legs):
@@ -110,3 +161,8 @@ def leg_union(*legs):
         t, D = _combine_tD(*legs)
         return _metaLeg(legs=new_nlegs, mf=legs[0].mf, t=t, D=D)
     raise YastError('All arguments of leg_union should be Legs or meta-fused Legs.')
+
+
+def invert_signature_tensor(yast.Tensor : a, int : n):
+    leg_to_invert= a.get_legs(n)
+    symbol_invert= zeros(config= a.config, legs=[leg_to_invert,leg_to_invert.conj()])

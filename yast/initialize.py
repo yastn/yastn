@@ -8,51 +8,51 @@ from .tensor._auxliary import _struct, _config
 from .tensor._merging import _Fusion
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
-           'load_from_dict', 'load_from_hdf5',  'decompress_from_1d']
+           'make_config', 'load_from_dict', 'load_from_hdf5',  'decompress_from_1d']
 
 
-# def make_config(backend= backend_np, sym=sym_none, default_device='cpu', 
-#     default_dtype='float64', fermionic= False,    
+# def make_config(backend= backend_np, sym=sym_none, default_device='cpu',
+#     default_dtype='float64', fermionic= False,
 #     default_fusion= 'meta', force_fusion= None,
 #     default_tensordot= 'hybrid', force_tensordot= None, **kwargs):
 def make_config(**kwargs):
     r"""
     Parameters
     ----------
-        backend : backend module or compatible object
-            Specify ``backend`` providing Linear algebra and base dense tensors.
-            Currently support backends
+    backend : backend module or compatible object
+        Specify ``backend`` providing Linear algebra and base dense tensors.
+        Currently supported backends are
 
-                * NumPy as ``yast.backend.backend_np``
-                * PyTorch as ``yast.backend.backend_torch``
+            * NumPy as ``yast.backend.backend_np``
+            * PyTorch as ``yast.backend.backend_torch``
 
-            Defaults to NumPy backend.
+        Defaults to NumPy backend.
 
-        sym : symmetry module or compatible object
-            Specify abelian symmetry. To see how YAST defines symmetries,
-            see :class:`yast.sym.sym_abelian`.
-            Defaults to ``yast.sym.sym_none``, effectively a dense tensor.
-        default_device : str
-            Base tensors can be stored on various devices as supported by ``backend``
+    sym : symmetry module or compatible object
+        Specify abelian symmetry. To see how YAST defines symmetries,
+        see :class:`yast.sym.sym_abelian`.
+        Defaults to ``yast.sym.sym_none``, effectively a dense tensor.
+    default_device : str
+        Base tensors can be stored on various devices as supported by ``backend``
 
-                * NumPy supports only ``'cpu'`` device
-                * PyTorch supports multiple devices, see
-                  https://pytorch.org/docs/stable/tensor_attributes.html#torch.torch.device
+            * NumPy supports only ``'cpu'`` device
+            * PyTorch supports multiple devices, see
+              https://pytorch.org/docs/stable/tensor_attributes.html#torch.torch.device
 
-            If not specified, the default device is ``'cpu'``.
+        If not specified, the default device is ``'cpu'``.
 
-        default_dtype: str
-            Default data type (dtype) of YAST tensors. Supported options are: 'float64', 'complex128'.
-            If not specified, the default dtype is ``'float64'``.
-        fermionic : bool or tuple[bool,...]
-            Specify behavior of swap_gate function, allowing to introduce fermionic symmetries.
-            Allowed values: ``False``, ``True``, or a tuple ``(True, False, ...)`` with one bool for each component
-            charge vector i.e. of length sym.NSYM. Default is ``False``.
-        default_fusion: str
-            Specify default strategy to handle leg fusion: 'hard' or 'meta'. See yast.tensor.fuse_legs
-            for details. Default is ``'meta'``.
-        force_fusion : str
-            Overrides fusion strategy provided in yast.tensor.fuse_legs. Default is ``None``.
+    default_dtype: str
+        Default data type (dtype) of YAST tensors. Supported options are: 'float64', 'complex128'.
+        If not specified, the default dtype is ``'float64'``.
+    fermionic : bool or tuple[bool,...]
+        Specify behavior of swap_gate function, allowing to introduce fermionic symmetries.
+        Allowed values: ``False``, ``True``, or a tuple ``(True, False, ...)`` with one bool for each component
+        charge vector i.e. of length sym.NSYM. Default is ``False``.
+    default_fusion: str
+        Specify default strategy to handle leg fusion: 'hard' or 'meta'. See yast.tensor.fuse_legs
+        for details. Default is ``'meta'``.
+    force_fusion : str
+        Overrides fusion strategy provided in yast.tensor.fuse_legs. Default is ``None``.
     """
     if "backend" not in kwargs:
         from .backend import backend_np
@@ -61,7 +61,6 @@ def make_config(**kwargs):
         from .sym import sym_none
         kwargs["sym"] = sym_none
     return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
-
 
 
 def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
@@ -102,6 +101,11 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
     Parameters
     ----------
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
+    legs : list[yast.tensor._legs._Leg] or list[list[yast.Tensor,int,yast.Tensor,int,...]]
+        If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
+        directly by passing a list of legs.
     s : tuple
         Signature of tensor. Also determines the number of legs
     n : int
@@ -110,24 +114,23 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
         List of charges for each leg,
         see :meth:`Tensor.fill_tensor` for description.
     D : list
-        List of corresponding bond dimensions
+        List of corresponding bond dimensions.
     isdiag : bool
         Makes tensor diagonal
     dtype : str
         Desired dtype, overrides default_dtype specified in config
     device : str
         Device on which the tensor should be initialized, overrides default_device specified in config
-    legs : list
-        Specify t and D based on a list of lists of tensors and their legs.
-        e.q., legs = [[a, 0, b, 0], [a, 1], [b, 1]] gives tensor with 3 legs, whose
-        charges and dimension are consistent with specific legs of tensors a and b (simultaniously for the first leg).
-        Overrides t and D.
 
     Returns
     -------
-    tensor : tensor
-        a random instance of a :meth:`Tensor`
+    tensor : yast.Tensor
+        a random instance of a :class:`yast.Tensor`
     """
+    # * pass lists of lists of Tensors and leg indices. A new set of legs is created
+    # from the specified legs, merging legs if necessary.
+    # For example, legs = [[a, 0, b, 0], [a, 1], [b, 1]] gives tensor with 3 legs, whose
+    # charges and dimension are consistent with specific legs of tensors a and b (simultaniously for the first leg).
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
 
@@ -155,6 +158,11 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
     Parameters
     ----------
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
+    legs : list[yast.tensor._legs._Leg] or list[list[yast.Tensor,int,yast.Tensor,int,...]]
+        If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
+        directly by passing a list of legs.
     s : tuple
         a signature of tensor. Also determines the number of legs
     n : int
@@ -174,7 +182,7 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
     Returns
     -------
-    tensor : tensor
+    tensor : yast.Tensor
         an instance of a tensor filled with zeros
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='zeros', **kwargs)
@@ -188,6 +196,11 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
     Parameters
     ----------
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
+    legs : list[yast.tensor._legs._Leg] or list[list[yast.Tensor,int,yast.Tensor,int,...]]
+        If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
+        directly by passing a list of legs.
     s : tuple
         a signature of tensor. Also determines the number of legs
     n : int
@@ -205,7 +218,7 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
     Returns
     -------
-    tensor : tensor
+    tensor : yast.Tensor
         an instance of a tensor filled with ones
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='ones', **kwargs)
@@ -219,6 +232,11 @@ def eye(config=None, legs=(), n=None, **kwargs):
 
     Parameters
     ----------
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
+    legs : list[yast.tensor._legs._Leg] or list[list[yast.Tensor,int,yast.Tensor,int,...]]
+        If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
+        directly by passing a list of legs.
     t : list
         a list of charges for each leg,
         see :meth:`Tensor.fill_tensor` for description.
@@ -232,7 +250,7 @@ def eye(config=None, legs=(), n=None, **kwargs):
 
     Returns
     -------
-    tensor : tensor
+    tensor : yast.Tensor
         an instance of diagonal tensor filled with ones
     """
     return _fill(config=config, legs=legs, n=n, isdiag=True, val='ones', **kwargs)
@@ -250,6 +268,10 @@ def load_from_dict(config=None, d=None):
     d : dict
         Tensor stored in form of a dictionary. Typically provided by an output
         of :meth:`~yast.Tensor.save_to_dict`
+
+    Returns
+    -------
+    tensor : yast.Tensor
     """
     if d is not None:
         c_isdiag = bool(d['isdiag'])
@@ -279,6 +301,10 @@ def load_from_hdf5(config, file, path):
         :ref:`YAST configuration <tensor/configuration:yast configuration>`
     file: TODO
     path: TODO
+
+    Returns
+    -------
+    tensor : yast.Tensor
     """
     g = file.get(path)
     c_isdiag = bool(g.get('isdiag')[:][0])
@@ -321,6 +347,10 @@ def decompress_from_1d(r1d, config, meta):
         structure of symmetric tensor. Non-zero blocks are indexed by associated charges.
         Each such entry contains block's dimensions and the location of its data
         in rank-1 tensor `r1d`
+
+    Returns
+    -------
+    tensor : yast.Tensor
     """
     a = Tensor(config=config, **meta)
     a._data = r1d
