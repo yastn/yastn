@@ -177,5 +177,4 @@ if __name__ == '__main__':
     test_fuse_transpose()
     test_get_shapes()
     test_fuse_get_legs()
-    test_fuse_block()
     test_fuse_legs_exceptions()

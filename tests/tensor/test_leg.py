@@ -11,16 +11,17 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 def test_leg():
     leg = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
+    print(leg)
 
     # flipping signature
     legc = leg.conj()
     assert leg.s == -legc.s
+    print(legc)
 
     # order of provided charges (with corresponding bond dimensions) does not matter
     leg_unsorted = yast.Leg(config_U1, s=1, t=(1, 0, -1), D=(4, 3, 2))
     assert leg_unsorted == leg
-
-    print(leg)
+    assert hash(leg_unsorted) == hash(leg)
 
     legs = [yast.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(1, 2, 3)),
             yast.Leg(config_U1, s=1, t=(0, 2), D=(1, 2)),
@@ -28,6 +29,7 @@ def test_leg():
             yast.Leg(config_U1, s=1, t=(0,), D=(1,))]
 
     a = yast.ones(config=config_U1, legs=legs)
+
     assert all(a.get_legs(n) == legs[n] for n in range(a.ndim))
 
 
@@ -71,8 +73,6 @@ def test_leg_initialization_exceptions():
         # Different symmetry of initialized tensor and some of the legs.
 
 
-
-
 def test_leg_exceptions():
     with pytest.raises(yast.YastError):
         _ = yast.Leg(config_U1, s=2, t=(), D=())
@@ -95,6 +95,34 @@ def test_leg_exceptions():
     with pytest.raises(yast.YastError):
         _ = yast.Leg(config_Z3, s=1, t=(4,), D=(2,))
         # Provided charges are outside of the natural range for specified symmetry.
+    
+    leg_Z3 = yast.Leg(config_Z3, s=1, t=(0, 1, 2), D=(2, 2, 2))
+    leg = yast.Leg(config_U1, s=1, t=(-1, 1), D=(2, 2))
+
+    a = yast.rand(config_U1, legs=[leg, leg, leg, leg])
+    af1 = a.fuse_legs(axes=(0, (1, 2, 3)), mode='meta')
+    af2 = a.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
+    with pytest.raises(yast.YastError):
+        yast.leg_union(af1.get_legs(1), a.get_legs(1))
+        # All arguments of leg_union should have consistent fusions.
+    with pytest.raises(yast.YastError):
+        yast.leg_union(af1.get_legs(1), af2.get_legs(1))
+        # Meta-fusions do not match.
+    with pytest.raises(yast.YastError):
+        yast.leg_union(leg, leg_Z3)
+        #  Provided legs have different symmetries.
+    with pytest.raises(yast.YastError):
+        yast.leg_union(leg, leg.conj())
+        # Provided legs have different signatures.
+    with pytest.raises(yast.YastError):
+        af1 = a.fuse_legs(axes=(0, (1, 2, 3)), mode='hard')
+        af2 = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+        yast.leg_union(af1.get_legs(1), af2.get_legs(1))
+        # Leg union does not support union of fused spaces - TODO
+    with pytest.raises(yast.YastError):
+        leg2 = yast.Leg(config_U1, s=1, t=(-1, 1), D=(2, 3))
+        yast.leg_union(leg, leg2)
+        # Legs have inconsistent dimensions.
 
 
 if __name__ == '__main__':

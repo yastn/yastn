@@ -35,20 +35,33 @@ def test_to_number_0():
 
 
 def test_to_number_1():
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-2, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    c = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-2, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+    legs = [yast.Leg(config_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
+            yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+            yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
+            yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
+
+    a = yast.rand(config=config_U1, legs=legs)
+    b = yast.rand(config=config_U1, legs=legs)
+
+    legs[0] = yast.Leg(config_U1, s=-1, t=(-2, 2), D=(1, 3))
+    c = yast.rand(config=config_U1, legs=legs)
+
     run_to_number(a, b)
     run_to_number(a, c)
     run_to_number(b, c)
 
 
+def test_to_number_exceptions():
+    a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    with pytest.raises(yast.YastError):
+        a.to_number()
+        # Only single-element (symmetric) Tensor can be converted to scalar
+    with pytest.raises(yast.YastError):
+        a.item()
+        # Only single-element (symmetric) Tensor can be converted to scalar
+
+
 if __name__ == '__main__':
     test_to_number_0()
     test_to_number_1()
+    test_to_number_exceptions()
