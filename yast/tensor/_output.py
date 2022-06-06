@@ -83,7 +83,7 @@ def compress_to_1d(a, meta=None):
     while ia < len(a.struct.t):
         if a.struct.t[ia] < meta['struct'].t[im] or im >= len(meta['struct'].t):
             raise YastError("Tensor has blocks that do not appear in meta.")
-        elif a.struct.t[ia] == meta['struct'].t[im]:
+        if a.struct.t[ia] == meta['struct'].t[im]:
             meta_merge.append((meta['struct'].sl[im], a.struct.sl[ia]))
             ia += 1
             im += 1
@@ -266,8 +266,8 @@ def __getitem__(a, key):
     key = tuple(_flatten(key))
     try:
         ind = a.struct.t.index(key)
-    except ValueError:
-        raise YastError('tensor does not have block specify by key')
+    except ValueError as exc:
+        raise YastError('tensor does not have block specify by key') from exc
     x = a._data[slice(*a.struct.sl[ind])]
 
     # TODO this should be reshape called from backend ?
