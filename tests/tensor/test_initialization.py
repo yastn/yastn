@@ -107,8 +107,9 @@ def test_initialize_U1():
     # diagonal tensor
     a1 = yast.ones(config=config_U1, isdiag=True, t=0, D=5)
     leg = yast.Leg(config_U1, s=1, t=[0], D=[5])
-    a2 = yast.ones(config=config_U1, isdiag=True, legs=[leg, leg.conj()])
-    assert yast.norm(a1 - a2) < tol  # == 0.0
+    a2 = yast.ones(config=config_U1, isdiag=True, legs=leg) # a2 and a3 are equivalent initializations
+    a3 = yast.ones(config=config_U1, isdiag=True, legs=[leg, leg.conj()])
+    assert all(yast.norm(a1 - x) < tol  for x in (a2, a3))  # == 0.0
 
     npa = a1.to_numpy()
     assert np.isrealobj(npa) == (config_U1.default_dtype == 'float64')
@@ -120,7 +121,7 @@ def test_initialize_U1():
     # diagonal tensor
     a1 = yast.rand(config=config_U1, isdiag=True, t=(-1, 0, 1), D=(2, 3, 4), dtype='complex128')
     leg = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
-    a2 = yast.ones(config=config_U1, isdiag=True, legs=[leg, leg.conj()], dtype='complex128')
+    a2 = yast.ones(config=config_U1, isdiag=True, legs=leg, dtype='complex128')
     assert a1.struct == a2.struct
 
     npa = a1.to_numpy()
@@ -180,7 +181,7 @@ def test_initialize_Z2xU1():
 
     # diagonal tensor
     leg = yast.Leg(config_Z2xU1, s=1, t=[(0, 0), (1, 1), (0, 2)], D=[2, 2, 2])
-    a1 = yast.rand(config=config_Z2xU1, isdiag=True, legs=[leg, leg.conj()])
+    a1 = yast.rand(config=config_Z2xU1, isdiag=True, legs=leg)
     a2 = yast.rand(config=config_Z2xU1, isdiag=True,
                   t=[[(0, 0), (1, 1), (0, 2)]],
                   D=[[2, 2, 2]])
@@ -200,7 +201,7 @@ def test_initialize_Z2xU1():
             yast.Leg(config_Z2xU1, s=-1, t=[(0, 1), (1, 1)], D=[2, 7])]
     a2 = yast.eye(config=config_Z2xU1, legs=legs)  ## only the matching parts are used
     leg = yast.Leg(config_Z2xU1, s=1, t=[(0, 1)], D=[2])
-    a3 = yast.eye(config=config_Z2xU1, legs=[leg, leg.conj()])
+    a3 = yast.eye(config=config_Z2xU1, legs=leg) # same as legs=[leg, leg.conj()]
 
     assert yast.norm(a1 - a2) < tol  # == 0.0
     assert yast.norm(a1 - a3) < tol  # == 0.0

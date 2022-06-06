@@ -6,6 +6,7 @@ import numpy as np
 from .tensor import Tensor, YastError
 from .tensor._auxliary import _struct, _config
 from .tensor._merging import _Fusion
+from .tensor._legs import Leg
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
            'make_config', 'load_from_dict', 'load_from_hdf5',  'decompress_from_1d']
@@ -69,7 +70,11 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
         t = kwargs.pop('t') if 't' in kwargs else ()
         D = kwargs.pop('D') if 'D' in kwargs else ()
         mfs, hfs = None, None
-    else:
+    else:  # use legs for initialization
+        if isinstance(legs, Leg):
+            legs = (legs,)
+        if isdiag and len(legs) == 1:
+            legs = (legs[0], legs[0].conj())
         ulegs, mfs = [], []
         for leg in legs:
             if isinstance(leg.fusion, tuple):  # meta-fused

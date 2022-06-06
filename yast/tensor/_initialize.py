@@ -20,8 +20,8 @@ def __setitem__(a, key, newvalue):
     key = tuple(_flatten(key))
     try:
         ind = a.struct.t.index(key)
-    except ValueError:
-        raise YastError('tensor does not have block specify by key')
+    except ValueError as exc:
+        raise YastError('Tensor does not have a block specify by the key.') from exc
     a._data[slice(*a.struct.sl[ind])] = newvalue.reshape(-1)
 
 
@@ -210,11 +210,10 @@ def _init_block(config, Dsize, val, dtype, device):
         if val == 'ones':
             return config.backend.ones((Dsize,), dtype=dtype, device=device)
         raise YastError('val should be in ("zeros", "ones", "rand") or an array of the correct size')
-    else:
-        x = config.backend.to_tensor(val, Ds=Dsize, dtype=dtype, device=device)
-        if config.backend.get_size(x) == Dsize ** 2:
-            x = config.backend.diag_get(x.reshape(Dsize, Dsize))
-        return x
+    x = config.backend.to_tensor(val, Ds=Dsize, dtype=dtype, device=device)
+    if config.backend.get_size(x) == Dsize ** 2:
+        x = config.backend.diag_get(x.reshape(Dsize, Dsize))
+    return x
 
 
 # def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=False):
@@ -296,7 +295,7 @@ def block(tensors, common_legs=None):
             raise YastError('Blocking of hard-fused legs is currently not supported. Go through meta-fusion. Only common_legs can be hard-fused.')
         if any(tn.hfs[n] != tn0.hfs[n] for n in out_s):
             raise YastError('Hard-fusions of common_legs do not match.')  # TODO: HANDLED THIS
-        if tn.isdiag == True:
+        if tn.isdiag:
             raise YastError('Block does not support diagonal tensors. Use .diag() first.')
 
     posa = np.ones((len(pos), tn0.ndim_n), dtype=int)

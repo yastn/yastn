@@ -27,7 +27,7 @@ def _test_tD_consistency(struct):
     for i in range(len(struct.s)):
         ti = [tuple(x.flat) for x in tset[:, i, :].reshape(len(tset), len(struct.n))]
         Di = Dset[:, i].reshape(-1)
-        tDi = [(x, y) for x, y in zip(ti, Di)]
+        tDi = list(zip(ti, Di))
         if len(set(ti)) != len(set(tDi)):
             raise YastError('Inconsist assigment of bond dimension to some charge.')
 

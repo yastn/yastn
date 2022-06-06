@@ -158,7 +158,7 @@ def fuse_legs(a, axes, mode=None):
         .. note::
             Fusion can be reverted back by :meth:`yast.Tensor.unfuse_legs`
 
-    First, the legs are permuted into desired order. Then, selected groups of consecutive legs 
+    First, the legs are permuted into desired order. Then, selected groups of consecutive legs
     are fused. The desired order of the legs is given by a tuple `axes`
     of leg indices where the groups of legs to be fused are denoted by inner tuples ::
 
@@ -183,7 +183,7 @@ def fuse_legs(a, axes, mode=None):
     Two types of fusion are supported: `meta` and `hard`:
 
     * `meta` performs the fusion only at the level of tensor structure: changing its rank,
-      signature, charge sectors. The tensor data (blocks) is not affected. 
+      signature, charge sectors. The tensor data (blocks) is not affected.
 
     * `hard` changes both the structure and data, by aggregating smaller blocks into larger
       ones. Such fusion allows to balance number of non-zero blocks and typical block size.
@@ -302,17 +302,17 @@ def fuse_meta_to_hard(a):
 
 def unfuse_legs(a, axes):
     r"""
-    Unfuse legs, reverting one layer of fusion. 
+    Unfuse legs, reverting one layer of fusion.
 
     If the tensor has been obtained by fusing some legs together, `unfuse_legs`
-    can revert such fusion. The legs to be unfused are passed in `axes` as `int` 
-    or `tuple(int)` in case of more legs to be unfused. The unfused legs follow 
+    can revert such fusion. The legs to be unfused are passed in `axes` as `int`
+    or `tuple(int)` in case of more legs to be unfused. The unfused legs follow
     the original position of the fused legs. The remaining legs are shifted accordingly ::
 
         axes=2              unfuse leg 2 into legs 2,3,4
         ->   (0,1,2,3,4,5)
-            __                 __ 
-        0--|  |--3         0--|  |--3    
+            __                 __
+        0--|  |--3         0--|  |--3
         1--|__|        =>  1--|  |--4
             |              2--|__|--5<-3
             2=(2,3,4)
@@ -326,14 +326,14 @@ def unfuse_legs(a, axes):
               1--|  |--5=(6,7)     2--|  |--6
         (2,3)=2--|__|              3--|__|--7
 
-    
+
     Unfusing a leg obtained by fusing together other previously fused legs, unfuses
     only the last fusion ::
-    
+
         axes=2              unfuse leg 2 into legs 2,3
         ->   (0,1,2,3,4)
             __                    __
-        0--|  |--3            0--|  |--3=(3,4)    
+        0--|  |--3            0--|  |--3=(3,4)
         1--|__|           =>  1--|  |
             |                 2--|__|--4<-3
             2=(2,3=(3,4))
@@ -564,8 +564,7 @@ def _masks_for_add(config, structa, hfa, structb, hfb):
     msk_a, msk_b, hfs = [], [], []
     tla, Dla, _, _, _ = _get_tD_legs(structa)
     tlb, Dlb, _, _, _ = _get_tD_legs(structb)
-    nsym, ndim = config.sym.NSYM, len(tla)
-    for n in range(ndim):
+    for n in range(len(structa.s)):
         ma, mb, hf = _union_hfs(config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (hfa[n], hfb[n]))
         msk_a.append(ma)
         msk_b.append(mb)

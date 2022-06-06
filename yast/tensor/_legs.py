@@ -1,6 +1,5 @@
-import numpy as np
 from dataclasses import dataclass, replace
-
+import numpy as np
 from ._auxliary import _flatten
 from ._tests import YastError
 from ..sym import sym_none
@@ -28,7 +27,7 @@ __all__ = ['Leg', 'leg_union', 'invert_signature_tensor']
 
 @dataclass(frozen=True)
 class Leg:
-    """
+    r"""
     Define new vector space, encoded through hashable ``NamedTuple`` :class:`_Leg`.
 
     An abelian symmetric vector space can be specified as a direct
@@ -86,7 +85,7 @@ class Leg:
                 raise YastError('Provided charges are outside of the natural range for specified symmetry.')
             if len(set(newt)) != len(newt):
                 raise YastError('Repeated charge index.')
-            tD = {x: d for x, d in zip(newt, D)}
+            tD = dict(zip(newt, D))
             t =  tuple(sorted(newt))
             object.__setattr__(self, "t", t)
             object.__setattr__(self, "D", tuple(tD[x] for x in t))
@@ -100,7 +99,7 @@ class Leg:
         """ switch leg signature """
         legs_conj = tuple(leg.conj() for leg in self.legs)
         return replace(self, s=-self.s, legs=legs_conj)
-    
+
     def conj_charges(self):
         return self
 
@@ -150,6 +149,6 @@ def _combine_tD(*legs):
 
 
 def invert_signature_tensor(a, n : int):
-    pass 
+    pass
     # leg_to_invert = a.get_legs(n)
     # symbol_invert = zeros(config= a.config, legs=[leg_to_invert,leg_to_invert.conj()])

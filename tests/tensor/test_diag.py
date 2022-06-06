@@ -11,19 +11,15 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_diag_basic():
-    a1 = yast.rand(config=config_U1, s=(-1, 1),
-                   t=((-1, 1, 2), (-1, 1, 2)),
-                   D=((4, 5, 6), (4, 5, 6)))
+    leg = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
 
-    a2 = a1.diag()
-    a3 = a2.diag()
-    a4 = a3.diag()
-    a5 = a4.diag()
+    a1 = yast.rand(config=config_U1, legs=[leg, leg.conj()])
+    a2 = a1.diag()  # isdiag = True
+    a3 = a2.diag()  # isdiag = False
+    a4 = a3.diag()  # isdiag = True
+    a5 = a4.diag()  # isdiag = False
 
-    assert a1.are_independent(a2)
-    assert a2.are_independent(a3)
-    assert a3.are_independent(a4)
-    assert a4.are_independent(a5)
+    assert all(yast.are_independent(x, y) for x, y in [(a1, a2), (a2, a3), (a3, a4), (a4, a5)])
 
     na1 = a1.to_numpy()
     na5 = a5.to_numpy()

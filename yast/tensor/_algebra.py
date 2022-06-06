@@ -298,8 +298,8 @@ def __truediv__(a, number):
 
 def __abs__(a):
     r"""
-    Return tensor with element-wise absolute values. 
-    Can be on called on tensor as ``abs(tensor)``. 
+    Return tensor with element-wise absolute values.
+    Can be on called on tensor as ``abs(tensor)``.
 
     Returns
     -------

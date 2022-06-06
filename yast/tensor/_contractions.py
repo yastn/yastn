@@ -29,8 +29,8 @@ def tensordot(a, b, axes, conj=(0, 0)):
     r"""
     Compute tensor dot product of two tensor along specified axes.
 
-    Outgoing legs are ordered such that first ones are the remaining legs 
-    of the first tensor in the original order, and than those 
+    Outgoing legs are ordered such that first ones are the remaining legs
+    of the first tensor in the original order, and than those
     of the second tensor.
 
     Parameters
@@ -54,9 +54,9 @@ def tensordot(a, b, axes, conj=(0, 0)):
     tensor: Tensor
     """
     if conj[0]:
-         a = a.conj()
+        a = a.conj()
     if conj[1]:
-         b = b.conj()
+        b = b.conj()
 
     in_a, in_b = _clear_axes(*axes)  # contracted meta legs
     needs_mask, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-1, axes=(in_a, in_b))
@@ -94,7 +94,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
 
 @lru_cache(maxsize=1024)
-def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym): 
+def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym):
     """ Return row indices of nparray a that are in b, and vice versa.  Outputs tuples."""
     t_a = np.array(t_a, dtype=int).reshape((len(t_a), ndimn_a, nsym))
     t_b = np.array(t_b, dtype=int).reshape((len(t_b), ndimn_b, nsym))
@@ -319,9 +319,9 @@ def vdot(a, b, conj=(1, 0)):
     """
     _test_configs_match(a, b)
     if conj[0] == 1:
-         a = a.conj()
+        a = a.conj()
     if conj[1] == 1:
-         b = b.conj()
+        b = b.conj()
     needs_mask, _ = _test_axes_match(a, b, sgn=-1)
     if a.struct.t == b.struct.t:
         Adata, Bdata = a._data, b._data
@@ -527,18 +527,18 @@ def einsum(subscripts, *operands, order='Alphabetic'):
 
     Example
     -------
-    
+
     ::
-    
-        yast.einsum('*ij,jh->ih', t1, t2) 
-        
+
+        yast.einsum('*ij,jh->ih', t1, t2)
+
         # matrix-matrix multiplication, where the first matrix is conjugated.
-        # Equivalent to 
+        # Equivalent to
 
         t1.conj() @ t2
 
         yast.einsum('ab,al,bm->lm', t1, t2, t3, order='ba')
-        
+
         # Contract along b first, and a second.
 
     Returns
@@ -617,14 +617,14 @@ def ncon(ts, inds, conjs=None):
     -------
 
     ::
-        
+
         # matrix-matrix multiplication where the first matrix is conjugated
-        
+
         yast.ncon([a, b], ((-0, 1), (1, -1)), conjs=(1, 0))
-        
+
         # outer product
-    
-        yast.ncon([a, b], ((-0, -2), (-1, -3))) 
+
+        yast.ncon([a, b], ((-0, -2), (-1, -3)))
 
     Returns
     -------
