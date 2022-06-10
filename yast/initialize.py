@@ -108,9 +108,9 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YAST configuration <tensor/configuration:yast configuration>`
-    legs : list[yast.tensor._legs._Leg] or list[list[yast.Tensor,int,yast.Tensor,int,...]]
+    legs : list[yast.Leg]
         If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
-        directly by passing a list of legs.
+        directly by passing a list of :class:`~yast.Leg`.
     s : tuple
         Signature of tensor. Also determines the number of legs
     n : int
@@ -165,9 +165,9 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YAST configuration <tensor/configuration:yast configuration>`
-    legs : list[yast.tensor._legs._Leg] or list[list[yast.Tensor,int,yast.Tensor,int,...]]
+    legs : list[yast.Leg]
         If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
-        directly by passing a list of legs.
+        directly by passing a list of :class:`~yast.Leg`.
     s : tuple
         a signature of tensor. Also determines the number of legs
     n : int
@@ -203,9 +203,9 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YAST configuration <tensor/configuration:yast configuration>`
-    legs : list[yast.tensor._legs._Leg] or list[list[yast.Tensor,int,yast.Tensor,int,...]]
+    legs : list[yast.Leg]
         If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
-        directly by passing a list of legs.
+        directly by passing a list of :class:`~yast.Leg`.
     s : tuple
         a signature of tensor. Also determines the number of legs
     n : int
@@ -231,7 +231,7 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
 def eye(config=None, legs=(), n=None, **kwargs):
     r"""
-    Initialize diagonal tensor with all possible blocks filled with ones.
+    Initialize `diagonal` tensor with all possible blocks filled with ones.
 
     Initialize tensor and call :meth:`Tensor.fill_tensor`.
 
@@ -239,9 +239,9 @@ def eye(config=None, legs=(), n=None, **kwargs):
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YAST configuration <tensor/configuration:yast configuration>`
-    legs : list[yast.tensor._legs._Leg] or list[list[yast.Tensor,int,yast.Tensor,int,...]]
+    legs : list[yast.Leg]
         If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
-        directly by passing a list of legs.
+        directly by passing a list of :class:`~yast.Leg`.
     t : list
         a list of charges for each leg,
         see :meth:`Tensor.fill_tensor` for description.
