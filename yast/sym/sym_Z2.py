@@ -8,7 +8,8 @@ class sym_Z2(sym_abelian):
     SYM_ID = 'Z2'
     NSYM = 1
 
-    def fuse(charges, signatures, new_signature):
+    @classmethod
+    def fuse(cls, charges, signatures, new_signature):
         """
         Fusion rule for :math:`Z_2` symmetry.
 
@@ -18,7 +19,7 @@ class sym_Z2(sym_abelian):
                 rank-3 integer tensor with shape (k, n, NSYM)
 
             signatures: numpy.ndarray
-                integer vector with `n` +1 or -1 elements 
+                integer vector with `n` +1 or -1 elements
 
             new_signature: int
 

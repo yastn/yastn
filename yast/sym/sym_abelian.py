@@ -1,28 +1,21 @@
-r"""
-YAST specifies symmetry through any object be it plain Python module, :class:`types.SimpleNamespace` 
-or class instance which defines
-
-* ``SYM_ID`` string label for the symmetry
-* ``NSYM`` number of elements in the charge vector. For example, `NSYM=1` for U(1) or :math:`Z_2`
-  group. For product groups such as U(1)xU(1) `NSYM=2`.
-* addition of charges through function `fuse`
-"""
-
-class Meta(type):
-    """ This metaclass is defined to get human-readable print """
-    def __repr__(cls):
-        return cls.SYM_ID
-
-class sym_abelian(metaclass=Meta):
-    """ template that can be inherited """
+class sym_abelian(type):
+    """
+    Interface to be subclassed for concrete symmetry implementations.
+    """
     SYM_ID = 'symmetry-name'
     NSYM = len('length-of-charge-vector')
+
+    def __str__(cls):
+        return cls.SYM_ID
+
+    def __repr__(cls):
+        return cls.SYM_ID
 
     @classmethod
     def fuse(cls, charges, signatures, new_signature):
         """
         Fusion rule for abelian symmetry. An `i`-th row ``charges[i,:,:]`` contains `n` length-`NSYM`
-        charge vectors. For each row, the charge vectors are added up (fused) with selected ``signature`` 
+        charge vectors. For each row, the charge vectors are added up (fused) with selected ``signature``
         according to the group addition rules.
 
         Parameters
@@ -31,7 +24,7 @@ class sym_abelian(metaclass=Meta):
                 rank-3 integer tensor with shape (k, n, NSYM)
 
             signatures: numpy.ndarray
-                integer vector with `n` +1 or -1 elements 
+                integer vector with `n` +1 or -1 elements
 
             new_signature: int
 
@@ -40,4 +33,4 @@ class sym_abelian(metaclass=Meta):
             teff: numpy.ndarray
                 integer matrix with shape (k,NSYM) of fused charges and multiplied by ``new_signature``
         """
-        pass
+        raise NotImplementedError("Subclasses need to override fuse function")

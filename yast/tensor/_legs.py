@@ -28,16 +28,17 @@ __all__ = ['Leg', 'leg_union', 'invert_signature_tensor']
 @dataclass(frozen=True)
 class Leg:
     r"""
-    Define new vector space, encoded through hashable ``NamedTuple`` :class:`_Leg`.
+    `Leg` is a hashable `dataclass <https://docs.python.org/3/library/dataclasses.html>`_,
+    defining a vector space.
 
     An abelian symmetric vector space can be specified as a direct
-    sum of vector spaces (sectors), each labeled by charge `t`
+    sum of `plain` vector spaces (sectors), each labeled by charge `t`
 
     .. math::
         V = \oplus_t V_t
 
     The action of abelian symmetry on elements of such space
-    depend only on the charge `t` of the element.
+    depends only on the charge `t` of the element.
 
     .. math::
         g \in G:\quad U(g)V = \oplus_t U(g)_t V_t
@@ -46,15 +47,15 @@ class Leg:
 
     Parameters
     ----------
-        config : module, types.SimpleNamespace, or typing.NamedTuple
-            :ref:`YAST configuration <tensor/configuration:yast configuration>`
-        s : int
-            Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
-        t : iterable[int] or iterable[iterable[int]]
-            List of charge sectors
-        D : iterable[int]
-            List of corresponding charge sector dimensions.
-            The lengths `len(D)` and `len(t)` must be equal.
+    sym : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
+    s : int
+        Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
+    t : iterable[int] or iterable[iterable[int]]
+        List of charge sectors.
+    D : iterable[int]
+        List of corresponding charge sector dimensions.
+        The lengths `len(D)` and `len(t)` must be equal.
     """
     sym: any = sym_none
     s: int = 1  # leg signature in (1, -1)
@@ -95,7 +96,14 @@ class Leg:
             object.__setattr__(self, "_verified", True)
 
     def conj(self):
-        """ switch leg signature """
+        """
+        Switch signature of Leg.
+
+        Returns
+        -------
+        leg : Leg
+            Returns new Leg with opposite signature.
+        """
         legs_conj = tuple(leg.conj() for leg in self.legs)
         return replace(self, s=-self.s, legs=legs_conj)
 
