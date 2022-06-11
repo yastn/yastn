@@ -3,7 +3,7 @@ import numpy as np
 from ._auxliary import _flatten
 from ._tests import YastError
 from ..sym import sym_none
-from ._merging import _Fusion
+from ._merging import _Fusion, _hfs_union
 #from ...Initialize import zeros
 
 __all__ = ['Leg', 'leg_union', 'invert_signature_tensor']
@@ -56,12 +56,11 @@ class Leg:
             List of corresponding charge sector dimensions.
             The lengths `len(D)` and `len(t)` must be equal.
     """
-
     sym: any = sym_none
     s: int = 1  # leg signature in (1, -1)
     t: tuple = ()  # leg charges
     D: tuple = ()  # and their dimensions
-    fusion: str = 'hard'  # 'hard', 'meta' -- tuple of meta_fusions, (in the future) None, 'sum'
+    fusion: str = "hard"  # 'hard', 'meta' -- tuple of meta_fusions, (in the future also None, 'sum')
     legs: tuple = () # sub-legs
     _verified: bool = False
 
@@ -104,6 +103,17 @@ class Leg:
         return self
 
 
+def _leg_fusions_need_mask(*legs):
+    legs = list(legs)
+    if all(leg.fusion == 'hard' for leg in legs):
+        return any(legs[0].legs[0] != leg.legs[0] for leg in legs)
+    if all(isinstance(leg.fusion, tuple) for leg in legs):
+        mf = legs[0].fusion
+        if any(mf != leg.fusion for leg in legs):
+            raise YastError('Meta-fusions do not match.')
+        return any(_leg_fusions_need_mask(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
+
+
 def leg_union(*legs):
     """
     Output Leg that represent space being an union of spaces of a list of legs.
@@ -131,9 +141,10 @@ def _leg_union(*legs):
     if any(leg.s != legs[0].s for leg in legs):
         raise YastError('Provided legs have different signatures.')
     if any(leg.legs != legs[0].legs for leg in legs):
-        raise YastError('Leg union does not support union of fused spaces - TODO.')
-    t, D = _combine_tD(*legs)
-    return Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D, legs=legs[0].legs)
+        t, D, hf = _hfs_union(legs[0].sym, [leg.t for leg in legs] ,[leg.legs[0] for leg in legs])
+    else:
+        (t, D), hf = _combine_tD(*legs), legs[0].legs[0]
+    return Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D, legs=(hf,))
 
 
 def _combine_tD(*legs):

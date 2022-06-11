@@ -59,6 +59,17 @@ def test_leg_meta():
     assert umlegs.legs[0] == yast.leg_union(legs[1], legs[3])
 
 
+def test_leg_hf():
+    legs = [yast.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(1, 2, 3)),
+            yast.Leg(config_U1, s=1, t=(0, 2), D=(5, 4)),
+            yast.Leg(config_U1, s=-1, t=(0, 2), D=(2, 3)),
+            yast.Leg(config_U1, s=1, t=(0,), D=(5,))]
+    a = yast.ones(config=config_U1, legs=legs)
+    af = a.fuse_legs(axes=((0, 1), (2, 3)))
+    fl = yast.leg_union(*af.get_legs())
+    print(fl)
+
+
 def test_leg_initialization_exceptions():
     legU1 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
 
@@ -118,7 +129,7 @@ def test_leg_exceptions():
         af1 = a.fuse_legs(axes=(0, (1, 2, 3)), mode='hard')
         af2 = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         yast.leg_union(af1.get_legs(1), af2.get_legs(1))
-        # Leg union does not support union of fused spaces - TODO
+        # Inconsistent numbers of hard-fused legs or sub-fusions order.
     with pytest.raises(yast.YastError):
         leg2 = yast.Leg(config_U1, s=1, t=(-1, 1), D=(2, 3))
         yast.leg_union(leg, leg2)
@@ -128,5 +139,6 @@ def test_leg_exceptions():
 if __name__ == '__main__':
     test_leg()
     test_leg_meta()
+    test_leg_hf()
     test_leg_exceptions()
     test_leg_initialization_exceptions()
