@@ -4,7 +4,8 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _mf_to_ntree, _struct, _flatten
 from ._tests import YastError
 from ..sym import sym_none
-from ._legs import Leg, leg_union
+from ._legs import Leg, leg_union, _leg_fusions_need_mask
+from ._merging import _embed_tensor
 
 
 __all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5', 'requires_grad']
@@ -550,10 +551,14 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     ndim = a.ndim_n if native else a.ndim
     legs_a = list(a.get_legs(range(ndim), native=native))
     if legs is not None:
-        for n, leg in legs.items():
-            if (n < 0) or (n >= ndim):
-                raise YastError('Specified leg out of ndim')
-            legs_a[n] = leg_union(legs_a[n], leg)
+        if any((n < 0) or (n >= ndim) for n in legs.keys()):
+            raise YastError('Specified leg out of ndim')
+        legs_new = {n: leg_union(legs_a[n], leg) for n, leg in legs.items()}
+        if any(_leg_fusions_need_mask(leg, legs_a[n]) for n, leg in legs_new.items()):
+            a = _embed_tensor(a, legs_a, legs_new)  # needs mask
+        for n, leg in legs_new.items():
+            legs_a[n] = leg
+
     Dtot = tuple(sum(leg.D) for leg in legs_a)
     tD, step = [], -1 if reverse else 1
     for n, leg in enumerate(legs_a):
@@ -584,74 +589,6 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
 
-
-# def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
-#     r"""
-#     Create equivalent ``yast.Tensor`` with no explict symmetry. All blocks of the original
-#     tensor are accummulated into a single block.
-
-#     Blocks are ordered according to increasing charges on each leg.
-#     It is possible to supply a list of additional charge sectors with dimensions to be included.
-#     (should be consistent with the tensor). This allows to fill in some explicit zero blocks.
-
-#     .. note::
-#         yast structure can be redundant since resulting tensor is effectively just
-#         a single dense block. If that's the case, use :meth:`yast.Tensor.to_dense`.
-
-#     Parameters
-#     ----------
-#     leg_structures : dict
-#         {n: {tn: Dn}} specify charges and dimensions to include on some legs (indicated by keys n).
-
-#     native: bool
-#         output native tensor (ignoring fusion of legs).
-
-#     reverse: bool
-#         reverse the order in which blocks are sorted. Default order is ascending in
-#         values of block's charges.
-
-#     Returns
-#     -------
-#     out : Tensor
-#         the config of returned tensor does not use any symmetry
-#     """
-#     config_dense = a.config._replace(sym=sym_none)
-
-#     ndim = a.ndim_n if native else a.ndim
-#     tD = [a.get_leg_structure(n, native=native) for n in range(ndim)]
-#     if leg_structures is not None:
-#         for n, tDn in leg_structures.items():
-#             if (n < 0) or (n >= ndim):
-#                 raise YastError('Specified leg out of ndim')
-#             tD[n] = leg_structures_union(tD[n], tDn)
-#     Dtot = tuple(sum(tDn.values()) for tDn in tD)
-#     for tDn in tD:
-#         tns = sorted(tDn.keys(), reverse=reverse)
-#         Dlow = 0
-#         for tn in tns:
-#             Dhigh = Dlow + tDn[tn]
-#             tDn[tn] = (Dlow, Dhigh)
-#             Dlow = Dhigh
-#     axes = tuple((n,) for n in range(ndim))
-#     if not native:
-#         axes = tuple(_unpack_axes(a.mfs, *axes))
-#     meta = []
-#     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-#     for t_sl, tt in zip(a.struct.sl, tset):
-#         meta.append((slice(*t_sl), tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
-#     if a.isdiag:
-#         Dtot = Dtot[:1]
-#         meta = [(sl, D[:1]) for sl, D in meta]
-
-#     c_s = a.get_signature(native)
-#     c_t = ((),)
-#     c_D = (Dtot,) if not a.isdiag else (Dtot + Dtot,)
-#     Dp = np.prod(Dtot, dtype=int)
-#     c_Dp = (Dp,)
-#     c_sl = ((0, Dp),)
-#     c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
-#     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
-#     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
 
 def zero_of_dtype(a):
     """ Return zero scalar of the instance specified by backend and dtype. """

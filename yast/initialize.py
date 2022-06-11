@@ -79,7 +79,7 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
         for leg in legs:
             if isinstance(leg.fusion, tuple):  # meta-fused
                 if isdiag:
-                    raise YastError('Diagonal tensor cannot be initialized with fused legs')
+                    raise YastError('Diagonal tensor cannot be initialized with fused legs.')
                 ulegs.extend(leg.legs)
                 mfs.append(leg.fusion)
             else:  #_Leg
@@ -91,6 +91,8 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
         t = tuple(leg.t for leg in ulegs)
         D = tuple(leg.D for leg in ulegs)
         hfs = tuple(leg.legs[0] for leg in ulegs)
+        if isdiag and any(hf.tree != (1,) for hf in hfs):
+            raise YastError('Diagonal tensor cannot be initialized with fused legs.')
         mfs = tuple(mfs)
 
     a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, hfs=hfs, **kwargs)

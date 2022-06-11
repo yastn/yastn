@@ -85,7 +85,6 @@ def _addition_meta(a, b):
         struct_a, struct_b = a.struct, b.struct
         hfs = a.hfs
 
-
     if struct_a.t == struct_b.t:
         if struct_a != struct_b:
             raise YastError('Bond dimensions do not match.')
