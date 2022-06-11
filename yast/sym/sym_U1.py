@@ -1,7 +1,7 @@
 """U(1) symmetry"""
 from .sym_abelian import sym_abelian
 
-class sym_U1(sym_abelian):
+class sym_U1(metaclass=sym_abelian):
     """U(1) symmetry"""
 
     SYM_ID = 'U(1)'
@@ -18,7 +18,7 @@ class sym_U1(sym_abelian):
                 rank-3 integer tensor with shape (k, n, NSYM)
 
             signatures: numpy.ndarray
-                integer vector with `n` +1 or -1 elements 
+                integer vector with `n` +1 or -1 elements
 
             new_signature: int
 
