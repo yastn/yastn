@@ -294,7 +294,6 @@ def __truediv__(a, number):
     return a._replace(data=data)
 
 
-
 def __abs__(a):
     r"""
     Return tensor with element-wise absolute values.
@@ -306,7 +305,6 @@ def __abs__(a):
     """
     data = a.config.backend.absolute(a._data)
     return a._replace(data=data)
-
 
 
 def real(a):

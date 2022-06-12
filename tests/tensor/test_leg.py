@@ -134,6 +134,19 @@ def test_leg_exceptions():
         leg2 = yast.Leg(config_U1, s=1, t=(-1, 1), D=(2, 3))
         yast.leg_union(leg, leg2)
         # Legs have inconsistent dimensions.
+    with  pytest.raises(yast.YastError):
+        b = yast.rand(config_U1, legs=[leg, leg.conj(), leg, leg])
+        af = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
+        bf = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
+        yast.leg_union(af.get_legs(0), bf.get_legs(0))
+        # Inconsistent signatures of fused legs.
+    with  pytest.raises(yast.YastError):
+        leg2 = yast.Leg(config_U1, s=1, t=(-1, 1), D=(2, 3))
+        b = yast.rand(config_U1, legs=[leg, leg2, leg, leg])
+        af = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
+        bf = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
+        yast.leg_union(af.get_legs(0), bf.get_legs(0))
+        # Bond dimensions of fused legs do not match.
 
 
 if __name__ == '__main__':

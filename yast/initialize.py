@@ -6,16 +6,15 @@ import numpy as np
 from .tensor import Tensor, YastError
 from .tensor._auxliary import _struct, _config
 from .tensor._merging import _Fusion
-from .tensor._legs import Leg
+from .tensor._legs import Leg, _unpack_legs
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye',
-           'make_config', 'load_from_dict', 'load_from_hdf5',  'decompress_from_1d']
+           'make_config', 'load_from_dict', 'load_from_hdf5', 'decompress_from_1d']
 
 
 # def make_config(backend= backend_np, sym=sym_none, default_device='cpu',
 #     default_dtype='float64', fermionic= False,
-#     default_fusion= 'meta', force_fusion= None,
-#     default_tensordot= 'hybrid', force_tensordot= None, **kwargs):
+#     default_fusion= 'meta', force_fusion= None, **kwargs):
 def make_config(**kwargs):
     r"""
     Parameters
@@ -75,25 +74,18 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
             legs = (legs,)
         if isdiag and len(legs) == 1:
             legs = (legs[0], legs[0].conj())
-        ulegs, mfs = [], []
-        for leg in legs:
-            if isinstance(leg.fusion, tuple):  # meta-fused
-                if isdiag:
-                    raise YastError('Diagonal tensor cannot be initialized with fused legs.')
-                ulegs.extend(leg.legs)
-                mfs.append(leg.fusion)
-            else:  #_Leg
-                ulegs.append(leg)
-                mfs.append((1,))
-        if any(config.sym.SYM_ID != leg.sym.SYM_ID for leg in ulegs):
-            raise YastError('Different symmetry of initialized tensor and some of the legs.')
+        ulegs, mfs = _unpack_legs(legs)
         s = tuple(leg.s for leg in ulegs)
         t = tuple(leg.t for leg in ulegs)
         D = tuple(leg.D for leg in ulegs)
         hfs = tuple(leg.legs[0] for leg in ulegs)
+
+        if any(config.sym.SYM_ID != leg.sym.SYM_ID for leg in ulegs):
+            raise YastError('Different symmetry of initialized tensor and some of the legs.')
+        if isdiag and any(mf != (1,) for mf in mfs):
+            raise YastError('Diagonal tensor cannot be initialized with fused legs.')
         if isdiag and any(hf.tree != (1,) for hf in hfs):
             raise YastError('Diagonal tensor cannot be initialized with fused legs.')
-        mfs = tuple(mfs)
 
     a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, hfs=hfs, **kwargs)
     a.fill_tensor(t=t, D=D, val=val)
@@ -134,10 +126,6 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
     tensor : yast.Tensor
         a random instance of a :class:`yast.Tensor`
     """
-    # * pass lists of lists of Tensors and leg indices. A new set of legs is created
-    # from the specified legs, merging legs if necessary.
-    # For example, legs = [[a, 0, b, 0], [a, 1], [b, 1]] gives tensor with 3 legs, whose
-    # charges and dimension are consistent with specific legs of tensors a and b (simultaniously for the first leg).
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
 

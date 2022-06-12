@@ -132,7 +132,9 @@ def show_properties(a):
 
 
 def __str__(a):
-    ts, Ds = a.get_leg_charges_and_dims(native=False)
+    legs = a.get_legs()
+    ts = tuple(leg.t for leg in legs)
+    Ds = tuple(leg.D for leg in legs)
     s = f"{a.config.sym.SYM_ID} s= {a.struct.s} n= {a.struct.n}\n"
     s += f"leg charges  : {ts}\n"
     s += f"dimensions   : {Ds}"
@@ -344,6 +346,8 @@ def get_legs(a, axis=None, native=False):
 
 def get_leg_structure(a, axis, native=False):
     r"""
+    This function will be removed -- use get_legs instead.
+
     Find all charges and the corresponding bond dimension for n-th leg.
 
     Parameters
@@ -369,9 +373,6 @@ def get_leg_structure(a, axis, native=False):
     Dset = np.prod(Dset, axis=1, dtype=int) if len(axis) > 1 else Dset.reshape(-1)
 
     tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tset, Dset)}
-    # for tn, Dn in zip(tset, Dset):
-    #     if tDn[tuple(tn.flat)] != Dn:
-    #         raise YastError('Inconsistend bond dimension of charge.')
     return tDn
 
 
@@ -384,74 +385,6 @@ def get_leg_charges_and_dims(a, native=False):
         return (), ()
     ts, Ds = ts_and_Ds
     return ts, Ds
-
-
-# def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
-#     r"""
-#     Combine and output charges and bond dimensions from legs of provided tensors.
-#     Auxliary function to ```tensor.to_dense``` and ```tensor.to_numpy```,
-#     to create dense tensors with consistent dimensions (charge sectors)
-
-#     Rises exception if there are some inconsistencies in bond dimensions.
-
-#     Parameters
-#     ----------
-#     tensors : list
-#         [reference_tensor, {leg of reference_tensor: leg of tensor to be made dense}]
-#         If dict not present, assumes {n: n for n in reference_tensor.ndim_n}
-
-#     native: bool
-#         output data for native tensor (neglecting meta fusions).
-#     """
-#     lss = {}
-#     itensors = iter(tensors)
-#     a = next(itensors, None)
-#     while a is not None:
-#         b = next(itensors, None)
-#         if isinstance(b, dict):
-#             for la, lo in b.items():
-#                 if lo in lss:
-#                     lss[lo].append(a.get_leg_structure(la, native=native))
-#                 else:
-#                     lss[lo] = [a.get_leg_structure(la, native=native)]
-#             a = next(itensors, None)
-#         else:
-#             for n in range(a.ndim_n if native else a.ndim):
-#                 if n in lss:
-#                     lss[n].append(a.get_leg_structure(n, native=native))
-#                 else:
-#                     lss[n] = [a.get_leg_structure(n, native=native)]
-#             a = b
-
-#     if leg_structures is not None:
-#         for n, ls in leg_structures.items():
-#             if n in lss:
-#                 lss[n].append(ls)
-#             else:
-#                 lss[n] = [ls]
-
-#     for lo in lss:
-#         lss[lo] = leg_structures_union(*lss[lo])
-#     return lss
-
-
-# def leg_structures_union(*args):
-#     """
-#     Makes a union of leg structures {t: D} specified in args.
-
-#     Raise error if there are inconsistencies.
-#     """
-#     ls_out = {}
-#     len_t = -1
-#     for tD in args:
-#         for t, D in tD.items():
-#             if (t in ls_out) and ls_out[t] != D:
-#                 raise YastError(f'Bond dimensions for charge {t} are inconsistent.')
-#             ls_out[t] = D
-#             if len(t) != len_t and len_t >= 0:
-#                 raise YastError('Inconsistent charge structure. Likely mixing merged and native legs.')
-#             len_t = len(t)
-#     return ls_out
 
 
 ############################
@@ -532,10 +465,10 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     Parameters
     ----------
     legs : dict
-        {n: {tn: Dn}} specify charges and dimensions to include on some legs (indicated by keys n).
+        {n: Leg} specify charges and dimensions to include on some legs (indicated by keys n).
 
     native: bool
-        output native tensor (ignoring fusion of legs).
+        output native tensor (ignoring meta-fusion of legs).
 
     reverse: bool
         reverse the order in which blocks are sorted. Default order is ascending in
@@ -555,7 +488,7 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
             raise YastError('Specified leg out of ndim')
         legs_new = {n: leg_union(legs_a[n], leg) for n, leg in legs.items()}
         if any(_leg_fusions_need_mask(leg, legs_a[n]) for n, leg in legs_new.items()):
-            a = _embed_tensor(a, legs_a, legs_new)  # needs mask
+            a = _embed_tensor(a, legs_a, legs_new)  # mask needed
         for n, leg in legs_new.items():
             legs_a[n] = leg
 
@@ -588,6 +521,73 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
+
+
+# def to_nonsymmetric(a, legs=None, native=False, reverse=False):
+#     r"""
+#     Create equivalent ``yast.Tensor`` with no explict symmetry. All blocks of the original
+#     tensor are accummulated into a single block.
+
+#     Blocks are ordered according to increasing charges on each leg.
+#     It is possible to supply a list of additional charge sectors with dimensions to be included.
+#     (should be consistent with the tensor). This allows to fill in some explicit zero blocks.
+
+#     .. note::
+#         yast structure can be redundant since resulting tensor is effectively just
+#         a single dense block. If that's the case, use :meth:`yast.Tensor.to_dense`.
+
+#     Parameters
+#     ----------
+#     legs : dict
+#         {n: Leg} specify charges and dimensions to include on some legs (indicated by keys n).
+
+#     native: bool
+#         output native tensor (ignoring meta-fusion of legs).
+
+#     reverse: bool
+#         reverse the order in which blocks are sorted. Default order is ascending in
+#         values of block's charges.
+
+#     Returns
+#     -------
+#     out : yast.Tensor
+#         returned tensor does not use any symmetry
+#     """
+#     config_dense = a.config._replace(sym=sym_none)
+#     a = a.embed(legs=legs)
+#     a_legs = a.get_legs(native=native)
+
+#     Dtot = tuple(sum(leg.D) for leg in a_legs)
+#     tD, step = [], -1 if reverse else 1
+#     for n, leg in enumerate(a_legs):
+#         Dlow, tDn = 0, {}
+#         for tn, Dn in zip(leg.t[::step], leg.D[::step]):
+#             Dhigh = Dlow + Dn
+#             tDn[tn] = (Dlow, Dhigh)
+#             Dlow = Dhigh
+#         tD.append(tDn)
+#     if native:
+#         axes = tuple((n,) for n in range(a.ndim_n))
+#     else:
+#         axes = tuple((n,) for n in range(a.ndim))
+#         axes = tuple(_unpack_axes(a.mfs, *axes))
+#     meta = []
+#     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+#     for t_sl, tt in zip(a.struct.sl, tset):
+#         meta.append((slice(*t_sl), tuple(tD[n][tuple(tt[ax, :].flat)] for n, ax in enumerate(axes))))
+#     if a.isdiag:
+#         Dtot = Dtot[:1]
+#         meta = [(sl, D[:1]) for sl, D in meta]
+
+#     c_s = a.get_signature(native)
+#     c_t = ((),)
+#     c_D = (Dtot,) if not a.isdiag else (Dtot + Dtot,)
+#     Dp = np.prod(Dtot, dtype=int)
+#     c_Dp = (Dp,)
+#     c_sl = ((0, Dp),)
+#     c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+#     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
+#     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
 
 
 def zero_of_dtype(a):

@@ -6,8 +6,7 @@ from ..sym import sym_none
 from ._merging import _Fusion, _hfs_union
 #from ...Initialize import zeros
 
-__all__ = ['Leg', 'leg_union', 'invert_signature_tensor']
-
+__all__ = ['Leg', 'leg_union']
 
     # r"""
     # Abelian symmetric vector space - leg of a tensor.
@@ -106,9 +105,10 @@ class Leg:
         """
         legs_conj = tuple(leg.conj() for leg in self.legs)
         return replace(self, s=-self.s, legs=legs_conj)
-
-    def conj_charges(self):
-        return self
+    
+    def __getitem__(self, key):
+        """ Dimension of the space with charge given by key."""
+        return self.D[self.t.index(key)]
 
 
 def _leg_fusions_need_mask(*legs):
@@ -134,7 +134,10 @@ def leg_union(*legs):
         if any(mf != leg.fusion for leg in legs):
             raise YastError('Meta-fusions do not match.')
         new_nlegs = tuple(_leg_union(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
-        t, D = _combine_tD(*legs)
+        nsym = legs[0].sym.NSYM
+        t = tuple(sorted(set.union(*(set(leg.t) for leg in legs))))
+        Dt = [tuple(leg[x[n * nsym : (n + 1) * nsym]] for n, leg in enumerate(new_nlegs)) for x in t]
+        D = tuple(np.prod(Dt, axis=1))
         return replace(legs[0], t=t, D=D, legs=new_nlegs)
     raise YastError('All arguments of leg_union should have consistent fusions.')
 
@@ -151,23 +154,26 @@ def _leg_union(*legs):
     if any(leg.legs != legs[0].legs for leg in legs):
         t, D, hf = _hfs_union(legs[0].sym, [leg.t for leg in legs] ,[leg.legs[0] for leg in legs])
     else:
-        (t, D), hf = _combine_tD(*legs), legs[0].legs[0]
+        tD = {}
+        for leg in legs:
+            for t, D in zip(leg.t, leg.D):
+                if t in tD and tD[t] != D:
+                    raise YastError('Legs have inconsistent dimensions.')
+                tD[t] = D
+        t = tuple(sorted(tD.keys()))
+        D = tuple(tD[x] for x in t)
+        hf = legs[0].legs[0]
     return Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D, legs=(hf,))
 
 
-def _combine_tD(*legs):
-    tD = {}
+def _unpack_legs(legs):
+    """ return native legs and mfs. """
+    ulegs, mfs = [], []
     for leg in legs:
-        for t, D in zip(leg.t, leg.D):
-            if t in tD and tD[t] != D:
-                raise YastError('Legs have inconsistent dimensions.')
-            tD[t] = D
-    t = tuple(sorted(tD.keys()))
-    D = tuple(tD[x] for x in t)
-    return t, D
-
-
-def invert_signature_tensor(a, n : int):
-    pass
-    # leg_to_invert = a.get_legs(n)
-    # symbol_invert = zeros(config= a.config, legs=[leg_to_invert,leg_to_invert.conj()])
+        if isinstance(leg.fusion, tuple):  # meta-fused
+            ulegs.extend(leg.legs)
+            mfs.append(leg.fusion)
+        else:  #_Leg
+            ulegs.append(leg)
+            mfs.append((1,))
+    return tuple(ulegs), tuple(mfs)
