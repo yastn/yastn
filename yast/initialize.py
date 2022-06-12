@@ -394,7 +394,7 @@ def block(tensors, common_legs=None):
         #if any(tn.hfs[n].tree != (1,) for n in range(tn.ndim_n) if n not in out_s):
         #    raise YastError('Blocking of hard-fused legs is currently not supported. Go through meta-fusion. Only common_legs can be hard-fused.')
         #if any(tn.hfs[n] != tn0.hfs[n] for n in out_s):
-        #    raise YastError('Hard-fusions of common_legs do not match.')  # TODO: HANDLED THIS
+        #    raise YastError('Hard-fusions of common_legs do not match.')
         if tn.isdiag:
             raise YastError('Block does not support diagonal tensors. Use .diag() first.')
 
@@ -405,8 +405,8 @@ def block(tensors, common_legs=None):
     for n in range(tn0.ndim_n):
         tDl = {}
         for tn, pp in zip(tensors.values(), posa):
-            tDn = tn.get_leg_structure(n, native=True)
-            for t, D in tDn.items():
+            leg = tn.get_legs(n, native=True)
+            for t, D in zip(leg.t, leg.D):
                 if t in tDl:
                     if (pp[n] in tDl[t]) and (tDl[t][pp[n]] != D):
                         raise YastError('Dimensions of blocked tensors are not consistent.')

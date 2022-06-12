@@ -8,6 +8,9 @@ except ImportError:
     import ops_U1
 
 
+tol = 1e-12
+
+
 def test_gen_XX_dmrg_dense():
     N = 7
     t, mu = 1., .2
@@ -22,7 +25,7 @@ def test_gen_XX_dmrg_dense():
     version = '2site'
     psi = ops_dense.mps_random(N=N, Dmax=Dmax, d=2).canonize_sweep(to='first')
     env = yamps.dmrg(psi, H, version=version, max_sweeps=cutoff_sweep, atol=cutoff_dE, opts_svd=opts_svd)
-    assert abs(env.measure()-Eng_gs)<1e-12
+    assert abs(env.measure() - Eng_gs) < tol
 
 
 def test_gen_XX_dmrg_U1():
@@ -42,8 +45,7 @@ def test_gen_XX_dmrg_U1():
     for total_occ, E_target in Eng_sectors.items():
         psi = ops_U1.mps_random(N=N, Dblocks=[Dmax, 2, Dmax], total_charge=total_occ).canonize_sweep(to='first')
         env = yamps.dmrg(psi, H, version=version, max_sweeps=cutoff_sweep, atol=cutoff_dE, opts_svd=opts_svd)
-        assert abs(env.measure()-E_target) < 1e-12
-
+        assert abs(env.measure() - E_target) <  tol
 
 
 if __name__ == "__main__":
