@@ -29,7 +29,7 @@ def test_full_hdf5():  # TODO: fix problem with loading orderdict in python 3.7
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
-        phi = yamps._mps.load_from_hdf5(psi.A[0].config, 1, f, 'state/')
+        phi = yamps.load_from_hdf5(psi.A[0].config, 1, f, 'state/')
     check_copy(psi, phi)
     os.remove("tmp.h5") 
     
@@ -37,7 +37,7 @@ def test_full_hdf5():  # TODO: fix problem with loading orderdict in python 3.7
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
-        phi = yamps._mps.load_from_hdf5(psi.A[0].config, 1, f, 'state/')
+        phi = yamps.load_from_hdf5(psi.A[0].config, 1, f, 'state/')
     check_copy(psi, phi)
     os.remove("tmp.h5") 
 
@@ -45,7 +45,7 @@ def test_full_hdf5():  # TODO: fix problem with loading orderdict in python 3.7
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
-        phi = yamps._mps.load_from_hdf5(psi.A[0].config, 1, f, 'state/')
+        phi = yamps.load_from_hdf5(psi.A[0].config, 1, f, 'state/')
     check_copy(psi, phi)
     os.remove("tmp.h5") 
 
@@ -76,14 +76,14 @@ def test_Z2_hdf5():  # TODO: fix problem with loading orderdict in python 3.7
 def test_full_dict():
     psi = ops_dense.mpo_random(N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
     tmp = psi.save_to_dict()
-    phi = yamps._mps.load_from_dict(psi.A[0].config, 1, tmp)
+    phi = yamps.load_from_dict(psi.A[0].config, 1, tmp)
     check_copy(psi, phi)
 
 
 def test_Z2_dict():
     psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
     tmp = psi.save_to_dict()
-    phi = yamps._mps.load_from_dict(psi.A[0].config, 1, tmp)
+    phi = yamps.load_from_dict(psi.A[0].config, 1, tmp)
     check_copy(psi, phi)
 
 

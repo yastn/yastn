@@ -1,8 +1,4 @@
 """ adding set of the Mps-s, automatic Mps generator """
-import logging
-import numpy as np
-import pytest
-import yast
 import yamps
 try:
     from . import ops_dense
