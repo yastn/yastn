@@ -172,10 +172,8 @@ def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to
     opts : dict
         Options passed for svd -- including information how to truncate.
     """
-    given = np.nonzero(np.array(amplitude))[0]
-    bunch_tens, bunch_amp = [None] * len(given), [None] * len(given)
-    for ik in range(len(given)):
-        it = given[ik]
+    bunch_tens, bunch_amp = [], []
+    for it in np.nonzero(np.array(amplitude))[0]:
         if from_it[it] > to_it[it]:
             conn, other = Tensor_conn[it], Tensor_other[it]
             if nr_phys > 1:
@@ -194,12 +192,12 @@ def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to
                 left, right = left.tensordot(right, axes=common_legs[::-1]), None
 
         connect = {'from': (il, left),
-                'to': (ir, right),
-                'conn': conn,
-                'else': other}
+                   'to': (ir, right),
+                   'conn': conn,
+                   'else': other}
 
-        bunch_tens[ik] = generate_Mij(1., connect, N, nr_phys)
-        bunch_amp[ik] = amp
+        bunch_tens.append(_generate_Mij(1., connect, N, nr_phys))
+        bunch_amp.append(amp)
 
     M = add(bunch_tens, bunch_amp)
     M.canonize_sweep(to='last', normalize=False)
@@ -207,35 +205,27 @@ def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to
     return M
 
 
-
-
-def generate_Mij(amp, connect, N, nr_phys):
-    x_from = connect['from']
-    x_to = connect['to']
-    x_conn = connect['conn']
-    x_else = connect['else']
-    jL, T_from = x_from
-    jR, T_to = x_to
-    T_conn = x_conn
-    T_else = x_else
+def _generate_Mij(amp, connect, N, nr_phys):
+    jL, T_from = connect['from']
+    jR, T_to = connect['to']
+    T_conn = connect['conn']
+    T_else = connect['else']
 
     M = Mps(N, nr_phys=nr_phys)
+    tt = (0,) * len(T_from.n)
     for n in range(M.N):
         if jL == jR:
-            M.A[n] = amp*T_from.copy() if n == jL else T_else.copy()
+            M.A[n] = amp * T_from.copy() if n == jL else T_else.copy()
         else:
             if n == jL:
-                M.A[n] = amp*T_from.copy()
+                M.A[n] = amp * T_from.copy()
             elif n == jR:
                 M.A[n] = T_to.copy()
             elif n > jL and n < jR:
                 M.A[n] = T_conn.copy()
             else:
                 M.A[n] = T_else.copy()
-        if n == 0:
-            tt = (0,) * len(M.A[n].n)
         M.A[n] = M.A[n].add_leg(axis=0, t=tt, s=1)
         M.A[n] = M.A[n].add_leg(axis=-1, s=-1)
-        tD = M.A[n].get_leg_structure(axis=-1)
-        tt = next(iter(tD))
+        tt = M.A[n].get_legs(axis=-1).t[0]
     return M

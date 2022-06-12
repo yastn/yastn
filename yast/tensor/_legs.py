@@ -110,6 +110,10 @@ class Leg:
         """ Dimension of the space with charge given by key."""
         return self.D[self.t.index(key)]
 
+    @property
+    def tD(self):
+        """ Return a dict of {t: D} """
+        return dict(zip(self.t, self.D))
 
 def _leg_fusions_need_mask(*legs):
     legs = list(legs)

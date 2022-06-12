@@ -74,11 +74,6 @@ def test_block_exceptions():
         _ = yast.block({(0, 0): fII,  (1, 0): fnn, (1, 1): fII}, common_legs=())
         # Meta fusions of blocked tensors are inconsistent.
     with pytest.raises(yast.YastError):
-        fII = II.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
-        fnn = nn.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
-        _ = yast.block({(0, 0): fII,  (1, 0): fnn, (1, 1): fII}, common_legs=())
-        # Blocking of hard-fused legs is currently not supported. Go through meta-fusion. Only common_legs can be hard-fused.
-    with pytest.raises(yast.YastError):
         nnn = yast.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 2, 1, 1), s=(1, 1, -1, -1))
         _ = yast.block({(0, 0): II,  (1, 0): nnn, (1, 1): II}, common_legs=(1, 2))
         # Dimensions of blocked tensors are not consistent

@@ -32,6 +32,8 @@ def test_leg():
 
     assert all(a.get_legs(n) == legs[n] for n in range(a.ndim))
 
+    assert a.get_legs(-1) == a.get_legs(3)
+
 
 def test_leg_meta():
     """ test get_leg with meta-fused tensor"""

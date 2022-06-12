@@ -347,8 +347,12 @@ class Mps:
             list of charges and corresponding dimensions on virtual mps bonds from first to last,
             including "trivial" leftmost and rightmost virtual indices.
         """
-        tDs = [self.A[n].get_leg_structure(self.left[0]) for n in self.sweep(to='last')]
-        tDs.append(self.A[self.last].get_leg_structure(self.right[0]))
+        tDs = []
+        for n in self.sweep(to='last'):
+            leg = self.A[n].get_legs(self.left[0])
+            tDs.append(leg.tD)
+        leg = self.A[self.last].get_legs(self.right[0])
+        tDs.append(leg.tD)
         return tDs
 
     def get_entropy(self, alpha=1):

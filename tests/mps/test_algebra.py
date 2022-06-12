@@ -56,6 +56,8 @@ def test_multiply():
     p0 = yamps.add([Hpsi, psi], [1, -Eng])
     assert yamps.measure_overlap(p0, p0) < tol  # == 0.
 
+    p0 = yamps.add([Hpsi * -1, Eng * psi])
+    assert yamps.measure_overlap(p0, p0) < tol  # == 0.
 
 
 if __name__ == "__main__":
