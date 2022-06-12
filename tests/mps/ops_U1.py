@@ -120,5 +120,5 @@ def mpo_gen_XX(chain, t, mu):
             Tensor_conn[n] = Z
             Tensor_from[n] = CP
             Tensor_to[n] = C
-    N, nr_phys, common_legs = chain, 2, (0,1,)
+    N, nr_phys, common_legs = chain, 2, (0, 1)
     return yamps.automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys, common_legs, opts={'tol': 1e-14})
