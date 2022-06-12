@@ -116,7 +116,6 @@ def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     a_t, a_D, a_Dp = zip(*meta) if len(meta) > 0 else ((), (), ())
     a_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(a_Dp), a_Dp))
     a.struct = a.struct._replace(t=a_t, D=a_D, Dp=a_Dp, sl=a_sl)
-
     a._data = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
     _test_tD_consistency(a.struct)
 
@@ -214,44 +213,6 @@ def _init_block(config, Dsize, val, dtype, device):
     if config.backend.get_size(x) == Dsize ** 2:
         x = config.backend.diag_get(x.reshape(Dsize, Dsize))
     return x
-
-
-# def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=False):
-#     r"""
-#     Initialize tensor matching legs of existing tensors, so that it can be contracted with those tensors.
-
-#     Finds all matching symmetry sectors and their bond dimensions and passes it to :meth:`Tensor.fill_tensor`.
-
-#     TODO: the set of tensors should reside on the same device. Optional destination device might be added
-
-#     Parameters
-#     ----------
-#     tensors: list
-#         list of tensors -- they should not be diagonal to properly identify signature.
-#     legs: list
-#         and their corresponding legs to match
-#     conjs: list
-#         if tensors are entering dot as conjugated
-#     val: str
-#         'rand', 'ones', 'zeros'
-#     """
-
-#     t, D, s, mfs, hfs = [], [], [], [], []
-#     if conjs is None:
-#         conjs = (0,) * len(tensors)
-#     for nf, te, cc in zip(legs, tensors, conjs):
-#         mfs.append(te.mfs[nf])
-#         un, = _unpack_axes(te.mfs, (nf,))
-#         for nn in un:
-#             tdn = te.get_leg_structure(nn, native=True)
-#             t.append(tuple(tdn.keys()))
-#             D.append(tuple(tdn.values()))
-#             s.append(te.struct.s[nn] * (2 * cc - 1))
-#             hfs.append(te.hfs[nn] if cc == 1 else te.hfs[nn].conj())
-#     a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, mfs=mfs, hfs=hfs,
-#                             dtype=tensors[0].yast_dtype, device=tensors[0].device)
-#     a.fill_tensor(t=t, D=D, val=val)
-#     return a
 
 
 def block(tensors, common_legs=None):
