@@ -14,7 +14,7 @@ tol = 1e-6
 
 def check_add(psi0, psi1):
     """ test yamps.add using overlaps"""
-    out1 = yamps.add(states=[psi0, psi1], amplitudes=[1., 2.])
+    out1 = yamps.add(psi0, psi1, amplitudes=[1., 2.])
     o1 = yamps.measure_overlap(out1, out1)
     p0 = yamps.measure_overlap(psi0, psi0)
     p1 = yamps.measure_overlap(psi1, psi1)
@@ -48,15 +48,15 @@ def test_multiply():
     psi = ops_U1.mps_random(N=N, Dblocks=[1, 2, 1], total_charge=total_charge).canonize_sweep(to='first')
     env = yamps.dmrg(psi, H, version='2site', max_sweeps=20, opts_svd=opts_svd)
 
-    assert pytest.approx(env.measure(), rel=tol) == Eng
+    assert pytest.approx(env.measure().item(), rel=tol) == Eng
 
     Hpsi = yamps.multiply(H, psi)
     assert pytest.approx(yamps.measure_overlap(Hpsi, Hpsi), rel=tol) == Eng ** 2
 
-    p0 = yamps.add([Hpsi, psi], [1, -Eng])
+    p0 = yamps.add(Hpsi, psi, amplitudes=[1, -Eng])
     assert yamps.measure_overlap(p0, p0) < tol  # == 0.
 
-    p0 = yamps.add([Hpsi * -1, Eng * psi])
+    p0 = yamps.add(Hpsi * -1, Eng * psi)
     assert yamps.measure_overlap(p0, p0) < tol  # == 0.
 
 

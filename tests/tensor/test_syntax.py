@@ -329,10 +329,11 @@ class TestSyntaxGeneral(unittest.TestCase):
         str(a)
         a.get_blocks_charge()
         a.get_blocks_shape()
-        a.get_leg_charges_and_dims()
-        a.get_shape(axes=2)
-        ls = a.get_leg_structure(axis=1)
-        print(ls)
+        a.get_shape()
+        a.get_shape(axis=2)
+        legs = a.get_legs()
+        leg = a.get_legs(axis=1)  # legs[1] = leg
+        print(leg)
 
 
         # output dense

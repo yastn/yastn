@@ -9,6 +9,7 @@ except ImportError:
 
 
 def run_expmv(A, v, tau, tol, ncv, hermitian):
+    """ tests of yast.linalg.expmv() for calculating expm(tau * A) * v """
     if hermitian:
         A = (A + A.conj().transpose(axes=(2, 3, 0, 1))) / 2
     f = lambda x: yast.tensordot(A, x, axes=((2, 3), (0, 1)))
@@ -39,28 +40,16 @@ def run_expmv(A, v, tau, tol, ncv, hermitian):
 
 @pytest.mark.parametrize("D, ncv, tau, tol", [(8, 5, 2., 1e-10), (8, 5, 2j, 1e-10), (8, 5, -2., 1e-10), (8, 5, -2j, 1e-10), (8, 5, 0, 1e-10), (4, 20, 2, 1e-10)])
 def test_expmv(D, ncv, tau, tol):
-    # dense
-    Ds = D
-    A = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=[Ds, Ds, Ds, Ds], dtype='complex128')
-    v = yast.rand(config=config_dense, s=(-1, 1), D=[Ds, Ds], dtype='complex128')
-    run_expmv(A, v, tau, tol, ncv, hermitian=True)
-    run_expmv(A, v, tau, tol, ncv, hermitian=False)
+    """ initialize test of yast.expmv() for various symmetries. """
+    leg_dense = yast.Leg(config_dense, s=1, D=[D])
+    leg_Z2 = yast.Leg(config_Z2, s=1, t=(0, 1), D=(D//2, D//2))
+    leg_U1 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(D//4, D//2, D//4))
 
-    # Z2
-    ts = (0, 1)
-    Ds = (D//2, D//2)
-    A = yast.rand(config=config_Z2, s=(-1, 1, 1, -1), t=[ts, ts, ts, ts], D=[Ds, Ds, Ds, Ds], dtype='complex128')
-    v = yast.rand(config=config_Z2, s=(-1, 1), t=[ts, ts], D=[Ds, Ds], dtype='complex128')
-    run_expmv(A, v, tau, tol, ncv, hermitian=True)
-    run_expmv(A, v, tau, tol, ncv, hermitian=False)
-
-    # U1
-    ts = (-1, 0, 1)
-    Ds = (D//4, D//2, D//4)
-    A = yast.rand(config=config_U1, s=(-1, 1, 1, -1), t=[ts, ts, ts, ts], D=[Ds, Ds, Ds, Ds], dtype='complex128')
-    v = yast.rand(config=config_U1, s=(-1, 1), t=[ts, ts], D=[Ds, Ds], dtype='complex128')
-    run_expmv(A, v, tau, tol, ncv, hermitian=True)
-    run_expmv(A, v, tau, tol, ncv, hermitian=False)
+    for cfg, leg in ((config_dense, leg_dense), (config_Z2, leg_Z2), (config_U1, leg_U1)):
+        A = yast.rand(config=cfg, legs=[leg.conj(), leg, leg, leg.conj()], dtype='complex128')
+        v = yast.rand(config=cfg, legs=[leg.conj(), leg], dtype='complex128')
+        run_expmv(A, v, tau, tol, ncv, hermitian=True)
+        run_expmv(A, v, tau, tol, ncv, hermitian=False)
 
     v0 = 0 * v
     A0 = 0 * A
@@ -73,16 +62,18 @@ def test_expmv(D, ncv, tau, tol):
 
 @pytest.mark.parametrize("t, tol", [(2.0j, 1e-10), (2.0j, 1e-4), (-2.0j, 1e-10), (-2.0j, 1e-4), (2.0, 1e-10), (2.0, 1e-4), (-2.0, 1e-10), (-2.0, 1e-4)])
 def test_expmv_tm(t, tol):
-    a = yast.rand(config=config_U1, s=(1, 1, -1), n=0,
-                  t=[(-1, 0, 1), (0, 1), (-1, 0, 1)],
-                  D=[(2, 3, 4), (2, 3), (2, 3, 4)])
+    """ combining yast.expmv() with more complicated contraction """
+    legs = [yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4)),
+            yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3)),
+            yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
+    a = yast.rand(config=config_U1, legs=legs)
 
     # dense transfer matrix build from a
     tm = yast.ncon([a, a], [(-1, 1, -3), (-2, 1, -4)], conjs=(0, 1))
     tm = tm.fuse_legs(axes=((0, 1), (2, 3)))
     tmn = tm.to_numpy()
 
-    ## initializing random tensor matching TM
+    ## initializing random tensor matching TM, with extra leg carrying charges; this are independent blocks in calculation
     legs = [a.get_legs(2).conj(), a.get_legs(2), yast.Leg(a.config, s=1, t=(-2, -1, 0, 1, 2), D=(1, 1, 1, 1, 1))]
     v = yast.rand(config=a.config, legs=legs, dtype='float64')
 

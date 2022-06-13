@@ -9,75 +9,77 @@ except ImportError:
 tol = 1e-12  #pylint: disable=invalid-name
 
 
-def test_mask_1():
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                    t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                    D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+def test_mask_basic():
+    """ series of tests for apply_mask """
+    config_U1.backend.random_seed(seed=0)  # fix for tests
 
-    b0 = yast.rand(config=config_U1, isdiag=True, t=(-1, 1), D=(7, 8))
+    # start with U1
+    leg1 =  yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
+    leg2 =  yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(5, 6, 7))
+    a = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
+ 
+    legd =  yast.Leg(config_U1, s=1, t=(-1, 1), D=(7, 8))
+    b0 = yast.rand(config=config_U1, isdiag=True, legs=legd)
 
-    b = b0.copy()
-    b[(-1, -1)] = b[(-1, -1)] < -2
-    b[(1, 1)] = b[(1, 1)] > 0
+    b = b0.copy()  # create a mask by hand
+    b[(-1, -1)] = b[(-1, -1)] < -2  # all false
+    b[(1, 1)] = b[(1, 1)] > 0  # some true
+    tr_b = b.trace(axes=(0, 1)).item()
 
-    bd = b.trace(axes=(0, 1)).item()
     c = b.apply_mask(a, axis=2)
-    ls = c.get_leg_structure(axis=2)
-    assert len(ls) == 1
-    assert (1,) in ls and ls[(1,)] == bd
 
-    d1 = b.apply_mask(b0, axis=-1)
-    ls = d1.get_leg_structure(axis=1)
-    assert len(ls) == 1 and (1,) in ls and ls[(1,)] == bd
+    # application of the mask should leave a single charge (1,) on this leg
+    l = c.get_legs(axis=2)
+    assert l.t == ((1,),) and l[(1,)] == tr_b  # in second checks the bond dimension
 
     d0 = b.apply_mask(b0, axis=0)
-    ls = d0.get_leg_structure(axis=1)
-    assert len(ls) == 1 and (1,) in ls and ls[(1,)] == bd
+    d1 = b.apply_mask(b0, axis=-1)
     assert yast.norm(d0 - d1) < tol
+    l = d1.get_legs(axis=1)
+    assert l.t == ((1,),) and l[(1,)] == tr_b
 
-    d00, d11 = b.apply_mask(b0, b0, axis=(-1, 0))
-    assert (d00 - d0).norm() < tol
-    assert (d11 - d1).norm() < tol
+    # apply the same mask on 2 tensors
+    d2, c2 = b.apply_mask(b0, a, axis=(-1, 2))
+    assert (d2 - d0).norm() < tol
+    assert (c2 - c).norm() < tol
 
+    # here using Z2xU1 symmetry
+    legs = [yast.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(6, 3, 9, 6)),
+            yast.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2)), D=(3, 2)),
+            yast.Leg(config_Z2xU1, s=1, t=((0, 1), (1, 0), (0, 0), (1, 1)), D=(4, 5, 6, 3)),
+            yast.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2)), D=(2, 3))]
+    a = yast.rand(config=config_Z2xU1, legs=legs)
 
-def test_mask_2():
-    a = yast.rand(config=config_Z2xU1, s=(-1, -1, 1, 1),
-                    t=[((0, 0), (0, 2), (1, 0), (1, 2)),
-                       ((0, 0), (0, 2)),
-                       ((0, 1), (1, 0), (0, 0), (1, 1)),
-                       ((0, 0), (0, 2))],
-                    D=[(6, 3, 9, 6), (3, 2), (4, 5, 6, 3), (2, 3)])
-    b = yast.rand(config=config_Z2xU1, isdiag=True,
-                   t=[[(0, 0), (0, 2), (1, 0), (1, 2)]],
-                   D=[[6, 3, 9, 6]])
-    b[(0, 0, 0, 0)] *= 0
+    # diagonal tensor exactly matching first leg of a
+    b = yast.rand(config=config_Z2xU1, isdiag=True, legs=legs[0])
+
+    b[(0, 0, 0, 0)] *= 0  # put block (0, 0, 0, 0) in diagonal b to 0.
 
     bgt = b > 0
     blt = b < 0
     bge = b >= 0
     ble = b <= 0
-
-    assert bgt.trace().item() + ble.trace().item() == blt.trace().item() + bge.trace().item() == a.get_shape(axes=0)
-
-    def mask_and_shape(aa, bb):
-        bd = bb.trace(axes=(0, 1)).item()
-        c = bb.apply_mask(aa, axis=0)
-        ls = c.get_leg_structure(axis=0)
-        assert sum(ls.values()) == bd
+    assert bgt.trace().item() + ble.trace().item() == blt.trace().item() + bge.trace().item() == b.get_shape(axis=0)
 
     for bb in [bgt, blt, bge, ble]:
-        mask_and_shape(a, bb)
+        bnd_dim = bb.trace(axes=(0, 1)).item()
+        c = bb.apply_mask(a, axis=0)
+        l = c.get_legs(axis=0)
+        assert sum(l.D) == bnd_dim
 
-    assert blt.apply_mask(bge, axis=0).trace() < tol
-    assert ble.apply_mask(bgt, axis=1).trace() < tol
+    assert blt.apply_mask(bge, axis=0).trace() < tol  # == 0.
+    assert ble.apply_mask(bgt, axis=1).trace() < tol  # == 0.
 
 
 def test_mask_exceptions():
-    a = yast.rand(config=config_U1, isdiag=True, t=(1, 1), D=(8, 8))
+    """ trigger exceptions for apply_mask """
+    legd =  yast.Leg(config_U1, s=1, t=(-1, 1), D=(8, 8))
+    a = yast.rand(config=config_U1, isdiag=True, legs=legd)
     a_nondiag = a.diag()
-    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                    t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                    D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+
+    leg1 =  yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
+    leg2 =  yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(5, 6, 7))
+    b = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
 
     with pytest.raises(yast.YastError):
         _ = a_nondiag.apply_mask(b, axis=2)
@@ -98,6 +100,5 @@ def test_mask_exceptions():
 
 
 if __name__ == '__main__':
-    test_mask_1()
-    test_mask_2()
+    test_mask_basic()
     test_mask_exceptions()

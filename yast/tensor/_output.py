@@ -236,25 +236,25 @@ def get_blocks_shape(a):
     return a.struct.D
 
 
-def get_shape(a, axes=None, native=False):
+def get_shape(a, axis=None, native=False):
     r"""
     Return total bond dimension, sum of dimensions along sectors, of meta legs.
 
     Parameters
     ----------
-    axes : Int or tuple of ints
-        indices of legs; If axes is None returns all (default).
+    axis : Int or tuple of ints
+        indices of legs; If axis is None returns all (default).
 
     Returns
     -------
     shape : Int or tuple(int)
         shapes of legs specified by axes
     """
-    if axes is None:
-        axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
-    if isinstance(axes, int):
-        return sum(a.get_legs(axes, native=native).D)
-    return tuple(sum(leg.D) for leg in a.get_legs(axes, native=native))
+    if axis is None:
+        axis = tuple(n for n in range(a.ndim_n if native else a.ndim))
+    if isinstance(axis, int):
+        return sum(a.get_legs(axis, native=native).D)
+    return tuple(sum(leg.D) for leg in a.get_legs(axis, native=native))
 
 
 def get_dtype(a):
