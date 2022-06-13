@@ -14,7 +14,7 @@ __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
            'make_config', 'load_from_dict', 'load_from_hdf5', 'decompress_from_1d']
 
 
-# def make_config(backend= backend_np, sym=sym_none, default_device='cpu',
+# def make_config(backend=backend_np, sym=sym_none, default_device='cpu',
 #     default_dtype='float64', fermionic= False,
 #     default_fusion= 'meta', force_fusion= None, **kwargs):
 def make_config(**kwargs):
