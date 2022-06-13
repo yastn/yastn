@@ -11,13 +11,14 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_diag_basic():
+    """ test yast.diag() """
     leg = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
 
-    a1 = yast.rand(config=config_U1, legs=[leg, leg.conj()])
-    a2 = a1.diag()  # isdiag = True
-    a3 = a2.diag()  # isdiag = False
-    a4 = a3.diag()  # isdiag = True
-    a5 = a4.diag()  # isdiag = False
+    a1 = yast.rand(config=config_U1, legs=[leg, leg.conj()])  # isdiag == False
+    a2 = a1.diag()  # isdiag == True
+    a3 = a2.diag()  # isdiag == False
+    a4 = a3.diag()  # isdiag == True
+    a5 = a4.diag()  # isdiag == False
 
     assert all(yast.are_independent(x, y) for x, y in [(a1, a2), (a2, a3), (a3, a4), (a4, a5)])
 
@@ -30,6 +31,7 @@ def test_diag_basic():
 
 
 def test_diag_exceptions():
+    """ triggering exceptions by yast.diag()"""
     t1, D1, D2 = (-1, 0, 1), (2, 3, 4), (3, 4, 5)
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, s=(-1, 1, 1), t=(t1, t1, t1), D=(D1, D1, D1))

@@ -77,7 +77,8 @@ def test_eigs_exception():
 
     # eigs going though yast.tensor
     wy, vy1d = eigs(ff, v0=r1d, k=9, which='LM', tol=1e-10)
-    # print(wy)  # eigenvalues
+
+
 
 
     # # for tm with fused legs
@@ -103,7 +104,6 @@ def test_eigs_exception():
     vyr = [yast.remove_zero_blocks(a, rtol=1e-12) for a in vy]
     assert all((yast.norm(x - y) < tol for x, y in zip(vy, vyr)))
     # display charges of eigenvectors (only charge on last leg) -- now there is superposition between +1 and -1
-    # print([x.get_leg_structure(axis=2) for x in vyr])
 
 if __name__ == '__main__':
     test_eigs_simple()

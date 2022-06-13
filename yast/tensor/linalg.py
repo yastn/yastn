@@ -76,8 +76,8 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
     U, S, Vh: Tensor
         U and Vh are unitary projectors. S is a real diagonal tensor.
     """
-    U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block, diagnostics=kwargs['diagonostics']\
-        if 'diagonostics' in kwargs else None)
+    diagnostics = kwargs['diagonostics'] if 'diagonostics' in kwargs else None
+    U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block, diagnostics=diagnostics)
 
     if mask_f:
         Smask = mask_f(S)
@@ -127,8 +127,12 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
         if 'D_block' not in kwargs:
             raise YastError("lowrank policy in svd requires passing argument D_block.")
         D_block = kwargs['D_block']
-        minD =  tuple(min(D_block, d) for d in minD) if not isinstance(D_block, dict) else \
-                tuple(min(D_block.get(t, 0), d) for t, d in zip(struct.t, minD))
+        if not isinstance(D_block, dict):
+            minD = tuple(min(D_block, d) for d in minD)
+        else:
+            nsym = a.config.sym.NSYM
+            st = [x[nsym:] for x in struct.t] if nU else [x[:nsym] for x in struct.t]
+            minD = tuple(min(D_block.get(t, 0), d) for t, d in zip(st, minD))
 
     meta, Ustruct, Sstruct, Vstruct = _meta_svd(a.config, struct, minD, sU, nU)
     sizes = tuple(x.sl[-1][1] if len(x.sl) > 0 else 0 for x in (Ustruct, Sstruct, Vstruct))
@@ -180,7 +184,7 @@ def _meta_svd(config, struct, minD, sU, nU):
 
     if any(D == 0 for D in minD):
         temp = [(at, aD, asl, mD) for at, aD, asl, mD in zip(struct.t, struct.D, struct.sl, minD) if mD > 0]
-        at, aD, asl, mD = zip(*temp) if len(temp) > 0 else ((), (), (), ())
+        at, aD, asl, minD = zip(*temp) if len(temp) > 0 else ((), (), (), ())
         struct = struct._replace(t=at, D=aD, sl=asl)
 
     if nU and sU == struct.s[1]:
@@ -485,12 +489,12 @@ def eigh(a, axes, sU=1, Uaxis=-1):
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
     if not all(x == 0 for x in a.struct.n):
-        raise YastError('Charge should be zero')
+        raise YastError('eigh requires tensor charge to be zero')
 
     data, struct, ls_l, ls_r = _merge_to_matrix(a, axes)
 
     if ls_l != ls_r:
-        raise YastError('Something went wrong in matching the indices of the two tensors')
+        raise YastError("Tensor likely not hermitian. Legs of effective square blocks not match.")
 
     meta, Sstruct, Ustruct = _meta_eigh(a.config, struct, sU)
     sizes = tuple(x.sl[-1][1] if len(x.sl) > 0 else 0 for x in (Sstruct, Ustruct))

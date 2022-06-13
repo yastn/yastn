@@ -28,8 +28,8 @@ def test_broadcast_dense():
 
     # broadcast with conj
     a = yast.randC(config=config_dense, s=(-1, 1), D=(5, 5))
-    a = a.diag()  # 5x5 isdiag=True
-    a1 = a.diag()  # 5x5 isdiag=False
+    a = a.diag()  # 5x5 isdiag == True
+    a1 = a.diag()  # 5x5 isdiag == False
     b = yast.randC(config=config_dense, s=(1, -1, 1, -1), D=(2, 5, 2, 5))
 
     r1 = a.conj().broadcast(b, axis=1)
@@ -72,7 +72,6 @@ def test_broadcast_U1():
     r4 = b.tensordot(a, axes=(2, 1)).transpose((0, 1, 3, 2))
     assert all(x.is_consistent() for x in [r1, r2, r3, r4])
     assert all(yast.norm(r1 - x) < tol for x in [r2, r3, r4])
-
 
     c = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg3, leg3.conj()])
 

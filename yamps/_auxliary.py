@@ -8,7 +8,7 @@ class YampsError(Exception):
     pass
 
 
-def add(states, amplitudes=None):
+def add(*states, amplitudes=None):
     r"""
     Adds any number of Mps-s stored in a list states with multiplicative prefactors specified in ampitudes. 
     It creates a new Mps as an output, in short: c = \sum_j amplitudes[j] * states[j]
@@ -199,7 +199,7 @@ def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to
         bunch_tens.append(_generate_Mij(1., connect, N, nr_phys))
         bunch_amp.append(amp)
 
-    M = add(bunch_tens, bunch_amp)
+    M = add(*bunch_tens, amplitudes=bunch_amp)
     M.canonize_sweep(to='last', normalize=False)
     M.truncate_sweep(to='first', opts=opts, normalize=False)
     return M
