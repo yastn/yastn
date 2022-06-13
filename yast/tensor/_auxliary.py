@@ -22,8 +22,6 @@ class _config(NamedTuple):
     default_dtype: str = 'float64'
     default_fusion: str = 'meta'
     force_fusion: str = None
-    default_tensordot: str = 'hybrid'
-    force_tensordot: str = None
 
 
 def _flatten(nested_iterator):
@@ -67,3 +65,16 @@ def _mf_to_ntree(mf):
                     ntree.append(_mf_to_ntree(mf[pos_init:pos + 2]))
                     pos_init = pos + 2
     return ntree
+
+
+def _unpack_legs(legs):
+    """ return native legs and mfs. """
+    ulegs, mfs = [], []
+    for leg in legs:
+        if isinstance(leg.fusion, tuple):  # meta-fused
+            ulegs.extend(leg.legs)
+            mfs.append(leg.fusion)
+        else:  #_Leg
+            ulegs.append(leg)
+            mfs.append((1,))
+    return tuple(ulegs), tuple(mfs)

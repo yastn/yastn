@@ -3,7 +3,7 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes
 from ._merging import _Fusion
 from ._tests import YastError, _test_axes_all
-from ._legs import leg_union, _unpack_legs
+
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',
            'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to', 'requires_grad_', 'grad']
