@@ -13,7 +13,6 @@ from ._tests import YastError
 from ._tests import *
 from ._control_lru import *
 from ._contractions import *
-from ._initialize import *
 from ._output import *
 from ._single import *
 from ._algebra import *
@@ -23,7 +22,6 @@ from ._legs import *
 from . import _tests
 from . import _control_lru
 from . import _contractions
-from . import _initialize
 from . import _output
 from . import _single
 from . import _algebra
@@ -31,7 +29,6 @@ from . import linalg
 from . import _merging
 from . import _legs
 __all__ = ['Tensor', 'linalg', 'YastError']
-__all__.extend(_initialize.__all__)
 __all__.extend(linalg.__all__)
 __all__.extend(_tests.__all__)
 __all__.extend(_control_lru.__all__)

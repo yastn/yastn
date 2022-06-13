@@ -46,7 +46,7 @@ Additionally, you can multiply the product of Mps-s by setting a prefactor to by
 
 .. automodule:: yamps
 	:noindex:
-	:members: x_a_times_b
+	:members: add, multiply
 
 See examples here :ref:`examples/mps/mps:Multiplication`.
 

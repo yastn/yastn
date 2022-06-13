@@ -232,8 +232,15 @@ def test_initialize_exceptions():
     with pytest.raises(yast.YastError):
         a = yast.eye(config=config_U1, t=[(0,), (0,)], D=[(1,), (2,)])
         # Diagonal tensor requires the same bond dimensions on both legs.
-    
-
+    with pytest.raises(yast.YastError):
+        _ = yast.Tensor(config=config_U1, n=(0, 0))
+        # n does not match the number of symmetry sectors
+    with pytest.raises(yast.YastError):
+        _ = yast.Tensor(config=config_U1, isdiag=True, s=(1, 1))
+        # Diagonal tensor should have s equal (1, -1) or (-1, 1)
+    with pytest.raises(yast.YastError):
+        _ = yast.Tensor(config=config_U1, isdiag=True, n=1)
+        # Tensor charge of a diagonal tensor should be 0
 
 
 if __name__ == '__main__':
