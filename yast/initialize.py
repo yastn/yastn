@@ -55,6 +55,12 @@ def make_config(**kwargs):
         for details. Default is ``'meta'``.
     force_fusion : str
         Overrides fusion strategy provided in yast.tensor.fuse_legs. Default is ``None``.
+    
+    Returns
+    -------
+    typing.NamedTuple
+        YAST configuration
+    
     """
     if "backend" not in kwargs:
         from .backend import backend_np
@@ -96,9 +102,10 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
 
 def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
-    Initialize tensor with all possible blocks filled with the random numbers.
+    Initialize tensor with all allowed blocks filled with random numbers.
 
-    Draws from a uniform distribution in [-1, 1] or [-1, 1] + 1j * [-1, 1], depending on dtype.
+    Draws from a uniform distribution in [-1, 1] or [-1, 1] + 1j * [-1, 1], 
+    depending on desired ``dtype``.
 
     Parameters
     ----------
@@ -125,15 +132,16 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
     Returns
     -------
-    tensor : yast.Tensor
-        a random instance of a :class:`yast.Tensor`
+    yast.Tensor
+        new random tensor
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
 
 def randR(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
-    Initialize tensor with all possible blocks filled with real random numbers, see `rand`.
+    Initialize tensor with all allowed blocks filled with real random numbers, 
+    see :meth:`yast.rand`.
     """
     kwargs['dtype'] = 'float64'
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
@@ -141,7 +149,8 @@ def randR(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
 def randC(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
-    Initialize tensor with all possible blocks filled with complex random numbers, see `rand`.
+    Initialize tensor with all allowed blocks filled with complex random numbers, \
+    see :meth:`yast.rand`.
     """
     kwargs['dtype'] = 'complex128'
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
@@ -149,9 +158,8 @@ def randC(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
 def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
-    Initialize tensor with all possible blocks filled with zeros.
-
-    Initialize tensor and call :meth:`Tensor.fill_tensor`.
+    Initialize tensor with all allowed blocks filled with zeros.
+    First, initializes empty tensor then calls :meth:`yast.Tensor.fill_tensor`.
 
     Parameters
     ----------
@@ -179,17 +187,16 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
     Returns
     -------
-    tensor : yast.Tensor
-        an instance of a tensor filled with zeros
+    yast.Tensor
+        new tensor filled with zeros
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='zeros', **kwargs)
 
 
 def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
-    Initialize tensor with all possible blocks filled with ones.
-
-    Initialize tensor and call :meth:`Tensor.fill_tensor`.
+    Initialize tensor with all allowed blocks filled with ones.
+    First, initializes empty tensor then calls :meth:`yast.Tensor.fill_tensor`.
 
     Parameters
     ----------
@@ -215,8 +222,8 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
     Returns
     -------
-    tensor : yast.Tensor
-        an instance of a tensor filled with ones
+    yast.Tensor
+        new tensor filled with ones
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='ones', **kwargs)
 
@@ -225,7 +232,7 @@ def eye(config=None, legs=(), n=None, **kwargs):
     r"""
     Initialize `diagonal` tensor with all possible blocks filled with ones.
 
-    Initialize tensor and call :meth:`Tensor.fill_tensor`.
+    Initializes tensor and call :meth:`Tensor.fill_tensor`.
 
     Parameters
     ----------
@@ -255,7 +262,7 @@ def eye(config=None, legs=(), n=None, **kwargs):
 
 def load_from_dict(config=None, d=None):
     """
-    Generate tensor based on information in dictionary `d`.
+    Create tensor the dictionary `d`.
 
     Parameters
     ----------
@@ -264,11 +271,11 @@ def load_from_dict(config=None, d=None):
 
     d : dict
         Tensor stored in form of a dictionary. Typically provided by an output
-        of :meth:`~yast.Tensor.save_to_dict`
+        of :meth:`~yast.save_to_dict`
 
     Returns
     -------
-    tensor : yast.Tensor
+    yast.Tensor
     """
     if d is not None:
         c_isdiag = bool(d['isdiag'])
@@ -301,7 +308,7 @@ def load_from_hdf5(config, file, path):
 
     Returns
     -------
-    tensor : yast.Tensor
+    yast.Tensor
     """
     g = file.get(path)
     c_isdiag = bool(g.get('isdiag')[:][0])
@@ -330,7 +337,7 @@ def decompress_from_1d(r1d, config, meta):
     charges and dimensions of its non-zero blocks, and 1-D array `r1d` containing
     serialized data of non-zero blocks.
 
-    Typically, the pair `r1d` and `meta` is obtained from :func:`~yast.Tensor.compress_to_1d`.
+    Typically, the pair `r1d` and `meta` is obtained from :meth:`~yast.compress_to_1d`.
 
     Parameters
     ----------
@@ -347,7 +354,7 @@ def decompress_from_1d(r1d, config, meta):
 
     Returns
     -------
-    tensor : yast.Tensor
+    yast.Tensor
     """
     a = Tensor(config=config, **meta)
     a._data = r1d

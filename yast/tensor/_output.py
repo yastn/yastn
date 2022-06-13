@@ -13,11 +13,12 @@ __all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5', 'requires_grad']
 
 def save_to_dict(a):
     r"""
-    Export relevant information about tensor to dictionary. Such dictionary can be then
-    stored in file using i.e. numpy.save
+    Export YAST tensor to dictionary.
 
     Returns
     -------
+    a: yast.Tensor
+        tensor to export
     d: dict
         dictionary containing all the information needed to recreate the tensor.
     """
@@ -35,7 +36,10 @@ def save_to_hdf5(a, file, path):
 
     Parameters
     ----------
-    ADD DESCRIPTION
+    a : yast.Tensor
+        tensor to export
+    
+    TODO
     """
     _d = a.config.backend.to_numpy(a._data)
     hfs = [tuple(hf) for hf in a.hfs]
@@ -51,16 +55,26 @@ def save_to_hdf5(a, file, path):
 
 def compress_to_1d(a, meta=None):
     """
-    Store each block as 1D array within r1d in contiguous manner (do not clone the data if not necceaary);
-    outputs meta-information to reconstruct the original tensor
+    Store each block within 1D array in contiguous manner 
+    (without cloning the data if not necessary) and 
+    create metadata allowing re-creation of the original tensor.
 
     Parameters
     ----------
+        a: yast.Tensor
+            tensor to export
         meta: dict
-            If not None, uses this metainformation to merge into 1d structure,
-            filling-in zeros if tensor does not have some blocks.
-            Raise error if tensor has some blocks which are not included in meta or otherwise
+            If not None, uses this extra information to fill-in extra zero blocks
+            not present in the tensor but allowed by the symmetry.
+            Raises error if tensor has some blocks which are not included in meta or otherwise
             meta does not match the tensor.
+
+    Returns
+    -------
+    tensor (type derived from backend)
+        1D array with tensor data
+    dict
+        metadata with structure of the symmetric tensor
     """
     if meta is None:
         meta = {'struct': a.struct, 'hfs': a.hfs,
@@ -283,6 +297,9 @@ def __getitem__(a, key):
 
 def get_leg_fusion(a, axes=None):
     """
+    .. deprecated::
+        to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.
+
     Fusion trees for meta legs.
 
     Parameters
@@ -346,7 +363,8 @@ def get_legs(a, axis=None, native=False):
 
 def get_leg_structure(a, axis, native=False):
     r"""
-    This function will be removed -- use get_legs instead.
+    .. deprecated::
+        to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.
 
     Find all charges and the corresponding bond dimension for n-th leg.
 
@@ -377,7 +395,12 @@ def get_leg_structure(a, axis, native=False):
 
 
 def get_leg_charges_and_dims(a, native=False):
-    """ collect information about charges and dimensions on all legs into two lists. """
+    """ 
+    .. deprecated::
+        to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.
+
+    Collect information about charges and dimensions on all legs into two lists. 
+    """
     _tmp = [a.get_leg_structure(n, native=native) for n in range(a.ndim_n if native else a.ndim)]
     _tmp = [{k: lst[k] for k in sorted(lst)} for lst in _tmp]
     ts_and_Ds= tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))

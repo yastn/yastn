@@ -12,7 +12,8 @@ The data, in form of non-zero blocks, can be added at later time.
 See examples: :ref:`examples/tensor/init:create empty tensor and fill it block by block`.
 
 .. autoclass:: yast.Tensor
-	:members: __init__
+	:members: fill_tensor
+	:special-members: __init__
 	:exclude-members: __new__
 
 
@@ -64,8 +65,8 @@ Tensors can be moved between devices and/or their `dtype` changed
 .. automethod:: yast.Tensor.to
 
 
-Importing YAST tensor from different formats
---------------------------------------------
+Import/Export of YAST tensors from/to different formats
+-------------------------------------------------------
 
 These utility operations can re-create tensors from
 different formats. For example, 1D representation or dictionary.
@@ -78,6 +79,6 @@ Their export counterparts are
 See examples: :ref:`examples/tensor/init:serialization of symmetric tensors`.
 
 .. automodule:: yast
-   :members: load_from_dict, load_from_hdf5, decompress_from_1d
-   :noindex:
+   :members: load_from_dict, load_from_hdf5, decompress_from_1d,
+             save_to_dict, save_to_hdf5, compress_to_1d
    :show-inheritance:

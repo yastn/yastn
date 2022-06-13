@@ -7,5 +7,6 @@ In YAST, the `legs` of the tensor represent individual vector spaces.
 To create a Leg, use
 
 .. autoclass:: yast.Leg
-    :members: conj
+    :members: conj, tD
+    :special-members: __getitem__
     :exclude-members: __init__, __new__

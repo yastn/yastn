@@ -37,10 +37,10 @@ class Leg:
         V = \oplus_t V_t
 
     The action of abelian symmetry on elements of such space
-    depends only on the charge `t` of the element.
+    depends only on the charge `t` of the element
 
     .. math::
-        g \in G:\quad U(g)V = \oplus_t U(g)_t V_t
+        g \in G:\quad U(g)V = \oplus_t U(g)_t V_t.
 
     The size of individual sectors :math:`dim(V_t)` is arbitrary.
 
@@ -95,24 +95,41 @@ class Leg:
             object.__setattr__(self, "_verified", True)
 
     def conj(self):
-        """
-        Switch signature of Leg.
+        r"""
+        Switch the signature of Leg.
 
         Returns
         -------
-        leg : Leg
-            Returns new Leg with opposite signature.
+        Leg
+            Returns a new Leg with opposite signature.
         """
         legs_conj = tuple(leg.conj() for leg in self.legs)
         return replace(self, s=-self.s, legs=legs_conj)
     
-    def __getitem__(self, key):
-        """ Dimension of the space with charge given by key."""
-        return self.D[self.t.index(key)]
+    def __getitem__(self, t):
+        r"""
+        Size of a charge sector
+        
+        Parameters
+        ----------
+        t : int or tuple(int)
+            selected charge sector
+
+        Returns
+        -------
+        int
+            size of the charge sector
+        """
+        return self.D[self.t.index(t)]
 
     @property
     def tD(self):
-        """ Return a dict of {t: D} """
+        r""" 
+        Returns 
+        -------
+        dict
+            charge sectors and their sizes as dictionary ``{t: D}``.
+        """
         return dict(zip(self.t, self.D))
 
 def _leg_fusions_need_mask(*legs):

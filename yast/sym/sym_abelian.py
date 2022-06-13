@@ -1,15 +1,17 @@
-class sym_abelian(type):
-    """
-    Interface to be subclassed for concrete symmetry implementations.
-    """
-    SYM_ID = 'symmetry-name'
-    NSYM = len('length-of-charge-vector')
-
+class sym_meta(type):
     def __str__(cls):
         return cls.SYM_ID
 
     def __repr__(cls):
         return cls.SYM_ID
+
+
+class sym_abelian(metaclass=sym_meta):
+    """
+    Interface to be subclassed for concrete symmetry implementations.
+    """
+    SYM_ID = 'symmetry-name'
+    NSYM = len('length-of-charge-vector')
 
     @classmethod
     def fuse(cls, charges, signatures, new_signature):
@@ -33,4 +35,4 @@ class sym_abelian(type):
             teff: numpy.ndarray
                 integer matrix with shape (k,NSYM) of fused charges and multiplied by ``new_signature``
         """
-        raise NotImplementedError("Subclasses need to override fuse function")
+        raise NotImplementedError("Subclasses need to override the fuse function")
