@@ -1,334 +1,9 @@
 """ Mps structure and its basic manipulations. """
-from numpy import array, nonzero
-from yast.tensor import block, entropy
-from yast.tensor import save_to_hdf5 as Tensor_to_hdf5
-from yast.tensor import save_to_dict as Tensor_to_dict
-from yast import load_from_dict as Tensor_from_dict
-from yast import load_from_hdf5 as Tensor_from_hdf5
+from yast import entropy
 
 
 class YampsError(Exception):
     pass
-
-
-def apxb(a, b, common_legs, x=1):
-    r"""
-    Adds two Mps-s with multiplicative prefactor x, and creates a new object as an output.
-    In short: c = a + x * b
-
-
-    Parameters
-    ----------
-        a, b : Mps
-            matrix products to be added
-
-        common_legs : tuple
-            which legs of individual tensors in Mps objects are common and are expanded by an addition. The addition is done on remaining legs
-
-        x : float/complex
-            multiplicative prefactor for tensor b
-
-    Returns
-    -------
-        c : Mps
-            new Mps, sum of a and b which is independent of them
-    """
-    if a.N is not b.N:
-        YampsError('Mps-s must have equal number of Tensor-s.')
-
-    c = a.copy()
-    for n in range(c.N):
-        if n == 0:
-            if x != 1:
-                d = {(0,): x*a.A[n], (1,): x*b.A[n]}
-            else:
-                d = {(0,): a.A[n], (1,): b.A[n]}
-            common_lgs = (0,)+common_legs
-        elif n == a.N-1:
-            d = {(0,): a.A[n], (1,): b.A[n]}
-            common_lgs = common_legs+(common_legs[-1]+1,)
-        else:
-            d = {(0, 0): a.A[n], (1, 1): b.A[n]}
-            common_lgs = common_legs
-        c.A[n] = block(d, common_lgs)
-    return c
-
-
-def add(tens, amp, common_legs):
-    r"""
-    Adds any number of Mps-s stored in tens with multiplicative prefactors specified in amp. It creates a new Mps as an output.
-    In short: c = \sum_j amp[j] * tens[j]
-    Number of Mps-s should be the same as the number of prefactors.
-
-
-    Parameters
-    ----------
-        tens : list of Mps-s
-            Each element of the list should contain a single Mps.
-
-        tens : list of float/complex-s
-            Each element of the list should contain a single number.
-
-        common_legs : tuple
-            which legs of individual tensors in Mps objects are common and are expanded by an addition. The addition is done on remaining legs
-
-    Returns
-    -------
-        c : Mps
-            new Mps, sum of all Mps-s in tens. It is independent of them
-    """
-    if len(tens) is not len(amp):
-        raise YampsError('Number of Mps-s must be equal to number of coefficients in amp.')
-
-    elif sum([tens[j].N-tens[0].N for j in range(len(tens))]) != 0:
-        raise YampsError('Mps-s must have equal lengths.')
-
-    c = tens[0].copy()
-    N = c.N
-    for n in range(N):
-        d = {}
-        if n == 0:
-            for j in range(len(tens)):
-                d[(j,)] = amp[j]*tens[j].A[n] if amp[j] != 1. else tens[j].A[n]
-            common_lgs = (0,) + common_legs
-        elif n == N-1:
-            for j in range(len(tens)):
-                d[(j,)] = tens[j].A[n]
-            common_lgs = common_legs+(common_legs[-1]+1,)
-        else:
-            for j in range(len(tens)):
-                d[(j, j)] = tens[j].A[n]
-            common_lgs = common_legs
-        c.A[n] = block(d, common_lgs)
-    return c
-
-
-def x_a_times_b(a, b, axes, axes_fin, conj=(0, 0), x=1, mode='hard'):
-    r"""
-    Multiplies two Mps-s with additional prefector which is an number. In short: c = x * a * b
-
-
-    Parameters
-    ----------
-        a, b : Mps
-            matrix products to be added
-
-        axes: tuple
-            an argument for tensordot, legs of both tensors (for each it is specified by int or tuple of ints)
-            e.g. axes=(0, 3) to contract 0th leg of `a` with 3rd leg of `b`
-            axes=((0, 3), (1, 2)) to contract legs 0 and 3 of `a` with 1 and 2 of `b`, respectively.
-
-        axes_fin: tuple
-            an argument for fuse_legs, happening after performing tensordot along Mps-s,        
-            legs of both tensors (for each it is specified by int or tuple of ints)
-            e.g. (0, (1,2,), 3) means fusing leg 1 and 2 into one leg
-            The fusion in performed inplace=True
-
-        conj: tuple
-            an argument for tensordot, shows which Mps to conjugate: (0, 0), (0, 1), (1, 0), or (1, 1).
-            Default is (0, 0), i.e. neither is conjugated
-
-        x : float/complex
-            multiplicative prefactor
-
-        mode : str
-            an argument for fuse_legs, mode for the fusion of legs
-
-    Returns
-    -------
-        c : Mps
-            new Mps, product of Mps-s a and b, is independent of them
-    """
-    if a.N is not b.N:
-        YampsError('Mps-s must have equal number of Tensor-s.')
-    c = a.copy()
-    for n in range(c.N):
-        if n == 0:
-            c.A[n] = x*a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, True, mode)
-        else:
-            c.A[n] = a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, True, mode)
-    return c
-
-
-def load_from_dict(config, nr_phys, in_dict):
-    r"""
-    Reads Tensor-s of Mps from a dictionary into an Mps object
-
-    Returns
-    -------
-    out_Mps : Mps
-    """
-    N = len(in_dict)
-    out_Mps = Mps(N, nr_phys=nr_phys)
-    for n in range(out_Mps.N):
-        out_Mps.A[n] = Tensor_from_dict(config=config, d=in_dict[n])
-    return out_Mps
-
-
-def load_from_hdf5(config, nr_phys, file, in_file_path):
-    r"""
-    Reads Tensor-s of Mps from a HDF5 file into an Mps object
-
-    Parameters
-    -----------
-    config: config
-        Configuration of Tensors' symmetries
-
-    nr_phys: int
-        number of physical legs
-
-    file: File
-        A 'pointer' to a file opened by a user
-
-    in_file_path: File
-        Name of a group in the file, where the Mps saved
-
-    Returns
-    -------
-    out_Mps : Mps
-    """
-    N = len(file[in_file_path].keys())
-    out_Mps = Mps(N, nr_phys=nr_phys)
-    for n in range(out_Mps.N):
-        out_Mps.A[n] = Tensor_from_hdf5(config, file, in_file_path+str(n))
-    return out_Mps
-
-
-def generate_Mij(amp, connect, N, nr_phys):
-    x_from = connect['from']
-    x_to = connect['to']
-    x_conn = connect['conn']
-    x_else = connect['else']
-    jL, T_from = x_from
-    jR, T_to = x_to
-    T_conn = x_conn
-    T_else = x_else
-
-    M = Mps(N, nr_phys=nr_phys)
-    for n in range(M.N):
-        if jL == jR:
-            M.A[n] = amp*T_from.copy() if n == jL else T_else.copy()
-        else:
-            if n == jL:
-                M.A[n] = amp*T_from.copy()
-            elif n == jR:
-                M.A[n] = T_to.copy()
-            elif n > jL and n < jR:
-                M.A[n] = T_conn.copy()
-            else:
-                M.A[n] = T_else.copy()
-        if n == 0:
-            tt = (0,) * len(M.A[n].n)
-        M.A[n] = M.A[n].add_leg(axis=0, t=tt, s=1)
-        M.A[n] = M.A[n].add_leg(axis=-1, s=-1)
-        tD = M.A[n].get_leg_structure(axis=-1)
-        tt = next(iter(tD))
-    return M
-
-
-def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys, common_legs, opts={'tol': 1e-14}):
-    r"""
-    Generate Mps representuing sum of two-point operators M=\sum_i,j Mij Op_i Op_j with possibility to include jordan-Wigner chain for these.
-
-    Parameters
-    ----------
-    amplitude : iterable list of numbers
-        Mij, amplitudes for an operator
-    from_it : int iterable list
-        first index of Mij
-    to_it : int iterable list
-        second index of Mij
-    permute_amp : iterable list of numbers
-        accounds for commuation/anticommutation rule while Op_j, Opj have to be permuted.
-    Tensor_from: list of Tensor-s
-        list of Op_i for Mij-th element
-    Tensor_to: list of Tensor-s
-        list of Op_j for Mij-th element
-    Tensor_conn: list of Tensor-s
-        list of operators to put in cetween Op_i and Opj for Mij-th element
-    Tensor_other: list of Tensor-s
-        list of operators outside i-j for Mij-th element
-    N : int
-        number of sites of Mps
-    nr_phys : int
-        number of physical legs: _1_ for mps; _2_ for mpo;
-    common_legs : tuple of int
-        common legs for Tensors
-    opts : dict
-        Options passed for svd -- including information how to truncate.
-    """
-    new_common_legs = tuple([n+1 for n in common_legs])
-    given = nonzero(array(amplitude))[0]
-    bunch_tens, bunch_amp = [None]*len(given), [None]*len(given)
-    for ik in range(len(given)):
-        it = given[ik]
-        if from_it[it] > to_it[it]:
-            conn, other = Tensor_conn[it], Tensor_other[it]
-            if nr_phys > 1:
-                left, right = Tensor_to[it].tensordot(conn, axes=common_legs[::-1]), Tensor_from[it]
-            else:
-                left, right = Tensor_to[it], Tensor_from[it]
-            il, ir = to_it[it], from_it[it]
-            amp = amplitude[it]*permute_amp[it]
-        else:
-            conn, other = Tensor_conn[it], Tensor_other[it]
-            left, right = Tensor_from[it], Tensor_to[it]
-            il, ir = from_it[it], to_it[it]
-            amp = amplitude[it]
-
-            if il == ir and right:
-                left, right = left.tensordot(right, axes=common_legs[::-1]), None
-
-        connect = {'from': (il, left),
-                'to': (ir, right),
-                'conn': conn,
-                'else': other}
-
-        bunch_tens[ik] = generate_Mij(1., connect, N, nr_phys)
-        bunch_amp[ik] = amp
-
-    M = add(bunch_tens, bunch_amp, new_common_legs)
-    M.canonize_sweep(to='last', normalize=False)
-    M.truncate_sweep(to='first', opts=opts, normalize=False)
-    return M
-
-
-def apxb(a, b, common_legs, x=1):
-    """
-    if inplace=false a+a*b will be a new Mps otherwise I will replace mb and delete b
-    """
-    if a.N is not b.N:
-        YampsError('Mps-s must have equal number of Tensor-s.')
-
-    c = a.copy()
-    for n in range(c.N):
-        if n == 0:
-            if x != 1:
-                d = {(0,): x*a.A[n], (1,): x*b.A[n]}
-            else:
-                d = {(0,): a.A[n], (1,): b.A[n]}
-            common_lgs = (0,)+common_legs
-        elif n == a.N-1:
-            d = {(0,): a.A[n], (1,): b.A[n]}
-            common_lgs = common_legs+(common_legs[-1]+1,)
-        else:
-            d = {(0, 0): a.A[n], (1, 1): b.A[n]}
-            common_lgs = common_legs
-        c.A[n] = block(d, common_lgs)
-    return c
-
-
-def x_a_times_b(a, b, axes, axes_fin, conj=(0, 0), x=1, mode='hard'):
-    # make multiplication x*a*b, with conj if necessary
-    if a.N is not b.N:
-        YampsError('Mps-s must have equal number of Tensor-s.')
-    c = a.copy()
-    for n in range(c.N):
-        if n == 0:
-            c.A[n] = x*a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, mode)
-        else:
-            c.A[n] = a.A[n].tensordot(b.A[n], axes, conj).fuse_legs(axes_fin, mode)
-    return c
 
 
 ###################################
@@ -370,14 +45,11 @@ class Mps:
         self.first = 0
         self.last = self.N - 1
 
-
     def get_leftmost_leg(self):
         return self.A[self.first].get_legs(self.left[0])
 
-
     def get_rightmost_leg(self):
         return self.A[self.last].get_legs(self.right[0])
-
 
     def sweep(self, to='last', df=0, dl=0):
         r"""
@@ -395,6 +67,30 @@ class Mps:
         if to == 'first':
             return range(self.N - 1 - dl, df - 1, -1)
         raise YampsError('Argument "to" should be in ("first", "last")')
+
+    def __mul__(self, number):
+        """
+        Makes a copy of mps, multiplying the first tensor by the number.
+
+        Returns
+        -------
+        mps : Mps
+        """
+        phi = Mps(N=self.N, nr_phys=self.nr_phys)
+        phi.A = {ind: number * ten if ind == self.first else ten.clone() \
+                 for ind, ten in self.A.items()}
+        phi.pC = self.pC
+        return phi
+
+    def __rmul__(self, number):
+        """
+        Makes a copy of mps, multiplying the first tensor by the number.
+
+        Returns
+        -------
+        mps : Mps
+        """
+        return self.__mul__(number)
 
     def clone(self):
         r"""
@@ -651,8 +347,12 @@ class Mps:
             list of charges and corresponding dimensions on virtual mps bonds from first to last,
             including "trivial" leftmost and rightmost virtual indices.
         """
-        tDs = [self.A[n].get_leg_structure(self.left[0]) for n in self.sweep(to='last')]
-        tDs.append(self.A[self.last].get_leg_structure(self.right[0]))
+        tDs = []
+        for n in self.sweep(to='last'):
+            leg = self.A[n].get_legs(self.left[0])
+            tDs.append(leg.tD)
+        leg = self.A[self.last].get_legs(self.right[0])
+        tDs.append(leg.tD)
         return tDs
 
     def get_entropy(self, alpha=1):
@@ -703,7 +403,7 @@ class Mps:
         """
         out_dict = {}
         for n in self.sweep(to='last'):
-            out_dict[n] = Tensor_to_dict(self.A[n])
+            out_dict[n] = self.A[n].save_to_dict()
         return out_dict
 
     def save_to_hdf5(self, file, in_file_path):
@@ -719,4 +419,4 @@ class Mps:
             Name of a group in the file, where the Mps will be saved
         """
         for n in self.sweep(to='last'):
-            Tensor_to_hdf5(self.A[n], file, in_file_path+str(n))
+            self.A[n].save_to_hdf5(file, in_file_path+str(n))

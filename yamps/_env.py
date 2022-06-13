@@ -71,7 +71,6 @@ class _EnvParent:
             self.update_env(n, to=to)
         return self
 
-
     def clear_site(self, *args):
         r""" Clear environments pointing from sites which indices are provided in args """
         for n in args:
@@ -139,7 +138,6 @@ class _EnvParent:
             T1 = tensordot(self.Fort[ii][(n - 1, n)], self.ort[ii].A[n], axes=(1, 0))
             Aort.append(tensordot(T1, self.Fort[ii][(n + 1, n)], axes=(self.nr_phys + 1, 0)))
         self._temp['Aort'] = Aort
-
 
     def update_AAort(self, bd):
         """ Update projection of states to be project to on psi. """
@@ -351,7 +349,6 @@ class Env3(_EnvParent):
         self._temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)
 
-
     def enlarge_bond(self, bd, opts_svd):
         if bd[0] < 0 or bd[1] >= self.N:  # do not enlarge bond outside of the chain
             return False
@@ -393,6 +390,7 @@ def _update2(n, F, bra, ket, to, nr_phys):
         else:
             T1 = tensordot(F[(n - 1, n)], bra.A[n], axes=(0, 0), conj=(0, 1))
             F[(n, n + 1)] = tensordot(T1, ket.A[n], axes=((0, 1, 2), (0, 1, 2)))
+
 
 def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
     if to == 'last':

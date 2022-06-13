@@ -105,32 +105,37 @@ def mpo_gen_XX(chain, t, mu):
 
     CP = yast.Tensor(config=config_dense, s=s)
     CP.set_block(Ds=Ds, val=[[0, 0], [1, 0]])
+
     C = yast.Tensor(config=config_dense, s=s)
     C.set_block(Ds=Ds, val=[[0, 1], [0, 0]])
+
     NN = yast.Tensor(config=config_dense, s=s)
     NN.set_block(Ds=Ds, val=[[0, 0], [0, 1]])
+
     Z = yast.Tensor(config=config_dense, s=s)
     Z.set_block(Ds=Ds, val=[[1, 0], [0, -1]])
+
     EE = yast.Tensor(config=config_dense, s=s)
     EE.set_block(Ds=Ds, val=[[1, 0], [0, 1]])
 
-    B = np.diag([mu]*chain)+np.diag([t]*(chain-1),1)+np.diag([t]*(chain-1),-1)
+    B = np.diag([mu] * chain) + np.diag([t] * (chain - 1), 1) + np.diag([t] * (chain - 1), -1)
     from_it, to_it = B.nonzero()
     amplitude = B[B.nonzero()]
     L = len(from_it)
 
-    permute_amp = [-1]*L
-    Tensor_from, Tensor_to = [None]*L, [None]*L
-    Tensor_conn, Tensor_other = [None]*L, [None]*L
+    permute_amp = [-1] * L
 
+    Tensor_from, Tensor_to, Tensor_conn, Tensor_other = [], [], [], []
     for n in range(L):
-        if from_it[n]==to_it[n]:
-            Tensor_other[n] = EE
-            Tensor_from[n] = NN
+        if from_it[n] == to_it[n]:
+            Tensor_other.append(EE)
+            Tensor_from.append(NN)
+            Tensor_conn.append(None)
+            Tensor_to.append(None)
         else:
-            Tensor_other[n] = EE
-            Tensor_conn[n] = Z
-            Tensor_from[n] = CP
-            Tensor_to[n] = C
-    N, nr_phys, common_legs = chain, 2, (0, 1,)
+            Tensor_other.append(EE)
+            Tensor_from.append(CP)
+            Tensor_conn.append(Z)
+            Tensor_to.append(C)
+    N, nr_phys, common_legs = chain, 2, (0, 1)
     return yamps.automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys, common_legs, opts={'tol': 1e-14})

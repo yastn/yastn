@@ -116,23 +116,26 @@ def _meta_tensordot(config, struct_a, struct_b):
     nsym = len(struct_a.n)
     n_c = np.array(struct_a.n + struct_b.n, dtype=int).reshape((1, 2, nsym))
     n_c = tuple(config.sym.fuse(n_c, (1, 1), 1)[0])
-    struct_a_resorted = iter(sorted(((t[nsym:], t, D, sl) for t, D, sl in zip(struct_a.t, struct_a.D, struct_a.sl))))
+    struct_a_resorted = sorted(((t[nsym:], t, D, sl) for t, D, sl in zip(struct_a.t, struct_a.D, struct_a.sl)))
     struct_b_resorted = ((t[:nsym], t, D, sl) for t, D, sl in zip(struct_b.t, struct_b.D, struct_b.sl))
     meta = []
-    try:
-        tar, ta, Da, sla = next(struct_a_resorted)
-        tbl, tb, Db, slb = next(struct_b_resorted)
-        while True:
-            if tar == tbl:
-                meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db, tar, tbl))
-                tar, ta, Da, sla = next(struct_a_resorted)
-                tbl, tb, Db, slb = next(struct_b_resorted)
-            elif tar < tbl:
-                tar, ta, Da, sla = next(struct_a_resorted)
-            elif tar > tbl:
-                tbl, tb, Db, slb = next(struct_b_resorted)
-    except StopIteration:
-        pass
+    for (tar, ta, Da, sla), (tbl, tb, Db, slb) in zip( struct_a_resorted, struct_b_resorted):
+        assert tar == tbl, "This should not have happend; contact the authors."
+        meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db, tar, tbl))
+    # try:
+    #     tar, ta, Da, sla = next(struct_a_resorted)
+    #     tbl, tb, Db, slb = next(struct_b_resorted)
+    #     while True:
+    #         if tar == tbl:
+    #             meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db, tar, tbl))
+    #             tar, ta, Da, sla = next(struct_a_resorted)
+    #             tbl, tb, Db, slb = next(struct_b_resorted)
+    #         elif tar < tbl:
+    #             tar, ta, Da, sla = next(struct_a_resorted)
+    #         elif tar > tbl:
+    #             tbl, tb, Db, slb = next(struct_b_resorted)
+    # except StopIteration:
+    #     pass
     meta = sorted(meta)
     t_c = tuple(x[0] for x in meta)
     D_c = tuple(x[1] for x in meta)
@@ -725,7 +728,6 @@ def _consume_edges(edges, conjs):
         axes = None
     meta_transpose = (t1, axes, conjs[t1])
     return tuple(meta_trace), tuple(meta_dot), meta_transpose
-
 
     # if policy in ('hybrid', 'direct'):
     #     meta, c_t, c_D, c_Dp, c_sl, tcon = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
