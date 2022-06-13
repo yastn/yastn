@@ -2,11 +2,10 @@
 
 from functools import lru_cache
 from itertools import groupby, product
-from locale import locale_encoding_alias
 from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
-from ._auxliary import _flatten, _clear_axes, _ntree_to_mf, _mf_to_ntree
+from ._auxliary import _flatten, _clear_axes, _ntree_to_mf, _mf_to_ntree, _unpack_legs
 from ._tests import YastError, _test_axes_all, _get_tD_legs
 
 
@@ -516,12 +515,10 @@ def _masks_for_trace(config, t12, D1, D2, hfs, ax1, ax2):
 
     tDDset = set(zip(t12, D1, D2))
     tset = set(t12)
-    # if len(tset) != len(tDDset):
-    #     raise YastError('CRITICAL ERROR. Bond dimensions of a tensor are inconsistent. This should not have happend.')
 
     for n, (i1, i2) in enumerate(zip(ax1, ax2)):
         tdn = tuple(set((t[n * nsym: (n + 1) * nsym], d1[n], d2[n]) for t, d1, d2 in tDDset))
-        tn, D1n, D2n = zip(*tdn)  # this can triggerexception when tdn is empty -- fix and test in test_trace
+        tn, D1n, D2n = zip(*tdn) if len(tdn) > 0 else ((), (), ())
         m1, m2 = _intersect_hfs(config, (tn, tn), (D1n, D2n), (hfs[i1], hfs[i2]))
         msk1.append(m1)
         msk2.append(m2)
@@ -582,10 +579,13 @@ def _embed_tensor(a, legs, legs_new):
     Embed tensor to fill in zero block in fusion mismatch.
     here legs are contained in legs_new that result from leg_union
     """
+
+    legs_new = [legs_new[n] if n in legs_new else legs[n] for n in range(len(legs))]
+    legs, _ = _unpack_legs(legs)
+    legs_new, _ = _unpack_legs(legs_new)
+
     msk_a, hfs = [], []
-    for n in range(len(a.struct.s)):
-        la = legs[n]
-        lb = legs_new[n] if n in legs_new else legs[n]
+    for la, lb in zip(legs, legs_new):
         ma, mb, hf = _union_hfs(a.config, (la.t, lb.t), (la.D, lb.D), (la.legs[0], lb.legs[0]))
         msk_a.append(ma)
         hfs.append(hf)

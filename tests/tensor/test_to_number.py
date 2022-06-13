@@ -28,18 +28,18 @@ def run_to_number(a, b):
     assert type(it0) is not type(nb0)
 
 
-def test_to_number_0():
+def test_to_number_basic():
+    """ test to_number() for various symmetries"""
+    # dense
     a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     b = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     run_to_number(a, b)
 
-
-def test_to_number_1():
+    # U1
     legs = [yast.Leg(config_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
             yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
             yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
             yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
-
     a = yast.rand(config=config_U1, legs=legs)
     b = yast.rand(config=config_U1, legs=legs)
 
@@ -62,6 +62,5 @@ def test_to_number_exceptions():
 
 
 if __name__ == '__main__':
-    test_to_number_0()
-    test_to_number_1()
+    test_to_number_basic()
     test_to_number_exceptions()
