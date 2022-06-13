@@ -25,41 +25,35 @@ def __setitem__(a, key, newvalue):
 
 def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     r"""
-    Create all possible blocks based on s, n and list of charges for all legs.
+    Create all allowed blocks based on signature ``s``, total charge ``n``,
+    and a set of charge sectors ``t`` for each leg of the tensor.
 
-    Brute-force check all possibilities and select the ones satisfying f(t@s) == n for each symmetry generator f.
-    Initialize each possible block with sizes given by D.
-    Old data in the tensor are reset.
+    First, all allowed blocks are identified by checking the 
+    :ref:`selection rule<symmetry selection rule>`.
+    Then each allowed block is created as a tensor with 
+    sizes specified in ``D`` and filled with value ``val``.
+    
+    .. note::
+        This operation overwrites the data of the tensor.
 
     Parameters
     ----------
-    a : Tensor
+    a : yast.Tensor
 
-    t : list
-        All possible combination of charges for each leg:
-        t = [[(leg1sym1, leg1sym2), ... ], [(leg2sym1, leg2sym2), ... )]
-        If nsym is 0, it is not taken into account.
-        When somewhere there is only one value and it is unambiguous, tuple can typically be replaced by int, see examples.
+    t : list[list[int]] or list[list[list[int]]]
+        list of charge sectors for each leg of the tensor, see examples.
+        In case of tensor without symmetry this argument is ignored.
 
-    D : tuple
-        list of bond dimensions on all legs
-        If nsym == 0, D = [leg1, leg2, leg3]
-        If nsym >= 1, it should match the form of t
-        When somewhere there is only one value tuple can typically be replaced by int.
-
+    D : list[int] or list[list[int]]
+        list of sector sizes for each leg of the tensor, see examples.
+        
     val : str
-        'rand' (use current dtype float or complex), 'ones', 'zeros'
+        ``'rand'``, ``'ones'``, or  ``'zeros'``
 
-    dtype : str
-        desired dtype, overrides current dtype of 'a'
-
-    Examples
-    --------
-    D = 5  # ndim = 1
-    D = (1, 2, 3)  # nsym = 0, ndim = 3
-    t = [0, (-2, 0), (2, 0)], D = [1, (1, 2), (1, 3)]  # nsym = 1 ndim = 3
-    t = [[(0, 0)], [(-2, -2), (0, 0), (-2, 0), (0, -2)], [(2, 2), (0, 0), (2, 0), (0, 2)]], \
-    D = [1, (1, 4, 2, 2), (1, 9, 3, 3)]  # nsym = 2 ndim = 3
+    Returns
+    -------
+    yast.Tensor
+        tensor filled with selected values
     """
 
     # if dtype is None:
@@ -123,8 +117,8 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     Add new block to tensor or change the existing one.
 
     This is the intended way to add new blocks by hand.
-    Checks if bond dimensions of the new block are consistent with the existing ones.
-    Updates meta-data.
+    Checks if bond dimensions of the new block are consistent with the existing ones
+    and updates the Legs of the tensors accordingly.
 
     Parameters
     ----------
