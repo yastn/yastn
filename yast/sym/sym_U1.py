@@ -1,7 +1,7 @@
 """U(1) symmetry"""
 from .sym_abelian import sym_abelian
 
-class sym_U1(metaclass=sym_abelian):
+class sym_U1(sym_abelian):
     """U(1) symmetry"""
 
     SYM_ID = 'U(1)'
