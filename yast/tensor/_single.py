@@ -11,14 +11,15 @@ __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'mo
 
 def copy(a):
     r"""
-    Return a copy of the tensor.
+    Return a copy of the tensor. Data of the resulting tensor is independent 
+    from the original.
 
     .. warning::
-        this operation doesn't preserve autograd on returned :class:`yast.Tensor`
+        this operation does not preserve autograd on returned :class:`yast.Tensor`
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     data = a.config.backend.copy(a._data)
     return a._replace(data=data)
@@ -26,12 +27,13 @@ def copy(a):
 
 def clone(a):
     r"""
-    Return a copy of the tensor preserving the autograd (resulting clone is a part
-    of the computational graph)
+    Return a clone of the tensor preserving the autograd - resulting clone is a part
+    of the computational graph. Data of the resulting tensor is indepedent
+    from the original.
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     data = a.config.backend.clone(a._data)
     return a._replace(data=data)
@@ -64,11 +66,16 @@ def to(a, device=None, dtype=None):
 
 def detach(a):
     r"""
-    Detach tensor from computational graph.
+    Detach tensor from the computational graph returning a `view`. Data of the resulting
+    tensor is a `view` of the original data. 
+
+    .. warning::
+        this operation does not preserve autograd on returned :class:`yast.Tensor`
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
+        In case of NumPy backend, returns ``self``.
     """
     data = a.config.backend.detach(a._data)
     return a._replace(data=data)

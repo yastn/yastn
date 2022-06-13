@@ -122,22 +122,17 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
     Parameters
     ----------
-    a : Tensor
+    ts : tuple(int) or tuple(tuple(int))
+        Charges identifing the block. Ignored if tensor has no symmetry.
 
-    ts : tuple
-        charges identifing the block, t = (sym1leg1, sym2leg1, sym1leg2, sym2leg2, ...)
-        If nsym == 0, it is not taken into account.
+    Ds : tuple(int)
+        Dimensions of the block. If ``None``, tries to infer 
+        dimensions from legs of the tensor.
 
-    Ds : tuple
-        bond dimensions of the block. Ds = (leg1, leg2, leg3)
-        If Ds not given, tries to read it from existing blocks.
-
-    val : str, nparray, list
-        'rand' (use current dtype float or complex), 'ones', 'zeros'
-        for nparray setting Ds is needed.
-
-    dtype : str
-        desired dtype, overrides default_dtype specified in config of tensor `a`
+    val : str, tensor-like
+        recognized string values are ``'rand'``, ``'ones'``,`or  ``'zeros'``.
+        Otherwise any tensor-like format such as nested list, numpy.ndarray, etc., 
+        can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
     if isinstance(Ds, int):
         Ds = (Ds,)

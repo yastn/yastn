@@ -12,7 +12,7 @@ The data, in form of non-zero blocks, can be added at later time.
 See examples: :ref:`examples/tensor/init:create empty tensor and fill it block by block`.
 
 .. autoclass:: yast.Tensor
-	:members: fill_tensor
+	:members: fill_tensor, set_block
 	:special-members: __init__
 	:exclude-members: __new__
 
@@ -37,16 +37,16 @@ See examples: :ref:`examples/tensor/init:create tensors from scratch`.
 Copying and cloning with autograd
 ---------------------------------
 
-TODO add link
-
 YAST follows the semantics of PyTorch with regards to creating
 differentiable `clones` or non-differentiable `copies` of symmetric
-tensors.
+tensors. See 
+`clone <https://pytorch.org/docs/stable/generated/torch.clone.html#torch.clone>`_ 
+and 
+`detach <https://pytorch.org/docs/stable/generated/torch.Tensor.detach.html?highlight=detach#torch.Tensor.detach>`_ for PyTorch.
 
-See examples: :ref:`examples/tensor/init:clone, detach or copy tensors`.
+See YAST examples: :ref:`examples/tensor/init:clone, detach or copy tensors`.
 
 .. autoclass:: yast.Tensor
-	:noindex:
 	:exclude-members: __init__, __new__
 	:members: copy, clone, detach
 
