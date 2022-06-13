@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 import yast
 try:
-    from .configs import config_U1, config_U1_force
+    from .configs import config_U1
 except ImportError:
-    from configs import config_U1, config_U1_force
+    from configs import config_U1
 
 tol = 1e-10  #pylint: disable=invalid-name
 
@@ -20,10 +20,6 @@ def test_fuse():
     c = c.unfuse_legs(axes=2)
     d = c.move_leg(source=1, destination=0)
     assert yast.norm(a - d) < tol  # == 0.0
-
-    e = yast.rand(config=config_U1_force, s=(-1, 1),
-                  t=((0, 1), (0, 1)), D=((1, 2), (3, 4)))
-    e = e.fuse_legs(axes=(0, 1), mode='meta')
 
 
 def test_fuse_split():

@@ -22,8 +22,6 @@ class _config(NamedTuple):
     default_dtype: str = 'float64'
     default_fusion: str = 'meta'
     force_fusion: str = None
-    default_tensordot: str = 'hybrid'
-    force_tensordot: str = None
 
 
 def _flatten(nested_iterator):

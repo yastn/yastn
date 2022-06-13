@@ -14,8 +14,7 @@ The configuration can be a Python module,
 `typing.NamedTuple <https://docs.python.org/3/library/typing.html#typing.NamedTuple>`_ or similar which defines following members
 
 * required: ``backend``, ``sym``
-* optional: ``default_device``, ``default_dtype``, ``default_fusion``, ``default_tensordot``,
-  ``fermionic``, ``force_fusion``, ``force_tensordot``
+* optional: ``default_device``, ``default_dtype``, ``default_fusion``, ``fermionic``, ``force_fusion``
 
 For easy way to generate `configurations`, a convenience function is provided
 
