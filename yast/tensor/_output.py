@@ -297,6 +297,9 @@ def __getitem__(a, key):
 
 def get_leg_fusion(a, axes=None):
     """
+    .. deprecated::
+        to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.
+
     Fusion trees for meta legs.
 
     Parameters
@@ -360,7 +363,8 @@ def get_legs(a, axis=None, native=False):
 
 def get_leg_structure(a, axis, native=False):
     r"""
-    This function will be removed -- use get_legs instead.
+    .. deprecated::
+        to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.
 
     Find all charges and the corresponding bond dimension for n-th leg.
 
@@ -391,7 +395,12 @@ def get_leg_structure(a, axis, native=False):
 
 
 def get_leg_charges_and_dims(a, native=False):
-    """ collect information about charges and dimensions on all legs into two lists. """
+    """ 
+    .. deprecated::
+        to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.
+
+    Collect information about charges and dimensions on all legs into two lists. 
+    """
     _tmp = [a.get_leg_structure(n, native=native) for n in range(a.ndim_n if native else a.ndim)]
     _tmp = [{k: lst[k] for k in sorted(lst)} for lst in _tmp]
     ts_and_Ds= tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
