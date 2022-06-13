@@ -16,18 +16,19 @@ where `T` expressed in basis and components is
     T = \sum_{abc...ijk...} T^{abc...}_{ijk...} e^ie^je^k...e_ae_be_c...
 
 YAST refers to individual spaces :math:`V` as `legs`. In graphical notation
-legs refer to lines emerging from shapes, which represent individual tensors
+the shapes represent tensors, while legs correspond to lines emerging from these shapes 
 
 ::
 
+    (generic) tensor,    matrix,             vector
           ___
-    V^i--|   |--V_a
-    V^j--| T |--V_b
+    V^i--|   |--V_a            ___                 _
+    V^j--| T |--V_b      V^i--|_M_|--V_a     V^i--|W|
     V^k--|   |--V_c
       ...|___|...
 
 .. note::
-        YAST defines a vector space and its abelian symmetry structure through :meth:`yast.Leg`.
+        YAST defines a vector space and its abelian symmetry structure through :class:`yast.Leg`.
 
 In some contexts, its often useful to distinguish underlying spaces as co- or contra-variant
 with respect to transformations acting on these spaces. Often such distinction is encoded
@@ -45,12 +46,12 @@ In YAST, similar to other implementations (:ref:`see below <refs_basics>`), the 
 :math:`\langle bra |` and :math:`|ket \rangle` spaces, or Hilbert space :math:`\mathcal{H}` and its dual :math:`\mathcal{H}^*`, is encoded through `signature`.
 
 .. note::
-    `signature`, :py:attr:`yast.Tensor.s`, is a tuple/list/1-D array of signs :math:`\pm 1`
+    `signature`, :attr:`yast.Tensor.s`, is a tuple/list/1-D array of signs :math:`\pm 1`
 
 Action of abelian symmetry
 --------------------------
 
-For any element `g` of abelian group G, its action on tensor elements :math:`T^{ab...}_{ij...}` in proper basis can be represented by diagonal matrices `U(g)` acting on each of the vector spaces
+For any element `g` of abelian group G, its action on tensor elements :math:`T^{ab...}_{ij...}` in a proper basis can be represented by `diagonal` matrices `U(g)` acting on each of the vector spaces
 
 .. math::
 
@@ -72,6 +73,8 @@ This structure gives simple selection rule which all symmetric tensors must obey
 
     (gT)^{ab...}_{ij...} = T^{ab...}_{ij...}exp[i\theta_g(t_a+t_b+...-t_i-t_j-...)].
 
+.. _symmetry selection rule:
+
 The selection rule can be equivalently expressed as charge conservation
 
 .. math::
@@ -83,7 +86,7 @@ The charges :math:`t_i,\ N` and precise form of their addition :math:`+` depends
 considered.
 
 .. note::
-    * Total charge `N` of YAST tensor can be accessed by :py:attr:`yast.Tensor.n`
+    * Total charge `N` of YAST tensor can be accessed by :attr:`yast.Tensor.n`
     * To inspect what charge sectors :math:`t_i` exist on legs of a tensor
       use :meth:`yast.Tensor.get_legs`.
 

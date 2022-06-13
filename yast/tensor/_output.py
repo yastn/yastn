@@ -13,11 +13,12 @@ __all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5', 'requires_grad']
 
 def save_to_dict(a):
     r"""
-    Export relevant information about tensor to dictionary. Such dictionary can be then
-    stored in file using i.e. numpy.save
+    Export YAST tensor to dictionary.
 
     Returns
     -------
+    a: yast.Tensor
+        tensor to export
     d: dict
         dictionary containing all the information needed to recreate the tensor.
     """
@@ -35,7 +36,10 @@ def save_to_hdf5(a, file, path):
 
     Parameters
     ----------
-    ADD DESCRIPTION
+    a : yast.Tensor
+        tensor to export
+    
+    TODO
     """
     _d = a.config.backend.to_numpy(a._data)
     hfs = [tuple(hf) for hf in a.hfs]
@@ -51,16 +55,26 @@ def save_to_hdf5(a, file, path):
 
 def compress_to_1d(a, meta=None):
     """
-    Store each block as 1D array within r1d in contiguous manner (do not clone the data if not necceaary);
-    outputs meta-information to reconstruct the original tensor
+    Store each block within 1D array in contiguous manner 
+    (without cloning the data if not necessary) and 
+    create metadata allowing re-creation of the original tensor.
 
     Parameters
     ----------
+        a: yast.Tensor
+            tensor to export
         meta: dict
-            If not None, uses this metainformation to merge into 1d structure,
-            filling-in zeros if tensor does not have some blocks.
-            Raise error if tensor has some blocks which are not included in meta or otherwise
+            If not None, uses this extra information to fill-in extra zero blocks
+            not present in the tensor but allowed by the symmetry.
+            Raises error if tensor has some blocks which are not included in meta or otherwise
             meta does not match the tensor.
+
+    Returns
+    -------
+    tensor (type derived from backend)
+        1D array with tensor data
+    dict
+        metadata with structure of the symmetric tensor
     """
     if meta is None:
         meta = {'struct': a.struct, 'hfs': a.hfs,

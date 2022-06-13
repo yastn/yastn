@@ -54,7 +54,7 @@ def to(a, device=None, dtype=None):
         returns a clone of the tensor residing on ``device`` in desired ``dtype``. If tensor already
         resides on ``device``, returns ``self``. This operation preserves autograd.
 
-        Makes a shallow copy of Tensor data if nothing is to change.
+        If no change is needed, makes only a shallow copy of the tensor data.
     """
     if dtype in (None, a.yast_dtype) and device in (None, a.device):
         return a._replace()

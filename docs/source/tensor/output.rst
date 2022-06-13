@@ -5,7 +5,6 @@ Get information about tensor's structure and properties
 -------------------------------------------------------
 
 .. autoclass:: yast.Tensor
-   :noindex:
    :exclude-members: __init__, __new__
    :members: s, s_n, n, ndim, ndim_n, isdiag, requires_grad, size,
              show_properties, print_blocks_shape, is_complex, get_rank,

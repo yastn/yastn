@@ -251,6 +251,7 @@ class Tensor:
         """
         Returns
         -------
-        data : backend 1d array
+        data : backend tensor type
+            underlying 1D-array storing the elements of the tensor 
         """
         return self._data
