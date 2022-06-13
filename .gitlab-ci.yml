@@ -88,6 +88,7 @@ test_python3.7_conda_numpy1.19.1:
   - conda install python=3.7
   - conda update -q conda
   - conda install numpy=1.19.1 scipy pytest h5py
+  - pip install fbpca
   - export PYTHONPATH=$(pwd)
   - git submodule status
   - ssh-add -l

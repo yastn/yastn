@@ -2,9 +2,9 @@ import numpy as np
 import pytest
 import yast
 try:
-    from .configs import config_dense, config_U1, config_U1_force, config_Z2xU1
+    from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
-    from configs import config_dense, config_U1, config_Z2xU1, config_U1_force
+    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 

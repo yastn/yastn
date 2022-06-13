@@ -236,6 +236,10 @@ def test_algebra_exceptions():
         a = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=0)
         b = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=1)
         _ = a + b  # Tensor charges do not match.
+    with pytest.raises(yast.YastError):
+        a = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=0)
+        _ = yast.norm(a, p='wrong_order')
+        # Error in norm: p not in ('fro', 'inf').
 
 
 def test_hf_union_exceptions():
