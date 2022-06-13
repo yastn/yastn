@@ -23,6 +23,6 @@ Example symmetries
 
 .. literalinclude:: /../../yast/sym/sym_Z2.py
 
-* :math:`Z_2\times U(1)`
+* :math:`Z_2\times U(1)` as plain Python module
 
 .. literalinclude:: /../../tests/tensor/configs/syms/sym_Z2xU1.py
