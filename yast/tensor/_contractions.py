@@ -297,7 +297,7 @@ def _meta_mask(a_struct, a_isdiag, b_struct, Dbnew, axis):
         c_Dp = tuple(x[0] for x in c_D)
     else:
         c_D = tuple(mt[2][:axis] + (mt[4],) + mt[2][axis + 1:] for mt in meta)
-        c_Dp = tuple(np.prod(c_D, axis=1))
+        c_Dp = tuple(np.prod(c_D, axis=1)) if len(c_D) > 0 else ()
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
     c_struct = a_struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     meta = tuple((sln, sla, Da, slb) for (_, sla, Da, slb, _), sln in zip(meta, c_struct.sl))

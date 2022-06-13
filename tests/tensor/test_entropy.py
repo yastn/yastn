@@ -11,14 +11,15 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_entropy():
-    a = yast.rand(config=config_U1, s=(1, 1, -1, -1), n=1,
-                  t=[(0, 1), (-1, 0), (-1, 0, 1), (-1, 0, 1)],
-                  D=[(5, 6), (5, 6), (2, 3, 4), (2, 3, 4)])
+    legs = [yast.Leg(config_U1, s=1, t=(0, 1), D=(5, 6)),
+            yast.Leg(config_U1, s=1, t=(-1, 0), D=(5, 6)),
+            yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
+            yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
+    a = yast.rand(config=config_U1, n=1, legs=legs)
+
     U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
-    S.set_block(ts=-2, Ds=4, val='ones')
-    S.set_block(ts=-1, Ds=12, val='ones')
-    S.set_block(ts=0, Ds=25, val='ones')
-    a = U @ S @ V
+    S2 = yast.eye(config=config_U1, legs=yast.Leg(config_U1, s=1, t=(-2, -1, 0), D=(4, 12, 25)))
+    a = U @ S2 @ V
 
     entropy, Smin, normalization = yast.entropy(a, axes=((0, 1), (2, 3)))
     assert pytest.approx(entropy.item(), rel=tol) == np.log2(41)
@@ -30,7 +31,7 @@ def test_entropy():
     assert pytest.approx(Smin.item(), rel=tol) == 1
     assert pytest.approx(normalization.item(), rel=tol) == np.sqrt(41)
 
-    b = yast.Tensor(config=config_U1, s=(1, 1, -1, -1))  # speciac case of empty tensor
+    b = yast.Tensor(config=config_U1, s=(1, 1, -1, -1))  # specific case of an empty tensor
     entropy, Smin, normalization = yast.entropy(b, axes=((0, 1), (2, 3)))
     assert entropy == 0
     assert Smin == 0
