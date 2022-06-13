@@ -18,10 +18,7 @@ def svd_combine(a):
     USV = yast.tensordot(US, V, axes=(2, 0))
     USV = USV.transpose(axes=(3, 1, 2, 0))
     assert yast.norm(a - USV) < tol  # == 0.0
-    assert a.is_consistent()
-    assert U.is_consistent()
-    assert S.is_consistent()
-    assert V.is_consistent()
+    assert all(x.is_consistent() for x in (a, U, S, V))
 
     # changes signature of new leg; and position of new leg
     U, S, V = yast.linalg.svd(a, axes=((3, 1), (2, 0)), sU=1, Uaxis=0, Vaxis=-1)
@@ -29,9 +26,7 @@ def svd_combine(a):
     USV = yast.tensordot(US, V, axes=(0, 2))
     USV = USV.transpose(axes=(3, 1, 2, 0))
     assert yast.norm(a - USV) < tol  # == 0.0
-    assert U.is_consistent()
-    assert S.is_consistent()
-    assert V.is_consistent()
+    assert all(x.is_consistent() for x in (U, S, V))
 
 
 def test_svd_basic():
@@ -41,16 +36,19 @@ def test_svd_basic():
     svd_combine(a)
 
     # U1
-    a = yast.rand(config=config_U1, s=(-1, -1, 1, 1), n=1,
-                  t=[(-1, 0, 1), (-2, 0, 2), (-2, -1, 0, 1, 2), (0, 1)],
-                  D=[(2, 3, 4), (5, 6, 7), (6, 5, 4, 3, 2), (2, 3)])
+    legs = [yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
+            yast.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(5, 6, 7)),
+            yast.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
+            yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))]
+    a = yast.rand(config=config_U1, n=1, legs=legs)
     svd_combine(a)
 
     # Z2xU1
-    t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
-    a = yast.ones(config=config_Z2xU1, s=(-1, -1, 1, 1),
-                  t=[t1, t1, t1, t1],
-                  D=[(2, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
+    legs = [yast.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(2, 3, 4, 5)),
+            yast.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(5, 4, 3, 2)),
+            yast.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(2, 1, 3, 3)),
+            yast.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4))]
+    a = yast.ones(config=config_Z2xU1, legs=legs)
     svd_combine(a)
 
 
@@ -64,13 +62,11 @@ def test_svd_Z3():
         a = yast.rand(config=config_Z3, s=s, n=n, t=[(0, 1, 2), (0, 1, 2)], D=[(2, 5, 3), (5, 2, 3)], dtype='complex128')
         U, S, V = yast.linalg.svd(a, axes=(0, 1), sU=sU, nU=nU)
         assert yast.norm(a - U @ S @ V) < tol  # == 0.0
-        assert U.is_consistent()
-        assert S.is_consistent()
-        assert V.is_consistent()
+        assert all(x.is_consistent() for x in (U, S, V))
 
 
 def test_svd_complex():
-    """ test svd decomposition for various symmetries """
+    """ test svd decomposition and dtype propagation """
     # dense
     a = yast.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21], dtype='complex128')
     U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
@@ -94,34 +90,49 @@ def test_svd_sparse():
     a.set_block(ts=(0, 1, 0, 0, 1, 0), Ds=(2, 2, 2, 2, 2, 2), val='rand')
     a.set_block(ts=(0, 0, 1, 0, 0, 1), Ds=(2, 2, 2, 2, 2, 2), val='rand')
     axes = ((1, 2, 0), (5, 3, 4))
-    U, S, V = yast.linalg.svd(a, axes)
-    assert U.is_consistent()
-    assert S.is_consistent()
-    assert V.is_consistent()
+    U, S, V = yast.linalg.svd(a, axes=axes)
+    assert all(x.is_consistent() for x in (U, S, V))
 
-    ll = len(axes[0])
-    US = yast.tensordot(U, S, axes=(ll, 0))
-    USV = yast.tensordot(US, V, axes=(ll, 0))
+    USV = U @ S @ V
     b = a.transpose(axes=axes[0] + axes[1])
     assert yast.norm(b - USV) < tol  # == 0.0
 
 
 def test_svd_truncate():
-    a = yast.rand(config=config_U1, s=(1, 1, -1, -1), n=1,
-                  t=[(0, 1), (-1, 0), (-1, 0, 1), (-1, 0, 1)],
-                  D=[(5, 6), (5, 6), (2, 3, 4), (2, 3, 4)])
+    legs = [yast.Leg(config_U1, s=1, t=(0, 1), D=(5, 6)),
+            yast.Leg(config_U1, s=1, t=(-1, 0), D=(5, 6)),
+            yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
+            yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
+    a = yast.rand(config=config_U1, n=1, legs=legs)
+
     U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
 
     # fixing singular values for testing
-    S.set_block(ts=(-2, -2), Ds=4, val=np.array([2**(-ii - 6) for ii in range(4)]))
-    S.set_block(ts=(-1, -1), Ds=12, val=np.array([2**(-ii - 2) for ii in range(12)]))
-    S.set_block(ts=(0, 0), Ds=25, val=np.array([2**(-ii - 1) for ii in range(25)]))
+    S.set_block(ts=(-2, -2), Ds=4, val=[2**(-ii - 6) for ii in range(4)])
+    S.set_block(ts=(-1, -1), Ds=12, val=[2**(-ii - 2) for ii in range(12)])
+    S.set_block(ts=(0, 0), Ds=25, val=[2**(-ii - 1) for ii in range(25)])
 
     a = yast.ncon([U, S, V], [(-1, -2, 1), (1, 2), (2, -3, -4)])
 
     opts = {'tol': 0.01, 'D_block': 100, 'D_total': 12}
-    _, S1, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
-    assert S1.get_shape() == (12, 12)
+    U1, S1, V1 = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)  # nU=True
+    assert S1.get_blocks_charge() == ((-2, -2), (-1, -1), (0, 0))
+    assert S1.s[0] == 1 and U1.n == a.n and V1.n == (0,) and S1.get_shape() == (12, 12)
+
+    # specific charges of S1 depend on signature of a new leg comming from U, 
+    # and where charge of tensor 'a' is attached
+    U1, S1, V1 = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)  # sU=1, nU=True
+    assert S1.get_blocks_charge() == ((0, 0), (1, 1), (2, 2))
+    assert S1.s[0] == -1 and U1.n == a.n and V1.n == (0,) and S1.get_shape() == (12, 12)
+
+    U1, S1, V1 = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, nU=False, **opts)
+    assert S1.get_blocks_charge() == ((-1, -1), (0, 0), (1, 1))
+    assert S1.s[0] == 1 and U1.n == (0,) and V1.n == a.n and S1.get_shape() == (12, 12)
+
+    U1, S1, V1 = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=1, nU=False, **opts)
+    assert S1.get_blocks_charge() == ((-1, -1), (0, 0), (1, 1))
+    assert S1.s[0] == -1 and U1.n == (0,) and V1.n == a.n and S1.get_shape() == (12, 12)
+
     try:
         _, S2, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts, policy='lowrank')
         assert S2.get_shape() == (12, 12)
@@ -140,22 +151,42 @@ def test_svd_truncate():
     _, S1, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
     assert S1.get_shape() == (4, 4)
 
+    opts = {'D_block': {(0,): 2, (-1,): 0}, 'policy': 'lowrank'}
+    U1, S1, V1 = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=True, sU=-1, **opts)
+    assert S1.get_shape() == (2, 2)
+    a1 = U1 @ S1 @ V1
+
+    # truncation by charge requires some care to properly assign charges, given nU and sU.
+    opts = {'D_block': {(1,): 2}, 'policy': 'lowrank'}
+    U2, S2, V2 = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=False, sU=-1, **opts)
+    assert S1.get_shape() == (2, 2)
+    a2 = U2 @ S2 @ V2
+    assert yast.norm(a1 - a2) < tol
+
+    opts = {'D_total': 0}
+    _, S2, _ = yast.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=False, sU=-1, **opts)
+    assert S2.norm() < tol
+
 
 def test_svd_multiplets():
-    a = yast.rand(config=config_U1, s=(1, 1, -1, -1), n=0,
-                  t=[(-1, 0, 1), (-1, 0, 1), (-1, 0, 1), (-1, 0, 1)],
-                  D=[(2, 3, 2), (3, 4, 3), (4, 5, 4), (5, 6, 5)])
+    config_U1.backend.random_seed(seed=0)  # to fix consistency of tests
+    legs = [yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 2)),
+            yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 4, 3)),
+            yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(4, 5, 4)),
+            yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(5, 6, 5))]
+    a = yast.rand(config=config_U1, n=0, legs=legs)
+
     U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)))
 
     # fixing singular values for testing
-    v00 = np.array([1, 1, 0.1001, 0.1000, 0.1000, 0.0999, 0.001001, 0.001000] + [0] * 16)
+    v00 = [1, 1, 0.1001, 0.1000, 0.1000, 0.0999, 0.001001, 0.001000] + [0] * 16
     S.set_block(ts=(0, 0), Ds=24, val=v00)
 
-    v11 = np.array([1, 1, 0.1001, 0.1000, 0.0999, 0.001000, 0.000999] + [0] * 10)
+    v11 = [1, 1, 0.1001, 0.1000, 0.0999, 0.001000, 0.000999] + [0] * 10
     S.set_block(ts=(1, 1), Ds=17, val=v11)
     S.set_block(ts=(-1, -1), Ds=17, val=v11)
 
-    v22 = np.array([1, 1, 0.1001, 0.1000, 0.001000, 0])
+    v22 = [1, 1, 0.1001, 0.1000, 0.001000, 0]
     S.set_block(ts=(2, 2), Ds=6, val=v22)
     S.set_block(ts=(-2, -2), Ds=6, val=v22)
 
@@ -172,9 +203,12 @@ def test_svd_multiplets():
 
 
 def test_svd_tensor_charge_division():
-    a = yast.rand(config=config_U1, s=(-1, -1, 1, 1), n=3,
-                  t=[(-1, 0, 1), (-2, 0, 2), (-2, -1, 0, 1, 2), (0, 1)],
-                  D=[(2, 3, 4), (5, 6, 7), (6, 5, 4, 3, 2), (2, 3)])
+    legs = [yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
+            yast.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(5, 6, 7)),
+            yast.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
+            yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))]
+    a = yast.rand(config=config_U1, n=3, legs=legs)
+
     U1, S1, V1 = yast.linalg.svd(a, axes=((0, 1), (2, 3)), nU=True, sU=1)
     US1 = yast.tensordot(U1, S1, axes=(2, 0))
     USV1 = yast.tensordot(US1, V1, axes=(2, 0))
@@ -191,73 +225,80 @@ def test_svd_tensor_charge_division():
 
 
 @pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
-def test_svd_backward_1():
+def test_svd_backward_basic():
     import torch
-
     # U1
     for dtype in ["float64", "complex128"]:
-        a= yast.rand(config=config_U1, s=(-1, -1, 1, 1),
-                  t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                  D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
+        for p in ['inf', 'fro']:
+            a = yast.rand(config=config_U1, s=(-1, -1, 1, 1),
+                    t=[(0, 1), (0, 1), (0, 1), (0, 1)],
+                    D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
 
-        def test_f(data):
-            a._data=data
-            U,S,V= a.svd(axes=([0,1],[2,3]))
-            return S.norm(p='inf')
+            def test_f(data):
+                a._data=data
+                U, S, V = a.svd(axes=([0, 1], [2, 3]))
+                return S.norm(p=p)
 
-        op_args = (torch.randn_like(a.data,requires_grad=True), )
-        test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
-        assert test
+            op_args = (torch.randn_like(a.data,requires_grad=True), )
+            test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+            assert test
 
-@pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
-def test_svd_backward_full():
-    import torch
-
-    # U1
-    for dtype in ["float64", "complex128"]:
-        a= yast.rand(config=config_U1, s=(-1, -1, 1, 1),
-                      t=[(0, 1), (0, 1), (0, 1), (0, 1)],
-                      D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
-
-        def test_f(data):
-            a._data=data
-            U,S,V= a.svd(axes=([0,1],[2,3]))
-            return S.norm(p='fro')
-
-        op_args = (torch.randn_like(a.data,requires_grad=True), )
-        test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
-        assert test
 
 @pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
 def test_svd_backward_truncate():
     import torch
-
     # U1
     for dtype in ["float64", "complex128"]:
-        a= yast.rand(config=config_U1, s=(-1, -1, 1, 1),
+        a = yast.rand(config=config_U1, s=(-1, -1, 1, 1),
                       t=[(0, 1), (0, 1), (0, 1), (0, 1)],
                       D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype=dtype)
 
-        b= yast.rand(config=config_U1, s=(-1, -1),
+        b = yast.rand(config=config_U1, s=(-1, -1),
                       t=[(0, 1), (0, 1)],
                       D=[(4, 3), (2, 1)], dtype=dtype)
 
-        c= yast.rand(config=config_U1, s=(1, 1),
+        c = yast.rand(config=config_U1, s=(1, 1),
                       t=[(0, 1), (0, 1)],
                       D=[(2, 3), (4, 5)], dtype=dtype)
 
         def test_f(data):
             a._data=data
-            U,S,Vh= a.svd(axes=([0,1],[2,3]), D_total=10)
-            r= c.tensordot(U,([0,1],[0,1]))
-            r= r.tensordot(S,(0,0))
-            r= r.tensordot(Vh,([0],[0]))
-            r= r.tensordot(b,([0,1],[0,1]))
+            U, S, Vh = a.svd_with_truncation(axes=([0, 1], [2, 3]), D_total=10)
+            r = c.tensordot(U, axes=([0, 1], [0, 1]))
+            r = r.tensordot(S, axes=(0, 0))
+            r = r.tensordot(Vh, axes=(0, 0))
+            r = r.tensordot(b, axes=([0, 1], [0, 1]))
             return r.to_number()
 
-        op_args = (torch.randn_like(a.data,requires_grad=True), )
+        op_args = (torch.randn_like(a.data, requires_grad=True),)
         test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
         assert test
+
+
+def test_svd_exceptions():
+    """ raising exceptions by svd(), and some corner cases. """
+    legs = [yast.Leg(config_U1, s=1, t=(0, 1), D=(5, 6)),
+            yast.Leg(config_U1, s=1, t=(-1, 0), D=(5, 6)),
+            yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
+    a = yast.rand(config=config_U1, legs=legs)
+    
+    with pytest.raises(yast.YastError):
+        _ = yast.svd(a, axes=((0, 1), 2), policy='wrong_policy')
+        # svd policy should be one of (`lowrank`, `fullrank`)
+    with pytest.raises(yast.YastError):
+        _ = yast.svd(a, axes=((0, 1), 2), policy='lowrank')
+        # lowrank policy in svd requires passing argument D_block
+    
+    _, S, _ = yast.svd(a, axes=((0, 1), 2))
+    with pytest.raises(yast.YastError):
+        _ = yast.truncation_mask(1j * S, tol=1e-10)
+        # Truncation_mask requires S to be real and diagonal
+    with pytest.raises(yast.YastError):
+        _ = yast.truncation_mask_multiplets(1j * S, tol=1e-10)
+        # Truncation_mask requires S to be real and diagonal
+
+
+
 
 if __name__ == '__main__':
     test_svd_basic()
@@ -267,6 +308,6 @@ if __name__ == '__main__':
     test_svd_truncate()
     test_svd_tensor_charge_division()
     test_svd_multiplets()
-    test_svd_backward_1()
-    test_svd_backward_full()
+    test_svd_exceptions()
+    test_svd_backward_basic()
     test_svd_backward_truncate()

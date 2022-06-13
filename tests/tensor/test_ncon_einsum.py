@@ -80,7 +80,6 @@ def test_ncon_einsum_basic():
     y1 = yast.einsum('abc, def*, aghh, gifi* -> cebd', a, b, c, d, order='higaf')
     assert yast.norm(y - y1) < tol
 
-
     z1 = yast.ncon([e, f], ((-2, -0), (-1, -3)), conjs=[0, 1])
     z2 = yast.ncon([f, e], ((-1, -3), (-2, -0)), conjs=[1, 0])
     z3 = yast.ncon([e, f], ((-2, -0), (-1, -3)), conjs=[0, 0])
@@ -137,7 +136,6 @@ def test_ncon_einsum_basic():
     assert abs(yast.ncon([a], [(1, -1, -0, 1)], conjs=[1]).item() + 1j) < tol
     assert abs(yast.ncon([a], [(-0, -1, -2, -3)], conjs=[1]).item() + 1j) < tol
     assert abs(yast.ncon([a], [(1, 2, 2, 1)], conjs=[0]).item() - 1j) < tol
-
 
 
 def test_ncon_einsum_exceptions():

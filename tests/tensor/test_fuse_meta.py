@@ -71,17 +71,21 @@ def test_fuse_transpose():
     a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
-    # assert a.get_shape() == (3, 5, 7, 9, 11, 13)
-    b = a.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='meta')
+    assert a.get_shape() == (3, 5, 7, 9, 11, 13)
 
-    c = np.transpose(b, axes=(3, 2, 1, 0))
-    assert c.get_shape() == (13, 99, 7, 15)
-    c = c.unfuse_legs(axes=(1, 3))
-    assert c.get_shape() == (13, 9, 11, 7, 3, 5)
+    fa = a.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='meta')
+    assert fa.get_shape() == (15, 7, 99, 13)
+    
+    fc = np.transpose(fa, axes=(3, 2, 1, 0))
+    assert fc.get_shape() == (13, 99, 7, 15)
 
-    c = b.move_leg(source=1, destination=2)
-    assert c.get_shape() == (15, 99, 7, 13)
-    c = c.unfuse_legs(axes=(1, 0))
+    fc = fc.unfuse_legs(axes=(1, 3))
+    assert fc.get_shape() == (13, 9, 11, 7, 3, 5)
+
+    fc = fa.move_leg(source=1, destination=2)
+    assert fc.get_shape() == (15, 99, 7, 13)
+
+    c = fc.unfuse_legs(axes=(1, 0))
     assert c.get_shape() == (3, 5, 9, 11, 7, 13)
 
 
@@ -90,36 +94,34 @@ def test_get_shapes():
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
 
-    assert a.get_shape() == (3, 5, 7, 9, 11, 13)
+    assert a.get_shape() == a.to_numpy().shape == (3, 5, 7, 9, 11, 13)
     assert a.get_signature() == (-1, -1, -1, 1, 1, 1)
-    assert a.to_numpy().shape == (3, 5, 7, 9, 11, 13)
+
     b = a.to_nonsymmetric()
-    assert b.get_shape() == (3, 5, 7, 9, 11, 13)
-    b = a.to_nonsymmetric(native=True)
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 
     a = a.fuse_legs(axes=[0, 1, (2, 3), (4, 5)], mode='meta')
-    assert a.get_shape() == (3, 5, 63, 143)
+    assert a.get_shape() == a.to_numpy().shape == (3, 5, 63, 143)
     assert a.get_signature() == (-1, -1, -1, 1)
-    assert a.to_numpy().shape == (3, 5, 63, 143)
+
     b = a.to_nonsymmetric()
     assert b.get_shape() == (3, 5, 63, 143)
     b = a.to_nonsymmetric(native=True)
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 
     a = a.fuse_legs(axes=[0, (1, 2, 3)], mode='meta')
-    assert a.get_shape() == (3, 28389)
+    assert a.get_shape() == a.to_numpy().shape == (3, 28389)
     assert a.get_signature() == (-1, -1)
-    assert a.to_numpy().shape == (3, 28389)
+
     b = a.to_nonsymmetric()
     assert b.get_shape() == (3, 28389)
     b = a.to_nonsymmetric(native=True)
     assert b.get_shape() == (3, 5, 7, 9, 11, 13)
 
     a = a.fuse_legs(axes=[(0, 1)], mode='meta')
-    assert a.get_shape() == (a.size, )
+    assert a.get_shape() == a.to_numpy().shape == (a.size,)
     assert a.get_signature() == (-1,)
-    assert a.to_numpy().shape == (a.size,)
+
     b = a.to_nonsymmetric()
     assert b.get_shape() == (a.size,)
     b = a.to_nonsymmetric(native=True)
@@ -147,12 +149,10 @@ def test_fuse_get_legs():
 
     c3 = c2.unfuse_legs(axes=1)  # partial unfuse
     r3 = yast.ncon([af, bf, c3], [[-1, 1, -2], [-3, 2, 3, -4], [1, 2, 3]], [0, 1, 0])
-
     assert yast.norm(r3 - r2) < tol  # == 0.0
+
     r2 = r2.unfuse_legs(axes=0)
     assert yast.norm(r1 - r2) < tol  # == 0.0
-
-
 
 
 def test_fuse_legs_exceptions():
