@@ -128,7 +128,7 @@ class Leg:
         Returns 
         -------
         dict
-            charge sectors and their sizes as dictionary ``{t: D}``.
+            charge sectors `t` and their sizes `D` as dictionary ``{t: D}``.
         """
         return dict(zip(self.t, self.D))
 
