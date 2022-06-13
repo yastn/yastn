@@ -26,20 +26,20 @@ def test_dense_basic():
                       D=((2, 3), (5, 5), (3, 4)))]
     shapes = [(8, 15, 7), (3, 11, 5), (5, 10, 7)]
     common_shape = (10, 20, 9)
-    norms.append(_tens_dense_v1(tens, shapes, common_shape))
+    norms.append(_test_dense_v1(tens, shapes, common_shape))
 
     # with meta-fusion
     mtens = [a.fuse_legs(axes=((0, 1), 2), mode='meta') for a in tens]
     mtens = [ma.fuse_legs(axes=[(0, 1)], mode='meta') for ma in mtens]
     mshapes = [(126,), (58,), (135,)]
     mcommon_shape = (211,)
-    norms.append(_tens_dense_v1(mtens, mshapes, mcommon_shape))
+    norms.append(_test_dense_v1(mtens, mshapes, mcommon_shape))
 
     htens = [a.fuse_legs(axes=((0, 1), 2), mode='hard') for a in tens]
     htens = [ha.fuse_legs(axes=[(0, 1)], mode='hard') for ha in htens]
     hshapes = [(126,), (58,), (135,)]
     hcommon_shape = (383,)
-    norms.append(_tens_dense_v1(htens, hshapes, hcommon_shape))
+    norms.append(_test_dense_v1(htens, hshapes, hcommon_shape))
 
     assert all(pytest.approx(n, rel=tol) == norms[0] for n in norms)
 
@@ -119,7 +119,7 @@ def test_to_nonsymmetric_basic():
         # Specified leg out of ndim
 
 
-def _tens_dense_v1(tens, shapes, common_shape):
+def _test_dense_v1(tens, shapes, common_shape):
     assert all(a.to_numpy().shape == sh for a, sh in zip(tens, shapes))
 
     legs = [a.get_legs() for a in tens]

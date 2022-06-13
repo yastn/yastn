@@ -19,7 +19,7 @@ def check_copy(psi1, psi2):
         assert np.allclose(psi1.A[n].to_numpy(), psi2.A[n].to_numpy())
 
 
-def test_full_hdf5():  # TODO: fix problem with loading orderdict in python 3.7
+def test_full_hdf5():
     """ Initialize random mps of full tensors and checks copying. """
     psi = ops_dense.mps_random(N=16, Dmax=15, d=2)
     try:
@@ -50,7 +50,7 @@ def test_full_hdf5():  # TODO: fix problem with loading orderdict in python 3.7
     os.remove("tmp.h5") 
 
 
-def test_Z2_hdf5():  # TODO: fix problem with loading orderdict in python 3.7
+def test_Z2_hdf5():
     psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
     try:
         os.remove("tmp.h5")

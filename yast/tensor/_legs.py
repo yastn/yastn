@@ -168,16 +168,3 @@ def _leg_union(*legs):
         D = tuple(tD[x] for x in t)
         hf = legs[0].legs[0]
     return Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D, legs=(hf,))
-
-
-def _unpack_legs(legs):
-    """ return native legs and mfs. """
-    ulegs, mfs = [], []
-    for leg in legs:
-        if isinstance(leg.fusion, tuple):  # meta-fused
-            ulegs.extend(leg.legs)
-            mfs.append(leg.fusion)
-        else:  #_Leg
-            ulegs.append(leg)
-            mfs.append((1,))
-    return tuple(ulegs), tuple(mfs)
