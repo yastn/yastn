@@ -72,14 +72,14 @@ class FusionSyntax(unittest.TestCase):
         # fusion step 2: 0 1 2 -> fuse -> (0 1) 2 = 0 1 
         #
         # unfuse step 2: 0 1 -> unfuse -> (0 1) 1->2 = 0 1 2
-        c0_0= c1.unfuse_legs(axes=0)
+        c0_0 = c1.unfuse_legs(axes=0)
         assert yast.norm(c0_0 - c0) < tol
 
         # unfuse step 1: 0 1 2 -> unfuse -> 0 (3->1 4->2) (2->3 1->4) = 0 1 2 3 4
         # 
         # Hence, to retrieve original tensor, we have to permute its indices
-        a_0= c0_0.unfuse_legs(axes=(1, 2))
-        a_0= a_0.transpose(axes=(0, 4, 3, 1, 2))
+        a_0 = c0_0.unfuse_legs(axes=(1, 2))
+        a_0 = a_0.transpose(axes=(0, 4, 3, 1, 2))
         assert yast.norm(a - a_0) < tol
 
 
@@ -370,6 +370,7 @@ def test_unmerge_backward():
     assert test
 
 if __name__ == '__main__':
+    unittest.main()
     test_fuse_hard_dense()
     test_hard_split()
     test_hard_transpose()
@@ -377,5 +378,5 @@ if __name__ == '__main__':
     test_hard_dot_sparse()
     test_fuse_mix()
     test_auxliary_merging_functions()
-    test_transpose_and_merge_backward()
-    test_unmerge_backward()
+    # test_transpose_and_merge_backward()
+    # test_unmerge_backward()

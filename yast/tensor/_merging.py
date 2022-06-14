@@ -28,6 +28,7 @@ class _DecRec(NamedTuple):
 class _Fusion(NamedTuple):
     """ Information identifying the structure of hard fusion"""
     tree: tuple = (1,)  # order of fusions
+    type: str = 'n'  # type of node; 'n' native; 'p' product; 's' sum  len(node) = len(tree)
     s: tuple = (1,)  # signatures len(s) = len(tree)
     t: tuple = ()  # fused leg charges at each step len(t) = len(tree) - 1
     D: tuple = ()  # fused dimensions  at each step len(t) = len(tree) - 1
@@ -235,7 +236,7 @@ def fuse_legs(a, axes, mode=None):
 
 
 def _fuse_legs_hard(a, axes, order):
-    """ Funtion performing hard fusion. axes are for native legs and are cleaned outside."""
+    """ Function performing hard fusion. axes are for native legs and are cleaned outside."""
     assert all(isinstance(x, tuple) for x in axes)
     for x in axes:
         assert all(isinstance(y, int) for y in x)
@@ -244,8 +245,9 @@ def _fuse_legs_hard(a, axes, order):
     mfs = ((1,),) * len(struct.s)
     hfs = tuple(_fuse_hfs(a.hfs, t_in, D_in, struct.s[n], axis) if len(axis) > 1 else a.hfs[axis[0]]
                 for n, axis in enumerate(axes))
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
-
+    aa =  a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
+    assert aa.is_consistent()
+    return aa
 
 @lru_cache(maxsize=1024)
 def _meta_fuse_hard(config, struct, axes):
@@ -371,17 +373,23 @@ def unfuse_legs(a, axes):
                     if cum == 0:
                         mfs.append(stack[pos_init: pos + 1])
                         pos_init = pos + 1
-        else:  # c.hfs[ni].tree[0] > 1 and c.mfs[mi][0] == 1 and mi in axes
+        elif a.hfs[ni].type == 'p':  # and a.hfs[ni].tree[0] > 1 and a.mfs[mi][0] == 1 and mi in axes
             axes_hf.append(ni)
             mfs.append(a.mfs[mi])
+        else: # c.hfs[ni].type == 's':
+            raise YastError('Cannot unfuse a leg obtained as a result of yast.block()')
         ni += dni
     if axes_hf:
         meta, struct, nlegs, hfs = _meta_unfuse_hard(a.config, a.struct, tuple(axes_hf), tuple(a.hfs))
         data = _unmerge(a.config, a._data, meta)
         for unfused, n in zip(nlegs[::-1], axes_hf[::-1]):
             mfs = mfs[:n] + [mfs[n]] * unfused + mfs[n+1:]
-        return a._replace(struct=struct, mfs=tuple(mfs), hfs=hfs, data=data)
-    return a._replace(mfs=tuple(mfs))
+        aa = a._replace(struct=struct, mfs=tuple(mfs), hfs=hfs, data=data)
+        assert aa.is_consistent()
+        return aa
+    aa = a._replace(mfs=tuple(mfs))
+    assert aa.is_consistent()
+    return aa
 
 
 @lru_cache(maxsize=1024)
@@ -425,10 +433,6 @@ def _meta_unfuse_legdec(config, struct, ls, snew):
     Dpnew = tuple(x[2] for x in meta)
     slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
     meta = tuple((x, *y[3:]) for x, y in zip(slnew, meta))
-    # if struct.diag:
-    #     meta = tuple((sln, Dslc, slo, Do[0], sub_slc) for sln, Dslc, slo, Do, sub_slc in meta)
-    #     tnew = tuple(t + t for t in tnew)
-    #     Dnew = tuple(D + D for D in Dnew)
     new_struct = struct._replace(s=tuple(snew), t=tnew, D=Dnew, Dp=Dpnew, sl=slnew)
     return meta, new_struct
 
@@ -636,6 +640,7 @@ def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
     if axis is None:
         axis = list(range(len(hfs)))
     tfl, Dfl, sfl = [], [], [s_out]
+    typefl = 'p'  # product
     treefl = [sum(hfs[n].tree[0] for n in axis)]
     for n in axis:
         tfl.append(t_in[n])
@@ -644,7 +649,8 @@ def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
         Dfl.extend(hfs[n].D)
         sfl.extend(hfs[n].s)
         treefl.extend(hfs[n].tree)
-    return _Fusion(tuple(treefl), tuple(sfl), tuple(tfl), tuple(Dfl))
+        typefl += hfs[n].type
+    return _Fusion(tree=tuple(treefl), type=typefl, s=tuple(sfl), t=tuple(tfl), D=tuple(Dfl))
 
 
 def _merge_masks(config, ls, ms):
@@ -876,8 +882,8 @@ def _unfuse_Fusion(hf):
                 tt.append(hf.t[n_init - 1])
                 DD.append(hf.D[n_init - 1])
                 ss.append(hf.s[n_init])
-                hfs.append(_Fusion(hf.tree[n_init: n + 1], hf.s[n_init: n + 1],
-                                    hf.t[n_init: n], hf.D[n_init: n]))
+                hfs.append(_Fusion(tree=hf.tree[n_init: n + 1], type=hf.type[n_init: n + 1],
+                                   s=hf.s[n_init: n + 1], t=hf.t[n_init: n], D=hf.D[n_init: n]))
                 n_init = n + 1
     return tuple(tt), tuple(DD), tuple(ss), hfs
 

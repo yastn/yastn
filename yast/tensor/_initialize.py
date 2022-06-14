@@ -19,7 +19,7 @@ def __setitem__(a, key, newvalue):
     try:
         ind = a.struct.t.index(key)
     except ValueError as exc:
-        raise YastError('Tensor does not have a block specify by the key.') from exc
+        raise YastError('Tensor does not have a block specified by the key.') from exc
     a._data[slice(*a.struct.sl[ind])] = newvalue.reshape(-1)
 
 
@@ -112,7 +112,7 @@ def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     _test_tD_consistency(a.struct)
 
 
-def set_block(a, ts=(), Ds=None, val='zeros'):
+def set_block(a, ts=(), Ds=None, val='zeros'):  # change to ts; Ds
     """
     Add new block to tensor or change the existing one.
 
@@ -131,7 +131,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
     val : str, tensor-like
         recognized string values are ``'rand'``, ``'ones'``,`or  ``'zeros'``.
-        Otherwise any tensor-like format such as nested list, numpy.ndarray, etc., 
+        Otherwise any tensor-like format such as nested list, numpy.ndarray, etc.,
         can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
     if isinstance(Ds, int):
