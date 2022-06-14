@@ -23,7 +23,7 @@ def __setitem__(a, key, newvalue):
     a._data[slice(*a.struct.sl[ind])] = newvalue.reshape(-1)
 
 
-def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
+def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     r"""
     Create all allowed blocks based on signature ``s``, total charge ``n``,
     and a set of charge sectors ``t`` for each leg of the tensor.
