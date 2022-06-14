@@ -122,6 +122,11 @@ def is_consistent(a):
     _test_tD_consistency(a.struct)
     for s, hf in zip(a.struct.s, a.hfs):
         assert s == hf.s[0]
+        assert len(hf.tree) == len(hf.type)
+        assert len(hf.tree) == len(hf.s)
+        assert len(hf.tree) == len(hf.t) + 1
+        assert len(hf.tree) == len(hf.D) + 1
+        assert all(y == 'p' if x > 1 else 'n' for x, y in zip(hf.tree, hf.type))
     return True
 
 
