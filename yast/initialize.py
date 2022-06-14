@@ -5,7 +5,7 @@ from ast import literal_eval
 from itertools import chain, repeat, accumulate
 import numpy as np
 from .tensor import Tensor, YastError
-from .tensor._auxliary import _struct, _config, _clear_axes, _unpack_axes,  _unpack_legs
+from .tensor._auxliary import _struct, _config, _clear_axes, _unpack_axes, _unpack_legs
 from .tensor._merging import _Fusion
 from .tensor._legs import Leg
 
@@ -52,7 +52,7 @@ def make_config(**kwargs):
         charge vector i.e. of length sym.NSYM. Default is ``False``.
     default_fusion: str
         Specify default strategy to handle leg fusion: 'hard' or 'meta'. See yast.tensor.fuse_legs
-        for details. Default is ``'meta'``.
+        for details. Default is ``'hard'``.
     force_fusion : str
         Overrides fusion strategy provided in yast.tensor.fuse_legs. Default is ``None``.
     
@@ -96,7 +96,7 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
             raise YastError('Diagonal tensor cannot be initialized with fused legs.')
 
     a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, hfs=hfs, **kwargs)
-    a.fill_tensor(t=t, D=D, val=val)
+    a._fill_tensor(t=t, D=D, val=val)
     return a
 
 
@@ -120,7 +120,7 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
         Total charge of the tensor
     t : list
         List of charges for each leg,
-        see :meth:`Tensor.fill_tensor` for description.
+        see :meth:`Tensor._fill_tensor` for description.
     D : list
         List of corresponding bond dimensions.
     isdiag : bool
@@ -159,7 +159,7 @@ def randC(config=None, legs=(), n=None, isdiag=False, **kwargs):
 def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
     Initialize tensor with all allowed blocks filled with zeros.
-    First, initializes empty tensor then calls :meth:`yast.Tensor.fill_tensor`.
+    First, initializes empty tensor then calls :meth:`yast.Tensor._fill_tensor`.
 
     Parameters
     ----------
@@ -174,7 +174,7 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
         total charge of the tensor
     t : list
         a list of charges for each leg,
-        see :meth:`Tensor.fill_tensor` for description.
+        see :meth:`Tensor._fill_tensor` for description.
     D : list
         a list of corresponding bond dimensions
     isdiag : bool
@@ -196,7 +196,7 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
 def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
     Initialize tensor with all allowed blocks filled with ones.
-    First, initializes empty tensor then calls :meth:`yast.Tensor.fill_tensor`.
+    First, initializes empty tensor then calls :meth:`yast.Tensor._fill_tensor`.
 
     Parameters
     ----------
@@ -211,7 +211,7 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
         total charge of the tensor
     t : list
         a list of charges for each leg,
-        see :meth:`Tensor.fill_tensor` for description.
+        see :meth:`Tensor._fill_tensor` for description.
     D : list
         a list of corresponding bond dimensions
     dtype : str
@@ -232,7 +232,7 @@ def eye(config=None, legs=(), n=None, **kwargs):
     r"""
     Initialize `diagonal` tensor with all possible blocks filled with ones.
 
-    Initializes tensor and call :meth:`Tensor.fill_tensor`.
+    Initializes tensor and call :meth:`Tensor._fill_tensor`.
 
     Parameters
     ----------
@@ -243,7 +243,7 @@ def eye(config=None, legs=(), n=None, **kwargs):
         directly by passing a list of :class:`~yast.Leg`.
     t : list
         a list of charges for each leg,
-        see :meth:`Tensor.fill_tensor` for description.
+        see :meth:`Tensor._fill_tensor` for description.
     D : list
         a list of corresponding bond dimensions
     dtype : str

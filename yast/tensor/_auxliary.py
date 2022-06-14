@@ -20,7 +20,7 @@ class _config(NamedTuple):
     fermionic: tuple = False
     default_device: str = 'cpu'
     default_dtype: str = 'float64'
-    default_fusion: str = 'meta'
+    default_fusion: str = 'hard'
     force_fusion: str = None
 
 
