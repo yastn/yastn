@@ -422,6 +422,6 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0):
 #         D = tuple(leg.D for leg in ulegs)
 #         hfs = tuple(leg.legs[0] for leg in ulegs)
 #         b = a._replace(hfs=hfs)
-#         b.fill_tensor(t=t, D=D, val='zeros')
+#         b._fill_tensor(t=t, D=D, val='zeros')
 #         a = a + b
 #     return a
