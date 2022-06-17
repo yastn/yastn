@@ -94,6 +94,8 @@ def multiply(a, b, mode=None):
         axes_fuse = ((0, 3), 1, 4, (2, 5))
     for n in phi.sweep():
         phi.A[n] = yast.tensordot(a.A[n], b.A[n], axes_dot).fuse_legs(axes_fuse, mode)
+    phi.A[phi.first] = phi.A[phi.first].drop_leg_history(axis=phi.left)
+    phi.A[phi.last] = phi.A[phi.last].drop_leg_history(axis=phi.right)
     return phi
 
 

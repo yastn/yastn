@@ -423,7 +423,7 @@ def block(tensors, common_legs=None):
         legs_n = {p: leg_union(*plegs) for p, plegs in legs_n.items()}
         ulegs.append(legs_n)
         pn = sorted(legs_n.keys())
-        lss.append(_leg_structure_combine_charges_sum(pn, [legs_n[p].t for p in pn], [legs_n[p].D for p in pn]))
+        lss.append(_leg_structure_combine_charges_sum([legs_n[p].t for p in pn], [legs_n[p].D for p in pn], pn))
         hfs.append(_sum_legs_hfs([legs_n[p] for p in pn]))
 
     for pind, pp in zip(tensors, posa):
