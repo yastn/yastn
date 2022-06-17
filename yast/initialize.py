@@ -6,8 +6,8 @@ from itertools import chain, repeat, accumulate
 import numpy as np
 from .tensor import Tensor, YastError
 from .tensor._auxliary import _struct, _config, _clear_axes, _unpack_axes, _unpack_legs
-from .tensor._merging import _Fusion
-from .tensor._legs import Leg
+from .tensor._merging import _Fusion, _leg_structure_combine_charges_sum, _embed_tensor
+from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
 
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
@@ -405,27 +405,31 @@ def block(tensors, common_legs=None):
         if tn.isdiag:
             raise YastError('Block does not support diagonal tensors. Use .diag() first.')
 
-    posa = np.ones((len(pos), tn0.ndim_n), dtype=int)
-    posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int).reshape(len(pos), -1)
+    posa = np.zeros((len(pos), tn0.ndim_n), dtype=int)
+    posa[:, out_b] = np.array(pos, dtype=int).reshape(len(pos), len(out_b))
+    posa = tuple(tuple(x.flat) for x in posa)
 
-    tDs = []  # {leg: {charge: {position: D, 'D' : Dtotal}}}
+    legs_tn = {tuple(pp): tn.get_legs(native=True) for tn, pp in zip(tensors.values(), posa)}
+
+    ulegs, legs, lss, hfs = [], [], [], []
     for n in range(tn0.ndim_n):
-        tDl = {}
-        for tn, pp in zip(tensors.values(), posa):
-            leg = tn.get_legs(n, native=True)
-            for t, D in zip(leg.t, leg.D):
-                if t in tDl:
-                    if (pp[n] in tDl[t]) and (tDl[t][pp[n]] != D):
-                        raise YastError('Dimensions of blocked tensors are not consistent.')
-                    tDl[t][pp[n]] = D
-                else:
-                    tDl[t] = {pp[n]: D}
-        for t, pD in tDl.items():
-            ps = sorted(pD.keys())
-            Ds = [pD[p] for p in ps]
-            tDl[t] = {p: (aD - D, aD) for p, D, aD in zip(ps, Ds, accumulate(Ds))}
-            tDl[t]['Dtot'] = sum(Ds)
-        tDs.append(tDl)
+        legs_n = {}
+        for pp, ll in legs_tn.items():
+            if pp[n] not in legs_n:
+                legs_n[pp[n]] = [ll[n]]
+            else:
+                legs_n[pp[n]].append(ll[n])
+        legs.append(legs_n)
+        legs_n = {p: leg_union(*plegs) for p, plegs in legs_n.items()}
+        ulegs.append(legs_n)
+        pn = sorted(legs_n.keys())
+        lss.append(_leg_structure_combine_charges_sum(pn, [legs_n[p].t for p in pn], [legs_n[p].D for p in pn]))
+        hfs.append(_sum_hfs([legs_n[p] for p in pn]))
+
+    for pind, pp in zip(tensors, posa):
+        if any(_leg_fusions_need_mask(ulegs[n][pp[n]], leg) for n, leg in enumerate(legs_tn[pp])):
+            legs_new = tuple(legs[pp[n]] for n, legs in enumerate(ulegs))
+            tensors[pind] = _embed_tensor(tensors[pind], legs_tn[pp], legs_new)
 
     # all unique blocks
     # meta_new = {tind: Dtot};  #meta_block = [(tind, pos, Dslc)]
@@ -435,8 +439,9 @@ def block(tensors, common_legs=None):
         tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
         for tind, slind, Dind, t in zip(a.struct.t, a.struct.sl, a.struct.D, tset):
             if tind not in meta_new:
-                meta_new[tind] = tuple(tDs[n][tuple(t[n].flat)]['Dtot'] for n in range(a.ndim_n))
-            meta_block.append((tind, slind, Dind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.ndim_n))))
+                meta_new[tind] = tuple(lss[n].Dtot[tuple(t[n].flat)] for n in range(a.ndim_n))
+            Dslcs = tuple(lss[n].dec[tuple(t[n].flat)][pa[n]].Dslc for n in range(a.ndim_n))
+            meta_block.append((tind, slind, Dind, pind, Dslcs))
     meta_block = tuple(sorted(meta_block, key=lambda x: x[0]))
     meta_new = tuple(sorted(meta_new.items()))
     c_t = tuple(t for t, _ in meta_new)
@@ -448,5 +453,116 @@ def block(tensors, common_legs=None):
     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
 
     data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, Dsize)
-    hfs = tuple(_Fusion(s=(tn0.struct.s[n],)) if n not in out_s else tn0.hfs[n] for n in range(tn0.ndim_n))
-    return tn0._replace(struct=c_struct, data=data, hfs=hfs)
+    return tn0._replace(struct=c_struct, data=data, hfs=tuple(hfs))
+
+
+def _sum_hfs(legs):
+    if len(legs) == 1:
+        return legs[0].legs[0]
+    tfl, Dfl, sfl = [], [], [legs[0].s]
+    opfl = 's'  # product 
+    hfs = [leg.legs[0] for leg in legs]    
+    treefl = [sum(hf.tree[0] for hf in hfs)]
+    for leg, hf in zip(legs, hfs):
+        if hf.op[0] != 's':
+            ds = 0
+            tfl.append(leg.t)
+            Dfl.append(leg.D)
+        else:  #  hf.op[0] == 's':
+            ds = 1
+        tfl.extend(hf.t)
+        Dfl.extend(hf.D)
+        sfl.extend(hf.s[ds:])
+        treefl.extend(hf.tree[ds:])
+        opfl += hf.op[ds:]
+    return _Fusion(tree=tuple(treefl), op=opfl, s=tuple(sfl), t=tuple(tfl), D=tuple(Dfl))
+
+# def block(tensors, common_legs=None):
+#     """
+#     Assemble new tensor by blocking a set of tensors.
+
+#     TODO: the set of tensors should reside on the same device. Optional destination device might be added
+
+#     Parameters
+#     ----------
+#     tensors : dict
+#         dictionary of tensors {(x,y,...): tensor at position x,y,.. in the new, blocked super-tensor}.
+#         Length of tuple should be equall to tensor.ndim - len(common_legs)
+
+#     common_legs : list
+#         Legs that are not blocked.
+#         This is equivalently to all tensors having the same position (not specified explicitly) in the super-tensor on that leg.
+#     """
+#     out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
+#     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
+#     out_b = tuple((ii,) for ii in range(tn0.ndim) if ii not in out_s)
+#     pos = list(_clear_axes(*tensors))
+#     lind = tn0.ndim - len(out_s)
+#     for ind in pos:
+#         if len(ind) != lind:
+#             raise YastError('Wrong number of coordinates encoded in tensors.keys()')
+
+#     out_s, =  _unpack_axes(tn0.mfs, out_s)
+#     u_b = tuple(_unpack_axes(tn0.mfs, *out_b))
+#     out_b = tuple(chain(*u_b))
+#     pos = tuple(tuple(chain.from_iterable(repeat(x, len(u)) for x, u in zip(ind, u_b))) for ind in pos)
+
+#     for tn in tensors.values():
+#         if tn.struct.s != tn0.struct.s:
+#             raise YastError('Signatues of blocked tensors are inconsistent.')
+#         if tn.struct.n != tn0.struct.n:
+#             raise YastError('Tensor charges of blocked tensors are inconsistent.')
+#         if tn.mfs != tn0.mfs:
+#             raise YastError('Meta fusions of blocked tensors are inconsistent.')
+#         #if any(tn.hfs[n].tree != (1,) for n in range(tn.ndim_n) if n not in out_s):
+#         #    raise YastError('Blocking of hard-fused legs is currently not supported. Go through meta-fusion. Only common_legs can be hard-fused.')
+#         #if any(tn.hfs[n] != tn0.hfs[n] for n in out_s):
+#         #    raise YastError('Hard-fusions of common_legs do not match.')
+#         if tn.isdiag:
+#             raise YastError('Block does not support diagonal tensors. Use .diag() first.')
+
+#     posa = np.ones((len(pos), tn0.ndim_n), dtype=int)
+#     posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int).reshape(len(pos), -1)
+
+#     tDs = []  # {leg: {charge: {position: D, 'D' : Dtotal}}}
+#     for n in range(tn0.ndim_n):
+#         tDl = {}
+#         for tn, pp in zip(tensors.values(), posa):
+#             leg = tn.get_legs(n, native=True)
+#             for t, D in zip(leg.t, leg.D):
+#                 if t in tDl:
+#                     if (pp[n] in tDl[t]) and (tDl[t][pp[n]] != D):
+#                         raise YastError('Dimensions of blocked tensors are not consistent.')
+#                     tDl[t][pp[n]] = D
+#                 else:
+#                     tDl[t] = {pp[n]: D}
+#         for t, pD in tDl.items():
+#             ps = sorted(pD.keys())
+#             Ds = [pD[p] for p in ps]
+#             tDl[t] = {p: (aD - D, aD) for p, D, aD in zip(ps, Ds, accumulate(Ds))}
+#             tDl[t]['Dtot'] = sum(Ds)
+#         tDs.append(tDl)
+
+#     # all unique blocks
+#     # meta_new = {tind: Dtot};  #meta_block = [(tind, pos, Dslc)]
+#     meta_new, meta_block = {}, []
+#     for pind, pa in zip(tensors, posa):
+#         a = tensors[pind]
+#         tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+#         for tind, slind, Dind, t in zip(a.struct.t, a.struct.sl, a.struct.D, tset):
+#             if tind not in meta_new:
+#                 meta_new[tind] = tuple(tDs[n][tuple(t[n].flat)]['Dtot'] for n in range(a.ndim_n))
+#             meta_block.append((tind, slind, Dind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.ndim_n))))
+#     meta_block = tuple(sorted(meta_block, key=lambda x: x[0]))
+#     meta_new = tuple(sorted(meta_new.items()))
+#     c_t = tuple(t for t, _ in meta_new)
+#     c_D = tuple(D for _, D in meta_new)
+#     c_Dp = tuple(np.prod(c_D, axis=1))
+#     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+#     c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+#     meta_new = tuple(zip(c_t, c_D, c_sl))
+#     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
+
+#     data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, Dsize)
+#     hfs = tuple(_Fusion(s=(tn0.struct.s[n],)) if n not in out_s else tn0.hfs[n] for n in range(tn0.ndim_n))
+#     return tn0._replace(struct=c_struct, data=data, hfs=hfs)

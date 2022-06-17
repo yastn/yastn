@@ -334,7 +334,7 @@ def get_legs(a, axis=None, native=False):
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
     if axis is None:
-        axis = tuple(range(a.ndim))
+        axis = tuple(range(a.ndim)) if not native else tuple(range(a.ndim_n))
     axes, = _clear_axes(axis)
     for ax in axes:
         legs_ax = []

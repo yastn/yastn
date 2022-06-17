@@ -38,8 +38,18 @@ def test_block_U1():
     H3 = yast.block({(0, 0, 0, 0): II, (1, 0, 0, 0): cp10, (2, 0, 0, 0): c10, (3, 0, 0, 0): mu * nn, (3, 0, 0, 1): w * c01, (3, 0, 0, 2): w * cp01, (3, 0, 0, 3): II})
     # those tree give the same output
 
+
+    H11 = yast.block({(0, 0): II, (1, 0): cp10, (2, 0): c10}, common_legs=(1, 2))
+    H22 = yast.block({(3, 1): w * c01, (3, 2): w * cp01, (3, 3): II}, common_legs=(1, 2))
+    H4 = yast.block({(3, 0): mu * nn, (0, 0): H11, (3, 1): H22}, common_legs=(1, 2))
+
+    assert H4.get_shape() == (4, 2, 2, 4)
+
+
     assert all(x.is_consistent() for x in (H0, H1, H2, H3))
-    assert all(yast.norm(H0 - x) < tol for x in (H0, H1, H2, H3))  # == 0.0
+    assert all(yast.norm(H1 - x) < tol for x in (H1, H2, H3, H4))  # == 0.0
+
+
     assert H1.get_shape() == (4, 2, 2, 4)
 
     
@@ -116,8 +126,6 @@ def test_block_fuse():
 
     bfs = yast.ncon([bfl, bfc, bfr], [[1], [1, 2], [2]])
     assert yast.norm(bfs - s[1, 1] - s[2, 2] - s[1, 2]) < tol
-
-
 
 
 if __name__ == "__main__":

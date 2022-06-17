@@ -3,7 +3,7 @@ import numpy as np
 from ._auxliary import _flatten
 from ._tests import YastError
 from ..sym import sym_none
-from ._merging import _Fusion, _hfs_union
+from ._merging import _Fusion, _pure_hfs_union
 #from ...Initialize import zeros
 
 __all__ = ['Leg', 'leg_union']
@@ -24,7 +24,7 @@ __all__ = ['Leg', 'leg_union']
     #     Information about type of fusion
     # """
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, repr=False)
 class Leg:
     r"""
     `Leg` is a hashable `dataclass <https://docs.python.org/3/library/dataclasses.html>`_,
@@ -94,6 +94,9 @@ class Leg:
                 object.__setattr__(self, "legs", legs)
             object.__setattr__(self, "_verified", True)
 
+    def __repr__(self):
+        return ("Leg(sym={}, s={}, t={}, D={})".format(self.sym, self.s, self.t, self.D))
+
     def conj(self):
         r"""
         Switch the signature of Leg.
@@ -148,6 +151,8 @@ def leg_union(*legs):
     Output Leg that represent space being an union of spaces of a list of legs.
     """
     legs = list(legs)
+    # if len(legs) == 1:
+    #     return legs.pop()
     if all(leg.fusion == 'hard' for leg in legs):
         return _leg_union(*legs)
     if all(isinstance(leg.fusion, tuple) for leg in legs):
@@ -173,7 +178,7 @@ def _leg_union(*legs):
     if any(leg.s != legs[0].s for leg in legs):
         raise YastError('Provided legs have different signatures.')
     if any(leg.legs != legs[0].legs for leg in legs):
-        t, D, hf = _hfs_union(legs[0].sym, [leg.t for leg in legs] ,[leg.legs[0] for leg in legs])
+        t, D, hf = _pure_hfs_union(legs[0].sym, [leg.t for leg in legs] ,[leg.legs[0] for leg in legs])
     else:
         tD = {}
         for leg in legs:
