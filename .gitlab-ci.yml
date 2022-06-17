@@ -189,7 +189,8 @@ test_python3.9_torch1.11:
   - ssh-add -l
   - git submodule update --init --recursive
   - cd tests/;
-  - pytest --cov=yast --backend torch -v ./tensor;
+  - pytest --cov=yast --backend np -v ./tensor --cov-report=;
+  - pytest --cov=yast --backend torch -v ./tensor --cov-append;
   - pytest --backend torch -v ./mps;
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
   rules:
