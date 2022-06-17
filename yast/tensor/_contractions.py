@@ -14,13 +14,13 @@ __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadca
 def __matmul__(a, b):
     """
     The ``@`` operator computes tensor dot product, contracting the last axis
-    of `a` with the first axis of `b`.
+    of `self` with the first axis of `b`.
 
     Shorthand for yast.tensordot(a, b, axes=(a.ndim - 1, 0)).
 
     Returns
     -------
-    tensor: Tensor
+    yast.Tensor
     """
     return tensordot(a, b, axes=(a.ndim - 1, 0))
 
@@ -35,15 +35,16 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
     Parameters
     ----------
-    a, b: Tensors to contract
+    a, b: yast.Tensor 
+        Tensors to contract
 
-    axes: tuple
+    axes: tuple[int] or tuple[tuple[int]]
         legs of both tensors (for each it is specified by int or tuple of ints)
-        e.g. axes=(0, 3) to contract 0th leg of `a` with 3rd leg of `b`
+        e.g. axes=(0, 3) to contract 0th leg of `a` with 3rd leg of `b`; 
         axes=((0, 3), (1, 2)) to contract legs 0 and 3 of `a` with 1 and 2 of `b`, respectively.
 
-    conj: tuple
-        shows which tensors to conjugate: (0, 0), (0, 1), (1, 0), or (1, 1).
+    conj: tuple[int]
+        specify tensors to conjugate: (0, 0), (0, 1), (1, 0), or (1, 1).
         Default is (0, 0), i.e. neither tensor is conjugated
 
     policy: str
@@ -51,7 +52,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
     Returns
     -------
-    tensor: Tensor
+    yast.Tensor
     """
     if conj[0]:
         a = a.conj()
@@ -310,15 +311,15 @@ def vdot(a, b, conj=(1, 0)):
 
     Parameters
     ----------
-    a, b: Tensor
+    a, b: yast.Tensor
 
-    conj: tuple(int)
+    conj: tuple[int]
         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), or (1, 1).
         Default is (1, 0), i.e. tensor `a` is conjugated.
 
     Returns
     -------
-    x: scalar
+    scalar
     """
     _test_configs_match(a, b)
     if conj[0] == 1:
@@ -373,12 +374,12 @@ def trace(a, axes=(0, 1)):
 
     Parameters
     ----------
-        axes: tuple(int) or tuple(tuple(int))
-            Legs to be traced out, e.g axes=(0, 1); or axes=((2, 3, 4), (0, 1, 5))
+    axes: tuple[int] or tuple[tuple[int]]
+        Legs to be traced out, e.g axes=(0, 1); or axes=((2, 3, 4), (0, 1, 5))
 
     Returns
     -------
-        tensor: Tensor
+    yast.Tensor
     """
     lin1, lin2 = _clear_axes(*axes)  # contracted legs
     if len(set(lin1) & set(lin2)) > 0:
@@ -546,7 +547,7 @@ def einsum(subscripts, *operands, order='Alphabetic'):
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     if not isinstance(subscripts, str):
         raise YastError('The first argument should be a string.')
@@ -602,19 +603,19 @@ def ncon(ts, inds, conjs=None):
 
     Parameters
     ----------
-    ts: list
+    ts: list[yast.Tensor]
         list of tensors to be contracted
 
-    inds: tuple of tuples of ints (or list of lists of ints)
-        each inner tuple labels axes of respective tensor with ints.
-        Positive values labels legs to be contracted,
-        with pairs of axes to be contracted denoted by the same integer label.
+    inds: list[list[int]]
+        each inner tuple labels legs of respective tensor with integers.
+        Positive values label legs to be contracted,
+        with pairs of legs to be contracted denoted by the same integer label.
         Legs are contracted in the order of ascending integer value.
-        Non-positive numbers label the legs of resulting tensor, in reversed order.
+        Non-positive numbers label legs of the resulting tensor, in reversed order.
 
-    conjs: tuple of ints
-        For each tensor in ts, it contains
-        1 if the tensor should be conjugated and 0 otherwise.
+    conjs: tuple[int]
+        For each tensor in `ts` contains either 0 or 1. If the value is 1 the tensor 
+        is conjugated.
 
     Example
     -------
@@ -631,7 +632,7 @@ def ncon(ts, inds, conjs=None):
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     if len(ts) != len(inds):
         raise YastError('Number of tensors and indices do not match.')

@@ -189,17 +189,19 @@ def fuse_legs(a, axes, mode=None):
     * `hard` changes both the structure and data, by aggregating smaller blocks into larger
       ones. Such fusion allows to balance number of non-zero blocks and typical block size.
 
+    It is possible to use both `meta` and `hard` fusion of legs on the same tensor.
+    Applying hard fusion on tensor turns all previous meta fused legs into hard fused
+    ones.
+       
     Parameters
     ----------
-    axes: tuple(tuple(int))
-        tuple of leg's indices. Groups of legs to be fused together are accumulated within inner tuples.
+    axes: tuple[tuple[int]]        
+        tuple of leg indices. Groups of legs to be fused together are accumulated within inner tuples.
 
     mode: str
-        can select 'hard' or 'meta' fusion. If None, use default from config.
-        It can also be overriden by config.force_fuse.
-        Applying hard fusion of tensor with meta fusion
-        first replaces meta fusion with hard fusion.
-        Meta fusion can be applied on top of hard fusion.
+        can select ``'hard'`` or ``'meta'`` fusion. If ``None``, uses ``default_fusion`` 
+        from tensor's :doc:`configuration </tensor/configuration>`.
+        Configuration option ``force_fusion`` can be used to override `mode`, typically for debugging purposes.
 
     Returns
     -------
@@ -308,7 +310,7 @@ def unfuse_legs(a, axes):
 
     If the tensor has been obtained by fusing some legs together, `unfuse_legs`
     can revert such fusion. The legs to be unfused are passed in `axes` as `int`
-    or `tuple(int)` in case of more legs to be unfused. The unfused legs follow
+    or `tuple[int]` in case of more legs to be unfused. The unfused legs follow
     the original position of the fused legs. The remaining legs are shifted accordingly ::
 
         axes=2              unfuse leg 2 into legs 2,3,4
@@ -340,17 +342,14 @@ def unfuse_legs(a, axes):
             |                 2--|__|--4<-3
             2=(2,3=(3,4))
 
-
-    This operation can be done in-place.
-
     Parameters
     ----------
-    axis: int or tuple of ints
+    axis: int or tuple[int]
         leg(s) to unfuse.
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     if a.isdiag:
         raise YastError('Cannot unfuse legs of a diagonal tensor.')

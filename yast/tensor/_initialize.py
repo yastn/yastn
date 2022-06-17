@@ -10,10 +10,11 @@ def __setitem__(a, key, newvalue):
     """
     Parameters
     ----------
-    key : tuple(int)
+    key : tuple[int]
         charges of the block
 
-    Update data corresponding the block. The data should be consistent with shape
+    Update data of the selected block. The data (its shape) should be consistent with 
+    the dimensions of the charge sectors where the block belongs.
     """
     key = tuple(_flatten(key))
     try:
@@ -118,7 +119,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):  # change to ts; Ds
 
     This is the intended way to add new blocks by hand.
     Checks if bond dimensions of the new block are consistent with the existing ones
-    and updates the Legs of the tensors accordingly.
+    and updates the legs of the tensors accordingly.
 
     Parameters
     ----------
@@ -131,7 +132,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):  # change to ts; Ds
 
     val : str, tensor-like
         recognized string values are ``'rand'``, ``'ones'``,`or  ``'zeros'``.
-        Otherwise any tensor-like format such as nested list, numpy.ndarray, etc.,
+        Otherwise any tensor-like format such as nested list, numpy.ndarray, etc., 
         can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
     if isinstance(Ds, int):

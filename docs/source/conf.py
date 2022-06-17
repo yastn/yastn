@@ -38,8 +38,8 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx_rtd_theme'
 ]
-
-autodoc_class_signature = "separated"
+autoclass_content = 'both'
+#autodoc_class_signature = "separated"
 
 # Make sure the target is unique
 autosectionlabel_prefix_document = True
