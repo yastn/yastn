@@ -3,9 +3,9 @@ from itertools import product
 import pytest
 import yast
 try:
-    from .configs import config_U1xU1_fermionic, config_U1xU1xZ2_fermionic, config_Z2_fermionic
+    from .configs import config_U1xU1_fermionic, config_U1xU1xZ2_fermionic, config_Z2_fermionic, config_Z2
 except ImportError:
-    from configs import config_U1xU1_fermionic, config_U1xU1xZ2_fermionic, config_Z2_fermionic
+    from configs import config_U1xU1_fermionic, config_U1xU1xZ2_fermionic, config_Z2_fermionic, config_Z2
 
 
 
@@ -14,8 +14,8 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 def test_swap_gate_basic():
     """ basic tests of swap_gate """
-    t, D = (0, 1), (1, 1)
-    a = yast.ones(config=config_Z2_fermionic, s=(1, 1, 1, 1), n=0, t=(t, t, t, t), D=(D, D, D, D))
+    leg = yast.Leg(config_Z2_fermionic, t=(0, 1), D=(1, 1))
+    a = yast.ones(config=config_Z2_fermionic, legs=[leg, leg, leg, leg], n=0)
     assert pytest.approx(sum(a.to_numpy().ravel()), rel=tol) == 8
 
     b = a.swap_gate(axes=(0, 1))
@@ -37,6 +37,11 @@ def test_swap_gate_basic():
     assert pytest.approx(yast.vdot(b, c).item(), rel=tol) == 0
     assert pytest.approx(yast.vdot(b, d).item(), rel=tol) == -4
     assert pytest.approx(yast.vdot(c, d).item(), rel=tol) == 4
+
+    leg = yast.Leg(config_Z2, t=(0, 1), D=(1, 1))
+    a_bosonic = yast.ones(config=config_Z2, legs=[leg, leg, leg, leg], n=0)
+    b_bosonic = a_bosonic.swap_gate(axes=(0, 1))
+    assert a_bosonic is b_bosonic
 
 
 def apply_operator(psi, c, site):

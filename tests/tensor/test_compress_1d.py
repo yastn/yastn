@@ -1,4 +1,4 @@
-""" fill_tensor (which is called in: rand, zeros, ones), yast.to_numpy, yast.match_legs """
+""" fill_tensor (which is called in: rand, zeros, ones), yast.to_numpy """
 import numpy as np
 import pytest
 import yast
@@ -175,8 +175,8 @@ def test_meta_compress():
     A = yast.Tensor(config=config_U1, s=(-1, 1, 1, 1))
     A.set_block(ts=(2, 0, 1, 1), Ds=(1, 2, 3, 4))
     A.set_block(ts=(0, 1, 0, -1), Ds=(5, 6, 7, 8))
-    # createstensor matching A for dot multiplication filling in all possible blocks.
-    B = yast.match_legs([A, A, A, A], legs=[0, 1, 2, 3], conjs=[1, 1, 1, 1])
+    # creates tensor matching A for dot multiplication filling in all possible blocks.
+    B = yast.zeros(config=A.config, legs=A.get_legs())
     _, meta = B.compress_to_1d()
     r1d, _ = A.compress_to_1d(meta)
     T = yast.decompress_from_1d(r1d, config=config_U1, meta=meta)

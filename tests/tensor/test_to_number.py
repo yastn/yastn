@@ -16,10 +16,10 @@ def run_to_number(a, b):
     nb0 = t0.to_number()  # this is backend-type number
     it0 = t0.item()  # this is python float (or int)
 
-    tDa = {ii: a.get_leg_structure(ii) for ii in range(a.ndim)}  # info on charges and dimensions on all legs
-    tDb = {ii: b.get_leg_structure(ii) for ii in range(b.ndim)}
-    na = a.to_numpy(tDb)  # use tDb to fill in missing zero blocks to make sure that na and nb match
-    nb = b.to_numpy(tDa)
+    legs_for_b = {ii: leg for ii, leg in enumerate(a.get_legs())}  # info on charges and dimensions on all legs
+    legs_for_a = {ii: leg for ii, leg in enumerate(b.get_legs())}
+    na = a.to_numpy(legs_for_a)  # use tDb to fill in missing zero blocks to make sure that na and nb match
+    nb = b.to_numpy(legs_for_b)
     ns = na.conj().reshape(-1) @ nb.reshape(-1)  # this is numpy scalar
 
     assert pytest.approx(it0, rel=tol) == ns
@@ -28,27 +28,39 @@ def run_to_number(a, b):
     assert type(it0) is not type(nb0)
 
 
-def test_to_number_0():
+def test_to_number_basic():
+    """ test to_number() for various symmetries"""
+    # dense
     a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     b = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     run_to_number(a, b)
 
+    # U1
+    legs = [yast.Leg(config_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
+            yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+            yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
+            yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
+    a = yast.rand(config=config_U1, legs=legs)
+    b = yast.rand(config=config_U1, legs=legs)
 
-def test_to_number_1():
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-2, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    c = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-2, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
+    legs[0] = yast.Leg(config_U1, s=-1, t=(-2, 2), D=(1, 3))
+    c = yast.rand(config=config_U1, legs=legs)
+
     run_to_number(a, b)
     run_to_number(a, c)
     run_to_number(b, c)
 
 
+def test_to_number_exceptions():
+    a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    with pytest.raises(yast.YastError):
+        a.to_number()
+        # Only single-element (symmetric) Tensor can be converted to scalar
+    with pytest.raises(yast.YastError):
+        a.item()
+        # Only single-element (symmetric) Tensor can be converted to scalar
+
+
 if __name__ == '__main__':
-    test_to_number_0()
-    test_to_number_1()
+    test_to_number_basic()
+    test_to_number_exceptions()

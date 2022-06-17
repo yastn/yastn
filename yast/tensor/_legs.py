@@ -1,76 +1,187 @@
+from dataclasses import dataclass, replace
 import numpy as np
-from typing import NamedTuple
 from ._auxliary import _flatten
 from ._tests import YastError
 from ..sym import sym_none
+from ._merging import _Fusion, _hfs_union
+#from ...Initialize import zeros
 
 __all__ = ['Leg', 'leg_union']
 
+    # r"""
+    # Abelian symmetric vector space - leg of a tensor.
+    # .. py:attribute:: sym : symmetry class or compatible object
+    #     Specify abelian symmetry. To see how YAST defines symmetries,
+    #     see :class:`yast.sym.sym_abelian`.
+    #     Defaults to ``yast.sym.sym_none``, effectively a dense tensor.
+    # .. py:attribute:: s
+    #         Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
+    # .. py:attribute:: t : iterable[int] or iterable[iterable[int]]
+    #     List of charge sectors
+    # .. py:attribute:: D : iterable[int]
+    #     List of corresponding charge sector dimensions.
+    # .. py:attribute:: fusion
+    #     Information about type of fusion
+    # """
 
-class _Leg(NamedTuple):
+@dataclass(frozen=True)
+class Leg:
+    r"""
+    `Leg` is a hashable `dataclass <https://docs.python.org/3/library/dataclasses.html>`_,
+    defining a vector space.
+
+    An abelian symmetric vector space can be specified as a direct
+    sum of `plain` vector spaces (sectors), each labeled by charge `t`
+
+    .. math::
+        V = \oplus_t V_t
+
+    The action of abelian symmetry on elements of such space
+    depends only on the charge `t` of the element
+
+    .. math::
+        g \in G:\quad U(g)V = \oplus_t U(g)_t V_t.
+
+    The size of individual sectors :math:`dim(V_t)` is arbitrary.
+
+    Parameters
+    ----------
+    sym : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
+    s : int
+        Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
+    t : iterable[int] or iterable[iterable[int]]
+        List of charge sectors.
+    D : iterable[int]
+        List of corresponding charge sector dimensions.
+        The lengths `len(D)` and `len(t)` must be equal.
+    """
     sym: any = sym_none
     s: int = 1  # leg signature in (1, -1)
     t: tuple = ()  # leg charges
     D: tuple = ()  # and their dimensions
-    fused: tuple = ()  # subspaces
+    fusion: str = "hard"  # 'hard', 'meta' -- tuple of meta_fusions, (in the future also None, 'sum')
+    legs: tuple = () # sub-legs
+    _verified: bool = False
+
+    def __post_init__(self):
+        if not self._verified:
+            if not hasattr(self.sym, 'SYM_ID'):
+                object.__setattr__(self, "sym", self.sym.sym)
+            if self.s not in (-1, 1):
+                raise YastError('Signature of Leg should be 1 or -1')
+            D = tuple(_flatten(self.D))
+            t = tuple(_flatten(self.t))
+            if not all(int(x) == x and x > 0 for x in D):
+                raise YastError('D should be a tuple of positive ints')
+            if not all(int(x) == x for x in t):
+                raise YastError('Charges should be ints')
+            if len(D) * self.sym.NSYM != len(t) or (self.sym.NSYM == 0 and len(D) != 1):
+                raise YastError('Number of provided charges and bond dimensions do not match sym.NSYM')
+            newt = tuple(tuple(x.flat) for x in self.sym.fuse(np.array(t).reshape((len(D), 1, self.sym.NSYM)), (self.s,), self.s))
+            oldt = tuple(tuple(x.flat) for x in np.array(t).reshape(len(D), self.sym.NSYM))
+            if oldt != newt:
+                raise YastError('Provided charges are outside of the natural range for specified symmetry.')
+            if len(set(newt)) != len(newt):
+                raise YastError('Repeated charge index.')
+            tD = dict(zip(newt, D))
+            t =  tuple(sorted(newt))
+            object.__setattr__(self, "t", t)
+            object.__setattr__(self, "D", tuple(tD[x] for x in t))
+
+            if len(self.legs) == 0:
+                legs = (_Fusion(s=(self.s,)),)
+                object.__setattr__(self, "legs", legs)
+            object.__setattr__(self, "_verified", True)
 
     def conj(self):
-        """ switch leg signature """
-        return self._replace(s=-self.s)
+        r"""
+        Switch the signature of Leg.
+
+        Returns
+        -------
+        Leg
+            Returns a new Leg with opposite signature.
+        """
+        legs_conj = tuple(leg.conj() for leg in self.legs)
+        return replace(self, s=-self.s, legs=legs_conj)
+    
+    def __getitem__(self, t):
+        r"""
+        Size of a charge sector
+        
+        Parameters
+        ----------
+        t : int or tuple(int)
+            selected charge sector
+
+        Returns
+        -------
+        int
+            size of the charge sector
+        """
+        return self.D[self.t.index(t)]
+
+    @property
+    def tD(self):
+        r""" 
+        Returns 
+        -------
+        dict
+            charge sectors `t` and their sizes `D` as dictionary ``{t: D}``.
+        """
+        return dict(zip(self.t, self.D))
+
+def _leg_fusions_need_mask(*legs):
+    legs = list(legs)
+    if all(leg.fusion == 'hard' for leg in legs):
+        return any(legs[0].legs[0] != leg.legs[0] for leg in legs)
+    if all(isinstance(leg.fusion, tuple) for leg in legs):
+        mf = legs[0].fusion
+        if any(mf != leg.fusion for leg in legs):
+            raise YastError('Meta-fusions do not match.')
+        return any(_leg_fusions_need_mask(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
 
 
-class _metaLeg(NamedTuple):
-    legs: tuple = ()
-    mf: tuple = (1,)  # order of (meta) fusions
-
-
-def Leg(config, s=1, t=(), D=(), **kwargs):
-    """ 
-    Create a new _Leg.
-
-    Verifies if the input is consistent.
+def leg_union(*legs):
     """
-
-    sym = config if hasattr(config, 'SYM_ID') else config.sym
-    if s not in (-1, 1):
-        raise YastError('Signature of Leg should be 1 or -1')
-
-    D = tuple(_flatten(D))
-    t = tuple(_flatten(t))
-    if not all(int(x) == x and x > 0 for x in D):
-        raise YastError('D should be a tuple of positive ints')
-    if not all(int(x) == x for x in t):
-        raise YastError('Charges should be ints')
-    if len(D) * sym.NSYM != len(t) or (sym.NSYM == 0 and len(D) != 1):
-        raise YastError('Number of provided charges and bond dimensions do not match sym.NSYM')
-    newt = tuple(tuple(x.flat) for x in sym.fuse(np.array(t).reshape((len(D), 1, sym.NSYM)), (s,), s))
-    oldt = tuple(tuple(x.flat) for x in np.array(t).reshape(len(D), sym.NSYM))
-    if oldt != newt:
-        raise YastError('Provided charges are outside of the natural range for specified symmetry.')
-    if len(set(newt)) != len(newt):
-        raise YastError('Repeated charge index.')
-    tD = {x: d for x, d in zip(newt, D)}
-    t = tuple(sorted(newt))
-    D = tuple(tD[x] for x in t)
-    return _Leg(sym=sym, s=s, t=t, D=D)
+    Output Leg that represent space being an union of spaces of a list of legs.
+    """
+    legs = list(legs)
+    if all(leg.fusion == 'hard' for leg in legs):
+        return _leg_union(*legs)
+    if all(isinstance(leg.fusion, tuple) for leg in legs):
+        mf = legs[0].fusion
+        if any(mf != leg.fusion for leg in legs):
+            raise YastError('Meta-fusions do not match.')
+        new_nlegs = tuple(_leg_union(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
+        nsym = legs[0].sym.NSYM
+        t = tuple(sorted(set.union(*(set(leg.t) for leg in legs))))
+        Dt = [tuple(leg[x[n * nsym : (n + 1) * nsym]] for n, leg in enumerate(new_nlegs)) for x in t]
+        D = tuple(np.prod(Dt, axis=1))
+        return replace(legs[0], t=t, D=D, legs=new_nlegs)
+    raise YastError('All arguments of leg_union should have consistent fusions.')
 
 
-def leg_union(*args):
+def _leg_union(*legs):
     """
     Output _Leg that represent space being an union of spaces of a list of legs.
     """
-    legs = list(args)
+    legs = list(legs)
     if any(leg.sym.SYM_ID != legs[0].sym.SYM_ID for leg in legs):
-        raise YastError('Legs have different symmetries')
+        raise YastError('Provided legs have different symmetries.')
     if any(leg.s != legs[0].s for leg in legs):
-        raise YastError('Legs have different signatures')
-
-    tD = {}
-    for leg in legs:
-        for t, D in zip(leg.t, leg.D):
-            if t in tD and tD[t] != D:
-                raise YastError('Legs have inconsistent dimensions')
-            tD[t] = D
-    t, D = tuple(tD.keys()), tuple(tD.values())
-    return _Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D)
-
+        raise YastError('Provided legs have different signatures.')
+    if any(leg.legs != legs[0].legs for leg in legs):
+        t, D, hf = _hfs_union(legs[0].sym, [leg.t for leg in legs] ,[leg.legs[0] for leg in legs])
+    else:
+        tD = {}
+        for leg in legs:
+            for t, D in zip(leg.t, leg.D):
+                if t in tD and tD[t] != D:
+                    raise YastError('Legs have inconsistent dimensions.')
+                tD[t] = D
+        t = tuple(sorted(tD.keys()))
+        D = tuple(tD[x] for x in t)
+        hf = legs[0].legs[0]
+    return Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D, legs=(hf,))

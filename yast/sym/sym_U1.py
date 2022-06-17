@@ -1,25 +1,30 @@
 """U(1) symmetry"""
+from .sym_abelian import sym_abelian
 
-SYM_ID= 'U(1)'
-NSYM= 1
+class sym_U1(sym_abelian):
+    """U(1) symmetry"""
 
-def fuse(charges, signatures, new_signature):
-    """
-    Fusion rule for U(1) symmetry.
+    SYM_ID = 'U(1)'
+    NSYM = 1
 
-    Parameters
-    ----------
-        charges: numpy.ndarray
-            rank-3 integer tensor with shape (k, n, NSYM)
+    @classmethod
+    def fuse(cls, charges, signatures, new_signature):
+        """
+        Fusion rule for U(1) symmetry.
 
-        signatures: numpy.ndarray
-            integer vector with `n` +1 or -1 elements 
+        Parameters
+        ----------
+            charges: numpy.ndarray
+                rank-3 integer tensor with shape (k, n, NSYM)
 
-        new_signature: int
+            signatures: numpy.ndarray
+                integer vector with `n` +1 or -1 elements
 
-    Returns
-    -------
-        teff: numpy.ndarray
-            integer matrix with shape (k,NSYM) of fused charges and multiplied by ``new_signature``
-    """
-    return new_signature * (charges.swapaxes(1, 2) @ signatures)
+            new_signature: int
+
+        Returns
+        -------
+            teff: numpy.ndarray
+                integer matrix with shape (k,NSYM) of fused charges and multiplied by ``new_signature``
+        """
+        return new_signature * (charges.swapaxes(1, 2) @ signatures)

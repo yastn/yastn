@@ -71,7 +71,7 @@ def apxb(a, b, x=1):
 def _addition_meta(a, b):
     """ meta-information for backend and new tensor charges and dimensions. """
     if a.struct.n != b.struct.n:
-        raise YastError('Error in add: tensor charges do not match')
+        raise YastError('Tensor charges do not match.')
     needs_mask, _ = _test_axes_match(a, b, sgn=1)
     if needs_mask:
         msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hfs, b.struct, b.hfs)
@@ -84,7 +84,6 @@ def _addition_meta(a, b):
         Adata, Bdata = a._data, b._data
         struct_a, struct_b = a.struct, b.struct
         hfs = a.hfs
-
 
     if struct_a.t == struct_b.t:
         if struct_a != struct_b:
@@ -295,11 +294,10 @@ def __truediv__(a, number):
     return a._replace(data=data)
 
 
-
 def __abs__(a):
     r"""
-    Return tensor with element-wise absolute values. 
-    Can be on called on tensor as ``abs(tensor)``. 
+    Return tensor with element-wise absolute values.
+    Can be on called on tensor as ``abs(tensor)``.
 
     Returns
     -------
@@ -307,7 +305,6 @@ def __abs__(a):
     """
     data = a.config.backend.absolute(a._data)
     return a._replace(data=data)
-
 
 
 def real(a):
