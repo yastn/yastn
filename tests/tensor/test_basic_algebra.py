@@ -1,4 +1,4 @@
-""" test algebraic expresions using magic methods like: a + 2. * b,  a / 2. - c * 3.,  a + b ** 2"""
+""" test algebraic expressions using magic methods, e.g.: a + 2. * b,  a / 2. - c * 3.,  a + b ** 2"""
 import numpy as np
 import pytest
 import yast
@@ -15,10 +15,10 @@ def algebra_vs_numpy(f, a, b):
     f is lambda expresion using magic methods on a and b tensors
     e.g. f = lambda x, y: x + y
     """
-    tDsa = {ia: a.get_leg_structure(ia) for ia in range(a.ndim)}
-    tDsb = {ib: b.get_leg_structure(ib) for ib in range(b.ndim)}
-    na = a.to_numpy(leg_structures=tDsb) # makes sure nparrays have consistent shapes
-    nb = b.to_numpy(leg_structures=tDsa) # makes sure nparrays have consistent shapes
+    legs_for_a = dict(enumerate(b.get_legs()))
+    legs_for_b = dict(enumerate(a.get_legs()))
+    na = a.to_numpy(legs=legs_for_a) # makes sure nparrays have consistent shapes
+    nb = b.to_numpy(legs=legs_for_b) # makes sure nparrays have consistent shapes
     nc = f(na, nb)
 
     c = f(a, b)
@@ -38,6 +38,7 @@ def combine_tests(a, b):
     assert all(yast.norm(r1 - x, p=p) < tol for x in (r2, r3) for p in ('fro', 'inf'))  # == 0.0
     # additionally tests norm
 
+
 def test_algebra_basic():
     """ test basic algebra for various symmetries """
     # dense
@@ -54,13 +55,14 @@ def test_algebra_basic():
     assert all(yast.are_independent(c, x) for x in (d, e))
 
     # U1
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)), dtype='float64')
+    leg0a = yast.Leg(config_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3))
+    leg0b = yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(1, 2, 3))
+    leg1 = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
+    leg2 = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
+    leg3 = yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))
 
-    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)), dtype='float64')
+    a = yast.rand(config=config_U1, legs=[leg0a, leg1, leg2, leg3], dtype='float64')
+    b = yast.rand(config=config_U1, legs=[leg0b, leg1, leg2, leg3], dtype='float64')
     combine_tests(a, b)
 
     c = yast.eye(config=config_U1, t=1, D=5)
@@ -78,12 +80,16 @@ def test_algebra_basic():
     assert pytest.approx(r7.norm(p='inf').item(), rel=tol) == 2
 
     # Z2xU1
-    a = yast.randC(config=config_Z2xU1, s=(-1, 1, 1, 1),
-        t=[[(0, 0), (0, 2), (1, 2)], [(0, -2), (0, 2)], [(0, -2), (0, 2), (1, -2), (1, 0), (1, 2)], [(0, 0), (0, 2)]],
-        D=((1, 2, 4), (2, 3), (2, 6, 3, 6, 9), (4, 7)))
-    b = yast.randC(config=config_Z2xU1, s=(-1, 1, 1, 1),
-        t=[[(0, 0), (1, 0), (1, 2)], [(0, -2), (0, 2)], [(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)], [(0, 0)]],
-        D=((1, 2, 4), (2, 3), (2, 4, 6, 3, 6, 9), 4))
+    leg0a = yast.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 2)], D=[1, 2, 4])
+    leg0b = yast.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 1), (1, 2)], D=[1, 3, 4])
+    leg1 = yast.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 2)], D=[2, 3])
+    leg2a = yast.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 2), (1, -2), (1, 0), (1, 2)], D=[2, 6, 3, 6, 9])
+    leg2b = yast.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)], D=[2, 4, 6, 3, 6, 9])
+    leg3a = yast.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2)], D=[4, 7])
+    leg3b = yast.Leg(config_Z2xU1, s=1, t=[(0, 0)], D=[4])
+
+    a = yast.randC(config=config_Z2xU1, legs=[leg0a, leg1, leg2a, leg3a])
+    b = yast.randC(config=config_Z2xU1, legs=[leg0b, leg1, leg2b, leg3b])
     combine_tests(a, b)
 
 
@@ -109,7 +115,7 @@ def test_algebra_functions():
 def test_algebra_fuse_meta():
     """ test basic algebra on meta-fused tensor. """
     a = yast.rand(config=config_Z2, s=(-1, 1, 1, -1),
-                  t=((0, 1), (0,), (0, 1), (1,)), D=((1, 2), (3,), (4, 5), (7, )))
+                  t=((0, 1), (0,), (0, 1), (1,)), D=((1, 2), (3,), (4, 5), (7,)))
     b = yast.rand(config=config_Z2, s=(-1, 1, 1, -1),
                   t=((0,), (0, 1), (0, 1), (0, 1)), D=((1,), (3, 4), (4, 5), (6, 7)))
     ma = a.fuse_legs(axes=((0, 3), (2, 1)), mode='meta')
@@ -170,51 +176,49 @@ def test_algebra_fuse_hard():
 
     # U1 with 6 legs
     t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
-    D1, D2, D3 = (1, 3, 2), (3, 3, 4), (5, 3, 6)
+    Da, Db, Dc = (1, 3, 2), (3, 3, 4), (5, 3, 6)
     a = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2))
+                t=(t1, t1, t2, t2, t3, t3), D=(Da, Db, Db, Da, Da, Db))
     b = yast.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
-                t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2))
+                t=(t2, t2, t3, t3, t1, t1), D=(Db, Dc, Da, Dc, Da, Db))
     algebra_hf(lambda x, y: x / 0.5 + y * 3, a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
     b.set_block(ts=(2, 2, 1, -2, -3, 0), Ds=(4, 6, 1, 1, 1, 3), val='rand')
     algebra_hf(lambda x, y: x - 3 * y, a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
 
     # Z2xU1 with 4 legs
-    t1, t2 = ((0, -1), (0, 1), (1, -1), (1, 1)), ((0, 0), (0, 1), (1, 1))
-    D1, D2 = (1, 2, 3, 4), (5, 2, 4)
-    a = yast.rand(config=config_Z2xU1, s=(-1, 1, 1, -1),
-                  t=(t2, t2, t1, t1), D=(D2, D2, D1, D1))
-    b = yast.rand(config=config_Z2xU1, s=(1, -1, -1, 1),
-                  t=(t1, t1, t2, t2), D=(D1, D1, D2, D2))
+    leg1 = yast.Leg(config_Z2xU1, s=1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D=[1, 2, 3, 4])
+    leg2 = yast.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 1), (1, 1)], D=[5, 2, 4])
+    a = yast.rand(config=config_Z2xU1, legs=[leg2.conj(), leg2, leg1, leg1.conj()])
+    b = yast.rand(config=config_Z2xU1, legs=[leg1, leg1.conj(), leg2.conj(), leg2])
 
     algebra_hf(lambda x, y: x / 0.5 + y * 3, a, b.conj())
 
-    a.set_block(ts=(((1, 2), (1, 2), (1, 2), (1, 2))), Ds=(6, 6, 6, 6), val='rand')
-    a.set_block(ts=(((1, -1), (1, -1), (1, -1), (1, -1))), Ds=(3, 3, 3, 3), val='rand')
+    a.set_block(ts=((1, 2), (1, 2), (1, 2), (1, 2)), Ds=(6, 6, 6, 6), val='rand')
+    a.set_block(ts=((1, -1), (1, -1), (1, -1), (1, -1)), Ds=(3, 3, 3, 3), val='rand')
     algebra_hf(lambda x, y: x - y ** 3, a.conj(), b)
 
 
 def test_algebra_exceptions():
     """ test handling exceptions """
-    t1 = (-1, 0, 1)
-    D1, D2 = (2, 3, 4), (2, 3, 5)
-    t3, D3 = (-1, 0), (2, 4)
+    leg1 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
+    leg2 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 5))
+    leg3 = yast.Leg(config_U1, s=1, t=(-1, 0), D=(2, 4))
     with pytest.raises(yast.YastError):
-        a = yast.rand(config=config_U1, s=(-1, 1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
-        b = yast.rand(config=config_U1, s=(1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
-        _ = a + b  # Error in add: tensor signatures do not match.
+        a = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
+        b = yast.rand(config=config_U1, legs=[leg1, leg2.conj(), leg1, leg2.conj()])
+        _ = a + b  # Signatures do not match.
     with pytest.raises(yast.YastError):
-        a = yast.rand(config=config_U1, s=(-1, 1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
-        b = yast.rand(config=config_U1, s=(-1, 1, 1), t=(t1, t1, t1), D=(D1, D2, D1))
-        _ = a + b  # Error in add: tensor signatures do not match.
+        a = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
+        b = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1])
+        _ = a + b  # Tensors have different number of legs.
     with pytest.raises(yast.YastError):
-        a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
-        b = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D2, D1))
-        _ = a + b  # Error in addition: bond dimensions do not match.
+        a = yast.rand(config=config_U1, legs=[leg1, leg1.conj(), leg1])
+        b = yast.rand(config=config_U1, legs=[leg1, leg2.conj(), leg1])
+        _ = a + b  # Bond dimensions do not match.
     with pytest.raises(yast.YastError):
-        a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
-        b = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t3, t1), D=(D1, D3, D1))
-        _ = a + b  # Error in addition: bond dimensions do not match.
+        a = yast.rand(config=config_U1, legs=[leg1, leg1.conj(), leg1])
+        b = yast.rand(config=config_U1, legs=[leg1, leg3.conj(), leg1])
+        _ = a + b  # Bond dimensions do not match.
     with pytest.raises(yast.YastError):
         # Here, individual blocks between a na b are consistent, but cannot form consistent sum.
         a = yast.Tensor(config=config_U1, s=(1, -1, 1, -1))
@@ -223,21 +227,26 @@ def test_algebra_exceptions():
         b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
         _ = a + b  # Bond dimensions related to some charge are not consistent.
     with pytest.raises(yast.YastError):
-        a = yast.rand(config=config_U1, s=(1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
-        b = yast.rand(config=config_U1, s=(1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
+        a = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
+        b = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
         a = a.fuse_legs(axes=(0, 1, (2, 3)), mode='meta')
         b = b.fuse_legs(axes=((0, 1), 2, 3), mode='meta')
-        _ = a + b  # Error in add: fusion trees do not match.
+        _ = a + b  # Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order.
     with pytest.raises(yast.YastError):
-        a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D2, D1), n=1)
-        b = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D2, D1), n=0)
-        _ = a + b  # Error in add: tensor charges do not match.
+        a = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=0)
+        b = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=1)
+        _ = a + b  # Tensor charges do not match.
+    with pytest.raises(yast.YastError):
+        a = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=0)
+        _ = yast.norm(a, p='wrong_order')
+        # Error in norm: p not in ('fro', 'inf').
 
 
 def test_hf_union_exceptions():
     """ exceptions happening in resolving hard-fusion mismatches. """
-    t1, t2 = (-1, 0, 1), (-2, 0, 2)
-    D1, D2 = (2, 3, 2), (2, 5, 2)
+    leg1 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 2))
+    leg2 = yast.Leg(config_U1, s=1, t=(-2, 0, 2), D=(2, 3, 5))
+    leg3 = yast.Leg(config_U1, s=1, t=(-2, 0, 2), D=(2, 5, 2))
     with pytest.raises(yast.YastError):
         a = yast.Tensor(config=config_U1, s=(1, -1, 1, -1))
         a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
@@ -245,25 +254,25 @@ def test_hf_union_exceptions():
         b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
         a = a.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
         b = b.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
-        _ = a + b  # Error in union: mismatch of native bond dimensions of fused legs.
+        _ = a + b  # Bond dimensions of fused legs do not match.
     with pytest.raises(yast.YastError):
-        a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
-        b = yast.rand(config=config_U1, s=(1, -1, 1), t=(t2, t2, t2), D=(D1, D2, D1))
+        a = yast.rand(config=config_U1, legs=[leg1, leg1.conj(), leg1])
+        b = yast.rand(config=config_U1, legs=[leg2, leg3.conj(), leg2])
         a = a.fuse_legs(axes=((0, 2), 1), mode='hard')
         b = b.fuse_legs(axes=((0, 2), 1), mode='hard')
-        _ = a + b  # Error in union: mismatch of bond dimensions of unfused legs.
+        _ = a + b  # Bond dimensions do not match.
     with pytest.raises(yast.YastError):
-        a = yast.rand(config=config_U1, s=(-1, 1, -1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
-        b = yast.rand(config=config_U1, s=(-1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
+        a = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
+        b = yast.rand(config=config_U1, legs=[leg1.conj(), leg2.conj(), leg1, leg2.conj()])
         a = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         b = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
-        _ = a + b  # Error in union: mismatch in native signatures of fused legs.
+        _ = a + b  # Signatures of hard-fused legs do not match.
     with pytest.raises(yast.YastError):
-        a = yast.rand(config=config_U1, s=(-1, 1, -1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
-        b = yast.rand(config=config_U1, s=(-1, 1, -1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
+        a = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
+        b = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
         a = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         b = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
-        _ = a + b  # Error in union: mismatch in number of fused legs or fusion order.
+        _ = a + b  # Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.
 
 
 if __name__ == '__main__':
@@ -272,4 +281,4 @@ if __name__ == '__main__':
     test_algebra_fuse_meta()
     test_algebra_fuse_hard()
     test_algebra_exceptions()
-    # test_hf_union_exceptions()
+    test_hf_union_exceptions()

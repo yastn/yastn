@@ -2,19 +2,19 @@
 import pytest
 import yast
 try:
-    from .configs import config_dense, config_U1
+    from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
-    from configs import config_dense, config_U1
+    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
 
 def vdot_vs_numpy(a, b):
     """ test vdot vs numpy """
-    tDsa = {ii: b.get_leg_structure(ii) for ii in range(b.ndim)}
-    tDsb = {ii: a.get_leg_structure(ii) for ii in range(a.ndim)}
-    na = a.to_numpy(tDsa)  # makes sure nparrays have consistent shapes
-    nb = b.to_numpy(tDsb)  # makes sure nparrays have consistent shapes
+    legs_for_a = {ii: leg for ii, leg in enumerate(b.get_legs())}
+    legs_for_b = {ii: leg for ii, leg in enumerate(a.get_legs())}
+    na = a.to_numpy(legs=legs_for_a)  # makes sure nparrays have consistent shapes
+    nb = b.to_numpy(legs=legs_for_b)  # makes sure nparrays have consistent shapes
     ns = na.conj().reshape(-1) @ nb.reshape(-1)
     bc = b.conj()
     ac = a.conj()
@@ -35,27 +35,29 @@ def test_vdot_basic():
     vdot_vs_numpy(a, b)
 
     # U1
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 0, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 2, 12)))
-    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
-                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)))
-    c = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=(1, -1, 2, 0), D=(2, 4, 9, 2))
+    legs_a = [yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(1, 2, 3)),
+              yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+              yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
+              yast.Leg(config_U1, s=-1, t=(-1, 0, 2), D=(10, 2, 12))]
+    legs_b = [yast.Leg(config_U1, s=-1, t=(-1, 2), D=(1, 3)),
+              yast.Leg(config_U1, s=1, t=(1, 2), D=(5, 6)),
+              yast.Leg(config_U1, s=1, t=(-1, 1), D=(7, 8)),
+              yast.Leg(config_U1, s=-1, t=(-1, 0, 1, 2), D=(10, 2, 11, 12))]
+    legs_c = [yast.Leg(config_U1, s=-1, t=[1], D=[2]),
+              yast.Leg(config_U1, s=1, t=[-1], D=[4]),
+              yast.Leg(config_U1, s=1, t=[1], D=[9]),
+              yast.Leg(config_U1, s=-1, t=[2], D=[12])]
+    a = yast.rand(config=config_U1, legs=legs_a)
+    b = yast.rand(config=config_U1, legs=legs_b)
+    c = yast.rand(config=config_U1, legs=legs_c)
     vdot_vs_numpy(a, b)
     vdot_vs_numpy(a, c)
     vdot_vs_numpy(c, b)
 
     # U1 complex
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 0, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 2, 12)), dtype='complex128')
-    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
-                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)), dtype='complex128')
-    c = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=(1, -1, 2, 0), D=(2, 4, 9, 2), dtype='complex128')
+    a = yast.rand(config=config_U1, legs=legs_a, dtype='complex128')
+    b = yast.rand(config=config_U1, legs=legs_b, dtype='complex128')
+    c = yast.rand(config=config_U1, legs=legs_c, dtype='complex128')
     vdot_vs_numpy(a, b)
     vdot_vs_numpy(a, c)
     vdot_vs_numpy(c, b)
@@ -74,35 +76,14 @@ def test_vdot_fuse_hard():
     b.set_block(ts=(1, 1, -2, -2, -3, 3), Ds=(2, 4, 3, 1, 1, 4), val='rand')
     vdot_hf(a, b, hf_axes1=((0, 1), (2, 3), (4, 5)))
 
-
-    # a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-    #             t=((0,), (0,), (-1, 0, 1), (-1, 0, 1)), D=((2,), (5,), (7, 8, 9), (10, 11, 12)))
-    # a.set_block(ts=(1, 1, 0, 0), Ds=(3, 6, 8, 11))
-    # b = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-    #             t=((-1, 0, 1), (-1, 0, 1), (-1, 0, 1), (-2, 0, 2)),
-    #             D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-    # c = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-    #             t=((1,), (1,), (0, 1), (0, 1)), D=((3,), (6,), (8, 9), (11, 12)))
-
-    # vdot_hf(a, b)
-    # vdot_hf(a, c)
-    # vdot_hf(b.conj(), c.conj())
-
-    # t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
-    # D1 = (1, 2, 3, 4)
-    # t2 = [(0, 0), (0, 1), (1, 1)]
-    # D2 = (5, 2, 4)
-    # a2 = yast.rand(config=config_Z2xU1, s=(-1, 1, 1, -1),
-    #               t=(t2, t2, t1, t1),
-    #               D=(D2, D2, D1, D1))
-    # b2 = yast.rand(config=config_Z2xU1, s=(1, -1, -1, 1),
-    #               t=(t1, t1, t2, t2),
-    #               D=(D1, D1, D2, D2))
-    # vdot_hf(a2, b2)
-
-    # a2.set_block(ts=((1, 2, 1, 2, 1, 2, 1, 2)), Ds=(6, 6, 6, 6), val='rand')
-    # a2.set_block(ts=((1, -1, 1, -1, 1, -1, 1, -1)), Ds=(3, 3, 3, 3), val='rand')
-    # vdot_hf(a2, b2)
+    t1, t2 = [(0, -1), (0, 1), (1, -1), (1, 1)],  [(0, 0), (0, 1), (1, 1)]
+    D1, D2 = (1, 2, 3, 4), (5, 2, 4)
+    a2 = yast.rand(config=config_Z2xU1, s=(-1, 1, 1, -1), t=(t2, t2, t1, t1), D=(D2, D2, D1, D1))
+    b2 = yast.rand(config=config_Z2xU1, s=(-1, 1, 1, -1), t=(t1, t1, t2, t2), D=(D1, D1, D2, D2))
+    vdot_hf(a2, b2, hf_axes1=(0, (2, 3), 1))
+    a2.set_block(ts=(((1, 2), (1, 2), (1, 2), (1, 2))), Ds=(6, 6, 6, 6), val='rand')
+    a2.set_block(ts=(((1, -1), (1, -1), (1, -1), (1, -1))), Ds=(3, 3, 3, 3), val='rand')
+    vdot_hf(a2, b2, hf_axes1=(0, (2, 3), 1))
 
 
 
@@ -130,46 +111,29 @@ def test_vdot_exceptions():
     b = yast.Tensor(config=config_U1, s=(), dtype='complex128')
     vdot_vs_numpy(a, b)  # == 0 for empty tensors
 
-    t1, D1 = (-1, 1), (3, 4)
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1), n=1,
-                  t=(t1, t1, t1, t1), D=(D1, D1, D1, D1), dtype='complex128')
-    b = yast.rand(config=config_U1, s=(-1, 1, 1, -1), n=-1,
-                  t=(t1, t1, t1, t1), D=(D1, D1, D1, D1), dtype='complex128')
-    c = yast.rand(config=config_U1, s=(1, -1, -1, 1), n=1,
-                  t=(t1, t1, t1, t1), D=(D1, D1, D1, D1), dtype='complex128')
+    leg = yast.Leg(config_U1, s=1, t=(-1, 1), D=(3, 4))
+    a = yast.randC(config=config_U1, legs=[leg.conj(), leg, leg, leg.conj()], n=1)
+    b = yast.randC(config=config_U1, legs=[leg.conj(), leg, leg, leg.conj()], n=-1)
+    c = yast.randC(config=config_U1, legs=[leg, leg.conj(), leg.conj(), leg], n=1)
 
     assert abs(a.vdot(b)) < tol  # == 0 as charges do not match
     assert abs(a.vdot(c, conj=(0, 0))) < tol  # == 0 as charges do not match for that conj
     assert abs(a.vdot(c, conj=(1, 1))) < tol  # == 0 as charges do not match for that conj
 
-
-    c = yast.rand(config=config_U1, s=(-1, -1, 1, -1), n=1,
-                  t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
-                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)), dtype='complex128')
-
-    d = yast.rand(config=config_U1, s=(-1, 1, 1, -1), n=1,
-                  t=((-1, 2), (1, 2), (-1, 1), (-1, 0, 1, 2)),
-                  D=((1, 3), (5, 6), (7, 8), (10, 2, 11, 12)), dtype='complex128')
-    d = d.fuse_legs(axes=(0, (1, 2), 3))
-
     with pytest.raises(yast.YastError):
-        d = yast.rand(config=config_U1, s=(-1, -1, 1, -1), n=1,
-                    t=(t1, t1, t1, t1), D=(D1, D1, D1, D1))
+        d = yast.rand(config=config_U1, legs=[leg.conj(), leg.conj(), leg, leg.conj()], n=1)
         a.vdot(d)  # Error in vdot: signatures do not match.
     with pytest.raises(yast.YastError):
-        d = yast.rand(config=config_U1, s=(-1, -1, 1), n=1,
-                    t=(t1, t1, t1), D=(D1, D1, D1))
+        d = yast.rand(config=config_U1, egs=[leg.conj(), leg, leg], n=1)
         a.vdot(d)  # Error in vdot: mismatch in number of legs.
     with pytest.raises(yast.YastError):
         af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
         bf = b.fuse_legs(axes=(0, (1, 2, 3)), mode='meta')
         af.vdot(bf)  # Error in vdot: mismatch in number of fused legs or fusion order.
-
-    t1, t2 = (-1, 0, 1), (-1, 0, 2)
-    D1, D2 = (2, 3, 4), (2, 4, 5)
     with pytest.raises(yast.YastError):
-        a = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
-        b = yast.rand(config=config_U1, s=(1, -1, 1), t=(t1, t2, t1), D=(D1, D2, D1))
+        a = yast.rand(config=config_U1, legs=[leg, leg.conj(), leg, leg])
+        leg2 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 4, 5))
+        b = yast.rand(config=config_U1, legs=[leg, leg.conj(), leg, leg2])
         yast.vdot(a, b)  # Bond dimensions do not match.
 
 

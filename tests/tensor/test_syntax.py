@@ -204,7 +204,8 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
         # block tensors
         tensor = yast.block({(1, 1): a, (1, 2): b, (2, 1): c}, common_legs=(0, 1))
         # new tensor filled with ones, matching structure of selected legs -- to be used for e.g. dot
-        tensor = yast.match_legs([a, a, b], legs=[1, 2, 0], conjs=[0, 0, 1], val='ones')
+
+        tensor = yast.ones(config=a.config, legs=[a.get_legs(1).conj(), a.get_legs(2).conj(), b.get_legs(0)])
         # combined with ncon
         yast.ncon([tensor, a, b], [(1, 2, 3), (-1, 1, 2, -2), (3, -4, -5, -6)], conjs=(0, 0, 1))
 
@@ -328,17 +329,18 @@ class TestSyntaxGeneral(unittest.TestCase):
         str(a)
         a.get_blocks_charge()
         a.get_blocks_shape()
-        a.get_leg_charges_and_dims()
-        a.get_shape(axes=2)
-        ls = a.get_leg_structure(axis=1)
-        print(ls)
-        
+        a.get_shape()
+        a.get_shape(axis=2)
+        legs = a.get_legs()
+        leg = a.get_legs(axis=1)  # legs[1] = leg
+        print(leg)
+
 
         # output dense
         array = a.to_dense()
         array = a.to_numpy()
-        ls = {1: b.get_leg_structure(axis=1)}
-        array = a.to_dense(leg_structures=ls)  # on selected legs, enforce to include cherges read in previous line
+        ls = {1: b.get_legs(axis=1)}
+        array = a.to_dense(legs=ls)  # on selected legs, enforce to include cherges read in previous line
         tensor = a.to_nonsymmetric()
 
         # permute - documented example in test_transpose.py

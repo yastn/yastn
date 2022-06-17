@@ -88,6 +88,7 @@ test_python3.7_conda_numpy1.19.1:
   - conda install python=3.7
   - conda update -q conda
   - conda install numpy=1.19.1 scipy pytest h5py
+  - pip install fbpca
   - export PYTHONPATH=$(pwd)
   - git submodule status
   - ssh-add -l
@@ -181,14 +182,15 @@ test_python3.9_torch1.11:
   - pip install torch==1.11.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
   - pip install scipy
   - pip install h5py
-  - pip install pytest
+  - pip install pytest pytest-cov
   - pip install .
   - export PYTHONPATH=$(pwd)
   - git submodule status
   - ssh-add -l
   - git submodule update --init --recursive
   - cd tests/;
-  - pytest --backend torch -v ./tensor;
+  - pytest --cov=yast --backend torch -v ./tensor;
   - pytest --backend torch -v ./mps;
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
   rules:
     - !reference [.default_rules, rules]

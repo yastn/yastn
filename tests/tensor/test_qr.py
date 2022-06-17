@@ -10,7 +10,7 @@ except ImportError:
 tol = 1e-10  #pylint: disable=invalid-name
 
 
-def qr_combine(a):
+def run_qr_combine(a):
     """ decompose and contracts tensor using qr decomposition """
     Q, R = yast.linalg.qr(a, axes=((3, 1), (2, 0)))
     QR = yast.tensordot(Q, R, axes=(2, 0))
@@ -40,20 +40,23 @@ def test_qr_basic():
     """ test qr decomposition for various symmetries """
     # dense
     a = yast.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
-    qr_combine(a)
+    run_qr_combine(a)
 
     # U1
-    a = yast.rand(config=config_U1, s=(-1, -1, 1, 1), n=1,
-                  t=[(-1, 0, 1), (-2, 0, 2), (-2, -1, 0, 1, 2), (0, 1)],
-                  D=[(2, 3, 4), (5, 6, 7), (6, 5, 4, 3, 2), (2, 3)])
-    qr_combine(a)
+    legs = [yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
+            yast.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(5, 6, 7)),
+            yast.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
+            yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))]
+    a = yast.rand(config=config_U1, legs=legs, n=1)
+    run_qr_combine(a)
 
     # Z2xU1
-    t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
-    a = yast.ones(config=config_Z2xU1, s=(1, 1, -1, -1),
-                  t=[t1, t1, t1, t1],
-                  D=[(2, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
-    qr_combine(a)
+    legs = [yast.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(2, 3, 4, 5)),
+            yast.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(5, 4, 3, 2)),
+            yast.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(3, 4, 5, 6)),
+            yast.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(1, 2, 3, 4))]
+    a = yast.ones(config=config_Z2xU1, legs=legs)
+    run_qr_combine(a)
 
 
 def test_qr_Z3():
