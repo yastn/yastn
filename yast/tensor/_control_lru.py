@@ -16,7 +16,7 @@ def set_cache_maxsize(maxsize=0):
     _contractions._trace_meta = lru_cache(maxsize)(_contractions._trace_meta.__wrapped__)
     _merging._meta_merge_to_matrix = lru_cache(maxsize)(_merging._meta_merge_to_matrix.__wrapped__)
     _merging._intersect_hfs = lru_cache(maxsize)(_merging._intersect_hfs.__wrapped__)
-    _merging._leg_structure_combine_charges = lru_cache(maxsize)(_merging._leg_structure_combine_charges.__wrapped__)
+    _merging._leg_structure_combine_charges_prod = lru_cache(maxsize)(_merging._leg_structure_combine_charges_prod.__wrapped__)
     _merging._meta_fuse_hard = lru_cache(maxsize)(_merging._meta_fuse_hard.__wrapped__)
     _merging._meta_unfuse_hard = lru_cache(maxsize)(_merging._meta_unfuse_hard.__wrapped__)
 
@@ -30,7 +30,7 @@ def clear_cache():
     _contractions._trace_meta.cache_clear()
     _merging._meta_merge_to_matrix.cache_clear()
     _merging._intersect_hfs.cache_clear()
-    _merging._leg_structure_combine_charges.cache_clear()
+    _merging._leg_structure_combine_charges_prod.cache_clear()
     _merging._meta_fuse_hard.cache_clear()
     _merging._meta_unfuse_hard.cache_clear()
 
@@ -46,4 +46,4 @@ def get_cache_info():
             "fuse_hard": _merging._meta_fuse_hard.cache_info(),
             "unfuse_hard": _merging._meta_unfuse_hard.cache_info(),
             "intersect_hfs": _merging._intersect_hfs.cache_info(),
-            "combine_leg_structure": _merging._leg_structure_combine_charges.cache_info()}
+            "combine_leg_structure": _merging._leg_structure_combine_charges_prod.cache_info()}
