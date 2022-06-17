@@ -315,9 +315,8 @@ def qr(data, meta, sizes):
     return Qdata, Rdata
 
 
-def nth_largest(data, n):
-    return np.partition(data, -n)[-n]
-    # return np.argsort(data)
+def argsort(data):
+    return np.argsort(data)
 
 
 def eigs_which(val, which):

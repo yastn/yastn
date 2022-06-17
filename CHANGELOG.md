@@ -168,3 +168,14 @@ v0.9
 01-05-2022
 - svd_with_truncation can take mask-generating funcion as an argument
 - function `truncation_mask_multiplets` to retain multiplets in generating mask for truncation
+
+30-05-2022
+- function `Leg` generates `_Leg` object describing linear space of a single tensor leg.
+  It takes, signature `s`, list of charges `t` and corresponding dimensions `D`, as well as symmetry (or config).
+- function `yast.leg_union(*legs)` creates a leg that describes a space being an union of provided spaces/legs.
+- tensor has method `.get_legs(axis=None)` outputing `_Leg` (or list of specified legs, of list of all tensor legs for axis=None). It also carries information about fusions.
+- Initializing tensor with `yast.ones`, `yast.zeors`, `yast.rand`, `yast.eye` takes list of a list of legs,(argument `legs`). Old input with `s`, `t`, `D` is supported and providing any of those parameters overrides argument `legs`
+- methods `to_numpy`, `to_dense`, `to_nonsymmetric` take dict `legs` specifying how to fill-in zeros to make output consistent with provided `legs` (for now does not work for mismatch in hard fusions). This replaces old argument `leg_structures`.
+- `truncation_mask` does not have arguments keep_multiplets and multiplets_eps, as there is specialised function `truncation_mask_multiplets`
+
+

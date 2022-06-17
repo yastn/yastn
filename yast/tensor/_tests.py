@@ -21,6 +21,17 @@ def _test_configs_match(a, b):
         raise YastError('Two tensors have different backends.')
 
 
+def _test_tD_consistency(struct):
+    tset = np.array(struct.t, dtype=int).reshape((len(struct.t), len(struct.s), len(struct.n)))
+    Dset = np.array(struct.D, dtype=int).reshape((len(struct.D), len(struct.s)))
+    for i in range(len(struct.s)):
+        ti = [tuple(x.flat) for x in tset[:, i, :].reshape(len(tset), len(struct.n))]
+        Di = Dset[:, i].reshape(-1)
+        tDi = list(zip(ti, Di))
+        if len(set(ti)) != len(set(tDi)):
+            raise YastError('Inconsist assigment of bond dimension to some charge.')
+
+
 def _test_axes_match(a, b, sgn=1, axes=None):
     """
     Test if legs of a in axes[0] and legs ob b in axes[1] have matching signature and fusion structures.
@@ -108,8 +119,7 @@ def is_consistent(a):
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)
     assert np.all(a.config.sym.fuse(tset, sa, 1) == na), 'charges of some block do not satisfy symmetry condition'
-    for n in range(a.ndim_n):
-        a.get_leg_structure(n, native=True)
+    _test_tD_consistency(a.struct)
     for s, hf in zip(a.struct.s, a.hfs):
         assert s == hf.s[0]
     return True

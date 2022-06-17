@@ -1,68 +1,60 @@
 """ Methods creating a new yast tensor """
 
-from itertools import chain, repeat, accumulate, product
+from itertools import product
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _flatten, _struct
-from ._merging import _flip_hf
-from ._tests import YastError
-
-__all__ = ['match_legs', 'block']
+from ._auxliary import _flatten
+from ._tests import YastError, _test_tD_consistency
 
 
 def __setitem__(a, key, newvalue):
     """
     Parameters
     ----------
-    key : tuple(int)
+    key : tuple[int]
         charges of the block
 
-    Update data corresponding the block. The data should be consistent with shape
+    Update data of the selected block. The data (its shape) should be consistent with 
+    the dimensions of the charge sectors where the block belongs.
     """
     key = tuple(_flatten(key))
     try:
         ind = a.struct.t.index(key)
-    except ValueError:
-        raise YastError('tensor does not have block specify by key')
-    a._data[slice(*a.struct.sl[ind])] = newvalue
+    except ValueError as exc:
+        raise YastError('Tensor does not have a block specify by the key.') from exc
+    a._data[slice(*a.struct.sl[ind])] = newvalue.reshape(-1)
 
 
-def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
+def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     r"""
-    Create all possible blocks based on s, n and list of charges for all legs.
+    Create all allowed blocks based on signature ``s``, total charge ``n``,
+    and a set of charge sectors ``t`` for each leg of the tensor.
 
-    Brute-force check all possibilities and select the ones satisfying f(t@s) == n for each symmetry generator f.
-    Initialize each possible block with sizes given by D.
-    Old data in the tensor are reset.
+    First, all allowed blocks are identified by checking the 
+    :ref:`selection rule<symmetry selection rule>`.
+    Then each allowed block is created as a tensor with 
+    sizes specified in ``D`` and filled with value ``val``.
+    
+    .. note::
+        This operation overwrites the data of the tensor.
 
     Parameters
     ----------
-    a : Tensor
+    a : yast.Tensor
 
-    t : list
-        All possible combination of charges for each leg:
-        t = [[(leg1sym1, leg1sym2), ... ], [(leg2sym1, leg2sym2), ... )]
-        If nsym is 0, it is not taken into account.
-        When somewhere there is only one value and it is unambiguous, tuple can typically be replaced by int, see examples.
+    t : list[list[int]] or list[list[list[int]]]
+        list of charge sectors for each leg of the tensor, see examples.
+        In case of tensor without symmetry this argument is ignored.
 
-    D : tuple
-        list of bond dimensions on all legs
-        If nsym == 0, D = [leg1, leg2, leg3]
-        If nsym >= 1, it should match the form of t
-        When somewhere there is only one value tuple can typically be replaced by int.
-
+    D : list[int] or list[list[int]]
+        list of sector sizes for each leg of the tensor, see examples.
+        
     val : str
-        'rand' (use current dtype float or complex), 'ones', 'zeros'
+        ``'rand'``, ``'ones'``, or  ``'zeros'``
 
-    dtype : str
-        desired dtype, overrides current dtype of 'a'
-
-    Examples
-    --------
-    D = 5  # ndim = 1
-    D = (1, 2, 3)  # nsym = 0, ndim = 3
-    t = [0, (-2, 0), (2, 0)], D = [1, (1, 2), (1, 3)]  # nsym = 1 ndim = 3
-    t = [[(0, 0)], [(-2, -2), (0, 0), (-2, 0), (0, -2)], [(2, 2), (0, 0), (2, 0), (0, 2)]], \
-    D = [1, (1, 4, 2, 2), (1, 9, 3, 3)]  # nsym = 2 ndim = 3
+    Returns
+    -------
+    yast.Tensor
+        tensor filled with selected values
     """
 
     # if dtype is None:
@@ -117,10 +109,8 @@ def fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     a_t, a_D, a_Dp = zip(*meta) if len(meta) > 0 else ((), (), ())
     a_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(a_Dp), a_Dp))
     a.struct = a.struct._replace(t=a_t, D=a_D, Dp=a_Dp, sl=a_sl)
-
     a._data = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
-    for n in range(a.ndim_n):
-        a.get_leg_structure(n, native=True)  # here checks the consistency of bond dimensions
+    _test_tD_consistency(a.struct)
 
 
 def set_block(a, ts=(), Ds=None, val='zeros'):
@@ -128,27 +118,22 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     Add new block to tensor or change the existing one.
 
     This is the intended way to add new blocks by hand.
-    Checks if bond dimensions of the new block are consistent with the existing ones.
-    Updates meta-data.
+    Checks if bond dimensions of the new block are consistent with the existing ones
+    and updates the legs of the tensors accordingly.
 
     Parameters
     ----------
-    a : Tensor
+    ts : tuple(int) or tuple(tuple(int))
+        Charges identifing the block. Ignored if tensor has no symmetry.
 
-    ts : tuple
-        charges identifing the block, t = (sym1leg1, sym2leg1, sym1leg2, sym2leg2, ...)
-        If nsym == 0, it is not taken into account.
+    Ds : tuple(int)
+        Dimensions of the block. If ``None``, tries to infer 
+        dimensions from legs of the tensor.
 
-    Ds : tuple
-        bond dimensions of the block. Ds = (leg1, leg2, leg3)
-        If Ds not given, tries to read it from existing blocks.
-
-    val : str, nparray, list
-        'rand' (use current dtype float or complex), 'ones', 'zeros'
-        for nparray setting Ds is needed.
-
-    dtype : str
-        desired dtype, overrides default_dtype specified in config of tensor `a`
+    val : str, tensor-like
+        recognized string values are ``'rand'``, ``'ones'``,`or  ``'zeros'``.
+        Otherwise any tensor-like format such as nested list, numpy.ndarray, etc., 
+        can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
     if isinstance(Ds, int):
         Ds = (Ds,)
@@ -161,9 +146,9 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         ts = ts + ts
 
     if len(ts) != a.ndim_n * a.config.sym.NSYM:
-        raise YastError('Wrong size of ts.')
+        raise YastError('Size of ts is not consistent with tensor rank and the number of symmetry sectors.')
     if Ds is not None and len(Ds) != a.ndim_n:
-        raise YastError('Wrong size of Ds.')
+        raise YastError('Size of Ds is not consistent with tensor rank.')
 
     ats = np.array(ts, dtype=int).reshape((1, a.ndim_n, a.config.sym.NSYM))
     sa = np.array(a.struct.s, dtype=int)
@@ -173,11 +158,11 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
     if Ds is None:  # attempt to read Ds from existing blocks.
         Ds = []
-        tD = [a.get_leg_structure(n, native=True) for n in range(a.ndim_n)]
-        for n in range(a.ndim_n):
+        legs = a.get_legs(range(a.ndim_n), native=True)
+        for n, leg in enumerate(legs):
             try:
-                Ds.append(tD[n][tuple(ats[0, n, :].flat)])
-            except KeyError as err:
+                Ds.append(leg.D[leg.t.index(tuple(ats[0, n, :].flat))])
+            except ValueError as err:
                 raise YastError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
         Ds = tuple(Ds)
 
@@ -200,9 +185,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     a_Dp = a.struct.Dp[:ind] + (Dsize,) + a.struct.Dp[ind2:]
     a_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(a_Dp), a_Dp))
     a.struct = a.struct._replace(t=a_t, D=a_D, Dp=a_Dp, sl=a_sl)
-
-    for n in range(a.ndim_n):
-        a.get_leg_structure(n, native=True)  # here checks the consistency of bond dimensions
+    _test_tD_consistency(a.struct)
 
 
 def _init_block(config, Dsize, val, dtype, device):
@@ -213,134 +196,8 @@ def _init_block(config, Dsize, val, dtype, device):
             return config.backend.rand((Dsize,), dtype=dtype, device=device)
         if val == 'ones':
             return config.backend.ones((Dsize,), dtype=dtype, device=device)
-        raise YastError('val should be in ("zeros", "ones", "rand")')
-    else:
-        x = config.backend.to_tensor(val, Ds=Dsize, dtype=dtype, device=device)
-        if config.backend.get_size(x) == Dsize ** 2:
-            x = config.backend.diag_get(x.reshape(Dsize, Dsize))
-        return x
-
-
-def match_legs(tensors=None, legs=None, conjs=None, val='ones', n=None, isdiag=False):
-    r"""
-    Initialize tensor matching legs of existing tensors, so that it can be contracted with those tensors.
-
-    Finds all matching symmetry sectors and their bond dimensions and passes it to :meth:`Tensor.fill_tensor`.
-
-    TODO: the set of tensors should reside on the same device. Optional destination device might be added
-
-    Parameters
-    ----------
-    tensors: list
-        list of tensors -- they should not be diagonal to properly identify signature.
-    legs: list
-        and their corresponding legs to match
-    conjs: list
-        if tensors are entering dot as conjugated
-    val: str
-        'rand', 'ones', 'zeros'
-    """
-
-    t, D, s, mfs, hfs = [], [], [], [], []
-    if conjs is None:
-        conjs = (0,) * len(tensors)
-    for nf, te, cc in zip(legs, tensors, conjs):
-        mfs.append(te.mfs[nf])
-        un, = _unpack_axes(te.mfs, (nf,))
-        for nn in un:
-            tdn = te.get_leg_structure(nn, native=True)
-            t.append(tuple(tdn.keys()))
-            D.append(tuple(tdn.values()))
-            s.append(te.struct.s[nn] * (2 * cc - 1))
-            hfs.append(te.hfs[nn] if cc == 1 else _flip_hf(te.hfs[nn]))
-    a = tensors[0].__class__(config=tensors[0].config, s=s, n=n, isdiag=isdiag, mfs=mfs, hfs=hfs,
-                            dtype=tensors[0].yast_dtype, device=tensors[0].device)
-    a.fill_tensor(t=t, D=D, val=val)
-    return a
-
-
-def block(tensors, common_legs=None):
-    """
-    Assemble new tensor by blocking a set of tensors.
-
-    TODO: the set of tensors should reside on the same device. Optional destination device might be added
-
-    Parameters
-    ----------
-    tensors : dict
-        dictionary of tensors {(x,y,...): tensor at position x,y,.. in the new, blocked super-tensor}.
-        Length of tuple should be equall to tensor.ndim - len(common_legs)
-
-    common_legs : list
-        Legs that are not blocked.
-        This is equivalently to all tensors having the same position (not specified) in the supertensor on that leg.
-    """
-    out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
-    tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
-    out_b = tuple((ii,) for ii in range(tn0.ndim) if ii not in out_s)
-    pos = list(_clear_axes(*tensors))
-    lind = tn0.ndim - len(out_s)
-    for ind in pos:
-        if len(ind) != lind:
-            raise YastError('Wrong number of coordinates encoded in tensors.keys()')
-
-    out_s, =  _unpack_axes(tn0.mfs, out_s)
-    u_b = tuple(_unpack_axes(tn0.mfs, *out_b))
-    out_b = tuple(chain(*u_b))
-    pos = tuple(tuple(chain.from_iterable(repeat(x, len(u)) for x, u in zip(ind, u_b))) for ind in pos)
-
-    for ind, tn in tensors.items():
-        ind, = _clear_axes(ind)
-        if tn.struct.s != tn0.struct.s:
-            raise YastError('Signatues of blocked tensors are inconsistent.')
-        if tn.struct.n != tn0.struct.n:
-            raise YastError('Tensor charges of blocked tensors are inconsistent.')
-        if tn.mfs != tn0.mfs or tn.hfs != tn0.hfs:
-            raise YastError('Fusion structures of blocked tensors are inconsistent.')
-        if tn.isdiag != tn0.isdiag:
-            raise YastError('Block can talk either only diagonal of only nondiagonal tensors.')
-
-    posa = np.ones((len(pos), tn0.ndim_n), dtype=int)
-    posa[:, np.array(out_b, dtype=np.intp)] = np.array(pos, dtype=int).reshape(len(pos), -1)
-
-    tDs = []  # {leg: {charge: {position: D, 'D' : Dtotal}}}
-    for n in range(tn0.ndim_n):
-        tDl = {}
-        for tn, pp in zip(tensors.values(), posa):
-            tDn = tn.get_leg_structure(n, native=True)
-            for t, D in tDn.items():
-                if t in tDl:
-                    if (pp[n] in tDl[t]) and (tDl[t][pp[n]] != D):
-                        raise YastError('Dimensions of blocked tensors are not consistent')
-                    tDl[t][pp[n]] = D
-                else:
-                    tDl[t] = {pp[n]: D}
-        for t, pD in tDl.items():
-            ps = sorted(pD.keys())
-            Ds = [pD[p] for p in ps]
-            tDl[t] = {p: (aD - D, aD) for p, D, aD in zip(ps, Ds, accumulate(Ds))}
-            tDl[t]['Dtot'] = sum(Ds)
-        tDs.append(tDl)
-
-    # all unique blocks
-    # meta_new = {tind: Dtot};  #meta_block = [(tind, pos, Dslc)]
-    meta_new, meta_block = {}, []
-    for pind, pa in zip(tensors, posa):
-        a = tensors[pind]
-        tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-        for tind, slind, Dind, t in zip(a.struct.t, a.struct.sl, a.struct.D, tset):
-            if tind not in meta_new:
-                meta_new[tind] = tuple(tDs[n][tuple(t[n].flat)]['Dtot'] for n in range(a.ndim_n))
-            meta_block.append((tind, slind, Dind, pind, tuple(tDs[n][tuple(t[n].flat)][pa[n]] for n in range(a.ndim_n))))
-    meta_block = tuple(sorted(meta_block, key=lambda x: x[0]))
-    meta_new = tuple(sorted(meta_new.items()))
-    c_t = tuple(t for t, _ in meta_new)
-    c_D = tuple(D for _, D in meta_new)
-    c_Dp = tuple(np.prod(c_D, axis=1))
-    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-    c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
-    meta_new = tuple(zip(c_t, c_D, c_sl))
-    Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
-
-    data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, Dsize)
-    return tn0._replace(struct=c_struct, data=data)
+        raise YastError('val should be in ("zeros", "ones", "rand") or an array of the correct size')
+    x = config.backend.to_tensor(val, Ds=Dsize, dtype=dtype, device=device)
+    if config.backend.get_size(x) == Dsize ** 2:
+        x = config.backend.diag_get(x.reshape(Dsize, Dsize))
+    return x

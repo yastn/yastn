@@ -4,20 +4,21 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _mf_to_ntree, _struct, _flatten
 from ._tests import YastError
 from ..sym import sym_none
-from ._legs import Leg, _metaLeg
+from ._legs import Leg, leg_union, _leg_fusions_need_mask
+from ._merging import _embed_tensor
 
 
-__all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5',
-            'leg_structures_for_dense', 'requires_grad']
+__all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5', 'requires_grad']
 
 
 def save_to_dict(a):
     r"""
-    Export relevant information about tensor to dictionary. Such dictionary can be then
-    stored in file using i.e. numpy.save
+    Export YAST tensor to dictionary.
 
     Returns
     -------
+    a: yast.Tensor
+        tensor to export
     d: dict
         dictionary containing all the information needed to recreate the tensor.
     """
@@ -35,7 +36,10 @@ def save_to_hdf5(a, file, path):
 
     Parameters
     ----------
-    ADD DESCRIPTION
+    a : yast.Tensor
+        tensor to export
+    
+    TODO
     """
     _d = a.config.backend.to_numpy(a._data)
     hfs = [tuple(hf) for hf in a.hfs]
@@ -51,16 +55,26 @@ def save_to_hdf5(a, file, path):
 
 def compress_to_1d(a, meta=None):
     """
-    Store each block as 1D array within r1d in contiguous manner (do not clone the data if not necceaary);
-    outputs meta-information to reconstruct the original tensor
+    Store each block within 1D array in contiguous manner 
+    (without cloning the data if not necessary) and 
+    create metadata allowing re-creation of the original tensor.
 
     Parameters
     ----------
+        a: yast.Tensor
+            tensor to export
         meta: dict
-            If not None, uses this metainformation to merge into 1d structure,
-            filling-in zeros if tensor does not have some blocks.
-            Raise error if tensor has some blocks which are not included in meta or otherwise
+            If not None, uses this extra information to fill-in extra zero blocks
+            not present in the tensor but allowed by the symmetry.
+            Raises error if tensor has some blocks which are not included in meta or otherwise
             meta does not match the tensor.
+
+    Returns
+    -------
+    tensor (type derived from backend)
+        1D array with tensor data
+    dict
+        metadata with structure of the symmetric tensor
     """
     if meta is None:
         meta = {'struct': a.struct, 'hfs': a.hfs,
@@ -84,7 +98,7 @@ def compress_to_1d(a, meta=None):
     while ia < len(a.struct.t):
         if a.struct.t[ia] < meta['struct'].t[im] or im >= len(meta['struct'].t):
             raise YastError("Tensor has blocks that do not appear in meta.")
-        elif a.struct.t[ia] == meta['struct'].t[im]:
+        if a.struct.t[ia] == meta['struct'].t[im]:
             meta_merge.append((meta['struct'].sl[im], a.struct.sl[ia]))
             ia += 1
             im += 1
@@ -132,7 +146,9 @@ def show_properties(a):
 
 
 def __str__(a):
-    ts, Ds = a.get_leg_charges_and_dims(native=False)
+    legs = a.get_legs()
+    ts = tuple(leg.t for leg in legs)
+    Ds = tuple(leg.D for leg in legs)
     s = f"{a.config.sym.SYM_ID} s= {a.struct.s} n= {a.struct.n}\n"
     s += f"leg charges  : {ts}\n"
     s += f"dimensions   : {Ds}"
@@ -171,7 +187,7 @@ def get_tensor_charge(a):
     """
     Returns
     -------
-    n : int or tuple(int)
+    int or tuple[int]
         see :attr:`yast.Tensor.n`
     """
     return a.struct.n
@@ -181,7 +197,7 @@ def get_signature(a, native=False):
     """
     Returns
     -------
-    s : tuple
+    tuple[int]
         Tensor signature, equivalent to :attr:`yast.Tensor.s`.
         If native, returns the signature of tensors's native legs, see :attr:`yast.Tensor.s_n`.
     """
@@ -192,7 +208,7 @@ def get_rank(a, native=False):
     """
     Returns
     -------
-    n : int
+    int
         Tensor rank equivalent to :attr:`yast.Tensor.ndim`.
         If native, the native rank of the tensor is returned, see :attr:`yast.Tensor.ndim_n`.
     """
@@ -220,25 +236,25 @@ def get_blocks_shape(a):
     return a.struct.D
 
 
-def get_shape(a, axes=None, native=False):
+def get_shape(a, axis=None, native=False):
     r"""
-    Return total bond dimension, sum of dimensions along sectors, of meta legs.
+    Return effective bond dimensions as sum of dimensions along sectors for each leg.
 
     Parameters
     ----------
-    axes : Int or tuple of ints
-        indices of legs; If axes is None returns all (default).
+    axis : int or tuple[int]
+        indices of legs; If axis is ``None`` returns for all legs (default).
 
     Returns
     -------
-    shape : Int or tuple(int)
-        shapes of legs specified by axes
+    shape : int or tuple[int]
+        effective bond dimensions of legs specified by axes
     """
-    if axes is None:
-        axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
-    if isinstance(axes, int):
-        return sum(a.get_leg_structure(axes, native=native).values())
-    return tuple(sum(a.get_leg_structure(ii, native=native).values()) for ii in axes)
+    if axis is None:
+        axis = tuple(n for n in range(a.ndim_n if native else a.ndim))
+    if isinstance(axis, int):
+        return sum(a.get_legs(axis, native=native).D)
+    return tuple(sum(leg.D) for leg in a.get_legs(axis, native=native))
 
 
 def get_dtype(a):
@@ -255,22 +271,23 @@ def __getitem__(a, key):
     """
     Parameters
     ----------
-    key : tuple(int)
-        charges of the block
+    key : tuple[int] or tuple[tuple[int]]
+        charges of the block.
 
     Returns
     -------
-    out : tensor
-        The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
-        Output 1d array for diagonal tensor, otherwise reshape into n-dim array.
+    tensor-like
+        The type of the returned tensor depends on the backend, for example 
+        :class:`numpy.ndarray` or :class:`torch.Tensor`.
+        In case of diagonal tensor, returns 1D array.
     """
     key = tuple(_flatten(key))
     try:
         ind = a.struct.t.index(key)
-    except ValueError:
-        raise YastError('tensor does not have block specify by key')
+    except ValueError as exc:
+        raise YastError('tensor does not have block specify by key') from exc
     x = a._data[slice(*a.struct.sl[ind])]
-    
+
     # TODO this should be reshape called from backend ?
     return x if a.isdiag else x.reshape(a.struct.D[ind])
 
@@ -281,6 +298,9 @@ def __getitem__(a, key):
 
 def get_leg_fusion(a, axes=None):
     """
+    .. deprecated::
+        to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.
+
     Fusion trees for meta legs.
 
     Parameters
@@ -295,27 +315,27 @@ def get_leg_fusion(a, axes=None):
     return {'meta': tuple(a.mfs(n) for n in axes), 'hard': tuple(a.hfs(n) for n in axes)}
 
 
-def get_leg(a, axis, native=False):
+def get_legs(a, axis=None, native=False):
     r"""
-    Find all charges and the corresponding bond dimension for n-th leg.
+    Return a leg or a set of legs of a Tensor.
 
     Parameters
     ----------
-    axis : int or tuple of ints
-        Index of a leg.
+    axis : int or tuple[int] or None
+        indices of legs to retrieve. If ``None`` return list with all legs.
 
     native : bool
-        consider native legs if True; otherwise meta/fused legs (default).
+        consider native legs if ``True``; otherwise returns fused legs (default).
 
     Returns
     -------
-        _Leg or _metaLeg (for nontrivial meta fusion) if axis is int
-        Return tuple of such objects if axis is tuple/list of ints
+        Leg if axis is `int`, otherwise tuple[Leg].
     """
     legs = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
-
+    if axis is None:
+        axis = tuple(range(a.ndim))
     axes, = _clear_axes(axis)
     for ax in axes:
         legs_ax = []
@@ -328,13 +348,15 @@ def get_leg(a, axis, native=False):
             tseta = tset[:, i, :].reshape(len(tset), a.config.sym.NSYM)
             Dseta = Dset[:, i].reshape(-1)
             tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tseta, Dseta)}
-            for tn, Dn in zip(tseta, Dseta):
-                if tDn[tuple(tn.flat)] != Dn:
-                    raise YastError('Inconsistend bond dimension of charge.')
             t, D = tuple(tDn.keys()), tuple(tDn.values())
-            legs_ax.append(Leg(a.config, s=a.struct.s[i], t=t, D=D))
+            legs_ax.append(Leg(a.config, s=a.struct.s[i], t=t, D=D, legs=(a.hfs[i],)))
         if not native and mf[0] > 1:
-            legs.append(_metaLeg(legs=tuple(legs_ax), mf=mf))
+            tseta = tset[:, nax, :].reshape(len(tset), len(nax) * a.config.sym.NSYM)
+            Dseta = np.prod(Dset[:, nax], axis=1, dtype=int)
+            tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tseta, Dseta)}
+            t = tuple(sorted(tDn.keys()))
+            D = tuple(tDn[x] for x in t)
+            legs.append(Leg(a.config.sym, s=legs_ax[0].s, t=t, D=D, fusion=mf, legs=tuple(legs_ax), _verified=True))
         else:
             legs.append(legs_ax.pop())
     return tuple(legs) if hasattr(axis, '__iter__') else legs.pop()
@@ -342,6 +364,9 @@ def get_leg(a, axis, native=False):
 
 def get_leg_structure(a, axis, native=False):
     r"""
+    .. deprecated::
+        to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.
+
     Find all charges and the corresponding bond dimension for n-th leg.
 
     Parameters
@@ -367,14 +392,16 @@ def get_leg_structure(a, axis, native=False):
     Dset = np.prod(Dset, axis=1, dtype=int) if len(axis) > 1 else Dset.reshape(-1)
 
     tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tset, Dset)}
-    for tn, Dn in zip(tset, Dset):
-        if tDn[tuple(tn.flat)] != Dn:
-            raise YastError('Inconsistend bond dimension of charge.')
     return tDn
 
 
 def get_leg_charges_and_dims(a, native=False):
-    """ collect information about charges and dimensions on all legs into two lists. """
+    """ 
+    .. deprecated::
+        to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.
+
+    Collect information about charges and dimensions on all legs into two lists. 
+    """
     _tmp = [a.get_leg_structure(n, native=native) for n in range(a.ndim_n if native else a.ndim)]
     _tmp = [{k: lst[k] for k in sorted(lst)} for lst in _tmp]
     ts_and_Ds= tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
@@ -384,90 +411,24 @@ def get_leg_charges_and_dims(a, native=False):
     return ts, Ds
 
 
-def leg_structures_for_dense(tensors=(), native=False, leg_structures=None):
-    r"""
-    Combine and output charges and bond dimensions from legs of provided tensors.
-    Auxliary function to ```tensor.to_dense``` and ```tensor.to_numpy```,
-    to create dense tensors with consistent dimensions (charge sectors)
-
-    Rises exception if there are some inconsistencies in bond dimensions.
-
-    Parameters
-    ----------
-    tensors : list
-        [reference_tensor, {leg of reference_tensor: leg of tensor to be made dense}]
-        If dict not present, assumes {n: n for n in reference_tensor.ndim_n}
-
-    native: bool
-        output data for native tensor (neglecting meta fusions).
-    """
-    lss = {}
-    itensors = iter(tensors)
-    a = next(itensors, None)
-    while a is not None:
-        b = next(itensors, None)
-        if isinstance(b, dict):
-            for la, lo in b.items():
-                if lo in lss:
-                    lss[lo].append(a.get_leg_structure(la, native=native))
-                else:
-                    lss[lo] = [a.get_leg_structure(la, native=native)]
-            a = next(itensors, None)
-        else:
-            for n in range(a.ndim_n if native else a.ndim):
-                if n in lss:
-                    lss[n].append(a.get_leg_structure(n, native=native))
-                else:
-                    lss[n] = [a.get_leg_structure(n, native=native)]
-            a = b
-
-    if leg_structures is not None:
-        for n, ls in leg_structures.items():
-            if n in lss:
-                lss[n].append(ls)
-            else:
-                lss[n] = [ls]
-
-    for lo in lss:
-        lss[lo] = leg_structures_union(*lss[lo])
-    return lss
-
-
-def leg_structures_union(*args):
-    """
-    Makes a union of leg structures {t: D} specified in args.
-
-    Raise error if there are inconsistencies.
-    """
-    ls_out = {}
-    len_t = -1
-    for tD in args:
-        for t, D in tD.items():
-            if (t in ls_out) and ls_out[t] != D:
-                raise YastError(f'Bond dimensions for charge {t} are inconsistent.')
-            ls_out[t] = D
-            if len(t) != len_t and len_t >= 0:
-                raise YastError('Inconsistent charge structure. Likely mixing merged and native legs.')
-            len_t = len(t)
-    return ls_out
-
-
 ############################
 #   Down-casting tensors   #
 ############################
 
-def to_dense(a, leg_structures=None, native=False, reverse=False):
+def to_dense(a, legs=None, native=False, reverse=False):
     r"""
     Create dense tensor corresponding to the symmetric tensor.
 
     Blocks are ordered according to increasing charges on each leg.
-    It is possible to supply a list of additional charge sectors with dimensions to be included.
-    (should be consistent with the tensor). This allows to fill in some explicit zero blocks.
+    It is possible to supply a list of additional charge sectors to be included by explictly
+    specifying `legs`. These legs should be consistent with current structure of the tensor. 
+    This allows to fill in extra zero blocks.
 
     Parameters
     ----------
-    leg_structures : dict
-        {n: {tn: Dn}} specify charges and dimensions to include on some legs (indicated by keys n).
+    legs : dict[int, yast.Leg]
+        specify extra charge sectors on the legs by adding desired :class:`yast.Leg`
+        under legs's index into dictionary.
 
     native: bool
         output native tensor (ignoring fusion of legs).
@@ -481,22 +442,23 @@ def to_dense(a, leg_structures=None, native=False, reverse=False):
     out : tensor
         The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
-    c = a.to_nonsymmetric(leg_structures, native, reverse)
+    c = a.to_nonsymmetric(legs, native, reverse)
     x = c.config.backend.clone(c._data)
     x = c.config.backend.diag_create(x) if c.isdiag else x.reshape(c.struct.D[0])
     return x
 
 
-def to_numpy(a, leg_structures=None, native=False, reverse=False):
+def to_numpy(a, legs=None, native=False, reverse=False):
     r"""
-    Create full ``numpy.ndarray`` corresponding to the symmetric tensor. See :func:`yast.to_dense`
+    Create dense :class:`numpy.ndarray`` corresponding to the symmetric tensor. 
+    See :func:`yast.to_dense`.
 
     Returns
     -------
-    out : numpy.ndarray
-        NumPy array equivalent to symmetric tensor
+    numpy.ndarray
+        dense NumPy array equivalent to symmetric tensor
     """
-    return a.config.backend.to_numpy(a.to_dense(leg_structures, native, reverse))
+    return a.config.backend.to_numpy(a.to_dense(legs, native, reverse))
 
 
 def to_raw_tensor(a):
@@ -506,7 +468,7 @@ def to_raw_tensor(a):
 
     Returns
     -------
-    out : tensor
+    out : tensor-like
         The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
     if len(a.struct.D) == 1:
@@ -514,26 +476,28 @@ def to_raw_tensor(a):
     raise YastError('Only tensor with a single block can be converted to raw tensor')
 
 
-def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
+def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     r"""
     Create equivalent ``yast.Tensor`` with no explict symmetry. All blocks of the original
     tensor are accummulated into a single block.
 
     Blocks are ordered according to increasing charges on each leg.
-    It is possible to supply a list of additional charge sectors with dimensions to be included.
-    (should be consistent with the tensor). This allows to fill in some explicit zero blocks.
+    It is possible to supply a list of additional charge sectors to be included by explictly
+    specifying `legs`. These legs should be consistent with current structure of the tensor. 
+    This allows to fill in extra zero blocks.
 
     .. note::
-        yast structure can be redundant since resulting tensor is effectively just
-        a single dense block. If that's the case, use :meth:`yast.Tensor.to_dense`.
+        YAST structure is redundant since resulting tensor is effectively just
+        a single dense block. To obtain this single dense block directly, use :meth:`yast.Tensor.to_dense`.
 
     Parameters
     ----------
-    leg_structures : dict
-        {n: {tn: Dn}} specify charges and dimensions to include on some legs (indicated by keys n).
+    legs : dict[int, yast.Leg]
+        specify extra charge sectors on the legs by adding desired :class:`yast.Leg`
+        under legs's index into dictionary.
 
     native: bool
-        output native tensor (ignoring fusion of legs).
+        output native tensor (ignoring meta-fusion of legs).
 
     reverse: bool
         reverse the order in which blocks are sorted. Default order is ascending in
@@ -541,33 +505,38 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
 
     Returns
     -------
-    out : Tensor
-        the config of returned tensor does not use any symmetry
+    yast.Tensor
+        tensor with no explicit symmetry
     """
     config_dense = a.config._replace(sym=sym_none)
 
     ndim = a.ndim_n if native else a.ndim
-    tD = [a.get_leg_structure(n, native=native) for n in range(ndim)]
-    if leg_structures is not None:
-        for n, tDn in leg_structures.items():
-            if (n < 0) or (n >= ndim):
-                raise YastError('Specified leg out of ndim')
-            tD[n] = leg_structures_union(tD[n], tDn)
-    Dtot = tuple(sum(tDn.values()) for tDn in tD)
-    for tDn in tD:
-        tns = sorted(tDn.keys(), reverse=reverse)
-        Dlow = 0
-        for tn in tns:
-            Dhigh = Dlow + tDn[tn]
+    legs_a = list(a.get_legs(range(ndim), native=native))
+    if legs is not None:
+        if any((n < 0) or (n >= ndim) for n in legs.keys()):
+            raise YastError('Specified leg out of ndim')
+        legs_new = {n: leg_union(legs_a[n], leg) for n, leg in legs.items()}
+        if any(_leg_fusions_need_mask(leg, legs_a[n]) for n, leg in legs_new.items()):
+            a = _embed_tensor(a, legs_a, legs_new)  # mask needed
+        for n, leg in legs_new.items():
+            legs_a[n] = leg
+
+    Dtot = tuple(sum(leg.D) for leg in legs_a)
+    tD, step = [], -1 if reverse else 1
+    for n, leg in enumerate(legs_a):
+        Dlow, tDn = 0, {}
+        for tn, Dn in zip(leg.t[::step], leg.D[::step]):
+            Dhigh = Dlow + Dn
             tDn[tn] = (Dlow, Dhigh)
             Dlow = Dhigh
+        tD.append(tDn)
     axes = tuple((n,) for n in range(ndim))
     if not native:
         axes = tuple(_unpack_axes(a.mfs, *axes))
     meta = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     for t_sl, tt in zip(a.struct.sl, tset):
-        meta.append((slice(*t_sl), tuple(tD[n][tuple(tt[m, :].flat)] for n, m in enumerate(axes))))
+        meta.append((slice(*t_sl), tuple(tD[n][tuple(tt[ax, :].flat)] for n, ax in enumerate(axes))))
     if a.isdiag:
         Dtot = Dtot[:1]
         meta = [(sl, D[:1]) for sl, D in meta]
@@ -581,6 +550,73 @@ def to_nonsymmetric(a, leg_structures=None, native=False, reverse=False):
     c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
+
+
+# def to_nonsymmetric(a, legs=None, native=False, reverse=False):
+#     r"""
+#     Create equivalent ``yast.Tensor`` with no explict symmetry. All blocks of the original
+#     tensor are accummulated into a single block.
+
+#     Blocks are ordered according to increasing charges on each leg.
+#     It is possible to supply a list of additional charge sectors with dimensions to be included.
+#     (should be consistent with the tensor). This allows to fill in some explicit zero blocks.
+
+#     .. note::
+#         yast structure can be redundant since resulting tensor is effectively just
+#         a single dense block. If that's the case, use :meth:`yast.Tensor.to_dense`.
+
+#     Parameters
+#     ----------
+#     legs : dict
+#         {n: Leg} specify charges and dimensions to include on some legs (indicated by keys n).
+
+#     native: bool
+#         output native tensor (ignoring meta-fusion of legs).
+
+#     reverse: bool
+#         reverse the order in which blocks are sorted. Default order is ascending in
+#         values of block's charges.
+
+#     Returns
+#     -------
+#     out : yast.Tensor
+#         returned tensor does not use any symmetry
+#     """
+#     config_dense = a.config._replace(sym=sym_none)
+#     a = a.embed(legs=legs)
+#     a_legs = a.get_legs(native=native)
+
+#     Dtot = tuple(sum(leg.D) for leg in a_legs)
+#     tD, step = [], -1 if reverse else 1
+#     for n, leg in enumerate(a_legs):
+#         Dlow, tDn = 0, {}
+#         for tn, Dn in zip(leg.t[::step], leg.D[::step]):
+#             Dhigh = Dlow + Dn
+#             tDn[tn] = (Dlow, Dhigh)
+#             Dlow = Dhigh
+#         tD.append(tDn)
+#     if native:
+#         axes = tuple((n,) for n in range(a.ndim_n))
+#     else:
+#         axes = tuple((n,) for n in range(a.ndim))
+#         axes = tuple(_unpack_axes(a.mfs, *axes))
+#     meta = []
+#     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+#     for t_sl, tt in zip(a.struct.sl, tset):
+#         meta.append((slice(*t_sl), tuple(tD[n][tuple(tt[ax, :].flat)] for n, ax in enumerate(axes))))
+#     if a.isdiag:
+#         Dtot = Dtot[:1]
+#         meta = [(sl, D[:1]) for sl, D in meta]
+
+#     c_s = a.get_signature(native)
+#     c_t = ((),)
+#     c_D = (Dtot,) if not a.isdiag else (Dtot + Dtot,)
+#     Dp = np.prod(Dtot, dtype=int)
+#     c_Dp = (Dp,)
+#     c_sl = ((0, Dp),)
+#     c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+#     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
+#     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
 
 
 def zero_of_dtype(a):
@@ -614,7 +650,7 @@ def to_number(a, part=None):
     elif size == 0:
         x = a.zero_of_dtype()
     else:
-        raise YastError('Specified bond dimensions inconsistent with tensor.')
+        raise YastError('Only single-element (symmetric) Tensor can be converted to scalar')
     return a.config.backend.real(x) if part == 'real' else x
 
 
@@ -634,4 +670,4 @@ def item(a):
         return a.config.backend.item(a._data)
     if size == 0:
         return 0
-    raise YastError("only single-element (symmetric) Tensor can be converted to scalar")
+    raise YastError("Only single-element (symmetric) Tensor can be converted to scalar")

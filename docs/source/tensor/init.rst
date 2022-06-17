@@ -6,21 +6,24 @@ Initializing symmetric tensors from scratch
 
 Symmetric tensor can be initialized as "blank" or more precisely empty.
 In this case only its rank (specified through signature) and symmetry
-needs to known when initializing such empty symmetric tensors. 
+needs to be known when initializing such empty symmetric tensors.
 The data, in form of non-zero blocks, can be added at later time.
 
 See examples: :ref:`examples/tensor/init:create empty tensor and fill it block by block`.
 
 .. autoclass:: yast.Tensor
-	:members: __init__
-	:exclude-members: __new__
 
+.. automethod:: yast.Tensor.set_block
 
 Basic creation operations
 -------------------------
 
 Basic creation operations such as random tensors,
 tensors filled with zeros, or diagonal identity tensors.
+
+The symmetry structure of the tensor can be given either
+by directly listing all charge sectors for each leg and dimensions
+of these sectors `or` by passing a list of legs.
 
 See examples: :ref:`examples/tensor/init:create tensors from scratch`.
 
@@ -32,48 +35,48 @@ See examples: :ref:`examples/tensor/init:create tensors from scratch`.
 Copying and cloning with autograd
 ---------------------------------
 
-TODO add link
-
 YAST follows the semantics of PyTorch with regards to creating
 differentiable `clones` or non-differentiable `copies` of symmetric
-tensors.
+tensors. See 
+`clone <https://pytorch.org/docs/stable/generated/torch.clone.html#torch.clone>`_ 
+and 
+`detach <https://pytorch.org/docs/stable/generated/torch.Tensor.detach.html?highlight=detach#torch.Tensor.detach>`_ for PyTorch.
 
-See examples: :ref:`examples/tensor/init:clone, detach or copy tensors`.
+See YAST examples: :ref:`examples/tensor/init:clone, detach or copy tensors`.
 
-.. autoclass:: yast.Tensor
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: copy, clone, detach
+.. automethod:: yast.Tensor.copy
+.. automethod:: yast.Tensor.clone
+.. automethod:: yast.Tensor.detach
 
 
 Changing tensor's device or dtype
 ---------------------------------
 
 Support for different compute devices, i.e. `CPU`, `GPU`, or others,
-depends on the selected backend. For example 
-    
+depends on the selected backend. For example
+
     * `NumPy` backend supports only `CPU`
     * `PyTorch` backend supports also `GPU` (and other devices)
 
-Tensors can be moved between devices and/or their `dtype` changed 
+Tensors can be moved between devices and/or their `dtype` changed
 
 .. automethod:: yast.Tensor.to
 
 
-Importing YAST tensor from different formats
---------------------------------------------
+Import/Export of YAST tensors from/to different formats
+-------------------------------------------------------
 
 These utility operations can re-create tensors from
 different formats. For example, 1D representation or dictionary.
 Their export counterparts are
-	
+
 	* :meth:`yast.save_to_dict`
-	* :meth:`yast.save_to_hdf5` 
-	* :meth:`yast.compress_to_1d` 
+	* :meth:`yast.save_to_hdf5`
+	* :meth:`yast.compress_to_1d`
 
 See examples: :ref:`examples/tensor/init:serialization of symmetric tensors`.
 
 .. automodule:: yast
-   :members: load_from_dict, load_from_hdf5, decompress_from_1d
-   :noindex:
+   :members: load_from_dict, load_from_hdf5, decompress_from_1d,
+             save_to_dict, save_to_hdf5, compress_to_1d
    :show-inheritance:
