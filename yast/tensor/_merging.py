@@ -463,8 +463,8 @@ def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb)
         ma, mb = _intersect_hfs(config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (hfa[i1], hfb[i2]))
         msk_a.append(ma)
         msk_b.append(mb)
-    msk_a = _merge_masks(config, lsa, msk_a)
-    msk_b = _merge_masks(config, lsb, msk_b)
+    msk_a = _merge_masks_outer(config, lsa, msk_a)
+    msk_b = _merge_masks_outer(config, lsb, msk_b)
     for t, x in msk_a.items():
         msk_a[t] = config.backend.to_mask(x)
     for t, x in msk_b.items():
@@ -664,20 +664,43 @@ def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
     return _Fusion(tree=tuple(treefl), op=opfl, s=tuple(sfl), t=tuple(tfl), D=tuple(Dfl))
 
 
-def _merge_masks(config, ls, ms, op='p'):
-    """ combine masks using information from LegDec"""
+def _sum_hfs(hfs, t_in, D_in, s_out):
+    if len(hfs) == 1:
+        return hfs[0]
+    tfl, Dfl, sfl = [], [], [s_out]
+    opfl = 's'  # sum
+    treefl = [sum(hf.tree[0] for hf in hfs)]
+    for t, D, hf in zip(t_in, D_in, hfs):
+        if hf.op[0] != 's':
+            ds = 0
+            tfl.append(t)
+            Dfl.append(D)
+        else:  #  hf.op[0] == 's':
+            ds = 1
+        tfl.extend(hf.t)
+        Dfl.extend(hf.D)
+        sfl.extend(hf.s[ds:])
+        treefl.extend(hf.tree[ds:])
+        opfl += hf.op[ds:]
+    return _Fusion(tree=tuple(treefl), op=opfl, s=tuple(sfl), t=tuple(tfl), D=tuple(Dfl))
+
+
+def _merge_masks_outer(config, ls, ms):
+    """ combine masks using information from LegDec; perform product of spaces / leg fusion. """
     msk = {te: np.ones(D, dtype=bool) for te, D in ls.Dtot.items()}
-    if op == 'p':
-        nsym = config.sym.NSYM
-        for te, dec in ls.dec.items():
-            for t, Dr in dec.items():
-                msk[te][slice(*Dr.Dslc)] = _outer_masks(t, ms, nsym)
-    elif op == 's':
-        for te, dec in ls.dec.items():
-            for n, Dr in dec.items():
-                msk[te][slice(*Dr.Dslc)] = ms[n][te]
-    else:
-        raise YastError('THIS SHOULD NOT HAVE HAPPEND')
+    nsym = config.sym.NSYM
+    for te, dec in ls.dec.items():
+        for t, Dr in dec.items():
+            msk[te][slice(*Dr.Dslc)] = _outer_masks(t, ms, nsym)
+    return msk
+
+
+def _merge_masks_sum(ls, ms):
+    """ combine masks using information from LegDec; perform sum of spaces / blocking of legs."""
+    msk = {te: np.ones(D, dtype=bool) for te, D in ls.Dtot.items()}
+    for te, dec in ls.dec.items():
+        for n, Dr in dec.items():
+            msk[te][slice(*Dr.Dslc)] = ms[n][te]
     return msk
 
 
@@ -740,10 +763,8 @@ def _intersect_hfs(config, ts, Ds, hfs):
                 leg, nlegs, count = leg + 1, nlegs + 1, count - 1
             if count == 0:
                 break
-        op = op[:ltree - nlegs + 1] + op[ltree + 1 :]
-        for _ in range(nlegs):  # remove leafs at position ltree - nlegs + 1: ltree + 1
-            tree.pop(ltree - nlegs + 1)
-        assert len(tree) == len(op)
+        del op[ltree - nlegs + 1: ltree + 1]  # remove leafs
+        del tree[ltree - nlegs + 1: ltree + 1]  # remove leafs
         for i in parents:
             tree[i] -= nlegs - 1
         ss = [tuple(s1.pop(ltree - nlegs + 1) for _ in range(nlegs)) for s1 in s]
@@ -753,11 +774,10 @@ def _intersect_hfs(config, ts, Ds, hfs):
         if op[ltree - nlegs] == 'p':
             lss = [_leg_structure_combine_charges_prod(config.sym, tt1, DD1, ss1, t1[ltree - nlegs], s1[ltree - nlegs])
                    for tt1, DD1, ss1, t1, s1 in zip(tt, DD, ss, t, s)]
-        elif op[ltree - nlegs] == 's':
+            ma = [_merge_masks_outer(config, ls1, ms1) for ls1, ms1 in zip(lss, mss)]
+        else: # op[ltree - nlegs] == 's':
             lss = [_leg_structure_combine_charges_sum(tt1, DD1) for tt1, DD1, in zip(tt, DD)]
-        else:
-            raise YastError('SHOULD NOT HAVE HAPPEND')
-        ma = [_merge_masks(config, ls1, ms1, op=op[ltree - nlegs]) for ls1, ms1 in zip(lss, mss)]
+            ma = [_merge_masks_sum(ls1, ms1) for ls1, ms1 in zip(lss, mss)]
         _mask_falsify_mismatches(ma[0], ma[1])
         msks[0].insert(leg - nlegs, ma[0])
         msks[1].insert(leg - nlegs, ma[1])
@@ -773,6 +793,7 @@ def _union_hfs(config, ts, Ds, hfs):
     """
     tree = list(hfs[0].tree)
     s = list(hfs[0].s)  # to be consumed during parsing of the tree
+    op = list(hfs[0].op) # to be consumed during parsing of the tree
 
     if len(tree) == 1:
         hfu = _Fusion(s=hfs[0].s)
@@ -810,28 +831,37 @@ def _union_hfs(config, ts, Ds, hfs):
                 leg, nlegs, count = leg + 1, nlegs + 1, count - 1
             if count == 0:
                 break
-        for _ in range(nlegs):  # remove leafs
-            tree.pop(ltree - nlegs + 1)
-            t1.pop(ltree - nlegs + 1)
-            t2.pop(ltree - nlegs + 1)
+        del op[ltree - nlegs + 1: ltree + 1]  # remove leafs
+        del tree[ltree - nlegs + 1: ltree + 1]
+        del t1[ltree - nlegs + 1: ltree + 1]
+        del t2[ltree - nlegs + 1: ltree + 1]
         for i in parents:
             tree[i] -= nlegs - 1
         s_in = tuple(s.pop(ltree - nlegs + 1) for _ in range(nlegs))
         t_in = tuple(tu.pop(leg - nlegs) for _ in range(nlegs))
         D_in = tuple(Du.pop(leg - nlegs) for _ in range(nlegs))
         t_out = tuple(sorted(set(t1[ltree - nlegs]) | set(t2[ltree - nlegs])))
+        hh = [hfu.pop(leg - nlegs) for _ in range(nlegs)]
+        ms1_in = [msk1.pop(leg - nlegs) for _ in range(nlegs)]
+        ms2_in = [msk2.pop(leg - nlegs) for _ in range(nlegs)]
         s_out = s[ltree - nlegs]
-        ls = _leg_structure_combine_charges_prod(config.sym, t_in, D_in, s_in, t_out, s_out)
-        ma1 = _merge_masks(config, ls, [msk1.pop(leg - nlegs) for _ in range(nlegs)])
-        ma2 = _merge_masks(config, ls, [msk2.pop(leg - nlegs) for _ in range(nlegs)])
+
+        if op[ltree - nlegs] == 'p':
+            ls = _leg_structure_combine_charges_prod(config.sym, t_in, D_in, s_in, t_out, s_out)
+            ma1 = _merge_masks_outer(config, ls, ms1_in)
+            ma2 = _merge_masks_outer(config, ls, ms2_in)
+            hfu.insert(leg - nlegs, _fuse_hfs(hh, t_in, D_in, s_out))
+        else:  # op[ltree - nlegs] == 's':
+            ls = _leg_structure_combine_charges_sum(t_in, D_in)
+            ma1 = _merge_masks_sum(ls, ms1_in)
+            ma2 = _merge_masks_sum(ls, ms2_in)
+            hfu.insert(leg - nlegs, _sum_hfs(hh, t_in, D_in, s_out))
         for ind in ma1.keys() - set(t1[ltree - nlegs]):
             ma1[ind] *= False
         for ind in ma2.keys() - set(t2[ltree - nlegs]):
             ma2[ind] *= False
         msk1.insert(leg - nlegs, ma1)
         msk2.insert(leg - nlegs, ma2)
-        hh = [hfu.pop(leg - nlegs) for _ in range(nlegs)]
-        hfu.insert(leg - nlegs, _fuse_hfs(hh, t_in, D_in, s_out))
         t_out, D_out = zip(*ls.Dtot.items())
         tu.insert(leg - nlegs, t_out)
         Du.insert(leg - nlegs, D_out)
@@ -844,8 +874,9 @@ def _pure_hfs_union(sym, ts, hfs):
     """
     tree = list(hfs[0].tree)
     s = list(hfs[0].s)  # to be consumed during parsing of the tree
+    op = list(hfs[0].op) # to be consumed during parsing of the tree
 
-    if any(hfs[0].tree != hf.tree for hf in hfs):
+    if any(hfs[0].tree != hf.tree or hfs[0].op != hf.op for hf in hfs):
         raise YastError("Inconsistent numbers of hard-fused legs or sub-fusions order.")
     if any(hfs[0].s != hf.s for hf in hfs):
         raise YastError("Inconsistent signatures of fused legs.")
@@ -876,10 +907,10 @@ def _pure_hfs_union(sym, ts, hfs):
                 leg, nlegs, count = leg + 1, nlegs + 1, count - 1
             if count == 0:
                 break
-        for _ in range(nlegs):  # remove leafs
-            tree.pop(ltree - nlegs + 1)
-            for x in tss:
-                x.pop(ltree - nlegs + 1)
+        del op[ltree - nlegs + 1: ltree + 1]  # remove leafs
+        del tree[ltree - nlegs + 1: ltree + 1]
+        for ti in tss:
+            del ti[ltree - nlegs + 1: ltree + 1]
         for i in parents:
             tree[i] -= nlegs - 1
         s_in = tuple(s.pop(ltree - nlegs + 1) for _ in range(nlegs))
@@ -887,9 +918,13 @@ def _pure_hfs_union(sym, ts, hfs):
         D_in = tuple(Du.pop(leg - nlegs) for _ in range(nlegs))
         t_out = tuple(sorted(set.union(*(set(x[ltree - nlegs]) for x in tss))))
         s_out = s[ltree - nlegs]
-        ls = _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, t_out, s_out)
         hh = [hfu.pop(leg - nlegs) for _ in range(nlegs)]
-        hfu.insert(leg - nlegs, _fuse_hfs(hh, t_in, D_in, s_out))
+        if op[ltree - nlegs] == 'p':
+            ls = _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, t_out, s_out)
+            hfu.insert(leg - nlegs, _fuse_hfs(hh, t_in, D_in, s_out))
+        else:  # op[ltree - nlegs] == 's':
+            ls = _leg_structure_combine_charges_sum(t_in, D_in)
+            hfu.insert(leg - nlegs, _sum_hfs(hh, t_in, D_in, s_out))
         t_out, D_out = zip(*ls.Dtot.items())
         tu.insert(leg - nlegs, t_out)
         Du.insert(leg - nlegs, D_out)

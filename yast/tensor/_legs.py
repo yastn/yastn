@@ -151,8 +151,8 @@ def leg_union(*legs):
     Output Leg that represent space being an union of spaces of a list of legs.
     """
     legs = list(legs)
-    # if len(legs) == 1:
-    #     return legs.pop()
+    if len(legs) == 1:
+        return legs.pop()
     if all(leg.fusion == 'hard' for leg in legs):
         return _leg_union(*legs)
     if all(isinstance(leg.fusion, tuple) for leg in legs):

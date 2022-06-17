@@ -6,7 +6,7 @@ from itertools import chain, repeat, accumulate
 import numpy as np
 from .tensor import Tensor, YastError
 from .tensor._auxliary import _struct, _config, _clear_axes, _unpack_axes, _unpack_legs
-from .tensor._merging import _Fusion, _leg_structure_combine_charges_sum, _embed_tensor
+from .tensor._merging import _Fusion, _leg_structure_combine_charges_sum, _embed_tensor, _sum_hfs
 from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
 
 
@@ -424,7 +424,7 @@ def block(tensors, common_legs=None):
         ulegs.append(legs_n)
         pn = sorted(legs_n.keys())
         lss.append(_leg_structure_combine_charges_sum(pn, [legs_n[p].t for p in pn], [legs_n[p].D for p in pn]))
-        hfs.append(_sum_hfs([legs_n[p] for p in pn]))
+        hfs.append(_sum_legs_hfs([legs_n[p] for p in pn]))
 
     for pind, pp in zip(tensors, posa):
         if any(_leg_fusions_need_mask(ulegs[n][pp[n]], leg) for n, leg in enumerate(legs_tn[pp])):
@@ -455,27 +455,35 @@ def block(tensors, common_legs=None):
     data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, Dsize)
     return tn0._replace(struct=c_struct, data=data, hfs=tuple(hfs))
 
+def _sum_legs_hfs(legs):
+    """ sum hfs based on info in legs"""
+    hfs = [leg.legs[0] for leg in legs]
+    t_in = [leg.t for leg in legs]
+    D_in = [leg.D for leg in legs]
+    s_out = legs[0].s
+    return _sum_hfs(hfs, t_in, D_in, s_out)
 
-def _sum_hfs(legs):
-    if len(legs) == 1:
-        return legs[0].legs[0]
-    tfl, Dfl, sfl = [], [], [legs[0].s]
-    opfl = 's'  # product 
-    hfs = [leg.legs[0] for leg in legs]    
-    treefl = [sum(hf.tree[0] for hf in hfs)]
-    for leg, hf in zip(legs, hfs):
-        if hf.op[0] != 's':
-            ds = 0
-            tfl.append(leg.t)
-            Dfl.append(leg.D)
-        else:  #  hf.op[0] == 's':
-            ds = 1
-        tfl.extend(hf.t)
-        Dfl.extend(hf.D)
-        sfl.extend(hf.s[ds:])
-        treefl.extend(hf.tree[ds:])
-        opfl += hf.op[ds:]
-    return _Fusion(tree=tuple(treefl), op=opfl, s=tuple(sfl), t=tuple(tfl), D=tuple(Dfl))
+
+# def _sum_hfs(legs):
+#     if len(legs) == 1:
+#         return legs[0].legs[0]
+#     tfl, Dfl, sfl = [], [], [legs[0].s]
+#     opfl = 's'  # product 
+#     hfs = [leg.legs[0] for leg in legs]    
+#     treefl = [sum(hf.tree[0] for hf in hfs)]
+#     for leg, hf in zip(legs, hfs):
+#         if hf.op[0] != 's':
+#             ds = 0
+#             tfl.append(leg.t)
+#             Dfl.append(leg.D)
+#         else:  #  hf.op[0] == 's':
+#             ds = 1
+#         tfl.extend(hf.t)
+#         Dfl.extend(hf.D)
+#         sfl.extend(hf.s[ds:])
+#         treefl.extend(hf.tree[ds:])
+#         opfl += hf.op[ds:]
+#     return _Fusion(tree=tuple(treefl), op=opfl, s=tuple(sfl), t=tuple(tfl), D=tuple(Dfl))
 
 # def block(tensors, common_legs=None):
 #     """

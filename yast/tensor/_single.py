@@ -6,7 +6,7 @@ from ._tests import YastError, _test_axes_all
 
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',
-           'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to', 'requires_grad_', 'grad']
+           'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to', 'requires_grad_', 'grad', 'drop_leg_history']
 
 
 def copy(a):
@@ -158,6 +158,33 @@ def flip_signature(a):
     struct = a.struct._replace(s=news, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)
     return a._replace(hfs=hfs, struct=struct)
+
+
+def drop_leg_history(a, axis=None):
+    r"""
+    Drops information about original structure of fused or blocked legs that have been combined into a selected tensor leg(s).
+
+    Makes a shallow copy of Tensor data.
+
+    Parameters
+    ----------
+        axis: int or tuple(int)
+            index of the leg, or a group of legs. Is None, drops information from all legs.
+
+    Returns
+    -------
+    tensor : Tensor
+    """
+    if axis is None:
+        axis = tuple(range(a.ndim))
+    else:
+        try: 
+            axis = tuple(axis)
+        except TypeError:
+            axis = (axis,)
+    uaxes, = _unpack_axes(a.mfs, axis)
+    hfs = tuple(_Fusion(s=(a.struct.s[n],)) if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
+    return a._replace(hfs=hfs)
 
 
 def transpose(a, axes):
@@ -382,46 +409,3 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0):
     struct = a.struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     data = a.config.backend.apply_slice(a._data, c_sl, old_sl)
     return a._replace(struct=struct, data=data)
-
-
-# def embed(a, legs=None, return_legs=False):
-#     r"""
-#     Create equivalent ``yast.Tensor``, where some zero blocks are explicitly added,
-#     to include all charges specified in provided legs.
-
-#     .. note::
-#         Utility function used in to_nonsymmetric(). Might potentially be usefull also for yast.block.
-
-#     Parameters
-#     ----------
-#     legs : dict
-#         {n: Leg} specify charges and dimensions to include on some legs (indicated by keys n).
-
-#     return_legs : bool
-#         if True, additionally return a tuple of legs of a new tensor.
-
-#     Returns
-#     -------
-#     out : yast.Tensor
-#         If embeding is not needed, return self
-#     """
-#     if legs is None:
-#         return a
-#     if any((n < 0) or (n >= a.ndim) for n in legs.keys()):
-#         raise YastError('Specified leg out of ndim')
-
-#     a_legs, perform_embeding = list(a.get_legs()), False
-#     for n, leg in legs.items():
-#         new_leg = leg_union(a_legs[n], leg)
-#         if new_leg != a_legs[n]:
-#             perform_embeding = True
-#         a_legs[n] = new_leg
-#     if perform_embeding:
-#         ulegs, _ = _unpack_legs(a_legs)
-#         t = tuple(leg.t for leg in ulegs)
-#         D = tuple(leg.D for leg in ulegs)
-#         hfs = tuple(leg.legs[0] for leg in ulegs)
-#         b = a._replace(hfs=hfs)
-#         b._fill_tensor(t=t, D=D, val='zeros')
-#         a = a + b
-#     return a

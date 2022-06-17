@@ -64,7 +64,7 @@ def _test_axes_match(a, b, sgn=1, axes=None):
 
     needs_mask = False  # for hard-fused legs
     for i1, i2 in zip(*uaxes):
-        if a.hfs[i1].tree != b.hfs[i2].tree:
+        if a.hfs[i1].tree != b.hfs[i2].tree or a.hfs[i1].op != b.hfs[i2].op:
             raise YastError('Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.')
         if any(s1 != sgn * s2 for s1, s2 in zip(a.hfs[i1].s, b.hfs[i2].s)):
             raise YastError('Signatures of hard-fused legs do not match.')
