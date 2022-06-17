@@ -12,10 +12,8 @@ The data, in form of non-zero blocks, can be added at later time.
 See examples: :ref:`examples/tensor/init:create empty tensor and fill it block by block`.
 
 .. autoclass:: yast.Tensor
-	:members: fill_tensor, set_block
-	:special-members: __init__
-	:exclude-members: __new__
 
+.. automethod:: yast.Tensor.set_block
 
 Basic creation operations
 -------------------------
@@ -46,9 +44,9 @@ and
 
 See YAST examples: :ref:`examples/tensor/init:clone, detach or copy tensors`.
 
-.. autoclass:: yast.Tensor
-	:exclude-members: __init__, __new__
-	:members: copy, clone, detach
+.. automethod:: yast.Tensor.copy
+.. automethod:: yast.Tensor.clone
+.. automethod:: yast.Tensor.detach
 
 
 Changing tensor's device or dtype

@@ -35,7 +35,7 @@ def make_config(**kwargs):
         see :class:`yast.sym.sym_abelian`.
         Defaults to ``yast.sym.sym_none``, effectively a dense tensor.
     default_device : str
-        Base tensors can be stored on various devices as supported by ``backend``
+        Tensors can be stored on various devices as supported by ``backend``
 
             * NumPy supports only ``'cpu'`` device
             * PyTorch supports multiple devices, see
@@ -44,8 +44,8 @@ def make_config(**kwargs):
         If not specified, the default device is ``'cpu'``.
 
     default_dtype: str
-        Default data type (dtype) of YAST tensors. Supported options are: 'float64', 'complex128'.
-        If not specified, the default dtype is ``'float64'``.
+        Default data type (dtype) of YAST tensors. Supported options are: ``'float64'``, 
+        ``'complex128'``. If not specified, the default dtype is ``'float64'``.
     fermionic : bool or tuple[bool,...]
         Specify behavior of swap_gate function, allowing to introduce fermionic symmetries.
         Allowed values: ``False``, ``True``, or a tuple ``(True, False, ...)`` with one bool for each component
@@ -117,10 +117,9 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
     s : tuple
         Signature of tensor. Also determines the number of legs
     n : int
-        Total charge of the tensor
+        Total charge of the tensor.
     t : list
-        List of charges for each leg,
-        see :meth:`Tensor._fill_tensor` for description.
+        List of charges for each leg.
     D : list
         List of corresponding bond dimensions.
     isdiag : bool
@@ -159,7 +158,6 @@ def randC(config=None, legs=(), n=None, isdiag=False, **kwargs):
 def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
     Initialize tensor with all allowed blocks filled with zeros.
-    First, initializes empty tensor then calls :meth:`yast.Tensor._fill_tensor`.
 
     Parameters
     ----------
@@ -169,21 +167,20 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
         If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
         directly by passing a list of :class:`~yast.Leg`.
     s : tuple
-        a signature of tensor. Also determines the number of legs
+        a signature of tensor. Also determines the number of legs.
     n : int
-        total charge of the tensor
+        total charge of the tensor.
     t : list
-        a list of charges for each leg,
-        see :meth:`Tensor._fill_tensor` for description.
+        a list of charges for each leg.
     D : list
-        a list of corresponding bond dimensions
+        a list of corresponding bond dimensions.
     isdiag : bool
         makes tensor diagonal
     dtype : str
-        desired dtype, overrides default_dtype specified in config
+        desired dtype, overrides default_dtype specified in config.
     device : str
         device on which the tensor should be initialized, overrides default_device
-        specified in config
+        specified in config.
 
     Returns
     -------
@@ -196,7 +193,6 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
 def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
     Initialize tensor with all allowed blocks filled with ones.
-    First, initializes empty tensor then calls :meth:`yast.Tensor._fill_tensor`.
 
     Parameters
     ----------
@@ -206,19 +202,18 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
         If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
         directly by passing a list of :class:`~yast.Leg`.
     s : tuple
-        a signature of tensor. Also determines the number of legs
+        a signature of tensor. Also determines the number of legs.
     n : int
-        total charge of the tensor
+        total charge of the tensor.
     t : list
-        a list of charges for each leg,
-        see :meth:`Tensor._fill_tensor` for description.
+        a list of charges for each leg.
     D : list
         a list of corresponding bond dimensions
     dtype : str
-        desired dtype, overrides default_dtype specified in config
+        desired dtype, overrides default_dtype specified in config.
     device : str
         device on which the tensor should be initialized, overrides default_device
-        specified in config
+        specified in config.
 
     Returns
     -------
@@ -230,9 +225,12 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
 def eye(config=None, legs=(), n=None, **kwargs):
     r"""
-    Initialize `diagonal` tensor with all possible blocks filled with ones.
+    Initialize `diagonal` identity matrix with all possible blocks filled with ones.
 
-    Initializes tensor and call :meth:`Tensor._fill_tensor`.
+    .. note::
+        currently supports either one or two legs as input. In case of a single leg,
+        an identity matrix with Leg and its conjugate :meth:`yast.Leg.conj()` is returned.
+        If two legs are passed, they must have opposite signature.
 
     Parameters
     ----------
@@ -242,15 +240,14 @@ def eye(config=None, legs=(), n=None, **kwargs):
         If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
         directly by passing a list of :class:`~yast.Leg`.
     t : list
-        a list of charges for each leg,
-        see :meth:`Tensor._fill_tensor` for description.
+        a list of charges for each leg.
     D : list
-        a list of corresponding bond dimensions
+        a list of corresponding bond dimensions.
     dtype : str
-        desired dtype, overrides default_dtype specified in config
+        desired dtype, overrides default_dtype specified in config.
     device : str
         device on which the tensor should be initialized, overrides default_device
-        specified in config
+        specified in config.
 
     Returns
     -------

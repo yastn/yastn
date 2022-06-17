@@ -20,7 +20,7 @@ def norm(a, p='fro'):
 
     Returns
     -------
-    norm : float64
+    real scalar
     """
     if p not in ('fro', 'inf'):
         raise YastError("Error in norm: p not in ('fro', 'inf'). ")
@@ -31,9 +31,9 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
         tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
         mask_f=None, **kwargs):
     r"""
-    Split tensor into :math:`a=USV^\dag` using exact singular value decomposition (SVD),
-    where `U` and `V` are orthonormal bases and `S` is positive and diagonal matrix.
-    Optionally, truncate the result.
+    Split tensor into :math:`a = U S V^\dagger` using exact singular value decomposition (SVD),
+    where the columns of `U` and :math:`V^\dagger` form orthonormal bases 
+    and `S` is positive and diagonal matrix. Optionally, truncate the result.
 
     Truncation can be based on relative tolerance, bond dimension of each block,
     and total bond dimension across all blocks (whichever gives smaller total dimension).
@@ -73,8 +73,8 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
 
     Returns
     -------
-    U, S, Vh: Tensor
-        U and Vh are unitary projectors. S is a real diagonal tensor.
+    U, S, V: Tensor
+        U and V are unitary projectors. S is a real diagonal tensor.
     """
     diagnostics = kwargs['diagonostics'] if 'diagonostics' in kwargs else None
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block, diagnostics=diagnostics)
@@ -93,8 +93,9 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
 
 def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **kwargs):
     r"""
-    Split tensor into :math:`a = U @ S @ Vh` using exact singular value decomposition (SVD),
-    where `U` and `V` are orthonormal bases and `S` is positive and diagonal matrix.
+    Split tensor into :math:`a = U S V^\dagger` using exact singular value decomposition (SVD),
+    where the columns of `U` and :math:`V^\dagger` form orthonormal bases  
+    and `S` is a positive and diagonal matrix.
 
     Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
 
@@ -113,8 +114,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
 
     Returns
     -------
-    U, S, Vh: Tensor
-        U and Vh are unitary projectors. S is a real diagonal tensor.
+    U, S, V: Tensor
+        U and V are unitary projectors. S is a real diagonal tensor.
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)

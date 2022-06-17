@@ -112,7 +112,7 @@ def conj(a):
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     an = np.array(a.struct.n, dtype=int).reshape((1, 1, -1))
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
@@ -190,19 +190,16 @@ def drop_leg_history(a, axis=None):
 def transpose(a, axes):
     r"""
     Transpose tensor by permuting the order of its legs (spaces).
-    Transpose can be done in-place, in which case copying of the data is not forced.
-    Otherwise, new tensor is created and its data (blocks) is cloned.
-
     Makes a shallow copy of Tensor data if the order is not changed.
 
     Parameters
     ----------
-    axes: tuple(int)
+    axes: tuple[int]
         new order of legs. Has to be a valid permutation of (0, 1, ..., ndim-1)
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
         transposed tensor
     """
     _test_axes_all(a, axes, native=False)
@@ -241,11 +238,11 @@ def move_leg(a, source, destination):
 
     Parameters
     ----------
-    source, destination: int or tuple(int)
+    source, destination: int or tuple[int]
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     lsrc, ldst = _clear_axes(source, destination)
     lsrc = tuple(xx + a.ndim if xx < 0 else xx for xx in lsrc)
@@ -269,33 +266,38 @@ def moveaxis(a, source, destination):
 
     Parameters
     ----------
-    source, destination: int or tuple(int)
+    source, destination: int or tuple[int]
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     return move_leg(a, source, destination)
 
 
 def add_leg(a, axis=-1, s=1, t=None):
     r"""
-    Creates a new auxiliary leg that explicitly carries charge
-    (or part of it) associated with the tensor.
+    Creates a new tensor with extra leg that carries the charge (or part of it) 
+    of the orignal tensor. This is achieved by extra leg having a single charge sector
+    of dimension D=1. The total charge of the tensor :meth:`yast.Tensor.n` can modified this way.
 
     Makes a shallow copy of Tensor data.
 
     Parameters
     ----------
         axis: int
-            index of the new axis
+            index of the new leg
 
         s : int
-            signature :math:`\pm1` of the new axis
+            signature :math:`\pm1` of the new leg
 
-        t : tuple
+        t : int or tuple[int]
             charge carried by the new leg. If ``None``, takes the total charge `n`
             of the original tensor resulting in uncharged tensor with `n=0`.
+
+    Returns
+    -------
+    yast.Tensor
     """
     if a.isdiag:
         raise YastError('Cannot add axis to a diagonal tensor.')
@@ -325,16 +327,16 @@ def add_leg(a, axis=-1, s=1, t=None):
 
 def remove_leg(a, axis=-1):
     r"""
-    Removes leg of single charge with dimension one.
-
-    The charge carried by that axis is added to the tensors charge.
+    Removes leg with a single charge sector of dimension one from tensor.
+    The charge carried by that leg (if any) is added to the  
+    tensor's total charge :meth:`yast.Tensor.n`.
 
     Makes a shallow copy of Tensor data.
 
     Parameters
     ----------
         axis: int
-            index of the axis to be removed
+            index of the leg to be removed
     """
     if a.isdiag:
         raise YastError('Cannot remove axis to a diagonal tensor.')
@@ -409,3 +411,46 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0):
     struct = a.struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     data = a.config.backend.apply_slice(a._data, c_sl, old_sl)
     return a._replace(struct=struct, data=data)
+
+
+# def embed(a, legs=None, return_legs=False):
+#     r"""
+#     Create equivalent ``yast.Tensor``, where some zero blocks are explicitly added,
+#     to include all charges specified in provided legs.
+
+#     .. note::
+#         Utility function used in to_nonsymmetric(). Might potentially be usefull also for yast.block.
+
+#     Parameters
+#     ----------
+#     legs : dict
+#         {n: Leg} specify charges and dimensions to include on some legs (indicated by keys n).
+
+#     return_legs : bool
+#         if True, additionally return a tuple of legs of a new tensor.
+
+#     Returns
+#     -------
+#     out : yast.Tensor
+#         If embeding is not needed, return self
+#     """
+#     if legs is None:
+#         return a
+#     if any((n < 0) or (n >= a.ndim) for n in legs.keys()):
+#         raise YastError('Specified leg out of ndim')
+
+#     a_legs, perform_embeding = list(a.get_legs()), False
+#     for n, leg in legs.items():
+#         new_leg = leg_union(a_legs[n], leg)
+#         if new_leg != a_legs[n]:
+#             perform_embeding = True
+#         a_legs[n] = new_leg
+#     if perform_embeding:
+#         ulegs, _ = _unpack_legs(a_legs)
+#         t = tuple(leg.t for leg in ulegs)
+#         D = tuple(leg.D for leg in ulegs)
+#         hfs = tuple(leg.legs[0] for leg in ulegs)
+#         b = a._replace(hfs=hfs)
+#         b._fill_tensor(t=t, D=D, val='zeros')
+#         a = a + b
+#     return a

@@ -194,7 +194,6 @@ def test_initialize_Z2xU1():
     assert a1.is_consistent()
 
     # diagonal tensor
-
     a1 = yast.eye(config=config_Z2xU1,
                   t=[[(0, 1), (1, 2)], [(0, 1), (1, 1)]],
                   D=[[2, 5], [2, 7]])

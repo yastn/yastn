@@ -187,7 +187,7 @@ def get_tensor_charge(a):
     """
     Returns
     -------
-    n : int or tuple(int)
+    int or tuple[int]
         see :attr:`yast.Tensor.n`
     """
     return a.struct.n
@@ -197,7 +197,7 @@ def get_signature(a, native=False):
     """
     Returns
     -------
-    s : tuple
+    tuple[int]
         Tensor signature, equivalent to :attr:`yast.Tensor.s`.
         If native, returns the signature of tensors's native legs, see :attr:`yast.Tensor.s_n`.
     """
@@ -208,7 +208,7 @@ def get_rank(a, native=False):
     """
     Returns
     -------
-    n : int
+    int
         Tensor rank equivalent to :attr:`yast.Tensor.ndim`.
         If native, the native rank of the tensor is returned, see :attr:`yast.Tensor.ndim_n`.
     """
@@ -238,17 +238,17 @@ def get_blocks_shape(a):
 
 def get_shape(a, axis=None, native=False):
     r"""
-    Return total bond dimension, sum of dimensions along sectors, of meta legs.
+    Return effective bond dimensions as sum of dimensions along sectors for each leg.
 
     Parameters
     ----------
-    axis : Int or tuple of ints
-        indices of legs; If axis is None returns all (default).
+    axis : int or tuple[int]
+        indices of legs; If axis is ``None`` returns for all legs (default).
 
     Returns
     -------
-    shape : Int or tuple(int)
-        shapes of legs specified by axes
+    shape : int or tuple[int]
+        effective bond dimensions of legs specified by axes
     """
     if axis is None:
         axis = tuple(n for n in range(a.ndim_n if native else a.ndim))
@@ -271,14 +271,15 @@ def __getitem__(a, key):
     """
     Parameters
     ----------
-    key : tuple(int)
-        charges of the block
+    key : tuple[int] or tuple[tuple[int]]
+        charges of the block.
 
     Returns
     -------
-    out : tensor
-        The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
-        Output 1d array for diagonal tensor, otherwise reshape into n-dim array.
+    tensor-like
+        The type of the returned tensor depends on the backend, for example 
+        :class:`numpy.ndarray` or :class:`torch.Tensor`.
+        In case of diagonal tensor, returns 1D array.
     """
     key = tuple(_flatten(key))
     try:
@@ -321,10 +322,10 @@ def get_legs(a, axis=None, native=False):
     Parameters
     ----------
     axis : int or tuple[int] or None
-        indices of legs to retrieve. If ```None`` return list with all legs.
+        indices of legs to retrieve. If ``None`` return list with all legs.
 
     native : bool
-        consider native legs if ``True``; otherwise meta/fused legs (default).
+        consider native legs if ``True``; otherwise returns fused legs (default).
 
     Returns
     -------
@@ -419,13 +420,15 @@ def to_dense(a, legs=None, native=False, reverse=False):
     Create dense tensor corresponding to the symmetric tensor.
 
     Blocks are ordered according to increasing charges on each leg.
-    It is possible to supply a list of additional charge sectors with dimensions to be included.
-    (should be consistent with the tensor). This allows to fill in some explicit zero blocks.
+    It is possible to supply a list of additional charge sectors to be included by explictly
+    specifying `legs`. These legs should be consistent with current structure of the tensor. 
+    This allows to fill in extra zero blocks.
 
     Parameters
     ----------
-    leg_structures : dict
-        {n: {tn: Dn}} specify charges and dimensions to include on some legs (indicated by keys n).
+    legs : dict[int, yast.Leg]
+        specify extra charge sectors on the legs by adding desired :class:`yast.Leg`
+        under legs's index into dictionary.
 
     native: bool
         output native tensor (ignoring fusion of legs).
@@ -447,12 +450,13 @@ def to_dense(a, legs=None, native=False, reverse=False):
 
 def to_numpy(a, legs=None, native=False, reverse=False):
     r"""
-    Create full ``numpy.ndarray`` corresponding to the symmetric tensor. See :func:`yast.to_dense`
+    Create dense :class:`numpy.ndarray`` corresponding to the symmetric tensor. 
+    See :func:`yast.to_dense`.
 
     Returns
     -------
-    out : numpy.ndarray
-        NumPy array equivalent to symmetric tensor
+    numpy.ndarray
+        dense NumPy array equivalent to symmetric tensor
     """
     return a.config.backend.to_numpy(a.to_dense(legs, native, reverse))
 
@@ -464,7 +468,7 @@ def to_raw_tensor(a):
 
     Returns
     -------
-    out : tensor
+    out : tensor-like
         The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     """
     if len(a.struct.D) == 1:
@@ -478,17 +482,19 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     tensor are accummulated into a single block.
 
     Blocks are ordered according to increasing charges on each leg.
-    It is possible to supply a list of additional charge sectors with dimensions to be included.
-    (should be consistent with the tensor). This allows to fill in some explicit zero blocks.
+    It is possible to supply a list of additional charge sectors to be included by explictly
+    specifying `legs`. These legs should be consistent with current structure of the tensor. 
+    This allows to fill in extra zero blocks.
 
     .. note::
-        yast structure can be redundant since resulting tensor is effectively just
-        a single dense block. If that's the case, use :meth:`yast.Tensor.to_dense`.
+        YAST structure is redundant since resulting tensor is effectively just
+        a single dense block. To obtain this single dense block directly, use :meth:`yast.Tensor.to_dense`.
 
     Parameters
     ----------
-    legs : dict
-        {n: Leg} specify charges and dimensions to include on some legs (indicated by keys n).
+    legs : dict[int, yast.Leg]
+        specify extra charge sectors on the legs by adding desired :class:`yast.Leg`
+        under legs's index into dictionary.
 
     native: bool
         output native tensor (ignoring meta-fusion of legs).
@@ -499,8 +505,8 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
 
     Returns
     -------
-    out : yast.Tensor
-        returned tensor does not use any symmetry
+    yast.Tensor
+        tensor with no explicit symmetry
     """
     config_dense = a.config._replace(sym=sym_none)
 

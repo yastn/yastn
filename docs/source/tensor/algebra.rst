@@ -14,15 +14,16 @@ See examples: :ref:`examples/tensor/algebra:basic algebra operations`.
 Simple element-wise operations
 ------------------------------
 
-.. autoclass:: yast.Tensor
-	:exclude-members: __init__, __new__
-	:noindex:
-	:members: __abs__, real, imag, sqrt, rsqrt, reciprocal, exp
+.. automethod:: yast.Tensor.__abs__ 
+.. automethod:: yast.Tensor.real
+.. automethod:: yast.Tensor.imag
+.. automethod:: yast.Tensor.sqrt
+.. automethod:: yast.Tensor.rsqrt
+.. automethod:: yast.Tensor.reciprocal
+.. automethod:: yast.Tensor.exp
 
 
-.. automodule::	yast
-	:noindex:
-	:members: apxb
+.. autofunction:: yast.apxb
 
 
 Tensor contractions
@@ -41,14 +42,13 @@ or composition of such operations over several tensors.
 
 See examples: :ref:`examples/tensor/algebra:tensor contractions`.
 
-.. autoclass:: yast.Tensor
-	:exclude-members: __init__, __new__
-	:noindex:
-	:members: __matmul__
+.. automethod:: yast.Tensor.__matmul__
 
-.. automodule:: yast
-	:noindex:
-	:members: tensordot, vdot, trace, einsum, ncon
+.. autofunction:: yast.tensordot
+.. autofunction:: yast.vdot
+.. autofunction:: yast.trace
+.. autofunction:: yast.einsum
+.. autofunction:: yast.ncon
 
 
 Transposition
@@ -56,10 +56,9 @@ Transposition
 
 See examples: :ref:`examples/tensor/algebra:transposition`.
 
-.. autoclass:: yast.Tensor
-	:exclude-members: __init__, __new__
-	:noindex:
-	:members: transpose, move_leg, moveaxis
+.. automethod:: yast.Tensor.transpose
+.. automethod:: yast.Tensor.move_leg
+.. automethod:: yast.Tensor.moveaxis
 
 
 Fusion of legs (reshaping)
@@ -73,21 +72,19 @@ Fusion can be used to vary compression between (unfused) symmetric tensors with 
 
 See examples: :ref:`examples/tensor/algebra:fusion (reshaping)`.
 
-.. autoclass:: yast.Tensor
-	:exclude-members: __init__, __new__
-	:noindex:
-	:members: fuse_legs, unfuse_legs
-
+.. automethod:: yast.Tensor.fuse_legs
+.. automethod:: yast.Tensor.unfuse_legs
+.. automethod:: yast.Tensor.add_leg
+.. automethod:: yast.Tensor.remove_leg
 
 Conjugation of symmetric tensors
 --------------------------------
 
 See examples: :ref:`examples/tensor/algebra:conjugation of symmetric tensors`.
 
-.. autoclass:: yast.Tensor
-	:exclude-members: __init__, __new__
-	:noindex:
-	:members: conj, conj_blocks, flip_signature
+.. automethod:: yast.Tensor.conj
+.. automethod:: yast.Tensor.conj_blocks
+.. automethod:: yast.Tensor.flip_signature
 
 
 Tensor norms
