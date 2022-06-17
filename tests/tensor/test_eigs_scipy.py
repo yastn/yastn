@@ -23,7 +23,7 @@ def test_eigs_simple():
     wn, vn = eigs(tmn, k=9, which='LM')
 
     ## initializing random tensor matching TM, with 3-rd leg extra carrying charges -1, 0, 1
-    legs = [a.get_leg(2).conj(), a.get_leg(2), yast.Leg(a.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))]
+    legs = [a.get_legs(2).conj(), a.get_legs(2), yast.Leg(a.config, s=1, t=(-1, 0, 1), D=(1, 1, 1))]
     vv = yast.rand(config=a.config, legs=legs, dtype='float64')
     r1d, meta = yast.compress_to_1d(vv)
 
@@ -44,19 +44,18 @@ def test_eigs_simple():
 @pytest.mark.skipif(config_U1.backend.BACKEND_ID=="torch", reason="uses scipy procedures for raw data")
 def test_eigs_exception():
 
-    leg0 = yast.Leg(config=config_U1, s=1, t=(-2, -1, 0, 1), D=(1, 2, 3 ,4))
-    leg1 = yast.Leg(config=config_U1, s=1, t=(0, 1), D=(2, 3))
-    leg2 = yast.Leg(config=config_U1, s=1, t=(-1, 0, 1, 2), D=(2, 3 ,4, 5))
+    leg0 = yast.Leg(config_U1, s=1, t=(-2, -1, 0, 1), D=(1, 2, 3 ,4))
+    leg1 = yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
+    leg2 = yast.Leg(config_U1, s=1, t=(-1, 0, 1, 2), D=(2, 3 ,4, 5))
 
     a = yast.rand(config=config_U1, legs=(leg0, leg1, leg2.conj()), n=0)
     
     # dense transfer matrix build from a -- here a has some un-matching blocks between first and last legs
     tm = yast.ncon([a, a], [(-1, 1, -3), (-2, 1, -4)], conjs=(0, 1))
     tm = tm.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
-    # make sure to fill-in zero blocks
-    ls0 = tm.get_leg_structure(axis=0)
-    ls1 = tm.get_leg_structure(axis=1)
-    tmn = tm.to_numpy(leg_structures={0: ls1, 1: ls0})
+    # make sure to fill-in zero blocks, as in this example tm is not a square matrix
+    legs_for_tm = {0: tm.get_legs(1).conj(), 1: tm.get_legs(0).conj()}
+    tmn = tm.to_numpy(legs=legs_for_tm)
 
     wn, vn = eigs(tmn, k=9, which='LM')
     # print(wn)
@@ -78,12 +77,13 @@ def test_eigs_exception():
 
     # eigs going though yast.tensor
     wy, vy1d = eigs(ff, v0=r1d, k=9, which='LM', tol=1e-10)
-    # print(wy)  # eigenvalues
+
+
 
 
     # # for tm with fused legs
 
-    # vv2 = yast.rand(config=a.config, legs=[(tm.get_leg(1).conj(), tm.get_leg(0), leg_aux)], dtype='float64')
+    # vv2 = yast.rand(config=a.config, legs=[(tm.get_legs(1).conj(), tm.get_legs(0), leg_aux)], dtype='float64')
     # r1d2, meta2 = yast.compress_to_1d(vv2)
 
     # def f2(x):
@@ -104,7 +104,6 @@ def test_eigs_exception():
     vyr = [yast.remove_zero_blocks(a, rtol=1e-12) for a in vy]
     assert all((yast.norm(x - y) < tol for x, y in zip(vy, vyr)))
     # display charges of eigenvectors (only charge on last leg) -- now there is superposition between +1 and -1
-    # print([x.get_leg_structure(axis=2) for x in vyr])
 
 if __name__ == '__main__':
     test_eigs_simple()

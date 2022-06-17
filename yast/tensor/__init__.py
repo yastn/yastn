@@ -13,7 +13,6 @@ from ._tests import YastError
 from ._tests import *
 from ._control_lru import *
 from ._contractions import *
-from ._initialize import *
 from ._output import *
 from ._single import *
 from ._algebra import *
@@ -23,7 +22,6 @@ from ._legs import *
 from . import _tests
 from . import _control_lru
 from . import _contractions
-from . import _initialize
 from . import _output
 from . import _single
 from . import _algebra
@@ -31,7 +29,6 @@ from . import linalg
 from . import _merging
 from . import _legs
 __all__ = ['Tensor', 'linalg', 'YastError']
-__all__.extend(_initialize.__all__)
 __all__.extend(linalg.__all__)
 __all__.extend(_tests.__all__)
 __all__.extend(_control_lru.__all__)
@@ -105,7 +102,7 @@ class Tensor:
             self.hfs = tuple(_Fusion(s=(x,)) for x in self.struct.s)
 
     # pylint: disable=C0415
-    from ._initialize import set_block, fill_tensor, __setitem__
+    from ._initialize import set_block, _fill_tensor, __setitem__
     from .linalg import norm, svd, svd_with_truncation, eigh, eigh_with_truncation, qr
     from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, apply_mask
     from ._algebra import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
@@ -113,7 +110,7 @@ class Tensor:
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, move_leg, diag, grad
     from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_leg, remove_leg
     from ._output import show_properties, __str__, print_blocks_shape, is_complex
-    from ._output import get_blocks_charge, get_blocks_shape, get_leg_charges_and_dims, get_leg_structure, get_leg
+    from ._output import get_blocks_charge, get_blocks_shape, get_leg_charges_and_dims, get_leg_structure, get_legs
     from ._output import zero_of_dtype, item, __getitem__
     from ._output import get_leg_fusion, get_shape, get_signature, get_dtype
     from ._output import get_tensor_charge, get_rank
@@ -254,6 +251,7 @@ class Tensor:
         """
         Returns
         -------
-        data : backend 1d array
+        data : backend tensor type
+            underlying 1D-array storing the elements of the tensor 
         """
         return self._data

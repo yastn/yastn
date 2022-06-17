@@ -4,7 +4,7 @@ from ._env import Env2, Env3
 
 def variational_sweep_1site(psi, psi_target, env=None, op=None):
     r"""
-    Perform a sweep updating psi to maximize the overlap with the target state.
+    Perform a sweep updating psi to maximize the overlap with the target state psi_target.
 
     Operator in a form of mpo can be provided. In that case maximize overlap with op * psi_target.
 
@@ -14,7 +14,7 @@ def variational_sweep_1site(psi, psi_target, env=None, op=None):
     Parameters
     ----------
     psi: Mps
-        Initial guess. should be cannonical toward the first site.
+        Initial guess. Should be cannonical toward the first site.
 
     psi_target: Mps
         Target state.

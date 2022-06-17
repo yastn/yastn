@@ -1,5 +1,5 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
-from yast import ncon, match_legs, tensordot, expmv, vdot, qr, svd
+from yast import ncon, tensordot, expmv, vdot, qr, svd, ones
 from ._mps import YampsError
 
 
@@ -47,14 +47,12 @@ class _EnvParent:
         if self.bra.N != self.ket.N:
             raise YampsError('bra and ket should have the same number of sites.')
 
-        ll = self.N - 1
+        config = self.ket.A[0].config
         for ii in range(len(self.ort)):
-            self.Fort[ii][(-1, 0)] = match_legs(tensors=[self.ort[ii].A[0], self.ket.A[0]],
-                                            legs=[self.ort[ii].left[0], self.ket.left[0]],
-                                            conjs=[1, 0], val='ones')
-            self.Fort[ii][(ll + 1, ll)] = match_legs(tensors=[self.ket.A[ll], self.ort[ii].A[ll]],
-                                            legs=[self.ket.right[0], self.ort[ii].right[0]],
-                                            conjs=[0, 1], val='ones')
+            legs = [self.ort[ii].get_leftmost_leg(), self.ket.get_leftmost_leg().conj()]
+            self.Fort[ii][(-1, 0)] = ones(config=config, legs=legs)
+            legs = [self.ket.get_rightmost_leg().conj(), self.ort[ii].get_rightmost_leg()]
+            self.Fort[ii][(self.N, self.N - 1)] = ones(config=config, legs=legs)
 
     def reset_temp(self):
         """ Reset temporary objects stored to speed-up some simulations. """
@@ -72,7 +70,6 @@ class _EnvParent:
         for n in self.ket.sweep(to=to):
             self.update_env(n, to=to)
         return self
-
 
     def clear_site(self, *args):
         r""" Clear environments pointing from sites which indices are provided in args """
@@ -142,7 +139,6 @@ class _EnvParent:
             Aort.append(tensordot(T1, self.Fort[ii][(n + 1, n)], axes=(self.nr_phys + 1, 0)))
         self._temp['Aort'] = Aort
 
-
     def update_AAort(self, bd):
         """ Update projection of states to be project to on psi. """
         Aort = []
@@ -179,14 +175,12 @@ class Env2(_EnvParent):
         super().__init__(bra, ket)
 
         # left boundary
-        self.F[(-1, 0)] = match_legs(tensors=[self.bra.A[0], self.ket.A[0]],
-                                        legs=[self.bra.left[0], self.ket.left[0]],
-                                        conjs=[1, 0], val='ones')
+        config = self.bra.A[0].config
+        legs = [self.bra.get_leftmost_leg(), self.ket.get_leftmost_leg().conj()]
+        self.F[(-1, 0)] = ones(config=config, legs=legs)
         # right boundary
-        ll = self.N - 1
-        self.F[(ll + 1, ll)] = match_legs(tensors=[self.ket.A[ll], self.bra.A[ll]],
-                                        legs=[self.ket.right[0], self.bra.right[0]],
-                                        conjs=[0, 1], val='ones')
+        legs = [self.ket.get_rightmost_leg().conj(), self.bra.get_rightmost_leg()]
+        self.F[(self.N, self.N - 1)] = ones(config=config, legs=legs)
 
     def Heff1(self, x, n):
         r"""
@@ -234,14 +228,13 @@ class Env3(_EnvParent):
             raise YampsError('op should should have the same number of sites as ket.')
 
         # left boundary
-        self.F[(-1, 0)] = match_legs(tensors=[self.bra.A[0], self.op.A[0], self.ket.A[0]],
-                                        legs=[self.bra.left[0], self.op.left[0], self.ket.left[0]],
-                                        conjs=[1, 0, 0], val='ones')
+        config = self.ket.A[0].config
+        legs = [self.bra.get_leftmost_leg(), self.op.get_leftmost_leg().conj(), self.ket.get_leftmost_leg().conj()]
+        self.F[(-1, 0)] = ones(config=config, legs=legs)
+
         # right boundary
-        ll = self.N - 1
-        self.F[(ll + 1, ll)] = match_legs(tensors=[self.ket.A[ll], self.op.A[ll], self.bra.A[ll]],
-                                        legs=[self.ket.right[0], self.op.right[0], self.bra.right[0]],
-                                        conjs=[0, 0, 1], val='ones')
+        legs = [self.ket.get_rightmost_leg().conj(), self.op.get_rightmost_leg().conj(), self.bra.get_rightmost_leg()]
+        self.F[(self.N, self.N - 1)] = ones(config=config, legs=legs)
 
     def Heff0(self, C, bd):
         r"""
@@ -356,15 +349,14 @@ class Env3(_EnvParent):
         self._temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)
 
-
     def enlarge_bond(self, bd, opts_svd):
         if bd[0] < 0 or bd[1] >= self.N:  # do not enlarge bond outside of the chain
             return False
         AL = self.ket.A[bd[0]]
         AR = self.ket.A[bd[1]]
-        if len(self.op.A[bd[0]].get_leg_structure(axis=1)) > len(AL.get_leg_structure(axis=1)) or \
-           len(self.op.A[bd[1]].get_leg_structure(axis=1)) > len(AR.get_leg_structure(axis=1)):
-            return True  # true if not some charges are missing on physical legs of psi
+        if self.op.A[bd[0]].get_legs(axis=1).t != AL.get_legs(axis=1).t or \
+           self.op.A[bd[1]].get_legs(axis=1).t != AR.get_legs(axis=1).t:
+            return True  # true if some charges are missing on physical legs of psi
 
         AL = AL.fuse_legs(axes=((0, 1), 2))
         AR = AR.fuse_legs(axes=(0, (1, 2)))
@@ -398,6 +390,7 @@ def _update2(n, F, bra, ket, to, nr_phys):
         else:
             T1 = tensordot(F[(n - 1, n)], bra.A[n], axes=(0, 0), conj=(0, 1))
             F[(n, n + 1)] = tensordot(T1, ket.A[n], axes=((0, 1, 2), (0, 1, 2)))
+
 
 def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
     if to == 'last':

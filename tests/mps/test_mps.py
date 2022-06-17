@@ -13,12 +13,13 @@ except ImportError:
 tol = 1e-12
 
 
+
 def is_left_canonical(psi):
     """ Assert if each mps tensor is left canonical. """
     cl = (0, 1) if psi.nr_phys == 1 else (0, 1, 2)
     for n in range(psi.N):
-        x = psi.A[n].tensordot(psi.A[n], axes=(cl, cl), conj=(1, 0))
-        x0 = yast.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True, val='ones', conjs=[1, 1])
+        x = yast.tensordot(psi.A[n], psi.A[n], axes=(cl, cl), conj=(1, 0))
+        x0 = yast.eye(config=x.config, legs=x.get_legs([0, 1]))
         assert yast.norm(x - x0.diag()) < tol  # == 0
     assert psi.pC is None
 
@@ -27,8 +28,8 @@ def is_right_canonical(psi):
     """ Assert if each mps tensor is right canonical. """
     cl = (1, 2) if psi.nr_phys == 1 else (1, 2, 3)
     for n in range(psi.N):
-        x = psi.A[n].tensordot(psi.A[n], axes=(cl, cl), conj=(0, 1))
-        x0 = yast.match_legs(tensors=[x, x], legs=[0, 1], isdiag=True, val='ones', conjs=[1, 1])
+        x = yast.tensordot(psi.A[n], psi.A[n], axes=(cl, cl), conj=(0, 1))
+        x0 = yast.eye(config=x.config, legs=x.get_legs([0, 1]))
         assert yast.norm(x - x0.diag()) < tol  # == 0
     assert psi.pC is None
 

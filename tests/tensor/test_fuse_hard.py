@@ -49,14 +49,14 @@ class FusionSyntax(unittest.TestCase):
 
         # We can also fuse more than a single group of indices.
         # Their order can be permuted as well
-        c0 = a.fuse_legs(axes=(0, (3,4), (2,1)), mode='hard')
+        c0 = a.fuse_legs(axes=(0, (3, 4), (2, 1)), mode='hard')
 
         # Fusion can be applied succesively - fusing fused spaces together.
         # This results in a rank-2 tensor, equivalent to block-sparse matrix
-        c1 = c0.fuse_legs(axes=((0,1),2), mode='hard')
+        c1 = c0.fuse_legs(axes=((0, 1), 2), mode='hard')
 
         # Resulting matrix has three blocks and the largest block holds 13604 elements
-        assert c1.s == (-1,1)
+        assert c1.s == (-1, 1)
         c1.print_blocks_shape()
         #
         # (0, 0) (283, 15)
@@ -78,8 +78,8 @@ class FusionSyntax(unittest.TestCase):
         # unfuse step 1: 0 1 2 -> unfuse -> 0 (3->1 4->2) (2->3 1->4) = 0 1 2 3 4
         # 
         # Hence, to retrieve original tensor, we have to permute its indices
-        a_0= c0_0.unfuse_legs(axes=(1,2))
-        a_0= a_0.transpose(axes=(0,4,3,1,2))
+        a_0= c0_0.unfuse_legs(axes=(1, 2))
+        a_0= a_0.transpose(axes=(0, 4, 3, 1, 2))
         assert yast.norm(a - a_0) < tol
 
 
@@ -128,29 +128,36 @@ def test_hard_transpose():
     a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
-    # assert a.get_shape() == (3, 5, 7, 9, 11, 13)
+    assert a.get_shape() == (3, 5, 7, 9, 11, 13)
+
     b = a.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
+    assert b.get_shape() == (15, 7, 99, 13)
 
     c = np.transpose(b, axes=(3, 2, 1, 0))
     assert c.get_shape() == (13, 99, 7, 15)
+
     c = c.unfuse_legs(axes=(1, 3))
     assert c.get_shape() == (13, 9, 11, 7, 3, 5)
 
     c = b.move_leg(source=1, destination=2)
     assert c.get_shape() == (15, 99, 7, 13)
+
     c = c.unfuse_legs(axes=(1, 0))
     assert c.get_shape() == (3, 5, 9, 11, 7, 13)
 
 
-def test_hard_dot_2():
-    t1 = [(0, -1), (0, 1), (1, -1), (1, 1)]
-    t2 = [(0, 0), (0, 2), (1, 0), (1, 2)]
-    a = yast.rand(config=config_Z2xU1, s=(-1, 1, 1, -1, -1),
-                  t=(t1, t1, t2, t2, t2),
-                  D=((1, 2, 2, 4), (9, 4, 3, 2), (7, 8, 9, 10), (5, 6, 7, 8), (1, 2, 2, 4)))
-    b = yast.rand(config=config_Z2xU1, s=(1, -1, 1, 1),
-                  t=(t1, t1, t2, t2),
-                  D=((1, 2, 2, 4), (9, 4, 3, 2), (1, 2, 2, 4), (5, 6, 7, 8)))
+def test_hard_dot():
+    """ integration of hard fusionwith dot """
+    # Z2 x U1
+    legs_a = [yast.Leg(config_Z2xU1, s=-1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D=(1, 2, 2, 4)),
+            yast.Leg(config_Z2xU1, s=1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D= (9, 4, 3, 2)),
+            yast.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(7, 8, 9, 10)),
+            yast.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(5, 6, 7, 8)),
+            yast.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(1, 2, 2, 4))]
+    a = yast.rand(config=config_Z2xU1, legs=legs_a)
+
+    legs_b = [legs_a[n].conj() for n in (0, 1, 4, 3)]
+    b = yast.rand(config=config_Z2xU1, legs=legs_b)
 
     aa = yast.fuse_legs(a, axes=((0, 3), (4, 1), 2), mode='hard')
     bb = yast.fuse_legs(b, axes=((0, 3), (2, 1)), mode='hard')
@@ -172,15 +179,17 @@ def test_hard_dot_2():
     aaa = yast.unfuse_legs(aaa, axes=(0, 1)).transpose(axes=(0, 3, 4, 1, 2))
     assert yast.norm(a - aaa) < tol
 
+    # U1
+    legs_a = [yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(1, 2, 3)),
+              yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+              yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
+              yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
+    a = yast.rand(config=config_U1, legs=legs_a)
 
-def test_hard_dot_1():
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-
-    b = yast.rand(config=config_U1, s=(1, -1, 1),
-                  t=((-1, 1, 2), (-1, 1, 2), (-1, 0, 1)),
-                  D=((1, 2, 3), (4, 5, 6), (10, 7, 11)))
+    legs_b = [legs_a[0].conj(),
+              legs_a[1].conj(),
+              yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(10, 7, 11))]
+    b = yast.rand(config=config_U1, legs=legs_b)
 
     bb = yast.fuse_legs(b, axes=((0, 1), 2), mode='hard')
     aa =  yast.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
@@ -196,7 +205,7 @@ def test_hard_dot_1():
     assert yast.norm(b - bbb) < tol
 
 
-def test_hard_dot_1_sparse():
+def test_hard_dot_sparse():
     a = yast.Tensor(config=config_U1, s=(-1, 1, 1, -1), n=-2)
     a.set_block(ts=(2, 1, 0, 1), Ds=(2, 1, 5, 3), val='rand')
     a.set_block(ts=(1, 1, -1, 1), Ds=(1, 1, 6, 3), val='rand')
@@ -209,7 +218,10 @@ def test_hard_dot_1_sparse():
 
     aa = yast.fuse_legs(a, axes=((1, 0), 2, 3), mode='hard')
     bb = yast.fuse_legs(b, axes=((1, 0), 2, 3), mode='hard')
-    xx = yast.match_legs([aa, aa], legs=[0, 0], conjs=[1, 0], val='rand')
+
+    leg = aa.get_legs(0)
+    xx = yast.rand(config=aa.config, legs=[leg, leg.conj()])
+
     yast.tensordot(xx, aa, axes=(1, 0))
     yast.tensordot(xx, aa, axes=(0, 0), conj = (1, 0))
 
@@ -219,8 +231,6 @@ def test_hard_dot_1_sparse():
 
     aat = aa.fuse_legs(axes=((1, 2), 0), mode='hard').conj()
     bbt = bb.fuse_legs(axes=(0, (1, 2)), mode='hard')
-    aat.show_properties()
-    bbt.show_properties()
     ccc = yast.tensordot(aat, bbt, axes=(1, 0))
     assert yast.norm(c -  ccc.unfuse_legs(axes=(0, 1))) < tol
 
@@ -309,23 +319,25 @@ def test_fuse_hard_dense():
 @pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
 def test_transpose_and_merge_backward():
     import torch
-
     # U1
-    a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (3, 8, 9), (3, 11, 12)))
-    b= yast.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
+    legs = [yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(1, 2, 3)),
+            yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+            yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(3, 8, 9)),
+            yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(3, 11, 12))]
+    a = yast.rand(config=config_U1, legs=legs)
 
-    target_block=(1,1,-1,-1)
-    target_block_size= a[target_block].size()
+    b = yast.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
+
+    target_block = (1, 1, -1, -1)
+    target_block_size = a[target_block].size()
 
     def test_f(block):
         a.set_block(ts=target_block, val=block)
-        tmp_a= yast.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
-        ab= b.vdot(tmp_a)
+        tmp_a = yast.fuse_legs(a, axes=((0, 1), 2, 3), mode='hard')
+        ab = yast.vdot(b, tmp_a)
         return ab
 
-    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(),requires_grad=True), )
+    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(),requires_grad=True),)
     test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
     assert test
 
@@ -333,36 +345,36 @@ def test_transpose_and_merge_backward():
 @pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
 def test_unmerge_backward():
     import torch
-
     # U1
-    a= yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                  t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                  D=((1, 2, 3), (4, 5, 6), (3, 8, 9), (3, 11, 12)))
-    b= yast.fuse_legs(a, axes=(0,(1,2),3), mode='hard')
+    legs = [yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(1, 2, 3)),
+            yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+            yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(3, 8, 9)),
+            yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(3, 11, 12))]
+    a = yast.rand(config=config_U1, legs=legs)
 
-    target_block=(1,1,-1,-1)
-    target_block_size= a[target_block].size()
+    b = yast.fuse_legs(a, axes=(0,(1,2),3), mode='hard')
+
+    target_block = (1, 1, -1, -1)
+    target_block_size = a[target_block].size()
 
     def test_f(block):
         a.set_block(ts=target_block, val=block)
-        tmp_a= yast.fuse_legs(a, axes=((0, 1, 2), 3), mode='hard')
-        tmp_a= yast.unfuse_legs(tmp_a, axes=0)
-        tmp_a= yast.fuse_legs(tmp_a, axes=(0, (1, 2), 3), mode='hard')
-        ab= b.vdot(tmp_a)
+        tmp_a = yast.fuse_legs(a, axes=((0, 1, 2), 3), mode='hard')
+        tmp_a = yast.unfuse_legs(tmp_a, axes=0)
+        tmp_a = yast.fuse_legs(tmp_a, axes=(0, (1, 2), 3), mode='hard')
+        ab = yast.vdot(b, tmp_a)
         return ab
 
-    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(),requires_grad=True), )
+    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
     test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
     assert test
 
 if __name__ == '__main__':
-    #unittest.main()
     test_fuse_hard_dense()
     test_hard_split()
     test_hard_transpose()
-    test_hard_dot_1()
-    test_hard_dot_2()
-    test_hard_dot_1_sparse()
+    test_hard_dot()
+    test_hard_dot_sparse()
     test_fuse_mix()
     test_auxliary_merging_functions()
     test_transpose_and_merge_backward()

@@ -4,8 +4,8 @@ from itertools import groupby, product
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
 from ._tests import YastError, _test_configs_match, _test_axes_match
-from ._merging import _merge_to_matrix, _flip_hf, _meta_unfuse_legdec, _unmerge
-from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace, _masks_for_axes
+from ._merging import _merge_to_matrix, _meta_unfuse_legdec, _unmerge
+from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
 
 
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask']
@@ -14,13 +14,13 @@ __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadca
 def __matmul__(a, b):
     """
     The ``@`` operator computes tensor dot product, contracting the last axis
-    of `a` with the first axis of `b`.
+    of `self` with the first axis of `b`.
 
     Shorthand for yast.tensordot(a, b, axes=(a.ndim - 1, 0)).
 
     Returns
     -------
-    tensor: Tensor
+    yast.Tensor
     """
     return tensordot(a, b, axes=(a.ndim - 1, 0))
 
@@ -29,21 +29,22 @@ def tensordot(a, b, axes, conj=(0, 0)):
     r"""
     Compute tensor dot product of two tensor along specified axes.
 
-    Outgoing legs are ordered such that first ones are the remaining legs 
-    of the first tensor in the original order, and than those 
+    Outgoing legs are ordered such that first ones are the remaining legs
+    of the first tensor in the original order, and than those
     of the second tensor.
 
     Parameters
     ----------
-    a, b: Tensors to contract
+    a, b: yast.Tensor 
+        Tensors to contract
 
-    axes: tuple
+    axes: tuple[int] or tuple[tuple[int]]
         legs of both tensors (for each it is specified by int or tuple of ints)
-        e.g. axes=(0, 3) to contract 0th leg of `a` with 3rd leg of `b`
+        e.g. axes=(0, 3) to contract 0th leg of `a` with 3rd leg of `b`; 
         axes=((0, 3), (1, 2)) to contract legs 0 and 3 of `a` with 1 and 2 of `b`, respectively.
 
-    conj: tuple
-        shows which tensors to conjugate: (0, 0), (0, 1), (1, 0), or (1, 1).
+    conj: tuple[int]
+        specify tensors to conjugate: (0, 0), (0, 1), (1, 0), or (1, 1).
         Default is (0, 0), i.e. neither tensor is conjugated
 
     policy: str
@@ -51,12 +52,12 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
     Returns
     -------
-    tensor: Tensor
+    yast.Tensor
     """
     if conj[0]:
-         a = a.conj()
+        a = a.conj()
     if conj[1]:
-         b = b.conj()
+        b = b.conj()
 
     in_a, in_b = _clear_axes(*axes)  # contracted meta legs
     needs_mask, (nin_a, nin_b) = _test_axes_match(a, b, sgn=-1, axes=(in_a, in_b))
@@ -94,7 +95,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
 
 @lru_cache(maxsize=1024)
-def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym): 
+def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym):
     """ Return row indices of nparray a that are in b, and vice versa.  Outputs tuples."""
     t_a = np.array(t_a, dtype=int).reshape((len(t_a), ndimn_a, nsym))
     t_b = np.array(t_b, dtype=int).reshape((len(t_b), ndimn_b, nsym))
@@ -116,23 +117,26 @@ def _meta_tensordot(config, struct_a, struct_b):
     nsym = len(struct_a.n)
     n_c = np.array(struct_a.n + struct_b.n, dtype=int).reshape((1, 2, nsym))
     n_c = tuple(config.sym.fuse(n_c, (1, 1), 1)[0])
-    struct_a_resorted = iter(sorted(((t[nsym:], t, D, sl) for t, D, sl in zip(struct_a.t, struct_a.D, struct_a.sl))))
+    struct_a_resorted = sorted(((t[nsym:], t, D, sl) for t, D, sl in zip(struct_a.t, struct_a.D, struct_a.sl)))
     struct_b_resorted = ((t[:nsym], t, D, sl) for t, D, sl in zip(struct_b.t, struct_b.D, struct_b.sl))
     meta = []
-    try:
-        tar, ta, Da, sla = next(struct_a_resorted)
-        tbl, tb, Db, slb = next(struct_b_resorted)
-        while True:
-            if tar == tbl:
-                meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db, tar, tbl))
-                tar, ta, Da, sla = next(struct_a_resorted)
-                tbl, tb, Db, slb = next(struct_b_resorted)
-            elif tar < tbl:
-                tar, ta, Da, sla = next(struct_a_resorted)
-            elif tar > tbl:
-                tbl, tb, Db, slb = next(struct_b_resorted)
-    except StopIteration:
-        pass
+    for (tar, ta, Da, sla), (tbl, tb, Db, slb) in zip( struct_a_resorted, struct_b_resorted):
+        assert tar == tbl, "This should not have happend; contact the authors."
+        meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db, tar, tbl))
+    # try:
+    #     tar, ta, Da, sla = next(struct_a_resorted)
+    #     tbl, tb, Db, slb = next(struct_b_resorted)
+    #     while True:
+    #         if tar == tbl:
+    #             meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db, tar, tbl))
+    #             tar, ta, Da, sla = next(struct_a_resorted)
+    #             tbl, tb, Db, slb = next(struct_b_resorted)
+    #         elif tar < tbl:
+    #             tar, ta, Da, sla = next(struct_a_resorted)
+    #         elif tar > tbl:
+    #             tbl, tb, Db, slb = next(struct_b_resorted)
+    # except StopIteration:
+    #     pass
     meta = sorted(meta)
     t_c = tuple(x[0] for x in meta)
     D_c = tuple(x[1] for x in meta)
@@ -258,7 +262,7 @@ def apply_mask(a, *args, axis=0):
         _test_configs_match(a, b)
         axis = _broadcast_input(axis, b.mfs, a.isdiag)
         if b.hfs[axis].tree != (1,):
-            raise YastError('First tensor`s leg specified by axis cannot be fused.')
+            raise YastError('Second tensor`s leg specified by axis cannot be fused.')
 
         Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl)]) for sl in a.struct.sl)
         meta, struct = _meta_mask(b.struct, b.isdiag, a.struct, Dbnew, axis)
@@ -294,7 +298,7 @@ def _meta_mask(a_struct, a_isdiag, b_struct, Dbnew, axis):
         c_Dp = tuple(x[0] for x in c_D)
     else:
         c_D = tuple(mt[2][:axis] + (mt[4],) + mt[2][axis + 1:] for mt in meta)
-        c_Dp = tuple(np.prod(c_D, axis=1))
+        c_Dp = tuple(np.prod(c_D, axis=1)) if len(c_D) > 0 else ()
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
     c_struct = a_struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     meta = tuple((sln, sla, Da, slb) for (_, sla, Da, slb, _), sln in zip(meta, c_struct.sl))
@@ -307,21 +311,21 @@ def vdot(a, b, conj=(1, 0)):
 
     Parameters
     ----------
-    a, b: Tensor
+    a, b: yast.Tensor
 
-    conj: tuple(int)
+    conj: tuple[int]
         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), or (1, 1).
         Default is (1, 0), i.e. tensor `a` is conjugated.
 
     Returns
     -------
-    x: scalar
+    scalar
     """
     _test_configs_match(a, b)
     if conj[0] == 1:
-         a = a.conj()
+        a = a.conj()
     if conj[1] == 1:
-         b = b.conj()
+        b = b.conj()
     needs_mask, _ = _test_axes_match(a, b, sgn=-1)
     if a.struct.t == b.struct.t:
         Adata, Bdata = a._data, b._data
@@ -370,12 +374,12 @@ def trace(a, axes=(0, 1)):
 
     Parameters
     ----------
-        axes: tuple(int) or tuple(tuple(int))
-            Legs to be traced out, e.g axes=(0, 1); or axes=((2, 3, 4), (0, 1, 5))
+    axes: tuple[int] or tuple[tuple[int]]
+        Legs to be traced out, e.g axes=(0, 1); or axes=((2, 3, 4), (0, 1, 5))
 
     Returns
     -------
-        tensor: Tensor
+    yast.Tensor
     """
     lin1, lin2 = _clear_axes(*axes)  # contracted legs
     if len(set(lin1) & set(lin2)) > 0:
@@ -527,23 +531,23 @@ def einsum(subscripts, *operands, order='Alphabetic'):
 
     Example
     -------
-    
+
     ::
-    
-        yast.einsum('*ij,jh->ih', t1, t2) 
-        
+
+        yast.einsum('*ij,jh->ih', t1, t2)
+
         # matrix-matrix multiplication, where the first matrix is conjugated.
-        # Equivalent to 
+        # Equivalent to
 
         t1.conj() @ t2
 
         yast.einsum('ab,al,bm->lm', t1, t2, t3, order='ba')
-        
+
         # Contract along b first, and a second.
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     if not isinstance(subscripts, str):
         raise YastError('The first argument should be a string.')
@@ -599,36 +603,36 @@ def ncon(ts, inds, conjs=None):
 
     Parameters
     ----------
-    ts: list
+    ts: list[yast.Tensor]
         list of tensors to be contracted
 
-    inds: tuple of tuples of ints (or list of lists of ints)
-        each inner tuple labels axes of respective tensor with ints.
-        Positive values labels legs to be contracted,
-        with pairs of axes to be contracted denoted by the same integer label.
+    inds: list[list[int]]
+        each inner tuple labels legs of respective tensor with integers.
+        Positive values label legs to be contracted,
+        with pairs of legs to be contracted denoted by the same integer label.
         Legs are contracted in the order of ascending integer value.
-        Non-positive numbers label the legs of resulting tensor, in reversed order.
+        Non-positive numbers label legs of the resulting tensor, in reversed order.
 
-    conjs: tuple of ints
-        For each tensor in ts, it contains
-        1 if the tensor should be conjugated and 0 otherwise.
+    conjs: tuple[int]
+        For each tensor in `ts` contains either 0 or 1. If the value is 1 the tensor 
+        is conjugated.
 
     Example
     -------
 
     ::
-        
+
         # matrix-matrix multiplication where the first matrix is conjugated
-        
+
         yast.ncon([a, b], ((-0, 1), (1, -1)), conjs=(1, 0))
-        
+
         # outer product
-    
-        yast.ncon([a, b], ((-0, -2), (-1, -3))) 
+
+        yast.ncon([a, b], ((-0, -2), (-1, -3)))
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     if len(ts) != len(inds):
         raise YastError('Number of tensors and indices do not match.')
@@ -725,7 +729,6 @@ def _consume_edges(edges, conjs):
         axes = None
     meta_transpose = (t1, axes, conjs[t1])
     return tuple(meta_trace), tuple(meta_dot), meta_transpose
-
 
     # if policy in ('hybrid', 'direct'):
     #     meta, c_t, c_D, c_Dp, c_sl, tcon = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)

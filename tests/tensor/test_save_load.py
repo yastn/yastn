@@ -55,39 +55,42 @@ def check_to_hdf5(a):
 def test_dict():
     """ test exporting tensor to native python data-structure,
         that allows robust saving/loading with np.save/load."""
-    a = yast.rand(config=config_dense)  # s=() i.e. scalar
+    a = yast.rand(config=config_dense)  # s=() i.e. a scalar
+    assert a.size == 1
     check_to_numpy(a, config_dense)
     check_to_hdf5(a)
 
-    a = yast.rand(config=config_U1, isdiag=False, s=(1, -1, 1),
-                  t=((0, 1, 2), (0, 1, 3), (-1, 0, 1)),
-                  D=((3, 5, 2), (1, 2, 3), (2, 3, 4)))
+    legs = [yast.Leg(config_U1, s=1, t=(0, 1, 2), D= (3, 5, 2)),
+            yast.Leg(config_U1, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
+            yast.Leg(config_U1, s=1, t=(-1, 0, 1), D= (2, 3, 4))]
+
+    a = yast.rand(config=config_U1, legs=legs)
     check_to_numpy(a, config_U1)
     check_to_hdf5(a)
 
-    a = yast.randC(config=config_U1, isdiag=False, s=(1, -1, 1),
-                  t=((0, 1, 2), (0, 1, 3), (-1, 0, 1)),
-                  D=((3, 5, 2), (1, 2, 3), (2, 3, 4)))
-    check_to_numpy(a, config_U1) # here a is 
+    a = yast.randC(config=config_U1, legs=legs, n=1)
+    check_to_numpy(a, config_U1) # here a is complex
     check_to_hdf5(a)
 
-    a = yast.rand(config=config_U1, isdiag=True, t=(0, 1), D=(3, 5))
+    a = yast.rand(config=config_U1, isdiag=True, legs=legs[0])
     check_to_numpy(a, config_U1)
     check_to_hdf5(a)
 
-    a = yast.ones(config=config_Z2xU1, s=(-1, 1, 1), n=(0, -2),
-                  t=(((0, 0), (0, 2), (1, 0), (1, 2)), ((0, -2), (0, 2)), ((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2))),
-                  D=((1, 2, 3, 4), (2, 1), (2, 3, 5, 4, 1, 6)))
+
+    legs = [yast.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4)),
+            yast.Leg(config_Z2xU1, s=1, t=((0, -2), (0, 2)), D=(2, 1)),
+            yast.Leg(config_Z2xU1, s=1, t=((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)), D=(2, 3, 5, 4, 1, 6))]
+    a = yast.ones(config=config_Z2xU1, legs=legs, n=(0, -2))
     check_to_numpy(a, config_Z2xU1)
     check_to_hdf5(a)
 
     a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
-    b = a.fuse_legs(axes=((0, 2), 1, (4, 3), 5), mode='hard')
-    b = b.fuse_legs(axes=((0, 2), 1, 3), mode='hard')
-    b = b.fuse_legs(axes=((0, 2), 1), mode='meta')
-    check_to_numpy(b, config_U1)
+    a = a.fuse_legs(axes=((0, 2), 1, (4, 3), 5), mode='hard')
+    a = a.fuse_legs(axes=((0, 2), 1, 3), mode='hard')
+    a = a.fuse_legs(axes=((0, 2), 1), mode='meta')
+    check_to_numpy(a, config_U1)
     check_to_hdf5(a)
 
 
@@ -97,9 +100,8 @@ def test_load_exceptions():
     with pytest.raises(yast.YastError):
         _ = yast.load_from_dict(config=config_U1)  # Dictionary d is required
 
-    a = yast.randC(config=config_Z2, isdiag=False, s=(1, -1, 1), n=1,
-                  t=((0, 1), (0, 1), (0, 1)),
-                  D=((1, 2), (3, 4), (5, 6)))
+    leg = yast.Leg(config_Z2, s=1, t=(0, 1), D=(2, 3))
+    a = yast.randC(config=config_Z2, n=1, legs=[leg, leg, leg.conj()])
     check_to_numpy(a, config_Z2)  # OK
 
     with pytest.raises(yast.YastError):

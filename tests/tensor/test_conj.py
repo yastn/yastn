@@ -10,7 +10,7 @@ except ImportError:
 tol = 1e-12  #pylint: disable=invalid-name
 
 def conj_vs_numpy(a, expected_n):
-    """ run conj() flip_signature() and a few tests. """
+    """ run conj(), flip_signature() and a few tests. """
     b = a.conj()
     c = a.flip_signature()
     d = a.conj_blocks()
@@ -73,10 +73,9 @@ class TestConj_Z2xU1(unittest.TestCase):
         #
         # create random complex-valued symmetric tensor with symmetry Z2 x U(1)
         #
-        a = yast.rand(config=config_Z2xU1, s=(1, -1), n=(1, 2),
-                      t=[[(0, 2), (1, 1), (0, 2)], [(0, 1), (0, 0), (1, 1)]],
-                      D=[[1, 2, 3], [4, 5, 6]], dtype="complex128")
-
+        legs = [yast.Leg(config_Z2xU1, s=1, t=((0, 2), (1, 1), (1, 2)), D=(1, 2, 3)),
+                yast.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, -1), (1, 0)), D=(4, 5, 6))]
+        a = yast.rand(config=config_Z2xU1, legs=legs, n=(1, 2), dtype="complex128")
         #
         # conjugate tensor a: verify that signature and total charge
         # has been reversed.
@@ -120,7 +119,7 @@ class TestConj_Z2xU1(unittest.TestCase):
         # opposite order). Hence, tensor b and tensor d should be numerically 
         # identical
         #
-        assert yast.norm(b-d)<tol
+        assert yast.norm(b - d)<tol
 
 if __name__ == '__main__':
     test_conj_basic()

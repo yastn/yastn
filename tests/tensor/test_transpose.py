@@ -42,13 +42,13 @@ class TestSyntaxTranspose(unittest.TestCase):
         # for each leg its dense dimension is given by the sum of dimensions
         # of individual sectors. Hence, the (dense) shape of this tensor
         # is (2+3, 4+5, 6+7, 6+5, 4+3, 2+1)
-        assert a.get_shape() ==  (5, 9, 13, 11, 7, 3)
+        assert a.get_shape() == (5, 9, 13, 11, 7, 3)
 
         #
         # permute the legs of the tensor and check the shape is changed
         # accordingly
-        b = a.transpose(axes=(0,2,4,1,3,5))
-        assert b.get_shape() == (5,13,7,9,11,3)
+        b = a.transpose(axes=(0, 2, 4, 1, 3, 5))
+        assert b.get_shape() == (5, 13, 7, 9, 11, 3)
 
         #
         # sometimes, instead of writing explicit permutation of all legs
@@ -56,9 +56,9 @@ class TestSyntaxTranspose(unittest.TestCase):
         # In this example, we reverse the permutation done previously thus
         # ending up with tensor numerically identical to a.
         #
-        c = b.move_leg(source=(1,2), destination=(2,4))
+        c = b.move_leg(source=(1, 2), destination=(2, 4))
         assert c.get_shape() == a.get_shape()
-        assert yast.norm(a-c)<tol
+        assert yast.norm(a - c) < tol
 
 
 def test_transpose_basic():
@@ -86,10 +86,11 @@ def test_transpose_basic():
     run_move_leg(a, ad, source=(2, -1, 0), destination=(-1, 2, -2), result=(9, 11, 3, 7, 5, 13))
 
     # Z2xU1
-    t1 = [(0, 0), (0, 2), (1, 0), (1, 2)]
-    a = yast.ones(config=config_Z2xU1, s=(-1, -1, 1, 1),
-                  t=[t1, t1, t1, t1],
-                  D=[(7, 3, 4, 5), (5, 4, 3, 2), (3, 4, 5, 6), (1, 2, 3, 4)])
+    legs = [yast.Leg(config_Z2xU1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(7, 3, 4, 5), s=-1),
+            yast.Leg(config_Z2xU1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(5, 4, 3, 2), s=-1),
+            yast.Leg(config_Z2xU1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(3, 4, 5, 6), s=1),
+            yast.Leg(config_Z2xU1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4), s=1)]
+    a = yast.ones(config=config_Z2xU1, legs=legs)
     assert a.get_shape() == (19, 14, 18, 10)
     ad = a.to_numpy()
     run_transpose(a, ad, axes=(1, 2, 3, 0), result=(14, 18, 10, 19))
@@ -114,6 +115,7 @@ def test_transpose_exceptions():
         _ = a.transpose(axes=(0, 1, 3, 5))  # Provided axes do not match tensor ndim.
     with pytest.raises(yast.YastError):
         _ = a.transpose(axes=(0, 1, 1, 2, 2, 3))  # Provided axes do not match tensor ndim.
+
 
 @pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
 def test_transpose_backward():
@@ -141,5 +143,5 @@ if __name__ == '__main__':
     test_transpose_basic()
     test_transpose_diag()
     test_transpose_exceptions()
-    test_transpose_backward()
+    # test_transpose_backward()
     unittest.main()
