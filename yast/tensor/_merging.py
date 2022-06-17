@@ -620,7 +620,9 @@ def _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, t_out, s_out):
     return _leg_structure_merge(teff, tlegs, Deff, Dlegs)
 
 
-def _leg_structure_combine_charges_sum(pos, t_in, D_in):
+def _leg_structure_combine_charges_sum(t_in, D_in, pos=None):
+    if pos is None:
+        pos = range(len(t_in))
     teff, plegs, Deff, Dlegs = [], [], [], []
     for n, tns, Dns in zip(pos, t_in, D_in):
         for tn, Dn in zip(tns, Dns):

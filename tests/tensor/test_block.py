@@ -97,11 +97,11 @@ def test_block_fuse():
 
     # THIS WOULD GENERATE ERROR
     # BLOCKING DO NOT REMEMBER HISTORY OF BLOCKING WHICH CAN LEAD TO ERRORS
-    # HAS TO BE USED WITH CAUCIOUS
-    # leg1 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 1, 2))
-    # leg2 = yast.Leg(config_U1, s=1, t=(0, 1, 2), D=(2, 3, 1))
-    # leg3 = yast.Leg(config_U1, s=1, t=(0, 1, 2), D=(3, 4, 5))
-    # leg4 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(4, 5, 6))
+    # HAS TO BE USED WITH CAUCIOUS  -- FIXED ???
+    leg1 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 1, 2))
+    leg2 = yast.Leg(config_U1, s=1, t=(0, 1, 2), D=(2, 3, 1))
+    leg3 = yast.Leg(config_U1, s=1, t=(0, 1, 2), D=(3, 4, 5))
+    leg4 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(4, 5, 6))
 
     legs_l = {1: [leg1, leg2.conj()], 2: [leg2, leg3.conj()]}
     legs_r = {1: [leg3, leg4.conj()], 2: [leg4, leg1.conj()]}
