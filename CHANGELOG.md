@@ -178,4 +178,6 @@ v0.9
 - methods `to_numpy`, `to_dense`, `to_nonsymmetric` take dict `legs` specifying how to fill-in zeros to make output consistent with provided `legs` (for now does not work for mismatch in hard fusions). This replaces old argument `leg_structures`.
 - `truncation_mask` does not have arguments keep_multiplets and multiplets_eps, as there is specialised function `truncation_mask_multiplets`
 
-
+17-6-2022
+- a new version of `yast.block` that supports tracking history of blocking; to resolve possible merge conflicts
+- `.drop_leg_history(axis=None)` gives a shallow copy of the tensor, where information about fusion/blocking history on some legs (of all for axis=None) is dropped.
