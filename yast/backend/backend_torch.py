@@ -636,13 +636,10 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
     newdata = torch.zeros((Dsize,), dtype=dtype, device=device)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_block, key=lambda x: x[0])):
         assert tn == t1
-        temp = torch.zeros(Dn, dtype=dtype, device=device)
         for (_, slo, Do, pos, Dslc) in gr:
-            slc = tuple(slice(*x) for x in Dslc)
-            temp[slc] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
-        newdata[slice(*sln)] = temp.ravel()
+            slcs = tuple(slice(*x) for x in Dslc)
+            newdata[slice(*sln)].reshape(Dn)[slcs] = pos_tens[pos]._data[slice(*slo)].reshape(Do)
     return newdata
-
 
 def unmerge(data, meta):
     return kernel_unmerge.apply(data, meta)
