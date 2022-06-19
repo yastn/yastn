@@ -82,12 +82,68 @@ def test_block_exceptions():
         fII = II.fuse_legs(axes=(0, (1, 2, 3)), mode='meta')
         fnn = nn.fuse_legs(axes=(0, 1, (2, 3)), mode='meta')
         fnn = fnn.fuse_legs(axes=(0, (1, 2)), mode='meta')
+        # block is hard-fusing meta-fused legs first.
         _ = yast.block({(0, 0): fII,  (1, 0): fnn, (1, 1): fII}, common_legs=())
-        # Meta fusions of blocked tensors are inconsistent.
+        # Inconsistent numbers of hard-fused legs or sub-fusions order.
     with pytest.raises(yast.YastError):
         nnn = yast.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 2, 1, 1), s=(1, 1, -1, -1))
         _ = yast.block({(0, 0): II,  (1, 0): nnn, (1, 1): II}, common_legs=(1, 2))
-        # Dimensions of blocked tensors are not consistent
+        # Legs have inconsistent dimensions.
+
+
+def test_block_embed():
+    """ test handling leg mismatches before applying block."""
+    leg1 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 1, 4))
+    leg1a = yast.Leg(config_U1, s=1, t=(-1, 0, 4), D=(3, 1, 5))
+    leg2 = yast.Leg(config_U1, s=1, t=(-2, 0, 2), D=(3, 1, 2))
+
+    vs, tras = [], []
+    a = yast.rand(config=config_U1, legs=[leg1, leg1, leg2.conj(), leg2.conj()])
+    b = yast.rand(config=config_U1, legs=[leg2, leg2, leg1a.conj(), leg1.conj()])
+
+    print(a.get_legs())
+    print(b.get_legs())
+
+    vs.append(yast.vdot(a, a) + yast.vdot(b, b).item())
+    tras.append(yast.trace(a, axes=((0, 1), (2, 3))).item() + yast.trace(b, axes=((0, 1), (2, 3))).item())
+
+    fa = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+    fb = b.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+
+    print(fa.get_legs())
+    print(fb.get_legs())
+
+    c1 = yast.block({(0, 0): fa, (1, 0): fb})
+    vs.append(yast.vdot(c1, c1).item())
+    c2 = yast.block({(0, 0): fa, (0, 1): fb})
+    vs.append(yast.vdot(c2, c2).item())
+    c3 = yast.block({(0, 0): fb, (1, 0): fa})
+    vs.append(yast.vdot(c3, c3).item())
+    c4 = yast.block({(0, 0): fb, (0, 1): fa})
+    vs.append(yast.vdot(c4, c4).item())
+
+    ffa = fa.fuse_legs(axes=[(0, 1)], mode='hard').add_leg(axis=1)
+    ffb = fb.fuse_legs(axes=[(0, 1)], mode='hard').add_leg(axis=1)
+    c = yast.block({(0, 0): ffa, (0, 1): ffb})
+    vs.append(yast.vdot(c, c).item())
+
+    c1 = yast.block({(0, 0): fa, (1, 0): fb})
+    c2 = yast.block({(0, 0): fb, (1, 0): fa})
+    cc1 = yast.block({(0, 0): c1, (0, 1): c2})
+    vs.append(yast.vdot(cc1, cc1).item() / 2)
+    vs.append(yast.tensordot(cc1, cc1.conj(), axes=((0, 1), (0, 1))).item() / 2)
+
+    c1 = yast.block({(0, 0): fb, (1, 0): fa})
+    c2 = yast.block({(0, 0): fa, (1, 0): fb})
+    cc2 = yast.block({(0, 0): c1, (0, 1): c2})
+    vs.append(yast.vdot(cc2, cc2).item() / 2)
+    vs.append(yast.tensordot(cc2, cc2.conj(), axes=((0, 1), (0, 1))).item() / 2)
+
+    tras.append(yast.trace(cc1 + cc2, axes=(0, 1)).item() / 2)
+
+    assert all(pytest.approx(x, rel=tol) == vs[0] for x in vs)
+    assert all(pytest.approx(x, rel=tol) == tras[0] for x in tras)
+
 
 def test_block_fuse():
     leg1 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 1, 2))
@@ -111,7 +167,7 @@ def test_block_fuse():
     c = {(i, j): yast.rand(config=config_U1, legs=legs_l[i] + legs_r[j]).conj() for i, j in ((1, 1), (1, 2), (2, 2))}
     s = {(i, j): yast.einsum('kl,klmn,mn->', l[i], c[i, j], r[j]) for i, j in ((1, 1), (1, 2), (2, 2))}
 
-    mode = 'meta'
+    mode = 'hard'
     fl = {i: l[i].fuse_legs(axes=[(0, 1)], mode=mode) for i in (1, 2)}
     fr = {j: r[j].fuse_legs(axes=[(0, 1)], mode=mode) for j in (1, 2)}
     fc = {(i, j): c[i, j].fuse_legs(axes=[(0, 1), (2, 3)], mode=mode) for i, j in ((1, 1), (1, 2), (2, 2))}
@@ -120,11 +176,6 @@ def test_block_fuse():
     bfr = yast.block({1: fr[1], 2: fr[2]})
     bfc = yast.block({(1, 1): fc[1, 1], (2, 2): fc[2, 2], (1, 2): fc[1, 2]})
 
-    # this explains blocking of meta-fused tensors
-    bc = yast.block({(1, 1, 1, 1): c[1, 1], (2, 2, 2, 2): c[2, 2], (1, 1, 2, 2): c[1, 2]})
-    fbc = bc.fuse_legs(axes=((0, 1), (2, 3)), mode=mode)
-    assert yast.norm(bfc - fbc) < tol
-
     bfs = yast.ncon([bfl, bfc, bfr], [[1], [1, 2], [2]])
     assert yast.norm(bfs - s[1, 1] - s[2, 2] - s[1, 2]) < tol
 
@@ -132,4 +183,6 @@ def test_block_fuse():
 if __name__ == "__main__":
     test_block_U1()
     test_block_exceptions()
+
+    test_block_embed()
     test_block_fuse()
