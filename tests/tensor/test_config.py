@@ -25,7 +25,7 @@ def test_config_exceptions():
 
 
 @pytest.mark.skipif(config_U1.backend.BACKEND_ID=="numpy", reason="requires different backends or devices")
-def test_config_exceptions_2():
+def test_config_exceptions_torch():
     """ mismatches requiring different backends or devices"""
     a = yast.rand(config=config_U1, s=(1, -1, 1), t=((0, 1), (0, 1), (0, 1)), D=((1, 2), (1, 2), (1, 2)))
     with pytest.raises(yast.YastError):
@@ -44,4 +44,4 @@ def test_config_exceptions_2():
 
 if __name__ == '__main__':
     test_config_exceptions()
-    test_config_exceptions_2()
+    test_config_exceptions_torch()

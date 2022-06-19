@@ -30,12 +30,12 @@ def random_seed(seed):
     rng['rng'] = np.random.default_rng(seed)
 
 
-def set_num_threads(num_threads):
+def set_num_threads(num_threads):  # pragma: no cover
     warnings.warn("backend_np does not support set_num_threads.", Warning)
     pass
 
 
-def grad(x):
+def grad(x):  # pragma: no cover
     warnings.warn("backend_np does not support automatic differentiation.", Warning)
     return None
 
@@ -44,11 +44,11 @@ def grad(x):
 ###################################
 
 
-def detach(x):
+def detach(x):  # pragma: no cover
     return x
 
 
-def detach_(x):
+def detach_(x):  # pragma: no cover
     return x
 
 
@@ -78,10 +78,6 @@ def diag_create(x, p=0):
 
 def diag_get(x):
     return np.diag(x).copy()
-
-
-def count_greater(x, cutoff):
-    return np.sum(x > cutoff).item()
 
 
 def real(x):
@@ -198,12 +194,12 @@ def square_matrix_from_dict(H, D=None, **kwargs):
     return T
 
 
-def requires_grad_(data, requires_grad=True):
+def requires_grad_(data, requires_grad=True):  # pragma: no cover
     warnings.warn("backend_np does not support autograd.", Warning)
     pass
 
 
-def requires_grad(data):
+def requires_grad(data):  # pragma: no cover
     return False
 
 
@@ -232,9 +228,6 @@ def trace_with_mask(data, order, meta, Dsize, tcon, msk12):
         temp = data[slice(*slo)].reshape(Do).transpose(order).reshape(Drsh)
         newdata[slice(*sln)] += np.sum(temp[msk12[tt][0], msk12[tt][1]], axis=0).ravel()
     return newdata
-
-
-
 
 
 def rsqrt(data, cutoff=0):
