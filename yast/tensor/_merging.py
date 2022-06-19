@@ -28,7 +28,7 @@ class _DecRec(NamedTuple):
 class _Fusion(NamedTuple):
     """ Information identifying the structure of hard fusion"""
     tree: tuple = (1,)  # order of fusions
-    op: str = 'n'  # type of node; 'n' native; 'p' product; 's' sum  len(node) = len(tree)
+    op: str = 'o'  # type of node; 'n' native; 'p' product; 's' sum  len(node) = len(tree)
     s: tuple = (1,)  # signatures len(s) = len(tree)
     t: tuple = ()  # fused leg charges at each step len(t) = len(tree) - 1
     D: tuple = ()  # fused dimensions  at each step len(t) = len(tree) - 1

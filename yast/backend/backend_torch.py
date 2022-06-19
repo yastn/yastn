@@ -9,7 +9,7 @@ def _torch_version_check(version):
     try:
         import pkg_resources
         return pkg_resources.parse_version(torch.__version__) >= pkg_resources.parse_version(version)
-    except ModuleNotFoundError:
+    except ModuleNotFoundError:  # pragma: no cover
         try:
             from packaging import version
             return version.parse(torch.__version__) >= version.parse(version)
@@ -18,7 +18,7 @@ def _torch_version_check(version):
             tokens_v= version.split('.')
             return int(tokens[0]) > int(tokens_v[0]) or \
                 (int(tokens[0])==int(tokens_v[0]) and int(tokens[1]) >= int(tokens_v[1])) 
-    return True
+
 
 from .linalg.torch_svd_gesdd import SVDGESDD
 from .linalg.torch_eig_sym import SYMEIG

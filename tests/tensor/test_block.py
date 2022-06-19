@@ -113,11 +113,14 @@ def test_block_embed_fuse():
 
     fa = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
     fb = b.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+    assert all(leg.fused() == 'p(oo)' for leg in fa.get_legs())
 
     abv = yast.block({(0, 0): fa, (1, 0): fb})
     abh = yast.block({(0, 0): fa, (0, 1): fb})
     bav = yast.block({(0, 0): fb, (1, 0): fa})
     bah = yast.block({(0, 0): fb, (0, 1): fa})
+    assert abv.get_legs(0).fused() == 's(p(oo)p(oo))'
+    assert abv.get_legs(1).fused() == 'p(oo)'
 
     ffa = fa.fuse_legs(axes=[(0, 1)], mode='hard').add_leg(axis=1)
     ffb = fb.fuse_legs(axes=[(0, 1)], mode='hard').add_leg(axis=1)
@@ -143,6 +146,7 @@ def test_block_embed_fuse():
     fbd1 = yast.block({(0, 0): fbah, (1, 0): fabh})
     ffad = fad.fuse_legs(axes=[(0, 1)], mode='hard')
     ffbd = fbd.fuse_legs(axes=[(0, 1)], mode='hard')
+    ffad.get_legs(axis=0).fused() == 'p(s(p(oo)p(oo))s(p(oo)p(oo)))'
 
     fabbav = yast.block({(0, 0): fabv, (1, 0): fbav})
     fbaabv = yast.block({(0, 0): fbav, (1, 0): fabv})
@@ -176,6 +180,7 @@ def test_block_embed_fuse():
     assert all(pytest.approx(x, rel=tol) == tras[0] for x in tras)
     assert all(pytest.approx(x, rel=tol) == vapb[0] for x in vapb)
     assert all(pytest.approx(x, rel=tol) == vamb[0] for x in vamb)
+
 
 
 if __name__ == "__main__":
