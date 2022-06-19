@@ -49,7 +49,7 @@ def test_leg_meta_fusion():
     a = a.fuse_legs(axes=((0, 1), 2), mode='meta')
     legm = a.get_legs(0)
     assert legm.fusion == a.mfs[0] and legm.legs == (leg, leg, leg, leg.conj())
-    assert legm.fused() == 'm(m(oo)m(oo))'
+    assert legm.history() == 'm(m(oo)m(oo))'
 
     legt = a.get_legs((0, 1))
     assert legt[0] == legm
@@ -83,7 +83,7 @@ def test_leg_hard_fusion():
     assert yast.norm(a - b) < tol
 
     cf =  af.fuse_legs(axes=[(0, 1)], mode='meta')
-    assert cf.get_legs(axis=0).fused() == 'm(p(oo)p(oo))'
+    assert cf.get_legs(axis=0).history() == 'm(p(oo)p(oo))'
 
 
 def test_leg_exceptions():

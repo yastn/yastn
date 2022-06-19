@@ -139,7 +139,7 @@ def show_properties(a):
     print("shape native :", a.get_shape(native=True))
     print("no. blocks   :", len(a.struct.t))  # number of blocks
     print("size         :", a.size)  # total number of elements in all blocks
-    st = {i: leg._str_leg_history() for i, leg in enumerate(a.get_legs())}
+    st = {i: leg.history() for i, leg in enumerate(a.get_legs())}
     print("legs fusions :", st, "\n")
 
 

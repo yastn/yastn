@@ -80,7 +80,7 @@ class Leg:
             object.__setattr__(self, "_verified", True)
 
     def __repr__(self):
-        return ("Leg(sym={}, s={}, t={}, D={}, fused={})".format(self.sym, self.s, self.t, self.D, self.fused()))
+        return ("Leg(sym={}, s={}, t={}, D={}, hist={})".format(self.sym, self.s, self.t, self.D, self.history()))
 
     def conj(self):
         r"""
@@ -121,7 +121,7 @@ class Leg:
         return dict(zip(self.t, self.D))
     
     
-    def fused(self):
+    def history(self):
         """
         Show str representation of Leg fusion history.
         'o' marks original legs,
@@ -135,7 +135,7 @@ class Leg:
             tmp  = _str_tree(tree, op).split('X')
             st = tmp[0]
             for leg_native, sm in zip(self.legs, tmp[1:]):
-                st = st + leg_native.fused()  + sm
+                st = st + leg_native.history()  + sm
             return st
         else:
             hf = self.legs[0]
