@@ -8,21 +8,6 @@ from ._merging import _Fusion, _pure_hfs_union
 
 __all__ = ['Leg', 'leg_union']
 
-    # r"""
-    # Abelian symmetric vector space - leg of a tensor.
-    # .. py:attribute:: sym : symmetry class or compatible object
-    #     Specify abelian symmetry. To see how YAST defines symmetries,
-    #     see :class:`yast.sym.sym_abelian`.
-    #     Defaults to ``yast.sym.sym_none``, effectively a dense tensor.
-    # .. py:attribute:: s
-    #         Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
-    # .. py:attribute:: t : iterable[int] or iterable[iterable[int]]
-    #     List of charge sectors
-    # .. py:attribute:: D : iterable[int]
-    #     List of corresponding charge sector dimensions.
-    # .. py:attribute:: fusion
-    #     Information about type of fusion
-    # """
 
 @dataclass(frozen=True, repr=False)
 class Leg:
@@ -95,7 +80,7 @@ class Leg:
             object.__setattr__(self, "_verified", True)
 
     def __repr__(self):
-        return ("Leg(sym={}, s={}, t={}, D={})".format(self.sym, self.s, self.t, self.D))
+        return ("Leg(sym={}, s={}, t={}, D={}, fused={})".format(self.sym, self.s, self.t, self.D, self.fused()))
 
     def conj(self):
         r"""
@@ -134,6 +119,29 @@ class Leg:
             charge sectors `t` and their sizes `D` as dictionary ``{t: D}``.
         """
         return dict(zip(self.t, self.D))
+    
+    
+    def fused(self):
+        """
+        Show str representation of Leg fusion history.
+        'o' marks original legs,
+        's' is for sum (block),
+        'p' is for product fuse(..., mode='hard'),
+        'm' is for meta-fusion.
+        """
+        if isinstance(self.fusion, tuple):  # meta fused
+            tree = self.fusion
+            op=''.join('m' if x > 1 else 'X' for x in tree)
+            tmp  = _str_tree(tree, op).split('X')
+            st = tmp[0]
+            for leg_native, sm in zip(self.legs, tmp[1:]):
+                st = st + leg_native.fused()  + sm
+            return st
+        else:
+            hf = self.legs[0]
+            return _str_tree(hf.tree, hf.op)
+
+
 
 def _leg_fusions_need_mask(*legs):
     legs = list(legs)
@@ -190,3 +198,14 @@ def _leg_union(*legs):
         D = tuple(tD[x] for x in t)
         hf = legs[0].legs[0]
     return Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D, legs=(hf,))
+
+
+def _str_tree(tree, op):
+    if len(tree) == 1:
+        return op
+    st, op, tree = op[0] + '(', op[1:], tree[1:]
+    while len(tree) > 0:
+        slc = [pos for pos, node in enumerate(tree) if node == 1][tree[0] - 1] + 1
+        st = st + _str_tree(tree[:slc], op[:slc])
+        tree, op = tree[slc:], op[slc:]
+    return st  + ')'

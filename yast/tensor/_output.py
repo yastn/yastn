@@ -1,7 +1,7 @@
 """ methods outputing data from yast tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _mf_to_ntree, _struct, _flatten
+from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
 from ._tests import YastError
 from ..sym import sym_none
 from ._legs import Leg, leg_union, _leg_fusions_need_mask
@@ -129,20 +129,18 @@ def show_properties(a):
         * fusion tree for each leg
         * metadata for fused legs
     """
-    print("Symmetry    :", a.config.sym.SYM_ID)
-    print("signature   :", a.struct.s)  # signature
-    print("charge      :", a.struct.n)  # total charge of tensor
-    print("isdiag      :", a.isdiag)
-    print("dim meta    :", a.ndim)  # number of meta legs
-    print("dim native  :", a.ndim_n)  # number of native legs
-    print("shape meta  :", a.get_shape(native=False))
-    print("shape native:", a.get_shape(native=True))
-    print("no. blocks  :", len(a.struct.t))  # number of blocks
-    print("size        :", a.size)  # total number of elements in all blocks
-    mfs = {i: _mf_to_ntree(mf) for i, mf in enumerate(a.mfs)}
-    print("meta fusion :", mfs)  # encoding meta fusion tree for each leg
-    hfs = {i: _mf_to_ntree(hf.tree) for i, hf in enumerate(a.hfs)}
-    print("hard fusion :", hfs, "\n")  # encoding info on hard fusion for each leg
+    print("Symmetry     :", a.config.sym.SYM_ID)
+    print("signature    :", a.struct.s)  # signature
+    print("charge       :", a.struct.n)  # total charge of tensor
+    print("isdiag       :", a.isdiag)
+    print("dim meta     :", a.ndim)  # number of meta legs
+    print("dim native   :", a.ndim_n)  # number of native legs
+    print("shape meta   :", a.get_shape(native=False))
+    print("shape native :", a.get_shape(native=True))
+    print("no. blocks   :", len(a.struct.t))  # number of blocks
+    print("size         :", a.size)  # total number of elements in all blocks
+    st = {i: leg._str_leg_history() for i, leg in enumerate(a.get_legs())}
+    print("legs fusions :", st, "\n")
 
 
 def __str__(a):
@@ -550,73 +548,6 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
-
-
-# def to_nonsymmetric(a, legs=None, native=False, reverse=False):
-#     r"""
-#     Create equivalent ``yast.Tensor`` with no explict symmetry. All blocks of the original
-#     tensor are accummulated into a single block.
-
-#     Blocks are ordered according to increasing charges on each leg.
-#     It is possible to supply a list of additional charge sectors with dimensions to be included.
-#     (should be consistent with the tensor). This allows to fill in some explicit zero blocks.
-
-#     .. note::
-#         yast structure can be redundant since resulting tensor is effectively just
-#         a single dense block. If that's the case, use :meth:`yast.Tensor.to_dense`.
-
-#     Parameters
-#     ----------
-#     legs : dict
-#         {n: Leg} specify charges and dimensions to include on some legs (indicated by keys n).
-
-#     native: bool
-#         output native tensor (ignoring meta-fusion of legs).
-
-#     reverse: bool
-#         reverse the order in which blocks are sorted. Default order is ascending in
-#         values of block's charges.
-
-#     Returns
-#     -------
-#     out : yast.Tensor
-#         returned tensor does not use any symmetry
-#     """
-#     config_dense = a.config._replace(sym=sym_none)
-#     a = a.embed(legs=legs)
-#     a_legs = a.get_legs(native=native)
-
-#     Dtot = tuple(sum(leg.D) for leg in a_legs)
-#     tD, step = [], -1 if reverse else 1
-#     for n, leg in enumerate(a_legs):
-#         Dlow, tDn = 0, {}
-#         for tn, Dn in zip(leg.t[::step], leg.D[::step]):
-#             Dhigh = Dlow + Dn
-#             tDn[tn] = (Dlow, Dhigh)
-#             Dlow = Dhigh
-#         tD.append(tDn)
-#     if native:
-#         axes = tuple((n,) for n in range(a.ndim_n))
-#     else:
-#         axes = tuple((n,) for n in range(a.ndim))
-#         axes = tuple(_unpack_axes(a.mfs, *axes))
-#     meta = []
-#     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-#     for t_sl, tt in zip(a.struct.sl, tset):
-#         meta.append((slice(*t_sl), tuple(tD[n][tuple(tt[ax, :].flat)] for n, ax in enumerate(axes))))
-#     if a.isdiag:
-#         Dtot = Dtot[:1]
-#         meta = [(sl, D[:1]) for sl, D in meta]
-
-#     c_s = a.get_signature(native)
-#     c_t = ((),)
-#     c_D = (Dtot,) if not a.isdiag else (Dtot + Dtot,)
-#     Dp = np.prod(Dtot, dtype=int)
-#     c_Dp = (Dp,)
-#     c_sl = ((0, Dp),)
-#     c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
-#     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
-#     return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
 
 
 def zero_of_dtype(a):
