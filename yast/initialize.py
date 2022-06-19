@@ -5,9 +5,10 @@ from ast import literal_eval
 from itertools import chain, repeat, accumulate
 import numpy as np
 from .tensor import Tensor, YastError
-from .tensor._auxliary import _struct, _config, _clear_axes, _unpack_axes, _unpack_legs
+from .tensor._auxliary import _struct, _config, _clear_axes, _unpack_legs
 from .tensor._merging import _Fusion, _leg_structure_combine_charges_sum, _embed_tensor, _sum_hfs
 from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
+from .tensor._tests import _test_configs_match
 
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
@@ -360,9 +361,11 @@ def decompress_from_1d(r1d, config, meta):
 
 def block(tensors, common_legs=None):
     """
-    Assemble new tensor by blocking a set of tensors.
+    Assemble new tensor by blocking a group of tensors.
 
-    TODO: the set of tensors should reside on the same device. Optional destination device might be added
+    History of blocking is stored together with history of hard-fusions.
+    Subsequent blocking in a few steps and its equivalent single step blocking give the same tensor.
+    Applying block on tensors turns all previous meta fused legs into hard fused ones.
 
     Parameters
     ----------
@@ -372,12 +375,16 @@ def block(tensors, common_legs=None):
 
     common_legs : list
         Legs that are not blocked.
-        This is equivalently to all tensors having the same position (not specified explicitly) in the super-tensor on that leg.
+        This is equivalently to all tensors having the same position
+        (not specified explicitly) in the super-tensor on that leg.
+
+    Returns
+    -------
+    tensor : Tensor
     """
     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
     out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
     out_b = tuple(ii for ii in range(tn0.ndim) if ii not in out_s)
-    #out_b = tuple((ii,) for ii in range(tn0.ndim) if ii not in out_s)
 
     pos = list(_clear_axes(*tensors))
     lind = tn0.ndim - len(out_s)
@@ -393,6 +400,7 @@ def block(tensors, common_legs=None):
     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
 
     for tn in tensors.values():
+        _test_configs_match(tn, tn0)
         if tn.struct.s != tn0.struct.s:
             raise YastError('Signatues of blocked tensors are inconsistent.')
         if tn.struct.n != tn0.struct.n:

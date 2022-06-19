@@ -97,11 +97,6 @@ def diag_get(x):
     return torch.diag(x)
 
 
-@torch.no_grad()
-def count_greater(x, cutoff):
-    return torch.sum(x > cutoff).item()
-
-
 def real(x):
     return torch.real(x) if torch.is_complex(x) else x
 

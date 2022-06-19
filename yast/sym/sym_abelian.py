@@ -2,8 +2,9 @@ class sym_meta(type):
     def __str__(cls):
         return cls.SYM_ID
 
-    def __repr__(cls):
-        return cls.SYM_ID
+    # def __repr__(cls):
+    #     """ standard path to predefined symmetries """
+    #     return "yast.sym.sym_" + cls.SYM_ID
 
 
 class sym_abelian(metaclass=sym_meta):
@@ -35,4 +36,4 @@ class sym_abelian(metaclass=sym_meta):
             teff: numpy.ndarray
                 integer matrix with shape (k,NSYM) of fused charges and multiplied by ``new_signature``
         """
-        raise NotImplementedError("Subclasses need to override the fuse function")
+        raise NotImplementedError("Subclasses need to override the fuse function")  # pragma: no cover

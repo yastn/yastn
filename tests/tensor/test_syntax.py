@@ -289,16 +289,19 @@ class TestSyntaxContractions(unittest.TestCase):
 class TestSyntaxGeneral(unittest.TestCase):
 
     def test_syntax_noDocs(self):
-        a = yast.rand(config=config_U1, s=(-1, 1, 1, -1),
-                      t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                      D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-        b = yast.ones(config=config_U1, s=(-1, 1, 1, -1),
-                      t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                      D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
-        c = yast.rand(config=config_U1, s=(1, 1, -1),
-                      t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
-                      D=((10, 11, 12), (7, 8, 9), (4, 5, 6)))
-
+        # initialization
+        cfg_none = yast.make_config()  # backend_np; sym_none
+        # not imported config
+        if config_U1.backend.BACKEND_ID == 'numpy':
+            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_np)
+        else:
+            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_torch)
+        legs = [yast.Leg(cfg_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
+                yast.Leg(cfg_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+                yast.Leg(cfg_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
+                yast.Leg(cfg_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
+        a = yast.rand(config=cfg_U1, legs=legs)
+        b = yast.ones(config=config_U1, legs=legs)
 
         # conj - documented example in test_conj.py
         tensor = a.conj()
@@ -318,6 +321,7 @@ class TestSyntaxGeneral(unittest.TestCase):
 
         # to
         tensor = a.to(device='cpu')
+        tensor = a.to(device='complex128')
 
         # get info
         a.show_properties()
@@ -332,15 +336,17 @@ class TestSyntaxGeneral(unittest.TestCase):
         a.get_shape()
         a.get_shape(axis=2)
         legs = a.get_legs()
-        leg = a.get_legs(axis=1)  # legs[1] = leg
+        leg = a.get_legs(axis=2)  # legs[2] = leg
+        print(leg.tD) # dict od charges with dimensions spanning the leg
         print(leg)
-
+        a.get_dtype()
+        a.dtype
 
         # output dense
         array = a.to_dense()
         array = a.to_numpy()
         ls = {1: b.get_legs(axis=1)}
-        array = a.to_dense(legs=ls)  # on selected legs, enforce to include cherges read in previous line
+        array = a.to_dense(legs=ls)  # on selected legs, enforce to include charges read in previous line
         tensor = a.to_nonsymmetric()
 
         # permute - documented example in test_transpose.py
