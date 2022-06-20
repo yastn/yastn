@@ -321,7 +321,7 @@ class TestSyntaxGeneral(unittest.TestCase):
 
         # to
         tensor = a.to(device='cpu')
-        tensor = a.to(device='complex128')
+        tensor = a.to(dtype='complex128')
 
         # get info
         a.show_properties()
