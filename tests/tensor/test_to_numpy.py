@@ -5,9 +5,9 @@ import numpy as np
 import pytest
 import yast
 try:
-    from .configs import config_dense, config_U1
+    from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
-    from configs import config_dense, config_U1
+    from configs import config_dense, config_U1, config_Z2xU1
 
 tol = 1e-12  #pylint: disable=invalid-name
 
@@ -68,6 +68,24 @@ def test_dense_basic():
         assert np.allclose(na @ nd, nad)
         assert np.allclose(ad.to_numpy(legs=lsad), nad)
         assert np.allclose(fad.to_numpy(legs=lsad), nad)
+
+
+def test_to_raw_tensor():
+    """ test to_raw_tensor and getting single block """
+    # leg with a single charge sector
+    leg = yast.Leg(config_Z2xU1, s=1, t=[(0, 0)], D=[2])
+    a = yast.ones(config=config_Z2xU1, legs=[leg, leg, leg])
+    assert pytest.approx(a.norm().item() ** 2) == 8.
+
+    raw = a.to_raw_tensor()  # if there is only one single block in tensor
+    assert raw.shape == (2, 2, 2)
+
+    raw = a[((0, 0), (0, 0), (0, 0))]  # accesing specific block
+    assert raw.shape == (2, 2, 2)
+
+    # add 1 to all elements of the block
+    a[((0, 0), (0, 0), (0, 0))] += 1  # (broadcasted by underlaying backend tensors)
+    assert pytest.approx(a.norm().item() ** 2) == 32.
 
 
 def test_dense_diag():
@@ -142,3 +160,4 @@ if __name__ == '__main__':
     test_dense_basic()
     test_dense_diag()
     test_to_nonsymmetric_basic()
+    test_to_raw_tensor()

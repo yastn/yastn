@@ -117,8 +117,11 @@ def test_block_embed_fuse():
     leg1 = yast.Leg(config_Z2xU1, s=1, t=((0, -1), (0, 1), (1, 0)), D=(2, 3, 4))
     leg2 = yast.Leg(config_Z2xU1, s=1, t=((1, -1), (1, 1), (0, 0)), D=(5, 6, 7))
     a = yast.rand(config=config_Z2xU1, legs=[leg1, leg2, leg2.conj(), leg1.conj()])
-    a.set_block(ts=((0, 2), (1, 0), (1, 2), (0, 0)), Ds=(1, 4, 2, 7))
     b = yast.rand(config=config_Z2xU1, legs=[leg2, leg1, leg1.conj(), leg2.conj()])
+    run_block_embed_fuse(a, b)
+
+    # adds extra block to a and b and run test again
+    a.set_block(ts=((0, 2), (1, 0), (1, 2), (0, 0)), Ds=(1, 4, 2, 7))
     b.set_block(ts=((0, -1), (1, -2), (0, -2), (1, -1)), Ds=(2, 4, 3, 5))
     run_block_embed_fuse(a, b)
 
