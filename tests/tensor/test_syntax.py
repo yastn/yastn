@@ -165,7 +165,7 @@ class TestSyntaxTensorExportImport(unittest.TestCase):
         # 
         vector, meta = yast.compress_to_1d(a)
         vector, meta = a.compress_to_1d(meta=meta)
-        tensor = yast.decompress_from_1d(vector, config_U1, meta)
+        tensor = yast.decompress_from_1d(vector, meta)
 
         # 
         # Tensors can be also serialized directly into basic Python dictionary

@@ -8,7 +8,7 @@ description = ('Yet another symmetric tensor.')
 # README file as long_description.
 long_description = open('README.md', encoding='utf-8').read()
 
-__version__ = '0.9.9'
+__version__ = '1.0.0'
 
 setup(
     name='yast',

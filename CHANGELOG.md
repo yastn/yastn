@@ -182,3 +182,4 @@ v0.9
 - a new version of `yast.block` that supports tracking history of blocking; to resolve possible merge conflicts
 - `.drop_leg_history(axis=None)` gives a shallow copy of the tensor, where information about fusion/blocking history on some legs (of all for axis=None) is dropped.
 - `Leg` got method `.history()` that returns a string representation of the fusion history, with 'o' marking original legs, `s` is for sum, `p` is for product, 'm' is for meta fusion.
+- simplify syntax of `yast.decompose_from_1d(r1d, meta)`. It no longer takes config, that is stored in meta.

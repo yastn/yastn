@@ -8,7 +8,7 @@ from .tensor import Tensor, YastError
 from .tensor._auxliary import _struct, _config, _clear_axes, _unpack_legs
 from .tensor._merging import _Fusion, _leg_structure_combine_charges_sum, _embed_tensor, _sum_hfs
 from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
-from .tensor._tests import _test_configs_match
+from .tensor._tests import _test_can_be_combined
 
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
@@ -329,7 +329,7 @@ def load_from_hdf5(config, file, path):
     return c
 
 
-def decompress_from_1d(r1d, config, meta):
+def decompress_from_1d(r1d, meta):
     """
     Generate tensor from dictionary `meta` describing the structure of the tensor,
     charges and dimensions of its non-zero blocks, and 1-D array `r1d` containing
@@ -354,7 +354,8 @@ def decompress_from_1d(r1d, config, meta):
     -------
     yast.Tensor
     """
-    a = Tensor(config=config, **meta)
+    hfs = tuple(leg.legs[0] for leg in meta['legs'])
+    a = Tensor(config=meta['config'], hfs=hfs, mfs=meta['mfs'], struct=meta['struct'])
     a._data = r1d
     return a
 
@@ -400,7 +401,7 @@ def block(tensors, common_legs=None):
     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
 
     for tn in tensors.values():
-        _test_configs_match(tn, tn0)
+        _test_can_be_combined(tn, tn0)
         if tn.struct.s != tn0.struct.s:
             raise YastError('Signatues of blocked tensors are inconsistent.')
         if tn.struct.n != tn0.struct.n:
@@ -443,7 +444,7 @@ def block(tensors, common_legs=None):
     meta_new = tuple(sorted(meta_new.items()))
     c_t = tuple(t for t, _ in meta_new)
     c_D = tuple(D for _, D in meta_new)
-    c_Dp = tuple(np.prod(c_D, axis=1))
+    c_Dp = tuple(np.prod(c_D, axis=1)) if len(c_D) > 0 else ()
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
     c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
     meta_new = tuple(zip(c_t, c_D, c_sl))

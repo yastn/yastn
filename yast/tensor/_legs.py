@@ -149,8 +149,6 @@ def _leg_fusions_need_mask(*legs):
         return any(legs[0].legs[0] != leg.legs[0] for leg in legs)
     if all(isinstance(leg.fusion, tuple) for leg in legs):
         mf = legs[0].fusion
-        if any(mf != leg.fusion for leg in legs):
-            raise YastError('Meta-fusions do not match.')
         return any(_leg_fusions_need_mask(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
 
 

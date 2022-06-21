@@ -3,7 +3,7 @@ from functools import lru_cache
 from itertools import groupby, product
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
-from ._tests import YastError, _test_configs_match, _test_axes_match
+from ._tests import YastError, _test_can_be_combined, _test_axes_match
 from ._merging import _merge_to_matrix, _meta_unfuse_legdec, _unmerge
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
 
@@ -66,7 +66,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
     if b.isdiag:
         return _tensordot_diag(b, a, in_a, destination=(-1,))
 
-    _test_configs_match(a, b)
+    _test_can_be_combined(a, b)
     nout_a = tuple(ii for ii in range(a.ndim_n) if ii not in nin_a)  # outgoing native legs
     nout_b = tuple(ii for ii in range(b.ndim_n) if ii not in nin_b)  # outgoing native legs
 
@@ -182,7 +182,7 @@ def broadcast(a, *args, axis=0):
         raise YastError("There should be exactly one axis for each tensor to be projected.")
     results = []
     for b, axis in zip(args, axes):
-        _test_configs_match(a, b)
+        _test_can_be_combined(a, b)
         axis = _broadcast_input(axis, b.mfs, a.isdiag)
         if b.hfs[axis].tree != (1,):
             raise YastError('Second tensor`s leg specified by axis cannot be fused.')
@@ -259,7 +259,7 @@ def apply_mask(a, *args, axis=0):
         raise YastError("There should be exactly one axis for each tensor to be projected.")
     results = []
     for b, axis in zip(args, axes):
-        _test_configs_match(a, b)
+        _test_can_be_combined(a, b)
         axis = _broadcast_input(axis, b.mfs, a.isdiag)
         if b.hfs[axis].tree != (1,):
             raise YastError('Second tensor`s leg specified by axis cannot be fused.')
@@ -321,7 +321,7 @@ def vdot(a, b, conj=(1, 0)):
     -------
     scalar
     """
-    _test_configs_match(a, b)
+    _test_can_be_combined(a, b)
     if conj[0] == 1:
         a = a.conj()
     if conj[1] == 1:
