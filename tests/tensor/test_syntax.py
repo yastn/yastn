@@ -49,8 +49,8 @@ class TestSyntaxTensorCreation(unittest.TestCase):
                        D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
         
         #
-        # The identity tensor behaves as rank-2 tensor with automatic signature (1,-1)
-        # or (-1,1). It is enough to provide charge sectors and their dimensions 
+        # The identity tensor behaves as rank-2 tensor with automatic signature (1, -1)
+        # or (-1, 1). It is enough to provide charge sectors and their dimensions 
         # for single leg, the data for other leg is inferred automatically. 
         e = yast.eye(config=config_U1, t=(-1, 0, 1), D=(2, 3, 4))
 
