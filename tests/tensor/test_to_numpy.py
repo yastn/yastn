@@ -87,6 +87,11 @@ def test_to_raw_tensor():
     a[((0, 0), (0, 0), (0, 0))] += 1  # (broadcasted by underlaying backend tensors)
     assert pytest.approx(a.norm().item() ** 2) == 32.
 
+    # add 2nd block to the tensor
+    a.set_block(ts=((1, 0), (1, 0), (0, 0)), Ds=(2, 2, 2), val='ones')
+    with pytest.raises(yast.YastError):
+        _ = a.to_raw_tensor()
+        # Only tensor with a single block can be converted to raw tensor.
 
 def test_dense_diag():
     a = yast.rand(config=config_U1, t=(-1, 0, 1), D=(2, 3, 4), isdiag=True)

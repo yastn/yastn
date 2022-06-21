@@ -303,7 +303,7 @@ def __getitem__(a, key):
 #    output tensors info - advanced structure    #
 ##################################################
 
-def get_leg_fusion(a, axes=None):
+def get_leg_fusion(a, axes=None):  # pragma: no cover
     """
     .. deprecated::
         to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.
@@ -480,7 +480,7 @@ def to_raw_tensor(a):
     """
     if len(a.struct.D) == 1:
         return a._data.reshape(a.struct.D[0])
-    raise YastError('Only tensor with a single block can be converted to raw tensor')
+    raise YastError('Only tensor with a single block can be converted to raw tensor.')
 
 
 def to_nonsymmetric(a, legs=None, native=False, reverse=False):

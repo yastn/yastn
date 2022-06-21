@@ -95,6 +95,10 @@ def test_leg_exceptions():
         b = a.fuse_legs(axes=[(0, 1)], mode='meta')
         yast.eye(config_U1, legs=[b.get_legs(0)])
         # Diagonal tensor cannot be initialized with fused legs.
+    with pytest.raises(yast.YastError):
+        b = a.fuse_legs(axes=[(0, 1)], mode='hard')
+        yast.eye(config_U1, legs=[b.get_legs(0)])
+        # Diagonal tensor cannot be initialized with fused legs.
 
     legZ3 = yast.Leg(config_Z3, s=1, t=(0, 1, 2), D=(2, 3, 4))
     with pytest.raises(yast.YastError):

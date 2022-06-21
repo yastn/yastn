@@ -329,7 +329,6 @@ class TestSyntaxGeneral(unittest.TestCase):
         a.size
         a.get_tensor_charge()
         a.get_signature()
-        a.get_leg_fusion()
         str(a)
         a.get_blocks_charge()
         a.get_blocks_shape()
