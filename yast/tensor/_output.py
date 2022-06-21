@@ -2,7 +2,7 @@
 
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
-from ._tests import YastError
+from ._tests import YastError, _test_configs_match
 from ..sym import sym_none
 from ._legs import Leg, leg_union, _leg_fusions_need_mask
 from ._merging import _embed_tensor
@@ -55,8 +55,8 @@ def save_to_hdf5(a, file, path):
 
 def compress_to_1d(a, meta=None):
     """
-    Store each block within 1D array in contiguous manner 
-    (without cloning the data if not necessary) and 
+    Store each block within 1D array in contiguous manner
+    (without cloning the data if not necessary) and
     create metadata allowing re-creation of the original tensor.
 
     Parameters
@@ -77,19 +77,27 @@ def compress_to_1d(a, meta=None):
         metadata with structure of the symmetric tensor
     """
     if meta is None:
-        meta = {'struct': a.struct, 'hfs': a.hfs,
-                'mfs': a.mfs}
+        meta = {'config': a.config, 'struct': a.struct,
+                'mfs': a.mfs, 'legs': a.get_legs(native=True)}
         return a._data, meta
     # else:
+    _test_configs_match(a.config, meta['config'])
     if a.struct.s != meta['struct'].s:
-        raise YastError("Tensor has different signature than metadata.")
+        raise YastError("Tensor signature do not match meta.")
     if a.struct.n != meta['struct'].n:
-        raise YastError("Tensor has different tensor charge than metadata.")
+        raise YastError("Tensor charge than do not match meta.")
     if a.isdiag != meta['struct'].diag:
-        raise YastError("Tensor has different diagonality than metadata.")
-    if a.mfs != meta['mfs'] or a.hfs != meta['hfs']:
-        raise YastError("Tensor has different leg fusion structure than metadata.")
-    Dsize = meta['struct'].sl[-1][1] if len(meta['struct'].sl) > 0 else 0
+        raise YastError("Tensor diagonality do not match meta.")
+    if a.mfs != meta['mfs']:
+        raise YastError("Tensor meta-fusion structure do not match meta.")
+
+    meta_hfs =  tuple(leg.legs[0] for leg in meta['legs'])
+    if a.hfs != meta_hfs:
+        legs_a = a.get_legs()
+        legs_u = {n: leg_union(leg_a, leg) for n, (leg_a, leg) in enumerate(zip(legs_a, meta['legs']))}
+        a = _embed_tensor(a, legs_a, legs_u)  # mask needed
+        if a.hfs != meta_hfs:
+            raise YastError("Tensor fused legs do not match metadata.")
 
     if a.struct == meta['struct']:
         return a._data, meta
@@ -104,6 +112,7 @@ def compress_to_1d(a, meta=None):
             im += 1
         else: #a.struct.t[ia] > meta['struct'].t[im]:
             im += 1
+    Dsize = meta['struct'].sl[-1][1] if len(meta['struct'].sl) > 0 else 0
     data = a.config.backend.embed_slc(a._data, meta_merge, Dsize)
     return data, meta
 
@@ -360,7 +369,7 @@ def get_legs(a, axis=None, native=False):
     return tuple(legs) if hasattr(axis, '__iter__') else legs.pop()
 
 
-def get_leg_structure(a, axis, native=False):
+def get_leg_structure(a, axis, native=False):  # pragma: no cover
     r"""
     .. deprecated::
         to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.
@@ -393,7 +402,7 @@ def get_leg_structure(a, axis, native=False):
     return tDn
 
 
-def get_leg_charges_and_dims(a, native=False):
+def get_leg_charges_and_dims(a, native=False):  # pragma: no cover
     """ 
     .. deprecated::
         to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.

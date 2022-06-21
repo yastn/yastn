@@ -1,6 +1,6 @@
 """ Linear operations and operations on a single yast tensor. """
 from ._merging import _masks_for_add
-from ._tests import YastError, _test_configs_match, _get_tD_legs, _test_axes_match
+from ._tests import YastError, _test_can_be_combined, _get_tD_legs, _test_axes_match
 
 __all__ = ['apxb', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp']
 
@@ -20,7 +20,7 @@ def __add__(a, b):
     tensor : Tensor
         result of addition as a new tensor
     """
-    _test_configs_match(a, b)
+    _test_can_be_combined(a, b)
     aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
     data = a.config.backend.add(aA, bA, meta, Dsize)
     return a._replace(hfs=hfs, struct=struct, data=data)
@@ -41,7 +41,7 @@ def __sub__(a, b):
     tensor : Tensor
         result of subtraction as a new tensor
     """
-    _test_configs_match(a, b)
+    _test_can_be_combined(a, b)
     aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
     data = a.config.backend.sub(aA, bA, meta, Dsize)
     return a._replace(hfs=hfs, struct=struct, data=data)
@@ -62,7 +62,7 @@ def apxb(a, b, x=1):
     -------
     tensor : Tensor
     """
-    _test_configs_match(a, b)
+    _test_can_be_combined(a, b)
     aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
     data = a.config.backend.apxb(aA, bA, x, meta, Dsize)
     return a._replace(hfs=hfs, struct=struct, data=data)

@@ -557,7 +557,7 @@ def _merge_masks_embed(config, struct, ms):
         slnew.append((low, high))
         low = high
     structnew = struct._replace(D=tuple(Dnew), Dp=tuple(Dpnew), sl=tuple(slnew))
-    msk = np.hstack(msk)
+    msk = np.hstack(msk) if len(msk) > 0 else np.zeros((0,), dtype=bool)
     return msk, structnew
 
 
@@ -581,6 +581,7 @@ def _embed_tensor(a, legs, legs_new):
     """
     Embed tensor to fill in zero block in fusion mismatch.
     here legs are contained in legs_new that result from leg_union
+    legs_new is a dict = {n: leg}
     """
 
     legs_new = [legs_new[n] if n in legs_new else legs[n] for n in range(len(legs))]
