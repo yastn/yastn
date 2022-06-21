@@ -204,7 +204,7 @@ def requires_grad(data):  # pragma: no cover
 
 
 def move_to(data, dtype, **kwargs):
-    return data.astype[DTYPE[dtype]] if dtype in DTYPE else data
+    return data.astype(dtype=DTYPE[dtype]) if dtype in DTYPE else data
 
 
 def conj(data):
