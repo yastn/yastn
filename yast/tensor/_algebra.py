@@ -50,8 +50,6 @@ def __sub__(a, b):
 def apxb(a, b, x=1):
     r"""
     Directly compute the result of :math:`a + x b`.
-    This `composite` operation is faster than first performing multiplication
-    and then addition.
 
     Parameters
     ----------
@@ -313,7 +311,8 @@ def real(a):
     Return tensor with imaginary part set to zero.
 
         .. note::
-            Returned :class:`yast.Tensor` has the same dtype
+            Follows the behavior of the backend.real()
+            when it comes to creating a new copy of the data or handling dtype.
 
     Returns
     -------
@@ -328,7 +327,9 @@ def imag(a):
     Return tensor with real part set to zero.
 
         .. note::
-            Returned :class:`yast.Tensor` has the same dtype
+            Follows the behavior of the backend.imag()
+            when it comes to creating a new copy of the data or handling dtype.
+
 
     Returns
     -------
@@ -354,7 +355,7 @@ def rsqrt(a, cutoff=0):
     """
     Return element-wise 1/sqrt(A).
 
-    The tensor elements with square root of absolute value below the cutoff are set to zero.
+    The tensor elements with absolute value below the cutoff are set to zero.
 
     Parameters
     ----------

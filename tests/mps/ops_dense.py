@@ -139,3 +139,42 @@ def mpo_gen_XX(chain, t, mu):
             Tensor_to.append(C)
     N, nr_phys, common_legs = chain, 2, (0, 1)
     return yamps.automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys, common_legs, opts={'tol': 1e-14})
+
+
+def mpo_Ising_model(N, Jij, gi):
+    """ 
+    MPO for Hamiltonian sum_i>j Jij Zi Zj + sum_i Jii Zi - sum_i gi Xi.
+    For now only nearest neighbour coupling -- # TODO make it general
+    """
+    Ds, s = (2, 2), (1, -1)
+
+    X = yast.Tensor(config=config_dense, s=s)
+    X.set_block(Ds=Ds, val=[[0, 1], [1, 0]])
+
+    Z = yast.Tensor(config=config_dense, s=s)
+    Z.set_block(Ds=Ds, val=[[1, 0], [0, -1]])
+
+    I = yast.Tensor(config=config_dense, s=s)
+    I.set_block(Ds=Ds, val=[[1, 0], [0, 1]])
+
+    X = X.add_leg(axis=-1, s=-1).add_leg(axis=0, s=1)
+    Z = Z.add_leg(axis=-1, s=-1).add_leg(axis=0, s=1)
+    I = I.add_leg(axis=-1, s=-1).add_leg(axis=0, s=1)
+
+    H = yamps.Mps(N, nr_phys=2)
+
+    for n in H.sweep(to='last'):  # empty tensors
+        if n == H.first:
+            H.A[n] = yast.block({(2, 0): gi * X, (2, 1): Jij * Z, (2, 2) : I},
+                                common_legs=(1, 2))
+        elif n == H.last:
+            H.A[n] = yast.block({(0, 0): I,
+                                 (1, 0): Z,
+                                 (2, 0): gi * X, (2, 1): Jij * Z, (2, 2) : I},
+                                common_legs=(1, 2))
+        else:
+            H.A[n] = yast.block({(0, 0): I,
+                                 (1, 0): Z,
+                                 (2, 0): gi * X},
+                                common_legs=(1, 2))
+    return H

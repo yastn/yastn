@@ -48,6 +48,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
 
     sU: int
         signature of the new leg in U; equal 1 or -1. Default is 1.
+        V is going to have opposite signature on connecting leg.
 
     Uaxis, Vaxis: int
         specify which leg of U and V tensors are connecting with S. By default
@@ -107,10 +108,11 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
 
     sU: int
         signature of the new leg in U; equal 1 or -1. Default is 1.
+        V is going to have opposite signature on connecting leg.
 
     Uaxis, Vaxis: int
         specify which leg of U and V tensors are connecting with S. By default
-        it is the last leg of U and the first of Vh.
+        it is the last leg of U and the first of V, in which case a = U @ S @ V.
 
     Returns
     -------
@@ -383,6 +385,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
     sQ: int
         signature of connecting leg in Q; equal 1 or -1. Default is 1.
+        R is going to have opposite signature on connecting leg.
 
     Qaxis, Raxis: int
         specify which leg of Q and R tensors are connecting to the other tensor.
@@ -462,12 +465,8 @@ def _meta_qr(config, struct, sQ):
 def eigh(a, axes, sU=1, Uaxis=-1):
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
-    Optionally, truncate the resulting decomposition.
 
     Tensor is expected to be symmetric (hermitian) with total charge 0.
-    Truncation can be based on relative tolerance, bond dimension of each block,
-    and total bond dimension across all blocks (whichever gives smaller total dimension).
-    Truncate based on tolerance only if some eigenvalues are positive -- than all negative ones are discarded.
 
     Parameters
     ----------
