@@ -15,6 +15,9 @@ def save_to_dict(a):
     r"""
     Export YAST tensor to dictionary.
 
+    .. note::
+        allows to save the tensor, e.g. with numpy.save()
+
     Returns
     -------
     a: yast.Tensor
@@ -55,8 +58,7 @@ def save_to_hdf5(a, file, path):
 
 def compress_to_1d(a, meta=None):
     """
-    Store each block within 1D array in contiguous manner
-    (without cloning the data if not necessary) and
+    Return 1D array containing tensor data (without cloning the data if not necessary) and
     create metadata allowing re-creation of the original tensor.
 
     Parameters
@@ -64,10 +66,15 @@ def compress_to_1d(a, meta=None):
         a: yast.Tensor
             tensor to export
         meta: dict
-            If not None, uses this extra information to fill-in extra zero blocks
-            not present in the tensor but allowed by the symmetry.
+            There is an option to provide meta obtained from earlier application of :meth:`yast.Tensor.compress_to_1d`.
+            Extra zero blocks (missing in tensor) are then included in the returned 1D array
+            to make it consistent with structure given in meta.
             Raises error if tensor has some blocks which are not included in meta or otherwise
             meta does not match the tensor.
+
+    .. note::
+        :meth:`yast.Tensor.compress_to_1d` and :meth:`yast.Tensor.decompress_from_1d` 
+        provide mechanism that allows using matrix-free methods, such as eigs implemented in scipy.
 
     Returns
     -------
@@ -129,14 +136,15 @@ def show_properties(a):
         * signature
         * total charge
         * whether it is a diagonal tensor
-        * meta/logical rank - treating fused legs as single leg
+        * meta/logical rank - treating meta-fused legs as a single logical leg
         * native rank
-        * total dimension of all existing charge sectors for each leg, treating fused legs as single leg
+        * total dimension of all existing charge sectors for each leg, treating meta-fused legs as a single leg
         * total dimension of all existing charge sectors for native leg
         * number of non-empty blocks
         * total number of elements across all non-empty blocks
         * fusion tree for each leg
-        * metadata for fused legs
+        * fusion history with `o` indicating original legs, `m` meta-fusion, 
+          `p` hard-fusion (product), `s` blocking (sum).
     """
     print("Symmetry     :", a.config.sym.SYM_ID)
     print("signature    :", a.struct.s)  # signature

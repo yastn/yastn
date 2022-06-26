@@ -113,22 +113,25 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YAST configuration <tensor/configuration:yast configuration>`
     legs : list[yast.Leg]
-        If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
-        directly by passing a list of :class:`~yast.Leg`.
-    s : tuple
-        Signature of tensor. Also determines the number of legs
+        Specify legs of the tensor passing a list of :class:`~yast.Leg`.
     n : int
         Total charge of the tensor.
-    t : list
-        List of charges for each leg.
-    D : list
-        List of corresponding bond dimensions.
     isdiag : bool
         Makes tensor diagonal
     dtype : str
         Desired dtype, overrides default_dtype specified in config
     device : str
         Device on which the tensor should be initialized, overrides default_device specified in config
+    s : tuple
+        (alternative) Signature of tensor. Also determines the number of legs. Default is s=().
+    t : list
+        (alternative) List of charges for each leg. Default is t=().
+    D : list
+        (alternative) List of corresponding bond dimensions. Default is D=().
+
+    Note
+    ----
+    If any of `s`, `t`, or `D` are specified, `legs` are overriden and only `t`, `D`, and `s` are used.
 
     Returns
     -------
@@ -165,16 +168,9 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YAST configuration <tensor/configuration:yast configuration>`
     legs : list[yast.Leg]
-        If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
-        directly by passing a list of :class:`~yast.Leg`.
-    s : tuple
-        a signature of tensor. Also determines the number of legs.
+        Specify legs of the tensor passing a list of :class:`~yast.Leg`.
     n : int
         total charge of the tensor.
-    t : list
-        a list of charges for each leg.
-    D : list
-        a list of corresponding bond dimensions.
     isdiag : bool
         makes tensor diagonal
     dtype : str
@@ -182,6 +178,16 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
     device : str
         device on which the tensor should be initialized, overrides default_device
         specified in config.
+    s : tuple
+        (alternative) Signature of tensor. Also determines the number of legs. Default is s=().
+    t : list
+        (alternative) List of charges for each leg. Default is t=().
+    D : list
+        (alternative) List of corresponding bond dimensions. Default is D=().
+
+    Note
+    ----
+    If any of `s`, `t`, or `D` are specified, `legs` are overriden and only `t`, `D`, and `s` are used.
 
     Returns
     -------
@@ -200,21 +206,24 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YAST configuration <tensor/configuration:yast configuration>`
     legs : list[yast.Leg]
-        If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
-        directly by passing a list of :class:`~yast.Leg`.
-    s : tuple
-        a signature of tensor. Also determines the number of legs.
+        Specify legs of the tensor passing a list of :class:`~yast.Leg`.
     n : int
         total charge of the tensor.
-    t : list
-        a list of charges for each leg.
-    D : list
-        a list of corresponding bond dimensions
     dtype : str
         desired dtype, overrides default_dtype specified in config.
     device : str
         device on which the tensor should be initialized, overrides default_device
         specified in config.
+    s : tuple
+        (alternative) Signature of tensor. Also determines the number of legs. Default is s=().
+    t : list
+        (alternative) List of charges for each leg. Default is t=().
+    D : list
+        (alternative) List of corresponding bond dimensions. Default is D=().
+
+    Note
+    ----
+    If any of `s`, `t`, or `D` are specified, `legs` are overriden and only `t`, `D`, and `s` are used.
 
     Returns
     -------
@@ -238,17 +247,22 @@ def eye(config=None, legs=(), n=None, **kwargs):
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YAST configuration <tensor/configuration:yast configuration>`
     legs : list[yast.Leg]
-        If specified, overrides `t`, `D`, and `s` arguments. Specify legs of the tensor
-        directly by passing a list of :class:`~yast.Leg`.
-    t : list
-        a list of charges for each leg.
-    D : list
-        a list of corresponding bond dimensions.
+        Specify legs of the tensor passing a list of :class:`~yast.Leg`.
     dtype : str
         desired dtype, overrides default_dtype specified in config.
     device : str
         device on which the tensor should be initialized, overrides default_device
         specified in config.
+    s : tuple
+        (alternative) Signature of tensor, should be (1, -1) or (-1, 1). Default is s=(1, -1) 
+    t : list
+        (alternative) List of charges for each leg. Default is t=().
+    D : list
+        (alternative) List of corresponding bond dimensions. Default is D=().
+
+    Note
+    ----
+    If any of `s`, `t`, or `D` are specified, `legs` are overriden and only `t`, `D`, and `s` are used.
 
     Returns
     -------
@@ -260,7 +274,7 @@ def eye(config=None, legs=(), n=None, **kwargs):
 
 def load_from_dict(config=None, d=None):
     """
-    Create tensor the dictionary `d`.
+    Create tensor from the dictionary `d`.
 
     Parameters
     ----------

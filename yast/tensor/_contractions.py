@@ -617,6 +617,9 @@ def ncon(ts, inds, conjs=None):
         For each tensor in `ts` contains either 0 or 1. If the value is 1 the tensor 
         is conjugated.
 
+    .. note::
+        :meth:`yast.ncon` and :meth:`yast.einsum` differ only by syntax.
+
     Example
     -------
 

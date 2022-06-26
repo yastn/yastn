@@ -279,7 +279,7 @@ def add_leg(a, axis=-1, s=1, t=None):
     r"""
     Creates a new tensor with extra leg that carries the charge (or part of it) 
     of the orignal tensor. This is achieved by extra leg having a single charge sector
-    of dimension D=1. The total charge of the tensor :meth:`yast.Tensor.n` can modified this way.
+    of dimension D=1. The total charge of the tensor :meth:`yast.Tensor.n` can be modified this way.
 
     Makes a shallow copy of Tensor data.
 
