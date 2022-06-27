@@ -303,12 +303,13 @@ class TestSyntaxGeneral(unittest.TestCase):
 
     def test_syntax_noDocs(self):
         # initialization
-        cfg_none = yast.make_config()  # backend_np; sym_none
-        # not imported config
+
+        # with config that is not imported as usually
         if config_U1.backend.BACKEND_ID == 'numpy':
-            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_np)
+            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_np, device=config_U1.device)
         else:
-            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_torch)
+            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_torch, device=config_U1.device)
+
         legs = [yast.Leg(cfg_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
                 yast.Leg(cfg_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
                 yast.Leg(cfg_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
