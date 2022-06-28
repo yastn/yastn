@@ -71,7 +71,7 @@ def test_multiply():
     assert yamps.measure_overlap(p0, p0) < tol  # == 0.
 
 
-    Hpsi = H*psi
+    Hpsi = H @ psi
     assert pytest.approx(yamps.measure_overlap(Hpsi, Hpsi).item(), rel=tol) == Eng ** 2
     p0 = yamps.add(Hpsi, psi, amplitudes=[1, -Eng])
     assert yamps.measure_overlap(p0, p0) < tol  # == 0.
