@@ -1,5 +1,4 @@
 """ Mps structure and its basic manipulations. """
-from torch import mul
 from yast import entropy, block, tensordot
 from numbers import Number
 
@@ -34,7 +33,7 @@ def add(*states, amplitudes=None):
     if len(states) != len(amplitudes):
         raise YampsError('Number of Mps-s must be equal to number of coefficients in amp.')
 
-    phi = TN_1D(N=states[0].N, nr_phys=states[0].nr_phys)
+    phi = _mpsmpo(N=states[0].N, nr_phys=states[0].nr_phys)
 
     if any(psi.N != phi.N for psi in states):
         raise YampsError('All states must have equal number of sites.')
@@ -80,7 +79,7 @@ def multiply(a, b, mode=None):
     nr_phys = a.nr_phys + b.nr_phys - 2
     if nr_phys == 0:
         YampsError('Use measure_overlap to calculate overlap between two mps-s')
-    phi = TN_1D(N=a.N, nr_phys=nr_phys)
+    phi = _mpsmpo(N=a.N, nr_phys=nr_phys)
 
     if b.N != a.N:
         raise YampsError('a and b must have equal number of sites.')
@@ -105,12 +104,12 @@ def multiply(a, b, mode=None):
 ###################################
 
 
-class TN_1D:
+class _mpsmpo:
     """
     The basic structure of mps (for nr_phys=1) and mpo (for nr_phys=2) and some basic operations on a single mps.
     This is a parent structure for Mps (for nr_phys=1), Mpo (for nr_phys=2).
     Order of legs for a single mps tensor is (left virtual, 1st physical, 2nd physical, right virtual).
-    TN_1D tensors are index with :math:`0, 1, 2, 3, \\ldots, N-1` (with :math:`0` corresponding to the first site).
+    _mpsmpo tensors are index with :math:`0, 1, 2, 3, \\ldots, N-1` (with :math:`0` corresponding to the first site).
     A central block (associated with a bond) is indexed using ordered tuple (n, n+1).
     Maximally one central block is allowed.
     """
@@ -165,76 +164,87 @@ class TN_1D:
 
     def __add__(self, mps):
         """
-        Makes a copy of mps, the result is a sum of two Mps or Mpo objects.
+        Sum of two Mps's or two Mpo's.
 
         Parameters
         ----------
-        mps : TN_1D/Mps/Mpo
+        mps : Mps or Mpo (same as self)
 
         Returns
         -------
-        TN_1D/Mps/Mpo
+        out : Mps or Mpo
         """
         return add(self, mps)
 
     def __mul__(self, multiplier):
         """
-        Makes a copy of mps, multiplying the first tensor by the number or by another tensor (depending on the argument you provide).
+        Makes a copy of Mps or Mpo, multiplying the first tensor by the number.
 
         Parameters
         ----------
-        multiplier : Number or TN_1D
+        multiplier : Number or _mpsmpo
     
         Returns
         -------
-        TN_1D
+        out : Mps or Mpo
         """
-        if isinstance(multiplier, Number):
-            phi = TN_1D(N=self.N, nr_phys=self.nr_phys)
-            phi.A = {ind: multiplier * ten if ind == self.first else ten.clone() \
-                    for ind, ten in self.A.items()}
-            phi.pC = self.pC
-            return phi
-        elif isinstance(multiplier, TN_1D):
-            return multiply(self, multiplier)
+        phi = _mpsmpo(N=self.N, nr_phys=self.nr_phys)
+        phi.A = {ind: multiplier * ten if ind == self.first else ten.clone() \
+                for ind, ten in self.A.items()}
+        phi.pC = self.pC
+        return phi
 
     def __rmul__(self, number):
         """
-        Makes a copy of mps, multiplying the first tensor by the number.
+        Makes a copy of Mps or Mpo, multiplying the first tensor by the number.
 
         Returns
         -------
-        mps : Mps
+        out : Mps or Mpo
         """
         return self.__mul__(number)
 
+    def __matmul__(self, multiplier):
+        """
+        Multiply Mpo by Mpo of Mps.
+
+        Parameters
+        ----------
+        multiplier : Mps or Mpo
+
+        Returns
+        -------
+        out : Mps or Mpo
+        """
+        return multiply(self, multiplier)
+
     def clone(self):
         r"""
-        Makes a copy of mps. Copy all mps tensors, tracking gradients.
+        Makes a clone of Mps or Mpo. Clone all tensors tracking gradients.
 
         Use when retaining "old" mps is neccesary -- other operations on mps are often done in-place.
 
         Returns
         -------
-        Cloned mps : Mps
+        out : cloned Mps or Mpo
         """
-        phi = TN_1D(N=self.N, nr_phys=self.nr_phys)
+        phi = _mpsmpo(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: ten.clone() for ind, ten in self.A.items()}
         phi.pC = self.pC
         return phi
 
     def copy(self):
         r"""
-        Makes a copy of mps. Copy all mps tensors.
+        Makes a copy of Mps or Mpo. Copy all tensors.
 
         Warning, this might break autograd if you are using it.
         Use when retaining "old" mps is neccesary -- other operations on mps are often done in-place.
 
         Returns
         -------
-        Copied mps : Mps
+        out : copied Mps or Mpo
         """
-        phi = TN_1D(N=self.N, nr_phys=self.nr_phys)
+        phi = _mpsmpo(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: ten.copy() for ind, ten in self.A.items()}
         phi.pC = self.pC
         return phi
@@ -538,12 +548,11 @@ class TN_1D:
             self.A[n].save_to_hdf5(file, in_file_path+str(n))
 
 
-class Mps(TN_1D):
+class Mps(_mpsmpo):
     def __init__(self, N):
-        nr_phys=1
-        super().__init__(N, nr_phys)
+        super().__init__(N, nr_phys=1)
 
-class Mpo(TN_1D):
+
+class Mpo(_mpsmpo):
     def __init__(self, N):
-        nr_phys=2
-        super().__init__(N, nr_phys)
+        super().__init__(N, nr_phys=2)

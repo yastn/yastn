@@ -1,7 +1,7 @@
 """ Mps structure and its basic """
 import numpy as np
 import yast
-from ._mps import TN_1D, add
+from ._mps import _mpsmpo, add
 
 class YampsError(Exception):
     pass
@@ -16,7 +16,7 @@ def load_from_dict(config, nr_phys, in_dict):
     out_Mps : Mps
     """
     N = len(in_dict)
-    out_Mps = TN_1D(N, nr_phys=nr_phys)
+    out_Mps = _mpsmpo(N, nr_phys=nr_phys)
     for n in range(out_Mps.N):
         out_Mps.A[n] = yast.load_from_dict(config=config, d=in_dict[n])
     return out_Mps
@@ -45,7 +45,7 @@ def load_from_hdf5(config, nr_phys, file, in_file_path):
     out_Mps : Mps
     """
     N = len(file[in_file_path].keys())
-    out_Mps = TN_1D(N, nr_phys=nr_phys)
+    out_Mps = _mpsmpo(N, nr_phys=nr_phys)
     for n in range(out_Mps.N):
         out_Mps.A[n] = yast.load_from_hdf5(config, file, in_file_path+str(n))
     return out_Mps
@@ -121,7 +121,7 @@ def _generate_Mij(amp, connect, N, nr_phys):
     T_conn = connect['conn']
     T_else = connect['else']
 
-    M = TN_1D(N, nr_phys=nr_phys)
+    M = _mpsmpo(N, nr_phys=nr_phys)
     tt = (0,) * len(T_from.n)
     for n in range(M.N):
         if jL == jR:
