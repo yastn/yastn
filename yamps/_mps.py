@@ -11,11 +11,12 @@ class YampsError(Exception):
 ###################################
 
 
-class Mps:
+class TN_1D:
     """
     The basic structure of mps (for nr_phys=1) and mpo (for nr_phys=2) and some basic operations on a single mps.
+    This is a parent structure for Mps (for nr_phys=1), Mpo (for nr_phys=2).
     Order of legs for a single mps tensor is (left virtual, 1st physical, 2nd physical, right virtual).
-    Mps tensors are index with :math:`0, 1, 2, 3, \\ldots, N-1` (with :math:`0` corresponding to the first site).
+    TN_1D tensors are index with :math:`0, 1, 2, 3, \\ldots, N-1` (with :math:`0` corresponding to the first site).
     A central block (associated with a bond) is indexed using ordered tuple (n, n+1).
     Maximally one central block is allowed.
     """
@@ -420,3 +421,12 @@ class Mps:
         """
         for n in self.sweep(to='last'):
             self.A[n].save_to_hdf5(file, in_file_path+str(n))
+
+
+class Mps(TN_1D):
+    def __init__(self, N):
+        super().__init__(self, N, nr_phys=1)
+
+class Mpo(TN_1D):
+    def __init__(self, N):
+        super().__init__(self, N, nr_phys=2)
