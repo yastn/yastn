@@ -16,7 +16,7 @@ def mps_random(N=2, Dmax=2, d=2, dtype='float64'):
         d = [d]
     d *= (N + len(d) - 1) // len(d)
 
-    psi = yamps.Mps(N, nr_phys=1)
+    psi = yamps.Mps(N)
     Dl, Dr = 1, Dmax
     for n in range(N):
         Dr = Dmax if n < N - 1 else 1
@@ -35,7 +35,7 @@ def mpo_random(N=2, Dmax=2, d_out=None, d=2):
         d_out = [d_out]
     d_out *= ((N + len(d_out) - 1) // len(d_out))
 
-    psi = yamps.Mps(N, nr_phys=2)
+    psi = yamps.Mpo(N)
     Dl, Dr = 1, Dmax
     for n in range(N):
         Dr = Dmax if n < N - 1 else 1
@@ -51,7 +51,7 @@ def mpo_XX_model(N, t, mu):
     ee = np.array([[1, 0], [0, 1]])
     oo = np.array([[0, 0], [0, 0]])
 
-    H = yamps.Mps(N, nr_phys=2)
+    H = yamps.Mpo(N)
     for n in H.sweep(to='last'):  # empty tensors
         H.A[n] = yast.Tensor(config=config_dense, s=(1, 1, -1, -1))
         if n == H.first:
@@ -79,7 +79,7 @@ def mpo_occupation(N):
     ee = np.array([[1, 0], [0, 1]])
     oo = np.array([[0, 0], [0, 0]])
 
-    H = yamps.Mps(N, nr_phys=2)
+    H = yamps.Mpo(N)
     for n in H.sweep(to='last'):  # empty tensors
         H.A[n] = yast.Tensor(config=config_dense, s=(1, 1, -1, -1))
         if n == H.first:
@@ -161,7 +161,7 @@ def mpo_Ising_model(N, Jij, gi):
     Z = Z.add_leg(axis=-1, s=-1).add_leg(axis=0, s=1)
     I = I.add_leg(axis=-1, s=-1).add_leg(axis=0, s=1)
 
-    H = yamps.Mps(N, nr_phys=2)
+    H = yamps.Mpo(N)
 
     for n in H.sweep(to='last'):  # empty tensors
         if n == H.first:

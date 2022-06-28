@@ -21,7 +21,7 @@ def test_assign_block():
     bR = T[:,:,1].reshape((2,3,1))
 
     N = 5
-    psi = yamps.Mps(N, nr_phys=1)
+    psi = yamps.Mps(N)
     for n in range(N):
         psi.A[n] = yast.Tensor(config=config_dense, s=(1, 1, -1))
         if n == 0:
@@ -44,7 +44,7 @@ def test_set_random():
         d = [d]
     d *= (N + len(d) - 1) // len(d)
 
-    psi = yamps.Mps(N, nr_phys=1)
+    psi = yamps.Mps(N)
     Dl, Dr = 1, Dmax
     for n in range(N):
         Dr = Dmax if n < N - 1 else 1
