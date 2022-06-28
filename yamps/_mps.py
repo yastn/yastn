@@ -1,10 +1,104 @@
 """ Mps structure and its basic manipulations. """
-from yast import entropy
-
+from torch import mul
+from yast import entropy, block, tensordot
+from numbers import Number
 
 class YampsError(Exception):
     pass
 
+
+###################################
+#   auxiliary for basic algebra   #
+###################################
+def add(*states, amplitudes=None):
+    r"""
+    Adds any number of Mps-s stored in a list states with multiplicative prefactors specified in ampitudes. 
+    It creates a new Mps as an output, in short: c = \sum_j amplitudes[j] * states[j]
+
+    Parameters
+    ----------
+        states : list of Mps-s
+            Each element of the list should contain a single Mps.
+
+        amplitudes : list of float/complex-s
+            If None, all amplitudes are 1.
+
+    Returns
+    -------
+        c : Mps
+            new Mps, sum of all Mps-s in tens. It is independent of them
+    """
+    if amplitudes is None:
+        amplitudes = [1] * len(states)
+
+    if len(states) != len(amplitudes):
+        raise YampsError('Number of Mps-s must be equal to number of coefficients in amp.')
+
+    phi = TN_1D(N=states[0].N, nr_phys=states[0].nr_phys)
+
+    if any(psi.N != phi.N for psi in states):
+        raise YampsError('All states must have equal number of sites.')
+    if any(psi.phys != phi.phys for psi in states):
+        raise YampsError('All states should be either mps or mpo')
+    if any(psi.pC != None for psi in states):
+        raise YampsError('Absorb central sites of mps-s befor calling add')
+
+    for n in phi.sweep(to='last'):
+        if n == phi.first:
+            d = {(j,): amplitudes[j] * psi.A[n] for j, psi in enumerate(states)}
+            common_legs =  phi.left + phi.phys
+        elif n == phi.last:
+            d = {(j,): psi.A[n] for j, psi in enumerate(states)}
+            common_legs =  phi.phys + phi.right
+        else:
+            d = {(j, j): psi.A[n] for j, psi in enumerate(states)}
+            common_legs =  phi.phys
+        phi.A[n] = block(d, common_legs)
+    return phi
+
+
+def multiply(a, b, mode=None):
+    r"""
+    Multiplies mpo's/mps's, in short: c = a @ b
+
+    Parameters
+    ----------
+        a, b : Mps
+            matrix products states/operators to be multiplied
+
+        mode : str
+           mode for yast.fuse_legs; If None, use default from tensor configs.
+
+    Returns
+    -------
+        c : Mps
+            new Mps,
+    """
+    if a.N != b.N:
+        YampsError('Mps-s must have equal number of Tensor-s.')
+
+    nr_phys = a.nr_phys + b.nr_phys - 2
+    if nr_phys == 0:
+        YampsError('Use measure_overlap to calculate overlap between two mps-s')
+    phi = TN_1D(N=a.N, nr_phys=nr_phys)
+
+    if b.N != a.N:
+        raise YampsError('a and b must have equal number of sites.')
+    if a.pC is not None or b.pC is not None:
+        raise YampsError('Absorb central sites of mps-s befor calling multiply.')
+
+    axes_dot = ((a.phys[1],), (b.phys[0],))
+    if a.nr_phys == 2 and b.nr_phys == 1:
+        axes_fuse = ((0, 3), 1, (2, 4))
+    elif a.nr_phys == 1 and b.nr_phys == 2:
+        axes_fuse = ((0, 2), 3, (1, 4))
+    elif a.nr_phys == 2 and b.nr_phys == 2:
+        axes_fuse = ((0, 3), 1, 4, (2, 5))
+    for n in phi.sweep():
+        phi.A[n] = tensordot(a.A[n], b.A[n], axes_dot).fuse_legs(axes_fuse, mode)
+    phi.A[phi.first] = phi.A[phi.first].drop_leg_history(axis=phi.left)
+    phi.A[phi.last] = phi.A[phi.last].drop_leg_history(axis=phi.right)
+    return phi
 
 ###################################
 #     basic operations on MPS     #
@@ -69,19 +163,40 @@ class TN_1D:
             return range(self.N - 1 - dl, df - 1, -1)
         raise YampsError('Argument "to" should be in ("first", "last")')
 
-    def __mul__(self, number):
+    def __add__(self, mps):
         """
-        Makes a copy of mps, multiplying the first tensor by the number.
+        Makes a copy of mps, the result is a sum of two Mps or Mpo objects.
+
+        Parameters
+        ----------
+        mps : TN_1D/Mps/Mpo
 
         Returns
         -------
-        mps : Mps
+        TN_1D/Mps/Mpo
         """
-        phi = TN_1D(N=self.N, nr_phys=self.nr_phys)
-        phi.A = {ind: number * ten if ind == self.first else ten.clone() \
-                 for ind, ten in self.A.items()}
-        phi.pC = self.pC
-        return phi
+        return add(self, mps)
+
+    def __mul__(self, multiplier):
+        """
+        Makes a copy of mps, multiplying the first tensor by the number or by another tensor (depending on the argument you provide).
+
+        Parameters
+        ----------
+        multiplier : Number or TN_1D
+    
+        Returns
+        -------
+        TN_1D
+        """
+        if isinstance(multiplier, Number):
+            phi = TN_1D(N=self.N, nr_phys=self.nr_phys)
+            phi.A = {ind: multiplier * ten if ind == self.first else ten.clone() \
+                    for ind, ten in self.A.items()}
+            phi.pC = self.pC
+            return phi
+        elif isinstance(multiplier, TN_1D):
+            return multiply(self, multiplier)
 
     def __rmul__(self, number):
         """

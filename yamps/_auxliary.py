@@ -1,102 +1,10 @@
 """ Mps structure and its basic """
 import numpy as np
 import yast
-from ._mps import TN_1D
-
+from ._mps import TN_1D, add
 
 class YampsError(Exception):
     pass
-
-
-def add(*states, amplitudes=None):
-    r"""
-    Adds any number of Mps-s stored in a list states with multiplicative prefactors specified in ampitudes. 
-    It creates a new Mps as an output, in short: c = \sum_j amplitudes[j] * states[j]
-
-    Parameters
-    ----------
-        states : list of Mps-s
-            Each element of the list should contain a single Mps.
-
-        amplitudes : list of float/complex-s
-            If None, all amplitudes are 1.
-
-    Returns
-    -------
-        c : Mps
-            new Mps, sum of all Mps-s in tens. It is independent of them
-    """
-    if amplitudes is None:
-        amplitudes = [1] * len(states)
-
-    if len(states) != len(amplitudes):
-        raise YampsError('Number of Mps-s must be equal to number of coefficients in amp.')
-
-    phi = TN_1D(N=states[0].N, nr_phys=states[0].nr_phys)
-
-    if any(psi.N != phi.N for psi in states):
-        raise YampsError('All states must have equal number of sites.')
-    if any(psi.phys != phi.phys for psi in states):
-        raise YampsError('All states should be either mps or mpo')
-    if any(psi.pC != None for psi in states):
-        raise YampsError('Absorb central sites of mps-s befor calling add')
-
-    for n in phi.sweep(to='last'):
-        if n == phi.first:
-            d = {(j,): amplitudes[j] * psi.A[n] for j, psi in enumerate(states)}
-            common_legs =  phi.left + phi.phys
-        elif n == phi.last:
-            d = {(j,): psi.A[n] for j, psi in enumerate(states)}
-            common_legs =  phi.phys + phi.right
-        else:
-            d = {(j, j): psi.A[n] for j, psi in enumerate(states)}
-            common_legs =  phi.phys
-        phi.A[n] = yast.block(d, common_legs)
-    return phi
-
-
-def multiply(a, b, mode=None):
-    r"""
-    Multiplies mpo's/mps's, in short: c = a @ b
-
-    Parameters
-    ----------
-        a, b : Mps
-            matrix products states/operators to be multiplied
-
-        mode : str
-           mode for yast.fuse_legs; If None, use default from tensor configs.
-
-    Returns
-    -------
-        c : Mps
-            new Mps,
-    """
-    if a.N != b.N:
-        YampsError('Mps-s must have equal number of Tensor-s.')
-
-    nr_phys = a.nr_phys + b.nr_phys - 2
-    if nr_phys == 0:
-        YampsError('Use measure_overlap to calculate overlap between two mps-s')
-    phi = TN_1D(N=a.N, nr_phys=nr_phys)
-
-    if b.N != a.N:
-        raise YampsError('a and b must have equal number of sites.')
-    if a.pC is not None or b.pC is not None:
-        raise YampsError('Absorb central sites of mps-s befor calling multiply.')
-
-    axes_dot = ((a.phys[1],), (b.phys[0],))
-    if a.nr_phys == 2 and b.nr_phys == 1:
-        axes_fuse = ((0, 3), 1, (2, 4))
-    elif a.nr_phys == 1 and b.nr_phys == 2:
-        axes_fuse = ((0, 2), 3, (1, 4))
-    elif a.nr_phys == 2 and b.nr_phys == 2:
-        axes_fuse = ((0, 3), 1, 4, (2, 5))
-    for n in phi.sweep():
-        phi.A[n] = yast.tensordot(a.A[n], b.A[n], axes_dot).fuse_legs(axes_fuse, mode)
-    phi.A[phi.first] = phi.A[phi.first].drop_leg_history(axis=phi.left)
-    phi.A[phi.last] = phi.A[phi.last].drop_leg_history(axis=phi.right)
-    return phi
 
 
 def load_from_dict(config, nr_phys, in_dict):
