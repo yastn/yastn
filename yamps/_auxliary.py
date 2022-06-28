@@ -1,7 +1,7 @@
 """ Mps structure and its basic """
 import numpy as np
 import yast
-from ._mps import Mps
+from ._mps import TN_1D
 
 
 class YampsError(Exception):
@@ -32,7 +32,7 @@ def add(*states, amplitudes=None):
     if len(states) != len(amplitudes):
         raise YampsError('Number of Mps-s must be equal to number of coefficients in amp.')
 
-    phi = Mps(N=states[0].N, nr_phys=states[0].nr_phys)
+    phi = TN_1D(N=states[0].N, nr_phys=states[0].nr_phys)
 
     if any(psi.N != phi.N for psi in states):
         raise YampsError('All states must have equal number of sites.')
@@ -78,7 +78,7 @@ def multiply(a, b, mode=None):
     nr_phys = a.nr_phys + b.nr_phys - 2
     if nr_phys == 0:
         YampsError('Use measure_overlap to calculate overlap between two mps-s')
-    phi = Mps(N=a.N, nr_phys=nr_phys)
+    phi = TN_1D(N=a.N, nr_phys=nr_phys)
 
     if b.N != a.N:
         raise YampsError('a and b must have equal number of sites.')
@@ -108,7 +108,7 @@ def load_from_dict(config, nr_phys, in_dict):
     out_Mps : Mps
     """
     N = len(in_dict)
-    out_Mps = Mps(N, nr_phys=nr_phys)
+    out_Mps = TN_1D(N, nr_phys=nr_phys)
     for n in range(out_Mps.N):
         out_Mps.A[n] = yast.load_from_dict(config=config, d=in_dict[n])
     return out_Mps
@@ -137,7 +137,7 @@ def load_from_hdf5(config, nr_phys, file, in_file_path):
     out_Mps : Mps
     """
     N = len(file[in_file_path].keys())
-    out_Mps = Mps(N, nr_phys=nr_phys)
+    out_Mps = TN_1D(N, nr_phys=nr_phys)
     for n in range(out_Mps.N):
         out_Mps.A[n] = yast.load_from_hdf5(config, file, in_file_path+str(n))
     return out_Mps
@@ -213,7 +213,7 @@ def _generate_Mij(amp, connect, N, nr_phys):
     T_conn = connect['conn']
     T_else = connect['else']
 
-    M = Mps(N, nr_phys=nr_phys)
+    M = TN_1D(N, nr_phys=nr_phys)
     tt = (0,) * len(T_from.n)
     for n in range(M.N):
         if jL == jR:

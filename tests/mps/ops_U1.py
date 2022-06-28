@@ -13,7 +13,7 @@ def random_seed(seed):
 
 def mps_random(N=2, Dblocks=(2,), total_charge=1, dtype='float64'):
     Dblocks = tuple(Dblocks)
-    psi = yamps.Mps(N, nr_phys=1)
+    psi = yamps.Mps(N)
     tc = (0, 1)
     Dc = (1, 1)
     nb = len(Dblocks)
@@ -29,7 +29,7 @@ def mps_random(N=2, Dblocks=(2,), total_charge=1, dtype='float64'):
 
 
 def mpo_random(N=2, Dblocks=(2,), total_charge=1, t_out=None, t_in=(0, 1)):
-    psi = yamps.Mps(N, nr_phys=2)
+    psi = yamps.Mpo(N)
     Dblocks = tuple(Dblocks)
     nb = len(Dblocks)
     if t_out is None:
@@ -48,7 +48,7 @@ def mpo_random(N=2, Dblocks=(2,), total_charge=1, t_out=None, t_in=(0, 1)):
 
 
 def mpo_XX_model(N, t, mu):
-    H = yamps.Mps(N, nr_phys=2)
+    H = yamps.Mpo(N)
     for n in H.sweep(to='last'):
         H.A[n] = yast.Tensor(config=config_U1, s=[1, 1, -1, -1], n=0)
         if n == H.first:
@@ -72,7 +72,7 @@ def mpo_XX_model(N, t, mu):
 
 
 def mpo_occupation(N):
-    H = yamps.Mps(N, nr_phys=2)
+    H = yamps.Mpo(N)
     for n in H.sweep(to='last'):
         H.A[n] = yast.Tensor(config=config_U1, s=[1, 1, -1, -1], n=0)
         if n == H.first:

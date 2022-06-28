@@ -77,7 +77,7 @@ class TN_1D:
         -------
         mps : Mps
         """
-        phi = Mps(N=self.N, nr_phys=self.nr_phys)
+        phi = TN_1D(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: number * ten if ind == self.first else ten.clone() \
                  for ind, ten in self.A.items()}
         phi.pC = self.pC
@@ -103,7 +103,7 @@ class TN_1D:
         -------
         Cloned mps : Mps
         """
-        phi = Mps(N=self.N, nr_phys=self.nr_phys)
+        phi = TN_1D(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: ten.clone() for ind, ten in self.A.items()}
         phi.pC = self.pC
         return phi
@@ -119,7 +119,7 @@ class TN_1D:
         -------
         Copied mps : Mps
         """
-        phi = Mps(N=self.N, nr_phys=self.nr_phys)
+        phi = TN_1D(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: ten.copy() for ind, ten in self.A.items()}
         phi.pC = self.pC
         return phi
@@ -425,8 +425,10 @@ class TN_1D:
 
 class Mps(TN_1D):
     def __init__(self, N):
-        super().__init__(self, N, nr_phys=1)
+        nr_phys=1
+        super().__init__(N, nr_phys)
 
 class Mpo(TN_1D):
     def __init__(self, N):
-        super().__init__(self, N, nr_phys=2)
+        nr_phys=2
+        super().__init__(N, nr_phys)
