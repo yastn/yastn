@@ -1,8 +1,13 @@
-Matrix products and algorithms 
+YAMPS
 ==============================
 
 
-.. todo:: how to get rid of titles for module files?
+Basic concepts
+---------------------------------------
+
+.. toctree::
+   :glob:
+   theory/mps/basics
 
 Matrix producs state and operator
 ---------------------------------------
