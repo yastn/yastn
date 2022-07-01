@@ -1,15 +1,15 @@
 Examples for `yamps` module
-=====================================
+===========================
 
 Filling matrix product with tensors
-----------------------------
+-----------------------------------
 
-The `yamps.Mps` can be filled by hand by directly assigning `yast.Tensor` to `A`, e.g. :code:`psi.A[3] = <example tensor>`, where `psi` is an example `yamps.Mps` object.
+The `yamps.MpsMpo` can be filled by hand by directly assigning `yast.Tensor` to `A`, e.g. :code:`psi.A[3] = <example tensor>`, where `psi` is an example `yamps.MpsMpo` object.
 
 .. literalinclude:: /../../tests/mps/test_initialization.py
         :pyobject: test_assign_block
 
-For symmetric `yamps.Mps` we havee to make sure that the blocks throughout the chain have consistent bond dimension.
+For symmetric `yamps.MpsMpo` we havee to make sure that the blocks throughout the chain have consistent bond dimension.
 That means that the blocks of one tensor define the structure of its neighbours.
 
 .. literalinclude:: /../../tests/mps/ops_dense.py
@@ -23,7 +23,7 @@ That means that the blocks of one tensor define the structure of its neighbours.
 
 
 Automatically generated matrix product
-----------------------------
+--------------------------------------
 
 XX Hamiltonian generated automatically for the case with no symmetries imposed. 
 
@@ -45,24 +45,17 @@ Copying
 .. literalinclude:: /../../tests/mps/test_copy.py
 
 
-Addition
+Algebra
 ------------------------
 
-.. literalinclude:: /../../tests/mps/test_addition.py
-
-
-Multiplication
-------------------------
-
-.. literalinclude:: /../../tests/mps/test_multiplication.py
-
+.. literalinclude:: /../../tests/mps/test_algebra.py
 
 .. QR and SVD
 
-Canonical form by QR decomposition
----------------------------------------
+.. Canonical form by QR decomposition
+.. ---------------------------------------
 
-.. literalinclude:: /../../tests/mps/test_canonical.py
+.. .. literalinclude:: /../../tests/mps/test_canonical.py
 
 
 Canonical form by SVD decomposition
@@ -72,6 +65,7 @@ Canonical form by SVD decomposition
 
 
 .. outside world
+
 Save and load
 ----------------------------------------
 
@@ -79,12 +73,13 @@ Save and load
 
 
 .. algorithms
+
 DMRG
------
+----
 
 .. literalinclude:: /../../tests/mps/test_dmrg.py
 
 TDVP
------
+----
 
 .. literalinclude:: /../../tests/mps/test_tdvp.py
