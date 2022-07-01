@@ -1,7 +1,7 @@
 """ Mps structure and its basic """
 import numpy as np
 import yast
-from ._mps import _mpsmpo, add
+from ._mps import MpsMpo, add
 
 class YampsError(Exception):
     pass
@@ -16,7 +16,7 @@ def load_from_dict(config, nr_phys, in_dict):
     out_Mps : Mps
     """
     N = len(in_dict)
-    out_Mps = _mpsmpo(N, nr_phys=nr_phys)
+    out_Mps = MpsMpo(N, nr_phys=nr_phys)
     for n in range(out_Mps.N):
         out_Mps.A[n] = yast.load_from_dict(config=config, d=in_dict[n])
     return out_Mps
@@ -45,10 +45,22 @@ def load_from_hdf5(config, nr_phys, file, in_file_path):
     out_Mps : Mps
     """
     N = len(file[in_file_path].keys())
-    out_Mps = _mpsmpo(N, nr_phys=nr_phys)
+    out_Mps = MpsMpo(N, nr_phys=nr_phys)
     for n in range(out_Mps.N):
         out_Mps.A[n] = yast.load_from_hdf5(config, file, in_file_path+str(n))
     return out_Mps
+
+
+# # cp = yast.ones(config=config_U1)
+# def generate_mpo(N, H, I, opts):
+#     """
+#     H = [(0.25, 1, cp, 10, c, 12, c, 14 cp), (0.25, 2, cp, 12, c)]
+#     """
+# cp.ndim = 2
+#   M.A[n] = M.A[n].add_leg(axis=0, t=tt, s=1)
+#   M.A[n] = M.A[n].add_leg(axis=-1, s=-1)
+
+#     pass
 
 
 def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys,  common_legs, opts={'tol': 1e-14}):
@@ -121,7 +133,7 @@ def _generate_Mij(amp, connect, N, nr_phys):
     T_conn = connect['conn']
     T_else = connect['else']
 
-    M = _mpsmpo(N, nr_phys=nr_phys)
+    M = MpsMpo(N, nr_phys=nr_phys)
     tt = (0,) * len(T_from.n)
     for n in range(M.N):
         if jL == jR:

@@ -6,6 +6,15 @@ class YampsError(Exception):
     pass
 
 
+def Mps(N):
+    """ Generate empty Mps"""
+    return MpsMpo(N,  nr_phys=1)
+
+def Mpo(N):
+    """ Generate empty Mpo"""
+    return MpsMpo(N,  nr_phys=2)
+
+
 ###################################
 #   auxiliary for basic algebra   #
 ###################################
@@ -33,7 +42,7 @@ def add(*states, amplitudes=None):
     if len(states) != len(amplitudes):
         raise YampsError('Number of Mps-s must be equal to number of coefficients in amp.')
 
-    phi = _mpsmpo(N=states[0].N, nr_phys=states[0].nr_phys)
+    phi = MpsMpo(N=states[0].N, nr_phys=states[0].nr_phys)
 
     if any(psi.N != phi.N for psi in states):
         raise YampsError('All states must have equal number of sites.')
@@ -79,7 +88,7 @@ def multiply(a, b, mode=None):
     nr_phys = a.nr_phys + b.nr_phys - 2
     if nr_phys == 0:
         YampsError('Use measure_overlap to calculate overlap between two mps-s')
-    phi = _mpsmpo(N=a.N, nr_phys=nr_phys)
+    phi = MpsMpo(N=a.N, nr_phys=nr_phys)
 
     if b.N != a.N:
         raise YampsError('a and b must have equal number of sites.')
@@ -104,17 +113,10 @@ def multiply(a, b, mode=None):
 ###################################
 
 
-class _mpsmpo:
-    """
-    The basic structure of mps (for nr_phys=1) and mpo (for nr_phys=2) and some basic operations on a single mps.
-    This is a parent structure for Mps (for nr_phys=1), Mpo (for nr_phys=2).
-    Order of legs for a single mps tensor is (left virtual, 1st physical, 2nd physical, right virtual).
-    _mpsmpo tensors are index with :math:`0, 1, 2, 3, \\ldots, N-1` (with :math:`0` corresponding to the first site).
-    A central block (associated with a bond) is indexed using ordered tuple (n, n+1).
-    Maximally one central block is allowed.
-    """
+class _TN1D_base():
+    """ Geometric information about 1D tensor network. """
 
-    def __init__(self, N, nr_phys=1):
+    def __init__(self, N):
         r"""
         Initialize basic structure for matrix product state/operator/purification.
 
@@ -127,23 +129,11 @@ class _mpsmpo:
         """
         if not isinstance(N, int) or N <= 0:
             raise YampsError("Number of Mps sites N should be a positive integer.")
-        if nr_phys not in (1, 2):
-            raise YampsError("Number of physical legs of Mps, nr_phys, should be equal to 1 or 2.")
         self.N = N
-        self.nr_phys = nr_phys
-        self.A = {}  # dict of mps tensors; indexed by integers
+        self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
         self.pC = None  # index of the central site, None if it does not exist
-        self.left = (0,)  # convention which leg is left virtual(connected to site with smaller index)
-        self.right = (nr_phys + 1,)  # convention which leg is a right virtual leg (connected to site with larger index)
-        self.phys = (1,) if nr_phys == 1 else (1, 2)  # convention which legs are physical
         self.first = 0
-        self.last = self.N - 1
-
-    def get_leftmost_leg(self):
-        return self.A[self.first].get_legs(self.left[0])
-
-    def get_rightmost_leg(self):
-        return self.A[self.last].get_legs(self.right[0])
+        self.last = N - 1
 
     def sweep(self, to='last', df=0, dl=0):
         r"""
@@ -162,61 +152,9 @@ class _mpsmpo:
             return range(self.N - 1 - dl, df - 1, -1)
         raise YampsError('Argument "to" should be in ("first", "last")')
 
-    def __add__(self, mps):
-        """
-        Sum of two Mps's or two Mpo's.
-
-        Parameters
-        ----------
-        mps : Mps or Mpo (same as self)
-
-        Returns
-        -------
-        out : Mps or Mpo
-        """
-        return add(self, mps)
-
-    def __mul__(self, multiplier):
-        """
-        Makes a copy of Mps or Mpo, multiplying the first tensor by a number.
-
-        Parameters
-        ----------
-        multiplier : Number
-    
-        Returns
-        -------
-        out : Mps or Mpo
-        """
-        phi = _mpsmpo(N=self.N, nr_phys=self.nr_phys)
-        phi.A = {ind: multiplier * ten if ind == self.first else ten.clone() \
-                for ind, ten in self.A.items()}
-        phi.pC = self.pC
-        return phi
-
-    def __rmul__(self, number):
-        """
-        Makes a copy of Mps or Mpo, multiplying the first tensor by a number.
-
-        Returns
-        -------
-        out : Mps or Mpo
-        """
-        return self.__mul__(number)
-
-    def __matmul__(self, multiplier):
-        """
-        Multiply Mpo by Mpo or Mps.
-
-        Parameters
-        ----------
-        multiplier : Mps or Mpo
-
-        Returns
-        -------
-        out : Mps or Mpo
-        """
-        return multiply(self, multiplier)
+    def __getitem__(self, n):
+        """ Return tensor corresponding to n-th site."""
+        return self.A[n]
 
     def clone(self):
         r"""
@@ -228,7 +166,7 @@ class _mpsmpo:
         -------
         out : cloned Mps or Mpo
         """
-        phi = _mpsmpo(N=self.N, nr_phys=self.nr_phys)
+        phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: ten.clone() for ind, ten in self.A.items()}
         phi.pC = self.pC
         return phi
@@ -244,10 +182,172 @@ class _mpsmpo:
         -------
         out : copied Mps or Mpo
         """
-        phi = _mpsmpo(N=self.N, nr_phys=self.nr_phys)
+        phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: ten.copy() for ind, ten in self.A.items()}
         phi.pC = self.pC
         return phi
+
+    def __mul__(self, multiplier):
+        """
+        Makes a copy of Mps or Mpo, multiplying the first tensor by a number.
+
+        Parameters
+        ----------
+        multiplier : Number
+    
+        Returns
+        -------
+        out : Mps or Mpo
+        """
+        phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
+        phi.A = {ind: multiplier * ten if ind == self.first else ten.clone() \
+                for ind, ten in self.A.items()}
+        phi.pC = self.pC
+        return phi
+
+    def __rmul__(self, number):
+        """
+        Makes a copy of Mps or Mpo, multiplying the first tensor by a number.
+
+        Returns
+        -------
+        out : Mps or Mpo
+        """
+        return self.__mul__(number)
+    
+    def save_to_dict(self):
+        r"""
+        Writes Tensor-s of Mps into a dictionary
+
+        Returns
+        -------
+        out_dict : dictionary of dictionaries
+            each element represents a tensor in the chain from first to last.
+        """
+        out_dict = {}
+        for n in self.sweep(to='last'):
+            out_dict[n] = self.A[n].save_to_dict()
+        return out_dict
+
+    def save_to_hdf5(self, file, in_file_path):
+        r"""
+        Writes Tensor-s of Mps into a HDF5 file
+
+        Parameters
+        -----------
+        file: File
+            A 'pointer' to a file opened by a user
+
+        in_file_path: File
+            Name of a group in the file, where the Mps will be saved
+        """
+        for n in self.sweep(to='last'):
+            self.A[n].save_to_hdf5(file, in_file_path+str(n))
+
+
+class MpsMpo(_TN1D_base):
+    """
+    The basic structure of mps (for nr_phys=1) and mpo (for nr_phys=2) and some basic operations on a single mps.
+    This is a parent structure for Mps (for nr_phys=1), Mpo (for nr_phys=2).
+    Order of legs for a single mps tensor is (left virtual, 1st physical, 2nd physical, right virtual).
+    MpsMpo tensors are index with :math:`0, 1, 2, 3, \\ldots, N-1` (with :math:`0` corresponding to the first site).
+    A central block (associated with a bond) is indexed using ordered tuple (n, n+1).
+    Maximally one central block is allowed.
+    """
+
+    def __init__(self, N, nr_phys=1):
+        r"""
+        Initialize basic structure for matrix product state/operator/purification.
+
+        Parameters
+        ----------
+        N : int
+            number of sites of mps, or directly an instance of geometry class
+        nr_phys : int
+            number of physical legs: _1_ for mps; _2_ for mpo;
+        """
+        super().__init__(N)
+
+        if nr_phys not in (1, 2):
+            raise YampsError("Number of physical legs of Mps, nr_phys, should be equal to 1 or 2.")
+        self.nr_phys = nr_phys
+        self.left = (0,)  # convention which leg is left virtual(connected to site with smaller index)
+        self.right = (nr_phys + 1,)  # convention which leg is a right virtual leg (connected to site with larger index)
+        self.phys = (1,) if nr_phys == 1 else (1, 2)  # convention which legs are physical
+
+    def __setitem__(self, n, tensor):
+        """ Assign tensor to n-th site of Mps or Mpo. """
+        if not isinstance(n, int) or n < 0 or n >= self.N:
+            raise YampsError("n should be a positive integer in [0, N - 1].")
+        if tensor.ndim != self.nr_phys + 2:
+            raise YampsError("Tensor rank should be %d" % self.nr_phys + 2)
+        self.A[n] = tensor
+
+    def get_leftmost_leg(self):
+        return self.A[self.first].get_legs(self.left[0])
+
+    def get_rightmost_leg(self):
+        return self.A[self.last].get_legs(self.right[0])
+
+    def get_bond_dimensions(self):
+        r"""
+        Returns bond dimensions of mps.
+
+        Returns
+        -------
+        Ds : list
+            list of bond dimensions on virtual legs from first to last,
+            including "trivial" leftmost and rightmost virtual indices.
+        """
+        Ds = [self.A[n].get_shape(self.left[0]) for n in self.sweep(to='last')]
+        Ds.append(self.A[self.last].get_shape(self.right[0]))
+        return Ds
+
+    def get_bond_charges_dimensions(self):
+        r"""
+        Returns charges and dimensions of all virtual mps bonds.
+
+        Returns
+        -------
+        tDs : list
+            list of charges and corresponding dimensions on virtual mps bonds from first to last,
+            including "trivial" leftmost and rightmost virtual indices.
+        """
+        tDs = []
+        for n in self.sweep(to='last'):
+            leg = self.A[n].get_legs(self.left[0])
+            tDs.append(leg.tD)
+        leg = self.A[self.last].get_legs(self.right[0])
+        tDs.append(leg.tD)
+        return tDs
+
+    def __add__(self, mps):
+        """
+        Sum of two Mps's or two Mpo's.
+
+        Parameters
+        ----------
+        mps : Mps or Mpo (same as self)
+
+        Returns
+        -------
+        out : Mps or Mpo
+        """
+        return add(self, mps)
+
+    def __matmul__(self, multiplier):
+        """
+        Multiply Mpo by Mpo or Mps.
+
+        Parameters
+        ----------
+        multiplier : Mps or Mpo
+
+        Returns
+        -------
+        out : Mps or Mpo
+        """
+        return multiply(self, multiplier)
 
     def orthogonalize_site(self, n, to='last', normalize=True):
         r"""
@@ -449,38 +549,6 @@ class _mpsmpo:
         self.pC = bd
         self.A[nl], self.A[bd], self.A[nr] = AA.svd_with_truncation(axes=axes, sU=-1, **opts_svd)
 
-    def get_bond_dimensions(self):
-        r"""
-        Returns bond dimensions of mps.
-
-        Returns
-        -------
-        Ds : list
-            list of bond dimensions on virtual legs from first to last,
-            including "trivial" leftmost and rightmost virtual indices.
-        """
-        Ds = [self.A[n].get_shape(self.left[0]) for n in self.sweep(to='last')]
-        Ds.append(self.A[self.last].get_shape(self.right[0]))
-        return Ds
-
-    def get_bond_charges_dimensions(self):
-        r"""
-        Returns charges and dimensions of all virtual mps bonds.
-
-        Returns
-        -------
-        tDs : list
-            list of charges and corresponding dimensions on virtual mps bonds from first to last,
-            including "trivial" leftmost and rightmost virtual indices.
-        """
-        tDs = []
-        for n in self.sweep(to='last'):
-            leg = self.A[n].get_legs(self.left[0])
-            tDs.append(leg.tD)
-        leg = self.A[self.last].get_legs(self.right[0])
-        tDs.append(leg.tD)
-        return tDs
-
     def get_entropy(self, alpha=1):
         r"""
         Entropy for a bipartition on each bond
@@ -517,42 +585,3 @@ class _mpsmpo:
             SV[n] = sv
             self.absorb_central(to='first')
         return SV
-
-    def save_to_dict(self):
-        r"""
-        Writes Tensor-s of Mps into a dictionary
-
-        Returns
-        -------
-        out_dict : dictionary of dictionaries
-            each element represents a tensor in the chain from first to last.
-        """
-        out_dict = {}
-        for n in self.sweep(to='last'):
-            out_dict[n] = self.A[n].save_to_dict()
-        return out_dict
-
-    def save_to_hdf5(self, file, in_file_path):
-        r"""
-        Writes Tensor-s of Mps into a HDF5 file
-
-        Parameters
-        -----------
-        file: File
-            A 'pointer' to a file opened by a user
-
-        in_file_path: File
-            Name of a group in the file, where the Mps will be saved
-        """
-        for n in self.sweep(to='last'):
-            self.A[n].save_to_hdf5(file, in_file_path+str(n))
-
-
-class Mps(_mpsmpo):
-    def __init__(self, N):
-        super().__init__(N, nr_phys=1)
-
-
-class Mpo(_mpsmpo):
-    def __init__(self, N):
-        super().__init__(N, nr_phys=2)
