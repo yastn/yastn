@@ -178,11 +178,11 @@ class _mpsmpo:
 
     def __mul__(self, multiplier):
         """
-        Makes a copy of Mps or Mpo, multiplying the first tensor by the number.
+        Makes a copy of Mps or Mpo, multiplying the first tensor by a number.
 
         Parameters
         ----------
-        multiplier : Number or _mpsmpo
+        multiplier : Number
     
         Returns
         -------
@@ -196,7 +196,7 @@ class _mpsmpo:
 
     def __rmul__(self, number):
         """
-        Makes a copy of Mps or Mpo, multiplying the first tensor by the number.
+        Makes a copy of Mps or Mpo, multiplying the first tensor by a number.
 
         Returns
         -------
@@ -206,7 +206,7 @@ class _mpsmpo:
 
     def __matmul__(self, multiplier):
         """
-        Multiply Mpo by Mpo of Mps.
+        Multiply Mpo by Mpo or Mps.
 
         Parameters
         ----------
@@ -280,7 +280,7 @@ class _mpsmpo:
 
     def diagonalize_central(self, opts=None, normalize=True):
         r"""
-        Perform svd of the central site C = U S V -- truncating according to opts which is pased into svd.
+        Perform svd of the central site C = U @ S @ V. Truncation can be done based on opts.
 
         Attach U and V respective to the left and right sites.
 
