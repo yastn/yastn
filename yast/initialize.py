@@ -235,7 +235,7 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
 def eye(config=None, legs=(), n=None, **kwargs):
     r"""
-    Initialize `diagonal` identity matrix with all possible blocks filled with ones.
+    Initialize `diagonal` identity matrix. Such matrix is block-diagonal with all allowed blocks filled with identity matrices.
 
     .. note::
         currently supports either one or two legs as input. In case of a single leg,
@@ -266,8 +266,8 @@ def eye(config=None, legs=(), n=None, **kwargs):
 
     Returns
     -------
-    tensor : yast.Tensor
-        an instance of diagonal tensor filled with ones
+    yast.Tensor
+        an instance of (block) diagonal identity matrix
     """
     return _fill(config=config, legs=legs, n=n, isdiag=True, val='ones', **kwargs)
 
@@ -355,9 +355,6 @@ def decompress_from_1d(r1d, meta):
     ----------
     r1d : rank-1 tensor
         1-D array (of backend type) holding serialized blocks.
-
-    config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yast configuration>`
 
     meta : dict
         structure of symmetric tensor. Non-zero blocks are indexed by associated charges.
