@@ -12,6 +12,7 @@ The separation of variables can be performed using e.g. singular value decomposi
 If the SVD decomposition keeps all Schmidt vactors with non-zero aplitude then the decomposition to tensor product is exact. Otherwise the quality of MPS is quantified by the virtual dimensions `D_{i,j}`
 
 ::
+
     #individual tensor in MPS
                 ___
     D_{j-1,j}--|___|--D_{j,j+1}
