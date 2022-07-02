@@ -168,16 +168,12 @@ def mpo_gen_XX(chain, t, mu):
     EE = yast.Tensor(config=config_dense_fermionic, s=s)
     EE.set_block(Ds=Ds, val=[[1, 0], [0, 1]])
 
-    H = [None]*(chain+1+0*2*(chain-1))
-    pointer = 0
+    H = []
     for n in range(chain):
-        H[pointer+n] = {"amp": mu, n: NN}
-    pointer += chain
-    for n in range(1):#chain-1):
-        H[pointer+n] = {"amp": t, n: CP, (n+1): C}
-    #pointer += chain-1
-    #for n in range(chain-1):
-    #    H[pointer+n] = {"amp": t, (n+1): CP, n: C}
+        H.append({"amp": mu, n: NN})
+    for n in range(chain - 1):
+        H.append({"amp": t, n: CP, n + 1: C})
+        H.append({"amp": t, n + 1: CP, n: C})
     return yamps.generate_mpo(chain, H, EE, opts={'tol': 1e-14})
 
 
