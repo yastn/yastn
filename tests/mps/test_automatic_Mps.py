@@ -23,7 +23,7 @@ def test_gen_XX_dmrg_dense():
     opts_svd = {'tol': 1e-6, 'D_total': Dmax}
 
     version = '2site'
-    psi = ops_dense.mps_random(N=N, Dmax=Dmax, d=2).canonize_sweep(to='first')
+    psi = ops_dense.mps_random_fermionic(N=N, Dmax=Dmax, d=2).canonize_sweep(to='first')
     env = yamps.dmrg(psi, H, version=version, max_sweeps=cutoff_sweep, atol=cutoff_dE, opts_svd=opts_svd)
     assert abs(env.measure() - Eng_gs) < tol
 

@@ -77,6 +77,7 @@ def generate_mpo(N, H, identity, opts={'tol': 1e-14}):
                 product_tmp.A[j2-1-j3] = yast.ncon([product_tmp.A[j2-1-j3], operator], [(-1,-3,-4,-5),(-2,-6)])
                 product_tmp.A[j2-1-j3] = product_tmp.A[j2-1-j3].swap_gate(axes=(1,2,))
                 product_tmp.A[j2-1-j3] = product_tmp.A[j2-1-j3].fuse_legs(axes=((0,1),2,3,(4,5)), mode='hard')
+                print(product_tmp.A[j2-1-j3].get_legs())
         H_tens[j1] = amplitude * product_tmp
     M = add(*H_tens)
     M.canonize_sweep(to='last', normalize=False)
