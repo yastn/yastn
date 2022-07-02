@@ -29,7 +29,7 @@ def test_gen_XX_dmrg_dense():
 
 
 def test_gen_XX_dmrg_U1():
-    N = 7
+    N = 2#7
     t, mu = 1., .2
     H = ops_U1.mpo_gen_XX(N, t, mu)
     Eng_sectors = {2: -2.861972627395668,

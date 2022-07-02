@@ -1,4 +1,5 @@
 """ Mps structure and its basic """
+from turtle import position
 import numpy as np
 import yast
 from ._mps import MpsMpo, add
@@ -52,15 +53,35 @@ def load_from_hdf5(config, nr_phys, file, in_file_path):
 
 
 # # cp = yast.ones(config=config_U1)
-# def generate_mpo(N, H, I, opts):
-#     """
-#     H = [(0.25, 1, cp, 10, c, 12, c, 14 cp), (0.25, 2, cp, 12, c)]
-#     """
-# cp.ndim = 2
-#   M.A[n] = M.A[n].add_leg(axis=0, t=tt, s=1)
-#   M.A[n] = M.A[n].add_leg(axis=-1, s=-1)
-
-#     pass
+def generate_mpo(N, H, identity, opts={'tol': 1e-14}):
+    identity2 = identity.copy().add_leg(axis=0, s=1).add_leg(axis=-1, s=-1)
+    id_helper = MpsMpo(N, nr_phys=2)
+    # prepare identity
+    for n in range(id_helper.N):
+        id_helper.A[n] = identity2
+    H_tens = [None]*len(H)
+    for j1 in range(len(H)):
+        op_info = H[j1]
+        print(op_info)
+        product_tmp = id_helper.copy()
+        amplitude, positions = op_info["amp"], op_info.keys()
+        for j2 in list(positions)[1::]:
+            operator = op_info[j2].add_leg(axis=0, s=1)
+            product_tmp.A[j2] = yast.ncon([product_tmp.A[j2], operator], [(-1,1,-4,-5,),(-2,-3,1)])
+            product_tmp.A[j2] = product_tmp.A[j2].fuse_legs(axes=((0,1),2,3,(4)), mode='hard')
+            print("0:", j2, len(product_tmp.A[j2].get_legs()))
+            for j3 in range(j2):
+                print("j3:", j3)
+                operator = yast.ones(config=op_info[j2].config, legs=[operator.get_legs()[0]], n=op_info[j2].n, isdiag=op_info[j2].isdiag).conj()
+                operator = operator.add_leg(axis=0, s=1)
+                product_tmp.A[j2-1-j3] = yast.ncon([product_tmp.A[j2-1-j3], operator], [(-1,-3,-4,-5),(-2,-6)])
+                product_tmp.A[j2-1-j3] = product_tmp.A[j2-1-j3].swap_gate(axes=(1,2,))
+                product_tmp.A[j2-1-j3] = product_tmp.A[j2-1-j3].fuse_legs(axes=((0,1),2,3,(4,5)), mode='hard')
+        H_tens[j1] = amplitude * product_tmp
+    M = add(*H_tens)
+    M.canonize_sweep(to='last', normalize=False)
+    M.truncate_sweep(to='first', opts=opts, normalize=False)
+    return M
 
 
 def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys,  common_legs, opts={'tol': 1e-14}):
