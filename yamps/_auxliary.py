@@ -68,7 +68,7 @@ def generate_mpo(N, H, identity, opts={'tol': 1e-14}):
         for j2 in list(positions)[1::]:
             operator = op_info[j2].add_leg(axis=0, s=1)
             product_tmp.A[j2] = yast.ncon([product_tmp.A[j2], operator], [(-1,1,-4,-5,),(-2,-3,1)])
-            product_tmp.A[j2] = product_tmp.A[j2].fuse_legs(axes=((0,1),2,3,(4)), mode='hard')
+            product_tmp.A[j2] = product_tmp.A[j2].fuse_legs(axes=((0,1),2,3,4), mode='hard')
             print("0:", j2, len(product_tmp.A[j2].get_legs()))
             for j3 in range(j2):
                 print("j3:", j3)
