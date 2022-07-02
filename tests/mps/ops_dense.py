@@ -11,6 +11,19 @@ def random_seed(seed):
     config_dense.backend.random_seed(seed)
 
 
+def mps_random_fermionic(N=2, Dmax=2, d=2, dtype='float64'):
+    if isinstance(d, int):
+        d = [d]
+    d *= (N + len(d) - 1) // len(d)
+
+    psi = yamps.Mps(N)
+    Dl, Dr = 1, Dmax
+    for n in range(N):
+        Dr = Dmax if n < N - 1 else 1
+        Dl = Dmax if n > 0 else 1
+        psi.A[n] = yast.rand(config=config_dense_fermionic, s=(1, 1, -1), D=[Dl, d[n], Dr], dtype=dtype)
+    return psi
+
 def mps_random(N=2, Dmax=2, d=2, dtype='float64'):
     if isinstance(d, int):
         d = [d]
@@ -155,16 +168,16 @@ def mpo_gen_XX(chain, t, mu):
     EE = yast.Tensor(config=config_dense_fermionic, s=s)
     EE.set_block(Ds=Ds, val=[[1, 0], [0, 1]])
 
-    H = [None]*(chain+2*(chain-1))
+    H = [None]*(chain+1+0*2*(chain-1))
     pointer = 0
     for n in range(chain):
         H[pointer+n] = {"amp": mu, n: NN}
     pointer += chain
-    for n in range(chain-1):
+    for n in range(1):#chain-1):
         H[pointer+n] = {"amp": t, n: CP, (n+1): C}
-    pointer += chain-1
-    for n in range(chain-1):
-        H[pointer+n] = {"amp": t, (n+1): CP, n: C}
+    #pointer += chain-1
+    #for n in range(chain-1):
+    #    H[pointer+n] = {"amp": t, (n+1): CP, n: C}
     return yamps.generate_mpo(chain, H, EE, opts={'tol': 1e-14})
 
 
