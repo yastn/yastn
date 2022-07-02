@@ -29,7 +29,7 @@ def test_gen_XX_dmrg_dense():
 
 
 def test_gen_XX_dmrg_U1():
-    N = 2#7
+    N = 7
     t, mu = 1., .2
     H = ops_U1.mpo_gen_XX(N, t, mu)
     Eng_sectors = {2: -2.861972627395668,
@@ -46,6 +46,7 @@ def test_gen_XX_dmrg_U1():
         psi = ops_U1.mps_random(N=N, Dblocks=[Dmax, 2, Dmax], total_charge=total_occ).canonize_sweep(to='first')
         env = yamps.dmrg(psi, H, version=version, max_sweeps=cutoff_sweep, atol=cutoff_dE, opts_svd=opts_svd)
         assert abs(env.measure() - E_target) <  tol
+
 
 
 if __name__ == "__main__":

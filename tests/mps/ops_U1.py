@@ -87,9 +87,53 @@ def mpo_occupation(N):
     return H
 
 
-def mpo_gen_XX(chain, t, mu):
-    Ds, s = (1, 1), (1, -1)
+# def mpo_gen_XX(chain, t, mu):
+#     Ds, s = (1, 1), (1, -1)
 
+#     C = yast.Tensor(config=config_U1, s=s, n=-1)
+#     C.set_block(Ds=Ds, val=1, ts=(0, 1))
+
+#     CP = yast.Tensor(config=config_U1, s=s, n=1)
+#     CP.set_block(Ds=Ds, val=1, ts=(1, 0))
+
+#     NN = yast.Tensor(config=config_U1, s=s, n=0)
+#     NN.set_block(Ds=Ds, val=1, ts=(1, 1))
+
+#     Z = yast.Tensor(config=config_U1, s=s, n=0)
+#     Z.set_block(Ds=Ds, val=1, ts=(0, 0))
+#     Z.set_block(Ds=Ds, val=-1, ts=(1, 1))
+
+#     EE = yast.Tensor(config=config_U1, s=s, n=0)
+#     EE.set_block(Ds=Ds, val=1, ts=(0, 0))
+#     EE.set_block(Ds=Ds, val=1, ts=(1, 1))
+
+#     B = np.diag([mu] * chain) + np.diag([t] * (chain - 1), 1) + np.diag([t] * (chain - 1), -1)
+
+#     from_it, to_it = B.nonzero()
+#     amplitude = B[B.nonzero()]
+#     L = len(from_it)
+
+#     permute_amp = [-1] * L
+
+#     Tensor_from, Tensor_to, Tensor_conn, Tensor_other = [], [], [], []
+#     for n in range(L):
+#         if from_it[n] == to_it[n]:
+#             Tensor_other.append(EE)
+#             Tensor_from.append(NN)
+#             Tensor_conn.append(None)
+#             Tensor_to.append(None)
+#         else:
+#             Tensor_other.append(EE)
+#             Tensor_from.append(CP)
+#             Tensor_conn.append(Z)
+#             Tensor_to.append(C)
+
+#     N, nr_phys, common_legs = chain, 2, (0, 1)
+#     return yamps.automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys, common_legs, opts={'tol': 1e-14})
+
+
+def mpo_gen_XX(N, t, mu):
+    Ds, s = (1, 1), (1, -1)
     C = yast.Tensor(config=config_U1, s=s, n=-1)
     C.set_block(Ds=Ds, val=1, ts=(0, 1))
 
@@ -99,34 +143,14 @@ def mpo_gen_XX(chain, t, mu):
     NN = yast.Tensor(config=config_U1, s=s, n=0)
     NN.set_block(Ds=Ds, val=1, ts=(1, 1))
 
-    Z = yast.Tensor(config=config_U1, s=s, n=0)
-    Z.set_block(Ds=Ds, val=1, ts=(0, 0))
-    Z.set_block(Ds=Ds, val=-1, ts=(1, 1))
-
     EE = yast.Tensor(config=config_U1, s=s, n=0)
     EE.set_block(Ds=Ds, val=1, ts=(0, 0))
     EE.set_block(Ds=Ds, val=1, ts=(1, 1))
 
-    B = np.diag([mu] * chain) + np.diag([t] * (chain - 1), 1) + np.diag([t] * (chain - 1), -1)
-
-    from_it, to_it = B.nonzero()
-    amplitude = B[B.nonzero()]
-    L = len(from_it)
-
-    permute_amp = [-1] * L
-
-    Tensor_from, Tensor_to, Tensor_conn, Tensor_other = [], [], [], []
-    for n in range(L):
-        if from_it[n] == to_it[n]:
-            Tensor_other.append(EE)
-            Tensor_from.append(NN)
-            Tensor_conn.append(None)
-            Tensor_to.append(None)
-        else:
-            Tensor_other.append(EE)
-            Tensor_from.append(CP)
-            Tensor_conn.append(Z)
-            Tensor_to.append(C)
-
-    N, nr_phys, common_legs = chain, 2, (0, 1)
-    return yamps.automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys, common_legs, opts={'tol': 1e-14})
+    H = []
+    for n in range(N):
+        H.append({"amp": mu, n: NN})
+    for n in range(N - 1):
+        H.append({"amp": t, n: CP, n + 1: C})
+        H.append({"amp": t, n + 1: CP, n: C})
+    return yamps.generate_mpo(N, H, EE, opts={'tol': 1e-14})

@@ -1,8 +1,7 @@
 """ Mps structure and its basic """
-from turtle import position
 import numpy as np
 import yast
-from ._mps import MpsMpo, add
+from ._mps import MpsMpo, Mpo, add
 
 class YampsError(Exception):
     pass
@@ -52,33 +51,36 @@ def load_from_hdf5(config, nr_phys, file, in_file_path):
     return out_Mps
 
 
-# # cp = yast.ones(config=config_U1)
 def generate_mpo(N, H, identity, opts={'tol': 1e-14}):
     identity2 = identity.copy().add_leg(axis=0, s=1).add_leg(axis=-1, s=-1)
-    id_helper = MpsMpo(N, nr_phys=2)
     # prepare identity
+    id_helper = Mpo(N)
     for n in range(id_helper.N):
-        id_helper.A[n] = identity2
-    H_tens = [None]*len(H)
-    for j1 in range(len(H)):
-        op_info = H[j1]
-        print(op_info)
+        id_helper.A[n] = identity2.copy()
+
+    H_tens = []
+    for op_info in H:
         product_tmp = id_helper.copy()
         amplitude, positions = op_info["amp"], op_info.keys()
         for j2 in list(positions)[1::]:
             operator = op_info[j2].add_leg(axis=0, s=1)
-            product_tmp.A[j2] = yast.ncon([product_tmp.A[j2], operator], [(-1,1,-4,-5,),(-2,-3,1)])
-            product_tmp.A[j2] = product_tmp.A[j2].fuse_legs(axes=((0,1),2,3,4), mode='hard')
-            print("0:", j2, len(product_tmp.A[j2].get_legs()))
+            leg = operator.get_legs(0)
+            cfg = operator.config
+            product_tmp.A[j2] = yast.ncon([product_tmp.A[j2], operator], [(-1, 1, -4, -5), (-2, -3, 1)])
+            product_tmp.A[j2] = product_tmp.A[j2].fuse_legs(axes=((0, 1), 2, 3, 4), mode='hard')
             for j3 in range(j2):
-                print("j3:", j3)
-                operator = yast.ones(config=op_info[j2].config, legs=[operator.get_legs()[0]], n=op_info[j2].n, isdiag=op_info[j2].isdiag).conj()
-                operator = operator.add_leg(axis=0, s=1)
-                product_tmp.A[j2-1-j3] = yast.ncon([product_tmp.A[j2-1-j3], operator], [(-1,-3,-4,-5),(-2,-6)])
-                product_tmp.A[j2-1-j3] = product_tmp.A[j2-1-j3].swap_gate(axes=(1,2,))
-                product_tmp.A[j2-1-j3] = product_tmp.A[j2-1-j3].fuse_legs(axes=((0,1),2,3,(4,5)), mode='hard')
-                print(product_tmp.A[j2-1-j3].get_legs())
-        H_tens[j1] = amplitude * product_tmp
+                virtual = yast.ones(config=cfg, legs=[leg, leg.conj()])
+                product_tmp.A[j2-1-j3] = yast.ncon([product_tmp.A[j2-1-j3], virtual], [(-1, -3, -4, -5), (-2, -6)])
+                product_tmp.A[j2-1-j3] = product_tmp.A[j2-1-j3].swap_gate(axes=(1, 2))
+                product_tmp.A[j2-1-j3] = product_tmp.A[j2-1-j3].fuse_legs(axes=((0, 1), 2, 3, (4, 5)), mode='hard')
+
+        # product_tmp.A[0] = product_tmp.A[0].drop_leg_history(axis=0)  # there are "trivial" fusions happening here as D=1
+        # at the very beginning of the chain this is creating a problem for block, as history of that trivial fusion can be different
+        # to make it work it is sufficient to remove it as two lines above; but we can as well remove all history from virtual legs of all tensors
+        # I'm not removing history from physical legs in case input operators are somehow complicated for whatever reason
+        for n in range(N):
+            product_tmp.A[n] = product_tmp.A[n].drop_leg_history(axis=(0, 3))
+        H_tens.append(amplitude * product_tmp)
     M = add(*H_tens)
     M.canonize_sweep(to='last', normalize=False)
     M.truncate_sweep(to='first', opts=opts, normalize=False)
