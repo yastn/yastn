@@ -2,9 +2,9 @@ import numpy as np
 import yast
 import yamps
 try:
-    from .configs import config_U1
+    from .configs import config_U1, config_U1_fermionic
 except ImportError:
-    from configs import config_U1
+    from configs import config_U1, config_U1_fermionic
 
 
 def random_seed(seed):
@@ -25,6 +25,22 @@ def mps_random(N=2, Dblocks=(2,), total_charge=1, dtype='float64'):
         tr = tuple(tr + ii for ii in range((-nb + 1) // 2, (nb + 1) // 2)) if n < N - 1 else (total_charge,)
         Dr = Dblocks if n < N - 1 else (1,)
         psi.A[n] = yast.rand(config=config_U1, s=(1, 1, -1), t=[tl, tc, tr], D=[Dl, Dc, Dr], dtype=dtype)
+    return psi
+
+def mps_random_fermionic(N=2, Dblocks=(2,), total_charge=1, dtype='float64'):
+    Dblocks = tuple(Dblocks)
+    psi = yamps.Mps(N)
+    tc = (0, 1)
+    Dc = (1, 1)
+    nb = len(Dblocks)
+    for n in range(N):
+        tl = (n * total_charge) // N
+        tl = tuple(tl + ii for ii in range((-nb + 1) // 2, (nb + 1) // 2)) if n > 0 else (0,)
+        Dl = Dblocks if n > 0 else (1,)
+        tr = ((n + 1) * total_charge) // N
+        tr = tuple(tr + ii for ii in range((-nb + 1) // 2, (nb + 1) // 2)) if n < N - 1 else (total_charge,)
+        Dr = Dblocks if n < N - 1 else (1,)
+        psi.A[n] = yast.rand(config=config_U1_fermionic, s=(1, 1, -1), t=[tl, tc, tr], D=[Dl, Dc, Dr], dtype=dtype)
     return psi
 
 
@@ -132,18 +148,18 @@ def mpo_occupation(N):
 #     return yamps.automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys, common_legs, opts={'tol': 1e-14})
 
 
-def mpo_gen_XX(N, t, mu):
+def mpo_gen_XX_old(N, t, mu):
     Ds, s = (1, 1), (1, -1)
-    C = yast.Tensor(config=config_U1, s=s, n=-1)
+    C = yast.Tensor(config=config_U1_fermionic, s=s, n=-1)
     C.set_block(Ds=Ds, val=1, ts=(0, 1))
 
-    CP = yast.Tensor(config=config_U1, s=s, n=1)
+    CP = yast.Tensor(config=config_U1_fermionic, s=s, n=1)
     CP.set_block(Ds=Ds, val=1, ts=(1, 0))
 
-    NN = yast.Tensor(config=config_U1, s=s, n=0)
+    NN = yast.Tensor(config=config_U1_fermionic, s=s, n=0)
     NN.set_block(Ds=Ds, val=1, ts=(1, 1))
 
-    EE = yast.Tensor(config=config_U1, s=s, n=0)
+    EE = yast.Tensor(config=config_U1_fermionic, s=s, n=0)
     EE.set_block(Ds=Ds, val=1, ts=(0, 0))
     EE.set_block(Ds=Ds, val=1, ts=(1, 1))
 
@@ -154,3 +170,11 @@ def mpo_gen_XX(N, t, mu):
         H.append({"amp": t, n: CP, n + 1: C})
         H.append({"amp": t, n + 1: CP, n: C})
     return yamps.generate_mpo(N, H, EE, opts={'tol': 1e-14})
+
+
+def mpo_gen_XX(chain, t, mu):
+    gen = yamps.generateMpo(N=chain, config=config_U1_fermionic)
+    H = gen.sum(lambda j: mu * gen.prod(gen.cp(j), gen.c(j)), range(gen.N)) \
+        + gen.sum(lambda j: t * gen.prod(gen.cp(j), gen.c(j+1)), range(gen.N-1)) \
+        + gen.sum(lambda j: t * gen.prod(gen.cp(j+1), gen.c(j)), range(gen.N-1))
+    return H

@@ -43,7 +43,7 @@ def test_gen_XX_dmrg_U1():
 
     version = '2site'
     for total_occ, E_target in Eng_sectors.items():
-        psi = ops_U1.mps_random(N=N, Dblocks=[Dmax, 2, Dmax], total_charge=total_occ).canonize_sweep(to='first')
+        psi = ops_U1.mps_random_fermionic(N=N, Dblocks=[Dmax, 2, Dmax], total_charge=total_occ).canonize_sweep(to='first')
         env = yamps.dmrg(psi, H, version=version, max_sweeps=cutoff_sweep, atol=cutoff_dE, opts_svd=opts_svd)
         assert abs(env.measure() - E_target) <  tol
 
