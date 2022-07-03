@@ -113,7 +113,7 @@ def mpo_occupation(N):
     return H
 
 
-def mpo_gen_XX_old(chain, t, mu):
+def mpo_gen_XX_older(chain, t, mu):
     Ds, s = (2, 2), (1, -1)
 
     CP = yast.Tensor(config=config_dense, s=s)
@@ -153,7 +153,7 @@ def mpo_gen_XX_old(chain, t, mu):
     N, nr_phys, common_legs = chain, 2, (0, 1)
     return yamps.automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys, common_legs, opts={'tol': 1e-14})
 
-def mpo_gen_XX(chain, t, mu):
+def mpo_gen_XX_old(chain, t, mu):
     Ds, s = (2, 2), (1, -1)
 
     CP = yast.Tensor(config=config_dense_fermionic, s=s)
@@ -174,7 +174,35 @@ def mpo_gen_XX(chain, t, mu):
     for n in range(chain - 1):
         H.append({"amp": t, n: CP, n + 1: C})
         H.append({"amp": t, n + 1: CP, n: C})
+    
     return yamps.generate_mpo(chain, H, EE, opts={'tol': 1e-14})
+
+
+def mpo_gen_XX_semi_old(chain, t, mu):
+    Ds, s = (2, 2), (1, -1)
+
+    CP = yast.Tensor(config=config_dense_fermionic, s=s)
+    CP.set_block(Ds=Ds, val=[[0, 0], [1, 0]])
+
+    C = yast.Tensor(config=config_dense_fermionic, s=s)
+    C.set_block(Ds=Ds, val=[[0, 1], [0, 0]])
+
+    EE = yast.Tensor(config=config_dense_fermionic, s=s)
+    EE.set_block(Ds=Ds, val=[[1, 0], [0, 1]])
+
+    gen = yamps.GenerateMpo(N=chain, identity=EE, annihilation=C, creation=CP)
+    H = gen.sum(lambda j: mu * gen.prod(gen.cp(j), gen.c(j)), range(gen.N)) \
+        + gen.sum(lambda j: t * gen.prod(gen.cp(j), gen.c(j+1)), range(gen.N-1)) \
+        + gen.sum(lambda j: t * gen.prod(gen.cp(j+1), gen.c(j)), range(gen.N-1))    
+    return H
+
+
+def mpo_gen_XX(chain, t, mu):
+    gen = yamps.generateMpo(N=chain, config=config_dense_fermionic)
+    H = gen.sum(lambda j: mu * gen.prod(gen.cp(j), gen.c(j)), range(gen.N)) \
+        + gen.sum(lambda j: t * gen.prod(gen.cp(j), gen.c(j+1)), range(gen.N-1)) \
+        + gen.sum(lambda j: t * gen.prod(gen.cp(j+1), gen.c(j)), range(gen.N-1))
+    return H
 
 
 def mpo_Ising_model(N, Jij, gi):
