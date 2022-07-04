@@ -24,7 +24,7 @@ class GenerateMpo():
         def prod(self, *multiplied):
                 product = self.identity.copy()
                 for im in range(len(multiplied)):
-                        j, op = multiplied[im]
+                        j, op = multiplied[len(multiplied)-1-im]
                         operator = op.copy().add_leg(axis=0, s=1)
                         leg = operator.get_legs(0)
                         cfg = operator.config
@@ -75,5 +75,4 @@ def generateMpo(N, config, opts={'tol': 1e-14}):
                 EE = yast.Tensor(config=config, s=s, n=0)
                 EE.set_block(Ds=Ds, val=1, ts=(0, 0))
                 EE.set_block(Ds=Ds, val=1, ts=(1, 1))
-        # które to creacji a które anihilacji?  W tej wersji działa dobrze
-        return GenerateMpo(N, identity=EE, annihilation=CP, creation=C, opts=opts)
+        return GenerateMpo(N, identity=EE, annihilation=C, creation=CP, opts=opts)
