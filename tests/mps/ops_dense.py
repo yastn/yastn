@@ -1,6 +1,9 @@
+from ast import operator
+from turtle import position
 import numpy as np
 import yast
 import yamps
+import re
 try:
     from .configs import config_dense, config_dense_fermionic
 except ImportError:
@@ -114,10 +117,17 @@ def mpo_occupation(N):
 
 
 def mpo_gen_XX(chain, t, mu):
-    gen = yamps.generateMpo(N=chain, config=config_dense_fermionic)
-    H = gen.sum(lambda j: mu * gen.prod(gen.cp(j), gen.c(j)), range(gen.N)) \
-        + gen.sum(lambda j: t * gen.prod(gen.cp(j), gen.c(j+1)), range(gen.N-1)) \
-        + gen.sum(lambda j: t * gen.prod(gen.cp(j+1), gen.c(j)), range(gen.N-1))
+    # prepare generator
+    gen = yamps.GenerateOpEnv(N=chain, config=config_dense_fermionic)
+    gen.use_default()
+    ## generate directly, most general
+    #H = gen.sum([yamps.mpo_term(mu, (n, n), ('cp', 'c')) for n in range(gen.N)]) \
+    #    + gen.sum([yamps.mpo_term(t, (n, n+1), ('cp', 'c')) for n in range(gen.N-1)]) \
+    #    + gen.sum([yamps.mpo_term(t, (n+1, n), ('cp', 'c')) for n in range(gen.N-1)])
+    # generate Mpo from string, user firiendly but not very good
+    parameters = {"t": t, "mu": mu}
+    H_str = "\sum_{j=0}^{"+str(chain-1)+"} mu*cp_{j}.c_{j} + \sum_{j=0}^{"+str(chain-2)+"} cp_{j}.c_{j+1} + \sum_{j=0}^{"+str(chain-2)+"} t*cp_{j+1}.c_{j}"
+    H = gen.latex2yamps(H_str, parameters)
     return H
 
 
