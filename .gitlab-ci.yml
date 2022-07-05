@@ -32,7 +32,7 @@ default:
 
 .default_rules:
   rules:
-    - if: $CI_COMMIT_BRANCH == "docs"
+    - if: $CI_COMMIT_BRANCH == "docs" || $CI_COMMIT_BRANCH == "generate_mpo"
       when: never
     - if: $CI_COMMIT_BRANCH
 
