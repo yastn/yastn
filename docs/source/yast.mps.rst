@@ -9,8 +9,7 @@ Basic concepts
    :glob:
 
    theory/mps/basics
-   theory/mps/basics
-   theory/mps/basics
+
 
 Matrix producs state and operator
 ---------------------------------------
