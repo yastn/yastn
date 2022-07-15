@@ -11,14 +11,27 @@ class YampsError(Exception):
 
 
 class mpo_term(NamedTuple):
-        # entries for the Hamiltonian
-        amplitude: float = 1.0 # a number
-        position: tuple = () # tuple of int
-        operator: tuple = () # tuple of strings
+        r"""
+        The length of 'position' should be the same as 'operator'
+        """
+        amplitude: float = 1.0
+        r"""
+        A number multiplier (float or complex) for the MPO term.
+        """
+        position: tuple = (0,)
+        r"""
+        tuple of int-s. Difines the positition for each operator defined in 'operator'. Indexing of the MPO sites starts from 0. 
+        """
+        operator: tuple = ('identity',)
+        r""""
+        tuple of string-s. Gives definition for each operator wchich should exist in fullbasis for the generator you use. 
+        """
 
 
 class GenerateOpEnv():
-        # environment to build Mpo
+        """
+        Class provides an environment for building MPO (yamps.Mpo) based on the configuration for Tensor's and with operator basis provided for the environment.
+        """
 
         def __init__(self, N, config, opts={'tol': 1e-14}):
                 r"""
@@ -27,14 +40,13 @@ class GenerateOpEnv():
                 N: int
                         length of Mpo
 
-                basis: dict
-                        contains Tensors building the basis for Mpo generator. Has to have an entry basis['identity'] with identity tensor. Other keys are strings with the name of the operator, e.g., basis['op1'] = op (with op as yast.Tensor or list() of yast.Tensor's.
+                config: NamedTuple
+                        contains information for the configuration of :meth:`yast.Tensor`
 
                 opts: dict
                         options passed to :meth:`yast.linalg.svd` to truncate virtual bond dimensions when compressing Mpo
 
                 """
-                # basic information
                 self.N = N
                 self.opts = opts
                 self.config = config
@@ -49,9 +61,14 @@ class GenerateOpEnv():
 
         def use_default(self):
                 r""""
-                Use default operators for given config. See yamps._generator to see defined elements. This definition will overwrite basis you initiated if keys overlap.
+                Use a basis for single particle operators compatible with self.config.
+
+                "identity" = identity operator
+                "c"        = annihilation operator
+                "cp"       = creation operator
+                
+                The basis is written to self.fullbasis which means that it will overwrite the basis if keys overlap.
                 """
-                # The library of the operators will grow. Maybe this can be imported from another file to maintain clarity of the code.
                 if self.config.sym.SYM_ID == 'dense':
                         Ds, s = (2, 2), (1, -1)
 
@@ -83,6 +100,18 @@ class GenerateOpEnv():
 
 
         def use_basis(self, basis):
+                r"""
+                Use the single-particle operators defines by user. Definitions are supplier to self.fullbasis
+
+                Parameters
+                -----------
+                basis: dict
+                        The list of operators defined for the generator. The keys should be strings while entries shuold be either:
+                        1/ :meth:`yast.Tensor` with two phisical legs only,
+                        2/ a list or tuple of length self.N containing :meth:`yast.Tensor` for each element of Mpo lattice,
+                        3/ a function with the index as an argument assigning a :meth:`yast.Tensor` for each index value. 
+                        You always have to define 'identity' tensor for your generator. Alternatively you can use predefines basis given by self.use_default()
+                """
                 if 'identity' not in basis:
                         raise YampsError("Basis doesn't contain identity yast.Tensor. Provide an entry with key 'identity'.")
                 # prepare full basis for the envoronment
@@ -132,7 +161,25 @@ class GenerateOpEnv():
                 return M
 
         def latex2yamps(self, H_str, parameters):
-                # convert latex to mpo_term input
+                r"""
+                Use the single-particle operators defines by user. Definitions are supplier to self.fullbasis
+
+                Parameters
+                -----------
+                H_str: str
+                        The definition of the MPO given as latex expression. The definition uses string names of the operators given in self.fullbasis. The assigment of the location is 
+                        given e.g. for 'cp' operator as 'cp_j' for 'cp' operator acring on site 'j'. A product of operators will be written as 'cp_j.c_(j+1)' where operators are separated by a dot. 
+                        To mulply by a number use 'g * cp_j.c_{j+1}' where 'g' can be defines in 'parameters'. You can write all elements explicitely separating by '+' or use use '\sum_{j=0}^5' to sum from index 0 to 5 (included). 
+                        e.g. \sum_{j=0}^5 g * cp_{j}.c_{j+1} '.
+                
+                parameters: dict
+                        Keys for the dict define the extressions occuring in H_str
+                
+
+                Returns
+                --------
+                        yamps.Mpo
+                """
                 # remove excess spaces
                 while "  " in H_str:
                         H_str = H_str.replace("  ", " ")

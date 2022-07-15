@@ -94,6 +94,7 @@ Tensor norms
 	:noindex:
 	:members: norm
 
+
 Spectral decompositions
 -----------------------
 

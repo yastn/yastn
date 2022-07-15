@@ -247,7 +247,7 @@ class _TN1D_base():
 
 class MpsMpo(_TN1D_base):
     """
-    The basic structure of mps (for nr_phys=1) and mpo (for nr_phys=2) and some basic operations on a single mps.
+    The basic structure of mps (for nr_phys=1) and mpo (for nr_phys=2) and some basic operations on an object.
     This is a parent structure for Mps (for nr_phys=1), Mpo (for nr_phys=2).
     Order of legs for a single mps tensor is (left virtual, 1st physical, 2nd physical, right virtual).
     MpsMpo tensors are index with :math:`0, 1, 2, 3, \\ldots, N-1` (with :math:`0` corresponding to the first site).
