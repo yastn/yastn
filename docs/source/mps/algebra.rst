@@ -1,5 +1,5 @@
-Matrix product algebra
-=========================
+Algebra
+=========
 
 Copying an object
 ---------------------------------
@@ -21,11 +21,11 @@ Addition
 ---------------------------------
 
 In order to make a direct sum of two matrix products make sure they have the same symmetries and length. Only then they can be added to each other alond distinguished axis defined by `common_legs`.
-The addition of two matrix products can be done using `apxb()`, where you can additionally specify the prefactor which will be multiply to the second Mps you give.
+The addition of two matrix products can be done using `+`, where you can additionally specify the prefactor which will be multiply to the second Mps you give.
 
-.. automodule:: yamps
+.. automodule:: yamps.MpsMpo
 	:noindex:
-	:members: apxb
+	:members: __add__
 
 The addition of any number of matrix products can be done using `add()`, where you can additionally specify the list of prefactors which will be multiplied to each Mps.
 
@@ -46,7 +46,7 @@ Additionally, you can multiply the product of Mps-s by setting a prefactor to by
 
 .. automodule:: yamps
 	:noindex:
-	:members: add, multiply
+	:members: __matmul__, multiply
 
 See examples here :ref:`examples/mps/mps:Multiplication`.
 

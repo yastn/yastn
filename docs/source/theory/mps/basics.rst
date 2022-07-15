@@ -5,7 +5,7 @@ Basics concepts
 Matrix product state
 --------------------
 
-The numerical simulation of quantum system has been proven to be hard due to exponentially growing size of matrix representation if the system. In particular, if the local Hilbert space for `j`-th particle is :math: `\mathcal{H}_j`of dimension `d` 
+The numerical simulation of quantum system has been proven to be hard due to exponentially growing size of matrix representation if the system. In particular, if the local Hilbert space for `j`-th particle is :math:`\mathcal{H}_j`of dimension `d` 
 (e.g. `d=2` for qubit and `d=3` for qutrit) then for `N` particles it will be :math:`\mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1}` which is `d^N`. 
 Tensor Network representation introduce a concept of efficient separation of variables which will iteratively split `j`-th particle from others by performing :ref:`tensor/algebra:Spectral decompositions` e.g. singular value decomposition (SVD). 
 The SVD operation at first isolates `0`-th from `1`-to-`N`-th and then `1`-th from `2`-to-`N`-th until the state is decomposed to `N` tensors forming  `matrix product state` (MPS). 
@@ -47,7 +47,7 @@ of states we can reach. The manifold can be controlled by changing the virtual d
 Matrix product operator
 -----------------------
 
-`Matrix product operator` (MPO) is tensor product representation for an operator of which is `d^N\times d^N` into `N` tensors of two physical and two virtual indicies. The concept of MPO is anologues to :ref:`theory/mps/basics:Matrix product state`. 
+`Matrix product operator` (MPO) is tensor product representation for an operator of which is :math:`d^N \times d^N` into `N` tensors of two physical and two virtual indicies. The concept of MPO is anologues to :ref:`theory/mps/basics:Matrix product state`. 
 
 ::
 

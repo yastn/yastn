@@ -11,16 +11,24 @@ Basic concepts
    theory/mps/basics
 
 
-Matrix producs state and operator
+Mps and Mpo
 ---------------------------------------
 
 .. toctree::
    :glob:
 
-   theory/mps/basics
    mps/init
    mps/algebra
    mps/i-o
+
+
+Expectation values
+---------------------------
+
+.. toctree::
+   :glob:
+
+   mps/measurements
 
 
 Algorithms
@@ -30,15 +38,6 @@ Algorithms
    :glob:
 
    mps/algorithms
-
-
-Expectation values for MPS
----------------------------
-
-.. toctree::
-   :glob:
-
-   mps/measurements
 
 
 Examples
