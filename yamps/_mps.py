@@ -173,7 +173,7 @@ class _TN1D_base():
 
     def copy(self):
         r"""
-        Makes a copy of Mps or Mpo. Copy all tensors.
+        Makes a copy of Mps or Mpo. Copies all :meth:`yast.Tensor`'s to an independent :meth:`yamps` object.
 
         Warning, this might break autograd if you are using it.
         Use when retaining "old" mps is neccesary -- other operations on mps are often done in-place.
