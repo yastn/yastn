@@ -1,8 +1,6 @@
 MPS based algorithms
 =====================
 
-.. todo:: I ignored the project* functions
-
 
 Maximize overlap
 ---------------------------------

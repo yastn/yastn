@@ -18,6 +18,7 @@ Mps and Mpo
    :glob:
 
    mps/init
+   mps/properties
    mps/algebra
    mps/i-o
 
