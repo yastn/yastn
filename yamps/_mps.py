@@ -452,7 +452,7 @@ class MpsMpo(_TN1D_base):
 
     def canonize_sweep(self, to='last', normalize=True):
         r"""
-        Sweep though the mps and cannonize it toward the first of last site.
+        Sweep though the mps and canonize it toward the first of last site.
 
         At the end, attach the trivial central block to the end of the chain, so that there is no central block left.
 
@@ -472,9 +472,9 @@ class MpsMpo(_TN1D_base):
 
     def truncate_sweep(self, to='last', normalize=True, opts=None):
         r"""
-        Sweep though the mps, cannonize it toward the first or last site truncating via svd.
+        Sweep though the mps, canonize it toward the first or last site truncating via svd.
 
-        Truncation makes sense if mps is in the cannonical form in the oposite direction to that of the current sweep.
+        Truncation makes sense if mps is in the canonical form in the oposite direction to that of the current sweep.
 
         Parameters
         ----------
