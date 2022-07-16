@@ -1,6 +1,7 @@
 Algebra
 =========
 
+
 Copying an object
 ---------------------------------
 
@@ -42,6 +43,7 @@ Multiplication
 
 `YAMPS` objects can be combined by multiplication. For example, :code:`z = x @ y` (or :code:`z=yamps.multiply(x,y)` ) produces a new `YAMPS` object `z` which is a product of `x` and `y` `YAMPS` objects.
 In direct product we take two `YAMPS` object, e.g. `Mps`'s and collect allong physical dimensions making direct product on virtual dimensions.
+
 ::
 
     # a product of two MPS's

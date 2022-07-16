@@ -1,25 +1,5 @@
-I-O for the matrix products
-=========================
-
-
-Entropy, and bond dimension
----------------------------------
-
-The properties of virtual bond dimensions for the matrix product can be extracted by calling `get_*` functions on `yamps.Mps` object. 
-Those information can be used to quantify the entanaglemnt encoded by the virtual dimension as well as the structure of singlets encoding the correlations. 
-This can be used both for matrix-producs state and matrix product operator.
-
-.. autoclass:: yamps.Mps
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: get_bond_dimensions, get_bond_charges_dimensions, get_entropy
-
-Full information on the structure of virtual dimension is given by Schmidt values which is obtained by SVD. If the symmetries are present the Schmidt values are split to blocks.
-
-.. autoclass:: yamps.Mps
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: get_Schmidt_values
+Import and export
+===================================
 
 
 Saving and loading `yamps.Mps`
