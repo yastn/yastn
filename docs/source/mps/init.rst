@@ -1,4 +1,4 @@
-Setting up matrix product state and operators
+Initialisation
 ===============================
 
 General information

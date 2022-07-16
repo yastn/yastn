@@ -4,77 +4,80 @@ Algebra
 Copying an object
 ---------------------------------
 
-Simple assignment of the element under a new name does not create an independent copy. Therefore all changes in the original version will be reflected in the new variable.
-To make an independent copy you should use :code:`mp_new = mp_old.copy()`
-
-.. autoclass:: yamps.Mps
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: copy, clone
-
-See examples here :ref:`examples/mps/mps:Copying`.
-
-.. todo:: what about shallow and deep copy? should I delete copy/clone?
-
-
-Addition
----------------------------------
-
-In order to make a direct sum of two matrix products make sure they have the same symmetries and length. Only then they can be added to each other alond distinguished axis defined by `common_legs`.
-The addition of two matrix products can be done using `+`, where you can additionally specify the prefactor which will be multiply to the second Mps you give.
+To create an independent `YAMPS` object use :code:`mp_new = mp_old.copy()`
 
 .. automodule:: yamps.MpsMpo
 	:noindex:
-	:members: __add__
+	:members: copy
 
-The addition of any number of matrix products can be done using `add()`, where you can additionally specify the list of prefactors which will be multiplied to each Mps.
+See examples here :ref:`examples/mps/mps:Copying`.
 
-.. automodule:: yamps
-	:noindex:
-	:members: add
+
+Multiplication by a number
+---------------------------
+
+`YAMPS` object can be multiplied by a number using `*`-sign. For example, :code:`y = a * x` produces  a new `YAMPS` object `y` which is old tensor `x` multiplied by a number `a`. `YAMPS` treats :code:`y = a * x` and :code:`y = x * a` the same.
+
+.. autofunction:: yamps.MpsMpo.__mul__
+.. autofunction:: yamps.MpsMpo.__rmul__
+
+
+Addition
+----------
+
+Direct sum of two Mps's or two Mpo's can be made if their symmetry, length and physical dimensions agree. The sum of two objects  :code:`A` and :code:`B` is :code:`C = A + B`.
+
+.. autofunction:: yamps.MpsMpo.__add__
+
+To make a sum of many objects :math:`\{A0,A1,\dots\}` at ones use :code:`C = yamps.add(A0,A1,...)`. The function allows to add amplitudes for each element of the sum, such that to calculate :math:`C=\sum_{j=0}^{L-1} h_j A_j` you can use 
+:code:`C = yamps.add(A_0,A_1,.., amplitudes=[h_0,h_1,..])` with amplitudes given by a list of numbers.
+
+.. autofunction:: yamps.add
 
 See examples here :ref:`examples/mps/mps:Addition`.
 
-.. todo:: check tests for symmetric Mps
-
 
 Multiplication
----------------------------------
+--------------
 
-In order to multiply two Mps-s you need to know interpretation of their legs. That includes which legs of their individual tensors should be contracted and which lie along the code for the enw Mps and thus should be fused to a new leg. 
-Additionally, you can multiply the product of Mps-s by setting a prefactor to by any number.
+`YAMPS` objects can be combined by multiplication. For example, :code:`z = x @ y` (or :code:`z=yamps.multiply(x,y)` ) produces a new `YAMPS` object `z` which is a product of `x` and `y` `YAMPS` objects.
+In direct product we take two `YAMPS` object, e.g. `Mps`'s and collect allong physical dimensions making direct product on virtual dimensions.
+::
 
-.. automodule:: yamps
-	:noindex:
-	:members: __matmul__, multiply
+    # a product of two MPS's
+             ___     ___    ___    ___    ___    ___         ___       ___    ___    ___    ___    ___ 
+    x   =   |___|-D-|___|--|___|--|___|--|___|--|___|       |   |- - -|   |--|   |--|   |--|   |--|   |
+ z=  @     __d|    ___|   ___|   ___|   ___|   ___|     =   |___|-D^2-|___|--|___|--|___|--|___|--|___|
+      y = |___|-D-|___|--|___|--|___|--|___|--|___|          d|         |      |      |      |      |    
+           d|_|    |_|    |_|    |_|    |_|    |_|     
+             |      |      |      |      |      |     
+
+
+.. autofunction:: yamps.MpsMpo.__matmul__
+
+.. autofunction:: yamps.multiply
+
 
 See examples here :ref:`examples/mps/mps:Multiplication`.
-
-.. todo:: do I really need additional test for Mps with symmetries?
 
 
 Canonical form
 ---------------------------------
 
 
-The cannonical form of the matrix product can be obtaining by subesqent QR or SVD decomposition. In the 1D objects you can choose it to be put into left or right canonical version depending of the parameter `to` to be `last` or `first`.
+:ref:`theory/mps/basics:Canonical form` of the MPS/MPO can be imposed to bring it to the most advantageous truncation or to prepare it for :ref:`theory/mps/algorithms:DMRG` or :ref:`theory/mps/algorithms:TDVP` algorithms. 
+The object can be brought to left canonical by setting :code:`to='first'` or to right canonical by setting :code:`to='last'` (we assume that tensors building are enumerated increasing from index `0`=:code:`first` to `N-1`=:code:`last`).
+The canonical version can be perfomed with QR decomposition or SVD decomposition. As default the canonisation normalizes `YAMPS` object to `1`. You can omitt the normalisation by setting a flag :code:`normalize=False`.
 
-QR decomposision exhibits better performence while procedure beeing made exactly.
+The canonical form obtained from QR decomposition doesn't truncate any information of matrix product. The canonisation is relatively cheep. 
 
-.. autoclass:: yamps.Mps
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: canonize_sweep
+.. autofunction:: yamps.MpsMpo.canonize_sweep
 
 See examples: :ref:`examples/mps/mps:Canonical form by QR decomposition`.
 
-On the other hand singular values decomposision (SVD) additionally allows for truncating Schmidt vectors exceeding set truncation tolerance or maximal bond dimension. The truncation happens on each site of the Mps after persorming SVD of the tensor.
+The canonisation by singular value decomposition (SVD) allows to truncate components of the lowest applitude according to instructions provided in :code:`opts`. As default the object is not truncated. 
+The truncation happens on each site of the object after persorming SVD of the tensor.
 
-.. autoclass:: yamps.Mps
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: truncate_sweep
+.. autofunction:: yamps.MpsMpo.truncate_sweep
 
 See examples: :ref:`examples/mps/mps:Canonical form by SVD decomposition`.
-
-.. todo:: this probably should be changed after splitting SVD to pure svd nd truncation
