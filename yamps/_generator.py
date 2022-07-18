@@ -70,9 +70,13 @@ class GenerateOpEnv():
                 -----------
                 basis: dict
                         The list of operators defined for the generator. The keys should be strings while entries shuold be either:
+
                         1/ :meth:`yast.Tensor` with two phisical legs only,
+
                         2/ a list or tuple of length self.N containing :meth:`yast.Tensor` for each element of Mpo lattice,
+
                         3/ a function with the index as an argument assigning a :meth:`yast.Tensor` for each index value. 
+
                         You always have to define 'identity' tensor for your generator. Alternatively you can use predefines basis given by self.use_default()
                 """
                 if 'identity' not in basis:
@@ -125,7 +129,7 @@ class GenerateOpEnv():
 
         def latex2yamps(self, H_str, parameters):
                 r"""
-                Use the single-particle operators defines by user. Definitions are supplier to self.fullbasis
+                Convert latex-like string to yamps MPO. Use the single-particle operators defines by user. Definitions are supplier to self.fullbasis
 
                 Parameters
                 -----------
@@ -134,11 +138,9 @@ class GenerateOpEnv():
                         given e.g. for 'cp' operator as 'cp_j' for 'cp' operator acring on site 'j'. A product of operators will be written as 'cp_j.c_(j+1)' where operators are separated by a dot. 
                         To mulply by a number use 'g * cp_j.c_{j+1}' where 'g' can be defines in 'parameters'. You can write all elements explicitely separating by '+' or use use '\sum_{j=0}^5' to sum from index 0 to 5 (included). 
                         e.g. \sum_{j=0}^5 g * cp_{j}.c_{j+1} '.
-                
                 parameters: dict
                         Keys for the dict define the extressions occuring in H_str
                 
-
                 Returns
                 --------
                         yamps.Mpo

@@ -12,11 +12,7 @@ composition of MPS/MPO as itself is build with :code:`yast.Tensor` which are ass
 
 :code:`Mps` and :code:`Mpo` are belong to a common class :code:`yamps.MpsMpo` sharing many operations the only difference between them is that :code:`Mps` reprsents MPS with one phisical dimension for a tensor and :code:`Mpo` repsents MPO with two phisical dimensions. 
 
-
 .. autoclass:: yamps.MpsMpo
-	:noindex:
-	:members: __init__
-	:exclude-members: __new__
 
 
 Creating :code:`yamps.Mps` and :code:`yamps.Mpo`
@@ -28,29 +24,21 @@ The symmetry of :code:`yamps.Mps` is inherited by its building blocks. Its build
 `YAMPS` provides a tool for automatic MPO generation. The genetator works under :code:`GenerateOpEnv` class which allows to contruct Hamiltonian of any form for bosonic or fermionic system. 
 
 .. automodule:: yamps._generator.GenerateOpEnv
-	:noindex:
-	:members: __init__
 
 To initiallize the generator :code:`gen = yamps.GenerateOpEnv(N, config, opts)` we need to provide a length of the MPO :code':`N`, and :ref:`tensor/configuration:YAST configuration` :code:`config` which will also define the commutation rules :code:`config.fermionic`.
 The instruction for truncation :code:`opts` is an optional argument.
 
-The generator has to be supplied with the operators we want to use. If you want to use predefined operators suitable with :code:`config` then you should :code:`gen.use_default()`. Make sure that you know the definition for the operators by checking out:
+The generator has to be supplied with the operators we want to use. If you want to use predefined operators suitable with :code:`config` then you should :code:`gen.use_default(basis_type)`. Make sure that you know the definition for the operators by checking out:
 
-.. automodule:: yamps._generator.GenerateOpEnv
-	:noindex:
-	:members: use_default
+.. autofunction:: yamps.basis.use_default_basis
 
 For custom basis you can use :code:`gen.use_basis(basis_dict)`, where :code:`basics_dict` is new self of single-particle operators.
 
-.. automodule:: yamps._generator.GenerateOpEnv
-	:noindex:
-	:members: use_basis
+.. autofunction:: yamps._generator.GenerateOpEnv.use_basis
 
 After providing the basis for the generator you can use it to generate MPO. In order to do that you can use latex-to-yamps converter:
 
-.. automodule:: yamps._generator.GenerateOpEnv
-	:noindex:
-	:members: latex2yamps
+.. autofunction:: yamps._generator.GenerateOpEnv.latex2yamps
 
 You can also generate the MPO by hand. If your MPO is a sum or operator products then define each operator product separately.
 
@@ -60,9 +48,7 @@ You can also generate the MPO by hand. If your MPO is a sum or operator products
 
 The :code:`mpo_term` gives only a  definition for a product operator with a multiplier. The MPO is an output of :code:`my_mpo = gen.generate(my_mpo_term)`. 
 
-.. automodule:: yamps._generator.GenerateOpEnv
-	:noindex:
-	:members: generate
+.. autofunction:: yamps._generator.GenerateOpEnv.generate
 
 To sum many MPO entries at ones use :code:`my_mpo = gen.sum(list_of_mpo_terms)`. 
 
