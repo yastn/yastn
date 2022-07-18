@@ -39,9 +39,7 @@ The `2site` is suitable for dynamically expanding the Mps virtual dimensions con
 To lower the cost you can provide :code:`env` produced by previous run. 
 
 
-.. automodule:: yamps
-	:noindex:
-	:members: tdvp
+.. autofunction:: yamps.tdvp
 
 See examples: :ref:`examples/mps/mps:tdvp`.
 
