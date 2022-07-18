@@ -97,10 +97,11 @@ If for every MPS tensor the left environwent is :math:`L_j^\dagger L_j=I` then w
 Algorithms
 ----------
 
-`Density matrix renormalisation group` (:ref:`theory/mps/algorithms:DMRG`) is an algorithm which seach for the MPS which extremize the expectation value for hermitian MPO, which is usually the Hamiltonian (operator for energy of the system). 
+`Density matrix renormalisation group` (:ref:`theory/mps/algorithms:DMRG`) is an algorithm which seach for the MPS which extremize the expectation value for hermitian operator written as MPO, which is usually the Hamiltonian (operator for energy of the system). 
 
-`Time-dependent variational principle` (:ref:`theory/mps/algorithms:TDVP`) allows for the evolution of a state :math:`\Psi` under a Hamiltonian :math:`\hat H`. The state after an evolution over time `t` changes the state to :math:`\Psi(t)=e^{- i t \hat H} \Psi`, where :math:`i` an imaginary number. `YAMPS` allows to perform TDVP for any MPS under hermitian MPO for a time `t` which in general can be complex. 
-
+`Time-dependent variational principle` (:ref:`theory/mps/algorithms:TDVP`) allows for the evolution of a state :math:`\Psi` under a Hamiltonian :math:`\hat H`. 
+The state after an evolution over time `t` changes the state to :math:`\Psi(t)=e^{- i t \hat H} \Psi`, where :math:`i` an imaginary number. 
+`YAMPS` allows to perform TDVP for any MPS under MPO for a time `t` which in general can be complex. 
 
 
 Measurements
@@ -143,4 +144,4 @@ References & Related works
 1. "Tensor Network Contractions: Methods and Applications to Quantum Many-Body Systems" Shi-Ju Ran, Emanuele Tirrito, Cheng Peng, Xi Chen, Luca Tagliacozzo, Gang Su, Maciej Lewenstein `Lecture Notes in Physics LNP, volume 964, (2020) <https://link.springer.com/book/10.1007/978-3-030-34489-4>`_
 2. "The density-matrix renormalization group in the age of matrix product states" Ulrich Schollwoeck, `Annals of Physics, Volume 326, Issue 1, Pages 96-192, (2011) <https://arxiv.org/pdf/1008.3477.pdf>`_
 3. "Time-Dependent Variational Principle for Quantum Lattices" Jutho Haegeman, J. Ignacio Cirac, Tobias J. Osborne, Iztok Pižorn, Henri Verschelde, and Frank Verstraete, `Phys. Rev. Lett. 107, 070601 (2011) <https://arxiv.org/abs/1103.0936v2>`_
-# Montangero for tyheory on symmetruic TNs
+4. "The Tensor Networks Anthology: Simulation techniques for many-body quantum lattice systems" Pietro Silvi, Ferdinand Tschirsich, Matthias Gerster, Johannes Jünemann, Daniel Jaschke, Matteo Rizzi, Simone Montangero, `SciPost Phys. Lect. Notes 8 (2019) <https://scipost.org/SciPostPhysLectNotes.8>`_

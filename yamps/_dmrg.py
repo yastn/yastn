@@ -64,7 +64,7 @@ def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', ato
     max_sweeps: int
         maximal number of sweeps
 
-    opts_expmv: dict
+    opts_eigs: dict
         options passed to :meth:`yast.eigs`
 
     opts_svd: dict
