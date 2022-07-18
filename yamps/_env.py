@@ -5,7 +5,16 @@ from ._mps import YampsError
 
 def measure_overlap(bra, ket):
     r"""
-    Calculate overlap <bra|ket>
+    Calculate overlap <bra|ket>. Conjugation of argument bra is made internally.
+    The overlap can be calculated if the length, symmetry and phisical dimensions agree.
+
+    Parameters
+    -----------
+    bra : Mps
+        Treated as a state which will be conjugated.
+
+    ket : Mps
+        Treated as a state which won't be conjugated.
 
     Returns
     -------
@@ -18,7 +27,19 @@ def measure_overlap(bra, ket):
 
 def measure_mpo(bra, op, ket):
     r"""
-    Calculate overlap <bra|ket>
+    Calculate overlap <bra|op|ket>. Conjugation of argument bra is made internally.
+    The overlap can be calculated if the length, symmetry and phisical dimensions agree.
+
+    Parameters
+    -----------
+    bra : Mps
+        Treated as a state which will be conjugated.
+
+    op : Mpo
+        Operator written as MPO.
+
+    ket : Mps
+        Treated as a state which won't be conjugated.
 
     Returns
     -------
