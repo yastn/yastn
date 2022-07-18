@@ -10,7 +10,7 @@ The fist method writes MPS/MPO :code:`A` in a form of a dictionary :code:`d = A.
 
 .. autofunction:: yamps.MpsMpo.save_to_dict
 
-The second one redirects all information to HDF5 :code:`file` to a group which has the path :code:`my_mps_address` such that running :code:`A.save_to_hdf5(file, './my_mps_address/')`. Keep the adress as you will need to have it to encode the object back to `YAMPS`.
+The second one redirects all information to HDF5 :code:`file` to a group which has the path :code:`my_address` such that running :code:`A.save_to_hdf5(file, './my_address/')`. Keep the adress as you will need to have it to encode the object back to `YAMPS`.
 
 .. autofunction:: yamps.MpsMpo.save_to_hdf5
 
@@ -24,7 +24,7 @@ After :ref:`mps/i-o:Export/save` the instruction about the `YAMPS` object can be
 
 .. autofunction:: yamps.load_from_dict
 
-If the information are saved in HDF5 format :code:`file` under an address  :code:`my_mps_address` then encoding is made by :code:`A_new = yamps.load_from_hdf5(file, './my_mps_address/')`.
+If the information are saved in HDF5 format :code:`file` under an address  :code:`my_address` then encoding is made by :code:`A_new = yamps.load_from_hdf5(file, './my_address/')`.
 
 .. autofunction:: yamps.load_from_hdf5
 
