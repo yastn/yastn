@@ -2,6 +2,11 @@ YAMPS
 ==============================
 
 
+.. automodule:: yamps
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 Basic concepts
 ---------------------------------------
 
@@ -49,11 +54,3 @@ Examples
 
    examples/mps/mps
 
-
-Module contents
------------------
-
-.. automodule:: yamps
-   :members:
-   :undoc-members:
-   :show-inheritance:
