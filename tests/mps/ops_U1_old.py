@@ -87,22 +87,33 @@ def mpo_XX_model(N, t, mu):
     return H
 
 
-
-
 def mpo_occupation(N):
-    gen = yamps.GenerateOpEnv(N, config=config_U1)
-    gen.use_default()
-    H_str = "\sum_{j=0}^{"+str(N-1)+"} cp_{j}.c_{j}"
-    H = gen.latex2yamps(H_str)
+    H = yamps.Mpo(N)
+    for n in H.sweep(to='last'):
+        H.A[n] = yast.Tensor(config=config_U1, s=[1, 1, -1, -1], n=0)
+        if n == H.first:
+            H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(1, 1, 1, 2))
+        elif n == H.last:
+            H.A[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(2, 1, 1, 1))
+        else:
+            H.A[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[[1, 0], [1, 1]], Ds=(2, 1, 1, 2))
     return H
 
 
 def mpo_gen_XX(chain, t, mu):
+    # prepare generator
     gen = yamps.GenerateOpEnv(N=chain, config=config_U1_fermionic)
     gen.use_default()
+    ## generate directly, most general
+    #H = gen.sum([yamps.mpo_term(mu, (n, n), ('cp', 'c')) for n in range(gen.N)]) \
+    #    + gen.sum([yamps.mpo_term(t, (n, n+1), ('cp', 'c')) for n in range(gen.N-1)]) \
+    #    + gen.sum([yamps.mpo_term(t, (n+1, n), ('cp', 'c')) for n in range(gen.N-1)])
+    # generate Mpo from string, user firiendly but not very good
     parameters = {"t": t, "mu": mu}
-    H_str = "\sum_{j=0}^{"+str(chain-1)+"} mu*cp_{j}.c_{j} + \sum_{j=0}^{"+str(chain-2)+"} cp_{j}.c_{j+1} + \sum_{j=0}^{"+str(chain-2)+"} t*cp_{j+1}.c_{j}"
+    H_str = "\sum_{j=0}^{"+str(chain-1)+"} mu*cp_{j}.c_{j} + \sum_{j=0}^{"+str(chain-2)+"} t*cp_{j}.c_{j+1} + \sum_{j=0}^{"+str(chain-2)+"} t*cp_{j+1}.c_{j}"
     H = gen.latex2yamps(H_str, parameters)
     return H
-
 

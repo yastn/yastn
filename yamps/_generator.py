@@ -1,10 +1,9 @@
 import numpy as np
-from ast import operator
 from typing import NamedTuple
 from ._mps import Mpo
 from ._auxliary import add
+from .basis import use_default_basis
 import yast
-from itertools import product
 
 class YampsError(Exception):
     pass
@@ -59,46 +58,10 @@ class GenerateOpEnv():
                         id = self.fullbasis['identity'](n).copy().add_leg(axis=0, s=1).add_leg(axis=-1, s=-1)
                         self.identity.A[n] = id
 
-        def use_default(self):
-                r""""
-                Use a basis for single particle operators compatible with self.config.
-
-                "identity" = identity operator
-                "c"        = annihilation operator
-                "cp"       = creation operator
-                
-                The basis is written to self.fullbasis which means that it will overwrite the basis if keys overlap.
-                """
-                if self.config.sym.SYM_ID == 'dense':
-                        Ds, s = (2, 2), (1, -1)
-
-                        CP = yast.Tensor(config=self.config, s=s)
-                        CP.set_block(Ds=Ds, val=[[0, 0], [1, 0]])
-
-                        C = yast.Tensor(config=self.config, s=s)
-                        C.set_block(Ds=Ds, val=[[0, 1], [0, 0]])
-
-                        EE = yast.Tensor(config=self.config, s=s)
-                        EE.set_block(Ds=Ds, val=[[1, 0], [0, 1]])
-
-                elif self.config.sym.SYM_ID == 'U(1)':
-                        Ds, s = (1, 1), (1, -1)
-
-                        C = yast.Tensor(config=self.config, s=s, n=-1)
-                        C.set_block(Ds=Ds, val=1, ts=(0, 1))
-
-                        CP = yast.Tensor(config=self.config, s=s, n=1)
-                        CP.set_block(Ds=Ds, val=1, ts=(1, 0))
-
-                        EE = yast.Tensor(config=self.config, s=s, n=0)
-                        EE.set_block(Ds=Ds, val=1, ts=(0, 0))
-                        EE.set_block(Ds=Ds, val=1, ts=(1, 1))
-                self.fullbasis['identity'] = lambda j: EE  # at this stage you have to define identity at initialisation, this may have to be moved
-                self.fullbasis['c'] = lambda j: C
-                self.fullbasis['cp'] = lambda j: CP
+        def use_default(self, basis_type='creation_annihilation'):
+                self.fullbasis = use_default_basis(self.config, basis_type)
                 self.identity_mpo()
-
-
+        
         def use_basis(self, basis):
                 r"""
                 Use the single-particle operators defines by user. Definitions are supplier to self.fullbasis
