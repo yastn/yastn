@@ -2,14 +2,16 @@
 import logging
 import pytest
 import yamps
+import generate_random
+import generate_automatic
 try:
-    from . import ops_dense
-    from . import ops_Z2
-    from . import ops_U1
+    from .configs import config_dense, config_dense_fermionic
+    from .configs import config_U1, config_U1_fermionic
+    from .configs import config_Z2, config_Z2_fermionic
 except ImportError:
-    import ops_dense
-    import ops_Z2
-    import ops_U1
+    from configs import config_dense, config_dense_fermionic
+    from configs import config_U1, config_U1_fermionic
+    from configs import config_Z2, config_Z2_fermionic
 
 tol=1e-8
 
@@ -33,7 +35,7 @@ def test_full_tdvp():
     """
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
-    ops_dense.random_seed(seed=0)
+    generate_random.random_seed(config_dense_fermionic, seed=0)
     N = 5
     dt = -.25
     sweeps = 10
@@ -43,10 +45,10 @@ def test_full_tdvp():
     logging.info(' Tensor : dense ')
 
     Eng_gs = -2.232050807568877
-    H = ops_dense.mpo_XX_model(N=N, t=1, mu=0.25)
+    H = generate_automatic.mpo_XX_model(config_dense_fermionic, N=N, t=1, mu=0.25)
 
     for version in ('1site', '2site'):
-        psi = ops_dense.mps_random(N=N, Dmax=D_total, d=2).canonize_sweep(to='first')
+        psi = generate_random.mps_random(config_dense_fermionic, N=N, Dmax=D_total, d=2).canonize_sweep(to='first')
         run_tdvp_imag(psi, H, dt=dt, Eng_gs=Eng_gs, sweeps=sweeps, version=version, opts_svd=opts_svd)
 
 
@@ -54,7 +56,7 @@ def test_Z2_tdvp():
     """
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
-    ops_Z2.random_seed(seed=0)
+    generate_random.random_seed(config_Z2_fermionic, seed=0)
     N = 5
     D_total = 4
     dt = -.25
@@ -64,11 +66,11 @@ def test_Z2_tdvp():
     logging.info(' Tensor : Z2 ')
 
     Eng_gs = {0: -2.232050807568877, 1: -1.982050807568877}
-    H = ops_Z2.mpo_XX_model(N=N, t=1, mu=0.25)
+    H = generate_automatic.mpo_XX_model(config_Z2_fermionic, N=N, t=1, mu=0.25)
 
     for parity in (0, 1):
         for version in ('1site', '2site'):
-            psi = ops_Z2.mps_random(N=N, Dblock=D_total/2, total_parity=parity)
+            psi = generate_random.mps_random(config_Z2_fermionic, N=N, Dblock=D_total/2, total_parity=parity)
             psi.canonize_sweep(to='first')
             run_tdvp_imag(psi, H, dt=dt, Eng_gs=Eng_gs[parity], sweeps=sweeps, version=version, opts_svd=opts_svd)
 
@@ -77,7 +79,7 @@ def test_U1_tdvp():
     """
     Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
-    ops_U1.random_seed(seed=0)
+    generate_random.random_seed(config_U1_fermionic, seed=0)
     N = 5
     D_total = 4
     dt = -.25
@@ -87,11 +89,11 @@ def test_U1_tdvp():
     logging.info(' Tensor : U1 ')
 
     Eng_gs = {1: -1.482050807568877, 2: -2.232050807568877}
-    H = ops_U1.mpo_XX_model(N=N, t=1, mu=0.25)
+    H = generate_automatic.mpo_XX_model(config_U1_fermionic, N=N, t=1, mu=0.25)
 
     for charge in (1, 2):
         for version in ('1site', '2site', '12site'):
-            psi = ops_U1.mps_random(N=N, Dblocks=[1, 2, 1], total_charge=charge)
+            psi = generate_random.mps_random(config_U1_fermionic, N=N, Dblocks=[1, 2, 1], total_charge=charge)
             psi.canonize_sweep(to='first')
             run_tdvp_imag(psi, H, dt=dt, Eng_gs=Eng_gs[charge], sweeps=sweeps, version=version, opts_svd=opts_svd)
 

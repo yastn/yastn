@@ -1,14 +1,15 @@
 """ basic procedures of single mps """
 import numpy as np
-import pytest
-import yast
-import yamps
+import generate_random
 try:
-    from . import ops_dense
-    from . import ops_Z2
+    from .configs import config_dense, config_dense_fermionic
+    from .configs import config_U1, config_U1_fermionic
+    from .configs import config_Z2, config_Z2_fermionic
 except ImportError:
-    import ops_dense
-    import ops_Z2
+    from configs import config_dense, config_dense_fermionic
+    from configs import config_U1, config_U1_fermionic
+    from configs import config_Z2, config_Z2_fermionic
+
 
 tol = 1e-12
 
@@ -21,26 +22,26 @@ def check_copy(psi1, psi2):
 
 def test_full_copy():
     """ Initialize random mps of full tensors and checks copying. """
-    psi = ops_dense.mps_random(N=16, Dmax=15, d=2)
+    psi = generate_random.mps_random(config_dense, N=16, Dmax=15, d=2)
     phi = psi.copy()
     check_copy(psi, phi)
 
-    psi = ops_dense.mps_random(N=16, Dmax=19, d=[2, 3])
+    psi = generate_random.mps_random(config_dense, N=16, Dmax=19, d=[2, 3])
     phi = psi.copy()
     check_copy(psi, phi)
 
-    psi = ops_dense.mpo_random(N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
+    psi = generate_random.mpo_random(config_dense, N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
     phi = psi.copy()
     check_copy(psi, phi)
 
 
 def test_Z2_copy():
     """ Initialize random mps of full tensors and checks copying. """
-    psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
+    psi = generate_random.mps_random(config_Z2, N=16, Dblock=25, total_parity=0)
     phi = psi.copy()
     check_copy(psi, phi)
 
-    psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=1)
+    psi = generate_random.mps_random(config_Z2, N=16, Dblock=25, total_parity=1)
     phi = psi.copy()
     check_copy(psi, phi)
 
