@@ -2,7 +2,7 @@ Properties
 ==========
 
 
-`YAMPS` properties
+YAMPS properties
 -----------------------
 
 The symmetry of the `YAMPS` object is determined by the symmetry of :meth:`yast.Tensor`'s forming matrix product. The symmetries of the tensors have to be consistent along virtual dimensions implying that global MPS/MPO symmetry is a consequence of 

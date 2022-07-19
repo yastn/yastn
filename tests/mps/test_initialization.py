@@ -11,19 +11,29 @@ except ImportError:
 
 def test_assign_block():
     """ Initialise mps with known blocks. Example for AKLT state"""
+    #
+    # Prepare the representation of local tensors
+    #
     AM = - np.sqrt(2.0/3) * np.array([[0, 0],[1, 0]])
     A0 = - np.sqrt(1.0/3) * np.array([[1, 0],[0, -1]])
     AP = np.sqrt(2.0/3) * np.array([[0, 1],[0, 0]])
-
+    #
+    # Prepare local tensor with appropriate virtual and physical dimensions
+    #
     T = np.array([AM,A0,AP])
     T = np.transpose(T,(1,0,2))
+    #
+    # In open boundary condition for MPS we shuold make sure that 
+    # terminating virtual dimensions are 1.
+    #
     bL = T[0,:,:].reshape((1,3,2))
     bR = T[:,:,1].reshape((2,3,1))
-
+    #
+    # Setting up MPS always involves initialisation of YAMPS object with proper length.
+    #
     N = 5
     psi = yamps.Mps(N)
     for n in range(N):
-        psi.A[n] = yast.Tensor(config=config_dense, s=(1, 1, -1))
         if n == 0:
             tmp = bL
             Ds = (1,3,2)
@@ -33,7 +43,13 @@ def test_assign_block():
         else:
             tmp = T
             Ds = (2,3,2)
-        psi.A[n].set_block(val=tmp, Ds=Ds)
+        #
+        # The loop will assign each tensor in the MPS chain one by one.
+        # We create a site_tensor with appropriate legs and we push it to MPS. 
+        #
+        site_tensor = yast.Tensor(config=config_dense, s=(1, 1, -1))
+        site_tensor.set_block(val=tmp, Ds=Ds)
+        psi.A[n] = site_tensor
     return psi
 
 

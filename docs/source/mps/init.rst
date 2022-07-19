@@ -15,7 +15,7 @@ composition of MPS/MPO as itself is build with :code:`yast.Tensor` which are ass
 .. autoclass:: yamps.MpsMpo
 
 
-Creating :code:`yamps.Mps` and :code:`yamps.Mpo`
+Creating :meth:`yamps.Mps` and :meth:`yamps.Mpo`
 ------------------------------------------------
 
 The initialisation of an empty object can be done by calling :code:`yamps.Mps(N)` (:code:`yamps.Mpo(N)`) where :code:`N` is number to tensors building the object. 

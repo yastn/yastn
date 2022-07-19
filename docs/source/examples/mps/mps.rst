@@ -1,40 +1,43 @@
-Examples for `yamps` module
+Examples for :meth:`yamps` module
 =====================================
 
-Filling matrix product with tensors
-----------------------------
+Building `YAMPS` object manually
+----------------------------------
 
-The `yamps.Mps` can be filled by hand by directly assigning `yast.Tensor` to `A`, e.g. :code:`psi.A[3] = <example tensor>`, where `psi` is an example `yamps.Mps` object.
+The content of MPS/MPO can be assigned manualy by setting known tensors one by one.
+In order to do that you should prepare :meth:`yast.Tensor` which fits the structure of physical and virtual legs according to :ref:`mps/properties:YAMPS properties`. 
+After initialising `YAMPS` object we assign tensor of index :code:`j` with :code:`psi.A[3] = <example tensor>`.
+We have to make sure that assined tensor fit along virtual dimension.
+
+The most well known exact MPS construction is the ground state for Affleck-Kennedy-Lieb-Tasaki (AKLT) model.
 
 .. literalinclude:: /../../tests/mps/test_initialization.py
         :pyobject: test_assign_block
 
-For symmetric `yamps.Mps` we havee to make sure that the blocks throughout the chain have consistent bond dimension.
-That means that the blocks of one tensor define the structure of its neighbours.
+The same can be done for MPO. Depending on symmetry of the tensors we will have diffrent definition of them.  
+This can be shown for a simple nearest-neightbour hopping Hamiltonian with hopping amplitude `t` and on-site energy `mu`.
 
-.. literalinclude:: /../../tests/mps/ops_dense.py
-        :pyobject: mps_random
+.. literalinclude:: /../../tests/mps/generate_by_hand.py
+        :pyobject: mpo_XX_model_dense
 
-.. literalinclude:: /../../tests/mps/ops_Z2.py
-        :pyobject: mps_random
+.. literalinclude:: /../../tests/mps/generate_by_hand.py
+        :pyobject: mpo_XX_model_Z2
 
-.. literalinclude:: /../../tests/mps/ops_U1.py
-        :pyobject: mps_random
+.. literalinclude:: /../../tests/mps/generate_by_hand.py
+        :pyobject: mpo_XX_model_U1
 
 
-Automatically generated matrix product
-----------------------------
+Building `YAMPS` object automatically
+-------------------------------------
 
-XX Hamiltonian generated automatically for the case with no symmetries imposed. 
+The MPO can be constructed automatically using dedicated generator supplied with the Hamiltonian. 
+This can be shown for a simple nearest-neightbour hopping Hamiltonian 
+with hopping amplitude `t` and on-site energy `mu`.
 
-.. literalinclude:: /../../tests/mps/ops_dense.py
-        :pyobject: mpo_gen_XX
+Automatic generator creates MPO with symmetries defies by building operators. 
 
-XX Hamiltonian generated automatically for the case with imposed U(1) symmetry for the tensors. 
-
-.. literalinclude:: /../../tests/mps/ops_U1.py
-        :pyobject: mpo_gen_XX
-
+.. literalinclude:: /../../tests/mps/generate_automatic.py
+        :pyobject: mpo_XX_model
 
 
 .. FOR ALGEBRA 
