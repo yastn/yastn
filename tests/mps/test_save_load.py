@@ -2,14 +2,17 @@
 import numpy as np
 import h5py
 import os
-import yast
 import yamps
+import generate_random
 try:
-    from . import ops_dense
-    from . import ops_Z2
+    from .configs import config_dense, config_dense_fermionic
+    from .configs import config_U1, config_U1_fermionic
+    from .configs import config_Z2, config_Z2_fermionic
 except ImportError:
-    import ops_dense
-    import ops_Z2
+    from configs import config_dense, config_dense_fermionic
+    from configs import config_U1, config_U1_fermionic
+    from configs import config_Z2, config_Z2_fermionic
+
 
 tol = 1e-12
 
@@ -21,7 +24,7 @@ def check_copy(psi1, psi2):
 
 def test_full_hdf5():
     """ Initialize random mps of full tensors and checks copying. """
-    psi = ops_dense.mps_random(N=16, Dmax=15, d=2)
+    psi = generate_random.mps_random(config_dense, N=16, Dmax=15, d=2)
     try:
         os.remove("tmp.h5")
     except OSError:
@@ -33,7 +36,7 @@ def test_full_hdf5():
     check_copy(psi, phi)
     os.remove("tmp.h5") 
     
-    psi = ops_dense.mps_random(N=16, Dmax=19, d=[2, 3])
+    psi = generate_random.mps_random(config_dense, N=16, Dmax=19, d=[2, 3])
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
@@ -41,7 +44,7 @@ def test_full_hdf5():
     check_copy(psi, phi)
     os.remove("tmp.h5") 
 
-    psi = ops_dense.mpo_random(N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
+    psi = generate_random.mpo_random(config_dense, N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
@@ -51,7 +54,7 @@ def test_full_hdf5():
 
 
 def test_Z2_hdf5():
-    psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
+    psi = generate_random.mps_random(config_Z2, N=16, Dblock=25, total_parity=0)
     try:
         os.remove("tmp.h5")
     except OSError:
@@ -64,7 +67,7 @@ def test_Z2_hdf5():
     os.remove("tmp.h5") 
 
 
-    psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=1)
+    psi = generate_random.mps_random(config_Z2, N=16, Dblock=25, total_parity=1)
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
@@ -74,14 +77,14 @@ def test_Z2_hdf5():
 
 
 def test_full_dict():
-    psi = ops_dense.mpo_random(N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
+    psi = generate_random.mpo_random(config_dense, N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
     tmp = psi.save_to_dict()
     phi = yamps.load_from_dict(psi.A[0].config, 1, tmp)
     check_copy(psi, phi)
 
 
 def test_Z2_dict():
-    psi = ops_Z2.mps_random(N=16, Dblock=25, total_parity=0)
+    psi = generate_random.mps_random(config_Z2, N=16, Dblock=25, total_parity=0)
     tmp = psi.save_to_dict()
     phi = yamps.load_from_dict(psi.A[0].config, 1, tmp)
     check_copy(psi, phi)

@@ -127,7 +127,7 @@ class GenerateOpEnv():
                 M.truncate_sweep(to='first', opts=self.opts, normalize=False)
                 return M
 
-        def latex2yamps(self, H_str, parameters):
+        def latex2yamps(self, H_str, parameters={}):
                 r"""
                 Convert latex-like string to yamps MPO. Use the single-particle operators defines by user. Definitions are supplier to self.fullbasis
 

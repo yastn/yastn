@@ -1,11 +1,16 @@
 """ truncation of mps """
 import yamps
+import generate_random
+import generate_automatic
 try:
-    from . import ops_dense
-    from . import ops_Z2
+    from .configs import config_dense, config_dense_fermionic
+    from .configs import config_U1, config_U1_fermionic
+    from .configs import config_Z2, config_Z2_fermionic
 except ImportError:
-    import ops_dense
-    import ops_Z2
+    from configs import config_dense, config_dense_fermionic
+    from configs import config_U1, config_U1_fermionic
+    from configs import config_Z2, config_Z2_fermionic
+
 
 
 def run_dmrg_1site(psi, H, sweeps=10):
@@ -44,9 +49,9 @@ def test_truncate_svd_full():
     N = 8
     Eng_gs = -4.758770483143633
     D_total = 8
-    H = ops_dense.mpo_XX_model(N=N, t=1, mu=0)
+    H = generate_automatic.mpo_XX_model(config_dense_fermionic, N=N, t=1, mu=0)
 
-    psi = ops_dense.mps_random(N=N, Dmax=D_total, d=2)
+    psi =generate_random.mps_random(config_dense_fermionic, N=N, Dmax=D_total, d=2)
     psi.canonize_sweep(to='first')
     run_dmrg_1site(psi, H)
     run_truncation(psi, H, Eng_gs)
@@ -61,14 +66,14 @@ def test_truncate_svd_Z2():
     Eng_parity0 = -4.758770483143633
     Eng_parity1 = -4.411474127809773
 
-    H = ops_Z2.mpo_XX_model(N=N, t=1, mu=0)
+    H = generate_automatic.mpo_XX_model(config_Z2_fermionic, N=N, t=1, mu=0)
 
-    psi = ops_Z2.mps_random(N=N, Dblock=D_total/2, total_parity=1)
+    psi = generate_random.mps_random(config_Z2_fermionic, N=N, Dblock=D_total/2, total_parity=1)
     psi.canonize_sweep(to='first')
     run_dmrg_1site(psi, H)
     run_truncation(psi, H, Eng_parity1)
 
-    psi = ops_Z2.mps_random(N=N, Dblock=D_total/2, total_parity=0)
+    psi = generate_random.mps_random(config_Z2_fermionic, N=N, Dblock=D_total/2, total_parity=0)
     psi.canonize_sweep(to='first')
     run_dmrg_1site(psi, H)
     run_truncation(psi, H, Eng_parity0)
