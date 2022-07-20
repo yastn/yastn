@@ -52,38 +52,59 @@ def test_addition():
     check_add_mul(psi0, psi1)
 
 
-def test_multiply():
+def test_multiplication():
     """ Calculate ground state and checks yamps.multiply() and __mul__()and yamps.add() within eigen-condition."""
-    generate_random.random_seed(config_U1_fermionic, seed=0)
+    #
+    # This test presents a multiplication as a part of DMRG study. 
+    # We use multiplication to get expectation values from a state.
+    # Knowing exact solution we will compare it to the value we obtain.
     N = 7
-    Dmax = 8
-    opts_svd = {'tol': 1e-8, 'D_total': Dmax}
-
     Eng = -3.427339492125848
-    total_charge = 3
+    #
+    # The Hamiltonian is obtained with automatic generator (see source file).
+    #
     H = generate_automatic.mpo_XX_model(config_U1_fermionic, N=N, t=1, mu=0.2)
-
-    psi = generate_random.mps_random(config_U1_fermionic, N=N, Dblocks=[1, 2, 1], total_charge=total_charge).canonize_sweep(to='first')
+    #
+    # To standardize this test we will fix a seed for random MPS we use
+    #
+    generate_random.random_seed(config_U1_fermionic, seed=0)
+    #
+    # In this example we use yast.Tensor's with U(1) symmetry. 
+    #
+    total_charge = 3
+    psi = generate_random.mps_random(config_U1_fermionic, N=N, Dblocks=[1, 2, 1], total_charge=total_charge)
+    #
+    # You always have to start with MPS in right canonical form.
+    #
+    psi.canonize_sweep(to='first')
+    #
+    # We set truncation for DMRG and runt the algorithm in '2site' version
+    #
+    opts_svd = {'tol': 1e-8, 'D_total': 8} 
     env = yamps.dmrg(psi, H, version='2site', max_sweeps=20, opts_svd=opts_svd)
-
+    #
+    # Test if we obtained exact solution for the energy?:
+    #
     assert pytest.approx(env.measure().item(), rel=tol) == Eng
-
+    #
+    # If the code didn't break then we shuold get a ground state. 
+    # Now we calculate the variation of energy <H^2>-<H>^2=<(H-Eng)^2> to check if DMRG converged properly to tol.
+    # We have two equivalent ways to do that:
+    #
+    # case 1/
     Hpsi = yamps.multiply(H, psi)
-    assert pytest.approx(yamps.measure_overlap(Hpsi, Hpsi).item(), rel=tol) == Eng ** 2
-    p0 = yamps.add(Hpsi, psi, amplitudes=[1, -Eng])
-    assert yamps.measure_overlap(p0, p0) < tol  # == 0.
-    p0 = yamps.add(Hpsi * -1, Eng * psi)
-    assert yamps.measure_overlap(p0, p0) < tol  # == 0.
-
-
+    #
+    # use yamps.measure_overlap to get variation
+    #
+    p0 = -1 * Hpsi + Eng * psi
+    assert yamps.measure_overlap(p0, p0) < tol
+    #
+    # case 2/
     Hpsi = H @ psi
-    assert pytest.approx(yamps.measure_overlap(Hpsi, Hpsi).item(), rel=tol) == Eng ** 2
-    p0 = yamps.add(Hpsi, psi, amplitudes=[1, -Eng])
-    assert yamps.measure_overlap(p0, p0) < tol  # == 0.
-    p0 = yamps.add(Hpsi * -1, Eng * psi)
-    assert yamps.measure_overlap(p0, p0) < tol  # == 0.
+    p0 = -1 * Hpsi + Eng * psi
+    assert yamps.measure_overlap(p0, p0) < tol
 
 
 if __name__ == "__main__":
     test_addition()
-    test_multiply()
+    test_multiplication()
