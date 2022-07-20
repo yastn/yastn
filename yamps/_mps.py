@@ -187,6 +187,19 @@ class _TN1D_base():
         phi.pC = self.pC
         return phi
 
+    def conj(self):
+        r"""
+        Makes a conjugation of the object.
+
+        Returns
+        -------
+        out : conjugated Mps or Mpo, independent of self
+        """
+        phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
+        phi.A = {ind: ten.copy().conj() for ind, ten in self.A.items()}
+        phi.pC = self.pC
+        return phi
+
     def __mul__(self, multiplier):
         """
         Makes a copy of Mps or Mpo, multiplying the first tensor by a number.

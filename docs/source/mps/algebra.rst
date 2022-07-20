@@ -11,13 +11,14 @@ To create an independent `YAMPS` object use :code:`mp_new = mp_old.copy()`
 	:noindex:
 	:members: copy
 
-See examples here :ref:`examples/mps/mps:Copying`.
-
 
 Multiplication by a number
 ---------------------------
 
-`YAMPS` object can be multiplied by a number using `*`-sign. For example, :code:`y = a * x` produces  a new `YAMPS` object `y` which is old tensor `x` multiplied by a number `a`. `YAMPS` treats :code:`y = a * x` and :code:`y = x * a` the same.
+`YAMPS` object can be multiplied by a number using `*`-sign. 
+For example, :code:`y = a * x` produces  a new `YAMPS` object `y` 
+which is old tensor `x` multiplied by a number `a`. `YAMPS` treats 
+:code:`y = a * x` and :code:`y = x * a` equivalently.
 
 .. autofunction:: yamps.MpsMpo.__mul__
 .. autofunction:: yamps.MpsMpo.__rmul__
@@ -46,7 +47,27 @@ To make a sum of many objects :math:`\{A0,A1,\dots\}` at ones use :code:`C = yam
 
 .. autofunction:: yamps.add
 
-See examples here :ref:`examples/mps/mps:Addition`.
+The example code for addition can involve two MPSs:
+::
+     # We need to import yamps to access YAMMPS with addition
+     #
+     import yamps
+     #
+     # Define yamps.Mps's
+     #
+     psi0 = <some random MPS>
+     psi1 = <some random MPS>
+     #
+     # We want to calculate: res = psi0 + 2*psi1. There are 
+     # a couple of ways to do that:
+     # A/
+     resA = yamps.add(psi0, 2.0*psi1)
+     # B/
+     resB = yamps.add(psi0, psi1, amplitudes=[1.0,2.0])
+     # C/
+     resC = psi0 + 2.0 * psi1
+     # All cases above gives the MPS which is desired sum and is independent of sum elements. 
+     # resA == resB == resC
 
 
 Multiplication
@@ -73,12 +94,11 @@ In direct product we take two `YAMPS` object, e.g. `Mps`'s and collect allong ph
 .. autofunction:: yamps.multiply
 
 
-See examples here :ref:`examples/mps/mps:Multiplication`.
+See examples here: :ref:`examples/mps/mps:Multiplication`.
 
 
 Canonical form
 ---------------------------------
-
 
 :ref:`theory/mps/basics:Canonical form` of the MPS/MPO can be imposed to bring it to the most advantageous truncation or to prepare it for :ref:`theory/mps/algorithms:DMRG` or :ref:`theory/mps/algorithms:TDVP` algorithms. 
 The object can be brought to left canonical by setting :code:`to='first'` or to right canonical by setting :code:`to='last'` (we assume that tensors building are enumerated increasing from index `0`=:code:`first` to `N-1`=:code:`last`).
@@ -88,11 +108,11 @@ The canonical form obtained from `QR decomposition` doesn't truncate any informa
 
 .. autofunction:: yamps.MpsMpo.canonize_sweep
 
-See examples: :ref:`examples/mps/mps:Canonical form by QR decomposition`.
+See examples: :ref:`examples/mps/mps:Canonical form by QR`.
 
 The canonisation by `singular value decomposition` (SVD) allows to truncate components of the lowest applitude according to instructions provided in :code:`opts`. As default the object is not truncated. 
 The truncation happens on each site of the object after persorming SVD of the tensor.
 
 .. autofunction:: yamps.MpsMpo.truncate_sweep
 
-See examples: :ref:`examples/mps/mps:Canonical form by SVD decomposition`.
+See examples: :ref:`examples/mps/mps:Canonical form by SVD`.

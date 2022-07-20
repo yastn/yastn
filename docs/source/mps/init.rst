@@ -15,6 +15,7 @@ composition of MPS/MPO as itself is build with :code:`yast.Tensor` which are ass
 .. autoclass:: yamps.MpsMpo
 
 
+.. _initialization:
 Creating :meth:`yamps.Mps` and :meth:`yamps.Mpo`
 ------------------------------------------------
 
