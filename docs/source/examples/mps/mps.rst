@@ -1,8 +1,5 @@
-Examples for :meth:`yamps` module
-=====================================
-
 Building YAMPS object manually
-----------------------------------
+=====================================
 
 The content of MPS/MPO can be assigned manualy by setting known tensors one by one.
 In order to do that you should prepare :meth:`yast.Tensor` which fits the structure of physical and virtual legs according to :ref:`mps/properties:YAMPS properties`. 
@@ -28,7 +25,7 @@ This can be shown for a simple nearest-neightbour hopping Hamiltonian with hoppi
 
 
 Building YAMPS object automatically
--------------------------------------
+=====================================
 
 The MPO can be constructed automatically using dedicated generator supplied with the Hamiltonian. 
 This can be shown for a simple nearest-neightbour hopping Hamiltonian 
@@ -48,7 +45,7 @@ Generation of more complex Hamiltonian can be drown to Ising model with decaying
 .. FOR ALGEBRA 
 
 Multiplication
----------------
+=====================================
 
 We can test the multiplication of MPO and MPS using a practical example for a ground state obtained with :ref:`theory/mps/algorithms:DMRG`.
 
@@ -59,7 +56,7 @@ We can test the multiplication of MPO and MPS using a practical example for a gr
 .. QR and SVD
 
 Canonical form by QR
---------------------
+=====================================
 
 The right/left canonical form of a Tensor in MPS can be tested 
 by checking if the right/left overlaps are identities. 
@@ -99,7 +96,7 @@ The canonical for is locally restored by applying QR on a Tensor.
 
 
 Canonical form by SVD
-----------------------
+=====================================
 
 The SVD decomposition can be used as a method for obtaining effective truncation of MPS or MPO.
 To perform the truncation we should set an conditions:
@@ -139,7 +136,7 @@ Custom test for truncation:
 
 .. outside world
 Save and load
----------------
+=====================================
 
 Any MPS/MPO can be saved/loaded (exported/imported) to/from a dictionary or a HDF5 file. In order to import 
 an object we have to provide configuration for :meth:`yast.Tensor`'s.
@@ -157,7 +154,7 @@ For a HDF5 file:
 
 .. algorithms
 DMRG
------
+=====================================
 
 In order to perform :ref:`theory/mps/algorithms:DMRG` we need initial guess for MPS the hermitian operator (typically a Hamiltonian) written as MPO. 
 We should start with :ref:`mps/init:initialisation` of the MPS and MPO which we push to DMRG.
@@ -183,7 +180,7 @@ Also see the test in examples for  :ref:`examples/mps/mps:Multiplication`.
 
 
 TDVP
------
+=====================================
 
 In order to perform :ref:`theory/mps/algorithms:TDVP` we need initial MPS the operator written as MPO. 
 We should start with :ref:`mps/init:initialisation` of the MPS and MPO which we push to DMRG.
