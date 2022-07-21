@@ -1,4 +1,5 @@
 from dataclasses import dataclass, replace
+from doctest import script_from_examples
 import numpy as np
 from ._auxliary import _flatten
 from ._tests import YastError
@@ -6,7 +7,7 @@ from ..sym import sym_none
 from ._merging import _Fusion, _pure_hfs_union
 #from ...Initialize import zeros
 
-__all__ = ['Leg', 'leg_union']
+__all__ = ['Leg', 'leg_union', 'random_leg']
 
 
 @dataclass(frozen=True, repr=False)
@@ -119,8 +120,7 @@ class Leg:
             charge sectors `t` and their sizes `D` as dictionary ``{t: D}``.
         """
         return dict(zip(self.t, self.D))
-    
-    
+
     def history(self):
         """
         Show str representation of Leg fusion history.
@@ -141,6 +141,52 @@ class Leg:
             hf = self.legs[0]
             return _str_tree(hf.tree, hf.op)
 
+
+def random_leg(sym=sym_none, s=1, n=None, D_total=1, positive=False, n_vectors=None):
+    """
+    Creat :class:`yast.Leg` automatically distributing bond dimensions to sectors with gaussian distribution centered at n.
+    """
+    if not hasattr(sym, 'SYM_ID'):  # config is provided insted of sym
+        sym = sym.sym
+    if n is None:
+        n = (0,) * sym.NSYM
+    try:
+        n = tuple(n)
+    except TypeError:
+        n = (n,)
+
+    if len(n) != sym.NSYM:
+        raise YastError('len(n) is not consistent with provided symmetry.')
+
+    an = np.array(n)
+    spanning_vectors = np.eye(len(n)) if n_vectors is None else np.array(n_vectors)
+    nvec = len(spanning_vectors)
+
+    maxr = 3
+
+    shifts = np.zeros((2 * maxr + 1,) * nvec + (nvec,))
+    for i in range(nvec):
+        dims = (1,) * i + (2 * maxr + 1,) + (1,) * (nvec - i - 1)
+        shifts[(slice(None),) * nvec + (i,)] = np.reshape(np.arange(-maxr, maxr+1), dims)
+    ts = shifts.reshape(-1, nvec) @ spanning_vectors + an
+    ts = np.round(ts).astype(dtype=np.int64)
+    ts = sym.fuse(ts.reshape(-1, 1, sym.NSYM), (1,), 1)
+    uts = tuple(set(tuple(x.flat) for x in ts))
+    ts = np.array(uts)
+    distance = np.linalg.norm((ts - an.reshape(1, -1)) @ spanning_vectors.T, axis=1)
+
+    pd = np.exp(-distance ** 2)
+    pd = pd / sum(pd)
+    cdf = np.add.accumulate(pd).reshape(1, -1)
+    samples = np.random.rand(D_total).reshape(-1, 1)
+    inds = np.sum(samples > cdf, axis=1)
+
+    Ds=np.zeros(len(ts), dtype=int)
+    for i in inds:
+        Ds[i] += 1
+    tnonzero, Dnonzero = zip(*[(t, D) for t, D in zip(uts, Ds) if D > 0])
+
+    return Leg(sym=sym, s=s, t=tnonzero, D=Dnonzero)
 
 
 def _leg_fusions_need_mask(*legs):
