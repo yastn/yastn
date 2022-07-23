@@ -142,27 +142,46 @@ class Leg:
             return _str_tree(hf.tree, hf.op)
 
 
-def random_leg(sym=sym_none, s=1, n=None, D_total=1, positive=False, n_vectors=None):
+def random_leg(config, s=1, n=None, sigma=1, D_total=8, positive=False):
     """
-    Creat :class:`yast.Leg` automatically distributing bond dimensions to sectors with gaussian distribution centered at n.
+    Creat :class:`yast.Leg`. Randomly distribute bond dimensions to sectors according to Gaussian distribution.
+
+    Parameters
+    ----------
+    module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
+    s : int
+        Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
+    n : int or tuple
+        mean charge of the distribution
+    sigma : number
+        standard deviation of the distribution
+    D_total : int
+        total bond dimension of the leg, to be distributed to sectors
+    positive : bool
+        If true, cut off negative charges
+
+    Returns
+    -------
+    Leg : :class:`yast.Leg`
+        Returns a new Leg with randomly distributed bond dimensions.
     """
-    if not hasattr(sym, 'SYM_ID'):  # config is provided insted of sym
-        sym = sym.sym
+
     if n is None:
-        n = (0,) * sym.NSYM
-    try:
+        n = (0,) * config.sym.NSYM
+    try:  # handle int input
         n = tuple(n)
     except TypeError:
         n = (n,)
-
-    if len(n) != sym.NSYM:
+    if len(n) != config.sym.NSYM:
         raise YastError('len(n) is not consistent with provided symmetry.')
 
     an = np.array(n)
-    spanning_vectors = np.eye(len(n)) if n_vectors is None else np.array(n_vectors)
+    spanning_vectors = np.eye(len(n)) if not hasattr(config.sym, 'spanning_vectors') \
+                        else np.array(config.sym.spanning_vectors)
+    
     nvec = len(spanning_vectors)
-
-    maxr = 3
+    maxr = np.ceil(3 * sigma).astype(dtype=int)
 
     shifts = np.zeros((2 * maxr + 1,) * nvec + (nvec,))
     for i in range(nvec):
@@ -170,23 +189,28 @@ def random_leg(sym=sym_none, s=1, n=None, D_total=1, positive=False, n_vectors=N
         shifts[(slice(None),) * nvec + (i,)] = np.reshape(np.arange(-maxr, maxr+1), dims)
     ts = shifts.reshape(-1, nvec) @ spanning_vectors + an
     ts = np.round(ts).astype(dtype=np.int64)
-    ts = sym.fuse(ts.reshape(-1, 1, sym.NSYM), (1,), 1)
+    ts = config.sym.fuse(ts.reshape(-1, 1, config.sym.NSYM), (1,), 1)
+    if positive:
+        ts = ts[np.all(ts >= 0, axis=1)]
+
     uts = tuple(set(tuple(x.flat) for x in ts))
     ts = np.array(uts)
     distance = np.linalg.norm((ts - an.reshape(1, -1)) @ spanning_vectors.T, axis=1)
 
-    pd = np.exp(-distance ** 2)
+    pd = np.exp(- (distance ** 2) / (2 * sigma ** 2))
     pd = pd / sum(pd)
-    cdf = np.add.accumulate(pd).reshape(1, -1)
-    samples = np.random.rand(D_total).reshape(-1, 1)
-    inds = np.sum(samples > cdf, axis=1)
 
     Ds=np.zeros(len(ts), dtype=int)
+    cdf = np.add.accumulate(pd).reshape(1, -1)
+    # backend.rand gives distribution in [-1, 1]; subjected to backend seed fixing
+    samples = (config.backend.rand(D_total, dtype='float64') + 1.) / 2.
+    samples = np.array(samples).reshape(-1, 1)
+    inds = np.sum(samples > cdf, axis=1)
     for i in inds:
         Ds[i] += 1
     tnonzero, Dnonzero = zip(*[(t, D) for t, D in zip(uts, Ds) if D > 0])
 
-    return Leg(sym=sym, s=s, t=tnonzero, D=Dnonzero)
+    return Leg(config, s=s, t=tnonzero, D=Dnonzero)
 
 
 def _leg_fusions_need_mask(*legs):
