@@ -183,3 +183,10 @@ v0.9
 - `.drop_leg_history(axis=None)` gives a shallow copy of the tensor, where information about fusion/blocking history on some legs (of all for axis=None) is dropped.
 - `Leg` got method `.history()` that returns a string representation of the fusion history, with 'o' marking original legs, `s` is for sum, `p` is for product, 'm' is for meta fusion.
 - simplify syntax of `yast.decompose_from_1d(r1d, meta)`. It no longer takes config, that is stored in meta.
+
+20-07-2022
+- a new function `yast.random_leg` that allows that randomly distributes bond dimensions 
+  according to Gaussian distribution cenered at provided mean charge.
+
+23-07-2022
+- In yast.operators predefine classes that generate sets of a few standard local operators.

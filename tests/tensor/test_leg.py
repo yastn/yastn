@@ -39,9 +39,10 @@ def test_leg():
 
 
 def test_random_leg():
-    leg = yast.random_leg(config_U1, s=1, n=0, D_total=35)
+    leg = yast.random_leg(config_U1, s=1, n=0, D_total=100)
     print(leg)
-
+    leg = yast.random_leg(config_U1, s=1, n=0, D_total=100, positive=True)
+    print(leg)
     leg = yast.random_leg(config_Z3, s=1, n=1, D_total=35)
     print(leg)
 
