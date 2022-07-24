@@ -2,7 +2,7 @@ from ..initialize import make_config
 from ..sym import sym_none, sym_Z2, sym_U1
 from ..tensor import YastError, Tensor
 
-class Spin1:
+class SpinlessFermions:
     """ Predefine operators for spin-1/2 system. """
 
     def __init__(self, sym='dense', **kwargs):
