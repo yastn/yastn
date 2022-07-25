@@ -1,15 +1,16 @@
+import numpy as np
 from ..initialize import make_config
-from ..sym import sym_none, sym_Z2, sym_U1
+from ..sym import sym_none, sym_Z3, sym_U1
 from ..tensor import YastError, Tensor
 
-class Spin12:
-    """ Predefine operators for spin-1/2 system. """
+class Spin1:
+    """ Predefine operators for spin-1 system. """
 
     def __init__(self, sym='dense', **kwargs):
-        """ 
-        Generator of standard operators for 2-dimensional Hilbert space.
+        """
+        Generator of standard operators for 3-dimensional Hilbert space.
 
-        Predefine identity, rising and lowering operators, and Pauli matrices (if allowed by symmetry).
+        Predefine identity, rising and lowering operators, and spin-1 matrices (if allowed by symmetry).
 
         Other config parameters can be provided, see :meth:`yast.make_config`
         fermionic is set to False.
@@ -17,23 +18,23 @@ class Spin12:
         Parameters
         ----------
         sym : str
-            Should be 'dense', 'Z2', or 'U1'.
+            Should be 'dense', 'Z3', or 'U1'.
 
         Notes
         -----
         Assume the following conventions:
-        For dense, basis order is (Z=+1, Z=-1)
-        For Z2, charge t=0 <=> Z=1, t=1 <=> Z=-1; i.e., Z = e^i pi t
-        For U1, charge t=-1 <=> Z=-1, t=1 <=> Z=1; i.e., Z = t
+        For dense, basis order is (sz=+1, sz=0, sz=-1)
+        For Z3, charge t=0 <=> Z=1, t=1 <=> Z=0; t=2 <=> Z=-1;
+        For U1, charge t=-1 <=> sz=-1, t=0 <=> sz=0, t=1 <=> sz=1; i.e., sz = t
 
         Using :meth:`yast.to_numpy`, U1 additionally requires reverse=True to obtain the standard matrix representation,
         as by default the charges get ordered in the increasing order.
         """
-        if not sym in ('dense', 'Z2', 'U1'):
-            raise YastError("For Spin12 sym should be in ('dense', 'Z2', 'U1').")
+        if not sym in ('dense', 'Z3', 'U1'):
+            raise YastError("For Spin1 sym should be in ('dense', 'Z3', 'U1').")
         self._sym = sym
         kwargs['fermionic'] = False
-        import_sym = {'dense': sym_none, 'Z2': sym_Z2, 'U1': sym_U1}
+        import_sym = {'dense': sym_none, 'Z3': sym_Z3, 'U1': sym_U1}
         kwargs['sym'] = import_sym[sym]
         self.config = make_config(**kwargs)
         self.s = (1, -1)
@@ -42,80 +43,84 @@ class Spin12:
         """ Identity operator. """
         if self._sym == 'dense':
             I = Tensor(config=self.config, s=self.s)
-            I.set_block(val=[[1, 0], [0, 1]], Ds=(2, 2))
-        if self._sym in 'Z2':
+            I.set_block(val=[[1, 0, 0], [0, 1, 0], [0, 0, 1]], Ds=(3, 3))
+        if self._sym in 'Z3':
             I = Tensor(config=self.config, s=self.s, n=0)
             I.set_block(ts=(0, 0), Ds=(1, 1), val=1)
             I.set_block(ts=(1, 1), Ds=(1, 1), val=1)
+            I.set_block(ts=(2, 2), Ds=(1, 1), val=1)
         if self._sym in 'U1':
             I = Tensor(config=self.config, s=self.s, n=0)
             I.set_block(ts=(1, 1), Ds=(1, 1), val=1)
+            I.set_block(ts=(0, 0), Ds=(1, 1), val=1)
             I.set_block(ts=(-1, -1), Ds=(1, 1), val=1)
         return I
 
-    def X(self):
-        """ Pauli sigma_x operator. """
+    def sx(self):
+        """ Spin-1 sx operator. """
+        isq2 = 1 / np.sqrt(2)
         if self._sym == 'dense':
-            X = Tensor(config=self.config, s=self.s)
-            X.set_block(val=[[0, 1], [1, 0]], Ds=(2, 2))
-        if self._sym == 'Z2':
-            X = Tensor(config=self.config, s=self.s, n=1)
-            X.set_block(ts=(1, 0), Ds=(1, 1), val=1)
-            X.set_block(ts=(0, 1), Ds=(1, 1), val=1)
-        if self._sym == 'U1':
-            raise YastError('Cannot define sigma_x operator for U(1) symmetry.')
-        return X
+            sx = Tensor(config=self.config, s=self.s)
+            sx.set_block(val=[[0, isq2, 0], [isq2, 0, isq2], [0, isq2, 0]], Ds=(3, 3))
+        if self._sym in ('Z3', 'U1'):
+            raise YastError('Cannot define sx operator for U(1) or Z3 symmetry.')
+        return sx
 
-    def Y(self):
-        """ Pauli sigma_y operator. """
+    def sy(self):
+        """ Spin-1 sy operator. """
+        iisq2 = 1j / np.sqrt(2)
         if self._sym == 'dense':
-            Y = Tensor(config=self.config, s=self.s, dtype='complex128')
-            Y.set_block(val=[[0, -1j], [1j, 0]], Ds=(2, 2))
-        if self._sym == 'Z2':
-            Y = Tensor(config=self.config, s=self.s, n=1, dtype='complex128')
-            Y.set_block(ts=(0, 1), Ds=(1, 1), val=-1j)
-            Y.set_block(ts=(1, 0), Ds=(1, 1), val=1j)
-        if self._sym == 'U1':
-            raise YastError('Cannot define sigma_y operator for U(1) symmetry.')
-        return Y
+            sy = Tensor(config=self.config, s=self.s, dtype='complex128')
+            sy.set_block(val=[[0, -iisq2, 0], [iisq2, 0, -iisq2], [0, iisq2, 0]], Ds=(3, 3))
+        if self._sym in ('Z3', 'U1'):
+            raise YastError('Cannot define sy operator for U(1) or Z3 symmetry.')
+        return sy
 
-    def Z(self):
-        """ Pauli sigma_z operator. """
+    def sz(self):
+        """ Spin-1 sz operator. """
         if self._sym == 'dense':
-            Z = Tensor(config=self.config, s=self.s)
-            Z.set_block(val=[[1, 0], [0, -1]], Ds=(2, 2))
-        if self._sym == 'Z2':
-            Z = Tensor(config=self.config, s=self.s, n=0)
-            Z.set_block(ts=(0, 0), Ds=(1, 1), val=1)
-            Z.set_block(ts=(1, 1), Ds=(1, 1), val=-1)
+            sz = Tensor(config=self.config, s=self.s)
+            sz.set_block(val=[[1, 0, 0], [0, 0, 0], [0, 0, -1]], Ds=(3, 3))
+        if self._sym == 'Z3':
+            sz = Tensor(config=self.config, s=self.s, n=0)
+            sz.set_block(ts=(0, 0), Ds=(1, 1), val=1)
+            sz.set_block(ts=(1, 1), Ds=(1, 1), val=0)
+            sz.set_block(ts=(2, 2), Ds=(1, 1), val=-1)
         if self._sym == 'U1':
-            Z = Tensor(config=self.config, s=self.s, n=0)
-            Z.set_block(ts=(1, 1), Ds=(1, 1), val=1)
-            Z.set_block(ts=(-1, -1), Ds=(1, 1), val=-1)
-        return Z
+            sz = Tensor(config=self.config, s=self.s, n=0)
+            sz.set_block(ts=(1, 1), Ds=(1, 1), val=1)
+            sz.set_block(ts=(0, 0), Ds=(1, 1), val=0)
+            sz.set_block(ts=(-1, -1), Ds=(1, 1), val=-1)
+        return sz
 
-    def Sp(self):
-        """ Rising operator. """
+    def sp(self):
+        """ Spin-1 rising operator. """
+        sq2 = np.sqrt(2)
         if self._sym == 'dense':
-            Sp = Tensor(config=self.config, s=self.s)
-            Sp.set_block(val=[[0, 1], [0, 0]], Ds=(2, 2))
-        if self._sym == 'Z2':
-            Sp = Tensor(config=self.config, s=self.s, n=1)
-            Sp.set_block(ts=(0, 1), Ds=(1, 1), val=1)
+            sp = Tensor(config=self.config, s=self.s)
+            sp.set_block(val=[[0, sq2, 0], [0, 0, sq2], [0, 0, 0]], Ds=(3, 3))
+        if self._sym == 'Z3':
+            sp = Tensor(config=self.config, s=self.s, n=2)
+            sp.set_block(ts=(0, 1), Ds=(1, 1), val=sq2)
+            sp.set_block(ts=(1, 2), Ds=(1, 1), val=sq2)
         if self._sym == 'U1':
-            Sp = Tensor(config=self.config, s=self.s, n=2)
-            Sp.set_block(ts=(1, -1), Ds=(1, 1), val=1)
-        return Sp
+            sp = Tensor(config=self.config, s=self.s, n=1)
+            sp.set_block(ts=(0, -1), Ds=(1, 1), val=sq2)
+            sp.set_block(ts=(1, 0), Ds=(1, 1), val=sq2)
+        return sp
 
-    def Sm(self):
-        """ Lowering operator. """
+    def sm(self):
+        """ Spin-1 lowering operator. """
+        sq2 = np.sqrt(2)
         if self._sym == 'dense':
-            Sm = Tensor(config=self.config, s=self.s)
-            Sm.set_block(val=[[0, 0], [1, 0]], Ds=(2, 2))
-        if self._sym == 'Z2':
-            Sm = Tensor(config=self.config, s=self.s, n=1)
-            Sm.set_block(ts=(1, 0), Ds=(1, 1), val=1)
+            sm = Tensor(config=self.config, s=self.s)
+            sm.set_block(val=[[0, 0, 0], [sq2, 0, 0], [0, sq2, 0]], Ds=(3, 3))
+        if self._sym == 'Z3':
+            sm = Tensor(config=self.config, s=self.s, n=1)
+            sm.set_block(ts=(1, 0), Ds=(1, 1), val=sq2)
+            sm.set_block(ts=(2, 1), Ds=(1, 1), val=sq2)
         if self._sym == 'U1':
-            Sm = Tensor(config=self.config, s=self.s, n=-2)
-            Sm.set_block(ts=(-1, 1), Ds=(1, 1), val=1)
-        return Sm
+            sm = Tensor(config=self.config, s=self.s, n=-1)
+            sm.set_block(ts=(0, 1), Ds=(1, 1), val=sq2)
+            sm.set_block(ts=(-1, 0), Ds=(1, 1), val=sq2)
+        return sm

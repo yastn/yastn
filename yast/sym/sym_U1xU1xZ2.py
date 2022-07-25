@@ -1,17 +1,15 @@
-""" Define rules for Z3 symmetry"""
 import numpy as np
-from .sym_abelian import sym_abelian
+from yast.sym.sym_abelian import sym_abelian
 
-class sym_Z3(sym_abelian):
-    """Z3 symmetry"""
-
-    SYM_ID = 'Z3'
-    NSYM = 1  # single int is used to distinguish symmetry sectors
+class sym_U1xU1xZ2(sym_abelian):
+    """ U(1) x U(1) x Z2 -- here Z2 will be used to account for global fermionic parity. """
+    SYM_ID = "U(1)xU(1)xZ2"
+    NSYM = 3  # three ints used to distinguish symmetry sectors
 
     @classmethod
     def fuse(cls, charges, signatures, new_signature):
         """
-        Fusion rule for Z3 symmetry
+        Fusion rule for ... symmetry
 
         Parameters
         ----------
@@ -28,4 +26,6 @@ class sym_Z3(sym_abelian):
             teff: nparray(int)
                 matrix of effective fused charges of size k x nsym for new signature
         """
-        return np.mod(new_signature * (charges.swapaxes(1, 2) @ signatures), 3)
+        teff = new_signature * (charges.swapaxes(1,2) @ signatures)
+        teff[:, 2] = np.mod(teff[:, 2], 2)
+        return teff
