@@ -575,7 +575,7 @@ class MpsMpo(_TN1D_base):
         self.canonize_sweep(to='last', normalize=False)
         self.absorb_central(to='first')
         for n in self.sweep(to='first'):
-            self.orthogonalize_site(n=n, to='first')
+            self.orthogonalize_site(n=n, to='first', normalize=False)
             Entropy[n] = entropy(self.A[self.pC], alpha=alpha)[0]
             self.absorb_central(to='first')
         return Entropy
@@ -593,7 +593,7 @@ class MpsMpo(_TN1D_base):
         self.canonize_sweep(to='last', normalize=False)
         self.absorb_central(to='first')
         for n in self.sweep(to='first'):
-            self.orthogonalize_site(n=n, to='first')
+            self.orthogonalize_site(n=n, to='first', normalize=False)
             _, sv, _ = self.A[self.pC].svd()
             SV[n] = sv
             self.absorb_central(to='first')
