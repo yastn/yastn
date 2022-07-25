@@ -1,5 +1,6 @@
 """ Predefined operators """
 import pytest
+from itertools import product
 import numpy as np
 import yast
 try:
@@ -156,7 +157,16 @@ def test_spinfull_fermions():
 
     assert all(ops.config.fermionic == fs for ops, fs in zip((ops_Z2, ops_U1xU1_ind, ops_U1xU1_dis), (True, (False, False, True), True)))
 
-    lss = [{0: I.get_legs(0), 1: I.get_legs(1)} for I in Is]
+    for ops, inter_sgn in [(ops_Z2, 1), (ops_U1xU1_ind, 1), (ops_U1xU1_dis, -1)]:
+        # check anti-commutation relations
+        assert all(yast.norm(ops.c(s) @ ops.c(s)) < tol for s in ('u', 'd'))
+        assert all(yast.norm(ops.c(s) @ ops.cp(s) + ops.cp(s) @ ops.c(s) - ops.I()) < tol for s in ('u', 'd'))
+
+        # anticommutator for indistinguishable; commutator for distinguishable
+        assert yast.norm(ops.c('u') @ ops.cp('d') + inter_sgn * ops.cp('d') @ ops.c('u')) < tol
+        assert yast.norm(ops.c('u') @ ops.c('d') + inter_sgn * ops.c('d') @ ops.c('u')) < tol
+        assert yast.norm(ops.cp('u') @ ops.cp('d') + inter_sgn * ops.cp('d') @ ops.cp('u')) < tol
+        assert yast.norm(ops.cp('u') @ ops.c('d') + inter_sgn * ops.c('d') @ ops.cp('u')) < tol
 
     with pytest.raises(yast.YastError):
         yast.operators.SpinfullFermions('dense')

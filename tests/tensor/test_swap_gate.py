@@ -1,6 +1,7 @@
 """ yast.swap_gate() to introduce fermionic statistics. """
 from itertools import product
 import pytest
+from tests.tensor.configs import config_dense
 import yast
 try:
     from .configs import config_U1xU1_fermionic, config_U1xU1xZ2_fermionic, config_Z2_fermionic, config_Z2
@@ -61,135 +62,53 @@ def apply_operator(psi, c, site):
 
 
 def test_apply_operators():
-    """ apply swap_gate during calculation of expectation value such as, e.g. <psi| c_1 cdag_3 |psi>"""
-    spins = ('up', 'dn')
-    for sym in ['Z2', 'U1xU1_ind', 'U1xU1_dis']:
-        ann = {s: operator_spinfull('ann', s=s, sym=sym) for s in spins}
-        cre = {s: operator_spinfull('cre', s=s, sym=sym) for s in spins}
+    """ 
+    Apply swap_gate during calculation of expectation value such as, e.g. <psi| c_1 cdag_3 |psi>.
 
-        vac = vacum_spinfull(sites=4, sym=sym)
+    Use SpinfullFermions defined in :class:`yast.operators.SpinfullFermions`
+    """
+    for sym in ['Z2', 'U1xU1xZ2', 'U1xU1']:
+        ops = yast.operators.SpinfullFermions(sym=sym, backend=config_dense.backend)
+        # pytest switches backends in configs imported in tests
+
+        vac = vacum_spinfull(sites=4, ops=ops)
         psi = vac
-        for s in spins:
+        for s in ('u', 'd'):
             psi0 = None
             for sites in ((2, 3), (1, 2), (0, 3), (0, 1)):  # sum of fermions created on those sites
-                temp = apply_operator(psi, cre[s], sites[1])
-                temp = apply_operator(temp, cre[s], sites[0])
+                temp = apply_operator(psi, ops.cp(s), sites[1])
+                temp = apply_operator(temp, ops.cp(s), sites[0])
                 psi0 = temp if psi0 is None else psi0 + temp
             psi = psi0 / psi0.norm()
         # product state between spin-spicies; 2 fermions in each spicies
 
-        for s in spins:
-            psi2 = apply_operator(psi, cre[s], site=1)
-            psi2 = apply_operator(psi2, ann[s], site=3)  # 0.5 * |12> - 0.5 * |01>
+        for s in ('u', 'd'):
+            psi2 = apply_operator(psi, ops.cp(s), site=1)
+            psi2 = apply_operator(psi2, ops.c(s), site=3)  # 0.5 * |12> - 0.5 * |01>
             assert abs(yast.vdot(psi, psi2)) < tol
             assert pytest.approx(yast.vdot(psi2, psi2).item(), rel=tol) == 0.5
 
-            psi3 = apply_operator(psi, ann[s], site=0)
-            psi3 = apply_operator(psi3, cre[s], site=2)  # 0.5 * |23> - 0.5 |12>
+            psi3 = apply_operator(psi, ops.c(s), site=0)
+            psi3 = apply_operator(psi3, ops.cp(s), site=2)  # 0.5 * |23> - 0.5 |12>
             assert abs(yast.vdot(psi, psi3)) < tol
             assert pytest.approx(yast.vdot(psi3, psi3).item(), rel=tol) == 0.5
 
             assert pytest.approx(yast.vdot(psi2, psi3).item(), rel=tol) == -0.25
-            psi = apply_operator(psi, cre[s], site=2) # adds particle on site 2 'up' for next loop
+            psi = apply_operator(psi, ops.cp(s), site=2) # adds particle on site 2 'up' for next loop
             psi = psi / psi.norm()
 
 
-def test_operators():
-    """ test commutation rules for creation and anihilation operators for spinfull fermions. """
-    spins, ops = ('up', 'dn'), ('cre', 'ann')
-    for sym, inter_sgn in [('Z2', 1), ('U1xU1_ind', 1), ('U1xU1_dis', -1)]:
-        c = {op + s: operator_spinfull(op, s=s, sym=sym) for s, op in product(spins, ops)}
-        one = operator_spinfull('one', sym=sym)
-
-        # check anti-commutation relations
-        assert all(yast.norm(c[op + s] @ c[op + s]) < tol for s, op in product(spins, ops))
-        assert all(yast.norm(c['ann' + s] @ c['cre' + s] + c['cre' + s] @ c['ann' + s] - one) < tol for s in spins)
-
-        # anticommutator for indistinguishable; commutator for distinguishable
-        assert all(yast.norm(c[op1 + 'up'] @ c[op2 + 'dn'] + inter_sgn * c[op2 + 'dn'] @ c[op1 + 'up']) < tol
-                    for op1, op2 in product(ops, ops))
-
-
-def vacum_spinfull(sites=4, sym='Z2'):
+def vacum_spinfull(sites, ops):
     """ |Psi> as a tensor with proper symmetry information and one axis per site. """
     s = (1,) * sites
-    if sym == 'Z2':
-        psi = yast.zeros(config=config_Z2_fermionic, s=s, t=[((0,),)] * sites, D=(2,) * sites)
+    I = ops.I()
+    if ops._sym == 'Z2':
+        psi = yast.zeros(config=I.config, s=s, t=[((0,),)] * sites, D=(2,) * sites)
         psi[(0,) * sites][(0,) * sites] = 1.  # here first [(0,0,..)] is the block charge -- here outputed as ndim object. 
         # The second [(0,0,..)] is index in the block.
-    if sym == 'U1xU1_ind':
-        psi = yast.ones(config=config_U1xU1xZ2_fermionic, s=s, t=[((0, 0, 0),)] * sites, D=(1,) * sites)
-    if sym == 'U1xU1_dis':
-        psi = yast.ones(config=config_U1xU1_fermionic, s=s, t=[((0, 0),)] * sites, D=(1,) * sites)
+    else: # ops._sym in ('U1xU1xZ2', 'U1xU1'):
+        psi = yast.ones(config=I.config, s=s, t=[(I.n,)] * sites, D=(1,) * sites)
     return psi
-
-
-def operator_spinfull(op='ann', s='up', sym='Z2'):
-    """ define operators for spinfull local Hilbert space and various symmetries. """
-    if op == 'ann':  # annihilation
-        if sym == 'Z2' and s == 'up': # charges: 0 <-> (|00>, |11>); 1 <-> (|10>, |01>)
-            temp = yast.Tensor(config=config_Z2_fermionic, s=(1, -1), n=1)
-            temp.set_block(ts=(0, 1), Ds=(2, 2), val=[[1, 0], [0, 0]])
-            temp.set_block(ts=(1, 0), Ds=(2, 2), val=[[0, 0], [0, 1]])
-        if sym == 'Z2' and s == 'dn':
-            temp = yast.Tensor(config=config_Z2_fermionic, s=(1, -1), n=1)
-            temp.set_block(ts=(0, 1), Ds=(2, 2), val=[[0, 1], [0, 0]])
-            temp.set_block(ts=(1, 0), Ds=(2, 2), val=[[0, -1], [0, 0]])
-        if sym == 'U1xU1_ind' and s == 'up': # charges <-> (ocupation up, occupation down, total_parity)
-            temp = yast.Tensor(config=config_U1xU1xZ2_fermionic, s=(1, -1), n=(-1, 0, 1))
-            temp.set_block(ts=((0, 0, 0), (1, 0, 1)), Ds=(1, 1), val=1)
-            temp.set_block(ts=((0, 1, 1), (1, 1, 0)), Ds=(1, 1), val=1)
-        if sym == 'U1xU1_ind' and s == 'dn':
-            temp = yast.Tensor(config=config_U1xU1xZ2_fermionic, s=(1, -1), n=(0, -1, 1))
-            temp.set_block(ts=((0, 0, 0), (0, 1, 1)), Ds=(1, 1), val=1)
-            temp.set_block(ts=((1, 0, 1), (1, 1, 0)), Ds=(1, 1), val=-1)
-        if sym == 'U1xU1_dis' and s == 'up':  # charges <-> (ocupation up, occupation down)
-            temp = yast.Tensor(config=config_U1xU1_fermionic, s=(1, -1), n=(-1, 0))
-            temp.set_block(ts=((0, 0), (1, 0)), Ds=(1, 1), val=1)
-            temp.set_block(ts=((0, 1), (1, 1)), Ds=(1, 1), val=1)
-        if sym == 'U1xU1_dis' and s == 'dn':
-            temp = yast.Tensor(config=config_U1xU1_fermionic, s=(1, -1), n=(0, -1))
-            temp.set_block(ts=((0, 0), (0, 1)), Ds=(1, 1), val=1)
-            temp.set_block(ts=((1, 0), (1, 1)), Ds=(1, 1), val=1)
-    if op == 'cre':  # creation
-        if sym == 'Z2' and s == 'up':  # charges: 0 <-> (|00>, |11>); <-> (|10>, |01>)
-            temp = yast.Tensor(config=config_Z2_fermionic, s=(1, -1), n=1)
-            temp.set_block(ts=(0, 1), Ds=(2, 2), val=[[0, 0], [0, 1]])
-            temp.set_block(ts=(1, 0), Ds=(2, 2), val=[[1, 0], [0, 0]])
-        if sym == 'Z2' and s == 'dn':
-            temp = yast.Tensor(config=config_Z2_fermionic, s=(1, -1), n=1)
-            temp.set_block(ts=(0, 1), Ds=(2, 2), val=[[0, 0], [-1, 0]])
-            temp.set_block(ts=(1, 0), Ds=(2, 2), val=[[0, 0], [1, 0]])
-        if sym == 'U1xU1_ind' and s == 'up':
-            temp = yast.Tensor(config=config_U1xU1xZ2_fermionic, s=(1, -1), n=(1, 0, 1))
-            temp.set_block(ts=((1, 0, 1), (0, 0, 0)), Ds=(1, 1), val=1)
-            temp.set_block(ts=((1, 1, 0), (0, 1, 1)), Ds=(1, 1), val=1)
-        if sym == 'U1xU1_ind' and s == 'dn':
-            temp = yast.Tensor(config=config_U1xU1xZ2_fermionic, s=(1, -1), n=(0, 1, 1))
-            temp.set_block(ts=((0, 1, 1), (0, 0, 0)), Ds=(1, 1), val=1)
-            temp.set_block(ts=((1, 1, 0), (1, 0, 1)), Ds=(1, 1), val=-1)
-        if sym == 'U1xU1_dis' and s == 'up':
-            temp = yast.Tensor(config=config_U1xU1_fermionic, s=(1, -1), n=(1, 0))
-            temp.set_block(ts=((1, 0), (0, 0)), Ds=(1, 1), val=1)
-            temp.set_block(ts=((1, 1), (0, 1)), Ds=(1, 1), val=1)
-        if sym == 'U1xU1_dis' and s == 'dn':
-            temp = yast.Tensor(config=config_U1xU1_fermionic, s=(1, -1), n=(0, 1))
-            temp.set_block(ts=((0, 1), (0, 0)), Ds=(1, 1), val=1)
-            temp.set_block(ts=((1, 1), (1, 0)), Ds=(1, 1), val=1)
-    if op == 'one':  # identity
-        if sym == 'Z2':
-            temp = yast.Tensor(config=config_Z2_fermionic, s=(1, -1), n=0)
-            for t in [0, 1]:
-                temp.set_block(ts=(t, t), Ds=(2, 2), val=[[1, 0], [0, 1]])
-        if sym == 'U1xU1_ind':
-            temp = yast.Tensor(config=config_U1xU1xZ2_fermionic, s=(1, -1), n=(0, 0, 0))
-            for t in [(0, 0, 0), (0, 1, 1), (1, 0, 1), (1, 1, 0)]:
-                temp.set_block(ts=(t, t), Ds=(1, 1), val=1)
-        if sym == 'U1xU1_dis':
-            temp = yast.Tensor(config=config_U1xU1_fermionic, s=(1, -1), n=(0, 0))
-            for t in [(0, 0), (0, 1), (1, 0), (1, 1)]:
-                temp.set_block(ts=(t, t), Ds=(1, 1), val=1)
-    return temp
 
 
 def test_swap_gate_exceptions():
@@ -207,5 +126,4 @@ def test_swap_gate_exceptions():
 if __name__ == '__main__':
     test_swap_gate_basic()
     test_apply_operators()
-    test_operators()
     test_swap_gate_exceptions()
