@@ -67,7 +67,7 @@ class GenerateOpEnv():
                 Use the single-particle operators defines by user. Definitions are supplier to self.fullbasis
 
                 Parameters
-                -----------
+                ----------
                 basis: dict
                         The list of operators defined for the generator. The keys should be strings while entries shuold be either:
 
