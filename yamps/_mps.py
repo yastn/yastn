@@ -176,7 +176,7 @@ class _TN1D_base():
         Makes a copy of Mps or Mpo. Copies all :meth:`yast.Tensor`'s to an independent :meth:`yamps` object.
 
         Warning, this might break autograd if you are using it.
-        Use when retaining "old" mps is neccesary -- other operations on mps are often done in-place.
+        Use when retaining "old" mps is necessary -- other operations on mps are often done in-place.
 
         Returns
         -------
@@ -293,7 +293,7 @@ class MpsMpo(_TN1D_base):
         if not isinstance(n, int) or n < 0 or n >= self.N:
             raise YampsError("n should be a positive integer in [0, N - 1].")
         if tensor.ndim != self.nr_phys + 2:
-            raise YampsError("Tensor rank should be %d" % self.nr_phys + 2)
+            raise YampsError("Tensor rank should be {}.".format(self.nr_phys + 2))
         self.A[n] = tensor
 
     def get_leftmost_leg(self):
@@ -314,7 +314,7 @@ class MpsMpo(_TN1D_base):
         """
         Ds = [self.A[n].get_shape(self.left[0]) for n in self.sweep(to='last')]
         Ds.append(self.A[self.last].get_shape(self.right[0]))
-        return Ds
+        return tuple(Ds)
 
     def get_bond_charges_dimensions(self):
         r"""

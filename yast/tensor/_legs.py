@@ -1,11 +1,10 @@
 from dataclasses import dataclass, replace
-from doctest import script_from_examples
+from itertools import product
 import numpy as np
 from ._auxliary import _flatten
 from ._tests import YastError
 from ..sym import sym_none
 from ._merging import _Fusion, _pure_hfs_union
-#from ...Initialize import zeros
 
 __all__ = ['Leg', 'leg_union', 'random_leg']
 
@@ -142,7 +141,7 @@ class Leg:
             return _str_tree(hf.tree, hf.op)
 
 
-def random_leg(config, s=1, n=None, sigma=1, D_total=8, positive=False):
+def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, positive=False):
     """
     Creat :class:`yast.Leg`. Randomly distribute bond dimensions to sectors according to Gaussian distribution.
 
@@ -166,6 +165,8 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, positive=False):
     Leg : :class:`yast.Leg`
         Returns a new Leg with randomly distributed bond dimensions.
     """
+    if config.sym.NSYM == 0:
+        return Leg(config, s=s, D=(D_total,))
 
     if n is None:
         n = (0,) * config.sym.NSYM
@@ -183,13 +184,21 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, positive=False):
     nvec = len(spanning_vectors)
     maxr = np.ceil(3 * sigma).astype(dtype=int)
 
-    shifts = np.zeros((2 * maxr + 1,) * nvec + (nvec,))
-    for i in range(nvec):
-        dims = (1,) * i + (2 * maxr + 1,) + (1,) * (nvec - i - 1)
-        shifts[(slice(None),) * nvec + (i,)] = np.reshape(np.arange(-maxr, maxr+1), dims)
-    ts = shifts.reshape(-1, nvec) @ spanning_vectors + an
-    ts = np.round(ts).astype(dtype=np.int64)
-    ts = config.sym.fuse(ts.reshape(-1, 1, config.sym.NSYM), (1,), 1)
+    if legs is None:
+        shifts = np.zeros((2 * maxr + 1,) * nvec + (nvec,))
+        for i in range(nvec):
+            dims = (1,) * i + (2 * maxr + 1,) + (1,) * (nvec - i - 1)
+            shifts[(slice(None),) * nvec + (i,)] = np.reshape(np.arange(-maxr, maxr+1), dims)
+        ts = shifts.reshape(-1, nvec) @ spanning_vectors + an
+        ts = np.round(ts).astype(dtype=np.int64)
+        ts = config.sym.fuse(ts.reshape(-1, 1, config.sym.NSYM), (1,), 1)
+    else:
+        ss = tuple(leg.s for leg in legs)
+        comb_t = list(product(*(leg.t for leg in legs)))
+        lcomb_t = len(comb_t)
+        comb_t = list(_flatten(comb_t))
+        comb_t = np.array(comb_t, dtype=int).reshape((lcomb_t, len(ss), len(n)))
+        ts = config.sym.fuse(comb_t, ss, -s)
     if positive:
         ts = ts[np.all(ts >= 0, axis=1)]
 

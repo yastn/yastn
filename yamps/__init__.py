@@ -7,3 +7,4 @@ from ._tdvp import tdvp_sweep_1site, tdvp_sweep_2site, tdvp
 from ._compression import variational_sweep_1site
 from ._generator import GenerateOpEnv, mpo_term
 from .basis import use_default_basis
+from ._generate import Generator

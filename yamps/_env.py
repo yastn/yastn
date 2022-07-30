@@ -6,7 +6,7 @@ from ._mps import YampsError
 def measure_overlap(bra, ket):
     r"""
     Calculate overlap <bra|ket>. Conjugation of argument bra is made internally.
-    The overlap can be calculated if the length, symmetry and phisical dimensions agree.
+    The overlap can be calculated if the length, symmetry and physical dimensions agree.
 
     Parameters
     -----------
@@ -28,7 +28,7 @@ def measure_overlap(bra, ket):
 def measure_mpo(bra, op, ket):
     r"""
     Calculate overlap <bra|op|ket>. Conjugation of argument bra is made internally.
-    The overlap can be calculated if the length, symmetry and phisical dimensions agree.
+    The overlap can be calculated if the length, symmetry and physical dimensions agree.
 
     Parameters
     -----------
@@ -119,7 +119,7 @@ class _EnvParent:
     def project_ket_on_bra(self, n):
         r"""Project ket on a n-th site of bra.
 
-        It is equall to the overlap <bra|op|ket> up to the contribution from n-th site of bra.
+        It is equal to the overlap <bra|op|ket> up to the contribution from n-th site of bra.
 
         Parameters
         ----------
@@ -237,7 +237,7 @@ class Env3(_EnvParent):
         bra : mps
             mps for :math:`| {\rm bra} \rangle`. If None, it is the same as ket.
         opp : mps
-            mps for opperator opp.
+            mps for operator opp.
         ket : mps
             mps for :math:`| {\rm ket} \rangle`.
         """

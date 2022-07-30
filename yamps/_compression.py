@@ -14,14 +14,14 @@ def variational_sweep_1site(psi, psi_target, env=None, op=None):
     Parameters
     ----------
     psi: Mps
-        Initial guess. Should be cannonical toward the first site.
+        Initial guess. Should be canonical toward the first site.
 
     psi_target: Mps
         Target state.
 
     env: Env2 or Env3
         Environments of the overlap <psi|psi_target> or <psi |op|psi_target> if op is given.
-        If None, it is calculated befor the sweep.
+        If None, it is calculated before the sweep.
 
     op: Mps
         Mpo acting on psi_target

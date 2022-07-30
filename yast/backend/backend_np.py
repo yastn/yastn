@@ -131,7 +131,7 @@ def sum_elements(data):
 
 
 def norm(data, p):
-    """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
+    """ 'fro' for Frobenius; 'inf' for max(abs(A)) """
     if p == 'fro':
         return np.linalg.norm(data)
     return max(np.abs(data)) if len(data) > 0  else np.float64(0.)
@@ -337,7 +337,7 @@ def embed_slc(data, meta, Dsize):
 
 
 ################################
-#     two dicts operations     #
+#     two dict-s operations    #
 ################################
 
 

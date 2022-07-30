@@ -31,7 +31,7 @@ def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', ato
     r"""
     Perform dmrg sweeps until convergence.
 
-    Assume that psi is cannonized to first site.
+    Assume that psi is canonized to first site.
     Sweeps consists of iterative updates from last site to first and back to the first one.
     Updates psi, returning it in canonical form to the first site.
 
@@ -71,7 +71,7 @@ def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', ato
         options passed to :meth:`yast.svd` to truncate virtual bond dimensions when unmerging two merged sites.
 
     return_info: bool
-        if True, return additional information regarding conergence
+        if True, return additional information regarding convergence
 
     Returns
     -------

@@ -86,7 +86,7 @@ def test_multiplication():
     #
     assert pytest.approx(env.measure().item(), rel=tol) == Eng
     #
-    # If the code didn't break then we shuold get a ground state. 
+    # If the code didn't break then we should get a ground state. 
     # Now we calculate the variation of energy <H^2>-<H>^2=<(H-Eng)^2> to check if DMRG converged properly to tol.
     # We have two equivalent ways to do that:
     #

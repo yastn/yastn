@@ -10,7 +10,7 @@ except ImportError:
 
 
 def test_assign_block():
-    """ Initialise mps with known blocks. Example for AKLT state"""
+    """ Initialize mps with known blocks. Example for AKLT state"""
     #
     # Prepare the representation of local tensors
     #
@@ -23,13 +23,13 @@ def test_assign_block():
     T = np.array([AM,A0,AP])
     T = np.transpose(T,(1,0,2))
     #
-    # In open boundary condition for MPS we shuold make sure that 
+    # In open boundary condition for MPS we should make sure that 
     # terminating virtual dimensions are 1.
     #
     bL = T[0,:,:].reshape((1,3,2))
     bR = T[:,:,1].reshape((2,3,1))
     #
-    # Setting up MPS always involves initialisation of YAMPS object with proper length.
+    # Setting up MPS always involves initialization of YAMPS object with proper length.
     #
     N = 5
     psi = yamps.Mps(N)
@@ -54,7 +54,7 @@ def test_assign_block():
 
 
 def test_set_random():
-    """ Initialise mps with random blocks."""
+    """ Initialize mps with random blocks."""
     N, d, Dmax, dtype = 16, 2, 30, 'float64'
     if isinstance(d, int):
         d = [d]

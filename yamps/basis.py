@@ -1,8 +1,5 @@
 import yast
 
-class YampsError(Exception):
-    pass
-
 def use_default_basis(config, basis_type):
         r"""
         Use a basis for single particle operators compatible with config. The basis is written to fullbasis which means that it will overwrite the basis if keys overlap.

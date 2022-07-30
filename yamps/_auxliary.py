@@ -3,9 +3,6 @@ import numpy as np
 import yast
 from ._mps import MpsMpo, Mpo, add
 
-class YampsError(Exception):
-    pass
-
 
 def load_from_dict(config, nr_phys, in_dict):
     r"""
@@ -89,7 +86,7 @@ def generate_mpo(N, H, identity, opts={'tol': 1e-14}):
 
 def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to, Tensor_conn, Tensor_other, N, nr_phys,  common_legs, opts={'tol': 1e-14}):
     r"""
-    Generate Mps representuing sum of two-point operators M=\sum_i,j Mij Op_i Op_j with possibility to include Jordan-Wigner chains for these.
+    Generate Mps representing sum of two-point operators M=\sum_i,j Mij Op_i Op_j with possibility to include Jordan-Wigner chains for these.
 
     Parameters
     ----------
@@ -100,13 +97,13 @@ def automatic_Mps(amplitude, from_it, to_it, permute_amp, Tensor_from, Tensor_to
     to_it : int iterable list
         second index of Mij
     permute_amp : iterable list of numbers
-        accounds for commuation/anticommutation rule while Op_j, Opj have to be permuted.
+        accounts for commutation/anticommutation rule while Op_j, Opj have to be permuted.
     Tensor_from: list of Tensor-s
         list of Op_i for Mij-th element
     Tensor_to: list of Tensor-s
         list of Op_j for Mij-th element
     Tensor_conn: list of Tensor-s
-        list of operators to put in cetween Op_i and Opj for Mij-th element
+        list of operators to put in between Op_i and Opj for Mij-th element
     Tensor_other: list of Tensor-s
         list of operators outside i-j for Mij-th element
     N : int
