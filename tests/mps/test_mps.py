@@ -14,11 +14,7 @@ except ImportError:
     from configs import config_U1, config_U1_fermionic
     from configs import config_Z2, config_Z2_fermionic
 
-
-
 tol = 1e-12
-
-
 
 def is_left_canonical(psi):
     """ Assert if each mps tensor is left canonical. """

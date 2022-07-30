@@ -2,6 +2,7 @@
 import logging
 import pytest
 import yamps
+import yast
 try:
     from . import generate_random, generate_by_hand, generate_automatic
     from .configs import config_dense, config_dense_fermionic
@@ -66,7 +67,7 @@ def test_dense_dmrg():
     Initialize random mps of dense tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
     # Knowing exact solution we can compare it DMRG result.
-    # In this test we will conside sectors of different occupation.
+    # In this test we will consider sectors of different occupation.
     #
     N = 7
     Eng_gs = [-3.427339492125848, -3.227339492125848, -2.8619726273956685]
@@ -159,8 +160,51 @@ def test_U1_dmrg():
         psi = run_dmrg(psi, H, occ, E_target, occ_target, version='2site', opts_svd=opts_svd)
 
 
+def test_generate_mpo():
+    N = 7
+    Dmax = 8
+    opts_svd = {'tol': 1e-8, 'D_total': Dmax}
+
+    logging.info(' Tensor : U1 ')
+
+    Eng_sectors = {2: [-2.861972627395668, -2.213125929752753, -1.7795804271032745],
+                   3: [-3.427339492125848, -2.661972627395668, -2.0131259297527526],
+                   4: [-3.227339492125848, -2.461972627395668, -1.8131259297527529]}
+    
+    operators = yast.operators.SpinlessFermions(sym='U1')
+    generate = yamps.Generator(N, operators)
+    parameters = {"t": 1, "mu": 0.2}
+
+    #H_str = "\sum_{j=0}^{"+str(N-1)+"} mu*cp_{j}.c_{j} + \sum_{j=0}^{"+str(N-2)+"} cp_{j}.c_{j+1} + \sum_{j=0}^{"+str(N-2)+"} t*cp_{j+1}.c_{j}"
+    H_str = "\sum_{j=0}^{"+str(N-1)+"} mu*n_{j} + \sum_{j=0}^{"+str(N-2)+"} cp_{j}.c_{j+1} + \sum_{j=0}^{"+str(N-2)+"} t*cp_{j+1}.c_{j}"
+    
+    H = generate.mpo(H_str, parameters)
+
+    H_str = "\sum_{j=0}^{"+str(N-1)+"} n_{j}"
+    occ =  generate.mpo(H_str)
+    
+    # occ = generate.mpo("sum_i n_i")
+    # H = generate.mpo("sum_j mu * n_j + sum_j' t * (cp_{j}.c_{j+1} + cp_{j+1}.c_{j})"
+
+    # H = sum_{x,y'} x_{x,y}.x_{x,y+1} + sum_{x',y} x_{x,y}.x_{x+1,y} + \sum_{x,y} z_{x,y}
+
+    # H = sum_{k, s} cp_{k, s}.c_{k, s'} # think spinfull
+
+    # psi = generate.mps("prod_i [x_i == 1]" )
+    # psi = generate.mps("prod_i (f_i * [n_{i, u} == 1] + (1-f_i) * [n_{i, u} == 0])" )
+
+
+    for total_occ, E_target in Eng_sectors.items():
+        psi = generate.random_mps(D_total=6, n=total_occ).canonize_sweep(to='first')
+        occ_target = [total_occ] * len(E_target)
+        psi = run_dmrg(psi, H, occ, E_target, occ_target, version='2site', opts_svd=opts_svd)
+        print(psi.get_bond_dimensions())
+
+
+
 if __name__ == "__main__":
     logging.basicConfig(level='INFO')
     test_dense_dmrg()
     test_Z2_dmrg()
     test_U1_dmrg()
+    test_generate_mpo()

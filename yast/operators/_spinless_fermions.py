@@ -33,6 +33,7 @@ class SpinlessFermions:
         kwargs['sym'] = import_sym[sym]
         self.config = make_config(**kwargs)
         self.s = (1, -1)
+        self.operators = ('I', 'n', 'c', 'cp')
 
     def I(self):
         """ Identity operator. """

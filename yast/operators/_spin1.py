@@ -38,6 +38,8 @@ class Spin1:
         kwargs['sym'] = import_sym[sym]
         self.config = make_config(**kwargs)
         self.s = (1, -1)
+        self.operators = ('I', 'sx', 'sy', 'sz', 'sp', 'sm')
+
 
     def I(self):
         """ Identity operator. """
