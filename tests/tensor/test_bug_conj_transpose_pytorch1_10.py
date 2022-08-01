@@ -36,7 +36,7 @@ def test_bug_conj_transpose_torch(block_D):
     D0= torch.zeros_like(R)
     D1= torch.zeros_like(R)
 
-    # order: tranpose then conj
+    # order: transpose then conj
     block=slice(10,10+block_size)
     D0[block].view(block_Ds)[:]= R[block].view(block_Ds).permute(1,0)
     Y= D0.conj()
@@ -60,7 +60,7 @@ def test_bug_conj_transpose_torch_conjphys(block_D):
     D0= torch.zeros_like(R)
     D1= torch.zeros_like(R)
 
-    # order: tranpose then conj
+    # order: transpose then conj
     block=slice(10,10+block_size)
     D0[block].view(block_Ds)[:]= R[block].view(block_Ds).permute(1,0)
     Y= D0.conj()

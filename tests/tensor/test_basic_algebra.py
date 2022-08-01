@@ -12,7 +12,7 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 def algebra_vs_numpy(f, a, b):
     """
-    f is lambda expresion using magic methods on a and b tensors
+    f is lambda expression using magic methods on a and b tensors
     e.g. f = lambda x, y: x + y
     """
     legs_for_a = dict(enumerate(b.get_legs()))
