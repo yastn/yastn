@@ -114,7 +114,7 @@ def test_broadcast_Z2xU1():
     assert np.trace(nr4) == 3.
     assert (r4 - r5).norm() < tol
 
-    # broadcast tensor b over multiple tensors in single cal
+    # broadcast tensor b over multiple tensors in single call
     r1p, r5p = b.broadcast(a, c, axis=(0, 1))
     assert (r1 - r1p).norm() < tol
     assert (r5 - r5p).norm() < tol

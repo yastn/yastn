@@ -170,11 +170,11 @@ def test_generate_mpo():
     Eng_sectors = {2: [-2.861972627395668, -2.213125929752753, -1.7795804271032745],
                    3: [-3.427339492125848, -2.661972627395668, -2.0131259297527526],
                    4: [-3.227339492125848, -2.461972627395668, -1.8131259297527529]}
-    
+
     operators = yast.operators.SpinlessFermions(sym='U1')
     generate = yamps.Generator(N, operators)
-    parameters = {"t": 1, "mu": 0.2}
 
+    parameters = {"t": 1, "mu": 0.2}
     #H_str = "\sum_{j=0}^{"+str(N-1)+"} mu*cp_{j}.c_{j} + \sum_{j=0}^{"+str(N-2)+"} cp_{j}.c_{j+1} + \sum_{j=0}^{"+str(N-2)+"} t*cp_{j+1}.c_{j}"
     H_str = "\sum_{j=0}^{"+str(N-1)+"} mu*n_{j} + \sum_{j=0}^{"+str(N-2)+"} cp_{j}.c_{j+1} + \sum_{j=0}^{"+str(N-2)+"} t*cp_{j+1}.c_{j}"
     
@@ -183,16 +183,29 @@ def test_generate_mpo():
     H_str = "\sum_{j=0}^{"+str(N-1)+"} n_{j}"
     occ =  generate.mpo(H_str)
     
-    # occ = generate.mpo("sum_i n_i")
+    # occ = generate.mpo("sum_{i in sites} n_i")
     # H = generate.mpo("sum_j mu * n_j + sum_j' t * (cp_{j}.c_{j+1} + cp_{j+1}.c_{j})"
+
+    # sum_{l,r in nn_sites} cp_l c_r
 
     # H = sum_{x,y'} x_{x,y}.x_{x,y+1} + sum_{x',y} x_{x,y}.x_{x+1,y} + \sum_{x,y} z_{x,y}
 
-    # H = sum_{k, s} cp_{k, s}.c_{k, s'} # think spinfull
+    # H = sum_{k, s} cp_{k, s}.c_{k, s'} # think spinful
 
-    # psi = generate.mps("prod_i [x_i == 1]" )
+    psi = generate.mps("prod_i ([n('u')_i == 1, n('d')_i == 1] + [n('u')_i == 0, n('d')_i == 0])" )
+
     # psi = generate.mps("prod_i (f_i * [n_{i, u} == 1] + (1-f_i) * [n_{i, u} == 0])" )
+    # map={'l1':0, 'l2':2, 'l3':5, 's1':4, 'r1':1, 'r2':3, 'r3':6}
+    # (x, y) : Ly *x + y
 
+    # parameters = {'nn_sites'}
+    # sum_{i, j in nn_sites}
+
+    "   sum_{s in spins} sum_{j in l_sites} sum_{i in s_sites} (v_i,j cp_i^s c_j^s + v_i,j cp_j^s c_i^s)"
+    " + sum_{s in spins} sum_{j in l_sites} n_i^s"
+
+    # parameters={"v": {(i, j): vij}}
+    # cpu ('u')
 
     for total_occ, E_target in Eng_sectors.items():
         psi = generate.random_mps(D_total=6, n=total_occ).canonize_sweep(to='first')

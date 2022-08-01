@@ -13,14 +13,19 @@ class Hterm(NamedTuple):
 
 def generate_H1(I, term):
     r"""
-    Apply local operators specified by term to the mpo I (makes a copy).
+    Apply local operators specified by term in :class:`Hterm` to the mpo I.
 
-    Apply swap gates
+    Apply swap_gates to introduce fermionic degrees of freedom
+    (fermionic order is the same as order of sites in Mps).
+    With this respect, local operators specified in term.operators are applied from last to first,
+    i.e., from right to left.
 
     Parameters
     ----------
     term: :class:`Hterm`
-        instruction to create the Mpo which is a product of operators element.operator at location element.position and with amplitude element.amplitude.
+        instruction to create the Mpo which is a product of
+        operators element.operator at location element.position
+        and with amplitude element.amplitude.
     """
     H1 = I.copy()
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
@@ -41,7 +46,9 @@ def generate_H1(I, term):
 
 def generate_mpo(I, terms, opts):
     """
-    Generate mpo provided a list of Hterm-s.
+    Generate mpo provided a list of Hterm-s and identity operator I.
+
+    TODO: implement more efficient algorithm
     """
     H1s = [generate_H1(I, term) for term in terms]
     M = add(*H1s)
@@ -52,21 +59,24 @@ def generate_mpo(I, terms, opts):
 
 class Generator:
     """ Generator to create Mpo-s and Mps-s from local operators. """
-    def __init__(self, N, operators, map=None, Is=None, opts={"tol": 1e-14}):
+    def __init__(self, N, operators, map=None, Is=None, parameters=None, opts={"tol": 1e-14}):
         """
         N : int
-            number of sites of mps/mpo
+            number of sites of mps/mpo.
         operators : class
-            generator of local operators, such as an instance of yast.operators.Spin12
+            generator of local operators, e.g., an instance of :class:`yast.operators.Spin12`.
         map : dict
-            custom labels for mps sites, {site_label: mps_site}, where mps_site are ordered as 0, 1, ..., N - 1
-            If None, use default identity map, with labels 0, 1, ..., N - 1
+            custom labels for mps sites, {site_label: mps_site}, where mps_site are ordered as 0, 1, ..., N - 1.
+            If None, use default identity map, i.e., {site: site for site in range(N)}.
         Is : dict
-            For each mps site, name identity operator in operators class, {site_label: str}.
+            For each mps site, name identity operator in operators, {site_label: str}.
             If local mps sites have different physical dimensions, each should have separate identity operator defined in operators.
-            If None, use default {site_label: 'I'}
+            If None, use default {site_label: 'I'}.
+        parameters : dict
+            Default parameters that can be used by interpreters :meth:`Generator.mpo` and :meth:`Generator.mps`.
+            If None, use default {'sites': [*map.keys()]}
         opts : dict
-            used if compression is needed. Options passed to :meth:`yast.linalg.svd`
+            used if compression is needed. Options passed to :meth:`yast.linalg.svd`.
         """
         self.N = N
         self._ops = operators
@@ -85,6 +95,8 @@ class Generator:
             self._I.A[site] = local_I().add_leg(axis=0, s=1).add_leg(axis=-1, s=-1)
 
         self.config = self._I.A[0].config
+        self.parameters = {} if parameters is None else parameters
+
         self.opts=opts
 
     def I(self):
@@ -120,7 +132,7 @@ class Generator:
             return psi
         raise YampsError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization) ")
 
-    def mpo(self, H_str, parameters={}):
+    def mpo(self, H_str, parameters=None):
         r"""
         Convert latex-like string to yamps MPO.
 
@@ -138,6 +150,8 @@ class Generator:
         --------
             :class:`yamps.Mpo`
         """
+        parameters = self.parameters if parameters is None else {**self.parameters, **parameters}
+
         # remove excess spaces
         while "  " in H_str:
             H_str = H_str.replace("  ", " ")
@@ -174,3 +188,11 @@ class Generator:
                 operators = tuple(getattr(self._ops, ih_op[0])() for ih_op in h_op)
                 mpo_term_list.append(Hterm(amplitude, positions, operators))
         return generate_mpo(self._I, mpo_term_list, self.opts)
+
+    def mps(self, psi_str, parameters=None):
+        """ 
+        initialize simple product states 
+
+        TODO: implement
+        """
+        pass

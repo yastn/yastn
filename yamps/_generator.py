@@ -1,6 +1,6 @@
 import numpy as np
 from typing import NamedTuple
-from ._mps import Mpo
+from ._mps import Mpo, YampsError
 from ._auxliary import add
 from .basis import use_default_basis
 import yast
@@ -69,7 +69,7 @@ class GenerateOpEnv():
         basis: dict
             The list of operators defined for the generator. The keys should be strings while entries shuold be either:
 
-            1/ :meth:`yast.Tensor` with two phisical legs only,
+            1/ :meth:`yast.Tensor` with two physical`s legs only,
 
             2/ a list or tuple of length self.N containing :meth:`yast.Tensor` for each element of Mpo lattice,
 
@@ -79,7 +79,7 @@ class GenerateOpEnv():
         """
         if 'identity' not in basis:
             raise YampsError("Basis doesn't contain identity yast.Tensor. Provide an entry with key 'identity'.")
-        # prepare full basis for the envoronment
+        # prepare full basis for the environment
         for key, content in basis.keys():
             if isinstance(content, yast.Tensor):
                 self.fullbasis[key] = lambda j: content

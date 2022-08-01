@@ -182,7 +182,7 @@ Also see the test in examples for  :ref:`examples/mps/mps:Multiplication`.
 TDVP
 =====================================
 
-In order to perform :ref:`theory/mps/algorithms:TDVP` we need initial MPS the operator written as MPO. 
+In order to perform :ref:`theory/mps/algorithms:TDVP` we need initial MPS the operator written as MPO.
 We should start with :ref:`mps/init:initialisation` of the MPS and MPO which we push to DMRG.
 
 Here is a simple example for TDVP used to obtain a ground state for a quadratic Hamiltonian 
