@@ -2,6 +2,7 @@
 import yamps
 
 def mpo_occupation(config, N):
+    print("DOESNT WORK")
     gen = yamps.GenerateOpEnv(N, config=config)
     gen.use_default()
     H_str = "\sum_{j=0}^{"+str(N-1)+"} cp_{j}.c_{j}"
@@ -46,6 +47,7 @@ def mpo_XX_model(config, N, t, mu):
     #
     # Another way to generate MPO is to use custom latex2yamps converter.
     #
+    print("DOESNT WORK")
     parameters = {"t": t, "mu": mu}
     H_str = "\sum_{j=0}^{"+str(N-1)+"} mu*cp_{j}.c_{j} + \sum_{j=0}^{"+str(N-2)+"} cp_{j}.c_{j+1} + \sum_{j=0}^{"+str(N-2)+"} t*cp_{j+1}.c_{j}"
     H = gen.latex2yamps(H_str, parameters)
@@ -56,6 +58,7 @@ def mpo_Ising_model(config, N, Jij, gi):
     MPO for Hamiltonian sum_i>j Jij Zi Zj + sum_i Jii Zi - sum_i gi Xi.
     For now only nearest neighbor coupling -- # TODO make it general
     """
+    print("DOESNT WORK")
     gen = yamps.GenerateOpEnv(N, config=config)
     gen.use_default(basis_type='Pauli_matrices')
     parameters = {"J": Jij, "g": -gi}
