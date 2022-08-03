@@ -43,12 +43,12 @@ def test_generator_mpo():
     H_str = "- \sum_{j \in range1} mu cp_{j} c_{j} + \sum_{i \in range2} \sum_{j \in range3} ( t_{i,j} ) ( cp_{i} c_{j} + 2 cp_{j} c_{i} ) -  h_{0} cp_{0} c_{0}"
     basis_dict = {"cp": lambda j: "cp_"+str(j),
                   "c": lambda j: "c_"+str(j)}
-    params_dict = { "mu": "mu",
+    params_dict = { "mu": lambda j: 1.0,
                     "range1": range(5),
                     "range2": range(5),
                     "range3": range(5),
-                    "h": lambda j: "h_"+str(j),
-                    "t": lambda i,j: "h_"+str(i)+","+str(j)}
+                    "h": lambda j: j+1,
+                    "t": lambda i,j: 1+i*j}
 
     tmp = H_str
     while "  " in tmp:
@@ -90,7 +90,7 @@ def test_generator_mpo():
         print(is_sum, '\n')
         # iterate over is_index-es each over is_range-es range of numbers
         range_span = product(*is_range, repeat=1)
-        if 1==1: #for idx in range_span:
+        for idx in range_span:
             read_not_sum = [None]*len(not_sum)
             sgn_math = ['+', '-', '(', ')']
             sgn_basis = list(basis_dict.keys())
@@ -111,20 +111,43 @@ def test_generator_mpo():
                 tmp = [ira == iorder for ira in read_not_sum]
                 itake = list(compress(not_sum, tmp))
                 print(itake)
-                place_holder = '' # keep the output here 
-                iind =  None
-                for inum, ival in enumerate(itake):
+                place_holder = []
+                op_holder, ind_holder, amp_holder = [], [], 1
+                iind = None
+                for inum, ival in enumerate(itake[::-1]):
                     # extract using map if needed
-                    if re.match(r"(\w+)_{(\w+)}", ival):
-                        ival, iind = re.match(r"(\w+)_{(\w+)}", tmp).group(1, 2)
-                    
+                    print(inum, ival)
+                    get_info = re.match(r"(?P<ival>.*)_{(?P<iind>.*)}", ival)
+                    #get_info = re.match(r"(?<=\{)(?P<index>.*).in.(?P<range>.*)(?=\})", ival)
+                    if get_info:
+                        ival, iind = get_info.group("ival"), get_info.group("iind")
+                        iind = iind.split(',')
+                        if all([i.isnumeric() for i in iind]):
+                            # convert to numerical index
+                            iind = [int(i) for i in iind]
+                        else:
+                            # find index from sum indexing
+                            for i_ind in range(len(iind)):
+                                for i_index in range(len(is_index)):
+                                    if iind[i_ind] == is_index[i_index]:
+                                        iind[i_ind] = idx[i_index]
                     if ival in sgn_basis:
-                        # generate mpo with index iind
-                        place_holder += basis_dict[ival](iind?) iind cant be a string. 
+                        op_holder.append(basis_dict[ival](*iind))
+                        ind_holder.append(*iind)
                     elif ival in sgn_params:
-                        # take numerical value from parameters
-                        place_holder += params_dict[ival](iind?)
-        
+                        print(ival, iind)
+                        amp_holder *= params_dict[ival](*iind)
+                    else:
+                        if ival == '+':
+                            amp_holder *= +1.0
+                        elif ival == '-':
+                            amp_holder *= -1.0
+                        else:
+                            amp_holder *= float(ival)
+                # generate mpo product using automatic
+                place_holder.append([ind_holder, op_holder, amp_holder])
+    print(place_holder, inum)
+    exit()
 
 
 if __name__ == "__main__":
