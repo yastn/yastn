@@ -126,3 +126,11 @@ class Spin1:
             sm.set_block(ts=(0, 1), Ds=(1, 1), val=sq2)
             sm.set_block(ts=(-1, 0), Ds=(1, 1), val=sq2)
         return sm
+
+    def to_dict(self):
+        return {'I': self.I(),
+                'sx': self.sx(),
+                'sy': self.sy(),
+                'sz': self.sz(),
+                'sp': self.sp(),
+                'sm': self.sm()}

@@ -137,3 +137,12 @@ class SpinfullFermions:
         else:
             raise YastError("spin shoul be equal 'u' or 'd'.")
         return c
+
+    def to_dict(self):
+        return {'I': lambda j: self.I(),
+                'nu': lambda j: self.n(spin='u'),
+                'cu': lambda j: self.c(spin='u'),
+                'cpu': lambda j: self.cp(spin='u'),
+                'nd': lambda j: self.n(spin='d'),
+                'cd': lambda j: self.c(spin='d'),
+                'cpd': lambda j: self.cp(spin='d')}

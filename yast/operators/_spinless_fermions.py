@@ -61,3 +61,9 @@ class SpinlessFermions:
         c = Tensor(config=self.config, s=self.s, n=n)
         c.set_block(ts=(0, 1), Ds=(1, 1), val=1)
         return c
+
+    def to_dict(self):
+        return {'I': lambda j: self.I(),
+                'n': lambda j: self.n(),
+                'c': lambda j: self.c(),
+                'cp': lambda j: self.cp()}

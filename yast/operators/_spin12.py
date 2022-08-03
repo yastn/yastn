@@ -132,3 +132,14 @@ class Spin12:
             sm = Tensor(config=self.config, s=self.s, n=-2)
             sm.set_block(ts=(-1, 1), Ds=(1, 1), val=1)
         return sm
+
+    def to_dict(self):
+        return {'I': self.I(),
+                'x': self.x(),
+                'y': self.y(),
+                'z': self.z(),
+                'sx': self.sx(),
+                'sy': self.sy(),
+                'sz': self.sz(),
+                'sp': self.sp(),
+                'sm': self.sm()}
