@@ -153,19 +153,29 @@ class Generator:
         --------
             :class:`yamps.Mpo`
         """
+        # get everything to dictionary
         parameters = self.parameters if parameters is None else {**self.parameters, **parameters}
         params_dict = parameters
         basis_dict = self._ops.to_dict()
+        # merge to a single dictionary
+        info_dict = {**params_dict.copy(), **basis_dict.copy()}
+
+        # interpret string
+        # RULES:
+        # * put all parameters in info_dict are functions, if constant then should be single-parameter function
         tmp = H_str
-        while "  " in tmp:
+        tmp = tmp.replace("*", " ")
+        for ic in ["*", "(", ")", "\in"]:  # put additional spaces
+            tmp = tmp.replace(ic, " "+ic+" ")
+        while "  " in tmp:  # remove double spaces
             tmp = tmp.replace("  ", " ")
-        lall = tmp.replace(" \in ", ".in.").replace("\sum_", ".sum_.").split(" ")
+        tmp = tmp.replace(" \in ", ".in.").replace("\sum_", ".sum_.") # remove \ because I don't know how to manege this
+        lall = tmp.strip().split(" ")  # remove space if it is on the beginning/end & finally split the instruction
 
+        # split sums away from each other
         sep, H = {}, None
-
-        terminate, hodor = ['+','-'], False
-        isep = 0
-        id_sep = 0
+        terminate, hodor = ['+', '-'], False
+        isep, id_sep = 0, 0  # where new id_step-th substring begins
         # split to separate sums
         sep[id_sep] = []
         for it in range(len(lall)):
@@ -179,55 +189,44 @@ class Generator:
                 id_sep += 1
                 sep[id_sep] = []
             sep[id_sep].append(tmp)
-        #print(sep, '\n\n\n')
         # analyze terms, get info on sums
         for k in sep.keys():
             spart = sep[k]
             issum = ['sum' in ix for ix in spart]
             is_sum = list(compress(spart, issum))
             not_sum = list(compress(spart, [not ix for ix in issum]))
-            #print('is_sum: ', is_sum)
-            #print('not_sum: ', not_sum)
-            #print()
             # sum instruction
-            is_sum = [match(r".sum_.{(\w+).in.(\w+)}", tmp).group(1, 2) for tmp in is_sum]
+            is_sum = [match(r".sum_.{(?P<index>.*).in.(?P<range>.*)}", tmp).group("index", "range") for tmp in is_sum]
             is_index = [tmp[0] for tmp in is_sum]
             is_range = [params_dict[tmp[1]] for tmp in is_sum]
-            #print(is_sum, '\n')
+            read_not_sum = [None]*len(not_sum)
+            sgn_math = ['+', '-', '(', ')']
+            sgn_info = list(info_dict.keys())
+            # ger order of operations
+            iorder = 0
+            for inum, ival in enumerate(not_sum[::-1]):
+                if ival in sgn_math:
+                    iorder += 1
+                read_not_sum[-inum-1] = iorder
+                if ival in sgn_math:
+                    iorder += 1
+            # remove bracket for convenience
+            remove_braket = [ix not in ['(', ')'] for ix in not_sum]
+            not_sum = list(compress(not_sum, remove_braket))
+            read_not_sum = list(compress(read_not_sum, remove_braket))
             # iterate over is_index-es each over is_range-es range of numbers
             range_span = product(*is_range, repeat=1)
             for idx in range_span:
-                read_not_sum = [None]*len(not_sum)
-                sgn_math = ['+', '-', '(', ')']
-                sgn_basis = list(basis_dict.keys())
-                sgn_params = list(params_dict.keys())
-                # ger order of operations
-                iorder = 0
-                for inum, ival in enumerate(not_sum[::-1]):
-                    if ival in sgn_math:
-                        iorder += 1
-                    read_not_sum[-inum-1] = iorder
-                    if ival in sgn_math:
-                        iorder += 1
-                #print('not_sum: ', not_sum)
-                #print('read_not_sum: ', read_not_sum)
-                # remove bracket for convenience
-                remove_braket = [ix not in ['(', ')'] for ix in not_sum]
-                not_sum = list(compress(not_sum, remove_braket))
-                read_not_sum = list(compress(read_not_sum, remove_braket))
-                #print('not_sum: ', not_sum)
-                #print('read_not_sum: ', read_not_sum)
+                # it does a seach for a parametrs and operators for each range-span
+                # I am not sure how to change that because each elemetn is a function...
                 for iorder in np.unique(read_not_sum):
                     tmp = [ira == iorder for ira in read_not_sum]
                     itake = list(compress(not_sum, tmp))
-                    #print(iorder, ' itake: ', itake)
-                    op_holder, ind_holder, amp_holder, op_helper = [], [], 1, [] # op_helper is control list, is not needed
-                    iind = (0,) # oput dummy just in case parameter is just a number 
+                    op_holder, ind_holder, amp_holder = [], [], 1
+                    iind = (0,)  # put dummy just in case parameter is just a number
                     for inum, ival in enumerate(itake[::-1]):
                         # extract using map if needed
-                        #print(inum, ival)
                         get_info = match(r"(?P<ival>.*)_{(?P<iind>.*)}", ival)
-                        #get_info = re.match(r"(?<=\{)(?P<index>.*).in.(?P<range>.*)(?=\})", ival)
                         if get_info:
                             ival, iind = get_info.group("ival"), get_info.group("iind")
                             iind = iind.split(',')
@@ -241,24 +240,23 @@ class Generator:
                                         if is_index[i_index] in iind[i_ind]:
                                             iind[i_ind] = iind[i_ind].replace(is_index[i_index], str(idx[i_index]))
                                     iind[i_ind] = eval(iind[i_ind])
-                        if ival in sgn_basis:
-                            op_holder.append(basis_dict[ival](*iind))
-                            op_helper.append(ival)
-                            ind_holder.append(*iind)
-                        elif ival in sgn_params:
-                            #print(ival, iind)
-                            amp_holder *= params_dict[ival](*iind)
+                        if ival in sgn_info:
+                            ival = info_dict[ival](*iind)
+                            if type(ival) == yast.Tensor:
+                                op_holder.append(ival)
+                                ind_holder.append(*iind)
+                            else:
+                                amp_holder *= ival
                         else:
-                            if '+' is ival:
+                            if '+' == ival:
                                 amp_holder *= float(1)
-                            elif '-' is ival:
+                            elif '-' == ival:
                                 amp_holder *= float(-1)
                             else:
                                 amp_holder *= float(ival)
                     # generate mpo product using automatic
-                    ind_holder, op_holder, op_helper = ind_holder[::-1], op_holder[::-1], op_helper[::-1]
+                    ind_holder, op_holder = ind_holder[::-1], op_holder[::-1]
                     place_holder = [Hterm(amp_holder, ind_holder, op_holder)]
-                    #print([amp_holder, ind_holder, op_helper])
                     if not op_holder:
                         H = amp_holder * H
                     else:
@@ -266,52 +264,13 @@ class Generator:
                             H = generate_mpo(self._I, place_holder, self.opts)
                         else:
                             H = H + generate_mpo(self._I, place_holder, self.opts)
-                H.canonize_sweep(to='last', normalize=False)
-                H.truncate_sweep(to='first', opts=self.opts, normalize=False)
+            H.canonize_sweep(to='last', normalize=False)
+            H.truncate_sweep(to='first', opts=self.opts, normalize=False)
         return H
-        """
-        # remove excess spaces
-        while "  " in H_str:
-            H_str = H_str.replace("  ", " ")
-        H_str = H_str.split(" + ")
-        mpo_term_list = []
-        for h in H_str:
-            # search for amplitude
-            h = h.replace("*", "* ")
-            h = h.split(" ")
-            amp = [i for i in h if "*" in i]
-            [h.remove(ia) for ia in amp]  # remove terms of amplitude we don't need them any more
-            amp = ' '.join(amp).replace("*","").split(' ')
-            if '' in amp:
-                amp.remove('') # remove empty elements
-            amplitude = np.prod(np.array([1.0]+[parameters[ia] for ia in amp]))
-            if '\sum' in h[0]:
-                sum_name = h[0].replace('{', '').replace('}', '')
-                sum_name = sum_name.replace("_", " _")
-                sum_name = sum_name.replace("^", " ^")
-                sum_name = sum_name.split(' ')
-                lower_bound = [i for i in sum_name if "_" in i][0].replace('_', '')
-                iterator, lower_bound = lower_bound.split('=')
-                upper_bound = [i for i in sum_name if "^" in i][0].replace('^', '')
-                lower_bound, upper_bound = int(lower_bound), int(upper_bound)
-                op_list = []
-                for it in range(lower_bound, upper_bound+1):
-                    op_list.append(h[1].replace(iterator, str(it)))
-            else:
-                op_list = h
-            for iop_list in op_list:
-                h_op=iop_list.split('.')
-                h_op = [ih_op.split('_') for ih_op in h_op]
-                positions = tuple(eval(ih_op[1].replace('{','').replace('}', '')) for ih_op in h_op)
-                operators = tuple(getattr(self._ops, ih_op[0])() for ih_op in h_op)
-                mpo_term_list.append(Hterm(amplitude, positions, operators))
-        
-        return generate_mpo(self._I, mpo_term_list, self.opts)
-        """
-        
+
 
     def mps(self, psi_str, parameters=None):
-        """ 
+        """
         initialize simple product states 
 
         TODO: implement
