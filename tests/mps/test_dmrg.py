@@ -4,12 +4,12 @@ import pytest
 import yamps
 import yast
 try:
-    from . import generate_random, generate_by_hand, generate_automatic
+    from . import generate_random, generate_by_hand
     from .configs import config_dense, config_dense_fermionic
     from .configs import config_U1, config_U1_fermionic
     from .configs import config_Z2, config_Z2_fermionic
 except ImportError:
-    import generate_random, generate_by_hand, generate_automatic
+    import generate_random, generate_by_hand
     from configs import config_dense, config_dense_fermionic
     from configs import config_U1, config_U1_fermionic
     from configs import config_Z2, config_Z2_fermionic
@@ -75,11 +75,11 @@ def test_dense_dmrg():
     #
     # The Hamiltonian is obtained with automatic generator (see source file).
     #
-    H = generate_automatic.mpo_XX_model(config_dense_fermionic, N=N, t=1, mu=0.2)
+    H = generate_by_hand.mpo_XX_model(config_dense_fermionic, N=N, t=1, mu=0.2)
     #
     # and MPO to measure occupation:
     #
-    occ = generate_automatic.mpo_occupation(config_dense_fermionic, N=N)
+    occ = generate_by_hand.mpo_occupation(config_dense_fermionic, N=N)
     #
     # To standardize this test we will fix a seed for random MPS we use
     #
@@ -127,8 +127,8 @@ def test_Z2_dmrg():
     Occ_target = {0: [4, 2, 4], 1: [3, 3, 5]}
     Eng_target = {0: [-3.227339492125848, -2.8619726273956685, -2.461972627395668],
                   1: [-3.427339492125848, -2.6619726273956683, -2.261972627395668]}
-    H = generate_automatic.mpo_XX_model(config_Z2_fermionic, N=N, t=1, mu=0.2)
-    occ = generate_automatic.mpo_occupation(config_Z2_fermionic, N=N)
+    H = generate_by_hand.mpo_XX_model(config_Z2_fermionic, N=N, t=1, mu=0.2)
+    occ = generate_by_hand.mpo_occupation(config_Z2_fermionic, N=N)
 
     for parity in (0, 1):
         for version in ('1site', '2site'):
@@ -151,8 +151,8 @@ def test_U1_dmrg():
     Eng_sectors = {2: [-2.861972627395668, -2.213125929752753, -1.7795804271032745],
                    3: [-3.427339492125848, -2.661972627395668, -2.0131259297527526],
                    4: [-3.227339492125848, -2.461972627395668, -1.8131259297527529]}
-    H = generate_automatic.mpo_XX_model(config_U1_fermionic, N=N, t=1, mu=0.2)
-    occ = generate_automatic.mpo_occupation(config_U1_fermionic, N=N)
+    H = generate_by_hand.mpo_XX_model(config_U1_fermionic, N=N, t=1, mu=0.2)
+    occ = generate_by_hand.mpo_occupation(config_U1_fermionic, N=N)
 
     for total_occ, E_target in Eng_sectors.items():
         psi = generate_random.mps_random(config_U1_fermionic, N=N, Dblocks=[1, 2, 1], total_charge=total_occ).canonize_sweep(to='first')
@@ -174,14 +174,14 @@ def test_generate_mpo():
     operators = yast.operators.SpinlessFermions(sym='U1')
     generate = yamps.Generator(N, operators)
 
-    parameters = {"t": 1, "mu": 0.2}
-    #H_str = "\sum_{j=0}^{"+str(N-1)+"} mu*cp_{j}.c_{j} + \sum_{j=0}^{"+str(N-2)+"} cp_{j}.c_{j+1} + \sum_{j=0}^{"+str(N-2)+"} t*cp_{j+1}.c_{j}"
-    H_str = "\sum_{j=0}^{"+str(N-1)+"} mu*n_{j} + \sum_{j=0}^{"+str(N-2)+"} cp_{j}.c_{j+1} + \sum_{j=0}^{"+str(N-2)+"} t*cp_{j+1}.c_{j}"
+    # parameters = {"t": 1, "mu": 0.2}
+    # #H_str = "\sum_{j=0}^{"+str(N-1)+"} mu*cp_{j}.c_{j} + \sum_{j=0}^{"+str(N-2)+"} cp_{j}.c_{j+1} + \sum_{j=0}^{"+str(N-2)+"} t*cp_{j+1}.c_{j}"
+    # H_str = "\sum_{j=0}^{"+str(N-1)+"} mu*n_{j} + \sum_{j=0}^{"+str(N-2)+"} cp_{j}.c_{j+1} + \sum_{j=0}^{"+str(N-2)+"} t*cp_{j+1}.c_{j}"
     
-    H = generate.mpo(H_str, parameters)
+    # H = generate.mpo(H_str, parameters)
 
-    H_str = "\sum_{j=0}^{"+str(N-1)+"} n_{j}"
-    occ =  generate.mpo(H_str)
+    # H_str = "\sum_{j=0}^{"+str(N-1)+"} n_{j}"
+    # occ =  generate.mpo(H_str)
     
     # occ = generate.mpo("sum_{i in sites} n_i")
     # H = generate.mpo("sum_j mu * n_j + sum_j' t * (cp_{j}.c_{j+1} + cp_{j+1}.c_{j})"
@@ -192,7 +192,7 @@ def test_generate_mpo():
 
     # H = sum_{k, s} cp_{k, s}.c_{k, s'} # think spinful
 
-    psi = generate.mps("prod_i ([n('u')_i == 1, n('d')_i == 1] + [n('u')_i == 0, n('d')_i == 0])" )
+    #psi = generate.mps("prod_i ([n('u')_i == 1, n('d')_i == 1] + [n('u')_i == 0, n('d')_i == 0])" )
 
     # psi = generate.mps("prod_i (f_i * [n_{i, u} == 1] + (1-f_i) * [n_{i, u} == 0])" )
     # map={'l1':0, 'l2':2, 'l3':5, 's1':4, 'r1':1, 'r2':3, 'r3':6}
@@ -201,17 +201,17 @@ def test_generate_mpo():
     # parameters = {'nn_sites'}
     # sum_{i, j in nn_sites}
 
-    "   sum_{s in spins} sum_{j in l_sites} sum_{i in s_sites} (v_i,j cp_i^s c_j^s + v_i,j cp_j^s c_i^s)"
-    " + sum_{s in spins} sum_{j in l_sites} n_i^s"
+    # "   sum_{s in spins} sum_{j in l_sites} sum_{i in s_sites} (v_i,j cp_i^s c_j^s + v_i,j cp_j^s c_i^s)"
+    # " + sum_{s in spins} sum_{j in l_sites} n_i^s"
 
     # parameters={"v": {(i, j): vij}}
     # cpu ('u')
 
-    for total_occ, E_target in Eng_sectors.items():
-        psi = generate.random_mps(D_total=6, n=total_occ).canonize_sweep(to='first')
-        occ_target = [total_occ] * len(E_target)
-        psi = run_dmrg(psi, H, occ, E_target, occ_target, version='2site', opts_svd=opts_svd)
-        print(psi.get_bond_dimensions())
+    # for total_occ, E_target in Eng_sectors.items():
+    #     psi = generate.random_mps(D_total=6, n=total_occ).canonize_sweep(to='first')
+    #     occ_target = [total_occ] * len(E_target)
+    #     psi = run_dmrg(psi, H, occ, E_target, occ_target, version='2site', opts_svd=opts_svd)
+    #     print(psi.get_bond_dimensions())
 
 
 
@@ -220,4 +220,4 @@ if __name__ == "__main__":
     test_dense_dmrg()
     test_Z2_dmrg()
     test_U1_dmrg()
-    test_generate_mpo()
+    #test_generate_mpo()
