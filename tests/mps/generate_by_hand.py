@@ -32,6 +32,31 @@ def mpo_XX_model_dense(config, N, t, mu):
         H.A[n].set_block(val=tmp, Ds=Ds)
     return H
 
+def mpo_occupation_dense(config, N):
+    nn = np.array([[0, 0], [0, 1]])
+    ee = np.array([[1, 0], [0, 1]])
+    oo = np.array([[0, 0], [0, 0]])
+
+    H = yamps.Mpo(N)
+    for n in H.sweep(to='last'):  # empty tensors
+        H.A[n] = yast.Tensor(config=config, s=(1, 1, -1, -1))
+        if n == H.first:
+            tmp = np.block([[nn, ee]])
+            tmp = tmp.reshape((1, 2, 2, 2))
+            Ds = (1, 2, 2, 2)
+        elif n == H.last:
+            tmp = np.block([[ee], [nn]])
+            tmp = tmp.reshape((2, 2, 1, 2))
+            Ds = (2, 2, 2, 1)
+        else:
+            tmp = np.block([[ee, oo],
+                            [nn, ee]])
+            tmp = tmp.reshape((2, 2, 2, 2))
+            Ds = (2, 2, 2, 2)
+        tmp = np.transpose(tmp, (0, 1, 3, 2))
+        H.A[n].set_block(val=tmp, Ds=Ds)
+    return H
+
 def mpo_XX_model_Z2(config, N, t, mu):
     H = yamps.Mpo(N)
     for n in H.sweep(to='last'):
@@ -56,6 +81,21 @@ def mpo_XX_model_Z2(config, N, t, mu):
     return H
 
 
+def mpo_occupation_Z2(config, N):
+    H = yamps.Mpo(N)
+    for n in H.sweep(to='last'):
+        H.A[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
+        if n == H.first:
+            H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(1, 1, 1, 2))
+        elif n == H.last:
+            H.A[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(2, 1, 1, 1))
+        else:
+            H.A[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[[1, 0], [1, 1]], Ds=(2, 1, 1, 2))
+    return H
+
 def mpo_XX_model_U1(config, N, t, mu):
     H = yamps.Mpo(N)
     for n in H.sweep(to='last'):
@@ -79,6 +119,22 @@ def mpo_XX_model_U1(config, N, t, mu):
             H.A[n].set_block(ts=(1, 0, 1, 0), val=[1, 0], Ds=(1, 1, 1, 2))
     return H
 
+
+def mpo_occupation_U1(config, N):
+    H = yamps.Mpo(N)
+    for n in H.sweep(to='last'):
+        H.A[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
+        if n == H.first:
+            H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(1, 1, 1, 2))
+        elif n == H.last:
+            H.A[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(2, 1, 1, 1))
+        else:
+            H.A[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 1, 2))
+            H.A[n].set_block(ts=(0, 1, 1, 0), val=[[1, 0], [1, 1]], Ds=(2, 1, 1, 2))
+    return H
+
 def mpo_XX_model(config, N, t, mu):
     if config.sym.SYM_ID == 'dense':
         return mpo_XX_model_dense(config, N, t, mu)
@@ -86,3 +142,13 @@ def mpo_XX_model(config, N, t, mu):
         return mpo_XX_model_Z2(config, N, t, mu)
     elif config.sym.SYM_ID == 'U(1)':
         return mpo_XX_model_U1(config, N, t, mu)
+
+
+
+def mpo_occupation(config, N):
+    if config.sym.SYM_ID == 'dense':
+        return mpo_occupation_dense(config, N)
+    elif config.sym.SYM_ID == 'Z2':
+        return mpo_occupation_Z2(config, N)
+    elif config.sym.SYM_ID == 'U(1)':
+        return mpo_occupation_U1(config, N)

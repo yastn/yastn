@@ -1,12 +1,12 @@
 """ basic procedures of single mps """
 import numpy as np
 try:
-    from . import generate_random, generate_by_hand, generate_automatic
+    from . import generate_random, generate_by_hand
     from .configs import config_dense, config_dense_fermionic
     from .configs import config_U1, config_U1_fermionic
     from .configs import config_Z2, config_Z2_fermionic
 except ImportError:
-    import generate_random, generate_by_hand, generate_automatic
+    import generate_random, generate_by_hand
     from configs import config_dense, config_dense_fermionic
     from configs import config_U1, config_U1_fermionic
     from configs import config_Z2, config_Z2_fermionic

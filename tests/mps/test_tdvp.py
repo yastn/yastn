@@ -3,12 +3,12 @@ import logging
 import pytest
 import yamps
 try:
-    from . import generate_random, generate_by_hand, generate_automatic
+    from . import generate_random, generate_by_hand
     from .configs import config_dense, config_dense_fermionic
     from .configs import config_U1, config_U1_fermionic
     from .configs import config_Z2, config_Z2_fermionic
 except ImportError:
-    import generate_random, generate_by_hand, generate_automatic
+    import generate_random, generate_by_hand
     from configs import config_dense, config_dense_fermionic
     from configs import config_U1, config_U1_fermionic
     from configs import config_Z2, config_Z2_fermionic
@@ -67,7 +67,7 @@ def test_dense_tdvp():
     #
     # The Hamiltonian is obtained with automatic generator (see source file).
     #
-    H = generate_automatic.mpo_XX_model(config_dense_fermionic, N=N, t=1, mu=0.25)
+    H = generate_by_hand.mpo_XX_model(config_dense_fermionic, N=N, t=1, mu=0.25)
     #
     # To standardize this test we will fix a seed for random MPS we use
     #
@@ -122,7 +122,7 @@ def test_Z2_tdvp():
     logging.info(' Tensor : Z2 ')
 
     Eng_gs = {0: -2.232050807568877, 1: -1.982050807568877}
-    H = generate_automatic.mpo_XX_model(config_Z2_fermionic, N=N, t=1, mu=0.25)
+    H = generate_by_hand.mpo_XX_model(config_Z2_fermionic, N=N, t=1, mu=0.25)
 
     for parity in (0, 1):
         for version in ('1site', '2site'):
@@ -145,7 +145,7 @@ def test_U1_tdvp():
     logging.info(' Tensor : U1 ')
 
     Eng_gs = {1: -1.482050807568877, 2: -2.232050807568877}
-    H = generate_automatic.mpo_XX_model(config_U1_fermionic, N=N, t=1, mu=0.25)
+    H = generate_by_hand.mpo_XX_model(config_U1_fermionic, N=N, t=1, mu=0.25)
 
     for charge in (1, 2):
         for version in ('1site', '2site', '12site'):

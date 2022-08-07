@@ -2,12 +2,12 @@
 import pytest
 import yamps
 try:
-    from . import generate_random, generate_by_hand, generate_automatic
+    from . import generate_random, generate_by_hand
     from .configs import config_dense, config_dense_fermionic
     from .configs import config_U1, config_U1_fermionic
     from .configs import config_Z2, config_Z2_fermionic
 except ImportError:
-    import generate_random, generate_by_hand, generate_automatic
+    import generate_random, generate_by_hand
     from configs import config_dense, config_dense_fermionic
     from configs import config_U1, config_U1_fermionic
     from configs import config_Z2, config_Z2_fermionic
@@ -62,7 +62,7 @@ def test_multiplication():
     #
     # The Hamiltonian is obtained with automatic generator (see source file).
     #
-    H = generate_automatic.mpo_XX_model(config_U1_fermionic, N=N, t=1, mu=0.2)
+    H = generate_by_hand.mpo_XX_model(config_U1_fermionic, N=N, t=1, mu=0.2)
     #
     # To standardize this test we will fix a seed for random MPS we use
     #

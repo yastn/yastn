@@ -1,12 +1,12 @@
 """ adding set of the Mps-s, automatic Mps generator """
 import yamps
 try:
-    from . import generate_random, generate_by_hand, generate_automatic
+    from . import generate_random, generate_by_hand
     from .configs import config_dense, config_dense_fermionic
     from .configs import config_U1, config_U1_fermionic
     from .configs import config_Z2, config_Z2_fermionic
 except ImportError:
-    import generate_random, generate_by_hand, generate_automatic
+    import generate_random, generate_by_hand
     from configs import config_dense, config_dense_fermionic
     from configs import config_U1, config_U1_fermionic
     from configs import config_Z2, config_Z2_fermionic
@@ -18,7 +18,7 @@ tol = 1e-12
 def test_gen_XX_dmrg_dense():
     N = 7
     t, mu = 1., .2
-    H = generate_automatic.mpo_XX_model(config_dense_fermionic, N, t, mu)
+    H = generate_by_hand.mpo_XX_model(config_dense_fermionic, N, t, mu)
     Eng_gs = -3.427339492125848
 
     Dmax = 32
@@ -35,7 +35,7 @@ def test_gen_XX_dmrg_dense():
 def test_gen_XX_dmrg_U1():
     N = 7
     t, mu = 1., .2
-    H = generate_automatic.mpo_XX_model(config_U1_fermionic, N, t, mu)
+    H = generate_by_hand.mpo_XX_model(config_U1_fermionic, N, t, mu)
     Eng_sectors = {2: -2.861972627395668,
                    3: -3.427339492125848,
                    4: -3.227339492125848}
