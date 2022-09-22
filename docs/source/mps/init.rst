@@ -1,35 +1,94 @@
-Initialisation
-===================
+Initialization
+==============
 
 
-General information
---------------------------------
+Creating empty MPS/MPO
+----------------------
 
-`YAMPS` provides a class object :code:`Mps` dedicated to represent `matrix product state` (MPS) and :code:`Mpo` dedicated to represent `matrix product operator` (MPO). :code:`Mps` and :code:`Mpo` include abtract information on general contruction and properties of an object. The 
-composition of MPS/MPO as itself is build with :code:`yast.Tensor` which are assigned to MPS/MPO as ordered list of tensors. The tensors building the body of MPS/MPO has to be matching along virtual dimension. The virtual dimension on the eges of the MPS/MPO should be `D=1`. 
+Both MPS and MPO are represented by the same class :class:`yamps.MpsMpo`, sharing many operations. The only difference between them is the number of their physical dimensions. The class :class:`yamps.MpsMpo` defines MPS/MPO through the set of tensors *A*
+which are stored as integer-indexed dictionary :code:`yamps.MpsMpo.A` 
+of rank-3/rank-4 :class:`yast.Tensor`'s. 
 
-`YAMPS` supports one-dimensional structures with open boundary conditions which can be used to perform :ref:`theory/mps/basics:Algorithms` for e.g. energy optimisation or time evolution, or to do :ref:`theory/mps/basics:Measurements`.
-
-:code:`Mps` and :code:`Mpo` are belong to a common class :code:`yamps.MpsMpo` sharing many operations the only difference between them is that :code:`Mps` reprsents MPS with one phisical dimension for a tensor and :code:`Mpo` repsents MPO with two phisical dimensions. 
+To create empty MPS/MPO, i.e., without any tensors call
 
 .. autoclass:: yamps.MpsMpo
 
+Short-hand functions for creation of empty MPS/MPO
 
-.. _initialization:
-Creating :meth:`yamps.Mps` and :meth:`yamps.Mpo`
-------------------------------------------------
+.. autofunction:: yamps.Mps
+.. autofunction:: yamps.Mpo
 
-The initialisation of an empty object can be done by calling :code:`yamps.Mps(N)` (:code:`yamps.Mpo(N)`) where :code:`N` is number to tensors building the object. 
-The symmetry of :code:`yamps.Mps` is inherited by its building blocks. Its building blocks can be assigned directly by :ref:`examples/mps/mps:Filling matrix product with tensors`. 
 
-`YAMPS` provides a tool for automatic MPO generation. The genetator works under :code:`GenerateOpEnv` class which allows to contruct Hamiltonian of any form for bosonic or fermionic system. 
+Setting MPS/MPO tensors
+-----------------------
 
-.. automodule:: yamps._generator.GenerateOpEnv
+The tensors of MPS/MPO can be set manually, using familiar :code:`dict` access
+
+.. code-block::
+
+	# create empty MPS over three sites
+	Y= yamps.Mps(3)
+
+	# create 3x2x3 random dense tensor
+	A_1= yast.rand(yast.make_config(), Legs=(yast.Leg(s=1,D=(3,)), 
+		yast.Leg(s=1,D=(2,)), yast.Leg(s=-1,D=(3,))))
+
+	# assign tensor to site 1
+	Y[1]= A_1
+
+To create :class:`yast.Tensor`'s see :ref:`YAST's basic creation operations<tensor/init:basic creation operations>`. 
+For more examples, see :ref:`Setting MPS/MPO manually<examples/mps/mps:building yamps object manually>`. 
+
+
+Automatic creation of MPS
+-------------------------
+
+
+Generate MPO automatically
+--------------------------
+
+`YAMPS` provides a tool for automatic MPO generation, which allows to construct Hamiltonian of any form for both bosonic and fermionic systems.
+
+.. autoclass:: yamps.Generator
 
 To initiallize the generator :code:`gen = yamps.GenerateOpEnv(N, config, opts)` we need to provide a length of the MPO :code':`N`, and :ref:`tensor/configuration:YAST configuration` :code:`config` which will also define the commutation rules :code:`config.fermionic`.
 The instruction for truncation :code:`opts` is an optional argument.
 
 The generator has to be supplied with the operators we want to use. If you want to use predefined operators suitable with :code:`config` then you should :code:`gen.use_default(basis_type)`. Make sure that you know the definition for the operators by checking out:
+
+..
+	=======
+	The class :class:`yamps.Mps` defines matrix product states and operators through a set of tensors *A*. It consists of integer-indexed dictionary of :class:`yast.Tensor`. 
+	Using rank-3 tensors *A*, :class:`yamps.Mps` can represent states
+
+	.. math::
+		
+		|\psi\rangle &= \sum_{\{\sigma\}} c_{\{\sigma\}} |\{\sigma\}\rangle,\\
+		c_{\{\sigma\}} &= Tr_{aux}[A^{\sigma_0}_{a_0,a_1}A^{\sigma_1}_{a_1,a_2}\ldots
+		A^{\sigma_{N-1}}_{a_{N-1},a_N}],
+
+	where each of tensors *A* has three indices, in order: left virtual :math:`a_i`, single physical :math:`\sigma`, and right virtual index :math:`a_{i+1}`. 
+	The operators are represented similarily by rank-4 tensors *A*
+
+	.. math::
+		
+		O &= \sum_{\{\sigma\},\{\sigma'\}} O_{\{\sigma\},\{\sigma'\}} |\{\sigma\}\rangle\langle\{\sigma'\}|,\\
+		O_{\{\sigma\},\{\sigma'\}} &= Tr_{aux}[A^{\sigma_0,\sigma'_0}_{a_0,a_1}A^{\sigma_1,\sigma'_1}_{a_1,a_2}\ldots
+		A^{\sigma_{N-1}\sigma'_{N-1}}_{a_{N-1},a_N}]
+
+	with convention for index order as follows: left virtual :math:`a_i`, physical :math:`\sigma`, physical :math:`\sigma'`, and right virtual index :math:`a_{i+1}`.
+	The indices :math:`\sigma,\sigma'` represent *bra* and *ket* physical indices
+	of the operator.
+
+	The `yamps.Mps` defines matrix products with open-boundary condition. Therefore, 
+	the bond dimension of virtual indices on the edges, :math:`a_0` and :math:`a_N` is 1 by default.
+
+
+	Creating `yamps.Mps` matrix product
+	-----------------------------------
+
+	.. autoclass:: yamps.Mps
+	>>>>>>> Stashed changes
 
 .. autofunction:: yamps.basis.use_default_basis
 

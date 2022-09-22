@@ -4,31 +4,35 @@ from ..sym import sym_none, sym_Z3, sym_U1
 from ..tensor import YastError, Tensor
 
 class Spin1:
-    """ Predefine operators for spin-1 system. """
-
+    # Predefine operators for spin-1 system.
     def __init__(self, sym='dense', **kwargs):
-        """
-        Generator of standard operators for 3-dimensional Hilbert space.
-
-        Predefine identity, rising and lowering operators, and spin-1 matrices (if allowed by symmetry).
-
-        Other config parameters can be provided, see :meth:`yast.make_config`
-        fermionic is set to False.
+        r"""
+        A set of standard operators for 3-dimensional Hilbert space as Spin-1 representation 
+        of su(2) algebra. Defines identity, :math:`S^z,\ S^x,\ S^y` operators 
+        and :math:`S^+,\ S^-` raising and lowering operators (if allowed by symmetry).
 
         Parameters
         ----------
         sym : str
-            Should be 'dense', 'Z3', or 'U1'.
+            Explicit symmetry to used. Allowed options are :code:`'dense'`, ``'Z3'``, or ``'U1'``.
+
+        kwargs
+            Other YAST configuration parameters can be provided, see :meth:`yast.make_config`.
 
         Notes
         -----
-        Assume the following conventions:
-        For dense, basis order is (sz=+1, sz=0, sz=-1)
-        For Z3, charge t=0 <=> Z=1, t=1 <=> Z=0; t=2 <=> Z=-1;
-        For U1, charge t=-1 <=> sz=-1, t=0 <=> sz=0, t=1 <=> sz=1; i.e., sz = t
+        The following basis ordering and charge conventions are assumed
 
-        Using :meth:`yast.to_numpy`, U1 additionally requires reverse=True to obtain the standard matrix representation,
-        as by default the charges get ordered in the increasing order.
+            * For :code:`sym='dense'`, the basis order is (sz=+1, sz=0, sz=-1).
+            * For :code:`sym='Z3'`, charge t=0 -> sz=+1, t=1 -> sz=0; t=2 -> sz=-1, 
+              i.e., :math:`sz = e^{i \frac{2}{3}\pi t}`
+            * For :code:`sym='U1'`, charge t=-1 -> sz=-1, t=0 -> sz=0, t=1 -> sz=1; i.e., sz = t
+
+        Default configuration sets :code:`fermionic` to :code:`False`.
+
+        When using :meth:`yast.to_numpy` to recover usual dense representation of the algebra
+        for :code:`sym='U1'` symmetry, :code:`reverse=True` is required 
+        since by default the charges are ordered in the increasing order.
         """
         if not sym in ('dense', 'Z3', 'U1'):
             raise YastError("For Spin1 sym should be in ('dense', 'Z3', 'U1').")
@@ -59,7 +63,7 @@ class Spin1:
         return I
 
     def sx(self):
-        """ Spin-1 sx operator. """
+        """ Spin-1 :math:`S^x` operator. """
         isq2 = 1 / np.sqrt(2)
         if self._sym == 'dense':
             sx = Tensor(config=self.config, s=self.s)
@@ -69,7 +73,7 @@ class Spin1:
         return sx
 
     def sy(self):
-        """ Spin-1 sy operator. """
+        """ Spin-1 :math:`S^y` operator. """
         iisq2 = 1j / np.sqrt(2)
         if self._sym == 'dense':
             sy = Tensor(config=self.config, s=self.s, dtype='complex128')
@@ -79,7 +83,7 @@ class Spin1:
         return sy
 
     def sz(self):
-        """ Spin-1 sz operator. """
+        """ Spin-1 :math:`S^z` operator. """
         if self._sym == 'dense':
             sz = Tensor(config=self.config, s=self.s)
             sz.set_block(val=[[1, 0, 0], [0, 0, 0], [0, 0, -1]], Ds=(3, 3))
@@ -96,7 +100,7 @@ class Spin1:
         return sz
 
     def sp(self):
-        """ Spin-1 rising operator. """
+        """ Spin-1 raising operator :math:`S^+=S^x + iS^y`. """
         sq2 = np.sqrt(2)
         if self._sym == 'dense':
             sp = Tensor(config=self.config, s=self.s)
@@ -112,7 +116,7 @@ class Spin1:
         return sp
 
     def sm(self):
-        """ Spin-1 lowering operator. """
+        """ Spin-1 lowering operator :math:`S^-=S^x - iS^y`. """
         sq2 = np.sqrt(2)
         if self._sym == 'dense':
             sm = Tensor(config=self.config, s=self.s)
@@ -128,6 +132,12 @@ class Spin1:
         return sm
 
     def to_dict(self):
+        """
+        Returns
+        -------
+        dict(str,yast.Tensor)
+            a map from strings to operators
+        """
         return {'I': self.I(),
                 'sx': self.sx(),
                 'sy': self.sy(),
