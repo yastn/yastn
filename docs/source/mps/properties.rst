@@ -1,28 +1,34 @@
 Properties
 ==========
 
+Symmetry
+--------
 
-YAMPS properties
------------------------
+The symmetry of the `YAMPS` MPS or MPO is inherted from the symmetry 
+of :meth:`yast.Tensor<yast.Tensor>`'s which form the matrix product. The symmetries of the tensors have to be consistent along virtual dimensions implying that the global MPS/MPO symmetry is a consequence of the local symmetry of :meth:`yast.Tensor<yast.Tensor>`.
 
-The symmetry of the `YAMPS` object is determined by the symmetry of :meth:`yast.Tensor`'s forming matrix product. The symmetries of the tensors have to be consistent along virtual dimensions implying that global MPS/MPO symmetry is a consequence of 
-local symmetry for :meth:`yast.Tensor`.
+Physical and virtual spaces
+---------------------------
 
-The :code:`Mps` and :code:`Mpo` differ by the number of physical dimensions. You can check what is the interpretation of the `YAMPS` object :code:`A` by checking if :code:`A.nr_phys` is `1` implying MPS or `2` implying MPO. 
+MPS is built from tensors with single physical index and two virtual indices. 
+MPO tenors have an additional physical index. The number of physical indices
+can be accessed through the property :code:`yamps.MpsMps.nr_phys`.
 
-Each tensor of the `YAMPS` object has two virtual dimensions and `1` or `2`  physical dimensions. The tensors assigned to `YAMPS` object are assumed a left-most leg of index `0` as left virtual dimension and 
-the right-most leg of the highest index as right virtual dimension. 
+The index convention for MPS/MPO tensors in `YAMPS` is:
+0-th index (leftmost) corresponds to the left virtual space,
+1-st index is physical, for MPO the 2-nd index is also physical, 
+and finally the highest index (rightmost) corresponds to the right virtual space. 
 
 ::
     
-    # indicies in the individual tensor in MPS
+    # indices of the individual tensors in MPS
         ___
     0--|___|--2
          |
          1 (ket)
 
-    # indicies in the individual tensor in MP0
-    # (the physical indicies are ordered as for a usual matrix)
+    # indices of the individual tensors in MP0. The physical indices 
+    # are ordered as for usual quantum-mechanical operator, i.e., O = \sum_{ij} O_ij |i><j|)
 
          2 (bra)
         _|_
@@ -30,18 +36,34 @@ the right-most leg of the highest index as right virtual dimension.
          |
          1 (ket)
 
+The index convention can be accessed through properties 
 
-You can always check what are left virtal legs by running :code:`A.left` (right virtal :code:`A.right`) and physical legs by running :code:`A.phys` which gives a tuple of indicies.
+    * :code:`yamps.MpsMpo.left` for position of left virtual index
+    * :code:`yamps.MpsMpo.right` for position of right virtual index
+    * :code:`yamps.MpsMpo.phys` for position(s) of physical indices given as :code:`tuple(int)`.
 
+In case of MPS/MPO with no explicit symmetry, the virtual space :math:`V_{j,j+1}` 
+for *j*-to-*j+1* bond is simple :math:`\mathbb{R}^{D_{j,j+1}}` 
+or :math:`\mathbb{C}^{D_{j,j+1}}` space. Typically, the maximal dimension allowed 
+dimension of these virtual spaces is the control parameter for matrix product representation. 
 
-Virtual dimension
------------------
+For symmetric MPS/MPO the virtual space has instead a structure of direct sum of simple spaces, dubbed *sectors*, labeled by symmetry charges *c* 
 
-The structure of virtual bond dimension is a control parameter for matrix product representation. In order to get the profile of the total (all blocks) bond dimension in the `YAMPS` object for :code:`A` run `Ds = A.get_bond_dimensions()`.
+.. math::
+    V_{j,j+1} = \oplus_{c} V^c_{j,j+1},\quad \textrm{where}\quad V^c_{j,j+1} = \mathbb{R}^{D^c_{j,j+1}}\ \textrm{or}\ \mathbb{C}^{D^c_{j,j+1}}.
+
+Note that for a product of abelian symmetries, the *c*'s are :code:`tuple(int)`. 
+Therefore, symmetric MPS/MPO ansatz is specified by the content of all its virtual spaces.
+Typically, the effective control parameter is the maximal total dimension 
+:math:`D_{j,j+1}=\sum_c D^c_{j,j+1}`. 
+
+To get the profile of the total bond dimensions along `YAMPS` MPS/MPO :code:`A` 
+call :code:`A.get_bond_dimensions()`.
 
 .. autofunction:: yamps.MpsMpo.get_bond_dimensions
 
-More detailed information is given by `A.get_bond_charges_dimensions()` where we get the information on each block in tensors.
+More detailed information resolved by charge sectors is given by 
+:code:`A.get_bond_charges_dimensions()`.
 
 .. autofunction:: yamps.MpsMpo.get_bond_charges_dimensions
 
@@ -49,12 +71,15 @@ More detailed information is given by `A.get_bond_charges_dimensions()` where we
 Schmidt values and entropy profile
 ----------------------------------
 
-The Schmidt values are extracted at each bond separately. In order to get it we do SVD decomposition with all sites to the left being in left-canonical form and all sites to the right being in right-canonical form. 
-You can get the profile for Schmidt values for all bipartition by :code:`SV = A.get_Schmidt_values()`.
+The Schmidt values are extracted at each bond separately. In order to get them, we do SVD decomposition with all sites to the left being in left-canonical form and all sites to the right being in right-canonical form 
+(see :ref:`Canonical form<theory/mps/basics:canonical form>`). 
+
+Given MPS/MPO :code:`A` you can get the profile for Schmidt values for all bipartitions by calling :code:`A.get_Schmidt_values()`.
 
 .. autofunction:: yamps.MpsMpo.get_Schmidt_values
 
-The entropy profile can be extracted by running :code:`en = A.get_entropy()`. As dafault we get von Neumann entropy (:math:`\alpha=1`). You can get the Renyi entropy of any order :math:`\alpha` by adding a flag :code:`alpha=<desired order>`.
+The Von Neumann or Renyi entropy profile (a function of Schmidt values) 
+can be extracted by running  :code:`A.get_entropy()`. 
 
 .. autofunction:: yamps.MpsMpo.get_entropy
 

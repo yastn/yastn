@@ -1,4 +1,4 @@
-""" A simple implementation of Matrix Product State (Mps) and Operator (Mpo) employing yast Tensor. """
+# A simple implementation of Matrix Product State (Mps) and Operator (Mpo) employing yast Tensor. 
 from ._mps import Mps, Mpo, MpsMpo, YampsError, add, multiply
 from ._auxliary import automatic_Mps, load_from_dict, load_from_hdf5, generate_mpo
 from ._env import Env2, measure_overlap, Env3, measure_mpo

@@ -98,7 +98,10 @@ Tensor norms
 Spectral decompositions
 -----------------------
 
-.. automodule:: yast.linalg
-	:noindex:
-	:members: svd, svd_with_truncation, qr, eigh, eigh_with_truncation,
-           	truncation_mask, truncation_mask_multiplets
+.. autofunction:: yast.linalg.svd 
+.. autofunction:: yast.linalg.svd_with_truncation
+.. autofunction:: yast.linalg.qr
+.. autofunction:: yast.linalg.eigh
+.. autofunction:: yast.linalg.eigh_with_truncation
+.. autofunction:: yast.linalg.truncation_mask
+.. autofunction:: yast.linalg.truncation_mask_multiplets

@@ -1,6 +1,10 @@
 YAMPS
-==============================
+=====
 
+YAMPS - *Yet another matrix product state* library, supporting
+abelian-symmetric matrix product states/operators and related algorithms.
+
+Abelian-symmetric tensor algebra is provided by :doc:`YAST<index>`.
 
 .. automodule:: yamps
    :members:
@@ -9,14 +13,14 @@ YAMPS
 
 Basic concepts
 ---------------------------------------
-
+   
 .. toctree::
    :glob:
 
    theory/mps/basics
 
 
-Mps and Mpo
+MPS and MPO
 ---------------------------------------
 
 .. toctree::
@@ -53,4 +57,3 @@ Examples
    :glob:
 
    examples/mps/mps
-

@@ -7,12 +7,36 @@ class YampsError(Exception):
 
 
 def Mps(N):
-    """ Generate empty Mps"""
-    return MpsMpo(N,  nr_phys=1)
+    """ 
+    Generate empty MPS for system of *N* sites.
+
+    Parameters
+    ----------
+    N : int
+        number of sites
+    
+    Returns
+    -------
+    yamps.MpsMpo
+        MPS with :code:`nr_phys=1`
+    """
+    return MpsMpo(N, nr_phys=1)
 
 def Mpo(N):
-    """ Generate empty Mpo"""
-    return MpsMpo(N,  nr_phys=2)
+    """ 
+    Generate empty MPO for system of *N* sites.
+
+    Parameters
+    ----------
+    N : int
+        number of sites
+    
+    Returns
+    -------
+    yamps.MpsMpo
+        MPO with :code:`nr_phys=2`
+    """
+    return MpsMpo(N, nr_phys=2)
 
 
 ###################################
@@ -20,21 +44,20 @@ def Mpo(N):
 ###################################
 def add(*states, amplitudes=None):
     r"""
-    Adds any number of Mps-s stored in a list states with multiplicative prefactors specified in ampitudes. 
-    It creates a new Mps as an output, in short: c = \sum_j amplitudes[j] * states[j]
+    Linear superposition of several MPS/MPOs with specific amplitudes.
 
     Parameters
     ----------
-        states : list of Mps-s
-            Each element of the list should contain a single Mps.
+    states : sequence(yamps.MpsMpo)
 
-        amplitudes : list of float/complex-s
-            If None, all amplitudes are 1.
+    amplitudes : list(scalar)
+        If :code:`None`, all amplitudes are assumed to be 1.
 
     Returns
     -------
-        c : Mps
-            new Mps, sum of all Mps-s in tens. It is independent of them
+    yast.MpsMpo
+        new MPS/MPO given by linear superpostion of :code:`states`, i.e. 
+        :math:`\sum_j \textrm{amplitudes[j]} \times \textrm{states[j]}`.
     """
     if amplitudes is None:
         amplitudes = [1] * len(states)
@@ -67,20 +90,38 @@ def add(*states, amplitudes=None):
 
 def multiply(a, b, mode=None):
     r"""
-    Multiplies mpo's/mps's, in short: c = a @ b
+    Performs MPO-MPS product resulting in a new MPS or
+    MPO-MPO product resulting in a new MPO. 
+
+    For MPS/MPO with no symmetry, the bond dimensions
+    of the result are given by the product of the bond dimensions of the inputs.
+    For symmetric MPS/MPO the virtual spaces of the result are given by   
+    :ref:`fusion <tensor/algebra:fusion of legs (reshaping)>` 
+    (i.e. resolving tensor product into direct sum) of the virtual spaces 
+    of the inputs
+    
+    .. math::
+        V^{\textrm{result}}_{j,j+1} = V^{a}_{j,j+1} \otimes V^{b}_{j,j+1} 
+        = \sum_{c} V^{\textrm{result},c}_{j,j+1},
+
+    where the charge sectors :math:`V^{\textrm{result},c}` are computed during fusion. 
+
+    .. note::
+        One can equivalently call :code:`a @ b`.
 
     Parameters
     ----------
-        a, b : Mps
-            matrix products states/operators to be multiplied
+        a, b : yast.MpsMpo, yast.MpsMpo 
+            a pair of MPO and MPS or two MPO's to be multiplied
 
         mode : str
-           mode for yast.fuse_legs; If None, use default from tensor configs.
+           mode for :meth:`yast.fuse_legs`; If :code:`None` (default)
+           use default setting from YAST tensor's 
+           :ref:`configuration<tensor/configuration:yast configuration>`.
 
     Returns
     -------
-        c : Mps
-            new Mps,
+        yast.MpsMpo
     """
     if a.N != b.N:
         YampsError('Mps-s must have equal number of Tensor-s.')
@@ -118,14 +159,21 @@ class _TN1D_base():
 
     def __init__(self, N):
         r"""
-        Initialize basic structure for matrix product state/operator/purification.
+        Creates an empty MPS (``nr_phys=1``) or MPO (``nr_phys=2``) for a system with N sites.
+
+        For example:
+
+            * create empty MPS for a system of N=10 sites call 
+              :code:`mps = yamps.Mps(N=10, nr_phys=1)` 
+            * create empty MPO (or density matrix) for a system of N=10 sites call 
+              :code:`mpo = yamps.Mps(N=10, nr_phys=2)`.
 
         Parameters
         ----------
         N : int
             number of sites of mps, or directly an instance of geometry class
         nr_phys : int
-            number of physical legs: _1_ for mps; _2_ for mpo;
+            number of physical legs: 1 for states (default) or 2 for operators
         """
         if not isinstance(N, int) or N <= 0:
             raise YampsError("Number of Mps sites N should be a positive integer.")
@@ -158,13 +206,16 @@ class _TN1D_base():
 
     def clone(self):
         r"""
-        Makes a clone of Mps or Mpo. Clone all tensors tracking gradients.
-
-        Use when retaining "old" mps is neccesary -- other operations on mps are often done in-place.
+        Makes a clone of MPS or MPO by :meth:`cloning<yast.Tensor.clone>` 
+        all :class:`yast.Tensor<yast.Tensor>`'s into a new and independent :class:`yamps.MpsMpo`.
+        
+        .. note::
+            Cloning preserves autograd tracking on all tensors.
 
         Returns
         -------
-        out : cloned Mps or Mpo
+        yast.MpsMpo
+            a clone of :code:`self`
         """
         phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: ten.clone() for ind, ten in self.A.items()}
@@ -173,14 +224,20 @@ class _TN1D_base():
 
     def copy(self):
         r"""
-        Makes a copy of Mps or Mpo. Copies all :meth:`yast.Tensor`'s to an independent :meth:`yamps` object.
+        Makes a copy of MPS or MPO by :meth:`copying<yast.Tensor.copy>` all :class:`yast.Tensor<yast.Tensor>`'s 
+        into a new and independent :class:`yamps.MpsMpo`.
 
-        Warning, this might break autograd if you are using it.
-        Use when retaining "old" mps is necessary -- other operations on mps are often done in-place.
+        .. warning:: 
+            this operation does not preserve autograd on the returned :code:`yast.MpsMpo`.
+        
+        .. note::
+            Use when retaining "old" MPS/MPO is necessary. Most operations on 
+            MPS/MPO are typically done in-place.
 
         Returns
         -------
-        out : copied Mps or Mpo
+        yast.MpsMpo
+            a copy of :code:`self`
         """
         phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: ten.copy() for ind, ten in self.A.items()}
@@ -202,15 +259,15 @@ class _TN1D_base():
 
     def __mul__(self, multiplier):
         """
-        Makes a copy of Mps or Mpo, multiplying the first tensor by a number.
+        New MPS/MPO with first tensor multiplied by a scalar.
 
         Parameters
         ----------
-        multiplier : Number
+        multiplier : scalar
     
         Returns
         -------
-        out : Mps or Mpo
+        yast.MpsMpo
         """
         phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: multiplier * ten if ind == self.first else ten.clone() \
@@ -220,11 +277,15 @@ class _TN1D_base():
 
     def __rmul__(self, number):
         """
-        Makes a copy of Mps or Mpo, multiplying the first tensor by a number.
+        New MPS/MPO with first tensor multiplied by a scalar.
 
+        Parameters
+        ----------
+        multiplier : scalar
+    
         Returns
         -------
-        out : Mps or Mpo
+        yast.MpsMpo
         """
         return self.__mul__(number)
     
@@ -259,25 +320,26 @@ class _TN1D_base():
 
 
 class MpsMpo(_TN1D_base):
-    """
-    The basic structure of mps (for nr_phys=1) and mpo (for nr_phys=2) and some basic operations on an object.
-    This is a parent structure for Mps (for nr_phys=1), Mpo (for nr_phys=2).
-    Order of legs for a single mps tensor is (left virtual, 1st physical, 2nd physical, right virtual).
-    MpsMpo tensors are index with :math:`0, 1, 2, 3, \\ldots, N-1` (with :math:`0` corresponding to the first site).
-    A central block (associated with a bond) is indexed using ordered tuple (n, n+1).
-    Maximally one central block is allowed.
-    """
-
+    # The basic structure of mps (for nr_phys=1) and mpo (for nr_phys=2) 
+    # and some basic operations on an object. This is a parent structure for Mps (for nr_phys=1), 
+    # Mpo (for nr_phys=2). Order of legs for a single mps tensor is (left virtual, 
+    # 1st physical, 2nd physical, right virtual).
+    # MpsMpo tensors are index with :math:`0, 1, 2, 3, \\ldots, N-1` 
+    # (with :math:`0` corresponding to the first site).
+    # A central block (associated with a bond) is indexed using ordered tuple (n, n+1).
+    # Maximally one central block is allowed.
+    
     def __init__(self, N, nr_phys=1):
         r"""
-        Initialize basic structure for matrix product state/operator/purification.
+        Create empty MPS (:code:`nr_phys=1`) or MPO (:code:`nr_phys=2`) 
+        for system of *N* sites. Empty MPS/MPO has no tensors assigned.
 
         Parameters
         ----------
         N : int
-            number of sites of mps, or directly an instance of geometry class
+            number of sites
         nr_phys : int
-            number of physical legs: _1_ for mps; _2_ for mpo;
+            number of physical legs: 1 for MPS (default); 2 for MPO;
         """
         super().__init__(N)
 
@@ -304,13 +366,13 @@ class MpsMpo(_TN1D_base):
 
     def get_bond_dimensions(self):
         r"""
-        Returns bond dimensions of mps.
+        Returns total bond dimensions of all virtual spaces along MPS/MPO.
 
         Returns
         -------
-        Ds : list
-            list of bond dimensions on virtual legs from first to last,
-            including "trivial" leftmost and rightmost virtual indices.
+        list(int)
+            list of total bond dimensions on virtual legs from first to last,
+            including "trivial" leftmost and rightmost virtual spaces.
         """
         Ds = [self.A[n].get_shape(self.left[0]) for n in self.sweep(to='last')]
         Ds.append(self.A[self.last].get_shape(self.right[0]))
@@ -318,13 +380,14 @@ class MpsMpo(_TN1D_base):
 
     def get_bond_charges_dimensions(self):
         r"""
-        Returns charges and dimensions of all virtual mps bonds.
+        Returns list of charge sectors and their dimensions for all virtual spaces 
+        along MPS/MPO.
 
         Returns
         -------
-        tDs : list
+        list(dict(int,int)) or list(dict(tuple(int),int))
             list of charges and corresponding dimensions on virtual mps bonds from first to last,
-            including "trivial" leftmost and rightmost virtual indices.
+            including "trivial" leftmost and rightmost virtual spaces.
         """
         tDs = []
         for n in self.sweep(to='last'):
@@ -465,17 +528,26 @@ class MpsMpo(_TN1D_base):
 
     def canonize_sweep(self, to='last', normalize=True):
         r"""
-        Sweep though the mps and canonize it toward the first of last site.
+        Sweep though the MPS/MPO and put it in left/right canonical form 
+        using :meth:`QR<yast.linalg.qr>` decomposition by setting 
+        :code:`to='first'`/:code:`to='last'`. It is assumed that tensors are enumerated 
+        by index increasing from 0 (:code:`first`) to N-1 (:code:`last`). 
 
-        At the end, attach the trivial central block to the end of the chain, so that there is no central block left.
+        Finally, the trivial central block is attached to the end of the chain.
 
         Parameters
         ----------
         to : str
-            'last' or 'first'.
+            code:`'last'` (default) or :code:`'first'`.
 
         normalize : bool
-            If true, S is normalized to 1 according to the standard 2-norm.
+            If :code:`true` (default), the central block and thus MPS/MPO is normalized 
+            to unity according to the standard 2-norm.
+
+        Returns
+        -------
+        self : yast.MpsMpo
+            in-place canonized MPS/MPO
         """
         self.absorb_central(to=to)
         for n in self.sweep(to=to):
@@ -483,27 +555,36 @@ class MpsMpo(_TN1D_base):
             self.absorb_central(to=to)
         return self
 
-    def truncate_sweep(self, to='last', normalize=True, opts=None):
+    def truncate_sweep(self, to='last', normalize=True, opts={'tol': 1e-12}):
         r"""
-        Sweep though the mps, canonize it toward the first or last site truncating via svd.
+        Sweep though the MPS/MPO and put it in left/right canonical form 
+        using :meth:`SVD<yast.linalg.qr>` decomposition by setting 
+        :code:`to='first'`/:code:`to='last'`. It is assumed that tensors are enumerated 
+        by index increasing from 0 (:code:`first`) to N-1 (:code:`last`). 
 
-        Truncation makes sense if mps is in the canonical form in the oposite direction to that of the current sweep.
+        Access to singular values during sweeping allows to truncate virtual spaces.
+        This truncation makes sense if MPS/MPO is already in the canonical form 
+        in the direction opposite to current sweep, i.e., left canonical form for :code:`to='last'`
+        or right canonical form for :code:`to='first'`.
+
+        The MPS/MPO is canonized in-place. 
 
         Parameters
         ----------
         to : str
-            'last' or 'first'.
+            code:`'last'` (default) or :code:`'first'`.
 
         normalize : bool
-            If true, S is normalized to 1 according to the standard 2-norm.
+            If :code:`true` (default), the central block and thus MPS/MPO is normalized 
+            to unity according to the standard 2-norm.
 
         opts : dict
-            Options passed for svd; includes information how to truncate.
+            options passed to :meth:`SVD<yast.linalg.qr>`, including options governing truncation.
 
-        Return
-        ------
-        discarded : float
-            maximal norm of discarded singular values normalized by the remining ones
+        Returns
+        -------
+        float
+            maximal norm of the discarded singular values after normalization
         """
         discarded_max = 0.
         if opts is None:
@@ -564,12 +645,18 @@ class MpsMpo(_TN1D_base):
 
     def get_entropy(self, alpha=1):
         r"""
-        Entropy for a bipartition on each bond
+        Entropy of bipartition across each bond.
+
+        Parameters
+        ----------
+        alpha : int
+            Value 1 (default) computes Von Neumann entropy. Higher values
+            instead compute order :code:`alpha` Renyi entropies.
 
         Returns
         -------
-        Entropy : list
-            list of bond entropies on virtual legs.
+        list(scalar)
+            list of bond entropies.
         """
         Entropy = [0]*self.N
         self.canonize_sweep(to='last', normalize=False)
@@ -582,12 +669,12 @@ class MpsMpo(_TN1D_base):
 
     def get_Schmidt_values(self):
         r"""
-        Schmidt values for a bipartition on each bond
+        Schmidt values for bipartition across each of the bonds
 
         Returns
         -------
-        SV : dictionary
-            each element of dictionary is a Schmidt values for a bipartition on this bond
+        dict(int,yast.Tensor)
+            integer-indexed dictionary of Schmidt values stored as diagonal tensors.
         """
         SV = {}
         self.canonize_sweep(to='last', normalize=False)

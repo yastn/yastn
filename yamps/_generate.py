@@ -61,23 +61,30 @@ def generate_mpo(I, terms, opts):
 
 
 class Generator:
-    """ Generator to create Mpo-s and Mps-s from local operators. """
+    
     def __init__(self, N, operators, map=None, Is=None, parameters=None, opts={"tol": 1e-14}):
         """
+        Generator allowing creation of MPO/MPS from a set of local operators.
+
+        Parameters
+        ----------
+
         N : int
-            number of sites of mps/mpo.
-        operators : class
-            generator of local operators, e.g., an instance of :class:`yast.operators.Spin12`.
-        map : dict
-            custom labels for mps sites, {site_label: mps_site}, where mps_site are ordered as 0, 1, ..., N - 1.
-            If None, use default identity map, i.e., {site: site for site in range(N)}.
-        Is : dict
-            For each mps site, name identity operator in operators, {site_label: str}.
-            If local mps sites have different physical dimensions, each should have separate identity operator defined in operators.
-            If None, use default {site_label: 'I'}.
+            number of sites of MPS/MPO.
+        operators : object
+            a set of local operators, e.g., an instance of :class:`yast.operators.Spin12`.
+            The ``operators`` object is expected to provide a map :code:`operators.to_dict()`
+            from string labels to operators (:class:`yast.Tensor`).
+        map : dict(int,int)
+            custom permutation of N sites indexed from 0 to N-1 , ``{3: 0, 21: 1, ...}``,
+            with values ordered as 0, 1, ..., N - 1.
+            If ``None``, assumes no permutation, i.e., :code:`{site: site for site in range(N)}`.
+        Is : dict(int,str)
+            For each site, specify identity operator by providing its string label, i.e., ``{0: 'I', 1: 'I', ...}``.
+            If ``None``, uses default specification {i: 'I' for i in range(N)}.
         parameters : dict
-            Default parameters that can be used by interpreters :meth:`Generator.mpo` and :meth:`Generator.mps`.
-            If None, use default {'sites': [*map.keys()]}
+            Default parameters used by the interpreters :meth:`Generator.mpo` and :meth:`Generator.mps`.
+            If None, uses default {'sites': [*map.keys()]}
         opts : dict
             used if compression is needed. Options passed to :meth:`yast.linalg.svd`.
         """
