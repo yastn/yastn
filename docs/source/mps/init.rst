@@ -36,6 +36,9 @@ The tensors of MPS/MPO can be set manually, using familiar :code:`dict` access
 	# assign tensor to site 1
 	Y[1]= A_1
 
+.. note::
+	The virtual dimensions/spaces of the neighbouring MPS/MPO tensors have to remain consistent.
+
 To create :class:`yast.Tensor`'s see :ref:`YAST's basic creation operations<tensor/init:basic creation operations>`. 
 For more examples, see :ref:`Setting MPS/MPO manually<examples/mps/mps:building yamps object manually>`. 
 

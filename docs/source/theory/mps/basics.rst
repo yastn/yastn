@@ -96,9 +96,13 @@ If for every MPS tensor the left environment is unitary, i.e. for corresponding 
 Algorithms
 ----------
 
-`Density matrix renormalisation group` (:ref:`theory/mps/algorithms:DMRG`) is an algorithm searching for the MPS which extremizes the expectation value of hermitian operator written as MPO, usually the Hamiltonian. 
+`Density matrix renormalisation group` 
+(:ref:`DMRG<mps/algorithms:density matrix renormalisation group (dmrg) algorithm>`) 
+is an algorithm searching for the MPS which extremizes the expectation value of hermitian operator written as MPO, usually the Hamiltonian. 
 
-`Time-dependent variational principle` (:ref:`theory/mps/algorithms:TDVP`) allows for variational approximation of the evolution of a state :math:`\Psi` under a Hamiltonian :math:`\hat H`. 
+`Time-dependent variational principle` 
+(:ref:`TDVP<mps/algorithms:time-dependent variational principle (tdvp) algorithm>`) 
+allows for variational approximation of the evolution of a state :math:`\Psi` under a Hamiltonian :math:`\hat H`. 
 The state after an evolution over time `t` is :math:`\Psi(t)=e^{- i t \hat H} \Psi`, with :math:`i` an imaginary unit. 
 `YAMPS` allows to perform TDVP for any MPS under MPO for a time `t` which in general can be complex. 
 

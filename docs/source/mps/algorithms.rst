@@ -1,23 +1,74 @@
 Density matrix renormalisation group (DMRG) algorithm
-=======================================================
+=====================================================
 
-:ref:`theory/mps/algorithms:DMRG` is a variational technique devised to obtain a state which extremises the expectation values for hermitian operator. A typical example is solving for ground-state of the Hamiltonian. The Hamiltonian is 
-written as MPO and the state is in MPS ansatz.
+DMRG is a variational technique devised 
+to obtain a state which extremizes the expectation value of Hermitian operator. 
+A typical example is search for the best MPS approximation of a ground-state 
+of some Hamiltonian in form of MPO.
 
-In the algorithm  we `sweep` throgh the MPS initial guess :code:`psi` making the optimisation of each :meth:`yast.Tensor` one by one locally solving for the smallest energy for effective Hamiltonian derived from MPO :code:`H`. 
-The local optimisation can take tensors one after one which is :code:`version='1site'`. Find the best approximation, orthogonalise to keep :ref:`theory/mps/basics:Canonical form` of the MPS. In `1site` version we are confined in particular MPS ansatz with
-fixed bond dimension. 
+Single-site DMRG
+----------------
 
-Alternatively, we can perform local optimisation for a pair of neightbouring tensors at one which is :code:`version='2site'`. In this approach, we take two neighbouring sites, find the best approximation, split sites with SVD and move to another pair.
-The next pair will take one of sites from our previous pair while the other one is orthogonalised to keep :ref:`theory/mps/basics:Canonical form` of the MPS. 
-By doing SVD decomposition we can dynamically adjust MPS ansatz according to :code:`opts_svd`. 
+In the algorithm we `sweep` through the MPS, starting from the initial guess :code:`psi`, 
+optimizing each :class:`yast.Tensor` :math:`A_j` one by one while keeping 
+all other tensors fixed (Alternating least squares). 
+At each step, the best :math:`A_j` is then found by minimizing the energy 
+of the local effective Hamiltonian :math:`H_{eff}`. This DMRG variant, called :code:`version='1site'`, 
+works with single-site effective :math:`H_{eff}`.
+ 
+::
 
-The convergence of the DMRG is controlled either by the expectational values in iteration of the variational step :code:`converge='energy'` or by the Schmidt values  :code:`converge='schmidt'` which is more sensitive parameter. 
-The DMRG algorithm sweeps thought the lattice :code:`max_sweeps` times until converged quantity changes by less then :code:`atol` from sweep to sweep.
+    # local optimization of the MPS tensor A_j using the effective Hamiltonian H_eff
+                              ___
+                            -|A_j|-
+             ___    ___        |        ___    ___    ___
+            |___|--|___|-..         ..-|___|--|___|--|___|
+              |      |                   |      |      |      
+             _|_    _|_       _|_       _|_    _|_    _|
+    H_eff = |___|--|___|-...-|H_j|-...-|___|--|___|--|___|
+              |      |         |         |      |      |     
+             _|_    _|_                 _|_    _|_    _|
+            |___|--|___|-..         ..-|___|--|___|--|___|
 
-To lower the cost of DMRG you can provide :code:`env` produced by previous run. 
+After the local problem is solved and a new :math:`A_j` minimizing :math:`H_{eff}` is found,
+the MPS is orthogonalized to keep it in the :ref:`canonical form<theory/mps/basics:Canonical form>`. 
+In the simplest formulation of ``1site`` DMRG algorithm, the virtual dimension/spaces are fixed. 
 
-The optimisation of MPS can be performed in restricted subspace where contrubutions of some MPS is projected out. This can be used for searching for excited states which can be done by giving a list of MPS :code:`project=[lower_E_MPS, ...]` we want to project out. 
+
+Two-site DMRG
+----------------
+
+The virtual spaces of the MPS can be adjusted by performing :code:`version='2site'` DMRG. 
+In this approach, we (i) build effective Hamiltonian :math:`H_{eff}` of two neighbouring sites, 
+(ii) solve for its ground state, and (iii) finally split the resulting tensor back into two sites with SVD 
+and then move to next pair. By doing SVD decomposition we can dynamically 
+adjust virtual space of MPS according to :code:`opts_svd`.
+
+::
+
+  # local optimization of the MPS tensors A_j and A_j+1 using 
+  # the effective Hamiltonian H_eff
+
+           H_eff of 2-site DMRG
+              ___    _____
+   ______   -|A_j|--|A_j+1|-    ______  
+  |      |--   |      |      --|      |
+  |      |                     |      |
+  |      |    _|_   __|__      |      |
+  |      |---|H_j|-|H_j+1|-----|      |
+  |      |     |      |        |      |
+  |      |                     |      |
+  |______|--                 --|______|
+
+The next pair will take one of the sites from the previous step while the other one 
+is orthogonalized to maintain :ref:`canonical form<theory/mps/basics:Canonical form>` of the MPS. 
+
+Projecting out selected MPS
+---------------------------
+
+The optimization can be performed in the restricted subspace, where contributions 
+from some MPSs are projected out. This can be useful when searching for 
+excited states. List of MPS to project out is given as :code:`project=[lower_E_MPS, ...]`.
 
 .. autofunction:: yamps.dmrg
 
@@ -29,11 +80,12 @@ See examples for :ref:`examples/mps/mps:dmrg`.
 Time-dependent variational principle (TDVP) algorithm
 =======================================================
 
-:ref:`theory/mps/algorithms:TDVP` algorithm is suitable to perform exponentiation of some operator :math:`\hat H` acting on a state :math:`\Psi` producing :math:`\Psi(t)=e^{\hat H} \Psi`. 
+TDVP algorithm is suitable to perform exponentiation of some operator :math:`\hat H` acting on a state :math:`\Psi` producing :math:`\Psi(t)=e^{\hat H} \Psi`. 
 The algorithm allows to use MPO operator :code:`H` which can be either hermitian or non-hermitian. The state :code:`psi` is obviously in MPS ansatz. 
 In TDVP we use the concept if time-ste :code:`dt` which scale the exponent such that we get  :math:`\Psi(t)=e^{dt \hat H} \Psi`. Notice that for unitary time evolution with Hamiltonian :code:`H` you have imaginary :code:`dt`. 
 
-The TDVP splits the exponentiation to local operation on 1 or 2 tensors depending on :code:`version='1site'` or :code:`'2site'` similar as for :ref:`mps/algorithms:DMRG` folowing Suzuki-Trotter decomposition of given :code:`order`. 
+The TDVP splits the exponentiation to local operation on 1 or 2 tensors depending on :code:`version='1site'` or :code:`'2site'` similar as for 
+:ref:`DMRG<mps/algorithms:density matrix renormalisation group (dmrg) algorithm>`  folowing Suzuki-Trotter decomposition of given :code:`order`. 
 The `2site` is suitable for dynamically expanding the Mps virtual dimensions controlled by `opts_svd` option. 
 
 To lower the cost you can provide :code:`env` produced by previous run. 
@@ -45,9 +97,7 @@ See examples: :ref:`examples/mps/mps:tdvp`.
 
 
 Maximize overlap
-==================
-
-This is the procedure which performs DMRG sweep such that the initial state has the maximal ovelap with the target state.
+================
 
 .. autofunction:: yamps.variational_sweep_1site
 

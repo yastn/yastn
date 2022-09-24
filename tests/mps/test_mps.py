@@ -17,17 +17,45 @@ except ImportError:
 tol = 1e-12
 
 def is_left_canonical(psi):
-    """ Assert if each mps tensor is left canonical. """
+    # Assert if each MPS/MPO tensor is left canonical, i.e,
+    # if the following equality holds
+    #        _______
+    #  --0--|psi[n]*|--         --
+    # |        |               |
+    # |        1 (or 1 & 2)    |
+    # |        1   for MPO     |
+    # |      __|___         =  |     , where the right-hand side is 
+    #  --0--|psi[n] |--         --     an identity matrix
+    #
+
+    # choose legs to contract
     cl = (0, 1) if psi.nr_phys == 1 else (0, 1, 2)
+    
+    # loop over on-site tensors
     for n in range(psi.N):
-        x = yast.tensordot(psi.A[n], psi.A[n], axes=(cl, cl), conj=(1, 0))
+        # 
+        # compute the contraction shown in the diagram above
+        #
+        x = yast.tensordot(psi[n], psi[n], axes=(cl, cl), conj=(1, 0))
+        
+        # compare with identity matrix
+        #
         x0 = yast.eye(config=x.config, legs=x.get_legs([0, 1]))
         assert yast.norm(x - x0.diag()) < tol  # == 0
     assert psi.pC is None
 
 
 def is_right_canonical(psi):
-    """ Assert if each mps tensor is right canonical. """
+    # Assert if each MPS/MPO tensor is right canonical, i.e,
+    # if the following equality holds
+    #           _______
+    #     --0--|psi[n]*|--              --
+    #              |      |               |
+    #  (or 1 & 2   1      2 (or 3         |
+    #    for MPO)  1      2  for MPO)     |
+    #            __|___   |           =   |  , where the right-hand side is 
+    #     ---0--|psi[n]|--              --     an identity matrix
+    #
     cl = (1, 2) if psi.nr_phys == 1 else (1, 2, 3)
     for n in range(psi.N):
         x = yast.tensordot(psi.A[n], psi.A[n], axes=(cl, cl), conj=(0, 1))

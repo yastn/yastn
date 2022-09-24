@@ -1,31 +1,47 @@
-Building YAMPS object manually
-=====================================
+Building MPS/MPO manually
+=========================
 
-The content of MPS/MPO can be assigned manualy by setting known tensors one by one.
-In order to do that you should prepare :meth:`yast.Tensor` which fits the structure of physical and virtual legs according to :ref:`mps/properties:YAMPS properties`. 
-After initialising `YAMPS` object we assign tensor of index :code:`j` with :code:`psi.A[3] = <example tensor>`.
-We have to make sure that assined tensor fit along virtual dimension.
+The tensor making up MPS/MPO can be assigned manualy by setting them one by one.
 
-The most well known exact MPS construction is the ground state for Affleck-Kennedy-Lieb-Tasaki (AKLT) model.
+.. note::
+        The virtual dimensions/spaces of the neighbouring MPS/MPO tensors have to remain consistent.
+
+Ground state of Spin-1 AKLT model
+---------------------------------
+
+Here, we show an example of such code for the most well-known exact MPS: The ground state of  
+`Affleck-Kennedy-Lieb-Tasaki (AKLT) model <https://en.wikipedia.org/wiki/AKLT_model>`_.
 
 .. literalinclude:: /../../tests/mps/test_initialization.py
         :pyobject: test_assign_block
 
-The same can be done for MPO. Depending on symmetry of the tensors we will have diffrent definition of them.  
-This can be shown for a simple nearest-neightbour hopping Hamiltonian with hopping amplitude `t` and on-site energy `mu`.
+
+MPO for hopping model (no symmetry)
+-----------------------------------
+
+The same can be done for MPOs. Here, we show construction of a simple 
+nearest-neighbour hopping Hamiltonian with hopping amplitude `t` 
+and on-site energy :math:`\mu` with different 
+realizations of explicit symmetry.
 
 .. literalinclude:: /../../tests/mps/generate_by_hand.py
         :pyobject: mpo_XX_model_dense
 
+MPO for hopping model with :math:`\mathbb{Z}_2` symmetry
+--------------------------------------------------------
+
 .. literalinclude:: /../../tests/mps/generate_by_hand.py
         :pyobject: mpo_XX_model_Z2
+
+MPO for hopping model with U(1) symmetry
+----------------------------------------
 
 .. literalinclude:: /../../tests/mps/generate_by_hand.py
         :pyobject: mpo_XX_model_U1
 
 
-Building YAMPS object automatically
-=====================================
+Generating MPS/MPO automatically
+================================
 
 The MPO can be constructed automatically using dedicated generator supplied with the Hamiltonian. 
 This can be shown for a simple nearest-neightbour hopping Hamiltonian 
@@ -55,101 +71,112 @@ We can test the multiplication of MPO and MPS using a practical example for a gr
 
 .. QR and SVD
 
+Canonizing MPS/MPO
+==================
+
+There are different algorithms, which can bring MPS/MPO into
+canonical form.
+
 Canonical form by QR
-=====================================
+--------------------
 
-The right/left canonical form of a Tensor in MPS can be tested 
-by checking if the right/left overlaps are identities. 
+This is the cheapest way to bring MPS/MPO into left or right canonical form. 
 
-.. literalinclude:: /../../tests/mps/test_mps.py
-        :pyobject: is_right_canonical
+.. note::
 
-.. literalinclude:: /../../tests/mps/test_mps.py
-        :pyobject: is_left_canonical
+        Both :ref:`DMRG<mps/algorithms:density matrix renormalisation group (dmrg) algorithm>` 
+        and :ref:`TDVP<mps/algorithms:time-dependent variational principle (tdvp) algorithm>` 
+        algorithms expect initial MPS to be the right canonical form.
 
-The canonical form for a full state can be obtained by QR decomposition:
+Bring MPS/MPO into canonical form by QR decomposition
 
 ::
+
+        # Generate random MPS with no symmetry
+        psi = yamps.generate_random.mps_random(yast.make_config(), N=16, Dmax=15, d=2)
 
         # rigth canonical form
         #
         psi.canonize_sweep(to='first')
-        #
+
         # left canonical form
         #
         psi.canonize_sweep(to='last')
 
-This is the cheapest way to get canonical. Preparing a state in right canonical form is necessary when we prepare MPS for 
-:ref:`theory/mps/algorithms:DMRG` and :ref:`theory/mps/algorithms:TDVP` algorithm. E.g. see the example in :ref:`examples/mps/mps:Multiplication`.
+Check if MPS/MPO is in left/right canonical form by verifying 
+if each tensor forms an isometry after appropriate contraction
+with its conjugate. For left canonical form
 
-The canonical for is locally restored by applying QR on a Tensor.
+.. literalinclude:: /../../tests/mps/test_mps.py
+        :pyobject: is_left_canonical
 
-::
+And similarily for right canonical form
 
-        # If we have m > n in right canonical we right-orthogonalize n-th Tensor
-        # and obtain all m >= n in right canonical form.
-        #
-        psi.orthogonalize_site(n, to='first', normalize=True)
-        #
-        # For canonical form the normalization normalize=True is default 
-        # but you can impose normalize=False if needed (same for full canonize_sweep).
+.. literalinclude:: /../../tests/mps/test_mps.py
+        :pyobject: is_right_canonical
 
 
 Canonical form by SVD
-=====================================
+---------------------
 
-The SVD decomposition can be used as a method for obtaining effective truncation of MPS or MPO.
-To perform the truncation we should set an conditions:
-
-::
-
-        # the instructions are written in a form of dictionary. 
-        #
-        opts_dict = {}
-        #
-        # There are different options which we can pass. 
-        # If not all are defined the truncation uses defaults.
-        #
-        opts_dict['D_total'] = 4     # largest total number of singular values to keep
-        opts_dict['D_block'] = 2     # largest number of singular values to keep in a single block
-        opts_dict['tol'] = 1e-6     # relative tolerance of singular values below which to truncate across all blocks
-        opts_dict['tol_blocks'] = 1e-6     # relative tolerance of singular values below which to truncate within individual blocks
-
-With desined options :code:`opts_dict` we can sweep SVD through MPS/MPO. At the end we obtain truncated object in left/right 
-canonical form.
+Bringing MPS/MPO into canonical form through SVD decomposition 
+is computationally more expensive than with QR, but allows for truncation.
+Truncation is governed by options passed as :code:`opts_dict` (internally to SVD).
 
 ::
 
-        # for MPS we usually normalize the state. Here, resulting in right canonical form.
+        # There are different options which we can pass, see yast.linalg.svd. 
+        # Defaults are assumed for options not explictly specified.
+        #
+        opts_dict = {
+                'D_total': 4,      # total number of singular values to keep
+                'D_block': 2,      # maximal number of singular values to keep in a single block
+                'tol': 1e-6,       # relative tolerance of singular values below which to 
+                                   # truncate across all blocks
+                'tol_blocks': 1e-6 # relative tolerance of singular values below which to
+                                   # truncate within individual blocks
+        }
+
+        # Generate random MPS with no symmetry
+        #
+        psi = generate_random.mps_random(config_dense, N=16, Dmax=15, d=2)
+
+        # Bring MPS to canonical form and truncate (here, right canonical form).
+        # For MPS we usually normalize the state.
         #
         psi.truncate_sweep(to='first', opts=opts_dict)
+        
+        # Generate random MPO with no symmetry
         #
-        # while for MP0 we want to truncate it but we don't want to loose an applitude for an operator. 
-        # Here, resulting in right canonical form.
+        H= generate_random.mpo_random(config_dense, N=16, Dmax=25, d=2, d_out=2)
+
+        # Bring MPO to canonical form and truncate (here, left canonical form).
+        # Note: for MPO we do not want to change overall scale, thus no normalization. 
         #
-        H.truncate_sweep(to='first', opts=opts_dict, normalize=False)
-
-Custom test for truncation:
-
-.. literalinclude:: /../../tests/mps/test_truncate_svd.py
+        H.truncate_sweep(to='last', opts=opts_dict, normalize=False)
 
 
-.. outside world
-Save and load
-=====================================
+Save and load MPS/MPO
+=====================
 
-Any MPS/MPO can be saved/loaded (exported/imported) to/from a dictionary or a HDF5 file. In order to import 
-an object we have to provide configuration for :meth:`yast.Tensor`'s.
+YAMPS MPS/MPO can be saved/loaded either to/from a dictionary or an HDF5 file. 
 
-For a dictionary:
+.. note::
+        :ref:`YAST configuration<tensor/configuration:yast configuration>` 
+        of on-site tensors of MPS/MPO must be provided
+        when loading either from dictionary or HDF5 file.
+
+Using Python's dictionary
+-------------------------
 
 .. literalinclude:: /../../tests/mps/test_save_load.py
-        :pyobject: test_full_dict
+        :pyobject: test_basic_dict
 
-For a HDF5 file:
+Using HDF5 format
+-----------------
 
 .. literalinclude:: /../../tests/mps/test_save_load.py
-        :pyobject: test_full_hdf5
+        :pyobject: test_basic_hdf5
 
 
 .. algorithms
