@@ -5,20 +5,22 @@ from ._mps import YampsError
 
 def measure_overlap(bra, ket):
     r"""
-    Calculate overlap <bra|ket>. Conjugation of argument bra is made internally.
-    The overlap can be calculated if the length, symmetry and physical dimensions agree.
+    Calculate overlap :math:`\langle \textrm{bra}|\textrm{ket} \rangle`. 
+    Conjugate of MPS :code:`bra` is computed internally.
+    
+    MPSs :code:`bra` and :code:`ket` must have matching length, 
+    physical dimensions, and symmetry.
 
     Parameters
     -----------
-    bra : Mps
-        Treated as a state which will be conjugated.
+    bra : yast.MpsMpo
+        An MPS which will be conjugated.
 
-    ket : Mps
-        Treated as a state which won't be conjugated.
+    ket : yast.MpsMpo
 
     Returns
     -------
-    overlap : float or complex
+    scalar
     """
     env = Env2(bra=bra, ket=ket)
     env.setup(to='first')
@@ -27,23 +29,24 @@ def measure_overlap(bra, ket):
 
 def measure_mpo(bra, op, ket):
     r"""
-    Calculate overlap <bra|op|ket>. Conjugation of argument bra is made internally.
-    The overlap can be calculated if the length, symmetry and physical dimensions agree.
+    Calculate expectation value :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle`. 
+    Conjugate of MPS :code:`bra` is computed internally.
+    MPSs :code:`bra`, :code:`ket`, and MPO :code:`op` must have matching length, 
+    physical dimensions, and symmetry.
 
     Parameters
     -----------
-    bra : Mps
-        Treated as a state which will be conjugated.
+    bra : yast.MpsMpo
+        An MPS which will be conjugated.
 
-    op : Mpo
+    op : yast.MpsMpo
         Operator written as MPO.
 
-    ket : Mps
-        Treated as a state which won't be conjugated.
+    ket : yast.MpsMpo
 
     Returns
     -------
-    overlap : float or complex
+    scalar
     """
     env = Env3(bra=bra, op=op, ket=ket)
     env.setup(to='first')

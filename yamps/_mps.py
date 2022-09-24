@@ -291,12 +291,14 @@ class _TN1D_base():
     
     def save_to_dict(self):
         r"""
-        Writes Tensor-s of Mps into a dictionary
+        Serialize MPS/MPO into a dictionary.
 
         Returns
         -------
-        out_dict : dictionary of dictionaries
-            each element represents a tensor in the chain from first to last.
+        dict(int,dict)
+            each element represents serialized :class:`yast.Tensor` 
+            (see :meth:`yast.Tensor.save_to_dict`) of the MPS/MPO starting 
+            from first site to last.
         """
         out_dict = {}
         for n in self.sweep(to='last'):
@@ -305,7 +307,13 @@ class _TN1D_base():
 
     def save_to_hdf5(self, file, in_file_path):
         r"""
-        Writes Tensor-s of Mps into a HDF5 file
+        Save MPS/MPO into a HDF5 file.
+        
+        .. todo::
+            The second one redirects all information to HDF5 :code:`file` to 
+            a group which has the path :code:`my_address` 
+            such that running :code:`A.save_to_hdf5(file, './my_address/')`. 
+            Keep the adress as you will need to have it to encode the object back to `YAMPS`.
 
         Parameters
         -----------
@@ -427,18 +435,28 @@ class MpsMpo(_TN1D_base):
 
     def orthogonalize_site(self, n, to='last', normalize=True):
         r"""
-        Orthogonalize n-th site to the first site.
+        Performs QR (or RQ) decomposition of on-site tensor at :code:`n`-th position. 
+        Two typical modes of usege are
+        
+            * Advance left canonical form: Assuming first n-1 sites are already 
+              in the left canonical form, brings n-th site to left canonical form, 
+              i.e., extends left canonical form by one site towards :code:`'last'` site.
+
+            * Advance right canonical form: Assuming all m > n sites are already 
+              in right canonical form, brings n-th site to right canonical form, i.e.,
+              extends right canonical form by one site towards :code:`'first'` site.
 
         Parameters
         ----------
             n : int
-                index of site to be ortogonalized
+                index of site to be orthogonalized
 
             to : str
-                'last' or 'first'.
+                canonical form to which site is brought: :code:`'last'` or :code:`'first'`.
 
             normalize : bool
-                If true, central sites is normalized to 1 according to standard 2-norm.
+                If :code:`True`, central block is normalized to unity according 
+                to standard 2-norm.
         """
         if self.pC is not None:
             raise YampsError('Only one central block is possible. Attach the existing central block first.')
@@ -558,7 +576,7 @@ class MpsMpo(_TN1D_base):
     def truncate_sweep(self, to='last', normalize=True, opts={'tol': 1e-12}):
         r"""
         Sweep though the MPS/MPO and put it in left/right canonical form 
-        using :meth:`SVD<yast.linalg.qr>` decomposition by setting 
+        using :meth:`SVD<yast.linalg.svd>` decomposition by setting 
         :code:`to='first'`/:code:`to='last'`. It is assumed that tensors are enumerated 
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`). 
 
@@ -579,11 +597,12 @@ class MpsMpo(_TN1D_base):
             to unity according to the standard 2-norm.
 
         opts : dict
-            options passed to :meth:`SVD<yast.linalg.qr>`, including options governing truncation.
+            options passed to :meth:`SVD<yast.linalg.svd>`, 
+            including options governing truncation.
 
         Returns
         -------
-        float
+        scalar
             maximal norm of the discarded singular values after normalization
         """
         discarded_max = 0.

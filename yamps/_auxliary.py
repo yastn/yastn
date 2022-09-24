@@ -6,11 +6,23 @@ from ._mps import MpsMpo, Mpo, add
 
 def load_from_dict(config, nr_phys, in_dict):
     r"""
-    Reads Tensor-s of Mps from a dictionary into an Mps object
+    Create MPS/MPO from dictionary.
+
+    Parameters
+    ----------
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
+
+    nr_phys: int
+        number of physical legs: 1 for MPS (default); 2 for MPO;
+
+    in_dict: dict
+        dictionary containing serialized MPS/MPO, i.e., 
+        a result of :meth:`yamps.MpsMpo.save_to_dict`.
 
     Returns
     -------
-    out_Mps : Mps
+    yamps.MpsMpo
     """
     N = len(in_dict)
     out_Mps = MpsMpo(N, nr_phys=nr_phys)
@@ -21,15 +33,15 @@ def load_from_dict(config, nr_phys, in_dict):
 
 def load_from_hdf5(config, nr_phys, file, in_file_path):
     r"""
-    Reads Tensor-s of Mps from a HDF5 file into an Mps object
+    Create MPS/MPO from HDF5 file.
 
     Parameters
     -----------
-    config: config
-        Configuration of Tensors' symmetries
+    config : module, types.SimpleNamespace, or typing.NamedTuple
+        :ref:`YAST configuration <tensor/configuration:yast configuration>`
 
     nr_phys: int
-        number of physical legs
+        number of physical legs: 1 for MPS (default); 2 for MPO;
 
     file: File
         A 'pointer' to a file opened by a user
@@ -39,7 +51,7 @@ def load_from_hdf5(config, nr_phys, file, in_file_path):
 
     Returns
     -------
-    out_Mps : Mps
+    yast.MpsMpo
     """
     N = len(file[in_file_path].keys())
     out_Mps = MpsMpo(N, nr_phys=nr_phys)

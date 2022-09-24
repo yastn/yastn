@@ -81,10 +81,10 @@ class Generator:
             If ``None``, assumes no permutation, i.e., :code:`{site: site for site in range(N)}`.
         Is : dict(int,str)
             For each site, specify identity operator by providing its string label, i.e., ``{0: 'I', 1: 'I', ...}``.
-            If ``None``, uses default specification {i: 'I' for i in range(N)}.
+            If ``None``, uses default specification ``{i: 'I' for i in range(N)}``.
         parameters : dict
             Default parameters used by the interpreters :meth:`Generator.mpo` and :meth:`Generator.mps`.
-            If None, uses default {'sites': [*map.keys()]}
+            If None, uses default ``{'sites': [*map.keys()]}``.
         opts : dict
             used if compression is needed. Options passed to :meth:`yast.linalg.svd`.
         """

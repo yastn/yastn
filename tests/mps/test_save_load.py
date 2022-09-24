@@ -24,42 +24,60 @@ def check_copy(psi1, psi2):
         assert np.allclose(psi1.A[n].to_numpy(), psi2.A[n].to_numpy())
 
 
-def test_full_hdf5():
-    """ Initialize random mps of full tensors and checks copying. """
-    #
-    # The initialization produces a random MPS with certain symmetry given by config.
-    # Here there are no symmetries imposed.
+def test_basic_hdf5():
+    # Initialize random MPS with dense tensors and checks saving/loading 
+    # to and from HDF5 file.
     #
     psi = generate_random.mps_random(config_dense, N=16, Dmax=15, d=2)
     #
-    # In order to save the MPS you have to make sure that the place we are saving to is empty
-    # Here we delete full file if it exist but it is enough to clear a group './state' inside it.
+    # We delete file if it already exists. 
+    # (It is enough to clear the address './state' if the file already exists)
     #
     try:
         os.remove("tmp.h5")
     except OSError:
         pass
     #
-    # We save to a file after opening it in Python. The file can contain other element but you 
-    # have to make sure that the address is empty.
+    # We save the MPS to file 'tmp.h5' under the address 'state/'
     #
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
+
     #
-    # To read MPS from HDF5 to yamps we have to open the file and get 
-    # saved instructions. You have to specify basic properties of the object 
-    # like nr_phys = 1 (for MPS) or 2 (for MPO).
+    # To read MPS from HDF5 file, open the file and load the MPS stored 
+    # at address 'state/'. 
+    # Note: You have to provide valid YAST configuration 
+    # TODO: basic properties of the object like nr_phys = 1 (for MPS) or 2 (for MPO).
     #
     with h5py.File('tmp.h5', 'r') as f:
-        phi = yamps.load_from_hdf5(psi.A[0].config, 1, f, 'state/')
+        phi = yamps.load_from_hdf5(config_dense, 1, f, 'state/')
+
+    # Similarily, one can save and load MPO
     #
-    # In this test we will also check if the import was successful and delete HDF5 file we produced.
-    #
+    psi = generate_random.mpo_random(config_dense, N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
+    with h5py.File('tmp.h5', 'a') as f:
+        psi.save_to_hdf5(f, 'state/')
+    with h5py.File('tmp.h5', 'r') as f:
+        phi = yamps.load_from_hdf5(config_dense, 1, f, 'state/')
+    os.remove("tmp.h5")
+
+
+def test_full_hdf5():
+    try:
+        os.remove("tmp.h5")
+    except OSError:
+        pass
+
+    # basic MPS
+    psi = generate_random.mps_random(config_dense, N=16, Dmax=15, d=2)
+    with h5py.File('tmp.h5', 'a') as f:
+        psi.save_to_hdf5(f, 'state/')
+    with h5py.File('tmp.h5', 'r') as f:
+        phi = yamps.load_from_hdf5(config_dense, 1, f, 'state/')
     check_copy(psi, phi)
     os.remove("tmp.h5") 
-    
-    # Here are some more advanced examples:
-    #
+
+    # MPS with alternating physical dimension
     psi = generate_random.mps_random(config_dense, N=16, Dmax=19, d=[2, 3])
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
@@ -68,6 +86,7 @@ def test_full_hdf5():
     check_copy(psi, phi)
     os.remove("tmp.h5") 
 
+    # MPO with alternating physical dimensions of both bra and ket indices
     psi = generate_random.mpo_random(config_dense, N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
@@ -100,26 +119,27 @@ def test_Z2_hdf5():
     os.remove("tmp.h5") 
 
 
-def test_full_dict():
+def test_basic_dict():
     #
-    # The initialization produces a random MPS with certain symmetry given by config.
-    # Here there are no symmetries imposed.
+    # First, we generate random MPS without any symmetry.
     #    
     psi = generate_random.mpo_random(config_dense, N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
     #
-    # We write instructions to recover the MPS in a dictionary tmp:
+    # Next, we serialize MPS into dictionary.
     #
     tmp = psi.save_to_dict()
     #
-    # Using these intructions we can load it to yamps and produce the MPS we saved.
-    # You have to specify basic properties of the object 
-    # like nr_phys = 1 (for MPS) or 2 (for MPO).
+    # Last, we load the MPS from the dictionary, providing valid YAST configuration
     #
+    phi = yamps.load_from_dict(config_dense, 1, tmp)
+
+
+def test_full_dict():
+    psi = generate_random.mpo_random(config_dense, N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
+    tmp = psi.save_to_dict()
     phi = yamps.load_from_dict(psi.A[0].config, 1, tmp)
-    #
-    # In this test we will also check if the import was successful.
-    #
     check_copy(psi, phi)
+
 
 def test_Z2_dict():
     psi = generate_random.mps_random(config_Z2, N=16, Dblock=25, total_parity=0)

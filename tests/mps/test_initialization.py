@@ -10,26 +10,35 @@ except ImportError:
 
 
 def test_assign_block():
-    """ Initialize mps with known blocks. Example for AKLT state"""
+    # Initialize MPS tensor by tensor. Example for Spin-1 AKLT state.
     #
-    # Prepare the representation of local tensors
+    # Prepare rank-2 blocks (matrices) of on-site tensors
     #
     AM = - np.sqrt(2.0/3) * np.array([[0, 0],[1, 0]])
     A0 = - np.sqrt(1.0/3) * np.array([[1, 0],[0, -1]])
     AP = np.sqrt(2.0/3) * np.array([[0, 1],[0, 0]])
     #
-    # Prepare local tensor with appropriate virtual and physical dimensions
+    # Prepare rank-3 on-site tensor with virtual dimensions 2 
+    # and physical dimension dim(Spin-1)=3
+    #                _ 
+    # dim(left)=2 --|T|-- dim(right)=2
+    #                |
+    #           dim(Spin-1)=3 
     #
     T = np.array([AM,A0,AP])
     T = np.transpose(T,(1,0,2))
     #
-    # In open boundary condition for MPS we should make sure that 
-    # terminating virtual dimensions are 1.
+    # Due to open boundary conditions for MPS, the first and the last 
+    # on-site tensors have left and right virtual indices of dimension 1.
+    #
+    # 1--|bL|--  and  --|bR|--1
+    #     |               |
     #
     bL = T[0,:,:].reshape((1,3,2))
     bR = T[:,:,1].reshape((2,3,1))
     #
-    # Setting up MPS always involves initialization of YAMPS object with proper length.
+    # First, we initialize empty MPS for N=5 sites. Then assign 
+    # its on-site tensors one-by-one.
     #
     N = 5
     psi = yamps.Mps(N)
@@ -44,12 +53,19 @@ def test_assign_block():
             tmp = T
             Ds = (2,3,2)
         #
-        # The loop will assign each tensor in the MPS chain one by one.
-        # We create a site_tensor with appropriate legs and we push it to MPS. 
+        # Create a yast.Tensor with appropriate legs and assign it to MPS.
+        # Here, the choice of signatures is as follows
+        #
+        # (+1) ->--|T|-->- (-1)
+        #           ^
+        #           |(+1)  
         #
         site_tensor = yast.Tensor(config=config_dense, s=(1, 1, -1))
         site_tensor.set_block(val=tmp, Ds=Ds)
-        psi.A[n] = site_tensor
+        
+        # Finally assign the on-site tensor.
+        #
+        psi[n] = site_tensor
     return psi
 
 

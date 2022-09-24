@@ -37,6 +37,9 @@ def save_to_hdf5(a, file, path):
     """
     Export tensor into hdf5 type file.
 
+    .. todo::
+        HDF5 export
+
     Parameters
     ----------
     a : yast.Tensor

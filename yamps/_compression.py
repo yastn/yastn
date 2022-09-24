@@ -4,32 +4,43 @@ from ._env import Env2, Env3
 
 def variational_sweep_1site(psi, psi_target, env=None, op=None):
     r"""
-    Perform a sweep updating psi to maximize the overlap with the target state psi_target.
+    Using :code:`verions='1site'` DMRG, an MPS :code:`psi` with fixed 
+    virtual spaces is variationally optimized to maximize overlap 
+    :math:`\langle \psi | \psi_{\textrm{target}}\rangle` with 
+    the target MPS :code:`psi_target`.
 
-    Operator in a form of mpo can be provided. In that case maximize overlap with op * psi_target.
+    The principal use of this algorithm is an (approximate) compression of large MPS 
+    into MPS with smaller virtual dimension/spaces. 
 
-    Assume input psi is canonical towards first site.
-    Sweep consists of iterative updates from last site to first and back to the first one.
+    Operator in a form of MPO can be provided in which case algorithm maximizes 
+    overlap :math:`\langle \psi | O |\psi_{target}\rangle`.
+
+    It is assumed that the initial MPS :code:`psi` is in the right canonical form. 
+    The outer loop sweeps over MPS :code:`psi` updating sites from the first site to last and back. 
+
+    .. todo::
+        convergence criterions / options ?
 
     Parameters
     ----------
-    psi: Mps
-        Initial guess. Should be canonical toward the first site.
+    psi: yamps.MpsMpo
+        initial MPS in right canonical form.
 
-    psi_target: Mps
-        Target state.
+    psi_target: yamps.MpsMpo
+        Target MPS.
 
     env: Env2 or Env3
-        Environments of the overlap <psi|psi_target> or <psi |op|psi_target> if op is given.
-        If None, it is calculated before the sweep.
+        optional environment of tensor network :math:`\langle \psi|\psi_{target} \rangle`
+        or :math:`\langle \psi|O|\psi_{target} \rangle` from the previous run.
 
-    op: Mps
-        Mpo acting on psi_target
+    op: yamps.MpsMpo
+        operator acting on :math:`\psi_{\textrm{target}}.
 
     Returns
     -------
-    env: Env2 or Env3
-        environments which can be used during next sweep, or to calculated updated overlap
+    env: yamps.Env2 or yamps.Env3
+        Environment of the network :math:`\langle \psi|\psi_{target} \rangle`
+        or :math:`\langle \psi|O|\psi_{target} \rangle`.
     """
 
     if env is None:

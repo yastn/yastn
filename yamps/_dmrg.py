@@ -29,37 +29,46 @@ def _init_dmrg(psi, H, env, project, opts_eigs):
 def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', atol=-1, max_sweeps=1,
             opts_eigs=None, opts_svd=None, return_info=False):
     r"""
-    Perform dmrg sweeps until convergence.
+    Perform DMRG sweeps until convergence, starting from MPS :code:`psi` 
+    in right canonical form. The outer loop sweeps over MPS updating sites 
+    from the first site to last and back. 
 
-    Assume that psi is canonized to first site.
-    Sweeps consists of iterative updates from last site to first and back to the first one.
-    Updates psi, returning it in canonical form to the first site.
+    The convergence is controlled either by selected expectation value, i.e., :code:`converge='energy'` 
+    or by the Schmidt values :code:`converge='schmidt'` which is more sensitive measure. 
+    The DMRG algorithm then sweeps through the lattice at most :code:`max_sweeps` times 
+    or until selected convergence measure changes by less then :code:`atol` from sweep to sweep.
+
+    Computational cost of DMRG can be lowered by providing environment :code:`env` 
+    obtained in previous run.
 
     Parameters
     ----------
-    psi: Mps
-        initial state.
+    psi: yamps.MpsMpo
+        initial MPS in right canonical form.
 
-    H: Mps, nr_phys=2
-        operator to minimize given in the form of mpo.
+    H: yamps.MpsMpo
+        MPO to minimize against.
 
-    env: Env3
-        can provide environment <psi|H|psi> from the previous sweep.
-        It is initialized if None
-
-    project: list
-        optimizes psi in the subspace orthogonal to Mps's in the list
+    env: yamps.Env3
+        optional environment of tensor network :math:`\langle \psi|H|\psi \rangle` 
+        from the previous DMRG run.
+    
+    project: list(yamps.MpsMpo)
+        optimizes MPS in the subspace orthogonal to MPS's in the list
 
     version: str
-        which tdvp procedure to use from ('1site', '2site')
+        which DMRG variant to use from :code:`'1site'`, :code:`'2site'`
 
     converge: str
-        defines convergence criteria from ('energy', 'schmidt')
-        'energy' uses the expectation value of H
-        'schmidt' uses the schmidt values on the worst cut
+        defines convergence measure. Available options are
+        
+            * :code:`'energy'` uses the expectation value of H
+        
+            * :code:`'schmidt'` uses Schmidt values on the worst cut
 
     atol: float
-        stop sweeping if converged quantity changes by less than atol in a single sweep
+        defines converged criterion. DMRG stop once the change in convergence measure 
+        is less than :code:`atol` between sweeps.
 
     max_sweeps: int
         maximal number of sweeps
@@ -68,19 +77,18 @@ def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', ato
         options passed to :meth:`yast.eigs`
 
     opts_svd: dict
-        options passed to :meth:`yast.svd` to truncate virtual bond dimensions when unmerging two merged sites.
+        options passed to :meth:`yast.svd` used to truncate virtual spaces in :code:`verions='2site'`.
 
     return_info: bool
         if True, return additional information regarding convergence
 
     Returns
     -------
-    env: Env3
-        Environment of the <psi|H|psi> ready for the next iteration.
-        Can contain temporary objects to reuse from previous sweeps.
+    env: yamps.Env3
+        Environment of the :math:`\langle \psi|H|\psi \rangle` ready for the next iteration.
 
     info: dict
-        if return_info is True, return some information about reached convergence.
+        if :code:`return_info` is ``True``, return additional information about convergence.
     """
     env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
     if opts_svd is None:

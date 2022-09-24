@@ -46,7 +46,9 @@ To make a sum of many MPS/MPOs :math:`\{A_0,A_1,\dots\}` at once use :code:`yamp
 .. autofunction:: yamps.add
 
 Following example show addition of two MPSs:
+
 ::
+
      import yamps
      #
      # Define yamps.Mps's
@@ -100,19 +102,17 @@ One can either use product operator :code:`C=A@B` or more verbose
 :code:`C=yamps.multiply(A,B)`. Note that for MPO-MPS product, the *@*
 is commutative, i.e., :code:`O@A` and :code:`A@O` are equivalent.
 
-..
-    .. autofunction:: yamps.MpsMpo.__matmul__
+See examples here: :ref:`examples/mps/mps:Multiplication`.
 
 .. autofunction:: yamps.multiply
-
-
-See examples here: :ref:`examples/mps/mps:Multiplication`.
 
 
 Canonizing MPS/MPO
 ------------------
 
-MPS/MPO can be put into :ref:`theory/mps/basics:Canonical form` to reveal most advantageous truncation or as a part of the setup for :ref:`theory/mps/algorithms:DMRG` or :ref:`theory/mps/algorithms:TDVP` algorithms. 
+MPS/MPO can be put into :ref:`theory/mps/basics:Canonical form` to reveal most advantageous truncation or as a part of the setup for 
+:ref:`DMRG<mps/algorithms:density matrix renormalisation group (dmrg) algorithm>` or 
+:ref:`TDVP<mps/algorithms:time-dependent variational principle (tdvp) algorithm>` algorithms. 
 
 The canonical form obtained by QR decomposition is fast, but does not allow for truncation 
 of the virtual spaces of MPS/MPO. 
@@ -121,8 +121,15 @@ of the virtual spaces of MPS/MPO.
 
 See examples: :ref:`examples/mps/mps:Canonical form by QR`.
 
-The canonisation by `singular value decomposition` (SVD) allows to truncate components of the lowest applitude according to instructions provided in :code:`opts`. As default the object is not truncated. 
-The truncation happens on each site of the object after persorming SVD of the tensor.
+Restoring canonical form locally: For example, while performing DMRG sweeps, 
+the tensors getting updated will not be in canonical form after the update. 
+It is necessary to restore their canonical form in course of sweeping. 
+
+.. autofunction:: yamps.MpsMpo.orthogonalize_site
+
+The canonisation by `singular value decomposition` (SVD) allows 
+to truncate virtual dimension/spaces with the lowest weight 
+(lowest singular values).
 
 .. autofunction:: yamps.MpsMpo.truncate_sweep
 
