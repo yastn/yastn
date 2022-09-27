@@ -24,10 +24,18 @@ def load_from_dict(config, nr_phys, in_dict):
     -------
     yamps.MpsMpo
     """
-    N = len(in_dict)
-    out_Mps = MpsMpo(N, nr_phys=nr_phys)
-    for n in range(out_Mps.N):
-        out_Mps.A[n] = yast.load_from_dict(config=config, d=in_dict[n])
+    if 'nr_phys' in in_dict.keys():
+        nr_phys = in_dict['nr_phys']
+    if 'A' in in_dict.keys():
+        N = len(in_dict['A'])
+        out_Mps = MpsMpo(N, nr_phys=nr_phys)
+        for n in range(out_Mps.N):
+            out_Mps.A[n] = yast.load_from_dict(config=config, d=in_dict['A'][n])
+    else:
+        N = len(in_dict)
+        out_Mps = MpsMpo(N, nr_phys=nr_phys)
+        for n in range(out_Mps.N):
+            out_Mps.A[n] = yast.load_from_dict(config=config, d=in_dict[n])
     return out_Mps
 
 
@@ -53,10 +61,18 @@ def load_from_hdf5(config, nr_phys, file, in_file_path):
     -------
     yast.MpsMpo
     """
-    N = len(file[in_file_path].keys())
-    out_Mps = MpsMpo(N, nr_phys=nr_phys)
-    for n in range(out_Mps.N):
-        out_Mps.A[n] = yast.load_from_hdf5(config, file, in_file_path+str(n))
+    if 'nr_phys' in file[in_file_path].keys():
+        nr_phys = int(file[in_file_path].get('nr_phys')[()])
+    if 'A' in file[in_file_path].keys():
+        N = len(file[in_file_path+'/A'].keys())
+        out_Mps = MpsMpo(N, nr_phys=nr_phys)
+        for n in range(out_Mps.N):
+            out_Mps.A[n] = yast.load_from_hdf5(config, file, in_file_path+'/A/'+str(n))
+    else:
+        N = len(file[in_file_path].keys())
+        out_Mps = MpsMpo(N, nr_phys=nr_phys)
+        for n in range(out_Mps.N):
+            out_Mps.A[n] = yast.load_from_hdf5(config, file, in_file_path+str(n))
     return out_Mps
 
 

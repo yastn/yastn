@@ -1,7 +1,6 @@
 """ Algorithm for variational optimization of mps to match the target state."""
 from ._env import Env2, Env3
 
-
 def variational_sweep_1site(psi, psi_target, env=None, op=None):
     r"""
     Using :code:`verions='1site'` DMRG, an MPS :code:`psi` with fixed 
@@ -18,9 +17,6 @@ def variational_sweep_1site(psi, psi_target, env=None, op=None):
     It is assumed that the initial MPS :code:`psi` is in the right canonical form. 
     The outer loop sweeps over MPS :code:`psi` updating sites from the first site to last and back. 
 
-    .. todo::
-        convergence criterions / options ?
-
     Parameters
     ----------
     psi: yamps.MpsMpo
@@ -34,7 +30,7 @@ def variational_sweep_1site(psi, psi_target, env=None, op=None):
         or :math:`\langle \psi|O|\psi_{target} \rangle` from the previous run.
 
     op: yamps.MpsMpo
-        operator acting on :math:`\psi_{\textrm{target}}.
+        operator acting on :math:`|\psi_{\textrm{target}}\rangle`.
 
     Returns
     -------

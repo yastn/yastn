@@ -20,7 +20,7 @@ Basic concepts
    theory/mps/basics
 
 
-MPS and MPO
+API: MPS and MPO
 ---------------------------------------
 
 .. toctree::
@@ -32,7 +32,7 @@ MPS and MPO
    mps/i-o
 
 
-Expectation values
+API: Expectation values
 ---------------------------
 
 .. toctree::
@@ -41,7 +41,7 @@ Expectation values
    mps/measurements
 
 
-Algorithms
+API: Algorithms
 ---------------------
 
 .. toctree::

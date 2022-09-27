@@ -13,10 +13,10 @@ def measure_overlap(bra, ket):
 
     Parameters
     -----------
-    bra : yast.MpsMpo
+    bra : yamps.MpsMpo
         An MPS which will be conjugated.
 
-    ket : yast.MpsMpo
+    ket : yamps.MpsMpo
 
     Returns
     -------
@@ -36,13 +36,13 @@ def measure_mpo(bra, op, ket):
 
     Parameters
     -----------
-    bra : yast.MpsMpo
+    bra : yamps.MpsMpo
         An MPS which will be conjugated.
 
-    op : yast.MpsMpo
+    op : yamps.MpsMpo
         Operator written as MPO.
 
-    ket : yast.MpsMpo
+    ket : yamps.MpsMpo
 
     Returns
     -------

@@ -275,7 +275,6 @@ class Generator:
             H.truncate_sweep(to='first', opts=self.opts, normalize=False)
         return H
 
-
     def mps(self, psi_str, parameters=None):
         """
         initialize simple product states 
@@ -283,3 +282,8 @@ class Generator:
         TODO: implement
         """
         pass
+
+
+def random_dense_mps(N, D, d, **kwargs):
+    G= Generator(N, yast.operators.Qdit(d=d, **kwargs))
+    return G.random_mps(D_total=D)

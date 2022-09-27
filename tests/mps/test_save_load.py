@@ -1,7 +1,12 @@
 """ basic procedures of single mps """
-import numpy as np
-import h5py
 import os
+import warnings
+import numpy as np
+try:
+    import h5py
+except ImportError:
+    warnings.warn("h5py module not available", ImportWarning)
+
 import yamps
 try:
     from . import generate_random, generate_by_hand
@@ -28,7 +33,7 @@ def test_basic_hdf5():
     # Initialize random MPS with dense tensors and checks saving/loading 
     # to and from HDF5 file.
     #
-    psi = generate_random.mps_random(config_dense, N=16, Dmax=15, d=2)
+    psi = yamps.random_dense_mps(N=16, D=15, d=2)
     #
     # We delete file if it already exists. 
     # (It is enough to clear the address './state' if the file already exists)
@@ -55,7 +60,7 @@ def test_basic_hdf5():
     # Similarily, one can save and load MPO
     #
     psi = generate_random.mpo_random(config_dense, N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
-    with h5py.File('tmp.h5', 'a') as f:
+    with h5py.File('tmp.h5', 'w') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
         phi = yamps.load_from_hdf5(config_dense, 1, f, 'state/')
@@ -123,7 +128,7 @@ def test_basic_dict():
     #
     # First, we generate random MPS without any symmetry.
     #    
-    psi = generate_random.mpo_random(config_dense, N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
+    psi = yamps.random_dense_mps(N=16, D=25, d=3)
     #
     # Next, we serialize MPS into dictionary.
     #

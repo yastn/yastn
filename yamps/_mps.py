@@ -55,7 +55,7 @@ def add(*states, amplitudes=None):
 
     Returns
     -------
-    yast.MpsMpo
+    yamps.MpsMpo
         new MPS/MPO given by linear superpostion of :code:`states`, i.e. 
         :math:`\sum_j \textrm{amplitudes[j]} \times \textrm{states[j]}`.
     """
@@ -111,7 +111,7 @@ def multiply(a, b, mode=None):
 
     Parameters
     ----------
-        a, b : yast.MpsMpo, yast.MpsMpo 
+        a, b : yamps.MpsMpo, yamps.MpsMpo 
             a pair of MPO and MPS or two MPO's to be multiplied
 
         mode : str
@@ -121,7 +121,7 @@ def multiply(a, b, mode=None):
 
     Returns
     -------
-        yast.MpsMpo
+        yamps.MpsMpo
     """
     if a.N != b.N:
         YampsError('Mps-s must have equal number of Tensor-s.')
@@ -214,7 +214,7 @@ class _TN1D_base():
 
         Returns
         -------
-        yast.MpsMpo
+        yamps.MpsMpo
             a clone of :code:`self`
         """
         phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
@@ -228,7 +228,7 @@ class _TN1D_base():
         into a new and independent :class:`yamps.MpsMpo`.
 
         .. warning:: 
-            this operation does not preserve autograd on the returned :code:`yast.MpsMpo`.
+            this operation does not preserve autograd on the returned :code:`yamps.MpsMpo`.
         
         .. note::
             Use when retaining "old" MPS/MPO is necessary. Most operations on 
@@ -236,7 +236,7 @@ class _TN1D_base():
 
         Returns
         -------
-        yast.MpsMpo
+        yamps.MpsMpo
             a copy of :code:`self`
         """
         phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
@@ -267,7 +267,7 @@ class _TN1D_base():
     
         Returns
         -------
-        yast.MpsMpo
+        yamps.MpsMpo
         """
         phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: multiplier * ten if ind == self.first else ten.clone() \
@@ -285,7 +285,7 @@ class _TN1D_base():
     
         Returns
         -------
-        yast.MpsMpo
+        yamps.MpsMpo
         """
         return self.__mul__(number)
     
@@ -300,9 +300,16 @@ class _TN1D_base():
             (see :meth:`yast.Tensor.save_to_dict`) of the MPS/MPO starting 
             from first site to last.
         """
-        out_dict = {}
+        out_dict = { 
+            'nr_phys': self.nr_phys,
+            'sym': {
+                'SYM_ID': self[0].config.sym.SYM_ID, 
+                'NSYM': self[0].config.sym.NSYM
+            },
+            'A' : {}
+        }
         for n in self.sweep(to='last'):
-            out_dict[n] = self.A[n].save_to_dict()
+            out_dict['A'][n] = self.A[n].save_to_dict()
         return out_dict
 
     def save_to_hdf5(self, file, in_file_path):
@@ -323,8 +330,11 @@ class _TN1D_base():
         in_file_path: File
             Name of a group in the file, where the Mps will be saved
         """
+        file.create_dataset(in_file_path+'/nr_phys', data=self.nr_phys)
+        file.create_dataset(in_file_path+'/sym/SYM_ID', data=self[0].config.sym.SYM_ID)
+        file.create_dataset(in_file_path+'/sym/NSYM', data=self[0].config.sym.NSYM)
         for n in self.sweep(to='last'):
-            self.A[n].save_to_hdf5(file, in_file_path+str(n))
+            self.A[n].save_to_hdf5(file, in_file_path+'/A/'+str(n))
 
 
 class MpsMpo(_TN1D_base):
@@ -564,7 +574,7 @@ class MpsMpo(_TN1D_base):
 
         Returns
         -------
-        self : yast.MpsMpo
+        self : yamps.MpsMpo
             in-place canonized MPS/MPO
         """
         self.absorb_central(to=to)

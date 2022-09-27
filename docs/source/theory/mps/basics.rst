@@ -10,7 +10,10 @@ The SVD operation at first isolates `0`-th from `1`-to-`N`-th and then `1`-th fr
 
 .. math::
 
-    \Psi \in \mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1} \xrightarrow{SVD}{\sum_{j_0,j_1\dots j_{N-1}} \sum_{\sigma_0,\sigma_1\dots \sigma_{N-1}} \, \Theta_{j_0,j_1\dots j_{N-1}}^{\sigma_0,\sigma_1\dots \sigma_{N-1}} \, A^{\sigma_0}_{,j_0} A^{\sigma_1}_{j_0,j_1} \dots A^{\sigma_{N-2}}_{j_{N-2},j_{N-1}} A^{\sigma_{N-1}}_{j_{N-1},}}
+    \Psi \in \mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1} \xrightarrow{SVD}{\sum_{j_0,j_1\dots j_{N-1}} \sum_{\sigma_0,\sigma_1\dots \sigma_{N-1}} \, A^{\sigma_0}_{,j_0} A^{\sigma_1}_{j_0,j_1} \dots A^{\sigma_{N-2}}_{j_{N-2},j_{N-1}} A^{\sigma_{N-1}}_{j_{N-1},}}
+
+.. 
+  \Theta_{j_0,j_1\dots j_{N-1}}^{\sigma_0,\sigma_1\dots \sigma_{N-1}} \
 
 A single tensor :math:`A_j` is a rank-3 array of size :math:`D_{j-1,j} \times d_j \times D_{j,j+1}`. 
 
@@ -25,7 +28,8 @@ A single tensor :math:`A_j` is a rank-3 array of size :math:`D_{j-1,j} \times d_
 
 The MPS forms one-dimensional structure with each tensor having a physical dimension *d* (:math:`d_j` for general case when particles/qudits are different) and virtual dimensions 
 :math:`D_{i,j}` connecting *i*-th particle with *j*-th particle. *YAMPS* allows to perform computation on one dimensional MPS with open boundary conditions. 
-The schematic picture for general MPS is shown below. Notice that for open boundary condition we always have edge tensor with dimension :math:`1\times d_0 \times D_{0,1}` on the left corner and :math:`D_{N-2,N-1} \times d_{N-1} \times` on the right edge.
+The schematic picture for general MPS is shown below. Notice that for open boundary condition we always have edge tensor with dimension :math:`1\times d_0 \times D_{0,1}` 
+on the left edge and :math:`D_{N-2,N-1} \times d_{N-1} \times` on the right edge.
 
 ::
 
@@ -58,7 +62,7 @@ Matrix product operator (MPO)
                      |
                     d_j
 
-`YAMPS` allows to encode operators, e.g., Hamiltonian or other operators associated with expectation values, under open boundary condition. MPO with open boundary condition has a bond dimension `D=1` on the corners of the MPO chain. 
+`YAMPS` allows to encode operators, e.g., Hamiltonian or other operators associated with expectation values, under open boundary condition. MPO with open boundary condition has a bond dimension `D=1` on the edges of the MPO chain. 
 
 ::
 
