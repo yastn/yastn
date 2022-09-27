@@ -93,7 +93,7 @@ Bring MPS/MPO into canonical form by QR decomposition
 ::
 
         # Generate random MPS with no symmetry
-        psi = yamps.generate_random.mps_random(yast.make_config(), N=16, Dmax=15, d=2)
+        psi = yamps.random_dense_mps(N=16, D=15, d=2)
 
         # rigth canonical form
         #
@@ -139,7 +139,7 @@ Truncation is governed by options passed as :code:`opts_dict` (internally to SVD
 
         # Generate random MPS with no symmetry
         #
-        psi = generate_random.mps_random(config_dense, N=16, Dmax=15, d=2)
+        psi = yamps.random_dense_mps(N=16, D=15, d=2)
 
         # Bring MPS to canonical form and truncate (here, right canonical form).
         # For MPS we usually normalize the state.

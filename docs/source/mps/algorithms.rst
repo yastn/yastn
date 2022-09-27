@@ -99,5 +99,8 @@ See examples: :ref:`examples/mps/mps:tdvp`.
 Maximize overlap
 ================
 
+.. todo::
+    Wrap in high-level DMRG-like function
+
 .. autofunction:: yamps.variational_sweep_1site
 

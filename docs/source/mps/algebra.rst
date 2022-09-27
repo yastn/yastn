@@ -49,23 +49,23 @@ Following example show addition of two MPSs:
 
 ::
 
-     import yamps
+     import yamps, yast
+     
+     # Define random MPS's without any symmetry
      #
-     # Define yamps.Mps's
-     #
-     psi0 = <some random MPS>
-     psi1 = <some random MPS>
-     #
-     # We want to calculate: res = psi0 + 2*psi1. There are 
-     # a couple of ways to do that:
+     config_dense= yast.make_config()
+     psi0 = yamps.random_dense_mps(N=8, D=5, d=2)
+     psi1 = yamps.random_dense_mps(N=8, D=5, d=2)
+     
+     # We want to calculate: res = psi0 + 2*psi1. There are couple of ways:
      # A/
      resA = yamps.add(psi0, 2.0*psi1)
+     
      # B/
      resB = yamps.add(psi0, psi1, amplitudes=[1.0,2.0])
+     
      # C/
      resC = psi0 + 2.0 * psi1
-     # All cases above gives the MPS which is desired sum and is independent of sum elements. 
-     # resA == resB == resC
 
 
 Products of MPS/MPO
