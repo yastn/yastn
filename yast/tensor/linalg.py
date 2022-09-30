@@ -42,7 +42,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
 
     Parameters
     ----------
-    axes: tuple
+    axes: Sequence(int) or Sequence(Sequence(int),Sequence(int))
         Specify two groups of legs between which to perform SVD, as well as
         their final order.
 
@@ -102,7 +102,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
 
     Parameters
     ----------
-    axes: tuple
+    axes: Sequence(int) or Sequence(Sequence(int),Sequence(int))
         Specify two groups of legs between which to perform SVD, as well as
         their final order.
 
@@ -380,7 +380,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
     Parameters
     ----------
-    axes: tuple
+    axes: Sequence(int) or Sequence(Sequence(int),Sequence(int))
         Specify two groups of legs between which to perform svd, as well as their final order.
 
     sQ: int

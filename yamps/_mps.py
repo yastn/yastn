@@ -1,5 +1,6 @@
 """ Mps structure and its basic manipulations. """
 from yast import entropy, block, tensordot
+import yast 
 from numbers import Number
 
 class YampsError(Exception):
@@ -648,9 +649,10 @@ class MpsMpo(_TN1D_base):
 
     def unmerge_two_sites(self, AA, bd, opts_svd):
         r"""
-        Unmerge tensor into two neighbouring mps sites and a central block using svd to trunctate the bond dimension.
+        Unmerge rank-4 tensor into two neighbouring MPS sites and a central block 
+        using :func:`yast.linalg.svd` to trunctate the bond dimension.
 
-        Provided tensor should be fused consistently with `merge_two_sites`.
+        Input tensor should be a result of :meth:`merge_two_sites` (or fused consistently).
 
         Parameters
         ----------
@@ -662,15 +664,21 @@ class MpsMpo(_TN1D_base):
 
         Returns
         ----------
-        out : Tensor
-            tensor formed from A[n] and A[n + 1]
+        scalar
+            normalized discarded weight :math:`\sum_{i\in\textrm{discarded}}\lambda_i/\sum_i\lambda_i`,
+            where :math:`\lambda_i` are singular values across the bond. 
         """
         nl, nr = bd
         axes = (1,) if self.nr_phys == 1 else (1, 2)
         AA = AA.unfuse_legs(axes=axes)
         axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 3), (2, 4, 5))
         self.pC = bd
-        self.A[nl], self.A[bd], self.A[nr] = AA.svd_with_truncation(axes=axes, sU=-1, **opts_svd)
+        # self.A[nl], self.A[bd], self.A[nr] = AA.svd_with_truncation(axes=axes, sU=-1, **opts_svd)
+        _U, _S, _V= AA.svd(axes=axes, sU=-1, **opts_svd)
+        mask= yast.linalg.truncation_mask(_S, **opts_svd)
+        self.A[nl], self.A[bd], self.A[nr]= mask.apply_mask(_U, _S, _V, axis=(-1, 0, 0))
+        # discarded weight
+        return 1.0-sum(self.A[bd].data)/sum(_S.data)
 
     def get_entropy(self, alpha=1):
         r"""

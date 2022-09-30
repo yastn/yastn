@@ -1,6 +1,7 @@
 import numpy as np
 from ..initialize import make_config
 from ..sym import sym_none, sym_Z3, sym_U1
+from .. import block
 from ..tensor import YastError, Tensor
 
 class Spin1:
@@ -43,7 +44,6 @@ class Spin1:
         self.config = make_config(**kwargs)
         self.s = (1, -1)
         self.operators = ('I', 'sx', 'sy', 'sz', 'sp', 'sm')
-
 
     def I(self):
         """ Identity operator. """
@@ -130,6 +130,51 @@ class Spin1:
             sm.set_block(ts=(0, 1), Ds=(1, 1), val=sq2)
             sm.set_block(ts=(-1, 0), Ds=(1, 1), val=sq2)
         return sm
+
+    def vec_s(self):
+        r"""
+        :return: vector of Spin-1 generators as rank-3 tensor 
+        :rtype: yast.Tensor
+        
+        Returns vector of Spin-1 generators, in order: :math:`S^z, S^+, S^-`.
+        The generators are indexed by first index of the resulting rank-3 tensors.
+        Signature convention is::    
+
+            1(+1)
+            S--0(-1)
+            2(-1)
+        """
+        vec_s= block({i: t.add_leg(axis=0,s=-1) for i,t in enumerate([\
+            self.sz(), self.sp(), self.sm()])}, common_legs=[1,2])
+        vec_s= vec_s.drop_leg_history(axis=0)
+        return vec_s
+
+    def g(self):
+        r"""
+        :return: metric tensor.
+        :rtype: yast.Tensor
+
+        Returns rank-2 tensor g, such that the quadratic Casimir in terms of [S^z, S^+, S^-] basis 
+        :math:`\vec{S}` can be computed as :math:`\vec{S}^T g \vec{S}`. The signature of g is
+
+        ::
+
+            (+1)--g--(+1)
+        """
+        if self._sym == 'dense':
+            g = Tensor(config=self.config, s=(1,1))
+            g.set_block(val=[[1, 0, 0], [0, 0.5, 0], [0, 0, 0.5]], Ds=(3, 3))
+        if self._sym in 'Z3':
+            g = Tensor(config=self.config, s=(1,1))
+            g.set_block(ts=(0, 0), Ds=(1, 1), val=1)
+            g.set_block(ts=(1, 2), Ds=(1, 1), val=0.5)
+            g.set_block(ts=(2, 1), Ds=(1, 1), val=0.5)
+        if self._sym in 'U1':
+            g = Tensor(config=self.config, s=(1,1))
+            g.set_block(ts=(1, -1), Ds=(1, 1), val=0.5)
+            g.set_block(ts=(0, 0), Ds=(1, 1), val=1)
+            g.set_block(ts=(-1, 1), Ds=(1, 1), val=0.5)
+        return g
 
     def to_dict(self):
         """

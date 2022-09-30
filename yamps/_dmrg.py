@@ -26,8 +26,9 @@ def _init_dmrg(psi, H, env, project, opts_eigs):
     return env, opts_eigs
 
 
-def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', atol=-1, max_sweeps=1,
-            opts_eigs=None, opts_svd=None, return_info=False):
+def dmrg(psi, H, env=None, project=None, version='1site', \
+        converge='energy', measure=None, \
+        atol=-1, max_sweeps=1, opts_eigs=None, opts_svd=None, return_info=False):
     r"""
     Perform DMRG sweeps until convergence, starting from MPS :code:`psi` 
     in right canonical form. The outer loop sweeps over MPS updating sites 
@@ -66,6 +67,12 @@ def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', ato
         
             * :code:`'schmidt'` uses Schmidt values on the worst cut
 
+    measure: func(int, yamps.MpsMpo, yamps.Env3, scalar, scalar)->None
+        callback allowing measurement/manipulation of MPS after each DMRG sweep.
+        The arguments passed are current sweep, current state :math:`|\psi\rangle`, 
+        current environment corresponding to :math:`\langle\psi|H|\psi\rangle` network,
+        current energy, and current truncation error.
+
     atol: float
         defines converged criterion. DMRG stop once the change in convergence measure 
         is less than :code:`atol` between sweeps.
@@ -96,15 +103,19 @@ def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', ato
 
     Eold = env.measure()
     for sweep in range(max_sweeps):
+        max_disc_weight= None
         if version == '1site':
             env = dmrg_sweep_1site(psi, H=H, env=env, project=project, opts_eigs=opts_eigs)
         elif version == '2site':
-            env = dmrg_sweep_2site(psi, H=H, env=env, project=project, opts_eigs=opts_eigs, opts_svd=opts_svd)
+            env, max_disc_weight = dmrg_sweep_2site(psi, H=H, env=env, project=project, \
+                opts_eigs=opts_eigs, opts_svd=opts_svd)
         else:
             raise YampsError('dmrg version %s not recognized' % version)
         E = env.measure()
         dE, Eold = Eold - E, E
         logger.info('Iteration = %03d  Energy = %0.14f dE = %0.14f', sweep, E, dE)
+        if not (measure is None):
+            measure(sweep, psi, env, E, max_disc_weight)
         if converge == 'energy' and abs(dE) < atol:
             break
     if return_info:
@@ -150,16 +161,18 @@ def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=No
     if opts_svd is None:
         opts_svd = {'tol': 1e-12}
 
+    max_disc_weight=-1.
     for to, dn in (('last', 0), ('first', 1)):
         for n in psi.sweep(to=to, dl=1):
             bd = (n, n + 1)
             env.update_AAort(bd)
             AA = psi.merge_two_sites(bd)
             _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
-            psi.unmerge_two_sites(AA, bd, opts_svd)
+            _disc_weigth_bd= psi.unmerge_two_sites(AA, bd, opts_svd)
+            max_disc_weight= max(max_disc_weight,_disc_weigth_bd)
             psi.absorb_central(to=to)
             env.clear_site(n, n + 1)
             env.update_env(n + dn, to=to)
 
     env.update_env(0, to='first')
-    return env
+    return env, max_disc_weight

@@ -9,6 +9,18 @@ from re import match
 
 
 class Hterm(NamedTuple):
+    r"""
+    Defines a product operator :math:`O\in\A(\mathcal{H})` on product Hilbert space :math:`\mathcal{H}=\otimes_i \mathcal{H}_i`
+    where :math:`\mathcal{H}_i` is a local Hilbert space of *i*-th degree of freedom. 
+    The product operator :math:`O = \otimes_i o_i` is a tensor product of local operators :math:`o_i`.
+    Unless explicitly specified, the :math:`o_i` is assumed to be identity operator.
+
+    positions : tuple(int)
+        positions of the local operators :math:`o_i` in the product different than identity
+    operators : tuple(yast.Tensor)
+        local operators in the product, acting at *i*-th positon :code:`positions[i]` 
+        different than identity.
+    """
     amplitude : float = 1.0
     positions : tuple = ()
     operators : tuple = ()
@@ -66,6 +78,14 @@ class Generator:
         """
         Generator allowing creation of MPO/MPS from a set of local operators.
 
+        Generated MPO tensors have following signature::
+
+                   (+1) (physical ket)
+                     |
+            (+1)--|MPO_i|--(-1)
+                     |
+                   (-1) (physical bra)
+
         Parameters
         ----------
 
@@ -116,6 +136,16 @@ class Generator:
     def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64'):
         """
         Generate a random Mps of total charge n and virtual bond dimension D_total.
+
+        Parameters
+        ----------
+        n : int
+            total charge
+        D_total : int
+            total dimension of virtual space
+        sigma : int
+            variance of Normal distribution from which dimensions of charge sectors
+            are drawn.
         """
         if n is None:
             n = (0,) * self.config.sym.NSYM
