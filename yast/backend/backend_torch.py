@@ -3,6 +3,26 @@ from itertools import chain, groupby
 import numpy as np
 import torch
 
+__all__= [
+    '_torch_version_check', 'DTYPE',
+    'SVDGESDD','SYMEIG',
+    'get_dtype', 'is_complex', 'get_device', 'random_seed', 'set_num_threads', 'grad',
+    'detach', 'detach_', 'clone', 'copy',
+    'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real', 
+    'imag', 'max_abs', 'norm_matrix', 'count_nonzero', 'delete', 'insert', 
+    'expm', 
+    'first_element', 'item', 'sum_elements', 'norm', 'entropy',
+    'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict', 
+    'requires_grad_', 'requires_grad', 'move_to', 'conj',
+    'trace', 'trace_with_mask', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 
+    'svd_lowrank', 'svd', 'eigh', 'qr',
+    'argsort', 'eigs_which', 'embed_msk', 'embed_slc',
+    'add', 'sub', 'apxb', 'apply_slice', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
+    'dot', 'dot_with_mask', 'dot_diag', 'mask_diag',
+    'merge_to_dense', 'merge_super_blocks', 'is_independent'
+]
+#['transpose', 'transpose_and_merge', 'unmerge']
+
 def _torch_version_check(version):
     # for version="X.Y.Z" checks if current version is higher or equal to X.Y
     assert version.count('.')==2 and version.replace('.','').isdigit(),"Invalid version string"

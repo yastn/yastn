@@ -1,5 +1,5 @@
 import os
-_NUM_THREADS="1"
+_NUM_THREADS="8"
 os.environ["OMP_NUM_THREADS"] = _NUM_THREADS
 os.environ["OPENBLAS_NUM_THREADS"] = _NUM_THREADS
 os.environ["MKL_NUM_THREADS"] = _NUM_THREADS

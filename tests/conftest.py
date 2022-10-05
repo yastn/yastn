@@ -6,7 +6,8 @@ import importlib
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 def pytest_addoption(parser):
-    parser.addoption("--backend", help='np or torch', default='np', action='store')
+    parser.addoption("--backend", help='backend', default='np', choices=['np','torch','torch_cpp'],\
+     action='store')
     parser.addoption("--device", help='cpu or cuda', default='cpu', action='store')
     parser.addoption("--bug_pytorch110", help='test complex conjugation bug in PyTorch 1.10',\
         action='store_true', dest="bug_pytorch110", default=False)
@@ -16,6 +17,9 @@ def pytest_configure(config):
     if config.option.backend == 'torch':
         print('Using torch backend')
         import yast.backend.backend_torch as backend
+    if config.option.backend == 'torch_cpp':
+        print('Using torch_cpp backend')
+        import yast.backend.backend_torch_cpp as backend
     elif config.option.backend == 'np':
         print('Using numpy backend')
         import yast.backend.backend_np as backend
