@@ -10,7 +10,7 @@ except ImportError:
 tol = 1e-8  #pylint: disable=invalid-name
 
 
-@pytest.mark.skipif(config_U1.backend.BACKEND_ID=="torch", reason="uses scipy procedures for raw data")
+@pytest.mark.skipif(not config_U1.backend.BACKEND_ID=="np", reason="uses scipy procedures for raw data")
 def test_eigs_simple():
     legs = [yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 2)),
             yast.Leg(config_U1, s=1, t=(0, 1), D=(1, 1)),
@@ -49,7 +49,7 @@ def test_eigs_simple():
     assert all(pytest.approx(x, rel=tol) == 1.0 for x in (abs(wy), abs(wn)))
 
 
-@pytest.mark.skipif(config_U1.backend.BACKEND_ID=="torch", reason="uses scipy procedures for raw data")
+@pytest.mark.skipif(not config_U1.backend.BACKEND_ID=="np", reason="uses scipy procedures for raw data")
 def test_eigs_mismatches():
     # here define a problem in a way that there are some mismatches in legs to be resolved
 

@@ -307,8 +307,12 @@ class TestSyntaxGeneral(unittest.TestCase):
         # with config that is not imported as usually
         if config_U1.backend.BACKEND_ID == 'numpy':
             cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_np, device=config_U1.default_device)
-        else:
+        elif config_U1.backend.BACKEND_ID == 'torch':
             cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_torch, device=config_U1.default_device)
+        elif config_U1.backend.BACKEND_ID == 'torch_cpp':
+            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_torch_cpp, device=config_U1.default_device)
+        else:
+            raise RuntimeError('Unsupported backend')
 
         legs = [yast.Leg(cfg_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
                 yast.Leg(cfg_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
