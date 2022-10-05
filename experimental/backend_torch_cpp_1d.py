@@ -1,5 +1,6 @@
 import torch
 from itertools import groupby
+import numpy as np
 import merge_to_matrix_cpp_1d
 
 def randR(D, device='cpu', dtype=torch.float64):

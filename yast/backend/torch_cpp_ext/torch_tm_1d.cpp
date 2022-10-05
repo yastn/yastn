@@ -334,6 +334,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("forward_p2p_v2", &tm_forward_1d_p2p_v2, "TM forward p2p");
   m.def("forward_omp", &tm_forward_1d_omp, "TM forward omp");
   m.def("backward", &tm_backward_1d, "TM backward");
-  m.def("map_source_to_dest_plain_omp", &map_source_to_dest_plain_omp, "source_to_dest map");
+  // m.def("map_source_to_dest_plain_omp", &map_source_to_dest_plain_omp, "source_to_dest map");
   m.def("map_source_to_dest_plain_omp_v3", &map_source_to_dest_plain_omp_v3, "source_to_dest map");
 }
