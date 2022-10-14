@@ -333,7 +333,7 @@ class Generator:
                     else:
                         if not H:
                             H = generate_mpo(self._I, place_holder, self.opts)
-                        else:
+                        elif H and amp_holder > 0.0:
                             H = H + generate_mpo(self._I, place_holder, self.opts)
             H.canonize_sweep(to='last', normalize=False)
             H.truncate_sweep(to='first', opts=self.opts, normalize=False)

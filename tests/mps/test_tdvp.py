@@ -3,10 +3,6 @@ import logging
 import pytest
 import yamps
 import yast
-try:
-    from . import generate_by_hand
-except ImportError:
-    import generate_by_hand
 
 
 tol=1e-8
@@ -64,7 +60,9 @@ def test_dense_tdvp():
     #
     operators = yast.operators.Spin12(sym='dense')
     generate = yamps.Generator(N=N, operators=operators)
-    H = generate_by_hand.mpo_XX_model(generate.config, N=N, t=1, mu=0.25)
+    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.25, "range1": range(N), "range2": range(N-1)}
+    H_str = "\sum_{j \in range2} t ( sp_{j} sm_{j+1} + sp_{j+1} sm_{j} ) + \sum_{j\in range1} mu sp_{j} sm_{j}"
+    H = generate.mpo(H_str, parameters)
     #
     # To standardize this test we will fix a seed for random MPS we use
     #
@@ -117,12 +115,14 @@ def test_Z2_tdvp():
 
     logging.info(' Tensor : Z2 ')
 
-    operators = yast.operators.Spin12(sym='Z2')
+    operators = yast.operators.SpinlessFermions(sym='Z2')
     generate = yamps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 
     Eng_gs = {0: -2.232050807568877, 1: -1.982050807568877}
-    H = generate_by_hand.mpo_XX_model(generate.config, N=N, t=1, mu=0.25)
+    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.25, "range1": range(N), "range2": range(N-1)}
+    H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j}"
+    H = generate.mpo(H_str, parameters)
 
     for parity in (0, 1):
         psi = generate.random_mps(D_total=D_total, n=parity)
@@ -148,7 +148,9 @@ def test_U1_tdvp():
     logging.info(' Tensor : U1 ')
 
     Eng_gs = {1: -1.482050807568877, 2: -2.232050807568877}
-    H = generate_by_hand.mpo_XX_model(generate.config, N=N, t=1, mu=0.25)
+    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.25, "range1": range(N), "range2": range(N-1)}
+    H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j}"
+    H = generate.mpo(H_str, parameters)
 
     for charge in (1, 2):
         psi = generate.random_mps(D_total=D_total, n=charge)
