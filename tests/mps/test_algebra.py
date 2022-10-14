@@ -2,10 +2,6 @@
 import pytest
 import yamps
 import yast
-try:
-    from . import generate_by_hand
-except ImportError:
-    import generate_by_hand
 
 
 tol = 1e-6
@@ -52,7 +48,9 @@ def test_multiplication():
     #
     # The Hamiltonian is obtained with automatic generator (see source file).
     #
-    H = generate_by_hand.mpo_XX_model(generate.config, N=N, t=1, mu=0.2)
+    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.2, "range1": range(N), "range2": range(N-1)}
+    H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j}"
+    H = generate.mpo(H_str, parameters)
     #
     # To standardize this test we will fix a seed for random MPS we use
     #

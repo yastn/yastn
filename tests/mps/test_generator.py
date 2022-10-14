@@ -1,6 +1,11 @@
+import pytest
 import numpy as np
-import yamps
 import yast
+import yamps
+
+
+tol = 1e-12
+
 
 ####### MPO for XX model ##########
 def mpo_XX_model_dense(config, N, t, mu):
@@ -57,30 +62,6 @@ def mpo_XX_model_dense(config, N, t, mu):
         H[n]= on_site_t
     return H
 
-def mpo_occupation_dense(config, N):
-    nn = np.array([[0, 0], [0, 1]])
-    ee = np.array([[1, 0], [0, 1]])
-    oo = np.array([[0, 0], [0, 0]])
-
-    H = yamps.Mpo(N)
-    for n in H.sweep(to='last'):  # empty tensors
-        H.A[n] = yast.Tensor(config=config, s=(1, 1, -1, -1))
-        if n == H.first:
-            tmp = np.block([[nn, ee]])
-            tmp = tmp.reshape((1, 2, 2, 2))
-            Ds = (1, 2, 2, 2)
-        elif n == H.last:
-            tmp = np.block([[ee], [nn]])
-            tmp = tmp.reshape((2, 2, 1, 2))
-            Ds = (2, 2, 2, 1)
-        else:
-            tmp = np.block([[ee, oo],
-                            [nn, ee]])
-            tmp = tmp.reshape((2, 2, 2, 2))
-            Ds = (2, 2, 2, 2)
-        tmp = np.transpose(tmp, (0, 1, 3, 2))
-        H.A[n].set_block(val=tmp, Ds=Ds)
-    return H
 
 def mpo_XX_model_Z2(config, N, t, mu):
     # Initialize MPO tensor by tensor. Example for NN-hopping model, 
@@ -130,21 +111,6 @@ def mpo_XX_model_Z2(config, N, t, mu):
     return H
 
 
-def mpo_occupation_Z2(config, N):
-    H = yamps.Mpo(N)
-    for n in H.sweep(to='last'):
-        H.A[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
-        if n == H.first:
-            H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 1, 2))
-            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(1, 1, 1, 2))
-        elif n == H.last:
-            H.A[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
-            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(2, 1, 1, 1))
-        else:
-            H.A[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 1, 2))
-            H.A[n].set_block(ts=(0, 1, 1, 0), val=[[1, 0], [1, 1]], Ds=(2, 1, 1, 2))
-    return H
-
 def mpo_XX_model_U1(config, N, t, mu):
     # Initialize MPO tensor by tensor. Example for NN-hopping model, 
     # using explicit U(1) symmetry of the model.
@@ -193,21 +159,6 @@ def mpo_XX_model_U1(config, N, t, mu):
     return H
 
 
-def mpo_occupation_U1(config, N):
-    H = yamps.Mpo(N)
-    for n in H.sweep(to='last'):
-        H.A[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
-        if n == H.first:
-            H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 1, 2))
-            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(1, 1, 1, 2))
-        elif n == H.last:
-            H.A[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
-            H.A[n].set_block(ts=(0, 1, 1, 0), val=[1, 1], Ds=(2, 1, 1, 1))
-        else:
-            H.A[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 1, 2))
-            H.A[n].set_block(ts=(0, 1, 1, 0), val=[[1, 0], [1, 1]], Ds=(2, 1, 1, 2))
-    return H
-
 def mpo_XX_model(config, N, t, mu):
     if config.sym.SYM_ID == 'dense':
         return mpo_XX_model_dense(config, N, t, mu)
@@ -218,10 +169,48 @@ def mpo_XX_model(config, N, t, mu):
 
 
 
-def mpo_occupation(config, N):
-    if config.sym.SYM_ID == 'dense':
-        return mpo_occupation_dense(config, N)
-    elif config.sym.SYM_ID == 'Z2':
-        return mpo_occupation_Z2(config, N)
-    elif config.sym.SYM_ID == 'U(1)':
-        return mpo_occupation_U1(config, N)
+def test_generator_mps():
+    N = 10
+    D_total = 16
+    bds = (1,) + (D_total,) * (N - 1) + (1,)
+
+    for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U1', (N // 2,))):
+        operators = yast.operators.SpinlessFermions(sym=sym)
+        generate = yamps.Generator(N, operators)
+        I = generate.I()
+        assert pytest.approx(yamps.measure_overlap(I, I).item(), rel=tol) == 2 ** N
+        O = I @ I + (-1 * I)
+        assert pytest.approx(yamps.measure_overlap(O, O).item(), abs=tol) == 0
+        psi = generate.random_mps(D_total=D_total, n = nn)
+        assert psi[psi.last].get_legs(axis=psi.right[0]).t == (nn,)
+        assert psi[psi.first].get_legs(axis=psi.left[0]).t == ((0,) * len(nn),)
+        bds = psi.get_bond_dimensions()
+        assert bds[0] == bds[-1] == 1
+        assert all(bd > D_total/2 for bd in bds[2:-2])
+
+
+def test_generator_mpo():
+    N = 5
+    t = 1
+    mu = 0.2
+    operators = yast.operators.SpinlessFermions(sym='Z2')
+    generate = yamps.Generator(N, operators)
+    generate.random_seed(seed=0)
+    parameters = {"t": lambda j: t, "mu": lambda j: mu, "range1": range(N), "range2": range(1, N-1)}
+    H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j} + ( cp_{0} c_{1} + 1*cp_{1} c_{0} )*t "
+    H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
+    H = generate.mpo(H_str, parameters)
+    psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
+    x_ref = yamps.measure_mpo(psi, H_ref, psi).item()
+    x = yamps.measure_mpo(psi, H, psi).item()
+    assert abs(x_ref - x) < tol
+
+    psi.canonize_sweep(to='first')
+    psi.canonize_sweep(to='last')
+    x_ref = yamps.measure_mpo(psi, H_ref, psi).item()
+    x = yamps.measure_mpo(psi, H, psi).item()
+    assert abs(x_ref - x) < tol
+
+if __name__ == "__main__":
+    test_generator_mps()
+    test_generator_mpo()

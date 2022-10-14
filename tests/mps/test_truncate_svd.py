@@ -1,11 +1,6 @@
 """ truncation of mps """
 import yamps
 import yast
-try:
-    from . import generate_by_hand
-except ImportError:
-    import generate_by_hand
-
 
 
 def run_dmrg_1site(psi, H, sweeps=10):
@@ -37,9 +32,9 @@ def run_truncation(psi, H, Egs, sweeps=2):
     assert Egs < Eng_v < Eng_t
 
 
-def test_truncate_svd_full():
+def test_truncate_svd_dense():
     """
-    Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
+    Initialize random mps of dense tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
     N = 8
     Eng_gs = -4.758770483143633
@@ -49,7 +44,9 @@ def test_truncate_svd_full():
     generate = yamps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 
-    H = generate_by_hand.mpo_XX_model(generate.config, N=N, t=1, mu=0)
+    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0, "range1": range(N), "range2": range(N-1)}
+    H_str = "\sum_{j \in range2} t ( sp_{j} sm_{j+1} + sp_{j+1} sm_{j} ) + \sum_{j\in range1} mu sp_{j} sm_{j}"
+    H = generate.mpo(H_str, parameters)
     psi = generate.random_mps(D_total=D_total).canonize_sweep(to='first')
     run_dmrg_1site(psi, H)
     run_truncation(psi, H, Eng_gs)
@@ -57,7 +54,7 @@ def test_truncate_svd_full():
 
 def test_truncate_svd_Z2():
     """
-    Initialize random mps of full tensors and checks canonization
+    Initialize random mps of dense tensors and checks canonization
     """
     N = 8
     D_total = 8
@@ -67,7 +64,9 @@ def test_truncate_svd_Z2():
     generate = yamps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 
-    H = generate_by_hand.mpo_XX_model(generate.config, N=N, t=1, mu=0)
+    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0, "range1": range(N), "range2": range(N-1)}
+    H_str = "\sum_{j \in range2} t ( sp_{j} sm_{j+1} + sp_{j+1} sm_{j} ) + \sum_{j\in range1} mu sp_{j} sm_{j}"
+    H = generate.mpo(H_str, parameters)
 
     for parity in (0, 1):
         psi = generate.random_mps(D_total=D_total, n=parity)
@@ -77,5 +76,5 @@ def test_truncate_svd_Z2():
 
 
 if __name__ == "__main__":
-    test_truncate_svd_full()
+    test_truncate_svd_dense()
     test_truncate_svd_Z2()
