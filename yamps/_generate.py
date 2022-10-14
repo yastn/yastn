@@ -172,6 +172,37 @@ class Generator:
             return psi
         raise YampsError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization) ")
 
+    def random_mpo(self, D_total=8, sigma=1, dtype='float64'):
+        """
+        Generate a random Mpo of virtual bond dimension D_total.
+
+        Mainly, for testing.
+
+        Parameters
+        ----------
+        D_total : int
+            total dimension of virtual space
+        sigma : int
+            variance of Normal distribution from which dimensions of charge sectors
+            are drawn.
+        """
+        n0 = (0,) * self.config.sym.NSYM
+        psi = Mpo(self.N)
+
+        ll = yast.Leg(self.config, s=1, t=(n0,), D=(1,),)
+        for site in psi.sweep(to='last'):
+            lp = self._I[site].get_legs(axis=self._I.phys[0])
+            if site != psi.last:
+                lr = yast.random_leg(self.config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[ll, lp, lp.conj()])
+            else:
+                lr = yast.Leg(self.config, s=-1, t=(n0,), D=(1,),)
+            psi.A[site] = yast.rand(self.config, legs=[ll, lp, lp.conj(), lr], dtype=dtype)
+            ll = psi.A[site].get_legs(axis=psi.right[0]).conj()
+        if sum(ll.D) == 1:
+            return psi
+        raise YampsError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
+
+
     def mpo(self, H_str, parameters=None):
         r"""
         Convert latex-like string to yamps MPO.
