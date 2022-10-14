@@ -8,20 +8,11 @@ except ImportError:
     warnings.warn("h5py module not available", ImportWarning)
 
 import yamps
-try:
-    from . import generate_random, generate_by_hand
-    from .configs import config_dense, config_dense_fermionic
-    from .configs import config_U1, config_U1_fermionic
-    from .configs import config_Z2, config_Z2_fermionic
-except ImportError:
-    import generate_random, generate_by_hand
-    from configs import config_dense, config_dense_fermionic
-    from configs import config_U1, config_U1_fermionic
-    from configs import config_Z2, config_Z2_fermionic
-
+import yast
 
 
 tol = 1e-12
+
 
 def check_copy(psi1, psi2):
     """ Test if two mps-s have the same tensors (velues). """
@@ -30,11 +21,13 @@ def check_copy(psi1, psi2):
     assert psi1.A is not psi2.A
     assert psi1 is not psi2
 
+
 def test_basic_hdf5():
     # Initialize random MPS with dense tensors and checks saving/loading 
     # to and from HDF5 file.
     #
     psi = yamps.random_dense_mps(N=16, D=15, d=2)
+    config_dense = psi.config
     #
     # We delete file if it already exists. 
     # (It is enough to clear the address './state' if the file already exists)
@@ -57,53 +50,27 @@ def test_basic_hdf5():
     #
     with h5py.File('tmp.h5', 'r') as f:
         phi = yamps.load_from_hdf5(config_dense, 1, f, 'state/')
-
+    #
+    # Test psi == phi
+    #
+    check_copy(psi, phi)
+    #
     # Similarily, one can save and load MPO
     #
-    psi = generate_random.mpo_random(config_dense, N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
+    psi = yamps.random_dense_mpo(N=16, D=8, d=3)
     with h5py.File('tmp.h5', 'w') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
         phi = yamps.load_from_hdf5(config_dense, 1, f, 'state/')
     os.remove("tmp.h5")
-
-
-def test_full_hdf5():
-    try:
-        os.remove("tmp.h5")
-    except OSError:
-        pass
-
-    # basic MPS
-    psi = generate_random.mps_random(config_dense, N=16, Dmax=15, d=2)
-    with h5py.File('tmp.h5', 'a') as f:
-        psi.save_to_hdf5(f, 'state/')
-    with h5py.File('tmp.h5', 'r') as f:
-        phi = yamps.load_from_hdf5(config_dense, 1, f, 'state/')
     check_copy(psi, phi)
-    os.remove("tmp.h5") 
-
-    # MPS with alternating physical dimension
-    psi = generate_random.mps_random(config_dense, N=16, Dmax=19, d=[2, 3])
-    with h5py.File('tmp.h5', 'a') as f:
-        psi.save_to_hdf5(f, 'state/')
-    with h5py.File('tmp.h5', 'r') as f:
-        phi = yamps.load_from_hdf5(psi.A[0].config, 1, f, 'state/')
-    check_copy(psi, phi)
-    os.remove("tmp.h5") 
-
-    # MPO with alternating physical dimensions of both bra and ket indices
-    psi = generate_random.mpo_random(config_dense, N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
-    with h5py.File('tmp.h5', 'a') as f:
-        psi.save_to_hdf5(f, 'state/')
-    with h5py.File('tmp.h5', 'r') as f:
-        phi = yamps.load_from_hdf5(psi.A[0].config, 1, f, 'state/')
-    check_copy(psi, phi)
-    os.remove("tmp.h5") 
 
 
 def test_Z2_hdf5():
-    psi = generate_random.mps_random(config_Z2, N=16, Dblock=25, total_parity=0)
+    operators = yast.operators.SpinlessFermions(sym='Z2')
+    generate = yamps.Generator(N=16, operators=operators)
+    #
+    psi = generate.random_mps(D_total=25, n=0)
     try:
         os.remove("tmp.h5")
     except OSError:
@@ -112,17 +79,8 @@ def test_Z2_hdf5():
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
         phi = yamps.load_from_hdf5(psi.A[0].config, 1, f, 'state/')
-    check_copy(psi, phi)
     os.remove("tmp.h5") 
-
-
-    psi = generate_random.mps_random(config_Z2, N=16, Dblock=25, total_parity=1)
-    with h5py.File('tmp.h5', 'a') as f:
-        psi.save_to_hdf5(f, 'state/')
-    with h5py.File('tmp.h5', 'r') as f:
-        phi = yamps.load_from_hdf5(psi.A[0].config, 1, f, 'state/')
     check_copy(psi, phi)
-    os.remove("tmp.h5") 
 
 
 def test_basic_dict():
@@ -130,6 +88,7 @@ def test_basic_dict():
     # First, we generate random MPS without any symmetry.
     #    
     psi = yamps.random_dense_mps(N=16, D=25, d=3)
+    config_dense = psi.config
     #
     # Next, we serialize MPS into dictionary.
     #
@@ -138,24 +97,25 @@ def test_basic_dict():
     # Last, we load the MPS from the dictionary, providing valid YAST configuration
     #
     phi = yamps.load_from_dict(config_dense, 1, tmp)
-
-
-def test_full_dict():
-    psi = generate_random.mpo_random(config_dense, N=16, Dmax=25, d=[2, 3], d_out=[2, 1])
-    tmp = psi.save_to_dict()
-    phi = yamps.load_from_dict(psi.A[0].config, 1, tmp)
+    #
+    # Test psi == phi
+    #
     check_copy(psi, phi)
 
 
+
 def test_Z2_dict():
-    psi = generate_random.mps_random(config_Z2, N=16, Dblock=25, total_parity=0)
+    operators = yast.operators.SpinlessFermions(sym='Z2')
+    generate = yamps.Generator(N=16, operators=operators)
+
+    psi = generate.random_mps(D_total=15, n=0)
     tmp = psi.save_to_dict()
-    phi = yamps.load_from_dict(psi.A[0].config, 1, tmp)
+    phi = yamps.load_from_dict(generate.config, 1, tmp)
     check_copy(psi, phi)
 
 
 if __name__ == "__main__":
-    test_full_hdf5()
+    test_basic_hdf5()
     test_Z2_hdf5()
-    test_full_dict()
+    test_basic_dict()
     test_Z2_dict()
