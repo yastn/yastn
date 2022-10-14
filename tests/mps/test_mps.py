@@ -1,75 +1,21 @@
 """ basic procedures of single mps """
 import numpy as np
-import pytest
-import yast
 import yamps
 try:
-    from . import generate_random, generate_by_hand
-    from .configs import config_dense, config_dense_fermionic
-    from .configs import config_U1, config_U1_fermionic
-    from .configs import config_Z2, config_Z2_fermionic
+    from . import generate_random
+    from .configs import config_dense, config_Z2
 except ImportError:
-    import generate_random, generate_by_hand
-    from configs import config_dense, config_dense_fermionic
-    from configs import config_U1, config_U1_fermionic
-    from configs import config_Z2, config_Z2_fermionic
+    import generate_random
+    from configs import config_Z2, config_dense
 
 tol = 1e-12
-
-def is_left_canonical(psi):
-    # Assert if each MPS/MPO tensor is left canonical, i.e,
-    # if the following equality holds
-    #        _______
-    #  --0--|psi[n]*|--         --
-    # |        |               |
-    # |        1 (or 1 & 2)    |
-    # |        1   for MPO     |
-    # |      __|___         =  |     , where the right-hand side is 
-    #  --0--|psi[n] |--         --     an identity matrix
-    #
-
-    # choose legs to contract
-    cl = (0, 1) if psi.nr_phys == 1 else (0, 1, 2)
-    
-    # loop over on-site tensors
-    for n in range(psi.N):
-        # 
-        # compute the contraction shown in the diagram above
-        #
-        x = yast.tensordot(psi[n], psi[n], axes=(cl, cl), conj=(1, 0))
-        
-        # compare with identity matrix
-        #
-        x0 = yast.eye(config=x.config, legs=x.get_legs([0, 1]))
-        assert yast.norm(x - x0.diag()) < tol  # == 0
-    assert psi.pC is None
-
-
-def is_right_canonical(psi):
-    # Assert if each MPS/MPO tensor is right canonical, i.e,
-    # if the following equality holds
-    #           _______
-    #     --0--|psi[n]*|--              --
-    #              |      |               |
-    #  (or 1 & 2   1      2 (or 3         |
-    #    for MPO)  1      2  for MPO)     |
-    #            __|___   |           =   |  , where the right-hand side is 
-    #     ---0--|psi[n]|--              --     an identity matrix
-    #
-    cl = (1, 2) if psi.nr_phys == 1 else (1, 2, 3)
-    for n in range(psi.N):
-        x = yast.tensordot(psi[n], psi[n], axes=(cl, cl), conj=(0, 1))
-        x0 = yast.eye(config=x.config, legs=x.get_legs([0, 1]))
-        assert yast.norm(x - x0.diag()) < tol  # == 0
-    assert psi.pC is None
-
 
 def check_canonize(psi):
     """ Canonize mps to left and right, running tests if it is canonical. """
     psi.canonize_sweep(to='last')
-    is_left_canonical(psi)
+    assert psi.is_canonical(to='last', tol=tol)
     psi.canonize_sweep(to='first')
-    is_right_canonical(psi)
+    assert psi.is_canonical(to='first', tol=tol)
 
 
 def env2_measure(psi1, psi2):
