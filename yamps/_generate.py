@@ -349,5 +349,10 @@ class Generator:
 
 
 def random_dense_mps(N, D, d, **kwargs):
-    G= Generator(N, yast.operators.Qdit(d=d, **kwargs))
+    G = Generator(N, yast.operators.Qdit(d=d, **kwargs))
     return G.random_mps(D_total=D)
+
+
+def random_dense_mpo(N, D, d, **kwargs):
+    G = Generator(N, yast.operators.Qdit(d=d, **kwargs))
+    return G.random_mpo(D_total=D)

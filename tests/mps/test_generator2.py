@@ -1,21 +1,12 @@
-from math import gamma
-from os import remove
-from tracemalloc import get_tracemalloc_memory
-import numpy as np
 import pytest
 import yast
 import yamps
 
 try:
-    from . import generate_random, generate_by_hand
-    from .configs import config_dense, config_dense_fermionic
-    from .configs import config_U1, config_U1_fermionic
-    from .configs import config_Z2, config_Z2_fermionic
+    from . import generate_by_hand
 except ImportError:
-    import generate_random, generate_by_hand
-    from configs import config_dense, config_dense_fermionic
-    from configs import config_U1, config_U1_fermionic
-    from configs import config_Z2, config_Z2_fermionic
+    import generate_by_hand
+
 tol = 1e-12
 
 def test_generator_mps():
@@ -31,34 +22,38 @@ def test_generator_mps():
         O = I @ I + (-1 * I)
         assert pytest.approx(yamps.measure_overlap(O, O).item(), abs=tol) == 0
         psi = generate.random_mps(D_total=D_total, n = nn)
-        assert psi.A[psi.last].get_legs(axis=psi.right[0]).t == (nn,)
-        assert psi.A[psi.first].get_legs(axis=psi.left[0]).t == ((0,) * len(nn),)
+        assert psi[psi.last].get_legs(axis=psi.right[0]).t == (nn,)
+        assert psi[psi.first].get_legs(axis=psi.left[0]).t == ((0,) * len(nn),)
         bds = psi.get_bond_dimensions()
         assert bds[0] == bds[-1] == 1
         assert all(bd > D_total/2 for bd in bds[2:-2])
 
 
 def test_generator_mpo():
-    conf = config_Z2_fermionic
-    generate_random.random_seed(conf, seed=0)
     N = 5
     t = 1
     mu = 0.2
     operators = yast.operators.SpinlessFermions(sym='Z2')
     generate = yamps.Generator(N, operators)
+    generate.random_seed(seed=0)
     parameters = {"t": lambda j: t, "mu": lambda j: mu, "range1": range(N), "range2": range(1, N-1)}
     # is CORRECT // full model hopping:
-    H_str, H_ref = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j} + ( cp_{0} c_{1} + 1*cp_{1} c_{0} )*t ", generate_by_hand.mpo_XX_model(config_Z2_fermionic, N=N, t=t, mu=mu)
+    H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j} + ( cp_{0} c_{1} + 1*cp_{1} c_{0} )*t "
+    H_ref = generate_by_hand.mpo_XX_model(generate.config, N=N, t=t, mu=mu)
     # is CORRECT // only hopping: H_str, H_ref = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} )", generate_by_hand.mpo_XX_model(config_Z2_fermionic, N=N, t=t, mu=0)
     # is CORRECT // no hopping: H_str, H_ref = "+ \sum_{j \in range1} mu cp_{j} c_{j}", generate_by_hand.mpo_XX_model(config_Z2_fermionic, N=N, t=0, mu=0.2)
     H = generate.mpo(H_str, parameters)
-    psi = generate_random.mps_random(conf, N=N, Dblock=4, total_parity=0, dtype='float64') +\
-        generate_random.mps_random(conf, N=N, Dblock=4, total_parity=1, dtype='float64')
+    psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
+    x_ref = yamps.measure_mpo(psi, H_ref, psi).item()
+    x = yamps.measure_mpo(psi, H, psi).item()
+    assert abs(x_ref - x) < tol
+
     psi.canonize_sweep(to='first')
-    x_ref = yamps.measure_mpo(psi, H_ref, psi)
-    x = yamps.measure_mpo(psi, H, psi)
-    assert x_ref - x < 1e-15
+    psi.canonize_sweep(to='last')
+    x_ref = yamps.measure_mpo(psi, H_ref, psi).item()
+    x = yamps.measure_mpo(psi, H, psi).item()
+    assert abs(x_ref - x) < tol
 
 if __name__ == "__main__":
-    # test_generator_mps()
+    test_generator_mps()
     test_generator_mpo()

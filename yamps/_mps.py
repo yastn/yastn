@@ -191,6 +191,10 @@ class MpsMpo:
         self.right = (nr_phys + 1,)  # convention which leg is a right virtual leg (connected to site with larger index)
         self.phys = (1,) if nr_phys == 1 else (1, 2)  # convention which legs are physical
 
+    @property
+    def config(self):
+        return self.A[0].config
+
     def sweep(self, to='last', df=0, dl=0):
         r"""
         Generator of indices of all sites going from the first site to the last site, or vice-versa.

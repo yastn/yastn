@@ -1,15 +1,10 @@
 """ truncation of mps """
 import yamps
+import yast
 try:
-    from . import generate_random, generate_by_hand
-    from .configs import config_dense, config_dense_fermionic
-    from .configs import config_U1, config_U1_fermionic
-    from .configs import config_Z2, config_Z2_fermionic
+    from . import generate_by_hand
 except ImportError:
-    import generate_random, generate_by_hand
-    from configs import config_dense, config_dense_fermionic
-    from configs import config_U1, config_U1_fermionic
-    from configs import config_Z2, config_Z2_fermionic
+    import generate_by_hand
 
 
 
@@ -49,10 +44,13 @@ def test_truncate_svd_full():
     N = 8
     Eng_gs = -4.758770483143633
     D_total = 8
-    H = generate_by_hand.mpo_XX_model(config_dense_fermionic, N=N, t=1, mu=0)
 
-    psi =generate_random.mps_random(config_dense_fermionic, N=N, Dmax=D_total, d=2)
-    psi.canonize_sweep(to='first')
+    operators = yast.operators.Spin12(sym='dense')
+    generate = yamps.Generator(N=N, operators=operators)
+    generate.random_seed(seed=0)
+
+    H = generate_by_hand.mpo_XX_model(generate.config, N=N, t=1, mu=0)
+    psi = generate.random_mps(D_total=D_total).canonize_sweep(to='first')
     run_dmrg_1site(psi, H)
     run_truncation(psi, H, Eng_gs)
 
@@ -63,20 +61,19 @@ def test_truncate_svd_Z2():
     """
     N = 8
     D_total = 8
-    Eng_parity0 = -4.758770483143633
-    Eng_parity1 = -4.411474127809773
+    Eng_parity = {0: -4.758770483143633, 1: -4.411474127809773}
 
-    H = generate_by_hand.mpo_XX_model(config_Z2_fermionic, N=N, t=1, mu=0)
+    operators = yast.operators.Spin12(sym='Z2')
+    generate = yamps.Generator(N=N, operators=operators)
+    generate.random_seed(seed=0)
 
-    psi = generate_random.mps_random(config_Z2_fermionic, N=N, Dblock=D_total/2, total_parity=1)
-    psi.canonize_sweep(to='first')
-    run_dmrg_1site(psi, H)
-    run_truncation(psi, H, Eng_parity1)
+    H = generate_by_hand.mpo_XX_model(generate.config, N=N, t=1, mu=0)
 
-    psi = generate_random.mps_random(config_Z2_fermionic, N=N, Dblock=D_total/2, total_parity=0)
-    psi.canonize_sweep(to='first')
-    run_dmrg_1site(psi, H)
-    run_truncation(psi, H, Eng_parity0)
+    for parity in (0, 1):
+        psi = generate.random_mps(D_total=D_total, n=parity)
+        psi.canonize_sweep(to='first')
+        run_dmrg_1site(psi, H)
+        run_truncation(psi, H, Eng_parity[parity])
 
 
 if __name__ == "__main__":

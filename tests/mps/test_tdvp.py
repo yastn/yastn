@@ -2,16 +2,11 @@
 import logging
 import pytest
 import yamps
+import yast
 try:
-    from . import generate_random, generate_by_hand
-    from .configs import config_dense, config_dense_fermionic
-    from .configs import config_U1, config_U1_fermionic
-    from .configs import config_Z2, config_Z2_fermionic
+    from . import generate_by_hand
 except ImportError:
-    import generate_random, generate_by_hand
-    from configs import config_dense, config_dense_fermionic
-    from configs import config_U1, config_U1_fermionic
-    from configs import config_Z2, config_Z2_fermionic
+    import generate_by_hand
 
 
 tol=1e-8
@@ -67,11 +62,13 @@ def test_dense_tdvp():
     #
     # The Hamiltonian is obtained with automatic generator (see source file).
     #
-    H = generate_by_hand.mpo_XX_model(config_dense_fermionic, N=N, t=1, mu=0.25)
+    operators = yast.operators.Spin12(sym='dense')
+    generate = yamps.Generator(N=N, operators=operators)
+    H = generate_by_hand.mpo_XX_model(generate.config, N=N, t=1, mu=0.25)
     #
     # To standardize this test we will fix a seed for random MPS we use
     #
-    generate_random.random_seed(config_dense_fermionic, seed=0)
+    generate.random_seed(seed=0)
     #
     # In this example we use yast.Tensor's with no symmetry imposed. 
     #
@@ -92,7 +89,7 @@ def test_dense_tdvp():
     #
     # Finally run TDVP starting:
     for version in ('1site', '2site'):
-        psi = generate_random.mps_random(config_dense_fermionic, N=N, Dmax=D_total, d=2)
+        psi = generate.random_mps(D_total=D_total)
         #
         # The initial guess has to be prepared in right canonical form!
         #
@@ -112,22 +109,25 @@ def test_Z2_tdvp():
     """
     Initialize random mps of Z2 tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
-    generate_random.random_seed(config_Z2_fermionic, seed=0)
     N = 5
-    D_total = 4
+    D_total = 6
     dt = -.25
     sweeps = 10
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
     logging.info(' Tensor : Z2 ')
 
+    operators = yast.operators.Spin12(sym='Z2')
+    generate = yamps.Generator(N=N, operators=operators)
+    generate.random_seed(seed=0)
+
     Eng_gs = {0: -2.232050807568877, 1: -1.982050807568877}
-    H = generate_by_hand.mpo_XX_model(config_Z2_fermionic, N=N, t=1, mu=0.25)
+    H = generate_by_hand.mpo_XX_model(generate.config, N=N, t=1, mu=0.25)
 
     for parity in (0, 1):
-        for version in ('1site', '2site'):
-            psi = generate_random.mps_random(config_Z2_fermionic, N=N, Dblock=D_total/2, total_parity=parity)
-            psi.canonize_sweep(to='first')
+        psi = generate.random_mps(D_total=D_total, n=parity)
+        psi.canonize_sweep(to='first')
+        for version in ('2site', '1site'):
             run_tdvp_imag(psi, H, dt=dt, Eng_gs=Eng_gs[parity], sweeps=sweeps, version=version, opts_svd=opts_svd)
 
 
@@ -135,22 +135,25 @@ def test_U1_tdvp():
     """
     Initialize random mps of U(1) tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
-    generate_random.random_seed(config_U1_fermionic, seed=0)
     N = 5
-    D_total = 4
+    D_total = 5
     dt = -.25
     sweeps = 10
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
+    operators = yast.operators.SpinlessFermions(sym='U1')
+    generate = yamps.Generator(N=N, operators=operators)
+    generate.random_seed(seed=0)
+
     logging.info(' Tensor : U1 ')
 
     Eng_gs = {1: -1.482050807568877, 2: -2.232050807568877}
-    H = generate_by_hand.mpo_XX_model(config_U1_fermionic, N=N, t=1, mu=0.25)
+    H = generate_by_hand.mpo_XX_model(generate.config, N=N, t=1, mu=0.25)
 
     for charge in (1, 2):
-        for version in ('1site', '2site', '12site'):
-            psi = generate_random.mps_random(config_U1_fermionic, N=N, Dblocks=[1, 2, 1], total_charge=charge)
-            psi.canonize_sweep(to='first')
+        psi = generate.random_mps(D_total=D_total, n=charge)
+        psi.canonize_sweep(to='first')
+        for version in ('2site', '12site', '1site'):
             run_tdvp_imag(psi, H, dt=dt, Eng_gs=Eng_gs[charge], sweeps=sweeps, version=version, opts_svd=opts_svd)
 
 
