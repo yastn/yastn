@@ -39,4 +39,4 @@ class Qdit():
         dict(str,yast.Tensor)
             a map from strings to operators
         """
-        return {'I': self.I()}
+        return {'I': lambda j: self.I()}
