@@ -1,16 +1,11 @@
 """ examples for addition of the Mps-s """
 import pytest
 import yamps
+import yast
 try:
-    from . import generate_random, generate_by_hand
-    from .configs import config_dense, config_dense_fermionic
-    from .configs import config_U1, config_U1_fermionic
-    from .configs import config_Z2, config_Z2_fermionic
+    from . import generate_by_hand
 except ImportError:
-    import generate_random, generate_by_hand
-    from configs import config_dense, config_dense_fermionic
-    from configs import config_U1, config_U1_fermionic
-    from configs import config_Z2, config_Z2_fermionic
+    import generate_by_hand
 
 
 tol = 1e-6
@@ -19,36 +14,28 @@ tol = 1e-6
 def check_add(psi0, psi1):
     """ test yamps.add using overlaps"""
     out1 = yamps.add(psi0, psi1, amplitudes=[1., 2.])
-    o1 = yamps.measure_overlap(out1, out1)
+    out2 = (1.0 * psi0) + (2.0 * psi1)
     p0 = yamps.measure_overlap(psi0, psi0)
     p1 = yamps.measure_overlap(psi1, psi1)
     p01 = yamps.measure_overlap(psi0, psi1)
     p10 = yamps.measure_overlap(psi1, psi0)
-    assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
-
-
-def check_add_mul(psi0, psi1):
-    """ test __add__ and __mul__ by a number using overlaps"""
-    out1 = (1.0 * psi0) + (2.0 * psi1)
-    o1 = yamps.measure_overlap(out1, out1)
-    p0 = yamps.measure_overlap(psi0, psi0)
-    p1 = yamps.measure_overlap(psi1, psi1)
-    p01 = yamps.measure_overlap(psi0, psi1)
-    p10 = yamps.measure_overlap(psi1, psi0)
-    assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
+    for out in (out1, out2):
+        o1 = yamps.measure_overlap(out, out)
+        assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
 
 
 def test_addition():
     """create two Mps-s and add them to each other"""
-    psi0 = generate_random.mps_random(config_dense, N=8, Dmax=15, d=1)
-    psi1 = generate_random.mps_random(config_dense, N=8, Dmax=19, d=1)
-    check_add(psi0, psi1)
-    check_add_mul(psi0, psi1)
+    operators = yast.operators.SpinfulFermions(sym='U1xU1')
+    generate = yamps.Generator(N=9, operators=operators)
 
-    psi0 = generate_random.mps_random(config_Z2, N=8, Dblock=8, total_parity=0)
-    psi1 = generate_random.mps_random(config_Z2, N=8, Dblock=12, total_parity=0)
+    psi0 = generate.random_mps(D_total=15, n=(3, 5))
+    psi1 = generate.random_mps(D_total=19, n=(3, 5))
     check_add(psi0, psi1)
-    check_add_mul(psi0, psi1)
+
+    psi0 = generate.random_mpo(D_total=12)
+    psi1 = generate.random_mpo(D_total=11)
+    check_add(psi0, psi1)
 
 
 def test_multiplication():
@@ -60,18 +47,21 @@ def test_multiplication():
     N = 7
     Eng = -3.427339492125848
     #
+    operators = yast.operators.SpinlessFermions(sym='U1')
+    generate = yamps.Generator(N=N, operators=operators)
+    #
     # The Hamiltonian is obtained with automatic generator (see source file).
     #
-    H = generate_by_hand.mpo_XX_model(config_U1_fermionic, N=N, t=1, mu=0.2)
+    H = generate_by_hand.mpo_XX_model(generate.config, N=N, t=1, mu=0.2)
     #
     # To standardize this test we will fix a seed for random MPS we use
     #
-    generate_random.random_seed(config_U1_fermionic, seed=0)
+    generate.random_seed(seed=0)
     #
     # In this example we use yast.Tensor's with U(1) symmetry. 
     #
     total_charge = 3
-    psi = generate_random.mps_random(config_U1_fermionic, N=N, Dblocks=[1, 2, 1], total_charge=total_charge)
+    psi = generate.random_mps(D_total=5, n=total_charge)
     #
     # You always have to start with MPS in right canonical form.
     #

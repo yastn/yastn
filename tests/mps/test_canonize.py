@@ -18,18 +18,12 @@ def test_canonize():
     psi = generate.random_mpo(D_total=8, dtype='complex128')
     check_canonize(psi)
 
-    phi = psi.clone()
-    check_copy(psi, phi)
-
     operators = yast.operators.Spin12(sym='dense')
     generate = yamps.Generator(N=16, operators=operators)
     psi = generate.random_mps(D_total=16, dtype='complex128')
     check_canonize(psi)
     psi = generate.random_mpo(D_total=8)
     check_canonize(psi)
-
-    phi = psi.copy()
-    check_copy(psi, phi)
 
 
 def test_env2_update():
@@ -69,12 +63,6 @@ def check_canonize(psi):
     psi.canonize_sweep(to='first')
     assert psi.is_canonical(to='first', tol=tol)
     assert abs(yamps.measure_overlap(psi, psi) - 1) < tol
-
-
-def check_copy(psi1, psi2):
-    """ Test if two mps-s have the same tensors (velues). """
-    for n in psi1.sweep():
-        assert np.allclose(psi1.A[n].to_numpy(), psi2.A[n].to_numpy())
 
 
 def check_env2_measure(psi1, psi2):

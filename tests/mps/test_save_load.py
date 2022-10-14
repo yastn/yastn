@@ -27,7 +27,8 @@ def check_copy(psi1, psi2):
     """ Test if two mps-s have the same tensors (velues). """
     for n in psi1.sweep():
         assert np.allclose(psi1.A[n].to_numpy(), psi2.A[n].to_numpy())
-
+    assert psi1.A is not psi2.A
+    assert psi1 is not psi2
 
 def test_basic_hdf5():
     # Initialize random MPS with dense tensors and checks saving/loading 

@@ -129,6 +129,9 @@ class Generator:
 
         self.opts = opts
 
+    def random_seed(self, seed):
+        self.config.backend.random_seed(seed)
+
     def I(self):
         """ return identity Mpo. """
         return self._I.copy()
