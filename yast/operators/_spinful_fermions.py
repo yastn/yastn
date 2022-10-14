@@ -2,8 +2,8 @@ from ..initialize import make_config
 from ..sym import sym_Z2, sym_U1xU1, sym_U1xU1xZ2
 from ..tensor import YastError, Tensor
 
-class SpinfullFermions:
-    """ Predefine operators for spinfull fermions. """
+class SpinfulFermions:
+    """ Predefine operators for spinful fermions. """
 
     def __init__(self, sym='Z2', **kwargs):
         """
@@ -27,7 +27,7 @@ class SpinfullFermions:
         In that case, rising and lowering operators of the two species commute.
         """
         if not sym in ('Z2', 'U1xU1', 'U1xU1xZ2'):
-            raise YastError("For SpinfullFermions sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').")
+            raise YastError("For SpinfulFermions sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').")
         self._sym = sym
         kwargs['fermionic'] = (False, False, True) if sym == 'U1xU1xZ2' else True
         import_sym = {'Z2': sym_Z2, 'U1xU1': sym_U1xU1, 'U1xU1xZ2': sym_U1xU1xZ2}

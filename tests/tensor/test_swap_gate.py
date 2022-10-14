@@ -65,13 +65,13 @@ def test_apply_operators():
     """ 
     Apply swap_gate during calculation of expectation value such as, e.g. <psi| c_1 cdag_3 |psi>.
 
-    Use SpinfullFermions defined in :class:`yast.operators.SpinfullFermions`
+    Use SpinfulFermions defined in :class:`yast.operators.SpinfulFermions`
     """
     for sym in ['Z2', 'U1xU1xZ2', 'U1xU1']:
-        ops = yast.operators.SpinfullFermions(sym=sym, backend=config_dense.backend)
+        ops = yast.operators.SpinfulFermions(sym=sym, backend=config_dense.backend)
         # pytest switches backends in configs imported in tests
 
-        vac = vacum_spinfull(sites=4, ops=ops)
+        vac = vacum_spinful(sites=4, ops=ops)
         psi = vac
         for s in ('u', 'd'):
             psi0 = None
@@ -98,7 +98,7 @@ def test_apply_operators():
             psi = psi / psi.norm()
 
 
-def vacum_spinfull(sites, ops):
+def vacum_spinful(sites, ops):
     """ |Psi> as a tensor with proper symmetry information and one axis per site. """
     s = (1,) * sites
     I = ops.I()

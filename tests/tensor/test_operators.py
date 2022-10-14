@@ -144,13 +144,13 @@ def test_spinless_fermions():
         # For SpinlessFermions sym should be in ('Z2', 'U1').
 
 
-def test_spinfull_fermions():
+def test_spinful_fermions():
     """ Generate standard operators in two-dimensional Hilbert space for various symmetries. """
     backend = config_dense.backend  # pytest switches backends in config files for testing
 
-    ops_Z2 = yast.operators.SpinfullFermions(sym='Z2', backend=backend)
-    ops_U1xU1_ind = yast.operators.SpinfullFermions(sym='U1xU1xZ2', backend=backend)
-    ops_U1xU1_dis = yast.operators.SpinfullFermions(sym='U1xU1', backend=backend)
+    ops_Z2 = yast.operators.SpinfulFermions(sym='Z2', backend=backend)
+    ops_U1xU1_ind = yast.operators.SpinfulFermions(sym='U1xU1xZ2', backend=backend)
+    ops_U1xU1_dis = yast.operators.SpinfulFermions(sym='U1xU1', backend=backend)
 
     Is = [ops_Z2.I(), ops_U1xU1_ind.I(), ops_U1xU1_dis.I()]
     assert all(np.allclose(I.to_numpy(), np.eye(4)) for I in Is)
@@ -169,7 +169,7 @@ def test_spinfull_fermions():
         assert yast.norm(ops.cp('u') @ ops.c('d') + inter_sgn * ops.c('d') @ ops.cp('u')) < tol
 
     with pytest.raises(yast.YastError):
-        yast.operators.SpinfullFermions('dense')
+        yast.operators.SpinfulFermions('dense')
         # For SpinlessFermions sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').
     with pytest.raises(yast.YastError):
         ops_Z2.c(spin='down')
@@ -183,4 +183,4 @@ if __name__ == '__main__':
     test_spin12()
     test_spin1()
     test_spinless_fermions()
-    test_spinfull_fermions()
+    test_spinful_fermions()
