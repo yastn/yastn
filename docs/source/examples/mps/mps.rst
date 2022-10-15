@@ -24,37 +24,36 @@ nearest-neighbour hopping Hamiltonian with hopping amplitude `t`
 and on-site energy :math:`\mu` with different 
 realizations of explicit symmetry.
 
-.. literalinclude:: /../../tests/mps/generate_by_hand.py
+.. literalinclude:: /../../tests/mps/test_generator.py
         :pyobject: mpo_XX_model_dense
 
 MPO for hopping model with :math:`\mathbb{Z}_2` symmetry
 --------------------------------------------------------
 
-.. literalinclude:: /../../tests/mps/generate_by_hand.py
+.. literalinclude:: /../../tests/mps/test_generator.py
         :pyobject: mpo_XX_model_Z2
 
 MPO for hopping model with U(1) symmetry
 ----------------------------------------
 
-.. literalinclude:: /../../tests/mps/generate_by_hand.py
+.. literalinclude:: /../../tests/mps/test_generator.py
         :pyobject: mpo_XX_model_U1
 
 
 Generating MPS/MPO automatically
 ================================
 
-The MPO can be constructed automatically using dedicated generator supplied with the Hamiltonian. 
-This can be shown for a simple nearest-neightbour hopping Hamiltonian 
-with hopping amplitude `t` and on-site energy `mu`.
+The MPO can be constructed automatically using dedicated `yamps.Generator` supplied with set of tensors as a basis. 
+The input for MPS/MPO generation can be given in a convenient LaTeX-like string. 
 
-Automatic generator creates MPO with symmetries defies by building operators. 
+Automatic generator creates MPS/MPO with symmetries 
 
-.. literalinclude:: /../../tests/mps/generate_automatic.py
-        :pyobject: mpo_XX_model
+.. literalinclude:: /../../tests/mps/test_generator.py
+        :pyobject: test_generator_mps, test_generator_mpo
 
 Generation of more complex Hamiltonian can be drown to Ising model with decaying coupling strength. 
 
-.. literalinclude:: /../../tests/mps/generate_automatic.py
+.. literalinclude:: /../../tests/mps/test_generator.py
         :pyobject: mpo_Ising_model
 
 
