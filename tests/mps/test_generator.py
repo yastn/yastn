@@ -211,6 +211,9 @@ def test_generator_mpo():
     x = yamps.measure_mpo(psi, H, psi).item()
     assert abs(x_ref - x) < tol
 
+def mpo_Ising_model()
+    pass
+
 if __name__ == "__main__":
     test_generator_mps()
     test_generator_mpo()
