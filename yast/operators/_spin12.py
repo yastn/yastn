@@ -143,12 +143,12 @@ class Spin12:
         dict(str,yast.Tensor)
             a map from strings to operators
         """
-        return {'I': self.I(),
-                'x': self.x(),
-                'y': self.y(),
-                'z': self.z(),
-                'sx': self.sx(),
-                'sy': self.sy(),
-                'sz': self.sz(),
-                'sp': self.sp(),
-                'sm': self.sm()}
+        return {'I': lambda j: self.I(),
+                'x': lambda j: self.x(),
+                'y': lambda j: self.y(),
+                'z': lambda j: self.z(),
+                'sx': lambda j: self.sx(),
+                'sy': lambda j: self.sy(),
+                'sz': lambda j: self.sz(),
+                'sp': lambda j: self.sp(),
+                'sm': lambda j: self.sm()}
