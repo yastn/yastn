@@ -256,6 +256,10 @@ def absolute(data):
     return np.abs(data)
 
 
+def bitwise_not(data):
+    return np.bitwise_not(data)
+
+
 def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])

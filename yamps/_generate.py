@@ -47,14 +47,14 @@ def generate_H1(I, term):
         op = op.add_leg(axis=0, s=1)
         leg = op.get_legs(axis=0)
         one = yast.ones(config=op.config, legs=(leg, leg.conj()))
-        temp = yast.ncon([op, H1[site]], [(-2, -3, 1), (-1, 1, -4, -5)])
+        temp = yast.ncon([op, H1[site]], [(-1, -2, 1), (-0, 1, -3, -4)])
         H1[site] = temp.fuse_legs(axes=((0, 1), 2, 3, 4), mode='hard')
         for n in range(site):
-            temp = yast.ncon([H1[n], one], [(-1, -3, -4, -5), (-2, -6)])
+            temp = yast.ncon([H1[n], one], [(-0, -2, -3, -5), (-1, -4)])
             temp = temp.swap_gate(axes=(1, 2))
-            H1[n] = temp.fuse_legs(axes=((0, 1), 2, 3, (4, 5)), mode='hard')
+            H1[n] = temp.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
     for n in H1.sweep():
-        H1[n] = H1[n].drop_leg_history(axis=(0, 3))
+        H1[n] = H1[n].drop_leg_history(axis=(0, 2))
     H1[0] = term.amplitude * H1[0]
     return H1
 
@@ -80,11 +80,11 @@ class Generator:
 
         Generated MPO tensors have following signature::
 
-                   (+1) (physical ket)
+                   (-1) (physical bra)
                      |
             (+1)--|MPO_i|--(-1)
                      |
-                   (-1) (physical bra)
+                   (+1) (physical ket)
 
         Parameters
         ----------
@@ -122,7 +122,7 @@ class Generator:
         self._I = Mpo(self.N)
         for label, site in self._map.items():
             local_I = getattr(self._ops, self._Is[label])
-            self._I.A[site] = local_I().add_leg(axis=0, s=1).add_leg(axis=-1, s=-1)
+            self._I.A[site] = local_I().add_leg(axis=0, s=1).add_leg(axis=2, s=-1)
 
         self.config = self._I.A[0].config
         self.parameters = {} if parameters is None else parameters
@@ -163,14 +163,14 @@ class Generator:
 
         ll = yast.Leg(self.config, s=1, t=(nl,), D=(1,),)
         for site in psi.sweep(to='last'):
-            lp = self._I[site].get_legs(axis=self._I.phys[0])
+            lp = self._I[site].get_legs(axis=1)
             nr = tuple(an * (site + 1) / self.N)
             if site != psi.last:
                 lr = yast.random_leg(self.config, s=-1, n=nr, D_total=D_total, sigma=sigma, legs=[ll, lp])
             else:
                 lr = yast.Leg(self.config, s=-1, t=(n,), D=(1,),)
             psi.A[site] = yast.rand(self.config, legs=[ll, lp, lr], dtype=dtype)
-            ll = psi.A[site].get_legs(axis=psi.right[0]).conj()
+            ll = psi.A[site].get_legs(axis=2).conj()
         if sum(ll.D) == 1:
             return psi
         raise YampsError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization) ")
@@ -194,13 +194,13 @@ class Generator:
 
         ll = yast.Leg(self.config, s=1, t=(n0,), D=(1,),)
         for site in psi.sweep(to='last'):
-            lp = self._I[site].get_legs(axis=self._I.phys[0])
+            lp = self._I[site].get_legs(axis=1)
             if site != psi.last:
                 lr = yast.random_leg(self.config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[ll, lp, lp.conj()])
             else:
                 lr = yast.Leg(self.config, s=-1, t=(n0,), D=(1,),)
-            psi.A[site] = yast.rand(self.config, legs=[ll, lp, lp.conj(), lr], dtype=dtype)
-            ll = psi.A[site].get_legs(axis=psi.right[0]).conj()
+            psi.A[site] = yast.rand(self.config, legs=[ll, lp, lr, lp.conj()], dtype=dtype)
+            ll = psi.A[site].get_legs(axis=2).conj()
         if sum(ll.D) == 1:
             return psi
         raise YampsError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")

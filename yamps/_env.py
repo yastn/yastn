@@ -76,7 +76,7 @@ class _EnvParent:
             legs = [self.ort[ii].get_leftmost_leg(), self.ket.get_leftmost_leg().conj()]
             self.Fort[ii][(-1, 0)] = ones(config=config, legs=legs)
             legs = [self.ket.get_rightmost_leg().conj(), self.ort[ii].get_rightmost_leg()]
-            self.Fort[ii][(self.N, self.N - 1)] = ones(config=config, legs=legs)
+            self.Fort[ii][(self.N, self.N - 1)] = ones(config=config, legs=legs)  # TODO: eye ?
 
     def reset_temp(self):
         """ Reset temporary objects stored to speed-up some simulations. """
@@ -156,21 +156,21 @@ class _EnvParent:
             _update2(n, self.Fort[ii], self.bra, self.ort[ii], to, self.nr_phys)
 
     def update_Aort(self, n):
-        """ Update projection of states to be project to on psi. """
+        """ Update projection of states to be subtracted from psi. """
         Aort = []
+        inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
         for ii in range(len(self.ort)):
-            T1 = tensordot(self.Fort[ii][(n - 1, n)], self.ort[ii].A[n], axes=(1, 0))
-            Aort.append(tensordot(T1, self.Fort[ii][(n + 1, n)], axes=(self.nr_phys + 1, 0)))
+            Aort.append(ncon([self.Fort[ii][(n - 1, n)], self.ort[ii].A[n], self.Fort[ii][(n + 1, n)]], inds))
         self._temp['Aort'] = Aort
 
     def update_AAort(self, bd):
-        """ Update projection of states to be project to on psi. """
+        """ Update projection of states to be subtracted from psi. """
         Aort = []
         nl, nr = bd
+        inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
         for ii in range(len(self.ort)):
             AA = self.ort[ii].merge_two_sites(bd)
-            T1 = tensordot(self.Fort[ii][(nl - 1, nl)], AA, axes=(1, 0))
-            Aort.append(tensordot(T1, self.Fort[ii][(nr + 1, nr)], axes=(self.nr_phys + 1, 0)))
+            Aort.append(ncon([self.Fort[ii][(nl - 1, nl)], AA, self.Fort[ii][(nr + 1, nr)]], inds))
         self._temp['Aort'] = Aort
 
     def _project_ort(self, A):
@@ -201,10 +201,10 @@ class Env2(_EnvParent):
         # left boundary
         config = self.bra.A[0].config
         legs = [self.bra.get_leftmost_leg(), self.ket.get_leftmost_leg().conj()]
-        self.F[(-1, 0)] = ones(config=config, legs=legs)
+        self.F[(-1, 0)] = ones(config=config, legs=legs)  # TODO: or eye?
         # right boundary
         legs = [self.ket.get_rightmost_leg().conj(), self.bra.get_rightmost_leg()]
-        self.F[(self.N, self.N - 1)] = ones(config=config, legs=legs)
+        self.F[(self.N, self.N - 1)] = ones(config=config, legs=legs)  # TODO: or eye?
 
     def Heff1(self, x, n):
         r"""
@@ -223,7 +223,8 @@ class Env2(_EnvParent):
         out : tensor
             Heff1 * A
         """
-        return tensordot(tensordot(self.F[(n - 1, n)], x, axes=(1, 0)), self.F[(n + 1, n)], axes=(self.nr_phys + 1, 0))
+        inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
+        return ncon([self.F[(n - 1, n)], x, self.F[(n + 1, n)]], inds)
 
 
 class Env3(_EnvParent):
@@ -277,7 +278,7 @@ class Env3(_EnvParent):
             Heff0 * C
         """
         bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
-        return tensordot(tensordot(self.F[bd], C, axes=(2, 0)), self.F[ibd], axes=((1, 2), (1, 0)))
+        return ncon([self.F[bd], C, self.F[ibd]], ((-0, 2, 1), (1, 3), (3, 2, -1)))
 
     def Heff1(self, A, n):
         r"""
@@ -300,13 +301,13 @@ class Env3(_EnvParent):
         A = self._project_ort(A)
         if self.nr_phys == 1:
             T1 = ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
-                        ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))
+                        ((-0, 2, 1), (1, 3, 4), (2, -1, 5, 3), (4, 5, -2)))
         elif self.nr_phys == 2 and not self.on_aux:
             T1 = ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
-                        ((-1, 2, 1), (1, 3, -3, 4), (2, -2, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
+                        ((-0, 2, 1), (1, 3, 4, -3), (2, -1, 5, 3), (4, 5, -2)))
         else:
             T1 = ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
-                    ((-1, 2, 1), (1, -2, 3, 4), (2, -3, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
+                        ((-0, 2, 1), (1, -1, 4, 3), (2, -3, 5, 3), (4, 5, -2)))
         T1 = self._project_ort(T1)
         return T1
 
@@ -330,19 +331,19 @@ class Env3(_EnvParent):
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
 
         if bd not in self._temp['op_2site']:
-            OO = tensordot(self.op.A[n1], self.op.A[n2], axes=(3, 0))
-            self._temp['op_2site'][bd] = OO.fuse_legs(axes=(0, (1, 3), (2, 4), 5))
+            OO = tensordot(self.op.A[n1], self.op.A[n2], axes=(2, 0))
+            self._temp['op_2site'][bd] = OO.fuse_legs(axes=(0, (1, 3), 4, (2, 5)))
         OO = self._temp['op_2site'][bd]
 
         AA = self._project_ort(AA)
         if self.nr_phys == 1:
             return ncon([self.F[(nl, n1)], AA, OO, self.F[(nr, n2)]],
-                        ((-1, 2, 1), (1, 3, 4), (2, -2, 3, 5), (4, 5, -3)), (0, 0, 0, 0))
+                        ((-0, 2, 1), (1, 3, 4), (2, -1, 5, 3), (4, 5, -2)))
         if self.nr_phys == 2 and not self.on_aux:
             return ncon([self.F[(nl, n1)], AA, OO, self.F[(nr, n2)]],
-                        ((-1, 2, 1), (1, 3, -3, 4), (2, -2, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
+                        ((-0, 2, 1), (1, 3, 4, -3), (2, -1, 5, 3), (4, 5, -2)))
         return ncon([self.F[(nl, n1)], AA, OO, self.F[(nr, n2)]],
-                    ((-1, 2, 1), (1, -2, 3, 4), (2, -3, 3, 5), (4, 5, -4)), (0, 0, 0, 0))
+                        ((-0, 2, 1), (1, -1, 4, 3), (2, -3, 5, 3), (4, 5, -2)))
 
     def update_A(self, n, dt, opts, normalize=True):
         """ Updates env.ket.A[n] by exp(dt Heff1). """
@@ -401,39 +402,27 @@ class Env3(_EnvParent):
 def _update2(n, F, bra, ket, to, nr_phys):
     """ Contractions for 2-layer environment update. """
     if to == 'first':
-        if nr_phys == 1:
-            T1 = tensordot(ket.A[n], F[(n + 1, n)], axes=(2, 0))
-            F[(n, n - 1)] = tensordot(T1, bra.A[n], axes=((1, 2), (1, 2)), conj=(0, 1))
-        else:
-            T1 = tensordot(ket.A[n], F[(n + 1, n)], axes=(3, 0))
-            F[(n, n - 1)] = tensordot(T1, bra.A[n], axes=((1, 2, 3), (1, 2, 3)), conj=(0, 1))
+        inds = ((-0, 2, 1), (1, 3), (-1, 2, 3)) if nr_phys == 1 else ((-0, 2, 1, 4), (1, 3), (-1, 2, 3, 4))
+        F[(n, n - 1)] = ncon([ket.A[n], F[(n + 1, n)], bra.A[n].conj()], inds)
     elif to == 'last':
-        if nr_phys == 1:
-            T1 = tensordot(F[(n - 1, n)], bra.A[n], axes=(0, 0), conj=(0, 1))
-            F[(n, n + 1)] = tensordot(T1, ket.A[n], axes=((0, 1), (0, 1)))
-        else:
-            T1 = tensordot(F[(n - 1, n)], bra.A[n], axes=(0, 0), conj=(0, 1))
-            F[(n, n + 1)] = tensordot(T1, ket.A[n], axes=((0, 1, 2), (0, 1, 2)))
+        inds = ((2, 3, -0), (2, 1), (1, 3, -1)) if nr_phys == 1 else ((2, 3, -0, 4), (2, 1), (1, 3, -1, 4))
+        F[(n, n + 1)] = ncon([bra.A[n].conj(), F[(n - 1, n)], ket.A[n]], inds)
 
 
 def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
     if to == 'last':
         if nr_phys == 1:
-            F[(n, n + 1)] = ncon([bra.A[n], F[(n - 1, n)], ket.A[n], op.A[n]],
-                                        ((4, 5, -1), (4, 2, 1), (1, 3, -3), (2, 5, 3, -2)), conjs=(1, 0, 0, 0))
+            inds = ((4, 5, -0), (4, 2, 1), (1, 3, -2), (2, 5, -1, 3))
         elif nr_phys == 2 and not on_aux:
-            F[(n, n + 1)] = ncon([bra.A[n], F[(n - 1, n)], ket.A[n], op.A[n]],
-                                        ((4, 5, 6, -1), (4, 2, 1), (1, 3, 6, -3), (2, 5, 3, -2)), (1, 0, 0, 0))
+            inds = ((4, 5, -0, 6), (4, 2, 1), (1, 3, -2, 6), (2, 5, -1, 3))
         else:  # nr_phys == 2 and on_aux:
-            F[(n, n + 1)] = ncon([bra.A[n], F[(n - 1, n)], ket.A[n], op.A[n]],
-                                        ((4, 6, 5, -1), (4, 2, 1), (1, 6, 3, -3), (2, 5, 3, -2)), (1, 0, 0, 0))
-    elif to == 'first':
+            inds = ((4, 6, -0, 5), (4, 2, 1), (1, 6, -2, 3), (2, 5, -1, 3))
+        F[(n, n + 1)] = ncon([bra.A[n].conj(), F[(n - 1, n)], ket.A[n], op.A[n]], inds)
+    else: # to == 'first':
         if nr_phys == 1:
-            F[(n, n - 1)] = ncon([ket.A[n], F[(n + 1, n)], op.A[n], bra.A[n]],
-                                        ((-1, 2, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 4, 5)), (0, 0, 0, 1))
+            inds = ((-0, 2, 1), (1, 3, 5), (-1, 4, 3, 2), (-2, 4, 5))
         elif nr_phys == 2 and not on_aux:
-            F[(n, n - 1)] = ncon([ket.A[n], F[(n + 1, n)], op.A[n], bra.A[n]],
-                                        ((-1, 2, 6, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 4, 6, 5)), (0, 0, 0, 1))
+            inds = ((-0, 2, 1, 6), (1, 3, 5), (-1, 4, 3, 2), (-2, 4, 5, 6))
         else:  # nr_phys == 2 and on_aux:
-            F[(n, n - 1)] = ncon([ket.A[n], F[(n + 1, n)], op.A[n], bra.A[n]],
-                                        ((-1, 6, 2, 1), (1, 3, 5), (-2, 4, 2, 3), (-3, 6, 4, 5)), (0, 0, 0, 1))
+            inds = ((-0, 6, 1, 2), (1, 3, 5), (-1, 4, 3, 2), (-2, 6, 5, 4))
+        F[(n, n - 1)] = ncon([ket.A[n], F[(n + 1, n)], op.A[n], bra.A[n].conj()], inds)

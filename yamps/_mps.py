@@ -22,6 +22,7 @@ def Mps(N):
     """
     return MpsMpo(N, nr_phys=1)
 
+
 def Mpo(N):
     """
     Generate empty MPO for system of *N* sites.
@@ -42,9 +43,13 @@ def Mpo(N):
 ###################################
 #   auxiliary for basic algebra   #
 ###################################
+
+
 def add(*states, amplitudes=None):
     r"""
     Linear superposition of several MPS/MPOs with specific amplitudes.
+
+    Compression (truncation of bond dimensions) is not performed.
 
     Parameters
     ----------
@@ -63,28 +68,32 @@ def add(*states, amplitudes=None):
         amplitudes = [1] * len(states)
 
     if len(states) != len(amplitudes):
-        raise YampsError('Number of Mps-s must be equal to the number of coefficients in amp.')
+        raise YampsError('Number of Mps-s must be equal to the number of coefficients in amplitudes.')
 
     phi = MpsMpo(N=states[0].N, nr_phys=states[0].nr_phys)
 
     if any(psi.N != phi.N for psi in states):
         raise YampsError('All states must have equal number of sites.')
-    if any(psi.phys != phi.phys for psi in states):
+    if any(psi.nr_phys != phi.nr_phys for psi in states):
         raise YampsError('All states should be either Mps or Mpo.')
     if any(psi.pC != None for psi in states):
         raise YampsError('Absorb central sites of mps-s before calling add.')
 
-    for n in phi.sweep(to='last'):
-        if n == phi.first:
-            d = {(j,): amplitudes[j] * psi.A[n] for j, psi in enumerate(states)}
-            common_legs =  phi.left + phi.phys
-        elif n == phi.last:
-            d = {(j,): psi.A[n] for j, psi in enumerate(states)}
-            common_legs =  phi.phys + phi.right
-        else:
-            d = {(j, j): psi.A[n] for j, psi in enumerate(states)}
-            common_legs =  phi.phys
+    n = phi.first
+    d = {(j,): amplitudes[j] * psi.A[n] for j, psi in enumerate(states)}
+    common_legs = (0, 1) if phi.nr_phys == 1 else (0, 1, 3)
+    phi.A[n] = block(d, common_legs)
+
+    common_legs = (1,) if phi.nr_phys == 1 else (1, 3)
+    for n in phi.sweep(to='last', df=1, dl=1):
+        d = {(j, j): psi.A[n] for j, psi in enumerate(states)}
         phi.A[n] = block(d, common_legs)
+
+    n = phi.last
+    d = {(j,): psi.A[n] for j, psi in enumerate(states)}
+    common_legs = (1, 2) if phi.nr_phys == 1 else (1, 2, 3)
+    phi.A[n] = block(d, common_legs)
+
     return phi
 
 
@@ -124,29 +133,24 @@ def multiply(a, b, mode=None):
         yamps.MpsMpo
     """
     if a.N != b.N:
-        YampsError('Mps-s must have equal number of Tensor-s.')
+        YampsError('Mps-s must have equal number of sites.')
 
     nr_phys = a.nr_phys + b.nr_phys - 2
-    if nr_phys == 0:
-        YampsError('Use measure_overlap to calculate overlap between two mps-s')
+    
+    if a.nr_phys == 1:
+        YampsError('First argument has to be an MPO.')
     phi = MpsMpo(N=a.N, nr_phys=nr_phys)
 
     if b.N != a.N:
         raise YampsError('a and b must have equal number of sites.')
     if a.pC is not None or b.pC is not None:
-        raise YampsError('Absorb central sites of mps-s befor calling multiply.')
+        raise YampsError('Absorb central sites of mps-s before calling multiply.')
 
-    axes_dot = ((a.phys[1],), (b.phys[0],))
-    if a.nr_phys == 2 and b.nr_phys == 1:
-        axes_fuse = ((0, 3), 1, (2, 4))
-    elif a.nr_phys == 1 and b.nr_phys == 2:
-        axes_fuse = ((0, 2), 3, (1, 4))
-    elif a.nr_phys == 2 and b.nr_phys == 2:
-        axes_fuse = ((0, 3), 1, 4, (2, 5))
+    axes_fuse = ((0, 3), 1, (2, 4)) if b.nr_phys == 1 else ((0, 3), 1, (2, 4), 5)
     for n in phi.sweep():
-        phi.A[n] = tensordot(a.A[n], b.A[n], axes_dot).fuse_legs(axes_fuse, mode)
-    phi.A[phi.first] = phi.A[phi.first].drop_leg_history(axis=phi.left)
-    phi.A[phi.last] = phi.A[phi.last].drop_leg_history(axis=phi.right)
+        phi.A[n] = tensordot(a.A[n], b.A[n], axes=(3, 1)).fuse_legs(axes_fuse, mode)
+    phi.A[phi.first] = phi.A[phi.first].drop_leg_history(axis=0)
+    phi.A[phi.last] = phi.A[phi.last].drop_leg_history(axis=2)
     return phi
 
 ###################################
@@ -178,7 +182,7 @@ class MpsMpo:
         if not isinstance(N, int) or N <= 0:
             raise YampsError("Number of Mps sites N should be a positive integer.")
         if nr_phys not in (1, 2):
-            raise YampsError("Number of physical legs of Mps, nr_phys, should be equal to 1 or 2.")
+            raise YampsError("Number of physical legs, nr_phys, should be equal to 1 or 2.")
 
         self.N = N
         self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
@@ -364,7 +368,7 @@ class MpsMpo:
         if to == 'first':
             self.pC = (n - 1, n)
             ax = (1, 2) if self.nr_phys == 1 else (1, 2, 3)
-            self.A[n], R = self.A[n].qr(axes=(ax, 0), sQ=1, Qaxis=0, Raxis=-1)
+            self.A[n], R = self.A[n].qr(axes=(ax, 0), sQ=1, Qaxis=0, Raxis=1)
         elif to == 'last':
             self.pC = (n, n + 1)
             ax = (0, 1) if self.nr_phys == 1 else (0, 1, 3)
@@ -393,13 +397,14 @@ class MpsMpo:
             norm of discarded singular values normalized by the remining ones
         """
         if self.pC is not None:
-            normC = self.A[self.pC].norm()
             if opts is None:
                 opts = {'tol': 1e-12}   #  TODO: No truncation?
-            U, S, V = self.A[self.pC].svd_with_truncation(axes=(0, 1), sU=-1, **opts)
 
-            normS = S.norm()
-            self.A[self.pC] = S / normS if normalize else S
+            U, S, V = yast.svd(self.A[self.pC], axes=(0, 1), sU=-1)
+
+            mask = yast.linalg.truncation_mask(S, **opts)
+            U, C, V = mask.apply_mask(U, S, V, axis=(1, 0, 0))
+            self.A[self.pC] = C / C.norm() if normalize else C
             n1, n2 = self.pC
 
             if n1 >= self.first:
@@ -413,7 +418,9 @@ class MpsMpo:
             else:
                 self.A[self.pC] = self.A[self.pC] @ V
 
-            return ((normC * normC - normS * normS) ** 0.5) / normS
+            # discarded weight
+            nC = yast.bitwise_not(mask).apply_mask(S, axis=0)
+            return nC.norm() / S.norm()
         return 0.
 
     def remove_central(self):
@@ -570,7 +577,7 @@ class MpsMpo:
         axes = (0, (1, 2), 3) if self.nr_phys == 1 else (0, (1, 3), 4, (2, 5))
         return AA.fuse_legs(axes=axes)
 
-    def unmerge_two_sites(self, AA, bd, opts_svd):
+    def unmerge_two_sites(self, AA, bd, opts):
         r"""
         Unmerge rank-4 tensor into two neighbouring MPS sites and a central block 
         using :func:`yast.linalg.svd` to trunctate the bond dimension.
@@ -596,12 +603,13 @@ class MpsMpo:
         AA = AA.unfuse_legs(axes=axes)
         axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 4), (2, 3, 5))
         self.pC = bd
-        _U, _S, _V = yast.svd(AA, axes=axes, sU=-1, Uaxis=2)
-        mask = yast.linalg.truncation_mask(_S, **opts_svd)
-        self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(_U, _S, _V, axis=(2, 0, 0))
+        U, S, V = yast.linalg.svd(AA, axes=axes, sU=-1, Uaxis=2)
+        mask = yast.linalg.truncation_mask(S, **opts)
+        self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(U, S, V, axis=(2, 0, 0))
+
         # discarded weight
-        Snorm, Cnorm = _S.norm(), self.A[bd].norm()
-        return ((Snorm * Snorm - Cnorm * Cnorm) ** 0.5) / Snorm  # max discarder ? 
+        nC = yast.bitwise_not(mask).apply_mask(S, axis=0)
+        return nC.norm() / S.norm()
 
     def get_leftmost_leg(self):
         return self.A[self.first].get_legs(axis=0)
@@ -668,7 +676,7 @@ class MpsMpo:
 
     def get_Schmidt_values(self):
         r"""
-        Schmidt values for bipartition across each of the bonds
+        Schmidt values for bipartition across all bonds
 
         Returns
         -------
