@@ -214,9 +214,9 @@ class Generator:
         -----------
         H_str: str
             The definition of the MPO given as latex expression. The definition uses string names of the operators given in. The assignment of the location is 
-            given e.g. for 'cp' operator as 'cp_j' for 'cp' operator acting on site 'j'. A product of operators will be written as 'cp_j.c_(j+1)' where operators are separated by a dot. 
-            To multiply by a number use 'g * cp_j.c_{j+1}' where 'g' can be defines in 'parameters'. You can write all elements explicitly separating by '+' or use use '\sum_{j=0}^5' to sum from index 0 to 5 (included). 
-            e.g. \sum_{j=0}^5 g * cp_{j}.c_{j+1} '.
+            given e.g. for 'cp' operator as 'cp_{j}' (always with {}-brackets!) for 'cp' operator acting on site 'j'. 
+            The space and * are interpreted as multiplication by a number of by an operator. E.g., to multiply by a number use 'g * cp_j c_{j+1}' where 'g' has to be defines in 'parameters' or writen directly as a number, 
+            You can define automatic summation with expression '\sum_{j \in A}', where A has to be iterable, one-dimensional object with specified values of 'j'. 
         parameters: dict
             Keys for the dict define the expressions that occur in H_str
 
@@ -333,7 +333,7 @@ class Generator:
                     else:
                         if not H:
                             H = generate_mpo(self._I, place_holder, self.opts)
-                        else:
+                        elif H and amp_holder > 0.0:
                             H = H + generate_mpo(self._I, place_holder, self.opts)
             H.canonize_sweep(to='last', normalize=False)
             H.truncate_sweep(to='first', opts=self.opts, normalize=False)

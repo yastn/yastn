@@ -183,9 +183,9 @@ class Spin1:
         dict(str,yast.Tensor)
             a map from strings to operators
         """
-        return {'I': self.I(),
-                'sx': self.sx(),
-                'sy': self.sy(),
-                'sz': self.sz(),
-                'sp': self.sp(),
-                'sm': self.sm()}
+        return {'I': lambda j: self.I(),
+                'sx': lambda j: self.sx(),
+                'sy': lambda j: self.sy(),
+                'sz': lambda j: self.sz(),
+                'sp': lambda j: self.sp(),
+                'sm': lambda j: self.sm()}
