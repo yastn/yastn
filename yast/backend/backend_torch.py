@@ -310,6 +310,10 @@ def absolute(data):
     return torch.abs(data)
 
 
+def bitwise_not(data):
+    return torch.bitwise_not(data)
+
+
 def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
     # torch.svd_lowrank decomposes A = USV^T and return U,S,V
     # complex A is not supported 

@@ -345,7 +345,7 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32, **k
     # makes a copy for partial truncations; also detaches from autograd computation graph
     S = S.copy()
     Smask = S.copy()
-    Smask._data[:] = True # all True
+    Smask._data = Smask._data > -float('inf') # all True
 
     nsym = S.config.sym.NSYM
     tol_null = 0. if isinstance(tol_block, dict) else tol_block

@@ -142,7 +142,7 @@
 - new function `move_leg` which is an alias to `moveaxis`
 
 v0.9
-  the last version employing dictionary of blocks befor the transition to a single 1d data structure
+  the last version employing dictionary of blocks before the transition to a single 1d data structure
 
 13-03-2022
 - Transition to 1d data structure
@@ -190,3 +190,8 @@ v0.9
 
 23-07-2022
 - In yast.operators predefine classes that generate sets of a few standard local operators.
+
+16-10-2-22
+- new function `yast.bitwise_not()`
+- new function `yamst.is_canonical()`
+- change order of tenor legs in MPO  (left virtual, ket, right virtual, bra)
