@@ -157,11 +157,11 @@ class MpsMpo:
     # The basic structure of mps (for nr_phys=1) and mpo (for nr_phys=2)
     # and some basic operations on an object. This is a parent structure for Mps (for nr_phys=1),
     # Mpo (for nr_phys=2). Order of legs for a single mps tensor is
-    # (left virtual, 1st physical, 2nd physical, right virtual).
+    # (left virtual, 1st physical |ket>, right virtual, 2nd physical <bra|).
     # MpsMpo tensors are index with :math:`0, 1, 2, 3, \\ldots, N-1`
     # (with :math:`0` corresponding to the first site).
     # A central block (associated with a bond) is indexed using ordered tuple (n, n+1).
-    # Maximally one central block is allowed.
+    # At most one central block is allowed.
     
     def __init__(self, N, nr_phys=1):
         r"""
@@ -183,13 +183,9 @@ class MpsMpo:
         self.N = N
         self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
         self.pC = None  # index of the central site, None if it does not exist
-        self.first = 0
-        self.last = N - 1
-
+        self.first = 0  # index of the first lattice site
+        self.last = N - 1  # index of the last lattice site
         self.nr_phys = nr_phys
-        self.left = (0,)  # convention which leg is left virtual(connected to site with smaller index)
-        self.right = (nr_phys + 1,)  # convention which leg is a right virtual leg (connected to site with larger index)
-        self.phys = (1,) if nr_phys == 1 else (1, 2)  # convention which legs are physical
 
     @property
     def config(self):
@@ -218,7 +214,7 @@ class MpsMpo:
 
     def __setitem__(self, n, tensor):
         """ Assign tensor to n-th site of Mps or Mpo. """
-        if not isinstance(n, int) or n < 0 or n >= self.N:
+        if not isinstance(n, int) or n < self.first or n > self.last:
             raise YampsError("n should be a positive integer in [0, N - 1].")
         if tensor.ndim != self.nr_phys + 2:
             raise YampsError("Tensor rank should be {}.".format(self.nr_phys + 2))
@@ -309,7 +305,7 @@ class MpsMpo:
         """
         return self.__mul__(number)
 
-    def __add__(self, mps):
+    def __add__(self, phi):
         """
         Sum of two Mps's or two Mpo's.
 
@@ -321,9 +317,9 @@ class MpsMpo:
         -------
         out : Mps or Mpo
         """
-        return add(self, mps)
+        return add(self, phi)
 
-    def __matmul__(self, multiplier):
+    def __matmul__(self, phi):
         """
         Multiply Mpo by Mpo or Mps.
 
@@ -335,9 +331,9 @@ class MpsMpo:
         -------
         out : Mps or Mpo
         """
-        return multiply(self, multiplier)
+        return multiply(self, phi)
 
-    def orthogonalize_site(self, n, to='last', normalize=True):
+    def orthogonalize_site(self, n, to='first', normalize=True):
         r"""
         Performs QR (or RQ) decomposition of on-site tensor at :code:`n`-th position.
         Two typical modes of usege are
@@ -367,14 +363,15 @@ class MpsMpo:
 
         if to == 'first':
             self.pC = (n - 1, n)
-            self.A[n], R = self.A[n].qr(axes=(self.phys + self.right, self.left), sQ=1, Qaxis=0, Raxis=-1)
-            self.A[self.pC] = R / R.norm() if normalize else R
+            ax = (1, 2) if self.nr_phys == 1 else (1, 2, 3)
+            self.A[n], R = self.A[n].qr(axes=(ax, 0), sQ=1, Qaxis=0, Raxis=-1)
         elif to == 'last':
             self.pC = (n, n + 1)
-            self.A[n], R = self.A[n].qr(axes=(self.left + self.phys, self.right), sQ=-1)
-            self.A[self.pC] = R / R.norm() if normalize else R
+            ax = (0, 1) if self.nr_phys == 1 else (0, 1, 3)
+            self.A[n], R = self.A[n].qr(axes=(ax, 2), sQ=-1, Qaxis=2)
         else:
             raise YampsError('Argument "to" should be in ("first", "last")')
+        self.A[self.pC] = R / R.norm() if normalize else R
 
     def diagonalize_central(self, opts=None, normalize=True):
         r"""
@@ -398,24 +395,25 @@ class MpsMpo:
         if self.pC is not None:
             normC = self.A[self.pC].norm()
             if opts is None:
-                opts = {'tol': 1e-12}
+                opts = {'tol': 1e-12}   #  TODO: No truncation?
             U, S, V = self.A[self.pC].svd_with_truncation(axes=(0, 1), sU=-1, **opts)
 
             normS = S.norm()
             self.A[self.pC] = S / normS if normalize else S
             n1, n2 = self.pC
 
-            if n1 >= 0:
-                self.A[n1] = self.A[n1].tensordot(U, axes=(self.right, 0))
+            if n1 >= self.first:
+                ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
+                self.A[n1] = yast.ncon([self.A[n1], U], (ax, (1, -2)))
             else:
-                self.A[self.pC] = U.tensordot(self.A[self.pC], axes=(1, 0))
+                self.A[self.pC] = U @ self.A[self.pC]
 
-            if n2 <= self.N - 1:
-                self.A[n2] = V.tensordot(self.A[n2], axes=(1, self.left))
+            if n2 <= self.last:
+                self.A[n2] = V @ self.A[n2]
             else:
-                self.A[self.pC] = self.A[self.pC].tensordot(V, axes=(1, 0))
+                self.A[self.pC] = self.A[self.pC] @ V
 
-            return (normC - normS) / normS
+            return ((normC * normC - normS * normS) ** 0.5) / normS
         return 0.
 
     def remove_central(self):
@@ -443,10 +441,11 @@ class MpsMpo:
             n1, n2 = self.pC
             self.pC = None
 
-            if (to == 'first' and n1 >= 0) or n2 >= self.N:
-                self.A[n1] = self.A[n1].tensordot(C, axes=(self.right, 0))
-            else:  # (to == 'last' and n2 < self.N) or n1 < 0
-                self.A[n2] = C.tensordot(self.A[n2], axes=(1, self.left))
+            if (to == 'first' and n1 >= self.first) or n2 > self.last:
+                ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
+                self.A[n1] = yast.ncon([self.A[n1], C], (ax, (1, -2)))
+            else:  # (to == 'last' and n2 <= self.last) or n1 < self.first
+                self.A[n2] = C @ self.A[n2]
 
     def canonize_sweep(self, to='first', normalize=True):
         r"""
@@ -499,10 +498,10 @@ class MpsMpo:
         if to == 'first':
             cl = (1, 2) if self.nr_phys == 1 else (1, 2, 3)
         else: # to == 'last':
-            cl = (0, 1) if self.nr_phys == 1 else (0, 1, 2)
+            cl = (0, 1) if self.nr_phys == 1 else (0, 1, 3)
         it = self.sweep(to=to) if n is None else [n]
         for n in it:
-            x = yast.tensordot(self[n], self[n], axes=(cl, cl), conj=(0, 1))
+            x = yast.tensordot(self.A[n], self.A[n].conj(), axes=(cl, cl))
             x0 = yast.eye(config=x.config, legs=x.get_legs((0, 1)))
             if yast.norm(x - x0.diag()) > tol:  # == 0
                 return False
@@ -542,7 +541,7 @@ class MpsMpo:
         """
         discarded_max = 0.
         if opts is None:
-            opts = {'tol': 1e-12}
+            opts = {'tol': 1e-12}   #  TODO: No truncation?
         for n in self.sweep(to=to):
             self.orthogonalize_site(n=n, to=to, normalize=normalize)
             discarded = self.diagonalize_central(opts=opts, normalize=normalize)
@@ -567,8 +566,8 @@ class MpsMpo:
             tensor formed from A[n] and A[n + 1]
         """
         nl, nr = bd
-        AA = self.A[nl].tensordot(self.A[nr], axes=(self.right, self.left))
-        axes = (0, (1, 2), 3) if self.nr_phys == 1 else (0, (1, 3), (2, 4), 5)
+        AA = yast.tensordot(self.A[nl], self.A[nr], axes=(2, 0))
+        axes = (0, (1, 2), 3) if self.nr_phys == 1 else (0, (1, 3), 4, (2, 5))
         return AA.fuse_legs(axes=axes)
 
     def unmerge_two_sites(self, AA, bd, opts_svd):
@@ -593,22 +592,22 @@ class MpsMpo:
             where :math:`\lambda_i` are singular values across the bond. 
         """
         nl, nr = bd
-        axes = (1,) if self.nr_phys == 1 else (1, 2)
+        axes = (1,) if self.nr_phys == 1 else (1, 3)
         AA = AA.unfuse_legs(axes=axes)
-        axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 3), (2, 4, 5))
+        axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 4), (2, 3, 5))
         self.pC = bd
-        # self.A[nl], self.A[bd], self.A[nr] = AA.svd_with_truncation(axes=axes, sU=-1, **opts_svd)
-        _U, _S, _V= AA.svd(axes=axes, sU=-1, **opts_svd)
-        mask= yast.linalg.truncation_mask(_S, **opts_svd)
-        self.A[nl], self.A[bd], self.A[nr]= mask.apply_mask(_U, _S, _V, axis=(-1, 0, 0))
+        _U, _S, _V = yast.svd(AA, axes=axes, sU=-1, Uaxis=2)
+        mask = yast.linalg.truncation_mask(_S, **opts_svd)
+        self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(_U, _S, _V, axis=(2, 0, 0))
         # discarded weight
-        return 1.0 - sum(self.A[bd].data) / sum(_S.data)
+        Snorm, Cnorm = _S.norm(), self.A[bd].norm()
+        return ((Snorm * Snorm - Cnorm * Cnorm) ** 0.5) / Snorm  # max discarder ? 
 
     def get_leftmost_leg(self):
-        return self.A[self.first].get_legs(self.left[0])
+        return self.A[self.first].get_legs(axis=0)
 
     def get_rightmost_leg(self):
-        return self.A[self.last].get_legs(self.right[0])
+        return self.A[self.last].get_legs(axis=2)
 
     def get_bond_dimensions(self):
         r"""
@@ -620,8 +619,8 @@ class MpsMpo:
             list of total bond dimensions on virtual legs from first to last,
             including "trivial" leftmost and rightmost virtual spaces.
         """
-        Ds = [self.A[n].get_shape(self.left[0]) for n in self.sweep(to='last')]
-        Ds.append(self.A[self.last].get_shape(self.right[0]))
+        Ds = [self.A[n].get_shape(axis=0) for n in self.sweep(to='last')]
+        Ds.append(self.A[self.last].get_shape(axis=2))
         return tuple(Ds)
 
     def get_bond_charges_dimensions(self):
@@ -637,9 +636,9 @@ class MpsMpo:
         """
         tDs = []
         for n in self.sweep(to='last'):
-            leg = self.A[n].get_legs(self.left[0])
+            leg = self.A[n].get_legs(axis=0)
             tDs.append(leg.tD)
-        leg = self.A[self.last].get_legs(self.right[0])
+        leg = self.A[self.last].get_legs(axis=2)
         tDs.append(leg.tD)
         return tDs
 
@@ -663,7 +662,7 @@ class MpsMpo:
         self.absorb_central(to='first')
         for n in self.sweep(to='first'):
             self.orthogonalize_site(n=n, to='first', normalize=False)
-            Entropy[n] = entropy(self.A[self.pC], alpha=alpha)[0]
+            Entropy[n], _, _ = entropy(self.A[self.pC], alpha=alpha)
             self.absorb_central(to='first')
         return Entropy
 
