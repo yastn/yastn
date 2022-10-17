@@ -4,7 +4,7 @@ import numpy as np
 import torch
 
 from .backend_torch import *
-from .backend_torch import transpose, unmerge
+from .backend_torch import transpose
 
 import fused_transpose_merge_1d
 
@@ -203,3 +203,33 @@ class kernel_transpose_and_merge_p2p_v3(torch.autograd.Function):
                 inv_Do = tuple(Do[n] for n in order)
                 newdata_b[slice(*slo)].reshape(Do)[:] = tmp_b[slcs].reshape(inv_Do).permute(inv_order)
         return newdata_b, None, None, None, None
+
+
+def unmerge(data, meta):
+    return kernel_unmerge_ptp.apply(data, meta)
+
+class kernel_unmerge_ptp(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, data, meta):
+        Dsize = data.size()
+        ctx.meta = meta
+        ctx.fwd_data_size = Dsize
+        # sln -> slice in dest tensor, specifying location of unfused block
+        # Dn  -> shape of the unfused block
+        # slo -> slice in source tensor, specifying location of t_effective(fused) block
+        # Do  -> shape of the fused block with t_eff
+        # sub_slc -> sub-block within block Do
+        source_inds= fused_transpose_merge_1d.map_source_to_dest_unmerge(Dsize[0], meta)
+        newdata= data[source_inds]
+        return newdata
+
+    @staticmethod
+    def backward(ctx, data_b):
+        meta = ctx.meta
+        fwd_data_size = ctx.fwd_data_size
+        # no zero blocks should be introduces here
+        newdata_b = torch.empty(fwd_data_size, dtype=data_b.dtype, device=data_b.device)
+        for sln, Dn, slo, Do, sub_slc in meta:
+            slcs = tuple(slice(*x) for x in sub_slc)
+            newdata_b[slice(*slo)].view(Do)[slcs] = data_b[slice(*sln)].view(Dn)
+        return newdata_b, None, None, None
