@@ -11,6 +11,22 @@ def run_dmrg_1site(psi, H, sweeps=10):
     return env.measure()
 
 
+def run_multiply_svd(psi, H, Egs, sweeps=2):
+    Hpsi = yamps.multiply_svd(H, psi, opts={'D_total': 6})
+
+    Eng_t = yamps.measure_overlap(Hpsi, psi)
+    assert Egs < Eng_t < Egs * 0.98
+
+    Hnorm = yamps.measure_overlap(Hpsi, Hpsi) ** 0.5
+
+    env = None
+    for _ in range(sweeps):
+        yamps.variational_sweep_1site(Hpsi, psi_target=psi, op=H)
+        Eng_new = yamps.measure_overlap(Hpsi, psi) * Hnorm
+        assert Egs < Eng_new < Eng_t
+        Eng_t = Eng_new
+
+
 def run_truncation(psi, H, Egs, sweeps=2):
     psi2 = psi.copy()
     discarded = psi2.truncate_sweep(to='last', opts={'D_total': 4})
@@ -73,6 +89,7 @@ def test_truncate_svd_Z2():
         psi.canonize_sweep(to='first')
         run_dmrg_1site(psi, H)
         run_truncation(psi, H, Eng_parity[parity])
+        run_multiply_svd(psi, H, Eng_parity[parity])
 
 
 if __name__ == "__main__":
