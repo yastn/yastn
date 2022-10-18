@@ -71,7 +71,7 @@ class _EnvParent:
         if self.bra.N != self.ket.N:
             raise YampsError('bra and ket should have the same number of sites.')
 
-        config = self.ket.A[0].config
+        config = self.ket[0].config
         for ii in range(len(self.ort)):
             legs = [self.ort[ii].get_leftmost_leg(), self.ket.get_leftmost_leg().conj()]
             self.Fort[ii][(-1, 0)] = ones(config=config, legs=legs)
@@ -134,7 +134,7 @@ class _EnvParent:
         out : tensor
             result of projection
         """
-        return self.Heff1(self.ket.A[n], n)
+        return self.Heff1(self.ket[n], n)
 
     def update_env(self, n, to='last'):
         r"""
@@ -160,7 +160,7 @@ class _EnvParent:
         Aort = []
         inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
         for ii in range(len(self.ort)):
-            Aort.append(ncon([self.Fort[ii][(n - 1, n)], self.ort[ii].A[n], self.Fort[ii][(n + 1, n)]], inds))
+            Aort.append(ncon([self.Fort[ii][(n - 1, n)], self.ort[ii][n], self.Fort[ii][(n + 1, n)]], inds))
         self._temp['Aort'] = Aort
 
     def update_AAort(self, bd):
@@ -199,7 +199,7 @@ class Env2(_EnvParent):
         super().__init__(bra, ket)
 
         # left boundary
-        config = self.bra.A[0].config
+        config = self.bra[0].config
         legs = [self.bra.get_leftmost_leg(), self.ket.get_leftmost_leg().conj()]
         self.F[(-1, 0)] = ones(config=config, legs=legs)  # TODO: or eye?
         # right boundary
@@ -225,6 +225,8 @@ class Env2(_EnvParent):
         """
         inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
         return ncon([self.F[(n - 1, n)], x, self.F[(n + 1, n)]], inds)
+
+
 
 
 class Env3(_EnvParent):
@@ -253,7 +255,7 @@ class Env3(_EnvParent):
             raise YampsError('op should should have the same number of sites as ket.')
 
         # left boundary
-        config = self.ket.A[0].config
+        config = self.ket[0].config
         legs = [self.bra.get_leftmost_leg(), self.op.get_leftmost_leg().conj(), self.ket.get_leftmost_leg().conj()]
         self.F[(-1, 0)] = ones(config=config, legs=legs)
 
@@ -280,36 +282,6 @@ class Env3(_EnvParent):
         bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
         return ncon([self.F[bd], C, self.F[ibd]], ((-0, 2, 1), (1, 3), (3, 2, -1)))
 
-    # def Heff1(self, A, n):
-    #     r"""
-    #     Action of Heff on a single site mps tensor.
-
-    #     Parameters
-    #     ----------
-    #     A : tensor
-    #         site tensor
-
-    #     n : int
-    #         index of corresponding site
-
-    #     Returns
-    #     -------
-    #     out : tensor
-    #         Heff1 * A
-    #     """
-    #     nl, nr = n - 1, n + 1
-    #     A = self._project_ort(A)
-    #     if self.nr_phys == 1:
-    #         T1 = ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
-    #                     ((-0, 2, 1), (1, 3, 4), (2, -1, 5, 3), (4, 5, -2)))
-    #     elif self.nr_phys == 2 and not self.on_aux:
-    #         T1 = ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
-    #                     ((-0, 2, 1), (1, 3, 4, -3), (2, -1, 5, 3), (4, 5, -2)))
-    #     else:
-    #         T1 = ncon([self.F[(nl, n)], A, self.op.A[n], self.F[(nr, n)]],
-    #                     ((-0, 2, 1), (1, -1, 4, 3), (2, -3, 5, 3), (4, 5, -2)))
-    #     T1 = self._project_ort(T1)
-    #     return T1
 
     def Heff1(self, A, n):
         r"""
@@ -332,25 +304,24 @@ class Env3(_EnvParent):
         A = self._project_ort(A)
 
         if self.nr_phys == 1:
-            kA = A
-        elif self.nr_phys == 2 and not self.on_aux:
-            kA = A.fuse_legs(axes=((0, 3), 1, 2))
-        else:
-            kA = A.fuse_legs(axes=((0, 1), 3, 2))
+            tmp = A @ self.F[(nr, n)]
+            tmp = self.op[n]._attach_23(tmp)
+            tmp = ncon([self.F[(nl, n)], tmp], ((-0, 1, 2), (2, 1, -2, -1)))
 
-        T1 = ncon([kA, self.F[(nr, n)]], ((-0, -1, 1), (1, -2, -3)))
-        T2 = attach_23(self.op.A[n], T1)
-        if self.nr_phys == 1:
-            T4 = ncon([self.F[(nl, n)], T2], ((-0, 2, 1), (1, 2, -2, -1)))
         elif self.nr_phys == 2 and not self.on_aux:
-            T3 = T2.unfuse_legs(axes=0)
-            T4 = ncon([self.F[(nl, n)], T3], ((-0, 2, 1), (1, -3, 2, -2, -1)))
-        else:  # nr_phys == 2 and on_aux:
-            T3 = T2.unfuse_legs(axes=0)
-            T4 = ncon([self.F[(nl, n)], T3], ((-0, 2, 1), (1, -1, 2, -2, -3)))
+            tmp = ncon([A, self.F[(nr, n)]], ((-0, -1, 1, -4), (1, -2, -3)))
+            tmp = tmp.swap_gate(axes=(3, 4)).fuse_legs(axes=(0, 1, 2, (3, 4)))
+            tmp = self.op[n]._attach_23(tmp)
+            tmp = ncon([self.F[(nl, n)], tmp], ((-0, 1, 2), (2, 1, -2, -1)))
+            tmp = tmp.unfuse_legs(axes=2)
+        else:  # if self.nr_phys == 2 and self.on_aux:
+            tmp = ncon([A, self.F[(nl, n)]], ((1, -4, -0, -1), (-3, -2, 1)))
+            tmp = tmp.swap_gate(axes=(2, 4)).fuse_legs(axes=(0, 1, 2, (3, 4)))
+            tmp = self.op[n]._attach_01(tmp.conj()).conj()
+            tmp = ncon([tmp, self.F[(nr, n)]], ((1, 2, -0, -2), (1, 2, -1)))
+            tmp = tmp.unfuse_legs(axes=0)
 
-        T4 = self._project_ort(T4)
-        return T4
+        return self._project_ort(tmp)
 
 
     def Heff2(self, AA, bd):
@@ -373,7 +344,7 @@ class Env3(_EnvParent):
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
 
         if bd not in self._temp['op_2site']:
-            OO = tensordot(self.op.A[n1], self.op.A[n2], axes=(2, 0))
+            OO = tensordot(self.op[n1], self.op[n2], axes=(2, 0))
             self._temp['op_2site'][bd] = OO.fuse_legs(axes=(0, (1, 3), 4, (2, 5)))
         OO = self._temp['op_2site'][bd]
 
@@ -388,21 +359,21 @@ class Env3(_EnvParent):
                         ((-0, 2, 1), (1, -1, 4, 3), (2, -3, 5, 3), (4, 5, -2)))
 
     def update_A(self, n, dt, opts, normalize=True):
-        """ Updates env.ket.A[n] by exp(dt Heff1). """
+        """ Updates env.ket[n] by exp(dt Heff1). """
         if n in self._temp['expmv_ncv']:
             opts['ncv'] = self._temp['expmv_ncv'][n]
         f = lambda x: self.Heff1(x, n)
-        self.ket.A[n], info = expmv(f, self.ket.A[n], dt, **opts, normalize=normalize, return_info=True)
+        self.ket[n], info = expmv(f, self.ket[n], dt, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][n] = info['ncv']
 
     def update_C(self, dt, opts, normalize=True):
-        """ Updates env.ket.A[bd] by exp(dt Heff0). """
+        """ Updates env.ket[bd] by exp(dt Heff0). """
         bd = self.ket.pC
         if bd[0] != -1 and bd[1] != self.N:  # do not update central sites outsite of the chain
             if bd in self._temp['expmv_ncv']:
                 opts['ncv'] = self._temp['expmv_ncv'][bd]
             f = lambda x: self.Heff0(x, bd)
-            self.ket.A[bd], info = expmv(f, self.ket.A[bd], dt, **opts, normalize=normalize, return_info=True)
+            self.ket.A[bd], info = expmv(f, self.ket[bd], dt, **opts, normalize=normalize, return_info=True)
             self._temp['expmv_ncv'][bd] = info['ncv']
 
     def update_AA(self, bd, dt, opts, opts_svd, normalize=True):
@@ -419,10 +390,10 @@ class Env3(_EnvParent):
     def enlarge_bond(self, bd, opts_svd):
         if bd[0] < 0 or bd[1] >= self.N:  # do not enlarge bond outside of the chain
             return False
-        AL = self.ket.A[bd[0]]
-        AR = self.ket.A[bd[1]]
-        if self.op.A[bd[0]].get_legs(axis=1).t != AL.get_legs(axis=1).t or \
-           self.op.A[bd[1]].get_legs(axis=1).t != AR.get_legs(axis=1).t:
+        AL = self.ket[bd[0]]
+        AR = self.ket[bd[1]]
+        if self.op[bd[0]].get_legs(axis=1).t != AL.get_legs(axis=1).t or \
+           self.op[bd[1]].get_legs(axis=1).t != AR.get_legs(axis=1).t:
             return True  # true if some charges are missing on physical legs of psi
 
         AL = AL.fuse_legs(axes=((0, 1), 2))
@@ -445,69 +416,43 @@ def _update2(n, F, bra, ket, to, nr_phys):
     """ Contractions for 2-layer environment update. """
     if to == 'first':
         inds = ((-0, 2, 1), (1, 3), (-1, 2, 3)) if nr_phys == 1 else ((-0, 2, 1, 4), (1, 3), (-1, 2, 3, 4))
-        F[(n, n - 1)] = ncon([ket.A[n], F[(n + 1, n)], bra.A[n].conj()], inds)
+        F[(n, n - 1)] = ncon([ket[n], F[(n + 1, n)], bra[n].conj()], inds)
     elif to == 'last':
         inds = ((2, 3, -0), (2, 1), (1, 3, -1)) if nr_phys == 1 else ((2, 3, -0, 4), (2, 1), (1, 3, -1, 4))
-        F[(n, n + 1)] = ncon([bra.A[n].conj(), F[(n - 1, n)], ket.A[n]], inds)
+        F[(n, n + 1)] = ncon([bra[n].conj(), F[(n - 1, n)], ket[n]], inds)
 
-
-# def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
-#     if to == 'last':
-#         if nr_phys == 1:
-#             inds = ((4, 5, -0), (4, 2, 1), (1, 3, -2), (2, 5, -1, 3))
-#         elif nr_phys == 2 and not on_aux:
-#             inds = ((4, 5, -0, 6), (4, 2, 1), (1, 3, -2, 6), (2, 5, -1, 3))
-#         else:  # nr_phys == 2 and on_aux:
-#             inds = ((4, 6, -0, 5), (4, 2, 1), (1, 6, -2, 3), (2, 5, -1, 3))
-#         F[(n, n + 1)] = ncon([bra.A[n].conj(), F[(n - 1, n)], ket.A[n], op.A[n]], inds)
-#     else: # to == 'first':
-#         if nr_phys == 1:
-#             inds = ((-0, 2, 1), (1, 3, 5), (-1, 4, 3, 2), (-2, 4, 5))
-#         elif nr_phys == 2 and not on_aux:
-#             inds = ((-0, 2, 1, 6), (1, 3, 5), (-1, 4, 3, 2), (-2, 4, 5, 6))
-#         else:  # nr_phys == 2 and on_aux:
-#             inds = ((-0, 6, 1, 2), (1, 3, 5), (-1, 4, 3, 2), (-2, 6, 5, 4))
-#         F[(n, n - 1)] = ncon([ket.A[n], F[(n + 1, n)], op.A[n], bra.A[n].conj()], inds)
 
 def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
-    if to == 'last':
-        if nr_phys == 1:
-            bA = bra.A[n]
-        elif nr_phys == 2 and not on_aux:
-            bA = bra.A[n].fuse_legs(axes=(0, 1, (2, 3)))
-        else:
-            bA = bra.A[n].fuse_legs(axes=(0, 3, (2, 1)))
-        T1 = ncon([bA.conj(), F[(n - 1, n)]], ((1, -1, -0), (1, -2, -3)))
-        T2 = attach_01(op.A[n], T1)
-        if nr_phys == 1:
-            F[(n, n + 1)] = ncon([T2, ket.A[n]], ((-0, -1, 1, 2), (1, 2, -2)))
-        elif nr_phys == 2 and not on_aux:
-            T3 = T2.unfuse_legs(axes=0)
-            F[(n, n + 1)] = ncon([T3, ket.A[n]], ((-0, 3, -1, 1, 2), (1, 2, -2, 3)))
-        else:  # nr_phys == 2 and on_aux:
-            T3 = T2.unfuse_legs(axes=0)
-            F[(n, n + 1)] = ncon([T3, ket.A[n]], ((-0, 3, -1, 1, 2), (1, 3, -2, 2)))
-    else: # to == 'first':
-        if nr_phys == 1:
-            kA = ket.A[n]
-        elif nr_phys == 2 and not on_aux:
-            kA = ket.A[n].fuse_legs(axes=((0, 3), 1, 2))
-        else:
-            kA = ket.A[n].fuse_legs(axes=((0, 1), 3, 2))
-        T1 = ncon([kA, F[(n + 1, n)]], ((-0, -1, 1), (1, -2, -3)))
-        T2 = attach_23(op.A[n], T1)
-        if nr_phys == 1:
-            F[(n, n - 1)] = ncon([T2, bra.A[n].conj()], ((-0, -1, 1, 2), (-2, 2, 1)))
-        elif nr_phys == 2 and not on_aux:
-            T3 = T2.unfuse_legs(axes=0)
-            F[(n, n - 1)] = ncon([T3, bra.A[n].conj()], ((-0, 3, -1, 1, 2), (-2, 2, 1, 3)))
-        else:  # nr_phys == 2 and on_aux:
-            T3 = T2.unfuse_legs(axes=0)
-            F[(n, n - 1)] = ncon([T3, bra.A[n].conj()], ((-0, 3, -1, 1, 2), (-2, 3, 1, 2)))
+    if nr_phys == 1 and to == 'last':
+        tmp = ncon([bra[n].conj(), F[(n - 1, n)]], ((1, -1, -0), (1, -2, -3)))
+        tmp = op[n]._attach_01(tmp)
+        F[(n, n + 1)] = ncon([tmp, ket[n]], ((-0, -1, 1, 2), (1, 2, -2)))
+    elif nr_phys == 1 and to == 'first':
+        tmp = ket[n] @ F[(n + 1, n)]
+        tmp = op[n]._attach_23(tmp)
+        F[(n, n - 1)] = ncon([tmp, bra[n].conj()], ((-0, -1, 1, 2), (-2, 2, 1)))
+    elif nr_phys == 2 and not on_aux and to == 'last':
+        bA = bra[n].fuse_legs(axes=(0, 1, (2, 3)))
+        tmp = ncon([bA.conj(), F[(n - 1, n)]], ((1, -1, -0), (1, -2, -3)))
+        tmp = op[n]._attach_01(tmp)
+        tmp = tmp.unfuse_legs(axes=0).swap_gate(axes=(1, 2))
+        F[(n, n + 1)] = ncon([tmp, ket[n]], ((-0, 3, -1, 1, 2), (1, 2, -2, 3)))
+    elif nr_phys == 2 and not on_aux and to == 'first':
+        tmp = ncon([ket[n], F[(n + 1, n)]], ((-0, -1, 1, -4), (1, -2, -3)))
+        tmp = tmp.swap_gate(axes=(2, 4)).fuse_legs(axes=(0, 1, 2, (3, 4)))
+        tmp = op[n]._attach_23(tmp)
+        bA = bra[n].fuse_legs(axes=(0, 1, (2, 3)))
+        F[(n, n - 1)] = ncon([tmp, bA.conj()], ((-0, -1, 1, 2), (-2, 2, 1)))
+    elif nr_phys == 2 and on_aux and to == 'last':
+        tmp = ncon([ket[n], F[(n - 1, n)]], ((1, -4, -0, -1), (-3, -2, 1)))
+        tmp = tmp.swap_gate(axes=(2, 4)).fuse_legs(axes=(0, 1, 2, (3, 4)))
+        tmp = op[n]._attach_01(tmp.conj()).conj()
+        bA = bra[n].fuse_legs(axes=((0, 1), 2, 3))
+        F[(n, n + 1)] = ncon([bA.conj(), tmp], ((1, -0, 2), (-2, -1, 1, 2)))
+    else: # nr_phys == 2 and on_aux and to == 'first':
+        bA = bra[n].fuse_legs(axes=((0, 1), 2, 3))
+        tmp = ncon([bA.conj(), F[(n + 1, n)]], ((-0, 1, -1), (-3, -2, 1)))
+        tmp = op[n]._attach_23(tmp.conj()).conj()
+        tmp = tmp.unfuse_legs(axes=0).swap_legs(axes=(1, 2))
+        F[(n, n - 1)] = ncon([ket[n], tmp], ((-0, 1, 2, 3), (-2, 1, -1, 2, 3)))
 
-
-def attach_01(M, T):
-    return ncon([T, M], ((-0, 1, 2, -2), (2, 1, -1, -3)))
-
-def attach_23(M, T):
-    return ncon([T, M], ((-0, 1, 2, -2), (-1, -3, 2, 1)))

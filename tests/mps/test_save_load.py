@@ -46,10 +46,9 @@ def test_basic_hdf5():
     # To read MPS from HDF5 file, open the file and load the MPS stored 
     # at address 'state/'. 
     # Note: You have to provide valid YAST configuration 
-    # TODO: basic properties of the object like nr_phys = 1 (for MPS) or 2 (for MPO).
     #
     with h5py.File('tmp.h5', 'r') as f:
-        phi = yamps.load_from_hdf5(config_dense, 1, f, 'state/')
+        phi = yamps.load_from_hdf5(config_dense, f, 'state/')
     #
     # Test psi == phi
     #
@@ -61,7 +60,7 @@ def test_basic_hdf5():
     with h5py.File('tmp.h5', 'w') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
-        phi = yamps.load_from_hdf5(config_dense, 1, f, 'state/')
+        phi = yamps.load_from_hdf5(config_dense, f, 'state/')
     os.remove("tmp.h5")
     check_copy(psi, phi)
 
@@ -78,7 +77,7 @@ def test_Z2_hdf5():
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
-        phi = yamps.load_from_hdf5(psi.A[0].config, 1, f, 'state/')
+        phi = yamps.load_from_hdf5(psi.A[0].config, f, 'state/')
     os.remove("tmp.h5") 
     check_copy(psi, phi)
 
@@ -96,7 +95,7 @@ def test_basic_dict():
     #
     # Last, we load the MPS from the dictionary, providing valid YAST configuration
     #
-    phi = yamps.load_from_dict(config_dense, 1, tmp)
+    phi = yamps.load_from_dict(config_dense, tmp)
     #
     # Test psi == phi
     #
@@ -110,7 +109,7 @@ def test_Z2_dict():
 
     psi = generate.random_mps(D_total=15, n=0)
     tmp = psi.save_to_dict()
-    phi = yamps.load_from_dict(generate.config, 1, tmp)
+    phi = yamps.load_from_dict(generate.config, tmp)
     check_copy(psi, phi)
 
 
