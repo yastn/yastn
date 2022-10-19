@@ -2,7 +2,7 @@
 from ._merging import _masks_for_add
 from ._tests import YastError, _test_can_be_combined, _get_tD_legs, _test_axes_match
 
-__all__ = ['apxb', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp']
+__all__ = ['apxb', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not']
 
 
 def __add__(a, b):
@@ -405,4 +405,19 @@ def exp(a, step=1.):
     tensor: Tensor
     """
     data = a.config.backend.exp(a._data, step)
+    return a._replace(data=data)
+
+
+def bitwise_not(a):
+    r"""
+    Return element-wise bit-wise not.
+
+        .. note::
+            This applies only to non-empty blocks of A. 
+
+    Returns
+    -------
+    tensor: Tensor
+    """
+    data = a.config.backend.bitwise_not(a._data)
     return a._replace(data=data)

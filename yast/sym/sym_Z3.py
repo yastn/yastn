@@ -8,7 +8,8 @@ class sym_Z3(sym_abelian):
     SYM_ID = 'Z3'
     NSYM = 1  # single int is used to distinguish symmetry sectors
 
-    def fuse(charges, signatures, new_signature):
+    @classmethod
+    def fuse(cls, charges, signatures, new_signature):
         """
         Fusion rule for Z3 symmetry
 

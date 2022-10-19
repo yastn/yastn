@@ -36,7 +36,7 @@ def test_add_leg_basic():
     a = yast.Tensor(config=config_U1, s=(-1, 1), n=-1)
     a.set_block(ts=(1, 0), Ds=(1, 1), val=1)  # creation operator
     b = yast.Tensor(config=config_U1, s=(-1, 1), n=1)
-    b.set_block(ts=(0, 1), Ds=(1, 1), val=1)  # anihilation operator
+    b.set_block(ts=(0, 1), Ds=(1, 1), val=1)  # annihilation operator
     _test_add_remove_leg(a)
     _test_add_remove_leg(b)
 
@@ -82,7 +82,7 @@ def test_add_leg_basic():
 
 def test_operators_chain():
     """
-    Consider a sequence of operators "cdag cdag c c"
+    Consider a sequence of operators "cp cp c c"
     add virtual legs connecting them, starting from the end
     """
 

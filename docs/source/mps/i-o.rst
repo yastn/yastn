@@ -1,43 +1,28 @@
-I-O for the matrix products
-===========================
+Import and export
+===================================
+
+`YAMPS` can save MPS/MPO as Python :code:`dict` or HDF5 file. 
+The MPS/MPO previously serialized by :meth:`yamps.MpsMpo.save_to_dict` or :meth:`yamps.MpsMpo.save_to_hdf5` can be again deserialized into *YAMPS* MPS/MPO.
+
+Examples of exporting and loading MPS/MPO can be found in 
+:ref:`examples/mps/mps:save and load mps/mpo`.
+
+Export/save
+------------
 
 
-Entropy, and bond dimension
----------------------------
 
-The properties of virtual bond dimensions for the matrix product can be extracted by calling `get_*` functions on `yamps.MpsMpo` object. 
-Those information can be used to quantify the entanaglemnt encoded by the virtual dimension as well as the structure of singlets encoding the correlations. 
-This can be used both for matrix-producs state and matrix product operator.
+.. autofunction:: yamps.MpsMpo.save_to_dict
 
-.. autoclass:: yamps.MpsMpo
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: get_bond_dimensions, get_bond_charges_dimensions, get_entropy
-
-Full information on the structure of virtual dimension is given by Schmidt values which is obtained by SVD. If the symmetries are present the Schmidt values are split to blocks.
-
-.. autoclass:: yamps.MpsMpo
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: get_Schmidt_values
+.. autofunction:: yamps.MpsMpo.save_to_hdf5
 
 
-Saving and loading `yamps.MpsMpo`
----------------------------------
+Import/load
+-----------
 
-The Mps object can be convenienty saved as a dictionary or to a HDF5 file.
+.. autofunction:: yamps.load_from_dict
 
-.. autoclass:: yamps.MpsMpo
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: save_to_dict, save_to_hdf5
+.. 
+	If the information are saved in HDF5 format :code:`file` under an address  :code:`my_address` then encoding is made by :code:`A_new = yamps.load_from_hdf5(file, './my_address/')`.
 
-It can be later loaded from a dictionary or to a HDF5 file into `yamps.MpsMpo`.
-
-.. automodule:: yamps
-	:noindex:
-	:members: load_from_dict, load_from_hdf5
-
-.. todo:: can I simplify the export smh, what about the configuration files, nr_phys etc, I shuld export them as well.
-
-Examples for saving and loading matrix products can be found in :ref:`examples/mps/mps:save and load`.
+.. autofunction:: yamps.load_from_hdf5

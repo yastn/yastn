@@ -26,61 +26,76 @@ def _init_dmrg(psi, H, env, project, opts_eigs):
     return env, opts_eigs
 
 
-def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', atol=-1, max_sweeps=1,
-            opts_eigs=None, opts_svd=None, return_info=False):
+def dmrg(psi, H, env=None, project=None, version='1site', \
+        converge='energy', measure=None, \
+        atol=-1, max_sweeps=1, opts_eigs=None, opts_svd=None, return_info=False):
     r"""
-    Perform dmrg sweeps until convergence.
+    Perform DMRG sweeps until convergence, starting from MPS :code:`psi` 
+    in right canonical form. The outer loop sweeps over MPS updating sites 
+    from the first site to last and back. 
 
-    Assume that psi is cannonized to first site.
-    Sweeps consists of iterative updates from last site to first and back to the first one.
-    Updates psi, returning it in canonical form to the first site.
+    The convergence is controlled either by selected expectation value, i.e., :code:`converge='energy'` 
+    or by the Schmidt values :code:`converge='schmidt'` which is more sensitive measure. 
+    The DMRG algorithm then sweeps through the lattice at most :code:`max_sweeps` times 
+    or until selected convergence measure changes by less then :code:`atol` from sweep to sweep.
+
+    Computational cost of DMRG can be lowered by providing environment :code:`env` 
+    obtained in previous run.
 
     Parameters
     ----------
-    psi: Mps
-        initial state.
+    psi: yamps.MpsMpo
+        initial MPS in right canonical form.
 
-    H: Mps, nr_phys=2
-        operator to minimize given in the form of mpo.
+    H: yamps.MpsMpo
+        MPO to minimize against.
 
-    env: Env3
-        can provide environment <psi|H|psi> from the previous sweep.
-        It is initialized if None
-
-    project: list
-        optimizes psi in the subspace orthogonal to Mps's in the list
+    env: yamps.Env3
+        optional environment of tensor network :math:`\langle \psi|H|\psi \rangle` 
+        from the previous DMRG run.
+    
+    project: list(yamps.MpsMpo)
+        optimizes MPS in the subspace orthogonal to MPS's in the list
 
     version: str
-        which tdvp procedure to use from ('1site', '2site')
+        which DMRG variant to use from :code:`'1site'`, :code:`'2site'`
 
     converge: str
-        defines convergence criteria from ('energy', 'schmidt')
-        'energy' uses the expectation value of H
-        'schmidt' uses the schmidt values on the worst cut
+        defines convergence measure. Available options are
+        
+            * :code:`'energy'` uses the expectation value of H
+        
+            * :code:`'schmidt'` uses Schmidt values on the worst cut
+
+    measure: func(int, yamps.MpsMpo, yamps.Env3, scalar, scalar)->None
+        callback allowing measurement/manipulation of MPS after each DMRG sweep.
+        The arguments passed are current sweep, current state :math:`|\psi\rangle`, 
+        current environment corresponding to :math:`\langle\psi|H|\psi\rangle` network,
+        current energy, and current truncation error.
 
     atol: float
-        stop sweeping if converged quantity changes by less than atol in a single sweep
+        defines converged criterion. DMRG stop once the change in convergence measure 
+        is less than :code:`atol` between sweeps.
 
     max_sweeps: int
         maximal number of sweeps
 
-    opts_expmv: dict
+    opts_eigs: dict
         options passed to :meth:`yast.eigs`
 
     opts_svd: dict
-        options passed to :meth:`yast.svd` to truncate virtual bond dimensions when unmerging two merged sites.
+        options passed to :meth:`yast.svd` used to truncate virtual spaces in :code:`verions='2site'`.
 
     return_info: bool
-        if True, return additional information regarding conergence
+        if True, return additional information regarding convergence
 
     Returns
     -------
-    env: Env3
-        Environment of the <psi|H|psi> ready for the next iteration.
-        Can contain temporary objects to reuse from previous sweeps.
+    env: yamps.Env3
+        Environment of the :math:`\langle \psi|H|\psi \rangle` ready for the next iteration.
 
     info: dict
-        if return_info is True, return some information about reached convergence.
+        if :code:`return_info` is ``True``, return additional information about convergence.
     """
     env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
     if opts_svd is None:
@@ -88,15 +103,19 @@ def dmrg(psi, H, env=None, project=None, version='1site', converge='energy', ato
 
     Eold = env.measure()
     for sweep in range(max_sweeps):
+        max_disc_weight= None
         if version == '1site':
             env = dmrg_sweep_1site(psi, H=H, env=env, project=project, opts_eigs=opts_eigs)
         elif version == '2site':
-            env = dmrg_sweep_2site(psi, H=H, env=env, project=project, opts_eigs=opts_eigs, opts_svd=opts_svd)
+            env, max_disc_weight = dmrg_sweep_2site(psi, H=H, env=env, project=project, \
+                opts_eigs=opts_eigs, opts_svd=opts_svd)
         else:
             raise YampsError('dmrg version %s not recognized' % version)
         E = env.measure()
         dE, Eold = Eold - E, E
         logger.info('Iteration = %03d  Energy = %0.14f dE = %0.14f', sweep, E, dE)
+        if not (measure is None):
+            measure(sweep, psi, env, E, max_disc_weight)
         if converge == 'energy' and abs(dE) < atol:
             break
     if return_info:
@@ -142,16 +161,18 @@ def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=No
     if opts_svd is None:
         opts_svd = {'tol': 1e-12}
 
+    max_disc_weight=-1.
     for to, dn in (('last', 0), ('first', 1)):
         for n in psi.sweep(to=to, dl=1):
             bd = (n, n + 1)
             env.update_AAort(bd)
             AA = psi.merge_two_sites(bd)
             _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
-            psi.unmerge_two_sites(AA, bd, opts_svd)
+            _disc_weigth_bd= psi.unmerge_two_sites(AA, bd, opts_svd)
+            max_disc_weight= max(max_disc_weight,_disc_weigth_bd)
             psi.absorb_central(to=to)
             env.clear_site(n, n + 1)
             env.update_env(n + dn, to=to)
 
     env.update_env(0, to='first')
-    return env
+    return env, max_disc_weight

@@ -1,12 +1,7 @@
 """ examples for addition of the Mps-s """
 import pytest
 import yamps
-try:
-    from . import ops_dense
-    from . import ops_Z2, ops_U1
-except ImportError:
-    import ops_dense
-    import ops_Z2, ops_U1
+import yast
 
 
 tol = 1e-6
@@ -15,70 +10,88 @@ tol = 1e-6
 def check_add(psi0, psi1):
     """ test yamps.add using overlaps"""
     out1 = yamps.add(psi0, psi1, amplitudes=[1., 2.])
-    o1 = yamps.measure_overlap(out1, out1)
+    out2 = (1.0 * psi0) + (2.0 * psi1)
     p0 = yamps.measure_overlap(psi0, psi0)
     p1 = yamps.measure_overlap(psi1, psi1)
     p01 = yamps.measure_overlap(psi0, psi1)
     p10 = yamps.measure_overlap(psi1, psi0)
-    assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
-
-
-def check_add_mul(psi0, psi1):
-    """ test __add__ and __mul__ by a number using overlaps"""
-    out1 = (1.0 * psi0) + (2.0 * psi1)
-    o1 = yamps.measure_overlap(out1, out1)
-    p0 = yamps.measure_overlap(psi0, psi0)
-    p1 = yamps.measure_overlap(psi1, psi1)
-    p01 = yamps.measure_overlap(psi0, psi1)
-    p10 = yamps.measure_overlap(psi1, psi0)
-    assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
+    for out in (out1, out2):
+        o1 = yamps.measure_overlap(out, out)
+        assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
 
 
 def test_addition():
     """create two Mps-s and add them to each other"""
-    psi0 = ops_dense.mps_random(N=8, Dmax=15, d=1)
-    psi1 = ops_dense.mps_random(N=8, Dmax=19, d=1)
+    operators = yast.operators.SpinfulFermions(sym='U1xU1')
+    generate = yamps.Generator(N=9, operators=operators)
+
+    psi0 = generate.random_mps(D_total=15, n=(3, 5))
+    psi1 = generate.random_mps(D_total=19, n=(3, 5))
     check_add(psi0, psi1)
-    check_add_mul(psi0, psi1)
 
-    psi0 = ops_Z2.mps_random(N=8, Dblock=8, total_parity=0)
-    psi1 = ops_Z2.mps_random(N=8, Dblock=12, total_parity=0)
+    psi0 = generate.random_mpo(D_total=12)
+    psi1 = generate.random_mpo(D_total=11)
     check_add(psi0, psi1)
-    check_add_mul(psi0, psi1)
 
 
-def test_multiply():
+def test_multiplication():
     """ Calculate ground state and checks yamps.multiply() and __mul__()and yamps.add() within eigen-condition."""
-    ops_U1.random_seed(seed=0)
+    #
+    # This test presents a multiplication as a part of DMRG study. 
+    # We use multiplication to get expectation values from a state.
+    # Knowing exact solution we will compare it to the value we obtain.
     N = 7
-    Dmax = 8
-    opts_svd = {'tol': 1e-8, 'D_total': Dmax}
-
     Eng = -3.427339492125848
+    #
+    operators = yast.operators.SpinlessFermions(sym='U1')
+    generate = yamps.Generator(N=N, operators=operators)
+    #
+    # The Hamiltonian is obtained with automatic generator (see source file).
+    #
+    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.2, "range1": range(N), "range2": range(N-1)}
+    H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j}"
+    H = generate.mpo(H_str, parameters)
+    #
+    # To standardize this test we will fix a seed for random MPS we use
+    #
+    generate.random_seed(seed=0)
+    #
+    # In this example we use yast.Tensor's with U(1) symmetry. 
+    #
     total_charge = 3
-    H = ops_U1.mpo_XX_model(N=N, t=1, mu=0.2)
-
-    psi = ops_U1.mps_random(N=N, Dblocks=[1, 2, 1], total_charge=total_charge).canonize_sweep(to='first')
+    psi = generate.random_mps(D_total=5, n=total_charge)
+    #
+    # You always have to start with MPS in right canonical form.
+    #
+    psi.canonize_sweep(to='first')
+    #
+    # We set truncation for DMRG and runt the algorithm in '2site' version
+    #
+    opts_svd = {'tol': 1e-8, 'D_total': 8} 
     env = yamps.dmrg(psi, H, version='2site', max_sweeps=20, opts_svd=opts_svd)
-
+    #
+    # Test if we obtained exact solution for the energy?:
+    #
     assert pytest.approx(env.measure().item(), rel=tol) == Eng
-
+    #
+    # If the code didn't break then we should get a ground state. 
+    # Now we calculate the variation of energy <H^2>-<H>^2=<(H-Eng)^2> to check if DMRG converged properly to tol.
+    # We have two equivalent ways to do that:
+    #
+    # case 1/
     Hpsi = yamps.multiply(H, psi)
-    assert pytest.approx(yamps.measure_overlap(Hpsi, Hpsi).item(), rel=tol) == Eng ** 2
-    p0 = yamps.add(Hpsi, psi, amplitudes=[1, -Eng])
-    assert yamps.measure_overlap(p0, p0) < tol  # == 0.
-    p0 = yamps.add(Hpsi * -1, Eng * psi)
-    assert yamps.measure_overlap(p0, p0) < tol  # == 0.
-
-
+    #
+    # use yamps.measure_overlap to get variation
+    #
+    p0 = -1 * Hpsi + Eng * psi
+    assert yamps.measure_overlap(p0, p0) < tol
+    #
+    # case 2/
     Hpsi = H @ psi
-    assert pytest.approx(yamps.measure_overlap(Hpsi, Hpsi).item(), rel=tol) == Eng ** 2
-    p0 = yamps.add(Hpsi, psi, amplitudes=[1, -Eng])
-    assert yamps.measure_overlap(p0, p0) < tol  # == 0.
-    p0 = yamps.add(Hpsi * -1, Eng * psi)
-    assert yamps.measure_overlap(p0, p0) < tol  # == 0.
+    p0 = -1 * Hpsi + Eng * psi
+    assert yamps.measure_overlap(p0, p0) < tol
 
 
 if __name__ == "__main__":
     test_addition()
-    test_multiply()
+    test_multiplication()

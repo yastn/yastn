@@ -21,7 +21,7 @@ def test_config_exceptions():
         # leg do not depend on fermionic statistics so the next line is fine
         b = yast.rand(config=config_Z2_fermionic, legs=[leg_Z2, leg_Z2, leg_Z2.conj()])
         _ = a + b
-        # Two tensors have different assigment of fermionic statistics.
+        # Two tensors have different assignment of fermionic statistics.
 
 
 @pytest.mark.skipif(config_U1.backend.BACKEND_ID=="numpy", reason="requires different backends or devices")

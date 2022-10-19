@@ -1,76 +1,136 @@
-Matrix product algebra
-=========================
+Algebra
+=======
 
-Copying an object
----------------------------------
+Creating a copy of MPS/MPO
+--------------------------
 
-Simple assignment of the element under a new name does not create an independent copy. Therefore all changes in the original version will be reflected in the new variable.
-To make an independent copy you should use :code:`mp_new = mp_old.copy()`
+To create an independent copy or clone of `YAMPS` MPS/MPO :code:`A` call :code:`A.copy()`
+or :code:`A.clone()` respectively.
 
-.. autoclass:: yamps.MpsMpo
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: copy, clone
+.. autofunction:: yamps.MpsMpo.copy
 
-See examples here :ref:`examples/mps/mps:Copying`.
+.. autofunction:: yamps.MpsMpo.clone
 
-.. todo:: what about shallow and deep copy? should I delete copy/clone?
+Multiplication by a scalar
+---------------------------
+
+`YAMPS` MPS/MPO can be multiplied from both left and right by a scalar using regular `*` operator. 
+For example, :code:`B = a * A` or :code:`B = A * a` results in a new MPS/MPO :code:`B`
+with first tensor multiplied by a number `a`.
+
+..
+    .. autofunction:: yamps.MpsMpo.__mul__
+    .. autofunction:: yamps.MpsMpo.__rmul__
+
+Addition of MPS/MPO
+-------------------
+
+Two MPS's or two MPO's can be added up provided that their length, physical dimensions, and symmetry agree. The sum of two such objects :code:`A` and :code:`B` results in new MPS/MPO :code:`C = A + B`, with tensor of :code:`C` given by the direct sum of :code:`A`'s 
+and :code:`B`'s tensors along virtual dimension.
+
+::
+
+    # a product of two MPS's
+               ___     ___    ___    ___    ___    ___     ___      ___    ___    ___    ___    ___
+      A       |___|-D-|___|--|___|--|___|--|___|--|___|   |   |-  -|   |--|   |--|   |--|   |--|   |
+ C =  +  =  __ d|   ___ |  ___ |  ___ |  ___ |  ___ |   = |   | 2D |   |  |   |  |   |  |   |  |   |
+      B    |___|:D-|___|:-|___|:-|___|:-|___|:-|___||     |___|-  -|___|--|___|--|___|--|___|--|___|
+            d|  |    |  |   |  |   |  |   |  |   |  |      d|        |      |      |      |      |
+              \/      \/     \/     \/     \/     \/
+
+..
+    .. autofunction:: yamps.MpsMpo.__add__
+
+To make a sum of many MPS/MPOs :math:`\{A_0,A_1,\dots\}` at once use :code:`yamps.add(A_0,A_1,...)`.
+
+.. autofunction:: yamps.add
+
+Following example show addition of two MPSs:
+
+::
+
+     import yamps, yast
+     
+     # Define random MPS's without any symmetry
+     #
+     config_dense= yast.make_config()
+     psi0 = yamps.random_dense_mps(N=8, D=5, d=2)
+     psi1 = yamps.random_dense_mps(N=8, D=5, d=2)
+     
+     # We want to calculate: res = psi0 + 2*psi1. There are couple of ways:
+     # A/
+     resA = yamps.add(psi0, 2.0*psi1)
+     
+     # B/
+     resB = yamps.add(psi0, psi1, amplitudes=[1.0,2.0])
+     
+     # C/
+     resC = psi0 + 2.0 * psi1
 
 
-Addition
----------------------------------
+Products of MPS/MPO
+-------------------
 
-In order to make a direct sum of two matrix products make sure they have the same symmetries and length. Only then they can be added to each other alond distinguished axis defined by `common_legs`.
-The addition of two matrix products can be done using `apxb()`, where you can additionally specify the prefactor which will be multiply to the second Mps you give.
+`YAMPS` supports *product* of 
+    
+i) MPO with MPS resulting in a new MPS in analogy with 
+:math:`\hat{O}|\psi\rangle = |\phi\rangle` (i.e. matrix-vector multiplication).
 
-The addition of any number of matrix products can be done using `add()`, where you can additionally specify the list of prefactors which will be multiplied to each Mps.
+::
 
-.. automodule:: yamps
-	:noindex:
-	:members: add
+ # a product of MPO O and MPS A
+              
+             _|d        _|_         _|_ 
+            |___|--D---|___|--...--|___|     _|_        _|_         _|_
+ C= O @ A =  _|_        _|_         _|_   = |___|-DxD'-|___|--...--|___|
+            |___|--D'--|___|--...--|___|    
 
-See examples here :ref:`examples/mps/mps:algebra`.
+ii) two MPOs resulting in a new MPO corresponding to usual 
+operator product :math:`\hat{O}\hat{P} = \hat{C}` (matrix-matrix multiplication).
 
-.. todo:: check tests for symmetric Mps
+::
+ 
+ # a product of two MPO's O and P
 
+             _|d_       _|_         _|_
+            |___|--D---|___|--...-:|___|    _|d          _|_         _|_
+ C= O @ P =  _|_        _|_         _|_  = |___|--DxD'--|___|--...--|___|
+            |___|--D'--|___|--...--|___|     |d           |           |
+              |d         |           |
 
-Multiplication
----------------------------------
+One can either use product operator :code:`C=A@B` or more verbose 
+:code:`C=yamps.multiply(A,B)`. Note that for MPO-MPS product, the *@*
+is commutative, i.e., :code:`O@A` and :code:`A@O` are equivalent.
 
-In order to multiply two Mps-s you need to know interpretation of their legs. That includes which legs of their individual tensors should be contracted and which lie along the code for the enw Mps and thus should be fused to a new leg. 
-Additionally, you can multiply the product of Mps-s by setting a prefactor to by any number.
+See examples here: :ref:`examples/mps/mps:Multiplication`.
 
-.. automodule:: yamps
-	:noindex:
-	:members: add, multiply
-
-See examples here :ref:`examples/mps/mps:algebra`.
-
-.. todo:: do I really need additional test for Mps with symmetries?
-
-
-Canonical form
----------------------------------
+.. autofunction:: yamps.multiply
 
 
-The cannonical form of the matrix product can be obtaining by subesqent QR or SVD decomposition. In the 1D objects you can choose it to be put into left or right canonical version depending of the parameter `to` to be `last` or `first`.
+Canonizing MPS/MPO
+------------------
 
-QR decomposision exhibits better performence while procedure beeing made exactly.
+MPS/MPO can be put into :ref:`theory/mps/basics:Canonical form` to reveal most advantageous truncation or as a part of the setup for 
+:ref:`DMRG<mps/algorithms:density matrix renormalisation group (dmrg) algorithm>` or 
+:ref:`TDVP<mps/algorithms:time-dependent variational principle (tdvp) algorithm>` algorithms. 
 
-.. autoclass:: yamps.MpsMpo
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: canonize_sweep
+The canonical form obtained by QR decomposition is fast, but does not allow for truncation 
+of the virtual spaces of MPS/MPO. 
 
-See examples: :ref:`examples/mps/mps:Canonical form by QR decomposition`.
+.. autofunction:: yamps.MpsMpo.canonize_sweep
 
-On the other hand singular values decomposision (SVD) additionally allows for truncating Schmidt vectors exceeding set truncation tolerance or maximal bond dimension. The truncation happens on each site of the Mps after persorming SVD of the tensor.
+See examples: :ref:`examples/mps/mps:Canonical form by QR`.
 
-.. autoclass:: yamps.MpsMpo
-	:noindex:
-	:exclude-members: __init__, __new__
-	:members: truncate_sweep
+Restoring canonical form locally: For example, while performing DMRG sweeps, 
+the tensors getting updated will not be in canonical form after the update. 
+It is necessary to restore their canonical form in course of sweeping. 
 
-See examples: :ref:`examples/mps/mps:Canonical form by SVD decomposition`.
+.. autofunction:: yamps.MpsMpo.orthogonalize_site
 
-.. todo:: this probably should be changed after splitting SVD to pure svd nd truncation
+The canonisation by `singular value decomposition` (SVD) allows 
+to truncate virtual dimension/spaces with the lowest weight 
+(lowest singular values).
+
+.. autofunction:: yamps.MpsMpo.truncate_sweep
+
+See examples: :ref:`examples/mps/mps:Canonical form by SVD`.

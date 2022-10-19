@@ -32,7 +32,7 @@ default:
 
 .default_rules:
   rules:
-    - if: $CI_COMMIT_BRANCH == "docs"
+    - if: $CI_COMMIT_BRANCH == "docs" || $CI_COMMIT_BRANCH == "generate_mpo"
       when: never
     - if: $CI_COMMIT_BRANCH
 
@@ -61,7 +61,6 @@ pages:
     - !reference [.default_rules, rules]
 
 
-
 flake8:
   image: python:3.8
   stage: Static Analysis
@@ -71,7 +70,6 @@ flake8:
   - flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
   rules:
     - !reference [.default_rules, rules]
-
 
 pylint:
   image: python:3.8

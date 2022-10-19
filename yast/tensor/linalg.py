@@ -42,7 +42,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
 
     Parameters
     ----------
-    axes: tuple
+    axes: Sequence(int) or Sequence(Sequence(int),Sequence(int))
         Specify two groups of legs between which to perform SVD, as well as
         their final order.
 
@@ -102,7 +102,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
 
     Parameters
     ----------
-    axes: tuple
+    axes: Sequence(int) or Sequence(Sequence(int),Sequence(int))
         Specify two groups of legs between which to perform SVD, as well as
         their final order.
 
@@ -345,7 +345,7 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32, **k
     # makes a copy for partial truncations; also detaches from autograd computation graph
     S = S.copy()
     Smask = S.copy()
-    Smask._data[:] = True # all True
+    Smask._data = Smask._data > -float('inf') # all True
 
     nsym = S.config.sym.NSYM
     tol_null = 0. if isinstance(tol_block, dict) else tol_block
@@ -380,7 +380,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
     Parameters
     ----------
-    axes: tuple
+    axes: Sequence(int) or Sequence(Sequence(int),Sequence(int))
         Specify two groups of legs between which to perform svd, as well as their final order.
 
     sQ: int

@@ -79,7 +79,7 @@ def test_block_exceptions():
     with pytest.raises(yast.YastError):
         nnc = yast.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 1, 1, 1), s=(-1, -1, 1, 1))
         _ = yast.block({(0, 0): II,  (1, 0): nnc, (1, 1): II}, common_legs=(1, 2))
-        # Signatues of blocked tensors are inconsistent.
+        # Signatures of blocked tensors are inconsistent.
     with pytest.raises(yast.YastError):
         nnn = yast.ones(config=config_U1, t=(0, 1, 1, 1), D=(1, 1, 1, 1), s=(1, 1, -1, -1), n=1)
         _ = yast.block({(0, 0): II,  (1, 0): nnn, (1, 1): II}, common_legs=(1, 2))

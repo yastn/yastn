@@ -11,8 +11,8 @@ tol = 1e-10  #pylint: disable=invalid-name
 
 
 def eigh_combine(a):
-    """ decompose and contracts hermitian tensor using eigh decomposition """
-    a2 = yast.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(0, 1))  # makes hermitian matrix from a
+    """ decompose and contracts Hermitian tensor using eigh decomposition """
+    a2 = yast.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(0, 1))  # makes Hermitian matrix from a
     S, U = yast.linalg.eigh(a2, axes=((0, 1), (2, 3)))
     US = yast.tensordot(U, S, axes=(2, 0))
     USU = yast.tensordot(US, U, axes=(2, 2), conj=(0, 1))
@@ -76,7 +76,7 @@ def test_eigh_exceptions():
     with pytest.raises(yast.YastError):
         a = yast.rand(config_U1, n=0, legs=legs)
         _ = yast.eigh(a, axes=(0, 1))
-        # Tensor likely not hermitian. Legs of effective square blocks not match.
+        # Tensor likely not Hermitian. Legs of effective square blocks not match.
 
 
 if __name__ == '__main__':

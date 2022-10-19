@@ -39,7 +39,7 @@ def test_compress_to_1d_basic():
 
 
 def test_compress_to_1d_embed():
-    """ test embeding zeros to match another tensor """
+    """ test embedding zeros to match another tensor """
     a = yast.Tensor(config=config_U1, s=(-1, 1, 1, 1))
     a.set_block(ts=(2, 0, 1, 1), Ds=(1, 2, 3, 4))
     a.set_block(ts=(0, 1, 0, -1), Ds=(5, 6, 7, 8))

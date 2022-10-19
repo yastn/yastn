@@ -51,7 +51,7 @@ class FusionSyntax(unittest.TestCase):
         # Their order can be permuted as well
         c0 = a.fuse_legs(axes=(0, (3, 4), (2, 1)), mode='hard')
 
-        # Fusion can be applied succesively - fusing fused spaces together.
+        # Fusion can be applied successively - fusing fused spaces together.
         # This results in a rank-2 tensor, equivalent to block-sparse matrix
         c1 = c0.fuse_legs(axes=((0, 1), 2), mode='hard')
 
@@ -147,7 +147,7 @@ def test_hard_transpose():
 
 
 def test_hard_dot():
-    """ integration of hard fusionwith dot """
+    """ integration of hard fusion with dot """
     # Z2 x U1
     legs_a = [yast.Leg(config_Z2xU1, s=-1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D=(1, 2, 2, 4)),
             yast.Leg(config_Z2xU1, s=1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D= (9, 4, 3, 2)),
