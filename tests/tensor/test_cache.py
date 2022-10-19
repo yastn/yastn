@@ -1,4 +1,4 @@
-""" changing tests controls and size of lru_cache in some auxliary functions """
+""" changing tests controls and size of lru_cache in some auxiliary functions """
 import yast
 try:
     from .configs import config_Z2

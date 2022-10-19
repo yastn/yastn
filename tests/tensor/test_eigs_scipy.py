@@ -16,7 +16,7 @@ def test_eigs_simple():
             yast.Leg(config_U1, s=1, t=(0, 1), D=(1, 1)),
             yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 2))]
     a = yast.rand(config=config_U1, legs=legs)  # could be mps tensor
-    a, _ = yast.qr(a, axes=((0, 1), 2), sQ=-1)  # ortonormalize
+    a, _ = yast.qr(a, axes=((0, 1), 2), sQ=-1)  # orthonormalize
 
     # dense transfer matrix build from a; reference solution
     tm = yast.ncon([a, a.conj()], [(-1, 1, -3), (-2, 1, -4)])
@@ -24,7 +24,7 @@ def test_eigs_simple():
     tmn = tm.to_numpy()
     wn, vn = eigs(tmn, k=1, which='LM')  # use scipy
 
-    # initializing ranfom tensor matching tm from left
+    # initializing random tensor matching tm from left
     # we add a 3-rd leg extra carrying charges -1, 0, 1
     # to calculate eigs over those 3 subspaces in one go
     legs = [a.get_legs(0).conj(),
@@ -74,7 +74,7 @@ def test_eigs_mismatches():
     vv = yast.rand(config=a.config, legs=(leg02, leg02.conj(), leg_aux), dtype='float64')
     r1d, meta = yast.compress_to_1d(vv)
 
-    def f(x):  # change all that into a wraper aorund ncon part?
+    def f(x):  # change all that into a wrapper around ncon part?
         t = yast.decompress_from_1d(x, meta)
         t2 = yast.ncon([a, a, t], [(-1, 1, 2), (-2, 1, 3), (2, 3, -3)], conjs=(0, 1, 0))
         t3, _ = yast.compress_to_1d(t2, meta=meta)

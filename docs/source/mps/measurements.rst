@@ -1,19 +1,18 @@
-Overlaps of MPS-s
-=========================
+Overlap of two MPSs
+===================
 
-To calculate an overlap of one MPS-state and conjucation of another MPS-state use:
+:ref:`Measurement<theory/mps/basics:Measurements>` of the overlap between two MPSs is calculated by contracting a network formed by MPS and conjugate of another or the same MPS. In the latter case, :code:`yamps.measure_overlap(psi,psi)`, 
+returns the norm of MPS :code:`psi`.
 
-.. automodule:: yamps
-	:noindex:
-	:members: measure_overlap
+.. autofunction:: yamps.measure_overlap
 
 
 Expectation value of MPO
-=========================
+========================
 
-To calculate an overlap of one MPS-state, MPO-operator and conjucation of another MPS-state use:
+:ref:`Measurement<theory/mps/basics:Measurements>` of MPO's expectation value 
+is calculated by contracting a network formed by MPS, MPO, and a conjugate 
+of the same or different MPS.
 
-.. automodule:: yamps
-	:noindex:
-	:members: measure_mpo
+.. autofunction:: yamps.measure_mpo
 

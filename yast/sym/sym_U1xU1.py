@@ -7,7 +7,8 @@ class sym_U1xU1(sym_abelian):
     SYM_ID = 'U(1)xU(1)'
     NSYM = 2
 
-    def fuse(charges, signatures, new_signature):
+    @classmethod
+    def fuse(cls, charges, signatures, new_signature):
         """
         Fusion rule for U(1) x U(1) symmetry
 

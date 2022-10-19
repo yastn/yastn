@@ -131,7 +131,7 @@ def sum_elements(data):
 
 
 def norm(data, p):
-    """ 'fro' for Frobenious; 'inf' for max(abs(A)) """
+    """ 'fro' for Frobenius; 'inf' for max(abs(A)) """
     if p == 'fro':
         return np.linalg.norm(data)
     return max(np.abs(data)) if len(data) > 0  else np.float64(0.)
@@ -256,6 +256,10 @@ def absolute(data):
     return np.abs(data)
 
 
+def bitwise_not(data):
+    return np.bitwise_not(data)
+
+
 def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
     Udata = np.empty((sizes[0],), dtype=data.dtype)
     Sdata = np.empty((sizes[1],), dtype=DTYPE['float64'])
@@ -337,7 +341,7 @@ def embed_slc(data, meta, Dsize):
 
 
 ################################
-#     two dicts operations     #
+#     two dict-s operations    #
 ################################
 
 

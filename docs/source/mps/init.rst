@@ -1,39 +1,102 @@
-Setting up matrix product state and operators
-=============================================
-
-General information on Mps class
---------------------------------
-
-.. todo:: can we change the name Mps to e.g. Mp (or MP or TP for tensor product) to make it more general between MPS and MPO objects
-
-The class `yamps.MpsMpo` allows to create an object which represents a product operator. It consists of the numbered list of YAST tensors (members of class `yast.Tensor`, together with 
-properties definying waht do the matrix product represents.
-
-The `yamps` module supports one-dimensional structures with open boundary conditions. It allows to manipulate matrix product states and matrix product operators and use algorithms such as density matrix renormalisation group (:ref:`mps/algorithms:DMRG`) and time-dependend variational principle (:ref:`mps/algorithms:TDVP`) algorithms.
+Initialization
+==============
 
 
-Creating `yamps.MpsMpo` matrix product
----------------------------------------------
+Creating empty MPS/MPO
+----------------------
 
-The object of class `yamps.MpsMpo` are designed to represent one-dimensional matrix products with open-boundary 
-condition. The bond dimension on the edges is 1 by default.
+Both MPS and MPO are represented by the same class :class:`yamps.MpsMpo`, sharing many operations. The only difference between them is the number of their physical dimensions. The class :class:`yamps.MpsMpo` defines MPS/MPO through the set of tensors *A*
+which are stored as integer-indexed dictionary :code:`yamps.MpsMpo.A` 
+of rank-3/rank-4 :class:`yast.Tensor`'s. 
+
+To create empty MPS/MPO, i.e., without any tensors call
 
 .. autoclass:: yamps.MpsMpo
-	:noindex:
-	:members: __init__
-	:exclude-members: __new__
 
-Empty `yamps.MpsMpo` matrix product state of 10 tensors is created using :code:`mps = yamps.MpsMpo(N=10, nr_phys=1)`
-while the matrix producs operator :code:`mpo = yamps.MpsMpo(N=10, nr_phys=2)`.
+Short-hand functions for creation of empty MPS/MPO
 
-The symmetry of `yamps.MpsMpo` is inherited by its building blocks. Its building blocks can be assigned directly to `yamps.MpsMpo` by :ref:`examples/mps/mps:Filling matrix product with tensors`.
+.. autofunction:: yamps.Mps
+.. autofunction:: yamps.Mpo
 
-The matrix product can be generated automatically basing on the structure defined by a user
 
-.. automodule:: yamps
-	:noindex:
-	:members: automatic_Mps
+Setting MPS/MPO tensors
+-----------------------
 
-For examples for the function see the code in :ref:`examples/mps/mps:Automatically generated matrix product`.
+The tensors of MPS/MPO can be set manually, using familiar :code:`dict` access
 
-.. todo:: make automatic_Mps better and erase *Mij version for automatically generated MP
+.. code-block::
+
+	# create empty MPS over three sites
+	Y= yamps.Mps(3)
+
+	# create 3x2x3 random dense tensor
+	A_1= yast.rand(yast.make_config(), Legs=(yast.Leg(s=1,D=(3,)), 
+		yast.Leg(s=1,D=(2,)), yast.Leg(s=-1,D=(3,))))
+
+	# assign tensor to site 1
+	Y[1]= A_1
+
+.. note::
+	The virtual dimensions/spaces of the neighbouring MPS/MPO tensors have to remain consistent.
+
+To create :class:`yast.Tensor`'s see :ref:`YAST's basic creation operations<tensor/init:basic creation operations>`. 
+For more examples, see :ref:`Setting MPS/MPO manually<examples/mps/mps:building yamps object manually>`. 
+
+
+Automatic creation of MPS
+-------------------------
+
+
+Generate MPO automatically
+--------------------------
+
+`YAMPS` provides a tool for automatic MPO generation, which allows to construct Hamiltonian of any form for both bosonic and fermionic systems.
+
+.. autoclass:: yamps.Generator
+
+To initiallize the generator :code:`gen = yamps.Generator(N, operators)` we need to provide a length of the MPO :code':`N`, set of operators used by :code:`gen`.
+For optional parameters see sourse code. Predefined set of operators are :code:`yast` option. E.g., for spinless fermions one should use,
+
+.. autoclass:: yast.operators.SpinlessFermions
+
+For example, to get the set of operators for spinless fermions written as U(1)-symmetric tensors use :code:`operators = yast.operators.SpinlessFermions(sym='U1')`.
+After defining :code:`operators` we can run  :code:`gen = yamps.Generator(N, operators)`.
+
+With the generator we can construct a random MPS/MPO (we can fix seed for random generator by :code:`generate.random_seed(seed)`) or specified by LaTeX-like input format.
+For the examples see :ref:`Generating MPS/MPO automatically<examples/mps/mps:generating mps/mpo automatically>`. 
+
+..
+	=======
+	The class :class:`yamps.Mps` defines matrix product states and operators through a set of tensors *A*. It consists of integer-indexed dictionary of :class:`yast.Tensor`. 
+	Using rank-3 tensors *A*, :class:`yamps.Mps` can represent states
+
+	.. math::
+		
+		|\psi\rangle &= \sum_{\{\sigma\}} c_{\{\sigma\}} |\{\sigma\}\rangle,\\
+		c_{\{\sigma\}} &= Tr_{aux}[A^{\sigma_0}_{a_0,a_1}A^{\sigma_1}_{a_1,a_2}\ldots
+		A^{\sigma_{N-1}}_{a_{N-1},a_N}],
+
+	where each of tensors *A* has three indices, in order: left virtual :math:`a_i`, single physical :math:`\sigma`, and right virtual index :math:`a_{i+1}`. 
+	The operators are represented similarily by rank-4 tensors *A*
+
+	.. math::
+		
+		O &= \sum_{\{\sigma\},\{\sigma'\}} O_{\{\sigma\},\{\sigma'\}} |\{\sigma\}\rangle\langle\{\sigma'\}|,\\
+		O_{\{\sigma\},\{\sigma'\}} &= Tr_{aux}[A^{\sigma_0,\sigma'_0}_{a_0,a_1}A^{\sigma_1,\sigma'_1}_{a_1,a_2}\ldots
+		A^{\sigma_{N-1}\sigma'_{N-1}}_{a_{N-1},a_N}]
+
+	with convention for index order as follows: left virtual :math:`a_i`, physical :math:`\sigma`, physical :math:`\sigma'`, and right virtual index :math:`a_{i+1}`.
+	The indices :math:`\sigma,\sigma'` represent *bra* and *ket* physical indices
+	of the operator.
+
+	The `yamps.Mps` defines matrix products with open-boundary condition. Therefore, 
+	the bond dimension of virtual indices on the edges, :math:`a_0` and :math:`a_N` is 1 by default.
+
+
+	Creating `yamps.Mps` matrix product
+	-----------------------------------
+
+	.. autoclass:: yamps.Mps
+	>>>>>>> Stashed changes
+
+

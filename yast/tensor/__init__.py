@@ -106,7 +106,7 @@ class Tensor:
     from .linalg import norm, svd, svd_with_truncation, eigh, eigh_with_truncation, qr
     from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, apply_mask
     from ._algebra import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
-    from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp
+    from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp, bitwise_not
     from ._single import conj, conj_blocks, flip_signature, transpose, moveaxis, move_leg, diag, grad
     from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_leg, remove_leg, drop_leg_history
     from ._output import show_properties, __str__, print_blocks_shape, is_complex
@@ -118,6 +118,7 @@ class Tensor:
     from ._output import save_to_hdf5, save_to_dict, compress_to_1d
     from ._tests import is_consistent, are_independent
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
+    from ._special import _attach_01, _attach_23
 
     def _replace(self, **kwargs):
         """ Creates a shallow copy replacing fields specified in kwargs """

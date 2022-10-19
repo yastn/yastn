@@ -17,6 +17,7 @@ API: yast and yast.Tensor
    tensor/symmetry
    tensor/leg
    tensor/init
+   tensor/operators
    tensor/access
    tensor/algebra
    tensor/output

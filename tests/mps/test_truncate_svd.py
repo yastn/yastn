@@ -1,11 +1,6 @@
 """ truncation of mps """
 import yamps
-try:
-    from . import ops_dense
-    from . import ops_Z2
-except ImportError:
-    import ops_dense
-    import ops_Z2
+import yast
 
 
 def run_dmrg_1site(psi, H, sweeps=10):
@@ -14,6 +9,22 @@ def run_dmrg_1site(psi, H, sweeps=10):
     for _ in range(sweeps):
         env = yamps.dmrg_sweep_1site(psi, H, env=env)
     return env.measure()
+
+
+def run_multiply_svd(psi, H, Egs, sweeps=2):
+    Hpsi = yamps.multiply_svd(H, psi, opts={'D_total': 6})
+
+    Eng_t = yamps.measure_overlap(Hpsi, psi)
+    assert Egs < Eng_t < Egs * 0.98
+
+    Hnorm = yamps.measure_overlap(Hpsi, Hpsi) ** 0.5
+
+    env = None
+    for _ in range(sweeps):
+        yamps.variational_sweep_1site(Hpsi, psi_target=psi, op=H)
+        Eng_new = yamps.measure_overlap(Hpsi, psi) * Hnorm
+        assert Egs < Eng_new < Eng_t
+        Eng_t = Eng_new
 
 
 def run_truncation(psi, H, Egs, sweeps=2):
@@ -32,48 +43,55 @@ def run_truncation(psi, H, Egs, sweeps=2):
 
     ov_v = yamps.measure_overlap(psi, psi2)
     Eng_v = yamps.measure_mpo(psi2, H, psi2)
-    assert psi2.get_bond_dimensions() == [1, 2, 4, 4, 4, 4, 4, 2, 1]
+    assert psi2.get_bond_dimensions() == (1, 2, 4, 4, 4, 4, 4, 2, 1)
     assert 1 > ov_v > ov_t
     assert Egs < Eng_v < Eng_t
 
 
-def test_truncate_svd_full():
+def test_truncate_svd_dense():
     """
-    Initialize random mps of full tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
+    Initialize random mps of dense tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
     """
     N = 8
     Eng_gs = -4.758770483143633
     D_total = 8
-    H = ops_dense.mpo_XX_model(N=N, t=1, mu=0)
 
-    psi = ops_dense.mps_random(N=N, Dmax=D_total, d=2)
-    psi.canonize_sweep(to='first')
+    operators = yast.operators.Spin12(sym='dense')
+    generate = yamps.Generator(N=N, operators=operators)
+    generate.random_seed(seed=0)
+
+    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0, "range1": range(N), "range2": range(N-1)}
+    H_str = "\sum_{j \in range2} t ( sp_{j} sm_{j+1} + sp_{j+1} sm_{j} ) + \sum_{j\in range1} mu sp_{j} sm_{j}"
+    H = generate.mpo(H_str, parameters)
+    psi = generate.random_mps(D_total=D_total).canonize_sweep(to='first')
     run_dmrg_1site(psi, H)
     run_truncation(psi, H, Eng_gs)
 
 
 def test_truncate_svd_Z2():
     """
-    Initialize random mps of full tensors and checks canonization
+    Initialize random mps of dense tensors and checks canonization
     """
     N = 8
     D_total = 8
-    Eng_parity0 = -4.758770483143633
-    Eng_parity1 = -4.411474127809773
+    Eng_parity = {0: -4.758770483143633, 1: -4.411474127809773}
 
-    H = ops_Z2.mpo_XX_model(N=N, t=1, mu=0)
+    operators = yast.operators.Spin12(sym='Z2')
+    generate = yamps.Generator(N=N, operators=operators)
+    generate.random_seed(seed=0)
 
-    psi = ops_Z2.mps_random(N=N, Dblock=D_total/2, total_parity=1)
-    psi.canonize_sweep(to='first')
-    run_dmrg_1site(psi, H)
-    run_truncation(psi, H, Eng_parity1)
+    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0, "range1": range(N), "range2": range(N-1)}
+    H_str = "\sum_{j \in range2} t ( sp_{j} sm_{j+1} + sp_{j+1} sm_{j} ) + \sum_{j\in range1} mu sp_{j} sm_{j}"
+    H = generate.mpo(H_str, parameters)
 
-    psi = ops_Z2.mps_random(N=N, Dblock=D_total/2, total_parity=0)
-    psi.canonize_sweep(to='first')
-    run_dmrg_1site(psi, H)
-    run_truncation(psi, H, Eng_parity0)
+    for parity in (0, 1):
+        psi = generate.random_mps(D_total=D_total, n=parity)
+        psi.canonize_sweep(to='first')
+        run_dmrg_1site(psi, H)
+        run_truncation(psi, H, Eng_parity[parity])
+        run_multiply_svd(psi, H, Eng_parity[parity])
 
 
 if __name__ == "__main__":
-    test_truncate_svd_full()
+    test_truncate_svd_dense()
     test_truncate_svd_Z2()

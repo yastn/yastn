@@ -38,6 +38,15 @@ def test_leg():
     assert a.get_legs(-1) == a.get_legs(3)
 
 
+def test_random_leg():
+    leg = yast.random_leg(config_U1, s=1, n=0, D_total=100)
+    print(leg)
+    leg = yast.random_leg(config_U1, s=1, n=0, D_total=100, positive=True)
+    print(leg)
+    leg = yast.random_leg(config_Z3, s=1, n=1, D_total=35)
+    print(leg)
+
+
 def test_leg_meta_fusion():
     """ test get_leg with meta-fused tensor"""
     # U1
@@ -172,7 +181,8 @@ def test_leg_exceptions():
 
 
 if __name__ == '__main__':
-    test_leg()
-    test_leg_meta_fusion()
-    test_leg_hard_fusion()
-    test_leg_exceptions()
+    test_random_leg()
+    # test_leg()
+    # test_leg_meta_fusion()
+    # test_leg_hard_fusion()
+    # test_leg_exceptions()
