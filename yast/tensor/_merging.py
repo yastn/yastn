@@ -423,15 +423,14 @@ def _meta_unfuse_legdec(config, struct, ls, snew):
                 sub_slc = tuple(x[1].Dslc for x in tt)
                 Dn = sum((x[1].Drsh for x in tt), ())
                 Dsln = tuple(x[1].Dprod for x in tt)
-                Dp = np.prod(Dsln, dtype=int)
-                meta.append((tn, Dn, Dp, Dsln, slo, Do, sub_slc))
+                meta.append((tn, Dn, Dsln, slo, Do, sub_slc))
 
     meta = sorted(meta, key=lambda x: x[0])
     tnew = tuple(x[0] for x in meta)
     Dnew = tuple(x[1] for x in meta)
-    Dpnew = tuple(x[2] for x in meta)
+    Dpnew = tuple(np.prod(np.array(Dnew, dtype=int).reshape(len(Dnew), len(snew)), axis=1, dtype=int))
     slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
-    meta = tuple((x, *y[3:]) for x, y in zip(slnew, meta))
+    meta = tuple((x, *y[2:]) for x, y in zip(slnew, meta))
     new_struct = struct._replace(s=tuple(snew), t=tnew, D=Dnew, Dp=Dpnew, sl=slnew)
     return meta, new_struct
 
