@@ -11,15 +11,14 @@ def run_dmrg_1site(psi, H, sweeps=10):
     return env.measure()
 
 
-def run_multiply_svd(psi, H, Egs, sweeps=2):
+def run_multiply_svd(psi, H, Egs, sweeps=1):
     Hpsi = yamps.multiply_svd(H, psi, opts={'D_total': 6})
 
     Eng_t = yamps.measure_overlap(Hpsi, psi)
-    assert Egs < Eng_t < Egs * 0.98
+    assert Egs < Eng_t < Egs * 0.995
 
     Hnorm = yamps.measure_overlap(Hpsi, Hpsi) ** 0.5
 
-    env = None
     for _ in range(sweeps):
         yamps.variational_sweep_1site(Hpsi, psi_target=psi, op=H)
         Eng_new = yamps.measure_overlap(Hpsi, psi) * Hnorm

@@ -61,31 +61,28 @@ def multiply_svd(a, b, opts=None):
     psi = b.clone()
     psi.canonize_sweep(to='last')
 
-    if b.N != a.N:
+    if psi.N != a.N:
         raise YampsError('a and b must have equal number of sites.')
-    if a.pC is not None or b.pC is not None:
-        raise YampsError('Absorb central sites of mps-s before calling multiply.')
 
-    axes_fuse = (3, 0, (2, 4), 1) if b.nr_phys == 1 else (3, 0, (2, 4), 5, 1)
-    tmp = yast.tensordot(a[a.last], b[b.last], axes=(3, 1))
-    tmp = tmp.fuse_legs(axes_fuse).drop_leg_history(axis=2)
-    if b.nr_phys == 2:
-        tmp = tmp.fuse_legs(axes=(0, 1, (2, 3), 4))
+    la, lpsi = a.get_rightmost_leg(), psi.get_rightmost_leg()
+
+    tmp = yast.ones(a.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
+    tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axis=2)
 
     for n in psi.sweep(to='first'):
+        tmp = yast.tensordot(psi[n], tmp, axes=(2, 0))
+        if psi.nr_phys == 2:
+            tmp = tmp.fuse_legs(axes=(0, 1, 3, (4, 2)))
+        tmp = a[n]._attach_23(tmp)
+
         U, S, V = yast.svd(tmp, axes=((0, 1), (3, 2)), sU=-1)
 
         mask = yast.linalg.truncation_mask(S, **opts)
         U, C, V = mask.apply_mask(U, S, V, axis=(2, 0, 0))
 
-        psi.A[n] = V if b.nr_phys == 1 else V.unfuse_legs(axes=2)
-        UC = U @ C
+        psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
+        tmp = U @ C
 
-        if n > psi.first:
-            tmp = yast.tensordot(b[n-1], UC, axes=(2, 0))
-            if b.nr_phys == 2:
-                tmp = tmp.fuse_legs(axes=(0, 1, 3, (4, 2)))
-            tmp = a[n-1]._attach_23(tmp)
-    UC = UC.fuse_legs(axes=((0, 1), 2)).drop_leg_history(axis=0)
-    psi.A[psi.first] = UC @ psi.A[psi.first]
+    tmp = tmp.fuse_legs(axes=((0, 1), 2)).drop_leg_history(axis=0)
+    psi[psi.first] = tmp @ psi[psi.first]
     return psi

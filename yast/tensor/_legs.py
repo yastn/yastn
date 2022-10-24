@@ -209,7 +209,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, positive=Fals
     pd = np.exp(- (distance ** 2) / (2 * sigma ** 2))
     pd = pd / sum(pd)
 
-    Ds=np.zeros(len(ts), dtype=int)
+    Ds = np.zeros(len(ts), dtype=int)
     cdf = np.add.accumulate(pd).reshape(1, -1)
     # backend.rand gives distribution in [-1, 1]; subjected to backend seed fixing
     samples = (config.backend.rand(D_total, dtype='float64') + 1.) / 2.

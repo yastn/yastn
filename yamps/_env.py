@@ -315,12 +315,11 @@ class Env3(_EnvParent):
             tmp = tmp.unfuse_legs(axes=0)
             tmp = ncon([self.F[(nl, n)], tmp], ((-0, 1, 2), (2, -3, 1, -2, -1)))
         else:  # if self.nr_phys == 2 and self.on_aux:
-            pass
-            # tmp = ncon([A, self.F[(nl, n)]], ((1, -4, -0, -1), (-3, -2, 1)))
-            # tmp = tmp.fuse_legs(axes=(0, 1, 2, (3, 4)))
-            # tmp = self.op[n]._attach_01(tmp.conj()).conj()
-            # tmp = ncon([tmp, self.F[(nr, n)]], ((1, 2, -0, -2), (1, 2, -1)))
-            # tmp = tmp.unfuse_legs(axes=0)
+            tmp = ncon([A, self.F[(nl, n)]], ((1, -4, -0, -1), (-3, -2, 1)))
+            tmp = tmp.fuse_legs(axes=(0, 1, 2, (3, 4)))
+            tmp = self.op[n]._attach_01(tmp)
+            tmp = ncon([tmp, self.F[(nr, n)]], ((1, 2, -0, -2), (1, 2, -1)))
+            tmp = tmp.unfuse_legs(axes=0)
 
         return self._project_ort(tmp)
 
@@ -445,17 +444,14 @@ def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
         tmp = tmp.unfuse_legs(axes=0)
         F[(n, n - 1)] = ncon([tmp, bra[n].conj()], ((-0, 3, -1, 1, 2), (-2, 2, 1, 3)))
     elif nr_phys == 2 and on_aux and to == 'last':
-        pass
-        # tmp = ncon([ket[n], F[(n - 1, n)]], ((1, -4, -0, -1), (-3, -2, 1)))
-        # tmp = tmp.fuse_legs(axes=(0, 1, 2, (3, 4)))
-        # tmp = op[n]._attach_01(tmp.conj()).conj()
-        # bA = bra[n].fuse_legs(axes=((0, 1), 2, 3))
-        # F[(n, n + 1)] = ncon([bA.conj(), tmp], ((1, -0, 2), (-2, -1, 1, 2)))
+        tmp = ncon([ket[n], F[(n - 1, n)]], ((1, -4, -0, -1), (-3, -2, 1)))
+        tmp = tmp.fuse_legs(axes=(0, 1, 2, (3, 4)))
+        tmp = op[n]._attach_01(tmp)
+        bA = bra[n].fuse_legs(axes=((0, 1), 2, 3))
+        F[(n, n + 1)] = ncon([bA.conj(), tmp], ((1, -0, 2), (-2, -1, 1, 2)))
     else: # nr_phys == 2 and on_aux and to == 'first':
-        pass
-        # bA = bra[n].fuse_legs(axes=((0, 1), 2, 3))
-        # tmp = ncon([bA.conj(), F[(n + 1, n)]], ((-0, 1, -1), (-3, -2, 1)))
-        # tmp = op[n]._attach_23(tmp.conj()).conj()
-        # tmp = tmp.unfuse_legs(axes=0)
-        # F[(n, n - 1)] = ncon([ket[n], tmp], ((-0, 1, 2, 3), (-2, 1, -1, 2, 3)))
-
+        bA = bra[n].fuse_legs(axes=((0, 1), 2, 3))
+        tmp = ncon([bA.conj(), F[(n + 1, n)]], ((-0, 1, -1), (-3, -2, 1)))
+        tmp = op[n]._attach_23(tmp)
+        tmp = tmp.unfuse_legs(axes=0)
+        F[(n, n - 1)] = ncon([ket[n], tmp], ((-0, 1, 2, 3), (-2, 1, -1, 2, 3)))
