@@ -1,10 +1,10 @@
 """ Contractions of yast tensors """
 from functools import lru_cache
-from itertools import groupby, product
+from itertools import groupby
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
 from ._tests import YastError, _test_can_be_combined, _test_axes_match
-from ._merging import _merge_to_matrix, _meta_unfuse_legdec, _unmerge
+from ._merging import _merge_to_matrix, _meta_unfuse_legdec, _unmerge, LegDec_to_Imm, _meta_unmerge_matrix
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
 
 
@@ -89,7 +89,10 @@ def tensordot(a, b, axes, conj=(0, 0)):
         if ls_ac != ls_bc:
             raise YastError('Bond dimensions do not match.')
         data = a.config.backend.dot(data_a, data_b, meta_dot, Dsize)
-    meta_unmerge, struct_c = _meta_unfuse_legdec(a.config, struct_c, [ls_l, ls_r], s_c)
+
+    ls_l = LegDec_to_Imm(ls_l)
+    ls_r = LegDec_to_Imm(ls_r)
+    meta_unmerge, struct_c = _meta_unmerge_matrix(a.config, struct_c, ls_l, ls_r, s_c)
     data = _unmerge(a.config, data, meta_unmerge)
     return a._replace(data=data, struct=struct_c, mfs=mfs_c, hfs=hfs_c)
 
