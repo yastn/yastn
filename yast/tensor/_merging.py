@@ -192,14 +192,14 @@ def fuse_legs(a, axes, mode=None):
     It is possible to use both `meta` and `hard` fusion of legs on the same tensor.
     Applying hard fusion on tensor turns all previous meta fused legs into hard fused
     ones.
-       
+
     Parameters
     ----------
-    axes: tuple[tuple[int]]        
+    axes: tuple[tuple[int]]
         tuple of leg indices. Groups of legs to be fused together are accumulated within inner tuples.
 
     mode: str
-        can select ``'hard'`` or ``'meta'`` fusion. If ``None``, uses ``default_fusion`` 
+        can select ``'hard'`` or ``'meta'`` fusion. If ``None``, uses ``default_fusion``
         from tensor's :doc:`configuration </tensor/configuration>`.
         Configuration option ``force_fusion`` can be used to override `mode`, typically for debugging purposes.
 
@@ -238,7 +238,7 @@ def fuse_legs(a, axes, mode=None):
 
 
 def _fuse_legs_hard(a, axes, order):
-    """ Function performing hard fusion. axes are for native legs and are cleaned outside."""
+    """ Function performing hard fusion. Axes are for native legs and are cleaned outside."""
     assert all(isinstance(x, tuple) for x in axes)
     for x in axes:
         assert all(isinstance(y, int) for y in x)
@@ -247,7 +247,7 @@ def _fuse_legs_hard(a, axes, order):
     mfs = ((1,),) * len(struct.s)
     hfs = tuple(_fuse_hfs(a.hfs, t_in, D_in, struct.s[n], axis) if len(axis) > 1 else a.hfs[axis[0]]
                 for n, axis in enumerate(axes))
-    aa =  a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
+    aa = a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
     assert aa.is_consistent()
     return aa
 
@@ -425,6 +425,8 @@ def _meta_unfuse_legdec(config, struct, ls, snew):
                 Dsln = tuple(x[1].Dprod for x in tt)
                 Dp = np.prod(Dsln, dtype=int)
                 meta.append((tn, Dn, Dp, Dsln, slo, Do, sub_slc))
+        else:
+            raise YastError("Don't know how to unfuse -- should not have happened")
 
     meta = sorted(meta, key=lambda x: x[0])
     tnew = tuple(x[0] for x in meta)
