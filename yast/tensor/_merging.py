@@ -44,11 +44,6 @@ def LegDec_to_mut(ls):
     Dtot = {tt: DD for tt, DD in zip(ls.t, ls.D)}
     return _LegDec(dec, Dtot)
 
-def LegDec_to_Imm(ls):
-    t = tuple(sorted(ls.Dtot.keys()))
-    D = tuple(ls.Dtot[k] for k in t)
-    dec = tuple(tuple(sorted(_RecImm(tt, *rr) for tt, rr in ls.dec[k].items())) for k in t)
-    return _LegDecImm(t, D, dec)
 
 class _Fusion(NamedTuple):
     """ Information identifying the structure of hard fusion"""
@@ -149,17 +144,16 @@ def _meta_merge_to_matrix(config, struct, axes, inds):
         D[n] = tuple(tuple(x) for x in D[n])
         ls.append(_leg_structure_merge(teff[n], t[n], Deff[n], D[n]))
 
-    # ls1 = ls
-    # ls = [LegDec_to_mut(l) for l in ls]
+    ls1 = [LegDec_to_mut(l) for l in ls]
 
     t_new = tuple(t1 + t2 for t1, t2 in zip(teff[0], teff[1]))
     meta_mrg = tuple(sorted((tn, slo, Do,
-                             (ls[0].dec[tel][tl].Dslc, ls[1].dec[ter][tr].Dslc),
-                             (ls[0].dec[tel][tl].Dprod, ls[1].dec[ter][tr].Dprod))
+                             (ls1[0].dec[tel][tl].Dslc, ls1[1].dec[ter][tr].Dslc),
+                             (ls1[0].dec[tel][tl].Dprod, ls1[1].dec[ter][tr].Dprod))
                     for tn, slo, Do, tel, tl, ter, tr in zip(t_new, sl_old, D_old, teff[0], t[0], teff[1], t[1])))
 
     t_new, tl_new, tr_new = zip(*sorted(set(zip(t_new, teff[0], teff[1])))) if len(t_new) > 0 else ((), (), ())
-    D_new = tuple((ls[0].Dtot[il], ls[1].Dtot[ir]) for il, ir in zip(tl_new, tr_new))
+    D_new = tuple((ls1[0].Dtot[il], ls1[1].Dtot[ir]) for il, ir in zip(tl_new, tr_new))
     Dp_new = tuple(x[0] * x[1] for x in D_new)
     sl_new = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp_new), Dp_new))
     struct_new = struct._replace(t=t_new, D=D_new, Dp=Dp_new, sl=sl_new, s=tuple(s_eff))
@@ -301,7 +295,9 @@ def _meta_fuse_hard(config, struct, axes):
         else:
             t, D = tuple(tD_dict[a[0]].keys()), tuple(tD_dict[a[0]].values())
             dec = tuple((_RecImm(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
-            ls.append(LegDec_to_mut(_LegDecImm(t, D, dec)))
+            ls.append(_LegDecImm(t, D, dec))
+
+    ls1 = [LegDec_to_mut(ll) for ll in ls]
 
     teff_split = [tuple(tuple(y.flat) for y in x) for x in teff]
     told_split = [tuple(tuple(x[a, :].flat) for a in axes) for x in tset]
@@ -310,13 +306,13 @@ def _meta_fuse_hard(config, struct, axes):
     tnew = tuple(sorted(set(teff)))
     ndimnew = len(snew)
     tnew_split = [tuple(x[i * nsym: (i + 1) * nsym] for i in range(ndimnew)) for x in tnew]
-    Dnew = tuple(tuple(l.Dtot[y] for l, y in zip(ls, x)) for x in tnew_split)
+    Dnew = tuple(tuple(l.Dtot[y] for l, y in zip(ls1, x)) for x in tnew_split)
     Dpnew = np.prod(Dnew, axis=1, dtype=int)
     slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
     Dpnew = tuple(Dpnew)
 
-    meta_mrg = tuple(sorted(((tn, slo, Do, tuple(l.dec[e][o].Dslc for l, e, o in zip(ls, tes, tos)),
-                             tuple(l.dec[e][o].Dprod for l, e, o in zip(ls, tes, tos)))
+    meta_mrg = tuple(sorted(((tn, slo, Do, tuple(l.dec[e][o].Dslc for l, e, o in zip(ls1, tes, tos)),
+                             tuple(l.dec[e][o].Dprod for l, e, o in zip(ls1, tes, tos)))
                              for tn, slo, Do, tes, tos in zip(teff, struct.sl, struct.D, teff_split, told_split)), key=lambda x : x[0]))
     struct_new = struct._replace(t=tnew, D=Dnew, Dp=Dpnew, sl=slnew, s=tuple(snew))
     return struct_new, meta_mrg, t_in, D_in
@@ -424,36 +420,31 @@ def unfuse_legs(a, axes):
 def _meta_unfuse_hard(config, struct, axes, hfs):
     """ Meta information for backend needed to hard-unfuse some legs. """
     t_in, _, tD_dict, _, _ = _get_tD_legs(struct)
-    ls, hfs_new, snew, nlegs_unfused = [], [], [], []
+    lls, hfs_new, snew, nlegs_unfused = [], [], [], []
     for n, hf in enumerate(hfs):
         if n in axes:
             t_part, D_part, s_part, hfs_part = _unfuse_Fusion(hf)
-            ls.append(_leg_structure_combine_charges_prod(config.sym, t_part, D_part, s_part, t_in[n], struct.s[n]))
+            lls.append(_leg_structure_combine_charges_prod(config.sym, t_part, D_part, s_part, t_in[n], struct.s[n]))
             hfs_new.extend(hfs_part)
             nlegs_unfused.append(len(hfs_part))
             snew.extend(s_part)
         else:
             t, D = tuple(tD_dict[n].keys()), tuple(tD_dict[n].values())
             dec = tuple((_RecImm(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
-            ls.append(LegDec_to_mut(_LegDecImm(t, D, dec)))
+            lls.append(_LegDecImm(t, D, dec))
             hfs_new.append(hf)
             snew.append(struct.s[n])
-    meta, new_struct = _meta_unfuse_legdec(config, struct, ls, snew)
-    return meta, new_struct, tuple(nlegs_unfused), tuple(hfs_new)
-
-
-def _meta_unfuse_legdec(config, struct, ls, snew):
+    
     meta, nsym = [], config.sym.NSYM
     for to, slo, Do in zip(struct.t, struct.sl, struct.D):
-        tfused = tuple(to[n * nsym: (n + 1) * nsym] for n in range(len(struct.s)))
-        if all(ts in l.dec for l, ts in zip(ls, tfused)):
-            tunfused = tuple(tuple(l.dec[ts].items()) for l, ts in zip(ls, tfused))
-            for tt in product(*tunfused):
-                tn = sum((x[0] for x in tt), ())
-                sub_slc = tuple(x[1].Dslc for x in tt)
-                Dn = sum((x[1].Drsh for x in tt), ())
-                Dsln = tuple(x[1].Dprod for x in tt)
-                meta.append((tn, Dn, Dsln, slo, Do, sub_slc))
+        ind = tuple(ls.t.index(to[n * nsym: (n + 1) * nsym]) for n, ls in enumerate(lls))
+        decs = tuple(tuple(ls.dec[ii]) for ls, ii in zip(lls, ind))
+        for tt in product(*decs):
+            tn = sum((x.t for x in tt), ())
+            sub_slc = tuple(x.Dslc for x in tt)
+            Dn = sum((x.Drsh for x in tt), ())
+            Dsln = tuple(x.Dprod for x in tt)
+            meta.append((tn, Dn, Dsln, slo, Do, sub_slc))
 
     meta = sorted(meta, key=lambda x: x[0])
     tnew = tuple(x[0] for x in meta)
@@ -462,7 +453,7 @@ def _meta_unfuse_legdec(config, struct, ls, snew):
     slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
     meta = tuple((x, *y[2:]) for x, y in zip(slnew, meta))
     new_struct = struct._replace(s=tuple(snew), t=tnew, D=Dnew, Dp=Dpnew, sl=slnew)
-    return meta, new_struct
+    return meta, new_struct, tuple(nlegs_unfused), tuple(hfs_new)
 
 
 @lru_cache(maxsize=1024)
@@ -699,8 +690,7 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
         t.append(te)
         D.append(Dtop)
         dec.append(tuple(dect))
-    ls = _LegDecImm(tuple(t), tuple(D), tuple(dec))
-    return LegDec_to_mut(ls)
+    return _LegDecImm(tuple(t), tuple(D), tuple(dec))
 
 
 def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
@@ -744,7 +734,6 @@ def _sum_hfs(hfs, t_in, D_in, s_out):
 
 def _merge_masks_outer(config, ls, ms):
     """ combine masks using information from LegDec; perform product of spaces / leg fusion. """
-    ls = LegDec_to_Imm(ls)
     msk = {tt: np.ones(Dt, dtype=bool) for tt, Dt in zip(ls.t, ls.D)}
     nsym = config.sym.NSYM
     for tt, dect in zip(ls.t, ls.dec):
@@ -755,7 +744,6 @@ def _merge_masks_outer(config, ls, ms):
 
 def _merge_masks_sum(ls, ms):
     """ combine masks using information from LegDec; perform sum of spaces / blocking of legs."""
-    ls = LegDec_to_Imm(ls)
     msk = {tt: np.ones(Dt, dtype=bool) for tt, Dt in zip(ls.t, ls.D)}
     for tt, dect in zip(ls.t, ls.dec):
         for rec in dect:
@@ -921,9 +909,8 @@ def _union_hfs(config, ts, Ds, hfs):
             ma2[ind] *= False
         msk1.insert(leg - nlegs, ma1)
         msk2.insert(leg - nlegs, ma2)
-        t_out, D_out = zip(*ls.Dtot.items())
-        tu.insert(leg - nlegs, t_out)
-        Du.insert(leg - nlegs, D_out)
+        tu.insert(leg - nlegs, ls.t)
+        Du.insert(leg - nlegs, ls.D)
     return msk1.pop(), msk2.pop(), hfu.pop()
 
 
@@ -984,9 +971,8 @@ def _pure_hfs_union(sym, ts, hfs):
         else:  # op[ltree - nlegs] == 's':
             ls = _leg_structure_combine_charges_sum(t_in, D_in)
             hfu.insert(leg - nlegs, _sum_hfs(hh, t_in, D_in, s_out))
-        t_out, D_out = zip(*ls.Dtot.items())
-        tu.insert(leg - nlegs, t_out)
-        Du.insert(leg - nlegs, D_out)
+        tu.insert(leg - nlegs, ls.t)
+        Du.insert(leg - nlegs, ls.D)
     return tu.pop(), Du.pop(), hfu.pop()
 
 
