@@ -4,7 +4,7 @@ from itertools import groupby
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
 from ._tests import YastError, _test_can_be_combined, _test_axes_match
-from ._merging import _merge_to_matrix, _meta_unfuse_legdec, _unmerge, LegDec_to_Imm, _meta_unmerge_matrix
+from ._merging import _merge_to_matrix, _unmerge, LegDec_to_Imm, _meta_unmerge_matrix
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
 
 
