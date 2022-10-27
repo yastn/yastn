@@ -3,7 +3,7 @@ import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct
 from ._tests import YastError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
-from ._merging import _leg_struct_trivial, _Fusion, LegDec_to_Imm
+from ._merging import _leg_struct_trivial, _Fusion
 from ._krylov import _expand_krylov_space
 
 __all__ = ['svd', 'svd_with_truncation', 'qr', 'eigh', 'eigh_with_truncation', 'norm', 'entropy', 'expmv', 'eigs', 'truncation_mask', 'truncation_mask_multiplets']
@@ -149,9 +149,6 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
         raise YastError('svd policy should be one of (`lowrank`, `fullrank`)')
 
     ls_s = _leg_struct_trivial(Sstruct, axis=0)
-
-    ls_l = LegDec_to_Imm(ls_l)
-    ls_r = LegDec_to_Imm(ls_r)
 
     Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
     Umeta_unmerge, Ustruct = _meta_unmerge_matrix(a.config, Ustruct, ls_l, ls_s, Us)
@@ -410,9 +407,6 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
     ls = _leg_struct_trivial(Rstruct, axis=0)
 
-    ls_l = LegDec_to_Imm(ls_l)
-    ls_r = LegDec_to_Imm(ls_r)
-
     Qs = tuple(a.struct.s[lg] for lg in axes[0]) + (sQ,)
     Qmeta_unmerge, Qstruct = _meta_unmerge_matrix(a.config, Qstruct, ls_l, ls, Qs)
     Qdata = _unmerge(a.config, Qdata, Qmeta_unmerge)
@@ -508,8 +502,6 @@ def eigh(a, axes, sU=1, Uaxis=-1):
     Sdata, Udata = a.config.backend.eigh(data, meta, sizes)
 
     ls_s = _leg_struct_trivial(Sstruct, axis=1)
-
-    ls_l = LegDec_to_Imm(ls_l)
 
     Us = tuple(a.struct.s[lg] for lg in axes[0]) + (sU,)
     Umeta_unmerge, Ustruct = _meta_unmerge_matrix(a.config, Ustruct, ls_l, ls_s, Us)

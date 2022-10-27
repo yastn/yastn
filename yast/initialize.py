@@ -6,7 +6,7 @@ from itertools import chain, repeat, accumulate
 import numpy as np
 from .tensor import Tensor, YastError
 from .tensor._auxliary import _struct, _config, _clear_axes, _unpack_legs
-from .tensor._merging import _Fusion, _leg_structure_combine_charges_sum, _embed_tensor, _sum_hfs
+from .tensor._merging import _Fusion, _leg_structure_combine_charges_sum, _embed_tensor, _sum_hfs, LegDec_to_mut
 from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
 from .tensor._tests import _test_can_be_combined
 
@@ -443,6 +443,8 @@ def block(tensors, common_legs=None):
         if any(_leg_fusions_need_mask(ulegs[n][pa[n]], leg) for n, leg in enumerate(legs_tn[pa])):
             legs_new = {n: legs[pa[n]] for n, legs in enumerate(ulegs)}
             tensors[pa] = _embed_tensor(tensors[pa], legs_tn[pa], legs_new)
+
+    lss = [LegDec_to_mut(ll) for ll in lss]
 
     # all unique blocks
     # meta_new = {tind: Dtot};  #meta_block = [(tind, pos, Dslc)]
