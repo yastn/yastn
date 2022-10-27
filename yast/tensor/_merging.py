@@ -39,6 +39,10 @@ class _RecImm(NamedTuple):
     Dprod: int = 0  # size of slice, equal to product of Drsh
     Drsh: tuple = ()  # original shape of fused dims in a block
 
+def LegDec_to_mut(ls):
+    dec = {tt: {rec.t : _DecRec(rec.Dslc, rec.Dprod, rec.Drsh) for rec in dect} for tt, dect in zip(ls.t, ls.dec)}
+    Dtot = {tt: DD for tt, DD in zip(ls.t, ls.D)}
+    return _LegDec(dec, Dtot)
 
 def LegDec_to_Imm(ls):
     t = tuple(sorted(ls.Dtot.keys()))
@@ -163,13 +167,11 @@ def _meta_merge_to_matrix(config, struct, axes, inds):
 def _leg_struct_trivial(struct, axis=0):
     """ trivial LegDecomposition for unfused leg. """
     nsym = len(struct.n)
-    dec, Dtot = {}, {}
-    for tt, DD in zip(struct.t, struct.D):
-        t = tt[nsym * axis: nsym * (axis + 1)]
-        D = DD[axis]
-        dec[t] = {t: _DecRec((0, D), D, (D,))}
-        Dtot[t] = D
-    return _LegDec(dec, Dtot)
+    tD = sorted((tt[nsym * axis: nsym * (axis + 1)], DD[axis]) for tt, DD in zip(struct.t, struct.D))
+    t = tuple(x[0] for x in tD)
+    D = tuple(x[1] for x in tD)
+    dec = tuple((_RecImm(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
+    return _LegDecImm(t, D, dec)
 
 
 #  =========== fuse legs ======================
@@ -690,7 +692,11 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
             dec[te][tl] = _DecRec((Dlow, Dtop), De, Dl)
             Dlow = Dtop
         Dtot[te] = Dtop
-    return _LegDec(dec, Dtot)
+    ls = _LegDec(dec, Dtot)
+    ls1 = LegDec_to_Imm(ls)
+    ls2 = LegDec_to_mut(ls1)
+    assert ls == ls2
+    return ls
 
 
 def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
@@ -734,20 +740,22 @@ def _sum_hfs(hfs, t_in, D_in, s_out):
 
 def _merge_masks_outer(config, ls, ms):
     """ combine masks using information from LegDec; perform product of spaces / leg fusion. """
-    msk = {te: np.ones(D, dtype=bool) for te, D in ls.Dtot.items()}
+    ls = LegDec_to_Imm(ls)
+    msk = {tt: np.ones(Dt, dtype=bool) for tt, Dt in zip(ls.t, ls.D)}
     nsym = config.sym.NSYM
-    for te, dec in ls.dec.items():
-        for t, Dr in dec.items():
-            msk[te][slice(*Dr.Dslc)] = _outer_masks(t, ms, nsym)
+    for tt, dect in zip(ls.t, ls.dec):
+        for rec in dect:
+            msk[tt][slice(*rec.Dslc)] = _outer_masks(rec.t, ms, nsym)
     return msk
 
 
 def _merge_masks_sum(ls, ms):
     """ combine masks using information from LegDec; perform sum of spaces / blocking of legs."""
-    msk = {te: np.ones(D, dtype=bool) for te, D in ls.Dtot.items()}
-    for te, dec in ls.dec.items():
-        for n, Dr in dec.items():
-            msk[te][slice(*Dr.Dslc)] = ms[n][te]
+    ls = LegDec_to_Imm(ls)
+    msk = {tt: np.ones(Dt, dtype=bool) for tt, Dt in zip(ls.t, ls.D)}
+    for tt, dect in zip(ls.t, ls.dec):
+        for rec in dect:
+            msk[tt][slice(*rec.Dslc)] = ms[rec.t][tt]
     return msk
 
 
