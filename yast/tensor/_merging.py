@@ -149,6 +149,9 @@ def _meta_merge_to_matrix(config, struct, axes, inds):
         D[n] = tuple(tuple(x) for x in D[n])
         ls.append(_leg_structure_merge(teff[n], t[n], Deff[n], D[n]))
 
+    # ls1 = ls
+    # ls = [LegDec_to_mut(l) for l in ls]
+
     t_new = tuple(t1 + t2 for t1, t2 in zip(teff[0], teff[1]))
     meta_mrg = tuple(sorted((tn, slo, Do,
                              (ls[0].dec[tel][tl].Dslc, ls[1].dec[ter][tr].Dslc),
@@ -296,7 +299,9 @@ def _meta_fuse_hard(config, struct, axes):
             D_a = tuple(D_in[n] for n in a)
             ls.append(_leg_structure_combine_charges_prod(config.sym, t_a, D_a, slegs[n], teff_set, snew[n]))
         else:
-            ls.append(_LegDec({t: {t: _DecRec((0, D), D, (D,))} for t, D in tD_dict[a[0]].items()}, tD_dict[a[0]]))
+            t, D = tuple(tD_dict[a[0]].keys()), tuple(tD_dict[a[0]].values())
+            dec = tuple((_RecImm(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
+            ls.append(LegDec_to_mut(_LegDecImm(t, D, dec)))
 
     teff_split = [tuple(tuple(y.flat) for y in x) for x in teff]
     told_split = [tuple(tuple(x[a, :].flat) for a in axes) for x in tset]
@@ -428,8 +433,9 @@ def _meta_unfuse_hard(config, struct, axes, hfs):
             nlegs_unfused.append(len(hfs_part))
             snew.extend(s_part)
         else:
-            dec = {t: {t: _DecRec((0, D), D, (D,))} for t, D in tD_dict[n].items()}
-            ls.append(_LegDec(dec, tD_dict[n]))
+            t, D = tuple(tD_dict[n].keys()), tuple(tD_dict[n].values())
+            dec = tuple((_RecImm(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
+            ls.append(LegDec_to_mut(_LegDecImm(t, D, dec)))
             hfs_new.append(hf)
             snew.append(struct.s[n])
     meta, new_struct = _meta_unfuse_legdec(config, struct, ls, snew)
@@ -683,20 +689,18 @@ def _leg_structure_combine_charges_sum(t_in, D_in, pos=None):
 def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
     """ LegDecomposition for merging into a single leg. """
     tt = sorted(set(zip(teff, tlegs, Deff, Dlegs)))
-    dec, Dtot = {}, {}
+    t, D, dec = [], [], []
     for te, grp in groupby(tt, key=itemgetter(0)):
-        Dlow = 0
-        dec[te] = {}
+        Dlow, dect = 0, []
         for _, tl, De, Dl in grp:
             Dtop = Dlow + De
-            dec[te][tl] = _DecRec((Dlow, Dtop), De, Dl)
+            dect.append(_RecImm(tl, (Dlow, Dtop), De, Dl))
             Dlow = Dtop
-        Dtot[te] = Dtop
-    ls = _LegDec(dec, Dtot)
-    ls1 = LegDec_to_Imm(ls)
-    ls2 = LegDec_to_mut(ls1)
-    assert ls == ls2
-    return ls
+        t.append(te)
+        D.append(Dtop)
+        dec.append(tuple(dect))
+    ls = _LegDecImm(tuple(t), tuple(D), tuple(dec))
+    return LegDec_to_mut(ls)
 
 
 def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
