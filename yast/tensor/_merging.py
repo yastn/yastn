@@ -146,28 +146,28 @@ def _meta_merge_to_matrix(config, struct, axes, inds):
     smeta = sorted((tel, ter, tl, tr, slo, Do)
                 for tel, ter, tl, tr, slo, Do in zip(teff[0], teff[1], t[0], t[1], sl_old, D_old))
 
-    meta_mrg, t_new, D_new, Dp_new, sl_new = [], [], [], [], []
-    imeta, Dlow = iter(smeta), 0
-    try:
-        tel1, ter1, tl, tr, slo, Do = next(imeta)
-        for (tel, ter), _ in groupby(smeta, key=lambda x: x[:2]):
-            ind0 = ls[0].t.index(tel)
-            ind1 = ls[1].t.index(ter)
-            tn = tel + ter
-            t_new.append(tn)
-            D0, D1 = ls[0].D[ind0], ls[1].D[ind1]
-            D_new.append((D0, D1))
-            Dp_new.append(D0 * D1)
-            Dhigh = Dlow + Dp_new[-1]
-            sl_new.append((Dlow, Dhigh))
-            Dlow = Dhigh
+    meta_mrg, t_new, D_new, Dp_new, sl_new, Dlow = [], [], [], [], [], 0
+    for (tel, ter), gr in groupby(smeta, key=lambda x: x[:2]):
+        ind0 = ls[0].t.index(tel)
+        ind1 = ls[1].t.index(ter)
+        tn = tel + ter
+        t_new.append(tn)
+        D0, D1 = ls[0].D[ind0], ls[1].D[ind1]
+        D_new.append((D0, D1))
+        Dp_new.append(D0 * D1)
+        Dhigh = Dlow + Dp_new[-1]
+        sl_new.append((Dlow, Dhigh))
+        Dlow = Dhigh
+        try:
+            _, _, tl, tr, slo, Do = next(gr)
             for d0, d1 in product(ls[0].dec[ind0], ls[1].dec[ind1]):
                 if d0.t == tl and d1.t == tr:
                     meta_mrg.append((tn, slo, Do, (d0.Dslc, d1.Dslc), (d0.Dprod, d1.Dprod)))
-                    tel1, ter1, tl, tr, slo, Do = next(imeta)
-    except StopIteration:
-        pass
-    struct_new = struct._replace(t=tuple(t_new), D=tuple(D_new), Dp=tuple(Dp_new), sl=tuple(sl_new), s=tuple(s_eff))
+                    _, _, tl, tr, slo, Do = next(gr)
+        except StopIteration:
+                pass
+    t_new, D_new, Dp_new, sl_new, s_eff = tuple(t_new), tuple(D_new), tuple(Dp_new), tuple(sl_new), tuple(s_eff)
+    struct_new = struct._replace(t=t_new, D=D_new, Dp=Dp_new, sl=sl_new, s=s_eff)
     return struct_new, tuple(meta_mrg), ls[0], ls[1]
 
 
@@ -284,43 +284,52 @@ def _meta_fuse_hard(config, struct, axes):
     nblocks, nsym = len(struct.t), len(struct.n)
     t_in, D_in, tD_dict, tset, Dset = _get_tD_legs(struct)
     slegs = tuple(tuple(struct.s[n] for n in a) for a in axes)
-    snew = tuple(struct.s[axis[0]] for axis in axes)
-    teff = np.zeros((nblocks, len(snew), nsym), dtype=int)
-    Deff = np.zeros((nblocks, len(snew)), dtype=int)
+    s_eff = tuple(struct.s[axis[0]] for axis in axes)
+    teff = np.zeros((nblocks, len(s_eff), nsym), dtype=int)
+    Deff = np.zeros((nblocks, len(s_eff)), dtype=int)
     for n, a in enumerate(axes):
-        teff[:, n, :] = config.sym.fuse(tset[:, a, :], slegs[n], snew[n])
+        teff[:, n, :] = config.sym.fuse(tset[:, a, :], slegs[n], s_eff[n])
         Deff[:, n] = np.prod(Dset[:, a], axis=1, dtype=int)
 
-    ls = []
+    lls = []
     for n, a in enumerate(axes):
         if len(a) > 1:
             teff_set = tuple(set(tuple(x.flat) for x in teff[:, n, :]))
             t_a = tuple(t_in[n] for n in a)
             D_a = tuple(D_in[n] for n in a)
-            ls.append(_leg_structure_combine_charges_prod(config.sym, t_a, D_a, slegs[n], teff_set, snew[n]))
+            lls.append(_leg_structure_combine_charges_prod(config.sym, t_a, D_a, slegs[n], teff_set, s_eff[n]))
         else:
             t, D = tuple(tD_dict[a[0]].keys()), tuple(tD_dict[a[0]].values())
             dec = tuple((_RecImm(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
-            ls.append(_LegDecImm(t, D, dec))
-
-    ls1 = [LegDec_to_mut(ll) for ll in ls]
+            lls.append(_LegDecImm(t, D, dec))
 
     teff_split = [tuple(tuple(y.flat) for y in x) for x in teff]
     told_split = [tuple(tuple(x[a, :].flat) for a in axes) for x in tset]
     teff = tuple(tuple(x.flat) for x in teff)
 
-    tnew = tuple(sorted(set(teff)))
-    ndimnew = len(snew)
-    tnew_split = [tuple(x[i * nsym: (i + 1) * nsym] for i in range(ndimnew)) for x in tnew]
-    Dnew = tuple(tuple(l.Dtot[y] for l, y in zip(ls1, x)) for x in tnew_split)
-    Dpnew = np.prod(Dnew, axis=1, dtype=int)
-    slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
-    Dpnew = tuple(Dpnew)
+    smeta = sorted((tes, tn, tos, slo, Do) for tes, tn, tos, slo, Do
+                in zip(teff_split, teff, told_split, struct.sl, struct.D))
 
-    meta_mrg = tuple(sorted(((tn, slo, Do, tuple(l.dec[e][o].Dslc for l, e, o in zip(ls1, tes, tos)),
-                             tuple(l.dec[e][o].Dprod for l, e, o in zip(ls1, tes, tos)))
-                             for tn, slo, Do, tes, tos in zip(teff, struct.sl, struct.D, teff_split, told_split)), key=lambda x : x[0]))
-    struct_new = struct._replace(t=tnew, D=Dnew, Dp=Dpnew, sl=slnew, s=tuple(snew))
+    meta_mrg, t_new, D_new = [], [], []
+    for (tes, tn), gr in groupby(smeta, key=lambda x: x[:2]):
+        ind = tuple(ls.t.index(te) for ls, te in zip(lls, tes))
+        decs = tuple(ls.dec[ii] for ls, ii in zip(lls, ind))
+        t_new.append(tn)
+        D_new.append(tuple(ls.D[ii] for ls, ii in zip(lls, ind)))
+        try:
+            _, _, tos, slo, Do = next(gr)
+            for de in product(*decs):
+                if tuple(d.t for d in de) == tos:
+                    sub_slc = tuple(d.Dslc for d in de)
+                    Dsln = tuple(d.Dprod for d in de)
+                    meta_mrg.append((tn, slo, Do, sub_slc, Dsln))
+                    _, _, tos, slo, Do = next(gr)
+        except StopIteration:
+                pass
+    Dp_new = np.prod(D_new, axis=1, dtype=int)
+    sl_new = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp_new), Dp_new))
+    t_new, D_new, Dp_new, s_eff = tuple(t_new), tuple(D_new), tuple(Dp_new), tuple(s_eff)
+    struct_new = struct._replace(t=t_new, D=D_new, Dp=Dp_new, sl=sl_new, s=s_eff)
     return struct_new, meta_mrg, t_in, D_in
 
 
