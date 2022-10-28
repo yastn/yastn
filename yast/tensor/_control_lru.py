@@ -15,6 +15,7 @@ def set_cache_maxsize(maxsize=0):
     _contractions._swap_gate_meta = lru_cache(maxsize)(_contractions._swap_gate_meta.__wrapped__)
     _contractions._trace_meta = lru_cache(maxsize)(_contractions._trace_meta.__wrapped__)
     _merging._meta_merge_to_matrix = lru_cache(maxsize)(_merging._meta_merge_to_matrix.__wrapped__)
+    _merging._meta_unmerge_matrix = lru_cache(maxsize)(_merging._meta_unmerge_matrix.__wrapped__)
     _merging._intersect_hfs = lru_cache(maxsize)(_merging._intersect_hfs.__wrapped__)
     _merging._leg_structure_combine_charges_prod = lru_cache(maxsize)(_merging._leg_structure_combine_charges_prod.__wrapped__)
     _merging._meta_fuse_hard = lru_cache(maxsize)(_merging._meta_fuse_hard.__wrapped__)
@@ -29,6 +30,7 @@ def clear_cache():
     _contractions._swap_gate_meta.cache_clear()
     _contractions._trace_meta.cache_clear()
     _merging._meta_merge_to_matrix.cache_clear()
+    _merging._meta_unmerge_matrix.cache_clear()
     _merging._intersect_hfs.cache_clear()
     _merging._leg_structure_combine_charges_prod.cache_clear()
     _merging._meta_fuse_hard.cache_clear()
@@ -38,6 +40,7 @@ def clear_cache():
 def get_cache_info():
     """Return statistics of lru_caches used in yast."""
     return {"merge_to_matrix": _merging._meta_merge_to_matrix.cache_info(),
+            "unmerge_from_matrix": _merging._meta_unmerge_matrix.cache_info(),
             "tensordot_1": _contractions._meta_tensordot.cache_info(),
             "tensordot_2": _contractions._common_inds.cache_info(),
             "broadcast": _contractions._meta_broadcast.cache_info(),

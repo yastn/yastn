@@ -25,6 +25,27 @@ class _DecRec(NamedTuple):
     Drsh: tuple = ()  # original shape of fused dims in a block
 
 
+class _LegDecImm(NamedTuple):
+    """ Immutable version of LegDec """
+    t: tuple = ()  # list of effective charges
+    D: tuple = ()  # list of their bond dimensions
+    dec: tuple = ()  # and their decompositions
+
+
+class _RecImm(NamedTuple):
+    """ Single record in _LegDecImm.dec[i]"""
+    t : tuple = ()  # charge
+    Dslc: tuple = (None, None)  # slice
+    Dprod: int = 0  # size of slice, equal to product of Drsh
+    Drsh: tuple = ()  # original shape of fused dims in a block
+
+
+def LegDec_to_Imm(ls):
+    t = tuple(sorted(ls.Dtot.keys()))
+    D = tuple(ls.Dtot[k] for k in t)
+    dec = tuple(tuple(sorted(_RecImm(tt, *rr) for tt, rr in ls.dec[k].items())) for k in t)
+    return _LegDecImm(t, D, dec)
+
 class _Fusion(NamedTuple):
     """ Information identifying the structure of hard fusion"""
     tree: tuple = (1,)  # order of fusions
@@ -135,6 +156,7 @@ def _meta_merge_to_matrix(config, struct, axes, inds):
     Dp_new = tuple(x[0] * x[1] for x in D_new)
     sl_new = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp_new), Dp_new))
     struct_new = struct._replace(t=t_new, D=D_new, Dp=Dp_new, sl=sl_new, s=tuple(s_eff))
+
     return struct_new, meta_mrg, ls[0], ls[1]
 
 
@@ -423,8 +445,31 @@ def _meta_unfuse_legdec(config, struct, ls, snew):
                 sub_slc = tuple(x[1].Dslc for x in tt)
                 Dn = sum((x[1].Drsh for x in tt), ())
                 Dsln = tuple(x[1].Dprod for x in tt)
-                Dp = np.prod(Dsln, dtype=int)
-                meta.append((tn, Dn, Dp, Dsln, slo, Do, sub_slc))
+                meta.append((tn, Dn, Dsln, slo, Do, sub_slc))
+
+    meta = sorted(meta, key=lambda x: x[0])
+    tnew = tuple(x[0] for x in meta)
+    Dnew = tuple(x[1] for x in meta)
+    Dpnew = tuple(np.prod(np.array(Dnew, dtype=int).reshape(len(Dnew), len(snew)), axis=1, dtype=int))
+    slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
+    meta = tuple((x, *y[2:]) for x, y in zip(slnew, meta))
+    new_struct = struct._replace(s=tuple(snew), t=tnew, D=Dnew, Dp=Dpnew, sl=slnew)
+    return meta, new_struct
+
+
+@lru_cache(maxsize=1024)
+def _meta_unmerge_matrix(config, struct, ls0, ls1, snew):
+    meta, nsym = [], config.sym.NSYM
+    for to, slo, Do in zip(struct.t, struct.sl, struct.D):
+        ind0 = ls0.t.index(to[:nsym])
+        ind1 = ls1.t.index(to[nsym:])
+        for d0, d1 in product(ls0.dec[ind0], ls1.dec[ind1]):
+            tn = d0.t + d1.t
+            sub_slc = (d0.Dslc, d1.Dslc)
+            Dn = d0.Drsh + d1.Drsh
+            Dsln = (d0.Dprod, d1.Dprod)
+            Dp = d0.Dprod * d1.Dprod
+            meta.append((tn, Dn, Dp, Dsln, slo, Do, sub_slc))
 
     meta = sorted(meta, key=lambda x: x[0])
     tnew = tuple(x[0] for x in meta)
