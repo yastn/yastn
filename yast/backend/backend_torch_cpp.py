@@ -161,9 +161,9 @@ class kernel_transpose_and_merge_p2p_v2(torch.autograd.Function):
 class kernel_transpose_and_merge_p2p_v3(torch.autograd.Function):
     @staticmethod
     def forward(ctx, data, order, meta_new, meta_mrg, Dsize):
-        ctx.order = order
-        ctx.meta_new = meta_new
-        ctx.meta_mrg = meta_mrg
+        # ctx.order = order
+        # ctx.meta_new = meta_new
+        # ctx.meta_mrg = meta_mrg
         ctx.D_source = data.numel()
 
         # meta_new -> list of [(tn, Dn, sln), ...] where
@@ -181,6 +181,7 @@ class kernel_transpose_and_merge_p2p_v3(torch.autograd.Function):
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
         # 
         source_inds, dest_inds= fused_transpose_merge_1d.map_source_to_dest_v3(data, order, meta_new, meta_mrg)
+        ctx.save_for_backward(source_inds, dest_inds)
         newdata= torch.zeros(Dsize,dtype=data.dtype, device=data.device, 
             requires_grad=data.requires_grad)
         newdata[dest_inds]= data[source_inds]
@@ -188,20 +189,22 @@ class kernel_transpose_and_merge_p2p_v3(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, data_b):
-        order = ctx.order
-        inv_order= tuple(np.argsort(order))
-        meta_new = ctx.meta_new
-        meta_mrg = ctx.meta_mrg
+        # order = ctx.order
+        # inv_order= tuple(np.argsort(order))
+        # meta_new = ctx.meta_new
+        # meta_mrg = ctx.meta_mrg
         D_source = ctx.D_source
+        source_inds, dest_inds = ctx.saved_tensors
 
         newdata_b = torch.zeros((D_source,), dtype=data_b.dtype, device=data_b.device)
-        for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
-            assert tn == t1
-            tmp_b = data_b[slice(*sln)].view(Dn)
-            for (_, slo, Do, Dslc, _) in gr:
-                slcs = tuple(slice(*x) for x in Dslc)
-                inv_Do = tuple(Do[n] for n in order)
-                newdata_b[slice(*slo)].reshape(Do)[:] = tmp_b[slcs].reshape(inv_Do).permute(inv_order)
+        # for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
+        #     assert tn == t1
+        #     tmp_b = data_b[slice(*sln)].view(Dn)
+        #     for (_, slo, Do, Dslc, _) in gr:
+        #         slcs = tuple(slice(*x) for x in Dslc)
+        #         inv_Do = tuple(Do[n] for n in order)
+        #         newdata_b[slice(*slo)].reshape(Do)[:] = tmp_b[slcs].reshape(inv_Do).permute(inv_order)
+        newdata_b[source_inds]= data_b[dest_inds]
         return newdata_b, None, None, None, None
 
 
@@ -212,7 +215,7 @@ class kernel_unmerge_ptp(torch.autograd.Function):
     @staticmethod
     def forward(ctx, data, meta):
         Dsize = data.size()
-        ctx.meta = meta
+        # ctx.meta = meta
         ctx.fwd_data_size = Dsize
         # sln -> slice in dest tensor, specifying location of unfused block
         # Dn  -> shape of the unfused block
@@ -220,16 +223,20 @@ class kernel_unmerge_ptp(torch.autograd.Function):
         # Do  -> shape of the fused block with t_eff
         # sub_slc -> sub-block within block Do
         source_inds= fused_transpose_merge_1d.map_source_to_dest_unmerge(Dsize[0], meta)
+        ctx.save_for_backward(source_inds)
+        
         newdata= data[source_inds]
         return newdata
 
     @staticmethod
     def backward(ctx, data_b):
-        meta = ctx.meta
+        # meta = ctx.meta
         fwd_data_size = ctx.fwd_data_size
         # no zero blocks should be introduces here
         newdata_b = torch.empty(fwd_data_size, dtype=data_b.dtype, device=data_b.device)
-        for sln, Dn, slo, Do, sub_slc in meta:
-            slcs = tuple(slice(*x) for x in sub_slc)
-            newdata_b[slice(*slo)].view(Do)[slcs] = data_b[slice(*sln)].view(Dn)
+        # for sln, Dn, slo, Do, sub_slc in meta:
+        #     slcs = tuple(slice(*x) for x in sub_slc)
+        #     newdata_b[slice(*slo)].view(Do)[slcs] = data_b[slice(*sln)].view(Dn)
+        source_inds = ctx.saved_tensors
+        newdata_b[source_inds]= data_b
         return newdata_b, None, None, None

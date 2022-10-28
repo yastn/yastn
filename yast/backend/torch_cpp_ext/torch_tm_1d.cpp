@@ -253,26 +253,32 @@ std::vector<torch::Tensor> map_source_to_dest_v3(
 	// 1) build jobs (blocks in destination array), which are keys of map,
 	//    holding array jobs_b of blocks in source array
 	std::map< std::vector<int64_t> /*tn*/, row_meta_new > jobs;
-	std::map< std::vector<int64_t> /*tn == t1*/, std::vector< row_meta_mrg > > jobs_b;
+	// std::map< std::vector<int64_t> /*tn == t1*/, std::vector< row_meta_mrg > > jobs_b;
 
 	// 1.1 populate jobs and keys of jobs_b
 	for (auto const &row : meta_new) {
 		jobs[std::get<0>(row)]= row;
-		jobs_b[std::get<0>(row)]= std::vector< row_meta_mrg >();
+		// jobs_b[std::get<0>(row)]= std::vector< row_meta_mrg >();
 	}
 
 	std::vector< std::vector<int64_t> > sl_index;
 
 	// 1.2 populate jobs_b
 	int64_t n_elem=0;
-	for (auto const &row : meta_mrg) {
-		jobs_b[std::get<0>(row)].push_back(row);
+	for (int64_t b=0; b<meta_mrg.size(); b++) {
+	// for (auto const &row : meta_mrg) {
+		// jobs_b[std::get<0>(row)].push_back(row);
 		// compute location in source_inds, dest_inds
+		const auto & row = meta_mrg[b];
 		int64_t D_inds= (std::get<1>(row)[1]-std::get<1>(row)[0]);
-		std::get<4>(jobs_b[std::get<0>(row)].back())= {n_elem, n_elem+D_inds};
-		sl_index.push_back({n_elem, n_elem+D_inds});
+		// std::get<4>(jobs_b[std::get<0>(row)].back())= {n_elem, n_elem+D_inds};
+		sl_index.push_back({b, n_elem, n_elem+D_inds});
 		n_elem+= D_inds;
 	}
+
+	// 1.3 sort in descending order by job size
+	std::sort(sl_index.begin(), sl_index.end(), 
+		[](const auto &l, const auto &r) {return l[2]-l[1] > r[2]-r[1];});
 
 	// 2) prepare arrays to hold source and destination indices
 	//    where element at source_inds[i] is mapped to dest_inds[i]
@@ -288,9 +294,9 @@ std::vector<torch::Tensor> map_source_to_dest_v3(
 	// for (auto const &row : jobs) {
 	// 	for (auto const &job_b : jobs_b[row.first]) {
 	//    const auto & job= row.second;
-	#pragma omp parallel for
+	#pragma omp parallel for schedule(dynamic)
 	for (int64_t b=0; b<meta_mrg.size(); b++) {
-			const auto & job_b= meta_mrg[b];
+			const auto & job_b= meta_mrg[sl_index[b][0]];
 			const auto & job= jobs[std::get<0>(job_b)];
 
 			// prelim)
@@ -329,8 +335,7 @@ std::vector<torch::Tensor> map_source_to_dest_v3(
 			// 3) interpret as contiguous iteration over elements of reshape-permute-reshaped 
 			//    source block, i.e., with shape D_src_perm (D_src_perm[i]= D_src[order[i]]) 
 			//    OR D_block_dest (D_block_dest[i]= block_dest_slcs[i][1]-block_dest_slcs[i][0]) 		
-			// for (int64_t i=std::get<4>(job_b)[0]; i<std::get<4>(job_b)[1]; i++) {
-			for (int64_t i=sl_index[b][0]; i<sl_index[b][1]; i++) {
+			for (int64_t i=sl_index[b][1]; i<sl_index[b][2]; i++) {
 
 				a_source_inds[i]= i_src;
 				a_dest_inds[i]= i_dest;
