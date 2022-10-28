@@ -122,7 +122,7 @@ def _meta_tensordot(config, struct_a, struct_b):
     struct_b_resorted = ((t[:nsym], t, D, sl) for t, D, sl in zip(struct_b.t, struct_b.D, struct_b.sl))
     meta = []
     for (tar, ta, Da, sla), (tbl, tb, Db, slb) in zip( struct_a_resorted, struct_b_resorted):
-        assert tar == tbl, "This should not have happend; contact the authors."
+        assert tar == tbl, "This should not have happend"
         meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db, tar, tbl))
     # try:
     #     tar, ta, Da, sla = next(struct_a_resorted)

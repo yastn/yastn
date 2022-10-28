@@ -44,7 +44,6 @@ def LegDec_to_mut(ls):
     Dtot = {tt: DD for tt, DD in zip(ls.t, ls.D)}
     return _LegDec(dec, Dtot)
 
-
 class _Fusion(NamedTuple):
     """ Information identifying the structure of hard fusion"""
     tree: tuple = (1,)  # order of fusions
@@ -144,21 +143,32 @@ def _meta_merge_to_matrix(config, struct, axes, inds):
         D[n] = tuple(tuple(x) for x in D[n])
         ls.append(_leg_structure_merge(teff[n], t[n], Deff[n], D[n]))
 
-    ls1 = [LegDec_to_mut(l) for l in ls]
+    smeta = sorted((tel, ter, tl, tr, slo, Do)
+                for tel, ter, tl, tr, slo, Do in zip(teff[0], teff[1], t[0], t[1], sl_old, D_old))
 
-    t_new = tuple(t1 + t2 for t1, t2 in zip(teff[0], teff[1]))
-    meta_mrg = tuple(sorted((tn, slo, Do,
-                             (ls1[0].dec[tel][tl].Dslc, ls1[1].dec[ter][tr].Dslc),
-                             (ls1[0].dec[tel][tl].Dprod, ls1[1].dec[ter][tr].Dprod))
-                    for tn, slo, Do, tel, tl, ter, tr in zip(t_new, sl_old, D_old, teff[0], t[0], teff[1], t[1])))
-
-    t_new, tl_new, tr_new = zip(*sorted(set(zip(t_new, teff[0], teff[1])))) if len(t_new) > 0 else ((), (), ())
-    D_new = tuple((ls1[0].Dtot[il], ls1[1].Dtot[ir]) for il, ir in zip(tl_new, tr_new))
-    Dp_new = tuple(x[0] * x[1] for x in D_new)
-    sl_new = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp_new), Dp_new))
-    struct_new = struct._replace(t=t_new, D=D_new, Dp=Dp_new, sl=sl_new, s=tuple(s_eff))
-
-    return struct_new, meta_mrg, ls[0], ls[1]
+    meta_mrg, t_new, D_new, Dp_new, sl_new = [], [], [], [], []
+    imeta, Dlow = iter(smeta), 0
+    try:
+        tel1, ter1, tl, tr, slo, Do = next(imeta)
+        for (tel, ter), _ in groupby(smeta, key=lambda x: x[:2]):
+            ind0 = ls[0].t.index(tel)
+            ind1 = ls[1].t.index(ter)
+            tn = tel + ter
+            t_new.append(tn)
+            D0, D1 = ls[0].D[ind0], ls[1].D[ind1]
+            D_new.append((D0, D1))
+            Dp_new.append(D0 * D1)
+            Dhigh = Dlow + Dp_new[-1]
+            sl_new.append((Dlow, Dhigh))
+            Dlow = Dhigh
+            for d0, d1 in product(ls[0].dec[ind0], ls[1].dec[ind1]):
+                if d0.t == tl and d1.t == tr:
+                    meta_mrg.append((tn, slo, Do, (d0.Dslc, d1.Dslc), (d0.Dprod, d1.Dprod)))
+                    tel1, ter1, tl, tr, slo, Do = next(imeta)
+    except StopIteration:
+        pass
+    struct_new = struct._replace(t=tuple(t_new), D=tuple(D_new), Dp=tuple(Dp_new), sl=tuple(sl_new), s=tuple(s_eff))
+    return struct_new, tuple(meta_mrg), ls[0], ls[1]
 
 
 def _leg_struct_trivial(struct, axis=0):
@@ -260,17 +270,13 @@ def fuse_legs(a, axes, mode=None):
 
 def _fuse_legs_hard(a, axes, order):
     """ Function performing hard fusion. axes are for native legs and are cleaned outside."""
-    assert all(isinstance(x, tuple) for x in axes)
-    for x in axes:
-        assert all(isinstance(y, int) for y in x)
     struct, meta_mrg, t_in, D_in = _meta_fuse_hard(a.config, a.struct, axes)
     data = _transpose_and_merge(a.config, a._data, order, struct, meta_mrg)
     mfs = ((1,),) * len(struct.s)
     hfs = tuple(_fuse_hfs(a.hfs, t_in, D_in, struct.s[n], axis) if len(axis) > 1 else a.hfs[axis[0]]
                 for n, axis in enumerate(axes))
-    aa =  a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
-    assert aa.is_consistent()
-    return aa
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
+
 
 @lru_cache(maxsize=1024)
 def _meta_fuse_hard(config, struct, axes):
@@ -408,12 +414,8 @@ def unfuse_legs(a, axes):
         data = _unmerge(a.config, a._data, meta)
         for unfused, n in zip(nlegs[::-1], axes_hf[::-1]):
             mfs = mfs[:n] + [mfs[n]] * unfused + mfs[n+1:]
-        aa = a._replace(struct=struct, mfs=tuple(mfs), hfs=hfs, data=data)
-        assert aa.is_consistent()
-        return aa
-    aa = a._replace(mfs=tuple(mfs))
-    assert aa.is_consistent()
-    return aa
+        return a._replace(struct=struct, mfs=tuple(mfs), hfs=hfs, data=data)
+    return a._replace(mfs=tuple(mfs))
 
 
 @lru_cache(maxsize=1024)
@@ -684,11 +686,11 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
     for te, grp in groupby(tt, key=itemgetter(0)):
         Dlow, dect = 0, []
         for _, tl, De, Dl in grp:
-            Dtop = Dlow + De
-            dect.append(_RecImm(tl, (Dlow, Dtop), De, Dl))
-            Dlow = Dtop
+            Dhigh = Dlow + De
+            dect.append(_RecImm(tl, (Dlow, Dhigh), De, Dl))
+            Dlow = Dhigh
         t.append(te)
-        D.append(Dtop)
+        D.append(Dhigh)
         dec.append(tuple(dect))
     return _LegDecImm(tuple(t), tuple(D), tuple(dec))
 
