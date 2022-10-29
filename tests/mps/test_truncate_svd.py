@@ -30,8 +30,8 @@ def run_truncation(psi, H, Egs, sweeps=2):
     psi2 = psi.copy()
     discarded = psi2.truncate_sweep(to='last', opts={'D_total': 4})
 
-    ov_t = yamps.measure_overlap(psi, psi2)
-    Eng_t = yamps.measure_mpo(psi2, H, psi2)
+    ov_t = yamps.measure_overlap(psi, psi2).item()
+    Eng_t = yamps.measure_mpo(psi2, H, psi2).item()
     assert 1 > abs(ov_t) > 0.99
     assert Egs < Eng_t.real < Egs * 0.99
 
@@ -40,8 +40,8 @@ def run_truncation(psi, H, Egs, sweeps=2):
     for _ in range(sweeps):
         env = yamps.variational_sweep_1site(psi2, psi_target=psi, env=env)
 
-    ov_v = yamps.measure_overlap(psi, psi2)
-    Eng_v = yamps.measure_mpo(psi2, H, psi2)
+    ov_v = yamps.measure_overlap(psi, psi2).item()
+    Eng_v = yamps.measure_mpo(psi2, H, psi2).item()
     assert psi2.get_bond_dimensions() == (1, 2, 4, 4, 4, 4, 4, 2, 1)
     assert 1 > abs(ov_v) > abs(ov_t)
     assert Egs < Eng_v.real < Eng_t.real
