@@ -4,7 +4,7 @@ from itertools import groupby
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
 from ._tests import YastError, _test_can_be_combined, _test_axes_match
-from ._merging import _merge_to_matrix, _meta_unfuse_legdec, _unmerge, LegDec_to_Imm, _meta_unmerge_matrix
+from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
 
 
@@ -90,8 +90,6 @@ def tensordot(a, b, axes, conj=(0, 0)):
             raise YastError('Bond dimensions do not match.')
         data = a.config.backend.dot(data_a, data_b, meta_dot, Dsize)
 
-    ls_l = LegDec_to_Imm(ls_l)
-    ls_r = LegDec_to_Imm(ls_r)
     meta_unmerge, struct_c = _meta_unmerge_matrix(a.config, struct_c, ls_l, ls_r, s_c)
     data = _unmerge(a.config, data, meta_unmerge)
     return a._replace(data=data, struct=struct_c, mfs=mfs_c, hfs=hfs_c)
@@ -124,7 +122,7 @@ def _meta_tensordot(config, struct_a, struct_b):
     struct_b_resorted = ((t[:nsym], t, D, sl) for t, D, sl in zip(struct_b.t, struct_b.D, struct_b.sl))
     meta = []
     for (tar, ta, Da, sla), (tbl, tb, Db, slb) in zip( struct_a_resorted, struct_b_resorted):
-        assert tar == tbl, "This should not have happend; contact the authors."
+        assert tar == tbl, "This should not have happend"
         meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db, tar, tbl))
     # try:
     #     tar, ta, Da, sla = next(struct_a_resorted)
@@ -404,7 +402,7 @@ def trace(a, axes=(0, 1)):
         data = a.config.backend.sum_elements(a._data)
         return a._replace(struct=struct, mfs=mfs, hfs=hfs, isdiag=False, data=data)
 
-    meta, struct, tcon, D1, D2 = _trace_meta(a.struct, in1, in2, out)
+    meta, struct, tcon, D1, D2 = _meta_trace(a.struct, in1, in2, out)
     Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
     if needs_mask:
         msk12 = _masks_for_trace(a.config, tcon, D1, D2, a.hfs, in1, in2)
@@ -418,7 +416,7 @@ def trace(a, axes=(0, 1)):
 
 
 @lru_cache(maxsize=1024)
-def _trace_meta(struct, in1, in2, out):
+def _meta_trace(struct, in1, in2, out):
     """ meta-information for backend and struct of traced tensor. """
     lt = len(struct.t)
     tset = np.array(struct.t, dtype=int).reshape((lt, len(struct.s), len(struct.n)))
@@ -488,7 +486,7 @@ def swap_gate(a, axes):
         return a
     fss = (True,) * len(a.struct.n) if a.config.fermionic is True else a.config.fermionic
     axes = tuple(_clear_axes(*axes))  # swapped groups of legs
-    tp = _swap_gate_meta(a.struct.t, a.struct.n, a.mfs, a.ndim_n, axes, fss)
+    tp = _meta_swap_gate(a.struct.t, a.struct.n, a.mfs, a.ndim_n, axes, fss)
     c = a.clone()
     for sl, odd in zip(c.struct.sl, tp):
         if odd:
@@ -497,7 +495,7 @@ def swap_gate(a, axes):
 
 
 @lru_cache(maxsize=1024)
-def _swap_gate_meta(t, n, mf, ndim, axes, fss):
+def _meta_swap_gate(t, n, mf, ndim, axes, fss):
     """ calculate which blocks to negate. """
     axes = _unpack_axes(mf, *axes)
     tset = np.array(t, dtype=int).reshape((len(t), ndim, len(n)))
@@ -650,9 +648,9 @@ def ncon(ts, inds, conjs=None):
     if conjs is not None:
         conjs = tuple(conjs)
 
-    meta_trace, meta_dot, meta_transpose = _ncon_meta(inds, conjs)
+    meta_tr, meta_dot, meta_transpose = _meta_ncon(inds, conjs)
     ts = dict(enumerate(ts))
-    for command in meta_trace:
+    for command in meta_tr:
         t, axes = command
         ts[t] = trace(ts[t], axes=axes)
     for command in meta_dot:
@@ -666,7 +664,7 @@ def ncon(ts, inds, conjs=None):
 
 
 @lru_cache(maxsize=1024)
-def _ncon_meta(inds, conjs):
+def _meta_ncon(inds, conjs):
     """ turning information in inds and conjs into list of contraction commands """
     if not all(-256 < x < 256 for x in _flatten(inds)):
         raise YastError('ncon requires indices to be between -256 and 256.')
@@ -684,7 +682,7 @@ def _ncon_meta(inds, conjs):
 def _consume_edges(edges, conjs):
     """ consumes edges to generate order of contractions. """
     eliminated, ntensors = [], len(conjs)
-    meta_trace, meta_dot = [], []
+    meta_tr, meta_dot = [], []
     order1, leg1, ten1 = edges.pop()
     ax1, ax2 = [], []
     while order1 != 512:  # tensordot two tensors, or trace one tensor; 512 is cutoff marking end of truncation
@@ -700,7 +698,7 @@ def _consume_edges(edges, conjs):
                 if len(meta_dot) > 0:
                     raise YastError("Likely inefficient order of contractions. Do all traces before tensordot. " +
                         "Call all axes connecting two tensors one after another.")
-                meta_trace.append((t1, (tuple(ax1), tuple(ax2))))
+                meta_tr.append((t1, (tuple(ax1), tuple(ax2))))
                 ax12 = ax1 + ax2
                 for edge in edges:  # edge = (order, leg, tensor)
                     edge[1] -= sum(i < edge[1] for i in ax12) if edge[2] == t1 else 0
@@ -734,7 +732,7 @@ def _consume_edges(edges, conjs):
     if axes == tuple(range(len(axes))):
         axes = None
     meta_transpose = (t1, axes, conjs[t1])
-    return tuple(meta_trace), tuple(meta_dot), meta_transpose
+    return tuple(meta_tr), tuple(meta_dot), meta_transpose
 
     # if policy in ('hybrid', 'direct'):
     #     meta, c_t, c_D, c_Dp, c_sl, tcon = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
