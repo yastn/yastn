@@ -12,37 +12,19 @@ from ._tests import YastError, _test_axes_all, _get_tD_legs
 __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard']
 
 
-class _LegDec(NamedTuple):
-    """ Internal structure of leg resulting from fusions, including slices"""
-    dec: dict = None  # decomposition of each effective charge
-    Dtot: dict = None  # bond dimensions of effective charges
-
-
-class _DecRec(NamedTuple):
-    """ Single record in _LegDec.dec[effective charge]"""
-    Dslc: tuple = (None, None)  # slice
-    Dprod: int = 0  # size of slice, equal to product of Drsh
-    Drsh: tuple = ()  # original shape of fused dims in a block
-
-
-class _LegDecImm(NamedTuple):
+class _LegSlices(NamedTuple):
     """ Immutable version of LegDec """
     t: tuple = ()  # list of effective charges
     D: tuple = ()  # list of their bond dimensions
     dec: tuple = ()  # and their decompositions
 
 
-class _RecImm(NamedTuple):
-    """ Single record in _LegDecImm.dec[i]"""
+class _DecRecord(NamedTuple):
+    """ Single record in _LegSlices.dec[i]"""
     t : tuple = ()  # charge
     Dslc: tuple = (None, None)  # slice
     Dprod: int = 0  # size of slice, equal to product of Drsh
     Drsh: tuple = ()  # original shape of fused dims in a block
-
-def LegDec_to_mut(ls):
-    dec = {tt: {rec.t : _DecRec(rec.Dslc, rec.Dprod, rec.Drsh) for rec in dect} for tt, dect in zip(ls.t, ls.dec)}
-    Dtot = {tt: DD for tt, DD in zip(ls.t, ls.D)}
-    return _LegDec(dec, Dtot)
 
 class _Fusion(NamedTuple):
     """ Information identifying the structure of hard fusion"""
@@ -177,8 +159,8 @@ def _leg_struct_trivial(struct, axis=0):
     tD = sorted((tt[nsym * axis: nsym * (axis + 1)], DD[axis]) for tt, DD in zip(struct.t, struct.D))
     t = tuple(x[0] for x in tD)
     D = tuple(x[1] for x in tD)
-    dec = tuple((_RecImm(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
-    return _LegDecImm(t, D, dec)
+    dec = tuple((_DecRecord(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
+    return _LegSlices(t, D, dec)
 
 
 #  =========== fuse legs ======================
@@ -300,8 +282,8 @@ def _meta_fuse_hard(config, struct, axes):
             lls.append(_leg_structure_combine_charges_prod(config.sym, t_a, D_a, slegs[n], teff_set, s_eff[n]))
         else:
             t, D = tuple(tD_dict[a[0]].keys()), tuple(tD_dict[a[0]].values())
-            dec = tuple((_RecImm(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
-            lls.append(_LegDecImm(t, D, dec))
+            dec = tuple((_DecRecord(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
+            lls.append(_LegSlices(t, D, dec))
 
     teff_split = [tuple(tuple(y.flat) for y in x) for x in teff]
     told_split = [tuple(tuple(x[a, :].flat) for a in axes) for x in tset]
@@ -441,8 +423,8 @@ def _meta_unfuse_hard(config, struct, axes, hfs):
             snew.extend(s_part)
         else:
             t, D = tuple(tD_dict[n].keys()), tuple(tD_dict[n].values())
-            dec = tuple((_RecImm(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
-            lls.append(_LegDecImm(t, D, dec))
+            dec = tuple((_DecRecord(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
+            lls.append(_LegSlices(t, D, dec))
             hfs_new.append(hf)
             snew.append(struct.s[n])
     
@@ -696,12 +678,12 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
         Dlow, dect = 0, []
         for _, tl, De, Dl in grp:
             Dhigh = Dlow + De
-            dect.append(_RecImm(tl, (Dlow, Dhigh), De, Dl))
+            dect.append(_DecRecord(tl, (Dlow, Dhigh), De, Dl))
             Dlow = Dhigh
         t.append(te)
         D.append(Dhigh)
         dec.append(tuple(dect))
-    return _LegDecImm(tuple(t), tuple(D), tuple(dec))
+    return _LegSlices(tuple(t), tuple(D), tuple(dec))
 
 
 def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):

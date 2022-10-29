@@ -6,7 +6,7 @@ from itertools import groupby
 import numpy as np
 from .tensor import Tensor, YastError
 from .tensor._auxliary import _struct, _config, _clear_axes, _unpack_legs
-from .tensor._merging import _Fusion, _leg_structure_combine_charges_sum, _embed_tensor, _sum_hfs, LegDec_to_mut
+from .tensor._merging import _Fusion, _embed_tensor, _sum_hfs
 from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
 from .tensor._tests import _test_can_be_combined
 
