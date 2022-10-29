@@ -1,5 +1,11 @@
-import numpy as np
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1" 
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
+import numpy as np
 
 def randR(D, device='cpu'):
     return 2 * np.random.random_sample(D) - 1

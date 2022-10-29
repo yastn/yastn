@@ -2,7 +2,7 @@
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct
 from ._tests import YastError, _test_axes_all
-from ._merging import _merge_to_matrix, _meta_unfuse_legdec, _unmerge
+from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _leg_struct_trivial, _Fusion
 from ._krylov import _expand_krylov_space
 
@@ -151,7 +151,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
     ls_s = _leg_struct_trivial(Sstruct, axis=0)
 
     Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
-    Umeta_unmerge, Ustruct = _meta_unfuse_legdec(a.config, Ustruct, [ls_l, ls_s], Us)
+    Umeta_unmerge, Ustruct = _meta_unmerge_matrix(a.config, Ustruct, ls_l, ls_s, Us)
 
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
@@ -163,7 +163,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
     S = a._replace(struct=Sstruct, data=Sdata, mfs=Smfs, hfs=Shfs)
 
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
-    Vmeta_unmerge, Vstruct = _meta_unfuse_legdec(a.config, Vstruct, [ls_s, ls_r], Vs)
+    Vmeta_unmerge, Vstruct = _meta_unmerge_matrix(a.config, Vstruct, ls_s, ls_r, Vs)
     Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in axes[1])
@@ -408,14 +408,14 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     ls = _leg_struct_trivial(Rstruct, axis=0)
 
     Qs = tuple(a.struct.s[lg] for lg in axes[0]) + (sQ,)
-    Qmeta_unmerge, Qstruct = _meta_unfuse_legdec(a.config, Qstruct, [ls_l, ls], Qs)
+    Qmeta_unmerge, Qstruct = _meta_unmerge_matrix(a.config, Qstruct, ls_l, ls, Qs)
     Qdata = _unmerge(a.config, Qdata, Qmeta_unmerge)
     Qmfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Qhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sQ,)),)
     Q = a._replace(struct=Qstruct, data=Qdata, mfs=Qmfs, hfs=Qhfs)
 
     Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in axes[1])
-    Rmeta_unmerge, Rstruct = _meta_unfuse_legdec(a.config, Rstruct, [ls, ls_r], Rs)
+    Rmeta_unmerge, Rstruct = _meta_unmerge_matrix(a.config, Rstruct, ls, ls_r, Rs)
     Rdata = _unmerge(a.config, Rdata, Rmeta_unmerge)
     Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
     Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in axes[1])
@@ -504,7 +504,7 @@ def eigh(a, axes, sU=1, Uaxis=-1):
     ls_s = _leg_struct_trivial(Sstruct, axis=1)
 
     Us = tuple(a.struct.s[lg] for lg in axes[0]) + (sU,)
-    Umeta_unmerge, Ustruct = _meta_unfuse_legdec(a.config, Ustruct, [ls_l, ls_s], Us)
+    Umeta_unmerge, Ustruct = _meta_unmerge_matrix(a.config, Ustruct, ls_l, ls_s, Us)
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
