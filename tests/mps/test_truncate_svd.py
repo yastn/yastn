@@ -27,8 +27,8 @@ def run_truncation(psi, H, Egs, sweeps=2):
 
     ov_t = yamps.measure_overlap(psi, psi2)
     Eng_t = yamps.measure_mpo(psi2, H, psi2)
-    assert 1 > ov_t > 0.99
-    assert Egs < Eng_t < Egs * 0.99
+    assert 1 > abs(ov_t) > 0.99
+    assert Egs < Eng_t.real < Egs * 0.99
 
     psi2.canonize_sweep(to='first')
     env = None
@@ -38,8 +38,8 @@ def run_truncation(psi, H, Egs, sweeps=2):
     ov_v = yamps.measure_overlap(psi, psi2)
     Eng_v = yamps.measure_mpo(psi2, H, psi2)
     assert psi2.get_bond_dimensions() == (1, 2, 4, 4, 4, 4, 4, 2, 1)
-    assert 1 > ov_v > ov_t
-    assert Egs < Eng_v < Eng_t
+    assert 1 > abs(ov_v) > abs(ov_t)
+    assert Egs < Eng_v.real < Eng_t.real
 
 
 def test_truncate_svd_full():
