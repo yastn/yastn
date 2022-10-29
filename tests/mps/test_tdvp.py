@@ -15,7 +15,7 @@ def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, version='1site', opts_svd=None):
     # a ground state by imaginary time evolution.
     #
     env = yamps.dmrg_sweep_1site(psi, H)
-    Eng_old = env.measure()
+    Eng_old = env.measure().item()
     #
     # We set parameters for exponentiation in TDVP giving the information on the operator 
     # and setting what is desired Krylow dimension opts_expmv['ncv'] and truncation of Arnoldin algorithm opts_expmv['tol'].
@@ -32,7 +32,7 @@ def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, version='1site', opts_svd=None):
         #
         # After the evolution the energy is:
         #
-        Eng = env.measure()
+        Eng = env.measure().item()
         #
         # We check how much it changes comparing to energy before TDVP. 
         # If the state is not converged we do another TDVP step.
@@ -42,7 +42,7 @@ def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, version='1site', opts_svd=None):
     #
     # Finally we can check if we obtained a ground state:
     #
-    assert pytest.approx(Eng.item(), rel=2e-2) == Eng_gs
+    assert pytest.approx(Eng, rel=2e-2) == Eng_gs
     return psi
 
 
