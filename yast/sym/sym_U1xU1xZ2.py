@@ -1,5 +1,5 @@
 import numpy as np
-from yast.sym.sym_abelian import sym_abelian
+from .sym_abelian import sym_abelian
 
 class sym_U1xU1xZ2(sym_abelian):
     """ U(1) x U(1) x Z2 -- here Z2 will be used to account for global fermionic parity. """

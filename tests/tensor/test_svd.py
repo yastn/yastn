@@ -1,7 +1,8 @@
 """ yast.linalg.svd() and truncation of its singular values """
+from itertools import product
+import unittest
 import pytest
 import numpy as np
-from itertools import product
 import yast
 try:
     from .configs import config_dense, config_U1, config_Z2xU1, config_Z3

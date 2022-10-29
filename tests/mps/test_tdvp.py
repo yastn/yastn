@@ -36,7 +36,7 @@ def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, version='1site', opts_svd=None):
         #
         # We check how much it changes comparing to energy before TDVP. 
         # If the state is not converged we do another TDVP step.
-        assert Eng - Eng_old < tol
+        assert (Eng - Eng_old).real < tol
         Eng_old = Eng
     logging.info("%s tdvp; Energy: %0.8f / %0.8f", version, Eng, Eng_gs)
     #
