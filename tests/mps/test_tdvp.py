@@ -3,7 +3,11 @@ import logging
 import pytest
 import yamps
 import yast
-
+try:
+    from .configs import config_dense as cfg
+    # cfg is used by pytest to inject different backends and divices
+except ImportError:
+    from configs import config_dense as cfg
 
 tol=1e-8
 
@@ -58,7 +62,7 @@ def test_dense_tdvp():
     #
     # The Hamiltonian is obtained with automatic generator (see source file).
     #
-    operators = yast.operators.Spin12(sym='dense')
+    operators = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
     generate = yamps.Generator(N=N, operators=operators)
     parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.25, "range1": range(N), "range2": range(N-1)}
     H_str = "\sum_{j \in range2} t ( sp_{j} sm_{j+1} + sp_{j+1} sm_{j} ) + \sum_{j\in range1} mu sp_{j} sm_{j}"
@@ -115,7 +119,7 @@ def test_Z2_tdvp():
 
     logging.info(' Tensor : Z2 ')
 
-    operators = yast.operators.SpinlessFermions(sym='Z2')
+    operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = yamps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 
@@ -141,7 +145,7 @@ def test_U1_tdvp():
     sweeps = 10
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
-    operators = yast.operators.SpinlessFermions(sym='U1')
+    operators = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     generate = yamps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 

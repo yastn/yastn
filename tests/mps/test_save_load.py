@@ -6,6 +6,12 @@ try:
     import h5py
 except ImportError:
     warnings.warn("h5py module not available", ImportWarning)
+try:
+    from .configs import config_dense as cfg
+    # cfg is used by pytest to inject different backends and divices
+except ImportError:
+    from configs import config_dense as cfg
+
 
 import yamps
 import yast
@@ -26,7 +32,7 @@ def test_basic_hdf5():
     # Initialize random MPS with dense tensors and checks saving/loading 
     # to and from HDF5 file.
     #
-    psi = yamps.random_dense_mps(N=16, D=15, d=2)
+    psi = yamps.random_dense_mps(N=16, D=15, d=2, backend=cfg.backend, default_device=cfg.default_device)
     config_dense = psi.config
     #
     # We delete file if it already exists. 
@@ -56,7 +62,7 @@ def test_basic_hdf5():
     #
     # Similarily, one can save and load MPO
     #
-    psi = yamps.random_dense_mpo(N=16, D=8, d=3)
+    psi = yamps.random_dense_mpo(N=16, D=8, d=3, backend=cfg.backend, default_device=cfg.default_device)
     with h5py.File('tmp.h5', 'w') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
@@ -66,7 +72,7 @@ def test_basic_hdf5():
 
 
 def test_Z2_hdf5():
-    operators = yast.operators.SpinlessFermions(sym='Z2')
+    operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = yamps.Generator(N=16, operators=operators)
     #
     psi = generate.random_mps(D_total=25, n=0)
@@ -86,7 +92,7 @@ def test_basic_dict():
     #
     # First, we generate random MPS without any symmetry.
     #    
-    psi = yamps.random_dense_mps(N=16, D=25, d=3)
+    psi = yamps.random_dense_mps(N=16, D=25, d=3, backend=cfg.backend, default_device=cfg.default_device)
     config_dense = psi.config
     #
     # Next, we serialize MPS into dictionary.
@@ -104,7 +110,7 @@ def test_basic_dict():
 
 
 def test_Z2_dict():
-    operators = yast.operators.SpinlessFermions(sym='Z2')
+    operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = yamps.Generator(N=16, operators=operators)
 
     psi = generate.random_mps(D_total=15, n=0)

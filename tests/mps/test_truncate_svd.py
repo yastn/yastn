@@ -1,7 +1,11 @@
 """ truncation of mps """
 import yamps
 import yast
-
+try:
+    from .configs import config_dense as cfg
+    # cfg is used by pytest to inject different backends and divices
+except ImportError:
+    from configs import config_dense as cfg
 
 def run_dmrg_1site(psi, H, sweeps=10):
     """ Run a few sweeps of dmrg_1site_sweep. Returns energy. """
@@ -29,6 +33,7 @@ def run_multiply_svd(psi, H, Egs, sweeps=1):
 def run_truncation(psi, H, Egs, sweeps=2):
     psi2 = psi.copy()
     discarded = psi2.truncate_sweep(to='last', opts={'D_total': 4})
+    print(discarded)
 
     ov_t = yamps.measure_overlap(psi, psi2).item()
     Eng_t = yamps.measure_mpo(psi2, H, psi2).item()
@@ -55,7 +60,7 @@ def test_truncate_svd_dense():
     Eng_gs = -4.758770483143633
     D_total = 8
 
-    operators = yast.operators.Spin12(sym='dense')
+    operators = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
     generate = yamps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 
@@ -72,10 +77,10 @@ def test_truncate_svd_Z2():
     Initialize random mps of dense tensors and checks canonization
     """
     N = 8
-    D_total = 8
+    D_total = 10
     Eng_parity = {0: -4.758770483143633, 1: -4.411474127809773}
 
-    operators = yast.operators.Spin12(sym='Z2')
+    operators = yast.operators.Spin12(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = yamps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 
@@ -92,5 +97,5 @@ def test_truncate_svd_Z2():
 
 
 if __name__ == "__main__":
-    test_truncate_svd_dense()
+    # test_truncate_svd_dense()
     test_truncate_svd_Z2()

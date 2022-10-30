@@ -1,12 +1,12 @@
 """ basic procedures of single mps """
 import numpy as np
-import pytest
 import yast
 import yamps
 try:
-    from .configs import config_dense
+    from .configs import config_dense as cfg
+    # cfg is used by pytest to inject different backends and divices
 except ImportError:
-    from configs import config_dense
+    from configs import config_dense as cfg
 
 
 def test_assign_block():
@@ -60,7 +60,7 @@ def test_assign_block():
         #           ^
         #           |(+1)
         #
-        site_tensor = yast.Tensor(config=config_dense, s=(1, 1, -1))
+        site_tensor = yast.Tensor(config=cfg, s=(1, 1, -1))
         site_tensor.set_block(val=tmp, Ds=Ds)
         #
         # Finally assign the on-site tensor.

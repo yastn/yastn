@@ -2,7 +2,11 @@
 import numpy as np
 import yast
 import yamps
-
+try:
+    from .configs import config_dense as cfg
+    # cfg is used by pytest to inject different backends and divices
+except ImportError:
+    from configs import config_dense as cfg
 
 tol = 1e-12
 
@@ -17,7 +21,7 @@ def check_copy(psi1, psi2):
 
 def test_copy():
     """ Initialize random mps of full tensors and checks copying. """
-    operators = yast.operators.Spin1(sym='Z3')
+    operators = yast.operators.Spin1(sym='Z3', backend=cfg.backend, default_device=cfg.default_device)
     generate = yamps.Generator(N=16, operators=operators)
 
     psi = generate.random_mps(n=(1,), D_total=16)
