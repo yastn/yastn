@@ -3,11 +3,10 @@
 # import pytest
 # import yamps
 # try:
-#     from . import ops_dense
-#     from . import ops_Z2
+#     from .configs import config_dense as cfg
+#    # cfg is used by pytest to inject different backends and divices
 # except ImportError:
-#     import ops_dense
-#     import ops_Z2
+#     from configs import config_dense as cfg
 
 # tol=1e-8
 

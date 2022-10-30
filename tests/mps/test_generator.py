@@ -2,7 +2,11 @@ import pytest
 import numpy as np
 import yast
 import yamps
-
+try:
+    from .configs import config_dense as cfg
+    # cfg is used by pytest to inject different backends and divices
+except ImportError:
+    from configs import config_dense as cfg
 
 tol = 1e-12
 
@@ -27,7 +31,6 @@ def mpo_XX_model_dense(config, N, t, mu):
     # Depending on the site position, define elements of on-site tensor
     #
     for n in H.sweep(to='last'):  # empty tensors
-        
         if n == H.first:
             tmp = np.block([[mu * nn, t * cp, t * c, ee]])
             tmp = tmp.reshape((1, 2, 4, 2))
@@ -175,7 +178,7 @@ def test_generator_mps():
     bds = (1,) + (D_total,) * (N - 1) + (1,)
 
     for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U1', (N // 2,))):
-        operators = yast.operators.SpinlessFermions(sym=sym)
+        operators = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
         generate = yamps.Generator(N, operators)
         I = generate.I()
         assert pytest.approx(yamps.measure_overlap(I, I).item(), rel=tol) == 2 ** N
@@ -193,7 +196,7 @@ def test_generator_mpo():
     N = 5
     t = 1
     mu = 0.2
-    operators = yast.operators.SpinlessFermions(sym='Z2')
+    operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = yamps.Generator(N, operators)
     generate.random_seed(seed=0)
     parameters = {"t": lambda j: t, "mu": lambda j: mu, "range1": range(N), "range2": range(1, N-1)}

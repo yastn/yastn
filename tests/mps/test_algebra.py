@@ -2,7 +2,11 @@
 import pytest
 import yamps
 import yast
-
+try:
+    from .configs import config_dense as cfg
+    # cfg is used by pytest to inject different backends and divices
+except ImportError:
+    from configs import config_dense as cfg
 
 tol = 1e-6
 
@@ -22,7 +26,7 @@ def check_add(psi0, psi1):
 
 def test_addition():
     """create two Mps-s and add them to each other"""
-    operators = yast.operators.SpinfulFermions(sym='U1xU1')
+    operators = yast.operators.SpinfulFermions(sym='U1xU1', backend=cfg.backend, default_device=cfg.default_device)
     generate = yamps.Generator(N=9, operators=operators)
 
     psi0 = generate.random_mps(D_total=15, n=(3, 5))
@@ -43,7 +47,7 @@ def test_multiplication():
     N = 7
     Eng = -3.427339492125848
     #
-    operators = yast.operators.SpinlessFermions(sym='U1')
+    operators = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     generate = yamps.Generator(N=N, operators=operators)
     #
     # The Hamiltonian is obtained with automatic generator (see source file).
