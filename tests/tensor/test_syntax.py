@@ -306,11 +306,11 @@ class TestSyntaxGeneral(unittest.TestCase):
 
         # with config that is not imported as usually
         if config_U1.backend.BACKEND_ID == 'numpy':
-            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_np, device=config_U1.default_device)
+            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_np, default_device=config_U1.default_device)
         elif config_U1.backend.BACKEND_ID == 'torch':
-            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_torch, device=config_U1.default_device)
+            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_torch, default_device=config_U1.default_device)
         elif config_U1.backend.BACKEND_ID == 'torch_cpp':
-            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_torch_cpp, device=config_U1.default_device)
+            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_torch_cpp, default_device=config_U1.default_device)
         else:
             raise RuntimeError('Unsupported backend')
 
@@ -340,7 +340,6 @@ class TestSyntaxGeneral(unittest.TestCase):
         # to
         tensor = a.to(device='cpu')
         tensor = a.to(dtype='complex128')
-
         # get info
         a.show_properties()
         a.get_rank()
