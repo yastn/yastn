@@ -1,7 +1,7 @@
 """ Algorithm for variational optimization of mps to match the target state."""
 from ._env import Env2, Env3
 from. _mps import YampsError
-import yast
+from ... import ones, svd, truncation_mask, tensordot
 
 def variational_sweep_1site(psi, psi_target, env=None, op=None):
     r"""
@@ -66,18 +66,18 @@ def multiply_svd(a, b, opts=None):
 
     la, lpsi = a.get_rightmost_leg(), psi.get_rightmost_leg()
 
-    tmp = yast.ones(a.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
+    tmp = ones(a.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
     tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axis=2)
 
     for n in psi.sweep(to='first'):
-        tmp = yast.tensordot(psi[n], tmp, axes=(2, 0))
+        tmp = tensordot(psi[n], tmp, axes=(2, 0))
         if psi.nr_phys == 2:
             tmp = tmp.fuse_legs(axes=(0, 1, 3, (4, 2)))
         tmp = a[n]._attach_23(tmp)
 
-        U, S, V = yast.svd(tmp, axes=((0, 1), (3, 2)), sU=-1)
+        U, S, V = svd(tmp, axes=((0, 1), (3, 2)), sU=-1)
 
-        mask = yast.linalg.truncation_mask(S, **opts)
+        mask = truncation_mask(S, **opts)
         U, C, V = mask.apply_mask(U, S, V, axis=(2, 0, 0))
 
         psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)

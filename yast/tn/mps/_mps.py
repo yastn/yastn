@@ -1,6 +1,6 @@
 """ Mps structure and its basic manipulations. """
-from yast import entropy, block, tensordot
-import yast
+from ... import entropy, block, tensordot, truncation_mask, bitwise_not, svd, ncon, eye, norm
+
 
 class YampsError(Exception):
     pass
@@ -400,16 +400,16 @@ class MpsMpo:
             if opts is None:
                 opts = {'tol': 1e-12}   #  TODO: No truncation?
 
-            U, S, V = yast.svd(self.A[self.pC], axes=(0, 1), sU=-1)
+            U, S, V = svd(self.A[self.pC], axes=(0, 1), sU=-1)
 
-            mask = yast.linalg.truncation_mask(S, **opts)
+            mask = truncation_mask(S, **opts)
             U, C, V = mask.apply_mask(U, S, V, axis=(1, 0, 0))
             self.A[self.pC] = C / C.norm() if normalize else C
             n1, n2 = self.pC
 
             if n1 >= self.first:
                 ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
-                self.A[n1] = yast.ncon([self.A[n1], U], (ax, (1, -2)))
+                self.A[n1] = ncon([self.A[n1], U], (ax, (1, -2)))
             else:
                 self.A[self.pC] = U @ self.A[self.pC]
 
@@ -419,7 +419,7 @@ class MpsMpo:
                 self.A[self.pC] = self.A[self.pC] @ V
 
             # discarded weight
-            nC = yast.bitwise_not(mask).apply_mask(S, axis=0)
+            nC = bitwise_not(mask).apply_mask(S, axis=0)
             return nC.norm() / S.norm()
         return 0.
 
@@ -450,7 +450,7 @@ class MpsMpo:
 
             if (to == 'first' and n1 >= self.first) or n2 > self.last:
                 ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
-                self.A[n1] = yast.ncon([self.A[n1], C], (ax, (1, -2)))
+                self.A[n1] = ncon([self.A[n1], C], (ax, (1, -2)))
             else:  # (to == 'last' and n2 <= self.last) or n1 < self.first
                 self.A[n2] = C @ self.A[n2]
 
@@ -508,9 +508,9 @@ class MpsMpo:
             cl = (0, 1) if self.nr_phys == 1 else (0, 1, 3)
         it = self.sweep(to=to) if n is None else [n]
         for n in it:
-            x = yast.tensordot(self.A[n], self.A[n].conj(), axes=(cl, cl))
-            x0 = yast.eye(config=x.config, legs=x.get_legs((0, 1)))
-            if yast.norm(x - x0.diag()) > tol:  # == 0
+            x = tensordot(self.A[n], self.A[n].conj(), axes=(cl, cl))
+            x0 = eye(config=x.config, legs=x.get_legs((0, 1)))
+            if norm(x - x0.diag()) > tol:  # == 0
                 return False
         return True
 
@@ -573,7 +573,7 @@ class MpsMpo:
             tensor formed from A[n] and A[n + 1]
         """
         nl, nr = bd
-        AA = yast.tensordot(self.A[nl], self.A[nr], axes=(2, 0))
+        AA = tensordot(self.A[nl], self.A[nr], axes=(2, 0))
         axes = (0, (1, 2), 3) if self.nr_phys == 1 else (0, (1, 3), 4, (2, 5))
         return AA.fuse_legs(axes=axes)
 
@@ -603,12 +603,12 @@ class MpsMpo:
         AA = AA.unfuse_legs(axes=axes)
         axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 4), (2, 3, 5))
         self.pC = bd
-        U, S, V = yast.linalg.svd(AA, axes=axes, sU=-1, Uaxis=2)
-        mask = yast.linalg.truncation_mask(S, **opts)
+        U, S, V = svd(AA, axes=axes, sU=-1, Uaxis=2)
+        mask = truncation_mask(S, **opts)
         self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(U, S, V, axis=(2, 0, 0))
 
         # discarded weight
-        nC = yast.bitwise_not(mask).apply_mask(S, axis=0)
+        nC = bitwise_not(mask).apply_mask(S, axis=0)
         return nC.norm() / S.norm()
 
     def get_leftmost_leg(self):

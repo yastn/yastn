@@ -1,6 +1,6 @@
 """ Various variants of the DMRG algorithm for mps."""
 import logging
-from yast import eigs
+from ... import eigs
 from ._env import Env3
 from ._mps import YampsError
 

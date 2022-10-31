@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 import yast
-import yamps
+import yast.tn.mps as mps
 try:
     from .configs import config_dense as cfg
     # cfg is used by pytest to inject different backends and divices
@@ -26,7 +26,7 @@ def mpo_XX_model_dense(config, N, t, mu):
 
     # Build empty MPO for system of N sites
     # 
-    H = yamps.Mpo(N)
+    H = mps.Mpo(N)
 
     # Depending on the site position, define elements of on-site tensor
     #
@@ -73,7 +73,7 @@ def mpo_XX_model_Z2(config, N, t, mu):
 
     # Build empty MPO for system of N sites
     #
-    H = yamps.Mpo(N)
+    H = mps.Mpo(N)
 
     # Depending on the site position, define elements of on-site tensor
     #
@@ -121,7 +121,7 @@ def mpo_XX_model_U1(config, N, t, mu):
 
     # Build empty MPO for system of N sites
     #
-    H = yamps.Mpo(N)
+    H = mps.Mpo(N)
 
     # Depending on the site position, define elements of on-site tensor
     #
@@ -179,11 +179,11 @@ def test_generator_mps():
 
     for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U1', (N // 2,))):
         operators = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
-        generate = yamps.Generator(N, operators)
+        generate = mps.Generator(N, operators)
         I = generate.I()
-        assert pytest.approx(yamps.measure_overlap(I, I).item(), rel=tol) == 2 ** N
+        assert pytest.approx(mps.measure_overlap(I, I).item(), rel=tol) == 2 ** N
         O = I @ I + (-1 * I)
-        assert pytest.approx(yamps.measure_overlap(O, O).item(), abs=tol) == 0
+        assert pytest.approx(mps.measure_overlap(O, O).item(), abs=tol) == 0
         psi = generate.random_mps(D_total=D_total, n = nn)
         assert psi[psi.last].get_legs(axis=2).t == (nn,)
         assert psi[psi.first].get_legs(axis=0).t == ((0,) * len(nn),)
@@ -197,21 +197,21 @@ def test_generator_mpo():
     t = 1
     mu = 0.2
     operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
-    generate = yamps.Generator(N, operators)
+    generate = mps.Generator(N, operators)
     generate.random_seed(seed=0)
     parameters = {"t": lambda j: t, "mu": lambda j: mu, "range1": range(N), "range2": range(1, N-1)}
     H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j} + ( cp_{0} c_{1} + 1*cp_{1} c_{0} )*t "
     H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
     H = generate.mpo(H_str, parameters)
     psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
-    x_ref = yamps.measure_mpo(psi, H_ref, psi).item()
-    x = yamps.measure_mpo(psi, H, psi).item()
+    x_ref = mps.measure_mpo(psi, H_ref, psi).item()
+    x = mps.measure_mpo(psi, H, psi).item()
     assert abs(x_ref - x) < tol
 
     psi.canonize_sweep(to='first')
     psi.canonize_sweep(to='last')
-    x_ref = yamps.measure_mpo(psi, H_ref, psi).item()
-    x = yamps.measure_mpo(psi, H, psi).item()
+    x_ref = mps.measure_mpo(psi, H_ref, psi).item()
+    x = mps.measure_mpo(psi, H, psi).item()
     assert abs(x_ref - x) < tol
 
 def mpo_Ising_model():

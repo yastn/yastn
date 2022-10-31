@@ -1,5 +1,5 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
-from yast import ncon, tensordot, expmv, vdot, qr, svd, ones
+from ... import ncon, tensordot, expmv, vdot, qr, svd, ones
 from ._mps import YampsError
 
 

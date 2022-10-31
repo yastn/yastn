@@ -1,7 +1,6 @@
 """ Mps structure and its basic """
-import numpy as np
-import yast
-from ._mps import MpsMpo, Mpo, add
+from ... import initialize
+from ._mps import MpsMpo
 
 
 def load_from_dict(config, in_dict):
@@ -28,7 +27,7 @@ def load_from_dict(config, in_dict):
     N = len(in_dict['A'])
     out_Mps = MpsMpo(N, nr_phys=nr_phys)
     for n in range(out_Mps.N):
-        out_Mps.A[n] = yast.load_from_dict(config=config, d=in_dict['A'][n])
+        out_Mps.A[n] = initialize.load_from_dict(config=config, d=in_dict['A'][n])
     return out_Mps
 
 
@@ -58,5 +57,5 @@ def load_from_hdf5(config, file, in_file_path):
     N = len(file[in_file_path+'/A'].keys())
     out_Mps = MpsMpo(N, nr_phys=nr_phys)
     for n in range(out_Mps.N):
-        out_Mps.A[n] = yast.load_from_hdf5(config, file, in_file_path+'/A/'+str(n))
+        out_Mps.A[n] = initialize.load_from_hdf5(config, file, in_file_path+'/A/'+str(n))
     return out_Mps

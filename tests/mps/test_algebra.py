@@ -1,6 +1,6 @@
 """ examples for addition of the Mps-s """
 import pytest
-import yamps
+import yast.tn.mps as mps
 import yast
 try:
     from .configs import config_dense as cfg
@@ -12,22 +12,22 @@ tol = 1e-6
 
 
 def check_add(psi0, psi1):
-    """ test yamps.add using overlaps"""
-    out1 = yamps.add(psi0, psi1, amplitudes=[1., 2.])
+    """ test mps.add using overlaps"""
+    out1 = mps.add(psi0, psi1, amplitudes=[1., 2.])
     out2 = (1.0 * psi0) + (2.0 * psi1)
-    p0 = yamps.measure_overlap(psi0, psi0)
-    p1 = yamps.measure_overlap(psi1, psi1)
-    p01 = yamps.measure_overlap(psi0, psi1)
-    p10 = yamps.measure_overlap(psi1, psi0)
+    p0 = mps.measure_overlap(psi0, psi0)
+    p1 = mps.measure_overlap(psi1, psi1)
+    p01 = mps.measure_overlap(psi0, psi1)
+    p10 = mps.measure_overlap(psi1, psi0)
     for out in (out1, out2):
-        o1 = yamps.measure_overlap(out, out)
+        o1 = mps.measure_overlap(out, out)
         assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
 
 
 def test_addition():
     """create two Mps-s and add them to each other"""
     operators = yast.operators.SpinfulFermions(sym='U1xU1', backend=cfg.backend, default_device=cfg.default_device)
-    generate = yamps.Generator(N=9, operators=operators)
+    generate = mps.Generator(N=9, operators=operators)
 
     psi0 = generate.random_mps(D_total=15, n=(3, 5))
     psi1 = generate.random_mps(D_total=19, n=(3, 5))
@@ -39,7 +39,7 @@ def test_addition():
 
 
 def test_multiplication():
-    """ Calculate ground state and checks yamps.multiply() and __mul__()and yamps.add() within eigen-condition."""
+    """ Calculate ground state and checks mps.multiply() and __mul__()and mps.add() within eigen-condition."""
     #
     # This test presents a multiplication as a part of DMRG study. 
     # We use multiplication to get expectation values from a state.
@@ -48,7 +48,7 @@ def test_multiplication():
     Eng = -3.427339492125848
     #
     operators = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
-    generate = yamps.Generator(N=N, operators=operators)
+    generate = mps.Generator(N=N, operators=operators)
     #
     # The Hamiltonian is obtained with automatic generator (see source file).
     #
@@ -72,7 +72,7 @@ def test_multiplication():
     # We set truncation for DMRG and runt the algorithm in '2site' version
     #
     opts_svd = {'tol': 1e-8, 'D_total': 8} 
-    env = yamps.dmrg(psi, H, version='2site', max_sweeps=20, opts_svd=opts_svd)
+    env = mps.dmrg(psi, H, version='2site', max_sweeps=20, opts_svd=opts_svd)
     #
     # Test if we obtained exact solution for the energy?:
     #
@@ -83,17 +83,17 @@ def test_multiplication():
     # We have two equivalent ways to do that:
     #
     # case 1/
-    Hpsi = yamps.multiply(H, psi)
+    Hpsi = mps.multiply(H, psi)
     #
-    # use yamps.measure_overlap to get variation
+    # use mps.measure_overlap to get variation
     #
     p0 = -1 * Hpsi + Eng * psi
-    assert yamps.measure_overlap(p0, p0) < tol
+    assert mps.measure_overlap(p0, p0) < tol
     #
     # case 2/
     Hpsi = H @ psi
     p0 = -1 * Hpsi + Eng * psi
-    assert yamps.measure_overlap(p0, p0) < tol
+    assert mps.measure_overlap(p0, p0) < tol
 
 
 if __name__ == "__main__":
