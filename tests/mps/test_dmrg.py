@@ -9,9 +9,9 @@ try:
 except ImportError:
     from configs import config_dense as cfg
 
-tol = 1e-6
+tol = 1e-4
 
-def run_dmrg(psi, H, occ, E_target, occ_target, version='1site', opts_svd=None):
+def run_dmrg(psi, H, occ, E_target, occ_target, opts_svd=None):
     """ Run a faw sweeps of dmrg_1site_sweep. Returns energy. """
     # To obtain states above ground state be project lower-lying states. 
     # The list project keeps all lower lying states which we obtain iteratively in this code.
@@ -28,7 +28,7 @@ def run_dmrg(psi, H, occ, E_target, occ_target, version='1site', opts_svd=None):
         #
         # We set up dmrg to converge according to energy.
         #
-        env, info = yamps.dmrg(psi2, H, project=project, version=version,
+        env, info = yamps.dmrg(psi2, H, project=project, version='2site',
                         converge='energy', atol=tol/10, max_sweeps=20, opts_svd=opts_svd, return_info=True)
         #
         # The energy can be extracted from env we generated.
@@ -38,8 +38,8 @@ def run_dmrg(psi, H, occ, E_target, occ_target, version='1site', opts_svd=None):
         #
         # Print the result:
         #
-        logging.info("%s dmrg; Energy: %0.8f / %0.8f   Occupation: %0.8f / %0.8f",
-                        version, EE, E_target[ii], Eocc, occ_target[ii])
+        logging.info(" 2site dmrg; Energy: %0.8f / %0.8f   Occupation: %0.8f / %0.8f", 
+                        EE, E_target[ii], Eocc, occ_target[ii])
         logging.info(" Convergence info: %s", info)
         #
         # Check if DMRG reached exact energy:
@@ -48,11 +48,20 @@ def run_dmrg(psi, H, occ, E_target, occ_target, version='1site', opts_svd=None):
         #
         # and if occupation is as we expected:
         #
-        assert pytest.approx(Eocc.item(), rel=10 * tol) == occ_target[ii]
+        assert pytest.approx(Eocc.item(), rel=tol) == occ_target[ii]
         #
         # The loop allows to find MPS states with increasing energy. 
         # We append the list of lower-lying states to target next excited state.
         #
+        env, info = yamps.dmrg(psi2, H, project=project, version='1site',
+                converge='energy', atol=tol/10, max_sweeps=20, opts_svd=opts_svd, return_info=True)
+        EE, Eocc = env.measure(), yamps.measure_mpo(psi2, occ, psi2)
+        logging.info(" 1site dmrg; Energy: %0.8f / %0.8f   Occupation: %0.8f / %0.8f",
+                        EE, E_target[ii], Eocc, occ_target[ii])
+        logging.info(" Convergence info: %s", info)
+        assert pytest.approx(EE.item(), rel=tol) == Eng_ii
+        assert pytest.approx(Eocc.item(), rel=tol) == occ_target[ii]
+
         project.append(psi2)
     return project[0]
 
@@ -94,21 +103,20 @@ def test_dense_dmrg():
     #
     # Finally run DMRG starting from random MPS psi:
     #
-    for version in ('1site', '2site'):
-        psi = generate.random_mps(D_total=Dmax)
-        #
-        # The initial guess has to be prepared in right canonical form!
-        #
-        psi.canonize_sweep(to='first')
-        #
-        # Single run for a ground state can be done using:
-        #
-        # env, info = yamps.dmrg(psi, H, version=version, converge='energy', atol=tol/10, max_sweeps=20, opts_svd=opts_svd, return_info=True)
-        #
-        # To explain how to target some sectors for occupation we create a subfunction run_dmrg
-        # This is not necessary but we do it for the sake of clarity.
-        #
-        psi = run_dmrg(psi, H, occ, Eng_gs, Occ_gs, version=version, opts_svd=opts_svd)
+    psi = generate.random_mps(D_total=Dmax)
+    #
+    # The initial guess has to be prepared in right canonical form!
+    #
+    psi.canonize_sweep(to='first')
+    #
+    # Single run for a ground state can be done using:
+    #
+    # env, info = yamps.dmrg(psi, H, version=version, converge='energy', atol=tol/10, max_sweeps=20, opts_svd=opts_svd, return_info=True)
+    #
+    # To explain how to target some sectors for occupation we create a subfunction run_dmrg
+    # This is not necessary but we do it for the sake of clarity.
+    #
+    psi = run_dmrg(psi, H, occ, Eng_gs, Occ_gs, opts_svd=opts_svd)
 
 
 def test_Z2_dmrg():
@@ -119,12 +127,13 @@ def test_Z2_dmrg():
     generate = yamps.Generator(N=7, operators=operators)
     generate.random_seed(seed=0)
     N = 7
-    Dmax = 13
+    Dmax = 8
     opts_svd = {'tol': 1e-8, 'D_total': Dmax}
 
     logging.info(' Tensor : Z2 ')
 
-    Occ_target = {0: [4, 2, 4], 1: [3, 3, 5]}
+    Occ_target = {0: [4, 2, 4],
+                  1: [3, 3, 5]}
     Eng_target = {0: [-3.227339492125848, -2.8619726273956685, -2.461972627395668],
                   1: [-3.427339492125848, -2.6619726273956683, -2.261972627395668]}
     parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.2, "range1": range(N), "range2": range(N-1)}
@@ -133,10 +142,9 @@ def test_Z2_dmrg():
     occ = generate.mpo("\sum_{j\in range1} cp_{j} c_{j}", {"range1": range(N)})
     
     for parity in (0, 1):
-        for version in ('1site', '2site'):
-            psi = generate.random_mps(D_total=Dmax, n=parity)
-            psi.canonize_sweep(to='first')
-            psi = run_dmrg(psi, H, occ, Eng_target[parity], Occ_target[parity], version=version, opts_svd=opts_svd)
+        psi = generate.random_mps(D_total=Dmax, n=parity).canonize_sweep(to='first')
+        # run 2-site version first to update bond dimension for small tests with random distribution of bond dimensions.
+        psi = run_dmrg(psi, H, occ, Eng_target[parity], Occ_target[parity], opts_svd=opts_svd)
 
 
 def test_U1_dmrg():
@@ -163,7 +171,7 @@ def test_U1_dmrg():
     for total_occ, E_target in Eng_sectors.items():
         psi = generate.random_mps(D_total=Dmax, n=total_occ).canonize_sweep(to='first')
         occ_target = [total_occ] * len(E_target)
-        psi = run_dmrg(psi, H, occ, E_target, occ_target, version='2site', opts_svd=opts_svd)
+        psi = run_dmrg(psi, H, occ, E_target, occ_target, opts_svd=opts_svd)
 
 
 if __name__ == "__main__":

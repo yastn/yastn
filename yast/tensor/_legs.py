@@ -6,7 +6,7 @@ from ._tests import YastError
 from ..sym import sym_none
 from ._merging import _Fusion, _pure_hfs_union
 
-__all__ = ['Leg', 'leg_union', 'random_leg']
+__all__ = ['Leg', 'leg_union', 'random_leg', 'leg_product_all_charges']
 
 
 @dataclass(frozen=True, repr=False)
@@ -229,6 +229,19 @@ def _leg_fusions_need_mask(*legs):
     if all(isinstance(leg.fusion, tuple) for leg in legs):
         mf = legs[0].fusion
         return any(_leg_fusions_need_mask(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
+
+
+def leg_product_all_charges(*legs, s=1):
+    """ 
+    Output Leg that represents an outer product of a list of legs, fixing bond dimension of each to 1.
+    """
+    sym = legs[0].sym
+    comb_t = tuple(product(*(leg.t for leg in legs)))
+    comb_t = np.array(comb_t, dtype=int).reshape((len(comb_t), len(legs), sym.NSYM))
+    teff = sym.fuse(comb_t, tuple(leg.s for leg in legs), s)
+    teff = tuple(sorted(set(tuple(t.flat) for t in teff)))
+    D1 = (1,) * len(teff)
+    return Leg(sym=sym, s=s, t=teff, D=D1)
 
 
 def leg_union(*legs):

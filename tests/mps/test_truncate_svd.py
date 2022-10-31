@@ -33,7 +33,6 @@ def run_multiply_svd(psi, H, Egs, sweeps=1):
 def run_truncation(psi, H, Egs, sweeps=2):
     psi2 = psi.copy()
     discarded = psi2.truncate_sweep(to='last', opts={'D_total': 4})
-    print(discarded)
 
     ov_t = yamps.measure_overlap(psi, psi2).item()
     Eng_t = yamps.measure_mpo(psi2, H, psi2).item()
@@ -47,7 +46,7 @@ def run_truncation(psi, H, Egs, sweeps=2):
 
     ov_v = yamps.measure_overlap(psi, psi2).item()
     Eng_v = yamps.measure_mpo(psi2, H, psi2).item()
-    assert psi2.get_bond_dimensions() == (1, 2, 4, 4, 4, 4, 4, 2, 1)
+    assert all(dp <= do for dp, do in zip(psi2.get_bond_dimensions(), (1, 2, 4, 4, 4, 4, 4, 2, 1)))
     assert 1 > abs(ov_v) > abs(ov_t)
     assert Egs < Eng_v.real < Eng_t.real
 
