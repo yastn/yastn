@@ -44,11 +44,13 @@ def test_generator_mpo():
     N = 5
     t = 1
     mu = 0.2
-    operators = yast.operators.SpinlessFermions(sym='Z2')
+    operators = yast.operators.SpinlessFermions(sym='Z2', backend=conf.backend)
     generate = yamps.Generator(N, operators)
     parameters = {"t": lambda j: t, "mu": lambda j: mu, "range1": range(N), "range2": range(1, N-1)}
     # is CORRECT // full model hopping:
-    H_str, H_ref = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j} + ( cp_{0} c_{1} + 1*cp_{1} c_{0} )*t ", generate_by_hand.mpo_XX_model(config_Z2_fermionic, N=N, t=t, mu=mu)
+    H_str, H_ref = r"\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) "\
+        r"+ \sum_{j\in range1} mu cp_{j} c_{j} + ( cp_{0} c_{1} + 1*cp_{1} c_{0} )*t ", \
+        generate_by_hand.mpo_XX_model(config_Z2_fermionic, N=N, t=t, mu=mu)
     # is CORRECT // only hopping: H_str, H_ref = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} )", generate_by_hand.mpo_XX_model(config_Z2_fermionic, N=N, t=t, mu=0)
     # is CORRECT // no hopping: H_str, H_ref = "+ \sum_{j \in range1} mu cp_{j} c_{j}", generate_by_hand.mpo_XX_model(config_Z2_fermionic, N=N, t=0, mu=0.2)
     H = generate.mpo(H_str, parameters)
@@ -57,7 +59,7 @@ def test_generator_mpo():
     psi.canonize_sweep(to='first')
     x_ref = yamps.measure_mpo(psi, H_ref, psi)
     x = yamps.measure_mpo(psi, H, psi)
-    assert x_ref - x < 1e-15
+    assert (x_ref - x).real < 1e-15
 
 if __name__ == "__main__":
     # test_generator_mps()
