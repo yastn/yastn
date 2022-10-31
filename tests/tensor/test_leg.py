@@ -46,6 +46,11 @@ def test_random_leg():
     leg = yast.random_leg(config_Z3, s=1, n=1, D_total=35)
     print(leg)
 
+    leg0 = yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
+    leg1 = yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 4))
+
+    leg = yast.leg_product_all_charges(leg0, leg1, s=1)
+    print(leg)
 
 def test_leg_meta_fusion():
     """ test get_leg with meta-fused tensor"""
