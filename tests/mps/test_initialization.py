@@ -1,7 +1,7 @@
 """ basic procedures of single mps """
 import numpy as np
 import yast
-import yamps
+import yast.tn.mps as mps
 try:
     from .configs import config_dense as cfg
     # cfg is used by pytest to inject different backends and divices
@@ -41,7 +41,7 @@ def test_assign_block():
     # its on-site tensors one-by-one.
     #
     N = 5
-    psi = yamps.Mps(N)
+    psi = mps.Mps(N)
     for n in range(N):
         if n == 0:
             tmp = bL
