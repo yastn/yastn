@@ -33,7 +33,7 @@ def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, opts_svd=None):
             #
             # We run TDVP evolution
             #
-            env = mps.tdvp(psi, H, env=env, dt=dt, version=version, opts_expmv=opts_expmv, opts_svd=opts_svd)
+            env = mps.tdvp(psi, H, env=env, time=dt, dt=dt, version=version, opts_expmv=opts_expmv, opts_svd=opts_svd)
             #
             # After the evolution the energy is:
             #
