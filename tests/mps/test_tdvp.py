@@ -33,7 +33,7 @@ def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, opts_svd=None):
             #
             # We run TDVP evolution
             #
-            env = mps.tdvp(psi, H, env=env, dt=dt, version=version, opts_expmv=opts_expmv, opts_svd=opts_svd)
+            env = mps.tdvp(psi, H, env=env, time=dt, dt=dt, u=1, version=version, opts_expmv=opts_expmv, opts_svd=opts_svd)
             #
             # After the evolution the energy is:
             #
@@ -47,7 +47,7 @@ def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, opts_svd=None):
     #
     # Finally we can check if we obtained a ground state:
     #
-    assert pytest.approx(Eng, rel=2e-2) == Eng_gs
+    assert pytest.approx(Eng, rel=1e-3) == Eng_gs
     return psi
 
 
@@ -87,7 +87,7 @@ def test_dense_tdvp():
     # initial state by a time dt, such that we obtain: 
     # psi(t+dt) = exp( dt * H) @ psi(t)
     #
-    dt = -.125
+    dt = 0.125
     sweeps = 10
     #
     # Finally run TDVP starting:
@@ -113,7 +113,7 @@ def test_Z2_tdvp():
     """
     N = 7
     D_total = 6
-    dt = -.25
+    dt = 0.25
     sweeps = 20
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
@@ -140,7 +140,7 @@ def test_U1_tdvp():
     """
     N = 7
     D_total = 6
-    dt = -.125
+    dt = 0.125
     sweeps = 10
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
