@@ -5,10 +5,10 @@ from ._mps import YampsError
 
 def measure_overlap(bra, ket):
     r"""
-    Calculate overlap :math:`\langle \textrm{bra}|\textrm{ket} \rangle`. 
+    Calculate overlap :math:`\langle \textrm{bra}|\textrm{ket} \rangle`.
     Conjugate of MPS :code:`bra` is computed internally.
     
-    MPSs :code:`bra` and :code:`ket` must have matching length, 
+    MPSs :code:`bra` and :code:`ket` must have matching length,
     physical dimensions, and symmetry.
 
     Parameters
@@ -29,9 +29,9 @@ def measure_overlap(bra, ket):
 
 def measure_mpo(bra, op, ket):
     r"""
-    Calculate expectation value :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle`. 
+    Calculate expectation value :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle`.
     Conjugate of MPS :code:`bra` is computed internally.
-    MPSs :code:`bra`, :code:`ket`, and MPO :code:`op` must have matching length, 
+    MPSs :code:`bra`, :code:`ket`, and MPO :code:`op` must have matching length,
     physical dimensions, and symmetry.
 
     Parameters

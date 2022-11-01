@@ -16,7 +16,7 @@ def load_from_dict(config, in_dict):
         number of physical legs: 1 for MPS (default); 2 for MPO;
 
     in_dict: dict
-        dictionary containing serialized MPS/MPO, i.e., 
+        dictionary containing serialized MPS/MPO, i.e.,
         a result of :meth:`yamps.MpsMpo.save_to_dict`.
 
     Returns

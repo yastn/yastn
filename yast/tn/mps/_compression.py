@@ -5,19 +5,19 @@ from ... import ones, svd, truncation_mask, tensordot
 
 def variational_sweep_1site(psi, psi_target, env=None, op=None):
     r"""
-    Using :code:`verions='1site'` DMRG, an MPS :code:`psi` with fixed 
-    virtual spaces is variationally optimized to maximize overlap 
-    :math:`\langle \psi | \psi_{\textrm{target}}\rangle` with 
+    Using :code:`verions='1site'` DMRG, an MPS :code:`psi` with fixed
+    virtual spaces is variationally optimized to maximize overlap
+    :math:`\langle \psi | \psi_{\textrm{target}}\rangle` with
     the target MPS :code:`psi_target`.
 
-    The principal use of this algorithm is an (approximate) compression of large MPS 
-    into MPS with smaller virtual dimension/spaces. 
+    The principal use of this algorithm is an (approximate) compression of large MPS
+    into MPS with smaller virtual dimension/spaces.
 
-    Operator in a form of MPO can be provided in which case algorithm maximizes 
+    Operator in a form of MPO can be provided in which case algorithm maximizes
     overlap :math:`\langle \psi | O |\psi_{target}\rangle`.
 
-    It is assumed that the initial MPS :code:`psi` is in the right canonical form. 
-    The outer loop sweeps over MPS :code:`psi` updating sites from the first site to last and back. 
+    It is assumed that the initial MPS :code:`psi` is in the right canonical form.
+    The outer loop sweeps over MPS :code:`psi` updating sites from the first site to last and back.
 
     Parameters
     ----------

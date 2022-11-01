@@ -191,7 +191,10 @@ v0.9
 23-07-2022
 - In yast.operators predefine classes that generate sets of a few standard local operators.
 
-16-10-2-22
+16-10-2022
 - new function `yast.bitwise_not()`
-- new function `yamst.is_canonical()`
+- new function `yamps.is_canonical()`
 - change order of tenor legs in MPO  (left virtual, ket, right virtual, bra)
+
+01-11-2022
+- move mps routines to yast.tn.mps

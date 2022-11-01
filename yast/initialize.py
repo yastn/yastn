@@ -56,12 +56,11 @@ def make_config(**kwargs):
         for details. Default is ``'hard'``.
     force_fusion : str
         Overrides fusion strategy provided in yast.tensor.fuse_legs. Default is ``None``.
-    
+
     Returns
     -------
     typing.NamedTuple
         YAST configuration
-    
     """
     if "backend" not in kwargs:
         from .backend import backend_np
@@ -143,7 +142,7 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
 def randR(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
-    Initialize tensor with all allowed blocks filled with real random numbers, 
+    Initialize tensor with all allowed blocks filled with real random numbers,
     see :meth:`yast.rand`.
     """
     kwargs['dtype'] = 'float64'
@@ -152,7 +151,7 @@ def randR(config=None, legs=(), n=None, isdiag=False, **kwargs):
 
 def randC(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
-    Initialize tensor with all allowed blocks filled with complex random numbers, \
+    Initialize tensor with all allowed blocks filled with complex random numbers,
     see :meth:`yast.rand`.
     """
     kwargs['dtype'] = 'complex128'
@@ -477,103 +476,6 @@ def block(tensors, common_legs=None):
     data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, Dsize)
     return tn0._replace(struct=c_struct, data=data, hfs=tuple(hfs))
 
-
-
-
-# def block(tensors, common_legs=None):
-#     """
-#     Assemble new tensor by blocking a group of tensors.
-
-#     History of blocking is stored together with history of hard-fusions.
-#     Subsequent blocking in a few steps and its equivalent single step blocking give the same tensor.
-#     Applying block on tensors turns all previous meta fused legs into hard fused ones.
-
-#     Parameters
-#     ----------
-#     tensors : dict
-#         dictionary of tensors {(x,y,...): tensor at position x,y,.. in the new, blocked super-tensor}.
-#         Length of tuple should be equall to tensor.ndim - len(common_legs)
-
-#     common_legs : list
-#         Legs that are not blocked.
-#         This is equivalently to all tensors having the same position
-#         (not specified explicitly) in the super-tensor on that leg.
-
-#     Returns
-#     -------
-#     tensor : Tensor
-#     """
-#     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
-#     out_s, = ((),) if common_legs is None else _clear_axes(common_legs)
-#     out_b = tuple(ii for ii in range(tn0.ndim) if ii not in out_s)
-
-#     pos = list(_clear_axes(*tensors))
-#     lind = tn0.ndim - len(out_s)
-#     if any(len(ind) != lind for ind in pos):
-#         raise YastError('Wrong number of coordinates encoded in tensors.keys()')
-
-#     posa = np.zeros((len(pos), tn0.ndim), dtype=int)
-#     posa[:, out_b] = np.array(pos, dtype=int).reshape(len(pos), len(out_b))
-#     posa = tuple(tuple(x.flat) for x in posa)
-
-#     # perform hard fusion of meta-fused legs before blocking
-#     tensors = {pa: a.fuse_meta_to_hard() for pa, a in zip(posa, tensors.values())}
-#     tn0 = next(iter(tensors.values()))  # first tensor; used to initialize new objects and retrive common values
-
-#     for tn in tensors.values():
-#         _test_can_be_combined(tn, tn0)
-#         if tn.struct.s != tn0.struct.s:
-#             raise YastError('Signatues of blocked tensors are inconsistent.')
-#         if tn.struct.n != tn0.struct.n:
-#             raise YastError('Tensor charges of blocked tensors are inconsistent.')
-#         if tn.isdiag:
-#             raise YastError('Block does not support diagonal tensors. Use .diag() first.')
-
-#     legs_tn = {pa: a.get_legs() for pa, a in tensors.items()}
-#     ulegs, legs, lls, hfs = [], [], [], []
-#     for n in range(tn0.ndim_n):
-#         legs_n = {}
-#         for pa, ll in legs_tn.items():
-#             if pa[n] not in legs_n:
-#                 legs_n[pa[n]] = [ll[n]]
-#             else:
-#                 legs_n[pa[n]].append(ll[n])
-#         legs.append(legs_n)
-#         legs_n = {p: leg_union(*plegs) for p, plegs in legs_n.items()}
-#         ulegs.append(legs_n)
-#         pn = sorted(legs_n.keys())
-#         lls.append(_leg_structure_combine_charges_sum([legs_n[p].t for p in pn], [legs_n[p].D for p in pn], pn))
-#         hfs.append(_sum_legs_hfs([legs_n[p] for p in pn]))
-
-#     for pa in tensors.keys():
-#         if any(_leg_fusions_need_mask(ulegs[n][pa[n]], leg) for n, leg in enumerate(legs_tn[pa])):
-#             legs_new = {n: legs[pa[n]] for n, legs in enumerate(ulegs)}
-#             tensors[pa] = _embed_tensor(tensors[pa], legs_tn[pa], legs_new)
-
-#     lls = [LegDec_to_mut(ll) for ll in lls]
-
-#     # all unique blocks
-#     # meta_new = {tind: Dtot};  #meta_block = [(tind, pos, Dslc)]
-#     meta_new, meta_block = {}, []
-#     nsym = tn0.config.sym.NSYM
-#     for pa, a in tensors.items():
-#         for tind, slind, Dind in zip(a.struct.t, a.struct.sl, a.struct.D):
-#             if tind not in meta_new:
-#                 meta_new[tind] = tuple(lls[n].Dtot[tind[n * nsym : n * nsym + nsym]] for n in range(a.ndim_n))
-#             Dslcs = tuple(lls[n].dec[tind[n * nsym : n * nsym + nsym]][pa[n]].Dslc for n in range(a.ndim_n))
-#             meta_block.append((tind, slind, Dind, pa, Dslcs))
-#     meta_block = tuple(sorted(meta_block, key=lambda x: x[0]))
-#     meta_new = tuple(sorted(meta_new.items()))
-#     c_t = tuple(t for t, _ in meta_new)
-#     c_D = tuple(D for _, D in meta_new)
-#     c_Dp = tuple(np.prod(c_D, axis=1)) if len(c_D) > 0 else ()
-#     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-#     c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
-#     meta_new = tuple(zip(c_t, c_D, c_sl))
-#     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
-
-#     data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, Dsize)
-#     return tn0._replace(struct=c_struct, data=data, hfs=tuple(hfs))
 
 def _sum_legs_hfs(legs):
     """ sum hfs based on info in legs"""

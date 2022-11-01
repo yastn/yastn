@@ -33,7 +33,7 @@ def _flatten(nested_iterator):
 
 
 def _unpack_axes(mfs, *args):
-    """Unpack meta axes into native axes based on a.mfs"""
+    """ Unpack meta axes into native axes based on a.mfs """
     clegs = tuple(accumulate(x[0] for x in mfs))
     return tuple(tuple(chain(*(range(clegs[ii] - mfs[ii][0], clegs[ii]) for ii in axes))) for axes in args)
 
@@ -68,7 +68,7 @@ def _mf_to_ntree(mf):
 
 
 def _unpack_legs(legs):
-    """ return native legs and mfs. """
+    """ Return native legs and mfs. """
     ulegs, mfs = [], []
     for leg in legs:
         if isinstance(leg.fusion, tuple):  # meta-fused

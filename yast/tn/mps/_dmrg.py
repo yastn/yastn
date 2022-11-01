@@ -30,16 +30,16 @@ def dmrg(psi, H, env=None, project=None, version='1site', \
         converge='energy', measure=None, \
         atol=-1, max_sweeps=1, opts_eigs=None, opts_svd=None, return_info=False):
     r"""
-    Perform DMRG sweeps until convergence, starting from MPS :code:`psi` 
-    in right canonical form. The outer loop sweeps over MPS updating sites 
-    from the first site to last and back. 
+    Perform DMRG sweeps until convergence, starting from MPS :code:`psi`
+    in right canonical form. The outer loop sweeps over MPS updating sites
+    from the first site to last and back.
 
-    The convergence is controlled either by selected expectation value, i.e., :code:`converge='energy'` 
-    or by the Schmidt values :code:`converge='schmidt'` which is more sensitive measure. 
-    The DMRG algorithm then sweeps through the lattice at most :code:`max_sweeps` times 
+    The convergence is controlled either by selected expectation value, i.e., :code:`converge='energy'`
+    or by the Schmidt values :code:`converge='schmidt'` which is more sensitive measure.
+    The DMRG algorithm then sweeps through the lattice at most :code:`max_sweeps` times
     or until selected convergence measure changes by less then :code:`atol` from sweep to sweep.
 
-    Computational cost of DMRG can be lowered by providing environment :code:`env` 
+    Computational cost of DMRG can be lowered by providing environment :code:`env`
     obtained in previous run.
 
     Parameters
@@ -62,19 +62,19 @@ def dmrg(psi, H, env=None, project=None, version='1site', \
 
     converge: str
         defines convergence measure. Available options are
-        
+
             * :code:`'energy'` uses the expectation value of H
-        
+
             * :code:`'schmidt'` uses Schmidt values on the worst cut
 
     measure: func(int, yamps.MpsMpo, yamps.Env3, scalar, scalar)->None
         callback allowing measurement/manipulation of MPS after each DMRG sweep.
-        The arguments passed are current sweep, current state :math:`|\psi\rangle`, 
+        The arguments passed are current sweep, current state :math:`|\psi\rangle`,
         current environment corresponding to :math:`\langle\psi|H|\psi\rangle` network,
         current energy, and current truncation error.
 
     atol: float
-        defines converged criterion. DMRG stop once the change in convergence measure 
+        defines converged criterion. DMRG stop once the change in convergence measure
         is less than :code:`atol` between sweeps.
 
     max_sweeps: int
