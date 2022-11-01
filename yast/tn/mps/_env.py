@@ -276,7 +276,7 @@ class Env3(_EnvParent):
         Returns
         -------
         out : tensor
-            Heff0 * C
+            Heff0 @ C
         """
         bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
         return ncon([self.F[bd], C, self.F[ibd]], ((-0, 2, 1), (1, 3), (3, 2, -1)))
@@ -297,64 +297,27 @@ class Env3(_EnvParent):
         Returns
         -------
         out : tensor
-            Heff1 * A
+            Heff1 @ A
         """
         nl, nr = n - 1, n + 1
-        A = self._project_ort(A)
-
+        tmp = self._project_ort(A)
         if self.nr_phys == 1:
-            tmp = A @ self.F[(nr, n)]
+            tmp = tmp @ self.F[(nr, n)]
             tmp = self.op[n]._attach_23(tmp)
             tmp = ncon([self.F[(nl, n)], tmp], ((-0, 1, 2), (2, 1, -2, -1)))
         elif self.nr_phys == 2 and not self.on_aux:
-            tmp = A.fuse_legs(axes=((0, 3), 1, 2))
-            tmp = ncon([tmp, self.F[(nr, n)]], ((-0, -1, 1), (1, -2, -3)))
+            tmp = tmp.fuse_legs(axes=((0, 3), 1, 2))
+            tmp = tmp @ self.F[(nr, n)]
             tmp = self.op[n]._attach_23(tmp)
             tmp = tmp.unfuse_legs(axes=0)
             tmp = ncon([self.F[(nl, n)], tmp], ((-0, 1, 2), (2, -3, 1, -2, -1)))
         else:  # if self.nr_phys == 2 and self.on_aux:
-            tmp = ncon([A, self.F[(nl, n)]], ((1, -4, -0, -1), (-3, -2, 1)))
-            tmp = tmp.fuse_legs(axes=(0, 1, 2, (3, 4)))
+            tmp = tmp.fuse_legs(axes=(0, (1, 2), 3))
+            tmp = ncon([tmp, self.F[(nl, n)]], ((1, -0, -1), (-3, -2, 1)))
             tmp = self.op[n]._attach_01(tmp)
-            tmp = ncon([tmp, self.F[(nr, n)]], ((1, 2, -0, -2), (1, 2, -1)))
             tmp = tmp.unfuse_legs(axes=0)
-
+            tmp = ncon([tmp, self.F[(nr, n)]], ((-1, 1, -0, 2, -3), (1, 2, -2)))
         return self._project_ort(tmp)
-
-
-    # def Heff2(self, AA, bd):
-    #     r"""Action of Heff on central site.
-
-    #     Parameters
-    #     ----------
-    #     AA : tensor
-    #         merged tensor for 2 sites.
-    #         Physical legs should be fused turning it effectivly into 1-site update.
-    #     bd : tuple
-    #         index of bond on which it acts, e.g. (1, 2) [or (2, 1) -- it is ordered]
-
-    #     Returns
-    #     -------
-    #     out : tensor
-    #         Heff2 * AA
-    #     """
-    #     n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
-    #     bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
-
-    #     if bd not in self._temp['op_2site']:
-    #         OO = tensordot(self.op[n1], self.op[n2], axes=(2, 0))
-    #         self._temp['op_2site'][bd] = OO.fuse_legs(axes=(0, (1, 3), 4, (2, 5)))
-    #     OO = self._temp['op_2site'][bd]
-
-    #     AA = self._project_ort(AA)
-    #     if self.nr_phys == 1:
-    #         return ncon([self.F[(nl, n1)], AA, OO, self.F[(nr, n2)]],
-    #                     ((-0, 2, 1), (1, 3, 4), (2, -1, 5, 3), (4, 5, -2)))
-    #     if self.nr_phys == 2 and not self.on_aux:
-    #         return ncon([self.F[(nl, n1)], AA, OO, self.F[(nr, n2)]],
-    #                     ((-0, 2, 1), (1, 3, 4, -3), (2, -1, 5, 3), (4, 5, -2)))
-    #     return ncon([self.F[(nl, n1)], AA, OO, self.F[(nr, n2)]],
-    #                     ((-0, 2, 1), (1, -1, 4, 3), (2, -3, 5, 3), (4, 5, -2)))
 
 
     def Heff2(self, AA, bd):
@@ -378,17 +341,36 @@ class Env3(_EnvParent):
 
         tmp = self._project_ort(AA)
         if self.nr_phys == 1:
+            tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))
             tmp = tmp @ self.F[(nr, n2)]
-            tmp = tmp.fuse_legs(axes=((0, 1), 2, 3, 4))
             tmp = self.op[n2]._attach_23(tmp)
             tmp = tmp.fuse_legs(axes=(0, 1, (3, 2)))
             tmp = tmp.unfuse_legs(axes=0)
             tmp = self.op[n1]._attach_23(tmp)
             tmp = ncon([self.F[(nl, n1)], tmp], ((-0, 1, 2), (2, 1, -2, -1)))
             tmp = tmp.unfuse_legs(axes=2)
-        # if self.nr_phys == 2 and not self.on_aux:
-        #     return ncon([self.F[(nl, n1)], AA, OO, self.F[(nr, n2)]],
-        #                 ((-0, 2, 1), (1, 3, 4, -3), (2, -1, 5, 3), (4, 5, -2)))
+        elif self.nr_phys == 2 and not self.on_aux:
+            tmp = tmp.fuse_legs(axes=((0, 2, 5), 1, 3, 4))
+            tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))
+            tmp = tmp @ self.F[(nr, n2)]
+            tmp = self.op[n2]._attach_23(tmp)
+            tmp = tmp.fuse_legs(axes=(0, 1, (3, 2)))
+            tmp = tmp.unfuse_legs(axes=0)
+            tmp = self.op[n1]._attach_23(tmp)
+            tmp = tmp.unfuse_legs(axes=0)
+            tmp = ncon([self.F[(nl, n1)], tmp], ((-0, 1, 2), (2, -2, -4, 1, -3, -1)))
+            tmp = tmp.unfuse_legs(axes=3)
+        else:  # if self.nr_phys == 2 and self.on_aux:
+            tmp = tmp.fuse_legs(axes=(0, 2, (1, 3, 4), 5))
+            tmp = tmp.fuse_legs(axes=(0, 1, (2, 3)))
+            tmp = ncon([tmp, self.F[(nl, n1)]], ((1, -1, -0), (-3, -2, 1)))
+            tmp = self.op[n1]._attach_01(tmp)
+            tmp = tmp.fuse_legs(axes=(0, 1, (2, 3)))
+            tmp = tmp.unfuse_legs(axes=0)
+            tmp = self.op[n2]._attach_01(tmp)
+            tmp = tmp.unfuse_legs(axes=0)
+            tmp = ncon([tmp, self.F[(nr, n2)]], ((-1, -2, 1, 2, -0, -4), (1, 2, -3)))
+            tmp = tmp.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3, 4, 5))
         return self._project_ort(tmp)
 
     def update_A(self, n, du, opts, normalize=True):
