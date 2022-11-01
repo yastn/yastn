@@ -8,9 +8,9 @@ import numpy as np
 #################################
 
 
-def tdvp(psi, H, time=(0, 0.125), dt=0.125, env=None, version='1site', order='2nd', opts_expmv=None, opts_svd=None, normalize=True):
+def tdvp(psi, H, time=(0, 0.1), dt=0.1, u=1j, env=None, version='1site', order='2nd', opts_expmv=None, opts_svd=None, normalize=True):
     r"""
-    Perform TDVP sweep, calculating the update psi(dt) = exp( dt * H ) @ psi(0).
+    Perform TDVP sweeps, solving d/dt psi(t) = -u * H @ psi(t).
 
     Assume input psi is canonized to the first site.
 
@@ -30,6 +30,10 @@ def tdvp(psi, H, time=(0, 0.125), dt=0.125, env=None, version='1site', order='2n
     dt: double
         time step.
         It is adjusted down to have an integer number of time-steps covering total evolution time.
+
+    u: number
+        '1j' for real time evolution, 1 for imaginary time evolution.
+        Default is 1j.
 
     env: Env3
         For time-independent H can provide environment <psi|H|psi> from the previous sweep.
@@ -65,17 +69,17 @@ def tdvp(psi, H, time=(0, 0.125), dt=0.125, env=None, version='1site', order='2n
         raise YampsError('Time should be an ascending tuple.')
 
     if version == '1site' and time_independent:
-        routine = lambda t, dt0, env: tdvp_sweep_1site(psi, H, dt0, env, opts_expmv, normalize)
+        routine = lambda t, dt0, env: tdvp_sweep_1site(psi, H, dt0, u, env, opts_expmv, normalize)
     elif version == '2site' and time_independent:
-        routine = lambda t, dt0, env: tdvp_sweep_2site(psi, H, dt0, env, opts_expmv, opts_svd, normalize)
+        routine = lambda t, dt0, env: tdvp_sweep_2site(psi, H, dt0, u, env, opts_expmv, opts_svd, normalize)
     elif version == '12site' and time_independent:
-        routine = lambda t, dt0, env: tdvp_sweep_12site(psi, H, dt0, env, opts_expmv, opts_svd, normalize)
+        routine = lambda t, dt0, env: tdvp_sweep_12site(psi, H, dt0, u, env, opts_expmv, opts_svd, normalize)
     elif version == '1site' and not time_independent:
-        routine = lambda t, dt0, env: tdvp_sweep_1site(psi, H(t), dt0, None, opts_expmv, normalize)
+        routine = lambda t, dt0, env: tdvp_sweep_1site(psi, H(t), dt0, u, None, opts_expmv, normalize)
     elif version == '2site' and not time_independent:
-        routine = lambda t, dt0, env: tdvp_sweep_2site(psi, H(t), dt0, None, opts_expmv, opts_svd, normalize)
+        routine = lambda t, dt0, env: tdvp_sweep_2site(psi, H(t), dt0, u, None, opts_expmv, opts_svd, normalize)
     elif version == '12site' and not time_independent:
-        routine = lambda t, dt0, env: tdvp_sweep_12site(psi, H(t), dt0, None, opts_expmv, opts_svd, normalize)
+        routine = lambda t, dt0, env: tdvp_sweep_12site(psi, H(t), dt0, u, None, opts_expmv, opts_svd, normalize)
     else:
         raise YampsError('tdvp version %s not recognized' % version, order)
 
@@ -100,44 +104,44 @@ def tdvp(psi, H, time=(0, 0.125), dt=0.125, env=None, version='1site', order='2n
     return env
 
 
-def tdvp_sweep_1site(psi, H, dt=0.1, env=None, opts_expmv=None, normalize=True):
+def tdvp_sweep_1site(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, normalize=True):
     r""" Perform sweep with 1-site TDVP update, see :meth:`tdvp` for description. """
     
     env, opts = _init_tdvp(psi, H, env, opts_expmv)
 
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
-            env.update_A(n, 0.5 * dt, opts, normalize=normalize)
+            env.update_A(n, -u * 0.5 * dt, opts, normalize=normalize)
             psi.orthogonalize_site(n, to=to, normalize=normalize)
             env.clear_site(n)
             env.update_env(n, to=to)
-            env.update_C(-0.5 * dt, opts, normalize=normalize)
+            env.update_C(u * 0.5 * dt, opts, normalize=normalize)
             psi.absorb_central(to=to)
 
     env.update_env(psi.first, to='first')
     return env
 
 
-def tdvp_sweep_2site(psi, H, dt=0.1, env=None, opts_expmv=None, opts_svd=None, normalize=True):
+def tdvp_sweep_2site(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd=None, normalize=True):
     r""" Perform sweep with 2-site TDVP update, see :meth:`tdvp` for description. """
 
     env, opts = _init_tdvp(psi, H, env, opts_expmv)
 
     for to, dn in (('last', 1), ('first', 0)):
         for n in psi.sweep(to=to, dl=1):
-            env.update_AA((n, n + 1), 0.5 * dt, opts, opts_svd, normalize=normalize)
+            env.update_AA((n, n + 1), -u * 0.5 * dt, opts, opts_svd, normalize=normalize)
             psi.absorb_central(to=to)
             env.clear_site(n, n + 1)
             env.update_env(n + 1 - dn, to=to)
             if n + dn != getattr(psi, to):
-                env.update_A(n + dn, -0.5 * dt, opts, normalize=normalize)
+                env.update_A(n + dn, u * 0.5 * dt, opts, normalize=normalize)
 
     env.clear_site(psi.first)
     env.update_env(psi.first, to='first')
     return env
 
 
-def tdvp_sweep_12site(psi, H=False, dt=1., env=None, opts_expmv=None, opts_svd=None, normalize=True):
+def tdvp_sweep_12site(psi, H=False, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd=None, normalize=True):
     r"""
     Perform sweep with mixed TDVP update, see :meth:`tdvp` for description.
 
@@ -155,23 +159,23 @@ def tdvp_sweep_12site(psi, H=False, dt=1., env=None, opts_expmv=None, opts_svd=N
                 if env.enlarge_bond((n - 1 + dn, n + dn), opts_svd):
                     update_two = True
                 else:
-                    env.update_A(n, 0.5 * dt, opts, normalize=normalize)
+                    env.update_A(n, -u * 0.5 * dt, opts, normalize=normalize)
                     psi.orthogonalize_site(n, to=to, normalize=normalize)
                     env.clear_site(n)
                     env.update_env(n, to=to)
-                    env.update_C(-0.5 * dt, opts, normalize=normalize)
+                    env.update_C(u * 0.5 * dt, opts, normalize=normalize)
                     psi.absorb_central(to=to)
             else:
-                env.update_AA((n - dn , n - dn + 1), 0.5 * dt, opts, opts_svd, normalize=normalize)
+                env.update_AA((n - dn , n - dn + 1), - u * 0.5 * dt, opts, opts_svd, normalize=normalize)
                 psi.absorb_central(to=to)
                 env.clear_site(n - dn, n - dn + 1)
                 env.update_env(n + 1 - 2 * dn, to=to)
                 if env.enlarge_bond((n - 1 + dn, n + dn), opts_svd):
-                    env.update_A(n, -0.5 * dt, opts, normalize=normalize)
+                    env.update_A(n, u * 0.5 * dt, opts, normalize=normalize)
                 else:
                     psi.orthogonalize_site(n, to=to, normalize=normalize)
                     env.update_env(n, to=to)
-                    env.update_C(-0.5 * dt, opts, normalize=normalize)
+                    env.update_C(u * 0.5 * dt, opts, normalize=normalize)
                     psi.absorb_central(to=to)
                     update_two = False
 
