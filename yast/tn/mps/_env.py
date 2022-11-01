@@ -358,32 +358,32 @@ class Env3(_EnvParent):
         return ncon([self.F[(nl, n1)], AA, OO, self.F[(nr, n2)]],
                         ((-0, 2, 1), (1, -1, 4, 3), (2, -3, 5, 3), (4, 5, -2)))
 
-    def update_A(self, n, dt, opts, normalize=True):
-        """ Updates env.ket[n] by exp(dt Heff1). """
+    def update_A(self, n, du, opts, normalize=True):
+        """ Updates env.ket[n] by exp(du Heff1). """
         if n in self._temp['expmv_ncv']:
             opts['ncv'] = self._temp['expmv_ncv'][n]
         f = lambda x: self.Heff1(x, n)
-        self.ket[n], info = expmv(f, self.ket[n], dt, **opts, normalize=normalize, return_info=True)
+        self.ket[n], info = expmv(f, self.ket[n], du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][n] = info['ncv']
 
-    def update_C(self, dt, opts, normalize=True):
-        """ Updates env.ket[bd] by exp(dt Heff0). """
+    def update_C(self, du, opts, normalize=True):
+        """ Updates env.ket[bd] by exp(du Heff0). """
         bd = self.ket.pC
         if bd[0] != -1 and bd[1] != self.N:  # do not update central sites outsite of the chain
             if bd in self._temp['expmv_ncv']:
                 opts['ncv'] = self._temp['expmv_ncv'][bd]
             f = lambda x: self.Heff0(x, bd)
-            self.ket.A[bd], info = expmv(f, self.ket[bd], dt, **opts, normalize=normalize, return_info=True)
+            self.ket.A[bd], info = expmv(f, self.ket[bd], du, **opts, normalize=normalize, return_info=True)
             self._temp['expmv_ncv'][bd] = info['ncv']
 
-    def update_AA(self, bd, dt, opts, opts_svd, normalize=True):
-        """ Merge two sites given in bd into AA, updates AA by exp(dt Heff2) and unmerge the sites. """
+    def update_AA(self, bd, du, opts, opts_svd, normalize=True):
+        """ Merge two sites given in bd into AA, updates AA by exp(du Heff2) and unmerge the sites. """
         ibd = bd[::-1]
         if ibd in self._temp['expmv_ncv']:
             opts['ncv'] = self._temp['expmv_ncv'][ibd]
         AA = self.ket.merge_two_sites(bd)
         f = lambda v: self.Heff2(v, bd)
-        AA, info = expmv(f, AA, dt, **opts, normalize=normalize, return_info=True)
+        AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)
 
