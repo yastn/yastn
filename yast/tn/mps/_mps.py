@@ -573,9 +573,9 @@ class MpsMpo:
             tensor formed from A[n] and A[n + 1]
         """
         nl, nr = bd
-        AA = tensordot(self.A[nl], self.A[nr], axes=(2, 0))
-        axes = (0, (1, 2), 3) if self.nr_phys == 1 else (0, (1, 3), 4, (2, 5))
-        return AA.fuse_legs(axes=axes)
+        return tensordot(self.A[nl], self.A[nr], axes=(2, 0))
+        # axes = (0, (1, 2), 3) if self.nr_phys == 1 else (0, (1, 3), 4, (2, 5))
+        # return AA.fuse_legs(axes=axes)
 
     def unmerge_two_sites(self, AA, bd, opts):
         r"""
@@ -599,9 +599,10 @@ class MpsMpo:
             where :math:`\lambda_i` are singular values across the bond.
         """
         nl, nr = bd
-        axes = (1,) if self.nr_phys == 1 else (1, 3)
-        AA = AA.unfuse_legs(axes=axes)
-        axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 4), (2, 3, 5))
+        # axes = (1,) if self.nr_phys == 1 else (1, 3)
+        # AA = AA.unfuse_legs(axes=axes)
+        # axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 4), (2, 3, 5))
+        axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 2), (3, 4, 5))
         self.pC = bd
         U, S, V = svd(AA, axes=axes, sU=-1, Uaxis=2)
         mask = truncation_mask(S, **opts)
