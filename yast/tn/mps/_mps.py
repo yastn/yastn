@@ -120,12 +120,12 @@ def multiply(a, b, mode=None):
 
     Parameters
     ----------
-        a, b : yamps.MpsMpo, yamps.MpsMpo 
+        a, b : yamps.MpsMpo, yamps.MpsMpo
             a pair of MPO and MPS or two MPO's to be multiplied
 
         mode : str
            mode for :meth:`yast.fuse_legs`; If :code:`None` (default)
-           use default setting from YAST tensor's 
+           use default setting from YAST tensor's
            :ref:`configuration<tensor/configuration:yast configuration>`.
 
     Returns
@@ -169,7 +169,7 @@ class MpsMpo:
     
     def __init__(self, N, nr_phys=1):
         r"""
-        Create empty MPS (:code:`nr_phys=1`) or MPO (:code:`nr_phys=2`) 
+        Create empty MPS (:code:`nr_phys=1`) or MPO (:code:`nr_phys=2`)
         for system of *N* sites. Empty MPS/MPO has no tensors assigned.
 
         Parameters
@@ -519,10 +519,10 @@ class MpsMpo:
         Sweep though the MPS/MPO and put it in left/right canonical form 
         using :meth:`SVD<yast.linalg.svd>` decomposition by setting 
         :code:`to='first'`/:code:`to='last'`. It is assumed that tensors are enumerated 
-        by index increasing from 0 (:code:`first`) to N-1 (:code:`last`). 
+        by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
         Access to singular values during sweeping allows to truncate virtual spaces.
-        This truncation makes sense if MPS/MPO is already in the canonical form 
+        This truncation makes sense if MPS/MPO is already in the canonical form
         in the direction opposite to current sweep, i.e., left canonical form for :code:`to='last'`
         or right canonical form for :code:`to='first'`.
 
@@ -534,11 +534,11 @@ class MpsMpo:
             code:`'last'` (default) or :code:`'first'`.
 
         normalize : bool
-            If :code:`true` (default), the central block and thus MPS/MPO is normalized 
+            If :code:`true` (default), the central block and thus MPS/MPO is normalized
             to unity according to the standard 2-norm.
 
         opts : dict
-            options passed to :meth:`SVD<yast.linalg.svd>`, 
+            options passed to :meth:`SVD<yast.linalg.svd>`,
             including options governing truncation.
 
         Returns
@@ -558,7 +558,7 @@ class MpsMpo:
 
     def merge_two_sites(self, bd):
         r"""
-        Merge two neighbouring mps sites and return the resulting tensor. 
+        Merge two neighbouring mps sites and return the resulting tensor.
 
         Fuse physical indices.
 
@@ -579,7 +579,7 @@ class MpsMpo:
 
     def unmerge_two_sites(self, AA, bd, opts):
         r"""
-        Unmerge rank-4 tensor into two neighbouring MPS sites and a central block 
+        Unmerge rank-4 tensor into two neighbouring MPS sites and a central block
         using :func:`yast.linalg.svd` to trunctate the bond dimension.
 
         Input tensor should be a result of :meth:`merge_two_sites` (or fused consistently).
@@ -593,10 +593,10 @@ class MpsMpo:
             (n, n + 1), index of two sites to merge.
 
         Returns
-        ----------
+        -------
         scalar
             normalized discarded weight :math:`\sum_{i\in\textrm{discarded}}\lambda_i/\sum_i\lambda_i`,
-            where :math:`\lambda_i` are singular values across the bond. 
+            where :math:`\lambda_i` are singular values across the bond.
         """
         nl, nr = bd
         axes = (1,) if self.nr_phys == 1 else (1, 3)
@@ -700,8 +700,8 @@ class MpsMpo:
         Returns
         -------
         dict(int,dict)
-            each element represents serialized :class:`yast.Tensor` 
-            (see :meth:`yast.Tensor.save_to_dict`) of the MPS/MPO starting 
+            each element represents serialized :class:`yast.Tensor`
+            (see :meth:`yast.Tensor.save_to_dict`) of the MPS/MPO starting
             from first site to last.
         """
         out_dict = {
@@ -722,7 +722,7 @@ class MpsMpo:
 
         .. todo::
             The second one redirects all information to HDF5 :code:`file` to
-            a group which has the path :code:`my_address` 
+            a group which has the path :code:`my_address`
             such that running :code:`A.save_to_hdf5(file, './my_address/')`.
             Keep the adress as you will need to have it to encode the object back to `YAMPS`.
 
