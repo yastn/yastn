@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
-import yast, yamps
-from yamps._generate import Hterm, generate_H1, generate_mpo
+import yast
+import yast.tn.mps as mps
 
 parser= argparse.ArgumentParser(description='',allow_abbrev=False)
 parser.add_argument("--init_D", type=int, default=1, help="bond dimension")
@@ -26,7 +26,7 @@ def h_2site(N,i,theta,J=1.0):
     S1= yast.operators.Spin1(sym='U1')
 
     # 1.0) init generator
-    G= yamps.Generator(N,S1)
+    G= mps.Generator(N,S1)
     
     # 1.1) get identity MPO
     I= G.I()
@@ -53,12 +53,12 @@ def h_2site(N,i,theta,J=1.0):
     #      0     1     0                1
     #      S_i . S_j = Qi--2(-1) (+1)0--Rj
     #      2     3     1                2
-    Qi,Rj= yast.linalg.qr(h2, axes=((0,2), (1,3)), sQ=-1)
+    Qi,Rj= yast.linalg.qr(h2, axes=((0, 2), (1, 3)), sQ=-1, Qaxis=1)
 
     # 1.4) add extra legs to Qi and Rj to conform to MPO tensor
     #
-    Qi= Qi.add_leg(axis=0,s=1)
-    Rj= Rj.add_leg(axis=-1,s=-1)
+    Qi= Qi.add_leg(axis=0, s=1)
+    Rj= Rj.add_leg(axis=2, s=-1)
 
     # replace identity tensors in the identity MPO
     I[i]= Qi
@@ -73,7 +73,7 @@ def random_mps(N, charge, D, sigma=1):
     S1= yast.operators.Spin1(sym='U1')
 
     # 1.0) init generator
-    G= yamps.Generator(N,S1)
+    G= mps.Generator(N,S1)
     return G.random_mps(n=charge,D_total=D,sigma=sigma)
 
 # 3) define function generating dimer MPS
@@ -82,7 +82,7 @@ def random_mps(N, charge, D, sigma=1):
 def dimer_mps(N):
     S1= yast.operators.Spin1(sym='U1')
 
-    _A= yast.Tensor(config=S1.I().config, s=(1,1,-1), n=0)
+    _A= yast.Tensor(config=S1.config, s=(1,1,-1), n=0)
     _B= _A.copy()
     _A.set_block(ts=(0,0,0), Ds=(1,1,1), val=1.)
     _N= _A.copy()
@@ -91,8 +91,8 @@ def dimer_mps(N):
     _B.set_block(ts=(0,0,0), Ds=(1,1,1), val=-1.)
     _B.set_block(ts=(-1,1,0), Ds=(1,1,1), val=1.)
     _B.set_block(ts=(1,-1,0), Ds=(1,1,1), val=1.)
-    psi_even= yamps.Mps(N)
-    psi_odd= yamps.Mps(N)
+    psi_even= mps.Mps(N)
+    psi_odd= mps.Mps(N)
     for i in range(N//2):
         psi_even[2*i]=_A.copy()
         psi_even[2*i+1]=_B.copy()
@@ -114,23 +114,23 @@ def obs_ops(N):
     S1= yast.operators.Spin1(sym='U1')
 
     # 1.0) init generator
-    G= yamps.Generator(N,S1)
+    G= mps.Generator(N,S1)
     
     # 1.1) get identity MPO
     I= G.I()
 
-    mpos_Sz= [generate_H1(I, Hterm(positions=(i,), operators=(S1.sz(),))) \
+    mpos_Sz= [mps.generate_H1(I, mps.Hterm(positions=(i,), operators=(S1.sz(),))) \
         for i in range(N)]
     
     def _gen_SSnn(i):
         return [
-            Hterm(positions=(i,i+1), operators=(S1.sz(),S1.sz())),
-            Hterm(amplitude=0.5, positions=(i,i+1), operators=(S1.sp(),S1.sm())),
-            Hterm(amplitude=0.5, positions=(i,i+1), operators=(S1.sm(),S1.sp()))
+            mps.Hterm(positions=(i,i+1), operators=(S1.sz(),S1.sz())),
+            mps.Hterm(amplitude=0.5, positions=(i,i+1), operators=(S1.sp(),S1.sm())),
+            mps.Hterm(amplitude=0.5, positions=(i,i+1), operators=(S1.sm(),S1.sp()))
             ]
 
     svd_opts= None
-    mpos_SSnn= [generate_mpo(I, _gen_SSnn(i), svd_opts) for i in range(N-1)]
+    mpos_SSnn= [mps.generate_mpo(I, _gen_SSnn(i), svd_opts) for i in range(N-1)]
 
     return mpos_Sz, mpos_SSnn
 
@@ -142,7 +142,7 @@ def main():
     H_2site_terms= [h_2site(args.N,i,args.theta) for i in range(args.N-1)]
 
     # 1) add them up and (losslessly) compress resulting MPO
-    H= yamps.add(*H_2site_terms)
+    H= mps.add(*H_2site_terms)
     H.canonize_sweep(to='last', normalize=False)
     H.truncate_sweep(to='first', opts={"tol": 1e-14}, normalize=False)
 
@@ -153,18 +153,18 @@ def main():
 
     # 3) define observables
     mpos_Sz, mpos_SSnn= obs_ops(args.N)
-    total_Sz_qpi= yamps.add(*mpos_Sz, amplitudes=[(-1)**i for i in range(args.N)])
+    total_Sz_qpi= mps.add(*mpos_Sz, amplitudes=[(-1)**i for i in range(args.N)])
     total_Sz_qpi.canonize_sweep(to='last', normalize=False)
     total_Sz_qpi.truncate_sweep(to='first', opts={"tol": 1e-14}, normalize=False)
     
     def measure(sweep,psi,env3,E,disc_w):
         if (sweep+1)%1==0:
-            _total_Sz_qpi= yamps.measure_mpo(psi, total_Sz_qpi, psi)
+            _total_Sz_qpi= mps.measure_mpo(psi, total_Sz_qpi, psi)
             print(f"{sweep} {E} {disc_w} {_total_Sz_qpi}")
 
     project=[]
     opts_svd={'D_total': args.max_D}
-    env_psiHpsi, info = yamps.dmrg(psi_opt, H, project=project, version="2site",
+    env_psiHpsi, info = mps.dmrg(psi_opt, H, project=project, version="2site",
         converge='energy', measure=measure, atol=args.eps_conv, max_sweeps=args.opt_max_iter, 
         opts_svd=opts_svd, return_info=True)
 
@@ -177,8 +177,8 @@ def main():
     # 2.1) S^z profile
     print("\n\ni Sz S.S_nn")
     for i in range(args.N):
-        _sz= yamps.measure_mpo(psi_opt, mpos_Sz[i], psi_opt)
-        _SSnn= yamps.measure_mpo(psi_opt, mpos_SSnn[i], psi_opt) if i<args.N-1 else None
+        _sz= mps.measure_mpo(psi_opt, mpos_Sz[i], psi_opt)
+        _SSnn= mps.measure_mpo(psi_opt, mpos_SSnn[i], psi_opt) if i<args.N-1 else None
         print(f"{i} {_sz} {_SSnn}")
 
 if __name__=='__main__':
