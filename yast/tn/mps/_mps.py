@@ -667,12 +667,13 @@ class MpsMpo:
             list of bond entropies.
         """
         Entropy = [0]*self.N
-        self.canonize_sweep(to='last', normalize=False)
-        self.absorb_central(to='first')
-        for n in self.sweep(to='first'):
-            self.orthogonalize_site(n=n, to='first', normalize=False)
-            Entropy[n], _, _ = entropy(self.A[self.pC], alpha=alpha)
-            self.absorb_central(to='first')
+        psi = self.clone()
+        psi.canonize_sweep(to='last', normalize=False)
+        psi.absorb_central(to='first')
+        for n in psi.sweep(to='first'):
+            psi.orthogonalize_site(n=n, to='first', normalize=False)
+            Entropy[n], _, _ = entropy(psi.A[psi.pC], alpha=alpha)
+            psi.absorb_central(to='first')
         return Entropy
 
     def get_Schmidt_values(self):
@@ -685,13 +686,14 @@ class MpsMpo:
             integer-indexed dictionary of Schmidt values stored as diagonal tensors.
         """
         SV = {}
-        self.canonize_sweep(to='last', normalize=False)
-        self.absorb_central(to='first')
-        for n in self.sweep(to='first'):
-            self.orthogonalize_site(n=n, to='first', normalize=False)
-            _, sv, _ = self.A[self.pC].svd()
-            SV[n] = sv
-            self.absorb_central(to='first')
+        psi = self.clone()
+        psi.canonize_sweep(to='last', normalize=False)
+        psi.absorb_central(to='first')
+        for n in psi.sweep(to='first', df=1):
+            psi.orthogonalize_site(n=n, to='first', normalize=False)
+            _, sv, _ = svd(psi.A[psi.pC], sU=-1)
+            SV[psi.pC] = sv
+            psi.absorb_central(to='first')
         return SV
 
     def save_to_dict(self):
