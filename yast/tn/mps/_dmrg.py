@@ -101,14 +101,15 @@ def dmrg(psi, H, env=None, project=None, version='1site', \
     if opts_svd is None:
         opts_svd = {'tol': 1e-12}
 
+    schmidt = {}
     Eold = env.measure()
     for sweep in range(max_sweeps):
         max_disc_weight= None
         if version == '1site':
-            env = dmrg_sweep_1site(psi, H=H, env=env, project=project, opts_eigs=opts_eigs)
+            env = dmrg_sweep_1site(psi, H=H, env=env, project=project, opts_eigs=opts_eigs, schmidt=schmidt)
         elif version == '2site':
             env, max_disc_weight = dmrg_sweep_2site(psi, H=H, env=env, project=project, \
-                opts_eigs=opts_eigs, opts_svd=opts_svd)
+                opts_eigs=opts_eigs, opts_svd=opts_svd, schmidt=schmidt)
         else:
             raise YampsError('dmrg version %s not recognized' % version)
         E = env.measure()
@@ -123,7 +124,7 @@ def dmrg(psi, H, env=None, project=None, version='1site', \
     return env
 
 
-def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None):
+def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None, schmidt=None):
     r"""
     Perform sweep with 1-site DMRG, see :meth:`dmrg` for description.
 
@@ -140,14 +141,16 @@ def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None):
             env.update_Aort(n)
             _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
             psi.orthogonalize_site(n, to=to)
+            if schmidt is not None and to == 'first' and n != psi.first:
+                _, S, _ = psi[psi.pC].svd()
+                schmidt[psi.pC] = S
             psi.absorb_central(to=to)
             env.clear_site(n)
             env.update_env(n, to=to)
-
     return env
 
 
-def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=None):
+def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=None, schmidt=None):
     r"""
     Perform sweep with 2-site DMRG, see :meth:`dmrg` for description.
 
@@ -161,18 +164,19 @@ def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=No
     if opts_svd is None:
         opts_svd = {'tol': 1e-12}
 
-    max_disc_weight=-1.
+    max_disc_weight = -1.
     for to, dn in (('last', 0), ('first', 1)):
         for n in psi.sweep(to=to, dl=1):
             bd = (n, n + 1)
             env.update_AAort(bd)
             AA = psi.merge_two_sites(bd)
             _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
-            _disc_weigth_bd= psi.unmerge_two_sites(AA, bd, opts_svd)
-            max_disc_weight= max(max_disc_weight,_disc_weigth_bd)
+            _disc_weigth_bd = psi.unmerge_two_sites(AA, bd, opts_svd)
+            max_disc_weight = max(max_disc_weight, _disc_weigth_bd)
+            if schmidt is not None and to == 'first':
+                schmidt[psi.pC] = psi[psi.pC]
             psi.absorb_central(to=to)
             env.clear_site(n, n + 1)
             env.update_env(n + dn, to=to)
-
     env.update_env(0, to='first')
     return env, max_disc_weight

@@ -44,7 +44,7 @@ def save_to_hdf5(a, file, path):
     ----------
     a : yast.Tensor
         tensor to export
-    
+
     TODO
     """
     _d = a.config.backend.to_numpy(a._data)
@@ -76,7 +76,7 @@ def compress_to_1d(a, meta=None):
             meta does not match the tensor.
 
     .. note::
-        :meth:`yast.Tensor.compress_to_1d` and :meth:`yast.Tensor.decompress_from_1d` 
+        :meth:`yast.Tensor.compress_to_1d` and :meth:`yast.Tensor.decompress_from_1d`
         provide mechanism that allows using matrix-free methods, such as eigs implemented in scipy.
 
     Returns
@@ -146,7 +146,7 @@ def show_properties(a):
         * number of non-empty blocks
         * total number of elements across all non-empty blocks
         * fusion tree for each leg
-        * fusion history with `o` indicating original legs, `m` meta-fusion, 
+        * fusion history with `o` indicating original legs, `m` meta-fusion,
           `p` hard-fusion (product), `s` blocking (sum).
     """
     print("Symmetry     :", a.config.sym.SYM_ID)
@@ -295,7 +295,7 @@ def __getitem__(a, key):
     Returns
     -------
     tensor-like
-        The type of the returned tensor depends on the backend, for example 
+        The type of the returned tensor depends on the backend, for example
         :class:`numpy.ndarray` or :class:`torch.Tensor`.
         In case of diagonal tensor, returns 1D array.
     """
@@ -414,11 +414,11 @@ def get_leg_structure(a, axis, native=False):  # pragma: no cover
 
 
 def get_leg_charges_and_dims(a, native=False):  # pragma: no cover
-    """ 
+    """
     .. deprecated::
         to inspect Legs of the tensor, use :meth:`yast.Tensor.get_legs`.
 
-    Collect information about charges and dimensions on all legs into two lists. 
+    Collect information about charges and dimensions on all legs into two lists.
     """
     _tmp = [a.get_leg_structure(n, native=native) for n in range(a.ndim_n if native else a.ndim)]
     _tmp = [{k: lst[k] for k in sorted(lst)} for lst in _tmp]
@@ -439,7 +439,7 @@ def to_dense(a, legs=None, native=False, reverse=False):
 
     Blocks are ordered according to increasing charges on each leg.
     It is possible to supply a list of additional charge sectors to be included by explictly
-    specifying `legs`. These legs should be consistent with current structure of the tensor. 
+    specifying `legs`. These legs should be consistent with current structure of the tensor.
     This allows to fill in extra zero blocks.
 
     Parameters
@@ -468,7 +468,7 @@ def to_dense(a, legs=None, native=False, reverse=False):
 
 def to_numpy(a, legs=None, native=False, reverse=False):
     r"""
-    Create dense :class:`numpy.ndarray`` corresponding to the symmetric tensor. 
+    Create dense :class:`numpy.ndarray`` corresponding to the symmetric tensor.
     See :func:`yast.to_dense`.
 
     Returns
@@ -501,7 +501,7 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
 
     Blocks are ordered according to increasing charges on each leg.
     It is possible to supply a list of additional charge sectors to be included by explictly
-    specifying `legs`. These legs should be consistent with current structure of the tensor. 
+    specifying `legs`. These legs should be consistent with current structure of the tensor.
     This allows to fill in extra zero blocks.
 
     .. note::
