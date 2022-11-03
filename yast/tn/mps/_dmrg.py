@@ -5,7 +5,7 @@ from ._env import Env3
 from ._mps import YampsError
 
 
-logger = logging.Logger('dmrg')
+#logger = logging.Logger('dmrg')
 
 
 #################################
@@ -97,14 +97,17 @@ def dmrg(psi, H, env=None, project=None, version='1site', \
     info: dict
         if :code:`return_info` is ``True``, return additional information about convergence.
     """
+
+    schmidtold = psi.get_Schmidt_values() if converge == 'schmidt' else None
+
     env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
     if opts_svd is None:
         opts_svd = {'tol': 1e-12}
-
-    schmidt = {}
     Eold = env.measure()
+
     for sweep in range(max_sweeps):
-        max_disc_weight= None
+        max_disc_weight = None
+        schmidt = {} if converge == 'schmidt' else None
         if version == '1site':
             env = dmrg_sweep_1site(psi, H=H, env=env, project=project, opts_eigs=opts_eigs, schmidt=schmidt)
         elif version == '2site':
@@ -114,11 +117,18 @@ def dmrg(psi, H, env=None, project=None, version='1site', \
             raise YampsError('dmrg version %s not recognized' % version)
         E = env.measure()
         dE, Eold = Eold - E, E
-        logger.info('Iteration = %03d  Energy = %0.14f dE = %0.14f', sweep, E, dE)
         if not (measure is None):
             measure(sweep, psi, env, E, max_disc_weight)
-        if converge == 'energy' and abs(dE) < atol:
-            break
+        if converge == 'energy':
+            logging.info('Iteration = %03d  Energy = %0.14f dE = %0.14f', sweep, E, dE)
+            if abs(dE) < atol:
+                break
+        if converge == 'schmidt':
+            dS = max((schmidt[k] - schmidtold[k]).norm() for k in schmidt.keys())
+            schmidtold = schmidt
+            logging.info('Iteration = %03d  Energy = %0.14f dE = %0.14f dS = %0.14f', sweep, E, dE, dS)
+            if dS < atol:
+                break
     if return_info:
         return env, {'sweeps': sweep + 1, 'dEng': dE}
     return env
@@ -142,7 +152,7 @@ def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None, schmidt=Non
             _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
             psi.orthogonalize_site(n, to=to)
             if schmidt is not None and to == 'first' and n != psi.first:
-                _, S, _ = psi[psi.pC].svd()
+                _, S, _ = psi[psi.pC].svd(sU=-1)
                 schmidt[psi.pC] = S
             psi.absorb_central(to=to)
             env.clear_site(n)

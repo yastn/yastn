@@ -168,14 +168,21 @@ def test_U1_dmrg():
     H = generate.mpo(H_str, parameters)
     occ = generate.mpo("\sum_{j\in range1} cp_{j} c_{j}", {"range1": range(N)})
 
-    for total_occ, E_target in Eng_sectors.items():
-        psi = generate.random_mps(D_total=Dmax, n=total_occ).canonize_sweep(to='first')
-        occ_target = [total_occ] * len(E_target)
-        psi = run_dmrg(psi, H, occ, E_target, occ_target, opts_svd=opts_svd)
+    # for total_occ, E_target in Eng_sectors.items():
+    #     psi = generate.random_mps(D_total=Dmax, n=total_occ).canonize_sweep(to='first')
+    #     occ_target = [total_occ] * len(E_target)
+    #     psi = run_dmrg(psi, H, occ, E_target, occ_target, opts_svd=opts_svd)
+
+    
+    # different convergence criteria
+    psi = generate.random_mps(D_total=Dmax, n=3).canonize_sweep(to='first')
+    env = mps.dmrg(psi, H, version='2site', converge='schmidt', atol=1e-10, max_sweeps=20, opts_svd=opts_svd)
+    psi = generate.random_mps(D_total=Dmax, n=3).canonize_sweep(to='first')
+    env = mps.dmrg(psi, H, version='1site', converge='schmidt', atol=1e-10, max_sweeps=20, opts_svd=opts_svd)
 
 
 if __name__ == "__main__":
     logging.basicConfig(level='INFO')
-    test_dense_dmrg()
-    test_Z2_dmrg()
+    # test_dense_dmrg()
+    # test_Z2_dmrg()
     test_U1_dmrg()
