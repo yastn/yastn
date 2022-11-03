@@ -11,7 +11,7 @@ __all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'mo
 
 def copy(a):
     r"""
-    Return a copy of the tensor. Data of the resulting tensor is independent 
+    Return a copy of the tensor. Data of the resulting tensor is independent
     from the original.
 
     .. warning::
@@ -67,7 +67,7 @@ def to(a, device=None, dtype=None):
 def detach(a):
     r"""
     Detach tensor from the computational graph returning a `view`. Data of the resulting
-    tensor is a `view` of the original data. 
+    tensor is a `view` of the original data.
 
     .. warning::
         this operation does not preserve autograd on returned :class:`yast.Tensor`
@@ -178,7 +178,7 @@ def drop_leg_history(a, axis=None):
     if axis is None:
         axis = tuple(range(a.ndim))
     else:
-        try: 
+        try:
             axis = tuple(axis)
         except TypeError:
             axis = (axis,)
@@ -277,7 +277,7 @@ def moveaxis(a, source, destination):
 
 def add_leg(a, axis=-1, s=1, t=None):
     r"""
-    Creates a new tensor with extra leg that carries the charge (or part of it) 
+    Creates a new tensor with extra leg that carries the charge (or part of it)
     of the orignal tensor. This is achieved by extra leg having a single charge sector
     of dimension D=1. The total charge of the tensor :meth:`yast.Tensor.n` can be modified this way.
 
@@ -328,7 +328,7 @@ def add_leg(a, axis=-1, s=1, t=None):
 def remove_leg(a, axis=-1):
     r"""
     Removes leg with a single charge sector of dimension one from tensor.
-    The charge carried by that leg (if any) is added to the  
+    The charge carried by that leg (if any) is added to the
     tensor's total charge :meth:`yast.Tensor.n`.
 
     Makes a shallow copy of Tensor data.

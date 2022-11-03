@@ -93,6 +93,24 @@ def test_algebra_basic():
     combine_tests(a, b)
 
 
+def test_add_diagonal():
+    """
+    Addition of diagonal tensors matches sectorial bond dimensions,
+    filling in missing zeros at the end of each sector.
+    """
+    leg0 = yast.Leg(config_U1, s=-1, t=(-1, 0, 1, 3), D=(2, 2, 3, 2))
+    leg1 = yast.Leg(config_U1, s=-1, t=(-1, 0, 1, 2), D=(1, 5, 3, 2))
+    a = yast.eye(config_U1, legs=leg0)
+    b = yast.eye(config_U1, legs=leg1)
+    c1 = a + b
+    c2 = b + a
+    c3 = a - b
+    assert pytest.approx(yast.trace(c1).item(), rel=tol) == 20
+    assert pytest.approx(yast.trace(c2).item(), rel=tol) == 20
+    assert pytest.approx(yast.trace(c3).item(), rel=tol) == -2
+    assert all(x.get_legs(axis=0).D == (2, 5, 3, 2, 2) for x in [c1, c2, c3])
+
+
 def test_algebra_functions():
     a = yast.Tensor(config=config_U1, isdiag=True)
     a.set_block(ts=1, Ds=3, val=[1, 0.01, 0.0001])
@@ -203,6 +221,11 @@ def test_algebra_exceptions():
     leg1 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
     leg2 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 5))
     leg3 = yast.Leg(config_U1, s=1, t=(-1, 0), D=(2, 4))
+
+    with pytest.raises(yast.YastError):
+        a = yast.eye(config=config_U1, legs=[leg1.conj(), leg1])
+        b = yast.ones(config=config_U1, legs=[leg1.conj(), leg1])
+        _ = a + b  # Cannot add diagonal tensor to non-diagonal one.
     with pytest.raises(yast.YastError):
         a = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
         b = yast.rand(config=config_U1, legs=[leg1, leg2.conj(), leg1, leg2.conj()])
@@ -277,6 +300,7 @@ def test_hf_union_exceptions():
 
 if __name__ == '__main__':
     test_algebra_basic()
+    test_add_diagonal()
     test_algebra_functions()
     test_algebra_fuse_meta()
     test_algebra_fuse_hard()

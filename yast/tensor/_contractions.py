@@ -35,12 +35,12 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
     Parameters
     ----------
-    a, b: yast.Tensor 
+    a, b: yast.Tensor
         Tensors to contract
 
     axes: tuple[int] or tuple[tuple[int]]
         legs of both tensors (for each it is specified by int or tuple of ints)
-        e.g. axes=(0, 3) to contract 0th leg of `a` with 3rd leg of `b`; 
+        e.g. axes=(0, 3) to contract 0th leg of `a` with 3rd leg of `b`;
         axes=((0, 3), (1, 2)) to contract legs 0 and 3 of `a` with 1 and 2 of `b`, respectively.
 
     conj: tuple[int]
@@ -182,21 +182,21 @@ def broadcast(a, *args, axis=0):
     if len(axes) != len(args):
         raise YastError("There should be exactly one axis for each tensor to be projected.")
     results = []
-    for b, axis in zip(args, axes):
+    for b, ax in zip(args, axes):
         _test_can_be_combined(a, b)
-        axis = _broadcast_input(axis, b.mfs, a.isdiag)
-        if b.hfs[axis].tree != (1,):
+        ax = _broadcast_input(ax, b.mfs, a.isdiag)
+        if b.hfs[ax].tree != (1,):
             raise YastError('Second tensor`s leg specified by axis cannot be fused.')
 
-        meta, struct = _meta_broadcast(b.struct, a.struct, axis)
+        meta, struct = _meta_broadcast(b.struct, a.struct, ax)
 
         if b.isdiag:
-            b_ndim, axis = (1, 0)
+            b_ndim, ax = (1, 0)
             meta = tuple((sln, slb, Db[0], sla) for sln, slb, Db, sla in meta)
         else:
             b_ndim = b.ndim_n
         Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
-        data = b.config.backend.dot_diag(a._data, b._data, meta, Dsize, axis, b_ndim)
+        data = b.config.backend.dot_diag(a._data, b._data, meta, Dsize, ax, b_ndim)
         results.append(b._replace(struct=struct, data=data))
     return results.pop() if len(results) == 1 else results
 
@@ -615,7 +615,7 @@ def ncon(ts, inds, conjs=None):
         Non-positive numbers label legs of the resulting tensor, in reversed order.
 
     conjs: tuple[int]
-        For each tensor in `ts` contains either 0 or 1. If the value is 1 the tensor 
+        For each tensor in `ts` contains either 0 or 1. If the value is 1 the tensor
         is conjugated.
 
     .. note::
