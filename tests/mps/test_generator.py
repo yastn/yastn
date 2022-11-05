@@ -215,8 +215,28 @@ def test_generator_mpo():
     assert abs(x_ref - x) < tol
 
 def mpo_Ising_model():
-    pass
+    op = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    gn = mps.Generator(10, op)
+    HT1 = mps.Hterm(1, (4,), (op.c(),))
+    HT2 = mps.Hterm(1, (4,), (op.cp(),))
+    H = mps.generate_mpo(gn.I(), [HT1, HT2])
+    print(H.get_bond_dimensions())
+    print(H.first_virtual_leg())
+
+    p1 = gn.random_mps(n=2, D_total=8)
+    p2 = gn.random_mps(n=3, D_total=8)
+    pp = p1 + p2
+    qq = p1 + p2
+    
+    print(pp.get_bond_dimensions())
+    qq.canonize_sweep(to='first', normalize=False)
+    qq.canonize_sweep(to='last', normalize=False)
+    print(qq.get_bond_dimensions())
+   
+    print(mps.measure_overlap(pp + -1 * qq, pp + -1 * qq))
+
 
 if __name__ == "__main__":
-    test_generator_mps()
-    test_generator_mpo()
+    # test_generator_mps()
+    # test_generator_mpo()
+    mpo_Ising_model()

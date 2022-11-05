@@ -1,8 +1,7 @@
 import numpy as np
 from typing import NamedTuple
-from ... import ones, rand, ncon, Leg, random_leg, Tensor
-from ...operators import Qdit
-from ._mps import Mpo, Mps, YampsError, add
+from ... import initialize, operators, tensor, YastError
+from ._mps import Mpo, Mps, add
 
 from itertools import compress, product
 from re import match
@@ -46,11 +45,11 @@ def generate_H1(I, term):
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
         op = op.add_leg(axis=0, s=1)
         leg = op.get_legs(axis=0)
-        one = ones(config=op.config, legs=(leg, leg.conj()))
-        temp = ncon([op, H1[site]], [(-1, -2, 1), (-0, 1, -3, -4)])
+        one = initialize.ones(config=op.config, legs=(leg, leg.conj()))
+        temp = tensor.ncon([op, H1[site]], [(-1, -2, 1), (-0, 1, -3, -4)])
         H1[site] = temp.fuse_legs(axes=((0, 1), 2, 3, 4), mode='hard')
         for n in range(site):
-            temp = ncon([H1[n], one], [(-0, -2, -3, -5), (-1, -4)])
+            temp = tensor.ncon([H1[n], one], [(-0, -2, -3, -5), (-1, -4)])
             temp = temp.swap_gate(axes=(1, 2))
             H1[n] = temp.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
     for n in H1.sweep():
@@ -59,7 +58,7 @@ def generate_H1(I, term):
     return H1
 
 
-def generate_mpo(I, terms, opts):
+def generate_mpo(I, terms, opts=None):
     """
     Generate mpo provided a list of Hterm-s and identity operator I.
 
@@ -112,12 +111,12 @@ class Generator:
         self._ops = operators
         self._map = {i:i for i in range(N)} if map is None else map
         if len(self._map) != N or sorted(self._map.values()) != list(range(N)):
-            raise YampsError("Map is inconsistent with mps of N sites.")
+            raise YastError("MPS: Map is inconsistent with mps of N sites.")
         self._Is = {k: 'I' for k in self._map.keys()} if Is is None else Is
         if self._Is.keys() != self._map.keys():
-            raise YampsError("Is is inconsistent with map.")
+            raise YastError("MPS: Is is inconsistent with map.")
         if not all(hasattr(self._ops, v) and callable(getattr(self._ops, v)) for v in self._Is.values()):
-            raise YampsError("operators do not contain identity specified in Is.")
+            raise YastError("MPS: operators do not contain identity specified in Is.")
 
         self._I = Mpo(self.N)
         for label, site in self._map.items():
@@ -161,19 +160,19 @@ class Generator:
         nl = tuple(an * 0)
         psi = Mps(self.N)
 
-        ll = Leg(self.config, s=1, t=(nl,), D=(1,),)
+        ll = tensor.Leg(self.config, s=1, t=(nl,), D=(1,),)
         for site in psi.sweep(to='last'):
             lp = self._I[site].get_legs(axis=1)
             nr = tuple(an * (site + 1) / self.N)
             if site != psi.last:
-                lr = random_leg(self.config, s=-1, n=nr, D_total=D_total, sigma=sigma, legs=[ll, lp])
+                lr = tensor.random_leg(self.config, s=-1, n=nr, D_total=D_total, sigma=sigma, legs=[ll, lp])
             else:
-                lr = Leg(self.config, s=-1, t=(n,), D=(1,),)
-            psi.A[site] = rand(self.config, legs=[ll, lp, lr], dtype=dtype)
+                lr = tensor.Leg(self.config, s=-1, t=(n,), D=(1,),)
+            psi.A[site] = initialize.rand(self.config, legs=[ll, lp, lr], dtype=dtype)
             ll = psi.A[site].get_legs(axis=2).conj()
         if sum(ll.D) == 1:
             return psi
-        raise YampsError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization) ")
+        raise YastError("MPS: Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization) ")
 
     def random_mpo(self, D_total=8, sigma=1, dtype='float64'):
         """
@@ -192,18 +191,18 @@ class Generator:
         n0 = (0,) * self.config.sym.NSYM
         psi = Mpo(self.N)
 
-        ll = Leg(self.config, s=1, t=(n0,), D=(1,),)
+        ll = tensor.Leg(self.config, s=1, t=(n0,), D=(1,),)
         for site in psi.sweep(to='last'):
             lp = self._I[site].get_legs(axis=1)
             if site != psi.last:
-                lr = random_leg(self.config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[ll, lp, lp.conj()])
+                lr = tensor.random_leg(self.config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[ll, lp, lp.conj()])
             else:
-                lr = Leg(self.config, s=-1, t=(n0,), D=(1,),)
-            psi.A[site] = rand(self.config, legs=[ll, lp, lr, lp.conj()], dtype=dtype)
+                lr = tensor.Leg(self.config, s=-1, t=(n0,), D=(1,),)
+            psi.A[site] = initialize.rand(self.config, legs=[ll, lp, lr, lp.conj()], dtype=dtype)
             ll = psi.A[site].get_legs(axis=2).conj()
         if sum(ll.D) == 1:
             return psi
-        raise YampsError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
+        raise YastError("MPS: Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
 
 
     def mpo(self, H_str, parameters=None):
@@ -313,7 +312,7 @@ class Generator:
                                     iind[i_ind] = eval(iind[i_ind])
                         if ival in sgn_info:
                             ival = info_dict[ival](*iind)
-                            if type(ival) == Tensor:
+                            if type(ival) == tensor.Tensor:
                                 op_holder.append(ival)
                                 ind_holder.append(*iind)
                             else:
@@ -349,10 +348,10 @@ class Generator:
 
 
 def random_dense_mps(N, D, d, **kwargs):
-    G = Generator(N, Qdit(d=d, **kwargs))
+    G = Generator(N, operators.Qdit(d=d, **kwargs))
     return G.random_mps(D_total=D)
 
 
 def random_dense_mpo(N, D, d, **kwargs):
-    G = Generator(N, Qdit(d=d, **kwargs))
+    G = Generator(N, operators.Qdit(d=d, **kwargs))
     return G.random_mpo(D_total=D)
