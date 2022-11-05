@@ -1,11 +1,10 @@
 """ Various variants of the DMRG algorithm for mps."""
 import logging
-from ... import eigs
+from ... import tensor, YastError
 from ._env import Env3
-from ._mps import YampsError
 
 
-#logger = logging.Logger('dmrg')
+logger = logging.Logger('dmrg')
 
 
 #################################
@@ -22,7 +21,7 @@ def _init_dmrg(psi, H, env, project, opts_eigs):
         env = Env3(bra=psi, op=H, ket=psi, project=project).setup(to='first')
 
     if not (env.bra is psi and env.ket is psi):
-        raise YampsError('Require environment env where ket == bra == psi')
+        raise YastError('MPS: Require environment env where ket == bra == psi')
     return env, opts_eigs
 
 
@@ -114,19 +113,19 @@ def dmrg(psi, H, env=None, project=None, version='1site', \
             env, max_disc_weight = dmrg_sweep_2site(psi, H=H, env=env, project=project, \
                 opts_eigs=opts_eigs, opts_svd=opts_svd, schmidt=schmidt)
         else:
-            raise YampsError('dmrg version %s not recognized' % version)
+            raise YastError('MPS: dmrg version %s not recognized' % version)
         E = env.measure()
         dE, Eold = Eold - E, E
         if not (measure is None):
             measure(sweep, psi, env, E, max_disc_weight)
         if converge == 'energy':
-            logging.info('Iteration = %03d  Energy = %0.14f dE = %0.14f', sweep, E, dE)
+            logger.info('Iteration = %03d  Energy = %0.14f dE = %0.14f', sweep, E, dE)
             if abs(dE) < atol:
                 break
         if converge == 'schmidt':
             dS = max((schmidt[k] - schmidtold[k]).norm() for k in schmidt.keys())
             schmidtold = schmidt
-            logging.info('Iteration = %03d  Energy = %0.14f dE = %0.14f dS = %0.14f', sweep, E, dE, dS)
+            logger.info('Iteration = %03d  Energy = %0.14f dE = %0.14f dS = %0.14f', sweep, E, dE, dS)
             if dS < atol:
                 break
     if return_info:
@@ -149,7 +148,7 @@ def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None, schmidt=Non
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
             env.update_Aort(n)
-            _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
+            _, (psi.A[n],) = tensor.eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
             psi.orthogonalize_site(n, to=to)
             if schmidt is not None and to == 'first' and n != psi.first:
                 _, S, _ = psi[psi.pC].svd(sU=-1)
@@ -180,7 +179,7 @@ def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=No
             bd = (n, n + 1)
             env.update_AAort(bd)
             AA = psi.merge_two_sites(bd)
-            _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
+            _, (AA,) = tensor.eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
             _disc_weigth_bd = psi.unmerge_two_sites(AA, bd, opts_svd)
             max_disc_weight = max(max_disc_weight, _disc_weigth_bd)
             if schmidt is not None and to == 'first':

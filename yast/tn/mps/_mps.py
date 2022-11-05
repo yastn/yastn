@@ -1,9 +1,5 @@
 """ Mps structure and its basic manipulations. """
-from ... import entropy, block, tensordot, truncation_mask, bitwise_not, svd, ncon, eye, norm
-
-
-class YampsError(Exception):
-    pass
+from ... import tensor, initialize, YastError
 
 
 def Mps(N):
@@ -68,31 +64,35 @@ def add(*states, amplitudes=None):
         amplitudes = [1] * len(states)
 
     if len(states) != len(amplitudes):
-        raise YampsError('Number of Mps-s must be equal to the number of coefficients in amplitudes.')
+        raise YastError('MPS: Number of Mps-s must be equal to the number of coefficients in amplitudes.')
 
     phi = MpsMpo(N=states[0].N, nr_phys=states[0].nr_phys)
 
     if any(psi.N != phi.N for psi in states):
-        raise YampsError('All states must have equal number of sites.')
+        raise YastError('MPS: All states must have equal number of sites.')
     if any(psi.nr_phys != phi.nr_phys for psi in states):
-        raise YampsError('All states should be either Mps or Mpo.')
+        raise YastError('MPS: All states should be either Mps or Mpo.')
     if any(psi.pC != None for psi in states):
-        raise YampsError('Absorb central sites of mps-s before calling add.')
+        raise YastError('MPS: Absorb central sites of mps-s before calling add.')
+    legf = states[0][phi.first].get_legs(axis=0)
+    legl = states[0][phi.last].get_legs(axis=2)
+    #if any(psi.first_virtual_leg() != legf or psi.last_virtual_leg() != legl for psi in states):
+    #    raise YastError('MPS: Addition')
 
     n = phi.first
     d = {(j,): amplitudes[j] * psi.A[n] for j, psi in enumerate(states)}
     common_legs = (0, 1) if phi.nr_phys == 1 else (0, 1, 3)
-    phi.A[n] = block(d, common_legs)
+    phi.A[n] = initialize.block(d, common_legs)
 
     common_legs = (1,) if phi.nr_phys == 1 else (1, 3)
     for n in phi.sweep(to='last', df=1, dl=1):
         d = {(j, j): psi.A[n] for j, psi in enumerate(states)}
-        phi.A[n] = block(d, common_legs)
+        phi.A[n] = initialize.block(d, common_legs)
 
     n = phi.last
     d = {(j,): psi.A[n] for j, psi in enumerate(states)}
     common_legs = (1, 2) if phi.nr_phys == 1 else (1, 2, 3)
-    phi.A[n] = block(d, common_legs)
+    phi.A[n] = initialize.block(d, common_legs)
 
     return phi
 
@@ -133,22 +133,22 @@ def multiply(a, b, mode=None):
         yamps.MpsMpo
     """
     if a.N != b.N:
-        YampsError('Mps-s must have equal number of sites.')
+        YastError('MPS: Mps-s must have equal number of sites.')
 
     nr_phys = a.nr_phys + b.nr_phys - 2
     
     if a.nr_phys == 1:
-        YampsError('First argument has to be an MPO.')
+        YastError('MPS: First argument has to be an MPO.')
     phi = MpsMpo(N=a.N, nr_phys=nr_phys)
 
     if b.N != a.N:
-        raise YampsError('a and b must have equal number of sites.')
+        raise YastError('MPS: a and b must have equal number of sites.')
     if a.pC is not None or b.pC is not None:
-        raise YampsError('Absorb central sites of mps-s before calling multiply.')
+        raise YastError('MPS: Absorb central sites of mps-s before calling multiply.')
 
     axes_fuse = ((0, 3), 1, (2, 4)) if b.nr_phys == 1 else ((0, 3), 1, (2, 4), 5)
     for n in phi.sweep():
-        phi.A[n] = tensordot(a.A[n], b.A[n], axes=(3, 1)).fuse_legs(axes_fuse, mode)
+        phi.A[n] = tensor.tensordot(a.A[n], b.A[n], axes=(3, 1)).fuse_legs(axes_fuse, mode)
     phi.A[phi.first] = phi.A[phi.first].drop_leg_history(axis=0)
     phi.A[phi.last] = phi.A[phi.last].drop_leg_history(axis=2)
     return phi
@@ -180,9 +180,9 @@ class MpsMpo:
             number of physical legs: 1 for MPS (default); 2 for MPO;
         """
         if not isinstance(N, int) or N <= 0:
-            raise YampsError("Number of Mps sites N should be a positive integer.")
+            raise YastError('MPS: Number of Mps sites N should be a positive integer.')
         if nr_phys not in (1, 2):
-            raise YampsError("Number of physical legs, nr_phys, should be equal to 1 or 2.")
+            raise YastError('MPS: Number of physical legs, nr_phys, should be equal to 1 or 2.')
 
         self.N = N
         self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
@@ -210,7 +210,7 @@ class MpsMpo:
             return range(df, self.N - dl)
         if to == 'first':
             return range(self.N - 1 - dl, df - 1, -1)
-        raise YampsError('Argument "to" should be in ("first", "last")')
+        raise YastError('MPS: Argument "to" should be in ("first", "last")')
 
     def __getitem__(self, n):
         """ Return tensor corresponding to n-th site."""
@@ -219,9 +219,9 @@ class MpsMpo:
     def __setitem__(self, n, tensor):
         """ Assign tensor to n-th site of Mps or Mpo. """
         if not isinstance(n, int) or n < self.first or n > self.last:
-            raise YampsError("n should be a positive integer in [0, N - 1].")
+            raise YastError('MPS: n should be a positive integer in [0, N - 1].')
         if tensor.ndim != self.nr_phys + 2:
-            raise YampsError("Tensor rank should be {}.".format(self.nr_phys + 2))
+            raise YastError('MPS: Tensor rank should be {}.'.format(self.nr_phys + 2))
         self.A[n] = tensor
 
     def clone(self):
@@ -363,7 +363,7 @@ class MpsMpo:
                 to standard 2-norm.
         """
         if self.pC is not None:
-            raise YampsError('Only one central block is possible. Attach the existing central block first.')
+            raise YastError('MPS: Only one central block is possible. Attach the existing central block first.')
 
         if to == 'first':
             self.pC = (n - 1, n)
@@ -374,7 +374,7 @@ class MpsMpo:
             ax = (0, 1) if self.nr_phys == 1 else (0, 1, 3)
             self.A[n], R = self.A[n].qr(axes=(ax, 2), sQ=-1, Qaxis=2)
         else:
-            raise YampsError('Argument "to" should be in ("first", "last")')
+            raise YastError('MPS: Argument "to" should be in ("first", "last")')
         self.A[self.pC] = R / R.norm() if normalize else R
 
     def diagonalize_central(self, opts=None, normalize=True):
@@ -400,16 +400,16 @@ class MpsMpo:
             if opts is None:
                 opts = {'tol': 1e-12}   #  TODO: No truncation?
 
-            U, S, V = svd(self.A[self.pC], axes=(0, 1), sU=-1)
+            U, S, V = tensor.svd(self.A[self.pC], axes=(0, 1), sU=-1)
 
-            mask = truncation_mask(S, **opts)
+            mask = tensor.truncation_mask(S, **opts)
             U, C, V = mask.apply_mask(U, S, V, axis=(1, 0, 0))
             self.A[self.pC] = C / C.norm() if normalize else C
             n1, n2 = self.pC
 
             if n1 >= self.first:
                 ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
-                self.A[n1] = ncon([self.A[n1], U], (ax, (1, -2)))
+                self.A[n1] = tensor.ncon([self.A[n1], U], (ax, (1, -2)))
             else:
                 self.A[self.pC] = U @ self.A[self.pC]
 
@@ -419,7 +419,7 @@ class MpsMpo:
                 self.A[self.pC] = self.A[self.pC] @ V
 
             # discarded weight
-            nC = bitwise_not(mask).apply_mask(S, axis=0)
+            nC = tensor.bitwise_not(mask).apply_mask(S, axis=0)
             return nC.norm() / S.norm()
         return 0.
 
@@ -450,7 +450,7 @@ class MpsMpo:
 
             if (to == 'first' and n1 >= self.first) or n2 > self.last:
                 ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
-                self.A[n1] = ncon([self.A[n1], C], (ax, (1, -2)))
+                self.A[n1] = tensor.ncon([self.A[n1], C], (ax, (1, -2)))
             else:  # (to == 'last' and n2 <= self.last) or n1 < self.first
                 self.A[n2] = C @ self.A[n2]
 
@@ -508,9 +508,9 @@ class MpsMpo:
             cl = (0, 1) if self.nr_phys == 1 else (0, 1, 3)
         it = self.sweep(to=to) if n is None else [n]
         for n in it:
-            x = tensordot(self.A[n], self.A[n].conj(), axes=(cl, cl))
-            x0 = eye(config=x.config, legs=x.get_legs((0, 1)))
-            if norm(x - x0.diag()) > tol:  # == 0
+            x = tensor.tensordot(self.A[n], self.A[n].conj(), axes=(cl, cl))
+            x0 = initialize.eye(config=x.config, legs=x.get_legs((0, 1)))
+            if (x - x0.diag()).norm() > tol:  # == 0
                 return False
         return True
 
@@ -573,7 +573,7 @@ class MpsMpo:
             tensor formed from A[n] and A[n + 1]
         """
         nl, nr = bd
-        return tensordot(self.A[nl], self.A[nr], axes=(2, 0))
+        return tensor.tensordot(self.A[nl], self.A[nr], axes=(2, 0))
         # axes = (0, (1, 2), 3) if self.nr_phys == 1 else (0, (1, 3), 4, (2, 5))
         # return AA.fuse_legs(axes=axes)
 
@@ -604,18 +604,18 @@ class MpsMpo:
         # axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 4), (2, 3, 5))
         axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 2), (3, 4, 5))
         self.pC = bd
-        U, S, V = svd(AA, axes=axes, sU=-1, Uaxis=2)
-        mask = truncation_mask(S, **opts)
+        U, S, V = tensor.svd(AA, axes=axes, sU=-1, Uaxis=2)
+        mask = tensor.truncation_mask(S, **opts)
         self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(U, S, V, axis=(2, 0, 0))
 
         # discarded weight
-        nC = bitwise_not(mask).apply_mask(S, axis=0)
+        nC = tensor.bitwise_not(mask).apply_mask(S, axis=0)
         return nC.norm() / S.norm()
 
-    def get_leftmost_leg(self):
+    def first_virtual_leg(self):
         return self.A[self.first].get_legs(axis=0)
 
-    def get_rightmost_leg(self):
+    def last_virtual_leg(self):
         return self.A[self.last].get_legs(axis=2)
 
     def get_bond_dimensions(self):
@@ -672,7 +672,7 @@ class MpsMpo:
         psi.absorb_central(to='first')
         for n in psi.sweep(to='first'):
             psi.orthogonalize_site(n=n, to='first', normalize=False)
-            Entropy[n], _, _ = entropy(psi.A[psi.pC], alpha=alpha)
+            Entropy[n], _, _ = tensor.entropy(psi.A[psi.pC], alpha=alpha)
             psi.absorb_central(to='first')
         return Entropy
 
@@ -691,7 +691,7 @@ class MpsMpo:
         psi.absorb_central(to='first')
         for n in psi.sweep(to='first', df=1):
             psi.orthogonalize_site(n=n, to='first', normalize=False)
-            _, sv, _ = svd(psi.A[psi.pC], sU=-1)
+            _, sv, _ = tensor.svd(psi.A[psi.pC], sU=-1)
             SV[psi.pC] = sv
             psi.absorb_central(to='first')
         return SV
