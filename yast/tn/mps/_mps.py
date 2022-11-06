@@ -76,7 +76,7 @@ def add(*states, amplitudes=None):
         raise YastError('MPS: Absorb central sites of mps-s before calling add.')
     legf = states[0][phi.first].get_legs(axis=0)
     legl = states[0][phi.last].get_legs(axis=2)
-    #if any(psi.first_virtual_leg() != legf or psi.last_virtual_leg() != legl for psi in states):
+    #if any(psi.virtual_leg('first') != legf or psi.virtual_leg('last') != legl for psi in states):
     #    raise YastError('MPS: Addition')
 
     n = phi.first
@@ -368,11 +368,11 @@ class MpsMpo:
         if to == 'first':
             self.pC = (n - 1, n)
             ax = (1, 2) if self.nr_phys == 1 else (1, 2, 3)
-            self.A[n], R = self.A[n].qr(axes=(ax, 0), sQ=1, Qaxis=0, Raxis=1)
+            self.A[n], R = self.A[n].qr(axes=(ax, 0), sQ=-1, Qaxis=0, Raxis=1)
         elif to == 'last':
             self.pC = (n, n + 1)
             ax = (0, 1) if self.nr_phys == 1 else (0, 1, 3)
-            self.A[n], R = self.A[n].qr(axes=(ax, 2), sQ=-1, Qaxis=2)
+            self.A[n], R = self.A[n].qr(axes=(ax, 2), sQ=1, Qaxis=2)
         else:
             raise YastError('MPS: Argument "to" should be in ("first", "last")')
         self.A[self.pC] = R / R.norm() if normalize else R
@@ -400,7 +400,7 @@ class MpsMpo:
             if opts is None:
                 opts = {'tol': 1e-12}   #  TODO: No truncation?
 
-            U, S, V = tensor.svd(self.A[self.pC], axes=(0, 1), sU=-1)
+            U, S, V = tensor.svd(self.A[self.pC], axes=(0, 1), sU=1)
 
             mask = tensor.truncation_mask(S, **opts)
             U, C, V = mask.apply_mask(U, S, V, axis=(1, 0, 0))
@@ -604,7 +604,7 @@ class MpsMpo:
         # axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 4), (2, 3, 5))
         axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 2), (3, 4, 5))
         self.pC = bd
-        U, S, V = tensor.svd(AA, axes=axes, sU=-1, Uaxis=2)
+        U, S, V = tensor.svd(AA, axes=axes, sU=1, Uaxis=2)
         mask = tensor.truncation_mask(S, **opts)
         self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(U, S, V, axis=(2, 0, 0))
 
@@ -612,11 +612,11 @@ class MpsMpo:
         nC = tensor.bitwise_not(mask).apply_mask(S, axis=0)
         return nC.norm() / S.norm()
 
-    def first_virtual_leg(self):
-        return self.A[self.first].get_legs(axis=0)
-
-    def last_virtual_leg(self):
-        return self.A[self.last].get_legs(axis=2)
+    def virtual_leg(self, ind):
+        if ind == 'first':
+            return self.A[self.first].get_legs(axis=0)
+        if ind == 'last':
+            return self.A[self.last].get_legs(axis=2)
 
     def get_bond_dimensions(self):
         r"""
@@ -691,7 +691,7 @@ class MpsMpo:
         psi.absorb_central(to='first')
         for n in psi.sweep(to='first', df=1):
             psi.orthogonalize_site(n=n, to='first', normalize=False)
-            _, sv, _ = tensor.svd(psi.A[psi.pC], sU=-1)
+            _, sv, _ = tensor.svd(psi.A[psi.pC], sU=1)
             SV[psi.pC] = sv
             psi.absorb_central(to='first')
         return SV

@@ -64,7 +64,7 @@ def multiply_svd(a, b, opts=None):
     if psi.N != a.N:
         raise YastError('MPS: a and b must have equal number of sites.')
 
-    la, lpsi = a.last_virtual_leg(), psi.last_virtual_leg()
+    la, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
     tmp = initialize.ones(a.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
     tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axis=2)
@@ -75,7 +75,7 @@ def multiply_svd(a, b, opts=None):
             tmp = tmp.fuse_legs(axes=(0, 1, 3, (4, 2)))
         tmp = a[n]._attach_23(tmp)
 
-        U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=-1)
+        U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1)
 
         mask = tensor.truncation_mask(S, **opts)
         U, C, V = mask.apply_mask(U, S, V, axis=(2, 0, 0))

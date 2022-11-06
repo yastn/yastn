@@ -172,26 +172,6 @@ def mpo_XX_model(config, N, t, mu):
 
 
 
-def test_generator_mps():
-    N = 10
-    D_total = 16
-    bds = (1,) + (D_total,) * (N - 1) + (1,)
-
-    for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U1', (N // 2,))):
-        operators = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
-        generate = mps.Generator(N, operators)
-        I = generate.I()
-        assert pytest.approx(mps.measure_overlap(I, I).item(), rel=tol) == 2 ** N
-        O = I @ I + (-1 * I)
-        assert pytest.approx(mps.measure_overlap(O, O).item(), abs=tol) == 0
-        psi = generate.random_mps(D_total=D_total, n = nn)
-        assert psi[psi.last].get_legs(axis=2).t == (nn,)
-        assert psi[psi.first].get_legs(axis=0).t == ((0,) * len(nn),)
-        bds = psi.get_bond_dimensions()
-        assert bds[0] == bds[-1] == 1
-        assert all(bd > D_total/2 for bd in bds[2:-2])
-
-
 def test_generator_mpo():
     N = 5
     t = 1
@@ -221,7 +201,7 @@ def mpo_Ising_model():
     HT2 = mps.Hterm(1, (4,), (op.cp(),))
     H = mps.generate_mpo(gn.I(), [HT1, HT2])
     print(H.get_bond_dimensions())
-    print(H.first_virtual_leg())
+    print(H.virtual_leg('first'))
 
     p1 = gn.random_mps(n=2, D_total=8)
     p2 = gn.random_mps(n=3, D_total=8)
@@ -237,6 +217,5 @@ def mpo_Ising_model():
 
 
 if __name__ == "__main__":
-    # test_generator_mps()
-    # test_generator_mpo()
+    test_generator_mpo()
     mpo_Ising_model()
