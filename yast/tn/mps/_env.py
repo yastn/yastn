@@ -72,9 +72,9 @@ class _EnvParent:
 
         config = self.ket[0].config
         for ii in range(len(self.ort)):
-            legs = [self.ort[ii].first_virtual_leg(), self.ket.first_virtual_leg().conj()]
+            legs = [self.ort[ii].virtual_leg('first'), self.ket.virtual_leg('first').conj()]
             self.Fort[ii][(-1, 0)] = initialize.ones(config=config, legs=legs)
-            legs = [self.ket.last_virtual_leg().conj(), self.ort[ii].last_virtual_leg()]
+            legs = [self.ket.virtual_leg('last').conj(), self.ort[ii].virtual_leg('last')]
             self.Fort[ii][(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)  # TODO: eye ?
 
     def reset_temp(self):
@@ -200,10 +200,10 @@ class Env2(_EnvParent):
 
         # left boundary
         config = self.bra[0].config
-        legs = [self.bra.first_virtual_leg(), self.ket.first_virtual_leg().conj()]
+        legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
         self.F[(-1, 0)] = initialize.ones(config=config, legs=legs)  # TODO: or eye?
         # right boundary
-        legs = [self.ket.last_virtual_leg().conj(), self.bra.last_virtual_leg()]
+        legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         self.F[(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)  # TODO: or eye?
 
     def Heff1(self, x, n):
@@ -254,11 +254,11 @@ class Env3(_EnvParent):
 
         # left boundary
         config = self.ket[0].config
-        legs = [self.bra.first_virtual_leg(), self.op.first_virtual_leg().conj(), self.ket.first_virtual_leg().conj()]
+        legs = [self.bra.virtual_leg('first'), self.op.virtual_leg('first').conj(), self.ket.virtual_leg('first').conj()]
         self.F[(-1, 0)] = initialize.ones(config=config, legs=legs)
 
         # right boundary
-        legs = [self.ket.last_virtual_leg().conj(), self.op.last_virtual_leg().conj(), self.bra.last_virtual_leg()]
+        legs = [self.ket.virtual_leg('last').conj(), self.op.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         self.F[(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)
 
     def Heff0(self, C, bd):
@@ -418,8 +418,8 @@ class Env3(_EnvParent):
            ('D_total' in opts_svd and shapeL[0] >= opts_svd['D_total']):
             return False  # maximal bond dimension
         if 'tol' in opts_svd:
-            _, R0 = tensor.qr(AL, axes=(0, 1), sQ=-1)
-            _, R1 = tensor.qr(AR, axes=(1, 0), Raxis=1, sQ=1)
+            _, R0 = tensor.qr(AL, axes=(0, 1), sQ=1)
+            _, R1 = tensor.qr(AR, axes=(1, 0), Raxis=1, sQ=-1)
             _, S, _ = tensor.svd(R0 @ R1)
             if any(S[t][-1] > opts_svd['tol'] * 1.1 for t in S.struct.t):
                 return True

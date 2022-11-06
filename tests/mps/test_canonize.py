@@ -1,5 +1,6 @@
 """ basic procedures of single mps """
 import numpy as np
+import pytest
 import yast
 import yast.tn.mps as mps
 try:
@@ -61,12 +62,12 @@ def test_env3_update():
 
 def check_canonize(psi):
     """ Canonize mps to left and right, running tests if it is canonical. """
-    psi.canonize_sweep(to='last')
-    assert psi.is_canonical(to='last', tol=tol)
-    assert abs(mps.measure_overlap(psi, psi) - 1) < tol
-    psi.canonize_sweep(to='first')
-    assert psi.is_canonical(to='first', tol=tol)
-    assert abs(mps.measure_overlap(psi, psi) - 1) < tol
+    ref_s = (-1, 1, 1) if psi.nr_phys == 1 else (-1, 1, 1, -1)
+    for to in ('last', 'first'):
+        psi.canonize_sweep(to=to)
+        assert psi.is_canonical(to=to, tol=tol)
+        assert abs(mps.measure_overlap(psi, psi) - 1) < tol
+        assert all(psi[site].s == ref_s for site in psi.sweep())
 
 
 def check_env2_measure(psi1, psi2):

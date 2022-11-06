@@ -151,7 +151,7 @@ def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None, schmidt=Non
             _, (psi.A[n],) = tensor.eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
             psi.orthogonalize_site(n, to=to)
             if schmidt is not None and to == 'first' and n != psi.first:
-                _, S, _ = psi[psi.pC].svd(sU=-1)
+                _, S, _ = psi[psi.pC].svd(sU=1)
                 schmidt[psi.pC] = S
             psi.absorb_central(to=to)
             env.clear_site(n)
