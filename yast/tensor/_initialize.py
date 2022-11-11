@@ -13,7 +13,7 @@ def __setitem__(a, key, newvalue):
     key : tuple[int]
         charges of the block
 
-    Update data of the selected block. The data (its shape) should be consistent with 
+    Update data of the selected block. The data (its shape) should be consistent with
     the dimensions of the charge sectors where the block belongs.
     """
     key = tuple(_flatten(key))
@@ -29,11 +29,11 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     Create all allowed blocks based on signature ``s``, total charge ``n``,
     and a set of charge sectors ``t`` for each leg of the tensor.
 
-    First, all allowed blocks are identified by checking the 
+    First, all allowed blocks are identified by checking the
     :ref:`selection rule<symmetry selection rule>`.
-    Then each allowed block is created as a tensor with 
+    Then each allowed block is created as a tensor with
     sizes specified in ``D`` and filled with value ``val``.
-    
+
     .. note::
         This operation overwrites the data of the tensor.
 
@@ -47,7 +47,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
 
     D : list[int] or list[list[int]]
         list of sector sizes for each leg of the tensor, see examples.
-        
+
     val : str
         ``'rand'``, ``'ones'``, or  ``'zeros'``
 
@@ -132,7 +132,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):  # change to ts; Ds
 
     val : str, tensor-like
         recognized string values are ``'rand'``, ``'ones'``,`or  ``'zeros'``.
-        Otherwise any tensor-like format such as nested list, numpy.ndarray, etc., 
+        Otherwise any tensor-like format such as nested list, numpy.ndarray, etc.,
         can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
     if isinstance(Ds, int):

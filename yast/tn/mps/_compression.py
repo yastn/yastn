@@ -1,7 +1,7 @@
 """ Algorithm for variational optimization of mps to match the target state."""
 from ._env import Env2, Env3
-from. _mps import YampsError
-from ... import ones, svd, truncation_mask, tensordot
+from ... import initialize, tensor, YastError
+
 
 def variational_sweep_1site(psi, psi_target, env=None, op=None):
     r"""
@@ -62,22 +62,22 @@ def multiply_svd(a, b, opts=None):
     psi.canonize_sweep(to='last')
 
     if psi.N != a.N:
-        raise YampsError('a and b must have equal number of sites.')
+        raise YastError('MPS: a and b must have equal number of sites.')
 
-    la, lpsi = a.get_rightmost_leg(), psi.get_rightmost_leg()
+    la, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
-    tmp = ones(a.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
+    tmp = initialize.ones(a.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
     tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axis=2)
 
     for n in psi.sweep(to='first'):
-        tmp = tensordot(psi[n], tmp, axes=(2, 0))
+        tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
         if psi.nr_phys == 2:
             tmp = tmp.fuse_legs(axes=(0, 1, 3, (4, 2)))
         tmp = a[n]._attach_23(tmp)
 
-        U, S, V = svd(tmp, axes=((0, 1), (3, 2)), sU=-1)
+        U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1)
 
-        mask = truncation_mask(S, **opts)
+        mask = tensor.truncation_mask(S, **opts)
         U, C, V = mask.apply_mask(U, S, V, axis=(2, 0, 0))
 
         psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)

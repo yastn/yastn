@@ -1,6 +1,7 @@
 """ Various variants of the TDVP algorithm for mps."""
 from ._env import Env3
-from ._mps import YampsError, MpsMpo
+from ._mps import MpsMpo
+from ... import YastError
 import numpy as np
 
 #################################
@@ -62,11 +63,11 @@ def tdvp(psi, H, time=(0, 0.1), dt=0.1, u=1j, env=None, version='1site', order='
     """
     time_independent = isinstance(H, MpsMpo)
     if dt <= 0:
-        raise YampsError('dt should be positive.')
+        raise YastError('MPS: dt should be positive.')
     if not isinstance(time, tuple):
         time = (0, time)
     if any(t1 - t0 <= 0 for t1, t0 in zip(time[1:], time[:-1])):
-        raise YampsError('Time should be an ascending tuple.')
+        raise YastError('MPS: Time should be an ascending tuple.')
 
     if version == '1site' and time_independent:
         routine = lambda t, dt0, env: tdvp_sweep_1site(psi, H, dt0, u, env, opts_expmv, normalize)
@@ -81,7 +82,7 @@ def tdvp(psi, H, time=(0, 0.1), dt=0.1, u=1j, env=None, version='1site', order='
     elif version == '12site' and not time_independent:
         routine = lambda t, dt0, env: tdvp_sweep_12site(psi, H(t), dt0, u, None, opts_expmv, opts_svd, normalize)
     else:
-        raise YampsError('tdvp version %s not recognized' % version, order)
+        raise YastError('MPS: tdvp version %s not recognized' % version, order)
 
     # perform time-steps
     for t0, t1 in zip(time[:-1], time[1:]):
@@ -98,7 +99,7 @@ def tdvp(psi, H, time=(0, 0.1), dt=0.1, u=1j, env=None, version='1site', order='
             env = routine(t + (1 - 1.5 * s2) * dt1, dt1 * s2, env)
             env = routine(t + (1 - 0.5 * s2) * dt1, dt1 * s2, env)
         else:
-            raise YampsError("order should be in ('2nd', '4th')")
+            raise YastError("MPS: order should be in ('2nd', '4th')")
         t = t + dt1
         # measurment here
     return env
@@ -191,5 +192,5 @@ def _init_tdvp(psi, H, env, opts_expmv):
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup(to='first')
     if not (env.bra is psi and env.ket is psi):
-        raise YampsError('Require environment env where ket == bra == psi')
+        raise YastError('MPS: Require environment env where ket == bra == psi')
     return env, opts

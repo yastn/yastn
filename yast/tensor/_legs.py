@@ -93,11 +93,11 @@ class Leg:
         """
         legs_conj = tuple(leg.conj() for leg in self.legs)
         return replace(self, s=-self.s, legs=legs_conj)
-    
+
     def __getitem__(self, t):
         r"""
         Size of a charge sector
-        
+
         Parameters
         ----------
         t : int or tuple(int)
@@ -112,8 +112,8 @@ class Leg:
 
     @property
     def tD(self):
-        r""" 
-        Returns 
+        r"""
+        Returns
         -------
         dict
             charge sectors `t` and their sizes `D` as dictionary ``{t: D}``.
@@ -180,7 +180,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, positive=Fals
     an = np.array(n)
     spanning_vectors = np.eye(len(n)) if not hasattr(config.sym, 'spanning_vectors') \
                         else np.array(config.sym.spanning_vectors)
-    
+
     nvec = len(spanning_vectors)
     maxr = np.ceil(3 * sigma).astype(dtype=int)
 
@@ -232,7 +232,7 @@ def _leg_fusions_need_mask(*legs):
 
 
 def leg_product_all_charges(*legs, s=1):
-    """ 
+    """
     Output Leg that represents an outer product of a list of legs, fixing bond dimension of each to 1.
     """
     sym = legs[0].sym

@@ -147,7 +147,7 @@ def _meta_merge_to_matrix(config, struct, axes, inds):
                     meta_mrg.append((tn, slo, Do, (d0.Dslc, d1.Dslc), (d0.Dprod, d1.Dprod)))
                     _, _, tl, tr, slo, Do = next(gr)
         except StopIteration:
-                pass
+            pass
     t_new, D_new, Dp_new, sl_new, s_eff = tuple(t_new), tuple(D_new), tuple(Dp_new), tuple(sl_new), tuple(s_eff)
     struct_new = struct._replace(t=t_new, D=D_new, Dp=Dp_new, sl=sl_new, s=s_eff)
     return struct_new, tuple(meta_mrg), ls[0], ls[1]
@@ -307,7 +307,7 @@ def _meta_fuse_hard(config, struct, axes):
                     meta_mrg.append((tn, slo, Do, sub_slc, Dsln))
                     _, _, tos, slo, Do = next(gr)
         except StopIteration:
-                pass
+            pass
     Dp_new = np.prod(D_new, axis=1, dtype=int)
     sl_new = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp_new), Dp_new))
     t_new, D_new, Dp_new, s_eff = tuple(t_new), tuple(D_new), tuple(Dp_new), tuple(s_eff)
@@ -427,7 +427,7 @@ def _meta_unfuse_hard(config, struct, axes, hfs):
             lls.append(_LegSlices(t, D, dec))
             hfs_new.append(hf)
             snew.append(struct.s[n])
-    
+
     meta, nsym = [], config.sym.NSYM
     for to, slo, Do in zip(struct.t, struct.sl, struct.D):
         ind = tuple(ls.t.index(to[n * nsym: (n + 1) * nsym]) for n, ls in enumerate(lls))
@@ -691,7 +691,7 @@ def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
     if axis is None:
         axis = list(range(len(hfs)))
     tfl, Dfl, sfl = [], [], [s_out]
-    opfl = 'p'  # product 
+    opfl = 'p'  # product
     treefl = [sum(hfs[n].tree[0] for n in axis)]
     for n in axis:
         tfl.append(t_in[n])
