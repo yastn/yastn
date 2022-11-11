@@ -1,9 +1,10 @@
 from ..sym import sym_none
 from ..initialize import make_config, eye
 from .. import diag
+from ._meta_operators import meta_operators
 
-class Qdit():
-    
+class Qdit(meta_operators):
+    # Predefine dense operators with set dimension of the local space.
     def __init__(self, d=2, **kwargs):
         r"""
         Algebra of d-dimensional Hilbert space with only identity operator.
@@ -20,12 +21,11 @@ class Qdit():
         -----
         Default configuration sets :code:`fermionic` to :code:`False`.
         """
-        self._d= d
-        self._sym= 'dense'
         kwargs['fermionic'] = False
         kwargs['sym'] = sym_none
-        self.config = make_config(**kwargs)
-        self.s = (1, -1)
+        super().__init__(**kwargs)
+        self._d = d
+        self._sym = 'dense'
         self.operators = ('I',)
 
     def I(self):

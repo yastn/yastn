@@ -1,8 +1,9 @@
 from ..initialize import make_config
 from ..sym import sym_none, sym_Z2, sym_U1
 from ..tensor import YastError, Tensor
+from ._meta_operators import meta_operators
 
-class Spin12:
+class Spin12(meta_operators):
     # Predefined set of Pauli operators and spin-1/2 operators. 
     def __init__(self, sym='dense', **kwargs):
         r"""
@@ -34,12 +35,11 @@ class Spin12:
         """
         if not sym in ('dense', 'Z2', 'U1'):
             raise YastError("For Spin12 sym should be in ('dense', 'Z2', 'U1').")
-        self._sym = sym
         kwargs['fermionic'] = False
         import_sym = {'dense': sym_none, 'Z2': sym_Z2, 'U1': sym_U1}
         kwargs['sym'] = import_sym[sym]
-        self.config = make_config(**kwargs)
-        self.s = (1, -1)
+        super().__init__(**kwargs)
+        self._sym = sym
         self.operators = ('I', 'x', 'y', 'z', 'sx', 'sy', 'sz', 'sp', 'sm')
 
     def I(self):
