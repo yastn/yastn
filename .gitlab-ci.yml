@@ -79,8 +79,8 @@ pylint:
   - pip install numpy==1.19.1
   - pip install pylint
   - pip install numpy==1.19.1
-  - pylint -d C0301,C0103 ./yast/tensor/
-  - pylint -d C0301,C0103 ./yamps/
+  - pylint -d C0301,C0103,W0212 ./yast/tensor/
+  - pylint -d C0301,C0103 ./yast/tn/mps/
   rules:
     - !reference [.default_rules, rules]
 

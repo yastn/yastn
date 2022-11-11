@@ -444,39 +444,30 @@ def embed_slc(data, meta, Dsize):
 def add(Adata, Bdata, meta, Dsize):
     dtype = _common_type((Adata, Bdata))
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-    for sl_c, sl_a, sl_b, ab in meta:
-        if ab == 'AB':
-            newdata[slice(*sl_c)] = Adata[slice(*sl_a)] + Bdata[slice(*sl_b)]
-        elif ab == 'A':
-            newdata[slice(*sl_c)] = Adata[slice(*sl_a)]
-        else:  # ab == 'B'
-            newdata[slice(*sl_c)] = Bdata[slice(*sl_b)]
+    for sl_c, sl_a in meta[0]:
+        newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
+    for sl_c, sl_b in meta[1]:
+        newdata[slice(*sl_c)] += Bdata[slice(*sl_b)]
     return newdata
 
 
 def sub(Adata, Bdata, meta, Dsize):
     dtype = _common_type((Adata, Bdata))
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-    for sl_c, sl_a, sl_b, ab in meta:
-        if ab == 'AB':
-            newdata[slice(*sl_c)] = Adata[slice(*sl_a)] - Bdata[slice(*sl_b)]
-        elif ab == 'A':
-            newdata[slice(*sl_c)] = Adata[slice(*sl_a)]
-        else:  # ab == 'B'
-            newdata[slice(*sl_c)] = -Bdata[slice(*sl_b)]
+    for sl_c, sl_a in meta[0]:
+        newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
+    for sl_c, sl_b in meta[1]:
+        newdata[slice(*sl_c)] -= Bdata[slice(*sl_b)]
     return newdata
 
 
 def apxb(Adata, Bdata, x, meta, Dsize):
     dtype = _common_type((Adata, Bdata))
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
-    for sl_c, sl_a, sl_b, ab in meta:
-        if ab == 'AB':
-            newdata[slice(*sl_c)] = Adata[slice(*sl_a)] + x * Bdata[slice(*sl_b)]
-        elif ab == 'A':
-            newdata[slice(*sl_c)] = Adata[slice(*sl_a)]
-        else:  # ab == 'B'
-            newdata[slice(*sl_c)] = x * Bdata[slice(*sl_b)]
+    for sl_c, sl_a in meta[0]:
+        newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
+    for sl_c, sl_b in meta[1]:
+        newdata[slice(*sl_c)] += x * Bdata[slice(*sl_b)]
     return newdata
 
 
