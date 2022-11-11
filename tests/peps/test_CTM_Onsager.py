@@ -4,7 +4,6 @@ import logging
 import numpy as np
 import pytest
 import yast
-from yast.operators._spin12 import Spin12
 try:
     from .configs import config_dense as cfg
     # cfg is used by pytest to inject different backends and divices
@@ -46,7 +45,7 @@ def matrix_inverse_random(n):
 
 
 def CTM_for_Onsager(peps, Z_exact):
-    opt = Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
+    opt = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
     opts = {'chi': 16, 'cutoff': 1e-10, 'nbitmax': 400, 'prec' : 1e-7, 'tcinit' : (0,), 'Dcinit' : (1,)}
     sz, one = opt.z(), opt.I()
     ops = {'magA1': {'l': sz, 'r': one},
