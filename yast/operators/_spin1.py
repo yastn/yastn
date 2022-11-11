@@ -3,8 +3,9 @@ from ..initialize import make_config
 from ..sym import sym_none, sym_Z3, sym_U1
 from .. import block
 from ..tensor import YastError, Tensor
+from ._meta_operators import meta_operators
 
-class Spin1:
+class Spin1(meta_operators):
     # Predefine operators for spin-1 system.
     def __init__(self, sym='dense', **kwargs):
         r"""
@@ -37,12 +38,11 @@ class Spin1:
         """
         if not sym in ('dense', 'Z3', 'U1'):
             raise YastError("For Spin1 sym should be in ('dense', 'Z3', 'U1').")
-        self._sym = sym
         kwargs['fermionic'] = False
         import_sym = {'dense': sym_none, 'Z3': sym_Z3, 'U1': sym_U1}
         kwargs['sym'] = import_sym[sym]
-        self.config = make_config(**kwargs)
-        self.s = (1, -1)
+        super().__init__(**kwargs)
+        self._sym = sym
         self.operators = ('I', 'sx', 'sy', 'sz', 'sp', 'sm')
 
     def I(self):

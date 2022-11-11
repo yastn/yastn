@@ -4,12 +4,13 @@ import logging
 import numpy as np
 import pytest
 import yast
-from yaps.configs import config_dense as config
-from yaps.operators._spin12 import Spin12
-from yaps.operators.gates import fuse_ancilla_2s, fuse_ancilla_1s
-from yaps.CTM import CTM_EVs
+from yast.operators._spin12 import Spin12
+try:
+    from .configs import config_dense as cfg
+    # cfg is used by pytest to inject different backends and divices
+except ImportError:
+    from configs import config_dense as cfg
 
-opt = Spin12(sym='dense')
 
 def create_ZZ_ten(betas):
     # creates the exact peps tensor for a certain beta
@@ -28,7 +29,7 @@ def create_ZZ_ten(betas):
     T = np.tensordot(T, L, axes=(4, 0))
     T = np.transpose(T, axes=(1, 2, 3, 4, 5, 0))
     Dt = (D, D, D, D, spin, ancilla)
-    strt =  yast.Tensor(config=config, s=(-1, 1, 1, -1, -1, 1))
+    strt =  yast.Tensor(config=cfg, s=(-1, 1, 1, -1, -1, 1))
     strt.set_block(val=T, Ds=Dt)
     return strt
 
@@ -37,20 +38,21 @@ def matrix_inverse_random(n):
     """ Returns a n*n random matrix and its inverse """
     tu = np.random.rand(n,n)
     inv_tu = np.linalg.inv(tu)
-    a = yast.Tensor(config=config, s=(1, -1))
+    a = yast.Tensor(config=cfg, s=(1, -1))
     a.set_block(val=tu, Ds=(2, 2))
-    b = yast.Tensor(config=config, s=(1, -1))
+    b = yast.Tensor(config=cfg, s=(1, -1))
     b.set_block(val=inv_tu, Ds=(2, 2))
     return a, b
 
 
 def CTM_for_Onsager(peps, Z_exact):
+    opt = Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
     opts = {'chi': 16, 'cutoff': 1e-10, 'nbitmax': 400, 'prec' : 1e-7, 'tcinit' : (0,), 'Dcinit' : (1,)}
     sz, one = opt.z(), opt.I()
     ops = {'magA1': {'l': sz, 'r': one},
            'magB1': {'l': one, 'r': sz}}
 
-    one.config.backend.random_seed(0)  # fix random seed in the backend
+    opt.random_seed(0)  # fix random seed in the backend
 
     EVs, _ = CTM_EVs(A=peps, ops=ops, **opts) 
     cf = 0.5 * (abs(EVs.get('magA1')) + abs(EVs.get('magB1')))

@@ -1,8 +1,9 @@
 from ..initialize import make_config
 from ..sym import sym_Z2, sym_U1
 from ..tensor import YastError, Tensor
+from ._meta_operators import meta_operators
 
-class SpinlessFermions:
+class SpinlessFermions(meta_operators):
     """ Predefine operators for spinless fermions. """
 
     def __init__(self, sym='U1', **kwargs):
@@ -27,12 +28,11 @@ class SpinlessFermions:
         """
         if not sym in ('Z2', 'U1'):
             raise YastError("For SpinlessFermions sym should be in ('Z2', 'U1').")
-        self._sym = sym
         kwargs['fermionic'] = True
         import_sym = {'Z2': sym_Z2, 'U1': sym_U1}
         kwargs['sym'] = import_sym[sym]
-        self.config = make_config(**kwargs)
-        self.s = (1, -1)
+        super().__init__(**kwargs)
+        self._sym = sym
         self.operators = ('I', 'n', 'c', 'cp')
 
     def I(self):
