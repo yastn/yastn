@@ -4,9 +4,7 @@ from ... import ones, rand, ncon, Leg, random_leg, Tensor
 from ...operators import Qdit
 from ._mps import Mpo, Mps, YampsError, add
 
-from itertools import compress, product
-from re import match
-
+from .latex2Hterm import latex2single_term
 
 class Hterm(NamedTuple):
     r"""
@@ -59,7 +57,7 @@ def generate_H1(I, term):
     return H1
 
 
-def generate_mpo(I, terms, opts):
+def generate_mpo(I, terms, opts=None):
     """
     Generate mpo provided a list of Hterm-s and identity operator I.
 
@@ -110,7 +108,7 @@ class Generator:
         """
         self.N = N
         self._ops = operators
-        self._map = {i:i for i in range(N)} if map is None else map
+        self._map = {(i,): i for i in range(N)} if map is None else map
         if len(self._map) != N or sorted(self._map.values()) != list(range(N)):
             raise YampsError("Map is inconsistent with mps of N sites.")
         self._Is = {k: 'I' for k in self._map.keys()} if Is is None else Is
@@ -205,6 +203,14 @@ class Generator:
             return psi
         raise YampsError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
 
+    def mps(self, psi_str, parameters=None):
+        """
+        initialize simple product states 
+
+        TODO: implement
+        """
+        pass
+
 
     def mpo(self, H_str, parameters=None):
         r"""
@@ -224,129 +230,27 @@ class Generator:
         --------
             :class:`yamps.Mpo`
         """
-        # get everything to dictionary
-        parameters = self.parameters if parameters is None else {**self.parameters, **parameters}
-        params_dict = parameters
-        basis_dict = self._ops.to_dict()
-        # merge to a single dictionary
-        info_dict = {**params_dict.copy(), **basis_dict.copy()}
+        self.parameters = parameters
+        c2 = latex2single_term(H_str, self)
+        c3 = single_term2Hterm(c2, self)
+        return generate_mpo(self._I, c3)
 
-        # interpret string
-        # RULES:
-        # * put all parameters in info_dict are functions, if constant then should be single-parameter function
-        tmp = H_str
-        tmp = tmp.replace("*", " ")
-        for ic in ["*", "(", ")", "\in"]:  # put additional spaces
-            tmp = tmp.replace(ic, " "+ic+" ")
-        while "  " in tmp:  # remove double spaces
-            tmp = tmp.replace("  ", " ")
-        tmp = tmp.replace(" \in ", ".in.").replace("\sum_", ".sum_.") # remove \ because I don't know how to manege this
-        lall = tmp.strip().split(" ")  # remove space if it is on the beginning/end & finally split the instruction
-
-        # split sums away from each other
-        sep, H = {}, None
-        terminate, hodor = ['+', '-'], False
-        isep, id_sep = 0, 0  # where new id_step-th substring begins
-        # split to separate sums
-        sep[id_sep] = []
-        for it in range(len(lall)):
-            tmp = lall[it]
-            if tmp == '(':
-                hodor, terminate = True, [')']
-            if hodor and tmp in terminate:
-                hodor, terminate = False, ['+', '-']
-            if not hodor and tmp in terminate and it > isep:
-                isep = it+1
-                id_sep += 1
-                sep[id_sep] = []
-            sep[id_sep].append(tmp)
-        # analyze terms, get info on sums
-        for k in sep.keys():
-            spart = sep[k]
-            issum = ['sum' in ix for ix in spart]
-            is_sum = list(compress(spart, issum))
-            not_sum = list(compress(spart, [not ix for ix in issum]))
-            # sum instruction
-            is_sum = [match(r".sum_.{(?P<index>.*).in.(?P<range>.*)}", tmp).group("index", "range") for tmp in is_sum]
-            is_index = [tmp[0] for tmp in is_sum]
-            is_range = [params_dict[tmp[1]] for tmp in is_sum]
-            read_not_sum = [None]*len(not_sum)
-            sgn_math = ['+', '-', '(', ')']
-            sgn_info = list(info_dict.keys())
-            # ger order of operations
-            iorder = 0
-            for inum, ival in enumerate(not_sum[::-1]):
-                if ival in sgn_math:
-                    iorder += 1
-                read_not_sum[-inum-1] = iorder
-                if ival in sgn_math:
-                    iorder += 1
-            # remove bracket for convenience
-            remove_braket = [ix not in ['(', ')'] for ix in not_sum]
-            not_sum = list(compress(not_sum, remove_braket))
-            read_not_sum = list(compress(read_not_sum, remove_braket))
-            # iterate over is_index-es each over is_range-es range of numbers
-            range_span = product(*is_range, repeat=1)
-            for idx in range_span:
-                # it does a seach for a parametrs and operators for each range-span
-                # I am not sure how to change that because each elemetn is a function...
-                for iorder in np.unique(read_not_sum):
-                    tmp = [ira == iorder for ira in read_not_sum]
-                    itake = list(compress(not_sum, tmp))
-                    op_holder, ind_holder, amp_holder = [], [], 1
-                    iind = (0,)  # put dummy just in case parameter is just a number
-                    for inum, ival in enumerate(itake[::-1]):
-                        # extract using map if needed
-                        get_info = match(r"(?P<ival>.*)_{(?P<iind>.*)}", ival)
-                        if get_info:
-                            ival, iind = get_info.group("ival"), get_info.group("iind")
-                            iind = iind.split(',')
-                            if all([i.isnumeric() for i in iind]):
-                                # convert to numerical index
-                                iind = [int(i) for i in iind]
-                            else:
-                                # find index from sum indexing
-                                for i_ind in range(len(iind)):
-                                    for i_index in range(len(is_index)):
-                                        if is_index[i_index] in iind[i_ind]:
-                                            iind[i_ind] = iind[i_ind].replace(is_index[i_index], str(idx[i_index]))
-                                    iind[i_ind] = eval(iind[i_ind])
-                        if ival in sgn_info:
-                            ival = info_dict[ival](*iind)
-                            if type(ival) == Tensor:
-                                op_holder.append(ival)
-                                ind_holder.append(*iind)
-                            else:
-                                amp_holder *= ival
-                        else:
-                            if '+' == ival:
-                                amp_holder *= float(1)
-                            elif '-' == ival:
-                                amp_holder *= float(-1)
-                            else:
-                                amp_holder *= float(ival)
-                    # generate mpo product using automatic
-                    ind_holder, op_holder = ind_holder[::-1], op_holder[::-1]
-                    place_holder = [Hterm(amp_holder, ind_holder, op_holder)]
-                    if not op_holder:
-                        H = amp_holder * H
-                    else:
-                        if not H:
-                            H = generate_mpo(self._I, place_holder, self.opts)
-                        elif H and amp_holder > 0.0:
-                            H = H + generate_mpo(self._I, place_holder, self.opts)
-            H.canonize_sweep(to='last', normalize=False)
-            H.truncate_sweep(to='first', opts=self.opts, normalize=False)
-        return H
-
-    def mps(self, psi_str, parameters=None):
-        """
-        initialize simple product states 
-
-        TODO: implement
-        """
-        pass
-
+def single_term2Hterm(c2, gen):
+    fin_list = []
+    for ic in c2:
+        amplitude, positions, operators = 1, [], []
+        for iop in ic.op:
+            if len(iop)==1:
+                amplitude *= gen.parameters[iop[0]] if iop[0] in gen.parameters else float(iop[0])
+            else:
+                name, indicies = iop[0], gen._map[iop[1:]]
+                positions.append(indicies)
+                if name in gen.parameters:
+                    operators.append(gen.parameters[name](indicies))
+                else:
+                    operators.append(gen._ops.to_dict()[name](indicies))
+        fin_list.append(Hterm(amplitude, positions, operators))
+    return fin_list
 
 def random_dense_mps(N, D, d, **kwargs):
     G = Generator(N, Qdit(d=d, **kwargs))
