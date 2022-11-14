@@ -63,6 +63,6 @@ def test_Peps_get_set():
 
 if __name__ == '__main__':
     test_Lattice()
-   # test_Peps_get_set()
+    test_Peps_get_set()
     test_NtuEnv()
 
