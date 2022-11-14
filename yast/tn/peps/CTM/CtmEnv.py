@@ -1,4 +1,4 @@
-from yaps import Lattice
+from yast.tn.peps import Lattice
 from typing import NamedTuple, Tuple
 from dataclasses import dataclass
 from yast import tensordot, svd_with_truncation, rand, ones
