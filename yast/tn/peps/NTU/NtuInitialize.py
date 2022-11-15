@@ -1,4 +1,5 @@
 import numpy as np
+import yast.tn.peps as peps
 
 def initialize_peps_purification(fid, net):
     """
@@ -12,5 +13,6 @@ def initialize_peps_purification(fid, net):
         A = A.add_leg(axis=0, s=s)
    
     A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
-    Gamma = {ms: A for ms in net.sites()}
+    Gamma = peps.Peps()
+    Gamma._data = {ms: A for ms in net.sites()}
     return Gamma

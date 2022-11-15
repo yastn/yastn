@@ -46,6 +46,6 @@ def GB_list(net, nn_gates):
 
 def show_leg_structure(net, Gamma):
    for ms in net.sites():
-        xs = Gamma[ms].unfuse_legs((0, 1))
+        xs = Gamma._data[ms].unfuse_legs((0, 1))
         print("site ", str(ms), xs.get_shape()) 
   

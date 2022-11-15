@@ -7,11 +7,11 @@ import numpy as np
 def ret_AAbs(A, bds, op, orient):
     # preparing the nearest neighbor tensor before contraction by attaching them with operators
     if orient == 'h':
-        AAb = {'l': fPEPS_2layers(A[bds.site_0], op=op['l'], dir='l'), 'r': fPEPS_2layers(A[bds.site_1], op=op['r'], dir='r')}
+        AAb = {'l': fPEPS_2layers(A._data[bds.site_0], op=op['l'], dir='l'), 'r': fPEPS_2layers(A._data[bds.site_1], op=op['r'], dir='r')}
     elif orient == 'v':
-        AAb = {'l': fPEPS_2layers(A[bds.site_0], op=op['l'], dir='t'), 'r': fPEPS_2layers(A[bds.site_1], op=op['r'], dir='b')}
+        AAb = {'l': fPEPS_2layers(A._data[bds.site_0], op=op['l'], dir='t'), 'r': fPEPS_2layers(A._data[bds.site_1], op=op['r'], dir='b')}
     elif orient == '1s':
-        AAb = {'l': fPEPS_2layers(A[bds.site_0], op=op['l'], dir='1s'), 'r': fPEPS_2layers(A[bds.site_1], op=op['r'], dir='1s')}
+        AAb = {'l': fPEPS_2layers(A._data[bds.site_0], op=op['l'], dir='1s'), 'r': fPEPS_2layers(A._data[bds.site_1], op=op['r'], dir='1s')}
     return AAb
 
 
