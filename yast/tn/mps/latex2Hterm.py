@@ -24,11 +24,18 @@ def issingle_term(d):
 
 
 def replace_index(single_term_el, old_name, new_name):
+    #print(old_name, new_name)
+    old_name = [old_name] if not isinstance(old_name, (list, tuple)) else old_name
+    new_name = [new_name] if not isinstance(new_name, (list, tuple)) else new_name
+    if len(old_name) != len(new_name):
+        print("Number of iterators and indicies is inconsistent.")
+        exit()
     # returns single_term
     new_op = []
     for op in single_term_el.op:
-        el = tuple([new_name if ind == old_name else ind for ind in op])
-        new_op += (el,)
+        for jold, jnew in zip(old_name, new_name):
+            op = tuple([jnew if ind == jold else ind for ind in op])
+        new_op += (op,)
     return single_term(op=tuple(new_op))
 
 def combine_lists(operation, list1, list2, gen):
@@ -51,11 +58,12 @@ def apply_operation(operation, single_terms, gen):
         return single_term(op=new_op)
     elif operation[0] == "\sum":
         m = re.match(r'{(.*).\\in.(.*)}', operation[1])
-        old_name, iterate_list = m.group(1), m.group(2)
+        iterator, iterate_list = (m.group(1).split(",")), m.group(2)
         sum_elements = []
         # iterate over list read from gen parameters
-        for new_name in gen.parameters[iterate_list]:
-            sum_elements += [replace_index(new_list, old_name, new_name) for new_list in single_terms.copy()]
+        for new_iterator in gen.parameters[iterate_list]:
+            for new_list in single_terms.copy():
+                sum_elements.append(replace_index(new_list, iterator, new_iterator))
         return sum_elements
 
 
