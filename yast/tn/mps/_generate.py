@@ -3,8 +3,7 @@ from typing import NamedTuple
 from ... import ones, rand, ncon, Leg, random_leg, Tensor
 from ...operators import Qdit
 from ._mps import Mpo, Mps, YampsError, add
-
-from .latex2Hterm import latex2single_term
+from .latex2term import latex2term
 
 
 class Hterm(NamedTuple):
@@ -231,11 +230,11 @@ class Generator:
             :class:`yamps.Mpo`
         """
         self.parameters = parameters
-        c2 = latex2single_term(H_str, self.parameters)
-        c3 = self.single_term2Hterm(c2)
+        c2 = latex2term(H_str, self.parameters)
+        c3 = self.term2Hterm(c2)
         return generate_mpo(self._I, c3)
 
-    def single_term2Hterm(self, c2):
+    def term2Hterm(self, c2):
         # can be used with latex-form interpreter or alone.
         # TODO: write separate test
         fin_list = []
