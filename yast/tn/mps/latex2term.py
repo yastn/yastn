@@ -221,7 +221,7 @@ def splitt(b, eq_it):
     return operation, list(map(lambda x: splitt(x, (eq_it + 1)%len(basic_operation)), out))
 
 
-def latex2single_term(c0, param_dict):
+def latex2term(c0, param_dict):
     # Full interpreter from string to single_term-s
     # I make all parameters global but use only ranges from sum
     global gen_param
