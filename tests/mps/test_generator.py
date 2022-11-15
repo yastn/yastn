@@ -202,14 +202,13 @@ def test_generator_mpo():
     parameters = {"t": lambda j: t, "mu": mu, "rangeN": range(N), "rangeNN": zip(range(N-1), range(1,N))}
     
     H_str = "\sum {j,k.\in.rangeNN} ( t_{j} * 1 + 0 ) * ( cp_{j} * c_{k} + cp_{k} * c_{j} ) + \sum {j.\in.rangeN} mu * cp_{j} * c_{j}"
-
+    
     H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
     H = generate.mpo(H_str, parameters)
     
     psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
     x_ref = mps.measure_mpo(psi, H_ref, psi).item()
     x = mps.measure_mpo(psi, H, psi).item()
-    print(x, x_ref)
     assert abs(x_ref - x) < tol
 
     psi.canonize_sweep(to='first')

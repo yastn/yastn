@@ -6,6 +6,7 @@ from ._mps import Mpo, Mps, YampsError, add
 
 from .latex2Hterm import latex2single_term
 
+
 class Hterm(NamedTuple):
     r"""
     Defines a product operator :math:`O\in\A(\mathcal{H})` on product Hilbert space :math:`\mathcal{H}=\otimes_i \mathcal{H}_i`
@@ -211,7 +212,6 @@ class Generator:
         """
         pass
 
-
     def mpo(self, H_str, parameters=None):
         r"""
         Convert latex-like string to yamps MPO.
@@ -231,26 +231,28 @@ class Generator:
             :class:`yamps.Mpo`
         """
         self.parameters = parameters
-        c2 = latex2single_term(H_str, self)
-        c3 = single_term2Hterm(c2, self)
+        c2 = latex2single_term(H_str, self.parameters)
+        c3 = self.single_term2Hterm(c2)
         return generate_mpo(self._I, c3)
 
-def single_term2Hterm(c2, gen):
-    fin_list = []
-    for ic in c2:
-        amplitude, positions, operators = 1, [], []
-        for iop in ic.op:
-            if len(iop)==1:
-                amplitude *= gen.parameters[iop[0]] if iop[0] in gen.parameters else float(iop[0])
-            else:
-                name, indicies = iop[0], gen._map[iop[1:]]
-                if name in gen.parameters:
-                    operators.append(gen.parameters[name](indicies))
+    def single_term2Hterm(self, c2):
+        # can be used with latex-form interpreter or alone.
+        # TODO: write separate test
+        fin_list = []
+        for ic in c2:
+            amplitude, positions, operators = 1, [], []
+            for iop in ic.op:
+                if len(iop)==1:
+                    amplitude *= self.parameters[iop[0]] if iop[0] in self.parameters else float(iop[0])
                 else:
-                    positions.append(indicies)
-                    operators.append(gen._ops.to_dict()[name](indicies))
-        fin_list.append(Hterm(amplitude, positions, operators))
-    return fin_list
+                    name, indicies = iop[0], self._map[iop[1:]]
+                    if name in self.parameters:
+                        operators.append(self.parameters[name](indicies))
+                    else:
+                        positions.append(indicies)
+                        operators.append(self._ops.to_dict()[name](indicies))
+            fin_list.append(Hterm(amplitude, positions, operators))
+        return fin_list
 
 def random_dense_mps(N, D, d, **kwargs):
     G = Generator(N, Qdit(d=d, **kwargs))
