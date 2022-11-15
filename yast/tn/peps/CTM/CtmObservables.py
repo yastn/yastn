@@ -15,13 +15,13 @@ def nn_avg(Gamma, net, env, op):
         for bds_h in net.bonds(dirn='h'):  # correlators on all horizontal bonds
             
             AAbo = ret_AAbs(Gamma, bds_h, opt, orient='h')
-            AAb = {'l': fPEPS_2layers(Gamma[bds_h.site_0]), 'r': fPEPS_2layers(Gamma[bds_h.site_1])}
+            AAb = {'l': fPEPS_2layers(Gamma._data[bds_h.site_0]), 'r': fPEPS_2layers(Gamma._data[bds_h.site_1])}
             val_hor = hor_extension(env, bds_h, AAbo, AAb)
             res_hor.append(val_hor)
 
         for bds_v in net.bonds(dirn='v'): # correlators on all vertical bonds
             AAbo = ret_AAbs(Gamma, bds_v, opt, orient='v')
-            AAb = {'l': fPEPS_2layers(Gamma[bds_v.site_0]), 'r': fPEPS_2layers(Gamma[bds_v.site_1])}
+            AAb = {'l': fPEPS_2layers(Gamma._data[bds_v.site_0]), 'r': fPEPS_2layers(Gamma._data[bds_v.site_1])}
             val_ver = ver_extension(env, bds_v, AAbo, AAb)
             res_ver.append(val_ver)
         
@@ -39,6 +39,6 @@ def nn_bond(Gamma, net, env, op, bd):
 
     Gamma = check_consistency_tensors(Gamma, net)
     AAbo = ret_AAbs(Gamma, bd, op, orient=bd.dirn)
-    AAb = {'l': fPEPS_2layers(Gamma[bd.site_0]), 'r': fPEPS_2layers(Gamma[bd.site_1])}
+    AAb = {'l': fPEPS_2layers(Gamma._data[bd.site_0]), 'r': fPEPS_2layers(Gamma._data[bd.site_1])}
     val = hor_extension(env, bd, AAbo, AAb) if bd.dirn == 'h' else ver_extension(env, bd, AAbo, AAb)
     return val

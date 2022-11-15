@@ -6,7 +6,7 @@ PEPs tensors habe 6 legs: [top, left, bottom, right, ancilla, system] with signa
 The routines include swap_gates to incorporate fermionic anticommutation relations into the lattice.
 """
 from yast import tensordot, ncon, svd_with_truncation, qr, vdot
-from yast.tn.peps import DoublePepsTensor
+from yast.tn.peps._doublePepsTensor import DoublePepsTensor
 import numpy as np
 from .CtmEnv import CtmEnv
 
@@ -578,11 +578,11 @@ def check_consistency_tensors(A, net):
     # to check if the A tensors have the appropriate configuration of legs i.e. t l b r [s a]
 
     list_sites = net.sites()
-    if A[0, 0].ndim == 6:
-        A = {ms: A[ms].fuse_legs(axes=(0, 1, 2, 3, (4, 5))) for ms in list_sites}  # make sure A is a dict
-    elif A[0, 0].ndim == 3:
-        A = {ms: A[ms].unfuse_legs(axes=(0, 1)) for ms in list_sites}  # system and ancila are fused by default
+    if A._data[0, 0].ndim == 6:
+        A._data = {ms: A._data[ms].fuse_legs(axes=(0, 1, 2, 3, (4, 5))) for ms in list_sites}  # make sure A is a dict
+    elif A._data[0, 0].ndim == 3:
+        A._data = {ms: A._data[ms].unfuse_legs(axes=(0, 1)) for ms in list_sites}  # system and ancila are fused by default
     else:
-        A = {ms: A[ms] for ms in list_sites}  # system and ancila are fused by default
+        A._data = {ms: A._data[ms] for ms in list_sites}  # system and ancila are fused by default
     return A
         

@@ -28,8 +28,7 @@ def GetEnv(A, net, chi=32, cutoff=1e-10, prec=1e-7, nbitmax=10, tcinit=(), Dcini
 
     A = check_consistency_tensors(A, net=net) # to check if A has the desired fused form of legs i.e. t l b r [s a]
     list_sites = net.sites()
-
-    AAb = {m: fPEPS_2layers(A[m]) for m in list_sites}
+    AAb = {m: fPEPS_2layers(A._data[m]) for m in list_sites}
 
     if AAb_mode >= 1:
         fPEPS_fuse_layers(AAb)

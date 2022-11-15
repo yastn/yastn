@@ -15,7 +15,7 @@ def ntu_machine(Gamma, net, fid, bd, GA, GB, Ds, truncation_mode, step, fix_bd):
 
     if step == "svd-update":
         MA, MB = truncation_step(RA, RB, Ds, normalize=True)
-        Gamma[bd.site_0], Gamma[bd.site_1] = form_new_peps_tensors(QA, QB, MA, MB, bd)
+        Gamma._data[bd.site_0], Gamma._data[bd.site_1] = form_new_peps_tensors(QA, QB, MA, MB, bd)
         info = {}
         return Gamma, info
     else:
@@ -34,7 +34,7 @@ def ntu_machine(Gamma, net, fid, bd, GA, GB, Ds, truncation_mode, step, fix_bd):
                 MA, MB = MA_2, MB_2
                 logging.info("2-step NTU; ntu errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e " % (ntu_error, ntu_error_2, svd_error, svd_error_2))
                 ntu_error, optim, svd_error = ntu_error_2, optim_2, svd_error_2
-        Gamma[bd.site_0], Gamma[bd.site_1] = form_new_peps_tensors(QA, QB, MA, MB, bd)
+        Gamma._data[bd.site_0], Gamma._data[bd.site_1] = form_new_peps_tensors(QA, QB, MA, MB, bd)
         info.update({'ntu_error': ntu_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
 
         return Gamma, info
@@ -48,7 +48,7 @@ def single_bond_local_update(Gamma, net, G_loc):
 
     list_sites = net.sites()
     for ms in list_sites:
-        Gamma[ms] = Gamma[ms] @ G_loc
+        Gamma._data[ms] = Gamma._data[ms] @ G_loc
 
     return Gamma # local update all sites at once
     
@@ -56,7 +56,7 @@ def single_bond_local_update(Gamma, net, G_loc):
 def single_bond_nn_update(Gamma, bd, GA, GB):
     """ apply nn gates on PEPS tensors. """
 
-    A, B = Gamma[bd.site_0], Gamma[bd.site_1]  # A = [t l] [b r] s
+    A, B = Gamma._data[bd.site_0], Gamma._data[bd.site_1]  # A = [t l] [b r] s
 
     dirn = bd.dirn
 
@@ -146,7 +146,7 @@ def env_NTU(Gamma, net, fid, bd, QA, QB, dirn):
         if env[ms] is None:
             G[ms] = trivial_tensor(fid)
         else:
-            G[ms] = Gamma[env[ms]]
+            G[ms] = Gamma._data[env[ms]]
 
     if dirn == "h":
         m_tl, m_l, m_bl = con_tl(G['tl']), con_l(G['l']), con_bl(G['bl'])

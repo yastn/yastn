@@ -27,7 +27,7 @@ def test_NTU_spinless():
     chi = 20
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
-    beta_end = 0.1
+    beta_end = 0.01
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
@@ -41,9 +41,10 @@ def test_NTU_spinless():
     G_loc = gate_local_fermi_sea(mu, dbeta, fid, fc, fcdag, ancilla=ancilla, purification=purification) # local gate for spinless fermi sea
     Gate = {'loc': G_loc, 'nn':{'GA': GA_nn, 'GB': GB_nn}}
 
+
     if purification == 'True':
         Gamma = initialize_peps_purification(fid, net) # initialized at infinite temperature
-
+    
     time_steps = round(beta_end / dbeta)
 
     for nums in range(time_steps):

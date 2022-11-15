@@ -71,7 +71,7 @@ class Local_CTM_Env: # no more variables than the one given
 
 def init_rand(A, tc, Dc, lattice):
     """ Initialize random CTMRG environments of peps tensors A. """
-    config = A[0, 0].config
+    config = A._data[0, 0].config
   
     list_sites = lattice.sites()
 
@@ -88,26 +88,26 @@ def init_rand(A, tc, Dc, lattice):
 
 
         legs = [env[ms].tl.get_legs(1).conj(),
-                A[ms].get_legs(0).conj(),
-                A[ms].get_legs(0),
+                A._data[ms].get_legs(0).conj(),
+                A._data[ms].get_legs(0),
                 env[ms].tr.get_legs(0).conj()]
         env[ms].t = rand(config=config, legs=legs)
 
         legs = [env[ms].br.get_legs(1).conj(),
-                A[ms].get_legs(2).conj(),
-                A[ms].get_legs(2),
+                A._data[ms].get_legs(2).conj(),
+                A._data[ms].get_legs(2),
                 env[ms].bl.get_legs(0).conj()]
         env[ms].b = rand(config=config, legs=legs)
 
         legs = [env[ms].bl.get_legs(1).conj(),
-                A[ms].get_legs(1).conj(),
-                A[ms].get_legs(1),
+                A._data[ms].get_legs(1).conj(),
+                A._data[ms].get_legs(1),
                 env[ms].tl.get_legs(0).conj()]
         env[ms].l = rand(config=config, legs=legs)
 
         legs = [env[ms].tr.get_legs(1).conj(),
-                A[ms].get_legs(3).conj(),
-                A[ms].get_legs(3),
+                A._data[ms].get_legs(3).conj(),
+                A._data[ms].get_legs(3),
                 env[ms].br.get_legs(0).conj()]
         env[ms].r = rand(config=config, legs=legs)
 

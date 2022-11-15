@@ -125,7 +125,7 @@ class Peps(Lattice):
         nx = index
         for ny in range(self.Ny):
             site = (nx, ny)
-            H[ny] = DoublePepsTensor(self[site], self[site])
+            H[ny] = DoublePepsTensor(self._data[site], self._data[site])
         return H
 
     def boudary_mps(self, rotation=''):
