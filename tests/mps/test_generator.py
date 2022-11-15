@@ -194,24 +194,22 @@ def test_generator_mps():
 
 def test_generator_mpo():
     N = 5
-    t = 0
+    t = 1
     mu = 0.2
     operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N, operators)
     generate.random_seed(seed=0)
-    parameters = {"t": t, "mu": mu, "range1": range(N), "range2": range(1, N-1)}
+    parameters = {"t": lambda j: t, "mu": mu, "rangeN": range(N), "rangeNN": zip(range(N-1), range(1,N))}
     
-    #H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j} + ( cp_{0} c_{1} + 1*cp_{1} c_{0} )*t "
-    
-    H_str = "\sum {j.\in.range1} 1 * mu * cp_{j} * c_{j}"
-    H_str = "\sum {j.\in.range1} ( 0.5 + 0.5 ) * mu * cp_{j} * c_{j}"
-    
+    H_str = "\sum {j,k.\in.rangeNN} ( t_{j} * 1 + 0 ) * ( cp_{j} * c_{k} + cp_{k} * c_{j} ) + \sum {j.\in.rangeN} mu * cp_{j} * c_{j}"
+
     H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
     H = generate.mpo(H_str, parameters)
     
     psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
     x_ref = mps.measure_mpo(psi, H_ref, psi).item()
     x = mps.measure_mpo(psi, H, psi).item()
+    print(x, x_ref)
     assert abs(x_ref - x) < tol
 
     psi.canonize_sweep(to='first')

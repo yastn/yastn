@@ -244,10 +244,10 @@ def single_term2Hterm(c2, gen):
                 amplitude *= gen.parameters[iop[0]] if iop[0] in gen.parameters else float(iop[0])
             else:
                 name, indicies = iop[0], gen._map[iop[1:]]
-                positions.append(indicies)
                 if name in gen.parameters:
                     operators.append(gen.parameters[name](indicies))
                 else:
+                    positions.append(indicies)
                     operators.append(gen._ops.to_dict()[name](indicies))
         fin_list.append(Hterm(amplitude, positions, operators))
     return fin_list
