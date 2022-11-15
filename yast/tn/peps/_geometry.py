@@ -1,7 +1,9 @@
 """ Basic structures forming PEPS network. """
-from dataclasses import dataclass
 from itertools import product
-from typing import NamedTuple, Tuple
+from typing import NamedTuple
+from ...tn.mps import Mps, Mpo
+from ._doublePepsTensor import DoublePepsTensor
+from ... import Leg, initialize
 
 class Bond(NamedTuple):
     """ site_0 should be before site_1 in the fermionic order. """
@@ -118,6 +120,26 @@ class Peps(Lattice):
         self._data[self.site2index(site)] = tensor
 
 
+    def mpo(self, index, rotation=''):
+        H = Mpo(N=self.Nx)
+        nx = index
+        for ny in range(self.Ny):
+            site = (nx, ny)
+            H[ny] = DoublePepsTensor(self[site], self[site])
+        return H
+
+    def boudary_mps(self, rotation=''):
+        psi = Mpo(N=self.Nx)
+        cfg = self[(0, 0)].config
+        n0 = (0,) * cfg.sym.NSYM
+        leg0 = Leg(s=-1, t=(n0,), D=(1,))
         
+        for ny in range(self.Ny):
+            site = (self.Nx, ny)
+            legA = self[site].get_legs(axis=3)
+            psi[ny] = initialize.ones(config=cfg, legs=[leg0, legA.conj(), leg0.conj()])
+        return psi
+
+
  
 
