@@ -120,24 +120,29 @@ class Peps(Lattice):
         self._data[self.site2index(site)] = tensor
 
 
-    def mpo(self, index, rotation=''):
+    def mpo(self, row_index, rotation=''):
+
+        # converts specific row of PEPS into MPO
+
         H = Mpo(N=self.Nx)
-        nx = index
-        for ny in range(self.Ny):
+        ny = row_index
+        for nx in range(self.Nx):
             site = (nx, ny)
-            H[ny] = DoublePepsTensor(self._data[site], self._data[site])
+            H.A[nx] = DoublePepsTensor(top=self._data[site], bottom=self._data[site])
         return H
 
-    def boudary_mps(self, rotation=''):
+    def boundary_mps(self, rotation=''):
+        # create 
         psi = Mpo(N=self.Nx)
-        cfg = self[(0, 0)].config
+        cfg = self._data[(0, 0)].config
         n0 = (0,) * cfg.sym.NSYM
-        leg0 = Leg(s=-1, t=(n0,), D=(1,))
+        print(n0)
+        leg0 = Leg(cfg, s=-1, t=(n0,), D=(1,))
         
-        for ny in range(self.Ny):
-            site = (self.Nx, ny)
-            legA = self[site].get_legs(axis=3)
-            psi[ny] = initialize.ones(config=cfg, legs=[leg0, legA.conj(), leg0.conj()])
+        for nx in range(self.Nx):
+            site = (nx, self.Ny-1)
+            legA = self._data[site].get_legs(axis=3)
+            psi[nx] = initialize.ones(config=cfg, legs=[leg0, legA.conj(), leg0.conj()])
         return psi
 
 
