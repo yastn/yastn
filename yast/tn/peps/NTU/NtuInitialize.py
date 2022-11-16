@@ -13,6 +13,6 @@ def initialize_peps_purification(fid, net):
         A = A.add_leg(axis=0, s=s)
    
     A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
-    Gamma = peps.Peps()
+    Gamma = peps.Peps(net.lattice, net.dims, net.boundary)
     Gamma._data = {ms: A for ms in net.sites()}
     return Gamma
