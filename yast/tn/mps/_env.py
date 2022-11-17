@@ -2,6 +2,18 @@
 from ... import tensor, initialize, YastError
 
 
+def norm(ket):
+    r""" Calculating norm of |ket>, i.e. <ket|ket> ** 0.5. """
+    return abs(measure_overlap(ket, ket)) ** 0.5
+
+
+def vdot(bra, ket, op=None):
+    r""" Calculating overlap <bra|ket>, or <bra|op|ket> if op is provided as the last argument."""
+    if op is None:
+        return measure_overlap(bra, ket)
+    return measure_mpo(bra, op, ket)
+
+
 def measure_overlap(bra, ket):
     r"""
     Calculate overlap :math:`\langle \textrm{bra}|\textrm{ket} \rangle`.

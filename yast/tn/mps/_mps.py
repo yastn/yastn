@@ -1,5 +1,10 @@
 """ Mps structure and its basic manipulations. """
 from ... import tensor, initialize, YastError
+from ._env import norm
+
+###################################
+#   auxiliary for basic algebra   #
+###################################
 
 
 def Mps(N):
@@ -34,11 +39,6 @@ def Mpo(N):
         MPO with :code:`nr_phys=2`
     """
     return MpsMpo(N, nr_phys=2)
-
-
-###################################
-#   auxiliary for basic algebra   #
-###################################
 
 
 def add(*states, amplitudes=None):
@@ -190,6 +190,10 @@ class MpsMpo:
         self.first = 0  # index of the first lattice site
         self.last = N - 1  # index of the last lattice site
         self.nr_phys = nr_phys
+
+    def norm(self):
+        return norm(self)
+
 
     @property
     def config(self):
