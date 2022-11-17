@@ -1,7 +1,7 @@
 import numpy as np
 from typing import NamedTuple
 from ... import initialize, operators, tensor, YastError
-from ._mps import Mpo, Mps, add
+from ._mps import add, Mpo, Mps
 
 from itertools import compress, product
 from re import match
