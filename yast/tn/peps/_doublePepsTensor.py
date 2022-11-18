@@ -1,12 +1,42 @@
 """ Class that treats a cell of a double-layer peps as a single tensor."""
 
-from yast import tensordot
+from yast import tensordot, leg_outer_product
+
+_rotations = {0: (0, 1, 2, 3), 90: (1, 2, 3, 0)}
 
 class DoublePepsTensor:
-    def __init__(self, top, bottom):
+    def __init__(self, top, btm, rotation=0):
         self.A = top
-        self.Ab = bottom
+        self.Ab = btm
+        self._r = rotation
 
+    @property
+    def ndim(self):
+        return 4
+
+    def get_shape(self, axis=None):
+        if axis is None:
+            axis = tuple(range(4))
+        sA = self.A.get_shape(axis=axis)
+        sB = self.Ab.get_shape(axis=axis)
+        if isinstance(axis, int):
+            return sA * sB 
+        return tuple(x * y for x, y in zip(sA, sB))
+
+    def get_legs(self, axis=None):
+        if axis is None:
+            axis = tuple(range(4))
+        axes = (axis,) if isinstance(axis, int) else tuple(axis)
+        rot = _rotations[self._r]
+        axes = tuple(rot[ax] for ax in axes)
+        lts = self.A.get_legs(axis=axes)
+        lbs = self.A.get_legs(axis=axes)
+        if hasattr(axis, '__iter__'):
+            lts, lbs = (lts,), (lbs,)
+        legs = []
+        for lt, lb in zip(lts, lbs):
+            legs.append(leg_outer_product(lt, lb.conj()))
+        return tuple(legs) if hasattr(axis, '__iter__') else legs.pop()
 
 
     def clone(self):
@@ -22,10 +52,7 @@ class DoublePepsTensor:
         yast.tn.peps.DoublePepsTensor
             a clone of :code:`self`
         """
-        phi = DoublePepsTensor()
-        phi.A = self.A.clone()
-        phi.Ab = self.Ab.clone()
-        return phi
+        return DoublePepsTensor(self.A.clone(), self.Ab.clone(), rotation=self._r)
 
     def copy(self):
         r"""
@@ -43,12 +70,8 @@ class DoublePepsTensor:
         yast.tn.peps.DoublePepsTensor
             a copy of :code:`self`
         """
-        phi = DoublePepsTensor()
-        phi.A = self.A.copy()
-        phi.Ab = self.Ab.copy()
-        return phi
+        return DoublePepsTensor(self.A.copy(), self.Ab.copy(), rotation=self._r)
 
-         
     def append_a_bl(self, tt):
         tt = tt.fuse_legs(axes=((0, 3), 1, 2))
         tt = tt.unfuse_legs(axes=(1, 2))
@@ -83,7 +106,6 @@ class DoublePepsTensor:
         tt = tt.transpose(axes=(0, 2, 1, 3))
         return tt
 
-
     def append_a_tl(self, tt):
         tt = tt.fuse_legs(axes=((0, 3), 1, 2))
         tt = tt.unfuse_legs(axes=(1, 2))
@@ -99,7 +121,6 @@ class DoublePepsTensor:
         tt = tt.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3))
         return tt
 
-
     def append_a_br(self, tt):
         tt = tt.fuse_legs(axes=((0, 3), 1, 2))
         tt = tt.unfuse_legs(axes=(1, 2))
@@ -114,29 +135,24 @@ class DoublePepsTensor:
         tt = tt.fuse_legs(axes=(0, (1, 3), (2, 4)))
         tt = tt.unfuse_legs(axes=0)
         tt = tt.transpose(axes=(0, 2, 1, 3))
-        return 
+        return tt
 
-
-    def _attach_01(AAb, tt, rotation=''):
-        if isinstance(AAb, DoublePepsTensor):
-            if rotation == '0':
-                return AAb.append_a_tl(tt)
-            elif rotation == '90':
-                return AAb.append_a_bl(tt)
+    def _attach_01(self, tt):
+        if self._r == 0:
+            return self.append_a_tl(tt)
+        elif self._r == 90:
+            return self.append_a_bl(tt)
     
-    def _attach_23(AAb, tt, rotation=''):
-        if isinstance(AAb, DoublePepsTensor):
-            if rotation == '0':
-                return AAb.append_a_br(tt)
-            elif rotation == '90':
-                return AAb.append_a_tr(tt)
-
+    def _attach_23(self, tt):
+        if self._r == 0:
+            return self.append_a_br(tt)
+        elif self._r == 90:
+            return self.append_a_tr(tt)
 
     def fPEPS_fuse_layers(self):
-        # fuse the top and bottom layers of PEPS
-        
+        # fuse the top and btm layers of PEPS
         fA = self.top.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0t 1t) (2t 3t) 4t
-        fAb = self.bottom.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0b 1b) (2b 3b) 4b
+        fAb = self.btm.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0b 1b) (2b 3b) 4b
         tt = tensordot(fA, fAb, axes=(2, 2), conj=(0, 1))  # (0t 1t) (2t 3t) (0b 1b) (2b 3b)
         tt = tt.fuse_legs(axes=(0, 2, (1, 3)))  # (0t 1t) (0b 1b) ((2t 3t) (2b 3b))
         tt = tt.unfuse_legs(axes=(0, 1))  # 0t 1t 0b 1b ((2t 3t) (2b 3b))
@@ -150,8 +166,3 @@ class DoublePepsTensor:
         st = tt.unfuse_legs(axes=(0)) # (1t 1b) (0t 0b) (3t 3b) (2t 2b)
         st = st.fuse_legs(axes=(1, 0, 3, 2)) # (0t 0b) (1t 1b) (2t 2b) (3t 3b)
         return st
-   
-     
-        
-
-    

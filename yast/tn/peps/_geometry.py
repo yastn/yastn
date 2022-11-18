@@ -3,7 +3,7 @@ from itertools import product
 from typing import NamedTuple
 from ...tn.mps import Mps, Mpo
 from ._doublePepsTensor import DoublePepsTensor
-from ... import Leg, initialize
+from ... import tensor, initialize
 
 class Bond(NamedTuple):
     """ site_0 should be before site_1 in the fermionic order. """
@@ -128,21 +128,29 @@ class Peps(Lattice):
         ny = row_index
         for nx in range(self.Nx):
             site = (nx, ny)
-            H.A[nx] = DoublePepsTensor(top=self._data[site], bottom=self._data[site])
+            top = self[site]
+            if top.ndim == 3:
+                top = top.unfuse_legs(axes=(0, 1))
+            btm = top.swap_gate(axes=(0, 1, 2, 3))
+            H.A[nx] = DoublePepsTensor(top=top, btm=btm)
         return H
 
     def boundary_mps(self, rotation=''):
         # create 
-        psi = Mpo(N=self.Nx)
+        psi = Mps(N=self.Nx)
         cfg = self._data[(0, 0)].config
         n0 = (0,) * cfg.sym.NSYM
-        print(n0)
-        leg0 = Leg(cfg, s=-1, t=(n0,), D=(1,))
-        
+        leg0 = tensor.Leg(cfg, s=-1, t=(n0,), D=(1,))
         for nx in range(self.Nx):
-            site = (nx, self.Ny-1)
-            legA = self._data[site].get_legs(axis=3)
-            psi[nx] = initialize.ones(config=cfg, legs=[leg0, legA.conj(), leg0.conj()])
+            site = (nx, self.Ny - 1)
+            A = self[site]
+            if A.ndim == 3:
+                legA = A.get_legs(axis=1)
+                _, legA = tensor.leg_undo_product(legA)
+            else:
+                legA = A.get_legs(axis=3)
+            legAAb = tensor.leg_outer_product(legA, legA.conj())
+            psi[nx] = initialize.ones(config=cfg, legs=[leg0, legAAb.conj(), leg0.conj()])
         return psi
 
 

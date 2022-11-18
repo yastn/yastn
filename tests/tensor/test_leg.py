@@ -49,7 +49,7 @@ def test_random_leg():
     leg0 = yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
     leg1 = yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 4))
 
-    leg = yast.leg_product_all_charges(leg0, leg1, s=1)
+    leg = yast.leg_outer_product(leg0, leg1)
     print(leg)
 
 def test_leg_meta_fusion():

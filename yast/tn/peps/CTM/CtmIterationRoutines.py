@@ -523,7 +523,7 @@ def fPEPS_2layers(A, B=None, op=None, dir=None):
         if dir == 't':
             if op.ndim == 2: # checks whether the operator already has an auxiliary index attached 
                 op_aux = op.add_leg(s=1).swap_gate(axes=(0, 2))
-            Ao = fPEPS_t(Ao, op_aux)   
+            Ao = fPEPS_t(Ao, op_aux)
         elif dir == 'b':
             if op.ndim == 2: # checks whether the operator already has an auxiliary index attached 
                 op_aux =  op.add_leg(s=-1)
@@ -548,7 +548,7 @@ def fPEPS_2layers(A, B=None, op=None, dir=None):
         B = A.swap_gate(axes=(0, 1, 2, 3))
     elif B is not None:
         B = B.swap_gate(axes=(0, 1, 2, 3))
-    AAb = DoublePepsTensor(top=Ao, bottom=B)
+    AAb = DoublePepsTensor(top=Ao, btm=B)
     return AAb
 
 
@@ -556,7 +556,7 @@ def fPEPS_fuse_layers(AAb, EVonly=False):
     for st in AAb.values():
         fA = st.top.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0t 1t) (2t 3t) 4t
        # st.pop('A')
-        fAb = st.bottom.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0b 1b) (2b 3b) 4b
+        fAb = st.btm.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0b 1b) (2b 3b) 4b
        # st.pop('Ab')
         tt = tensordot(fA, fAb, axes=(2, 2), conj=(0, 1))  # (0t 1t) (2t 3t) (0b 1b) (2b 3b)
         tt = tt.fuse_legs(axes=(0, 2, (1, 3)))  # (0t 1t) (0b 1b) ((2t 3t) (2b 3b))

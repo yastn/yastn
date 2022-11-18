@@ -369,14 +369,43 @@ def test_unmerge_backward():
     test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
     assert test
 
+
+def test_leg_outer_product():
+    l0 = yast.Leg(config_Z2xU1, s=-1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D=(1, 2, 2, 4))
+    l1 = yast.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(7, 8, 9, 10))
+    l2 = yast.Leg(config_Z2xU1, s=1, t=[(0, -1), (0, 1), (1, -1), (1, 1)], D= (9, 4, 3, 2))
+    l3 = yast.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(5, 6, 7, 8))
+
+    a = yast.rand(config=config_Z2xU1, legs=[l0, l1, l2, l3])
+
+    fa = yast.fuse_legs(a, axes=((0, 1), (2, 3)), mode='hard')
+    pfa0 = yast.leg_outer_product(l0, l1)
+    lfa0 = fa.get_legs(axis=0)
+    pfa1 = yast.leg_outer_product(l2, l3)
+    lfa1 = fa.get_legs(axis=1)
+    assert (pfa0, pfa1) == (lfa0, lfa1)
+
+    ffa = yast.fuse_legs(fa, axes=[(0, 1)], mode='hard')
+    pffa = yast.leg_outer_product(lfa0, lfa1, t_allowed=[(0, 0)])
+    lffa = ffa.get_legs(axis=0)
+    assert pffa == lffa
+
+    ul0, ul1 = yast.leg_undo_product(lfa0)
+    ul2, ul3 = yast.leg_undo_product(lfa1)
+    ulf0, ulf1 = yast.leg_undo_product(lffa)
+    assert (ul0, ul1, ul2, ul3) == (l0, l1, l2, l3)
+    assert (ulf0, ulf1) == (lfa0, lfa1)
+
+
 if __name__ == '__main__':
-    unittest.main()
-    test_fuse_hard_dense()
-    test_hard_split()
-    test_hard_transpose()
-    test_hard_dot()
-    test_hard_dot_sparse()
-    test_fuse_mix()
-    test_auxliary_merging_functions()
-    # test_transpose_and_merge_backward()
-    # test_unmerge_backward()
+    #unittest.main()
+    test_leg_outer_product()
+    # test_fuse_hard_dense()
+    # test_hard_split()
+    # test_hard_transpose()
+    # test_hard_dot()
+    # test_hard_dot_sparse()
+    # test_fuse_mix()
+    # test_auxliary_merging_functions()
+    # # test_transpose_and_merge_backward()
+    # # test_unmerge_backward()

@@ -15,8 +15,8 @@ def run_dmrg_1site(psi, H, sweeps=10):
     return env.measure()
 
 
-def run_multiply_svd(psi, H, Egs, sweeps=1):
-    Hpsi = mps.multiply_svd(H, psi, opts={'D_total': 6})
+def run_zipper(psi, H, Egs, sweeps=1):
+    Hpsi = mps.zipper(H, psi, opts={'D_total': 6})
 
     Eng_t = mps.measure_overlap(Hpsi, psi)
     assert Egs < Eng_t < Egs * 0.995
@@ -92,7 +92,7 @@ def test_truncate_svd_Z2():
         psi.canonize_sweep(to='first')
         run_dmrg_1site(psi, H)
         run_truncation(psi, H, Eng_parity[parity])
-        run_multiply_svd(psi, H, Eng_parity[parity])
+        run_zipper(psi, H, Eng_parity[parity])
 
 
 if __name__ == "__main__":
