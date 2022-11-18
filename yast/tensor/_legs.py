@@ -1,12 +1,12 @@
 from dataclasses import dataclass, replace
-from itertools import product
+from itertools import product, groupby
 import numpy as np
 from ._auxliary import _flatten
 from ._tests import YastError
 from ..sym import sym_none
-from ._merging import _Fusion, _pure_hfs_union
+from ._merging import _Fusion, _pure_hfs_union, _fuse_hfs, _unfuse_Fusion
 
-__all__ = ['Leg', 'leg_union', 'random_leg', 'leg_product_all_charges']
+__all__ = ['Leg', 'leg_union', 'random_leg', 'leg_outer_product', 'leg_undo_product']
 
 
 @dataclass(frozen=True, repr=False)
@@ -231,17 +231,75 @@ def _leg_fusions_need_mask(*legs):
         return any(_leg_fusions_need_mask(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
 
 
-def leg_product_all_charges(*legs, s=1):
+def leg_outer_product(*legs, t_allowed=None):
     """
-    Output Leg that represents an outer product of a list of legs, fixing bond dimension of each to 1.
+    Output Leg being an outer product of a list of legs.
+    
+    Equivalent to result of :meth:`yast.Tensor.get_legs` from tensor with fused legs -
+    up to possibility, that in fused tensor not all possible effective charges have to appear.
+
+    Parameters
+    ----------
+    *legs : :class:`yast.Leg`
+        legs to compute outer product from.
+
+    t_allowed : list(tuple)
+        limit effective charges to the ones provided in the list.
+
+    Returns
+    -------
+    Leg : :class:`yast.Leg`
+        Leg representing outer product of provided legs.
     """
+    seff = legs[0].s
     sym = legs[0].sym
+
     comb_t = tuple(product(*(leg.t for leg in legs)))
     comb_t = np.array(comb_t, dtype=int).reshape((len(comb_t), len(legs), sym.NSYM))
-    teff = sym.fuse(comb_t, tuple(leg.s for leg in legs), s)
-    teff = tuple(sorted(set(tuple(t.flat) for t in teff)))
-    D1 = (1,) * len(teff)
-    return Leg(sym=sym, s=s, t=teff, D=D1)
+    comb_D = tuple(product(*(leg.D for leg in legs)))
+    comb_D = np.array(comb_D, dtype=int).reshape((len(comb_D), len(legs)))
+    teff = sym.fuse(comb_t, tuple(leg.s for leg in legs), seff)
+    Deff = np.prod(comb_D, axis=1, dtype=int)
+    tDs = sorted((tuple(t.flat), D) for t, D in zip(teff, Deff))
+    tnew, Dnew = [], []
+    for t, group in groupby(tDs, key = lambda x: x[0]):
+        if t_allowed is None or t in t_allowed:
+            tnew.append(t)
+            Dnew.append(sum(tD[1] for tD in group))
+    tnew = tuple(tnew)
+    Dnew = tuple(Dnew)
+    hfs = tuple(leg.legs[0] for leg in legs)  # here assumes that all legs are 'hard fused'
+    ts = tuple(leg.t for leg in legs)
+    Ds = tuple(leg.D for leg in legs)
+    hf = _fuse_hfs(hfs, ts, Ds, seff)
+    return Leg(sym=sym, s=seff, t=tnew, D=Dnew, legs=(hf,))
+
+
+def leg_undo_product(leg):
+    """
+    Output Leg being an outer product of a list of legs.
+    
+    Equivalent to result of :meth:`yast.Tensor.get_legs` from tensor with fused legs -
+    up to possibility, that in fused tensor not all possible effective charges have to appear.
+
+    Parameters
+    ----------
+    leg : :class:`yast.Leg`
+        legs to compute outer product from.
+
+    Returns
+    -------
+    list(:class:`yast.Leg`)
+        Returns a new Leg with randomly distributed bond dimensions.
+    """
+    hst = leg.history()
+    if hst[0] in ('o', 's'):
+        raise YastError('Leg is not a result of outer_product.')
+    if hst[0] == 'p':
+        ts, Ds, ss, hfs = _unfuse_Fusion(leg.legs[0])
+        return tuple(Leg(sym=leg.sym, s=s, t=t, D=D, legs=(hf,))
+                        for s, t, D, hf in zip(ss, ts, Ds, hfs))
+    pass
 
 
 def leg_union(*legs):

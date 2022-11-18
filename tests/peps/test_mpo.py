@@ -4,6 +4,7 @@ import logging
 import argparse
 import yast
 import yast.tn.peps as peps
+import yast.tn.mps as mps
 import time
 from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
 from yast.tn.peps.NTU import ntu_update, initialize_peps_purification
@@ -53,13 +54,17 @@ def test_NTU_spinless():
         logging.info("beta = %0.3f" % beta)
         
         Gamma, info =  ntu_update(Gamma, net, fid, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
-    
+
     O = Gamma.mpo(row_index=1)
     for x in O.A:
         print(x)
+    psi0 = Gamma.boundary_mps()
+    opts = {'D_total': 5}
 
-    psi = Gamma.boundary_mps()
-
+    psi1 = mps.zipper(O, psi0, opts)
+    mps.variational_sweep_1site(psi1, psi_target=psi0, op=O)
+    print(O.get_bond_dimensions())
+    print(psi1.get_bond_dimensions())
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')

@@ -9,10 +9,10 @@ def ntu_update(Gamma, net, fid, Gates, Ds, step, truncation_mode, fix_bd):
     if Gates['loc'] is not None:
         Gamma = single_bond_local_update(Gamma, net, Gates['loc'])
    
-    for iter in GB_list(net, Gates['nn']):    
+    for iter in GB_list(net, Gates['nn']):
         GA, GB, bd = iter['gateA'], iter['gateB'], iter['bond'] 
         Gamma, info = ntu_machine(Gamma, net, fid, bd, GA, GB, Ds, truncation_mode, step, fix_bd)
-      #  show_leg_structure(net, Gamma)
+        # show_leg_structure(net, Gamma)
         infos.append(info)
 
     # local gate
