@@ -57,8 +57,8 @@ def apply_operation(operation, single_terms):
         for x in single_terms:
             new_op = new_op+x.op
         return single_term(op=new_op)
-    elif operation[0] == "\sum":
-        m = re.match(r'{(.*).\\in.(.*)}', operation[1])
+    elif operation[0] == "sum":
+        m = re.match(r'{(.*).in.(.*)}', operation[1])
         iterator, iterate_list = (m.group(1).split(",")), m.group(2)
         sum_elements = []
         # iterate over list read from gen_param parameters
@@ -141,8 +141,8 @@ def splitt(b, eq_it):
                 return splitt(b, 0)
     
     # check brackets
-    id_startX = [i for i, x in enumerate(b) if x == "\sum"]
-    id_stopX = [i for i, x in enumerate(b) if x == "\endsum"]
+    id_startX = [i for i, x in enumerate(b) if x == "sum"]
+    id_stopX = [i for i, x in enumerate(b) if x == "endsum"]
     if len(id_startX) and len(id_startX) == len(id_stopX):
         # remove those we don't need
         if id_startX[0] == 0 and id_stopX[-1] == len(b)-1:
@@ -150,16 +150,16 @@ def splitt(b, eq_it):
             res = 0
             tmp = b[1:-1]
             for n in tmp:
-                if n == '\sum':
+                if n == 'sum':
                     res += 1
-                elif n == '\endsum':
+                elif n == 'endsum':
                     res -= 1
                 if res < 0:
                     is_bad = True
                     break
             if not is_bad:
                 in_sum = tmp[1:] if len(tmp) > 2 else tmp[1]
-                return ("\sum", tmp[0]), splitt(in_sum, 0)
+                return ("sum", tmp[0]), splitt(in_sum, 0)
     
     # If a single string gen_paramerate single_term
     if not isinstance(b, list) or len(b) == 1:
@@ -170,13 +170,14 @@ def splitt(b, eq_it):
     # Check if there are any basic operations
     id_operation = [i for i, x in enumerate(b) if x is operation]
     id_basic_operation = [i for i, x in enumerate(b) if x in basic_operation]
-    if not "\sum" in b and not id_basic_operation:
-        # Report error if no relation defined
-        raise gen_parameratorError("Not supported: Please define operation between elements: ", b)
+    if not "sum" in b and not id_basic_operation:
+        # There is no recognized operation between objects. Assume it is a multiplication.
+        # TODO: Is there any nicer way to do sth multiple times?
+        [b.insert((ib+1)*2-1, "*") for ib in range(len(b)-1)]
+        return splitt(b, 1)
     if not id_operation and id_basic_operation:
         # Check another operation if this one is not here
         return splitt(b, (eq_it + 1)%len(basic_operation))
-
     # Main splitter loop
     n, bracket_open, sum_open = 0, 0, 0
     # tunnel - list of elements connected by the operation
@@ -192,13 +193,13 @@ def splitt(b, eq_it):
             bracket_open -= 1
         
         # Itarative operations have higher rank than basic_operation and brackets
-        if bracket_open == 0 and sig == "\sum":
+        if bracket_open == 0 and sig == "sum":
             sum_open += 1
-        if sig == "\endsum":
+        if sig == "endsum":
             sum_open -= 1
         if bracket_open == 0 and sum_open > 0 and sig == "+":
             # Addition outside all brackets ends sums
-            [buffer.append("\endsum") for _ in range(sum_open)]
+            [buffer.append("endsum") for _ in range(sum_open)]
             sum_open = 0
         # Control buffer/tunnel flow
         tunnel_closed = (sig not in operation or bracket_open!=0) or sum_open > 0
@@ -211,7 +212,7 @@ def splitt(b, eq_it):
                 tunnel += [buffer]
             buffer = []
             tunnel_closed = False
-    [buffer.append("\endsum") for _ in range(sum_open)]
+    [buffer.append("endsum") for _ in range(sum_open)]
     if len(buffer) == 1:
         tunnel.append(*buffer)
     else:
@@ -220,16 +221,29 @@ def splitt(b, eq_it):
     # Apply interpreter to all elements separated by the operation
     return operation, list(map(lambda x: splitt(x, (eq_it + 1)%len(basic_operation)), out))
 
+def string2list(c0):
+    if not c0:
+        return []
+    else:
+        # replace muiltiple spaces with a single space
+        c0 = c0.replace("-", "+ minus *")
+        c0 = c0.replace("\sum_", " sum ")
+        for ix in ["+","*","(",")"]:
+            c0 = c0.replace(ix, " "+ix+" ")
+        c0 = c0.replace("*", " ")
+        c0 = " ".join(c0.split())
+        c0 = c0.replace(" \in", "\in").replace("\in ", "\in")
+        c0 = c0.replace("\in", ".in.")
+        return c0.split(" ")
+
 
 def latex2term(c0, param_dict):
     # Full interpreter from string to single_term-s
     # I make all parameters global but use only ranges from sum
     global gen_param
     gen_param = param_dict
-    c0 = c0.split(" ") if c0 else []
-    # TODO: write test
+    # Manipulation on the string.
+    c0 = string2list(c0)
     c1 = splitt(c0, 0)
-    # TODO: write test
     c2 = interpret(c1)
-    # TODO: write test
     return c2
