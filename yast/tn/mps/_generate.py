@@ -230,6 +230,8 @@ class Generator:
             :class:`yamps.Mpo`
         """
         self.parameters = parameters
+        self.parameters["minus"] = -float(1.0) # TODO: check if works fine. What is duplicates?
+        self.parameters["1j"] = -1j
         c2 = latex2term(H_str, self.parameters)
         c3 = self.term2Hterm(c2)
         return generate_mpo(self._I, c3)
