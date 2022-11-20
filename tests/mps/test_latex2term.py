@@ -1,10 +1,13 @@
 import pytest
 import sys
 sys.path.insert(1, './../../yast/tn/mps')
-from latex2term import splitt, interpret, string2list, latex2term
-from latex2term import single_term
+from latex2term import  splitt,\
+                        interpret,\
+                        string2list,\
+                        latex2term,\
+                        single_term
 
-def test1():
+def test_latex2term():
     # Test splitting from latex-like instruction to list used as the input
     examples_A = ("   s_j   + d_j    +   1 + 2  + 3 ", \
                 "   s_j   - d_j    +   1 - 2  + 3 ",\
@@ -83,12 +86,6 @@ def test1():
     param_dict["range_L"] = ("A", "B", "C")
     for x, test_x in zip(examples_C, test_examples_C1):
         assert latex2term(x, param_dict) == test_x
-    #N = 5
-    #t = 1
-    #mu = 0.2
-    #parameters = {"t": lambda j: t, "mu": mu, "rangeN": range(N), "rangeNN": zip(range(N-1), range(1,N))}
-    #H_str = "\sum {j,k.\in.rangeNN} ( t_{j} * 1 + 0 ) * ( cp_{j} * c_{k} + cp_{k} * c_{j} ) + \sum {j.\in.rangeN} mu * cp_{j} * c_{j}"
-
 
 if __name__ == "__main__":
-    test1()
+    test_latex2term()
