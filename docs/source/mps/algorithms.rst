@@ -70,7 +70,7 @@ The optimization can be performed in the restricted subspace, where contribution
 from some MPSs are projected out. This can be useful when searching for 
 excited states. List of MPS to project out is given as :code:`project=[lower_E_MPS, ...]`.
 
-.. autofunction:: yamps.dmrg
+.. autofunction:: yast.tn.mps.dmrg
 
 See examples for :ref:`examples/mps/mps:dmrg`.
 
@@ -91,7 +91,7 @@ The `2site` is suitable for dynamically expanding the Mps virtual dimensions con
 To lower the cost you can provide :code:`env` produced by previous run. 
 
 
-.. autofunction:: yamps.tdvp
+.. autofunction:: yast.tn.mps.tdvp
 
 See examples: :ref:`examples/mps/mps:tdvp`.
 
@@ -102,5 +102,5 @@ Maximize overlap
 .. todo::
     Wrap in high-level DMRG-like function
 
-.. autofunction:: yamps.variational_sweep_1site
+.. autofunction:: yast.tn.mps.variational_sweep_1site
 

@@ -96,24 +96,26 @@ Bring MPS/MPO into canonical form by QR decomposition
 
         # rigth canonical form
         #
+        # --A*--    --
+        #   |   | =   |Identity
+        # --A---    --
+        #
         psi.canonize_sweep(to='first')
 
         # left canonical form
+        #
+        #  --A*--             --
+        # |  |     = Identity|
+        #  --A---             --
         #
         psi.canonize_sweep(to='last')
 
 Check if MPS/MPO is in left/right canonical form by verifying 
 if each tensor forms an isometry after appropriate contraction
-with its conjugate. For left canonical form
+with its conjugate. For either left or right canonical form
 
-.. literalinclude:: /../../tests/mps/test_mps.py
-        :pyobject: is_left_canonical
-
-And similarily for right canonical form
-
-.. literalinclude:: /../../tests/mps/test_mps.py
-        :pyobject: is_right_canonical
-
+.. literalinclude:: /../../tests/mps/test_canonize.py
+        :pyobject: check_canonize
 
 Canonical form by SVD
 ---------------------
