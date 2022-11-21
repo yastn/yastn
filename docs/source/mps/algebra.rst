@@ -7,9 +7,9 @@ Creating a copy of MPS/MPO
 To create an independent copy or clone of `YAMPS` MPS/MPO :code:`A` call :code:`A.copy()`
 or :code:`A.clone()` respectively.
 
-.. autofunction:: yamps.MpsMpo.copy
+.. autofunction:: yast.tn.mps.MpsMpo.copy
 
-.. autofunction:: yamps.MpsMpo.clone
+.. autofunction:: yast.tn.mps.MpsMpo.clone
 
 Multiplication by a scalar
 ---------------------------
@@ -43,35 +43,18 @@ and :code:`B`'s tensors along virtual dimension.
 
 To make a sum of many MPS/MPOs :math:`\{A_0,A_1,\dots\}` at once use :code:`yamps.add(A_0,A_1,...)`.
 
-.. autofunction:: yamps.add
+.. autofunction:: yast.tn.mps.add
 
-Following example show addition of two MPSs:
+Following example show an addition of two MPSs:
 
-::
-
-     import yamps, yast
-     
-     # Define random MPS's without any symmetry
-     #
-     config_dense= yast.make_config()
-     psi0 = yamps.random_dense_mps(N=8, D=5, d=2)
-     psi1 = yamps.random_dense_mps(N=8, D=5, d=2)
-     
-     # We want to calculate: res = psi0 + 2*psi1. There are couple of ways:
-     # A/
-     resA = yamps.add(psi0, 2.0*psi1)
-     
-     # B/
-     resB = yamps.add(psi0, psi1, amplitudes=[1.0,2.0])
-     
-     # C/
-     resC = psi0 + 2.0 * psi1
+.. literalinclude:: /../../tests/mps/test_algebra.py
+        :pyobject: test_addition_basic
 
 
 Products of MPS/MPO
 -------------------
 
-`YAMPS` supports *product* of 
+`YAMPS` supports *product* ``@`` of 
     
 i) MPO with MPS resulting in a new MPS in analogy with 
 :math:`\hat{O}|\psi\rangle = |\phi\rangle` (i.e. matrix-vector multiplication).
@@ -99,12 +82,12 @@ operator product :math:`\hat{O}\hat{P} = \hat{C}` (matrix-matrix multiplication)
               |d         |           |
 
 One can either use product operator :code:`C=A@B` or more verbose 
-:code:`C=yamps.multiply(A,B)`. Note that for MPO-MPS product, the *@*
+:code:`C=yast.tn.mps.multiply(A,B)`. Note that for MPO-MPS product, the *@*
 is commutative, i.e., :code:`O@A` and :code:`A@O` are equivalent.
 
 See examples here: :ref:`examples/mps/mps:Multiplication`.
 
-.. autofunction:: yamps.multiply
+.. autofunction:: yast.tn.mps.multiply
 
 
 Canonizing MPS/MPO
@@ -117,7 +100,7 @@ MPS/MPO can be put into :ref:`theory/mps/basics:Canonical form` to reveal most a
 The canonical form obtained by QR decomposition is fast, but does not allow for truncation 
 of the virtual spaces of MPS/MPO. 
 
-.. autofunction:: yamps.MpsMpo.canonize_sweep
+.. autofunction:: yast.tn.mps.MpsMpo.canonize_sweep
 
 See examples: :ref:`examples/mps/mps:Canonical form by QR`.
 
@@ -125,12 +108,12 @@ Restoring canonical form locally: For example, while performing DMRG sweeps,
 the tensors getting updated will not be in canonical form after the update. 
 It is necessary to restore their canonical form in course of sweeping. 
 
-.. autofunction:: yamps.MpsMpo.orthogonalize_site
+.. autofunction:: yast.tn.mps.MpsMpo.orthogonalize_site
 
 The canonisation by `singular value decomposition` (SVD) allows 
 to truncate virtual dimension/spaces with the lowest weight 
 (lowest singular values).
 
-.. autofunction:: yamps.MpsMpo.truncate_sweep
+.. autofunction:: yast.tn.mps.MpsMpo.truncate_sweep
 
 See examples: :ref:`examples/mps/mps:Canonical form by SVD`.

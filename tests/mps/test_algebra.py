@@ -24,8 +24,30 @@ def check_add(psi0, psi1):
         assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
 
 
+def test_addition_basic():
+    import yast.tn.mps as mps
+    import yast
+     
+    # Define random MPS's without any symmetry
+    #
+    config_dense= yast.make_config()
+    psi0 = yamps.random_dense_mps(N=8, D=5, d=2)
+    psi1 = yamps.random_dense_mps(N=8, D=5, d=2)
+     
+    # We want to calculate: res = psi0 + 2*psi1. There are couple of ways:
+    # A/
+    resA = yamps.add(psi0, 2.0*psi1)
+     
+    # B/
+    resB = yamps.add(psi0, psi1, amplitudes=[1.0,2.0])
+     
+    # C/
+    resC = psi0 + 2.0 * psi1
+
+
 def test_addition():
     """create two Mps-s and add them to each other"""
+
     operators = yast.operators.SpinfulFermions(sym='U1xU1', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=9, operators=operators)
 
@@ -39,7 +61,8 @@ def test_addition():
 
 
 def test_multiplication():
-    """ Calculate ground state and checks mps.multiply() and __mul__()and mps.add() within eigen-condition."""
+    # Calculate ground state and checks mps.multiply() and __mul__() 
+    # and mps.add() within eigen-condition.
     #
     # This test presents a multiplication as a part of DMRG study. 
     # We use multiplication to get expectation values from a state.
@@ -79,7 +102,8 @@ def test_multiplication():
     assert pytest.approx(env.measure().item(), rel=tol) == Eng
     #
     # If the code didn't break then we should get a ground state. 
-    # Now we calculate the variation of energy <H^2>-<H>^2=<(H-Eng)^2> to check if DMRG converged properly to tol.
+    # Now we calculate the variation of energy <H^2>-<H>^2=<(H-Eng)^2> 
+    # to check if DMRG converged properly to tol.
     # We have two equivalent ways to do that:
     #
     # case 1/

@@ -3,27 +3,20 @@ from ..sym import sym_Z2, sym_U1
 from ..tensor import YastError, Tensor
 
 class SpinlessFermions:
-    """ Predefine operators for spinless fermions. """
 
     def __init__(self, sym='U1', **kwargs):
-        """ 
-        Generator of standard operators for single fermionic species (2-dimensional Hilbert space).
+        r""" 
+        Standard operators for single fermionic species (2-dimensional Hilbert space).
+        Defines identity, raising and lowering operators, and density operators.
 
-        Predefine identity, rising and lowering operators, and density operators.
-
-        Other config parameters can be provided, see :meth:`yast.make_config`
-
-        fermionic is set to True.
-
-        Parameters
-        ----------
-        sym : str
-            Should be 'Z2', or 'U1'.
+        Other config parameters can be provided, see :meth:`yast.make_config` ,
+        while :code:`fermionic` is always set to :code:`True` .
 
         Notes
         -----
-        Assume the following conventions:
-        For both Z2 and U1, charge t=0 <=> |0>, t=1 <=> |1>
+        The following basis ordering and charge conventions are assumed
+            
+            * For both Z2 and U1, charge.
         """
         if not sym in ('Z2', 'U1'):
             raise YastError("For SpinlessFermions sym should be in ('Z2', 'U1').")
@@ -50,7 +43,7 @@ class SpinlessFermions:
         return n
 
     def cp(self):
-        """ Rising operator. """
+        """ Raising operator. """
         cp = Tensor(config=self.config, s=self.s, n=1)
         cp.set_block(ts=(1, 0), Ds=(1, 1), val=1)
         return cp

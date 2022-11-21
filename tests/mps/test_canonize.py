@@ -60,9 +60,11 @@ def test_env3_update():
 
 
 def check_canonize(psi):
-    """ Canonize mps to left and right, running tests if it is canonical. """
+    # Canonize mps to psi left and right and test if it is 
+    # in canonical form.
     psi.canonize_sweep(to='last')
     assert psi.is_canonical(to='last', tol=tol)
+    import pdb; pdb.set_trace()
     assert abs(mps.measure_overlap(psi, psi) - 1) < tol
     psi.canonize_sweep(to='first')
     assert psi.is_canonical(to='first', tol=tol)
