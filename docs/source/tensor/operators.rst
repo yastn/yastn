@@ -13,3 +13,10 @@ Spin-1
 
 .. autoclass:: yast.operators.Spin1
     :members: I, sz, sx, sy, sp, sm, to_dict
+
+
+Spinless fermions
+-----------------
+
+.. autoclass:: yast.operators.SpinlessFermions
+    :members: I, n, cp, c, to_dict
