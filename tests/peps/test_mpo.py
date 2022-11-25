@@ -27,7 +27,7 @@ def test_NTU_spinless():
     xx = 3
     yy = 3
     D = 20
-    chi = 20
+    chi = 10
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
     beta_end = 0.01
@@ -58,7 +58,7 @@ def test_NTU_spinless():
     env = GetEnv(A=Gamma, net=net, **opts, AAb_mode=0)
 
 
-    ###  we try to find out the bottom boundary vector of the top-most row or 0th row
+    ###  we try to find out the right boundary vector of the left-most column or 0th row
     ########## 3x3 lattice ########
     ###############################
     ##### (0,0) (1,0) (2,0) #######
@@ -66,24 +66,23 @@ def test_NTU_spinless():
     ##### (0,2) (1,2) (2,2) #######
     ###############################
 
-    row_index = 0
-    Bctm = CtmEnv2Mps(net, env, index=row_index, index_type='b')  # bottom boundary of 0th row through CTM environment tensors
-    print(Bctm.A[0])
-    print(Bctm.A[1])
-    print(Bctm.A[2])
-
+    column_index = 0
+    Bctm = CtmEnv2Mps(net, env, index=column_index, index_type='r')  # bottom boundary of 0th row through CTM environment tensors
+    print(Bctm.A[0].get_shape())
+    print(Bctm.A[1].get_shape())
+    print(Bctm.A[2].get_shape())
 
     psi0 = Gamma.boundary_mps()
     psi = psi0
     opts = {'D_total': 5}
     for r_index in range(net.Ny-1,0,-1):
         print(r_index)
-        O = Gamma.mpo(index=r_index, index_type='row')
+        O = Gamma.mpo(index=r_index, index_type='column')
         psi = mps.zipper(O, psi, opts)  # bottom boundary of 0th row through zipper
 
-    print(psi.A[0])
-    print(psi.A[1])
-    print(psi.A[2])
+    print(psi.A[0].get_shape())
+    print(psi.A[1].get_shape())
+    print(psi.A[2].get_shape())
 
     
     print(mps.measure_overlap(psi, Bctm))
