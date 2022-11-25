@@ -5,29 +5,29 @@ Initialization
 Creating empty MPS/MPO
 ----------------------
 
-Both MPS and MPO are represented by the same class :class:`yamps.MpsMpo`, sharing many operations. The only difference between them is the number of their physical dimensions. The class :class:`yamps.MpsMpo` defines MPS/MPO through the set of tensors *A*
-which are stored as integer-indexed dictionary :code:`yamps.MpsMpo.A` 
+Both MPS and MPO are represented by the same class :class:`yast.tn.mps.MpsMpo`, sharing many operations. The only difference between them is the number of their physical dimensions. The class :class:`yast.tn.mps.MpsMpo` defines MPS/MPO through the set of tensors *A*
+which are stored as integer-indexed dictionary :code:`yast.tn.mps.MpsMpo.A` 
 of rank-3/rank-4 :class:`yast.Tensor`'s. 
 
-To create empty MPS/MPO, i.e., without any tensors call
+To create empty MPS/MPO, i.e. without any tensors, call
 
-.. autoclass:: yamps.MpsMpo
+.. autoclass:: yast.tn.mps.MpsMpo
 
 Short-hand functions for creation of empty MPS/MPO
 
-.. autofunction:: yamps.Mps
-.. autofunction:: yamps.Mpo
+.. autofunction:: yast.tn.mps.Mps
+.. autofunction:: yast.tn.mps.Mpo
 
 
 Setting MPS/MPO tensors
 -----------------------
 
-The tensors of MPS/MPO can be set manually, using familiar :code:`dict` access
+The tensors of MPS/MPO can be set manually, using familiar :code:`dict` access.
 
 .. code-block::
 
 	# create empty MPS over three sites
-	Y= yamps.Mps(3)
+	Y= yast.tn.mps.Mps(3)
 
 	# create 3x2x3 random dense tensor
 	A_1= yast.rand(yast.make_config(), Legs=(yast.Leg(s=1,D=(3,)), 
@@ -37,10 +37,10 @@ The tensors of MPS/MPO can be set manually, using familiar :code:`dict` access
 	Y[1]= A_1
 
 .. note::
-	The virtual dimensions/spaces of the neighbouring MPS/MPO tensors have to remain consistent.
+	The virtual dimensions/spaces of the neighbouring MPS/MPO tensors have to remain consistent. The on-site tensors have to adhere to :ref:`index convention<mps/convention:index convention>`
 
 To create :class:`yast.Tensor`'s see :ref:`YAST's basic creation operations<tensor/init:basic creation operations>`. 
-For more examples, see :ref:`Setting MPS/MPO manually<examples/mps/mps:building yamps object manually>`. 
+For more examples, see :ref:`Setting MPS/MPO manually<examples/mps/mps:building MPS/MPO manually>`. 
 
 
 Automatic creation of MPS
@@ -54,10 +54,8 @@ Generate MPO automatically
 
 .. autoclass:: yamps.Generator
 
-To initiallize the generator :code:`gen = yamps.Generator(N, operators)` we need to provide a length of the MPO :code':`N`, set of operators used by :code:`gen`.
-For optional parameters see sourse code. Predefined set of operators are :code:`yast` option. E.g., for spinless fermions one should use,
-
-.. autoclass:: yast.operators.SpinlessFermions
+To initiallize the generator :code:`gen = yamps.Generator(N, operators)` we need to provide a length of the MPO :code:`N`, set of operators used by :code:`gen`.
+For optional parameters see sourse code. Predefined set of operators are :code:`yast` option. E.g., for spinless fermions one should use, :class:`yast.operators.SpinlessFermions``.
 
 For example, to get the set of operators for spinless fermions written as U(1)-symmetric tensors use :code:`operators = yast.operators.SpinlessFermions(sym='U1')`.
 After defining :code:`operators` we can run  :code:`gen = yamps.Generator(N, operators)`.
