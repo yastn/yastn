@@ -125,15 +125,6 @@ class Peps(Lattice):
         H = Mpo(N=self.Ny)
 
         if index_type == 'row':
-            ny = index
-            for nx in range(self.Nx):
-                site = (nx, ny)
-                top = self[site]
-                if top.ndim == 3:
-                    top = top.unfuse_legs(axes=(0, 1))
-                btm = top.swap_gate(axes=(0, 1, 2, 3))
-                H.A[nx] = DoublePepsTensor(top=top, btm=btm)
-        elif index_type == 'column':
             nx = index
             for ny in range(self.Ny):
                 site = (nx, ny)
@@ -142,6 +133,15 @@ class Peps(Lattice):
                     top = top.unfuse_legs(axes=(0, 1))
                 btm = top.swap_gate(axes=(0, 1, 2, 3))
                 H.A[ny] = DoublePepsTensor(top=top, btm=btm)
+        elif index_type == 'column':
+            ny = index
+            for nx in range(self.Nx):
+                site = (nx, ny)
+                top = self[site]
+                if top.ndim == 3:
+                    top = top.unfuse_legs(axes=(0, 1))
+                btm = top.swap_gate(axes=(0, 1, 2, 3))
+                H.A[nx] = DoublePepsTensor(top=top, btm=btm)
 
         return H
 

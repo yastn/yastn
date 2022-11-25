@@ -73,27 +73,30 @@ class Local_CTM_Env: # no more variables than the one given
 
 def CtmEnv2Mps(net, env, index, index_type):
     
-    H = Mps(N=net.Nx)
     if index_type == 'b':
-        ny = index
-        for nx in range(net.Nx):
+        nx = index
+        H = Mps(N=net.Ny)
+        for ny in range(net.Ny):
             site = (nx, ny)
-            H.A[nx] = env[site].b.fuse_legs(axes=(2, 1, 0))
+            H.A[nx] = env[site].b
     elif index_type == 'r':
-        nx = index
-        for ny in range(net.Ny):
-            site = (nx, ny)
-            H.A[ny] = env[site].r
-    elif index_type == 't':
         ny = index
+        H = Mps(N=net.Nx)
         for nx in range(net.Nx):
             site = (nx, ny)
-            H.A[nx] = env[site].t
-    elif index_type == 'l':
+            H.A[nx] = env[site].r
+    elif index_type == 't':
         nx = index
+        H = Mps(N=net.Ny)
         for ny in range(net.Ny):
             site = (nx, ny)
-            H.A[ny] = env[site].l
+            H.A[ny] = env[site].t
+    elif index_type == 'l':
+        ny = index
+        H = Mps(N=net.Nx)
+        for nx in range(net.Nx):
+            site = (nx, ny)
+            H.A[nx] = env[site].l
 
     return H
 
