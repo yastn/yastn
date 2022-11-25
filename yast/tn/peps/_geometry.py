@@ -120,29 +120,40 @@ class Peps(Lattice):
         self._data[self.site2index(site)] = tensor
 
 
-    def mpo(self, row_index, rotation=''):
-
+    def mpo(self, index, index_type, rotation=''):
         # converts specific row of PEPS into MPO
+        H = Mpo(N=self.Ny)
 
-        H = Mpo(N=self.Nx)
-        ny = row_index
-        for nx in range(self.Nx):
-            site = (nx, ny)
-            top = self[site]
-            if top.ndim == 3:
-                top = top.unfuse_legs(axes=(0, 1))
-            btm = top.swap_gate(axes=(0, 1, 2, 3))
-            H.A[nx] = DoublePepsTensor(top=top, btm=btm)
+        if index_type == 'row':
+            ny = index
+            for nx in range(self.Nx):
+                site = (nx, ny)
+                top = self[site]
+                if top.ndim == 3:
+                    top = top.unfuse_legs(axes=(0, 1))
+                btm = top.swap_gate(axes=(0, 1, 2, 3))
+                H.A[nx] = DoublePepsTensor(top=top, btm=btm)
+        elif index_type == 'column':
+            nx = index
+            for ny in range(self.Ny):
+                site = (nx, ny)
+                top = self[site]
+                if top.ndim == 3:
+                    top = top.unfuse_legs(axes=(0, 1))
+                btm = top.swap_gate(axes=(0, 1, 2, 3))
+                H.A[ny] = DoublePepsTensor(top=top, btm=btm)
+
         return H
 
     def boundary_mps(self, rotation=''):
-        # create 
+        # create  
         psi = Mps(N=self.Nx)
         cfg = self._data[(0, 0)].config
+ 
         n0 = (0,) * cfg.sym.NSYM
         leg0 = tensor.Leg(cfg, s=-1, t=(n0,), D=(1,))
         for nx in range(self.Nx):
-            site = (nx, self.Ny - 1)
+            site = (nx, self.Ny-1)
             A = self[site]
             if A.ndim == 3:
                 legA = A.get_legs(axis=1)
@@ -151,7 +162,7 @@ class Peps(Lattice):
                 legA = A.get_legs(axis=3)
             legAAb = tensor.leg_outer_product(legA, legA.conj())
             psi[nx] = initialize.ones(config=cfg, legs=[leg0, legAAb.conj(), leg0.conj()])
-        return psi
+        return psi 
 
 
  
