@@ -17,11 +17,11 @@ def load_from_dict(config, in_dict):
 
     in_dict: dict
         dictionary containing serialized MPS/MPO, i.e.,
-        a result of :meth:`yamps.MpsMpo.save_to_dict`.
+        a result of :meth:`yast.tn.mps.MpsMpo.save_to_dict`.
 
     Returns
     -------
-    yamps.MpsMpo
+    yast.tn.mps.MpsMpo
     """
     nr_phys = in_dict['nr_phys']
     N = len(in_dict['A'])
@@ -51,7 +51,7 @@ def load_from_hdf5(config, file, in_file_path):
 
     Returns
     -------
-    yast.MpsMpo
+    yast.tn.mps.MpsMpo
     """
     nr_phys = int(file[in_file_path].get('nr_phys')[()])
     N = len(file[in_file_path+'/A'].keys())
