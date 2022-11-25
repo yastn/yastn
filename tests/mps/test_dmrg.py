@@ -173,7 +173,10 @@ def test_U1_dmrg():
         occ_target = [total_occ] * len(E_target)
         psi = run_dmrg(psi, H, occ, E_target, occ_target, opts_svd=opts_svd)
 
-    
+        psi = generate.random_mps(D_total=Dmax, n=total_occ)
+        x = mps.drrg(psi, H, max_sweeps=10)
+        print(x)
+
     # different convergence criteria
     # psi = generate.random_mps(D_total=Dmax, n=3).canonize_sweep(to='first')
     # env = mps.dmrg(psi, H, version='2site', converge='schmidt', atol=1e-10, max_sweeps=20, opts_svd=opts_svd)
@@ -182,7 +185,7 @@ def test_U1_dmrg():
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level='INFO')
-    test_dense_dmrg()
-    test_Z2_dmrg()
+    # logging.basicConfig(level='INFO')
+    # test_dense_dmrg()
+    # test_Z2_dmrg()
     test_U1_dmrg()
