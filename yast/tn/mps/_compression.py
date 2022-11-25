@@ -58,6 +58,7 @@ def variational_sweep_1site(psi, psi_target, env=None, op=None):
 
 def zipper(a, b, opts=None):
     "Apply mpo a on mps/mpo b, performing svd compression during the sweep."
+
     psi = b.clone()
     psi.canonize_sweep(to='last')
 

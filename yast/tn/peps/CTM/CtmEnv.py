@@ -1,6 +1,7 @@
 from yast.tn.peps import Lattice
 from typing import NamedTuple, Tuple
 from dataclasses import dataclass
+from ....tn.mps import Mps, Mpo
 from yast import tensordot, svd_with_truncation, rand, ones
 
 class ctm_window(NamedTuple):
@@ -68,6 +69,36 @@ class Local_CTM_Env: # no more variables than the one given
     b : any = None
     l : any = None
     b : any = None
+
+
+def CtmEnv2Mps(net, env, index, index_type):
+    
+    H = Mps(N=net.Nx)
+    if index_type == 'b':
+        ny = index
+        for nx in range(net.Nx):
+            site = (nx, ny)
+            H.A[nx] = env[site].b.fuse_legs(axes=(2, 1, 0))
+    elif index_type == 'r':
+        nx = index
+        for ny in range(net.Ny):
+            site = (nx, ny)
+            H.A[ny] = env[site].r
+    elif index_type == 't':
+        ny = index
+        for nx in range(net.Nx):
+            site = (nx, ny)
+            H.A[nx] = env[site].t
+    elif index_type == 'l':
+        nx = index
+        for ny in range(net.Ny):
+            site = (nx, ny)
+            H.A[ny] = env[site].l
+
+    return H
+
+
+
 
 def init_rand(A, tc, Dc, lattice):
     """ Initialize random CTMRG environments of peps tensors A. """

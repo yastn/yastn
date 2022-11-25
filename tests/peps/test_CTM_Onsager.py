@@ -65,8 +65,9 @@ def test_CTM_loop_1():
     """ Calculate magnetization for classical 2D Ising model and compares with the exact result. """
     beta = 0.8  # check for a certain inverse temperature
     Z_exact = 0.99602 # analytical value of magnetization up to 4 decimal places for beta = 0.8 (2D Classical Ising)
-    peps = {ms: create_ZZ_ten(beta) for ms in net.sites()}
-    CTM_for_Onsager(peps, Z_exact)
+    Gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+    Gamma._data = {ms: create_ZZ_ten(beta) for ms in net.sites()}
+    CTM_for_Onsager(Gamma, Z_exact)
 
 
 def test_CTM_loop_2():
@@ -81,11 +82,12 @@ def test_CTM_loop_2():
     B = yast.ncon((inv_h_rg, B), ((-1, 1), (-0, 1, -2, -3, -4, -5)))
     A = yast.ncon((A, v_rg), ((1, -1, -2, -3, -4, -5), (1, -0)))
     B = yast.ncon((inv_v_rg, B), ((-2, 1), (-0, -1, 1, -3, -4, -5)))
-    peps = {(0,0): A, (0,1): B, (1,0):B, (1,1):A}
-    CTM_for_Onsager(peps, Z_exact)
+    Gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+    Gamma._data = {(0,0): A, (0,1): B, (1,0):B, (1,1):A}
+    CTM_for_Onsager(Gamma, Z_exact)
 
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
     test_CTM_loop_1()
-    test_CTM_loop_2()
+   # test_CTM_loop_2()
