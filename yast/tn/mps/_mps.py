@@ -382,7 +382,6 @@ class MpsMpo:
             # A = ax(A)--Q--0 1--R--0(0A) => 0--Q*--    --
             #                                   1   2 =   |Identity
             #                                0--Q---    --
-            self.A[n], R = self.A[n].qr(axes=(ax, 0), sQ=1, Qaxis=0, Raxis=1)
             self.A[n], R = self.A[n].qr(axes=(ax, 0), sQ=-1, Qaxis=0, Raxis=1)
         elif to == 'last':
             self.pC = (n, n + 1)
@@ -390,7 +389,6 @@ class MpsMpo:
             # A = ax(A)--Q--2 0--R--1(2A) =>  --Q*--2            --
             #                                0  1     = Identity|
             #                                 --Q---2            --
-            self.A[n], R = self.A[n].qr(axes=(ax, 2), sQ=-1, Qaxis=2)
             self.A[n], R = self.A[n].qr(axes=(ax, 2), sQ=1, Qaxis=2)
         else:
             raise YastError('MPS: Argument "to" should be in ("first", "last")')

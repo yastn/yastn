@@ -34,19 +34,23 @@ def test_addition_basic():
     psi0 = mps.random_dense_mps(N=8, D=5, d=2)
     psi1 = mps.random_dense_mps(N=8, D=5, d=2)
      
-    # We want to calculate: res = psi0 + 2*psi1. There are couple of ways:
+    # We want to calculate: res = psi0 + 2 * psi1. There are couple of ways:
     # A/
-    resA = mps.add(psi0, 2.0*psi1)
+    resA = mps.add(psi0, 2.0 * psi1)
      
     # B/
-    resB = mps.add(psi0, psi1, amplitudes=[1.0,2.0])
+    resB = mps.add(psi0, psi1, amplitudes=[1.0, 2.0])
      
     # C/
     resC = psi0 + 2.0 * psi1
 
+    nresA, nresB, nresC = resA.norm(), resB.norm(), resC.norm()
+    assert abs(mps.vdot(resA, resB) / (nresA * nresB) - 1) < tol
+    assert abs(mps.vdot(resA, resC) / (nresA * nresC) - 1) < tol
+
 
 def test_addition():
-    """create two Mps-s and add them to each other"""
+    """Create two Mps-s and add them to each other."""
 
     operators = yast.operators.SpinfulFermions(sym='U1xU1', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=9, operators=operators)
@@ -61,7 +65,7 @@ def test_addition():
 
 
 def test_multiplication():
-    # Calculate ground state and checks mps.multiply() and __mul__() 
+    # Calculate ground state and checks mps.multiply(), __mul__() and mps.zipper()
     # and mps.add() within eigen-condition.
     #
     # This test presents a multiplication as a part of DMRG study. 
@@ -86,38 +90,43 @@ def test_multiplication():
     # In this example we use yast.Tensor's with U(1) symmetry. 
     #
     total_charge = 3
-    psi = generate.random_mps(D_total=5, n=total_charge)
+    psi = generate.random_mps(D_total=8, n=total_charge)
     #
-    # You always have to start with MPS in right canonical form.
+    # We set truncation for DMRG and run the algorithm in '2site' version
     #
-    psi.canonize_sweep(to='first')
-    #
-    # We set truncation for DMRG and runt the algorithm in '2site' version
-    #
-    opts_svd = {'tol': 1e-8, 'D_total': 8} 
-    env = mps.dmrg(psi, H, version='2site', max_sweeps=20, opts_svd=opts_svd)
+    opts_svd = {'D_total': 8} 
+    out = mps.dmrg_(psi, H, method='2site', max_sweeps=20, opts_svd=opts_svd)
     #
     # Test if we obtained exact solution for the energy?:
     #
-    assert pytest.approx(env.measure().item(), rel=tol) == Eng
+    assert pytest.approx(out.energy.item(), rel=tol) == Eng
     #
     # If the code didn't break then we should get a ground state. 
     # Now we calculate the variation of energy <H^2>-<H>^2=<(H-Eng)^2> 
     # to check if DMRG converged properly to tol.
     # We have two equivalent ways to do that:
+    # (case 2 and 3 are not most efficient - we use them here for testing)
     #
     # case 1/
-    Hpsi = mps.multiply(H, psi)
+    Hpsi = mps.multiply_svd(H, psi, opts={"D_total": 8})
     #
     # use mps.measure_overlap to get variation
     #
     p0 = -1 * Hpsi + Eng * psi
-    assert mps.measure_overlap(p0, p0) < tol
+    print(mps.vdot(p0, p0))
+    #assert mps.vdot(p0, p0) < tol
     #
     # case 2/
+    Hpsi = mps.multiply(H, psi)
+    p0 = -1 * Hpsi + Eng * psi
+    print(mps.vdot(p0, p0))
+    assert mps.vdot(p0, p0) < tol
+    #
+    # case 3/
     Hpsi = H @ psi
     p0 = -1 * Hpsi + Eng * psi
-    assert mps.measure_overlap(p0, p0) < tol
+    print(mps.vdot(p0, p0))
+    assert mps.vdot(p0, p0) < tol
 
 
 if __name__ == "__main__":
