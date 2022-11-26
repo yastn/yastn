@@ -56,8 +56,9 @@ def variational_sweep_1site(psi, psi_target, env=None, op=None):
     return env
 
 
-def multiply_svd(a, b, opts=None):
+def zipper(a, b, opts=None):
     "Apply mpo a on mps/mpo b, performing svd compression during the sweep."
+
     psi = b.clone()
     psi.canonize_sweep(to='last')
 
@@ -66,7 +67,7 @@ def multiply_svd(a, b, opts=None):
 
     la, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
-    tmp = initialize.ones(a.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
+    tmp = initialize.ones(b.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
     tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axis=2)
 
     for n in psi.sweep(to='first'):

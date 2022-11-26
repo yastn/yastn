@@ -21,19 +21,6 @@ class DMRGout(NamedTuple):
     max_discarded_weight : float = None
 
 
-def _init_dmrg(psi, H, env, project, opts_eigs):
-    """ tests and initializations for all dmrg methods. """
-    if opts_eigs is None:
-        opts_eigs = {'hermitian': True, 'ncv': 3, 'which': 'SR'}
-
-    if env is None:
-        env = Env3(bra=psi, op=H, ket=psi, project=project).setup(to='first')
-
-    if not (env.bra is psi and env.ket is psi):
-        raise YastError('MPS: Require environment env where ket == bra == psi')
-    return env, opts_eigs
-
-
 def dmrg_(psi, H, project=None, method='1site',
         energy_tol=None, Schmidt_tol=None, max_sweeps=1, iterator_step=None,
         opts_eigs=None, opts_svd=None):
@@ -59,21 +46,21 @@ def dmrg_(psi, H, project=None, method='1site',
         MPO to minimize against.
 
     project: list(yamps.MpsMpo)
-        optimizes MPS in the subspace orthogonal to MPS's in the list.
+        Optimizes MPS in the subspace orthogonal to MPS's in the list.
 
     method: str
-        which DMRG variant to use from :code:`'1site'`, :code:`'2site'`
+        Which DMRG variant to use from :code:`'1site'`, :code:`'2site'`
 
     energy_tol: float
-        convergence tolerance for the change of energy in a single sweep.
+        Convergence tolerance for the change of energy in a single sweep.
         By default is None, in which case energy convergence is not checked.
 
     energy_tol: float
-        convergence tolerance for the change of Schmidt values on the worst cut/bond in a single sweep.
+        Convergence tolerance for the change of Schmidt values on the worst cut/bond in a single sweep.
         By default is None, in which case Schmidt values convergence is not checked.
 
     max_sweeps: int
-        maximal number of sweeps
+        Maximal number of sweeps.
 
     iterator_step: int
         If int, :code:`dmrg_` returns a generator that would yield output after every iterator_step sweeps.
@@ -84,18 +71,18 @@ def dmrg_(psi, H, project=None, method='1site',
         If None, use default {'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
     opts_svd: dict
-        options passed to :meth:`yast.svd` used to truncate virtual spaces in :code:`verions='2site'`.
-        If None, use default 
+        Options passed to :meth:`yast.svd` used to truncate virtual spaces in :code:`verions='2site'`.
+        If None, use default {'tol': 1e-14}
 
     Returns
     -------
-    step: DMRGout(NamedTuple)
+    out: DMRGout(NamedTuple)
         Includes fields:
-            :code:`sweeps` number of performed dmrg sweeps.
-            :code:`energy` energy after the last sweep.
-            :code:`denergy` absolut value of energy change in the last sweep.
-            :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep
-            :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
+        :code:`sweeps` number of performed dmrg sweeps.
+        :code:`energy` energy after the last sweep.
+        :code:`denergy` absolut value of energy change in the last sweep.
+        :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep
+        :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
     tmp = _dmrg_(psi, H, project, method, 
                 energy_tol, Schmidt_tol, max_sweeps, iterator_step,
@@ -106,14 +93,16 @@ def dmrg_(psi, H, project=None, method='1site',
 def _dmrg_(psi, H, project, method,
         energy_tol, Schmidt_tol, max_sweeps, iterator_step,
         opts_eigs, opts_svd):
-    """ Generator for dmrg_() """
+    """ Generator for dmrg_(). """
 
     if not psi.is_canonical(to='first'):
         psi.canonize_sweep(to='first')
 
-    env = None
-    env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
+    env = Env3(bra=psi, op=H, ket=psi, project=project).setup(to='first')
     E_old = env.measure()
+
+    if opts_eigs is None:
+        opts_eigs = {'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
     if Schmidt_tol is not None:
         if not Schmidt_tol > 0:
@@ -130,11 +119,10 @@ def _dmrg_(psi, H, project, method,
 
     for sweep in range(1, max_sweeps + 1):
         if method == '1site':
-            env = dmrg_sweep_1site(psi, H=H, env=env, project=project, 
-                opts_eigs=opts_eigs, Schmidt=Schmidt)
+            _dmrg_sweep_1site_(env, opts_eigs=opts_eigs, Schmidt=Schmidt)
         else: # method == '2site':
-            env, max_dw = dmrg_sweep_2site(psi, H=H, env=env, project=project,
-                opts_eigs=opts_eigs, opts_svd=opts_svd, Schmidt=Schmidt)
+            max_dw = _dmrg_sweep_2site_(env, opts_eigs=opts_eigs,
+                                        opts_svd=opts_svd, Schmidt=Schmidt)
 
         E = env.measure()
         dE, E_old = E_old - E, E
@@ -157,47 +145,7 @@ def _dmrg_(psi, H, project, method,
     yield DMRGout(sweep, E, dE, max_dS, max_dw)
 
 
-def dmrg(psi, H, env=None, project=None, version='1site',
-        converge='energy', measure=None,
-        atol=-1, max_sweeps=1, opts_eigs=None, opts_svd=None, return_info=False):
-
-    Schmidt_old = psi.get_Schmidt_values() if converge == 'Schmidt' else None
-
-    env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
-    if opts_svd is None:
-        opts_svd = {'tol': 1e-12}
-    E_old = env.measure()
-
-    for sweep in range(max_sweeps):
-        max_disc_weight = None
-        Schmidt = {} if converge == 'Schmidt' else None
-        if version == '1site':
-            env = dmrg_sweep_1site(psi, H=H, env=env, project=project, opts_eigs=opts_eigs, Schmidt=Schmidt)
-        elif version == '2site':
-            env, max_disc_weight = dmrg_sweep_2site(psi, H=H, env=env, project=project, \
-                opts_eigs=opts_eigs, opts_svd=opts_svd, Schmidt=Schmidt)
-        else:
-            raise YastError('MPS: dmrg version %s not recognized' % version)
-        E = env.measure()
-        dE, E_old = E_old - E, E
-        if not (measure is None):
-            measure(sweep, psi, env, E, max_disc_weight)
-        if converge == 'energy':
-            logger.info('Iteration = %03d  Energy = %0.14f dE = %0.14f', sweep, E, dE)
-            if abs(dE) < atol:
-                break
-        if converge == 'Schmidt':
-            dS = max((Schmidt[k] - Schmidt_old[k]).norm() for k in Schmidt.keys())
-            Schmidt_old = Schmidt
-            logger.info('Iteration = %03d  Energy = %0.14f dE = %0.14f dS = %0.14f', sweep, E, dE, dS)
-            if dS < atol:
-                break
-    if return_info:
-        return env, {'sweeps': sweep + 1, 'dEng': dE}
-    return env
-
-
-def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None, Schmidt=None):
+def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
     r"""
     Perform sweep with 1-site DMRG, see :meth:`dmrg` for description.
 
@@ -206,9 +154,7 @@ def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None, Schmidt=Non
     env: Env3
         Environment of the <psi|H|psi> ready for the next iteration.
     """
-
-    env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
-
+    psi = env.ket
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
             env.update_Aort(n)
@@ -223,7 +169,7 @@ def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None, Schmidt=Non
     return env
 
 
-def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=None, Schmidt=None):
+def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
     r"""
     Perform sweep with 2-site DMRG, see :meth:`dmrg` for description.
 
@@ -232,11 +178,10 @@ def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=No
     env: Env3
         Environment of the <psi|H|psi> ready for the next iteration.
     """
-
-    env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
+    psi = env.ket
 
     if opts_svd is None:
-        raise YastError('DMRG: provide opts_svd for truncation of 2site dmrg.')
+        opts_svd = {'tol': 1e-14}
 
     max_disc_weight = -1.
     for to, dn in (('last', 0), ('first', 1)):

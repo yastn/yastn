@@ -532,6 +532,7 @@ class MpsMpo:
         it = self.sweep(to=to) if n is None else [n]
         for n in it:
             x = tensor.tensordot(self.A[n], self.A[n].conj(), axes=(cl, cl))
+            x = x.drop_leg_history()
             x0 = initialize.eye(config=x.config, legs=x.get_legs((0, 1)))
             if (x - x0.diag()).norm() > tol:  # == 0
                 return False
