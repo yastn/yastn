@@ -18,8 +18,8 @@ def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, opts_svd=None):
     # After cheat-move we have MPS of the energy Eng_old but we want to bring it closer to 
     # a ground state by imaginary time evolution.
     #
-    env, _ = mps.dmrg_sweep_2site(psi, H, opts_svd=opts_svd)
-    Eng_old = env.measure().item()
+    out = mps.dmrg_(psi, H, method='2site', opts_svd=opts_svd)
+    Eng_old = out.energy.item()
     #
     # We set parameters for exponentiation in TDVP giving the information on the operator 
     # and setting what is desired Krylow dimension opts_expmv['ncv'] and truncation of Arnoldin algorithm opts_expmv['tol'].
@@ -33,7 +33,7 @@ def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, opts_svd=None):
             #
             # We run TDVP evolution
             #
-            env = mps.tdvp(psi, H, env=env, time=dt, dt=dt, u=1, version=version, opts_expmv=opts_expmv, opts_svd=opts_svd)
+            env = mps.tdvp(psi, H, time=dt, dt=dt, u=1, version=version, opts_expmv=opts_expmv, opts_svd=opts_svd)
             #
             # After the evolution the energy is:
             #

@@ -104,7 +104,7 @@ def dimer_mps(N):
         psi_odd[0]=_N.copy()
         psi_odd[N-1]=_N.copy()
 
-    return psi_even+psi_odd
+    return psi_even + psi_odd
 
 # 3) define MPOs for observables
 #
@@ -135,43 +135,35 @@ def obs_ops(N):
     return mpos_Sz, mpos_SSnn
 
 def main():
-    assert args.N>1,"Number of sites must be larger than 1."
+    assert args.N > 1,"Number of sites must be larger than 1."
     
     # 0) create all 2-site terms
     #
     H_2site_terms= [h_2site(args.N,i,args.theta) for i in range(args.N-1)]
 
     # 1) add them up and (losslessly) compress resulting MPO
-    H= mps.add(*H_2site_terms)
+    H = mps.add(*H_2site_terms)
     H.canonize_sweep(to='last', normalize=False)
     H.truncate_sweep(to='first', opts={"tol": 1e-14}, normalize=False)
 
     # 2) define initial state
     # psi0 = random_mps(args.N, charge=args.init_n, D=args.init_D)
     psi0 = dimer_mps(args.N)
-    psi_opt = psi0.copy() 
+    psi_opt = psi0.copy()
 
     # 3) define observables
     mpos_Sz, mpos_SSnn= obs_ops(args.N)
     total_Sz_qpi= mps.add(*mpos_Sz, amplitudes=[(-1)**i for i in range(args.N)])
     total_Sz_qpi.canonize_sweep(to='last', normalize=False)
     total_Sz_qpi.truncate_sweep(to='first', opts={"tol": 1e-14}, normalize=False)
-    
-    def measure(sweep,psi,env3,E,disc_w):
-        if (sweep+1)%1==0:
-            _total_Sz_qpi= mps.measure_mpo(psi, total_Sz_qpi, psi)
-            print(f"{sweep} {E} {disc_w} {_total_Sz_qpi}")
 
-    project=[]
     opts_svd={'D_total': args.max_D}
-    env_psiHpsi, info = mps.dmrg(psi_opt, H, project=project, version="2site",
-        converge='energy', measure=measure, atol=args.eps_conv, max_sweeps=args.opt_max_iter, 
-        opts_svd=opts_svd, return_info=True)
-
-    total_E= env_psiHpsi.measure()
-
-    print(f"E_total {total_E}")
-    print(f"conv. info {info}")
+    it = mps.dmrg_(psi_opt, H, method="2site", opts_svd=opts_svd,
+                    energy_tol=args.eps_conv, max_sweeps=args.opt_max_iter,
+                    iterator_step=1)
+    for step in it:
+        _total_Sz_qpi= mps.measure_mpo(psi_opt, total_Sz_qpi, psi_opt)
+        print(f"{step.sweeps} {step.energy} {step.max_discarded_weight} {_total_Sz_qpi}")
 
     # 2) measure observables
     # 2.1) S^z profile

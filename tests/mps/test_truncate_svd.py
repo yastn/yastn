@@ -7,16 +7,9 @@ try:
 except ImportError:
     from configs import config_dense as cfg
 
-def run_dmrg_1site(psi, H, sweeps=10):
-    """ Run a few sweeps of dmrg_1site_sweep. Returns energy. """
-    env = None
-    for _ in range(sweeps):
-        env = mps.dmrg_sweep_1site(psi, H, env=env)
-    return env.measure()
 
-
-def run_multiply_svd(psi, H, Egs, sweeps=1):
-    Hpsi = mps.multiply_svd(H, psi, opts={'D_total': 6})
+def run_zipper(psi, H, Egs, sweeps=1):
+    Hpsi = mps.zipper(H, psi, opts={'D_total': 6})
 
     Eng_t = mps.measure_overlap(Hpsi, psi)
     assert Egs < Eng_t < Egs * 0.995
@@ -66,8 +59,8 @@ def test_truncate_svd_dense():
     parameters = {"t": lambda j: 1.0, "mu": lambda j: 0, "range1": range(N), "range2": range(N-1)}
     H_str = "\sum_{j \in range2} t ( sp_{j} sm_{j+1} + sp_{j+1} sm_{j} ) + \sum_{j\in range1} mu sp_{j} sm_{j}"
     H = generate.mpo(H_str, parameters)
-    psi = generate.random_mps(D_total=D_total).canonize_sweep(to='first')
-    run_dmrg_1site(psi, H)
+    psi = generate.random_mps(D_total=D_total)
+    mps.dmrg_(psi, H, max_sweeps=10, Schmidt_tol=1e-8)
     run_truncation(psi, H, Eng_gs)
 
 
@@ -89,12 +82,11 @@ def test_truncate_svd_Z2():
 
     for parity in (0, 1):
         psi = generate.random_mps(D_total=D_total, n=parity)
-        psi.canonize_sweep(to='first')
-        run_dmrg_1site(psi, H)
+        mps.dmrg_(psi, H, max_sweeps=10, Schmidt_tol=1e-8)
         run_truncation(psi, H, Eng_parity[parity])
-        run_multiply_svd(psi, H, Eng_parity[parity])
+        run_zipper(psi, H, Eng_parity[parity])
 
 
 if __name__ == "__main__":
-    # test_truncate_svd_dense()
+    test_truncate_svd_dense()
     test_truncate_svd_Z2()

@@ -83,7 +83,7 @@ def test_multiplication():
     H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j}"
     H = generate.mpo(H_str, parameters)
     #
-    # To standardize this test we will fix a seed for random MPS we use
+    # To standardize this test we will fix a seed for random MPS we use.
     #
     generate.random_seed(seed=0)
     #
@@ -92,7 +92,7 @@ def test_multiplication():
     total_charge = 3
     psi = generate.random_mps(D_total=8, n=total_charge)
     #
-    # We set truncation for DMRG and run the algorithm in '2site' version
+    # We set truncation for DMRG and run the algorithm in '2site' version.
     #
     opts_svd = {'D_total': 8} 
     out = mps.dmrg_(psi, H, method='2site', max_sweeps=20, opts_svd=opts_svd)
@@ -101,20 +101,19 @@ def test_multiplication():
     #
     assert pytest.approx(out.energy.item(), rel=tol) == Eng
     #
-    # If the code didn't break then we should get a ground state. 
-    # Now we calculate the variation of energy <H^2>-<H>^2=<(H-Eng)^2> 
+    # If the code didn't break then we should get a ground state.
+    # Now we calculate the variation of energy <H^2>-<H>^2=<(H-Eng)^2>
     # to check if DMRG converged properly to tol.
     # We have two equivalent ways to do that:
     # (case 2 and 3 are not most efficient - we use them here for testing)
     #
     # case 1/
-    Hpsi = mps.multiply_svd(H, psi, opts={"D_total": 8})
+    Hpsi = mps.zipper(H, psi, opts={"D_total": 12})
     #
-    # use mps.measure_overlap to get variation
+    # Use mps.vdot to get variation.
     #
     p0 = -1 * Hpsi + Eng * psi
-    print(mps.vdot(p0, p0))
-    #assert mps.vdot(p0, p0) < tol
+    assert mps.vdot(p0, p0) < tol
     #
     # case 2/
     Hpsi = mps.multiply(H, psi)
