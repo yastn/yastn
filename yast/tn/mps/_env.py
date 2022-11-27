@@ -7,11 +7,11 @@ def norm(ket):
     return abs(measure_overlap(ket, ket)) ** 0.5
 
 
-def vdot(bra, ket, op=None):
-    r""" Calculating overlap <bra|ket>, or <bra|op|ket> if op is provided as the last argument."""
-    if op is None:
-        return measure_overlap(bra, ket)
-    return measure_mpo(bra, op, ket)
+def vdot(bra, ket_or_op, ket_or_none=None):
+    r""" Calculating overlap <bra|ket>, or <bra|op|ket> if three arguments are provided."""
+    if ket_or_none is None:
+        return measure_overlap(bra, ket_or_op)
+    return measure_mpo(bra, ket_or_op, ket_or_none)
 
 
 def measure_overlap(bra, ket):
@@ -87,7 +87,7 @@ class _EnvParent:
             legs = [self.ort[ii].virtual_leg('first'), self.ket.virtual_leg('first').conj()]
             self.Fort[ii][(-1, 0)] = initialize.ones(config=config, legs=legs)
             legs = [self.ket.virtual_leg('last').conj(), self.ort[ii].virtual_leg('last')]
-            self.Fort[ii][(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)  # TODO: eye ?
+            self.Fort[ii][(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)
 
     def reset_temp(self):
         """ Reset temporary objects stored to speed-up some simulations. """
@@ -213,10 +213,10 @@ class Env2(_EnvParent):
         # left boundary
         config = self.bra[0].config
         legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
-        self.F[(-1, 0)] = initialize.ones(config=config, legs=legs)  # TODO: or eye?
+        self.F[(-1, 0)] = initialize.ones(config=config, legs=legs)
         # right boundary
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
-        self.F[(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)  # TODO: or eye?
+        self.F[(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)
 
     def Heff1(self, x, n):
         r"""

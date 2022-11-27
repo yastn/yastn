@@ -3,6 +3,10 @@ from ._env import Env2, Env3
 from ... import initialize, tensor, YastError
 
 
+def variational_(psi, op_or_ket, ket_or_none=None):
+    pass
+
+
 def variational_sweep_1site(psi, psi_target, env=None, op=None):
     r"""
     Using :code:`verions='1site'` DMRG, an MPS :code:`psi` with fixed

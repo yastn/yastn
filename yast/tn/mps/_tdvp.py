@@ -1,4 +1,5 @@
 """ Various variants of the TDVP algorithm for mps."""
+from typing import NamedTuple
 from ._env import Env3
 from ._mps import MpsMpo
 from ... import YastError
@@ -8,52 +9,56 @@ import numpy as np
 #           tdvp                #
 #################################
 
+class TDVPout(NamedTuple):
+    ti : float = 0.
+    tf : float = 0.
+    time_independent: bool = None
+    dt: float = 0.
+    steps: int = 0
 
-def tdvp(psi, H, time=(0, 0.1), dt=0.1, u=1j, env=None, version='1site', order='2nd', opts_expmv=None, opts_svd=None, normalize=True):
+
+def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opts_expmv=None, opts_svd=None, normalize=True):
     r"""
-    Perform TDVP sweeps, solving d/dt psi(t) = -u * H @ psi(t).
-
-    Assume input psi is canonized to the first site.
+    Generator performing TDVP sweeps to solve d/dt psi(t) = -u * H @ psi(t),
 
     Parameters
     ----------
     psi: Mps
-        initial state. It is updated during the execution.
+        Initial state. It is updated during execution.
+        It is first canonized to to the first site, if not provided in such a form.
+        State resulting from :code:`tdvp_` is canonized to the first site.
 
     H: Mps, nr_phys=2
-        evolution generator given in the form of mpo (time-independent H),
+        Evolution generator given in the form of mpo (time-independent H),
         or a function outputting mpo (time-dependent H).
 
     time: float64 or tuple(float64)
-        initial and final time; can also provide intermidiate times to reached.
-        Can provide only final time, in which case initial time is set to 0.
+        Initial and final times; can also provide intermidiate times to reached as snapshots.
+        If only the final time is provided, initial time is set to 0.
 
     dt: double
-        time step.
-        It is adjusted down to have an integer number of time-steps covering total evolution time.
+        Time step.
+        It is adjusted down to have an integer number of time-steps to reach the next snapshot.
 
     u: number
         '1j' for real time evolution, 1 for imaginary time evolution.
         Default is 1j.
 
-    env: Env3
-        For time-independent H can provide environment <psi|H|psi> from the previous sweep.
-        It is initialized if None.
-
-    version: str
-        which tdvp procedure to use in ('1site', '2site', 'mix')
+    method: str
+        Algorithm to use in ('1site', '2site', 'mix')
 
     order: str
-        order of Suzuki-Trotter decomposition in ('2nd', '4th')
-        4th order is composed from 5 sweeps with 2nd order.
+        Order of Suzuki-Trotter decomposition in ('2nd', '4th').
+        4th order step is composed of 5 2nd order steps.
 
     opts_expmv: dict
-        options passed to :meth:`yast.expmv`
+        Options passed to :meth:`yast.expmv`
         If there is information from previous excecutions stored in env,
         overrid the initial guess of the size of krylov space opts_expmv['ncv'] will be overriden.
 
     opts_svd: dict
-        options passed to :meth:`yast.linalg.svd` to truncate virtual bond dimensions when unmerging two merged sites.
+        Options passed to :meth:`yast.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`method='mix'`.
+        If None, use default {'tol': 1e-14}
 
     Returns
     -------
@@ -64,48 +69,49 @@ def tdvp(psi, H, time=(0, 0.1), dt=0.1, u=1j, env=None, version='1site', order='
     time_independent = isinstance(H, MpsMpo)
     if dt <= 0:
         raise YastError('MPS: dt should be positive.')
-    if not isinstance(time, tuple):
-        time = (0, time)
-    if any(t1 - t0 <= 0 for t1, t0 in zip(time[1:], time[:-1])):
+    if not hasattr(times, '__iter__'):
+        times = (0, times)
+    if any(t1 - t0 <= 0 for t0, t1 in zip(times[:-1], times[1:])):
         raise YastError('MPS: Time should be an ascending tuple.')
 
-    if version == '1site' and time_independent:
-        routine = lambda t, dt0, env: tdvp_sweep_1site(psi, H, dt0, u, env, opts_expmv, normalize)
-    elif version == '2site' and time_independent:
-        routine = lambda t, dt0, env: tdvp_sweep_2site(psi, H, dt0, u, env, opts_expmv, opts_svd, normalize)
-    elif version == '12site' and time_independent:
-        routine = lambda t, dt0, env: tdvp_sweep_12site(psi, H, dt0, u, env, opts_expmv, opts_svd, normalize)
-    elif version == '1site' and not time_independent:
-        routine = lambda t, dt0, env: tdvp_sweep_1site(psi, H(t), dt0, u, None, opts_expmv, normalize)
-    elif version == '2site' and not time_independent:
-        routine = lambda t, dt0, env: tdvp_sweep_2site(psi, H(t), dt0, u, None, opts_expmv, opts_svd, normalize)
-    elif version == '12site' and not time_independent:
-        routine = lambda t, dt0, env: tdvp_sweep_12site(psi, H(t), dt0, u, None, opts_expmv, opts_svd, normalize)
+    if method == '1site' and time_independent:
+        routine = lambda t, dt0, env: _tdvp_sweep_1site_(psi, H, dt0, u, env, opts_expmv, normalize)
+    elif method == '2site' and time_independent:
+        routine = lambda t, dt0, env: _tdvp_sweep_2site_(psi, H, dt0, u, env, opts_expmv, opts_svd, normalize)
+    elif method == '12site' and time_independent:
+        routine = lambda t, dt0, env: _tdvp_sweep_12site_(psi, H, dt0, u, env, opts_expmv, opts_svd, normalize)
+    elif method == '1site' and not time_independent:
+        routine = lambda t, dt0, env: _tdvp_sweep_1site_(psi, H(t), dt0, u, None, opts_expmv, normalize)
+    elif method == '2site' and not time_independent:
+        routine = lambda t, dt0, env: _tdvp_sweep_2site_(psi, H(t), dt0, u, None, opts_expmv, opts_svd, normalize)
+    elif method == '12site' and not time_independent:
+        routine = lambda t, dt0, env: _tdvp_sweep_12site_(psi, H(t), dt0, u, None, opts_expmv, opts_svd, normalize)
     else:
-        raise YastError('MPS: tdvp version %s not recognized' % version, order)
+        raise YastError('MPS: tdvp method %s not recognized' % method)
 
+    env = None
     # perform time-steps
-    for t0, t1 in zip(time[:-1], time[1:]):
-        steps = np.ceil((t1 - t0) / dt)
-        t, dt1 = t0, (t1 - t0) / steps
+    for t0, t1 in zip(times[:-1], times[1:]):
+        steps = int((t1 - t0 - 1e-12) // dt) + 1
+        t, ds = t0, (t1 - t0) / steps
+        for _ in range(steps):
+            if order == '2nd':
+                env = routine(t + ds/2, ds, env)
+            elif order == '4th':
+                s2 = 0.41449077179437573714
+                env = routine(t + 0.5 * s2 * ds, ds * s2, env)
+                env = routine(t + 1.5 * s2 * ds, ds * s2, env)
+                env = routine(t + 0.5 * ds, ds * (1 - 4 * s2), env)
+                env = routine(t + (1 - 1.5 * s2) * ds, ds * s2, env)
+                env = routine(t + (1 - 0.5 * s2) * ds, ds * s2, env)
+            else:
+                raise YastError("MPS: order should be in ('2nd', '4th')")
+            t = t + ds
+        yield TDVPout(t0, t, time_independent, ds, steps)
 
-        if order == '2nd':
-            env = routine(t + dt1/2, dt1, env)
-        elif order == '4th':
-            s2 = 0.41449077179437573714
-            env = routine(t + 0.5 * s2 * dt1, dt1 * s2, env)
-            env = routine(t + 1.5 * s2 * dt1, dt1 * s2, env)
-            env = routine(t + 0.5 * dt1, dt1 * (1 - 4 * s2), env)
-            env = routine(t + (1 - 1.5 * s2) * dt1, dt1 * s2, env)
-            env = routine(t + (1 - 0.5 * s2) * dt1, dt1 * s2, env)
-        else:
-            raise YastError("MPS: order should be in ('2nd', '4th')")
-        t = t + dt1
-        # measurment here
-    return env
 
 
-def tdvp_sweep_1site(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, normalize=True):
+def _tdvp_sweep_1site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, normalize=True):
     r""" Perform sweep with 1-site TDVP update, see :meth:`tdvp` for description. """
     
     env, opts = _init_tdvp(psi, H, env, opts_expmv)
@@ -123,7 +129,7 @@ def tdvp_sweep_1site(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, normalize=
     return env
 
 
-def tdvp_sweep_2site(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd=None, normalize=True):
+def _tdvp_sweep_2site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd=None, normalize=True):
     r""" Perform sweep with 2-site TDVP update, see :meth:`tdvp` for description. """
 
     env, opts = _init_tdvp(psi, H, env, opts_expmv)
@@ -142,7 +148,7 @@ def tdvp_sweep_2site(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd=N
     return env
 
 
-def tdvp_sweep_12site(psi, H=False, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd=None, normalize=True):
+def _tdvp_sweep_12site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd=None, normalize=True):
     r"""
     Perform sweep with mixed TDVP update, see :meth:`tdvp` for description.
 
