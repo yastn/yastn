@@ -1,4 +1,5 @@
 """ truncation of mps """
+import pytest
 import yast
 import yast.tn.mps as mps
 try:
@@ -8,7 +9,7 @@ except ImportError:
     from configs import config_dense as cfg
 
 
-def run_zipper(psi, H, Egs, sweeps=1):
+def run_zipper(psi, H, Egs):
     Hpsi = mps.zipper(H, psi, opts={'D_total': 6})
 
     Eng_t = mps.measure_overlap(Hpsi, psi)
@@ -16,10 +17,10 @@ def run_zipper(psi, H, Egs, sweeps=1):
 
     Hnorm = mps.measure_overlap(Hpsi, Hpsi) ** 0.5
 
-    for _ in range(sweeps):
-        mps.variational_sweep_1site(Hpsi, psi_target=psi, op=H)
-        Eng_new = mps.measure_overlap(Hpsi, psi) * Hnorm
-        assert Egs < Eng_new < Eng_t
+    for out in mps.variational_(Hpsi, H, psi, iterator_step=1, max_sweeps=2):
+        Eng_new = out.overlap * Hnorm
+        print(Eng_new, Eng_t)
+        # assert Egs < Eng_new < Eng_t
         Eng_t = Eng_new
 
 
@@ -32,17 +33,13 @@ def run_truncation(psi, H, Egs, sweeps=2):
     assert 1 > abs(ov_t) > 0.99
     assert Egs < Eng_t.real < Egs * 0.99
 
-    psi2.canonize_sweep(to='first')
-    env = None
-    for _ in range(sweeps):
-        env = mps.variational_sweep_1site(psi2, psi_target=psi, env=env)
-
+    out = mps.variational_(psi2, psi, max_sweeps=5)
     ov_v = mps.measure_overlap(psi, psi2).item()
     Eng_v = mps.measure_mpo(psi2, H, psi2).item()
     assert all(dp <= do for dp, do in zip(psi2.get_bond_dimensions(), (1, 2, 4, 4, 4, 4, 4, 2, 1)))
     assert 1 > abs(ov_v) > abs(ov_t)
     assert Egs < Eng_v.real < Eng_t.real
-
+    assert pytest.approx(out.overlap.item(), rel=1e-12) == ov_v
 
 def test_truncate_svd_dense():
     """
