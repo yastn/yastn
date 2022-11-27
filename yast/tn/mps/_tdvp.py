@@ -3,7 +3,6 @@ from typing import NamedTuple
 from ._env import Env3
 from ._mps import MpsMpo
 from ... import YastError
-import numpy as np
 
 #################################
 #           tdvp                #
