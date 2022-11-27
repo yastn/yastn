@@ -1,4 +1,4 @@
-# """ yamps.tdvp """
+# """ mps.tdvp """
 # import logging
 # import pytest
 # import yast.tn.mps as mps

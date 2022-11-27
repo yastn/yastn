@@ -3,7 +3,6 @@ from typing import NamedTuple
 import logging
 from ... import tensor, YastError
 from ._env import Env3
-from ._mps import MpsMpo
 
 
 logger = logging.Logger('dmrg')
@@ -38,9 +37,9 @@ def dmrg_(psi, H, project=None, method='1site',
     Parameters
     ----------
     psi: yamps.MpsMpo
-        Initial MPS, that gets modified in place inside :code:`dmrg_`.
-        psi is initialy canonized to to the first site, if not provided in such a form.
-        In particular, psi resulting from :code:`dmrg_` is canonized to the first site.
+        Initial state. It is updated during execution.
+        It is first canonized to to the first site, if not provided in such a form.
+        State resulting from :code:`dmrg_` is canonized to the first site.
 
     H: yamps.MpsMpo
         MPO to minimize against.
@@ -71,7 +70,7 @@ def dmrg_(psi, H, project=None, method='1site',
         If None, use default {'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
     opts_svd: dict
-        Options passed to :meth:`yast.svd` used to truncate virtual spaces in :code:`verions='2site'`.
+        Options passed to :meth:`yast.svd` used to truncate virtual spaces in :code:`method='2site'`.
         If None, use default {'tol': 1e-14}
 
     Returns
