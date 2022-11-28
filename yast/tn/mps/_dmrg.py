@@ -195,5 +195,5 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
             psi.absorb_central(to=to)
             env.clear_site(n, n + 1)
             env.update_env(n + dn, to=to)
-    env.update_env(0, to='first')
+    env.update_env(psi.first, to='first')
     return max_disc_weight

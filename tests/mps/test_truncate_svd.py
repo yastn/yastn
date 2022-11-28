@@ -17,10 +17,10 @@ def run_zipper(psi, H, Egs):
 
     Hnorm = mps.measure_overlap(Hpsi, Hpsi) ** 0.5
 
-    for out in mps.variational_(Hpsi, H, psi, iterator_step=1, max_sweeps=2):
-        Eng_new = out.overlap * Hnorm
+    for out in mps.variational_(Hpsi, H, psi, iterator_step=1, max_sweeps=3):
+        Eng_new = mps.vdot(Hpsi, psi) * Hnorm
         print(Eng_new, Eng_t)
-        # assert Egs < Eng_new < Eng_t
+        assert Egs < Eng_new < Eng_t
         Eng_t = Eng_new
 
 

@@ -130,24 +130,6 @@ class _EnvParent:
         axes = ((0, 1), (1, 0)) if self.nr_layers == 2 else ((0, 1, 2), (2, 1, 0))
         return self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
 
-    def project_ket_on_bra(self, n):
-        r"""
-        Project ket on a n-th site of bra.
-
-        It is equal to the overlap <bra|op|ket> up to the contribution from n-th site of bra.
-
-        Parameters
-        ----------
-        n : int
-            index of site
-
-        Returns
-        -------
-        out : tensor
-            result of projection
-        """
-        return self.Heff1(self.ket[n], n)
-
     def update_env(self, n, to='last'):
         r"""
         Update environment including site n, in the direction given by to.
@@ -238,6 +220,16 @@ class Env2(_EnvParent):
         inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
         return tensor.ncon([self.F[(n - 1, n)], x, self.F[(n + 1, n)]], inds)
 
+    def Heff2(self, AA, bd):
+        """ Heff2 @ AA """
+        n1, n2 = bd
+        axes = (0, (1, 2), 3) if AA.ndim == 4 else (0, (1, 2, 3, 5), 4)
+        temp = AA.fuse_legs(axes=axes)
+        temp = self.F[(n1 - 1, n1)] @ temp @ self.F[(n2 + 1, n2)]
+        temp = temp.unfuse_legs(axes=1)
+        if temp.ndim == 6:
+            temp = temp.transpose(axes=(0, 1, 2, 3, 5, 4))
+        return temp
 
 class Env3(_EnvParent):
     """
@@ -332,7 +324,8 @@ class Env3(_EnvParent):
 
 
     def Heff2(self, AA, bd):
-        r"""Action of Heff on central site.
+        r"""
+        Action of Heff on central site.
 
         Parameters
         ----------

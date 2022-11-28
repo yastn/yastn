@@ -95,7 +95,7 @@ def test_multiplication():
     # We set truncation for DMRG and run the algorithm in '2site' version.
     #
     opts_svd = {'D_total': 8} 
-    out = mps.dmrg_(psi, H, method='2site', max_sweeps=20, opts_svd=opts_svd)
+    out = mps.dmrg_(psi, H, method='2site', max_sweeps=20, Schmidt_tol=1e-14, opts_svd=opts_svd)
     #
     # Test if we obtained exact solution for the energy?:
     #
@@ -108,23 +108,25 @@ def test_multiplication():
     # (case 2 and 3 are not most efficient - we use them here for testing)
     #
     # case 1/
-    Hpsi = mps.zipper(H, psi, opts={"D_total": 12})
+    print(psi.get_bond_charges_dimensions())
+    Hpsi = mps.zipper(H, psi, opts={"D_total": 8})
+    mps.variational_(Hpsi, H, psi, method='2site', max_sweeps=5, Schmidt_tol=1e-6, opts_svd={"D_total": 8})
+    print(Hpsi.get_bond_charges_dimensions())
     #
     # Use mps.vdot to get variation.
     #
-    p0 = -1 * Hpsi + Eng * psi
+    p0 =  -1 * Hpsi + Eng * psi # Hpsi + psi
+    print(mps.vdot(p0, p0))
     assert mps.vdot(p0, p0) < tol
     #
     # case 2/
     Hpsi = mps.multiply(H, psi)
     p0 = -1 * Hpsi + Eng * psi
-    print(mps.vdot(p0, p0))
     assert mps.vdot(p0, p0) < tol
     #
     # case 3/
     Hpsi = H @ psi
     p0 = -1 * Hpsi + Eng * psi
-    print(mps.vdot(p0, p0))
     assert mps.vdot(p0, p0) < tol
 
 

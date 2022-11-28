@@ -137,7 +137,7 @@ def _variational_(psi, op_or_ket, ket_or_none, method,
     yield variational_out(sweep, overlap, doverlap, max_dS, max_dw)
 
 
-def _variational_1site_sweep_(env, Schmidt):
+def _variational_1site_sweep_(env, Schmidt=None):
     r"""
     Using :code:`verions='1site'` DMRG, an MPS :code:`psi` with fixed
     virtual spaces is variationally optimized to maximize overlap
@@ -174,19 +174,39 @@ def _variational_1site_sweep_(env, Schmidt):
         Environment of the network :math:`\langle \psi|\psi_{target} \rangle`
         or :math:`\langle \psi|O|\psi_{target} \rangle`.
     """
-
-    psi = env.bra
+    bra, ket = env.bra, env.ket
     for to in ('last', 'first'):
-        for n in psi.sweep(to=to):
-            psi.remove_central()
-            psi.A[n] = env.project_ket_on_bra(n)
-            psi.orthogonalize_site(n, to=to)
+        for n in bra.sweep(to=to):
+            bra.A[n] = env.Heff1(ket[n], n)
+            bra.orthogonalize_site(n, to=to)
+            if Schmidt is not None and to == 'first' and n != bra.first:
+                _, S, _ = bra[bra.pC].svd(sU=1)
+                Schmidt[bra.pC] = S
             env.clear_site(n)
             env.update_env(n, to=to)
+            bra.remove_central()
 
 
-def _variational_2site_sweep_(env):
-    pass
+def _variational_2site_sweep_(env, opts_svd=None, Schmidt=None):
+    """ variational update on 2 sites """
+    if opts_svd is None:
+        opts_svd = {'tol': 1e-14}
+    max_disc_weight = -1.
+    bra, ket = env.bra, env.ket
+    for to, dn in (('last', 0), ('first', 1)):
+        for n in bra.sweep(to=to, dl=1):
+            bd = (n, n + 1)
+            AA = ket.merge_two_sites(bd)
+            AA = env.Heff2(AA, bd)
+            _disc_weight_bd = bra.unmerge_two_sites(AA, bd, opts_svd)
+            max_disc_weight = max(max_disc_weight, _disc_weight_bd)
+            if Schmidt is not None and to == 'first':
+                Schmidt[bra.pC] = bra[bra.pC]
+            bra.absorb_central(to=to)
+            env.clear_site(n, n + 1)
+            env.update_env(n + dn, to=to)
+    env.update_env(bra.first, to='first')
+    return max_disc_weight
 
 
 def zipper(a, b, opts=None):
