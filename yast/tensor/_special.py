@@ -1,3 +1,4 @@
+""" special contractions appearing in mps. Introduced to dispatch this contraction to more complex meta-tensors."""
 from ._contractions import ncon
 
 def _attach_01(M, T):

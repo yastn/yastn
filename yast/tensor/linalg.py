@@ -1,4 +1,4 @@
-# Linalg methods for yast tensor.
+""" Linalg methods for yast tensor. """
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct
 from ._tests import YastError, _test_axes_all
