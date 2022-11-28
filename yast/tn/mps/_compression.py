@@ -89,7 +89,7 @@ def _variational_(psi, op_or_ket, ket_or_none, method,
     """ Generator for variational_(). """
 
     if not psi.is_canonical(to='first'):
-        psi.canonize_sweep(to='first')
+        psi.canonize_(to='first')
 
     env = Env2(bra=psi, ket=op_or_ket) if ket_or_none is None else \
         Env3(bra=psi, op=op_or_ket, ket=ket_or_none)
@@ -213,7 +213,7 @@ def zipper(a, b, opts=None):
     "Apply mpo a on mps/mpo b, performing svd compression during the sweep."
 
     psi = b.clone()
-    psi.canonize_sweep(to='last')
+    psi.canonize_(to='last')
 
     if psi.N != a.N:
         raise YastError('MPS: a and b must have equal number of sites.')

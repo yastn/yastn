@@ -191,7 +191,7 @@ class MpsMpo:
         self.nr_phys = nr_phys
 
     def norm(self):
-        return norm(self)
+        return norm(self)  # TODO: Write norm using qr decomposition.
 
 
     @property
@@ -325,6 +325,20 @@ class MpsMpo:
         out : Mps or Mpo
         """
         return add(self, phi)
+
+    def __sub__(self, phi):
+        """
+        Subtraction of two Mps's or two Mpo's.
+
+        Parameters
+        ----------
+        mps : Mps or Mpo (same as self)
+
+        Returns
+        -------
+        out : Mps or Mpo
+        """
+        return add(self, phi, amplitudes=(1, -1))
 
     def __matmul__(self, phi):
         """
@@ -471,7 +485,7 @@ class MpsMpo:
             else:  # (to == 'last' and n2 <= self.last) or n1 < self.first
                 self.A[n2] = C @ self.A[n2]
 
-    def canonize_sweep(self, to='first', normalize=True):
+    def canonize_(self, to='first', normalize=True):
         r"""
         Sweep though the MPS/MPO and put it in right/left canonical form
         using :meth:`QR<yast.linalg.qr>` decomposition by setting
@@ -538,7 +552,7 @@ class MpsMpo:
                 return False
         return True
 
-    def truncate_sweep(self, to='last', normalize=True, opts={'tol': 1e-12}):
+    def truncate_(self, to='last', normalize=True, opts={'tol': 1e-12}):
         r"""
         Sweep though the MPS/MPO and put it in right/left canonical form 
         using :meth:`SVD<yast.linalg.svd>` decomposition by setting 
@@ -692,7 +706,7 @@ class MpsMpo:
         """
         Entropy = [0]*self.N
         psi = self.clone()
-        psi.canonize_sweep(to='last', normalize=False)
+        psi.canonize_(to='last', normalize=False)
         psi.absorb_central(to='first')
         for n in psi.sweep(to='first'):
             psi.orthogonalize_site(n=n, to='first', normalize=False)
@@ -711,7 +725,7 @@ class MpsMpo:
         """
         SV = {}
         psi = self.clone()
-        psi.canonize_sweep(to='last', normalize=False)
+        psi.canonize_(to='last', normalize=False)
         psi.absorb_central(to='first')
         for n in psi.sweep(to='first', df=1):
             psi.orthogonalize_site(n=n, to='first', normalize=False)

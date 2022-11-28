@@ -95,7 +95,7 @@ def _dmrg_(psi, H, project, method,
     """ Generator for dmrg_(). """
 
     if not psi.is_canonical(to='first'):
-        psi.canonize_sweep(to='first')
+        psi.canonize_(to='first')
 
     env = Env3(bra=psi, op=H, ket=psi, project=project).setup(to='first')
     E_old = env.measure()

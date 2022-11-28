@@ -26,7 +26,7 @@ def run_zipper(psi, H, Egs):
 
 def run_truncation(psi, H, Egs, sweeps=2):
     psi2 = psi.copy()
-    discarded = psi2.truncate_sweep(to='last', opts={'D_total': 4})
+    discarded = psi2.truncate_(to='last', opts={'D_total': 4})
 
     ov_t = mps.measure_overlap(psi, psi2).item()
     Eng_t = mps.measure_mpo(psi2, H, psi2).item()

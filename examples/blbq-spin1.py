@@ -143,8 +143,8 @@ def main():
 
     # 1) add them up and (losslessly) compress resulting MPO
     H = mps.add(*H_2site_terms)
-    H.canonize_sweep(to='last', normalize=False)
-    H.truncate_sweep(to='first', opts={"tol": 1e-14}, normalize=False)
+    H.canonize_(to='last', normalize=False)
+    H.truncate_(to='first', opts={"tol": 1e-14}, normalize=False)
 
     # 2) define initial state
     # psi0 = random_mps(args.N, charge=args.init_n, D=args.init_D)
@@ -154,8 +154,8 @@ def main():
     # 3) define observables
     mpos_Sz, mpos_SSnn= obs_ops(args.N)
     total_Sz_qpi= mps.add(*mpos_Sz, amplitudes=[(-1)**i for i in range(args.N)])
-    total_Sz_qpi.canonize_sweep(to='last', normalize=False)
-    total_Sz_qpi.truncate_sweep(to='first', opts={"tol": 1e-14}, normalize=False)
+    total_Sz_qpi.canonize_(to='last', normalize=False)
+    total_Sz_qpi.truncate_(to='first', opts={"tol": 1e-14}, normalize=False)
 
     opts_svd={'D_total': args.max_D}
     it = mps.dmrg_(psi_opt, H, method="2site", opts_svd=opts_svd,
