@@ -1,3 +1,4 @@
+""" class yast.Leg """
 from dataclasses import dataclass, replace
 from itertools import product
 import numpy as np
@@ -136,9 +137,8 @@ class Leg:
             for leg_native, sm in zip(self.legs, tmp[1:]):
                 st = st + leg_native.history()  + sm
             return st
-        else:
-            hf = self.legs[0]
-            return _str_tree(hf.tree, hf.op)
+        hf = self.legs[0]  # hard fusion
+        return _str_tree(hf.tree, hf.op)
 
 
 def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, positive=False):
