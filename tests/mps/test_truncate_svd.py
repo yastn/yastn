@@ -17,12 +17,10 @@ def run_zipper(psi, H, Egs):
 
     Hnorm = mps.measure_overlap(Hpsi, Hpsi) ** 0.5
 
-    for out in mps.variational_(Hpsi, H, psi, iterator_step=1, max_sweeps=2):
+    for out in mps.variational_(Hpsi, H, psi, iterator_step=1, max_sweeps=1):
         Eng_new = mps.vdot(Hpsi, psi) * Hnorm
-        print(Eng_new, Eng_t)
         assert Egs < Eng_new < Eng_t
         Eng_t = Eng_new
-
 
 def run_truncation(psi, H, Egs, sweeps=2):
     psi2 = psi.copy()

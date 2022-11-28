@@ -18,7 +18,7 @@ def run_tdvp_imag(psi, H, time, steps, Eng_gs, opts_svd=None):
     # After cheat-move we have MPS of the energy Eng_old but we want to bring it closer to 
     # a ground state by imaginary time evolution.
     #
-    out = mps.dmrg_(psi, H, method='2site', opts_svd=opts_svd)
+    out = mps.dmrg_(psi, H, method='2site', opts_svd=opts_svd, max_sweeps=2)
     Eng_old = out.energy.item()
     #
     # We set parameters for exponentiation in TDVP giving the information on the operator 
@@ -104,7 +104,7 @@ def test_Z2_tdvp():
     N = 7
     D_total = 6
     time = 2.
-    steps = 20
+    steps = 30
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
     logging.info(' Tensor : Z2 ')

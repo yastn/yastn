@@ -25,14 +25,14 @@ class Spin1:
         The following basis ordering and charge conventions are assumed
 
             * For :code:`sym='dense'`, the basis order is (sz=+1, sz=0, sz=-1).
-            * For :code:`sym='Z3'`, charge t=0 -> sz=+1, t=1 -> sz=0; t=2 -> sz=-1, 
+            * For :code:`sym='Z3'`, charge t=0 -> sz=+1, t=1 -> sz=0; t=2 -> sz=-1,
               i.e., :math:`sz = e^{i \frac{2}{3}\pi t}`
             * For :code:`sym='U1'`, charge t=-1 -> sz=-1, t=0 -> sz=0, t=1 -> sz=1; i.e., sz = t
 
         Default configuration sets :code:`fermionic` to :code:`False`.
 
         When using :meth:`yast.to_numpy` to recover usual dense representation of the algebra
-        for :code:`sym='U1'` symmetry, :code:`reverse=True` is required 
+        for :code:`sym='U1'` symmetry, :code:`reverse=True` is required
         since by default the charges are ordered in the increasing order.
         """
         if not sym in ('dense', 'Z3', 'U1'):
@@ -133,12 +133,12 @@ class Spin1:
 
     def vec_s(self):
         r"""
-        :return: vector of Spin-1 generators as rank-3 tensor 
+        :return: vector of Spin-1 generators as rank-3 tensor
         :rtype: yast.Tensor
         
         Returns vector of Spin-1 generators, in order: :math:`S^z, S^+, S^-`.
         The generators are indexed by first index of the resulting rank-3 tensors.
-        Signature convention is::    
+        Signature convention is::
 
             1(+1)
             S--0(-1)
@@ -154,7 +154,7 @@ class Spin1:
         :return: metric tensor.
         :rtype: yast.Tensor
 
-        Returns rank-2 tensor g, such that the quadratic Casimir in terms of [S^z, S^+, S^-] basis 
+        Returns rank-2 tensor g, such that the quadratic Casimir in terms of [S^z, S^+, S^-] basis
         :math:`\vec{S}` can be computed as :math:`\vec{S}^T g \vec{S}`. The signature of g is
 
         ::
