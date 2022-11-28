@@ -100,7 +100,7 @@ MPS/MPO can be put into :ref:`theory/mps/basics:Canonical form` to reveal most a
 The canonical form obtained by QR decomposition is fast, but does not allow for truncation 
 of the virtual spaces of MPS/MPO. 
 
-.. autofunction:: yast.tn.mps.MpsMpo.canonize_sweep
+.. autofunction:: yast.tn.mps.MpsMpo.canonize_
 
 See examples: :ref:`examples/mps/mps:Canonical form by QR`.
 
@@ -114,6 +114,6 @@ The canonisation by `singular value decomposition` (SVD) allows
 to truncate virtual dimension/spaces with the lowest weight 
 (lowest singular values).
 
-.. autofunction:: yast.tn.mps.MpsMpo.truncate_sweep
+.. autofunction:: yast.tn.mps.MpsMpo.truncate_
 
 See examples: :ref:`examples/mps/mps:Canonical form by SVD`.

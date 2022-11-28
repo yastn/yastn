@@ -44,7 +44,7 @@
 #     for parity in (0, 1):
 #         for version in ('1site', '2site'):
 #             psi = ops_Z2.mps_random(N=N, Dblock=D_total/2, total_parity=parity)
-#             psi.canonize_sweep(to='first')
+#             psi.canonize_(to='first')
 #             run_tdvp_imag(psi, H, dt=dt, Eng_gs=Eng_gs[parity], sweeps=sweeps, version=version, opts_svd=opts_svd)
 
 

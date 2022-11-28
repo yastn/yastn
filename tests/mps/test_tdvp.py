@@ -120,7 +120,7 @@ def test_Z2_tdvp():
 
     for parity in (0, 1):
         psi = generate.random_mps(D_total=D_total, n=parity, sigma=2)
-        psi.canonize_sweep(to='first')
+        psi.canonize_(to='first')
         run_tdvp_imag(psi, H, time, steps, Eng_gs=Eng_gs[parity], opts_svd=opts_svd)
 
 
@@ -147,7 +147,7 @@ def test_U1_tdvp():
 
     for charge in Eng_gs.keys():
         psi = generate.random_mps(D_total=D_total, n=charge, sigma=1)
-        psi.canonize_sweep(to='first')
+        psi.canonize_(to='first')
         run_tdvp_imag(psi, H, time, steps, Eng_gs=Eng_gs[charge], opts_svd=opts_svd)
 
 

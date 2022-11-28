@@ -188,8 +188,8 @@ def test_generator_mpo():
     x = mps.measure_mpo(psi, H, psi).item()
     assert abs(x_ref - x) < tol
 
-    psi.canonize_sweep(to='first')
-    psi.canonize_sweep(to='last')
+    psi.canonize_(to='first')
+    psi.canonize_(to='last')
     x_ref = mps.measure_mpo(psi, H_ref, psi).item()
     x = mps.measure_mpo(psi, H, psi).item()
     assert abs(x_ref - x) < tol
@@ -209,8 +209,8 @@ def mpo_Ising_model():
     qq = p1 + p2
     
     print(pp.get_bond_dimensions())
-    qq.canonize_sweep(to='first', normalize=False)
-    qq.canonize_sweep(to='last', normalize=False)
+    qq.canonize_(to='first', normalize=False)
+    qq.canonize_(to='last', normalize=False)
     print(qq.get_bond_dimensions())
    
     print(mps.measure_overlap(pp + -1 * qq, pp + -1 * qq))
