@@ -29,7 +29,7 @@ class Spin12:
         Default configuration sets :code:`fermionic` to :code:`False`.
 
         When using :meth:`yast.to_numpy` to recover usual dense representation of the algebra
-        for :code:`sym='U1'` symmetry, :code:`reverse=True` is required 
+        for :code:`sym='U1'` symmetry, :code:`reverse=True` is required
         since by default the charges are ordered in the increasing order.
         """
         if not sym in ('dense', 'Z2', 'U1'):
