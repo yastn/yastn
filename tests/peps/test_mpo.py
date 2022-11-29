@@ -73,9 +73,9 @@ def test_NTU_spinless():
     for r_index in range(net.Ny-1,-1,-1):
         print(r_index)
         Bctm = CtmEnv2Mps(net, env, index=r_index, index_type='r')  # bottom boundary of 0th row through CTM environment tensors
-        print(*(Bctm[i].get_shape() for i in range(3)))
-        print(*(psi[i].get_shape() for i in range(3)))
-        print(mps.vdot(psi, Bctm) / (psi.norm() * Bctm.norm()))
+        
+        assert all(Bctm[i].get_shape() == psi[i].get_shape() for i in range(3))
+        assert pytest.approx(abs(mps.vdot(psi, Bctm)) / (psi.norm() * Bctm.norm()), rel=1e-10) == 1.0
 
         psi0 = psi.copy()
         O = Gamma.mpo(index=r_index, index_type='column')
