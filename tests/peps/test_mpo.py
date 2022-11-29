@@ -26,8 +26,8 @@ def test_NTU_spinless():
     purification = 'True'
     xx = 3
     yy = 3
-    D = 20
-    chi = 10
+    D = 12
+    chi = 5
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
     beta_end = 0.01
@@ -66,30 +66,23 @@ def test_NTU_spinless():
     ##### (0,2) (1,2) (2,2) #######
     ###############################
 
-    column_index = 0
-    Bctm = CtmEnv2Mps(net, env, index=column_index, index_type='r')  # bottom boundary of 0th row through CTM environment tensors
-    print(Bctm.A[0].get_shape())
-    print(Bctm.A[1].get_shape())
-    print(Bctm.A[2].get_shape())
-
-    psi0 = Gamma.boundary_mps()
-    psi = psi0
-    opts = {'D_total': 5}
-    for r_index in range(net.Ny-1,0,-1):
-        print(r_index)
-        O = Gamma.mpo(index=r_index, index_type='column')
-        psi = mps.zipper(O, psi, opts)  # bottom boundary of 0th row through zipper
-
-    print(psi.A[0].get_shape())
-    print(psi.A[1].get_shape())
-    print(psi.A[2].get_shape())
-
     
-    print(mps.measure_overlap(psi, Bctm))
+    psi = Gamma.boundary_mps()
+    opts = {'D_total': chi}
+
+    for r_index in range(net.Ny-1,-1,-1):
+        print(r_index)
+        Bctm = CtmEnv2Mps(net, env, index=r_index, index_type='r')  # bottom boundary of 0th row through CTM environment tensors
+        print(*(Bctm[i].get_shape() for i in range(3)))
+        print(*(psi[i].get_shape() for i in range(3)))
+        print(mps.vdot(psi, Bctm) / (psi.norm() * Bctm.norm()))
+
+        psi0 = psi.copy()
+        O = Gamma.mpo(index=r_index, index_type='column')
+        psi = mps.zipper(O, psi0, opts)  # bottom boundary of 0th row through zipper
+        mps.variational_(psi, O, psi0, method='1site', max_sweeps=2)
 
 
-  #  print(O.get_bond_dimensions())
-  #  print(psi1.get_bond_dimensions())
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
