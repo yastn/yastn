@@ -1,7 +1,7 @@
 import numpy as np
 from typing import NamedTuple
 from ... import initialize, operators, tensor, YastError
-from ._mps import Mpo, Mps, add
+from ._mps import add, Mpo, Mps
 
 from itertools import compress, product
 from re import match
@@ -66,8 +66,8 @@ def generate_mpo(I, terms, opts=None):
     """
     H1s = [generate_H1(I, term) for term in terms]
     M = add(*H1s)
-    M.canonize_sweep(to='last', normalize=False)
-    M.truncate_sweep(to='first', opts=opts, normalize=False)
+    M.canonize_(to='last', normalize=False)
+    M.truncate_(to='first', opts=opts, normalize=False)
     return M
 
 
@@ -332,8 +332,8 @@ class Generator:
                             H = generate_mpo(self._I, place_holder, self.opts)
                         elif H and amp_holder > 0.0:
                             H = H + generate_mpo(self._I, place_holder, self.opts)
-            H.canonize_sweep(to='last', normalize=False)
-            H.truncate_sweep(to='first', opts=self.opts, normalize=False)
+            H.canonize_(to='last', normalize=False)
+            H.truncate_(to='first', opts=self.opts, normalize=False)
         return H
 
     def mps(self, psi_str, parameters=None):

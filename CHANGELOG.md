@@ -198,3 +198,10 @@ v0.9
 
 01-11-2022
 - move mps routines to yast.tn.mps
+
+28-11-2022
+- renamed functions `mps.dmrg_`, `mps.variational_`, `mps.tdvp_`, `psi.canonize_`, `psi.truncate_`.
+  `_` is used to indicate that they change mps (first argument) in place.
+- `mps.tdvp_` is a genetator iterating over specified time snapshots.
+- `mps.dmrg_`, `mps.variational_` can be made into generator by providing `iterator_step` : int, that gives the number of forth-and-back sweeps after which generator yields snapshot.
+

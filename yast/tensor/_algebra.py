@@ -72,7 +72,7 @@ def _addition_meta(a, b):
         raise YastError('Tensor charges do not match.')
     if a.isdiag != b.isdiag:
         raise YastError('Cannot add diagonal tensor to non-diagonal one.')
-    
+
     needs_mask, _ = _test_axes_match(a, b, sgn=1)
     if needs_mask:
         msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hfs, b.struct, b.hfs)
@@ -490,7 +490,7 @@ def bitwise_not(a):
     Return element-wise bit-wise not.
 
         .. note::
-            This applies only to non-empty blocks of A. 
+            This applies only to non-empty blocks of A.
 
     Returns
     -------

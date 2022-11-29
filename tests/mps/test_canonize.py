@@ -64,7 +64,7 @@ def check_canonize(psi):
     """ Canonize mps to left and right, running tests if it is canonical. """
     ref_s = (-1, 1, 1) if psi.nr_phys == 1 else (-1, 1, 1, -1)
     for to in ('last', 'first'):
-        psi.canonize_sweep(to=to)
+        psi.canonize_(to=to)
         assert psi.is_canonical(to=to, tol=tol)
         assert abs(mps.measure_overlap(psi, psi) - 1) < tol
         assert all(psi[site].s == ref_s for site in psi.sweep())

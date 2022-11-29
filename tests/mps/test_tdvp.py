@@ -1,4 +1,4 @@
-""" mps.tdvp """
+""" mps.tdvp_ """
 import logging
 import pytest
 import yast
@@ -12,14 +12,14 @@ except ImportError:
 tol=1e-8
 
 
-def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, opts_svd=None):
-    """ Run a faw sweeps in imaginary time of tdvp_1site_sweep. """
+def run_tdvp_imag(psi, H, time, steps, Eng_gs, opts_svd=None):
+    """ Run a few sweeps in imaginary time of tdvp_1site_sweep. """
     # In order to converge faster we cheat and bring random MPS closer to a ground state using DMRG-1site.
     # After cheat-move we have MPS of the energy Eng_old but we want to bring it closer to 
     # a ground state by imaginary time evolution.
     #
-    env, _ = mps.dmrg_sweep_2site(psi, H, opts_svd=opts_svd)
-    Eng_old = env.measure().item()
+    out = mps.dmrg_(psi, H, method='2site', opts_svd=opts_svd, max_sweeps=2)
+    Eng_old = out.energy.item()
     #
     # We set parameters for exponentiation in TDVP giving the information on the operator 
     # and setting what is desired Krylow dimension opts_expmv['ncv'] and truncation of Arnoldin algorithm opts_expmv['tol'].
@@ -28,22 +28,16 @@ def run_tdvp_imag(psi, H, dt, Eng_gs, sweeps, opts_svd=None):
     #
     # We do evolve the MPS by dt and repeat it sweeps-time to observe the convergence.
     #
-    for version in ('2site', '12site', '1site'):
-        for _ in range(sweeps):
-            #
-            # We run TDVP evolution
-            #
-            env = mps.tdvp(psi, H, env=env, time=dt, dt=dt, u=1, version=version, opts_expmv=opts_expmv, opts_svd=opts_svd)
-            #
-            # After the evolution the energy is:
-            #
-            Eng = env.measure().item()
-            #
-            # We check how much it changes comparing to energy before TDVP. 
-            # If the state is not converged we do another TDVP step.
+    for method in ('2site', '12site', '1site'):
+        dt = time / steps
+        times = [n * dt for n in range(steps + 1)]
+        for out in mps.tdvp_(psi, H, times=times, dt=dt, u=1, method=method, opts_expmv=opts_expmv, opts_svd=opts_svd):
+            Eng = mps.vdot(psi, H, psi)
+            logging.info("%s tdvp  t = %0.3f  energy = %0.8f", method, out.tf, Eng)
+            print(out)
             assert (Eng - Eng_old).real < tol
             Eng_old = Eng
-    logging.info("%s tdvp; Energy: %0.8f / %0.8f", version, Eng, Eng_gs)
+    logging.info("%s tdvp; Energy: %0.8f / %0.8f", method, Eng, Eng_gs)
     #
     # Finally we can check if we obtained a ground state:
     #
@@ -77,7 +71,7 @@ def test_dense_tdvp():
     #
     logging.info(' Tensor : dense ')
     #
-    # Set options for truncation for '2site' version of mps.tdvp.
+    # Set options for truncation for '2site' method of mps.tdvp.
     #
     D_total = 6
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
@@ -87,24 +81,20 @@ def test_dense_tdvp():
     # initial state by a time dt, such that we obtain: 
     # psi(t+dt) = exp( dt * H) @ psi(t)
     #
-    dt = 0.125
-    sweeps = 10
+    time = 2.
+    steps = 20
     #
     # Finally run TDVP starting:
     psi = generate.random_mps(D_total=D_total, sigma=2)
     #
-    # The initial guess has to be prepared in right canonical form!
-    #
-    psi.canonize_sweep(to='first')
-    #
     # Single run can be done using:
     #
-    # env = mps.tdvp(psi, H, env=env, dt=dt, version=version, opts_expmv=opts_expmv, opts_svd=opts_svd)
+    # env = mps.tdvp_(psi, H, env=env, dt=dt, method=method, opts_expmv=opts_expmv, opts_svd=opts_svd)
     #
     # To explain how we iterate over sweeps we create a subfunction run_tdvp_imag.
     # This is not necessary but we do it for the sake of clarity.
     #
-    run_tdvp_imag(psi, H, dt=dt, Eng_gs=Eng_gs, sweeps=sweeps, opts_svd=opts_svd)
+    run_tdvp_imag(psi, H, time, steps, Eng_gs=Eng_gs, opts_svd=opts_svd)
 
 
 def test_Z2_tdvp():
@@ -113,8 +103,8 @@ def test_Z2_tdvp():
     """
     N = 7
     D_total = 6
-    dt = 0.25
-    sweeps = 20
+    time = 2.
+    steps = 30
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
     logging.info(' Tensor : Z2 ')
@@ -130,8 +120,8 @@ def test_Z2_tdvp():
 
     for parity in (0, 1):
         psi = generate.random_mps(D_total=D_total, n=parity, sigma=2)
-        psi.canonize_sweep(to='first')
-        run_tdvp_imag(psi, H, dt=dt, Eng_gs=Eng_gs[parity], sweeps=sweeps, opts_svd=opts_svd)
+        psi.canonize_(to='first')
+        run_tdvp_imag(psi, H, time, steps, Eng_gs=Eng_gs[parity], opts_svd=opts_svd)
 
 
 def test_U1_tdvp():
@@ -140,8 +130,8 @@ def test_U1_tdvp():
     """
     N = 7
     D_total = 6
-    dt = 0.125
-    sweeps = 10
+    time = 2.
+    steps = 20
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
     operators = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
@@ -157,8 +147,8 @@ def test_U1_tdvp():
 
     for charge in Eng_gs.keys():
         psi = generate.random_mps(D_total=D_total, n=charge, sigma=1)
-        psi.canonize_sweep(to='first')
-        run_tdvp_imag(psi, H, dt=dt, Eng_gs=Eng_gs[charge], sweeps=sweeps, opts_svd=opts_svd)
+        psi.canonize_(to='first')
+        run_tdvp_imag(psi, H, time, steps, Eng_gs=Eng_gs[charge], opts_svd=opts_svd)
 
 
 if __name__ == "__main__":

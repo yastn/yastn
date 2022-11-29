@@ -1,6 +1,10 @@
 """ Mps structure and its basic manipulations. """
 from ... import tensor, initialize, YastError
+from ._env import norm
 
+###################################
+#   auxiliary for basic algebra   #
+###################################
 
 def Mps(N):
     """
@@ -13,7 +17,7 @@ def Mps(N):
 
     Returns
     -------
-    yamps.MpsMpo
+    yast.tn.mps.MpsMpo
         MPS with :code:`nr_phys=1`
     """
     return MpsMpo(N, nr_phys=1)
@@ -30,15 +34,10 @@ def Mpo(N):
 
     Returns
     -------
-    yamps.MpsMpo
+    yast.tn.mps.MpsMpo
         MPO with :code:`nr_phys=2`
     """
     return MpsMpo(N, nr_phys=2)
-
-
-###################################
-#   auxiliary for basic algebra   #
-###################################
 
 
 def add(*states, amplitudes=None):
@@ -49,14 +48,14 @@ def add(*states, amplitudes=None):
 
     Parameters
     ----------
-    states : sequence(yamps.MpsMpo)
+    states : sequence(yast.tn.mps.MpsMpo)
 
     amplitudes : list(scalar)
         If :code:`None`, all amplitudes are assumed to be 1.
 
     Returns
     -------
-    yamps.MpsMpo
+    yast.tn.mps.MpsMpo
         new MPS/MPO given by linear superpostion of :code:`states`, i.e.
         :math:`\sum_j \textrm{amplitudes[j]} \times \textrm{states[j]}`.
     """
@@ -120,7 +119,7 @@ def multiply(a, b, mode=None):
 
     Parameters
     ----------
-        a, b : yamps.MpsMpo, yamps.MpsMpo
+        a, b : yast.tn.mps.MpsMpo, yast.tn.mps.MpsMpo
             a pair of MPO and MPS or two MPO's to be multiplied
 
         mode : str
@@ -130,7 +129,7 @@ def multiply(a, b, mode=None):
 
     Returns
     -------
-        yamps.MpsMpo
+        yast.tn.mps.MpsMpo
     """
     if a.N != b.N:
         YastError('MPS: Mps-s must have equal number of sites.')
@@ -191,6 +190,10 @@ class MpsMpo:
         self.last = N - 1  # index of the last lattice site
         self.nr_phys = nr_phys
 
+    def norm(self):
+        return norm(self)  # TODO: Write norm using qr decomposition.
+
+
     @property
     def config(self):
         return self.A[0].config
@@ -227,14 +230,14 @@ class MpsMpo:
     def clone(self):
         r"""
         Makes a clone of MPS or MPO by :meth:`cloning<yast.Tensor.clone>`
-        all :class:`yast.Tensor<yast.Tensor>`'s into a new and independent :class:`yamps.MpsMpo`.
+        all :class:`yast.Tensor<yast.Tensor>`'s into a new and independent :class:`yast.tn.mps.MpsMpo`.
 
         .. note::
             Cloning preserves autograd tracking on all tensors.
 
         Returns
         -------
-        yamps.MpsMpo
+        yast.tn.mps.MpsMpo
             a clone of :code:`self`
         """
         phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
@@ -245,10 +248,10 @@ class MpsMpo:
     def copy(self):
         r"""
         Makes a copy of MPS or MPO by :meth:`copying<yast.Tensor.copy>` all :class:`yast.Tensor<yast.Tensor>`'s
-        into a new and independent :class:`yamps.MpsMpo`.
+        into a new and independent :class:`yast.tn.mps.MpsMpo`.
 
         .. warning::
-            this operation does not preserve autograd on the returned :code:`yamps.MpsMpo`.
+            this operation does not preserve autograd on the returned :code:`yast.tn.mps.MpsMpo`.
 
         .. note::
             Use when retaining "old" MPS/MPO is necessary. Most operations on
@@ -256,7 +259,7 @@ class MpsMpo:
 
         Returns
         -------
-        yamps.MpsMpo
+        yast.tn.mps.MpsMpo
             a copy of :code:`self`
         """
         phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
@@ -287,7 +290,7 @@ class MpsMpo:
     
         Returns
         -------
-        yamps.MpsMpo
+        yast.tn.mps.MpsMpo
         """
         phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: multiplier * ten if ind == self.first else ten.clone() \
@@ -305,7 +308,7 @@ class MpsMpo:
 
         Returns
         -------
-        yamps.MpsMpo
+        yast.tn.mps.MpsMpo
         """
         return self.__mul__(number)
 
@@ -322,6 +325,20 @@ class MpsMpo:
         out : Mps or Mpo
         """
         return add(self, phi)
+
+    def __sub__(self, phi):
+        """
+        Subtraction of two Mps's or two Mpo's.
+
+        Parameters
+        ----------
+        mps : Mps or Mpo (same as self)
+
+        Returns
+        -------
+        out : Mps or Mpo
+        """
+        return add(self, phi, amplitudes=(1, -1))
 
     def __matmul__(self, phi):
         """
@@ -340,15 +357,23 @@ class MpsMpo:
     def orthogonalize_site(self, n, to='first', normalize=True):
         r"""
         Performs QR (or RQ) decomposition of on-site tensor at :code:`n`-th position.
-        Two typical modes of usege are
+        Two typical modes of usage are
 
-            * Advance left canonical form: Assuming first n - 1 sites are already
+            * ``to='last'`` - Advance left canonical form: Assuming first n - 1 sites are already
               in the left canonical form, brings n-th site to left canonical form,
-              i.e., extends left canonical form by one site towards :code:`'last'` site.
+              i.e., extends left canonical form by one site towards :code:`'last'` site::
 
-            * Advance right canonical form: Assuming all m > n sites are already
+                 --A---    --
+                   |   | =   |Identity
+                 --A*--    --
+
+            * ``to='first'`` - Advance right canonical form: Assuming all m > n sites are already
               in right canonical form, brings n-th site to right canonical form, i.e.,
-              extends right canonical form by one site towards :code:`'first'` site.
+              extends right canonical form by one site towards :code:`'first'` site::
+
+                 --A---            --
+                |  |    = Identity|
+                 --A*--            --
 
         Parameters
         ----------
@@ -356,7 +381,7 @@ class MpsMpo:
                 index of site to be orthogonalized
 
             to : str
-                canonical form to which site is brought: :code:`'last'` or :code:`'first'`.
+                a choice of canonical form. For :code:`'last'` or :code:`'first'`.
 
             normalize : bool
                 If :code:`True`, central block is normalized to unity according
@@ -368,10 +393,16 @@ class MpsMpo:
         if to == 'first':
             self.pC = (n - 1, n)
             ax = (1, 2) if self.nr_phys == 1 else (1, 2, 3)
+            # A = ax(A)--Q--0 1--R--0(0A) => 0--Q*--    --
+            #                                   1   2 =   |Identity
+            #                                0--Q---    --
             self.A[n], R = self.A[n].qr(axes=(ax, 0), sQ=-1, Qaxis=0, Raxis=1)
         elif to == 'last':
             self.pC = (n, n + 1)
             ax = (0, 1) if self.nr_phys == 1 else (0, 1, 3)
+            # A = ax(A)--Q--2 0--R--1(2A) =>  --Q*--2            --
+            #                                0  1     = Identity|
+            #                                 --Q---2            --
             self.A[n], R = self.A[n].qr(axes=(ax, 2), sQ=1, Qaxis=2)
         else:
             raise YastError('MPS: Argument "to" should be in ("first", "last")')
@@ -454,9 +485,9 @@ class MpsMpo:
             else:  # (to == 'last' and n2 <= self.last) or n1 < self.first
                 self.A[n2] = C @ self.A[n2]
 
-    def canonize_sweep(self, to='first', normalize=True):
+    def canonize_(self, to='first', normalize=True):
         r"""
-        Sweep though the MPS/MPO and put it in left/right canonical form
+        Sweep though the MPS/MPO and put it in right/left canonical form
         using :meth:`QR<yast.linalg.qr>` decomposition by setting
         :code:`to='first'`/:code:`to='last'`. It is assumed that tensors are enumerated
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
@@ -466,7 +497,7 @@ class MpsMpo:
         Parameters
         ----------
         to : str
-            :code:`'first'` (default) or code:`'last'`.
+            :code:`'first'` (default) or :code:`'last'`.
 
         normalize : bool
             If :code:`true` (default), the central block and thus MPS/MPO is normalized
@@ -474,7 +505,7 @@ class MpsMpo:
 
         Returns
         -------
-        self : yamps.MpsMpo
+        self : yast.tn.mps.MpsMpo
             in-place canonized MPS/MPO
         """
         self.absorb_central(to=to)
@@ -503,22 +534,29 @@ class MpsMpo:
         out : bool
         """
         if to == 'first':
+            # 0--A*--
+            #    1   2
+            # 0--A---
             cl = (1, 2) if self.nr_phys == 1 else (1, 2, 3)
         else: # to == 'last':
+            #  --A*--2
+            # 0  1 
+            #  --A---2
             cl = (0, 1) if self.nr_phys == 1 else (0, 1, 3)
         it = self.sweep(to=to) if n is None else [n]
         for n in it:
             x = tensor.tensordot(self.A[n], self.A[n].conj(), axes=(cl, cl))
+            x = x.drop_leg_history()
             x0 = initialize.eye(config=x.config, legs=x.get_legs((0, 1)))
             if (x - x0.diag()).norm() > tol:  # == 0
                 return False
         return True
 
-    def truncate_sweep(self, to='last', normalize=True, opts={'tol': 1e-12}):
+    def truncate_(self, to='last', normalize=True, opts={'tol': 1e-12}):
         r"""
-        Sweep though the MPS/MPO and put it in left/right canonical form 
+        Sweep though the MPS/MPO and put it in right/left canonical form 
         using :meth:`SVD<yast.linalg.svd>` decomposition by setting 
-        :code:`to='first'`/:code:`to='last'`. It is assumed that tensors are enumerated 
+        :code:`to='first'` :code:`to='last'`. It is assumed that tensors are enumerated 
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
         Access to singular values during sweeping allows to truncate virtual spaces.
@@ -531,7 +569,7 @@ class MpsMpo:
         Parameters
         ----------
         to : str
-            code:`'last'` (default) or :code:`'first'`.
+            :code:`'last'` (default) or :code:`'first'`.
 
         normalize : bool
             If :code:`true` (default), the central block and thus MPS/MPO is normalized
@@ -668,7 +706,7 @@ class MpsMpo:
         """
         Entropy = [0]*self.N
         psi = self.clone()
-        psi.canonize_sweep(to='last', normalize=False)
+        psi.canonize_(to='last', normalize=False)
         psi.absorb_central(to='first')
         for n in psi.sweep(to='first'):
             psi.orthogonalize_site(n=n, to='first', normalize=False)
@@ -687,7 +725,7 @@ class MpsMpo:
         """
         SV = {}
         psi = self.clone()
-        psi.canonize_sweep(to='last', normalize=False)
+        psi.canonize_(to='last', normalize=False)
         psi.absorb_central(to='first')
         for n in psi.sweep(to='first', df=1):
             psi.orthogonalize_site(n=n, to='first', normalize=False)

@@ -127,7 +127,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):  # change to ts; Ds
         Charges identifing the block. Ignored if tensor has no symmetry.
 
     Ds : tuple(int)
-        Dimensions of the block. If ``None``, tries to infer 
+        Dimensions of the block. If ``None``, tries to infer
         dimensions from legs of the tensor.
 
     val : str, tensor-like

@@ -17,11 +17,11 @@ def load_from_dict(config, in_dict):
 
     in_dict: dict
         dictionary containing serialized MPS/MPO, i.e.,
-        a result of :meth:`yamps.MpsMpo.save_to_dict`.
+        a result of :meth:`yast.tn.mps.MpsMpo.save_to_dict`.
 
     Returns
     -------
-    yamps.MpsMpo
+    yast.tn.mps.MpsMpo
     """
     nr_phys = in_dict['nr_phys']
     N = len(in_dict['A'])
@@ -51,7 +51,7 @@ def load_from_hdf5(config, file, in_file_path):
 
     Returns
     -------
-    yast.MpsMpo
+    yast.tn.mps.MpsMpo
     """
     nr_phys = int(file[in_file_path].get('nr_phys')[()])
     N = len(file[in_file_path+'/A'].keys())
@@ -59,3 +59,12 @@ def load_from_hdf5(config, file, in_file_path):
     for n in range(out_Mps.N):
         out_Mps.A[n] = initialize.load_from_hdf5(config, file, in_file_path+'/A/'+str(n))
     return out_Mps
+
+
+def _test_virtual(leg, ind):
+    if ind == 'trivial':
+        return leg.D == (1,) and leg.t == ((0,) * leg.sym.NSYM,)
+    if ind == 'Done':
+        return leg.D == (1,)
+    if ind == 'Dones':
+        return all(Dn == 1 for Dn in leg.D)

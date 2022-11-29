@@ -26,6 +26,7 @@ API: MPS and MPO
 .. toctree::
    :glob:
 
+   mps/convention
    mps/init
    mps/properties
    mps/algebra
