@@ -49,7 +49,7 @@ def matrix_inverse_random(n):
 
 def CTM_for_Onsager(peps, Z_exact):
     
-    env = GetEnv(peps, net, chi=32, cutoff=1e-10, prec=1e-7, nbitmax=30, tcinit=(0,), Dcinit=(1,), init_env='rand', AAb_mode=0)
+    env = GetEnv(peps, net, chi=32, cutoff=1e-10, prec=1e-7, nbitmax=40, tcinit=(0,), Dcinit=(1,), init_env='rand', AAb_mode=0)
   
     ops = {'magA1': {'l': sz, 'r': one},
            'magB1': {'l': one, 'r': sz}}
@@ -90,4 +90,4 @@ def test_CTM_loop_2():
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
     test_CTM_loop_1()
-   # test_CTM_loop_2()
+    test_CTM_loop_2()

@@ -23,8 +23,8 @@ def test_NTU_spinless():
     purification = 'True'
     xx = 3
     yy = 2
-    D = 6
-    chi = 20
+    D = 8
+    chi = 25
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
     beta_end = 0.1
@@ -136,14 +136,13 @@ def test_NTU_spinfull():
     nn_CTM_bond_1_dn = 0.5*(abs(nn_bond(Gamma, net, env, ops['cdagc_dn'], bd_h)) + abs(nn_bond(Gamma, net, env, ops['ccdag_dn'], bd_h)))
     nn_CTM_bond_2_dn = 0.5*(abs(nn_bond(Gamma, net, env, ops['cdagc_dn'], bd_v)) + abs(nn_bond(Gamma, net, env, ops['ccdag_dn'], bd_v)))
 
-    print(nn_CTM_bond_1_up, nn_CTM_bond_2_up, nn_CTM_bond_1_dn, nn_CTM_bond_2_dn)
-
     nn_bond_1_exact = 0.02489643395816514 # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (1,1) and (1,2)
     nn_bond_2_exact = 0.0249171016517031  # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (0,0) and (1,0)
-    assert pytest.approx(nn_CTM_bond_1_up, abs=2e-4) == nn_bond_1_exact
-    assert pytest.approx(nn_CTM_bond_1_dn, abs=2e-4) == nn_bond_1_exact
-    assert pytest.approx(nn_CTM_bond_2_up, abs=2e-4) == nn_bond_2_exact
-    assert pytest.approx(nn_CTM_bond_2_dn, abs=2e-4) == nn_bond_2_exact
+
+    assert pytest.approx(nn_CTM_bond_1_up, abs=1e-5) == nn_bond_1_exact
+    assert pytest.approx(nn_CTM_bond_1_dn, abs=1e-5) == nn_bond_1_exact
+    assert pytest.approx(nn_CTM_bond_2_up, abs=1e-5) == nn_bond_2_exact
+    assert pytest.approx(nn_CTM_bond_2_dn, abs=1e-5) == nn_bond_2_exact
 
 
 if __name__ == '__main__':
