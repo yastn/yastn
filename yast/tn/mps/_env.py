@@ -2,6 +2,18 @@
 from ... import tensor, initialize, YastError
 
 
+def norm(ket):
+    r""" Calculating norm of |ket>, i.e. <ket|ket> ** 0.5. """
+    return abs(measure_overlap(ket, ket)) ** 0.5
+
+
+def vdot(bra, ket_or_op, ket_or_none=None):
+    r""" Calculating overlap <bra|ket>, or <bra|op|ket> if three arguments are provided."""
+    if ket_or_none is None:
+        return measure_overlap(bra, ket_or_op)
+    return measure_mpo(bra, ket_or_op, ket_or_none)
+
+
 def measure_overlap(bra, ket):
     r"""
     Calculate overlap :math:`\langle \textrm{bra}|\textrm{ket} \rangle`.
@@ -12,10 +24,10 @@ def measure_overlap(bra, ket):
 
     Parameters
     -----------
-    bra : yamps.MpsMpo
+    bra : yast.tn.mps.MpsMpo
         An MPS which will be conjugated.
 
-    ket : yamps.MpsMpo
+    ket : yast.tn.mps.MpsMpo
 
     Returns
     -------
@@ -35,13 +47,13 @@ def measure_mpo(bra, op, ket):
 
     Parameters
     -----------
-    bra : yamps.MpsMpo
+    bra : yast.tn.mps.MpsMpo
         An MPS which will be conjugated.
 
-    op : yamps.MpsMpo
+    op : yast.tn.mps.MpsMpo
         Operator written as MPO.
 
-    ket : yamps.MpsMpo
+    ket : yast.tn.mps.MpsMpo
 
     Returns
     -------
@@ -75,7 +87,7 @@ class _EnvParent:
             legs = [self.ort[ii].virtual_leg('first'), self.ket.virtual_leg('first').conj()]
             self.Fort[ii][(-1, 0)] = initialize.ones(config=config, legs=legs)
             legs = [self.ket.virtual_leg('last').conj(), self.ort[ii].virtual_leg('last')]
-            self.Fort[ii][(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)  # TODO: eye ?
+            self.Fort[ii][(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)
 
     def reset_temp(self):
         """ Reset temporary objects stored to speed-up some simulations. """
@@ -117,24 +129,6 @@ class _EnvParent:
             bd = (-1, 0)
         axes = ((0, 1), (1, 0)) if self.nr_layers == 2 else ((0, 1, 2), (2, 1, 0))
         return self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
-
-    def project_ket_on_bra(self, n):
-        r"""
-        Project ket on a n-th site of bra.
-
-        It is equal to the overlap <bra|op|ket> up to the contribution from n-th site of bra.
-
-        Parameters
-        ----------
-        n : int
-            index of site
-
-        Returns
-        -------
-        out : tensor
-            result of projection
-        """
-        return self.Heff1(self.ket[n], n)
 
     def update_env(self, n, to='last'):
         r"""
@@ -201,10 +195,10 @@ class Env2(_EnvParent):
         # left boundary
         config = self.bra[0].config
         legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
-        self.F[(-1, 0)] = initialize.ones(config=config, legs=legs)  # TODO: or eye?
+        self.F[(-1, 0)] = initialize.ones(config=config, legs=legs)
         # right boundary
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
-        self.F[(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)  # TODO: or eye?
+        self.F[(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)
 
     def Heff1(self, x, n):
         r"""
@@ -226,6 +220,16 @@ class Env2(_EnvParent):
         inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
         return tensor.ncon([self.F[(n - 1, n)], x, self.F[(n + 1, n)]], inds)
 
+    def Heff2(self, AA, bd):
+        """ Heff2 @ AA """
+        n1, n2 = bd
+        axes = (0, (1, 2), 3) if AA.ndim == 4 else (0, (1, 2, 3, 5), 4)
+        temp = AA.fuse_legs(axes=axes)
+        temp = self.F[(n1 - 1, n1)] @ temp @ self.F[(n2 + 1, n2)]
+        temp = temp.unfuse_legs(axes=1)
+        if temp.ndim == 6:
+            temp = temp.transpose(axes=(0, 1, 2, 3, 5, 4))
+        return temp
 
 class Env3(_EnvParent):
     """
@@ -320,7 +324,8 @@ class Env3(_EnvParent):
 
 
     def Heff2(self, AA, bd):
-        r"""Action of Heff on central site.
+        r"""
+        Action of Heff on central site.
 
         Parameters
         ----------

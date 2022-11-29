@@ -1,4 +1,4 @@
-# Linalg methods for yast tensor.
+""" Linalg methods for yast tensor. """
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct
 from ._tests import YastError, _test_axes_all
@@ -375,13 +375,13 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32, **k
 
 def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     r"""
-    Split tensor using reduced qr decomposition.
-    Charge of R is zero.
+    Split tensor using reduced QR decomposition, such that :math:`a=QR`,
+    with :math:`QQ^\dag=I`. The charge of R is zero.
 
     Parameters
     ----------
     axes: Sequence(int) or Sequence(Sequence(int),Sequence(int))
-        Specify two groups of legs between which to perform svd, as well as their final order.
+        Specify two groups of legs between which to perform QR, as well as their final order.
 
     sQ: int
         signature of connecting leg in Q; equal 1 or -1. Default is 1.

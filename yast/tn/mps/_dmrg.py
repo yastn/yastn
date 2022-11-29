@@ -1,4 +1,5 @@
 """ Various variants of the DMRG algorithm for mps."""
+from typing import NamedTuple
 import logging
 from ... import tensor, YastError
 from ._env import Env3
@@ -11,129 +12,139 @@ logger = logging.Logger('dmrg')
 #           dmrg                #
 #################################
 
-
-def _init_dmrg(psi, H, env, project, opts_eigs):
-    """ tests and initializations for all dmrg methods. """
-    if opts_eigs is None:
-        opts_eigs = {'hermitian': True, 'ncv': 3, 'which': 'SR'}
-
-    if env is None:
-        env = Env3(bra=psi, op=H, ket=psi, project=project).setup(to='first')
-
-    if not (env.bra is psi and env.ket is psi):
-        raise YastError('MPS: Require environment env where ket == bra == psi')
-    return env, opts_eigs
+class DMRGout(NamedTuple):
+    sweeps : int = 0
+    energy : float = None
+    denergy : float = None
+    max_dSchmidt : float = None
+    max_discarded_weight : float = None
 
 
-def dmrg(psi, H, env=None, project=None, version='1site', \
-        converge='energy', measure=None, \
-        atol=-1, max_sweeps=1, opts_eigs=None, opts_svd=None, return_info=False):
+def dmrg_(psi, H, project=None, method='1site',
+        energy_tol=None, Schmidt_tol=None, max_sweeps=1, iterator_step=None,
+        opts_eigs=None, opts_svd=None):
     r"""
-    Perform DMRG sweeps until convergence, starting from MPS :code:`psi`
-    in right canonical form. The outer loop sweeps over MPS updating sites
-    from the first site to last and back.
+    Perform DMRG sweeps until convergence, starting from MPS :code:`psi`.
 
-    The convergence is controlled either by selected expectation value, i.e., :code:`converge='energy'`
-    or by the Schmidt values :code:`converge='schmidt'` which is more sensitive measure.
-    The DMRG algorithm then sweeps through the lattice at most :code:`max_sweeps` times
-    or until selected convergence measure changes by less then :code:`atol` from sweep to sweep.
+    The outer loop sweeps over MPS updating sites from the first site to last and back.
+    Convergence can be controlled based on energy and/or Schmidt values (which is a more sensitive measure).
+    The DMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
+    or until all convergence measures with provided tolerance change by less then the tolerance.
 
-    Computational cost of DMRG can be lowered by providing environment :code:`env`
-    obtained in previous run.
+    Outputs generator if :code:`iterator_step` is given.
+    It allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------
     psi: yamps.MpsMpo
-        initial MPS in right canonical form.
+        Initial state. It is updated during execution.
+        It is first canonized to to the first site, if not provided in such a form.
+        State resulting from :code:`dmrg_` is canonized to the first site.
 
     H: yamps.MpsMpo
         MPO to minimize against.
 
-    env: yamps.Env3
-        optional environment of tensor network :math:`\langle \psi|H|\psi \rangle` 
-        from the previous DMRG run.
-    
     project: list(yamps.MpsMpo)
-        optimizes MPS in the subspace orthogonal to MPS's in the list
+        Optimizes MPS in the subspace orthogonal to MPS's in the list.
 
-    version: str
-        which DMRG variant to use from :code:`'1site'`, :code:`'2site'`
+    method: str
+        Which DMRG variant to use from :code:`'1site'`, :code:`'2site'`
 
-    converge: str
-        defines convergence measure. Available options are
+    energy_tol: float
+        Convergence tolerance for the change of energy in a single sweep.
+        By default is None, in which case energy convergence is not checked.
 
-            * :code:`'energy'` uses the expectation value of H
-
-            * :code:`'schmidt'` uses Schmidt values on the worst cut
-
-    measure: func(int, yamps.MpsMpo, yamps.Env3, scalar, scalar)->None
-        callback allowing measurement/manipulation of MPS after each DMRG sweep.
-        The arguments passed are current sweep, current state :math:`|\psi\rangle`,
-        current environment corresponding to :math:`\langle\psi|H|\psi\rangle` network,
-        current energy, and current truncation error.
-
-    atol: float
-        defines converged criterion. DMRG stop once the change in convergence measure
-        is less than :code:`atol` between sweeps.
+    energy_tol: float
+        Convergence tolerance for the change of Schmidt values on the worst cut/bond in a single sweep.
+        By default is None, in which case Schmidt values convergence is not checked.
 
     max_sweeps: int
-        maximal number of sweeps
+        Maximal number of sweeps.
+
+    iterator_step: int
+        If int, :code:`dmrg_` returns a generator that would yield output after every iterator_step sweeps.
+        Default is None, in which case  :code:`dmrg_` sweeps are performed immidiatly.
 
     opts_eigs: dict
-        options passed to :meth:`yast.eigs`
+        options passed to :meth:`yast.eigs`.
+        If None, use default {'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
     opts_svd: dict
-        options passed to :meth:`yast.svd` used to truncate virtual spaces in :code:`verions='2site'`.
-
-    return_info: bool
-        if True, return additional information regarding convergence
+        Options passed to :meth:`yast.svd` used to truncate virtual spaces in :code:`method='2site'`.
+        If None, use default {'tol': 1e-14}
 
     Returns
     -------
-    env: yamps.Env3
-        Environment of the :math:`\langle \psi|H|\psi \rangle` ready for the next iteration.
-
-    info: dict
-        if :code:`return_info` is ``True``, return additional information about convergence.
+    out: DMRGout(NamedTuple)
+        Includes fields:
+        :code:`sweeps` number of performed dmrg sweeps.
+        :code:`energy` energy after the last sweep.
+        :code:`denergy` absolut value of energy change in the last sweep.
+        :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep
+        :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
+    tmp = _dmrg_(psi, H, project, method, 
+                energy_tol, Schmidt_tol, max_sweeps, iterator_step,
+                opts_eigs, opts_svd)
+    return tmp if iterator_step else next(tmp)
 
-    schmidtold = psi.get_Schmidt_values() if converge == 'schmidt' else None
 
-    env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
-    if opts_svd is None:
-        opts_svd = {'tol': 1e-12}
-    Eold = env.measure()
+def _dmrg_(psi, H, project, method,
+        energy_tol, Schmidt_tol, max_sweeps, iterator_step,
+        opts_eigs, opts_svd):
+    """ Generator for dmrg_(). """
 
-    for sweep in range(max_sweeps):
-        max_disc_weight = None
-        schmidt = {} if converge == 'schmidt' else None
-        if version == '1site':
-            env = dmrg_sweep_1site(psi, H=H, env=env, project=project, opts_eigs=opts_eigs, schmidt=schmidt)
-        elif version == '2site':
-            env, max_disc_weight = dmrg_sweep_2site(psi, H=H, env=env, project=project, \
-                opts_eigs=opts_eigs, opts_svd=opts_svd, schmidt=schmidt)
-        else:
-            raise YastError('MPS: dmrg version %s not recognized' % version)
+    if not psi.is_canonical(to='first'):
+        psi.canonize_(to='first')
+
+    env = Env3(bra=psi, op=H, ket=psi, project=project).setup(to='first')
+    E_old = env.measure()
+
+    if opts_eigs is None:
+        opts_eigs = {'hermitian': True, 'ncv': 3, 'which': 'SR'}
+
+    if Schmidt_tol is not None:
+        if not Schmidt_tol > 0:
+            raise YastError('DMRG: Schmidt_tol has to be positive or None.')
+        Schmidt_old = psi.get_Schmidt_values()
+    max_dS, max_dw = None, None
+    Schmidt = None if Schmidt_tol is None else {}
+
+    if energy_tol is not None and not energy_tol > 0:
+        raise YastError('DMRG: energy_tol has to be positive or None.')
+
+    if method not in ('1site', '2site'):
+        raise YastError('DMRG: dmrg method %s not recognized.' % method)
+
+    for sweep in range(1, max_sweeps + 1):
+        if method == '1site':
+            _dmrg_sweep_1site_(env, opts_eigs=opts_eigs, Schmidt=Schmidt)
+        else: # method == '2site':
+            max_dw = _dmrg_sweep_2site_(env, opts_eigs=opts_eigs,
+                                        opts_svd=opts_svd, Schmidt=Schmidt)
+
         E = env.measure()
-        dE, Eold = Eold - E, E
-        if not (measure is None):
-            measure(sweep, psi, env, E, max_disc_weight)
-        if converge == 'energy':
-            logger.info('Iteration = %03d  Energy = %0.14f dE = %0.14f', sweep, E, dE)
-            if abs(dE) < atol:
-                break
-        if converge == 'schmidt':
-            dS = max((schmidt[k] - schmidtold[k]).norm() for k in schmidt.keys())
-            schmidtold = schmidt
-            logger.info('Iteration = %03d  Energy = %0.14f dE = %0.14f dS = %0.14f', sweep, E, dE, dS)
-            if dS < atol:
-                break
-    if return_info:
-        return env, {'sweeps': sweep + 1, 'dEng': dE}
-    return env
+        dE, E_old = E_old - E, E
+        converged = []
+
+        if energy_tol is not None:
+            converged.append(abs(dE) < energy_tol)
+
+        if Schmidt_tol is not None:
+            max_dS = max((Schmidt[k] - Schmidt_old[k]).norm() for k in Schmidt.keys())
+            Schmidt_old = Schmidt
+            converged.append(max_dS < Schmidt_tol)
+
+        logger.info('Sweep = %03d  energy = %0.14f  dE = %0.4f  dSchmidt = %0.4f', sweep, E, dE, max_dS)
+
+        if all(converged) and any(converged):
+            break
+        if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
+            yield DMRGout(sweep, E, dE, max_dS, max_dw)
+    yield DMRGout(sweep, E, dE, max_dS, max_dw)
 
 
-def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None, schmidt=None):
+def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
     r"""
     Perform sweep with 1-site DMRG, see :meth:`dmrg` for description.
 
@@ -142,24 +153,21 @@ def dmrg_sweep_1site(psi, H, env=None, project=None, opts_eigs=None, schmidt=Non
     env: Env3
         Environment of the <psi|H|psi> ready for the next iteration.
     """
-
-    env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
-
+    psi = env.ket
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
             env.update_Aort(n)
             _, (psi.A[n],) = tensor.eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
             psi.orthogonalize_site(n, to=to)
-            if schmidt is not None and to == 'first' and n != psi.first:
+            if Schmidt is not None and to == 'first' and n != psi.first:
                 _, S, _ = psi[psi.pC].svd(sU=1)
-                schmidt[psi.pC] = S
+                Schmidt[psi.pC] = S
             psi.absorb_central(to=to)
             env.clear_site(n)
             env.update_env(n, to=to)
-    return env
 
 
-def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=None, schmidt=None):
+def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
     r"""
     Perform sweep with 2-site DMRG, see :meth:`dmrg` for description.
 
@@ -168,10 +176,10 @@ def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=No
     env: Env3
         Environment of the <psi|H|psi> ready for the next iteration.
     """
+    psi = env.ket
 
-    env, opts_eigs = _init_dmrg(psi, H, env, project, opts_eigs)
     if opts_svd is None:
-        opts_svd = {'tol': 1e-12}
+        opts_svd = {'tol': 1e-14}
 
     max_disc_weight = -1.
     for to, dn in (('last', 0), ('first', 1)):
@@ -180,12 +188,12 @@ def dmrg_sweep_2site(psi, H, env=None, project=None, opts_eigs=None, opts_svd=No
             env.update_AAort(bd)
             AA = psi.merge_two_sites(bd)
             _, (AA,) = tensor.eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
-            _disc_weigth_bd = psi.unmerge_two_sites(AA, bd, opts_svd)
-            max_disc_weight = max(max_disc_weight, _disc_weigth_bd)
-            if schmidt is not None and to == 'first':
-                schmidt[psi.pC] = psi[psi.pC]
+            _disc_weight_bd = psi.unmerge_two_sites(AA, bd, opts_svd)
+            max_disc_weight = max(max_disc_weight, _disc_weight_bd)
+            if Schmidt is not None and to == 'first':
+                Schmidt[psi.pC] = psi[psi.pC]
             psi.absorb_central(to=to)
             env.clear_site(n, n + 1)
             env.update_env(n + dn, to=to)
-    env.update_env(0, to='first')
-    return env, max_disc_weight
+    env.update_env(psi.first, to='first')
+    return max_disc_weight

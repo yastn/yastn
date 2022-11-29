@@ -96,24 +96,26 @@ Bring MPS/MPO into canonical form by QR decomposition
 
         # rigth canonical form
         #
-        psi.canonize_sweep(to='first')
+        # --A*--    --
+        #   |   | =   |Identity
+        # --A---    --
+        #
+        psi.canonize_(to='first')
 
         # left canonical form
         #
-        psi.canonize_sweep(to='last')
+        #  --A*--             --
+        # |  |     = Identity|
+        #  --A---             --
+        #
+        psi.canonize_(to='last')
 
 Check if MPS/MPO is in left/right canonical form by verifying 
 if each tensor forms an isometry after appropriate contraction
-with its conjugate. For left canonical form
+with its conjugate. For either left or right canonical form
 
-.. literalinclude:: /../../tests/mps/test_mps.py
-        :pyobject: is_left_canonical
-
-And similarily for right canonical form
-
-.. literalinclude:: /../../tests/mps/test_mps.py
-        :pyobject: is_right_canonical
-
+.. literalinclude:: /../../tests/mps/test_canonize.py
+        :pyobject: check_canonize
 
 Canonical form by SVD
 ---------------------
@@ -143,7 +145,7 @@ Truncation is governed by options passed as :code:`opts_dict` (internally to SVD
         # Bring MPS to canonical form and truncate (here, right canonical form).
         # For MPS we usually normalize the state.
         #
-        psi.truncate_sweep(to='first', opts=opts_dict)
+        psi.truncate_(to='first', opts=opts_dict)
         
         # Generate random MPO with no symmetry
         #
@@ -152,7 +154,7 @@ Truncation is governed by options passed as :code:`opts_dict` (internally to SVD
         # Bring MPO to canonical form and truncate (here, left canonical form).
         # Note: for MPO we do not want to change overall scale, thus no normalization. 
         #
-        H.truncate_sweep(to='last', opts=opts_dict, normalize=False)
+        H.truncate_(to='last', opts=opts_dict, normalize=False)
 
 
 Save and load MPS/MPO
