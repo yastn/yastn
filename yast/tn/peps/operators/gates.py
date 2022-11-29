@@ -10,6 +10,20 @@ def fuse_ancilla_1s(G_loc, fid):
     return Gas.fuse_legs(axes=((0, 1), (2, 3)))
 
 
+def match_ancilla_1s(G_loc, A):
+    """ kron and fusion of local gate with identity for ancilla. Identity is read from ancila of A. """
+    leg = A.get_legs(axis=-1)
+    if len(leg.legs) == 1 and leg.legs[0].tree[0] == 1:
+        return G_loc
+    leg, _ = yast.leg_undo_product(leg) # last leg of A should be fused
+    fid = yast.eye(config=A.config, legs=[leg.conj(), leg]).diag()
+    Gas = ncon((fid, G_loc), ((-0, -2), (-1, -3)))
+    Gas = Gas.fuse_legs(axes=((0, 1), (2, 3)))
+    return Gas
+
+
+
+
 def fuse_ancilla_2s(GA, GB, fid):
     """ kron and fusion of local gate with identity for ancilla. """
     if GA.ndim == 2:

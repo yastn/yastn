@@ -1,8 +1,10 @@
-from yast.tn.peps import Lattice
 from typing import NamedTuple, Tuple
+from itertools import accumulate
 from dataclasses import dataclass
-from ....tn.mps import Mps, Mpo
-from yast import tensordot, svd_with_truncation, rand, ones
+from ....tn import mps
+from yast.tn.peps import Lattice
+from yast.tn.peps.operators.gates import match_ancilla_1s
+from yast import rand, tensordot
 
 class ctm_window(NamedTuple):
     """ elements of a 2x2 window for the CTM algorithm. """
@@ -72,35 +74,32 @@ class Local_CTM_Env: # no more variables than the one given
 
 
 def CtmEnv2Mps(net, env, index, index_type):
-    
+    """ WRITE DOCSTRINGS """
     if index_type == 'b':
         nx = index
-        H = Mps(N=net.Ny)
+        H = mps.Mps(N=net.Ny)
         for ny in range(net.Ny):
             site = (nx, ny)
             H.A[nx] = env[site].b
     elif index_type == 'r':
         ny = index
-        H = Mps(N=net.Nx)
+        H = mps.Mps(N=net.Nx)
         for nx in range(net.Nx):
             site = (nx, ny)
             H.A[nx] = env[site].r
     elif index_type == 't':
         nx = index
-        H = Mps(N=net.Ny)
+        H = mps.Mps(N=net.Ny)
         for ny in range(net.Ny):
             site = (nx, ny)
             H.A[ny] = env[site].t
     elif index_type == 'l':
         ny = index
-        H = Mps(N=net.Nx)
+        H = mps.Mps(N=net.Nx)
         for nx in range(net.Nx):
             site = (nx, ny)
             H.A[nx] = env[site].l
-
     return H
-
-
 
 
 def init_rand(A, tc, Dc, lattice):
@@ -154,3 +153,52 @@ def init_rand(A, tc, Dc, lattice):
 
 
 
+def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
+    """ 
+    Sample a random configuration from a finite peps. 
+   
+    Takes a CTM emvironments and a complet list of projectors to sample from.
+    """
+
+    config = state._data[0, 0].config
+    rands = (config.backend.rand(state.Nx * state.Ny) + 1) / 2
+
+
+    out = {}
+    count = 0
+    vR = CtmEnv2Mps(state, CTMenv, index=state.Ny - 1, index_type='r')
+
+    for ny in range(state.Ny - 1, -1, -1):
+        O = state.mpo(index=ny, index_type='column')
+        vL = CtmEnv2Mps(state, CTMenv, index=ny, index_type='l').conj()
+        env = mps.Env3(vL, O, vR).setup(to = 'first')
+
+        for nx in range(0, state.Nx):
+            dpt = O[nx].copy()
+            loc_projectors = [match_ancilla_1s(pr, dpt.A) for pr in projectors]
+            prob = []
+            norm_prob = env.measure(bd=(nx - 1, nx))
+            for proj in loc_projectors:
+                dpt_pr = dpt.copy()
+                dpt_pr.A = tensordot(dpt_pr.A, proj, axes=(4, 0))
+                O[nx] = dpt_pr
+                env.update_env(nx, to='last')
+                prob.append(env.measure(bd=(nx, nx+1)) / norm_prob)
+            assert abs(sum(prob) - 1) < 1e-12
+            rand = rands[count]
+            ind = sum(apr < rand for apr in accumulate(prob))
+            out[(nx, ny)] = ind
+            dpt.A = tensordot(dpt.A, loc_projectors[ind], axes=(4, 0))
+            O[nx] = dpt
+            env.update_env(nx, to='last')
+            count += 1
+
+        if opts_svd is None:
+            opts_svd = {'D_total': max(vL.get_bond_dimensions())}
+
+        vRnew = mps.zipper(O, vR, opts=opts_svd)
+        if opts_var is None:
+            opts_var = {}
+        mps.variational_(vRnew, O, vR, method='1site', **opts_var)
+        vR = vRnew
+    return out

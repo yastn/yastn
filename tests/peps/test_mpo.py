@@ -8,7 +8,7 @@ import yast.tn.mps as mps
 import time
 from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
 from yast.tn.peps.NTU import ntu_update, initialize_peps_purification
-from yast.tn.peps.CTM import GetEnv, nn_bond, CtmEnv2Mps
+from yast.tn.peps.CTM import GetEnv, nn_bond, CtmEnv2Mps, sample
 from yast.tn.mps import Env2, Env3
 
 
@@ -82,7 +82,10 @@ def test_NTU_spinless():
         psi = mps.zipper(O, psi0, opts)  # bottom boundary of 0th row through zipper
         mps.variational_(psi, O, psi0, method='1site', max_sweeps=2)
 
-
+    nn, hh = fcdag @ fc, fc @ fcdag
+    projectors = [nn, hh]
+    out = sample(Gamma, env, projectors)
+    print(out)
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
