@@ -48,7 +48,7 @@ def single_bond_local_update(Gamma, net, G_loc):
 
     list_sites = net.sites()
     for ms in list_sites:
-        Gamma._data[ms] = Gamma._data[ms] @ G_loc
+        Gamma._data[ms] = tensordot(Gamma._data[ms], G_loc, axes=(2, 1))
 
     return Gamma # local update all sites at once
     
@@ -62,27 +62,31 @@ def single_bond_nn_update(Gamma, bd, GA, GB):
 
     if dirn == "h":  # Horizontal Gate
 
-        int_A = A @ GA  # [t l] [b r] s c
+        #int_A = A @ GA  # [t l] [b r] s c
+        int_A = tensordot(A, GA, axes=(2, 1)) # [t l] [b r] s c
         int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] s] [b r] c
         int_A = int_A.unfuse_legs(axes=1)  # [[t l] s] b r c
         int_A = int_A.swap_gate(axes=(1, 3))  # b X c
         int_A = int_A.fuse_legs(axes=((0, 1), (2, 3)))  # [[[t l] s] b] [r c]
         QA, RA = qr(int_A, axes=(0, 1), sQ=-1)  # [[[t l] s] b] rr @ rr [r c]
 
-        int_B = B @ GB  # [t l] [b r] s c
+        #int_B = B @ GB  # [t l] [b r] s c
+        int_B = tensordot(B, GB, axes=(2, 1)) # [t l] [b r] s c
         int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] s] c
         int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] s] c
         int_B = int_B.fuse_legs(axes=((0, 2), (1, 3)))  # [t [[b r] s]] [l c]
         QB, RB = qr(int_B, axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] s]]  @  [l c] ll
 
     elif dirn == "v":  # Vertical Gate
-        int_A = A @ GA  # [t l] [b r] s c
+        #int_A = A @ GA  # [t l] [b r] s c
+        int_A = tensordot(A, GA, axes=(2, 1)) # [t l] [b r] s c
         int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] s] [b r] c
         int_A = int_A.unfuse_legs(axes=1)  # [[t l] s] b r c
         int_A = int_A.fuse_legs(axes=((0, 2), (1, 3)))  # [[[t l] s] r] [b c]
         QA, RA = qr(int_A, axes=(0, 1), sQ=1)  # [[[t l] s] r] bb  @  bb [b c]
 
-        int_B = B @ GB  # [t l] [b r] s c
+        #int_B = B @ GB  # [t l] [b r] s c
+        int_B = tensordot(B, GB, axes=(2, 1)) # [t l] [b r] s c
         int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] s] c
         int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] s] c
         int_B = int_B.swap_gate(axes=(1, 3))  # l X c

@@ -430,7 +430,8 @@ def fPEPS_l(A, op):
         Aop = Aop.swap_gate(axes=((2, 4), 6))
         Aop = Aop.fuse_legs(axes=(0, 1, 2, (3, 6), 4, 5))
     else:"""
-    Aop = tensordot(A, op, axes=(4, 0)) 
+    #Aop = tensordot(A, op, axes=(4, 0)) 
+    Aop = tensordot(A, op, axes=(4, 1))
     Aop = Aop.swap_gate(axes=(2, 5))
     Aop = Aop.fuse_legs(axes=(0, 1, 2, (3, 5), 4))
     return Aop
@@ -447,7 +448,8 @@ def fPEPS_r(A, op):
         Aop = tensordot(A, op, axes=(5, 0))
         Aop = Aop.fuse_legs(axes=(0, (1, 6), 2, 3, 4, 5))
     elif A.ndim == 5:"""
-    Aop = tensordot(A, op, axes=(4, 0))
+   # Aop = tensordot(A, op, axes=(4, 0))
+    Aop = tensordot(A, op, axes=(4, 1))
     Aop = Aop.fuse_legs(axes=(0, (1, 5), 2, 3, 4))
     return Aop
 
@@ -463,7 +465,8 @@ def fPEPS_t(A, op):
         Aop = Aop.swap_gate(axes=(4, 6))
         Aop = Aop.fuse_legs(axes=(0, 1, (2, 6), 3, 4, 5))
     elif A.ndim == 5:"""
-    Aop = tensordot(A, op, axes=(4, 0))
+    #Aop = tensordot(A, op, axes=(4, 0))
+    Aop = tensordot(A, op, axes=(4, 1))
     Aop = Aop.fuse_legs(axes=(0, 1, (2, 5), 3, 4))
     return Aop
 
@@ -480,7 +483,8 @@ def fPEPS_b(A, op):
         Aop = Aop.swap_gate(axes=(1, 6))
         Aop = Aop.fuse_legs(axes=((0, 6), 1, 2, 3, 4, 5))
     elif A.ndim == 5:"""
-    Aop = tensordot(A, op, axes=(4, 0))
+    #Aop = tensordot(A, op, axes=(4, 0))
+    Aop = tensordot(A, op, axes=(4, 1))
     Aop = Aop.swap_gate(axes=(1, 5))
     Aop = Aop.fuse_legs(axes=((0, 5), 1, 2, 3, 4))
     return Aop
@@ -495,7 +499,8 @@ def fPEPS_op1s(A, op):
     """if A.ndim == 6:
         Aop = tensordot(A, op, axes=(5, 0))
     elif A.ndim == 5:"""
-    Aop = tensordot(A, op, axes=(4, 0))
+   # Aop = tensordot(A, op, axes=(4, 0))
+    Aop = tensordot(A, op, axes=(4, 1))
     return Aop
          
 
@@ -508,20 +513,25 @@ def fPEPS_unfuse_physical(A):
 
 def fuse_ancilla_wos(op, fid):
     """ kron and fusion of local operator with identity for ancilla --- without string """
-    op = ncon((fid, op), ((-2, -0), (-1, -3)))
-    return op.fuse_legs(axes=((0, 1), (2, 3)))
+    #op = ncon((fid, op), ((-2, -0), (-1, -3)))
+    op = ncon((op, fid), ((-0, -1), (-2, -3)))
+    #return op.fuse_legs(axes=((0, 1), (2, 3)))
+    return op.fuse_legs(axes=((0, 3), (1, 2)))
 
 def fuse_ancilla_ws(op, fid, dirn):
     """ kron and fusion of nn operator with identity for ancilla --- with string """
     if dirn == 'l':
         op= op.add_leg(s=1).swap_gate(axes=(0, 2))
-        op = ncon((fid, op), ((-2, -0), (-1, -3, -4)))
+       # op = ncon((fid, op), ((-2, -0), (-1, -3, -4)))
+        op = ncon((op, fid), ((-0, -1, -4), (-2, -3)))
         op = op.swap_gate(axes=(2, 4)) # swap of connecting axis with ancilla is always in GA gate
-        op = op.fuse_legs(axes=((0, 1), (2, 3), 4))
+       # op = op.fuse_legs(axes=((0, 1), (2, 3), 4))
+        op = op.fuse_legs(axes=((0, 3), (1, 2), 4))
     elif dirn == 'r':
         op = op.add_leg(s=-1)
-        op = ncon((fid, op), ((-2, -0), (-1, -3, -4)))
-        op = op.fuse_legs(axes=((0, 1), (2, 3), 4))
+       # op = ncon((fid, op), ((-2, -0), (-1, -3, -4)))
+        op = ncon((op, fid), ((-0, -1, -4), (-2, -3)))
+        op = op.fuse_legs(axes=((0, 3), (1, 2), 4))
     return op
 
 
