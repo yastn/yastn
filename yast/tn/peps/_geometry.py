@@ -36,7 +36,7 @@ class Lattice():
         assert boundary in ('finite', 'infinite'), "boundary should be 'finite' or 'infinite'"
         self.lattice = lattice
         self.boundary = boundary
-        self.Ny, self.Nx = (2, 2) if lattice == 'checkerboard' else dims
+        self.Nx, self.Ny = (2, 2) if lattice == 'checkerboard' else dims
         self._sites = tuple(product(*(range(k) for k in self.dims)))
         self._dir = {'t': (-1, 0), 'l': (0, -1), 'b': (1, 0), 'r': (0, 1),
                      'tl': (-1, -1), 'bl': (1, -1), 'br': (1, 1), 'tr': (-1, 1)}
@@ -59,7 +59,7 @@ class Lattice():
     @property
     def dims(self):
         """ Size of the unit cell """
-        return (self.Ny, self.Nx)
+        return (self.Nx, self.Ny)
 
     def sites(self, reverse=False):
         """ ADD """
@@ -74,12 +74,12 @@ class Lattice():
 
     def nn_site(self, site, d):
         """ Index of the site to the top. Return None if there is no neighboring site to the top. """
-        y, x = site
-        dy, dx = self._dir[d]
-        y, x = y + dy, x + dx
+        x, y = site
+        dx, dy = self._dir[d]
+        x, y = x + dx, y + dy
         if self.boundary == 'finite' and (x < 0 or x >= self.Nx or y < 0 or y >= self.Ny):
             return None
-        return (y % self.Ny, x % self.Nx)
+        return (x % self.Nx, y % self.Ny)
 
     def tensors_NtuEnv(self, bds):
         """ returns the cluster of sites around the bond to be updated """
@@ -104,7 +104,7 @@ class Lattice():
 
 
 class Peps(Lattice):
-    """ ADD """
+    """ Inherits Lattice Class and manages Peps data with additional functionalities """
     def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
         super().__init__(lattice=lattice, dims=dims, boundary=boundary)
         inds = set(self.site2index(site) for site in self._sites)
