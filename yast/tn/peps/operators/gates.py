@@ -6,8 +6,9 @@ from yast.tensor.linalg import svd_with_truncation
 
 def fuse_ancilla_1s(G_loc, fid):
     """ kron and fusion of local gate with identity for ancilla. """
-    Gas = ncon((fid, G_loc), ((-2, -0), (-1, -3)))
-    return Gas.fuse_legs(axes=((0, 1), (2, 3)))
+   # Gas = ncon((fid, G_loc), ((-2, -0), (-1, -3)))
+    Gas = ncon((G_loc, fid), ((-0, -1), (-2, -3)))
+    return Gas.fuse_legs(axes=((0, 3), (1, 2)))
 
 
 def match_ancilla_1s(G_loc, A):
@@ -17,11 +18,9 @@ def match_ancilla_1s(G_loc, A):
         return G_loc
     leg, _ = yast.leg_undo_product(leg) # last leg of A should be fused
     fid = yast.eye(config=A.config, legs=[leg.conj(), leg]).diag()
-    Gas = ncon((fid, G_loc), ((-0, -2), (-1, -3)))
-    Gas = Gas.fuse_legs(axes=((0, 1), (2, 3)))
+    Gas = ncon((G_loc, fid), ((-0, -1), (-2, -3)))
+    Gas = Gas.fuse_legs(axes=((0, 3), (1, 2)))
     return Gas
-
-
 
 
 def fuse_ancilla_2s(GA, GB, fid):
@@ -30,13 +29,20 @@ def fuse_ancilla_2s(GA, GB, fid):
         GA = GA.add_leg(s=1).swap_gate(axes=(0, 2))
     if GB.ndim == 2:
         GB = GB.add_leg(s=-1)
-    GAas = ncon((fid, GA), ((-2, -0), (-1, -3, -4)))
-    # swap of connecting axis with ancilla is always in GA gate
-    GAas = GAas.swap_gate(axes=(2, 4))
-    GAas = GAas.fuse_legs(axes=((0, 1), (2, 3), 4))
+  #  GAas = ncon((fid, GA), ((-2, -0), (-1, -3, -4)))
 
-    GBas = ncon((fid, GB), ((-2, -0), (-1, -3, -4)))
-    GBas = GBas.fuse_legs(axes=((0, 1), (2, 3), 4))
+    GAas = ncon((GA, fid), ((-0, -1, -4), (-2, -3)))
+    
+    GAas = GAas.swap_gate(axes=(2, 4))    # swap of connecting axis with ancilla is always in GA gate
+    
+    #GAas = GAas.fuse_legs(axes=((0, 1), (2, 3), 4))
+    GAas = GAas.fuse_legs(axes=((0, 3), (1, 2), 4))
+
+  #  GBas = ncon((fid, GB), ((-2, -0), (-1, -3, -4)))
+    GBas = ncon((GB, fid), ((-0, -1, -4), (-2, -3)))
+   # GBas = GBas.fuse_legs(axes=((0, 1), (2, 3), 4))
+    GBas = GBas.fuse_legs(axes=((0, 3), (1, 2), 4))
+
     return GAas, GBas
 
 

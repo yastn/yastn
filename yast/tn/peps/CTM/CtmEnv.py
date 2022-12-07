@@ -70,7 +70,7 @@ class Local_CTM_Env: # no more variables than the one given
 
 
 def CtmEnv2Mps(net, env, index, index_type):
-    """ WRITE DOCSTRINGS """
+    """ Convert environmental tensors of Ctm to an MPS """
     if index_type == 'b':
         nx = index
         H = mps.Mps(N=net.Ny)
