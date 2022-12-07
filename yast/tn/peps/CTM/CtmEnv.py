@@ -33,23 +33,19 @@ class CtmEnv(Lattice):
 
     def tensors_CtmEnv(self, trajectory):
         """ 
-        We can traverse through the lattice in different trajectories     
-        Order Left move: site[0, 0], site[1, 0], site[0, 1], site[1, 1]
-        Order Right move: sites[0, 1], site[1, 1], site[0, 0], site[1, 0]
-        Order Top Move: site[0, 0], site[0, 1], site[1, 0], site[1, 1]
-        Order Bottom Move: site[1, 0], site[1, 1], site[0, 0], site[0, 1]
+        Choosing 2x2 ctm windows for horizontal and vertical moves of the CTM of a mxn lattice
         """
         
         order = []
         s = []
         self.boundary = 'infinite'
         if trajectory == 'h':
-            for n in range(self.Nx):
-                for m in range(self.Ny): 
+            for n in range(self.Ny):
+                for m in range(self.Nx): 
                     order.append(tuple((m, n)))
         elif trajectory == 'v':
-            for m in range(self.Ny):
-                for n in range(self.Nx):
+            for m in range(self.Nx):
+                for n in range(self.Ny):
                     order.append(tuple((m, n)))
  
         for ms in order:
