@@ -1,6 +1,5 @@
 """ Function performing NTU update on all four unique bonds corresponding to a two site unit cell. """
 from .NtuEssentials import single_bond_local_update, ntu_machine
-import yaps
 
 def ntu_update(Gamma, net, fid, Gates, Ds, step, truncation_mode, fix_bd):
     
