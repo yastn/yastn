@@ -17,7 +17,7 @@ def match_ancilla_1s(G_loc, A):
     if len(leg.legs) == 1 and leg.legs[0].tree[0] == 1:
         return G_loc
     leg, _ = yast.leg_undo_product(leg) # last leg of A should be fused
-    fid = yast.eye(config=A.config, legs=[leg.conj(), leg]).diag()
+    fid = yast.eye(config=A.config, legs=[leg, leg.conj()]).diag()
     Gas = ncon((G_loc, fid), ((-0, -1), (-2, -3)))
     Gas = Gas.fuse_legs(axes=((0, 3), (1, 2)))
     return Gas

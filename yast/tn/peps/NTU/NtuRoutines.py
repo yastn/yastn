@@ -2,7 +2,7 @@
 from .NtuEssentials import single_bond_local_update, ntu_machine
 import yaps
 
-def ntu_update(Gamma, net, fid, Gates, Ds, step, truncation_mode, fix_bd):
+def ntu_update(Gamma, net, Gates, Ds, step, truncation_mode, fix_bd):
     
     infos = []
    # local gate
@@ -11,7 +11,7 @@ def ntu_update(Gamma, net, fid, Gates, Ds, step, truncation_mode, fix_bd):
    
     for iter in GB_list(net, Gates['nn']):
         GA, GB, bd = iter['gateA'], iter['gateB'], iter['bond'] 
-        Gamma, info = ntu_machine(Gamma, net, fid, bd, GA, GB, Ds, truncation_mode, step, fix_bd)
+        Gamma, info = ntu_machine(Gamma, net, bd, GA, GB, Ds, truncation_mode, step, fix_bd)
         # show_leg_structure(net, Gamma)
         infos.append(info)
 
