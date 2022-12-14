@@ -5,10 +5,11 @@ PEPS tensors have 5 legs: (top, left, bottom, right, system)
 In case of purification, system leg is a fusion of (ancila, system)
 """
 import logging
+import yast
 from yast.tn.peps.operators.gates import trivial_tensor
 from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_legs, ncon, eigh_with_truncation, eye
 
-def ntu_machine(Gamma, net, fid, bd, GA, GB, Ds, truncation_mode, step, fix_bd):
+def ntu_machine(Gamma, net, bd, GA, GB, Ds, truncation_mode, step, fix_bd):
     # step can be svd-step, one-step or two-step
     # application of nearest neighbor gate and subsequent optimization of peps tensor using NTU
     QA, QB, RA, RB = single_bond_nn_update(Gamma, bd, GA, GB)
@@ -19,7 +20,7 @@ def ntu_machine(Gamma, net, fid, bd, GA, GB, Ds, truncation_mode, step, fix_bd):
         info = {}
         return Gamma, info
     else:
-        g = env_NTU(Gamma, net, fid, bd, QA, QB, dirn=bd.dirn)
+        g = env_NTU(Gamma, net, bd, QA, QB, dirn=bd.dirn)
         info={}
         if fix_bd==1:
             MA, MB, ntu_error, optim, svd_error = truncate_and_optimize(g, RA, RB, Ds, fix_bd, truncation_mode)
@@ -141,13 +142,16 @@ def form_new_peps_tensors(QA, QB, MA, MB, bd):
 ##### creating ntu environment ####
 ###################################
 
-def env_NTU(Gamma, net, fid, bd, QA, QB, dirn):
+def env_NTU(Gamma, net,  bd, QA, QB, dirn):
     """ calculate metric g """
   
     env = net.tensors_NtuEnv(bd)
     G={}
     for ms in env.keys():
         if env[ms] is None:
+            leg = Gamma[(0, 0)].get_legs(axis=-1)
+            leg, _ = yast.leg_undo_product(leg) # last leg of A should be fused
+            fid = yast.eye(config=Gamma[(0,0)].config, legs=[leg, leg.conj()]).diag()
             G[ms] = trivial_tensor(fid)
         else:
             G[ms] = Gamma._data[env[ms]]

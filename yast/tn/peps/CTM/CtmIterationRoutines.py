@@ -5,11 +5,17 @@ PEPS tensors A[0] and A[1] corresponds to "black" and "white" sites of the check
 PEPs tensors habe 6 legs: [top, left, bottom, right, ancilla, system] with signature s=(-1, 1, 1, -1, -1, 1).
 The routines include swap_gates to incorporate fermionic anticommutation relations into the lattice.
 """
+
+import yast
 from yast import tensordot, ncon, svd_with_truncation, qr, vdot
 from yast.tn.peps._doublePepsTensor import DoublePepsTensor
 import numpy as np
 from .CtmEnv import CtmEnv
-
+try:
+    from .configs import config_dense 
+    # cfg is used by pytest to inject different backends and divices
+except ImportError:
+    from configs import config_dense
 
 def append_a_bl(tt, AAb):
     """
@@ -425,12 +431,6 @@ def fPEPS_l(A, op):
     fermionic operators in vertical direction
     """
 
-    """if A.ndim == 6:
-        Aop = tensordot(A, op, axes=(5, 0)) 
-        Aop = Aop.swap_gate(axes=((2, 4), 6))
-        Aop = Aop.fuse_legs(axes=(0, 1, 2, (3, 6), 4, 5))
-    else:"""
-    #Aop = tensordot(A, op, axes=(4, 0)) 
     Aop = tensordot(A, op, axes=(4, 1))
     Aop = Aop.swap_gate(axes=(2, 5))
     Aop = Aop.fuse_legs(axes=(0, 1, 2, (3, 5), 4))
@@ -489,7 +489,6 @@ def fPEPS_b(A, op):
     Aop = Aop.fuse_legs(axes=((0, 5), 1, 2, 3, 4))
     return Aop
 
-
 def fPEPS_op1s(A, op):
     """
     attaches operator to the tensor while calulating expectation
@@ -502,75 +501,60 @@ def fPEPS_op1s(A, op):
    # Aop = tensordot(A, op, axes=(4, 0))
     Aop = tensordot(A, op, axes=(4, 1))
     return Aop
-         
 
 def fPEPS_fuse_physical(A):
     return {ind: x.fuse_legs(axes=(0, 1, 2, 3, (4, 5))) for ind, x in A.items()}
-
 
 def fPEPS_unfuse_physical(A):
     return {ind: x.unfuse_legs(axes=4) for ind, x in A.items()}
 
 def fuse_ancilla_wos(op, fid):
     """ kron and fusion of local operator with identity for ancilla --- without string """
-    #op = ncon((fid, op), ((-2, -0), (-1, -3)))
     op = ncon((op, fid), ((-0, -1), (-2, -3)))
-    #return op.fuse_legs(axes=((0, 1), (2, 3)))
     return op.fuse_legs(axes=((0, 3), (1, 2)))
 
 def fuse_ancilla_ws(op, fid, dirn):
     """ kron and fusion of nn operator with identity for ancilla --- with string """
     if dirn == 'l':
         op= op.add_leg(s=1).swap_gate(axes=(0, 2))
-       # op = ncon((fid, op), ((-2, -0), (-1, -3, -4)))
         op = ncon((op, fid), ((-0, -1, -4), (-2, -3)))
         op = op.swap_gate(axes=(2, 4)) # swap of connecting axis with ancilla is always in GA gate
-       # op = op.fuse_legs(axes=((0, 1), (2, 3), 4))
         op = op.fuse_legs(axes=((0, 3), (1, 2), 4))
     elif dirn == 'r':
         op = op.add_leg(s=-1)
-       # op = ncon((fid, op), ((-2, -0), (-1, -3, -4)))
         op = ncon((op, fid), ((-0, -1, -4), (-2, -3)))
         op = op.fuse_legs(axes=((0, 3), (1, 2), 4))
     return op
 
-
-
-def fPEPS_2layers(fid, A, B=None, op=None, dir=None):
+def fPEPS_2layers(A, B=None, op=None, dir=None):
     """ 
     Prepare top and bottom peps tensors for CTM procedures.
     Applies operators on top if provided, with dir = 'l', 'r', 't', 'b', '1s'
-    If dir = '1s', no auxiliary indices are introduced as the operator is local
+    If dir = '1s', no auxiliary indices are introduced as the operator is local.
+    Here spin and ancilla legs of tensors are fused
     """
+    leg = A.get_legs(axis=-1)
+    leg, _ = yast.leg_undo_product(leg) # last leg of A is fused 
+    fid = yast.eye(config=A.config, legs=[leg, leg.conj()]).diag() # identity generated to act on ancilla leg through the operators
+
     if op is not None:
-       # Ao = A.unfuse_legs(axes=4)
         if dir == 't':
-           # if op.ndim == 2: # checks whether the operator already has an auxiliary index attached 
-               # op_aux = op.add_leg(s=1).swap_gate(axes=(0, 2))
             op_aux = fuse_ancilla_ws(op, fid, dirn='l')
             Ao = fPEPS_t(A, op_aux)
         elif dir == 'b':
-         #   if op.ndim == 2: # checks whether the operator already has an auxiliary index attached 
-                #op_aux =  op.add_leg(s=-1)
             op_aux = fuse_ancilla_ws(op, fid, dirn='r')
             Ao = fPEPS_b(A, op_aux)
         elif dir == 'l':
-           # if op.ndim == 2: # checks whether the operator already has an auxiliary index attached 
-                #op_aux = op.add_leg(s=1).swap_gate(axes=(0, 2))
             op_aux = fuse_ancilla_ws(op, fid, dirn='l')
             Ao = fPEPS_l(A, op_aux)
         elif dir == 'r':
-            #if op.ndim == 2: # checks whether the operator already has an auxiliary index attached 
-                #op_aux =  op.add_leg(s=-1)
             op_aux = fuse_ancilla_ws(op, fid, dirn='r')
             Ao = fPEPS_r(A, op_aux)
         elif dir == '1s':
             op = fuse_ancilla_wos(op, fid)
-            Ao = fPEPS_op1s(Ao, op)
+            Ao = fPEPS_op1s(A, op)
         else:
-            raise RuntimeError("dir should be equal to 'l', 'r', 't', 'b' or '1s'")
-        
-      #  Ao = Ao.fuse_legs(axes=(0, 1, 2, 3, (4, 5))) if Ao.ndim == 6 else Ao
+            raise RuntimeError("dir should be equal to 'l', 'r', 't', 'b' or '1s'")        
     else:
         Ao = A
     if B is None:

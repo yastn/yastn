@@ -37,6 +37,7 @@ def test_NTU_spinless():
    
     opt = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
+
     ancilla='True'
     GA_nn, GB_nn = gates_hopping(t, dbeta, fid, fc, fcdag, ancilla=ancilla, purification=purification)  # nn gate for 2D fermi sea
     G_loc = gate_local_fermi_sea(mu, dbeta, fid, fc, fcdag, ancilla=ancilla, purification=purification) # local gate for spinless fermi sea
@@ -52,11 +53,11 @@ def test_NTU_spinless():
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
         
-        Gamma, info =  ntu_update(Gamma, net, fid, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
+        Gamma, info =  ntu_update(Gamma, net, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
     
     nbit = 10
     opts = {'chi': round(chi), 'cutoff': 1e-10, 'nbitmax': round(nbit), 'prec' : 1e-8, 'tcinit' : ((0,) * fid.config.sym.NSYM,), 'Dcinit' : (1,)}
-    env = GetEnv(fid, A=Gamma, net=net, **opts, AAb_mode=0)
+    env = GetEnv(A=Gamma, net=net, **opts, AAb_mode=0)
 
     bd_h = peps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
     bd_v = peps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
@@ -64,12 +65,12 @@ def test_NTU_spinless():
     ops = {'cdagc': {'l': fcdag, 'r': fc},
            'ccdag': {'l': fc, 'r': fcdag}}
 
-    nn_CTM_bond_1 = 0.5*(abs(nn_bond(fid, Gamma, net, env, ops['cdagc'], bd_h)) + abs(nn_bond(fid, Gamma, net, env, ops['ccdag'], bd_h)))
-    nn_CTM_bond_2 = 0.5*(abs(nn_bond(fid, Gamma, net, env, ops['cdagc'], bd_v)) + abs(nn_bond(fid, Gamma, net, env, ops['ccdag'], bd_v)))
+    nn_CTM_bond_1 = 0.5*(abs(nn_bond(Gamma, net, env, ops['cdagc'], bd_h)) + abs(nn_bond(Gamma, net, env, ops['ccdag'], bd_h)))
+    nn_CTM_bond_2 = 0.5*(abs(nn_bond(Gamma, net, env, ops['cdagc'], bd_v)) + abs(nn_bond(Gamma, net, env, ops['ccdag'], bd_v)))
 
     print(nn_CTM_bond_1, nn_CTM_bond_2)
 
-    nn_bond_1_exact = 0.0493470169695543 # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (1,1) and (1,2)
+    nn_bond_1_exact = 0.04934701696955436 # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (1,1) and (1,2)
     nn_bond_2_exact = 0.049185554490429065  # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (0,0) and (1,0)
     assert pytest.approx(nn_CTM_bond_1, abs=1e-6) == nn_bond_1_exact
     assert pytest.approx(nn_CTM_bond_2, abs=1e-6) == nn_bond_2_exact
@@ -118,11 +119,11 @@ def test_NTU_spinfull():
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
         
-        Gamma, info =  ntu_update(Gamma, net, fid, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
+        Gamma, info =  ntu_update(Gamma, net, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
     
     nbit = 10
     opts = {'chi': round(chi), 'cutoff': 1e-10, 'nbitmax': round(nbit), 'prec' : 1e-8, 'tcinit' : ((0,) * fid.config.sym.NSYM,), 'Dcinit' : (1,)}
-    env = GetEnv(fid, A=Gamma, net=net, **opts, AAb_mode=0)
+    env = GetEnv(A=Gamma, net=net, **opts, AAb_mode=0)
 
     bd_h = peps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
     bd_v = peps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
@@ -132,10 +133,10 @@ def test_NTU_spinfull():
            'cdagc_dn': {'l': fcdag_dn, 'r': fc_dn},
            'ccdag_dn': {'l': fc_dn, 'r': fcdag_dn}}
 
-    nn_CTM_bond_1_up = 0.5*(abs(nn_bond(fid, Gamma, net, env, ops['cdagc_up'], bd_h)) + abs(nn_bond(fid, Gamma, net, env, ops['ccdag_up'], bd_h)))
-    nn_CTM_bond_2_up = 0.5*(abs(nn_bond(fid, Gamma, net, env, ops['cdagc_up'], bd_v)) + abs(nn_bond(fid, Gamma, net, env, ops['ccdag_up'], bd_v)))
-    nn_CTM_bond_1_dn = 0.5*(abs(nn_bond(fid, Gamma, net, env, ops['cdagc_dn'], bd_h)) + abs(nn_bond(fid, Gamma, net, env, ops['ccdag_dn'], bd_h)))
-    nn_CTM_bond_2_dn = 0.5*(abs(nn_bond(fid, Gamma, net, env, ops['cdagc_dn'], bd_v)) + abs(nn_bond(fid, Gamma, net, env, ops['ccdag_dn'], bd_v)))
+    nn_CTM_bond_1_up = 0.5*(abs(nn_bond(Gamma, net, env, ops['cdagc_up'], bd_h)) + abs(nn_bond(Gamma, net, env, ops['ccdag_up'], bd_h)))
+    nn_CTM_bond_2_up = 0.5*(abs(nn_bond(Gamma, net, env, ops['cdagc_up'], bd_v)) + abs(nn_bond(Gamma, net, env, ops['ccdag_up'], bd_v)))
+    nn_CTM_bond_1_dn = 0.5*(abs(nn_bond(Gamma, net, env, ops['cdagc_dn'], bd_h)) + abs(nn_bond(Gamma, net, env, ops['ccdag_dn'], bd_h)))
+    nn_CTM_bond_2_dn = 0.5*(abs(nn_bond(Gamma, net, env, ops['cdagc_dn'], bd_v)) + abs(nn_bond(Gamma, net, env, ops['ccdag_dn'], bd_v)))
 
     nn_bond_1_exact = 0.024917101651703362 # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (1,1) and (1,2)
     nn_bond_2_exact = 0.024896433958165112  # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (0,0) and (1,0)
@@ -144,7 +145,6 @@ def test_NTU_spinfull():
     assert pytest.approx(nn_CTM_bond_1_dn, abs=1e-5) == nn_bond_1_exact
     assert pytest.approx(nn_CTM_bond_2_up, abs=1e-5) == nn_bond_2_exact
     assert pytest.approx(nn_CTM_bond_2_dn, abs=1e-5) == nn_bond_2_exact
-
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')

@@ -7,7 +7,7 @@ from .CtmIterationRoutines import CTM_it
 from .CtmIterationRoutines import fPEPS_2layers, fPEPS_fuse_layers, check_consistency_tensors
 from .CtmEnv import CtmEnv, init_rand
 
-def GetEnv(fid, A, net, chi=32, cutoff=1e-10, prec=1e-7, nbitmax=10, tcinit=(), Dcinit=(1,), init_env='rand', AAb_mode=0):
+def GetEnv(A, net, chi=32, cutoff=1e-10, prec=1e-7, nbitmax=10, tcinit=(), Dcinit=(1,), init_env='rand', AAb_mode=0):
 
     r"""
     Based on lattice structure create converged CTM environments using functionalities from CTM_rountines.py
@@ -28,7 +28,7 @@ def GetEnv(fid, A, net, chi=32, cutoff=1e-10, prec=1e-7, nbitmax=10, tcinit=(), 
 
     A = check_consistency_tensors(A, net=net) # to check if A has the desired fused form of legs i.e. t l b r [s a]
     list_sites = net.sites()
-    AAb = {m: fPEPS_2layers(fid, A._data[m]) for m in list_sites}
+    AAb = {m: fPEPS_2layers(A._data[m]) for m in list_sites}
 
     if AAb_mode >= 1:
         fPEPS_fuse_layers(AAb)

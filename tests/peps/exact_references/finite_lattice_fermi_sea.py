@@ -52,7 +52,7 @@ def correlator(x1, y1, x2, y2, Nx, Ny, t, mu, beta):
 Nx = 3
 Ny = 2
 t = 1
-beta = 0.1
+beta = 0.2
 mu = 0
 
 
