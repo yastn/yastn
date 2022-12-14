@@ -539,20 +539,20 @@ def fPEPS_2layers(A, B=None, op=None, dir=None):
 
     if op is not None:
         if dir == 't':
-            op_aux = fuse_ancilla_ws(op, fid, dirn='l')
-            Ao = fPEPS_t(A, op_aux)
+            op_aux = fuse_ancilla_ws(op,fid,dirn='l')
+            Ao = fPEPS_t(A,op_aux)
         elif dir == 'b':
-            op_aux = fuse_ancilla_ws(op, fid, dirn='r')
-            Ao = fPEPS_b(A, op_aux)
+            op_aux = fuse_ancilla_ws(op,fid,dirn='r')
+            Ao = fPEPS_b(A,op_aux)
         elif dir == 'l':
-            op_aux = fuse_ancilla_ws(op, fid, dirn='l')
-            Ao = fPEPS_l(A, op_aux)
+            op_aux = fuse_ancilla_ws(op,fid,dirn='l')
+            Ao = fPEPS_l(A,op_aux)
         elif dir == 'r':
-            op_aux = fuse_ancilla_ws(op, fid, dirn='r')
-            Ao = fPEPS_r(A, op_aux)
+            op_aux = fuse_ancilla_ws(op,fid,dirn='r')
+            Ao = fPEPS_r(A,op_aux)
         elif dir == '1s':
-            op = fuse_ancilla_wos(op, fid)
-            Ao = fPEPS_op1s(A, op)
+            op = fuse_ancilla_wos(op,fid)
+            Ao = fPEPS_op1s(A,op)
         else:
             raise RuntimeError("dir should be equal to 'l', 'r', 't', 'b' or '1s'")        
     else:
