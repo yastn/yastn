@@ -100,46 +100,37 @@ def CtmEnv2Mps(net, env, index, index_type):
 
 def init_rand(A, tc, Dc, lattice):
     """ Initialize random CTMRG environments of peps tensors A. """
-    config = A._data[0, 0].config
-  
+    config = A._data[0, 0].config 
     list_sites = lattice.sites()
-
     env= {}
 
     for ms in list_sites:
         env[ms] = Local_CTM_Env()
-
     for ms in list_sites:
         env[ms].tl = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].tr = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].bl = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].br = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
-
-
         legs = [env[ms].tl.get_legs(1).conj(),
                 A._data[ms].get_legs(0).conj(),
                 A._data[ms].get_legs(0),
                 env[ms].tr.get_legs(0).conj()]
         env[ms].t = rand(config=config, legs=legs)
-
         legs = [env[ms].br.get_legs(1).conj(),
                 A._data[ms].get_legs(2).conj(),
                 A._data[ms].get_legs(2),
                 env[ms].bl.get_legs(0).conj()]
         env[ms].b = rand(config=config, legs=legs)
-
         legs = [env[ms].bl.get_legs(1).conj(),
                 A._data[ms].get_legs(1).conj(),
                 A._data[ms].get_legs(1),
                 env[ms].tl.get_legs(0).conj()]
         env[ms].l = rand(config=config, legs=legs)
-
         legs = [env[ms].tr.get_legs(1).conj(),
                 A._data[ms].get_legs(3).conj(),
                 A._data[ms].get_legs(3),
                 env[ms].br.get_legs(0).conj()]
         env[ms].r = rand(config=config, legs=legs)
-
         env[ms].t = env[ms].t.fuse_legs(axes=(0, (1, 2), 3))
         env[ms].b = env[ms].b.fuse_legs(axes=(0, (1, 2), 3))
         env[ms].l = env[ms].l.fuse_legs(axes=(0, (1, 2), 3))
@@ -176,7 +167,7 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
             norm_prob = env.measure(bd=(nx - 1, nx))
             for proj in loc_projectors:
                 dpt_pr = dpt.copy()
-                dpt_pr.A = tensordot(dpt_pr.A, proj, axes=(4, 0))
+                dpt_pr.A = tensordot(dpt_pr.A, proj, axes=(4, 1))
                 O[nx] = dpt_pr
                 env.update_env(nx, to='last')
                 prob.append(env.measure(bd=(nx, nx+1)) / norm_prob)
@@ -184,7 +175,7 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
             rand = rands[count]
             ind = sum(apr < rand for apr in accumulate(prob))
             out[(nx, ny)] = ind
-            dpt.A = tensordot(dpt.A, loc_projectors[ind], axes=(4, 0))
+            dpt.A = tensordot(dpt.A, loc_projectors[ind], axes=(4, 1))
             O[nx] = dpt
             env.update_env(nx, to='last')
             count += 1

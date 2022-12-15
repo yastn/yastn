@@ -2,3 +2,5 @@
 from .tensor import *
 from .initialize import *
 from . import operators
+BETA_MULTIPLIER = 10000
+
