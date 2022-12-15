@@ -526,6 +526,24 @@ def fuse_ancilla_ws(op, fid, dirn):
         op = op.fuse_legs(axes=((0, 3), (1, 2), 4))
     return op
 
+
+
+def fPEPS_only_spin(A, B=None, op=None):
+
+    if op is not None:
+        B = A.swap_gate(axes=(0, 1, 2, 3))
+        A = A.unfuse_legs(axes=4)
+        Ao = tensordot(A, op, axes=(4, 1))
+        Ao = Ao.fuse_legs(axes=(0, 1, 2, 3, (5, 4)))
+        AAb = DoublePepsTensor(top=Ao, btm=B)
+    elif op is None:
+        Ao = A
+        B = A.swap_gate(axes=(0, 1, 2, 3))
+        AAb = DoublePepsTensor(top=Ao, btm=B)
+
+    return AAb
+
+
 def fPEPS_2layers(A, B=None, op=None, dir=None):
     """ 
     Prepare top and bottom peps tensors for CTM procedures.

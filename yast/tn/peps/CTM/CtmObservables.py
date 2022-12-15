@@ -1,6 +1,7 @@
 from .CtmIterationRoutines import check_consistency_tensors
-from .CtmIterationRoutines import fPEPS_2layers
-from .CtmObservableRoutines import ret_AAbs, hor_extension, ver_extension
+from .CtmIterationRoutines import fPEPS_2layers, fPEPS_only_spin
+from .CtmObservableRoutines import ret_AAbs, hor_extension, ver_extension, apply_TMO_left, con_bi
+import yast
 import numpy as np
 
 def nn_avg(Gamma, net, env, op):
@@ -40,3 +41,46 @@ def nn_bond(Gamma, net, env, op, bd):
     AAb = {'l': fPEPS_2layers(Gamma._data[bd.site_0]), 'r': fPEPS_2layers(Gamma._data[bd.site_1])}
     val = hor_extension(env, bd, AAbo, AAb) if bd.dirn == 'h' else ver_extension(env, bd, AAbo, AAb)
     return val
+
+def measure_one_site_spin(A, ms, env, op=None):
+
+    if op is not None:
+        AAb = fPEPS_2layers(A, op=op, dir='1s')
+    elif op is None:
+        AAb = fPEPS_2layers(A)
+    vecl = yast.tensordot(env[ms].l, env[ms].tl, axes=(2, 0))
+    vecl = yast.tensordot(env[ms].bl, vecl, axes=(1, 0))
+    new_vecl = apply_TMO_left(vecl, env, ms, AAb)
+    vecr = yast.tensordot(env[ms].tr, env[ms].r, axes=(1, 0)) 
+    vecr = yast.tensordot(vecr, env[ms].br, axes=(2, 0))
+    hor = con_bi(new_vecl, vecr)
+    return hor
+
+def measure_one_site_only_spin(A, ms, env, op=None):
+
+    if op is not None:
+        AAb = fPEPS_only_spin(A, op=op)
+    elif op is None:
+        AAb = fPEPS_only_spin(A)
+    vecl = yast.tensordot(env[ms].l, env[ms].tl, axes=(2, 0))
+    vecl = yast.tensordot(env[ms].bl, vecl, axes=(1, 0))
+    new_vecl = apply_TMO_left(vecl, env, ms, AAb)
+    vecr = yast.tensordot(env[ms].tr, env[ms].r, axes=(1, 0)) 
+    vecr = yast.tensordot(vecr, env[ms].br, axes=(2, 0))
+    hor = con_bi(new_vecl, vecr)
+    return hor
+
+def one_site_avg(Gamma, net, env, op):
+
+    Gamma = check_consistency_tensors(Gamma, net)
+    one_site_exp = np.zeros((net.Nx*net.Ny))
+    s = 0
+    for ms in net.sites():
+        print('site: ', ms)
+        val_op = measure_one_site_spin(Gamma[ms], ms, env, op=op)
+        val_norm = measure_one_site_spin(Gamma[ms], ms, env, op=None)
+        one_site_exp[s] = val_op/val_norm
+        print(one_site_exp[s])
+        s = s+1
+    
+    return np.mean(one_site_exp)
