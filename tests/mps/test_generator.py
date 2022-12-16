@@ -193,7 +193,16 @@ def test_generator_mps():
 
 def test_generator_mpo():
     # uniform chain with nearest neighbor hopping
-    H_str = "\sum_{j,k \in rangeNN} t_{j,k} (cp_{j} c_{k}+cp_{k} c_{j})+\sum_{j \in rangeN} mu cp_{j} c_{j}"
+    # notation:
+    # * in the sum there are all elements which are connected by multiplication, so \sum_{.} -1 ... shuold be \sum_{.} (-1) ...
+    # * 1j is an imaginary number
+    # * multiple sums are supported so you can write \sum_{.} \sum_{.} ...
+    # * multiplication of the sum is allowed but '*' or bracket is needed.
+    #   ---> this is an artifact of allowing space=' ' to be equivalent to multiplication
+    #   E.g.1, 2 \sum... can be written as 2 (\sum...) or 2 * \sum... or (2) * \sum...
+    #   E.g.2, \sum... \sum.. write as \sum... * \sum... or (\sum...) (\sum...)
+    #   E.g.4, -\sum... is supported and equivalent to (-1) * \sum...
+    H_str = "\sum_{j,k \in rangeNN} t_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in rangeN} mu cp_{i} c_{i}"
     for sym in ['Z2', 'U(1)']:
         operators = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
         for t in [0,0.2, -0.3]:
@@ -215,7 +224,7 @@ def test_generator_mpo():
                         
                         H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
                         H = generate.mpo(H_str, eparam)
-                        
+              
                         psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
                         x_ref = mps.measure_mpo(psi, H_ref, psi).item()
                         x = mps.measure_mpo(psi, H, psi).item()
@@ -226,6 +235,7 @@ def test_generator_mpo():
                         x_ref = mps.measure_mpo(psi, H_ref, psi).item()
                         x = mps.measure_mpo(psi, H, psi).item()
                         assert abs(x_ref - x) < tol
+                        exit()
 
 def mpo_Ising_model():
     pass

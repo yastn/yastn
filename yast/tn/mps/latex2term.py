@@ -121,27 +121,6 @@ def splitt(b, eq_it):
     id_stop = [i for i, x in enumerate(b) if x == ")"]
     if len(id_start) != len(id_stop):
         raise gen_parameratorError("Inconsistent brackets!")
-    """
-    # remove those we don't need
-    if len(id_start) > 0:
-        if id_start[0] == 0 and id_stop[-1] == len(b)-1:
-            is_bad = False
-            res = 0
-            tmp = b.copy()
-            b = b[1:-1]
-            for n in range(len(b)):
-                if b[n] == '(':
-                    res += 1
-                elif b[n] == ')':
-                    res -= 1
-                if res < 0:
-                    is_bad = True
-                    break
-            if is_bad == True:
-                b = tmp
-            else:
-                return splitt(b, 0)
-    """
     # check sums
     id_startX = [i for i, x in enumerate(b) if x == "sum"]
     id_stopX = [i for i, x in enumerate(b) if x == "endsum"]
@@ -203,16 +182,14 @@ def splitt(b, eq_it):
         # Control buffer/tunnel flow
         tunnel_closed = (sig not in operation or bracket_open!=0) or sum_open > 0
         if tunnel_closed:
-            if operation == "*" and sig == '(' and bracket_open == 1:
+            if operation == "*" and (sig =='(' and bracket_open == 1):
                 if len(buffer) == 1:
                     tunnel.append(*buffer)
                 else:
                     if buffer:
                         tunnel += [buffer]
                 buffer = []
-                #buffer.append(sig)
-            elif operation == "*" and sig == ')' and bracket_open == 0:
-                #buffer.append(sig)
+            elif operation == "*" and (sig == ')' and bracket_open == 0):
                 if buffer: 
                     tunnel += [buffer]
                 buffer = []
@@ -240,11 +217,10 @@ def string2list(c0):
         return []
     else:
         # replace muiltiple spaces with a single space
-        c0 = c0.replace("-", "+ minus *")
+        c0 = c0.replace("-", " + minus * ")
         c0 = c0.replace("\sum_", " sum ")
         for ix in ["+","*","(",")"]:
             c0 = c0.replace(ix, " "+ix+" ")
-        c0 = c0.replace("*", " ")
         c0 = " ".join(c0.split())
         c0 = c0.replace(" \in", "\in").replace("\in ", "\in")
         c0 = c0.replace("\in", ".in.")
