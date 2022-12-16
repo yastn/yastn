@@ -171,13 +171,12 @@ def mpo_XX_model(config, N, t, mu):
         return mpo_XX_model_U1(config, N, t, mu)
 
 
-
 def test_generator_mps():
     N = 10
     D_total = 16
     bds = (1,) + (D_total,) * (N - 1) + (1,)
 
-    for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U1', (N // 2,))):
+    for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U(1)', (N // 2,))):
         operators = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
         generate = mps.Generator(N, operators)
         I = generate.I()
@@ -193,29 +192,40 @@ def test_generator_mps():
 
 
 def test_generator_mpo():
-    N = 5
-    t = 1
-    mu = 0.2
-    operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
-    generate = mps.Generator(N, operators)
-    generate.random_seed(seed=0)
-    parameters = {"t": lambda j: t, "mu": mu, "rangeN": range(N), "rangeNN": zip(range(N-1), range(1,N))}
-    
-    H_str = "\sum {j,k.\in.rangeNN} ( t_{j} * 1 + 0 ) * ( cp_{j} * c_{k} + cp_{k} * c_{j} ) + \sum {j.\in.rangeN} mu * cp_{j} * c_{j}"
-    
-    H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
-    H = generate.mpo(H_str, parameters)
-    
-    psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
-    x_ref = mps.measure_mpo(psi, H_ref, psi).item()
-    x = mps.measure_mpo(psi, H, psi).item()
-    assert abs(x_ref - x) < tol
+    # uniform chain with nearest neighbor hopping
+    H_str = "\sum_{j,k \in rangeNN} t_{j,k} (cp_{j} c_{k}+cp_{k} c_{j})+\sum_{j \in rangeN} mu cp_{j} c_{j}"
+    for sym in ['Z2', 'U(1)']:
+        operators = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+        for t in [0,0.2, -0.3]:
+            for mu in [0.2, -0.3]:
+                for N in [3,5]:
+                    example_mapping = (\
+                                        {i: i for i in range(N)},\
+                                        {str(i): i for i in range(N)},\
+                                        {(str(i), 'A'): i for i in range(N)},\
+                    )
+                    example_parameters = (\
+                        {"t": t * np.ones((N,N)), "mu": mu, "rangeN": [i for i in range(N)], "rangeNN": zip([i for i in range(N-1)], [i for i in range(1,N)])},\
+                        {"t": t * np.ones((N,N)), "mu": mu, "rangeN": [str(i) for i in range(N)], "rangeNN": zip([str(i) for i in range(N-1)], [str(i) for i in range(1,N)])},\
+                        {"t": t * np.ones((N,N)), "mu": mu, "rangeN": [(str(i),'A') for i in range(N)], "rangeNN": zip([(str(i),'A') for i in range(N-1)], [(str(i),'A') for i in range(1,N)])},\
+                    )
+                    for (emap, eparam) in zip(example_mapping, example_parameters):
+                        generate = mps.Generator(N, operators, map=emap)
+                        generate.random_seed(seed=0)
+                        
+                        H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
+                        H = generate.mpo(H_str, eparam)
+                        
+                        psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
+                        x_ref = mps.measure_mpo(psi, H_ref, psi).item()
+                        x = mps.measure_mpo(psi, H, psi).item()
+                        assert abs(x_ref - x) < tol
 
-    psi.canonize_sweep(to='first')
-    psi.canonize_sweep(to='last')
-    x_ref = mps.measure_mpo(psi, H_ref, psi).item()
-    x = mps.measure_mpo(psi, H, psi).item()
-    assert abs(x_ref - x) < tol
+                        psi.canonize_sweep(to='first')
+                        psi.canonize_sweep(to='last')
+                        x_ref = mps.measure_mpo(psi, H_ref, psi).item()
+                        x = mps.measure_mpo(psi, H, psi).item()
+                        assert abs(x_ref - x) < tol
 
 def mpo_Ising_model():
     pass

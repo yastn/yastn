@@ -6,6 +6,7 @@ class gen_parameratorError(Exception):
     pass
 
 basic_operation = ["+", "*"]
+# "*" and space is accepted as multiplication
 
 class single_term(NamedTuple):
     # Helper object to perform operations on elements
@@ -27,11 +28,12 @@ def issingle_term(d):
         return False
 
 def replace_index(single_term_el, old_name, new_name):
-    old_name = [old_name] if not isinstance(old_name, (list, tuple)) else old_name
-    new_name = [new_name] if not isinstance(new_name, (list, tuple)) else new_name
+    # old_name and new_name have to be list or tuple
+    old_name = old_name
+    new_name = [new_name] if len(old_name)==1 else new_name
     if len(old_name) != len(new_name):
         raise gen_parameratorError("Number of iterators and indicies is inconsistent.")
-    # returns single_term
+    # return single_term with a new index
     new_op = []
     for op in single_term_el.op:
         for jold, jnew in zip(old_name, new_name):
@@ -114,12 +116,12 @@ def splitt(b, eq_it):
         raise gen_parameratorError("Not supported. You provided an empty list or there is no such basic operation.")
     # split against that operation
     operation = basic_operation[eq_it]
-
     # check brackets
     id_start = [i for i, x in enumerate(b) if x == "("]
     id_stop = [i for i, x in enumerate(b) if x == ")"]
     if len(id_start) != len(id_stop):
         raise gen_parameratorError("Inconsistent brackets!")
+    """
     # remove those we don't need
     if len(id_start) > 0:
         if id_start[0] == 0 and id_stop[-1] == len(b)-1:
@@ -139,8 +141,8 @@ def splitt(b, eq_it):
                 b = tmp
             else:
                 return splitt(b, 0)
-    
-    # check brackets
+    """
+    # check sums
     id_startX = [i for i, x in enumerate(b) if x == "sum"]
     id_stopX = [i for i, x in enumerate(b) if x == "endsum"]
     if len(id_startX) and len(id_startX) == len(id_stopX):
@@ -161,23 +163,20 @@ def splitt(b, eq_it):
                 in_sum = tmp[1:] if len(tmp) > 2 else tmp[1]
                 return ("sum", tmp[0]), splitt(in_sum, 0)
     
-    # If a single string gen_paramerate single_term
-    if not isinstance(b, list) or len(b) == 1:
-        # Ends recursion.
-        op = (get_variable(b),) if isinstance(b, str) else (get_variable(b[0]),)
-        return [single_term(op=op)]
     
     # Check if there are any basic operations
-    id_operation = [i for i, x in enumerate(b) if x is operation]
+    # If a single string gen_paramerate single_term
+    #if not isinstance(b, list) or len(b) == 1:
+    #    # Ends recursion.
+    #    op = (get_variable(b),) if isinstance(b, str) else (get_variable(b[0]),)
+    #    return [single_term(op=op)]
+    
     id_basic_operation = [i for i, x in enumerate(b) if x in basic_operation]
-    if not "sum" in b and not id_basic_operation:
+    if not "sum" in b and not id_basic_operation and '(' not in b:
         # There is no recognized operation between objects. Assume it is a multiplication.
-        # TODO: Is there any nicer way to do sth multiple times?
-        [b.insert((ib+1)*2-1, "*") for ib in range(len(b)-1)]
-        return splitt(b, 1)
-    if not id_operation and id_basic_operation:
-        # Check another operation if this one is not here
-        return splitt(b, (eq_it + 1)%len(basic_operation))
+        op = tuple([get_variable(ib) for ib in b]) if isinstance(b, list) else (get_variable(b),)
+        return [single_term(op=op)]
+
     # Main splitter loop
     n, bracket_open, sum_open = 0, 0, 0
     # tunnel - list of elements connected by the operation
@@ -204,23 +203,38 @@ def splitt(b, eq_it):
         # Control buffer/tunnel flow
         tunnel_closed = (sig not in operation or bracket_open!=0) or sum_open > 0
         if tunnel_closed:
-            buffer.append(sig)
+            if operation == "*" and sig == '(' and bracket_open == 1:
+                if len(buffer) == 1:
+                    tunnel.append(*buffer)
+                else:
+                    if buffer:
+                        tunnel += [buffer]
+                buffer = []
+                #buffer.append(sig)
+            elif operation == "*" and sig == ')' and bracket_open == 0:
+                #buffer.append(sig)
+                if buffer: 
+                    tunnel += [buffer]
+                buffer = []
+            else:
+                buffer.append(sig)
         else:
             if len(buffer) == 1:
                 tunnel.append(*buffer)
-            else:    
-                tunnel += [buffer]
+            else:
+                if buffer:
+                    tunnel += [buffer]
             buffer = []
             tunnel_closed = False
     [buffer.append("endsum") for _ in range(sum_open)]
     if len(buffer) == 1:
         tunnel.append(*buffer)
     else:
-        tunnel += [buffer]
-    out = tunnel
+        if buffer:
+            tunnel += [buffer]
     # Apply interpreter to all elements separated by the operation
-    return operation, list(map(lambda x: splitt(x, (eq_it + 1)%len(basic_operation)), out))
-
+    return operation, list(map(lambda x: splitt(x, (eq_it + 1)%len(basic_operation)), tunnel))
+    
 def string2list(c0):
     if not c0:
         return []
