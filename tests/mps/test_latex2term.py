@@ -18,8 +18,8 @@ def test_latex2term_unit_tests():
                 "\sum_{j\in range}\sum_{k\in range_L}(a_j+b_k)   ",\
                 )
     test_examples_A1 = (["s_j","+","d_j","+","1","+","2","+","3"],\
-                    ["s_j","+","minus","d_j","+","1","+","minus","2","+","3"],\
-                    ["s_j","+","minus","d_j","+","1","+","minus","2","+","3"],\
+                    ["s_j","+","minus",'*',"d_j","+","1","+","minus",'*',"2","+","3"],\
+                    ["s_j","+","minus",'*',"d_j","+","1","+","minus",'*',"2","+","3"],\
                     ["sum","{j.in.range}","(","a_j","+","b_j", ")"],\
                     ["sum","{j.in.range}","(","a_j","+","b_j", ")"],\
                     ["sum","{j.in.range}","(","a_j","+","b_j", ")"],\
