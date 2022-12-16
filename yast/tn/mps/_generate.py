@@ -108,7 +108,7 @@ class Generator:
         """
         self.N = N
         self._ops = operators
-        self._map = {(i,): i for i in range(N)} if map is None else map
+        self._map = {i: i for i in range(N)} if map is None else map
         if len(self._map) != N or sorted(self._map.values()) != list(range(N)):
             raise YampsError("Map is inconsistent with mps of N sites.")
         self._Is = {k: 'I' for k in self._map.keys()} if Is is None else Is
@@ -121,9 +121,11 @@ class Generator:
         for label, site in self._map.items():
             local_I = getattr(self._ops, self._Is[label])
             self._I.A[site] = local_I().add_leg(axis=0, s=1).add_leg(axis=2, s=-1)
-
+        
         self.config = self._I.A[0].config
         self.parameters = {} if parameters is None else parameters
+        self.parameters["minus"] = -float(1.0)
+        self.parameters["1j"] = 1j
 
         self.opts = opts
 
@@ -229,9 +231,7 @@ class Generator:
         --------
             :class:`yamps.Mpo`
         """
-        self.parameters = parameters
-        self.parameters["minus"] = -float(1.0) # TODO: check if works fine. What is duplicates?
-        self.parameters["1j"] = -1j
+        self.parameters = {**self.parameters, **parameters}
         c2 = latex2term(H_str, self.parameters)
         c3 = self.term2Hterm(c2)
         return generate_mpo(self._I, c3)
@@ -239,26 +239,34 @@ class Generator:
     def term2Hterm(self, c2):
         # can be used with latex-form interpreter or alone.
         # TODO: write separate test
-        fin_list = []
+        Hterm_list = []
+        basis_operators = self._ops.to_dict()
+        basis_parameters = self.parameters
         for ic in c2:
-            amplitude, positions, operators = 1, [], []
+            # create a single Hterm using single_term
+            amplitude, positions, operators = float(1), [], []
             for iop in ic.op:
-                if len(iop)==1:
-                    amplitude *= self.parameters[iop[0]] if iop[0] in self.parameters else float(iop[0])
+                element, *indicies = iop
+                if element in basis_parameters:
+                    # TODO: self._map has to be obeyed for parameters.
+                    # can have many indicies for cross terms
+                    mapindex = tuple([self._map[ind] for ind in indicies]) if indicies else None
+                    # TODO: element has to be numpy array or number
+                    amplitude *= basis_parameters[element] if mapindex is None else basis_parameters[element][mapindex]
+                elif element in basis_operators:
+                    # is always a single index for each site
+                    mapindex = self._map[indicies[0]] if len(indicies) == 1 else YampsError("Operator has to have single index as defined by self._map")
+                    positions.append(mapindex) 
+                    operators.append(basis_operators[element](mapindex))
                 else:
-                    name, indicies = iop[0], self._map[iop[1:]]
-                    if name in self.parameters:
-                        operators.append(self.parameters[name](indicies))
-                    else:
-                        positions.append(indicies)
-                        operators.append(self._ops.to_dict()[name](indicies))
-            fin_list.append(Hterm(amplitude, positions, operators))
-        return fin_list
+                    # the only other option is that is a numberm, imaginary number is in self.parameters 
+                    amplitude *= float(element)
+            Hterm_list.append(Hterm(amplitude, positions, operators))
+        return Hterm_list
 
 def random_dense_mps(N, D, d, **kwargs):
     G = Generator(N, Qdit(d=d, **kwargs))
     return G.random_mps(D_total=D)
-
 
 def random_dense_mpo(N, D, d, **kwargs):
     G = Generator(N, Qdit(d=d, **kwargs))
