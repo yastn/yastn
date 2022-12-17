@@ -284,6 +284,7 @@ def mpo_random_hopping():
     psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
     x_man = mps.measure_mpo(psi, h_man, psi).item()
     x_str = mps.measure_mpo(psi, h_str, psi).item()
+    
     assert abs(x_man - x_str) < tol
 
 
