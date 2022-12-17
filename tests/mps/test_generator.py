@@ -177,8 +177,8 @@ def test_generator_mps():
     bds = (1,) + (D_total,) * (N - 1) + (1,)
 
     for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U(1)', (N // 2,))):
-        operators = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
-        generate = mps.Generator(N, operators)
+        ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+        generate = mps.Generator(N, ops)
         I = generate.I()
         assert pytest.approx(mps.measure_overlap(I, I).item(), rel=tol) == 2 ** N
         O = I @ I + (-1 * I)
@@ -204,7 +204,7 @@ def test_generator_mpo():
     #   E.g.4, -\sum... is supported and equivalent to (-1) * \sum...
     H_str = "\sum_{j,k \in rangeNN} t_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in rangeN} mu cp_{i} c_{i}"
     for sym in ['Z2', 'U(1)']:
-        operators = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+        ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
         for t in [0,0.2, -0.3]:
             for mu in [0.2, -0.3]:
                 for N in [3,5]:
@@ -219,7 +219,7 @@ def test_generator_mpo():
                         {"t": t * np.ones((N,N)), "mu": mu, "rangeN": [(str(i),'A') for i in range(N)], "rangeNN": zip([(str(i),'A') for i in range(N-1)], [(str(i),'A') for i in range(1,N)])},\
                     )
                     for (emap, eparam) in zip(example_mapping, example_parameters):
-                        generate = mps.Generator(N, operators, map=emap)
+                        generate = mps.Generator(N, ops, map=emap)
                         generate.random_seed(seed=0)
                         
                         H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
@@ -235,11 +235,59 @@ def test_generator_mpo():
                         x_ref = mps.measure_mpo(psi, H_ref, psi).item()
                         x = mps.measure_mpo(psi, H, psi).item()
                         assert abs(x_ref - x) < tol
-                        exit()
 
-def mpo_Ising_model():
-    pass
+def mpo_random_hopping():
+    
+    # the model is random with handom hopping and on-site energies. sym is symmetry for tensors we will use
+    sym, N = 'U(1)', 3
+    
+    # generate set of basic ops for the model we want to work with
+    ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+    
+    # generate data for random Hamiltonian
+    amplitudes1 = np.random.rand(N, N)
+    param1 = amplitudes1 - np.diag(np.diag(amplitudes1))
+    param2 = np.diag(amplitudes1)
+    
+    # use this map which is used for naming the sites in MPO
+    # maps between iteractors and MPO
+    emap = {i: i for i in range(N)}
+    
+    # create a generator initialized for emap mapping
+    generate = mps.Generator(N, ops, map=emap)
+    generate.random_seed(seed=0)
+    
+    # define parameters for automatic generator and Hamiltonian in a latex-like form
+    eparam ={"t": param1, "mu": param2, "rangeN": range(N)}
+    h_input = "\sum_{j\in rangeN} \sum_{k\in rangeN} t_{j,k} (cp_{j} c_{k} + cp_{k} c_{j}) + \
+            \sum_{j\in rangeN} mu_{j} cp_{j} c_{j}"
+    
+    # generate MPO from latex-like input
+    h_str = generate.mpo(h_input, eparam)
+
+    # generate Hamiltonian manually
+    man_input = []
+    for j, val in enumerate(param2):
+        man_input.append(mps.Hterm(val, (j, j,), (ops.cp(), ops.c(),)))
+    
+    for j, row in enumerate(param1):
+        for k, val in enumerate(row):
+            man_input.append(mps.Hterm(val, (j, k,), (ops.cp(), ops.c(),)))
+            man_input.append(mps.Hterm(val, (k, j,), (ops.cp(), ops.c(),)))
+    h_man = mps.generate_mpo(generate.I(), man_input)
+    
+    # test the result by comparing expectation value for a steady state.
+    # use random seed to generate mps
+    generate.random_seed(seed=0)
+
+    # generate mps and compare overlaps
+    psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
+    x_man = mps.measure_mpo(psi, h_man, psi).item()
+    x_str = mps.measure_mpo(psi, h_str, psi).item()
+    assert abs(x_man - x_str) < tol
+
 
 if __name__ == "__main__":
-    #test_generator_mps()
-    test_generator_mpo()
+    test_generator_mps()
+    #test_generator_mpo()
+    mpo_random_hopping()
