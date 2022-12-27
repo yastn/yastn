@@ -80,22 +80,22 @@ if __name__== '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-L", default='rectangle')     # lattice shape
  #   parser.add_argument("-DIM", type=tuple, default=(2, 2))   # lattice dimension in x-dirn
-    parser.add_argument("-x", type=int, default=2)   # lattice dimension in x-dirn
-    parser.add_argument("-y", type=int, default=2)   # lattice dimension in y-dirn
+    parser.add_argument("-x", type=int, default=5)   # lattice dimension in x-dirn
+    parser.add_argument("-y", type=int, default=5)   # lattice dimension in y-dirn
     parser.add_argument("-B", type=str, default='finite') # boundary
-    parser.add_argument("-p", type=str, default='True') # bool
-    parser.add_argument("-D", type=int, default=12)            # bond dimension or distribution of virtual legs of peps tensors,  input can be either an 
+    parser.add_argument("-p", type=str, default='False') # bool
+    parser.add_argument("-D", type=int, default=4)            # bond dimension or distribution of virtual legs of peps tensors,  input can be either an 
                                                                # integer representing total bond dimension or a string labeling a sector-wise 
                                                                # distribution of bond dimensions in yaps.operators.import_distribution
-    parser.add_argument("-I", type=float, default=0.01)         # interval of beta at which we want to measure observables
+    parser.add_argument("-I", type=float, default=0.1)         # interval of beta at which we want to measure observables
     parser.add_argument("-S", default='U1xU1_ind')             # symmetry -- Z2xZ2 or U1xU1
     parser.add_argument("-M_UP", type=float, default=0.0)      # chemical potential up
     parser.add_argument("-M_DOWN", type=float, default=0.0)    # chemical potential down
-    parser.add_argument("-U", type=float, default=0.)          # hubbard interaction
+    parser.add_argument("-U", type=float, default=12.)          # hubbard interaction
     parser.add_argument("-TUP", type=float, default=1.)        # hopping_up
     parser.add_argument("-TDOWN", type=float, default=1.)      # hopping_down
-    parser.add_argument("-E", type=float, default=10)         # beta end
-    parser.add_argument("-DBETA", type=float, default=0.01)   # dbeta
+    parser.add_argument("-E", type=float, default=20)         # beta end
+    parser.add_argument("-DBETA", type=float, default=0.005)   # dbeta
     parser.add_argument("-STEP", default='two-step')           # truncation can be done in 'one-step' or 'two-step'. note that truncations done 
                                                                # with svd update or when we fix the symmetry sectors are always 'one-step'
     parser.add_argument("-MODE", default='optimal')             # truncation mode can be svd (without NTU), normal (NTU without EAT), optimal (NTU with EAT)

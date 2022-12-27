@@ -2,7 +2,8 @@ from typing import NamedTuple, Tuple
 from itertools import accumulate
 from dataclasses import dataclass
 from ....tn import mps
-from yast.tn.peps import Lattice
+#from yast.tn.peps import Lattice
+from yast.tn.peps import Peps
 from yast.tn.peps.operators.gates import match_ancilla_1s
 from yast import rand, tensordot
 
@@ -13,22 +14,24 @@ class ctm_window(NamedTuple):
     sw : Tuple
     se : Tuple
 
-class CtmEnv(Lattice):
-    def __init__(self, ket, bra=None):
-        super().__init__(lattice=ket.lattice, dims=ket.dims, boundary=ket.boundary)
-        self.ket = ket
-        self.bra = ket if bra is None else bra
+class CtmEnv(Peps):
+    def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
+        super().__init__(lattice=lattice, dims=dims, boundary=boundary)
+        #self.ket = ket
+        #self.bra = ket if bra is None else bra
         ## assert that ket and bra are matching ....
         inds = set(self.site2index(site) for site in self._sites)
-        self = {ind: None for ind in inds}
+        self._data = {ind: None for ind in inds}  # I don't know what to do with ket and bra; for now I am importing the double peps tensors 
+                                                  # within the CtmEnv structure
 
     def __getitem__(self, site):
         assert site in self._sites, "Site is inconsistent with lattice"
-        return self[self.site2index(site)]
+        return self._data[self.site2index(site)]
+
 
     def __setitem__(self, site, local_env):
         assert site in self._sites, "Site is inconsistent with lattice"
-        self[self.site2index(site)] = local_env
+        self._data[self.site2index(site)] = local_env
 
 
     def tensors_CtmEnv(self, trajectory):
@@ -98,35 +101,36 @@ def CtmEnv2Mps(net, env, index, index_type):
     return H
 
 
-def init_rand(A, tc, Dc):
+def init_rand(AAb, tc, Dc):
     """ Initialize random CTMRG environments of peps tensors A. """
-    config = A[0, 0].config 
+
+    config = AAb[(0,0)].A.config 
     env= {}
 
-    for ms in A.sites():
+    for ms in AAb.sites():
         env[ms] = Local_CTM_Env()
         env[ms].tl = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].tr = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].bl = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].br = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         legs = [env[ms].tl.get_legs(1).conj(),
-                A[ms].get_legs(0).conj(),
-                A[ms].get_legs(0),
+                AAb[ms].A.get_legs(0).conj(),
+                AAb[ms].A.get_legs(0),
                 env[ms].tr.get_legs(0).conj()]
         env[ms].t = rand(config=config, legs=legs)
         legs = [env[ms].br.get_legs(1).conj(),
-                A[ms].get_legs(2).conj(),
-                A[ms].get_legs(2),
+                AAb[ms].A.get_legs(2).conj(),
+                AAb[ms].A.get_legs(2),
                 env[ms].bl.get_legs(0).conj()]
         env[ms].b = rand(config=config, legs=legs)
         legs = [env[ms].bl.get_legs(1).conj(),
-                A[ms].get_legs(1).conj(),
-                A[ms].get_legs(1),
+                AAb[ms].A.get_legs(1).conj(),
+                AAb[ms].A.get_legs(1),
                 env[ms].tl.get_legs(0).conj()]
         env[ms].l = rand(config=config, legs=legs)
         legs = [env[ms].tr.get_legs(1).conj(),
-                A[ms].get_legs(3).conj(),
-                A[ms].get_legs(3),
+                AAb[ms].A.get_legs(3).conj(),
+                AAb[ms].A.get_legs(3),
                 env[ms].br.get_legs(0).conj()]
         env[ms].r = rand(config=config, legs=legs)
         env[ms].t = env[ms].t.fuse_legs(axes=(0, (1, 2), 3))

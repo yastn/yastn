@@ -19,7 +19,6 @@ from yast.tn.peps.CTM import nn_avg, nn_bond, one_site_avg, Local_CTM_Env, EVcor
 def lattice_view_expectation_values_hole(lattice, boundary, purification, xx, yy, D, sym, beta, UU, mu_up, mu_dn, t_up, t_dn, step, tr_mode, fix_bd):
 
     dims=(xx, yy)
-    net = peps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
     opt = yast.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
 
@@ -28,8 +27,8 @@ def lattice_view_expectation_values_hole(lattice, boundary, purification, xx, yy
     n_int = n_up @ n_dn
     hole_density = (fid-n_up)@(fid-n_dn)
     
-    x_target = round((net.Nx-1)*0.5)
-    y_target = round((net.Ny-1)*0.5)
+    x_target = round((xx-1)*0.5)
+    y_target = round((yy-1)*0.5)
     target_site = (x_target, y_target)
 
     def exp_1s(A, ms, env1, op): 

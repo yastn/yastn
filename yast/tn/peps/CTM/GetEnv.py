@@ -27,19 +27,19 @@ def GetEnv(A, chi=32, cutoff=1e-10, prec=1e-7, nbitmax=10, tcinit=(), Dcinit=(1,
     """
 
     A = check_consistency_tensors(A) # to check if A has the desired fused form of legs i.e. t l b r [s a]
-    AAb = {m: fPEPS_2layers(A[m]) for m in A.sites()}
+    AAb = CtmEnv(lattice=A.lattice, dims=A.dims, boundary='infinite') #CtmEnv puts A into a double peps structure to be used for Ctm Iterations
+    for ms in A.sites():
+        AAb[ms] = fPEPS_2layers(A[ms])
 
     if AAb_mode >= 1:
         fPEPS_fuse_layers(AAb)
-
-    net = peps.Peps(lattice=A.lattice, dims=A.dims, boundary='infinite')
   
     if init_env == 'rand':
-        env = init_rand(A, tcinit, Dcinit)  # random initialization
+        env = init_rand(AAb, tcinit, Dcinit)  # random initialization
 
     for ctr in range(nbitmax):
         logging.info('CTM iteration: %2d', ctr+1)
-        env, proj_hor, proj_ver = CTM_it(net, env, AAb, chi, cutoff)
+        env, proj_hor, proj_ver = CTM_it(env, AAb, chi, cutoff)
     
     logging.info('CTM completed sucessfully')
 
