@@ -5,7 +5,7 @@ import yast
 import numpy as np
 
 def nn_avg(Gamma, env, op):
-    # main function which calculates the nearest neighbor correlators on all bonds and averages them
+    """ Calculates the nearest neighbor correlators on all bonds and averages them """
     Gamma = check_consistency_tensors(Gamma)
     obs_hor = {}
     obs_ver = {}
@@ -33,8 +33,8 @@ def nn_avg(Gamma, env, op):
 
 
 def nn_bond(Gamma, env, op, bd):
-    # calculation of correlator on a desired bond in the lattice
-    # useful when you don't need the average value
+    """ calculates correlator on a desired bond in the lattice
+     useful when you don't need the average value """
 
     Gamma = check_consistency_tensors(Gamma)
     AAbo = ret_AAbs(Gamma, bd, op, orient=bd.dirn)
@@ -43,7 +43,7 @@ def nn_bond(Gamma, env, op, bd):
     return val
 
 def measure_one_site_spin(A, ms, env, op=None):
-
+    """ measures the overlap of bra and ket on a single site """
     if op is not None:
         AAb = fPEPS_2layers(A, op=op, dir='1s')
     elif op is None:
@@ -58,8 +58,9 @@ def measure_one_site_spin(A, ms, env, op=None):
 
 
 def one_site_avg(Gamma, env, op, flag=None):
+    """ measures the expectation values of single site operators all over the lattice """
 
-    mat = np.zeros((Gamma.Nx, Gamma.Ny))
+    mat = np.zeros((Gamma.Nx, Gamma.Ny))  # output returns the expectation value on every site
 
     target_site = (round((Gamma.Nx-1)*0.5), round((Gamma.Ny-1)*0.5))
     Gamma = check_consistency_tensors(Gamma)
@@ -76,7 +77,7 @@ def one_site_avg(Gamma, env, op, flag=None):
                 val_norm = measure_one_site_spin(Am, ms, env, op=None)
                 one_site_exp[s] = val_op/val_norm
                 print(one_site_exp[s])
-                cs_val = one_site_exp[s]
+                cs_val = one_site_exp[s]   # expectation value of particular target site
                 mat[ms[0],ms[1]] = one_site_exp[s]
 
                 s = s+1
@@ -93,7 +94,7 @@ def one_site_avg(Gamma, env, op, flag=None):
         
             val_op = measure_one_site_spin(Am, ms, env, op=op)
             val_norm = measure_one_site_spin(Am, ms, env, op=None)
-            one_site_exp[s] = val_op/val_norm
+            one_site_exp[s] = val_op/val_norm   # expectation value of particular target site
             print(one_site_exp[s])
             mat[ms[0], ms[1]] = one_site_exp[s]
             if ms == target_site:
