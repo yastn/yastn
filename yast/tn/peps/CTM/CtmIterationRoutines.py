@@ -284,12 +284,12 @@ def proj_vertical(env, AAb, chi, cutoff, ms):
 
 
 
-def move_horizontal(env, lattice, AAb, proj, ms):
+def move_horizontal(env, AAb, proj, ms):
     """ Perform horizontal CTMRG move on a mxn lattice. """
     envn = env.copy()
 
-    nw_abv = lattice.nn_site(ms.nw, d='t')
-    ne_abv = lattice.nn_site(ms.ne, d='t')
+    nw_abv = AAb.nn_site(ms.nw, d='t')
+    ne_abv = AAb.nn_site(ms.ne, d='t')
 
     envn[ms.ne].tl = ncon((env[ms.nw].tl, env[ms.nw].t, proj['ph_l_t', nw_abv]),
                                    ([2, 3], [3, 1, -1], [2, 1, -0]))
@@ -334,13 +334,13 @@ def move_horizontal(env, lattice, AAb, proj, ms):
 
 
 
-def move_vertical(env, lattice, AAb, proj, ms):
+def move_vertical(env, AAb, proj, ms):
     """ Perform vertical CTMRG on a mxn lattice """
 
     envn = env.copy()
 
-    nw_left = lattice.nn_site(ms.nw, d='l')
-    sw_left = lattice.nn_site(ms.sw, d='l')
+    nw_left = AAb.nn_site(ms.nw, d='l')
+    sw_left = AAb.nn_site(ms.sw, d='l')
 
     envn[ms.sw].tl = ncon((env[ms.nw].tl, env[ms.nw].l, proj['pv_t_l', nw_left]), 
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
@@ -380,7 +380,7 @@ def move_vertical(env, lattice, AAb, proj, ms):
 
     return envn
 
-def CTM_it(lattice, env, AAb, chi, cutoff):
+def CTM_it(env, AAb, chi, cutoff):
     r""" 
     Perform one step of CTMRG update for a mxn lattice 
 
@@ -397,25 +397,24 @@ def CTM_it(lattice, env, AAb, chi, cutoff):
     proj_hor = {}
     proj_ver = {}
 
-    Nx, Ny = lattice.Nx, lattice.Ny
-    CmEv = CtmEnv(lattice)
+    Nx, Ny = AAb.Nx, AAb.Ny
 
     for y in range(Ny):
-        for ms in CmEv.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
+        for ms in AAb.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
             print('ctm cluster horizontal', ms)
             proj = proj_horizontal(env, AAb, chi, cutoff, ms)
             proj_hor.update(proj)
-        for ms in CmEv.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
-            env = move_horizontal(env, lattice, AAb, proj_hor, ms)
+        for ms in AAb.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
+            env = move_horizontal(env, AAb, proj_hor, ms)
 
     proj={}
     for x in range(Nx):
-        for ms in CmEv.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
+        for ms in AAb.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
             print('ctm cluster vertical', ms)
             proj = proj_vertical(env, AAb, chi, cutoff, ms)
             proj_ver.update(proj)
-        for ms in CmEv.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
-            env = move_vertical(env, lattice, AAb, proj_ver, ms)       
+        for ms in AAb.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
+            env = move_vertical(env,  AAb, proj_ver, ms)       
 
     return env, proj_hor, proj_ver       
 

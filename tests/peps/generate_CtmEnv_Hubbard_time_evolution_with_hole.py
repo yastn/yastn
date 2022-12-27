@@ -17,9 +17,6 @@ except ImportError:
 def benchmark_EV_spinfull(lattice, boundary, purification, xx, yy, D, sym, chi, interval, beta_end, beta_start, UU, mu_up, mu_dn, t_up, t_dn, step, tr_mode, fix_bd):
     
     dims = (xx, yy)
-
-    net = peps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
-    print(net.sites())
     opt = yast.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
 
@@ -33,14 +30,15 @@ def benchmark_EV_spinfull(lattice, boundary, purification, xx, yy, D, sym, chi, 
     for beta in beta_range:
         
         sv_beta = round(beta * yast.BETA_MULTIPLIER)
-        tpeps = peps.Peps(net.lattice, net.dims, net.boundary)
-        tpeps._data = {sind: yast.load_from_dict(config=fid.config, d=state.get((sind, sv_beta))) for sind in net.sites()}
+        tpeps = peps.Peps(lattice, dims, boundary)
+        for sind in tpeps.sites():
+            tpeps[sind] = yast.load_from_dict(config=fid.config, d=state.get((sind, sv_beta))) 
         print('BETA: ', beta)
         nbit = 10
         opts = {'chi': round(chi), 'cutoff': 1e-10, 'nbitmax': round(nbit), 'prec' : 1e-7, 'tcinit' : ((0,) * fid.config.sym.NSYM,), 'Dcinit' : (1,)}
         env = GetEnv(A=tpeps, **opts, AAb_mode=0)
         mdata={}                                                                                 
-        for ms in net.sites():
+        for ms in tpeps.sites():
             xm = {('cortl', ms, sv_beta): env[ms].tl.save_to_dict(), ('cortr', ms, sv_beta): env[ms].tr.save_to_dict(),
             ('corbl', ms, sv_beta): env[ms].bl.save_to_dict(), ('corbr', ms, sv_beta): env[ms].br.save_to_dict(),
             ('strt', ms, sv_beta): env[ms].t.save_to_dict(), ('strb', ms, sv_beta): env[ms].b.save_to_dict(),

@@ -1,5 +1,4 @@
-# This tests the expectation values with CTM_dense using exact analytic peps tensors for
-# 2D Ising model with 0 transverse field (Onsager solution) 
+""" Tests the expectation values with CTM_dense using peps tensors for 2D Ising model with 0 transverse field (Onsager solution) """
 import logging
 import numpy as np
 import pytest
@@ -20,8 +19,7 @@ net = peps.Peps(lattice='checkerboard', boundary='infinite')
 
 
 def create_ZZ_ten(sz, betas):
-    # creates the exact peps tensor for a certain beta
-
+    """ Creates the peps tensor for a certain beta. """
     L = ncon((sz, sz), ((-0, -1), (-2, -3)))
     L = L.fuse_legs(axes = ((0, 2), (1, 3)))
     D, S = yast.eigh(L, axes = (0, 1))
@@ -52,7 +50,7 @@ def matrix_inverse_random():
     return a, b
 
 def CTM_for_Onsager(Gamma, Z_exact):
-    
+    """ Asserts CTM expectation values with analytical values values. """
     env = GetEnv(Gamma, chi=32, cutoff=1e-10, prec=1e-7, nbitmax=40, tcinit=(0,), Dcinit=(1,), init_env='rand', AAb_mode=0)
     ops = {'magA1': {'l': sz, 'r': id},
            'magB1': {'l': id, 'r': sz}}

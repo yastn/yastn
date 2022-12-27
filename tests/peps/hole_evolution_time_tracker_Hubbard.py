@@ -18,8 +18,6 @@ from yast.tn.peps.CTM import nn_avg, nn_bond, one_site_avg, Local_CTM_Env, EVcor
 def expectation_values_hole(lattice, boundary, purification, xx, yy, D, sym, chi, interval, beta_start, beta_end, UU, mu_up, mu_dn, t_up, t_dn, step, tr_mode, fix_bd):
 
     dims=(xx, yy)
-    net = peps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
-    print(net.sites())
     opt = yast.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
 
@@ -28,8 +26,8 @@ def expectation_values_hole(lattice, boundary, purification, xx, yy, D, sym, chi
     n_int = n_up @ n_dn
     hole_density = (fid-n_up)@(fid-n_dn)
     
-    x_target = round((net.Nx-1)*0.5)
-    y_target = round((net.Ny-1)*0.5)
+    x_target = round((xx-1)*0.5)
+    y_target = round((yy-1)*0.5)
     target_site = (x_target, y_target)
 
     def exp_1s(A, ms, env1, op): 
@@ -40,9 +38,6 @@ def expectation_values_hole(lattice, boundary, purification, xx, yy, D, sym, chi
 
     file_name = "shape_%s_Nx_%1.0f_Ny_%1.0f_boundary_%s_purification_%s_fixed_bd_%1.1f_%s_%s_Ds_%s_U_%1.2f_MU_UP_%1.5f_MU_DN_%1.5f_T_UP_%1.2f_T_DN_%1.2f_%s" % (lattice, dims[1], dims[0], boundary, purification, fix_bd, tr_mode, step, D, UU, mu_up, mu_dn, t_up, t_dn, sym)
     state = np.load("hole_initialized_real_time_evolution_Hubbard_model_spinfull_tensors_%s.npy" % (file_name), allow_pickle=True).item()
- 
-    ops = {'ZZ': {'l': (n_up - n_dn), 'r': (n_up - n_dn)}}
-
     num_ints = round((beta_end-beta_start)/interval)+1
     beta_range = np.linspace(beta_start, beta_end, num_ints)
     print(beta_range)
@@ -54,18 +49,19 @@ def expectation_values_hole(lattice, boundary, purification, xx, yy, D, sym, chi
 
         print('BETA: ', beta)
         sv_beta = round(beta * yast.BETA_MULTIPLIER)
-        tpeps = peps.Peps(net.lattice, net.dims, net.boundary)
-        tpeps._data = {sind: yast.load_from_dict(config=fid.config, d=state.get((sind, sv_beta))) for sind in tpeps.sites()}
-        tpeps._data = {ms: tpeps._data[ms].unfuse_legs(axes=(0, 1)) for ms in tpeps.sites()}      
+        tpeps = peps.Peps(lattice, dims, boundary)
+        for sind in tpeps.sites():
+            tpeps[sind] = yast.load_from_dict(config=fid.config, d=state.get((sind, sv_beta)))
+            tpeps[sind] = tpeps[sind].unfuse_legs(axes=(0, 1))    
 
         dict_list_env = []
-        for ms in net.sites():
+        for ms in tpeps.sites():
             dict_list_env.extend([('cortl', ms), ('cortr', ms), ('corbl', ms), ('corbr', ms), ('strt', ms), ('strb', ms), ('strl', ms), ('strr', ms)])
 
         state1 = np.load("ctm_environment_real_time_hole_beta_%1.3f_chi_%1.1f_%s.npy" % (beta, chi, file_name), allow_pickle=True).item()
         env = {ind: yast.load_from_dict(config=fid.config, d=state1[(*ind, sv_beta)]) for ind in dict_list_env}
         env1 = {}
-        for ms in net.sites():
+        for ms in tpeps.sites():
             env1[ms] = Local_CTM_Env()
             env1[ms].tl = env['cortl',ms] 
             env1[ms].tr = env['cortr',ms] 

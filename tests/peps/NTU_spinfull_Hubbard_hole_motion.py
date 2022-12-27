@@ -51,8 +51,9 @@ def evolution_hole_Hubbard(lattice, boundary, beta_gs, purification, xx, yy, D_g
         env1[ms].b = env['strb',ms] 
 
     state = np.load("neel_initialized_Hubbard_spinfull_tensors_%s.npy" % (file_name), allow_pickle=True).item()
-    peps_gs._data = {sind: yast.load_from_dict(config=fid.config, d=state.get((sind, sv_beta))) for sind in peps_gs.sites()}
-    peps_gs._data = {ms: peps_gs[ms].unfuse_legs(axes=(0, 1)) for ms in peps_gs.sites()}      
+    for ms in peps_gs.sites():
+        peps_gs[ms] = yast.load_from_dict(config=fid.config, d=state.get((ms, sv_beta))) 
+        peps_gs[ms] = peps_gs[ms].unfuse_legs(axes=(0, 1))      
 
     def exp_1s(A, ms, env1, op): 
         val_op = measure_one_site_spin(A, ms, env1, op=op)
@@ -75,7 +76,7 @@ def evolution_hole_Hubbard(lattice, boundary, beta_gs, purification, xx, yy, D_g
     ##### operator to be applied to create hole #####
     #################################################
 
-    c = (fc_up).add_leg(s=+1).swap_gate(axes=(0, 2))
+    c = (fc_up).add_leg(s=+1).swap_gate(axes=(0, 2)) # fc_dn works
     ca = yast.ncon([c, fid], ((-0, -1, -4), (-2, -3))) 
     ca = ca.fuse_legs(axes=((0, 3), (1, 2), 4))
 
@@ -85,7 +86,6 @@ def evolution_hole_Hubbard(lattice, boundary, beta_gs, purification, xx, yy, D_g
     print(peps_gs[target_site].get_shape())
     print(peps_gs[target_site].get_signature())
    # print(peps_gs[target_site].to_numpy())
-
 
     n_up_af = exp_1s(peps_gs[target_site], target_site, env1, fid*1e-16+n_up) 
     n_dn_af = exp_1s(peps_gs[target_site], target_site, env1, fid*1e-16+n_dn)
@@ -98,7 +98,8 @@ def evolution_hole_Hubbard(lattice, boundary, beta_gs, purification, xx, yy, D_g
     print('after hole: ', h_af)
 
     peps_gs[target_site] = peps_gs[target_site].unfuse_legs(axes=5).fuse_legs(axes=(0, 1, 2, 3, 5, (6, 4))).fuse_legs(axes=(0, 1, 2, 3, (4, 5))) # t l b r [s [a str]]
-    peps_gs._data = {ms: peps_gs._data[ms].fuse_legs(axes=((0, 1), (2, 3), 4)) for ms in peps_gs.sites()}
+    for ms in peps_gs.sites():
+        peps_gs[ms] = peps_gs[ms].fuse_legs(axes=((0, 1), (2, 3), 4)) 
 
     ############################################################################################################
     ##################       time evolution after injecting hole at the center          ########################
@@ -168,7 +169,7 @@ if __name__== '__main__':
     parser.add_argument("-p", type=str, default='False') # bool
     parser.add_argument("-D_gs", type=int, default=4)
     parser.add_argument("-D_evol", type=int, default=6) 
-    parser.add_argument("-BETA_GS", type=float, default=20) # beta of initial tensor corresponding to ground state
+    parser.add_argument("-BETA_GS", type=float, default=0.5) # beta of initial tensor corresponding to ground state
     parser.add_argument("-S", default='U1xU1_ind') # symmetry -- 'Z2_spinless' or 'U1_spinless'
     parser.add_argument("-X", type=float, default=20) # chi_multiple
     parser.add_argument("-I", type=float, default=0.001) # interval
@@ -190,4 +191,3 @@ if __name__== '__main__':
     logging.info('Elapsed time: %0.2f s.', (time.time() - tt))
 
 # to run, type in terminal : taskset -c 0-6 nohup python -u NTU_spinfull_Hubbard_hole_motion.py -L 'rectangle' -x 5 -y 5 -BETA_GS 20.0 -B 'finite' -p 'False' -D_gs 4 -X 20 -D_evol 12 -S 'U1xU1_ind' -I 0.001 -D_BETA 0.001 -BETA_END 3 -U 12 -MU_UP 0.0 -MU_DOWN 0.0 -T_UP 1 -T_DOWN 1 -STEP 'two-step' -MODE 'optimal' -FIXED 0 > hole_motion_spinfull_5_5_beta_gs_20_D_4_U_12_T_1.out &
-# bond dimension 12 and if we want to store PEPS tensors at an interval 0.1 of beta for 0 chemical potential and a hopping rate of 1
