@@ -53,11 +53,11 @@ def test_NTU_spinless():
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
         
-        Gamma, info =  ntu_update(Gamma, net, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
+        Gamma, info =  ntu_update(Gamma, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
     
     nbit = 10
     opts = {'chi': round(chi), 'cutoff': 1e-10, 'nbitmax': round(nbit), 'prec' : 1e-8, 'tcinit' : ((0,) * fid.config.sym.NSYM,), 'Dcinit' : (1,)}
-    env = GetEnv(A=Gamma, net=net, **opts, AAb_mode=0)
+    env = GetEnv(A=Gamma, **opts, AAb_mode=0)
 
     bd_h = peps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
     bd_v = peps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
@@ -65,8 +65,8 @@ def test_NTU_spinless():
     ops = {'cdagc': {'l': fcdag, 'r': fc},
            'ccdag': {'l': fc, 'r': fcdag}}
 
-    nn_CTM_bond_1 = 0.5*(abs(nn_bond(Gamma, net, env, ops['cdagc'], bd_h)) + abs(nn_bond(Gamma, net, env, ops['ccdag'], bd_h)))
-    nn_CTM_bond_2 = 0.5*(abs(nn_bond(Gamma, net, env, ops['cdagc'], bd_v)) + abs(nn_bond(Gamma, net, env, ops['ccdag'], bd_v)))
+    nn_CTM_bond_1 = 0.5*(abs(nn_bond(Gamma, env, ops['cdagc'], bd_h)) + abs(nn_bond(Gamma, env, ops['ccdag'], bd_h)))
+    nn_CTM_bond_2 = 0.5*(abs(nn_bond(Gamma, env, ops['cdagc'], bd_v)) + abs(nn_bond(Gamma, env, ops['ccdag'], bd_v)))
 
     print(nn_CTM_bond_1, nn_CTM_bond_2)
 

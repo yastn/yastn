@@ -9,10 +9,10 @@ import yast
 from yast.tn.peps.operators.gates import trivial_tensor
 from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_legs, ncon, eigh_with_truncation, eye
 
-def ntu_machine(Gamma, net, bd, GA, GB, Ds, truncation_mode, step, fix_bd):
+def ntu_machine(Gamma, bd, GA, GB, Ds, truncation_mode, step, fix_bd, flag):
     # step can be svd-step, one-step or two-step
     # application of nearest neighbor gate and subsequent optimization of peps tensor using NTU
-    QA, QB, RA, RB = single_bond_nn_update(Gamma, bd, GA, GB)
+    QA, QB, RA, RB = single_bond_nn_update(Gamma, bd, GA, GB, flag)
 
     if step == "svd-update":
         MA, MB = truncation_step(RA, RB, Ds, normalize=True)
@@ -20,7 +20,7 @@ def ntu_machine(Gamma, net, bd, GA, GB, Ds, truncation_mode, step, fix_bd):
         info = {}
         return Gamma, info
     else:
-        g = env_NTU(Gamma, net, bd, QA, QB, dirn=bd.dirn)
+        g = env_NTU(Gamma, bd, QA, QB, dirn=bd.dirn)
         info={}
         if fix_bd==1:
             MA, MB, ntu_error, optim, svd_error = truncate_and_optimize(g, RA, RB, Ds, fix_bd, truncation_mode)
@@ -44,50 +44,100 @@ def ntu_machine(Gamma, net, bd, GA, GB, Ds, truncation_mode, step, fix_bd):
 ##### gate application  ####
 ############################
 
-def single_bond_local_update(Gamma, net, G_loc):
-    """ add docstring """
+def single_bond_local_update(Gamma, G_loc, flag):
+    """ apply local gates on PEPS tensors """
 
-    list_sites = net.sites()
-    for ms in list_sites:
-        Gamma._data[ms] = tensordot(Gamma._data[ms], G_loc, axes=(2, 1))
+    target_site = (round((Gamma.Nx-1)*0.5), round((Gamma.Ny-1)*0.5)) # center of an oddxodd lattice
+    
+    for ms in Gamma.sites():
+        if ms != target_site:
+            Gamma._data[ms] = tensordot(Gamma._data[ms], G_loc, axes=(2, 1)) # [t l] [b r] [s a]
+        elif ms == target_site: # target site can have a string attached to ancilla when hole is created at the center
+            if flag == 'hole':
+                Gamma._data[ms] =  Gamma._data[ms].unfuse_legs(axes=2).unfuse_legs(axes=3)
+                Gamma._data[ms] =  Gamma._data[ms].fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2))
+                Gamma._data[ms] = tensordot(Gamma._data[ms], G_loc, axes=(3, 1))
+                Gamma._data[ms] = Gamma._data[ms].fuse_legs(axes=(0, 1, 3, 2)).unfuse_legs(axes=(2)).fuse_legs(axes=(0, 1, 2, (3, 4))).fuse_legs(axes=(0, 1, (2, 3))) # [t l] [b r] [s [a string]]
+            else:
+                Gamma._data[ms] = tensordot(Gamma._data[ms], G_loc, axes=(2, 1)) # [t l] [b r] [s a]
 
+            
     return Gamma # local update all sites at once
     
 
-def single_bond_nn_update(Gamma, bd, GA, GB):
+def single_bond_nn_update(Gamma, bd, GA, GB, flag):
+
     """ apply nn gates on PEPS tensors. """
-
+    target_site = (round((Gamma.Nx-1)*0.5), round((Gamma.Ny-1)*0.5)) # center of an oddxodd lattice
     A, B = Gamma._data[bd.site_0], Gamma._data[bd.site_1]  # A = [t l] [b r] s
-
     dirn = bd.dirn
-
-    if dirn == "h":  # Horizontal Gate
-
-        #int_A = A @ GA  # [t l] [b r] s c
-        int_A = tensordot(A, GA, axes=(2, 1)) # [t l] [b r] s c
+    if dirn == "h":  # Horizontal Gate        
+        if bd.site_0 != target_site:
+            int_A = tensordot(A, GA, axes=(2, 1)) # [t l] [b r] s c
+        elif bd.site_0 == target_site:
+            if flag == 'hole':
+                A =  A.unfuse_legs(axes=2).unfuse_legs(axes=3) # [t l] [b r] s a str 
+                A =  A.fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
+                A = tensordot(A, GA, axes=(3, 1)) # [t l] [b r] str [s a] c 
+                A = A.unfuse_legs(axes=3) # [t l] [b r] str s a c
+                A = A.fuse_legs(axes=(0, 1, 3, (4, 2), 5)) # [t l] [b r] s [a str] c
+                int_A = A.fuse_legs(axes=(0, 1, (2, 3), 4)) # [t l] [b r] [s [a str]] c
+            else:
+                int_A = tensordot(A, GA, axes=(2, 1)) # [t l] [b r] s c
         int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] s] [b r] c
         int_A = int_A.unfuse_legs(axes=1)  # [[t l] s] b r c
         int_A = int_A.swap_gate(axes=(1, 3))  # b X c
         int_A = int_A.fuse_legs(axes=((0, 1), (2, 3)))  # [[[t l] s] b] [r c]
         QA, RA = qr(int_A, axes=(0, 1), sQ=-1)  # [[[t l] s] b] rr @ rr [r c]
 
-        #int_B = B @ GB  # [t l] [b r] s c
-        int_B = tensordot(B, GB, axes=(2, 1)) # [t l] [b r] s c
+        if bd.site_1 != target_site:
+            int_B = tensordot(B, GB, axes=(2, 1)) # [t l] [b r] s c
+        elif bd.site_1 == target_site:
+            if flag == 'hole':
+                B =  B.unfuse_legs(axes=2).unfuse_legs(axes=3) # [t l] [b r] s a str 
+                B =  B.fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
+                B = tensordot(B, GB, axes=(3, 1)) # [t l] [b r] str [s a] c 
+                B = B.unfuse_legs(axes=3) # [t l] [b r] str s a c
+                B = B.fuse_legs(axes=(0, 1, 3, (4, 2), 5)) # [t l] [b r] s [a str] c
+                int_B = B.fuse_legs(axes=(0, 1, (2, 3), 4)) # [t l] [b r] [s [a str]] c
+            else:
+                int_B = tensordot(B, GB, axes=(2, 1)) # [t l] [b r] s c
         int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] s] c
         int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] s] c
         int_B = int_B.fuse_legs(axes=((0, 2), (1, 3)))  # [t [[b r] s]] [l c]
         QB, RB = qr(int_B, axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] s]]  @  [l c] ll
 
     elif dirn == "v":  # Vertical Gate
-        #int_A = A @ GA  # [t l] [b r] s c
-        int_A = tensordot(A, GA, axes=(2, 1)) # [t l] [b r] s c
+        if bd.site_0 != target_site:
+            int_A = tensordot(A, GA, axes=(2, 1)) # [t l] [b r] s c
+        elif bd.site_0 == target_site:
+            if flag == 'hole':
+                A =  A.unfuse_legs(axes=2).unfuse_legs(axes=3) # [t l] [b r] s a str 
+                A =  A.fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
+                A = tensordot(A, GA, axes=(3, 1)) # [t l] [b r] str [s a] c 
+                A = A.unfuse_legs(axes=3) # [t l] [b r] str s a c
+                A = A.fuse_legs(axes=(0, 1, 3, (4, 2), 5)) # [t l] [b r] s [a str] c
+                int_A = A.fuse_legs(axes=(0, 1, (2, 3), 4)) # [t l] [b r] [s [a str]] c
+            else:
+                int_A = tensordot(A, GA, axes=(2, 1)) # [t l] [b r] s c
         int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] s] [b r] c
         int_A = int_A.unfuse_legs(axes=1)  # [[t l] s] b r c
         int_A = int_A.fuse_legs(axes=((0, 2), (1, 3)))  # [[[t l] s] r] [b c]
         QA, RA = qr(int_A, axes=(0, 1), sQ=1)  # [[[t l] s] r] bb  @  bb [b c]
 
-        #int_B = B @ GB  # [t l] [b r] s c
-        int_B = tensordot(B, GB, axes=(2, 1)) # [t l] [b r] s c
+        if bd.site_1 != target_site:
+            int_B = tensordot(B, GB, axes=(2, 1)) # [t l] [b r] s c
+        elif bd.site_1 == target_site:
+            if flag == 'hole':
+                B =  B.unfuse_legs(axes=2).unfuse_legs(axes=3) # [t l] [b r] s a str 
+                B =  B.fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
+                B = tensordot(B, GB, axes=(3, 1)) # [t l] [b r] str [s a] c 
+                B = B.unfuse_legs(axes=3) # [t l] [b r] str s a c
+                B = B.fuse_legs(axes=(0, 1, 3, (4, 2), 5)) # [t l] [b r] s [a str] c
+                int_B = B.fuse_legs(axes=(0, 1, (2, 3), 4)) # [t l] [b r] [s [a str]] c
+            else:
+                int_B = tensordot(B, GB, axes=(2, 1)) # [t l] [b r] s c
+ 
         int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] s] c
         int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] s] c
         int_B = int_B.swap_gate(axes=(1, 3))  # l X c
@@ -142,10 +192,10 @@ def form_new_peps_tensors(QA, QB, MA, MB, bd):
 ##### creating ntu environment ####
 ###################################
 
-def env_NTU(Gamma, net,  bd, QA, QB, dirn):
+def env_NTU(Gamma, bd, QA, QB, dirn):
     """ calculate metric g """
   
-    env = net.tensors_NtuEnv(bd)
+    env = Gamma.tensors_NtuEnv(bd)
     G={}
     for ms in env.keys():
         if env[ms] is None:

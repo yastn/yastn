@@ -55,6 +55,8 @@ def gates_hopping(t, beta, fid, fc, fcdag, ancilla, purification):
         coeff = 0.5
     elif purification == 'True':
         coeff = 0.25
+    elif purification == 'Time':
+        coeff = 1j*0.5
 
     fn = fcdag@fc
     one = ncon([fid, fid], ((-0, -1), (-2, -3)))
@@ -90,6 +92,8 @@ def gate_local_Hubbard(mu_up, mu_dn, U, beta, fid, fc_up, fc_dn, fcdag_up, fcdag
         coeff = 0.5
     elif purification == 'True':
         coeff = 0.25
+    elif purification == 'Time':
+        coeff = 1j*0.5
 
     G_loc = fid
     G_loc = G_loc + (fn_dn - fnn) * (np.exp((coeff * beta * (mu_dn + 0.5 * U))) - 1)
@@ -108,6 +112,8 @@ def gate_local_fermi_sea(mu, beta, fid, fc, fcdag, ancilla=True, purification=Fa
         coeff = 0.5
     elif purification == 'True':
         coeff = 0.25
+    elif purification == 'Time':
+        coeff = 1j*0.5
     fn = fcdag @ fc
     step = coeff * beta * mu
     G_loc = fid + fn * (np.exp(step) - 1)

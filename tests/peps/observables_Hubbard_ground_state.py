@@ -12,7 +12,7 @@ from yast.tn.peps.CTM import nn_avg, one_site_avg, Local_CTM_Env
 
 
 try:
-    from .configs import config_U1xU1_R_fermionic as cfg
+    from ..configs import config_U1xU1_R_fermionic as cfg
     # cfg is used by pytest to inject different backends and devices
 except ImportError:
     from configs import config_U1xU1_R_fermionic as cfg
@@ -70,13 +70,13 @@ def Hubbard_GS(lattice, boundary, purification, xx, yy, D, sym, chi, interval, b
             env1[ms].b = env['strb',ms] 
 
         print('density of up spin')
-        dens_up = one_site_avg(tpeps, net, env1, n_up)
+        dens_up, mat_up = one_site_avg(tpeps, env1, n_up)
         print('density of down spin')
-        dens_dn = one_site_avg(tpeps, net, env1,  n_dn)
+        dens_dn, mat_dn = one_site_avg(tpeps, env1, n_dn)
         print('double occupancy')
-        doc = one_site_avg(tpeps, net, env1, n_int)
+        doc, mat_doc = one_site_avg(tpeps, env1, n_int)
 
-        obs_hor, obs_ver = nn_avg(tpeps, net, env1, ops)
+        obs_hor, obs_ver = nn_avg(tpeps, env1, ops)
 
         cdagc_up = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
         ccdag_up = 0.5*(abs(obs_hor.get('ccdag_up')) + abs(obs_ver.get('ccdag_up')))

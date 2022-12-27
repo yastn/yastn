@@ -6,9 +6,8 @@ import yast.tn.peps as peps
 import time
 from yast.tn.peps.operators.gates import gates_hopping, gate_local_Hubbard
 from yast.tn.peps.NTU import ntu_update, initialize_peps_purification, initialize_Neel_spinfull
-
 try:
-    from .configs import config_U1xU1_R_fermionic as cfg
+    from ..configs import config_U1xU1_R_fermionic as cfg
     # cfg is used by pytest to inject different backends and devices
 except ImportError:
     from configs import config_U1xU1_R_fermionic as cfg
@@ -44,7 +43,7 @@ def benchmark_NTU_hubbard(lattice, boundary, purification, xx, yy, D, interval, 
         sv_beta = int(beta * yast.BETA_MULTIPLIER)
         logging.info("beta = %0.3f" % beta)
          
-        Gamma, info =  ntu_update(Gamma, net, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
+        Gamma, info =  ntu_update(Gamma, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
         print(info)
 
         for ms in net.sites():
@@ -74,8 +73,7 @@ def benchmark_NTU_hubbard(lattice, boundary, purification, xx, yy, D, interval, 
         with open("SVD_error_%s.txt" % file_name, "a+") as f:
             f.write('{:.3f} {:.2e} {:.2e}\n'.format(beta, svd_error_up, svd_error_dn))
 
-        
-
+    
 if __name__== '__main__':
     logging.basicConfig(level='INFO')
 

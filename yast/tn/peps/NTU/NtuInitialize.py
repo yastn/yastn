@@ -18,6 +18,23 @@ def initialize_peps_purification(fid, net):
     return Gamma
 
 
+def initialize_spinless_filled(fid, fc, fcdag, net):
+
+    n = fcdag @ fc
+    #h = fc@fcdag
+    f = n
+    A = f.fuse_legs(axes=[(0, 1)])  # particle
+    for s in (-1, 1, 1, -1):
+        A = A.add_leg(axis=0, s=s)
+    
+    A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
+    Gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+    for ms in net.sites():
+        Gamma._data[ms] = A
+
+    return Gamma
+
+
 def initialize_Neel_spinfull(fid, fc_up, fc_dn, fcdag_up, fcdag_dn, net):
 
     Nx = net.Nx
@@ -26,8 +43,8 @@ def initialize_Neel_spinfull(fid, fc_up, fc_dn, fcdag_up, fcdag_dn, net):
     nu = fcdag_up @ fc_up
     nd = fcdag_dn @ fc_dn
    
-    f1 = (nu @ (fid-nd)).remove_zero_blocks()
-    f2 = ((fid-nu) @ nd).remove_zero_blocks()
+    f1 = nu @ (fid-nd)
+    f2 = (fid-nu) @ nd
 
     A = f1.fuse_legs(axes=[(0, 1)])  # spin up
     B = f2.fuse_legs(axes=[(0, 1)])   # spin down

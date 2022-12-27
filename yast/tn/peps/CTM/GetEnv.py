@@ -7,7 +7,7 @@ from .CtmIterationRoutines import CTM_it
 from .CtmIterationRoutines import fPEPS_2layers, fPEPS_fuse_layers, check_consistency_tensors
 from .CtmEnv import CtmEnv, init_rand
 
-def GetEnv(A, net, chi=32, cutoff=1e-10, prec=1e-7, nbitmax=10, tcinit=(), Dcinit=(1,), init_env='rand', AAb_mode=0):
+def GetEnv(A, chi=32, cutoff=1e-10, prec=1e-7, nbitmax=10, tcinit=(), Dcinit=(1,), init_env='rand', AAb_mode=0):
 
     r"""
     Based on lattice structure create converged CTM environments using functionalities from CTM_rountines.py
@@ -26,16 +26,16 @@ def GetEnv(A, net, chi=32, cutoff=1e-10, prec=1e-7, nbitmax=10, tcinit=(), Dcini
     AAb = 0 (no double-peps tensors; 1 = double pepes tensors with identity; 2 = for all
     """
 
-    A = check_consistency_tensors(A, net=net) # to check if A has the desired fused form of legs i.e. t l b r [s a]
-    list_sites = net.sites()
-    AAb = {m: fPEPS_2layers(A._data[m]) for m in list_sites}
+    A = check_consistency_tensors(A) # to check if A has the desired fused form of legs i.e. t l b r [s a]
+    AAb = {m: fPEPS_2layers(A[m]) for m in A.sites()}
 
     if AAb_mode >= 1:
         fPEPS_fuse_layers(AAb)
 
+    net = peps.Peps(lattice=A.lattice, dims=A.dims, boundary='infinite')
+  
     if init_env == 'rand':
-        net = peps.Peps(lattice=net.lattice, dims=net.dims, boundary='infinite')
-        env = init_rand(A, tcinit, Dcinit, net)  # random initialization
+        env = init_rand(A, tcinit, Dcinit)  # random initialization
 
     for ctr in range(nbitmax):
         logging.info('CTM iteration: %2d', ctr+1)

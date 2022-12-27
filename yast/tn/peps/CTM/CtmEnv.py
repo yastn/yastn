@@ -20,15 +20,15 @@ class CtmEnv(Lattice):
         self.bra = ket if bra is None else bra
         ## assert that ket and bra are matching ....
         inds = set(self.site2index(site) for site in self._sites)
-        self._data = {ind: None for ind in inds}
+        self = {ind: None for ind in inds}
 
     def __getitem__(self, site):
         assert site in self._sites, "Site is inconsistent with lattice"
-        return self._data[self.site2index(site)]
+        return self[self.site2index(site)]
 
     def __setitem__(self, site, local_env):
         assert site in self._sites, "Site is inconsistent with lattice"
-        self._data[self.site2index(site)] = local_env
+        self[self.site2index(site)] = local_env
 
 
     def tensors_CtmEnv(self, trajectory):
@@ -98,37 +98,35 @@ def CtmEnv2Mps(net, env, index, index_type):
     return H
 
 
-def init_rand(A, tc, Dc, lattice):
+def init_rand(A, tc, Dc):
     """ Initialize random CTMRG environments of peps tensors A. """
-    config = A._data[0, 0].config 
-    list_sites = lattice.sites()
+    config = A[0, 0].config 
     env= {}
 
-    for ms in list_sites:
+    for ms in A.sites():
         env[ms] = Local_CTM_Env()
-    for ms in list_sites:
         env[ms].tl = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].tr = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].bl = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].br = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         legs = [env[ms].tl.get_legs(1).conj(),
-                A._data[ms].get_legs(0).conj(),
-                A._data[ms].get_legs(0),
+                A[ms].get_legs(0).conj(),
+                A[ms].get_legs(0),
                 env[ms].tr.get_legs(0).conj()]
         env[ms].t = rand(config=config, legs=legs)
         legs = [env[ms].br.get_legs(1).conj(),
-                A._data[ms].get_legs(2).conj(),
-                A._data[ms].get_legs(2),
+                A[ms].get_legs(2).conj(),
+                A[ms].get_legs(2),
                 env[ms].bl.get_legs(0).conj()]
         env[ms].b = rand(config=config, legs=legs)
         legs = [env[ms].bl.get_legs(1).conj(),
-                A._data[ms].get_legs(1).conj(),
-                A._data[ms].get_legs(1),
+                A[ms].get_legs(1).conj(),
+                A[ms].get_legs(1),
                 env[ms].tl.get_legs(0).conj()]
         env[ms].l = rand(config=config, legs=legs)
         legs = [env[ms].tr.get_legs(1).conj(),
-                A._data[ms].get_legs(3).conj(),
-                A._data[ms].get_legs(3),
+                A[ms].get_legs(3).conj(),
+                A[ms].get_legs(3),
                 env[ms].br.get_legs(0).conj()]
         env[ms].r = rand(config=config, legs=legs)
         env[ms].t = env[ms].t.fuse_legs(axes=(0, (1, 2), 3))
@@ -147,7 +145,7 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
     Takes a CTM emvironments and a complet list of projectors to sample from.
     """
 
-    config = state._data[0, 0].config
+    config = state[0, 0].config
     rands = (config.backend.rand(state.Nx * state.Ny) + 1) / 2
 
 
