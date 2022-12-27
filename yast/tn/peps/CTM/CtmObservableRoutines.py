@@ -5,7 +5,7 @@ from .CtmIterationRoutines import append_a_tl, append_a_br, append_a_tr, append_
 import numpy as np
 
 def ret_AAbs(A, bds, op, orient):
-    # preparing the nearest neighbor tensor before contraction by attaching them with operators
+    """ preparing the nearest neighbor tensor before contraction by attaching them with operators"""
     if orient == 'h':
         AAb = {'l': fPEPS_2layers(A[bds.site_0], op=op['l'], dir='l'), 'r': fPEPS_2layers(A[bds.site_1], op=op['r'], dir='r')}
     elif orient == 'v':
@@ -69,7 +69,7 @@ def apply_TMO_bottom(vecb, env, site, AAb):
 
 
 def left_right_op_vectors(env, site_0, site_1, AAb):
-    # form the left and right part in the process of evaluating a horizontal correlator before contracting them
+    """ form the left and right part in the process of evaluating a horizontal correlator before contracting them"""
 
     vecl = tensordot(env[site_0].l, env[site_0].tl, axes=(2, 0))
     vecl = tensordot(env[site_0].bl, vecl, axes=(1, 0))
@@ -84,7 +84,7 @@ def left_right_op_vectors(env, site_0, site_1, AAb):
 
 
 def top_bottom_op_vectors(env, site_0, site_1, AAb):
-    # form the top and bottom part in the process of evaluating a vertical correlator before contracting them
+    """ form the top and bottom part in the process of evaluating a vertical correlator before contracting them"""
 
     vect = tensordot(env[site_0].tl, env[site_0].t, axes=(1, 0))
     vect = tensordot(vect, env[site_0].tr, axes=(2, 0))
@@ -122,7 +122,7 @@ def ver_extension(env, bd, AAbo, AAb):
 
 
 
-#### diagonal correlation
+#### diagonal correlation (under development)
 def make_ext_corner_tl(cortl, strt_l, strl_t, AAb, AAbop, orient):
     vec_cor_tl = strl_t @ cortl @ strt_l
     if orient == 'se':
