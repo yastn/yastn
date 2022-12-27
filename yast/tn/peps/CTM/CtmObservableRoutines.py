@@ -1,17 +1,17 @@
 # this routine just calculates nearest neighbor correlators
 
 from yast import tensordot, svd_with_truncation, rand, ncon
-from .CtmIterationRoutines import append_a_tl, append_a_br, fPEPS_2layers
+from .CtmIterationRoutines import append_a_tl, append_a_br, append_a_tr, append_a_bl, fPEPS_2layers
 import numpy as np
 
 def ret_AAbs(A, bds, op, orient):
     # preparing the nearest neighbor tensor before contraction by attaching them with operators
     if orient == 'h':
-        AAb = {'l': fPEPS_2layers(A._data[bds.site_0], op=op['l'], dir='l'), 'r': fPEPS_2layers(A._data[bds.site_1], op=op['r'], dir='r')}
+        AAb = {'l': fPEPS_2layers(A[bds.site_0], op=op['l'], dir='l'), 'r': fPEPS_2layers(A[bds.site_1], op=op['r'], dir='r')}
     elif orient == 'v':
-        AAb = {'l': fPEPS_2layers(A._data[bds.site_0], op=op['l'], dir='t'), 'r': fPEPS_2layers(A._data[bds.site_1], op=op['r'], dir='b')}
+        AAb = {'l': fPEPS_2layers(A[bds.site_0], op=op['l'], dir='t'), 'r': fPEPS_2layers(A[bds.site_1], op=op['r'], dir='b')}
     elif orient == '1s':
-        AAb = {'l': fPEPS_2layers(A._data[bds.site_0], op=op['l'], dir='1s'), 'r': fPEPS_2layers(A._data[bds.site_1], op=op['r'], dir='1s')}
+        AAb = {'l': fPEPS_2layers(A[bds.site_0], op=op['l'], dir='1s'), 'r': fPEPS_2layers(A[bds.site_1], op=op['r'], dir='1s')}
     return AAb
 
 
@@ -119,5 +119,61 @@ def ver_extension(env, bd, AAbo, AAb):
     ver_norm = con_bi(top_bound_vec_norm, bottom_bound_vec_norm) 
 
     return (ver/ver_norm)
+
+
+
+#### diagonal correlation
+def make_ext_corner_tl(cortl, strt_l, strl_t, AAb, AAbop, orient):
+    vec_cor_tl = strl_t @ cortl @ strt_l
+    if orient == 'se':
+        new_vec_cor_tl = append_a_tl(vec_cor_tl, AAbop).fuse_legs(axes=(0, 1, 3, 2))
+    else:
+        new_vec_cor_tl = append_a_tl(vec_cor_tl, AAb).fuse_legs(axes=(0, 1, 3, 2))
+    return new_vec_cor_tl
+
+def make_ext_corner_tr(cortr, strt_r, strr_t, AAb, AAbop, orient):
+    vec_cor_tr = strt_r @ cortr @ strr_t
+    if orient == 'ne': 
+        new_vec_cor_tr = append_a_tr(vec_cor_tr, AAbop).fuse_legs(axes=(0, 1, 3, 2)) 
+    else:
+        new_vec_cor_tr = append_a_tr(vec_cor_tr, AAb).fuse_legs(axes=(0, 1, 3, 2))  
+    return new_vec_cor_tr
+
+def make_ext_corner_bl(corbl, strb_l, strl_b, AAb, AAbop, orient):
+    vec_cor_bl = strb_l @ corbl @ strl_b
+    if orient == 'ne': # bosonic operator without string ... dirn 2 means operator sare in top right and bottom left corner
+        new_vec_cor_bl = append_a_bl(vec_cor_bl, AAbop).fuse_legs(axes=(0, 1, 3, 2))
+    else:
+        new_vec_cor_bl = append_a_bl(vec_cor_bl, AAb).fuse_legs(axes=(0, 1, 3, 2))
+    return new_vec_cor_bl
+
+def make_ext_corner_br(corbr, strb_r, strr_b, AAb, AAbop, orient):
+    vec_cor_br = strr_b @ corbr @ strb_r
+    if orient == 'se': # fermionic operator without string ... dirn 1 means operators are in top left and bottom right corner
+        new_vec_cor_br = append_a_br(vec_cor_br, AAbop).fuse_legs(axes=(0, 1, 3, 2))
+    else:
+        new_vec_cor_br = append_a_br(vec_cor_br, AAb).fuse_legs(axes=(0, 1, 3, 2))
+    return new_vec_cor_br
+    
+def diagonal_correlation(env, x_l, y_l, x_r, y_r, AAb_top, AAb_bottom, AAbop_top, AAbop_bottom, orient=None):
+    """ construct diagonal correlators """
+
+    if orient == 'ne':
+        indten_tl, indten_tr, indten_bl, indten_br = (x_r, y_r-1), (x_r, y_r), (x_l, y_l), (x_l, y_l+1)
+    elif orient == 'se':
+        indten_tl, indten_tr, indten_bl, indten_br = (x_l, y_l), (x_l, y_l+1), (x_r, y_r-1), (x_r, y_r)
+
+    print(indten_tl, indten_tr, indten_bl, indten_br)
+    vec_tl = make_ext_corner_tl(env[indten_tl].tl, env[indten_tl].t, env[indten_tl].l, AAb_top['l'], AAbop_top['l'], orient)
+    vec_tr = make_ext_corner_tr(env[indten_tr].tr, env[indten_tr].t, env[indten_tr].r, AAb_top['r'], AAbop_top['r'], orient)
+    vec_bl = make_ext_corner_bl(env[indten_bl].bl, env[indten_bl].b, env[indten_bl].l, AAb_bottom['l'], AAbop_bottom['l'], orient)
+    vec_br = make_ext_corner_br(env[indten_br].br, env[indten_br].b, env[indten_br].r, AAb_bottom['r'], AAbop_bottom['r'], orient)
+
+    corr_l = ncon((vec_tl, vec_bl), ([2, 1, -3, -4], [-1, -2, 1, 2]))
+    corr_r = ncon((vec_br, vec_tr), ([2, 1, -2, -1], [-4, -3, 1, 2]))
+    corr = tensordot(corr_l, corr_r, axes=((0, 1, 2, 3), (0, 1, 2, 3))).to_number()
+
+    return corr
+
 
 

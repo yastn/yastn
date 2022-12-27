@@ -9,23 +9,22 @@ import yast.tn.peps as peps
 from yast.tn.peps.NTU import ntu_update, initialize_peps_purification, initialize_Neel_spinfull
 from yast.tn.peps.operators.gates import gates_hopping, gate_local_Hubbard
 import pytest
-from yast.tn.peps.CTM import nn_avg, nn_bond, one_site_avg, measure_one_site_spin, fPEPS_2layers, Local_CTM_Env, measure_one_site_only_spin
+from yast.tn.peps.CTM import nn_avg, nn_bond, one_site_avg, measure_one_site_spin, fPEPS_2layers, Local_CTM_Env
 try:
-    from .configs import config_U1xU1_R_fermionic as cfg
+    from ..configs import config_U1xU1_R_fermionic as cfg
     # cfg is used by pytest to inject different backends and devices
 except ImportError:
     from configs import config_U1xU1_R_fermionic as cfg
 
 def evolution_hole_Hubbard(lattice, boundary, beta_gs, purification, xx, yy, D_gs, D_evol, sym, chi, interval, beta_end, dbeta, U, mu_up, mu_dn, t_up, t_dn, step, tr_mode, fix_bd):
     
-    print(beta_gs)
+    print('BETA GROUND STATE: ',beta_gs)
     purification='False'
     dims=(xx, yy)
     peps_gs = peps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
     opt = yast.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
-
-    n_up = fcdag_up @ fc_up
+    n_up = fcdag_up @ fc_up 
     n_dn = fcdag_dn @ fc_dn
     n_int = n_up @ n_dn
 
@@ -34,8 +33,8 @@ def evolution_hole_Hubbard(lattice, boundary, beta_gs, purification, xx, yy, D_g
     file_name = "shape_%s_Nx_%1.0f_Ny_%1.0f_boundary_%s_purification_%s_fixed_bd_%1.1f_%s_%s_Ds_%s_U_%1.2f_MU_UP_%1.5f_MU_DN_%1.5f_T_UP_%1.2f_T_DN_%1.2f_%s" % (lattice, dims[1], dims[0], boundary, purification, fix_bd, tr_mode, step, D_gs, U, mu_up, mu_dn, t_up, t_dn, sym)
 
     for ms in peps_gs.sites():
-        d1 = [('cortl', ms), ('cortr', ms), ('corbl', ms), ('corbr', ms), ('strt', ms), ('strb', ms), ('strl', ms), ('strr', ms)]
-        dict_list_env.extend(d1)
+        dict_list_env.extend([('cortl', ms), ('cortr', ms), ('corbl', ms), ('corbr', ms), ('strt', ms), ('strb', ms), ('strl', ms), ('strr', ms)])
+        
     state1 = np.load("ctm_environment_beta_%1.1f_chi_%1.1f_%s.npy" % (beta_gs, chi, file_name), allow_pickle=True).item()
     env = {ind: yast.load_from_dict(config=fid.config, d=state1[(*ind, sv_beta)]) for ind in dict_list_env}
 
@@ -51,67 +50,63 @@ def evolution_hole_Hubbard(lattice, boundary, beta_gs, purification, xx, yy, D_g
         env1[ms].r = env['strr',ms] 
         env1[ms].b = env['strb',ms] 
 
-
     state = np.load("neel_initialized_Hubbard_spinfull_tensors_%s.npy" % (file_name), allow_pickle=True).item()
     peps_gs._data = {sind: yast.load_from_dict(config=fid.config, d=state.get((sind, sv_beta))) for sind in peps_gs.sites()}
     peps_gs._data = {ms: peps_gs[ms].unfuse_legs(axes=(0, 1)) for ms in peps_gs.sites()}      
 
-    def exp_1s(peps, ms, env1, op):  # exp2s made to caclualte expectation value with fused spin and ancilla
-        val_op = measure_one_site_spin(peps, ms, env1, op=op)
-        val_norm = measure_one_site_spin(peps, ms, env1, op=None)
+    def exp_1s(A, ms, env1, op): 
+        val_op = measure_one_site_spin(A, ms, env1, op=op)
+        val_norm = measure_one_site_spin(A, ms, env1, op=None)
         return (val_op/val_norm)
 
-    def exp_2s(peps, ms, env1, op):
-        val_norm = measure_one_site_only_spin(peps, ms, env1, op=None) # exp2s made to caclualte expectation value without fusing spin and ancilla
-        val_op = measure_one_site_only_spin(peps, ms, env1, op=op)
-        return (val_op/val_norm)
+    target_site = (round((peps_gs.Nx-1)*0.5), round((peps_gs.Ny-1)*0.5))   # middle of an odd x odd lattice
 
-    x_target = round((xx-1)*0.5)
-    y_target = round((yy-1)*0.5)
-    target_site = (x_target, y_target)
     n_up_bf = exp_1s(peps_gs[target_site], target_site, env1, n_up)
     n_dn_bf = exp_1s(peps_gs[target_site], target_site, env1, n_dn)
-    h_bf = exp_1s(peps_gs[target_site], target_site, env1, (n_int))
+    n_int_bf = exp_1s(peps_gs[target_site], target_site, env1, n_int)
+    h_bf = exp_1s(peps_gs[target_site], target_site, env1, (fid-n_up)@(fid-n_dn))
 
     print('before n_up: ', n_up_bf)
     print('before n_dn: ', n_dn_bf)
-    print('before double occupancyy: ', h_bf)
+    print('before double occupancy: ', n_int_bf)
+    print('before hole: ', h_bf)
 
     #################################################
     ##### operator to be applied to create hole #####
     #################################################
 
+    c = (fc_up).add_leg(s=+1).swap_gate(axes=(0, 2))
+    ca = yast.ncon([c, fid], ((-0, -1, -4), (-2, -3))) 
+    ca = ca.fuse_legs(axes=((0, 3), (1, 2), 4))
 
-    c = fc_dn.add_leg(s=-1).swap_gate(axes=(0, 2))
-    
-    ca = yast.ncon([c, fid], ((-0, -1, -4) , (-2, -3))) 
-    ca = ca.fuse_legs(axes=(0, 1, 2, (3, 4)))
-    ca = ca.fuse_legs(axes=((0, 3), (1, 2)))
-
-    peps_gs[target_site] = yast.tensordot(peps_gs[target_site], ca, axes= (4, 1))
+    peps_gs[target_site] = yast.tensordot(peps_gs[target_site], ca, axes= (4, 1))  # t l b r [s a] str
+    peps_gs[target_site] = peps_gs[target_site].fuse_legs(axes=(0, 1, 2, 3, 5, 4)) # t l b r str [s a]
 
     print(peps_gs[target_site].get_shape())
     print(peps_gs[target_site].get_signature())
+   # print(peps_gs[target_site].to_numpy())
 
-    n_up_af = exp_2s(peps_gs[target_site], target_site, env1, n_up)  # exp2s made to caclualte expectation value without fusing spin and ancilla
-    n_dn_af = exp_2s(peps_gs[target_site], target_site, env1, fid*1e-16+n_dn)
-    h_af = exp_2s(peps_gs[target_site], target_site, env1, n_up@fid*1e-16+n_dn)
+
+    n_up_af = exp_1s(peps_gs[target_site], target_site, env1, fid*1e-16+n_up) 
+    n_dn_af = exp_1s(peps_gs[target_site], target_site, env1, fid*1e-16+n_dn)
+    n_int_af = exp_1s(peps_gs[target_site], target_site, env1, (fid*1e-16+n_up)@(fid*1e-16+n_dn))
+    h_af = exp_1s(peps_gs[target_site], target_site, env1, (fid-n_up)@(fid-n_dn))
 
     print('after n_up: ', n_up_af)
     print('after n_dn: ', n_dn_af)
-    print('after double occupancy: ', h_af)
+    print('after double occupancy: ', n_int_af)
+    print('after hole: ', h_af)
 
-    xcc
-
-    peps_gs = {ms: peps_gs[ms].fuse_legs(axes=((0, 1), (2, 3), 4)) for ms in peps_gs.sites()}
-
+    peps_gs[target_site] = peps_gs[target_site].unfuse_legs(axes=5).fuse_legs(axes=(0, 1, 2, 3, 5, (6, 4))).fuse_legs(axes=(0, 1, 2, 3, (4, 5))) # t l b r [s [a str]]
+    peps_gs._data = {ms: peps_gs._data[ms].fuse_legs(axes=((0, 1), (2, 3), 4)) for ms in peps_gs.sites()}
 
     ############################################################################################################
     ##################       time evolution after injecting hole at the center          ########################
     ############################################################################################################
 
     Gamma = peps_gs
-    purification='time'
+
+    purification='Time'
     ancilla = 'True'
     GA_nn_up, GB_nn_up = gates_hopping(t_up, dbeta, fid, fc_up, fcdag_up, ancilla=ancilla, purification=purification)
     GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, dbeta, fid, fc_dn, fcdag_dn, ancilla=ancilla, purification=purification)
@@ -127,21 +122,23 @@ def evolution_hole_Hubbard(lattice, boundary, beta_gs, purification, xx, yy, D_g
 
     for nums in range(time_steps):
         beta = (nums + 1) * dbeta
-        sv_beta = int(beta * yaps.BETA_MULTIPLIER)
+        sv_beta = int(beta * yast.BETA_MULTIPLIER)
         logging.info("beta = %0.3f" % beta)
-        Gamma, info =  ntu_update(Gamma, net, fid, Gate, D_evol, step, tr_mode, fix_bd, purification) # fix_bd = 0 refers to unfixed symmetry sectors
+        if (nums + 1) % int(obs_int) == 0:
+            x = {(ms, sv_beta): Gamma._data[ms].save_to_dict() for ms in Gamma._data.keys()}
+            mdata.update(x)
+            np.save("hole_initialized_real_time_evolution_Hubbard_model_spinfull_tensors_%s.npy" % (file_name), mdata)
+
+        Gamma, info =  ntu_update(Gamma, Gate, D_evol, step, tr_mode, fix_bd, flag='hole') # fix_bd = 0 refers to unfixed symmetry sectors
         print(info)
 
-        for ms in net.sites():
-            logging.info("shape of peps tensor = " + str(ms) + ": " +str(Gamma[ms].get_shape()))
-            xs = Gamma[ms].unfuse_legs((0, 1))
+        for ms in Gamma.sites():
+            logging.info("shape of peps tensor = " + str(ms) + ": " +str(Gamma._data[ms].get_shape()))
+            xs = Gamma._data[ms].unfuse_legs((0, 1))
             for l in range(4):
                 print(xs.get_leg_structure(axis=l))
 
-        if (nums + 1) % int(obs_int) == 0:
-            x = {(ms, sv_beta): Gamma[ms].save_to_dict() for ms in Gamma.keys()}
-            mdata.update(x)
-            np.save("hole_initialized_real_time_evolution_Hubbard_model_spinfull_tensors_%s.npy" % (file_name), mdata)
+        
         if step=='svd-update':
             continue
         ntu_error_up = np.mean(np.sqrt(info['ntu_error'][::2]))
@@ -170,12 +167,12 @@ if __name__== '__main__':
     parser.add_argument("-B", type=str, default='finite') # boundary
     parser.add_argument("-p", type=str, default='False') # bool
     parser.add_argument("-D_gs", type=int, default=4)
-    parser.add_argument("-D_evol", type=int, default=8) 
+    parser.add_argument("-D_evol", type=int, default=6) 
     parser.add_argument("-BETA_GS", type=float, default=20) # beta of initial tensor corresponding to ground state
     parser.add_argument("-S", default='U1xU1_ind') # symmetry -- 'Z2_spinless' or 'U1_spinless'
     parser.add_argument("-X", type=float, default=20) # chi_multiple
-    parser.add_argument("-I", type=float, default=0.01) # interval
-    parser.add_argument("-D_BETA", type=float, default=0.005) # location
+    parser.add_argument("-I", type=float, default=0.001) # interval
+    parser.add_argument("-D_BETA", type=float, default=0.001) # location
     parser.add_argument("-BETA_END", type=float, default=3) # location
     parser.add_argument("-U", type=float, default=12)       # location                                                                                             
     parser.add_argument("-MU_UP", type=float, default=0.)   # location                                                                                                 

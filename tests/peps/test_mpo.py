@@ -51,11 +51,11 @@ def test_NTU_spinless():
     for nums in range(time_steps):
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        Gamma, info = ntu_update(Gamma, net, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
+        Gamma, info = ntu_update(Gamma, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
 
     nbit = 10
     opts = {'chi': round(chi), 'cutoff': 1e-10, 'nbitmax': round(nbit), 'prec' : 1e-8, 'tcinit' : ((0,) * fid.config.sym.NSYM,), 'Dcinit' : (1,)}
-    env = GetEnv(A=Gamma, net=net, **opts, AAb_mode=0)
+    env = GetEnv(A=Gamma, **opts, AAb_mode=0)
 
 
     ###  we try to find out the right boundary vector of the left-most column or 0th row

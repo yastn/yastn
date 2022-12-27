@@ -1,22 +1,22 @@
 """ Function performing NTU update on all four unique bonds corresponding to a two site unit cell. """
 from .NtuEssentials import single_bond_local_update, ntu_machine
 
-def ntu_update(Gamma, net, Gates, Ds, step, truncation_mode, fix_bd):
+def ntu_update(Gamma, Gates, Ds, step, truncation_mode, fix_bd, flag=None):
     
     infos = []
    # local gate
     if Gates['loc'] is not None:
-        Gamma = single_bond_local_update(Gamma, net, Gates['loc'])
+        Gamma = single_bond_local_update(Gamma, Gates['loc'], flag)
    
-    for iter in GB_list(net, Gates['nn']):
+    for iter in GB_list(Gamma, Gates['nn']):
         GA, GB, bd = iter['gateA'], iter['gateB'], iter['bond'] 
-        Gamma, info = ntu_machine(Gamma, net, bd, GA, GB, Ds, truncation_mode, step, fix_bd)
-        # show_leg_structure(net, Gamma)
+        Gamma, info = ntu_machine(Gamma, bd, GA, GB, Ds, truncation_mode, step, fix_bd, flag)
+        # show_leg_structure(Gamma)
         infos.append(info)
 
     # local gate
     if Gates['loc'] is not None:
-        Gamma = single_bond_local_update(Gamma, net, Gates['loc'])
+        Gamma = single_bond_local_update(Gamma, Gates['loc'], flag)
 
     if step=='svd-update':
         return Gamma, info 
@@ -27,9 +27,9 @@ def ntu_update(Gamma, net, Gates, Ds, step, truncation_mode, fix_bd):
         return Gamma, info
 
 
-def GB_list(net, nn_gates):
+def GB_list(Gamma, nn_gates):
     # len(nn_gates) indicates the physical degrees of freedom; option to add more
-    list_tuple = net.bonds(dirn='h') + net.bonds(dirn='v') + net.bonds(dirn='v', reverse=True) + net.bonds(dirn='h', reverse=True)
+    list_tuple = Gamma.bonds(dirn='h') + Gamma.bonds(dirn='v') + Gamma.bonds(dirn='v', reverse=True) + Gamma.bonds(dirn='h', reverse=True)
 
     coll = []
     if len(nn_gates) == 2:
@@ -43,8 +43,8 @@ def GB_list(net, nn_gates):
     return coll
 
 
-def show_leg_structure(net, Gamma):
-   for ms in net.sites():
+def show_leg_structure(Gamma):
+   for ms in Gamma.sites():
         xs = Gamma._data[ms].unfuse_legs((0, 1))
         print("site ", str(ms), xs.get_shape()) 
   
