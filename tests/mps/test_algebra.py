@@ -52,9 +52,9 @@ def test_multiplication():
     #
     # The Hamiltonian is obtained with automatic generator (see source file).
     #
-    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.2, "range1": range(N), "range2": range(N-1)}
-    H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j}"
-    H = generate.mpo(H_str, parameters)
+    parameters = {"t": 1.0, "mu": 0.2, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
+    H_str = "\sum_{i,j \in rangeNN} t ( cp_{i} c_{j} + cp_{j} c_{i} ) + \sum_{j\in rangeN} mu cp_{j} c_{j}"
+    H = generate.mpo_from_latex(H_str, parameters)
     #
     # To standardize this test we will fix a seed for random MPS we use
     #

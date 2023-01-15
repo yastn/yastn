@@ -1,7 +1,7 @@
 import pytest
 import sys
 sys.path.insert(1, './../../yast/tn/mps')
-from latex2term import  splitt,\
+from _latex2term import  splitt,\
                         interpret,\
                         string2list,\
                         latex2term,\
@@ -60,7 +60,7 @@ def test_latex2term_unit_tests():
                         [single_term(op=(('a',), ('b',), ('c',), ('d',), ('d',), ('b',)))],\
                         )
     for x, test_x in zip(examples_B, test_examples_B2):
-        assert interpret(splitt(string2list(x),0)) == test_x
+        assert interpret(splitt(string2list(x),0), {}) == test_x
     
     # Test interpreter with sum substitution
     examples_C =(\

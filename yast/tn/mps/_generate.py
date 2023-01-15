@@ -3,7 +3,7 @@ from typing import NamedTuple
 from ... import ones, rand, ncon, Leg, random_leg, Tensor
 from ...operators import Qdit
 from ._mps import Mpo, Mps, YampsError, add
-from .latex2term import latex2term
+from ._latex2term import latex2term
 
 
 class Hterm(NamedTuple):
@@ -13,6 +13,10 @@ class Hterm(NamedTuple):
     The product operator :math:`O = \otimes_i o_i` is a tensor product of local operators :math:`o_i`.
     Unless explicitly specified, the :math:`o_i` is assumed to be identity operator.
 
+    Parameters
+    ----------
+    amplitude : number
+        number multiplier in front of the product.
     positions : tuple(int)
         positions of the local operators :math:`o_i` in the product different than identity
     operators : tuple(yast.Tensor)
@@ -24,7 +28,7 @@ class Hterm(NamedTuple):
     operators : tuple = ()
 
 
-def generate_H1(I, term):
+def generate_single_mpo(I, term):
     r"""
     Apply local operators specified by term in :class:`Hterm` to the mpo I.
 
@@ -56,18 +60,31 @@ def generate_H1(I, term):
     H1[0] = term.amplitude * H1[0]
     return H1
 
-
-def generate_mpo(I, terms, opts=None):
+def generate_mpo(I, terms, normalize=False, opts=None, packet=50):
     """
     Generate mpo provided a list of Hterm-s and identity operator I.
 
-    TODO: implement more efficient algorithm
+    Creates a packet of MPO-s with packet virtual dimension  'packet',
+    truncate, and to total and truncate again
     """
-    H1s = [generate_H1(I, term) for term in terms]
-    M = add(*H1s)
-    M.canonize_sweep(to='last', normalize=False)
-    M.truncate_sweep(to='first', opts=opts, normalize=False)
-    return M
+    ip, M_tot, Nterms = 0, None, len(terms)
+    while ip < Nterms:
+        H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
+        M = add(*H1s)
+        M.truncate_sweep(to='first', opts=opts, normalize=normalize)
+        ip += packet
+        if not M_tot:
+            M_tot = M.copy()
+        else:
+            M_tot = M_tot + M
+            M_tot.truncate_sweep(to='first', opts=opts, normalize=normalize)
+    return M_tot
+
+def generate_single_mps(I, term):
+    pass
+
+def generate_mps(I, terms, normalize=False, opts=None, packet=50):
+    pass
 
 
 class Generator:
@@ -86,7 +103,6 @@ class Generator:
 
         Parameters
         ----------
-
         N : int
             number of sites of MPS/MPO.
         operators : object
@@ -130,10 +146,18 @@ class Generator:
         self.opts = opts
 
     def random_seed(self, seed):
+        """
+        Generate random seed number for random number generator used in backend of self.config
+
+        Parameters
+        ----------
+        seed : int
+            Seed number for random number generator.
+        """
         self.config.backend.random_seed(seed)
 
     def I(self):
-        """ return identity Mpo. """
+        """ Returns identity Mpo. """
         return self._I.copy()
 
     def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64'):
@@ -149,6 +173,8 @@ class Generator:
         sigma : int
             variance of Normal distribution from which dimensions of charge sectors
             are drawn.
+        dtype : string
+            number format, e.g., 'float64'
         """
         if n is None:
             n = (0,) * self.config.sym.NSYM
@@ -188,6 +214,8 @@ class Generator:
         sigma : int
             variance of Normal distribution from which dimensions of charge sectors
             are drawn.
+        dtype : string
+            number format, e.g., 'float64'
         """
         n0 = (0,) * self.config.sym.NSYM
         psi = Mpo(self.N)
@@ -205,15 +233,31 @@ class Generator:
             return psi
         raise YampsError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
 
-    def mps(self, psi_str, parameters=None):
-        """
-        initialize simple product states 
+    def mps_from_latex(self, psi_str, vectors=None, parameters=None):
+        r"""
+        Generate simple mps form the instruction in psi_str.
 
-        TODO: implement
+        Parameters
+        ----------
+        psi_str : str
+            instruction in latex-like format
+        vectors : dict
+            dictionary with vectors for the generator. All should be given as
+            a dictionary with elements in a format:
+            name : lambda j: tensor
+                where 
+                name - is a name of an element which can be used in psi_str,
+                j - single index for lambda function,
+                tensor - is a yast.Tensor with one physical index.
+        parameters : dict
+            dictionary with parameters for the generator
         """
-        pass
+        parameters = {**self.parameters, **parameters}
+        c2 = latex2term(psi_str, parameters)
+        c3 = self._term2Hterm(c2, vectors, parameters)
+        return generate_mpo(self._I, c3)
 
-    def mpo(self, H_str, parameters=None):
+    def mpo_from_latex(self, H_str, parameters=None):
         r"""
         Convert latex-like string to yamps MPO.
 
@@ -231,43 +275,55 @@ class Generator:
         --------
             :class:`yamps.Mpo`
         """
-        self.parameters = {**self.parameters, **parameters}
-        c2 = latex2term(H_str, self.parameters)
-        c3 = self.term2Hterm(c2)
+        parameters = {**self.parameters, **parameters}
+        c2 = latex2term(H_str, parameters)
+        c3 = self._term2Hterm(c2, self._ops.to_dict(), parameters)
         return generate_mpo(self._I, c3)
 
-    def term2Hterm(self, c2):
+    def _term2Hterm(self, c2, obj_yast, obj_number):
+        """
+        Helper function to rewrite the instruction given as a list of single_term-s (see _latex2term)
+        to a list of Hterm-s (see here).
+
+        Differentiates operators from numberical values.
+
+        Parameters
+        ----------
+        c2 : list
+            list of single_term-s
+        obj_yast : dict
+            dictionary with operators for the generator
+        obj_number : dict
+            dictionary with parameters for the generator
+        """
         # can be used with latex-form interpreter or alone.
-        # TODO: write separate test
         Hterm_list = []
-        basis_operators = self._ops.to_dict()
-        basis_parameters = self.parameters
         for ic in c2:
             # create a single Hterm using single_term
             amplitude, positions, operators = float(1), [], []
             for iop in ic.op:
                 element, *indicies = iop
-                if element in basis_parameters:
-                    # TODO: self._map has to be obeyed for parameters.
+                if element in obj_number:
                     # can have many indicies for cross terms
                     mapindex = tuple([self._map[ind] for ind in indicies]) if indicies else None
-                    # TODO: element has to be numpy array or number
-                    amplitude *= basis_parameters[element] if mapindex is None else basis_parameters[element][mapindex]
-                elif element in basis_operators:
+                    amplitude *= obj_number[element] if mapindex is None else obj_number[element][mapindex]
+                elif element in obj_yast:
                     # is always a single index for each site
                     mapindex = self._map[indicies[0]] if len(indicies) == 1 else YampsError("Operator has to have single index as defined by self._map")
                     positions.append(mapindex) 
-                    operators.append(basis_operators[element](mapindex))
+                    operators.append(obj_yast[element](mapindex))
                 else:
-                    # the only other option is that is a numberm, imaginary number is in self.parameters 
+                    # the only other option is that is a number, imaginary number is in self.obj_number
                     amplitude *= float(element)
             Hterm_list.append(Hterm(amplitude, positions, operators))
         return Hterm_list
 
 def random_dense_mps(N, D, d, **kwargs):
+    """Generate random mps with physical dimension d and virtual dimension D."""
     G = Generator(N, Qdit(d=d, **kwargs))
     return G.random_mps(D_total=D)
 
 def random_dense_mpo(N, D, d, **kwargs):
+    """Generate random mpo with physical dimension d and virtual dimension D."""
     G = Generator(N, Qdit(d=d, **kwargs))
     return G.random_mpo(D_total=D)
