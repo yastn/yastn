@@ -116,7 +116,7 @@ def mpo_XX_model_Z2(config, N, t, mu):
 
 def mpo_XX_model_U1(config, N, t, mu):
     # Initialize MPO tensor by tensor. Example for NN-hopping model, 
-    # using explicit U(1) symmetry of the model.
+    # using explicit U1 symmetry of the model.
     # TODO ref ?
 
     # Build empty MPO for system of N sites
@@ -140,7 +140,7 @@ def mpo_XX_model_U1(config, N, t, mu):
         #
         H.A[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
 
-        # set blocks, indexed by tuple of U(1) charges, of on-site tensor at n-th position
+        # set blocks, indexed by tuple of U1 charges, of on-site tensor at n-th position
         #
         if n == H.first:
             H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 2, 1))
@@ -167,7 +167,7 @@ def mpo_XX_model(config, N, t, mu):
         return mpo_XX_model_dense(config, N, t, mu)
     elif config.sym.SYM_ID == 'Z2':
         return mpo_XX_model_Z2(config, N, t, mu)
-    elif config.sym.SYM_ID == 'U(1)':
+    elif config.sym.SYM_ID == 'U1':
         return mpo_XX_model_U1(config, N, t, mu)
 
 
@@ -176,7 +176,7 @@ def test_generator_mps():
     D_total = 16
     bds = (1,) + (D_total,) * (N - 1) + (1,)
 
-    for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U(1)', (N // 2,))):
+    for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U1', (N // 2,))):
         ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
         generate = mps.Generator(N, ops)
         I = generate.I()
@@ -203,7 +203,7 @@ def test_generator_mpo():
     #   E.g.2, \sum... \sum.. write as \sum... * \sum... or (\sum...) (\sum...)
     #   E.g.4, -\sum... is supported and equivalent to (-1) * \sum...
     H_str = "\sum_{j,k \in rangeNN} t_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in rangeN} mu cp_{i} c_{i}"
-    for sym in ['Z2', 'U(1)']:
+    for sym in ['Z2', 'U1']:
         ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
         for t in [0,0.2, -0.3]:
             for mu in [0.2, -0.3]:
@@ -223,7 +223,7 @@ def test_generator_mpo():
                         generate.random_seed(seed=0)
                         
                         H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
-                        H = generate.mpo(H_str, eparam)
+                        H = generate.mpo_from_latex(H_str, eparam)
               
                         psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
                         x_ref = mps.measure_mpo(psi, H_ref, psi).item()
@@ -239,7 +239,7 @@ def test_generator_mpo():
 def mpo_random_hopping():
     
     # the model is random with handom hopping and on-site energies. sym is symmetry for tensors we will use
-    sym, N = 'U(1)', 3
+    sym, N = 'U1', 3
     
     # generate set of basic ops for the model we want to work with
     ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
@@ -263,7 +263,7 @@ def mpo_random_hopping():
             \sum_{j\in rangeN} mu_{j} cp_{j} c_{j}"
     
     # generate MPO from latex-like input
-    h_str = generate.mpo(h_input, eparam)
+    h_str = generate.mpo_from_latex(h_input, eparam)
 
     # generate Hamiltonian manually
     man_input = []

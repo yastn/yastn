@@ -5,7 +5,7 @@ from ..tensor import YastError, Tensor
 class SpinlessFermions:
     """ Predefine operators for spinless fermions. """
 
-    def __init__(self, sym='U(1)', **kwargs):
+    def __init__(self, sym='U1', **kwargs):
         """ 
         Generator of standard operators for single fermionic species (2-dimensional Hilbert space).
 
@@ -18,18 +18,18 @@ class SpinlessFermions:
         Parameters
         ----------
         sym : str
-            Should be 'Z2', or 'U(1)'.
+            Should be 'Z2', or 'U1'.
 
         Notes
         -----
         Assume the following conventions:
-        For both Z2 and U(1), charge t=0 <=> |0>, t=1 <=> |1>
+        For both Z2 and U1, charge t=0 <=> |0>, t=1 <=> |1>
         """
-        if not sym in ('Z2', 'U(1)'):
-            raise YastError("For SpinlessFermions sym should be in ('Z2', 'U(1)').")
+        if not sym in ('Z2', 'U1'):
+            raise YastError("For SpinlessFermions sym should be in ('Z2', 'U1').")
         self._sym = sym
         kwargs['fermionic'] = True
-        import_sym = {'Z2': sym_Z2, 'U(1)': sym_U1}
+        import_sym = {'Z2': sym_Z2, 'U1': sym_U1}
         kwargs['sym'] = import_sym[sym]
         self.config = make_config(**kwargs)
         self.s = (1, -1)

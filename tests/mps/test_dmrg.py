@@ -80,13 +80,13 @@ def test_dense_dmrg():
     #
     operators = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=N, operators=operators)
-    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.2, "range1": range(N), "range2": range(N-1)}
-    H_str = "\sum_{j \in range2} t ( sp_{j} sm_{j+1} + sp_{j+1} sm_{j} ) + \sum_{j\in range1} mu sp_{j} sm_{j}"
-    H = generate.mpo(H_str, parameters)
+    parameters = {"t": 1.0, "mu": 0.2, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
+    H_str = "\sum_{i,j \in rangeNN} t ( sp_{i} sm_{j} + sp_{j} sm_{i} ) + \sum_{j\in rangeN} mu sp_{j} sm_{j}"
+    H = generate.mpo_from_latex(H_str, parameters)
     #
     # and MPO to measure occupation:
     #
-    occ = generate.mpo("\sum_{j\in range1} sp_{j} sm_{j}", {"range1": range(N)})
+    occ = generate.mpo_from_latex("\sum_{j\in rangeN} sp_{j} sm_{j}", {"rangeN": range(N)})
     #
     # To standardize this test we will fix a seed for random MPS we use
     #
@@ -136,10 +136,10 @@ def test_Z2_dmrg():
                   1: [3, 3, 5]}
     Eng_target = {0: [-3.227339492125848, -2.8619726273956685, -2.461972627395668],
                   1: [-3.427339492125848, -2.6619726273956683, -2.261972627395668]}
-    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.2, "range1": range(N), "range2": range(N-1)}
-    H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j}"
-    H = generate.mpo(H_str, parameters)
-    occ = generate.mpo("\sum_{j\in range1} cp_{j} c_{j}", {"range1": range(N)})
+    parameters = {"t": 1.0, "mu": 0.2, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
+    H_str = "\sum_{i,j \in rangeNN} t ( cp_{i} c_{j} + cp_{j} c_{i} ) + \sum_{j\in rangeN} mu cp_{j} c_{j}"
+    H = generate.mpo_from_latex(H_str, parameters)
+    occ = generate.mpo_from_latex("\sum_{j\in rangeN} cp_{j} c_{j}", {"rangeN": range(N)})
     
     for parity in (0, 1):
         psi = generate.random_mps(D_total=Dmax, n=parity).canonize_sweep(to='first')
@@ -163,10 +163,10 @@ def test_U1_dmrg():
     Eng_sectors = {2: [-2.861972627395668, -2.213125929752753, -1.7795804271032745],
                    3: [-3.427339492125848, -2.661972627395668, -2.0131259297527526],
                    4: [-3.227339492125848, -2.461972627395668, -1.8131259297527529]}
-    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.2, "range1": range(N), "range2": range(N-1)}
-    H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j}"
-    H = generate.mpo(H_str, parameters)
-    occ = generate.mpo("\sum_{j\in range1} cp_{j} c_{j}", {"range1": range(N)})
+    parameters = {"t": 1.0, "mu": 0.2, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
+    H_str = "\sum_{i,j \in rangeNN} t ( cp_{i} c_{j} + cp_{j} c_{i} ) + \sum_{j\in rangeN} mu cp_{j} c_{j}"
+    H = generate.mpo_from_latex(H_str, parameters)
+    occ = generate.mpo_from_latex("\sum_{j\in rangeN} cp_{j} c_{j}", {"rangeN": range(N)})
 
     # for total_occ, E_target in Eng_sectors.items():
     #     psi = generate.random_mps(D_total=Dmax, n=total_occ).canonize_sweep(to='first')
