@@ -3,7 +3,7 @@ from typing import NamedTuple
 from ... import ones, rand, ncon, Leg, random_leg, Tensor
 from ...operators import Qdit
 from ._mps import Mpo, Mps, YampsError, add
-from ._latex2term import latex2term
+from ._latex2term import latex2term, GeneratorError
 
 
 class Hterm(NamedTuple):
@@ -44,21 +44,21 @@ def generate_single_mpo(I, term):
         operators element.operator at location element.position
         and with amplitude element.amplitude.
     """
-    H1 = I.copy()
+    single_mpo = I.copy()
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
         op = op.add_leg(axis=0, s=1)
         leg = op.get_legs(axis=0)
         one = ones(config=op.config, legs=(leg, leg.conj()))
-        temp = ncon([op, H1[site]], [(-1, -2, 1), (-0, 1, -3, -4)])
-        H1[site] = temp.fuse_legs(axes=((0, 1), 2, 3, 4), mode='hard')
+        temp = ncon([op, single_mpo[site]], [(-1, -2, 1), (-0, 1, -3, -4)])
+        single_mpo[site] = temp.fuse_legs(axes=((0, 1), 2, 3, 4), mode='hard')
         for n in range(site):
-            temp = ncon([H1[n], one], [(-0, -2, -3, -5), (-1, -4)])
+            temp = ncon([single_mpo[n], one], [(-0, -2, -3, -5), (-1, -4)])
             temp = temp.swap_gate(axes=(1, 2))
-            H1[n] = temp.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
-    for n in H1.sweep():
-        H1[n] = H1[n].drop_leg_history(axis=(0, 2))
-    H1[0] = term.amplitude * H1[0]
-    return H1
+            single_mpo[n] = temp.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
+    for n in single_mpo.sweep():
+        single_mpo[n] = single_mpo[n].drop_leg_history(axis=(0, 2))
+    single_mpo[0] = term.amplitude * single_mpo[0]
+    return single_mpo
 
 def generate_mpo(I, terms, normalize=False, opts=None, packet=50):
     """
@@ -80,11 +80,53 @@ def generate_mpo(I, terms, normalize=False, opts=None, packet=50):
             M_tot.truncate_sweep(to='first', opts=opts, normalize=normalize)
     return M_tot
 
-def generate_single_mps(I, term):
-    pass
+def generate_single_mps(term, N):
+    r"""
+    Generate a vector given vectors for each site in the MPS.
 
-def generate_mps(I, terms, normalize=False, opts=None, packet=50):
-    pass
+    Parameters
+    ----------
+    term: :class:`Hterm`
+        instruction to create the Mps which is a product of
+        operators element.operator at location element.position
+        and with amplitude element.amplitude.
+    N: int
+        MPS size
+    """
+    if len(term.positions) != set(len(term.positions)):
+        raise GeneratorError("List contains more than one operator for a single position.\n \
+            Multiplication of two vectors is not defined.")
+    if set(len(term.positions)) != N:
+        raise GeneratorError("Provide term for each site in MPS.")
+    single_mps = Mps(N)
+    for n in range(N):
+        if n in term.positions:
+            op = term.operators[term.positions == n]
+        else:
+            raise GeneratorError("Provide term for each site in MPS.")
+        single_mps.A[n] = op.add_leg(axis=0, s=1).add_leg(axis=2, s=-1)
+    return term.amplitude * single_mps
+
+
+def generate_mps(terms, N, normalize=False, opts=None, packet=50):
+    """
+    Generate mps provided a list of Hterm-s.
+
+    Creates a packet of MPS-s with packet virtual dimension  'packet',
+    truncate, and to total and truncate again
+    """
+    ip, M_tot, Nterms = 0, None, len(terms)
+    while ip < Nterms:
+        H1s = [generate_single_mps(terms[j], N) for j in range(ip, min([Nterms, ip + packet]))]
+        M = add(*H1s)
+        M.truncate_sweep(to='first', opts=opts, normalize=normalize)
+        ip += packet
+        if not M_tot:
+            M_tot = M.copy()
+        else:
+            M_tot = M_tot + M
+            M_tot.truncate_sweep(to='first', opts=opts, normalize=normalize)
+    return M_tot
 
 
 class Generator:
@@ -255,7 +297,7 @@ class Generator:
         parameters = {**self.parameters, **parameters}
         c2 = latex2term(psi_str, parameters)
         c3 = self._term2Hterm(c2, vectors, parameters)
-        return generate_mpo(self._I, c3)
+        return generate_mps(c3, self.N)
 
     def mpo_from_latex(self, H_str, parameters=None):
         r"""

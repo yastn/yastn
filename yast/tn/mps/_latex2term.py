@@ -8,7 +8,7 @@ from typing import NamedTuple
 from itertools import chain
 import re
 
-class gen_parameratorError(Exception):
+class GeneratorError(Exception):
     pass
 
 basic_operation = ["+", "*"]
@@ -70,7 +70,7 @@ def replace_index(single_term_el, old_name, new_name):
     old_name = old_name
     new_name = [new_name] if len(old_name)==1 else new_name
     if len(old_name) != len(new_name):
-        raise gen_parameratorError("Number of old and new indicies is not consistent.")
+        raise GeneratorError("Number of old and new indicies is not consistent.")
     new_op = []
     for op in single_term_el.op:
         for jold, jnew in zip(old_name, new_name):
@@ -193,14 +193,14 @@ def splitt(b, eq_it):
         Split the intruction in b with respect to the operation basic_operation[eq_it]
     """
     if not b or eq_it > len(basic_operation):
-        raise gen_parameratorError("Not supported. You provided an empty list or there is no such basic operation.")
+        raise GeneratorError("Not supported. You provided an empty list or there is no such basic operation.")
     # split against that operation
     operation = basic_operation[eq_it]
     # check brackets
     id_start = [i for i, x in enumerate(b) if x == "("]
     id_stop = [i for i, x in enumerate(b) if x == ")"]
     if len(id_start) != len(id_stop):
-        raise gen_parameratorError("Inconsistent brackets!")
+        raise GeneratorError("Inconsistent brackets!")
     # check sums
     id_startX = [i for i, x in enumerate(b) if x == "sum"]
     id_stopX = [i for i, x in enumerate(b) if x == "endsum"]
