@@ -167,7 +167,7 @@ def mpo_XX_model(config, N, t, mu):
         return mpo_XX_model_dense(config, N, t, mu)
     elif config.sym.SYM_ID == 'Z2':
         return mpo_XX_model_Z2(config, N, t, mu)
-    elif config.sym.SYM_ID == 'U1':
+    elif config.sym.SYM_ID == 'U(1)':
         return mpo_XX_model_U1(config, N, t, mu)
 
 
@@ -224,8 +224,9 @@ def test_generator_mpo():
                         
                         H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
                         H = generate.mpo_from_latex(H_str, eparam)
-              
+
                         psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
+                        
                         x_ref = mps.measure_mpo(psi, H_ref, psi).item()
                         x = mps.measure_mpo(psi, H, psi).item()
                         assert abs(x_ref - x) < tol
@@ -236,7 +237,7 @@ def test_generator_mpo():
                         x = mps.measure_mpo(psi, H, psi).item()
                         assert abs(x_ref - x) < tol
 
-def mpo_random_hopping():
+def mpo_random_hopping_from_latex():
     
     # the model is random with handom hopping and on-site energies. sym is symmetry for tensors we will use
     sym, N = 'U1', 3
@@ -288,7 +289,55 @@ def mpo_random_hopping():
     assert abs(x_man - x_str) < tol
 
 
+def mpo_random_hopping_from_tamplete():
+    
+    # the model is random with handom hopping and on-site energies. sym is symmetry for tensors we will use
+    sym, N = 'U1', 3
+    
+    # generate set of basic ops for the model we want to work with
+    ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+    
+    # generate data for random Hamiltonian
+    amplitudes1 = np.random.rand(N, N)
+    amplitudes1 = 0.5 * (amplitudes1 + amplitudes1.transpose())
+    
+    # use this map which is used for naming the sites in MPO
+    # maps between iteractors and MPO
+    emap = {i: i for i in range(N)}
+    
+    # create a generator initialized for emap mapping
+    generate = mps.Generator(N, ops, map=emap)
+    generate.random_seed(seed=0)
+    
+    # define parameters for automatic generator and Hamiltonian in a latex-like form
+    eparam ={"A": amplitudes1, "rangeN": range(N)}
+    h_input = "\sum_{j\in rangeN} \sum_{k\in rangeN} A_{j,k} cp_{j} c_{k}"
+    
+    # generate MPO from latex-like input
+    h_str = generate.mpo_from_latex(h_input, eparam)
+
+    # generate Hamiltonian manually
+    man_input = []
+    for n0 in emap.keys():
+        for n1 in emap.keys():
+            man_input.append(\
+                mps.single_term((('A',n0,n1), ('cp',n0), ('c',n1),)))
+    h_man = generate.mpo_from_templete(man_input, eparam)
+    
+    # test the result by comparing expectation value for a steady state.
+    # use random seed to generate mps
+    generate.random_seed(seed=0)
+
+    # generate mps and compare overlaps
+    psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
+    x_man = mps.measure_mpo(psi, h_man, psi).item()
+    x_str = mps.measure_mpo(psi, h_str, psi).item()
+    
+    assert abs(x_man - x_str) < tol
+
+
 if __name__ == "__main__":
     test_generator_mps()
-    #test_generator_mpo()
-    mpo_random_hopping()
+    test_generator_mpo()
+    mpo_random_hopping_from_latex()
+    mpo_random_hopping_from_tamplete()

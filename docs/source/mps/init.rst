@@ -43,60 +43,41 @@ To create :class:`yast.Tensor`'s see :ref:`YAST's basic creation operations<tens
 For more examples, see :ref:`Setting MPS/MPO manually<examples/mps/mps:building yamps object manually>`. 
 
 
-Automatic creation of MPS
--------------------------
+Generating MPS from LaTex-like format
+-------------------------------------
 
 
-Generate MPO automatically
---------------------------
+Generating MPO from LaTex-like format
+-------------------------------------
 
-`YAMPS` provides a tool for automatic MPO generation, which allows to construct Hamiltonian of any form for both bosonic and fermionic systems.
+`YAMPS` includes a tool which interprets LaTex-like instruction in order to generate MPO. The tool allows to create bosonic and fermionic operators. 
+The `Generator` provides an environment to use interpreter.
 
 .. autoclass:: yamps.Generator
 
-To initiallize the generator :code:`gen = yamps.Generator(N, operators)` we need to provide a length of the MPO :code':`N`, set of operators used by :code:`gen`.
-For optional parameters see sourse code. Predefined set of operators are :code:`yast` option. E.g., for spinless fermions one should use,
+
+The minimal example to initialize a `Generator` is :code:`gen = yast.tn.mps.Generator(N, operators, map)`. Which creates an environment
+to generate MPO of `N`  tensors. The generator uses the `yast.Tensor`-s provided in `operators` which are refered in the intruction based 
+on their names in :code:`operators.to_dict()` with indicies refered by names as defined in the map `map` which maps from an abract name to
+index in `YAMPS` object.
+
+In order to create a generator we need to provide the basis operators used for the generator. In `yast.operators` there are some most common
+classes with bases operators, e.g., an instance of :class:`yast.operators.SpinlessFermions` for uniform lattice with spinless fermions. 
+After importing the basis class we can use all operators in :code:`operators.to_dict()`. These operators can be refered in the intruction 
+by using its name as in keys :code:`operators.to_dict()`. 
+There is a possibility to create your own class with basis operators. In order to do that use :class:`yast.operators.General` which is a tamplete. 
 
 .. autoclass:: yast.operators.SpinlessFermions
 
-For example, to get the set of operators for spinless fermions written as U(1)-symmetric tensors use :code:`operators = yast.operators.SpinlessFermions(sym='U1')`.
-After defining :code:`operators` we can run  :code:`gen = yamps.Generator(N, operators)`.
+The `YAMPS` object is indexed by the :code:`map` which is a dictionary mapping from abstract label to a number according to the enumeration in the 
+`YAMPS` object. 
 
-With the generator we can construct a random MPS/MPO (we can fix seed for random generator by :code:`generate.random_seed(seed)`) or specified by LaTeX-like input format.
-For the examples see :ref:`Generating MPS/MPO automatically<examples/mps/mps:generating mps/mpo automatically>`. 
+`Generator` allows to:
 
-..
-	=======
-	The class :class:`yamps.Mps` defines matrix product states and operators through a set of tensors *A*. It consists of integer-indexed dictionary of :class:`yast.Tensor`. 
-	Using rank-3 tensors *A*, :class:`yamps.Mps` can represent states
+1/ :ref:`<examples/mps/mps:Create random MPS or MPO>`
 
-	.. math::
-		
-		|\psi\rangle &= \sum_{\{\sigma\}} c_{\{\sigma\}} |\{\sigma\}\rangle,\\
-		c_{\{\sigma\}} &= Tr_{aux}[A^{\sigma_0}_{a_0,a_1}A^{\sigma_1}_{a_1,a_2}\ldots
-		A^{\sigma_{N-1}}_{a_{N-1},a_N}],
+2/ :ref:`<examples/mps/mps:Create MPS or MPO based on templete object>`
 
-	where each of tensors *A* has three indices, in order: left virtual :math:`a_i`, single physical :math:`\sigma`, and right virtual index :math:`a_{i+1}`. 
-	The operators are represented similarily by rank-4 tensors *A*
+3/ :ref:`<examples/mps/mps:Generate MPS from LaTex-like instruction>`
 
-	.. math::
-		
-		O &= \sum_{\{\sigma\},\{\sigma'\}} O_{\{\sigma\},\{\sigma'\}} |\{\sigma\}\rangle\langle\{\sigma'\}|,\\
-		O_{\{\sigma\},\{\sigma'\}} &= Tr_{aux}[A^{\sigma_0,\sigma'_0}_{a_0,a_1}A^{\sigma_1,\sigma'_1}_{a_1,a_2}\ldots
-		A^{\sigma_{N-1}\sigma'_{N-1}}_{a_{N-1},a_N}]
-
-	with convention for index order as follows: left virtual :math:`a_i`, physical :math:`\sigma`, physical :math:`\sigma'`, and right virtual index :math:`a_{i+1}`.
-	The indices :math:`\sigma,\sigma'` represent *bra* and *ket* physical indices
-	of the operator.
-
-	The `yamps.Mps` defines matrix products with open-boundary condition. Therefore, 
-	the bond dimension of virtual indices on the edges, :math:`a_0` and :math:`a_N` is 1 by default.
-
-
-	Creating `yamps.Mps` matrix product
-	-----------------------------------
-
-	.. autoclass:: yamps.Mps
-	>>>>>>> Stashed changes
-
-
+4/ :ref:`<examples/mps/mps:Generate MPO from LaTex-like instruction>`
