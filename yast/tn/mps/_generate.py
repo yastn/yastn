@@ -321,6 +321,27 @@ class Generator:
         c2 = latex2term(H_str, parameters)
         c3 = self._term2Hterm(c2, self._ops.to_dict(), parameters)
         return generate_mpo(self._I, c3)
+    
+    def mpo_from_templete(self, templete, parameters=None):
+        r"""
+        Convert instruction in a form of single_term-s to yamps MPO.
+
+        single_term is a templete which which take named from operators and templetes.
+
+        Parameters
+        -----------
+        templete: list
+            List of single_term objects. The object is defined in ._latex2term
+        parameters: dict
+            Keys for the dict define the expressions that occur in H_str
+
+        Returns
+        --------
+            :class:`yamps.Mpo`
+        """
+        parameters = {**self.parameters, **parameters}
+        c3 = self._term2Hterm(templete, self._ops.to_dict(), parameters)
+        return generate_mpo(self._I, c3)
 
     def _term2Hterm(self, c2, obj_yast, obj_number):
         """

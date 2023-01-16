@@ -40,7 +40,13 @@ MPO for hopping model with U(1) symmetry
         :pyobject: mpo_XX_model_U1
 
 
-Automatically generated matrix product
+Generate MPS from LaTex-like instruction
+--------------------------------------
+
+NONE
+
+
+Generate MPO from LaTex-like instruction
 --------------------------------------
 
 The MPO can be constructed automatically using dedicated `yamps.Generator` supplied with set of tensors as a basis. 
@@ -49,13 +55,20 @@ The input for MPS/MPO generation can be given in a convenient LaTeX-like string.
 Automatic generator creates MPS/MPO with symmetries 
 
 .. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: test_generator_mps, test_generator_mpo
+        :pyobject: test_generator_mpo, mpo_random_hopping_from_latex
 
-Generation of more complex Hamiltonian can be drown to Ising model with decaying coupling strength. 
+
+Create MPS or MPO based on templete object
+--------------------------------------
 
 .. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: mpo_Ising_model
+        :pyobject: mpo_random_hopping_from_tamplete
 
+Create random MPS or MPO
+--------------------------------------
+
+.. literalinclude:: /../../tests/mps/test_generator.py
+        :pyobject: test_generator_mps
 
 .. FOR ALGEBRA 
 
