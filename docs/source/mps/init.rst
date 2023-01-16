@@ -43,18 +43,13 @@ To create :class:`yast.Tensor`'s see :ref:`YAST's basic creation operations<tens
 For more examples, see :ref:`Setting MPS/MPO manually<examples/mps/mps:building yamps object manually>`. 
 
 
-Generating MPS from LaTex-like format
--------------------------------------
-
-
-Generating MPO from LaTex-like format
+Generating YAMPS from LaTex-like format
 -------------------------------------
 
 `YAMPS` includes a tool which interprets LaTex-like instruction in order to generate MPO. The tool allows to create bosonic and fermionic operators. 
 The `Generator` provides an environment to use interpreter.
 
 .. autoclass:: yamps.Generator
-
 
 The minimal example to initialize a `Generator` is :code:`gen = yast.tn.mps.Generator(N, operators, map)`. Which creates an environment
 to generate MPO of `N`  tensors. The generator uses the `yast.Tensor`-s provided in `operators` which are refered in the intruction based 
