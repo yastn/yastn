@@ -76,6 +76,7 @@ The object can be created without `yast.tn.mps.Generator` by writing the instruc
 elements which will be summed.
 
 An example for creating MPO from `Hterm` templete is included below:
+
 .. literalinclude:: /../../tests/mps/test_generator.py
         :pyobject: test_mpo_from_latex
 
@@ -84,7 +85,7 @@ contains the instruction for the product where the elements of the product are r
 the basis for operators :code:`generator._ops.to_dict()`, and parameters we provide as input.
 
 .. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: test_generator_mps, test_mpo_from_templete
+        :pyobject: test_mpo_from_templete
 
 
 Create random MPS or MPO

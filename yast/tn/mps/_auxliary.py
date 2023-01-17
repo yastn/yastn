@@ -1,6 +1,6 @@
 """ Mps structure and its basic """
 from ... import initialize
-from ._mps import MpsMpo
+from ._mps import MpsMpo, YampsError
 
 
 def load_from_dict(config, in_dict):
@@ -40,19 +40,18 @@ def load_from_hdf5(config, file, in_file_path):
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YAST configuration <tensor/configuration:yast configuration>`
 
-    nr_phys: int
-        number of physical legs: 1 for MPS (default); 2 for MPO;
-
     file: File
         A 'pointer' to a file opened by a user
-
-    in_file_path: File
-        Name of a group in the file, where the Mps saved
 
     Returns
     -------
     yast.MpsMpo
     """
+    
+    sym_id = file[in_file_path].get('sym/SYM_ID')[()]
+    nsym = file[in_file_path].get('sym/NSYM')[()]
+    if not sym_id.decode('ascii') == config.sym.SYM_ID or not nsym == config.sym.NSYM:
+        raise YampsError("config doesn't match the one for saved data")
     nr_phys = int(file[in_file_path].get('nr_phys')[()])
     N = len(file[in_file_path+'/A'].keys())
     out_Mps = MpsMpo(N, nr_phys=nr_phys)
