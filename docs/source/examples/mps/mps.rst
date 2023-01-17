@@ -65,7 +65,10 @@ The input for MPO generation can be given in a convenient LaTeX-like string.
 Automatic generator creates MPO with symmetry as in `Generator`.
 
 .. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: test_generator_mpo, test_mpo_from_latex
+        :pyobject: test_generator_mpo
+
+.. literalinclude:: /../../tests/mps/test_generator.py
+        :pyobject: test_mpo_from_latex
 
 
 Create MPS or MPO based on templete object
