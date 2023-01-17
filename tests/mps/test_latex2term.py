@@ -1,7 +1,6 @@
 import pytest
 import sys
-sys.path.insert(1, './../../yast/tn/mps')
-from _latex2term import  splitt,\
+from yast.tn.mps._latex2term import  splitt,\
                         interpret,\
                         string2list,\
                         latex2term,\
