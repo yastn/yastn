@@ -27,7 +27,7 @@ class General:
         basis_operators have to include an identity operators defined under a key 'I'.
         """
         
-        self.config = basis_operators['I'].config
+        self.config = basis_operators['I'](0).config
         self._sym = self.config.sym.SYM_ID
         self.s = (1, -1)
         self.operators =  list(basis_operators.keys())
@@ -35,7 +35,7 @@ class General:
 
     def I(self):
         """ Identity operator. """
-        return self.basis_operators['I']
+        return self.basis_operators['I'](0)
 
     def to_dict(self):
         return self.basis_operators
