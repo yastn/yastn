@@ -70,10 +70,10 @@ The `YAMPS` object is indexed by the :code:`map` which is a dictionary mapping f
 
 `Generator` allows to:
 
-1/ :ref:`<examples/mps/mps:Create random MPS or MPO>`
+1/ :ref:`Create random MPS or MPO<examples/mps/mps:create random mps or mpo>`
 
-2/ :ref:`<examples/mps/mps:Create MPS or MPO based on templete object>`
+2/ :ref:`Create MPS or MPO based on templete object<examples/mps/mps:Create MPS or MPO based on templete object>`
 
-3/ :ref:`<examples/mps/mps:Generate MPS from LaTex-like instruction>`
+3/ :ref:`Generate MPS from LaTex-like instruction<examples/mps/mps:Generate MPS from LaTex-like instruction>`
 
-4/ :ref:`<examples/mps/mps:Generate MPO from LaTex-like instruction>`
+4/ :ref:`Generate MPO from LaTex-like instruction<examples/mps/mps:Generate MPO from LaTex-like instruction>`
