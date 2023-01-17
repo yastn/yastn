@@ -93,10 +93,10 @@ def generate_single_mps(term, N):
     N: int
         MPS size
     """
-    if len(term.positions) != set(len(term.positions)):
+    if len(term.positions) != len(set(term.positions)):
         raise GeneratorError("List contains more than one operator for a single position.\n \
             Multiplication of two vectors is not defined.")
-    if set(len(term.positions)) != N:
+    if len(set(term.positions)) != N:
         raise GeneratorError("Provide term for each site in MPS.")
     single_mps = Mps(N)
     for n in range(N):
@@ -106,7 +106,6 @@ def generate_single_mps(term, N):
             raise GeneratorError("Provide term for each site in MPS.")
         single_mps.A[n] = op.add_leg(axis=0, s=1).add_leg(axis=2, s=-1)
     return term.amplitude * single_mps
-
 
 def generate_mps(terms, N, normalize=False, opts=None, packet=50):
     """
@@ -163,6 +162,10 @@ class Generator:
             If None, uses default ``{'sites': [*map.keys()]}``.
         opts : dict
             used if compression is needed. Options passed to :meth:`yast.linalg.svd`.
+        
+        Notes
+        ------
+        minus and 1j are reserved name for perameters.
         """
         self.N = N
         self._ops = operators
@@ -293,10 +296,43 @@ class Generator:
                 tensor - is a yast.Tensor with one physical index.
         parameters : dict
             dictionary with parameters for the generator
+
+        Returns
+        --------
+            :class:`yamps.Mps`
         """
         parameters = {**self.parameters, **parameters}
         c2 = latex2term(psi_str, parameters)
         c3 = self._term2Hterm(c2, vectors, parameters)
+        return generate_mps(c3, self.N)
+
+    def mps_from_templete(self, templete, vectors=None, parameters=None):
+        r"""
+        Convert instruction in a form of single_term-s to yamps MPO.
+
+        single_term is a templete which which take named from operators and templetes.
+
+        Parameters
+        -----------
+        templete: list
+            List of single_term objects. The object is defined in ._latex2term
+        vectors : dict
+            dictionary with vectors for the generator. All should be given as
+            a dictionary with elements in a format:
+            name : lambda j: tensor
+                where 
+                name - is a name of an element which can be used in psi_str,
+                j - single index for lambda function,
+                tensor - is a yast.Tensor with one physical index.
+        parameters: dict
+            Keys for the dict define the expressions that occur in H_str
+
+        Returns
+        --------
+            :class:`yamps.Mps`
+        """
+        parameters = {**self.parameters, **parameters}
+        c3 = self._term2Hterm(templete, vectors, parameters)
         return generate_mps(c3, self.N)
 
     def mpo_from_latex(self, H_str, parameters=None):

@@ -162,6 +162,7 @@ def mpo_XX_model_U1(config, N, t, mu):
     return H
 
 
+
 def mpo_XX_model(config, N, t, mu):
     if config.sym.SYM_ID == 'dense':
         return mpo_XX_model_dense(config, N, t, mu)
@@ -170,8 +171,7 @@ def mpo_XX_model(config, N, t, mu):
     elif config.sym.SYM_ID == 'U(1)':
         return mpo_XX_model_U1(config, N, t, mu)
 
-
-def test_generator_mps():
+def test_random_mps():
     N = 10
     D_total = 16
     bds = (1,) + (D_total,) * (N - 1) + (1,)
@@ -207,7 +207,7 @@ def test_generator_mpo():
         ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
         for t in [0,0.2, -0.3]:
             for mu in [0.2, -0.3]:
-                for N in [3,5]:
+                for N in [2,3]:
                     example_mapping = (\
                                         {i: i for i in range(N)},\
                                         {str(i): i for i in range(N)},\
@@ -237,7 +237,7 @@ def test_generator_mpo():
                         x = mps.measure_mpo(psi, H, psi).item()
                         assert abs(x_ref - x) < tol
 
-def mpo_random_hopping_from_latex():
+def test_mpo_from_latex():
     
     # the model is random with handom hopping and on-site energies. sym is symmetry for tensors we will use
     sym, N = 'U1', 3
@@ -289,7 +289,7 @@ def mpo_random_hopping_from_latex():
     assert abs(x_man - x_str) < tol
 
 
-def mpo_random_hopping_from_tamplete():
+def test_mpo_from_templete():
     
     # the model is random with handom hopping and on-site energies. sym is symmetry for tensors we will use
     sym, N = 'U1', 3
@@ -335,9 +335,55 @@ def mpo_random_hopping_from_tamplete():
     
     assert abs(x_man - x_str) < tol
 
+def mps_basis_ex(config):
+    plus = yast.Tensor(config=config, s=[1])
+    plus.set_block(val=[0, 1],Ds=(2,))
+    minus = yast.Tensor(config=config, s=[1])
+    minus.set_block(val=[1, 0],Ds=(2,))
+    return plus, minus
+
+def mpo_basis_ex(config):
+    cpc = yast.Tensor(config=config, s=[1, -1])
+    cpc.set_block(val=[[0,0],[0,1]],Ds=(2,2,))
+    ccp = yast.Tensor(config=config, s=[1, -1])
+    ccp.set_block(val=[[1,0],[0,0]],Ds=(2,2,))
+    I = yast.Tensor(config=config, s=[1, -1])
+    I.set_block(val=[[1,0],[0,1]],Ds=(2,2,))
+    return cpc, ccp, I
+
+def test_generator_mps():
+    N = 3
+    
+    cpc, ccp, I = mpo_basis_ex(cfg)
+    
+    ops = yast.operators.General({'cpc': lambda j: cpc, 'ccp': lambda j: ccp, 'I': lambda j: I})
+        
+    emap = {str(i): i for i in range(N)}
+    
+    generate = mps.Generator(N, ops, map=emap)
+    generate.random_seed(seed=0)
+    
+    # generate from LaTeX-like instruction
+    A = np.random.rand(2)
+    psi_str = "A_{0} Plus_{0} Plus_{1} Plus_{2} + A_{1} Minus_{0} Minus_{1} Minus_{2}"
+    plus, minus = mps_basis_ex(cfg)
+
+    psi_ltx = generate.mps_from_latex(psi_str, \
+        vectors = {'Plus': lambda j: plus, 'Minus': lambda j: minus}, \
+        parameters = {'A': A})
+    
+    psi_tmpl = generate.mps_from_templete(
+        [mps.single_term((('A','0'),('Plus','0'),('Plus','1'),('Plus','2'))), \
+        mps.single_term((('A','1'),('Minus','0'),('Minus','1'),('Minus','2')))], \
+        vectors = {'Plus': lambda j: plus, 'Minus': lambda j: minus}, \
+        parameters = {'A': A})
+
+    psi = generate.random_mps(D_total=8)
+    assert mps.measure_overlap(psi_tmpl, psi) == mps.measure_overlap(psi_ltx, psi)
 
 if __name__ == "__main__":
+    test_random_mps()
     test_generator_mps()
     test_generator_mpo()
-    mpo_random_hopping_from_latex()
-    mpo_random_hopping_from_tamplete()
+    test_mpo_from_latex()
+    test_mpo_from_templete()
