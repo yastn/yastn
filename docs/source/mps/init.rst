@@ -43,7 +43,7 @@ To create :class:`yast.Tensor`'s see :ref:`YAST's basic creation operations<tens
 For more examples, see :ref:`Setting MPS/MPO manually<examples/mps/mps:building yamps object manually>`. 
 
 
-Generating YAMPS from LaTex-like format
+Generating MPS or MPO with Generator
 -------------------------------------
 
 `YAMPS` includes a tool which interprets LaTex-like instruction in order to generate MPO. The tool allows to create bosonic and fermionic operators. 
@@ -60,9 +60,10 @@ In order to create a generator we need to provide the basis operators used for t
 classes with bases operators, e.g., an instance of :class:`yast.operators.SpinlessFermions` for uniform lattice with spinless fermions. 
 After importing the basis class we can use all operators in :code:`operators.to_dict()`. These operators can be refered in the intruction 
 by using its name as in keys :code:`operators.to_dict()`. 
-There is a possibility to create your own class with basis operators. In order to do that use :class:`yast.operators.General` which is a tamplete. 
 
 .. autoclass:: yast.operators.SpinlessFermions
+
+There is a possibility to create your own class with basis operators. In order to do that use :class:`yast.operators.General` which is a tamplete. 
 
 The `YAMPS` object is indexed by the :code:`map` which is a dictionary mapping from abstract label to a number according to the enumeration in the 
 `YAMPS` object. 
