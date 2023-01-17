@@ -728,8 +728,8 @@ class MpsMpo:
         file: File
             A 'pointer' to a file opened by a user
 
-        my_address: File
-            Name of a group in the file, where the Mps will be saved
+        my_address: str
+            Name of a group in the file, where the Mps will be saved, e.g., 'state/'
         """
         file.create_dataset(my_address+'/nr_phys', data=self.nr_phys)
         file.create_dataset(my_address+'/sym/SYM_ID', data=self[0].config.sym.SYM_ID)
