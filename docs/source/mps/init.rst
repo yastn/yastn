@@ -5,75 +5,153 @@ Initialization
 Creating empty MPS/MPO
 ----------------------
 
-Both MPS and MPO are represented by the same class :class:`yamps.MpsMpo`, sharing many operations. The only difference between them is the number of their physical dimensions. The class :class:`yamps.MpsMpo` defines MPS/MPO through the set of tensors *A*
-which are stored as integer-indexed dictionary :code:`yamps.MpsMpo.A` 
-of rank-3/rank-4 :class:`yast.Tensor`'s. 
+In order to initialize MPS :class:`yast.tn.mps.Mps` or MPO :class:`yast.tn.mps.MPO` we have to create an object of that class.
 
-To create empty MPS/MPO, i.e., without any tensors call
+.. autofunction:: yast.tn.mps.Mps
+.. autofunction:: yast.tn.mps.Mpo
 
-.. autoclass:: yamps.MpsMpo
+To initialize an empty object for MPS use :code:`psi = yast.tn.mps.Mps(N)` which creates MPS of `N` sites but without any tensors defined.
 
-Short-hand functions for creation of empty MPS/MPO
+Both :class:`yast.tn.mps.Mps` and :class:`yast.tn.mps.MPO` inherit all functions from parent class :class:`yast.tn.mps.MpsMpo` but differ by a 
+number of physical legs, i.e., one for MPS and 2 for MPO. :class:`yast.tn.mps.MpsMpo` supports one dimensional structures which means that contains a list
+of rank-3 or rank-4 :class:`yast.Tensor`-s for  :class:`yast.tn.mps.Mps` and :class:`yast.tn.mps.Mpo` respectively.
 
-.. autofunction:: yamps.Mps
-.. autofunction:: yamps.Mpo
+.. autoclass:: yast.tn.mps.MpsMpo
 
 
-Setting MPS/MPO tensors
------------------------
+Setting MPS/MPO tensors by hand
+-------------------------------
 
-The tensors of MPS/MPO can be set manually, using familiar :code:`dict` access
+:ref:`An empty MPS/MPO<mps/init:Creating empty MPS/MPO>` can be filled with tensors by setting it one by one into empty `YAMPS` object. 
 
 .. code-block::
 
+	import yast.tn.mps as mps
+
 	# create empty MPS over three sites
-	Y= yamps.Mps(3)
+	Y= mps.Mps(3)
 
 	# create 3x2x3 random dense tensor
-	A_1= yast.rand(yast.make_config(), Legs=(yast.Leg(s=1,D=(3,)), 
-		yast.Leg(s=1,D=(2,)), yast.Leg(s=-1,D=(3,))))
+	A_1= yast.rand(yast.make_config(), Legs=(\
+			yast.Leg(s=1,D=(3,)), yast.Leg(s=1,D=(2,)), yast.Leg(s=-1,D=(3,))))
 
 	# assign tensor to site 1
 	Y[1]= A_1
 
 .. note::
+	Tensor should be of the rank expected for initialized object. See :ref:`basic concepts<theory/basics:>` for more.
+
+.. note::
 	The virtual dimensions/spaces of the neighbouring MPS/MPO tensors have to remain consistent.
 
-To create :class:`yast.Tensor`'s see :ref:`YAST's basic creation operations<tensor/init:basic creation operations>`. 
-For more examples, see :ref:`Setting MPS/MPO manually<examples/mps/mps:building yamps object manually>`. 
+.. note::
+	To create :class:`yast.Tensor`'s look :ref:`here<tensor/init:Creating symmetric YAST tensors>`. 
+
+The examples of creating MPS/MPO by hand can be found here:
+:ref:`Ground state of Spin-1 AKLT model<examples/mps/mps:Ground state of Spin-1 AKLT model>`,
+:ref:`MPO for hopping model with Z2 symmetry<examples/mps/mps:MPO for hopping model with :math:`\mathbb{Z}_2` symmetry>`,
+:ref:`MPO for hopping model with U(1) symmetry<examples/mps/mps:MPO for hopping model with U(1) symmetry`.
+
+.. todo:
+	Failed to create references to Z2 and U1 above. 
+
+Alternatively, MPS/MPO can be set using :class:`yast.tn.mps.Generator` environment (see  :ref:`here<mps/init:Setting MPS/MPO tensors with Generator>` for more)
+or using :class:`yast.tn.mps.Hterm` templete (see :ref:`here<mps/init:Setting MPS/MPO tensors with Hterm>` for more).
 
 
-Generating MPS or MPO with Generator
--------------------------------------
+Setting MPS/MPO tensors with Hterm
+-----------------------------------
 
-`YAMPS` includes a tool which interprets LaTex-like instruction in order to generate MPO. The tool allows to create bosonic and fermionic operators. 
-The `Generator` provides an environment to use interpreter.
+:class:`yast.tn.mps.Hterm` is a templete object which includes an information about a product state we would like to generate. 
 
-.. autoclass:: yamps.Generator
+.. autoclass:: yast.tn.mps.Hterm
 
-The minimal example to initialize a `Generator` is :code:`gen = yast.tn.mps.Generator(N, operators, map)`. Which creates an environment
-to generate MPO of `N`  tensors. The generator uses the `yast.Tensor`-s provided in `operators` which are refered in the intruction based 
-on their names in :code:`operators.to_dict()` with indicies refered by names as defined in the map `map` which maps from an abract name to
-index in `YAMPS` object.
+.. note::
+	The object :code:`hterm` has operators :code:`hterm.operators` without virtual legs, i.e., rank-1 for MPS and rank-2 for MPO.
 
-In order to create a generator we need to provide the basis operators used for the generator. In `yast.operators` there are some most common
-classes with bases operators, e.g., an instance of :class:`yast.operators.SpinlessFermions` for uniform lattice with spinless fermions. 
-After importing the basis class we can use all operators in :code:`operators.to_dict()`. These operators can be refered in the intruction 
-by using its name as in keys :code:`operators.to_dict()`. 
+A list containing such templetes can be used to create a sum of products. In order to generate full MPO use :code:`exMPO = mps.generate_mpo(I, man_input)`, 
+where :code:`man_input` is a list of `Hterm`-s and :code:`I` is identity matrix for your basis.
+
+.. autofunction:: yast.tn.mps.generate_mpo
+
+In order to generate MPS use :code:`exMPS = mps.generate_mps(I, man_input)`, where `I` is identity matrix for your basis.
+
+.. autofunction:: yast.tn.mps.generate_mps
+
+.. note::
+	To create MPS you need to provide a vector for each site `0` through `N-1`.
+
+An example for MPO using this method can be found :ref:`here<examples/mps/mps:Create MPS or MPO based on templete object>`.
+
+
+Setting MPS/MPO tensors with Generator
+--------------------------------------
+
+:class:`yast.tn.mps.Generator` provies an environment to automitize setting MPS and MPO. The tool allows to create any `YAMPS` object 
+providing the :class:`yast.Tensor`-s used for the construction. The instruction for MPS/MPO can be given and LaTeX-like expression or 
+relying on custom templetes as described below. 
+
+.. autoclass:: yast.tn.mps.Generator
+
+The generator can be accessed with 
+.. code-block::
+	import yast.tn.mps
+
+Initializing the environment you have to provide set of basic operators. This is done by cutom class containing necessary information. 
+There are number of predefines operators which can be foing at :code:`yast.operators`, e.g.:
+
+.. code-block::
+
+	# for uniform lattice with spinless fermions
+	ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device) 
 
 .. autoclass:: yast.operators.SpinlessFermions
+	
+In order to set your own set of basic operators you can use general class
 
-There is a possibility to create your own class with basis operators. In order to do that use :class:`yast.operators.General` which is a tamplete. 
+.. code-block::
 
-The `YAMPS` object is indexed by the :code:`map` which is a dictionary mapping from abstract label to a number according to the enumeration in the 
-`YAMPS` object. 
+    ops = yast.operators.General({'cpc': lambda j: cpc, 'ccp': lambda j: ccp, 'I': lambda j: I})
 
-`Generator` allows to:
+.. autoclass:: yast.operators.General
 
-1/ :ref:`Create random MPS or MPO<examples/mps/mps:create random mps or mpo>`
+.. note::
+	`Generator` has to contain operator `I` which is an identity matrix for the model.
 
-2/ :ref:`Create MPS or MPO based on templete object<examples/mps/mps:Create MPS or MPO based on templete object>`
+.. note::
+	Operators have to be defined as :class:`yast.Tensor`-s without virtual legs, i.e., rank-1 for MPS and rank-2 for MPO.
 
-3/ :ref:`Generate MPS from LaTex-like instruction<examples/mps/mps:Generate MPS from LaTex-like instruction>`
+.. note::
+	Make sure that physical dimensions and symmetries are consistent.
 
-4/ :ref:`Generate MPO from LaTex-like instruction<examples/mps/mps:Generate MPO from LaTex-like instruction>`
+.. note::
+	The set of operators can be listed by :code:`ops.to_dict()`. 
+
+The instruction can be defined using the abstract indicies for each element of the system. The mapping from abstract indicies to a position in 
+MPS/MPO is given by :code:`map` which is a dictionary of abstract indicies with values given by a real position. 
+
+Finally, the initialisation for :code:`N` site lattice with indicies given by :code:`map`:
+
+.. code-block::
+
+	gen = yast.tn.mps.Generator(N, operators, map)
+
+These operators can be refered in the intruction by using its name as the keys in :code:`operators` and indicies as keys in :code:`map`.
+
+Below you can find detailed description how to set MPS and MPO using LaTeX-like instruction:
+
+1/ :ref:`Generate MPS from LaTex-like instruction<examples/mps/mps:Generate MPS from LaTex-like instruction>`
+
+2/ :ref:`Generate MPO from LaTex-like instruction<examples/mps/mps:Generate MPO from LaTex-like instruction>`
+
+Alternatively, :class:`yast.tn.mps.Generatot` allows to set the instruction using prefined names for operators, parameters and indicies 
+by using :class:`single_term`.
+
+.. autoclass:: yast.tn.mps.single_term
+
+For more on method based on templete see :ref:`here<examples/mps/mps:Create MPS or MPO based on templete object>`.
+
+
+For consistency you can create also other `YAMPS` objects withing the environment. 
+For random MPS and MPO see :ref:`here<examples/mps/mps:create random mps or mpo>`.
+

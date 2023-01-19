@@ -66,6 +66,21 @@ def generate_mpo(I, terms, normalize=False, opts=None, packet=50):
 
     Creates a packet of MPO-s with packet virtual dimension  'packet',
     truncate, and to total and truncate again
+    
+    Parameters
+    ----------
+    term: list of :class:`Hterm`
+        instruction to create the Mpo which is a product of
+        operators element.operator at location element.position
+        and with amplitude element.amplitude.
+    I: yast.Tensor
+        identity tensor
+    normalize: bool
+        True if the result should be normalized
+    opts: dict
+        options for truncation of the result
+    packet: int
+        how many single MPO-s of bond dimension 1 shuold be truncated at ones
     """
     ip, M_tot, Nterms = 0, None, len(terms)
     while ip < Nterms:
@@ -113,6 +128,22 @@ def generate_mps(terms, N, normalize=False, opts=None, packet=50):
 
     Creates a packet of MPS-s with packet virtual dimension  'packet',
     truncate, and to total and truncate again
+    
+    Parameters
+    ----------
+    N: int
+        size of the product Mps
+    term: list of :class:`Hterm`
+        instruction to create the Mps which is a product of
+        operators element.operator at location element.position
+        and with amplitude element.amplitude.
+        Used has to provide tensor for each site 0 through N-1.
+    normalize: bool
+        True if the result should be normalized
+    opts: dict
+        options for truncation of the result
+    packet: int
+        how many single MPO-s of bond dimension 1 shuold be truncated at ones
     """
     ip, M_tot, Nterms = 0, None, len(terms)
     while ip < Nterms:
@@ -165,7 +196,17 @@ class Generator:
         
         Notes
         ------
-        minus and 1j are reserved name for perameters.
+        * Names `minus` and `1j` are reserved paramters in self.parameters
+
+        * Write operator `a` on site `3` as `a_{3}`.
+        
+        * Write element if matrix `A` with indicies `(1,3)` as `A_{1,2}`.
+        
+        * Write sumation over one index `j` taking values from 1D-array `listA` as `\sum_{j \in listA}`.
+        
+        * Write sumation over indicies `j0,j1` taking values from 2D-array `listA` as `\sum_{j0,j1 \in listA}`.
+        
+        * In an expression only round brackets, i.e., ().
         """
         self.N = N
         self._ops = operators
