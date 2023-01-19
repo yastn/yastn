@@ -27,6 +27,7 @@ realizations of explicit symmetry.
 .. literalinclude:: /../../tests/mps/test_generator.py
         :pyobject: mpo_XX_model_dense
 
+
 MPO for hopping model with :math:`\mathbb{Z}_2` symmetry
 --------------------------------------------------------
 
