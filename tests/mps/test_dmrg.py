@@ -172,6 +172,8 @@ def test_U1_dmrg():
     Eng_sectors = {2: [-2.861972627395668, -2.213125929752753, -1.7795804271032745],
                    3: [-3.427339492125848, -2.661972627395668, -2.0131259297527526],
                    4: [-3.227339492125848, -2.461972627395668, -1.8131259297527529]}
+
+    N = 7
     parameters = {"t": 1.0, "mu": 0.2, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
     H_str = "\sum_{i,j \in rangeNN} t ( cp_{i} c_{j} + cp_{j} c_{i} ) + \sum_{j\in rangeN} mu cp_{j} c_{j}"
     H = generate.mpo_from_latex(H_str, parameters)

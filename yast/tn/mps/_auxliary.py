@@ -1,6 +1,6 @@
 """ Mps structure and its basic """
-from ... import initialize
-from ._mps import MpsMpo, YampsError
+from ... import initialize, YastError
+from ._mps import MpsMpo
 
 
 def load_from_dict(config, in_dict):
@@ -53,7 +53,7 @@ def load_from_hdf5(config, file, my_address):
     sym_id = file[my_address].get('sym/SYM_ID')[()]
     nsym = file[my_address].get('sym/NSYM')[()]
     if not sym_id.decode('ascii') == config.sym.SYM_ID or not nsym == config.sym.NSYM:
-        raise YampsError("config doesn't match the one for saved data")
+        raise YastError("config doesn't match the one for saved data")
     nr_phys = int(file[my_address].get('nr_phys')[()])
     N = len(file[my_address+'/A'].keys())
     out_Mps = MpsMpo(N, nr_phys=nr_phys)

@@ -1,8 +1,8 @@
 import numpy as np
 from typing import NamedTuple
-from ... import ones, rand, ncon, Leg, random_leg, Tensor
+from ... import ones, rand, ncon, Leg, random_leg, Tensor, YastError
 from ...operators import Qdit
-from ._mps import Mpo, Mps, YampsError, add
+from ._mps import Mpo, Mps, add
 from ._latex2term import latex2term, GeneratorError
 
 
@@ -86,13 +86,13 @@ def generate_mpo(I, terms, normalize=False, opts=None, packet=50):
     while ip < Nterms:
         H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
         M = add(*H1s)
-        M.truncate_sweep(to='first', opts=opts, normalize=normalize)
+        M.truncate_(to='first', opts=opts, normalize=normalize)
         ip += packet
         if not M_tot:
             M_tot = M.copy()
         else:
             M_tot = M_tot + M
-            M_tot.truncate_sweep(to='first', opts=opts, normalize=normalize)
+            M_tot.truncate_(to='first', opts=opts, normalize=normalize)
     return M_tot
 
 def generate_single_mps(term, N):
@@ -119,7 +119,7 @@ def generate_single_mps(term, N):
             op = term.operators[term.positions == n]
         else:
             raise GeneratorError("Provide term for each site in MPS.")
-        single_mps.A[n] = op.add_leg(axis=0, s=1).add_leg(axis=2, s=-1)
+        single_mps.A[n] = op.add_leg(axis=0, s=-1).add_leg(axis=2, s=1)
     return term.amplitude * single_mps
 
 def generate_mps(terms, N, normalize=False, opts=None, packet=50):
@@ -149,13 +149,13 @@ def generate_mps(terms, N, normalize=False, opts=None, packet=50):
     while ip < Nterms:
         H1s = [generate_single_mps(terms[j], N) for j in range(ip, min([Nterms, ip + packet]))]
         M = add(*H1s)
-        M.truncate_sweep(to='first', opts=opts, normalize=normalize)
+        M.truncate_(to='first', opts=opts, normalize=normalize)
         ip += packet
         if not M_tot:
             M_tot = M.copy()
         else:
             M_tot = M_tot + M
-            M_tot.truncate_sweep(to='first', opts=opts, normalize=normalize)
+            M_tot.truncate_(to='first', opts=opts, normalize=normalize)
     return M_tot
 
 
@@ -222,7 +222,7 @@ class Generator:
         self._I = Mpo(self.N)
         for label, site in self._map.items():
             local_I = getattr(self._ops, self._Is[label])
-            self._I.A[site] = local_I().add_leg(axis=0, s=1).add_leg(axis=2, s=-1)
+            self._I.A[site] = local_I().add_leg(axis=0, s=-1).add_leg(axis=2, s=1)
         
         self.config = self._I.A[0].config
         self.parameters = {} if parameters is None else parameters
@@ -272,15 +272,15 @@ class Generator:
 
         psi = Mps(self.N)
 
-        lr = tensor.Leg(self.config, s=1, t=(tuple(an * 0),), D=(1,),)
+        lr = Leg(self.config, s=1, t=(tuple(an * 0),), D=(1,),)
         for site in psi.sweep(to='first'):
             lp = self._I[site].get_legs(axis=1)
             nl = tuple(an * (self.N - site) / self.N)
             if site != psi.first:
-                ll = tensor.random_leg(self.config, s=-1, n=nl, D_total=D_total, sigma=sigma, legs=[lp, lr])
+                ll = random_leg(self.config, s=-1, n=nl, D_total=D_total, sigma=sigma, legs=[lp, lr])
             else:
-                ll = tensor.Leg(self.config, s=-1, t=(n,), D=(1,),)
-            psi.A[site] = initialize.rand(self.config, legs=[ll, lp, lr], dtype=dtype)
+                ll = Leg(self.config, s=-1, t=(n,), D=(1,),)
+            psi.A[site] = rand(self.config, legs=[ll, lp, lr], dtype=dtype)
             lr = psi.A[site].get_legs(axis=0).conj()
         if sum(lr.D) == 1:
             return psi
@@ -305,18 +305,18 @@ class Generator:
         n0 = (0,) * self.config.sym.NSYM
         psi = Mpo(self.N)
 
-        lr = tensor.Leg(self.config, s=1, t=(n0,), D=(1,),)
+        lr = Leg(self.config, s=1, t=(n0,), D=(1,),)
         for site in psi.sweep(to='first'):
             lp = self._I[site].get_legs(axis=1)
             if site != psi.first:
-                ll = tensor.random_leg(self.config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[lp, lr, lp.conj()])
+                ll = random_leg(self.config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[lp, lr, lp.conj()])
             else:
-                ll = tensor.Leg(self.config, s=-1, t=(n0,), D=(1,),)
-            psi.A[site] = initialize.rand(self.config, legs=[ll, lp, lr, lp.conj()], dtype=dtype)
+                ll = Leg(self.config, s=-1, t=(n0,), D=(1,),)
+            psi.A[site] = rand(self.config, legs=[ll, lp, lr, lp.conj()], dtype=dtype)
             lr = psi.A[site].get_legs(axis=0).conj()
         if sum(lr.D) == 1:
             return psi
-        raise YampsError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
+        raise YastError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
 
     def mps_from_latex(self, psi_str, vectors=None, parameters=None):
         r"""
@@ -448,7 +448,7 @@ class Generator:
                     amplitude *= obj_number[element] if mapindex is None else obj_number[element][mapindex]
                 elif element in obj_yast:
                     # is always a single index for each site
-                    mapindex = self._map[indicies[0]] if len(indicies) == 1 else YampsError("Operator has to have single index as defined by self._map")
+                    mapindex = self._map[indicies[0]] if len(indicies) == 1 else YastError("Operator has to have single index as defined by self._map")
                     positions.append(mapindex) 
                     operators.append(obj_yast[element](mapindex))
                 else:
