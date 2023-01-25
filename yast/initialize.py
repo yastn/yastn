@@ -314,8 +314,8 @@ def load_from_hdf5(config, file, path):
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YAST configuration <tensor/configuration:yast configuration>`
-    file: TODO
-    path: TODO
+    file: pointer to opened HDF5 file. 
+    path: path inside the file which contains the state
 
     Returns
     -------
