@@ -22,7 +22,7 @@ def svd_combine(a):
     assert all(x.is_consistent() for x in (a, U, S, V))
 
     # changes signature of new leg; and position of new leg
-    U, S, V = yast.linalg.svd(a, axes=((3, 1), (2, 0)), sU=1, Uaxis=0, Vaxis=-1)
+    U, S, V = yast.linalg.svd(a, axes=((3, 1), (2, 0)), sU=1, Uaxis=0, Vaxis=-1, fix_signs=True)
     US = yast.tensordot(S, U, axes=(0, 0))
     USV = yast.tensordot(US, V, axes=(0, 2))
     USV = USV.transpose(axes=(3, 1, 2, 0))

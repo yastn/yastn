@@ -92,7 +92,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
     return U, S, V
 
 
-def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **kwargs):
+def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False, **kwargs):
     r"""
     Split tensor into :math:`a = U S V^\dagger` using exact singular value decomposition (SVD),
     where the columns of `U` and :math:`V^\dagger` form orthonormal bases
@@ -147,6 +147,9 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', **k
         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs)
     else:
         raise YastError('svd policy should be one of (`lowrank`, `fullrank`)')
+
+    if fix_signs:
+        a.config.backend.fix_svd_signs(Udata, Vdata, meta)
 
     ls_s = _leg_struct_trivial(Sstruct, axis=0)
 
