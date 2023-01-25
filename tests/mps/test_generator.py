@@ -184,8 +184,8 @@ def test_random_mps():
         O = I @ I + (-1 * I)
         assert pytest.approx(mps.measure_overlap(O, O).item(), abs=tol) == 0
         psi = generate.random_mps(D_total=D_total, n = nn)
-        assert psi[psi.last].get_legs(axis=2).t == (nn,)
-        assert psi[psi.first].get_legs(axis=0).t == ((0,) * len(nn),)
+        assert psi[psi.last].get_legs(axis=2).t == ((0,) * len(nn),)
+        assert psi[psi.first].get_legs(axis=0).t == (nn,)
         bds = psi.get_bond_dimensions()
         assert bds[0] == bds[-1] == 1
         assert all(bd > D_total/2 for bd in bds[2:-2])
@@ -231,8 +231,8 @@ def test_generator_mpo():
                         x = mps.measure_mpo(psi, H, psi).item()
                         assert abs(x_ref - x) < tol
 
-                        psi.canonize_sweep(to='first')
-                        psi.canonize_sweep(to='last')
+                        psi.canonize_(to='first')
+                        psi.canonize_(to='last')
                         x_ref = mps.measure_mpo(psi, H_ref, psi).item()
                         x = mps.measure_mpo(psi, H, psi).item()
                         assert abs(x_ref - x) < tol

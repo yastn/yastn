@@ -132,4 +132,5 @@ def test_multiplication():
 
 if __name__ == "__main__":
     test_addition()
+    test_addition_basic()
     test_multiplication()
