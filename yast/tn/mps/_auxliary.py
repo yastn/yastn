@@ -48,12 +48,6 @@ def load_from_hdf5(config, file, my_address):
 
     Returns
     -------
-<<<<<<< HEAD
-    yast.tn.mps.MpsMpo
-    """
-    nr_phys = int(file[in_file_path].get('nr_phys')[()])
-    N = len(file[in_file_path+'/A'].keys())
-=======
     yast.MpsMpo
     """    
     sym_id = file[my_address].get('sym/SYM_ID')[()]
@@ -62,7 +56,6 @@ def load_from_hdf5(config, file, my_address):
         raise YampsError("config doesn't match the one for saved data")
     nr_phys = int(file[my_address].get('nr_phys')[()])
     N = len(file[my_address+'/A'].keys())
->>>>>>> latex2Hterm
     out_Mps = MpsMpo(N, nr_phys=nr_phys)
     for n in range(out_Mps.N):
         out_Mps.A[n] = initialize.load_from_hdf5(config, file, my_address+'/A/'+str(n))
