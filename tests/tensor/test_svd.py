@@ -84,6 +84,8 @@ def test_svd_complex():
     USV = yast.tensordot(US, V, axes=(2, 0))
     assert yast.norm(a - USV) < tol  # == 0.0
 
+    svd_combine(a)
+
 
 def test_svd_sparse():
     a = yast.Tensor(config=config_U1, s=(-1, -1, -1, 1, 1, 1), n=0)
