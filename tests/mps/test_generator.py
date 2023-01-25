@@ -116,7 +116,7 @@ def mpo_XX_model_Z2(config, N, t, mu):
 
 def mpo_XX_model_U1(config, N, t, mu):
     # Initialize MPO tensor by tensor. Example for NN-hopping model, 
-    # using explicit U(1) symmetry of the model.
+    # using explicit U1 symmetry of the model.
     # TODO ref ?
 
     # Build empty MPO for system of N sites
@@ -140,7 +140,7 @@ def mpo_XX_model_U1(config, N, t, mu):
         #
         H.A[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
 
-        # set blocks, indexed by tuple of U(1) charges, of on-site tensor at n-th position
+        # set blocks, indexed by tuple of U1 charges, of on-site tensor at n-th position
         #
         if n == H.first:
             H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 2, 1))
@@ -162,6 +162,7 @@ def mpo_XX_model_U1(config, N, t, mu):
     return H
 
 
+
 def mpo_XX_model(config, N, t, mu):
     if config.sym.SYM_ID == 'dense':
         return mpo_XX_model_dense(config, N, t, mu)
@@ -170,52 +171,219 @@ def mpo_XX_model(config, N, t, mu):
     elif config.sym.SYM_ID == 'U(1)':
         return mpo_XX_model_U1(config, N, t, mu)
 
+def test_random_mps():
+    N = 10
+    D_total = 16
+    bds = (1,) + (D_total,) * (N - 1) + (1,)
+
+    for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U1', (N // 2,))):
+        ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+        generate = mps.Generator(N, ops)
+        I = generate.I()
+        assert pytest.approx(mps.measure_overlap(I, I).item(), rel=tol) == 2 ** N
+        O = I @ I + (-1 * I)
+        assert pytest.approx(mps.measure_overlap(O, O).item(), abs=tol) == 0
+        psi = generate.random_mps(D_total=D_total, n = nn)
+        assert psi[psi.last].get_legs(axis=2).t == (nn,)
+        assert psi[psi.first].get_legs(axis=0).t == ((0,) * len(nn),)
+        bds = psi.get_bond_dimensions()
+        assert bds[0] == bds[-1] == 1
+        assert all(bd > D_total/2 for bd in bds[2:-2])
 
 
 def test_generator_mpo():
-    N = 5
-    t = 1
-    mu = 0.2
-    operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
-    generate = mps.Generator(N, operators)
-    generate.random_seed(seed=0)
-    parameters = {"t": lambda j: t, "mu": lambda j: mu, "range1": range(N), "range2": range(1, N-1)}
-    H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j} + ( cp_{0} c_{1} + 1*cp_{1} c_{0} )*t "
-    H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
-    H = generate.mpo(H_str, parameters)
-    psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
-    x_ref = mps.measure_mpo(psi, H_ref, psi).item()
-    x = mps.measure_mpo(psi, H, psi).item()
-    assert abs(x_ref - x) < tol
+    # uniform chain with nearest neighbor hopping
+    # notation:
+    # * in the sum there are all elements which are connected by multiplication, so \sum_{.} -1 ... shuold be \sum_{.} (-1) ...
+    # * 1j is an imaginary number
+    # * multiple sums are supported so you can write \sum_{.} \sum_{.} ...
+    # * multiplication of the sum is allowed but '*' or bracket is needed.
+    #   ---> this is an artifact of allowing space=' ' to be equivalent to multiplication
+    #   E.g.1, 2 \sum... can be written as 2 (\sum...) or 2 * \sum... or (2) * \sum...
+    #   E.g.2, \sum... \sum.. write as \sum... * \sum... or (\sum...) (\sum...)
+    #   E.g.4, -\sum... is supported and equivalent to (-1) * \sum...
+    H_str = "\sum_{j,k \in rangeNN} t_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in rangeN} mu cp_{i} c_{i}"
+    for sym in ['Z2', 'U1']:
+        ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+        for t in [0,0.2, -0.3]:
+            for mu in [0.2, -0.3]:
+                for N in [2,3]:
+                    example_mapping = (\
+                                        {i: i for i in range(N)},\
+                                        {str(i): i for i in range(N)},\
+                                        {(str(i), 'A'): i for i in range(N)},\
+                    )
+                    example_parameters = (\
+                        {"t": t * np.ones((N,N)), "mu": mu, "rangeN": [i for i in range(N)], "rangeNN": zip([i for i in range(N-1)], [i for i in range(1,N)])},\
+                        {"t": t * np.ones((N,N)), "mu": mu, "rangeN": [str(i) for i in range(N)], "rangeNN": zip([str(i) for i in range(N-1)], [str(i) for i in range(1,N)])},\
+                        {"t": t * np.ones((N,N)), "mu": mu, "rangeN": [(str(i),'A') for i in range(N)], "rangeNN": zip([(str(i),'A') for i in range(N-1)], [(str(i),'A') for i in range(1,N)])},\
+                    )
+                    for (emap, eparam) in zip(example_mapping, example_parameters):
+                        generate = mps.Generator(N, ops, map=emap)
+                        generate.random_seed(seed=0)
+                        
+                        H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
+                        H = generate.mpo_from_latex(H_str, eparam)
 
-    psi.canonize_(to='first')
-    psi.canonize_(to='last')
-    x_ref = mps.measure_mpo(psi, H_ref, psi).item()
-    x = mps.measure_mpo(psi, H, psi).item()
-    assert abs(x_ref - x) < tol
+                        psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
+                        
+                        x_ref = mps.measure_mpo(psi, H_ref, psi).item()
+                        x = mps.measure_mpo(psi, H, psi).item()
+                        assert abs(x_ref - x) < tol
 
-def mpo_Ising_model():
-    op = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
-    gn = mps.Generator(10, op)
-    HT1 = mps.Hterm(1, (4,), (op.c(),))
-    HT2 = mps.Hterm(1, (4,), (op.cp(),))
-    H = mps.generate_mpo(gn.I(), [HT1, HT2])
-    print(H.get_bond_dimensions())
-    print(H.virtual_leg('first'))
+                        psi.canonize_sweep(to='first')
+                        psi.canonize_sweep(to='last')
+                        x_ref = mps.measure_mpo(psi, H_ref, psi).item()
+                        x = mps.measure_mpo(psi, H, psi).item()
+                        assert abs(x_ref - x) < tol
 
-    p1 = gn.random_mps(n=2, D_total=8)
-    p2 = gn.random_mps(n=3, D_total=8)
-    pp = p1 + p2
-    qq = p1 + p2
+def test_mpo_from_latex():
     
-    print(pp.get_bond_dimensions())
-    qq.canonize_(to='first', normalize=False)
-    qq.canonize_(to='last', normalize=False)
-    print(qq.get_bond_dimensions())
-   
-    print(mps.measure_overlap(pp + -1 * qq, pp + -1 * qq))
+    # the model is random with handom hopping and on-site energies. sym is symmetry for tensors we will use
+    sym, N = 'U1', 3
+    
+    # generate set of basic ops for the model we want to work with
+    ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+    
+    # generate data for random Hamiltonian
+    amplitudes1 = np.random.rand(N, N)
+    param1 = amplitudes1 - np.diag(np.diag(amplitudes1))
+    param2 = np.diag(amplitudes1)
+    
+    # use this map which is used for naming the sites in MPO
+    # maps between iteractors and MPO
+    emap = {i: i for i in range(N)}
+    
+    # create a generator initialized for emap mapping
+    generate = mps.Generator(N, ops, map=emap)
+    generate.random_seed(seed=0)
+    
+    # define parameters for automatic generator and Hamiltonian in a latex-like form
+    eparam ={"t": param1, "mu": param2, "rangeN": range(N)}
+    h_input = "\sum_{j\in rangeN} \sum_{k\in rangeN} t_{j,k} (cp_{j} c_{k} + cp_{k} c_{j}) + \
+            \sum_{j\in rangeN} mu_{j} cp_{j} c_{j}"
+    
+    # generate MPO from latex-like input
+    h_str = generate.mpo_from_latex(h_input, eparam)
 
+    # generate Hamiltonian manually
+    man_input = []
+    for j, val in enumerate(param2):
+        man_input.append(mps.Hterm(val, (j, j,), (ops.cp(), ops.c(),)))
+    
+    for j, row in enumerate(param1):
+        for k, val in enumerate(row):
+            man_input.append(mps.Hterm(val, (j, k,), (ops.cp(), ops.c(),)))
+            man_input.append(mps.Hterm(val, (k, j,), (ops.cp(), ops.c(),)))
+    h_man = mps.generate_mpo(generate.I(), man_input)
+    
+    # test the result by comparing expectation value for a steady state.
+    # use random seed to generate mps
+    generate.random_seed(seed=0)
+
+    # generate mps and compare overlaps
+    psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
+    x_man = mps.measure_mpo(psi, h_man, psi).item()
+    x_str = mps.measure_mpo(psi, h_str, psi).item()
+    
+    assert abs(x_man - x_str) < tol
+
+
+def test_mpo_from_templete():
+    
+    # the model is random with handom hopping and on-site energies. sym is symmetry for tensors we will use
+    sym, N = 'U1', 3
+    
+    # generate set of basic ops for the model we want to work with
+    ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+    
+    # generate data for random Hamiltonian
+    amplitudes1 = np.random.rand(N, N)
+    amplitudes1 = 0.5 * (amplitudes1 + amplitudes1.transpose())
+    
+    # use this map which is used for naming the sites in MPO
+    # maps between iteractors and MPO
+    emap = {i: i for i in range(N)}
+    
+    # create a generator initialized for emap mapping
+    generate = mps.Generator(N, ops, map=emap)
+    generate.random_seed(seed=0)
+    
+    # define parameters for automatic generator and Hamiltonian in a latex-like form
+    eparam ={"A": amplitudes1, "rangeN": range(N)}
+    h_input = "\sum_{j\in rangeN} \sum_{k\in rangeN} A_{j,k} cp_{j} c_{k}"
+    
+    # generate MPO from latex-like input
+    h_str = generate.mpo_from_latex(h_input, eparam)
+
+    # generate Hamiltonian manually
+    man_input = []
+    for n0 in emap.keys():
+        for n1 in emap.keys():
+            man_input.append(\
+                mps.single_term((('A',n0,n1), ('cp',n0), ('c',n1),)))
+    h_man = generate.mpo_from_templete(man_input, eparam)
+    
+    # test the result by comparing expectation value for a steady state.
+    # use random seed to generate mps
+    generate.random_seed(seed=0)
+
+    # generate mps and compare overlaps
+    psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
+    x_man = mps.measure_mpo(psi, h_man, psi).item()
+    x_str = mps.measure_mpo(psi, h_str, psi).item()
+    
+    assert abs(x_man - x_str) < tol
+
+def mps_basis_ex(config):
+    plus = yast.Tensor(config=config, s=[1])
+    plus.set_block(val=[0, 1],Ds=(2,))
+    minus = yast.Tensor(config=config, s=[1])
+    minus.set_block(val=[1, 0],Ds=(2,))
+    return plus, minus
+
+def mpo_basis_ex(config):
+    cpc = yast.Tensor(config=config, s=[1, -1])
+    cpc.set_block(val=[[0,0],[0,1]],Ds=(2,2,))
+    ccp = yast.Tensor(config=config, s=[1, -1])
+    ccp.set_block(val=[[1,0],[0,0]],Ds=(2,2,))
+    I = yast.Tensor(config=config, s=[1, -1])
+    I.set_block(val=[[1,0],[0,1]],Ds=(2,2,))
+    return cpc, ccp, I
+
+def test_generator_mps():
+    N = 3
+    
+    cpc, ccp, I = mpo_basis_ex(cfg)
+    
+    ops = yast.operators.General({'cpc': lambda j: cpc, 'ccp': lambda j: ccp, 'I': lambda j: I})
+        
+    emap = {str(i): i for i in range(N)}
+    
+    generate = mps.Generator(N, ops, map=emap)
+    generate.random_seed(seed=0)
+    
+    # generate from LaTeX-like instruction
+    A = np.random.rand(2)
+    psi_str = "A_{0} Plus_{0} Plus_{1} Plus_{2} + A_{1} Minus_{0} Minus_{1} Minus_{2}"
+    plus, minus = mps_basis_ex(cfg)
+
+    psi_ltx = generate.mps_from_latex(psi_str, \
+        vectors = {'Plus': lambda j: plus, 'Minus': lambda j: minus}, \
+        parameters = {'A': A})
+    
+    psi_tmpl = generate.mps_from_templete(
+        [mps.single_term((('A','0'),('Plus','0'),('Plus','1'),('Plus','2'))), \
+        mps.single_term((('A','1'),('Minus','0'),('Minus','1'),('Minus','2')))], \
+        vectors = {'Plus': lambda j: plus, 'Minus': lambda j: minus}, \
+        parameters = {'A': A})
+
+    psi = generate.random_mps(D_total=8)
+    assert mps.measure_overlap(psi_tmpl, psi) == mps.measure_overlap(psi_ltx, psi)
 
 if __name__ == "__main__":
+    test_random_mps()
+    test_generator_mps()
     test_generator_mpo()
-    mpo_Ising_model()
+    test_mpo_from_latex()
+    test_mpo_from_templete()

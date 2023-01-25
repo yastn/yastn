@@ -1,10 +1,9 @@
 import numpy as np
 from typing import NamedTuple
-from ... import initialize, operators, tensor, YastError
-from ._mps import add, Mpo, Mps
-
-from itertools import compress, product
-from re import match
+from ... import ones, rand, ncon, Leg, random_leg, Tensor
+from ...operators import Qdit
+from ._mps import Mpo, Mps, YampsError, add
+from ._latex2term import latex2term, GeneratorError
 
 
 class Hterm(NamedTuple):
@@ -14,6 +13,10 @@ class Hterm(NamedTuple):
     The product operator :math:`O = \otimes_i o_i` is a tensor product of local operators :math:`o_i`.
     Unless explicitly specified, the :math:`o_i` is assumed to be identity operator.
 
+    Parameters
+    ----------
+    amplitude : number
+        number multiplier in front of the product.
     positions : tuple(int)
         positions of the local operators :math:`o_i` in the product different than identity
     operators : tuple(yast.Tensor)
@@ -25,7 +28,7 @@ class Hterm(NamedTuple):
     operators : tuple = ()
 
 
-def generate_H1(I, term):
+def generate_single_mpo(I, term):
     r"""
     Apply local operators specified by term in :class:`Hterm` to the mpo I.
 
@@ -41,34 +44,119 @@ def generate_H1(I, term):
         operators element.operator at location element.position
         and with amplitude element.amplitude.
     """
-    H1 = I.copy()
+    single_mpo = I.copy()
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
         op = op.add_leg(axis=0, s=-1)
         leg = op.get_legs(axis=0)
-        one = initialize.ones(config=op.config, legs=(leg, leg.conj()))
-        temp = tensor.ncon([op, H1[site]], [(-1, -2, 1), (-0, 1, -3, -4)])
-        H1[site] = temp.fuse_legs(axes=((0, 1), 2, 3, 4))
+        one = ones(config=op.config, legs=(leg, leg.conj()))
+        temp = ncon([op, single_mpo[site]], [(-1, -2, 1), (-0, 1, -3, -4)])
+        single_mpo[site] = temp.fuse_legs(axes=((0, 1), 2, 3, 4), mode='hard')
         for n in range(site):
-            temp = tensor.ncon([H1[n], one], [(-0, -2, -3, -5), (-1, -4)])
+            temp = ncon([single_mpo[n], one], [(-0, -2, -3, -5), (-1, -4)])
             temp = temp.swap_gate(axes=(1, 2))
-            H1[n] = temp.fuse_legs(axes=((0, 1), 2, (3, 4), 5))
-    for n in H1.sweep():
-        H1[n] = H1[n].drop_leg_history(axis=(0, 2))
-    H1[0] = term.amplitude * H1[0]
-    return H1
+            single_mpo[n] = temp.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
+    for n in single_mpo.sweep():
+        single_mpo[n] = single_mpo[n].drop_leg_history(axis=(0, 2))
+    single_mpo[0] = term.amplitude * single_mpo[0]
+    return single_mpo
 
-
-def generate_mpo(I, terms, opts=None):
+def generate_mpo(I, terms, normalize=False, opts=None, packet=50):
     """
     Generate mpo provided a list of Hterm-s and identity operator I.
 
-    TODO: implement more efficient algorithm
+    Creates a packet of MPO-s with packet virtual dimension  'packet',
+    truncate, and to total and truncate again
+    
+    Parameters
+    ----------
+    term: list of :class:`Hterm`
+        instruction to create the Mpo which is a product of
+        operators element.operator at location element.position
+        and with amplitude element.amplitude.
+    I: yast.Tensor
+        identity tensor
+    normalize: bool
+        True if the result should be normalized
+    opts: dict
+        options for truncation of the result
+    packet: int
+        how many single MPO-s of bond dimension 1 shuold be truncated at ones
     """
-    H1s = [generate_H1(I, term) for term in terms]
-    M = add(*H1s)
-    M.canonize_(to='last', normalize=False)
-    M.truncate_(to='first', opts=opts, normalize=False)
-    return M
+    ip, M_tot, Nterms = 0, None, len(terms)
+    while ip < Nterms:
+        H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
+        M = add(*H1s)
+        M.truncate_sweep(to='first', opts=opts, normalize=normalize)
+        ip += packet
+        if not M_tot:
+            M_tot = M.copy()
+        else:
+            M_tot = M_tot + M
+            M_tot.truncate_sweep(to='first', opts=opts, normalize=normalize)
+    return M_tot
+
+def generate_single_mps(term, N):
+    r"""
+    Generate a vector given vectors for each site in the MPS.
+
+    Parameters
+    ----------
+    term: :class:`Hterm`
+        instruction to create the Mps which is a product of
+        operators element.operator at location element.position
+        and with amplitude element.amplitude.
+    N: int
+        MPS size
+    """
+    if len(term.positions) != len(set(term.positions)):
+        raise GeneratorError("List contains more than one operator for a single position.\n \
+            Multiplication of two vectors is not defined.")
+    if len(set(term.positions)) != N:
+        raise GeneratorError("Provide term for each site in MPS.")
+    single_mps = Mps(N)
+    for n in range(N):
+        if n in term.positions:
+            op = term.operators[term.positions == n]
+        else:
+            raise GeneratorError("Provide term for each site in MPS.")
+        single_mps.A[n] = op.add_leg(axis=0, s=1).add_leg(axis=2, s=-1)
+    return term.amplitude * single_mps
+
+def generate_mps(terms, N, normalize=False, opts=None, packet=50):
+    """
+    Generate mps provided a list of Hterm-s.
+
+    Creates a packet of MPS-s with packet virtual dimension  'packet',
+    truncate, and to total and truncate again
+    
+    Parameters
+    ----------
+    N: int
+        size of the product Mps
+    term: list of :class:`Hterm`
+        instruction to create the Mps which is a product of
+        operators element.operator at location element.position
+        and with amplitude element.amplitude.
+        Used has to provide tensor for each site 0 through N-1.
+    normalize: bool
+        True if the result should be normalized
+    opts: dict
+        options for truncation of the result
+    packet: int
+        how many single MPO-s of bond dimension 1 shuold be truncated at ones
+    """
+    ip, M_tot, Nterms = 0, None, len(terms)
+    while ip < Nterms:
+        H1s = [generate_single_mps(terms[j], N) for j in range(ip, min([Nterms, ip + packet]))]
+        M = add(*H1s)
+        M.truncate_sweep(to='first', opts=opts, normalize=normalize)
+        ip += packet
+        if not M_tot:
+            M_tot = M.copy()
+        else:
+            M_tot = M_tot + M
+            M_tot.truncate_sweep(to='first', opts=opts, normalize=normalize)
+    return M_tot
 
 
 class Generator:
@@ -87,7 +175,6 @@ class Generator:
 
         Parameters
         ----------
-
         N : int
             number of sites of MPS/MPO.
         operators : object
@@ -106,10 +193,24 @@ class Generator:
             If None, uses default ``{'sites': [*map.keys()]}``.
         opts : dict
             used if compression is needed. Options passed to :meth:`yast.linalg.svd`.
+        
+        Notes
+        ------
+        * Names `minus` and `1j` are reserved paramters in self.parameters
+
+        * Write operator `a` on site `3` as `a_{3}`.
+        
+        * Write element if matrix `A` with indicies `(1,3)` as `A_{1,2}`.
+        
+        * Write sumation over one index `j` taking values from 1D-array `listA` as `\sum_{j \in listA}`.
+        
+        * Write sumation over indicies `j0,j1` taking values from 2D-array `listA` as `\sum_{j0,j1 \in listA}`.
+        
+        * In an expression only round brackets, i.e., ().
         """
         self.N = N
         self._ops = operators
-        self._map = {i:i for i in range(N)} if map is None else map
+        self._map = {i: i for i in range(N)} if map is None else map
         if len(self._map) != N or sorted(self._map.values()) != list(range(N)):
             raise YastError("MPS: Map is inconsistent with mps of N sites.")
         self._Is = {k: 'I' for k in self._map.keys()} if Is is None else Is
@@ -121,18 +222,28 @@ class Generator:
         self._I = Mpo(self.N)
         for label, site in self._map.items():
             local_I = getattr(self._ops, self._Is[label])
-            self._I.A[site] = local_I().add_leg(axis=0, s=-1).add_leg(axis=2, s=1)
-
+            self._I.A[site] = local_I().add_leg(axis=0, s=1).add_leg(axis=2, s=-1)
+        
         self.config = self._I.A[0].config
         self.parameters = {} if parameters is None else parameters
+        self.parameters["minus"] = -float(1.0)
+        self.parameters["1j"] = 1j
 
         self.opts = opts
 
     def random_seed(self, seed):
+        """
+        Generate random seed number for random number generator used in backend of self.config
+
+        Parameters
+        ----------
+        seed : int
+            Seed number for random number generator.
+        """
         self.config.backend.random_seed(seed)
 
     def I(self):
-        """ return identity Mpo. """
+        """ Returns identity Mpo. """
         return self._I.copy()
 
     def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64'):
@@ -148,6 +259,8 @@ class Generator:
         sigma : int
             variance of Normal distribution from which dimensions of charge sectors
             are drawn.
+        dtype : string
+            number format, e.g., 'float64'
         """
         if n is None:
             n = (0,) * self.config.sym.NSYM
@@ -186,6 +299,8 @@ class Generator:
         sigma : int
             variance of Normal distribution from which dimensions of charge sectors
             are drawn.
+        dtype : string
+            number format, e.g., 'float64'
         """
         n0 = (0,) * self.config.sym.NSYM
         psi = Mpo(self.N)
@@ -201,9 +316,66 @@ class Generator:
             lr = psi.A[site].get_legs(axis=0).conj()
         if sum(lr.D) == 1:
             return psi
-        raise YastError("MPS: Random mpo is zero. Check parameters, or try running again in this is due to randomness of the initialization. ")
+        raise YampsError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
 
-    def mpo(self, H_str, parameters=None):
+    def mps_from_latex(self, psi_str, vectors=None, parameters=None):
+        r"""
+        Generate simple mps form the instruction in psi_str.
+
+        Parameters
+        ----------
+        psi_str : str
+            instruction in latex-like format
+        vectors : dict
+            dictionary with vectors for the generator. All should be given as
+            a dictionary with elements in a format:
+            name : lambda j: tensor
+                where 
+                name - is a name of an element which can be used in psi_str,
+                j - single index for lambda function,
+                tensor - is a yast.Tensor with one physical index.
+        parameters : dict
+            dictionary with parameters for the generator
+
+        Returns
+        --------
+            :class:`yamps.Mps`
+        """
+        parameters = {**self.parameters, **parameters}
+        c2 = latex2term(psi_str, parameters)
+        c3 = self._term2Hterm(c2, vectors, parameters)
+        return generate_mps(c3, self.N)
+
+    def mps_from_templete(self, templete, vectors=None, parameters=None):
+        r"""
+        Convert instruction in a form of single_term-s to yamps MPO.
+
+        single_term is a templete which which take named from operators and templetes.
+
+        Parameters
+        -----------
+        templete: list
+            List of single_term objects. The object is defined in ._latex2term
+        vectors : dict
+            dictionary with vectors for the generator. All should be given as
+            a dictionary with elements in a format:
+            name : lambda j: tensor
+                where 
+                name - is a name of an element which can be used in psi_str,
+                j - single index for lambda function,
+                tensor - is a yast.Tensor with one physical index.
+        parameters: dict
+            Keys for the dict define the expressions that occur in H_str
+
+        Returns
+        --------
+            :class:`yamps.Mps`
+        """
+        parameters = {**self.parameters, **parameters}
+        c3 = self._term2Hterm(templete, vectors, parameters)
+        return generate_mps(c3, self.N)
+
+    def mpo_from_latex(self, H_str, parameters=None):
         r"""
         Convert latex-like string to yamps MPO.
 
@@ -221,135 +393,76 @@ class Generator:
         --------
             :class:`yamps.Mpo`
         """
-        # get everything to dictionary
-        parameters = self.parameters if parameters is None else {**self.parameters, **parameters}
-        params_dict = parameters
-        basis_dict = self._ops.to_dict()
-        # merge to a single dictionary
-        info_dict = {**params_dict.copy(), **basis_dict.copy()}
+        parameters = {**self.parameters, **parameters}
+        c2 = latex2term(H_str, parameters)
+        c3 = self._term2Hterm(c2, self._ops.to_dict(), parameters)
+        return generate_mpo(self._I, c3)
+    
+    def mpo_from_templete(self, templete, parameters=None):
+        r"""
+        Convert instruction in a form of single_term-s to yamps MPO.
 
-        # interpret string
-        # RULES:
-        # * put all parameters in info_dict are functions, if constant then should be single-parameter function
-        tmp = H_str
-        tmp = tmp.replace("*", " ")
-        for ic in ["*", "(", ")", "\in"]:  # put additional spaces
-            tmp = tmp.replace(ic, " "+ic+" ")
-        while "  " in tmp:  # remove double spaces
-            tmp = tmp.replace("  ", " ")
-        tmp = tmp.replace(" \in ", ".in.").replace("\sum_", ".sum_.") # remove \ because I don't know how to manege this
-        lall = tmp.strip().split(" ")  # remove space if it is on the beginning/end & finally split the instruction
+        single_term is a templete which which take named from operators and templetes.
 
-        # split sums away from each other
-        sep, H = {}, None
-        terminate, hodor = ['+', '-'], False
-        isep, id_sep = 0, 0  # where new id_step-th substring begins
-        # split to separate sums
-        sep[id_sep] = []
-        for it in range(len(lall)):
-            tmp = lall[it]
-            if tmp == '(':
-                hodor, terminate = True, [')']
-            if hodor and tmp in terminate:
-                hodor, terminate = False, ['+', '-']
-            if not hodor and tmp in terminate and it > isep:
-                isep = it+1
-                id_sep += 1
-                sep[id_sep] = []
-            sep[id_sep].append(tmp)
-        # analyze terms, get info on sums
-        for k in sep.keys():
-            spart = sep[k]
-            issum = ['sum' in ix for ix in spart]
-            is_sum = list(compress(spart, issum))
-            not_sum = list(compress(spart, [not ix for ix in issum]))
-            # sum instruction
-            is_sum = [match(r".sum_.{(?P<index>.*).in.(?P<range>.*)}", tmp).group("index", "range") for tmp in is_sum]
-            is_index = [tmp[0] for tmp in is_sum]
-            is_range = [params_dict[tmp[1]] for tmp in is_sum]
-            read_not_sum = [None]*len(not_sum)
-            sgn_math = ['+', '-', '(', ')']
-            sgn_info = list(info_dict.keys())
-            # ger order of operations
-            iorder = 0
-            for inum, ival in enumerate(not_sum[::-1]):
-                if ival in sgn_math:
-                    iorder += 1
-                read_not_sum[-inum-1] = iorder
-                if ival in sgn_math:
-                    iorder += 1
-            # remove bracket for convenience
-            remove_braket = [ix not in ['(', ')'] for ix in not_sum]
-            not_sum = list(compress(not_sum, remove_braket))
-            read_not_sum = list(compress(read_not_sum, remove_braket))
-            # iterate over is_index-es each over is_range-es range of numbers
-            range_span = product(*is_range, repeat=1)
-            for idx in range_span:
-                # it does a seach for a parametrs and operators for each range-span
-                # I am not sure how to change that because each elemetn is a function...
-                for iorder in np.unique(read_not_sum):
-                    tmp = [ira == iorder for ira in read_not_sum]
-                    itake = list(compress(not_sum, tmp))
-                    op_holder, ind_holder, amp_holder = [], [], 1
-                    iind = (0,)  # put dummy just in case parameter is just a number
-                    for inum, ival in enumerate(itake[::-1]):
-                        # extract using map if needed
-                        get_info = match(r"(?P<ival>.*)_{(?P<iind>.*)}", ival)
-                        if get_info:
-                            ival, iind = get_info.group("ival"), get_info.group("iind")
-                            iind = iind.split(',')
-                            if all([i.isnumeric() for i in iind]):
-                                # convert to numerical index
-                                iind = [int(i) for i in iind]
-                            else:
-                                # find index from sum indexing
-                                for i_ind in range(len(iind)):
-                                    for i_index in range(len(is_index)):
-                                        if is_index[i_index] in iind[i_ind]:
-                                            iind[i_ind] = iind[i_ind].replace(is_index[i_index], str(idx[i_index]))
-                                    iind[i_ind] = eval(iind[i_ind])
-                        if ival in sgn_info:
-                            ival = info_dict[ival](*iind)
-                            if type(ival) == tensor.Tensor:
-                                op_holder.append(ival)
-                                ind_holder.append(*iind)
-                            else:
-                                amp_holder *= ival
-                        else:
-                            if '+' == ival:
-                                amp_holder *= float(1)
-                            elif '-' == ival:
-                                amp_holder *= float(-1)
-                            else:
-                                amp_holder *= float(ival)
-                    # generate mpo product using automatic
-                    ind_holder, op_holder = ind_holder[::-1], op_holder[::-1]
-                    place_holder = [Hterm(amp_holder, ind_holder, op_holder)]
-                    if not op_holder:
-                        H = amp_holder * H
-                    else:
-                        if not H:
-                            H = generate_mpo(self._I, place_holder, self.opts)
-                        elif H and amp_holder > 0.0:
-                            H = H + generate_mpo(self._I, place_holder, self.opts)
-            H.canonize_(to='last', normalize=False)
-            H.truncate_(to='first', opts=self.opts, normalize=False)
-        return H
+        Parameters
+        -----------
+        templete: list
+            List of single_term objects. The object is defined in ._latex2term
+        parameters: dict
+            Keys for the dict define the expressions that occur in H_str
 
-    def mps(self, psi_str, parameters=None):
+        Returns
+        --------
+            :class:`yamps.Mpo`
         """
-        initialize simple product states 
+        parameters = {**self.parameters, **parameters}
+        c3 = self._term2Hterm(templete, self._ops.to_dict(), parameters)
+        return generate_mpo(self._I, c3)
 
-        TODO: implement
+    def _term2Hterm(self, c2, obj_yast, obj_number):
         """
-        pass
+        Helper function to rewrite the instruction given as a list of single_term-s (see _latex2term)
+        to a list of Hterm-s (see here).
 
+        Differentiates operators from numberical values.
+
+        Parameters
+        ----------
+        c2 : list
+            list of single_term-s
+        obj_yast : dict
+            dictionary with operators for the generator
+        obj_number : dict
+            dictionary with parameters for the generator
+        """
+        # can be used with latex-form interpreter or alone.
+        Hterm_list = []
+        for ic in c2:
+            # create a single Hterm using single_term
+            amplitude, positions, operators = float(1), [], []
+            for iop in ic.op:
+                element, *indicies = iop
+                if element in obj_number:
+                    # can have many indicies for cross terms
+                    mapindex = tuple([self._map[ind] for ind in indicies]) if indicies else None
+                    amplitude *= obj_number[element] if mapindex is None else obj_number[element][mapindex]
+                elif element in obj_yast:
+                    # is always a single index for each site
+                    mapindex = self._map[indicies[0]] if len(indicies) == 1 else YampsError("Operator has to have single index as defined by self._map")
+                    positions.append(mapindex) 
+                    operators.append(obj_yast[element](mapindex))
+                else:
+                    # the only other option is that is a number, imaginary number is in self.obj_number
+                    amplitude *= float(element)
+            Hterm_list.append(Hterm(amplitude, positions, operators))
+        return Hterm_list
 
 def random_dense_mps(N, D, d, **kwargs):
-    G = Generator(N, operators.Qdit(d=d, **kwargs))
+    """Generate random mps with physical dimension d and virtual dimension D."""
+    G = Generator(N, Qdit(d=d, **kwargs))
     return G.random_mps(D_total=D)
 
-
 def random_dense_mpo(N, D, d, **kwargs):
-    G = Generator(N, operators.Qdit(d=d, **kwargs))
+    """Generate random mpo with physical dimension d and virtual dimension D."""
+    G = Generator(N, Qdit(d=d, **kwargs))
     return G.random_mpo(D_total=D)
