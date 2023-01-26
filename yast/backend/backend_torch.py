@@ -375,6 +375,9 @@ def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
     return Udata, Sdata, Vhdata
 
 
+def fix_svd_signs(Udata, Vdata, meta):
+    pass  # TODO: add this function
+
 
 def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=1.0e-12):
     real_dtype= data.real.dtype if data.is_complex() else data.dtype
