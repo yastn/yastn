@@ -224,7 +224,7 @@ def proj_Cor(tt, tb, chi, cutoff):
     _, rb = qr(tb, axes=((0, 1), (2, 3)))
 
     rr = tensordot(rt, rb, axes=((1, 2), (1, 2)))
-    u, s, v = svd_with_truncation(rr, axes=(0, 1), tol=cutoff, D_total=chi)
+    u, s, v = svd_with_truncation(rr, axes=(0, 1), tol=cutoff, D_total=chi, fix_signs=True)
     s = s.rsqrt()
     pt = s.broadcast(tensordot(rb, v, axes=(0, 1), conj=(0, 1)), axis=2)
     pb = s.broadcast(tensordot(rt, u, axes=(0, 0), conj=(0, 1)), axis=2)
