@@ -14,13 +14,14 @@ def nn_avg(Gamma, env, op):
         res_ver = []
         opt = op.get(ms)
         for bds_h in Gamma.bonds(dirn='h'):  # correlators on all horizontal bonds
-            AAbo = ret_AAbs(Gamma, bds_h, opt, orient='h')
+           # print(bds_h)
             AAb = {'l': fPEPS_2layers(Gamma[bds_h.site_0]), 'r': fPEPS_2layers(Gamma[bds_h.site_1])}
+            AAbo = ret_AAbs(Gamma, bds_h, opt, orient='h')
             val_hor = hor_extension(env, bds_h, AAbo, AAb)
             res_hor.append(val_hor)
         for bds_v in Gamma.bonds(dirn='v'): # correlators on all vertical bonds
-            AAbo = ret_AAbs(Gamma, bds_v, opt, orient='v')
             AAb = {'l': fPEPS_2layers(Gamma[bds_v.site_0]), 'r': fPEPS_2layers(Gamma[bds_v.site_1])}
+            AAbo = ret_AAbs(Gamma, bds_v, opt, orient='v')
             val_ver = ver_extension(env, bds_v, AAbo, AAb)
             res_ver.append(val_ver)
         
@@ -35,8 +36,8 @@ def nn_avg(Gamma, env, op):
 def nn_bond(Gamma, env, op, bd):
     """ calculates correlator on a desired bond in the lattice
      useful when you don't need the average value """
-
     Gamma = check_consistency_tensors(Gamma)
+
     AAbo = ret_AAbs(Gamma, bd, op, orient=bd.dirn)
     AAb = {'l': fPEPS_2layers(Gamma[bd.site_0]), 'r': fPEPS_2layers(Gamma[bd.site_1])}
     val = hor_extension(env, bd, AAbo, AAb) if bd.dirn == 'h' else ver_extension(env, bd, AAbo, AAb)
@@ -67,7 +68,6 @@ def one_site_avg(Gamma, env, op, flag=None):
     one_site_exp = np.zeros((Gamma.Nx*Gamma.Ny))
     s = 0
     for ms in Gamma.sites():
-        print('site: ', ms)
         Am = Gamma[ms]
 
         if flag == 'hole':
@@ -76,7 +76,6 @@ def one_site_avg(Gamma, env, op, flag=None):
                 val_op = measure_one_site_spin(Am, ms, env, op=op)
                 val_norm = measure_one_site_spin(Am, ms, env, op=None)
                 one_site_exp[s] = val_op/val_norm
-                print(one_site_exp[s])
                 cs_val = one_site_exp[s]   # expectation value of particular target site
                 mat[ms[0],ms[1]] = one_site_exp[s]
 
@@ -85,17 +84,14 @@ def one_site_avg(Gamma, env, op, flag=None):
                 val_op = measure_one_site_spin(Am, ms, env, op=op)
                 val_norm = measure_one_site_spin(Am, ms, env, op=None)
                 one_site_exp[s] = val_op/val_norm
-                print(one_site_exp[s])
                 mat[ms[0],ms[1]] = one_site_exp[s]
                 s = s+1
-            return np.mean(one_site_exp), cs_val, mat
 
         else:
         
             val_op = measure_one_site_spin(Am, ms, env, op=op)
             val_norm = measure_one_site_spin(Am, ms, env, op=None)
             one_site_exp[s] = val_op/val_norm   # expectation value of particular target site
-            print(one_site_exp[s])
             mat[ms[0], ms[1]] = one_site_exp[s]
             if ms == target_site:
                 cs_val = one_site_exp[s]

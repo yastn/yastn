@@ -225,6 +225,7 @@ def zipper(a, b, opts=None):
 
     for n in psi.sweep(to='first'):
         tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
+        
         if psi.nr_phys == 2:
             tmp = tmp.fuse_legs(axes=(0, 1, 3, (4, 2)))
         tmp = a[n]._attach_23(tmp)

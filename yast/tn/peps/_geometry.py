@@ -62,11 +62,12 @@ class Lattice():
         return (self.Nx, self.Ny)
 
     def sites(self, reverse=False):
-        """ ADD """
+        """ Labels of the lattice sites """
         return self._sites[::-1] if reverse else self._sites
 
     def bonds(self, dirn=None, reverse=False):
-        """ ADD """
+        """ Labels of the links between sites """
+
         bnds = self._bonds[::-1] if reverse else self._bonds
         if dirn is None:
             return bnds
@@ -122,10 +123,10 @@ class Peps(Lattice):
 
     def mpo(self, index, index_type, rotation=''):
         # converts specific row of PEPS into MPO
-        H = Mpo(N=self.Ny)
 
         if index_type == 'row':
             nx = index
+            H = Mpo(N=self.Ny)
             for ny in range(self.Ny):
                 site = (nx, ny)
                 top = self[site]
@@ -135,6 +136,7 @@ class Peps(Lattice):
                 H.A[ny] = DoublePepsTensor(top=top, btm=btm)
         elif index_type == 'column':
             ny = index
+            H = Mpo(N=self.Nx)
             for nx in range(self.Nx):
                 site = (nx, ny)
                 top = self[site]
@@ -146,10 +148,9 @@ class Peps(Lattice):
         return H
 
     def boundary_mps(self, rotation=''):
-        # create  
+        # initiate a boundary MPS at the right most column
         psi = Mps(N=self.Nx)
         cfg = self._data[(0, 0)].config
- 
         n0 = (0,) * cfg.sym.NSYM
         leg0 = tensor.Leg(cfg, s=-1, t=(n0,), D=(1,))
         for nx in range(self.Nx):
@@ -162,6 +163,7 @@ class Peps(Lattice):
                 legA = A.get_legs(axis=3)
             legAAb = tensor.leg_outer_product(legA, legA.conj())
             psi[nx] = initialize.ones(config=cfg, legs=[leg0, legAAb.conj(), leg0.conj()])
+
         return psi 
 
 

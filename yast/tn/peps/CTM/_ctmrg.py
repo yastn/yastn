@@ -1,0 +1,98 @@
+""" Functions performing many CTMRG steps until convergence and return of CTM environment tensors for mxn lattice. """
+from typing import NamedTuple
+import logging
+import yast.tn.peps as peps
+import numpy as np
+from itertools import chain
+from .CtmIterationRoutines import CTM_it
+from .CtmIterationRoutines import fPEPS_2layers, fPEPS_fuse_layers, check_consistency_tensors
+from .CtmEnv import CtmEnv, init_rand
+
+
+#################################
+#           ctmrg               #
+#################################
+
+class CTMRGout(NamedTuple):
+    sweeps : int = 0
+    env : dict = 0
+    proj_hor : dict = 0
+    proj_vert : dict = 0
+
+
+def ctmrg_(psi, env, chi, cutoff, max_sweeps=1, iterator_step=None, AAb_mode=0, flag=None):
+    r"""
+    Perform CTMRG sweeps until convergence, starting from PEPS and environmental corner and edge tensors :code:`psi`.
+
+    The outer loop sweeps over PEPS updating only the environmental tensors through 2x2 windows of PEPS tensors.
+    Convergence can be controlled based on observables or Schmidt values of projectors.
+    The CTMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
+    or until all convergence measures with provided tolerance change by less then the tolerance.
+
+    Outputs generator if :code:`iterator_step` is given.
+    It allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
+
+    Parameters
+    ----------
+    psi: yaps.Peps
+        peps tensors occupying all the lattice sites in 2D. Maybe obtained after real or imaginary time evolution.
+        It is not updated during execution.
+
+    env: yaps.CtmEnv
+        Initial environmental tensors: maybe random or given by the user. It is updated during execution. 
+        The virtual bonds aligning with the boundary can be of maximum bond dimension chi
+
+    chi: maximal CTM bond dimension
+
+    cutoff: controls removal of singular values smaller than cutoff during CTM projector construction
+
+    prec: stop execution when 2 consecutive iterations give difference of a function used to evaluate conv smaller than prec
+
+    max_sweeps: int
+        Maximal number of sweeps.
+
+    iterator_step: int
+        If int, :code:`dmrg_` returns a generator that would yield output after every iterator_step sweeps.
+        Default is None, in which case  :code:`dmrg_` sweeps are performed immidiatly.
+
+    tcinit: symmetry sectors of initial corners legs
+
+    Dcinit: dimensions of initial corner legs
+
+    AAb = 0 (no double-peps tensors; 1 = double pepes tensors with identity; 2 = for all
+
+    Returns
+    -------
+    out: CTMRGout(NamedTuple)
+        Includes fields:
+        :code:`sweeps` number of performed dmrg sweeps.
+    """
+    tmp = _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, flag)
+    return tmp if iterator_step else next(tmp)
+
+
+def _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, flag):
+
+    """ Generator for ctmrg_(). """
+    psi = check_consistency_tensors(psi, flag) # to check if A has the desired fused form of legs i.e. t l b r [s a]
+
+    AAb = CtmEnv(lattice=psi.lattice, dims=psi.dims, boundary='infinite')   
+
+    for ms in psi.sites():
+        AAb[ms] = fPEPS_2layers(psi[ms])
+
+    if AAb_mode >= 1:
+        fPEPS_fuse_layers(AAb)
+  
+    for sweep in range(1, max_sweeps + 1):
+        logging.info('CTM sweep: %2d', sweep)
+        env, proj_hor, proj_ver = CTM_it(env, AAb, chi, cutoff)
+
+        if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
+            yield CTMRGout(sweep, env, proj_hor, proj_ver)
+    yield CTMRGout(sweep, env, proj_hor, proj_ver)
+    
+
+
+
+

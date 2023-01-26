@@ -401,7 +401,7 @@ def CTM_it(env, AAb, chi, cutoff):
 
     for y in range(Ny):
         for ms in AAb.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
-            print('ctm cluster horizontal', ms)
+            #print('ctm cluster horizontal', ms)
             proj = proj_horizontal(env, AAb, chi, cutoff, ms)
             proj_hor.update(proj)
         for ms in AAb.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
@@ -410,7 +410,7 @@ def CTM_it(env, AAb, chi, cutoff):
     proj={}
     for x in range(Nx):
         for ms in AAb.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
-            print('ctm cluster vertical', ms)
+            #print('ctm cluster vertical', ms)
             proj = proj_vertical(env, AAb, chi, cutoff, ms)
             proj_ver.update(proj)
         for ms in AAb.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
@@ -520,20 +520,20 @@ def fPEPS_unfuse_physical(A):
 
 def fuse_ancilla_wos(op, fid):
     """ kron and fusion of local operator with identity for ancilla --- without string """
-    op = ncon((op, fid), ((-0, -1), (-2, -3)))
-    return op.fuse_legs(axes=((0, 3), (1, 2)))
+    op = ncon((op, fid), ((-0, -2), (-1, -3)))
+    return op.fuse_legs(axes=((0, 1), (2, 3)))
 
 def fuse_ancilla_ws(op, fid, dirn):
     """ kron and fusion of nn operator with identity for ancilla --- with string """
     if dirn == 'l':
         op= op.add_leg(s=1).swap_gate(axes=(0, 2))
-        op = ncon((op, fid), ((-0, -1, -4), (-2, -3)))
-        op = op.swap_gate(axes=(2, 4)) # swap of connecting axis with ancilla is always in GA gate
-        op = op.fuse_legs(axes=((0, 3), (1, 2), 4))
+        op = ncon((op, fid), ((-0, -2, -4), (-1, -3)))
+        op = op.swap_gate(axes=(3, 4)) # swap of connecting axis with ancilla is always in GA gate
+        op = op.fuse_legs(axes=((0, 1), (2, 3), 4))
     elif dirn == 'r':
         op = op.add_leg(s=-1)
-        op = ncon((op, fid), ((-0, -1, -4), (-2, -3)))
-        op = op.fuse_legs(axes=((0, 3), (1, 2), 4))
+        op = ncon((op, fid), ((-0, -2, -4), (-1, -3)))
+        op = op.fuse_legs(axes=((0, 1), (2, 3), 4))
     return op
 
 def fPEPS_2layers(A, B=None, op=None, dir=None):
@@ -544,8 +544,8 @@ def fPEPS_2layers(A, B=None, op=None, dir=None):
     Here spin and ancilla legs of tensors are fused
     """
     leg = A.get_legs(axis=-1)
-    leg, _ = yast.leg_undo_product(leg) # last leg of A is fused 
-    fid = yast.eye(config=A.config, legs=[leg, leg.conj()]).diag() # identity generated to act on ancilla leg through the operators
+    _, leg = yast.leg_undo_product(leg) # last leg of A should be fused
+    fid = yast.eye(config=A.config, legs=[leg, leg.conj()]).diag()
 
     if op is not None:
         if dir == 't':
@@ -608,18 +608,25 @@ def fPEPS_fuse_layers(AAb, EVonly=False):
             st['bl'] = tt.fuse_legs(axes=((2, 0), (1, 3)))  # ((2t 2b) (1t 1b)) ((0t 0b) (3t 3b))
 
 
-def check_consistency_tensors(A):
+def check_consistency_tensors(A, flag=None):
     # to check if the A tensors have the appropriate configuration of legs i.e. t l b r [s a]
 
     Ab = peps.Peps(A.lattice, A.dims, A.boundary)
     if A[0, 0].ndim == 6:
-        for ms in A.sites(): 
+        for ms in Ab.sites(): 
             Ab[ms] = A[ms].fuse_legs(axes=(0, 1, 2, 3, (4, 5))) 
     elif A[0, 0].ndim == 3:
-        for ms in A.sites():
-            Ab[ms] = A[ms].unfuse_legs(axes=(0, 1)) # system and ancila are fused by default
+        for ms in Ab.sites():
+            target_site = (round((A.Nx-1)*0.5), round((A.Ny-1)*0.5))
+            if flag == 'hole':
+                if ms ==  target_site:
+                    Ab[ms] = A[ms].unfuse_legs(axes=2).unfuse_legs(axes=3).fuse_legs(axes=(0, 1, 4, (2, 3))).unfuse_legs(axes=(0, 1)) # t l b r str [s a]
+                else:
+                    Ab[ms] = A[ms].unfuse_legs(axes=(0, 1)) # system and ancila are fused by default
+            else:
+                Ab[ms] = A[ms].unfuse_legs(axes=(0, 1)) # system and ancila are fused by default
     else:
-        for ms in A.sites():
+        for ms in Ab.sites():
             Ab[ms] = A[ms]   # system and ancila are fused by default
     return Ab
         
