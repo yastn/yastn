@@ -1,3 +1,4 @@
+from ._general import General
 from ._qdit import Qdit
 from ._spin12 import Spin12
 from ._spin1 import Spin1

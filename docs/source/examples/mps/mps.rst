@@ -27,6 +27,7 @@ realizations of explicit symmetry.
 .. literalinclude:: /../../tests/mps/test_generator.py
         :pyobject: mpo_XX_model_dense
 
+
 MPO for hopping model with :math:`\mathbb{Z}_2` symmetry
 --------------------------------------------------------
 
@@ -40,24 +41,68 @@ MPO for hopping model with U(1) symmetry
         :pyobject: mpo_XX_model_U1
 
 
-Automatically generated matrix product
+Generate MPS from LaTex-like instruction
+--------------------------------------
+
+The MPS can be constructed automatically using dedicated `yamps.Generator` supplied with set of tensors as a basis. 
+The input for MPS can be given in a convenient LaTeX-like string.  To generate MPS we need to pass the parameters included 
+in the instruction and suply all vectors which will be used by the generator. 
+
+The instruction should provide all `vectors` and `parameters` which are used in the LaTeX-like instruction. In addition 
+the input has to define each element of the product explicitely. 
+
+Automatic generator creates MPO with symmetry as in `Generator`.
+
+.. literalinclude:: /../../tests/mps/test_generator.py
+        :pyobject: test_generator_mps
+
+
+Generate MPO from LaTex-like instruction
 --------------------------------------
 
 The MPO can be constructed automatically using dedicated `yamps.Generator` supplied with set of tensors as a basis. 
-The input for MPS/MPO generation can be given in a convenient LaTeX-like string. 
+The input for MPO generation can be given in a convenient LaTeX-like string. 
 
-Automatic generator creates MPS/MPO with symmetries 
-
-.. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: test_generator_mps, test_generator_mpo
-
-Generation of more complex Hamiltonian can be drown to Ising model with decaying coupling strength. 
+Automatic generator creates MPO with symmetry as in `Generator`.
 
 .. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: mpo_Ising_model
+        :pyobject: test_generator_mpo
+
+.. literalinclude:: /../../tests/mps/test_generator.py
+        :pyobject: test_mpo_from_latex
 
 
-.. FOR ALGEBRA 
+Create MPS or MPO based on templete object
+--------------------------------------
+
+The object can be created without `yast.tn.mps.Generator` by writing the instruction in terms of templete objects
+:code:`yast.tn.mps.Hterm(amplitude, position, operators)`. The list of `Hterm`'s gives the instruction for 
+elements which will be summed.
+
+An example for creating MPO from `Hterm` templete is included below:
+
+.. literalinclude:: /../../tests/mps/test_generator.py
+        :pyobject: test_mpo_from_latex
+
+Alternatively you can create `YAMPS` by using `Generator`'s templete object. The object :code:`yast.tn.mps.single_term(op)` 
+contains the instruction for the product where the elements of the product are refered to by their names. The names are taken both from
+the basis for operators :code:`generator._ops.to_dict()`, and parameters we provide as input.
+
+.. literalinclude:: /../../tests/mps/test_generator.py
+        :pyobject: test_mpo_from_templete
+
+
+Create random MPS or MPO
+--------------------------------------
+
+`Generator` can be used as a tool to `YAMPS` object in a consistent basis. That includes creating 
+random MPS and MPO.
+
+.. literalinclude:: /../../tests/mps/test_generator.py
+        :pyobject: test_random_mps
+
+
+.. FOR ALGEBRA
 
 Multiplication
 =====================================

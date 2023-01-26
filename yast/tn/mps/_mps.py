@@ -757,26 +757,20 @@ class MpsMpo:
             out_dict['A'][n] = self.A[n].save_to_dict()
         return out_dict
 
-    def save_to_hdf5(self, file, in_file_path):
+    def save_to_hdf5(self, file, my_address):
         r"""
         Save MPS/MPO into a HDF5 file.
-
-        .. todo::
-            The second one redirects all information to HDF5 :code:`file` to
-            a group which has the path :code:`my_address`
-            such that running :code:`A.save_to_hdf5(file, './my_address/')`.
-            Keep the adress as you will need to have it to encode the object back to `YAMPS`.
 
         Parameters
         -----------
         file: File
             A 'pointer' to a file opened by a user
 
-        in_file_path: File
-            Name of a group in the file, where the Mps will be saved
+        my_address: str
+            Name of a group in the file, where the Mps will be saved, e.g., 'state/'
         """
-        file.create_dataset(in_file_path+'/nr_phys', data=self.nr_phys)
-        file.create_dataset(in_file_path+'/sym/SYM_ID', data=self[0].config.sym.SYM_ID)
-        file.create_dataset(in_file_path+'/sym/NSYM', data=self[0].config.sym.NSYM)
+        file.create_dataset(my_address+'/nr_phys', data=self.nr_phys)
+        file.create_dataset(my_address+'/sym/SYM_ID', data=self[0].config.sym.SYM_ID)
+        file.create_dataset(my_address+'/sym/NSYM', data=self[0].config.sym.NSYM)
         for n in self.sweep(to='last'):
-            self.A[n].save_to_hdf5(file, in_file_path+'/A/'+str(n))
+            self.A[n].save_to_hdf5(file, my_address+'/A/'+str(n))
