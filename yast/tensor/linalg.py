@@ -27,7 +27,7 @@ def norm(a, p='fro'):
     return a.config.backend.norm(a._data, p)
 
 
-def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank',
+def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False,
         tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
         mask_f=None, **kwargs):
     r"""
@@ -69,7 +69,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
     untruncated_S: bool
         returns U, S, Vh, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
 
-    mask_f: function(yast.Tensor)->yast.Tensor
+    mask_f: function(yast.Tensor) -> yast.Tensor
         custom truncation mask
 
     Returns
@@ -78,7 +78,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
         U and V are unitary projectors. S is a real diagonal tensor.
     """
     diagnostics = kwargs['diagonostics'] if 'diagonostics' in kwargs else None
-    U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block, diagnostics=diagnostics)
+    U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block, diagnostics=diagnostics, fix_signs=fix_signs)
 
     if mask_f:
         Smask = mask_f(S)
@@ -149,7 +149,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix
         raise YastError('svd policy should be one of (`lowrank`, `fullrank`)')
 
     if fix_signs:
-        a.config.backend.fix_svd_signs(Udata, Vdata, meta)
+        Udata, Vdata = a.config.backend.fix_svd_signs(Udata, Vdata, meta)
 
     ls_s = _leg_struct_trivial(Sstruct, axis=0)
 

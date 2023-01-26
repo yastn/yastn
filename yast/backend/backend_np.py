@@ -292,11 +292,12 @@ def fix_svd_signs(Udata, Vdata, meta):
     for (_, _, slU, DU, _, slV, DV) in meta:
         Utemp = Udata[slice(*slU)].reshape(DU)
         Vtemp = Vdata[slice(*slV)].reshape(DV)
-        imax = np.argmax(abs(Utemp), axis=0, keepdims=True)
-        phase = np.take_along_axis(Utemp, imax, axis=0)
+        ii = np.argmax(abs(Utemp), axis=0, keepdims=True)
+        phase = np.take_along_axis(Utemp, ii, axis=0)
         phase /= abs(phase)
         Utemp *= phase.conj().reshape(1, -1)
         Vtemp *= phase.reshape(-1, 1)
+    return Udata, Vdata
 
 
 def eigh(data, meta=None, sizes=(1, 1)):

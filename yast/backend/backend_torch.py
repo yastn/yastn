@@ -375,8 +375,20 @@ def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
     return Udata, Sdata, Vhdata
 
 
-def fix_svd_signs(Udata, Vdata, meta):
-    pass  # TODO: add this function
+def fix_svd_signs(Udata, Vhdata, meta):
+    Ud = torch.empty_like(Udata)
+    Vhd = torch.empty_like(Vhdata)
+    for (_, _, slU, DU, _, slV, DV) in meta:
+        Utemp = Udata[slice(*slU)].reshape(DU)
+        Vtemp = Vhdata[slice(*slV)].reshape(DV)
+        ii = torch.argmax(abs(Utemp), dim=0, keepdims=True)
+        phase = torch.take_along_dim(Utemp, ii, dim=0)
+        phase /= abs(phase)
+        # Utemp *= phase.conj().reshape(1, -1)
+        # Vtemp *= phase.reshape(-1, 1)
+        Ud[slice(*slU)].reshape(DU)[:] = Utemp * phase.conj().reshape(1, -1)
+        Vhd[slice(*slV)].reshape(DV)[:] = Vtemp * phase.reshape(-1, 1)
+    return Ud, Vhd # Utemp, Vtemp
 
 
 def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=1.0e-12):
