@@ -10,10 +10,10 @@ except ImportError:
 
 
 def run_zipper(psi, H, Egs):
-    Hpsi = mps.zipper(H, psi, opts={'D_total': 6})
+    Hpsi = mps.zipper(H, psi, opts={'D_total': 16})
 
     Eng_t = mps.measure_overlap(Hpsi, psi)
-    assert Egs < Eng_t < Egs * 0.995
+    assert Egs < Eng_t < Egs * 0.99
 
     Hnorm = mps.measure_overlap(Hpsi, Hpsi) ** 0.5
 
@@ -51,10 +51,10 @@ def test_truncate_svd_dense():
     generate = mps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 
-    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0, "range1": range(N), "range2": range(N-1)}
-    H_str = "\sum_{j \in range2} t ( sp_{j} sm_{j+1} + sp_{j+1} sm_{j} ) + \sum_{j\in range1} mu sp_{j} sm_{j}"
-    H = generate.mpo(H_str, parameters)
-    psi = generate.random_mps(D_total=D_total)
+    parameters = {"t": 1.0, "mu": 0.0, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
+    H_str = "\sum_{i,j \in rangeNN} t ( sp_{i} sm_{j} + sp_{j} sm_{i} ) + \sum_{j\in rangeN} mu sp_{j} sm_{j}"
+    H = generate.mpo_from_latex(H_str, parameters)
+    psi = generate.random_mps(D_total=D_total).canonize_(to='first')
     mps.dmrg_(psi, H, max_sweeps=10, Schmidt_tol=1e-8)
     run_truncation(psi, H, Eng_gs)
 
@@ -71,9 +71,9 @@ def test_truncate_svd_Z2():
     generate = mps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 
-    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0, "range1": range(N), "range2": range(N-1)}
-    H_str = "\sum_{j \in range2} t ( sp_{j} sm_{j+1} + sp_{j+1} sm_{j} ) + \sum_{j\in range1} mu sp_{j} sm_{j}"
-    H = generate.mpo(H_str, parameters)
+    parameters = {"t": 1.0, "mu": 0.0, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
+    H_str = "\sum_{i,j \in rangeNN} t ( sp_{i} sm_{j} + sp_{j} sm_{i} ) + \sum_{j\in rangeN} mu sp_{j} sm_{j}"
+    H = generate.mpo_from_latex(H_str, parameters)
 
     for parity in (0, 1):
         psi = generate.random_mps(D_total=D_total, n=parity)

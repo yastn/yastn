@@ -55,7 +55,7 @@ def test_basic_hdf5():
     # Note: You have to provide valid YAST configuration 
     #
     with h5py.File('tmp.h5', 'r') as f:
-        phi = mps.load_from_hdf5(config_dense, f, 'state/')
+        phi = mps.load_from_hdf5(config_dense, f, './state/')
     #
     # Test psi == phi
     #
@@ -67,7 +67,7 @@ def test_basic_hdf5():
     with h5py.File('tmp.h5', 'w') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
-        phi = mps.load_from_hdf5(config_dense, f, 'state/')
+        phi = mps.load_from_hdf5(config_dense, f, './state/')
     os.remove("tmp.h5")
     check_copy(psi, phi)
 
@@ -84,7 +84,7 @@ def test_Z2_hdf5():
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
-        phi = mps.load_from_hdf5(psi.A[0].config, f, 'state/')
+        phi = mps.load_from_hdf5(psi.A[0].config, f, './state/')
     os.remove("tmp.h5") 
     check_copy(psi, phi)
 

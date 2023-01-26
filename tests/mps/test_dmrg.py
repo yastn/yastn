@@ -85,13 +85,13 @@ def test_dense_dmrg():
     #
     operators = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=N, operators=operators)
-    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.2, "range1": range(N), "range2": range(N-1)}
-    H_str = "\sum_{j \in range2} t ( sp_{j} sm_{j+1} + sp_{j+1} sm_{j} ) + \sum_{j\in range1} mu sp_{j} sm_{j}"
-    H = generate.mpo(H_str, parameters)
+    parameters = {"t": 1.0, "mu": 0.2, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
+    H_str = "\sum_{i,j \in rangeNN} t ( sp_{i} sm_{j} + sp_{j} sm_{i} ) + \sum_{j\in rangeN} mu sp_{j} sm_{j}"
+    H = generate.mpo_from_latex(H_str, parameters)
     #
     # and MPO to measure occupation:
     #
-    occ = generate.mpo("\sum_{j\in range1} sp_{j} sm_{j}", {"range1": range(N)})
+    occ = generate.mpo_from_latex("\sum_{j\in rangeN} sp_{j} sm_{j}", {"rangeN": range(N)})
     #
     # Known energies and occupations of low energy eigen-states.
     #
@@ -143,16 +143,17 @@ def test_Z2_dmrg():
     N, Dmax  = 7, 8
     opts_svd = {'tol': 1e-8, 'D_total': Dmax}
 
-    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.2, "range1": range(N), "range2": range(N-1)}
-    H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j}"
-    H = generate.mpo(H_str, parameters)
-    occ = generate.mpo("\sum_{j\in range1} cp_{j} c_{j}", {"range1": range(N)})
+    logging.info(' Tensor : Z2 ')
 
-    Occ_target = {0: [4, 2, 4],  # occupations in low-energy states of total parity 0 and 1.
+    Occ_target = {0: [4, 2, 4],
                   1: [3, 3, 5]}
     Eng_target = {0: [-3.227339492125848, -2.8619726273956685, -2.461972627395668],
                   1: [-3.427339492125848, -2.6619726273956683, -2.261972627395668]}
-
+    parameters = {"t": 1.0, "mu": 0.2, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
+    H_str = "\sum_{i,j \in rangeNN} t ( cp_{i} c_{j} + cp_{j} c_{i} ) + \sum_{j\in rangeN} mu cp_{j} c_{j}"
+    H = generate.mpo_from_latex(H_str, parameters)
+    occ = generate.mpo_from_latex("\sum_{j\in rangeN} cp_{j} c_{j}", {"rangeN": range(N)})
+    
     for parity in (0, 1):
         psi = generate.random_mps(D_total=Dmax, n=parity)
         # run_dmrg starts with 2-site method to update bond dimension for small tests with random distribution of bond dimensions.
@@ -168,11 +169,15 @@ def test_U1_dmrg():
     generate = mps.Generator(N=7, operators=operators)
     generate.random_seed(seed=0)
 
+    Eng_sectors = {2: [-2.861972627395668, -2.213125929752753, -1.7795804271032745],
+                   3: [-3.427339492125848, -2.661972627395668, -2.0131259297527526],
+                   4: [-3.227339492125848, -2.461972627395668, -1.8131259297527529]}
+
     N = 7
-    parameters = {"t": lambda j: 1.0, "mu": lambda j: 0.2, "range1": range(N), "range2": range(N-1)}
-    H_str = "\sum_{j \in range2} t ( cp_{j} c_{j+1} + cp_{j+1} c_{j} ) + \sum_{j\in range1} mu cp_{j} c_{j}"
-    H = generate.mpo(H_str, parameters)
-    occ = generate.mpo("\sum_{j\in range1} cp_{j} c_{j}", {"range1": range(N)})
+    parameters = {"t": 1.0, "mu": 0.2, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
+    H_str = "\sum_{i,j \in rangeNN} t ( cp_{i} c_{j} + cp_{j} c_{i} ) + \sum_{j\in rangeN} mu cp_{j} c_{j}"
+    H = generate.mpo_from_latex(H_str, parameters)
+    occ = generate.mpo_from_latex("\sum_{j\in rangeN} cp_{j} c_{j}", {"rangeN": range(N)})
 
     Eng_sectors = {2: [-2.861972627395668, -2.213125929752753, -1.7795804271032745],
                    3: [-3.427339492125848, -2.661972627395668, -2.0131259297527526],
