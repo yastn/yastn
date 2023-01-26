@@ -64,7 +64,8 @@ def test_NTU_spinfull_finite():
     singular_vecs_old = {}
 
     diff_norm_sing = {}
-    average_diff_norm_sing = {}
+    max_diff_norm_sing = {}
+    ctm_energy_bond_old = 0
 
     for step in ctmrg_(tpeps, env, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0, flag=None):
         
@@ -74,35 +75,26 @@ def test_NTU_spinfull_finite():
         print("###################################    SWEEP  ", step.sweeps)
         print("#############################################################################################")
 
-
         ##### a criteria by calculating norms of singular vectors of corner transfer matrices of each site
 
+        list_sing_diff_norm = []
         for ms in tpeps.sites():
-
             print("###################### SITE:  ", ms)
-
-            _, S_tl, _ = yast.svd(step.env[ms].tl)
-            singular_vecs[ms, 'tl'] = S_tl
-            _, S_tr, _ = yast.svd(step.env[ms].tr)
-            singular_vecs[ms, 'tr'] = S_tr
-            _, S_bl, _ = yast.svd(step.env[ms].bl)
-            singular_vecs[ms, 'bl'] = S_bl
-            _, S_br, _ = yast.svd(step.env[ms].br)
-            singular_vecs[ms, 'br'] = S_br
+            _, singular_vecs[ms, 'tl'], _ = yast.svd(step.env[ms].tl)
+            _, singular_vecs[ms, 'tr'], _ = yast.svd(step.env[ms].tr)
+            _, singular_vecs[ms, 'bl'], _ = yast.svd(step.env[ms].bl)
+            _, singular_vecs[ms, 'br'], _ = yast.svd(step.env[ms].br)
             
             if step.sweeps > 1:      
+                for k in ['tl', 'tr', 'bl', 'br']:
+                    diff_norm_sing[ms, k] =  ((singular_vecs[ms, k] - singular_vecs_old[ms, k]).norm()) / singular_vecs_old[ms, k].norm()
+                    print("diff norm: ", diff_norm_sing[ms, k])
+                max_diff_norm_sing[ms] = max(diff_norm_sing[ms, 'tl'], diff_norm_sing[ms, 'tr'], diff_norm_sing[ms, 'bl'], diff_norm_sing[ms, 'br'])
+                print("average difference norm singular ", max_diff_norm_sing[ms])
 
-                diff_norm_sing[ms, 'tl'] =  ((singular_vecs[ms, 'tl'] - singular_vecs_old[ms, 'tl']).norm())
-                diff_norm_sing[ms, 'tr'] = ((singular_vecs[ms, 'tr'] - singular_vecs_old[ms, 'tr']).norm())
-                diff_norm_sing[ms, 'bl'] =  ((singular_vecs[ms, 'bl'] - singular_vecs_old[ms, 'bl']).norm())
-                diff_norm_sing[ms, 'br'] =  ((singular_vecs[ms, 'br'] - singular_vecs_old[ms, 'br']).norm())
-                average_diff_norm_sing['ms'] = 0.25 * (diff_norm_sing[ms, 'tl']+ diff_norm_sing[ms, 'tr']+ diff_norm_sing[ms, 'bl']+diff_norm_sing[ms, 'br'])
-                print("average difference norm singular ", average_diff_norm_sing['ms'])
-            
-            singular_vecs_old[ms, 'tl'] = singular_vecs[ms, 'tl']
-            singular_vecs_old[ms, 'tr'] = singular_vecs[ms, 'tr']
-            singular_vecs_old[ms, 'bl'] = singular_vecs[ms, 'bl']
-            singular_vecs_old[ms, 'br'] = singular_vecs[ms, 'br']
+                list_sing_diff_norm.append(max_diff_norm_sing[ms])
+            for k in ['tl', 'tr', 'bl', 'br']:
+                singular_vecs_old[ms, k] = singular_vecs[ms, k]
 
         ###   calculate energy at each sweep as a covergence criteria  ###
 
@@ -115,16 +107,12 @@ def test_NTU_spinfull_finite():
         rel_diff_ctm_energy = (ctm_energy_bond-ctm_energy_bond_old)/ctm_energy_bond_old # relative difference with analytical result
 
         ctm_energy_bond_old = ctm_energy_bond
-
-        with open("ctm_iteration_convergence_scheme_%s.txt" % file_name, "a+") as f:
-            f.write('{:.3f} {:.2e} {:.2e} {:+.6f}\n'.format(beta, ntu_error_up, ntu_error_dn, energy))
-
-        print("rel diff in energy: ", rel_diff_an_energy)
-
-
         
-
-
+        if step.sweeps > 1:
+            max_sing_diff_norm = max(list_sing_diff_norm) # maximum of the norm of the difference of the singular vectors obtained by svd of the four corner matrices of all sites
+            with open("ctm_iteration_convergence_scheme_%s.txt" % file_name, "a+") as f:
+                f.write('{:.1f} {:.6e} {:.6e} {:.6e}\n'.format(step.sweeps, max_sing_diff_norm, rel_diff_ctm_energy, rel_diff_an_energy))
+        
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
     test_NTU_spinfull_finite()
