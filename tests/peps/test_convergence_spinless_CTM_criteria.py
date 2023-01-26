@@ -25,11 +25,11 @@ n = fcdag @ fc
 def test_NTU_spinfull_finite():
 
     lattice = 'rectangle'
-    boundary = 'finite'
+    boundary = 'infinite'
     purification = 'True'   # real-time evolution not imaginary
     xx = 3
     yy = 3
-    D = 6
+    D = 8
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
     fix_bd = 0
@@ -39,18 +39,20 @@ def test_NTU_spinfull_finite():
     dims = (xx, yy)
 
     file_name = "shape_%s_Nx_%1.0f_Ny_%1.0f_boundary_%s_purification_%s_fixed_bd_%1.1f_%s_%s_Ds_%s_MU_%1.5f_T_%1.2f_%s" % (lattice, dims[1], dims[0], boundary, purification, fix_bd, tr_mode, step, D, mu, t, sym)
-    state = np.load("fully_filled_initialized_spinless_tensors_%s.npy" % (file_name), allow_pickle=True).item()
+    state = np.load("spinless_tensors_%s.npy" % (file_name), allow_pickle=True).item()
     
     beta = 3
+    exact_energy_bond = -0.19489891 # at beta = 3
+
     sv_beta = round(beta * yast.BETA_MULTIPLIER)
     tpeps = peps.Peps(lattice, dims, boundary)
     for sind in tpeps.sites():
         tpeps[sind] = yast.load_from_dict(config=fid.config, d=state.get((sind, sv_beta))) 
     
     # convergence criteria for CTM based on total energy
-    chi = 30 # environmental bond dimension
+    chi = 32 # environmental bond dimension
     cutoff = 1e-10
-    max_sweeps=8 
+    max_sweeps=40
     tol = 1e-7   # difference of some observable must be lower than tolernace
 
     env = init_rand(tpeps, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
@@ -58,11 +60,11 @@ def test_NTU_spinfull_finite():
     ops = {'cdagc': {'l': fcdag, 'r': fc},
            'ccdag': {'l': fc, 'r': fcdag}}
 
-    tl_sum_old1, tr_sum_old1, bl_sum_old1, br_sum_old1, tl_sum_old2, tr_sum_old2, bl_sum_old2, br_sum_old2 = 0, 0, 0, 0, 0, 0, 0, 0
-    exp_rel_diff = 0
+    singular_vecs  = {}
+    singular_vecs_old = {}
 
-    bd_h = peps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
-    bd_v = peps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
+    diff_norm_sing = {}
+    average_diff_norm_sing = {}
 
     for step in ctmrg_(tpeps, env, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0, flag=None):
         
@@ -72,49 +74,54 @@ def test_NTU_spinfull_finite():
         print("###################################    SWEEP  ", step.sweeps)
         print("#############################################################################################")
 
-        ms1, ms2 = (1,1), (2,2)
-        tlc1, trc1, blc1, brc1, tlc2, trc2, blc2, brc2  = step.env[ms1].tl, step.env[ms1].tr, step.env[ms1].bl, step.env[ms1].br, step.env[ms2].tl, step.env[ms2].tr, step.env[ms2].bl, step.env[ms2].br
-        U_tl1, S_tl1, V_tl1 = yast.svd(tlc1)
-        U_tl2, S_tl2, V_tl2 = yast.svd(tlc2)
-        U_tr1, S_tr1, V_tr1 = yast.svd(trc1)
-        U_tr2, S_tr2, V_tr2 = yast.svd(trc2)
-        U_bl1, S_bl1, V_bl1 = yast.svd(blc1)
-        U_bl2, S_bl2, V_bl2 = yast.svd(blc2)
-        U_br1, S_br1, V_br1 = yast.svd(brc1)
-        U_br2, S_br2, V_br2 = yast.svd(brc2)
-                
-        tl_sum1, tl_sum2 = np.sum(np.diag(S_tl1.to_numpy())), np.sum(np.diag(S_tl2.to_numpy()))
-        tr_sum1, tr_sum2 = np.sum(np.diag(S_tr1.to_numpy())), np.sum(np.diag(S_tr2.to_numpy()))
-        bl_sum1, bl_sum2 = np.sum(np.diag(S_bl1.to_numpy())), np.sum(np.diag(S_bl2.to_numpy()))
-        br_sum1, br_sum2 = np.sum(np.diag(S_br1.to_numpy())), np.sum(np.diag(S_br2.to_numpy()))
 
-        print("##################    site   ", ms1)
+        ##### a criteria by calculating norms of singular vectors of corner transfer matrices of each site
 
-        print("differnce top-left corner: ", (tl_sum1 - tl_sum_old1)/tl_sum_old1)
-        print("differnce top-right coner: ", (tr_sum1 - tr_sum_old1)/tr_sum_old1)
-        print("difference bottom-left coner: ", (bl_sum1 - bl_sum_old1)/bl_sum_old1)
-        print("difference bottom-right coner: ", (br_sum1 - br_sum_old1)/br_sum_old1)
+        for ms in tpeps.sites():
 
-        print("##################    site   ", ms2)
+            print("###################### SITE:  ", ms)
 
-        print("differnce top-left corner: ", (tl_sum2 - tl_sum_old2)/tl_sum_old2)
-        print("differnce top-right coner: ", (tr_sum2 - tr_sum_old2)/tr_sum_old2)
-        print("difference bottom-left coner: ", (bl_sum2 - bl_sum_old2)/bl_sum_old2)
-        print("difference bottom-right coner: ", (br_sum2 - br_sum_old2)/br_sum_old2)
+            _, S_tl, _ = yast.svd(step.env[ms].tl)
+            singular_vecs[ms, 'tl'] = S_tl
+            _, S_tr, _ = yast.svd(step.env[ms].tr)
+            singular_vecs[ms, 'tr'] = S_tr
+            _, S_bl, _ = yast.svd(step.env[ms].bl)
+            singular_vecs[ms, 'bl'] = S_bl
+            _, S_br, _ = yast.svd(step.env[ms].br)
+            singular_vecs[ms, 'br'] = S_br
+            
+            if step.sweeps > 1:      
 
-        tl_sum_old1, tl_sum_old2 = tl_sum1, tl_sum2
-        tr_sum_old1, tr_sum_old2  = tr_sum1, tr_sum2
-        bl_sum_old1, bl_sum_old2 = bl_sum1, bl_sum2
-        br_sum_old1, br_sum_old2 = br_sum1, br_sum2
+                diff_norm_sing[ms, 'tl'] =  ((singular_vecs[ms, 'tl'] - singular_vecs_old[ms, 'tl']).norm())
+                diff_norm_sing[ms, 'tr'] = ((singular_vecs[ms, 'tr'] - singular_vecs_old[ms, 'tr']).norm())
+                diff_norm_sing[ms, 'bl'] =  ((singular_vecs[ms, 'bl'] - singular_vecs_old[ms, 'bl']).norm())
+                diff_norm_sing[ms, 'br'] =  ((singular_vecs[ms, 'br'] - singular_vecs_old[ms, 'br']).norm())
+                average_diff_norm_sing['ms'] = 0.25 * (diff_norm_sing[ms, 'tl']+ diff_norm_sing[ms, 'tr']+ diff_norm_sing[ms, 'bl']+diff_norm_sing[ms, 'br'])
+                print("average difference norm singular ", average_diff_norm_sing['ms'])
+            
+            singular_vecs_old[ms, 'tl'] = singular_vecs[ms, 'tl']
+            singular_vecs_old[ms, 'tr'] = singular_vecs[ms, 'tr']
+            singular_vecs_old[ms, 'bl'] = singular_vecs[ms, 'bl']
+            singular_vecs_old[ms, 'br'] = singular_vecs[ms, 'br']
 
-        ###   calculate fermionic bond correlators at each sweep as a covergence criteria  ###
+        ###   calculate energy at each sweep as a covergence criteria  ###
 
-        exact_correlation_bond = 0.1767723804184942
+        obs_hor, obs_ver =  nn_avg(tpeps, step.env, ops)
+        cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
+        ccdag = 0.5*(abs(obs_hor.get('ccdag')) + abs(obs_ver.get('ccdag')))
+        ctm_energy_bond = - 0.5 * (cdagc + ccdag)  # average energy per bond
 
-        nn_CTM_bond = 0.5*(abs(nn_bond(tpeps, env, ops['cdagc'], bd_v)) + abs(nn_bond(tpeps, env, ops['ccdag'], bd_v)))
-        exp_rel_diff = (nn_CTM_bond - exact_correlation_bond)/exact_correlation_bond
+        rel_diff_an_energy = (ctm_energy_bond-exact_energy_bond)/exact_energy_bond # relative difference with analytical result
+        rel_diff_ctm_energy = (ctm_energy_bond-ctm_energy_bond_old)/ctm_energy_bond_old # relative difference with analytical result
 
-        print("relative difference expectation value: ", exp_rel_diff)
+        ctm_energy_bond_old = ctm_energy_bond
+
+        with open("ctm_iteration_convergence_scheme_%s.txt" % file_name, "a+") as f:
+            f.write('{:.3f} {:.2e} {:.2e} {:+.6f}\n'.format(beta, ntu_error_up, ntu_error_dn, energy))
+
+        print("rel diff in energy: ", rel_diff_an_energy)
+
+
         
 
 
