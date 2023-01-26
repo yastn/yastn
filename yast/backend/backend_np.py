@@ -288,6 +288,17 @@ def svd(data, meta, sizes, **kwargs):
     return Udata, Sdata, Vdata
 
 
+def fix_svd_signs(Udata, Vdata, meta):
+    for (_, _, slU, DU, _, slV, DV) in meta:
+        Utemp = Udata[slice(*slU)].reshape(DU)
+        Vtemp = Vdata[slice(*slV)].reshape(DV)
+        imax = np.argmax(abs(Utemp), axis=0, keepdims=True)
+        phase = np.take_along_axis(Utemp, imax, axis=0)
+        phase /= abs(phase)
+        Utemp *= phase.conj().reshape(1, -1)
+        Vtemp *= phase.reshape(-1, 1)
+
+
 def eigh(data, meta=None, sizes=(1, 1)):
     Sdata = np.zeros((sizes[0],), dtype=DTYPE['float64'])
     Udata = np.zeros((sizes[1],), dtype=data.dtype)
