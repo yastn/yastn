@@ -101,6 +101,28 @@ def test_svd_sparse():
     assert yast.norm(b - USV) < tol  # == 0.0
 
 
+def test_svd_fix_signs():
+    U = yast.Tensor(config=config_U1, s=(-1, 1), dtype='complex128')
+    S = yast.Tensor(config=config_U1, s=(-1, 1), isdiag=True)
+    V = yast.Tensor(config=config_U1, s=(-1, 1), dtype='complex128')
+
+    U.set_block(ts=(0, 0), Ds=(3, 2), val= [[-1, 0], [0, 1j], [0, 0]])
+    U.set_block(ts=(1, 1), Ds=(2, 2), val= [[0, -1j], [1, 0]])
+    S.set_block(ts=(0, 0), Ds=(2, 2), val= [0.5, 0.2])
+    S.set_block(ts=(1, 1), Ds=(2, 2), val= [0.3, 0.2])
+    V.set_block(ts=(0, 0), Ds=(2, 2), val= [[0, 1], [1, 0]])
+    V.set_block(ts=(1, 1), Ds=(2, 3), val= [[1, 0, 0], [0, 0.8j, 0.6]])
+
+    USV = U @ S @ V
+    for f in [yast.svd_with_truncation, yast.svd]:
+        nU, nS, nV = f(USV, axis=(0, 1), fix_signs=True)
+        nUSV = nU @ nS @ nV
+        assert yast.norm(nUSV - USV) < tol
+        assert np.linalg.norm(np.array(nU[0, 0]) - np.array([[1, 0], [0, 1], [0, 0]])) < tol
+        assert np.linalg.norm(np.array(nU[1, 1]) - np.array([[0, 1], [1, 0]])) < tol
+
+
+
 def test_svd_truncate():
     legs = [yast.Leg(config_U1, s=1, t=(0, 1), D=(5, 6)),
             yast.Leg(config_U1, s=1, t=(-1, 0), D=(5, 6)),
@@ -304,13 +326,14 @@ def test_svd_exceptions():
 
 
 if __name__ == '__main__':
-    test_svd_basic()
-    test_svd_Z3()
-    test_svd_sparse()
-    test_svd_complex()
-    test_svd_truncate()
-    test_svd_tensor_charge_division()
-    test_svd_multiplets()
-    test_svd_exceptions()
-    test_svd_backward_basic()
-    test_svd_backward_truncate()
+    test_svd_fix_signs()
+    # test_svd_basic()
+    # test_svd_Z3()
+    # test_svd_sparse()
+    # test_svd_complex()
+    # test_svd_truncate()
+    # test_svd_tensor_charge_division()
+    # test_svd_multiplets()
+    # test_svd_exceptions()
+    # test_svd_backward_basic()
+    # test_svd_backward_truncate()
