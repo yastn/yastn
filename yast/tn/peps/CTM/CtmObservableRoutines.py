@@ -103,6 +103,7 @@ def con_bi(new_vecl, new_vecr):
 def hor_extension(env, bd, AAbo, AAb):
     """ merge the left and right vecs + TM """
     site_0, site_1 = bd.site_0, bd.site_1
+
     left_bound_vec, right_bound_vec = left_right_op_vectors(env, site_0, site_1, AAbo) 
     hor = con_bi(left_bound_vec, right_bound_vec)
     left_bound_vec_norm, right_bound_vec_norm = left_right_op_vectors(env, site_0, site_1, AAb) 

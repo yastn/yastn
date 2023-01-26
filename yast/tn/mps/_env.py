@@ -238,14 +238,14 @@ class Env3(_EnvParent):
 
     def __init__(self, bra=None, op=None, ket=None, on_aux=False, project=None):
         r"""
-        Initialize structure for :math:`\langle {\rm bra} | {\rm opp} | {\rm ket} \rangle` related operations.
+        Initialize structure for :math:`\langle {\rm bra} | {\rm op} | {\rm ket} \rangle` related operations.
 
         Parameters
         ----------
         bra : mps
             mps for :math:`| {\rm bra} \rangle`. If None, it is the same as ket.
-        opp : mps
-            mps for operator opp.
+        op : mps
+            mps for operator op.
         ket : mps
             mps for :math:`| {\rm ket} \rangle`.
         """
@@ -435,6 +435,11 @@ def _update2(n, F, bra, ket, to, nr_phys):
     """ Contractions for 2-layer environment update. """
     if to == 'first':
         inds = ((-0, 2, 1), (1, 3), (-1, 2, 3)) if nr_phys == 1 else ((-0, 2, 1, 4), (1, 3), (-1, 2, 3, 4))
+        print('n: ', n)
+        print('ket: ', ket[n].get_shape())
+        print('bra: ', bra[n].get_shape())
+        print('F: ', F[(n+1,n)].get_shape())
+
         F[(n, n - 1)] = tensor.ncon([ket[n], F[(n + 1, n)], bra[n].conj()], inds)
     elif to == 'last':
         inds = ((2, 3, -0), (2, 1), (1, 3, -1)) if nr_phys == 1 else ((2, 3, -0, 4), (2, 1), (1, 3, -1, 4))
@@ -442,6 +447,7 @@ def _update2(n, F, bra, ket, to, nr_phys):
 
 
 def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
+    print('n: ', n)
     if nr_phys == 1 and to == 'last':
         tmp = tensor.ncon([bra[n].conj(), F[(n - 1, n)]], ((1, -1, -0), (1, -2, -3)))
         tmp = op[n]._attach_01(tmp)
@@ -449,6 +455,8 @@ def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
     elif nr_phys == 1 and to == 'first':
         tmp = ket[n] @ F[(n + 1, n)]
         tmp = op[n]._attach_23(tmp)
+        print('tmp ', tmp.get_shape())
+        print('bra[n] conj: ', bra[n].conj().get_shape())
         F[(n, n - 1)] = tensor.ncon([tmp, bra[n].conj()], ((-0, -1, 1, 2), (-2, 2, 1)))
     elif nr_phys == 2 and not on_aux and to == 'last':
         bA = bra[n].fuse_legs(axes=(0, 1, (2, 3)))

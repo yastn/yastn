@@ -1,0 +1,22 @@
+The following is a list of analytical two point fermionic hopping correlator values for spinless fermi sea. This should 
+serve as a benchmark for iPEPS caluclations for spinless and spinfull fermions at finite temperature
+
+
+inverse temperature           correlator values
+
+
+0.1                               0.02481459
+0.2                               0.04856353
+0.5                               0.10655025
+1                                 0.15757863
+2                                 0.18727586
+3                                 0.19489891
+4                                 0.19792109
+5                                 0.19943796
+6                                 0.20031291
+7                                 0.20086604
+8                                 0.20123924
+9                                 0.20150362
+10                                0.20169816
+
+

@@ -3,50 +3,40 @@ import yast
 from yast import ncon
 from yast.tensor.linalg import svd_with_truncation
 
-
-def fuse_ancilla_1s(G_loc, fid):
-    """ kron and fusion of local gate with identity for ancilla. """
-   # Gas = ncon((fid, G_loc), ((-2, -0), (-1, -3)))
-    Gas = ncon((G_loc, fid), ((-0, -1), (-2, -3)))
-    return Gas.fuse_legs(axes=((0, 3), (1, 2)))
-
-
 def match_ancilla_1s(G_loc, A):
     """ kron and fusion of local gate with identity for ancilla. Identity is read from ancila of A. """
     leg = A.get_legs(axis=-1)
     if len(leg.legs) == 1 and leg.legs[0].tree[0] == 1:
         return G_loc
-    leg, _ = yast.leg_undo_product(leg) # last leg of A should be fused
+    _, leg = yast.leg_undo_product(leg) # last leg of A should be fused
     fid = yast.eye(config=A.config, legs=[leg, leg.conj()]).diag()
-    Gas = ncon((G_loc, fid), ((-0, -1), (-2, -3)))
-    Gas = Gas.fuse_legs(axes=((0, 3), (1, 2)))
+    Gas = ncon((G_loc, fid), ((-0, -2), (-1, -3)))
+    Gas = Gas.fuse_legs(axes=((0, 1), (2, 3)))
     return Gas
 
 
-def fuse_ancilla_2s(GA, GB, fid):
+def match_ancilla_2s(G, A, dir=None):
     """ kron and fusion of local gate with identity for ancilla. """
-    if GA.ndim == 2:
-        GA = GA.add_leg(s=1).swap_gate(axes=(0, 2))
-    if GB.ndim == 2:
-        GB = GB.add_leg(s=-1)
-  #  GAas = ncon((fid, GA), ((-2, -0), (-1, -3, -4)))
 
-    GAas = ncon((GA, fid), ((-0, -1, -4), (-2, -3)))
-    
-    GAas = GAas.swap_gate(axes=(2, 4))    # swap of connecting axis with ancilla is always in GA gate
-    
-    #GAas = GAas.fuse_legs(axes=((0, 1), (2, 3), 4))
-    GAas = GAas.fuse_legs(axes=((0, 3), (1, 2), 4))
+    leg = A.get_legs(axis=-1)
+    if len(leg.legs) == 1 and leg.legs[0].tree[0] == 1:
+        return G
+    _, leg = yast.leg_undo_product(leg) # last leg of A should be fused
+    fid = yast.eye(config=A.config, legs=[leg, leg.conj()]).diag()
 
-  #  GBas = ncon((fid, GB), ((-2, -0), (-1, -3, -4)))
-    GBas = ncon((GB, fid), ((-0, -1, -4), (-2, -3)))
-   # GBas = GBas.fuse_legs(axes=((0, 1), (2, 3), 4))
-    GBas = GBas.fuse_legs(axes=((0, 3), (1, 2), 4))
+    if G.ndim == 2:
+        if dir=='l':
+            G = G.add_leg(s=1).swap_gate(axes=(0, 2))
+        elif dir=='r':
+            G = G.add_leg(s=-1)
+    Gas = ncon((G, fid), ((-0, -2, -4), (-1, -3)))
+    if dir == 'l':
+        Gas = Gas.swap_gate(axes=(3, 4))    # swap of connecting axis with ancilla is always in G gate
+    Gas = Gas.fuse_legs(axes=((0, 1), (2, 3), 4))
 
-    return GAas, GBas
+    return Gas
 
-
-def gates_hopping(t, beta, fid, fc, fcdag, ancilla, purification):
+def gates_hopping(t, beta, fid, fc, fcdag, purification):
     """ gates for exp[beta * t * (cdag1 c2 + c2dag c1) / 4] """
     # below note that local operators follow convention where
     # they are transposed comparing to typical matrix notation
@@ -77,12 +67,9 @@ def gates_hopping(t, beta, fid, fc, fcdag, ancilla, purification):
     S = S.sqrt()
     GA = S.broadcast(U, axis=2)
     GB = S.broadcast(V, axis=2)
-    if ancilla == 'True':
-        GA, GB =  fuse_ancilla_2s(GA, GB, fid)
     return GA, GB
 
-
-def gate_local_Hubbard(mu_up, mu_dn, U, beta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, ancilla=True, purification = False):
+def gate_local_Hubbard(mu_up, mu_dn, U, beta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, purification = False):
     # local Hubbard gate with chemical potential and Coulomb interaction
     fn_up = fcdag_up @ fc_up
     fn_dn = fcdag_dn @ fc_dn
@@ -99,11 +86,9 @@ def gate_local_Hubbard(mu_up, mu_dn, U, beta, fid, fc_up, fc_dn, fcdag_up, fcdag
     G_loc = G_loc + (fn_dn - fnn) * (np.exp((coeff * beta * (mu_dn + 0.5 * U))) - 1)
     G_loc = G_loc + (fn_up - fnn) * (np.exp((coeff * beta * (mu_up + 0.5 * U))) - 1)
     G_loc = G_loc + fnn * (np.exp((coeff * beta * (mu_up + mu_dn))) - 1)
-    if ancilla == 'True':
-        G_loc = fuse_ancilla_1s(G_loc, fid)
     return G_loc
 
-def gate_local_fermi_sea(mu, beta, fid, fc, fcdag, ancilla=True, purification=False):
+def gate_local_fermi_sea(mu, beta, fid, fc, fcdag, purification=False):
     """ gates for exp[beta * mu * fn / 4] """
     # below note that local operators follow convention where
     # they are transposed comparing to typical matrix notation
@@ -117,8 +102,6 @@ def gate_local_fermi_sea(mu, beta, fid, fc, fcdag, ancilla=True, purification=Fa
     fn = fcdag @ fc
     step = coeff * beta * mu
     G_loc = fid + fn * (np.exp(step) - 1)
-    if ancilla=='True':
-        G_loc = fuse_ancilla_1s(G_loc, fid)
     return G_loc
 
 
