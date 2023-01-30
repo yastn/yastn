@@ -18,6 +18,7 @@ def test_leg():
     # flipping signature
     legc = leg.conj()
     assert leg.s == -legc.s
+    assert not leg.is_fused()
     print(legc)
 
     # order of provided charges (with corresponding bond dimensions) does not matter
@@ -51,6 +52,8 @@ def test_random_leg():
 
     leg = yast.leg_outer_product(leg0, leg1)
     print(leg)
+    assert leg.is_fused()
+
 
 def test_leg_meta_fusion():
     """ test get_leg with meta-fused tensor"""
@@ -64,6 +67,7 @@ def test_leg_meta_fusion():
     legm = a.get_legs(0)
     assert legm.fusion == a.mfs[0] and legm.legs == (leg, leg, leg, leg.conj())
     assert legm.history() == 'm(m(oo)m(oo))'
+    assert legm.is_fused()
 
     legt = a.get_legs((0, 1))
     assert legt[0] == legm
@@ -91,8 +95,10 @@ def test_leg_hard_fusion():
             yast.Leg(config_U1, s=1, t=(0,), D=(5,))]
     a = yast.ones(config=config_U1, legs=legs)
     af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+    laf = af.get_legs()
+    assert all(l.is_fused() for l in laf)
 
-    bf = yast.ones(config=config_U1, legs=af.get_legs())
+    bf = yast.ones(config=config_U1, legs=laf)
     b = bf.unfuse_legs(axes=(0, 1))
     assert yast.norm(a - b) < tol
 
@@ -186,8 +192,8 @@ def test_leg_exceptions():
 
 
 if __name__ == '__main__':
+    test_leg()
     test_random_leg()
-    # test_leg()
-    # test_leg_meta_fusion()
-    # test_leg_hard_fusion()
-    # test_leg_exceptions()
+    test_leg_meta_fusion()
+    test_leg_hard_fusion()
+    test_leg_exceptions()
