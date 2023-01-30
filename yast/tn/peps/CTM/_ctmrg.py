@@ -20,7 +20,7 @@ class CTMRGout(NamedTuple):
     proj_vert : dict = 0
 
 
-def ctmrg_(psi, env, chi, cutoff, max_sweeps=1, iterator_step=None, AAb_mode=0, flag=None):
+def ctmrg_(psi, env, chi, cutoff, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, flag=None):
     r"""
     Perform CTMRG sweeps until convergence, starting from PEPS and environmental corner and edge tensors :code:`psi`.
 
@@ -67,11 +67,11 @@ def ctmrg_(psi, env, chi, cutoff, max_sweeps=1, iterator_step=None, AAb_mode=0, 
         Includes fields:
         :code:`sweeps` number of performed dmrg sweeps.
     """
-    tmp = _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, flag)
+    tmp = _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, fix_signs, flag)
     return tmp if iterator_step else next(tmp)
 
 
-def _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, flag):
+def _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, fix_signs, flag):
 
     """ Generator for ctmrg_(). """
     psi = check_consistency_tensors(psi, flag) # to check if A has the desired fused form of legs i.e. t l b r [s a]
@@ -86,7 +86,7 @@ def _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, flag):
   
     for sweep in range(1, max_sweeps + 1):
         logging.info('CTM sweep: %2d', sweep)
-        env, proj_hor, proj_ver = CTM_it(env, AAb, chi, cutoff)
+        env, proj_hor, proj_ver = CTM_it(env, AAb, chi, cutoff, fix_signs)
 
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield CTMRGout(sweep, env, proj_hor, proj_ver)

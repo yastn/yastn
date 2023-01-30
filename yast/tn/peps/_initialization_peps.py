@@ -1,10 +1,13 @@
 import numpy as np
 import yast.tn.peps as peps
 
+r""" Initialization of peps tensors for evolution """
+
 def initialize_peps_purification(fid, net):
     """
-    initialize peps tensors into infinite-temeprature state, 
+    initialize peps tensors at infinite-temperature state, 
     fid is identity operator in local space with desired symmetry
+    (ancilla present)
     """
     
     A = fid / np.sqrt(fid.get_shape(1)) 
@@ -21,9 +24,9 @@ def initialize_peps_purification(fid, net):
 
 
 def initialize_spinless_filled(fid, fc, fcdag, net):
+    """ initialize spinless fermi sea with all sites filled """
 
     n = fcdag @ fc
-    #h = fc@fcdag
     f = n
     A = f.fuse_legs(axes=[(0, 1)])  # particle
     for s in (-1, 1, 1, -1):
@@ -37,10 +40,8 @@ def initialize_spinless_filled(fid, fc, fcdag, net):
     return Gamma
 
 
-def initialize_Neel_spinfull(fid, fc_up, fc_dn, fcdag_up, fcdag_dn, net):
-
-    Nx = net.Nx
-    Ny = net.Ny
+def initialize_Neel_spinfull(fc_up, fc_dn, fcdag_up, fcdag_dn, net):
+    """ initializes Neel state """
 
     nu = fcdag_up @ fc_up
     hd = fc_dn @ fcdag_dn
@@ -63,17 +64,18 @@ def initialize_Neel_spinfull(fid, fc_up, fc_dn, fcdag_up, fcdag_dn, net):
     m = list([A, B])
     i = 0
     Gamma = peps.Peps(net.lattice, net.dims, net.boundary)
-    for x in range(Nx):
-        for y in range(Ny)[::2]:
+    for x in range(net.Nx):
+        for y in range(net.Ny)[::2]:
             Gamma[x, y] = m[i]
-        for y in range(Ny)[1::2]:
+        for y in range(net.Ny)[1::2]:
             Gamma[x, y] = m[(i+1)%2]
         i = (i+1)%2
     
     return Gamma
 
 
-def initialize_post_sampling(fid, fc_up, fc_dn, fcdag_up, fcdag_dn, net, out):
+def initialize_post_sampling(fc_up, fc_dn, fcdag_up, fcdag_dn, net, out):
+    """ initializes the post-sampling initialize state according to out """
 
     n_up, n_dn, h_up, h_dn = fcdag_up @ fc_up, fcdag_dn @ fc_dn, fc_up @ fcdag_up, fc_dn @ fcdag_dn
     nn_up, nn_dn, nn_do, nn_hole = n_up @ h_dn, h_up @ n_dn, n_up @ n_dn, h_up @ h_dn # up - 0; down - 1; double occupancy - 2; hole - 3
