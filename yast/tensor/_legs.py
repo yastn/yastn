@@ -141,6 +141,12 @@ class Leg:
         return _str_tree(hf.tree, hf.op)
 
 
+    def is_fused(self):
+        """ Return True if the leg is a result of some fusion, and False is it is elementary. """
+        return len(self.legs) > 1 or self.legs[0].tree[0] > 1
+
+
+
 def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, positive=False):
     """
     Creat :class:`yast.Leg`. Randomly distribute bond dimensions to sectors according to Gaussian distribution.
