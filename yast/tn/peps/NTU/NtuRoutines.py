@@ -1,5 +1,11 @@
 """ Function performing NTU update on all four unique bonds corresponding to a two site unit cell. """
 from .NtuEssentials import single_bond_local_update, ntu_machine
+from typing import NamedTuple
+
+class Gate(NamedTuple):
+    """ site_0 should be before site_1 in the fermionic order. """
+    A : tuple = None
+    B : tuple = None
 
 def ntu_update(Gamma, Gates, Ds, step, truncation_mode, fix_bd, flag=None):
     
@@ -9,8 +15,8 @@ def ntu_update(Gamma, Gates, Ds, step, truncation_mode, fix_bd, flag=None):
         Gamma = single_bond_local_update(Gamma, Gates['loc'], flag)
    
     for iter in GB_list(Gamma, Gates['nn']):
-        GA, GB, bd = iter['gateA'], iter['gateB'], iter['bond'] 
-        Gamma, info = ntu_machine(Gamma, bd, GA, GB, Ds, truncation_mode, step, fix_bd, flag)
+        bd = iter['bond'] 
+        Gamma, info = ntu_machine(Gamma, bd, Gate(iter['gateA'], iter['gateB']), Ds, truncation_mode, step, fix_bd, flag)
         # show_leg_structure(Gamma)
         infos.append(info)
 

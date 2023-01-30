@@ -9,10 +9,10 @@ import yast
 from yast.tn.peps.operators.gates import trivial_tensor, match_ancilla_1s, match_ancilla_2s
 from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_legs, ncon, eigh_with_truncation, eye
 
-def ntu_machine(Gamma, bd, GA, GB, Ds, truncation_mode, step, fix_bd, flag):
+def ntu_machine(Gamma, bd, Gate, Ds, truncation_mode, step, fix_bd, flag):
     # step can be svd-step, one-step or two-step
     # application of nearest neighbor gate and subsequent optimization of peps tensor using NTU
-    QA, QB, RA, RB = single_bond_nn_update(Gamma, bd, GA, GB, flag)
+    QA, QB, RA, RB = single_bond_nn_update(Gamma, bd, Gate, flag)
 
     if step == "svd-update":
         MA, MB = truncation_step(RA, RB, Ds, normalize=True)
@@ -63,7 +63,7 @@ def single_bond_local_update(Gamma, G_loc, flag):
     return Gamma # local update all sites at once
     
 
-def single_bond_nn_update(Gamma, bd, GA, GB, flag):
+def single_bond_nn_update(Gamma, bd, Gate, flag):
 
     """ apply nn gates on PEPS tensors. """
     target_site = (round((Gamma.Nx-1)*0.5), round((Gamma.Ny-1)*0.5)) # center of an odd x odd lattice
@@ -72,19 +72,19 @@ def single_bond_nn_update(Gamma, bd, GA, GB, flag):
     dirn = bd.dirn
     if dirn == "h":  # Horizontal Gate        
         if bd.site_0 != target_site:
-            GA_an = match_ancilla_2s(GA, A, dir='l') 
+            GA_an = match_ancilla_2s(Gate.A, A, dir='l') 
             int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
         elif bd.site_0 == target_site:
             if flag == 'hole':
                 A =  A.unfuse_legs(axes=2).unfuse_legs(axes=3) # [t l] [b r] s a str 
                 A =  A.fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
-                GA_an = match_ancilla_2s(GA, A, dir='l')
+                GA_an = match_ancilla_2s(Gate.A, A, dir='l')
                 A = tensordot(A, GA_an, axes=(3, 1)) # [t l] [b r] str [s a] c 
                 A = A.unfuse_legs(axes=3) # [t l] [b r] str s a c
                 A = A.fuse_legs(axes=(0, 1, 3, (4, 2), 5)) # [t l] [b r] s [a str] c
                 int_A = A.fuse_legs(axes=(0, 1, (2, 3), 4)) # [t l] [b r] [s [a str]] c
             else:
-                GA_an = match_ancilla_2s(GA, A, dir='l') 
+                GA_an = match_ancilla_2s(Gate.A, A, dir='l') 
                 int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
         int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] s] [b r] c
         int_A = int_A.unfuse_legs(axes=1)  # [[t l] s] b r c
@@ -93,19 +93,19 @@ def single_bond_nn_update(Gamma, bd, GA, GB, flag):
         QA, RA = qr(int_A, axes=(0, 1), sQ=-1)  # [[[t l] s] b] rr @ rr [r c]
 
         if bd.site_1 != target_site:
-            GB_an = match_ancilla_2s(GB, B, dir='r')
+            GB_an = match_ancilla_2s(Gate.B, B, dir='r')
             int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
         elif bd.site_1 == target_site:
             if flag == 'hole':
                 B =  B.unfuse_legs(axes=2).unfuse_legs(axes=3) # [t l] [b r] s a str 
                 B =  B.fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
-                GB_an = match_ancilla_2s(GB, B, dir='r')
+                GB_an = match_ancilla_2s(Gate.B, B, dir='r')
                 B = tensordot(B, GB_an, axes=(3, 1)) # [t l] [b r] str [s a] c 
                 B = B.unfuse_legs(axes=3) # [t l] [b r] str s a c
                 B = B.fuse_legs(axes=(0, 1, 3, (4, 2), 5)) # [t l] [b r] s [a str] c
                 int_B = B.fuse_legs(axes=(0, 1, (2, 3), 4)) # [t l] [b r] [s [a str]] c
             else:
-                GB_an = match_ancilla_2s(GB, B, dir='r')
+                GB_an = match_ancilla_2s(Gate.B, B, dir='r')
                 int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
         int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] s] c
         int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] s] c
@@ -114,19 +114,19 @@ def single_bond_nn_update(Gamma, bd, GA, GB, flag):
 
     elif dirn == "v":  # Vertical Gate
         if bd.site_0 != target_site:
-            GA_an = match_ancilla_2s(GA, A, dir='l') 
+            GA_an = match_ancilla_2s(Gate.A, A, dir='l') 
             int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
         elif bd.site_0 == target_site:
             if flag == 'hole':
                 A =  A.unfuse_legs(axes=2).unfuse_legs(axes=3) # [t l] [b r] s a str 
                 A =  A.fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
-                GA_an = match_ancilla_2s(GA, A, dir='l')
+                GA_an = match_ancilla_2s(Gate.A, A, dir='l')
                 A = tensordot(A, GA_an, axes=(3, 1)) # [t l] [b r] str [s a] c 
                 A = A.unfuse_legs(axes=3) # [t l] [b r] str s a c
                 A = A.fuse_legs(axes=(0, 1, 3, (4, 2), 5)) # [t l] [b r] s [a str] c
                 int_A = A.fuse_legs(axes=(0, 1, (2, 3), 4)) # [t l] [b r] [s [a str]] c
             else:
-                GA_an = match_ancilla_2s(GA, A, dir='l') 
+                GA_an = match_ancilla_2s(Gate.A, A, dir='l') 
                 int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
         int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] s] [b r] c
         int_A = int_A.unfuse_legs(axes=1)  # [[t l] s] b r c
@@ -134,19 +134,19 @@ def single_bond_nn_update(Gamma, bd, GA, GB, flag):
         QA, RA = qr(int_A, axes=(0, 1), sQ=1)  # [[[t l] s] r] bb  @  bb [b c]
 
         if bd.site_1 != target_site:
-            GB_an = match_ancilla_2s(GB, B, dir='r')
+            GB_an = match_ancilla_2s(Gate.B, B, dir='r')
             int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
         elif bd.site_1 == target_site:
             if flag == 'hole':
                 B =  B.unfuse_legs(axes=2).unfuse_legs(axes=3) # [t l] [b r] s a str 
                 B =  B.fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
-                GB_an = match_ancilla_2s(GB, B, dir='r')
+                GB_an = match_ancilla_2s(Gate.B, B, dir='r')
                 B = tensordot(B, GB_an, axes=(3, 1)) # [t l] [b r] str [s a] c 
                 B = B.unfuse_legs(axes=3) # [t l] [b r] str s a c
                 B = B.fuse_legs(axes=(0, 1, 3, (4, 2), 5)) # [t l] [b r] s [a str] c
                 int_B = B.fuse_legs(axes=(0, 1, (2, 3), 4)) # [t l] [b r] [s [a str]] c
             else:
-                GB_an = match_ancilla_2s(GB, B, dir='r')
+                GB_an = match_ancilla_2s(Gate.B, B, dir='r')
                 int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
         int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] s] c
         int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] s] c

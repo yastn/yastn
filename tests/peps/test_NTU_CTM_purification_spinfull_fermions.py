@@ -195,7 +195,7 @@ def test_NTU_spinfull_infinite():
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
-    #test_NTU_spinfull_finite()
+    test_NTU_spinfull_finite()
     test_NTU_spinfull_infinite()
 
 

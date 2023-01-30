@@ -215,7 +215,7 @@ def EV1s(env, indop, AAb):
     return vdot(top_part, bot_part, conj=(0, 0))
 
 
-def proj_Cor(tt, tb, chi, cutoff):
+def proj_Cor(tt, tb, chi, cutoff, fix_signs):
     """
     tt upper half of the CTM 4 extended corners diagram indices from right (e,t,b) to left (e,t,b)
     tb lower half of the CTM 4 extended corners diagram indices from right (e,t,b) to left (e,t,b)
@@ -224,14 +224,14 @@ def proj_Cor(tt, tb, chi, cutoff):
     _, rb = qr(tb, axes=((0, 1), (2, 3)))
 
     rr = tensordot(rt, rb, axes=((1, 2), (1, 2)))
-    u, s, v = svd_with_truncation(rr, axes=(0, 1), tol=cutoff, D_total=chi, fix_signs=True)
+    u, s, v = svd_with_truncation(rr, axes=(0, 1), tol=cutoff, D_total=chi, fix_signs=fix_signs)
     s = s.rsqrt()
     pt = s.broadcast(tensordot(rb, v, axes=(0, 1), conj=(0, 1)), axis=2)
     pb = s.broadcast(tensordot(rt, u, axes=(0, 0), conj=(0, 1)), axis=2)
     return pt, pb
 
 
-def proj_horizontal(env, AAb, chi, cutoff, ms):
+def proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs):
 
     # ms in the CTM unit cell 
     out = {}
@@ -248,17 +248,17 @@ def proj_horizontal(env, AAb, chi, cutoff, ms):
     del corblm
     del corbrm
 
-    out['ph_l_t', ms.nw], out['ph_l_b', ms.nw] = proj_Cor(corttm, corbbm, chi, cutoff)   # projector left-middle
+    out['ph_l_t', ms.nw], out['ph_l_b', ms.nw] = proj_Cor(corttm, corbbm, chi, cutoff, fix_signs)   # projector left-middle
     corttm = corttm.transpose(axes=(2, 3, 0, 1))
     corbbm = corbbm.transpose(axes=(2, 3, 0, 1))
-    out['ph_r_t', ms.ne], out['ph_r_b', ms.ne] = proj_Cor(corttm, corbbm, chi, cutoff)   # projector right-middle
+    out['ph_r_t', ms.ne], out['ph_r_b', ms.ne] = proj_Cor(corttm, corbbm, chi, cutoff, fix_signs)   # projector right-middle
     del corttm
     del corbbm
 
     return out
 
 
-def proj_vertical(env, AAb, chi, cutoff, ms):
+def proj_vertical(env, AAb, chi, cutoff, ms, fix_signs):
 
     out = {}
     
@@ -273,10 +273,10 @@ def proj_vertical(env, AAb, chi, cutoff, ms):
     corbrm = fcor_br(env, AAb[ms.se], ms.se) # contracted matrix at bottom-right constructing a projector with cut in the middle
 
     corkkr = tensordot(corbrm, cortrm, axes=((0, 1), (2, 3))) # right half for constructing middle projector
-    out['pv_t_l', ms.nw], out['pv_t_r', ms.nw] = proj_Cor(corvvm, corkkr, chi, cutoff) # projector top-middle 
+    out['pv_t_l', ms.nw], out['pv_t_r', ms.nw] = proj_Cor(corvvm, corkkr, chi, cutoff, fix_signs) # projector top-middle 
     corvvm = corvvm.transpose(axes=(2, 3, 0, 1))
     corkkr = corkkr.transpose(axes=(2, 3, 0, 1))
-    out['pv_b_l', ms.sw], out['pv_b_r', ms.sw] = proj_Cor(corvvm, corkkr, chi, cutoff) # projector bottom-middle
+    out['pv_b_l', ms.sw], out['pv_b_r', ms.sw] = proj_Cor(corvvm, corkkr, chi, cutoff, fix_signs) # projector bottom-middle
     del corvvm
     del corkkr
 
@@ -380,7 +380,7 @@ def move_vertical(env, AAb, proj, ms):
 
     return envn
 
-def CTM_it(env, AAb, chi, cutoff):
+def CTM_it(env, AAb, chi, cutoff, fix_signs):
     r""" 
     Perform one step of CTMRG update for a mxn lattice 
 
@@ -402,7 +402,7 @@ def CTM_it(env, AAb, chi, cutoff):
     for y in range(Ny):
         for ms in AAb.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
             #print('ctm cluster horizontal', ms)
-            proj = proj_horizontal(env, AAb, chi, cutoff, ms)
+            proj = proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs)
             proj_hor.update(proj)
         for ms in AAb.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
             env = move_horizontal(env, AAb, proj_hor, ms)
@@ -411,7 +411,7 @@ def CTM_it(env, AAb, chi, cutoff):
     for x in range(Nx):
         for ms in AAb.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
             #print('ctm cluster vertical', ms)
-            proj = proj_vertical(env, AAb, chi, cutoff, ms)
+            proj = proj_vertical(env, AAb, chi, cutoff, ms, fix_signs)
             proj_ver.update(proj)
         for ms in AAb.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
             env = move_vertical(env,  AAb, proj_ver, ms)       
