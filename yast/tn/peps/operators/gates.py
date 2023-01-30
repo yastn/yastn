@@ -3,38 +3,51 @@ import yast
 from yast import ncon
 from yast.tensor.linalg import svd_with_truncation
 
-def match_ancilla_1s(G_loc, A):
+
+def match_ancilla_1s(G, A):
     """ kron and fusion of local gate with identity for ancilla. Identity is read from ancila of A. """
     leg = A.get_legs(axis=-1)
-    if len(leg.legs) == 1 and leg.legs[0].tree[0] == 1:
-        return G_loc
-    _, leg = yast.leg_undo_product(leg) # last leg of A should be fused
-    fid = yast.eye(config=A.config, legs=[leg, leg.conj()]).diag()
-    Gas = ncon((G_loc, fid), ((-0, -2), (-1, -3)))
-    Gas = Gas.fuse_legs(axes=((0, 1), (2, 3)))
-    return Gas
+
+    if not leg.is_fused():
+        if any(n != 0 for n in G.n):
+            G = G.add_leg(axis=1, s=-1)
+            G = G.fuse_legs(axes=((0, 1), 2))  # new ancilla on outgoing leg
+        return G
+
+    _, leg = yast.leg_undo_product(leg)  # unfuse to get ancilla leg
+    one = yast.eye(config=A.config, legs=[leg, leg.conj()]).diag()
+    if all(n == 0 for n in G.n):
+        Gsa = ncon((G, one), ((-0, -2), (-1, -3)))
+    else:
+        G = G.add_leg(axis=1, s=-1)
+        Gsa = ncon((G, one), ((-0, -1, -3), (-2, -4)))
+        Gsa = Gsa.fuse_legs(axes=(0, (1, 2), 3, 4))
+        Gsa = Gsa.drop_leg_history(G, axis=1)
+    Gsa = Gsa.fuse_legs(axes=((0, 1), (2, 3)))
+    return Gsa
 
 
 def match_ancilla_2s(G, A, dir=None):
     """ kron and fusion of local gate with identity for ancilla. """
-
     leg = A.get_legs(axis=-1)
-    if len(leg.legs) == 1 and leg.legs[0].tree[0] == 1:
+
+    if not leg.is_fused():
         return G
-    _, leg = yast.leg_undo_product(leg) # last leg of A should be fused
-    fid = yast.eye(config=A.config, legs=[leg, leg.conj()]).diag()
+
+    _, leg = yast.leg_undo_product(leg)  # unfuse to get ancilla leg
+    one = yast.eye(config=A.config, legs=[leg, leg.conj()]).diag()
 
     if G.ndim == 2:
         if dir=='l':
-            G = G.add_leg(s=1).swap_gate(axes=(0, 2))
+            G = G.add_leg(s=1, axis=-1).swap_gate(axes=(0, 2))
         elif dir=='r':
-            G = G.add_leg(s=-1)
-    Gas = ncon((G, fid), ((-0, -2, -4), (-1, -3)))
+            G = G.add_leg(s=-1, axis=-1)
+    Gsa = ncon((G, one), ((-0, -2, -4), (-1, -3)))
     if dir == 'l':
-        Gas = Gas.swap_gate(axes=(3, 4))    # swap of connecting axis with ancilla is always in G gate
-    Gas = Gas.fuse_legs(axes=((0, 1), (2, 3), 4))
+        Gsa = Gsa.swap_gate(axes=(3, 4))  # swap of connecting axis with ancilla is always in G gate
+    Gsa = Gsa.fuse_legs(axes=((0, 1), (2, 3), 4))
+    return Gsa
 
-    return Gas
 
 def gates_hopping(t, beta, fid, fc, fcdag, purification):
     """ gates for exp[beta * t * (cdag1 c2 + c2dag c1) / 4] """
