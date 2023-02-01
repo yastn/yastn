@@ -6,7 +6,7 @@ import pytest
 import yast
 from yast import ncon, tensordot
 import yast.tn.peps as peps
-from yast.tn.peps.CTM import nn_avg, ctmrg_, init_rand
+from yast.tn.peps.ctm import nn_avg, ctmrg_, init_rand
 
 try:
     from .configs import config_dense as cfg

@@ -7,8 +7,9 @@ import yast
 import yast.tn.peps as peps
 import time
 from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
-from yast.tn.peps.alte import ntu_update, initialize_peps_purification
-from yast.tn.peps.CTM import nn_avg, ctmrg_, init_rand, one_site_avg, Local_CTM_Env, nn_bond
+from yast.tn.peps.als import _als_update
+from yast.tn.peps import initialize_peps_purification
+from yast.tn.peps.ctm import nn_avg, ctmrg_, init_rand, one_site_avg, Local_CTM_Env, nn_bond
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg

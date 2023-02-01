@@ -2,8 +2,8 @@ import logging
 import pytest
 import yast
 import yast.tn.peps as peps
-from yast.tn.peps import initialize_Neel_spinfull, initialize_peps_purification, initialize_vacuum
-from yast.tn.peps.operators.gates import gate_local_Hubbard, match_ancilla_1s, match_ancilla_2s, gates_hopping
+from yast.tn.peps import initialize_vacuum
+from yast.tn.peps.operators.gates import match_ancilla_1s, match_ancilla_2s
 
 try:
     from .configs import config_U1_R_fermionic, config_U1xU1_R_fermionic
@@ -82,9 +82,8 @@ def test_match_ancilla():
     
     int_A = yast.tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
     int_B = yast.tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
-
-    assert(int_A.unfuse_legs(axes=2).get_leg_structure(axis=2).keys()==([0,0,0])) # checking if the central site has up-spin fermion trasferred
-    assert(int_B.unfuse_legs(axes=2).get_leg_structure(axis=2).keys()==([1,1,0])) # to the site to the right
+    assert(list(int_A.unfuse_legs(axes=2).get_leg_structure(axis=2).keys())==[(0,0,0)]) # checking if the central site has up-spin fermion trasferred
+    assert(list(int_B.unfuse_legs(axes=2).get_leg_structure(axis=2).keys())==[(1,1,0)]) # to the site to the right
 
 
 if __name__ == "__main__":

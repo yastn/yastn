@@ -7,9 +7,9 @@ import yast
 import yast.tn.peps as peps
 import time
 from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
-from yast.tn.peps.alte import ntu_update
+from yast.tn.peps.als import _als_update
 from yast.tn.peps import initialize_peps_purification
-from yast.tn.peps.CTM import nn_avg, ctmrg_, init_rand, one_site_avg, Local_CTM_Env, nn_bond
+from yast.tn.peps.ctm import nn_avg, ctmrg_, init_rand, one_site_avg, Local_CTM_Env, nn_bond
 
 try:
     from .configs import config_U1_R_fermionic as cfg
@@ -54,7 +54,7 @@ def test_NTU_spinless_finite():
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
         
-        gamma, info =  ntu_update(gamma, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
+        gamma, info =  _als_update(gamma, Gate, D, step, tr_mode, env_type='NTU') # fix_bd = 0 refers to unfixed symmetry sectors
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -131,7 +131,7 @@ def test_NTU_spinless_infinite():
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        gamma, info =  ntu_update(gamma, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors    
+        gamma, info =  _als_update(gamma, Gate, D, step, tr_mode, env_type='NTU') # fix_bd = 0 refers to unfixed symmetry sectors    
 
     
 
