@@ -10,7 +10,7 @@ def match_ancilla_1s(G, A):
 
     if not leg.is_fused():
         if any(n != 0 for n in G.n):
-            G = G.add_leg(axis=1, s=-1).swap_gate(axes=(0, 1))
+            G = G.add_leg(axis=1, s=-1)
             G = G.fuse_legs(axes=((0, 1), 2))  # new ancilla on outgoing leg
         return G
 
@@ -19,7 +19,7 @@ def match_ancilla_1s(G, A):
     if all(n == 0 for n in G.n):
         Gsa = ncon((G, one), ((-0, -2), (-1, -3)))
     else:
-        G = G.add_leg(axis=1, s=-1).swap_gate(axes=(0, 1))
+        G = G.add_leg(axis=1, s=-1)
         Gsa = ncon((G, one), ((-0, -1, -3), (-2, -4)))
         Gsa = Gsa.fuse_legs(axes=(0, (1, 2), 3, 4))
         Gsa = Gsa.drop_leg_history(axis=1)
