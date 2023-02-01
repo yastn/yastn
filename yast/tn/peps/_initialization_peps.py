@@ -1,7 +1,27 @@
 import numpy as np
 import yast.tn.peps as peps
+import yast
 
-r""" Initialization of peps tensors for evolution """
+r""" Initialization of peps tensors for real or imaginary time evolution """
+
+
+def initialize_vacuum(fid, net):
+    """
+    initialize peps tensors as vacuum state
+    """
+    
+    A = yast.Leg(fid.config, t= ((0,0,0),), D=((1),))
+    A = yast.ones(fid.config, legs=[A])
+    for s in (-1, 1, 1, -1):
+        A = A.add_leg(axis=0, s=s)
+
+    A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
+    gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+
+    for ms in net.sites():
+        gamma[ms] = A
+    return gamma
+
 
 def initialize_peps_purification(fid, net):
     """
@@ -16,11 +36,11 @@ def initialize_peps_purification(fid, net):
         A = A.add_leg(axis=0, s=s)
    
     A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
-    Gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+    gamma = peps.Peps(net.lattice, net.dims, net.boundary)
 
     for ms in net.sites():
-        Gamma[ms] = A
-    return Gamma
+        gamma[ms] = A
+    return gamma
 
 
 def initialize_spinless_filled(fid, fc, fcdag, net):
@@ -33,11 +53,11 @@ def initialize_spinless_filled(fid, fc, fcdag, net):
         A = A.add_leg(axis=0, s=s)
     
     A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
-    Gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+    gamma = peps.Peps(net.lattice, net.dims, net.boundary)
     for ms in net.sites():
-        Gamma[ms] = A
+        gamma[ms] = A
 
-    return Gamma
+    return gamma
 
 
 def initialize_Neel_spinfull(fc_up, fc_dn, fcdag_up, fcdag_dn, net):
@@ -63,15 +83,15 @@ def initialize_Neel_spinfull(fc_up, fc_dn, fcdag_up, fcdag_dn, net):
 
     m = list([A, B])
     i = 0
-    Gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+    gamma = peps.Peps(net.lattice, net.dims, net.boundary)
     for x in range(net.Nx):
         for y in range(net.Ny)[::2]:
-            Gamma[x, y] = m[i]
+            gamma[x, y] = m[i]
         for y in range(net.Ny)[1::2]:
-            Gamma[x, y] = m[(i+1)%2]
+            gamma[x, y] = m[(i+1)%2]
         i = (i+1)%2
     
-    return Gamma
+    return gamma
 
 
 def initialize_post_sampling(fc_up, fc_dn, fcdag_up, fcdag_dn, net, out):
@@ -81,11 +101,11 @@ def initialize_post_sampling(fc_up, fc_dn, fcdag_up, fcdag_dn, net, out):
     nn_up, nn_dn, nn_do, nn_hole = n_up @ h_dn, h_up @ n_dn, n_up @ n_dn, h_up @ h_dn # up - 0; down - 1; double occupancy - 2; hole - 3
     tt = {0: nn_up, 1: nn_dn, 2: nn_do, 3: nn_hole}
    
-    Gamma = peps.Peps(net.lattice, net.dims, net.boundary)
-    for kk in Gamma.sites():
+    gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+    for kk in gamma.sites():
         Ga = tt[out[kk]].fuse_legs(axes=[(0, 1)])
         for s in (-1, 1, 1, -1):
             Ga = Ga.add_leg(axis=0, s=s)
-        Gamma[kk] = Ga.fuse_legs(axes=((0, 1), (2, 3), 4))
+        gamma[kk] = Ga.fuse_legs(axes=((0, 1), (2, 3), 4))
         
-    return Gamma
+    return gamma

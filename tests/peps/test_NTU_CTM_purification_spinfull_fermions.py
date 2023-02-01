@@ -7,7 +7,7 @@ import yast
 import yast.tn.peps as peps
 import time
 from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
-from yast.tn.peps.NTU import ntu_update, initialize_peps_purification
+from yast.tn.peps.alte import ntu_update, initialize_peps_purification
 from yast.tn.peps.CTM import nn_avg, ctmrg_, init_rand, one_site_avg, Local_CTM_Env, nn_bond
 
 try:
@@ -48,7 +48,7 @@ def test_NTU_spinfull_finite():
     Gate = {'loc':G_loc, 'nn':{'GA_up':GA_nn_up, 'GB_up':GB_nn_up, 'GA_dn':GA_nn_dn, 'GB_dn':GB_nn_dn}}
 
     if purification == 'True':
-        Gamma = initialize_peps_purification(fid, net) # initialized at infinite temperature
+        gamma = initialize_peps_purification(fid, net) # initialized at infinite temperature
 
     time_steps = round(beta_end / dbeta)
 
@@ -57,7 +57,7 @@ def test_NTU_spinfull_finite():
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
         
-        Gamma, info =  ntu_update(Gamma, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
+        gamma, info =  ntu_update(gamma, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -65,7 +65,7 @@ def test_NTU_spinfull_finite():
     max_sweeps=50 
     tol = 1e-7   # difference of some observable must be lower than tolernace
 
-    env = init_rand(Gamma, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
+    env = init_rand(gamma, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
 
     ops = {'cdagc_up': {'l': fcdag_up, 'r': fc_up},
            'ccdag_up': {'l': fc_up, 'r': fcdag_up},
@@ -74,13 +74,13 @@ def test_NTU_spinfull_finite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(Gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, flag=None):
+    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, flag=None):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
 
-        doc, _, _ = one_site_avg(Gamma, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
+        doc, _, _ = one_site_avg(gamma, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
 
-        obs_hor, obs_ver =  nn_avg(Gamma, step.env, ops)
+        obs_hor, obs_ver =  nn_avg(gamma, step.env, ops)
 
         cdagc_up = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
         ccdag_up = 0.5*(abs(obs_hor.get('ccdag_up')) + abs(obs_ver.get('ccdag_up')))
@@ -98,10 +98,10 @@ def test_NTU_spinfull_finite():
     bd_h = peps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
     bd_v = peps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
 
-    nn_CTM_bond_1_up = 0.5*(abs(nn_bond(Gamma, step.env, ops['cdagc_up'], bd_h)) + abs(nn_bond(Gamma, env, ops['ccdag_up'], bd_h)))
-    nn_CTM_bond_2_up = 0.5*(abs(nn_bond(Gamma, step.env, ops['cdagc_up'], bd_v)) + abs(nn_bond(Gamma, env, ops['ccdag_up'], bd_v)))
-    nn_CTM_bond_1_dn = 0.5*(abs(nn_bond(Gamma, step.env, ops['cdagc_dn'], bd_h)) + abs(nn_bond(Gamma, env, ops['ccdag_dn'], bd_h)))
-    nn_CTM_bond_2_dn = 0.5*(abs(nn_bond(Gamma, step.env, ops['cdagc_dn'], bd_v)) + abs(nn_bond(Gamma, env, ops['ccdag_dn'], bd_v)))
+    nn_CTM_bond_1_up = 0.5*(abs(nn_bond(gamma, step.env, ops['cdagc_up'], bd_h)) + abs(nn_bond(gamma, env, ops['ccdag_up'], bd_h)))
+    nn_CTM_bond_2_up = 0.5*(abs(nn_bond(gamma, step.env, ops['cdagc_up'], bd_v)) + abs(nn_bond(gamma, env, ops['ccdag_up'], bd_v)))
+    nn_CTM_bond_1_dn = 0.5*(abs(nn_bond(gamma, step.env, ops['cdagc_dn'], bd_h)) + abs(nn_bond(gamma, env, ops['ccdag_dn'], bd_h)))
+    nn_CTM_bond_2_dn = 0.5*(abs(nn_bond(gamma, step.env, ops['cdagc_dn'], bd_v)) + abs(nn_bond(gamma, env, ops['ccdag_dn'], bd_v)))
 
     nn_bond_1_exact = 0.024917101651703362 # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (1,1) and (1,2)
     nn_bond_2_exact = 0.024896433958165112  # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (0,0) and (1,0)
@@ -139,7 +139,7 @@ def test_NTU_spinfull_infinite():
     Gate = {'loc':G_loc, 'nn':{'GA_up':GA_nn_up, 'GB_up':GB_nn_up, 'GA_dn':GA_nn_dn, 'GB_dn':GB_nn_dn}}
 
     if purification == 'True':
-        Gamma = initialize_peps_purification(fid, net) # initialized at infinite temperature
+        gamma = initialize_peps_purification(fid, net) # initialized at infinite temperature
 
     time_steps = round(beta_end / dbeta)
     for nums in range(time_steps):
@@ -147,7 +147,7 @@ def test_NTU_spinfull_infinite():
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
         
-        Gamma, info =  ntu_update(Gamma, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
+        gamma, info =  ntu_update(gamma, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -155,7 +155,7 @@ def test_NTU_spinfull_infinite():
     max_sweeps=50 
     tol = 1e-7   # difference of some observable must be lower than tolernace
 
-    env = init_rand(Gamma, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
+    env = init_rand(gamma, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
 
     ops = {'cdagc_up': {'l': fcdag_up, 'r': fc_up},
            'ccdag_up': {'l': fc_up, 'r': fcdag_up},
@@ -164,13 +164,13 @@ def test_NTU_spinfull_infinite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(Gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, flag=None):
+    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, flag=None):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
 
-        doc, _, _ = one_site_avg(Gamma, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
+        doc, _, _ = one_site_avg(gamma, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
 
-        obs_hor, obs_ver =  nn_avg(Gamma, step.env, ops)
+        obs_hor, obs_ver =  nn_avg(gamma, step.env, ops)
 
         cdagc_up = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
         ccdag_up = 0.5*(abs(obs_hor.get('ccdag_up')) + abs(obs_ver.get('ccdag_up')))
@@ -184,7 +184,7 @@ def test_NTU_spinfull_infinite():
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
-    ob_hor, ob_ver = nn_avg(Gamma, step.env, ops)
+    ob_hor, ob_ver = nn_avg(gamma, step.env, ops)
 
     nn_CTM = 0.25 * (abs(ob_hor.get('cdagc_up')) + abs(ob_ver.get('ccdag_up'))+ abs(ob_ver.get('cdagc_dn'))+ abs(ob_ver.get('ccdag_dn')))
     print(nn_CTM)

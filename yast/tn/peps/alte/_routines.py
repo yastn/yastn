@@ -9,18 +9,18 @@ import yast
 from yast.tn.peps.operators.gates import trivial_tensor, match_ancilla_1s, match_ancilla_2s
 from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_legs, ncon, eigh_with_truncation, eye
 
-def ntu_machine(Gamma, bd, Gate, Ds, truncation_mode, step, fix_bd, flag):
+def ntu_machine(gamma, bd, Gate, Ds, truncation_mode, step, fix_bd):
     # step can be svd-step, one-step or two-step
     # application of nearest neighbor gate and subsequent optimization of peps tensor using NTU
-    QA, QB, RA, RB = single_bond_nn_update(Gamma, bd, Gate, flag)
+    QA, QB, RA, RB = single_bond_nn_update(gamma, bd, Gate)
 
     if step == "svd-update":
         MA, MB = truncation_step(RA, RB, Ds, normalize=True)
-        Gamma[bd.site_0], Gamma[bd.site_1] = form_new_peps_tensors(QA, QB, MA, MB, bd)
+        gamma[bd.site_0], gamma[bd.site_1] = form_new_peps_tensors(QA, QB, MA, MB, bd)
         info = {}
-        return Gamma, info
+        return gamma, info
     else:
-        g = env_NTU(Gamma, bd, QA, QB, dirn=bd.dirn)
+        g = env_NTU(gamma, bd, QA, QB, dirn=bd.dirn)
         info={}
         MA, MB, ntu_error, optim, svd_error = truncate_and_optimize(g, RA, RB, Ds, fix_bd, truncation_mode)
         if step == 'two-step':  # else 'one-step'
@@ -32,122 +32,57 @@ def ntu_machine(Gamma, bd, Gate, Ds, truncation_mode, step, fix_bd, flag):
                 MA, MB = MA_2, MB_2
                 logging.info("2-step NTU; ntu errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e " % (ntu_error, ntu_error_2, svd_error, svd_error_2))
                 ntu_error, optim, svd_error = ntu_error_2, optim_2, svd_error_2
-        Gamma[bd.site_0], Gamma[bd.site_1] = form_new_peps_tensors(QA, QB, MA, MB, bd)
+        gamma[bd.site_0], gamma[bd.site_1] = form_new_peps_tensors(QA, QB, MA, MB, bd)
         info.update({'ntu_error': ntu_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
 
-        return Gamma, info
+        return gamma, info
 
 ############################
 ##### gate application  ####
 ############################
 
-def single_bond_local_update(Gamma, G_loc, flag):
+def single_bond_local_update(gamma, G_loc):
     """ apply local gates on PEPS tensors """
+    for ms in gamma.sites():
+        G_l = match_ancilla_1s(G_loc, gamma[ms])
+        gamma[ms] = tensordot(gamma[ms], G_l, axes=(2, 1)) # [t l] [b r] [s a]
 
-    target_site = (round((Gamma.Nx-1)*0.5), round((Gamma.Ny-1)*0.5)) # center of an odd x odd lattice
-    for ms in Gamma.sites():
-        if ms != target_site:
-            G_l = match_ancilla_1s(G_loc, Gamma[ms])
-            Gamma[ms] = tensordot(Gamma[ms], G_l, axes=(2, 1)) # [t l] [b r] [s a]
-        elif ms == target_site: # target site can have a string attached to ancilla when hole is created at the center
-            if flag == 'hole':
-                Gamma[ms] =  Gamma[ms].unfuse_legs(axes=2).unfuse_legs(axes=3)  # [t l] [b r] s a str
-                Gamma[ms] =  Gamma[ms].fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
-                G_l = match_ancilla_1s(G_loc, Gamma[ms])
-                Gamma[ms] = tensordot(Gamma[ms], G_l, axes=(3, 1))
-                Gamma[ms] = Gamma[ms].fuse_legs(axes=(0, 1, 3, 2)).unfuse_legs(axes=(2)).fuse_legs(axes=(0, 1, 2, (3, 4))).fuse_legs(axes=(0, 1, (2, 3))) # [t l] [b r] [s [a string]]
-            else:
-                G_l = match_ancilla_1s(G_loc, Gamma[ms])
-                Gamma[ms] = tensordot(Gamma[ms], G_l, axes=(2, 1)) # [t l] [b r] [s a]
-
-    return Gamma # local update all sites at once
+    return gamma # local update all sites at once
     
 
-def single_bond_nn_update(Gamma, bd, Gate, flag):
+def single_bond_nn_update(gamma, bd, Gate):
 
     """ apply nn gates on PEPS tensors. """
-    target_site = (round((Gamma.Nx-1)*0.5), round((Gamma.Ny-1)*0.5)) # center of an odd x odd lattice
-    A, B = Gamma[bd.site_0], Gamma[bd.site_1]  # A = [t l] [b r] s
+    A, B = gamma[bd.site_0], gamma[bd.site_1]  # A = [t l] [b r] s
     
     dirn = bd.dirn
     if dirn == "h":  # Horizontal Gate        
-        if bd.site_0 != target_site:
-            GA_an = match_ancilla_2s(Gate.A, A, dir='l') 
-            int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
-        elif bd.site_0 == target_site:
-            if flag == 'hole':
-                A =  A.unfuse_legs(axes=2).unfuse_legs(axes=3) # [t l] [b r] s a str 
-                A =  A.fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
-                GA_an = match_ancilla_2s(Gate.A, A, dir='l')
-                A = tensordot(A, GA_an, axes=(3, 1)) # [t l] [b r] str [s a] c 
-                A = A.unfuse_legs(axes=3) # [t l] [b r] str s a c
-                A = A.fuse_legs(axes=(0, 1, 3, (4, 2), 5)) # [t l] [b r] s [a str] c
-                int_A = A.fuse_legs(axes=(0, 1, (2, 3), 4)) # [t l] [b r] [s [a str]] c
-            else:
-                GA_an = match_ancilla_2s(Gate.A, A, dir='l') 
-                int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
+        GA_an = match_ancilla_2s(Gate.A, A, dir='l') 
+        int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
         int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] s] [b r] c
         int_A = int_A.unfuse_legs(axes=1)  # [[t l] s] b r c
         int_A = int_A.swap_gate(axes=(1, 3))  # b X c
         int_A = int_A.fuse_legs(axes=((0, 1), (2, 3)))  # [[[t l] s] b] [r c]
         QA, RA = qr(int_A, axes=(0, 1), sQ=-1)  # [[[t l] s] b] rr @ rr [r c]
 
-        if bd.site_1 != target_site:
-            GB_an = match_ancilla_2s(Gate.B, B, dir='r')
-            int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
-        elif bd.site_1 == target_site:
-            if flag == 'hole':
-                B =  B.unfuse_legs(axes=2).unfuse_legs(axes=3) # [t l] [b r] s a str 
-                B =  B.fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
-                GB_an = match_ancilla_2s(Gate.B, B, dir='r')
-                B = tensordot(B, GB_an, axes=(3, 1)) # [t l] [b r] str [s a] c 
-                B = B.unfuse_legs(axes=3) # [t l] [b r] str s a c
-                B = B.fuse_legs(axes=(0, 1, 3, (4, 2), 5)) # [t l] [b r] s [a str] c
-                int_B = B.fuse_legs(axes=(0, 1, (2, 3), 4)) # [t l] [b r] [s [a str]] c
-            else:
-                GB_an = match_ancilla_2s(Gate.B, B, dir='r')
-                int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
+        GB_an = match_ancilla_2s(Gate.B, B, dir='r')
+        int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
         int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] s] c
         int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] s] c
         int_B = int_B.fuse_legs(axes=((0, 2), (1, 3)))  # [t [[b r] s]] [l c]
         QB, RB = qr(int_B, axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] s]]  @  [l c] ll       
 
     elif dirn == "v":  # Vertical Gate
-        if bd.site_0 != target_site:
-            GA_an = match_ancilla_2s(Gate.A, A, dir='l') 
-            int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
-        elif bd.site_0 == target_site:
-            if flag == 'hole':
-                A =  A.unfuse_legs(axes=2).unfuse_legs(axes=3) # [t l] [b r] s a str 
-                A =  A.fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
-                GA_an = match_ancilla_2s(Gate.A, A, dir='l')
-                A = tensordot(A, GA_an, axes=(3, 1)) # [t l] [b r] str [s a] c 
-                A = A.unfuse_legs(axes=3) # [t l] [b r] str s a c
-                A = A.fuse_legs(axes=(0, 1, 3, (4, 2), 5)) # [t l] [b r] s [a str] c
-                int_A = A.fuse_legs(axes=(0, 1, (2, 3), 4)) # [t l] [b r] [s [a str]] c
-            else:
-                GA_an = match_ancilla_2s(Gate.A, A, dir='l') 
-                int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
+            
+        GA_an = match_ancilla_2s(Gate.A, A, dir='l') 
+        int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
         int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] s] [b r] c
         int_A = int_A.unfuse_legs(axes=1)  # [[t l] s] b r c
         int_A = int_A.fuse_legs(axes=((0, 2), (1, 3)))  # [[[t l] s] r] [b c]
         QA, RA = qr(int_A, axes=(0, 1), sQ=1)  # [[[t l] s] r] bb  @  bb [b c]
 
-        if bd.site_1 != target_site:
-            GB_an = match_ancilla_2s(Gate.B, B, dir='r')
-            int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
-        elif bd.site_1 == target_site:
-            if flag == 'hole':
-                B =  B.unfuse_legs(axes=2).unfuse_legs(axes=3) # [t l] [b r] s a str 
-                B =  B.fuse_legs(axes=(0, 1, (2, 3), 4)).fuse_legs(axes=(0, 1, 3, 2)) # [t l] [b r] str [s a]
-                GB_an = match_ancilla_2s(Gate.B, B, dir='r')
-                B = tensordot(B, GB_an, axes=(3, 1)) # [t l] [b r] str [s a] c 
-                B = B.unfuse_legs(axes=3) # [t l] [b r] str s a c
-                B = B.fuse_legs(axes=(0, 1, 3, (4, 2), 5)) # [t l] [b r] s [a str] c
-                int_B = B.fuse_legs(axes=(0, 1, (2, 3), 4)) # [t l] [b r] [s [a str]] c
-            else:
-                GB_an = match_ancilla_2s(Gate.B, B, dir='r')
-                int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
+        GB_an = match_ancilla_2s(Gate.B, B, dir='r')
+        int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
         int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] s] c
         int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] s] c
         int_B = int_B.swap_gate(axes=(1, 3))  # l X c
@@ -202,19 +137,19 @@ def form_new_peps_tensors(QA, QB, MA, MB, bd):
 ##### creating ntu environment ####
 ###################################
 
-def env_NTU(Gamma, bd, QA, QB, dirn):
+def env_NTU(gamma, bd, QA, QB, dirn):
     """ calculate metric g """
   
-    env = Gamma.tensors_NtuEnv(bd)
+    env = gamma.tensors_NtuEnv(bd)
     G={}
     for ms in env.keys():
         if env[ms] is None:
-            leg = Gamma[(0, 0)].get_legs(axis=-1)
+            leg = gamma[(0, 0)].get_legs(axis=-1)
             leg, _ = yast.leg_undo_product(leg) # last leg of A should be fused
-            fid = yast.eye(config=Gamma[(0,0)].config, legs=[leg, leg.conj()]).diag()
+            fid = yast.eye(config=gamma[(0,0)].config, legs=[leg, leg.conj()]).diag()
             G[ms] = trivial_tensor(fid)
         else:
-            G[ms] = Gamma[env[ms]]
+            G[ms] = gamma[env[ms]]
 
     if dirn == "h":
         m_tl, m_l, m_bl = con_tl(G['tl']), con_l(G['l']), con_bl(G['bl'])
@@ -403,7 +338,7 @@ def forced_sectorial_truncation(U, L, V, Ds):
     return U, new_L, V, discard_block_weight
 
 
-def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, Ds, fix_bd, truncation_mode):
+def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, Ds, truncation_mode):
 
     if truncation_mode == 'optimal':
         G = ncon((g, RA, RB, RA, RB), ([1, 2, 3, 4], [1, -1], [-3, 3], [2, -2], [-4, 4]), conjs=(0, 0, 0, 1, 1))
@@ -415,21 +350,15 @@ def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, Ds, fix_bd, tr
         UR, SR, _ = svd(GR)
         XL, XR = SL.sqrt() @ UL, UR @ SR.sqrt()
         XRRX = XL @ XR
-        if fix_bd == 1:
-            U, L, V = svd_with_truncation(XRRX, sU=RA.get_signature()[1], tol_block=1e-15) 
-            U, L, V, discard_block_weight = forced_sectorial_truncation(U, L, V, Ds)
-            mA, mB = U @ L.sqrt(), L.sqrt() @ V
-            MA, MB, svd_error, _ = optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB)
-            return MA, MB, svd_error
-        elif fix_bd == 0:
-            if isinstance(Ds, dict):
-                Dn = sum(Ds.values())
-            else:
-                Dn = Ds
-            U, L, V = svd_with_truncation(XRRX, sU=RA.get_signature()[1], D_total=Dn, tol_block=1e-15)
-            mA, mB = U @ L.sqrt(), L.sqrt() @ V
-            MA, MB, svd_error, _ = optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB)
-            return MA, MB, svd_error
+        
+        if isinstance(Ds, dict):
+            Dn = sum(Ds.values())
+        else:
+            Dn = Ds
+        U, L, V = svd_with_truncation(XRRX, sU=RA.get_signature()[1], D_total=Dn, tol_block=1e-15)
+        mA, mB = U @ L.sqrt(), L.sqrt() @ V
+        MA, MB, svd_error, _ = optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB)
+        return MA, MB, svd_error
 
     elif truncation_mode == 'normal':
 
@@ -523,7 +452,7 @@ def ntu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter):
 ########################## of MA and MB #######################################
 ###############################################################################
 
-def truncate_and_optimize(g, RA, RB, Ds, fix_bd, truncation_mode):
+def truncate_and_optimize(g, RA, RB, Ds, truncation_mode):
     """ optimize truncated MA and MB tensors, using NTU metric. """
     max_iter = 1000 # max no of NTU optimization loops
     assert (g.fuse_legs(axes=((0, 2), (1, 3))) - g.fuse_legs(axes=((0, 2), (1, 3))).conj().transpose(axes=(1, 0))).norm() < 1e-14 * g.fuse_legs(axes=((0, 2), (1, 3))).norm()
@@ -536,7 +465,7 @@ def truncate_and_optimize(g, RA, RB, Ds, fix_bd, truncation_mode):
     gRAB =  gf @ RAB
     gRR = vdot(RAB, fgRAB).item()
     
-    MA, MB, svd_error = environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, Ds, fix_bd, truncation_mode)
+    MA, MB, svd_error = environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, Ds, truncation_mode)
     MA, MB, ntu_errorB, optimal_cf  = ntu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter)
     MA, MB = truncation_step(MA, MB, Ds, normalize=True)
     return MA, MB, ntu_errorB, optimal_cf, svd_error

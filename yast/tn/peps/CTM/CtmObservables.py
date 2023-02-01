@@ -4,24 +4,24 @@ from .CtmObservableRoutines import ret_AAbs, hor_extension, ver_extension, apply
 import yast
 import numpy as np
 
-def nn_avg(Gamma, env, op):
+def nn_avg(gamma, env, op):
     """ Calculates the nearest neighbor correlators on all bonds and averages them """
-    Gamma = check_consistency_tensors(Gamma)
+    gamma = check_consistency_tensors(gamma)
     obs_hor = {}
     obs_ver = {}
     for ms in op.keys():
         res_hor = []
         res_ver = []
         opt = op.get(ms)
-        for bds_h in Gamma.bonds(dirn='h'):  # correlators on all horizontal bonds
+        for bds_h in gamma.bonds(dirn='h'):  # correlators on all horizontal bonds
            # print(bds_h)
-            AAb = {'l': fPEPS_2layers(Gamma[bds_h.site_0]), 'r': fPEPS_2layers(Gamma[bds_h.site_1])}
-            AAbo = ret_AAbs(Gamma, bds_h, opt, orient='h')
+            AAb = {'l': fPEPS_2layers(gamma[bds_h.site_0]), 'r': fPEPS_2layers(gamma[bds_h.site_1])}
+            AAbo = ret_AAbs(gamma, bds_h, opt, orient='h')
             val_hor = hor_extension(env, bds_h, AAbo, AAb)
             res_hor.append(val_hor)
-        for bds_v in Gamma.bonds(dirn='v'): # correlators on all vertical bonds
-            AAb = {'l': fPEPS_2layers(Gamma[bds_v.site_0]), 'r': fPEPS_2layers(Gamma[bds_v.site_1])}
-            AAbo = ret_AAbs(Gamma, bds_v, opt, orient='v')
+        for bds_v in gamma.bonds(dirn='v'): # correlators on all vertical bonds
+            AAb = {'l': fPEPS_2layers(gamma[bds_v.site_0]), 'r': fPEPS_2layers(gamma[bds_v.site_1])}
+            AAbo = ret_AAbs(gamma, bds_v, opt, orient='v')
             val_ver = ver_extension(env, bds_v, AAbo, AAb)
             res_ver.append(val_ver)
         

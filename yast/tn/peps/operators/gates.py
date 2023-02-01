@@ -22,7 +22,7 @@ def match_ancilla_1s(G, A):
         G = G.add_leg(axis=1, s=-1)
         Gsa = ncon((G, one), ((-0, -1, -3), (-2, -4)))
         Gsa = Gsa.fuse_legs(axes=(0, (1, 2), 3, 4))
-        Gsa = Gsa.drop_leg_history(G, axis=1)
+        Gsa = Gsa.drop_leg_history(axis=1)
     Gsa = Gsa.fuse_legs(axes=((0, 1), (2, 3)))
     return Gsa
 
