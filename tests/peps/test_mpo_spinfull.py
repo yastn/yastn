@@ -7,8 +7,9 @@ import yast.tn.peps as peps
 import yast.tn.mps as mps
 import time
 from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
-from yast.tn.peps.NTU import ntu_update, initialize_peps_purification
-from yast.tn.peps.CTM import sample, nn_bond, CtmEnv2Mps, nn_avg, ctmrg_, init_rand, one_site_avg, Local_CTM_Env
+from yast.tn.peps.als import _als_update
+from yast.tn.peps import initialize_peps_purification
+from yast.tn.peps.ctm import sample, nn_bond, CtmEnv2Mps, nn_avg, ctmrg_, init_rand, one_site_avg, Local_CTM_Env
 from yast.tn.mps import Env2, Env3
 
 
@@ -54,7 +55,7 @@ def test_NTU_spinfull():
     for nums in range(time_steps):
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        Gamma, info = ntu_update(Gamma, Gate, D, step, tr_mode, fix_bd=0) # fix_bd = 0 refers to unfixed symmetry sectors
+        Gamma, info = _als_update(Gamma, Gate, D, step, tr_mode, env_type='NTU') 
 
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension

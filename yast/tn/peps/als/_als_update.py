@@ -7,7 +7,7 @@ class Gate(NamedTuple):
     A : tuple = None
     B : tuple = None
 
-def _update(gamma, Gates, Ds, step, truncation_mode):
+def _als_update(gamma, Gates, Ds, step, truncation_mode, env_type):
     
     infos = []
    # local gate
@@ -16,7 +16,7 @@ def _update(gamma, Gates, Ds, step, truncation_mode):
    
     for iter in GB_list(gamma, Gates['nn']):
         bd = iter['bond'] 
-        gamma, info = ntu_machine(gamma, bd, Gate(iter['gateA'], iter['gateB']), Ds, truncation_mode, step, fix_bd)
+        gamma, info = ntu_machine(gamma, bd, Gate(iter['gateA'], iter['gateB']), Ds, truncation_mode, step, env_type)
         # show_leg_structure(gamma)
         infos.append(info)
 

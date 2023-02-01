@@ -1,5 +1,5 @@
 """ imaginary time evolution routines. """
-from ._alte_update import ntu_update
+from ._als_update import _als_update
 
 
 

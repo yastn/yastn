@@ -8,8 +8,9 @@ import logging
 import yast
 from yast.tn.peps.operators.gates import trivial_tensor, match_ancilla_1s, match_ancilla_2s
 from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_legs, ncon, eigh_with_truncation, eye
+from ._ntu import env_NTU
 
-def ntu_machine(gamma, bd, Gate, Ds, truncation_mode, step, fix_bd):
+def ntu_machine(gamma, bd, Gate, Ds, truncation_mode, step, env_type):
     # step can be svd-step, one-step or two-step
     # application of nearest neighbor gate and subsequent optimization of peps tensor using NTU
     QA, QB, RA, RB = single_bond_nn_update(gamma, bd, Gate)
@@ -20,20 +21,21 @@ def ntu_machine(gamma, bd, Gate, Ds, truncation_mode, step, fix_bd):
         info = {}
         return gamma, info
     else:
-        g = env_NTU(gamma, bd, QA, QB, dirn=bd.dirn)
+        if env_type=='NTU':
+            g = env_NTU(gamma, bd, QA, QB, dirn=bd.dirn)
         info={}
-        MA, MB, ntu_error, optim, svd_error = truncate_and_optimize(g, RA, RB, Ds, fix_bd, truncation_mode)
+        MA, MB, opt_error, optim, svd_error = truncate_and_optimize(g, RA, RB, Ds, truncation_mode)
         if step == 'two-step':  # else 'one-step'
-            MA_int, MB_int, _, _, _ = truncate_and_optimize(g, RA, RB, int(2*Ds), fix_bd, truncation_mode)
-            MA_2, MB_2, ntu_error_2, optim_2, svd_error_2 = truncate_and_optimize(g, MA_int, MB_int, Ds, fix_bd, truncation_mode)
-            if ntu_error < ntu_error_2:
-                logging.info("1-step NTU; ntu errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e" % (ntu_error, ntu_error_2, svd_error, svd_error_2))
+            MA_int, MB_int, _, _, _ = truncate_and_optimize(g, RA, RB, int(2*Ds), truncation_mode)
+            MA_2, MB_2, opt_error_2, optim_2, svd_error_2 = truncate_and_optimize(g, MA_int, MB_int, Ds, truncation_mode)
+            if opt_error < opt_error_2:
+                logging.info("1-step update; truncation errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e" % (opt_error, opt_error_2, svd_error, svd_error_2))
             else:
                 MA, MB = MA_2, MB_2
-                logging.info("2-step NTU; ntu errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e " % (ntu_error, ntu_error_2, svd_error, svd_error_2))
-                ntu_error, optim, svd_error = ntu_error_2, optim_2, svd_error_2
+                logging.info("2-step update; truncation errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e " % (opt_error, opt_error_2, svd_error, svd_error_2))
+                opt_error, optim, svd_error = opt_error_2, optim_2, svd_error_2
         gamma[bd.site_0], gamma[bd.site_1] = form_new_peps_tensors(QA, QB, MA, MB, bd)
-        info.update({'ntu_error': ntu_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
+        info.update({'ntu_error': opt_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
 
         return gamma, info
 
@@ -362,25 +364,14 @@ def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, Ds, truncation
 
     elif truncation_mode == 'normal':
 
-        if fix_bd == 0:
-            MA, MB = truncation_step(RA, RB, Ds)
-            MAB = MA @ MB
-            MAB = MAB.fuse_legs(axes=[(0, 1)])
-            gMM = vdot(MAB, fgf @ MAB).item()
-            gMR = vdot(MAB, fgRAB).item()
-            svd_error = abs((gMM + gRR - gMR - gMR.conjugate()) / gRR)
-        elif fix_bd == 1:
-            XRX = RA @ RB
-            U, L, V = svd_with_truncation(XRX, sU=RA.get_signature()[1], tol_block=1e-15)
-            U, L, V, discard_block_weight = forced_sectorial_truncation(U, L, V, Ds)
-            MA, MB = U @ L.sqrt(), L.sqrt() @ V
-            MAB = MA @ MB
-            MAB = MAB.fuse_legs(axes=[(0, 1)])
-            gMM = vdot(MAB, fgf @ MAB).item()
-            gMR = vdot(MAB, fgRAB).item()
-            svd_error = abs((gMM + gRR - gMR - gMR.conjugate()) / gRR)
+        MA, MB = truncation_step(RA, RB, Ds)
+        MAB = MA @ MB
+        MAB = MAB.fuse_legs(axes=[(0, 1)])
+        gMM = vdot(MAB, fgf @ MAB).item()
+        gMR = vdot(MAB, fgRAB).item()
+        svd_error = abs((gMM + gRR - gMR - gMR.conjugate()) / gRR)
          
-        return MA, MB, svd_error
+    return MA, MB, svd_error
 
 
 def optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB):
