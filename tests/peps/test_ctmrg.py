@@ -50,7 +50,7 @@ def matrix_inverse_random():
 
     return a, b
 
-def CTM_for_Onsager(Gamma, Z_exact):
+def CTM_for_Onsager(gamma, Z_exact):
     """ Asserts CTM expectation values with analytical values. """
     """ Convergence criteria based on energy """
 
@@ -59,16 +59,16 @@ def CTM_for_Onsager(Gamma, Z_exact):
     tol=1e-7
     max_sweeps = 400
 
-    env = init_rand(Gamma, tc=(0,), Dc=(1,))  # initialization with random tensors 
+    env = init_rand(gamma, tc=(0,), Dc=(1,))  # initialization with random tensors 
 
     cf_old = 0
 
-    for step in ctmrg_(Gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, flag=None):
+    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, flag=None):
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=2
         ops = {'magA1': {'l': sz, 'r': id},
            'magB1': {'l': id, 'r': sz}}
 
-        ob_hor, ob_ver =  nn_avg(Gamma, step.env, ops)
+        ob_hor, ob_ver =  nn_avg(gamma, step.env, ops)
         cf = 0.25 * (abs(ob_hor.get('magA1')) + abs(ob_hor.get('magB1')) +  abs(ob_ver.get('magA1'))+abs(ob_ver.get('magB1')))
         print("expectation value: ", cf)
         if abs(cf - cf_old) < tol:
@@ -81,7 +81,7 @@ def CTM_for_Onsager(Gamma, Z_exact):
 
     ops = {'magA1': {'l': sz, 'r': id},
            'magB1': {'l': id, 'r': sz}}
-    ob_hor, ob_ver =  nn_avg(Gamma, step.env, ops)    
+    ob_hor, ob_ver =  nn_avg(gamma, step.env, ops)    
     cf = 0.25 * (abs(ob_hor.get('magA1')) + abs(ob_hor.get('magB1')) +  abs(ob_ver.get('magA1'))+abs(ob_ver.get('magB1')))
     print("expectation value: ", cf)
         
