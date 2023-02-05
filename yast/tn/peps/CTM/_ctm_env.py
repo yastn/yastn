@@ -55,7 +55,7 @@ class CtmEnv(Peps):
             site_se = ms
             site_ne = self.nn_site(site_se, d='t')
             site_sw = self.nn_site(site_se, d='l')
-            site_nw = self.nn_site(site_sw, d='t')
+            site_nw = self.nn_site(site_se, d='tl')
             s.append(ctm_window(site_nw, site_ne, site_sw, site_se))
 
         return s

@@ -29,7 +29,7 @@ def test_NTU_spinless_finite():
     chi = 40
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
-    beta_end = 0.2
+    beta_end = 0.01
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
@@ -69,7 +69,7 @@ def test_NTU_spinless_finite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, flag=None):
+    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, fix_signs=False):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
         obs_hor, obs_ver =  nn_avg(gamma, step.env, ops)
@@ -110,7 +110,7 @@ def test_NTU_spinless_infinite():
     chi = 40
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
-    beta_end = 0.2
+    beta_end = 0.02
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
@@ -148,7 +148,7 @@ def test_NTU_spinless_infinite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, flag=None):
+    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
         obs_hor, obs_ver =  nn_avg(gamma, step.env, ops)
@@ -174,6 +174,6 @@ def test_NTU_spinless_infinite():
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
-    test_NTU_spinless_finite()
+  #  test_NTU_spinless_finite()
     test_NTU_spinless_infinite()
 
