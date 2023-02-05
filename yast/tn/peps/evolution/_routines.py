@@ -13,7 +13,7 @@ from ._ntu import env_NTU
 def ntu_machine(gamma, bd, Gate, Ds, truncation_mode, step, env_type):
     # step can be svd-step, one-step or two-step
     # application of nearest neighbor gate and subsequent optimization of peps tensor using NTU
-    QA, QB, RA, RB = single_bond_nn_update(gamma, bd, Gate)
+    QA, QB, RA, RB = apply_nn_gate(gamma, bd, Gate)
 
     if step == "svd-update":
         MA, MB = truncation_step(RA, RB, Ds, normalize=True)
@@ -43,23 +43,22 @@ def ntu_machine(gamma, bd, Gate, Ds, truncation_mode, step, env_type):
 ##### gate application  ####
 ############################
 
-def single_bond_local_update(gamma, G_loc):
+def apply_local_gate_(gamma, gate):
     """ apply local gates on PEPS tensors """
-    for ms in gamma.sites():
-        G_l = match_ancilla_1s(G_loc, gamma[ms])
-        gamma[ms] = tensordot(gamma[ms], G_l, axes=(2, 1)) # [t l] [b r] [s a]
+    A = match_ancilla_1s(gate.A, gamma[gate.site])
+    gamma[gate.site] = tensordot(gamma[gate.site], A, axes=(2, 1)) # [t l] [b r] [s a]
+    return gamma
 
-    return gamma # local update all sites at once
-    
 
-def single_bond_nn_update(gamma, bd, Gate):
+
+def apply_nn_gate(gamma, bd, gate):
 
     """ apply nn gates on PEPS tensors. """
     A, B = gamma[bd.site_0], gamma[bd.site_1]  # A = [t l] [b r] s
-    
+
     dirn = bd.dirn
-    if dirn == "h":  # Horizontal Gate        
-        GA_an = match_ancilla_2s(Gate.A, A, dir='l') 
+    if dirn == "h":  # Horizontal gate
+        GA_an = match_ancilla_2s(gate.A, A, dir='l') 
         int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
         int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] s] [b r] c
         int_A = int_A.unfuse_legs(axes=1)  # [[t l] s] b r c
@@ -67,23 +66,23 @@ def single_bond_nn_update(gamma, bd, Gate):
         int_A = int_A.fuse_legs(axes=((0, 1), (2, 3)))  # [[[t l] s] b] [r c]
         QA, RA = qr(int_A, axes=(0, 1), sQ=-1)  # [[[t l] s] b] rr @ rr [r c]
 
-        GB_an = match_ancilla_2s(Gate.B, B, dir='r')
+        GB_an = match_ancilla_2s(gate.B, B, dir='r')
         int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
         int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] s] c
         int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] s] c
         int_B = int_B.fuse_legs(axes=((0, 2), (1, 3)))  # [t [[b r] s]] [l c]
         QB, RB = qr(int_B, axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] s]]  @  [l c] ll       
 
-    elif dirn == "v":  # Vertical Gate
+    elif dirn == "v":  # Vertical gate
             
-        GA_an = match_ancilla_2s(Gate.A, A, dir='l') 
+        GA_an = match_ancilla_2s(gate.A, A, dir='l') 
         int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
         int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] s] [b r] c
         int_A = int_A.unfuse_legs(axes=1)  # [[t l] s] b r c
         int_A = int_A.fuse_legs(axes=((0, 2), (1, 3)))  # [[[t l] s] r] [b c]
         QA, RA = qr(int_A, axes=(0, 1), sQ=1)  # [[[t l] s] r] bb  @  bb [b c]
 
-        GB_an = match_ancilla_2s(Gate.B, B, dir='r')
+        GB_an = match_ancilla_2s(gate.B, B, dir='r')
         int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
         int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] s] c
         int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] s] c
