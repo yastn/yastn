@@ -4,9 +4,9 @@ import logging
 import yast.tn.peps as peps
 import numpy as np
 from itertools import chain
-from .CtmIterationRoutines import CTM_it
-from .CtmIterationRoutines import fPEPS_2layers, fPEPS_fuse_layers, check_consistency_tensors
-from .CtmEnv import CtmEnv, init_rand
+from ._ctm_iteration_routines import CTM_it
+from ._ctm_iteration_routines import fPEPS_2layers, fPEPS_fuse_layers, check_consistency_tensors
+from ._ctm_env import CtmEnv, init_rand
 
 
 #################################
@@ -20,7 +20,7 @@ class CTMRGout(NamedTuple):
     proj_vert : dict = 0
 
 
-def ctmrg_(psi, env, chi, cutoff, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, flag=None):
+def ctmrg_(psi, env, chi, cutoff, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None):
     r"""
     Perform CTMRG sweeps until convergence, starting from PEPS and environmental corner and edge tensors :code:`psi`.
 
@@ -67,14 +67,14 @@ def ctmrg_(psi, env, chi, cutoff, max_sweeps=1, iterator_step=None, AAb_mode=0, 
         Includes fields:
         :code:`sweeps` number of performed dmrg sweeps.
     """
-    tmp = _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, fix_signs, flag)
+    tmp = _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, fix_signs)
     return tmp if iterator_step else next(tmp)
 
 
-def _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, fix_signs, flag):
+def _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, fix_signs):
 
     """ Generator for ctmrg_(). """
-    psi = check_consistency_tensors(psi, flag) # to check if A has the desired fused form of legs i.e. t l b r [s a]
+    psi = check_consistency_tensors(psi) # to check if A has the desired fused form of legs i.e. t l b r [s a]
 
     AAb = CtmEnv(lattice=psi.lattice, dims=psi.dims, boundary='infinite')   
 
@@ -86,7 +86,8 @@ def _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, fix_sign
   
     for sweep in range(1, max_sweeps + 1):
         logging.info('CTM sweep: %2d', sweep)
-        env, proj_hor, proj_ver = CTM_it(env, AAb, chi, cutoff, fix_signs)
+        cheap_moves=False
+        env, proj_hor, proj_ver = CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs)
 
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield CTMRGout(sweep, env, proj_hor, proj_ver)

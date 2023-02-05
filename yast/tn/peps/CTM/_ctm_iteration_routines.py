@@ -11,7 +11,7 @@ from yast import tensordot, ncon, svd_with_truncation, qr, vdot
 import yast.tn.peps as peps
 from yast.tn.peps._doublePepsTensor import DoublePepsTensor
 import numpy as np
-from .CtmEnv import CtmEnv
+from ._ctm_env import CtmEnv
 
 def append_a_bl(tt, AAb):
     """
@@ -215,13 +215,11 @@ def EV1s(env, indop, AAb):
     return vdot(top_part, bot_part, conj=(0, 0))
 
 
-def proj_Cor(tt, tb, chi, cutoff, fix_signs):
+def proj_Cor(rt, rb, chi, cutoff, fix_signs):
     """
     tt upper half of the CTM 4 extended corners diagram indices from right (e,t,b) to left (e,t,b)
     tb lower half of the CTM 4 extended corners diagram indices from right (e,t,b) to left (e,t,b)
     """
-    _, rt = qr(tt, axes=((0, 1), (2, 3)))
-    _, rb = qr(tb, axes=((0, 1), (2, 3)))
 
     rr = tensordot(rt, rb, axes=((1, 2), (1, 2)))
     u, s, v = svd_with_truncation(rr, axes=(0, 1), tol=cutoff, D_total=chi, fix_signs=fix_signs)
@@ -248,10 +246,18 @@ def proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs):
     del corblm
     del corbrm
 
-    out['ph_l_t', ms.nw], out['ph_l_b', ms.nw] = proj_Cor(corttm, corbbm, chi, cutoff, fix_signs)   # projector left-middle
+    _, rt = qr(corttm, axes=((0, 1), (2, 3)))
+    _, rb = qr(corbbm, axes=((0, 1), (2, 3)))
+
+    out['ph_l_t', ms.nw], out['ph_l_b', ms.nw] = proj_Cor(rt, rb, chi, cutoff, fix_signs)   # projector left-middle
+
     corttm = corttm.transpose(axes=(2, 3, 0, 1))
     corbbm = corbbm.transpose(axes=(2, 3, 0, 1))
-    out['ph_r_t', ms.ne], out['ph_r_b', ms.ne] = proj_Cor(corttm, corbbm, chi, cutoff, fix_signs)   # projector right-middle
+
+    _, rt = qr(corttm, axes=((0, 1), (2, 3)))
+    _, rb = qr(corbbm, axes=((0, 1), (2, 3)))
+
+    out['ph_r_t', ms.ne], out['ph_r_b', ms.ne] = proj_Cor(rt, rb, chi, cutoff, fix_signs)   # projector right-middle
     del corttm
     del corbbm
 
@@ -273,12 +279,96 @@ def proj_vertical(env, AAb, chi, cutoff, ms, fix_signs):
     corbrm = fcor_br(env, AAb[ms.se], ms.se) # contracted matrix at bottom-right constructing a projector with cut in the middle
 
     corkkr = tensordot(corbrm, cortrm, axes=((0, 1), (2, 3))) # right half for constructing middle projector
-    out['pv_t_l', ms.nw], out['pv_t_r', ms.nw] = proj_Cor(corvvm, corkkr, chi, cutoff, fix_signs) # projector top-middle 
+
+    _, rl = qr(corvvm, axes=((0, 1), (2, 3)))
+    _, rr = qr(corkkr, axes=((0, 1), (2, 3)))
+
+    out['pv_t_l', ms.nw], out['pv_t_r', ms.nw] = proj_Cor(rl, rr, chi, cutoff, fix_signs) # projector top-middle 
     corvvm = corvvm.transpose(axes=(2, 3, 0, 1))
     corkkr = corkkr.transpose(axes=(2, 3, 0, 1))
-    out['pv_b_l', ms.sw], out['pv_b_r', ms.sw] = proj_Cor(corvvm, corkkr, chi, cutoff, fix_signs) # projector bottom-middle
+    _, rl = qr(corvvm, axes=((0, 1), (2, 3)))
+    _, rr = qr(corkkr, axes=((0, 1), (2, 3)))
+    out['pv_b_l', ms.sw], out['pv_b_r', ms.sw] = proj_Cor(rl, rr, chi, cutoff, fix_signs) # projector bottom-middle
     del corvvm
     del corkkr
+
+    return out
+
+
+def proj_horizontal_cheap(env, chi, cutoff, ms, fix_signs):
+    # ref https://arxiv.org/pdf/1607.04016.pdf
+    out = {}
+
+    cortlm = tensordot(env[ms.nw].tl, env[ms.nw].t, axes=(1, 0))
+    print(cortlm.get_shape())
+    q1, r1 = qr(cortlm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
+    cortrm = tensordot(env[ms.ne].t, env[ms.ne].tr, axes=(2, 0))
+    q2, r2 = qr(cortrm, axes=((1, 2), 0), Qaxis=0, Raxis=1)
+
+    rrt = r1@r2
+    Ut, St, Vt = svd_with_truncation(rrt, tol=1e-15)
+    sSt = St.rsqrt()
+    Ut = sSt.broadcast(Ut, axis=1)
+    Vt = sSt.broadcast(Vt, axis=0)
+
+    Rtl = tensordot(q1, Ut, axes=(2, 0)).fuse_legs(axes=(2, 1, 0))  # ordered clockwise
+    Rtr = tensordot(Vt, q2, axes=(1, 0))  # ordered anticlockwise
+
+    corblm = tensordot(env[ms.sw].b, env[ms.sw].bl, axes=(2, 0))
+    q3, r3 = qr(corblm, axes=((1, 2), 0), Qaxis=0, Raxis=1)
+    corbrm = tensordot(env[ms.se].br, env[ms.se].b, axes=(1, 0))
+    q4, r4 = qr(corbrm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
+
+    rrb = r4@r3
+    Ub, Sb, Vb = svd_with_truncation(rrb, tol=1e-15)
+    sSb = Sb.rsqrt()
+    Ub = sSb.broadcast(Ub, axis=1)
+    Vb = sSb.broadcast(Vb, axis=0)
+
+    Rbl = tensordot(Vb, q3, axes=(1, 0))  # ordered anticlockwise
+    Rbr = tensordot(q4, Ub, axes=(2, 0)).fuse_legs(axes=(2, 1, 0))  # ordered clockwise
+
+    out['ph_l_t', ms.nw], out['ph_l_b', ms.nw] = proj_Cor(Rtl, Rbl, chi, cutoff, fix_signs) # projector left-middle 
+    out['ph_r_t', ms.ne], out['ph_r_b', ms.ne] = proj_Cor(Rtr, Rbr, chi, cutoff, fix_signs) # projector right-middle
+
+    return out
+
+
+def proj_vertical_cheap(env, chi, cutoff, ms, fix_signs):
+    # ref https://arxiv.org/pdf/1607.04016.pdf
+
+    out = {}
+
+    cortlm = tensordot(env[ms.nw].l, env[ms.nw].tl, axes=(2, 0))
+    q1, r1 = qr(cortlm, axes=((1, 2), 0), Qaxis=0, Raxis=1)
+    corblm =  tensordot(env[ms.sw].bl, env[ms.sw].l, axes=(1, 0))
+    q2, r2 = qr(corblm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
+
+    rrl = r2@r1
+    Ul, Sl, Vl = svd_with_truncation(rrl, tol=1e-15)
+    sSl = Sl.rsqrt()
+    Ul = sSl.broadcast(Ul, axis=1)
+    Vl = sSl.broadcast(Vl, axis=0)
+
+    Rtl = tensordot(Vl, q1, axes=(1, 0))  # ordered anticlockwise
+    Rbl = tensordot(q2, Ul, axes=(2, 0)).fuse_legs(axes=(2, 1, 0))  # ordered clockwise
+
+    cortrm = tensordot(env[ms.ne].tr, env[ms.ne].r, axes=(1, 0))
+    q3, r3 = qr(cortrm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
+    corbrm = tensordot(env[ms.se].r, env[ms.se].br, axes=(2, 0))
+    q4, r4 = qr(corbrm, axes=(0, (1, 2)), Qaxis=0, Raxis=1)
+
+    rrr = r3@r4
+    Ur, Sr, Vr = svd_with_truncation(rrr, tol=1e-15)
+    sSr = Sr.rsqrt()
+    Ur = sSr.broadcast(Ur, axis=1)
+    Vr = sSr.broadcast(Vr, axis=0)
+
+    Rtr = tensordot(q3, Ur, axes=(2, 0)).fuse_legs(axes=(2, 1, 0)) # ordered clockwise
+    Rbr = tensordot(Vr, q4, axes=(1, 0)) # ordered anticlockwise
+
+    out['pv_t_l', ms.nw], out['pv_t_r', ms.nw] = proj_Cor(Rtl, Rtr, chi, cutoff, fix_signs) # projector top-middle 
+    out['pv_b_l', ms.sw], out['pv_b_r', ms.sw] = proj_Cor(Rbl, Rbr, chi, cutoff, fix_signs) # projector bottom-middle
 
     return out
 
@@ -380,7 +470,7 @@ def move_vertical(env, AAb, proj, ms):
 
     return envn
 
-def CTM_it(env, AAb, chi, cutoff, fix_signs):
+def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
     r""" 
     Perform one step of CTMRG update for a mxn lattice 
 
@@ -402,7 +492,10 @@ def CTM_it(env, AAb, chi, cutoff, fix_signs):
     for y in range(Ny):
         for ms in AAb.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
             #print('ctm cluster horizontal', ms)
-            proj = proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs)
+            if cheap_moves is True:
+                proj = proj_horizontal_cheap(env, chi, cutoff, ms, fix_signs)
+            else:
+                proj = proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs)
             proj_hor.update(proj)
         for ms in AAb.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
             env = move_horizontal(env, AAb, proj_hor, ms)
@@ -411,7 +504,10 @@ def CTM_it(env, AAb, chi, cutoff, fix_signs):
     for x in range(Nx):
         for ms in AAb.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
             #print('ctm cluster vertical', ms)
-            proj = proj_vertical(env, AAb, chi, cutoff, ms, fix_signs)
+            if cheap_moves is True:
+                proj = proj_vertical_cheap(env, chi, cutoff, ms, fix_signs)
+            else:
+                proj = proj_vertical(env, AAb, chi, cutoff, ms, fix_signs)
             proj_ver.update(proj)
         for ms in AAb.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
             env = move_vertical(env,  AAb, proj_ver, ms)       
@@ -608,7 +704,7 @@ def fPEPS_fuse_layers(AAb, EVonly=False):
             st['bl'] = tt.fuse_legs(axes=((2, 0), (1, 3)))  # ((2t 2b) (1t 1b)) ((0t 0b) (3t 3b))
 
 
-def check_consistency_tensors(A, flag=None):
+def check_consistency_tensors(A):
     # to check if the A tensors have the appropriate configuration of legs i.e. t l b r [s a]
 
     Ab = peps.Peps(A.lattice, A.dims, A.boundary)
@@ -617,14 +713,7 @@ def check_consistency_tensors(A, flag=None):
             Ab[ms] = A[ms].fuse_legs(axes=(0, 1, 2, 3, (4, 5))) 
     elif A[0, 0].ndim == 3:
         for ms in Ab.sites():
-            target_site = (round((A.Nx-1)*0.5), round((A.Ny-1)*0.5))
-            if flag == 'hole':
-                if ms ==  target_site:
-                    Ab[ms] = A[ms].unfuse_legs(axes=2).unfuse_legs(axes=3).fuse_legs(axes=(0, 1, 4, (2, 3))).unfuse_legs(axes=(0, 1)) # t l b r str [s a]
-                else:
-                    Ab[ms] = A[ms].unfuse_legs(axes=(0, 1)) # system and ancila are fused by default
-            else:
-                Ab[ms] = A[ms].unfuse_legs(axes=(0, 1)) # system and ancila are fused by default
+            Ab[ms] = A[ms].unfuse_legs(axes=(0, 1)) # system and ancila are fused by default
     else:
         for ms in Ab.sites():
             Ab[ms] = A[ms]   # system and ancila are fused by default
