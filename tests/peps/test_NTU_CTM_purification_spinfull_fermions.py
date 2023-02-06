@@ -76,9 +76,9 @@ def test_NTU_spinfull_finite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
+    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0):
         
-        assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
+        assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
 
         doc, _, _ = one_site_avg(psi, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
 
@@ -168,9 +168,9 @@ def test_NTU_spinfull_infinite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
+    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0):
         
-        assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
+        assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
 
         doc, _, _ = one_site_avg(psi, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
 
