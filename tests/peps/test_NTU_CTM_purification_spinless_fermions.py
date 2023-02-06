@@ -6,10 +6,10 @@ import argparse
 import yast
 import yast.tn.peps as peps
 import time
-from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
-from yast.tn.peps.evolution import _als_update
+from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea
+from yast.tn.peps.evolution import evolution_step_, gates_homogeneous
 from yast.tn.peps import initialize_peps_purification
-from yast.tn.peps.ctm import nn_avg, ctmrg_, init_rand, one_site_avg, Local_CTM_Env, nn_bond
+from yast.tn.peps.ctm import nn_avg, ctmrg_, init_rand, one_site_avg, nn_bond
 
 try:
     from .configs import config_U1_R_fermionic as cfg
@@ -29,7 +29,7 @@ def test_NTU_spinless_finite():
     chi = 40
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
-    beta_end = 0.01
+    beta_end = 0.2
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
@@ -41,11 +41,13 @@ def test_NTU_spinless_finite():
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
 
     GA_nn, GB_nn = gates_hopping(t, dbeta, fid, fc, fcdag, purification=purification)  # nn gate for 2D fermi sea
-    G_loc = gate_local_fermi_sea(mu, dbeta, fid, fc, fcdag, purification=purification) # local gate for spinless fermi sea
-    Gate = {'loc': G_loc, 'nn':{'GA': GA_nn, 'GB': GB_nn}}
+    g_loc = gate_local_fermi_sea(mu, dbeta, fid, fc, fcdag, purification=purification) # local gate for spinless fermi sea
+    g_nn = {'GA': GA_nn, 'GB': GB_nn}
 
     if purification == 'True':
         gamma = initialize_peps_purification(fid, net) # initialized at infinite temperature
+
+    gates = gates_homogeneous(gamma, g_nn, g_loc)
 
     time_steps = round(beta_end / dbeta)
 
@@ -53,8 +55,7 @@ def test_NTU_spinless_finite():
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        
-        gamma, info =  _als_update(gamma, Gate, D, step, tr_mode, env_type='NTU') # fix_bd = 0 refers to unfixed symmetry sectors
+        gamma, info =  evolution_step_(gamma, gates, D, step, tr_mode, env_type='NTU') 
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -110,7 +111,7 @@ def test_NTU_spinless_infinite():
     chi = 40
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
-    beta_end = 0.02
+    beta_end = 0.2
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
@@ -119,11 +120,13 @@ def test_NTU_spinless_infinite():
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
 
     GA_nn, GB_nn = gates_hopping(t, dbeta, fid, fc, fcdag, purification=purification)  # nn gate for 2D fermi sea
-    G_loc = gate_local_fermi_sea(mu, dbeta, fid, fc, fcdag, purification=purification) # local gate for spinless fermi sea
-    Gate = {'loc': G_loc, 'nn':{'GA': GA_nn, 'GB': GB_nn}}
+    g_loc = gate_local_fermi_sea(mu, dbeta, fid, fc, fcdag, purification=purification) # local gate for spinless fermi sea
+    g_nn = {'GA': GA_nn, 'GB': GB_nn}
 
     if purification == 'True':
         gamma = initialize_peps_purification(fid, net) # initialized at infinite temperature
+
+    gates = gates_homogeneous(gamma, g_nn, g_loc)
 
     time_steps = round(beta_end / dbeta)
 
@@ -131,7 +134,7 @@ def test_NTU_spinless_infinite():
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        gamma, info =  _als_update(gamma, Gate, D, step, tr_mode, env_type='NTU') # fix_bd = 0 refers to unfixed symmetry sectors    
+        gamma, info =  evolution_step_(gamma, gates, D, step, tr_mode, env_type='NTU') # fix_bd = 0 refers to unfixed symmetry sectors    
 
     
 
@@ -174,6 +177,6 @@ def test_NTU_spinless_infinite():
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
-  #  test_NTU_spinless_finite()
+    test_NTU_spinless_finite()
     test_NTU_spinless_infinite()
 

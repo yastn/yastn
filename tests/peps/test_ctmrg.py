@@ -63,7 +63,7 @@ def CTM_for_Onsager(gamma, Z_exact):
 
     cf_old = 0
 
-    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, flag=None):
+    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=2
         ops = {'magA1': {'l': sz, 'r': id},
            'magB1': {'l': id, 'r': sz}}

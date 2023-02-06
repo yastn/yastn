@@ -2,7 +2,6 @@
 from ._routines import apply_local_gate_, ntu_machine
 from typing import NamedTuple
 
-
 class Gate_nn(NamedTuple):
     """ site_0 should be before site_1 in the fermionic order. """
     A : tuple = None
@@ -28,7 +27,7 @@ def evolution_step_(gamma, gates, Ds, step, truncation_mode, env_type):  # perfo
     """ 
     Apply a list of gates on peps; performing truncation; 
     it is a 2nd-order step in a sense that gates that gates contain half of the sweep,
-    and the orher half is applied in the reverse order
+    and the other half is applied in the reverse order
     """
     infos = []
 
@@ -48,8 +47,6 @@ def evolution_step_(gamma, gates, Ds, step, truncation_mode, env_type):  # perfo
         info['optimal_cutoff'] = [record['optimal_cutoff'] for record in infos]
         info['svd_error'] = [record['svd_error'] for record in infos]
         return gamma, info
-
-
 
 
 def gates_homogeneous(gamma, nn_gates, loc_gates):

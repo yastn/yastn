@@ -6,10 +6,10 @@ import argparse
 import yast
 import yast.tn.peps as peps
 import time
-from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
-from yast.tn.peps.evolution import _als_update
+from yast.tn.peps.operators.gates import gates_hopping, gate_local_Hubbard
+from yast.tn.peps.evolution import evolution_step_, gates_homogeneous
 from yast.tn.peps import initialize_peps_purification
-from yast.tn.peps.ctm import nn_avg, ctmrg_, init_rand, one_site_avg, Local_CTM_Env, nn_bond
+from yast.tn.peps.ctm import nn_avg, ctmrg_, init_rand, one_site_avg, nn_bond
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg
@@ -45,11 +45,13 @@ def test_NTU_spinfull_finite():
     
     GA_nn_up, GB_nn_up = gates_hopping(t_up, dbeta, fid, fc_up, fcdag_up, purification=purification)
     GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, dbeta, fid, fc_dn, fcdag_dn, purification=purification)
-    G_loc = gate_local_Hubbard(mu_up, mu_dn, U, dbeta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, purification=purification)
-    Gate = {'loc':G_loc, 'nn':{'GA_up':GA_nn_up, 'GB_up':GB_nn_up, 'GA_dn':GA_nn_dn, 'GB_dn':GB_nn_dn}}
+    g_loc = gate_local_Hubbard(mu_up, mu_dn, U, dbeta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, purification=purification)
+    g_nn = {'GA_up':GA_nn_up, 'GB_up':GB_nn_up, 'GA_dn':GA_nn_dn, 'GB_dn':GB_nn_dn}
 
     if purification == 'True':
         gamma = initialize_peps_purification(fid, net) # initialized at infinite temperature
+    
+    gates = gates_homogeneous(gamma, g_nn, g_loc)
 
     time_steps = round(beta_end / dbeta)
 
@@ -57,8 +59,7 @@ def test_NTU_spinfull_finite():
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        
-        gamma, info =  _als_update(gamma, Gate, D, step, tr_mode, env_type='NTU') # fix_bd = 0 refers to unfixed symmetry sectors
+        gamma, info =  evolution_step_(gamma, gates, D, step, tr_mode, env_type='NTU') 
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -75,7 +76,7 @@ def test_NTU_spinfull_finite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, flag=None):
+    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
 
@@ -136,19 +137,21 @@ def test_NTU_spinfull_infinite():
 
     GA_nn_up, GB_nn_up = gates_hopping(t_up, dbeta, fid, fc_up, fcdag_up, purification=purification)
     GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, dbeta, fid, fc_dn, fcdag_dn, purification=purification)
-    G_loc = gate_local_Hubbard(mu_up, mu_dn, U, dbeta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, purification=purification)
-    Gate = {'loc':G_loc, 'nn':{'GA_up':GA_nn_up, 'GB_up':GB_nn_up, 'GA_dn':GA_nn_dn, 'GB_dn':GB_nn_dn}}
+    g_loc = gate_local_Hubbard(mu_up, mu_dn, U, dbeta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, purification=purification)
+    g_nn = {'GA_up':GA_nn_up, 'GB_up':GB_nn_up, 'GA_dn':GA_nn_dn, 'GB_dn':GB_nn_dn}
 
     if purification == 'True':
         gamma = initialize_peps_purification(fid, net) # initialized at infinite temperature
+    
+    gates = gates_homogeneous(gamma, g_nn, g_loc)
+
 
     time_steps = round(beta_end / dbeta)
     for nums in range(time_steps):
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        
-        gamma, info =  _als_update(gamma, Gate, D, step, tr_mode, env_type='NTU') # fix_bd = 0 refers to unfixed symmetry sectors
+        gamma, info =  evolution_step_(gamma, gates, D, step, tr_mode, env_type='NTU') 
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -165,7 +168,7 @@ def test_NTU_spinfull_infinite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, flag=None):
+    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
 
