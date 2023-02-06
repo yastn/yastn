@@ -74,7 +74,7 @@ def test_NTU_spinfull():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, flag=None):
+    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
         obs_hor, obs_ver =  nn_avg(gamma, step.env, ops)
