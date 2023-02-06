@@ -7,19 +7,19 @@ from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_
 ##### creating ntu environment ####
 ###################################
 
-def env_NTU(gamma, bd, QA, QB, dirn):
+def env_NTU(peps, bd, QA, QB, dirn):
     """ calculate metric g """
   
-    env = gamma.tensors_NtuEnv(bd)
+    env = peps.tensors_NtuEnv(bd)
     G={}
     for ms in env.keys():
         if env[ms] is None:
-            leg = gamma[(0, 0)].get_legs(axis=-1)
+            leg = peps[(0, 0)].get_legs(axis=-1)
             leg, _ = yast.leg_undo_product(leg) # last leg of A should be fused
-            fid = yast.eye(config=gamma[(0,0)].config, legs=[leg, leg.conj()]).diag()
+            fid = yast.eye(config=peps[(0,0)].config, legs=[leg, leg.conj()]).diag()
             G[ms] = trivial_tensor(fid)
         else:
-            G[ms] = gamma[env[ms]]
+            G[ms] = peps[env[ms]]
 
     if dirn == "h":
         m_tl, m_l, m_bl = con_tl(G['tl']), con_l(G['l']), con_bl(G['bl'])

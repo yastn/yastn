@@ -1,5 +1,5 @@
 """ ctmrg test on 2D Classical Ising model with CTMRG  """
-""" Tests the expectation values with CTM using analytical dense peps tensors (upto numerical presisions) for 2D Ising model with 0 transverse field (Onsager solution) """
+""" Tests the expectation values with CTM using analytical dense psi tensors (upto numerical presisions) for 2D Ising model with 0 transverse field (Onsager solution) """
 import logging
 import numpy as np
 import pytest
@@ -20,7 +20,7 @@ net = peps.Peps(lattice='checkerboard', boundary='infinite')
 
 
 def create_ZZ_ten(sz, betas):
-    """ Creates the peps tensor for a certain beta. """
+    """ Creates the psi tensor for a certain beta. """
     L = ncon((sz, sz), ((-0, -1), (-2, -3)))
     L = L.fuse_legs(axes = ((0, 2), (1, 3)))
     D, S = yast.eigh(L, axes = (0, 1))
@@ -50,7 +50,7 @@ def matrix_inverse_random():
 
     return a, b
 
-def CTM_for_Onsager(gamma, Z_exact):
+def CTM_for_Onsager(psi, Z_exact):
     """ Asserts CTM expectation values with analytical values. """
     """ Convergence criteria based on energy """
 
@@ -59,29 +59,27 @@ def CTM_for_Onsager(gamma, Z_exact):
     tol=1e-7
     max_sweeps = 400
 
-    env = init_rand(gamma, tc=(0,), Dc=(1,))  # initialization with random tensors 
+    env = init_rand(psi, tc=(0,), Dc=(1,))  # initialization with random tensors 
 
     cf_old = 0
 
-    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
-        assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=2
+    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0):
+        assert step.sweeps % 2 == 0 # stop every 4th step as iteration_step=2
         ops = {'magA1': {'l': sz, 'r': id},
            'magB1': {'l': id, 'r': sz}}
 
-        ob_hor, ob_ver =  nn_avg(gamma, step.env, ops)
+        ob_hor, ob_ver =  nn_avg(psi, step.env, ops)
         cf = 0.25 * (abs(ob_hor.get('magA1')) + abs(ob_hor.get('magB1')) +  abs(ob_ver.get('magA1'))+abs(ob_ver.get('magB1')))
         print("expectation value: ", cf)
         if abs(cf - cf_old) < tol:
             break # here break if the relative differnece is below tolerance
         cf_old = cf
-        
 
     assert pytest.approx(cf, rel=1e-3) == Z_exact
 
-
     ops = {'magA1': {'l': sz, 'r': id},
            'magB1': {'l': id, 'r': sz}}
-    ob_hor, ob_ver =  nn_avg(gamma, step.env, ops)    
+    ob_hor, ob_ver =  nn_avg(psi, step.env, ops)    
     cf = 0.25 * (abs(ob_hor.get('magA1')) + abs(ob_hor.get('magB1')) +  abs(ob_ver.get('magA1'))+abs(ob_ver.get('magB1')))
     print("expectation value: ", cf)
         
@@ -92,10 +90,10 @@ def test_CTM_loop_1():
     """ Calculate magnetization for classical 2D Ising model and compares with the exact result. """
     beta = 0.7  # check for a certain inverse temperature
     Z_exact = 0.99016253867 # analytical value of magnetization up to 4 decimal places for beta = 0.8 (2D Classical Ising)
-    Gamma = peps.Peps(net.lattice, net.dims, net.boundary)
-    for ms in Gamma.sites():
-        Gamma[ms] = create_ZZ_ten(sz, beta) 
-    CTM_for_Onsager(Gamma, Z_exact)
+    psi = peps.Peps(net.lattice, net.dims, net.boundary)
+    for ms in psi.sites():
+        psi[ms] = create_ZZ_ten(sz, beta) 
+    CTM_for_Onsager(psi, Z_exact)
 
 
 def not_working_test_CTM_loop_2():
@@ -110,9 +108,9 @@ def not_working_test_CTM_loop_2():
     B = yast.ncon((inv_h_rg, B), ((-1, 1), (-0, 1, -2, -3, -4)))
     A = yast.ncon((A, v_rg), ((1, -1, -2, -3, -4), (1, -0)))
     B = yast.ncon((inv_v_rg, B), ((-2, 1), (-0, -1, 1, -3, -4)))
-    Gamma = peps.Peps(net.lattice, net.dims, net.boundary)
-    Gamma = {(0,0): A, (0,1): B, (1,0):B, (1,1):A}
-    CTM_for_Onsager(Gamma, Z_exact)
+    psi = psi.psi(net.lattice, net.dims, net.boundary)
+    psi = {(0,0): A, (0,1): B, (1,0):B, (1,1):A}
+    CTM_for_Onsager(psi, Z_exact)
 
 
 if __name__ == '__main__':

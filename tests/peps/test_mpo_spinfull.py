@@ -42,22 +42,21 @@ def test_NTU_spinfull():
 
     opt = yast.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
-    ancilla='True'
     GA_nn_up, GB_nn_up = gates_hopping(t_up, dbeta, fid, fc_up, fcdag_up, purification=purification)
     GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, dbeta, fid, fc_dn, fcdag_dn, purification=purification)
     g_loc = gate_local_Hubbard(mu_up, mu_dn, U, dbeta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, purification=purification)
-    g_nn = {'GA_up':GA_nn_up, 'GB_up':GB_nn_up, 'GA_dn':GA_nn_dn, 'GB_dn':GB_nn_dn}
+    g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
 
     if purification == 'True':
-        gamma = initialize_peps_purification(fid, net) # initialized at infinite temperature
+        psi = initialize_peps_purification(fid, net) # initialized at infinite temperature
     
-    gates = gates_homogeneous(gamma, g_nn, g_loc)
+    gates = gates_homogeneous(psi, g_nn, g_loc)
 
     time_steps = round(beta_end / dbeta)
     for nums in range(time_steps):
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        gamma, info =  evolution_step_(gamma, gates, D, step, tr_mode, env_type='NTU') 
+        psi, _ =  evolution_step_(psi, gates, D, step, tr_mode, env_type='NTU') 
 
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -65,7 +64,7 @@ def test_NTU_spinfull():
     max_sweeps=50 
     tol = 1e-7   # difference of some observable must be lower than tolernace
 
-    env = init_rand(gamma, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
+    env = init_rand(psi, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
 
     ops = {'cdagc_up': {'l': fcdag_up, 'r': fc_up},
            'ccdag_up': {'l': fc_up, 'r': fcdag_up},
@@ -74,10 +73,10 @@ def test_NTU_spinfull():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
+    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
-        obs_hor, obs_ver =  nn_avg(gamma, step.env, ops)
+        obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
 
         cdagc_up = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
         ccdag_up = 0.5*(abs(obs_hor.get('ccdag_up')) + abs(obs_ver.get('ccdag_up')))
@@ -91,8 +90,6 @@ def test_NTU_spinfull():
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
-
-
     ###  we try to find out the right boundary vector of the left-most column or 0th row
     ########## 3x3 lattice ########
     ###############################
@@ -101,21 +98,20 @@ def test_NTU_spinfull():
     ##### (0,2) (1,2) (2,2) #######
     ###############################
 
-    
-    psi = gamma.boundary_mps()
+    phi = psi.boundary_mps()
     opts = {'D_total': chi}
 
     for r_index in range(net.Ny-1,-1,-1):
         print(r_index)
         Bctm = CtmEnv2Mps(net, env, index=r_index, index_type='r')   # right boundary of r_index th column through CTM environment tensors
         #assert all(Bctm[i].get_shape() == psi[i].get_shape() for i in range(net.Nx))
-        print(abs(mps.vdot(psi, Bctm)) / (psi.norm() * Bctm.norm()))
-        assert pytest.approx(abs(mps.vdot(psi, Bctm)) / (psi.norm() * Bctm.norm()), rel=1e-10) == 1.0
+        print(abs(mps.vdot(phi, Bctm)) / (phi.norm() * Bctm.norm()))
+        assert pytest.approx(abs(mps.vdot(phi, Bctm)) / (phi.norm() * Bctm.norm()), rel=1e-10) == 1.0
 
-        psi0 = psi.copy()
-        O = gamma.mpo(index=r_index, index_type='column')
-        psi = mps.zipper(O, psi0, opts)  # right boundary of (r_index-1) th column through zipper
-        mps.variational_(psi, O, psi0, method='1site', max_sweeps=2)
+        phi0 = phi.copy()
+        O = peps.mpo(index=r_index, index_type='column')
+        phi = mps.zipper(O, phi0, opts)  # right boundary of (r_index-1) th column through zipper
+        mps.variational_(phi, O, phi0, method='1site', max_sweeps=2)
 
 
     n_up = fcdag_up @ fc_up 
@@ -125,7 +121,7 @@ def test_NTU_spinfull():
 
     nn_up, nn_dn, nn_do, nn_hole = n_up @ h_dn, n_dn @ h_up, n_up @ n_dn, h_up @ h_dn
     projectors = [nn_up, nn_dn, nn_do, nn_hole]
-    out = sample(gamma, env, projectors)
+    out = sample(psi, env, projectors)
     print(out)
 
 if __name__ == '__main__':

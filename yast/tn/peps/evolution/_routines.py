@@ -10,19 +10,19 @@ from yast.tn.peps.operators.gates import trivial_tensor, match_ancilla_1s, match
 from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_legs, ncon, eigh_with_truncation, eye
 from ._ntu import env_NTU
 
-def ntu_machine(gamma, gate, Ds, truncation_mode, step, env_type):
+def ntu_machine(peps, gate, Ds, truncation_mode, step, env_type):
     # step can be svd-step, one-step or two-step
     # application of nearest neighbor gate and subsequent optimization of peps tensor using NTU
-    QA, QB, RA, RB = apply_nn_gate(gamma, gate)
+    QA, QB, RA, RB = apply_nn_gate(peps, gate)
 
     if step == "svd-update":
         MA, MB = truncation_step(RA, RB, Ds, normalize=True)
-        gamma[gate.bond.site_0], gamma[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
+        peps[gate.bond.site_0], peps[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
         info = {}
-        return gamma, info
+        return peps, info
     else:
         if env_type=='NTU':
-            g = env_NTU(gamma, gate.bond, QA, QB, dirn=gate.bond.dirn)
+            g = env_NTU(peps, gate.bond, QA, QB, dirn=gate.bond.dirn)
         info={}
         MA, MB, opt_error, optim, svd_error = truncate_and_optimize(g, RA, RB, Ds, truncation_mode)
         if step == 'two-step':  # else 'one-step'
@@ -34,27 +34,27 @@ def ntu_machine(gamma, gate, Ds, truncation_mode, step, env_type):
                 MA, MB = MA_2, MB_2
                 logging.info("2-step update; truncation errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e " % (opt_error, opt_error_2, svd_error, svd_error_2))
                 opt_error, optim, svd_error = opt_error_2, optim_2, svd_error_2
-        gamma[gate.bond.site_0], gamma[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
+        peps[gate.bond.site_0], peps[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
         info.update({'ntu_error': opt_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
 
-        return gamma, info
+        return peps, info
 
 ############################
 ##### gate application  ####
 ############################
 
-def apply_local_gate_(gamma, gate):
+def apply_local_gate_(peps, gate):
     """ apply local gates on PEPS tensors """
-    A = match_ancilla_1s(gate.A, gamma[gate.site])
-    gamma[gate.site] = tensordot(gamma[gate.site], A, axes=(2, 1)) # [t l] [b r] [s a]
-    return gamma
+    A = match_ancilla_1s(gate.A, peps[gate.site])
+    peps[gate.site] = tensordot(peps[gate.site], A, axes=(2, 1)) # [t l] [b r] [s a]
+    return peps
 
 
 
-def apply_nn_gate(gamma, gate):
+def apply_nn_gate(peps, gate):
 
     """ apply nn gates on PEPS tensors. """
-    A, B = gamma[gate.bond.site_0], gamma[gate.bond.site_1]  # A = [t l] [b r] s
+    A, B = peps[gate.bond.site_0], peps[gate.bond.site_1]  # A = [t l] [b r] s
 
     dirn = gate.bond.dirn
     if dirn == "h":  # Horizontal gate
