@@ -23,7 +23,7 @@ class Gates(NamedTuple):
 # here Gates can be a function generating gates based on something 
 #    yield state
 
-def evolution_step_(gamma, gates, Ds, step, truncation_mode, env_type):  # perform a single step of evolution 
+def evolution_step_(psi, gates, Ds, step, truncation_mode, env_type):  # perform a single step of evolution 
     """ 
     Apply a list of gates on peps; performing truncation; 
     it is a 2nd-order step in a sense that gates that gates contain half of the sweep,
@@ -32,28 +32,28 @@ def evolution_step_(gamma, gates, Ds, step, truncation_mode, env_type):  # perfo
     infos = []
 
     for gate in gates.local:
-        gamma = apply_local_gate_(gamma, gate)
+        psi = apply_local_gate_(psi, gate)
 
     for gate in gates.nn + gates.nn[::-1]:
-        gamma, info = ntu_machine(gamma, gate, Ds, truncation_mode, step, env_type)
+        psi, info = ntu_machine(psi, gate, Ds, truncation_mode, step, env_type)
 
     for gate in gates.local[::-1]:
-        gamma = apply_local_gate_(gamma, gate)
+        psi = apply_local_gate_(psi, gate)
 
     if step=='svd-update':
-        return gamma, info 
+        return psi, info 
     else: 
         info['ntu_error'] = [record['ntu_error'] for record in infos]
         info['optimal_cutoff'] = [record['optimal_cutoff'] for record in infos]
         info['svd_error'] = [record['svd_error'] for record in infos]
-        return gamma, info
+        return psi, info
 
 
-def gates_homogeneous(gamma, nn_gates, loc_gates):
+"""def gates_homogeneous(psi, nn_gates, loc_gates):
     # len(nn_gates) indicates the physical degrees of freedom; option to add more
-    bonds = gamma.bonds(dirn='h') + gamma.bonds(dirn='v')
+    bonds = psi.bonds(dirn='h') + psi.bonds(dirn='v')
 
-    gates_nn = []
+    gates_nn = []   # nn_gates = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)] 
     if len(nn_gates) == 2:
         for bd in bonds:
             gates_nn.append(Gate_nn(A=nn_gates['GA'], B=nn_gates['GB'], bond=bd))
@@ -62,13 +62,25 @@ def gates_homogeneous(gamma, nn_gates, loc_gates):
             gates_nn.append(Gate_nn(A=nn_gates['GA_up'], B=nn_gates['GB_up'], bond=bd))
             gates_nn.append(Gate_nn(A=nn_gates['GA_dn'], B=nn_gates['GB_dn'], bond=bd))
     gates_loc = []
-    for site in gamma.sites():
+    for site in psi.sites():
+        gates_loc.append(Gate_local(A=loc_gates, site=site))
+    return Gates(local=gates_loc, nn=gates_nn)"""
+
+def gates_homogeneous(psi, nn_gates, loc_gates):
+    # len(nn_gates) indicates the physical degrees of freedom; option to add more
+    bonds = psi.bonds(dirn='h') + psi.bonds(dirn='v')
+    gates_nn = []   # nn_gates = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)] 
+    for bd in bonds:
+        for i in range(len(nn_gates)):
+            gates_nn.append(Gate_nn(A=nn_gates[i][0], B=nn_gates[i][1], bond=bd))
+    gates_loc = []
+    for site in psi.sites():
         gates_loc.append(Gate_local(A=loc_gates, site=site))
     return Gates(local=gates_loc, nn=gates_nn)
 
 
-def show_leg_structure(gamma):
-   for ms in gamma.sites():
-        xs = gamma[ms].unfuse_legs((0, 1))
+def show_leg_structure(psi):
+   for ms in psi.sites():
+        xs = psi[ms].unfuse_legs((0, 1))
         print("site ", str(ms), xs.get_shape()) 
   

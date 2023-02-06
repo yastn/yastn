@@ -9,8 +9,7 @@ import time
 from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea
 from yast.tn.peps.evolution import evolution_step_, gates_homogeneous
 from yast.tn.peps import initialize_peps_purification
-from yast.tn.peps.ctm import nn_avg, ctmrg_, init_rand, one_site_avg, nn_bond
-
+from yast.tn.peps.ctm import nn_avg, ctmrg_, init_rand, nn_bond
 try:
     from .configs import config_U1_R_fermionic as cfg
     # cfg is used by pytest to inject different backends and divices
@@ -42,20 +41,19 @@ def test_NTU_spinless_finite():
 
     GA_nn, GB_nn = gates_hopping(t, dbeta, fid, fc, fcdag, purification=purification)  # nn gate for 2D fermi sea
     g_loc = gate_local_fermi_sea(mu, dbeta, fid, fc, fcdag, purification=purification) # local gate for spinless fermi sea
-    g_nn = {'GA': GA_nn, 'GB': GB_nn}
+    g_nn = [(GA_nn, GB_nn)]
 
     if purification == 'True':
-        gamma = initialize_peps_purification(fid, net) # initialized at infinite temperature
+        psi = initialize_peps_purification(fid, net) # initialized at infinite temperature
 
-    gates = gates_homogeneous(gamma, g_nn, g_loc)
-
+    gates = gates_homogeneous(psi, g_nn, g_loc)
     time_steps = round(beta_end / dbeta)
 
     for nums in range(time_steps):
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        gamma, info =  evolution_step_(gamma, gates, D, step, tr_mode, env_type='NTU') 
+        psi, _ =  evolution_step_(psi, gates, D, step, tr_mode, env_type='NTU') 
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -63,17 +61,17 @@ def test_NTU_spinless_finite():
     max_sweeps=50 
     tol = 1e-7   # difference of some observable must be lower than tolernace
 
-    env = init_rand(gamma, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
+    env = init_rand(psi, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
 
     ops = {'cdagc': {'l': fcdag, 'r': fc},
            'ccdag': {'l': fc, 'r': fcdag}}
 
     cf_energy_old = 0
 
-    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, fix_signs=False):
+    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, fix_signs=False):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
-        obs_hor, obs_ver =  nn_avg(gamma, step.env, ops)
+        obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
         ccdag = 0.5*(abs(obs_hor.get('ccdag')) + abs(obs_ver.get('ccdag')))
@@ -88,8 +86,8 @@ def test_NTU_spinless_finite():
     bd_h = peps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
     bd_v = peps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
 
-    nn_CTM_bond_1 = 0.5*(abs(nn_bond(gamma, env, ops['cdagc'], bd_h)) + abs(nn_bond(gamma, env, ops['ccdag'], bd_h)))
-    nn_CTM_bond_2 = 0.5*(abs(nn_bond(gamma, env, ops['cdagc'], bd_v)) + abs(nn_bond(gamma, env, ops['ccdag'], bd_v)))
+    nn_CTM_bond_1 = 0.5*(abs(nn_bond(psi, env, ops['cdagc'], bd_h)) + abs(nn_bond(psi, env, ops['ccdag'], bd_h)))
+    nn_CTM_bond_2 = 0.5*(abs(nn_bond(psi, env, ops['cdagc'], bd_v)) + abs(nn_bond(psi, env, ops['ccdag'], bd_v)))
 
     print(nn_CTM_bond_1, nn_CTM_bond_2)
 
@@ -97,8 +95,6 @@ def test_NTU_spinless_finite():
     nn_bond_2_exact = 0.049185554490429065  # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (0,0) and (1,0)
     assert pytest.approx(nn_CTM_bond_1, abs=1e-6) == nn_bond_1_exact
     assert pytest.approx(nn_CTM_bond_2, abs=1e-6) == nn_bond_2_exact
-
-
 
 def test_NTU_spinless_infinite():
 
@@ -121,22 +117,19 @@ def test_NTU_spinless_infinite():
 
     GA_nn, GB_nn = gates_hopping(t, dbeta, fid, fc, fcdag, purification=purification)  # nn gate for 2D fermi sea
     g_loc = gate_local_fermi_sea(mu, dbeta, fid, fc, fcdag, purification=purification) # local gate for spinless fermi sea
-    g_nn = {'GA': GA_nn, 'GB': GB_nn}
+    g_nn = [(GA_nn, GB_nn)]
 
     if purification == 'True':
-        gamma = initialize_peps_purification(fid, net) # initialized at infinite temperature
+        psi = initialize_peps_purification(fid, net) # initialized at infinite temperature
 
-    gates = gates_homogeneous(gamma, g_nn, g_loc)
-
+    gates = gates_homogeneous(psi, g_nn, g_loc)
     time_steps = round(beta_end / dbeta)
 
     for nums in range(time_steps):
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        gamma, info =  evolution_step_(gamma, gates, D, step, tr_mode, env_type='NTU') # fix_bd = 0 refers to unfixed symmetry sectors    
-
-    
+        psi, _ =  evolution_step_(psi, gates, D, step, tr_mode, env_type='NTU') # fix_bd = 0 refers to unfixed symmetry sectors    
 
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -144,17 +137,17 @@ def test_NTU_spinless_infinite():
     max_sweeps=50 
     tol = 1e-7   # difference of some observable must be lower than tolernace
 
-    env = init_rand(gamma, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
+    env = init_rand(psi, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
 
     ops = {'cdagc': {'l': fcdag, 'r': fc},
            'ccdag': {'l': fc, 'r': fcdag}}
 
     cf_energy_old = 0
 
-    for step in ctmrg_(gamma, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
+    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
-        obs_hor, obs_ver =  nn_avg(gamma, step.env, ops)
+        obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
         ccdag = 0.5*(abs(obs_hor.get('ccdag')) + abs(obs_ver.get('ccdag')))
@@ -166,7 +159,7 @@ def test_NTU_spinless_infinite():
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
-    ob_hor, ob_ver = nn_avg(gamma, step.env, ops)
+    ob_hor, ob_ver = nn_avg(psi, step.env, ops)
 
     nn_CTM = 0.5 * (abs(ob_hor.get('cdagc')) + abs(ob_ver.get('ccdag')))
     print(nn_CTM)

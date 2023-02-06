@@ -299,10 +299,9 @@ def proj_horizontal_cheap(env, chi, cutoff, ms, fix_signs):
     # ref https://arxiv.org/pdf/1607.04016.pdf
     out = {}
 
-    cortlm = tensordot(env[ms.nw].tl, env[ms.nw].t, axes=(1, 0))
-    print(cortlm.get_shape())
+    cortlm = tensordot(env[ms.se].tl, env[ms.se].t, axes=(1, 0))
     q1, r1 = qr(cortlm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
-    cortrm = tensordot(env[ms.ne].t, env[ms.ne].tr, axes=(2, 0))
+    cortrm = tensordot(env[ms.sw].t, env[ms.sw].tr, axes=(2, 0))
     q2, r2 = qr(cortrm, axes=((1, 2), 0), Qaxis=0, Raxis=1)
 
     rrt = r1@r2
@@ -314,9 +313,9 @@ def proj_horizontal_cheap(env, chi, cutoff, ms, fix_signs):
     Rtl = tensordot(q1, Ut, axes=(2, 0)).fuse_legs(axes=(2, 1, 0))  # ordered clockwise
     Rtr = tensordot(Vt, q2, axes=(1, 0))  # ordered anticlockwise
 
-    corblm = tensordot(env[ms.sw].b, env[ms.sw].bl, axes=(2, 0))
+    corblm = tensordot(env[ms.ne].b, env[ms.ne].bl, axes=(2, 0))
     q3, r3 = qr(corblm, axes=((1, 2), 0), Qaxis=0, Raxis=1)
-    corbrm = tensordot(env[ms.se].br, env[ms.se].b, axes=(1, 0))
+    corbrm = tensordot(env[ms.nw].br, env[ms.nw].b, axes=(1, 0))
     q4, r4 = qr(corbrm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
 
     rrb = r4@r3
@@ -339,9 +338,9 @@ def proj_vertical_cheap(env, chi, cutoff, ms, fix_signs):
 
     out = {}
 
-    cortlm = tensordot(env[ms.nw].l, env[ms.nw].tl, axes=(2, 0))
+    cortlm = tensordot(env[ms.ne].l, env[ms.ne].tl, axes=(2, 0))
     q1, r1 = qr(cortlm, axes=((1, 2), 0), Qaxis=0, Raxis=1)
-    corblm =  tensordot(env[ms.sw].bl, env[ms.sw].l, axes=(1, 0))
+    corblm =  tensordot(env[ms.se].bl, env[ms.se].l, axes=(1, 0))
     q2, r2 = qr(corblm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
 
     rrl = r2@r1
@@ -353,9 +352,9 @@ def proj_vertical_cheap(env, chi, cutoff, ms, fix_signs):
     Rtl = tensordot(Vl, q1, axes=(1, 0))  # ordered anticlockwise
     Rbl = tensordot(q2, Ul, axes=(2, 0)).fuse_legs(axes=(2, 1, 0))  # ordered clockwise
 
-    cortrm = tensordot(env[ms.ne].tr, env[ms.ne].r, axes=(1, 0))
+    cortrm = tensordot(env[ms.nw].tr, env[ms.nw].r, axes=(1, 0))
     q3, r3 = qr(cortrm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
-    corbrm = tensordot(env[ms.se].r, env[ms.se].br, axes=(2, 0))
+    corbrm = tensordot(env[ms.sw].r, env[ms.sw].br, axes=(2, 0))
     q4, r4 = qr(corbrm, axes=(0, (1, 2)), Qaxis=0, Raxis=1)
 
     rrr = r3@r4
@@ -491,19 +490,20 @@ def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
 
     for y in range(Ny):
         for ms in AAb.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
-            #print('ctm cluster horizontal', ms)
+            print('ctm cluster horizontal', ms)
             if cheap_moves is True:
                 proj = proj_horizontal_cheap(env, chi, cutoff, ms, fix_signs)
             else:
                 proj = proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs)
             proj_hor.update(proj)
+
         for ms in AAb.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
             env = move_horizontal(env, AAb, proj_hor, ms)
 
     proj={}
     for x in range(Nx):
         for ms in AAb.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
-            #print('ctm cluster vertical', ms)
+            print('ctm cluster vertical', ms)
             if cheap_moves is True:
                 proj = proj_vertical_cheap(env, chi, cutoff, ms, fix_signs)
             else:
