@@ -109,7 +109,7 @@ def test_NTU_spinfull():
         assert pytest.approx(abs(mps.vdot(phi, Bctm)) / (phi.norm() * Bctm.norm()), rel=1e-10) == 1.0
 
         phi0 = phi.copy()
-        O = peps.mpo(index=r_index, index_type='column')
+        O = psi.mpo(index=r_index, index_type='column')
         phi = mps.zipper(O, phi0, opts)  # right boundary of (r_index-1) th column through zipper
         mps.variational_(phi, O, phi0, method='1site', max_sweeps=2)
 
