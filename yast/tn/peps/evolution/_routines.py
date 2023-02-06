@@ -10,19 +10,19 @@ from yast.tn.peps.operators.gates import trivial_tensor, match_ancilla_1s, match
 from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_legs, ncon, eigh_with_truncation, eye
 from ._ntu import env_NTU
 
-def ntu_machine(gamma, bd, Gate, Ds, truncation_mode, step, env_type):
+def ntu_machine(gamma, gate, Ds, truncation_mode, step, env_type):
     # step can be svd-step, one-step or two-step
     # application of nearest neighbor gate and subsequent optimization of peps tensor using NTU
-    QA, QB, RA, RB = apply_nn_gate(gamma, bd, Gate)
+    QA, QB, RA, RB = apply_nn_gate(gamma, gate)
 
     if step == "svd-update":
         MA, MB = truncation_step(RA, RB, Ds, normalize=True)
-        gamma[bd.site_0], gamma[bd.site_1] = form_new_peps_tensors(QA, QB, MA, MB, bd)
+        gamma[gate.bond.site_0], gamma[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
         info = {}
         return gamma, info
     else:
         if env_type=='NTU':
-            g = env_NTU(gamma, bd, QA, QB, dirn=bd.dirn)
+            g = env_NTU(gamma, gate.bond, QA, QB, dirn=gate.bond.dirn)
         info={}
         MA, MB, opt_error, optim, svd_error = truncate_and_optimize(g, RA, RB, Ds, truncation_mode)
         if step == 'two-step':  # else 'one-step'
@@ -34,7 +34,7 @@ def ntu_machine(gamma, bd, Gate, Ds, truncation_mode, step, env_type):
                 MA, MB = MA_2, MB_2
                 logging.info("2-step update; truncation errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e " % (opt_error, opt_error_2, svd_error, svd_error_2))
                 opt_error, optim, svd_error = opt_error_2, optim_2, svd_error_2
-        gamma[bd.site_0], gamma[bd.site_1] = form_new_peps_tensors(QA, QB, MA, MB, bd)
+        gamma[gate.bond.site_0], gamma[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
         info.update({'ntu_error': opt_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
 
         return gamma, info
@@ -51,12 +51,12 @@ def apply_local_gate_(gamma, gate):
 
 
 
-def apply_nn_gate(gamma, bd, gate):
+def apply_nn_gate(gamma, gate):
 
     """ apply nn gates on PEPS tensors. """
-    A, B = gamma[bd.site_0], gamma[bd.site_1]  # A = [t l] [b r] s
+    A, B = gamma[gate.bond.site_0], gamma[gate.bond.site_1]  # A = [t l] [b r] s
 
-    dirn = bd.dirn
+    dirn = gate.bond.dirn
     if dirn == "h":  # Horizontal gate
         GA_an = match_ancilla_2s(gate.A, A, dir='l') 
         int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
@@ -107,9 +107,9 @@ def truncation_step(RA, RB, Ds, normalize=False):
     return MA, MB
 
 
-def form_new_peps_tensors(QA, QB, MA, MB, bd):
+def form_new_peps_tensors(QA, QB, MA, MB, bond):
     """ combine unitaries in QA with optimized MA to form new peps tensors. """
-    if bd.dirn == "h":
+    if bond.dirn == "h":
         A = QA @ MA  # [[[[t l] s] b] r
         A = A.unfuse_legs(axes=0)  # [[t l] s] b r
         A = A.fuse_legs(axes=(0, (1, 2)))  # [[t l] s] [b r]
@@ -120,7 +120,7 @@ def form_new_peps_tensors(QA, QB, MA, MB, bd):
         B = B.unfuse_legs(axes=1)  # l t [[b r] s]
         B = B.fuse_legs(axes=((1, 0), 2))  # [t l] [[b r] s]
         B = B.unfuse_legs(axes=1)  # [t l] [b r] s
-    elif bd.dirn == "v":
+    elif bond.dirn == "v":
         A = QA @ MA  # [[[t l] s] r] b
         A = A.unfuse_legs(axes=0)  # [[t l] s] r b
         A = A.fuse_legs(axes=(0, (2, 1)))  # [[t l] s] [b r]
@@ -132,190 +132,6 @@ def form_new_peps_tensors(QA, QB, MA, MB, bd):
         B = B.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] s]
         B = B.unfuse_legs(axes=1)  # [t l] [b r] s
     return A, B
-
-
-###################################
-##### creating ntu environment ####
-###################################
-
-def env_NTU(gamma, bd, QA, QB, dirn):
-    """ calculate metric g """
-  
-    env = gamma.tensors_NtuEnv(bd)
-    G={}
-    for ms in env.keys():
-        if env[ms] is None:
-            leg = gamma[(0, 0)].get_legs(axis=-1)
-            leg, _ = yast.leg_undo_product(leg) # last leg of A should be fused
-            fid = yast.eye(config=gamma[(0,0)].config, legs=[leg, leg.conj()]).diag()
-            G[ms] = trivial_tensor(fid)
-        else:
-            G[ms] = gamma[env[ms]]
-
-    if dirn == "h":
-        m_tl, m_l, m_bl = con_tl(G['tl']), con_l(G['l']), con_bl(G['bl'])
-        m_tr, m_r, m_br = con_tr(G['tr']), con_r(G['r']), con_br(G['br'])
-        env_l = con_Q_l(QA, m_l)  # [t t'] [b b'] [rr rr']
-        env_r = con_Q_r(QB, m_r)  # [ll ll'] [t t'] [b b']
-        env_t = m_tl @ m_tr  # [tl tl'] [tr tr']
-        env_b = m_br @ m_bl  # [br br'] [bl bl']
-        g = ncon((env_t, env_l, env_r, env_b), ((1, 4), (1, 3, -1), (-2, 4, 2), (2, 3)))  # [ll ll'] [rr rr']
-    elif dirn == "v":
-        m_tl, m_t, m_tr = con_tl(G['tl']), con_t(G['t']), con_tr(G['tr'])
-        m_bl, m_b, m_br = con_bl(G['bl']), con_b(G['b']), con_br(G['br'])
-        env_t = con_Q_t(QA, m_t)  # [l l'] [r r'] [bb bb']
-        env_b = con_Q_b(QB, m_b)  # [tt tt'] [l l'] [r r']
-        env_l = m_bl @ m_tl  # [bl bl'] [tl tl']
-        env_r = m_tr @ m_br  # [tr tr'] [br br']
-        g = ncon((env_l, env_t, env_b, env_r), ((4, 1), (1, 3, -1), (-2, 4, 2), (3, 2)))  # [tt tt'] [bb bb']
-    return g.unfuse_legs(axes=(0, 1))
-
-
-def con_tl(A):  # A -> [t l] [b r] s
-    """ top-left env tensor """  
-    A = fuse_legs(A, axes=((0, 2), 1))  # [[t l] s] [b r]
-    m_tl = tensordot(A, A, axes=(0, 0), conj=(0, 1))  # [b r] [b' r']
-    m_tl = m_tl.unfuse_legs(axes=(0, 1))  # b r b' r'
-    m_tl = m_tl.swap_gate(axes=((0, 2), 3))  # b b' X r'
-    m_tl = m_tl.fuse_legs(axes=((0, 2), (1, 3)))  # [b b'] [r r']
-    return m_tl
-
-
-def con_tr(A):  # A = [t l] [b r] s
-    """ top-right env tensor """
-    A = A.unfuse_legs(axes=(0, 1))
-    A = swap_gate(A, axes=(0, 1, 2, 3))  # t X l, b X r
-    A = fuse_legs(A, axes=((1, 2), (0, 3, 4)))  # [l b] [t r s]
-    m_tr = tensordot(A, A, axes=(1, 1), conj=(0, 1))  # [l b] [l' b']
-    m_tr = m_tr.unfuse_legs(axes=(0, 1))  # l b l' b'
-    m_tr = m_tr.fuse_legs(axes=((0, 2), (1, 3)))  # [l l'] [b b']
-    return m_tr
-
-
-def con_br(A):  # A = [t l] [b r] s
-    """ bottom-right env tensor """
-    A = fuse_legs(A, axes=(0, (1, 2)))  # [t l] [[b r] s]
-    m_br = tensordot(A, A, axes=(1, 1), conj=(0, 1))  # [t l] [t' l']
-    m_br = m_br.unfuse_legs(axes=(0, 1))  # t l t' l'
-    m_br = m_br.swap_gate(axes=((1, 3), 2))  # l l' X t'
-    m_br = m_br.fuse_legs(axes=((0, 2), (1, 3)))  # [t t'] [l l']
-    return m_br
-
-
-def con_bl(A):  # A = [t l] [b r] s
-    """ bottom-left env tensor """
-    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
-    A = fuse_legs(A, axes=((0, 3), (1, 2, 4)))  # [t r] [b l s]
-    m_bl = tensordot(A, A, axes=(1, 1), conj=(0, 1))  # [t r] [t' r']
-    m_bl = m_bl.unfuse_legs(axes=(0, 1))  # t r t' r'
-    m_bl = m_bl.fuse_legs(axes=((1, 3), (0, 2)))  # [r r'] [t t']
-    return m_bl
-
-
-def con_l(A):  # A = [t l] [b r] s
-    """ left env tensor """
-    A = A.unfuse_legs(axes=1)  # [t l] b r s
-    A = A.fuse_legs(axes=((0, 1, 3), 2))  # [[t l] b s] r
-    m_l = tensordot(A, A, axes=(0, 0), conj=(1, 0))  # r' r
-    return m_l
-
-
-def con_r(A):  # A = [t l] [b r] s
-    """ right env tensor """
-    A = A.unfuse_legs(axes=0)  # t l [b r] s
-    A = A.fuse_legs(axes=(1, (0, 2, 3)))  # l [t [b r] s]
-    m_r = tensordot(A, A, axes=(1, 1), conj=(1, 0))  # [l' l]
-    return m_r
-
-
-def con_b(A):  # A = [t l] [b r] s
-    """ bottom env tensor """
-    A = A.unfuse_legs(axes=0)  # t l [b r] s
-    A = A.fuse_legs(axes=(0, (1, 2, 3)))  # t [l [b r] s]
-    m_b = tensordot(A, A, axes=(1, 1), conj=(1, 0))  # [t' t]
-    return m_b
-
-
-def con_t(A):
-    """ top env tensor """
-    A = A.unfuse_legs(axes=1)  # [t l] b r s
-    A = A.fuse_legs(axes=((0, 2, 3), 1))  # [[t l] r s] b
-    m_t = tensordot(A, A, axes=(0, 0), conj=(1, 0))  # b' b
-    return m_t
-
-
-
-def con_Q_l(QA, m_l):  # QA -> [[[t l] s] b] rr
-    """ env_l where left legs of double-layer Q tensors are contracted with m_l """
-    QA = QA.unfuse_legs(axes=0)  # [[t l] s] b rr
-    QA = QA.swap_gate(axes=(1, 2))  # b X rr
-    QA = QA.fuse_legs(axes=(0, (1, 2)))   # [[t l] s] [b rr]
-    QA = QA.unfuse_legs(axes=0)  # [t l] s [b rr]
-    QA = QA.unfuse_legs(axes=0)  # t l s [b rr]
-    QA = QA.fuse_legs(axes=(1, 2, (0, 3)))  # l s [t [b rr]]
-    mlQA = m_l @ QA  # l' s [t [b rr]]
-    env_l = tensordot(mlQA, QA, axes=((0, 1), (0, 1)), conj=(0, 1))  # [t [b rr]] [t' [b' rr']]
-    env_l = env_l.unfuse_legs(axes=(0, 1))  # t [b rr] t' [b' rr']
-    env_l = env_l.fuse_legs(axes=((0, 2), 1, 3))  # [t t'] [b rr] [b' rr']
-    env_l = env_l.unfuse_legs(axes=(1, 2))  # [t t'] b rr b' rr'
-    env_l = env_l.swap_gate(axes=(1, (2, 4)))  # b x rr rr'
-    env_l = env_l.fuse_legs(axes=(0, (1, 3), (2, 4)))  # [t t'] [b b'] [rr rr']
-    return env_l
-
-
-def con_Q_r(QB, m_r):  # QB -> ll [t [[b r] s]]
-    """ env_r where right legs of double-layer Q tensors are contracted with m_r """
-    QB = QB.unfuse_legs(axes=1)  # ll t [[b r] s]
-    QB = QB.fuse_legs(axes=((0, 1), 2))  # [ll t] [[b r] s]
-    QB = QB.unfuse_legs(axes=1)  # [ll t] [b r] s
-    QB = QB.unfuse_legs(axes=1)  # [ll t] b r s
-    QB = QB.swap_gate(axes=(1, 2))  # b X r
-    QB = QB.fuse_legs(axes=(2, 3, (0, 1)))  # r s [[ll t] b]
-    mrsQB = m_r @ QB  # r' s [ll [t b]]
-    env_r = tensordot(mrsQB, QB, axes=((0, 1), (0, 1)), conj=(0, 1))  # [[ll t] b] [[ll' t'] b']
-    env_r = env_r.unfuse_legs(axes=(0, 1))  # [ll t] b [ll' t'] b'
-    env_r = env_r.fuse_legs(axes=(0, 2, (1, 3)))  # [ll t] [ll' t'] [b b']
-    env_r = env_r.unfuse_legs(axes=(0, 1))  # ll t ll' t' [b b']
-    env_r = env_r.swap_gate(axes=((0, 2), 3))  # ll ll' X t'
-    env_r = env_r.fuse_legs(axes=((0, 2), (1, 3), 4))  # [ll ll'] [t t'] [b b']
-    return env_r
-
-
-def con_Q_t(QA, m_t):  # QA -> [[[t l] s] r] bb
-    """ env_t where top legs of double-layer Q tensors are contracted with m_t """
-    QA = QA.unfuse_legs(axes=0)  # [[t l] s] r bb
-    QA = QA.fuse_legs(axes=(0, (1, 2)))  # [[t l] s] [r bb]
-    QA = QA.unfuse_legs(axes=0)  # [t l] s [r bb]
-    QA = QA.unfuse_legs(axes=0)  # t l s [r bb]
-    QA = QA.swap_gate(axes=(0, 1))  # t X l
-    QA = QA.fuse_legs(axes=(0, 2, (1, 3)))  # t s [l [r bb]]
-    mtsQA = m_t @ QA  # t' s [l [r bb]]
-    env_t = tensordot(mtsQA, QA, axes=((0, 1), (0, 1)), conj=(0, 1))  # [l [r bb]] [l' [r' bb']]
-    env_t = env_t.unfuse_legs(axes=(0, 1))  # l [r bb] l' [r' bb']
-    env_t = env_t.fuse_legs(axes=((0, 2), 1, 3))  # [l l'] [r bb] [r' bb']
-    env_t = env_t.unfuse_legs(axes=(1, 2))  # [l l'] r bb r' bb'
-    env_t = env_t.swap_gate(axes=(3, (2, 4)))  # r' X bb bb'
-    env_t = env_t.fuse_legs(axes=(0, (1, 3), (2, 4))) # [l l'] [r r'] [bb bb']
-    return env_t
-
-
-def con_Q_b(QB, m_b):  # QB -> t [l [[b r] s]]
-    """ env_t where top legs of double-layer Q tensors are contracted with m_t """
-    QB = QB.unfuse_legs(axes=1)  # tt l [[b r] s]
-    QB = QB.swap_gate(axes=(0, 1))  # tt X l
-    QB = QB.fuse_legs(axes=((0, 1), 2))  # [tt l] [[b r] s]
-    QB = QB.unfuse_legs(axes=1)  # [tt l] [b r] s
-    QB = QB.unfuse_legs(axes=1)  # [tt l] b r s
-    QB = QB.fuse_legs(axes=(1, 3, (0, 2)))  # b s [[tt l] r]
-    mbQB = m_b @ QB  # b' s [[tt l] r]
-    env_b = tensordot(mbQB, QB, axes=((0, 1), (0, 1)), conj=(0, 1))  # [[tt l] r] [[tt' l'] r']
-    env_b = env_b.unfuse_legs(axes=(0, 1))  # [tt l] r [tt' l'] r'
-    env_b = env_b.fuse_legs(axes=(0, 2, (1, 3)))  # [tt l] [tt' l'] [r r']
-    env_b = env_b.unfuse_legs(axes=(0, 1))  # tt l tt' l' [r r']
-    env_b = env_b.swap_gate(axes=((0, 2), 1)) # tt tt' X l
-    env_b = env_b.fuse_legs(axes=((0, 2), (1, 3), 4))  # [tt tt'] [l l'] [r r']
-    return env_b
-
 
 def forced_sectorial_truncation(U, L, V, Ds):
     # truncates bond dimensions of different symmetry sectors according to agiven distribution Ds
