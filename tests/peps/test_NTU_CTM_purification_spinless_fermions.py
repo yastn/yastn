@@ -68,9 +68,9 @@ def test_NTU_spinless_finite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0, fix_signs=False):
+    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0, fix_signs=False):
         
-        assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
+        assert step.sweeps % 2 == 0 # stop every 4th step as iteration_step=2
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
@@ -144,9 +144,9 @@ def test_NTU_spinless_infinite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=4, AAb_mode=0):
+    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0):
         
-        assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
+        assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))

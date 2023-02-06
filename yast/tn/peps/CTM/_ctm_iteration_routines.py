@@ -249,7 +249,7 @@ def proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs):
     _, rt = qr(corttm, axes=((0, 1), (2, 3)))
     _, rb = qr(corbbm, axes=((0, 1), (2, 3)))
 
-    out['ph_l_t', ms.nw], out['ph_l_b', ms.nw] = proj_Cor(rt, rb, chi, cutoff, fix_signs)   # projector left-middle
+    out['ph_l_b', ms.nw], out['ph_l_t', ms.sw] = proj_Cor(rt, rb, chi, cutoff, fix_signs)   # projector left-middle
 
     corttm = corttm.transpose(axes=(2, 3, 0, 1))
     corbbm = corbbm.transpose(axes=(2, 3, 0, 1))
@@ -257,7 +257,7 @@ def proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs):
     _, rt = qr(corttm, axes=((0, 1), (2, 3)))
     _, rb = qr(corbbm, axes=((0, 1), (2, 3)))
 
-    out['ph_r_t', ms.ne], out['ph_r_b', ms.ne] = proj_Cor(rt, rb, chi, cutoff, fix_signs)   # projector right-middle
+    out['ph_r_b', ms.ne], out['ph_r_t', ms.se] = proj_Cor(rt, rb, chi, cutoff, fix_signs)   # projector right-middle
     del corttm
     del corbbm
 
@@ -283,12 +283,12 @@ def proj_vertical(env, AAb, chi, cutoff, ms, fix_signs):
     _, rl = qr(corvvm, axes=((0, 1), (2, 3)))
     _, rr = qr(corkkr, axes=((0, 1), (2, 3)))
 
-    out['pv_t_l', ms.nw], out['pv_t_r', ms.nw] = proj_Cor(rl, rr, chi, cutoff, fix_signs) # projector top-middle 
+    out['pv_t_r', ms.nw], out['pv_t_l', ms.ne] = proj_Cor(rl, rr, chi, cutoff, fix_signs) # projector top-middle 
     corvvm = corvvm.transpose(axes=(2, 3, 0, 1))
     corkkr = corkkr.transpose(axes=(2, 3, 0, 1))
     _, rl = qr(corvvm, axes=((0, 1), (2, 3)))
     _, rr = qr(corkkr, axes=((0, 1), (2, 3)))
-    out['pv_b_l', ms.sw], out['pv_b_r', ms.sw] = proj_Cor(rl, rr, chi, cutoff, fix_signs) # projector bottom-middle
+    out['pv_b_r', ms.sw], out['pv_b_l', ms.se] = proj_Cor(rl, rr, chi, cutoff, fix_signs) # projector bottom-middle
     del corvvm
     del corkkr
 
@@ -379,35 +379,42 @@ def move_horizontal(env, AAb, proj, ms):
 
     nw_abv = AAb.nn_site(ms.nw, d='t')
     ne_abv = AAb.nn_site(ms.ne, d='t')
+    sw_bel = AAb.nn_site(ms.sw, d='b')
+    se_bel = AAb.nn_site(ms.se, d='b')
 
-    envn[ms.ne].tl = ncon((env[ms.nw].tl, env[ms.nw].t, proj['ph_l_t', nw_abv]),
+
+    envn[ms.ne].tl = ncon((env[ms.nw].tl, env[ms.nw].t, proj['ph_l_b', nw_abv]),
                                    ([2, 3], [3, 1, -1], [2, 1, -0]))
 
-    tt_l = tensordot(env[ms.nw].l, proj['ph_l_b', nw_abv], axes=(2, 0))
+    tt_l = tensordot(env[ms.nw].l, proj['ph_l_t', ms.nw], axes=(2, 0))
     tt_l = append_a_tl(tt_l, AAb[ms.nw])
-    envn[ms.ne].l = ncon((proj['ph_l_t', ms.nw], tt_l), ([2, 1, -0], [2, 1, -2, -1]))
+    envn[ms.ne].l = ncon((proj['ph_l_b', ms.nw], tt_l), ([2, 1, -0], [2, 1, -2, -1]))
 
-    bb_l = ncon((proj['ph_l_t', ms.sw], env[ms.sw].l), ([1, -1, -0], [1, -2, -3]))
+    bb_l = ncon((proj['ph_l_b', ms.sw], env[ms.sw].l), ([1, -1, -0], [1, -2, -3]))
     bb_l = append_a_bl(bb_l, AAb[ms.sw])
 
-    envn[ms.se].l = ncon((proj['ph_l_b', ms.nw], bb_l), ([2, 1, -2], [-0, -1, 2, 1]))
+    envn[ms.se].l = ncon((proj['ph_l_t', ms.sw], bb_l), ([2, 1, -2], [-0, -1, 2, 1]))
 
-    envn[ms.se].bl = ncon((env[ms.sw].bl, env[ms.sw].b, proj['ph_l_b', ms.sw]),
+    envn[ms.se].bl = ncon((env[ms.sw].bl, env[ms.sw].b, proj['ph_l_t', sw_bel]),
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
 
-    envn[ms.nw].tr = ncon((env[ms.ne].tr, env[ms.ne].t, proj['ph_r_t', ne_abv]),
+    envn[ms.nw].tr = ncon((env[ms.ne].tr, env[ms.ne].t, proj['ph_r_b', ne_abv]),
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
 
-    tt_r = ncon((env[ms.ne].r, proj['ph_r_b', ne_abv]), ([1, -2, -3], [1, -1, -0]))
+ 
+    tt_r = ncon((env[ms.ne].r, proj['ph_r_t', ms.ne]), ([1, -2, -3], [1, -1, -0]))
     tt_r = append_a_tr(tt_r, AAb[ms.ne])
 
-    bb_r = tensordot(env[ms.se].r, proj['ph_r_t', ms.se], axes=(2, 0))
+    envn[ms.nw].r = ncon((tt_r, proj['ph_r_b', ms.ne]),
+                               ([-0, -1, 2, 1], [2, 1, -3]))
+
+    bb_r = tensordot(env[ms.se].r, proj['ph_r_b', ms.se], axes=(2, 0))
     bb_r = append_a_br(bb_r, AAb[ms.se])
 
-    envn[ms.sw].r = tensordot(proj['ph_r_b', ms.ne], bb_r, axes=((1, 0), (1, 0))).fuse_legs(axes=(0, 2, 1))
+    envn[ms.sw].r = tensordot(proj['ph_r_t', ms.se], bb_r, axes=((1, 0), (1, 0))).fuse_legs(axes=(0, 2, 1))
 
     
-    envn[ms.sw].br = ncon((proj['ph_r_b', ms.se], env[ms.se].br, env[ms.se].b), 
+    envn[ms.sw].br = ncon((proj['ph_r_t', se_bel], env[ms.se].br, env[ms.se].b), 
                                ([2, 1, -0], [2, 3], [3, 1, -1]))
 
     envn[ms.ne].tl = envn[ms.ne].tl / envn[ms.ne].tl.norm(p='inf')
@@ -430,32 +437,34 @@ def move_vertical(env, AAb, proj, ms):
 
     nw_left = AAb.nn_site(ms.nw, d='l')
     sw_left = AAb.nn_site(ms.sw, d='l')
+    ne_right = AAb.nn_site(ms.ne, d='r')
+    se_right = AAb.nn_site(ms.se, d='r')
 
-    envn[ms.sw].tl = ncon((env[ms.nw].tl, env[ms.nw].l, proj['pv_t_l', nw_left]), 
+    envn[ms.sw].tl = ncon((env[ms.nw].tl, env[ms.nw].l, proj['pv_t_r', nw_left]), 
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
     
-    ll_t = ncon((proj['pv_t_r', nw_left], env[ms.nw].t), ([1, -1, -0], [1, -2, -3]))
+    ll_t = ncon((proj['pv_t_l', ms.nw], env[ms.nw].t), ([1, -1, -0], [1, -2, -3]))
     ll_t = append_a_tl(ll_t, AAb[ms.nw])
-    envn[ms.sw].t = ncon((ll_t, proj['pv_t_l', ms.nw]), ([-0, -1, 2, 1], [2, 1, -2]))
+    envn[ms.sw].t = ncon((ll_t, proj['pv_t_r', ms.nw]), ([-0, -1, 2, 1], [2, 1, -2]))
 
-    rr_t = tensordot(env[ms.ne].t, proj['pv_t_l', ms.ne], axes=(2, 0))
+    rr_t = tensordot(env[ms.ne].t, proj['pv_t_r', ms.ne], axes=(2, 0))
     rr_t = append_a_tr(rr_t, AAb[ms.ne])
-    envn[ms.se].t = ncon((proj['pv_t_r', ms.nw], rr_t), ([2, 1, -0], [2, 1, -2, -1]))
-    envn[ms.se].tr = ncon((proj['pv_t_r', ms.ne], envn[ms.ne].tr, envn[ms.ne].r), 
+    envn[ms.se].t = ncon((proj['pv_t_l', ms.ne], rr_t), ([2, 1, -0], [2, 1, -2, -1]))
+    envn[ms.se].tr = ncon((proj['pv_t_l', ne_right], envn[ms.ne].tr, envn[ms.ne].r), 
                                ([2, 1, -0], [2, 3], [3, 1, -1]))
     
-    envn[ms.nw].bl = ncon((env[ms.sw].bl, env[ms.sw].l, proj['pv_b_l', sw_left]), 
+    envn[ms.nw].bl = ncon((env[ms.sw].bl, env[ms.sw].l, proj['pv_b_r', sw_left]), 
                                ([1, 3], [3, 2, -1], [1, 2, -0]))
 
-    ll_b = tensordot(env[ms.sw].b, proj['pv_b_r', sw_left], axes=(2, 0))
+    ll_b = tensordot(env[ms.sw].b, proj['pv_b_l', ms.sw], axes=(2, 0))
     ll_b = append_a_bl(ll_b, AAb[ms.sw])
-    envn[ms.nw].b = ncon((ll_b, proj['pv_b_l', ms.sw]), ([2, 1, -2, -1], [2, 1, -0]))
+    envn[ms.nw].b = ncon((ll_b, proj['pv_b_r', ms.sw]), ([2, 1, -2, -1], [2, 1, -0]))
 
-    rr_b = ncon((proj['pv_b_l', ms.se], env[ms.se].b), ([1, -1, -0], [1, -2, -3]))
+    rr_b = ncon((proj['pv_b_r', ms.se], env[ms.se].b), ([1, -1, -0], [1, -2, -3]))
     rr_b = append_a_br(rr_b, AAb[ms.se])
-    envn[ms.ne].b = tensordot(rr_b, proj['pv_b_r', ms.sw], axes=((3, 2), (1, 0)))
+    envn[ms.ne].b = tensordot(rr_b, proj['pv_b_l', ms.se], axes=((3, 2), (1, 0)))
 
-    envn[ms.ne].br = ncon((proj['pv_b_r', ms.se], env[ms.se].br, env[ms.se].r), 
+    envn[ms.ne].br = ncon((proj['pv_b_l', se_right], env[ms.se].br, env[ms.se].r), 
                                ([2, 1, -1], [3, 2], [-0, 1, 3]))
 
     envn[ms.sw].tl = envn[ms.sw].tl/ envn[ms.sw].tl.norm(p='inf')
