@@ -497,8 +497,8 @@ def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
 
     Nx, Ny = AAb.Nx, AAb.Ny
 
-    for y in range(Ny):
-        for ms in AAb.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
+    for y in range(Ny):  # if index is None:  return all windows'; else return windows for a given column (for trajectory='h') and row (for trajectory='v')
+        for ms in AAb.tensors_CtmEnv(trajectory='h')[y]:   #ctm_wndows(trajectory='h', index=y): # horizontal absorption and renormalization
             print('ctm cluster horizontal', ms)
             if cheap_moves is True:
                 proj = proj_horizontal_cheap(env, chi, cutoff, ms, fix_signs)
@@ -506,19 +506,19 @@ def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
                 proj = proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs)
             proj_hor.update(proj)
 
-        for ms in AAb.tensors_CtmEnv(trajectory='h')[y*Nx:(y+1)*Nx]:   # horizontal absorption and renormalization
+        for ms in AAb.tensors_CtmEnv(trajectory='h')[y]:   # horizontal absorption and renormalization
             env = move_horizontal(env, AAb, proj_hor, ms)
 
     proj={}
     for x in range(Nx):
-        for ms in AAb.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
+        for ms in AAb.tensors_CtmEnv(trajectory='v')[x]:   # vertical absorption and renormalization
             print('ctm cluster vertical', ms)
             if cheap_moves is True:
                 proj = proj_vertical_cheap(env, chi, cutoff, ms, fix_signs)
             else:
                 proj = proj_vertical(env, AAb, chi, cutoff, ms, fix_signs)
             proj_ver.update(proj)
-        for ms in AAb.tensors_CtmEnv(trajectory='v')[x*Ny:(x+1)*Ny]:   # vertical absorption and renormalization
+        for ms in AAb.tensors_CtmEnv(trajectory='v')[x]:   # vertical absorption and renormalization
             env = move_vertical(env,  AAb, proj_ver, ms)       
 
     return env, proj_hor, proj_ver       
