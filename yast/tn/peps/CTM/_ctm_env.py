@@ -1,4 +1,5 @@
 from typing import NamedTuple, Tuple
+import numpy as np
 from itertools import accumulate
 from dataclasses import dataclass
 from ....tn import mps
@@ -38,27 +39,37 @@ class CtmEnv(Peps):
         """ 
         Choosing 2x2 ctm windows for horizontal and vertical moves of the CTM of a mxn lattice
         """
-        
-        order = []
-        s = []
-        self.boundary = 'infinite'
-        if trajectory == 'h':
-            for n in range(self.Ny):
-                for m in range(self.Nx): 
-                    order.append(tuple((m, n)))
-        elif trajectory == 'v':
-            for m in range(self.Nx):
-                for n in range(self.Ny):
-                    order.append(tuple((m, n)))
- 
-        for ms in order:
-            site_se = ms
-            site_ne = self.nn_site(site_se, d='t')
-            site_sw = self.nn_site(site_se, d='l')
-            site_nw = self.nn_site(site_se, d='tl')
-            s.append(ctm_window(site_nw, site_ne, site_sw, site_se))
 
-        return s
+        ss = []
+        self.boundary = 'infinite'
+        if trajectory == 'h':  # create columns
+            order = []
+            for n in range(self.Ny):
+                hor = []
+                for m in range(self.Nx): 
+                    hor.append(tuple((m, n)))
+                order.append(hor)
+                
+        elif trajectory == 'v':
+            order = []
+            for m in range(self.Nx):
+                ver = []
+                for n in range(self.Ny):
+                    ver.append(tuple((m, n)))
+                order.append(ver)
+
+        
+        for ms in order:
+            s = []
+            for xs in ms:
+                site_se = xs
+                site_ne = self.nn_site(site_se, d='t')
+                site_sw = self.nn_site(site_se, d='l')
+                site_nw = self.nn_site(site_se, d='tl')
+                s.append(ctm_window(site_nw, site_ne, site_sw, site_se))
+            ss.append(s)
+
+        return ss
 
 @dataclass()
 class Local_CTM_Env: # no more variables than the one given 

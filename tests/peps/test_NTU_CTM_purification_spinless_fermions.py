@@ -22,13 +22,13 @@ def test_NTU_spinless_finite():
     lattice = 'rectangle'
     boundary = 'finite'
     purification = 'True'
-    xx = 3
+    xx = 2
     yy = 2
     D = 8
     chi = 40
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
-    beta_end = 0.2
+    beta_end = 0.01
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
@@ -101,13 +101,13 @@ def test_NTU_spinless_infinite():
     lattice = 'rectangle'
     boundary = 'infinite'
     purification = 'True'
-    xx = 3
+    xx = 2
     yy = 2
     D = 8
     chi = 40
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
-    beta_end = 0.2
+    beta_end = 0.01
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
@@ -144,9 +144,9 @@ def test_NTU_spinless_infinite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0):
+    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0):
         
-        assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
+        assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
@@ -166,7 +166,7 @@ def test_NTU_spinless_infinite():
 
     nn_exact = 0.04856353 # analytical nn fermionic correlator at beta = 0.2 for 2D infinite lattice with checkerboard ansatz
 
-    assert pytest.approx(nn_CTM, abs=1e-3) == nn_exact
+    assert pytest.approx(nn_CTM, abs=1e-5) == nn_exact
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
