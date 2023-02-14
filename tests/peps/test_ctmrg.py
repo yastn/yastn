@@ -58,12 +58,10 @@ def CTM_for_Onsager(psi, Z_exact):
     cutoff = 1e-10 # 
     tol=1e-7
     max_sweeps = 400
-
-    env = init_rand(psi, tc=(0,), Dc=(1,))  # initialization with random tensors 
-
+    
     cf_old = 0
 
-    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0):
+    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0):
         assert step.sweeps % 2 == 0 # stop every 4th step as iteration_step=2
         ops = {'magA1': {'l': sz, 'r': id},
            'magB1': {'l': id, 'r': sz}}
@@ -91,6 +89,7 @@ def test_CTM_loop_1():
     beta = 0.7  # check for a certain inverse temperature
     Z_exact = 0.99016253867 # analytical value of magnetization up to 4 decimal places for beta = 0.8 (2D Classical Ising)
     psi = peps.Peps(net.lattice, net.dims, net.boundary)
+
     for ms in psi.sites():
         psi[ms] = create_ZZ_ten(sz, beta) 
     CTM_for_Onsager(psi, Z_exact)

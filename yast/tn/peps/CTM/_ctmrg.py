@@ -20,7 +20,7 @@ class CTMRGout(NamedTuple):
     proj_vert : dict = 0
 
 
-def ctmrg_(psi, env, chi, cutoff, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None):
+def ctmrg_(psi, chi, cutoff, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, env=None):
     r"""
     Perform CTMRG sweeps until convergence, starting from PEPS and environmental corner and edge tensors :code:`psi`.
 
@@ -67,6 +67,12 @@ def ctmrg_(psi, env, chi, cutoff, max_sweeps=1, iterator_step=None, AAb_mode=0, 
         Includes fields:
         :code:`sweeps` number of performed dmrg sweeps.
     """
+    
+    # if environment is not given, start with a random initialization
+    pconfig =  psi[0,0].config
+    if env is None:
+        env = init_rand(psi, tc = ((0,) * pconfig.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
+
     tmp = _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, fix_signs)
     return tmp if iterator_step else next(tmp)
 
@@ -87,11 +93,11 @@ def _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, fix_sign
     for sweep in range(1, max_sweeps + 1):
         logging.info('CTM sweep: %2d', sweep)
         cheap_moves=False
-        env, proj_hor, proj_ver = CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs)
+        env, proj = CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs)
 
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
-            yield CTMRGout(sweep, env, proj_hor, proj_ver)
-    yield CTMRGout(sweep, env, proj_hor, proj_ver)
+            yield CTMRGout(sweep, env, proj)
+    yield CTMRGout(sweep, env, proj)
     
 
 

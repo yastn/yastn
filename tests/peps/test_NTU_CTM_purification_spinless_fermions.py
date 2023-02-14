@@ -28,7 +28,7 @@ def test_NTU_spinless_finite():
     chi = 40
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
-    beta_end = 0.01
+    beta_end = 0.1
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
@@ -61,16 +61,14 @@ def test_NTU_spinless_finite():
     max_sweeps=50 
     tol = 1e-7   # difference of some observable must be lower than tolernace
 
-    env = init_rand(psi, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
-
     ops = {'cdagc': {'l': fcdag, 'r': fc},
            'ccdag': {'l': fc, 'r': fcdag}}
 
     cf_energy_old = 0
 
-    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0, fix_signs=False):
+    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0, fix_signs=False):
         
-        assert step.sweeps % 2 == 0 # stop every 4th step as iteration_step=2
+        assert step.sweeps % 1 == 0 # stop every 4th step as iteration_step=2
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
@@ -83,16 +81,16 @@ def test_NTU_spinless_finite():
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
-    bd_h = peps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
+    bd_h = peps.Bond(site_0 = (1, 0), site_1=(1, 1), dirn='h')
     bd_v = peps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
 
-    nn_CTM_bond_1 = 0.5*(abs(nn_bond(psi, env, ops['cdagc'], bd_h)) + abs(nn_bond(psi, env, ops['ccdag'], bd_h)))
-    nn_CTM_bond_2 = 0.5*(abs(nn_bond(psi, env, ops['cdagc'], bd_v)) + abs(nn_bond(psi, env, ops['ccdag'], bd_v)))
+    nn_CTM_bond_1 = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc'], bd_h)) + abs(nn_bond(psi, step.env, ops['ccdag'], bd_h)))
+    nn_CTM_bond_2 = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc'], bd_v)) + abs(nn_bond(psi, step.env, ops['ccdag'], bd_v)))
 
     print(nn_CTM_bond_1, nn_CTM_bond_2)
 
-    nn_bond_1_exact = 0.04934701696955436 # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (1,1) and (1,2)
-    nn_bond_2_exact = 0.049185554490429065  # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (0,0) and (1,0)
+    nn_bond_1_exact = 0.024916998656238976 # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (1,1) and (1,2)
+    nn_bond_2_exact = 0.02491699865623899  # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (0,0) and (1,0)
     assert pytest.approx(nn_CTM_bond_1, abs=1e-6) == nn_bond_1_exact
     assert pytest.approx(nn_CTM_bond_2, abs=1e-6) == nn_bond_2_exact
 
@@ -101,13 +99,13 @@ def test_NTU_spinless_infinite():
     lattice = 'rectangle'
     boundary = 'infinite'
     purification = 'True'
-    xx = 2
+    xx = 3
     yy = 2
     D = 8
     chi = 40
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
-    beta_end = 0.01
+    beta_end = 0.2
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
@@ -137,14 +135,12 @@ def test_NTU_spinless_infinite():
     max_sweeps=50 
     tol = 1e-7   # difference of some observable must be lower than tolernace
 
-    env = init_rand(psi, tc = ((0,) * fid.config.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
-
     ops = {'cdagc': {'l': fcdag, 'r': fc},
            'ccdag': {'l': fc, 'r': fcdag}}
 
     cf_energy_old = 0
 
-    for step in ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0):
+    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0):
         
         assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
@@ -170,6 +166,8 @@ def test_NTU_spinless_infinite():
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
+
     test_NTU_spinless_finite()
     test_NTU_spinless_infinite()
+
 

@@ -11,7 +11,7 @@ from yast import tensordot, ncon, svd_with_truncation, qr, vdot
 import yast.tn.peps as peps
 from yast.tn.peps._doublePepsTensor import DoublePepsTensor
 import numpy as np
-from ._ctm_env import CtmEnv
+from ._ctm_env import CtmEnv, Proj, Local_Projector_Env
 
 def append_a_bl(tt, AAb):
     """
@@ -222,18 +222,16 @@ def proj_Cor(rt, rb, chi, cutoff, fix_signs):
     """
 
     rr = tensordot(rt, rb, axes=((1, 2), (1, 2)))
-    u, s, v = svd_with_truncation(rr, axes=(0, 1), tol=cutoff, D_total=chi, fix_signs=fix_signs)
+    u, s, v = svd_with_truncation(rr, axes=(0, 1), sU =rt.get_signature()[1], tol=cutoff, D_total=chi, fix_signs=fix_signs)
     s = s.rsqrt()
     pt = s.broadcast(tensordot(rb, v, axes=(0, 1), conj=(0, 1)), axis=2)
     pb = s.broadcast(tensordot(rt, u, axes=(0, 0), conj=(0, 1)), axis=2)
     return pt, pb
 
 
-def proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs):
+def proj_horizontal(env, out, AAb, chi, cutoff, ms, fix_signs):
 
-    # ms in the CTM unit cell 
-    out = {}
-    
+    # ms in the CTM unit cell     
     cortlm = fcor_tl(env, AAb[ms.nw], ms.nw) # contracted matrix at top-left constructing a projector with cut in the middle
     cortrm = fcor_tr(env, AAb[ms.ne], ms.ne) # contracted matrix at top-right constructing a projector with cut in the middle
     corttm = tensordot(cortrm, cortlm, axes=((0, 1), (2, 3))) # top half for constructing middle projector
@@ -249,7 +247,7 @@ def proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs):
     _, rt = qr(corttm, axes=((0, 1), (2, 3)))
     _, rb = qr(corbbm, axes=((0, 1), (2, 3)))
 
-    out['ph_l_b', ms.nw], out['ph_l_t', ms.sw] = proj_Cor(rt, rb, chi, cutoff, fix_signs)   # projector left-middle
+    out[ms.nw].hlb, out[ms.sw].hlt = proj_Cor(rt, rb, chi, cutoff, fix_signs)   # projector left-middle
 
     corttm = corttm.transpose(axes=(2, 3, 0, 1))
     corbbm = corbbm.transpose(axes=(2, 3, 0, 1))
@@ -257,16 +255,14 @@ def proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs):
     _, rt = qr(corttm, axes=((0, 1), (2, 3)))
     _, rb = qr(corbbm, axes=((0, 1), (2, 3)))
 
-    out['ph_r_b', ms.ne], out['ph_r_t', ms.se] = proj_Cor(rt, rb, chi, cutoff, fix_signs)   # projector right-middle
+    out[ms.ne].hrb, out[ms.se].hrt = proj_Cor(rt, rb, chi, cutoff, fix_signs)   # projector right-middle
     del corttm
     del corbbm
 
     return out
 
 
-def proj_vertical(env, AAb, chi, cutoff, ms, fix_signs):
-
-    out = {}
+def proj_vertical(env, out, AAb, chi, cutoff, ms, fix_signs):
     
     cortlm = fcor_tl(env, AAb[ms.nw], ms.nw) # contracted matrix at top-left constructing a projector with a cut in the middle
     corblm = fcor_bl(env, AAb[ms.sw], ms.sw) # contracted matrix at bottom-left constructing a projector with a cut in the middle
@@ -283,19 +279,19 @@ def proj_vertical(env, AAb, chi, cutoff, ms, fix_signs):
     _, rl = qr(corvvm, axes=((0, 1), (2, 3)))
     _, rr = qr(corkkr, axes=((0, 1), (2, 3)))
 
-    out['pv_t_r', ms.nw], out['pv_t_l', ms.ne] = proj_Cor(rl, rr, chi, cutoff, fix_signs) # projector top-middle 
+    out[ms.nw].vtr, out[ms.ne].vtl = proj_Cor(rl, rr, chi, cutoff, fix_signs) # projector top-middle 
     corvvm = corvvm.transpose(axes=(2, 3, 0, 1))
     corkkr = corkkr.transpose(axes=(2, 3, 0, 1))
     _, rl = qr(corvvm, axes=((0, 1), (2, 3)))
     _, rr = qr(corkkr, axes=((0, 1), (2, 3)))
-    out['pv_b_r', ms.sw], out['pv_b_l', ms.se] = proj_Cor(rl, rr, chi, cutoff, fix_signs) # projector bottom-middle
+    out[ms.sw].vbr, out[ms.se].vbl = proj_Cor(rl, rr, chi, cutoff, fix_signs) # projector bottom-middle
     del corvvm
     del corkkr
 
     return out
 
 
-def proj_horizontal_cheap(env, chi, cutoff, ms, fix_signs):
+def proj_horizontal_cheap(env, out, chi, cutoff, ms, fix_signs):
     # ref https://arxiv.org/pdf/1607.04016.pdf
     out = {}
 
@@ -306,7 +302,7 @@ def proj_horizontal_cheap(env, chi, cutoff, ms, fix_signs):
 
     rrt = r1@r2
     Ut, St, Vt = svd_with_truncation(rrt, tol=1e-15)
-    sSt = St.rsqrt()
+    sSt = St.sqrt()
     Ut = sSt.broadcast(Ut, axis=1)
     Vt = sSt.broadcast(Vt, axis=0)
 
@@ -320,7 +316,7 @@ def proj_horizontal_cheap(env, chi, cutoff, ms, fix_signs):
 
     rrb = r4@r3
     Ub, Sb, Vb = svd_with_truncation(rrb, tol=1e-15)
-    sSb = Sb.rsqrt()
+    sSb = Sb.sqrt()
     Ub = sSb.broadcast(Ub, axis=1)
     Vb = sSb.broadcast(Vb, axis=0)
 
@@ -333,7 +329,7 @@ def proj_horizontal_cheap(env, chi, cutoff, ms, fix_signs):
     return out
 
 
-def proj_vertical_cheap(env, chi, cutoff, ms, fix_signs):
+def proj_vertical_cheap(env, out, chi, cutoff, ms, fix_signs):
     # ref https://arxiv.org/pdf/1607.04016.pdf
 
     out = {}
@@ -345,7 +341,7 @@ def proj_vertical_cheap(env, chi, cutoff, ms, fix_signs):
 
     rrl = r2@r1
     Ul, Sl, Vl = svd_with_truncation(rrl, tol=1e-15)
-    sSl = Sl.rsqrt()
+    sSl = Sl.sqrt()
     Ul = sSl.broadcast(Ul, axis=1)
     Vl = sSl.broadcast(Vl, axis=0)
 
@@ -359,7 +355,7 @@ def proj_vertical_cheap(env, chi, cutoff, ms, fix_signs):
 
     rrr = r3@r4
     Ur, Sr, Vr = svd_with_truncation(rrr, tol=1e-15)
-    sSr = Sr.rsqrt()
+    sSr = Sr.sqrt()
     Ur = sSr.broadcast(Ur, axis=1)
     Vr = sSr.broadcast(Vr, axis=0)
 
@@ -373,48 +369,47 @@ def proj_vertical_cheap(env, chi, cutoff, ms, fix_signs):
 
 
 
-def move_horizontal(env, AAb, proj, ms):
+def move_horizontal(envn, env, AAb, proj, ms):
     """ Perform horizontal CTMRG move on a mxn lattice. """
-    envn = env.copy()
+
+   # envn = env.copy()
 
     nw_abv = AAb.nn_site(ms.nw, d='t')
     ne_abv = AAb.nn_site(ms.ne, d='t')
     sw_bel = AAb.nn_site(ms.sw, d='b')
     se_bel = AAb.nn_site(ms.se, d='b')
-
-
-    envn[ms.ne].tl = ncon((env[ms.nw].tl, env[ms.nw].t, proj['ph_l_b', nw_abv]),
+    
+    envn[ms.ne].tl = ncon((env[ms.nw].tl, env[ms.nw].t, proj[nw_abv].hlb),
                                    ([2, 3], [3, 1, -1], [2, 1, -0]))
 
-    tt_l = tensordot(env[ms.nw].l, proj['ph_l_t', ms.nw], axes=(2, 0))
+    tt_l = tensordot(env[ms.nw].l, proj[ms.nw].hlt, axes=(2, 0))
     tt_l = append_a_tl(tt_l, AAb[ms.nw])
-    envn[ms.ne].l = ncon((proj['ph_l_b', ms.nw], tt_l), ([2, 1, -0], [2, 1, -2, -1]))
+    envn[ms.ne].l = ncon((proj[ms.nw].hlb, tt_l), ([2, 1, -0], [2, 1, -2, -1]))
 
-    bb_l = ncon((proj['ph_l_b', ms.sw], env[ms.sw].l), ([1, -1, -0], [1, -2, -3]))
+    bb_l = ncon((proj[ms.sw].hlb, env[ms.sw].l), ([1, -1, -0], [1, -2, -3]))
     bb_l = append_a_bl(bb_l, AAb[ms.sw])
 
-    envn[ms.se].l = ncon((proj['ph_l_t', ms.sw], bb_l), ([2, 1, -2], [-0, -1, 2, 1]))
+    envn[ms.se].l = ncon((proj[ms.sw].hlt, bb_l), ([2, 1, -2], [-0, -1, 2, 1]))
 
-    envn[ms.se].bl = ncon((env[ms.sw].bl, env[ms.sw].b, proj['ph_l_t', sw_bel]),
+    envn[ms.se].bl = ncon((env[ms.sw].bl, env[ms.sw].b, proj[sw_bel].hlt),
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
 
-    envn[ms.nw].tr = ncon((env[ms.ne].tr, env[ms.ne].t, proj['ph_r_b', ne_abv]),
+    envn[ms.nw].tr = ncon((env[ms.ne].tr, env[ms.ne].t, proj[ne_abv].hrb),
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
-
  
-    tt_r = ncon((env[ms.ne].r, proj['ph_r_t', ms.ne]), ([1, -2, -3], [1, -1, -0]))
+    tt_r = ncon((env[ms.ne].r, proj[ms.ne].hrt), ([1, -2, -3], [1, -1, -0]))
     tt_r = append_a_tr(tt_r, AAb[ms.ne])
 
-    envn[ms.nw].r = ncon((tt_r, proj['ph_r_b', ms.ne]),
+    envn[ms.nw].r = ncon((tt_r, proj[ms.ne].hrb),
                                ([-0, -1, 2, 1], [2, 1, -3]))
 
-    bb_r = tensordot(env[ms.se].r, proj['ph_r_b', ms.se], axes=(2, 0))
+    bb_r = tensordot(env[ms.se].r, proj[ms.se].hrb, axes=(2, 0))
     bb_r = append_a_br(bb_r, AAb[ms.se])
 
-    envn[ms.sw].r = tensordot(proj['ph_r_t', ms.se], bb_r, axes=((1, 0), (1, 0))).fuse_legs(axes=(0, 2, 1))
+    envn[ms.sw].r = tensordot(proj[ms.se].hrt, bb_r, axes=((1, 0), (1, 0))).fuse_legs(axes=(0, 2, 1))
 
     
-    envn[ms.sw].br = ncon((proj['ph_r_t', se_bel], env[ms.se].br, env[ms.se].b), 
+    envn[ms.sw].br = ncon((proj[se_bel].hrt, env[ms.se].br, env[ms.se].b), 
                                ([2, 1, -0], [2, 3], [3, 1, -1]))
 
     envn[ms.ne].tl = envn[ms.ne].tl / envn[ms.ne].tl.norm(p='inf')
@@ -430,41 +425,42 @@ def move_horizontal(env, AAb, proj, ms):
 
 
 
-def move_vertical(env, AAb, proj, ms):
+def move_vertical(envn, env, AAb, proj, ms):
     """ Perform vertical CTMRG on a mxn lattice """
 
-    envn = env.copy()
+   # envn = env.copy()
 
     nw_left = AAb.nn_site(ms.nw, d='l')
     sw_left = AAb.nn_site(ms.sw, d='l')
     ne_right = AAb.nn_site(ms.ne, d='r')
     se_right = AAb.nn_site(ms.se, d='r')
 
-    envn[ms.sw].tl = ncon((env[ms.nw].tl, env[ms.nw].l, proj['pv_t_r', nw_left]), 
+    envn[ms.sw].tl = ncon((env[ms.nw].tl, env[ms.nw].l, proj[nw_left].vtr), 
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
     
-    ll_t = ncon((proj['pv_t_l', ms.nw], env[ms.nw].t), ([1, -1, -0], [1, -2, -3]))
+    ll_t = ncon((proj[ms.nw].vtl, env[ms.nw].t), ([1, -1, -0], [1, -2, -3]))
     ll_t = append_a_tl(ll_t, AAb[ms.nw])
-    envn[ms.sw].t = ncon((ll_t, proj['pv_t_r', ms.nw]), ([-0, -1, 2, 1], [2, 1, -2]))
+    envn[ms.sw].t = ncon((ll_t, proj[ms.nw].vtr), ([-0, -1, 2, 1], [2, 1, -2]))
 
-    rr_t = tensordot(env[ms.ne].t, proj['pv_t_r', ms.ne], axes=(2, 0))
+    rr_t = tensordot(env[ms.ne].t, proj[ms.ne].vtr, axes=(2, 0))
     rr_t = append_a_tr(rr_t, AAb[ms.ne])
-    envn[ms.se].t = ncon((proj['pv_t_l', ms.ne], rr_t), ([2, 1, -0], [2, 1, -2, -1]))
-    envn[ms.se].tr = ncon((proj['pv_t_l', ne_right], envn[ms.ne].tr, envn[ms.ne].r), 
+    envn[ms.se].t = ncon((proj[ms.ne].vtl, rr_t), ([2, 1, -0], [2, 1, -2, -1]))
+
+    envn[ms.se].tr = ncon((proj[ne_right].vtl, env[ms.ne].tr, env[ms.ne].r), 
                                ([2, 1, -0], [2, 3], [3, 1, -1]))
     
-    envn[ms.nw].bl = ncon((env[ms.sw].bl, env[ms.sw].l, proj['pv_b_r', sw_left]), 
+    envn[ms.nw].bl = ncon((env[ms.sw].bl, env[ms.sw].l, proj[sw_left].vbr), 
                                ([1, 3], [3, 2, -1], [1, 2, -0]))
 
-    ll_b = tensordot(env[ms.sw].b, proj['pv_b_l', ms.sw], axes=(2, 0))
+    ll_b = tensordot(env[ms.sw].b, proj[ms.sw].vbl, axes=(2, 0))
     ll_b = append_a_bl(ll_b, AAb[ms.sw])
-    envn[ms.nw].b = ncon((ll_b, proj['pv_b_r', ms.sw]), ([2, 1, -2, -1], [2, 1, -0]))
+    envn[ms.nw].b = ncon((ll_b, proj[ms.sw].vbr), ([2, 1, -2, -1], [2, 1, -0]))
 
-    rr_b = ncon((proj['pv_b_r', ms.se], env[ms.se].b), ([1, -1, -0], [1, -2, -3]))
+    rr_b = ncon((proj[ms.se].vbr, env[ms.se].b), ([1, -1, -0], [1, -2, -3]))
     rr_b = append_a_br(rr_b, AAb[ms.se])
-    envn[ms.ne].b = tensordot(rr_b, proj['pv_b_l', ms.se], axes=((3, 2), (1, 0)))
+    envn[ms.ne].b = tensordot(rr_b, proj[ms.se].vbl, axes=((3, 2), (1, 0)))
 
-    envn[ms.ne].br = ncon((proj['pv_b_l', se_right], env[ms.se].br, env[ms.se].r), 
+    envn[ms.ne].br = ncon((proj[se_right].vbl, env[ms.se].br, env[ms.se].r), 
                                ([2, 1, -1], [3, 2], [-0, 1, 3]))
 
     envn[ms.sw].tl = envn[ms.sw].tl/ envn[ms.sw].tl.norm(p='inf')
@@ -491,37 +487,57 @@ def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
     and renormalization starting with a 2x2 cell in the top-left corner and 
     subsequently going downward for (Ny-1) steps and then (Nx-1) steps to the right.      
     """
-    proj={}
-    proj_hor = {}
-    proj_ver = {}
+    proj = Proj(lattice=AAb.lattice, dims=AAb.dims, boundary=AAb.boundary) 
+    for ms in proj.sites():
+        proj[ms] = Local_Projector_Env()
 
     Nx, Ny = AAb.Nx, AAb.Ny
 
+    print('###############################################################')
+    print('######## Calculating projectors for horizontal move ###########')
+    print('###############################################################')
+
+    envn_hor = env.copy()
     for y in range(Ny):  # if index is None:  return all windows'; else return windows for a given column (for trajectory='h') and row (for trajectory='v')
         for ms in AAb.tensors_CtmEnv(trajectory='h')[y]:   #ctm_wndows(trajectory='h', index=y): # horizontal absorption and renormalization
-            print('ctm cluster horizontal', ms)
+            print('projector calculation ctm cluster horizontal', ms)
             if cheap_moves is True:
-                proj = proj_horizontal_cheap(env, chi, cutoff, ms, fix_signs)
+                proj = proj_horizontal_cheap(env, proj, chi, cutoff, ms, fix_signs)
             else:
-                proj = proj_horizontal(env, AAb, chi, cutoff, ms, fix_signs)
-            proj_hor.update(proj)
+                proj = proj_horizontal(env, proj, AAb, chi, cutoff, ms, fix_signs)
 
+    print('####################################')
+    print('######## Horizontal Move ###########')
+    print('####################################')
+
+    for y in range(Ny): 
         for ms in AAb.tensors_CtmEnv(trajectory='h')[y]:   # horizontal absorption and renormalization
-            env = move_horizontal(env, AAb, proj_hor, ms)
+            print('move ctm cluster horizontal', ms)
+            envn_hor = move_horizontal(envn_hor, env, AAb, proj, ms)
 
-    proj={}
+    envn_ver = envn_hor.copy()
+  
+    print('#############################################################')
+    print('######## Calculating projectors for vertical move ###########')
+    print('#############################################################')
+    
     for x in range(Nx):
         for ms in AAb.tensors_CtmEnv(trajectory='v')[x]:   # vertical absorption and renormalization
-            print('ctm cluster vertical', ms)
+            print('projector calculation ctm cluster vertical', ms)
             if cheap_moves is True:
-                proj = proj_vertical_cheap(env, chi, cutoff, ms, fix_signs)
+                proj = proj_vertical_cheap(envn_hor, proj, chi, cutoff, ms, fix_signs)
             else:
-                proj = proj_vertical(env, AAb, chi, cutoff, ms, fix_signs)
-            proj_ver.update(proj)
-        for ms in AAb.tensors_CtmEnv(trajectory='v')[x]:   # vertical absorption and renormalization
-            env = move_vertical(env,  AAb, proj_ver, ms)       
+                proj = proj_vertical(envn_hor, proj, AAb, chi, cutoff, ms, fix_signs)
 
-    return env, proj_hor, proj_ver       
+    print('###################################')
+    print('######### Vertical Move ###########')
+    print('###################################')
+    for x in range(Nx):
+        for ms in AAb.tensors_CtmEnv(trajectory='v')[x]:   # vertical absorption and renormalization
+            print('move ctm cluster vertical', ms)
+            envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, ms)
+
+    return envn_ver, proj    
 
 
 def fPEPS_l(A, op):
