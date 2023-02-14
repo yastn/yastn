@@ -49,12 +49,12 @@ def correlator(x1, y1, x2, y2, Nx, Ny, t, mu, beta):
     return val
 
 
-Nx = 3
-Ny = 3
+Nx = 2
+Ny = 2
 t = 1
-beta = 3
+beta = 0.1
 mu = 0
-x1, y1, x2, y2 = 2, 0, 2, 1
+x1, y1, x2, y2 = 1, 0, 1, 1
 x11, y11, x21, y21 = 0, 1, 1, 1
 
 c1 = correlator(x1, y1, x2, y2, Nx, Ny, t, mu, beta)

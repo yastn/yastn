@@ -7,6 +7,7 @@ from ....tn import mps
 from yast.tn.peps import Peps
 from yast.tn.peps.operators.gates import match_ancilla_1s
 from yast import rand, tensordot
+import copy
 
 class ctm_window(NamedTuple):
     """ elements of a 2x2 window for the CTM algorithm. """
@@ -34,6 +35,11 @@ class CtmEnv(Peps):
         assert site in self._sites, "Site is inconsistent with lattice"
         self._data[self.site2index(site)] = local_env
 
+    def copy(self):
+        env = CtmEnv(lattice=self.lattice, dims=self.dims, boundary=self.boundary)
+        env._data = {k : v.copy() for k, v in self._data.items()}        
+        return env
+
 
     def tensors_CtmEnv(self, trajectory):
         """ 
@@ -57,7 +63,6 @@ class CtmEnv(Peps):
                 for n in range(self.Ny):
                     ver.append(tuple((m, n)))
                 order.append(ver)
-
         
         for ms in order:
             s = []
@@ -68,11 +73,59 @@ class CtmEnv(Peps):
                 site_nw = self.nn_site(site_se, d='tl')
                 s.append(ctm_window(site_nw, site_ne, site_sw, site_se))
             ss.append(s)
+        
+    
+        if self.lattice == 'checkerboard':
+            ss.clear()
+            ss = [[(ctm_window(nw=(0, 0), ne=(0, 1), sw=(1, 0), se=(1, 1))), (ctm_window(nw=(1, 0), ne=(1, 1), sw=(0, 0), se=(0, 1)))]]
 
         return ss
 
+
+class Proj(Peps):
+    def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
+        super().__init__(lattice=lattice, dims=dims, boundary=boundary)
+        #self.ket = ket
+        #self.bra = ket if bra is None else bra
+        ## assert that ket and bra are matching ....
+        inds = set(self.site2index(site) for site in self._sites)
+        self._data = {ind: None for ind in inds}  # I don't know what to do with ket and bra; for now I am importing the double peps tensors 
+                                                  # within the CtmEnv structure
+
+    def __getitem__(self, site):
+        assert site in self._sites, "Site is inconsistent with lattice"
+        return self._data[self.site2index(site)]
+
+
+    def __setitem__(self, site, local_env):
+        assert site in self._sites, "Site is inconsistent with lattice"
+        self._data[self.site2index(site)] = local_env
+
+    def copy(self):
+        proj_new = Proj(lattice=self.lattice, dims=self.dims, boundary=self.boundary)
+        proj_new._data = {k : v.copy() for k, v in self._data.items()}        
+        return proj_new
+
+
 @dataclass()
-class Local_CTM_Env: # no more variables than the one given 
+class Local_Projector_Env(): # no more variables than the one given 
+    # data class for projectors labelled by a single lattice site calculate during ctm renormalization step
+
+    hlt : any = None   # horizontal left top
+    hlb : any = None   # horizontal left bottom
+    hrt : any = None    # horizontal right top
+    hrb : any = None    # horizontal right bottom
+    vtl : any = None     # vertical top left
+    vtr : any = None    # vertical top right
+    vbl : any = None    # vertical bottom left
+    vbr : any = None     # vertical bottom right
+
+    def copy(self):
+        return Local_Projector_Env(hlt=self.hlt, hlb=self.hlb, hrt=self.hrt, hrb=self.hrb, vtl=self.vtl, vtr=self.vtr, vbl=self.vbl, vbr=self.vbr)
+
+
+@dataclass()
+class Local_CTM_Env(): # no more variables than the one given 
     tl : any = None
     tr : any = None
     bl : any = None
@@ -80,7 +133,10 @@ class Local_CTM_Env: # no more variables than the one given
     t : any = None
     b : any = None
     l : any = None
-    b : any = None
+    r : any = None
+
+    def copy(self):
+        return Local_CTM_Env(tl=self.tl, tr=self.tr, bl=self.bl, br=self.br, t=self.t, b=self.b, l=self.l, r=self.r)
 
 
 def CtmEnv2Mps(net, env, index, index_type):
@@ -115,9 +171,8 @@ def CtmEnv2Mps(net, env, index, index_type):
 def init_rand(A, tc, Dc):
     """ Initialize random CTMRG environments of peps tensors A. """
 
-
     config = A[(0,0)].config 
-    env= {}
+    env= CtmEnv(A.lattice, A.dims, A.boundary)
 
     for ms in A.sites():
         B = A[ms].copy()
