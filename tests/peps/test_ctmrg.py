@@ -43,9 +43,11 @@ def create_ZZ_ten(sz, betas):
 
 def matrix_inverse_random():
     """ Returns a n*n random matrix and its inverse """
-    a = yast.rand(config=cfg, s=(1, -1), D=(2, 2))
+
+    ss = (1,-1)
+    a = yast.rand(config=cfg, s=ss, D=(2, 2))
     inv_tu = np.linalg.inv(a.to_numpy())
-    b = yast.Tensor(config=cfg, s=(1, -1))
+    b = yast.Tensor(config=cfg, s=ss)
     b.set_block(val=inv_tu, Ds=(2, 2))
 
     return a, b
@@ -61,8 +63,8 @@ def CTM_for_Onsager(psi, Z_exact):
     
     cf_old = 0
 
-    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0):
-        assert step.sweeps % 1 == 0 # stop every 4th step as iteration_step=2
+    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0):
+        assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
         ops = {'magA1': {'l': sz, 'r': id},
            'magB1': {'l': id, 'r': sz}}
 
@@ -101,19 +103,40 @@ def not_working_test_CTM_loop_2():
     Z_exact = 0.99016253867 # analytical value of magnetization up to 4 decimal places for beta = 0.8 (2D Classical Ising)
     A = create_ZZ_ten(sz, beta)
     B = create_ZZ_ten(sz, beta)
-    [h_rg, inv_h_rg] = matrix_inverse_random()
-    [v_rg, inv_v_rg] = matrix_inverse_random()
-    A = yast.ncon((A, h_rg), ((-0, -1, -2, 1, -4), (1, -3)))
-    B = yast.ncon((inv_h_rg, B), ((-1, 1), (-0, 1, -2, -3, -4)))
-    A = yast.ncon((A, v_rg), ((1, -1, -2, -3, -4), (1, -0)))
-    B = yast.ncon((inv_v_rg, B), ((-2, 1), (-0, -1, 1, -3, -4)))
-    psi = psi.psi(net.lattice, net.dims, net.boundary)
-    psi = {(0,0): A, (0,1): B, (1,0):B, (1,1):A}
+    [h_rg1, inv_h_rg1] = matrix_inverse_random()
+    [h_rg2, inv_h_rg2] = matrix_inverse_random()
+    [v_rg1, inv_v_rg1] = matrix_inverse_random()
+    [v_rg2, inv_v_rg2] = matrix_inverse_random()
+
+    print(A.s)
+    print(B.s)
+
+
+    A = yast.ncon((A, h_rg1), ((-0, -1, -2, 1, -4), (1, -3)))
+    A = yast.ncon((A, h_rg2), ((-0, 1, -2, -3, -4), (-1, 1)))
+    A = yast.ncon((A, v_rg1), ((1, -1, -2, -3, -4), (1, -0)))
+    A = yast.ncon((A, v_rg2), ((-0, -1, 1, -3, -4), (-2, 1)))
+
+    B = yast.ncon((inv_h_rg1, B), ((-1, 1), (-0, 1, -2, -3, -4)))
+    B = yast.ncon((inv_h_rg2, B), ((1, -3), (-0, -1, -2, 1, -4)))
+    B = yast.ncon((inv_v_rg1, B), ((-2, 1), (-0, -1, 1, -3, -4)))
+    B = yast.ncon((inv_v_rg2, B), ((1, -0), (1, -1, -2, -3, -4)))
+
+    psi = peps.Peps(net.lattice, net.dims, net.boundary)
+
+    print(A.s)
+    print(B.s)
+
+    psi[0,0] = A
+    psi[0,1] = B
+    # psi[1,0] = B
+    # psi[1,1] = A
+
     CTM_for_Onsager(psi, Z_exact)
 
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
     test_CTM_loop_1()
-    #test_CTM_loop_2()
+   # not_working_test_CTM_loop_2()
 
