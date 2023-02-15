@@ -94,6 +94,14 @@ def fcor_tl(env, AAb, ind):
     return append_a_tl(cortln, AAb)
 
 def fcor_tr(env, AAb, ind):
+    """print(AAb.A.unfuse_legs(axes=(0,1,2,3,4,5)).get_shape())
+    print(AAb.Ab.unfuse_legs(axes=(0,1,2,3,4,5)).get_shape())
+    print(ind)
+    print(env[ind].t.get_shape())
+    print(env[ind].tr.get_shape())
+    xcc
+  """
+
     """ Creates extended top right corner. """
     cortrn = tensordot(env[ind].t, env[ind].tr, axes=(2, 0))
     cortrn = tensordot(cortrn, env[ind].r, axes=(2, 0))
