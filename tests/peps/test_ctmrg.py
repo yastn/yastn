@@ -61,8 +61,8 @@ def CTM_for_Onsager(psi, Z_exact):
     
     cf_old = 0
 
-    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0):
-        assert step.sweeps % 2 == 0 # stop every 4th step as iteration_step=2
+    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0):
+        assert step.sweeps % 1 == 0 # stop every 4th step as iteration_step=2
         ops = {'magA1': {'l': sz, 'r': id},
            'magB1': {'l': id, 'r': sz}}
 
