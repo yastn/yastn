@@ -7,7 +7,7 @@ The routines include swap_gates to incorporate fermionic anticommutation relatio
 """
 
 import yast
-from yast import tensordot, ncon, svd_with_truncation, qr, vdot
+from yast import tensordot, ncon, svd_with_truncation, qr, vdot, initialize
 import yast.tn.peps as peps
 from yast.tn.peps._doublePepsTensor import DoublePepsTensor
 import numpy as np
@@ -378,23 +378,26 @@ def move_horizontal(envn, env, AAb, proj, ms):
     ne_abv = AAb.nn_site(ms.ne, d='t')
     sw_bel = AAb.nn_site(ms.sw, d='b')
     se_bel = AAb.nn_site(ms.se, d='b')
-    
-    envn[ms.ne].tl = ncon((env[ms.nw].tl, env[ms.nw].t, proj[nw_abv].hlb),
+
+    if nw_abv is not None:
+        envn[ms.ne].tl = ncon((env[ms.nw].tl, env[ms.nw].t, proj[nw_abv].hlb),
                                    ([2, 3], [3, 1, -1], [2, 1, -0]))
 
     tt_l = tensordot(env[ms.nw].l, proj[ms.nw].hlt, axes=(2, 0))
     tt_l = append_a_tl(tt_l, AAb[ms.nw])
     envn[ms.ne].l = ncon((proj[ms.nw].hlb, tt_l), ([2, 1, -0], [2, 1, -2, -1]))
-
+  
     bb_l = ncon((proj[ms.sw].hlb, env[ms.sw].l), ([1, -1, -0], [1, -2, -3]))
     bb_l = append_a_bl(bb_l, AAb[ms.sw])
 
     envn[ms.se].l = ncon((proj[ms.sw].hlt, bb_l), ([2, 1, -2], [-0, -1, 2, 1]))
-
-    envn[ms.se].bl = ncon((env[ms.sw].bl, env[ms.sw].b, proj[sw_bel].hlt),
+    
+    if sw_bel is not None:
+        envn[ms.se].bl = ncon((env[ms.sw].bl, env[ms.sw].b, proj[sw_bel].hlt),
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
 
-    envn[ms.nw].tr = ncon((env[ms.ne].tr, env[ms.ne].t, proj[ne_abv].hrb),
+    if ne_abv is not None:
+        envn[ms.nw].tr = ncon((env[ms.ne].tr, env[ms.ne].t, proj[ne_abv].hrb),
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
  
     tt_r = ncon((env[ms.ne].r, proj[ms.ne].hrt), ([1, -2, -3], [1, -1, -0]))
@@ -408,8 +411,8 @@ def move_horizontal(envn, env, AAb, proj, ms):
 
     envn[ms.sw].r = tensordot(proj[ms.se].hrt, bb_r, axes=((1, 0), (1, 0))).fuse_legs(axes=(0, 2, 1))
 
-    
-    envn[ms.sw].br = ncon((proj[se_bel].hrt, env[ms.se].br, env[ms.se].b), 
+    if se_bel is not None:
+        envn[ms.sw].br = ncon((proj[se_bel].hrt, env[ms.se].br, env[ms.se].b), 
                                ([2, 1, -0], [2, 3], [3, 1, -1]))
 
     envn[ms.ne].tl = envn[ms.ne].tl / envn[ms.ne].tl.norm(p='inf')
@@ -435,7 +438,8 @@ def move_vertical(envn, env, AAb, proj, ms):
     ne_right = AAb.nn_site(ms.ne, d='r')
     se_right = AAb.nn_site(ms.se, d='r')
 
-    envn[ms.sw].tl = ncon((env[ms.nw].tl, env[ms.nw].l, proj[nw_left].vtr), 
+    if nw_left is not None:
+        envn[ms.sw].tl = ncon((env[ms.nw].tl, env[ms.nw].l, proj[nw_left].vtr), 
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
     
     ll_t = ncon((proj[ms.nw].vtl, env[ms.nw].t), ([1, -1, -0], [1, -2, -3]))
@@ -446,10 +450,12 @@ def move_vertical(envn, env, AAb, proj, ms):
     rr_t = append_a_tr(rr_t, AAb[ms.ne])
     envn[ms.se].t = ncon((proj[ms.ne].vtl, rr_t), ([2, 1, -0], [2, 1, -2, -1]))
 
-    envn[ms.se].tr = ncon((proj[ne_right].vtl, env[ms.ne].tr, env[ms.ne].r), 
+    if ne_right is not None:
+        envn[ms.se].tr = ncon((proj[ne_right].vtl, env[ms.ne].tr, env[ms.ne].r), 
                                ([2, 1, -0], [2, 3], [3, 1, -1]))
     
-    envn[ms.nw].bl = ncon((env[ms.sw].bl, env[ms.sw].l, proj[sw_left].vbr), 
+    if sw_left is not None:
+        envn[ms.nw].bl = ncon((env[ms.sw].bl, env[ms.sw].l, proj[sw_left].vbr), 
                                ([1, 3], [3, 2, -1], [1, 2, -0]))
 
     ll_b = tensordot(env[ms.sw].b, proj[ms.sw].vbl, axes=(2, 0))
@@ -460,7 +466,8 @@ def move_vertical(envn, env, AAb, proj, ms):
     rr_b = append_a_br(rr_b, AAb[ms.se])
     envn[ms.ne].b = tensordot(rr_b, proj[ms.se].vbl, axes=((3, 2), (1, 0)))
 
-    envn[ms.ne].br = ncon((proj[se_right].vbl, env[ms.se].br, env[ms.se].r), 
+    if se_right is not None:
+        envn[ms.ne].br = ncon((proj[se_right].vbl, env[ms.se].br, env[ms.se].r), 
                                ([2, 1, -1], [3, 2], [-0, 1, 3]))
 
     envn[ms.sw].tl = envn[ms.sw].tl/ envn[ms.sw].tl.norm(p='inf')
@@ -473,6 +480,32 @@ def move_vertical(envn, env, AAb, proj, ms):
     envn[ms.ne].br = envn[ms.ne].br/ envn[ms.ne].br.norm(p='inf')
 
     return envn
+
+
+def trivial_projector(a, b, c, dirn):
+
+    if dirn == 'hlt':
+        la, lb, lc = a.get_legs(axis=2), b.get_legs(axis=0), c.get_legs(axis=0)
+    elif dirn == 'hlb':
+        la, lb, lc = a.get_legs(axis=0), b.get_legs(axis=2), c.get_legs(axis=1)
+    elif dirn == 'hrt':
+        la, lb, lc = a.get_legs(axis=0), b.get_legs(axis=0), c.get_legs(axis=1)
+    elif dirn == 'hrb':
+        la, lb, lc = a.get_legs(axis=2), b.get_legs(axis=2), c.get_legs(axis=0)
+    elif dirn == 'vtl':
+        la, lb, lc = a.get_legs(axis=0), b.get_legs(axis=1), c.get_legs(axis=1)
+    elif dirn == 'vbl':
+        la, lb, lc = a.get_legs(axis=2), b.get_legs(axis=1), c.get_legs(axis=0)
+    elif dirn == 'vtr':
+        la, lb, lc = a.get_legs(axis=2), b.get_legs(axis=3), c.get_legs(axis=0)
+    elif dirn == 'vbr':
+        la, lb, lc = a.get_legs(axis=0), b.get_legs(axis=3), c.get_legs(axis=1)
+
+    tmp = initialize.ones(b.A.config, legs=[la.conj(), lb.conj(), lc.conj()])
+
+    return tmp
+
+
 
 def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
     r""" 
@@ -491,7 +524,10 @@ def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
     for ms in proj.sites():
         proj[ms] = Local_Projector_Env()
 
-    Nx, Ny = AAb.Nx, AAb.Ny
+    Nx, Ny = AAb.Nx, AAb.Ny # here Nx, Ny serves as a guide for providing correct ctm windows and maybe
+                            # varied upon need; does not have to represent actual ldimensions of the lattice
+    if AAb.boundary == 'finite':
+        Nx, Ny = Nx-1, Ny-1
 
     print('###############################################################')
     print('######## Calculating projectors for horizontal move ###########')
@@ -506,6 +542,15 @@ def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
             else:
                 proj = proj_horizontal(env, proj, AAb, chi, cutoff, ms, fix_signs)
 
+    if AAb.boundary == 'finite': 
+        # we need proj[0,0].hlt, proj[0, Ny-1].hrt, proj[Nx-1, 0].hlb, proj[Nx-1, Ny-1].hrb as trivial projectors
+        for ms in range(Ny):
+            proj[0,ms].hlt = trivial_projector(env[0,ms].l, AAb[0,ms], env[0,ms+1].tl, dirn='hlt')
+            proj[Nx,ms].hlb = trivial_projector(env[Nx,ms].l, AAb[Nx,ms], env[Nx,ms+1].bl, dirn='hlb')
+            proj[0, ms+1].hrt = trivial_projector(env[0,ms+1].r, AAb[0,ms+1], env[0,ms].tr, dirn='hrt')
+            proj[Nx, ms+1].hrb = trivial_projector(env[Nx,ms+1].r, AAb[Nx,ms+1], env[Nx,ms].br, dirn='hrb')
+
+    
     print('####################################')
     print('######## Horizontal Move ###########')
     print('####################################')
@@ -528,6 +573,14 @@ def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
                 proj = proj_vertical_cheap(envn_hor, proj, chi, cutoff, ms, fix_signs)
             else:
                 proj = proj_vertical(envn_hor, proj, AAb, chi, cutoff, ms, fix_signs)
+
+    if AAb.boundary == 'finite': 
+
+        for ms in range(Nx):
+            proj[ms,0].vtl = trivial_projector(envn_hor[ms,0].t, AAb[ms,0], envn_hor[ms+1,0].tl, dirn='vtl')
+            proj[ms+1,0].vbl = trivial_projector(envn_hor[ms+1,0].b, AAb[ms+1,0], envn_hor[ms,0].bl, dirn='vbl')
+            proj[ms,Ny].vtr = trivial_projector(envn_hor[ms, Ny].t, AAb[ms,Ny], envn_hor[ms+1,Ny].tr, dirn='vtr')
+            proj[ms+1,Ny].vbr = trivial_projector(envn_hor[ms+1,Ny].b, AAb[ms+1,Ny], envn_hor[ms,Ny].br, dirn='vbr')
 
     print('###################################')
     print('######### Vertical Move ###########')

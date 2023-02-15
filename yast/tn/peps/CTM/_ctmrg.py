@@ -82,7 +82,7 @@ def _ctmrg_(psi, env, chi, cutoff, max_sweeps, iterator_step, AAb_mode, fix_sign
     """ Generator for ctmrg_(). """
     psi = check_consistency_tensors(psi) # to check if A has the desired fused form of legs i.e. t l b r [s a]
 
-    AAb = CtmEnv(lattice=psi.lattice, dims=psi.dims, boundary='infinite')   
+    AAb = CtmEnv(lattice=psi.lattice, dims=psi.dims, boundary=psi.boundary)   
 
     for ms in psi.sites():
         AAb[ms] = fPEPS_2layers(psi[ms])

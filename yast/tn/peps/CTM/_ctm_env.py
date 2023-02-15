@@ -17,6 +17,7 @@ class ctm_window(NamedTuple):
     se : Tuple
 
 class CtmEnv(Peps):
+    r""" Geometric information about the lattice provided to ctm tensors """
     def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
         super().__init__(lattice=lattice, dims=dims, boundary=boundary)
         #self.ket = ket
@@ -47,22 +48,41 @@ class CtmEnv(Peps):
         """
 
         ss = []
-        self.boundary = 'infinite'
+
         if trajectory == 'h':  # create columns
             order = []
-            for n in range(self.Ny):
-                hor = []
-                for m in range(self.Nx): 
-                    hor.append(tuple((m, n)))
-                order.append(hor)
-                
+
+            if self.boundary == 'infinite':
+                for n in range(self.Ny):
+                    hor = []
+                    for m in range(self.Nx): 
+                        hor.append(tuple((m, n)))
+                    order.append(hor)
+
+            elif self.boundary == 'finite':
+                for n in range(self.Ny-1):
+                    hor =[]
+                    for m in range(self.Nx-1):
+                        hor.append(tuple((m+1, n+1)))
+                    order.append(hor)
+
         elif trajectory == 'v':
             order = []
-            for m in range(self.Nx):
-                ver = []
-                for n in range(self.Ny):
-                    ver.append(tuple((m, n)))
-                order.append(ver)
+
+            if self.boundary == 'infinite':
+                for m in range(self.Nx):
+                    ver = []
+                    for n in range(self.Ny):
+                        ver.append(tuple((m, n))) 
+                    order.append(ver)
+            elif self.boundary == 'finite':
+                for m in range(self.Nx-1):
+                    ver = []
+                    for n in range(self.Ny-1):
+                        ver.append(tuple((m+1, n+1))) 
+                    order.append(ver)
+            print(order)
+
         
         for ms in order:
             s = []
@@ -208,8 +228,6 @@ def init_rand(A, tc, Dc):
         env[ms].r = env[ms].r.fuse_legs(axes=(0, (1, 2), 3))
 
     return env
-
-
 
 def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
     """ 
