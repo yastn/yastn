@@ -528,6 +528,8 @@ def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
                             # varied upon need; does not have to represent actual ldimensions of the lattice
     if AAb.boundary == 'finite':
         Nx, Ny = Nx-1, Ny-1
+    if AAb.lattice == 'checkerboard':
+        Nx, Ny = 1, 1
 
     print('###############################################################')
     print('######## Calculating projectors for horizontal move ###########')
