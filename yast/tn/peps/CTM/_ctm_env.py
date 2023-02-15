@@ -97,7 +97,7 @@ class CtmEnv(Peps):
     
         if self.lattice == 'checkerboard':
             ss.clear()
-            ss = [[(ctm_window(nw=(0, 0), ne=(0, 1), sw=(1, 0), se=(1, 1))), (ctm_window(nw=(1, 0), ne=(1, 1), sw=(0, 0), se=(0, 1)))]]
+            ss = [[ctm_window(nw=(0, 0), ne=(0, 1), sw=(1, 0), se=(1, 1)),ctm_window(nw=(1, 0), ne=(1, 1), sw=(0, 0), se=(0, 1))]]
 
         return ss
 
