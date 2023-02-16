@@ -20,7 +20,7 @@ class CTMRGout(NamedTuple):
     proj_vert : dict = 0
 
 
-def ctmrg_(psi, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, env=None, opts_svd=None):
+def ctmrg(psi, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, env=None, opts_svd=None):
     r"""
     Perform CTMRG sweeps until convergence, starting from PEPS and environmental corner and edge tensors :code:`psi`.
 
@@ -73,13 +73,13 @@ def ctmrg_(psi, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, en
     if env is None:
         env = init_rand(psi, tc = ((0,) * pconfig.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
 
-    tmp = _ctmrg_(psi, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd)
+    tmp = _ctmrg(psi, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd)
     return tmp if iterator_step else next(tmp)
 
 
-def _ctmrg_(psi, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd=None):
+def _ctmrg(psi, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd=None):
 
-    """ Generator for ctmrg_(). """
+    """ Generator for ctmrg(). """
     psi = check_consistency_tensors(psi) # to check if A has the desired fused form of legs i.e. t l b r [s a]
 
     AAb = CtmEnv(lattice=psi.lattice, dims=psi.dims, boundary=psi.boundary)   

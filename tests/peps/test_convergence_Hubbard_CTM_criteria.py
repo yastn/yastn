@@ -9,7 +9,7 @@ import time
 from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
 from yast.tn.peps.evolution import evolution_step_, gates_homogeneous
 from yast.tn.peps import initialize_peps_purification
-from yast.tn.peps.ctm import nn_avg, ctmrg_, init_rand, one_site_avg, Local_CTM_Env, nn_bond
+from yast.tn.peps.ctm import nn_avg, ctmrg, init_rand, one_site_avg, Local_CTM_Env, nn_bond
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg
@@ -73,7 +73,7 @@ def not_test_NTU_spinfull_finite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(tpeps, env, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0):
+    for step in ctmrg(tpeps, env, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0):
         
         assert step.sweeps % 1 == 0 # stop every 4th step as iteration_step=4
             

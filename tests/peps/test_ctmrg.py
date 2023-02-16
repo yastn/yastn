@@ -1,12 +1,14 @@
-""" ctmrg test on 2D Classical Ising model with CTMRG  """
-""" Tests the expectation values with CTM using analytical dense psi tensors (upto numerical presisions) for 2D Ising model with 0 transverse field (Onsager solution) """
+""" 
+Test ctmrg on 2D Classical Ising model.
+Calculate expectation values using ctm for analytical dense peps tensors
+of 2D Ising model with zero transverse field (Onsager solution)
+"""
 import logging
 import numpy as np
 import pytest
 import yast
-from yast import ncon, tensordot
 import yast.tn.peps as peps
-from yast.tn.peps.ctm import nn_avg, ctmrg_, init_rand
+from yast.tn.peps.ctm import nn_avg, ctmrg
 
 try:
     from .configs import config_dense as cfg
@@ -14,21 +16,16 @@ try:
 except ImportError:
     from configs import config_dense as cfg
 
-opt = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
-sz, id = opt.z(), opt.I()
-net = peps.Peps(lattice='checkerboard', boundary='infinite')
 
-
-def create_ZZ_ten(sz, betas):
-    """ Creates the psi tensor for a certain beta. """
-    L = ncon((sz, sz), ((-0, -1), (-2, -3)))
-    L = L.fuse_legs(axes = ((0, 2), (1, 3)))
-    D, S = yast.eigh(L, axes = (0, 1))
-    D = yast.exp(D, step=0.5*betas) 
-    U = yast.ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
+def create_Ising_tensor(sz, beta):
+    """ Creates peps tensor for given beta. """
+    L = yast.ncon((sz, sz), ((-0, -2), (-1, -3)))
+    L = L.fuse_legs(axes=((0, 1), (2, 3)))
+    D, S = yast.eigh(L, axes=(0, 1))
+    D = yast.exp(D, step=beta / 2) 
+    U = yast.ncon((S, D, S), ((-1, 1), (1, 2), (-3, 2)), conjs=(0, 0, 1))
     U = U.unfuse_legs(axes=(0, 1))
-    U = U.transpose(axes=(0, 2, 1, 3))
-    U, S, V = yast.svd_with_truncation(U, axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15, Uaxis=1, Vaxis=1)
+    U, S, V = yast.svd_with_truncation(U, axes = ((0, 2), (1, 3)), sU = -1, tol = 1e-15, Uaxis=1, Vaxis=1)
     S = S.sqrt()
     GA = S.broadcast(U, axis=1)
     GB = S.broadcast(V, axis=1)
@@ -37,107 +34,90 @@ def create_ZZ_ten(sz, betas):
     T = yast.tensordot(T, GB, axes=(3, 0))
     T = yast.tensordot(T, GA, axes=(4, 0))
     T = T.fuse_legs(axes=(1, 2, 3, 4, (0, 5)))
-
     return T
 
 
-def matrix_inverse_random():
-    """ Returns a n*n random matrix and its inverse """
-
-    ss = (1,-1)
+def gauges_random():
+    """ Returns a 2 x 2 dense random matrix and its inverse """
+    ss = (1, -1)
     a = yast.rand(config=cfg, s=ss, D=(2, 2))
     inv_tu = np.linalg.inv(a.to_numpy())
     b = yast.Tensor(config=cfg, s=ss)
     b.set_block(val=inv_tu, Ds=(2, 2))
-
     return a, b
 
-def CTM_for_Onsager(psi, Z_exact):
-    """ Asserts CTM expectation values with analytical values. """
-    """ Convergence criteria based on energy """
+
+def ctm_for_Onsager(psi, opt, Z_exact):
+    """ Compares ctm expectation values with analytical result. """
 
     chi = 40 # max environmental bond dimension
     tol = 1e-10 # singular values of svd truncation of projectors
     tol_exp = 1e-7 # tolerance for expectation values
     max_sweeps = 400
-    
+
     cf_old = 0
     opts_svd = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg_(psi, max_sweeps, iterator_step=2, AAb_mode=0, opts_svd=opts_svd):
-        assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
-        ops = {'magA1': {'l': sz, 'r': id},
-           'magB1': {'l': id, 'r': sz}}
+    ops = {'magA1': {'l': opt.z(), 'r': opt.I()},
+           'magB1': {'l': opt.I(), 'r': opt.z()}}
 
-        ob_hor, ob_ver =  nn_avg(psi, step.env, ops)
-        cf = 0.25 * (abs(ob_hor.get('magA1')) + abs(ob_hor.get('magB1')) +  abs(ob_ver.get('magA1'))+abs(ob_ver.get('magB1')))
+    for step in ctmrg(psi, max_sweeps, iterator_step=2, AAb_mode=0, opts_svd=opts_svd):
+        assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
+
+        ob_hor, ob_ver = nn_avg(psi, step.env, ops)
+        cf = 0.25 * (abs(ob_hor.get('magA1')) + abs(ob_hor.get('magB1')) + abs(ob_ver.get('magA1')) + abs(ob_ver.get('magB1')))
         print("expectation value: ", cf)
         if abs(cf - cf_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
         cf_old = cf
-
-    assert pytest.approx(cf, rel=1e-3) == Z_exact
-
-    ops = {'magA1': {'l': sz, 'r': id},
-           'magB1': {'l': id, 'r': sz}}
-    ob_hor, ob_ver =  nn_avg(psi, step.env, ops)    
-    cf = 0.25 * (abs(ob_hor.get('magA1')) + abs(ob_hor.get('magB1')) +  abs(ob_ver.get('magA1'))+abs(ob_ver.get('magB1')))
-    print("expectation value: ", cf)
-        
     assert pytest.approx(cf, rel=1e-3) == Z_exact
 
 
-def test_CTM_loop_1():
+def test_ctm_loop():
     """ Calculate magnetization for classical 2D Ising model and compares with the exact result. """
     beta = 0.7  # check for a certain inverse temperature
-    Z_exact = 0.99016253867 # analytical value of magnetization up to 4 decimal places for beta = 0.8 (2D Classical Ising)
-    psi = peps.Peps(net.lattice, net.dims, net.boundary)
+    Z_exact = 0.99016253867 # analytical value of magnetization up to 4 decimal places for beta = 0.7 (2D Classical Ising)
 
-    for ms in psi.sites():
-        psi[ms] = create_ZZ_ten(sz, beta) 
-    CTM_for_Onsager(psi, Z_exact)
+    opt = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
+
+    psi = peps.Peps(lattice='checkerboard', boundary='infinite')
+    psi[(0, 0)] = create_Ising_tensor(opt.z(), beta)
+    psi[(0, 1)] = create_Ising_tensor(opt.z(), beta)
+
+    ctm_for_Onsager(psi, opt, Z_exact)
 
 
-def not_working_test_CTM_loop_2():
+def test_ctm_loop_with_gauges():
     """ Calculate magnetization for classical 2D Ising model and compares with the exact result. """
-    beta = 0.7 # check for a ceratin inverse temperature
-    Z_exact = 0.99016253867 # analytical value of magnetization up to 4 decimal places for beta = 0.8 (2D Classical Ising)
-    A = create_ZZ_ten(sz, beta)
-    B = create_ZZ_ten(sz, beta)
-    [h_rg1, inv_h_rg1] = matrix_inverse_random()
-    [h_rg2, inv_h_rg2] = matrix_inverse_random()
-    [v_rg1, inv_v_rg1] = matrix_inverse_random()
-    [v_rg2, inv_v_rg2] = matrix_inverse_random()
+    beta = 0.7  # check for a certain inverse temperature
+    Z_exact = 0.99016253867 # analytical value of magnetization up to 4 decimal places for beta = 0.7 (2D Classical Ising)
 
-    print(A.s)
-    print(B.s)
+    opt = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
 
+    psi = peps.Peps(lattice='checkerboard', boundary='infinite')
+    psi[(0, 0)] = create_Ising_tensor(opt.z(), beta)
+    psi[(0, 1)] = create_Ising_tensor(opt.z(), beta)
 
-    A = yast.ncon((A, h_rg1), ((-0, -1, -2, 1, -4), (1, -3)))
-    A = yast.ncon((A, h_rg2), ((-0, 1, -2, -3, -4), (-1, 1)))
-    A = yast.ncon((A, v_rg1), ((1, -1, -2, -3, -4), (1, -0)))
-    A = yast.ncon((A, v_rg2), ((-0, -1, 1, -3, -4), (-2, 1)))
+    h_rg1, inv_h_rg1 = gauges_random()
+    h_rg2, inv_h_rg2 = gauges_random()
+    v_rg1, inv_v_rg1 = gauges_random()
+    v_rg2, inv_v_rg2 = gauges_random()
 
-    B = yast.ncon((inv_h_rg1, B), ((-1, 1), (-0, 1, -2, -3, -4)))
-    B = yast.ncon((inv_h_rg2, B), ((1, -3), (-0, -1, -2, 1, -4)))
-    B = yast.ncon((inv_v_rg1, B), ((-2, 1), (-0, -1, 1, -3, -4)))
-    B = yast.ncon((inv_v_rg2, B), ((1, -0), (1, -1, -2, -3, -4)))
+    psi[(0, 0)] = yast.ncon((psi[(0, 0)], h_rg1), ((-0, -1, -2, 1, -4), (1, -3)))
+    psi[(0, 0)] = yast.ncon((psi[(0, 0)], h_rg2), ((-0, 1, -2, -3, -4), (-1, 1)))
+    psi[(0, 0)] = yast.ncon((psi[(0, 0)], v_rg1), ((1, -1, -2, -3, -4), (1, -0)))
+    psi[(0, 0)] = yast.ncon((psi[(0, 0)], v_rg2), ((-0, -1, 1, -3, -4), (-2, 1)))
 
-    psi = peps.Peps(net.lattice, net.dims, net.boundary)
+    psi[(0, 1)] = yast.ncon((inv_h_rg1, psi[(0, 1)]), ((-1, 1), (-0, 1, -2, -3, -4)))
+    psi[(0, 1)] = yast.ncon((inv_h_rg2, psi[(0, 1)]), ((1, -3), (-0, -1, -2, 1, -4)))
+    psi[(0, 1)] = yast.ncon((inv_v_rg1, psi[(0, 1)]), ((-2, 1), (-0, -1, 1, -3, -4)))
+    psi[(0, 1)] = yast.ncon((inv_v_rg2, psi[(0, 1)]), ((1, -0), (1, -1, -2, -3, -4)))
 
-    print(A.s)
-    print(B.s)
-
-    psi[0,0] = A
-    psi[0,1] = B
-    # psi[1,0] = B
-    # psi[1,1] = A
-
-    CTM_for_Onsager(psi, Z_exact)
+    ctm_for_Onsager(psi, opt, Z_exact)
 
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
-    test_CTM_loop_1()
-   # not_working_test_CTM_loop_2()
+    test_ctm_loop()
+    test_ctm_loop_with_gauges()
 

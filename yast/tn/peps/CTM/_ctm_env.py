@@ -20,21 +20,7 @@ class CtmEnv(Peps):
     r""" Geometric information about the lattice provided to ctm tensors """
     def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
         super().__init__(lattice=lattice, dims=dims, boundary=boundary)
-        #self.ket = ket
-        #self.bra = ket if bra is None else bra
-        ## assert that ket and bra are matching ....
-        inds = set(self.site2index(site) for site in self._sites)
-        self._data = {ind: None for ind in inds}  # I don't know what to do with ket and bra; for now I am importing the double peps tensors 
-                                                  # within the CtmEnv structure
 
-    def __getitem__(self, site):
-        assert site in self._sites, "Site is inconsistent with lattice"
-        return self._data[self.site2index(site)]
-
-
-    def __setitem__(self, site, local_env):
-        assert site in self._sites, "Site is inconsistent with lattice"
-        self._data[self.site2index(site)] = local_env
 
     def copy(self):
         env = CtmEnv(lattice=self.lattice, dims=self.dims, boundary=self.boundary)
@@ -93,8 +79,7 @@ class CtmEnv(Peps):
                 site_nw = self.nn_site(site_se, d='tl')
                 s.append(ctm_window(site_nw, site_ne, site_sw, site_se))
             ss.append(s)
-        
-    
+
         if self.lattice == 'checkerboard':
             ss.clear()
             ss = [[ctm_window(nw=(0, 0), ne=(0, 1), sw=(1, 0), se=(1, 1)),ctm_window(nw=(1, 0), ne=(1, 1), sw=(0, 0), se=(0, 1))]]
@@ -105,25 +90,10 @@ class CtmEnv(Peps):
 class Proj(Peps):
     def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
         super().__init__(lattice=lattice, dims=dims, boundary=boundary)
-        #self.ket = ket
-        #self.bra = ket if bra is None else bra
-        ## assert that ket and bra are matching ....
-        inds = set(self.site2index(site) for site in self._sites)
-        self._data = {ind: None for ind in inds}  # I don't know what to do with ket and bra; for now I am importing the double peps tensors 
-                                                  # within the CtmEnv structure
-
-    def __getitem__(self, site):
-        assert site in self._sites, "Site is inconsistent with lattice"
-        return self._data[self.site2index(site)]
-
-
-    def __setitem__(self, site, local_env):
-        assert site in self._sites, "Site is inconsistent with lattice"
-        self._data[self.site2index(site)] = local_env
 
     def copy(self):
         proj_new = Proj(lattice=self.lattice, dims=self.dims, boundary=self.boundary)
-        proj_new._data = {k : v.copy() for k, v in self._data.items()}        
+        proj_new._data = {k : v.copy() for k, v in self._data.items()}
         return proj_new
 
 
