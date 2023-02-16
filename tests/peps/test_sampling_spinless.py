@@ -9,7 +9,7 @@ import time
 from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
 from yast.tn.peps.evolution import evolution_step_, gates_homogeneous
 from yast.tn.peps import initialize_peps_purification
-from yast.tn.peps.ctm import sample, nn_bond, CtmEnv2Mps, nn_avg, ctmrg_, init_rand, one_site_avg, Local_CTM_Env
+from yast.tn.peps.ctm import sample, nn_bond, CtmEnv2Mps, nn_avg, ctmrg, init_rand, one_site_avg, Local_CTM_Env
 
 from yast.tn.mps import Env2, Env3
 
@@ -71,7 +71,7 @@ def test_sampling_spinless():
     cf_energy_old = 0
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg_(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
+    for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 4th step as iteration_step=4
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)

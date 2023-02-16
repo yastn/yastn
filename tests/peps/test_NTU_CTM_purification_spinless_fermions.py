@@ -9,7 +9,7 @@ import time
 from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea
 from yast.tn.peps.evolution import evolution_step_, gates_homogeneous
 from yast.tn.peps import initialize_peps_purification
-from yast.tn.peps.ctm import nn_avg, ctmrg_, init_rand, nn_bond
+from yast.tn.peps.ctm import nn_avg, ctmrg, init_rand, nn_bond
 try:
     from .configs import config_U1_R_fermionic as cfg
     # cfg is used by pytest to inject different backends and divices
@@ -69,7 +69,7 @@ def test_NTU_spinless_finite():
 
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg_(psi, max_sweeps, iterator_step=2, AAb_mode=0, fix_signs=False, opts_svd=opts_svd_ctm):
+    for step in ctmrg(psi, max_sweeps, iterator_step=2, AAb_mode=0, fix_signs=False, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
@@ -146,7 +146,7 @@ def test_NTU_spinless_infinite():
 
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg_(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
+    for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
