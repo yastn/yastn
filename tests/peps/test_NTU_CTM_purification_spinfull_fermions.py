@@ -158,7 +158,7 @@ def test_NTU_spinfull_infinite():
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        psi, _ =  evolution_step_(psi, gates, D, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
+        psi, _ =  evolution_step_(psi, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -174,9 +174,9 @@ def test_NTU_spinfull_infinite():
     cf_energy_old = 0
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg_(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
+    for step in ctmrg_(psi, max_sweeps, iterator_step=2, AAb_mode=0, opts_svd=opts_svd_ctm):
         
-        assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
+        assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
 
         doc, _, _ = one_site_avg(psi, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
 
