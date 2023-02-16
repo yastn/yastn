@@ -54,12 +54,13 @@ def test_NTU_spinfull_finite():
     gates = gates_homogeneous(psi, g_nn, g_loc)
 
     time_steps = round(beta_end / dbeta)
+    opts_svd_ntu = {'D_total': D, 'tol_block': 1e-15}
 
     for nums in range(time_steps):
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        psi, _ =  evolution_step_(psi, gates, D, step, tr_mode, env_type='NTU') 
+        psi, _ =  evolution_step_(psi, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -74,10 +75,10 @@ def test_NTU_spinfull_finite():
 
     cf_energy_old = 0
 
-    opts_svd = {'D_total': chi, 'tol': tol}
+    opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
 
-    for step in ctmrg_(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd):
+    for step in ctmrg_(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
 
@@ -150,14 +151,14 @@ def test_NTU_spinfull_infinite():
         psi = initialize_peps_purification(fid, net) # initialized at infinite temperature
     
     gates = gates_homogeneous(psi, g_nn, g_loc)
-
-
     time_steps = round(beta_end / dbeta)
+    opts_svd_ntu = {'D_total': D, 'tol_block': 1e-15}
+
     for nums in range(time_steps):
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        psi, _ =  evolution_step_(psi, gates, D, step, tr_mode, env_type='NTU') 
+        psi, _ =  evolution_step_(psi, gates, D, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -171,9 +172,9 @@ def test_NTU_spinfull_infinite():
            'ccdag_dn': {'l': fc_dn, 'r': fcdag_dn}}
 
     cf_energy_old = 0
-    opts_svd = {'D_total': chi, 'tol': tol}
+    opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg_(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd):
+    for step in ctmrg_(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
 

@@ -51,25 +51,27 @@ def test_sampling_spinless():
         psi = initialize_peps_purification(fid, net) # initialized at infinite temperature
 
     gates = gates_homogeneous(psi, g_nn, g_loc)
-
     time_steps = round(beta_end / dbeta)
+    opts_svd_ntu = {'D_total': Ds, 'tol_block': 1e-15}
+
     for nums in range(time_steps):
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        psi, _ =  evolution_step_(psi, gates, Ds, step, tr_mode, env_type='NTU') 
+        psi, _ =  evolution_step_(psi, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
 
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
-    cutoff = 1e-10
+    tol = 1e-10
     max_sweeps=50 
-    tol = 1e-7   # difference of some observable must be lower than tolernace
+    tol_exp = 1e-7   # difference of some observable must be lower than tolernace
 
     ops = {'cdagc': {'l': fcdag, 'r': fc},
            'ccdag': {'l': fc, 'r': fcdag}}
 
     cf_energy_old = 0
+    opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0):
+    for step in ctmrg_(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 4th step as iteration_step=4
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
@@ -80,7 +82,7 @@ def test_sampling_spinless():
         cf_energy = - (cdagc + ccdag) * (2 * xx * yy - xx - yy)
 
         print("Energy : ", cf_energy)
-        if abs(cf_energy - cf_energy_old) < tol:
+        if abs(cf_energy - cf_energy_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 

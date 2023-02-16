@@ -10,13 +10,17 @@ from yast.tn.peps.operators.gates import trivial_tensor, match_ancilla_1s, match
 from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_legs, ncon, eigh_with_truncation, eye
 from ._ntu import env_NTU
 
-def ntu_machine(peps, gate, Ds, truncation_mode, step, env_type):
+def ntu_machine(peps, gate, truncation_mode, step, env_type, opts_svd=None):
     # step can be svd-step, one-step or two-step
     # application of nearest neighbor gate and subsequent optimization of peps tensor using NTU
+
+    if opts_svd is None:
+        opts_svd = {'D_total':10, 'tol_block':1e-15}  # D_total = 10 chosen arbitrarily
+
     QA, QB, RA, RB = apply_nn_gate(peps, gate)
 
     if step == "svd-update":
-        MA, MB = truncation_step(RA, RB, Ds, normalize=True)
+        MA, MB = truncation_step(RA, RB, opts_svd=opts_svd, normalize=True)
         peps[gate.bond.site_0], peps[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
         info = {}
         return peps, info
@@ -24,10 +28,11 @@ def ntu_machine(peps, gate, Ds, truncation_mode, step, env_type):
         if env_type=='NTU':
             g = env_NTU(peps, gate.bond, QA, QB, dirn=gate.bond.dirn)
         info={}
-        MA, MB, opt_error, optim, svd_error = truncate_and_optimize(g, RA, RB, Ds, truncation_mode)
+        MA, MB, opt_error, optim, svd_error = truncate_and_optimize(g, RA, RB, truncation_mode, opts_svd=opts_svd)
         if step == 'two-step':  # else 'one-step'
-            MA_int, MB_int, _, _, _ = truncate_and_optimize(g, RA, RB, int(2*Ds), truncation_mode)
-            MA_2, MB_2, opt_error_2, optim_2, svd_error_2 = truncate_and_optimize(g, MA_int, MB_int, Ds, truncation_mode)
+            opts_svd_2 = {'D_total':int(opts_svd['D_total']*2), 'tol_block':opts_svd['tol_block']}
+            MA_int, MB_int, _, _, _ = truncate_and_optimize(g, RA, RB, truncation_mode, opts_svd=opts_svd_2)
+            MA_2, MB_2, opt_error_2, optim_2, svd_error_2 = truncate_and_optimize(g, MA_int, MB_int, truncation_mode, opts_svd=opts_svd)
             if opt_error < opt_error_2:
                 logging.info("1-step update; truncation errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e" % (opt_error, opt_error_2, svd_error, svd_error_2))
             else:
@@ -93,12 +98,13 @@ def apply_nn_gate(peps, gate):
     return QA, QB, RA, RB
 
 
-def truncation_step(RA, RB, Ds, normalize=False):
+def truncation_step(RA, RB, opts_svd, normalize=False):
     """ svd truncation of central tensor """
+
     theta = RA @ RB
-    if isinstance(Ds, dict):
-        Ds = sum(Ds.values())
-    UA, S, UB = svd_with_truncation(theta, sU=RA.get_signature()[1], tol_block=1e-15, D_total=Ds)
+    if isinstance(opts_svd['D_total'], dict):
+        opts_svd['D_total'] = sum(opts_svd['D_total'].values())
+    UA, S, UB = svd_with_truncation(theta, sU=RA.get_signature()[1], **opts_svd)
     if normalize:
         S = S / S.norm(p='inf')
     sS = S.sqrt()
@@ -155,8 +161,8 @@ def forced_sectorial_truncation(U, L, V, Ds):
     return U, new_L, V, discard_block_weight
 
 
-def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, Ds, truncation_mode):
-
+def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mode, opts_svd):
+    
     if truncation_mode == 'optimal':
         G = ncon((g, RA, RB, RA, RB), ([1, 2, 3, 4], [1, -1], [-3, 3], [2, -2], [-4, 4]), conjs=(0, 0, 0, 1, 1))
         [ul, _, vr] = svd_with_truncation(G, axes=((0, 1), (2, 3)), tol_block=1e-15, D_total=1)
@@ -167,19 +173,18 @@ def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, Ds, truncation
         UR, SR, _ = svd(GR)
         XL, XR = SL.sqrt() @ UL, UR @ SR.sqrt()
         XRRX = XL @ XR
+
+        if isinstance(opts_svd['D_total'], dict):
+            opts_svd['D_total'] = sum(opts_svd['D_total'].values())
         
-        if isinstance(Ds, dict):
-            Dn = sum(Ds.values())
-        else:
-            Dn = Ds
-        U, L, V = svd_with_truncation(XRRX, sU=RA.get_signature()[1], D_total=Dn, tol_block=1e-15)
+        U, L, V = svd_with_truncation(XRRX, sU=RA.get_signature()[1], **opts_svd)
         mA, mB = U @ L.sqrt(), L.sqrt() @ V
         MA, MB, svd_error, _ = optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB)
         return MA, MB, svd_error
 
     elif truncation_mode == 'normal':
 
-        MA, MB = truncation_step(RA, RB, Ds)
+        MA, MB = truncation_step(RA, RB, opts_svd)
         MAB = MA @ MB
         MAB = MAB.fuse_legs(axes=[(0, 1)])
         gMM = vdot(MAB, fgf @ MAB).item()
@@ -258,7 +263,7 @@ def ntu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter):
 ########################## of MA and MB #######################################
 ###############################################################################
 
-def truncate_and_optimize(g, RA, RB, Ds, truncation_mode):
+def truncate_and_optimize(g, RA, RB, truncation_mode, opts_svd):
     """ optimize truncated MA and MB tensors, using NTU metric. """
     max_iter = 1000 # max no of NTU optimization loops
     assert (g.fuse_legs(axes=((0, 2), (1, 3))) - g.fuse_legs(axes=((0, 2), (1, 3))).conj().transpose(axes=(1, 0))).norm() < 1e-14 * g.fuse_legs(axes=((0, 2), (1, 3))).norm()
@@ -271,9 +276,9 @@ def truncate_and_optimize(g, RA, RB, Ds, truncation_mode):
     gRAB =  gf @ RAB
     gRR = vdot(RAB, fgRAB).item()
     
-    MA, MB, svd_error = environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, Ds, truncation_mode)
+    MA, MB, svd_error = environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mode, opts_svd)
     MA, MB, ntu_errorB, optimal_cf  = ntu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter)
-    MA, MB = truncation_step(MA, MB, Ds, normalize=True)
+    MA, MB = truncation_step(MA, MB, opts_svd, normalize=True)
     return MA, MB, ntu_errorB, optimal_cf, svd_error
 
 def optimal_pinv(gg, J, gRR):
