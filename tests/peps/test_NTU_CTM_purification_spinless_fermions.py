@@ -25,7 +25,7 @@ def test_NTU_spinless_finite():
     xx = 3
     yy = 2
     D = 6
-    chi = 20
+    chi = 30 # environmental bond dimension
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
     beta_end = 0.2
@@ -57,18 +57,20 @@ def test_NTU_spinless_finite():
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
-    cutoff = 1e-10
+    tol = 1e-10 # truncation of singular values of ctm projectors
     max_sweeps=50 
-    tol = 1e-7   # difference of some observable must be lower than tolernace
+    tol_exp = 1e-7   # difference of some expectation value must be lower than tolerance
 
     ops = {'cdagc': {'l': fcdag, 'r': fc},
            'ccdag': {'l': fc, 'r': fcdag}}
 
     cf_energy_old = 0
 
-    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0, fix_signs=False):
+    opts_svd = {'D_total': chi, 'tol': tol}
+
+    for step in ctmrg_(psi, max_sweeps, iterator_step=2, AAb_mode=0, fix_signs=False, opts_svd=opts_svd):
         
-        assert step.sweeps % 2 == 0 # stop every 4th step as iteration_step=2
+        assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
@@ -77,13 +79,12 @@ def test_NTU_spinless_finite():
         cf_energy = - (cdagc + ccdag) * (2 * xx * yy - xx - yy)
 
         print("expectation value: ", cf_energy)
-        if abs(cf_energy - cf_energy_old) < tol:
+        if abs(cf_energy - cf_energy_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
     bd_h = peps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
     bd_v = peps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
-
 
     nn_CTM_bond_1 = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc'], bd_h)) + abs(nn_bond(psi, step.env, ops['ccdag'], bd_h)))
     nn_CTM_bond_2 = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc'], bd_v)) + abs(nn_bond(psi, step.env, ops['ccdag'], bd_v)))
@@ -132,16 +133,18 @@ def test_NTU_spinless_infinite():
 
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
-    cutoff = 1e-10
+    tol = 1e-10 # CTM projectors
     max_sweeps=50 
-    tol = 1e-7   # difference of some observable must be lower than tolernace
+    tol_exp = 1e-7   # difference of some observable must be lower than tolernace
 
     ops = {'cdagc': {'l': fcdag, 'r': fc},
            'ccdag': {'l': fc, 'r': fcdag}}
 
     cf_energy_old = 0
 
-    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0):
+    opts_svd = {'D_total': chi, 'tol': tol}
+
+    for step in ctmrg_(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd):
         
         assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
@@ -152,7 +155,7 @@ def test_NTU_spinless_infinite():
         cf_energy = - (cdagc + ccdag) * (2 * xx * yy - xx - yy)
 
         print("expectation value: ", cf_energy)
-        if abs(cf_energy - cf_energy_old) < tol:
+        if abs(cf_energy - cf_energy_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
@@ -169,6 +172,6 @@ if __name__ == '__main__':
     logging.basicConfig(level='INFO')
 
     test_NTU_spinless_finite()
-    #test_NTU_spinless_infinite()
+    test_NTU_spinless_infinite()
 
 
