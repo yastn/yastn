@@ -23,7 +23,7 @@ class Gates(NamedTuple):
 # here Gates can be a function generating gates based on something 
 #    yield state
 
-def evolution_step_(psi, gates, Ds, step, truncation_mode, env_type):  # perform a single step of evolution 
+def evolution_step_(psi, gates, step, truncation_mode, env_type, opts_svd=None):  # perform a single step of evolution 
     """ 
     Apply a list of gates on peps; performing truncation; 
     it is a 2nd-order step in a sense that gates that gates contain half of the sweep,
@@ -35,7 +35,7 @@ def evolution_step_(psi, gates, Ds, step, truncation_mode, env_type):  # perform
         psi = apply_local_gate_(psi, gate)
 
     for gate in gates.nn + gates.nn[::-1]:
-        psi, info = ntu_machine(psi, gate, Ds, truncation_mode, step, env_type)
+        psi, info = ntu_machine(psi, gate, truncation_mode, step, env_type, opts_svd)
 
     for gate in gates.local[::-1]:
         psi = apply_local_gate_(psi, gate)
