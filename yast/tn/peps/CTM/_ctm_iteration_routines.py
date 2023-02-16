@@ -94,14 +94,6 @@ def fcor_tl(env, AAb, ind):
     return append_a_tl(cortln, AAb)
 
 def fcor_tr(env, AAb, ind):
-    """print(AAb.A.unfuse_legs(axes=(0,1,2,3,4,5)).get_shape())
-    print(AAb.Ab.unfuse_legs(axes=(0,1,2,3,4,5)).get_shape())
-    print(ind)
-    print(env[ind].t.get_shape())
-    print(env[ind].tr.get_shape())
-    xcc
-  """
-
     """ Creates extended top right corner. """
     cortrn = tensordot(env[ind].t, env[ind].tr, axes=(2, 0))
     cortrn = tensordot(cortrn, env[ind].r, axes=(2, 0))
@@ -223,21 +215,24 @@ def EV1s(env, indop, AAb):
     return vdot(top_part, bot_part, conj=(0, 0))
 
 
-def proj_Cor(rt, rb, chi, cutoff, fix_signs):
+def proj_Cor(rt, rb, fix_signs, opts_svd):
     """
     tt upper half of the CTM 4 extended corners diagram indices from right (e,t,b) to left (e,t,b)
     tb lower half of the CTM 4 extended corners diagram indices from right (e,t,b) to left (e,t,b)
     """
 
     rr = tensordot(rt, rb, axes=((1, 2), (1, 2)))
-    u, s, v = svd_with_truncation(rr, axes=(0, 1), sU =rt.get_signature()[1], tol=cutoff, D_total=chi, fix_signs=fix_signs)
+    u, s, v = svd_with_truncation(rr, axes=(0, 1), sU =rt.get_signature()[1], fix_signs=fix_signs, **opts_svd)
     s = s.rsqrt()
     pt = s.broadcast(tensordot(rb, v, axes=(0, 1), conj=(0, 1)), axis=2)
     pb = s.broadcast(tensordot(rt, u, axes=(0, 0), conj=(0, 1)), axis=2)
     return pt, pb
 
 
-def proj_horizontal(env, out, AAb, chi, cutoff, ms, fix_signs):
+def proj_horizontal(env, out, AAb, ms, fix_signs, opts_svd=None):
+
+    if opts_svd is None:
+        opts_svd = {'tol':1e-10, 'D_total': round(5*AAb.A[0,0].get_shape()[2])}   # D_total if not given can be a multiple of the total bond dimension
 
     # ms in the CTM unit cell     
     cortlm = fcor_tl(env, AAb[ms.nw], ms.nw) # contracted matrix at top-left constructing a projector with cut in the middle
@@ -255,7 +250,7 @@ def proj_horizontal(env, out, AAb, chi, cutoff, ms, fix_signs):
     _, rt = qr(corttm, axes=((0, 1), (2, 3)))
     _, rb = qr(corbbm, axes=((0, 1), (2, 3)))
 
-    out[ms.nw].hlb, out[ms.sw].hlt = proj_Cor(rt, rb, chi, cutoff, fix_signs)   # projector left-middle
+    out[ms.nw].hlb, out[ms.sw].hlt = proj_Cor(rt, rb, fix_signs, opts_svd=opts_svd)   # projector left-middle
 
     corttm = corttm.transpose(axes=(2, 3, 0, 1))
     corbbm = corbbm.transpose(axes=(2, 3, 0, 1))
@@ -263,14 +258,17 @@ def proj_horizontal(env, out, AAb, chi, cutoff, ms, fix_signs):
     _, rt = qr(corttm, axes=((0, 1), (2, 3)))
     _, rb = qr(corbbm, axes=((0, 1), (2, 3)))
 
-    out[ms.ne].hrb, out[ms.se].hrt = proj_Cor(rt, rb, chi, cutoff, fix_signs)   # projector right-middle
+    out[ms.ne].hrb, out[ms.se].hrt = proj_Cor(rt, rb, fix_signs, opts_svd=opts_svd)   # projector right-middle
     del corttm
     del corbbm
 
     return out
 
 
-def proj_vertical(env, out, AAb, chi, cutoff, ms, fix_signs):
+def proj_vertical(env, out, AAb, ms, fix_signs, opts_svd=None):
+
+    if opts_svd is None:
+        opts_svd = {'tol':1e-10, 'D_total': round(5*AAb.A[0,0].get_shape()[2])}   # D_total if not given can be a multiple of the total bond dimension
     
     cortlm = fcor_tl(env, AAb[ms.nw], ms.nw) # contracted matrix at top-left constructing a projector with a cut in the middle
     corblm = fcor_bl(env, AAb[ms.sw], ms.sw) # contracted matrix at bottom-left constructing a projector with a cut in the middle
@@ -287,12 +285,12 @@ def proj_vertical(env, out, AAb, chi, cutoff, ms, fix_signs):
     _, rl = qr(corvvm, axes=((0, 1), (2, 3)))
     _, rr = qr(corkkr, axes=((0, 1), (2, 3)))
 
-    out[ms.nw].vtr, out[ms.ne].vtl = proj_Cor(rl, rr, chi, cutoff, fix_signs) # projector top-middle 
+    out[ms.nw].vtr, out[ms.ne].vtl = proj_Cor(rl, rr, fix_signs, opts_svd=opts_svd) # projector top-middle 
     corvvm = corvvm.transpose(axes=(2, 3, 0, 1))
     corkkr = corkkr.transpose(axes=(2, 3, 0, 1))
     _, rl = qr(corvvm, axes=((0, 1), (2, 3)))
     _, rr = qr(corkkr, axes=((0, 1), (2, 3)))
-    out[ms.sw].vbr, out[ms.se].vbl = proj_Cor(rl, rr, chi, cutoff, fix_signs) # projector bottom-middle
+    out[ms.sw].vbr, out[ms.se].vbl = proj_Cor(rl, rr, fix_signs, opts_svd=opts_svd) # projector bottom-middle
     del corvvm
     del corkkr
 
@@ -515,7 +513,7 @@ def trivial_projector(a, b, c, dirn):
 
 
 
-def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
+def CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd=None):
     r""" 
     Perform one step of CTMRG update for a mxn lattice 
 
@@ -528,6 +526,7 @@ def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
     and renormalization starting with a 2x2 cell in the top-left corner and 
     subsequently going downward for (Ny-1) steps and then (Nx-1) steps to the right.      
     """
+    
     proj = Proj(lattice=AAb.lattice, dims=AAb.dims, boundary=AAb.boundary) 
     for ms in proj.sites():
         proj[ms] = Local_Projector_Env()
@@ -548,9 +547,9 @@ def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
         for ms in AAb.tensors_CtmEnv(trajectory='h')[y]:   #ctm_wndows(trajectory='h', index=y): # horizontal absorption and renormalization
             print('projector calculation ctm cluster horizontal', ms)
             if cheap_moves is True:
-                proj = proj_horizontal_cheap(env, proj, chi, cutoff, ms, fix_signs)
+                proj = proj_horizontal_cheap(env, proj, ms, fix_signs, opts_svd)
             else:
-                proj = proj_horizontal(env, proj, AAb, chi, cutoff, ms, fix_signs)
+                proj = proj_horizontal(env, proj, AAb, ms, fix_signs, opts_svd)
 
     if AAb.boundary == 'finite': 
         # we need proj[0,0].hlt, proj[0, Ny-1].hrt, proj[Nx-1, 0].hlb, proj[Nx-1, Ny-1].hrb as trivial projectors
@@ -580,9 +579,9 @@ def CTM_it(env, AAb, chi, cutoff, cheap_moves, fix_signs):
         for ms in AAb.tensors_CtmEnv(trajectory='v')[x]:   # vertical absorption and renormalization
             print('projector calculation ctm cluster vertical', ms)
             if cheap_moves is True:
-                proj = proj_vertical_cheap(envn_hor, proj, chi, cutoff, ms, fix_signs)
+                proj = proj_vertical_cheap(envn_hor, proj, ms, fix_signs, opts_svd)
             else:
-                proj = proj_vertical(envn_hor, proj, AAb, chi, cutoff, ms, fix_signs)
+                proj = proj_vertical(envn_hor, proj, AAb, ms, fix_signs, opts_svd)
 
     if AAb.boundary == 'finite': 
 

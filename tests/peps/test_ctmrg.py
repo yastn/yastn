@@ -57,13 +57,14 @@ def CTM_for_Onsager(psi, Z_exact):
     """ Convergence criteria based on energy """
 
     chi = 40 # max environmental bond dimension
-    cutoff = 1e-10 # 
-    tol=1e-7
+    tol = 1e-10 # singular values of svd truncation of projectors
+    tol_exp = 1e-7 # tolerance for expectation values
     max_sweeps = 400
     
     cf_old = 0
+    opts_svd = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=2, AAb_mode=0):
+    for step in ctmrg_(psi, max_sweeps, iterator_step=2, AAb_mode=0, opts_svd=opts_svd):
         assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
         ops = {'magA1': {'l': sz, 'r': id},
            'magB1': {'l': id, 'r': sz}}
@@ -71,7 +72,7 @@ def CTM_for_Onsager(psi, Z_exact):
         ob_hor, ob_ver =  nn_avg(psi, step.env, ops)
         cf = 0.25 * (abs(ob_hor.get('magA1')) + abs(ob_hor.get('magB1')) +  abs(ob_ver.get('magA1'))+abs(ob_ver.get('magB1')))
         print("expectation value: ", cf)
-        if abs(cf - cf_old) < tol:
+        if abs(cf - cf_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
         cf_old = cf
 

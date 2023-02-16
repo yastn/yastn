@@ -63,9 +63,9 @@ def test_NTU_spinfull_finite():
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
-    cutoff = 1e-10
+    tol = 1e-10 # truncation of singular values of CTM projectors
     max_sweeps=50 
-    tol = 1e-7   # difference of some observable must be lower than tolernace
+    tol_exp = 1e-7   # difference of some observable must be lower than tolernace
 
     ops = {'cdagc_up': {'l': fcdag_up, 'r': fc_up},
            'ccdag_up': {'l': fc_up, 'r': fcdag_up},
@@ -74,7 +74,10 @@ def test_NTU_spinfull_finite():
 
     cf_energy_old = 0
 
-    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0):
+    opts_svd = {'D_total': chi, 'tol': tol}
+
+
+    for step in ctmrg_(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd):
         
         assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
 
@@ -90,7 +93,7 @@ def test_NTU_spinfull_finite():
         cf_energy = (xx * yy) * U * doc - (cdagc_up + ccdag_up + cdagc_dn + ccdag_dn) * (2 * xx * yy - xx - yy)
 
         print("expectation value: ", cf_energy)
-        if abs(cf_energy - cf_energy_old) < tol:
+        if abs(cf_energy - cf_energy_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
@@ -158,9 +161,9 @@ def test_NTU_spinfull_infinite():
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
-    cutoff = 1e-10
+    tol = 1e-10 # truncation of singular values of CTM projectors
     max_sweeps=50 
-    tol = 1e-7   # difference of some observable must be lower than tolernace
+    tol_exp = 1e-7   # difference of some observable must be lower than tolernace
 
     ops = {'cdagc_up': {'l': fcdag_up, 'r': fc_up},
            'ccdag_up': {'l': fc_up, 'r': fcdag_up},
@@ -168,8 +171,9 @@ def test_NTU_spinfull_infinite():
            'ccdag_dn': {'l': fc_dn, 'r': fcdag_dn}}
 
     cf_energy_old = 0
+    opts_svd = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg_(psi, chi, cutoff, max_sweeps, iterator_step=1, AAb_mode=0):
+    for step in ctmrg_(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd):
         
         assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
 
@@ -185,7 +189,7 @@ def test_NTU_spinfull_infinite():
         cf_energy = (xx * yy) * U * doc - (cdagc_up + ccdag_up + cdagc_dn + ccdag_dn) * (2 * xx * yy - xx - yy)
 
         print("expectation value: ", cf_energy)
-        if abs(cf_energy - cf_energy_old) < tol:
+        if abs(cf_energy - cf_energy_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
@@ -201,6 +205,6 @@ def test_NTU_spinfull_infinite():
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
     test_NTU_spinfull_finite()
-    #test_NTU_spinfull_infinite()
-
+    test_NTU_spinfull_infinite()
+ 
 
