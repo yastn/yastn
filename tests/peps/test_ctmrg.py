@@ -105,8 +105,6 @@ def test_ctm_loop():
         ctm_for_Onsager(psi, opt, Z_exact)
 
 
-
-
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
     test_ctm_loop()
