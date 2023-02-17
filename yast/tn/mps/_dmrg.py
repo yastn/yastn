@@ -36,15 +36,15 @@ def dmrg_(psi, H, project=None, method='1site',
 
     Parameters
     ----------
-    psi: yamps.MpsMpo
+    psi: yast.tn.mps.MpsMpo
         Initial state. It is updated during execution.
         It is first canonized to to the first site, if not provided in such a form.
         State resulting from :code:`dmrg_` is canonized to the first site.
 
-    H: yamps.MpsMpo
+    H: yast.tn.mps.MpsMpo
         MPO to minimize against.
 
-    project: list(yamps.MpsMpo)
+    project: list(yast.tn.mps.MpsMpo)
         Optimizes MPS in the subspace orthogonal to MPS's in the list.
 
     method: str

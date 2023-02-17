@@ -2,7 +2,6 @@
 
 from yast import tensordot, svd_with_truncation, rand, ncon
 from ._ctm_iteration_routines import append_a_tl, append_a_br, append_a_tr, append_a_bl, fPEPS_2layers
-import numpy as np
 
 def ret_AAbs(A, bds, op, orient):
     """ preparing the nearest neighbor tensor before contraction by attaching them with operators"""

@@ -339,7 +339,7 @@ class Generator:
 
         Returns
         --------
-            :class:`yamps.Mps`
+            :class:`yast.tn.mps.Mps`
         """
         parameters = {**self.parameters, **parameters}
         c2 = latex2term(psi_str, parameters)
@@ -348,7 +348,7 @@ class Generator:
 
     def mps_from_templete(self, templete, vectors=None, parameters=None):
         r"""
-        Convert instruction in a form of single_term-s to yamps MPO.
+        Convert instruction in a form of single_term-s to yast.tn.mps MPO.
 
         single_term is a templete which which take named from operators and templetes.
 
@@ -369,7 +369,7 @@ class Generator:
 
         Returns
         --------
-            :class:`yamps.Mps`
+            :class:`yast.tn.mps.Mps`
         """
         parameters = {**self.parameters, **parameters}
         c3 = self._term2Hterm(templete, vectors, parameters)
@@ -377,7 +377,7 @@ class Generator:
 
     def mpo_from_latex(self, H_str, parameters=None):
         r"""
-        Convert latex-like string to yamps MPO.
+        Convert latex-like string to yast.tn.mps MPO.
 
         Parameters
         -----------
@@ -391,7 +391,7 @@ class Generator:
 
         Returns
         --------
-            :class:`yamps.Mpo`
+            :class:`yast.tn.mps.Mpo`
         """
         parameters = {**self.parameters, **parameters}
         c2 = latex2term(H_str, parameters)
@@ -400,7 +400,7 @@ class Generator:
     
     def mpo_from_templete(self, templete, parameters=None):
         r"""
-        Convert instruction in a form of single_term-s to yamps MPO.
+        Convert instruction in a form of single_term-s to yast.tn.mps MPO.
 
         single_term is a templete which which take named from operators and templetes.
 
@@ -413,7 +413,7 @@ class Generator:
 
         Returns
         --------
-            :class:`yamps.Mpo`
+            :class:`yast.tn.mps.Mpo`
         """
         parameters = {**self.parameters, **parameters}
         c3 = self._term2Hterm(templete, self._ops.to_dict(), parameters)

@@ -1,9 +1,6 @@
 """ Functions performing many CTMRG steps until convergence and return of CTM environment tensors for mxn lattice. """
 from typing import NamedTuple
 import logging
-import yast.tn.peps as peps
-import numpy as np
-from itertools import chain
 from ._ctm_iteration_routines import CTM_it
 from ._ctm_iteration_routines import fPEPS_2layers, fPEPS_fuse_layers, check_consistency_tensors
 from ._ctm_env import CtmEnv, init_rand
@@ -15,9 +12,9 @@ from ._ctm_env import CtmEnv, init_rand
 
 class CTMRGout(NamedTuple):
     sweeps : int = 0
-    env : dict = 0
-    proj_hor : dict = 0
-    proj_vert : dict = 0
+    env : dict = None
+    proj_hor : dict = None
+    proj_vert : dict = None
 
 
 def ctmrg(psi, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, env=None, opts_svd=None):
@@ -82,7 +79,7 @@ def _ctmrg(psi, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd=No
     """ Generator for ctmrg(). """
     psi = check_consistency_tensors(psi) # to check if A has the desired fused form of legs i.e. t l b r [s a]
 
-    AAb = CtmEnv(lattice=psi.lattice, dims=psi.dims, boundary=psi.boundary)   
+    AAb = CtmEnv(psi)
 
     for ms in psi.sites():
         AAb[ms] = fPEPS_2layers(psi[ms])
@@ -98,8 +95,3 @@ def _ctmrg(psi, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd=No
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield CTMRGout(sweep, env, proj)
     yield CTMRGout(sweep, env, proj)
-    
-
-
-
-

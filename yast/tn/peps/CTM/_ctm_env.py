@@ -1,13 +1,11 @@
 from typing import NamedTuple, Tuple
-import numpy as np
 from itertools import accumulate
 from dataclasses import dataclass
 from ....tn import mps
-#from yast.tn.peps import Lattice
-from yast.tn.peps import Peps
+from yast.tn.peps import Lattice
 from yast.tn.peps.operators.gates import match_ancilla_1s
 from yast import rand, tensordot
-import copy
+
 
 class ctm_window(NamedTuple):
     """ elements of a 2x2 window for the CTM algorithm. """
@@ -16,78 +14,36 @@ class ctm_window(NamedTuple):
     sw : Tuple
     se : Tuple
 
-class CtmEnv(Peps):
+
+class CtmEnv(Lattice):
     r""" Geometric information about the lattice provided to ctm tensors """
-    def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
-        super().__init__(lattice=lattice, dims=dims, boundary=boundary)
+    def __init__(self, psi):
+        super().__init__(lattice=psi.lattice, dims=psi.dims, boundary=psi.boundary)
+
+        if self.lattice == 'checkerboard':
+            windows = (ctm_window(nw=(0, 0), ne=(0, 1), sw=(1, 0), se=(1, 1)),
+                       ctm_window(nw=(1, 0), ne=(1, 1), sw=(0, 0), se=(0, 1)))
+        else:
+            windows = []
+            for site in self.sites():
+                win = [site]
+                for d in ('r', 'b', 'br'):
+                    win.append(self.nn_site(site, d=d))
+                if None not in win:
+                    windows.append(ctm_window(*win))
+        self._windows = tuple(windows)
 
 
     def copy(self):
-        env = CtmEnv(lattice=self.lattice, dims=self.dims, boundary=self.boundary)
-        env._data = {k : v.copy() for k, v in self._data.items()}        
+        env = CtmEnv(self)
+        env._data = {k : v.copy() for k, v in self._data.items()}
         return env
 
-
-    def tensors_CtmEnv(self, trajectory):
-        """ 
-        Choosing 2x2 ctm windows for horizontal and vertical moves of the CTM of a mxn lattice
-        """
-
-        ss = []
-
-        if trajectory == 'h':  # create columns
-            order = []
-
-            if self.boundary == 'infinite':
-                for n in range(self.Ny):
-                    hor = []
-                    for m in range(self.Nx): 
-                        hor.append(tuple((m, n)))
-                    order.append(hor)
-
-            elif self.boundary == 'finite':
-                for n in range(self.Ny-1):
-                    hor =[]
-                    for m in range(self.Nx-1):
-                        hor.append(tuple((m+1, n+1)))
-                    order.append(hor)
-
-        elif trajectory == 'v':
-            order = []
-
-            if self.boundary == 'infinite':
-                for m in range(self.Nx):
-                    ver = []
-                    for n in range(self.Ny):
-                        ver.append(tuple((m, n))) 
-                    order.append(ver)
-            elif self.boundary == 'finite':
-                for m in range(self.Nx-1):
-                    ver = []
-                    for n in range(self.Ny-1):
-                        ver.append(tuple((m+1, n+1))) 
-                    order.append(ver)
-            print(order)
-
-        
-        for ms in order:
-            s = []
-            for xs in ms:
-                site_se = xs
-                site_ne = self.nn_site(site_se, d='t')
-                site_sw = self.nn_site(site_se, d='l')
-                site_nw = self.nn_site(site_se, d='tl')
-                s.append(ctm_window(site_nw, site_ne, site_sw, site_se))
-            ss.append(s)
-
-        if self.lattice == 'checkerboard':
-            ss.clear()
-            ss = [[ctm_window(nw=(0, 0), ne=(0, 1), sw=(1, 0), se=(1, 1)),ctm_window(nw=(1, 0), ne=(1, 1), sw=(0, 0), se=(0, 1))]]
-
-        return ss
+    def tensors_CtmEnv(self):
+        return self._windows
 
 
-class Proj(Peps):
+class Proj(Lattice):
     def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
         super().__init__(lattice=lattice, dims=dims, boundary=boundary)
 
@@ -162,7 +118,7 @@ def init_rand(A, tc, Dc):
     """ Initialize random CTMRG environments of peps tensors A. """
 
     config = A[(0,0)].config 
-    env= CtmEnv(A.lattice, A.dims, A.boundary)
+    env= CtmEnv(A)
 
     for ms in A.sites():
         B = A[ms].copy()

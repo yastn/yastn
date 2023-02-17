@@ -10,8 +10,7 @@ import yast
 from yast import tensordot, ncon, svd_with_truncation, qr, vdot, initialize
 import yast.tn.peps as peps
 from yast.tn.peps._doublePepsTensor import DoublePepsTensor
-import numpy as np
-from ._ctm_env import CtmEnv, Proj, Local_Projector_Env
+from ._ctm_env import Proj, Local_Projector_Env
 
 def append_a_bl(tt, AAb):
     """
@@ -543,13 +542,12 @@ def CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd=None):
     print('###############################################################')
 
     envn_hor = env.copy()
-    for y in range(Ny):  # if index is None:  return all windows'; else return windows for a given column (for trajectory='h') and row (for trajectory='v')
-        for ms in AAb.tensors_CtmEnv(trajectory='h')[y]:   #ctm_wndows(trajectory='h', index=y): # horizontal absorption and renormalization
-            print('projector calculation ctm cluster horizontal', ms)
-            if cheap_moves is True:
-                proj = proj_horizontal_cheap(env, proj, ms, fix_signs, opts_svd)
-            else:
-                proj = proj_horizontal(env, proj, AAb, ms, fix_signs, opts_svd)
+    for ms in AAb.tensors_CtmEnv():   #ctm_wndows(trajectory='h', index=y): # horizontal absorption and renormalization
+        print('projector calculation ctm cluster horizontal', ms)
+        if cheap_moves is True:
+            proj = proj_horizontal_cheap(env, proj, ms, fix_signs, opts_svd)
+        else:
+            proj = proj_horizontal(env, proj, AAb, ms, fix_signs, opts_svd)
 
     if AAb.boundary == 'finite': 
         # we need proj[0,0].hlt, proj[0, Ny-1].hrt, proj[Nx-1, 0].hlb, proj[Nx-1, Ny-1].hrb as trivial projectors
@@ -564,10 +562,9 @@ def CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd=None):
     print('######## Horizontal Move ###########')
     print('####################################')
 
-    for y in range(Ny): 
-        for ms in AAb.tensors_CtmEnv(trajectory='h')[y]:   # horizontal absorption and renormalization
-            print('move ctm cluster horizontal', ms)
-            envn_hor = move_horizontal(envn_hor, env, AAb, proj, ms)
+    for ms in AAb.tensors_CtmEnv():   # horizontal absorption and renormalization
+        print('move ctm cluster horizontal', ms)
+        envn_hor = move_horizontal(envn_hor, env, AAb, proj, ms)
 
     envn_ver = envn_hor.copy()
   
@@ -575,13 +572,12 @@ def CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd=None):
     print('######## Calculating projectors for vertical move ###########')
     print('#############################################################')
     
-    for x in range(Nx):
-        for ms in AAb.tensors_CtmEnv(trajectory='v')[x]:   # vertical absorption and renormalization
-            print('projector calculation ctm cluster vertical', ms)
-            if cheap_moves is True:
-                proj = proj_vertical_cheap(envn_hor, proj, ms, fix_signs, opts_svd)
-            else:
-                proj = proj_vertical(envn_hor, proj, AAb, ms, fix_signs, opts_svd)
+    for ms in AAb.tensors_CtmEnv():   # vertical absorption and renormalization
+        print('projector calculation ctm cluster vertical', ms)
+        if cheap_moves is True:
+            proj = proj_vertical_cheap(envn_hor, proj, ms, fix_signs, opts_svd)
+        else:
+            proj = proj_vertical(envn_hor, proj, AAb, ms, fix_signs, opts_svd)
 
     if AAb.boundary == 'finite': 
 
@@ -594,12 +590,11 @@ def CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd=None):
     print('###################################')
     print('######### Vertical Move ###########')
     print('###################################')
-    for x in range(Nx):
-        for ms in AAb.tensors_CtmEnv(trajectory='v')[x]:   # vertical absorption and renormalization
-            print('move ctm cluster vertical', ms)
-            envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, ms)
+    for ms in AAb.tensors_CtmEnv():   # vertical absorption and renormalization
+        print('move ctm cluster vertical', ms)
+        envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, ms)
 
-    return envn_ver, proj    
+    return envn_ver, proj
 
 
 def fPEPS_l(A, op):
@@ -608,19 +603,9 @@ def fPEPS_l(A, op):
     chosen fermionic order) while calulating expectation values of non-local
     fermionic operators in vertical direction
     """
-
-    if A.ndim == 5:
-        Aop = tensordot(A, op, axes=(4, 1)) # t l b r [s a] c
-        Aop = Aop.swap_gate(axes=(2, 5))
-        Aop = Aop.fuse_legs(axes=(0, 1, 2, (3, 5), 4)) # t l b [r c] [s a]
-    elif A.ndim == 6:
-        # when we have to introduce a string for creating ahole at the middle of the lattice
-        Aop = tensordot(A, op, axes=(5, 1))  # t l b r str [s a] c
-        Aop = Aop.swap_gate(axes=(2, 6))
-        Aop = Aop.swap_gate(axes=(4, 6))
-        Aop = Aop.unfuse_legs(axes=(5)) # t l b r str s a c
-        Aop = Aop.fuse_legs(axes=(0, 1, 2, (3, 7), 5, (6, 4))) # t l b [r c] s [a str]
-        Aop = Aop.fuse_legs(axes=(0, 1, 2, 3, (4, 5))) # t l b [r c] [s [a str]] 
+    Aop = tensordot(A, op, axes=(4, 1)) # t l b r [s a] c
+    Aop = Aop.swap_gate(axes=(2, 5))
+    Aop = Aop.fuse_legs(axes=(0, 1, 2, (3, 5), 4)) # t l b [r c] [s a]
     return Aop
 
 
@@ -630,16 +615,8 @@ def fPEPS_r(A, op):
     chosen fermionic order) while calulating expectation values of non-local
     fermionic operators in vertical direction
     """
-
-    if A.ndim == 5:  # t l b r [s a] c
-        Aop = tensordot(A, op, axes=(4, 1))
-        Aop = Aop.fuse_legs(axes=(0, (1, 5), 2, 3, 4)) # t [l c] b r [s a]
-    elif A.ndim == 6:
-        # when we have to introduce a string for creating a hole at the middle of the lattice
-        Aop = tensordot(A, op, axes=(5, 1))  # t l b r str [s a] c
-        Aop = Aop.unfuse_legs(axes=(5)) # t l b r str s a c
-        Aop = Aop.fuse_legs(axes=(0, (1, 7), 2, 3, 5, (6, 4))) # t [l c] b r s [a str]
-        Aop = Aop.fuse_legs(axes=(0, 1, 2, 3, (4, 5))) # t [l c] b r [s [a str]]
+    Aop = tensordot(A, op, axes=(4, 1))
+    Aop = Aop.fuse_legs(axes=(0, (1, 5), 2, 3, 4)) # t [l c] b r [s a]
     return Aop
 
 
@@ -649,15 +626,8 @@ def fPEPS_t(A, op):
     chosen fermionic order) while calulating expectation values of non-local
     fermionic operators in vertical direction
     """
-    if A.ndim == 5:
-        Aop = tensordot(A, op, axes=(4, 1))
-        Aop = Aop.fuse_legs(axes=(0, 1, (2, 5), 3, 4)) # t l [b c] r [s a]
-    elif A.dim == 6:
-        # when we have to introduce a string for creating a hole at the middle of the lattice
-        Aop = tensordot(A, op, axes=(5, 1))  # t l b r str [s a] c
-        Aop = Aop.unfuse_legs(axes=(5)) # t l b r str s a c
-        Aop = Aop.fuse_legs(axes=(0, 1, (2, 7), 3, 5, (6, 4))) # t l [b c] r s [a str]
-        Aop = Aop.fuse_legs(axes=(0, 1, 2, 3, (4, 5))) # t l [b c] r [s [a str]]
+    Aop = tensordot(A, op, axes=(4, 1))
+    Aop = Aop.fuse_legs(axes=(0, 1, (2, 5), 3, 4)) # t l [b c] r [s a]
     return Aop
 
 
@@ -667,17 +637,9 @@ def fPEPS_b(A, op):
     chosen fermionic order) while calulating expectation values of non-local 
     fermionic operators in vertical direction
     """
-    if A.ndim == 5:
-        Aop = tensordot(A, op, axes=(4, 1))
-        Aop = Aop.swap_gate(axes=(1, 5))
-        Aop = Aop.fuse_legs(axes=((0, 5), 1, 2, 3, 4)) # [t c] l b r [s a]
-    elif A.ndim == 6:
-        # when we have to introduce a string for creating a hole at the middle of the lattice
-        Aop = tensordot(A, op, axes=(5, 1))  # t l b r str [s a] c
-        Aop = Aop.swap_gate(axes=(1, 6))
-        Aop = Aop.unfuse_legs(axes=(5)) # t l b r str s a c
-        Aop = Aop.fuse_legs(axes=((0, 7), 1, 2, 3, 5, (6, 4))) # [t c] l b r s [a str]
-        Aop = Aop.fuse_legs(axes=(0, 1, 2, 3, (4, 5))) # [t c] l b r [s [a str]]
+    Aop = tensordot(A, op, axes=(4, 1))
+    Aop = Aop.swap_gate(axes=(1, 5))
+    Aop = Aop.fuse_legs(axes=((0, 5), 1, 2, 3, 4)) # [t c] l b r [s a]
     return Aop
 
 def fPEPS_op1s(A, op):
@@ -685,14 +647,7 @@ def fPEPS_op1s(A, op):
     attaches operator to the tensor while calulating expectation
     values of local operators, no need to fuse auxiliary legs
     """
-    if A.ndim == 5:
-        Aop = tensordot(A, op, axes=(4, 1)) # t l b r [s a]
-    elif A.ndim == 6:
-        # when we have to introduce a string for creating a hole at the middle of the lattice
-        Aop = tensordot(A, op, axes=(5, 1)) # t l b r str [s a] 
-        Aop = Aop.unfuse_legs(axes=(5)) # t l b r str s a 
-        Aop = Aop.fuse_legs(axes=(0, 1, 2, 3, 5, (6, 4)))
-        Aop = Aop.fuse_legs(axes=(0, 1, 2, 3, (4, 5))) # t l b r [s [a str]]
+    Aop = tensordot(A, op, axes=(4, 1)) # t l b r [s a]
     return Aop
 
 def fPEPS_fuse_physical(A):
@@ -797,7 +752,7 @@ def check_consistency_tensors(A):
     Ab = peps.Peps(A.lattice, A.dims, A.boundary)
     if A[0, 0].ndim == 6:
         for ms in Ab.sites(): 
-            Ab[ms] = A[ms].fuse_legs(axes=(0, 1, 2, 3, (4, 5))) 
+            Ab[ms] = A[ms].fuse_legs(axes=(0, 1, 2, 3, (4, 5)))
     elif A[0, 0].ndim == 3:
         for ms in Ab.sites():
             Ab[ms] = A[ms].unfuse_legs(axes=(0, 1)) # system and ancila are fused by default
