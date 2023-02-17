@@ -30,15 +30,15 @@ def variational_(psi, op_or_ket, ket_or_none=None, method='1site',
 
     Parameters
     ----------
-    psi: yamps.MpsMpo
+    psi: yast.tn.mps.MpsMpo
         Initial state. It is updated during execution.
         It is first canonized to to the first site, if not provided in such a form.
         State resulting from :code:`dmrg_` is canonized to the first site.
 
-    H: yamps.MpsMpo
+    H: yast.tn.mps.MpsMpo
         MPO to minimize against.
 
-    project: list(yamps.MpsMpo)
+    project: list(yast.tn.mps.MpsMpo)
         Optimizes MPS in the subspace orthogonal to MPS's in the list.
 
     method: str
@@ -155,22 +155,22 @@ def _variational_1site_sweep_(env, Schmidt=None):
 
     Parameters
     ----------
-    psi: yamps.MpsMpo
+    psi: yast.tn.mps.MpsMpo
         initial MPS in right canonical form.
 
-    psi_target: yamps.MpsMpo
+    psi_target: yast.tn.mps.MpsMpo
         Target MPS.
 
     env: Env2 or Env3
         optional environment of tensor network :math:`\langle \psi|\psi_{target} \rangle`
         or :math:`\langle \psi|O|\psi_{target} \rangle` from the previous run.
 
-    op: yamps.MpsMpo
+    op: yast.tn.mps.MpsMpo
         operator acting on :math:`|\psi_{\textrm{target}}\rangle`.
 
     Returns
     -------
-    env: yamps.Env2 or yamps.Env3
+    env: yast.tn.mps.Env2 or yast.tn.mps.Env3
         Environment of the network :math:`\langle \psi|\psi_{target} \rangle`
         or :math:`\langle \psi|O|\psi_{target} \rangle`.
     """

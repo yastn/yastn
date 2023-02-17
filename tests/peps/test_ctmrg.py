@@ -80,44 +80,33 @@ def test_ctm_loop():
 
     opt = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
 
-    psi = peps.Peps(lattice='checkerboard', boundary='infinite')
-    psi[(0, 0)] = create_Ising_tensor(opt.z(), beta)
-    psi[(0, 1)] = create_Ising_tensor(opt.z(), beta)
+    for lattice, dims in (('checkerboard', (2, 2)), ('rectangle', (6, 4))):
+        T = create_Ising_tensor(opt.z(), beta)
+        psi = peps.Peps(lattice=lattice, dims=dims, boundary='infinite')
+        for site in psi.sites():
+            psi[site] = T
+        ctm_for_Onsager(psi, opt, Z_exact)
 
-    ctm_for_Onsager(psi, opt, Z_exact)
+        h_rg1, inv_h_rg1 = gauges_random()
+        h_rg2, inv_h_rg2 = gauges_random()
+        v_rg1, inv_v_rg1 = gauges_random()
+        v_rg2, inv_v_rg2 = gauges_random()
+        TA = yast.ncon((T, h_rg1), ((-0, -1, -2, 1, -4), (1, -3)))
+        TB = yast.ncon((inv_h_rg1, T), ((-1, 1), (-0, 1, -2, -3, -4)))
+        TA = yast.ncon((TA, h_rg2), ((-0, 1, -2, -3, -4), (-1, 1)))
+        TB = yast.ncon((inv_h_rg2, TB), ((1, -3), (-0, -1, -2, 1, -4)))
+        TA = yast.ncon((TA, v_rg1), ((1, -1, -2, -3, -4), (1, -0)))
+        TB = yast.ncon((inv_v_rg1, TB), ((-2, 1), (-0, -1, 1, -3, -4)))
+        TA = yast.ncon((TA, v_rg2), ((-0, -1, 1, -3, -4), (-2, 1)))
+        TB = yast.ncon((inv_v_rg2, TB), ((1, -0), (1, -1, -2, -3, -4)))
+
+        for site in psi.sites():
+            psi[site] = TA if sum(site) % 2 == 0 else TB
+        ctm_for_Onsager(psi, opt, Z_exact)
 
 
-def test_ctm_loop_with_gauges():
-    """ Calculate magnetization for classical 2D Ising model and compares with the exact result. """
-    beta = 0.7  # check for a certain inverse temperature
-    Z_exact = 0.99016253867 # analytical value of magnetization up to 4 decimal places for beta = 0.7 (2D Classical Ising)
-
-    opt = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
-
-    psi = peps.Peps(lattice='checkerboard', boundary='infinite')
-    psi[(0, 0)] = create_Ising_tensor(opt.z(), beta)
-    psi[(0, 1)] = create_Ising_tensor(opt.z(), beta)
-
-    h_rg1, inv_h_rg1 = gauges_random()
-    h_rg2, inv_h_rg2 = gauges_random()
-    v_rg1, inv_v_rg1 = gauges_random()
-    v_rg2, inv_v_rg2 = gauges_random()
-
-    psi[(0, 0)] = yast.ncon((psi[(0, 0)], h_rg1), ((-0, -1, -2, 1, -4), (1, -3)))
-    psi[(0, 0)] = yast.ncon((psi[(0, 0)], h_rg2), ((-0, 1, -2, -3, -4), (-1, 1)))
-    psi[(0, 0)] = yast.ncon((psi[(0, 0)], v_rg1), ((1, -1, -2, -3, -4), (1, -0)))
-    psi[(0, 0)] = yast.ncon((psi[(0, 0)], v_rg2), ((-0, -1, 1, -3, -4), (-2, 1)))
-
-    psi[(0, 1)] = yast.ncon((inv_h_rg1, psi[(0, 1)]), ((-1, 1), (-0, 1, -2, -3, -4)))
-    psi[(0, 1)] = yast.ncon((inv_h_rg2, psi[(0, 1)]), ((1, -3), (-0, -1, -2, 1, -4)))
-    psi[(0, 1)] = yast.ncon((inv_v_rg1, psi[(0, 1)]), ((-2, 1), (-0, -1, 1, -3, -4)))
-    psi[(0, 1)] = yast.ncon((inv_v_rg2, psi[(0, 1)]), ((1, -0), (1, -1, -2, -3, -4)))
-
-    ctm_for_Onsager(psi, opt, Z_exact)
 
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
     test_ctm_loop()
-    test_ctm_loop_with_gauges()
-

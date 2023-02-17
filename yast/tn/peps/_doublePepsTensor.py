@@ -57,10 +57,10 @@ class DoublePepsTensor:
     def copy(self):
         r"""
         Makes a copy of DoublePepsTensor by :meth:`copying<yast.Tensor.copy>` all :class:`yast.Tensor<yast.Tensor>`'s
-        into a new and independent :class:`yamps.MpsMpo`.
+        into a new and independent :class:`yast.tn.mps.MpsMpo`.
 
         .. warning::
-            this operation does not preserve autograd on the returned :code:`yamps.MpsMpo`.
+            this operation does not preserve autograd on the returned :code:`yast.tn.mps.MpsMpo`.
 
         .. note::
             Use when retaining "old" DoublePepsTensor is necessary. 

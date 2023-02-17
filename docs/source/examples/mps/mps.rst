@@ -42,7 +42,7 @@ MPO for hopping model with U(1) symmetry
 
 
 Generate MPS from LaTex-like instruction
---------------------------------------
+----------------------------------------
 
 The MPS can be constructed automatically using dedicated `yamps.Generator` supplied with set of tensors as a basis. 
 The input for MPS can be given in a convenient LaTeX-like string.  To generate MPS we need to pass the parameters included 
@@ -58,7 +58,7 @@ Automatic generator creates MPO with symmetry as in `Generator`.
 
 
 Generate MPO from LaTex-like instruction
---------------------------------------
+----------------------------------------
 
 The MPO can be constructed automatically using dedicated `yamps.Generator` supplied with set of tensors as a basis. 
 The input for MPO generation can be given in a convenient LaTeX-like string. 
@@ -73,7 +73,7 @@ Automatic generator creates MPO with symmetry as in `Generator`.
 
 
 Create MPS or MPO based on templete object
---------------------------------------
+------------------------------------------
 
 The object can be created without `yast.tn.mps.Generator` by writing the instruction in terms of templete objects
 :code:`yast.tn.mps.Hterm(amplitude, position, operators)`. The list of `Hterm`'s gives the instruction for 
