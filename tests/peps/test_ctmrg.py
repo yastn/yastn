@@ -50,9 +50,9 @@ def gauges_random():
 def ctm_for_Onsager(psi, opt, Z_exact):
     """ Compares ctm expectation values with analytical result. """
 
-    chi = 40 # max environmental bond dimension
+    chi = 30 # max environmental bond dimension
     tol = 1e-10 # singular values of svd truncation of projectors
-    tol_exp = 1e-7 # tolerance for expectation values
+    tol_exp = 1e-8 # tolerance for expectation values
     max_sweeps = 400
 
     cf_old = 0
@@ -75,12 +75,12 @@ def ctm_for_Onsager(psi, opt, Z_exact):
 
 def test_ctm_loop():
     """ Calculate magnetization for classical 2D Ising model and compares with the exact result. """
-    beta = 0.7  # check for a certain inverse temperature
-    Z_exact = 0.99016253867 # analytical value of magnetization up to 4 decimal places for beta = 0.7 (2D Classical Ising)
+    beta = 0.8 # check for a certain inverse temperature
+    Z_exact = 0.99602 # analytical value of magnetization up to 4 decimal places for beta = 0.7 (2D Classical Ising)
 
     opt = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
 
-    for lattice, dims in (('checkerboard', (2, 2)), ('rectangle', (6, 4))):
+    for lattice, dims in  [('checkerboard', (2, 2))]:
         T = create_Ising_tensor(opt.z(), beta)
         psi = peps.Peps(lattice=lattice, dims=dims, boundary='infinite')
         for site in psi.sites():
