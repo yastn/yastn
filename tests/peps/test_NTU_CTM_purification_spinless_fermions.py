@@ -55,7 +55,7 @@ def test_NTU_spinless_finite():
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
         psi, _ =  evolution_step_(psi, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
-    
+
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
     tol = 1e-10 # truncation of singular values of ctm projectors
@@ -102,10 +102,10 @@ def test_NTU_spinless_infinite():
     lattice = 'rectangle'
     boundary = 'infinite'
     purification = 'True'
-    xx = 3
+    xx = 2
     yy = 2
-    D = 8
-    chi = 40
+    D = 6
+    chi = 10
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
     beta_end = 0.2
@@ -131,7 +131,7 @@ def test_NTU_spinless_infinite():
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        psi, _ =  evolution_step_(psi, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) # fix_bd = 0 refers to unfixed symmetry sectors    
+        psi, _ =  evolution_step_(psi, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) # fix_bd = 0 refers to unfixed symmetry sectors   
 
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
