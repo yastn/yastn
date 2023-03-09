@@ -1,4 +1,5 @@
 """ yast.conj()  yast.flip_signature() """
+import pytest
 import unittest
 import numpy as np
 import yast
@@ -67,6 +68,33 @@ def test_conj_hard_fusion():
     assert all(hfa.s == hfd.s for hfa, hfd in zip(a.hfs, d.hfs))
 
 
+def test_flip_charges():
+    leg = yast.Leg(config_Z2xU1, s=1, t=((0, 1), (1, 0), (0, -1)), D=(2, 3, 2))
+    a = yast.rand(config=config_Z2xU1, legs=[leg, leg, leg.conj(), leg.conj()])
+    b = a.flip_charges()
+    c = a.flip_charges(axes=(1, 2))
+
+    assert a.s == (1, 1, -1, -1)
+    assert b.s == (-1, -1, 1, 1)
+    assert c.s == (1, -1, 1, -1)
+    assert b.get_legs() == (leg.conj(), leg.conj(), leg, leg)
+    assert c.get_legs() == (leg, leg.conj(), leg, leg.conj())
+    assert all(x.is_consistent() for x in (a, b, c))
+    assert all(yast.are_independent(a, x) for x in (b, c))
+    assert (a - b.conj()).norm() > tol
+    assert (a - b.flip_charges()).norm() < tol
+    assert (a - c.flip_charges(axes=(2, 1))).norm() < tol
+
+    with pytest.raises(yast.YastError):
+        d = a.fuse_legs(axes=(0, (1, 2), 3))
+        d.flip_charges()
+        # Flipping charges of hard-fused leg is not supported.
+    with pytest.raises(yast.YastError):
+        d = yast.rand(config_Z2xU1, legs=leg, isdiag=True)
+        d.flip_charges()
+        # Cannot flip charges of a diagonal tensor. Use diag() first.
+
+
 class TestConj_Z2xU1(unittest.TestCase):
 
     def test_conj_Z2xU1(self):
@@ -122,6 +150,7 @@ class TestConj_Z2xU1(unittest.TestCase):
         assert yast.norm(b - d)<tol
 
 if __name__ == '__main__':
+    test_flip_charges()
     test_conj_basic()
     test_conj_hard_fusion()
     unittest.main()
