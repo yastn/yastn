@@ -5,8 +5,10 @@ from ._merging import _Fusion
 from ._tests import YastError, _test_axes_all
 
 
-__all__ = ['conj', 'conj_blocks', 'flip_signature', 'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',
-           'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to', 'requires_grad_', 'grad', 'drop_leg_history']
+__all__ = ['conj', 'conj_blocks', 'flip_signature', 'flip_charges',
+           'transpose', 'moveaxis', 'move_leg', 'diag', 'remove_zero_blocks',
+           'add_leg', 'remove_leg', 'copy', 'clone', 'detach', 'to',
+           'requires_grad_', 'grad', 'drop_leg_history']
 
 
 def copy(a):
@@ -191,7 +193,7 @@ def flip_charges(a, axes=None):
     hfs = list(a.hfs)
     for ax in uaxes:
         if hfs[ax].is_fused():
-            raise YastError('Flipping charges on hard-fused leg is not supported.')
+            raise YastError('Flipping charges of hard-fused leg is not supported.')
         s = snew[ax]
         tnew[:, ax, :] = a.config.sym.fuse(tnew[:, (ax,), :], (s,), -s)
         snew[ax] = -s
@@ -201,7 +203,7 @@ def flip_charges(a, axes=None):
     tnew = tuple(tuple(t.flat) for t in tnew)
 
     meta = tuple(sorted(zip(tnew, a.struct.D, a.struct.Dp, a.struct.sl)))
-    tnew, Dnew, Dpnew, slold = zip(meta) if len(meta) > 0 else ((), (), (), ())
+    tnew, Dnew, Dpnew, slold = zip(*meta) if len(meta) > 0 else ((), (), (), ())
     slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
     Dsize = slnew[-1][1] if len(slnew) > 0 else 0
     struct = a.struct._replace(s=snew, t=tnew, D=Dnew, Dp=Dpnew, sl=slnew)
