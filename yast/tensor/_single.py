@@ -52,7 +52,7 @@ def to(a, device=None, dtype=None):
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
         returns a clone of the tensor residing on ``device`` in desired ``dtype``. If tensor already
         resides on ``device``, returns ``self``. This operation preserves autograd.
 
@@ -148,7 +148,7 @@ def flip_signature(a):
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
         clone of the tensor with modified signature `-s` and total
         charge `-n`.
     """
@@ -158,6 +158,58 @@ def flip_signature(a):
     struct = a.struct._replace(s=news, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)
     return a._replace(hfs=hfs, struct=struct)
+
+
+def flip_charges(a, axes=None):
+    r"""
+    Flip signs of charges and signatures on specified legs.
+
+    Flipping charges/signature of hard-fused legs is not supported.
+
+    Parameters
+    ----------
+        axes: int or tuple(int)
+            index of the leg, or a group of legs. Is None, flips all legs.
+
+    Returns
+    -------
+    yast.Tensor
+    """
+    if a.isdiag:
+        raise YastError('Cannot flip charges of a diagonal tensor. Use diag() first.')
+    if axes is None:
+        axes = tuple(range(a.ndim))
+    else:
+        try:
+            axes = tuple(axes)
+        except TypeError:
+            axes = (axes,)
+    uaxes, = _unpack_axes(a.mfs, axes)
+
+    snew = np.array(a.struct.s, dtype=int)
+    tnew = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+    hfs = list(a.hfs)
+    for ax in uaxes:
+        if hfs[ax].is_fused():
+            raise YastError('Flipping charges on hard-fused leg is not supported.')
+        s = snew[ax]
+        tnew[:, ax, :] = a.config.sym.fuse(tnew[:, (ax,), :], (s,), -s)
+        snew[ax] = -s
+        hfs[ax] = hfs[ax].conj()
+    snew = tuple(snew)
+    hfs = tuple(hfs)
+    tnew = tuple(tuple(t.flat) for t in tnew)
+
+    meta = tuple(sorted(zip(tnew, a.struct.D, a.struct.Dp, a.struct.sl)))
+    tnew, Dnew, Dpnew, slold = zip(meta) if len(meta) > 0 else ((), (), (), ())
+    slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
+    Dsize = slnew[-1][1] if len(slnew) > 0 else 0
+    struct = a.struct._replace(s=snew, t=tnew, D=Dnew, Dp=Dpnew, sl=slnew)
+
+    meta = tuple(zip(slnew, slold))
+    data = a.config.backend.embed_slc(a.data, meta, Dsize)
+    return a._replace(struct=struct, data=data, hfs=hfs)
+
 
 
 def drop_leg_history(a, axis=None):
@@ -173,7 +225,7 @@ def drop_leg_history(a, axis=None):
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     if axis is None:
         axis = tuple(range(a.ndim))
