@@ -27,7 +27,7 @@ class SpinfulFermions(meta_operators):
         For 'U1xU1' the two species (spin-up and spin-down) are treated as distinguishable.
         In that case, rising and lowering operators of the two species commute.
         """
-        if not sym in ('Z2', 'U1xU1', 'U1xU1xZ2'):
+        if sym not in ('Z2', 'U1xU1', 'U1xU1xZ2'):
             raise YastError("For SpinfulFermions sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').")
         kwargs['fermionic'] = (False, False, True) if sym == 'U1xU1xZ2' else True
         import_sym = {'Z2': sym_Z2, 'U1xU1': sym_U1xU1, 'U1xU1xZ2': sym_U1xU1xZ2}

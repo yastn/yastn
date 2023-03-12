@@ -20,7 +20,7 @@ class SpinlessFermions(meta_operators):
             
             * For both Z2 and U1, charge.
         """
-        if not sym in ('Z2', 'U1'):
+        if sym not in ('Z2', 'U1'):
             raise YastError("For SpinlessFermions sym should be in ('Z2', 'U1').")
         kwargs['fermionic'] = True
         import_sym = {'Z2': sym_Z2, 'U1': sym_U1}

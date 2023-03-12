@@ -36,7 +36,7 @@ class Spin1(meta_operators):
         for :code:`sym='U1'` symmetry, :code:`reverse=True` is required
         since by default the charges are ordered in the increasing order.
         """
-        if not sym in ('dense', 'Z3', 'U1'):
+        if sym not in ('dense', 'Z3', 'U1'):
             raise YastError("For Spin1 sym should be in ('dense', 'Z3', 'U1').")
         kwargs['fermionic'] = False
         import_sym = {'dense': sym_none, 'Z3': sym_Z3, 'U1': sym_U1}
