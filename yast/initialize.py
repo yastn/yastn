@@ -420,7 +420,7 @@ def block(tensors, common_legs=None):
             raise YastError('Block does not support diagonal tensors. Use .diag() first.')
 
     legs_tn = {pa: a.get_legs() for pa, a in tensors.items()}
-    ulegs, legs, lls, hfs, ltDtot, ltDslc = [], [], [], [], [], []
+    ulegs, legs, hfs, ltDtot, ltDslc = [], [], [], [], []
     for n in range(tn0.ndim_n):
         legs_n = {}
         for pa, ll in legs_tn.items():
