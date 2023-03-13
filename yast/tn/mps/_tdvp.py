@@ -18,22 +18,22 @@ class TDVP_out(NamedTuple):
 
 def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opts_expmv=None, opts_svd=None, normalize=True):
     r"""
-    Generator performing TDVP sweeps to solve d/dt psi(t) = -u * H @ psi(t),
+    Generator performing TDVP sweeps to solve :math:`\frac{d}{dt} |\psi(t)\rangle = -uH|\psi(t)\rangle`,
 
     Parameters
     ----------
     psi: Mps
         Initial state. It is updated during execution.
-        It is first canonized to to the first site, if not provided in such a form.
-        State resulting from :code:`tdvp_` is canonized to the first site.
+        It is first canonized to the first site, if not provided in such a form.
+        Resulting state is also canonized to the first site.
 
     H: Mps, nr_phys=2
-        Evolution generator given in the form of mpo (time-independent H),
-        or a function outputting mpo (time-dependent H).
+        Evolution generator given either as MPO for time-independent problem 
+        or as a function returning MPO for time-dependent problem, i.e. ``Callable[[float], Mpo]``.
 
     time: float64 or tuple(float64)
-        Initial and final times; can also provide intermidiate times to reached as snapshots.
-        If only the final time is provided, initial time is set to 0.
+        Initial and final times; can also provide intermediate times for snapshots returned 
+        by the iterator. If only the final time is provided, initial time is set to 0.
 
     dt: double
         Time step.
@@ -61,9 +61,14 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
 
     Returns
     -------
-    env: Env3
-        Environment of the <psi|H|psi> ready for the next iteration.
-        Can contain temporary objects to reuse from previous sweeps.
+    TDVP_out(NamedTuple)
+        NamedTuple with fields:
+        
+            * :code:`ti` initial time of the time-interval.
+            * :code:`tf` current time.
+            * :code:`time_independent` if the Hamiltonian is time-independent.
+            * :code:`dt` time-step used.
+            * :code:`steps` number of time-steps in the last time-interval.
     """
     time_independent = isinstance(H, MpsMpo)
     if dt <= 0:

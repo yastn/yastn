@@ -73,5 +73,3 @@ excited states. List of MPS to project out is given as :code:`project=[lower_E_M
 .. autofunction:: yast.tn.mps.dmrg_
 
 See examples for :ref:`examples/mps/mps:dmrg`.
-
-.. todo:: can I use some other case then the smalles energy, e.g. the highest EV, should I say more on info from returns? 

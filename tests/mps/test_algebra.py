@@ -110,7 +110,7 @@ def test_multiplication():
     # case 1/
     print(psi.get_bond_charges_dimensions())
     Hpsi = mps.zipper(H, psi, opts={"D_total": 8})
-    mps.variational_(Hpsi, H, psi, method='2site', max_sweeps=5, Schmidt_tol=1e-6, opts_svd={"D_total": 8})
+    mps.compression_(Hpsi, (H, psi), method='2site', max_sweeps=5, Schmidt_tol=1e-6, opts_svd={"D_total": 8})
     print(Hpsi.get_bond_charges_dimensions())
     #
     # Use mps.vdot to get variation.

@@ -25,10 +25,20 @@ API: MPS and MPO
    :glob:
 
    mps/convention
-   mps/init
    mps/properties
    mps/algebra
    mps/i-o
+
+
+API: Creating MPS and MPO
+-------------------------
+
+.. toctree::
+   :glob:
+
+   mps/init
+   mps/init_hterm
+   mps/generate
 
 
 API: Expectation values
