@@ -105,3 +105,10 @@ Spectral decompositions
 .. autofunction:: yast.linalg.eigh_with_truncation
 .. autofunction:: yast.linalg.truncation_mask
 .. autofunction:: yast.linalg.truncation_mask_multiplets
+
+
+Krylov methods
+--------------
+
+.. autofunction:: yast.expmv
+.. autofunction:: yast.eigs

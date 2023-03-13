@@ -2,11 +2,12 @@
 from typing import NamedTuple
 import logging
 from ._env import Env2, Env3
+from ._mps import MpsMpo
 from ... import initialize, tensor, YastError
 
 logger = logging.Logger('compression')
 
-class variational_out(NamedTuple):
+class compression_out(NamedTuple):
     sweeps : int = 0
     overlap : float = None
     doverlap : float = None
@@ -14,34 +15,38 @@ class variational_out(NamedTuple):
     max_discarded_weight : float = None
 
 
-def variational_(psi, op_or_ket, ket_or_none=None, method='1site',
+def compression_(psi, target, method='1site',
                 overlap_tol=None, Schmidt_tol=None, max_sweeps=1,
                 iterator_step=None, opts_svd=None):
     r"""
-    Perform variational optimization of overlap of MPS :code:`psi` with target MPS, or with target MPO acting on target MPS.
-    .
+    Perform variational optimization sweeps until convergence to best approximate the target, starting from MPS/MPO :code:`psi`.
 
-    The outer loop sweeps over MPS updating sites from the first site to last and back.
+    The outer loop sweeps over ``psi`` updating sites from the first site to last and back.
     Convergence can be controlled based on overlap and/or Schmidt values (which is a more sensitive measure).
-    The algorithm sweeps through the lattice at most :code:`max_sweeps` times
-    or until all convergence measures, with tolerance that is not None, change by less then the provided tolerance during a single sweep.
+    The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided, it terminates earlier 
+    if the convergence criteria are satisfied: change in overlap or Schmidt values is less then the provided tolerance during a single sweep.
 
+    Works for 
+
+        * optimization against provided MPS: ``target`` is ``Mps`` or list ``[Mps,]``
+        * against MPO acting on MPS: ``target`` is a list ``[Mpo, Mps]``.
+        * against MPO (replacing all Mps's above with Mpo's), i.e., ``[Mpo,]`` or ``[Mpo, Mpo]``
+        * sum of MPS's: target is ``[[Mps],[Mps],...]``
+        * sum of MPO's acting on MPS's: target is ``[[Mpo,Mps], [Mpo,Mps], ...]``
+ 
     Outputs generator if :code:`iterator_step` is given.
-    Generator allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
+    Generator allows inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------
     psi: yamps.MpsMpo
         Initial state. It is updated during execution.
         It is first canonized to the first site, if not provided in such a form.
-        State resulting from :code:`variational_` is canonized to the first site.
+        State resulting from :code:`compression_` is canonized to the first site.
 
-    op_or_ket: yamps.MpsMpo
-        MPS if optimization against MPS, MPO if optimization agains MPO acting on MPS.
-
-    ket_or_none: yamps.MpsMpo
-        MPS is optimization against MPS acting on MPO, None otherwise.
-
+    target: yamps.MpsMpo or list(yamps.MpsMpo)
+        Defines target state. Can be an Mps (target = Mps or (Mps,)),
+        or Mpo acting on Mps (target = (Mpo, Mps)).
 
     method: str
         Which optimization variant to use from :code:`'1site'`, :code:`'2site'`
@@ -58,8 +63,8 @@ def variational_(psi, op_or_ket, ket_or_none=None, method='1site',
         Maximal number of sweeps.
 
     iterator_step: int
-        If int, :code:`variational_` returns a generator that would yield output after every iterator_step sweeps.
-        Default is None, in which case  :code:`variational_` sweeps are performed immidiatly.
+        If int, :code:`compression_` returns a generator that would yield output after every iterator_step sweeps.
+        Default is None, in which case  :code:`compression_` sweeps are performed immidiatly.
 
     opts_svd: dict
         Options passed to :meth:`yast.svd` used to truncate virtual spaces in :code:`method='2site'`.
@@ -67,30 +72,36 @@ def variational_(psi, op_or_ket, ket_or_none=None, method='1site',
 
     Returns
     -------
-    out: variational_out(NamedTuple)
-        Includes fields:
-        :code:`sweeps` number of performed sweeps.
-        :code:`overlap` overlap after the last sweep.
-        :code:`doverlap` absolut value of energy change in the last sweep.
-        :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
-        :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
+    compression_out(NamedTuple)
+        NamedTuple with fields
+
+            * :code:`sweeps` number of performed sweeps.
+            * :code:`overlap` overlap after the last sweep.
+            * :code:`doverlap` absolute value of overlap change in the last sweep.
+            * :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
+            * :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
-    tmp = _variational_(psi, op_or_ket, ket_or_none, method,
+    tmp = _compression_(psi, target, method,
                         overlap_tol, Schmidt_tol, max_sweeps,
                         iterator_step, opts_svd)
     return tmp if iterator_step else next(tmp)
 
 
-def _variational_(psi, op_or_ket, ket_or_none, method,
+def _compression_(psi, target, method,
                 overlap_tol, Schmidt_tol, max_sweeps,
                 iterator_step, opts_svd):
-    """ Generator for variational_(). """
+    """ Generator for compression_(). """
 
     if not psi.is_canonical(to='first'):
         psi.canonize_(to='first')
 
-    env = Env2(bra=psi, ket=op_or_ket) if ket_or_none is None else \
-        Env3(bra=psi, op=op_or_ket, ket=ket_or_none)
+    if isinstance(target, MpsMpo):
+        env = Env2(bra=psi, ket=target)
+    elif len(target) == 1:
+        env = Env2(bra=psi, ket=target[0])
+    else:
+        env = Env3(bra=psi, op=target[0], ket=target[1])
+
     env.setup(to='first')
 
     overlap_old = env.measure()
@@ -110,9 +121,9 @@ def _variational_(psi, op_or_ket, ket_or_none, method,
 
     for sweep in range(1, max_sweeps + 1):
         if method == '1site':
-            _variational_1site_sweep_(env, Schmidt=Schmidt)
+            _compression_1site_sweep_(env, Schmidt=Schmidt)
         else: # method == '2site':
-            max_dw = _variational_2site_sweep_(env, opts_svd=opts_svd, Schmidt=Schmidt)
+            max_dw = _compression_2site_sweep_(env, opts_svd=opts_svd, Schmidt=Schmidt)
 
         overlap = env.measure()
         doverlap, overlap_old = overlap_old - overlap, overlap
@@ -131,11 +142,11 @@ def _variational_(psi, op_or_ket, ket_or_none, method,
         if len(converged) > 0 and all(converged):
             break
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
-            yield variational_out(sweep, overlap, doverlap, max_dS, max_dw)
-    yield variational_out(sweep, overlap, doverlap, max_dS, max_dw)
+            yield compression_out(sweep, overlap, doverlap, max_dS, max_dw)
+    yield compression_out(sweep, overlap, doverlap, max_dS, max_dw)
 
 
-def _variational_1site_sweep_(env, Schmidt=None):
+def _compression_1site_sweep_(env, Schmidt=None):
     r"""
     Using :code:`verions='1site'` DMRG, an MPS :code:`psi` with fixed
     virtual spaces is variationally optimized to maximize overlap
@@ -185,7 +196,7 @@ def _variational_1site_sweep_(env, Schmidt=None):
             bra.remove_central()
 
 
-def _variational_2site_sweep_(env, opts_svd=None, Schmidt=None):
+def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
     """ variational update on 2 sites """
     if opts_svd is None:
         opts_svd = {'tol': 1e-14}

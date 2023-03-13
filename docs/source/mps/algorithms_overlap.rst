@@ -1,5 +1,4 @@
 Maximize overlap
 ================
 
-.. autofunction:: yast.tn.mps.variational_
-
+.. autofunction:: yast.tn.mps.compression_

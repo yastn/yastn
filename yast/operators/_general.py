@@ -2,7 +2,7 @@ class General:
     """ Predefine operators for spinless fermions. """
 
     def __init__(self, basis_operators):
-        """ 
+        r"""
         Generator of any arbritrary form. The operators are provided by user.
         
         No predefined operators.
@@ -14,9 +14,8 @@ class General:
         basis_operators : dictionary
             Should be a dictionary with elements in a form: 
             name: lambda j: tensor
-            with name: str, name of the operator,
-                j: index, single index,
-                tensor: yast.Tensor, Tensor with bra and ket phisical indicies.
+            with name: str, name of the operator, j: index, single index,
+            tensor: yast.Tensor, Tensor with bra and ket phisical indicies.
             All yast.Tensor-s have to have the same symmetry.
 
         Notes
@@ -26,7 +25,6 @@ class General:
         
         basis_operators have to include an identity operators defined under a key 'I'.
         """
-        
         self.config = basis_operators['I'](0).config
         self._sym = self.config.sym.SYM_ID
         self.s = (1, -1)
