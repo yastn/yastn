@@ -1,9 +1,7 @@
-YAMPS
-=====
+MPS
+===
 
-YAMPS - *Yet another matrix product state* library, supporting
-abelian-symmetric matrix product states/operators and related algorithms.
-
+Abelian-symmetric matrix product states/operators and related algorithms.
 Abelian-symmetric tensor algebra is provided by :doc:`YAST<index>`.
 
 .. automodule:: yamps
@@ -48,7 +46,9 @@ API: Algorithms
 .. toctree::
    :glob:
 
-   mps/algorithms
+   mps/algorithms_dmrg
+   mps/algorithms_tdvp
+   mps/algorithms_overlap
 
 
 Examples
