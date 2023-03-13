@@ -8,7 +8,7 @@ from ... import YastError
 #           tdvp                #
 #################################
 
-class TDVPout(NamedTuple):
+class TDVP_out(NamedTuple):
     ti : float = 0.
     tf : float = 0.
     time_independent: bool = None
@@ -106,7 +106,7 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
             else:
                 raise YastError("MPS: order should be in ('2nd', '4th')")
             t = t + ds
-        yield TDVPout(t0, t, time_independent, ds, steps)
+        yield TDVP_out(t0, t, time_independent, ds, steps)
 
 
 
