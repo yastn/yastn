@@ -27,7 +27,7 @@ A single tensor :math:`A_j` is a rank-3 array of size :math:`D_{j-1,j} \times d_
 
 
 The MPS forms one-dimensional structure with each tensor having a physical dimension *d* (:math:`d_j` for general case when particles/qudits are different) and virtual dimensions 
-:math:`D_{i,j}` connecting *i*-th particle with *j*-th particle. *YAMPS* allows to perform computation on one dimensional MPS with open boundary conditions. 
+:math:`D_{i,j}` connecting *i*-th particle with *j*-th particle. YAST implements operations on one dimensional MPS with open boundary conditions. 
 The schematic picture for general MPS is shown below. Notice that for open boundary condition we always have edge tensor with dimension :math:`1\times d_0 \times D_{0,1}` 
 on the left edge and :math:`D_{N-2,N-1} \times d_{N-1} \times` on the right edge.
 

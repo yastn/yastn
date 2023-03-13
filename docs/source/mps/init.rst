@@ -5,15 +5,15 @@ Initialization
 Creating empty MPS/MPO
 ----------------------
 
-In order to initialize MPS :class:`yast.tn.mps.Mps` or MPO :class:`yast.tn.mps.MPO` we have to create an object of that class.
+In order to initialize MPS :class:`yast.tn.mps.Mps` or MPO :class:`yast.tn.mps.Mpo` we have to create an object of that class.
 
 .. autofunction:: yast.tn.mps.Mps
 .. autofunction:: yast.tn.mps.Mpo
 
 To initialize an empty object for MPS use :code:`psi = yast.tn.mps.Mps(N)` which creates MPS of `N` sites but without any tensors defined.
 
-Both :class:`yast.tn.mps.Mps` and :class:`yast.tn.mps.MPO` inherit all functions from parent class :class:`yast.tn.mps.MpsMpo` but differ by a 
-number of physical legs, i.e., one for MPS and 2 for MPO. :class:`yast.tn.mps.MpsMpo` supports one dimensional structures which means that contains a list
+Both :class:`yast.tn.mps.Mps` and :class:`yast.tn.mps.Mpo` inherit all functions from parent class :class:`yast.tn.mps.MpsMpo` but differ by a 
+number of physical legs, i.e., one for MPS and 2 for MPO. :class:`yast.tn.mps.MpsMpo` supports one dimensional tensor networks, defined by list 
 of rank-3 or rank-4 :class:`yast.Tensor`-s for  :class:`yast.tn.mps.Mps` and :class:`yast.tn.mps.Mpo` respectively.
 
 .. autoclass:: yast.tn.mps.MpsMpo
@@ -22,7 +22,7 @@ of rank-3 or rank-4 :class:`yast.Tensor`-s for  :class:`yast.tn.mps.Mps` and :cl
 Setting MPS/MPO tensors by hand
 -------------------------------
 
-:ref:`An empty MPS/MPO<mps/init:Creating empty MPS/MPO>` can be filled with tensors by setting it one by one into empty `YAMPS` object. 
+:ref:`An empty MPS/MPO<mps/init:Creating empty MPS/MPO>` can be filled with tensors by setting them one by one. 
 
 .. code-block::
 
@@ -48,29 +48,30 @@ Setting MPS/MPO tensors by hand
 	To create :class:`yast.Tensor`'s look :ref:`here<tensor/init:Creating symmetric YAST tensors>`. 
 
 The examples of creating MPS/MPO by hand can be found here:
-:ref:`Ground state of Spin-1 AKLT model<examples/mps/mps:Ground state of Spin-1 AKLT model>`,
-:ref:`MPO for hopping model with Z2 symmetry<examples/mps/mps:MPO for hopping model with :math:`\mathbb{Z}_2` symmetry>`,
-:ref:`MPO for hopping model with U(1) symmetry<examples/mps/mps:MPO for hopping model with U(1) symmetry`.
+:ref:`Ground state of Spin-1 AKLT model<examples/mps/mps:ground state of spin-1 aklt model>`,
+:ref:`MPO for hopping model with Z2 symmetry<example hopping with z2 symmetry>`,
+:ref:`MPO for hopping model with U(1) symmetry<example hopping with u1 symmetry>`.
 
 .. todo:
 	Failed to create references to Z2 and U1 above. 
 
 Alternatively, MPS/MPO can be set using :class:`yast.tn.mps.Generator` environment (see  :ref:`here<mps/init:Setting MPS/MPO tensors with Generator>` for more)
-or using :class:`yast.tn.mps.Hterm` templete (see :ref:`here<mps/init:Setting MPS/MPO tensors with Hterm>` for more).
+or using :class:`yast.tn.mps.Hterm` (see :ref:`here<mps/init:Setting MPS/MPO tensors with Hterm>` for more).
 
 
 Setting MPS/MPO tensors with Hterm
 -----------------------------------
 
-:class:`yast.tn.mps.Hterm` is a templete object which includes an information about a product state we would like to generate. 
+:class:`yast.tn.mps.Hterm` is a basic building block of operators. Each ``Hterm`` represents
+a product of local (on-site) operators. 
 
 .. autoclass:: yast.tn.mps.Hterm
 
 .. note::
-	The object :code:`hterm` has operators :code:`hterm.operators` without virtual legs, i.e., rank-1 for MPS and rank-2 for MPO.
+	The :code:`Hterm` has operators :code:`Hterm.operators` without virtual legs, i.e., rank-1 for MPS and rank-2 for MPO.
 
-A list containing such templetes can be used to create a sum of products. In order to generate full MPO use :code:`exMPO = mps.generate_mpo(I, man_input)`, 
-where :code:`man_input` is a list of `Hterm`-s and :code:`I` is identity matrix for your basis.
+A list of such ``Hterms`` can be used to create a sum of products. In order to generate full MPO use :code:`exMPO = mps.generate_mpo(I, man_input)`, 
+where :code:`man_input` is a list of ``Hterm``-s and :code:`I` is the identity operator for your basis.
 
 .. autofunction:: yast.tn.mps.generate_mpo
 

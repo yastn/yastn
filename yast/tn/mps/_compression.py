@@ -18,14 +18,13 @@ def variational_(psi, op_or_ket, ket_or_none=None, method='1site',
                 overlap_tol=None, Schmidt_tol=None, max_sweeps=1,
                 iterator_step=None, opts_svd=None):
     r"""
-    Perform variational optimization sweeps until convergence, starting from MPS :code:`psi`.
+    Perform variational optimization of overlap of MPS :code:`psi` with target MPS, or with target MPO acting on target MPS.
+    .
 
     The outer loop sweeps over MPS updating sites from the first site to last and back.
     Convergence can be controlled based on overlap and/or Schmidt values (which is a more sensitive measure).
     The algorithm sweeps through the lattice at most :code:`max_sweeps` times
     or until all convergence measures, with tolerance that is not None, change by less then the provided tolerance during a single sweep.
-
-    Works both for optimization against provided MPS, or against MPO acting on MPS.
 
     Outputs generator if :code:`iterator_step` is given.
     Generator allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.

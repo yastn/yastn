@@ -75,7 +75,7 @@ def dmrg_(psi, H, project=None, method='1site',
 
     Returns
     -------
-    out: DMRG_out(NamedTuple)
+    DMRG_out(NamedTuple)
         Includes fields:
         :code:`sweeps` number of performed dmrg sweeps.
         :code:`energy` energy after the last sweep.

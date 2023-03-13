@@ -27,12 +27,15 @@ realizations of explicit symmetry.
 .. literalinclude:: /../../tests/mps/test_generator.py
         :pyobject: mpo_XX_model_dense
 
+.. _example hopping with z2 symmetry:
 
 MPO for hopping model with :math:`\mathbb{Z}_2` symmetry
 --------------------------------------------------------
 
 .. literalinclude:: /../../tests/mps/test_generator.py
         :pyobject: mpo_XX_model_Z2
+
+.. _example hopping with u1 symmetry:
 
 MPO for hopping model with U(1) symmetry
 ----------------------------------------

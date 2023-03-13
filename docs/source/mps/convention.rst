@@ -1,5 +1,5 @@
-YAMPS Conventions
-=================
+Conventions
+===========
 
 Index convention
 ----------------
@@ -26,9 +26,3 @@ The index convention for MPS/MPO tensors in `YAMPS` is
     0--|___|--2
          |
          1 (ket)
-
-The index convention can be accessed through properties 
-
-    * :code:`yast.tn.mps.MpsMpo.left` for position of left virtual index
-    * :code:`yast.tn.mps.MpsMpo.right` for position of right virtual index
-    * :code:`yast.tn.mps.MpsMpo.phys` for position(s) of physical indices given as :code:`tuple(int)`.

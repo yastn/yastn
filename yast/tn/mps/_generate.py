@@ -8,10 +8,10 @@ from ._latex2term import latex2term, GeneratorError
 
 class Hterm(NamedTuple):
     r"""
-    Defines a product operator :math:`O\in\A(\mathcal{H})` on product Hilbert space :math:`\mathcal{H}=\otimes_i \mathcal{H}_i`
+    Defines a product operator :math:`O\in\mathcal{A}(\mathcal{H})` on product Hilbert space :math:`\mathcal{H}=\otimes_i \mathcal{H}_i`
     where :math:`\mathcal{H}_i` is a local Hilbert space of *i*-th degree of freedom.
     The product operator :math:`O = \otimes_i o_i` is a tensor product of local operators :math:`o_i`.
-    Unless explicitly specified, the :math:`o_i` is assumed to be identity operator.
+    Unless explicitly specified, the :math:`o_i` is assumed to be an identity operator.
 
     If operators are fermionic, execution of swap gates enforces fermionic order (last operator in the list acts first).
 
@@ -22,8 +22,8 @@ class Hterm(NamedTuple):
     positions : tuple(int)
         positions of the local operators :math:`o_i` in the product different than identity
     operators : tuple(yast.Tensor)
-        local operators in the product, acting at *i*-th positon :code:`positions[i]` 
-        different than identity.
+        local operators in the product different than identity. 
+        *i*-th operator is acting at position :code:`positions[i]` 
     """
     amplitude : float = 1.0
     positions : tuple = ()
@@ -64,25 +64,24 @@ def generate_single_mpo(I, term):
 
 def generate_mpo(I, terms, normalize=False, opts=None, packet=50):
     """
-    Generate mpo provided a list of Hterm-s and identity operator I.
+    Generate MPO provided a list of :class:`Hterm`-s and an on-site identity operator `I`.
 
-    Creates a packet of MPO-s with packet virtual dimension  'packet',
-    truncate, and to total and truncate again
-    
+    If the number of MPOs is large, adding them all together can result 
+    in large intermediate MPO. By specifying ``packet`` size, the groups of MPO-s 
+    are truncated at intermediate steps before continuing with summing. 
+
     Parameters
     ----------
     term: list of :class:`Hterm`
-        instruction to create the Mpo which is a product of
-        operators element.operator at location element.position
-        and with amplitude element.amplitude.
+        product operators making up the MPO
     I: yast.Tensor
-        identity MPO
+        on-site identity operator
     normalize: bool
         True if the result should be normalized
     opts: dict
         options for truncation of the result
     packet: int
-        how many single MPO-s of bond dimension 1 shuold be truncated at ones
+        how many ``Hterm``s (MPOs of bond dimension 1) should be truncated at once
     """
     ip, M_tot, Nterms = 0, None, len(terms)
     while ip < Nterms:
@@ -99,7 +98,7 @@ def generate_mpo(I, terms, normalize=False, opts=None, packet=50):
 
 def generate_single_mps(term, N):
     r"""
-    Generate a vector given vectors for each site in the MPS.
+    Generate an MPS given vectors for each site in the MPS.
 
     Parameters
     ----------
@@ -126,20 +125,18 @@ def generate_single_mps(term, N):
 
 def generate_mps(terms, N, normalize=False, opts=None, packet=50):
     """
-    Generate mps provided a list of Hterm-s.
+    Generate MPS provided a list of :class:`Hterm`-s.
 
-    Creates a packet of MPS-s with packet virtual dimension  'packet',
-    truncate, and to total and truncate again
+    If the number of MPSs is large, adding them all together can result 
+    in large intermediate MPS. By specifying ``packet`` size, the groups of MPO-s 
+    are truncated at intermediate steps before continuing with summing.
     
     Parameters
     ----------
     N: int
-        size of the product Mps
+       number of sites
     term: list of :class:`Hterm`
-        instruction to create the Mps which is a product of
-        operators element.operator at location element.position
-        and with amplitude element.amplitude.
-        Used has to provide tensor for each site 0 through N-1.
+        product operators making up the MPS
     normalize: bool
         True if the result should be normalized
     opts: dict
