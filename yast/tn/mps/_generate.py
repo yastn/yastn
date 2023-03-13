@@ -9,9 +9,11 @@ from ._latex2term import latex2term, GeneratorError
 class Hterm(NamedTuple):
     r"""
     Defines a product operator :math:`O\in\A(\mathcal{H})` on product Hilbert space :math:`\mathcal{H}=\otimes_i \mathcal{H}_i`
-    where :math:`\mathcal{H}_i` is a local Hilbert space of *i*-th degree of freedom. 
+    where :math:`\mathcal{H}_i` is a local Hilbert space of *i*-th degree of freedom.
     The product operator :math:`O = \otimes_i o_i` is a tensor product of local operators :math:`o_i`.
     Unless explicitly specified, the :math:`o_i` is assumed to be identity operator.
+
+    If operators are fermionic, execution of swap gates enforces fermionic order (last operator in the list acts first).
 
     Parameters
     ----------
@@ -32,7 +34,7 @@ def generate_single_mpo(I, term):
     r"""
     Apply local operators specified by term in :class:`Hterm` to the mpo I.
 
-    Apply swap_gates to introduce fermionic degrees of freedom
+    Apply swap_gates to introduce fermionic degrees of freedom 
     (fermionic order is the same as order of sites in Mps).
     With this respect, local operators specified in term.operators are applied from last to first,
     i.e., from right to left.
@@ -74,7 +76,7 @@ def generate_mpo(I, terms, normalize=False, opts=None, packet=50):
         operators element.operator at location element.position
         and with amplitude element.amplitude.
     I: yast.Tensor
-        identity tensor
+        identity MPO
     normalize: bool
         True if the result should be normalized
     opts: dict
@@ -223,7 +225,7 @@ class Generator:
         for label, site in self._map.items():
             local_I = getattr(self._ops, self._Is[label])
             self._I.A[site] = local_I().add_leg(axis=0, s=-1).add_leg(axis=2, s=1)
-        
+
         self.config = self._I.A[0].config
         self.parameters = {} if parameters is None else parameters
         self.parameters["minus"] = -float(1.0)

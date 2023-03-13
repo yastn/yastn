@@ -18,37 +18,40 @@ def variational_(psi, op_or_ket, ket_or_none=None, method='1site',
                 overlap_tol=None, Schmidt_tol=None, max_sweeps=1,
                 iterator_step=None, opts_svd=None):
     r"""
-    Perform DMRG sweeps until convergence, starting from MPS :code:`psi`.
+    Perform variational optimization sweeps until convergence, starting from MPS :code:`psi`.
 
     The outer loop sweeps over MPS updating sites from the first site to last and back.
-    Convergence can be controlled based on energy and/or Schmidt values (which is a more sensitive measure).
-    The DMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
-    or until all convergence measures with provided tolerance change by less then the tolerance.
+    Convergence can be controlled based on overlap and/or Schmidt values (which is a more sensitive measure).
+    The algorithm sweeps through the lattice at most :code:`max_sweeps` times
+    or until all convergence measures, with tolerance that is not None, change by less then the provided tolerance during a single sweep.
+
+    Works both for optimization against provided MPS, or against MPO acting on MPS.
 
     Outputs generator if :code:`iterator_step` is given.
-    It allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
+    Generator allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------
     psi: yamps.MpsMpo
         Initial state. It is updated during execution.
-        It is first canonized to to the first site, if not provided in such a form.
-        State resulting from :code:`dmrg_` is canonized to the first site.
+        It is first canonized to the first site, if not provided in such a form.
+        State resulting from :code:`variational_` is canonized to the first site.
 
-    H: yamps.MpsMpo
-        MPO to minimize against.
+    op_or_ket: yamps.MpsMpo
+        MPS if optimization against MPS, MPO if optimization agains MPO acting on MPS.
 
-    project: list(yamps.MpsMpo)
-        Optimizes MPS in the subspace orthogonal to MPS's in the list.
+    ket_or_none: yamps.MpsMpo
+        MPS is optimization against MPS acting on MPO, None otherwise.
+
 
     method: str
-        Which DMRG variant to use from :code:`'1site'`, :code:`'2site'`
+        Which optimization variant to use from :code:`'1site'`, :code:`'2site'`
 
-    energy_tol: float
-        Convergence tolerance for the change of energy in a single sweep.
-        By default is None, in which case energy convergence is not checked.
+    overlap_tol: float
+        Convergence tolerance for the change of overlap in a single sweep.
+        By default is None, in which case overlap convergence is not checked.
 
-    energy_tol: float
+    Schmidt_tol: float
         Convergence tolerance for the change of Schmidt values on the worst cut/bond in a single sweep.
         By default is None, in which case Schmidt values convergence is not checked.
 
@@ -56,12 +59,8 @@ def variational_(psi, op_or_ket, ket_or_none=None, method='1site',
         Maximal number of sweeps.
 
     iterator_step: int
-        If int, :code:`dmrg_` returns a generator that would yield output after every iterator_step sweeps.
-        Default is None, in which case  :code:`dmrg_` sweeps are performed immidiatly.
-
-    opts_eigs: dict
-        options passed to :meth:`yast.eigs`.
-        If None, use default {'hermitian': True, 'ncv': 3, 'which': 'SR'}
+        If int, :code:`variational_` returns a generator that would yield output after every iterator_step sweeps.
+        Default is None, in which case  :code:`variational_` sweeps are performed immidiatly.
 
     opts_svd: dict
         Options passed to :meth:`yast.svd` used to truncate virtual spaces in :code:`method='2site'`.
@@ -69,12 +68,12 @@ def variational_(psi, op_or_ket, ket_or_none=None, method='1site',
 
     Returns
     -------
-    out: DMRGout(NamedTuple)
+    out: variational_out(NamedTuple)
         Includes fields:
-        :code:`sweeps` number of performed dmrg sweeps.
-        :code:`energy` energy after the last sweep.
-        :code:`denergy` absolut value of energy change in the last sweep.
-        :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep
+        :code:`sweeps` number of performed sweeps.
+        :code:`overlap` overlap after the last sweep.
+        :code:`doverlap` absolut value of energy change in the last sweep.
+        :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
         :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
     tmp = _variational_(psi, op_or_ket, ket_or_none, method,
@@ -210,7 +209,7 @@ def _variational_2site_sweep_(env, opts_svd=None, Schmidt=None):
 
 
 def zipper(a, b, opts=None):
-    "Apply mpo a on mps/mpo b, performing svd compression during the sweep."
+    "Apply MPO a on MPS/MPS b, performing svd compression during the sweep."
 
     psi = b.clone()
     psi.canonize_(to='last')
