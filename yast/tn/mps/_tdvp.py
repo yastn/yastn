@@ -61,9 +61,13 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
 
     Returns
     -------
-    env: Env3
-        Environment of the <psi|H|psi> ready for the next iteration.
-        Can contain temporary objects to reuse from previous sweeps.
+    TDVP_out(NamedTuple)
+        Includes fields:
+        :code:`ti` initial time of the time-interval.
+        :code:`tf` current time.
+        :code:`time_independent` if the Hamiltonian is time-independent.
+        :code:`dt` time-step used.
+        :code:`steps` number of time-steps in the last time-interval.
     """
     time_independent = isinstance(H, MpsMpo)
     if dt <= 0:
