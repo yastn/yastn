@@ -17,7 +17,7 @@ def run_zipper(psi, H, Egs):
 
     Hnorm = mps.measure_overlap(Hpsi, Hpsi) ** 0.5
 
-    for out in mps.variational_(Hpsi, H, psi, iterator_step=1, max_sweeps=1):
+    for out in mps.compression_(Hpsi, (H, psi), iterator_step=1, max_sweeps=1):
         Eng_new = mps.vdot(Hpsi, psi) * Hnorm
         assert Egs < Eng_new < Eng_t
         Eng_t = Eng_new
@@ -31,7 +31,7 @@ def run_truncation(psi, H, Egs, sweeps=2):
     assert 1 > abs(ov_t) > 0.99
     assert Egs < Eng_t.real < Egs * 0.99
 
-    out = mps.variational_(psi2, psi, max_sweeps=5)
+    out = mps.compression_(psi2, psi, max_sweeps=5)
     ov_v = mps.measure_overlap(psi, psi2).item()
     Eng_v = mps.measure_mpo(psi2, H, psi2).item()
     assert all(dp <= do for dp, do in zip(psi2.get_bond_dimensions(), (1, 2, 4, 4, 4, 4, 4, 2, 1)))
