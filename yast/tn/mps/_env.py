@@ -1,5 +1,5 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
-from ... import tensor, initialize, YastError
+from ... import tensor, initialize, YastError, expmv
 
 
 def norm(ket):
@@ -382,7 +382,7 @@ class Env3(_EnvParent):
         if n in self._temp['expmv_ncv']:
             opts['ncv'] = self._temp['expmv_ncv'][n]
         f = lambda x: self.Heff1(x, n)
-        self.ket[n], info = tensor.expmv(f, self.ket[n], du, **opts, normalize=normalize, return_info=True)
+        self.ket[n], info = expmv(f, self.ket[n], du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][n] = info['ncv']
 
     def update_C(self, du, opts, normalize=True):
@@ -392,7 +392,7 @@ class Env3(_EnvParent):
             if bd in self._temp['expmv_ncv']:
                 opts['ncv'] = self._temp['expmv_ncv'][bd]
             f = lambda x: self.Heff0(x, bd)
-            self.ket.A[bd], info = tensor.expmv(f, self.ket[bd], du, **opts, normalize=normalize, return_info=True)
+            self.ket.A[bd], info = expmv(f, self.ket[bd], du, **opts, normalize=normalize, return_info=True)
             self._temp['expmv_ncv'][bd] = info['ncv']
 
     def update_AA(self, bd, du, opts, opts_svd, normalize=True):
@@ -402,7 +402,7 @@ class Env3(_EnvParent):
             opts['ncv'] = self._temp['expmv_ncv'][ibd]
         AA = self.ket.merge_two_sites(bd)
         f = lambda v: self.Heff2(v, bd)
-        AA, info = tensor.expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
+        AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)
 

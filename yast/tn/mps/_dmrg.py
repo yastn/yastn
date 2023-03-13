@@ -1,7 +1,7 @@
 """ Various variants of the DMRG algorithm for mps."""
 from typing import NamedTuple
 import logging
-from ... import tensor, YastError
+from ... import eigs, YastError
 from ._env import Env3
 
 
@@ -157,7 +157,7 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
             env.update_Aort(n)
-            _, (psi.A[n],) = tensor.eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
+            _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
             psi.orthogonalize_site(n, to=to)
             if Schmidt is not None and to == 'first' and n != psi.first:
                 _, S, _ = psi[psi.pC].svd(sU=1)
@@ -187,7 +187,7 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
             bd = (n, n + 1)
             env.update_AAort(bd)
             AA = psi.merge_two_sites(bd)
-            _, (AA,) = tensor.eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
+            _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
             _disc_weight_bd = psi.unmerge_two_sites(AA, bd, opts_svd)
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':
