@@ -11,6 +11,7 @@ API: yast and yast.Tensor
 -------------------------
 
 .. toctree::
+   :maxdepth: 2
    :glob:
 
    tensor/configuration
