@@ -1,6 +1,6 @@
 import numpy as np
 from typing import NamedTuple
-from ... import ones, rand, ncon, Leg, random_leg, Tensor, YastError
+from ... import ones, rand, ncon, Leg, random_leg, YastError
 from ...operators import Qdit
 from ._mps import Mpo, Mps, add
 from ._latex2term import latex2term, GeneratorError
@@ -13,16 +13,16 @@ class Hterm(NamedTuple):
     The product operator :math:`O = \otimes_i o_i` is a tensor product of local operators :math:`o_i`.
     Unless explicitly specified, the :math:`o_i` is assumed to be an identity operator.
 
-    If operators are fermionic, execution of swap gates enforces fermionic order (last operator in the list acts first).
+    If operators are fermionic, execution of swap gates enforces fermionic order (the last operator in the list acts first).
 
     Parameters
     ----------
     amplitude : number
-        number multiplier in front of the product.
+        numerical multiplier in front of the operator product.
     positions : tuple(int)
         positions of the local operators :math:`o_i` in the product different than identity
     operators : tuple(yast.Tensor)
-        local operators in the product different than identity. 
+        local operators in the product that are different than the identity.
         *i*-th operator is acting at position :code:`positions[i]` 
     """
     amplitude : float = 1.0
@@ -30,21 +30,19 @@ class Hterm(NamedTuple):
     operators : tuple = ()
 
 
-def generate_single_mpo(I, term):
+def generate_single_mpo(I, term):   # this can be private
     r"""
-    Apply local operators specified by term in :class:`Hterm` to the mpo I.
+    Apply local operators specified by term in :class:`Hterm` to the MPO `I`.
 
+    MPO `I` is presumed to be an identity.
     Apply swap_gates to introduce fermionic degrees of freedom 
     (fermionic order is the same as order of sites in Mps).
-    With this respect, local operators specified in term.operators are applied from last to first,
+    With this respect, local operators specified in term.operators are applied starting with the last element,
     i.e., from right to left.
 
     Parameters
     ----------
     term: :class:`Hterm`
-        instruction to create the Mpo which is a product of
-        operators element.operator at location element.position
-        and with amplitude element.amplitude.
     """
     single_mpo = I.copy()
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
@@ -62,9 +60,10 @@ def generate_single_mpo(I, term):
     single_mpo[0] = term.amplitude * single_mpo[0]
     return single_mpo
 
-def generate_mpo(I, terms, normalize=False, opts=None, packet=50):
+
+def generate_mpo(I, terms, normalize=False, opts=None, packet=50):  # can use better algorithm to compress
     """
-    Generate MPO provided a list of :class:`Hterm`-s and an on-site identity operator `I`.
+    Generate MPO provided a list of :class:`Hterm`-s and identity MPO `I`.
 
     If the number of MPOs is large, adding them all together can result 
     in large intermediate MPO. By specifying ``packet`` size, the groups of MPO-s 
@@ -96,7 +95,7 @@ def generate_mpo(I, terms, normalize=False, opts=None, packet=50):
             M_tot.truncate_(to='first', opts=opts, normalize=normalize)
     return M_tot
 
-def generate_single_mps(term, N):
+def generate_single_mps(term, N):  # obsolate - DELETE  (not docummented)
     r"""
     Generate an MPS given vectors for each site in the MPS.
 
@@ -123,7 +122,7 @@ def generate_single_mps(term, N):
         single_mps.A[n] = op.add_leg(axis=0, s=-1).add_leg(axis=2, s=1)
     return term.amplitude * single_mps
 
-def generate_mps(terms, N, normalize=False, opts=None, packet=50):
+def generate_mps(terms, N, normalize=False, opts=None, packet=50):   #  DELETE
     """
     Generate MPS provided a list of :class:`Hterm`-s.
 
@@ -242,7 +241,7 @@ class Generator:
         self.config.backend.random_seed(seed)
 
     def I(self):
-        """ Returns identity Mpo. """
+        """ Returns identity MPO. """
         return self._I.copy()
 
     def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64'):
@@ -287,7 +286,7 @@ class Generator:
 
     def random_mpo(self, D_total=8, sigma=1, dtype='float64'):
         """
-        Generate a random Mpo of virtual bond dimension D_total.
+        Generate a random MPO of virtual bond dimension D_total.
 
         Mainly, for testing.
 
@@ -374,7 +373,7 @@ class Generator:
         c3 = self._term2Hterm(templete, vectors, parameters)
         return generate_mps(c3, self.N)
 
-    def mpo_from_latex(self, H_str, parameters=None):
+    def mpo_from_latex(self, H_str, parameters=None):   
         r"""
         Convert latex-like string to yamps MPO.
 
@@ -397,7 +396,7 @@ class Generator:
         c3 = self._term2Hterm(c2, self._ops.to_dict(), parameters)
         return generate_mpo(self._I, c3)
     
-    def mpo_from_templete(self, templete, parameters=None):
+    def mpo_from_templete(self, templete, parameters=None):   # remove from docs (DELETE)
         r"""
         Convert instruction in a form of single_term-s to yamps MPO.
 

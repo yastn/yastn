@@ -5,7 +5,7 @@ import yast.tn.mps as mps
 import yast
 try:
     from .configs import config_dense as cfg
-    # cfg is used by pytest to inject different backends and divices
+    # pytest modifies cfg to inject different backends and devices during tests
 except ImportError:
     from configs import config_dense as cfg
 
