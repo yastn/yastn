@@ -73,8 +73,8 @@ def add(*states, amplitudes=None):
         raise YastError('MPS: All states should be either Mps or Mpo.')
     if any(psi.pC != None for psi in states):
         raise YastError('MPS: Absorb central sites of mps-s before calling add.')
-    legf = states[0][phi.first].get_legs(axis=0)
-    legl = states[0][phi.last].get_legs(axis=2)
+    legf = states[0][phi.first].get_legs(axes=0)
+    legl = states[0][phi.last].get_legs(axes=2)
     #if any(psi.virtual_leg('first') != legf or psi.virtual_leg('last') != legl for psi in states):
     #    raise YastError('MPS: Addition')
 
@@ -434,7 +434,7 @@ class MpsMpo:
             U, S, V = tensor.svd(self.A[self.pC], axes=(0, 1), sU=1)
 
             mask = tensor.truncation_mask(S, **opts)
-            U, C, V = mask.apply_mask(U, S, V, axis=(1, 0, 0))
+            U, C, V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
             self.A[self.pC] = C / C.norm() if normalize else C
             n1, n2 = self.pC
 
@@ -450,7 +450,7 @@ class MpsMpo:
                 self.A[self.pC] = self.A[self.pC] @ V
 
             # discarded weight
-            nC = tensor.bitwise_not(mask).apply_mask(S, axis=0)
+            nC = tensor.bitwise_not(mask).apply_mask(S, axes=0)
             return nC.norm() / S.norm()
         return 0.
 
@@ -644,17 +644,17 @@ class MpsMpo:
         self.pC = bd
         U, S, V = tensor.svd(AA, axes=axes, sU=1, Uaxis=2)
         mask = tensor.truncation_mask(S, **opts)
-        self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(U, S, V, axis=(2, 0, 0))
+        self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(U, S, V, axes=(2, 0, 0))
 
         # discarded weight
-        nC = tensor.bitwise_not(mask).apply_mask(S, axis=0)
+        nC = tensor.bitwise_not(mask).apply_mask(S, axes=0)
         return nC.norm() / S.norm()
 
     def virtual_leg(self, ind):
         if ind == 'first':
-            return self.A[self.first].get_legs(axis=0)
+            return self.A[self.first].get_legs(axes=0)
         if ind == 'last':
-            return self.A[self.last].get_legs(axis=2)
+            return self.A[self.last].get_legs(axes=2)
 
     def get_bond_dimensions(self):
         r"""
@@ -666,8 +666,8 @@ class MpsMpo:
             list of total bond dimensions on virtual legs from first to last,
             including "trivial" leftmost and rightmost virtual spaces.
         """
-        Ds = [self.A[n].get_shape(axis=0) for n in self.sweep(to='last')]
-        Ds.append(self.A[self.last].get_shape(axis=2))
+        Ds = [self.A[n].get_shape(axes=0) for n in self.sweep(to='last')]
+        Ds.append(self.A[self.last].get_shape(axes=2))
         return tuple(Ds)
 
     def get_bond_charges_dimensions(self):
@@ -683,9 +683,9 @@ class MpsMpo:
         """
         tDs = []
         for n in self.sweep(to='last'):
-            leg = self.A[n].get_legs(axis=0)
+            leg = self.A[n].get_legs(axes=0)
             tDs.append(leg.tD)
-        leg = self.A[self.last].get_legs(axis=2)
+        leg = self.A[self.last].get_legs(axes=2)
         tDs.append(leg.tD)
         return tDs
 

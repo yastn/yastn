@@ -94,19 +94,19 @@ def test_operators_chain():
     nn = (0,) * len(c.n)
     o4 = yast.add_leg(c, axis=-1, t=nn, s=-1)
     o4 = yast.add_leg(o4, axis=0, s=1)
-    nn = o4.get_legs(axis=0).t[0]
+    nn = o4.get_legs(axes=0).t[0]
 
     o3 = yast.add_leg(c, axis=-1, t=nn, s=-1)
     o3 = yast.add_leg(o3, axis=0, s=1)
-    nn = o3.get_legs(axis=0).t[0]
+    nn = o3.get_legs(axes=0).t[0]
 
     o2 = yast.add_leg(cdag, axis=-1, t=nn, s=-1)
     o2 = yast.add_leg(o2, axis=0, s=1)
-    nn = o2.get_legs(axis=0).t[0]
+    nn = o2.get_legs(axes=0).t[0]
 
     o1 = yast.add_leg(cdag, axis=-1, t=nn, s=-1)
     o1 = yast.add_leg(o1, axis=0, s=1)
-    nn = o1.get_legs(axis=0).t[0]
+    nn = o1.get_legs(axes=0).t[0]
     assert nn == (0,) * len(c.n)
 
     T1 = yast.ncon([cdag, cdag, c, c], [(-1, -5), (-2, -6), (-3 ,-7), (-4, -8)])

@@ -241,7 +241,7 @@ def zipper(a, b, opts=None):
         U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1)
 
         mask = tensor.truncation_mask(S, **opts)
-        U, C, V = mask.apply_mask(U, S, V, axis=(2, 0, 0))
+        U, C, V = mask.apply_mask(U, S, V, axes=(2, 0, 0))
 
         psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
         tmp = U @ C

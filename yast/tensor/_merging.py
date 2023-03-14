@@ -369,7 +369,7 @@ def unfuse_legs(a, axes):
 
     Parameters
     ----------
-    axis: int or tuple[int]
+    axes: int or tuple[int]
         leg(s) to unfuse.
 
     Returns
@@ -689,14 +689,14 @@ def _leg_structure_merge(teff, tlegs, Deff, Dlegs):
     return _LegSlices(tuple(t), tuple(D), tuple(dec))
 
 
-def _fuse_hfs(hfs, t_in, D_in, s_out, axis=None):
+def _fuse_hfs(hfs, t_in, D_in, s_out, axes=None):
     """ Fuse _Fusion(s), including charges and dimensions present on the fused legs. """
-    if axis is None:
-        axis = list(range(len(hfs)))
+    if axes is None:
+        axes = list(range(len(hfs)))
     tfl, Dfl, sfl = [], [], [s_out]
     opfl = 'p'  # product
-    treefl = [sum(hfs[n].tree[0] for n in axis)]
-    for n in axis:
+    treefl = [sum(hfs[n].tree[0] for n in axes)]
+    for n in axes:
         tfl.append(t_in[n])
         tfl.extend(hfs[n].t)
         Dfl.append(D_in[n])

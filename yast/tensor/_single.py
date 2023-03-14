@@ -214,7 +214,7 @@ def flip_charges(a, axes=None):
 
 
 
-def drop_leg_history(a, axis=None):
+def drop_leg_history(a, axes=None):
     r"""
     Drops information about original structure of fused or blocked legs that have been combined into a selected tensor leg(s).
 
@@ -222,21 +222,21 @@ def drop_leg_history(a, axis=None):
 
     Parameters
     ----------
-        axis: int or tuple(int)
+        axes: int or tuple(int)
             index of the leg, or a group of legs. Is None, drops information from all legs.
 
     Returns
     -------
     yast.Tensor
     """
-    if axis is None:
-        axis = tuple(range(a.ndim))
+    if axes is None:
+        axes = tuple(range(a.ndim))
     else:
         try:
-            axis = tuple(axis)
+            axes = tuple(axes)
         except TypeError:
-            axis = (axis,)
-    uaxes, = _unpack_axes(a.mfs, axis)
+            axes = (axes,)
+    uaxes, = _unpack_axes(a.mfs, axes)
     hfs = tuple(_Fusion(s=(a.struct.s[n],)) if n in uaxes else a.hfs[n] for n in range(a.ndim_n))
     return a._replace(hfs=hfs)
 
