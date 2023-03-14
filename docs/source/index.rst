@@ -7,7 +7,7 @@ Block-sparse tensor algebra library supporting abelian symmetries
 together with MPS and PEPS implementations powered by YAST.
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: Table of contents:
 
    yast.tensor

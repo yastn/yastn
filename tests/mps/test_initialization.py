@@ -9,7 +9,7 @@ except ImportError:
     from configs import config_dense as cfg
 
 
-def test_assign_block():
+def build_spin1_aklt_state():
     # Initialize MPS tensor by tensor. Example for Spin-1 AKLT state.
     #
     # Prepare rank-2 blocks (matrices) of on-site tensors
@@ -70,4 +70,4 @@ def test_assign_block():
 
 
 if __name__ == "__main__":
-    test_assign_block()
+    build_spin1_aklt_state()
