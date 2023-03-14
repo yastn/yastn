@@ -610,7 +610,7 @@ def entropy(a, axes=(0, 1), alpha=1):
     Calculate entropy from spliting the tensor using svd.
 
     If diagonal, calculates entropy treating S^2 as probabilities. Normalizes S^2 if neccesary.
-    If not diagonal, calculates svd first to get the diagonal S.
+    If not diagonal, starts with svd to get the diagonal S.
     Use base-2 log.
 
     Parameters

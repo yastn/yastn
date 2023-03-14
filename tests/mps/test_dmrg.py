@@ -12,57 +12,57 @@ except ImportError:
 tol = 1e-5
 
 def run_dmrg(phi, H, occ, E_target, occ_target, opts_svd=None):
-    """ Run a faw sweeps of mps._dmrg. Verify energy against known reference solutions. """
-    # To obtain states above the ground state, lower-lying states are projected out.
-    # The list project keeps all lower lying states which we obtain iteratively in this code.
+    r"""
+    Run mps.dmrg_ to find the ground state and a few low-energy states of the Hamiltonian H.
+    Verify resulting energies against known reference solutions.
+    """
+    # 
+    # DMRG can look for solutions in a space orthogonal to provided MPSs.
+    # We start with empty list, project = [], and keep adding to it previously found eigenstates.
+    # This allows us to find the ground state and a few consequative lowest-energy eigenstates.
     #
     project = []
-    for ii, Eng_ii in enumerate(E_target):
+    for reference_energy, reference_occupation in zip(E_target, occ_target):
         #
-        # In the loop we will find a state and then check its total occupation number and energy. 
+        # We find a state and check that its energy and total occupation matches the expected reference values.
         #
-        # We copy initial random MPS psi. This creates an independent MPS which can be used as initial 
-        # guess for DMRG.
+        # We copy initial random MPS psi, as yast.dmrg_ modifies provided input state in place.
         #
         psi = phi.copy()
         #
-        # We set up dmrg to converge according to energy.
+        # We set up dmrg_ to terminate iterations when energy is converged within some tolerance.
         #
         out = mps.dmrg_(psi, H, project=project, method='2site',
                         energy_tol=tol / 10, max_sweeps=20, opts_svd=opts_svd)
         #
-        # Output of _dmrg is a nametuple that contains final energy.
-        # Occupation number has to be calcuted with measure_mpo.
+        # Output of _dmrg is a nametuple with basic information about the run, including the final energy.
+        # Occupation number has to be calcuted using measure_mpo.
         #
-        EE, Eocc = out.energy, mps.measure_mpo(psi, occ, psi)
+        energy = out.energy
+        occupation = mps.measure_mpo(psi, occ, psi)
         #
         # Print the result:
         #
         logging.info(" 2site dmrg; Energy: %0.8f / %0.8f   Occupation: %0.8f / %0.8f", 
-                        EE, E_target[ii], Eocc, occ_target[ii])
+                        energy, reference_energy, occupation, reference_occupation)
+        assert pytest.approx(energy.item(), rel=tol) == reference_energy
+        assert pytest.approx(occupation.item(), rel=tol) == reference_occupation
         #
-        # Check if DMRG reached exact energy:
-        #
-        assert pytest.approx(EE.item(), rel=tol) == Eng_ii
-        #
-        # and if occupation is as we expected:
-        #
-        assert pytest.approx(Eocc.item(), rel=tol) == occ_target[ii]
-        #
-        # We run further iterations with other parameters
+        # We run further iterations with 1site dmrg scheme and stricter convergence criterion.
         #
         out = mps.dmrg_(psi, H, project=project, method='1site',
                         Schmidt_tol=tol / 10, max_sweeps=20)
-        EE, Eocc = mps.measure_mpo(psi, H, psi), mps.measure_mpo(psi, occ, psi)
+        
+        energy = mps.measure_mpo(psi, H, psi)
+        occupation = mps.measure_mpo(psi, occ, psi)        
         logging.info(" 1site dmrg; Energy: %0.8f / %0.8f   Occupation: %0.8f / %0.8f",
-                        EE, E_target[ii], Eocc, occ_target[ii])
+                        energy, reference_energy, occupation, reference_occupation)
         # test that energy outputed by dmrg is correct
-        assert pytest.approx(EE.item(), rel=1e-14) == out.energy.item() 
-        assert pytest.approx(EE.item(), rel=tol) == Eng_ii
-        assert pytest.approx(Eocc.item(), rel=tol) == occ_target[ii]
+        assert pytest.approx(energy.item(), rel=tol) == reference_energy
+        assert pytest.approx(occupation.item(), rel=tol) == reference_occupation
+        assert pytest.approx(energy.item(), rel=1e-14) == out.energy.item()
         #
-        # The loop allows to find consequative eigenstates with increasing energy. 
-        # We append the list of lower-lying states to target next excited state.
+        # Finally, we add the found state psi to the list of states to be projected out in the next step of the loop.
         #
         project.append(psi)
     return project[0]

@@ -36,7 +36,7 @@ In the simplest formulation of ``1site`` DMRG algorithm, the virtual dimension/s
 
 
 Two-site DMRG
-----------------
+-------------
 
 The virtual spaces of the MPS can be adjusted by performing :code:`version='2site'` DMRG. 
 In this approach, we (i) build effective Hamiltonian :math:`H_{eff}` of two neighbouring sites, 
@@ -69,6 +69,9 @@ Projecting out selected MPS
 The optimization can be performed in the restricted subspace, where contributions 
 from some MPSs are projected out. This can be useful when searching for 
 excited states. List of MPS to project out is given as :code:`project=[lower_E_MPS, ...]`.
+
+DMRG routine
+------------
 
 .. autofunction:: yast.tn.mps.dmrg_
 
