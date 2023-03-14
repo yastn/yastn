@@ -162,51 +162,44 @@ class Generator:
     
     def __init__(self, N, operators, map=None, Is=None, parameters=None, opts={"tol": 1e-14}):
         """
-        Generator allowing creation of MPO/MPS from a set of local operators.
+        Generator is a convenience class building MPOs from a set of local operators.
+        Generated MPO have following :ref:`index order<mps/convention:index convention>` and signature::
 
-        Generated MPO tensors have following signature::
-
-                   (-1) (physical bra)
+                     3 (-1) (physical bra)
                      |
-            (+1)--|MPO_i|--(-1)
+            (+1) 0--|MPO_i|--2 (-1)
                      |
-                   (+1) (physical ket)
+                     1 (+1) (physical ket)
 
         Parameters
         ----------
         N : int
             number of sites of MPS/MPO.
-        operators : object
+        operators : object or dict(str,yast.Tensor)
             a set of local operators, e.g., an instance of :class:`yast.operators.Spin12`.
-            The ``operators`` object is expected to provide a map :code:`operators.to_dict()`
-            from string labels to operators (:class:`yast.Tensor`).
+            Or a dictionary with string-labeled local operators, including at least ``{'I': <identity operator>,...}``.
         map : dict(int,int)
-            custom permutation of N sites indexed from 0 to N-1 , ``{3: 0, 21: 1, ...}``,
-            with values ordered as 0, 1, ..., N - 1.
-            If ``None``, assumes no permutation, i.e., :code:`{site: site for site in range(N)}`.
+            custom labels of N sites indexed from 0 to N-1 , ``{3: 0, 21: 1, ...}``.
+            If ``None``, the sites are labled as :code:`{site: site for site in range(N)}`.
         Is : dict(int,str)
-            For each site, specify identity operator by providing its string label, i.e., ``{0: 'I', 1: 'I', ...}``.
-            If ``None``, uses default specification ``{i: 'I' for i in range(N)}``.
+            For each site (using default or custom label), specify identity operator by providing 
+            its string key as defined in ``operators``.
+            If ``None``, assumes ``{i: 'I' for i in range(N)}``, which is compatible with all predefined
+            ``operators``.
         parameters : dict
             Default parameters used by the interpreters :meth:`Generator.mpo` and :meth:`Generator.mps`.
             If None, uses default ``{'sites': [*map.keys()]}``.
         opts : dict
             used if compression is needed. Options passed to :meth:`yast.linalg.svd`.
-        
-        Notes
-        ------
-        * Names `minus` and `1j` are reserved paramters in self.parameters
-
-        * Write operator `a` on site `3` as `a_{3}`.
-        
-        * Write element if matrix `A` with indicies `(1,3)` as `A_{1,2}`.
-        
-        * Write sumation over one index `j` taking values from 1D-array `listA` as `\sum_{j \in listA}`.
-        
-        * Write sumation over indicies `j0,j1` taking values from 2D-array `listA` as `\sum_{j0,j1 \in listA}`.
-        
-        * In an expression only round brackets, i.e., ().
         """
+        # Notes
+        # ------
+        # * Names `minus` and `1j` are reserved paramters in self.parameters
+        # * Write operator `a` on site `3` as `a_{3}`.
+        # * Write element if matrix `A` with indicies `(1,3)` as `A_{1,2}`.
+        # * Write sumation over one index `j` taking values from 1D-array `listA` as `\sum_{j \in listA}`.
+        # * Write sumation over indicies `j0,j1` taking values from 2D-array `listA` as `\sum_{j0,j1 \in listA}`.
+        # * In an expression only round brackets, i.e., ().
         self.N = N
         self._ops = operators
         self._map = {i: i for i in range(N)} if map is None else map
@@ -232,7 +225,7 @@ class Generator:
 
     def random_seed(self, seed):
         """
-        Generate random seed number for random number generator used in backend of self.config
+        Set seed for random number generator used in backend (of self.config).
 
         Parameters
         ----------
@@ -242,24 +235,28 @@ class Generator:
         self.config.backend.random_seed(seed)
 
     def I(self):
-        """ Returns identity Mpo. """
+        r""" 
+        Returns
+        -------
+        identity MPO : yast.tn.MpsMpo
+        """
         return self._I.copy()
 
     def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64'):
         """
-        Generate a random Mps of total charge n and virtual bond dimension D_total.
+        Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
         Parameters
         ----------
         n : int
             total charge
         D_total : int
-            total dimension of virtual space
+            largest bond dimension
         sigma : int
             variance of Normal distribution from which dimensions of charge sectors
             are drawn.
         dtype : string
-            number format, e.g., 'float64'
+            number format, e.g., ``'float64'`` or ``'complex128'``
         """
         if n is None:
             n = (0,) * self.config.sym.NSYM
@@ -287,19 +284,17 @@ class Generator:
 
     def random_mpo(self, D_total=8, sigma=1, dtype='float64'):
         """
-        Generate a random Mpo of virtual bond dimension D_total.
-
-        Mainly, for testing.
+        Generate a random MPO with bond dimension ``D_total``.
 
         Parameters
         ----------
         D_total : int
-            total dimension of virtual space
+            largest bond dimension
         sigma : int
             variance of Normal distribution from which dimensions of charge sectors
             are drawn.
         dtype : string
-            number format, e.g., 'float64'
+            number format, e.g., ``'float64'`` or ``'complex128'``
         """
         n0 = (0,) * self.config.sym.NSYM
         psi = Mpo(self.N)
