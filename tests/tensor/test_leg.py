@@ -97,7 +97,7 @@ def test_leg_hard_fusion():
     assert yast.norm(a - b) < tol
 
     cf =  af.fuse_legs(axes=[(0, 1)], mode='meta')
-    assert cf.get_legs(axis=0).history() == 'm(p(oo)p(oo))'
+    assert cf.get_legs(axes=0).history() == 'm(p(oo)p(oo))'
 
 
 def test_leg_exceptions():

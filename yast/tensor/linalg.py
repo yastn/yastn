@@ -84,7 +84,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
     else:
         Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total)
 
-    U, S, V = Smask.apply_mask(U, S, V, axis=(-1, 0, 0))
+    U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
 
     U = U.move_leg(source=-1, destination=Uaxis)
     V = V.move_leg(source=0, destination=Vaxis)
@@ -600,7 +600,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
 
     Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total)
 
-    S, U = Smask.apply_mask(S, U, axis=(0, -1))
+    S, U = Smask.apply_mask(S, U, axes=(0, -1))
     U = U.move_leg(source=-1, destination=Uaxis)
     return S, U
 

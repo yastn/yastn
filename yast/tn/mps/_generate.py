@@ -49,7 +49,7 @@ def generate_single_mpo(I, term):
     single_mpo = I.copy()
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
         op = op.add_leg(axis=0, s=-1)
-        leg = op.get_legs(axis=0)
+        leg = op.get_legs(axes=0)
         one = ones(config=op.config, legs=(leg, leg.conj()))
         temp = ncon([op, single_mpo[site]], [(-1, -2, 1), (-0, 1, -3, -4)])
         single_mpo[site] = temp.fuse_legs(axes=((0, 1), 2, 3, 4), mode='hard')
@@ -273,14 +273,14 @@ class Generator:
 
         lr = Leg(self.config, s=1, t=(tuple(an * 0),), D=(1,),)
         for site in psi.sweep(to='first'):
-            lp = self._I[site].get_legs(axis=1)
+            lp = self._I[site].get_legs(axes=1)
             nl = tuple(an * (self.N - site) / self.N)
             if site != psi.first:
                 ll = random_leg(self.config, s=-1, n=nl, D_total=D_total, sigma=sigma, legs=[lp, lr])
             else:
                 ll = Leg(self.config, s=-1, t=(n,), D=(1,),)
             psi.A[site] = rand(self.config, legs=[ll, lp, lr], dtype=dtype)
-            lr = psi.A[site].get_legs(axis=0).conj()
+            lr = psi.A[site].get_legs(axes=0).conj()
         if sum(lr.D) == 1:
             return psi
         raise YastError("MPS: Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization. ")
@@ -306,13 +306,13 @@ class Generator:
 
         lr = Leg(self.config, s=1, t=(n0,), D=(1,),)
         for site in psi.sweep(to='first'):
-            lp = self._I[site].get_legs(axis=1)
+            lp = self._I[site].get_legs(axes=1)
             if site != psi.first:
                 ll = random_leg(self.config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[lp, lr, lp.conj()])
             else:
                 ll = Leg(self.config, s=-1, t=(n0,), D=(1,),)
             psi.A[site] = rand(self.config, legs=[ll, lp, lr, lp.conj()], dtype=dtype)
-            lr = psi.A[site].get_legs(axis=0).conj()
+            lr = psi.A[site].get_legs(axes=0).conj()
         if sum(lr.D) == 1:
             return psi
         raise YastError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")

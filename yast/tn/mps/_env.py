@@ -424,8 +424,8 @@ class Env3(_EnvParent):
             return False
         AL = self.ket[bd[0]]
         AR = self.ket[bd[1]]
-        if self.op[bd[0]].get_legs(axis=1).t != AL.get_legs(axis=1).t or \
-           self.op[bd[1]].get_legs(axis=1).t != AR.get_legs(axis=1).t:
+        if self.op[bd[0]].get_legs(axes=1).t != AL.get_legs(axes=1).t or \
+           self.op[bd[1]].get_legs(axes=1).t != AR.get_legs(axes=1).t:
             return True  # true if some charges are missing on physical legs of psi
 
         AL = AL.fuse_legs(axes=((0, 1), 2))

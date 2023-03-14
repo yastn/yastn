@@ -173,7 +173,7 @@ def run_block_embed_fuse(a, b):
     fbd1 = yast.block({(0, 0): fbah, (1, 0): fabh})
     ffad = fad.fuse_legs(axes=[(0, 1)], mode='hard')
     ffbd = fbd.fuse_legs(axes=[(0, 1)], mode='hard')
-    ffad.get_legs(axis=0).history() == 'p(s(p(oo)p(oo))s(p(oo)p(oo)))'
+    ffad.get_legs(axes=0).history() == 'p(s(p(oo)p(oo))s(p(oo)p(oo)))'
 
     fabbav = yast.block({(0, 0): fabv, (1, 0): fbav})
     fbaabv = yast.block({(0, 0): fbav, (1, 0): fabv})

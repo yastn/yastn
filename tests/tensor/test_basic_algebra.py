@@ -108,7 +108,7 @@ def test_add_diagonal():
     assert pytest.approx(yast.trace(c1).item(), rel=tol) == 20
     assert pytest.approx(yast.trace(c2).item(), rel=tol) == 20
     assert pytest.approx(yast.trace(c3).item(), rel=tol) == -2
-    assert all(x.get_legs(axis=0).D == (2, 5, 3, 2, 2) for x in [c1, c2, c3])
+    assert all(x.get_legs(axes=0).D == (2, 5, 3, 2, 2) for x in [c1, c2, c3])
 
 
 def test_algebra_functions():
