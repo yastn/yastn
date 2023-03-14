@@ -146,7 +146,7 @@ class Spin1:
         """
         vec_s= block({i: t.add_leg(axis=0,s=-1) for i,t in enumerate([\
             self.sz(), self.sp(), self.sm()])}, common_legs=[1,2])
-        vec_s= vec_s.drop_leg_history(axis=0)
+        vec_s= vec_s.drop_leg_history(axes=0)
         return vec_s
 
     def g(self):

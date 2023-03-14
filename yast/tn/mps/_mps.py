@@ -148,8 +148,8 @@ def multiply(a, b, mode=None):
     axes_fuse = ((0, 3), 1, (2, 4)) if b.nr_phys == 1 else ((0, 3), 1, (2, 4), 5)
     for n in phi.sweep():
         phi.A[n] = tensor.tensordot(a.A[n], b.A[n], axes=(3, 1)).fuse_legs(axes_fuse, mode)
-    phi.A[phi.first] = phi.A[phi.first].drop_leg_history(axis=0)
-    phi.A[phi.last] = phi.A[phi.last].drop_leg_history(axis=2)
+    phi.A[phi.first] = phi.A[phi.first].drop_leg_history(axes=0)
+    phi.A[phi.last] = phi.A[phi.last].drop_leg_history(axes=2)
     return phi
 
 ###################################

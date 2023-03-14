@@ -58,7 +58,7 @@ def generate_single_mpo(I, term):
             temp = temp.swap_gate(axes=(1, 2))
             single_mpo[n] = temp.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
     for n in single_mpo.sweep():
-        single_mpo[n] = single_mpo[n].drop_leg_history(axis=(0, 2))
+        single_mpo[n] = single_mpo[n].drop_leg_history(axes=(0, 2))
     single_mpo[0] = term.amplitude * single_mpo[0]
     return single_mpo
 

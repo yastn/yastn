@@ -4,7 +4,7 @@ Welcome to YAST's documentation!
 YAST - yet another symmetric tensor
 
 Block-sparse tensor algebra library supporting abelian symmetries
-together with MPS implementation powered by YAST.
+together with MPS and PEPS implementations powered by YAST.
 
 .. toctree::
    :maxdepth: 2
@@ -12,6 +12,7 @@ together with MPS implementation powered by YAST.
 
    yast.tensor
    yast.mps
+   yast.fpeps
 
 
 Indices and tables

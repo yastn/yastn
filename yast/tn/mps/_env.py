@@ -7,24 +7,22 @@ def norm(ket):
     return abs(measure_overlap(ket, ket)) ** 0.5
 
 
-def vdot(bra, ket_or_op, ket_or_none=None):
+def vdot(*args):
     r""" 
     Calculate the overlap :math:`\langle \textrm{bra}|\textrm{ket}\rangle`, 
-    or :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle` depending on the are provided.
+    or :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle` depending on the number of provided agruments.
     
     Parameters
     -----------
-    bra : yast.tn.mps.MpsMpo
-    ket_or_op : yast.tn.mps.MpsMpo
-    ket_or_none : yast.tn.mps.MpsMpo or None
+    *args : yast.tn.mps.MpsMpo
 
     Returns
     -------
     scalar
     """
-    if ket_or_none is None:
-        return measure_overlap(bra, ket_or_op)
-    return measure_mpo(bra, ket_or_op, ket_or_none)
+    if len(args) == 2:
+        return measure_overlap(*args)
+    return measure_mpo(*args)
 
 
 def measure_overlap(bra, ket):

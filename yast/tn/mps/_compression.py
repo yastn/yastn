@@ -230,7 +230,7 @@ def zipper(a, b, opts=None):
     la, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
     tmp = initialize.ones(b.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
-    tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axis=2)
+    tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axes=2)
 
     for n in psi.sweep(to='first'):
         tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
@@ -246,6 +246,6 @@ def zipper(a, b, opts=None):
         psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
         tmp = U @ C
 
-    tmp = tmp.fuse_legs(axes=((0, 1), 2)).drop_leg_history(axis=0)
+    tmp = tmp.fuse_legs(axes=((0, 1), 2)).drop_leg_history(axes=0)
     psi[psi.first] = tmp @ psi[psi.first]
     return psi

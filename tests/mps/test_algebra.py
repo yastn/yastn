@@ -4,7 +4,7 @@ import yast.tn.mps as mps
 import yast
 try:
     from .configs import config_dense as cfg
-    # cfg is used by pytest to inject different backends and divices
+    # pytest is modifying cfg to inject different backends and divices during tests
 except ImportError:
     from configs import config_dense as cfg
 
@@ -12,7 +12,7 @@ tol = 1e-6
 
 
 def check_add(psi0, psi1):
-    """ test mps.add using overlaps"""
+    """ series of test of mps.add performed on provided psi0 and psi1"""
     out1 = mps.add(psi0, psi1, amplitudes=[1., 2.])
     out2 = (1.0 * psi0) + (2.0 * psi1)
     p0 = mps.measure_overlap(psi0, psi0)
@@ -27,14 +27,14 @@ def check_add(psi0, psi1):
 def test_addition_basic():
     import yast.tn.mps as mps
     import yast
-     
+
     # Define random MPS's without any symmetry
     #
     config_dense= yast.make_config()
     psi0 = mps.random_dense_mps(N=8, D=5, d=2)
     psi1 = mps.random_dense_mps(N=8, D=5, d=2)
      
-    # We want to calculate: res = psi0 + 2 * psi1. There are couple of ways:
+    # We want to calculate: res = psi0 + 2 * psi1. There is a couple of ways:
     # A/
     resA = mps.add(psi0, 2.0 * psi1)
      
