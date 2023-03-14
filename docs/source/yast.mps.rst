@@ -23,6 +23,7 @@ API: MPS and MPO
 
 .. toctree::
    :glob:
+   :maxdepth: 2
 
    mps/convention
    mps/properties
@@ -35,6 +36,7 @@ API: Creating MPS and MPO
 
 .. toctree::
    :glob:
+   :maxdepth: 2
 
    mps/init
    mps/init_hterm
@@ -46,6 +48,7 @@ API: Expectation values
 
 .. toctree::
    :glob:
+   :maxdepth: 2
 
    mps/measurements
 
@@ -55,6 +58,7 @@ API: Algorithms
 
 .. toctree::
    :glob:
+   :maxdepth: 2
 
    mps/algorithms_dmrg
    mps/algorithms_tdvp
@@ -66,5 +70,8 @@ Examples
 
 .. toctree::
    :glob:
+   :maxdepth: 2
 
-   examples/mps/mps
+   examples/mps/build_mps_manually
+   examples/mps/build_mps_latex
+   examples/mps/build_mps_random
