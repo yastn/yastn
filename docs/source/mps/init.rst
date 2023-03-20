@@ -45,7 +45,6 @@ Setting MPS/MPO tensors by hand
 
 The examples of creating MPS/MPO by hand can be found here:
 :ref:`Ground state of Spin-1 AKLT model<examples/mps/mps:ground state of spin-1 aklt model>`,
-:ref:`MPO for hopping model with Z2 symmetry<example hopping with z2 symmetry>`,
 :ref:`MPO for hopping model with U(1) symmetry<example hopping with u1 symmetry>`.
 
 .. todo:

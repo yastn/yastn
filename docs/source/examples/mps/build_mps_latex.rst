@@ -1,23 +1,17 @@
-Building MPS/MPO from LaTex
+Building MPO from LaTex
 ===========================
 
-Hopping spinless fermions
--------------------------
-
-The MPO can be constructed automatically using dedicated :class:`yast.tn.mps.Generator` supplied with set of local operators.
+The MPO can be constructed automatically using dedicated :class:`yast.tn.mps.Generator` supplied with the set of local operators.
 Automatic generator creates MPO with symmetries inherited from local operators.
 
-.. todo::
-    
-    Split example and test
-        
+Hamiltonian for nearest-neighbor hopping/XX model
+-------------------------------------------------
 
 .. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: test_generator_mpo
+        :pyobject: mpo_nn_hopping_latex
 
-
-Radnom hopping spinless fermions
---------------------------------
+Spinless fermions with hopping at arbitrary range
+-------------------------------------------------
 
 .. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: test_mpo_from_latex
+        :pyobject: mpo_hopping_latex

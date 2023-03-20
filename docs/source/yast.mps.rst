@@ -73,5 +73,7 @@ Examples
    :maxdepth: 2
 
    examples/mps/build_mps_manually
+   examples/mps/build_mps_Hterm
    examples/mps/build_mps_latex
    examples/mps/build_mps_random
+   examples/mps/mps

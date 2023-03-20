@@ -4,7 +4,7 @@ Properties
 Symmetry
 --------
 
-The symmetry of the `YAMPS` MPS or MPO is inherted from the symmetry 
+The symmetry of the MPS or MPO is inherted from the symmetry 
 of :meth:`yast.Tensor<yast.Tensor>`'s which form the matrix product. The symmetries of the tensors have to be consistent along virtual dimensions implying that the global MPS/MPO symmetry is a consequence of the local symmetry of :meth:`yast.Tensor<yast.Tensor>`.
 
 Physical and virtual spaces
@@ -29,7 +29,7 @@ Therefore, symmetric MPS/MPO ansatz is specified by the content of all its virtu
 Typically, the effective control parameter is the maximal total dimension 
 :math:`D_{j,j+1}=\sum_c D^c_{j,j+1}`. 
 
-To get the profile of the total bond dimensions along `YAMPS` MPS/MPO :code:`A` 
+To get the profile of the total bond dimensions along MPS/MPO :code:`A` 
 call :code:`A.get_bond_dimensions()`.
 
 .. autofunction:: yast.tn.mps.MpsMpo.get_bond_dimensions
