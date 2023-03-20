@@ -62,7 +62,7 @@ Matrix product operator (MPO)
                      |
                     d_j
 
-`YAMPS` allows to encode operators, e.g., Hamiltonian or other operators associated with expectation values, under open boundary condition. MPO with open boundary condition has a bond dimension `D=1` on the edges of the MPO chain. 
+API allows to encode operators, e.g., Hamiltonian or other operators associated with expectation values, under open boundary condition. MPO with open boundary condition has a bond dimension `D=1` on the edges of the MPO chain. 
 
 ::
 
@@ -108,7 +108,7 @@ is an algorithm searching for the MPS which extremizes the expectation value of 
 (:ref:`TDVP<mps/algorithms:time-dependent variational principle (tdvp) algorithm>`) 
 allows for variational approximation of the evolution of a state :math:`\Psi` under a Hamiltonian :math:`\hat H`. 
 The state after an evolution over time `t` is :math:`\Psi(t)=e^{- i t \hat H} \Psi`, with :math:`i` an imaginary unit. 
-`YAMPS` allows to perform TDVP for any MPS under MPO for a time `t` which in general can be complex. 
+TDVP can be performed for any MPS under MPO for a time `t`, real or imaginaty.
 
 
 Measurements

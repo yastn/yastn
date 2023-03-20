@@ -1,5 +1,5 @@
 Welcome to YAST's documentation!
-=================================
+================================
 
 YAST - yet another symmetric tensor
 

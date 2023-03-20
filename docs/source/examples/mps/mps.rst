@@ -1,7 +1,7 @@
 .. FOR ALGEBRA
 
 Multiplication
-=====================================
+==============
 
 We can test the multiplication of MPO and MPS using a practical example for a ground state obtained with :ref:`theory/mps/algorithms:DMRG`.
 
@@ -101,7 +101,7 @@ Truncation is governed by options passed as :code:`opts_dict` (internally to SVD
 Save and load MPS/MPO
 =====================
 
-YAMPS MPS/MPO can be saved/loaded either to/from a dictionary or an HDF5 file. 
+MPS/MPO can be saved/loaded either to/from a dictionary or an HDF5 file. 
 
 .. note::
         :ref:`YAST configuration<tensor/configuration:yast configuration>` 
@@ -124,7 +124,7 @@ Using HDF5 format
 .. algorithms
 
 DMRG
-=====================================
+====
 
 In order to perform :ref:`theory/mps/algorithms:DMRG` we need initial guess for MPS the hermitian operator (typically a Hamiltonian) written as MPO. 
 We should start with :ref:`mps/init:initialisation` of the MPS and MPO which we push to DMRG.
@@ -150,7 +150,7 @@ Also see the test in examples for  :ref:`examples/mps/mps:Multiplication`.
 
 
 TDVP
-=====================================
+====
 
 In order to perform :ref:`theory/mps/algorithms:TDVP` we need initial MPS the operator written as MPO.
 We should start with :ref:`mps/init:initialisation` of the MPS and MPO which we push to DMRG.

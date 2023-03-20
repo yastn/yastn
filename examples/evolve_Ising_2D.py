@@ -29,7 +29,7 @@ def run_evolution():
 #                         generate = mps.Generator(N, ops, map=emap)
 #                         generate.random_seed(seed=0)
                         
-#                         H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
+#                         H_ref = mpo_nn_hopping(generate.config, N=N, t=t, mu=mu)
 #                         H = generate.mpo_from_latex(H_str, eparam)
 
 #                         psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)

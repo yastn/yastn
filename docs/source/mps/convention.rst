@@ -4,7 +4,7 @@ Conventions
 Index convention
 ----------------
 
-The index convention for MPS/MPO tensors in `YAMPS` is
+The index convention for MPS/MPO tensors is
     
     i) *0th* index (leftmost) corresponds to the left virtual space,
     ii) *1st* index is physical, and *2nd* index (rightmost) corresponds to the right virtual space. 

@@ -4,7 +4,7 @@ Algebra
 Creating a copy of MPS/MPO
 --------------------------
 
-To create an independent copy or clone of `YAMPS` MPS/MPO :code:`A` call :code:`A.copy()`
+To create an independent copy or clone of MPS/MPO :code:`A` call :code:`A.copy()`
 or :code:`A.clone()` respectively.
 
 .. autofunction:: yast.tn.mps.MpsMpo.copy
@@ -14,7 +14,7 @@ or :code:`A.clone()` respectively.
 Multiplication by a scalar
 ---------------------------
 
-`YAMPS` MPS/MPO can be multiplied from both left and right by a scalar using regular `*` operator. 
+MPS/MPO can be multiplied from both left and right by a scalar using regular `*` operator. 
 For example, :code:`B = a * A` or :code:`B = A * a` results in a new MPS/MPO :code:`B`
 with first tensor multiplied by a number `a`.
 
@@ -54,7 +54,7 @@ Following example show an addition of two MPSs:
 Products of MPS/MPO
 -------------------
 
-`YAMPS` supports *product* ``@`` of 
+API supports *product* ``@`` of 
     
 i) MPO with MPS resulting in a new MPS in analogy with 
 :math:`\hat{O}|\psi\rangle = |\phi\rangle` (i.e. matrix-vector multiplication).
