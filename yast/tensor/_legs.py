@@ -124,6 +124,7 @@ class Leg:
     def history(self):
         """
         Show str representation of Leg fusion history.
+
         'o' marks original legs,
         's' is for sum (block),
         'p' is for product fuse(..., mode='hard'),

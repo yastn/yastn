@@ -274,10 +274,11 @@ def get_shape(a, axes=None, native=False):
 
 def get_dtype(a):
     """
+    Returns data ``dtype``.
+    
     Returns
     -------
-    dtype : dtype
-        Returns data ``dtype``.
+    dtype
     """
     return a.config.backend.get_dtype(a._data)
 
@@ -590,7 +591,7 @@ def to_number(a, part=None):
 
     Returns
     -------
-    out : scalar
+    out : number
         the type of the scalar is given by the backend.
     """
     size = a.size
@@ -612,7 +613,7 @@ def item(a):
 
     Returns
     -------
-    out : scalar
+    out : number
     """
     size = a.size
     if size == 1:

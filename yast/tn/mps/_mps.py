@@ -284,10 +284,6 @@ class MpsMpo:
         """
         New MPS/MPO with first tensor multiplied by a scalar.
 
-        Parameters
-        ----------
-        multiplier : scalar
-    
         Returns
         -------
         yast.tn.mps.MpsMpo
@@ -301,10 +297,6 @@ class MpsMpo:
     def __rmul__(self, number):
         """
         New MPS/MPO with first tensor multiplied by a scalar.
-
-        Parameters
-        ----------
-        multiplier : scalar
 
         Returns
         -------

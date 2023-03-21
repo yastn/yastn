@@ -22,8 +22,19 @@ Simple element-wise operations
 .. automethod:: yast.Tensor.reciprocal
 .. automethod:: yast.Tensor.exp
 
+.. automethod:: yast.Tensor.__mul__
+.. automethod:: yast.Tensor.__pow__
+.. automethod:: yast.Tensor.__truediv__
 
+.. autofunction:: yast.Tensor.__add__
+.. autofunction:: yast.Tensor.__sub__
 .. autofunction:: yast.apxb
+
+.. autofunction:: yast.Tensor.__lt__
+.. autofunction:: yast.Tensor.__gt__
+.. autofunction:: yast.Tensor.__le__
+.. autofunction:: yast.Tensor.__ge__
+.. autofunction:: yast.Tensor.bitwise_not
 
 
 Tensor contractions
@@ -79,6 +90,7 @@ See examples: :ref:`examples/tensor/algebra:fusion (reshaping)`.
 .. automethod:: yast.Tensor.unfuse_legs
 .. automethod:: yast.Tensor.add_leg
 .. automethod:: yast.Tensor.remove_leg
+.. automethod:: yast.Tensor.drop_leg_history
 
 Conjugation of symmetric tensors
 --------------------------------
@@ -108,10 +120,3 @@ Spectral decompositions and truncation
 .. autofunction:: yast.linalg.truncation_mask
 .. autofunction:: yast.linalg.truncation_mask_multiplets
 .. autofunction:: yast.linalg.entropy
-
-
-Krylov methods
---------------
-
-.. autofunction:: yast.expmv
-.. autofunction:: yast.eigs

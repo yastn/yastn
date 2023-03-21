@@ -169,12 +169,16 @@ def broadcast(a, *args, axes=0):
 
     Parameters
     ----------
-    a, args: Tensors
+    a, args: yast.Tensor
         a is a diagonal tensor to be broadcasted
 
     axes: int or tuple(int)
         legs of tensors in args to be multiplied by diagonal tensor a.
         Number of tensors provided in args should match lenght of axes.
+
+    Returns
+    -------
+    yast.Tensor
     """
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
@@ -248,11 +252,15 @@ def apply_mask(a, *args, axes=0):
 
     Parameters
     ----------
-    a, args: Tensors
+    a, args: yast.Tensor
         a is a diagonal tensor
 
     axes: int or tuple of ints
         leg of tensor a where the mask is applied.
+
+    Returns
+    -------
+    yast.Tensor
     """
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
@@ -320,7 +328,7 @@ def vdot(a, b, conj=(1, 0)):
 
     Returns
     -------
-    scalar
+    number
     """
     _test_can_be_combined(a, b)
     if conj[0] == 1:
@@ -468,7 +476,7 @@ def _meta_trace(struct, in1, in2, out):
 
 def swap_gate(a, axes):
     """
-    Return tensor after application of the swap gate.
+    Return tensor after application of a swap gate.
 
     Multiply the block with odd charges on swaped legs by -1.
     If one of the provided axes is -1, then swap with the charge n.
@@ -480,7 +488,7 @@ def swap_gate(a, axes):
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     if not a.config.fermionic:
         return a

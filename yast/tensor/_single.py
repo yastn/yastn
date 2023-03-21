@@ -134,7 +134,7 @@ def conj_blocks(a):
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     data = a.config.backend.conj(a._data)
     return a._replace(data=data)
@@ -151,8 +151,6 @@ def flip_signature(a):
     Returns
     -------
     yast.Tensor
-        clone of the tensor with modified signature `-s` and total
-        charge `-n`.
     """
     an = np.array(a.struct.n, dtype=int).reshape((1, 1, -1))
     newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
@@ -333,7 +331,7 @@ def add_leg(a, axis=-1, s=1, t=None):
     r"""
     Creates a new tensor with extra leg that carries the charge (or part of it)
     of the orignal tensor. This is achieved by extra leg having a single charge sector
-    of dimension D=1. The total charge of the tensor :meth:`yast.Tensor.n` can be modified this way.
+    of dimension D=1. The total charge of the tensor :attr:`yast.Tensor.n` can be modified this way.
 
     Makes a shallow copy of Tensor data.
 
@@ -383,7 +381,7 @@ def remove_leg(a, axis=-1):
     r"""
     Removes leg with a single charge sector of dimension one from tensor.
     The charge carried by that leg (if any) is added to the
-    tensor's total charge :meth:`yast.Tensor.n`.
+    tensor's total charge :attr:`yast.Tensor.n`.
 
     Makes a shallow copy of Tensor data.
 
@@ -391,6 +389,10 @@ def remove_leg(a, axis=-1):
     ----------
         axis: int
             index of the leg to be removed
+
+    Returns
+    -------
+    yast.Tensor
     """
     if a.isdiag:
         raise YastError('Cannot remove axis to a diagonal tensor.')

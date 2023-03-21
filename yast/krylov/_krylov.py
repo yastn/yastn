@@ -42,7 +42,6 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
 
     Employs the algorithm of: J. Niesen, W. M. Wright, ACM Trans. Math. Softw. 38, 22 (2012), 
     Algorithm 919: A Krylov subspace algorithm for evaluating the phi-functions appearing in exponential integrators.
-   
 
     Parameters
     ----------
@@ -69,15 +68,17 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             The result is normalized to unity using 2-norm.
 
         return_info: bool
-            info.ncv : guess of the Krylov-space size,
-            info.error : estimate of error (likely over-estimate)
-            info.krylov_steps : number of execution of f(x),
-            info.steps : number of steps to reach t,
+            if true, returns (yast.Tensor, info), where
+                info.ncv : guess of the Krylov-space size,
+                info.error : estimate of error (likely over-estimate)
+                info.krylov_steps : number of execution of f(x),
+                info.steps : number of steps to reach t,
+
+
 
     Returns
     -------
-    yast.Tensor 
-        if not return_info else a tuple(yast.Tensor, return_info)
+    yast.Tensor
     """
     backend = v.config.backend
     ncv, ncv_max = max(1, ncv), min([30, v.size])  # Krylov space parameters
@@ -180,33 +181,35 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True
     Search for dominant eigenvalues of linear operator f using Arnoldi algorithm.
     Economic implementation (without restart) for internal use within :meth:`yast.tn.dmrg_`.
 
-    f: function
-        define an action of a 'square matrix' on the 'vector' `v0`.
-        f(v0) should preserve the signature of v0.
+    Parameters
+    ----------
+        f: function
+            define an action of a 'square matrix' on the 'vector' `v0`.
+            f(v0) should preserve the signature of v0.
 
-    v0: Tensor
-        Initial guess, 'vector' to span the Krylov space.
+        v0: Tensor
+            Initial guess, 'vector' to span the Krylov space.
 
-    k: int
-        Number of desired eigenvalues and eigenvectors. default is 1.
+        k: int
+            Number of desired eigenvalues and eigenvectors. default is 1.
 
-    which: str 
-        One of [‘LM’, ‘SM’, ‘LR’, ‘SR’] specifying which k eigenvectors and eigenvalues to find:
-        ‘LM’ : largest magnitude, ‘SM’ : smallest magnitude, ‘LR’ : largest real part, ‘SR’ : smallest real part
+        which: str 
+            One of [‘LM’, ‘SM’, ‘LR’, ‘SR’] specifying which k eigenvectors and eigenvalues to find:
+            ‘LM’ : largest magnitude, ‘SM’ : smallest magnitude, ‘LR’ : largest real part, ‘SR’ : smallest real part
 
-    ncv: int
-        Dimension of the employed Krylov space. Default is 10.
-        Must be greated than k.
+        ncv: int
+            Dimension of the employed Krylov space. Default is 10.
+            Must be greated than k.
 
-    maxiter: int
-        Maximal number of restarts; 
+        maxiter: int
+            Maximal number of restarts; 
 
-    tol: float
-        Stopping criterion for Krylov subspace. Default is 1e-13.
+        tol: float
+            Stopping criterion for Krylov subspace. Default is 1e-13.
 
-    hermitian: bool
-        Assume that f is a hermitian operator, in which case Lanczos iterations are used.
-        Otherwise Arnoldi iterations are used to span the Krylov space.
+        hermitian: bool
+            Assume that f is a hermitian operator, in which case Lanczos iterations are used.
+            Otherwise Arnoldi iterations are used to span the Krylov space.
     """
     # Maximal number of restarts - NOT IMPLEMENTED FOR NOW.
     # ONLY A SINGLE ITERATION FOR NOW
