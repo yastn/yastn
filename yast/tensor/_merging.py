@@ -179,7 +179,7 @@ def fuse_legs(a, axes, mode=None):
     are fused. The desired order of the legs is given by a tuple `axes`
     of leg indices where the groups of legs to be fused are denoted by inner tuples ::
 
-        axes=(0,1,(2,3,4),5)  keep order, fuse legs (2,3,4) into new leg
+        axes=(0,1,(2,3,4),5)  keep leg order, fuse legs (2,3,4) into new leg
         ->   (0,1, 2,     3)
             __              __
         0--|  |--3      0--|  |--3<-5
@@ -199,11 +199,9 @@ def fuse_legs(a, axes, mode=None):
 
     Two types of fusion are supported: `meta` and `hard`:
 
-        * `meta` performs the fusion only at the level of a syntax, where it operates as a tensor with lower rank.
-          Tensor structure and data (blocks) are not affected - apart from a transpose that may be needed for consistency.
+        * ``'meta'`` performs the fusion only at the level of a syntax, where it operates as a tensor with lower rank. Tensor structure and data (blocks) are not affected - apart from a transpose that may be needed for consistency.
 
-        * `hard` changes both the structure and data, by aggregating smaller blocks into larger
-           ones. Such fusion allows to balance number of non-zero blocks and typical block size.
+        * ``'hard'`` changes both the structure and data, by aggregating smaller blocks into larger ones. Such fusion allows to balance number of non-zero blocks and typical block size.
 
     It is possible to use both `meta` and `hard` fusion of legs on the same tensor.
     Applying hard fusion on tensor turns all previous meta fused legs into hard fused
