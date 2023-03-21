@@ -5,7 +5,7 @@ from ..tensor import YastError
 __all__ = ['expmv', 'eigs']
 
 
-def _expand_krylov_space(f, tol, ncv, hermitian, V, H=None, info=None, generic_sum=None):
+def expand_krylov_space_tensor(f, tol, ncv, hermitian, V, H=None, info=None):
     """
     Expand the Krylov base up to ncv states or until reaching tolerance tol. """
     if H is None:
@@ -34,9 +34,15 @@ def _expand_krylov_space(f, tol, ncv, hermitian, V, H=None, info=None, generic_s
     return V, H, happy
 
 
+def sum_tensor(V, F):
+    v = F[0] * V[0]
+    for it in range(1, len(F)):
+        v = v.apxb(V[it], x=F[it])
+    return v
+
 
 # Krylov based methods, handled by anonymous function decribing action of matrix on a vector
-def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, return_info=False, generic_sum=None):
+def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, return_info=False, generic_expand=None, generic_sum=None):
     r"""
     Calculate :math:`e^{(tF)}v`, where `v` is Tensor, and F(v) is linear operator acting on `v`.
 
@@ -74,7 +80,8 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
                 info.krylov_steps : number of execution of f(x),
                 info.steps : number of steps to reach t,
 
-
+        generic_expand, generic_sum : bool
+            Allows to inject other function expanding krylov space and calculating linear combination of vectors.
 
     Returns
     -------
@@ -91,6 +98,11 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     reject, order_computed, ncv_computed = False, False, False
     info = {'ncv': ncv, 'error': 0., 'krylov_steps': 0, 'steps': 0}
 
+    if generic_expand is None:
+        generic_expand = expand_krylov_space_tensor
+    if generic_sum is None:
+        generic_sum = sum_tensor
+
     normv = v.norm()
     if normv == 0:
         if normalize:
@@ -102,7 +114,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     while t_now < t_out:
         if V is None:
             V = [v]
-        V, H, happy = _expand_krylov_space(f, tol, ncv, hermitian, V, H, info, generic_sum=generic_sum)
+        V, H, happy = generic_expand(f, tol, ncv, hermitian, V, H, info)
         if happy:
             tau = t_out - t_now
             m = len(V)
@@ -157,9 +169,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             normF = backend.norm_matrix(F)
             normv = normv * normF
             F = F / normF
-            v = F[0] * V[0]
-            for it in range(1, len(V)):
-                v = v.apxb(V[it], x=F[it])
+            v = generic_sum(V, F[:len(V)])
             t_now += tau
             info['steps'] += 1
             info['error'] += err
@@ -176,7 +186,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     return (v, info) if return_info else v
 
 
-def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True, generic_sum=None):
+def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True, generic_expand=None, generic_sum=None):
     r"""
     Search for dominant eigenvalues of linear operator f using Arnoldi algorithm.
     Economic implementation (without restart) for internal use within :meth:`yast.tn.dmrg_`.
@@ -217,8 +227,14 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True
     normv = v0.norm()
     if normv == 0:
         raise YastError('Initial vector v0 of eigs should be nonzero.')
+
+    if generic_expand is None:
+        generic_expand = expand_krylov_space_tensor
+    if generic_sum is None:
+        generic_sum = sum_tensor
+
     V = [v0 / normv]
-    V, H, happy = _expand_krylov_space(f, 1e-13, ncv, hermitian, V, generic_sum=generic_sum)  # tol=1e-13
+    V, H, happy = generic_expand(f, 1e-13, ncv, hermitian, V)  # tol=1e-13
     m = len(V) if happy else len(V) - 1
 
     T = backend.square_matrix_from_dict(H, m, device=v0.device)
@@ -229,7 +245,5 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True
     Y = []
     for it in range(k):
         sit = vr[:, it]
-        Y.append(sit[0] * V[0])
-        for jt in range(1, len(ind)):
-            Y[it] = Y[it].apxb(V[jt], x=sit[jt])
+        Y.append(generic_sum(V[:len(sit)], sit))
     return val[:len(Y)], Y
