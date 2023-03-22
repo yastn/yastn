@@ -120,8 +120,6 @@ def ver_extension(env, bd, AAbo, AAb):
 
     return (ver/ver_norm)
 
-
-
 #### diagonal correlation (under development)
 def make_ext_corner_tl(cortl, strt_l, strl_t, AAb, AAbop, orient):
     vec_cor_tl = strl_t @ cortl @ strt_l
