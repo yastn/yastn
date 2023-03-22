@@ -120,3 +120,13 @@ Spectral decompositions and truncation
 .. autofunction:: yast.linalg.truncation_mask
 .. autofunction:: yast.linalg.truncation_mask_multiplets
 .. autofunction:: yast.linalg.entropy
+
+.. _tensor-aux:
+
+Auxliary
+--------
+
+Methods called by Krylov-based :doc:`algorithms</tensor/krylov>`
+
+.. automethod:: yast.Tensor.expand_krylov_space
+.. automethod:: yast.Tensor.linear_combination

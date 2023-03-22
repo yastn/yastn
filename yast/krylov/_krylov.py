@@ -5,63 +5,26 @@ from ..tensor import YastError
 __all__ = ['expmv', 'eigs']
 
 
-def expand_krylov_space_tensor(f, tol, ncv, hermitian, V, H=None, info=None):
-    """
-    Expand the Krylov base up to ncv states or until reaching tolerance tol. """
-    if H is None:
-        H = {}
-    happy = False
-    for j in range(len(V)-1, ncv):
-        w = f(V[-1])
-        if info is not None:
-            info['krylov_steps'] += 1
-        if not hermitian:  # Arnoldi
-            for i in range(j + 1):
-                H[(i, j)] = V[i].vdot(w)
-                w = w.apxb(V[i], x=-H[(i, j)])
-        else:  # Lanczos
-            if j > 0:
-                H[(j - 1, j)] = H[(j, j - 1)]
-                w = w.apxb(V[j - 1], x=-H[(j - 1, j)])
-            H[(j, j)] = V[j].vdot(w)
-            w = w.apxb(V[j], x=-H[(j, j)])
-        H[(j + 1, j)] = w.norm()
-        if H[(j + 1, j)] < tol:
-            happy = True
-            H.pop((j + 1, j))
-            break
-        V.append(w / H[(j + 1, j)])
-    return V, H, happy
-
-
-def sum_tensor(V, F):
-    v = F[0] * V[0]
-    for it in range(1, len(F)):
-        v = v.apxb(V[it], x=F[it])
-    return v
-
-
 # Krylov based methods, handled by anonymous function decribing action of matrix on a vector
-def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, return_info=False, generic_expand=None, generic_sum=None):
+def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, return_info=False, **kwargs):
     r"""
-    Calculate :math:`e^{(tF)}v`, where `v` is Tensor, and F(v) is linear operator acting on `v`.
+    Calculate :math:`e^{(tF)}v`, where :math:`v` is a vector, and :math:`F(v)` is linear operator acting on :math:`v`.
 
     Employs the algorithm of: J. Niesen, W. M. Wright, ACM Trans. Math. Softw. 38, 22 (2012), 
     Algorithm 919: A Krylov subspace algorithm for evaluating the phi-functions appearing in exponential integrators.
 
     Parameters
     ----------
-        F: Callable[[yast.Tensor],yast.Tensor]
-            defines an action of a 'square matrix' on Tensor.
-            F(v) should preserve the signatures of `v`.
+        f: Callable[[vector],vector]
+            defines an action of a 'square matrix' on vector.
 
-        v: Tensor
+        v: vector
 
         t: number
 
         tol: number
-            targeted tolerance; it is used to update the time-step and size of Krylov space.
-           The result should have better tolerance, as corrected result is outputed.
+           targeted tolerance; it is used to update the time-step and size of Krylov space.
+           The returned result should have better tolerance, as correction is included.
 
         ncv: int
             Initial guess for the size of the Krylov space
@@ -74,18 +37,19 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             The result is normalized to unity using 2-norm.
 
         return_info: bool
-            if true, returns (yast.Tensor, info), where
-                info.ncv : guess of the Krylov-space size,
-                info.error : estimate of error (likely over-estimate)
-                info.krylov_steps : number of execution of f(x),
-                info.steps : number of steps to reach t,
+            if true, returns (vector, info), where
 
-        generic_expand, generic_sum : bool
-            Allows to inject other function expanding krylov space and calculating linear combination of vectors.
+            * info.ncv : guess of the Krylov-space size,
+            * info.error : estimate of error (likely over-estimate)
+            * info.krylov_steps : number of execution of f(x),
+            * info.steps : number of steps to reach t,
+
+        **kwargs: any
+            further parameters that are passed to expand_krylov_space and linear_combination
 
     Returns
     -------
-    yast.Tensor
+    vector
     """
     backend = v.config.backend
     ncv, ncv_max = max(1, ncv), min([30, v.size])  # Krylov space parameters
@@ -98,11 +62,6 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     reject, order_computed, ncv_computed = False, False, False
     info = {'ncv': ncv, 'error': 0., 'krylov_steps': 0, 'steps': 0}
 
-    if generic_expand is None:
-        generic_expand = expand_krylov_space_tensor
-    if generic_sum is None:
-        generic_sum = sum_tensor
-
     normv = v.norm()
     if normv == 0:
         if normalize:
@@ -114,7 +73,10 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     while t_now < t_out:
         if V is None:
             V = [v]
-        V, H, happy = generic_expand(f, tol, ncv, hermitian, V, H, info)
+        lenV = len(V)
+        V, H, happy = v.expand_krylov_space(f, tol, ncv, hermitian, V, H, **kwargs)
+        info['krylov_steps'] += len(V) - lenV + happy
+
         if happy:
             tau = t_out - t_now
             m = len(V)
@@ -169,7 +131,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             normF = backend.norm_matrix(F)
             normv = normv * normF
             F = F / normF
-            v = generic_sum(V, F[:len(V)])
+            v = v.linear_combination(*V, amplitudes=F, **kwargs)
             t_now += tau
             info['steps'] += 1
             info['error'] += err
@@ -186,7 +148,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     return (v, info) if return_info else v
 
 
-def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True, generic_expand=None, generic_sum=None):
+def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True, **kwargs):
     r"""
     Search for dominant eigenvalues of linear operator f using Arnoldi algorithm.
     Economic implementation (without restart) for internal use within :meth:`yast.tn.dmrg_`.
@@ -228,13 +190,9 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True
     if normv == 0:
         raise YastError('Initial vector v0 of eigs should be nonzero.')
 
-    if generic_expand is None:
-        generic_expand = expand_krylov_space_tensor
-    if generic_sum is None:
-        generic_sum = sum_tensor
 
     V = [v0 / normv]
-    V, H, happy = generic_expand(f, 1e-13, ncv, hermitian, V)  # tol=1e-13
+    V, H, happy = v0.expand_krylov_space(f, 1e-13, ncv, hermitian, V, **kwargs)  # tol=1e-13
     m = len(V) if happy else len(V) - 1
 
     T = backend.square_matrix_from_dict(H, m, device=v0.device)
@@ -245,5 +203,5 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True
     Y = []
     for it in range(k):
         sit = vr[:, it]
-        Y.append(generic_sum(V[:len(sit)], sit))
+        Y.append(v0.linear_combination(*V, amplitudes=sit, **kwargs))
     return val[:len(Y)], Y
