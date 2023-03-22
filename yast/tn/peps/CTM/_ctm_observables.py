@@ -14,7 +14,6 @@ def nn_avg(peps, env, op):
         res_ver = []
         opt = op.get(ms)
         for bds_h in peps.bonds(dirn='h'):  # correlators on all horizontal bonds
-           # print(bds_h)
             AAb = {'l': fPEPS_2layers(peps[bds_h.site_0]), 'r': fPEPS_2layers(peps[bds_h.site_1])}
             AAbo = ret_AAbs(peps, bds_h, opt, orient='h')
             val_hor = hor_extension(env, bds_h, AAbo, AAb)

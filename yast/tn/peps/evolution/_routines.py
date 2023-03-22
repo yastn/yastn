@@ -139,27 +139,6 @@ def form_new_peps_tensors(QA, QB, MA, MB, bond):
         B = B.unfuse_legs(axes=1)  # [t l] [b r] s
     return A, B
 
-def forced_sectorial_truncation(U, L, V, Ds):
-    # truncates bond dimensions of different symmetry sectors according to agiven distribution Ds
-    F = eye(config=U.config, legs=U.get_legs(1).conj())
-    discard_block_weight= {}
-    for k in L.get_leg_structure(axis=0).keys():
-        if k in Ds.keys():
-            v = Ds.get(k)
-            discard_block_weight[k] = sum(L.A[k+k][v:]**2)
-        elif k not in Ds.keys():
-            discard_block_weight[k] = sum(L.A[k+k]**2)
-    for k, v in Ds.items():
-        if k in F.get_leg_structure(axis=0).keys():
-            F.A[k+k][v:] = 0
-    for k, v in F.get_leg_structure(axis=0).items():
-        if k not in Ds.keys(): 
-            F.A[k+k][0:v] = 0
-    U = U.mask(F, axis=1)
-    new_L = L.mask(F, axis=0)
-    V = V.mask(F, axis=0)
-    return U, new_L, V, discard_block_weight
-
 
 def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mode, opts_svd):
     
@@ -173,10 +152,6 @@ def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mod
         UR, SR, _ = svd(GR)
         XL, XR = SL.sqrt() @ UL, UR @ SR.sqrt()
         XRRX = XL @ XR
-
-        if isinstance(opts_svd['D_total'], dict):
-            opts_svd['D_total'] = sum(opts_svd['D_total'].values())
-        
         U, L, V = svd_with_truncation(XRRX, sU=RA.get_signature()[1], **opts_svd)
         mA, mB = U @ L.sqrt(), L.sqrt() @ V
         MA, MB, svd_error, _ = optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB)

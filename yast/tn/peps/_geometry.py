@@ -44,14 +44,17 @@ class Lattice():
         self._data = {ind: None for ind in inds}  # container for site-dependent data
 
         bonds = []
-        for s in self._sites:
-            s_b = self.nn_site(s, d='b')
-            if s_b is not None:
-                bonds.append(Bond(s, s_b, 'v'))
-            s_r = self.nn_site(s, d='r')
-            if s_r is not None:
-                bonds.append(Bond(s, s_r, 'h'))
-        self._bonds = tuple(bonds)
+        if self.lattice == 'checkerboard':
+            self._bonds = (Bond(site_0=(0, 0), site_1=(0, 1), dirn='h'), Bond(site_0=(1, 0), site_1=(1, 1), dirn='h'), Bond(site_0=(0, 1), site_1=(1, 1), dirn='v'), Bond(site_0=(1, 1), site_1=(0, 1), dirn='v'))
+        else:
+            for s in self._sites:
+                s_b = self.nn_site(s, d='b')
+                if s_b is not None:
+                    bonds.append(Bond(s, s_b, 'v'))
+                s_r = self.nn_site(s, d='r')
+                if s_r is not None:
+                    bonds.append(Bond(s, s_r, 'h'))
+            self._bonds = tuple(bonds)
 
     def __getitem__(self, site):
         """ Get data for site. """

@@ -123,11 +123,9 @@ def test_NTU_spinfull_finite():
 
 def test_NTU_spinfull_infinite():
 
-    lattice = 'rectangle'
+    lattice = 'checkerboard'
     boundary = 'infinite'
     purification = 'True'
-    xx = 3
-    yy = 2
     D = 12
     chi = 40
     mu_up, mu_dn = 0, 0 # chemical potential
@@ -137,7 +135,7 @@ def test_NTU_spinfull_infinite():
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
-    net = peps.Peps(lattice=lattice, dims=(xx, yy), boundary=boundary)
+    net = peps.Peps(lattice=lattice, boundary=boundary)
 
     opt = yast.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
@@ -187,7 +185,7 @@ def test_NTU_spinfull_infinite():
         cdagc_dn = 0.5*(abs(obs_hor.get('cdagc_dn')) + abs(obs_ver.get('cdagc_dn')))
         ccdag_dn = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
 
-        cf_energy = (xx * yy) * U * doc - (cdagc_up + ccdag_up + cdagc_dn + ccdag_dn) * (2 * xx * yy - xx - yy)
+        cf_energy = - (cdagc_up + ccdag_up +cdagc_dn + ccdag_dn) * 0.25
 
         print("expectation value: ", cf_energy)
         if abs(cf_energy - cf_energy_old) < tol_exp:
