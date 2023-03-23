@@ -31,4 +31,6 @@ Examples: basics of usage
 .. toctree::
    :glob:
 
-   examples/tensor/*
+   examples/tensor/init
+   examples/tensor/algebra
+   examples/tensor/decomposition
