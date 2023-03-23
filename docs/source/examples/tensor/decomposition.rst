@@ -1,5 +1,5 @@
-Decompositions and truncation of symmetric tensors
-==================================================
+Decompositions of symmetric tensors
+===================================
 
 scipy.sparse.linalg.eigs
 ------------------------
