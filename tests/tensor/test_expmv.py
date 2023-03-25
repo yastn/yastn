@@ -15,7 +15,7 @@ def run_expmv(A, v, tau, tol, ncv, hermitian):
     f = lambda x: yast.tensordot(A, x, axes=((2, 3), (0, 1)))
     An = A.to_numpy()
     sA = An.shape
-    An = An.reshape((sA[0]*sA[1], sA[2]*sA[3]))
+    An = An.reshape((sA[0] * sA[1], sA[2] * sA[3]))
     vn = v.to_numpy().reshape(-1)
     wn = scipy.linalg.expm(tau * An) @ vn
 

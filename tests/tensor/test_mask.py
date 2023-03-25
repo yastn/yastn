@@ -61,6 +61,8 @@ def test_mask_basic():
     ble = b <= 0
     assert bgt.trace().item() + ble.trace().item() == blt.trace().item() + bge.trace().item() == b.get_shape(axes=0)
 
+    assert all(bgt.bitwise_not().data == ble.data)
+
     for bb in [bgt, blt, bge, ble]:
         bnd_dim = bb.trace(axes=(0, 1)).item()
         c = bb.apply_mask(a, axes=0)

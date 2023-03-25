@@ -31,11 +31,11 @@ def test_entropy():
     assert pytest.approx(Smin.item(), rel=tol) == 1
     assert pytest.approx(normalization.item(), rel=tol) == np.sqrt(41)
 
+    entropy, Smin, normalization = yast.entropy(a * 0, axes=((0, 1), (2, 3))) # zero tensor
+    assert (entropy, Smin, normalization) == (0, 0, 0)
     b = yast.Tensor(config=config_U1, s=(1, 1, -1, -1))  # specific case of an empty tensor
     entropy, Smin, normalization = yast.entropy(b, axes=((0, 1), (2, 3)))
-    assert entropy == 0
-    assert Smin == 0
-    assert normalization == 0
+    assert (entropy, Smin, normalization) == (0, 0, 0)
 
 
 if __name__ == '__main__':

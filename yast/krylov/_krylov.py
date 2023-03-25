@@ -166,7 +166,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True
             Number of desired eigenvalues and eigenvectors. default is 1.
 
         which: str 
-            One of [‘LM’, ‘SM’, ‘LR’, ‘SR’] specifying which k eigenvectors and eigenvalues to find:
+            One of [‘LM’, ‘LR’, ‘SR’] specifying which k eigenvectors and eigenvalues to find:
             ‘LM’ : largest magnitude, ‘SM’ : smallest magnitude, ‘LR’ : largest real part, ‘SR’ : smallest real part
 
         ncv: int
@@ -204,4 +204,4 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True
     for it in range(k):
         sit = vr[:, it]
         Y.append(v0.linear_combination(*V, amplitudes=sit, **kwargs))
-    return val[:len(Y)], Y
+    return val[:k], Y

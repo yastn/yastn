@@ -86,8 +86,8 @@ def test_flip_charges():
     assert (a - c.flip_charges(axes=(2, 1))).norm() < tol
 
     with pytest.raises(yast.YastError):
-        d = a.fuse_legs(axes=(0, (1, 2), 3))
-        d.flip_charges()
+        d = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
+        d.flip_charges(axes=1)
         # Flipping charges of hard-fused leg is not supported.
     with pytest.raises(yast.YastError):
         d = yast.rand(config_Z2xU1, legs=leg, isdiag=True)

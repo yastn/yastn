@@ -409,6 +409,10 @@ def eigh(data, meta=None, sizes=(1, 1), order_by_magnitude=False, ad_decomp_reg=
     return torch.linalg.eigh(data)  # S, U
 
 
+def eig(T):
+    return torch.linalg.eig(T)  # S, U
+
+
 def qr(data, meta, sizes):
     Qdata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
     Rdata = torch.zeros((sizes[1],), dtype=data.dtype, device=data.device)
@@ -430,8 +434,8 @@ def argsort(data):
 def eigs_which(val, which):
     if which == 'LM':
         return (-abs(val)).argsort()
-    if which == 'SM':
-        return abs(val).argsort()
+    # if which == 'SM':
+    #     return abs(val).argsort()
     if which == 'LR':
         return (-real(val)).argsort()
     #if which == 'SR':

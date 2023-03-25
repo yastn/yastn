@@ -10,7 +10,7 @@ except ImportError:
 tol = 1e-8  #pylint: disable=invalid-name
 
 
-@pytest.mark.skipif(not config_U1.backend.BACKEND_ID=="np", reason="uses scipy for raw data")
+@pytest.mark.skipif(not config_U1.backend.BACKEND_ID=="numpy", reason="uses scipy for raw data")
 def test_eigs_simple():
     legs = [yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 2)),
             yast.Leg(config_U1, s=1, t=(0, 1), D=(1, 1)),
@@ -67,7 +67,7 @@ def test_eigs_simple():
     print("vb -> ", vb.pop())
 
 
-@pytest.mark.skipif(not config_U1.backend.BACKEND_ID=="np", reason="uses scipy procedures for raw data")
+@pytest.mark.skipif(not config_U1.backend.BACKEND_ID=="numpy", reason="uses scipy procedures for raw data")
 def test_eigs_mismatches():
     # here define a problem in a way that there are some mismatches in legs to be resolved
 
@@ -112,6 +112,43 @@ def test_eigs_mismatches():
     print(vyr[0].get_legs(2))
     # for others there might be superposition between +1 and -1
 
+
+
+def test_eigs_temp():
+    legs = [yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 2)),
+            yast.Leg(config_U1, s=1, t=(0, 1), D=(1, 1)),
+            yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 2))]
+    a = yast.rand(config=config_U1, legs=legs)  # could be mps tensor
+
+    tm = yast.ncon([a, a.conj()], [(-1, 1, -3), (-2, 1, -4)])
+    tm = tm.fuse_legs(axes=((2, 3), (0, 1)), mode='hard')
+    tmn = tm.to_numpy()
+    f = lambda t: yast.ncon([t, a, a.conj()], [(1, 3, -3), (1, 2, -1), (3, 2, -2)])
+
+    legs = [a.get_legs(0).conj(),
+            a.get_legs(0),
+            yast.Leg(a.config, s=1, t=(-1, 0, 1, -2, 2), D=(1, 1, 1, 1, 1))]
+
+    for which in ('SR', 'LR', 'LM'):
+        w_ref, _ = eigs(tmn, k=1, which=which)  # use scipy.sparse.linalg.eigs
+        v0 = [yast.rand(config=a.config, legs=legs)]
+        for _ in range(10):  # no restart in yast.eigs
+            w, v0 = yast.eigs(f, v0=v0[0], k=1, which=which, ncv=10, hermitian=False)
+        assert abs(w_ref - w.item()) < tol
+
+    tmn = tmn + tmn.T
+    f = lambda t: yast.ncon([t, a, a.conj()], [(1, 3, -3), (1, 2, -1), (3, 2, -2)]) + yast.ncon([t, a.conj(), a], [(1, 3, -3), (-1, 2, 1), (-2, 2, 3)])
+
+    for which in ('SR', 'LR', 'LM'):
+        w_ref, _ = eigs(tmn, k=1, which=which)  # use scipy.sparse.linalg.eigs
+        v0 = [yast.rand(config=a.config, legs=legs)]
+        for _ in range(10):  # no restart in yast.eigs
+            w, v0 = yast.eigs(f, v0=v0[0], k=1, which=which, ncv=10, hermitian=True)
+        assert abs(w_ref - w.item()) < tol
+
+
+
 if __name__ == '__main__':
     test_eigs_simple()
     test_eigs_mismatches()
+    test_eigs_temp()

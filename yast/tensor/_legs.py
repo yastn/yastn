@@ -7,7 +7,7 @@ from ._tests import YastError
 from ..sym import sym_none
 from ._merging import _Fusion, _pure_hfs_union
 
-__all__ = ['Leg', 'leg_union', 'random_leg', 'leg_product_all_charges']
+__all__ = ['Leg', 'leg_union', 'random_leg']
 
 
 @dataclass(frozen=True, repr=False)
@@ -142,7 +142,7 @@ class Leg:
         return _str_tree(hf.tree, hf.op)
 
 
-def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, positive=False):
+def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False):
     """
     Creat :class:`yast.Leg`. Randomly distribute bond dimensions to sectors according to Gaussian distribution.
 
@@ -158,7 +158,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, positive=Fals
         standard deviation of the distribution
     D_total : int
         total bond dimension of the leg, to be distributed to sectors
-    positive : bool
+    nonnegative : bool
         If true, cut off negative charges
 
     Returns
@@ -200,7 +200,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, positive=Fals
         comb_t = list(_flatten(comb_t))
         comb_t = np.array(comb_t, dtype=int).reshape((lcomb_t, len(ss), len(n)))
         ts = config.sym.fuse(comb_t, ss, -s)
-    if positive:
+    if nonnegative:
         ts = ts[np.all(ts >= 0, axis=1)]
 
     uts = tuple(set(tuple(x.flat) for x in ts))
@@ -232,17 +232,17 @@ def _leg_fusions_need_mask(*legs):
         return any(_leg_fusions_need_mask(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
 
 
-def leg_product_all_charges(*legs, s=1):
-    """
-    Output Leg that represents an outer product of a list of legs, fixing bond dimension of each to 1.
-    """
-    sym = legs[0].sym
-    comb_t = tuple(product(*(leg.t for leg in legs)))
-    comb_t = np.array(comb_t, dtype=int).reshape((len(comb_t), len(legs), sym.NSYM))
-    teff = sym.fuse(comb_t, tuple(leg.s for leg in legs), s)
-    teff = tuple(sorted(set(tuple(t.flat) for t in teff)))
-    D1 = (1,) * len(teff)
-    return Leg(sym=sym, s=s, t=teff, D=D1)
+# def leg_product_all_charges(*legs, s=1):
+#     """
+#     Output Leg that represents an outer product of a list of legs, fixing bond dimension of each to 1.
+#     """
+#     sym = legs[0].sym
+#     comb_t = tuple(product(*(leg.t for leg in legs)))
+#     comb_t = np.array(comb_t, dtype=int).reshape((len(comb_t), len(legs), sym.NSYM))
+#     teff = sym.fuse(comb_t, tuple(leg.s for leg in legs), s)
+#     teff = tuple(sorted(set(tuple(t.flat) for t in teff)))
+#     D1 = (1,) * len(teff)
+#     return Leg(sym=sym, s=s, t=teff, D=D1)
 
 
 def leg_union(*legs):
