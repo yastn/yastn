@@ -33,7 +33,7 @@ def test_entropy():
 
     entropy, Smin, normalization = yast.entropy(a * 0, axes=((0, 1), (2, 3))) # zero tensor
     assert (entropy, Smin, normalization) == (0, 0, 0)
-    b = yast.Tensor(config=config_U1, s=(1, 1, -1, -1))  # specific case of an empty tensor
+    b = yast.Tensor(config=config_U1, s=(1, 1, -1, -1))  #  empty tensor
     entropy, Smin, normalization = yast.entropy(b, axes=((0, 1), (2, 3)))
     assert (entropy, Smin, normalization) == (0, 0, 0)
 

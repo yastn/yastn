@@ -148,7 +148,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     return (v, info) if return_info else v
 
 
-def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True, **kwargs):
+def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=False, **kwargs):
     r"""
     Search for dominant eigenvalues of linear operator f using Arnoldi algorithm.
     Economic implementation (without restart) for internal use within :meth:`yast.tn.dmrg_`.
