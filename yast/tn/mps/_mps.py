@@ -189,10 +189,11 @@ class MpsMpo:
         self.first = 0  # index of the first lattice site
         self.last = N - 1  # index of the last lattice site
         self.nr_phys = nr_phys
+        self.factor = 1
+
 
     def norm(self):
         return norm(self)  # TODO: Write norm using qr decomposition.
-
 
     @property
     def config(self):
@@ -243,6 +244,7 @@ class MpsMpo:
         phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: ten.clone() for ind, ten in self.A.items()}
         phi.pC = self.pC
+        phi.factor = self.factor
         return phi
 
     def copy(self):
@@ -265,6 +267,7 @@ class MpsMpo:
         phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: ten.copy() for ind, ten in self.A.items()}
         phi.pC = self.pC
+        phi.factor = self.factor
         return phi
 
     def conj(self):
@@ -278,6 +281,7 @@ class MpsMpo:
         phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
         phi.A = {ind: ten.conj() for ind, ten in self.A.items()}
         phi.pC = self.pC
+        phi.factor = self.factor
         return phi
 
     def __mul__(self, multiplier):
@@ -292,6 +296,7 @@ class MpsMpo:
         phi.A = {ind: multiplier * ten if ind == self.first else ten.clone() \
                 for ind, ten in self.A.items()}
         phi.pC = self.pC
+        phi.factor = self.factor
         return phi
 
     def __rmul__(self, number):
@@ -398,7 +403,9 @@ class MpsMpo:
             self.A[n], R = self.A[n].qr(axes=(ax, 2), sQ=1, Qaxis=2)
         else:
             raise YastError('MPS: Argument "to" should be in ("first", "last")')
-        self.A[self.pC] = R / R.norm() if normalize else R
+        nR = R.norm()
+        self.A[self.pC] = R / nR if normalize else R
+        self.factor *= nR
 
     def diagonalize_central(self, opts=None, normalize=True):
         r"""
