@@ -11,6 +11,10 @@ from yast import tensordot, ncon, svd_with_truncation, qr, vdot, initialize
 import yast.tn.peps as peps
 from yast.tn.peps._doublePepsTensor import DoublePepsTensor
 from ._ctm_env import Proj, Local_Projector_Env
+import multiprocess as mp
+import time
+import numpy as np
+
 
 def append_a_bl(tt, AAb):
     """
@@ -80,28 +84,28 @@ def append_a_br2(tt, AAb):
     tt = tt.transpose(axes=(2, 1, 3, 0))  # e0 (0t 0b) e1 (1t 1b)
     return tt
 
-def fcor_bl(env, AAb, ind):
+def fcor_bl(env_b, env_bl, env_l, AAb):
     """ Creates extended bottom left corner. Order of indices see append_a_bl. """
-    corbln = tensordot(env[ind].b, env[ind].bl, axes=(2, 0))
-    corbln = tensordot(corbln, env[ind].l, axes=(2, 0))
+    corbln = tensordot(env_b, env_bl, axes=(2, 0))
+    corbln = tensordot(corbln, env_l, axes=(2, 0))
     return append_a_bl(corbln, AAb)
 
-def fcor_tl(env, AAb, ind):
+def fcor_tl(env_l, env_tl, env_t, AAb):
     """ Creates extended top left corner. """
-    cortln = tensordot(env[ind].l, env[ind].tl, axes=(2, 0))
-    cortln = tensordot(cortln, env[ind].t, axes=(2, 0))
+    cortln = tensordot(env_l, env_tl, axes=(2, 0))
+    cortln = tensordot(cortln, env_t, axes=(2, 0))
     return append_a_tl(cortln, AAb)
 
-def fcor_tr(env, AAb, ind):
+def fcor_tr(env_t, env_tr, env_r, AAb):
     """ Creates extended top right corner. """
-    cortrn = tensordot(env[ind].t, env[ind].tr, axes=(2, 0))
-    cortrn = tensordot(cortrn, env[ind].r, axes=(2, 0))
+    cortrn = tensordot(env_t, env_tr, axes=(2, 0))
+    cortrn = tensordot(cortrn, env_r, axes=(2, 0))
     return append_a_tr(cortrn, AAb)
 
-def fcor_br(env, AAb, ind):
+def fcor_br(env_r, env_br, env_b, AAb):
     """ Creates extended bottom right corner. """
-    corbrn = tensordot(env[ind].r, env[ind].br, axes=(2, 0))
-    corbrn = tensordot(corbrn, env[ind].b, axes=(2, 0))
+    corbrn = tensordot(env_r, env_br, axes=(2, 0))
+    corbrn = tensordot(corbrn, env_b, axes=(2, 0))
     return append_a_br(corbrn, AAb)
 
 
@@ -228,20 +232,20 @@ def proj_Cor(rt, rb, fix_signs, opts_svd):
     return pt, pb
 
 
-def proj_horizontal(env, out, AAb, ms, fix_signs, opts_svd=None):
+def proj_horizontal(env_nw, env_ne, env_sw, env_se, out, ms, AAb_nw, AAb_ne, AAb_sw, AAb_se, fix_signs, opts_svd=None):
 
     if opts_svd is None:
-        opts_svd = {'tol':1e-10, 'D_total': round(5*AAb.A[0,0].get_shape()[2])}   # D_total if not given can be a multiple of the total bond dimension
+        opts_svd = {'tol':1e-10, 'D_total': round(5*np.max(AAb_nw.A.get_shape()))}   # D_total if not given can be a multiple of the total bond dimension
 
     # ms in the CTM unit cell     
-    cortlm = fcor_tl(env, AAb[ms.nw], ms.nw) # contracted matrix at top-left constructing a projector with cut in the middle
-    cortrm = fcor_tr(env, AAb[ms.ne], ms.ne) # contracted matrix at top-right constructing a projector with cut in the middle
+    cortlm = fcor_tl(env_nw.l, env_nw.tl, env_nw.t, AAb_nw) # contracted matrix at top-left constructing a projector with cut in the middle
+    cortrm = fcor_tr(env_ne.t, env_ne.tr, env_ne.r, AAb_ne) # contracted matrix at top-right constructing a projector with cut in the middle
     corttm = tensordot(cortrm, cortlm, axes=((0, 1), (2, 3))) # top half for constructing middle projector
     del cortlm
     del cortrm
     
-    corblm = fcor_bl(env, AAb[ms.sw], ms.sw) # contracted matrix at bottom-left constructing a projector with cut in the middle
-    corbrm = fcor_br(env, AAb[ms.se], ms.se) # contracted matrix at bottom-right constructing a projector with cut in the middle
+    corblm = fcor_bl(env_sw.b, env_sw.bl, env_sw.l, AAb_sw) # contracted matrix at bottom-left constructing a projector with cut in the middle
+    corbrm = fcor_br(env_se.r, env_se.br, env_se.b, AAb_se) # contracted matrix at bottom-right constructing a projector with cut in the middle
     corbbm = tensordot(corbrm, corblm, axes=((2, 3), (0, 1))) 
     del corblm
     del corbrm
@@ -264,20 +268,20 @@ def proj_horizontal(env, out, AAb, ms, fix_signs, opts_svd=None):
     return out
 
 
-def proj_vertical(env, out, AAb, ms, fix_signs, opts_svd=None):
+def proj_vertical(env_nw, env_sw, env_ne, env_se, out, ms, AAb_nw, AAb_sw, AAb_ne, AAb_se, fix_signs, opts_svd=None):
 
     if opts_svd is None:
-        opts_svd = {'tol':1e-10, 'D_total': round(5*AAb.A[0,0].get_shape()[2])}   # D_total if not given can be a multiple of the total bond dimension
+        opts_svd = {'tol':1e-10, 'D_total': round(5*np.max(AAb_nw.A.get_shape()))}   # D_total if not given can be a multiple of the total bond dimension
     
-    cortlm = fcor_tl(env, AAb[ms.nw], ms.nw) # contracted matrix at top-left constructing a projector with a cut in the middle
-    corblm = fcor_bl(env, AAb[ms.sw], ms.sw) # contracted matrix at bottom-left constructing a projector with a cut in the middle
+    cortlm = fcor_tl(env_nw.l, env_nw.tl, env_nw.t, AAb_nw) # contracted matrix at top-left constructing a projector with a cut in the middle
+    corblm = fcor_bl(env_sw.b, env_sw.bl, env_sw.l, AAb_sw) # contracted matrix at bottom-left constructing a projector with a cut in the middle
 
     corvvm = tensordot(corblm, cortlm, axes=((2, 3), (0, 1))) # left half for constructing middle projector
     del corblm
     del cortlm
 
-    cortrm = fcor_tr(env, AAb[ms.ne], ms.ne) # contracted matrix at top-right constructing a projector with cut in the middle
-    corbrm = fcor_br(env, AAb[ms.se], ms.se) # contracted matrix at bottom-right constructing a projector with cut in the middle
+    cortrm = fcor_tr(env_ne.t, env_ne.tr, env_ne.r, AAb_ne) # contracted matrix at top-right constructing a projector with cut in the middle
+    corbrm = fcor_br(env_se.r, env_se.br, env_se.b, AAb_se) # contracted matrix at bottom-right constructing a projector with cut in the middle
 
     corkkr = tensordot(corbrm, cortrm, axes=((0, 1), (2, 3))) # right half for constructing middle projector
 
@@ -285,24 +289,30 @@ def proj_vertical(env, out, AAb, ms, fix_signs, opts_svd=None):
     _, rr = qr(corkkr, axes=((0, 1), (2, 3)))
 
     out[ms.nw].vtr, out[ms.ne].vtl = proj_Cor(rl, rr, fix_signs, opts_svd=opts_svd) # projector top-middle 
+
     corvvm = corvvm.transpose(axes=(2, 3, 0, 1))
     corkkr = corkkr.transpose(axes=(2, 3, 0, 1))
+
     _, rl = qr(corvvm, axes=((0, 1), (2, 3)))
     _, rr = qr(corkkr, axes=((0, 1), (2, 3)))
+
     out[ms.sw].vbr, out[ms.se].vbl = proj_Cor(rl, rr, fix_signs, opts_svd=opts_svd) # projector bottom-middle
+
     del corvvm
     del corkkr
 
     return out
 
 
-def proj_horizontal_cheap(env, out, chi, cutoff, ms, fix_signs):
+def proj_horizontal_cheap(env, out, AAb, ms, fix_signs, opts_svd=None):
     # ref https://arxiv.org/pdf/1607.04016.pdf
-    out = {}
+    if opts_svd is None:
+        opts_svd = {'tol':1e-10, 'D_total': round(5*AAb.A[0,0].get_shape()[3])}   # D_total if not given can be a multiple of the total bond dimension
+    
 
-    cortlm = tensordot(env[ms.se].tl, env[ms.se].t, axes=(1, 0))
+    cortlm = tensordot(env[ms.nw].tl, env[ms.nw].t, axes=(1, 0))
     q1, r1 = qr(cortlm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
-    cortrm = tensordot(env[ms.sw].t, env[ms.sw].tr, axes=(2, 0))
+    cortrm = tensordot(env[ms.ne].t, env[ms.ne].tr, axes=(2, 0))
     q2, r2 = qr(cortrm, axes=((1, 2), 0), Qaxis=0, Raxis=1)
 
     rrt = r1@r2
@@ -311,12 +321,12 @@ def proj_horizontal_cheap(env, out, chi, cutoff, ms, fix_signs):
     Ut = sSt.broadcast(Ut, axis=1)
     Vt = sSt.broadcast(Vt, axis=0)
 
-    Rtl = tensordot(q1, Ut, axes=(2, 0)).fuse_legs(axes=(2, 1, 0))  # ordered clockwise
-    Rtr = tensordot(Vt, q2, axes=(1, 0))  # ordered anticlockwise
+    Rtl = tensordot(Ut, q1, axes=(0, 2)) 
+    Rtr = tensordot(Vt, q2, axes=(1, 0))
 
-    corblm = tensordot(env[ms.ne].b, env[ms.ne].bl, axes=(2, 0))
+    corblm = tensordot(env[ms.sw].b, env[ms.sw].bl, axes=(2, 0))
     q3, r3 = qr(corblm, axes=((1, 2), 0), Qaxis=0, Raxis=1)
-    corbrm = tensordot(env[ms.nw].br, env[ms.nw].b, axes=(1, 0))
+    corbrm = tensordot(env[ms.se].br, env[ms.se].b, axes=(1, 0))
     q4, r4 = qr(corbrm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
 
     rrb = r4@r3
@@ -325,23 +335,24 @@ def proj_horizontal_cheap(env, out, chi, cutoff, ms, fix_signs):
     Ub = sSb.broadcast(Ub, axis=1)
     Vb = sSb.broadcast(Vb, axis=0)
 
-    Rbl = tensordot(Vb, q3, axes=(1, 0))  # ordered anticlockwise
+    Rbl = tensordot(Vb, q3, axes=(1, 0)).fuse_legs(axes=(0, 2, 1))
     Rbr = tensordot(q4, Ub, axes=(2, 0)).fuse_legs(axes=(2, 1, 0))  # ordered clockwise
 
-    out['ph_l_t', ms.nw], out['ph_l_b', ms.nw] = proj_Cor(Rtl, Rbl, chi, cutoff, fix_signs) # projector left-middle 
-    out['ph_r_t', ms.ne], out['ph_r_b', ms.ne] = proj_Cor(Rtr, Rbr, chi, cutoff, fix_signs) # projector right-middle
+    out[ms.ne].hlb, out[ms.se].hlt = proj_Cor(Rtl, Rbl, fix_signs, opts_svd=opts_svd) # projector left-middle 
+    out[ms.nw].hrb, out[ms.sw].hrt = proj_Cor(Rtr, Rbr, fix_signs, opts_svd=opts_svd) # projector right-middle
 
     return out
 
 
-def proj_vertical_cheap(env, out, chi, cutoff, ms, fix_signs):
+def proj_vertical_cheap(env, out, AAb, ms, fix_signs, opts_svd=None):
     # ref https://arxiv.org/pdf/1607.04016.pdf
 
-    out = {}
+    if opts_svd is None:
+        opts_svd = {'tol':1e-10, 'D_total': round(5*AAb.A[0,0].get_shape()[3])}   # D_total if not given can be a multiple of the total bond dimension
 
-    cortlm = tensordot(env[ms.ne].l, env[ms.ne].tl, axes=(2, 0))
+    cortlm = tensordot(env[ms.sw].l, env[ms.sw].tl, axes=(2, 0))
     q1, r1 = qr(cortlm, axes=((1, 2), 0), Qaxis=0, Raxis=1)
-    corblm =  tensordot(env[ms.se].bl, env[ms.se].l, axes=(1, 0))
+    corblm =  tensordot(env[ms.nw].bl, env[ms.nw].l, axes=(1, 0))
     q2, r2 = qr(corblm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
 
     rrl = r2@r1
@@ -353,9 +364,9 @@ def proj_vertical_cheap(env, out, chi, cutoff, ms, fix_signs):
     Rtl = tensordot(Vl, q1, axes=(1, 0))  # ordered anticlockwise
     Rbl = tensordot(q2, Ul, axes=(2, 0)).fuse_legs(axes=(2, 1, 0))  # ordered clockwise
 
-    cortrm = tensordot(env[ms.nw].tr, env[ms.nw].r, axes=(1, 0))
+    cortrm = tensordot(env[ms.se].tr, env[ms.se].r, axes=(1, 0))
     q3, r3 = qr(cortrm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
-    corbrm = tensordot(env[ms.sw].r, env[ms.sw].br, axes=(2, 0))
+    corbrm = tensordot(env[ms.ne].r, env[ms.ne].br, axes=(2, 0))
     q4, r4 = qr(corbrm, axes=(0, (1, 2)), Qaxis=0, Raxis=1)
 
     rrr = r3@r4
@@ -367,124 +378,115 @@ def proj_vertical_cheap(env, out, chi, cutoff, ms, fix_signs):
     Rtr = tensordot(q3, Ur, axes=(2, 0)).fuse_legs(axes=(2, 1, 0)) # ordered clockwise
     Rbr = tensordot(Vr, q4, axes=(1, 0)) # ordered anticlockwise
 
-    out['pv_t_l', ms.nw], out['pv_t_r', ms.nw] = proj_Cor(Rtl, Rtr, chi, cutoff, fix_signs) # projector top-middle 
-    out['pv_b_l', ms.sw], out['pv_b_r', ms.sw] = proj_Cor(Rbl, Rbr, chi, cutoff, fix_signs) # projector bottom-middle
+    out[ms.nw].vtr, out[ms.ne].vtl = proj_Cor(Rtl, Rtr, fix_signs, opts_svd=opts_svd) # projector top-middle 
+    out[ms.sw].vbr, out[ms.se].vbl = proj_Cor(Rbl, Rbr, fix_signs, opts_svd=opts_svd) # projector bottom-middle
 
     return out
 
-
-
 def move_horizontal(envn, env, AAb, proj, ms):
-    """ Perform horizontal CTMRG move on a mxn lattice. """
 
-   # envn = env.copy()
+    (_,y) = ms
+    left = AAb.nn_site(ms, d='l')
+    right = AAb.nn_site(ms, d='r')
+    
+    if AAb.boundary == 'finite' and y == 0:
+        l_abv = None
+        l_bel = None
+    else:
+        l_abv = AAb.nn_site(left, d='t')
+        l_bel =  AAb.nn_site(left, d='b')
 
-    nw_abv = AAb.nn_site(ms.nw, d='t')
-    ne_abv = AAb.nn_site(ms.ne, d='t')
-    sw_bel = AAb.nn_site(ms.sw, d='b')
-    se_bel = AAb.nn_site(ms.se, d='b')
+    if AAb.boundary == 'finite' and y == (env.Ny-1):
+        r_abv = None
+        r_bel = None
+    else:
+        r_abv = AAb.nn_site(right, d='t')
+        r_bel = AAb.nn_site(right, d='b')
 
-    if nw_abv is not None:
-        envn[ms.ne].tl = ncon((env[ms.nw].tl, env[ms.nw].t, proj[nw_abv].hlb),
+    if l_abv is not None:
+        envn[ms].tl = ncon((env[left].tl, env[left].t, proj[l_abv].hlb),
                                    ([2, 3], [3, 1, -1], [2, 1, -0]))
 
-    tt_l = tensordot(env[ms.nw].l, proj[ms.nw].hlt, axes=(2, 0))
-    tt_l = append_a_tl(tt_l, AAb[ms.nw])
-    envn[ms.ne].l = ncon((proj[ms.nw].hlb, tt_l), ([2, 1, -0], [2, 1, -2, -1]))
-  
-    bb_l = ncon((proj[ms.sw].hlb, env[ms.sw].l), ([1, -1, -0], [1, -2, -3]))
-    bb_l = append_a_bl(bb_l, AAb[ms.sw])
-
-    envn[ms.se].l = ncon((proj[ms.sw].hlt, bb_l), ([2, 1, -2], [-0, -1, 2, 1]))
-    
-    if sw_bel is not None:
-        envn[ms.se].bl = ncon((env[ms.sw].bl, env[ms.sw].b, proj[sw_bel].hlt),
+    if r_abv is not None:
+        envn[ms].tr = ncon((env[right].tr, env[right].t, proj[r_abv].hrb),
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
-
-    if ne_abv is not None:
-        envn[ms.nw].tr = ncon((env[ms.ne].tr, env[ms.ne].t, proj[ne_abv].hrb),
+    if l_bel is not None:                       
+        envn[ms].bl = ncon((env[left].bl, env[left].b, proj[l_bel].hlt),
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
- 
-    tt_r = ncon((env[ms.ne].r, proj[ms.ne].hrt), ([1, -2, -3], [1, -1, -0]))
-    tt_r = append_a_tr(tt_r, AAb[ms.ne])
-
-    envn[ms.nw].r = ncon((tt_r, proj[ms.ne].hrb),
-                               ([-0, -1, 2, 1], [2, 1, -3]))
-
-    bb_r = tensordot(env[ms.se].r, proj[ms.se].hrb, axes=(2, 0))
-    bb_r = append_a_br(bb_r, AAb[ms.se])
-
-    envn[ms.sw].r = tensordot(proj[ms.se].hrt, bb_r, axes=((1, 0), (1, 0))).fuse_legs(axes=(0, 2, 1))
-
-    if se_bel is not None:
-        envn[ms.sw].br = ncon((proj[se_bel].hrt, env[ms.se].br, env[ms.se].b), 
+    if r_bel is not None:
+        envn[ms].br = ncon((proj[r_bel].hrt, env[right].br, env[right].b), 
                                ([2, 1, -0], [2, 3], [3, 1, -1]))
 
-    envn[ms.ne].tl = envn[ms.ne].tl / envn[ms.ne].tl.norm(p='inf')
-    envn[ms.ne].l = envn[ms.ne].l / envn[ms.ne].l.norm(p='inf')
-    envn[ms.se].l = envn[ms.se].l / envn[ms.se].l.norm(p='inf')
-    envn[ms.se].bl = envn[ms.se].bl / envn[ms.se].bl.norm(p='inf')
-    envn[ms.nw].tr = envn[ms.nw].tr / envn[ms.nw].tr.norm(p='inf')
-    envn[ms.nw].r = envn[ms.nw].r / envn[ms.nw].r.norm(p='inf')
-    envn[ms.sw].r = envn[ms.sw].r / envn[ms.sw].r.norm(p='inf')
-    envn[ms.sw].br = envn[ms.sw].br / envn[ms.sw].br.norm(p='inf')
+    if not(left is None):
+        tt_l = tensordot(env[left].l, proj[left].hlt, axes=(2, 0))
+        tt_l = append_a_tl(tt_l, AAb[left])
+        envn[ms].l = ncon((proj[left].hlb, tt_l), ([2, 1, -0], [2, 1, -2, -1]))
 
+    if not(right is None):
+        tt_r = ncon((env[right].r, proj[right].hrt), ([1, -2, -3], [1, -1, -0]))
+        tt_r = append_a_tr(tt_r, AAb[right])
+        envn[ms].r = ncon((tt_r, proj[right].hrb), ([-0, -1, 2, 1], [2, 1, -3]))
+
+    envn[ms].tl = envn[ms].tl/ envn[ms].tl.norm(p='inf')
+    envn[ms].l = envn[ms].l/ envn[ms].l.norm(p='inf')
+    envn[ms].tr = envn[ms].tr/ envn[ms].tr.norm(p='inf')
+    envn[ms].bl = envn[ms].bl/ envn[ms].bl.norm(p='inf')
+    envn[ms].r = envn[ms].r/ envn[ms].r.norm(p='inf')
+    envn[ms].br = envn[ms].br/ envn[ms].br.norm(p='inf')
+    
     return envn
-
 
 
 def move_vertical(envn, env, AAb, proj, ms):
-    """ Perform vertical CTMRG on a mxn lattice """
 
-   # envn = env.copy()
 
-    nw_left = AAb.nn_site(ms.nw, d='l')
-    sw_left = AAb.nn_site(ms.sw, d='l')
-    ne_right = AAb.nn_site(ms.ne, d='r')
-    se_right = AAb.nn_site(ms.se, d='r')
+    (x,_) = ms
+    top = AAb.nn_site(ms, d='t')
+    bottom = AAb.nn_site(ms, d='b')
 
-    if nw_left is not None:
-        envn[ms.sw].tl = ncon((env[ms.nw].tl, env[ms.nw].l, proj[nw_left].vtr), 
+    if AAb.boundary == 'finite' and x == 0:
+        t_left = None
+        t_right = None
+    else:
+        t_left = AAb.nn_site(top, d='l')
+        t_right =  AAb.nn_site(top, d='r')
+    if AAb.boundary == 'finite' and x == (env.Nx-1):
+        b_left = None
+        b_right = None
+    else:
+        b_left = AAb.nn_site(bottom, d='l')
+        b_right = AAb.nn_site(bottom, d='r')
+
+
+    if t_left is not None:
+        envn[ms].tl = ncon((env[top].tl, env[top].l, proj[t_left].vtr), 
                                ([3, 2], [-0, 1, 3], [2, 1, -1]))
-    
-    ll_t = ncon((proj[ms.nw].vtl, env[ms.nw].t), ([1, -1, -0], [1, -2, -3]))
-    ll_t = append_a_tl(ll_t, AAb[ms.nw])
-    envn[ms.sw].t = ncon((ll_t, proj[ms.nw].vtr), ([-0, -1, 2, 1], [2, 1, -2]))
-
-    rr_t = tensordot(env[ms.ne].t, proj[ms.ne].vtr, axes=(2, 0))
-    rr_t = append_a_tr(rr_t, AAb[ms.ne])
-    envn[ms.se].t = ncon((proj[ms.ne].vtl, rr_t), ([2, 1, -0], [2, 1, -2, -1]))
-
-    if ne_right is not None:
-        envn[ms.se].tr = ncon((proj[ne_right].vtl, env[ms.ne].tr, env[ms.ne].r), 
+    if t_right is not None:
+        envn[ms].tr = ncon((proj[t_right].vtl, env[top].tr, env[top].r), 
                                ([2, 1, -0], [2, 3], [3, 1, -1]))
-    
-    if sw_left is not None:
-        envn[ms.nw].bl = ncon((env[ms.sw].bl, env[ms.sw].l, proj[sw_left].vbr), 
+    if b_left is not None:
+        envn[ms].bl = ncon((env[bottom].bl, env[bottom].l, proj[b_left].vbr), 
                                ([1, 3], [3, 2, -1], [1, 2, -0]))
-
-    ll_b = tensordot(env[ms.sw].b, proj[ms.sw].vbl, axes=(2, 0))
-    ll_b = append_a_bl(ll_b, AAb[ms.sw])
-    envn[ms.nw].b = ncon((ll_b, proj[ms.sw].vbr), ([2, 1, -2, -1], [2, 1, -0]))
-
-    rr_b = ncon((proj[ms.se].vbr, env[ms.se].b), ([1, -1, -0], [1, -2, -3]))
-    rr_b = append_a_br(rr_b, AAb[ms.se])
-    envn[ms.ne].b = tensordot(rr_b, proj[ms.se].vbl, axes=((3, 2), (1, 0)))
-
-    if se_right is not None:
-        envn[ms.ne].br = ncon((proj[se_right].vbl, env[ms.se].br, env[ms.se].r), 
+    if b_right is not None:
+        envn[ms].br = ncon((proj[b_right].vbl, env[bottom].br, env[bottom].r), 
                                ([2, 1, -1], [3, 2], [-0, 1, 3]))
+    if not(top is None):
+        ll_t = ncon((proj[top].vtl, env[top].t), ([1, -1, -0], [1, -2, -3]))
+        ll_t = append_a_tl(ll_t, AAb[top])
+        envn[ms].t = ncon((ll_t, proj[top].vtr), ([-0, -1, 2, 1], [2, 1, -2]))
+    if not(bottom is None):
+        ll_b = tensordot(env[bottom].b, proj[bottom].vbl, axes=(2, 0))
+        ll_b = append_a_bl(ll_b, AAb[bottom])
+        envn[ms].b = ncon((ll_b, proj[bottom].vbr), ([2, 1, -2, -1], [2, 1, -0]))
 
-    envn[ms.sw].tl = envn[ms.sw].tl/ envn[ms.sw].tl.norm(p='inf')
-    envn[ms.sw].t = envn[ms.sw].t/ envn[ms.sw].t.norm(p='inf')
-    envn[ms.se].t = envn[ms.se].t/ envn[ms.se].t.norm(p='inf')
-    envn[ms.se].tr = envn[ms.se].tr/ envn[ms.se].tr.norm(p='inf')
-    envn[ms.nw].bl = envn[ms.nw].bl/ envn[ms.nw].bl.norm(p='inf')
-    envn[ms.nw].b = envn[ms.nw].b/ envn[ms.nw].b.norm(p='inf')
-    envn[ms.ne].b = envn[ms.ne].b/ envn[ms.ne].b.norm(p='inf')
-    envn[ms.ne].br = envn[ms.ne].br/ envn[ms.ne].br.norm(p='inf')
-
+    envn[ms].tl = envn[ms].tl/ envn[ms].tl.norm(p='inf')
+    envn[ms].t = envn[ms].t/ envn[ms].t.norm(p='inf')
+    envn[ms].tr = envn[ms].tr/ envn[ms].tr.norm(p='inf')
+    envn[ms].bl = envn[ms].bl/ envn[ms].bl.norm(p='inf')
+    envn[ms].b = envn[ms].b/ envn[ms].b.norm(p='inf')
+    envn[ms].br = envn[ms].br/ envn[ms].br.norm(p='inf')
     return envn
+
 
 
 def trivial_projector(a, b, c, dirn):
@@ -512,7 +514,7 @@ def trivial_projector(a, b, c, dirn):
 
 
 
-def CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd=None):
+def CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd=None, parallelize=False):
     r""" 
     Perform one step of CTMRG update for a mxn lattice 
 
@@ -525,73 +527,67 @@ def CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd=None):
     and renormalization starting with a 2x2 cell in the top-left corner and 
     subsequently going downward for (Ny-1) steps and then (Nx-1) steps to the right.      
     """
-    
+
     proj = Proj(lattice=AAb.lattice, dims=AAb.dims, boundary=AAb.boundary) 
     for ms in proj.sites():
         proj[ms] = Local_Projector_Env()
 
-    Nx, Ny = AAb.Nx, AAb.Ny # here Nx, Ny serves as a guide for providing correct ctm windows and maybe
-                            # varied upon need; does not have to represent actual ldimensions of the lattice
-    if AAb.boundary == 'finite':
-        Nx, Ny = Nx-1, Ny-1
-    if AAb.lattice == 'checkerboard':
-        Nx, Ny = 1, 1
-
-    print('###############################################################')
     print('######## Calculating projectors for horizontal move ###########')
-    print('###############################################################')
-
     envn_hor = env.copy()
-    for ms in AAb.tensors_CtmEnv():   #ctm_wndows(trajectory='h', index=y): # horizontal absorption and renormalization
-        print('projector calculation ctm cluster horizontal', ms)
-        if cheap_moves is True:
-            proj = proj_horizontal_cheap(env, proj, ms, fix_signs, opts_svd)
-        else:
-            proj = proj_horizontal(env, proj, AAb, ms, fix_signs, opts_svd)
+
+    if parallelize==False:
+        for ms in AAb.tensors_CtmEnv():   #ctm_wndows(trajectory='h', index=y): # horizontal absorption and renormalization
+            print('projector calculation ctm cluster horizontal', ms)
+            if cheap_moves is True:
+                proj = proj_horizontal_cheap(env, proj, AAb, ms, fix_signs, opts_svd)
+            else:
+                proj = proj_horizontal(env[ms.nw], env[ms.ne], env[ms.sw], env[ms.se], proj, ms, AAb[ms.nw], AAb[ms.ne], AAb[ms.sw], AAb[ms.se], fix_signs, opts_svd)
+    elif parallelize==True:
+        """# Multiple processor execution
+        num_processors = mp.cpu_count()
+        print(f"Number of processors: {num_processors}")
+        pool = mp.Pool(processes=num_processors)
+        start_time= time.time()
+        results = pool.map(lambda ms: proj_horizontal(env, proj, AAb, ms, fix_signs, opts_svd), AAb.tensors_CtmEnv())
+        end_time = time.time()"""
+
 
     if AAb.boundary == 'finite': 
-        # we need proj[0,0].hlt, proj[0, Ny-1].hrt, proj[Nx-1, 0].hlb, proj[Nx-1, Ny-1].hrb as trivial projectors
-        for ms in range(Ny):
+        # we need trivial projectors on the boundary for horizontal move for finite lattices
+        for ms in range(AAb.Ny-1):
             proj[0,ms].hlt = trivial_projector(env[0,ms].l, AAb[0,ms], env[0,ms+1].tl, dirn='hlt')
-            proj[Nx,ms].hlb = trivial_projector(env[Nx,ms].l, AAb[Nx,ms], env[Nx,ms+1].bl, dirn='hlb')
+            proj[AAb.Nx-1,ms].hlb = trivial_projector(env[AAb.Nx-1,ms].l, AAb[AAb.Nx-1,ms], env[AAb.Nx-1,ms+1].bl, dirn='hlb')
             proj[0, ms+1].hrt = trivial_projector(env[0,ms+1].r, AAb[0,ms+1], env[0,ms].tr, dirn='hrt')
-            proj[Nx, ms+1].hrb = trivial_projector(env[Nx,ms+1].r, AAb[Nx,ms+1], env[Nx,ms].br, dirn='hrb')
-
+            proj[AAb.Nx-1, ms+1].hrb = trivial_projector(env[AAb.Nx-1,ms+1].r, AAb[AAb.Nx-1,ms+1], env[AAb.Nx-1,ms].br, dirn='hrb')
     
-    print('####################################')
     print('######## Horizontal Move ###########')
-    print('####################################')
 
-    for ms in AAb.tensors_CtmEnv():   # horizontal absorption and renormalization
-        print('move ctm cluster horizontal', ms)
+    for ms in AAb.sites():
+        print('move ctm horizontal', ms)
         envn_hor = move_horizontal(envn_hor, env, AAb, proj, ms)
 
     envn_ver = envn_hor.copy()
-  
-    print('#############################################################')
-    print('######## Calculating projectors for vertical move ###########')
-    print('#############################################################')
-    
+
+    print('######## Calculating projectors for vertical move ###########')    
     for ms in AAb.tensors_CtmEnv():   # vertical absorption and renormalization
         print('projector calculation ctm cluster vertical', ms)
         if cheap_moves is True:
-            proj = proj_vertical_cheap(envn_hor, proj, ms, fix_signs, opts_svd)
+            proj = proj_vertical_cheap(envn_hor, proj, AAb, ms, fix_signs, opts_svd)
         else:
-            proj = proj_vertical(envn_hor, proj, AAb, ms, fix_signs, opts_svd)
+            proj = proj_vertical(envn_hor[ms.nw], envn_hor[ms.sw], envn_hor[ms.ne], envn_hor[ms.se], proj, ms, AAb[ms.nw], AAb[ms.sw], AAb[ms.ne], AAb[ms.se], fix_signs, opts_svd)
 
     if AAb.boundary == 'finite': 
-
-        for ms in range(Nx):
+        # we need trivial projectors on the boundary for vertical move for finite lattices
+        for ms in range(AAb.Nx-1):
             proj[ms,0].vtl = trivial_projector(envn_hor[ms,0].t, AAb[ms,0], envn_hor[ms+1,0].tl, dirn='vtl')
             proj[ms+1,0].vbl = trivial_projector(envn_hor[ms+1,0].b, AAb[ms+1,0], envn_hor[ms,0].bl, dirn='vbl')
-            proj[ms,Ny].vtr = trivial_projector(envn_hor[ms, Ny].t, AAb[ms,Ny], envn_hor[ms+1,Ny].tr, dirn='vtr')
-            proj[ms+1,Ny].vbr = trivial_projector(envn_hor[ms+1,Ny].b, AAb[ms+1,Ny], envn_hor[ms,Ny].br, dirn='vbr')
+            proj[ms,AAb.Ny-1].vtr = trivial_projector(envn_hor[ms, AAb.Ny-1].t, AAb[ms,AAb.Ny-1], envn_hor[ms+1,AAb.Ny-1].tr, dirn='vtr')
+            proj[ms+1,AAb.Ny-1].vbr = trivial_projector(envn_hor[ms+1,AAb.Ny-1].b, AAb[ms+1,AAb.Ny-1], envn_hor[ms,AAb.Ny-1].br, dirn='vbr')
 
-    print('###################################')
     print('######### Vertical Move ###########')
-    print('###################################')
-    for ms in AAb.tensors_CtmEnv():   # vertical absorption and renormalization
-        print('move ctm cluster vertical', ms)
+
+    for ms in AAb.sites():   # vertical absorption and renormalization
+        print('move ctm vertical', ms)
         envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, ms)
 
     return envn_ver, proj

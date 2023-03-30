@@ -1,6 +1,7 @@
 """ Functions performing many CTMRG steps until convergence and return of CTM environment tensors for mxn lattice. """
 from typing import NamedTuple
 import logging
+import time
 from ._ctm_iteration_routines import CTM_it
 from ._ctm_iteration_routines import fPEPS_2layers, fPEPS_fuse_layers, check_consistency_tensors
 from ._ctm_env import CtmEnv, init_rand
@@ -13,8 +14,8 @@ from ._ctm_env import CtmEnv, init_rand
 class CTMRGout(NamedTuple):
     sweeps : int = 0
     env : dict = None
-    proj_hor : dict = None
-    proj_vert : dict = None
+    proj : dict = None
+    tt : float = None
 
 
 def ctmrg(psi, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, env=None, opts_svd=None):
@@ -90,8 +91,13 @@ def _ctmrg(psi, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd=No
     for sweep in range(1, max_sweeps + 1):
         logging.info('CTM sweep: %2d', sweep)
         cheap_moves=False
+        t_start = time.time()
         env, proj = CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd)
+        t_end = time.time()
+        tt = t_start - t_end
+        logging.info('sweep time: %0.2f s.', tt)
+
 
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
-            yield CTMRGout(sweep, env, proj)
-    yield CTMRGout(sweep, env, proj)
+            yield CTMRGout(sweep, env, proj, tt)
+    yield CTMRGout(sweep, env, proj, tt)
