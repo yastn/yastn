@@ -61,8 +61,8 @@ def ctm_for_Onsager(psi, opt, Z_exact):
     ops = {'magA1': {'l': opt.z(), 'r': opt.I()},
            'magB1': {'l': opt.I(), 'r': opt.z()}}
 
-    for step in ctmrg(psi, max_sweeps, iterator_step=2, AAb_mode=0, opts_svd=opts_svd):
-        assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
+    for step in ctmrg(psi, max_sweeps, iterator_step=4, AAb_mode=0, opts_svd=opts_svd):
+        assert step.sweeps % 4 == 0 # stop every 2nd step as iteration_step=2
 
         ob_hor, ob_ver = nn_avg(psi, step.env, ops)
         cf = 0.25 * (abs(ob_hor.get('magA1')) + abs(ob_hor.get('magB1')) + abs(ob_ver.get('magA1')) + abs(ob_ver.get('magB1')))
@@ -73,14 +73,20 @@ def ctm_for_Onsager(psi, opt, Z_exact):
     assert pytest.approx(cf, rel=1e-3) == Z_exact
 
 
-def test_ctm_loop():
+def test_ctm_loop():  ###high temperature
     """ Calculate magnetization for classical 2D Ising model and compares with the exact result. """
     beta = 0.8 # check for a certain inverse temperature
     Z_exact = 0.99602 # analytical value of magnetization up to 4 decimal places for beta = 0.7 (2D Classical Ising)
 
     opt = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
+<<<<<<< HEAD
+    
+    list_lattice = [('checkerboard', (2, 2))]
+    for lattice, dims in list_lattice:
+=======
 
     for lattice, dims in  [('checkerboard', (2, 2))]:
+>>>>>>> 514b86606356c2ddd6c72621be40552588677da0
         T = create_Ising_tensor(opt.z(), beta)
         psi = peps.Peps(lattice=lattice, dims=dims, boundary='infinite')
         for site in psi.sites():

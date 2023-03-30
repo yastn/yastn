@@ -99,20 +99,25 @@ def test_NTU_spinless_finite():
 
 def test_NTU_spinless_infinite():
 
-    lattice = 'rectangle'
+    lattice = 'checkerboard'
     boundary = 'infinite'
     purification = 'True'
+<<<<<<< HEAD
+    D = 8
+    chi = 40
+=======
     xx = 2
     yy = 2
     D = 6
     chi = 10
+>>>>>>> 514b86606356c2ddd6c72621be40552588677da0
     mu = 0 # chemical potential
     t = 1 # hopping amplitude
     beta_end = 0.2
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
-    net = peps.Peps(lattice=lattice, dims=(xx, yy), boundary=boundary)
+    net = peps.Peps(lattice=lattice, boundary=boundary)
     opt = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
 
@@ -154,7 +159,7 @@ def test_NTU_spinless_infinite():
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
         ccdag = 0.5*(abs(obs_hor.get('ccdag')) + abs(obs_ver.get('ccdag')))
 
-        cf_energy = - (cdagc + ccdag) * (2 * xx * yy - xx - yy)
+        cf_energy = - (cdagc + ccdag) * 0.5
 
         print("expectation value: ", cf_energy)
         if abs(cf_energy - cf_energy_old) < tol_exp:
@@ -173,7 +178,7 @@ def test_NTU_spinless_infinite():
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
 
-    test_NTU_spinless_finite()
+    #test_NTU_spinless_finite()
     test_NTU_spinless_infinite()
 
 
