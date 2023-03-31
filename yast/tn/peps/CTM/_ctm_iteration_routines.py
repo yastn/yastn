@@ -234,6 +234,30 @@ def proj_Cor(rt, rb, fix_signs, opts_svd):
 
 def proj_horizontal(env_nw, env_ne, env_sw, env_se, out, ms, AAb_nw, AAb_ne, AAb_sw, AAb_se, fix_signs, opts_svd=None):
 
+    """
+    Calculates horizontal environment projectors and stores the resulting tensors in the output dictionary. 
+    
+    Parameters
+    ----------
+    env_nw: environment at north west of 2x2 ctm window
+    env_sw: environment at south west of 2x2 ctm window
+    env_ne: environment at north east of 2x2 ctm window
+    env_se: environment at south east of 2x2 ctm window
+    out: dictionary that stores the horizontal projectors
+    ms: current 2x2 ctm window
+    AAb_nw: double PEPS tensor at north west of 2x2 ctm window
+    AAb_sw: double PEPS tensor at south west of 2x2 ctm window
+    AAb_ne: double PEPS tensor at north east of 2x2 ctm window
+    AAb_se: double PEPS tensor at south east of 2x2 ctm window
+    fix_signs: whether to fix the signs of the projectors or not
+    opts_svd: options for the SVD (singular value decomposition) 
+    
+    Returns
+    ----------
+    out: dictionary that stores the vertical projectors
+
+    """
+
     if opts_svd is None:
         opts_svd = {'tol':1e-10, 'D_total': round(5*np.max(AAb_nw.A.get_shape()))}   # D_total if not given can be a multiple of the total bond dimension
 
@@ -270,6 +294,30 @@ def proj_horizontal(env_nw, env_ne, env_sw, env_se, out, ms, AAb_nw, AAb_ne, AAb
 
 def proj_vertical(env_nw, env_sw, env_ne, env_se, out, ms, AAb_nw, AAb_sw, AAb_ne, AAb_se, fix_signs, opts_svd=None):
 
+    r"""
+    Calculates vertical environment projectors and stores the resulting tensors in the output dictionary. 
+    
+    Parameters
+    ----------
+    env_nw: environment at north west of 2x2 ctm window
+    env_sw: environment at south west of 2x2 ctm window
+    env_ne: environment at north east of 2x2 ctm window
+    env_se: environment at south east of 2x2 ctm window
+    out: dictionary that stores the vertical projectors
+    ms: current 2x2 ctm window
+    AAb_nw: double PEPS tensor at north west of 2x2 ctm window
+    AAb_sw: double PEPS tensor at south west of 2x2 ctm window
+    AAb_ne: double PEPS tensor at north east of 2x2 ctm window
+    AAb_se: double PEPS tensor at south east of 2x2 ctm window
+    fix_signs: whether to fix the signs of the projectors or not
+    opts_svd: options for the SVD (singular value decomposition)
+    
+    Returns
+    ----------
+    out: dictionary that stores the vertical projectors
+
+    """
+
     if opts_svd is None:
         opts_svd = {'tol':1e-10, 'D_total': round(5*np.max(AAb_nw.A.get_shape()))}   # D_total if not given can be a multiple of the total bond dimension
     
@@ -304,86 +352,29 @@ def proj_vertical(env_nw, env_sw, env_ne, env_se, out, ms, AAb_nw, AAb_sw, AAb_n
     return out
 
 
-def proj_horizontal_cheap(env, out, AAb, ms, fix_signs, opts_svd=None):
-    # ref https://arxiv.org/pdf/1607.04016.pdf
-    if opts_svd is None:
-        opts_svd = {'tol':1e-10, 'D_total': round(5*AAb.A[0,0].get_shape()[3])}   # D_total if not given can be a multiple of the total bond dimension
-    
-
-    cortlm = tensordot(env[ms.nw].tl, env[ms.nw].t, axes=(1, 0))
-    q1, r1 = qr(cortlm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
-    cortrm = tensordot(env[ms.ne].t, env[ms.ne].tr, axes=(2, 0))
-    q2, r2 = qr(cortrm, axes=((1, 2), 0), Qaxis=0, Raxis=1)
-
-    rrt = r1@r2
-    Ut, St, Vt = svd_with_truncation(rrt, tol=1e-15)
-    sSt = St.sqrt()
-    Ut = sSt.broadcast(Ut, axis=1)
-    Vt = sSt.broadcast(Vt, axis=0)
-
-    Rtl = tensordot(Ut, q1, axes=(0, 2)) 
-    Rtr = tensordot(Vt, q2, axes=(1, 0))
-
-    corblm = tensordot(env[ms.sw].b, env[ms.sw].bl, axes=(2, 0))
-    q3, r3 = qr(corblm, axes=((1, 2), 0), Qaxis=0, Raxis=1)
-    corbrm = tensordot(env[ms.se].br, env[ms.se].b, axes=(1, 0))
-    q4, r4 = qr(corbrm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
-
-    rrb = r4@r3
-    Ub, Sb, Vb = svd_with_truncation(rrb, tol=1e-15)
-    sSb = Sb.sqrt()
-    Ub = sSb.broadcast(Ub, axis=1)
-    Vb = sSb.broadcast(Vb, axis=0)
-
-    Rbl = tensordot(Vb, q3, axes=(1, 0)).fuse_legs(axes=(0, 2, 1))
-    Rbr = tensordot(q4, Ub, axes=(2, 0)).fuse_legs(axes=(2, 1, 0))  # ordered clockwise
-
-    out[ms.ne].hlb, out[ms.se].hlt = proj_Cor(Rtl, Rbl, fix_signs, opts_svd=opts_svd) # projector left-middle 
-    out[ms.nw].hrb, out[ms.sw].hrt = proj_Cor(Rtr, Rbr, fix_signs, opts_svd=opts_svd) # projector right-middle
-
-    return out
-
-
-def proj_vertical_cheap(env, out, AAb, ms, fix_signs, opts_svd=None):
-    # ref https://arxiv.org/pdf/1607.04016.pdf
-
-    if opts_svd is None:
-        opts_svd = {'tol':1e-10, 'D_total': round(5*AAb.A[0,0].get_shape()[3])}   # D_total if not given can be a multiple of the total bond dimension
-
-    cortlm = tensordot(env[ms.sw].l, env[ms.sw].tl, axes=(2, 0))
-    q1, r1 = qr(cortlm, axes=((1, 2), 0), Qaxis=0, Raxis=1)
-    corblm =  tensordot(env[ms.nw].bl, env[ms.nw].l, axes=(1, 0))
-    q2, r2 = qr(corblm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
-
-    rrl = r2@r1
-    Ul, Sl, Vl = svd_with_truncation(rrl, tol=1e-15)
-    sSl = Sl.sqrt()
-    Ul = sSl.broadcast(Ul, axis=1)
-    Vl = sSl.broadcast(Vl, axis=0)
-
-    Rtl = tensordot(Vl, q1, axes=(1, 0))  # ordered anticlockwise
-    Rbl = tensordot(q2, Ul, axes=(2, 0)).fuse_legs(axes=(2, 1, 0))  # ordered clockwise
-
-    cortrm = tensordot(env[ms.se].tr, env[ms.se].r, axes=(1, 0))
-    q3, r3 = qr(cortrm, axes=((0, 1), 2), Qaxis=2, Raxis=0)
-    corbrm = tensordot(env[ms.ne].r, env[ms.ne].br, axes=(2, 0))
-    q4, r4 = qr(corbrm, axes=(0, (1, 2)), Qaxis=0, Raxis=1)
-
-    rrr = r3@r4
-    Ur, Sr, Vr = svd_with_truncation(rrr, tol=1e-15)
-    sSr = Sr.sqrt()
-    Ur = sSr.broadcast(Ur, axis=1)
-    Vr = sSr.broadcast(Vr, axis=0)
-
-    Rtr = tensordot(q3, Ur, axes=(2, 0)).fuse_legs(axes=(2, 1, 0)) # ordered clockwise
-    Rbr = tensordot(Vr, q4, axes=(1, 0)) # ordered anticlockwise
-
-    out[ms.nw].vtr, out[ms.ne].vtl = proj_Cor(Rtl, Rtr, fix_signs, opts_svd=opts_svd) # projector top-middle 
-    out[ms.sw].vbr, out[ms.se].vbl = proj_Cor(Rbl, Rbr, fix_signs, opts_svd=opts_svd) # projector bottom-middle
-
-    return out
-
 def move_horizontal(envn, env, AAb, proj, ms):
+
+    r"""
+    Horizontal move of CTM step calculating environment tensors corresponding
+     to a particular site on a lattice.
+
+    Parameters
+    ----------
+    envn : class CtmEnv
+        Class containing data for the new environment tensors 
+        renormalized by the horizontal move at each site + lattice info.
+    env : class CtmEnv
+        Class containing data for the input environment tensors at each site + lattice info.
+    AAb : Contains top and bottom Peps tensors
+    proj : Class Proj with info on lattice
+        Projectors to be applied for renormalization.
+    ms : site whose environment tensors are to be renormalized
+
+    Returns
+    -------
+    envn :  class CtmEnv
+        Contains data of updated environment tensors along with those not updated
+    """
 
     (_,y) = ms
     left = AAb.nn_site(ms, d='l')
@@ -439,6 +430,28 @@ def move_horizontal(envn, env, AAb, proj, ms):
 
 def move_vertical(envn, env, AAb, proj, ms):
 
+    r"""
+    Vertical move of CTM step calculating environment tensors corresponding
+     to a particular site on a lattice.
+
+    Parameters
+    ----------
+    envn : class CtmEnv
+        Class containing data for the new environment tensors 
+        renormalized by the vertical move at each site + lattice info.
+    env : class CtmEnv
+        Class containing data for the input environment tensors at each site + lattice info.
+    AAb : Contains top and bottom Peps tensors
+    proj : Class Proj with info on lattice
+        Projectors to be applied for renormalization.
+    ms : site whose environment tensors are to be renormalized
+
+    Returns
+    -------
+    envn :  class CtmEnv
+        Contains data of updated environment tensors along with those not updated
+    """
+
 
     (x,_) = ms
     top = AAb.nn_site(ms, d='t')
@@ -490,6 +503,7 @@ def move_vertical(envn, env, AAb, proj, ms):
 
 
 def trivial_projector(a, b, c, dirn):
+    # trivial tensors to fix the bond dimension of the finite boundary PEPS tensors to 1
 
     if dirn == 'hlt':
         la, lb, lc = a.get_legs(axis=2), b.get_legs(axis=0), c.get_legs(axis=0)
@@ -514,18 +528,39 @@ def trivial_projector(a, b, c, dirn):
 
 
 
-def CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd=None, parallelize=False):
-    r""" 
-    Perform one step of CTMRG update for a mxn lattice 
+def CTM_it(env, AAb, fix_signs, opts_svd=None):
+    r"""Perform one step of CTMRG update for a m x n lattice.
+
+    Parameters
+    ----------
+    env : class CTMEnv
+        The current CTM environment tensor.
+    AAb : CtmBond
+        The CtmBond tensor for the lattice.
+    fix_signs : bool
+        Whether to fix the signs of the environment tensors.
+    opts_svd : dict, optional
+        A dictionary of options to pass to the SVD algorithm, by default None.
+
+    Returns
+    -------
+    envn_ver : class CTMEnv
+              The updated CTM environment tensor 
+               
+    proj     :  dictionary of CTM projectors.
 
     Procedure
     ---------
+    The function performs a CTMRG update for a rectangular lattice using the corner transfer matrix
+    renormalization group (CTMRG) algorithm. The update is performed in two steps: a horizontal move
+    and a vertical move. The projectors for each move are calculated first, and then the tensors in
+    the CTM environment are updated using the projectors. The boundary conditions of the lattice
+    determine which trivial projectors are needed for each move. If the boundary conditions are
+    'infinite', no trivial projectors are needed; if they are 'finite', four trivial projectors
+    are needed for each move. The signs of the environment tensors can also be fixed during the
+    update if `fix_signs` is set to True. The latter is important when we set the criteria for 
+    stopping the algorithm based on singular values of the corners.
 
-    4 ways to move though the lattice using CTM: 'left', 'right', 'top' and 'bottom'.
-    Done iteratively on a mxn lattice with 2x2 unit PEPS representations. 
-    Example: A left trajectory would comprise a standard CTM move of absorbtion 
-    and renormalization starting with a 2x2 cell in the top-left corner and 
-    subsequently going downward for (Ny-1) steps and then (Nx-1) steps to the right.      
     """
 
     proj = Proj(lattice=AAb.lattice, dims=AAb.dims, boundary=AAb.boundary) 
@@ -535,22 +570,9 @@ def CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd=None, parallelize=False):
     print('######## Calculating projectors for horizontal move ###########')
     envn_hor = env.copy()
 
-    if parallelize==False:
-        for ms in AAb.tensors_CtmEnv():   #ctm_wndows(trajectory='h', index=y): # horizontal absorption and renormalization
-            print('projector calculation ctm cluster horizontal', ms)
-            if cheap_moves is True:
-                proj = proj_horizontal_cheap(env, proj, AAb, ms, fix_signs, opts_svd)
-            else:
-                proj = proj_horizontal(env[ms.nw], env[ms.ne], env[ms.sw], env[ms.se], proj, ms, AAb[ms.nw], AAb[ms.ne], AAb[ms.sw], AAb[ms.se], fix_signs, opts_svd)
-    elif parallelize==True:
-        """# Multiple processor execution
-        num_processors = mp.cpu_count()
-        print(f"Number of processors: {num_processors}")
-        pool = mp.Pool(processes=num_processors)
-        start_time= time.time()
-        results = pool.map(lambda ms: proj_horizontal(env, proj, AAb, ms, fix_signs, opts_svd), AAb.tensors_CtmEnv())
-        end_time = time.time()"""
-
+    for ms in AAb.tensors_CtmEnv():   #ctm_wndows(trajectory='h', index=y): # horizontal absorption and renormalization
+        print('projector calculation ctm cluster horizontal', ms)
+        proj = proj_horizontal(env[ms.nw], env[ms.ne], env[ms.sw], env[ms.se], proj, ms, AAb[ms.nw], AAb[ms.ne], AAb[ms.sw], AAb[ms.se], fix_signs, opts_svd)
 
     if AAb.boundary == 'finite': 
         # we need trivial projectors on the boundary for horizontal move for finite lattices
@@ -571,10 +593,7 @@ def CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd=None, parallelize=False):
     print('######## Calculating projectors for vertical move ###########')    
     for ms in AAb.tensors_CtmEnv():   # vertical absorption and renormalization
         print('projector calculation ctm cluster vertical', ms)
-        if cheap_moves is True:
-            proj = proj_vertical_cheap(envn_hor, proj, AAb, ms, fix_signs, opts_svd)
-        else:
-            proj = proj_vertical(envn_hor[ms.nw], envn_hor[ms.sw], envn_hor[ms.ne], envn_hor[ms.se], proj, ms, AAb[ms.nw], AAb[ms.sw], AAb[ms.ne], AAb[ms.se], fix_signs, opts_svd)
+        proj = proj_vertical(envn_hor[ms.nw], envn_hor[ms.sw], envn_hor[ms.ne], envn_hor[ms.se], proj, ms, AAb[ms.nw], AAb[ms.sw], AAb[ms.ne], AAb[ms.se], fix_signs, opts_svd)
 
     if AAb.boundary == 'finite': 
         # we need trivial projectors on the boundary for vertical move for finite lattices
@@ -721,6 +740,24 @@ def fPEPS_2layers(A, B=None, op=None, dir=None):
 
 
 def fPEPS_fuse_layers(AAb, EVonly=False):
+
+    r"""
+    Fuse two layers of PEPS tensors along their vertical and horizontal bonds to obtain a new, thicker
+    layer.
+
+    Parameters
+    ----------
+        AAb (dict): A dictionary of PEPS tensors for the two adjacent layers, with keys 'A', 'Ab', 'B', 'Bb', etc.
+        EVonly (bool): If True, only compute and return the top-left corner of the fused layer, containing the
+            eigenvectors. If False (default), also compute and return the bottom-left corner, containing the
+            singular values.
+
+    Returns
+    -------
+        dict: A dictionary containing the fused PEPS tensor for the new, thicker layer, with keys 'tl' (top-left
+            corner) and 'bl' (bottom-left corner, only if EVonly is False).
+    """
+
     for st in AAb.values():
         fA = st.top.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0t 1t) (2t 3t) 4t
        # st.pop('A')

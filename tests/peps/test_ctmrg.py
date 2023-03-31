@@ -79,14 +79,9 @@ def test_ctm_loop():  ###high temperature
     Z_exact = 0.99602 # analytical value of magnetization up to 4 decimal places for beta = 0.7 (2D Classical Ising)
 
     opt = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
-<<<<<<< HEAD
     
     list_lattice = [('checkerboard', (2, 2))]
     for lattice, dims in list_lattice:
-=======
-
-    for lattice, dims in  [('checkerboard', (2, 2))]:
->>>>>>> 514b86606356c2ddd6c72621be40552588677da0
         T = create_Ising_tensor(opt.z(), beta)
         psi = peps.Peps(lattice=lattice, dims=dims, boundary='infinite')
         for site in psi.sites():

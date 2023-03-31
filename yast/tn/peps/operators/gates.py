@@ -82,7 +82,7 @@ def gates_hopping(t, beta, fid, fc, fcdag, purification):
     GB = S.broadcast(V, axis=2)
     return GA, GB
 
-def gate_local_Hubbard(mu_up, mu_dn, U, beta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, purification = False):
+def gate_local_Hubbard(mu_up, mu_dn, U, beta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, purification = False, checkerboard=False):
     # local Hubbard gate with chemical potential and Coulomb interaction
     fn_up = fcdag_up @ fc_up
     fn_dn = fcdag_dn @ fc_dn
@@ -94,6 +94,9 @@ def gate_local_Hubbard(mu_up, mu_dn, U, beta, fid, fc_up, fc_dn, fcdag_up, fcdag
         coeff = 0.25
     elif purification == 'Time':
         coeff = 1j*0.5
+    
+    if checkerboard is True:
+        coeff = 0.5 * coeff
 
     G_loc = fid
     G_loc = G_loc + (fn_dn - fnn) * (np.exp((coeff * beta * (mu_dn + 0.5 * U))) - 1)

@@ -57,7 +57,7 @@ def ctmrg(psi, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, env
 
     Dcinit: dimensions of initial corner legs
 
-    AAb = 0 (no double-peps tensors; 1 = double pepes tensors with identity; 2 = for all
+    AAb = 0 (no double-peps tensors; 1 = double peps tensors with identity; 2 = for all
 
     Returns
     -------

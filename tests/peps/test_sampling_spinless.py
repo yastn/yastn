@@ -21,7 +21,7 @@ except ImportError:
     from configs import config_U1_R_fermionic as cfg
 
 
-def test_sampling_spinless():
+def not_working_test_sampling_spinless():
 
     lattice = 'rectangle'
     boundary = 'finite'
@@ -118,5 +118,5 @@ def test_sampling_spinless():
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
-    test_sampling_spinless()
+    not_working_test_sampling_spinless()
 

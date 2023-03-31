@@ -9,10 +9,10 @@ from yast import rand, tensordot
 
 class ctm_window(NamedTuple):
     """ elements of a 2x2 window for the CTM algorithm. """
-    nw : tuple
-    ne : tuple
-    sw : Tuple
-    se : Tuple
+    nw : tuple # north-west
+    ne : tuple # north-east
+    sw : Tuple # south-west
+    se : Tuple # south-east
 
 
 class CtmEnv(Lattice):
@@ -44,6 +44,8 @@ class CtmEnv(Lattice):
 
 
 class Proj(Lattice):
+    r""" Geometric information about the lattice provided to the Projectors """
+
     def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
         super().__init__(lattice=lattice, dims=dims, boundary=boundary)
 
@@ -55,16 +57,16 @@ class Proj(Lattice):
 
 @dataclass()
 class Local_Projector_Env(): # no more variables than the one given 
-    # data class for projectors labelled by a single lattice site calculate during ctm renormalization step
+    """ data class for projectors labelled by a single lattice site calculated during ctm renormalization step """
 
-    hlt : any = None   # horizontal left top
-    hlb : any = None   # horizontal left bottom
-    hrt : any = None    # horizontal right top
-    hrb : any = None    # horizontal right bottom
-    vtl : any = None     # vertical top left
-    vtr : any = None    # vertical top right
-    vbl : any = None    # vertical bottom left
-    vbr : any = None     # vertical bottom right
+    hlt : any = None # horizontal left top
+    hlb : any = None # horizontal left bottom
+    hrt : any = None # horizontal right top
+    hrb : any = None # horizontal right bottom
+    vtl : any = None # vertical top left
+    vtr : any = None # vertical top right
+    vbl : any = None # vertical bottom left
+    vbr : any = None # vertical bottom right
 
     def copy(self):
         return Local_Projector_Env(hlt=self.hlt, hlb=self.hlb, hrt=self.hrt, hrb=self.hrb, vtl=self.vtl, vtr=self.vtr, vbl=self.vbl, vbr=self.vbr)
@@ -72,14 +74,16 @@ class Local_Projector_Env(): # no more variables than the one given
 
 @dataclass()
 class Local_CTM_Env(): # no more variables than the one given 
-    tl : any = None
-    tr : any = None
-    bl : any = None
-    br : any = None
-    t : any = None
-    b : any = None
-    l : any = None
-    r : any = None
+    """ data class for CTM environment tensors associated with each peps tensor """
+
+    tl : any = None # top-left
+    tr : any = None # top-right
+    bl : any = None # bottom-left
+    br : any = None # bottom-right
+    t : any = None  # top
+    b : any = None  # bottom
+    l : any = None  # left
+    r : any = None  # right
 
     def copy(self):
         return Local_CTM_Env(tl=self.tl, tr=self.tr, bl=self.bl, br=self.br, t=self.t, b=self.b, l=self.l, r=self.r)

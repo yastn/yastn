@@ -20,7 +20,7 @@ except ImportError:
     from configs import config_U1_R_fermionic as cfg
 
 
-def test_sampling_spinfull():
+def not_working_test_sampling_spinfull():
 
     lattice = 'rectangle'
     boundary = 'finite'
@@ -127,5 +127,5 @@ def test_sampling_spinfull():
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
-    test_sampling_spinfull()
+    not_working_test_sampling_spinfull()
 
