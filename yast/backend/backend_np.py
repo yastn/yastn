@@ -525,5 +525,5 @@ def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
 def is_independent(x, y):
     """
     check if two arrays are identical, or share the same view.
-    """ 
+    """
     return not ((x is y) or (x.base is y) or (x is y.base))

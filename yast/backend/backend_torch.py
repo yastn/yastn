@@ -37,7 +37,7 @@ def _torch_version_check(version):
             tokens= torch.__version__.split('.')
             tokens_v= version.split('.')
             return int(tokens[0]) > int(tokens_v[0]) or \
-                (int(tokens[0])==int(tokens_v[0]) and int(tokens[1]) >= int(tokens_v[1])) 
+                (int(tokens[0])==int(tokens_v[0]) and int(tokens[1]) >= int(tokens_v[1]))
 
 
 from .linalg.torch_svd_gesdd import SVDGESDD
@@ -252,7 +252,7 @@ if _torch_version_check("1.11.0"):
         return data.conj()
 elif _torch_version_check("1.10.0"):
     def conj(data):
-        return data.conj_physical() 
+        return data.conj_physical()
         # return data.conj()
 else:
     def conj(data):
@@ -286,7 +286,7 @@ class kernel_transpose(torch.autograd.Function):
     def forward(ctx, data, axes, meta_transpose):
         ctx.axes = axes
         ctx.meta_transpose = meta_transpose
-        
+
         newdata = torch.zeros_like(data)
         for sln, Dn, slo, Do in meta_transpose:
             newdata[slice(*sln)].view(Dn)[:] = data[slice(*slo)].view(Do).permute(axes)
@@ -336,7 +336,7 @@ def bitwise_not(data):
 
 def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
     # torch.svd_lowrank decomposes A = USV^T and return U,S,V
-    # complex A is not supported 
+    # complex A is not supported
     real_dtype = data.real.dtype if data.is_complex() else data.dtype
     Udata = torch.zeros((sizes[0],), dtype=data.dtype, device=data.device)
     Sdata = torch.zeros((sizes[1],), dtype=real_dtype, device=data.device)
@@ -610,9 +610,9 @@ class kernel_transpose_and_merge(torch.autograd.Function):
         # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
         #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
         #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
         #             this source block will belong to destination block tn
         #          -> gr: tuple holding description of source data
         #                 slo -> specifies the location of source block in 1d data
@@ -620,7 +620,7 @@ class kernel_transpose_and_merge(torch.autograd.Function):
         #                 Dscl-> list of slice data which specifies the location of the "transformed"
         #                        source block in the destination block tn
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        # 
+        #
         for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
             assert tn == t1
             temp = newdata[slice(*sln)].reshape(Dn)
