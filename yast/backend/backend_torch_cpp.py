@@ -25,9 +25,9 @@ class kernel_transpose_and_merge_plain(torch.autograd.Function):
         # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
         #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
         #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
         #             this source block will belong to destination block tn
         #          -> gr: tuple holding description of source data
         #                 slo -> specifies the location of source block in 1d data
@@ -35,7 +35,7 @@ class kernel_transpose_and_merge_plain(torch.autograd.Function):
         #                 Dscl-> list of slice data which specifies the location of the "transformed"
         #                        source block in the destination block tn
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        # 
+        #
         jobs= [ (tn,Dn,sln,t1,list(gr)) for (tn,Dn,sln),(t1,gr) in \
             zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])) ]
         # print(f"rank(dest): {len(jobs[0][0])} src: {data.size()} dest: {Dsize}")
@@ -74,9 +74,9 @@ class kernel_transpose_and_merge_plain_omp(torch.autograd.Function):
         # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
         #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
         #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
         #             this source block will belong to destination block tn
         #          -> gr: tuple holding description of source data
         #                 slo -> specifies the location of source block in 1d data
@@ -84,7 +84,7 @@ class kernel_transpose_and_merge_plain_omp(torch.autograd.Function):
         #                 Dscl-> list of slice data which specifies the location of the "transformed"
         #                        source block in the destination block tn
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        # 
+        #
         jobs= [ (tn,Dn,sln,t1,list(gr)) for (tn,Dn,sln),(t1,gr) in \
             zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])) ]
         newdata= fused_transpose_merge_1d.tm_forward_plain_omp(data, order, jobs, Dsize)
@@ -120,9 +120,9 @@ class kernel_transpose_and_merge_p2p_v2(torch.autograd.Function):
         # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
         #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
         #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
         #             this source block will belong to destination block tn
         #          -> gr: tuple holding description of source data
         #                 slo -> specifies the location of source block in 1d data
@@ -130,7 +130,7 @@ class kernel_transpose_and_merge_p2p_v2(torch.autograd.Function):
         #                 Dscl-> list of slice data which specifies the location of the "transformed"
         #                        source block in the destination block tn
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        # 
+        #
         jobs= [ (tn,Dn,sln,t1,list(gr)) for (tn,Dn,sln),(t1,gr) in \
             zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])) ]
         # for row in jobs:
@@ -169,9 +169,9 @@ class kernel_transpose_and_merge_p2p_v3(torch.autograd.Function):
         # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
         #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
         #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
         #             this source block will belong to destination block tn
         #          -> gr: tuple holding description of source data
         #                 slo -> specifies the location of source block in 1d data
@@ -179,10 +179,10 @@ class kernel_transpose_and_merge_p2p_v3(torch.autograd.Function):
         #                 Dscl-> list of slice data which specifies the location of the "transformed"
         #                        source block in the destination block tn
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        # 
+        #
         source_inds, dest_inds= fused_transpose_merge_1d.map_source_to_dest_v3(data, order, meta_new, meta_mrg)
         ctx.save_for_backward(source_inds, dest_inds)
-        newdata= torch.zeros(Dsize,dtype=data.dtype, device=data.device, 
+        newdata= torch.zeros(Dsize,dtype=data.dtype, device=data.device,
             requires_grad=data.requires_grad)
         newdata[dest_inds]= data[source_inds]
         return newdata
@@ -224,7 +224,7 @@ class kernel_unmerge_ptp(torch.autograd.Function):
         # sub_slc -> sub-block within block Do
         source_inds= fused_transpose_merge_1d.map_source_to_dest_unmerge(Dsize[0], meta)
         ctx.save_for_backward(source_inds)
-        
+
         newdata= data[source_inds]
         return newdata
 

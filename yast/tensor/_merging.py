@@ -37,6 +37,9 @@ class _Fusion(NamedTuple):
     def conj(self):
         return self._replace(s=tuple(-x for x in self.s))
 
+    def is_fused(self):
+        return self.tree[0] > 1
+
 
 #  =========== merging blocks ======================
 
