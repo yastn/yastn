@@ -6,7 +6,7 @@ from ._doublePepsTensor import DoublePepsTensor
 from ... import tensor, initialize
 
 class Bond(NamedTuple):
-    """ site_0 should be before site_1 in the fermionic order. """
+    """ A bond between two lattice sites. site_0 should be before site_1 in the fermionic order. """
     site_0 : tuple = None
     site_1 : tuple = None
     dirn : str = ''
@@ -45,7 +45,7 @@ class Lattice():
 
         bonds = []
         if self.lattice == 'checkerboard':
-            self._bonds = (Bond(site_0=(0, 0), site_1=(0, 1), dirn='h'), Bond(site_0=(1, 0), site_1=(1, 1), dirn='h'), Bond(site_0=(0, 1), site_1=(1, 1), dirn='v'), Bond(site_0=(1, 1), site_1=(0, 1), dirn='v'))
+            self._bonds = (Bond(site_0=(0, 0), site_1=(0, 1), dirn='h'), Bond(site_0=(0, 1), site_1=(0, 0), dirn='h'), Bond(site_0=(1, 0), site_1=(0, 0), dirn='v'), Bond(site_0=(0, 0), site_1=(1, 0), dirn='v'))
         else:
             for s in self._sites:
                 s_b = self.nn_site(s, d='b')
@@ -101,7 +101,21 @@ class Lattice():
         return (x % self.Nx, y % self.Ny)
 
     def tensors_NtuEnv(self, bds):
-        """ returns the cluster of sites around the bond to be updated """
+        r""" Returns the cluster of sites around the bond to be updated by NTU optimization 
+
+        Parameters
+        ----------
+        bds: NamedTuple Bond
+
+        Returns
+        -------
+        neighbors : dict
+                  A dictionary containing the neighboring sites of the bond `bds`.
+                  The keys of the dictionary are the direction of the neighboring site with respect to
+                  the bond: 'tl' (top left), 't' (top), 'tr' (top right), 'l' (left), 'r' (right),
+                  'bl' (bottom left), and 'b' (bottom).
+        """
+        
         neighbors = {}
         site_1, site_2 = bds.site_0, bds.site_1
         if self.lattice == 'checkerboard':
@@ -123,13 +137,47 @@ class Lattice():
 
 
 class Peps(Lattice):
-    """ Inherits Lattice Class and manages Peps data with additional functionalities """
+    r""" 
+    Inherits Lattice Class and manages Peps data with additional functionalities.
+
+    Parameters:
+    -----------
+    lattice : str, optional
+        Name of the lattice ('checkerboard' by default).
+    dims : tuple of int, optional
+        Dimensions of each PEPS tensor (2,2) by default.
+    boundary : str, optional
+        Type of boundary ('infinite' by default).
+
+    Methods:
+    --------
+    mpo(index, index_type, rotation='')
+        Converts a specific row or column of PEPS into a matrix product operator (MPO).
+    boundary_mps(rotation='')
+        Initiates a boundary matrix product state (MPS) at the rightmost column.
+
+    Inherits the methods from the Lattice class.
+
+    """
+    
     def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
         super().__init__(lattice=lattice, dims=dims, boundary=boundary)
 
 
     def mpo(self, index, index_type, rotation=''):
-        # converts specific row of PEPS into MPO
+
+        """Converts a specific row or column of PEPS into MPO.
+
+        Parameters
+        ----------
+            index (int): The row or column index to convert.
+            index_type (str): The index type to convert, either 'row' or 'column'.
+            rotation (str): Optional string indicating the rotation of the PEPS tensor.
+
+        Returns
+        -------
+            H (Mpo): The resulting MPO.
+        """
 
         if index_type == 'row':
             nx = index
@@ -155,7 +203,17 @@ class Peps(Lattice):
         return H
 
     def boundary_mps(self, rotation=''):
-        # initiate a boundary MPS at the right most column
+
+        r"""Initiates a boundary MPS at the right most column.
+
+        Parameters
+        ----------
+            rotation (str): Optional string indicating the rotation of the PEPS tensor.
+
+        Returns
+        -------
+            psi (Mps): The resulting boundary MPS.
+        """
         psi = Mps(N=self.Nx)
         cfg = self._data[(0, 0)].config
         n0 = (0,) * cfg.sym.NSYM

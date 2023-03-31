@@ -1,15 +1,15 @@
 """ Function performing NTU update on all four unique bonds corresponding to a two site unit cell. """
-from ._routines import apply_local_gate_, ntu_machine
+from ._routines import apply_local_gate_, evol_machine
 from typing import NamedTuple
+import multiprocessing as mp
 
 class Gate_nn(NamedTuple):
-    """ site_0 should be before site_1 in the fermionic order. """
+    """ A should be before B in the fermionic order. """
     A : tuple = None
     B : tuple = None
     bond : tuple = None
 
 class Gate_local(NamedTuple):
-    """ site_0 should be before site_1 in the fermionic order. """
     A : tuple = None
     site : tuple = None
 
@@ -18,31 +18,60 @@ class Gates(NamedTuple):
     nn : list = None   # list of Gate_nn
 
 
-# To be written
-# def evolve_(gamma, Gates, .... )   # higher level routine; do many steps of the evolution
-# here Gates can be a function generating gates based on something 
-#    yield state
+def evolution_step_(psi, gates, step, truncation_mode, env_type, opts_svd=None):  
 
-def evolution_step_(psi, gates, step, truncation_mode, env_type, opts_svd=None):  # perform a single step of evolution 
-    """ 
-    Apply a list of gates on peps; performing truncation; 
-    it is a 2nd-order step in a sense that gates that gates contain half of the sweep,
-    and the other half is applied in the reverse order
+    r"""
+    Perform a single step of evolution on a PEPS by applying a list of gates,
+    performing truncation and subsequent optimization.
+    
+    Parameters
+    ----------
+
+    psi             : class PEPS
+
+    gates           : The gates to apply during the evolution. The `Gates` named tuple
+      should contain a list of NamedTuples `Gate_local` and `Gate_nn`.
+
+    step            : str
+       Specifies the type of evolution step to perform. Can be either
+      'ntu-update' or 'svd-update'.
+
+    truncation_mode : str 
+       Specifies the truncation mode to use during the evolution.
+    
+    env_type        : str 
+       Specifies the type of environment to use during the evolution.
+    
+    opts_svd (dict, optional): Dictionary containing options for the SVD routine.
+
+    Returns
+    -------
+
+    psi  : class PEPS
+   
+    info : dict
+          Dictionary containing information about the evolution.
+
     """
+
     infos = []
 
     for gate in gates.local:
         psi = apply_local_gate_(psi, gate)
 
-    for gate in gates.nn + gates.nn[::-1]:
-        psi, info = ntu_machine(psi, gate, truncation_mode, step, env_type, opts_svd)
+    all_gates = gates.nn + gates.nn[::-1]
+
+    for gate in all_gates:    
+        psi, info = evol_machine(psi, gate, truncation_mode, step, env_type, opts_svd)
         infos.append(info)
+
     for gate in gates.local[::-1]:
         psi = apply_local_gate_(psi, gate)
 
-    if step=='svd-update':
+    if step == 'svd-update':
         return psi, info 
-    else: 
+    
+    if env_type == 'NTU': 
         info['ntu_error'] = [record['ntu_error'] for record in infos]
         info['optimal_cutoff'] = [record['optimal_cutoff'] for record in infos]
         info['svd_error'] = [record['svd_error'] for record in infos]
@@ -50,6 +79,23 @@ def evolution_step_(psi, gates, step, truncation_mode, env_type, opts_svd=None):
 
 
 def gates_homogeneous(psi, nn_gates, loc_gates):
+
+    """
+    Generate a list of gates that is homogeneous over the lattice. 
+    
+    Parameters
+    ----------
+    psi      : class PEPS
+    nn_gates : list
+              A list of two-tuples, each containing the tensors that form a two-site
+              nearest-neighbor gate.
+    loc_gates : A two-tuple containing the tensors that form the single-site gate.
+
+    Returns
+    -------
+    Gates: The generated gates. The NamedTuple 'Gates` named tuple contains a list of 
+      local and nn gates along with info where they should be applied.
+    """
     # len(nn_gates) indicates the physical degrees of freedom; option to add more
     bonds = psi.bonds(dirn='h') + psi.bonds(dirn='v')
 
@@ -64,6 +110,7 @@ def gates_homogeneous(psi, nn_gates, loc_gates):
 
 
 def show_leg_structure(psi):
+   """ Prints the leg structure of each site tensor in a PEPS """
    for ms in psi.sites():
         xs = psi[ms].unfuse_legs((0, 1))
         print("site ", str(ms), xs.get_shape()) 

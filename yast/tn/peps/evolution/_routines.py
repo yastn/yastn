@@ -1,8 +1,8 @@
 """
-Routines for NTU timestep on a checkerboard lattice.
-NTU supports fermions though application of swap-gates.
+Routines for tensor update (tu) timestep on a 2D lattice. 
+tu supports fermions though application of swap-gates.
 PEPS tensors have 5 legs: (top, left, bottom, right, system)
-In case of purification, system leg is a fusion of (ancila, system)
+In case of purification, system leg is a fusion of (ancilla, system)
 """
 import logging
 import yast
@@ -10,9 +10,42 @@ from yast.tn.peps.operators.gates import trivial_tensor, match_ancilla_1s, match
 from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_legs, ncon, eigh_with_truncation, eye
 from ._ntu import env_NTU
 
-def ntu_machine(peps, gate, truncation_mode, step, env_type, opts_svd=None):
-    # step can be svd-step, one-step or two-step
-    # application of nearest neighbor gate and subsequent optimization of peps tensor using NTU
+def evol_machine(peps, gate, truncation_mode, step, env_type, opts_svd=None):
+
+    r"""
+    Applies a nearest-neighbor gate to a PEPS tensor and optimizes the resulting tensor using alternate
+    least squares. 
+
+    Parameters
+    ----------
+        peps            : class Peps
+
+        gate            : A Gate object representing the nearest-neighbor gate to apply.
+
+        truncation_mode : str
+                        The mode to use for truncation of the environment tensors. Can be 
+                        'normal' or 'optimal'.
+
+        step            : str
+                        The optimization step to perform. Can be 'svd-update', 'one-step', or 'two-step'.
+
+        env_type        : str
+                        The type of environment to use for optimization. Can be 'NTU' (neighborhood tensor update),
+                          'FU'(full update - to be added).
+
+        opts_svd        : dict, optional 
+                        A dictionary with options for the SVD truncation. Default is None.
+
+    Returns
+    -------
+        peps : The optimized PEPS tensor.
+        info : dict
+             A dictionary with information about the optimization. Contains the following keys:
+             - 'svd_error': The SVD truncation error.
+             - 'tu_error': The truncation error after optimization.
+             - 'optimal_cutoff': The optimal cutoff value used for inverse.
+            
+    """
 
     if opts_svd is None:
         opts_svd = {'D_total':10, 'tol_block':1e-15}  # D_total = 10 chosen arbitrarily
@@ -40,7 +73,7 @@ def ntu_machine(peps, gate, truncation_mode, step, env_type, opts_svd=None):
                 logging.info("2-step update; truncation errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e " % (opt_error, opt_error_2, svd_error, svd_error_2))
                 opt_error, optim, svd_error = opt_error_2, optim_2, svd_error_2
         peps[gate.bond.site_0], peps[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
-        info.update({'ntu_error': opt_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
+        info.update({'tu_error': opt_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
 
         return peps, info
 
@@ -50,10 +83,9 @@ def ntu_machine(peps, gate, truncation_mode, step, env_type, opts_svd=None):
 
 def apply_local_gate_(peps, gate):
     """ apply local gates on PEPS tensors """
-    A = match_ancilla_1s(gate.A, peps[gate.site])
+    A = match_ancilla_1s(gate.A, peps[gate.site]) 
     peps[gate.site] = tensordot(peps[gate.site], A, axes=(2, 1)) # [t l] [b r] [s a]
     return peps
-
 
 
 def apply_nn_gate(peps, gate):
@@ -141,6 +173,17 @@ def form_new_peps_tensors(QA, QB, MA, MB, bond):
 
 
 def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mode, opts_svd):
+
+    """ 
+    truncation_mode = 'optimal' is for implementing EAT algorithm only applicable for symmetric
+    tensors and offers no advantage for dense tensors.
+
+    Returns
+    -------
+    MA, MB: truncated pair of tensors before alternate least square optimization
+    svd_error: here just implies the error incurred for the initial truncation 
+               before the optimization
+    """
     
     if truncation_mode == 'optimal':
         G = ncon((g, RA, RB, RA, RB), ([1, 2, 3, 4], [1, -1], [-3, 3], [2, -2], [-4, 4]), conjs=(0, 0, 0, 1, 1))
@@ -171,6 +214,8 @@ def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mod
 
 def optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB):
 
+    """ function for choosing the optimal initial cutoff for the inverse which gives the least svd_error """
+
     cutoff_list = [10**n for n in range(-14, -5)]
     results = []
     for c_off in cutoff_list:
@@ -187,9 +232,12 @@ def optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB):
     return MA, MB, svd_error, c_off
 
 
-def ntu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter):
+def tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter):
+
+    """ Optimizes the matrices MA and MB by minimizing the truncation error using least square optimization """
+
     MA_guess, MB_guess = MA, MB
-    ntu_errorA_old, ntu_errorB_old = 0, 0
+    tu_errorA_old, tu_errorB_old = 0, 0
     epsilon1, epsilon2 = 0, 0
 
     for _ in range(max_iter):
@@ -198,14 +246,14 @@ def ntu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter):
         g_A = tensordot(MB, gf, axes=(1, 1), conj=(1, 0)).fuse_legs(axes=((1, 0), 2))
         g_A = g_A.unfuse_legs(axes=1)
         g_A = tensordot(g_A, MB, axes=(2, 1)).fuse_legs(axes=(0, (1, 2)))
-        ntu_errorA, optimal_cf, MA = optimal_pinv(g_A, j_A, gRR)
+        tu_errorA, optimal_cf, MA = optimal_pinv(g_A, j_A, gRR)
 
-        epsilon1 = abs(ntu_errorA_old - ntu_errorA)
-        ntu_errorA_old = ntu_errorA
+        epsilon1 = abs(tu_errorA_old - tu_errorA)
+        tu_errorA_old = tu_errorA
         count1, count2 = 0, 0
-        if abs(ntu_errorA) >= abs(svd_error):
+        if abs(tu_errorA) >= abs(svd_error):
             MA = MA_guess
-            epsilon1, ntu_errorA_old = 0, 0
+            epsilon1, tu_errorA_old = 0, 0
             count1 += 1
 
          # fix MA and optimize MB
@@ -213,14 +261,14 @@ def ntu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter):
         g_B = tensordot(MA, gf, axes=(0, 0), conj=(1, 0)).fuse_legs(axes=((0, 1), 2))
         g_B = g_B.unfuse_legs(axes=1)
         g_B = tensordot(g_B, MA, axes=(1, 0)).fuse_legs(axes=(0, (2, 1)))
-        ntu_errorB, optimal_cf, MB = optimal_pinv(g_B, j_B, gRR)
+        tu_errorB, optimal_cf, MB = optimal_pinv(g_B, j_B, gRR)
 
-        epsilon2 = abs(ntu_errorB_old - ntu_errorB)
-        ntu_errorB_old = ntu_errorB
+        epsilon2 = abs(tu_errorB_old - tu_errorB)
+        tu_errorB_old = tu_errorB
 
-        if abs(ntu_errorB) >= abs(svd_error):
+        if abs(tu_errorB) >= abs(svd_error):
             MB = MB_guess
-            epsilon2, ntu_errorB_old = 0, 0
+            epsilon2, tu_errorB_old = 0, 0
             count2 += 1
 
         count = count1 + count2
@@ -231,16 +279,18 @@ def ntu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter):
         if epsilon < 1e-14: ### convergence condition
             break
 
-    return MA, MB, ntu_errorB, optimal_cf
+    return MA, MB, tu_errorB, optimal_cf
 
-###############################################################################
-########### given the environment and the seeds, optimization #################
-########################## of MA and MB #######################################
-###############################################################################
 
 def truncate_and_optimize(g, RA, RB, truncation_mode, opts_svd):
-    """ optimize truncated MA and MB tensors, using NTU metric. """
-    max_iter = 1000 # max no of NTU optimization loops
+
+    """ 
+    First we truncate RA and RB tensors based on the input truncation_mode with 
+    function environment_aided_truncation_step. Then the truncated
+    MA and MB tensors are subjected to least square optimization to minimize
+     the truncation error with the function tu_single_optimization.
+    """
+    max_iter = 1000 # max no of tu optimization loops
     assert (g.fuse_legs(axes=((0, 2), (1, 3))) - g.fuse_legs(axes=((0, 2), (1, 3))).conj().transpose(axes=(1, 0))).norm() < 1e-14 * g.fuse_legs(axes=((0, 2), (1, 3))).norm()
     
     RAB = RA @ RB
@@ -252,12 +302,12 @@ def truncate_and_optimize(g, RA, RB, truncation_mode, opts_svd):
     gRR = vdot(RAB, fgRAB).item()
     
     MA, MB, svd_error = environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mode, opts_svd)
-    MA, MB, ntu_errorB, optimal_cf  = ntu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter)
+    MA, MB, tu_errorB, optimal_cf  = tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter)
     MA, MB = truncation_step(MA, MB, opts_svd, normalize=True)
-    return MA, MB, ntu_errorB, optimal_cf, svd_error
+    return MA, MB, tu_errorB, optimal_cf, svd_error
 
 def optimal_pinv(gg, J, gRR):
-    """ solve pinv(gg) * J, optimizing pseudoinverse cutoff for NTU error. """
+    """ solve pinv(gg) * J, optimizing pseudoinverse cutoff for tu error. """
     
     assert (gg - gg.conj().transpose(axes=(1, 0))).norm() < 1e-12 * gg.norm()
     S, U = eigh_with_truncation(gg, axes=(0, 1), tol=1e-14)
@@ -273,10 +323,10 @@ def optimal_pinv(gg, J, gRR):
         # calculation of errors with respect to metric
         met_newA = vdot(Mnew, gg @ Mnew).item()
         met_mixedA = vdot(Mnew, J).item()
-        ntu_error = abs((met_newA + gRR - met_mixedA - met_mixedA.conjugate()) / gRR)
-        results.append((ntu_error, c_off, Mnew))
+        tu_error = abs((met_newA + gRR - met_mixedA - met_mixedA.conjugate()) / gRR)
+        results.append((tu_error, c_off, Mnew))
 
-    ntu_error, c_off, Mnew = min(results, key=lambda x: x[0])
+    tu_error, c_off, Mnew = min(results, key=lambda x: x[0])
 
     Mnew = Mnew.unfuse_legs(axes=0)
-    return ntu_error, c_off, Mnew
+    return tu_error, c_off, Mnew

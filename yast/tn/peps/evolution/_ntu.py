@@ -7,19 +7,44 @@ from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_
 ##### creating ntu environment ####
 ###################################
 
-def env_NTU(peps, bd, QA, QB, dirn):
-    """ calculate metric g """
+def env_NTU(psi, bd, QA, QB, dirn):
+    r"""
+    Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
+    
+    Parameters
+    ----------
+    psi : class PEPS
+
+    bd  : class Bond
+        bond around which the tensor environment is to be calculated 
+
+    QA : yast.Tensor
+        Fixed isometry to be attached to the metric positioned on the left/top side of the bond.
+        Input obtained from QR decomposition of the PEPS to the left/top of the bond being optimized
+
+    QB : yast.Tensor
+        Fixed isometry to be attached to the metric positioned on the right/bottom side of the bond.
+        Input obtained from QR decomposition of the PEPS to the right/bottom of the bond being optimized
+
+    dirn : str
+        The direction of the bond. Can be "h" (horizontal) or "v" (vertical).
+    
+    Returns
+    -------
+    Tensor
+        The environment tensor g .
+    """
   
-    env = peps.tensors_NtuEnv(bd)
+    env = psi.tensors_NtuEnv(bd)
     G={}
     for ms in env.keys():
         if env[ms] is None:
-            leg = peps[(0, 0)].get_legs(axis=-1)
+            leg = psi[(0, 0)].get_legs(axis=-1)
             leg, _ = yast.leg_undo_product(leg) # last leg of A should be fused
-            fid = yast.eye(config=peps[(0,0)].config, legs=[leg, leg.conj()]).diag()
+            fid = yast.eye(config=psi[(0,0)].config, legs=[leg, leg.conj()]).diag()
             G[ms] = trivial_tensor(fid)
         else:
-            G[ms] = peps[env[ms]]
+            G[ms] = psi[env[ms]]
 
     if dirn == "h":
         m_tl, m_l, m_bl = con_tl(G['tl']), con_l(G['l']), con_bl(G['bl'])

@@ -5,7 +5,29 @@ import yast
 import numpy as np
 
 def nn_avg(peps, env, op):
-    """ Calculates the nearest neighbor correlators on all bonds and averages them """
+
+    r"""
+    Calculate two-site nearest-neighbor calculation of observables with CTM environments.
+
+    Parameters
+    ----------
+    peps : class
+           class containing peps data along with the lattice structure data
+
+    env: class
+        class containing ctm environmental tensors along with lattice structure data
+
+    op: dict
+        dictionary containing observables placed on NN sites
+
+    Returns
+    -------
+    obs_hor: dict
+        dictionary containing name of the horizontal observables as keys and their averaged values over all horizontal bonds.
+    obs_ver: dict
+        dictionary containing name of the vertical observables as keys and their averaged values over all vertical bonds.
+    """
+
     peps = check_consistency_tensors(peps)
     obs_hor = {}
     obs_ver = {}
@@ -33,9 +55,28 @@ def nn_avg(peps, env, op):
 
 
 def nn_bond(peps, env, op, bd):
-    """ calculates correlator on a desired bond in the lattice
-     useful when you don't need the average value """
-    peps = check_consistency_tensors(peps)
+    r"""
+    Calculates two-site nearest-neighbor expecation value for a single NN site.
+
+    Parameters
+    ----------
+    peps : class
+           class containing peps data along with the lattice structure data
+
+    env: class
+        class containing ctm environmental tensors along with lattice structure data
+
+    op: dict
+        contains NN pair of obsevables with dictionary key 'l' corresponding to
+          the observable on the left and key 'r' corresponding to
+          the observable on the right
+
+    bd: NamedTuple
+        contians info about NN sites where the oexpectation value is to be calculated
+ 
+    """
+
+    peps = check_consistency_tensors(peps) 
 
     AAbo = ret_AAbs(peps, bd, op, orient=bd.dirn)
     AAb = {'l': fPEPS_2layers(peps[bd.site_0]), 'r': fPEPS_2layers(peps[bd.site_1])}
@@ -43,7 +84,21 @@ def nn_bond(peps, env, op, bd):
     return val
 
 def measure_one_site_spin(A, ms, env, op=None):
-    """ measures the overlap of bra and ket on a single site """
+    r"""
+    Measures the overlap of bra and ket on a single site.
+
+    Parameters
+    ----------
+    A : single peps tensor
+
+    ms : site
+
+    env: class
+        class containing ctm environmental tensors along with lattice structure data
+    
+    op: single site operator
+    """
+
     if op is not None:
         AAb = fPEPS_2layers(A, op=op, dir='1s')
     elif op is None:
@@ -58,7 +113,27 @@ def measure_one_site_spin(A, ms, env, op=None):
 
 
 def one_site_avg(peps, env, op):
-    """ measures the expectation values of single site operators all over the lattice """
+    r"""
+    Measures the expectation value of single site operators all over the lattice.
+
+    Parameters
+    ----------
+    peps : class
+        class containing peps data along with the lattice structure data
+
+    env: class
+        class containing ctm environmental tensors along with lattice structure data
+
+    op: single site operator
+
+    Returns
+    -------
+    mean_one_site: expectation value of one site observables averaged over all the sites
+
+    cs_val: expectation value of the central site
+    
+    mat: expectation value of all the sites in a 2D table form
+    """
 
     mat = np.zeros((peps.Nx, peps.Ny))  # output returns the expectation value on every site
 
@@ -75,49 +150,7 @@ def one_site_avg(peps, env, op):
         if ms == target_site:
             cs_val = one_site_exp[s]
         s = s+1
+    mean_one_site = np.mean(one_site_exp)
 
-    return np.mean(one_site_exp), cs_val, mat
+    return mean_one_site, cs_val, mat
        
-
-def EVcorr_diagonal(env, ops, peps, x_l, y_l, x_r, y_r):
-
-    peps = check_consistency_tensors(peps) # to check if A has the desired fused form of legs i.e. t l b r [s a]
-
-    if x_l > x_r:
-        orient = 'ne'
-    elif x_l < x_r:
-        orient = 'se'
-
-    EV_diag = {}
-
-    if orient == 'ne':
-
-        AAb_top = {'l': fPEPS_2layers(peps[(x_r, y_r-1)]), 'r': fPEPS_2layers(peps[(x_r, y_r)])}     # top layer of A tensors without operator
-        AAb_bottom = {'l': fPEPS_2layers(peps[(x_l, y_l)]), 'r': fPEPS_2layers(peps[(x_l, y_l+1)])}  # bottom layer of A tensors without operator
-        norm = diagonal_correlation(env, x_l, y_l, x_r, y_r, AAb_top, AAb_bottom, AAb_top, AAb_bottom, orient='ne') 
-        print(norm)
-
-        for k, op in ops.items():
-            print(k)
-            AAbop_top = {'l': fPEPS_2layers(peps[(x_r, y_r-1)], op=op['l'], dir='l'), 'r': fPEPS_2layers(peps[(x_r, y_r)], op=op['r'], dir='r')} # top layer of A tensors with operator
-            AAbop_bottom = {'l': fPEPS_2layers(peps[(x_l, y_l)], op=op['l'], dir='l'), 'r': fPEPS_2layers(peps[(x_l, y_l+1)], op=op['r'], dir='r')} # bottom layer of A tensors with operator
-            val = diagonal_correlation(env, x_l, y_l, x_r, y_r, AAb_top, AAb_bottom, AAbop_top, AAbop_bottom, orient='ne') # diagonal correlation with
-            corr = val/norm
-            EV_diag[k] = corr
-    
-    elif orient == 'se':
- 
-        AAb_top = {'l': fPEPS_2layers(peps[(x_l, y_l)]), 'r': fPEPS_2layers(peps[(x_l, y_l+1)])}     # top layer of A tensors without operator
-        AAb_bottom = {'l': fPEPS_2layers(peps[(x_r, y_r-1)]), 'r': fPEPS_2layers(peps[(x_r, y_r)])}  # bottom layer of A tensors without operator
-        norm = diagonal_correlation(env, x_l, y_l, x_r, y_r, AAb_top, AAb_bottom, AAb_top, AAb_bottom, orient='se') 
-        print(norm)
-
-        for k, op in ops.items():
-            print(k)
-            AAbop_top = {'l': fPEPS_2layers(peps[(x_l, y_l)], op=op['l'], dir='l'), 'r': fPEPS_2layers(peps[(x_l, y_l+1)], op=op['r'], dir='r')} # top layer of A tensors with operator
-            AAbop_bottom = {'l': fPEPS_2layers(peps[(x_r, y_r-1)], op=op['l'], dir='l'), 'r': fPEPS_2layers(peps[(x_r, y_r)], op=op['r'], dir='r')} # bottom layer of A tensors with operator
-            val = diagonal_correlation(env, x_l, y_l, x_r, y_r, AAb_top, AAb_bottom, AAbop_top, AAbop_bottom, orient='se') # diagonal correlation with
-            corr = val/norm
-            EV_diag[k] = corr
-
-        return EV_diag
