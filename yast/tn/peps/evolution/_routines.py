@@ -7,7 +7,7 @@ In case of purification, system leg is a fusion of (ancilla, system)
 import logging
 import yast
 from yast.tn.peps.operators.gates import trivial_tensor, match_ancilla_1s, match_ancilla_2s
-from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_legs, ncon, eigh_with_truncation, eye
+from yast import tensordot, vdot, svd_with_truncation, svd, qr, ncon, eigh_with_truncation
 from ._ntu import env_NTU
 
 def evol_machine(peps, gate, truncation_mode, step, env_type, opts_svd=None):
@@ -73,7 +73,8 @@ def evol_machine(peps, gate, truncation_mode, step, env_type, opts_svd=None):
                 logging.info("2-step update; truncation errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e " % (opt_error, opt_error_2, svd_error, svd_error_2))
                 opt_error, optim, svd_error = opt_error_2, optim_2, svd_error_2
         peps[gate.bond.site_0], peps[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
-        info.update({'tu_error': opt_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
+        if env_type == 'NTU':
+            info.update({'ntu_error': opt_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
 
         return peps, info
 

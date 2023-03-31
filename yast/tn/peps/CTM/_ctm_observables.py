@@ -1,6 +1,6 @@
 from ._ctm_iteration_routines import check_consistency_tensors
 from ._ctm_iteration_routines import fPEPS_2layers
-from ._ctm_observable_routines import ret_AAbs, hor_extension, ver_extension, apply_TMO_left, con_bi, diagonal_correlation
+from ._ctm_observable_routines import ret_AAbs, hor_extension, ver_extension, apply_TMO_left, con_bi
 import yast
 import numpy as np
 
@@ -11,10 +11,10 @@ def nn_avg(peps, env, op):
 
     Parameters
     ----------
-    peps : class
+    peps : class Peps
            class containing peps data along with the lattice structure data
 
-    env: class
+    env: class CtmEnv
         class containing ctm environmental tensors along with lattice structure data
 
     op: dict
@@ -55,6 +55,7 @@ def nn_avg(peps, env, op):
 
 
 def nn_bond(peps, env, op, bd):
+
     r"""
     Calculates two-site nearest-neighbor expecation value for a single NN site.
 

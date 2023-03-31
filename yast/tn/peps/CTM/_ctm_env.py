@@ -44,7 +44,7 @@ class CtmEnv(Lattice):
 
 
 class Proj(Lattice):
-    r""" Geometric information about the lattice provided to the Projectors """
+    r""" Geometric information about the lattice provided to projectors """
 
     def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
         super().__init__(lattice=lattice, dims=dims, boundary=boundary)

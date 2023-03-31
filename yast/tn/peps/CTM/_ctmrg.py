@@ -90,9 +90,8 @@ def _ctmrg(psi, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd=No
   
     for sweep in range(1, max_sweeps + 1):
         logging.info('CTM sweep: %2d', sweep)
-        cheap_moves=False
         t_start = time.time()
-        env, proj = CTM_it(env, AAb, cheap_moves, fix_signs, opts_svd)
+        env, proj = CTM_it(env, AAb, fix_signs, opts_svd)
         t_end = time.time()
         tt = t_start - t_end
         logging.info('sweep time: %0.2f s.', tt)
