@@ -39,7 +39,7 @@ def env_NTU(psi, bd, QA, QB, dirn):
     G={}
     for ms in env.keys():
         if env[ms] is None:
-            leg = psi[(0, 0)].get_legs(axis=-1)
+            leg = psi[(0, 0)].get_legs(axes=-1)
             leg, _ = yast.leg_undo_product(leg) # last leg of A should be fused
             fid = yast.eye(config=psi[(0,0)].config, legs=[leg, leg.conj()]).diag()
             G[ms] = trivial_tensor(fid)

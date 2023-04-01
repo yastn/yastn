@@ -1,8 +1,8 @@
 Import and export
 ===================================
 
-`YAMPS` can save MPS/MPO as Python :code:`dict` or HDF5 file. 
-The MPS/MPO previously serialized by :meth:`yast.tn.mps.MpsMpo.save_to_dict` or :meth:`yast.tn.mps.MpsMpo.save_to_hdf5` can be again deserialized into *YAMPS* MPS/MPO.
+MPS/MPO can save as Python :code:`dict` or HDF5 file. 
+The MPS/MPO previously serialized by :meth:`yast.tn.mps.MpsMpo.save_to_dict` or :meth:`yast.tn.mps.MpsMpo.save_to_hdf5` can be again deserialized into MPS/MPO.
 
 Examples of exporting and loading MPS/MPO can be found in 
 :ref:`examples/mps/mps:save and load mps/mpo`.

@@ -119,6 +119,7 @@ class Tensor:
     from ._tests import is_consistent, are_independent
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
     from ._special import _attach_01, _attach_23
+    from ._krylov import linear_combination, expand_krylov_space
 
     def _replace(self, **kwargs):
         """ Creates a shallow copy replacing fields specified in kwargs """

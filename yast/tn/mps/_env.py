@@ -1,5 +1,5 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
-from ... import tensor, initialize, YastError
+from ... import tensor, initialize, YastError, expmv
 
 
 def norm(ket):
@@ -7,11 +7,22 @@ def norm(ket):
     return abs(measure_overlap(ket, ket)) ** 0.5
 
 
-def vdot(bra, ket_or_op, ket_or_none=None):
-    r""" Calculating overlap <bra|ket>, or <bra|op|ket> if three arguments are provided."""
-    if ket_or_none is None:
-        return measure_overlap(bra, ket_or_op)
-    return measure_mpo(bra, ket_or_op, ket_or_none)
+def vdot(*args):
+    r""" 
+    Calculate the overlap :math:`\langle \textrm{bra}|\textrm{ket}\rangle`, 
+    or :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle` depending on the number of provided agruments.
+    
+    Parameters
+    -----------
+    *args : yast.tn.mps.MpsMpo
+
+    Returns
+    -------
+    scalar
+    """
+    if len(args) == 2:
+        return measure_overlap(*args)
+    return measure_mpo(*args)
 
 
 def measure_overlap(bra, ket):
@@ -128,7 +139,7 @@ class _EnvParent:
         if bd is None:
             bd = (-1, 0)
         axes = ((0, 1), (1, 0)) if self.nr_layers == 2 else ((0, 1, 2), (2, 1, 0))
-        return self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
+        return self.factor() * self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
 
     def update_env(self, n, to='last'):
         r"""
@@ -200,6 +211,9 @@ class Env2(_EnvParent):
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         self.F[(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)
 
+    def factor(self):
+        return self.bra.factor * self.ket.factor
+
     def Heff1(self, x, n):
         r"""
         Action of Heff on a single site mps tensor.
@@ -264,6 +278,9 @@ class Env3(_EnvParent):
         # right boundary
         legs = [self.ket.virtual_leg('last').conj(), self.op.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         self.F[(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)
+
+    def factor(self):
+        return self.bra.factor * self.op.factor * self.ket.factor
 
     def Heff0(self, C, bd):
         r"""
@@ -382,7 +399,8 @@ class Env3(_EnvParent):
         if n in self._temp['expmv_ncv']:
             opts['ncv'] = self._temp['expmv_ncv'][n]
         f = lambda x: self.Heff1(x, n)
-        self.ket[n], info = tensor.expmv(f, self.ket[n], du, **opts, normalize=normalize, return_info=True)
+        du = du * self.op.factor
+        self.ket[n], info = expmv(f, self.ket[n], du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][n] = info['ncv']
 
     def update_C(self, du, opts, normalize=True):
@@ -392,7 +410,8 @@ class Env3(_EnvParent):
             if bd in self._temp['expmv_ncv']:
                 opts['ncv'] = self._temp['expmv_ncv'][bd]
             f = lambda x: self.Heff0(x, bd)
-            self.ket.A[bd], info = tensor.expmv(f, self.ket[bd], du, **opts, normalize=normalize, return_info=True)
+            du = du * self.op.factor
+            self.ket.A[bd], info = expmv(f, self.ket[bd], du, **opts, normalize=normalize, return_info=True)
             self._temp['expmv_ncv'][bd] = info['ncv']
 
     def update_AA(self, bd, du, opts, opts_svd, normalize=True):
@@ -402,7 +421,8 @@ class Env3(_EnvParent):
             opts['ncv'] = self._temp['expmv_ncv'][ibd]
         AA = self.ket.merge_two_sites(bd)
         f = lambda v: self.Heff2(v, bd)
-        AA, info = tensor.expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
+        du = du * self.op.factor
+        AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)
 
@@ -411,8 +431,8 @@ class Env3(_EnvParent):
             return False
         AL = self.ket[bd[0]]
         AR = self.ket[bd[1]]
-        if self.op[bd[0]].get_legs(axis=1).t != AL.get_legs(axis=1).t or \
-           self.op[bd[1]].get_legs(axis=1).t != AR.get_legs(axis=1).t:
+        if self.op[bd[0]].get_legs(axes=1).t != AL.get_legs(axes=1).t or \
+           self.op[bd[1]].get_legs(axes=1).t != AR.get_legs(axes=1).t:
             return True  # true if some charges are missing on physical legs of psi
 
         AL = AL.fuse_legs(axes=((0, 1), 2))
@@ -435,11 +455,6 @@ def _update2(n, F, bra, ket, to, nr_phys):
     """ Contractions for 2-layer environment update. """
     if to == 'first':
         inds = ((-0, 2, 1), (1, 3), (-1, 2, 3)) if nr_phys == 1 else ((-0, 2, 1, 4), (1, 3), (-1, 2, 3, 4))
-        print('n: ', n)
-        print('ket: ', ket[n].get_shape())
-        print('bra: ', bra[n].get_shape())
-        print('F: ', F[(n+1,n)].get_shape())
-
         F[(n, n - 1)] = tensor.ncon([ket[n], F[(n + 1, n)], bra[n].conj()], inds)
     elif to == 'last':
         inds = ((2, 3, -0), (2, 1), (1, 3, -1)) if nr_phys == 1 else ((2, 3, -0, 4), (2, 1), (1, 3, -1, 4))
@@ -447,7 +462,6 @@ def _update2(n, F, bra, ket, to, nr_phys):
 
 
 def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
-    print('n: ', n)
     if nr_phys == 1 and to == 'last':
         tmp = tensor.ncon([bra[n].conj(), F[(n - 1, n)]], ((1, -1, -0), (1, -2, -3)))
         tmp = op[n]._attach_01(tmp)
@@ -455,8 +469,6 @@ def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
     elif nr_phys == 1 and to == 'first':
         tmp = ket[n] @ F[(n + 1, n)]
         tmp = op[n]._attach_23(tmp)
-        print('tmp ', tmp.get_shape())
-        print('bra[n] conj: ', bra[n].conj().get_shape())
         F[(n, n - 1)] = tensor.ncon([tmp, bra[n].conj()], ((-0, -1, 1, 2), (-2, 2, 1)))
     elif nr_phys == 2 and not on_aux and to == 'last':
         bA = bra[n].fuse_legs(axes=(0, 1, (2, 3)))

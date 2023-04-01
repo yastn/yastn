@@ -1,7 +1,7 @@
 """ Various variants of the DMRG algorithm for mps."""
 from typing import NamedTuple
 import logging
-from ... import tensor, YastError
+from ... import eigs, YastError
 from ._env import Env3
 
 
@@ -12,7 +12,7 @@ logger = logging.Logger('dmrg')
 #           dmrg                #
 #################################
 
-class DMRGout(NamedTuple):
+class DMRG_out(NamedTuple):
     sweeps : int = 0
     energy : float = None
     denergy : float = None
@@ -26,19 +26,19 @@ def dmrg_(psi, H, project=None, method='1site',
     r"""
     Perform DMRG sweeps until convergence, starting from MPS :code:`psi`.
 
-    The outer loop sweeps over MPS updating sites from the first site to last and back.
+    The inner loop sweeps over MPS updating sites from the first site to the last and back, constituting a single iteration.
     Convergence can be controlled based on energy and/or Schmidt values (which is a more sensitive measure).
     The DMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
-    or until all convergence measures with provided tolerance change by less then the tolerance.
+    or until all convergence measures, with tolerance that is not None, change by less than the provided tolerance during a single sweep.
 
     Outputs generator if :code:`iterator_step` is given.
-    It allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
+    Generator allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------
     psi: yast.tn.mps.MpsMpo
         Initial state. It is updated during execution.
-        It is first canonized to to the first site, if not provided in such a form.
+        It is first canonized to the first site, if not provided in such a form.
         State resulting from :code:`dmrg_` is canonized to the first site.
 
     H: yast.tn.mps.MpsMpo
@@ -54,7 +54,7 @@ def dmrg_(psi, H, project=None, method='1site',
         Convergence tolerance for the change of energy in a single sweep.
         By default is None, in which case energy convergence is not checked.
 
-    energy_tol: float
+    Schmidt_tol: float
         Convergence tolerance for the change of Schmidt values on the worst cut/bond in a single sweep.
         By default is None, in which case Schmidt values convergence is not checked.
 
@@ -75,13 +75,14 @@ def dmrg_(psi, H, project=None, method='1site',
 
     Returns
     -------
-    out: DMRGout(NamedTuple)
-        Includes fields:
-        :code:`sweeps` number of performed dmrg sweeps.
-        :code:`energy` energy after the last sweep.
-        :code:`denergy` absolut value of energy change in the last sweep.
-        :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep
-        :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
+    DMRG_out(NamedTuple)
+        NamedTuple including fields:
+            
+            * :code:`sweeps` number of performed dmrg sweeps.
+            * :code:`energy` energy after the last sweep.
+            * :code:`denergy` absolut value of energy change in the last sweep.
+            * :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
+            * :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
     tmp = _dmrg_(psi, H, project, method, 
                 energy_tol, Schmidt_tol, max_sweeps, iterator_step,
@@ -137,11 +138,11 @@ def _dmrg_(psi, H, project, method,
 
         logger.info('Sweep = %03d  energy = %0.14f  dE = %0.4f  dSchmidt = %0.4f', sweep, E, dE, max_dS)
 
-        if all(converged) and any(converged):
+        if len(converged) > 0 and all(converged):
             break
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
-            yield DMRGout(sweep, E, dE, max_dS, max_dw)
-    yield DMRGout(sweep, E, dE, max_dS, max_dw)
+            yield DMRG_out(sweep, E, dE, max_dS, max_dw)
+    yield DMRG_out(sweep, E, dE, max_dS, max_dw)
 
 
 def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
@@ -157,8 +158,8 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
             env.update_Aort(n)
-            _, (psi.A[n],) = tensor.eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
-            psi.orthogonalize_site(n, to=to)
+            _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
+            psi.orthogonalize_site(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != psi.first:
                 _, S, _ = psi[psi.pC].svd(sU=1)
                 Schmidt[psi.pC] = S
@@ -187,7 +188,7 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
             bd = (n, n + 1)
             env.update_AAort(bd)
             AA = psi.merge_two_sites(bd)
-            _, (AA,) = tensor.eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
+            _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
             _disc_weight_bd = psi.unmerge_two_sites(AA, bd, opts_svd)
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':

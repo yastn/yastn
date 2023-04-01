@@ -26,20 +26,20 @@ def test_mask_basic():
     b[(1, 1)] = b[(1, 1)] > 0  # some true
     tr_b = b.trace(axes=(0, 1)).item()
 
-    c = b.apply_mask(a, axis=2)
+    c = b.apply_mask(a, axes=2)
 
     # application of the mask should leave a single charge (1,) on this leg
-    l = c.get_legs(axis=2)
+    l = c.get_legs(axes=2)
     assert l.t == ((1,),) and l[(1,)] == tr_b  # in second checks the bond dimension
 
-    d0 = b.apply_mask(b0, axis=0)
-    d1 = b.apply_mask(b0, axis=-1)
+    d0 = b.apply_mask(b0, axes=0)
+    d1 = b.apply_mask(b0, axes=-1)
     assert yast.norm(d0 - d1) < tol
-    l = d1.get_legs(axis=1)
+    l = d1.get_legs(axes=1)
     assert l.t == ((1,),) and l[(1,)] == tr_b
 
     # apply the same mask on 2 tensors
-    d2, c2 = b.apply_mask(b0, a, axis=(-1, 2))
+    d2, c2 = b.apply_mask(b0, a, axes=(-1, 2))
     assert (d2 - d0).norm() < tol
     assert (c2 - c).norm() < tol
 
@@ -59,16 +59,18 @@ def test_mask_basic():
     blt = b < 0
     bge = b >= 0
     ble = b <= 0
-    assert bgt.trace().item() + ble.trace().item() == blt.trace().item() + bge.trace().item() == b.get_shape(axis=0)
+    assert bgt.trace().item() + ble.trace().item() == blt.trace().item() + bge.trace().item() == b.get_shape(axes=0)
+
+    assert all(bgt.bitwise_not().data == ble.data)
 
     for bb in [bgt, blt, bge, ble]:
         bnd_dim = bb.trace(axes=(0, 1)).item()
-        c = bb.apply_mask(a, axis=0)
-        l = c.get_legs(axis=0)
+        c = bb.apply_mask(a, axes=0)
+        l = c.get_legs(axes=0)
         assert sum(l.D) == bnd_dim
 
-    assert blt.apply_mask(bge, axis=0).trace() < tol  # == 0.
-    assert ble.apply_mask(bgt, axis=1).trace() < tol  # == 0.
+    assert blt.apply_mask(bge, axes=0).trace() < tol  # == 0.
+    assert ble.apply_mask(bgt, axes=1).trace() < tol  # == 0.
 
 
 def test_mask_exceptions():
@@ -82,20 +84,20 @@ def test_mask_exceptions():
     b = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
 
     with pytest.raises(yast.YastError):
-        _ = a_nondiag.apply_mask(b, axis=2)
+        _ = a_nondiag.apply_mask(b, axes=2)
         # First tensor should be diagonal.
     with pytest.raises(yast.YastError):
         bmf = b.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
-        _ = a.apply_mask(bmf, axis=1)
-        # Second tensor`s leg specified by axis cannot be fused.
+        _ = a.apply_mask(bmf, axes=1)
+        # Second tensor`s leg specified by axes cannot be fused.
     with pytest.raises(yast.YastError):
         bhf = b.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
-        _ = a.apply_mask(bhf, axis=1)
-        # Second tensor`s leg specified by axis cannot be fused.
+        _ = a.apply_mask(bhf, axes=1)
+        # Second tensor`s leg specified by axes cannot be fused.
     with pytest.raises(yast.YastError):
-        _ = a.apply_mask(b, axis=1)  # Bond dimensions do not match.
+        _ = a.apply_mask(b, axes=1)  # Bond dimensions do not match.
     with pytest.raises(yast.YastError):
-        _, _ = a.apply_mask(b, b, axis=[2, 2, 1])
+        _, _ = a.apply_mask(b, b, axes=[2, 2, 1])
         # There should be exactly one axis for each tensor to be projected.
 
 

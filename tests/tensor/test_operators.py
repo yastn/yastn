@@ -161,6 +161,7 @@ def test_spinful_fermions():
         # check anti-commutation relations
         assert all(yast.norm(ops.c(s) @ ops.c(s)) < tol for s in ('u', 'd'))
         assert all(yast.norm(ops.c(s) @ ops.cp(s) + ops.cp(s) @ ops.c(s) - ops.I()) < tol for s in ('u', 'd'))
+        assert all(yast.norm(ops.c(s) @ ops.cp(s) + ops.n(s) - ops.I()) < tol for s in ('u', 'd'))
 
         # anticommutator for indistinguishable; commutator for distinguishable
         assert yast.norm(ops.c('u') @ ops.cp('d') + inter_sgn * ops.cp('d') @ ops.c('u')) < tol

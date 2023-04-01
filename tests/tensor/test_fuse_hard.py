@@ -380,14 +380,14 @@ def test_leg_outer_product():
 
     fa = yast.fuse_legs(a, axes=((0, 1), (2, 3)), mode='hard')
     pfa0 = yast.leg_outer_product(l0, l1)
-    lfa0 = fa.get_legs(axis=0)
+    lfa0 = fa.get_legs(axes=0)
     pfa1 = yast.leg_outer_product(l2, l3)
-    lfa1 = fa.get_legs(axis=1)
+    lfa1 = fa.get_legs(axes=1)
     assert (pfa0, pfa1) == (lfa0, lfa1)
 
     ffa = yast.fuse_legs(fa, axes=[(0, 1)], mode='hard')
     pffa = yast.leg_outer_product(lfa0, lfa1, t_allowed=[(0, 0)])
-    lffa = ffa.get_legs(axis=0)
+    lffa = ffa.get_legs(axes=0)
     assert pffa == lffa
     assert pffa.is_fused()
 

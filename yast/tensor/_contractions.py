@@ -152,33 +152,36 @@ def _meta_tensordot(config, struct_a, struct_b):
 def _tensordot_diag(a, b, in_b, destination):
     """ executes broadcast and then transpose into order expected by tensordot. """
     if len(in_b) == 1:
-        c = a.broadcast(b, axis=in_b[0])
+        c = a.broadcast(b, axes=in_b[0])
         return c.moveaxis(source=in_b, destination=destination)
     if len(in_b) == 2:
-        c = a.broadcast(b, axis=in_b[0])
+        c = a.broadcast(b, axes=in_b[0])
         return c.trace(axes=in_b)
     raise YastError('Outer product with diagonal tensor not supported. Use yast.diag() first.')  # len(in_a) == 0
 
 
-def broadcast(a, *args, axis=0):
+def broadcast(a, *args, axes=0):
     r"""
-    Compute tensor dot product of diagonal tensor a with tensor b.
+    Compute tensordot product of diagonal tensor a with tensors in args.
 
-    Legs of the resulting tensor are ordered in the same way as those of tensor b.
+    Legs of the resulting tensors are ordered in the same way as those of tensor in args.
     Produce diagonal tensor if both are diagonal.
 
     Parameters
     ----------
-    a, b: Tensors
+    a, args: yast.Tensor
         a is a diagonal tensor to be broadcasted
 
-    axis: int
-        leg of tensor b to be multiplied by the diagonal tensor a.
+    axes: int or tuple(int)
+        legs of tensors in args to be multiplied by diagonal tensor a.
+        Number of tensors provided in args should match lenght of axes.
 
-    conj: tuple
-        shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), (1, 1)
+    Returns
+    -------
+    yast.Tensor
     """
-    axes = (axis,) if not hasattr(axis, '__iter__') else axis
+    multiple_axes = hasattr(axes, '__iter__')
+    axes = (axes,) if not multiple_axes else axes
     if len(axes) != len(args):
         raise YastError("There should be exactly one axis for each tensor to be projected.")
     results = []
@@ -186,7 +189,7 @@ def broadcast(a, *args, axis=0):
         _test_can_be_combined(a, b)
         ax = _broadcast_input(ax, b.mfs, a.isdiag)
         if b.hfs[ax].tree != (1,):
-            raise YastError('Second tensor`s leg specified by axis cannot be fused.')
+            raise YastError('Second tensor`s leg specified in axes cannot be fused.')
 
         meta, struct = _meta_broadcast(b.struct, a.struct, ax)
 
@@ -198,7 +201,7 @@ def broadcast(a, *args, axis=0):
         Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
         data = b.config.backend.dot_diag(a._data, b._data, meta, Dsize, ax, b_ndim)
         results.append(b._replace(struct=struct, data=data))
-    return results.pop() if len(results) == 1 else results
+    return results if multiple_axes else results.pop()
 
 
 def _broadcast_input(axis, mf, isdiag):
@@ -238,43 +241,48 @@ def _meta_broadcast(b_struct, a_struct, axis):
     return meta, c_struct
 
 
-def apply_mask(a, *args, axis=0):
+def apply_mask(a, *args, axes=0):
     r"""
-    Apply mask given by nonzero elements of diagonal tensor a on specified axis of tensor b.
-    Can provide arbitrary number of tensors b, in which case axis is a list of corresponding length.
+    Apply mask given by nonzero elements of diagonal tensor a on specified axes of tensors in args.
+    Can provide arbitrary number of tensors in args, in which case axes is a list of corresponding length.
 
-    Legs of resulting tensor are ordered in the same way as those of tensor b.
-    Bond dimensions of specified axis of b are truncated according to the mask a.
+    Legs of resulting tensor are ordered in the same way as those of tensors in args.
+    Bond dimensions of specified axes of args are truncated according to the mask a.
     Produce diagonal tensor if both are diagonal.
 
     Parameters
     ----------
-    a, b: Tensors
+    a, args: yast.Tensor
         a is a diagonal tensor
 
-    axis: int or tuple of ints
+    axes: int or tuple of ints
         leg of tensor a where the mask is applied.
+
+    Returns
+    -------
+    yast.Tensor
     """
-    axes = (axis,) if not hasattr(axis, '__iter__') else axis
+    multiple_axes = hasattr(axes, '__iter__')
+    axes = (axes,) if not multiple_axes else axes
     if len(axes) != len(args):
         raise YastError("There should be exactly one axis for each tensor to be projected.")
     results = []
-    for b, axis in zip(args, axes):
+    for b, ax in zip(args, axes):
         _test_can_be_combined(a, b)
-        axis = _broadcast_input(axis, b.mfs, a.isdiag)
-        if b.hfs[axis].tree != (1,):
-            raise YastError('Second tensor`s leg specified by axis cannot be fused.')
+        ax = _broadcast_input(ax, b.mfs, a.isdiag)
+        if b.hfs[ax].tree != (1,):
+            raise YastError('Second tensor`s leg specified by axes cannot be fused.')
 
         Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl)]) for sl in a.struct.sl)
-        meta, struct = _meta_mask(b.struct, b.isdiag, a.struct, Dbnew, axis)
+        meta, struct = _meta_mask(b.struct, b.isdiag, a.struct, Dbnew, ax)
         Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
 
         if b.isdiag:
-            b_ndim, axis = (1, 0)
+            b_ndim, ax = (1, 0)
             meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
         else:
             b_ndim = b.ndim_n
-        data = b.config.backend.mask_diag(b._data, a._data, meta, Dsize, axis, b_ndim)
+        data = b.config.backend.mask_diag(b._data, a._data, meta, Dsize, ax, b_ndim)
         results.append(b._replace(struct=struct, data=data))
     return results.pop() if len(results) == 1 else results
 
@@ -320,7 +328,7 @@ def vdot(a, b, conj=(1, 0)):
 
     Returns
     -------
-    scalar
+    number
     """
     _test_can_be_combined(a, b)
     if conj[0] == 1:
@@ -468,7 +476,7 @@ def _meta_trace(struct, in1, in2, out):
 
 def swap_gate(a, axes):
     """
-    Return tensor after application of the swap gate.
+    Return tensor after application of a swap gate.
 
     Multiply the block with odd charges on swaped legs by -1.
     If one of the provided axes is -1, then swap with the charge n.
@@ -480,7 +488,7 @@ def swap_gate(a, axes):
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     if not a.config.fermionic:
         return a

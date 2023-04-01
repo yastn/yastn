@@ -74,8 +74,8 @@ def test_match_ancilla():
     B = psi[1,2]
     U, S, V = yast.svd_with_truncation(cc, axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15, Vaxis=2)
     S = S.sqrt()
-    GA = S.broadcast(U, axis=2)
-    GB = S.broadcast(V, axis=2)
+    GA = S.broadcast(U, axes=2)
+    GB = S.broadcast(V, axes=2)
     ### test for match_ancilla_2s
     GA_an = match_ancilla_2s(GA, A, dir='l')  
     GB_an = match_ancilla_2s(GB, B, dir='r')

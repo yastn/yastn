@@ -1,7 +1,7 @@
 """ Function performing NTU update on all four unique bonds corresponding to a two site unit cell. """
 from ._routines import apply_local_gate_, evol_machine
 from typing import NamedTuple
-import multiprocessing as mp
+# import multiprocessing as mp
 
 class Gate_nn(NamedTuple):
     """ A should be before B in the fermionic order. """

@@ -6,7 +6,7 @@ from yast.tensor.linalg import svd_with_truncation
 
 def match_ancilla_1s(G, A):
     """ kron and fusion of local gate with identity for ancilla. Identity is read from ancila of A. """
-    leg = A.get_legs(axis=-1)
+    leg = A.get_legs(axes=-1)
 
     if not leg.is_fused():
         if any(n != 0 for n in G.n):
@@ -22,14 +22,14 @@ def match_ancilla_1s(G, A):
         G = G.add_leg(axis=1, s=-1)
         Gsa = ncon((G, one), ((-0, -1, -3), (-2, -4)))
         Gsa = Gsa.fuse_legs(axes=(0, (1, 2), 3, 4))
-        Gsa = Gsa.drop_leg_history(axis=1)
+        Gsa = Gsa.drop_leg_history(axes=1)
     Gsa = Gsa.fuse_legs(axes=((0, 1), (2, 3)))
     return Gsa
 
 
 def match_ancilla_2s(G, A, dir=None):
     """ kron and fusion of local gate with identity for ancilla. """
-    leg = A.get_legs(axis=-1)
+    leg = A.get_legs(axes=-1)
 
     if not leg.is_fused():
         return G
@@ -78,8 +78,8 @@ def gates_hopping(t, beta, fid, fc, fcdag, purification):
     U =  one + (np.cosh(step) - 1) * (n1 + n2 - 2 * nn) + np.sinh(step) * cc
     U, S, V = svd_with_truncation(U, axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15, Vaxis=2)
     S = S.sqrt()
-    GA = S.broadcast(U, axis=2)
-    GB = S.broadcast(V, axis=2)
+    GA = S.broadcast(U, axes=2)
+    GB = S.broadcast(V, axes=2)
     return GA, GB
 
 def gate_local_Hubbard(mu_up, mu_dn, U, beta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, purification = False, checkerboard=False):
@@ -141,8 +141,8 @@ def Gate_Ising(id, z, J, beta, evolution='imaginary', ancilla=True):
 
     U, S, V = svd_with_truncation(U, axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15, Vaxis=2)
     S = S.sqrt()
-    GA = S.broadcast(U, axis=2)
-    GB = S.broadcast(V, axis=2)
+    GA = S.broadcast(U, axes=2)
+    GB = S.broadcast(V, axes=2)
 
     if ancilla == True:
         GA = ncon((id, GA), ((-2, -0), (-1, -3, -4)))
@@ -208,8 +208,8 @@ def Gate_Heisenberg(sp, sm, sz, Jpm, Jmp, Jz, beta, fid_ancilla, ancilla=True):
 
     U, S, V = svd_with_truncation(U, axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15, Vaxis=2)
     S = S.sqrt()
-    GA = S.broadcast(U, axis=2)
-    GB = S.broadcast(V, axis=2)
+    GA = S.broadcast(U, axes=2)
+    GB = S.broadcast(V, axes=2)
 
     if ancilla == True:
         GA = ncon((fid_ancilla, GA), ((-2, -0), (-1, -3, -4)))

@@ -1,111 +1,7 @@
-Building MPS/MPO manually
-=========================
-
-The tensor making up MPS/MPO can be assigned manualy by setting them one by one.
-
-.. note::
-        The virtual dimensions/spaces of the neighbouring MPS/MPO tensors have to remain consistent.
-
-Ground state of Spin-1 AKLT model
----------------------------------
-
-Here, we show an example of such code for the most well-known exact MPS: The ground state of  
-`Affleck-Kennedy-Lieb-Tasaki (AKLT) model <https://en.wikipedia.org/wiki/AKLT_model>`_.
-
-.. literalinclude:: /../../tests/mps/test_initialization.py
-        :pyobject: test_assign_block
-
-
-MPO for hopping model (no symmetry)
------------------------------------
-
-The same can be done for MPOs. Here, we show construction of a simple 
-nearest-neighbour hopping Hamiltonian with hopping amplitude `t` 
-and on-site energy :math:`\mu` with different 
-realizations of explicit symmetry.
-
-.. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: mpo_XX_model_dense
-
-
-MPO for hopping model with :math:`\mathbb{Z}_2` symmetry
---------------------------------------------------------
-
-.. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: mpo_XX_model_Z2
-
-MPO for hopping model with U(1) symmetry
-----------------------------------------
-
-.. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: mpo_XX_model_U1
-
-
-Generate MPS from LaTex-like instruction
-----------------------------------------
-
-The MPS can be constructed automatically using dedicated `yamps.Generator` supplied with set of tensors as a basis. 
-The input for MPS can be given in a convenient LaTeX-like string.  To generate MPS we need to pass the parameters included 
-in the instruction and suply all vectors which will be used by the generator. 
-
-The instruction should provide all `vectors` and `parameters` which are used in the LaTeX-like instruction. In addition 
-the input has to define each element of the product explicitely. 
-
-Automatic generator creates MPO with symmetry as in `Generator`.
-
-.. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: test_generator_mps
-
-
-Generate MPO from LaTex-like instruction
-----------------------------------------
-
-The MPO can be constructed automatically using dedicated `yamps.Generator` supplied with set of tensors as a basis. 
-The input for MPO generation can be given in a convenient LaTeX-like string. 
-
-Automatic generator creates MPO with symmetry as in `Generator`.
-
-.. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: test_generator_mpo
-
-.. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: test_mpo_from_latex
-
-
-Create MPS or MPO based on templete object
-------------------------------------------
-
-The object can be created without `yast.tn.mps.Generator` by writing the instruction in terms of templete objects
-:code:`yast.tn.mps.Hterm(amplitude, position, operators)`. The list of `Hterm`'s gives the instruction for 
-elements which will be summed.
-
-An example for creating MPO from `Hterm` templete is included below:
-
-.. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: test_mpo_from_latex
-
-Alternatively you can create `YAMPS` by using `Generator`'s templete object. The object :code:`yast.tn.mps.single_term(op)` 
-contains the instruction for the product where the elements of the product are refered to by their names. The names are taken both from
-the basis for operators :code:`generator._ops.to_dict()`, and parameters we provide as input.
-
-.. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: test_mpo_from_templete
-
-
-Create random MPS or MPO
---------------------------------------
-
-`Generator` can be used as a tool to `YAMPS` object in a consistent basis. That includes creating 
-random MPS and MPO.
-
-.. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: test_random_mps
-
-
 .. FOR ALGEBRA
 
 Multiplication
-=====================================
+==============
 
 We can test the multiplication of MPO and MPS using a practical example for a ground state obtained with :ref:`theory/mps/algorithms:DMRG`.
 
@@ -174,7 +70,7 @@ Truncation is governed by options passed as :code:`opts_dict` (internally to SVD
         # There are different options which we can pass, see yast.linalg.svd. 
         # Defaults are assumed for options not explictly specified.
         #
-        opts_dict = {
+        opts_svd = {
                 'D_total': 4,      # total number of singular values to keep
                 'D_block': 2,      # maximal number of singular values to keep in a single block
                 'tol': 1e-6,       # relative tolerance of singular values below which to 
@@ -190,7 +86,7 @@ Truncation is governed by options passed as :code:`opts_dict` (internally to SVD
         # Bring MPS to canonical form and truncate (here, right canonical form).
         # For MPS we usually normalize the state.
         #
-        psi.truncate_(to='first', opts=opts_dict)
+        psi.truncate_(to='first', opts_svd=opts_svd)
         
         # Generate random MPO with no symmetry
         #
@@ -199,13 +95,13 @@ Truncation is governed by options passed as :code:`opts_dict` (internally to SVD
         # Bring MPO to canonical form and truncate (here, left canonical form).
         # Note: for MPO we do not want to change overall scale, thus no normalization. 
         #
-        H.truncate_(to='last', opts=opts_dict, normalize=False)
+        H.truncate_(to='last', opts_svd=opts_svd, normalize=False)
 
 
 Save and load MPS/MPO
 =====================
 
-YAMPS MPS/MPO can be saved/loaded either to/from a dictionary or an HDF5 file. 
+MPS/MPO can be saved/loaded either to/from a dictionary or an HDF5 file. 
 
 .. note::
         :ref:`YAST configuration<tensor/configuration:yast configuration>` 
@@ -228,7 +124,7 @@ Using HDF5 format
 .. algorithms
 
 DMRG
-=====================================
+====
 
 In order to perform :ref:`theory/mps/algorithms:DMRG` we need initial guess for MPS the hermitian operator (typically a Hamiltonian) written as MPO. 
 We should start with :ref:`mps/init:initialisation` of the MPS and MPO which we push to DMRG.
@@ -254,7 +150,7 @@ Also see the test in examples for  :ref:`examples/mps/mps:Multiplication`.
 
 
 TDVP
-=====================================
+====
 
 In order to perform :ref:`theory/mps/algorithms:TDVP` we need initial MPS the operator written as MPO.
 We should start with :ref:`mps/init:initialisation` of the MPS and MPO which we push to DMRG.

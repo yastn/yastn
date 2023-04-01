@@ -27,8 +27,8 @@ def create_Ising_tensor(sz, beta):
     U = U.unfuse_legs(axes=(0, 1))
     U, S, V = yast.svd_with_truncation(U, axes = ((0, 2), (1, 3)), sU = -1, tol = 1e-15, Uaxis=1, Vaxis=1)
     S = S.sqrt()
-    GA = S.broadcast(U, axis=1)
-    GB = S.broadcast(V, axis=1)
+    GA = S.broadcast(U, axes=1)
+    GB = S.broadcast(V, axes=1)
 
     T = yast.tensordot(GA, GB, axes=(2, 0))
     T = yast.tensordot(T, GB, axes=(3, 0))

@@ -48,11 +48,11 @@ def make_config(**kwargs):
         Default data type (dtype) of YAST tensors. Supported options are: ``'float64'``, 
         ``'complex128'``. If not specified, the default dtype is ``'float64'``.
     fermionic : bool or tuple[bool,...]
-        Specify behavior of swap_gate function, allowing to introduce fermionic symmetries.
+        Specify behavior of :meth:`yast.swap_gate` function, allowing to introduce fermionic symmetries.
         Allowed values: ``False``, ``True``, or a tuple ``(True, False, ...)`` with one bool for each component
         charge vector i.e. of length sym.NSYM. Default is ``False``.
     default_fusion: str
-        Specify default strategy to handle leg fusion: 'hard' or 'meta'. See yast.tensor.fuse_legs
+        Specify default strategy to handle leg fusion: 'hard' or 'meta'. See :meth:`yast.Tensor.fuse_legs`
         for details. Default is ``'hard'``.
     force_fusion : str
         Overrides fusion strategy provided in yast.tensor.fuse_legs. Default is ``None``.

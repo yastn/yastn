@@ -4,174 +4,222 @@ import yast
 import yast.tn.mps as mps
 try:
     from .configs import config_dense as cfg
-    # cfg is used by pytest to inject different backends and divices
+    # pytest modifies cfg to inject different backends and devices during tests
 except ImportError:
     from configs import config_dense as cfg
 
 tol = 1e-12
 
-
+#
 ####### MPO for XX model ##########
-def mpo_XX_model_dense(config, N, t, mu):
-    # Initialize MPO tensor by tensor. Example for NN-hopping model
-    # TODO ref ?
+#
+def mpo_nn_hopping_manually(N=10, t=1.0, mu=0.0, config=None):
+    """
+    Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
 
-    # Define basic rank-2 blocks (matrices) of on-site tensors
+    Initialize MPO tensor by hand with dense, Z2, or U1 symmetric tensors. Symmetry is specified in config.
+    """
     #
-    cp = np.array([[0, 0], [1, 0]])
-    c = np.array([[0, 1], [0, 0]])
-    nn = np.array([[0, 0], [0, 1]])
-    ee = np.array([[1, 0], [0, 1]])
-    oo = np.array([[0, 0], [0, 0]])
-
     # Build empty MPO for system of N sites
     # 
     H = mps.Mpo(N)
-
-    # Depending on the site position, define elements of on-site tensor
     #
-    for n in H.sweep(to='last'):  # empty tensors
-        if n == H.first:
-            tmp = np.block([[mu * nn, t * cp, t * c, ee]])
-            tmp = tmp.reshape((1, 2, 4, 2))
-            Ds = (1, 2, 2, 4)
-        elif n == H.last:
-            tmp = np.block([[ee], [c], [cp], [mu * nn]])
-            tmp = tmp.reshape((4, 2, 1, 2))
-            Ds = (4, 2, 2, 1)
-        else:
-            tmp = np.block([[ee, oo, oo, oo],
-                            [c, oo, oo, oo],
-                            [cp, oo, oo, oo],
-                            [mu * nn, t * cp, t * c, ee]])
-            tmp = tmp.reshape((4, 2, 4, 2))
-            Ds = (4, 2, 2, 4)
-        # tmp = np.transpose(tmp, (0, 1, 3, 2))
-        #
-        # We chose signature convention for indices of the MPO tensor as follows
-        #         
-        #          | 
-        #          V(+1)
-        #          | 
-        # (+1) ->-|T|->-(-1)
-        #          |
-        #          V(-1)
-        #          |
-        #
-        on_site_t = yast.Tensor(config=config, s=(1, 1, -1, -1))
-        on_site_t.set_block(val=tmp, Ds=Ds)
+    # Depending on the symmetry, define elements of on-site tensor
+    #
+    # We chose signature convention for indices of the MPO tensor as follows
+    #          | 
+    #          V(-1)
+    #          | 
+    # (-1) ->-|T|->-(+1)
+    #          |
+    #          V(+1)
+    #          |
 
-        # Set n-th on-site tensor of MPO
-        H[n]= on_site_t
+    if config is None:
+        config = yast.make_config()  # no symmetry is a default
+
+    if config.sym.SYM_ID == 'dense':  # no symmetry
+        # Basic rank-2 blocks (matrices) of on-site tensors
+        cp = np.array([[0, 0], [1, 0]])
+        c  = np.array([[0, 1], [0, 0]])
+        nn = np.array([[0, 0], [0, 1]])
+        ee = np.array([[1, 0], [0, 1]])
+        oo = np.array([[0, 0], [0, 0]])
+
+        for n in H.sweep(to='last'):  # empty tensors
+            H[n] = yast.Tensor(config=config, s=(-1, 1, 1, -1))
+            if n == H.first:
+                tmp = np.block([[mu * nn, t * cp, t * c, ee]])
+                H[n].set_block(val=tmp, Ds=(1, 2, 2, 4))
+            elif n == H.last:
+                tmp = np.block([[ee], [c], [cp], [mu * nn]])
+                H[n].set_block(val=tmp, Ds=(4, 2, 2, 1))
+            else:
+                tmp = np.block([[ee, oo, oo, oo],
+                                [c, oo, oo, oo],
+                                [cp, oo, oo, oo],
+                                [mu * nn, t * cp, t * c, ee]])
+                H[n].set_block(val=tmp, Ds=(4, 2, 2, 4))
+
+    elif config.sym.SYM_ID == 'Z2':  # Z2 symmetry
+        for n in H.sweep(to='last'):
+            H[n] = yast.Tensor(config=config, s=(-1, 1, 1, -1), n=0)
+            if n == H.first:
+                H[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 2, 1))
+                H[n].set_block(ts=(0, 1, 0, 1), val=[mu, 1], Ds=(1, 1, 2, 1))
+                H[n].set_block(ts=(0, 0, 1, 1), val=[t, 0], Ds=(1, 1, 2, 1))
+                H[n].set_block(ts=(0, 1, 1, 0), val=[0, t], Ds=(1, 1, 2, 1))
+            elif n == H.last:
+                H[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
+                H[n].set_block(ts=(0, 1, 0, 1), val=[1, mu], Ds=(2, 1, 1, 1))
+                H[n].set_block(ts=(1, 1, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
+                H[n].set_block(ts=(1, 0, 0, 1), val=[0, 1], Ds=(2, 1, 1, 1))
+            else:
+                H[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 2, 1))
+                H[n].set_block(ts=(0, 1, 0, 1), val=[[1, 0], [mu, 1]], Ds=(2, 1, 2, 1))
+                H[n].set_block(ts=(0, 0, 1, 1), val=[[0, 0], [t, 0]], Ds=(2, 1, 2, 1))
+                H[n].set_block(ts=(0, 1, 1, 0), val=[[0, 0], [0, t]], Ds=(2, 1, 2, 1))
+                H[n].set_block(ts=(1, 1, 0, 0), val=[[1, 0], [0, 0]], Ds=(2, 1, 2, 1))
+                H[n].set_block(ts=(1, 0, 0, 1), val=[[0, 0], [1, 0]], Ds=(2, 1, 2, 1))
+
+    elif config.sym.SYM_ID == 'U(1)':  # U1 symmetry
+        for n in H.sweep(to='last'):
+            H.A[n] = yast.Tensor(config=config, s=(-1, 1, 1, -1), n=0)
+            if n == H.first:
+                H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 2, 1))
+                H.A[n].set_block(ts=(0, 1, 0, 1), val=[mu, 1], Ds=(1, 1, 2, 1))
+                H.A[n].set_block(ts=(0, 0, 1, 1), val=[t], Ds=(1, 1, 1, 1))
+                H.A[n].set_block(ts=(0, 1, -1, 0), val=[t], Ds=(1, 1, 1, 1))
+            elif n == H.last:
+                H.A[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
+                H.A[n].set_block(ts=(0, 1, 0, 1), val=[1, mu], Ds=(2, 1, 1, 1))
+                H.A[n].set_block(ts=(1, 1, 0, 0), val=[1], Ds=(1, 1, 1, 1))
+                H.A[n].set_block(ts=(-1, 0, 0, 1), val=[1], Ds=(1, 1, 1, 1))
+            else:
+                H.A[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 2, 1))
+                H.A[n].set_block(ts=(0, 1, 0, 1), val=[[1, 0], [mu, 1]], Ds=(2, 1, 2, 1))
+                H.A[n].set_block(ts=(0, 0, 1, 1), val=[0, t], Ds=(2, 1, 1, 1))
+                H.A[n].set_block(ts=(0, 1, -1, 0), val=[0, t], Ds=(2, 1, 1, 1))
+                H.A[n].set_block(ts=(1, 1, 0, 0), val=[1, 0], Ds=(1, 1, 2, 1))
+                H.A[n].set_block(ts=(-1, 0, 0, 1), val=[1, 0], Ds=(1, 1, 2, 1))
     return H
 
 
-def mpo_XX_model_Z2(config, N, t, mu):
-    # Initialize MPO tensor by tensor. Example for NN-hopping model, 
-    # using explicit Z2 symmetry of the model.
-    # TODO ref ?
+def mpo_hopping_Hterm(N, J, sym="U1", config=None):
+    """
+    Fermionic hopping Hamiltonian on N sites with hoppings at arbitrary range.
 
-    # Build empty MPO for system of N sites
-    #
-    H = mps.Mpo(N)
+    The upper triangular part of matrix J defines hopping amplitudes, and the diagonal defines on-site chemical potentials.
+    """
 
-    # Depending on the site position, define elements of on-site tensor
+    if config is None:
+        ops = yast.operators.SpinlessFermions(sym=sym)
+    else:  # config is used here by pytest to inject backend and device for testing
+        ops = yast.operators.SpinlessFermions(sym=sym, backend=config.backend, default_device=config.default_device)
+
+    Hterms = []  # list of Hterm(amplitude, positions, operators)
+    # Each Hterm corresponds to a single product of local operators.
+    # Hamiltonian is a sum of such products.
+
+
+    # chemical potential on site i
+    for n in range(N):
+        if abs(J[n, n]) > 0:
+            Hterms.append(mps.Hterm(J[n, n], [n], [ops.n()]))
+
+    # hopping term between sites i and j
+    for m in range(N):
+        for n in range(m + 1, N):
+            if abs(J[m, n]) > 0:
+                Hterms.append(mps.Hterm(J[m, n], (m, n), (ops.cp(), ops.c())))
+                Hterms.append(mps.Hterm(np.conj(J[m, n]), (n, m), (ops.cp(), ops.c())))
+
+    # We need an identity MPO operator. Here it is created manually.
+    I = mps.Mpo(N)
+    for n in I.sweep():
+        I[n] = ops.I().add_leg(axis=0, s=-1).add_leg(axis=2, s=1)
     #
-    for n in H.sweep(to='last'):
-        #
-        # Define empty yast.Tensor as n-th on-site tensor
-        # We chose signature convention for indices of the MPO tensor as follows
-        #         
-        #          | 
-        #          V(+1)
-        #          | 
-        # (+1) ->-|T|->-(-1)
-        #          |
-        #          V(-1)
-        #          |
-        #
-        H[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
-        
-        # set blocks, indexed by tuple of Z2 charges, of on-site tensor at n-th position
-        #
-        if n == H.first:
-            H[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 2, 1))
-            H[n].set_block(ts=(0, 1, 0, 1), val=[mu, 1], Ds=(1, 1, 2, 1))
-            H[n].set_block(ts=(0, 0, 1, 1), val=[t, 0], Ds=(1, 1, 2, 1))
-            H[n].set_block(ts=(0, 1, 1, 0), val=[0, t], Ds=(1, 1, 2, 1))
-        elif n == H.last:
-            H[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
-            H[n].set_block(ts=(0, 1, 0, 1), val=[1, mu], Ds=(2, 1, 1, 1))
-            H[n].set_block(ts=(1, 1, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
-            H[n].set_block(ts=(1, 0, 0, 1), val=[0, 1], Ds=(2, 1, 1, 1))
-        else:
-            H[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 2, 1))
-            H[n].set_block(ts=(0, 1, 0, 1), val=[[1, 0], [mu, 1]], Ds=(2, 1, 2, 1))
-            H[n].set_block(ts=(0, 0, 1, 1), val=[[0, 0], [t, 0]], Ds=(2, 1, 2, 1))
-            H[n].set_block(ts=(0, 1, 1, 0), val=[[0, 0], [0, t]], Ds=(2, 1, 2, 1))
-            H[n].set_block(ts=(1, 1, 0, 0), val=[[1, 0], [0, 0]], Ds=(2, 1, 2, 1))
-            H[n].set_block(ts=(1, 0, 0, 1), val=[[0, 0], [1, 0]], Ds=(2, 1, 2, 1))
+    # Identity MPO can be also obtained using mps.generator class
+    #
+    # generator = mps.Generator(N, ops)
+    # I = generator.I()
+    #
+
+    #
+    # Generate MPO for Hterms
+    #
+    H = mps.generate_mpo(I, Hterms)
     return H
 
 
-def mpo_XX_model_U1(config, N, t, mu):
-    # Initialize MPO tensor by tensor. Example for NN-hopping model, 
-    # using explicit U1 symmetry of the model.
-    # TODO ref ?
+def mpo_nn_hopping_latex(N=10, t=1.0, mu=0.0, sym="U1", config=None):
+    """
+    Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
 
-    # Build empty MPO for system of N sites
-    #
-    H = mps.Mpo(N)
+    The upper triangular part of matrix J defines hopping amplitudes, and the diagonal defines on-site chemical potentials.
+    """
 
-    # Depending on the site position, define elements of on-site tensor
-    #
-    for n in H.sweep(to='last'):
-        #
-        # Define empty yast.Tensor as n-th on-site tensor
-        # We chose signature convention for indices of the MPO tensor as follows
-        #         
-        #          | 
-        #          V(+1)
-        #          | 
-        # (+1) ->-|T|->-(-1)
-        #          |
-        #          V(-1)
-        #          |
-        #
-        H.A[n] = yast.Tensor(config=config, s=[1, 1, -1, -1], n=0)
+    if config is None:
+        ops = yast.operators.SpinlessFermions(sym=sym)
+    else:  # config is used here by pytest to inject backend and device for testing
+        ops = yast.operators.SpinlessFermions(sym=sym, backend=config.backend, default_device=config.default_device)
 
-        # set blocks, indexed by tuple of U1 charges, of on-site tensor at n-th position
-        #
-        if n == H.first:
-            H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 2, 1))
-            H.A[n].set_block(ts=(0, 1, 0, 1), val=[mu, 1], Ds=(1, 1, 2, 1))
-            H.A[n].set_block(ts=(0, 0, -1, 1), val=[t], Ds=(1, 1, 1, 1))
-            H.A[n].set_block(ts=(0, 1, 1, 0), val=[t], Ds=(1, 1, 1, 1))
-        elif n == H.last:
-            H.A[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
-            H.A[n].set_block(ts=(0, 1, 0, 1), val=[1, mu], Ds=(2, 1, 1, 1))
-            H.A[n].set_block(ts=(-1, 1, 0, 0), val=[1], Ds=(1, 1, 1, 1))
-            H.A[n].set_block(ts=(1, 0, 0, 1), val=[1], Ds=(1, 1, 1, 1))
-        else:
-            H.A[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 2, 1))
-            H.A[n].set_block(ts=(0, 1, 0, 1), val=[[1, 0], [mu, 1]], Ds=(2, 1, 2, 1))
-            H.A[n].set_block(ts=(0, 0, -1, 1), val=[0, t], Ds=(2, 1, 1, 1))
-            H.A[n].set_block(ts=(0, 1, 1, 0), val=[0, t], Ds=(2, 1, 1, 1))
-            H.A[n].set_block(ts=(-1, 1, 0, 0), val=[1, 0], Ds=(1, 1, 2, 1))
-            H.A[n].set_block(ts=(1, 0, 0, 1), val=[1, 0], Ds=(1, 1, 2, 1))
+    Hstr = "\sum_{j,k \in NN} t (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in sites} mu cp_{i} c_{i}"
+    parameters = {"t": t, "mu": mu, "sites": list(range(N)), "NN": list((i, i+1) for i in range(N-1))}
+    generate = mps.Generator(N, ops)
+    H = generate.mpo_from_latex(Hstr, parameters=parameters)
     return H
 
 
+def mpo_hopping_latex(N, J, sym="U1", config=None):
+    """
+    Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
 
-def mpo_XX_model(config, N, t, mu):
-    if config.sym.SYM_ID == 'dense':
-        return mpo_XX_model_dense(config, N, t, mu)
-    elif config.sym.SYM_ID == 'Z2':
-        return mpo_XX_model_Z2(config, N, t, mu)
-    elif config.sym.SYM_ID == 'U(1)':
-        return mpo_XX_model_U1(config, N, t, mu)
+    The upper triangular part of matrix J defines hopping amplitudes, and the diagonal defines on-site chemical potentials.
+    """
 
-def test_random_mps():
+    if config is None:
+        ops = yast.operators.SpinlessFermions(sym=sym)
+    else:  # config is used here by pytest to inject backend and device for testing
+        ops = yast.operators.SpinlessFermions(sym=sym, backend=config.backend, default_device=config.default_device)
+
+    Hstr = "\sum_{j,k \in NN} J_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in sites} J_{i,i} cp_{i} c_{i}"
+    parameters = {"J": J, "sites": list(range(N)), "NN": list((i, j) for i in range(N-1) for j in range(i + 1, N))}
+
+    generate = mps.Generator(N, ops)
+    H = generate.mpo_from_latex(Hstr, parameters=parameters)
+    return H
+
+
+def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config=None):
+    """
+    Generate random MPS of N sites, with bond dimension D_total, tensors with symmetry sym and total charge n.
+    """
+    if config is None:
+        ops = yast.operators.SpinlessFermions(sym=sym)
+    else:  # config is used here by pytest to inject backend and device for testing
+        ops = yast.operators.SpinlessFermions(sym=sym, backend=config.backend, default_device=config.default_device)
+
+    generate = mps.Generator(N, ops)
+    psi = generate.random_mps(D_total=D_total, n=n)
+    return psi
+
+
+def random_mpo_spinless_fermions(N=10, D_total=16, sym='Z2', config=None):
+    """
+    Generate random MPO of N sites, with bond dimension D_total and tensors with symmetry sym.
+    """
+    if config is None:
+        ops = yast.operators.SpinlessFermions(sym=sym)
+    else:  # config is used here by pytest to inject backend and device for testing
+        ops = yast.operators.SpinlessFermions(sym=sym, backend=config.backend, default_device=config.default_device)
+
+    generate = mps.Generator(N, ops)
+    H = generate.random_mpo(D_total=D_total)
+    return H
+
+
+def test_generate_random_mps():
     N = 10
     D_total = 16
     bds = (1,) + (D_total,) * (N - 1) + (1,)
@@ -182,11 +230,24 @@ def test_random_mps():
         I = generate.I()
         assert pytest.approx(mps.measure_overlap(I, I).item(), rel=tol) == 2 ** N
         O = I @ I + (-1 * I)
-        assert pytest.approx(mps.measure_overlap(O, O).item(), abs=tol) == 0
-        psi = generate.random_mps(D_total=D_total, n = nn)
-        assert psi[psi.last].get_legs(axis=2).t == ((0,) * len(nn),)
-        assert psi[psi.first].get_legs(axis=0).t == (nn,)
+        assert pytest.approx(O.norm().item(), abs=tol) == 0
+
+        n0 = (0,) * len(nn)
+        psi = random_mps_spinless_fermions(N, D_total, sym, nn)
+        leg = psi[psi.first].get_legs(axes=0)
+        assert leg.t == (nn,) and leg.s == -1
+        leg = psi[psi.last].get_legs(axes=2)
+        assert leg.t == (n0,) and leg.s == 1
         bds = psi.get_bond_dimensions()
+        assert bds[0] == bds[-1] == 1
+        assert all(bd > D_total/2 for bd in bds[2:-2])
+
+        H = random_mpo_spinless_fermions(N, D_total, sym)
+        leg = H[H.first].get_legs(axes=0)
+        assert leg.t == (n0,) and leg.s == -1
+        leg = H[H.last].get_legs(axes=2)
+        assert leg.t == (n0,) and leg.s == 1
+        bds = H.get_bond_dimensions()
         assert bds[0] == bds[-1] == 1
         assert all(bd > D_total/2 for bd in bds[2:-2])
 
@@ -194,7 +255,7 @@ def test_random_mps():
 def test_generator_mpo():
     # uniform chain with nearest neighbor hopping
     # notation:
-    # * in the sum there are all elements which are connected by multiplication, so \sum_{.} -1 ... shuold be \sum_{.} (-1) ...
+    # * in the sum there are all elements which are connected by multiplication, so \sum_{.} -1 ... should be \sum_{.} (-1) ...
     # * 1j is an imaginary number
     # * multiple sums are supported so you can write \sum_{.} \sum_{.} ...
     # * multiplication of the sum is allowed but '*' or bracket is needed.
@@ -202,117 +263,90 @@ def test_generator_mpo():
     #   E.g.1, 2 \sum... can be written as 2 (\sum...) or 2 * \sum... or (2) * \sum...
     #   E.g.2, \sum... \sum.. write as \sum... * \sum... or (\sum...) (\sum...)
     #   E.g.4, -\sum... is supported and equivalent to (-1) * \sum...
-    H_str = "\sum_{j,k \in rangeNN} t_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in rangeN} mu cp_{i} c_{i}"
+    H_str = "\sum_{j,k \in NN} t_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in sites} mu cp_{i} c_{i}"
     for sym in ['Z2', 'U1']:
         ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
-        for t in [0,0.2, -0.3]:
+        for t in [0, 0.2, -0.3]:
             for mu in [0.2, -0.3]:
-                for N in [2,3]:
-                    example_mapping = (\
-                                        {i: i for i in range(N)},\
-                                        {str(i): i for i in range(N)},\
-                                        {(str(i), 'A'): i for i in range(N)},\
-                    )
-                    example_parameters = (\
-                        {"t": t * np.ones((N,N)), "mu": mu, "rangeN": [i for i in range(N)], "rangeNN": zip([i for i in range(N-1)], [i for i in range(1,N)])},\
-                        {"t": t * np.ones((N,N)), "mu": mu, "rangeN": [str(i) for i in range(N)], "rangeNN": zip([str(i) for i in range(N-1)], [str(i) for i in range(1,N)])},\
-                        {"t": t * np.ones((N,N)), "mu": mu, "rangeN": [(str(i),'A') for i in range(N)], "rangeNN": zip([(str(i),'A') for i in range(N-1)], [(str(i),'A') for i in range(1,N)])},\
-                    )
+                for N in [3, 4]:
+                    example_mapping = [{i: i for i in range(N)},
+                                       {str(i): i for i in range(N)},
+                                       {(str(i), 'A'): i for i in range(N)}]
+                    example_parameters = \
+                        [{"t": t * np.ones((N,N)), "mu": mu, "sites": list(range(N)), "NN": list((i, i+1) for i in range(N - 1))},
+                         {"t": t * np.ones((N,N)), "mu": mu, "sites": [str(i) for i in range(N)], "NN": list((str(i), str(i+1)) for i in range(N - 1))},
+                         {"t": t * np.ones((N,N)), "mu": mu, "sites": [(str(i),'A') for i in range(N)], "NN": list(((str(i), 'A'), (str(i+1), 'A')) for i in range(N - 1))}]
+
                     for (emap, eparam) in zip(example_mapping, example_parameters):
                         generate = mps.Generator(N, ops, map=emap)
+
+                        H1 = generate.mpo_from_latex(H_str, eparam)
+                        H2 = mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=generate.config)
+                        H3 = mpo_nn_hopping_latex(N=N, t=t, mu=mu, sym=sym, config=cfg)
+
                         generate.random_seed(seed=0)
-                        
-                        H_ref = mpo_XX_model(generate.config, N=N, t=t, mu=mu)
-                        H = generate.mpo_from_latex(H_str, eparam)
+                        psi = generate.random_mps(D_total=8, n=0) + generate.random_mps(D_total=8, n=1)
 
-                        psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
-                        
-                        x_ref = mps.measure_mpo(psi, H_ref, psi).item()
-                        x = mps.measure_mpo(psi, H, psi).item()
-                        assert abs(x_ref - x) < tol
+                        x1 = mps.vdot(psi, H1, psi)
+                        x2 = mps.vdot(psi, H2, psi)
+                        x3 = mps.vdot(psi, H3, psi)
+                        assert abs(x1.item() - x2.item()) < tol
+                        assert abs(x1.item() - x3.item()) < tol
 
-                        psi.canonize_(to='first')
-                        psi.canonize_(to='last')
-                        x_ref = mps.measure_mpo(psi, H_ref, psi).item()
-                        x = mps.measure_mpo(psi, H, psi).item()
-                        assert abs(x_ref - x) < tol
 
 def test_mpo_from_latex():
-    
     # the model is random with handom hopping and on-site energies. sym is symmetry for tensors we will use
-    sym, N = 'U1', 3
-    
+    sym, N = 'U1', 5
+
     # generate set of basic ops for the model we want to work with
     ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
-    
+
     # generate data for random Hamiltonian
-    amplitudes1 = np.random.rand(N, N)
-    param1 = amplitudes1 - np.diag(np.diag(amplitudes1))
-    param2 = np.diag(amplitudes1)
-    
-    # use this map which is used for naming the sites in MPO
-    # maps between iteractors and MPO
-    emap = {i: i for i in range(N)}
-    
+    J = np.random.rand(N, N)
+    t = np.triu(J, 1)
+    mu = np.diag(J)
+
     # create a generator initialized for emap mapping
-    generate = mps.Generator(N, ops, map=emap)
-    generate.random_seed(seed=0)
-    
+    generate = mps.Generator(N, ops)
+
     # define parameters for automatic generator and Hamiltonian in a latex-like form
-    eparam ={"t": param1, "mu": param2, "rangeN": range(N)}
-    h_input = "\sum_{j\in rangeN} \sum_{k\in rangeN} t_{j,k} (cp_{j} c_{k} + cp_{k} c_{j}) + \
-            \sum_{j\in rangeN} mu_{j} cp_{j} c_{j}"
-    
-    # generate MPO from latex-like input
-    h_str = generate.mpo_from_latex(h_input, eparam)
+    eparam ={"t": t, "mu": mu, 'sites': list(range(N))}
+    h_input = "\sum_{j\in sites} \sum_{k\in sites} t_{j,k} (cp_{j} c_{k} + cp_{k} c_{j}) + \
+               \sum_{j\in sites} mu_{j} cp_{j} c_{j}"
 
-    # generate Hamiltonian manually
-    man_input = []
-    for j, val in enumerate(param2):
-        man_input.append(mps.Hterm(val, (j, j,), (ops.cp(), ops.c(),)))
-    
-    for j, row in enumerate(param1):
-        for k, val in enumerate(row):
-            man_input.append(mps.Hterm(val, (j, k,), (ops.cp(), ops.c(),)))
-            man_input.append(mps.Hterm(val, (k, j,), (ops.cp(), ops.c(),)))
-    h_man = mps.generate_mpo(generate.I(), man_input)
-    
-    # test the result by comparing expectation value for a steady state.
-    # use random seed to generate mps
-    generate.random_seed(seed=0)
+    H1 = generate.mpo_from_latex(h_input, eparam)
+    H2 = mpo_hopping_Hterm(N, J, sym=sym, config=cfg)
+    H3 = mpo_hopping_latex(N, J, sym=sym, config=cfg)
 
-    # generate mps and compare overlaps
-    psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
-    x_man = mps.measure_mpo(psi, h_man, psi).item()
-    x_str = mps.measure_mpo(psi, h_str, psi).item()
-    
-    assert abs(x_man - x_str) < tol
+    tmp = mps.vdot(H1, H2) / (H1.norm() * H2.norm())
+    assert pytest.approx(tmp.item(), rel=tol) == 1
+    tmp = mps.vdot(H1, H3) / (H1.norm() * H3.norm())
+    assert pytest.approx(tmp.item(), rel=tol) == 1
 
 
 def test_mpo_from_templete():
-    
     # the model is random with handom hopping and on-site energies. sym is symmetry for tensors we will use
     sym, N = 'U1', 3
-    
+
     # generate set of basic ops for the model we want to work with
     ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
-    
+
     # generate data for random Hamiltonian
     amplitudes1 = np.random.rand(N, N)
     amplitudes1 = 0.5 * (amplitudes1 + amplitudes1.transpose())
-    
+
     # use this map which is used for naming the sites in MPO
     # maps between iteractors and MPO
     emap = {i: i for i in range(N)}
-    
+
     # create a generator initialized for emap mapping
     generate = mps.Generator(N, ops, map=emap)
     generate.random_seed(seed=0)
-    
+
     # define parameters for automatic generator and Hamiltonian in a latex-like form
-    eparam ={"A": amplitudes1, "rangeN": range(N)}
-    h_input = "\sum_{j\in rangeN} \sum_{k\in rangeN} A_{j,k} cp_{j} c_{k}"
-    
+    eparam ={"A": amplitudes1, "sites": range(N)}
+    h_input = "\sum_{j\in sites} \sum_{k\in sites} A_{j,k} cp_{j} c_{k}"
+
     # generate MPO from latex-like input
     h_str = generate.mpo_from_latex(h_input, eparam)
 
@@ -332,8 +366,8 @@ def test_mpo_from_templete():
     psi = generate.random_mps(D_total=8, n=0) + generate.random_mps( D_total=8, n=1)
     x_man = mps.measure_mpo(psi, h_man, psi).item()
     x_str = mps.measure_mpo(psi, h_str, psi).item()
-    
     assert abs(x_man - x_str) < tol
+
 
 def mps_basis_ex(config):
     plus = yast.Tensor(config=config, s=[1])
@@ -341,6 +375,7 @@ def mps_basis_ex(config):
     minus = yast.Tensor(config=config, s=[1])
     minus.set_block(val=[1, 0],Ds=(2,))
     return plus, minus
+
 
 def mpo_basis_ex(config):
     cpc = yast.Tensor(config=config, s=[1, -1])
@@ -351,18 +386,15 @@ def mpo_basis_ex(config):
     I.set_block(val=[[1,0],[0,1]],Ds=(2,2,))
     return cpc, ccp, I
 
+
 def test_generator_mps():
     N = 3
-    
     cpc, ccp, I = mpo_basis_ex(cfg)
-    
     ops = yast.operators.General({'cpc': lambda j: cpc, 'ccp': lambda j: ccp, 'I': lambda j: I})
-        
     emap = {str(i): i for i in range(N)}
-    
     generate = mps.Generator(N, ops, map=emap)
     generate.random_seed(seed=0)
-    
+
     # generate from LaTeX-like instruction
     A = np.random.rand(2)
     psi_str = "A_{0} Plus_{0} Plus_{1} Plus_{2} + A_{1} Minus_{0} Minus_{1} Minus_{2}"
@@ -371,7 +403,7 @@ def test_generator_mps():
     psi_ltx = generate.mps_from_latex(psi_str, \
         vectors = {'Plus': lambda j: plus, 'Minus': lambda j: minus}, \
         parameters = {'A': A})
-    
+
     psi_tmpl = generate.mps_from_templete(
         [mps.single_term((('A','0'),('Plus','0'),('Plus','1'),('Plus','2'))), \
         mps.single_term((('A','1'),('Minus','0'),('Minus','1'),('Minus','2')))], \
@@ -381,8 +413,9 @@ def test_generator_mps():
     psi = generate.random_mps(D_total=8)
     assert mps.measure_overlap(psi_tmpl, psi) == mps.measure_overlap(psi_ltx, psi)
 
+
 if __name__ == "__main__":
-    test_random_mps()
+    test_generate_random_mps()
     test_generator_mps()
     test_generator_mpo()
     test_mpo_from_latex()

@@ -16,3 +16,8 @@ of the same or different MPS.
 
 .. autofunction:: yast.tn.mps.measure_mpo
 
+
+Shorthand notation
+==================
+
+.. autofunction:: yast.tn.mps.vdot

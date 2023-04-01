@@ -222,10 +222,10 @@ class Peps(Lattice):
             site = (nx, self.Ny-1)
             A = self[site]
             if A.ndim == 3:
-                legA = A.get_legs(axis=1)
+                legA = A.get_legs(axes=1)
                 _, legA = tensor.leg_undo_product(legA)
             else:
-                legA = A.get_legs(axis=3)
+                legA = A.get_legs(axes=3)
             legAAb = tensor.leg_outer_product(legA, legA.conj())
             psi[nx] = initialize.ones(config=cfg, legs=[leg0, legAAb.conj(), leg0.conj()])
 

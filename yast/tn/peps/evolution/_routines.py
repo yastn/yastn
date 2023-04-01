@@ -141,8 +141,8 @@ def truncation_step(RA, RB, opts_svd, normalize=False):
     if normalize:
         S = S / S.norm(p='inf')
     sS = S.sqrt()
-    MA = sS.broadcast(UA, axis=1)
-    MB = sS.broadcast(UB, axis=0)
+    MA = sS.broadcast(UA, axes=1)
+    MB = sS.broadcast(UB, axes=0)
     return MA, MB
 
 
@@ -317,7 +317,7 @@ def optimal_pinv(gg, J, gRR):
     results = []
     for c_off in cutoff_list:
         Sd = S.reciprocal(cutoff=c_off)
-        SdUdJ = Sd.broadcast(UdJ, axis=0)
+        SdUdJ = Sd.broadcast(UdJ, axes=0)
         # Mnew = tensordot(SdUdJ, V, axes=(0, 0), conj=(0, 1))
         Mnew = U @ SdUdJ
 
