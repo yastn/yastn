@@ -35,6 +35,7 @@ def nn_avg(peps, env, op):
         res_hor = []
         res_ver = []
         opt = op.get(ms)
+        
         for bds_h in peps.bonds(dirn='h'):  # correlators on all horizontal bonds
             AAb = {'l': fPEPS_2layers(peps[bds_h.site_0]), 'r': fPEPS_2layers(peps[bds_h.site_1])}
             AAbo = ret_AAbs(peps, bds_h, opt, orient='h')
@@ -57,23 +58,23 @@ def nn_avg(peps, env, op):
 def nn_bond(peps, env, op, bd):
 
     r"""
-    Calculates two-site nearest-neighbor expecation value for a single NN site.
+    Returns expecation value for specified nearest-neighbor bond.
 
     Parameters
     ----------
-    peps : class
+    peps : class Peps
            class containing peps data along with the lattice structure data
 
-    env: class
-        class containing ctm environmental tensors along with lattice structure data
+    env  : class CtmEnv
+         Class containing ctm environmental tensors along with lattice structure data
 
-    op: dict
-        contains NN pair of obsevables with dictionary key 'l' corresponding to
-          the observable on the left and key 'r' corresponding to
-          the observable on the right
+    op   : dict
+         Contains NN pair of obsevables with dictionary key 'l' corresponding to
+         the observable on the left and key 'r' corresponding to
+         the observable on the right
 
     bd: NamedTuple
-        contians info about NN sites where the oexpectation value is to be calculated
+        contains info about NN sites where the oexpectation value is to be calculated
  
     """
 
@@ -86,15 +87,15 @@ def nn_bond(peps, env, op, bd):
 
 def measure_one_site_spin(A, ms, env, op=None):
     r"""
-    Measures the overlap of bra and ket on a single site.
+    Returns the overlap of bra and ket on a single site.
 
     Parameters
     ----------
-    A : single peps tensor
+    A : single peps tensor at site ms
 
-    ms : site
+    ms : site where we want to measure some observable
 
-    env: class
+    env: class CtmEnv
         class containing ctm environmental tensors along with lattice structure data
     
     op: single site operator
@@ -119,19 +120,17 @@ def one_site_avg(peps, env, op):
 
     Parameters
     ----------
-    peps : class
+    peps : class Peps
         class containing peps data along with the lattice structure data
 
-    env: class
-        class containing ctm environmental tensors along with lattice structure data
+    env: class CtmEnv
+        class containing ctm environment tensors along with lattice structure data
 
     op: single site operator
 
     Returns
     -------
-    mean_one_site: expectation value of one site observables averaged over all the sites
-
-    cs_val: expectation value of the central site
+    mean_one_site: expectation value of one site observables averaged over all the lattice sites
     
     mat: expectation value of all the sites in a 2D table form
     """
@@ -140,18 +139,23 @@ def one_site_avg(peps, env, op):
 
     target_site = (round((peps.Nx-1)*0.5), round((peps.Ny-1)*0.5))
     peps = check_consistency_tensors(peps)
-    one_site_exp = np.zeros((peps.Nx*peps.Ny))
     s = 0
-    for ms in peps.sites():
+
+    if peps.lattice == 'checkerboard':
+        lists = [(0,0), (0,1)]
+    else:
+        lists = peps.sites()
+    
+    one_site_exp = np.zeros(len(lists))
+
+    for ms in lists:
         Am = peps[ms]
         val_op = measure_one_site_spin(Am, ms, env, op=op)
         val_norm = measure_one_site_spin(Am, ms, env, op=None)
         one_site_exp[s] = val_op/val_norm   # expectation value of particular target site
         mat[ms[0], ms[1]] = one_site_exp[s]
-        if ms == target_site:
-            cs_val = one_site_exp[s]
         s = s+1
     mean_one_site = np.mean(one_site_exp)
 
-    return mean_one_site, cs_val, mat
+    return mean_one_site, mat
        
