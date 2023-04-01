@@ -206,6 +206,6 @@ v0.9
 - `mps.dmrg_`, `mps.variational_` can be made into generator by providing `iterator_step` : int, that gives the number of forth-and-back sweeps after which generator yields snapshot.
 
 13-03-2023
-- raname `mps.variational_` to `mps.compression_`. New more flexible syntac specifying target state.
-- change axis to axes in parameters of all functions that can take plural.
+- raname `mps.variational_` to `mps.compression_`. New more flexible syntax specifying target state.
+- change axis to axes in parameters of all functions that can take multiple axes.
 
