@@ -422,9 +422,9 @@ def move_horizontal(envn, env, AAb, proj, ms):
         envn[ms].l = ncon((proj[left].hlb, tt_l), ([2, 1, -0], [2, 1, -2, -1]))
 
     if not(right is None):
-        tt_r = ncon((env[right].r, proj[right].hrt), ([1, -2, -3], [1, -1, -0]))
-        tt_r = append_a_tr(tt_r, AAb[right])
-        envn[ms].r = ncon((tt_r, proj[right].hrb), ([-0, -1, 2, 1], [2, 1, -3]))
+        tt_r = tensordot(env[right].r, proj[right].hrb, axes=(2,0))
+        tt_r = append_a_br(tt_r, AAb[right])
+        envn[ms].r = ncon((tt_r, proj[right].hrt), ([1, 2, -3, -2], [1, 2, -1]))
 
     envn[ms].tl = envn[ms].tl/ envn[ms].tl.norm(p='inf')
     envn[ms].l = envn[ms].l/ envn[ms].l.norm(p='inf')
@@ -504,9 +504,9 @@ def move_vertical(envn, env, AAb, proj, ms):
         ll_t = append_a_tl(ll_t, AAb[top])
         envn[ms].t = ncon((ll_t, proj[top].vtr), ([-0, -1, 2, 1], [2, 1, -2]))
     if not(bottom is None):
-        ll_b = tensordot(env[bottom].b, proj[bottom].vbl, axes=(2, 0))
-        ll_b = append_a_bl(ll_b, AAb[bottom])
-        envn[ms].b = ncon((ll_b, proj[bottom].vbr), ([2, 1, -2, -1], [2, 1, -0]))
+        ll_b = ncon((proj[bottom].vbr, env[bottom].b), ([1, -2, -1], [1, -3, -4]))
+        ll_b = append_a_br(ll_b, AAb[bottom])
+        envn[ms].b = ncon((ll_b, proj[bottom].vbl), ([-0, -1, 1, 2], [1, 2, -3]))
 
     envn[ms].tl = envn[ms].tl/ envn[ms].tl.norm(p='inf')
     envn[ms].t = envn[ms].t/ envn[ms].t.norm(p='inf')
