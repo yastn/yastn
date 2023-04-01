@@ -19,7 +19,7 @@ def test_broadcast_dense():
     # broadcast on tensor b
     b = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
 
-    r1 = a.broadcast(b, axis=1)
+    r1 = a.broadcast(b, axes=1)
     r2 = a1.tensordot(b, axes=(1, 1)).transpose((1, 0, 2, 3))
     r3 = a.tensordot(b, axes=(1, 1)).transpose((1, 0, 2, 3))
     r4 = b.tensordot(a, axes=(1, 1)).transpose((0, 3, 1, 2))
@@ -32,8 +32,8 @@ def test_broadcast_dense():
     a1 = a.diag()  # 5x5 isdiag == False
     b = yast.randC(config=config_dense, s=(1, -1, 1, -1), D=(2, 5, 2, 5))
 
-    r1 = a.conj().broadcast(b, axis=1)
-    r2 = a.broadcast(b.conj(), axis=1).conj()
+    r1 = a.conj().broadcast(b, axes=1)
+    r2 = a.broadcast(b.conj(), axes=1).conj()
     r3 = a1.tensordot(b, axes=(0, 1), conj=(1, 0)).transpose((1, 0, 2, 3))
     r5 = a.tensordot(b, axes=(0, 1), conj=(1, 0)).transpose((1, 0, 2, 3))
     r4 = b.tensordot(a, axes=(1, 0), conj=(0, 1)).transpose((0, 3, 1, 2))
@@ -66,7 +66,7 @@ def test_broadcast_U1():
     assert b.get_shape() == (6, 15, 24, 33)
 
     # broadcast
-    r1 = a.broadcast(b, axis=2)
+    r1 = a.broadcast(b, axes=2)
     r2 = a.tensordot(b, axes=(1, 2)).transpose((1, 2, 0, 3))
     r3 = b.tensordot(a1, axes=(2, 1)).transpose((0, 1, 3, 2))
     r4 = b.tensordot(a, axes=(2, 1)).transpose((0, 1, 3, 2))
@@ -97,7 +97,7 @@ def test_broadcast_Z2xU1():
     c = yast.eye(config=config_Z2xU1, legs=[leg0c, leg0c.conj()])
 
     # broadcast
-    r1 = b.broadcast(a, axis=0)
+    r1 = b.broadcast(a, axes=0)
     r2 = b.tensordot(a, axes=(0, 0))
     r3 = a.tensordot(b, axes=(0, 0)).transpose((3, 0, 1, 2))
     assert all(x.is_consistent() for x in [r1, r2, r3])
@@ -105,8 +105,8 @@ def test_broadcast_Z2xU1():
     assert not any((r1.isdiag, r2.isdiag, r3.isdiag))
 
     # broadcast on diagonal
-    r4 = c.broadcast(b, axis=1)
-    r5 = b.broadcast(c, axis=1)
+    r4 = c.broadcast(b, axes=1)
+    r5 = b.broadcast(c, axes=1)
     assert r4.is_consistent()
     assert r4.isdiag
     nr4 = r4.to_numpy()
@@ -115,7 +115,7 @@ def test_broadcast_Z2xU1():
     assert (r4 - r5).norm() < tol
 
     # broadcast tensor b over multiple tensors in single call
-    r1p, r5p = b.broadcast(a, c, axis=(0, 1))
+    r1p, r5p = b.broadcast(a, c, axes=(0, 1))
     assert (r1 - r1p).norm() < tol
     assert (r5 - r5p).norm() < tol
 
@@ -128,21 +128,21 @@ def test_broadcast_exceptions():
                     t=((-1, 1, 2), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
                     D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
     with pytest.raises(yast.YastError):
-        _ = a_nondiag.broadcast(b, axis=2)
+        _ = a_nondiag.broadcast(b, axes=2)
         # First tensor should be diagonal.
     with pytest.raises(yast.YastError):
         bmf = b.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
-        _ = a.broadcast(bmf, axis=1)  
-        # Second tensor`s leg specified by axis cannot be fused.
+        _ = a.broadcast(bmf, axes=1)  
+        # Second tensor`s leg specified by axes cannot be fused.
     with pytest.raises(yast.YastError):
         bhf = b.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
-        _ = a.broadcast(bhf, axis=1)
-        # Second tensor`s leg specified by axis cannot be fused.
+        _ = a.broadcast(bhf, axes=1)
+        # Second tensor`s leg specified by axes cannot be fused.
     with pytest.raises(yast.YastError):
-        a.broadcast(b, axis=1)  # Bond dimensions do not match.
+        a.broadcast(b, axes=1)  # Bond dimensions do not match.
     with pytest.raises(yast.YastError):
-        _, _ = a.broadcast(b, b, axis=(1, 1, 1))
-        # There should be exactly one axis for each tensor to be projected.
+        _, _ = a.broadcast(b, b, axes=(1, 1, 1))
+        # There should be exactly one axes for each tensor to be projected.
 
 
 if __name__ == '__main__':

@@ -11,6 +11,7 @@ API: yast and yast.Tensor
 -------------------------
 
 .. toctree::
+   :maxdepth: 2
    :glob:
 
    tensor/configuration
@@ -22,6 +23,7 @@ API: yast and yast.Tensor
    tensor/algebra
    tensor/output
    tensor/autograd
+   tensor/krylov
 
 Examples: basics of usage
 -------------------------
@@ -29,4 +31,6 @@ Examples: basics of usage
 .. toctree::
    :glob:
 
-   examples/tensor/*
+   examples/tensor/init
+   examples/tensor/algebra
+   examples/tensor/decomposition

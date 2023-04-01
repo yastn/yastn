@@ -124,6 +124,7 @@ class Leg:
     def history(self):
         """
         Show str representation of Leg fusion history.
+
         'o' marks original legs,
         's' is for sum (block),
         'p' is for product fuse(..., mode='hard'),
@@ -140,14 +141,12 @@ class Leg:
         hf = self.legs[0]  # hard fusion
         return _str_tree(hf.tree, hf.op)
 
-
     def is_fused(self):
         """ Return True if the leg is a result of some fusion, and False is it is elementary. """
         return len(self.legs) > 1 or self.legs[0].tree[0] > 1
 
 
-
-def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, positive=False):
+def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False):
     """
     Creat :class:`yast.Leg`. Randomly distribute bond dimensions to sectors according to Gaussian distribution.
 
@@ -163,7 +162,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, positive=Fals
         standard deviation of the distribution
     D_total : int
         total bond dimension of the leg, to be distributed to sectors
-    positive : bool
+    nonnegative : bool
         If true, cut off negative charges
 
     Returns
@@ -205,7 +204,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, positive=Fals
         comb_t = list(_flatten(comb_t))
         comb_t = np.array(comb_t, dtype=int).reshape((lcomb_t, len(ss), len(n)))
         ts = config.sym.fuse(comb_t, ss, -s)
-    if positive:
+    if nonnegative:
         ts = ts[np.all(ts >= 0, axis=1)]
 
     uts = tuple(set(tuple(x.flat) for x in ts))

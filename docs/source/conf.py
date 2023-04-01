@@ -18,8 +18,8 @@ sys.path.insert(0, os.path.abspath('../..'))
 # -- Project information -----------------------------------------------------
 
 project = 'YAST'
-copyright = '2022, Marek M. Rams, Gabriela Wójtowicz, Juraj Hasik'
-author = 'Marek M. Rams, Gabriela Wójtowicz, Juraj Hasik'
+copyright = '2023, Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, Juraj Hasik'
+author = 'Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, Juraj Hasik'
 
 
 # -- General configuration ---------------------------------------------------
@@ -74,7 +74,7 @@ rst_prolog = """
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+# html_static_path = ['_static']
 
 # html_sidebars = {
 #     '**': ['localtoc.html', 'relations.html', 'sourcelink.html', 'searchbox.html', 'customlinks.html']

@@ -251,33 +251,34 @@ def get_blocks_shape(a):
     return a.struct.D
 
 
-def get_shape(a, axis=None, native=False):
+def get_shape(a, axes=None, native=False):
     r"""
     Return effective bond dimensions as sum of dimensions along sectors for each leg.
 
     Parameters
     ----------
-    axis : int or tuple[int]
-        indices of legs; If axis is ``None`` returns for all legs (default).
+    axes : int or tuple[int]
+        indices of legs; If axes is ``None`` returns for all legs (default).
 
     Returns
     -------
     shape : int or tuple[int]
         effective bond dimensions of legs specified by axes
     """
-    if axis is None:
-        axis = tuple(n for n in range(a.ndim_n if native else a.ndim))
-    if isinstance(axis, int):
-        return sum(a.get_legs(axis, native=native).D)
-    return tuple(sum(leg.D) for leg in a.get_legs(axis, native=native))
+    if axes is None:
+        axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
+    if isinstance(axes, int):
+        return sum(a.get_legs(axes, native=native).D)
+    return tuple(sum(leg.D) for leg in a.get_legs(axes, native=native))
 
 
 def get_dtype(a):
     """
+    Returns data ``dtype``.
+    
     Returns
     -------
-    dtype : dtype
-        Returns data ``dtype``.
+    dtype
     """
     return a.config.backend.get_dtype(a._data)
 
@@ -330,13 +331,13 @@ def get_leg_fusion(a, axes=None):  # pragma: no cover
     return {'meta': tuple(a.mfs(n) for n in axes), 'hard': tuple(a.hfs(n) for n in axes)}
 
 
-def get_legs(a, axis=None, native=False):
+def get_legs(a, axes=None, native=False):
     r"""
     Return a leg or a set of legs of a Tensor.
 
     Parameters
     ----------
-    axis : int or tuple[int] or None
+    axes : int or tuple[int] or None
         indices of legs to retrieve. If ``None`` return list with all legs.
 
     native : bool
@@ -344,14 +345,15 @@ def get_legs(a, axis=None, native=False):
 
     Returns
     -------
-        Leg if axis is `int`, otherwise tuple[Leg].
+        Leg if axes is `int`, otherwise tuple[Leg].
     """
     legs = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
-    if axis is None:
-        axis = tuple(range(a.ndim)) if not native else tuple(range(a.ndim_n))
-    axes, = _clear_axes(axis)
+    if axes is None:
+        axes = tuple(range(a.ndim)) if not native else tuple(range(a.ndim_n))
+    multiple_legs = hasattr(axes, '__iter__')
+    axes, = _clear_axes(axes)
     for ax in axes:
         legs_ax = []
         if not native:
@@ -374,7 +376,7 @@ def get_legs(a, axis=None, native=False):
             legs.append(Leg(a.config.sym, s=legs_ax[0].s, t=t, D=D, fusion=mf, legs=tuple(legs_ax), _verified=True))
         else:
             legs.append(legs_ax.pop())
-    return tuple(legs) if hasattr(axis, '__iter__') else legs.pop()
+    return tuple(legs) if multiple_legs else legs.pop()
 
 
 def get_leg_structure(a, axis, native=False):  # pragma: no cover
@@ -589,7 +591,7 @@ def to_number(a, part=None):
 
     Returns
     -------
-    out : scalar
+    out : number
         the type of the scalar is given by the backend.
     """
     size = a.size
@@ -611,7 +613,7 @@ def item(a):
 
     Returns
     -------
-    out : scalar
+    out : number
     """
     size = a.size
     if size == 1:

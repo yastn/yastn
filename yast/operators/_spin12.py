@@ -22,7 +22,7 @@ class Spin12(meta_operators):
         Notes
         -----
         The following basis ordering and charge conventions are assumed
-            
+
             * For :code:`sym='dense'`, the basis order is (z=+1, z=-1).
             * For :code:`sym='Z2'`, charge t=0 -> z=1, t=1 -> z=-1; i.e., :math:`z = e^{i \pi t}`.
             * For :code:`sym='U1'`, charge t=-1 -> z=-1, t=1 -> z=1; i.e., z = t

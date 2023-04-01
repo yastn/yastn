@@ -312,6 +312,10 @@ def eigh(data, meta=None, sizes=(1, 1)):
     return np.linalg.eigh(data)  # S, U
 
 
+def eig(T):
+    return np.linalg.eig(T)  # S, U
+
+
 def qr(data, meta, sizes):
     Qdata = np.empty((sizes[0],), dtype=data.dtype)
     Rdata = np.empty((sizes[1],), dtype=data.dtype)
@@ -331,8 +335,8 @@ def argsort(data):
 def eigs_which(val, which):
     if which == 'LM':
         return (-abs(val)).argsort()
-    if which == 'SM':
-        return abs(val).argsort()
+    # if which == 'SM':
+    #     return abs(val).argsort()
     if which == 'LR':
         return (-val.real).argsort()
     # elif which == 'SR':

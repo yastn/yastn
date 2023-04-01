@@ -13,13 +13,13 @@ def test_leg():
     """ basic operations with yast.Leg"""
     # U1
     leg = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
-    print(leg)
+    assert str(leg) == 'Leg(sym=U(1), s=1, t=((-1,), (0,), (1,)), D=(2, 3, 4), hist=o)'
 
     # flipping signature
     legc = leg.conj()
     assert leg.s == -legc.s
     assert not leg.is_fused()
-    print(legc)
+    assert str(legc) == 'Leg(sym=U(1), s=-1, t=((-1,), (0,), (1,)), D=(2, 3, 4), hist=o)'
 
     # order of provided charges (with corresponding bond dimensions) does not matter
     leg_unsorted = yast.Leg(config_U1, s=1, t=(1, 0, -1), D=(4, 3, 2))
@@ -40,12 +40,29 @@ def test_leg():
 
 
 def test_random_leg():
-    leg = yast.random_leg(config_U1, s=1, n=0, D_total=100)
-    print(leg)
-    leg = yast.random_leg(config_U1, s=1, n=0, D_total=100, positive=True)
-    print(leg)
-    leg = yast.random_leg(config_Z3, s=1, n=1, D_total=35)
-    print(leg)
+    leg = yast.random_leg(config_U1, n=0, s=1, D_total=1024)
+    assert sum(leg.D) == 1024 and sum(t[0] * D for t, D in zip(leg.t, leg.D)) / 1024 < 0.2
+    leg = yast.random_leg(config_U1, s=1, D_total=1024)
+    assert sum(leg.D) == 1024 and sum(t[0] * D for t, D in zip(leg.t, leg.D)) / 1024 < 0.2
+    leg = yast.random_leg(config_U1, n=1, s=1, D_total=1024)
+    assert sum(leg.D) == 1024 and sum((t[0] - 1) * D for t, D in zip(leg.t, leg.D)) / 1024 < 0.2
+    leg = yast.random_leg(config_U1, s=1, n=0, D_total=1024, nonnegative=True)
+    assert sum(leg.D) == 1024 and all(t[0] >= 0 for t in leg.t)
+    leg = yast.random_leg(config_Z3, s=1, n=2, D_total=1024)
+    assert sum(leg.D) == 1024 and leg.t == ((0,), (1,), (2,))
+    with pytest.raises(yast.YastError):
+        yast.random_leg(config_U1, n=(0, 0), D_total=1024)
+        # len(n) is not consistent with provided symmetry.
+
+    leg0 = yast.Leg(config_U1, s=-1, t=(0, 1), D=(1, 1))
+    # limit charges on random leg, to be consistent with provided legs (e.g. for creation of a tensor with 3 legs)
+    leg = yast.random_leg(config_U1, s=1, n=0, D_total=1024, legs=[leg0, leg0])
+    assert sum(leg.D) == 1024 and leg.t == ((0,), (1,), (2,))
+    leg = yast.random_leg(config_U1, s=1, n=0, D_total=1024, legs=[leg0.conj(), leg0])
+    assert sum(leg.D) == 1024 and leg.t == ((-1,), (0,), (1,))
+
+    leg_dense = yast.random_leg(yast.make_config(), s=1, D_total=10)
+    assert leg_dense.D == (10,) and leg_dense.t == ((),)
 
     leg0 = yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
     leg1 = yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 4))
@@ -103,7 +120,7 @@ def test_leg_hard_fusion():
     assert yast.norm(a - b) < tol
 
     cf =  af.fuse_legs(axes=[(0, 1)], mode='meta')
-    assert cf.get_legs(axis=0).history() == 'm(p(oo)p(oo))'
+    assert cf.get_legs(axes=0).history() == 'm(p(oo)p(oo))'
 
 
 def test_leg_exceptions():

@@ -27,7 +27,7 @@ A single tensor :math:`A_j` is a rank-3 array of size :math:`D_{j-1,j} \times d_
 
 
 The MPS forms one-dimensional structure with each tensor having a physical dimension *d* (:math:`d_j` for general case when particles/qudits are different) and virtual dimensions 
-:math:`D_{i,j}` connecting *i*-th particle with *j*-th particle. *YAMPS* allows to perform computation on one dimensional MPS with open boundary conditions. 
+:math:`D_{i,j}` connecting *i*-th particle with *j*-th particle. YAST implements operations on one dimensional MPS with open boundary conditions. 
 The schematic picture for general MPS is shown below. Notice that for open boundary condition we always have edge tensor with dimension :math:`1\times d_0 \times D_{0,1}` 
 on the left edge and :math:`D_{N-2,N-1} \times d_{N-1} \times` on the right edge.
 
@@ -62,7 +62,7 @@ Matrix product operator (MPO)
                      |
                     d_j
 
-`YAMPS` allows to encode operators, e.g., Hamiltonian or other operators associated with expectation values, under open boundary condition. MPO with open boundary condition has a bond dimension `D=1` on the edges of the MPO chain. 
+API allows to encode operators, e.g., Hamiltonian or other operators associated with expectation values, under open boundary condition. MPO with open boundary condition has a bond dimension `D=1` on the edges of the MPO chain. 
 
 ::
 
@@ -108,7 +108,7 @@ is an algorithm searching for the MPS which extremizes the expectation value of 
 (:ref:`TDVP<mps/algorithms:time-dependent variational principle (tdvp) algorithm>`) 
 allows for variational approximation of the evolution of a state :math:`\Psi` under a Hamiltonian :math:`\hat H`. 
 The state after an evolution over time `t` is :math:`\Psi(t)=e^{- i t \hat H} \Psi`, with :math:`i` an imaginary unit. 
-`YAMPS` allows to perform TDVP for any MPS under MPO for a time `t` which in general can be complex. 
+TDVP can be performed for any MPS under MPO for a time `t`, real or imaginaty.
 
 
 Measurements

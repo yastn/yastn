@@ -350,20 +350,20 @@ class TestSyntaxGeneral(unittest.TestCase):
         a.get_blocks_charge()
         a.get_blocks_shape()
         a.get_shape()
-        a.get_shape(axis=2)
+        a.get_shape(axes=2)
         a.get_dtype()
         a.dtype
 
         # leg retrival
         legs = a.get_legs()
-        leg = a.get_legs(axis=2)  # legs[2] = leg
+        leg = a.get_legs(axes=2)  # legs[2] = leg
         print(leg.tD) # dict od charges with dimensions spanning the leg
         print(leg)
 
         # output dense
         array = a.to_dense()
         array = a.to_numpy()
-        ls = {1: b.get_legs(axis=1)}
+        ls = {1: b.get_legs(axes=1)}
         array = a.to_dense(legs=ls)  # on selected legs, enforce to include charges read in previous line
         tensor = a.to_nonsymmetric()
 

@@ -51,33 +51,29 @@ class DoublePepsTensor:
     def ndim(self):
         return 4
 
-    def get_shape(self, axis=None):
+    def get_shape(self, axes=None):
         """ Returns the shape of the DoublePepsTensor along the specified axes """
 
-        if axis is None:
-            axis = tuple(range(4))
-        sA = self.A.get_shape(axis=axis)
-        sB = self.Ab.get_shape(axis=axis)
-        if isinstance(axis, int):
+        if axes is None:
+            axes = tuple(range(4))
+        sA = self.A.get_shape(axes=axes)
+        sB = self.Ab.get_shape(axes=axes)
+        if isinstance(axes, int):
             return sA * sB 
         return tuple(x * y for x, y in zip(sA, sB))
 
-    def get_legs(self, axis=None):
+    def get_legs(self, axes=None):
         """ Returns the legs of the DoublePepsTensor along the specified axes. """
-
-        if axis is None:
-            axis = tuple(range(4))
-        axes = (axis,) if isinstance(axis, int) else tuple(axis)
+        if axes is None:
+            axes = tuple(range(4))
+        multiple_legs = hasattr(axes, '__iter__')
+        axes = (axes,) if isinstance(axes, int) else tuple(axes)
         rot = _rotations[self._r]
         axes = tuple(rot[ax] for ax in axes)
-        lts = self.A.get_legs(axis=axes)
-        lbs = self.A.get_legs(axis=axes)
-        if hasattr(axis, '__iter__'):
-            lts, lbs = (lts,), (lbs,)
-        legs = []
-        for lt, lb in zip(lts, lbs):
-            legs.append(leg_outer_product(lt, lb.conj()))
-        return tuple(legs) if hasattr(axis, '__iter__') else legs.pop()
+        lts = self.A.get_legs(axes=axes)
+        lbs = self.Ab.get_legs(axes=axes)
+        legs = tuple(leg_outer_product(lt, lb.conj()) for lt, lb in zip(lts, lbs))
+        return legs if multiple_legs else legs[0]
 
 
     def clone(self):

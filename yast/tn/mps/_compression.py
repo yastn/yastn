@@ -2,11 +2,12 @@
 from typing import NamedTuple
 import logging
 from ._env import Env2, Env3
+from ._mps import MpsMpo
 from ... import initialize, tensor, YastError
 
 logger = logging.Logger('compression')
 
-class variational_out(NamedTuple):
+class compression_out(NamedTuple):
     sweeps : int = 0
     overlap : float = None
     doverlap : float = None
@@ -14,41 +15,47 @@ class variational_out(NamedTuple):
     max_discarded_weight : float = None
 
 
-def variational_(psi, op_or_ket, ket_or_none=None, method='1site',
+def compression_(psi, target, method='1site',
                 overlap_tol=None, Schmidt_tol=None, max_sweeps=1,
-                iterator_step=None, opts_svd=None):
+                iterator_step=None, opts_svd=None, normalize=True):
     r"""
-    Perform DMRG sweeps until convergence, starting from MPS :code:`psi`.
+    Perform variational optimization sweeps until convergence to best approximate the target, starting from MPS/MPO :code:`psi`.
 
-    The outer loop sweeps over MPS updating sites from the first site to last and back.
-    Convergence can be controlled based on energy and/or Schmidt values (which is a more sensitive measure).
-    The DMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
-    or until all convergence measures with provided tolerance change by less then the tolerance.
+    The outer loop sweeps over ``psi`` updating sites from the first site to last and back.
+    Convergence can be controlled based on overlap and/or Schmidt values (which is a more sensitive measure).
+    The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided, it terminates earlier 
+    if the convergence criteria are satisfied: change in overlap or Schmidt values is less then the provided tolerance during a single sweep.
 
+    Works for 
+
+        * optimization against provided MPS: ``target`` is ``Mps`` or list ``[Mps,]``
+        * against MPO acting on MPS: ``target`` is a list ``[Mpo, Mps]``.
+        * against MPO (replacing all Mps's above with Mpo's), i.e., ``[Mpo,]`` or ``[Mpo, Mpo]``
+        * sum of MPS's: target is ``[[Mps],[Mps],...]``
+        * sum of MPO's acting on MPS's: target is ``[[Mpo,Mps], [Mpo,Mps], ...]``
+ 
     Outputs generator if :code:`iterator_step` is given.
-    It allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
+    Generator allows inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------
     psi: yast.tn.mps.MpsMpo
         Initial state. It is updated during execution.
-        It is first canonized to to the first site, if not provided in such a form.
-        State resulting from :code:`dmrg_` is canonized to the first site.
+        It is first canonized to the first site, if not provided in such a form.
+        State resulting from :code:`compression_` is canonized to the first site.
 
-    H: yast.tn.mps.MpsMpo
-        MPO to minimize against.
-
-    project: list(yast.tn.mps.MpsMpo)
-        Optimizes MPS in the subspace orthogonal to MPS's in the list.
+    target: yamps.MpsMpo or list(yamps.MpsMpo)
+        Defines target state. Can be an Mps (target = Mps or (Mps,)),
+        or Mpo acting on Mps (target = (Mpo, Mps)).
 
     method: str
-        Which DMRG variant to use from :code:`'1site'`, :code:`'2site'`
+        Which optimization variant to use from :code:`'1site'`, :code:`'2site'`
 
-    energy_tol: float
-        Convergence tolerance for the change of energy in a single sweep.
-        By default is None, in which case energy convergence is not checked.
+    overlap_tol: float
+        Convergence tolerance for the change of overlap in a single sweep.
+        By default is None, in which case overlap convergence is not checked.
 
-    energy_tol: float
+    Schmidt_tol: float
         Convergence tolerance for the change of Schmidt values on the worst cut/bond in a single sweep.
         By default is None, in which case Schmidt values convergence is not checked.
 
@@ -56,12 +63,8 @@ def variational_(psi, op_or_ket, ket_or_none=None, method='1site',
         Maximal number of sweeps.
 
     iterator_step: int
-        If int, :code:`dmrg_` returns a generator that would yield output after every iterator_step sweeps.
-        Default is None, in which case  :code:`dmrg_` sweeps are performed immidiatly.
-
-    opts_eigs: dict
-        options passed to :meth:`yast.eigs`.
-        If None, use default {'hermitian': True, 'ncv': 3, 'which': 'SR'}
+        If int, :code:`compression_` returns a generator that would yield output after every iterator_step sweeps.
+        Default is None, in which case  :code:`compression_` sweeps are performed immidiatly.
 
     opts_svd: dict
         Options passed to :meth:`yast.svd` used to truncate virtual spaces in :code:`method='2site'`.
@@ -69,30 +72,36 @@ def variational_(psi, op_or_ket, ket_or_none=None, method='1site',
 
     Returns
     -------
-    out: DMRGout(NamedTuple)
-        Includes fields:
-        :code:`sweeps` number of performed dmrg sweeps.
-        :code:`energy` energy after the last sweep.
-        :code:`denergy` absolut value of energy change in the last sweep.
-        :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep
-        :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
+    compression_out(NamedTuple)
+        NamedTuple with fields
+
+            * :code:`sweeps` number of performed sweeps.
+            * :code:`overlap` overlap after the last sweep.
+            * :code:`doverlap` absolute value of overlap change in the last sweep.
+            * :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
+            * :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
-    tmp = _variational_(psi, op_or_ket, ket_or_none, method,
+    tmp = _compression_(psi, target, method,
                         overlap_tol, Schmidt_tol, max_sweeps,
-                        iterator_step, opts_svd)
+                        iterator_step, opts_svd, normalize)
     return tmp if iterator_step else next(tmp)
 
 
-def _variational_(psi, op_or_ket, ket_or_none, method,
+def _compression_(psi, target, method,
                 overlap_tol, Schmidt_tol, max_sweeps,
-                iterator_step, opts_svd):
-    """ Generator for variational_(). """
+                iterator_step, opts_svd, normalize):
+    """ Generator for compression_(). """
 
     if not psi.is_canonical(to='first'):
         psi.canonize_(to='first')
 
-    env = Env2(bra=psi, ket=op_or_ket) if ket_or_none is None else \
-        Env3(bra=psi, op=op_or_ket, ket=ket_or_none)
+    if isinstance(target, MpsMpo):
+        env = Env2(bra=psi, ket=target)
+    elif len(target) == 1:
+        env = Env2(bra=psi, ket=target[0])
+    else:
+        env = Env3(bra=psi, op=target[0], ket=target[1])
+
     env.setup(to='first')
 
     overlap_old = env.measure()
@@ -112,13 +121,17 @@ def _variational_(psi, op_or_ket, ket_or_none, method,
 
     for sweep in range(1, max_sweeps + 1):
         if method == '1site':
-            _variational_1site_sweep_(env, Schmidt=Schmidt)
+            _compression_1site_sweep_(env, Schmidt=Schmidt)
         else: # method == '2site':
-            max_dw = _variational_2site_sweep_(env, opts_svd=opts_svd, Schmidt=Schmidt)
+            max_dw = _compression_2site_sweep_(env, opts_svd=opts_svd, Schmidt=Schmidt)
 
+        psi.factor = 1
         overlap = env.measure()
         doverlap, overlap_old = overlap_old - overlap, overlap
         converged = []
+
+        if not normalize:
+            psi.factor = overlap
 
         if overlap_tol is not None:
             converged.append(abs(doverlap) < overlap_tol)
@@ -133,11 +146,11 @@ def _variational_(psi, op_or_ket, ket_or_none, method,
         if len(converged) > 0 and all(converged):
             break
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
-            yield variational_out(sweep, overlap, doverlap, max_dS, max_dw)
-    yield variational_out(sweep, overlap, doverlap, max_dS, max_dw)
+            yield compression_out(sweep, overlap, doverlap, max_dS, max_dw)
+    yield compression_out(sweep, overlap, doverlap, max_dS, max_dw)
 
 
-def _variational_1site_sweep_(env, Schmidt=None):
+def _compression_1site_sweep_(env, Schmidt=None):
     r"""
     Using :code:`verions='1site'` DMRG, an MPS :code:`psi` with fixed
     virtual spaces is variationally optimized to maximize overlap
@@ -177,17 +190,18 @@ def _variational_1site_sweep_(env, Schmidt=None):
     bra, ket = env.bra, env.ket
     for to in ('last', 'first'):
         for n in bra.sweep(to=to):
+            bra.remove_central()
             bra.A[n] = env.Heff1(ket[n], n)
-            bra.orthogonalize_site(n, to=to)
+            bra.orthogonalize_site(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != bra.first:
                 _, S, _ = bra[bra.pC].svd(sU=1)
                 Schmidt[bra.pC] = S
             env.clear_site(n)
             env.update_env(n, to=to)
-            bra.remove_central()
+    bra.absorb_central(to='first')
 
 
-def _variational_2site_sweep_(env, opts_svd=None, Schmidt=None):
+def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
     """ variational update on 2 sites """
     if opts_svd is None:
         opts_svd = {'tol': 1e-14}
@@ -205,12 +219,13 @@ def _variational_2site_sweep_(env, opts_svd=None, Schmidt=None):
             bra.absorb_central(to=to)
             env.clear_site(n, n + 1)
             env.update_env(n + dn, to=to)
+    bra[bra.first] = bra[bra.first] / bra[bra.first].norm()
     env.update_env(bra.first, to='first')
     return max_disc_weight
 
 
 def zipper(a, b, opts=None):
-    "Apply mpo a on mps/mpo b, performing svd compression during the sweep."
+    "Apply MPO a on MPS/MPS b, performing svd compression during the sweep."
 
     psi = b.clone()
     psi.canonize_(to='last')
@@ -221,7 +236,7 @@ def zipper(a, b, opts=None):
     la, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
     tmp = initialize.ones(b.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
-    tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axis=2)
+    tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axes=2)
 
     for n in psi.sweep(to='first'):
         tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
@@ -233,11 +248,13 @@ def zipper(a, b, opts=None):
         U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1)
 
         mask = tensor.truncation_mask(S, **opts)
-        U, C, V = mask.apply_mask(U, S, V, axis=(2, 0, 0))
+        U, C, V = mask.apply_mask(U, S, V, axes=(2, 0, 0))
 
         psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
         tmp = U @ C
 
-    tmp = tmp.fuse_legs(axes=((0, 1), 2)).drop_leg_history(axis=0)
-    psi[psi.first] = tmp @ psi[psi.first]
+    tmp = tmp.fuse_legs(axes=((0, 1), 2)).drop_leg_history(axes=0)
+    ntmp = tmp.norm()
+    psi[psi.first] = (tmp / ntmp) @ psi[psi.first]
+    psi.factor = a.factor * b.factor * ntmp
     return psi

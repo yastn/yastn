@@ -8,17 +8,16 @@ class SpinlessFermions(meta_operators):
 
     def __init__(self, sym='U1', **kwargs):
         r""" 
-        Standard operators for single fermionic species (2-dimensional Hilbert space).
-        Defines identity, raising and lowering operators, and density operators.
+        Standard operators for single fermionic species and 2-dimensional Hilbert space.
+        Defines identity, creation, annihilation, and density operators.
 
-        Other config parameters can be provided, see :meth:`yast.make_config` ,
-        while :code:`fermionic` is always set to :code:`True` .
+        Parameters
+        ----------
+        sym : str
+            Should be 'Z2' or 'U1'. Fixes symmetry and fermionic fields in config.
 
-        Notes
-        -----
-        The following basis ordering and charge conventions are assumed
-            
-            * For both Z2 and U1, charge.
+        **kwargs : any
+            Passed to :meth:`yast.make_config` to change backend, default_device or other config parameters.
         """
         if sym not in ('Z2', 'U1'):
             raise YastError("For SpinlessFermions sym should be in ('Z2', 'U1').")

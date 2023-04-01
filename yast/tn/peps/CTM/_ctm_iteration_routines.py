@@ -11,7 +11,7 @@ from yast import tensordot, ncon, svd_with_truncation, qr, vdot, initialize
 import yast.tn.peps as peps
 from yast.tn.peps._doublePepsTensor import DoublePepsTensor
 from ._ctm_env import Proj, Local_Projector_Env
-import multiprocess as mp
+# import multiprocess as mp
 import time
 import numpy as np
 
@@ -227,8 +227,8 @@ def proj_Cor(rt, rb, fix_signs, opts_svd):
     rr = tensordot(rt, rb, axes=((1, 2), (1, 2)))
     u, s, v = svd_with_truncation(rr, axes=(0, 1), sU =rt.get_signature()[1], fix_signs=fix_signs, **opts_svd)
     s = s.rsqrt()
-    pt = s.broadcast(tensordot(rb, v, axes=(0, 1), conj=(0, 1)), axis=2)
-    pb = s.broadcast(tensordot(rt, u, axes=(0, 0), conj=(0, 1)), axis=2)
+    pt = s.broadcast(tensordot(rb, v, axes=(0, 1), conj=(0, 1)), axes=2)
+    pb = s.broadcast(tensordot(rt, u, axes=(0, 0), conj=(0, 1)), axes=2)
     return pt, pb
 
 
@@ -506,21 +506,21 @@ def trivial_projector(a, b, c, dirn):
     # trivial tensors to fix the bond dimension of the finite boundary PEPS tensors to 1
 
     if dirn == 'hlt':
-        la, lb, lc = a.get_legs(axis=2), b.get_legs(axis=0), c.get_legs(axis=0)
+        la, lb, lc = a.get_legs(axes=2), b.get_legs(axes=0), c.get_legs(axes=0)
     elif dirn == 'hlb':
-        la, lb, lc = a.get_legs(axis=0), b.get_legs(axis=2), c.get_legs(axis=1)
+        la, lb, lc = a.get_legs(axes=0), b.get_legs(axes=2), c.get_legs(axes=1)
     elif dirn == 'hrt':
-        la, lb, lc = a.get_legs(axis=0), b.get_legs(axis=0), c.get_legs(axis=1)
+        la, lb, lc = a.get_legs(axes=0), b.get_legs(axes=0), c.get_legs(axes=1)
     elif dirn == 'hrb':
-        la, lb, lc = a.get_legs(axis=2), b.get_legs(axis=2), c.get_legs(axis=0)
+        la, lb, lc = a.get_legs(axes=2), b.get_legs(axes=2), c.get_legs(axes=0)
     elif dirn == 'vtl':
-        la, lb, lc = a.get_legs(axis=0), b.get_legs(axis=1), c.get_legs(axis=1)
+        la, lb, lc = a.get_legs(axes=0), b.get_legs(axes=1), c.get_legs(axes=1)
     elif dirn == 'vbl':
-        la, lb, lc = a.get_legs(axis=2), b.get_legs(axis=1), c.get_legs(axis=0)
+        la, lb, lc = a.get_legs(axes=2), b.get_legs(axes=1), c.get_legs(axes=0)
     elif dirn == 'vtr':
-        la, lb, lc = a.get_legs(axis=2), b.get_legs(axis=3), c.get_legs(axis=0)
+        la, lb, lc = a.get_legs(axes=2), b.get_legs(axes=3), c.get_legs(axes=0)
     elif dirn == 'vbr':
-        la, lb, lc = a.get_legs(axis=0), b.get_legs(axis=3), c.get_legs(axis=1)
+        la, lb, lc = a.get_legs(axes=0), b.get_legs(axes=3), c.get_legs(axes=1)
 
     tmp = initialize.ones(b.A.config, legs=[la.conj(), lb.conj(), lc.conj()])
 
@@ -696,7 +696,7 @@ def fPEPS_2layers(A, B=None, op=None, dir=None):
     If dir = '1s', no auxiliary indices are introduced as the operator is local.
     Here spin and ancilla legs of tensors are fused
     """
-    leg = A.get_legs(axis=-1)
+    leg = A.get_legs(axes=-1)
     _, leg = yast.leg_undo_product(leg) # last leg of A should be fused
     fid = yast.eye(config=A.config, legs=[leg, leg.conj()]).diag()
 

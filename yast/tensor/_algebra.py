@@ -7,18 +7,13 @@ __all__ = ['apxb', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwis
 
 def __add__(a, b):
     """
-    Add two tensors, use: tensor + tensor.
+    Add two tensors, use: :math:`a + b`.
 
     Signatures and total charges should match.
 
-    Parameters
-    ----------
-    b: Tensor
-
     Returns
     -------
-    tensor : Tensor
-        result of addition as a new tensor
+    yast.Tensor
     """
     _test_can_be_combined(a, b)
     aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
@@ -28,18 +23,13 @@ def __add__(a, b):
 
 def __sub__(a, b):
     """
-    Subtract two tensors, use: tensor - tensor.
+    Subtract two tensors, use: :math:`a - b`.
 
     Both signatures and total charges should match.
 
-    Parameters
-    ----------
-    b: Tensor
-
     Returns
     -------
-    tensor : Tensor
-        result of subtraction as a new tensor
+    yast.Tensor
     """
     _test_can_be_combined(a, b)
     aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
@@ -53,12 +43,12 @@ def apxb(a, b, x=1):
 
     Parameters
     ----------
-    a, b: Tensor
-    x : scalar
+    a, b : yast.Tensor
+    x : number
 
     Returns
     -------
-    tensor : Tensor
+    yast.Tensor
     """
     _test_can_be_combined(a, b)
     aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
@@ -228,18 +218,14 @@ def _addition_meta(a, b):
 
 def __lt__(a, number):
     """
-    Logical tensor with elements less-than a number (if it makes sense for backend data tensors)
-
-    Parameters
-    ----------
-    number: number
+    Logical tensor with elements less-than a number (if it makes sense for backend data tensors),
+    use: `tensor < number`
 
     Intended for diagonal tensor to be applied as a truncation mask.
 
     Returns
     -------
-    tensor : Tensor
-        result of logical element-wise operation as a new tensor
+    yast.Tensor
     """
     data = a._data < number
     return a._replace(data=data)
@@ -247,18 +233,14 @@ def __lt__(a, number):
 
 def __gt__(a, number):
     """
-    Logical tensor with elements greater-than a number (if it makes sense for backend data tensors)
+    Logical tensor with elements greater-than a number (if it makes sense for backend data tensors),
+    use: `tensor > number`
 
     Intended for diagonal tensor to be applied as a truncation mask.
 
-    Parameters
-    ----------
-    number: number
-
     Returns
     -------
-    tensor : Tensor
-        result of logical element-wise operation as a new tensor
+    yast.Tensor
     """
     data = a._data > number
     return a._replace(data=data)
@@ -266,18 +248,14 @@ def __gt__(a, number):
 
 def __le__(a, number):
     """
-    Logical tensor with elements less-than-or-equal-to a number (if it makes sense for backend data tensors)
+    Logical tensor with elements less-than-or-equal-to a number (if it makes sense for backend data tensors),
+    use: `tensor <= number`
 
     Intended for diagonal tensor to be applied as a truncation mask.
 
-    Parameters
-    ----------
-    number: number
-
     Returns
     -------
-    tensor : Tensor
-        result of logical element-wise operation as a new tensor
+    yast.Tensor
     """
     data = a._data <= number
     return a._replace(data=data)
@@ -285,18 +263,14 @@ def __le__(a, number):
 
 def __ge__(a, number):
     """
-    Logical tensor with elements greater-than-or-equal-to a number (if it makes sense for backend data tensors)
+    Logical tensor with elements greater-than-or-equal-to a number (if it makes sense for backend data tensors),
+    use: `tensor >= number`
 
     Intended for diagonal tensor to be applied as a truncation mask.
 
-    Parameters
-    ----------
-    number: number
-
     Returns
     -------
-    tensor : Tensor
-        result of logical element-wise operation as a new tensor
+    yast.Tensor
     """
     data = a._data >= number
     return a._replace(data=data)
@@ -304,16 +278,11 @@ def __ge__(a, number):
 
 def __mul__(a, number):
     """
-    Multiply tensor by a number, use: number * tensor.
-
-    Parameters
-    ----------
-    number: number
+    Multiply tensor by a number, use: `number * tensor`.
 
     Returns
     -------
-    tensor : Tensor
-        result of multipcilation as a new tensor
+    yast.Tensor
     """
     data = number * a._data
     return a._replace(data=data)
@@ -321,32 +290,22 @@ def __mul__(a, number):
 
 def __rmul__(a, number):
     """
-    Multiply tensor by a number, use: tensor * number.
-
-    Parameters
-    ----------
-    number: number
+    Multiply tensor by a number, use: `tensor * number`.
 
     Returns
     -------
-    tensor : Tensor
-        result of multipcilation as a new tensor
+    yast.Tensor
     """
     return __mul__(a, number)
 
 
 def __pow__(a, exponent):
     """
-    Element-wise exponent of tensor, use: tensor ** exponent.
-
-    Parameters
-    ----------
-    exponent: number
+    Element-wise exponent of tensor, use: `tensor ** exponent`.
 
     Returns
     -------
-    tensor : Tensor
-        result of element-wise exponentiation as a new tensor
+    yast.Tensor
     """
     data = a._data ** exponent
     return a._replace(data=data)
@@ -354,16 +313,11 @@ def __pow__(a, exponent):
 
 def __truediv__(a, number):
     """
-    Divide tensor by a scalar, use: tensor / scalar.
-
-    Parameters
-    ----------
-    number: number
+    Divide tensor by a scalar, use: `tensor / number`.
 
     Returns
     -------
-    tensor : Tensor
-        result of element-wise division  as a new tensor
+    yast.Tensor
     """
     data = a._data / number
     return a._replace(data=data)
@@ -376,7 +330,7 @@ def __abs__(a):
 
     Returns
     -------
-    tensor: Tensor
+    yast.Tensor
     """
     data = a.config.backend.absolute(a._data)
     return a._replace(data=data)
@@ -384,7 +338,6 @@ def __abs__(a):
 
 def real(a):
     r"""
-
     Return tensor with imaginary part set to zero.
 
         .. note::
@@ -393,7 +346,7 @@ def real(a):
 
     Returns
     -------
-    tensor: Tensor
+    yast.Tensor
     """
     data = a.config.backend.real(a._data)
     return a._replace(data=data)
@@ -407,10 +360,9 @@ def imag(a):
             Follows the behavior of the backend.imag()
             when it comes to creating a new copy of the data or handling dtype.
 
-
     Returns
     -------
-    tensor: Tensor
+    yast.Tensor
     """
     data = a.config.backend.imag(a._data)
     return a._replace(data=data)
@@ -418,11 +370,11 @@ def imag(a):
 
 def sqrt(a):
     """
-    Return element-wise sqrt(A).
+    Return element-wise sqrt(tensor).
 
     Returns
     -------
-    tensor: Tensor
+    yast.Tensor
     """
     data = a.config.backend.sqrt(a._data)
     return a._replace(data=data)
@@ -430,7 +382,7 @@ def sqrt(a):
 
 def rsqrt(a, cutoff=0):
     """
-    Return element-wise 1/sqrt(A).
+    Return element-wise 1/sqrt(tensor).
 
     The tensor elements with absolute value below the cutoff are set to zero.
 
@@ -441,7 +393,7 @@ def rsqrt(a, cutoff=0):
 
     Returns
     -------
-    tensor: Tensor
+    yast.Tensor
     """
     data = a.config.backend.rsqrt(a._data, cutoff=cutoff)
     return a._replace(data=data)
@@ -449,7 +401,7 @@ def rsqrt(a, cutoff=0):
 
 def reciprocal(a, cutoff=0):
     """
-    Return element-wise 1/A.
+    Return element-wise 1/tensor.
 
     The tensor elements with absolute value below the cutoff are set to zero.
 
@@ -460,7 +412,7 @@ def reciprocal(a, cutoff=0):
 
     Returns
     -------
-    tensor: Tensor
+    yast.Tensor
     """
     data = a.config.backend.reciprocal(a._data, cutoff=cutoff)
     return a._replace(data=data)
@@ -468,18 +420,14 @@ def reciprocal(a, cutoff=0):
 
 def exp(a, step=1.):
     r"""
-    Return element-wise `exp(step * A)`.
+    Return element-wise `exp(step * tensor)`.
 
         .. note::
-            This applies only to non-empty blocks of A
-
-    Parameters
-    ----------
-    step: scalar
+            This applies only to non-empty blocks of tensor
 
     Returns
     -------
-    tensor: Tensor
+    yast.Tensor
     """
     data = a.config.backend.exp(a._data, step)
     return a._replace(data=data)
@@ -490,11 +438,11 @@ def bitwise_not(a):
     Return element-wise bit-wise not.
 
         .. note::
-            This applies only to non-empty blocks of A.
+            This applies only to non-empty blocks of tensor with tensor data dtype allowing for bitwise operation, i.e. intended for masks used to truncate tensor legs.
 
     Returns
     -------
-    tensor: Tensor
+    yast.Tensor
     """
     data = a.config.backend.bitwise_not(a._data)
     return a._replace(data=data)

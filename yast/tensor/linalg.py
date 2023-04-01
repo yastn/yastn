@@ -4,9 +4,8 @@ from ._auxliary import _clear_axes, _unpack_axes, _struct
 from ._tests import YastError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _leg_struct_trivial, _Fusion
-from ._krylov import _expand_krylov_space
 
-__all__ = ['svd', 'svd_with_truncation', 'qr', 'eigh', 'eigh_with_truncation', 'norm', 'entropy', 'expmv', 'eigs', 'truncation_mask', 'truncation_mask_multiplets']
+__all__ = ['svd', 'svd_with_truncation', 'qr', 'eigh', 'eigh_with_truncation', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets']
 
 
 def norm(a, p='fro'):
@@ -31,14 +30,14 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
         tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
         mask_f=None, **kwargs):
     r"""
-    Split tensor into :math:`a = U S V^\dagger` using exact singular value decomposition (SVD),
-    where the columns of `U` and :math:`V^\dagger` form orthonormal bases
+    Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
+    where the columns of `U` and the rows of :math:`V` form orthonormal bases
     and `S` is positive and diagonal matrix. Optionally, truncate the result.
 
     Truncation can be based on relative tolerance, bond dimension of each block,
     and total bond dimension across all blocks (whichever gives smaller total dimension).
 
-    Charge of input tensor `a` is attached to `U` if `nU` and to `Vh` otherwise.
+    Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
 
     Parameters
     ----------
@@ -67,14 +66,14 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
         largest total number of singular values to keep.
 
     untruncated_S: bool
-        returns U, S, Vh, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
+        returns U, S, V, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
 
     mask_f: function(yast.Tensor) -> yast.Tensor
         custom truncation mask
 
     Returns
     -------
-    U, S, V: Tensor
+    U, S, V: yast.Tensor
         U and V are unitary projectors. S is a real diagonal tensor.
     """
     diagnostics = kwargs['diagonostics'] if 'diagonostics' in kwargs else None
@@ -85,7 +84,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
     else:
         Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total)
 
-    U, S, V = Smask.apply_mask(U, S, V, axis=(-1, 0, 0))
+    U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
 
     U = U.move_leg(source=-1, destination=Uaxis)
     V = V.move_leg(source=0, destination=Vaxis)
@@ -94,8 +93,8 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
 
 def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False, **kwargs):
     r"""
-    Split tensor into :math:`a = U S V^\dagger` using exact singular value decomposition (SVD),
-    where the columns of `U` and :math:`V^\dagger` form orthonormal bases
+    Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
+    where the columns of `U` and the rows of :math:`V` form orthonormal bases
     and `S` is a positive and diagonal matrix.
 
     Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
@@ -116,7 +115,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix
 
     Returns
     -------
-    U, S, V: Tensor
+    U, S, V: yast.Tensor
         U and V are unitary projectors. S is a real diagonal tensor.
     """
     _test_axes_all(a, axes)
@@ -253,8 +252,7 @@ def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-14, *
 
     Returns
     -------
-    mask : yast.Tensor
-        mask tensor
+    yast.Tensor
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
         raise YastError("Truncation_mask requires S to be real and diagonal")
@@ -339,8 +337,7 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32, **k
 
     Returns
     -------
-    mask : yast.Tensor
-        mask tensor
+    yast.Tensor
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
         raise YastError("Truncation_mask requires S to be real and diagonal")
@@ -378,8 +375,8 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32, **k
 
 def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     r"""
-    Split tensor using reduced QR decomposition, such that :math:`a=QR`,
-    with :math:`QQ^\dag=I`. The charge of R is zero.
+    Split tensor using reduced QR decomposition, such that :math:`a = Q R`,
+    with :math:`QQ^\dagger=I`. The charge of R is zero.
 
     Parameters
     ----------
@@ -396,7 +393,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
     Returns
     -------
-        Q, R: Tensor
+        Q, R: yast.Tensor
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -484,7 +481,7 @@ def eigh(a, axes, sU=1, Uaxis=-1):
 
     Returns
     -------
-        S, U: Tensor
+        S, U: yast.Tensor
             U is unitary projector. S is a diagonal tensor.
     """
     _test_axes_all(a, axes)
@@ -594,14 +591,14 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
 
     Returns
     -------
-        S, U: Tensor
+        S, U: yast.Tensor
             U is unitary projector. S is a diagonal tensor.
     """
     S, U = eigh(a, axes=axes, sU=sU)
 
     Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total)
 
-    S, U = Smask.apply_mask(S, U, axis=(0, -1))
+    S, U = Smask.apply_mask(S, U, axes=(0, -1))
     U = U.move_leg(source=-1, destination=Uaxis)
     return S, U
 
@@ -611,7 +608,7 @@ def entropy(a, axes=(0, 1), alpha=1):
     Calculate entropy from spliting the tensor using svd.
 
     If diagonal, calculates entropy treating S^2 as probabilities. Normalizes S^2 if neccesary.
-    If not diagonal, calculates svd first to get the diagonal S.
+    If not diagonal, starts with svd to get the diagonal S.
     Use base-2 log.
 
     Parameters
@@ -626,7 +623,7 @@ def entropy(a, axes=(0, 1), alpha=1):
 
     Returns
     -------
-    entropy, minimal singular value, normalization : float64
+    entropy, minimal singular value, normalization : number
     """
     if len(a._data) == 0:
         return a.zero_of_dtype(), a.zero_of_dtype(), a.zero_of_dtype()
@@ -635,203 +632,3 @@ def entropy(a, axes=(0, 1), alpha=1):
     # entropy, Smin, normalization
     return a.config.backend.entropy(a._data, alpha=alpha)
 
-
-# Krylov based methods, handled by anonymous function decribing action of matrix on a vector
-def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, return_info=False):
-    r"""
-    Calculate exp(t*f)*v, where v is a yast tensor, and f(v) is linear operator acting on v.
-
-    Parameters
-    ----------
-        f: function
-            define an action of a 'square matrix' on the vector x.
-            f(x) should preserve the signature of x.
-
-        v: Tensor
-
-        t: number
-
-        tol: number
-            targeted tolerance; it is used to update the time-step and size of Krylov space.
-           The result should have better tolerance, as corrected result is outputed.
-
-        ncv: int
-            Initial guess for the size of the Krylov space
-
-        hermitian: bool
-            Assume that f is a hermitian operator, in which case Lanczos iterations are used.
-            Otherwise Arnoldi iterations are used to span the Krylov space.
-
-        normalize: bool
-            The result is normalized to unity using 2-norm.
-
-        return_info: bool
-            info.ncv : guess of the Krylov-space size,
-            info.error : estimate of error (likely over-estimate)
-            info.krylov_steps : number of execution of f(x),
-            info.steps : number of steps to reach t,
-
-        Returns
-        -------
-        out : Tensor if not return_info else (out, info)
-
-        Note
-        ----
-        Employ the algorithm of:
-        J. Niesen, W. M. Wright, ACM Trans. Math. Softw. 38, 22 (2012),
-        Algorithm 919: A Krylov subspace algorithm for evaluating
-        the phi-functions appearing in exponential integrators.
-    """
-    backend = v.config.backend
-    ncv, ncv_max = max(1, ncv), min([30, v.size])  # Krylov space parameters
-    t_now, t_out = 0, abs(t)
-    sgn = t / t_out if t_out > 0 else 0
-    tau = t_out  # initial quess for a time-step
-    gamma, delta = 0.8, 1.2  # Safety factors
-    V, H = None, None  # reset Krylov space
-    ncv_old, tau_old, omega = None, None, None
-    reject, order_computed, ncv_computed = False, False, False
-    info = {'ncv': ncv, 'error': 0., 'krylov_steps': 0, 'steps': 0}
-
-    normv = v.norm()
-    if normv == 0:
-        if normalize:
-            raise YastError('expmv got zero vector that cannot be normalized')
-        t_out = 0
-    else:
-        v = v / normv
-
-    while t_now < t_out:
-        if V is None:
-            V = [v]
-        V, H, happy = _expand_krylov_space(f, tol, ncv, hermitian, V, H, info)
-        if happy:
-            tau = t_out - t_now
-            m = len(V)
-            h = 0
-        else:
-            m = len(V) - 1
-            h = H.pop((m, m - 1))
-        H[(0, m)] = backend.ones((), dtype=v.yast_dtype, device=v.device)
-        T = backend.square_matrix_from_dict(H, m + 1, device=v.device)
-        F = backend.expm((sgn * tau) * T)
-        err = abs(h * F[m - 1, m]).item()
-
-        # renormalized error per unit step
-        omega_old, omega = omega, (t_out / tau) * (err / tol)
-
-        # Estimate order
-        if ncv == ncv_old and tau != tau_old and reject:
-            order = max([1., np.log(omega / omega_old) / np.log(tau / tau_old)])
-            order_computed = True
-        elif reject and order_computed:
-            order_computed = False
-        else:
-            order_computed = False
-            order = 0.25 * m
-
-        # Estimate ncv
-        if ncv != ncv_old and tau == tau_old and reject:
-            ncv_est = max([1.1, (omega / omega_old) ** (1. / (ncv_old - ncv))]) if omega > 0 else 1.1
-            ncv_computed = True
-        elif reject and ncv_computed:
-            ncv_computed = False
-        else:
-            ncv_computed = False
-            ncv_est = 2
-
-        tau_old, ncv_old = tau, ncv
-        if happy:
-            omega = 0
-            tau_new, ncv_new = tau, ncv
-        elif m == ncv_max and omega > delta:
-            tau_new, ncv_new = tau * (omega / gamma) ** (-1. / order), ncv_max
-        else:
-            tau_opt = tau * (omega / gamma) ** (-1. / order) if omega > 0 else t_out - t_now
-            ncv_opt = int(max([1, np.ceil(m + np.log(omega / gamma) / np.log(ncv_est))])) if omega > 0 else 1
-            C1 = ncv * int(np.ceil((t_out - t_now) / tau_opt))
-            C2 = ncv_opt * int(np.ceil((t_out - t_now) / tau))
-            tau_new, ncv_new = (tau_opt, m) if C1 < C2 else (tau, ncv_opt)
-
-        if omega <= delta:  # Check error against target
-            F[m, 0] = F[m - 1, m] * h
-            F = F[:, 0]
-            normF = backend.norm_matrix(F)
-            normv = normv * normF
-            F = F / normF
-            v = F[0] * V[0]
-            for it in range(1, len(V)):
-                v = v.apxb(V[it], x=F[it])
-            t_now += tau
-            info['steps'] += 1
-            info['error'] += err
-            V, H, reject = None, None, False
-        else:
-            reject = True
-            H[(m, m - 1)] = h
-            H.pop((0, m))
-        tau = min(max(0.2 * tau, tau_new), t_out - t_now, 2 * tau)
-        ncv = int(max(1, min(ncv_max, np.ceil(1.3333 * m), max(np.floor(0.75 * m), ncv_new))))
-    info['ncv'] = ncv
-    if not normalize:
-        v = normv * v
-    return (v, info) if return_info else v
-
-
-def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=True):
-    r"""
-    Search for dominant eigenvalues of linear operator f using Arnoldi algorithm.
-    ONLY A SINGLE ITERATION FOR NOW
-
-    f: function
-        define an action of a 'square matrix' on the 'vector' x.
-        f(x) should preserve the signature of x.
-
-    v0: Tensor
-        Initial guess, 'vector' to span the Krylov space.
-
-    k: int
-        Number of desired eigenvalues and eigenvectors. default is 1.
-
-    which: str in [‘LM’, ‘SM’, ‘LR’, ‘SR’]
-        Which k eigenvectors and eigenvalues to find:
-            ‘LM’ : largest magnitude
-            ‘SM’ : smallest magnitude
-            ‘LR’ : largest real part
-            ‘SR’ : smallest real part
-
-    ncv: int
-        Dimension of the employed Krylov space. Default is 10.
-        Must be greated than k.
-
-    maxiter: int
-        Maximal number of restarts; NOT IMPLEMENTED FOR NOW.
-
-    tol: float
-        Relative accuracy for eigenvalues and th stopping criterion for Krylov subspace.
-        Default is 1e-13.
-
-    hermitian: bool
-        Assume that f is a hermitian operator, in which case Lanczos iterations are used.
-        Otherwise Arnoldi iterations are used to span the Krylov space.
-    """
-    backend = v0.config.backend
-    normv = v0.norm()
-    if normv == 0:
-        raise YastError('Initial vector v0 of eigs should be nonzero.')
-    V = [v0 / normv]
-    V, H, happy = _expand_krylov_space(f, 1e-13, ncv, hermitian, V)  # tol=1e-13
-    m = len(V) if happy else len(V) - 1
-
-    T = backend.square_matrix_from_dict(H, m, device=v0.device)
-    val, vr = backend.eigh(T) if hermitian else backend.eig(T)
-    ind = backend.eigs_which(val, which)
-
-    val, vr = val[ind], vr[:, ind]
-    Y = []
-    for it in range(k):
-        sit = vr[:, it]
-        Y.append(sit[0] * V[0])
-        for jt in range(1, len(ind)):
-            Y[it] = Y[it].apxb(V[jt], x=sit[jt])
-    return val[:len(Y)], Y

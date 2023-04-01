@@ -39,7 +39,7 @@
 
 
 #     Eng_gs = {0: -2.232050807568877, 1: -1.982050807568877}
-#     H = ops_Z2.mpo_XX_model(N=N, t=1, mu=0.25)
+#     H = ops_Z2.mpo_nn_hopping(N=N, t=1, mu=0.25)
 
 #     for parity in (0, 1):
 #         for version in ('1site', '2site'):
