@@ -45,7 +45,7 @@ class Lattice():
 
         bonds = []
         if self.lattice == 'checkerboard':
-            self._bonds = (Bond(site_0=(0, 0), site_1=(0, 1), dirn='h'), Bond(site_0=(0, 1), site_1=(0, 0), dirn='h'), Bond(site_0=(1, 0), site_1=(0, 0), dirn='v'), Bond(site_0=(0, 0), site_1=(1, 0), dirn='v'))
+            self._bonds = (Bond(site_0=(0, 0), site_1=(0, 1), dirn='h'), Bond(site_0=(0, 1), site_1=(0, 0), dirn='h'), Bond(site_0=(0, 0), site_1=(0, 1), dirn='v'), Bond(site_0=(0, 1), site_1=(0, 0), dirn='v'))
         else:
             for s in self._sites:
                 s_b = self.nn_site(s, d='b')

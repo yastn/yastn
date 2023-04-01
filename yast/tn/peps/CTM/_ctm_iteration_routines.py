@@ -18,7 +18,7 @@ import numpy as np
 
 def append_a_bl(tt, AAb):
     """
-    ten indices counterclockwise order.
+    tensor indices have counterclockwise order.
     A indices counterclockwise order starting from top, then spin and ancilla indices.
     tt indices counterclockwise order (e1,[t1,b1],e2,[t2,b2]).
     """
@@ -394,6 +394,14 @@ def move_horizontal(envn, env, AAb, proj, ms):
         r_abv = AAb.nn_site(right, d='t')
         r_bel = AAb.nn_site(right, d='b')
 
+    if AAb.lattice == 'checkerboard':
+        if ms == (0,0):
+            left =  right = (0,1)
+            l_abv = r_abv = r_bel = l_bel = (0,0)
+        elif ms == (0,1):
+            left =  right = (0,0)
+            l_abv = r_abv = r_bel = l_bel = (0,1)
+
     if l_abv is not None:
         envn[ms].tl = ncon((env[left].tl, env[left].t, proj[l_abv].hlb),
                                    ([2, 3], [3, 1, -1], [2, 1, -0]))
@@ -470,6 +478,14 @@ def move_vertical(envn, env, AAb, proj, ms):
         b_left = AAb.nn_site(bottom, d='l')
         b_right = AAb.nn_site(bottom, d='r')
 
+    if AAb.lattice == 'checkerboard':
+        if ms == (0,0):
+            top =  bottom = (0,1)
+            t_left = b_left = b_right = t_right = (0,0)
+        elif ms == (0,1):
+            top =  bottom = (0,0)
+            t_left = b_left = b_right = t_right = (0,1)
+
 
     if t_left is not None:
         envn[ms].tl = ncon((env[top].tl, env[top].l, proj[t_left].vtr), 
@@ -503,7 +519,8 @@ def move_vertical(envn, env, AAb, proj, ms):
 
 
 def trivial_projector(a, b, c, dirn):
-    # trivial tensors to fix the bond dimension of the finite boundary PEPS tensors to 1
+    """ projectors which fix the bond dimension of the environment CTM tensors 
+     corresponding to boundary PEPS tensors to 1 """
 
     if dirn == 'hlt':
         la, lb, lc = a.get_legs(axis=2), b.get_legs(axis=0), c.get_legs(axis=0)
@@ -529,7 +546,7 @@ def trivial_projector(a, b, c, dirn):
 
 
 def CTM_it(env, AAb, fix_signs, opts_svd=None):
-    r"""Perform one step of CTMRG update for a m x n lattice.
+    r"""Perform one step of CTMRG update for a mxn lattice.
 
     Parameters
     ----------
@@ -555,7 +572,7 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
     renormalization group (CTMRG) algorithm. The update is performed in two steps: a horizontal move
     and a vertical move. The projectors for each move are calculated first, and then the tensors in
     the CTM environment are updated using the projectors. The boundary conditions of the lattice
-    determine which trivial projectors are needed for each move. If the boundary conditions are
+    determine whether trivial projectors are needed for the move. If the boundary conditions are
     'infinite', no trivial projectors are needed; if they are 'finite', four trivial projectors
     are needed for each move. The signs of the environment tensors can also be fixed during the
     update if `fix_signs` is set to True. The latter is important when we set the criteria for 
@@ -583,10 +600,15 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
             proj[AAb.Nx-1, ms+1].hrb = trivial_projector(env[AAb.Nx-1,ms+1].r, AAb[AAb.Nx-1,ms+1], env[AAb.Nx-1,ms].br, dirn='hrb')
     
     print('######## Horizontal Move ###########')
+        
 
-    for ms in AAb.sites():
-        print('move ctm horizontal', ms)
-        envn_hor = move_horizontal(envn_hor, env, AAb, proj, ms)
+    if AAb.lattice == 'checkerboard':
+        envn_hor = move_horizontal(envn_hor, env, AAb, proj, (0,0))
+        envn_hor = move_horizontal(envn_hor, env, AAb, proj, (0,1))
+    else:
+        for ms in AAb.sites():
+            print('move ctm horizontal', ms)
+            envn_hor = move_horizontal(envn_hor, env, AAb, proj, ms)
 
     envn_ver = envn_hor.copy()
 
@@ -605,9 +627,13 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
 
     print('######### Vertical Move ###########')
 
-    for ms in AAb.sites():   # vertical absorption and renormalization
-        print('move ctm vertical', ms)
-        envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, ms)
+    if AAb.lattice == 'checkerboard':
+        envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, (0,0))
+        envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, (0,1))
+    else:
+        for ms in AAb.sites():   # vertical absorption and renormalization
+            print('move ctm vertical', ms)
+            envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, ms)
 
     return envn_ver, proj
 
