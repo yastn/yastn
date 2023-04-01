@@ -139,7 +139,7 @@ class _EnvParent:
         if bd is None:
             bd = (-1, 0)
         axes = ((0, 1), (1, 0)) if self.nr_layers == 2 else ((0, 1, 2), (2, 1, 0))
-        return self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
+        return self.factor() * self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
 
     def update_env(self, n, to='last'):
         r"""
@@ -211,6 +211,9 @@ class Env2(_EnvParent):
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         self.F[(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)
 
+    def factor(self):
+        return self.bra.factor * self.ket.factor
+
     def Heff1(self, x, n):
         r"""
         Action of Heff on a single site mps tensor.
@@ -275,6 +278,9 @@ class Env3(_EnvParent):
         # right boundary
         legs = [self.ket.virtual_leg('last').conj(), self.op.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         self.F[(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)
+
+    def factor(self):
+        return self.bra.factor * self.op.factor * self.ket.factor
 
     def Heff0(self, C, bd):
         r"""
@@ -393,6 +399,7 @@ class Env3(_EnvParent):
         if n in self._temp['expmv_ncv']:
             opts['ncv'] = self._temp['expmv_ncv'][n]
         f = lambda x: self.Heff1(x, n)
+        du = du * self.op.factor
         self.ket[n], info = expmv(f, self.ket[n], du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][n] = info['ncv']
 
@@ -403,6 +410,7 @@ class Env3(_EnvParent):
             if bd in self._temp['expmv_ncv']:
                 opts['ncv'] = self._temp['expmv_ncv'][bd]
             f = lambda x: self.Heff0(x, bd)
+            du = du * self.op.factor
             self.ket.A[bd], info = expmv(f, self.ket[bd], du, **opts, normalize=normalize, return_info=True)
             self._temp['expmv_ncv'][bd] = info['ncv']
 
@@ -413,6 +421,7 @@ class Env3(_EnvParent):
             opts['ncv'] = self._temp['expmv_ncv'][ibd]
         AA = self.ket.merge_two_sites(bd)
         f = lambda v: self.Heff2(v, bd)
+        du = du * self.op.factor
         AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)

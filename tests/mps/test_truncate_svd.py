@@ -24,14 +24,14 @@ def run_zipper(psi, H, Egs):
 
 def run_truncation(psi, H, Egs, sweeps=2):
     psi2 = psi.copy()
-    discarded = psi2.truncate_(to='last', opts={'D_total': 4})
+    discarded = psi2.truncate_(to='last', opts_svd={'D_total': 4})
 
     ov_t = mps.measure_overlap(psi, psi2).item()
     Eng_t = mps.measure_mpo(psi2, H, psi2).item()
     assert 1 > abs(ov_t) > 0.99
     assert Egs < Eng_t.real < Egs * 0.99
 
-    out = mps.compression_(psi2, psi, max_sweeps=5)
+    out = mps.compression_(psi2, psi, max_sweeps=5, normalize=True)
     ov_v = mps.measure_overlap(psi, psi2).item()
     Eng_v = mps.measure_mpo(psi2, H, psi2).item()
     assert all(dp <= do for dp, do in zip(psi2.get_bond_dimensions(), (1, 2, 4, 4, 4, 4, 4, 2, 1)))
