@@ -21,8 +21,8 @@ class CtmEnv(Lattice):
         super().__init__(lattice=psi.lattice, dims=psi.dims, boundary=psi.boundary)
 
         if self.lattice == 'checkerboard':
-            windows = (ctm_window(nw=(0, 0), ne=(0, 1), sw=(1, 0), se=(1, 1)),
-                       ctm_window(nw=(1, 0), ne=(1, 1), sw=(0, 0), se=(0, 1)))
+            windows = (ctm_window(nw=(0, 0), ne=(0, 1), sw=(0, 1), se=(0, 0)),
+                       ctm_window(nw=(0, 1), ne=(0, 0), sw=(0, 0), se=(0, 1)))
         else:
             windows = []
             for site in self.sites():

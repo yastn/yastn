@@ -82,7 +82,7 @@ def test_NTU_spinfull_finite():
         
         assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
 
-        doc, _, _ = one_site_avg(psi, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
+        doc, _ = one_site_avg(psi, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
 
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
 
@@ -176,7 +176,7 @@ def test_NTU_spinfull_infinite():
         
         assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
 
-        doc, _, _ = one_site_avg(psi, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
+        doc, _ = one_site_avg(psi, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
 
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
 
