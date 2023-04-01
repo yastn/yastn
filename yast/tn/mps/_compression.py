@@ -17,7 +17,7 @@ class compression_out(NamedTuple):
 
 def compression_(psi, target, method='1site',
                 overlap_tol=None, Schmidt_tol=None, max_sweeps=1,
-                iterator_step=None, opts_svd=None):
+                iterator_step=None, opts_svd=None, normalize=True):
     r"""
     Perform variational optimization sweeps until convergence to best approximate the target, starting from MPS/MPO :code:`psi`.
 
@@ -83,13 +83,13 @@ def compression_(psi, target, method='1site',
     """
     tmp = _compression_(psi, target, method,
                         overlap_tol, Schmidt_tol, max_sweeps,
-                        iterator_step, opts_svd)
+                        iterator_step, opts_svd, normalize)
     return tmp if iterator_step else next(tmp)
 
 
 def _compression_(psi, target, method,
                 overlap_tol, Schmidt_tol, max_sweeps,
-                iterator_step, opts_svd):
+                iterator_step, opts_svd, normalize):
     """ Generator for compression_(). """
 
     if not psi.is_canonical(to='first'):
@@ -125,9 +125,13 @@ def _compression_(psi, target, method,
         else: # method == '2site':
             max_dw = _compression_2site_sweep_(env, opts_svd=opts_svd, Schmidt=Schmidt)
 
+        psi.factor = 1
         overlap = env.measure()
         doverlap, overlap_old = overlap_old - overlap, overlap
         converged = []
+
+        if not normalize:
+            psi.factor = overlap
 
         if overlap_tol is not None:
             converged.append(abs(doverlap) < overlap_tol)
@@ -186,14 +190,15 @@ def _compression_1site_sweep_(env, Schmidt=None):
     bra, ket = env.bra, env.ket
     for to in ('last', 'first'):
         for n in bra.sweep(to=to):
+            bra.remove_central()
             bra.A[n] = env.Heff1(ket[n], n)
-            bra.orthogonalize_site(n, to=to)
+            bra.orthogonalize_site(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != bra.first:
                 _, S, _ = bra[bra.pC].svd(sU=1)
                 Schmidt[bra.pC] = S
             env.clear_site(n)
             env.update_env(n, to=to)
-            bra.remove_central()
+    bra.absorb_central(to='first')
 
 
 def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
@@ -214,6 +219,7 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
             bra.absorb_central(to=to)
             env.clear_site(n, n + 1)
             env.update_env(n + dn, to=to)
+    bra[bra.first] = bra[bra.first] / bra[bra.first].norm()
     env.update_env(bra.first, to='first')
     return max_disc_weight
 
@@ -247,5 +253,7 @@ def zipper(a, b, opts=None):
         tmp = U @ C
 
     tmp = tmp.fuse_legs(axes=((0, 1), 2)).drop_leg_history(axes=0)
-    psi[psi.first] = tmp @ psi[psi.first]
+    ntmp = tmp.norm()
+    psi[psi.first] = (tmp / ntmp) @ psi[psi.first]
+    psi.factor = a.factor * b.factor * ntmp
     return psi

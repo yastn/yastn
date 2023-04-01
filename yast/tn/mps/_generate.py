@@ -86,13 +86,13 @@ def generate_mpo(I, terms, normalize=False, opts=None, packet=50):  # can use be
     while ip < Nterms:
         H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
         M = add(*H1s)
-        M.truncate_(to='first', opts=opts, normalize=normalize)
+        M.truncate_(to='first', opts_svd=opts, normalize=normalize)
         ip += packet
         if not M_tot:
             M_tot = M.copy()
         else:
             M_tot = M_tot + M
-            M_tot.truncate_(to='first', opts=opts, normalize=normalize)
+            M_tot.truncate_(to='first', opts_svd=opts, normalize=normalize)
     return M_tot
 
 def generate_single_mps(term, N):  # obsolate - DELETE  (not docummented)
@@ -147,13 +147,13 @@ def generate_mps(terms, N, normalize=False, opts=None, packet=50):   #  DELETE
     while ip < Nterms:
         H1s = [generate_single_mps(terms[j], N) for j in range(ip, min([Nterms, ip + packet]))]
         M = add(*H1s)
-        M.truncate_(to='first', opts=opts, normalize=normalize)
+        M.truncate_(to='first', opts_svd=opts, normalize=normalize)
         ip += packet
         if not M_tot:
             M_tot = M.copy()
         else:
             M_tot = M_tot + M
-            M_tot.truncate_(to='first', opts=opts, normalize=normalize)
+            M_tot.truncate_(to='first', opts_svd=opts, normalize=normalize)
     return M_tot
 
 

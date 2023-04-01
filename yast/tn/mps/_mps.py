@@ -169,7 +169,7 @@ class MpsMpo:
     # A central block (associated with a bond) is indexed using ordered tuple (n, n+1).
     # At most one central block is allowed.
     
-    def __init__(self, N, nr_phys=1):
+    def __init__(self, N=1, nr_phys=1, psi=None):
         r"""
         Create empty MPS (:code:`nr_phys=1`) or MPO (:code:`nr_phys=2`)
         for system of *N* sites. Empty MPS/MPO has no tensors assigned.
@@ -181,18 +181,26 @@ class MpsMpo:
         nr_phys : int
             number of physical legs: 1 for MPS (default); 2 for MPO;
         """
-        if not isinstance(N, int) or N <= 0:
-            raise YastError('MPS: Number of Mps sites N should be a positive integer.')
-        if nr_phys not in (1, 2):
-            raise YastError('MPS: Number of physical legs, nr_phys, should be equal to 1 or 2.')
-
-        self.N = N
-        self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
-        self.pC = None  # index of the central site, None if it does not exist
-        self.first = 0  # index of the first lattice site
-        self.last = N - 1  # index of the last lattice site
-        self.nr_phys = nr_phys
-        self.factor = 1
+        if psi is None:
+            if not isinstance(N, int) or N <= 0:
+                raise YastError('MPS: Number of Mps sites N should be a positive integer.')
+            if nr_phys not in (1, 2):
+                raise YastError('MPS: Number of physical legs, nr_phys, should be equal to 1 or 2.')
+            self.N = N
+            self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
+            self.pC = None  # index of the central site, None if it does not exist
+            self.first = 0  # index of the first lattice site
+            self.last = N - 1  # index of the last lattice site
+            self.nr_phys = nr_phys
+            self.factor = 1  # multiplicative factor is real and positive (e.g. norm)
+        else: # make a shallow copy of psi
+            self.N = psi.N
+            self.A = dict(psi.A)
+            self.pC = psi.pC
+            self.first = psi.first
+            self.last = psi.last
+            self.nr_phys = psi.nr_phys
+            self.factor = psi.factor
 
     def norm(self):
         return norm(self)  # TODO: Write norm using qr decomposition.
@@ -243,11 +251,10 @@ class MpsMpo:
         yast.tn.mps.MpsMpo
             a clone of :code:`self`
         """
-        phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
-        for ind, ten in self.A.items():
+        phi = MpsMpo(psi=self)
+        for ind, ten in phi.A.items():
             phi.A[ind] = ten.clone()
-        phi.pC = self.pC
-        phi.factor = self.factor
+        # TODO clone factor ?
         return phi
 
     def copy(self):
@@ -267,11 +274,10 @@ class MpsMpo:
         yast.tn.mps.MpsMpo
             a copy of :code:`self`
         """
-        phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
-        for ind, ten in self.A.items():
+        phi = MpsMpo(psi=self)
+        for ind, ten in phi.A.items():
             phi.A[ind] = ten.copy()
-        phi.pC = self.pC
-        phi.factor = self.factor
+        # TODO copy factor ?
         return phi
 
     def conj(self):
@@ -282,11 +288,9 @@ class MpsMpo:
         -------
         out : conjugated Mps or Mpo, independent of self
         """
-        phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
-        for ind, ten in self.A.items():
+        phi = MpsMpo(psi=self)
+        for ind, ten in phi.A.items():
             phi.A[ind] = ten.conj()
-        phi.pC = self.pC
-        phi.factor = self.factor
         return phi
 
     def __mul__(self, multiplier):
@@ -297,11 +301,13 @@ class MpsMpo:
         -------
         yast.tn.mps.MpsMpo
         """
-        phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
-        for ind, ten in self.A.items():
-            phi.A[ind] = ten
-        phi.pC = self.pC
-        phi.factor = multiplier * self.factor
+        phi = MpsMpo(psi=self)
+        am = abs(multiplier)
+        if am > 0:
+            phi.factor = am * self.factor
+            phi.A[0] = phi.A[0] * (multiplier / am)
+        else:
+            phi.A[0] = phi.A[0] * multiplier
         return phi
 
     def __rmul__(self, number):
