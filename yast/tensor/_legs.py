@@ -234,6 +234,7 @@ def _leg_fusions_need_mask(*legs):
     if all(isinstance(leg.fusion, tuple) for leg in legs):
         mf = legs[0].fusion
         return any(_leg_fusions_need_mask(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
+    raise YastError("mixing meta- and hard-fused legs")
 
 
 def leg_outer_product(*legs, t_allowed=None):
