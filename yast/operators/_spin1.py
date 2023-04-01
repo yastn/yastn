@@ -1,5 +1,4 @@
 import numpy as np
-from ..initialize import make_config
 from ..sym import sym_none, sym_Z3, sym_U1
 from .. import block
 from ..tensor import YastError, Tensor

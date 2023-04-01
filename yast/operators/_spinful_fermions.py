@@ -1,4 +1,3 @@
-from ..initialize import make_config
 from ..sym import sym_Z2, sym_U1xU1, sym_U1xU1xZ2
 from ..tensor import YastError, Tensor
 from ._meta_operators import meta_operators

@@ -631,4 +631,3 @@ def entropy(a, axes=(0, 1), alpha=1):
         _, a, _ = svd(a, axes=axes)
     # entropy, Smin, normalization
     return a.config.backend.entropy(a._data, alpha=alpha)
-

@@ -1,5 +1,5 @@
 from ..sym import sym_none
-from ..initialize import make_config, eye
+from ..initialize import eye
 from .. import diag
 from ._meta_operators import meta_operators
 

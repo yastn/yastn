@@ -115,6 +115,8 @@ def test_eigs_mismatches():
 
 
 def test_eigs_temp():
+    config_U1.backend.random_seed(seed=0)  # fix for tests
+
     legs = [yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 2)),
             yast.Leg(config_U1, s=1, t=(0, 1), D=(1, 1)),
             yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 2))]
