@@ -47,7 +47,7 @@ Install using
 git clone https://gitlab.com/marekrams/yastn.git && cd yast
 pip install .
 ```
-or just clone and add YAST root to your Python import path to sucessfully ``import yast``.   
+or just clone and add YAST root to your Python import path to sucessfully ``import yastn``.   
 
 ##### YAST depends on
 

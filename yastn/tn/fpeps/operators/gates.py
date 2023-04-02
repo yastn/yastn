@@ -1,5 +1,5 @@
 import numpy as np
-import yast
+import yastn
 from yastn import ncon
 from yastn.tensor.linalg import svd_with_truncation
 

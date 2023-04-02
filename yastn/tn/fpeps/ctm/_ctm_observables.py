@@ -1,7 +1,7 @@
 from ._ctm_iteration_routines import check_consistency_tensors
 from ._ctm_iteration_routines import fPEPS_2layers
 from ._ctm_observable_routines import ret_AAbs, hor_extension, ver_extension, apply_TMO_left, con_bi
-import yast
+import yastn
 import numpy as np
 
 def nn_avg(peps, env, op):
