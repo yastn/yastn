@@ -9,14 +9,14 @@ Blocks of YAST tensor can be simply accessed as ``dict`` i.e. with ``[]`` operat
 .. literalinclude:: /../../tests/tensor/test_syntax.py
    :pyobject: TestSyntaxBlockAccess.test_syntax_block_access
 
-.. automethod:: yast.Tensor.__getitem__ 
+.. automethod:: yastn.Tensor.__getitem__ 
 
 Converting to dense tensors, scalars
 ------------------------------------
 
-.. automethod:: yast.Tensor.to_dense
-.. automethod:: yast.Tensor.to_nonsymmetric
-.. automethod:: yast.Tensor.to_numpy
-.. automethod:: yast.Tensor.to_raw_tensor
-.. automethod:: yast.Tensor.to_number
-.. automethod:: yast.Tensor.item
+.. automethod:: yastn.Tensor.to_dense
+.. automethod:: yastn.Tensor.to_nonsymmetric
+.. automethod:: yastn.Tensor.to_numpy
+.. automethod:: yastn.Tensor.to_raw_tensor
+.. automethod:: yastn.Tensor.to_number
+.. automethod:: yastn.Tensor.item

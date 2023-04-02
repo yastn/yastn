@@ -16,13 +16,13 @@ def pytest_addoption(parser):
 def pytest_configure(config):
     if config.option.backend == 'torch':
         print('Using torch backend')
-        import yast.backend.backend_torch as backend
+        import yastn.backend.backend_torch as backend
     if config.option.backend == 'torch_cpp':
         print('Using torch_cpp backend')
-        import yast.backend.backend_torch_cpp as backend
+        import yastn.backend.backend_torch_cpp as backend
     elif config.option.backend == 'np':
         print('Using numpy backend')
-        import yast.backend.backend_np as backend
+        import yastn.backend.backend_np as backend
 
     for folder in ["tensor", "mps"]:
         confs = [name[:-3] for name in os.listdir(folder + "/configs") if fnmatch(name, 'config*.py')]

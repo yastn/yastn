@@ -1,4 +1,4 @@
-"""Setup script for yast."""
+"""Setup script for yastn."""
 from setuptools import setup, find_packages
 
 requirements = open('requirements.txt').readlines()
@@ -11,9 +11,9 @@ long_description = open('README.md', encoding='utf-8').read()
 __version__ = '1.0.0'
 
 setup(
-    name='yast',
+    name='yastn',
     version=__version__,
-    author='Marek M. Rams, Gabriela Wójtowicz, Juraj Hasik',
+    author='Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, Juraj Hasik',
     author_email='marek.rams@uj.edu.pl',
     license='Apache License 2.0',
     platform=['any'],

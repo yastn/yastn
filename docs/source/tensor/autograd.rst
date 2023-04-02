@@ -11,7 +11,7 @@ this capability for dense tensor algebra, for example PyTorch backend.
 
 You can activate autograd on YAST tensor
 
-.. automethod:: yast.Tensor.requires_grad_
+.. automethod:: yastn.Tensor.requires_grad_
 
 
 The operations on tensor (equivalently on any of its blocks) are then

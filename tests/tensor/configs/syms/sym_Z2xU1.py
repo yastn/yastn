@@ -1,5 +1,5 @@
 import numpy as np
-from yast.sym.sym_abelian import sym_abelian
+from yastn.sym.sym_abelian import sym_abelian
 
 class sym_Z2xU1(sym_abelian):
     """ Z2 x U(1) symmetry; for testing"""

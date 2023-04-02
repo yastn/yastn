@@ -1,5 +1,5 @@
-import yast.backend.backend_np as backend
-from yast.sym import sym_U1 as sym
+import yastn.backend.backend_np as backend
+from yastn.sym import sym_U1 as sym
 
 default_device: str = 'cpu'
 default_dtype: str = 'float64'

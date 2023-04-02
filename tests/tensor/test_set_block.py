@@ -1,7 +1,7 @@
-""" Test adding a single block to the tensor with yast.set_block """
+""" Test adding a single block to the tensor with yastn.set_block """
 import numpy as np
 import pytest
-import yast
+import yastn
 try:
     from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
@@ -13,22 +13,22 @@ tol = 1e-12  #pylint: disable=invalid-name
 def test_U1():
     """ initialization of tensor with U1 symmetry """
     # 3-dim tensor
-    a = yast.Tensor(config=config_U1, s=(-1, 1, 1))  # initialize empty tensor
+    a = yastn.Tensor(config=config_U1, s=(-1, 1, 1))  # initialize empty tensor
     assert a.get_shape() == (0, 0, 0)
     a.set_block(ts=(1, -1, 2), Ds=(2, 5, 3), val='rand')  # add a block filled with random numbers
     a.set_block(ts=(2, 0, 2), Ds=(3, 6, 3), val='rand')  # add a block filled with random numbers
     assert a.to_numpy().shape == a.get_shape() == (5, 11, 3)
 
-    b = yast.Tensor(config=config_U1, s=(-1, 1, 1))  # initialize empty tensor
+    b = yastn.Tensor(config=config_U1, s=(-1, 1, 1))  # initialize empty tensor
     b.set_block(ts=(1, 0, 1), Ds=(2, 6, 2), val='rand')  # add a block filled with random numbers
     b.set_block(ts=(2, 0, 2), Ds=(3, 6, 3), val='rand')  # add a block filled with random numbers
     assert b.to_numpy().shape == b.get_shape() == (5, 6, 5)
 
-    legs = (yast.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(1, 2, 3)),
-            yast.Leg(config_U1, s=1, t=(0, 2), D=(1, 2,)),
-            yast.Leg(config_U1, s=1, t=(-2, 0, 2), D=(1, 2, 3)),
-            yast.Leg(config_U1, s=1, t=(0,), D=(1,)))
-    c = yast.ones(config=config_U1, legs=legs)
+    legs = (yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(1, 2, 3)),
+            yastn.Leg(config_U1, s=1, t=(0, 2), D=(1, 2,)),
+            yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(1, 2, 3)),
+            yastn.Leg(config_U1, s=1, t=(0,), D=(1,)))
+    c = yastn.ones(config=config_U1, legs=legs)
     assert c.get_shape() == (6, 3, 6, 1)
     assert pytest.approx(c.norm().item() ** 2, rel=tol) == 30
     c.set_block(ts=(-2, 0, -2, 0), val='zeros')  # replaces existing block
@@ -39,14 +39,14 @@ def test_U1():
     assert pytest.approx(c.norm().item() ** 2, rel=tol) == 47
 
     # 0-dim tensor
-    a = yast.ones(config=config_U1)  # s=() # t=(), D=()
+    a = yastn.ones(config=config_U1)  # s=() # t=(), D=()
     assert pytest.approx(a.item(), rel=tol) == 1
     a.set_block(val=3)
     assert pytest.approx(a.item(), rel=tol) == 3
     assert a.get_shape() == ()
 
     # diagonal tensor
-    a = yast.rand(config=config_U1, isdiag=True, t=0, D=5)
+    a = yastn.rand(config=config_U1, isdiag=True, t=0, D=5)
     # for U1 simplified notation of charges avoiding some brackets is usually supported, if unambiguous.
     a.set_block(ts=0, val='rand')
     a.set_block(ts=1, val='rand', Ds=4)
@@ -59,10 +59,10 @@ def test_U1():
 def test_Z2xU1():
     """ initialization of tensor with more complicated symmetry indexed by 2 numbers"""
     # 3-dim tensor
-    legs = [yast.Leg(config_Z2xU1, s=-1, t=[(0, 0), (1, 0), (0, 2), (1, 2)], D=[1, 2, 2, 4]),
-            yast.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 2)], D=[1, 2]),
-            yast.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)], D=[2, 4, 6, 3, 6, 9])]
-    a = yast.ones(config=config_Z2xU1, legs=legs)
+    legs = [yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (1, 0), (0, 2), (1, 2)], D=[1, 2, 2, 4]),
+            yastn.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 2)], D=[1, 2]),
+            yastn.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)], D=[2, 4, 6, 3, 6, 9])]
+    a = yastn.ones(config=config_Z2xU1, legs=legs)
     assert a.get_shape() == (9, 3, 30)
     assert pytest.approx(a.norm().item() ** 2, rel=tol) == a.size == 104
 
@@ -82,10 +82,10 @@ def test_Z2xU1():
     assert a.get_shape(native=True) == (9, 8, 30)
 
     # 3-dim tensor
-    legs = [yast.Leg(config_Z2xU1, s=-1, t=[(0, 1), (1, 0)], D=[1, 2]),
-            yast.Leg(config_Z2xU1, s=1, t=[(0, 0)], D=[3]),
-            yast.Leg(config_Z2xU1, s=1, t=[(0, 1), (1, 0)], D=[1, 2])]
-    a = yast.ones(config=config_Z2xU1, legs=legs)
+    legs = [yastn.Leg(config_Z2xU1, s=-1, t=[(0, 1), (1, 0)], D=[1, 2]),
+            yastn.Leg(config_Z2xU1, s=1, t=[(0, 0)], D=[3]),
+            yastn.Leg(config_Z2xU1, s=1, t=[(0, 1), (1, 0)], D=[1, 2])]
+    a = yastn.ones(config=config_Z2xU1, legs=legs)
     assert a.get_shape() == (3, 3, 3)
 
     a.set_block(ts=((0, 1), (0, -2), (0, 3)), Ds=(1, 5, 6), val='ones')
@@ -94,8 +94,8 @@ def test_Z2xU1():
     assert a.is_consistent()
 
     # diagonal tensor
-    leg = yast.Leg(config_Z2xU1, s=1, t=[(0, 0), (1, 1), (0, 2)], D=[2, 3, 5])
-    a = yast.rand(config=config_Z2xU1, isdiag=True, legs=[leg, leg.conj()])
+    leg = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (1, 1), (0, 2)], D=[2, 3, 5])
+    a = yastn.rand(config=config_Z2xU1, isdiag=True, legs=[leg, leg.conj()])
     assert a.get_shape() == (10, 10)
 
     a.set_block(ts=(0, 0), val='ones')  # in a diagonal tensor, can fill-in matching charge on a second leg
@@ -111,7 +111,7 @@ def test_Z2xU1():
 def test_dense():
     """ initialization of dense tensor with no symmetry """
     # 3-dim tensor
-    a = yast.Tensor(config=config_dense, s=(-1, 1, 1))  # initialize empty tensor
+    a = yastn.Tensor(config=config_dense, s=(-1, 1, 1))  # initialize empty tensor
     a.set_block(Ds=(4, 5, 6), val='rand')  # add the only possible block for dense tensor
     npa = a.to_numpy()
     assert np.isrealobj(npa) == (config_dense.default_dtype == 'float64')
@@ -119,7 +119,7 @@ def test_dense():
     assert a.is_consistent()
 
     # 0-dim tensor
-    a = yast.Tensor(config=config_dense)  # s=()
+    a = yastn.Tensor(config=config_dense)  # s=()
     a.set_block(val=3)  # 0-dim tensor is a number
     npa = a.to_numpy()
     assert np.isrealobj(npa) == (config_dense.default_dtype == 'float64')
@@ -128,7 +128,7 @@ def test_dense():
     assert a.is_consistent()
 
     # 1-dim tensor
-    a = yast.Tensor(config=config_dense, s=1)  # s=(1,)
+    a = yastn.Tensor(config=config_dense, s=1)  # s=(1,)
     a.set_block(Ds=5, val='ones')
     npa = a.to_numpy()
     assert np.isrealobj(npa) == (config_dense.default_dtype == 'float64')
@@ -136,7 +136,7 @@ def test_dense():
     assert a.is_consistent()
 
     # diagonal tensor
-    a = yast.Tensor(config=config_dense, isdiag=True)
+    a = yastn.Tensor(config=config_dense, isdiag=True)
     a.set_block(Ds=5, val='ones')
     npa = a.to_numpy()
     assert np.isrealobj(npa) == (config_dense.default_dtype == 'float64')
@@ -148,39 +148,39 @@ def test_dense():
 def test_set_block_exceptions():
     """ test raise YaseError by set_block()"""
     # 3-dim tensor
-    leg = yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
-    a = yast.ones(config=config_U1, legs=[leg, leg, leg.conj()])
+    leg = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
+    a = yastn.ones(config=config_U1, legs=[leg, leg, leg.conj()])
     b = a.copy()
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         b = a.copy()
         b.set_block(ts=(0, 0, 0), Ds=(3, 2, 2), val='ones')  # here (3, ...) is inconsistent bond dimension
         # Inconsistend bond dimension of charge.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         b = a.copy()
         b.set_block(ts=(0, 0), Ds=(2, 2), val='ones')
         # Size of ts is not consistent with tensor rank and the number of symmetry sectors.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         b = a.copy()
         b.set_block(ts=(0, 0, 0), Ds=(2, 2), val='ones')
         # 'Size of Ds is not consistent with tensor rank.'
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         b = a.copy()
         b.set_block(ts=(3, 0, 0), Ds=(2, 2, 2), val='ones')
         # Charges ts are not consistent with the symmetry rules: f(t @ s) == n
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         a.set_block(ts=(1, 1, 2), val='ones')
         # Provided Ds. Cannot infer all bond dimensions from existing blocks.
-    with pytest.raises(yast.YastError):
-        b = yast.Tensor(config=config_U1, isdiag=True)
+    with pytest.raises(yastn.YastError):
+        b = yastn.Tensor(config=config_U1, isdiag=True)
         b.set_block(ts=(0, 0), Ds=(1, 2), val='ones')
         # Diagonal tensor requires the same bond dimensions on both legs.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         a.set_block(ts=(0, 0, 0), val='four')
         # val should be in ("zeros", "ones", "rand")
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         a[(1, 1, 1)] = np.ones((3, 3, 3))
         # tensor does not have block specify by key
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         a[(1, 1, 1)]
         # tensor does not have block specify by key
 

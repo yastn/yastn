@@ -23,7 +23,7 @@ allowing for automatic differentiation (autograd) on backends which provide it.
 
 - Matrix product states (MPS) and algorithms powered by YAST 
 
-   Explore the entire [MPS module](https://marekrams.gitlab.io/yast/yast.mps.html#) or 
+   Explore the entire [MPS module](https://marekrams.gitlab.io/yast/yastn.mps.html#) or 
    try out code examples running [DMRG](https://marekrams.gitlab.io/yast/examples/mps/mps.html#dmrg)
    or [TDVP](https://marekrams.gitlab.io/yast/examples/mps/mps.html#tdvp) optimizations
 
@@ -35,7 +35,7 @@ allowing for automatic differentiation (autograd) on backends which provide it.
 
 <br />
 
-### Jump to [full Documentation](https://marekrams.gitlab.io/yast/index.html) or get started with [Examples](https://marekrams.gitlab.io/yast/yast.tensor.html#examples-basics-of-usage)
+### Jump to [full Documentation](https://marekrams.gitlab.io/yast/index.html) or get started with [Examples](https://marekrams.gitlab.io/yast/yastn.tensor.html#examples-basics-of-usage)
 
 <br />
 
@@ -44,7 +44,7 @@ allowing for automatic differentiation (autograd) on backends which provide it.
 
 Install using
 ```
-git clone https://gitlab.com/marekrams/yast.git && cd yast
+git clone https://gitlab.com/marekrams/yastn.git && cd yast
 pip install .
 ```
 or just clone and add YAST root to your Python import path to sucessfully ``import yast``.   
@@ -64,7 +64,7 @@ and optionally
 
 Tests, which are also a good source of examples of usage, can be found in the folder `tests`.
 To verify that everything works, get `pytest`. See [Installing pytest](https://docs.pytest.org/en/6.2.x/getting-started.html) 
-or `conda install -c conda-forge pytest`. Then you can test base yast.Tensor and also yast.mps modules
+or `conda install -c conda-forge pytest`. Then you can test base yastn.Tensor and also yastn.mps modules
 
 ```
 cd tests

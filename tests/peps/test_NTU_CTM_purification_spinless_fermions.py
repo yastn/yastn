@@ -3,13 +3,13 @@ import numpy as np
 import pytest
 import logging
 import argparse
-import yast
-import yast.tn.fpeps as fpeps
+import yastn
+import yastn.tn.fpeps as fpeps
 import time
-from yast.tn.fpeps.operators.gates import gates_hopping, gate_local_fermi_sea
-from yast.tn.fpeps.evolution import evolution_step_, gates_homogeneous
-from yast.tn.fpeps import initialize_peps_purification
-from yast.tn.fpeps.ctm import nn_avg, ctmrg, init_rand, nn_bond
+from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_fermi_sea
+from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
+from yastn.tn.fpeps import initialize_peps_purification
+from yastn.tn.fpeps.ctm import nn_avg, ctmrg, init_rand, nn_bond
 try:
     from .configs import config_U1_R_fermionic as cfg
     # cfg is used by pytest to inject different backends and divices
@@ -36,7 +36,7 @@ def test_NTU_spinless_finite():
     dims = (xx, yy)
     net = fpeps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
    
-    opt = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    opt = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
 
     GA_nn, GB_nn = gates_hopping(t, dbeta, fid, fc, fcdag, purification=purification)  # nn gate for 2D fermi sea
@@ -111,7 +111,7 @@ def test_NTU_spinless_infinite():
     step = 'two-step'
     tr_mode = 'optimal'
     net = fpeps.Peps(lattice=lattice, boundary=boundary)
-    opt = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    opt = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
 
     GA_nn, GB_nn = gates_hopping(t, dbeta, fid, fc, fcdag, purification=purification)  # nn gate for 2D fermi sea

@@ -1,7 +1,7 @@
 """ basic procedures of single mps """
 import numpy as np
-import yast
-import yast.tn.mps as mps
+import yastn
+import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
     # pytest is modifying cfg to inject different backends and divices during tests
@@ -21,7 +21,7 @@ def check_copy(psi1, psi2):
 
 def test_copy():
     """ Initialize random mps of full tensors and checks copying. """
-    operators = yast.operators.Spin1(sym='Z3', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.Spin1(sym='Z3', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=16, operators=operators)
 
     psi = generate.random_mps(n=(1,), D_total=16)

@@ -6,10 +6,10 @@ In YAST, the `legs` of the tensor represent individual vector spaces.
 
 To create a Leg, use
 
-.. autoclass:: yast.Leg
+.. autoclass:: yastn.Leg
     :members: conj, tD, history
     :special-members: __getitem__
     :exclude-members: __init__, __new__
 
-.. autofunction:: yast.random_leg
-.. autofunction:: yast.leg_union
+.. autofunction:: yastn.random_leg
+.. autofunction:: yastn.leg_union

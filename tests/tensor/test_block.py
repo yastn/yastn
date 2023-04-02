@@ -1,6 +1,6 @@
-""" test yast.block """
+""" test yastn.block """
 import pytest
-import yast
+import yastn
 try:
     from .configs import config_U1, config_Z2xU1
 except ImportError:
@@ -10,11 +10,11 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_block_U1():
-    """ test yast.block() to create Hamiltonian MPO U1-tensor. """
+    """ test yastn.block() to create Hamiltonian MPO U1-tensor. """
     w = 0.6  # hopping
     mu = -0.4  # chemical potential
 
-    H0 = yast.Tensor(config=config_U1, s=(1, 1, -1, -1))
+    H0 = yastn.Tensor(config=config_U1, s=(1, 1, -1, -1))
     H0.set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 1, 2))
     H0.set_block(ts=(0, 1, 1, 0), val=[[1, 0], [mu, 1]], Ds=(2, 1, 1, 2))
     H0.set_block(ts=(0, 0, 1, -1), val=[0, w], Ds=(2, 1, 1, 1))
@@ -23,101 +23,101 @@ def test_block_U1():
     H0.set_block(ts=(1, 0, 1, 0), val=[1, 0], Ds=(1, 1, 1, 2))
     # H0 is an MPO tensor for fermions in a chain with nearest-neighbor hopping w and chemical potential mu.
 
-    II = yast.ones(config=config_U1, t=(0, (0, 1), (0, 1), 0), D=(1, (1, 1), (1, 1), 1), s=(1, 1, -1, -1))
-    nn = yast.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
-    c01 = yast.ones(config=config_U1, t=(0, 0, 1, -1), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
-    cp01 = yast.ones(config=config_U1, t=(0, 1, 0, 1), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
-    cp10 = yast.ones(config=config_U1, t=(1, 0, 1, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
-    c10 = yast.ones(config=config_U1, t=(-1, 1, 0, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
+    II = yastn.ones(config=config_U1, t=(0, (0, 1), (0, 1), 0), D=(1, (1, 1), (1, 1), 1), s=(1, 1, -1, -1))
+    nn = yastn.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
+    c01 = yastn.ones(config=config_U1, t=(0, 0, 1, -1), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
+    cp01 = yastn.ones(config=config_U1, t=(0, 1, 0, 1), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
+    cp10 = yastn.ones(config=config_U1, t=(1, 0, 1, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
+    c10 = yastn.ones(config=config_U1, t=(-1, 1, 0, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
 
     #
     # dict keys give relative coordinates of blocks in a new super-tensor
     # common_legs are excluded from provided coordinates
-    H1 = yast.block({(0, 0): II, (1, 0): cp10, (2, 0): c10, (3, 0): mu * nn, (3, 1): w * c01, (3, 2): w * cp01, (3, 3): II}, common_legs=(1, 2))
+    H1 = yastn.block({(0, 0): II, (1, 0): cp10, (2, 0): c10, (3, 0): mu * nn, (3, 1): w * c01, (3, 2): w * cp01, (3, 3): II}, common_legs=(1, 2))
     assert H1.get_shape() == (4, 2, 2, 4)
 
     # those three give the same output
-    H2 = yast.block({(1, 1): II, (3, 1): cp10, (5, 1): c10, (7, 1): mu * nn, (7, 3): w * c01, (7, 5): w * cp01, (7, 9): II}, common_legs=(1, 2))
-    H3 = yast.block({(0, 0, 0, 0): II, (1, 0, 0, 0): cp10, (2, 0, 0, 0): c10, (3, 0, 0, 0): mu * nn, (3, 0, 0, 1): w * c01, (3, 0, 0, 2): w * cp01, (3, 0, 0, 3): II})
+    H2 = yastn.block({(1, 1): II, (3, 1): cp10, (5, 1): c10, (7, 1): mu * nn, (7, 3): w * c01, (7, 5): w * cp01, (7, 9): II}, common_legs=(1, 2))
+    H3 = yastn.block({(0, 0, 0, 0): II, (1, 0, 0, 0): cp10, (2, 0, 0, 0): c10, (3, 0, 0, 0): mu * nn, (3, 0, 0, 1): w * c01, (3, 0, 0, 2): w * cp01, (3, 0, 0, 3): II})
 
     # blocking performed in two steps is the same as from a single step
-    Hv4 = yast.block({(0, 0): II, (1, 0): cp10, (2, 0): c10}, common_legs=(1, 2))
-    Hh4 = yast.block({(3, 1): w * c01, (3, 2): w * cp01, (3, 3): II}, common_legs=(1, 2))
-    H4 = yast.block({(1, 0): mu * nn, (0, 0): Hv4, (1, 1): Hh4}, common_legs=(1, 2))
+    Hv4 = yastn.block({(0, 0): II, (1, 0): cp10, (2, 0): c10}, common_legs=(1, 2))
+    Hh4 = yastn.block({(3, 1): w * c01, (3, 2): w * cp01, (3, 3): II}, common_legs=(1, 2))
+    H4 = yastn.block({(1, 0): mu * nn, (0, 0): Hv4, (1, 1): Hh4}, common_legs=(1, 2))
 
     # also possible to explicite put empty tensor filling in the super-block grid
     # here in 2 steps
-    null = yast.Tensor(config=config_U1, s=(1, 1, -1, -1))  
-    H00 = yast.block({(0, 0): II, (1, 0): cp10, (0, 1): null, (1, 1): null}, common_legs=(1, 2))
-    H01 = yast.block({(0, 0): null, (1, 0): null, (0, 1): null, (1, 1): null}, common_legs=(1, 2))
-    H10 = yast.block({(0, 0): c10, (1, 0): mu * nn, (0, 1): null, (1, 1): w * c01}, common_legs=(1, 2))
-    H11 = yast.block({(0, 0): null, (1, 0): w * cp01, (0, 1): null, (1, 1): II}, common_legs=(1, 2))
-    H5 = yast.block({(0, 0): H00,  (0, 1): H01, (1, 0): H10, (1, 1): H11}, common_legs=(1, 2))
+    null = yastn.Tensor(config=config_U1, s=(1, 1, -1, -1))  
+    H00 = yastn.block({(0, 0): II, (1, 0): cp10, (0, 1): null, (1, 1): null}, common_legs=(1, 2))
+    H01 = yastn.block({(0, 0): null, (1, 0): null, (0, 1): null, (1, 1): null}, common_legs=(1, 2))
+    H10 = yastn.block({(0, 0): c10, (1, 0): mu * nn, (0, 1): null, (1, 1): w * c01}, common_legs=(1, 2))
+    H11 = yastn.block({(0, 0): null, (1, 0): w * cp01, (0, 1): null, (1, 1): II}, common_legs=(1, 2))
+    H5 = yastn.block({(0, 0): H00,  (0, 1): H01, (1, 0): H10, (1, 1): H11}, common_legs=(1, 2))
 
     assert all(x.is_consistent() for x in (H0, H1, H2, H3, H4, H5))
-    assert all(yast.norm(H1 - x) < tol for x in (H2, H3, H4, H5))  # == 0.0
+    assert all(yastn.norm(H1 - x) < tol for x in (H2, H3, H4, H5))  # == 0.0
 
     # drops information about blocking to compare with H0 that was generated by hand.
     H1d = H1.drop_leg_history()
-    assert yast.norm(H1d - H0) < tol
+    assert yastn.norm(H1d - H0) < tol
     # different syntax of drop_leg_history(axes=...)
     H2d = H1.drop_leg_history(axes=0).drop_leg_history(axes=(1, 2, 3))
-    assert yast.norm(H2d - H0) < tol
+    assert yastn.norm(H2d - H0) < tol
 
 
 
 def test_block_exceptions():
-    """ raising exceptions while using yast.block()"""
-    II = yast.ones(config=config_U1, t=(0, (0, 1), (0, 1), 0), D=(1, (1, 1), (1, 1), 1), s=(1, 1, -1, -1))
-    nn = yast.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
+    """ raising exceptions while using yastn.block()"""
+    II = yastn.ones(config=config_U1, t=(0, (0, 1), (0, 1), 0), D=(1, (1, 1), (1, 1), 1), s=(1, 1, -1, -1))
+    nn = yastn.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 1, 1, 1), s=(1, 1, -1, -1))
     # MPO tensor for chemical potential
-    H = yast.block({(0, 0): II,  (1, 0): nn, (1, 1): II}, common_legs=(1, 2))
+    H = yastn.block({(0, 0): II,  (1, 0): nn, (1, 1): II}, common_legs=(1, 2))
 
-    with pytest.raises(yast.YastError):
-        _ = yast.block({(0, ): II,  (1, 0): nn, (1, 1): II}, common_legs=(1, 2))
+    with pytest.raises(yastn.YastError):
+        _ = yastn.block({(0, ): II,  (1, 0): nn, (1, 1): II}, common_legs=(1, 2))
         # Wrong number of coordinates encoded in tensors.keys()
-    with pytest.raises(yast.YastError):
-        nnc = yast.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 1, 1, 1), s=(-1, -1, 1, 1))
-        _ = yast.block({(0, 0): II,  (1, 0): nnc, (1, 1): II}, common_legs=(1, 2))
+    with pytest.raises(yastn.YastError):
+        nnc = yastn.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 1, 1, 1), s=(-1, -1, 1, 1))
+        _ = yastn.block({(0, 0): II,  (1, 0): nnc, (1, 1): II}, common_legs=(1, 2))
         # Signatures of blocked tensors are inconsistent.
-    with pytest.raises(yast.YastError):
-        nnn = yast.ones(config=config_U1, t=(0, 1, 1, 1), D=(1, 1, 1, 1), s=(1, 1, -1, -1), n=1)
-        _ = yast.block({(0, 0): II,  (1, 0): nnn, (1, 1): II}, common_legs=(1, 2))
+    with pytest.raises(yastn.YastError):
+        nnn = yastn.ones(config=config_U1, t=(0, 1, 1, 1), D=(1, 1, 1, 1), s=(1, 1, -1, -1), n=1)
+        _ = yastn.block({(0, 0): II,  (1, 0): nnn, (1, 1): II}, common_legs=(1, 2))
         # Tensor charges of blocked tensors are inconsistent.
-    with pytest.raises(yast.YastError):
-        e1 = yast.eye(config=config_U1, t=[(0, 1), (0, 1)], D=[(2, 2), (2, 2)])
-        e2 = yast.eye(config=config_U1, t=[(0, 2), (0, 2)], D=[(2, 2), (2, 2)])
-        _ = yast.block({(0, 0): e1, (1, 1): e2})
+    with pytest.raises(yastn.YastError):
+        e1 = yastn.eye(config=config_U1, t=[(0, 1), (0, 1)], D=[(2, 2), (2, 2)])
+        e2 = yastn.eye(config=config_U1, t=[(0, 2), (0, 2)], D=[(2, 2), (2, 2)])
+        _ = yastn.block({(0, 0): e1, (1, 1): e2})
         # Block does not support diagonal tensors. Use .diag() first.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         fII = II.fuse_legs(axes=(0, (1, 2, 3)), mode='meta')
         fnn = nn.fuse_legs(axes=(0, 1, (2, 3)), mode='meta')
         fnn = fnn.fuse_legs(axes=(0, (1, 2)), mode='meta')
         # block is hard-fusing meta-fused legs first.
-        _ = yast.block({(0, 0): fII,  (1, 0): fnn, (1, 1): fII}, common_legs=())
+        _ = yastn.block({(0, 0): fII,  (1, 0): fnn, (1, 1): fII}, common_legs=())
         # Inconsistent numbers of hard-fused legs or sub-fusions order.
-    with pytest.raises(yast.YastError):
-        nnn = yast.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 2, 1, 1), s=(1, 1, -1, -1))
-        _ = yast.block({(0, 0): II,  (1, 0): nnn, (1, 1): II}, common_legs=(1, 2))
+    with pytest.raises(yastn.YastError):
+        nnn = yastn.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 2, 1, 1), s=(1, 1, -1, -1))
+        _ = yastn.block({(0, 0): II,  (1, 0): nnn, (1, 1): II}, common_legs=(1, 2))
         # Legs have inconsistent dimensions.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         H.unfuse_legs(axes=0)
-        # cannot unfuse a leg obtained as a result of yast.block()
+        # cannot unfuse a leg obtained as a result of yastn.block()
 
 
 def test_block_embed_fuse():
     """ test handling leg mismatches before applying block."""
-    leg1 = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 1, 4))
-    leg1a = yast.Leg(config_U1, s=1, t=(-1, 0, 4), D=(3, 1, 5))
-    leg2 = yast.Leg(config_U1, s=1, t=(-2, 0, 2), D=(3, 1, 2))
-    a = yast.rand(config=config_U1, legs=[leg1, leg1, leg2.conj(), leg2.conj()])
-    b = yast.rand(config=config_U1, legs=[leg2, leg2, leg1a.conj(), leg1.conj()])
+    leg1 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 1, 4))
+    leg1a = yastn.Leg(config_U1, s=1, t=(-1, 0, 4), D=(3, 1, 5))
+    leg2 = yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(3, 1, 2))
+    a = yastn.rand(config=config_U1, legs=[leg1, leg1, leg2.conj(), leg2.conj()])
+    b = yastn.rand(config=config_U1, legs=[leg2, leg2, leg1a.conj(), leg1.conj()])
     run_block_embed_fuse(a, b)
 
-    leg1 = yast.Leg(config_Z2xU1, s=1, t=((0, -1), (0, 1), (1, 0)), D=(2, 3, 4))
-    leg2 = yast.Leg(config_Z2xU1, s=1, t=((1, -1), (1, 1), (0, 0)), D=(5, 6, 7))
-    a = yast.rand(config=config_Z2xU1, legs=[leg1, leg2, leg2.conj(), leg1.conj()])
-    b = yast.rand(config=config_Z2xU1, legs=[leg2, leg1, leg1.conj(), leg2.conj()])
+    leg1 = yastn.Leg(config_Z2xU1, s=1, t=((0, -1), (0, 1), (1, 0)), D=(2, 3, 4))
+    leg2 = yastn.Leg(config_Z2xU1, s=1, t=((1, -1), (1, 1), (0, 0)), D=(5, 6, 7))
+    a = yastn.rand(config=config_Z2xU1, legs=[leg1, leg2, leg2.conj(), leg1.conj()])
+    b = yastn.rand(config=config_Z2xU1, legs=[leg2, leg1, leg1.conj(), leg2.conj()])
     run_block_embed_fuse(a, b)
 
     # adds extra block to a and b and run test again
@@ -133,75 +133,75 @@ def run_block_embed_fuse(a, b):
     """
     vs, tras, vapb, vamb = [], [], [], []
 
-    vs.append((yast.vdot(a, a) + yast.vdot(b, b)).item())
-    vapb.append((yast.vdot(a, a) + yast.vdot(b, b) + yast.vdot(a, b) + yast.vdot(b, a)).item())
-    vamb.append((yast.vdot(a, a) + yast.vdot(b, b) - yast.vdot(a, b) - yast.vdot(b, a)).item())
-    tras.append((yast.trace(a, axes=((0, 1), (2, 3))) + yast.trace(b, axes=((0, 1), (2, 3)))).item())
+    vs.append((yastn.vdot(a, a) + yastn.vdot(b, b)).item())
+    vapb.append((yastn.vdot(a, a) + yastn.vdot(b, b) + yastn.vdot(a, b) + yastn.vdot(b, a)).item())
+    vamb.append((yastn.vdot(a, a) + yastn.vdot(b, b) - yastn.vdot(a, b) - yastn.vdot(b, a)).item())
+    tras.append((yastn.trace(a, axes=((0, 1), (2, 3))) + yastn.trace(b, axes=((0, 1), (2, 3)))).item())
 
     fa = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
     fb = b.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
     assert all(leg.history() == 'p(oo)' for leg in fa.get_legs())
 
-    abv = yast.block({(0, 0): fa, (1, 0): fb})
-    abh = yast.block({(0, 0): fa, (0, 1): fb})
-    bav = yast.block({(0, 0): fb, (1, 0): fa})
-    bah = yast.block({(0, 0): fb, (0, 1): fa})
+    abv = yastn.block({(0, 0): fa, (1, 0): fb})
+    abh = yastn.block({(0, 0): fa, (0, 1): fb})
+    bav = yastn.block({(0, 0): fb, (1, 0): fa})
+    bah = yastn.block({(0, 0): fb, (0, 1): fa})
     assert abv.get_legs(0).history() == 's(p(oo)p(oo))'
     assert abv.get_legs(1).history() == 'p(oo)'
 
     ffa = fa.fuse_legs(axes=[(0, 1)], mode='hard').add_leg(axis=1)
     ffb = fb.fuse_legs(axes=[(0, 1)], mode='hard').add_leg(axis=1)
-    ffab = yast.block({(0, 0): ffa, (0, 1): ffb})
-    ffba = yast.block({(0, 0): ffb, (0, 1): ffa})
+    ffab = yastn.block({(0, 0): ffa, (0, 1): ffb})
+    ffba = yastn.block({(0, 0): ffb, (0, 1): ffa})
 
     for x in (abv, abh, bav, bah, ffab, ffba):
-        vs.append(yast.vdot(x, x).item())
+        vs.append(yastn.vdot(x, x).item())
 
     for x, y in ((abv, bav), (bav, abv), (abh, bah), (bah, abh), (ffab, ffba), (ffba, ffab)):
-        vapb.append(yast.vdot(x + y, x + y).item() / 2)
-        vamb.append(yast.vdot(x - y, x - y).item() / 2)
+        vapb.append(yastn.vdot(x + y, x + y).item() / 2)
+        vamb.append(yastn.vdot(x - y, x - y).item() / 2)
 
-    fabv = yast.block({(0, 0): fa, (1, 0): fb})
-    fbav = yast.block({(0, 0): fb, (1, 0): fa})
-    fabh = yast.block({(0, 0): fa, (0, 1): fb})
-    fbah = yast.block({(0, 0): fb, (0, 1): fa})
-    fbbv = yast.block({(0, 0): fb, (1, 0): fb})
+    fabv = yastn.block({(0, 0): fa, (1, 0): fb})
+    fbav = yastn.block({(0, 0): fb, (1, 0): fa})
+    fabh = yastn.block({(0, 0): fa, (0, 1): fb})
+    fbah = yastn.block({(0, 0): fb, (0, 1): fa})
+    fbbv = yastn.block({(0, 0): fb, (1, 0): fb})
 
-    fad = yast.block({(0, 0): fabv, (0, 1): fbav})
-    fbd = yast.block({(0, 0): fbav, (0, 1): fabv})
-    fad1 = yast.block({(0, 0): fabh, (1, 0): fbah})
-    fbd1 = yast.block({(0, 0): fbah, (1, 0): fabh})
+    fad = yastn.block({(0, 0): fabv, (0, 1): fbav})
+    fbd = yastn.block({(0, 0): fbav, (0, 1): fabv})
+    fad1 = yastn.block({(0, 0): fabh, (1, 0): fbah})
+    fbd1 = yastn.block({(0, 0): fbah, (1, 0): fabh})
     ffad = fad.fuse_legs(axes=[(0, 1)], mode='hard')
     ffbd = fbd.fuse_legs(axes=[(0, 1)], mode='hard')
     ffad.get_legs(axes=0).history() == 'p(s(p(oo)p(oo))s(p(oo)p(oo)))'
 
-    fabbav = yast.block({(0, 0): fabv, (1, 0): fbav})
-    fbaabv = yast.block({(0, 0): fbav, (1, 0): fabv})
-    fababv = yast.block({(0, 0): fabv, (1, 0): fabv})
-    fbabav = yast.block({(0, 0): fbav, (1, 0): fbav})
+    fabbav = yastn.block({(0, 0): fabv, (1, 0): fbav})
+    fbaabv = yastn.block({(0, 0): fbav, (1, 0): fabv})
+    fababv = yastn.block({(0, 0): fabv, (1, 0): fabv})
+    fbabav = yastn.block({(0, 0): fbav, (1, 0): fbav})
 
-    fabbav1 = yast.block({(0, 0): fa, (1, 0): fbbv, (2, 0): fa})
-    fbaabv1 = yast.block({(0, 0): fb, (1, 0): fa, (2, 0): fabv})
-    fababv1 = yast.block({(0, 0): fabv, (1, 0): fa, (2, 0): fb})
-    fbabav1 = yast.block({(0, 0): fb, (1, 0): fabv, (2, 0): fa})
+    fabbav1 = yastn.block({(0, 0): fa, (1, 0): fbbv, (2, 0): fa})
+    fbaabv1 = yastn.block({(0, 0): fb, (1, 0): fa, (2, 0): fabv})
+    fababv1 = yastn.block({(0, 0): fabv, (1, 0): fa, (2, 0): fb})
+    fbabav1 = yastn.block({(0, 0): fb, (1, 0): fabv, (2, 0): fa})
 
     for x, y in ((fabbav, fabbav1), (fababv, fababv1),
                  (fbabav, fbabav1), (fbaabv, fbaabv1),
                  (fad, fad1), (fbd, fbd1)):
-        assert yast.norm(x - y) < tol
+        assert yastn.norm(x - y) < tol
 
     for x in (fad, fbd, fabbav, fbaabv, ffad, ffbd):
-        vs.append(yast.vdot(x, x).item() / 2)
+        vs.append(yastn.vdot(x, x).item() / 2)
     
     for x, y in ((fad, fbd), (fbd, fad), (fbaabv, fabbav), (fabbav, fbaabv), (ffad, ffbd), (ffbd, ffad)):
-        vapb.append(yast.vdot(x + y, x + y).item() / 4)
-        vamb.append(yast.vdot(x - y, x - y).item() / 4)
+        vapb.append(yastn.vdot(x + y, x + y).item() / 4)
+        vamb.append(yastn.vdot(x - y, x - y).item() / 4)
 
     for x, y in ((fbaabv, fbabav), (fabbav, fbabav)):
-        vamb.append(yast.vdot(x - y, x - y).item() / 2)
+        vamb.append(yastn.vdot(x - y, x - y).item() / 2)
 
     for x, y in ((fad1, fbd1), (fbd1, fad1)):
-        tras.append(yast.trace(x + y, axes=(0, 1)).item() / 2)
+        tras.append(yastn.trace(x + y, axes=(0, 1)).item() / 2)
 
     assert all(pytest.approx(x, rel=tol) == vs[0] for x in vs)
     assert all(pytest.approx(x, rel=tol) == tras[0] for x in tras)

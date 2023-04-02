@@ -1,8 +1,8 @@
 """ basic procedures of single mps """
 import numpy as np
 import pytest
-import yast
-import yast.tn.mps as mps
+import yastn
+import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
     # pytest modifies cfg to inject different backends and divices during tests
@@ -14,7 +14,7 @@ tol = 1e-12
 
 def test_canonize():
     """ Initialize random mps and checks canonization. """
-    operators = yast.operators.Spin1(sym='Z3', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.Spin1(sym='Z3', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=16, operators=operators)
 
     for n in (0, 1, 2):
@@ -23,7 +23,7 @@ def test_canonize():
     psi = generate.random_mpo(D_total=8, dtype='complex128')
     check_canonize(psi)
 
-    operators = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=16, operators=operators)
     psi = generate.random_mps(D_total=16, dtype='complex128')
     check_canonize(psi)
@@ -33,13 +33,13 @@ def test_canonize():
 
 def test_env2_update():
     """ Initialize random mps' and check if overlaps are calculated consistently. """
-    operators = yast.operators.Spin12(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.Spin12(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=12, operators=operators)
     psi1 = generate.random_mps(D_total=15)
     psi2 = generate.random_mps(D_total=7)
     check_env2_measure(psi1, psi2)
 
-    operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=13, operators=operators)
 
     psi1 = generate.random_mps(D_total=11, n=1)
@@ -52,7 +52,7 @@ def test_env2_update():
 
 def test_env3_update():
     """ Initialize random mps' and check if overlaps are calculated consistently. """
-    operators = yast.operators.SpinfulFermions(sym='U1xU1', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.SpinfulFermions(sym='U1xU1', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=13, operators=operators)
     psi1 = generate.random_mps(D_total=11, n=(7, 7))
     psi2 = generate.random_mps(D_total=15, n=(7, 7))

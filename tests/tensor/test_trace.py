@@ -1,7 +1,7 @@
-""" yast.trace() """
+""" yastn.trace() """
 import numpy as np
 import pytest
-import yast
+import yastn
 try:
     from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
@@ -11,7 +11,7 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 def trace_vs_numpy(a, axes):
-    """ Compares yast.trace vs dense operations in numpy. Return traced yast tensor. """
+    """ Compares yastn.trace vs dense operations in numpy. Return traced yastn tensor. """
     if isinstance(axes[0], int):
         axes = ((axes[0],), (axes[1],))
     out = tuple(i for i in range(a.ndim) if i not in axes[0] + axes[1])
@@ -24,7 +24,7 @@ def trace_vs_numpy(a, axes):
         na = a.to_numpy() # no trace is axes=((),())
 
     nat = np.trace(na) if len(axes[0]) > 0 else na
-    c = yast.trace(a, axes)
+    c = yastn.trace(a, axes)
 
     assert c.is_consistent()
     if len(axes[0]) > 0:
@@ -40,149 +40,149 @@ def trace_vs_numpy(a, axes):
 def test_trace_basic():
     """ test trace for different symmetries. """
     # dense
-    a = yast.ones(config=config_dense, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
+    a = yastn.ones(config=config_dense, s=(-1, 1, 1, -1), D=(2, 5, 2, 5))
     b = trace_vs_numpy(a, axes=(0, 2))
     c = trace_vs_numpy(b, axes=(1, 0))
     assert pytest.approx(c.item(), rel=tol) == 10.
 
-    a = yast.eye(config=config_dense, D=5)
+    a = yastn.eye(config=config_dense, D=5)
     b = trace_vs_numpy(a, axes=((), ()))
-    assert yast.norm(a - b) < tol
+    assert yastn.norm(a - b) < tol
     c = trace_vs_numpy(a, axes=(0, 1))
     assert pytest.approx(c.item(), rel=tol) == 5.
 
     # U1
-    leg1 = yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
-    leg2 = yast.Leg(config_U1, s=1, t=(0, 1), D=(4, 5))
-    leg3 = yast.Leg(config_U1, s=1, t=(0, 1), D=(6, 7))
-    a = yast.ones(config=config_U1, legs=[leg1.conj(), leg2.conj(), leg3.conj(), leg3, leg2, leg1])
+    leg1 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
+    leg2 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(4, 5))
+    leg3 = yastn.Leg(config_U1, s=1, t=(0, 1), D=(6, 7))
+    a = yastn.ones(config=config_U1, legs=[leg1.conj(), leg2.conj(), leg3.conj(), leg3, leg2, leg1])
     b = trace_vs_numpy(a, axes=(0, 5))
     b = trace_vs_numpy(b, axes=((), ())) # no trace
     b = trace_vs_numpy(b, axes=(3, 0))
     b = trace_vs_numpy(b, axes=(0, 1))
     assert pytest.approx(b.item(), rel=tol) == 5 * 9 * 13
 
-    leg = yast.Leg(config_U1, s=1, t=(1, 2, 3), D=(3, 4, 5))
-    a = yast.eye(config=config_U1, legs=leg)
+    leg = yastn.Leg(config_U1, s=1, t=(1, 2, 3), D=(3, 4, 5))
+    a = yastn.eye(config=config_U1, legs=leg)
     b = trace_vs_numpy(a, axes=((), ())) # no trace
     b = trace_vs_numpy(a, axes=(0, 1))
 
-    a = yast.ones(config=config_U1, s=(-1, -1, 1),
+    a = yastn.ones(config=config_U1, s=(-1, -1, 1),
                   t=[(1,), (1,), (2,)], D=[(2,), (2,), (2,)])
     b = trace_vs_numpy(a, axes=(0, 2))
     assert b.norm() < tol  # == 0
 
     # Z2xU1
-    leg1 = yast.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(6, 4, 9, 6))
-    leg2 = yast.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(20, 16, 25, 20))
-    a = yast.randC(config=config_Z2xU1, legs=[leg1.conj(), leg2.conj(), leg2, leg1])
+    leg1 = yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(6, 4, 9, 6))
+    leg2 = yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(20, 16, 25, 20))
+    a = yastn.randC(config=config_Z2xU1, legs=[leg1.conj(), leg2.conj(), leg2, leg1])
     b = trace_vs_numpy(a, axes=(0, 3))
     b = trace_vs_numpy(b, axes=(1, 0))
     c = a.trace(axes=((0, 1), (3, 2)))
     assert pytest.approx(c.item(), rel=tol) == b.item()
 
-    leg = yast.Leg(config_Z2xU1, s=1, t=((0, 0), (1, 1), (0, 2)), D=(2, 2, 2))
-    a = yast.eye(config=config_Z2xU1, legs=leg)
+    leg = yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (1, 1), (0, 2)), D=(2, 2, 2))
+    a = yastn.eye(config=config_Z2xU1, legs=leg)
     b = trace_vs_numpy(a, axes=((), ())) # no trace
-    assert yast.norm(a - b) < tol
+    assert yastn.norm(a - b) < tol
     b = trace_vs_numpy(a, axes=(0, 1))
     assert pytest.approx(b.item(), rel=tol) == 6
 
 
 def test_trace_fusions():
     """ test trace of meta-fused and hard-fused tensors. """
-    leg1 = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(1, 2, 3))
-    leg2 = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
+    leg1 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(1, 2, 3))
+    leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
 
     # meta-fusion
 
-    a = yast.randR(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj(), leg1, leg2.conj()])
-    af = yast.fuse_legs(a, axes=((1, 2), (3, 0), (4, 5)), mode='meta')
+    a = yastn.randR(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj(), leg1, leg2.conj()])
+    af = yastn.fuse_legs(a, axes=((1, 2), (3, 0), (4, 5)), mode='meta')
     b = trace_vs_numpy(a, axes=((1, 2), (3, 0)))
     bf = trace_vs_numpy(af, axes=(0, 1)).unfuse_legs(axes=0)
-    assert yast.norm(bf - b) < tol
+    assert yastn.norm(bf - b) < tol
 
     # hard-fusion
 
-    a = yast.randC(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj(), leg1, leg2.conj()])
-    af = yast.fuse_legs(a, axes=((1, 2), (3, 0), (4, 5)), mode='hard')
+    a = yastn.randC(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj(), leg1, leg2.conj()])
+    af = yastn.fuse_legs(a, axes=((1, 2), (3, 0), (4, 5)), mode='hard')
     b = trace_vs_numpy(a, axes=((1, 2), (3, 0)))
     bf = trace_vs_numpy(af, axes=(0, 1)).unfuse_legs(axes=0)
-    assert yast.norm(bf - b) < tol
+    assert yastn.norm(bf - b) < tol
 
 
-    legs = [yast.Leg(config_U1, s=-1, t=(-1, 1), D=(1, 2)),
-            yast.Leg(config_U1, s=1, t=(-1, 2), D=(4, 6)),
-            yast.Leg(config_U1, s=1, t=(-1, 1), D=(1, 2)),
-            yast.Leg(config_U1, s=-1, t=(1, 2), D=(5, 6)),
-            yast.Leg(config_U1, s=1, t=(1, 2), D=(3, 4))]
-    a = yast.rand(config=config_U1, legs=legs)
-    af = yast.fuse_legs(a, axes=((1, 2), (3, 0), 4), mode='hard')
+    legs = [yastn.Leg(config_U1, s=-1, t=(-1, 1), D=(1, 2)),
+            yastn.Leg(config_U1, s=1, t=(-1, 2), D=(4, 6)),
+            yastn.Leg(config_U1, s=1, t=(-1, 1), D=(1, 2)),
+            yastn.Leg(config_U1, s=-1, t=(1, 2), D=(5, 6)),
+            yastn.Leg(config_U1, s=1, t=(1, 2), D=(3, 4))]
+    a = yastn.rand(config=config_U1, legs=legs)
+    af = yastn.fuse_legs(a, axes=((1, 2), (3, 0), 4), mode='hard')
     b = trace_vs_numpy(a, axes=((1, 2), (3, 0)))
     bf = trace_vs_numpy(af, axes=(0, 1))
-    assert yast.norm(bf - b) < tol
+    assert yastn.norm(bf - b) < tol
 
-    a = yast.Tensor(config=config_U1, s=(1, -1, 1, 1, -1, -1))
+    a = yastn.Tensor(config=config_U1, s=(1, -1, 1, 1, -1, -1))
     a.set_block(ts=(1, 2, 0, 2, 1, 0), Ds=(2, 3, 4, 3, 2, 4), val='rand')
     a.set_block(ts=(2, 1, 1, 1, 2, 1), Ds=(6, 5, 4, 5, 6, 4), val='rand')
     a.set_block(ts=(3, 2, 1, 2, 2, 2), Ds=(1, 3, 4, 3, 6, 2), val='rand')
-    af = yast.fuse_legs(a, axes=((0, 1), 2, (4, 3), 5), mode='hard')
+    af = yastn.fuse_legs(a, axes=((0, 1), 2, (4, 3), 5), mode='hard')
     b = trace_vs_numpy(a, axes=((0, 1), (4, 3)))
     bf = trace_vs_numpy(af, axes=(0, 2))
-    assert yast.norm(bf - b) < tol
+    assert yastn.norm(bf - b) < tol
 
-    aff = yast.fuse_legs(af, axes=((0, 1), (2, 3)), mode='hard')
+    aff = yastn.fuse_legs(af, axes=((0, 1), (2, 3)), mode='hard')
     b = trace_vs_numpy(a, axes=((0, 1, 2), (4, 3, 5)))
     bff = trace_vs_numpy(aff, axes=(0, 1))
-    assert yast.norm(bff - b) < tol
+    assert yastn.norm(bff - b) < tol
 
-    a = yast.Tensor(config=config_U1, s=(1, -1, 1, -1, 1, -1, 1, -1))
+    a = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1, 1, -1, 1, -1))
     a.set_block(ts=(1, 1, 2, 2, 0, 0, 1, 1), Ds=(1, 1, 2, 2, 4, 4, 1, 1), val='rand')
     a.set_block(ts=(2, 1, 1, 2, 0, 0, 1, 1), Ds=(2, 1, 1, 2, 4, 4, 1, 1), val='rand')
     a.set_block(ts=(3, 1, 1, 2, 1, 1, 0, 1), Ds=(3, 1, 1, 2, 1, 1, 4, 1), val='rand')
-    af = yast.fuse_legs(a, axes=((0, 2), (1, 3), (4, 6), (5, 7)), mode='hard')
-    aff = yast.fuse_legs(af, axes=((0, 2), (1, 3)), mode='hard')
+    af = yastn.fuse_legs(a, axes=((0, 2), (1, 3), (4, 6), (5, 7)), mode='hard')
+    aff = yastn.fuse_legs(af, axes=((0, 2), (1, 3)), mode='hard')
     
     b = trace_vs_numpy(a, axes=((0, 2, 4, 6), (1, 3, 5, 7)))
     bf = trace_vs_numpy(af, axes=((0, 2), (1, 3)))
     bff = trace_vs_numpy(aff, axes=(0, 1))
-    assert yast.norm(b - bf) < tol
-    assert yast.norm(b - bff) < tol
+    assert yastn.norm(b - bf) < tol
+    assert yastn.norm(b - bff) < tol
 
     b2 = trace_vs_numpy(a, axes=((0, 2), (1, 3)))
     bf2 = trace_vs_numpy(af, axes=(0, 1))
     bf2 = bf2.unfuse_legs(axes=(0, 1)).transpose(axes=(0, 2, 1, 3))
-    assert yast.norm(b2 - bf2) < tol
+    assert yastn.norm(b2 - bf2) < tol
 
 
 def test_trace_exceptions():
     """ test trigerring some expections """
     t1, D1, D2 = (0, 1), (2, 3), (4, 5)
-    a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
+    a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                 t=[t1, t1, t1, t1, t1, t1], D=[D1, D2, D2, D2, D2, D2])
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         a.trace(axes=(0, 6))  # Error in trace: axis outside of tensor ndim
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         a.trace(axes=((0, 1, 2), (2, 3, 4)))  # Error in trace: repeated axis in axes
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         a.trace(axes=((0, 1, 2), (2, 3, 3)))  # Error in trace: repeated axis in axes
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         a.trace(axes=((0, 1, 2), (3, 4)))  # Error in trace: unmatching number of axes to trace.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         a.trace(axes=((1, 3), (2, 4)))  # Error in trace: signatures do not match.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         a.trace(axes=((0, 1, 2), (3, 4, 5)))  # Error in trace: bond dimensions of traced legs do not match.
     b = a.fuse_legs(axes=((0, 1, 2), (3, 4), 5), mode='meta')
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         b.trace(axes=(0, 1))  # Error in trace: meta-fusions of traced axes do not match.
     b = a.fuse_legs(axes=(0, (1, 3), (2, 4), 5), mode='meta')
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         b.trace(axes=(1, 2))  # Error in trace: signatures do not match.
     b = a.fuse_legs(axes=((0, 1, 2), (3, 4), 5), mode='hard')
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         b.trace(axes=(0, 1))  # Error in trace: hard fusions of legs 0 and 1 are not compatible.
     b = a.fuse_legs(axes=(0, (1, 3), (4, 5), 2), mode='hard')
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         b.trace(axes=(1, 2))  # Error in trace: hard fusions of legs 1 and 2 are not compatible.
 
 

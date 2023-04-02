@@ -7,9 +7,9 @@ Creating a copy of MPS/MPO
 To create an independent copy or clone of MPS/MPO :code:`A` call :code:`A.copy()`
 or :code:`A.clone()` respectively.
 
-.. autofunction:: yast.tn.mps.MpsMpo.copy
+.. autofunction:: yastn.tn.mps.MpsMpo.copy
 
-.. autofunction:: yast.tn.mps.MpsMpo.clone
+.. autofunction:: yastn.tn.mps.MpsMpo.clone
 
 Multiplication by a scalar
 ---------------------------
@@ -43,7 +43,7 @@ and :code:`B`'s tensors along virtual dimension.
 
 To make a sum of many MPS/MPOs :math:`\{A_0,A_1,\dots\}` at once use :code:`yamps.add(A_0,A_1,...)`.
 
-.. autofunction:: yast.tn.mps.add
+.. autofunction:: yastn.tn.mps.add
 
 Following example show an addition of two MPSs:
 
@@ -82,12 +82,12 @@ operator product :math:`\hat{O}\hat{P} = \hat{C}` (matrix-matrix multiplication)
               |d         |           |
 
 One can either use product operator :code:`C=A@B` or more verbose 
-:code:`C=yast.tn.mps.multiply(A,B)`. Note that for MPO-MPS product, the *@*
+:code:`C=yastn.tn.mps.multiply(A,B)`. Note that for MPO-MPS product, the *@*
 is commutative, i.e., :code:`O@A` and :code:`A@O` are equivalent.
 
 See examples here: :ref:`examples/mps/mps:Multiplication`.
 
-.. autofunction:: yast.tn.mps.multiply
+.. autofunction:: yastn.tn.mps.multiply
 
 
 Canonizing MPS/MPO
@@ -100,7 +100,7 @@ MPS/MPO can be put into :ref:`theory/mps/basics:Canonical form` to reveal most a
 The canonical form obtained by QR decomposition is fast, but does not allow for truncation 
 of the virtual spaces of MPS/MPO. 
 
-.. autofunction:: yast.tn.mps.MpsMpo.canonize_
+.. autofunction:: yastn.tn.mps.MpsMpo.canonize_
 
 See examples: :ref:`examples/mps/mps:Canonical form by QR`.
 
@@ -108,12 +108,12 @@ Restoring canonical form locally: For example, while performing DMRG sweeps,
 the tensors getting updated will not be in canonical form after the update. 
 It is necessary to restore their canonical form in course of sweeping. 
 
-.. autofunction:: yast.tn.mps.MpsMpo.orthogonalize_site
+.. autofunction:: yastn.tn.mps.MpsMpo.orthogonalize_site
 
 The canonisation by `singular value decomposition` (SVD) allows 
 to truncate virtual dimension/spaces with the lowest weight 
 (lowest singular values).
 
-.. autofunction:: yast.tn.mps.MpsMpo.truncate_
+.. autofunction:: yastn.tn.mps.MpsMpo.truncate_
 
 See examples: :ref:`examples/mps/mps:Canonical form by SVD`.

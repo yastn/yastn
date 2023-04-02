@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
-import yast
-import yast.tn.mps as mps
+import yastn
+import yastn.tn.mps as mps
 
 parser= argparse.ArgumentParser(description='',allow_abbrev=False)
 parser.add_argument("--init_D", type=int, default=1, help="bond dimension")
@@ -23,7 +23,7 @@ def h_2site(N,i,theta,J=1.0):
     #
     # 0) prepare algebra of Spin-1 operators with explicit U(1)-symmetry
     #    associated to S^z quantum number
-    S1= yast.operators.Spin1(sym='U1')
+    S1= yastn.operators.Spin1(sym='U1')
 
     # 1.0) init generator
     G= mps.Generator(N,S1)
@@ -40,9 +40,9 @@ def h_2site(N,i,theta,J=1.0):
     #
     #      then square it
     #
-    SiSj= yast.tensordot(S1.g(), S1.vec_s(), ([1],[0]))
-    SiSj= yast.tensordot(S1.vec_s(), SiSj, ([0],[0])).transpose(axes=(0,2,1,3))
-    SiSj2= yast.tensordot(SiSj,SiSj,([2,3],[0,1]))
+    SiSj= yastn.tensordot(S1.g(), S1.vec_s(), ([1],[0]))
+    SiSj= yastn.tensordot(S1.vec_s(), SiSj, ([0],[0])).transpose(axes=(0,2,1,3))
+    SiSj2= yastn.tensordot(SiSj,SiSj,([2,3],[0,1]))
     # 
     #      sum bilinear and biquadratic interactions
     #
@@ -53,7 +53,7 @@ def h_2site(N,i,theta,J=1.0):
     #      0     1     0                1
     #      S_i . S_j = Qi--2(-1) (+1)0--Rj
     #      2     3     1                2
-    Qi,Rj= yast.linalg.qr(h2, axes=((0, 2), (1, 3)), sQ=-1, Qaxis=1)
+    Qi,Rj= yastn.linalg.qr(h2, axes=((0, 2), (1, 3)), sQ=-1, Qaxis=1)
 
     # 1.4) add extra legs to Qi and Rj to conform to MPO tensor
     #
@@ -70,7 +70,7 @@ def h_2site(N,i,theta,J=1.0):
 def random_mps(N, charge, D, sigma=1):
     # 0) prepare algebra of Spin-1 operators with explicit U(1)-symmetry
     #    associated to S^z quantum number
-    S1= yast.operators.Spin1(sym='U1')
+    S1= yastn.operators.Spin1(sym='U1')
 
     # 1.0) init generator
     G= mps.Generator(N,S1)
@@ -80,9 +80,9 @@ def random_mps(N, charge, D, sigma=1):
 #    as superposition of dimers on even and odd sublattices   
 #
 def dimer_mps(N):
-    S1= yast.operators.Spin1(sym='U1')
+    S1= yastn.operators.Spin1(sym='U1')
 
-    _A= yast.Tensor(config=S1.config, s=(1,1,-1), n=0)
+    _A= yastn.Tensor(config=S1.config, s=(1,1,-1), n=0)
     _B= _A.copy()
     _A.set_block(ts=(0,0,0), Ds=(1,1,1), val=1.)
     _N= _A.copy()
@@ -111,7 +111,7 @@ def dimer_mps(N):
 def obs_ops(N):
     # 0) prepare algebra of Spin-1 operators with explicit U(1)-symmetry
     #    associated to S^z quantum number
-    S1= yast.operators.Spin1(sym='U1')
+    S1= yastn.operators.Spin1(sym='U1')
 
     # 1.0) init generator
     G= mps.Generator(N,S1)

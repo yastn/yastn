@@ -9,6 +9,6 @@ The TDVP splits the exponentiation to local operation on 1 or 2 tensors dependin
 The `2site` is suitable for dynamically expanding the MPS virtual dimensions controlled by `opts_svd` option. 
 
 
-.. autofunction:: yast.tn.mps.tdvp_
+.. autofunction:: yastn.tn.mps.tdvp_
 
 See examples: :ref:`examples/mps/mps:tdvp`.

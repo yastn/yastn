@@ -1,8 +1,8 @@
 """ mps.tdvp_ """
 import logging
 import pytest
-import yast
-import yast.tn.mps as mps
+import yastn
+import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
     # pytest modifies cfg to inject different backends and devices during tests
@@ -57,7 +57,7 @@ def test_dense_tdvp():
     #
     # The Hamiltonian is obtained with automatic generator (see source file).
     #
-    operators = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=N, operators=operators)
     parameters = {"t": 1.0, "mu": 0.2, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
     H_str = "\sum_{i,j \in rangeNN} t ( sp_{i} sm_{j} + sp_{j} sm_{i} ) + \sum_{j\in rangeN} mu sp_{j} sm_{j}"
@@ -67,7 +67,7 @@ def test_dense_tdvp():
     #
     generate.random_seed(seed=0)
     #
-    # In this example we use yast.Tensor's with no symmetry imposed. 
+    # In this example we use yastn.Tensor's with no symmetry imposed. 
     #
     logging.info(' Tensor : dense ')
     #
@@ -109,7 +109,7 @@ def test_Z2_tdvp():
 
     logging.info(' Tensor : Z2 ')
 
-    operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 
@@ -134,7 +134,7 @@ def test_U1_tdvp():
     steps = 20
     opts_svd = {'tol': 1e-6, 'D_total': D_total}
 
-    operators = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 

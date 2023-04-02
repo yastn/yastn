@@ -1,8 +1,8 @@
-""" yast.vdot yast.move_leg"""
+""" yastn.vdot yastn.move_leg"""
 import unittest
 import numpy as np
 import pytest
-import yast
+import yastn
 try:
     from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
@@ -34,7 +34,7 @@ class TestSyntaxTranspose(unittest.TestCase):
         #
         # define rank-6 U(1)-symmetric tensor
         #
-        a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
+        a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
 
@@ -58,13 +58,13 @@ class TestSyntaxTranspose(unittest.TestCase):
         #
         c = b.move_leg(source=(1, 2), destination=(2, 4))
         assert c.get_shape() == a.get_shape()
-        assert yast.norm(a - c) < tol
+        assert yastn.norm(a - c) < tol
 
 
 def test_transpose_basic():
     """ test transpose for different symmetries. """
     # dense
-    a = yast.ones(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    a = yastn.ones(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     assert a.get_shape() == (2, 3, 4, 5)
     ad = a.to_numpy()
     run_transpose(a, ad, axes=(1, 3, 2, 0), result=(3, 5, 4, 2))
@@ -75,7 +75,7 @@ def test_transpose_basic():
     run_move_leg(a, ad, source=(1, 3), destination=(0, 1), result=(3, 5, 2, 4))
 
     # U1
-    a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
+    a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
     ad = a.to_numpy()
@@ -86,11 +86,11 @@ def test_transpose_basic():
     run_move_leg(a, ad, source=(2, -1, 0), destination=(-1, 2, -2), result=(9, 11, 3, 7, 5, 13))
 
     # Z2xU1
-    legs = [yast.Leg(config_Z2xU1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(7, 3, 4, 5), s=-1),
-            yast.Leg(config_Z2xU1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(5, 4, 3, 2), s=-1),
-            yast.Leg(config_Z2xU1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(3, 4, 5, 6), s=1),
-            yast.Leg(config_Z2xU1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4), s=1)]
-    a = yast.ones(config=config_Z2xU1, legs=legs)
+    legs = [yastn.Leg(config_Z2xU1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(7, 3, 4, 5), s=-1),
+            yastn.Leg(config_Z2xU1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(5, 4, 3, 2), s=-1),
+            yastn.Leg(config_Z2xU1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(3, 4, 5, 6), s=1),
+            yastn.Leg(config_Z2xU1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4), s=1)]
+    a = yastn.ones(config=config_Z2xU1, legs=legs)
     assert a.get_shape() == (19, 14, 18, 10)
     ad = a.to_numpy()
     run_transpose(a, ad, axes=(1, 2, 3, 0), result=(14, 18, 10, 19))
@@ -98,22 +98,22 @@ def test_transpose_basic():
 
 
 def test_transpose_diag():
-    a = yast.eye(config=config_U1, t=(-1, 0, 2), D=(2, 2 ,4))
+    a = yastn.eye(config=config_U1, t=(-1, 0, 2), D=(2, 2 ,4))
     at = a.transpose(axes=(1, 0))
-    assert yast.tensordot(a, at, axes=((0, 1), (0, 1))).item() == 8.
-    assert yast.vdot(a, at, conj=(0, 0)).item() == 8.
+    assert yastn.tensordot(a, at, axes=((0, 1), (0, 1))).item() == 8.
+    assert yastn.vdot(a, at, conj=(0, 0)).item() == 8.
     a = a.transpose(axes=(1, 0))
-    assert yast.vdot(a, at).item() == 8.
+    assert yastn.vdot(a, at).item() == 8.
 
 
 def test_transpose_exceptions():
     """ test handling expections """
-    a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
+    a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         _ = a.transpose(axes=(0, 1, 3, 5))  # Provided axes do not match tensor ndim.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         _ = a.transpose(axes=(0, 1, 1, 2, 2, 3))  # Provided axes do not match tensor ndim.
 
 
@@ -122,7 +122,7 @@ def test_transpose_backward():
     import torch
 
     # U1
-    a = yast.rand(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
+    a = yastn.rand(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(2, 3), (4, 5), (6, 7), (6, 5), (4, 3), (2, 1)])
     b = a.transpose(axes=(1, 2, 3, 0, 5, 4))

@@ -11,9 +11,9 @@ The data, in form of non-zero blocks, can be added at later time.
 
 See examples: :ref:`examples/tensor/init:create empty tensor and fill it block by block`.
 
-.. autoclass:: yast.Tensor
+.. autoclass:: yastn.Tensor
 
-.. automethod:: yast.Tensor.set_block
+.. automethod:: yastn.Tensor.set_block
 
 Basic creation operations
 -------------------------
@@ -27,7 +27,7 @@ of these sectors `or` by passing a list of legs.
 
 See examples: :ref:`examples/tensor/init:create tensors from scratch`.
 
-.. automodule:: yast
+.. automodule:: yastn
    :members: rand, randR, randC, zeros, ones, eye
    :show-inheritance:
 
@@ -44,9 +44,9 @@ and
 
 See YAST examples: :ref:`examples/tensor/init:clone, detach or copy tensors`.
 
-.. automethod:: yast.Tensor.copy
-.. automethod:: yast.Tensor.clone
-.. automethod:: yast.Tensor.detach
+.. automethod:: yastn.Tensor.copy
+.. automethod:: yastn.Tensor.clone
+.. automethod:: yastn.Tensor.detach
 
 
 Changing tensor's device or dtype
@@ -60,7 +60,7 @@ depends on the selected backend. For example
 
 Tensors can be moved between devices and/or their `dtype` changed
 
-.. automethod:: yast.Tensor.to
+.. automethod:: yastn.Tensor.to
 
 
 Import/Export of YAST tensors from/to different formats
@@ -70,13 +70,13 @@ These utility operations can re-create tensors from
 different formats. For example, 1D representation or dictionary.
 Their export counterparts are
 
-	* :meth:`yast.save_to_dict`
-	* :meth:`yast.save_to_hdf5`
-	* :meth:`yast.compress_to_1d`
+	* :meth:`yastn.save_to_dict`
+	* :meth:`yastn.save_to_hdf5`
+	* :meth:`yastn.compress_to_1d`
 
 See examples: :ref:`examples/tensor/init:serialization of symmetric tensors`.
 
-.. automodule:: yast
+.. automodule:: yastn
    :members: load_from_dict, load_from_hdf5, decompress_from_1d,
              save_to_dict, save_to_hdf5, compress_to_1d
    :show-inheritance:

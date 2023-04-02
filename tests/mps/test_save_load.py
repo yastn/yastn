@@ -2,8 +2,8 @@
 import os
 import warnings
 import numpy as np
-import yast
-import yast.tn.mps as mps
+import yastn
+import yastn.tn.mps as mps
 
 try:
     import h5py
@@ -73,7 +73,7 @@ def test_basic_hdf5():
 
 
 def test_Z2_hdf5():
-    operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=16, operators=operators)
     #
     psi = generate.random_mps(D_total=25, n=0)
@@ -111,7 +111,7 @@ def test_basic_dict():
 
 
 def test_Z2_dict():
-    operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=16, operators=operators)
 
     psi = generate.random_mps(D_total=15, n=0)

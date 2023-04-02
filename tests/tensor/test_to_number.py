@@ -1,6 +1,6 @@
 """ to_number() """
 import pytest
-import yast
+import yastn
 try:
     from .configs import config_dense, config_U1
 except ImportError:
@@ -11,7 +11,7 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 def run_to_number(a, b):
     ax = tuple(range(a.ndim))  # here a.ndim == b.ndim
-    t0 = yast.tensordot(a, b, axes=(ax, ax), conj=(1, 0))  # 0-dim tensor with 1 element, i.e., a number
+    t0 = yastn.tensordot(a, b, axes=(ax, ax), conj=(1, 0))  # 0-dim tensor with 1 element, i.e., a number
 
     nb0 = t0.to_number()  # this is backend-type number
     it0 = t0.item()  # this is python float (or int)
@@ -31,20 +31,20 @@ def run_to_number(a, b):
 def test_to_number_basic():
     """ test to_number() for various symmetries"""
     # dense
-    a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
-    b = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    b = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     run_to_number(a, b)
 
     # U1
-    legs = [yast.Leg(config_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
-            yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
-            yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
-            yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
-    a = yast.rand(config=config_U1, legs=legs)
-    b = yast.rand(config=config_U1, legs=legs)
+    legs = [yastn.Leg(config_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
+            yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+            yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
+            yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
+    a = yastn.rand(config=config_U1, legs=legs)
+    b = yastn.rand(config=config_U1, legs=legs)
 
-    legs[0] = yast.Leg(config_U1, s=-1, t=(-2, 2), D=(1, 3))
-    c = yast.rand(config=config_U1, legs=legs)
+    legs[0] = yastn.Leg(config_U1, s=-1, t=(-2, 2), D=(1, 3))
+    c = yastn.rand(config=config_U1, legs=legs)
 
     run_to_number(a, b)
     run_to_number(a, c)
@@ -52,11 +52,11 @@ def test_to_number_basic():
 
 
 def test_to_number_exceptions():
-    a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
-    with pytest.raises(yast.YastError):
+    a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    with pytest.raises(yastn.YastError):
         a.to_number()
         # Only single-element (symmetric) Tensor can be converted to scalar
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         a.item()
         # Only single-element (symmetric) Tensor can be converted to scalar
 

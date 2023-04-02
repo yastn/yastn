@@ -1,7 +1,7 @@
 # """ mps.tdvp """
 # import logging
 # import pytest
-# import yast.tn.mps as mps
+# import yastn.tn.mps as mps
 # try:
 #     from .configs import config_dense as cfg
 #    # cfg is used by pytest to inject different backends and divices

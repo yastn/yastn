@@ -3,13 +3,13 @@ import numpy as np
 import pytest
 import logging
 import argparse
-import yast
-import yast.tn.fpeps as fpeps
+import yastn
+import yastn.tn.fpeps as fpeps
 import time
-from yast.tn.fpeps.operators.gates import gates_hopping, gate_local_Hubbard
-from yast.tn.fpeps.evolution import evolution_step_, gates_homogeneous
-from yast.tn.fpeps import initialize_peps_purification
-from yast.tn.fpeps.ctm import nn_avg, ctmrg, init_rand, one_site_avg, nn_bond
+from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_Hubbard
+from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
+from yastn.tn.fpeps import initialize_peps_purification
+from yastn.tn.fpeps.ctm import nn_avg, ctmrg, init_rand, one_site_avg, nn_bond
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg
@@ -17,7 +17,7 @@ try:
 except ImportError:
     from configs import config_U1xU1_R_fermionic as cfg
 
-opt = yast.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
+opt = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
 fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
 
 n_up = fcdag_up @ fc_up
@@ -137,7 +137,7 @@ def test_NTU_spinfull_infinite():
     tr_mode = 'optimal'
     net = fpeps.Peps(lattice=lattice, boundary=boundary)
 
-    opt = yast.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
+    opt = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
 
     GA_nn_up, GB_nn_up = gates_hopping(t_up, dbeta, fid, fc_up, fcdag_up, purification=purification)

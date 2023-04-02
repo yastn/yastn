@@ -10,7 +10,7 @@ Single-site DMRG
 ----------------
 
 In the algorithm we `sweep` through the MPS, starting from the initial guess :code:`psi`, 
-optimizing each :class:`yast.Tensor` :math:`A_j` one by one while keeping 
+optimizing each :class:`yastn.Tensor` :math:`A_j` one by one while keeping 
 all other tensors fixed (Alternating least squares). 
 At each step, the best :math:`A_j` is then found by minimizing the energy 
 of the local effective Hamiltonian :math:`H_{eff}`. This DMRG variant, called :code:`version='1site'`, 
@@ -73,6 +73,6 @@ excited states. List of MPS to project out is given as :code:`project=[lower_E_M
 DMRG routine
 ------------
 
-.. autofunction:: yast.tn.mps.dmrg_
+.. autofunction:: yastn.tn.mps.dmrg_
 
 See examples for :ref:`examples/mps/mps:dmrg`.

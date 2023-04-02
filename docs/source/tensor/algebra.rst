@@ -14,27 +14,27 @@ See examples: :ref:`examples/tensor/algebra:basic algebra operations`.
 Simple element-wise operations
 ------------------------------
 
-.. automethod:: yast.Tensor.__abs__ 
-.. automethod:: yast.Tensor.real
-.. automethod:: yast.Tensor.imag
-.. automethod:: yast.Tensor.sqrt
-.. automethod:: yast.Tensor.rsqrt
-.. automethod:: yast.Tensor.reciprocal
-.. automethod:: yast.Tensor.exp
+.. automethod:: yastn.Tensor.__abs__ 
+.. automethod:: yastn.Tensor.real
+.. automethod:: yastn.Tensor.imag
+.. automethod:: yastn.Tensor.sqrt
+.. automethod:: yastn.Tensor.rsqrt
+.. automethod:: yastn.Tensor.reciprocal
+.. automethod:: yastn.Tensor.exp
 
-.. automethod:: yast.Tensor.__mul__
-.. automethod:: yast.Tensor.__pow__
-.. automethod:: yast.Tensor.__truediv__
+.. automethod:: yastn.Tensor.__mul__
+.. automethod:: yastn.Tensor.__pow__
+.. automethod:: yastn.Tensor.__truediv__
 
-.. autofunction:: yast.Tensor.__add__
-.. autofunction:: yast.Tensor.__sub__
-.. autofunction:: yast.apxb
+.. autofunction:: yastn.Tensor.__add__
+.. autofunction:: yastn.Tensor.__sub__
+.. autofunction:: yastn.apxb
 
-.. autofunction:: yast.Tensor.__lt__
-.. autofunction:: yast.Tensor.__gt__
-.. autofunction:: yast.Tensor.__le__
-.. autofunction:: yast.Tensor.__ge__
-.. autofunction:: yast.Tensor.bitwise_not
+.. autofunction:: yastn.Tensor.__lt__
+.. autofunction:: yastn.Tensor.__gt__
+.. autofunction:: yastn.Tensor.__le__
+.. autofunction:: yastn.Tensor.__ge__
+.. autofunction:: yastn.Tensor.bitwise_not
 
 
 Tensor contractions
@@ -53,16 +53,16 @@ or composition of such operations over several tensors.
 
 See examples: :ref:`examples/tensor/algebra:tensor contractions`.
 
-.. automethod:: yast.Tensor.__matmul__
+.. automethod:: yastn.Tensor.__matmul__
 
-.. autofunction:: yast.tensordot
-.. autofunction:: yast.vdot
-.. autofunction:: yast.broadcast
-.. autofunction:: yast.apply_mask
-.. autofunction:: yast.trace
-.. autofunction:: yast.einsum
-.. autofunction:: yast.ncon
-.. autofunction:: yast.swap_gate
+.. autofunction:: yastn.tensordot
+.. autofunction:: yastn.vdot
+.. autofunction:: yastn.broadcast
+.. autofunction:: yastn.apply_mask
+.. autofunction:: yastn.trace
+.. autofunction:: yastn.einsum
+.. autofunction:: yastn.ncon
+.. autofunction:: yastn.swap_gate
 
 
 Transposition
@@ -70,9 +70,9 @@ Transposition
 
 See examples: :ref:`examples/tensor/algebra:transposition`.
 
-.. automethod:: yast.Tensor.transpose
-.. automethod:: yast.Tensor.move_leg
-.. automethod:: yast.Tensor.moveaxis
+.. automethod:: yastn.Tensor.transpose
+.. automethod:: yastn.Tensor.move_leg
+.. automethod:: yastn.Tensor.moveaxis
 
 
 Fusion of legs (reshaping)
@@ -86,40 +86,40 @@ Fusion can be used to vary compression between (unfused) symmetric tensors with 
 
 See examples: :ref:`examples/tensor/algebra:fusion (reshaping)`.
 
-.. automethod:: yast.Tensor.fuse_legs
-.. automethod:: yast.Tensor.unfuse_legs
-.. automethod:: yast.Tensor.add_leg
-.. automethod:: yast.Tensor.remove_leg
-.. automethod:: yast.Tensor.drop_leg_history
+.. automethod:: yastn.Tensor.fuse_legs
+.. automethod:: yastn.Tensor.unfuse_legs
+.. automethod:: yastn.Tensor.add_leg
+.. automethod:: yastn.Tensor.remove_leg
+.. automethod:: yastn.Tensor.drop_leg_history
 
 Conjugation of symmetric tensors
 --------------------------------
 
 See examples: :ref:`examples/tensor/algebra:conjugation of symmetric tensors`.
 
-.. automethod:: yast.Tensor.conj
-.. automethod:: yast.Tensor.conj_blocks
-.. automethod:: yast.Tensor.flip_signature
-.. automethod:: yast.Tensor.flip_charges
+.. automethod:: yastn.Tensor.conj
+.. automethod:: yastn.Tensor.conj_blocks
+.. automethod:: yastn.Tensor.flip_signature
+.. automethod:: yastn.Tensor.flip_charges
 
 
 Tensor norms
 ------------
 
-.. autofunction:: yast.linalg.norm
+.. autofunction:: yastn.linalg.norm
 
 
 Spectral decompositions and truncation
 --------------------------------------
 
-.. autofunction:: yast.linalg.svd 
-.. autofunction:: yast.linalg.svd_with_truncation
-.. autofunction:: yast.linalg.qr
-.. autofunction:: yast.linalg.eigh
-.. autofunction:: yast.linalg.eigh_with_truncation
-.. autofunction:: yast.linalg.truncation_mask
-.. autofunction:: yast.linalg.truncation_mask_multiplets
-.. autofunction:: yast.linalg.entropy
+.. autofunction:: yastn.linalg.svd 
+.. autofunction:: yastn.linalg.svd_with_truncation
+.. autofunction:: yastn.linalg.qr
+.. autofunction:: yastn.linalg.eigh
+.. autofunction:: yastn.linalg.eigh_with_truncation
+.. autofunction:: yastn.linalg.truncation_mask
+.. autofunction:: yastn.linalg.truncation_mask_multiplets
+.. autofunction:: yastn.linalg.entropy
 
 .. _tensor-aux:
 
@@ -128,5 +128,5 @@ Auxliary
 
 Methods called by Krylov-based :doc:`algorithms</tensor/krylov>`
 
-.. automethod:: yast.Tensor.expand_krylov_space
-.. automethod:: yast.Tensor.linear_combination
+.. automethod:: yastn.Tensor.expand_krylov_space
+.. automethod:: yastn.Tensor.linear_combination

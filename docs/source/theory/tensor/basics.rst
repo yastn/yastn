@@ -28,7 +28,7 @@ the shapes represent tensors, while legs correspond to lines emerging from these
       ...|___|...
 
 .. note::
-        YAST defines a vector space and its abelian symmetry structure through :class:`yast.Leg`
+        YAST defines a vector space and its abelian symmetry structure through :class:`yastn.Leg`
 
 In some contexts, it is often useful to distinguish underlying spaces as co- or contra-variant
 with respect to transformations acting on these spaces. Often such a distinction is encoded
@@ -46,7 +46,7 @@ In YAST, similar to other implementations (:ref:`see below <refs_basics>`), the 
 :math:`\langle bra |` and :math:`|ket \rangle` spaces, or Hilbert space :math:`\mathcal{H}` and its dual :math:`\mathcal{H}^*`, is encoded through `signature`.
 
 .. note::
-    `signature`, :attr:`yast.Tensor.s`, is a tuple of signs :math:`\pm 1`
+    `signature`, :attr:`yastn.Tensor.s`, is a tuple of signs :math:`\pm 1`
 
 Action of abelian symmetry
 --------------------------
@@ -89,9 +89,9 @@ The charges :math:`t_i,\ N` and precise form of their addition :math:`+` depends
 considered.
 
 .. note::
-    * Total charge `N` of YAST tensor can be accessed by :attr:`yast.Tensor.n`
+    * Total charge `N` of YAST tensor can be accessed by :attr:`yastn.Tensor.n`
     * To inspect what charge sectors :math:`t_i` exist on legs of a tensor
-      use :meth:`yast.Tensor.get_legs`.
+      use :meth:`yastn.Tensor.get_legs`.
 
 
 Examples for selected groups
@@ -112,7 +112,7 @@ Examples for selected groups
 Conjugation
 -----------
 
-Conjugation of a tensor complex-conjugates tensor elements, flips tensor signature :attr:`yast.Tensor.s` by
+Conjugation of a tensor complex-conjugates tensor elements, flips tensor signature :attr:`yastn.Tensor.s` by
 replacing :math:`\pm 1 \to \mp 1`, as well as the total charge :math:`N \to -N`.
 In the latter, :math:`-` depends on the abelian group.
 

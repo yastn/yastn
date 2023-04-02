@@ -3,7 +3,7 @@ to_nonsymmetric()  to_dense()  to_numpy()
 """
 import numpy as np
 import pytest
-import yast
+import yastn
 try:
     from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
@@ -15,13 +15,13 @@ tol = 1e-12  #pylint: disable=invalid-name
 def test_dense_basic():
     """ a.to_numpy() is equivalent to np.array(a.to_dense())"""
     norms = []
-    tens = [yast.rand(config=config_U1, s=(-1, -1, 1),
+    tens = [yastn.rand(config=config_U1, s=(-1, -1, 1),
                       t=((-1, 1, 2), (-1, 1, 2), (1, 2)),
                       D=((1, 3, 4), (4, 5, 6), (3, 4))),
-            yast.rand(config=config_U1, s=(-1, -1, 1),
+            yastn.rand(config=config_U1, s=(-1, -1, 1),
                       t=((-1, 0), (1, 2), (0, 1)),
                       D=((1, 2), (5, 6), (2, 3))),
-            yast.rand(config=config_U1, s=(-1, -1, 1),
+            yastn.rand(config=config_U1, s=(-1, -1, 1),
                       t=((0, 1), (0, 1), (1, 2)),
                       D=((2, 3), (5, 5), (3, 4)))]
     shapes = [(8, 15, 7), (3, 11, 5), (5, 10, 7)]
@@ -44,7 +44,7 @@ def test_dense_basic():
     assert all(pytest.approx(n, rel=tol) == norms[0] for n in norms)
 
     # provided individual legs
-    d = yast.rand(config=config_U1, s=(-1, 1, 1),
+    d = yastn.rand(config=config_U1, s=(-1, 1, 1),
                   t=((-1, 0), (-2, -1), (0, 1, 2)),
                   D=((1, 2), (3, 4), (2, 3, 4)))
     a = tens[0]
@@ -54,7 +54,7 @@ def test_dense_basic():
     nd = d.to_numpy(legs=lsd)
     nad = np.tensordot(na, nd, axes=((1, 0), (1, 2)))
     
-    ad = yast.tensordot(a, d, axes=((1, 0), (1, 2)))
+    ad = yastn.tensordot(a, d, axes=((1, 0), (1, 2)))
     lsad = {0: a.get_legs(2), 1: d.get_legs(0)}
     assert np.allclose(ad.to_numpy(legs=lsad), nad)
 
@@ -73,8 +73,8 @@ def test_dense_basic():
 def test_to_raw_tensor():
     """ test to_raw_tensor and getting single block """
     # leg with a single charge sector
-    leg = yast.Leg(config_Z2xU1, s=1, t=[(0, 0)], D=[2])
-    a = yast.ones(config=config_Z2xU1, legs=[leg, leg, leg])
+    leg = yastn.Leg(config_Z2xU1, s=1, t=[(0, 0)], D=[2])
+    a = yastn.ones(config=config_Z2xU1, legs=[leg, leg, leg])
     assert pytest.approx(a.norm().item() ** 2) == 8.
 
     raw = a.to_raw_tensor()  # if there is only one single block in tensor
@@ -89,12 +89,12 @@ def test_to_raw_tensor():
 
     # add 2nd block to the tensor
     a.set_block(ts=((1, 0), (1, 0), (0, 0)), Ds=(2, 2, 2), val='ones')
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         _ = a.to_raw_tensor()
         # Only tensor with a single block can be converted to raw tensor.
 
 def test_dense_diag():
-    a = yast.rand(config=config_U1, t=(-1, 0, 1), D=(2, 3, 4), isdiag=True)
+    a = yastn.rand(config=config_U1, t=(-1, 0, 1), D=(2, 3, 4), isdiag=True)
     an = a.to_nonsymmetric()
     assert an.isdiag == True
 
@@ -108,28 +108,28 @@ def test_dense_diag():
 def test_to_nonsymmetric_basic():
     """ test to_nonsymmetric() """
     # dense to dense (trivial)
-    a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     an = a.to_nonsymmetric()
     # for dense, to_nonsymetric() should result in the same config
-    assert yast.norm(a - an) < tol  # == 0.0
+    assert yastn.norm(a - an) < tol  # == 0.0
     assert an.are_independent(a)
     assert an.is_consistent()
 
     # U1 to dense
-    legs = [yast.Leg(config_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
-            yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
-            yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
-            yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
-    a = yast.rand(config=config_U1, legs=legs)
+    legs = [yastn.Leg(config_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
+            yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+            yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
+            yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
+    a = yastn.rand(config=config_U1, legs=legs)
 
-    legs[0] = yast.Leg(config_U1, s=-1, t=(-2, 1, 2), D=(1, 2, 3))
-    legs[2] = yast.Leg(config_U1, s=1, t=(1, 2, 3), D=(8, 9, 10))
-    b = yast.rand(config=config_U1, legs=legs)
+    legs[0] = yastn.Leg(config_U1, s=-1, t=(-2, 1, 2), D=(1, 2, 3))
+    legs[2] = yastn.Leg(config_U1, s=1, t=(1, 2, 3), D=(8, 9, 10))
+    b = yastn.rand(config=config_U1, legs=legs)
 
     an = a.to_nonsymmetric(legs=dict(enumerate(b.get_legs())))
     bn = b.to_nonsymmetric(legs=dict(enumerate(a.get_legs())))
-    assert pytest.approx(yast.vdot(an, bn).item(), rel=tol) == yast.vdot(a, b).item()
-    with pytest.raises(yast.YastError):
+    assert pytest.approx(yastn.vdot(an, bn).item(), rel=tol) == yastn.vdot(a, b).item()
+    with pytest.raises(yastn.YastError):
         a.vdot(bn)
         # Two tensors have different symmetry rules.
     assert an.are_independent(a)
@@ -137,7 +137,7 @@ def test_to_nonsymmetric_basic():
     assert an.is_consistent()
     assert bn.is_consistent()
 
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         _ = a.to_nonsymmetric(legs={5: legs[0]})
         # Specified leg out of ndim
 
@@ -149,7 +149,7 @@ def _test_dense_v1(tens, shapes, common_shape):
     ndim = tens[0].ndim
 
     # all dense tensors will have matching shapes
-    lss = {ii: yast.leg_union(*(a_legs[ii] for a_legs in legs)) for ii in range(ndim)}
+    lss = {ii: yastn.leg_union(*(a_legs[ii] for a_legs in legs)) for ii in range(ndim)}
     ntens = [a.to_numpy(legs=lss) for a in tens]
     assert all(na.shape == common_shape for na in ntens)
     sum_tens = tens[0]

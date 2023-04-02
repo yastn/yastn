@@ -1,6 +1,6 @@
 import pytest
-import yast
-import yast.tn.mps as mps
+import yastn
+import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
     # pytest modifies cfg to inject different backends and devices during tests
@@ -15,7 +15,7 @@ def test_generator_mps():
     D_total = 16
 
     for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U1', (N // 2,))):
-        operators = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+        operators = yastn.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
         generate = mps.Generator(N, operators)
 
         I = generate.I()

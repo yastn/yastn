@@ -1,7 +1,7 @@
 """ basic procedures of single mps """
 import numpy as np
-import yast
-import yast.tn.mps as mps
+import yastn
+import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
     # pytest modifies cfg to inject different backends and devices during tests
@@ -35,13 +35,13 @@ def build_spin1_aklt_state(N=5):
     # Then assign its on-site tensors one-by-one.
     #
     for n in range(N):
-        # Create a yast.Tensor with appropriate legs and assign it to MPS.
+        # Create a yastn.Tensor with appropriate legs and assign it to MPS.
         # Here, the choice of signatures is as follows
         #
         # (+1) ->--|T|-->- (-1)
         #           ^
         #           |(+1)
-        psi[n] = yast.Tensor(config=cfg, s=(1, 1, -1))
+        psi[n] = yastn.Tensor(config=cfg, s=(1, 1, -1))
         if n == 0:
             psi[n].set_block(val=T[0, :, :], Ds=(1, 3, 2))
         elif n == N - 1:
