@@ -33,7 +33,7 @@ class Leg:
     Parameters
     ----------
     sym : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yastn configuration>`
+        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
     s : int
         Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
     t : iterable[int] or iterable[iterable[int]]
@@ -153,7 +153,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
     Parameters
     ----------
     module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yastn configuration>`
+        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
     s : int
         Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
     n : int or tuple

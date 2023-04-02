@@ -1,7 +1,7 @@
 Specifying symmetry
 ===================
 
-YAST specifies symmetry through any object be it plain Python module, 
+YASTN specifies symmetry through any object be it plain Python module, 
 `types.SimpleNamespace <https://docs.python.org/3/librarytypes.html#types.SimpleNamespace>`_,
 or class which defines
 

@@ -1,6 +1,6 @@
 """ 
     Auxiliary operations used to interpret latex-like string
-    into an instruciton which can be interpreted by YAST. 
+    into an instruciton which can be interpreted by YASTN.
     Instructions are used for ._generate.py
 """
 

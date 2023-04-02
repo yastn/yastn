@@ -1,5 +1,5 @@
-Predefined YAST tensors
-=======================
+Predefined YASTN tensors
+========================
 
 Spin-1/2 and Pauli matrices
 ---------------------------

@@ -15,7 +15,7 @@ where `T` expressed in basis and components is
 .. math::
     T = \sum_{abc...ijk...} T^{abc...}_{ijk...} e^ie^je^k...e_ae_be_c...
 
-YAST refers to individual spaces :math:`V` as `legs`. In graphical notation
+YASTN refers to individual spaces :math:`V` as `legs`. In graphical notation
 the shapes represent tensors, while legs correspond to lines emerging from these shapes 
 
 ::
@@ -28,7 +28,7 @@ the shapes represent tensors, while legs correspond to lines emerging from these
       ...|___|...
 
 .. note::
-        YAST defines a vector space and its abelian symmetry structure through :class:`yastn.Leg`
+        YASTN defines a vector space and its abelian symmetry structure through :class:`yastn.Leg`
 
 In some contexts, it is often useful to distinguish underlying spaces as co- or contra-variant
 with respect to transformations acting on these spaces. Often such a distinction is encoded
@@ -42,7 +42,7 @@ and :math:`|ket \rangle` spaces, due to different action of symmetry transformat
     T = \sum_{abc...ijk...} T^{abc...}_{ijk...} |i \rangle|j \rangle|k \rangle ...
     \langle a |\langle b |\langle c |...
 
-In YAST, similar to other implementations (:ref:`see below <refs_basics>`), the distinction between
+In YASTN, similar to other implementations (:ref:`see below <refs_basics>`), the distinction between
 :math:`\langle bra |` and :math:`|ket \rangle` spaces, or Hilbert space :math:`\mathcal{H}` and its dual :math:`\mathcal{H}^*`, is encoded through `signature`.
 
 .. note::
@@ -59,7 +59,7 @@ in a proper basis can be represented by `diagonal` matrices `U(g)` acting on eac
     (gT)^{ab...}_{ij...} = \sum_{a'b'...i'j'...} T^{a'b'...}_{i'j'...} [U(g)^*]^{a}_{a'} [U(g)^*]^{b}_{b'} ... {U(g)}^{i'}_{i} {U(g)}^{j'}_{j}...,
 
 where the elements of `U(g)` are complex phases defined by **charges** :math:`t_i`,
-in YAST always taken to be integers :math:`\mathbb{Z}` or their subset, as
+in YASTN always taken to be integers :math:`\mathbb{Z}` or their subset, as
 
 .. math::
 
@@ -89,7 +89,7 @@ The charges :math:`t_i,\ N` and precise form of their addition :math:`+` depends
 considered.
 
 .. note::
-    * Total charge `N` of YAST tensor can be accessed by :attr:`yastn.Tensor.n`
+    * Total charge `N` of YASTN tensor can be accessed by :attr:`yastn.Tensor.n`
     * To inspect what charge sectors :math:`t_i` exist on legs of a tensor
       use :meth:`yastn.Tensor.get_legs`.
 
@@ -107,7 +107,7 @@ Examples for selected groups
     t_i+t'_i := \begin{pmatrix} t_{i,0} \\ t_{i,1} \end{pmatrix} + \begin{pmatrix} t'_{i,0} \\ t'_{i,1} \end{pmatrix} = \begin{pmatrix} t_{i,0} + t'_{i,0}\ \textrm{mod}\ 2\\ t'_{i,1} + t'_{i,1} \end{pmatrix}
 
 .. note::
-    See how YAST defines symmetries and the above examples in the :ref:`API docs<tensor/symmetry:specifying symmetry>`.
+    See how YASTN defines symmetries and the above examples in the :ref:`API docs<tensor/symmetry:specifying symmetry>`.
 
 Conjugation
 -----------

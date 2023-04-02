@@ -6,10 +6,10 @@ operating over many blocks (dense tensors). Hence, by composition,
 the operations on symmetric tensors can be straightforwardly differentiated 
 if the individual operations on dense tensors support autograd.    
 
-YAST supports autograd through selected backends which provide 
+YASTN supports autograd through selected backends which provide 
 this capability for dense tensor algebra, for example PyTorch backend. 
 
-You can activate autograd on YAST tensor
+You can activate autograd on YASTN tensor
 
 .. automethod:: yastn.Tensor.requires_grad_
 

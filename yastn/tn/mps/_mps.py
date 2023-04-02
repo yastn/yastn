@@ -126,7 +126,7 @@ def multiply(a, b, mode=None):
 
         mode : str
            mode for :meth:`yastn.fuse_legs`; If :code:`None` (default)
-           use default setting from YAST tensor's
+           use default setting from YASTN tensor's
            :ref:`configuration<tensor/configuration:yastn configuration>`.
 
     Returns

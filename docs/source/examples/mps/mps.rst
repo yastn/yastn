@@ -104,7 +104,7 @@ Save and load MPS/MPO
 MPS/MPO can be saved/loaded either to/from a dictionary or an HDF5 file. 
 
 .. note::
-        :ref:`YAST configuration<tensor/configuration:yastn configuration>` 
+        :ref:`YASTN configuration<tensor/configuration:yastn configuration>` 
         of on-site tensors of MPS/MPO must be provided
         when loading either from dictionary or HDF5 file.
 

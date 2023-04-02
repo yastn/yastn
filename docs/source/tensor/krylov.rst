@@ -2,7 +2,7 @@ Krylov methods
 ==============
 
 Implemented in yastn
--------------------
+--------------------
 
 We provide a high-level, backend-agnostic implementation of some Krylov-based algorithms used in :class:`yastn.tn.mps`.
 They assume a linear operation acting on a generalized vector, with the vector being an instance of a class that includes methods

@@ -45,12 +45,12 @@ class Tensor:
 
     def __init__(self, config=None, s=(), n=None, isdiag=False, **kwargs):
         r"""
-        Initialize empty (no allocated blocks) YAST tensor
+        Initialize empty (no allocated blocks) YASTN tensor
 
         Parameters
         ----------
             config : module, types.SimpleNamespace, or typing.NamedTuple
-                :ref:`YAST configuration <tensor/configuration:yastn configuration>`
+                :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
             s : tuple
                 a signature of tensor. Also determines the number of legs
             n : int or tuple

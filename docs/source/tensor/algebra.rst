@@ -1,5 +1,5 @@
-Algebra with YAST tensors
-=========================
+Algebra with YASTN tensors
+==========================
 
 Basic algebra operations with symmetric tensors
 -----------------------------------------------
