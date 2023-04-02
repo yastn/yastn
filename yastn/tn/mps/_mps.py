@@ -1,6 +1,5 @@
 """ Mps structure and its basic manipulations. """
 from ... import tensor, initialize, YastError
-from ._env import norm
 
 ###################################
 #   auxiliary for basic algebra   #
@@ -203,7 +202,11 @@ class MpsMpo:
             self.factor = psi.factor
 
     def norm(self):
-        return norm(self)  # TODO: Write norm using qr decomposition.
+        r""" Calculate norm of |ket> via canonization. """
+        ket = MpsMpo(psi=self)
+        if not ket.is_canonical(to='first'):
+            ket.canonize_(to='first', normalize=False)
+        return ket.factor
 
     @property
     def config(self):
