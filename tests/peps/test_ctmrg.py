@@ -7,8 +7,8 @@ import logging
 import numpy as np
 import pytest
 import yast
-import yast.tn.peps as peps
-from yast.tn.peps.ctm import nn_avg, ctmrg
+import yast.tn.fpeps as fpeps
+from yast.tn.fpeps.ctm import nn_avg, ctmrg
 
 try:
     from .configs import config_dense as cfg
@@ -83,7 +83,7 @@ def test_ctm_loop():  ###high temperature
     list_lattice = [('checkerboard', (2, 2))]
     for lattice, dims in list_lattice:
         T = create_Ising_tensor(opt.z(), beta)
-        psi = peps.Peps(lattice=lattice, dims=dims, boundary='infinite')
+        psi = fpeps.Peps(lattice=lattice, dims=dims, boundary='infinite')
         for site in psi.sites():
             psi[site] = T
         ctm_for_Onsager(psi, opt, Z_exact)

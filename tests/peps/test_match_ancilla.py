@@ -1,9 +1,9 @@
 import logging
 import pytest
 import yast
-import yast.tn.peps as peps
-from yast.tn.peps import initialize_vacuum
-from yast.tn.peps.operators.gates import match_ancilla_1s, match_ancilla_2s
+import yast.tn.fpeps as fpeps
+from yast.tn.fpeps import initialize_vacuum
+from yast.tn.fpeps.operators.gates import match_ancilla_1s, match_ancilla_2s
 
 try:
     from .configs import config_U1xU1_R_fermionic
@@ -13,7 +13,7 @@ except ImportError:
 def test_match_ancilla():
     """ initialize vacuum state and check the functions match_ancilla_1s and match_ancilla_2s """
 
-    net = peps.Lattice(lattice='rectangle',dims=(3,3),boundary='finite')  
+    net = fpeps.Lattice(lattice='rectangle',dims=(3,3),boundary='finite')  
     opt = yast.operators.SpinfulFermions(sym='U1xU1xZ2',backend=config_U1xU1_R_fermionic.backend,default_device=config_U1xU1_R_fermionic.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
     psi = initialize_vacuum(fid, net)   # initializing vacuum state; has no ancilla (so 5 legs when unfused : t l b r s)

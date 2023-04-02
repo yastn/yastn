@@ -6,7 +6,7 @@ In case of purification, system leg is a fusion of (ancilla, system)
 """
 import logging
 import yast
-from yast.tn.peps.operators.gates import trivial_tensor, match_ancilla_1s, match_ancilla_2s
+from yast.tn.fpeps.operators.gates import trivial_tensor, match_ancilla_1s, match_ancilla_2s
 from yast import tensordot, vdot, svd_with_truncation, svd, qr, ncon, eigh_with_truncation
 from ._ntu import env_NTU
 

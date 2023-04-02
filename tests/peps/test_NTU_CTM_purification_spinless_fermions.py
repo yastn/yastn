@@ -4,12 +4,12 @@ import pytest
 import logging
 import argparse
 import yast
-import yast.tn.peps as peps
+import yast.tn.fpeps as fpeps
 import time
-from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea
-from yast.tn.peps.evolution import evolution_step_, gates_homogeneous
-from yast.tn.peps import initialize_peps_purification
-from yast.tn.peps.ctm import nn_avg, ctmrg, init_rand, nn_bond
+from yast.tn.fpeps.operators.gates import gates_hopping, gate_local_fermi_sea
+from yast.tn.fpeps.evolution import evolution_step_, gates_homogeneous
+from yast.tn.fpeps import initialize_peps_purification
+from yast.tn.fpeps.ctm import nn_avg, ctmrg, init_rand, nn_bond
 try:
     from .configs import config_U1_R_fermionic as cfg
     # cfg is used by pytest to inject different backends and divices
@@ -34,7 +34,7 @@ def test_NTU_spinless_finite():
     tr_mode = 'optimal'
 
     dims = (xx, yy)
-    net = peps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
+    net = fpeps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
    
     opt = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
@@ -84,8 +84,8 @@ def test_NTU_spinless_finite():
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
-    bd_h = peps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
-    bd_v = peps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
+    bd_h = fpeps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
+    bd_v = fpeps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
 
     nn_CTM_bond_1 = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc'], bd_h)) + abs(nn_bond(psi, step.env, ops['ccdag'], bd_h)))
     nn_CTM_bond_2 = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc'], bd_v)) + abs(nn_bond(psi, step.env, ops['ccdag'], bd_v)))
@@ -110,7 +110,7 @@ def test_NTU_spinless_infinite():
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
-    net = peps.Peps(lattice=lattice, boundary=boundary)
+    net = fpeps.Peps(lattice=lattice, boundary=boundary)
     opt = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
 

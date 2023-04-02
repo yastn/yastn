@@ -1,6 +1,6 @@
 import logging
 import yast
-from yast.tn.peps.operators.gates import trivial_tensor, match_ancilla_1s, match_ancilla_2s
+from yast.tn.fpeps.operators.gates import trivial_tensor, match_ancilla_1s, match_ancilla_2s
 from yast import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_legs, ncon, eigh_with_truncation, eye
 
 ###################################
