@@ -2,8 +2,8 @@ from typing import NamedTuple, Tuple
 from itertools import accumulate
 from dataclasses import dataclass
 from ....tn import mps
-from yast.tn.peps import Lattice
-from yast.tn.peps.operators.gates import match_ancilla_1s
+from yast.tn.fpeps import Lattice
+from yast.tn.fpeps.operators.gates import match_ancilla_1s
 from yast import rand, tensordot
 
 

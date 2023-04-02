@@ -1,5 +1,5 @@
 import numpy as np
-import yast.tn.peps as peps
+import yast.tn.fpeps as fpeps
 import yast
 
 r""" Initialization of peps tensors for real or imaginary time evolution """
@@ -26,7 +26,7 @@ def initialize_vacuum(fid, net):
         A = A.add_leg(axis=0, s=s)
 
     A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
-    gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+    gamma = fpeps.Peps(net.lattice, net.dims, net.boundary)
 
     for ms in net.sites():
         gamma[ms] = A
@@ -54,7 +54,7 @@ def initialize_peps_purification(fid, net):
         A = A.add_leg(axis=0, s=s)
    
     A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
-    gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+    gamma = fpeps.Peps(net.lattice, net.dims, net.boundary)
 
     for ms in net.sites():
         gamma[ms] = A
@@ -85,7 +85,7 @@ def initialize_spinless_filled(fid, fc, fcdag, net):
         A = A.add_leg(axis=0, s=s)
     
     A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
-    gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+    gamma = fpeps.Peps(net.lattice, net.dims, net.boundary)
     for ms in net.sites():
         gamma[ms] = A
 
@@ -131,7 +131,7 @@ def initialize_Neel_spinfull(fc_up, fc_dn, fcdag_up, fcdag_dn, net):
 
     m = list([A, B])
     i = 0
-    gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+    gamma = fpeps.Peps(net.lattice, net.dims, net.boundary)
     for x in range(net.Nx):
         for y in range(net.Ny)[::2]:
             gamma[x, y] = m[i]
@@ -168,7 +168,7 @@ def initialize_post_sampling(fc_up, fc_dn, fcdag_up, fcdag_dn, net, out):
     nn_up, nn_dn, nn_do, nn_hole = n_up @ h_dn, h_up @ n_dn, n_up @ n_dn, h_up @ h_dn      # up - 0; down - 1; double occupancy - 2; hole - 3
     tt = {0: nn_up, 1: nn_dn, 2: nn_do, 3: nn_hole}
    
-    gamma = peps.Peps(net.lattice, net.dims, net.boundary)
+    gamma = fpeps.Peps(net.lattice, net.dims, net.boundary)
     for kk in gamma.sites():
         Ga = tt[out[kk]].fuse_legs(axes=[(0, 1)])
         for s in (-1, 1, 1, -1):

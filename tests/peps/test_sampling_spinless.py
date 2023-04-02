@@ -3,13 +3,13 @@ import pytest
 import logging
 import argparse
 import yast
-import yast.tn.peps as peps
+import yast.tn.fpeps as fpeps
 import yast.tn.mps as mps
 import time
-from yast.tn.peps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
-from yast.tn.peps.evolution import evolution_step_, gates_homogeneous
-from yast.tn.peps import initialize_peps_purification
-from yast.tn.peps.ctm import sample, nn_bond, CtmEnv2Mps, nn_avg, ctmrg, init_rand, one_site_avg, Local_CTM_Env
+from yast.tn.fpeps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
+from yast.tn.fpeps.evolution import evolution_step_, gates_homogeneous
+from yast.tn.fpeps import initialize_peps_purification
+from yast.tn.fpeps.ctm import sample, nn_bond, CtmEnv2Mps, nn_avg, ctmrg, init_rand, one_site_avg, Local_CTM_Env
 
 from yast.tn.mps import Env2, Env3
 
@@ -38,7 +38,7 @@ def not_working_test_sampling_spinless():
     tr_mode = 'optimal'
 
     dims = (xx, yy)
-    net = peps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
+    net = fpeps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
 
     opt = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()

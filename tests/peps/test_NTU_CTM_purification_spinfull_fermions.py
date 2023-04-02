@@ -4,12 +4,12 @@ import pytest
 import logging
 import argparse
 import yast
-import yast.tn.peps as peps
+import yast.tn.fpeps as fpeps
 import time
-from yast.tn.peps.operators.gates import gates_hopping, gate_local_Hubbard
-from yast.tn.peps.evolution import evolution_step_, gates_homogeneous
-from yast.tn.peps import initialize_peps_purification
-from yast.tn.peps.ctm import nn_avg, ctmrg, init_rand, one_site_avg, nn_bond
+from yast.tn.fpeps.operators.gates import gates_hopping, gate_local_Hubbard
+from yast.tn.fpeps.evolution import evolution_step_, gates_homogeneous
+from yast.tn.fpeps import initialize_peps_purification
+from yast.tn.fpeps.ctm import nn_avg, ctmrg, init_rand, one_site_avg, nn_bond
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg
@@ -41,7 +41,7 @@ def test_NTU_spinfull_finite():
     tr_mode = 'optimal'
 
     dims = (xx, yy)
-    net = peps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
+    net = fpeps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
     
     GA_nn_up, GB_nn_up = gates_hopping(t_up, dbeta, fid, fc_up, fcdag_up, purification=purification)
     GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, dbeta, fid, fc_dn, fcdag_dn, purification=purification)
@@ -99,8 +99,8 @@ def test_NTU_spinfull_finite():
         cf_energy_old = cf_energy
 
 
-    bd_h = peps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
-    bd_v = peps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
+    bd_h = fpeps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
+    bd_v = fpeps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
 
     nn_CTM_bond_1_up = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc_up'], bd_h)) + abs(nn_bond(psi, step.env, ops['ccdag_up'], bd_h)))
     nn_CTM_bond_2_up = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc_up'], bd_v)) + abs(nn_bond(psi, step.env, ops['ccdag_up'], bd_v)))
@@ -135,7 +135,7 @@ def test_NTU_spinfull_infinite():
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
-    net = peps.Peps(lattice=lattice, boundary=boundary)
+    net = fpeps.Peps(lattice=lattice, boundary=boundary)
 
     opt = yast.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
