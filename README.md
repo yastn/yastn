@@ -1,17 +1,17 @@
-# YAST - Yet Another Symmetric Tensor
-by Marek M. Rams, Gabriela Wójtowicz, and Juraj Hasik
+# YASTN - Yet Another Symmetric Tensor Network
+by Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, and Juraj Hasik
 
 <br />
   
 ### Python library for differentiable linear algebra with block-sparse tensors, supporting abelian symmetries
 
-##### YAST tensors can be defined with both discrete and continuous abelian groups
+##### YASTN tensors can be defined with both discrete and continuous abelian groups
 
 - Z<sub>2</sub> for parity conservation 
 - U(1) for particle number conservation
 - direct product of abelian groups such as Z<sub>3</sub>xU(1) or U(1)xU(1)xZ<sub>2</sub> and so on
 
-##### YAST can run with different backends
+##### YASTN can run with different backends
 
 - NumPy
 - [PyTorch](https://pytorch.org/)
@@ -19,9 +19,9 @@ by Marek M. Rams, Gabriela Wójtowicz, and Juraj Hasik
 allowing for automatic differentiation (autograd) on backends which provide it.
 <br />
 
-##### To see YAST in action, check
+##### To see YASTN in action, check
 
-- Matrix product states (MPS) and algorithms powered by YAST 
+- Matrix product states (MPS) and algorithms powered by YASTN 
 
    Explore the entire [MPS module](https://marekrams.gitlab.io/yast/yastn.mps.html#) or 
    try out code examples running [DMRG](https://marekrams.gitlab.io/yast/examples/mps/mps.html#dmrg)
@@ -29,7 +29,7 @@ allowing for automatic differentiation (autograd) on backends which provide it.
 
 <br />
 
-- Two-dimensional tensor networks library [peps-torch](https://github.com/jurajHasik/peps-torch) powered by YAST
+- Two-dimensional tensor networks library [peps-torch](https://github.com/jurajHasik/peps-torch) powered by YASTN
 
    Try variational optimization of iPEPS with abelian symmetries for spin models
 
@@ -47,9 +47,9 @@ Install using
 git clone https://gitlab.com/marekrams/yastn.git && cd yast
 pip install .
 ```
-or just clone and add YAST root to your Python import path to sucessfully ``import yastn``.   
+or just clone and add YASTN root to your Python import path to sucessfully ``import yastn``.
 
-##### YAST depends on
+##### YASTN depends on
 
 - Python 3.7+
 - NumPy ?+
@@ -72,7 +72,7 @@ pytest -v ./tensor
 pytest -v ./mps
 ```
 
-To test YAST on PyTorch backend and integration of autograd features
+To test YASTN on PyTorch backend and integration of autograd features
 ```
 cd tests
 pytest --backend torch -v ./tensor

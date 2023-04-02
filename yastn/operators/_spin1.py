@@ -18,7 +18,7 @@ class Spin1(meta_operators):
             Explicit symmetry to used. Allowed options are :code:`'dense'`, ``'Z3'``, or ``'U1'``.
 
         kwargs
-            Other YAST configuration parameters can be provided, see :meth:`yastn.make_config`.
+            Other YASTN configuration parameters can be provided, see :meth:`yastn.make_config`.
 
         Notes
         -----

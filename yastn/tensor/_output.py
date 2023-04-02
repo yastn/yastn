@@ -13,7 +13,7 @@ __all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5', 'requires_grad']
 
 def save_to_dict(a):
     r"""
-    Export YAST tensor to dictionary.
+    Export YASTN tensor to dictionary.
 
     .. note::
         allows to save the tensor, e.g. with numpy.save()
@@ -504,7 +504,7 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     This allows to fill in extra zero blocks.
 
     .. note::
-        YAST structure is redundant since resulting tensor is effectively just
+        YASTN structure is redundant since resulting tensor is effectively just
         a single dense block. To obtain this single dense block directly, use :meth:`yastn.Tensor.to_dense`.
 
     Parameters

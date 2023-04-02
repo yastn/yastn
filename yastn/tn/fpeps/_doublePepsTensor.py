@@ -86,7 +86,7 @@ class DoublePepsTensor:
 
         Returns
         -------
-        yastn.tn.peps.DoublePepsTensor
+        yastn.tn.fpeps.DoublePepsTensor
             a clone of :code:`self`
         """
         return DoublePepsTensor(self.A.clone(), self.Ab.clone(), rotation=self._r)
@@ -104,7 +104,7 @@ class DoublePepsTensor:
 
         Returns
         -------
-        yastn.tn.peps.DoublePepsTensor
+        yastn.tn.fpeps.DoublePepsTensor
             a copy of :code:`self`
         """
         return DoublePepsTensor(self.A.copy(), self.Ab.copy(), rotation=self._r)

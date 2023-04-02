@@ -69,7 +69,7 @@ def test_truncate_svd_Z2():
 
     operators = yastn.operators.Spin12(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=N, operators=operators)
-    generate.random_seed(seed=0)
+    generate.random_seed(seed=1)
 
     parameters = {"t": 1.0, "mu": 0.0, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
     H_str = "\sum_{i,j \in rangeNN} t ( sp_{i} sm_{j} + sp_{j} sm_{i} ) + \sum_{j\in rangeN} mu sp_{j} sm_{j}"

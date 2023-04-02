@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.abspath('../..'))
 
 # -- Project information -----------------------------------------------------
 
-project = 'YAST'
+project = 'YASTN'
 copyright = '2023, Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, Juraj Hasik'
 author = 'Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, Juraj Hasik'
 

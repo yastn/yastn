@@ -1,5 +1,5 @@
-Creating symmetric YAST tensors
-===============================
+Creating symmetric YASTN tensors
+================================
 
 Initializing symmetric tensors from scratch
 -------------------------------------------
@@ -35,14 +35,14 @@ See examples: :ref:`examples/tensor/init:create tensors from scratch`.
 Copying and cloning with autograd
 ---------------------------------
 
-YAST follows the semantics of PyTorch with regards to creating
+YASTN follows the semantics of PyTorch with regards to creating
 differentiable `clones` or non-differentiable `copies` of symmetric
 tensors. See 
 `clone <https://pytorch.org/docs/stable/generated/torch.clone.html#torch.clone>`_ 
 and 
 `detach <https://pytorch.org/docs/stable/generated/torch.Tensor.detach.html?highlight=detach#torch.Tensor.detach>`_ for PyTorch.
 
-See YAST examples: :ref:`examples/tensor/init:clone, detach or copy tensors`.
+See YASTN examples: :ref:`examples/tensor/init:clone, detach or copy tensors`.
 
 .. automethod:: yastn.Tensor.copy
 .. automethod:: yastn.Tensor.clone
@@ -63,8 +63,8 @@ Tensors can be moved between devices and/or their `dtype` changed
 .. automethod:: yastn.Tensor.to
 
 
-Import/Export of YAST tensors from/to different formats
--------------------------------------------------------
+Import/Export of YASTN tensors from/to different formats
+--------------------------------------------------------
 
 These utility operations can re-create tensors from
 different formats. For example, 1D representation or dictionary.

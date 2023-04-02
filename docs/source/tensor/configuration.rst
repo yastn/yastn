@@ -1,7 +1,7 @@
-YAST configuration
-==================
+YASTN configuration
+===================
 
-All YAST tensors have to be provided with `configuration`, which defines
+All YASTN tensors have to be provided with `configuration`, which defines
 
 #. Linear algebra backend
 #. :doc:`abelian symmetry group</tensor/symmetry>`

@@ -1,5 +1,5 @@
-YAST
-====
+YASTN
+=====
 
 What are abelian-symmetric tensors
 ----------------------------------
@@ -8,7 +8,7 @@ What are abelian-symmetric tensors
    theory/tensor/basics
 
 API: yastn and yastn.Tensor
--------------------------
+---------------------------
 
 .. toctree::
    :maxdepth: 2

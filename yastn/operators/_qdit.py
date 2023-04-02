@@ -15,7 +15,7 @@ class Qdit(meta_operators):
             Hilbert space dimension.
 
         kwargs
-            Other YAST configuration parameters can be provided, see :meth:`yastn.make_config`.
+            Other YASTN configuration parameters can be provided, see :meth:`yastn.make_config`.
 
         Notes
         -----

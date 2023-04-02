@@ -1,5 +1,5 @@
-Inspecting YAST tensors
-=======================
+Inspecting YASTN tensors
+========================
 
 Get information about tensor's structure and properties
 -------------------------------------------------------

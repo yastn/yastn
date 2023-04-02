@@ -1,4 +1,4 @@
-# Methods creating new YAST tensors from scratch
+# Methods creating new YASTN tensors from scratch
 # and importing tensors from different formats
 # such as 1D+metadata or dictionary representation
 from ast import literal_eval
@@ -32,7 +32,7 @@ def make_config(**kwargs):
         Defaults to NumPy backend.
 
     sym : symmetry module or compatible object
-        Specify abelian symmetry. To see how YAST defines symmetries,
+        Specify abelian symmetry. To see how YASTN defines symmetries,
         see :class:`yastn.sym.sym_abelian`.
         Defaults to ``yastn.sym.sym_none``, effectively a dense tensor.
     default_device : str
@@ -45,7 +45,7 @@ def make_config(**kwargs):
         If not specified, the default device is ``'cpu'``.
 
     default_dtype: str
-        Default data type (dtype) of YAST tensors. Supported options are: ``'float64'``, 
+        Default data type (dtype) of YASTN tensors. Supported options are: ``'float64'``, 
         ``'complex128'``. If not specified, the default dtype is ``'float64'``.
     fermionic : bool or tuple[bool,...]
         Specify behavior of :meth:`yastn.swap_gate` function, allowing to introduce fermionic symmetries.
@@ -60,7 +60,7 @@ def make_config(**kwargs):
     Returns
     -------
     typing.NamedTuple
-        YAST configuration
+        YASTN configuration
     """
     if "backend" not in kwargs:
         from .backend import backend_np
@@ -110,7 +110,7 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
     Parameters
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yastn configuration>`
+        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
     legs : list[yastn.Leg]
         Specify legs of the tensor passing a list of :class:`~yastn.Leg`.
     n : int
@@ -165,7 +165,7 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs):
     Parameters
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yastn configuration>`
+        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
     legs : list[yastn.Leg]
         Specify legs of the tensor passing a list of :class:`~yastn.Leg`.
     n : int
@@ -203,7 +203,7 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs):
     Parameters
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yastn configuration>`
+        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
     legs : list[yastn.Leg]
         Specify legs of the tensor passing a list of :class:`~yastn.Leg`.
     n : int
@@ -244,7 +244,7 @@ def eye(config=None, legs=(), n=None, **kwargs):
     Parameters
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yastn configuration>`
+        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
     legs : list[yastn.Leg]
         Specify legs of the tensor passing a list of :class:`~yastn.Leg`.
     dtype : str
@@ -278,7 +278,7 @@ def load_from_dict(config=None, d=None):
     Parameters
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yastn  configuration>`
+        :ref:`YASTN configuration <tensor/configuration:yastn  configuration>`
 
     d : dict
         Tensor stored in form of a dictionary. Typically provided by an output
@@ -313,7 +313,7 @@ def load_from_hdf5(config, file, path):
     Parameters
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yastn configuration>`
+        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
     file: pointer to opened HDF5 file. 
     path: path inside the file which contains the state
 

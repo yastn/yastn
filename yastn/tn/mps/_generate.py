@@ -62,7 +62,7 @@ def generate_single_mpo(I, term):   # this can be private
 
 
 def generate_mpo(I, terms, normalize=False, opts=None, packet=50):  # can use better algorithm to compress
-    """
+    r"""
     Generate MPO provided a list of :class:`Hterm`-s and identity MPO `I`.
 
     If the number of MPOs is large, adding them all together can result 
@@ -123,7 +123,7 @@ def generate_single_mps(term, N):  # obsolate - DELETE  (not docummented)
     return term.amplitude * single_mps
 
 def generate_mps(terms, N, normalize=False, opts=None, packet=50):   #  DELETE
-    """
+    r"""
     Generate MPS provided a list of :class:`Hterm`-s.
 
     If the number of MPSs is large, adding them all together can result 
@@ -160,7 +160,7 @@ def generate_mps(terms, N, normalize=False, opts=None, packet=50):   #  DELETE
 class Generator:
     
     def __init__(self, N, operators, map=None, Is=None, parameters=None, opts={"tol": 1e-14}):
-        """
+        r"""
         Generator is a convenience class building MPOs from a set of local operators.
         Generated MPO have following :ref:`index order<mps/convention:index convention>` and signature::
 
@@ -223,7 +223,7 @@ class Generator:
         self.opts = opts
 
     def random_seed(self, seed):
-        """
+        r"""
         Set seed for random number generator used in backend (of self.config).
 
         Parameters
@@ -242,7 +242,7 @@ class Generator:
         return self._I.copy()
 
     def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64'):
-        """
+        r"""
         Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
         Parameters
@@ -282,7 +282,7 @@ class Generator:
         raise YastError("MPS: Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization. ")
 
     def random_mpo(self, D_total=8, sigma=1, dtype='float64'):
-        """
+        r"""
         Generate a random MPO with bond dimension ``D_total``.
 
         Parameters
@@ -413,7 +413,7 @@ class Generator:
         return generate_mpo(self._I, c3)
 
     def _term2Hterm(self, c2, obj_yast, obj_number):
-        """
+        r"""
         Helper function to rewrite the instruction given as a list of single_term-s (see _latex2term)
         to a list of Hterm-s (see here).
 
@@ -451,11 +451,11 @@ class Generator:
         return Hterm_list
 
 def random_dense_mps(N, D, d, **kwargs):
-    """Generate random mps with physical dimension d and virtual dimension D."""
+    r"""Generate random mps with physical dimension d and virtual dimension D."""
     G = Generator(N, Qdit(d=d, **kwargs))
     return G.random_mps(D_total=D)
 
 def random_dense_mpo(N, D, d, **kwargs):
-    """Generate random mpo with physical dimension d and virtual dimension D."""
+    r"""Generate random mpo with physical dimension d and virtual dimension D."""
     G = Generator(N, Qdit(d=d, **kwargs))
     return G.random_mpo(D_total=D)

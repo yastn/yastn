@@ -41,7 +41,7 @@ Setting MPS/MPO tensors by hand
     The virtual dimensions/spaces of the neighbouring MPS/MPO tensors have to remain consistent.
 
 .. note::
-    To create :class:`yastn.Tensor`'s look :ref:`here<tensor/init:Creating symmetric YAST tensors>`. 
+    To create :class:`yastn.Tensor`'s look :ref:`here<tensor/init:Creating symmetric YASTN tensors>`. 
 
 The examples of creating MPS/MPO by hand can be found here:
 :ref:`Ground state of Spin-1 AKLT model<examples/mps/mps:ground state of spin-1 aklt model>`,

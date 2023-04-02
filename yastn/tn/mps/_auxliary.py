@@ -10,7 +10,7 @@ def load_from_dict(config, in_dict):
     Parameters
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yastn configuration>`
+        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
 
     nr_phys: int
         number of physical legs: 1 for MPS (default); 2 for MPO;
@@ -38,7 +38,7 @@ def load_from_hdf5(config, file, my_address):
     Parameters
     -----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
-        :ref:`YAST configuration <tensor/configuration:yastn configuration>`
+        :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
 
     file: File
         A 'pointer' to a file opened by a user

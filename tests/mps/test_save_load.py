@@ -52,7 +52,7 @@ def test_basic_hdf5():
     #
     # To read MPS from HDF5 file, open the file and load the MPS stored 
     # at address 'state/'. 
-    # Note: You have to provide valid YAST configuration 
+    # Note: You have to provide valid YASTN configuration 
     #
     with h5py.File('tmp.h5', 'r') as f:
         phi = mps.load_from_hdf5(config_dense, f, './state/')
@@ -100,7 +100,7 @@ def test_basic_dict():
     #
     tmp = psi.save_to_dict()
     #
-    # Last, we load the MPS from the dictionary, providing valid YAST configuration
+    # Last, we load the MPS from the dictionary, providing valid YASTN configuration
     #
     phi = mps.load_from_dict(config_dense, tmp)
     #
