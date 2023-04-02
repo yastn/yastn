@@ -1,4 +1,4 @@
-sfrom typing import NamedTuple, Tuple
+from typing import NamedTuple, Tuple
 from itertools import accumulate
 from dataclasses import dataclass
 from ....tn import mps
