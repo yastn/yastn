@@ -7,7 +7,7 @@ What are abelian-symmetric tensors
 .. toctree::
    theory/tensor/basics
 
-API: yast and yast.Tensor
+API: yastn and yastn.Tensor
 -------------------------
 
 .. toctree::

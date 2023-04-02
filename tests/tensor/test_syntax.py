@@ -1,6 +1,6 @@
 """ list supported operations on a tensor (not all arguments are shown)"""
 import unittest
-import yast
+import yastn
 try:
     from .configs import config_U1
 except ImportError:
@@ -11,7 +11,7 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 class TestSyntaxTensorCreation(unittest.TestCase):
 
-    # a = yast.randR(config=config_U1, s=(-1, 1, 1, -1),
+    # a = yastn.randR(config=config_U1, s=(-1, 1, 1, -1),
     #             t=((-1, 1, 0), (-1, 1, 2), (-1, 1, 2), (-1, 1, 2)),
     #             D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
 
@@ -38,21 +38,21 @@ class TestSyntaxTensorCreation(unittest.TestCase):
         # The dtype of the tensor elements as well as the device on which its data 
         # reside is given in config_U1.
         #
-        leg1 = yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3))
-        leg2 = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
-        leg3 = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
-        leg4 = yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))
+        leg1 = yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3))
+        leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
+        leg3 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
+        leg4 = yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))
 
-        a = yast.rand(config=config_U1, legs=[leg1, leg2, leg3, leg4])
-        b = yast.ones(config=config_U1, legs=[leg1, leg2, leg3, leg4])
-        c = yast.zeros(config=config_U1, legs=[leg1, leg2, leg3, leg4])
+        a = yastn.rand(config=config_U1, legs=[leg1, leg2, leg3, leg4])
+        b = yastn.ones(config=config_U1, legs=[leg1, leg2, leg3, leg4])
+        c = yastn.zeros(config=config_U1, legs=[leg1, leg2, leg3, leg4])
         
         #
         # The identity tensor behaves as rank-2 tensor with automatic signature (1, -1)
         # or (-1, 1). It is enough to provide charge sectors and their dimensions 
         # for single leg, the data for other leg is inferred automatically. 
         #
-        e = yast.eye(config=config_U1,legs=leg1)
+        e = yastn.eye(config=config_U1,legs=leg1)
 
     def test_syntax_create_empty_tensor_and_fill(self):
         # 
@@ -67,7 +67,7 @@ class TestSyntaxTensorCreation(unittest.TestCase):
         # of the block, ts, are given as a tuple with the length identical to
         # the rank of the tensor. Similarly, the dimensions of the block Ds.
         #
-        d = yast.Tensor(config=config_U1, s=(-1, 1, 1, -1))
+        d = yastn.Tensor(config=config_U1, s=(-1, 1, 1, -1))
         d.set_block(ts=(1, -1, 2, 0), Ds=(2, 4, 9, 2), val='rand')
         d.set_block(ts=(2, 0, 2, 0), Ds=(3, 3, 9, 2), val='rand')
 
@@ -79,19 +79,19 @@ class TestSyntaxTensorCreation(unittest.TestCase):
         # Attempting to create new block with different dimension for the same
         # sector 2 on 3rd leg throws an error
         #
-        with self.assertRaises(yast.YastError):
+        with self.assertRaises(yastn.YastError):
             d.set_block(ts=(2, 1, 2, 1), Ds=(3, 3, 10, 2), val='rand')
 
 
 class TestSyntaxBasicAlgebra(unittest.TestCase):
 
     def test_syntax_basic_algebra(self):
-        legs = [yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3)),
-                yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
-                yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
-                yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
+        legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3)),
+                yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+                yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
+                yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
 
-        a = yast.rand(config=config_U1, legs=legs)
+        a = yastn.rand(config=config_U1, legs=legs)
 
         # 
         # Tensor can be multiplied by scalar 
@@ -104,7 +104,7 @@ class TestSyntaxBasicAlgebra(unittest.TestCase):
         # Tensors can be added or subtracted assuming their structure is 
         # compatible.
         #
-        b = yast.ones(config=config_U1, legs=legs)
+        b = yastn.ones(config=config_U1, legs=legs)
         tensor = a + b
         tensor = a - b
 
@@ -112,8 +112,8 @@ class TestSyntaxBasicAlgebra(unittest.TestCase):
         # Attempting to add/subtract two tensors with different total charge,
         # or different dimension of a common charge sector raises exception
         # 
-        legs[0] = yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(7, 2, 3))
-        c = yast.ones(config=config_U1, legs=legs)
+        legs[0] = yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(7, 2, 3))
+        c = yastn.ones(config=config_U1, legs=legs)
         with self.assertRaises(Exception):
             tensor = a + c
 
@@ -122,18 +122,18 @@ class TestSyntaxBasicAlgebra(unittest.TestCase):
         # square root and its reciprocal x -> 1/sqrt(x)
         #
         tensor = a.exp(step=1)
-        tensor = yast.exp(a, step=1)
+        tensor = yastn.exp(a, step=1)
         
         tensor = abs(a)
 
         tensor = a.reciprocal(cutoff=1e-12)
-        tensor = yast.reciprocal(a, cutoff=1e-12)
+        tensor = yastn.reciprocal(a, cutoff=1e-12)
         
         tensor = abs(a).sqrt()
-        tensor = yast.sqrt(abs(a))
+        tensor = yastn.sqrt(abs(a))
         
         tensor = abs(a).rsqrt(cutoff=1e-12)
-        tensor = yast.rsqrt(abs(a), cutoff=1e-12)
+        tensor = yastn.rsqrt(abs(a), cutoff=1e-12)
         
 
         #
@@ -142,7 +142,7 @@ class TestSyntaxBasicAlgebra(unittest.TestCase):
         # are handled by specialized function
         # 
         tensor = a.apxb(b, x=1)
-        tensor = yast.apxb(a, b, x=1)
+        tensor = yastn.apxb(a, b, x=1)
 
 
 class TestSyntaxTensorExportImport(unittest.TestCase):
@@ -153,11 +153,11 @@ class TestSyntaxTensorExportImport(unittest.TestCase):
         # Such tensor is stored as dict of non-zero blocks, indexed by charges
         #
 
-        legs = [yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3)),
-                yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
-                yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(7, 8, 9))]
+        legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3)),
+                yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+                yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(7, 8, 9))]
 
-        a= yast.rand(config=config_U1, legs=legs)
+        a= yastn.rand(config=config_U1, legs=legs)
 
         #
         # We can serialize symmetric tensors into 1-D vector, holding
@@ -166,26 +166,26 @@ class TestSyntaxTensorExportImport(unittest.TestCase):
         # non-zero block indexed by charges and it points to location of 1-D vector
         # where the raw data of that block is stored
         # 
-        vector, meta = yast.compress_to_1d(a)
+        vector, meta = yastn.compress_to_1d(a)
         vector, meta = a.compress_to_1d(meta=meta)
-        tensor = yast.decompress_from_1d(vector, meta)
+        tensor = yastn.decompress_from_1d(vector, meta)
 
         # 
         # Tensors can be also serialized directly into basic Python dictionary
         #
-        dictionary = yast.save_to_dict(a)
+        dictionary = yastn.save_to_dict(a)
         dictionary = a.save_to_dict()
-        tensor = yast.load_from_dict(config=config_U1, d=dictionary)
+        tensor = yastn.load_from_dict(config=config_U1, d=dictionary)
 
 
 class TestSyntaxBlockAccess(unittest.TestCase):
 
     def test_syntax_block_access(self):
-        legs = [yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3)),
-                yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
-                yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(7, 8, 9))]
+        legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3)),
+                yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+                yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(7, 8, 9))]
         
-        a = yast.rand(config=config_U1, legs=legs)
+        a = yastn.rand(config=config_U1, legs=legs)
 
         #
         # directly access block with charges (1, 2, 1).
@@ -196,40 +196,40 @@ class TestSyntaxBlockAccess(unittest.TestCase):
 class TestSyntaxTensorBlocking(unittest.TestCase):
 
     def test_syntax_block_tensors(self):
-        legs = [yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3)),
-                yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
-                yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))]
+        legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3)),
+                yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+                yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))]
 
-        a = yast.rand(config=config_U1, legs=legs)
-        b = yast.ones(config=config_U1, legs=legs)
-        c = yast.zeros(config=config_U1, legs=legs)
-        d = yast.zeros(config=config_U1, legs=legs)
+        a = yastn.rand(config=config_U1, legs=legs)
+        b = yastn.ones(config=config_U1, legs=legs)
+        c = yastn.zeros(config=config_U1, legs=legs)
+        d = yastn.zeros(config=config_U1, legs=legs)
 
         # block tensors
-        tensor1 = yast.block({(1, 1): a, (1, 2): b}, common_legs=(0,))
-        tensor2 = yast.block({(1, 1): c, (2, 1): d}, common_legs=(0,))
+        tensor1 = yastn.block({(1, 1): a, (1, 2): b}, common_legs=(0,))
+        tensor2 = yastn.block({(1, 1): c, (2, 1): d}, common_legs=(0,))
 
-        result1 = yast.tensordot(tensor1, tensor2.conj(), axes=((1, 2), (2, 1)))
+        result1 = yastn.tensordot(tensor1, tensor2.conj(), axes=((1, 2), (2, 1)))
 
-        result2 = yast.tensordot(a, c.conj(), axes=((1, 2), (2, 1))) + \
-                  yast.tensordot(b, d.conj(), axes=((1, 2), (2, 1)))
+        result2 = yastn.tensordot(a, c.conj(), axes=((1, 2), (2, 1))) + \
+                  yastn.tensordot(b, d.conj(), axes=((1, 2), (2, 1)))
 
         # new tensor filled with ones, matching structure of selected legs -- to be used for e.g. dot
-        assert yast.norm(result1 - result2) < tol
+        assert yastn.norm(result1 - result2) < tol
 
 
 class TestSyntaxContractions(unittest.TestCase):
 
     def test_syntax_contraction(self):
         # create a set of U(1)-symmetric tensors
-        leg1 = yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3))
-        leg2 = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
-        leg3 = yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
-        leg4 = yast.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))
+        leg1 = yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3))
+        leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
+        leg3 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
+        leg4 = yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))
 
-        a = yast.rand(config=config_U1, legs=[leg1, leg2, leg3, leg4])
-        b = yast.ones(config=config_U1, legs=[leg1, leg2, leg3, leg4])
-        c = yast.rand(config=config_U1, legs=[leg4.conj(), leg3, leg2.conj()])
+        a = yastn.rand(config=config_U1, legs=[leg1, leg2, leg3, leg4])
+        b = yastn.ones(config=config_U1, legs=[leg1, leg2, leg3, leg4])
+        c = yastn.rand(config=config_U1, legs=[leg4.conj(), leg3, leg2.conj()])
 
         # Contract a and b by two indices. The a tensor is conjugated, which
         # reverses the signature on its indices
@@ -240,14 +240,14 @@ class TestSyntaxContractions(unittest.TestCase):
         # The order of the indices on the resulting tensor is as follows:
         # First, the outgoing indices of a (the first argument to tensordot), then
         # the outgoing indices of tensor b
-        tensor = yast.tensordot(a, b, axes=((1, 2), (1, 2)), conj=(1, 0))
+        tensor = yastn.tensordot(a, b, axes=((1, 2), (1, 2)), conj=(1, 0))
         
         # tensordot can also be invoked also as a function of the tensor itself
         #
         tensor = a.tensordot(b, axes=((1, 2), (1, 2)), conj=(1, 0))
 
         # If no axes are specified, the outer product of two tensors is returned
-        tensor = yast.tensordot(c, c, axes=((), ()) )
+        tensor = yastn.tensordot(c, c, axes=((), ()) )
         assert tensor.get_rank() == 6
 
 
@@ -256,17 +256,17 @@ class TestSyntaxContractions(unittest.TestCase):
         # 0-<-|a|-<-2     |c|-<-1 = 0-<-|ac|-<-2
         # 1->-|_|->-3 0->-|_|->-2   1->-|  |-<-1->3
         #                               |__|->-2->4
-        t0 = yast.tensordot(a, c, axes=(a.ndim - 1, 0)) 
+        t0 = yastn.tensordot(a, c, axes=(a.ndim - 1, 0)) 
         # 
         # is the @ operator. For rank-2 tensor it is thus equivalent to matrix multiplication
         t1 = a @ c
-        assert yast.norm(t0 - t1) < tol
+        assert yastn.norm(t0 - t1) < tol
         #
         # Utility functions simplifying execution of contractions
-        t2 = yast.ncon([a, c], ((-0, -1, -2, 1), (1, -3, -4)))
-        t3 = yast.einsum('ijkx,xlm->ijklm', a, c)
-        assert yast.norm(t0 - t2) < tol
-        assert yast.norm(t0 - t3) < tol
+        t2 = yastn.ncon([a, c], ((-0, -1, -2, 1), (1, -3, -4)))
+        t3 = yastn.einsum('ijkx,xlm->ijklm', a, c)
+        assert yastn.norm(t0 - t2) < tol
+        assert yastn.norm(t0 - t3) < tol
 
 
         # Another special case of tensor contraction is a dot product of vectorized tensors
@@ -276,7 +276,7 @@ class TestSyntaxContractions(unittest.TestCase):
         # |  |->-2 2->-| | 
         # |__|-<-3 3-<-|_|
         tensor = a.tensordot(b, axes=((0, 1, 2, 3), (0, 1, 2, 3)), conj=(1, 0))
-        assert isinstance(tensor,yast.Tensor)
+        assert isinstance(tensor,yastn.Tensor)
         #
         # such single element symmetric Tensor can be converted to a single-element
         # tensor of the backend type, or even further to python scalar
@@ -285,12 +285,12 @@ class TestSyntaxContractions(unittest.TestCase):
         assert isinstance(python_scalar,float)
 
         # A shorthand function for computing dot products is vdot
-        number = yast.vdot(a, b)
+        number = yastn.vdot(a, b)
         number = a.vdot(b)
 
         # Trace over certain indices can be computed using identically named function.
         # In this case, a2_ijil = a2_jl
-        a2 = yast.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(1, 0))
+        a2 = yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(1, 0))
         tensor = a2.trace(axes=(0, 2))
         assert tensor.get_rank()==2
         # 
@@ -306,36 +306,36 @@ class TestSyntaxGeneral(unittest.TestCase):
 
         # with config that is not imported as usually
         if config_U1.backend.BACKEND_ID == 'numpy':
-            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_np, default_device=config_U1.default_device)
+            cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_np, default_device=config_U1.default_device)
         elif config_U1.backend.BACKEND_ID == 'torch':
-            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_torch, default_device=config_U1.default_device)
+            cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_torch, default_device=config_U1.default_device)
         elif config_U1.backend.BACKEND_ID == 'torch_cpp':
-            cfg_U1 = yast.make_config(sym=yast.sym.sym_U1, backend=yast.backend.backend_torch_cpp, default_device=config_U1.default_device)
+            cfg_U1 = yastn.make_config(sym=yastn.sym.sym_U1, backend=yastn.backend.backend_torch_cpp, default_device=config_U1.default_device)
         else:
             raise RuntimeError('Unsupported backend')
 
-        legs = [yast.Leg(cfg_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
-                yast.Leg(cfg_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
-                yast.Leg(cfg_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
-                yast.Leg(cfg_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
-        a = yast.rand(config=cfg_U1, legs=legs)
-        b = yast.ones(config=config_U1, legs=legs)
+        legs = [yastn.Leg(cfg_U1, s=-1, t=(-1, 1, 0), D=(1, 2, 3)),
+                yastn.Leg(cfg_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+                yastn.Leg(cfg_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9)),
+                yastn.Leg(cfg_U1, s=-1, t=(-1, 1, 2), D=(10, 11, 12))]
+        a = yastn.rand(config=cfg_U1, legs=legs)
+        b = yastn.ones(config=config_U1, legs=legs)
 
         # conj - documented example in test_conj.py
         tensor = a.conj()
-        tensor = yast.conj(a)
+        tensor = yastn.conj(a)
         tensor = a.conj_blocks()
-        tensor = yast.conj_blocks(a)
+        tensor = yastn.conj_blocks(a)
         tensor = a.flip_signature()
-        tensor = yast.flip_signature(a)
+        tensor = yastn.flip_signature(a)
 
         # coping/cloning - documented example in test_autograd.py
         tensor = a.copy()
-        tensor = yast.copy(a)
+        tensor = yastn.copy(a)
         tensor = a.clone()
-        tensor = yast.clone(a)
+        tensor = yastn.clone(a)
         tensor = a.detach()
-        tensor = yast.detach(a)
+        tensor = yastn.detach(a)
 
         # to
         tensor = a.to(device='cpu')
@@ -369,53 +369,53 @@ class TestSyntaxGeneral(unittest.TestCase):
 
         # permute - documented example in test_transpose.py
         tensor = a.transpose(axes=(2, 3, 0, 1))
-        tensor = yast.transpose(a, axes=(2, 3, 0, 1))
+        tensor = yastn.transpose(a, axes=(2, 3, 0, 1))
 
         tensor = a.move_leg(source=2, destination=3)
-        tensor = yast.move_leg(a, source=2, destination=3)
+        tensor = yastn.move_leg(a, source=2, destination=3)
 
-        a2 = yast.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(1, 0))
+        a2 = yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(1, 0))
         # linalg / split
-        U, S, V = yast.linalg.svd(a, axes=((0, 1), (2, 3)))
-        U, S, V = yast.svd(a, axes=((0, 1), (2, 3)))
+        U, S, V = yastn.linalg.svd(a, axes=((0, 1), (2, 3)))
+        U, S, V = yastn.svd(a, axes=((0, 1), (2, 3)))
         U, S, V = a.svd(axes=((0, 1), (2, 3)))
-        U, S, V = yast.svd_with_truncation(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
+        U, S, V = yastn.svd_with_truncation(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
         try:
-            U, S, V = yast.svd(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2, n_iter=5, k_fac=2, policy='lowrank')
+            U, S, V = yastn.svd(a, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2, n_iter=5, k_fac=2, policy='lowrank')
             U, S, V = a.svd(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2, n_iter=5, k_fac=2, policy='lowrank')
         except NameError:
             pass
 
-        Q, R = yast.linalg.qr(a, axes=((0, 1), (2, 3)))
-        Q, R = yast.qr(a, axes=((0, 1), (2, 3)))
+        Q, R = yastn.linalg.qr(a, axes=((0, 1), (2, 3)))
+        Q, R = yastn.qr(a, axes=((0, 1), (2, 3)))
         Q, R = a.qr(axes=((0, 1), (2, 3)))
 
-        D, U = yast.linalg.eigh(a2, axes=((0, 1), (2, 3)))
-        D, U = yast.eigh_with_truncation(a2, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
+        D, U = yastn.linalg.eigh(a2, axes=((0, 1), (2, 3)))
+        D, U = yastn.eigh_with_truncation(a2, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
         D, U = a2.eigh_with_truncation(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
 
         # linalg
         number = a.norm()
-        number = yast.norm(a, p='fro')  # p = 'for', i.e. frobenius is default
-        number = yast.linalg.norm(a, p='inf')
+        number = yastn.norm(a, p='fro')  # p = 'for', i.e. frobenius is default
+        number = yastn.linalg.norm(a, p='inf')
 
-        number = yast.norm(a - b)
-        number = yast.norm(a - b)
-        number = yast.linalg.norm(a - b)
-        number = yast.norm(a - b)
+        number = yastn.norm(a - b)
+        number = yastn.norm(a - b)
+        number = yastn.linalg.norm(a - b)
+        number = yastn.norm(a - b)
 
         # utils
-        entropy, Smin, normalization = yast.entropy(a, axes=((0, 1), (2, 3)))
+        entropy, Smin, normalization = yastn.entropy(a, axes=((0, 1), (2, 3)))
 
         # fuse
         tensor = a.fuse_legs(axes=(0, (1, 3), 2))
         tensor = tensor.unfuse_legs(axes=1)
 
-        tensor = yast.fuse_legs(a, axes=(0, (1, 3), 2))
-        tensor = yast.unfuse_legs(tensor, axes=(0, (1, 3), 2))
+        tensor = yastn.fuse_legs(a, axes=(0, (1, 3), 2))
+        tensor = yastn.unfuse_legs(tensor, axes=(0, (1, 3), 2))
 
         # block
-        tensor = yast.block({(0, 0): a, (0, 1): b, (1, 0): b}, common_legs=(1, 2))
+        tensor = yastn.block({(0, 0): a, (0, 1): b, (1, 0): b}, common_legs=(1, 2))
 
         # tests
         a.is_consistent()

@@ -11,7 +11,7 @@ Basic algebra operations
 Tensor contractions
 -------------------
 
-Basic contractions with :meth:`yast.tensordot`,  matrix-multiplication operator ``@``, tracing with :meth:`yast.trace`
+Basic contractions with :meth:`yastn.tensordot`,  matrix-multiplication operator ``@``, tracing with :meth:`yastn.trace`
 
 .. literalinclude:: /../../tests/tensor/test_syntax.py
    :pyobject: TestSyntaxContractions.test_syntax_contraction

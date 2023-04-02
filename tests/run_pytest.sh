@@ -1,3 +1,3 @@
 conda activate pt
-pytest --backend np --cov=./../yast --cov-report html ./tensor
-pytest --backend torch --cov=./../yast --cov-append --cov-report html
+pytest --backend np --cov=./../yastn --cov-report html ./tensor
+pytest --backend torch --cov=./../yastn --cov-append --cov-report html

@@ -18,7 +18,7 @@ The configuration can be a Python module,
 
 For easy way to generate `configurations`, a convenience function is provided
 
-.. autofunction:: yast.make_config
+.. autofunction:: yastn.make_config
 
 Below is an example of `configuration` defined as a plain Python module, 
 using NumPy backend and U(1) symmetry

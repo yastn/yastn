@@ -13,7 +13,7 @@ or class which defines
        
     #. how to add up charges by implementing a `fuse` function
 
-.. automodule:: yast.sym.sym_abelian
+.. automodule:: yastn.sym.sym_abelian
     :members: sym_abelian
 
 Example symmetries
@@ -21,11 +21,11 @@ Example symmetries
 
 * U(1) symmetry
 
-.. literalinclude:: /../../yast/sym/sym_U1.py
+.. literalinclude:: /../../yastn/sym/sym_U1.py
 
 * :math:`Z_2` symmetry
 
-.. literalinclude:: /../../yast/sym/sym_Z2.py
+.. literalinclude:: /../../yastn/sym/sym_Z2.py
 
 * :math:`Z_2\times U(1)`
 

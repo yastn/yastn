@@ -1,12 +1,12 @@
 Creating MPS/MPO tensors with Generator
 =======================================
 
-:class:`yast.tn.mps.Generator` automatizes creation of MPS and MPO. 
-Given a set of local (on-site) operators, i.e. :class:`yast.operators.Spin12` 
-or :class:`yast.operators.SpinlessFermions`,
+:class:`yastn.tn.mps.Generator` automatizes creation of MPS and MPO. 
+Given a set of local (on-site) operators, i.e. :class:`yastn.operators.Spin12` 
+or :class:`yastn.operators.SpinlessFermions`,
 one can build both the states and operators. The MPS/MPO can be given as a LaTeX-like expression. 
 
-.. autoclass:: yast.tn.mps.Generator
+.. autoclass:: yastn.tn.mps.Generator
 	:members: random_seed, I, random_mps, random_mpo
 
 MPS/MPOs from LaTex 

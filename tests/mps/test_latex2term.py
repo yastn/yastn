@@ -1,6 +1,6 @@
 import pytest
 import sys
-from yast.tn.mps._latex2term import  splitt,\
+from yastn.tn.mps._latex2term import  splitt,\
                         interpret,\
                         string2list,\
                         latex2term,\

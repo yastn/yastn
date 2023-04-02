@@ -1,17 +1,17 @@
 import pytest
-import yast
-import yast.tn.mps as mps
+import yastn
+import yastn.tn.mps as mps
 
 
 def run_evolution():
-    ops = yast.operators.Spin12(sym='Z2')
+    ops = yastn.operators.Spin12(sym='Z2')
     H_ZZ = "\sum_{j,k \in rangeNN} (sz_{j} sz_{k}) + \sum_{i \in rangeN} mu cp_{i} c_{i}"
     H_X = "\sum_{j,k \in rangeNN} (sz_{j} sz_{k}) + \sum_{i \in rangeN} mu cp_{i} c_{i}"
 
 
 # def test_generator_mpo():
 #     for sym in ['Z2', 'U1']:
-#         ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+#         ops = yastn.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
 #         for t in [0,0.2, -0.3]:
 #             for mu in [0.2, -0.3]:
 #                 for N in [2,3]:
@@ -50,7 +50,7 @@ def run_evolution():
 #     sym, N = 'U1', 3
     
 #     # generate set of basic ops for the model we want to work with
-#     ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+#     ops = yastn.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
     
 #     # generate data for random Hamiltonian
 #     amplitudes1 = np.random.rand(N, N)
@@ -102,7 +102,7 @@ def run_evolution():
 #     sym, N = 'U1', 3
     
 #     # generate set of basic ops for the model we want to work with
-#     ops = yast.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+#     ops = yastn.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
     
 #     # generate data for random Hamiltonian
 #     amplitudes1 = np.random.rand(N, N)
@@ -143,18 +143,18 @@ def run_evolution():
 #     assert abs(x_man - x_str) < tol
 
 # def mps_basis_ex(config):
-#     plus = yast.Tensor(config=config, s=[1])
+#     plus = yastn.Tensor(config=config, s=[1])
 #     plus.set_block(val=[0, 1],Ds=(2,))
-#     minus = yast.Tensor(config=config, s=[1])
+#     minus = yastn.Tensor(config=config, s=[1])
 #     minus.set_block(val=[1, 0],Ds=(2,))
 #     return plus, minus
 
 # def mpo_basis_ex(config):
-#     cpc = yast.Tensor(config=config, s=[1, -1])
+#     cpc = yastn.Tensor(config=config, s=[1, -1])
 #     cpc.set_block(val=[[0,0],[0,1]],Ds=(2,2,))
-#     ccp = yast.Tensor(config=config, s=[1, -1])
+#     ccp = yastn.Tensor(config=config, s=[1, -1])
 #     ccp.set_block(val=[[1,0],[0,0]],Ds=(2,2,))
-#     I = yast.Tensor(config=config, s=[1, -1])
+#     I = yastn.Tensor(config=config, s=[1, -1])
 #     I.set_block(val=[[1,0],[0,1]],Ds=(2,2,))
 #     return cpc, ccp, I
 
@@ -163,7 +163,7 @@ def run_evolution():
     
 #     cpc, ccp, I = mpo_basis_ex(cfg)
     
-#     ops = yast.operators.General({'cpc': lambda j: cpc, 'ccp': lambda j: ccp, 'I': lambda j: I})
+#     ops = yastn.operators.General({'cpc': lambda j: cpc, 'ccp': lambda j: ccp, 'I': lambda j: I})
         
 #     emap = {str(i): i for i in range(N)}
     

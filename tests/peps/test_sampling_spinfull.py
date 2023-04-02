@@ -2,15 +2,15 @@ import numpy as np
 import pytest
 import logging
 import argparse
-import yast
-import yast.tn.fpeps as fpeps
-import yast.tn.mps as mps
+import yastn
+import yastn.tn.fpeps as fpeps
+import yastn.tn.mps as mps
 import time
-from yast.tn.fpeps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
-from yast.tn.fpeps.evolution import evolution_step_, gates_homogeneous
-from yast.tn.fpeps import initialize_peps_purification
-from yast.tn.fpeps.ctm import sample, nn_bond, CtmEnv2Mps, nn_avg, ctmrg, init_rand, one_site_avg, Local_CTM_Env
-from yast.tn.mps import Env2, Env3
+from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
+from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
+from yastn.tn.fpeps import initialize_peps_purification
+from yastn.tn.fpeps.ctm import sample, nn_bond, CtmEnv2Mps, nn_avg, ctmrg, init_rand, one_site_avg, Local_CTM_Env
+from yastn.tn.mps import Env2, Env3
 
 
 try:
@@ -40,7 +40,7 @@ def not_working_test_sampling_spinfull():
     dims = (yy, xx)
     net = fpeps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
 
-    opt = yast.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
+    opt = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
     GA_nn_up, GB_nn_up = gates_hopping(t_up, dbeta, fid, fc_up, fcdag_up, purification=purification)
     GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, dbeta, fid, fc_dn, fcdag_dn, purification=purification)

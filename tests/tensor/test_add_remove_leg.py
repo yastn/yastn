@@ -1,6 +1,6 @@
-""" yast.add_leg() yast.remove_leg() """
+""" yastn.add_leg() yastn.remove_leg() """
 import pytest
-import yast
+import yastn
 try:
     from .configs import config_dense, config_U1, config_Z2xU1
 except ImportError:
@@ -11,9 +11,9 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 def _test_add_remove_leg(a):
     """ run a sequence of adding and removing axis operations. """
-    b = yast.add_leg(a)  # new axis with s=1 added as the last one; makes copy
+    b = yastn.add_leg(a)  # new axis with s=1 added as the last one; makes copy
     assert b.is_consistent()
-    assert not yast.are_independent(a, b)
+    assert not yastn.are_independent(a, b)
     assert all(x == 0 for x in b.struct.n)  # tensor charge is set here to 0
     b = b.add_leg(axis=1, s=-1)
     b.is_consistent()
@@ -23,34 +23,34 @@ def _test_add_remove_leg(a):
     assert c.struct.n == a.struct.n
     c = c.remove_leg(axis=1)
     assert c.is_consistent()
-    assert yast.norm(a - c) < tol
+    assert yastn.norm(a - c) < tol
 
 
 def test_add_leg_basic():
     """ add_leg for various symmetries """
     # dense
-    a = yast.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
+    a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
     _test_add_remove_leg(a)
 
     # U1
-    a = yast.Tensor(config=config_U1, s=(-1, 1), n=-1)
+    a = yastn.Tensor(config=config_U1, s=(-1, 1), n=-1)
     a.set_block(ts=(1, 0), Ds=(1, 1), val=1)  # creation operator
-    b = yast.Tensor(config=config_U1, s=(-1, 1), n=1)
+    b = yastn.Tensor(config=config_U1, s=(-1, 1), n=1)
     b.set_block(ts=(0, 1), Ds=(1, 1), val=1)  # annihilation operator
     _test_add_remove_leg(a)
     _test_add_remove_leg(b)
 
-    ab1 = yast.tensordot(a, b, axes=((), ()))  # outer product
+    ab1 = yastn.tensordot(a, b, axes=((), ()))  # outer product
     a = a.add_leg(s=1)
     b = b.add_leg(s=-1)
-    ab2 = yast.tensordot(a, b, axes=(2, 2))
-    assert yast.norm(ab1 - ab2) < tol
+    ab2 = yastn.tensordot(a, b, axes=(2, 2))
+    assert yastn.norm(ab1 - ab2) < tol
 
     # Z2xU1
-    legs = [yast.Leg(config_Z2xU1, s=-1, t=[(0, 0), (1, 0), (0, 2), (1, 2)], D=(1, 2, 2, 4)),
-            yast.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 2)], D=(2, 3)),
-            yast.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)], D=(2, 4, 6, 3, 6, 9))]
-    a = yast.rand(config=config_Z2xU1, n=(1, 2), legs=legs)
+    legs = [yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (1, 0), (0, 2), (1, 2)], D=(1, 2, 2, 4)),
+            yastn.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 2)], D=(2, 3)),
+            yastn.Leg(config_Z2xU1, s=1, t=[(0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)], D=(2, 4, 6, 3, 6, 9))]
+    a = yastn.rand(config=config_Z2xU1, n=(1, 2), legs=legs)
     assert a.get_shape() == (9, 3, 25)
     _test_add_remove_leg(a)
 
@@ -86,35 +86,35 @@ def test_operators_chain():
     add virtual legs connecting them, starting from the end
     """
 
-    cdag = yast.Tensor(config=config_U1, s=(1, -1), n=1)
+    cdag = yastn.Tensor(config=config_U1, s=(1, -1), n=1)
     cdag.set_block(ts=(1, 0), Ds=(1, 1), val=1)
-    c = yast.Tensor(config=config_U1, s=(1, -1), n=-1)
+    c = yastn.Tensor(config=config_U1, s=(1, -1), n=-1)
     c.set_block(ts=(0, 1), Ds=(1, 1), val=1)
 
     nn = (0,) * len(c.n)
-    o4 = yast.add_leg(c, axis=-1, t=nn, s=-1)
-    o4 = yast.add_leg(o4, axis=0, s=1)
+    o4 = yastn.add_leg(c, axis=-1, t=nn, s=-1)
+    o4 = yastn.add_leg(o4, axis=0, s=1)
     nn = o4.get_legs(axes=0).t[0]
 
-    o3 = yast.add_leg(c, axis=-1, t=nn, s=-1)
-    o3 = yast.add_leg(o3, axis=0, s=1)
+    o3 = yastn.add_leg(c, axis=-1, t=nn, s=-1)
+    o3 = yastn.add_leg(o3, axis=0, s=1)
     nn = o3.get_legs(axes=0).t[0]
 
-    o2 = yast.add_leg(cdag, axis=-1, t=nn, s=-1)
-    o2 = yast.add_leg(o2, axis=0, s=1)
+    o2 = yastn.add_leg(cdag, axis=-1, t=nn, s=-1)
+    o2 = yastn.add_leg(o2, axis=0, s=1)
     nn = o2.get_legs(axes=0).t[0]
 
-    o1 = yast.add_leg(cdag, axis=-1, t=nn, s=-1)
-    o1 = yast.add_leg(o1, axis=0, s=1)
+    o1 = yastn.add_leg(cdag, axis=-1, t=nn, s=-1)
+    o1 = yastn.add_leg(o1, axis=0, s=1)
     nn = o1.get_legs(axes=0).t[0]
     assert nn == (0,) * len(c.n)
 
-    T1 = yast.ncon([cdag, cdag, c, c], [(-1, -5), (-2, -6), (-3 ,-7), (-4, -8)])
-    T2 = yast.ncon([o1, o2, o3, o4], [(4, -1, -5, 1), (1, -2, -6, 2), (2, -3 ,-7, 3), (3, -4, -8, 4)])
-    assert yast.norm(T1 -  T2) < tol
+    T1 = yastn.ncon([cdag, cdag, c, c], [(-1, -5), (-2, -6), (-3 ,-7), (-4, -8)])
+    T2 = yastn.ncon([o1, o2, o3, o4], [(4, -1, -5, 1), (1, -2, -6, 2), (2, -3 ,-7, 3), (3, -4, -8, 4)])
+    assert yastn.norm(T1 -  T2) < tol
 
     # special case when there are no blocks in the tensor
-    a = yast.Tensor(config=config_U1, s=(1, -1, 1, -1), n=1)
+    a = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1), n=1)
     a = a.remove_leg(axis=1)
     assert a.struct.s == (1, 1, -1)
     a = a.remove_leg(axis=1)
@@ -123,40 +123,40 @@ def test_operators_chain():
 
 
 def test_add_leg_exceptions():
-    """ handling exceptions in yast.add_leg()"""
-    leg = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
-    with pytest.raises(yast.YastError):
-        a = yast.eye(config=config_U1, legs=[leg, leg.conj()])
+    """ handling exceptions in yastn.add_leg()"""
+    leg = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
+    with pytest.raises(yastn.YastError):
+        a = yastn.eye(config=config_U1, legs=[leg, leg.conj()])
         a.add_leg(s=1)  # Cannot add axis to a diagonal tensor.
-    with pytest.raises(yast.YastError):
-        a = yast.ones(config=config_U1, n=1, legs=[leg, leg.conj()])
+    with pytest.raises(yastn.YastError):
+        a = yastn.ones(config=config_U1, n=1, legs=[leg, leg.conj()])
         a.add_leg(s=1, t=(1, 0))  # len(t) does not match the number of symmetry charges.
-    with pytest.raises(yast.YastError):
-        a = yast.ones(config=config_U1, n=1, legs=[leg, leg.conj()])
+    with pytest.raises(yastn.YastError):
+        a = yastn.ones(config=config_U1, n=1, legs=[leg, leg.conj()])
         a.add_leg(s=2)  # Signature of the new axis should be 1 or -1.
 
 
 def test_remove_leg_exceptions():
-    """ handling exceptions in yast.remove_leg()"""
-    leg = yast.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
-    with pytest.raises(yast.YastError):
-        a = yast.eye(config=config_U1, legs=[leg, leg.conj()])
+    """ handling exceptions in yastn.remove_leg()"""
+    leg = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
+    with pytest.raises(yastn.YastError):
+        a = yastn.eye(config=config_U1, legs=[leg, leg.conj()])
         a.remove_leg(axis=1)  # Cannot remove axis to a diagonal tensor.
-    with pytest.raises(yast.YastError):
-        a = yast.ones(config=config_U1, n=1, legs=[leg, leg.conj()])
-        scalar = yast.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(0, 1))
+    with pytest.raises(yastn.YastError):
+        a = yastn.ones(config=config_U1, n=1, legs=[leg, leg.conj()])
+        scalar = yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(0, 1))
         _ = scalar.remove_leg(axis=0)  # Cannot remove axis of a scalar tensor.
-    with pytest.raises(yast.YastError):
-        a = yast.ones(config=config_U1, legs=[leg, leg.conj(), leg])
+    with pytest.raises(yastn.YastError):
+        a = yastn.ones(config=config_U1, legs=[leg, leg.conj(), leg])
         a = a.fuse_legs(axes=((0, 1), 2), mode='meta')
         _ = a.remove_leg(axis=0)  # Axis to be removed cannot be fused.
-    with pytest.raises(yast.YastError):
-        a = yast.ones(config=config_U1, legs=[leg, leg.conj(), leg, leg])
+    with pytest.raises(yastn.YastError):
+        a = yastn.ones(config=config_U1, legs=[leg, leg.conj(), leg, leg])
         a = a.fuse_legs(axes=((0, 1), 2, 3), mode='meta')
         a = a.fuse_legs(axes=(0, (1, 2)), mode='hard')
         _ = a.remove_leg(axis=0)  # Axis to be removed cannot be fused.
-    with pytest.raises(yast.YastError):
-        a = yast.ones(config=config_U1, legs=[leg, leg.conj(), leg, leg])
+    with pytest.raises(yastn.YastError):
+        a = yastn.ones(config=config_U1, legs=[leg, leg.conj(), leg, leg])
         _ = a.remove_leg(axis=1)  # Axis to be removed must have single charge of dimension one.
 
 

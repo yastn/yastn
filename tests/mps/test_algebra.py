@@ -1,7 +1,7 @@
 """ examples for addition of the Mps-s """
 import pytest
-import yast.tn.mps as mps
-import yast
+import yastn.tn.mps as mps
+import yastn
 try:
     from .configs import config_dense as cfg
     # pytest modifies cfg to inject different backends and devices during tests
@@ -25,12 +25,12 @@ def check_add(psi0, psi1):
 
 
 def test_addition_basic():
-    import yast.tn.mps as mps
-    import yast
+    import yastn.tn.mps as mps
+    import yastn
 
     # Define random MPS's without any symmetry
     #
-    config_dense= yast.make_config()
+    config_dense= yastn.make_config()
     psi0 = mps.random_dense_mps(N=8, D=5, d=2)
     psi1 = mps.random_dense_mps(N=8, D=5, d=2)
      
@@ -52,7 +52,7 @@ def test_addition_basic():
 def test_addition():
     """Create two Mps-s and add them to each other."""
 
-    operators = yast.operators.SpinfulFermions(sym='U1xU1', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.SpinfulFermions(sym='U1xU1', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=9, operators=operators)
 
     psi0 = generate.random_mps(D_total=15, n=(3, 5))
@@ -74,7 +74,7 @@ def test_multiplication():
     N = 7
     Eng = -3.427339492125848
     #
-    operators = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=N, operators=operators)
     #
     # The Hamiltonian is obtained with automatic generator (see source file).
@@ -87,7 +87,7 @@ def test_multiplication():
     #
     generate.random_seed(seed=0)
     #
-    # In this example we use yast.Tensor's with U(1) symmetry. 
+    # In this example we use yastn.Tensor's with U(1) symmetry. 
     #
     total_charge = 3
     psi = generate.random_mps(D_total=8, n=total_charge)

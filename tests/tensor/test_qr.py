@@ -1,7 +1,7 @@
-""" yast.linalg.qr() """
+""" yastn.linalg.qr() """
 import numpy as np
 from itertools import product
-import yast
+import yastn
 try:
     from .configs import config_dense, config_U1, config_Z2xU1, config_Z3
 except ImportError:
@@ -12,18 +12,18 @@ tol = 1e-10  #pylint: disable=invalid-name
 
 def run_qr_combine(a):
     """ decompose and contracts tensor using qr decomposition """
-    Q, R = yast.linalg.qr(a, axes=((3, 1), (2, 0)))
-    QR = yast.tensordot(Q, R, axes=(2, 0))
+    Q, R = yastn.linalg.qr(a, axes=((3, 1), (2, 0)))
+    QR = yastn.tensordot(Q, R, axes=(2, 0))
     QR = QR.transpose(axes=(3, 1, 2, 0))
-    assert yast.norm(a - QR) < tol  # == 0.0
+    assert yastn.norm(a - QR) < tol  # == 0.0
     assert Q.is_consistent()
     assert R.is_consistent()
     check_diag_R_nonnegative(R.fuse_legs(axes=(0, (1, 2)), mode='hard'))
 
     # changes signature of new leg; and position of new leg
-    Q2, R2 = yast.qr(a, axes=((3, 1), (2, 0)), sQ=-1, Qaxis=0, Raxis=-1)
-    QR2 = yast.tensordot(R2, Q2, axes=(2, 0)).transpose(axes=(1, 3, 0, 2))
-    assert yast.norm(a - QR2) < tol  # == 0.0
+    Q2, R2 = yastn.qr(a, axes=((3, 1), (2, 0)), sQ=-1, Qaxis=0, Raxis=-1)
+    QR2 = yastn.tensordot(R2, Q2, axes=(2, 0)).transpose(axes=(1, 3, 0, 2))
+    assert yastn.norm(a - QR2) < tol  # == 0.0
     assert Q2.is_consistent()
     assert R2.is_consistent()
     check_diag_R_nonnegative(R2.fuse_legs(axes=((0, 1), 2), mode='hard'))
@@ -39,23 +39,23 @@ def check_diag_R_nonnegative(R):
 def test_qr_basic():
     """ test qr decomposition for various symmetries """
     # dense
-    a = yast.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
+    a = yastn.rand(config=config_dense, s=(-1, 1, -1, 1), D=[11, 12, 13, 21])
     run_qr_combine(a)
 
     # U1
-    legs = [yast.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
-            yast.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(5, 6, 7)),
-            yast.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
-            yast.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))]
-    a = yast.rand(config=config_U1, legs=legs, n=1)
+    legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
+            yastn.Leg(config_U1, s=-1, t=(-2, 0, 2), D=(5, 6, 7)),
+            yastn.Leg(config_U1, s=1, t=(-2, -1, 0, 1, 2), D=(6, 5, 4, 3, 2)),
+            yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))]
+    a = yastn.rand(config=config_U1, legs=legs, n=1)
     run_qr_combine(a)
 
     # Z2xU1
-    legs = [yast.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(2, 3, 4, 5)),
-            yast.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(5, 4, 3, 2)),
-            yast.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(3, 4, 5, 6)),
-            yast.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(1, 2, 3, 4))]
-    a = yast.ones(config=config_Z2xU1, legs=legs)
+    legs = [yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(2, 3, 4, 5)),
+            yastn.Leg(config_Z2xU1, s=1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(5, 4, 3, 2)),
+            yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(3, 4, 5, 6)),
+            yastn.Leg(config_Z2xU1, s=-1, t=[(0, 0), (0, 2), (1, 0), (1, 2)], D=(1, 2, 3, 4))]
+    a = yastn.ones(config=config_Z2xU1, legs=legs)
     run_qr_combine(a)
 
 
@@ -65,9 +65,9 @@ def test_qr_Z3():
     nset = (0, 1, 2)
     sQset = (-1, 1)
     for s, n, sQ in product(sset, nset, sQset):
-        a = yast.rand(config=config_Z3, s=s, n=n, t=[(0, 1, 2), (0, 1, 2)], D=[(2, 5, 3), (5, 2, 3)], dtype='complex128')
-        Q, R = yast.linalg.qr(a, axes=(0, 1), sQ=sQ)
-        assert yast.norm(a - Q @ R) < tol  # == 0.0
+        a = yastn.rand(config=config_Z3, s=s, n=n, t=[(0, 1, 2), (0, 1, 2)], D=[(2, 5, 3), (5, 2, 3)], dtype='complex128')
+        Q, R = yastn.linalg.qr(a, axes=(0, 1), sQ=sQ)
+        assert yastn.norm(a - Q @ R) < tol  # == 0.0
         assert Q.is_consistent()
         assert R.is_consistent()
         check_diag_R_nonnegative(R)

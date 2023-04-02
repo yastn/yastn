@@ -1,5 +1,5 @@
 
-""" yast.save_to_dict() yast.load_from_dict() yast.save_to_hdf5() yast.load_from_hdf5(). """
+""" yastn.save_to_dict() yastn.load_from_dict() yastn.save_to_hdf5() yastn.load_from_hdf5(). """
 import warnings
 import os
 import pytest
@@ -8,7 +8,7 @@ try:
     import h5py
 except ImportError:
     warnings.warn("h5py module not available", ImportWarning)
-import yast
+import yastn
 try:
     from .configs import config_dense, config_U1, config_Z2xU1, config_Z2, config_Z2_fermionic
 except ImportError:
@@ -21,18 +21,18 @@ def check_to_numpy(a1, config):
     """ save/load to numpy and tests consistency."""
     d1 = a1.save_to_dict()
     a2 = 2 * a1  # second tensor to be saved
-    d2 = yast.save_to_dict(a2)
+    d2 = yastn.save_to_dict(a2)
     data={'tensor1': d1, 'tensor2': d2}  # two tensors to be saved
     np.save('tmp.npy', data)
     ldata = np.load('tmp.npy', allow_pickle=True).item()
     os.remove('tmp.npy')
 
-    b1 = yast.load_from_dict(config=config, d=ldata['tensor1'])
-    b2 = yast.load_from_dict(config=config, d=ldata['tensor2'])
+    b1 = yastn.load_from_dict(config=config, d=ldata['tensor1'])
+    b2 = yastn.load_from_dict(config=config, d=ldata['tensor2'])
 
-    assert all(yast.norm(a - b) < tol for a, b in [(a1, b1), (a2, b2)])
+    assert all(yastn.norm(a - b) < tol for a, b in [(a1, b1), (a2, b2)])
     assert all(b.is_consistent for b in (b1, b2))
-    assert all(yast.are_independent(a, b) for a, b in [(a1, b1), (a2, b2)])
+    assert all(yastn.are_independent(a, b) for a, b in [(a1, b1), (a2, b2)])
 
 
 def check_to_hdf5(a):
@@ -45,46 +45,46 @@ def check_to_hdf5(a):
     with h5py.File('tmp.h5', 'a') as f:
         a.save_to_hdf5(f, './')
     with h5py.File('tmp.h5', 'r') as f:
-        b = yast.load_from_hdf5(a.config, f, './')
+        b = yastn.load_from_hdf5(a.config, f, './')
     os.remove("tmp.h5")
     b.is_consistent()
-    assert yast.are_independent(a, b)
-    assert yast.norm(a - b) < tol
+    assert yastn.are_independent(a, b)
+    assert yastn.norm(a - b) < tol
 
 
 def test_dict():
     """ test exporting tensor to native python data-structure,
         that allows robust saving/loading with np.save/load."""
-    a = yast.rand(config=config_dense)  # s=() i.e. a scalar
+    a = yastn.rand(config=config_dense)  # s=() i.e. a scalar
     assert a.size == 1
     check_to_numpy(a, config_dense)
     check_to_hdf5(a)
 
-    legs = [yast.Leg(config_U1, s=1, t=(0, 1, 2), D= (3, 5, 2)),
-            yast.Leg(config_U1, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
-            yast.Leg(config_U1, s=1, t=(-1, 0, 1), D= (2, 3, 4))]
+    legs = [yastn.Leg(config_U1, s=1, t=(0, 1, 2), D= (3, 5, 2)),
+            yastn.Leg(config_U1, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
+            yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D= (2, 3, 4))]
 
-    a = yast.rand(config=config_U1, legs=legs)
+    a = yastn.rand(config=config_U1, legs=legs)
     check_to_numpy(a, config_U1)
     check_to_hdf5(a)
 
-    a = yast.randC(config=config_U1, legs=legs, n=1)
+    a = yastn.randC(config=config_U1, legs=legs, n=1)
     check_to_numpy(a, config_U1) # here a is complex
     check_to_hdf5(a)
 
-    a = yast.rand(config=config_U1, isdiag=True, legs=legs[0])
+    a = yastn.rand(config=config_U1, isdiag=True, legs=legs[0])
     check_to_numpy(a, config_U1)
     check_to_hdf5(a)
 
 
-    legs = [yast.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4)),
-            yast.Leg(config_Z2xU1, s=1, t=((0, -2), (0, 2)), D=(2, 1)),
-            yast.Leg(config_Z2xU1, s=1, t=((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)), D=(2, 3, 5, 4, 1, 6))]
-    a = yast.ones(config=config_Z2xU1, legs=legs, n=(0, -2))
+    legs = [yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4)),
+            yastn.Leg(config_Z2xU1, s=1, t=((0, -2), (0, 2)), D=(2, 1)),
+            yastn.Leg(config_Z2xU1, s=1, t=((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)), D=(2, 3, 5, 4, 1, 6))]
+    a = yastn.ones(config=config_Z2xU1, legs=legs, n=(0, -2))
     check_to_numpy(a, config_Z2xU1)
     check_to_hdf5(a)
 
-    a = yast.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
+    a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
     a = a.fuse_legs(axes=((0, 2), 1, (4, 3), 5), mode='hard')
@@ -97,16 +97,16 @@ def test_dict():
 
 def test_load_exceptions():
     """ handling exceptions """
-    with pytest.raises(yast.YastError):
-        _ = yast.load_from_dict(config=config_U1)  # Dictionary d is required
+    with pytest.raises(yastn.YastError):
+        _ = yastn.load_from_dict(config=config_U1)  # Dictionary d is required
 
-    leg = yast.Leg(config_Z2, s=1, t=(0, 1), D=(2, 3))
-    a = yast.randC(config=config_Z2, n=1, legs=[leg, leg, leg.conj()])
+    leg = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(2, 3))
+    a = yastn.randC(config=config_Z2, n=1, legs=[leg, leg, leg.conj()])
     check_to_numpy(a, config_Z2)  # OK
 
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         check_to_numpy(a, config_U1)  # Symmetry rule in config do not match loaded one.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         check_to_numpy(a, config_Z2_fermionic)  # Fermionic statistics in config do not match loaded one.
 
 

@@ -1,7 +1,7 @@
 """ truncation of mps """
 import pytest
-import yast
-import yast.tn.mps as mps
+import yastn
+import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
     # pytest modifies cfg to inject different backends and devices during tests
@@ -47,7 +47,7 @@ def test_truncate_svd_dense():
     Eng_gs = -4.758770483143633
     D_total = 8
 
-    operators = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 
@@ -67,7 +67,7 @@ def test_truncate_svd_Z2():
     D_total = 10
     Eng_parity = {0: -4.758770483143633, 1: -4.411474127809773}
 
-    operators = yast.operators.Spin12(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.Spin12(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=N, operators=operators)
     generate.random_seed(seed=0)
 

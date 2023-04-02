@@ -1,6 +1,6 @@
 """ Test yaps.mask """
 import pytest
-import yast
+import yastn
 try:
     from .configs import config_U1, config_Z2xU1
 except ImportError:
@@ -14,12 +14,12 @@ def test_mask_basic():
     config_U1.backend.random_seed(seed=0)  # fix for tests
 
     # start with U1
-    leg1 =  yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
-    leg2 =  yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(5, 6, 7))
-    a = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
+    leg1 =  yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
+    leg2 =  yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(5, 6, 7))
+    a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
  
-    legd =  yast.Leg(config_U1, s=1, t=(-1, 1), D=(7, 8))
-    b0 = yast.rand(config=config_U1, isdiag=True, legs=legd)
+    legd =  yastn.Leg(config_U1, s=1, t=(-1, 1), D=(7, 8))
+    b0 = yastn.rand(config=config_U1, isdiag=True, legs=legd)
 
     b = b0.copy()  # create a mask by hand
     b[(-1, -1)] = b[(-1, -1)] < -2  # all false
@@ -34,7 +34,7 @@ def test_mask_basic():
 
     d0 = b.apply_mask(b0, axes=0)
     d1 = b.apply_mask(b0, axes=-1)
-    assert yast.norm(d0 - d1) < tol
+    assert yastn.norm(d0 - d1) < tol
     l = d1.get_legs(axes=1)
     assert l.t == ((1,),) and l[(1,)] == tr_b
 
@@ -44,14 +44,14 @@ def test_mask_basic():
     assert (c2 - c).norm() < tol
 
     # here using Z2xU1 symmetry
-    legs = [yast.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(6, 3, 9, 6)),
-            yast.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2)), D=(3, 2)),
-            yast.Leg(config_Z2xU1, s=1, t=((0, 1), (1, 0), (0, 0), (1, 1)), D=(4, 5, 6, 3)),
-            yast.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2)), D=(2, 3))]
-    a = yast.rand(config=config_Z2xU1, legs=legs)
+    legs = [yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(6, 3, 9, 6)),
+            yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2)), D=(3, 2)),
+            yastn.Leg(config_Z2xU1, s=1, t=((0, 1), (1, 0), (0, 0), (1, 1)), D=(4, 5, 6, 3)),
+            yastn.Leg(config_Z2xU1, s=1, t=((0, 0), (0, 2)), D=(2, 3))]
+    a = yastn.rand(config=config_Z2xU1, legs=legs)
 
     # diagonal tensor exactly matching first leg of a
-    b = yast.rand(config=config_Z2xU1, isdiag=True, legs=legs[0])
+    b = yastn.rand(config=config_Z2xU1, isdiag=True, legs=legs[0])
 
     b[(0, 0, 0, 0)] *= 0  # put block (0, 0, 0, 0) in diagonal b to 0.
 
@@ -75,28 +75,28 @@ def test_mask_basic():
 
 def test_mask_exceptions():
     """ trigger exceptions for apply_mask """
-    legd =  yast.Leg(config_U1, s=1, t=(-1, 1), D=(8, 8))
-    a = yast.rand(config=config_U1, isdiag=True, legs=legd)
+    legd =  yastn.Leg(config_U1, s=1, t=(-1, 1), D=(8, 8))
+    a = yastn.rand(config=config_U1, isdiag=True, legs=legd)
     a_nondiag = a.diag()
 
-    leg1 =  yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
-    leg2 =  yast.Leg(config_U1, s=1, t=(-1, 1, 2), D=(5, 6, 7))
-    b = yast.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
+    leg1 =  yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
+    leg2 =  yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(5, 6, 7))
+    b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
 
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         _ = a_nondiag.apply_mask(b, axes=2)
         # First tensor should be diagonal.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         bmf = b.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
         _ = a.apply_mask(bmf, axes=1)
         # Second tensor`s leg specified by axes cannot be fused.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         bhf = b.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
         _ = a.apply_mask(bhf, axes=1)
         # Second tensor`s leg specified by axes cannot be fused.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         _ = a.apply_mask(b, axes=1)  # Bond dimensions do not match.
-    with pytest.raises(yast.YastError):
+    with pytest.raises(yastn.YastError):
         _, _ = a.apply_mask(b, b, axes=[2, 2, 1])
         # There should be exactly one axis for each tensor to be projected.
 

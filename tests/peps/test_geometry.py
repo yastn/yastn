@@ -1,6 +1,6 @@
 """ Test operation of peps.Lattice and peps.Peps that inherits Lattice"""
 import pytest
-import yast.tn.fpeps as fpeps
+import yastn.tn.fpeps as fpeps
 
 def test_Lattice():
     """ Generate a few lattices veryfing expected output of some functions. """

@@ -1,8 +1,8 @@
 """ dmrg tested on XX model. """
 import logging
 import pytest
-import yast.tn.mps as mps
-import yast
+import yastn.tn.mps as mps
+import yastn
 try:
     from .configs import config_dense as cfg
     # pytest modifies cfg to inject different backends and devices during tests
@@ -26,7 +26,7 @@ def run_dmrg(phi, H, occ, E_target, occ_target, opts_svd=None):
         #
         # We find a state and check that its energy and total occupation matches the expected reference values.
         #
-        # We copy initial random MPS psi, as yast.dmrg_ modifies provided input state in place.
+        # We copy initial random MPS psi, as yastn.dmrg_ modifies provided input state in place.
         #
         psi = phi.copy()
         #
@@ -75,7 +75,7 @@ def test_dense_dmrg():
     # Knowing exact solution we can compare it DMRG result.
     # In this test we will consider sectors of different occupation.
     #
-    # In this example we use yast.Tensor's with no symmetry imposed. 
+    # In this example we use yastn.Tensor's with no symmetry imposed. 
     #
     logging.info(' Tensor : dense ')
     #
@@ -83,7 +83,7 @@ def test_dense_dmrg():
     #
     N = 7
     #
-    operators = yast.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=N, operators=operators)
     parameters = {"t": 1.0, "mu": 0.2, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
     H_str = "\sum_{i,j \in rangeNN} t ( sp_{i} sm_{j} + sp_{j} sm_{i} ) + \sum_{j\in rangeN} mu sp_{j} sm_{j}"
@@ -137,7 +137,7 @@ def test_Z2_dmrg():
     Initialize random mps of Z2 tensors and tests mps._dmrg
     """
     logging.info(' Tensor : Z2 ')
-    operators = yast.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=7, operators=operators)
     generate.random_seed(seed=0)
     N, Dmax  = 7, 8
@@ -165,7 +165,7 @@ def test_U1_dmrg():
     Initialize random mps of U(1) tensors and tests _dmrg against known results.
     """
     logging.info(' Tensor : U1 ')
-    operators = yast.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    operators = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=7, operators=operators)
     generate.random_seed(seed=0)
 

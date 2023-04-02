@@ -118,7 +118,7 @@
 - BUGFIX: fix some issues with passing device to config during initialization
 
 25-12-2021
-- add function yast.clear_cache() to clear caches of all lru_cache employed to speed-up precomputing.
+- add function yastn.clear_cache() to clear caches of all lru_cache employed to speed-up precomputing.
 
 01-01-2022
 - remove function `norm_diff(a, b)`. Use `norm(a - b)` instead.
@@ -129,13 +129,13 @@
 - change function names `export_to_dict` to `save_to_dict`, `export_to_hdf5` to `save_to_hdf5`
   `import_from_dict` to `load_from_dict`; `import_from_hdf5` to `load_from_hdf5`
 - save/load functions are changed to use 1d data container.
-  It is now also more robust, using only native python/numpy data structures, i.e. no NamedTuples used by yast.
+  It is now also more robust, using only native python/numpy data structures, i.e. no NamedTuples used by yastn.
   WARNING: Backward compatibility is broken!
 
 08-01-2022
 - New function `remove_leg`
 - define `abs` as a magic method `__abs__`. Function `absolut` has been removed.
-- define `__matmul__`, giving shorthand a @ b == yast.tensordot(a, b, axes=(a.ndim - 1, 0))
+- define `__matmul__`, giving shorthand a @ b == yastn.tensordot(a, b, axes=(a.ndim - 1, 0))
 - BUGFIX: raising exceptions when .diag() cannot be used to create diagonal tensor
 - BUGFIX: ncon in some rare special case could ignore content of conjs.
 - new function `einsum` (for now a place holder doing nothing).
@@ -151,7 +151,7 @@ v0.9
 - properties `tensor.dtype`, `tensor.yast_dtype`, `tensor.device`
 - new function '__setitem__()' that gives direct access to change existing blocks
 - in rsqrt(x, cutoff) cutoff is done with respect to x, not sqrt(x)
-- new function `grad()` that generates gradient yast tensor
+- new function `grad()` that generates gradient yastntensor
 
 07-04-2022
 - `apply_mask` replaces function `mask`.
@@ -172,32 +172,32 @@ v0.9
 30-05-2022
 - function `Leg` generates `_Leg` object describing linear space of a single tensor leg.
   It takes, signature `s`, list of charges `t` and corresponding dimensions `D`, as well as symmetry (or config).
-- function `yast.leg_union(*legs)` creates a leg that describes a space being an union of provided spaces/legs.
+- function `yastn.leg_union(*legs)` creates a leg that describes a space being an union of provided spaces/legs.
 - tensor has method `.get_legs(axes=None)` outputing `_Leg` (or list of specified legs, of list of all tensor legs for axis=None). It also carries information about fusions.
-- Initializing tensor with `yast.ones`, `yast.zeors`, `yast.rand`, `yast.eye` takes list of a list of legs,(argument `legs`). Old input with `s`, `t`, `D` is supported and providing any of those parameters overrides argument `legs`
+- Initializing tensor with `yastn.ones`, `yastn.zeors`, `yastn.rand`, `yastn.eye` takes list of a list of legs,(argument `legs`). Old input with `s`, `t`, `D` is supported and providing any of those parameters overrides argument `legs`
 - methods `to_numpy`, `to_dense`, `to_nonsymmetric` take dict `legs` specifying how to fill-in zeros to make output consistent with provided `legs` (for now does not work for mismatch in hard fusions). This replaces old argument `leg_structures`.
 - `truncation_mask` does not have arguments keep_multiplets and multiplets_eps, as there is specialised function `truncation_mask_multiplets`
 
 17-6-2022
-- a new version of `yast.block` that supports tracking history of blocking; to resolve possible merge conflicts
+- a new version of `yastn.block` that supports tracking history of blocking; to resolve possible merge conflicts
 - `.drop_leg_history(axis=None)` gives a shallow copy of the tensor, where information about fusion/blocking history on some legs (of all for axis=None) is dropped.
 - `Leg` got method `.history()` that returns a string representation of the fusion history, with 'o' marking original legs, `s` is for sum, `p` is for product, 'm' is for meta fusion.
-- simplify syntax of `yast.decompose_from_1d(r1d, meta)`. It no longer takes config, that is stored in meta.
+- simplify syntax of `yastn.decompose_from_1d(r1d, meta)`. It no longer takes config, that is stored in meta.
 
 20-07-2022
-- a new function `yast.random_leg` that allows that randomly distributes bond dimensions 
+- a new function `yastn.random_leg` that allows that randomly distributes bond dimensions 
   according to Gaussian distribution cenered at provided mean charge.
 
 23-07-2022
-- In yast.operators predefine classes that generate sets of a few standard local operators.
+- In yastn.operators predefine classes that generate sets of a few standard local operators.
 
 16-10-2022
-- new function `yast.bitwise_not()`
+- new function `yastn.bitwise_not()`
 - new function `yamps.is_canonical()`
 - change order of tenor legs in MPO  (left virtual, ket, right virtual, bra)
 
 01-11-2022
-- move mps routines to yast.tn.mps
+- move mps routines to yastn.tn.mps
 
 28-11-2022
 - renamed functions `mps.dmrg_`, `mps.variational_`, `mps.tdvp_`, `psi.canonize_`, `psi.truncate_`.

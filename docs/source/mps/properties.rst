@@ -5,14 +5,14 @@ Symmetry
 --------
 
 The symmetry of the MPS or MPO is inherted from the symmetry 
-of :meth:`yast.Tensor<yast.Tensor>`'s which form the matrix product. The symmetries of the tensors have to be consistent along virtual dimensions implying that the global MPS/MPO symmetry is a consequence of the local symmetry of :meth:`yast.Tensor<yast.Tensor>`.
+of :meth:`yastn.Tensor<yastn.Tensor>`'s which form the matrix product. The symmetries of the tensors have to be consistent along virtual dimensions implying that the global MPS/MPO symmetry is a consequence of the local symmetry of :meth:`yastn.Tensor<yastn.Tensor>`.
 
 Physical and virtual spaces
 ---------------------------
 
 MPS is built from tensors with single physical index and two virtual indices. 
 MPO tenors have an additional physical index. The number of physical indices
-can be accessed through the property :code:`yast.tn.mps.MpsMps.nr_phys`.
+can be accessed through the property :code:`yastn.tn.mps.MpsMps.nr_phys`.
 
 In case of MPS/MPO with no explicit symmetry, the virtual space :math:`V_{j,j+1}` 
 for *j*-to-*j+1* bond is simple :math:`\mathbb{R}^{D_{j,j+1}}` 
@@ -32,12 +32,12 @@ Typically, the effective control parameter is the maximal total dimension
 To get the profile of the total bond dimensions along MPS/MPO :code:`A` 
 call :code:`A.get_bond_dimensions()`.
 
-.. autofunction:: yast.tn.mps.MpsMpo.get_bond_dimensions
+.. autofunction:: yastn.tn.mps.MpsMpo.get_bond_dimensions
 
 More detailed information resolved by charge sectors is given by 
 :code:`A.get_bond_charges_dimensions()`.
 
-.. autofunction:: yast.tn.mps.MpsMpo.get_bond_charges_dimensions
+.. autofunction:: yastn.tn.mps.MpsMpo.get_bond_charges_dimensions
 
 
 Schmidt values and entropy profile
@@ -51,10 +51,10 @@ with all sites to the left being in left-canonical form and all sites to the rig
 Given MPS/MPO :code:`A` you can get the profile for Schmidt values across bonds 
 by calling :code:`A.get_Schmidt_values()`.
 
-.. autofunction:: yast.tn.mps.MpsMpo.get_Schmidt_values
+.. autofunction:: yastn.tn.mps.MpsMpo.get_Schmidt_values
 
 The Von Neumann or Renyi entropy profile (a function of Schmidt values) 
 can be obtained by running :code:`A.get_entropy()`. 
 
-.. autofunction:: yast.tn.mps.MpsMpo.get_entropy
+.. autofunction:: yastn.tn.mps.MpsMpo.get_entropy
 
