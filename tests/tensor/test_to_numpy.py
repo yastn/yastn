@@ -89,7 +89,7 @@ def test_to_raw_tensor():
 
     # add 2nd block to the tensor
     a.set_block(ts=((1, 0), (1, 0), (0, 0)), Ds=(2, 2, 2), val='ones')
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = a.to_raw_tensor()
         # Only tensor with a single block can be converted to raw tensor.
 
@@ -129,7 +129,7 @@ def test_to_nonsymmetric_basic():
     an = a.to_nonsymmetric(legs=dict(enumerate(b.get_legs())))
     bn = b.to_nonsymmetric(legs=dict(enumerate(a.get_legs())))
     assert pytest.approx(yastn.vdot(an, bn).item(), rel=tol) == yastn.vdot(a, b).item()
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.vdot(bn)
         # Two tensors have different symmetry rules.
     assert an.are_independent(a)
@@ -137,7 +137,7 @@ def test_to_nonsymmetric_basic():
     assert an.is_consistent()
     assert bn.is_consistent()
 
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = a.to_nonsymmetric(legs={5: legs[0]})
         # Specified leg out of ndim
 

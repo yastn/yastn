@@ -156,13 +156,13 @@ def test_fuse_legs_exceptions():
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
     b = yastn.rand(config=config_U1, isdiag=True, t=(0, 1), D=(1, 2))
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b.fuse_legs(axes=((0, 1),), mode='meta')
         # Cannot fuse legs of a diagonal tensor.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b.unfuse_legs(axes=0)
         # Cannot unfuse legs of a diagonal tensor.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.fuse_legs(axes=((0, 1, 2, 3, 4),), mode='wrong')
     # mode not in (`meta`, `hard`). Mode can be specified in config file.
 

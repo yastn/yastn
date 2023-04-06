@@ -9,7 +9,7 @@ An instance of a Tensor is specified by a list of blocks (dense tensors) labeled
 
 from ._auxliary import _struct, _config
 from ._merging import _Fusion
-from ._tests import YastError
+from ._tests import YastnError
 from ._tests import *
 from ._control_lru import *
 from ._contractions import *
@@ -28,7 +28,7 @@ from . import _algebra
 from . import linalg
 from . import _merging
 from . import _legs
-__all__ = ['Tensor', 'linalg', 'YastError']
+__all__ = ['Tensor', 'linalg', 'YastnError']
 __all__.extend(linalg.__all__)
 __all__.extend(_tests.__all__)
 __all__.extend(_control_lru.__all__)
@@ -81,14 +81,14 @@ class Tensor:
             except TypeError:
                 n = (0,) * self.config.sym.NSYM if n is None else (n,)
             if len(n) != self.config.sym.NSYM:
-                raise YastError("n does not match the number of symmetry sectors")
+                raise YastnError("n does not match the number of symmetry sectors")
             if isdiag:
                 if len(s) == 0:
                     s = (1, -1)  # default
                 if s not in ((-1, 1), (1, -1)):
-                    raise YastError("Diagonal tensor should have s equal (1, -1) or (-1, 1)")
+                    raise YastnError("Diagonal tensor should have s equal (1, -1) or (-1, 1)")
                 if any(x != 0 for x in n):
-                    raise YastError("Tensor charge of a diagonal tensor should be 0")
+                    raise YastnError("Tensor charge of a diagonal tensor should be 0")
             self.struct = _struct(s=s, n=n, diag=isdiag)
 
         # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]

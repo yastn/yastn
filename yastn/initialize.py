@@ -4,7 +4,7 @@
 from ast import literal_eval
 from itertools import groupby
 import numpy as np
-from .tensor import Tensor, YastError
+from .tensor import Tensor, YastnError
 from .tensor._auxliary import _struct, _config, _clear_axes, _unpack_legs
 from .tensor._merging import _Fusion, _embed_tensor, _sum_hfs
 from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
@@ -89,11 +89,11 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
         hfs = tuple(leg.legs[0] for leg in ulegs)
 
         if any(config.sym.SYM_ID != leg.sym.SYM_ID for leg in ulegs):
-            raise YastError('Different symmetry of initialized tensor and some of the legs.')
+            raise YastnError('Different symmetry of initialized tensor and some of the legs.')
         if isdiag and any(mf != (1,) for mf in mfs):
-            raise YastError('Diagonal tensor cannot be initialized with fused legs.')
+            raise YastnError('Diagonal tensor cannot be initialized with fused legs.')
         if isdiag and any(hf.tree != (1,) for hf in hfs):
-            raise YastError('Diagonal tensor cannot be initialized with fused legs.')
+            raise YastnError('Diagonal tensor cannot be initialized with fused legs.')
 
     a = Tensor(config=config, s=s, n=n, isdiag=isdiag, mfs=mfs, hfs=hfs, **kwargs)
     a._fill_tensor(t=t, D=D, val=val)
@@ -297,13 +297,13 @@ def load_from_dict(config=None, d=None):
         c = Tensor(config=config, struct=struct,
                     hfs=hfs, mfs=d['mfs'])
         if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID']:
-            raise YastError("Symmetry rule in config do not match loaded one.")
+            raise YastnError("Symmetry rule in config do not match loaded one.")
         if 'fermionic' in d and c.config.fermionic != d['fermionic']:
-            raise YastError("Fermionic statistics in config do not match loaded one.")
+            raise YastnError("Fermionic statistics in config do not match loaded one.")
         c._data = c.config.backend.to_tensor(d['_d'], dtype=d['_d'].dtype.name, device=c.device)
         c.is_consistent()
         return c
-    raise YastError("Dictionary d is required.")
+    raise YastnError("Dictionary d is required.")
 
 
 def load_from_hdf5(config, file, path):
@@ -400,7 +400,7 @@ def block(tensors, common_legs=None):
     pos = list(_clear_axes(*tensors))
     lind = tn0.ndim - len(out_s)
     if any(len(ind) != lind for ind in pos):
-        raise YastError('Wrong number of coordinates encoded in tensors.keys()')
+        raise YastnError('Wrong number of coordinates encoded in tensors.keys()')
 
     posa = np.zeros((len(pos), tn0.ndim), dtype=int)
     posa[:, out_b] = np.array(pos, dtype=int).reshape(len(pos), len(out_b))
@@ -413,11 +413,11 @@ def block(tensors, common_legs=None):
     for tn in tensors.values():
         _test_can_be_combined(tn, tn0)
         if tn.struct.s != tn0.struct.s:
-            raise YastError('Signatues of blocked tensors are inconsistent.')
+            raise YastnError('Signatues of blocked tensors are inconsistent.')
         if tn.struct.n != tn0.struct.n:
-            raise YastError('Tensor charges of blocked tensors are inconsistent.')
+            raise YastnError('Tensor charges of blocked tensors are inconsistent.')
         if tn.isdiag:
-            raise YastError('Block does not support diagonal tensors. Use .diag() first.')
+            raise YastnError('Block does not support diagonal tensors. Use .diag() first.')
 
     legs_tn = {pa: a.get_legs() for pa, a in tensors.items()}
     ulegs, legs, hfs, ltDtot, ltDslc = [], [], [], [], []

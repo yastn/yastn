@@ -1,6 +1,6 @@
 import numpy as np
 from typing import NamedTuple
-from ... import ones, rand, ncon, Leg, random_leg, YastError
+from ... import ones, rand, ncon, Leg, random_leg, YastnError
 from ...operators import Qdit
 from ._mps import Mpo, Mps, add
 from ._latex2term import latex2term, GeneratorError
@@ -203,12 +203,12 @@ class Generator:
         self._ops = operators
         self._map = {i: i for i in range(N)} if map is None else map
         if len(self._map) != N or sorted(self._map.values()) != list(range(N)):
-            raise YastError("MPS: Map is inconsistent with mps of N sites.")
+            raise YastnError("MPS: Map is inconsistent with mps of N sites.")
         self._Is = {k: 'I' for k in self._map.keys()} if Is is None else Is
         if self._Is.keys() != self._map.keys():
-            raise YastError("MPS: Is is inconsistent with map.")
+            raise YastnError("MPS: Is is inconsistent with map.")
         if not all(hasattr(self._ops, v) and callable(getattr(self._ops, v)) for v in self._Is.values()):
-            raise YastError("MPS: operators do not contain identity specified in Is.")
+            raise YastnError("MPS: operators do not contain identity specified in Is.")
 
         self._I = Mpo(self.N)
         for label, site in self._map.items():
@@ -279,7 +279,7 @@ class Generator:
             lr = psi.A[site].get_legs(axes=0).conj()
         if sum(lr.D) == 1:
             return psi
-        raise YastError("MPS: Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization. ")
+        raise YastnError("MPS: Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization. ")
 
     def random_mpo(self, D_total=8, sigma=1, dtype='float64'):
         r"""
@@ -309,7 +309,7 @@ class Generator:
             lr = psi.A[site].get_legs(axes=0).conj()
         if sum(lr.D) == 1:
             return psi
-        raise YastError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
+        raise YastnError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
 
     def mps_from_latex(self, psi_str, vectors=None, parameters=None):
         r"""
@@ -441,7 +441,7 @@ class Generator:
                     amplitude *= obj_number[element] if mapindex is None else obj_number[element][mapindex]
                 elif element in obj_yast:
                     # is always a single index for each site
-                    mapindex = self._map[indicies[0]] if len(indicies) == 1 else YastError("Operator has to have single index as defined by self._map")
+                    mapindex = self._map[indicies[0]] if len(indicies) == 1 else YastnError("Operator has to have single index as defined by self._map")
                     positions.append(mapindex) 
                     operators.append(obj_yast[element](mapindex))
                 else:

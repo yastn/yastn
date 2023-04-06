@@ -2,7 +2,7 @@
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes
 from ._merging import _Fusion
-from ._tests import YastError, _test_axes_all
+from ._tests import YastnError, _test_axes_all
 
 
 __all__ = ['conj', 'conj_blocks', 'flip_signature', 'flip_charges',
@@ -176,7 +176,7 @@ def flip_charges(a, axes=None):
     yastn.Tensor
     """
     if a.isdiag:
-        raise YastError('Cannot flip charges of a diagonal tensor. Use diag() first.')
+        raise YastnError('Cannot flip charges of a diagonal tensor. Use diag() first.')
     if axes is None:
         axes = tuple(range(a.ndim))
     else:
@@ -191,7 +191,7 @@ def flip_charges(a, axes=None):
     hfs = list(a.hfs)
     for ax in uaxes:
         if hfs[ax].is_fused():
-            raise YastError('Flipping charges of hard-fused leg is not supported.')
+            raise YastnError('Flipping charges of hard-fused leg is not supported.')
         s = snew[ax]
         tnew[:, ax, :] = a.config.sym.fuse(tnew[:, (ax,), :], (s,), -s)
         snew[ax] = -s
@@ -352,9 +352,9 @@ def add_leg(a, axis=-1, s=1, t=None):
     yastn.Tensor
     """
     if a.isdiag:
-        raise YastError('Cannot add axis to a diagonal tensor.')
+        raise YastnError('Cannot add axis to a diagonal tensor.')
     if s not in (-1, 1):
-        raise YastError('Signature of the new axis should be 1 or -1.')
+        raise YastnError('Signature of the new axis should be 1 or -1.')
 
     axis = axis % (a.ndim + 1)
     mfs = a.mfs[:axis] + ((1,),) + a.mfs[axis:]
@@ -365,7 +365,7 @@ def add_leg(a, axis=-1, s=1, t=None):
         t = tuple(a.config.sym.fuse(np.array(a.struct.n, dtype=int).reshape((1, 1, nsym)), (-1,), s).flat)
     else:
         if (isinstance(t, int) and nsym != 1) or len(t) != nsym:
-            raise YastError('len(t) does not match the number of symmetry charges.')
+            raise YastnError('len(t) does not match the number of symmetry charges.')
         t = tuple(a.config.sym.fuse(np.array(t, dtype=int).reshape((1, 1, nsym)), (s,), s).flat)
 
     news = a.struct.s[:axis] + (s,) + a.struct.s[axis:]
@@ -395,23 +395,23 @@ def remove_leg(a, axis=-1):
     yastn.Tensor
     """
     if a.isdiag:
-        raise YastError('Cannot remove axis to a diagonal tensor.')
+        raise YastnError('Cannot remove axis to a diagonal tensor.')
     if a.ndim == 0:
-        raise YastError('Cannot remove axis of a scalar tensor.')
+        raise YastnError('Cannot remove axis of a scalar tensor.')
 
     axis = axis % a.ndim
     if a.mfs[axis] != (1,):
-        raise YastError('Axis to be removed cannot be fused.')
+        raise YastnError('Axis to be removed cannot be fused.')
     mfs = a.mfs[:axis] + a.mfs[axis + 1:]
 
     axis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
     if a.hfs[axis].tree != (1,):
-        raise YastError('Axis to be removed cannot be fused.')
+        raise YastnError('Axis to be removed cannot be fused.')
 
     nsym = a.config.sym.NSYM
     t = a.struct.t[0][axis * nsym: (axis + 1) * nsym] if len(a.struct.t) > 0 else (0,) * nsym
     if any(x[axis] != 1 for x in a.struct.D) or any(x[axis * nsym: (axis + 1) * nsym] != t for x in a.struct.t):
-        raise YastError('Axis to be removed must have single charge of dimension one.')
+        raise YastnError('Axis to be removed must have single charge of dimension one.')
 
     news = a.struct.s[:axis] + a.struct.s[axis + 1:]
     newn = tuple(a.config.sym.fuse(np.array(a.struct.n + t, dtype=int).reshape((1, 2, nsym)), (-1, a.struct.s[axis]), -1).flat)
@@ -429,13 +429,13 @@ def diag(a):
     """
     if not a.isdiag:  # isdiag=False -> isdiag=True
         if a.ndim_n != 2 or sum(a.struct.s) != 0:
-            raise YastError('Diagonal tensor requires 2 legs with opposite signatures.')
+            raise YastnError('Diagonal tensor requires 2 legs with opposite signatures.')
         if any(x != 0 for x in a.struct.n):
-            raise YastError('Diagonal tensor requires zero tensor charge.')
+            raise YastnError('Diagonal tensor requires zero tensor charge.')
         if any(mf != (1,) for mf in a.mfs) or any(hf.tree != (1,) for hf in a.hfs):
-            raise YastError('Diagonal tensor cannot have fused legs.')
+            raise YastnError('Diagonal tensor cannot have fused legs.')
         if any(d0 != d1 for d0, d1 in a.struct.D):
-            raise YastError('yastn.diag() allowed only for square blocks.')
+            raise YastnError('yastn.diag() allowed only for square blocks.')
         #     isdiag=True -> isdiag=False                    isdiag=False -> isdiag=True
     Dp = tuple(x ** 2 for x in a.struct.Dp) if a.isdiag else tuple(D[0] for D in a.struct.D)
     sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp), Dp))

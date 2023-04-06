@@ -1,7 +1,7 @@
 """ Linalg methods for yastn tensor. """
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct
-from ._tests import YastError, _test_axes_all
+from ._tests import YastnError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _leg_struct_trivial, _Fusion
 
@@ -22,7 +22,7 @@ def norm(a, p='fro'):
     real scalar
     """
     if p not in ('fro', 'inf'):
-        raise YastError("Error in norm: p not in ('fro', 'inf'). ")
+        raise YastnError("Error in norm: p not in ('fro', 'inf'). ")
     return a.config.backend.norm(a._data, p)
 
 
@@ -127,7 +127,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix
     minD = tuple(min(ds) for ds in struct.D)
     if policy == 'lowrank':
         if 'D_block' not in kwargs:
-            raise YastError("lowrank policy in svd requires passing argument D_block.")
+            raise YastnError("lowrank policy in svd requires passing argument D_block.")
         D_block = kwargs['D_block']
         if not isinstance(D_block, dict):
             minD = tuple(min(D_block, d) for d in minD)
@@ -145,7 +145,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix
     elif policy == 'lowrank':
         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs)
     else:
-        raise YastError('svd policy should be one of (`lowrank`, `fullrank`)')
+        raise YastnError('svd policy should be one of (`lowrank`, `fullrank`)')
 
     if fix_signs:
         Udata, Vdata = a.config.backend.fix_svd_signs(Udata, Vdata, meta)
@@ -255,7 +255,7 @@ def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-14, *
     yastn.Tensor
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
-        raise YastError("Truncation_mask requires S to be real and diagonal")
+        raise YastnError("Truncation_mask requires S to be real and diagonal")
 
     # makes a copy for partial truncations; also detaches from autograd computation graph
     Smask = S.copy()
@@ -340,7 +340,7 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32, **k
     yastn.Tensor
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
-        raise YastError("Truncation_mask requires S to be real and diagonal")
+        raise YastnError("Truncation_mask requires S to be real and diagonal")
 
     # makes a copy for partial truncations; also detaches from autograd computation graph
     S = S.copy()
@@ -489,12 +489,12 @@ def eigh(a, axes, sU=1, Uaxis=-1):
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
     if not all(x == 0 for x in a.struct.n):
-        raise YastError('eigh requires tensor charge to be zero')
+        raise YastnError('eigh requires tensor charge to be zero')
 
     data, struct, ls_l, ls_r = _merge_to_matrix(a, axes)
 
     if ls_l != ls_r:
-        raise YastError("Tensor likely not hermitian. Legs of effective square blocks not match.")
+        raise YastnError("Tensor likely not hermitian. Legs of effective square blocks not match.")
 
     meta, Sstruct, Ustruct = _meta_eigh(a.config, struct, sU)
     sizes = tuple(x.sl[-1][1] if len(x.sl) > 0 else 0 for x in (Sstruct, Ustruct))

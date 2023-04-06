@@ -143,48 +143,48 @@ def test_ncon_einsum_exceptions():
     t, D = (0, 1), (2, 3)
     a = yastn.rand(config=config_U1, s=[-1, 1, -1], n=0,
                   t=(t, t, t), D=(D, D, D))
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = yastn.ncon([a, a], [(1, 2, 3)])
         # Number of tensors and groups of indices do not match.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = yastn.ncon([a, a], [(1, 2, -1), (1, 2)])
         # Number of legs of one of the tensors do not match provided indices.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = yastn.ncon([a, a], [(1, 2, -1), (1, 3, -2)])
         # Indices of legs to contract do not match
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = yastn.ncon([a, a], [(1, 2, -1), (1, 1, -2)])
         # Indices of legs to contract do not match
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = yastn.ncon([a, a], [(3, 3, 2), (1, 1, 2)], conjs=[0, 1])
         # Likely inefficient order of contractions. Do all traces before tensordot.
         # Call all axes connecting two tensors one after another.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = yastn.ncon([a, a, a], [(1, 2, 3), (1, 3, 4), (2, 4, -0)], conjs=[0, 1, 0])
         # Likely inefficient order of contractions. Do all traces before tensordot.
         # Call all axes connecting two tensors one after another.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         yastn.ncon([a], [(-1, -1, -0)])
         # Repeated non-positive (outgoing) index is ambiguous.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         yastn.ncon([a], [(-555, -542, -0)])
         # ncon requires indices to be between -256 and 256.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         yastn.einsum(a, a, order='alphabetic')
         # The first argument should be a string
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         yastn.einsum('xkl, xmn-> klmm -> kl', a, a)
         # Subscript should have at most one separator ->
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         yastn.einsum('xy;, xyn -> ;n', a, a)
         # Only alphabetic characters can be used to index legs.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         yastn.einsum('-;k, -;l -> kl', a, a)
         # Only alphabetic characters can be used to index legs.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         yastn.einsum('klm, klm-> mm', a, a)
         # Repeated index after ->
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         yastn.einsum('klm, *klm->', a, a, order='kl')
         # order does not cover all contracted indices
 

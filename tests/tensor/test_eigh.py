@@ -69,11 +69,11 @@ def test_eigh_Z3():
 def test_eigh_exceptions():
     legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0), D=(2, 3)),
             yastn.Leg(config_U1, s=-1, t=(-1, 0), D=(5, 6))]
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config_U1, n=2, legs=legs)
         _ = yastn.eigh(a, axes=(0, 1))
         # eigh requires tensor charge to be zero.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config_U1, n=0, legs=legs)
         _ = yastn.eigh(a, axes=(0, 1))
         # Tensor likely not Hermitian. Legs of effective square blocks not match.
