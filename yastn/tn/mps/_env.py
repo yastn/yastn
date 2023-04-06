@@ -1,5 +1,5 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
-from ... import tensor, initialize, YastError, expmv
+from ... import tensor, initialize, YastnError, expmv
 
 
 def vdot(*args):
@@ -84,9 +84,9 @@ class _EnvParent:
         self.reset_temp()
 
         if self.bra.nr_phys != self.ket.nr_phys:
-            raise YastError('MPS: bra and ket should have the same number of physical legs.')
+            raise YastnError('MPS: bra and ket should have the same number of physical legs.')
         if self.bra.N != self.ket.N:
-            raise YastError('MPS: bra and ket should have the same number of sites.')
+            raise YastnError('MPS: bra and ket should have the same number of sites.')
 
         config = self.ket[0].config
         for ii in range(len(self.ort)):
@@ -263,7 +263,7 @@ class Env3(_EnvParent):
         self.nr_layers = 3
         self.on_aux = on_aux
         if self.op.N != self.N:
-            raise YastError('MPS: op should should have the same number of sites as ket.')
+            raise YastnError('MPS: op should should have the same number of sites as ket.')
 
         # left boundary
         config = self.ket[0].config

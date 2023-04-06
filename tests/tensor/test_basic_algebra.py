@@ -222,44 +222,44 @@ def test_algebra_exceptions():
     leg2 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 5))
     leg3 = yastn.Leg(config_U1, s=1, t=(-1, 0), D=(2, 4))
 
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.eye(config=config_U1, legs=[leg1.conj(), leg1])
         b = yastn.ones(config=config_U1, legs=[leg1.conj(), leg1])
         _ = a + b  # Cannot add diagonal tensor to non-diagonal one.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
         b = yastn.rand(config=config_U1, legs=[leg1, leg2.conj(), leg1, leg2.conj()])
         _ = a + b  # Signatures do not match.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
         b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1])
         _ = a + b  # Tensors have different number of legs.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1, leg1.conj(), leg1])
         b = yastn.rand(config=config_U1, legs=[leg1, leg2.conj(), leg1])
         _ = a + b  # Bond dimensions do not match.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1, leg1.conj(), leg1])
         b = yastn.rand(config=config_U1, legs=[leg1, leg3.conj(), leg1])
         _ = a + b  # Bond dimensions do not match.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         # Here, individual blocks between a na b are consistent, but cannot form consistent sum.
         a = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1))
         a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
         b = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1))
         b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
         _ = a + b  # Bond dimensions related to some charge are not consistent.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
         b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
         a = a.fuse_legs(axes=(0, 1, (2, 3)), mode='meta')
         b = b.fuse_legs(axes=((0, 1), 2, 3), mode='meta')
         _ = a + b  # Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=0)
         b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=1)
         _ = a + b  # Tensor charges do not match.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1], n=0)
         _ = yastn.norm(a, p='wrong_order')
         # Error in norm: p not in ('fro', 'inf').
@@ -270,7 +270,7 @@ def test_hf_union_exceptions():
     leg1 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 2))
     leg2 = yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(2, 3, 5))
     leg3 = yastn.Leg(config_U1, s=1, t=(-2, 0, 2), D=(2, 5, 2))
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1))
         a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
         b = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1))
@@ -278,19 +278,19 @@ def test_hf_union_exceptions():
         a = a.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
         b = b.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
         _ = a + b  # Bond dimensions of fused legs do not match.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1, leg1.conj(), leg1])
         b = yastn.rand(config=config_U1, legs=[leg2, leg3.conj(), leg2])
         a = a.fuse_legs(axes=((0, 2), 1), mode='hard')
         b = b.fuse_legs(axes=((0, 2), 1), mode='hard')
         _ = a + b  # Bond dimensions do not match.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
         b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2.conj(), leg1, leg2.conj()])
         a = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         b = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         _ = a + b  # Signatures of hard-fused legs do not match.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
         b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
         a = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')

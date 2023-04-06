@@ -33,24 +33,24 @@ def test_diag_basic():
 def test_diag_exceptions():
     """ triggering exceptions by yastn.diag()"""
     t1, D1, D2 = (-1, 0, 1), (2, 3, 4), (3, 4, 5)
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, s=(-1, 1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
         _ = a.diag()  # Diagonal tensor requires 2 legs with opposite signatures.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, s=(1, 1), t=(t1, t1), D=(D1, D1))
         _ = a.diag()  # Diagonal tensor requires 2 legs with opposite signatures.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, s=(-1, 1), t=(t1, t1), D=(D1, D1), n=1)
         a.diag()  # Diagonal tensor requires zero tensor charge.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, s=(-1, 1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
         a = a.fuse_legs(axes=((0, 1), 2), mode='hard')
         a.diag()  # Diagonal tensor cannot have fused legs.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, s=(-1, 1), t=(t1, t1), D=(D1, D1))
         a = a.fuse_legs(axes=((0, 1),), mode='meta')
         a.diag()  # Diagonal tensor cannot have fused legs.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, s=(-1, 1), t=(t1, t1), D=(D1, D2))
         a.diag()  # yastn.diag() allowed only for square blocks.
 

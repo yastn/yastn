@@ -120,17 +120,17 @@ def test_vdot_exceptions():
     assert abs(a.vdot(c, conj=(0, 0))) < tol  # == 0 as charges do not match for that conj
     assert abs(a.vdot(c, conj=(1, 1))) < tol  # == 0 as charges do not match for that conj
 
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         d = yastn.rand(config=config_U1, legs=[leg.conj(), leg.conj(), leg, leg.conj()], n=1)
         a.vdot(d)  # Error in vdot: signatures do not match.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         d = yastn.rand(config=config_U1, egs=[leg.conj(), leg, leg], n=1)
         a.vdot(d)  # Error in vdot: mismatch in number of legs.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
         bf = b.fuse_legs(axes=(0, (1, 2, 3)), mode='meta')
         af.vdot(bf)  # Error in vdot: mismatch in number of fused legs or fusion order.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg, leg.conj(), leg, leg])
         leg2 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(3, 4, 5))
         b = yastn.rand(config=config_U1, legs=[leg, leg.conj(), leg, leg2])
@@ -141,7 +141,7 @@ def test_hf_intersect_exceptions():
     """ exceptions happening in resolving hard-fusion mismatches. """
     t1, t2 = (-1, 0, 1), (-2, 0, 2)
     D1, D2 = (2, 3, 2), (2, 5, 2)
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1))
         a.set_block(ts=(1, 1, 0, 0), Ds=(2, 2, 1, 1), val='rand')
         b = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1))
@@ -149,19 +149,19 @@ def test_hf_intersect_exceptions():
         a = a.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
         b = b.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
         yastn.vdot(a, b)  # Error in intersect: mismatch of native bond dimensions of fused legs.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, s=(1, -1, 1), t=(t1, t1, t1), D=(D1, D1, D1))
         b = yastn.rand(config=config_U1, s=(1, -1, 1), t=(t2, t2, t2), D=(D1, D2, D1))
         a = a.fuse_legs(axes=((0, 2), 1), mode='hard')
         b = b.fuse_legs(axes=((0, 2), 1), mode='hard')
         yastn.vdot(a, b)  # Error in union: mismatch of bond dimensions of unfused legs.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, s=(-1, 1, -1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
         b = yastn.rand(config=config_U1, s=(-1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
         a = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         b = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         yastn.vdot(a, b)  # Error in vdot: signatures of fused legs do not match.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, s=(-1, 1, -1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
         b = yastn.rand(config=config_U1, s=(-1, 1, -1, -1), t=(t1, t1, t1, t1), D=(D1, D2, D1, D2))
         a = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')

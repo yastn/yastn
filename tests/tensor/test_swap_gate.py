@@ -115,10 +115,10 @@ def test_swap_gate_exceptions():
     """ swap_gate raising exceptions """
     t1, D1 = (0, 1, 2, 3), (2, 2, 2, 2)
     a = yastn.rand(config=config_Z2_fermionic, s=(1, -1, 1, -1), t=(t1, t1, t1, t1), D=(D1, D1, D1, D1))
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.swap_gate(axes=(0, 1, 2))
         # Odd number of elements in axes. Elements of axes should come in pairs.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.swap_gate(axes=((0, 1), 0))
         # Cannot swap the same index
 

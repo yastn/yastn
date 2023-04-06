@@ -1,5 +1,5 @@
 """ Mps structure and its basic manipulations. """
-from ... import tensor, initialize, YastError
+from ... import tensor, initialize, YastnError
 
 ###################################
 #   auxiliary for basic algebra   #
@@ -62,20 +62,20 @@ def add(*states, amplitudes=None):
         amplitudes = [1] * len(states)
 
     if len(states) != len(amplitudes):
-        raise YastError('MPS: Number of Mps-s must be equal to the number of coefficients in amplitudes.')
+        raise YastnError('MPS: Number of Mps-s must be equal to the number of coefficients in amplitudes.')
 
     phi = MpsMpo(N=states[0].N, nr_phys=states[0].nr_phys)
 
     if any(psi.N != phi.N for psi in states):
-        raise YastError('MPS: All states must have equal number of sites.')
+        raise YastnError('MPS: All states must have equal number of sites.')
     if any(psi.nr_phys != phi.nr_phys for psi in states):
-        raise YastError('MPS: All states should be either Mps or Mpo.')
+        raise YastnError('MPS: All states should be either Mps or Mpo.')
     if any(psi.pC != None for psi in states):
-        raise YastError('MPS: Absorb central sites of mps-s before calling add.')
+        raise YastnError('MPS: Absorb central sites of mps-s before calling add.')
     legf = states[0][phi.first].get_legs(axes=0)
     legl = states[0][phi.last].get_legs(axes=2)
     #if any(psi.virtual_leg('first') != legf or psi.virtual_leg('last') != legl for psi in states):
-    #    raise YastError('MPS: Addition')
+    #    raise YastnError('MPS: Addition')
 
     amplitudes = [x * psi.factor for x, psi in zip(amplitudes, states)]
 
@@ -133,18 +133,18 @@ def multiply(a, b, mode=None):
         yastn.tn.mps.MpsMpo
     """
     if a.N != b.N:
-        YastError('MPS: Mps-s must have equal number of sites.')
+        YastnError('MPS: Mps-s must have equal number of sites.')
 
     nr_phys = a.nr_phys + b.nr_phys - 2
     
     if a.nr_phys == 1:
-        YastError('MPS: First argument has to be an MPO.')
+        YastnError('MPS: First argument has to be an MPO.')
     phi = MpsMpo(N=a.N, nr_phys=nr_phys)
 
     if b.N != a.N:
-        raise YastError('MPS: a and b must have equal number of sites.')
+        raise YastnError('MPS: a and b must have equal number of sites.')
     if a.pC is not None or b.pC is not None:
-        raise YastError('MPS: Absorb central sites of mps-s before calling multiply.')
+        raise YastnError('MPS: Absorb central sites of mps-s before calling multiply.')
 
     axes_fuse = ((0, 3), 1, (2, 4)) if b.nr_phys == 1 else ((0, 3), 1, (2, 4), 5)
     for n in phi.sweep():
@@ -159,16 +159,17 @@ def multiply(a, b, mode=None):
 ###################################
 
 class MpsMpo:
-    # The basic structure of mps (for nr_phys=1) and mpo (for nr_phys=2)
-    # and some basic operations on an object. This is a parent structure for Mps (for nr_phys=1),
-    # Mpo (for nr_phys=2). Order of legs for a single mps tensor is
-    # (left virtual, 1st physical |ket>, right virtual, 2nd physical <bra|).
-    # MpsMpo tensors are index with :math:`0, 1, 2, 3, \\ldots, N-1`
-    # (with :math:`0` corresponding to the first site).
-    # A central block (associated with a bond) is indexed using ordered tuple (n, n+1).
-    # At most one central block is allowed.
-    
-    def __init__(self, N=1, nr_phys=1, psi=None):
+    r""" 
+    The basic structure of Mps (for nr_phys=1) and Mpo (for nr_phys=2)
+    and some operations on it. Order of legs for a single tensor is
+    (virtual in the direction of first site, 1st physical |ket>,
+     virtual in the direction of first site, 2nd physical <bra| for Mpo).
+    MpsMpo tensors/sites are index with :math:`0, 1, 2, 3, \\ldots, N-1` with :math:`0` corresponding to the first site.
+    A central block (associated with a bond) is indexed using ordered tuple (n, n+1).
+    At most one central block is allowed.
+    """
+
+    def __init__(self, N=1, nr_phys=1):
         r"""
         Create empty MPS (:code:`nr_phys=1`) or MPO (:code:`nr_phys=2`)
         for system of *N* sites. Empty MPS/MPO has no tensors assigned.
@@ -180,33 +181,17 @@ class MpsMpo:
         nr_phys : int
             number of physical legs: 1 for MPS (default); 2 for MPO;
         """
-        if psi is None:
-            if not isinstance(N, int) or N <= 0:
-                raise YastError('MPS: Number of Mps sites N should be a positive integer.')
-            if nr_phys not in (1, 2):
-                raise YastError('MPS: Number of physical legs, nr_phys, should be equal to 1 or 2.')
-            self.N = N
-            self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
-            self.pC = None  # index of the central site, None if it does not exist
-            self.first = 0  # index of the first lattice site
-            self.last = N - 1  # index of the last lattice site
-            self.nr_phys = nr_phys
-            self.factor = 1  # multiplicative factor is real and positive (e.g. norm)
-        else: # make a shallow copy of psi
-            self.N = psi.N
-            self.A = dict(psi.A)
-            self.pC = psi.pC
-            self.first = psi.first
-            self.last = psi.last
-            self.nr_phys = psi.nr_phys
-            self.factor = psi.factor
-
-    def norm(self):
-        r""" Calculate norm of |ket> via canonization. """
-        ket = MpsMpo(psi=self)
-        if not ket.is_canonical(to='first'):
-            ket.canonize_(to='first', normalize=False)
-        return ket.factor
+        if not isinstance(N, int) or N <= 0:
+            raise YastnError('MPS: Number of Mps sites N should be a positive integer.')
+        if nr_phys not in (1, 2):
+            raise YastnError('MPS: Number of physical legs, nr_phys, should be equal to 1 or 2.')
+        self.N = N
+        self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
+        self.pC = None  # index of the central site, None if it does not exist
+        self.first = 0  # index of the first lattice site
+        self.last = N - 1  # index of the last lattice site
+        self.nr_phys = nr_phys
+        self.factor = 1  # multiplicative factor is real and positive (e.g. norm)
 
     @property
     def config(self):
@@ -227,7 +212,7 @@ class MpsMpo:
             return range(df, self.N - dl)
         if to == 'first':
             return range(self.N - 1 - dl, df - 1, -1)
-        raise YastError('MPS: Argument "to" should be in ("first", "last")')
+        raise YastnError('MPS: Argument "to" should be in ("first", "last")')
 
     def __getitem__(self, n):
         """ Return tensor corresponding to n-th site."""
@@ -236,10 +221,24 @@ class MpsMpo:
     def __setitem__(self, n, tensor):
         """ Assign tensor to n-th site of Mps or Mpo. """
         if not isinstance(n, int) or n < self.first or n > self.last:
-            raise YastError('MPS: n should be an integer in [0, N - 1].')
+            raise YastnError('MPS: n should be an integer in [0, N - 1].')
         if tensor.ndim != self.nr_phys + 2:
-            raise YastError('MPS: Tensor rank should be {}.'.format(self.nr_phys + 2))
+            raise YastnError('MPS: Tensor rank should be {}.'.format(self.nr_phys + 2))
         self.A[n] = tensor
+
+    def shallow_copy(self):
+        r"""
+        New instance of :class:`yastn.tn.mps.MpsMpo` pointing to the same tensors as the old one.
+
+        Returns
+        -------
+        yastn.tn.mps.MpsMpo
+        """
+        phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
+        phi.A = dict(self.A)
+        phi.pC = self.pC
+        phi.factor = self.factor
+        return phi
 
     def clone(self):
         r"""
@@ -252,9 +251,8 @@ class MpsMpo:
         Returns
         -------
         yastn.tn.mps.MpsMpo
-            a clone of :code:`self`
         """
-        phi = MpsMpo(psi=self)
+        phi = self.shallow_copy()
         for ind, ten in phi.A.items():
             phi.A[ind] = ten.clone()
         # TODO clone factor ?
@@ -268,16 +266,11 @@ class MpsMpo:
         .. warning::
             this operation does not preserve autograd on the returned :code:`yastn.tn.mps.MpsMpo`.
 
-        .. note::
-            Use when retaining "old" MPS/MPO is necessary. Most operations on
-            MPS/MPO are typically done in-place.
-
         Returns
         -------
         yastn.tn.mps.MpsMpo
-            a copy of :code:`self`
         """
-        phi = MpsMpo(psi=self)
+        phi = self.shallow_copy()
         for ind, ten in phi.A.items():
             phi.A[ind] = ten.copy()
         # TODO copy factor ?
@@ -291,7 +284,7 @@ class MpsMpo:
         -------
         out : conjugated Mps or Mpo, independent of self
         """
-        phi = MpsMpo(psi=self)
+        phi = self.shallow_copy()
         for ind, ten in phi.A.items():
             phi.A[ind] = ten.conj()
         return phi
@@ -304,7 +297,7 @@ class MpsMpo:
         -------
         yastn.tn.mps.MpsMpo
         """
-        phi = MpsMpo(psi=self)
+        phi = self.shallow_copy()
         am = abs(multiplier)
         if am > 0:
             phi.factor = am * self.factor
@@ -399,7 +392,7 @@ class MpsMpo:
                 to standard 2-norm.
         """
         if self.pC is not None:
-            raise YastError('MPS: Only one central block is possible. Attach the existing central block first.')
+            raise YastnError('MPS: Only one central block is possible. Attach the existing central block first.')
 
         if to == 'first':
             self.pC = (n - 1, n)
@@ -416,7 +409,7 @@ class MpsMpo:
             #                                 --Q---2            --
             self.A[n], R = self.A[n].qr(axes=(ax, 2), sQ=1, Qaxis=2)
         else:
-            raise YastError('MPS: Argument "to" should be in ("first", "last")')
+            raise YastnError('MPS: Argument "to" should be in ("first", "last")')
         nR = R.norm()
         self.A[self.pC] = R / nR
         self.factor = 1 if normalize else self.factor * nR
@@ -494,6 +487,13 @@ class MpsMpo:
                 self.A[n1] = tensor.ncon([self.A[n1], C], (ax, (1, -2)))
             else:  # (to == 'last' and n2 <= self.last) or n1 < self.first
                 self.A[n2] = C @ self.A[n2]
+
+    def norm(self):
+        r""" Calculate norm of |ket> via canonization. """
+        phi = self.shallow_copy()
+        #if not phi.is_canonical(to='first'):
+        phi.canonize_(to='first', normalize=False)
+        return phi.factor
 
     def canonize_(self, to='first', normalize=True):
         r"""
@@ -653,9 +653,7 @@ class MpsMpo:
         U, S, V = tensor.svd(AA, axes=axes, sU=1, Uaxis=2)
         mask = tensor.truncation_mask(S, **opts_svd)
         self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(U, S, V, axes=(2, 0, 0))
-
-        # discarded weight
-        return tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()
+        return tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()  # discarded weight
 
     def virtual_leg(self, ind):
         if ind == 'first':
@@ -712,7 +710,7 @@ class MpsMpo:
             list of bond entropies.
         """
         Entropy = [0] * self.N
-        psi = self.clone()
+        psi = self.shallow_copy()
         psi.canonize_(to='last', normalize=False)
         psi.absorb_central(to='first')
         for n in psi.sweep(to='first'):
@@ -731,7 +729,7 @@ class MpsMpo:
             integer-indexed dictionary of Schmidt values stored as diagonal tensors.
         """
         SV = {}
-        psi = self.clone()
+        psi = self.shallow_copy()
         psi.canonize_(to='last', normalize=False)
         psi.absorb_central(to='first')
         for n in psi.sweep(to='first', df=1):

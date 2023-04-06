@@ -3,7 +3,7 @@
 from itertools import product
 import numpy as np
 from ._auxliary import _flatten
-from ._tests import YastError, _test_tD_consistency
+from ._tests import YastnError, _test_tD_consistency
 
 
 def __setitem__(a, key, newvalue):
@@ -20,7 +20,7 @@ def __setitem__(a, key, newvalue):
     try:
         ind = a.struct.t.index(key)
     except ValueError as exc:
-        raise YastError('Tensor does not have a block specified by the key.') from exc
+        raise YastnError('Tensor does not have a block specified by the key.') from exc
     a._data[slice(*a.struct.sl[ind])] = newvalue.reshape(-1)
 
 
@@ -66,7 +66,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         if a.isdiag and len(D) == 1:
             D = D + D
         if len(D) != a.ndim_n:
-            raise YastError("Number of elements in D does not match tensor rank.")
+            raise YastnError("Number of elements in D does not match tensor rank.")
         tset = np.zeros((1, a.ndim_n, a.config.sym.NSYM))
         Dset = np.array(D, dtype=int).reshape(1, a.ndim_n)
     else:  # a.config.sym.NSYM >= 1
@@ -79,12 +79,12 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         t = list((x,) if isinstance(x, int) else x for x in t)
 
         if len(D) != a.ndim_n:
-            raise YastError("Number of elements in D does not match tensor rank.")
+            raise YastnError("Number of elements in D does not match tensor rank.")
         if len(t) != a.ndim_n:
-            raise YastError("Number of elements in t does not match tensor rank.")
+            raise YastnError("Number of elements in t does not match tensor rank.")
         for x, y in zip(D, t):
             if len(x) != len(y):
-                raise YastError("Elements of t and D do not match")
+                raise YastnError("Elements of t and D do not match")
 
         comb_D = list(product(*D))
         comb_t = list(product(*t))
@@ -99,7 +99,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         Dset = comb_D[ind]
 
     if a.isdiag and np.any(Dset[:, 0] != Dset[:, 1]):
-        raise YastError("Diagonal tensor requires the same bond dimensions on both legs.")
+        raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
     Dp = Dset[:, 0] if a.isdiag else np.prod(Dset, axis=1, dtype=int)
     Dsize = np.sum(Dp)
 
@@ -146,15 +146,15 @@ def set_block(a, ts=(), Ds=None, val='zeros'):  # change to ts; Ds
         ts = ts + ts
 
     if len(ts) != a.ndim_n * a.config.sym.NSYM:
-        raise YastError('Size of ts is not consistent with tensor rank and the number of symmetry sectors.')
+        raise YastnError('Size of ts is not consistent with tensor rank and the number of symmetry sectors.')
     if Ds is not None and len(Ds) != a.ndim_n:
-        raise YastError('Size of Ds is not consistent with tensor rank.')
+        raise YastnError('Size of Ds is not consistent with tensor rank.')
 
     ats = np.array(ts, dtype=int).reshape((1, a.ndim_n, a.config.sym.NSYM))
     sa = np.array(a.struct.s, dtype=int)
     na = np.array(a.struct.n, dtype=int)
     if not np.all(a.config.sym.fuse(ats, sa, 1) == na):
-        raise YastError('Charges ts are not consistent with the symmetry rules: f(t @ s) == n')
+        raise YastnError('Charges ts are not consistent with the symmetry rules: f(t @ s) == n')
 
     if Ds is None:  # attempt to read Ds from existing blocks.
         Ds = []
@@ -163,11 +163,11 @@ def set_block(a, ts=(), Ds=None, val='zeros'):  # change to ts; Ds
             try:
                 Ds.append(leg.D[leg.t.index(tuple(ats[0, n, :].flat))])
             except ValueError as err:
-                raise YastError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
+                raise YastnError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
         Ds = tuple(Ds)
 
     if a.isdiag and Ds[0] != Ds[1]:
-        raise YastError("Diagonal tensor requires the same bond dimensions on both legs.")
+        raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
     Dsize = Ds[0] if a.isdiag else np.prod(Ds, dtype=int)
 
     ind = sum(t < ts for t in a.struct.t)
@@ -196,7 +196,7 @@ def _init_block(config, Dsize, val, dtype, device):
             return config.backend.rand((Dsize,), dtype=dtype, device=device)
         if val == 'ones':
             return config.backend.ones((Dsize,), dtype=dtype, device=device)
-        raise YastError('val should be in ("zeros", "ones", "rand") or an array of the correct size')
+        raise YastnError('val should be in ("zeros", "ones", "rand") or an array of the correct size')
     x = config.backend.to_tensor(val, Ds=Dsize, dtype=dtype, device=device)
     if config.backend.get_size(x) == Dsize ** 2:
         x = config.backend.diag_get(x.reshape(Dsize, Dsize))

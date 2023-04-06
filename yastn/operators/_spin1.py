@@ -1,7 +1,7 @@
 import numpy as np
 from ..sym import sym_none, sym_Z3, sym_U1
 from .. import block
-from ..tensor import YastError, Tensor
+from ..tensor import YastnError, Tensor
 from ._meta_operators import meta_operators
 
 class Spin1(meta_operators):
@@ -36,7 +36,7 @@ class Spin1(meta_operators):
         since by default the charges are ordered in the increasing order.
         """
         if sym not in ('dense', 'Z3', 'U1'):
-            raise YastError("For Spin1 sym should be in ('dense', 'Z3', 'U1').")
+            raise YastnError("For Spin1 sym should be in ('dense', 'Z3', 'U1').")
         kwargs['fermionic'] = False
         import_sym = {'dense': sym_none, 'Z3': sym_Z3, 'U1': sym_U1}
         kwargs['sym'] = import_sym[sym]
@@ -68,7 +68,7 @@ class Spin1(meta_operators):
             sx = Tensor(config=self.config, s=self.s)
             sx.set_block(val=[[0, isq2, 0], [isq2, 0, isq2], [0, isq2, 0]], Ds=(3, 3))
         if self._sym in ('Z3', 'U1'):
-            raise YastError('Cannot define sx operator for U(1) or Z3 symmetry.')
+            raise YastnError('Cannot define sx operator for U(1) or Z3 symmetry.')
         return sx
 
     def sy(self):
@@ -78,7 +78,7 @@ class Spin1(meta_operators):
             sy = Tensor(config=self.config, s=self.s, dtype='complex128')
             sy.set_block(val=[[0, -iisq2, 0], [iisq2, 0, -iisq2], [0, iisq2, 0]], Ds=(3, 3))
         if self._sym in ('Z3', 'U1'):
-            raise YastError('Cannot define sy operator for U(1) or Z3 symmetry.')
+            raise YastnError('Cannot define sy operator for U(1) or Z3 symmetry.')
         return sy
 
     def sz(self):

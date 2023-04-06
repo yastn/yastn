@@ -63,9 +63,9 @@ def append_a_tl2(tt, AAb):
     # tt: e2 (1t 1b) (0t 0b) e3
     # AAb['tl']:  ((1t 1b) (0t 0b)) ((3t 3b) (2t 2b))
     tt = tt.fuse_legs(axes=((0, 3), (1, 2)))  # (e2 e3) ((1t 1b) (0t 0b))
-    tt = tensordot(tt, AAb['tl'], axes=(1, 0))  
+    tt = tensordot(tt, AAb['tl'], axes=(1, 0))
     tt = tt.unfuse_legs(axes=(0, 1))  # e2 e3 (3t 3b) (2t 2b)
-    tt = tt.transpose(axes=(0, 3, 1, 2))  # (e2 (2t 2b)) (e3 (3t 3b))
+    tt = tt.transpose(axes=(0, 3, 1, 2))  # e2 (2t 2b) e3 (3t 3b)
     return tt
 
 

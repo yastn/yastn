@@ -62,29 +62,29 @@ def test_compress_to_1d_exceptions():
     ad = yastn.eye(config=config_U1, legs=yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3)))
     _, ad_meta = ad.compress_to_1d()
 
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b = yastn.Tensor(config=config_U1, s=(1, 1, 1, 1))
         _ = b.compress_to_1d(a_meta)
         # Tensor signature do not match meta.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b = yastn.Tensor(config=config_U1, s=(-1, 1, 1, 1), n=1)
         _ = b.compress_to_1d(a_meta)
         # Tensor charge than do not match meta.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b = yastn.Tensor(config=config_U1, s=(1, -1))
         _ = b.compress_to_1d(ad_meta)
         # Tensor diagonality do not match meta.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b = yastn.Tensor(config=config_U1, s=(-1, 1, 1, 1))
         b = b.fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
         _ = b.compress_to_1d(a_meta)
         # Tensor meta-fusion structure do not match meta.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b = yastn.Tensor(config=config_U1, s=(-1, 1, 1, 1))
         b.set_block(ts=(1, -1, 2, 0), Ds=(2, 3, 3, 4))
         _ = b.compress_to_1d(a_meta)
         # Tensor has blocks that do not appear in meta.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         af = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         _, af_meta = af.compress_to_1d()
         b = yastn.Tensor(config=config_U1, s=(-1, 1, 1, 1))

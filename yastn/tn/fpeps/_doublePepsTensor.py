@@ -149,19 +149,19 @@ class DoublePepsTensor:
 
     def append_a_tl(self, tt):
         """ Append the A and Ab tensors of self to the top-left corner, tt. """
-
-        tt = tt.fuse_legs(axes=((0, 3), 1, 2))
-        tt = tt.unfuse_legs(axes=(1, 2))
-        tt = tt.swap_gate(axes=(1, 4))
-        tt = tt.fuse_legs(axes=(0, (2, 4), (1, 3)))
-        Af = self.A.fuse_legs(axes=((1, 0), (2, 3), 4))
-        Abf = self.Ab.fuse_legs(axes=((1, 0), 4, (2, 3)))
-        tt = tt.tensordot(Af, axes=(2, 0))
-        tt = tt.tensordot(Abf, axes=((1, 3), (0, 1)), conj=(0, 1))
-        tt = tt.unfuse_legs(axes=(1, 2))
-        tt = tt.swap_gate(axes=(1, 4))
-        tt = tt.fuse_legs(axes=(0, (1, 3), (2, 4)))
-        tt = tt.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3))
+        # tt: e2 (1t 1b) (0t 0b) e3
+        tt = tt.fuse_legs(axes=((0, 3), 1, 2))  # (e2 e3) (1t 1b) (0t 0b)
+        tt = tt.unfuse_legs(axes=(1, 2))  # (e2 e3) 1t 1b 0t 0b
+        tt = tt.swap_gate(axes=(1, 4))  # swap(1t, 0b)
+        tt = tt.fuse_legs(axes=(0, (2, 4), (1, 3)))  # (e2 e3) (1b 0b) (1t 0t)
+        Af = self.A.fuse_legs(axes=((1, 0), (2, 3), 4))  # (1t 0t) (2t 3t) p
+        Abf = self.Ab.fuse_legs(axes=((1, 0), 4, (2, 3)))  # (1b 0b) p (2b 3b)
+        tt = tt.tensordot(Af, axes=(2, 0))  # (e2 e3) (1b 0b) (2t 3t) p
+        tt = tt.tensordot(Abf, axes=((1, 3), (0, 1)), conj=(0, 1))  # (e2 e3) (2t 3t) (2b 3b)
+        tt = tt.unfuse_legs(axes=(1, 2))  # (e2 e3) 2t 3t 2b 3b
+        tt = tt.swap_gate(axes=(1, 4))  # swap(2t, 3b)
+        tt = tt.fuse_legs(axes=(0, (1, 3), (2, 4)))  # (e2 e3) (2t 2b) (3t 3b)
+        tt = tt.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3))  # e2 (2t 2b) e3 (3t 3b)
         return tt
 
     def append_a_br(self, tt):

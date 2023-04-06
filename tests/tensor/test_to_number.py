@@ -53,10 +53,10 @@ def test_to_number_basic():
 
 def test_to_number_exceptions():
     a = yastn.rand(config=config_dense, s=(-1, 1, 1, -1), D=(2, 3, 4, 5))
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.to_number()
         # Only single-element (symmetric) Tensor can be converted to scalar
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.item()
         # Only single-element (symmetric) Tensor can be converted to scalar
 

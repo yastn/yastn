@@ -2,7 +2,7 @@
 
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
-from ._tests import YastError, _test_configs_match
+from ._tests import YastnError, _test_configs_match
 from ..sym import sym_none
 from ._legs import Leg, leg_union, _leg_fusions_need_mask
 from ._merging import _embed_tensor
@@ -90,13 +90,13 @@ def compress_to_1d(a, meta=None):
     # else:
     _test_configs_match(a.config, meta['config'])
     if a.struct.s != meta['struct'].s:
-        raise YastError("Tensor signature do not match meta.")
+        raise YastnError("Tensor signature do not match meta.")
     if a.struct.n != meta['struct'].n:
-        raise YastError("Tensor charge than do not match meta.")
+        raise YastnError("Tensor charge than do not match meta.")
     if a.isdiag != meta['struct'].diag:
-        raise YastError("Tensor diagonality do not match meta.")
+        raise YastnError("Tensor diagonality do not match meta.")
     if a.mfs != meta['mfs']:
-        raise YastError("Tensor meta-fusion structure do not match meta.")
+        raise YastnError("Tensor meta-fusion structure do not match meta.")
 
     meta_hfs =  tuple(leg.legs[0] for leg in meta['legs'])
     if a.hfs != meta_hfs:
@@ -104,7 +104,7 @@ def compress_to_1d(a, meta=None):
         legs_u = {n: leg_union(leg_a, leg) for n, (leg_a, leg) in enumerate(zip(legs_a, meta['legs']))}
         a = _embed_tensor(a, legs_a, legs_u)  # mask needed
         if a.hfs != meta_hfs:
-            raise YastError("Tensor fused legs do not match metadata.")
+            raise YastnError("Tensor fused legs do not match metadata.")
 
     if a.struct == meta['struct']:
         return a._data, meta
@@ -112,7 +112,7 @@ def compress_to_1d(a, meta=None):
     ia, im, meta_merge = 0, 0, []
     while ia < len(a.struct.t):
         if a.struct.t[ia] < meta['struct'].t[im] or im >= len(meta['struct'].t):
-            raise YastError("Tensor has blocks that do not appear in meta.")
+            raise YastnError("Tensor has blocks that do not appear in meta.")
         if a.struct.t[ia] == meta['struct'].t[im]:
             meta_merge.append((meta['struct'].sl[im], a.struct.sl[ia]))
             ia += 1
@@ -301,7 +301,7 @@ def __getitem__(a, key):
     try:
         ind = a.struct.t.index(key)
     except ValueError as exc:
-        raise YastError('tensor does not have block specify by key') from exc
+        raise YastnError('tensor does not have block specify by key') from exc
     x = a._data[slice(*a.struct.sl[ind])]
 
     # TODO this should be reshape called from backend ?
@@ -490,7 +490,7 @@ def to_raw_tensor(a):
     """
     if len(a.struct.D) == 1:
         return a._data.reshape(a.struct.D[0])
-    raise YastError('Only tensor with a single block can be converted to raw tensor.')
+    raise YastnError('Only tensor with a single block can be converted to raw tensor.')
 
 
 def to_nonsymmetric(a, legs=None, native=False, reverse=False):
@@ -531,7 +531,7 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     legs_a = list(a.get_legs(range(ndim), native=native))
     if legs is not None:
         if any((n < 0) or (n >= ndim) for n in legs.keys()):
-            raise YastError('Specified leg out of ndim')
+            raise YastnError('Specified leg out of ndim')
         legs_new = {n: leg_union(legs_a[n], leg) for n, leg in legs.items()}
         if any(_leg_fusions_need_mask(leg, legs_a[n]) for n, leg in legs_new.items()):
             a = _embed_tensor(a, legs_a, legs_new)  # mask needed
@@ -600,7 +600,7 @@ def to_number(a, part=None):
     elif size == 0:
         x = a.zero_of_dtype()
     else:
-        raise YastError('Only single-element (symmetric) Tensor can be converted to scalar')
+        raise YastnError('Only single-element (symmetric) Tensor can be converted to scalar')
     return a.config.backend.real(x) if part == 'real' else x
 
 
@@ -620,4 +620,4 @@ def item(a):
         return a.config.backend.item(a._data)
     if size == 0:
         return 0
-    raise YastError("Only single-element (symmetric) Tensor can be converted to scalar")
+    raise YastnError("Only single-element (symmetric) Tensor can be converted to scalar")

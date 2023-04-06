@@ -151,36 +151,36 @@ def test_set_block_exceptions():
     leg = yastn.Leg(config_U1, s=1, t=(0, 1), D=(2, 3))
     a = yastn.ones(config=config_U1, legs=[leg, leg, leg.conj()])
     b = a.copy()
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b = a.copy()
         b.set_block(ts=(0, 0, 0), Ds=(3, 2, 2), val='ones')  # here (3, ...) is inconsistent bond dimension
         # Inconsistend bond dimension of charge.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b = a.copy()
         b.set_block(ts=(0, 0), Ds=(2, 2), val='ones')
         # Size of ts is not consistent with tensor rank and the number of symmetry sectors.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b = a.copy()
         b.set_block(ts=(0, 0, 0), Ds=(2, 2), val='ones')
         # 'Size of Ds is not consistent with tensor rank.'
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b = a.copy()
         b.set_block(ts=(3, 0, 0), Ds=(2, 2, 2), val='ones')
         # Charges ts are not consistent with the symmetry rules: f(t @ s) == n
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.set_block(ts=(1, 1, 2), val='ones')
         # Provided Ds. Cannot infer all bond dimensions from existing blocks.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b = yastn.Tensor(config=config_U1, isdiag=True)
         b.set_block(ts=(0, 0), Ds=(1, 2), val='ones')
         # Diagonal tensor requires the same bond dimensions on both legs.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.set_block(ts=(0, 0, 0), val='four')
         # val should be in ("zeros", "ones", "rand")
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a[(1, 1, 1)] = np.ones((3, 3, 3))
         # tensor does not have block specify by key
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a[(1, 1, 1)]
         # tensor does not have block specify by key
 

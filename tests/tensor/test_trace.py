@@ -160,29 +160,29 @@ def test_trace_exceptions():
     t1, D1, D2 = (0, 1), (2, 3), (4, 5)
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                 t=[t1, t1, t1, t1, t1, t1], D=[D1, D2, D2, D2, D2, D2])
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.trace(axes=(0, 6))  # Error in trace: axis outside of tensor ndim
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.trace(axes=((0, 1, 2), (2, 3, 4)))  # Error in trace: repeated axis in axes
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.trace(axes=((0, 1, 2), (2, 3, 3)))  # Error in trace: repeated axis in axes
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.trace(axes=((0, 1, 2), (3, 4)))  # Error in trace: unmatching number of axes to trace.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.trace(axes=((1, 3), (2, 4)))  # Error in trace: signatures do not match.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a.trace(axes=((0, 1, 2), (3, 4, 5)))  # Error in trace: bond dimensions of traced legs do not match.
     b = a.fuse_legs(axes=((0, 1, 2), (3, 4), 5), mode='meta')
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b.trace(axes=(0, 1))  # Error in trace: meta-fusions of traced axes do not match.
     b = a.fuse_legs(axes=(0, (1, 3), (2, 4), 5), mode='meta')
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b.trace(axes=(1, 2))  # Error in trace: signatures do not match.
     b = a.fuse_legs(axes=((0, 1, 2), (3, 4), 5), mode='hard')
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b.trace(axes=(0, 1))  # Error in trace: hard fusions of legs 0 and 1 are not compatible.
     b = a.fuse_legs(axes=(0, (1, 3), (4, 5), 2), mode='hard')
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         b.trace(axes=(1, 2))  # Error in trace: hard fusions of legs 1 and 2 are not compatible.
 
 
