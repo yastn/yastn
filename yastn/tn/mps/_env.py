@@ -294,6 +294,7 @@ class Env3(_EnvParent):
             Heff0 @ C
         """
         bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
+        C = self.op.factor * C
         return tensor.ncon([self.F[bd], C, self.F[ibd]], ((-0, 2, 1), (1, 3), (3, 2, -1)))
 
 
@@ -332,7 +333,7 @@ class Env3(_EnvParent):
             tmp = self.op[n]._attach_01(tmp)
             tmp = tmp.unfuse_legs(axes=0)
             tmp = tensor.ncon([tmp, self.F[(nr, n)]], ((-1, 1, -0, 2, -3), (1, 2, -2)))
-        return self._project_ort(tmp)
+        return self.op.factor * self._project_ort(tmp)
 
 
     def Heff2(self, AA, bd):
@@ -387,14 +388,13 @@ class Env3(_EnvParent):
             tmp = tmp.unfuse_legs(axes=0)
             tmp = tensor.ncon([tmp, self.F[(nr, n2)]], ((-1, -2, 1, 2, -0, -4), (1, 2, -3)))
             tmp = tmp.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3, 4, 5))
-        return self._project_ort(tmp)
+        return self.op.factor * self._project_ort(tmp)
 
     def update_A(self, n, du, opts, normalize=True):
         """ Updates env.ket[n] by exp(du Heff1). """
         if n in self._temp['expmv_ncv']:
             opts['ncv'] = self._temp['expmv_ncv'][n]
         f = lambda x: self.Heff1(x, n)
-        du = du * self.op.factor
         self.ket[n], info = expmv(f, self.ket[n], du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][n] = info['ncv']
 
@@ -405,7 +405,6 @@ class Env3(_EnvParent):
             if bd in self._temp['expmv_ncv']:
                 opts['ncv'] = self._temp['expmv_ncv'][bd]
             f = lambda x: self.Heff0(x, bd)
-            du = du * self.op.factor
             self.ket.A[bd], info = expmv(f, self.ket[bd], du, **opts, normalize=normalize, return_info=True)
             self._temp['expmv_ncv'][bd] = info['ncv']
 
@@ -416,7 +415,6 @@ class Env3(_EnvParent):
             opts['ncv'] = self._temp['expmv_ncv'][ibd]
         AA = self.ket.merge_two_sites(bd)
         f = lambda v: self.Heff2(v, bd)
-        du = du * self.op.factor
         AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)

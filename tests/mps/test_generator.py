@@ -121,18 +121,17 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
     # Each Hterm corresponds to a single product of local operators.
     # Hamiltonian is a sum of such products.
 
-
-    # chemical potential on site i
+    # chemical potential on site n
     for n in range(N):
-        if abs(J[n, n]) > 0:
-            Hterms.append(mps.Hterm(J[n, n], [n], [ops.n()]))
+        if abs(J[n][n]) > 0:
+            Hterms.append(mps.Hterm(J[n][n], [n], [ops.n()]))
 
-    # hopping term between sites i and j
+    # hopping term between sites m and n
     for m in range(N):
         for n in range(m + 1, N):
-            if abs(J[m, n]) > 0:
-                Hterms.append(mps.Hterm(J[m, n], (m, n), (ops.cp(), ops.c())))
-                Hterms.append(mps.Hterm(np.conj(J[m, n]), (n, m), (ops.cp(), ops.c())))
+            if abs(J[m][n]) > 0:
+                Hterms.append(mps.Hterm(J[m][n], (m, n), (ops.cp(), ops.c())))
+                Hterms.append(mps.Hterm(np.conj(J[m][n]), (n, m), (ops.cp(), ops.c())))
 
     # We need an identity MPO operator. Here it is created manually.
     I = mps.Mpo(N)
@@ -148,7 +147,7 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
     #
     # Generate MPO for Hterms
     #
-    H = mps.generate_mpo(I, Hterms)
+    H = mps.generate_mpo(I, Hterms, opts={'tol':1e-14})
     return H
 
 

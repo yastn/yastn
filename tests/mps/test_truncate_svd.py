@@ -10,15 +10,13 @@ except ImportError:
 
 
 def run_zipper(psi, H, Egs):
-    Hpsi = mps.zipper(H, psi, opts={'D_total': 16})
+    Hpsi = mps.zipper(H, psi, opts={'D_total': 8})
 
     Eng_t = mps.measure_overlap(Hpsi, psi)
     assert Egs < Eng_t < Egs * 0.99
 
-    Hnorm = mps.measure_overlap(Hpsi, Hpsi) ** 0.5
-
-    for out in mps.compression_(Hpsi, (H, psi), iterator_step=1, max_sweeps=1):
-        Eng_new = mps.vdot(Hpsi, psi) * Hnorm
+    for out in mps.compression_(Hpsi, (H, psi), iterator_step=1, max_sweeps=1, normalize=False):
+        Eng_new = mps.vdot(Hpsi, psi)
         assert Egs < Eng_new < Eng_t
         Eng_t = Eng_new
 
@@ -83,5 +81,5 @@ def test_truncate_svd_Z2():
 
 
 if __name__ == "__main__":
-    test_truncate_svd_dense()
+    # test_truncate_svd_dense()
     test_truncate_svd_Z2()

@@ -44,7 +44,7 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
         Default is 1j.
 
     method: str
-        Algorithm to use in ('1site', '2site', 'mix')
+        Algorithm to use in ('1site', '2site', '12site')
 
     order: str
         Order of Suzuki-Trotter decomposition in ('2nd', '4th').

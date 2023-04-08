@@ -152,23 +152,8 @@ Also see the test in examples for  :ref:`examples/mps/mps:Multiplication`.
 TDVP
 ====
 
-In order to perform :ref:`theory/mps/algorithms:TDVP` we need initial MPS the operator written as MPO.
-We should start with :ref:`mps/init:initialisation` of the MPS and MPO which we push to DMRG.
-
-Here is a simple example for TDVP used to obtain a ground state for a quadratic Hamiltonian 
-through imaginary time evolution:
+Test TDVP simulating time evolution after a sudden quench in a free-fermionic model.
 
 .. literalinclude:: /../../tests/mps/test_tdvp.py
-        :pyobject: test_dense_tdvp
+        :pyobject: test_tdvp_hermitian
 
-.. literalinclude:: /../../tests/mps/test_tdvp.py
-        :pyobject: run_tdvp_imag
-
-
-The same can be done for any symmetry:
-
-.. literalinclude:: /../../tests/mps/test_tdvp.py
-        :pyobject: test_Z2_tdvp
-
-.. literalinclude:: /../../tests/mps/test_tdvp.py
-        :pyobject: test_U1_tdvp
