@@ -8,8 +8,7 @@ try:
 except ImportError:
     from configs import config_dense as cfg
 
-tol = 1e-9
-
+tol = 1e-8
 
 def check_add(psi0, psi1):
     """ series of test of mps.add performed on provided psi0 and psi1"""

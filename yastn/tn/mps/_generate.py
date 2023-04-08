@@ -61,7 +61,7 @@ def generate_single_mpo(I, term):   # this can be private
     return single_mpo
 
 
-def generate_mpo(I, terms, normalize=False, opts=None, packet=50):  # can use better algorithm to compress
+def generate_mpo(I, terms, opts=None, packet=50):  # can use better algorithm to compress
     r"""
     Generate MPO provided a list of :class:`Hterm`-s and identity MPO `I`.
 
@@ -75,8 +75,6 @@ def generate_mpo(I, terms, normalize=False, opts=None, packet=50):  # can use be
         product operators making up the MPO
     I: yastn.Tensor
         on-site identity operator
-    normalize: bool
-        True if the result should be normalized
     opts: dict
         options for truncation of the result
     packet: int
@@ -86,13 +84,15 @@ def generate_mpo(I, terms, normalize=False, opts=None, packet=50):  # can use be
     while ip < Nterms:
         H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
         M = add(*H1s)
-        M.truncate_(to='first', opts_svd=opts, normalize=normalize)
+        M.canonize_(to='last', normalize=False)
+        M.truncate_(to='first', opts_svd=opts, normalize=False)
         ip += packet
         if not M_tot:
             M_tot = M.copy()
         else:
             M_tot = M_tot + M
-            M_tot.truncate_(to='first', opts_svd=opts, normalize=normalize)
+            M_tot.canonize_(to='last', normalize=False)
+            M_tot.truncate_(to='first', opts_svd=opts, normalize=False)
     return M_tot
 
 def generate_single_mps(term, N):  # obsolate - DELETE  (not docummented)
@@ -368,7 +368,7 @@ class Generator:
         c3 = self._term2Hterm(templete, vectors, parameters)
         return generate_mps(c3, self.N)
 
-    def mpo_from_latex(self, H_str, parameters=None):   
+    def mpo_from_latex(self, H_str, parameters=None, opts=None):
         r"""
         Convert latex-like string to yastn.tn.mps MPO.
 
@@ -389,7 +389,9 @@ class Generator:
         parameters = {**self.parameters, **parameters}
         c2 = latex2term(H_str, parameters)
         c3 = self._term2Hterm(c2, self._ops.to_dict(), parameters)
-        return generate_mpo(self._I, c3)
+        if opts is None:
+            opts={'tol': 5e-16}
+        return generate_mpo(self._I, c3, opts)
     
     def mpo_from_templete(self, templete, parameters=None):   # remove from docs (DELETE)
         r"""
