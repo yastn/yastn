@@ -157,3 +157,8 @@ Test TDVP simulating time evolution after a sudden quench in a free-fermionic mo
 .. literalinclude:: /../../tests/mps/test_tdvp.py
         :pyobject: test_tdvp_hermitian
 
+Slow quench across a quantum critical point in a transverse Ising chain.
+
+.. literalinclude:: /../../tests/mps/test_tdvp.py
+        :pyobject: test_tdvp_time_dependent
+
