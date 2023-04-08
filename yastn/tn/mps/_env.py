@@ -433,7 +433,7 @@ class Env3(_EnvParent):
         shapeL = AL.get_shape()
         shapeR = AR.get_shape()
         if shapeL[0] == shapeL[1] or shapeR[0] == shapeR[1] or \
-           ('D_total' in opts_svd and shapeL[0] >= opts_svd['D_total']):
+           ('D_total' in opts_svd and shapeL[1] >= opts_svd['D_total']):
             return False  # maximal bond dimension
         if 'tol' in opts_svd:
             _, R0 = tensor.qr(AL, axes=(0, 1), sQ=1)
