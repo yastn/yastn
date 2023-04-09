@@ -5,24 +5,24 @@ from ._auxliary import _flatten, _unpack_axes
 __all__ = ['are_independent', 'is_consistent']
 
 
-class YastError(Exception):
+class YastnError(Exception):
     """Errors cought by checks in yastn."""
 
 
 def _test_can_be_combined(a, b):
     """Check if config's of two tensors allow for performing operations mixing them. """
     if a.device != b.device:
-        raise YastError('Devices of the two tensors do not match.')
+        raise YastnError('Devices of the two tensors do not match.')
     _test_configs_match(a.config, b.config)
 
 
 def _test_configs_match(a_config, b_config):
     if a_config.sym.SYM_ID != b_config.sym.SYM_ID:
-        raise YastError('Two tensors have different symmetry rules.')
+        raise YastnError('Two tensors have different symmetry rules.')
     if a_config.fermionic != b_config.fermionic:
-        raise YastError('Two tensors have different assigment of fermionic statistics.')
+        raise YastnError('Two tensors have different assigment of fermionic statistics.')
     if a_config.backend.BACKEND_ID != b_config.backend.BACKEND_ID:
-        raise YastError('Two tensors have different backends.')
+        raise YastnError('Two tensors have different backends.')
 
 
 def _test_tD_consistency(struct):
@@ -33,7 +33,7 @@ def _test_tD_consistency(struct):
         Di = Dset[:, i].reshape(-1)
         tDi = list(zip(ti, Di))
         if len(set(ti)) != len(set(tDi)):
-            raise YastError('Inconsist assigment of bond dimension to some charge.')
+            raise YastnError('Inconsist assigment of bond dimension to some charge.')
 
 
 def _test_axes_match(a, b, sgn=1, axes=None):
@@ -46,32 +46,32 @@ def _test_axes_match(a, b, sgn=1, axes=None):
 
     if axes is None:
         if a.ndim != b.ndim:
-            raise YastError('Tensors have different number of legs.')
+            raise YastnError('Tensors have different number of legs.')
         axes = (tuple(range(a.ndim)), tuple(range(b.ndim)))
         uaxes = (tuple(range(a.ndim_n)), tuple(range(b.ndim_n)))
     else:
         if axes is not None and len(axes[0]) != len(axes[1]):
-            raise YastError('axes[0] and axes[1] indicated different number of legs.')
+            raise YastnError('axes[0] and axes[1] indicated different number of legs.')
         if len(set(axes[0])) != len(axes[0]) or (len(set(axes[1])) != len(axes[1])):
-            raise YastError('Repeated axis in axes[0] or axes[1].')
+            raise YastnError('Repeated axis in axes[0] or axes[1].')
         if len(set(axes[0]) - set(range(a.ndim))) > 0 or len(set(axes[1]) - set(range(b.ndim))) > 0:
-            raise YastError('Axis outside of tensor ndim.')
+            raise YastnError('Axis outside of tensor ndim.')
         ua, = _unpack_axes(a.mfs, axes[0])
         ub, = _unpack_axes(b.mfs, axes[1])
         uaxes = (ua, ub)
 
     if not all(a.struct.s[i1] == sgn * b.struct.s[i2] for i1, i2 in zip(*uaxes)):
-        raise YastError('Signatures do not match.')
+        raise YastnError('Signatures do not match.')
 
     if any(a.mfs[i1] != b.mfs[i2] for i1, i2 in zip(*axes)):
-        raise YastError('Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order.')
+        raise YastnError('Indicated axes of two tensors have different number of meta-fused legs or sub-fusions order.')
 
     needs_mask = False  # for hard-fused legs
     for i1, i2 in zip(*uaxes):
         if a.hfs[i1].tree != b.hfs[i2].tree or a.hfs[i1].op != b.hfs[i2].op:
-            raise YastError('Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.')
+            raise YastnError('Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.')
         if any(s1 != sgn * s2 for s1, s2 in zip(a.hfs[i1].s, b.hfs[i2].s)):
-            raise YastError('Signatures of hard-fused legs do not match.')
+            raise YastnError('Signatures of hard-fused legs do not match.')
         if a.hfs[i1].t != b.hfs[i2].t or a.hfs[i1].D != b.hfs[i2].D:
             needs_mask = True
     return needs_mask, uaxes
@@ -81,7 +81,7 @@ def _test_axes_all(a, axes, native=False):
     axes = tuple(_flatten(axes))
     ndim = a.ndim_n if native else a.ndim
     if ndim != len(axes) or sorted(set(axes)) != list(range(ndim)):
-        raise YastError('Provided axes do not match tensor ndim.')
+        raise YastnError('Provided axes do not match tensor ndim.')
 
 
 def are_independent(a, b):
@@ -141,7 +141,7 @@ def _get_tD_legs(struct):
     tD_legs = [sorted(set((tuple(t.flat), D) for t, D in zip(tset[:, n, :], Dset[:, n]))) for n in range(len(struct.s))]
     tD_dict = [dict(tD) for tD in tD_legs]
     if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
-        raise YastError('Bond dimensions related to some charge are not consistent.')
+        raise YastnError('Bond dimensions related to some charge are not consistent.')
     tlegs = [tuple(tD.keys()) for tD in tD_dict]
     Dlegs = [tuple(tD.values()) for tD in tD_dict]
     return tlegs, Dlegs, tD_dict, tset, Dset

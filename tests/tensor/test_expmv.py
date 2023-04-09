@@ -34,7 +34,7 @@ def run_expmv(A, v, tau, tol, ncv, hermitian):
         w = out.to_numpy().reshape(-1)
         assert np.linalg.norm(w - wn) <= tol * np.linalg.norm(wn)
     else:
-        with pytest.raises(yastn.YastError):
+        with pytest.raises(yastn.YastnError):
             out = yastn.expmv(f, v, tau, tol, ncv, hermitian=hermitian, normalize=True)
 
 

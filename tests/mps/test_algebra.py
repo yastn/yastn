@@ -8,8 +8,7 @@ try:
 except ImportError:
     from configs import config_dense as cfg
 
-tol = 1e-6
-
+tol = 1e-8
 
 def check_add(psi0, psi1):
     """ series of test of mps.add performed on provided psi0 and psi1"""
@@ -30,7 +29,7 @@ def test_addition_basic():
 
     # Define random MPS's without any symmetry
     #
-    config_dense= yastn.make_config()
+    config_dense = yastn.make_config()
     psi0 = mps.random_dense_mps(N=8, D=5, d=2)
     psi1 = mps.random_dense_mps(N=8, D=5, d=2)
      
@@ -96,6 +95,7 @@ def test_multiplication():
     #
     opts_svd = {'D_total': 8} 
     out = mps.dmrg_(psi, H, method='2site', max_sweeps=20, Schmidt_tol=1e-14, opts_svd=opts_svd)
+    out = mps.dmrg_(psi, H, method='1site', max_sweeps=20, Schmidt_tol=1e-14)
     #
     # Test if we obtained exact solution for the energy?:
     #
@@ -113,21 +113,21 @@ def test_multiplication():
     mps.compression_(Hpsi, (H, psi), method='2site', max_sweeps=5, Schmidt_tol=1e-6, opts_svd={"D_total": 8}, normalize=False)
     print(Hpsi.get_bond_charges_dimensions())
     #
-    # Use mps.vdot to get variation.
+    # Use mps.norm() to get variation. 
+    # Norm canonizes copy of the state and, close to zero, is more precise than vdot.
     #
-    p0 =  -1 * Hpsi + Eng * psi # Hpsi + psi
-    print(mps.vdot(p0, p0))
-    assert mps.vdot(p0, p0) < tol
+    p0 = Eng * psi - Hpsi
+    assert p0.norm() < tol
     #
     # case 2/
     Hpsi = mps.multiply(H, psi)
-    p0 = -1 * Hpsi + Eng * psi
-    assert mps.vdot(p0, p0) < tol
+    p0 = Eng * psi - Hpsi
+    assert p0.norm() < tol
     #
     # case 3/
     Hpsi = H @ psi
-    p0 = -1 * Hpsi + Eng * psi
-    assert mps.vdot(p0, p0) < tol
+    p0 = Eng * psi - Hpsi
+    assert p0.norm() < tol
 
 
 if __name__ == "__main__":

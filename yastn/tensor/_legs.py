@@ -3,7 +3,7 @@ from dataclasses import dataclass, replace
 from itertools import product, groupby
 import numpy as np
 from ._auxliary import _flatten
-from ._tests import YastError
+from ._tests import YastnError
 from ..sym import sym_none
 from ._merging import _Fusion, _pure_hfs_union, _fuse_hfs, _unfuse_Fusion
 
@@ -55,21 +55,21 @@ class Leg:
             if not hasattr(self.sym, 'SYM_ID'):
                 object.__setattr__(self, "sym", self.sym.sym)
             if self.s not in (-1, 1):
-                raise YastError('Signature of Leg should be 1 or -1')
+                raise YastnError('Signature of Leg should be 1 or -1')
             D = tuple(_flatten(self.D))
             t = tuple(_flatten(self.t))
             if not all(int(x) == x and x > 0 for x in D):
-                raise YastError('D should be a tuple of positive ints')
+                raise YastnError('D should be a tuple of positive ints')
             if not all(int(x) == x for x in t):
-                raise YastError('Charges should be ints')
+                raise YastnError('Charges should be ints')
             if len(D) * self.sym.NSYM != len(t) or (self.sym.NSYM == 0 and len(D) != 1):
-                raise YastError('Number of provided charges and bond dimensions do not match sym.NSYM')
+                raise YastnError('Number of provided charges and bond dimensions do not match sym.NSYM')
             newt = tuple(tuple(x.flat) for x in self.sym.fuse(np.array(t).reshape((len(D), 1, self.sym.NSYM)), (self.s,), self.s))
             oldt = tuple(tuple(x.flat) for x in np.array(t).reshape(len(D), self.sym.NSYM))
             if oldt != newt:
-                raise YastError('Provided charges are outside of the natural range for specified symmetry.')
+                raise YastnError('Provided charges are outside of the natural range for specified symmetry.')
             if len(set(newt)) != len(newt):
-                raise YastError('Repeated charge index.')
+                raise YastnError('Repeated charge index.')
             tD = dict(zip(newt, D))
             t =  tuple(sorted(newt))
             object.__setattr__(self, "t", t)
@@ -180,7 +180,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
     except TypeError:
         n = (n,)
     if len(n) != config.sym.NSYM:
-        raise YastError('len(n) is not consistent with provided symmetry.')
+        raise YastnError('len(n) is not consistent with provided symmetry.')
 
     an = np.array(n)
     spanning_vectors = np.eye(len(n)) if not hasattr(config.sym, 'spanning_vectors') \
@@ -234,7 +234,7 @@ def _leg_fusions_need_mask(*legs):
     if all(isinstance(leg.fusion, tuple) for leg in legs):
         mf = legs[0].fusion
         return any(_leg_fusions_need_mask(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
-    raise YastError("mixing meta- and hard-fused legs")
+    raise YastnError("mixing meta- and hard-fused legs")
 
 
 def leg_outer_product(*legs, t_allowed=None):
@@ -300,7 +300,7 @@ def leg_undo_product(leg):
     """
     hst = leg.history()
     if hst[0] in ('o', 's'):
-        raise YastError('Leg is not a result of outer_product.')
+        raise YastnError('Leg is not a result of outer_product.')
     if hst[0] == 'p':
         ts, Ds, ss, hfs = _unfuse_Fusion(leg.legs[0])
         return tuple(Leg(sym=leg.sym, s=s, t=t, D=D, legs=(hf,))
@@ -320,14 +320,14 @@ def leg_union(*legs):
     if all(isinstance(leg.fusion, tuple) for leg in legs):
         mf = legs[0].fusion
         if any(mf != leg.fusion for leg in legs):
-            raise YastError('Meta-fusions do not match.')
+            raise YastnError('Meta-fusions do not match.')
         new_nlegs = tuple(_leg_union(*(mleg.legs[n] for mleg in legs)) for n in range(mf[0]))
         nsym = legs[0].sym.NSYM
         t = tuple(sorted(set.union(*(set(leg.t) for leg in legs))))
         Dt = [tuple(leg[x[n * nsym : (n + 1) * nsym]] for n, leg in enumerate(new_nlegs)) for x in t]
         D = tuple(np.prod(Dt, axis=1))
         return replace(legs[0], t=t, D=D, legs=new_nlegs)
-    raise YastError('All arguments of leg_union should have consistent fusions.')
+    raise YastnError('All arguments of leg_union should have consistent fusions.')
 
 
 def _leg_union(*legs):
@@ -336,9 +336,9 @@ def _leg_union(*legs):
     """
     legs = list(legs)
     if any(leg.sym.SYM_ID != legs[0].sym.SYM_ID for leg in legs):
-        raise YastError('Provided legs have different symmetries.')
+        raise YastnError('Provided legs have different symmetries.')
     if any(leg.s != legs[0].s for leg in legs):
-        raise YastError('Provided legs have different signatures.')
+        raise YastnError('Provided legs have different signatures.')
     if any(leg.legs != legs[0].legs for leg in legs):
         t, D, hf = _pure_hfs_union(legs[0].sym, [leg.t for leg in legs] ,[leg.legs[0] for leg in legs])
     else:
@@ -346,7 +346,7 @@ def _leg_union(*legs):
         for leg in legs:
             for t, D in zip(leg.t, leg.D):
                 if t in tD and tD[t] != D:
-                    raise YastError('Legs have inconsistent dimensions.')
+                    raise YastnError('Legs have inconsistent dimensions.')
                 tD[t] = D
         t = tuple(sorted(tD.keys()))
         D = tuple(tD[x] for x in t)

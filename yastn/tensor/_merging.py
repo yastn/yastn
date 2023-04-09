@@ -6,7 +6,7 @@ from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
 from ._auxliary import _flatten, _clear_axes, _ntree_to_mf, _mf_to_ntree, _unpack_legs
-from ._tests import YastError, _test_axes_all, _get_tD_legs
+from ._tests import YastnError, _test_axes_all, _get_tD_legs
 
 
 __all__ = ['fuse_legs', 'unfuse_legs', 'fuse_meta_to_hard']
@@ -222,7 +222,7 @@ def fuse_legs(a, axes, mode=None):
     tensor : Tensor
     """
     if a.isdiag:
-        raise YastError('Cannot fuse legs of a diagonal tensor.')
+        raise YastnError('Cannot fuse legs of a diagonal tensor.')
     if mode is None:
         mode = a.config.default_fusion
     if a.config.force_fusion is not None:
@@ -248,7 +248,7 @@ def fuse_legs(a, axes, mode=None):
     if mode == 'hard':
         c = fuse_meta_to_hard(a)
         return _fuse_legs_hard(c, axes, order)
-    raise YastError('mode not in (`meta`, `hard`). Mode can be specified in config file.')
+    raise YastnError('mode not in (`meta`, `hard`). Mode can be specified in config file.')
 
 
 def _fuse_legs_hard(a, axes, order):
@@ -375,7 +375,7 @@ def unfuse_legs(a, axes):
     yastn.Tensor
     """
     if a.isdiag:
-        raise YastError('Cannot unfuse legs of a diagonal tensor.')
+        raise YastnError('Cannot unfuse legs of a diagonal tensor.')
     if isinstance(axes, int):
         axes = (axes,)
     ni, mfs, axes_hf = 0, [], []
@@ -399,7 +399,7 @@ def unfuse_legs(a, axes):
             axes_hf.append(ni)
             mfs.append(a.mfs[mi])
         else: # c.hfs[ni].op == 's':
-            raise YastError('Cannot unfuse a leg obtained as a result of yastn.block()')
+            raise YastnError('Cannot unfuse a leg obtained as a result of yastn.block()')
         ni += dni
     if axes_hf:
         meta, struct, nlegs, hfs = _meta_unfuse_hard(a.config, a.struct, tuple(axes_hf), tuple(a.hfs))
@@ -782,8 +782,8 @@ def _intersect_hfs(config, ts, Ds, hfs):
         for t in set(ms1) & set(ms2):
             if ms1[t].size != ms2[t].size:
                 if len(tree) == 1:
-                    raise YastError('Bond dimensions do not match.')
-                raise YastError('Bond dimensions of fused legs do not match.')
+                    raise YastnError('Bond dimensions do not match.')
+                raise YastnError('Bond dimensions of fused legs do not match.')
         _mask_falsify_mismatches(ms1, ms2)
 
     if len(tree) == 1:
@@ -841,7 +841,7 @@ def _union_hfs(config, ts, Ds, hfs):
         msk1 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[0], Ds[0])}
         msk2 = {t: np.ones(D, dtype=bool) for t, D in zip(ts[1], Ds[1])}
         if any(msk1[t].size != msk2[t].size for t in set(msk1) & set(msk2)):
-            raise YastError('Bond dimensions do not match.')
+            raise YastnError('Bond dimensions do not match.')
         return msk1, msk2, hfu
 
     ind_native = [i for i, l in enumerate(tree[1:]) if l == 1]
@@ -850,7 +850,7 @@ def _union_hfs(config, ts, Ds, hfs):
         tD1 = dict(zip(hfs[0].t[i], hfs[0].D[i]))
         tD2 = dict(zip(hfs[1].t[i], hfs[1].D[i]))
         if any(tD1[t] != tD2[t] for t in set(tD1) & set(tD2)):
-            raise YastError('Bond dimensions of fused legs do not match.')
+            raise YastnError('Bond dimensions of fused legs do not match.')
         tD12 = {**tD1, **tD2}
         tu.append(tuple(sorted(tD12)))
         Du.append(tuple(tD12[t] for t in tu[-1]))
@@ -917,9 +917,9 @@ def _pure_hfs_union(sym, ts, hfs):
     op = list(hfs[0].op) # to be consumed during parsing of the tree
 
     if any(hfs[0].tree != hf.tree or hfs[0].op != hf.op for hf in hfs):
-        raise YastError("Inconsistent numbers of hard-fused legs or sub-fusions order.")
+        raise YastnError("Inconsistent numbers of hard-fused legs or sub-fusions order.")
     if any(hfs[0].s != hf.s for hf in hfs):
-        raise YastError("Inconsistent signatures of fused legs.")
+        raise YastnError("Inconsistent signatures of fused legs.")
     ind_native = [i for i, l in enumerate(tree[1:]) if l == 1]
 
     hfu, tu, Du = [], [], []
@@ -929,7 +929,7 @@ def _pure_hfs_union(sym, ts, hfs):
         for tD in tDs:
             alltD.update(tD)
         if any(alltD[t] != D for tD in tDs for t, D in tD.items()):
-            raise YastError('Bond dimensions of fused legs do not match.')
+            raise YastnError('Bond dimensions of fused legs do not match.')
         tu.append(tuple(sorted(alltD)))
         Du.append(tuple(alltD[t] for t in tu[-1]))
         hfu.append(_Fusion(s=(s[i + 1],)))  # len(s) == 1 + len(t)

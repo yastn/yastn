@@ -1,5 +1,5 @@
 from ..sym import sym_Z2, sym_U1xU1, sym_U1xU1xZ2
-from ..tensor import YastError, Tensor
+from ..tensor import YastnError, Tensor
 from ._meta_operators import meta_operators
 
 class SpinfulFermions(meta_operators):
@@ -29,7 +29,7 @@ class SpinfulFermions(meta_operators):
         In that case, reation and annihilation operators of the two species commute.
         """
         if sym not in ('Z2', 'U1xU1', 'U1xU1xZ2'):
-            raise YastError("For SpinfulFermions sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').")
+            raise YastnError("For SpinfulFermions sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').")
         kwargs['fermionic'] = (False, False, True) if sym == 'U1xU1xZ2' else True
         import_sym = {'Z2': sym_Z2, 'U1xU1': sym_U1xU1, 'U1xU1xZ2': sym_U1xU1xZ2}
         kwargs['sym'] = import_sym[sym]
@@ -85,7 +85,7 @@ class SpinfulFermions(meta_operators):
             cp.set_block(ts=((0, 1), (0, 0)), Ds=(1, 1), val=1)
             cp.set_block(ts=((1, 1), (1, 0)), Ds=(1, 1), val=1)
         else:
-            raise YastError("spin shoul be equal 'u' or 'd'.")
+            raise YastnError("spin shoul be equal 'u' or 'd'.")
         return cp
 
     def c(self, spin='u'):
@@ -115,7 +115,7 @@ class SpinfulFermions(meta_operators):
             c.set_block(ts=((0, 0), (0, 1)), Ds=(1, 1), val=1)
             c.set_block(ts=((1, 0), (1, 1)), Ds=(1, 1), val=1)
         else:
-            raise YastError("spin shoul be equal 'u' or 'd'.")
+            raise YastnError("spin shoul be equal 'u' or 'd'.")
         return c
 
     def to_dict(self):

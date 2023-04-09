@@ -1,6 +1,6 @@
 """ Building Krylov space. """
 import numpy as np
-from ..tensor import YastError
+from ..tensor import YastnError
 
 __all__ = ['expmv', 'eigs']
 
@@ -65,7 +65,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     normv = v.norm()
     if normv == 0:
         if normalize:
-            raise YastError('expmv got zero vector that cannot be normalized')
+            raise YastnError('expmv got zero vector that cannot be normalized')
         t_out = 0
     else:
         v = v / normv
@@ -188,7 +188,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
     backend = v0.config.backend
     normv = v0.norm()
     if normv == 0:
-        raise YastError('Initial vector v0 of eigs should be nonzero.')
+        raise YastnError('Initial vector v0 of eigs should be nonzero.')
 
 
     V = [v0 / normv]

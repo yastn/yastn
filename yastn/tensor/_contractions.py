@@ -3,7 +3,7 @@ from functools import lru_cache
 from itertools import groupby
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
-from ._tests import YastError, _test_can_be_combined, _test_axes_match
+from ._tests import YastnError, _test_can_be_combined, _test_axes_match
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
 
@@ -87,7 +87,7 @@ def tensordot(a, b, axes, conj=(0, 0)):
         data = a.config.backend.dot_with_mask(data_a, data_b, meta_dot, Dsize, msk_a, msk_b)
     else:
         if ls_ac != ls_bc:
-            raise YastError('Bond dimensions do not match.')
+            raise YastnError('Bond dimensions do not match.')
         data = a.config.backend.dot(data_a, data_b, meta_dot, Dsize)
 
     meta_unmerge, struct_c = _meta_unmerge_matrix(a.config, struct_c, ls_l, ls_r, s_c)
@@ -157,7 +157,7 @@ def _tensordot_diag(a, b, in_b, destination):
     if len(in_b) == 2:
         c = a.broadcast(b, axes=in_b[0])
         return c.trace(axes=in_b)
-    raise YastError('Outer product with diagonal tensor not supported. Use yastn.diag() first.')  # len(in_a) == 0
+    raise YastnError('Outer product with diagonal tensor not supported. Use yastn.diag() first.')  # len(in_a) == 0
 
 
 def broadcast(a, *args, axes=0):
@@ -183,13 +183,13 @@ def broadcast(a, *args, axes=0):
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
     if len(axes) != len(args):
-        raise YastError("There should be exactly one axis for each tensor to be projected.")
+        raise YastnError("There should be exactly one axis for each tensor to be projected.")
     results = []
     for b, ax in zip(args, axes):
         _test_can_be_combined(a, b)
         ax = _broadcast_input(ax, b.mfs, a.isdiag)
         if b.hfs[ax].tree != (1,):
-            raise YastError('Second tensor`s leg specified in axes cannot be fused.')
+            raise YastnError('Second tensor`s leg specified in axes cannot be fused.')
 
         meta, struct = _meta_broadcast(b.struct, a.struct, ax)
 
@@ -206,10 +206,10 @@ def broadcast(a, *args, axes=0):
 
 def _broadcast_input(axis, mf, isdiag):
     if not isdiag:
-        raise YastError('First tensor should be diagonal.')
+        raise YastnError('First tensor should be diagonal.')
     axis = axis % len(mf)
     if mf[axis] != (1,):
-        raise YastError('Second tensor`s leg specified by axis cannot be fused.')
+        raise YastnError('Second tensor`s leg specified by axis cannot be fused.')
     axis = sum(mf[ii][0] for ii in range(axis))  # unpack
     return axis
 
@@ -226,7 +226,7 @@ def _meta_broadcast(b_struct, a_struct, axis):
                  zip(b_struct.t, b_struct.sl, b_struct.D, b_struct.Dp, ind_tb) if ib in ind_ta)
 
     if any(Db[axis] != sla[1] - sla[0] for _, _, Db, _, sla in meta):
-        raise YastError("Bond dimensions do not match.")
+        raise YastnError("Bond dimensions do not match.")
 
     if len(meta) < len(b_struct.t):
         c_t = tuple(mt[0] for mt in meta)
@@ -265,13 +265,13 @@ def apply_mask(a, *args, axes=0):
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
     if len(axes) != len(args):
-        raise YastError("There should be exactly one axis for each tensor to be projected.")
+        raise YastnError("There should be exactly one axis for each tensor to be projected.")
     results = []
     for b, ax in zip(args, axes):
         _test_can_be_combined(a, b)
         ax = _broadcast_input(ax, b.mfs, a.isdiag)
         if b.hfs[ax].tree != (1,):
-            raise YastError('Second tensor`s leg specified by axes cannot be fused.')
+            raise YastnError('Second tensor`s leg specified by axes cannot be fused.')
 
         Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl)]) for sl in a.struct.sl)
         meta, struct = _meta_mask(b.struct, b.isdiag, a.struct, Dbnew, ax)
@@ -298,7 +298,7 @@ def _meta_mask(a_struct, a_isdiag, b_struct, Dbnew, axis):
                 zip(a_struct.t, a_struct.sl, a_struct.D, ind_ta) if ia in ind_tb)
 
     if any(Da[axis] != slb[1] - slb[0] for _, _, Da, slb, _ in meta):
-        raise YastError("Bond dimensions do not match.")
+        raise YastnError("Bond dimensions do not match.")
 
     # mt = (ta, sla, Da, slb, Db)
     c_t = tuple(mt[0] for mt in meta)
@@ -368,7 +368,7 @@ def vdot(a, b, conj=(1, 0)):
         Adata = Adata[msk_a]
         Bdata = Bdata[msk_b]
     if struct_a.D != struct_b.D:
-        raise YastError('Bond dimensions do not match.')
+        raise YastnError('Bond dimensions do not match.')
 
     c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
     c_n = a.config.sym.fuse(c_n, (1, 1), 1)
@@ -392,7 +392,7 @@ def trace(a, axes=(0, 1)):
     """
     lin1, lin2 = _clear_axes(*axes)  # contracted legs
     if len(set(lin1) & set(lin2)) > 0:
-        raise YastError('The same axis in axes[0] and axes[1].')
+        raise YastnError('The same axis in axes[0] and axes[1].')
     needs_mask, (in1, in2) = _test_axes_match(a, a, sgn=-1, axes=(lin1, lin2))
 
     if len(in1) == 0:
@@ -405,7 +405,7 @@ def trace(a, axes=(0, 1)):
     hfs = tuple(a.hfs[ii] for ii in out)
 
     if a.isdiag:
-        # if needs_mask: raise YastError('Should not have happend')
+        # if needs_mask: raise YastnError('Should not have happend')
         struct = a.struct._replace(s=(), diag=False, t=((),), D=((),), Dp=(1,), sl=((0, 1),))
         data = a.config.backend.sum_elements(a._data)
         return a._replace(struct=struct, mfs=mfs, hfs=hfs, isdiag=False, data=data)
@@ -417,7 +417,7 @@ def trace(a, axes=(0, 1)):
         data = a.config.backend.trace_with_mask(a._data, order, meta, Dsize, tcon, msk12)
     else:
         if D1 != D2:
-            raise YastError('Bond dimensions do not match.')
+            raise YastnError('Bond dimensions do not match.')
         data = a.config.backend.trace(a._data, order, meta, Dsize)
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
 
@@ -511,10 +511,10 @@ def _meta_swap_gate(t, n, mf, ndim, axes, fss):
     tp = np.zeros(len(t), dtype=int)
 
     if len(axes) % 2 == 1:
-        raise YastError('Odd number of elements in axes. Elements of axes should come in pairs.')
+        raise YastnError('Odd number of elements in axes. Elements of axes should come in pairs.')
     for l1, l2 in zip(*(iaxes, iaxes)):
         if len(set(l1) & set(l2)) > 0:
-            raise YastError('Cannot swap the same index.')
+            raise YastnError('Cannot swap the same index.')
         t1 = np.sum(tset[:, l1, :], axis=1) % 2
         t2 = np.sum(tset[:, l2, :], axis=1) % 2
         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)
@@ -559,7 +559,7 @@ def einsum(subscripts, *operands, order='Alphabetic'):
     yastn.Tensor
     """
     if not isinstance(subscripts, str):
-        raise YastError('The first argument should be a string.')
+        raise YastnError('The first argument should be a string.')
 
     subscripts = subscripts.replace(' ', '')
 
@@ -569,13 +569,13 @@ def einsum(subscripts, *operands, order='Alphabetic'):
     elif len(tmp) == 2:
         sin, sout = tmp
     else:
-        raise YastError('Subscript should have at most one separator ->')
+        raise YastnError('Subscript should have at most one separator ->')
 
     alphabet1 = 'ABCDEFGHIJKLMNOPQRSTUWXYZabcdefghijklmnopqrstuvwxyz'
     alphabet2 = alphabet1 + ',*'
     if any(v not in alphabet1 for v in sout) or \
        any(v not in alphabet2 for v in sin):
-        raise YastError('Only alphabetic characters can be used to index legs.')
+        raise YastnError('Only alphabetic characters can be used to index legs.')
 
     conjs = [1 if '*' in ss else 0 for ss in sin.split(',')]
     sin = sin.replace('*', '')
@@ -585,7 +585,7 @@ def einsum(subscripts, *operands, order='Alphabetic'):
             if sin.count(v) == 1:
                 sout += v
     elif len(sout) != len(set(sout)):
-        raise YastError('Repeated index after ->')
+        raise YastnError('Repeated index after ->')
 
     if order in ('Alphabetic', 'alphabetic'):
         order = []
@@ -600,7 +600,7 @@ def einsum(subscripts, *operands, order='Alphabetic'):
     d[','] = 0
 
     if any(v not in d for v in sin):
-        raise YastError('order does not cover all contracted indices')
+        raise YastnError('order does not cover all contracted indices')
     inds = [tuple(d[v] for v in ss) for ss in sin.split(',')]
     ts = list(operands)
     return ncon(ts, inds, conjs)
@@ -647,10 +647,10 @@ def ncon(ts, inds, conjs=None):
     yastn.Tensor
     """
     if len(ts) != len(inds):
-        raise YastError('Number of tensors and indices do not match.')
+        raise YastnError('Number of tensors and indices do not match.')
     for tensor, ind in zip(ts, inds):
         if tensor.ndim != len(ind):
-            raise YastError('Number of legs of one of the tensors do not match provided indices.')
+            raise YastnError('Number of legs of one of the tensors do not match provided indices.')
 
     inds = tuple(_clear_axes(*inds))
     if conjs is not None:
@@ -675,7 +675,7 @@ def ncon(ts, inds, conjs=None):
 def _meta_ncon(inds, conjs):
     """ turning information in inds and conjs into list of contraction commands """
     if not all(-256 < x < 256 for x in _flatten(inds)):
-        raise YastError('ncon requires indices to be between -256 and 256.')
+        raise YastnError('ncon requires indices to be between -256 and 256.')
 
     edges = [[order, leg, ten] if order > 0 else [-order + 1024, leg, ten]
              for ten, el in enumerate(inds) for leg, order in enumerate(el)]
@@ -696,7 +696,7 @@ def _consume_edges(edges, conjs):
     while order1 != 512:  # tensordot two tensors, or trace one tensor; 512 is cutoff marking end of truncation
         order2, leg2, ten2 = edges.pop()
         if order1 != order2:
-            raise YastError('Indices of legs to contract do not match.')
+            raise YastnError('Indices of legs to contract do not match.')
         t1, t2, leg1, leg2 = (ten1, ten2, leg1, leg2) if ten1 < ten2 else (ten2, ten1, leg2, leg1)
         ax1.append(leg1)
         ax2.append(leg2)
@@ -704,7 +704,7 @@ def _consume_edges(edges, conjs):
             # execute contraction
             if t1 == t2:  # trace
                 if len(meta_dot) > 0:
-                    raise YastError("Likely inefficient order of contractions. Do all traces before tensordot. " +
+                    raise YastnError("Likely inefficient order of contractions. Do all traces before tensordot. " +
                         "Call all axes connecting two tensors one after another.")
                 meta_tr.append((t1, (tuple(ax1), tuple(ax2))))
                 ax12 = ax1 + ax2
@@ -735,7 +735,7 @@ def _consume_edges(edges, conjs):
                 edge[1:] = edge[1] + lt1, t1
     unique_out = tuple(ed[0] for ed in edges)
     if len(unique_out) != len(set(unique_out)):
-        raise YastError("Repeated non-positive (outgoing) index is ambiguous.")
+        raise YastnError("Repeated non-positive (outgoing) index is ambiguous.")
     axes = tuple(ed[1] for ed in sorted(edges))  # final order for transpose
     if axes == tuple(range(len(axes))):
         axes = None
@@ -753,10 +753,10 @@ def _consume_edges(edges, conjs):
     #         data = a.config.backend.dot_nomerge_masks(a._data, b._data, conj, oA, oB, meta, Dsize, tcon, ma, mb)
     #     else:
     #         if any(mt[3][1] != mt[6][0] for mt in meta):
-    #             raise YastError('Bond dimensions do not match.')
+    #             raise YastnError('Bond dimensions do not match.')
     #         data = a.config.backend.dot_nomerge(a._data, b._data, conj, oA, oB, meta, Dsize)
     #     return a._replace(mfs=c_mfs, hfs=c_hfs, struct=c_struct, data=data)
-    # raise YastError("Unknown policy for tensordot. policy should be in ('hybrid', 'direct', 'merge').")
+    # raise YastnError("Unknown policy for tensordot. policy should be in ('hybrid', 'direct', 'merge').")
 
     # @lru_cache(maxsize=1024)
     # def _meta_tensordot_nomerge(a_struct, b_struct, nout_a, nin_a, nin_b, nout_b):

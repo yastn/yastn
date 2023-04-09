@@ -1,7 +1,7 @@
 """ Various variants of the DMRG algorithm for mps."""
 from typing import NamedTuple
 import logging
-from ... import eigs, YastError
+from ... import eigs, YastnError
 from ._env import Env3
 
 
@@ -106,16 +106,16 @@ def _dmrg_(psi, H, project, method,
 
     if Schmidt_tol is not None:
         if not Schmidt_tol > 0:
-            raise YastError('DMRG: Schmidt_tol has to be positive or None.')
+            raise YastnError('DMRG: Schmidt_tol has to be positive or None.')
         Schmidt_old = psi.get_Schmidt_values()
     max_dS, max_dw = None, None
     Schmidt = None if Schmidt_tol is None else {}
 
     if energy_tol is not None and not energy_tol > 0:
-        raise YastError('DMRG: energy_tol has to be positive or None.')
+        raise YastnError('DMRG: energy_tol has to be positive or None.')
 
     if method not in ('1site', '2site'):
-        raise YastError('DMRG: dmrg method %s not recognized.' % method)
+        raise YastnError('DMRG: dmrg method %s not recognized.' % method)
 
     for sweep in range(1, max_sweeps + 1):
         if method == '1site':

@@ -326,18 +326,18 @@ def test_svd_exceptions():
             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
     a = yastn.rand(config=config_U1, legs=legs)
     
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = yastn.svd(a, axes=((0, 1), 2), policy='wrong_policy')
         # svd policy should be one of (`lowrank`, `fullrank`)
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = yastn.svd(a, axes=((0, 1), 2), policy='lowrank')
         # lowrank policy in svd requires passing argument D_block
     
     _, S, _ = yastn.svd(a, axes=((0, 1), 2))
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = yastn.truncation_mask(1j * S, tol=1e-10)
         # Truncation_mask requires S to be real and diagonal
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = yastn.truncation_mask_multiplets(1j * S, tol=1e-10)
         # Truncation_mask requires S to be real and diagonal
 

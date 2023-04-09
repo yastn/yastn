@@ -73,34 +73,34 @@ def test_block_exceptions():
     # MPO tensor for chemical potential
     H = yastn.block({(0, 0): II,  (1, 0): nn, (1, 1): II}, common_legs=(1, 2))
 
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = yastn.block({(0, ): II,  (1, 0): nn, (1, 1): II}, common_legs=(1, 2))
         # Wrong number of coordinates encoded in tensors.keys()
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         nnc = yastn.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 1, 1, 1), s=(-1, -1, 1, 1))
         _ = yastn.block({(0, 0): II,  (1, 0): nnc, (1, 1): II}, common_legs=(1, 2))
         # Signatures of blocked tensors are inconsistent.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         nnn = yastn.ones(config=config_U1, t=(0, 1, 1, 1), D=(1, 1, 1, 1), s=(1, 1, -1, -1), n=1)
         _ = yastn.block({(0, 0): II,  (1, 0): nnn, (1, 1): II}, common_legs=(1, 2))
         # Tensor charges of blocked tensors are inconsistent.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         e1 = yastn.eye(config=config_U1, t=[(0, 1), (0, 1)], D=[(2, 2), (2, 2)])
         e2 = yastn.eye(config=config_U1, t=[(0, 2), (0, 2)], D=[(2, 2), (2, 2)])
         _ = yastn.block({(0, 0): e1, (1, 1): e2})
         # Block does not support diagonal tensors. Use .diag() first.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         fII = II.fuse_legs(axes=(0, (1, 2, 3)), mode='meta')
         fnn = nn.fuse_legs(axes=(0, 1, (2, 3)), mode='meta')
         fnn = fnn.fuse_legs(axes=(0, (1, 2)), mode='meta')
         # block is hard-fusing meta-fused legs first.
         _ = yastn.block({(0, 0): fII,  (1, 0): fnn, (1, 1): fII}, common_legs=())
         # Inconsistent numbers of hard-fused legs or sub-fusions order.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         nnn = yastn.ones(config=config_U1, t=(0, 1, 1, 0), D=(1, 2, 1, 1), s=(1, 1, -1, -1))
         _ = yastn.block({(0, 0): II,  (1, 0): nnn, (1, 1): II}, common_legs=(1, 2))
         # Legs have inconsistent dimensions.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         H.unfuse_legs(axes=0)
         # cannot unfuse a leg obtained as a result of yastn.block()
 
