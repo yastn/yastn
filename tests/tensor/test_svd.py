@@ -158,11 +158,6 @@ def test_svd_truncate():
     assert S1.get_blocks_charge() == ((-1, -1), (0, 0), (1, 1))
     assert S1.s[0] == -1 and U1.n == (0,) and V1.n == a.n and S1.get_shape() == (12, 12)
 
-    try:
-        _, S2, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts, policy='lowrank')
-        assert S2.get_shape() == (12, 12)
-    except NameError:
-        pass
 
     opts = {'tol': 0.02, 'D_block': 5, 'D_total': 100}
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=1, **opts)
@@ -176,6 +171,34 @@ def test_svd_truncate():
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
     assert S1.get_shape() == (4, 4)
 
+
+    opts = {'D_total': 0}
+    _, S2, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=False, sU=-1, **opts)
+    assert S2.norm() < tol
+
+ 
+def test_svd_truncate_lowrank():
+    pytest.importorskip("fbpca")
+
+    legs = [yastn.Leg(config_U1, s=1, t=(0, 1), D=(5, 6)),
+            yastn.Leg(config_U1, s=1, t=(-1, 0), D=(5, 6)),
+            yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
+            yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
+    a = yastn.rand(config=config_U1, n=1, legs=legs)
+
+    U, S, V = yastn.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
+
+    # fixing singular values for testing
+    S.set_block(ts=(-2, -2), Ds=4, val=[2**(-ii - 6) for ii in range(4)])
+    S.set_block(ts=(-1, -1), Ds=12, val=[2**(-ii - 2) for ii in range(12)])
+    S.set_block(ts=(0, 0), Ds=25, val=[2**(-ii - 1) for ii in range(25)])
+
+    a = yastn.ncon([U, S, V], [(-1, -2, 1), (1, 2), (2, -3, -4)])
+
+    opts = {'tol': 0.01, 'D_block': 100, 'D_total': 12}
+    _, S2, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts, policy='lowrank')
+    assert S2.get_shape() == (12, 12)
+
     opts = {'D_block': {(0,): 2, (-1,): 0}, 'policy': 'lowrank'}
     U1, S1, V1 = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=True, sU=-1, **opts)
     assert S1.get_shape() == (2, 2)
@@ -187,10 +210,6 @@ def test_svd_truncate():
     assert S1.get_shape() == (2, 2)
     a2 = U2 @ S2 @ V2
     assert yastn.norm(a1 - a2) < tol
-
-    opts = {'D_total': 0}
-    _, S2, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=False, sU=-1, **opts)
-    assert S2.norm() < tol
 
 
 def test_svd_multiplets():
