@@ -1,5 +1,5 @@
 from ..sym import sym_Z2, sym_U1
-from ..tensor import YastError, Tensor
+from ..tensor import YastnError, Tensor
 from ._meta_operators import meta_operators
 
 class SpinlessFermions(meta_operators):
@@ -19,7 +19,7 @@ class SpinlessFermions(meta_operators):
             Passed to :meth:`yastn.make_config` to change backend, default_device or other config parameters.
         """
         if sym not in ('Z2', 'U1'):
-            raise YastError("For SpinlessFermions sym should be in ('Z2', 'U1').")
+            raise YastnError("For SpinlessFermions sym should be in ('Z2', 'U1').")
         kwargs['fermionic'] = True
         import_sym = {'Z2': sym_Z2, 'U1': sym_U1}
         kwargs['sym'] = import_sym[sym]

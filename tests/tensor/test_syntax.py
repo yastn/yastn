@@ -79,7 +79,7 @@ class TestSyntaxTensorCreation(unittest.TestCase):
         # Attempting to create new block with different dimension for the same
         # sector 2 on 3rd leg throws an error
         #
-        with self.assertRaises(yastn.YastError):
+        with self.assertRaises(yastn.YastnError):
             d.set_block(ts=(2, 1, 2, 1), Ds=(3, 3, 10, 2), val='rand')
 
 

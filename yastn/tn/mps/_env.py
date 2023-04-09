@@ -1,10 +1,5 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
-from ... import tensor, initialize, YastError, expmv
-
-
-def norm(ket):
-    r""" Calculating norm of |ket>, i.e. <ket|ket> ** 0.5. """
-    return abs(measure_overlap(ket, ket)) ** 0.5
+from ... import tensor, initialize, YastnError, expmv
 
 
 def vdot(*args):
@@ -89,9 +84,9 @@ class _EnvParent:
         self.reset_temp()
 
         if self.bra.nr_phys != self.ket.nr_phys:
-            raise YastError('MPS: bra and ket should have the same number of physical legs.')
+            raise YastnError('MPS: bra and ket should have the same number of physical legs.')
         if self.bra.N != self.ket.N:
-            raise YastError('MPS: bra and ket should have the same number of sites.')
+            raise YastnError('MPS: bra and ket should have the same number of sites.')
 
         config = self.ket[0].config
         for ii in range(len(self.ort)):
@@ -268,7 +263,7 @@ class Env3(_EnvParent):
         self.nr_layers = 3
         self.on_aux = on_aux
         if self.op.N != self.N:
-            raise YastError('MPS: op should should have the same number of sites as ket.')
+            raise YastnError('MPS: op should should have the same number of sites as ket.')
 
         # left boundary
         config = self.ket[0].config
@@ -299,6 +294,7 @@ class Env3(_EnvParent):
             Heff0 @ C
         """
         bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
+        C = self.op.factor * C
         return tensor.ncon([self.F[bd], C, self.F[ibd]], ((-0, 2, 1), (1, 3), (3, 2, -1)))
 
 
@@ -337,7 +333,7 @@ class Env3(_EnvParent):
             tmp = self.op[n]._attach_01(tmp)
             tmp = tmp.unfuse_legs(axes=0)
             tmp = tensor.ncon([tmp, self.F[(nr, n)]], ((-1, 1, -0, 2, -3), (1, 2, -2)))
-        return self._project_ort(tmp)
+        return self.op.factor * self._project_ort(tmp)
 
 
     def Heff2(self, AA, bd):
@@ -392,14 +388,13 @@ class Env3(_EnvParent):
             tmp = tmp.unfuse_legs(axes=0)
             tmp = tensor.ncon([tmp, self.F[(nr, n2)]], ((-1, -2, 1, 2, -0, -4), (1, 2, -3)))
             tmp = tmp.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3, 4, 5))
-        return self._project_ort(tmp)
+        return self.op.factor * self._project_ort(tmp)
 
     def update_A(self, n, du, opts, normalize=True):
         """ Updates env.ket[n] by exp(du Heff1). """
         if n in self._temp['expmv_ncv']:
             opts['ncv'] = self._temp['expmv_ncv'][n]
         f = lambda x: self.Heff1(x, n)
-        du = du * self.op.factor
         self.ket[n], info = expmv(f, self.ket[n], du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][n] = info['ncv']
 
@@ -410,7 +405,6 @@ class Env3(_EnvParent):
             if bd in self._temp['expmv_ncv']:
                 opts['ncv'] = self._temp['expmv_ncv'][bd]
             f = lambda x: self.Heff0(x, bd)
-            du = du * self.op.factor
             self.ket.A[bd], info = expmv(f, self.ket[bd], du, **opts, normalize=normalize, return_info=True)
             self._temp['expmv_ncv'][bd] = info['ncv']
 
@@ -421,7 +415,6 @@ class Env3(_EnvParent):
             opts['ncv'] = self._temp['expmv_ncv'][ibd]
         AA = self.ket.merge_two_sites(bd)
         f = lambda v: self.Heff2(v, bd)
-        du = du * self.op.factor
         AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][ibd] = info['ncv']
         self.ket.unmerge_two_sites(AA, bd, opts_svd)
@@ -440,7 +433,7 @@ class Env3(_EnvParent):
         shapeL = AL.get_shape()
         shapeR = AR.get_shape()
         if shapeL[0] == shapeL[1] or shapeR[0] == shapeR[1] or \
-           ('D_total' in opts_svd and shapeL[0] >= opts_svd['D_total']):
+           ('D_total' in opts_svd and shapeL[1] >= opts_svd['D_total']):
             return False  # maximal bond dimension
         if 'tol' in opts_svd:
             _, R0 = tensor.qr(AL, axes=(0, 1), sQ=1)

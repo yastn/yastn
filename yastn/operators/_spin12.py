@@ -1,5 +1,5 @@
 from ..sym import sym_none, sym_Z2, sym_U1
-from ..tensor import YastError, Tensor
+from ..tensor import YastnError, Tensor
 from ._meta_operators import meta_operators
 
 class Spin12(meta_operators):
@@ -33,7 +33,7 @@ class Spin12(meta_operators):
         since by default the charges are ordered in the increasing order.
         """
         if sym not in ('dense', 'Z2', 'U1'):
-            raise YastError("For Spin12 sym should be in ('dense', 'Z2', 'U1').")
+            raise YastnError("For Spin12 sym should be in ('dense', 'Z2', 'U1').")
         kwargs['fermionic'] = False
         import_sym = {'dense': sym_none, 'Z2': sym_Z2, 'U1': sym_U1}
         kwargs['sym'] = import_sym[sym]
@@ -66,7 +66,7 @@ class Spin12(meta_operators):
             x.set_block(ts=(1, 0), Ds=(1, 1), val=1)
             x.set_block(ts=(0, 1), Ds=(1, 1), val=1)
         if self._sym == 'U1':
-            raise YastError('Cannot define sigma_x operator for U(1) symmetry.')
+            raise YastnError('Cannot define sigma_x operator for U(1) symmetry.')
         return x
 
     def y(self):
@@ -79,7 +79,7 @@ class Spin12(meta_operators):
             y.set_block(ts=(0, 1), Ds=(1, 1), val=-1j)
             y.set_block(ts=(1, 0), Ds=(1, 1), val=1j)
         if self._sym == 'U1':
-            raise YastError('Cannot define sigma_y operator for U(1) symmetry.')
+            raise YastnError('Cannot define sigma_y operator for U(1) symmetry.')
         return y
 
     def z(self):

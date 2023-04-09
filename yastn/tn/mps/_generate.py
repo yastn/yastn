@@ -1,6 +1,6 @@
 import numpy as np
 from typing import NamedTuple
-from ... import ones, rand, ncon, Leg, random_leg, YastError
+from ... import ones, rand, ncon, Leg, random_leg, YastnError
 from ...operators import Qdit
 from ._mps import Mpo, Mps, add
 from ._latex2term import latex2term, GeneratorError
@@ -61,7 +61,7 @@ def generate_single_mpo(I, term):   # this can be private
     return single_mpo
 
 
-def generate_mpo(I, terms, normalize=False, opts=None, packet=50):  # can use better algorithm to compress
+def generate_mpo(I, terms, opts=None, packet=50):  # can use better algorithm to compress
     r"""
     Generate MPO provided a list of :class:`Hterm`-s and identity MPO `I`.
 
@@ -75,8 +75,6 @@ def generate_mpo(I, terms, normalize=False, opts=None, packet=50):  # can use be
         product operators making up the MPO
     I: yastn.Tensor
         on-site identity operator
-    normalize: bool
-        True if the result should be normalized
     opts: dict
         options for truncation of the result
     packet: int
@@ -86,13 +84,15 @@ def generate_mpo(I, terms, normalize=False, opts=None, packet=50):  # can use be
     while ip < Nterms:
         H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
         M = add(*H1s)
-        M.truncate_(to='first', opts_svd=opts, normalize=normalize)
+        M.canonize_(to='last', normalize=False)
+        M.truncate_(to='first', opts_svd=opts, normalize=False)
         ip += packet
         if not M_tot:
             M_tot = M.copy()
         else:
             M_tot = M_tot + M
-            M_tot.truncate_(to='first', opts_svd=opts, normalize=normalize)
+            M_tot.canonize_(to='last', normalize=False)
+            M_tot.truncate_(to='first', opts_svd=opts, normalize=False)
     return M_tot
 
 def generate_single_mps(term, N):  # obsolate - DELETE  (not docummented)
@@ -203,12 +203,12 @@ class Generator:
         self._ops = operators
         self._map = {i: i for i in range(N)} if map is None else map
         if len(self._map) != N or sorted(self._map.values()) != list(range(N)):
-            raise YastError("MPS: Map is inconsistent with mps of N sites.")
+            raise YastnError("MPS: Map is inconsistent with mps of N sites.")
         self._Is = {k: 'I' for k in self._map.keys()} if Is is None else Is
         if self._Is.keys() != self._map.keys():
-            raise YastError("MPS: Is is inconsistent with map.")
+            raise YastnError("MPS: Is is inconsistent with map.")
         if not all(hasattr(self._ops, v) and callable(getattr(self._ops, v)) for v in self._Is.values()):
-            raise YastError("MPS: operators do not contain identity specified in Is.")
+            raise YastnError("MPS: operators do not contain identity specified in Is.")
 
         self._I = Mpo(self.N)
         for label, site in self._map.items():
@@ -279,7 +279,7 @@ class Generator:
             lr = psi.A[site].get_legs(axes=0).conj()
         if sum(lr.D) == 1:
             return psi
-        raise YastError("MPS: Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization. ")
+        raise YastnError("MPS: Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization. ")
 
     def random_mpo(self, D_total=8, sigma=1, dtype='float64'):
         r"""
@@ -309,7 +309,7 @@ class Generator:
             lr = psi.A[site].get_legs(axes=0).conj()
         if sum(lr.D) == 1:
             return psi
-        raise YastError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
+        raise YastnError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
 
     def mps_from_latex(self, psi_str, vectors=None, parameters=None):
         r"""
@@ -368,7 +368,7 @@ class Generator:
         c3 = self._term2Hterm(templete, vectors, parameters)
         return generate_mps(c3, self.N)
 
-    def mpo_from_latex(self, H_str, parameters=None):   
+    def mpo_from_latex(self, H_str, parameters=None, opts=None):
         r"""
         Convert latex-like string to yastn.tn.mps MPO.
 
@@ -389,7 +389,9 @@ class Generator:
         parameters = {**self.parameters, **parameters}
         c2 = latex2term(H_str, parameters)
         c3 = self._term2Hterm(c2, self._ops.to_dict(), parameters)
-        return generate_mpo(self._I, c3)
+        if opts is None:
+            opts={'tol': 5e-16}
+        return generate_mpo(self._I, c3, opts)
     
     def mpo_from_templete(self, templete, parameters=None):   # remove from docs (DELETE)
         r"""
@@ -441,7 +443,7 @@ class Generator:
                     amplitude *= obj_number[element] if mapindex is None else obj_number[element][mapindex]
                 elif element in obj_yast:
                     # is always a single index for each site
-                    mapindex = self._map[indicies[0]] if len(indicies) == 1 else YastError("Operator has to have single index as defined by self._map")
+                    mapindex = self._map[indicies[0]] if len(indicies) == 1 else YastnError("Operator has to have single index as defined by self._map")
                     positions.append(mapindex) 
                     operators.append(obj_yast[element](mapindex))
                 else:

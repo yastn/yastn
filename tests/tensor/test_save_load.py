@@ -97,16 +97,16 @@ def test_dict():
 
 def test_load_exceptions():
     """ handling exceptions """
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = yastn.load_from_dict(config=config_U1)  # Dictionary d is required
 
     leg = yastn.Leg(config_Z2, s=1, t=(0, 1), D=(2, 3))
     a = yastn.randC(config=config_Z2, n=1, legs=[leg, leg, leg.conj()])
     check_to_numpy(a, config_Z2)  # OK
 
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         check_to_numpy(a, config_U1)  # Symmetry rule in config do not match loaded one.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         check_to_numpy(a, config_Z2_fermionic)  # Fermionic statistics in config do not match loaded one.
 
 

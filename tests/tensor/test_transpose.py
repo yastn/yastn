@@ -111,9 +111,9 @@ def test_transpose_exceptions():
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7)])
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = a.transpose(axes=(0, 1, 3, 5))  # Provided axes do not match tensor ndim.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = a.transpose(axes=(0, 1, 1, 2, 2, 3))  # Provided axes do not match tensor ndim.
 
 

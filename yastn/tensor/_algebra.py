@@ -1,6 +1,6 @@
 """ Linear operations and operations on a single yastn tensor. """
 from ._merging import _masks_for_add
-from ._tests import YastError, _test_can_be_combined, _get_tD_legs, _test_axes_match
+from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _test_axes_match
 
 __all__ = ['apxb', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not']
 
@@ -59,9 +59,9 @@ def apxb(a, b, x=1):
 def _addition_meta(a, b):
     """ meta-information for backend and new tensor charges and dimensions. """
     if a.struct.n != b.struct.n:
-        raise YastError('Tensor charges do not match.')
+        raise YastnError('Tensor charges do not match.')
     if a.isdiag != b.isdiag:
-        raise YastError('Cannot add diagonal tensor to non-diagonal one.')
+        raise YastnError('Cannot add diagonal tensor to non-diagonal one.')
 
     needs_mask, _ = _test_axes_match(a, b, sgn=1)
     if needs_mask:
@@ -90,7 +90,7 @@ def _addition_meta(a, b):
         tb, Db, Dpb, bsl = struct_b.t[ib], struct_b.D[ib], struct_b.Dp[ib], struct_b.sl[ib]
         if ta == tb:
             if Da != Db and not a.isdiag:
-                raise YastError('Bond dimensions do not match.')
+                raise YastnError('Bond dimensions do not match.')
             metaA.append(((low, low + Dpa), asl))
             metaB.append(((low, low + Dpb), bsl))
             Dp = max(Dpa, Dpb)
@@ -137,7 +137,7 @@ def _addition_meta(a, b):
 # def _addition_meta(a, b):
 #     """ meta-information for backend and new tensor charges and dimensions. """
 #     if a.struct.n != b.struct.n:
-#         raise YastError('Tensor charges do not match.')
+#         raise YastnError('Tensor charges do not match.')
 #     needs_mask, _ = _test_axes_match(a, b, sgn=1)
 #     if needs_mask:
 #         msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hfs, b.struct, b.hfs)
@@ -153,7 +153,7 @@ def _addition_meta(a, b):
 
 #     if struct_a.t == struct_b.t:
 #         if struct_a != struct_b:
-#             raise YastError('Bond dimensions do not match.')
+#             raise YastnError('Bond dimensions do not match.')
 #         c_struct = struct_a
 #         Dsize = c_struct.sl[-1][1] if len(c_struct.sl) > 0 else 0
 #         meta = (((0, Dsize), (0, Dsize), (0, Dsize), 'AB'),)
@@ -166,7 +166,7 @@ def _addition_meta(a, b):
 #         tb, Db, Dpb, bsl = struct_b.t[ib], struct_b.D[ib], struct_b.Dp[ib], struct_b.sl[ib]
 #         if ta == tb:
 #             if Da != Db:
-#                 raise YastError('Bond dimensions do not match.')
+#                 raise YastnError('Bond dimensions do not match.')
 #             high = low + Dpa
 #             meta.append(((low, high), asl, bsl, 'AB'))
 #             c_t.append(ta)

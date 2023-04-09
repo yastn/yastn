@@ -28,11 +28,11 @@ def tb2D(Nx, Ny, t, mu):
 
 
 def correlator(site1, site2, Nx, Ny, t, mu, beta):
+    """
+    fermionic hopping correlator between sites (x1, y1) and (x2, y2)
+    finite lattice size: Nx * Ny inverse temeprature beta 
+    """
 
-    # fermionic hopping correlator between sites (x1, y1) and (x2, y2)
-    # finite lattice size: Nx * Ny
-    # inverse temeprature beta 
-     
     x1,y1 = site1
     x2,y2 = site2
 
@@ -56,11 +56,7 @@ def correlator(site1, site2, Nx, Ny, t, mu, beta):
 
     return val
 
-
-
-
-Nx = 3
-Ny = 2
+Nx, Ny = 3, 2
 t = 1
 beta = 0.1
 mu = 0
@@ -72,6 +68,3 @@ c2 = correlator(site3, site4, Nx, Ny, t, mu, beta)
 
 print("Correlation between for spinless fermi sea at inverse temperature beta", beta, "between", site1, "and", site2, "is", c1)
 print("Correlation between for spinless fermi sea at inverse temperature beta", beta, "between", site3, "and", site4, "is", c2)
-
-
-

@@ -85,11 +85,11 @@ def test_flip_charges():
     assert (a - b.flip_charges()).norm() < tol
     assert (a - c.flip_charges(axes=(2, 1))).norm() < tol
 
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         d = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
         d.flip_charges(axes=1)
         # Flipping charges of hard-fused leg is not supported.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         d = yastn.rand(config_Z2xU1, legs=leg, isdiag=True)
         d.flip_charges()
         # Cannot flip charges of a diagonal tensor. Use diag() first.

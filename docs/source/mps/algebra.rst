@@ -7,6 +7,8 @@ Creating a copy of MPS/MPO
 To create an independent copy or clone of MPS/MPO :code:`A` call :code:`A.copy()`
 or :code:`A.clone()` respectively.
 
+.. autofunction:: yastn.tn.mps.MpsMpo.shallow_copy
+
 .. autofunction:: yastn.tn.mps.MpsMpo.copy
 
 .. autofunction:: yastn.tn.mps.MpsMpo.clone

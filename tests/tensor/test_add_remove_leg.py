@@ -125,13 +125,13 @@ def test_operators_chain():
 def test_add_leg_exceptions():
     """ handling exceptions in yastn.add_leg()"""
     leg = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.eye(config=config_U1, legs=[leg, leg.conj()])
         a.add_leg(s=1)  # Cannot add axis to a diagonal tensor.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.ones(config=config_U1, n=1, legs=[leg, leg.conj()])
         a.add_leg(s=1, t=(1, 0))  # len(t) does not match the number of symmetry charges.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.ones(config=config_U1, n=1, legs=[leg, leg.conj()])
         a.add_leg(s=2)  # Signature of the new axis should be 1 or -1.
 
@@ -139,23 +139,23 @@ def test_add_leg_exceptions():
 def test_remove_leg_exceptions():
     """ handling exceptions in yastn.remove_leg()"""
     leg = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.eye(config=config_U1, legs=[leg, leg.conj()])
         a.remove_leg(axis=1)  # Cannot remove axis to a diagonal tensor.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.ones(config=config_U1, n=1, legs=[leg, leg.conj()])
         scalar = yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(0, 1))
         _ = scalar.remove_leg(axis=0)  # Cannot remove axis of a scalar tensor.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.ones(config=config_U1, legs=[leg, leg.conj(), leg])
         a = a.fuse_legs(axes=((0, 1), 2), mode='meta')
         _ = a.remove_leg(axis=0)  # Axis to be removed cannot be fused.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.ones(config=config_U1, legs=[leg, leg.conj(), leg, leg])
         a = a.fuse_legs(axes=((0, 1), 2, 3), mode='meta')
         a = a.fuse_legs(axes=(0, (1, 2)), mode='hard')
         _ = a.remove_leg(axis=0)  # Axis to be removed cannot be fused.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         a = yastn.ones(config=config_U1, legs=[leg, leg.conj(), leg, leg])
         _ = a.remove_leg(axis=1)  # Axis to be removed must have single charge of dimension one.
 

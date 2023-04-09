@@ -53,13 +53,13 @@ def test_spin12():
     assert all(yastn.norm(sz @ sp - sp @ sz - sp) < tol for sz, sp in zip(szs, sps))
     assert all(yastn.norm(sz @ sm - sm @ sz + sm) < tol for sz, sm in zip(szs, sms))
 
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = ops_U1.x()
         # Cannot define sigma_x operator for U(1) symmetry
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = ops_U1.y()
         # Cannot define sigma_y operator for U(1) symmetry
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         yastn.operators.Spin12('wrong symmetry')
         # For Spin12 sym should be in ('dense', 'Z2', 'U1').
 
@@ -103,13 +103,13 @@ def test_spin1():
     assert all(yastn.norm(Sz @ Sp - Sp @ Sz - Sp) < tol for Sz, Sp in zip(Szs, Sps))
     assert all(yastn.norm(Sz @ Sm - Sm @ Sz + Sm) < tol for Sz, Sm in zip(Szs, Sms))
 
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = ops_U1.sx()
         # Cannot define Sx operator for U(1) or Z3 symmetry.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         _ = ops_Z3.sy()
         # Cannot define Sy operator for U(1) or Z3 symmetry.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         yastn.operators.Spin1('wrong symmetry')
         # For Spin1 sym should be in ('dense', 'Z3', 'U1').
 
@@ -139,7 +139,7 @@ def test_spinless_fermions():
 
     assert all(yastn.norm(cp @ c - n) < tol for cp, c, n in zip(cps, cs, ns))
 
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         yastn.operators.SpinlessFermions('dense')
         # For SpinlessFermions sym should be in ('Z2', 'U1').
 
@@ -169,13 +169,13 @@ def test_spinful_fermions():
         assert yastn.norm(ops.cp('u') @ ops.cp('d') + inter_sgn * ops.cp('d') @ ops.cp('u')) < tol
         assert yastn.norm(ops.cp('u') @ ops.c('d') + inter_sgn * ops.c('d') @ ops.cp('u')) < tol
 
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         yastn.operators.SpinfulFermions('dense')
         # For SpinlessFermions sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         ops_Z2.c(spin='down')
         # spin shoul be equal 'u' or 'd'.
-    with pytest.raises(yastn.YastError):
+    with pytest.raises(yastn.YastnError):
         ops_Z2.cp(spin=+1)
     # spin shoul be equal 'u' or 'd'.
     

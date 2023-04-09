@@ -3,7 +3,7 @@ from typing import NamedTuple
 import logging
 from ._env import Env2, Env3
 from ._mps import MpsMpo
-from ... import initialize, tensor, YastError
+from ... import initialize, tensor, YastnError
 
 logger = logging.Logger('compression')
 
@@ -108,16 +108,16 @@ def _compression_(psi, target, method,
 
     if Schmidt_tol is not None:
         if not Schmidt_tol > 0:
-            raise YastError('DMRG: Schmidt_tol has to be positive or None.')
+            raise YastnError('DMRG: Schmidt_tol has to be positive or None.')
         Schmidt_old = psi.get_Schmidt_values()
     max_dS, max_dw = None, None
     Schmidt = None if Schmidt_tol is None else {}
 
     if overlap_tol is not None and not overlap_tol > 0:
-        raise YastError('DMRG: energy_tol has to be positive or None.')
+        raise YastnError('DMRG: energy_tol has to be positive or None.')
 
     if method not in ('1site', '2site'):
-        raise YastError('DMRG: dmrg method %s not recognized.' % method)
+        raise YastnError('DMRG: dmrg method %s not recognized.' % method)
 
     for sweep in range(1, max_sweeps + 1):
         if method == '1site':
@@ -227,11 +227,11 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
 def zipper(a, b, opts=None):
     "Apply MPO a on MPS/MPS b, performing svd compression during the sweep."
 
-    psi = b.clone()
+    psi = b.shallow_copy()
     psi.canonize_(to='last')
 
     if psi.N != a.N:
-        raise YastError('MPS: a and b must have equal number of sites.')
+        raise YastnError('MPS: a and b must have equal number of sites.')
 
     la, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
