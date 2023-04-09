@@ -77,7 +77,7 @@ def test_truncate_svd_Z2():
 
     for parity in (0, 1):
         psi = generate.random_mps(D_total=D_total, n=parity)
-        mps.dmrg_(psi, H, max_sweeps=10, Schmidt_tol=1e-8)
+        mps.dmrg_(psi, H, max_sweeps=10, Schmidt_tol=1e-8, method='2site')
         run_truncation(psi, H, Eng_parity[parity])
         run_zipper(psi, H, Eng_parity[parity])
 
