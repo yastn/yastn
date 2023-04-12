@@ -35,8 +35,7 @@ extensions = [
     'sphinx.ext.autosectionlabel',
     'sphinx.ext.viewcode',
     'sphinx.ext.napoleon',
-    'sphinx.ext.mathjax',
-    'sphinx_rtd_theme'
+    'sphinx.ext.mathjax'
 ]
 autoclass_content = 'both'
 #autodoc_class_signature = "separated"
@@ -63,13 +62,26 @@ napoleon_use_param = False
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'sphinx_rtd_theme'
-html_theme_options = {}
-html_context = {}
+html_theme = 'pydata_sphinx_theme'
+html_theme_options = {
+    "show_toc_level": 3,
+    "navigation_depth": 3,
+    "icon_links": [
+        {
+            # Label for this link
+            "name": "GitHub",
+            # URL where the link will redirect
+            "url": "https://github.com/yastn/yastn",  # required
+            # Icon class (if "type": "fontawesome"), or path to local image (if "type": "local")
+            "icon": "fa-brands fa-square-github",
+            # The type of image to be used (see below for details)
+            "type": "fontawesome",
+        }
+   ]
+}
 
-rst_prolog = """
-:gitlab_url: https://gitlab.com/marekrams/yast
-"""
+html_context = {
+}
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,

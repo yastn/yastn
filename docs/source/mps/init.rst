@@ -1,12 +1,10 @@
 Creating empty MPS/MPO
 ======================
 
-In order to initialize MPS :class:`yastn.tn.mps.Mps` or MPO :class:`yastn.tn.mps.Mpo` we have to create an object of that class.
+Create empty, i.e. with no tensors specified, MPS :class:`yastn.tn.mps.Mps` or MPO :class:`yastn.tn.mps.Mpo`.
 
 .. autofunction:: yastn.tn.mps.Mps
 .. autofunction:: yastn.tn.mps.Mpo
-
-To initialize an empty object for MPS use :code:`psi = yastn.tn.mps.Mps(N)` which creates MPS of `N` sites but without any tensors defined.
 
 Both :class:`yastn.tn.mps.Mps` and :class:`yastn.tn.mps.Mpo` inherit all functions from parent class :class:`yastn.tn.mps.MpsMpo` but differ by a 
 number of physical legs, i.e., one for MPS and 2 for MPO. :class:`yastn.tn.mps.MpsMpo` supports one dimensional tensor networks, defined by list 
@@ -35,20 +33,19 @@ Setting MPS/MPO tensors by hand
     Y[1]= A_1
 
 .. note::
-    Tensor should be of the rank expected for initialized object. See :ref:`basic concepts<theory/basics:>` for more.
-
-.. note::
-    The virtual dimensions/spaces of the neighbouring MPS/MPO tensors have to remain consistent.
+    Tensor should have correct rank and the virtual dimensions/spaces of the neighbouring MPS/MPO tensors have to be consistent, see :ref:`basic concepts<theory/mps/basics:matrix product state (mps)>`. 
 
 .. note::
     To create :class:`yastn.Tensor`'s look :ref:`here<tensor/init:Creating symmetric YASTN tensors>`. 
 
 The examples of creating MPS/MPO by hand can be found here:
-:ref:`Ground state of Spin-1 AKLT model<examples/mps/mps:ground state of spin-1 aklt model>`,
-:ref:`MPO for hopping model with U(1) symmetry<example hopping with u1 symmetry>`.
+:ref:`Ground state of Spin-1 AKLT model<examples/mps/build_mps_manually:ground state of spin-1 aklt model>`,
+:ref:`MPO for hopping model with U(1) symmetry<examples/mps/build_mps_manually:hamiltonian for nearest-neighbor hopping/xx model>`.
 
 .. todo:
     Failed to create references to Z2 and U1 above. 
 
-Alternatively, MPS/MPO can be set using :class:`yastn.tn.mps.Generator` environment (see  :ref:`here<mps/init:Setting MPS/MPO tensors with Generator>` for more)
-or using :class:`yastn.tn.mps.Hterm` templete (see :ref:`here<mps/init:Setting MPS/MPO tensors with Hterm>` for more).
+Alternatively, MPS/MPO can be created using 
+
+    * :class:`yastn.tn.mps.Generator` shown :ref:`here<mps/generate:creating mps/mpo tensors with generator>`.
+    * :class:`yastn.tn.mps.Hterm` template shown :ref:`here<mps/init_hterm:setting mps/mpo tensors with hterm>`.

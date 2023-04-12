@@ -14,4 +14,4 @@ where :code:`man_input` is a list of ``Hterm``-s and :code:`I` is the identity o
 
 .. autofunction:: yastn.tn.mps.generate_mpo
 
-An example using this method can be found :ref:`here<examples/mps/mps:Create MPS or MPO based on templete object>`.
+An example using this method can be found :ref:`here<examples/mps/build_mps_hterm:building mpo using hterm>`.

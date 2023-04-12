@@ -159,14 +159,17 @@ def multiply(a, b, mode=None):
 ###################################
 
 class MpsMpo:
-    r""" 
-    The basic structure of Mps (for nr_phys=1) and Mpo (for nr_phys=2)
-    and some operations on it. Order of legs for a single tensor is
-    (virtual in the direction of first site, 1st physical |ket>,
-     virtual in the direction of first site, 2nd physical <bra| for Mpo).
-    MpsMpo tensors/sites are index with :math:`0, 1, 2, 3, \\ldots, N-1` with :math:`0` corresponding to the first site.
-    A central block (associated with a bond) is indexed using ordered tuple (n, n+1).
-    At most one central block is allowed.
+    r"""
+    The basic structure of MPS (for nr_phys=1) and MPO (for nr_phys=2).
+
+    MpsMpo tensors (sites) are accessed with usual ``[]`` operator. They are indexed 
+    by integers from :math:`0, 1, 2, 3, \ldots, N-1` with :math:`0` corresponding to the first site.
+    A central block, associated with a bond, is indexed using ordered tuple (n, n+1). At most one central block is allowed.
+
+    The :ref:`Index convention<mps/convention:index convention>` for 
+    legs of each tensor is: virtual leg in the direction of first site, 1st physical leg (:math:`|\textrm{ket}\rangle`),
+    virtual leg in the direction of last site, and 2nd physical leg (:math:`\langle \textrm{bra}|`) in case of MPO.
+    
     """
 
     def __init__(self, N=1, nr_phys=1):

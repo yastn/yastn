@@ -3,7 +3,7 @@
 Multiplication
 ==============
 
-We can test the multiplication of MPO and MPS using a practical example for a ground state obtained with :ref:`theory/mps/algorithms:DMRG`.
+We can test the multiplication of MPO and MPS using a practical example for a ground state obtained with :ref:`theory/mps/basics:algorithms`.
 
 .. literalinclude:: /../../tests/mps/test_algebra.py
         :pyobject: test_multiplication
@@ -24,8 +24,8 @@ This is the cheapest way to bring MPS/MPO into left or right canonical form.
 
 .. note::
 
-        Both :ref:`DMRG<mps/algorithms:density matrix renormalisation group (dmrg) algorithm>` 
-        and :ref:`TDVP<mps/algorithms:time-dependent variational principle (tdvp) algorithm>` 
+        Both :ref:`DMRG<mps/algorithms_dmrg:density matrix renormalisation group (dmrg) algorithm>` 
+        and :ref:`TDVP<mps/algorithms_tdvp:time-dependent variational principle (tdvp) algorithm>` 
         algorithms expect initial MPS to be the right canonical form.
 
 Bring MPS/MPO into canonical form by QR decomposition
@@ -126,8 +126,8 @@ Using HDF5 format
 DMRG
 ====
 
-In order to perform :ref:`theory/mps/algorithms:DMRG` we need initial guess for MPS the hermitian operator (typically a Hamiltonian) written as MPO. 
-We should start with :ref:`mps/init:initialisation` of the MPS and MPO which we push to DMRG.
+In order to perform :ref:`DMRG <mps/algorithms_dmrg:density matrix renormalisation group (dmrg) algorithm>` we need initial guess for MPS the hermitian operator (typically a Hamiltonian) written as MPO. 
+We should start with :ref:`initialization<mps/init:creating empty mps/mpo>` of the MPS and MPO which we push to DMRG.
 
 Here is a simple example for DMRG used to obtain a ground state for a quadratic Hamiltonian:
 
@@ -152,7 +152,7 @@ Also see the test in examples for  :ref:`examples/mps/mps:Multiplication`.
 TDVP
 ====
 
-Test TDVP simulating time evolution after a sudden quench in a free-fermionic model.
+Test :ref:`TDVP<mps/algorithms_tdvp:time-dependent variational principle (tdvp) algorithm>` simulating time evolution after a sudden quench in a free-fermionic model.
 
 .. literalinclude:: /../../tests/mps/test_tdvp.py
         :pyobject: test_tdvp_hermitian

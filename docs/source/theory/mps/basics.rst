@@ -4,7 +4,7 @@ Matrix product state (MPS)
 The numerical simulation of quantum system has been proven to be hard due to the exponentially growing size of the matrix representation of the system. In particular, if the local Hilbert space for *j*-th particle is :math:`\mathcal{H}_j` of dimension *d* 
 (e.g. *d=2* for qubit and *d=3* for qutrit) then for *N* particles it will be :math:`\mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1}` 
 which is :math:`d^N`. 
-Tensor Network representation introduces a concept of efficient separation of variables which will iteratively split `j`-th particle from others by performing :ref:`tensor/algebra:Spectral decompositions` e.g. singular value decomposition 
+Tensor Network representation introduces a concept of efficient separation of variables which will iteratively split `j`-th particle from others by performing :ref:`spectral decomposition<tensor/algebra:spectral decompositions and truncation>` e.g. singular value decomposition 
 (`SVD <https://en.wikipedia.org/wiki/Singular_value_decomposition>`_). 
 The SVD operation at first isolates `0`-th from `1`-to-`N`-th and then `1`-th from `2`-to-`N`-th until the state is decomposed to `N` tensors forming  `matrix product state`. 
 
@@ -78,7 +78,7 @@ API allows to encode operators, e.g., Hamiltonian or other operators associated 
 Canonical form 
 ---------------
 
-The computational costs associated with matrix product representation are controlled by virtual bond dimensions. That means that one wants to use  :ref:`tensor/algebra:Spectral decompositions` which allow for optimal truncation of the MPS. The truncation should be able to keep the most important components and discard those who are of lesser importance. *Canonical decomposition* is integral form for every :ref:`MPS algorithm<theory/mps/basics:Algorithms>`, including energy minimization with DMRG or time evolution with TDVP. 
+The computational costs associated with matrix product representation are controlled by virtual bond dimensions. That means that one wants to use :ref:`sepctral decomposition<tensor/algebra:spectral decompositions and truncation>` which allow for optimal truncation of the MPS. The truncation should be able to keep the most important components and discard those who are of lesser importance. *Canonical decomposition* is integral form for every :ref:`MPS algorithm<theory/mps/basics:Algorithms>`, including energy minimization with DMRG or time evolution with TDVP. 
 In those algorithms we act on each MPS tensor separately and we iteratively adjust their form. We choose to put MPS in the `canonical form` with respect to *j*-to-*j+1*-th bond. In order to do that we split MPS by SVD into two parts representing :math:`D_{j,j+1}` left Schmidt vectors :math:`|L_{0,1\cdots j}\rangle`, :math:`D_{j,j+1}` right Schmidt vectors :math:`|R_{j+1,j+2\cdots N-1}\rangle`, and central matrix :math:`\Lambda_{j,j+1}`.
 
 ::
@@ -101,11 +101,11 @@ Algorithms
 ----------
 
 `Density matrix renormalisation group` 
-(:ref:`DMRG<mps/algorithms:density matrix renormalisation group (dmrg) algorithm>`) 
+(:ref:`DMRG<mps/algorithms_dmrg:density matrix renormalisation group (dmrg) algorithm>`) 
 is an algorithm searching for the MPS which extremizes the expectation value of hermitian operator written as MPO, usually the Hamiltonian. 
 
 `Time-dependent variational principle` 
-(:ref:`TDVP<mps/algorithms:time-dependent variational principle (tdvp) algorithm>`) 
+(:ref:`TDVP<mps/algorithms_tdvp:time-dependent variational principle (tdvp) algorithm>`) 
 allows for variational approximation of the evolution of a state :math:`\Psi` under a Hamiltonian :math:`\hat H`. 
 The state after an evolution over time `t` is :math:`\Psi(t)=e^{- i t \hat H} \Psi`, with :math:`i` an imaginary unit. 
 TDVP can be performed for any MPS under MPO for a time `t`, real or imaginaty.
