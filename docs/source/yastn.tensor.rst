@@ -1,16 +1,22 @@
+#####
 YASTN
-=====
+#####
 
+**********************************
 What are abelian-symmetric tensors
-----------------------------------
+**********************************
 
 .. toctree::
+   :caption: What are abelian-symmetric tensors
+   
    theory/tensor/basics
 
+**********************************
 API: yastn and yastn.Tensor
----------------------------
+**********************************
 
 .. toctree::
+   :caption: API: yastn and yastn.Tensor
    :maxdepth: 2
    :glob:
 
@@ -25,10 +31,12 @@ API: yastn and yastn.Tensor
    tensor/autograd
    tensor/krylov
 
+*************************
 Examples: basics of usage
--------------------------
+*************************
 
 .. toctree::
+   :caption: Examples: basics of usage
    :glob:
 
    examples/tensor/init

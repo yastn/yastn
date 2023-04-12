@@ -28,6 +28,7 @@ of these sectors `or` by passing a list of legs.
 See examples: :ref:`examples/tensor/init:create tensors from scratch`.
 
 .. automodule:: yastn
+   :noindex:
    :members: rand, randR, randC, zeros, ones, eye
    :show-inheritance:
 
@@ -77,6 +78,7 @@ Their export counterparts are
 See examples: :ref:`examples/tensor/init:serialization of symmetric tensors`.
 
 .. automodule:: yastn
+   :noindex:
    :members: load_from_dict, load_from_hdf5, decompress_from_1d,
              save_to_dict, save_to_hdf5, compress_to_1d
    :show-inheritance:

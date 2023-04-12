@@ -1,8 +1,8 @@
 Basic concepts
-==============
+--------------
 
 Tensors
--------
+^^^^^^^
 
 In general, tensors are multilinear maps from products of several vector spaces
 
@@ -49,7 +49,7 @@ In YASTN, similar to other implementations (:ref:`see below <refs_basics>`), the
     `signature`, :attr:`yastn.Tensor.s`, is a tuple of signs :math:`\pm 1`
 
 Action of abelian symmetry
---------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 For any element `g` of abelian group G, its action on tensor elements :math:`T^{ab...}_{ij...}` 
 in a proper basis can be represented by `diagonal` matrices `U(g)` acting on each of the vector spaces
@@ -95,7 +95,7 @@ considered.
 
 
 Examples for selected groups
-----------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * **U(1)**: The charges can be taken as integers :math:`t_i \in \mathbb{Z}` with usual integer addition.
   With :math:`\theta_g` being usual angle :math:`\theta_g \in [0,2\pi)`.
@@ -110,7 +110,7 @@ Examples for selected groups
     See how YASTN defines symmetries and the above examples in the :ref:`API docs<tensor/symmetry:specifying symmetry>`.
 
 Conjugation
------------
+^^^^^^^^^^^
 
 Conjugation of a tensor complex-conjugates tensor elements, flips tensor signature :attr:`yastn.Tensor.s` by
 replacing :math:`\pm 1 \to \mp 1`, as well as the total charge :math:`N \to -N`.
@@ -124,7 +124,7 @@ It is also possible to flip the signature of a specific leg, which is accompanie
 .. _refs_basics:
 
 References & Related works
---------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 * `ITensor <https://itensor.org/>`_
 * `TenPy <https://github.com/tenpy/tenpy>`_

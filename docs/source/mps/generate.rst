@@ -13,5 +13,4 @@ MPS/MPOs from LaTex
 -------------------
 In examples below you can find a detailed description how to build MPS or MPO using LaTeX-like instructions
 
-	* :ref:`Generate MPS from LaTex<examples/mps/mps:Generate MPS from LaTex-like instruction>`
-	* :ref:`Generate MPO from LaTex<examples/mps/mps:Generate MPO from LaTex-like instruction>`
+	* :ref:`Generate MPS from LaTex<examples/mps/build_mps_latex:building mpo from latex>`
