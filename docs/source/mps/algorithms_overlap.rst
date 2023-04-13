@@ -1,4 +1,4 @@
-Maximize overlap
-================
+Variational overlap maximalization algorithm
+============================================
 
 .. autofunction:: yastn.tn.mps.compression_

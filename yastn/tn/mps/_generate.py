@@ -23,7 +23,7 @@ class Hterm(NamedTuple):
         positions of the local operators :math:`o_i` in the product different than identity
     operators : tuple(yastn.Tensor)
         local operators in the product that are different than the identity.
-        *i*-th operator is acting at position :code:`positions[i]` 
+        *i*-th operator is acting at position :code:`positions[i]`
     """
     amplitude : float = 1.0
     positions : tuple = ()
@@ -35,7 +35,7 @@ def generate_single_mpo(I, term):   # this can be private
     Apply local operators specified by term in :class:`Hterm` to the MPO `I`.
 
     MPO `I` is presumed to be an identity.
-    Apply swap_gates to introduce fermionic degrees of freedom 
+    Apply swap_gates to introduce fermionic degrees of freedom
     (fermionic order is the same as order of sites in Mps).
     With this respect, local operators specified in term.operators are applied starting with the last element,
     i.e., from right to left.
@@ -134,10 +134,10 @@ def generate_mps(terms, N, normalize=False, opts=None, packet=50):   #  DELETE
     r"""
     Generate MPS provided a list of :class:`Hterm`-s.
 
-    If the number of MPSs is large, adding them all together can result 
-    in large intermediate MPS. By specifying ``packet`` size, the groups of MPO-s 
+    If the number of MPSs is large, adding them all together can result
+    in large intermediate MPS. By specifying ``packet`` size, the groups of MPO-s
     are truncated at intermediate steps before continuing with summing.
-    
+
     Parameters
     ----------
     N: int
@@ -170,11 +170,11 @@ def generate_mps(terms, N, normalize=False, opts=None, packet=50):   #  DELETE
 
 
 class Generator:
-    
+
     def __init__(self, N, operators, map=None, Is=None, parameters=None, opts={"tol": 1e-14}):
         r"""
         Generator is a convenience class building MPOs from a set of local operators.
-        Generated MPO have following :ref:`index order<mps/convention:index convention>` and signature::
+        Generated MPO have following :ref:`index order<mps/properties:index convention>` and signature::
 
                      3 (-1) (physical bra)
                      |
@@ -193,7 +193,7 @@ class Generator:
             custom labels of N sites indexed from 0 to N-1 , ``{3: 0, 21: 1, ...}``.
             If ``None``, the sites are labled as :code:`{site: site for site in range(N)}`.
         Is : dict(int,str)
-            For each site (using default or custom label), specify identity operator by providing 
+            For each site (using default or custom label), specify identity operator by providing
             its string key as defined in ``operators``.
             If ``None``, assumes ``{i: 'I' for i in range(N)}``, which is compatible with all predefined
             ``operators``.
@@ -246,7 +246,7 @@ class Generator:
         self.config.backend.random_seed(seed)
 
     def I(self):
-        r""" 
+        r"""
         Indetity MPO derived from identity in local operators class.
 
         Returns
@@ -345,7 +345,7 @@ class Generator:
             dictionary with vectors for the generator. All should be given as
             a dictionary with elements in a format:
             name : lambda j: tensor
-                where 
+                where
                 name - is a name of an element which can be used in psi_str,
                 j - single index for lambda function,
                 tensor - is a yastn.Tensor with one physical index.
@@ -375,7 +375,7 @@ class Generator:
             dictionary with vectors for the generator. All should be given as
             a dictionary with elements in a format:
             name : lambda j: tensor
-                where 
+                where
                 name - is a name of an element which can be used in psi_str,
                 j - single index for lambda function,
                 tensor - is a yastn.Tensor with one physical index.
@@ -397,10 +397,10 @@ class Generator:
         Parameters
         -----------
         H_str: str
-            The definition of the MPO given as latex expression. The definition uses string names of the operators given in. The assignment of the location is 
-            given e.g. for 'cp' operator as 'cp_{j}' (always with {}-brackets!) for 'cp' operator acting on site 'j'. 
-            The space and * are interpreted as multiplication by a number of by an operator. E.g., to multiply by a number use 'g * cp_j c_{j+1}' where 'g' has to be defines in 'parameters' or writen directly as a number, 
-            You can define automatic summation with expression '\sum_{j \in A}', where A has to be iterable, one-dimensional object with specified values of 'j'. 
+            The definition of the MPO given as latex expression. The definition uses string names of the operators given in. The assignment of the location is
+            given e.g. for 'cp' operator as 'cp_{j}' (always with {}-brackets!) for 'cp' operator acting on site 'j'.
+            The space and * are interpreted as multiplication by a number of by an operator. E.g., to multiply by a number use 'g * cp_j c_{j+1}' where 'g' has to be defines in 'parameters' or writen directly as a number,
+            You can define automatic summation with expression '\sum_{j \in A}', where A has to be iterable, one-dimensional object with specified values of 'j'.
         parameters: dict
             Keys for the dict define the expressions that occur in H_str
 
@@ -414,7 +414,7 @@ class Generator:
         if opts is None:
             opts={'tol': 5e-16}
         return generate_mpo(self._I, c3, opts)
-    
+
     def mpo_from_templete(self, templete, parameters=None):   # remove from docs (DELETE)
         r"""
         Convert instruction in a form of single_term-s to yastn.tn.mps MPO.
@@ -466,7 +466,7 @@ class Generator:
                 elif element in obj_yast:
                     # is always a single index for each site
                     mapindex = self._map[indicies[0]] if len(indicies) == 1 else YastnError("Operator has to have single index as defined by self._map")
-                    positions.append(mapindex) 
+                    positions.append(mapindex)
                     operators.append(obj_yast[element](mapindex))
                 else:
                     # the only other option is that is a number, imaginary number is in self.obj_number

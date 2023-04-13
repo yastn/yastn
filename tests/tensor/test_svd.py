@@ -124,27 +124,40 @@ def test_svd_fix_signs():
 
 
 def test_svd_truncate():
+    #
+    # start with random tensor with 4 legs
     legs = [yastn.Leg(config_U1, s=1, t=(0, 1), D=(5, 6)),
             yastn.Leg(config_U1, s=1, t=(-1, 0), D=(5, 6)),
             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4)),
             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
     a = yastn.rand(config=config_U1, n=1, legs=legs)
 
-    U, S, V = yastn.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
-
+    #
     # fixing singular values for testing
+    # creat new tensor *a* that will be used for testing
+    U, S, V = yastn.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
     S.set_block(ts=(-2, -2), Ds=4, val=[2**(-ii - 6) for ii in range(4)])
     S.set_block(ts=(-1, -1), Ds=12, val=[2**(-ii - 2) for ii in range(12)])
     S.set_block(ts=(0, 0), Ds=25, val=[2**(-ii - 1) for ii in range(25)])
-
     a = yastn.ncon([U, S, V], [(-1, -2, 1), (1, 2), (2, -3, -4)])
 
+    #
+    # opts for truncation; truncates below (global) tolerance tol with respect to largest singular value
+    # up to a total of D_total singular values, with at mot D_block singular values for each charge sector.
     opts = {'tol': 0.01, 'D_block': 100, 'D_total': 12}
-    U1, S1, V1 = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)  # nU=True
+    U1, S1, V1 = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)  # nU=True, total charge of *a* goes with U
     assert S1.get_blocks_charge() == ((-2, -2), (-1, -1), (0, 0))
     assert S1.s[0] == 1 and U1.n == a.n and V1.n == (0,) and S1.get_shape() == (12, 12)
 
-    # specific charges of S1 depend on signature of a new leg comming from U, 
+    #
+    # svd_with_truncation is a shorthand for
+    U, S, V = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1)  # nU=True
+    mask = yastn.linalg.truncation_mask(S, **opts)
+    U1p, S1p, V1p = mask.apply_mask(U, S, V, axes=(2, 0, 0))
+    assert all((x - y).norm() < tol for x, y in ((U1, U1p), (S1, S1p), (V1, V1p)))
+
+    #
+    # specific charges of S1 depend on signature of a new leg comming from U,
     # and where charge of tensor 'a' is attached
     U1, S1, V1 = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)  # sU=1, nU=True
     assert S1.get_blocks_charge() == ((0, 0), (1, 1), (2, 2))
@@ -158,25 +171,31 @@ def test_svd_truncate():
     assert S1.get_blocks_charge() == ((-1, -1), (0, 0), (1, 1))
     assert S1.s[0] == -1 and U1.n == (0,) and V1.n == a.n and S1.get_shape() == (12, 12)
 
-
+    #
+    # different truncation options
     opts = {'tol': 0.02, 'D_block': 5, 'D_total': 100}
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=1, **opts)
     assert S1.get_shape() == (11, 11)
 
+    #
+    # tol_block decides on block truncation tolerance with respect to largest singular value of each block
     opts = {'tol': 0, 'tol_block': 0.2, 'D_total': 100}
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=1, **opts)
     assert S1.get_shape() == (9, 9)
 
+    #
+    # we can specify D_block and tol_block for each charge sector independently
     opts = {'D_block': {(0,): 2, (-1,): 3}, 'tol_block': {(0,): 0.6, (-1,): 0.1}}
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
     assert S1.get_shape() == (4, 4)
 
-
+    #
+    # empty tensor
     opts = {'D_total': 0}
     _, S2, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=False, sU=-1, **opts)
-    assert S2.norm() < tol
+    assert S2.norm() < tol and S2.size == 0
 
- 
+
 def test_svd_truncate_lowrank():
     pytest.importorskip("fbpca")
 
@@ -325,14 +344,14 @@ def test_svd_exceptions():
             yastn.Leg(config_U1, s=1, t=(-1, 0), D=(5, 6)),
             yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(2, 3, 4))]
     a = yastn.rand(config=config_U1, legs=legs)
-    
+
     with pytest.raises(yastn.YastnError):
         _ = yastn.svd(a, axes=((0, 1), 2), policy='wrong_policy')
         # svd policy should be one of (`lowrank`, `fullrank`)
     with pytest.raises(yastn.YastnError):
         _ = yastn.svd(a, axes=((0, 1), 2), policy='lowrank')
         # lowrank policy in svd requires passing argument D_block
-    
+
     _, S, _ = yastn.svd(a, axes=((0, 1), 2))
     with pytest.raises(yastn.YastnError):
         _ = yastn.truncation_mask(1j * S, tol=1e-10)

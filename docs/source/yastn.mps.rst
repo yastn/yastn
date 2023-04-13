@@ -10,77 +10,42 @@ Abelian-symmetric tensor algebra is provided by :doc:`YASTN<index>`.
    :undoc-members:
    :show-inheritance:
 
-**************
-Basic concepts
-**************
-   
+******************************
+What are matrix product states
+******************************
+
 .. toctree::
-   :caption: Basic concepts
+   :caption: What are matrix product states
    :glob:
 
    theory/mps/basics
 
-****************
-API: MPS and MPO
-****************
+*****************
+API: yastn.tn.mps
+*****************
 
 .. toctree::
-   :caption: API: MPS and MPO
+   :caption: API: yastn.tn.mps
    :glob:
    :maxdepth: 2
 
-   mps/convention
    mps/properties
    mps/algebra
-   mps/i-o
-
-
-*************************
-API: Creating MPS and MPO
-*************************
-
-.. toctree::
-   :caption: API: Creating MPS and MPO
-   :glob:
-   :maxdepth: 2
-
    mps/init
-
-***********************
-API: Expectation values
-***********************
-
-.. toctree::
-   :caption: API: Expectation values
-   :glob:
-   :maxdepth: 2
-
    mps/measurements
-
-***************
-API: Algorithms
-***************
-
-.. toctree::
-   :caption: API: Algorithms
-   :glob:
-   :maxdepth: 2
-
    mps/algorithms_dmrg
    mps/algorithms_tdvp
    mps/algorithms_overlap
 
-********
-Examples
-********
+*************************
+Examples: basics of usage
+*************************
 
 .. toctree::
-   :caption: Examples
+   :caption: Examples: basics of usage
    :glob:
    :maxdepth: 2
 
-   examples/mps/build_mps_manually
-   examples/mps/build_mps_Hterm
-   examples/mps/build_mps_latex
-   examples/mps/build_mps_random
-   examples/mps/mps
+   examples/mps/build
+   examples/mps/algebra
+   examples/mps/algorithms
