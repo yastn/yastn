@@ -1,6 +1,7 @@
 # YASTN - Yet Another Symmetric Tensor Network
-by Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, and Juraj Hasik
 ![Test status](https://github.com/yastn/yastn/actions/workflows/main.yml/badge.svg?branch=master)
+
+by Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, and Juraj Hasik
 
 <br />
   
