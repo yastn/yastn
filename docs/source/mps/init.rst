@@ -1,18 +1,17 @@
 Creating empty MPS/MPO
 ======================
 
-In order to initialize MPS :class:`yastn.tn.mps.Mps` or MPO :class:`yastn.tn.mps.Mpo` we have to create an object of that class.
+To initialize MPS or MPO for :code:`N` sites, we have to create an instance of class :class:`yastn.tn.mps.MpsMpo` specifying the number of physical legs, i.e., one for MPS and 2 for MPO.
+It supports one-dimensional tensor networks, defined by dict of rank-3 or rank-4 :class:`yastn.Tensor`-s for MPS and MPO, respectively.
+The new instance starts without any tensors defined.
+
+.. autoclass:: yastn.tn.mps.MpsMpo
+
+One can directly create a new empty MPS of `N` sites using :code:`psi = yastn.tn.mps.Mps(N)`. Tensors are not initialized at this point.
+Similarly, :code:`psi = yastn.tn.mps.Mpo(N)` initializes MPO.
 
 .. autofunction:: yastn.tn.mps.Mps
 .. autofunction:: yastn.tn.mps.Mpo
-
-To initialize an empty object for MPS use :code:`psi = yastn.tn.mps.Mps(N)` which creates MPS of `N` sites but without any tensors defined.
-
-Both :class:`yastn.tn.mps.Mps` and :class:`yastn.tn.mps.Mpo` inherit all functions from parent class :class:`yastn.tn.mps.MpsMpo` but differ by a 
-number of physical legs, i.e., one for MPS and 2 for MPO. :class:`yastn.tn.mps.MpsMpo` supports one dimensional tensor networks, defined by list 
-of rank-3 or rank-4 :class:`yastn.Tensor`-s for  :class:`yastn.tn.mps.Mps` and :class:`yastn.tn.mps.Mpo` respectively.
-
-.. autoclass:: yastn.tn.mps.MpsMpo
 
 
 Setting MPS/MPO tensors by hand
@@ -28,27 +27,72 @@ Setting MPS/MPO tensors by hand
     Y= mps.Mps(3)
 
     # create 3x2x3 random dense tensor
-    A_1= yastn.rand(yastn.make_config(), Legs=(\
+    A_1 = yastn.rand(yastn.make_config(), legs=(\
             yastn.Leg(s=1,D=(3,)), yastn.Leg(s=1,D=(2,)), yastn.Leg(s=-1,D=(3,))))
 
     # assign tensor to site 1
-    Y[1]= A_1
+    Y[1] = A_1
 
-.. note::
-    Tensor should be of the rank expected for initialized object. See :ref:`basic concepts<theory/basics:>` for more.
 
-.. note::
-    The virtual dimensions/spaces of the neighbouring MPS/MPO tensors have to remain consistent.
+Tensor should be of the rank expected for :ref:`MPS<theory/mps/basics:Matrix product state (MPS)>` or :ref:`MPO<theory/mps/basics:Matrix product operator (MPO)>`.
+The virtual dimensions/spaces of the neighbouring MPS/MPO tensors should be consistent.
 
 .. note::
     To create :class:`yastn.Tensor`'s look :ref:`here<tensor/init:Creating symmetric YASTN tensors>`. 
 
 The examples of creating MPS/MPO by hand can be found here:
-:ref:`Ground state of Spin-1 AKLT model<examples/mps/mps:ground state of spin-1 aklt model>`,
-:ref:`MPO for hopping model with U(1) symmetry<example hopping with u1 symmetry>`.
+:ref:`Ground state of Spin-1 AKLT model<examples/mps/build_mps_manually:Ground state of spin-1 AKLT model>`,
+:ref:`MPO for hopping model with U(1) symmetry<examples/mps/build_mps_manually:Hamiltonian for nearest-neighbor hopping/XX model>`.
 
-.. todo:
-    Failed to create references to Z2 and U1 above. 
 
-Alternatively, MPS/MPO can be set using :class:`yastn.tn.mps.Generator` environment (see  :ref:`here<mps/init:Setting MPS/MPO tensors with Generator>` for more)
-or using :class:`yastn.tn.mps.Hterm` templete (see :ref:`here<mps/init:Setting MPS/MPO tensors with Hterm>` for more).
+Setting MPO tensors with Hterm
+==============================
+
+:class:`yastn.tn.mps.Hterm` is a basic building block of operators. Each ``Hterm`` represents
+a product of local (on-site) operators. 
+
+.. autoclass:: yastn.tn.mps.Hterm
+
+.. note::
+    The :code:`Hterm` has operators :code:`Hterm.operators` without virtual legs, rank-2 for MPO.
+
+A :code:`list(Hterm)` can be used to create a sum of products. In order to generate full MPO use :code:`exMPO = mps.generate_mpo(I, man_input)`, 
+where :code:`man_input` is a list of ``Hterm``-s and :code:`I` is the identity MPO.
+
+.. autofunction:: yastn.tn.mps.generate_mpo
+
+An example using this method can be found :ref:`here<examples/mps/build_mps_Hterm:Building MPO using Hterm>`.
+
+
+Creating MPO tensors with Generator
+===================================
+
+:class:`yastn.tn.mps.Generator` automatizes the creation of MPS and MPO. 
+Given a set of local (on-site) operators, i.e. :class:`yastn.operators.Spin12` 
+or :class:`yastn.operators.SpinlessFermions`,
+one can build both the states and operators. The MPS/MPO can be given as a LaTeX-like expression. 
+
+.. autoclass:: yastn.tn.mps.Generator
+
+We can directly output identity MPO build from identity `I` in operator class.
+
+.. autofunction:: yastn.tn.mps.Generator.I
+
+Generator supports latex-like string instructions to help building MPOs. 
+For examples, see :ref:`Generate MPO from LaTex<examples/mps/build_mps_latex:Building MPO from LaTex>`.
+
+Generator provides direct link to random number generator in the backend to fix the seed
+
+.. autofunction:: yastn.tn.mps.Generator.random_seed
+
+
+
+
+Creating random MPS or MPO
+--------------------------
+
+:ref:`Generator<mps/init:Creating MPO tensors with Generator>` allows initialization of MPS and MPO filled with random tensors
+
+.. autofunction:: yastn.tn.mps.Generator.random_mps
+
+.. autofunction:: yastn.tn.mps.Generator.random_mpo

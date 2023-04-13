@@ -79,7 +79,7 @@ def test_dense_dmrg():
     #
     logging.info(' Tensor : dense ')
     #
-    # The Hamiltonian of N = 7 sites is obtained with automatic generator (see source file).
+    # The Hamiltonian of N = 7 sites is obtained with automatic generator.
     #
     N = 7
     #
@@ -102,7 +102,7 @@ def test_dense_dmrg():
     #
     generate.random_seed(seed=0)
     #
-    # Set options for truncation for '2site' method of mps._dmrg.
+    # Set options for truncation for '2site' method of mps.dmrg_.
     #
     Dmax = 8
     opts_svd = {'tol': 1e-8, 'D_total': Dmax}
@@ -113,7 +113,7 @@ def test_dense_dmrg():
     #
     # Single run for a ground state can be done using:
     #
-    # mps._dmrg(psi, H, method=method,energy_tol=tol/10, max_sweeps=20, opts_svd=opts_svd)
+    # mps.dmrg_(psi, H, method=method,energy_tol=tol/10, max_sweeps=20, opts_svd=opts_svd)
     #
     # To explain how to target some sectors for occupation we create a subfunction run_dmrg
     # This is not necessary but we do it for the sake of clarity and tests.
@@ -134,7 +134,7 @@ def test_dense_dmrg():
 
 def test_Z2_dmrg():
     """
-    Initialize random mps of Z2 tensors and tests mps._dmrg
+    Initialize random mps of Z2 tensors and tests mps.dmrg_
     """
     logging.info(' Tensor : Z2 ')
     operators = yastn.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)

@@ -1,5 +1,5 @@
 Building MPO from LaTex
-===========================
+=======================
 
 The MPO can be constructed automatically using dedicated :class:`yastn.tn.mps.Generator` supplied with the set of local operators.
 Automatic generator creates MPO with symmetries inherited from local operators.

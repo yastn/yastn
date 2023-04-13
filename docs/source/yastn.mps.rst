@@ -39,8 +39,6 @@ API: Creating MPS and MPO
    :maxdepth: 2
 
    mps/init
-   mps/init_hterm
-   mps/generate
 
 
 API: Expectation values
