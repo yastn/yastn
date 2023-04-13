@@ -123,7 +123,7 @@ Also see the test in examples for :ref:`examples/mps/mps:Multiplication`.
 TDVP
 ====
 
-Test TDVP simulating time evolution after a sudden quench in a free-fermionic model.
+Test :ref:`TDVP<mps/algorithms_tdvp:time-dependent variational principle (tdvp) algorithm>` simulating time evolution after a sudden quench in a free-fermionic model.
 
 .. literalinclude:: /../../tests/mps/test_tdvp.py
         :pyobject: test_tdvp_hermitian

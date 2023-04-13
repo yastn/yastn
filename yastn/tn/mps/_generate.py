@@ -67,7 +67,7 @@ def generate_single_mpo(I, term):   # this can be private
 
 def generate_mpo(I, terms, opts=None, packet=50):  # can use better algorithm to compress
     r"""
-    Generate MPO provided a list of :class:`Hterm`-s and identity MPO `I`.
+    Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
 
     If the number of MPOs is large, adding them all together can result
     in large intermediate MPO. By specifying `packet` size, the groups of MPO-s
@@ -82,7 +82,7 @@ def generate_mpo(I, terms, opts=None, packet=50):  # can use better algorithm to
     opts: dict
         options for truncation of the result
     packet: int
-        how many Hterms (MPOs of bond dimension 1) should be truncated at once
+        how many ``Hterm``\s (MPOs of bond dimension 1) should be truncated at once
 
     Returns
     -------

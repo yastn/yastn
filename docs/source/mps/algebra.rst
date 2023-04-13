@@ -98,8 +98,8 @@ Canonizing MPS/MPO
 ------------------
 
 MPS/MPO can be put into :ref:`theory/mps/basics:Canonical form` to reveal most advantageous truncation or as a part of the setup for 
-:ref:`DMRG<mps/algorithms_dmrg:Density matrix renormalization group (DMRG) algorithm>` or 
-:ref:`TDVP<mps/algorithms_tdvp:Time-dependent variational principle (TDVP) algorithm>` algorithms. 
+:ref:`DMRG<mps/algorithms_dmrg:density matrix renormalisation group (dmrg) algorithm>` or 
+:ref:`TDVP<mps/algorithms_tdvp:time-dependent variational principle (tdvp) algorithm>` algorithms. 
 
 The canonical form obtained by QR decomposition is fast, but does not allow for truncation 
 of the virtual spaces of MPS/MPO. 
