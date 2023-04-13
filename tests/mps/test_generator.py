@@ -17,7 +17,8 @@ def mpo_nn_hopping_manually(N=10, t=1.0, mu=0.0, config=None):
     """
     Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
 
-    Initialize MPO tensor by hand with dense, Z2, or U1 symmetric tensors. Symmetry is specified in config.
+    Initialize MPO tensor by hand with dense, Z2, or U1 symmetric tensors.
+    Symmetry is specified in config.
     """
     #
     # Build empty MPO for system of N sites
@@ -36,7 +37,7 @@ def mpo_nn_hopping_manually(N=10, t=1.0, mu=0.0, config=None):
     #          |
 
     if config is None:
-        config = yastn.make_config()  # no symmetry is a default
+        config = yastn.make_config()  # default is no symmetry, i.e. dense.
 
     if config.sym.SYM_ID == 'dense':  # no symmetry
         # Basic rank-2 blocks (matrices) of on-site tensors
@@ -109,7 +110,8 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
     """
     Fermionic hopping Hamiltonian on N sites with hoppings at arbitrary range.
 
-    The upper triangular part of matrix J defines hopping amplitudes, and the diagonal defines on-site chemical potentials.
+    The upper triangular part of matrix J defines hopping amplitudes,
+    and the diagonal defines on-site chemical potentials.
     """
 
     if config is None:
@@ -138,7 +140,7 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
     for n in I.sweep():
         I[n] = ops.I().add_leg(axis=0, s=-1).add_leg(axis=2, s=1)
     #
-    # Identity MPO can be also obtained using mps.generator class
+    # Identity MPO can be also obtained using mps.Generator class
     #
     # generator = mps.Generator(N, ops)
     # I = generator.I()
@@ -155,7 +157,8 @@ def mpo_nn_hopping_latex(N=10, t=1.0, mu=0.0, sym="U1", config=None):
     """
     Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
 
-    The upper triangular part of matrix J defines hopping amplitudes, and the diagonal defines on-site chemical potentials.
+    The upper triangular part of matrix J defines hopping amplitudes,
+    and the diagonal defines on-site chemical potentials.
     """
 
     if config is None:
@@ -174,7 +177,8 @@ def mpo_hopping_latex(N, J, sym="U1", config=None):
     """
     Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
 
-    The upper triangular part of matrix J defines hopping amplitudes, and the diagonal defines on-site chemical potentials.
+    The upper triangular part of matrix J defines hopping amplitudes,
+    and the diagonal defines on-site chemical potentials.
     """
 
     if config is None:

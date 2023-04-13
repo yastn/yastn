@@ -4,7 +4,7 @@ Building MPS/MPO manually
 The tensor making up MPS/MPO can be assigned manually, setting them one by one.
 
 .. note::
-        The virtual dimensions/spaces of the neighboring MPS/MPO tensors have to remain consistent.
+        The virtual dimensions/spaces of the neighboring MPS/MPO tensors should be consistent.
 
 Ground state of spin-1 AKLT model
 ---------------------------------
@@ -19,8 +19,8 @@ Here, as an example, we set up a well-known exact MPS: A ground state of
 Hamiltonian for nearest-neighbor hopping/XX model
 -------------------------------------------------
 
-The same can be done for MPOs. Here, we show a construction of a simple 
-nearest-neighbour hopping Hamiltonian with hopping amplitude `t` 
+The same can be done for MPOs. Here, we show a construction of a simple
+nearest-neighbour hopping Hamiltonian with hopping amplitude :math:`t`
 and on-site energy :math:`\mu` with different 
 realizations of explicit symmetry.
 

@@ -43,6 +43,10 @@ def generate_single_mpo(I, term):   # this can be private
     Parameters
     ----------
     term: :class:`Hterm`
+
+    Returns
+    -------
+    yastn.tn.mps.MpsMpo
     """
     single_mpo = I.copy()
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
@@ -65,9 +69,9 @@ def generate_mpo(I, terms, opts=None, packet=50):  # can use better algorithm to
     r"""
     Generate MPO provided a list of :class:`Hterm`-s and identity MPO `I`.
 
-    If the number of MPOs is large, adding them all together can result 
-    in large intermediate MPO. By specifying ``packet`` size, the groups of MPO-s 
-    are truncated at intermediate steps before continuing with summing. 
+    If the number of MPOs is large, adding them all together can result
+    in large intermediate MPO. By specifying `packet` size, the groups of MPO-s
+    are truncated at intermediate steps before continuing with summation.
 
     Parameters
     ----------
@@ -78,7 +82,11 @@ def generate_mpo(I, terms, opts=None, packet=50):  # can use better algorithm to
     opts: dict
         options for truncation of the result
     packet: int
-        how many ``Hterm``s (MPOs of bond dimension 1) should be truncated at once
+        how many Hterms (MPOs of bond dimension 1) should be truncated at once
+
+    Returns
+    -------
+    yastn.tn.mps.MpsMpo
     """
     ip, M_tot, Nterms = 0, None, len(terms)
     while ip < Nterms:
@@ -142,6 +150,10 @@ def generate_mps(terms, N, normalize=False, opts=None, packet=50):   #  DELETE
         options for truncation of the result
     packet: int
         how many single MPO-s of bond dimension 1 shuold be truncated at ones
+
+    Returns
+    -------
+    yastn.tn.mps.MpsMpo
     """
     ip, M_tot, Nterms = 0, None, len(terms)
     while ip < Nterms:
@@ -235,9 +247,11 @@ class Generator:
 
     def I(self):
         r""" 
+        Indetity MPO derived from identity in local operators class.
+
         Returns
         -------
-        identity MPO : yastn.tn.MpsMpo
+        yastn.tn.mps.MpsMpo
         """
         return self._I.copy()
 
@@ -256,6 +270,10 @@ class Generator:
             are drawn.
         dtype : string
             number format, e.g., ``'float64'`` or ``'complex128'``
+
+        Returns
+        -------
+        yastn.tn.mps.MpsMpo
         """
         if n is None:
             n = (0,) * self.config.sym.NSYM
@@ -294,6 +312,10 @@ class Generator:
             are drawn.
         dtype : string
             number format, e.g., ``'float64'`` or ``'complex128'``
+
+        Returns
+        -------
+        yastn.tn.mps.MpsMpo
         """
         n0 = (0,) * self.config.sym.NSYM
         psi = Mpo(self.N)
@@ -331,8 +353,8 @@ class Generator:
             dictionary with parameters for the generator
 
         Returns
-        --------
-            :class:`yastn.tn.mps.Mps`
+        -------
+        yastn.tn.mps.MpsMpo
         """
         parameters = {**self.parameters, **parameters}
         c2 = latex2term(psi_str, parameters)
@@ -361,8 +383,8 @@ class Generator:
             Keys for the dict define the expressions that occur in H_str
 
         Returns
-        --------
-            :class:`yastn.tn.mps.Mps`
+        -------
+        yastn.tn.mps.MpsMpo
         """
         parameters = {**self.parameters, **parameters}
         c3 = self._term2Hterm(templete, vectors, parameters)
@@ -383,8 +405,8 @@ class Generator:
             Keys for the dict define the expressions that occur in H_str
 
         Returns
-        --------
-            :class:`yastn.tn.mps.Mpo`
+        -------
+        yastn.tn.mps.MpsMpo
         """
         parameters = {**self.parameters, **parameters}
         c2 = latex2term(H_str, parameters)
@@ -407,8 +429,8 @@ class Generator:
             Keys for the dict define the expressions that occur in H_str
 
         Returns
-        --------
-            :class:`yastn.tn.mps.Mpo`
+        -------
+        yastn.tn.mps.MpsMpo
         """
         parameters = {**self.parameters, **parameters}
         c3 = self._term2Hterm(templete, self._ops.to_dict(), parameters)

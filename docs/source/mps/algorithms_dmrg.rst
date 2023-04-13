@@ -1,4 +1,4 @@
-Density matrix renormalisation group (DMRG) algorithm
+Density matrix renormalization group (DMRG) algorithm
 =====================================================
 
 DMRG is a variational technique devised 

@@ -4,8 +4,9 @@ Algebra
 Creating a copy of MPS/MPO
 --------------------------
 
-To create an independent copy or clone of MPS/MPO :code:`A` call :code:`A.copy()`
-or :code:`A.clone()` respectively.
+To create an independent copy or clone of MPS/MPO :code:`psi` call :code:`psi.copy()`
+or :code:`psi.clone()`, respectively. 
+It is also possible to make a shallow copy with :code:`psi.shallow_copy()`, where explicit copies of data tensors are not created.
 
 .. autofunction:: yastn.tn.mps.MpsMpo.shallow_copy
 
@@ -18,7 +19,8 @@ Multiplication by a scalar
 
 MPS/MPO can be multiplied from both left and right by a scalar using regular `*` operator. 
 For example, :code:`B = a * A` or :code:`B = A * a` results in a new MPS/MPO :code:`B`
-with first tensor multiplied by a number `a`.
+with first tensor multiplied by the phase of the number `a`, and modulus of `a` included in 
+:code:`B.factor`.
 
 ..
     .. autofunction:: yamps.MpsMpo.__mul__
@@ -27,7 +29,8 @@ with first tensor multiplied by a number `a`.
 Addition of MPS/MPO
 -------------------
 
-Two MPS's or two MPO's can be added up provided that their length, physical dimensions, and symmetry agree. The sum of two such objects :code:`A` and :code:`B` results in new MPS/MPO :code:`C = A + B`, with tensor of :code:`C` given by the direct sum of :code:`A`'s 
+Two MPS's or two MPO's can be added up, provided that their length, physical dimensions, and symmetry agree. 
+The sum of two such objects :code:`A` and :code:`B` results in new MPS/MPO :code:`C = A + B`, with tensor of :code:`C` given by the direct sum of :code:`A`'s 
 and :code:`B`'s tensors along virtual dimension.
 
 ::
@@ -43,7 +46,7 @@ and :code:`B`'s tensors along virtual dimension.
 ..
     .. autofunction:: yamps.MpsMpo.__add__
 
-To make a sum of many MPS/MPOs :math:`\{A_0,A_1,\dots\}` at once use :code:`yamps.add(A_0,A_1,...)`.
+To make a sum of many MPS/MPOs :math:`\{A_0, A_1,\dots\}` at once use :code:`yamps.add(A_0, A_1,...)`.
 
 .. autofunction:: yastn.tn.mps.add
 
@@ -83,9 +86,8 @@ operator product :math:`\hat{O}\hat{P} = \hat{C}` (matrix-matrix multiplication)
             |___|--D'--|___|--...--|___|     |d           |           |
               |d         |           |
 
-One can either use product operator :code:`C=A@B` or more verbose 
-:code:`C=yastn.tn.mps.multiply(A,B)`. Note that for MPO-MPS product, the *@*
-is commutative, i.e., :code:`O@A` and :code:`A@O` are equivalent.
+One can either use product operator :code:`C = A @ B` or more verbose 
+:code:`C = yastn.tn.mps.multiply(A, B)`.
 
 See examples here: :ref:`examples/mps/mps:Multiplication`.
 
@@ -96,8 +98,8 @@ Canonizing MPS/MPO
 ------------------
 
 MPS/MPO can be put into :ref:`theory/mps/basics:Canonical form` to reveal most advantageous truncation or as a part of the setup for 
-:ref:`DMRG<mps/algorithms:density matrix renormalisation group (dmrg) algorithm>` or 
-:ref:`TDVP<mps/algorithms:time-dependent variational principle (tdvp) algorithm>` algorithms. 
+:ref:`DMRG<mps/algorithms_dmrg:Density matrix renormalization group (DMRG) algorithm>` or 
+:ref:`TDVP<mps/algorithms_tdvp:Time-dependent variational principle (TDVP) algorithm>` algorithms. 
 
 The canonical form obtained by QR decomposition is fast, but does not allow for truncation 
 of the virtual spaces of MPS/MPO. 
@@ -108,7 +110,7 @@ See examples: :ref:`examples/mps/mps:Canonical form by QR`.
 
 Restoring canonical form locally: For example, while performing DMRG sweeps, 
 the tensors getting updated will not be in canonical form after the update. 
-It is necessary to restore their canonical form in course of sweeping. 
+It is necessary to restore their canonical form during sweeping. 
 
 .. autofunction:: yastn.tn.mps.MpsMpo.orthogonalize_site
 

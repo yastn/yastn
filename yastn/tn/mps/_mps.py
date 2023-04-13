@@ -6,8 +6,8 @@ from ... import tensor, initialize, YastnError
 ###################################
 
 def Mps(N):
-    """
-    Generate empty MPS for system of *N* sites.
+    r"""
+    Generate empty MPS for system of *N* sites, fixing :code:`nr_phys=1`.
 
     Parameters
     ----------
@@ -17,14 +17,13 @@ def Mps(N):
     Returns
     -------
     yastn.tn.mps.MpsMpo
-        MPS with :code:`nr_phys=1`
     """
     return MpsMpo(N, nr_phys=1)
 
 
 def Mpo(N):
-    """
-    Generate empty MPO for system of *N* sites.
+    r"""
+    Generate empty MPO for system of *N* sites, fixing :code:`nr_phys=2`.
 
     Parameters
     ----------
@@ -34,7 +33,6 @@ def Mpo(N):
     Returns
     -------
     yastn.tn.mps.MpsMpo
-        MPO with :code:`nr_phys=2`
     """
     return MpsMpo(N, nr_phys=2)
 
@@ -99,7 +97,7 @@ def add(*states, amplitudes=None):
 
 def multiply(a, b, mode=None):
     r"""
-    Performs MPO-MPS product resulting in a new MPS or
+    Performs MPO-MPS product resulting in a new MPS, or
     MPO-MPO product resulting in a new MPO.
 
     For MPS/MPO with no symmetry, the bond dimensions
@@ -161,10 +159,10 @@ def multiply(a, b, mode=None):
 class MpsMpo:
     r""" 
     The basic structure of Mps (for nr_phys=1) and Mpo (for nr_phys=2)
-    and some operations on it. Order of legs for a single tensor is
-    (virtual in the direction of first site, 1st physical |ket>,
-     virtual in the direction of first site, 2nd physical <bra| for Mpo).
-    MpsMpo tensors/sites are index with :math:`0, 1, 2, 3, \\ldots, N-1` with :math:`0` corresponding to the first site.
+    and some operations on it. Order of legs for a single tensor is:
+    virtual in the direction of first site, 1st physical :math:`|ket \rangle`,
+    virtual in the direction of first site, 2nd physical :math:`\langle bra|` for Mpo.
+    MpsMpo tensors/sites are index with :math:`0, 1, 2, 3, \ldots, N-1` with :math:`0` corresponding to the first site.
     A central block (associated with a bond) is indexed using ordered tuple (n, n+1).
     At most one central block is allowed.
     """
@@ -229,6 +227,8 @@ class MpsMpo:
     def shallow_copy(self):
         r"""
         New instance of :class:`yastn.tn.mps.MpsMpo` pointing to the same tensors as the old one.
+
+        Shallow copy is usually sufficient to retain the old MPS/MPO.
 
         Returns
         -------
@@ -326,7 +326,7 @@ class MpsMpo:
 
         Returns
         -------
-        out : Mps or Mpo
+        yastn.tn.mps.MpsMpo
         """
         return add(self, phi)
 
@@ -340,7 +340,7 @@ class MpsMpo:
 
         Returns
         -------
-        out : Mps or Mpo
+        yastn.tn.mps.MpsMpo
         """
         return add(self, phi, amplitudes=(1, -1))
 
@@ -354,7 +354,7 @@ class MpsMpo:
 
         Returns
         -------
-        out : Mps or Mpo
+        yastn.tn.mps.MpsMpo
         """
         return multiply(self, phi)
 
@@ -363,21 +363,21 @@ class MpsMpo:
         Performs QR (or RQ) decomposition of on-site tensor at :code:`n`-th position.
         Two typical modes of usage are
 
-            * ``to='last'`` - Advance left canonical form: Assuming first n - 1 sites are already
+            * ``to='last'`` - Advance left canonical form: Assuming first `n - 1` sites are already
               in the left canonical form, brings n-th site to left canonical form,
               i.e., extends left canonical form by one site towards :code:`'last'` site::
-
-                 --A---    --
-                   |   | =   |Identity
-                 --A*--    --
-
-            * ``to='first'`` - Advance right canonical form: Assuming all m > n sites are already
-              in right canonical form, brings n-th site to right canonical form, i.e.,
-              extends right canonical form by one site towards :code:`'first'` site::
 
                  --A---            --
                 |  |    = Identity|
                  --A*--            --
+
+            * ``to='first'`` - Advance right canonical form: Assuming all `m > n` sites are already
+              in right canonical form, brings n-th site to right canonical form, i.e.,
+              extends right canonical form by one site towards :code:`'first'` site::
+
+                --A---    --
+                  |   | =   |Identity
+                --A*--    --
 
         Parameters
         ----------
@@ -385,11 +385,12 @@ class MpsMpo:
                 index of site to be orthogonalized
 
             to : str
-                a choice of canonical form. For :code:`'last'` or :code:`'first'`.
+                a choice of canonical form: :code:`'last'` or :code:`'first'`.
 
             normalize : bool
                 If :code:`True`, central block is normalized to unity according
-                to standard 2-norm.
+                to standard 2-norm, and :code:`self.factor` is set to `1`. If false, the norm
+                gets accumulated in :code:`self.factor`.
         """
         if self.pC is not None:
             raise YastnError('MPS: Only one central block is possible. Attach the existing central block first.')
@@ -489,7 +490,12 @@ class MpsMpo:
                 self.A[n2] = C @ self.A[n2]
 
     def norm(self):
-        r""" Calculate norm of |ket> via canonization. """
+        r""" Calculate norm of MPS/MPO via canonization. 
+        
+        Returns
+        -------
+        scalar
+        """
         phi = self.shallow_copy()
         #if not phi.is_canonical(to='first'):
         phi.canonize_(to='first', normalize=False)
@@ -497,10 +503,10 @@ class MpsMpo:
 
     def canonize_(self, to='first', normalize=True):
         r"""
-        Sweep though the MPS/MPO and put it in right/left canonical form
+        Sweep through the MPS/MPO and put it in right/left canonical form
         using :meth:`QR<yastn.linalg.qr>` decomposition by setting
-        :code:`to='first'`/:code:`to='last'`. It is assumed that tensors are enumerated
-        by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
+        :code:`to='first'` or :code:`to='last'`. It is assumed that tensors are enumerated
+        by index increasing from `0` (:code:`first`) to `N-1` (:code:`last`).
 
         Finally, the trivial central block is attached to the end of the chain.
 
@@ -511,7 +517,7 @@ class MpsMpo:
 
         normalize : bool
             If :code:`true` (default), the central block and thus MPS/MPO is normalized
-            to unity according to the standard 2-norm.
+            to unity according to the standard 2-norm. If false, the norm gets accumulated in :code:`self.factor`.
 
         Returns
         -------
@@ -541,7 +547,7 @@ class MpsMpo:
 
         Returns
         -------
-        out : bool
+        bool
         """
         if to == 'first':
             # 0--A*--
@@ -564,9 +570,9 @@ class MpsMpo:
 
     def truncate_(self, to='last', normalize=True, opts_svd=None):
         r"""
-        Sweep though the MPS/MPO and put it in right/left canonical form 
+        Sweep through the MPS/MPO and put it in right/left canonical form 
         using :meth:`SVD<yastn.linalg.svd>` decomposition by setting 
-        :code:`to='first'` :code:`to='last'`. It is assumed that tensors are enumerated 
+        :code:`to='first'` or :code:`to='last'`. It is assumed that tensors are enumerated 
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
         Access to singular values during sweeping allows to truncate virtual spaces.
@@ -617,7 +623,7 @@ class MpsMpo:
 
         Returns
         ----------
-        out : Tensor
+        yastn.Tensor
             tensor formed from A[n] and A[n + 1]
         """
         nl, nr = bd
@@ -682,7 +688,7 @@ class MpsMpo:
 
         Returns
         -------
-        list(dict(int,int)) or list(dict(tuple(int),int))
+        list(dict(tuple(int),int))
             list of charges and corresponding dimensions on virtual mps bonds from first to last,
             including "trivial" leftmost and rightmost virtual spaces.
         """
@@ -701,7 +707,7 @@ class MpsMpo:
         Parameters
         ----------
         alpha : int
-            Value 1 (default) computes Von Neumann entropy. Higher values
+            value 1 (default) computes Von Neumann entropy. Higher values
             instead compute order :code:`alpha` Renyi entropies.
 
         Returns
@@ -721,12 +727,12 @@ class MpsMpo:
 
     def get_Schmidt_values(self):
         r"""
-        Schmidt values for bipartition across all bonds
+        Schmidt values for bipartition across all bonds (i-1, i).
 
         Returns
         -------
-        dict(int,yastn.Tensor)
-            integer-indexed dictionary of Schmidt values stored as diagonal tensors.
+        dict((int, int), yastn.Tensor)
+            tuple(int)-indexed dictionary of Schmidt values stored as diagonal tensors.
         """
         SV = {}
         psi = self.shallow_copy()
@@ -748,7 +754,7 @@ class MpsMpo:
         dict(int,dict)
             each element represents serialized :class:`yastn.Tensor`
             (see :meth:`yastn.Tensor.save_to_dict`) of the MPS/MPO starting
-            from first site to last.
+            from the first site to the last.
         """
         out_dict = {
             'nr_phys': self.nr_phys,
@@ -767,9 +773,9 @@ class MpsMpo:
         Save MPS/MPO into a HDF5 file.
 
         Parameters
-        -----------
+        ----------
         file: File
-            A 'pointer' to a file opened by a user
+            A `pointer` to a file opened by the user
 
         my_address: str
             Name of a group in the file, where the Mps will be saved, e.g., 'state/'

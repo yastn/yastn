@@ -12,9 +12,6 @@ def load_from_dict(config, in_dict):
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
 
-    nr_phys: int
-        number of physical legs: 1 for MPS (default); 2 for MPO;
-
     in_dict: dict
         dictionary containing serialized MPS/MPO, i.e.,
         a result of :meth:`yastn.tn.mps.MpsMpo.save_to_dict`.
@@ -36,19 +33,19 @@ def load_from_hdf5(config, file, my_address):
     Create MPS/MPO from HDF5 file.
 
     Parameters
-    -----------
+    ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
 
     file: File
-        A 'pointer' to a file opened by a user
+        A `pointer` to a file opened by the user
 
     my_address: str
         Name of a group in the file, where the Mps is saved, e.g., './state/'
 
     Returns
     -------
-    yastn.MpsMpo
+    yastn.tn.mps.MpsMpo
     """    
     sym_id = file[my_address].get('sym/SYM_ID')[()]
     nsym = file[my_address].get('sym/NSYM')[()]
@@ -60,12 +57,3 @@ def load_from_hdf5(config, file, my_address):
     for n in range(out_Mps.N):
         out_Mps.A[n] = initialize.load_from_hdf5(config, file, my_address+'/A/'+str(n))
     return out_Mps
-
-
-def _test_virtual(leg, ind):
-    if ind == 'trivial':
-        return leg.D == (1,) and leg.t == ((0,) * leg.sym.NSYM,)
-    if ind == 'Done':
-        return leg.D == (1,)
-    if ind == 'Dones':
-        return all(Dn == 1 for Dn in leg.D)

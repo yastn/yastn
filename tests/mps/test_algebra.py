@@ -31,7 +31,7 @@ def test_addition_basic():
     #
     config_dense = yastn.make_config()
     psi0 = mps.random_dense_mps(N=8, D=5, d=2)
-    psi1 = mps.random_dense_mps(N=8, D=5, d=2)
+    psi1 = mps.random_dense_mps(N=8, D=3, d=2)
      
     # We want to calculate: res = psi0 + 2 * psi1. There is a couple of ways:
     # A/
@@ -46,6 +46,7 @@ def test_addition_basic():
     nresA, nresB, nresC = resA.norm(), resB.norm(), resC.norm()
     assert abs(mps.vdot(resA, resB) / (nresA * nresB) - 1) < tol
     assert abs(mps.vdot(resA, resC) / (nresA * nresC) - 1) < tol
+    assert (x.get_bond_dimensions == (1, 8, 8, 8, 8, 8, 8, 8, 1) for x in (resA, resB, resC))
 
 
 def test_addition():
@@ -61,22 +62,24 @@ def test_addition():
     psi0 = generate.random_mpo(D_total=12)
     psi1 = generate.random_mpo(D_total=11)
     check_add(psi0, psi1)
-
+ 
 
 def test_multiplication():
-    # Calculate ground state and checks mps.multiply(), __mul__() and mps.zipper()
-    # and mps.add() within eigen-condition.
-    #
-    # This test presents a multiplication as a part of DMRG study. 
-    # We use multiplication to get expectation values from a state.
-    # Knowing exact solution we will compare it to the value we obtain.
+    """
+    Calculate ground state and tests, within eigen-condition, functions
+    mps.multiply(), __mul__() and mps.zipper() and mps.add()
+
+    This test presents multiplication as a part of DMRG study.
+    We use multiplication to get expectation values from a state.
+    Knowing the exact solution we will compare it to the value we obtain.
+    """
     N = 7
     Eng = -3.427339492125848
     #
     operators = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     generate = mps.Generator(N=N, operators=operators)
     #
-    # The Hamiltonian is obtained with automatic generator (see source file).
+    # The Hamiltonian is obtained with automatic generator.
     #
     parameters = {"t": 1.0, "mu": 0.2, "rangeN": range(N), "rangeNN": zip(range(N-1),range(1,N))}
     H_str = "\sum_{i,j \in rangeNN} t ( cp_{i} c_{j} + cp_{j} c_{i} ) + \sum_{j\in rangeN} mu cp_{j} c_{j}"
@@ -86,7 +89,7 @@ def test_multiplication():
     #
     generate.random_seed(seed=0)
     #
-    # In this example we use yastn.Tensor's with U(1) symmetry. 
+    # In this example we use yastn.Tensor's with U(1) symmetry.
     #
     total_charge = 3
     psi = generate.random_mps(D_total=8, n=total_charge)
@@ -101,30 +104,31 @@ def test_multiplication():
     #
     assert pytest.approx(out.energy.item(), rel=tol) == Eng
     #
-    # If the code didn't break then we should get a ground state.
+    # We should have the ground state.
     # Now we calculate the variation of energy <H^2>-<H>^2=<(H-Eng)^2>
     # to check if DMRG converged properly to tol.
-    # We have two equivalent ways to do that:
-    # (case 2 and 3 are not most efficient - we use them here for testing)
+    # We have a few ways to do that:
     #
     # case 1/
-    print(psi.get_bond_charges_dimensions())
+    # Find approximate Mps representing H @ psi. This is done in two steps.
+    # First, zipper function gives a good first approximation though a series of svd.
     Hpsi = mps.zipper(H, psi, opts={"D_total": 8})
+    # Second, compression is optimizing the overlap between approximation and a product H @ psi.
     mps.compression_(Hpsi, (H, psi), method='2site', max_sweeps=5, Schmidt_tol=1e-6, opts_svd={"D_total": 8}, normalize=False)
-    print(Hpsi.get_bond_charges_dimensions())
     #
-    # Use mps.norm() to get variation. 
-    # Norm canonizes copy of the state and, close to zero, is more precise than vdot.
+    # Use mps.norm() to get variation.
+    # Norm canonizes a copy of the state and, close to zero, is more precise than direct contraction using vdot.
     #
     p0 = Eng * psi - Hpsi
     assert p0.norm() < tol
     #
     # case 2/
+    # Here H @ psi is calculated exactly with resulting bond dimension being a product of bond dimensions of H and psi.
     Hpsi = mps.multiply(H, psi)
     p0 = Eng * psi - Hpsi
     assert p0.norm() < tol
     #
-    # case 3/
+    # Equivalently we can call.
     Hpsi = H @ psi
     p0 = Eng * psi - Hpsi
     assert p0.norm() < tol
