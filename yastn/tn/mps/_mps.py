@@ -122,7 +122,7 @@ def multiply(a, b, mode=None):
             a pair of MPO and MPS or two MPO's to be multiplied
 
         mode : str
-           mode for :meth:`yastn.fuse_legs`; If :code:`None` (default)
+           mode for :meth:`Tensor.fuse_legs()<yastn.Tensor.fuse_legs>`; If :code:`None` (default)
            use default setting from YASTN tensor's
            :ref:`configuration<tensor/configuration:yastn configuration>`.
 

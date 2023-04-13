@@ -1,5 +1,6 @@
 # YASTN - Yet Another Symmetric Tensor Network
 ![Test status](https://github.com/yastn/yastn/actions/workflows/main.yml/badge.svg?branch=master)
+![Docs status](https://github.com/yastn/yastn/actions/workflows/docs.yml/badge.svg?branch=master)
 
 by Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, and Juraj Hasik
 
@@ -25,9 +26,9 @@ allowing for automatic differentiation (autograd) on backends which provide it.
 
 - Matrix product states (MPS) and algorithms powered by YASTN 
 
-   Explore the entire [MPS module](https://marekrams.gitlab.io/yast/yastn.mps.html#) or 
-   try out code examples running [DMRG](https://marekrams.gitlab.io/yast/examples/mps/mps.html#dmrg)
-   or [TDVP](https://marekrams.gitlab.io/yast/examples/mps/mps.html#tdvp) optimizations
+   Explore the entire [MPS module](https://yastn.github.io/yastn/yastn.mps.html) or 
+   try out code examples running [DMRG](https://yastn.github.io/yastn/examples/mps/algorithms.html#dmrg)
+   or [TDVP](https://yastn.github.io/yastn/examples/mps/algorithms.html#tdvp) optimizations
 
 <br />
 
@@ -37,7 +38,7 @@ allowing for automatic differentiation (autograd) on backends which provide it.
 
 <br />
 
-### Jump to [full Documentation](https://marekrams.gitlab.io/yast/index.html) or get started with [Examples](https://marekrams.gitlab.io/yast/yastn.tensor.html#examples-basics-of-usage)
+### Jump to [full Documentation](https://yastn.github.io/yastn/index.html) or get started with [Examples](https://yastn.github.io/yastn/yastn.tensor.html#examples-basics-of-usage)
 
 <br />
 
@@ -53,13 +54,13 @@ or just clone and add YASTN root to your Python import path to sucessfully ``imp
 
 ##### YASTN depends on
 
-- Python 3.7+
-- NumPy ?+
+- Python 3.9+
+- NumPy
 
 and optionally 
 
 - PyTorch 1.11+ (for PyTorch backend)
-- SciPy ?+ (for sparse linear algebra solvers)
+- SciPy (for sparse linear algebra solvers)
 - ...
 
 ### Run the tests
@@ -86,9 +87,9 @@ pytest --backend torch -v ./mps
 You can build documentation using `sphinx`. The prerequisites are
 
    * sphinx
-   * sphinx_rtd_theme
+   * pydata-sphinx-theme
 
-Get them with your favourite Python package manager. For example, using conda as `conda install -c conda-forge sphinx sphinx_rtd_theme`.
+Get them with your favourite Python package manager. For example, using conda as `conda install -c conda-forge sphinx pydata-sphinx-theme`.
 Then
 
 ```
