@@ -11,7 +11,9 @@ tol = 1e-10  #pylint: disable=invalid-name
 
 
 def run_qr_combine(a):
-    """ decompose and contracts tensor using qr decomposition """
+    """ decompose and contracts tensor ``a`` using qr decomposition """
+    assert a.ndim == 4
+
     Q, R = yastn.linalg.qr(a, axes=((3, 1), (2, 0)))
     QR = yastn.tensordot(Q, R, axes=(2, 0))
     QR = QR.transpose(axes=(3, 1, 2, 0))
@@ -20,7 +22,7 @@ def run_qr_combine(a):
     assert R.is_consistent()
     check_diag_R_nonnegative(R.fuse_legs(axes=(0, (1, 2)), mode='hard'))
 
-    # changes signature of new leg; and position of new leg
+    # change signature of new leg; and position of new leg
     Q2, R2 = yastn.qr(a, axes=((3, 1), (2, 0)), sQ=-1, Qaxis=0, Raxis=-1)
     QR2 = yastn.tensordot(R2, Q2, axes=(2, 0)).transpose(axes=(1, 3, 0, 2))
     assert yastn.norm(a - QR2) < tol  # == 0.0

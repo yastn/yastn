@@ -16,7 +16,7 @@ Basic contractions with :meth:`yastn.tensordot`,  matrix-multiplication operator
 .. literalinclude:: /../../tests/tensor/test_syntax.py
    :pyobject: TestSyntaxContractions.test_syntax_contraction
 
-Higher-level interface ``ncon`` composing simple contractions
+Higher-level interface ``ncon`` (or equivalently ``einsum``) composing simple contractions
 
 .. literalinclude:: /../../tests/tensor/test_ncon_einsum.py
    :pyobject: test_ncon_einsum_syntax

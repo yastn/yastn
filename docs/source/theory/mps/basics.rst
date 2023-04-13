@@ -1,5 +1,8 @@
+Basic concepts
+--------------
+
 Matrix product state (MPS)
---------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The numerical simulation of quantum system has been proven to be hard due to the exponentially growing size of the matrix representation of the system. In particular, if the local Hilbert space for *j*-th particle is :math:`\mathcal{H}_j` of dimension *d* 
 (e.g., *d=2* for qubit and *d=3* for qutrit) then for *N* particles it will be :math:`\mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1}` 
@@ -48,7 +51,7 @@ The manifold can be controlled by changing the virtual dimension achieving exact
 
 
 Matrix product operator (MPO)
------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 *Matrix product operator* is tensor product representation for an operator on space of *N* particles, in general a :math:`d^N \times d^N` matrix, by `N` tensors with two physical and two virtual indices.
 The concept of MPO is analogous to :ref:`MPS <theory/mps/basics:Matrix product state (MPS)>`.
@@ -77,8 +80,8 @@ MPO with open boundary condition has a bond dimension `D=1` on the edges of the 
            d_0           d_1           d_2           d_3           d_4           d_5
 
 
-Canonical form 
----------------
+Canonical form
+^^^^^^^^^^^^^^
 
 The computational costs associated with matrix product representation are controlled by virtual bond dimensions. That means that one wants to use :ref:`sepctral decomposition<tensor/algebra:spectral decompositions and truncation>` which allow for optimal truncation of the MPS. The truncation should be able to keep the most important components and discard those who are of lesser importance. *Canonical decomposition* is integral form for every :ref:`MPS algorithm<theory/mps/basics:Algorithms>`, including energy minimization with DMRG or time evolution with TDVP. 
 In those algorithms we act on each MPS tensor separately and we iteratively adjust their form. We choose to put MPS in the `canonical form` with respect to *j*-to-*j+1*-th bond. In order to do that we split MPS by SVD into two parts representing :math:`D_{j,j+1}` left Schmidt vectors :math:`|L_{0,1\cdots j}\rangle`, :math:`D_{j,j+1}` right Schmidt vectors :math:`|R_{j+1,j+2\cdots N-1}\rangle`, and central matrix :math:`\Lambda_{j,j+1}`.
@@ -100,10 +103,10 @@ If for every MPS tensor the left environment is unitary, i.e., for corresponding
 
 
 Algorithms
-----------
+^^^^^^^^^^
 
-`Density matrix renormalisation group` 
-(:ref:`DMRG<mps/algorithms_dmrg:density matrix renormalisation group (dmrg) algorithm>`) 
+`Density matrix renormalization group` 
+(:ref:`DMRG<mps/algorithms_dmrg:density matrix renormalization group (dmrg) algorithm>`) 
 is an algorithm searching for the MPS which extremizes the expectation value of hermitian operator written as MPO, usually the Hamiltonian. 
 
 `Time-dependent variational principle` 
@@ -114,7 +117,7 @@ TDVP can be performed for any MPS under MPO for a time `t`, real or imaginary.
 
 
 Measurements
-------------
+^^^^^^^^^^^^
 
 Norm of an MPS is equivalent to a norm of a vector and can be written as :math:`tr\{\Psi^\dagger \Psi\}` where :math:`tr\{.\}` is a trace operation, or, in bra-ket notation, :math:`\langle\Psi|\Psi\rangle`, where :math:`|\Psi\rangle` is the MPS and 
 :math:`\langle\Psi|` is a conjugation of the MPS. This overlap can be calculated for arbitrary pair of vectors of matching physical indices. After contracting physical and virtual indices, an overlap gives a scalar value.
@@ -148,7 +151,7 @@ are consistent along physical indices. After contracting physical and virtual in
 
 
 References & Related works
---------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 1. "Tensor Network Contractions: Methods and Applications to Quantum Many-Body Systems" Shi-Ju Ran, Emanuele Tirrito, Cheng Peng, Xi Chen, Luca Tagliacozzo, Gang Su, Maciej Lewenstein `Lecture Notes in Physics LNP, volume 964, (2020) <https://link.springer.com/book/10.1007/978-3-030-34489-4>`_
 2. "The density-matrix renormalization group in the age of matrix product states" Ulrich Schollwoeck, `Annals of Physics, Volume 326, Issue 1, Pages 96-192, (2011) <https://arxiv.org/pdf/1008.3477.pdf>`_

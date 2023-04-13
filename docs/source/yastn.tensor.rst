@@ -11,9 +11,9 @@ What are abelian-symmetric tensors
    
    theory/tensor/basics
 
-**********************************
+***************************
 API: yastn and yastn.Tensor
-**********************************
+***************************
 
 .. toctree::
    :caption: API: yastn and yastn.Tensor

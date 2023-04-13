@@ -134,7 +134,7 @@ def multiply(a, b, mode=None):
         YastnError('MPS: Mps-s must have equal number of sites.')
 
     nr_phys = a.nr_phys + b.nr_phys - 2
-    
+
     if a.nr_phys == 1:
         YastnError('MPS: First argument has to be an MPO.')
     phi = MpsMpo(N=a.N, nr_phys=nr_phys)
@@ -160,14 +160,14 @@ class MpsMpo:
     r"""
     The basic structure of MPS (for nr_phys=1) and MPO (for nr_phys=2).
 
-    MpsMpo tensors (sites) are accessed with usual ``[]`` operator. They are indexed 
+    MpsMpo tensors (sites) are accessed with usual ``[]`` operator. They are indexed
     by integers from :math:`0, 1, 2, 3, \ldots, N-1` with :math:`0` corresponding to the first site.
     A central block, associated with a bond, is indexed using ordered tuple (n, n+1). At most one central block is allowed.
 
-    The :ref:`Index convention<mps/convention:index convention>` for 
+    The :ref:`Index convention<mps/properties:index convention>` for
     legs of each tensor is: virtual leg in the direction of first site, 1st physical leg (:math:`|\textrm{ket}\rangle`),
     virtual leg in the direction of last site, and 2nd physical leg (:math:`\langle \textrm{bra}|`) in case of MPO.
-    
+
     """
 
     def __init__(self, N=1, nr_phys=1):
@@ -493,8 +493,8 @@ class MpsMpo:
                 self.A[n2] = C @ self.A[n2]
 
     def norm(self):
-        r""" Calculate norm of MPS/MPO via canonization. 
-        
+        r""" Calculate norm of MPS/MPO via canonization.
+
         Returns
         -------
         scalar
@@ -559,7 +559,7 @@ class MpsMpo:
             cl = (1, 2) if self.nr_phys == 1 else (1, 2, 3)
         else: # to == 'last':
             #  --A*--2
-            # 0  1 
+            # 0  1
             #  --A---2
             cl = (0, 1) if self.nr_phys == 1 else (0, 1, 3)
         it = self.sweep(to=to) if n is None else [n]
@@ -573,9 +573,9 @@ class MpsMpo:
 
     def truncate_(self, to='last', normalize=True, opts_svd=None):
         r"""
-        Sweep through the MPS/MPO and put it in right/left canonical form 
-        using :meth:`SVD<yastn.linalg.svd>` decomposition by setting 
-        :code:`to='first'` or :code:`to='last'`. It is assumed that tensors are enumerated 
+        Sweep through the MPS/MPO and put it in right/left canonical form
+        using :meth:`SVD<yastn.linalg.svd>` decomposition by setting
+        :code:`to='first'` or :code:`to='last'`. It is assumed that tensors are enumerated
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
         Access to singular values during sweeping allows to truncate virtual spaces.
@@ -583,7 +583,7 @@ class MpsMpo:
         in the direction opposite to current sweep, i.e., left canonical form for :code:`to='last'`
         or right canonical form for :code:`to='first'`.
 
-        The MPS/MPO is canonized in-place. 
+        The MPS/MPO is canonized in-place.
 
         Parameters
         ----------
