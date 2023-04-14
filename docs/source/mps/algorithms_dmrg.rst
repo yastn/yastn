@@ -6,7 +6,7 @@ to obtain a state which extremizes the expectation value of Hermitian operator.
 A typical example is search for the best MPS approximation of a ground-state
 of some Hamiltonian in form of MPO.
 
-A high-level function organizing DMRG simulations is :code:`yastn.tn.mps.dmrg_()`. For examples, see :ref:`examples/mps/mps:dmrg`.
+A high-level function organizing DMRG simulations is :code:`yastn.tn.mps.dmrg_()`. For examples, see :ref:`examples/mps/algorithms:dmrg`.
 
 .. autofunction:: yastn.tn.mps.dmrg_
 

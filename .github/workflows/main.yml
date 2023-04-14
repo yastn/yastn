@@ -9,7 +9,7 @@ on:
     branches: 
       - '**'
   pull_request:
-    branches: [ master, tests ]
+    branches: [ master, tests, docs ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -57,6 +57,16 @@ jobs:
           cd tests/;
           pytest --backend ${{ matrix.backend }} -v ./tensor;
           pytest --backend ${{ matrix.backend }} -v ./mps;
+
+  deploy-docs:
+    if: contains(fromJson('["refs/heads/master","refs/heads/docs"]'), github.ref)
+    permissions: 
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/docs.yml
+    with:
+      python-version: '3.9'
 
   test-full-coverage:
     needs: test-basic
