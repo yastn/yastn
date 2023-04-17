@@ -718,10 +718,10 @@ class MpsMpo:
         list(scalar)
             list of bond entropies.
         """
-        Entropy = [0] * self.N
+        Entropy = [0] * (self.N + 1)
         psi = self.shallow_copy()
-        psi.canonize_(to='last', normalize=False)
         psi.absorb_central(to='first')
+        psi.canonize_(to='last', normalize=False)
         for n in psi.sweep(to='first'):
             psi.orthogonalize_site(n=n, to='first', normalize=False)
             Entropy[n], _, _ = tensor.entropy(psi.A[psi.pC], alpha=alpha)

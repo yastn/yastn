@@ -89,6 +89,8 @@ def generate_mpo(I, terms, opts=None, packet=50):  # can use better algorithm to
     yastn.tn.mps.MpsMpo
     """
     ip, M_tot, Nterms = 0, None, len(terms)
+    if opts is None:
+        opts={'tol': 5e-15}
     while ip < Nterms:
         H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
         M = add(*H1s)
@@ -412,7 +414,7 @@ class Generator:
         c2 = latex2term(H_str, parameters)
         c3 = self._term2Hterm(c2, self._ops.to_dict(), parameters)
         if opts is None:
-            opts={'tol': 5e-16}
+            opts={'tol': 5e-15}
         return generate_mpo(self._I, c3, opts)
 
     def mpo_from_templete(self, templete, parameters=None):   # remove from docs (DELETE)
