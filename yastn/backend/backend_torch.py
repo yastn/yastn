@@ -1,5 +1,6 @@
 """Support of torch as a data structure used by yastn."""
-from itertools import chain, groupby
+from itertools import groupby
+from functools import reduce
 import numpy as np
 import torch
 
@@ -8,13 +9,13 @@ __all__= [
     'SVDGESDD','SYMEIG',
     'get_dtype', 'is_complex', 'get_device', 'random_seed', 'set_num_threads', 'grad',
     'detach', 'detach_', 'clone', 'copy',
-    'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real', 
-    'imag', 'max_abs', 'norm_matrix', 'count_nonzero', 'delete', 'insert', 
-    'expm', 
+    'to_numpy', 'get_shape', 'get_size', 'diag_create', 'diag_get', 'real',
+    'imag', 'max_abs', 'norm_matrix', 'count_nonzero', 'delete', 'insert',
+    'expm',
     'first_element', 'item', 'sum_elements', 'norm', 'entropy',
-    'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict', 
+    'zeros', 'ones', 'rand', 'to_tensor', 'to_mask', 'square_matrix_from_dict',
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
-    'trace', 'trace_with_mask', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute', 
+    'trace', 'trace_with_mask', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
     'svd_lowrank', 'svd', 'eigh', 'qr',
     'argsort', 'eigs_which', 'embed_msk', 'embed_slc',
     'add', 'sub', 'apxb', 'apply_slice', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
@@ -48,10 +49,6 @@ from .linalg.torch_eig_sym import SYMEIG
 BACKEND_ID = "torch"
 DTYPE = {'float64': torch.float64,
          'complex128': torch.complex128}
-
-def _common_type(iterator):
-    return torch.complex128 if any(x.is_complex() for x in iterator) else torch.float64
-
 
 def get_dtype(t):
     return t.dtype
@@ -222,7 +219,7 @@ def to_mask(val):
 
 
 def square_matrix_from_dict(H, D=None, **kwargs):
-    dtype = _common_type(H.values())
+    dtype = reduce(torch.promote_types, (a.dtype for a in H.values()))
     device = next(iter(H.values())).device
     T = torch.zeros((D, D), dtype=dtype, device=device)
     for (i, j), v in H.items():
@@ -461,7 +458,7 @@ def embed_slc(data, meta, Dsize):
 
 
 def add(Adata, Bdata, meta, Dsize):
-    dtype = _common_type((Adata, Bdata))
+    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
     for sl_c, sl_a in meta[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
@@ -471,7 +468,7 @@ def add(Adata, Bdata, meta, Dsize):
 
 
 def sub(Adata, Bdata, meta, Dsize):
-    dtype = _common_type((Adata, Bdata))
+    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
     for sl_c, sl_a in meta[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
@@ -481,7 +478,7 @@ def sub(Adata, Bdata, meta, Dsize):
 
 
 def apxb(Adata, Bdata, x, meta, Dsize):
-    dtype = _common_type((Adata, Bdata))
+    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
     for sl_c, sl_a in meta[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
@@ -499,7 +496,7 @@ def apply_slice(data, slcn, slco):
 
 
 def vdot(Adata, Bdata):
-    dtype = _common_type((Adata, Bdata))
+    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     if dtype != Adata.dtype:
         Adata = Adata.to(dtype=dtype)
     if dtype != Bdata.dtype:
@@ -523,7 +520,7 @@ def diag_2dto1d(data, meta, Dsize):
 
 
 def dot(Adata, Bdata, meta_dot, Dsize):
-    dtype = _common_type((Adata, Bdata))
+    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     if dtype != Adata.dtype:
         Adata = Adata.to(dtype=dtype)
     if dtype != Bdata.dtype:
@@ -535,7 +532,7 @@ def dot(Adata, Bdata, meta_dot, Dsize):
 
 
 def dot_with_mask(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
-    dtype = _common_type((Adata, Bdata))
+    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     if dtype != Adata.dtype:
         Adata = Adata.to(dtype=dtype)
     if dtype != Bdata.dtype:
@@ -549,7 +546,7 @@ def dot_with_mask(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
 def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
-    dtype = _common_type((Adata, Bdata))
+    dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
     newdata = torch.empty((Dsize,), dtype=dtype, device=Adata.device)
     for sln, slb, Db, sla in meta:
         newdata[slice(*sln)].reshape(Db)[:] = Adata[slice(*sla)].reshape(dim) * Bdata[slice(*slb)].reshape(Db)
@@ -574,7 +571,7 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
 
 # def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
 #     f = dot_dict[cc]  # proper conjugations
-#     dtype = _common_type((Adata, Bdata))
+#     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
 #     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
 #     for (sln, sla, Dao, Dan, slb, Dbo, Dbn) in meta:
 #         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).permute(oA).reshape(Dan), \
@@ -584,7 +581,7 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
 
 # def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
 #     f = dot_dict[cc]  # proper conjugations
-#     dtype = _common_type((Adata, Bdata))
+#     dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
 #     newdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
 #     for (sln, sla, Dao, Dan, slb, Dbo, Dbn), tt in zip(meta, tcon):
 #         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).permute(oA).reshape(Dan)[:, ma[tt]], \
@@ -660,7 +657,7 @@ def merge_to_dense(data, Dtot, meta):
 
 
 def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
-    dtype = _common_type(pos_tens.values())
+    dtype = reduce(torch.promote_types, (a._data.dtype for a in pos_tens.values()))
     device = next(iter(pos_tens.values()))._data.device
     newdata = torch.zeros((Dsize,), dtype=dtype, device=device)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_block, key=lambda x: x[0])):
