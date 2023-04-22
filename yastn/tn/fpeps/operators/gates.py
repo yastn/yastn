@@ -110,9 +110,9 @@ def gate_local_fermi_sea(mu, beta, fid, fc, fcdag, purification=False):
     # they are transposed comparing to typical matrix notation
 
     if purification == 'False':
-        coeff = 0.5
+        coeff = -0.5
     elif purification == 'True':
-        coeff = 0.25
+        coeff = -0.25
     elif purification == 'Time':
         coeff = 1j*0.5
     fn = fcdag @ fc
@@ -121,103 +121,48 @@ def gate_local_fermi_sea(mu, beta, fid, fc, fcdag, purification=False):
     return G_loc
 
 
-def Gate_Ising(id, z, J, beta, evolution='imaginary', ancilla=True):
-
-    if evolution == 'imaginary':
-        coeff = 0.25
-        step = -coeff * beta # coeff comes from either purification and ST 
-    elif evolution == 'real':
+def gate_Ising(sid, sz, J, beta, purification='imaginary'):
+    """ define 2-site gate for Ising model with ZZ interactions. """
+   
+    if purification == 'False': 
+        coeff = -0.5*1j
+    elif purification == 'True':
+        coeff = -0.25*1j
+    elif purification == 'Time':
         coeff = 0.5
-        step = -1j *coeff * beta # coeff comes from either purification and ST or ST only 
-    """ define 2-site gate for Ising model with longitudinal (hz) and transverse (hx) fields. """
-    F = - J * ncon([z, z], ((-0, -1), (-2, -3)))
 
-    F = F.fuse_legs(axes = ((0, 2), (1, 3)))
-    D, S = yastn.eigh(F, axes = (0, 1))
-    D = yastn.exp(D, step=step) 
-    U = yastn.ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
-    U = U.unfuse_legs(axes=(0, 1))
-    U = U.transpose(axes=(0, 2, 1, 3))
+    one = ncon([sid, sid], ((-0, -1), (-2, -3)))
+    ZZ = ncon([sz, sz], ((-0, -1), (-2, -3)))
 
-    U, S, V = svd_with_truncation(U, axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15, Vaxis=2)
+    step = coeff * beta * J
+    D =  np.cos(step) * one + 1j * np.sin(step) * ZZ
+
+    U, S, V = svd_with_truncation(D, axes=((0, 1), (2, 3)), sU=-1, tol=1e-15, Vaxis=2)
     S = S.sqrt()
     GA = S.broadcast(U, axes=2)
     GB = S.broadcast(V, axes=2)
-
-    if ancilla == True:
-        GA = ncon((id, GA), ((-2, -0), (-1, -3, -4)))
-        GB = ncon((id, GB), ((-2, -0), (-1, -3, -4)))
-        GA = GA.fuse_legs(axes=((0, 1), (2, 3), 4))
-        GB = GB.fuse_legs(axes=((0, 1), (2, 3), 4))
-
     return GA, GB
 
 
-def Gate_local_dense(x, z, hx, hz, beta, evolution, disorder_ancilla=True, gen_fsigz=None):
+def gate_local_dense(sid, sx, sz, hx, hz, beta, purification='imaginary'):
 
-    if evolution == 'imaginary':
-        coeff = 0.25
-        step = -coeff * beta # coeff comes from either purification and ST 
-    elif evolution == 'real':
-        coeff = 0.5
-        step = -1j * coeff * beta # coeff comes from either purification and ST or ST only 
+    if purification == 'False':
+        coeff = -0.5 * 1j
+    elif purification == 'True':
+        coeff = -0.25 * 1j
+    elif purification == 'Time':
+        coeff = 0.5 
+    
+    step_x = coeff * beta * hx
+    step_z = coeff * beta * hz
 
-    F = - hx * x
-    F = F -  hz * z
-    D, S = yastn.eigh(F, axes = (0, 1))
-    D = yastn.exp(D, step=step) 
-    G_loc = yastn.ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
-    
-    if disorder_ancilla == True:
-        Gas = ncon((gen_fsigz, G_loc), ((-2, -0), (-1, -3)))
-        G_loc = Gas.fuse_legs(axes=((0, 1), (2, 3)))
-    
+    G_loc_x = np.cos(step_x) * sid + 1j * np.sin(step_x) * sx
+    G_loc_z = np.cos(step_z) * sid + 1j * np.sin(step_z) * sz
+
+    G_loc = G_loc_x @ G_loc_z
     return G_loc
 
 
-def Gate_local_dense_floquet(x, h_0, w, beta, dbeta):
-
-    coeff = 0.5   # from suzuki trotter
-    step = -1j *coeff * dbeta # coeff comes from either purification and ST 
-    hx = h_0*np.cos(w*beta)
-    print('field hx', hx)
-    F = - hx * x
-    D, S = yastn.eigh(F, axes = (0, 1))
-    D = yastn.exp(D, step=step) 
-    G_loc = yastn.ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
-    
-    return G_loc
-
-
-
-def Gate_Heisenberg(sp, sm, sz, Jpm, Jmp, Jz, beta, fid_ancilla, ancilla=True):
-
-    coeff = 0.5 # coeff comes from Suzuki Trotter
-    step = -1j *coeff * beta 
-    """ define 2-site gate for Heisenberg model """
-    F =  0.25 * Jz * ncon([sz, sz], ((-0, -1), (-2, -3)))
-    F = F + 0.25 * 0.5 * Jpm * ncon([sp, sm], ((-0, -1), (-2, -3)))
-    F = F + 0.25 * 0.5 * Jmp * ncon([sm, sp], ((-0, -1), (-2, -3)))
-
-    F = F.fuse_legs(axes = ((0, 2), (1, 3)))
-    D, S = yastn.eigh(F, axes = (0, 1))
-    D = yastn.exp(D, step=step) 
-    U = yastn.ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
-    U = U.unfuse_legs(axes=(0, 1))
-    U = U.transpose(axes=(0, 2, 1, 3))
-
-    U, S, V = svd_with_truncation(U, axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15, Vaxis=2)
-    S = S.sqrt()
-    GA = S.broadcast(U, axes=2)
-    GB = S.broadcast(V, axes=2)
-
-    if ancilla == True:
-        GA = ncon((fid_ancilla, GA), ((-2, -0), (-1, -3, -4)))
-        GB = ncon((fid_ancilla, GB), ((-2, -0), (-1, -3, -4)))
-        GA = GA.fuse_legs(axes=((0, 1), (2, 3), 4))
-        GB = GB.fuse_legs(axes=((0, 1), (2, 3), 4))
-
-    return GA, GB
 
 
 def trivial_tensor(fid):
