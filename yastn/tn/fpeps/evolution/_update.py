@@ -104,8 +104,12 @@ def gates_homogeneous(psi, nn_gates, loc_gates):
         for i in range(len(nn_gates)):
             gates_nn.append(Gate_nn(A=nn_gates[i][0], B=nn_gates[i][1], bond=bd))
     gates_loc = []
-    for site in psi.sites():
-        gates_loc.append(Gate_local(A=loc_gates, site=site))
+    if psi.lattice=='checkerboard':
+        gates_loc.append(Gate_local(A=loc_gates, site=(0,0)))
+        gates_loc.append(Gate_local(A=loc_gates, site=(0,1)))
+    elif psi.lattice != 'checkerboard':
+        for site in psi.sites():
+            gates_loc.append(Gate_local(A=loc_gates, site=site))
     return Gates(local=gates_loc, nn=gates_nn)
 
 

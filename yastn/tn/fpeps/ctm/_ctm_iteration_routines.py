@@ -723,6 +723,12 @@ def fPEPS_2layers(A, B=None, op=None, dir=None):
     Here spin and ancilla legs of tensors are fused
     """
     leg = A.get_legs(axes=-1)
+
+    if not leg.is_fused():  # when there is no ancilla on A, only the physical index is present
+        A = A.add_leg(s=-1)
+        A = A.fuse_legs(axes=(0, 1, 2, 3, (4, 5)))  # new ancilla on outgoing leg
+        leg = A.get_legs(axes=-1)
+
     _, leg = yastn.leg_undo_product(leg) # last leg of A should be fused
     fid = yastn.eye(config=A.config, legs=[leg, leg.conj()]).diag()
 
