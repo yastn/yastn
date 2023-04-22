@@ -1,5 +1,6 @@
 """Support of numpy as a data structure used by yastn."""
 from itertools import groupby
+from functools import reduce
 import warnings
 import numpy as np
 import scipy.linalg
@@ -186,7 +187,7 @@ def to_mask(val):
 
 
 def square_matrix_from_dict(H, D=None, **kwargs):
-    dtype = np.common_type(*tuple(H.values()))
+    dtype = reduce(np.promote_types, (a.dtype for a in H.values()))
     T = np.zeros((D, D), dtype=dtype)
     for (i, j), v in H.items():
         if i < D and j < D:
@@ -362,7 +363,8 @@ def embed_slc(data, meta, Dsize):
 
 
 def add(Adata, Bdata, meta, Dsize):
-    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+    dtype = np.promote_types(Adata.dtype, Bdata.dtype)
+    newdata = np.zeros((Dsize,), dtype=dtype)
     for sl_c, sl_a in meta[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
     for sl_c, sl_b in meta[1]:
@@ -371,7 +373,8 @@ def add(Adata, Bdata, meta, Dsize):
 
 
 def sub(Adata, Bdata, meta, Dsize):
-    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+    dtype = np.promote_types(Adata.dtype, Bdata.dtype)
+    newdata = np.zeros((Dsize,), dtype=dtype)
     for sl_c, sl_a in meta[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
     for sl_c, sl_b in meta[1]:
@@ -380,7 +383,8 @@ def sub(Adata, Bdata, meta, Dsize):
 
 
 def apxb(Adata, Bdata, x, meta, Dsize):
-    newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+    dtype = np.promote_types(Adata.dtype, Bdata.dtype)
+    newdata = np.zeros((Dsize,), dtype=dtype)
     for sl_c, sl_a in meta[0]:
         newdata[slice(*sl_c)] += Adata[slice(*sl_a)]
     for sl_c, sl_b in meta[1]:
@@ -415,7 +419,8 @@ def diag_2dto1d(Adata, meta, Dsize):
 
 
 def dot(Adata, Bdata, meta_dot, Dsize):
-    newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
+    dtype = np.promote_types(Adata.dtype, Bdata.dtype)
+    newdata = np.empty((Dsize,), dtype=dtype)
     for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
         np.matmul(Adata[slice(*sla)].reshape(Da), \
                   Bdata[slice(*slb)].reshape(Db), \
@@ -424,7 +429,8 @@ def dot(Adata, Bdata, meta_dot, Dsize):
 
 
 def dot_with_mask(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
-    newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
+    dtype = np.promote_types(Adata.dtype, Bdata.dtype)
+    newdata = np.empty((Dsize,), dtype=dtype)
     for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
         np.matmul(Adata[slice(*sla)].reshape(Da)[:, msk_a[ia]], \
                   Bdata[slice(*slb)].reshape(Db)[msk_b[ib], :], \
@@ -435,7 +441,8 @@ def dot_with_mask(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
 def dot_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
     dim = [1] * a_ndim
     dim[axis] = -1
-    newdata = np.empty((Dsize,), dtype=np.common_type(Adata, Bdata))
+    dtype = np.promote_types(Adata.dtype, Bdata.dtype)
+    newdata = np.empty((Dsize,), dtype=dtype)
     for sln, slb, Db, sla in meta:
         newdata[slice(*sln)].reshape(Db)[:] = Adata[slice(*sla)].reshape(dim) * Bdata[slice(*slb)].reshape(Db)
     return newdata
@@ -459,7 +466,8 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
 #
 # def dot_nomerge(Adata, Bdata, cc, oA, oB, meta, Dsize):
 #     f = dot_dict[cc]  # proper conjugations
-#     newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+#     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
+#     newdata = np.zeros((Dsize,), dtype=dtype)
 #     for (sln, sla, Dao, Dan, slb, Dbo, Dbn) in meta:
 #         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan), \
 #                                   Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn), None).ravel()
@@ -468,7 +476,8 @@ def mask_diag(Adata, Bdata, meta, Dsize, axis, a_ndim):
 
 # def dot_nomerge_masks(Adata, Bdata, cc, oA, oB, meta, Dsize, tcon, ma, mb):
 #     f = dot_dict[cc]  # proper conjugations
-#     newdata = np.zeros((Dsize,), dtype=np.common_type(Adata, Bdata))
+#     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
+#     newdata = np.zeros((Dsize,), dtype=dtype)
 #     for (sln, sla, Dao, Dan, slb, Dbo, Dbn), tt in zip(meta, tcon):
 #         newdata[slice(*sln)] += f(Adata[slice(*sla)].reshape(Dao).transpose(oA).reshape(Dan)[:, ma[tt]], \
 #                                   Bdata[slice(*slb)].reshape(Dbo).transpose(oB).reshape(Dbn)[mb[tt], :], None).ravel()
@@ -512,7 +521,7 @@ def merge_to_dense(data, Dtot, meta):
 
 
 def merge_super_blocks(pos_tens, meta_new, meta_block, Dsize):
-    dtype = np.common_type(*list(a._data for a in pos_tens.values()))
+    dtype = reduce(np.promote_types, (a._data.dtype for a in pos_tens.values()))
     newdata = np.zeros((Dsize,), dtype=dtype)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_block, key=lambda x: x[0])):
         assert tn == t1
