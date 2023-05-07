@@ -91,6 +91,8 @@ class Tensor:
                     raise YastnError("Tensor charge of a diagonal tensor should be 0")
             self.struct = _struct(s=s, n=n, diag=isdiag)
 
+        self.slices = kwargs['slices'] if 'slices' in kwargs else ()
+
         # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]
         try:
             self.mfs = tuple(kwargs['mfs'])
@@ -123,7 +125,7 @@ class Tensor:
 
     def _replace(self, **kwargs):
         """ Creates a shallow copy replacing fields specified in kwargs """
-        for arg in ('config', 'struct', 'mfs', 'hfs', 'data'):
+        for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
         return Tensor(**kwargs)
@@ -216,7 +218,7 @@ class Tensor:
         size : int
             total number of elements in all non-empty blocks of the tensor
         """
-        return self.config.backend.get_size(self._data)
+        return self.struct.size
 
     @property
     def device(self):
@@ -254,6 +256,6 @@ class Tensor:
         Returns
         -------
         data : backend tensor type
-            underlying 1D-array storing the elements of the tensor 
+            underlying 1D-array storing the elements of the tensor
         """
         return self._data

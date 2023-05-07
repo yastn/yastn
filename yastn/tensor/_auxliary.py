@@ -10,8 +10,13 @@ class _struct(NamedTuple):
     diag: bool = False  # isdiag
     t: tuple = ()  # list of block charges
     D: tuple = ()  # list of block shapes
-    Dp: tuple = ()  # list of block sizes (products of shapes)
-    sl: tuple = ()  # slices in 1d data
+    size: int = 0  # total data size
+
+
+class _slc(NamedTuple):
+    slcs: tuple = ()  # slice
+    D: tuple = ()  # reshape
+    Dp: int = 0  # product of D
 
 
 class _config(NamedTuple):

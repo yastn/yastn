@@ -2,7 +2,7 @@
 from functools import lru_cache
 from itertools import groupby
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
+from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
@@ -406,25 +406,24 @@ def trace(a, axes=(0, 1)):
 
     if a.isdiag:
         # if needs_mask: raise YastnError('Should not have happend')
-        struct = a.struct._replace(s=(), diag=False, t=((),), D=((),), Dp=(1,), sl=((0, 1),))
+        struct = a.struct._replace(s=(), diag=False, t=((),), D=((),), size=1)
         data = a.config.backend.sum_elements(a._data)
         return a._replace(struct=struct, mfs=mfs, hfs=hfs, isdiag=False, data=data)
 
-    meta, struct, tcon, D1, D2 = _meta_trace(a.struct, in1, in2, out)
-    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
+    meta, struct, slices, tcon, D1, D2 = _meta_trace(a.struct, a.slices, in1, in2, out)
     if needs_mask:
         msk12 = _masks_for_trace(a.config, tcon, D1, D2, a.hfs, in1, in2)
-        data = a.config.backend.trace_with_mask(a._data, order, meta, Dsize, tcon, msk12)
+        data = a.config.backend.trace_with_mask(a._data, order, meta, struct.size, tcon, msk12)
     else:
         if D1 != D2:
             raise YastnError('Bond dimensions do not match.')
-        data = a.config.backend.trace(a._data, order, meta, Dsize)
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
+        data = a.config.backend.trace(a._data, order, meta, struct.size)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data)
 
 
 
 @lru_cache(maxsize=1024)
-def _meta_trace(struct, in1, in2, out):
+def _meta_trace(struct, slices, in1, in2, out):
     """ meta-information for backend and struct of traced tensor. """
     lt = len(struct.t)
     tset = np.array(struct.t, dtype=int).reshape((lt, len(struct.s), len(struct.n)))
@@ -446,32 +445,31 @@ def _meta_trace(struct, in1, in2, out):
     D2 = tuple(tuple(x.flat) for x in D2[ind])
     Dn = tuple(tuple(x.flat) for x in Dn[ind])
     Dnp = Dnp[ind]
-    slo = tuple(struct.sl[n] for n in ind)
+    slo = tuple(slices[n] for n in ind)
     Do = tuple(struct.D[n] for n in ind)
     Drsh = tuple(tuple(x.flat) for x in Drsh[ind])
 
-    meta = tuple(sorted(zip(tn, Dn, Dnp, t12, slo, Do, Drsh), key=lambda x: x[0]))
+    meta = tuple(sorted(zip(tn, Dn, Dnp, t12, slo.slcs[0], Do, Drsh), key=lambda x: x[0]))
 
     low, high = 0, 0
-    c_t, c_D, c_Dp, c_sl, meta2, tcon = [], [], [], [], [], []
+    c_t, c_D, c_slices, meta2, tcon = [], [], [], [], []
     for t, group in groupby(meta, key=lambda x: x[0]):
         c_t.append(t)
         mt = next(group)
         c_D.append(mt[1])
-        c_Dp.append(mt[2])
-        high = low + mt[2]
+        Dp = mt[2]
+        high = low + Dp
         sl = (low, high)
         low = high
-        c_sl.append(sl)
+        c_slices.append(_slc((sl,), c_D[-1], Dp))
         tcon.append(mt[3])
         meta2.append((sl, *mt[4:]))
         for mt in group:
             tcon.append(mt[3])
             meta2.append((sl, *mt[4:]))
     c_s = tuple(struct.s[i] for i in out)
-    c_struct = _struct(s=c_s, n=struct.n, t=tuple(c_t), D=tuple(c_D), Dp=tuple(c_Dp), sl=tuple(c_sl))
-    return tuple(meta2), c_struct, tuple(tcon), D1, D2
-
+    c_struct = _struct(s=c_s, n=struct.n, t=tuple(c_t), D=tuple(c_D), size=high)
+    return tuple(meta2), c_struct, tuple(c_slices), tuple(tcon), D1, D2
 
 
 def swap_gate(a, axes):

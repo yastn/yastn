@@ -2,7 +2,7 @@
 
 from itertools import product
 import numpy as np
-from ._auxliary import _flatten
+from ._auxliary import _flatten, _slc
 from ._tests import YastnError, _test_tD_consistency
 
 
@@ -21,7 +21,8 @@ def __setitem__(a, key, newvalue):
         ind = a.struct.t.index(key)
     except ValueError as exc:
         raise YastnError('Tensor does not have a block specified by the key.') from exc
-    a._data[slice(*a.struct.sl[ind])] = newvalue.reshape(-1)
+    slc = slice(*a.slices[ind].slcs[0])
+    a._data[slc] = newvalue.reshape(-1)
 
 
 def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
@@ -107,13 +108,13 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     meta = sorted(meta, key=lambda x: x[0])
 
     a_t, a_D, a_Dp = zip(*meta) if len(meta) > 0 else ((), (), ())
-    a_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(a_Dp), a_Dp))
-    a.struct = a.struct._replace(t=a_t, D=a_D, Dp=a_Dp, sl=a_sl)
+    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(a_Dp), a_Dp, a_D))
+    a.struct = a.struct._replace(t=a_t, D=a_D, size=sum(a_Dp))
     a._data = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
     _test_tD_consistency(a.struct)
 
 
-def set_block(a, ts=(), Ds=None, val='zeros'):  # change to ts; Ds
+def set_block(a, ts=(), Ds=None, val='zeros'):  # change to ts; Ds  #  TODO
     """
     Add new block to tensor or change the existing one.
 
@@ -174,17 +175,16 @@ def set_block(a, ts=(), Ds=None, val='zeros'):  # change to ts; Ds
     ind2 = ind
     if ind < len(a.struct.t) and a.struct.t[ind] == ts:
         ind2 += 1
-        a._data = a.config.backend.delete(a._data, a.struct.sl[ind])
+        a._data = a.config.backend.delete(a._data, a.slices[ind].slcs[0])
 
-    pos = 0 if ind == 0 else a.struct.sl[ind - 1][1]
+    pos = a.struct.size
     new_block = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
     a._data = a.config.backend.insert(a._data, pos, new_block)
 
     a_t = a.struct.t[:ind] + (ts,) + a.struct.t[ind2:]
     a_D = a.struct.D[:ind] + (Ds,) + a.struct.D[ind2:]
-    a_Dp = a.struct.Dp[:ind] + (Dsize,) + a.struct.Dp[ind2:]
-    a_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(a_Dp), a_Dp))
-    a.struct = a.struct._replace(t=a_t, D=a_D, Dp=a_Dp, sl=a_sl)
+    a.slices = a.slices[:ind] + (_slc(((pos, pos + Dsize),), Ds, Dsize),) + a.slices[ind2:]
+    a.struct = a.struct._replace(t=a_t, D=a_D, size=pos + Dsize)
     _test_tD_consistency(a.struct)
 
 

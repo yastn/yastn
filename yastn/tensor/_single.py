@@ -1,6 +1,6 @@
 """ Linear operations and operations on a single yastn tensor. """
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes
+from ._auxliary import _slc, _clear_axes, _unpack_axes
 from ._merging import _Fusion
 from ._tests import YastnError, _test_axes_all
 
@@ -160,7 +160,7 @@ def flip_signature(a):
     return a._replace(hfs=hfs, struct=struct)
 
 
-def flip_charges(a, axes=None):
+def flip_charges(a, axes=None):  # TODO
     r"""
     Flip signs of charges and signatures on specified legs.
 
@@ -267,17 +267,20 @@ def transpose(a, axes):
     newt = tuple(tuple(x.flat) for x in tset[:, order, :])
     newD = tuple(tuple(x.flat) for x in Dset[:, order])
 
-    meta = sorted(zip(newt, a.struct.Dp, newD, a.struct.sl, a.struct.D), key=lambda x: x[0])
+    meta = sorted(zip(newt, newD, a.slices), key=lambda x: x[0])
 
     c_t = tuple(mt[0] for mt in meta)
-    c_D = tuple(mt[2] for mt in meta)
-    c_Dp = tuple(mt[1] for mt in meta)
+    c_D = tuple(mt[1] for mt in meta)
+
+    c_Dp = tuple(mt[2].Dp for mt in meta)
     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
 
-    meta = tuple((sln, *mt[2:]) for sln, mt, in zip(c_sl, meta))
-    struct = a.struct._replace(s=c_s, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    slices = tuple(_slc((x,), y, z) for x, y, z in zip(c_sl, c_D, c_Dp))
+    struct = a.struct._replace(s=c_s, t=c_t, D=c_D)
+    meta = tuple((sln.slcs[0], sln.D, mt[2].slcs[0], mt[2].D) for sln, mt, in zip(slices, meta))
+
     data = a._data if a.isdiag else a.config.backend.transpose(a._data, uaxes, meta)
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data)
 
 
 def move_leg(a, source, destination):
