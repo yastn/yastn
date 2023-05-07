@@ -336,9 +336,10 @@ def vdot(a, b, conj=(1, 0)):
     if conj[1] == 1:
         b = b.conj()
     needs_mask, _ = _test_axes_match(a, b, sgn=-1)
-    if a.struct.t == b.struct.t:
+    if a.struct.t == b.struct.t and a.slices == b.slices:
         Adata, Bdata = a._data, b._data
-        struct_a, struct_b = a.struct, b.struct
+        struct_a, slices_a = a.struct, a.slices
+        struct_b, slices_b = b.struct, b.slices
     else:
         ia, ib, ta, Da, Dpa, inter_sla,  tb, Db, Dpb, inter_slb,  = 0, 0, [], [], [], [], [], [], [], []
         while ia < len(a.struct.t) and ib < len(b.struct.t):
@@ -347,10 +348,10 @@ def vdot(a, b, conj=(1, 0)):
                 tb.append(b.struct.t[ib])
                 Da.append(a.struct.D[ia])
                 Db.append(b.struct.D[ib])
-                Dpa.append(a.struct.Dp[ia])
-                Dpb.append(b.struct.Dp[ib])
-                inter_sla.append(a.struct.sl[ia])
-                inter_slb.append(b.struct.sl[ib])
+                Dpa.append(a.slices[ia].Dp)
+                Dpb.append(b.slices[ib].Dp)
+                inter_sla.append(a.slices[ia].slcs[0])
+                inter_slb.append(b.slices[ib].slcs[0])
                 ia += 1
                 ib += 1
             elif a.struct.t[ia] < b.struct.t[ib]:
@@ -359,12 +360,14 @@ def vdot(a, b, conj=(1, 0)):
                 ib += 1
         sla = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpa), Dpa))
         slb = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpb), Dpb))
-        struct_a = a.struct._replace(t=tuple(ta), D=tuple(Da), Dp=tuple(Dpa), sl=sla)
-        struct_b = b.struct._replace(t=tuple(tb), D=tuple(Db), Dp=tuple(Dpb), sl=slb)
+        struct_a = a.struct._replace(t=tuple(ta), D=tuple(Da), size=sum(Dpa))
+        struct_b = b.struct._replace(t=tuple(tb), D=tuple(Db), size=sum(Dpb))
+        slices_a = tuple(_slc((x,), y, z) for x, y, z in zip(sla, Da, Dpa))
+        slices_b = tuple(_slc((x,), y, z) for x, y, z in zip(slb, Db, Dpb))
         Adata = a.config.backend.apply_slice(a._data, sla, inter_sla)
         Bdata = b.config.backend.apply_slice(b._data, slb, inter_slb)
     if needs_mask:
-        msk_a, msk_b, struct_a, struct_b = _masks_for_vdot(a.config, struct_a, a.hfs, struct_b, b.hfs)
+        msk_a, msk_b, struct_a, slices_a, struct_b, slices_b = _masks_for_vdot(a.config, struct_a, slices_a, a.hfs, struct_b, slices_b, b.hfs)
         Adata = Adata[msk_a]
         Bdata = Bdata[msk_b]
     if struct_a.D != struct_b.D:
@@ -408,7 +411,7 @@ def trace(a, axes=(0, 1)):
         # if needs_mask: raise YastnError('Should not have happend')
         struct = a.struct._replace(s=(), diag=False, t=((),), D=((),), size=1)
         data = a.config.backend.sum_elements(a._data)
-        return a._replace(struct=struct, mfs=mfs, hfs=hfs, isdiag=False, data=data)
+        return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data)
 
     meta, struct, slices, tcon, D1, D2 = _meta_trace(a.struct, a.slices, in1, in2, out)
     if needs_mask:
@@ -445,11 +448,11 @@ def _meta_trace(struct, slices, in1, in2, out):
     D2 = tuple(tuple(x.flat) for x in D2[ind])
     Dn = tuple(tuple(x.flat) for x in Dn[ind])
     Dnp = Dnp[ind]
-    slo = tuple(slices[n] for n in ind)
+    slo = tuple(slices[n].slcs[0] for n in ind)
     Do = tuple(struct.D[n] for n in ind)
     Drsh = tuple(tuple(x.flat) for x in Drsh[ind])
 
-    meta = tuple(sorted(zip(tn, Dn, Dnp, t12, slo.slcs[0], Do, Drsh), key=lambda x: x[0]))
+    meta = tuple(sorted(zip(tn, Dn, Dnp, t12, slo, Do, Drsh), key=lambda x: x[0]))
 
     low, high = 0, 0
     c_t, c_D, c_slices, meta2, tcon = [], [], [], [], []
@@ -494,9 +497,9 @@ def swap_gate(a, axes):
     axes = tuple(_clear_axes(*axes))  # swapped groups of legs
     tp = _meta_swap_gate(a.struct.t, a.struct.n, a.mfs, a.ndim_n, axes, fss)
     c = a.clone()
-    for sl, odd in zip(c.struct.sl, tp):
+    for sl, odd in zip(c.slices, tp):
         if odd:
-            c._data[slice(*sl)] = -1 * c._data[slice(*sl)]
+            c._data[slice(*sl.slcs[0])] = -1 * c._data[slice(*sl)]
     return c
 
 
@@ -739,92 +742,3 @@ def _consume_edges(edges, conjs):
         axes = None
     meta_transpose = (t1, axes, conjs[t1])
     return tuple(meta_tr), tuple(meta_dot), meta_transpose
-
-    # if policy in ('hybrid', 'direct'):
-    #     meta, c_t, c_D, c_Dp, c_sl, tcon = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
-    #     c_struct = _struct(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl, s=c_s, n=c_n)
-    #     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
-    #     oA = tuple(nout_a + nin_a)
-    #     oB = tuple(nin_b + nout_b)
-    #     if needs_mask:
-    #         ma, mb = _masks_for_axes(a.config, a.struct, a.hfs, nin_a, b.struct, b.hfs, nin_b, tcon)
-    #         data = a.config.backend.dot_nomerge_masks(a._data, b._data, conj, oA, oB, meta, Dsize, tcon, ma, mb)
-    #     else:
-    #         if any(mt[3][1] != mt[6][0] for mt in meta):
-    #             raise YastnError('Bond dimensions do not match.')
-    #         data = a.config.backend.dot_nomerge(a._data, b._data, conj, oA, oB, meta, Dsize)
-    #     return a._replace(mfs=c_mfs, hfs=c_hfs, struct=c_struct, data=data)
-    # raise YastnError("Unknown policy for tensordot. policy should be in ('hybrid', 'direct', 'merge').")
-
-    # @lru_cache(maxsize=1024)
-    # def _meta_tensordot_nomerge(a_struct, b_struct, nout_a, nin_a, nin_b, nout_b):
-    # """ meta information for backend, and new tensor structure for tensordot_nomerge """
-    # nsym = len(a_struct.n)
-    # a_ndim, b_ndim = len(a_struct.s), len(b_struct.s)
-
-    # ta = np.array(a_struct.t, dtype=int).reshape((len(a_struct.t), a_ndim, nsym))
-    # tb = np.array(b_struct.t, dtype=int).reshape((len(b_struct.t), b_ndim, nsym))
-    # Da = np.array(a_struct.D, dtype=int).reshape((len(a_struct.D), a_ndim))
-    # Db = np.array(b_struct.D, dtype=int).reshape((len(b_struct.D), b_ndim))
-
-    # ta_con = tuple(tuple(t.flat) for t in ta[:, nin_a, :])
-    # tb_con = tuple(tuple(t.flat) for t in tb[:, nin_b, :])
-    # ta_out = tuple(tuple(t.flat) for t in ta[:, nout_a, :])
-    # tb_out = tuple(tuple(t.flat) for t in tb[:, nout_b, :])
-
-    # Da_pcon = np.prod(Da[:, nin_a], axis=1, dtype=int)
-    # Db_pcon = np.prod(Db[:, nin_b], axis=1, dtype=int)
-    # Da_out = tuple(tuple(D.flat) for D in Da[:, nout_a])
-    # Db_out = tuple(tuple(D.flat) for D in Db[:, nout_b])
-    # Da_pout = np.prod(Da_out, axis=1, dtype=int)
-    # Db_pout = np.prod(Db_out, axis=1, dtype=int)
-
-    # block_a = [x for x in zip(ta_con, ta_out, a_struct.sl, a_struct.D, Da_pcon, Da_out, Da_pout)]
-    # block_a = groupby(sorted(block_a, key=lambda x: x[0]), key=lambda x: x[0])
-
-    # block_b = [x for x in zip(tb_con, tb_out, b_struct.sl, b_struct.D, Db_pcon, Db_out, Db_pout)]
-    # block_b = groupby(sorted(block_b, key=lambda x: x[0]), key=lambda x: x[0])
-
-    # meta = []
-    # try:
-    #     tta, ga = next(block_a)
-    #     ttb, gb = next(block_b)
-    #     while True:
-    #         if tta == ttb:
-    #             for ta, tb in product(ga, gb):
-    #                 meta.append((ta[1] + tb[1], ta[2], ta[3], (ta[6], ta[4]), tb[2], tb[3], (tb[4], tb[6]), ta[5] + tb[5], ta[6] * tb[6], ta[0]))
-    #             tta, ga = next(block_a)
-    #             ttb, gb = next(block_b)
-    #         elif tta < ttb:
-    #             tta, ga = next(block_a)
-    #         elif tta > ttb:
-    #             ttb, gb = next(block_b)
-    # except StopIteration:
-    #     pass
-
-    # meta = tuple(sorted(meta, key=lambda x: x[0]))
-    # tcon = tuple(mm[9] for mm in meta)
-    # if len(nin_a) == 1:
-    #     c_t = tuple(mm[0] for mm in meta)
-    #     c_D = tuple(mm[7] for mm in meta)
-    #     c_Dp = tuple(mm[8] for mm in meta)
-    #     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-    #     meta = tuple((sl, *mt[1:7]) for sl, mt in zip(c_sl, meta))
-    #     return meta, c_t, c_D, c_Dp, c_sl, tcon
-    # if len(meta) > 0:
-    #     low, high = 0, 0
-    #     c_t, c_D, c_Dp, c_sl, meta2 = [], [], [], [], []
-    #     for t, group in groupby(meta, key=lambda x: x[0]):
-    #         c_t.append(t)
-    #         mt = next(group)
-    #         c_D.append(mt[7])
-    #         c_Dp.append(mt[8])
-    #         high = low + mt[8]
-    #         sl = (low, high)
-    #         low = high
-    #         c_sl.append(sl)
-    #         meta2.append((sl, *mt[1:7]))
-    #         for mt in group:
-    #             meta2.append((sl, *mt[1:7]))
-    #     return tuple(meta2), tuple(c_t), tuple(c_D), tuple(c_Dp), tuple(c_sl), tcon
-    # return meta, (), (), (), (), tcon
