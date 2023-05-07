@@ -1,6 +1,8 @@
 """ Linear operations and operations on a single yastn tensor. """
 from ._merging import _masks_for_add
 from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _test_axes_match
+from ._auxliary import _slc
+
 
 __all__ = ['apxb', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not']
 
@@ -16,9 +18,9 @@ def __add__(a, b):
     yastn.Tensor
     """
     _test_can_be_combined(a, b)
-    aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
-    data = a.config.backend.add(aA, bA, meta, Dsize)
-    return a._replace(hfs=hfs, struct=struct, data=data)
+    aA, bA, hfs, meta, struct, slices = _addition_meta(a, b)
+    data = a.config.backend.add(aA, bA, meta, struct.size)
+    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
 
 
 def __sub__(a, b):
@@ -32,9 +34,9 @@ def __sub__(a, b):
     yastn.Tensor
     """
     _test_can_be_combined(a, b)
-    aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
-    data = a.config.backend.sub(aA, bA, meta, Dsize)
-    return a._replace(hfs=hfs, struct=struct, data=data)
+    aA, bA, hfs, meta, struct, slices = _addition_meta(a, b)
+    data = a.config.backend.sub(aA, bA, meta, struct.size)
+    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
 
 
 def apxb(a, b, x=1):
@@ -51,9 +53,9 @@ def apxb(a, b, x=1):
     yastn.Tensor
     """
     _test_can_be_combined(a, b)
-    aA, bA, hfs, meta, struct, Dsize = _addition_meta(a, b)
-    data = a.config.backend.apxb(aA, bA, x, meta, Dsize)
-    return a._replace(hfs=hfs, struct=struct, data=data)
+    aA, bA, hfs, meta, struct, slices = _addition_meta(a, b)
+    data = a.config.backend.apxb(aA, bA, x, meta, struct.size)
+    return a._replace(hfs=hfs, struct=struct, slices=slices, data=data)
 
 
 def _addition_meta(a, b):
@@ -64,157 +66,72 @@ def _addition_meta(a, b):
         raise YastnError('Cannot add diagonal tensor to non-diagonal one.')
 
     needs_mask, _ = _test_axes_match(a, b, sgn=1)
-    if needs_mask:
-        msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hfs, b.struct, b.hfs)
-        Dsize = struct_a.sl[-1][1] if len(struct_a.sl) > 0 else 0
-        Adata = a.config.backend.embed_msk(a._data, msk_a, Dsize)
-        Dsize = struct_b.sl[-1][1] if len(struct_b.sl) > 0 else 0
-        Bdata = a.config.backend.embed_msk(b._data, msk_b, Dsize)
-        del Dsize
+    if needs_mask:  # TODO
+        msk_a, msk_b, struct_a, slices_a, struct_b, slices_b, hfs = _masks_for_add(a.config, a.struct, a.slices, a.hfs, b.struct, b.slices, b.hfs)
+        Adata = a.config.backend.embed_msk(a._data, msk_a, struct_a.size)
+        Bdata = a.config.backend.embed_msk(b._data, msk_b, struct_b.size)
     else:
         Adata, Bdata = a._data, b._data
-        struct_a, struct_b = a.struct, b.struct
+        struct_a, slices_a = a.struct, a.slices
+        struct_b, slices_b = b.struct, b.slices
         hfs = a.hfs
 
-    if struct_a == struct_b:
-        c_struct = struct_a
-        Dsize = c_struct.sl[-1][1] if len(c_struct.sl) > 0 else 0
+    if struct_a == struct_b and slices_a == slices_b:
+        Dsize = struct_a.size
         metaA = (((0, Dsize), (0, Dsize)),)
         metaB = (((0, Dsize), (0, Dsize)),)
-        return Adata, Bdata, hfs, (metaA, metaB), c_struct, Dsize
+        return Adata, Bdata, hfs, (metaA, metaB), struct_a, slices_a
 
     ia, ib, metaA, metaB, str_c, check_structure = 0, 0, [], [], [], False
     low = 0
     while ia < len(struct_a.t) and ib < len(struct_b.t):
-        ta, Da, Dpa, asl = struct_a.t[ia], struct_a.D[ia], struct_a.Dp[ia], struct_a.sl[ia]
-        tb, Db, Dpb, bsl = struct_b.t[ib], struct_b.D[ib], struct_b.Dp[ib], struct_b.sl[ib]
+        ta, Da, asl = struct_a.t[ia], struct_a.D[ia], slices_a[ia]
+        tb, Db, bsl = struct_b.t[ib], struct_b.D[ib], slices_b[ib]
         if ta == tb:
             if Da != Db and not a.isdiag:
                 raise YastnError('Bond dimensions do not match.')
-            metaA.append(((low, low + Dpa), asl))
-            metaB.append(((low, low + Dpb), bsl))
-            Dp = max(Dpa, Dpb)
+            metaA.append(((low, low + asl.Dp), asl.slcs[0]))
+            metaB.append(((low, low + bsl.Dp), bsl.slcs[0]))
+            Dp = max(asl.Dp, bsl.Dp)
             high = low + Dp
             str_c.append((ta, max(Da, Db), Dp, (low, high)))
             low = high
             ia += 1
             ib += 1
         elif ta < tb:
-            high = low + Dpa
-            metaA.append(((low, high), asl))
-            str_c.append((ta, Da, Dpa, (low, high)))
+            high = low + asl.Dp
+            metaA.append(((low, high), asl.slcs[0]))
+            str_c.append((ta, Da, asl.Dp, (low, high)))
             low = high
             ia += 1
             check_structure = True
         else:
-            high = low + Dpb
-            metaB.append(((low, high), bsl))
-            str_c.append((tb, Db, Dpb, (low, high)))
+            high = low + bsl.Dp
+            metaB.append(((low, high), bsl.slcs[0]))
+            str_c.append((tb, Db, bsl.Dp, (low, high)))
             low = high
             ib += 1
             check_structure = True
-    for ta, Da, Dpa, asl in zip(struct_a.t[ia:], struct_a.D[ia:], struct_a.Dp[ia:], struct_a.sl[ia:]):
-        high = low + Dpa
-        metaA.append(((low, high), asl))
-        str_c.append((ta, Da, Dpa, (low, high)))
+    for ta, Da, asl in zip(struct_a.t[ia:], struct_a.D[ia:], slices_a[ia:]):
+        high = low + asl.Dp
+        metaA.append(((low, high), asl.slcs[0]))
+        str_c.append((ta, Da, asl.Dp, (low, high)))
         low = high
         check_structure = True
-    for tb, Db, Dpb, bsl in zip(struct_b.t[ib:], struct_b.D[ib:], struct_b.Dp[ib:], struct_b.sl[ib:]):
-        high = low + Dpb
-        metaB.append(((low, high), bsl))
-        str_c.append((tb, Db, Dpb, (low, high)))
+    for tb, Db, bsl in zip(struct_b.t[ib:], struct_b.D[ib:], slices_b[ib:]):
+        high = low + bsl.Dp
+        metaB.append(((low, high), bsl.slcs[0]))
+        str_c.append((tb, Db, bsl.Dp, (low, high)))
         low = high
         check_structure = True
 
     c_t, c_D, c_Dp, c_sl = zip(*str_c) if len(str_c) > 0 else ((), (), (), ())
-    c_struct = struct_a._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    slices_c = tuple(_slc((x,), y, z)  for x, y, z in zip(c_sl, c_D, c_Dp))
+    struct_c = struct_a._replace(t=c_t, D=c_D, size=sum(c_Dp))
     if check_structure:
-        _get_tD_legs(c_struct)
-    return Adata, Bdata, hfs, (metaA, metaB), c_struct, high
+        _get_tD_legs(struct_c)
+    return Adata, Bdata, hfs, (metaA, metaB), struct_c, slices_c
 
-
-
-# def _addition_meta(a, b):
-#     """ meta-information for backend and new tensor charges and dimensions. """
-#     if a.struct.n != b.struct.n:
-#         raise YastnError('Tensor charges do not match.')
-#     needs_mask, _ = _test_axes_match(a, b, sgn=1)
-#     if needs_mask:
-#         msk_a, msk_b, struct_a, struct_b, hfs = _masks_for_add(a.config, a.struct, a.hfs, b.struct, b.hfs)
-#         Dsize = struct_a.sl[-1][1] if len(struct_a.sl) > 0 else 0
-#         Adata = a.config.backend.embed_msk(a._data, msk_a, Dsize)
-#         Dsize = struct_b.sl[-1][1] if len(struct_b.sl) > 0 else 0
-#         Bdata = a.config.backend.embed_msk(b._data, msk_b, Dsize)
-#         del Dsize
-#     else:
-#         Adata, Bdata = a._data, b._data
-#         struct_a, struct_b = a.struct, b.struct
-#         hfs = a.hfs
-
-#     if struct_a.t == struct_b.t:
-#         if struct_a != struct_b:
-#             raise YastnError('Bond dimensions do not match.')
-#         c_struct = struct_a
-#         Dsize = c_struct.sl[-1][1] if len(c_struct.sl) > 0 else 0
-#         meta = (((0, Dsize), (0, Dsize), (0, Dsize), 'AB'),)
-#         return Adata, Bdata, hfs, meta, c_struct, Dsize
-
-#     ia, ib, meta, c_t, c_D, c_Dp, c_sl = 0, 0, [], [], [], [], []
-#     low = 0
-#     while ia < len(struct_a.t) and ib < len(struct_b.t):
-#         ta, Da, Dpa, asl = struct_a.t[ia], struct_a.D[ia], struct_a.Dp[ia], struct_a.sl[ia]
-#         tb, Db, Dpb, bsl = struct_b.t[ib], struct_b.D[ib], struct_b.Dp[ib], struct_b.sl[ib]
-#         if ta == tb:
-#             if Da != Db:
-#                 raise YastnError('Bond dimensions do not match.')
-#             high = low + Dpa
-#             meta.append(((low, high), asl, bsl, 'AB'))
-#             c_t.append(ta)
-#             c_D.append(Da)
-#             c_Dp.append(Dpa)
-#             c_sl.append((low, high))
-#             low = high
-#             ia += 1
-#             ib += 1
-#         elif ta < tb:
-#             high = low + Dpa
-#             meta.append(((low, high), asl, None, 'A'))
-#             c_t.append(ta)
-#             c_D.append(Da)
-#             c_Dp.append(Dpa)
-#             c_sl.append((low, high))
-#             low = high
-#             ia += 1
-#         else:
-#             high = low + Dpb
-#             meta.append(((low, high), None, bsl, 'B'))
-#             c_t.append(tb)
-#             c_D.append(Db)
-#             c_Dp.append(Dpb)
-#             c_sl.append((low, high))
-#             low = high
-#             ib += 1
-#     for ta, Da, Dpa, asl in zip(struct_a.t[ia:], struct_a.D[ia:], struct_a.Dp[ia:], struct_a.sl[ia:]):
-#         high = low + Dpa
-#         meta.append(((low, high), asl, None, 'A'))
-#         c_t.append(ta)
-#         c_D.append(Da)
-#         c_Dp.append(Dpa)
-#         c_sl.append((low, high))
-#         low = high
-#     for tb, Db, Dpb, bsl in zip(struct_b.t[ib:], struct_b.D[ib:], struct_b.Dp[ib:], struct_b.sl[ib:]):
-#         high = low + Dpb
-#         meta.append(((low, high), None, bsl, 'B'))
-#         c_t.append(tb)
-#         c_D.append(Db)
-#         c_Dp.append(Dpb)
-#         c_sl.append((low, high))
-#         low = high
-
-#     c_struct = struct_a._replace(t=tuple(c_t), D=tuple(c_D), Dp=tuple(c_Dp), sl=tuple(c_sl))
-#     if any(mt[3] != 'AB' for mt in meta):
-#         _get_tD_legs(c_struct)
-#     return Adata, Bdata, hfs, meta, c_struct, high
 
 def __lt__(a, number):
     """
