@@ -160,7 +160,7 @@ def flip_signature(a):
     return a._replace(hfs=hfs, struct=struct)
 
 
-def flip_charges(a, axes=None):  # TODO
+def flip_charges(a, axes=None):
     r"""
     Flip signs of charges and signatures on specified legs.
 
@@ -200,15 +200,14 @@ def flip_charges(a, axes=None):  # TODO
     hfs = tuple(hfs)
     tnew = tuple(tuple(t.flat) for t in tnew)
 
-    meta = tuple(sorted(zip(tnew, a.struct.D, a.struct.Dp, a.struct.sl)))
+    meta = tuple(sorted((x, y, z.Dp, z.slcs[0]) for x, y, z in zip(tnew, a.struct.D, a.slices)))
     tnew, Dnew, Dpnew, slold = zip(*meta) if len(meta) > 0 else ((), (), (), ())
-    slnew = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpnew), Dpnew))
-    Dsize = slnew[-1][1] if len(slnew) > 0 else 0
-    struct = a.struct._replace(s=snew, t=tnew, D=Dnew, Dp=Dpnew, sl=slnew)
 
-    meta = tuple(zip(slnew, slold))
-    data = a.config.backend.embed_slc(a.data, meta, Dsize)
-    return a._replace(struct=struct, data=data, hfs=hfs)
+    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(Dpnew), Dpnew, Dnew))
+    struct = a.struct._replace(s=snew, t=tnew, D=Dnew)
+    meta = tuple((x.slcs[0], y) for x, y in zip(slices, slold))
+    data = a.config.backend.embed_slc(a.data, meta, struct.size)
+    return a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
 
 
 
@@ -376,8 +375,9 @@ def add_leg(a, axis=-1, s=1, t=None):
     newt = tuple(x[:axis * nsym] + t + x[axis * nsym:] for x in a.struct.t)
     newD = tuple(x[:axis] + (1,) + x[axis:] for x in a.struct.D)
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
+    slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
     hfs = a.hfs[:axis] + (_Fusion(s=(s,)),) + a.hfs[axis:]
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices)
 
 
 def remove_leg(a, axis=-1):
@@ -421,9 +421,9 @@ def remove_leg(a, axis=-1):
     newt = tuple(x[: axis * nsym] + x[(axis + 1) * nsym:] for x in a.struct.t)
     newD = tuple(x[: axis] + x[axis + 1:] for x in a.struct.D)
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
-
+    slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
     hfs = a.hfs[:axis] + a.hfs[axis + 1:]
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices)
 
 
 def diag(a):
@@ -440,18 +440,17 @@ def diag(a):
         if any(d0 != d1 for d0, d1 in a.struct.D):
             raise YastnError('yastn.diag() allowed only for square blocks.')
         #     isdiag=True -> isdiag=False                    isdiag=False -> isdiag=True
-    Dp = tuple(x ** 2 for x in a.struct.Dp) if a.isdiag else tuple(D[0] for D in a.struct.D)
-    sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp), Dp))
-    struct = a.struct._replace(Dp=Dp, sl=sl, diag=not a.isdiag)
+    Dp = tuple(x.Dp ** 2 for x in a.slices) if a.isdiag else tuple(D[0] for D in a.struct.D)
+    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(Dp), Dp, a.struct.D))
+    struct = a.struct._replace(diag=not a.isdiag, size=sum(Dp))
 
-    Dsize = sl[-1][1] if len(sl) > 0 else 0
     if a.isdiag:  # isdiag=True -> isdiag=False
-        meta = tuple(zip(sl, a.struct.sl))
-        data = a.config.backend.diag_1dto2d(a._data, meta, Dsize)
+        meta = tuple((x.slcs[0], y.slcs[0]) for x, y in zip(slices, a.slices))
+        data = a.config.backend.diag_1dto2d(a._data, meta, struct.size)
     else:  # isdiag=False -> isdiag=True
-        meta = tuple(zip(sl, a.struct.sl, a.struct.D))
-        data = a.config.backend.diag_2dto1d(a._data, meta, Dsize)
-    return a._replace(struct=struct, data=data)
+        meta = tuple((x.slcs[0], y.slcs[0], y.D) for x, y in zip(slices, a.slices))
+        data = a.config.backend.diag_2dto1d(a._data, meta, struct.size)
+    return a._replace(struct=struct, slices=slices, data=data)
 
 
 def remove_zero_blocks(a, rtol=1e-12, atol=0):
@@ -460,13 +459,15 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0):
     Cutoff is a combination of absolut tolerance and relative tolerance with respect to maximal element in the tensor.
     """
     cutoff = atol + rtol * a.norm(p='inf')
-    meta = [(t, D, Dp, sl) for t, D, Dp, sl in zip(a.struct.t, a.struct.D, a.struct.Dp, a.struct.sl) \
-             if a.config.backend.max_abs(a._data[slice(*sl)]) > cutoff]
+    meta = [(t, D, sl) for t, D, sl in zip(a.struct.t, a.struct.D, a.slices) \
+             if a.config.backend.max_abs(a._data[slice(*sl.slcs[0])]) > cutoff]
     c_t = tuple(mt[0] for mt in meta)
     c_D = tuple(mt[1] for mt in meta)
-    c_Dp = tuple(mt[2] for mt in meta)
-    old_sl = tuple(mt[3] for mt in meta)
-    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-    struct = a.struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    old_sl = tuple(mt[2] for mt in meta)
+    c_Dp = tuple(x.Dp for x in old_sl)
+    old_sl = tuple(x.slcs[0] for x in old_sl)
+    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, c_D))
+    c_sl = tuple(x.slcs[0] for x in slices)
+    struct = a.struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
     data = a.config.backend.apply_slice(a._data, c_sl, old_sl)
-    return a._replace(struct=struct, data=data)
+    return a._replace(struct=struct, slices=slices, data=data)

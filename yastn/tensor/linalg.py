@@ -1,9 +1,9 @@
 """ Linalg methods for yastn tensor. """
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _struct
+from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes
 from ._tests import YastnError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
-from ._merging import _leg_struct_trivial, _Fusion
+from ._merging import _Fusion, _leg_struct_trivial
 
 __all__ = ['svd', 'svd_with_truncation', 'qr', 'eigh', 'eigh_with_truncation', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets']
 
@@ -122,7 +122,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
-    data, struct, ls_l, ls_r = _merge_to_matrix(a, axes)
+    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, axes)
 
     minD = tuple(min(ds) for ds in struct.D)
     if policy == 'lowrank':
@@ -136,8 +136,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix
             st = [x[nsym:] for x in struct.t] if nU else [x[:nsym] for x in struct.t]
             minD = tuple(min(D_block.get(t, 0), d) for t, d in zip(st, minD))
 
-    meta, Ustruct, Sstruct, Vstruct = _meta_svd(a.config, struct, minD, sU, nU)
-    sizes = tuple(x.sl[-1][1] if len(x.sl) > 0 else 0 for x in (Ustruct, Sstruct, Vstruct))
+    meta, Ustruct, Uslices, Sstruct, Sslices, Vstruct, Vslices = _meta_svd(a.config, struct, slices, minD, sU, nU)
+    sizes = tuple(x.size for x in (Ustruct, Sstruct, Vstruct))
 
     if policy == 'fullrank':
         Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, \
@@ -153,30 +153,30 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix
     ls_s = _leg_struct_trivial(Sstruct, axis=0)
 
     Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
-    Umeta_unmerge, Ustruct = _meta_unmerge_matrix(a.config, Ustruct, ls_l, ls_s, Us)
+    Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
 
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
-    U = a._replace(struct=Ustruct, data=Udata, mfs=Umfs, hfs=Uhfs)
+    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs)
 
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
-    S = a._replace(struct=Sstruct, data=Sdata, mfs=Smfs, hfs=Shfs)
+    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs)
 
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
-    Vmeta_unmerge, Vstruct = _meta_unmerge_matrix(a.config, Vstruct, ls_s, ls_r, Vs)
+    Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
     Vdata = _unmerge(a.config, Vdata, Vmeta_unmerge)
     Vmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
     Vhfs = (_Fusion(s=(-sU,)),) + tuple(a.hfs[ii] for ii in axes[1])
-    V = a._replace(struct=Vstruct, data=Vdata, mfs=Vmfs, hfs=Vhfs)
+    V = a._replace(struct=Vstruct, slices=Vslices, data=Vdata, mfs=Vmfs, hfs=Vhfs)
 
     U = U.move_leg(source=-1, destination=Uaxis)
     V = V.move_leg(source=0, destination=Vaxis)
     return U, S, V
 
 
-def _meta_svd(config, struct, minD, sU, nU):
+def _meta_svd(config, struct, slices, minD, sU, nU):
     """
     meta and struct for svd
     U has signature = (struct.s[0], sU)
@@ -188,9 +188,11 @@ def _meta_svd(config, struct, minD, sU, nU):
     n0 = (0,) * nsym
 
     if any(D == 0 for D in minD):
-        temp = [(at, aD, asl, mD) for at, aD, asl, mD in zip(struct.t, struct.D, struct.sl, minD) if mD > 0]
-        at, aD, asl, minD = zip(*temp) if len(temp) > 0 else ((), (), (), ())
-        struct = struct._replace(t=at, D=aD, sl=asl)
+        at = tuple(x for x, mD in zip(struct.t, minD) if mD > 0)
+        aD = tuple(x for x, mD in zip(struct.D, minD) if mD > 0)
+        slices = tuple(x for x, mD in zip(slices, minD) if mD > 0)
+        minD = tuple(mD for mD in minD if mD > 0)
+        struct = struct._replace(t=at, D=aD)
 
     if nU and sU == struct.s[1]:
         t_con = tuple(x[nsym:] for x in struct.t)
@@ -211,24 +213,23 @@ def _meta_svd(config, struct, minD, sU, nU):
     SD = tuple((dm, dm) for dm in minD)
     VD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
     UDp = tuple(np.prod(UD, axis=1))
-    Usl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(UDp), UDp))
+    Usl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(UDp), UDp, UD))
 
-    meta = tuple(zip(struct.sl, struct.D, Usl, UD, St, Vt, VD))
-
+    meta = tuple(zip(slices, struct.D, Usl, UD, St, Vt, VD))
     St, Vt, SD, VD = zip(*sorted(zip(St, Vt, SD, VD))) if len(St) > 0 else ((), (), (), ())
     SDp = tuple(dd[0] for dd in SD)
     VDp = tuple(np.prod(VD, axis=1))
-    Ssl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(SDp), SDp))
-    Vsl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(VDp), VDp))
-    Sdict = dict(zip(St, Ssl))
-    Vdict = dict(zip(Vt, Vsl))
+    Ssl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(SDp), SDp, SD))
+    Vsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(VDp), VDp, VD))
+    Sdict = {x: y.slcs[0] for x, y in zip(St, Ssl)}
+    Vdict = {x: y.slcs[0] for x, y in zip(Vt, Vsl)}
 
-    meta = tuple((sl, d, slu, du, Sdict[ts], Vdict[tv], dv) for sl, d, slu, du, ts, tv, dv in meta)
+    meta = tuple((sl.slcs[0], d, slu.slcs[0], du, Sdict[ts], Vdict[tv], dv) for sl, d, slu, du, ts, tv, dv in meta)
 
-    Ustruct = _struct(s=(struct.s[0], sU), n=Un, diag=False, t=Ut, D=UD, Dp=UDp, sl=Usl)
-    Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, Dp=SDp, sl=Ssl)
-    Vstruct = _struct(s=(-sU, struct.s[1]), n=Vn, diag=False, t=Vt, D=VD, Dp=VDp, sl=Vsl)
-    return meta, Ustruct, Sstruct, Vstruct
+    Ustruct = _struct(s=(struct.s[0], sU), n=Un, diag=False, t=Ut, D=UD, size=sum(UDp))
+    Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, size=sum(SDp))
+    Vstruct = _struct(s=(-sU, struct.s[1]), n=Vn, diag=False, t=Vt, D=VD, size=sum(VDp))
+    return meta, Ustruct, Usl, Sstruct, Ssl, Vstruct, Vsl
 
 
 def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-14, **kwargs):
@@ -350,17 +351,17 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32, **k
     nsym = S.config.sym.NSYM
     tol_null = 0. if isinstance(tol_block, dict) else tol_block
     D_null = 0 if isinstance(D_block, dict) else D_block
-    for t, Db, sl in zip(S.struct.t, S.struct.Dp, S.struct.sl):
+    for t, sl in zip(S.struct.t, S.slices):
         t = t[:nsym]
         tol_rel = tol_block[t] if (isinstance(tol_block, dict) and t in tol_block) else tol_null
-        D_tol = sum(S.data[slice(*sl)] > tol_rel * S.config.backend.max_abs(S.data[slice(*sl)])).item()
+        D_tol = sum(S.data[slice(*sl.slcs[0])] > tol_rel * S.config.backend.max_abs(S.data[slice(*sl.slcs[0])])).item()
         D_bl = D_block[t] if (isinstance(D_block, dict) and t in D_block) else D_null
         D_bl = min(D_bl, D_tol)
-        if 0 < D_bl < Db:  # no block truncation
-            inds = S.config.backend.argsort(S.data[slice(*sl)])
-            Smask._data[slice(*sl)][inds[:-D_bl]] = False
+        if 0 < D_bl < sl.Dp:  # no block truncation
+            inds = S.config.backend.argsort(S.data[slice(*sl.slcs[0])])
+            Smask._data[slice(*sl.slcs[0])][inds[:-D_bl]] = False
         elif D_bl == 0:
-            Smask._data[slice(*sl)] = False
+            Smask._data[slice(*sl.slcs[0])] = False
 
     temp_data = S._data * Smask.data
     D_tol = sum(temp_data > tol * S.config.backend.max_abs(temp_data)).item()
@@ -399,34 +400,34 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
     lout_l, lout_r = _clear_axes(*axes)
     axes = _unpack_axes(a.mfs, lout_l, lout_r)
 
-    data, struct, ls_l, ls_r = _merge_to_matrix(a, axes)
-    meta, Qstruct, Rstruct = _meta_qr(a.config, struct, sQ)
+    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, axes)
+    meta, Qstruct, Qslices, Rstruct, Rslices = _meta_qr(a.config, struct, slices, sQ)
 
-    sizes = tuple(x.sl[-1][1] if len(x.sl) > 0 else 0 for x in (Qstruct, Rstruct))
+    sizes = tuple(x.size for x in (Qstruct, Rstruct))
     Qdata, Rdata = a.config.backend.qr(data, meta, sizes)
 
     ls = _leg_struct_trivial(Rstruct, axis=0)
 
     Qs = tuple(a.struct.s[lg] for lg in axes[0]) + (sQ,)
-    Qmeta_unmerge, Qstruct = _meta_unmerge_matrix(a.config, Qstruct, ls_l, ls, Qs)
+    Qmeta_unmerge, Qstruct, Qslices = _meta_unmerge_matrix(a.config, Qstruct, Qslices, ls_l, ls, Qs)
     Qdata = _unmerge(a.config, Qdata, Qmeta_unmerge)
     Qmfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Qhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sQ,)),)
-    Q = a._replace(struct=Qstruct, data=Qdata, mfs=Qmfs, hfs=Qhfs)
+    Q = a._replace(struct=Qstruct, slices=Qslices, data=Qdata, mfs=Qmfs, hfs=Qhfs)
 
     Rs = (-sQ,) + tuple(a.struct.s[lg] for lg in axes[1])
-    Rmeta_unmerge, Rstruct = _meta_unmerge_matrix(a.config, Rstruct, ls, ls_r, Rs)
+    Rmeta_unmerge, Rstruct, Rslices = _meta_unmerge_matrix(a.config, Rstruct, Rslices, ls, ls_r, Rs)
     Rdata = _unmerge(a.config, Rdata, Rmeta_unmerge)
     Rmfs = ((1,),) + tuple(a.mfs[ii] for ii in lout_r)
     Rhfs = (_Fusion(s=(-sQ,)),) + tuple(a.hfs[ii] for ii in axes[1])
-    R = a._replace(struct=Rstruct, data=Rdata, mfs=Rmfs, hfs=Rhfs)
+    R = a._replace(struct=Rstruct, slices=Rslices, data=Rdata, mfs=Rmfs, hfs=Rhfs)
 
     Q = Q.move_leg(source=-1, destination=Qaxis)
     R = R.move_leg(source=0, destination=Raxis)
     return Q, R
 
 
-def _meta_qr(config, struct, sQ):
+def _meta_qr(config, struct, slices, sQ):
     """
     meta and struct for qr.
     Q has signature = (struct.s[0], sQ)
@@ -447,19 +448,19 @@ def _meta_qr(config, struct, sQ):
     QD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
     RD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
     QDp = tuple(np.prod(QD, axis=1))
-    Qsl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(QDp), QDp))
+    Qsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(QDp), QDp, QD))
 
-    meta = tuple(zip(struct.sl, struct.D, Qsl, QD, Rt, RD))
+    meta = tuple(zip(slices, struct.D, Qsl, QD, Rt, RD))
 
     Rt, RD = zip(*sorted(zip(Rt, RD))) if len(Rt) > 0 else ((), ())
     RDp = tuple(np.prod(RD, axis=1))
-    Rsl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(RDp), RDp))
-    Rdict = dict(zip(Rt, Rsl))
+    Rsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(RDp), RDp, RD))
+    Rdict = {x: y.slcs[0] for x, y in zip(Rt, Rsl)}
 
-    meta = tuple((sl, d, slq, dq, Rdict[tr], dr) for sl, d, slq, dq, tr, dr in meta)
-    Qstruct = struct._replace(t=Qt, D=QD, Dp=QDp, sl=Qsl, s=(struct.s[0], sQ))
-    Rstruct = struct._replace(t=Rt, D=RD, Dp=RDp, sl=Rsl, s=(-sQ, struct.s[1]), n=n0)
-    return meta, Qstruct, Rstruct
+    meta = tuple((sl.slcs[0], d, slq.slcs[0], dq, Rdict[tr], dr) for sl, d, slq, dq, tr, dr in meta)
+    Qstruct = struct._replace(t=Qt, D=QD, size=sum(QDp), s=(struct.s[0], sQ))
+    Rstruct = struct._replace(t=Rt, D=RD, size=sum(RDp), s=(-sQ, struct.s[1]), n=n0)
+    return meta, Qstruct, Qsl, Rstruct, Rsl
 
 
 def eigh(a, axes, sU=1, Uaxis=-1):
@@ -491,34 +492,34 @@ def eigh(a, axes, sU=1, Uaxis=-1):
     if not all(x == 0 for x in a.struct.n):
         raise YastnError('eigh requires tensor charge to be zero')
 
-    data, struct, ls_l, ls_r = _merge_to_matrix(a, axes)
+    data, struct, slices, ls_l, ls_r = _merge_to_matrix(a, axes)
 
     if ls_l != ls_r:
         raise YastnError("Tensor likely not hermitian. Legs of effective square blocks not match.")
 
-    meta, Sstruct, Ustruct = _meta_eigh(a.config, struct, sU)
-    sizes = tuple(x.sl[-1][1] if len(x.sl) > 0 else 0 for x in (Sstruct, Ustruct))
+    meta, Sstruct, Sslices, Ustruct, Uslices = _meta_eigh(a.config, struct, slices, sU)
+    sizes = tuple(x.size for x in (Sstruct, Ustruct))
 
     Sdata, Udata = a.config.backend.eigh(data, meta, sizes)
 
     ls_s = _leg_struct_trivial(Sstruct, axis=1)
 
     Us = tuple(a.struct.s[lg] for lg in axes[0]) + (sU,)
-    Umeta_unmerge, Ustruct = _meta_unmerge_matrix(a.config, Ustruct, ls_l, ls_s, Us)
+    Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
-    U = a._replace(struct=Ustruct, data=Udata, mfs=Umfs, hfs=Uhfs)
+    U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs)
 
     Smfs = ((1,), (1,))
     Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
-    S = a._replace(struct=Sstruct, data=Sdata, mfs=Smfs, hfs=Shfs)
+    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs)
 
     U = U.move_leg(source=-1, destination=Uaxis)
     return S, U
 
 
-def _meta_eigh(config, struct, sU):
+def _meta_eigh(config, struct, slices, sU):
     """
     meta and struct for eigh
     U has signature = (struct.s[0], sU)
@@ -539,17 +540,18 @@ def _meta_eigh(config, struct, sU):
     St = tuple(y + y for y in t_con)
     SD = struct.D
 
-    meta = tuple(zip(struct.sl, struct.D, Ustruct.sl, Ustruct.D, St))
+    meta = tuple(zip(slices, struct.D, St))
 
     St, SD = zip(*sorted(zip(St, SD))) if len(St) > 0 else ((), ())
     SDp = tuple(dd[0] for dd in SD)
-    Ssl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(SDp), SDp))
-    Sdict = dict(zip(St, Ssl))
 
-    meta = tuple((sl, d, slu, du, Sdict[ts]) for sl, d, slu, du, ts in meta)
+    Ssl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(SDp), SDp, SD))
+    Sdict = {x: y.slcs[0] for x, y in zip(St, Ssl)}
 
-    Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, Dp=SDp, sl=Ssl)
-    return meta, Sstruct, Ustruct
+    meta = tuple((sl.slcs[0], d, sl.slcs[0], d, Sdict[ts]) for sl, d, ts in meta)
+
+    Sstruct = _struct(s=(-sU, sU), n=n0, diag=True, t=St, D=SD, size=sum(SDp))
+    return meta, Sstruct, Ssl, Ustruct, slices
 
 
 def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
