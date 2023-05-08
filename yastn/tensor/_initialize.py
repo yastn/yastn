@@ -177,14 +177,14 @@ def set_block(a, ts=(), Ds=None, val='zeros'):  # change to ts; Ds  #  TODO
         ind2 += 1
         a._data = a.config.backend.delete(a._data, a.slices[ind].slcs[0])
 
-    pos = a.struct.size
+    pos = sum(x.Dp for x in a.slices[:ind])
     new_block = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
     a._data = a.config.backend.insert(a._data, pos, new_block)
-
     a_t = a.struct.t[:ind] + (ts,) + a.struct.t[ind2:]
     a_D = a.struct.D[:ind] + (Ds,) + a.struct.D[ind2:]
-    a.slices = a.slices[:ind] + (_slc(((pos, pos + Dsize),), Ds, Dsize),) + a.slices[ind2:]
-    a.struct = a.struct._replace(t=a_t, D=a_D, size=pos + Dsize)
+    a_Dp = [x.Dp for x in a.slices[:ind]] + [Dsize] + [x.Dp for x in a.slices[ind2:]]
+    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(a_Dp), a_Dp, a_D))
+    a.struct = a.struct._replace(t=a_t, D=a_D, size=sum(a_Dp))
     _test_tD_consistency(a.struct)
 
 

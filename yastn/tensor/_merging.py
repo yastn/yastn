@@ -151,7 +151,7 @@ def _meta_merge_to_matrix(config, struct, slices, axes, inds):
                     _, _, tl, tr, slo, Do = next(gr)
         except StopIteration:
             pass
-    struct_new = struct._replace(t=tuple(t_new), D=tuple(D_new), s=tuple(s_eff), size=Dhigh)
+    struct_new = struct._replace(t=tuple(t_new), D=tuple(D_new), s=tuple(s_eff), size=Dlow)
     slices_new = tuple(slices_new)
     return struct_new, slices_new, tuple(meta_mrg), ls[0], ls[1]
 

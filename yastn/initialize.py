@@ -369,7 +369,7 @@ def decompress_from_1d(r1d, meta):
     return a
 
 
-def block(tensors, common_legs=None):   # TODO
+def block(tensors, common_legs=None):
     """
     Assemble new tensor by blocking a group of tensors.
 
@@ -456,9 +456,9 @@ def block(tensors, common_legs=None):   # TODO
     meta_new, meta_block = {}, []
     nsym = tn0.config.sym.NSYM
     for pa, a in tensors.items():
-        for tind, slind, Dind in zip(a.struct.t, a.struct.sl, a.struct.D):
+        for tind, slind, Dind in zip(a.struct.t, a.slices, a.struct.D):
             Dslcs = tuple(tDslc[tind[n * nsym : n * nsym + nsym]][pa[n]] for n, tDslc in enumerate(ltDslc))
-            meta_block.append((tind, slind, Dind, pa, Dslcs))
+            meta_block.append((tind, slind.slcs[0], Dind, pa, Dslcs))
             if tind not in meta_new:
                 meta_new[tind] = tuple(tDtot[tind[n * nsym : n * nsym + nsym]] for n, tDtot in enumerate(ltDtot))
 
@@ -467,12 +467,11 @@ def block(tensors, common_legs=None):   # TODO
     c_t = tuple(t for t, _ in meta_new)
     c_D = tuple(D for _, D in meta_new)
     c_Dp = tuple(np.prod(c_D, axis=1)) if len(c_D) > 0 else ()
-    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-    c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl, size=sum(c_Dp))
-    meta_new = tuple(zip(c_t, c_D, c_sl))
-
+    c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, c_D))
+    c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, size=sum(c_Dp))
+    meta_new = tuple((x, y, z.slcs[0]) for x, y, z in zip(c_t, c_D, c_slices))
     data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, c_struct.size)
-    return tn0._replace(struct=c_struct, data=data, hfs=tuple(hfs))
+    return tn0._replace(struct=c_struct, slices=c_slices, data=data, hfs=tuple(hfs))
 
 
 def _sum_legs_hfs(legs):

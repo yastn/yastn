@@ -106,7 +106,7 @@ def compress_to_1d(a, meta=None): # TODO
         if a.hfs != meta_hfs:
             raise YastnError("Tensor fused legs do not match metadata.")
 
-    if a.struct == meta['struct']:
+    if a.struct == meta['struct'] and a.slices == meta['slices']:
         return a._data, meta
     # else: embed filling in missing zero blocks
     ia, im, meta_merge = 0, 0, []
@@ -114,13 +114,12 @@ def compress_to_1d(a, meta=None): # TODO
         if a.struct.t[ia] < meta['struct'].t[im] or im >= len(meta['struct'].t):
             raise YastnError("Tensor has blocks that do not appear in meta.")
         if a.struct.t[ia] == meta['struct'].t[im]:
-            meta_merge.append((meta['struct'].sl[im], a.struct.sl[ia]))
+            meta_merge.append((meta['slices'][im].slcs[0], a.slices[ia].slcs[0]))
             ia += 1
             im += 1
         else: #a.struct.t[ia] > meta['struct'].t[im]:
             im += 1
-    Dsize = meta['struct'].sl[-1][1] if len(meta['struct'].sl) > 0 else 0
-    data = a.config.backend.embed_slc(a._data, meta_merge, Dsize)
+    data = a.config.backend.embed_slc(a._data, meta_merge, meta['struct'].size)
     return data, meta
 
 
