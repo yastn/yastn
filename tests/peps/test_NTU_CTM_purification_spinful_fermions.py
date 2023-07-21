@@ -2,14 +2,12 @@
 import numpy as np
 import pytest
 import logging
-import argparse
 import yastn
 import yastn.tn.fpeps as fpeps
-import time
 from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_Hubbard
 from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
 from yastn.tn.fpeps import initialize_peps_purification
-from yastn.tn.fpeps.ctm import nn_avg, ctmrg, init_rand, one_site_avg, nn_bond
+from yastn.tn.fpeps.ctm import nn_avg, ctmrg, one_site_avg, nn_bond
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg
@@ -24,7 +22,7 @@ n_up = fcdag_up @ fc_up
 n_dn = fcdag_dn @ fc_dn
 n_int = n_up @ n_dn
 
-def test_NTU_spinfull_finite():
+def test_NTU_spinful_finite():
 
     lattice = 'rectangle'
     boundary = 'finite'
@@ -110,18 +108,13 @@ def test_NTU_spinfull_finite():
     nn_bond_1_exact = 0.024917101651703362 # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (1,1) and (1,2)
     nn_bond_2_exact = 0.024896433958165112  # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (0,0) and (1,0)
 
-    print(nn_CTM_bond_1_up)
-    print(nn_CTM_bond_1_dn)
-    print(nn_CTM_bond_2_up)
-    print(nn_CTM_bond_2_dn)
-
     assert pytest.approx(nn_CTM_bond_1_up, abs=1e-5) == nn_bond_1_exact
     assert pytest.approx(nn_CTM_bond_1_dn, abs=1e-5) == nn_bond_1_exact
     assert pytest.approx(nn_CTM_bond_2_up, abs=1e-5) == nn_bond_2_exact
     assert pytest.approx(nn_CTM_bond_2_dn, abs=1e-5) == nn_bond_2_exact
 
 
-def test_NTU_spinfull_infinite():
+def test_NTU_spinful_infinite():
 
     lattice = 'checkerboard'
     boundary = 'infinite'
@@ -176,8 +169,6 @@ def test_NTU_spinfull_infinite():
         
         assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
 
-        doc, _ = one_site_avg(psi, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
-
         obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
 
         cdagc_up = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
@@ -195,7 +186,6 @@ def test_NTU_spinfull_infinite():
     ob_hor, ob_ver = nn_avg(psi, step.env, ops)
 
     nn_CTM = 0.25 * (abs(ob_hor.get('cdagc_up')) + abs(ob_ver.get('ccdag_up'))+ abs(ob_ver.get('cdagc_dn'))+ abs(ob_ver.get('ccdag_dn')))
-    print(nn_CTM)
 
     nn_exact = 0.02481459 # analytical nn fermionic correlator at beta = 0.1 for 2D infinite lattice with checkerboard ansatz
 
@@ -203,7 +193,7 @@ def test_NTU_spinfull_infinite():
 
 if __name__ == '__main__':
     logging.basicConfig(level='INFO')
-    test_NTU_spinfull_finite()
-    test_NTU_spinfull_infinite()
+    test_NTU_spinful_finite()
+    test_NTU_spinful_infinite()
  
 

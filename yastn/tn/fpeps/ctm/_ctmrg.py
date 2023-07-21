@@ -93,9 +93,8 @@ def _ctmrg(psi, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd=No
         t_start = time.time()
         env, proj = CTM_it(env, AAb, fix_signs, opts_svd)
         t_end = time.time()
-        tt = t_start - t_end
+        tt = t_end - t_start
         logging.info('sweep time: %0.2f s.', tt)
-
 
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield CTMRGout(sweep, env, proj, tt)
