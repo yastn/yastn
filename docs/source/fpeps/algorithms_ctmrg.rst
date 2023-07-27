@@ -17,12 +17,11 @@ Idea
 The core idea behind CTMRG, both in the symmetric and nonsymmetric cases, remains the same. The method approximates the 
 contraction of an infinite tensor network by utilizing a finite set of environment tensors with a fixed rank :math:`\chi`.
 These environment tensors undergo a Renormalization Group (RG) procedure, iteratively converging towards their fixed-point forms. 
-The ultimate goal is to recover the thermodynamic limit properties as the rank :math:`\chi` approaches infinity. In 
-yastn/tn/fpeps/ctm/_ctm_iteration_routines.py, we use the Corboz version [3] of CTMRG. In the corner transfer matrix method,
-the infinite environment of a given site (or sites in a unit cell) in a 2D tensor network is approximated by a 
-combination of four corner C_nw,C_sw,C_ne,C_se and four transfer T_n,T_w,T_e,T_s tensors of finite size, as depicted in the 
-following figure. The singles-site observable O is placed between the site and its conjugated attached via the physical indices.
-The CTMRG tensors when contracted provides the reduced density matrix with which the expectation value is to be comoputed.
+The ultimate goal is to recover the thermodynamic limit properties as the rank :math:`\chi \rightarrow \infty`. 
+In the corner transfer matrix method, the infinite environment of a given site (or sites in a unit cell) in a 2D tensor network is approximated by a 
+combination of four corner :math:`C_{nw},C_{sw},C_{ne},C_{se}` and four transfer :math:`T_{n},T_{w},T_{e},T_{s}` tensors of finite size, as depicted in the 
+following figure. The single-site observable :math:`O` is placed between the site and its conjugated attached via the physical indices.
+The CTMRG tensors when contracted provides the reduced density matrix with which the expectation value is to be computed.
 
 ::
 
@@ -47,6 +46,7 @@ The CTMRG tensors when contracted provides the reduced density matrix with which
                                                                                            /
                                                                                           /  
                                                                                          /
+
 
 The convention for ordering the indices in the CTMRG environment tensors are given below:
 
@@ -81,6 +81,11 @@ The convention for ordering the indices in the CTMRG environment tensors are giv
     |___________|                       |___________|                       |__________|
 
 
+
+
+We implement one-step of the Corboz version [3] of CTMRG:
+
+.. autofunction:: yastn.tn.fpeps.ctm._ctm_iteration_routines.CTM_it
 
 References & Related works
 ^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -10,7 +10,7 @@ to the ancilla to obtain the thermal density matrix. The technique is outlined a
 We start with the system at infinite temperature (:math:`\beta=0`) where all states are equally probable. This is described as a maximally mixed density matrix :math:`\rho` in the basis 
 :math:`\ket{\psi_{n}}` where the number of states in the physical Hilbert space labelled by :math:`n` runs from :math:`1` to :math:`d`:
 
-:math:`\rho = \frac{\mathds{1}}{d}= \sum_{n} \frac{1}{d} \ket{\psi_{n}}\bra{\psi_{n}}`.
+:math:`\rho = \frac{\mathbb{1}}{d}= \sum_{n} \frac{1}{d} \ket{\psi_{n}}\bra{\psi_{n}}`.
 
 Then we write a purified wave-function :math:`\ket{\psi_{\infty}}` at infinite temperature as a maximally entangled state between the physical and ancillary degrees of freedom where the latter
 is introduced using the basis :math:`\ket{\psi_{n'}}`:

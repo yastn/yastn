@@ -3,16 +3,16 @@ Neighborhood tensor update (NTU) algorithm
 
 Neighborhood Tensor Update (NTU) (see Ref [2] for details) can be regarded as a special case of a cluster update (see Ref [1]),
 where the number of neighboring lattice sites taken into account during truncation makes for a refining parameter. The cluster update
-interpolates between a local truncation—as in the simple update (SU)[4]—and the full update (FU) [5] that takes into account all 
-correlations in the truncated state. The NTU cluster includes the
-neighboring sites only as the metric tensor to compute the Frobenius norm in theory/peps. 
+interpolates between a local truncation — as in the simple update (SU)[4]—and the full update (FU) [5] that takes into account all 
+correlations in the truncated state. The NTU cluster includes the neighboring sites only as the metric tensor to compute the Frobenius 
+norm in :ref:`Optimization of iPEPS<theory/fpeps/basics:Optimization of iPEPS>`. 
 
-In the diagram below, we have a checkeboard lattice with alternating tensors :math:`A` and :math:`B`
-in the 2D square lattice. The tensors :math:`A'` and :math:`B'` in the center are highlighted as 
-they have been updated by a NN 2-site gate of SVD rank :math:`r`. The procedure for
+In the diagram below, we have a checkerboard lattice with alternating tensors :math:`A` and :math:`B`
+in the :math:`2D` square lattice. The tensors :math:`A'` and :math:`B'` in the center are highlighted as 
+they have been updated by a NN :math:`2`-site gate of SVD rank :math:`r`. The procedure for
 truncating the bond dimension back to :math:`D` involves calculating the Frobenius norm. Ideally, in case of iPEPS
 the whole infinite lattice should contribute in calculation of the norm. This being practically impossible, CTMRG
-is often used to construct environmental tensors which approximate the infite environment around the updated bond.
+is often used to construct environmental tensors which approximate the infinite environment around the updated bond.
 This is done in the Full Update procedure. Due to matrix inversions involved in CTMRG, the metric tensor loses its
 hermiticty often rendering the algorithm unstable and also very expensive. A slightly less accurate but computationally
 cheaper and stable way is just to use the NN sites surrounding the updated bond to calculate the metric tensor.
@@ -44,7 +44,9 @@ The NTU error can be calculated numerically exactly via parallelizable tensor co
 description of the algorithm in Ref[2] and in Appendix B of Ref [3]. That exactness warrants
 that the error measure is Hermitian and non-negative own to the numerical precision.
 
-The least square optimization processes used is in yastn/tn/fpeps/_routines.py
+The least square optimization processes used is in 
+
+.. autofunction:: yastn.tn.fpeps.evolution._routines
 
 
 References & Related works

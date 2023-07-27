@@ -19,10 +19,11 @@ What are projected entangled pair states
    :glob:
 
    theory/fpeps/basics
+   theory/fpeps/purification
 
-******************
-API: yastn.tn.peps
-******************
+*******************
+API: yastn.tn.fpeps
+*******************
 
 .. toctree::
    :caption: API: yastn.tn.fpeps
@@ -32,10 +33,8 @@ API: yastn.tn.peps
    fpeps/structure
    fpeps/measurements
    fpeps/init
-   fpeps/measurements
    fpeps/algorithms_ctmrg
    fpeps/algorithms_ntu
-   fpeps/algorithms_overlap
 
 *************************
 Examples: basics of usage
