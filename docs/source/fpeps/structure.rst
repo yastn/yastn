@@ -4,40 +4,30 @@ Structure
 Geometry
 ---------
 
-The _geometry.py module contains the classes and structures that are used to manage and represent the geometry of Projected Entangled Pair States (PEPS).
-
+The module :code:`yastn.tn.fpeps._geometry.py` contains the classes and structures that are used to manage and represent the geometry of the Projected Entangled Pair States (PEPS).
 The classes defined in the module include:
 
-- **Bond**: A Named Tuple that represents a bond between two lattice sites. The sites are arranged in the fermionic order.
-Each bond has a directionality, captured by the "dirn" property. In the context of PEPS, a bond represents the entangled 
-pair of quantum states. 
+- **Bond**: A Named Tuple that represents a bond between two lattice sites. The sites are arranged in the fermionic order. Each bond has a directionality, captured by the "dirn" property. In the context of PEPS, a bond represents the entangled pair of quantum states. 
 .. autofunction:: yastn.tn.fpeps._geometry.Bond
 
-- **Lattice**: A Class that represents the geometric information about a 2D lattice. The Lattice class holds information
-about the geometry of the lattice on which the PEPS is defined. It can handle different lattice types, like 'checkerboard' or 'rectangle', 
-and different boundary conditions, 'finite' or 'infinite'. The Lattice class also provides methods to navigate
-this geometry, for instance, by providing the neighbouring sites or bonds. It thus provides the backbone for 
-the PEPS by defining its spatial structure. In the context of strongly correlated systems, the lattice and its properties can drastically
-affect the system's behavior.
+- **Lattice**: A Class that represents the geometric information about a 2D lattice. The Lattice class holds information about the geometry of the lattice on which the PEPS is defined. It can handle different lattice types, like 'checkerboard' or 'rectangle', 
+and different boundary conditions, 'finite' or 'infinite'. The Lattice class also provides methods to navigate this geometry, for instance, by providing the neighbouring sites or bonds. It thus provides the backbone for 
+the PEPS by defining its spatial structure. In the context of strongly correlated systems, the lattice and its properties can drastically affect the system's behavior.
 .. autofunction:: yastn.tn.fpeps._geometry.Lattice
 
-- **Peps**: The Peps class extends the Lattice class, holding the PEPS data itself,
-and provides additional functionalities specifically related to PEPS. The methods included in the Peps class, such 
-as mpo and boundary_mps, allow for efficient manipulation and transformation of the PEPS, which are key tasks
-in many numerical algorithms used to study these systems.
-.. autofunction:: yastn.tn.fpeps._geometry.Lattice
+- **Peps**: The Peps class extends the Lattice class, holding the PEPS data itself, and provides additional functionalities specifically related to PEPS. The methods included in the Peps class, such 
+as mpo and boundary_mps, allow for efficient manipulation and transformation of the PEPS, which are key tasks in many numerical algorithms used to study these systems.
+.. autofunction:: yastn.tn.fpeps._geometry.Peps
 
 .. literalinclude:: /../../tests/peps/test_geometry.py
         :pyobject: test_Lattice
-        :pyobject: test_Pes_get_set
+        :pyobject: test_Peps_get_set
         :pyobject: test_NtuEnv
 
 
 
 Double Peps Tensor
 ------------------
-
-.. autofunction:: yastn.tn.fpeps._doublePepsTensor.DoublePepsTensor
 
 The class `DoublePepsTensor`, deals with double-layer Projected Entangled Pair States (PEPS). An instance contains a 
 top tensor, a bottom tensor, and a rotation. The attribute rotation is optional and defaults to 0.
@@ -51,8 +41,13 @@ as during CTMRG procedures. In the following we provide the index ordering conve
 tt be the four legged tensor to which the DoublePepsTensor instance is appended to.
 Let the output tensor after the contraction be tt'.
 
+
+.. autofunction:: yastn.tn.fpeps._doublePepsTensor.DoublePepsTensor
+
+
 - **append_a_bl**:
-::                                                             
+::
+
                   3                                             2    3
                   |                                             |    |
                 __|___                                         _|____|_
@@ -67,8 +62,8 @@ Let the output tensor after the contraction be tt'.
 
 
 - **append_a_tr**:
-::                                                             
-                                                           
+::
+
                                                         
                       _______________                                               _______________
               0 -----|               |                                      0 -----|               |
@@ -83,7 +78,8 @@ Let the output tensor after the contraction be tt'.
 
 
 - **append_a_tl**:
-::                                                             
+::
+                                                                     
                                                            
                  _____________                                        _____________
                 |             |--- 3                                 |             |--- 2
