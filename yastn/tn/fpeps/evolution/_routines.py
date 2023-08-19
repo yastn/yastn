@@ -217,7 +217,7 @@ def optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB):
 
     """ function for choosing the optimal initial cutoff for the inverse which gives the least svd_error """
 
-    cutoff_list = [10**n for n in range(-14, -5)]
+    cutoff_list = [10**n for n in range(-14, -10)]
     results = []
     for c_off in cutoff_list:
         XL_inv, XR_inv = tensordot(UL.conj(), SL.sqrt().reciprocal(cutoff=c_off), axes=(0, 0)), tensordot(SR.sqrt().reciprocal(cutoff=c_off), UR.conj(), axes=(1, 1)) 
@@ -313,7 +313,7 @@ def optimal_pinv(gg, J, gRR):
     assert (gg - gg.conj().transpose(axes=(1, 0))).norm() < 1e-12 * gg.norm()
     S, U = eigh_with_truncation(gg, axes=(0, 1), tol=1e-14)
     UdJ = tensordot(J, U, axes=(0, 0), conj=(0, 1))
-    cutoff_list = [10**n for n in range(-14, -5)]
+    cutoff_list = [10**n for n in range(-14, -10)]
     results = []
     for c_off in cutoff_list:
         Sd = S.reciprocal(cutoff=c_off)

@@ -6,10 +6,10 @@ import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.mps as mps
 import time
-from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
+from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_fermi_sea
 from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
 from yastn.tn.fpeps import initialize_peps_purification
-from yastn.tn.fpeps.ctm import sample, nn_bond, CtmEnv2Mps, nn_avg, ctmrg, init_rand, one_site_avg, Local_CTM_Env
+from yastn.tn.fpeps.ctm import sample, CtmEnv2Mps, nn_avg, ctmrg
 
 from yastn.tn.mps import Env2, Env3
 
@@ -99,7 +99,6 @@ def not_working_test_sampling_spinless():
     opts = {'D_total': chi}
 
     for r_index in range(net.Ny-1,-1,-1):
-        print('r_index: ',r_index)
         Bctm = CtmEnv2Mps(net, step.env, index=r_index, index_type='r')  # right boundary of r_index th column through CTM environment tensors
 
        # assert all(Bctm[i].get_shape() == psi[i].get_shape() for i in range(net.Nx))
@@ -109,7 +108,7 @@ def not_working_test_sampling_spinless():
         phi0 = phi.copy()
         O = psi.mpo(index=r_index, index_type='column')
         phi = mps.zipper(O, phi0, opts)  # right boundary of (r_index-1) th column through zipper
-        mps.variational_(phi, O, phi0, method='1site', max_sweeps=2)
+        mps.compression_(phi, (O, phi0), method='1site', max_sweeps=2)
 
     nn, hh = fcdag @ fc, fc @ fcdag
     projectors = [nn, hh]

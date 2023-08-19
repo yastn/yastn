@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from ....tn import mps
 from yastn.tn.fpeps import Lattice
 from yastn.tn.fpeps.operators.gates import match_ancilla_1s
-from yastn import rand, tensordot
+from yastn import rand, tensordot, ones
 
 
 class ctm_window(NamedTuple):
@@ -96,7 +96,7 @@ def CtmEnv2Mps(net, env, index, index_type):
         H = mps.Mps(N=net.Ny)
         for ny in range(net.Ny):
             site = (nx, ny)
-            H.A[nx] = env[site].b
+            H.A[nx] = env[site].b.transpose(axes=(2,1,0))
     elif index_type == 'r':
         ny = index
         H = mps.Mps(N=net.Nx)
@@ -114,7 +114,7 @@ def CtmEnv2Mps(net, env, index, index_type):
         H = mps.Mps(N=net.Nx)
         for nx in range(net.Nx):
             site = (nx, ny)
-            H.A[nx] = env[site].l
+            H.A[nx] = env[site].l.transpose(axes=(2,1,0))
     return H
 
 
@@ -159,6 +159,48 @@ def init_rand(A, tc, Dc):
 
     return env
 
+
+def init_ones(A, tc, Dc):
+    """ Initialize CTMRG environments of peps tensors A with trivial tensors. """
+
+    config = A[(0,0)].config 
+    env= CtmEnv(A)
+
+    for ms in A.sites():
+        B = A[ms].copy()
+        B = B.unfuse_legs(axes=(0,1))
+        env[ms] = Local_CTM_Env()
+        env[ms].tl = ones(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
+        env[ms].tr = ones(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
+        env[ms].bl = ones(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
+        env[ms].br = ones(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
+        legs = [env[ms].tl.get_legs(1).conj(),
+                B.get_legs(0).conj(),
+                B.get_legs(0),
+                env[ms].tr.get_legs(0).conj()]
+        env[ms].t = ones(config=config, legs=legs)
+        legs = [env[ms].br.get_legs(1).conj(),
+                B.get_legs(2).conj(),
+                B.get_legs(2),
+                env[ms].bl.get_legs(0).conj()]
+        env[ms].b = ones(config=config, legs=legs)
+        legs = [env[ms].bl.get_legs(1).conj(),
+                B.get_legs(1).conj(),
+                B.get_legs(1),
+                env[ms].tl.get_legs(0).conj()]
+        env[ms].l = ones(config=config, legs=legs)
+        legs = [env[ms].tr.get_legs(1).conj(),
+                B.get_legs(3).conj(),
+                B.get_legs(3),
+                env[ms].br.get_legs(0).conj()]
+        env[ms].r = rand(config=config, legs=legs)
+        env[ms].t = env[ms].t.fuse_legs(axes=(0, (1, 2), 3))
+        env[ms].b = env[ms].b.fuse_legs(axes=(0, (1, 2), 3))
+        env[ms].l = env[ms].l.fuse_legs(axes=(0, (1, 2), 3))
+        env[ms].r = env[ms].r.fuse_legs(axes=(0, (1, 2), 3))
+
+    return env
+
 def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
     """ 
     Sample a random configuration from a finite peps. 
@@ -171,14 +213,14 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
 
     out = {}
     count = 0
-    vR = CtmEnv2Mps(state, CTMenv, index=state.Ny-1, index_type='r')
+    vR = CtmEnv2Mps(state, CTMenv, index=state.Ny-1, index_type='r') # right boundary of indexed column through CTM environment tensors
 
     for ny in range(state.Ny - 1, -1, -1):
 
-        Os = state.mpo(index=ny, index_type='column')
-        vL = CtmEnv2Mps(state, CTMenv, index=ny, index_type='l').conj()
+        Os = state.mpo(index=ny, index_type='column') # converts ny colum of PEPS to MPO
+        vL = CtmEnv2Mps(state, CTMenv, index=ny, index_type='l').conj() # left boundary of indexed column through CTM environment tensors
 
-        env = mps.Env3(vL, Os, vR).setup(to = 'first')
+        env = mps.Env3(vL, Os, vR).setup(to = 'first') 
 
         for nx in range(0, state.Nx):
             dpt = Os[nx].copy()
@@ -197,17 +239,19 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
             ind = sum(apr < rand for apr in accumulate(prob))
             out[(nx, ny)] = ind
             dpt.A = tensordot(dpt.A, loc_projectors[ind], axes=(4, 1))
-            Os[nx] = dpt
+            Os[nx] = dpt               # updated with the new collapse
             env.update_env(nx, to='last')
             count += 1
-
+        
         if opts_svd is None:
             opts_svd = {'D_total': max(vL.get_bond_dimensions())}
 
         vRnew = mps.zipper(Os, vR, opts=opts_svd)
         if opts_var is None:
             opts_var = {}
-        mps.variational_(vRnew, Os, vR, method='1site', **opts_var)
+
+
+        mps.compression_(vRnew, (Os, vR), method='1site', **opts_var)
         vR = vRnew
     return out
 
