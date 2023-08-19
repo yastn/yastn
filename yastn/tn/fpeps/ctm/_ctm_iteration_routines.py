@@ -826,3 +826,4 @@ def check_consistency_tensors(A):
             Ab[ms] = A[ms]   # system and ancila are fused by default
     return Ab
         
+        

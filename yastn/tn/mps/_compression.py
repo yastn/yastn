@@ -199,6 +199,8 @@ def _compression_1site_sweep_(env, Schmidt=None):
             env.clear_site(n)
             env.update_env(n, to=to)
     bra.absorb_central(to='first')
+    env.update_env(n, to=to)
+
 
 
 def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):

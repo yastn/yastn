@@ -2,14 +2,12 @@
 import numpy as np
 import pytest
 import logging
-import argparse
 import yastn
 import yastn.tn.fpeps as fpeps
-import time
 from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_fermi_sea
 from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
 from yastn.tn.fpeps import initialize_peps_purification
-from yastn.tn.fpeps.ctm import nn_avg, ctmrg, init_rand, nn_bond
+from yastn.tn.fpeps.ctm import nn_avg, ctmrg, nn_bond
 try:
     from .configs import config_U1_R_fermionic as cfg
     # cfg is used by pytest to inject different backends and divices
@@ -90,8 +88,6 @@ def test_NTU_spinless_finite():
     nn_CTM_bond_1 = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc'], bd_h)) + abs(nn_bond(psi, step.env, ops['ccdag'], bd_h)))
     nn_CTM_bond_2 = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc'], bd_v)) + abs(nn_bond(psi, step.env, ops['ccdag'], bd_v)))
 
-    print(nn_CTM_bond_1, nn_CTM_bond_2)
-
     nn_bond_1_exact = 0.04934701696955436 # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (1,1) and (1,2)
     nn_bond_2_exact = 0.049185554490429065  # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (0,0) and (1,0)
     assert pytest.approx(nn_CTM_bond_1, abs=1e-6) == nn_bond_1_exact
@@ -162,7 +158,6 @@ def test_NTU_spinless_infinite():
     ob_hor, ob_ver = nn_avg(psi, step.env, ops)
 
     nn_CTM = 0.5 * (abs(ob_hor.get('cdagc')) + abs(ob_ver.get('ccdag')))
-    print(nn_CTM)
 
     nn_exact = 0.04856353 # analytical nn fermionic correlator at beta = 0.2 for 2D infinite lattice with checkerboard ansatz
 
