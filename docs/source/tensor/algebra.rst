@@ -14,7 +14,7 @@ See examples: :ref:`examples/tensor/algebra:basic algebra operations`.
 Simple element-wise operations
 ------------------------------
 
-.. automethod:: yastn.Tensor.__abs__ 
+.. automethod:: yastn.Tensor.__abs__
 .. automethod:: yastn.Tensor.real
 .. automethod:: yastn.Tensor.imag
 .. automethod:: yastn.Tensor.sqrt
@@ -112,7 +112,7 @@ Tensor norms
 Spectral decompositions and truncation
 --------------------------------------
 
-.. autofunction:: yastn.linalg.svd 
+.. autofunction:: yastn.linalg.svd
 .. autofunction:: yastn.linalg.svd_with_truncation
 .. autofunction:: yastn.linalg.qr
 .. autofunction:: yastn.linalg.eigh
@@ -126,7 +126,7 @@ Spectral decompositions and truncation
 Auxliary
 --------
 
-Methods called by Krylov-based :doc:`algorithms</tensor/krylov>`
+Methods called by :doc:`Krylov-based algorithms</tensor/krylov>`
 
 .. automethod:: yastn.Tensor.expand_krylov_space
 .. automethod:: yastn.Tensor.linear_combination

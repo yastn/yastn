@@ -8,7 +8,7 @@ In general, tensors are multilinear maps from products of several vector spaces
 
 .. math::
 
-    T:\quad V^i\otimes V^j\otimes V^k\otimes...V_a\otimes V_b\otimes V_c\otimes \rightarrow scalar,
+    T:\quad V^i\otimes V^j\otimes V^k\otimes...V_a\otimes V_b\otimes V_c\otimes... \rightarrow scalar,
 
 where `T` expressed in basis and components is
 
@@ -16,7 +16,7 @@ where `T` expressed in basis and components is
     T = \sum_{abc...ijk...} T^{abc...}_{ijk...} e^ie^je^k...e_ae_be_c...
 
 YASTN refers to individual spaces :math:`V` as `legs`. In graphical notation
-the shapes represent tensors, while legs correspond to lines emerging from these shapes 
+the shapes represent tensors, while legs correspond to lines emerging from these shapes
 
 ::
 
@@ -51,7 +51,7 @@ In YASTN, similar to other implementations (:ref:`see below <refs_basics>`), the
 Action of abelian symmetry
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-For any element `g` of abelian group G, its action on tensor elements :math:`T^{ab...}_{ij...}` 
+For any element `g` of abelian group G, its action on tensor elements :math:`T^{ab...}_{ij...}`
 in a proper basis can be represented by `diagonal` matrices `U(g)` acting on each of the vector spaces
 
 .. math::
@@ -63,13 +63,13 @@ in YASTN always taken to be integers :math:`\mathbb{Z}` or their subset, as
 
 .. math::
 
-    U(g)^i_j=exp(-i\theta_g t_i)\delta_{ij}
+    U(g)^j_k=exp(-i\theta_g t_j)\delta_{jk}
 
-with angle :math:`\theta_g \in [0,2\pi)`, which depends on :math:`g \in G`, and :math:`\delta_{ij}` being
+with angle :math:`\theta_g \in [0,2\pi)`, which depends on :math:`g \in G`, and :math:`\delta_{jk}` being
 Kronecker delta.
 
-This structure gives a simple selection rule that all symmetric tensors must obey. 
-Taking group element :math:`g \in G` for **all non-zero** elements of `T` it must hold
+This structure gives a simple selection rule that all symmetric tensors must obey.
+Taking group element :math:`g \in G` for **all non-zero** elements of `T`, it must hold
 
 .. math::
 
@@ -82,7 +82,7 @@ The selection rule can be equivalently expressed as charge conservation
 .. math::
     t_a+t_b+...-t_i-t_j-... = N
 
-with total charge of the tensor `N` being independent of tensor elements :math:`T^{ab...}_{ij...}`. In the case of :math:`N=0` such tensor is invariant (unchanged) under the action of the symmetry. 
+with total charge of the tensor `N` being independent of tensor elements :math:`T^{ab...}_{ij...}`. In the case of :math:`N=0` such tensor is invariant (unchanged) under the action of the symmetry.
 Otherwise, it transforms covariantly as all its elements are altered by the same complex phase :math:`exp(i\theta_gN)`.
 
 The charges :math:`t_i,\ N` and precise form of their addition :math:`+` depends on the abelian group
@@ -116,7 +116,7 @@ Conjugation of a tensor complex-conjugates tensor elements, flips tensor signatu
 replacing :math:`\pm 1 \to \mp 1`, as well as the total charge :math:`N \to -N`.
 In the latter, :math:`-` depends on the abelian group.
 
-It is also possible to flip the signature of a specific leg, which is accompanied by a respective negation of charges on that leg.
+It is also possible to flip the signature of a specific leg, which is accompanied by negation of charges on that leg.
 
 .. note::
     See :ref:`API docs<tensor/algebra:Conjugation of symmetric tensors>`, for various types of conjugation.
