@@ -22,11 +22,11 @@ class SpinfulFermions(meta_operators):
         Notes
         -----
         For 'Z2' and 'U1xU1xZ2', the two species (spin-up and spin-down) are treated as indistinguishable.
-        In that case, creation and annihilation operators of the two species anti-commute 
+        In that case, creation and annihilation operators of the two species anti-commute
         (fermionic statistics is encoded in the Z2 channel).
 
         For 'U1xU1' the two species (spin-up and spin-down) are treated as distinguishable.
-        In that case, reation and annihilation operators of the two species commute.
+        In that case, creation and annihilation operators of the two species commute.
         """
         if sym not in ('Z2', 'U1xU1', 'U1xU1xZ2'):
             raise YastnError("For SpinfulFermions sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').")

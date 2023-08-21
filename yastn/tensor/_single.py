@@ -95,9 +95,6 @@ def requires_grad_(a, requires_grad=True):
     r"""
     Activate or deactivate recording of operations on the tensor for automatic differentiation.
 
-    .. note::
-        This operation sets requires_grad flag for `all` non-empty blocks of the tensor.
-
     Parameters
     ----------
     requires_grad: bool
@@ -169,7 +166,7 @@ def flip_charges(a, axes=None):
     Parameters
     ----------
         axes: int or tuple(int)
-            index of the leg, or a group of legs. Is None, flips all legs.
+            index of the leg, or a group of legs. If None, flips all legs.
 
     Returns
     -------
@@ -216,12 +213,12 @@ def drop_leg_history(a, axes=None):
     r"""
     Drops information about original structure of fused or blocked legs that have been combined into a selected tensor leg(s).
 
-    Makes a shallow copy of Tensor data.
+    Makes a shallow copy of tensor data.
 
     Parameters
     ----------
         axes: int or tuple(int)
-            index of the leg, or a group of legs. Is None, drops information from all legs.
+            index of the leg, or a group of legs. If None, drops information from all legs.
 
     Returns
     -------
@@ -242,7 +239,7 @@ def drop_leg_history(a, axes=None):
 def transpose(a, axes):
     r"""
     Transpose tensor by permuting the order of its legs (spaces).
-    Makes a shallow copy of Tensor data if the order is not changed.
+    Makes a shallow copy of tensor data if the order is not changed.
 
     Parameters
     ----------
@@ -252,7 +249,6 @@ def transpose(a, axes):
     Returns
     -------
     yastn.Tensor
-        transposed tensor
     """
     _test_axes_all(a, axes, native=False)
     if axes == tuple(range(a.ndim)):
@@ -286,7 +282,7 @@ def move_leg(a, source, destination):
     This is a convenience function for subset of possible permutations. It
     computes the corresponding permutation and then calls :meth:`yastn.Tensor.transpose`.
 
-    Makes a shallow copy of Tensor data if the order is not changed.
+    Makes a shallow copy of tensor data if the order is not changed.
 
     Parameters
     ----------
@@ -333,7 +329,7 @@ def add_leg(a, axis=-1, s=1, t=None):
     of the orignal tensor. This is achieved by extra leg having a single charge sector
     of dimension D=1. The total charge of the tensor :attr:`yastn.Tensor.n` can be modified this way.
 
-    Makes a shallow copy of Tensor data.
+    Makes a shallow copy of tensor data.
 
     Parameters
     ----------
@@ -383,7 +379,7 @@ def remove_leg(a, axis=-1):
     The charge carried by that leg (if any) is added to the
     tensor's total charge :attr:`yastn.Tensor.n`.
 
-    Makes a shallow copy of Tensor data.
+    Makes a shallow copy of tensor data.
 
     Parameters
     ----------

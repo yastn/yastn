@@ -1,4 +1,4 @@
-"""U(1)xU(1) symmetry"""
+""" Define rules for U(1)xU(1) symmetry"""
 from .sym_abelian import sym_abelian
 
 class sym_U1xU1(sym_abelian):
@@ -14,17 +14,17 @@ class sym_U1xU1(sym_abelian):
 
         Parameters
         ----------
-            charges: numpy.ndarray
+            charges: numpy.ndarray(int)
                 rank-3 integer tensor with shape (k, n, NSYM)
 
-            signatures: numpy.ndarray
-                integer vector with `n` +1 or -1 elements 
+            signatures: numpy.ndarray(int)
+                integer vector with `n` +1 or -1 elements
 
             new_signature: int
 
         Returns
         -------
-            teff: numpy.ndarray
-                integer matrix with shape (k,NSYM) of fused charges and multiplied by ``new_signature``
+            numpy.ndarray(int)
+                integer matrix with shape (k,NSYM) of fused charges; includes multiplication by ``new_signature``
         """
         return new_signature * (charges.swapaxes(1, 2) @ signatures)
