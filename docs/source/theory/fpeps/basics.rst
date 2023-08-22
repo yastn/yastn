@@ -5,27 +5,28 @@ Basic concepts
 Projected Entangled Pair States (PEPS)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The Projected Entangled Pair State (PEPS) [1] is a two-dimensional (`2D`) tensor network that, by construction, satisfies area law of entanglement entropy.
+The Projected Entangled Pair State (PEPS) [1] is a two-dimensional (`2D`) tensor network that, by construction, satisfies area law of entanglement entropy in `2D`.
 It allows efficient simulations of ground and thermal states of many-body quantum systems in `2D` with their respective area laws.
-PEPS is constructed from a set of tensors located on a `2D` lattice, where each tensor corresponds to a lattice site with the corresponding physical degrees of freedom (physical leg) and virtual legs (bonds) connected to neighboring tensors.
-Here we employ a 2D rectangular lattice of size :math:`L_{x} \times L_{y}`, with sites labeled by coordinates :math:`(x,y)` as shown below:
+PEPS is constructed from a set of tensors located on a `2D` lattice.
+Each tensor have physical leg, corresponding to physical degrees of freedom of the lattice site, and virtual legs (bonds) connecting it to neighboring tensors.
+Here we implement a 2D rectangular lattice of size :math:`L_{x} \times L_{y}`, with sites labeled by coordinates :math:`(x,y)` as shown below:
 
 
 ::
 
        # coordinates of the underlying 2D lattice
 
-       ------------------------------------------------------->
+        ----------->
        |
        |    (0,0)      (0,1)      (0,2)      ...      (0, L_y-1)
        |
        |    (1,0)      (1,1)      (1,2)      ...      (1, L_y-1)
-       |
-       |      .           .                              .
-       |      .                     .                    .
-       |      .                               .          .
-       |
-       |/ (L_x-1,0)  (L_x-1,1)  (L_x-1,2)    ...    (L_x-1,L_y-1)
+      \|/
+              .           .                              .
+              .                     .                    .
+              .                               .          .
+
+          (L_x-1,0)  (L_x-1,1)  (L_x-1,2)    ...    (L_x-1,L_y-1)
 
 
 Each tensor :math:`A_{(x,y)}` in PEPS is a rank-:math:`5` tensor of size :math:`D_{(x-1,y),(x,y)} \times D_{(x,y-1),(x,y)} \times D_{(x,y),(x+1,y)} \times D_{(x,y),(x,y+1)} \times d_{(x,y)}`.
@@ -33,17 +34,17 @@ Each tensor :math:`A_{(x,y)}` in PEPS is a rank-:math:`5` tensor of size :math:`
 
 ::
 
-    # individual tensor in the PEPS lattice
+      # individual tensor of the PEPS lattice
 
-                                D_(x-1,y),(x,y)
-                                            \
-                                          ___\_________
-                                         |             |
-             A_(x,y) = D_(x,y-1),(x,y) --|    (x,y)    |-- D_(x,y),(x,y+1)
-                                         |_____________|
-                                            |       \
-                                            |        \
-                                        d_(x,y)  D_(x,y),(x+1,y)
+                                 D_(x-1,y),(x,y)
+                                         \
+                                       ___\_______
+                                      |           |
+         A_(x,y)  =  D_(x,y-1),(x,y)--|   (x,y)   |--D_(x,y),(x,y+1)
+                                      |___________|
+                                         |      \
+                                         |       \
+                                      d_(x,y)  D_(x,y),(x+1,y)
 
 
 The module :code:`yastn.tn.fpeps` implements operations on PEPS both for a finite system with open boundary conditions (OBC) and in the thermodynamic limit.
@@ -51,26 +52,26 @@ A schematic diagram of PEPS with OBC is given below.
 
 ::
 
-       # PEPS for 6 sites arranged in a (L_x, L_y) = (2, 3) lattice with OBC.
-       # Notice that for OBC dimensions of virtual legs on the edge of the lattice are equal one.
+      # PEPS for 6 sites arranged in a (L_x, L_y) = (2, 3) lattice with OBC.
+      # For OBC, dimensions of virtual legs on the edge of the lattice are one.
 
-             1                             1                             1
-              \                             \                             \
-           ____\______                   ____\______                   ____\______
-          |           |                 |           |                 |           |
-       1--|   (0,0)   |--D_(0,0),(0,1)--|   (0,1)   |--D_(0,1),(0,2)--|   (0,2)   |--1
-          |___________|                 |___________|                 |___________|
-             |      \                      |      \                      |     \
-             |       \                     |       \                     |      \
-         d_(0,0)  D_(0,0),(1,0)        d_(0,1)  D_(0,1),(1,1)        d_(0,2)  D_(0,2),(1,2)
-                       \                             \                             \
-                    ____\______                   ____\______                   ____\______
-                   |           |                 |           |                 |           |
-                1--|   (1,0)   |--D_(1,0),(1,1)--|   (1,1)   |--D_(1,1),(1,2)--|   (1,2)   |--1
-                   |___________|                 |___________|                 |___________|
-                      |     \                       |     \                       |    \
-                      |      \                      |      \                      |     \
-                  d_(1,0)     1                 d_(1,1)     1                 d_(1,2)    1
+           1                         1                         1
+            \                         \                         \
+          ___\_____                 ___\_____                 ___\_____
+         |         |               |         |               |         |
+      1--|  (0,0)  |-D_(0,0),(0,1)-|  (0,1)  |-D_(0,1),(0,2)-|  (0,2)  |--1
+         |_________|               |_________|               |_________|
+           |     \                   |     \                   |     \
+           |      \                  |      \                  |      \
+       d_(0,0)  D_(0,0),(1,0)    d_(0,1)  D_(0,1),(1,1)    d_(0,2)  D_(0,2),(1,2)
+                    \                         \                         \
+                  ___\_____                 ___\_____                 ___\_____
+                 |         |               |         |               |         |
+              1--|  (1,0)  |-D_(1,0),(1,1)-|  (1,1)  |-D_(1,1),(1,2)-|  (1,2)  |--1
+                 |_________|               |_________|               |_________|
+                   |     \                   |     \                   |    \
+                   |      \                  |      \                  |     \
+                d_(1,0)    1              d_(1,1)    1              d_(1,2)   1
 
 
 
@@ -79,82 +80,78 @@ A schematic diagram of PEPS with OBC is given below.
 Implementation of fermionic anticommutation rules in PEPS
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-We follow the scheme introduced by Corboz et al. in Ref. [2].
-It relies on (a) working with parity preserving tensors and (b) replacing lines (contracted bonds) crossings, in a planar projection of the network, with fermionic swap gates :meth:`yastn.swap_gate`.
-The distribution of crossings (swap gates) follows from a chosen fermionic order but their application can be made local for contracting the network.
-The leading numerical cost of contracting fermionic and bosonic lattices are the same, with swap gates adding a subleading overhead.
+We follow the recipe introduced by Corboz et al. in Ref. [2].
+It relies on (a) working with parity preserving tensors and (b) supplementing lines (legs) crossings, in a planar projection of the network, with fermionic swap gates :meth:`yastn.swap_gate`.
+The distribution of crossings (swap gates) follows from a chosen fermionic order, but their application can be made local for contracting the network.
+The leading numerical cost of contracting fermionic and bosonic (or spin) lattices are the same, with swap gates adding a subleading overhead.
+The module :code:`yastn.tn.fpeps` handles both fermionic and bosonic statistics, controlled by :code:`fermionic` flag in the :ref:`tensor configuration <tensor/configuration:yastn configuration>`.
+We use the name fpeps to emphasize the incorporation of fermionic statistics in the module.
 
 Here we employ the fermionic order demonstrated in a 3x3 PEPS example below.
-The fermionic statistic is enforced by placing swap gates at each line crossing.
 Parity-preserving tensors permit moving the lines over tensors, changing the placement of the swap gates without affecting the result.
 
 ::
 
 
-              _________             _________              _________
-             |         |           |         |            |         |
-             |         |-----------|         |----------- |         |
-             |_________|           |_________|            |_________|
-                |   \                 |   \                 |   \
-                |    \                |    \                |    \
-                |   __\______         |   __\______         |   __\______
-                |  |         |        |  |         |        |  |         |
-                |  |         |--------|--|         |--------|--|         |
-       |Psi> =  |  |_________|        |  |_________|        |  |_________|
-                |     |   \           |     |   \           |     |   \
-                |     |    \          |     |    \          |     |    \
-                |     |   __\______   |     |   __\______   |     |   __\______
-                |     |  |         |  |     |  |         |  |     |  |         |
-                |     |  |         |--|-----|--|         |--|-----|--|         |
-                |     |  |_________|  |     |  |_________|  |     |  |_________|
-                |     |     |         |     |     |         |     |     |
-                |     |     |         |     |     |         |     |     |
+              ________            ________            ________
+             |        |          |        |          |        |
+             |        |----------|        |--------- |        |
+             |________|          |________|          |________|
+               |    \              |    \              |    \
+               |   __\_____        |   __\_____        |   __\_____
+               |  |        |       |  |        |       |  |        |
+      |Psi> =  |  |        |-------|--|        |-------|--|        |
+               |  |________|       |  |________|       |  |________|
+               |    |    \         |    |    \         |    |    \
+               |    |   __\_____   |    |   __\_____   |    |   __\_____
+               |    |  |        |  |    |  |        |  |    |  |        |
+               |    |  |        |--|----|--|        |--|----|--|        |
+               |    |  |________|  |    |  |________|  |    |  |________|
+               |    |    |         |    |    |         |    |    |
+               |    |    |         |    |    |         |    |    |
 
-                                                        fermionic order
-              ------------------------------------------------------------>
+            --------------------------------------------------------->
+                                                   fermionic order
 
 
 
 Infinite PEPS (iPEPS)
 ^^^^^^^^^^^^^^^^^^^^^
 
-Although finite PEPS is widely used, arguably, some of the best results have been obtained with infinite PEPS (iPEPS) [3] operating directly in the thermodynamic limit.
-In iPEPS ansatz, a unit cell of tensors is repeated all over the (infinite) lattice.
+Although finite PEPS is widely used, some of the best results, arguably, have been obtained with infinite PEPS (iPEPS) [3].
+It operates directly in the thermodynamic limit describing a system with translational invariance.
+In iPEPS ansatz is formed by a unit cell of tensors repeated all over infinite lattice.
 A common example is a checkerboard lattice, which has two tensors A and B in a 2 by 2 unit cell.
 
 ::
 
        # Checkerboard ansatz for iPEPS
-                .                 .
-                 .                 .
-                  \                 \
-                 __\______         __\______
-                |         |       |         |
-          ... --|    A    |-- D --|    B    |-- ...
-                |_________|       |_________|
-                   |   \             |   \
-                   |    D                 D
-                         \                 \
-                        __\______         __\______
-                       |         |       |         |
-                ... -- |    B    |-- D --|    A    |-- ...
-                       |_________|       |_________|
-                           |  \               |  \
-                           |   .              |   .
-                                .                  .
+                 .               .
+                  .               .
+                 __\____         __\____
+                |       |       |       |
+          ... --|   A   |-- D --|   B   |-- ...
+                |_______|       |_______|
+                   |   \          |    \
+                   |    D         |     D
+                         \               \
+                        __\____         __\____
+                       |       |       |       |
+                ...  --|   B   |-- D --|   A   |-- ...
+                       |_______|       |_______|
+                         |    \          |    \
+                         |     .         |     .
+                                .               .
 
 
 Time evolution
 ^^^^^^^^^^^^^^
 An ubiquitous problem is simulation of real or imaginary time evolution.
 For evolution generated by a local Hamiltonian :math:`H`, we employ Suzuki-Trotter decomposition.
-The time evolution operator :math:`\exp(-\beta H)` (here in the imaginary time) is approximated by
-a set of local gates
+The time evolution operator :math:`\exp(-\beta H)`, here in the imaginary time, is approximated by
+a product of local gates applied `n` times with a small time step :math:`d\beta = \beta / n`.
 
-two-site gates applied
-infinitesimal operators to be applied over all the bonds :math:`b` in :math:`n` time steps such that :math:`n = \beta / d\beta`.
-
-:math:`\exp(-\beta \hat{H}) = \exp(-\beta \sum_{bonds} \hat{H}_{bonds}) = (\exp(-d\beta \sum_{bonds} \hat{H}_{bonds}))^{n} \approx (prod \exp(-d\beta \hat{H}_{bonds}))^{n}`
+:math:`\exp(-\beta \hat{H}) =  [\exp(-d\beta \hat{H})]^{n} \approx [\prod_{bond} \exp(-d\beta \hat{H}_{bond})]^{n}`
 
 For Hamiltonians with nearest neighbor interactions, the operators are typically two-site gates applied to the physical index of the PEPS tensors. For checkerboard lattice,
 there are four unique bonds : AB horizontal, BA horizontal, AB vertical, BA vertical. Typically we use 2nd order Suzuki-Trotter method where our application of
