@@ -70,7 +70,7 @@ def test_NTU_spinless_finite():
     for step in ctmrg(psi, max_sweeps, iterator_step=2, AAb_mode=0, fix_signs=False, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
-        obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
+        obs_hor, obs_ver, _, _ =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
         ccdag = 0.5*(abs(obs_hor.get('ccdag')) + abs(obs_ver.get('ccdag')))
@@ -143,7 +143,7 @@ def test_NTU_spinless_infinite():
     for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
-        obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
+        obs_hor, obs_ver, _, _ =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
         ccdag = 0.5*(abs(obs_hor.get('ccdag')) + abs(obs_ver.get('ccdag')))
@@ -155,7 +155,7 @@ def test_NTU_spinless_infinite():
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
-    ob_hor, ob_ver = nn_avg(psi, step.env, ops)
+    ob_hor, ob_ver, _, _ = nn_avg(psi, step.env, ops)
 
     nn_CTM = 0.5 * (abs(ob_hor.get('cdagc')) + abs(ob_ver.get('ccdag')))
 

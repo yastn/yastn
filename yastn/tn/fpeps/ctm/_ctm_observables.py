@@ -22,15 +22,21 @@ def nn_avg(peps, env, op):
 
     Returns
     -------
-    obs_hor: dict
+    obs_hor_mean: dict
         dictionary containing name of the horizontal observables as keys and their averaged values over all horizontal bonds.
-    obs_ver: dict
+    obs_ver_mean: dict
         dictionary containing name of the vertical observables as keys and their averaged values over all vertical bonds.
+    obs_hor_sum: dict
+        dictionary containing name of the horizontal observables as keys and sum of values on all horizontal bonds.
+    obs_ver_sum: dict
+        dictionary containing name of the vertical observables as keys and sum of values on all vertical bonds.
     """
 
     peps = check_consistency_tensors(peps)
-    obs_hor = {}
-    obs_ver = {}
+    obs_hor_mean = {}
+    obs_ver_mean = {}
+    obs_hor_sum = {}
+    obs_ver_sum = {}
     for ms in op.keys():
         res_hor = []
         res_ver = []
@@ -42,12 +48,16 @@ def nn_avg(peps, env, op):
             val_ver = EV2ptcorr(peps, env, opt, bds_v.site_0, bds_v.site_1)
             res_ver.append(val_ver[0])
         
-        dic_hor = {ms: np.mean(res_hor)}
-        dic_ver = {ms: np.mean(res_ver)}
-        obs_hor.update(dic_hor)
-        obs_ver.update(dic_ver)
+        dic_hor_mean = {ms: np.mean(res_hor)}
+        dic_ver_mean = {ms: np.mean(res_ver)}
+        dic_hor_sum = {ms: np.sum(res_hor)}
+        dic_ver_sum = {ms: np.sum(res_ver)}
+        obs_hor_mean.update(dic_hor_mean)
+        obs_ver_mean.update(dic_ver_mean)
+        obs_hor_sum.update(dic_hor_sum)
+        obs_ver_sum.update(dic_ver_sum)
 
-    return obs_hor, obs_ver
+    return obs_hor_mean, obs_ver_mean, obs_hor_sum, obs_ver_sum
 
 
 
@@ -192,3 +202,5 @@ def EV2ptcorr_axial(peps, env, op, site0, site1):
     array_corr = op_array / norm_array
 
     return array_corr
+
+

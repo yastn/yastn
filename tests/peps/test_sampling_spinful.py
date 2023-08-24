@@ -77,7 +77,7 @@ def not_working_test_sampling_spinfull():
     for step in ctmrg(psi, max_sweeps, iterator_step=4, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
-        obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
+        obs_hor, obs_ver, _, _ =  nn_avg(psi, step.env, ops)
 
         cdagc_up = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
         ccdag_up = 0.5*(abs(obs_hor.get('ccdag_up')) + abs(obs_ver.get('ccdag_up')))
