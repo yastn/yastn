@@ -74,7 +74,7 @@ def not_working_test_sampling_spinless():
     for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 4th step as iteration_step=4
-        obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
+        obs_hor, obs_ver, _, _ =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
         ccdag = 0.5*(abs(obs_hor.get('ccdag')) + abs(obs_ver.get('ccdag')))
@@ -100,11 +100,7 @@ def not_working_test_sampling_spinless():
 
     for r_index in range(net.Ny-1,-1,-1):
         Bctm = CtmEnv2Mps(net, step.env, index=r_index, index_type='r')  # right boundary of r_index th column through CTM environment tensors
-
-       # assert all(Bctm[i].get_shape() == psi[i].get_shape() for i in range(net.Nx))
-        print(abs(mps.vdot(phi, Bctm)) / (phi.norm() * Bctm.norm()))
         assert pytest.approx(abs(mps.vdot(phi, Bctm)) / (phi.norm() * Bctm.norm()), rel=1e-8) == 1.0
-
         phi0 = phi.copy()
         O = psi.mpo(index=r_index, index_type='column')
         phi = mps.zipper(O, phi0, opts)  # right boundary of (r_index-1) th column through zipper

@@ -213,3 +213,23 @@ def array_EV2pt(peps, env, site0, site1, op=None):
 def con_bi(new_vecl, new_vecr):
     return tensordot(new_vecl, new_vecr, axes=((0, 1, 2), (2, 1, 0))).to_number()
 
+def hor_extension(env, bd, AAbo, AAb):
+    """ merge the left and right vecs + TM """
+    site_0, site_1 = bd.site_0, bd.site_1
+
+    left_bound_vec, right_bound_vec = left_right_op_vectors(env, site_0, site_1, AAbo) 
+    hor = con_bi(left_bound_vec, right_bound_vec)
+    left_bound_vec_norm, right_bound_vec_norm = left_right_op_vectors(env, site_0, site_1, AAb) 
+    hor_norm = con_bi(left_bound_vec_norm, right_bound_vec_norm)
+
+    return (hor/hor_norm)
+
+def ver_extension(env, bd, AAbo, AAb):
+    """ merge the left and right vecs + TM """
+    site_0, site_1 = bd.site_0, bd.site_1
+    top_bound_vec, bottom_bound_vec = top_bottom_op_vectors(env, site_0, site_1, AAbo)
+    ver = con_bi(top_bound_vec, bottom_bound_vec) 
+    top_bound_vec_norm, bottom_bound_vec_norm = top_bottom_op_vectors(env, site_0, site_1, AAb)
+    ver_norm = con_bi(top_bound_vec_norm, bottom_bound_vec_norm) 
+
+    return (ver/ver_norm)
