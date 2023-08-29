@@ -42,46 +42,6 @@ def initialize_peps_purification(fid, net):
     return gamma
 
 
-def initialize_post_sampling_spinful_sz_basis(fc_up, fc_dn, fcdag_up, fcdag_dn, net, out):
-    """"
-    Initializes the post-sampling state according to the specified occupation pattern.
-
-    Parameters
-    ----------
-    fc_up : Annihilation operator for spin up fermions.
-    fc_dn : Annihilation operator for spin down fermions.
-    fcdag_up : Creation operator for spin up fermions.
-    fcdag_dn : Creation operator for spin down fermions.
-    net : class Lattice
-    out : dict
-        A dictionary specifying the occupation pattern. The keys are the lattice sites
-        and the values are integers indicating the occupation type (0 for spin-up, 1 for spin-down,
-        2 for double occupancy, and 3 for hole).
-
-    Returns
-    -------
-    gamma : Peps object
-        The post-sampling state tensor network.
-    """
-
-    n_up, n_dn, h_up, h_dn = fcdag_up @ fc_up, fcdag_dn @ fc_dn, fc_up @ fcdag_up, fc_dn @ fcdag_dn
-    nn_up, nn_dn, nn_do, nn_hole = n_up @ h_dn, h_up @ n_dn, n_up @ n_dn, h_up @ h_dn      # up - 0; down - 1; double occupancy - 2; hole - 3
-    nn_up = reduce_operators(nn_up)
-    nn_dn = reduce_operators(nn_dn)
-    nn_do = reduce_operators(nn_do)
-    nn_hole = reduce_operators(nn_hole)
-    tt = {0: nn_up, 1: nn_dn, 2: nn_do, 3: nn_hole}
-
-    gamma = fpeps.Peps(net.lattice, net.dims, net.boundary)
-    for kk in gamma.sites():
-        Ga = tt[out[kk]].fuse_legs(axes=[(0, 1)])
-        for s in (-1, 1, 1, -1):
-            Ga = Ga.add_leg(axis=0, s=s)
-        gamma[kk] = Ga.fuse_legs(axes=((0, 1), (2, 3), 4))
-        
-    return gamma
-
-
 def initialize_spinful_random(fc_up, fc_dn, fcdag_up, fcdag_dn, net, n_up, n_down):
     """"
     Randomly initializes a 2D rectangular spinful lattice with a specified
