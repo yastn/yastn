@@ -36,15 +36,17 @@ def not_working_test_sampling_spinfull():
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
+    coeff = 0.25 # for purification; 0.5 for ground state calculation and 1j*0.5 for real-time evolution
+    trotter_step = coeff * dbeta  
 
     dims = (yy, xx)
     net = fpeps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
 
     opt = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
-    GA_nn_up, GB_nn_up = gates_hopping(t_up, dbeta, fid, fc_up, fcdag_up, purification=purification)
-    GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, dbeta, fid, fc_dn, fcdag_dn, purification=purification)
-    g_loc = gate_local_Hubbard(mu_up, mu_dn, U, dbeta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, purification=purification)
+    GA_nn_up, GB_nn_up = gates_hopping(t_up, trotter_step, fid, fc_up, fcdag_up)
+    GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, trotter_step, fid, fc_dn, fcdag_dn)
+    g_loc = gate_local_Hubbard(mu_up, mu_dn, U, trotter_step, fid, fc_up, fc_dn, fcdag_up, fcdag_dn)
     g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
 
     if purification == 'True':

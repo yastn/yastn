@@ -36,6 +36,8 @@ def not_working_test_sampling_spinless():
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
+    coeff = 0.25 # for purification; 0.5 for ground state calculation and 1j*0.5 for real-time evolution
+    trotter_step = coeff * dbeta  
 
     dims = (xx, yy)
     net = fpeps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
@@ -43,8 +45,8 @@ def not_working_test_sampling_spinless():
     opt = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
 
-    GA_nn, GB_nn = gates_hopping(t, dbeta, fid, fc, fcdag, purification=purification)  # nn gate for 2D fermi sea
-    g_loc = gate_local_fermi_sea(mu, dbeta, fid, fc, fcdag, purification=purification) # local gate for spinless fermi sea
+    GA_nn, GB_nn = gates_hopping(t, trotter_step, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    g_loc = gate_local_fermi_sea(mu, trotter_step, fid, fc, fcdag) # local gate for spinless fermi sea
     g_nn = [(GA_nn, GB_nn)]
 
     if purification == 'True':
