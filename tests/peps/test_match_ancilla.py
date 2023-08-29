@@ -2,7 +2,6 @@ import logging
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps import initialize_vacuum
 from yastn.tn.fpeps.operators.gates import match_ancilla_1s, match_ancilla_2s
 
 try:
@@ -16,10 +15,22 @@ def test_match_ancilla():
     net = fpeps.Lattice(lattice='rectangle',dims=(3,3),boundary='finite')  
     opt = yastn.operators.SpinfulFermions(sym='U1xU1xZ2',backend=config_U1xU1_R_fermionic.backend,default_device=config_U1xU1_R_fermionic.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
-    psi = initialize_vacuum(fid, net)   # initializing vacuum state; has no ancilla (so 5 legs when unfused : t l b r s)
+
+    # initialize vacuum state psi with lattice specifications
+    A = yastn.Leg(fid.config, t= ((0,0,0),), D=((1),))
+    A = yastn.ones(fid.config, legs=[A])
+    for s in (-1, 1, 1, -1):
+        A = A.add_leg(axis=0, s=s)
+
+    A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
+    psi = fpeps.Peps(net.lattice, net.dims, net.boundary)
+
+    for ms in net.sites():
+        psi[ms] = A
+    ################################################################
 
     for ms in psi.sites():
-        assert(psi[ms].unfuse_legs(axes=(0, 1, 2)).ndim==5)
+        assert(psi[ms].unfuse_legs(axes=(0, 1, 2)).ndim==5)  # asserting each peps tensor has 5 legs in its unfused form
  
     cdag_up = match_ancilla_1s(fcdag_up, psi[0,0]) # creation operator of up polarization; adds ancilla index when operated on vacuum
     cdag_dn = match_ancilla_1s(fcdag_dn, psi[0,0]) # creation operator of down polarization; adds ancilla index when operated on vacuum
