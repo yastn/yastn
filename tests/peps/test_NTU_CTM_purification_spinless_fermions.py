@@ -31,14 +31,17 @@ def test_NTU_spinless_finite():
     step = 'two-step'
     tr_mode = 'optimal'
 
+    coeff = 0.25 # for purification; 0.5 for ground state calculation and 1j*0.5 for real-time evolution
+    trotter_step = coeff * dbeta  
+
     dims = (xx, yy)
     net = fpeps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
    
     opt = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
 
-    GA_nn, GB_nn = gates_hopping(t, dbeta, fid, fc, fcdag, purification=purification)  # nn gate for 2D fermi sea
-    g_loc = gate_local_fermi_sea(mu, dbeta, fid, fc, fcdag, purification=purification) # local gate for spinless fermi sea
+    GA_nn, GB_nn = gates_hopping(t, trotter_step, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    g_loc = gate_local_fermi_sea(mu, trotter_step, fid, fc, fcdag) # local gate for spinless fermi sea
     g_nn = [(GA_nn, GB_nn)]
 
     if purification == 'True':
@@ -70,14 +73,14 @@ def test_NTU_spinless_finite():
     for step in ctmrg(psi, max_sweeps, iterator_step=2, AAb_mode=0, fix_signs=False, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
-        obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
+        obs_hor, obs_ver, _, _ =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
         ccdag = 0.5*(abs(obs_hor.get('ccdag')) + abs(obs_ver.get('ccdag')))
 
         cf_energy = - (cdagc + ccdag) * (2 * xx * yy - xx - yy)
 
-        print("expectation value: ", cf_energy)
+        print("energy: ", cf_energy)
         if abs(cf_energy - cf_energy_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
@@ -106,12 +109,14 @@ def test_NTU_spinless_infinite():
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
+    coeff = 0.25 # for purification; 0.5 for ground state calculation and 1j*0.5 for real-time evolution
+    trotter_step = coeff * dbeta  
     net = fpeps.Peps(lattice=lattice, boundary=boundary)
     opt = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
 
-    GA_nn, GB_nn = gates_hopping(t, dbeta, fid, fc, fcdag, purification=purification)  # nn gate for 2D fermi sea
-    g_loc = gate_local_fermi_sea(mu, dbeta, fid, fc, fcdag, purification=purification) # local gate for spinless fermi sea
+    GA_nn, GB_nn = gates_hopping(t, trotter_step, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    g_loc = gate_local_fermi_sea(mu, trotter_step, fid, fc, fcdag) # local gate for spinless fermi sea
     g_nn = [(GA_nn, GB_nn)]
 
     if purification == 'True':
@@ -143,19 +148,19 @@ def test_NTU_spinless_infinite():
     for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
-        obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
+        obs_hor, obs_ver, _, _ =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
         ccdag = 0.5*(abs(obs_hor.get('ccdag')) + abs(obs_ver.get('ccdag')))
 
         cf_energy = - (cdagc + ccdag) * 0.5
 
-        print("expectation value: ", cf_energy)
+        print("energy: ", cf_energy)
         if abs(cf_energy - cf_energy_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
-    ob_hor, ob_ver = nn_avg(psi, step.env, ops)
+    ob_hor, ob_ver, _, _ = nn_avg(psi, step.env, ops)
 
     nn_CTM = 0.5 * (abs(ob_hor.get('cdagc')) + abs(ob_ver.get('ccdag')))
 

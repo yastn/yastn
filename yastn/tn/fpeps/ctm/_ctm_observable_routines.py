@@ -208,8 +208,95 @@ def array_EV2pt(peps, env, site0, site1, op=None):
 
     return array_vals
 
-
-
 def con_bi(new_vecl, new_vecr):
     return tensordot(new_vecl, new_vecr, axes=((0, 1, 2), (2, 1, 0))).to_number()
 
+def hor_extension(env, bd, AAbo, AAb):
+    """ merge the left and right vecs + TM """
+    site_0, site_1 = bd.site_0, bd.site_1
+
+    left_bound_vec, right_bound_vec = left_right_op_vectors(env, site_0, site_1, AAbo) 
+    hor = con_bi(left_bound_vec, right_bound_vec)
+    left_bound_vec_norm, right_bound_vec_norm = left_right_op_vectors(env, site_0, site_1, AAb) 
+    hor_norm = con_bi(left_bound_vec_norm, right_bound_vec_norm)
+
+    return (hor/hor_norm)
+
+def ver_extension(env, bd, AAbo, AAb):
+    """ merge the left and right vecs + TM """
+    site_0, site_1 = bd.site_0, bd.site_1
+    top_bound_vec, bottom_bound_vec = top_bottom_op_vectors(env, site_0, site_1, AAbo)
+    ver = con_bi(top_bound_vec, bottom_bound_vec) 
+    top_bound_vec_norm, bottom_bound_vec_norm = top_bottom_op_vectors(env, site_0, site_1, AAb)
+    ver_norm = con_bi(top_bound_vec_norm, bottom_bound_vec_norm) 
+
+    return (ver/ver_norm)
+
+#### diagonal correlation
+def make_ext_corner_tl(cortl, str_t, str_l, AAb):
+    vec_cor_tl = str_l @ cortl @ str_t
+    new_vec_cor_tl = append_a_tl(vec_cor_tl, AAb).fuse_legs(axes=(0, 1, 3, 2))
+    nftl = new_vec_cor_tl.unfuse_legs(axes=2).unfuse_legs(axes=2)
+    if nftl.ndim == 6:
+        new_vec_cor_tl = nftl.swap_gate(axes=(4, 3))
+        new_vec_cor_tl = new_vec_cor_tl.fuse_legs(axes=(0, 1, (2, 4), 5, 3))
+    return new_vec_cor_tl
+
+def make_ext_corner_tr(cortr, str_t, str_r, AAb):
+    vec_cor_tr = str_t @ cortr @ str_r
+    new_vec_cor_tr = append_a_tr(vec_cor_tr, AAb).fuse_legs(axes=(0, 1, 3, 2))
+    nftr = new_vec_cor_tr.unfuse_legs(axes=1).unfuse_legs(axes=1)
+    if nftr.ndim == 6:
+        new_vec_cor_tr = nftr.swap_gate(axes=(2, 3))
+        new_vec_cor_tr = new_vec_cor_tr.fuse_legs(axes=(0, (1, 3), 4, 5, 2))
+    return new_vec_cor_tr
+
+def make_ext_corner_bl(corbl, str_b, str_l, AAb):
+    vec_cor_bl = str_b @ corbl @ str_l
+    new_vec_cor_bl = append_a_bl(vec_cor_bl, AAb).fuse_legs(axes=(0, 1, 3, 2))
+    nfbl = new_vec_cor_bl.unfuse_legs(axes=1).unfuse_legs(axes=1)
+    if nfbl.ndim == 6: 
+        new_vec_cor_bl = nfbl.swap_gate(axes=(2, 1))
+        new_vec_cor_bl = new_vec_cor_bl.fuse_legs(axes=(0, (1, 3), 4, 5, 2))
+    return new_vec_cor_bl
+
+def make_ext_corner_br(corbr, str_b, str_r, AAb):
+    vec_cor_br = str_r @ corbr @ str_b
+    new_vec_cor_br = append_a_br(vec_cor_br, AAb).fuse_legs(axes=(0, 1, 3, 2))
+    nfbr = new_vec_cor_br.unfuse_legs(axes=2).unfuse_legs(axes=2)
+    if nfbr.ndim == 6:
+        new_vec_cor_br = nfbr.swap_gate(axes=(2, 3))
+        new_vec_cor_br = new_vec_cor_br.fuse_legs(axes=(0, 1, (2, 4), 5, 3))
+    return new_vec_cor_br
+
+def array2ptdiag(peps, env, AAb_top, AAb_bottom, site0, site1, flag_str=None):
+    """ construct diagonal correlators """
+
+    x0, y0 = site0
+    x1, y1 = site1
+
+    if x0<x1:
+        ptl,ptr, pbr, pbl = site0, peps.nn_site(site0, d='r'), site1, peps.nn_site(site1, d='l')
+    elif x1<x0:
+        ptr, ptl, pbl, pbr = site1, peps.nn_site(site1, d='l'), site0, peps.nn_site(site0, d='r')
+
+    vec_tl = make_ext_corner_tl(env[ptl].tl, env[ptl].t, env[ptl].l, AAb_top['l'])
+    vec_tr = make_ext_corner_tr(env[ptr].tr, env[ptr].t, env[ptr].r, AAb_top['r'])
+    vec_bl = make_ext_corner_bl(env[pbl].bl, env[pbl].b, env[pbl].l, AAb_bottom['l'])
+    vec_br = make_ext_corner_br(env[pbr].br, env[pbr].b, env[pbr].r, AAb_bottom['r'])
+
+    if flag_str == 'ws':
+        if x0<x1:
+            corr_l = ncon((vec_tl, vec_bl), ([2, 1, -3, -4, -5], [-1, -2, 1, 2]))
+            corr_r = ncon((vec_br, vec_tr), ([2, 1, -2, -1, -5], [-4, -3, 1, 2]))
+            corr = tensordot(corr_l, corr_r, axes=((0, 1, 2, 3, 4), (0, 1, 2, 3, 4))).to_number()
+        elif x1<x0:
+            corr_l = ncon((vec_tl, vec_bl), ([2, 1, -3, -4], [-1, -2, 1, 2, -5]))
+            corr_r = ncon((vec_br, vec_tr), ([2, 1, -2, -1], [-4, -3, 1, 2, -5]))
+            corr = tensordot(corr_l, corr_r, axes=((0, 1, 2, 3, 4), (0, 1, 2, 3, 4))).to_number()   
+    elif flag_str is None:
+        corr_l = ncon((vec_tl, vec_bl), ([2, 1, -3, -4], [-1, -2, 1, 2]))
+        corr_r = ncon((vec_br, vec_tr), ([2, 1, -2, -1], [-4, -3, 1, 2]))
+        corr = tensordot(corr_l, corr_r, axes=((0, 1, 2, 3), (0, 1, 2, 3))).to_number()
+
+    return corr

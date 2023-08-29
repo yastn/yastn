@@ -1,6 +1,6 @@
 from ._ctm_iteration_routines import check_consistency_tensors
 from ._ctm_iteration_routines import fPEPS_2layers
-from ._ctm_observable_routines import apply_TMO_left, con_bi, array_EV2pt
+from ._ctm_observable_routines import apply_TMO_left, con_bi, array_EV2pt, array2ptdiag
 import yastn
 import numpy as np
 
@@ -29,8 +29,10 @@ def nn_avg(peps, env, op):
     """
 
     peps = check_consistency_tensors(peps)
-    obs_hor = {}
-    obs_ver = {}
+    obs_hor_mean = {}
+    obs_ver_mean = {}
+    obs_hor_sum = {}
+    obs_ver_sum = {}
     for ms in op.keys():
         res_hor = []
         res_ver = []
@@ -42,12 +44,16 @@ def nn_avg(peps, env, op):
             val_ver = EV2ptcorr(peps, env, opt, bds_v.site_0, bds_v.site_1)
             res_ver.append(val_ver[0])
         
-        dic_hor = {ms: np.mean(res_hor)}
-        dic_ver = {ms: np.mean(res_ver)}
-        obs_hor.update(dic_hor)
-        obs_ver.update(dic_ver)
+        dic_hor_mean = {ms: np.mean(res_hor)}
+        dic_ver_mean = {ms: np.mean(res_ver)}
+        dic_hor_sum = {ms: np.sum(res_hor)}
+        dic_ver_sum = {ms: np.sum(res_ver)}
+        obs_hor_mean.update(dic_hor_mean)
+        obs_ver_mean.update(dic_ver_mean)
+        obs_hor_sum.update(dic_hor_sum)
+        obs_ver_sum.update(dic_ver_sum)
 
-    return obs_hor, obs_ver
+    return obs_hor_mean, obs_ver_mean, obs_hor_sum, obs_ver_sum
 
 
 
@@ -175,6 +181,8 @@ def EV2ptcorr(peps, env, op, site0, site1):
 
     if (x0-x1) == 0 or (y0-y1) == 0:   # check if axial
         exp_corr = EV2ptcorr_axial(peps, env, op, site0, site1)
+    elif abs(x0-x1) == 1 and abs(y0-y1) == 1:   # check if diagonal
+        exp_corr = EV2ptcorr_diagonal(peps, env, op, site0, site1)
 
     return exp_corr
        
@@ -192,3 +200,54 @@ def EV2ptcorr_axial(peps, env, op, site0, site1):
     array_corr = op_array / norm_array
 
     return array_corr
+
+
+def EV2ptcorr_diagonal(peps, env, op, site0, site1):
+    
+    r"""
+    Returns two-point correlators along diagonal direction given any two sites and observables
+    to be evaluated on those sites. Directed from EV2ptcorr when sites lie diagonally.
+    """
+
+    peps = check_consistency_tensors(peps) # to check if A has the desired fused form of legs i.e. t l b r [s a]
+    op_array = diagonal(peps, env, op, site0, site1)   
+
+    return op_array
+
+
+def diagonal(peps, env, ops, site0, site1):
+    
+    # site0 has to be to at left and site1 at right according to the defined fermionic order
+    # decide if site0 is at top or bottom
+    x0, y0 = site0
+    x1, y1 = site1
+
+    if x0<x1:
+        ptl,ptr, pbr, pbl = site0, peps.nn_site(site0, d='r'), site1, peps.nn_site(site1, d='l')
+    elif x1<x0:
+        ptr, ptl, pbl, pbr = site1, peps.nn_site(site1, d='l'), site0, peps.nn_site(site0, d='r') 
+
+    AAb_top = {'l': fPEPS_2layers(peps[ptl]), 'r': fPEPS_2layers(peps[ptr])}     # top layer of double peps tensors without operator
+    AAb_bottom = {'l': fPEPS_2layers(peps[pbl]), 'r': fPEPS_2layers(peps[pbr])}  # bottom layer of double peps tensors without operator
+    normd = array2ptdiag(peps, env, AAb_top, AAb_bottom, site0, site1)
+
+    print('#####################')
+    print('site left', site0)
+    print('site right', site1)
+    print('norm ',normd)
+        
+    if x0<x1:  
+        AAbop_top = {'l': fPEPS_2layers(peps[ptl], op=ops['l'], dir='l'), 'r': fPEPS_2layers(peps[ptr])} # top layer of double peps tensors with operator
+        AAbop_bottom = {'l': fPEPS_2layers(peps[pbl]), 'r': fPEPS_2layers(peps[pbr], op=ops['r'], dir='r')} # bottom layer of double peps tensors with operator
+    elif x1<x0:
+        AAbop_top = {'l': fPEPS_2layers(peps[ptl]), 'r': fPEPS_2layers(peps[ptr], op=ops['r'], dir='r')} # top layer of dounle peps tensors with operator
+        AAbop_bottom = {'l': fPEPS_2layers(peps[pbl], op=ops['l'], dir='l'), 'r': fPEPS_2layers(peps[pbr])} # bottom layer of double peps tensors with operator
+
+    expdg = array2ptdiag(peps, env, AAbop_top, AAbop_bottom, site0, site1, flag_str='ws') 
+    exp_diag = expdg/normd 
+        
+    
+    print('expectation value of diagonal correlator', exp_diag)
+    print('#####################')
+
+    return exp_diag

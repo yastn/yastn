@@ -36,6 +36,8 @@ def not_working_test_sampling_spinless():
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
+    coeff = 0.25 # for purification; 0.5 for ground state calculation and 1j*0.5 for real-time evolution
+    trotter_step = coeff * dbeta  
 
     dims = (xx, yy)
     net = fpeps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
@@ -43,8 +45,8 @@ def not_working_test_sampling_spinless():
     opt = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
 
-    GA_nn, GB_nn = gates_hopping(t, dbeta, fid, fc, fcdag, purification=purification)  # nn gate for 2D fermi sea
-    g_loc = gate_local_fermi_sea(mu, dbeta, fid, fc, fcdag, purification=purification) # local gate for spinless fermi sea
+    GA_nn, GB_nn = gates_hopping(t, trotter_step, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    g_loc = gate_local_fermi_sea(mu, trotter_step, fid, fc, fcdag) # local gate for spinless fermi sea
     g_nn = [(GA_nn, GB_nn)]
 
     if purification == 'True':
@@ -74,7 +76,7 @@ def not_working_test_sampling_spinless():
     for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 4th step as iteration_step=4
-        obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
+        obs_hor, obs_ver, _, _ =  nn_avg(psi, step.env, ops)
 
         cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
         ccdag = 0.5*(abs(obs_hor.get('ccdag')) + abs(obs_ver.get('ccdag')))
@@ -100,11 +102,7 @@ def not_working_test_sampling_spinless():
 
     for r_index in range(net.Ny-1,-1,-1):
         Bctm = CtmEnv2Mps(net, step.env, index=r_index, index_type='r')  # right boundary of r_index th column through CTM environment tensors
-
-       # assert all(Bctm[i].get_shape() == psi[i].get_shape() for i in range(net.Nx))
-        print(abs(mps.vdot(phi, Bctm)) / (phi.norm() * Bctm.norm()))
         assert pytest.approx(abs(mps.vdot(phi, Bctm)) / (phi.norm() * Bctm.norm()), rel=1e-8) == 1.0
-
         phi0 = phi.copy()
         O = psi.mpo(index=r_index, index_type='column')
         phi = mps.zipper(O, phi0, opts)  # right boundary of (r_index-1) th column through zipper

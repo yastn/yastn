@@ -64,7 +64,7 @@ def ctm_for_Onsager(psi, opt, Z_exact):
     for step in ctmrg(psi, max_sweeps, iterator_step=4, AAb_mode=0, opts_svd=opts_svd):
         assert step.sweeps % 4 == 0 # stop every 2nd step as iteration_step=2
 
-        ob_hor, ob_ver = nn_avg(psi, step.env, ops)
+        ob_hor, ob_ver, _, _ = nn_avg(psi, step.env, ops)
         cf = 0.25 * (abs(ob_hor.get('magA1')) + abs(ob_hor.get('magB1')) + abs(ob_ver.get('magA1')) + abs(ob_ver.get('magB1')))
         print("expectation value: ", cf)
         if abs(cf - cf_old) < tol_exp:
