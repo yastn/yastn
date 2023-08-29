@@ -76,7 +76,11 @@ def gates_hopping(t, step, fid, fc, fcdag):
     return GA, GB
 
 def gate_local_Hubbard(mu_up, mu_dn, U, step, fid, fc_up, fc_dn, fcdag_up, fcdag_dn):
+    """ gates for exp[- beta * (U * (fn_up-0.5*ident) * (fn_dn-0.5*iden) - mu_up * fn_up - mu_dn * fn_dn];
+    we ignore a total of contant U/4 in the gate constructed below """
     # local Hubbard gate with chemical potential and Coulomb interaction
+    # below note that local operators follow convention where
+    # they are transposed comparing to typical matrix notation
     fn_up = fcdag_up @ fc_up
     fn_dn = fcdag_dn @ fc_dn
     fnn = fn_up @ fn_dn
@@ -87,8 +91,8 @@ def gate_local_Hubbard(mu_up, mu_dn, U, step, fid, fc_up, fc_dn, fcdag_up, fcdag
     G_loc = G_loc + fnn * (np.exp((step * (mu_up + mu_dn))) - 1)
     return G_loc
 
-def gate_local_fermi_sea(mu, step, fid, fc, fcdag, purification=False):
-    """ gates for exp[beta * mu * fn / 4] """
+def gate_local_fermi_sea(mu, step, fid, fc, fcdag):
+    """ gates for exp[beta * mu * fn] """
     # below note that local operators follow convention where
     # they are transposed comparing to typical matrix notation
 
