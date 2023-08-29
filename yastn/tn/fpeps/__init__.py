@@ -1,3 +1,3 @@
 from ._geometry import Lattice, Peps, Bond
 from ._doublePepsTensor import DoublePepsTensor
-from ._initialization_peps import initialize_peps_purification, initialize_Neel_spinful, initialize_vacuum, initialize_n_0p875_pattern_1, initialize_n_0p875_pattern_1, initialize_post_sampling_spinful_sz_basis
+from ._initialization_peps import initialize_peps_purification, initialize_post_sampling_spinful_sz_basis
