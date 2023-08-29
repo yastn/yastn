@@ -49,17 +49,10 @@ def match_ancilla_2s(G, A, dir=None):
     return Gsa
 
 
-def gates_hopping(t, beta, fid, fc, fcdag, purification):
-    """ gates for exp[beta * t * (cdag1 c2 + c2dag c1) / 4] """
+def gates_hopping(t, step, fid, fc, fcdag):
+    """ gates for exp[step * t * (cdag1 c2 + c2dag c1)] """
     # below note that local operators follow convention where
     # they are transposed comparing to typical matrix notation
-
-    if purification == 'False':
-        coeff = 0.5
-    elif purification == 'True':
-        coeff = 0.25
-    elif purification == 'Time':
-        coeff = 1j*0.5
 
     fn = fcdag@fc
     one = ncon([fid, fid], ((-0, -1), (-2, -3)))
@@ -74,95 +67,35 @@ def gates_hopping(t, beta, fid, fc, fcdag, purification):
     cc = ncon([c1dag, c2], ((-0, -1, 1) , (-2, -3, 1))) + \
          ncon([c1, c2dag], ((-0, -1, 1) , (-2, -3, 1)))
 
-    step = coeff * t * beta
-    U =  one + (np.cosh(step) - 1) * (n1 + n2 - 2 * nn) + np.sinh(step) * cc
+    tr_step = t * step
+    U =  one + (np.cosh(tr_step) - 1) * (n1 + n2 - 2 * nn) + np.sinh(tr_step) * cc
     U, S, V = svd_with_truncation(U, axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15, Vaxis=2)
     S = S.sqrt()
     GA = S.broadcast(U, axes=2)
     GB = S.broadcast(V, axes=2)
     return GA, GB
 
-def gate_local_Hubbard(mu_up, mu_dn, U, beta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, purification = False, checkerboard=False):
+def gate_local_Hubbard(mu_up, mu_dn, U, step, fid, fc_up, fc_dn, fcdag_up, fcdag_dn):
     # local Hubbard gate with chemical potential and Coulomb interaction
     fn_up = fcdag_up @ fc_up
     fn_dn = fcdag_dn @ fc_dn
     fnn = fn_up @ fn_dn
 
-    if purification == 'False':
-        coeff = 0.5
-    elif purification == 'True':
-        coeff = 0.25
-    elif purification == 'Time':
-        coeff = 1j*0.5
-    
-    if checkerboard is True:
-        coeff = 0.5 * coeff
-
     G_loc = fid
-    G_loc = G_loc + (fn_dn - fnn) * (np.exp((coeff * beta * (mu_dn + 0.5 * U))) - 1)
-    G_loc = G_loc + (fn_up - fnn) * (np.exp((coeff * beta * (mu_up + 0.5 * U))) - 1)
-    G_loc = G_loc + fnn * (np.exp((coeff * beta * (mu_up + mu_dn))) - 1)
+    G_loc = G_loc + (fn_dn - fnn) * (np.exp((step * (mu_dn + 0.5 * U))) - 1)
+    G_loc = G_loc + (fn_up - fnn) * (np.exp((step * (mu_up + 0.5 * U))) - 1)
+    G_loc = G_loc + fnn * (np.exp((step * (mu_up + mu_dn))) - 1)
     return G_loc
 
-def gate_local_fermi_sea(mu, beta, fid, fc, fcdag, purification=False):
+def gate_local_fermi_sea(mu, step, fid, fc, fcdag, purification=False):
     """ gates for exp[beta * mu * fn / 4] """
     # below note that local operators follow convention where
     # they are transposed comparing to typical matrix notation
 
-    if purification == 'False':
-        coeff = -0.5
-    elif purification == 'True':
-        coeff = -0.25
-    elif purification == 'Time':
-        coeff = 1j*0.5
     fn = fcdag @ fc
-    step = coeff * beta * mu
-    G_loc = fid + fn * (np.exp(step) - 1)
+    tr_step = step * mu
+    G_loc = fid + fn * (np.exp(tr_step) - 1)
     return G_loc
-
-
-def gate_Ising(sid, sz, J, beta, purification='imaginary'):
-    """ define 2-site gate for Ising model with ZZ interactions. """
-   
-    if purification == 'False': 
-        coeff = -0.5*1j
-    elif purification == 'True':
-        coeff = -0.25*1j
-    elif purification == 'Time':
-        coeff = 0.5
-
-    one = ncon([sid, sid], ((-0, -1), (-2, -3)))
-    ZZ = ncon([sz, sz], ((-0, -1), (-2, -3)))
-
-    step = coeff * beta * J
-    D =  np.cos(step) * one + 1j * np.sin(step) * ZZ
-
-    U, S, V = svd_with_truncation(D, axes=((0, 1), (2, 3)), sU=-1, tol=1e-15, Vaxis=2)
-    S = S.sqrt()
-    GA = S.broadcast(U, axes=2)
-    GB = S.broadcast(V, axes=2)
-    return GA, GB
-
-
-def gate_local_dense(sid, sx, sz, hx, hz, beta, purification='imaginary'):
-
-    if purification == 'False':
-        coeff = -0.5 * 1j
-    elif purification == 'True':
-        coeff = -0.25 * 1j
-    elif purification == 'Time':
-        coeff = 0.5 
-    
-    step_x = coeff * beta * hx
-    step_z = coeff * beta * hz
-
-    G_loc_x = np.cos(step_x) * sid + 1j * np.sin(step_x) * sx
-    G_loc_z = np.cos(step_z) * sid + 1j * np.sin(step_z) * sz
-
-    G_loc = G_loc_x @ G_loc_z
-    return G_loc
-
-
 
 
 def trivial_tensor(fid):
