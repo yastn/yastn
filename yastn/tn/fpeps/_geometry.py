@@ -5,8 +5,14 @@ from ...tn.mps import Mps, Mpo
 from ._doublePepsTensor import DoublePepsTensor
 from ... import tensor, initialize
 
-class Bond(NamedTuple):
+class nn_Bond(NamedTuple):
     """ A bond between two lattice sites. site_0 should be before site_1 in the fermionic order. """
+    site_0 : tuple = None
+    site_1 : tuple = None
+    dirn : str = ''
+
+class nnn_Bond(NamedTuple):
+    """  A bond between two lattice sites. site_0 should be before site_1 in the fermionic order. """
     site_0 : tuple = None
     site_1 : tuple = None
     dirn : str = ''
@@ -43,18 +49,34 @@ class Lattice():
         inds = set(self.site2index(site) for site in self._sites)
         self._data = {ind: None for ind in inds}  # container for site-dependent data
 
-        bonds = []
+        nn_bonds = []
         if self.lattice == 'checkerboard':
-            self._bonds = (Bond(site_0=(0, 0), site_1=(0, 1), dirn='h'), Bond(site_0=(0, 1), site_1=(0, 0), dirn='h'), Bond(site_0=(0, 0), site_1=(0, 1), dirn='v'), Bond(site_0=(0, 1), site_1=(0, 0), dirn='v'))
+            self._nn_bonds = (nn_Bond(site_0=(0, 0), site_1=(0, 1), dirn='h'), nn_Bond(site_0=(0, 1), site_1=(0, 0), dirn='h'), nn_Bond(site_0=(0, 0), site_1=(0, 1), dirn='v'), nn_Bond(site_0=(0, 1), site_1=(0, 0), dirn='v'))
         else:
             for s in self._sites:
                 s_b = self.nn_site(s, d='b')
                 if s_b is not None:
-                    bonds.append(Bond(s, s_b, 'v'))
+                    nn_bonds.append(nn_Bond(s, s_b, 'v'))
                 s_r = self.nn_site(s, d='r')
                 if s_r is not None:
-                    bonds.append(Bond(s, s_r, 'h'))
-            self._bonds = tuple(bonds)
+                    nn_bonds.append(nn_Bond(s, s_r, 'h'))
+            self._nn_bonds = tuple(nn_bonds)
+
+        nnn_bonds = []
+        if self.lattice == 'checkerboard':
+            self._nnn_bonds = (nnn_Bond(site_0=(0, 0), site_1=(1, 1), dirn='d1'), nnn_Bond(site_0=(0, 1), site_1=(1, 0), dirn='d1'), nnn_Bond(site_0=(1, 0), site_1=(0, 1), dirn='d2'), nnn_Bond(site_0=(1, 1), site_1=(0, 0), dirn='d2'))
+        else:
+            for s in self._sites:
+                s_d1 = self.nn_site(s, d='br')  # top-right 
+                if s_d1 is not None:
+                    site_0, site_1 = s, s_d1
+                    nnn_bonds.append(nnn_Bond(site_0, site_1, 'd1'))
+                s_d2 = self.nn_site(s, d='tr')  # bottom-right 
+                if s_d2 is not None:
+                    site_0, site_1 = s, s_d2
+                    nnn_bonds.append(nnn_Bond(site_0, site_1, 'd2'))
+            self._nnn_bonds = tuple(nnn_bonds)
+
 
     def __getitem__(self, site):
         """ Get data for site. """
@@ -80,10 +102,17 @@ class Lattice():
         """ Labels of the lattice sites """
         return self._sites[::-1] if reverse else self._sites
 
-    def bonds(self, dirn=None, reverse=False):
+    def nn_bonds(self, dirn=None, reverse=False):
         """ Labels of the links between sites """
 
-        bnds = self._bonds[::-1] if reverse else self._bonds
+        bnds = self._nn_bonds[::-1] if reverse else self._nn_bonds
+        if dirn is None:
+            return bnds
+        return tuple(bnd for bnd in bnds if bnd.dirn == dirn)
+    
+    def nnn_bonds(self, dirn=None, reverse=False):
+        """ Labels of the next-nearest neighbor links between sites """
+        bnds = self._nnn_bonds[::-1] if reverse else self._nnn_bonds
         if dirn is None:
             return bnds
         return tuple(bnd for bnd in bnds if bnd.dirn == dirn)
