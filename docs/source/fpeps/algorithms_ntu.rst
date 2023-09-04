@@ -1,51 +1,47 @@
 Neighborhood tensor update (NTU) algorithm
 ==========================================
 
-Neighborhood Tensor Update (NTU) (see Ref [1] for details) can be regarded as a special case of a cluster update (see Ref [2,3]),
-where the number of neighboring lattice sites taken into account during truncation makes for a refining parameter. The cluster update
-interpolates between a local truncation — as in the simple update (SU)[4]—and the full update (FU) [5] that takes into account all
-correlations in the truncated state. The NTU cluster includes the neighboring sites only as the metric tensor to compute the Frobenius
-norm in :ref:`Optimization of iPEPS<theory/fpeps/basics:Truncation of the PEPS bond dimensions>`.
+Neighborhood Tensor Update (NTU) [1] can be regarded as a special case of a cluster update (see Ref [2,3]), where the number of neighboring lattice sites taken into account during truncation makes for a refining parameter.
+The cluster update interpolates between a local truncation — as in the simple update (SU) [4]—and the full update (FU) [5] that takes into account all correlations in the truncated state.
+The NTU cluster includes the neighboring sites only as the metric tensor to compute the Frobenius norm in :ref:`Optimization of iPEPS<theory/fpeps/basics:Truncation of the PEPS bond dimensions>`.
 
 In the diagram below, we have a checkerboard lattice with alternating tensors :math:`A` and :math:`B`
 in the `2D` square lattice. The tensors :math:`A'` and :math:`B'` in the center are highlighted as
-they have been updated by a NN :math:`2`-site gate of SVD rank :math:`r`. The procedure for
-truncating the bond dimension back to :math:`D` involves calculating the Frobenius norm. Ideally, in case of iPEPS
-the whole infinite lattice should contribute in calculation of the norm. This being practically impossible, CTMRG
-is often used to construct environmental tensors which approximate the infinite environment around the updated bond.
+they have been updated by a NN :math:`2`-site gate of SVD-rank :math:`r`. The procedure for
+truncating the bond dimension back to :math:`D` involves calculating the Frobenius norm.
+Ideally, in the case of iPEPS, the whole infinite lattice should contribute to the calculation of the norm.
+This being practically impossible, CTMRG is often used to construct environmental tensors, which approximate the infinite environment around the updated bond.
 This is done in the Full Update procedure. Due to matrix inversions involved in CTMRG, the metric tensor loses its
-hermiticty often rendering the algorithm unstable and also very expensive. A slightly less accurate but computationally
+hermeticity often rendering the algorithm unstable and also very expensive. A slightly less accurate but computationally
 cheaper and stable way is just to use the NN sites surrounding the updated bond to calculate the metric tensor.
 
 ::
 
 
-                       \                  \
-                        \                  \
-                      __________         __________
-                     |          |       |          |
-                  ---|    B     |-- D --|    A     |---
-              \      |__________|       |__________|
-               \         |  \               |   \           \
-             _________   |  _\______       _|____\_       ___\_____
-            |         |     ||     || rxD ||      ||     |         |
-         ---|    B    |-----||  A' ||-----||  B'  ||-----|    A    |---
-            |_________|     ||_____||     ||______||     |_________|
-                |  \            \                \            |   \
-                |   \        ____\______         _\________   |    \
-                            |           |       |          |
-                         ---|     A     |-- D --|     B    |---
-                            |___________|       |__________|
-                                |  \               |  \
-                                |   \              |   \
+                  \             \
+                  _\_____       _\_____
+                 |       |     |       |
+              ---|   B   |--D--|   A   |---
+                 |_______|     |_______|
+          \         |   \         |   \             \
+         __\____    |  __\____    |  __\____       __\____
+        |       |     ||     ||     ||     ||     |       |
+     ---|   B   |--D--||  A' ||-rxD-||  B' ||--D--|   A   |---
+        |_______|     ||_____||     ||_____||     |_______|
+           |   \        |   \         |   \         |   \
+           |    \       |  __\____    |  __\____    |    \
+                          |       |     |       |
+                       ---|   A   |--D--|   B   |---
+                          |_______|     |_______|
+                            |    \        |    \
+                            |     \       |     \
 
 
-The NTU error can be calculated numerically exactly via parallelizable tensor contractions. The
-description of the algorithm in Ref[1] and in Appendix B of Ref [6]. That exactness warrants
-that the error measure is Hermitian and non-negative own to the numerical precision.
+The NTU error can be calculated numerically exactly via parallelizable tensor contractions.
+The algorithm is described Ref. [1] and in the appendix of Ref. [6].
+That exactness warrants that the error measure is Hermitian and non-negative own to the numerical precision.
 
-The least square optimization processes used is in
-:meth:`yastn.tn.fpeps.evolution._routines`
+The least-square optimization processes used is in :meth:`yastn.tn.fpeps.evolution._routines`
 
 References & Related works
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
