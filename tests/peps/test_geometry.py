@@ -8,11 +8,15 @@ def test_Lattice():
     assert net.dims == (2, 2)
     assert net.sites() == ((0, 0), (0, 1), (1, 0), (1, 1))
     assert net.sites(reverse=True) == ((1, 1), (1, 0), (0, 1), (0, 0))
-    
-    bonds_hor = tuple((bnd.site_0, bnd.site_1) for bnd in net.bonds(dirn='h'))
-    bonds_ver = tuple((bnd.site_0, bnd.site_1) for bnd in net.bonds(dirn='v'))
+    bonds_hor = tuple((bnd.site_0, bnd.site_1) for bnd in net.nn_bonds(dirn='h'))
+    bonds_ver = tuple((bnd.site_0, bnd.site_1) for bnd in net.nn_bonds(dirn='v'))
     assert bonds_hor == (((0, 0), (0, 1)), ((0, 1), (0, 0)))
     # assert bonds_ver == (((1, 0), (0, 0)), ((0, 0), (1, 0)))  # TODO make it work
+
+    nnn_bonds_diag1 = tuple((bnd.site_0, bnd.site_1) for bnd in net.nnn_bonds(dirn='d1'))
+    nnn_bonds_diag2 = tuple((bnd.site_0, bnd.site_1) for bnd in net.nnn_bonds(dirn='d2'))
+    assert nnn_bonds_diag1 == (((0, 0), (1, 1)), ((0, 1), (1, 0)))     
+    assert nnn_bonds_diag2 == (((1, 0), (0, 1)), ((1, 1), (0, 0))) 
 
     assert net.site2index((0, 0)) == 0 == net.site2index((1, 1))
     assert net.site2index((1, 0)) == 1 == net.site2index((0, 1))
@@ -21,19 +25,22 @@ def test_Lattice():
     net = fpeps.Lattice(lattice='rectangle', dims=(3, 2), boundary='finite')
     assert net.dims == (3, 2)
     assert net.sites() == ((0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1))
-    bonds_hor = tuple((bnd.site_0, bnd.site_1) for bnd in net.bonds(dirn='h'))
-    bonds_ver = tuple((bnd.site_0, bnd.site_1) for bnd in net.bonds(dirn='v'))
+    bonds_hor = tuple((bnd.site_0, bnd.site_1) for bnd in net.nn_bonds(dirn='h'))
+    bonds_ver = tuple((bnd.site_0, bnd.site_1) for bnd in net.nn_bonds(dirn='v'))
     assert bonds_hor == (((0, 0), (0, 1)), ((1, 0), (1, 1)), ((2, 0), (2, 1)))
     assert bonds_ver == (((0, 0), (1, 0)), ((0, 1), (1, 1)), ((1, 0), (2, 0)), ((1, 1), (2, 1)))
+    nnn_bonds_diag1 = tuple((bnd.site_0, bnd.site_1) for bnd in net.nnn_bonds(dirn='d1'))
+    nnn_bonds_diag2 = tuple((bnd.site_0, bnd.site_1) for bnd in net.nnn_bonds(dirn='d2'))
+    assert nnn_bonds_diag1 == (((0, 0), (1, 1)), ((1, 0), (2, 1))) 
+    assert nnn_bonds_diag2 == (((1, 0), (0, 1)), ((2, 0), (1, 1)))  
     assert net.nn_site((0, 1), d='r') is None
     assert net.site2index((1, 0)) == (1, 0)
-
 
 def test_NtuEnv():
     """ nearest environmental sites around a bond;  creates indices of the NTU environment """
 
-    bd00_01_h = fpeps.Bond(site_0 = (0, 0), site_1=(0, 1), dirn='h')
-    bd11_21_v = fpeps.Bond(site_0 = (1, 1), site_1=(2, 1), dirn='v')
+    bd00_01_h = fpeps.nn_Bond(site_0 = (0, 0), site_1=(0, 1), dirn='h')
+    bd11_21_v = fpeps.nn_Bond(site_0 = (1, 1), site_1=(2, 1), dirn='v')
 
     net_1 = fpeps.Lattice(lattice='rectangle', dims=(3, 4), boundary='finite')  # dims = (rows, columns) # finite lattice
     assert net_1.tensors_NtuEnv(bd00_01_h) == {'tl': None, 'l': None, 'bl': (1, 0), 'tr': None, 'r': (0, 2), 'br': (1, 1)}

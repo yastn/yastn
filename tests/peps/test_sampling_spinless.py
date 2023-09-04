@@ -9,7 +9,7 @@ import time
 from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_fermi_sea
 from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
 from yastn.tn.fpeps import initialize_peps_purification
-from yastn.tn.fpeps.ctm import sample, CtmEnv2Mps, nn_avg, ctmrg
+from yastn.tn.fpeps.ctm import sample, CtmEnv2Mps, nn_exp_dict, ctmrg
 
 from yastn.tn.mps import Env2, Env3
 
@@ -28,6 +28,7 @@ def not_working_test_sampling_spinless():
     purification = 'True'
     xx = 3
     yy = 3
+    tot_sites = (xx * yy)
     Ds = 5
     chi = 10
     mu = 0 # chemical potential
@@ -76,18 +77,17 @@ def not_working_test_sampling_spinless():
     for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 4th step as iteration_step=4
-        obs_hor, obs_ver, _, _ =  nn_avg(psi, step.env, ops)
+        obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
 
-        cdagc = 0.5*(abs(obs_hor.get('cdagc')) + abs(obs_ver.get('cdagc')))
-        ccdag = 0.5*(abs(obs_hor.get('ccdag')) + abs(obs_ver.get('ccdag')))
+        cdagc = (sum(abs(val) for val in obs_hor.get('cdagc').values()) + sum(abs(val) for val in obs_ver.get('cdagc').values()))
+        ccdag = (sum(abs(val) for val in obs_hor.get('ccdag').values()) + sum(abs(val) for val in obs_ver.get('ccdag').values()))
 
-        cf_energy = - (cdagc + ccdag) * (2 * xx * yy - xx - yy)
+        cf_energy = - (cdagc + ccdag) / tot_sites
 
         print("Energy : ", cf_energy)
         if abs(cf_energy - cf_energy_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
-
 
     ###  we try to find out the right boundary vector of the left-most column or 0th row
     ########## 3x3 lattice ########

@@ -97,7 +97,7 @@ def gates_homogeneous(psi, nn_gates, loc_gates):
       local and nn gates along with info where they should be applied.
     """
     # len(nn_gates) indicates the physical degrees of freedom; option to add more
-    bonds = psi.bonds(dirn='h') + psi.bonds(dirn='v')
+    bonds = psi.nn_bonds(dirn='h') + psi.nn_bonds(dirn='v')
 
     gates_nn = []   # nn_gates = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)] 
     for bd in bonds:
