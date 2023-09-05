@@ -21,26 +21,26 @@ def initialize_peps_purification(fid, net):
     Parameters
     ----------
         fid : Identity operator in local space with desired symmetry.
-        net : class Lattice 
+        net : class Lattice
 
     Returns
     -------
         gamma : class Peps
               PEPS tensor network class with data representing the infinite-temperature state.
     """
-    
-    A = fid / np.sqrt(fid.get_shape(1)) 
-    A = A.fuse_legs(axes=[(0, 1)])            
+
+    A = fid / np.sqrt(fid.get_shape(1))
+    A = A.fuse_legs(axes=[(0, 1)])
     for s in (-1, 1, 1, -1):
         A = A.add_leg(axis=0, s=s)
-   
+
     A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
     gamma = fpeps.Peps(net.lattice, net.dims, net.boundary)
 
     for ms in net.sites():
         gamma[ms] = A
     return gamma
-  
+
 
 def initialize_diagonal_basis(projectors, net, out):
     """"
@@ -63,8 +63,8 @@ def initialize_diagonal_basis(projectors, net, out):
     gamma : Peps object
         The post-sampling state tensor network.
     """
-   
-    projectors = [reduce_operators(proj) for proj in projectors]
+
+    #projectors = [reduce_operators(proj) for proj in projectors]
 
     gamma = fpeps.Peps(net.lattice, net.dims, net.boundary)
     for kk in gamma.sites():
@@ -72,5 +72,5 @@ def initialize_diagonal_basis(projectors, net, out):
         for s in (-1, 1, 1, -1):
             Ga = Ga.add_leg(axis=0, s=s)
         gamma[kk] = Ga.fuse_legs(axes=((0, 1), (2, 3), 4))
-        
+
     return gamma
