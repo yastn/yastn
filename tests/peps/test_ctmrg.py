@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.ctm import nn_avg, ctmrg
+from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg
 
 try:
     from .configs import config_dense as cfg
@@ -64,8 +64,11 @@ def ctm_for_Onsager(psi, opt, Z_exact):
     for step in ctmrg(psi, max_sweeps, iterator_step=4, AAb_mode=0, opts_svd=opts_svd):
         assert step.sweeps % 4 == 0 # stop every 2nd step as iteration_step=2
 
-        ob_hor, ob_ver, _, _ = nn_avg(psi, step.env, ops)
-        cf = 0.25 * (abs(ob_hor.get('magA1')) + abs(ob_hor.get('magB1')) + abs(ob_ver.get('magA1')) + abs(ob_ver.get('magB1')))
+        ob_hor, ob_ver = nn_exp_dict(psi, step.env, ops)
+        cf =  0.125 * (sum([abs(val) for val in ob_hor.get('magA1').values()]) + 
+                sum([abs(val) for val in ob_hor.get('magB1').values()]) + 
+                sum([abs(val) for val in ob_ver.get('magA1').values()]) + 
+                sum([abs(val) for val in ob_ver.get('magB1').values()]))
         print("expectation value: ", cf)
         if abs(cf - cf_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
