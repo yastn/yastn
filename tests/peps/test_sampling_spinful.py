@@ -9,7 +9,7 @@ import time
 from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_Hubbard
 from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
 from yastn.tn.fpeps import initialize_peps_purification
-from yastn.tn.fpeps.ctm import sample, CtmEnv2Mps, nn_avg, ctmrg
+from yastn.tn.fpeps.ctm import sample, CtmEnv2Mps, nn_exp_dict, ctmrg
 from yastn.tn.mps import Env2, Env3
 
 
@@ -27,6 +27,7 @@ def not_working_test_sampling_spinfull():
     purification = 'True'
     xx = 3
     yy = 3
+    tot_sites = (xx * yy)
     Ds = 12
     chi = 20
     U = 12
@@ -79,14 +80,21 @@ def not_working_test_sampling_spinfull():
     for step in ctmrg(psi, max_sweeps, iterator_step=4, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
-        obs_hor, obs_ver, _, _ =  nn_avg(psi, step.env, ops)
+        obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
 
-        cdagc_up = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
-        ccdag_up = 0.5*(abs(obs_hor.get('ccdag_up')) + abs(obs_ver.get('ccdag_up')))
-        cdagc_dn = 0.5*(abs(obs_hor.get('cdagc_dn')) + abs(obs_ver.get('cdagc_dn')))
-        ccdag_dn = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
+        cdagc_up = (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) + 
+                  sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
 
-        cf_energy =  - (cdagc_up + ccdag_up + cdagc_dn + ccdag_dn) * (2 * xx * yy - xx - yy)
+        ccdag_up = (sum(abs(val) for val in obs_hor.get('ccdag_up').values()) + 
+                  sum(abs(val) for val in obs_ver.get('ccdag_up').values()))
+
+        cdagc_dn = (sum(abs(val) for val in obs_hor.get('cdagc_dn').values()) + 
+                  sum(abs(val) for val in obs_ver.get('cdagc_dn').values()))
+
+        ccdag_dn = (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) + 
+                  sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
+
+        cf_energy =  - (cdagc_up + ccdag_up + cdagc_dn + ccdag_dn) / tot_sites
 
         print("expectation value: ", cf_energy)
         if abs(cf_energy - cf_energy_old) < tol_exp:

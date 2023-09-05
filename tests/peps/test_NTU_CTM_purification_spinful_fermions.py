@@ -7,7 +7,7 @@ import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_Hubbard
 from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
 from yastn.tn.fpeps import initialize_peps_purification
-from yastn.tn.fpeps.ctm import nn_avg, ctmrg, one_site_avg, nn_bond
+from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, nn_bond, one_site
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg
@@ -29,6 +29,7 @@ def test_NTU_spinful_finite():
     purification = 'True'
     xx = 3
     yy = 2
+    tot_sites = (xx * yy)
     D = 12
     mu_up, mu_dn = 0, 0 # chemical potential
     t_up, t_dn = 1, 1 # hopping amplitude
@@ -77,30 +78,36 @@ def test_NTU_spinful_finite():
 
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-
     for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
 
-        doc, _ = one_site_avg(psi, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
+        d_oc = one_site(psi, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
 
-        obs_hor, obs_ver, _, _ =  nn_avg(psi, step.env, ops)
+        obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
 
-        cdagc_up = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
-        ccdag_up = 0.5*(abs(obs_hor.get('ccdag_up')) + abs(obs_ver.get('ccdag_up')))
-        cdagc_dn = 0.5*(abs(obs_hor.get('cdagc_dn')) + abs(obs_ver.get('cdagc_dn')))
-        ccdag_dn = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
+        cdagc_up = 0.5 * (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) + 
+                  sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
 
-        cf_energy = (xx * yy) * U * doc - (cdagc_up + ccdag_up + cdagc_dn + ccdag_dn) * (2 * xx * yy - xx - yy)
+        ccdag_up = 0.5 * (sum(abs(val) for val in obs_hor.get('ccdag_up').values()) + 
+                  sum(abs(val) for val in obs_ver.get('ccdag_up').values()))
+
+        cdagc_dn = 0.5 * (sum(abs(val) for val in obs_hor.get('cdagc_dn').values()) + 
+                  sum(abs(val) for val in obs_ver.get('cdagc_dn').values()))
+
+        ccdag_dn = 0.5 * (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) + 
+                  sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
+
+
+        cf_energy = U * sum(d_oc.values()) - (cdagc_up + ccdag_up + cdagc_dn + ccdag_dn) / tot_sites
 
         print("expectation value: ", cf_energy)
         if abs(cf_energy - cf_energy_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
-
-    bd_h = fpeps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
-    bd_v = fpeps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
+    bd_h = fpeps.nn_Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
+    bd_v = fpeps.nn_Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
 
     nn_CTM_bond_1_up = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc_up'], bd_h)) + abs(nn_bond(psi, step.env, ops['ccdag_up'], bd_h)))
     nn_CTM_bond_2_up = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc_up'], bd_v)) + abs(nn_bond(psi, step.env, ops['ccdag_up'], bd_v)))
@@ -173,23 +180,29 @@ def test_NTU_spinful_infinite():
         
         assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
 
-        obs_hor, obs_ver, _, _ =  nn_avg(psi, step.env, ops)
+        obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
 
-        cdagc_up = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
-        ccdag_up = 0.5*(abs(obs_hor.get('ccdag_up')) + abs(obs_ver.get('ccdag_up')))
-        cdagc_dn = 0.5*(abs(obs_hor.get('cdagc_dn')) + abs(obs_ver.get('cdagc_dn')))
-        ccdag_dn = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
+        cdagc_up = (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) + 
+                  sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
 
-        cf_energy = - (cdagc_up + ccdag_up +cdagc_dn + ccdag_dn) * 0.25
+        ccdag_up = (sum(abs(val) for val in obs_hor.get('ccdag_up').values()) + 
+                  sum(abs(val) for val in obs_ver.get('ccdag_up').values()))
+
+        cdagc_dn = (sum(abs(val) for val in obs_hor.get('cdagc_dn').values()) + 
+                  sum(abs(val) for val in obs_ver.get('cdagc_dn').values()))
+
+        ccdag_dn = (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) + 
+                  sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
+
+
+        cf_energy = - (cdagc_up + ccdag_up +cdagc_dn + ccdag_dn) * 0.125
 
         print("expectation value: ", cf_energy)
         if abs(cf_energy - cf_energy_old) < tol_exp:
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
-    ob_hor, ob_ver, _, _ = nn_avg(psi, step.env, ops)
-
-    nn_CTM = 0.25 * (abs(ob_hor.get('cdagc_up')) + abs(ob_ver.get('ccdag_up'))+ abs(ob_ver.get('cdagc_dn'))+ abs(ob_ver.get('ccdag_dn')))
+    nn_CTM = 0.125 * 0.5 * (cdagc_up + ccdag_up + cdagc_dn + ccdag_dn) 
 
     nn_exact = 0.02481459 # analytical nn fermionic correlator at beta = 0.1 for 2D infinite lattice with checkerboard ansatz
 

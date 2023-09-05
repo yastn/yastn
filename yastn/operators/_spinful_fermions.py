@@ -48,6 +48,10 @@ class SpinfulFermions(meta_operators):
             I = Tensor(config=self.config, s=self.s, n=(0, 0, 0))
             for t in [(0, 0, 0), (0, 1, 1), (1, 0, 1), (1, 1, 0)]:
                 I.set_block(ts=(t, t), Ds=(1, 1), val=1)
+        if self._sym == 'U1xU1xZ2_GP':
+            I = Tensor(config=self.config, s=self.s, n=(0, 0, 0))
+            for t in [(0, 0, 0), (0, 1, 1), (1, 0, 1)]:
+                I.set_block(ts=(t, t), Ds=(1, 1), val=1)
         if self._sym == 'U1xU1':
             I = Tensor(config=self.config, s=self.s, n=(0, 0))
             for t in [(0, 0), (0, 1), (1, 0), (1, 1)]:
@@ -76,6 +80,12 @@ class SpinfulFermions(meta_operators):
             cp = Tensor(config=self.config, s=self.s, n=(0, 1, 1))
             cp.set_block(ts=((0, 1, 1), (0, 0, 0)), Ds=(1, 1), val=1)
             cp.set_block(ts=((1, 1, 0), (1, 0, 1)), Ds=(1, 1), val=-1)
+        elif self._sym == 'U1xU1xZ2_GP' and spin == 'u':
+            cp = Tensor(config=self.config, s=self.s, n=(1, 0, 1))
+            cp.set_block(ts=((1, 0, 1), (0, 0, 0)), Ds=(1, 1), val=1)
+        elif self._sym == 'U1xU1xZ2_GP' and spin == 'd':
+            cp = Tensor(config=self.config, s=self.s, n=(0, 1, 1))
+            cp.set_block(ts=((0, 1, 1), (0, 0, 0)), Ds=(1, 1), val=1)
         elif self._sym == 'U1xU1' and spin == 'u':
             cp = Tensor(config=self.config, s=self.s, n=(1, 0))
             cp.set_block(ts=((1, 0), (0, 0)), Ds=(1, 1), val=1)
@@ -106,6 +116,12 @@ class SpinfulFermions(meta_operators):
             c = Tensor(config=self.config, s=self.s, n=(0, -1, 1))
             c.set_block(ts=((0, 0, 0), (0, 1, 1)), Ds=(1, 1), val=1)
             c.set_block(ts=((1, 0, 1), (1, 1, 0)), Ds=(1, 1), val=-1)
+        elif self._sym == 'U1xU1xZ2_GP' and spin == 'u': # charges <-> (ocupation up, occupation down, total_parity)
+            c = Tensor(config=self.config, s=self.s, n=(-1, 0, 1))
+            c.set_block(ts=((0, 0, 0), (1, 0, 1)), Ds=(1, 1), val=1)
+        elif self._sym == 'U1xU1xZ2_GP' and spin == 'd':
+            c = Tensor(config=self.config, s=self.s, n=(0, -1, 1))
+            c.set_block(ts=((0, 0, 0), (0, 1, 1)), Ds=(1, 1), val=1)
         elif self._sym == 'U1xU1' and spin == 'u':  # charges <-> (ocupation up, occupation down)
             c = Tensor(config=self.config, s=self.s, n=(-1, 0))
             c.set_block(ts=((0, 0), (1, 0)), Ds=(1, 1), val=1)

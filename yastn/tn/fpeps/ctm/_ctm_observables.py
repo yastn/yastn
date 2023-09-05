@@ -2,59 +2,48 @@ from ._ctm_iteration_routines import check_consistency_tensors
 from ._ctm_iteration_routines import fPEPS_2layers
 from ._ctm_observable_routines import apply_TMO_left, con_bi, array_EV2pt, array2ptdiag
 import yastn
-import numpy as np
 
-def nn_avg(peps, env, op):
-
-    r"""
-    Calculate two-site nearest-neighbor calculation of observables with CTM environments.
-
-    Parameters
-    ----------
-    peps : class Peps
-           class containing peps data along with the lattice structure data
-
-    env: class CtmEnv
-        class containing ctm environmental tensors along with lattice structure data
-
-    op: dict
-        dictionary containing observables placed on NN sites
-
-    Returns
-    -------
-    obs_hor: dict
-        dictionary containing name of the horizontal observables as keys and their averaged values over all horizontal bonds.
-    obs_ver: dict
-        dictionary containing name of the vertical observables as keys and their averaged values over all vertical bonds.
-    """
-
+def nn_exp_dict(peps, env, op):
     peps = check_consistency_tensors(peps)
-    obs_hor_mean = {}
-    obs_ver_mean = {}
-    obs_hor_sum = {}
-    obs_ver_sum = {}
+    obs_hor = {}
+    obs_ver = {}
+
     for ms in op.keys():
-        res_hor = []
-        res_ver = []
+        obs_hor[ms] = {}
+        obs_ver[ms] = {}
+
         opt = op.get(ms)
-        for bds_h in peps.bonds(dirn='h'):  # correlators on all horizontal bonds
+
+        for bds_h in peps.nn_bonds(dirn='h'):  # correlators on all horizontal bonds
             val_hor = EV2ptcorr(peps, env, opt, bds_h.site_0, bds_h.site_1)
-            res_hor.append(val_hor[0])
-        for bds_v in peps.bonds(dirn='v'): # correlators on all vertical bonds
+            obs_hor[ms][(bds_h.site_0, bds_h.site_1)] = val_hor[0]
+
+        for bds_v in peps.nn_bonds(dirn='v'):  # correlators on all vertical bonds
             val_ver = EV2ptcorr(peps, env, opt, bds_v.site_0, bds_v.site_1)
-            res_ver.append(val_ver[0])
+            obs_ver[ms][(bds_v.site_0, bds_v.site_1)] = val_ver[0]
 
-        dic_hor_mean = {ms: np.mean(res_hor)}
-        dic_ver_mean = {ms: np.mean(res_ver)}
-        dic_hor_sum = {ms: np.sum(res_hor)}
-        dic_ver_sum = {ms: np.sum(res_ver)}
-        obs_hor_mean.update(dic_hor_mean)
-        obs_ver_mean.update(dic_ver_mean)
-        obs_hor_sum.update(dic_hor_sum)
-        obs_ver_sum.update(dic_ver_sum)
+    return obs_hor, obs_ver
 
-    return obs_hor_mean, obs_ver_mean, obs_hor_sum, obs_ver_sum
+def nnn_exp_dict(peps, env, op):
+    peps = check_consistency_tensors(peps)
+    obs_d1 = {}  # for diagonal 1
+    obs_d2 = {}  # for diagonal 2
 
+    for ms in op.keys():
+        obs_d1[ms] = {}
+        obs_d2[ms] = {}
+
+        opt = op.get(ms)
+
+        for bds_d1 in peps.nnn_bonds(dirn='d1'):  # correlators on all diagonal 1 bonds
+            val_d1 = EV2ptcorr(peps, env, opt, bds_d1.site_0, bds_d1.site_1)
+            obs_d1[ms][(bds_d1.site_0, bds_d1.site_1)] = val_d1[0]
+
+        for bds_d2 in peps.nnn_bonds(dirn='d2'):  # correlators on all diagonal 2 bonds
+            val_d2 = EV2ptcorr(peps, env, opt, bds_d2.site_0, bds_d2.site_1)
+            obs_d2[ms][(bds_d2.site_0, bds_d2.site_1)] = val_d2[0]
+
+    return obs_d1, obs_d2
 
 
 def nn_bond(peps, env, op, bd):
@@ -113,7 +102,7 @@ def measure_one_site_spin(A, ms, env, op=None):
     return hor
 
 
-def one_site_avg(peps, env, op):
+def one_site(peps, env, op):
     r"""
     Measures the expectation value of single site operators all over the lattice.
 
@@ -129,33 +118,30 @@ def one_site_avg(peps, env, op):
 
     Returns
     -------
-    mean_one_site: expectation value of one site observables averaged over all the lattice sites
-
-    mat: expectation value of all the sites in a 2D table form
+    site_exp_dict: dictionary containing site coordinates as keys and their corresponding expectation values as values
     """
 
-    mat = np.zeros((peps.Nx, peps.Ny))  # output returns the expectation value on every site
+    site_exp_dict = {}  # Dictionary to store site-wise expectation values
 
     peps = check_consistency_tensors(peps)
-    s = 0
 
     if peps.lattice == 'checkerboard':
         lists = [(0,0), (0,1)]
     else:
         lists = peps.sites()
 
-    one_site_exp = np.zeros(len(lists))
-
     for ms in lists:
         Am = peps[ms]
         val_op = measure_one_site_spin(Am, ms, env, op=op)
         val_norm = measure_one_site_spin(Am, ms, env, op=None)
-        one_site_exp[s] = val_op/val_norm   # expectation value of particular target site
-        mat[ms[0], ms[1]] = one_site_exp[s]
-        s = s+1
-    mean_one_site = np.mean(one_site_exp)
+        site_exp_value = val_op / val_norm  # expectation value of particular target site
 
-    return mean_one_site, mat
+        # Store the site and its expectation value in the dictionary
+        site_exp_dict[ms] = site_exp_value
+
+    return site_exp_dict
+
+
 
 
 def EV2ptcorr(peps, env, op, site0, site1):
