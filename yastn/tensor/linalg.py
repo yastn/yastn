@@ -31,7 +31,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
         mask_f=None, **kwargs):
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
-    where the columns of `U` and the rows of :math:`V` form orthonormal bases
+    where the columns of `U` and the rows of `V` form orthonormal bases
     and `S` is positive and diagonal matrix. Optionally, truncate the result.
 
     Truncation can be based on relative tolerance, bond dimension of each block,
@@ -94,7 +94,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
 def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False, **kwargs):
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
-    where the columns of `U` and the rows of :math:`V` form orthonormal bases
+    where the columns of `U` and the rows of `V` form orthonormal bases
     and `S` is a positive and diagonal matrix.
 
     Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
