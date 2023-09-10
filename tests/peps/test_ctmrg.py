@@ -62,7 +62,7 @@ def ctm_for_Onsager(peps, opt, Z_exact):
            'magB1': {'l': opt.I(), 'r': opt.z()}}
 
     for step in ctmrg(peps, max_sweeps, iterator_step=4, AAb_mode=0, opts_svd=opts_svd):
-        assert step.sweeps % 4 == 0 # stop every 2nd step as iteration_step=2
+        assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
 
         ob_hor, ob_ver = nn_exp_dict(peps, step.env, ops)
         cf =  0.125 * (sum([abs(val) for val in ob_hor.get('magA1').values()]) + 
