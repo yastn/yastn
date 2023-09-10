@@ -17,15 +17,15 @@ class sym_none(sym_abelian):
             charges: nparray(int)
                 k x number_legs x nsym matrix, where k is the number of independent blocks.
 
-            signatures: nparray(ind)
+            signatures: nparray(int)
                 vector with number_legs elements
 
             new_signature: int
 
         Returns
         -------
-            teff: nparray(int)
-                matrix of effective fused charges of size k x nsym for new signature
+            nparray(int)
+                integer matrix with shape (k,NSYM) of fused charges; includes multiplication by ``new_signature``
         """
         # charges is an empty matrix
         # swap to properly match non-zero dimensions of returned tset

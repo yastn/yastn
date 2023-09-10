@@ -107,7 +107,8 @@ We use the name fpeps to emphasize the incorporation of fermionic statistics in 
 Here we employ the fermionic order demonstrated in a :math:`3\times 3` PEPS example below.
 Parity-preserving tensors permit moving the lines over tensors, changing the placement of the swap gates without affecting the result.
 
-::
+Time evolution
+^^^^^^^^^^^^^^
 
               ________            ________            ________
              |        |          |        |          |        |
@@ -148,7 +149,10 @@ The corresponding two-site gates :math:`U_{bond} = \exp(-d\beta H_{bond} / 2)`, 
 
 Each gate increases the virtual bond dimension of PEPS tensors by a factor equal to the SVD rank of the gate `r`.
 
-::
+In `1D`, canonical structure of MPS makes truncation of a single bond dimension based on SVD singular values optimal in a Frobenius norm.
+However, a loopy structure of PEPS prevents a canonical form, and a successful algorithm requires using optimization techniques on top of SVD.
+The aim is to minimize the Frobenius norm of (a) the PEPS after application of the gate with virtual bond dimension increased to
+:math:`D = r \times D` and (b) a new PEPS with the bond dimension truncated back to :math:`D`:
 
       # Action of a two-site gate on horizontal A_1-A_2 bond in the PEPS.
       # Line crossing indicates application of a swap gate.

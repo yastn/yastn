@@ -55,7 +55,7 @@ class Tensor:
                 a signature of tensor. Also determines the number of legs
             n : int or tuple
                 total charge of the tensor. In case of direct product of several
-                abelian symmetries `n` is tuple with total charge for each individual
+                abelian symmetries, `n` is a tuple with total charge for each individual
                 symmetry
             isdiag : bool
                 distinguish diagonal tensor as a special case of a tensor
@@ -122,7 +122,9 @@ class Tensor:
     from ._krylov import linear_combination, expand_krylov_space
 
     def _replace(self, **kwargs):
-        """ Creates a shallow copy replacing fields specified in kwargs """
+        """
+        Creates a shallow copy replacing fields specified in kwargs
+        """
         for arg in ('config', 'struct', 'mfs', 'hfs', 'data'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
@@ -131,12 +133,14 @@ class Tensor:
     @property
     def s(self):
         """
+        Signature of tensor's effective legs.
+
+        Legs (spaces) fused together by :meth:`yastn.Tensor.fuse` are treated as single leg.
+        The signature of each fused leg is given by the first native leg in the fused space.
+
         Returns
         -------
-        s : tuple(int)
-            signature of tensor's effective legs. Legs (spaces) fused together
-            by :meth:`yastn.Tensor.fuse` are treated as single leg. The signature
-            of each fused leg is given by the first native leg in the fused space.
+        tuple(int)
         """
         inds, n = [], 0
         for mf in self.mfs:
@@ -147,113 +151,128 @@ class Tensor:
     @property
     def s_n(self):
         """
+        Signature of tensor's native legs.
+
+        This includes legs (spaces) which have been fused together by :meth:`yastn.Tensor.fuse` using mode=`meta`.
+
         Returns
         -------
-        s_n : tuple(int)
-            signature of tensor's native legs. This includes legs (spaces) which have been
-            fused together by :meth:`yastn.Tensor.fuse` using mode=`meta`.
+        tuple(int)
         """
         return self.struct.s
 
     @property
     def n(self):
         """
+        Total charge of the tensor.
+
+        In case of direct product of abelian symmetries, total charge for each symmetry, accummulated in a tuple.
+
         Returns
         -------
-        n : tuple(int)
-            total charge of the tensor. In case of direct product of abelian symmetries, total
-            charge for each symmetry, accummulated in a tuple.
+        tuple(int)
         """
         return self.struct.n
 
     @property
     def ndim(self):
         """
+        Effective rank of the tensor.
+
+        Legs (spaces) fused together by :meth:`yastn.Tensor.fuse` are treated as single leg.
+
         Returns
         -------
-        ndim : int
-            effective rank of the tensor. Legs (spaces) fused together by :meth:`yastn.Tensor.fuse`
-            are treated as single leg.
+        int
         """
         return len(self.mfs)
 
     @property
     def ndim_n(self):
         """
+        Native rank of the tensor.
+
+        This includes legs (spaces) which have been fused together by :meth:`yastn.Tensor.fuse` using mode=`meta`.
+
         Returns
         -------
-        ndim_n : int
-            native rank of the tensor. This includes legs (spaces) which have been
-            fused together by :meth:`yastn.Tensor.fuse` using mode=`meta`.
+        int
         """
         return len(self.struct.s)
 
     @property
     def isdiag(self):
         """
+        Return ``True`` if the tensor is diagonal.
+
         Returns
         -------
-        isdiag : bool
-            ``True`` if the tensor is diagonal.
+        bool
         """
         return self.struct.diag
 
     @property
     def requires_grad(self):
         """
+        Return ``True`` if tensor data have autograd enabled
+
         Returns
         -------
-        requires_grad : bool
-            ``True`` if any block of the tensor has autograd enabled
+        bool
         """
         return requires_grad(self)
 
     @property
     def size(self):
         """
+        Total number of elements in all non-empty blocks of the tensor
+
         Returns
         -------
-        size : int
-            total number of elements in all non-empty blocks of the tensor
+        int
         """
         return self.config.backend.get_size(self._data)
 
     @property
     def device(self):
         """
+        Name of device on which the data reside
+
         Returns
         -------
-        device : str
-            name of device on which the data reside
+        str
         """
         return self.config.backend.get_device(self._data)
 
     @property
     def dtype(self):
         """
+        dtype of tensor data used by the backend
+
         Returns
         -------
-        dtype :
-            dtype of tensor data used by the backend
+        dtype
         """
         return self.config.backend.get_dtype(self._data)
 
     @property
     def yast_dtype(self):
         """
+        Return 'complex128' if tensor data are complex else 'float64'
+
         Returns
         -------
-        dtype : str
-            'complex128' if tensor data are complex else 'float64'
+        str
         """
         return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
 
     @property
     def data(self):
         """
+        Return underlying 1D-array storing the elements of the tensor
+
         Returns
         -------
-        data : backend tensor type
-            underlying 1D-array storing the elements of the tensor 
+        backend tensor type
         """
         return self._data
