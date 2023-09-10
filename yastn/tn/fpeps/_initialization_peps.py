@@ -16,17 +16,13 @@ def reduce_operators(ops):
 
 def initialize_peps_purification(fid, net):
     """
-    Initialize PEPS tensors at infinite-temperature state.
+    Returns PEPS tensors initialized at infinite-temperature state.
 
     Parameters
     ----------
         fid : Identity operator in local space with desired symmetry.
         net : class Lattice 
 
-    Returns
-    -------
-        gamma : class Peps
-              PEPS tensor network class with data representing the infinite-temperature state.
     """
     
     A = fid / np.sqrt(fid.get_shape(1)) 
@@ -35,7 +31,7 @@ def initialize_peps_purification(fid, net):
         A = A.add_leg(axis=0, s=s)
    
     A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
-    gamma = fpeps.Peps(net.lattice, net.dims, net.boundary)
+    gamma = fpeps.Lattice(net.lattice, net.dims, net.boundary)
 
     for ms in net.sites():
         gamma[ms] = A
@@ -44,29 +40,23 @@ def initialize_peps_purification(fid, net):
 
 def initialize_diagonal_basis(projectors, net, out):
     """"
-    Initializes state according to the specified occupation pattern.
+    Return state according to the specified occupation pattern.
 
     Parameters
     ----------
-    fc_up : Annihilation operator for spin up fermions.
-    fc_dn : Annihilation operator for spin down fermions.
-    fcdag_up : Creation operator for spin up fermions.
-    fcdag_dn : Creation operator for spin down fermions.
-    net : class Lattice
-    out : dict
-        A dictionary specifying the occupation pattern. The keys are the lattice sites
-        and the values are integers indicating the occupation type (0 for spin-up, 1 for spin-down,
-        2 for double occupancy, and 3 for hole).
+        projectors: list of operators in the diagonal basis
+        net : class Lattice
+        out : dict
+            A dictionary specifying the occupation pattern. The keys are the lattice sites
+            and the values are integers indicating the occupation type 
+            (For Spinful fermions the convention can be to choose 0 for spin-up, 1 for spin-down,
+            2 for double occupancy, and 3 for hole).
 
-    Returns
-    -------
-    gamma : Peps object
-        The post-sampling state tensor network.
     """
    
     projectors = [reduce_operators(proj) for proj in projectors]
 
-    gamma = fpeps.Peps(net.lattice, net.dims, net.boundary)
+    gamma = fpeps.Lattice(net.lattice, net.dims, net.boundary)
     for kk in gamma.sites():
         Ga = projectors[out[kk]].fuse_legs(axes=[(0, 1)])
         for s in (-1, 1, 1, -1):

@@ -10,8 +10,7 @@ import yastn
 from yastn import tensordot, ncon, svd_with_truncation, qr, vdot, initialize
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps._doublePepsTensor import DoublePepsTensor
-from ._ctm_env import Proj, Local_Projector_Env
-# import multiprocess as mp
+from ._ctm_env import Local_Projector_Env
 import time
 import numpy as np
 
@@ -380,14 +379,14 @@ def move_horizontal(envn, env, AAb, proj, ms):
     left = AAb.nn_site(ms, d='l')
     right = AAb.nn_site(ms, d='r')
     
-    if AAb.boundary == 'finite' and y == 0:
+    if AAb.boundary == 'obc' and y == 0:
         l_abv = None
         l_bel = None
     else:
         l_abv = AAb.nn_site(left, d='t')
         l_bel =  AAb.nn_site(left, d='b')
 
-    if AAb.boundary == 'finite' and y == (env.Ny-1):
+    if AAb.boundary == 'obc' and y == (env.Ny-1):
         r_abv = None
         r_bel = None
     else:
@@ -465,13 +464,13 @@ def move_vertical(envn, env, AAb, proj, ms):
     top = AAb.nn_site(ms, d='t')
     bottom = AAb.nn_site(ms, d='b')
 
-    if AAb.boundary == 'finite' and x == 0:
+    if AAb.boundary == 'obc' and x == 0:
         t_left = None
         t_right = None
     else:
         t_left = AAb.nn_site(top, d='l')
         t_right =  AAb.nn_site(top, d='r')
-    if AAb.boundary == 'finite' and x == (env.Nx-1):
+    if AAb.boundary == 'obc' and x == (env.Nx-1):
         b_left = None
         b_right = None
     else:
@@ -573,14 +572,14 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
     and a vertical move. The projectors for each move are calculated first, and then the tensors in
     the CTM environment are updated using the projectors. The boundary conditions of the lattice
     determine whether trivial projectors are needed for the move. If the boundary conditions are
-    'infinite', no trivial projectors are needed; if they are 'finite', four trivial projectors
+    'infinite', no trivial projectors are needed; if they are 'obc', four trivial projectors
     are needed for each move. The signs of the environment tensors can also be fixed during the
     update if `fix_signs` is set to True. The latter is important when we set the criteria for 
     stopping the algorithm based on singular values of the corners.
 
     """
 
-    proj = Proj(lattice=AAb.lattice, dims=AAb.dims, boundary=AAb.boundary) 
+    proj = fpeps.Lattice(lattice=AAb.lattice, dims=AAb.dims, boundary=AAb.boundary) 
     for ms in proj.sites():
         proj[ms] = Local_Projector_Env()
 
@@ -591,7 +590,7 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
         print('projector calculation ctm cluster horizontal', ms)
         proj = proj_horizontal(env[ms.nw], env[ms.ne], env[ms.sw], env[ms.se], proj, ms, AAb[ms.nw], AAb[ms.ne], AAb[ms.sw], AAb[ms.se], fix_signs, opts_svd)
 
-    if AAb.boundary == 'finite': 
+    if AAb.boundary == 'obc': 
         # we need trivial projectors on the boundary for horizontal move for finite lattices
         for ms in range(AAb.Ny-1):
             proj[0,ms].hlt = trivial_projector(env[0,ms].l, AAb[0,ms], env[0,ms+1].tl, dirn='hlt')
@@ -617,7 +616,7 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
         print('projector calculation ctm cluster vertical', ms)
         proj = proj_vertical(envn_hor[ms.nw], envn_hor[ms.sw], envn_hor[ms.ne], envn_hor[ms.se], proj, ms, AAb[ms.nw], AAb[ms.sw], AAb[ms.ne], AAb[ms.se], fix_signs, opts_svd)
 
-    if AAb.boundary == 'finite': 
+    if AAb.boundary == 'obc': 
         # we need trivial projectors on the boundary for vertical move for finite lattices
         for ms in range(AAb.Nx-1):
             proj[ms,0].vtl = trivial_projector(envn_hor[ms,0].t, AAb[ms,0], envn_hor[ms+1,0].tl, dirn='vtl')
@@ -814,7 +813,7 @@ def fPEPS_fuse_layers(AAb, EVonly=False):
 def check_consistency_tensors(A):
     # to check if the A tensors have the appropriate configuration of legs i.e. t l b r [s a]
 
-    Ab = fpeps.Peps(A.lattice, A.dims, A.boundary)
+    Ab = fpeps.Lattice(A.lattice, A.dims, A.boundary)
     if A[0, 0].ndim == 6:
         for ms in Ab.sites(): 
             Ab[ms] = A[ms].fuse_legs(axes=(0, 1, 2, 3, (4, 5)))

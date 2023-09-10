@@ -8,38 +8,22 @@ class DoublePepsTensor:
 
     Parameters
     ----------
-    top : yastn.Tensor
-        The top tensor of the cell.
-    btm : yastn.Tensor
-        The bottom tensor of the cell.
-    rotation : int, optional
-        The rotation angle of the cell, default is 0.
+        top : yastn.Tensor
+            The top tensor of the cell.
+        btm : yastn.Tensor
+            The bottom tensor of the cell.
+        rotation : int, optional
+            The rotation angle of the cell, default is 0.
 
     Attributes
     ----------
-    A : yastn.Tensor
-        The top tensor of the cell.
-    Ab : yastn.Tensor
-        The bottom tensor of the cell.
-    _r : int
-        The rotation angle of the cell.
+        A : yastn.Tensor
+            The top tensor of the cell.
+        Ab : yastn.Tensor
+            The bottom tensor of the cell.
+        _r : int
+            The rotation angle of the cell.
 
-    Methods
-    -------
-    ndim()
-        Get the number of dimensions of the tensor.
-    get_shape()
-        Get the shape of the tensor.
-    get_legs()
-        Get the tensor legs of the tensor.
-    clone()
-        Make a clone of the tensor with autograd tracking preserved.
-    copy()
-        Make a copy of the tensor without autograd tracking preserved.
-    append_a_bl
-        Append a tensor to the bottom-left of the cell.
-    append_a_tr
-        Append a tensor to the top-right of the cell.
     """
 
     def __init__(self, top, btm, rotation=0):
@@ -64,6 +48,7 @@ class DoublePepsTensor:
 
     def get_legs(self, axes=None):
         """ Returns the legs of the DoublePepsTensor along the specified axes. """
+        
         if axes is None:
             axes = tuple(range(4))
         multiple_legs = hasattr(axes, '__iter__')
@@ -78,22 +63,18 @@ class DoublePepsTensor:
 
     def clone(self):
         r"""
-        Makes a clone of Double Peps Tensor by :meth:`cloning<yastn.Tensor.clone>`
+        Makes a clone of yastn.tn.fpeps.DoublePepsTensor by :meth:`cloning<yastn.Tensor.clone>`
         all :class:`yastn.Tensor<yastn.Tensor>`'s into a new and independent :class:`peps.DoublePepsTensor`.
 
         .. note::
             Cloning preserves autograd tracking on all tensors.
 
-        Returns
-        -------
-        yastn.tn.fpeps.DoublePepsTensor
-            a clone of :code:`self`
         """
         return DoublePepsTensor(self.A.clone(), self.Ab.clone(), rotation=self._r)
 
     def copy(self):
         r"""
-        Makes a copy of DoublePepsTensor by :meth:`copying<yastn.Tensor.copy>` all :class:`yastn.Tensor<yastn.Tensor>`'s
+        Makes a copy of yastn.tn.fpeps.DoublePepsTensor by :meth:`copying<yastn.Tensor.copy>` all :class:`yastn.Tensor<yastn.Tensor>`'s
         into a new and independent :class:`yastn.tn.mps.MpsMpo`.
 
         .. warning::
@@ -102,10 +83,6 @@ class DoublePepsTensor:
         .. note::
             Use when retaining "old" DoublePepsTensor is necessary. 
 
-        Returns
-        -------
-        yastn.tn.fpeps.DoublePepsTensor
-            a copy of :code:`self`
         """
         return DoublePepsTensor(self.A.copy(), self.Ab.copy(), rotation=self._r)
 
@@ -149,6 +126,7 @@ class DoublePepsTensor:
 
     def append_a_tl(self, tt):
         """ Append the A and Ab tensors of self to the top-left corner, tt. """
+
         # tt: e2 (1t 1b) (0t 0b) e3
         tt = tt.fuse_legs(axes=((0, 3), 1, 2))  # (e2 e3) (1t 1b) (0t 0b)
         tt = tt.unfuse_legs(axes=(1, 2))  # (e2 e3) 1t 1b 0t 0b
@@ -184,14 +162,9 @@ class DoublePepsTensor:
 
     def _attach_01(self, tt):
         """
-        Attach a tensor to the top left corner of the tensor network if rotation = 0
+        Attach a tensor to the top left corner of the tensor network tt if rotation = 0
         and to the bottom left if rotation is 90.
-        Parameters
-        ----------
-            tt: tensor to attach
-        Returns
-        -------
-            tensor network with tensor tt attached
+  
         """
         if self._r == 0:
             return self.append_a_tl(tt)
@@ -200,14 +173,8 @@ class DoublePepsTensor:
     
     def _attach_23(self, tt):
         """
-        Attach a tensor to the bottom right corner of the tensor network if rotation = 0
+        Attach a tensor to the bottom right corner of the tensor network tt if rotation = 0
         and to the top right if rotation is 90.
-        Parameters
-        ----------
-            tt: tensor to attach
-        Returns
-        -------
-            tensor network with tensor tt attached
         """
         if self._r == 0:
             return self.append_a_br(tt)
@@ -218,10 +185,9 @@ class DoublePepsTensor:
 
         """
           Fuse the top and bottom layers of a PEPS tensor network.
-        Returns
-        -------
-          A new tensor network obtained by fusing the top and bottom layers.
+
         """
+
         fA = self.top.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0t 1t) (2t 3t) 4t
         fAb = self.btm.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0b 1b) (2b 3b) 4b
         tt = tensordot(fA, fAb, axes=(2, 2), conj=(0, 1))  # (0t 1t) (2t 3t) (0b 1b) (2b 3b)

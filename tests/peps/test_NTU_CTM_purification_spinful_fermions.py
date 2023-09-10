@@ -7,7 +7,7 @@ import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_Hubbard
 from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
 from yastn.tn.fpeps import initialize_peps_purification
-from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, nn_bond, one_site
+from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, one_site_dict, EV2ptcorr
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg
@@ -24,8 +24,8 @@ n_int = n_up @ n_dn
 
 def test_NTU_spinful_finite():
 
-    lattice = 'rectangle'
-    boundary = 'finite'
+    lattice = 'square'
+    boundary = 'obc'
     purification = 'True'
     xx = 3
     yy = 2
@@ -42,7 +42,7 @@ def test_NTU_spinful_finite():
     trotter_step = coeff * dbeta  
 
     dims = (xx, yy)
-    net = fpeps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
+    net = fpeps.Lattice(lattice, dims, boundary)  # shape = (rows, columns)
     
     GA_nn_up, GB_nn_up = gates_hopping(t_up, trotter_step, fid, fc_up, fcdag_up)
     GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, trotter_step, fid, fc_dn, fcdag_dn)
@@ -50,9 +50,9 @@ def test_NTU_spinful_finite():
     g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
 
     if purification == 'True':
-        psi = initialize_peps_purification(fid, net) # initialized at infinite temperature
+        peps = initialize_peps_purification(fid, net) # initialized at infinite temperature
     
-    gates = gates_homogeneous(psi, g_nn, g_loc)
+    gates = gates_homogeneous(peps, g_nn, g_loc)
 
     time_steps = round(beta_end / dbeta)
     opts_svd_ntu = {'D_total': D, 'tol_block': 1e-15}
@@ -61,7 +61,7 @@ def test_NTU_spinful_finite():
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        psi, _ =  evolution_step_(psi, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
+        peps, _ =  evolution_step_(peps, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -78,13 +78,13 @@ def test_NTU_spinful_finite():
 
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
+    for step in ctmrg(peps, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 2nd step as iteration_step=2
 
-        d_oc = one_site(psi, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
+        d_oc = one_site_dict(peps, step.env, n_int) # first entry of the function gives average of one-site observables of the sites
 
-        obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
+        obs_hor, obs_ver =  nn_exp_dict(peps, step.env, ops)
 
         cdagc_up = 0.5 * (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) + 
                   sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
@@ -106,13 +106,13 @@ def test_NTU_spinful_finite():
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
-    bd_h = fpeps.nn_Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
-    bd_v = fpeps.nn_Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
+    bd_h = fpeps.Bond(site_0 = (2, 0), site_1=(2, 1), dirn='h')
+    bd_v = fpeps.Bond(site_0 = (0, 1), site_1=(1, 1), dirn='v')
 
-    nn_CTM_bond_1_up = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc_up'], bd_h)) + abs(nn_bond(psi, step.env, ops['ccdag_up'], bd_h)))
-    nn_CTM_bond_2_up = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc_up'], bd_v)) + abs(nn_bond(psi, step.env, ops['ccdag_up'], bd_v)))
-    nn_CTM_bond_1_dn = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc_dn'], bd_h)) + abs(nn_bond(psi, step.env, ops['ccdag_dn'], bd_h)))
-    nn_CTM_bond_2_dn = 0.5*(abs(nn_bond(psi, step.env, ops['cdagc_dn'], bd_v)) + abs(nn_bond(psi, step.env, ops['ccdag_dn'], bd_v)))
+    nn_CTM_bond_1_up = 0.5*(abs(EV2ptcorr(peps, step.env, ops['cdagc_up'], bd_h.site_0, bd_h.site_1)) + abs(EV2ptcorr(peps, step.env, ops['ccdag_up'], bd_h.site_0, bd_h.site_1)))
+    nn_CTM_bond_2_up = 0.5*(abs(EV2ptcorr(peps, step.env, ops['cdagc_up'], bd_v.site_0, bd_v.site_1)) + abs(EV2ptcorr(peps, step.env, ops['ccdag_up'], bd_v.site_0, bd_v.site_1)))
+    nn_CTM_bond_1_dn = 0.5*(abs(EV2ptcorr(peps, step.env, ops['cdagc_dn'], bd_h.site_0, bd_h.site_1)) + abs(EV2ptcorr(peps, step.env, ops['ccdag_dn'], bd_h.site_0, bd_h.site_1)))
+    nn_CTM_bond_2_dn = 0.5*(abs(EV2ptcorr(peps, step.env, ops['cdagc_dn'], bd_v.site_0, bd_v.site_1)) + abs(EV2ptcorr(peps, step.env, ops['ccdag_dn'], bd_v.site_0, bd_v.site_1)))
 
     nn_bond_1_exact = 0.024917101651703362 # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (1,1) and (1,2)
     nn_bond_2_exact = 0.024896433958165112  # analytical nn fermionic correlator at beta = 0.1 for 2D finite lattice (2,3) bond bond between (0,0) and (1,0)
@@ -139,7 +139,7 @@ def test_NTU_spinful_infinite():
     tr_mode = 'optimal'
     coeff = 0.25 # for purification; 0.5 for ground state calculation and 1j*0.5 for real-time evolution
     trotter_step = coeff * dbeta  
-    net = fpeps.Peps(lattice=lattice, boundary=boundary)
+    net = fpeps.Lattice(lattice=lattice, boundary=boundary)
 
     opt = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
@@ -150,9 +150,9 @@ def test_NTU_spinful_infinite():
     g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
 
     if purification == 'True':
-        psi = initialize_peps_purification(fid, net) # initialized at infinite temperature
+        peps = initialize_peps_purification(fid, net) # initialized at infinite temperature
     
-    gates = gates_homogeneous(psi, g_nn, g_loc)
+    gates = gates_homogeneous(peps, g_nn, g_loc)
     time_steps = round(beta_end / dbeta)
     opts_svd_ntu = {'D_total': D, 'tol_block': 1e-15}
 
@@ -160,7 +160,7 @@ def test_NTU_spinful_infinite():
 
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        psi, _ =  evolution_step_(psi, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
+        peps, _ =  evolution_step_(peps, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
     
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -176,11 +176,11 @@ def test_NTU_spinful_infinite():
     cf_energy_old = 0
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg(psi, max_sweeps, iterator_step=2, AAb_mode=0, opts_svd=opts_svd_ctm):
+    for step in ctmrg(peps, max_sweeps, iterator_step=2, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
 
-        obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
+        obs_hor, obs_ver =  nn_exp_dict(peps, step.env, ops)
 
         cdagc_up = (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) + 
                   sum(abs(val) for val in obs_ver.get('cdagc_up').values()))

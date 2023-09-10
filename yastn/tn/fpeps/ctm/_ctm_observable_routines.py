@@ -124,20 +124,20 @@ def top_bottom_op_vectors(env, site_0, site_1, AAbt, AAbb):
 
 
 def array_EV2pt(peps, env, site0, site1, op=None):
-    """
+
+    r"""
     Calculate two-point axial correlators between two sites site0 and site1.
 
-    Args:
+    Parameters
+    ----------
         peps: Class Peps.
         env: Class CtmEnv contaning data for CTM environment tensors .
         site0: The coordinate of the first site as a tuple of two integers.
         site1: The coordinate of the second site as a tuple of two integers.
         op: An optional dictionary specifying the operators to be applied to the sites.
 
-    Returns:
-        array_vals: A numpy array representing the calculated correlators.
-
-    Raises:
+    Raises
+    ------
         ValueError: If site0 and site1 are the same, or if they are not aligned either horizontally or vertically.
     """
 
@@ -232,8 +232,8 @@ def ver_extension(env, bd, AAbo, AAb):
 
     return (ver/ver_norm)
 
-#### diagonal correlation
 def make_ext_corner_tl(cortl, str_t, str_l, AAb):
+    """ Returns the newly created extended top-left corner tensor """
     vec_cor_tl = str_l @ cortl @ str_t
     new_vec_cor_tl = append_a_tl(vec_cor_tl, AAb).fuse_legs(axes=(0, 1, 3, 2))
     nftl = new_vec_cor_tl.unfuse_legs(axes=2).unfuse_legs(axes=2)
@@ -243,6 +243,7 @@ def make_ext_corner_tl(cortl, str_t, str_l, AAb):
     return new_vec_cor_tl
 
 def make_ext_corner_tr(cortr, str_t, str_r, AAb):
+    """ Returns the newly created extended top-right corner tensor """
     vec_cor_tr = str_t @ cortr @ str_r
     new_vec_cor_tr = append_a_tr(vec_cor_tr, AAb).fuse_legs(axes=(0, 1, 3, 2))
     nftr = new_vec_cor_tr.unfuse_legs(axes=1).unfuse_legs(axes=1)
@@ -252,6 +253,7 @@ def make_ext_corner_tr(cortr, str_t, str_r, AAb):
     return new_vec_cor_tr
 
 def make_ext_corner_bl(corbl, str_b, str_l, AAb):
+    """ Returns the newly created extended bottom-left corner tensor """
     vec_cor_bl = str_b @ corbl @ str_l
     new_vec_cor_bl = append_a_bl(vec_cor_bl, AAb).fuse_legs(axes=(0, 1, 3, 2))
     nfbl = new_vec_cor_bl.unfuse_legs(axes=1).unfuse_legs(axes=1)
@@ -261,6 +263,7 @@ def make_ext_corner_bl(corbl, str_b, str_l, AAb):
     return new_vec_cor_bl
 
 def make_ext_corner_br(corbr, str_b, str_r, AAb):
+    """ Returns the newly created extended bottom-right corner tensor """
     vec_cor_br = str_r @ corbr @ str_b
     new_vec_cor_br = append_a_br(vec_cor_br, AAb).fuse_legs(axes=(0, 1, 3, 2))
     nfbr = new_vec_cor_br.unfuse_legs(axes=2).unfuse_legs(axes=2)
@@ -269,8 +272,12 @@ def make_ext_corner_br(corbr, str_b, str_r, AAb):
         new_vec_cor_br = new_vec_cor_br.fuse_legs(axes=(0, 1, (2, 4), 5, 3))
     return new_vec_cor_br
 
-def array2ptdiag(peps, env, AAb_top, AAb_bottom, site0, site1, flag_str=None):
-    """ construct diagonal correlators """
+def array2ptdiag(peps, env, AAb_top, AAb_bottom, site0, site1, flag=None):
+    r""" Returns diagonal correlators 
+
+    Note: 1. site0 has to be to at left and site1 at right according to the defined fermionic order.
+          2. Flag should be set to 'y' when observables are included.
+    """
 
     x0, y0 = site0
     x1, y1 = site1
@@ -285,7 +292,7 @@ def array2ptdiag(peps, env, AAb_top, AAb_bottom, site0, site1, flag_str=None):
     vec_bl = make_ext_corner_bl(env[pbl].bl, env[pbl].b, env[pbl].l, AAb_bottom['l'])
     vec_br = make_ext_corner_br(env[pbr].br, env[pbr].b, env[pbr].r, AAb_bottom['r'])
 
-    if flag_str == 'ws':
+    if flag == 'y':
         if x0<x1:
             corr_l = ncon((vec_tl, vec_bl), ([2, 1, -3, -4, -5], [-1, -2, 1, 2]))
             corr_r = ncon((vec_br, vec_tr), ([2, 1, -2, -1, -5], [-4, -3, 1, 2]))
@@ -294,7 +301,7 @@ def array2ptdiag(peps, env, AAb_top, AAb_bottom, site0, site1, flag_str=None):
             corr_l = ncon((vec_tl, vec_bl), ([2, 1, -3, -4], [-1, -2, 1, 2, -5]))
             corr_r = ncon((vec_br, vec_tr), ([2, 1, -2, -1], [-4, -3, 1, 2, -5]))
             corr = tensordot(corr_l, corr_r, axes=((0, 1, 2, 3, 4), (0, 1, 2, 3, 4))).to_number()   
-    elif flag_str is None:
+    elif flag is None:
         corr_l = ncon((vec_tl, vec_bl), ([2, 1, -3, -4], [-1, -2, 1, 2]))
         corr_r = ncon((vec_br, vec_tr), ([2, 1, -2, -1], [-4, -3, 1, 2]))
         corr = tensordot(corr_l, corr_r, axes=((0, 1, 2, 3), (0, 1, 2, 3))).to_number()
