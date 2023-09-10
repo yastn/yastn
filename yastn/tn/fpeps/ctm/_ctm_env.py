@@ -42,19 +42,6 @@ class CtmEnv(Lattice):
     def tensors_CtmEnv(self):
         return self._windows
 
-
-#class Proj(Lattice):
-    r""" Geometric information about the lattice provided to projectors """
-
-    """def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
-        super().__init__(lattice=lattice, dims=dims, boundary=boundary)
-
-    def copy(self):
-        proj_new = Proj(lattice=self.lattice, dims=self.dims, boundary=self.boundary)
-        proj_new._data = {k : v.copy() for k, v in self._data.items()}
-        return proj_new"""
-
-
 @dataclass()
 class Local_Projector_Env(): # no more variables than the one given 
     """ data class for projectors labelled by a single lattice site calculated during ctm renormalization step """

@@ -359,19 +359,18 @@ def move_horizontal(envn, env, AAb, proj, ms):
 
     Parameters
     ----------
-    envn : class CtmEnv
-        Class containing data for the new environment tensors 
-        renormalized by the horizontal move at each site + lattice info.
-    env : class CtmEnv
-        Class containing data for the input environment tensors at each site + lattice info.
-    AAb : Contains top and bottom Peps tensors
-    proj : Class Proj with info on lattice
-        Projectors to be applied for renormalization.
-    ms : site whose environment tensors are to be renormalized
+        envn : class CtmEnv
+            Class containing data for the new environment tensors renormalized by the horizontal move at each site + lattice info.
+        env : class CtmEnv
+            Class containing data for the input environment tensors at each site + lattice info.
+        AAb : Contains top and bottom Peps tensors
+        proj : Class Lattice with info on lattice
+            Projectors to be applied for renormalization.
+        ms : site whose environment tensors are to be renormalized
 
     Returns
     -------
-    envn :  class CtmEnv
+        yastn.fpeps.CtmEnv
         Contains data of updated environment tensors along with those not updated
     """
 
@@ -443,19 +442,18 @@ def move_vertical(envn, env, AAb, proj, ms):
 
     Parameters
     ----------
-    envn : class CtmEnv
-        Class containing data for the new environment tensors 
-        renormalized by the vertical move at each site + lattice info.
-    env : class CtmEnv
-        Class containing data for the input environment tensors at each site + lattice info.
-    AAb : Contains top and bottom Peps tensors
-    proj : Class Proj with info on lattice
-        Projectors to be applied for renormalization.
-    ms : site whose environment tensors are to be renormalized
+        envn : class CtmEnv
+            Class containing data for the new environment tensors renormalized by the vertical move at each site + lattice info.
+        env : class CtmEnv
+            Class containing data for the input environment tensors at each site + lattice info.
+        AAb : Contains top and bottom Peps tensors
+        proj : Class Lattice with info on lattice
+              Projectors to be applied for renormalization.
+        ms : site whose environment tensors are to be renormalized
 
     Returns
     -------
-    envn :  class CtmEnv
+        yastn.fpeps.CtmEnv
         Contains data of updated environment tensors along with those not updated
     """
 
@@ -549,21 +547,20 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
 
     Parameters
     ----------
-    env : class CTMEnv
-        The current CTM environment tensor.
-    AAb : CtmBond
-        The CtmBond tensor for the lattice.
-    fix_signs : bool
-        Whether to fix the signs of the environment tensors.
-    opts_svd : dict, optional
-        A dictionary of options to pass to the SVD algorithm, by default None.
+        env : class CTMEnv
+            The current CTM environment tensor.
+        AAb : CtmBond
+            The CtmBond tensor for the lattice.
+        fix_signs : bool
+            Whether to fix the signs of the environment tensors.
+        opts_svd : dict, optional
+            A dictionary of options to pass to the SVD algorithm, by default None.
 
     Returns
     -------
-    envn_ver : class CTMEnv
-              The updated CTM environment tensor 
-               
-    proj     :  dictionary of CTM projectors.
+        envn_ver : class CTMEnv
+              The updated CTM environment tensor         
+        proj     :  dictionary of CTM projectors.
 
     Procedure
     ---------
@@ -579,7 +576,7 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
 
     """
 
-    proj = fpeps.Lattice(lattice=AAb.lattice, dims=AAb.dims, boundary=AAb.boundary) 
+    proj = fpeps.Lattice(lattice=AAb.lattice, dims=AAb.dims, boundary=AAb.boundary) # ctm projectors defined as an instance of Lattice class
     for ms in proj.sites():
         proj[ms] = Local_Projector_Env()
 
