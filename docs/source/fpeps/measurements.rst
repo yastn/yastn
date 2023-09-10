@@ -1,14 +1,13 @@
 Expectation values
 ==================
 
-Expectation values in PEPS are calulated using CTMRG. So after the imaginary or real time evolution,
-one must initiate the CTMRG procedure with the peps tensors as the input,
+Expectation values in PEPS require contraction of the lattice. This can be approximately done using CTMRG.
 
 .. autofunction:: yastn.tn.fpeps.ctm._ctmrg
 
-One can stop the CTM after a fixed number of iterations. A stopping criteria can also be set based on 
-the convergence of one or more observables or by comparing the singular values of the projectors. 
-Once the CTMRG environment tensors are found, it is straightforward to obtain one-site and two-site 
+One can stop the CTM after a fixed number of iterations. Stopping criteria can also be set based on
+the convergence of one or more observables or by comparing the singular values of the projectors.
+Once the CTMRG environment tensors are found, it is straightforward to obtain one-site and two-site
 observables using the following functions.
 
 One-site observables for all lattice sites can be calculated using the function

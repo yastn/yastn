@@ -2,9 +2,9 @@ Structure
 =========
 
 Geometry
----------
+--------
 
-The module :code:`yastn.tn.fpeps._geometry.py` contains the classes and structures that are used to manage and represent the geometry of the Projected Entangled Pair States (PEPS).
+The module :code:`yastn.tn.fpeps._geometry.py` contains classes to represent the lattice geometry of the Projected Entangled Pair States (PEPS).
 The classes defined in the module include:
 
 - **Bond**: A Named Tuple that represents a bond between two lattice sites. The sites are arranged in the fermionic order. Each bond has a directionality, captured by the "dirn" property. In the context of PEPS, a bond represents the entangled pair of quantum states. 
@@ -86,6 +86,7 @@ Let the output tensor after the contraction be `tt'`.
 
 .. autofunction:: yastn.tn.fpeps._doublePepsTensor.DoublePepsTensor.append_a_tl
 
+.. autofunction:: yastn.tn.fpeps._geometry.Bond
 
 - **append_a_br**:
 
@@ -98,16 +99,21 @@ Let the output tensor after the contraction be `tt'`.
            _|__|   |             |        |
        3--|________|          2--|________|
 
+.. autofunction:: yastn.tn.fpeps._geometry.Lattice
 
-.. autofunction:: yastn.tn.fpeps._doublePepsTensor.DoublePepsTensor.append_a_br
+- **Peps**:
 
+The Peps class extends the Lattice class, holding the PEPS data itself, and provides additional functionalities specifically related to PEPS.
+The methods included in the Peps class, such as mpo and boundary_mps, allow for efficient manipulation and transformation of the PEPS, which are key tasks in many numerical algorithms used to study these systems.
 
 The functions (`_attach_01` and `_attach_23`) are similar to the append methods but they attach the
 tensor to the top or bottom left if rotation = 0, and to the top or bottom right if rotation = 90.
 
-.. autofunction:: yastn.tn.fpeps._doublePepsTensor.DoublePepsTensor._attach_01
-.. autofunction:: yastn.tn.fpeps._doublePepsTensor.DoublePepsTensor._attach_23
+.. literalinclude:: /../../tests/peps/test_geometry.py
+      :pyobject: test_Lattice
 
+.. literalinclude:: /../../tests/peps/test_geometry.py
+      :pyobject: test_Peps_get_set
 
 - **fPEPS_fuse_layers**:
 
