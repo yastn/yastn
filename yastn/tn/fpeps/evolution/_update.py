@@ -18,7 +18,7 @@ class Gates(NamedTuple):
     nn : list = None   # list of Gate_nn
 
 
-def evolution_step_(psi, gates, step, truncation_mode, env_type, opts_svd=None):  
+def evolution_step_(peps, gates, step, truncation_mode, env_type, opts_svd=None):  
 
     r"""
     Perform a single step of evolution on a PEPS by applying a list of gates,
@@ -27,65 +27,53 @@ def evolution_step_(psi, gates, step, truncation_mode, env_type, opts_svd=None):
     Parameters
     ----------
 
-    psi             : class PEPS
-
-    gates           : The gates to apply during the evolution. The `Gates` named tuple
-      should contain a list of NamedTuples `Gate_local` and `Gate_nn`.
-
-    step            : str
-       Specifies the type of evolution step to perform. Can be either
-      'ntu-update' or 'svd-update'.
-
-    truncation_mode : str 
-       Specifies the truncation mode to use during the evolution.
-    
-    env_type        : str 
-       Specifies the type of environment to use during the evolution.
-    
-    opts_svd (dict, optional): Dictionary containing options for the SVD routine.
+        peps: class Lattice
+        gates: The gates to apply during the evolution. The `Gates` named tuple
+                should contain a list of NamedTuples `Gate_local` and `Gate_nn`.
+        step: str (Specifies the type of evolution step to perform. Can be either 'ntu-update' or 'svd-update'.
+        truncation_mode: str (Specifies the truncation mode to use during the evolution.)
+        env_type: str (Specifies the type of environment to use during the evolution.)
+        opts_svd (dict, optional): Dictionary containing options for the SVD routine.
 
     Returns
     -------
-
-    psi  : class PEPS
-   
-    info : dict
-          Dictionary containing information about the evolution.
+        peps  : class Lattice 
+        info : dict (Dictionary containing information about the evolution.)
 
     """
 
     infos = []
 
     for gate in gates.local:
-        psi = apply_local_gate_(psi, gate)
+        peps = apply_local_gate_(peps, gate)
 
     all_gates = gates.nn + gates.nn[::-1]
 
     for gate in all_gates:    
-        psi, info = evol_machine(psi, gate, truncation_mode, step, env_type, opts_svd)
+        peps, info = evol_machine(peps, gate, truncation_mode, step, env_type, opts_svd)
         infos.append(info)
 
     for gate in gates.local[::-1]:
-        psi = apply_local_gate_(psi, gate)
+        peps = apply_local_gate_(peps, gate)
 
     if step == 'svd-update':
-        return psi, info 
+        return peps, info 
     
     if env_type == 'NTU': 
         info['ntu_error'] = [record['ntu_error'] for record in infos]
         info['optimal_cutoff'] = [record['optimal_cutoff'] for record in infos]
         info['svd_error'] = [record['svd_error'] for record in infos]
-        return psi, info
+        return peps, info
 
 
-def gates_homogeneous(psi, nn_gates, loc_gates):
+def gates_homogeneous(peps, nn_gates, loc_gates):
 
     """
     Generate a list of gates that is homogeneous over the lattice. 
     
     Parameters
     ----------
-    psi      : class PEPS
+    peps      : class Lattice
     nn_gates : list
               A list of two-tuples, each containing the tensors that form a two-site
               nearest-neighbor gate.
@@ -97,25 +85,25 @@ def gates_homogeneous(psi, nn_gates, loc_gates):
       local and nn gates along with info where they should be applied.
     """
     # len(nn_gates) indicates the physical degrees of freedom; option to add more
-    bonds = psi.nn_bonds(dirn='h') + psi.nn_bonds(dirn='v')
+    bonds = peps.nn_bonds(dirn='h') + peps.nn_bonds(dirn='v')
 
     gates_nn = []   # nn_gates = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)] 
     for bd in bonds:
         for i in range(len(nn_gates)):
             gates_nn.append(Gate_nn(A=nn_gates[i][0], B=nn_gates[i][1], bond=bd))
     gates_loc = []
-    if psi.lattice=='checkerboard':
+    if peps.lattice=='checkerboard':
         gates_loc.append(Gate_local(A=loc_gates, site=(0,0)))
         gates_loc.append(Gate_local(A=loc_gates, site=(0,1)))
-    elif psi.lattice != 'checkerboard':
-        for site in psi.sites():
+    elif peps.lattice != 'checkerboard':
+        for site in peps.sites():
             gates_loc.append(Gate_local(A=loc_gates, site=site))
     return Gates(local=gates_loc, nn=gates_nn)
 
 
-def show_leg_structure(psi):
+def show_leg_structure(peps):
    """ Prints the leg structure of each site tensor in a PEPS """
-   for ms in psi.sites():
-        xs = psi[ms].unfuse_legs((0, 1))
+   for ms in peps.sites():
+        xs = peps[ms].unfuse_legs((0, 1))
         print("site ", str(ms), xs.get_shape()) 
   

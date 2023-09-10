@@ -11,10 +11,10 @@ the convergence of one or more observables or by comparing the singular values o
 Once the CTMRG environment tensors are found, it is straightforward to obtain one-site and two-site 
 observables using the following functions.
 
-Average of one-site observables for all sites can be calculated using the functionalities
+One-site observables for all lattice sites can be calculated using the function
 
-.. autofunction:: yastn.tn.fpeps.ctm._ctm_observables.one_site_avg
+.. autofunction:: yastn.tn.fpeps.ctm._ctm_observables.one_site_dict
 
-and average of two-point correlators can be calculated using the function 
+and all nearest neighbor two-point correlators can be calculated using the function 
 
-.. autofunction:: yastn.tn.fpeps.ctm._ctm_observables.nn_avg
+.. autofunction:: yastn.tn.fpeps.ctm._ctm_observables.nn_site_dict

@@ -18,3 +18,9 @@ Examples are given in
 :ref:`Purification<examples/fpeps/ntu:Thermal expectation value of spinless fermi sea>`,
 :ref:`Purification<examples/fpeps/ntu:Thermal expectation value of spinful fermi sea>`,
 
+
+The state can also be initialized in a product state with a user-defined dictionary containing the lattice sites
+as the keys and some encoding of the basis states as values. The encoding is in order of the the operators defined in the
+'projectors' list.
+
+.. autofunction:: yastn.tn.fpeps._initialization_peps.initialize_diagonal_basis

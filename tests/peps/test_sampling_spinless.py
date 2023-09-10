@@ -10,9 +10,7 @@ from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_fermi_sea
 from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
 from yastn.tn.fpeps import initialize_peps_purification
 from yastn.tn.fpeps.ctm import sample, CtmEnv2Mps, nn_exp_dict, ctmrg
-
-from yastn.tn.mps import Env2, Env3
-
+from yastn.tn.fpeps import _auxiliary
 
 try:
     from .configs import config_U1_R_fermionic as cfg
@@ -23,8 +21,8 @@ except ImportError:
 
 def not_working_test_sampling_spinless():
 
-    lattice = 'rectangle'
-    boundary = 'finite'
+    lattice = 'square'
+    boundary = 'obc'
     purification = 'True'
     xx = 3
     yy = 3
@@ -41,7 +39,7 @@ def not_working_test_sampling_spinless():
     trotter_step = coeff * dbeta  
 
     dims = (xx, yy)
-    net = fpeps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
+    net = fpeps.Lattice(lattice, dims, boundary)  # shape = (rows, columns)
 
     opt = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
@@ -51,16 +49,16 @@ def not_working_test_sampling_spinless():
     g_nn = [(GA_nn, GB_nn)]
 
     if purification == 'True':
-        psi = initialize_peps_purification(fid, net) # initialized at infinite temperature
+        peps = initialize_peps_purification(fid, net) # initialized at infinite temperature
 
-    gates = gates_homogeneous(psi, g_nn, g_loc)
+    gates = gates_homogeneous(peps, g_nn, g_loc)
     time_steps = round(beta_end / dbeta)
     opts_svd_ntu = {'D_total': Ds, 'tol_block': 1e-15}
 
     for nums in range(time_steps):
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        psi, _ =  evolution_step_(psi, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
+        peps, _ =  evolution_step_(peps, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
 
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -74,10 +72,10 @@ def not_working_test_sampling_spinless():
     cf_energy_old = 0
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
+    for step in ctmrg(peps, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 1 == 0 # stop every 4th step as iteration_step=4
-        obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
+        obs_hor, obs_ver =  nn_exp_dict(peps, step.env, ops)
 
         cdagc = (sum(abs(val) for val in obs_hor.get('cdagc').values()) + sum(abs(val) for val in obs_ver.get('cdagc').values()))
         ccdag = (sum(abs(val) for val in obs_hor.get('ccdag').values()) + sum(abs(val) for val in obs_ver.get('ccdag').values()))
@@ -97,20 +95,20 @@ def not_working_test_sampling_spinless():
     ##### (0,2) (1,2) (2,2) #######
     ###############################
 
-    phi = psi.boundary_mps()
+    phi = peps.boundary_mps()
     opts = {'D_total': chi}
 
     for r_index in range(net.Ny-1,-1,-1):
         Bctm = CtmEnv2Mps(net, step.env, index=r_index, index_type='r')  # right boundary of r_index th column through CTM environment tensors
         assert pytest.approx(abs(mps.vdot(phi, Bctm)) / (phi.norm() * Bctm.norm()), rel=1e-8) == 1.0
         phi0 = phi.copy()
-        O = psi.mpo(index=r_index, index_type='column')
+        O = peps.mpo(index=r_index, index_type='column')
         phi = mps.zipper(O, phi0, opts)  # right boundary of (r_index-1) th column through zipper
         mps.compression_(phi, (O, phi0), method='1site', max_sweeps=2)
 
     nn, hh = fcdag @ fc, fc @ fcdag
     projectors = [nn, hh]
-    out = sample(psi, step.env, projectors)
+    out = sample(peps, step.env, projectors)
     print(out)
 
 if __name__ == '__main__':

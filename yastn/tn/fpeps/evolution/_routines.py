@@ -18,27 +18,22 @@ def evol_machine(peps, gate, truncation_mode, step, env_type, opts_svd=None):
 
     Parameters
     ----------
-        peps            : class Peps
-
+        peps            : class Lattice
         gate            : A Gate object representing the nearest-neighbor gate to apply.
-
         truncation_mode : str
                         The mode to use for truncation of the environment tensors. Can be 
                         'normal' or 'optimal'.
-
         step            : str
                         The optimization step to perform. Can be 'svd-update', 'one-step', or 'two-step'.
-
         env_type        : str
                         The type of environment to use for optimization. Can be 'NTU' (neighborhood tensor update),
                           'FU'(full update - to be added).
-
         opts_svd        : dict, optional 
                         A dictionary with options for the SVD truncation. Default is None.
 
     Returns
     -------
-        peps : The optimized PEPS tensor.
+        peps : The optimized PEPS tensor (yastn.fpeps.Lattice).
         info : dict
              A dictionary with information about the optimization. Contains the following keys:
              - 'svd_error': The SVD truncation error.
@@ -181,8 +176,8 @@ def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mod
 
     Returns
     -------
-    MA, MB: truncated pair of tensors before alternate least square optimization
-    svd_error: here just implies the error incurred for the initial truncation 
+        MA, MB: truncated pair of tensors before alternate least square optimization
+        svd_error: here just implies the error incurred for the initial truncation 
                before the optimization
     """
     

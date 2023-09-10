@@ -23,6 +23,9 @@ combination of four corner :math:`C_{nw},C_{sw},C_{ne},C_{se}` and four transfer
 following figure. The single-site observable :math:`O` is placed between the site and its conjugated attached via the physical indices.
 The CTMRG tensors when contracted provides the reduced density matrix with which the expectation value is to be computed.
 
+
+
+
 ::
 
      ________       ________       ________                                             \

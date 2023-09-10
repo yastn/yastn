@@ -47,7 +47,7 @@ def gauges_random():
     return a, b
 
 
-def ctm_for_Onsager(psi, opt, Z_exact):
+def ctm_for_Onsager(peps, opt, Z_exact):
     """ Compares ctm expectation values with analytical result. """
 
     chi = 30 # max environmental bond dimension
@@ -61,10 +61,10 @@ def ctm_for_Onsager(psi, opt, Z_exact):
     ops = {'magA1': {'l': opt.z(), 'r': opt.I()},
            'magB1': {'l': opt.I(), 'r': opt.z()}}
 
-    for step in ctmrg(psi, max_sweeps, iterator_step=4, AAb_mode=0, opts_svd=opts_svd):
+    for step in ctmrg(peps, max_sweeps, iterator_step=4, AAb_mode=0, opts_svd=opts_svd):
         assert step.sweeps % 4 == 0 # stop every 2nd step as iteration_step=2
 
-        ob_hor, ob_ver = nn_exp_dict(psi, step.env, ops)
+        ob_hor, ob_ver = nn_exp_dict(peps, step.env, ops)
         cf =  0.125 * (sum([abs(val) for val in ob_hor.get('magA1').values()]) + 
                 sum([abs(val) for val in ob_hor.get('magB1').values()]) + 
                 sum([abs(val) for val in ob_ver.get('magA1').values()]) + 
@@ -86,10 +86,10 @@ def test_ctm_loop():  ###high temperature
     list_lattice = [('checkerboard', (2, 2))]
     for lattice, dims in list_lattice:
         T = create_Ising_tensor(opt.z(), beta)
-        psi = fpeps.Peps(lattice=lattice, dims=dims, boundary='infinite')
-        for site in psi.sites():
-            psi[site] = T
-        ctm_for_Onsager(psi, opt, Z_exact)
+        peps = fpeps.Lattice(lattice=lattice, dims=dims, boundary='infinite')
+        for site in peps.sites():
+            peps[site] = T
+        ctm_for_Onsager(peps, opt, Z_exact)
 
         h_rg1, inv_h_rg1 = gauges_random()
         h_rg2, inv_h_rg2 = gauges_random()
@@ -104,9 +104,9 @@ def test_ctm_loop():  ###high temperature
         TA = yastn.ncon((TA, v_rg2), ((-0, -1, 1, -3, -4), (-2, 1)))
         TB = yastn.ncon((inv_v_rg2, TB), ((1, -0), (1, -1, -2, -3, -4)))
 
-        for site in psi.sites():
-            psi[site] = TA if sum(site) % 2 == 0 else TB
-        ctm_for_Onsager(psi, opt, Z_exact)
+        for site in peps.sites():
+            peps[site] = TA if sum(site) % 2 == 0 else TB
+        ctm_for_Onsager(peps, opt, Z_exact)
 
 
 if __name__ == '__main__':
