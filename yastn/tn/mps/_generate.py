@@ -1,6 +1,6 @@
 import numpy as np
 from typing import NamedTuple
-from ... import ones, rand, zeros, ncon, Leg, random_leg, YastnError, Tensor, block
+from ... import ones, rand, zeros, ncon, Leg, random_leg, YastnError, Tensor, block, svd_with_truncation
 from ...operators import Qdit
 from ._mps import Mpo, Mps, add
 from ._latex2term import latex2term, GeneratorError
@@ -66,10 +66,9 @@ def generate_single_mpo(I, term, amplitude=True):
     return single_mpo
 
 
-def generate_mpo2(I, terms, opts=None):
+def generate_mpo(I, terms, opts=None):
     r"""
     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
-
 
     Parameters
     ----------
@@ -77,16 +76,17 @@ def generate_mpo2(I, terms, opts=None):
         product operators making up the MPO
     I: yastn.Tensor
         on-site identity operator
-    opts: dict
-        options for truncation of the result
 
     Returns
     -------
     yastn.tn.mps.MpsMpo
     """
+    if opts is None:
+        opts={'tol': 1e-14}
     H1s = [generate_single_mpo(I, term, amplitude=False) for term in terms]
+    cfg = H1s[0][0].config
     mH = np.zeros((len(H1s), I.N), dtype=int)
-    basis, bbasis, t2bs, tfbs = {}, {}, {}, {}
+    basis, bbasis, t1bs, t2bs, ifbs, tfbs = {}, {}, {}, {}, {}, {}
     for n in I.sweep():
         base = []
         for m, H1 in enumerate(H1s):
@@ -95,32 +95,71 @@ def generate_mpo2(I, terms, opts=None):
                 ind = len(base)
                 base.append(H1[n])
             mH[m, n] = ind
+        t1bs[n] = [ten.get_legs(axes=0).t[0] for ten in base]
         t2bs[n] = [ten.get_legs(axes=2).t[0] for ten in base]
         basis[n] = [ten.fuse_legs(axes=((0, 2), 1, 3)).drop_leg_history() for ten in base]
         bbasis[n] = block(dict(enumerate(basis[n])), common_legs=(1, 2)).drop_leg_history()
         tfbs[n] = [ten.get_legs(axes=0).t[0] for ten in basis[n]]
+        ifbs[n] = [sum(x == tfbs[n][i] for x in tfbs[n][:i]) for i in range(len(tfbs[n]))]
     Js = {}
+    dtype = cfg.default_dtype
     for a, H1 in zip(terms, H1s):
         t = H1[0].get_legs(axes=0).t[0]
         if t in Js:
             Js[t].append(a.amplitude)
         else:
             Js[t] = [a.amplitude]
-    J = Tensor(config=H1s[0][0].config, s=(-1, 1))
+        if isinstance(a.amplitude, complex):
+            dtype = 'complex128'
+    J = Tensor(config=cfg, s=(-1, 1), dtype=dtype)
     for t, val in Js.items():
         J.set_block(ts=(t, t), Ds=(1, len(val)), val=val)
 
     M = Mpo(I.N)
     for n in I.sweep():
         mH1 = mH[:, 0]
-        mH, uind = np.unique(mH[:, 1:], axis=0, return_inverse=True)
-        leg2 = Leg()
-        legs = [J.get_legs(axes=0), bbasis[n].get_legs(axes=0).conj(), leg2]
-        nJ = zeros(config=H1s[0][0].config, legs=legs)
+        mH, rind, iind = np.unique(mH[:, 1:], axis=0, return_index=True, return_inverse=True)
+
+        i2bs = {t: {} for t in t2bs[n]}
+        for ii, rr in enumerate(rind):
+            i2bs[t2bs[n][mH1[rr]]][ii] = len(i2bs[t2bs[n][mH1[rr]]])
+
+        i1bs = {t: 0 for t in t1bs[n]}
+        for ii, rr in enumerate(mH1):
+            i1bs[t1bs[n][rr]] += 1
+
+        leg1 = Leg(cfg, s=-1, t=list(i1bs.keys()), D=list(i1bs.values()))
+        leg2 = bbasis[n].get_legs(axes=0).conj()
+        leg3 = Leg(cfg, s=1, t=list(i2bs.keys()), D=[len(x) for x in i2bs.values()])
+        tran = zeros(config=cfg, legs=[leg1, leg2, leg3])
+
+        li = {x: -1 for x in t1bs[n]}
+        for bl, br in zip(mH1, iind):
+            lt = t1bs[n][bl]
+            li[lt] += 1
+            ft = tfbs[n][bl]
+            fi = ifbs[n][bl]
+            rt = t2bs[n][bl]
+            ri = i2bs[rt][br]
+            tran[lt + ft + rt][li[lt], fi, ri] += 1
+
+        nJ = J @ tran
+        # for bl, br in zip(mH1, iind):
+        #     lt = t1bs[n][bl]
+        #     li[lt] += 1
+        #     ft = tfbs[n][bl]
+        #     fi = ifbs[n][bl]
+        #     rt = t2bs[n][bl]
+        #     ri = i2bs[rt][br]
+        #     nJ[lt + ft + rt][:, fi, ri] += J[lt + lt][:, li[lt]]
+        if n < I.last:
+            nJ, S, V = svd_with_truncation(nJ, axes=((0, 1), 2), sU=1, **opts)
+            J = S @ V
+        M[n] = ncon([nJ, bbasis[n]], [[0, 1, -2], [1, -1, -3]])
     return M
 
 
-def generate_mpo(I, terms, opts=None, packet=50):  # can use better algorithm to compress
+def generate_mpo2(I, terms, opts=None, packet=50):  # can use better algorithm to compress
     r"""
     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
 
