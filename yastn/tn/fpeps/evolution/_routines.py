@@ -18,27 +18,22 @@ def evol_machine(peps, gate, truncation_mode, step, env_type, opts_svd=None):
 
     Parameters
     ----------
-        peps            : class Peps
-
+        peps            : class Lattice
         gate            : A Gate object representing the nearest-neighbor gate to apply.
-
         truncation_mode : str
                         The mode to use for truncation of the environment tensors. Can be 
                         'normal' or 'optimal'.
-
         step            : str
                         The optimization step to perform. Can be 'svd-update', 'one-step', or 'two-step'.
-
         env_type        : str
                         The type of environment to use for optimization. Can be 'NTU' (neighborhood tensor update),
                           'FU'(full update - to be added).
-
         opts_svd        : dict, optional 
                         A dictionary with options for the SVD truncation. Default is None.
 
     Returns
     -------
-        peps : The optimized PEPS tensor.
+        peps : The optimized PEPS tensor (yastn.fpeps.Lattice).
         info : dict
              A dictionary with information about the optimization. Contains the following keys:
              - 'svd_error': The SVD truncation error.
@@ -181,8 +176,8 @@ def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mod
 
     Returns
     -------
-    MA, MB: truncated pair of tensors before alternate least square optimization
-    svd_error: here just implies the error incurred for the initial truncation 
+        MA, MB: truncated pair of tensors before alternate least square optimization
+        svd_error: here just implies the error incurred for the initial truncation 
                before the optimization
     """
     
@@ -217,7 +212,7 @@ def optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB):
 
     """ function for choosing the optimal initial cutoff for the inverse which gives the least svd_error """
 
-    cutoff_list = [10**n for n in range(-14, -10)]
+    cutoff_list = [10**n for n in [-12,-8,-4]]
     results = []
     for c_off in cutoff_list:
         XL_inv, XR_inv = tensordot(UL.conj(), SL.sqrt().reciprocal(cutoff=c_off), axes=(0, 0)), tensordot(SR.sqrt().reciprocal(cutoff=c_off), UR.conj(), axes=(1, 1)) 
@@ -230,6 +225,7 @@ def optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB):
         svd_error = abs((gMM + gRR - gMR - gMR.conjugate()) / gRR)
         results.append((svd_error, c_off, MA, MB))
     svd_error, c_off, MA, MB = min(results, key=lambda x: x[0])
+
     return MA, MB, svd_error, c_off
 
 
@@ -313,7 +309,7 @@ def optimal_pinv(gg, J, gRR):
     assert (gg - gg.conj().transpose(axes=(1, 0))).norm() < 1e-12 * gg.norm()
     S, U = eigh_with_truncation(gg, axes=(0, 1), tol=1e-14)
     UdJ = tensordot(J, U, axes=(0, 0), conj=(0, 1))
-    cutoff_list = [10**n for n in range(-14, -10)]
+    cutoff_list = [10**n for n in [-12,-8,-4]]
     results = []
     for c_off in cutoff_list:
         Sd = S.reciprocal(cutoff=c_off)

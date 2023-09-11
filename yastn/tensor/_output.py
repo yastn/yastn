@@ -74,7 +74,7 @@ def compress_to_1d(a, meta=None):
 
     .. note::
         :meth:`yastn.Tensor.compress_to_1d` and :meth:`yastn.Tensor.decompress_from_1d`
-        provide mechanism that allows using matrix-free methods, such as eigs implemented in scipy.
+        provide mechanism that allows using external matrix-free methods, such as eigs implemented in scipy.
 
     Returns
     -------
@@ -143,8 +143,8 @@ def show_properties(a):
         * number of non-empty blocks
         * total number of elements across all non-empty blocks
         * fusion tree for each leg
-        * fusion history with `o` indicating original legs, `m` meta-fusion,
-          `p` hard-fusion (product), `s` blocking (sum).
+        * fusion history with 'o' indicating original legs, 'm' meta-fusion,
+          'p' hard-fusion (product), 's' blocking (sum).
     """
     print("Symmetry     :", a.config.sym.SYM_ID)
     print("signature    :", a.struct.s)  # signature
@@ -172,10 +172,11 @@ def __str__(a):
 
 def requires_grad(a):
     """
+    Return ``True`` if tensor data have autograd enabled
+
     Returns
     -------
-    bool : bool
-            ``True`` if any of the blocks of the tensor has autograd enabled
+    bool
     """
     return a.config.backend.requires_grad(a._data)
 
@@ -190,63 +191,72 @@ def print_blocks_shape(a):
 
 def is_complex(a):
     """
+    Return ``True`` if tensor data are complex
+
     Returns
     -------
-    bool : bool
-        ``True`` if all of the blocks of the tensor are complex
+    bool
     """
     return a.config.backend.is_complex(a._data)
 
 
 def get_tensor_charge(a):
     """
+    Return :attr:`yastn.Tensor.n`
+
     Returns
     -------
     int or tuple[int]
-        see :attr:`yastn.Tensor.n`
     """
     return a.struct.n
 
 
 def get_signature(a, native=False):
     """
+    Return tensor signature, equivalent to :attr:`yastn.Tensor.s`.
+
+    If native, returns the signature of tensors's native legs, see :attr:`yastn.Tensor.s_n`.
+
     Returns
     -------
     tuple[int]
-        Tensor signature, equivalent to :attr:`yastn.Tensor.s`.
-        If native, returns the signature of tensors's native legs, see :attr:`yastn.Tensor.s_n`.
     """
     return a.s_n if native else a.s
 
 
 def get_rank(a, native=False):
     """
+    Return tensor rank equivalent to :attr:`yastn.Tensor.ndim`.
+
+    If native, the native rank of the tensor is returned, see :attr:`yastn.Tensor.ndim_n`.
+
     Returns
     -------
     int
-        Tensor rank equivalent to :attr:`yastn.Tensor.ndim`.
-        If native, the native rank of the tensor is returned, see :attr:`yastn.Tensor.ndim_n`.
     """
     return a.ndim_n if native else a.ndim
 
 
 def get_blocks_charge(a):
     """
+    Return Charges of all native blocks.
+
+    In case of product of abelian symmetries, for each block the individual symmetry charges are flattened into a single tuple.
+
     Returns
     -------
-    t : tuple(tuple(int))
-        Charges of all native blocks. In case of product of abelian symmetries,
-        for each block the individual symmetry charges are flattened into a single tuple.
+    tuple(tuple(int))
     """
     return a.struct.t
 
 
 def get_blocks_shape(a):
     """
+    Shapes of all native blocks.
+
     Returns
     -------
-    D : tuple(tuple(int))
-        Shapes of all native blocks.
+    tuple(tuple(int))
     """
     return a.struct.D
 
@@ -262,8 +272,7 @@ def get_shape(a, axes=None, native=False):
 
     Returns
     -------
-    shape : int or tuple[int]
-        effective bond dimensions of legs specified by axes
+    int or tuple[int]
     """
     if axes is None:
         axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
@@ -275,7 +284,7 @@ def get_shape(a, axes=None, native=False):
 def get_dtype(a):
     """
     Returns data ``dtype``.
-    
+
     Returns
     -------
     dtype
@@ -448,7 +457,7 @@ def to_dense(a, legs=None, native=False, reverse=False):
         under legs's index into dictionary.
 
     native: bool
-        output native tensor (ignoring fusion of legs).
+        output native tensor (ignoring meta-fusion of legs).
 
     reverse: bool
         reverse the order in which blocks are sorted. Default order is ascending in

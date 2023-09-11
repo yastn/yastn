@@ -17,8 +17,8 @@ class ctm_window(NamedTuple):
 
 class CtmEnv(Lattice):
     r""" Geometric information about the lattice provided to ctm tensors """
-    def __init__(self, psi):
-        super().__init__(lattice=psi.lattice, dims=psi.dims, boundary=psi.boundary)
+    def __init__(self, peps):
+        super().__init__(lattice=peps.lattice, dims=peps.dims, boundary=peps.boundary)
 
         if self.lattice == 'checkerboard':
             windows = (ctm_window(nw=(0, 0), ne=(0, 1), sw=(0, 1), se=(0, 0)),
@@ -41,19 +41,6 @@ class CtmEnv(Lattice):
 
     def tensors_CtmEnv(self):
         return self._windows
-
-
-class Proj(Lattice):
-    r""" Geometric information about the lattice provided to projectors """
-
-    def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
-        super().__init__(lattice=lattice, dims=dims, boundary=boundary)
-
-    def copy(self):
-        proj_new = Proj(lattice=self.lattice, dims=self.dims, boundary=self.boundary)
-        proj_new._data = {k : v.copy() for k, v in self._data.items()}
-        return proj_new
-
 
 @dataclass()
 class Local_Projector_Env(): # no more variables than the one given 

@@ -2,7 +2,6 @@ import logging
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps import initialize_vacuum
 from yastn.tn.fpeps.operators.gates import match_ancilla_1s, match_ancilla_2s
 
 try:
@@ -13,16 +12,28 @@ except ImportError:
 def test_match_ancilla():
     """ initialize vacuum state and check the functions match_ancilla_1s and match_ancilla_2s """
 
-    net = fpeps.Lattice(lattice='rectangle',dims=(3,3),boundary='finite')  
+    net = fpeps.Lattice(lattice='square',dims=(3,3),boundary='obc')  
     opt = yastn.operators.SpinfulFermions(sym='U1xU1xZ2',backend=config_U1xU1_R_fermionic.backend,default_device=config_U1xU1_R_fermionic.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
-    psi = initialize_vacuum(fid, net)   # initializing vacuum state; has no ancilla (so 5 legs when unfused : t l b r s)
 
-    for ms in psi.sites():
-        assert(psi[ms].unfuse_legs(axes=(0, 1, 2)).ndim==5)
+    # initialize vacuum state peps with lattice specifications
+    A = yastn.Leg(fid.config, t= ((0,0,0),), D=((1),))
+    A = yastn.ones(fid.config, legs=[A])
+    for s in (-1, 1, 1, -1):
+        A = A.add_leg(axis=0, s=s)
+
+    A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
+    peps = fpeps.Lattice(net.lattice, net.dims, net.boundary)
+
+    for ms in net.sites():
+        peps[ms] = A
+    ################################################################
+
+    for ms in peps.sites():
+        assert(peps[ms].unfuse_legs(axes=(0, 1, 2)).ndim==5)  # asserting each peps tensor has 5 legs in its unfused form
  
-    cdag_up = match_ancilla_1s(fcdag_up, psi[0,0]) # creation operator of up polarization; adds ancilla index when operated on vacuum
-    cdag_dn = match_ancilla_1s(fcdag_dn, psi[0,0]) # creation operator of down polarization; adds ancilla index when operated on vacuum
+    cdag_up = match_ancilla_1s(fcdag_up, peps[0,0]) # creation operator of up polarization; adds ancilla index when operated on vacuum
+    cdag_dn = match_ancilla_1s(fcdag_dn, peps[0,0]) # creation operator of down polarization; adds ancilla index when operated on vacuum
 
     ############ next we add creation operators of alternate (up and down) polarizations to alternate lattice sites
     ############ in a checkerboard fashion to create a Néel state; this also adds ancilla to each lattice site to preserve parity
@@ -31,18 +42,18 @@ def test_match_ancilla():
     i=0
     for x in range(net.Nx):
         for y in range(net.Ny)[::2]:
-            psi[x, y] = yastn.tensordot(psi[x,y], m[i], axes=(2,1))  # spin-up polarization
+            peps[x, y] = yastn.tensordot(peps[x,y], m[i], axes=(2,1))  # spin-up polarization
         for y in range(net.Ny)[1::2]:
-            psi[x, y] = yastn.tensordot(psi[x,y], m[(i+1)%2], axes=(2,1)) # spin-down polarization
+            peps[x, y] = yastn.tensordot(peps[x,y], m[(i+1)%2], axes=(2,1)) # spin-down polarization
         i = (i+1)%2
 
     ######## check if all sites have ancilla leg by asserting their unfused forms have dimension 6
-    for ms in psi.sites():
-        assert(psi[ms].unfuse_legs(axes=(0, 1, 2)).ndim==6)
+    for ms in peps.sites():
+        assert(peps[ms].unfuse_legs(axes=(0, 1, 2)).ndim==6)
 
     ###### now we check what happens if we apply an annihilation operator of the same polarization 
     #######  as is present at say the first site (1,1). It should create a hole there.
-    G_before = psi[0,0]
+    G_before = peps[0,0]
     an_loc_up = match_ancilla_1s(fc_up, G_before) # creating a local annihilation operator for application at the first site
     G_after = yastn.tensordot(G_before, an_loc_up, axes=(2, 1))
     assert(list(G_before.unfuse_legs(axes=2).get_leg_structure(axis=2).keys())==[(1,0,1)]) # checks if the spin leg has charge corresponding to spin-up
@@ -51,7 +62,7 @@ def test_match_ancilla():
 
     ###### if we apply a an annihilation operator of the opposite polarization 
     #######  at the same site, the site should vanish.
-    G_before = psi[0,0]
+    G_before = peps[0,0]
     an_loc_dn = match_ancilla_1s(fc_dn, G_before) # creating a local annihilation operator for application at the first site
     G_after = yastn.tensordot(G_before, an_loc_dn, axes=(2, 1))
     assert(list(G_before.unfuse_legs(axes=2).get_leg_structure(axis=2).keys())==[(1,0,1)]) # checks if the spin leg has charge corresponding to spin-up
@@ -59,7 +70,7 @@ def test_match_ancilla():
 
     ###### if we apply a creation operator of the opposite polarization 
     #######  at the same site, then there would be double occupancy
-    G_before = psi[0,0]
+    G_before = peps[0,0]
     cr_loc_dn = match_ancilla_1s(fcdag_dn, G_before) # creating a local annihilation operator for application at the first site
     G_after = yastn.tensordot(G_before, cr_loc_dn, axes=(2, 1))
     assert(list(G_before.unfuse_legs(axes=2).get_leg_structure(axis=2).keys())==[(1,0,1)]) # checks if the spin leg has charge corresponding to spin-up
@@ -70,8 +81,8 @@ def test_match_ancilla():
     c1 = fc_up.add_leg(s=1).swap_gate(axes=(1, 2))
     c2dag = fcdag_up.add_leg(s=-1)
     cc =  yastn.ncon([c1, c2dag], ((-0, -1, 1) , (-2, -3, 1)))
-    A = psi[1,1]
-    B = psi[1,2]
+    A = peps[1,1]
+    B = peps[1,2]
     U, S, V = yastn.svd_with_truncation(cc, axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15, Vaxis=2)
     S = S.sqrt()
     GA = S.broadcast(U, axes=2)

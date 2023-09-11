@@ -1,3 +1,4 @@
+""" Parent class for defining symmetry rules"""
 class sym_meta(type):
     def __str__(cls):
         return cls.SYM_ID
@@ -23,17 +24,17 @@ class sym_abelian(metaclass=sym_meta):
 
         Parameters
         ----------
-            charges: numpy.ndarray
+            charges: numpy.ndarray(int)
                 rank-3 integer tensor with shape (k, n, NSYM)
 
-            signatures: numpy.ndarray
-                integer vector with `n` +1 or -1 elements
+            signatures: numpy.ndarray(int)
+                vector with `n` elements in `{+1, -1}`
 
             new_signature: int
 
         Returns
         -------
-            teff: numpy.ndarray
-                integer matrix with shape (k,NSYM) of fused charges and multiplied by ``new_signature``
+            numpy.ndarray(int)
+                integer matrix with shape (k,NSYM) of fused charges; includes multiplication by ``new_signature``
         """
         raise NotImplementedError("Subclasses need to override the fuse function")  # pragma: no cover
