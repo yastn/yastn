@@ -18,7 +18,7 @@ class sym_Z3(sym_abelian):
             charges: nparray(int)
                 k x number_legs x nsym matrix, where k is the number of independent blocks.
 
-            signatures: nparray(ind)
+            signatures: nparray(int)
                 vector with number_legs elements
 
             new_signature: int
@@ -26,6 +26,6 @@ class sym_Z3(sym_abelian):
         Returns
         -------
             teff: nparray(int)
-                matrix of effective fused charges of size k x nsym for new signature
+                integer matrix with shape (k,NSYM) of fused charges; includes multiplication by ``new_signature``
         """
         return np.mod(new_signature * (charges.swapaxes(1, 2) @ signatures), 3)

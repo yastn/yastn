@@ -2,8 +2,6 @@
 from itertools import product
 from typing import NamedTuple
 from ...tn.mps import Mps, Mpo
-from ._doublePepsTensor import DoublePepsTensor
-from ... import tensor, initialize
 
 class Bond(NamedTuple):
     """ A bond between two lattice sites. site_0 should be before site_1 in the fermionic order. """
@@ -20,20 +18,20 @@ class Lattice():
 
         Parameters
         ----------
-        lattice : str
-            'square' or 'checkerboard'
-        dims : tuple(int)
-            Size of elementary cell.
-            For 'checkerboard' it is always (2, 2)
-        boundary : str
-            'finite' or 'infinite'
+            lattice : str
+                'square' or 'checkerboard'
+            dims : tuple(int)
+                Size of elementary cell.
+                For 'checkerboard' it is always (2, 2)
+            boundary : str
+                'obc' or 'infinite'
 
         Notes
         -----
             Site (0, 0) corresponds to top-left corner of the lattice
         """
-        assert lattice in ('checkerboard', 'rectangle'), "lattice should be 'checkerboard' or 'rectangle' or ''"
-        assert boundary in ('finite', 'infinite'), "boundary should be 'finite' or 'infinite'"
+        assert lattice in ('checkerboard', 'square'), "lattice should be 'checkerboard' or 'square' or ''"
+        assert boundary in ('obc', 'infinite'), "boundary should be 'obc' or 'infinite'"
         self.lattice = lattice
         self.boundary = boundary
         self.Nx, self.Ny = (2, 2) if lattice == 'checkerboard' else dims
@@ -69,7 +67,7 @@ class Lattice():
     def site2index(self, site):
         """ Tensor index depending on site """
         assert site in self._sites, "wrong index of site"
-        return site if self.lattice == 'rectangle' else sum(site) % 2
+        return site if self.lattice == 'square' else sum(site) % 2
 
     @property
     def dims(self):
@@ -80,7 +78,7 @@ class Lattice():
         """ Labels of the lattice sites """
         return self._sites[::-1] if reverse else self._sites
 
-    def bonds(self, dirn=None, reverse=False):
+    def nn_bonds(self, dirn=None, reverse=False):
         """ Labels of the links between sites """
 
         bnds = self._bonds[::-1] if reverse else self._bonds
@@ -96,26 +94,16 @@ class Lattice():
         x, y = site
         dx, dy = self._dir[d]
         x, y = x + dx, y + dy
-        if self.boundary == 'finite' and (x < 0 or x >= self.Nx or y < 0 or y >= self.Ny):
+        if self.boundary == 'obc' and (x < 0 or x >= self.Nx or y < 0 or y >= self.Ny):
             return None
         return (x % self.Nx, y % self.Ny)
 
     def tensors_NtuEnv(self, bds):
-        r""" Returns the cluster of sites around the bond to be updated by NTU optimization 
-
-        Parameters
-        ----------
-        bds: NamedTuple Bond
-
-        Returns
-        -------
-        neighbors : dict
-                  A dictionary containing the neighboring sites of the bond `bds`.
+        r""" Returns a dictionary containing the neighboring sites of the bond `bds`.
                   The keys of the dictionary are the direction of the neighboring site with respect to
                   the bond: 'tl' (top left), 't' (top), 'tr' (top right), 'l' (left), 'r' (right),
-                  'bl' (bottom left), and 'b' (bottom).
-        """
-        
+                  'bl' (bottom left), and 'b' (bottom)"""
+                          
         neighbors = {}
         site_1, site_2 = bds.site_0, bds.site_1
         if self.lattice == 'checkerboard':
@@ -136,101 +124,6 @@ class Lattice():
         return neighbors
 
 
-class Peps(Lattice):
-    r""" 
-    Inherits Lattice Class and manages Peps data with additional functionalities.
-
-    Parameters:
-    -----------
-    lattice : str, optional
-        Name of the lattice ('checkerboard' by default).
-    dims : tuple of int, optional
-        Dimensions of each PEPS tensor (2,2) by default.
-    boundary : str, optional
-        Type of boundary ('infinite' by default).
-
-    Methods:
-    --------
-    mpo(index, index_type, rotation='')
-        Converts a specific row or column of PEPS into a matrix product operator (MPO).
-    boundary_mps(rotation='')
-        Initiates a boundary matrix product state (MPS) at the rightmost column.
-
-    Inherits the methods from the Lattice class.
-
-    """
-    
-    def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
-        super().__init__(lattice=lattice, dims=dims, boundary=boundary)
-
-
-    def mpo(self, index, index_type, rotation=''):
-
-        """Converts a specific row or column of PEPS into MPO.
-
-        Parameters
-        ----------
-            index (int): The row or column index to convert.
-            index_type (str): The index type to convert, either 'row' or 'column'.
-            rotation (str): Optional string indicating the rotation of the PEPS tensor.
-
-        Returns
-        -------
-            H (Mpo): The resulting MPO.
-        """
-
-        if index_type == 'row':
-            nx = index
-            H = Mpo(N=self.Ny)
-            for ny in range(self.Ny):
-                site = (nx, ny)
-                top = self[site]
-                if top.ndim == 3:
-                    top = top.unfuse_legs(axes=(0, 1))
-                btm = top.swap_gate(axes=(0, 1, 2, 3))
-                H.A[ny] = DoublePepsTensor(top=top, btm=btm)
-        elif index_type == 'column':
-            ny = index
-            H = Mpo(N=self.Nx)
-            for nx in range(self.Nx):
-                site = (nx, ny)
-                top = self[site]
-                if top.ndim == 3:
-                    top = top.unfuse_legs(axes=(0, 1))
-                btm = top.swap_gate(axes=(0, 1, 2, 3))
-                H.A[nx] = DoublePepsTensor(top=top, btm=btm)
-
-        return H
-
-    def boundary_mps(self, rotation=''):
-
-        r"""Initiates a boundary MPS at the right most column.
-
-        Parameters
-        ----------
-            rotation (str): Optional string indicating the rotation of the PEPS tensor.
-
-        Returns
-        -------
-            psi (Mps): The resulting boundary MPS.
-        """
-        psi = Mps(N=self.Nx)
-        cfg = self._data[(0, 0)].config
-        n0 = (0,) * cfg.sym.NSYM
-        leg0 = tensor.Leg(cfg, s=-1, t=(n0,), D=(1,))
-        for nx in range(self.Nx):
-            site = (nx, self.Ny-1)
-            A = self[site]
-            if A.ndim == 3:
-                legA = A.get_legs(axes=1)
-                _, legA = tensor.leg_undo_product(legA)
-            else:
-                legA = A.get_legs(axes=3)
-            legAAb = tensor.leg_outer_product(legA, legA.conj())
-            psi[nx] = initialize.ones(config=cfg, legs=[leg0, legAAb.conj(), leg0.conj()])
-
-        return psi 
 
 
  
-

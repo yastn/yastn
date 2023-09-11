@@ -3,11 +3,11 @@ from ..tensor import YastnError, Tensor
 from ._meta_operators import meta_operators
 
 class Spin12(meta_operators):
-    # Predefined set of Pauli operators and spin-1/2 operators. 
+    # Predefined set of Pauli operators and spin-1/2 operators.
     def __init__(self, sym='dense', **kwargs):
         r"""
-        A set of standard operators for 2-dimensional Hilbert space. Defines identity, 
-        :math:`S^z,\ S^x,\ S^y` operators and :math:`S^+,\ S^-` raising and lowering operators,  
+        A set of standard operators for 2-dimensional Hilbert space. Defines identity,
+        :math:`S^z,\ S^x,\ S^y` operators and :math:`S^+,\ S^-` raising and lowering operators,
         and Pauli matrices (if allowed by symmetry).
 
         Parameters
@@ -24,7 +24,7 @@ class Spin12(meta_operators):
 
             * For :code:`sym='dense'`, the basis order is (z=+1, z=-1).
             * For :code:`sym='Z2'`, charge t=0 -> z=1, t=1 -> z=-1; i.e., :math:`z = e^{i \pi t}`.
-            * For :code:`sym='U1'`, charge t=-1 -> z=-1, t=1 -> z=1; i.e., z = t
+            * For :code:`sym='U1'`, charge t=-1 -> z=-1, t=1 -> z=1; i.e., z = t.
 
         Default configuration sets :code:`fermionic` to :code:`False`.
 
