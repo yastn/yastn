@@ -60,7 +60,7 @@ class SpinfulFermions(meta_operators):
 
     def n(self, spin='u'):
         """ Particle number operator, with spin='u' for spin-up, and 'd' for spin-down. """
-        return self.cp(spin=spin) @ self.c(spin=spin)
+        return (self.cp(spin=spin) @ self.c(spin=spin)).remove_zero_blocks()
 
     def cp(self, spin='u'):
         """ Creation operator, with spin='u' for spin-up, and 'd' for spin-down. """

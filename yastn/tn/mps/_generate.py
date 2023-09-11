@@ -1,6 +1,6 @@
 import numpy as np
 from typing import NamedTuple
-from ... import ones, rand, ncon, Leg, random_leg, YastnError
+from ... import ones, rand, zeros, ncon, Leg, random_leg, YastnError, Tensor, block
 from ...operators import Qdit
 from ._mps import Mpo, Mps, add
 from ._latex2term import latex2term, GeneratorError
@@ -30,7 +30,7 @@ class Hterm(NamedTuple):
     operators : tuple = ()
 
 
-def generate_single_mpo(I, term):   # this can be private
+def generate_single_mpo(I, term, amplitude=True):
     r"""
     Apply local operators specified by term in :class:`Hterm` to the MPO `I`.
 
@@ -61,8 +61,63 @@ def generate_single_mpo(I, term):   # this can be private
             single_mpo[n] = temp.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
     for n in single_mpo.sweep():
         single_mpo[n] = single_mpo[n].drop_leg_history(axes=(0, 2))
-    single_mpo[0] = term.amplitude * single_mpo[0]
+    if amplitude:
+        single_mpo[0] = term.amplitude * single_mpo[0]
     return single_mpo
+
+
+def generate_mpo2(I, terms, opts=None):
+    r"""
+    Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
+
+
+    Parameters
+    ----------
+    term: list of :class:`Hterm`
+        product operators making up the MPO
+    I: yastn.Tensor
+        on-site identity operator
+    opts: dict
+        options for truncation of the result
+
+    Returns
+    -------
+    yastn.tn.mps.MpsMpo
+    """
+    H1s = [generate_single_mpo(I, term, amplitude=False) for term in terms]
+    mH = np.zeros((len(H1s), I.N), dtype=int)
+    basis, bbasis, t2bs, tfbs = {}, {}, {}, {}
+    for n in I.sweep():
+        base = []
+        for m, H1 in enumerate(H1s):
+            ind = next((ind for ind, v in enumerate(base) if (v - H1[n]).norm() < 1e-13), None)
+            if ind is None:
+                ind = len(base)
+                base.append(H1[n])
+            mH[m, n] = ind
+        t2bs[n] = [ten.get_legs(axes=2).t[0] for ten in base]
+        basis[n] = [ten.fuse_legs(axes=((0, 2), 1, 3)).drop_leg_history() for ten in base]
+        bbasis[n] = block(dict(enumerate(basis[n])), common_legs=(1, 2)).drop_leg_history()
+        tfbs[n] = [ten.get_legs(axes=0).t[0] for ten in basis[n]]
+    Js = {}
+    for a, H1 in zip(terms, H1s):
+        t = H1[0].get_legs(axes=0).t[0]
+        if t in Js:
+            Js[t].append(a.amplitude)
+        else:
+            Js[t] = [a.amplitude]
+    J = Tensor(config=H1s[0][0].config, s=(-1, 1))
+    for t, val in Js.items():
+        J.set_block(ts=(t, t), Ds=(1, len(val)), val=val)
+
+    M = Mpo(I.N)
+    for n in I.sweep():
+        mH1 = mH[:, 0]
+        mH, uind = np.unique(mH[:, 1:], axis=0, return_inverse=True)
+        leg2 = Leg()
+        legs = [J.get_legs(axes=0), bbasis[n].get_legs(axes=0).conj(), leg2]
+        nJ = zeros(config=H1s[0][0].config, legs=legs)
+    return M
 
 
 def generate_mpo(I, terms, opts=None, packet=50):  # can use better algorithm to compress

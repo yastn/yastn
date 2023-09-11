@@ -22,15 +22,15 @@ def mpo_nn_hopping_manually(N=10, t=1.0, mu=0.0, config=None):
     """
     #
     # Build empty MPO for system of N sites
-    # 
+    #
     H = mps.Mpo(N)
     #
     # Depending on the symmetry, define elements of on-site tensor
     #
     # We chose signature convention for indices of the MPO tensor as follows
-    #          | 
+    #          |
     #          V(-1)
-    #          | 
+    #          |
     # (-1) ->-|T|->-(+1)
     #          |
     #          V(+1)
@@ -150,6 +150,7 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
     # Generate MPO for Hterms
     #
     H = mps.generate_mpo(I, Hterms, opts={'tol':1e-14})
+    H2, k2 = mps.generate_mpo2(I, Hterms, opts={'tol':1e-14})
     return H
 
 
@@ -360,7 +361,7 @@ def test_mpo_from_templete():
             man_input.append(\
                 mps.single_term((('A',n0,n1), ('cp',n0), ('c',n1),)))
     h_man = generate.mpo_from_templete(man_input, eparam)
-    
+
     # test the result by comparing expectation value for a steady state.
     # use random seed to generate mps
     generate.random_seed(seed=0)

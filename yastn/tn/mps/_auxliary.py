@@ -1,4 +1,4 @@
-""" Mps structure and its basic """
+""" Mps structure and its basics. """
 from ... import initialize, YastnError
 from ._mps import MpsMpo
 
@@ -46,7 +46,7 @@ def load_from_hdf5(config, file, my_address):
     Returns
     -------
     yastn.tn.mps.MpsMpo
-    """    
+    """
     sym_id = file[my_address].get('sym/SYM_ID')[()]
     nsym = file[my_address].get('sym/NSYM')[()]
     if not sym_id.decode('ascii') == config.sym.SYM_ID or not nsym == config.sym.NSYM:
