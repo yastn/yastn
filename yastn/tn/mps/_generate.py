@@ -159,45 +159,45 @@ def generate_mpo(I, terms, opts=None):
     return M
 
 
-def generate_mpo2(I, terms, opts=None, packet=50):  # can use better algorithm to compress
-    r"""
-    Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
+# def generate_mpo2(I, terms, opts=None, packet=50):  # can use better algorithm to compress
+#     r"""
+#     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
 
-    If the number of MPOs is large, adding them all together can result
-    in large intermediate MPO. By specifying `packet` size, the groups of MPO-s
-    are truncated at intermediate steps before continuing with summation.
+#     If the number of MPOs is large, adding them all together can result
+#     in large intermediate MPO. By specifying `packet` size, the groups of MPO-s
+#     are truncated at intermediate steps before continuing with summation.
 
-    Parameters
-    ----------
-    term: list of :class:`Hterm`
-        product operators making up the MPO
-    I: yastn.Tensor
-        on-site identity operator
-    opts: dict
-        options for truncation of the result
-    packet: int
-        how many ``Hterm``\s (MPOs of bond dimension 1) should be truncated at once
+#     Parameters
+#     ----------
+#     term: list of :class:`Hterm`
+#         product operators making up the MPO
+#     I: yastn.Tensor
+#         on-site identity operator
+#     opts: dict
+#         options for truncation of the result
+#     packet: int
+#         how many ``Hterm``\s (MPOs of bond dimension 1) should be truncated at once
 
-    Returns
-    -------
-    yastn.tn.mps.MpsMpo
-    """
-    ip, M_tot, Nterms = 0, None, len(terms)
-    if opts is None:
-        opts={'tol': 5e-15}
-    while ip < Nterms:
-        H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
-        M = add(*H1s)
-        M.canonize_(to='last', normalize=False)
-        M.truncate_(to='first', opts_svd=opts, normalize=False)
-        ip += packet
-        if not M_tot:
-            M_tot = M.copy()
-        else:
-            M_tot = M_tot + M
-            M_tot.canonize_(to='last', normalize=False)
-            M_tot.truncate_(to='first', opts_svd=opts, normalize=False)
-    return M_tot
+#     Returns
+#     -------
+#     yastn.tn.mps.MpsMpo
+#     """
+#     ip, M_tot, Nterms = 0, None, len(terms)
+#     if opts is None:
+#         opts={'tol': 5e-15}
+#     while ip < Nterms:
+#         H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
+#         M = add(*H1s)
+#         M.canonize_(to='last', normalize=False)
+#         M.truncate_(to='first', opts_svd=opts, normalize=False)
+#         ip += packet
+#         if not M_tot:
+#             M_tot = M.copy()
+#         else:
+#             M_tot = M_tot + M
+#             M_tot.canonize_(to='last', normalize=False)
+#             M_tot.truncate_(to='first', opts_svd=opts, normalize=False)
+#     return M_tot
 
 def generate_single_mps(term, N):  # obsolate - DELETE  (not docummented)
     r"""
