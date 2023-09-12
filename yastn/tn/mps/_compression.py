@@ -23,17 +23,17 @@ def compression_(psi, target, method='1site',
 
     The outer loop sweeps over ``psi`` updating sites from the first site to last and back.
     Convergence can be controlled based on overlap and/or Schmidt values (which is a more sensitive measure).
-    The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided, it terminates earlier 
+    The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided, it terminates earlier
     if the convergence criteria are satisfied: change in overlap or Schmidt values is less then the provided tolerance during a single sweep.
 
-    Works for 
+    Works for
 
         * optimization against provided MPS: ``target`` is ``Mps`` or list ``[Mps,]``
         * against MPO acting on MPS: ``target`` is a list ``[Mpo, Mps]``.
         * against MPO (replacing all Mps's above with Mpo's), i.e., ``[Mpo,]`` or ``[Mpo, Mpo]``
         * sum of MPS's: target is ``[[Mps],[Mps],...]``
         * sum of MPO's acting on MPS's: target is ``[[Mpo,Mps], [Mpo,Mps], ...]``
- 
+
     Outputs generator if :code:`iterator_step` is given.
     Generator allows inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
 
@@ -227,7 +227,10 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
 
 
 def zipper(a, b, opts=None):
-    "Apply MPO a on MPS/MPS b, performing svd compression during the sweep."
+    """
+    Apply MPO a on MPS/MPS b, performing svd compression during the sweep.
+
+    """
 
     psi = b.shallow_copy()
     psi.canonize_(to='last')
@@ -242,7 +245,7 @@ def zipper(a, b, opts=None):
 
     for n in psi.sweep(to='first'):
         tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
-        
+
         if psi.nr_phys == 2:
             tmp = tmp.fuse_legs(axes=(0, 1, 3, (4, 2)))
         tmp = a[n]._attach_23(tmp)

@@ -20,12 +20,25 @@ tol = 1e-10
 def correlation_matrix(psi, gen):
     """ Calculate correlation matrix for Mps psi  C[m,n] = <c_n^dag c_m>"""
     assert pytest.approx(psi.norm().item(), rel=tol) == 1
+
+    # first approach: directly act with c operators on state psi
     cns = [mps.generate_mpo(gen.I(), [mps.Hterm(1, [n], [gen._ops.c()])]) for n in range(gen.N)]
     ps = [cn @ psi for cn in cns]
     C = np.zeros((gen.N, gen.N), dtype=np.complex128)
     for m in range(gen.N):
         for n in range(gen.N):
             C[m, n] = mps.vdot(ps[n], ps[m])
+
+    # second approach: use measure_1site() and measure_2site()
+    occs = mps.measure_1site(psi, gen._ops.n(), psi)
+    cpc = mps.measure_2site(psi, gen._ops.cp(), gen._ops.c(), psi)
+    C2 = np.zeros((gen.N, gen.N), dtype=np.complex128)
+    for n, v in occs.items():
+        C2[n, n] = v
+    for (n1, n2), v in cpc.items():
+        C2[n2, n1] = v
+        C2[n1, n2] = v.conj()
+    assert np.allclose(C, C2)
     return C
 
 
@@ -65,9 +78,9 @@ def test_tdvp_hermitian():
     #
     # run time evolution; calculate correlation matrix at 2 snapshots
     times = (0, 0.25, 0.6)
-    # parameters for expmv in tdvp_, 
+    # parameters for expmv in tdvp_,
     # 'ncv' is an initial guess for the size of Krylov space. It gets updated at each site/bond during evolution.
-    opts_expmv = {'hermitian': True, 'ncv': 5, 'tol': 1e-12} 
+    opts_expmv = {'hermitian': True, 'ncv': 5, 'tol': 1e-12}
     for method in ('1site', '2site', '12site'):  # test various methods
         psi1 = psi.shallow_copy()  # shallow_copy is sufficient to retain initial state
         for step in mps.tdvp_(psi1, H1, times=times, method=method, dt=0.125, opts_svd=opts_svd, opts_expmv=opts_expmv):
@@ -102,7 +115,7 @@ def test_tdvp_time_dependent():
     # analytical reference expectation values measured at g = 1 and g = 0 (for tauQ = 1, gi = 2 and N=10)
     ZZex = {1: 0.4701822929348489514, 0: 0.7387694101217603240}
     Xex  = {1: 0.7762552604723193039, 0: 0.1634910118224495344}
-    Egs = -2.127120881869593  # at gi = 2 
+    Egs = -2.127120881869593  # at gi = 2
     #
     # start with ground state at gi = 2
     Dmax = 10

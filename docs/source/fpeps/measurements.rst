@@ -14,6 +14,6 @@ One-site observables for all lattice sites can be calculated using the function
 
 .. autofunction:: yastn.tn.fpeps.ctm._ctm_observables.one_site_dict
 
-and all nearest neighbor two-point correlators can be calculated using the function 
+and all nearest neighbor two-point correlators can be calculated using the function
 
-.. autofunction:: yastn.tn.fpeps.ctm._ctm_observables.nn_site_dict
+.. autofunction:: yastn.tn.fpeps.ctm._ctm_observables.nn_exp_dict
