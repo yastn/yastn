@@ -126,10 +126,10 @@ def test_spinless_fermions():
     Is = [ops_Z2.I(), ops_U1.I()]
     assert all(np.allclose(I.to_numpy(), np.eye(2)) for I in Is)
 
-    ns = [ops_Z2.n(), ops_U1.n()]
-    assert all(np.allclose(n.to_numpy(), np.array([[0, 0], [0, 1]])) for n in ns)
-
     lss = [{0: I.get_legs(0), 1: I.get_legs(1)} for I in Is]
+
+    ns = [ops_Z2.n(), ops_U1.n()]
+    assert all(np.allclose(n.to_numpy(legs=ls), np.array([[0, 0], [0, 1]])) for n, ls in zip(ns, lss))
 
     cps = [ops_Z2.cp(), ops_U1.cp()]
     assert all(np.allclose(cp.to_numpy(legs=ls), np.array([[0, 0], [1, 0]])) for cp, ls in zip(cps, lss))
@@ -178,7 +178,7 @@ def test_spinful_fermions():
     with pytest.raises(yastn.YastnError):
         ops_Z2.cp(spin=+1)
     # spin shoul be equal 'u' or 'd'.
-    
+
 
 if __name__ == '__main__':
     test_spin12()

@@ -47,23 +47,20 @@ Each tensor :math:`A_{(x,y)}` in PEPS is a rank-:math:`5` tensor of size :math:`
                                       d_(x,y)  D_(x,y),(x+1,y)
 
 
-The hermitian conjugate of the above tensor :math:`A_{x,y}^{\dag}` is represented as its mirror image 
+The hermitian conjugate of the above tensor :math:`A_{x,y}^{\dagger}` is represented as its mirror image
 
 ::
-        # conjugate tensor in PEPS
 
-   
+      # conjugate tensor in PEPS
 
-               
-
-                                            d_(x,y)  D_(x,y),(x+1,y)
-                                              |     /
-                                             _|____/______
-                                            |             |
-          A_(x,y)^{\dag} = D_(x,y-1),(x,y)--|    (x,y)    |-- D_(x,y),(x,y+1)
-                                            |_____________|
-                                                 /
-                                                /
+                                          d_(x,y)  D_(x,y),(x+1,y)
+                                             |      /
+                                            _|_____/___
+                                           |           |
+      A_(x,y)^{\dagger} = D_(x,y-1),(x,y)--|   (x,y)   |--D_(x,y),(x,y+1)
+                                           |___________|
+                                               /
+                                              /
                                           D_(x-1,y),(x,y)
 
 
@@ -107,8 +104,7 @@ We use the name fpeps to emphasize the incorporation of fermionic statistics in 
 Here we employ the fermionic order demonstrated in a :math:`3\times 3` PEPS example below.
 Parity-preserving tensors permit moving the lines over tensors, changing the placement of the swap gates without affecting the result.
 
-Time evolution
-^^^^^^^^^^^^^^
+::
 
               ________            ________            ________
              |        |          |        |          |        |
@@ -149,10 +145,7 @@ The corresponding two-site gates :math:`U_{bond} = \exp(-d\beta H_{bond} / 2)`, 
 
 Each gate increases the virtual bond dimension of PEPS tensors by a factor equal to the SVD rank of the gate `r`.
 
-In `1D`, canonical structure of MPS makes truncation of a single bond dimension based on SVD singular values optimal in a Frobenius norm.
-However, a loopy structure of PEPS prevents a canonical form, and a successful algorithm requires using optimization techniques on top of SVD.
-The aim is to minimize the Frobenius norm of (a) the PEPS after application of the gate with virtual bond dimension increased to
-:math:`D = r \times D` and (b) a new PEPS with the bond dimension truncated back to :math:`D`:
+::
 
       # Action of a two-site gate on horizontal A_1-A_2 bond in the PEPS.
       # Line crossing indicates application of a swap gate.
@@ -243,49 +236,37 @@ A common example is a checkerboard lattice, which has two tensors A and B in a :
 Corner transfer matrix renormalization group (CTMRG)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The exact contraction of a PEPS is exponentially hard [7]. It can be done site by site using the reduced tensor
-:math:`a` which is obtained by tracing over the physical index in tensors :math:`A` and it's conjugate :math:`A^{\dag}`. Note that 
-in the following digram the virtual legs of the peps tensor are labelled by :math:`t`(top), :math:`l`(left), :math:`b`(bottom), and :math:`r`(right) in 
-an anticlockwise fashion. For the conjufate tensor similarly, it is labelled by :math:`t'`, :math:`l'`, :math:`b'` and :math:`r'`.
+Calculation of expectation values of interests requires contraction of PEPS with its conjugate.
+This amouts to contraction of PEPS network composed of reduced tensor :math:`a` which is obtained by tracing over the physical index in tensors :math:`A` and it's conjugate :math:`A^{\dagger}`.
+Note that in the following digram the virtual legs of the peps tensor are labelled by :math:`t` (top), :math:`l` (left), :math:`b` (bottom), and :math:`r` (right) in
+an anticlockwise fashion. For the conjugate tensor, similarly, they are labelled by :math:`{t'}`, :math:`{l'}`, :math:`{b'}` and :math:`{r'}`.
 
 ::
 
-                           t'  t
-                            \  \ 
-                             \  \ 
-                              \  \ 
-                               \  \__
-                               |     \ 
-                               |      \
-                               |       \
-                               |        \
-                               |      ___\______
-                               |     |          |
-                           ----------|    A     |-----------                         t' t
-                          |    |     |__________|           |                         \  \
-                          |    |            |    \          |                        __\__\__ 
-                  l ______|    |            |     \         |______ r           l --|        |-- r
-                    ______     |            |    _ \         ______ r'    =         |   a    |
-                  l'      |    |            |   | \ \      |                    l'--|________|-- r'
-                          |    |         ___|___|_ \ \     |                            \  \
-                          |    |        |         | \ \    |                             \  \
-                           ----|--------|   A'    |--\-\----                             b'  b
-                               |        |_________|   \ \
-                               |                \      \ \
-                               |                 \      \ \
-                               |                  \      \ \
-                               |___________________\      \ \
-                                                          b'  b
+                      t' t
+                       \ \
+                        | \
+                       /  _\_____
+                      /  |       |                            t' t
+                   /--|--|   A   |-------\                     \ \
+                  /   |  |_______|        \                   __\_\__
+             l --/    |    |      \        \-- r         l --|       |-- r
+                      |    |    __ \               ===       |   a   |
+             l'--\    |   _|___|_ \ \      /-- r'        l'--|_______|-- r'
+                  \   |  |       | \ \    /                      \ \
+                   \--|--|   A'  |--\-\--/                        \ \
+                      \  |_______|   \ \                          b' b
+                       \         \    \ \
+                        \________/     \ \
+                                       b' b
 
 
+Swap gates are placed where the legs cross. This gives a simple structure for the contracted tensors on the :math:`2D` lattice, respecting the global fermionic order.
 
-Swap gates are placed where the legs cross. By index bending and locally introducing the swap gates, we can 
-get a simple structure for the contracted tensors on the :math:`2D` lattice while respecting the fermionic order. 
-The state-of-the-art approximation technique for calculating expectation values in the case of iPEPS is the
+The exact contraction of a PEPS is exponentially hard [7], and one has to use efficient approximate contraction schemes. One of the state-of-the-art for calculating expectation values in the case of PEPS is the
 Corner Transfer Matrix Renormalization Group (:ref:`CTMRG<fpeps/algorithms_ctmrg:corner transfer matrix renormalization group (ctmrg) algorithm>`).
-
-CTMRG iteratively finds the environment of each tensor, representing the rest of the infinite lattice, in the form of four corner
-tensors and edge tensors transfer matrices surrounding each unique tensor in the unit cell.
+CTMRG iteratively finds the environment of each tensor, representing the rest of the lattice, in the form of four corner
+tensors and edge tensors transfer matrices surrounding each unique tensor in the unit cell. They are used to calculate the expectation values by contracting tensors (with operators of interest acting on physical legs) and their environments.
 
 
 References & Related works
