@@ -25,7 +25,8 @@ is calculated by contracting a network formed by MPS, MPO, and a conjugate
 of the same or different MPS.
 
 .. autofunction:: yastn.tn.mps.measure_mpo
-
+.. autofunction:: yastn.tn.mps.measure_1site
+.. autofunction:: yastn.tn.mps.measure_2site
 
 Shorthand notation
 ------------------

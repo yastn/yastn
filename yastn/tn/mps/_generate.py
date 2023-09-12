@@ -1,6 +1,6 @@
 import numpy as np
 from typing import NamedTuple
-from ... import ones, rand, ncon, Leg, random_leg, YastnError
+from ... import ones, rand, zeros, ncon, Leg, random_leg, YastnError, Tensor, block, svd_with_truncation
 from ...operators import Qdit
 from ._mps import Mpo, Mps, add
 from ._latex2term import latex2term, GeneratorError
@@ -30,7 +30,7 @@ class Hterm(NamedTuple):
     operators : tuple = ()
 
 
-def generate_single_mpo(I, term):   # this can be private
+def generate_single_mpo(I, term, amplitude=True):
     r"""
     Apply local operators specified by term in :class:`Hterm` to the MPO `I`.
 
@@ -61,17 +61,14 @@ def generate_single_mpo(I, term):   # this can be private
             single_mpo[n] = temp.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
     for n in single_mpo.sweep():
         single_mpo[n] = single_mpo[n].drop_leg_history(axes=(0, 2))
-    single_mpo[0] = term.amplitude * single_mpo[0]
+    if amplitude:
+        single_mpo[0] = term.amplitude * single_mpo[0]
     return single_mpo
 
 
-def generate_mpo(I, terms, opts=None, packet=50):  # can use better algorithm to compress
+def generate_mpo(I, terms, opts=None):
     r"""
     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
-
-    If the number of MPOs is large, adding them all together can result
-    in large intermediate MPO. By specifying `packet` size, the groups of MPO-s
-    are truncated at intermediate steps before continuing with summation.
 
     Parameters
     ----------
@@ -79,31 +76,128 @@ def generate_mpo(I, terms, opts=None, packet=50):  # can use better algorithm to
         product operators making up the MPO
     I: yastn.Tensor
         on-site identity operator
-    opts: dict
-        options for truncation of the result
-    packet: int
-        how many ``Hterm``\s (MPOs of bond dimension 1) should be truncated at once
 
     Returns
     -------
     yastn.tn.mps.MpsMpo
     """
-    ip, M_tot, Nterms = 0, None, len(terms)
     if opts is None:
-        opts={'tol': 5e-15}
-    while ip < Nterms:
-        H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
-        M = add(*H1s)
-        M.canonize_(to='last', normalize=False)
-        M.truncate_(to='first', opts_svd=opts, normalize=False)
-        ip += packet
-        if not M_tot:
-            M_tot = M.copy()
+        opts={'tol': 1e-14}
+    H1s = [generate_single_mpo(I, term, amplitude=False) for term in terms]
+    cfg = H1s[0][0].config
+    mH = np.zeros((len(H1s), I.N), dtype=int)
+    basis, bbasis, t1bs, t2bs, ifbs, tfbs = {}, {}, {}, {}, {}, {}
+    for n in I.sweep():
+        base = []
+        for m, H1 in enumerate(H1s):
+            ind = next((ind for ind, v in enumerate(base) if (v - H1[n]).norm() < 1e-13), None)
+            if ind is None:
+                ind = len(base)
+                base.append(H1[n])
+            mH[m, n] = ind
+        t1bs[n] = [ten.get_legs(axes=0).t[0] for ten in base]
+        t2bs[n] = [ten.get_legs(axes=2).t[0] for ten in base]
+        basis[n] = [ten.fuse_legs(axes=((0, 2), 1, 3)).drop_leg_history() for ten in base]
+        bbasis[n] = block(dict(enumerate(basis[n])), common_legs=(1, 2)).drop_leg_history()
+        tfbs[n] = [ten.get_legs(axes=0).t[0] for ten in basis[n]]
+        ifbs[n] = [sum(x == tfbs[n][i] for x in tfbs[n][:i]) for i in range(len(tfbs[n]))]
+    Js = {}
+    dtype = cfg.default_dtype
+    for a, H1 in zip(terms, H1s):
+        t = H1[0].get_legs(axes=0).t[0]
+        if t in Js:
+            Js[t].append(a.amplitude)
         else:
-            M_tot = M_tot + M
-            M_tot.canonize_(to='last', normalize=False)
-            M_tot.truncate_(to='first', opts_svd=opts, normalize=False)
-    return M_tot
+            Js[t] = [a.amplitude]
+        if isinstance(a.amplitude, complex):
+            dtype = 'complex128'
+    J = Tensor(config=cfg, s=(-1, 1), dtype=dtype)
+    for t, val in Js.items():
+        J.set_block(ts=(t, t), Ds=(1, len(val)), val=val)
+
+    M = Mpo(I.N)
+    for n in I.sweep():
+        mH1 = mH[:, 0]
+        mH, rind, iind = np.unique(mH[:, 1:], axis=0, return_index=True, return_inverse=True)
+
+        i2bs = {t: {} for t in t2bs[n]}
+        for ii, rr in enumerate(rind):
+            i2bs[t2bs[n][mH1[rr]]][ii] = len(i2bs[t2bs[n][mH1[rr]]])
+
+        i1bs = {t: 0 for t in t1bs[n]}
+        for ii, rr in enumerate(mH1):
+            i1bs[t1bs[n][rr]] += 1
+
+        leg1 = Leg(cfg, s=-1, t=list(i1bs.keys()), D=list(i1bs.values()))
+        leg2 = bbasis[n].get_legs(axes=0).conj()
+        leg3 = Leg(cfg, s=1, t=list(i2bs.keys()), D=[len(x) for x in i2bs.values()])
+        tran = zeros(config=cfg, legs=[leg1, leg2, leg3])
+
+        li = {x: -1 for x in t1bs[n]}
+        for bl, br in zip(mH1, iind):
+            lt = t1bs[n][bl]
+            li[lt] += 1
+            ft = tfbs[n][bl]
+            fi = ifbs[n][bl]
+            rt = t2bs[n][bl]
+            ri = i2bs[rt][br]
+            tran[lt + ft + rt][li[lt], fi, ri] += 1
+
+        nJ = J @ tran
+        # for bl, br in zip(mH1, iind):
+        #     lt = t1bs[n][bl]
+        #     li[lt] += 1
+        #     ft = tfbs[n][bl]
+        #     fi = ifbs[n][bl]
+        #     rt = t2bs[n][bl]
+        #     ri = i2bs[rt][br]
+        #     nJ[lt + ft + rt][:, fi, ri] += J[lt + lt][:, li[lt]]
+        if n < I.last:
+            nJ, S, V = svd_with_truncation(nJ, axes=((0, 1), 2), sU=1, **opts)
+            J = S @ V
+        M[n] = ncon([nJ, bbasis[n]], [[0, 1, -2], [1, -1, -3]])
+    return M
+
+
+# def generate_mpo2(I, terms, opts=None, packet=50):  # can use better algorithm to compress
+#     r"""
+#     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
+
+#     If the number of MPOs is large, adding them all together can result
+#     in large intermediate MPO. By specifying `packet` size, the groups of MPO-s
+#     are truncated at intermediate steps before continuing with summation.
+
+#     Parameters
+#     ----------
+#     term: list of :class:`Hterm`
+#         product operators making up the MPO
+#     I: yastn.Tensor
+#         on-site identity operator
+#     opts: dict
+#         options for truncation of the result
+#     packet: int
+#         how many ``Hterm``\s (MPOs of bond dimension 1) should be truncated at once
+
+#     Returns
+#     -------
+#     yastn.tn.mps.MpsMpo
+#     """
+#     ip, M_tot, Nterms = 0, None, len(terms)
+#     if opts is None:
+#         opts={'tol': 5e-15}
+#     while ip < Nterms:
+#         H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
+#         M = add(*H1s)
+#         M.canonize_(to='last', normalize=False)
+#         M.truncate_(to='first', opts_svd=opts, normalize=False)
+#         ip += packet
+#         if not M_tot:
+#             M_tot = M.copy()
+#         else:
+#             M_tot = M_tot + M
+#             M_tot.canonize_(to='last', normalize=False)
+#             M_tot.truncate_(to='first', opts_svd=opts, normalize=False)
+#     return M_tot
 
 def generate_single_mps(term, N):  # obsolate - DELETE  (not docummented)
     r"""

@@ -6,7 +6,7 @@ class SpinlessFermions(meta_operators):
     """ Predefine operators for spinless fermions. """
 
     def __init__(self, sym='U1', **kwargs):
-        r""" 
+        r"""
         Standard operators for single fermionic species and 2-dimensional Hilbert space.
         Defines identity, creation, annihilation, and density operators.
 
@@ -37,7 +37,7 @@ class SpinlessFermions(meta_operators):
     def n(self):
         """ Particle number operator. """
         n = Tensor(config=self.config, s=self.s, n=0)
-        n.set_block(ts=(0, 0), Ds=(1, 1), val=0)
+        # n.set_block(ts=(0, 0), Ds=(1, 1), val=0)
         n.set_block(ts=(1, 1), Ds=(1, 1), val=1)
         return n
 
