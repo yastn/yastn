@@ -45,6 +45,10 @@ def to(a, device=None, dtype=None):
     r"""
     Move tensor to device and cast to dtype.
 
+    Returns a clone of the tensor residing on ``device`` in desired ``dtype``.
+    If tensor already resides on ``device``, returns ``self``. This operation preserves autograd.
+    If no change is needed, makes only a shallow copy of the tensor data.
+
     Parameters
     ----------
     device: str
@@ -55,10 +59,6 @@ def to(a, device=None, dtype=None):
     Returns
     -------
     yastn.Tensor
-        returns a clone of the tensor residing on ``device`` in desired ``dtype``. If tensor already
-        resides on ``device``, returns ``self``. This operation preserves autograd.
-
-        If no change is needed, makes only a shallow copy of the tensor data.
     """
     if dtype in (None, a.yast_dtype) and device in (None, a.device):
         return a._replace()
@@ -68,8 +68,10 @@ def to(a, device=None, dtype=None):
 
 def detach(a):
     r"""
-    Detach tensor from the computational graph returning a `view`. Data of the resulting
-    tensor is a `view` of the original data.
+    Detach tensor from the computational graph returning a `view`.
+
+    Data of the resulting tensor is a `view` of the original data.
+    In case of NumPy backend, returns ``self``.
 
     .. warning::
         this operation does not preserve autograd on returned :class:`yastn.Tensor`
@@ -77,7 +79,6 @@ def detach(a):
     Returns
     -------
     yastn.Tensor
-        In case of NumPy backend, returns ``self``.
     """
     data = a.config.backend.detach(a._data)
     return a._replace(data=data)
@@ -422,6 +423,10 @@ def remove_leg(a, axis=-1):
 def diag(a):
     """
     Select diagonal of 2d tensor and output it as a diagonal tensor, or vice versa.
+
+    Returns
+    -------
+    yastn.Tensor
     """
     if not a.isdiag:  # isdiag=False -> isdiag=True
         if a.ndim_n != 2 or sum(a.struct.s) != 0:
@@ -450,7 +455,12 @@ def diag(a):
 def remove_zero_blocks(a, rtol=1e-12, atol=0):
     r"""
     Remove from the tensor blocks where all elements are below a cutoff.
+
     Cutoff is a combination of absolut tolerance and relative tolerance with respect to maximal element in the tensor.
+
+    Returns
+    -------
+    yastn.Tensor
     """
     cutoff = atol + rtol * a.norm(p='inf')
     meta = [(t, D, Dp, sl) for t, D, Dp, sl in zip(a.struct.t, a.struct.D, a.struct.Dp, a.struct.sl) \

@@ -77,14 +77,14 @@ def dmrg_(psi, H, project=None, method='1site',
     -------
     DMRG_out(NamedTuple)
         NamedTuple including fields:
-            
+
             * :code:`sweeps` number of performed dmrg sweeps.
             * :code:`energy` energy after the last sweep.
             * :code:`denergy` absolut value of energy change in the last sweep.
             * :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
             * :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
-    tmp = _dmrg_(psi, H, project, method, 
+    tmp = _dmrg_(psi, H, project, method,
                 energy_tol, Schmidt_tol, max_sweeps, iterator_step,
                 opts_eigs, opts_svd)
     return tmp if iterator_step else next(tmp)
@@ -133,7 +133,7 @@ def _dmrg_(psi, H, project, method,
 
         if Schmidt_tol is not None:
             max_dS = max((Schmidt[k] - Schmidt_old[k]).norm() for k in Schmidt.keys())
-            Schmidt_old = Schmidt
+            Schmidt_old = Schmidt.copy()
             converged.append(max_dS < Schmidt_tol)
 
         logger.info('Sweep = %03d  energy = %0.14f  dE = %0.4f  dSchmidt = %0.4f', sweep, E, dE, max_dS)

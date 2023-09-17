@@ -206,7 +206,7 @@ def get_tensor_charge(a):
 
     Returns
     -------
-    int or tuple[int]
+    tuple(int)
     """
     return a.struct.n
 
@@ -219,7 +219,7 @@ def get_signature(a, native=False):
 
     Returns
     -------
-    tuple[int]
+    tuple(int)
     """
     return a.s_n if native else a.s
 
@@ -239,7 +239,7 @@ def get_rank(a, native=False):
 
 def get_blocks_charge(a):
     """
-    Return Charges of all native blocks.
+    Return charges of all native blocks.
 
     In case of product of abelian symmetries, for each block the individual symmetry charges are flattened into a single tuple.
 
@@ -267,12 +267,12 @@ def get_shape(a, axes=None, native=False):
 
     Parameters
     ----------
-    axes : int or tuple[int]
+    axes : int or tuple(int)
         indices of legs; If axes is ``None`` returns for all legs (default).
 
     Returns
     -------
-    int or tuple[int]
+    int or tuple(int)
     """
     if axes is None:
         axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
@@ -294,17 +294,20 @@ def get_dtype(a):
 
 def __getitem__(a, key):
     """
+    Block corresponding to a given charge combination.
+
+    The type of the returned tensor depends on the backend,
+    for example :class:`numpy.ndarray` or :class:`torch.Tensor`.
+    In case of diagonal tensor, returns 1D array.
+
     Parameters
     ----------
-    key : tuple[int] or tuple[tuple[int]]
+    key : tuple(int) or tuple(tuple(int))
         charges of the block.
 
     Returns
     -------
     tensor-like
-        The type of the returned tensor depends on the backend, for example
-        :class:`numpy.ndarray` or :class:`torch.Tensor`.
-        In case of diagonal tensor, returns 1D array.
     """
     key = tuple(_flatten(key))
     try:
@@ -354,7 +357,7 @@ def get_legs(a, axes=None, native=False):
 
     Returns
     -------
-        Leg if axes is `int`, otherwise tuple[Leg].
+    yastn.Leg if axes is `int`, otherwise tuple(yastn.Leg).
     """
     legs = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
@@ -445,9 +448,10 @@ def to_dense(a, legs=None, native=False, reverse=False):
     r"""
     Create dense tensor corresponding to the symmetric tensor.
 
+    The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
     Blocks are ordered according to increasing charges on each leg.
-    It is possible to supply a list of additional charge sectors to be included by explictly
-    specifying `legs`. These legs should be consistent with current structure of the tensor.
+    It is possible to supply a list of additional charge sectors to be included by explictly specifying `legs`.
+    These legs should be consistent with current structure of the tensor.
     This allows to fill in extra zero blocks.
 
     Parameters
@@ -465,8 +469,7 @@ def to_dense(a, legs=None, native=False, reverse=False):
 
     Returns
     -------
-    out : tensor
-        The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
+    tensor-like
     """
     c = a.to_nonsymmetric(legs, native, reverse)
     x = c.config.backend.clone(c._data)
@@ -482,7 +485,6 @@ def to_numpy(a, legs=None, native=False, reverse=False):
     Returns
     -------
     numpy.ndarray
-        dense NumPy array equivalent to symmetric tensor
     """
     return a.config.backend.to_numpy(a.to_dense(legs, native, reverse))
 
@@ -492,10 +494,11 @@ def to_raw_tensor(a):
     If the symmetric tensor has just a single non-empty block, return raw tensor representing
     that block.
 
+    The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
+
     Returns
     -------
-    out : tensor-like
-        The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
+    tensor-like
     """
     if len(a.struct.D) == 1:
         return a._data.reshape(a.struct.D[0])
@@ -532,7 +535,6 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     Returns
     -------
     yastn.Tensor
-        tensor with no explicit symmetry
     """
     config_dense = a.config._replace(sym=sym_none)
 
@@ -588,6 +590,7 @@ def to_number(a, part=None):
     Assuming the symmetric tensor has just a single non-empty block of total dimension one,
     return this element as a scalar.
 
+    The type of the scalar is given by the backend.
     For empty tensor return 0.
 
     .. note::
@@ -600,8 +603,7 @@ def to_number(a, part=None):
 
     Returns
     -------
-    out : number
-        the type of the scalar is given by the backend.
+    number
     """
     size = a.size
     if size == 1:
@@ -622,7 +624,7 @@ def item(a):
 
     Returns
     -------
-    out : number
+    number
     """
     size = a.size
     if size == 1:

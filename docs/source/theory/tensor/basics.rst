@@ -8,9 +8,9 @@ In general, tensors are multilinear maps from products of several vector spaces
 
 .. math::
 
-    T:\quad V^i\otimes V^j\otimes V^k\otimes...V_a\otimes V_b\otimes V_c\otimes... \rightarrow scalar,
+    T:\quad V^i\otimes V^j\otimes V^k\otimes...\otimes V_a\otimes V_b\otimes V_c\otimes... \rightarrow scalar,
 
-where `T` expressed in basis and components is
+where `T` expressed in bases and components is
 
 .. math::
     T = \sum_{abc...ijk...} T^{abc...}_{ijk...} e^ie^je^k...e_ae_be_c...
@@ -30,12 +30,11 @@ the shapes represent tensors, while legs correspond to lines emerging from these
 .. note::
         YASTN defines a vector space and its abelian symmetry structure through :class:`yastn.Leg`
 
-In some contexts, it is often useful to distinguish underlying spaces as co- or contra-variant
-with respect to transformations acting on these spaces. Often such a distinction is encoded
-through position of the indices - subscript or superscript.
+In some contexts, it is often useful to distinguish underlying spaces as co- or contra-variant with respect to transformations acting on these spaces.
+Often such a distinction is encoded through the position of the indices: subscript or superscript.
 
 In quantum mechanics, it is useful to distinguish between :math:`\langle bra |`
-and :math:`|ket \rangle` spaces, due to different action of symmetry transformations on these spaces
+and :math:`|ket \rangle` spaces, due to different actions of symmetry transformations on these spaces
 
 .. math::
 
@@ -82,7 +81,7 @@ The selection rule can be equivalently expressed as charge conservation
 .. math::
     t_a+t_b+...-t_i-t_j-... = N
 
-with total charge of the tensor `N` being independent of tensor elements :math:`T^{ab...}_{ij...}`. In the case of :math:`N=0` such tensor is invariant (unchanged) under the action of the symmetry.
+with total charge of the tensor `N` being independent of tensor elements :math:`T^{ab...}_{ij...}`. In the case of :math:`N=0`, such a tensor is invariant (unchanged) under the action of the symmetry.
 Otherwise, it transforms covariantly as all its elements are altered by the same complex phase :math:`exp(i\theta_gN)`.
 
 The charges :math:`t_i,\ N` and precise form of their addition :math:`+` depends on the abelian group

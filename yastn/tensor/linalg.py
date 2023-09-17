@@ -393,7 +393,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
     Returns
     -------
-        Q, R: yastn.Tensor
+    Q, R: yastn.Tensor
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -481,8 +481,8 @@ def eigh(a, axes, sU=1, Uaxis=-1):
 
     Returns
     -------
-        S, U: yastn.Tensor
-            U is unitary projector. S is a diagonal tensor.
+    S, U: yastn.Tensor
+        U is unitary projector. S is a diagonal tensor.
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -591,8 +591,8 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
 
     Returns
     -------
-        S, U: yastn.Tensor
-            U is unitary projector. S is a diagonal tensor.
+    S, U: yastn.Tensor
+        U is unitary projector. S is a diagonal tensor.
     """
     S, U = eigh(a, axes=axes, sU=sU)
 
