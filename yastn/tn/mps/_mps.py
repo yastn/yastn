@@ -158,7 +158,7 @@ def multiply(a, b, mode=None):
 
 class MpsMpo:
     r"""
-    The basic structure of MPS (for nr_phys=1) and MPO (for nr_phys=2).
+    The basic structure of MPS (for nr_phys=1) and MPO (for nr_phys=2) with *N* sites.
 
     MpsMpo tensors (sites) are accessed with usual ``[]`` operator. They are indexed
     by integers from :math:`0, 1, 2, 3, \ldots, N-1` with :math:`0` corresponding to the first site.
