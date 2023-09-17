@@ -57,7 +57,7 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
 
     opts_svd: dict
         Options passed to :meth:`yastn.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`method='mix'`.
-        If None, use default {'tol': 1e-14}
+        If None, use default {'tol': 1e-13}
 
     Returns
     -------

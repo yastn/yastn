@@ -24,9 +24,9 @@ and :code:`B`'s tensors along virtual dimension.
 
     # a product of two MPS's
                ___     ___    ___    ___    ___    ___     ___      ___    ___    ___    ___    ___
-      A       |___|-D-|___|--|___|--|___|--|___|--|___|   |   |-  -|   |--|   |--|   |--|   |--|   |
- C =  +  =  __ d|   ___ |  ___ |  ___ |  ___ |  ___ |   = |   | 2D |   |  |   |  |   |  |   |  |   |
-      B    |___|:D-|___|:-|___|:-|___|:-|___|:-|___||     |___|-  -|___|--|___|--|___|--|___|--|___|
+      A       |___|-D-|___|--|___|--|___|--|___|--|___|   |   |    |   |  |   |  |   |  |   |  |   |
+ C =  +  =  __ d|   ___ |  ___ |  ___ |  ___ |  ___ |   = |   |-2D-|   |--|   |--|   |--|   |--|   |
+      B    |___|:D-|___|:-|___|:-|___|:-|___|:-|___||     |___|    |___|  |___|  |___|  |___|  |___|
             d|  |    |  |   |  |   |  |   |  |   |  |      d|        |      |      |      |      |
               \/      \/     \/     \/     \/     \/
 
@@ -55,10 +55,11 @@ i) MPO with MPS resulting in a new MPS in analogy with
 
  # a product of MPO O and MPS A
 
-             _|d        _|_         _|_
-            |___|--D---|___|--...--|___|     _|_        _|_         _|_
- C= O @ A =  _|_        _|_         _|_   = |___|-DxD'-|___|--...--|___|
-            |___|--D'--|___|--...--|___|
+              ___        ___         ___
+             |___|--D'--|___|--...--|___|      ___        ___         ___
+ C = O @ A =  _|_        _|_         _|_   =  |___|-DxD'-|___|--...--|___|
+             |___|--D --|___|--...--|___|       |          |           |
+               |          |           |
 
 ii) two MPOs resulting in a new MPO corresponding to usual
 operator product :math:`\hat{O}\hat{P} = \hat{C}` (matrix-matrix multiplication).
@@ -68,7 +69,7 @@ operator product :math:`\hat{O}\hat{P} = \hat{C}` (matrix-matrix multiplication)
  # a product of two MPO's O and P
 
              _|d_       _|_         _|_
-            |___|--D---|___|--...-:|___|    _|d          _|_         _|_
+            |___|--D---|___|--...--|___|    _|d          _|_         _|_
  C= O @ P =  _|_        _|_         _|_  = |___|--DxD'--|___|--...--|___|
             |___|--D'--|___|--...--|___|     |d           |           |
               |d         |           |
@@ -79,32 +80,3 @@ One can either use product operator :code:`C = A @ B` or more verbose
 See examples here: :ref:`examples/mps/algebra:Multiplication`.
 
 .. autofunction:: yastn.tn.mps.multiply
-
-
-Canonizing MPS/MPO
-------------------
-
-MPS/MPO can be put into :ref:`theory/mps/basics:Canonical form` to reveal most advantageous truncation or as a part of the setup for
-:ref:`DMRG<mps/algorithms_dmrg:density matrix renormalization group (dmrg) algorithm>` or
-:ref:`TDVP<mps/algorithms_tdvp:time-dependent variational principle (tdvp) algorithm>` algorithms.
-
-The canonical form obtained by QR decomposition is fast, but does not allow for truncation
-of the virtual spaces of MPS/MPO.
-
-.. autofunction:: yastn.tn.mps.MpsMpo.canonize_
-
-See examples: :ref:`examples/mps/algebra:canonical form by qr`.
-
-Restoring canonical form locally: For example, while performing DMRG sweeps,
-the tensors getting updated will not be in canonical form after the update.
-It is necessary to restore their canonical form during sweeping.
-
-.. autofunction:: yastn.tn.mps.MpsMpo.orthogonalize_site
-
-The canonisation by `singular value decomposition` (SVD) allows
-to truncate virtual dimension/spaces with the lowest weight
-(lowest singular values).
-
-.. autofunction:: yastn.tn.mps.MpsMpo.truncate_
-
-See examples: :ref:`examples/mps/algebra:canonical form by svd`.

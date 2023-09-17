@@ -78,7 +78,7 @@ class GenerateMpoTemplate(NamedTuple):
 
 def generate_mpo_template(I, terms, return_amplitudes=False):
     r"""
-    Precompute an amplitude-independent template that is then used to generate MPO by :meth:`generate_mpo_fast`
+    Precompute an amplitude-independent template that is then used to generate MPO by :meth:`yastn.tn.mps.generate_mpo_fast`
 
     Parameters
     ----------
@@ -91,7 +91,7 @@ def generate_mpo_template(I, terms, return_amplitudes=False):
 
     Returns
     -------
-    template [NamedTuple] if not return_amplitudes else (template [NamedTuple], amplitude [list])
+    template [NamedTuple] or (template [NamedTuple], amplitude [list])
     """
     H1s = [generate_product_mpo(I, term, amplitude=False) for term in terms]
     cfg = H1s[0][0].config
@@ -156,23 +156,23 @@ def generate_mpo_template(I, terms, return_amplitudes=False):
 
 def generate_mpo_fast(template, amplitudes, opts=None):
     r"""
-    Fast generation of MPO representing the sets of Hterms, that differ only in amplitudes.
+    Fast generation of MPO representing the lists(Hterm) that differ only in amplitudes.
 
-    Some precomputations in :meth:'generate_mpo' might be slow.
+    Some precomputations in :meth:`yastn.tn.mps.generate_mpo` might be slow.
     When only amplitudes in Hterms are changing (e.g. for time-dependent Hamiltonian),
-    MPO generation can be speeded up by precalculating an reusing amplitude-independent `template`.
-    The latter is done with :meth:`generate_mpo_template`.
+    MPO generation can be significantly speeded up by precalculating an reusing amplitude-independent `template`.
+    The latter is done with :meth:`yastn.tn.mps.generate_mpo_template`.
 
     Parameters
     ----------
     template: NamedTuple
-        calculated with :meth:`generate_mpo_template`
+        calculated with :meth:`yastn.tn.mps.generate_mpo_template`
     amplidutes: list(numbers)
         list of amplitudes that would appear in :class:`Hterm`.
-        The order of the list should match the order of Hterms supplemented to :meth:`generate_mpo_template`.
+        The order of the list should match the order of Hterms supplemented to :meth:`yastn.tn.mps.generate_mpo_template`.
     opts: dict
         The generator function employs svd while compressing MPO bond dimension.
-        opts allows passing options to :meth:`svd_with_truncation`
+        opts allows passing options to :meth:`yastn.svd_with_truncation`
         Default None sets truncation `tol` close to the numerical precision, which should effectively result in lossless compression.
 
     Returns
@@ -218,6 +218,9 @@ def generate_mpo(I, terms, opts=None):
     r"""
     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
 
+    It is a shorthand for :meth:`yastn.tn.mps.generate_mpo_template` and :meth:`yastn.tn.mps.generate_mpo_fast`,
+    but without storying the template to generate MPOs for different amplitudes in front of product operators.
+
     Parameters
     ----------
     term: list of :class:`Hterm`
@@ -226,13 +229,8 @@ def generate_mpo(I, terms, opts=None):
         identity MPO
     opts: dict
         generator employs svd while compressing MPO bond dimension.
-        opts allows passing options to :meth:`svd_with_truncation`
-        Default None sets truncation `tol` close to the numerical precision, which should result in lossless compression.
-
-    Note
-    ----
-    It is a shorthand for :meth:`generate_mpo_template` and :meth:`generate_mpo_fast`,
-    but without storying the template to generate MPO for different amplitudes in from of product operators.
+        opts allows passing options to :meth:`yastn.svd_with_truncation`
+        Default None sets truncation `tol` close to the numerical precision, which should result in effectively lossless compression.
 
     Returns
     -------
@@ -310,7 +308,7 @@ def generate_mps(terms, N, normalize=False, opts=None, packet=50):   #  DELETE
 
 class Generator:
 
-    def __init__(self, N, operators, map=None, Is=None, parameters=None, opts={"tol": 1e-14}):
+    def __init__(self, N, operators, map=None, Is=None, parameters=None, opts={"tol": 1e-13}):
         r"""
         Generator is a convenience class building MPOs from a set of local operators.
         Generated MPO have following :ref:`index order<mps/properties:index convention>` and signature::
@@ -405,7 +403,7 @@ class Generator:
         D_total : int
             largest bond dimension
         sigma : int
-            variance of Normal distribution from which dimensions of charge sectors
+            standard deviation of the normal distribution from which dimensions of charge sectors
             are drawn.
         dtype : string
             number format, e.g., ``'float64'`` or ``'complex128'``
@@ -447,7 +445,7 @@ class Generator:
         D_total : int
             largest bond dimension
         sigma : int
-            variance of Normal distribution from which dimensions of charge sectors
+            standard deviation of the normal distribution from which dimensions of charge sectors
             are drawn.
         dtype : string
             number format, e.g., ``'float64'`` or ``'complex128'``

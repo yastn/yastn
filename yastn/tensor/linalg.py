@@ -231,7 +231,7 @@ def _meta_svd(config, struct, minD, sU, nU):
     return meta, Ustruct, Sstruct, Vstruct
 
 
-def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-14, **kwargs):
+def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-13, **kwargs):
     """
     Generate a mask tensor from real positive spectrum S, while preserving
     degenerate multiplets. This is achieved by truncating the spectrum

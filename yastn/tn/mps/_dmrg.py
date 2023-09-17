@@ -71,7 +71,7 @@ def dmrg_(psi, H, project=None, method='1site',
 
     opts_svd: dict
         Options passed to :meth:`yastn.svd` used to truncate virtual spaces in :code:`method='2site'`.
-        If None, use default {'tol': 1e-14}
+        If None, use default {'tol': 1e-13}
 
     Returns
     -------
@@ -180,7 +180,7 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
     psi = env.ket
 
     if opts_svd is None:
-        opts_svd = {'tol': 1e-14}
+        opts_svd = {'tol': 1e-13}
 
     max_disc_weight = -1.
     for to, dn in (('last', 0), ('first', 1)):
