@@ -273,6 +273,6 @@ class Tensor:
 
         Returns
         -------
-        backend tensor type
+        backend tensor
         """
         return self._data

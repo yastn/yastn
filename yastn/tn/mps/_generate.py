@@ -1,4 +1,5 @@
 import numpy as np
+import numbers
 from typing import NamedTuple
 from ... import ones, rand, zeros, ncon, Leg, random_leg, YastnError, Tensor, block, svd_with_truncation
 from ...operators import Qdit
@@ -30,7 +31,7 @@ class Hterm(NamedTuple):
     operators : tuple = ()
 
 
-def generate_single_mpo(I, term, amplitude=True):
+def generate_product_mpo(I, term, amplitude=True):
     r"""
     Apply local operators specified by term in :class:`Hterm` to the MPO `I`.
 
@@ -50,6 +51,8 @@ def generate_single_mpo(I, term, amplitude=True):
     """
     single_mpo = I.copy()
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
+        if site < 0 or site > I.N or not isinstance(site, numbers.Integral):
+            raise YastnError("site index in Hterm should be in 0, 1, ..., N-1 ")
         op = op.add_leg(axis=0, s=-1)
         leg = op.get_legs(axes=0)
         one = ones(config=op.config, legs=(leg, leg.conj()))
@@ -66,6 +69,151 @@ def generate_single_mpo(I, term, amplitude=True):
     return single_mpo
 
 
+class GenerateMpoTemplate(NamedTuple):
+    config: NamedTuple = None
+    basis : list = None
+    trans : list = None
+    tleft : list = None
+
+
+def generate_mpo_template(I, terms, return_amplitudes=False):
+    r"""
+    Precompute an amplitude-independent template that is then used to generate MPO by :meth:`generate_mpo_fast`
+
+    Parameters
+    ----------
+    term: list of :class:`Hterm`
+        product operators making up the MPO
+    I: yastn.tn.mps.MpsMpo
+        identity MPO
+    return_amplitudes: bool
+        Apart from template, return also amplitudes = [term.amplitude for term in terms]
+
+    Returns
+    -------
+    template [NamedTuple] if not return_amplitudes else (template [NamedTuple], amplitude [list])
+    """
+    H1s = [generate_product_mpo(I, term, amplitude=False) for term in terms]
+    cfg = H1s[0][0].config
+    mapH = np.zeros((len(H1s), I.N), dtype=int)
+
+    basis, t1bs, t2bs, tfbs, ifbs = [], [], [], [], []
+    for n in I.sweep():
+        base = []
+        for m, H1 in enumerate(H1s):
+            ind = next((ind for ind, v in enumerate(base) if (v - H1[n]).norm() < 1e-13), None)  # site-tensors differing by less then 1e-13 are considered identical
+            if ind is None:
+                ind = len(base)
+                base.append(H1[n])
+            mapH[m, n] = ind
+
+        t1bs.append([ten.get_legs(axes=0).t[0] for ten in base])
+        t2bs.append([ten.get_legs(axes=2).t[0] for ten in base])
+        base = [ten.fuse_legs(axes=((0, 2), 1, 3)).drop_leg_history() for ten in base]
+        tfb = [ten.get_legs(axes=0).t[0] for ten in base]
+        tfbs.append(tfb)
+        ifbs.append([sum(x == y for x in tfb[:i]) for i, y in enumerate(tfb)])
+        base = block(dict(enumerate(base)), common_legs=(1, 2)).drop_leg_history()
+        basis.append(base)
+
+    tleft = [t1bs[0][i] for i in mapH[:, 0]]
+
+    trans = []
+    for n in I.sweep():
+        mapH0 = mapH[:, 0]
+        mapH, rind, iind = np.unique(mapH[:, 1:], axis=0, return_index=True, return_inverse=True)
+
+        i2bs = {t: {} for t in t2bs[n]}
+        for ii, rr in enumerate(rind):
+            i2bs[t2bs[n][mapH0[rr]]][ii] = len(i2bs[t2bs[n][mapH0[rr]]])
+
+        i1bs = {t: 0 for t in t1bs[n]}
+        for ii, rr in enumerate(mapH0):
+            i1bs[t1bs[n][rr]] += 1
+
+        leg1 = Leg(cfg, s=-1, t=list(i1bs.keys()), D=list(i1bs.values()))
+        leg2 = basis[n].get_legs(axes=0).conj()
+        leg3 = Leg(cfg, s=1, t=list(i2bs.keys()), D=[len(x) for x in i2bs.values()])
+        tran = zeros(config=cfg, legs=[leg1, leg2, leg3])
+
+        li = {x: -1 for x in t1bs[n]}
+        for bl, br in zip(mapH0, iind):
+            lt = t1bs[n][bl]
+            li[lt] += 1
+            ft = tfbs[n][bl]
+            fi = ifbs[n][bl]
+            rt = t2bs[n][bl]
+            ri = i2bs[rt][br]
+            tran[lt + ft + rt][li[lt], fi, ri] += 1
+        trans.append(tran)
+
+    template = GenerateMpoTemplate(config=cfg, basis=basis, trans=trans, tleft=tleft)
+    if return_amplitudes:
+        amplitudes = [term.amplitude for term in terms]
+        return template, amplitudes
+    return template
+
+
+def generate_mpo_fast(template, amplitudes, opts=None):
+    r"""
+    Fast generation of MPO representing the sets of Hterms, that differ only in amplitudes.
+
+    Some precomputations in :meth:'generate_mpo' might be slow.
+    When only amplitudes in Hterms are changing (e.g. for time-dependent Hamiltonian),
+    MPO generation can be speeded up by precalculating an reusing amplitude-independent `template`.
+    The latter is done with :meth:`generate_mpo_template`.
+
+    Parameters
+    ----------
+    template: NamedTuple
+        calculated with :meth:`generate_mpo_template`
+    amplidutes: list(numbers)
+        list of amplitudes that would appear in :class:`Hterm`.
+        The order of the list should match the order of Hterms supplemented to :meth:`generate_mpo_template`.
+    opts: dict
+        The generator function employs svd while compressing MPO bond dimension.
+        opts allows passing options to :meth:`svd_with_truncation`
+        Default None sets truncation `tol` close to the numerical precision, which should effectively result in lossless compression.
+
+    Returns
+    -------
+    yastn.tn.mps.MpsMpo
+    """
+    if opts is None:
+        opts = {'tol': 1e-13}
+
+    Js = {}
+    for a, t in zip(amplitudes, template.tleft):
+        if t in Js:
+            Js[t].append(a)
+        else:
+            Js[t] = [a]
+
+    dtype = 'complex128' if any(isinstance(a, complex) for a in amplitudes) else template.config.default_dtype
+    J = Tensor(config=template.config, s=(-1, 1), dtype=dtype)
+    for t, val in Js.items():
+        J.set_block(ts=(t, t), Ds=(1, len(val)), val=val)
+
+    M = Mpo(len(template.basis))
+    # for n in M.sweep():
+    #     nJ = J @ template.trans[n]
+    #     if n < M.last:
+    #         nJ, S, V = svd_with_truncation(nJ, axes=((0, 1), 2), sU=1, **opts)
+    #         J = S @ V
+    #     M[n] = ncon([nJ, template.basis[n]], [[0, 1, -2], [1, -1, -3]])
+
+    for n in M.sweep():
+        nJ = J @ template.trans[n]
+        nJ = ncon([nJ, template.basis[n]], [[0, 1, -3], [1, -1, -2]])
+        if n < M.last:
+            nJ, S, V = svd_with_truncation(nJ, axes=((0, 1, 2), 3), sU=1, **opts)
+            nS = S.norm()
+            nJ = nS * nJ
+            J = (S / nS) @ V
+        M[n] = nJ.transpose(axes=(0, 1, 3, 2))
+    return M
+
+
 def generate_mpo(I, terms, opts=None):
     r"""
     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
@@ -74,130 +222,25 @@ def generate_mpo(I, terms, opts=None):
     ----------
     term: list of :class:`Hterm`
         product operators making up the MPO
-    I: yastn.Tensor
-        on-site identity operator
+    I: yastn.tn.mps.MpsMpo
+        identity MPO
+    opts: dict
+        generator employs svd while compressing MPO bond dimension.
+        opts allows passing options to :meth:`svd_with_truncation`
+        Default None sets truncation `tol` close to the numerical precision, which should result in lossless compression.
+
+    Note
+    ----
+    It is a shorthand for :meth:`generate_mpo_template` and :meth:`generate_mpo_fast`,
+    but without storying the template to generate MPO for different amplitudes in from of product operators.
 
     Returns
     -------
     yastn.tn.mps.MpsMpo
     """
-    if opts is None:
-        opts={'tol': 1e-14}
-    H1s = [generate_single_mpo(I, term, amplitude=False) for term in terms]
-    cfg = H1s[0][0].config
-    mH = np.zeros((len(H1s), I.N), dtype=int)
-    basis, bbasis, t1bs, t2bs, ifbs, tfbs = {}, {}, {}, {}, {}, {}
-    for n in I.sweep():
-        base = []
-        for m, H1 in enumerate(H1s):
-            ind = next((ind for ind, v in enumerate(base) if (v - H1[n]).norm() < 1e-13), None)
-            if ind is None:
-                ind = len(base)
-                base.append(H1[n])
-            mH[m, n] = ind
-        t1bs[n] = [ten.get_legs(axes=0).t[0] for ten in base]
-        t2bs[n] = [ten.get_legs(axes=2).t[0] for ten in base]
-        basis[n] = [ten.fuse_legs(axes=((0, 2), 1, 3)).drop_leg_history() for ten in base]
-        bbasis[n] = block(dict(enumerate(basis[n])), common_legs=(1, 2)).drop_leg_history()
-        tfbs[n] = [ten.get_legs(axes=0).t[0] for ten in basis[n]]
-        ifbs[n] = [sum(x == tfbs[n][i] for x in tfbs[n][:i]) for i in range(len(tfbs[n]))]
-    Js = {}
-    dtype = cfg.default_dtype
-    for a, H1 in zip(terms, H1s):
-        t = H1[0].get_legs(axes=0).t[0]
-        if t in Js:
-            Js[t].append(a.amplitude)
-        else:
-            Js[t] = [a.amplitude]
-        if isinstance(a.amplitude, complex):
-            dtype = 'complex128'
-    J = Tensor(config=cfg, s=(-1, 1), dtype=dtype)
-    for t, val in Js.items():
-        J.set_block(ts=(t, t), Ds=(1, len(val)), val=val)
+    template, amplitudes = generate_mpo_template(I, terms, return_amplitudes=True)
+    return generate_mpo_fast(template, amplitudes, opts=opts)
 
-    M = Mpo(I.N)
-    for n in I.sweep():
-        mH1 = mH[:, 0]
-        mH, rind, iind = np.unique(mH[:, 1:], axis=0, return_index=True, return_inverse=True)
-
-        i2bs = {t: {} for t in t2bs[n]}
-        for ii, rr in enumerate(rind):
-            i2bs[t2bs[n][mH1[rr]]][ii] = len(i2bs[t2bs[n][mH1[rr]]])
-
-        i1bs = {t: 0 for t in t1bs[n]}
-        for ii, rr in enumerate(mH1):
-            i1bs[t1bs[n][rr]] += 1
-
-        leg1 = Leg(cfg, s=-1, t=list(i1bs.keys()), D=list(i1bs.values()))
-        leg2 = bbasis[n].get_legs(axes=0).conj()
-        leg3 = Leg(cfg, s=1, t=list(i2bs.keys()), D=[len(x) for x in i2bs.values()])
-        tran = zeros(config=cfg, legs=[leg1, leg2, leg3])
-
-        li = {x: -1 for x in t1bs[n]}
-        for bl, br in zip(mH1, iind):
-            lt = t1bs[n][bl]
-            li[lt] += 1
-            ft = tfbs[n][bl]
-            fi = ifbs[n][bl]
-            rt = t2bs[n][bl]
-            ri = i2bs[rt][br]
-            tran[lt + ft + rt][li[lt], fi, ri] += 1
-
-        nJ = J @ tran
-        # for bl, br in zip(mH1, iind):
-        #     lt = t1bs[n][bl]
-        #     li[lt] += 1
-        #     ft = tfbs[n][bl]
-        #     fi = ifbs[n][bl]
-        #     rt = t2bs[n][bl]
-        #     ri = i2bs[rt][br]
-        #     nJ[lt + ft + rt][:, fi, ri] += J[lt + lt][:, li[lt]]
-        if n < I.last:
-            nJ, S, V = svd_with_truncation(nJ, axes=((0, 1), 2), sU=1, **opts)
-            J = S @ V
-        M[n] = ncon([nJ, bbasis[n]], [[0, 1, -2], [1, -1, -3]])
-    return M
-
-
-# def generate_mpo2(I, terms, opts=None, packet=50):  # can use better algorithm to compress
-#     r"""
-#     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
-
-#     If the number of MPOs is large, adding them all together can result
-#     in large intermediate MPO. By specifying `packet` size, the groups of MPO-s
-#     are truncated at intermediate steps before continuing with summation.
-
-#     Parameters
-#     ----------
-#     term: list of :class:`Hterm`
-#         product operators making up the MPO
-#     I: yastn.Tensor
-#         on-site identity operator
-#     opts: dict
-#         options for truncation of the result
-#     packet: int
-#         how many ``Hterm``\s (MPOs of bond dimension 1) should be truncated at once
-
-#     Returns
-#     -------
-#     yastn.tn.mps.MpsMpo
-#     """
-#     ip, M_tot, Nterms = 0, None, len(terms)
-#     if opts is None:
-#         opts={'tol': 5e-15}
-#     while ip < Nterms:
-#         H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
-#         M = add(*H1s)
-#         M.canonize_(to='last', normalize=False)
-#         M.truncate_(to='first', opts_svd=opts, normalize=False)
-#         ip += packet
-#         if not M_tot:
-#             M_tot = M.copy()
-#         else:
-#             M_tot = M_tot + M
-#             M_tot.canonize_(to='last', normalize=False)
-#             M_tot.truncate_(to='first', opts_svd=opts, normalize=False)
-#     return M_tot
 
 def generate_single_mps(term, N):  # obsolate - DELETE  (not docummented)
     r"""

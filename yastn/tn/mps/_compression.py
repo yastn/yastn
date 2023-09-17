@@ -138,7 +138,7 @@ def _compression_(psi, target, method,
 
         if Schmidt_tol is not None:
             max_dS = max((Schmidt[k] - Schmidt_old[k]).norm() for k in Schmidt.keys())
-            Schmidt_old = Schmidt
+            Schmidt_old = Schmidt.copy()
             converged.append(max_dS < Schmidt_tol)
 
         logger.info('Sweep = %03d  overlap = %0.14f  doverlap = %0.4f  dSchmidt = %0.4f', sweep, overlap, doverlap, max_dS)
@@ -228,8 +228,18 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
 
 def zipper(a, b, opts=None):
     """
-    Apply MPO a on MPS/MPS b, performing svd compression during the sweep.
+    Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
 
+    Parameters
+    ----------
+    a, b: yastn.tn.mps.MpsMpo
+
+    opts: dict
+        truncation parameters for :meth:`yastn.linalg.truncation_mask`
+
+    Returns
+    -------
+    yastn.tn.mps.MpsMpo
     """
 
     psi = b.shallow_copy()
@@ -263,3 +273,7 @@ def zipper(a, b, opts=None):
     psi[psi.first] = (tmp / ntmp) @ psi[psi.first]
     psi.factor = a.factor * b.factor * ntmp
     return psi
+
+
+def linear_combination(self):
+    pass
