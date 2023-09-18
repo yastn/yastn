@@ -426,62 +426,62 @@ class Generator:
             return psi
         raise YastnError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
 
-    def mps_from_latex(self, psi_str, vectors=None, parameters=None):
-        r"""
-        Generate simple mps form the instruction in psi_str.
+    # def mps_from_latex(self, psi_str, vectors=None, parameters=None):
+    #     r"""
+    #     Generate simple mps form the instruction in psi_str.
 
-        Parameters
-        ----------
-        psi_str : str
-            instruction in latex-like format
-        vectors : dict
-            dictionary with vectors for the generator. All should be given as
-            a dictionary with elements in a format:
-            name : lambda j: tensor
-                where
-                name - is a name of an element which can be used in psi_str,
-                j - single index for lambda function,
-                tensor - is a yastn.Tensor with one physical index.
-        parameters : dict
-            dictionary with parameters for the generator
+    #     Parameters
+    #     ----------
+    #     psi_str : str
+    #         instruction in latex-like format
+    #     vectors : dict
+    #         dictionary with vectors for the generator. All should be given as
+    #         a dictionary with elements in a format:
+    #         name : lambda j: tensor
+    #             where
+    #             name - is a name of an element which can be used in psi_str,
+    #             j - single index for lambda function,
+    #             tensor - is a yastn.Tensor with one physical index.
+    #     parameters : dict
+    #         dictionary with parameters for the generator
 
-        Returns
-        -------
-        yastn.tn.mps.MpsMpo
-        """
-        parameters = {**self.parameters, **parameters}
-        c2 = latex2term(psi_str, parameters)
-        c3 = self._term2Hterm(c2, vectors, parameters)
-        return generate_mps(c3, self.N)
+    #     Returns
+    #     -------
+    #     yastn.tn.mps.MpsMpo
+    #     """
+    #     parameters = {**self.parameters, **parameters}
+    #     c2 = latex2term(psi_str, parameters)
+    #     c3 = self._term2Hterm(c2, vectors, parameters)
+    #     return generate_mps(c3, self.N)
 
-    def mps_from_templete(self, templete, vectors=None, parameters=None):
-        r"""
-        Convert instruction in a form of single_term-s to yastn.tn.mps MPO.
+    # def mps_from_templete(self, templete, vectors=None, parameters=None):
+    #     r"""
+    #     Convert instruction in a form of single_term-s to yastn.tn.mps MPO.
 
-        single_term is a templete which which take named from operators and templetes.
+    #     single_term is a templete which which take named from operators and templetes.
 
-        Parameters
-        -----------
-        templete: list
-            List of single_term objects. The object is defined in ._latex2term
-        vectors : dict
-            dictionary with vectors for the generator. All should be given as
-            a dictionary with elements in a format:
-            name : lambda j: tensor
-                where
-                name - is a name of an element which can be used in psi_str,
-                j - single index for lambda function,
-                tensor - is a yastn.Tensor with one physical index.
-        parameters: dict
-            Keys for the dict define the expressions that occur in H_str
+    #     Parameters
+    #     -----------
+    #     templete: list
+    #         List of single_term objects. The object is defined in ._latex2term
+    #     vectors : dict
+    #         dictionary with vectors for the generator. All should be given as
+    #         a dictionary with elements in a format:
+    #         name : lambda j: tensor
+    #             where
+    #             name - is a name of an element which can be used in psi_str,
+    #             j - single index for lambda function,
+    #             tensor - is a yastn.Tensor with one physical index.
+    #     parameters: dict
+    #         Keys for the dict define the expressions that occur in H_str
 
-        Returns
-        -------
-        yastn.tn.mps.MpsMpo
-        """
-        parameters = {**self.parameters, **parameters}
-        c3 = self._term2Hterm(templete, vectors, parameters)
-        return generate_mps(c3, self.N)
+    #     Returns
+    #     -------
+    #     yastn.tn.mps.MpsMpo
+    #     """
+    #     parameters = {**self.parameters, **parameters}
+    #     c3 = self._term2Hterm(templete, vectors, parameters)
+    #     return generate_mps(c3, self.N)
 
     def mpo_from_latex(self, H_str, parameters=None, opts=None):
         r"""
