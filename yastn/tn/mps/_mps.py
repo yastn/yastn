@@ -39,7 +39,7 @@ def Mpo(N):
 
 def add(*states, amplitudes=None):
     r"""
-    Linear superposition of several MPS/MPOs with specific amplitudes.
+    Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]} \times \textrm{states[j]}`.
 
     Compression (truncation of bond dimensions) is not performed.
 
@@ -53,8 +53,6 @@ def add(*states, amplitudes=None):
     Returns
     -------
     yastn.tn.mps.MpsMpo
-        new MPS/MPO given by linear superpostion of :code:`states`, i.e.
-        :math:`\sum_j \textrm{amplitudes[j]} \times \textrm{states[j]}`.
     """
     if amplitudes is None:
         amplitudes = [1] * len(states)
@@ -574,7 +572,7 @@ class MpsMpo:
     def truncate_(self, to='last', normalize=True, opts_svd=None):
         r"""
         Sweep through the MPS/MPO and put it in right/left canonical form
-        using :meth:`SVD<yastn.linalg.svd>` decomposition by setting
+        using :meth:`yastn.linalg.svd_with_truncation` decomposition by setting
         :code:`to='first'` or :code:`to='last'`. It is assumed that tensors are enumerated
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
@@ -595,7 +593,7 @@ class MpsMpo:
             to unity according to the standard 2-norm.
 
         opts_svd : dict
-            options passed to :meth:`SVD<yastn.linalg.svd>`,
+            options passed to :meth:`yastn.linalg.svd_with_truncation`,
             including options governing truncation.
 
         Returns
@@ -635,7 +633,7 @@ class MpsMpo:
     def unmerge_two_sites(self, AA, bd, opts_svd):
         r"""
         Unmerge rank-4 tensor into two neighbouring MPS sites and a central block
-        using :func:`yastn.linalg.svd` to trunctate the bond dimension.
+        using :meth:`yastn.linalg.svd_with_truncation` to trunctate the bond dimension.
 
         Input tensor should be a result of :meth:`merge_two_sites` (or fused consistently).
 

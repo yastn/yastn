@@ -30,9 +30,9 @@ An empty MPS/MPO can be filled with tensors by setting them one by one.
 
     # create 3x2x3 random dense tensor
     cfg = yastn.make_config()
-    legs = [yastn.Leg(config=cgf, s=1, D=(3,)),
+    legs = [yastn.Leg(config=cgf, s=-1, D=(3,)),
             yastn.Leg(config=cgf, s=1, D=(2,)),
-            yastn.Leg(config=cgf, s=-1, D=(3,))]
+            yastn.Leg(config=cgf, s=1, D=(3,))]
     A_1 = yastn.rand(config=cfg, legs=legs)
 
     # assign tensor to site 1
@@ -64,6 +64,7 @@ A list(Hterm) defines a broad class of operators of interests.
 In order to generate the corresponding MPO use :code:`mps.generate_mpo(I, terms)`,
 where :code:`terms` is a list of Hterm-s and :code:`I` is the identity MPO.
 The latter can conviniently be created with a :meth:`generator<yastn.tn.mps.Generator.I>` described below.
+An example using this method can be found :ref:`here<examples/mps/build:Building MPO using Hterm>`.
 
 .. autofunction:: yastn.tn.mps.generate_mpo
 
@@ -72,7 +73,10 @@ The latter can conviniently be created with a :meth:`generator<yastn.tn.mps.Gene
 .. autofunction:: yastn.tn.mps.generate_mpo_template
 
 
-An example using this method can be found :ref:`here<examples/mps/build:Building MPO using Hterm>`.
+Generating product MPS
+----------------------
+
+.. autofunction:: yastn.tn.mps.generate_product_mps
 
 
 Generator class for MPO/MPS

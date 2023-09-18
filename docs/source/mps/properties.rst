@@ -19,13 +19,13 @@ MPO tenors have an additional physical index. The number of physical indices can
 The index convention for MPS/MPO tensors is `0th` index corresponds to the left virtual space, i.e, in the direction of the first MPS/MPO site.
 `1st`` index is physical, and `2nd` index corresponds to the right virtual space, i.e. in the direction of the last MPS/MPO site.
 For MPO, the last `3rd`` index is also physical.
-We typically assume the signatures :math:`s=(+1, +1, -1)` for MPS tensors and :math:`s=(+1, +1, -1, -1)` for MPO tensors.
+We typically assume the signatures :math:`s=(-1, +1, +1)` for MPS tensors and :math:`s=(-1, +1, +1, -1)` for MPO tensors.
 
 ::
 
     # indices of the individual tensors in MPS
              ___
-    (+1) 0--|___|--2 (-1)
+    (-1) 0--|___|--2 (+1)
               |
               1 (ket; +1)
 
@@ -35,7 +35,7 @@ We typically assume the signatures :math:`s=(+1, +1, -1)` for MPS tensors and :m
 
               3 (bra; -1)
              _|_
-    (+1) 0--|___|--2 (-1)
+    (-1) 0--|___|--2 (+1)
               |
               1 (ket; +1)
 

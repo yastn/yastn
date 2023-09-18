@@ -230,6 +230,10 @@ def zipper(a, b, opts=None):
     """
     Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
 
+    Perform canonization of `b` to the last site.
+    Next, sweep back attaching elements of `a` and truncating the bond dimension along the way.
+    The resulting state is canonized to the first site.
+
     Parameters
     ----------
     a, b: yastn.tn.mps.MpsMpo
@@ -241,7 +245,6 @@ def zipper(a, b, opts=None):
     -------
     yastn.tn.mps.MpsMpo
     """
-
     psi = b.shallow_copy()
     psi.canonize_(to='last')
 
