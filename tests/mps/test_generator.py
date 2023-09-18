@@ -257,39 +257,28 @@ def test_generate_random_mps():
 
 def test_generate_product_mps():
     """ test mps.generate_prod_mps"""
-    for sym, ntot in [('U1', (1,)), ('Z2', (1,)), ('dense', ())]:
+    for sym, nl, nr in [('U1', (1,), (0,)), ('Z2', (1,), (0,)), ('dense', (), ())]:
         ops = yastn.operators.Spin12(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
-        nn = (ops.sp() @ ops.sm()).remove_zero_blocks()
-        leg = nn.get_legs(axes=1).conj()
-        v1 = nn @ yastn.ones(config=ops.config, legs=[leg], n=leg.t[0])
+        vp1 = ops.vec_z(val=+1)
+        vm1 = ops.vec_z(val=-1)
 
-        hh = (ops.sm() @ ops.sp()).remove_zero_blocks()
-        leg = hh.get_legs(axes=1).conj()
-        v0 = hh @ yastn.ones(config=ops.config, legs=[leg], n=leg.t[0])
-
-        psi = mps.generate_product_mps(vectors=[v1, v0, v1, v0, v0, v1, v1])
+        psi = mps.generate_product_mps(vectors=[vp1, vm1, vp1, vm1, vm1, vp1, vp1])
 
         assert pytest.approx(mps.vdot(psi, psi).item(), rel=tol) == 1.0
-        assert psi.virtual_leg('first').t == (ntot,)
-        assert mps.measure_1site(psi, nn, psi) == {0: 1.0, 1: 0.0, 2: 1.0, 3: 0.0, 4: 0.0, 5: 1.0, 6: 1.0}
-        assert mps.measure_1site(psi, hh, psi) == {0: 0.0, 1: 1.0, 2: 0.0, 3: 1.0, 4: 1.0, 5: 0.0, 6: 0.0}
+        assert psi.virtual_leg('first').t == (nl,)
+        assert psi.virtual_leg('last').t == (nr,)
+        assert mps.measure_1site(psi, ops.z(), psi) == {0: +1.0, 1: -1.0, 2: +1.0, 3: -1.0, 4: -1.0, 5: +1.0, 6: +1.0}
 
     for sym, ntot in [('U1', (4,)), ('Z2', (0,))]:
         ops = yastn.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
-        nn = (ops.cp() @ ops.c()).remove_zero_blocks()
-        leg = nn.get_legs(axes=1).conj()
-        v1 = nn @ yastn.ones(config=ops.config, legs=[leg], n=leg.t[0])
-
-        hh = (ops.c() @ ops.cp()).remove_zero_blocks()
-        leg = hh.get_legs(axes=1).conj()
-        v0 = hh @ yastn.ones(config=ops.config, legs=[leg], n=leg.t[0])
+        v0 = ops.vec_n(val=0)
+        v1 = ops.vec_n(val=1)
 
         psi = mps.generate_product_mps(vectors=[v1, v0, v1, v0, v0, v1, v1])
 
         assert pytest.approx(mps.vdot(psi, psi).item(), rel=tol) == 1.0
         assert psi.virtual_leg('first').t == (ntot,)
-        assert mps.measure_1site(psi, nn, psi) == {0: 1.0, 1: 0.0, 2: 1.0, 3: 0.0, 4: 0.0, 5: 1.0, 6: 1.0}
-        assert mps.measure_1site(psi, hh, psi) == {0: 0.0, 1: 1.0, 2: 0.0, 3: 1.0, 4: 1.0, 5: 0.0, 6: 0.0}
+        assert mps.measure_1site(psi, ops.n(), psi) == {0: 1.0, 1: 0.0, 2: 1.0, 3: 0.0, 4: 0.0, 5: 1.0, 6: 1.0}
 
 
 def test_generator_mpo():
