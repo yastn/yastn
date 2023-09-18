@@ -34,8 +34,8 @@ def compression_(psi, target, method='1site',
         * sum of MPS's: target is ``[[Mps],[Mps],...]``
         * sum of MPO's acting on MPS's: target is ``[[Mpo,Mps], [Mpo,Mps], ...]``
 
-    Outputs generator if :code:`iterator_step` is given.
-    Generator allows inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
+    Outputs iterator if :code:`iterator_step` is given.
+    It allows inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------

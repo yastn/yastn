@@ -31,8 +31,8 @@ def dmrg_(psi, H, project=None, method='1site',
     The DMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
     or until all convergence measures, with tolerance that is not None, change by less than the provided tolerance during a single sweep.
 
-    Outputs generator if :code:`iterator_step` is given.
-    Generator allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
+    Outputs iterator if :code:`iterator_step` is given.
+    It allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------
@@ -70,7 +70,7 @@ def dmrg_(psi, H, project=None, method='1site',
         If None, use default {'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
     opts_svd: dict
-        Options passed to :meth:`yastn.svd` used to truncate virtual spaces in :code:`method='2site'`.
+        Options passed to :meth:`yastn.linalg.svd_with_truncation` used to truncate virtual spaces in :code:`method='2site'`.
         If None, use default {'tol': 1e-13}
 
     Returns
