@@ -93,7 +93,7 @@ def measure_1site(bra, o, ket):
     -------
     dict
     """
-    op = sorted(O.items()) if isinstance(o, dict) else [(n, o) for n in ket.sweep(to='last')]
+    op = sorted(o.items()) if isinstance(o, dict) else [(n, o) for n in ket.sweep(to='last')]
     env = Env2(bra=bra, ket=ket)
     env.setup(to='first').setup(to='last')
     results = {}

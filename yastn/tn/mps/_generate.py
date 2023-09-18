@@ -52,7 +52,9 @@ def generate_product_mpo(I, term, amplitude=True):
     single_mpo = I.copy()
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
         if site < 0 or site > I.N or not isinstance(site, numbers.Integral):
-            raise YastnError("site index in Hterm should be in 0, 1, ..., N-1 ")
+            raise YastnError("position in Hterm should be in 0, 1, ..., N-1 ")
+        if not op.s == (1, -1):
+            raise YastnError("operator in Hterm should be a matrix with signature (1, -1)")
         op = op.add_leg(axis=0, s=-1)
         leg = op.get_legs(axes=0)
         one = ones(config=op.config, legs=(leg, leg.conj()))
@@ -172,7 +174,7 @@ def generate_mpo_fast(template, amplitudes, opts=None):
         The order of the list should match the order of Hterms supplemented to :meth:`yastn.tn.mps.generate_mpo_template`.
     opts: dict
         The generator function employs svd while compressing MPO bond dimension.
-        opts allows passing options to :meth:`yastn.svd_with_truncation`
+        opts allows passing options to :meth:`yastn.linalg.svd_with_truncation`
         Default None sets truncation `tol` close to the numerical precision, which should effectively result in lossless compression.
 
     Returns
@@ -195,14 +197,12 @@ def generate_mpo_fast(template, amplitudes, opts=None):
         J.set_block(ts=(t, t), Ds=(1, len(val)), val=val)
 
     M = Mpo(len(template.basis))
-    # for n in M.sweep():
-    #     nJ = J @ template.trans[n]
-    #     if n < M.last:
-    #         nJ, S, V = svd_with_truncation(nJ, axes=((0, 1), 2), sU=1, **opts)
-    #         J = S @ V
-    #     M[n] = ncon([nJ, template.basis[n]], [[0, 1, -2], [1, -1, -3]])
-
     for n in M.sweep():
+        #   nJ = J @ template.trans[n]
+        #   if n < M.last:
+        #       nJ, S, V = svd_with_truncation(nJ, axes=((0, 1), 2), sU=1, **opts)
+        #       J = S @ V
+        #   M[n] = ncon([nJ, template.basis[n]], [[0, 1, -2], [1, -1, -3]])
         nJ = J @ template.trans[n]
         nJ = ncon([nJ, template.basis[n]], [[0, 1, -3], [1, -1, -2]])
         if n < M.last:
@@ -219,7 +219,7 @@ def generate_mpo(I, terms, opts=None):
     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
 
     It is a shorthand for :meth:`yastn.tn.mps.generate_mpo_template` and :meth:`yastn.tn.mps.generate_mpo_fast`,
-    but without storying the template to generate MPOs for different amplitudes in front of product operators.
+    but without storying the template that helps generate MPOs for different amplitudes in front of product operators.
 
     Parameters
     ----------
@@ -229,7 +229,7 @@ def generate_mpo(I, terms, opts=None):
         identity MPO
     opts: dict
         generator employs svd while compressing MPO bond dimension.
-        opts allows passing options to :meth:`yastn.svd_with_truncation`
+        opts allows passing options to :meth:`yastn.linalg.svd_with_truncation`
         Default None sets truncation `tol` close to the numerical precision, which should result in effectively lossless compression.
 
     Returns

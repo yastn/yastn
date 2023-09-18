@@ -58,7 +58,7 @@ Each ``Hterm`` represents a product of local (on-site) operators.
 .. autoclass:: yastn.tn.mps.Hterm
 
 .. note::
-    The :code:`Hterm` has operators :code:`Hterm.operators` without virtual legs and, by convntion, signature `s=(1, -1)`.
+     :code:`Hterm.operators` should be a list of matrices with signatutes :math:`s=(1, -1)`.
 
 A list(Hterm) defines a broad class of operators of interests.
 In order to generate the corresponding MPO use :code:`mps.generate_mpo(I, terms)`,

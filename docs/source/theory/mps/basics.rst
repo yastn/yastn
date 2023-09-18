@@ -4,9 +4,9 @@ Basic concepts
 Matrix product state (MPS)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Numerical simulations of quantum systems have proven to be hard due to the exponentially growing size of the matrix representation of the system with the number of constituent particles.  In particular, if the local Hilbert space for *j*-th particle is :math:`\mathcal{H}_j` of dimension *d*
-(e.g., *d=2* for qubit and *d=3* for qutrit) then for *N* particles it will be :math:`\mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1}`
-of dimension :math:`d^N`.
+Numerical simulations of quantum many-body systems prove to be hard due to the exponentially growing size of the matrix representation of the system with the number of constituent particles.
+In particular, if the local Hilbert space for *j*-th particle is :math:`\mathcal{H}_j` of dimension *d*
+(e.g., *d=2* for qubit and *d=3* for qutrit) then for *N* particles it will be :math:`\mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1}` of dimension :math:`d^N`.
 Bipartite tensor networks, such as matrix product states, introduce a concept of efficient separation of variables which iteratively splits groups of particle by performing :ref:`spectral decomposition<tensor/algebra:spectral decompositions and truncation>` e.g. singular value decomposition
 (`SVD <https://en.wikipedia.org/wiki/Singular_value_decomposition>`_).
 To form a `matrix product state`, SVD at first isolates `0`-th site from `1-to-N-1`-th, then `0-to-1` from `2-to-N-1`-th, and so on until the state is decomposed into `N` tensors.
@@ -42,10 +42,10 @@ on the left edge and :math:`D_{N-2,N-1} \times d_{N-1} \times 1` on the right ed
 The above discussion presents top-to-bottom construction. However, one can also think about MPS as an ansatz.
 The paradigmatic example is energy minimization to find the best approximation of the ground state of a system.
 The MPS ansatz with fixed virtual dimensions fixes the manifold of states we can reach. Virtual bond dimension
-controls the quality of the approximation, achieving exact representation when :math:`D\rightarrow\infty`.
+controls the quality of the approximation, where the exact representation is rocovered for :math:`D\rightarrow\infty`.
 
 .. note::
-        The MPS can be equipped with symmetries by making its individual tensors *A* symmetric.
+        The MPS can be equipped with symmetries by making its individual tensors symmetric.
         Note that the construction of MPS requires common virtual spaces to be matching.
 
 
@@ -82,14 +82,14 @@ MPO with open boundary conditions has a bond dimension `D=1` on the edges of the
 Canonical form
 ^^^^^^^^^^^^^^
 
-The practical success of matrix product states follows from the possibility of putting them into canonical forms.
+The practical success of matrix product states is closely related to the possibility of putting them into canonical forms.
 Among others, this allow using local :ref:`sepctral decomposition<tensor/algebra:spectral decompositions and truncation>` to perform globally optimal truncation of the MPS on a specific bond.
 *Canonical decomposition* is also an integral element of every :ref:`MPS algorithm<theory/mps/basics:Algorithms>`, including energy minimization with DMRG or time evolution with TDVP.
 In those algorithms, one locally updates individual MPS tensors, adjusting its canonical form while sweeping through the lattice.
 
 We choose to put MPS in the `canonical form` with respect to the *j*-to-*j+1*-th bond.
 This is equivalent to performing Schmidt decomposition of the MPS with :math:`D_{j,j+1}` left Schmidt vectors :math:`|L_{0,1\cdots j}\rangle`, :math:`D_{j,j+1}` right Schmidt vectors :math:`|R_{j+1,j+2\cdots N-1}\rangle`, and a diagonal matrix of Schmidt values :math:`\Lambda_{j-1,j}`.
-More generally, one has a central matrix (block) :math:`C_{j,j+1}`, which SVD gives the MPS Schmidt values.
+More generally, instead of a diagonal positive matrix :math:`\Lambda_{j-1,j}`, one often works with a central matrix (block) :math:`C_{j,j+1}`, which SVD gives the Schmidt values on the bond.
 
 ::
 
@@ -103,7 +103,7 @@ More generally, one has a central matrix (block) :math:`C_{j,j+1}`, which SVD gi
 
 
 The left and right Schmidt vectors, forming columns of the matrix :math:`L_{0,1\cdots j}` and rows of the matrix :math:`R_{j+1,j+2\cdots N-1}` are orthonormal.
-It implies that :math:`L^\dagger L=I` and  :math:`R R^\dagger=I`, where :math:`I` is an identity matrix on a virtual bond, which we obtain after contracting physical indices.
+It implies that :math:`L^\dagger L=I` and  :math:`R R^\dagger=I`, where :math:`I` is an identity matrix on the virtual bond, which we obtain after contracting physical indices.
 The virtual bond of MPS can be efficiently truncated by discarding singular values :math:`\Lambda_{j,j+1}` of the smallest magnitude.
 If, for every MPS tensor, the left environment is unitary, i.e., for corresponding left vectors :math:`L_j^\dagger L_j=I`, then we say that MPS is in the `left canonical form`.
 It can be obtained by consecutive :meth:`QR<yastn.linalg.qr>` decompositions of each MPS tensor, starting from `0`-th, where the unitary part forms a new tensor, and the upper-triangular part becomes a central tensor that gets attached to the subsequent MPS tensor.
