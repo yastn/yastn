@@ -240,70 +240,26 @@ def generate_mpo(I, terms, opts=None):
     return generate_mpo_fast(template, amplitudes, opts=opts)
 
 
-def generate_single_mps(term, N):  # obsolate - DELETE  (not docummented)
+def generate_product_mps(vectors):
     r"""
     Generate an MPS given vectors for each site in the MPS.
 
     Parameters
     ----------
-    term: :class:`Hterm`
-        instruction to create the Mps which is a product of
-        operators element.operator at location element.position
-        and with amplitude element.amplitude.
-    N: int
-        MPS size
+    vectors: list[yastn.Tensor]
+        vectors will be attributed to consecuative MPS sites.
+        Each vector should have signature s=+1.
+        They can have non-zero charge, that will be converted into virtual legs.
+        The size of MPS is follows as len(vectors).
     """
-    if len(term.positions) != len(set(term.positions)):
-        raise GeneratorError("List contains more than one operator for a single position.\n \
-            Multiplication of two vectors is not defined.")
-    if len(set(term.positions)) != N:
-        raise GeneratorError("Provide term for each site in MPS.")
-    single_mps = Mps(N)
-    for n in range(N):
-        if n in term.positions:
-            op = term.operators[term.positions == n]
-        else:
-            raise GeneratorError("Provide term for each site in MPS.")
-        single_mps.A[n] = op.add_leg(axis=0, s=-1).add_leg(axis=2, s=1)
-    return term.amplitude * single_mps
-
-def generate_mps(terms, N, normalize=False, opts=None, packet=50):   #  DELETE
-    r"""
-    Generate MPS provided a list of :class:`Hterm`-s.
-
-    If the number of MPSs is large, adding them all together can result
-    in large intermediate MPS. By specifying ``packet`` size, the groups of MPO-s
-    are truncated at intermediate steps before continuing with summing.
-
-    Parameters
-    ----------
-    N: int
-       number of sites
-    term: list of :class:`Hterm`
-        product operators making up the MPS
-    normalize: bool
-        True if the result should be normalized
-    opts: dict
-        options for truncation of the result
-    packet: int
-        how many single MPO-s of bond dimension 1 shuold be truncated at ones
-
-    Returns
-    -------
-    yastn.tn.mps.MpsMpo
-    """
-    ip, M_tot, Nterms = 0, None, len(terms)
-    while ip < Nterms:
-        H1s = [generate_single_mps(terms[j], N) for j in range(ip, min([Nterms, ip + packet]))]
-        M = add(*H1s)
-        M.truncate_(to='first', opts_svd=opts, normalize=normalize)
-        ip += packet
-        if not M_tot:
-            M_tot = M.copy()
-        else:
-            M_tot = M_tot + M
-            M_tot.truncate_(to='first', opts_svd=opts, normalize=normalize)
-    return M_tot
+    psi = Mps(len(vectors))
+    rt = (0,) * vectors[0].config.sym.NSYM
+    for n, vec in zip(psi.sweep(to='first'), vectors[::-1]):
+        if not vec.s == (1,):
+            raise YastnError("Vector should have s = (1,).")
+        psi[n] = vec.add_leg(axis=1, s=1, t=rt).add_leg(axis=0, s=-1)
+        rt = psi[n].get_legs(axes=0).t[0]
+    return psi
 
 
 class Generator:
@@ -315,7 +271,7 @@ class Generator:
 
                      3 (-1) (physical bra)
                      |
-            (+1) 0--|MPO_i|--2 (-1)
+            (-1) 0--|MPO_i|--2 (+1)
                      |
                      1 (+1) (physical ket)
 
@@ -338,7 +294,7 @@ class Generator:
             Default parameters used by the interpreters :meth:`Generator.mpo` and :meth:`Generator.mps`.
             If None, uses default ``{'sites': [*map.keys()]}``.
         opts : dict
-            used if compression is needed. Options passed to :meth:`yastn.linalg.svd`.
+            used if compression is needed. Options passed to :meth:`yastn.linalg.svd_with_truncation`.
         """
         # Notes
         # ------

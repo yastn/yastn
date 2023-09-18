@@ -33,7 +33,7 @@ API: yastn.tn.mps
    mps/init
    mps/measurements
    mps/algebra
-   mps/canonisation
+   mps/canonization
    mps/algorithms_dmrg
    mps/algorithms_tdvp
    mps/algorithms_overlap
