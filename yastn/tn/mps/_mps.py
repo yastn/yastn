@@ -1,4 +1,5 @@
 """ Mps structure and its basic manipulations. """
+from __future__ import annotations
 from ... import tensor, initialize, YastnError
 
 ###################################
@@ -37,7 +38,7 @@ def Mpo(N):
     return MpsMpo(N, nr_phys=2)
 
 
-def add(*states, amplitudes=None):
+def add(*states, amplitudes=None) -> MpsMpo:
     r"""
     Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]} \times \textrm{states[j]}`.
 
@@ -93,7 +94,7 @@ def add(*states, amplitudes=None):
     return phi
 
 
-def multiply(a, b, mode=None):
+def multiply(a, b, mode=None) -> MpsMpo:
     r"""
     Performs MPO-MPS product resulting in a new MPS, or
     MPO-MPO product resulting in a new MPO.
