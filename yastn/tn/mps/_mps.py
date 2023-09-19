@@ -1,5 +1,6 @@
 """ Mps structure and its basic manipulations. """
 from __future__ import annotations
+import numbers
 from ... import tensor, initialize, YastnError
 
 ###################################
@@ -181,7 +182,7 @@ class MpsMpo:
         nr_phys : int
             number of physical legs: 1 for MPS (default); 2 for MPO;
         """
-        if not isinstance(N, int) or N <= 0:
+        if not isinstance(N, numbers.Integral) or N <= 0:
             raise YastnError('MPS: Number of Mps sites N should be a positive integer.')
         if nr_phys not in (1, 2):
             raise YastnError('MPS: Number of physical legs, nr_phys, should be equal to 1 or 2.')
@@ -220,7 +221,7 @@ class MpsMpo:
 
     def __setitem__(self, n, tensor):
         """ Assign tensor to n-th site of Mps or Mpo. """
-        if not isinstance(n, int) or n < self.first or n > self.last:
+        if not isinstance(n, numbers.Integral) or n < self.first or n > self.last:
             raise YastnError('MPS: n should be an integer in [0, N - 1].')
         if tensor.ndim != self.nr_phys + 2:
             raise YastnError('MPS: Tensor rank should be {}.'.format(self.nr_phys + 2))
