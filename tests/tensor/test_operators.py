@@ -193,15 +193,10 @@ def test_spinful_fermions():
 
         v00, v10, v01, v11 = ops.vec_n((0, 0)), ops.vec_n((1, 0)), ops.vec_n((0, 1)), ops.vec_n((1, 1))
         nu, nd = ops.n('u'), ops.n('d')
-        assert yastn.norm(nu @ v00) < tol
-        assert yastn.norm(nu @ v01) < tol
-        assert yastn.norm(nu @ v10 - v10) < tol
-        assert yastn.norm(nu @ v11 - v11) < tol
-        assert yastn.norm(nd @ v00) < tol
-        assert yastn.norm(nd @ v01 - v01) < tol
-        assert yastn.norm(nd @ v10) < tol
-        assert yastn.norm(nd @ v11 - v11) < tol
-
+        assert yastn.norm(nu @ v00) < tol and yastn.norm(nd @ v00) < tol
+        assert yastn.norm(nu @ v01) < tol and yastn.norm(nd @ v01 - v01) < tol
+        assert yastn.norm(nu @ v10 - v10) < tol and yastn.norm(nd @ v10) < tol
+        assert yastn.norm(nu @ v11 - v11) < tol and yastn.norm(nd @ v11 - v11) < tol
 
     with pytest.raises(yastn.YastnError):
         yastn.operators.SpinfulFermions('dense')
@@ -211,7 +206,10 @@ def test_spinful_fermions():
         # spin shoul be equal 'u' or 'd'.
     with pytest.raises(yastn.YastnError):
         ops_Z2.cp(spin=+1)
-    # spin shoul be equal 'u' or 'd'.
+        # spin shoul be equal 'u' or 'd'.
+    with pytest.raises(yastn.YastnError):
+        ops_Z2.vec_n(1)
+        # For SpinfulFermions val in vec_n should be in [(0, 0), (1, 0), (0, 1), (1, 1)].
 
 
 if __name__ == '__main__':
