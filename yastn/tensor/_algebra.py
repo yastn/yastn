@@ -225,7 +225,7 @@ def __lt__(a, number):
 
     Returns
     -------
-    yastn.Tensor
+    yastn.Tensor(bool)
     """
     data = a._data < number
     return a._replace(data=data)
@@ -240,7 +240,7 @@ def __gt__(a, number):
 
     Returns
     -------
-    yastn.Tensor
+    yastn.Tensor(bool)
     """
     data = a._data > number
     return a._replace(data=data)
@@ -255,7 +255,7 @@ def __le__(a, number):
 
     Returns
     -------
-    yastn.Tensor
+    yastn.Tensor(bool)
     """
     data = a._data <= number
     return a._replace(data=data)
@@ -270,7 +270,7 @@ def __ge__(a, number):
 
     Returns
     -------
-    yastn.Tensor
+    yastn.Tensor(bool)
     """
     data = a._data >= number
     return a._replace(data=data)

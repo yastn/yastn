@@ -34,8 +34,8 @@ def compression_(psi, target, method='1site',
         * sum of MPS's: target is ``[[Mps],[Mps],...]``
         * sum of MPO's acting on MPS's: target is ``[[Mpo,Mps], [Mpo,Mps], ...]``
 
-    Outputs generator if :code:`iterator_step` is given.
-    Generator allows inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
+    Outputs iterator if :code:`iterator_step` is given.
+    It allows inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------
@@ -68,7 +68,7 @@ def compression_(psi, target, method='1site',
 
     opts_svd: dict
         Options passed to :meth:`yastn.svd` used to truncate virtual spaces in :code:`method='2site'`.
-        If None, use default {'tol': 1e-14}
+        If None, use default {'tol': 1e-13}
 
     Returns
     -------
@@ -138,7 +138,7 @@ def _compression_(psi, target, method,
 
         if Schmidt_tol is not None:
             max_dS = max((Schmidt[k] - Schmidt_old[k]).norm() for k in Schmidt.keys())
-            Schmidt_old = Schmidt
+            Schmidt_old = Schmidt.copy()
             converged.append(max_dS < Schmidt_tol)
 
         logger.info('Sweep = %03d  overlap = %0.14f  doverlap = %0.4f  dSchmidt = %0.4f', sweep, overlap, doverlap, max_dS)
@@ -206,7 +206,7 @@ def _compression_1site_sweep_(env, Schmidt=None):
 def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
     """ variational update on 2 sites """
     if opts_svd is None:
-        opts_svd = {'tol': 1e-14}
+        opts_svd = {'tol': 1e-13}
     max_disc_weight = -1.
     bra, ket = env.bra, env.ket
     for to, dn in (('last', 0), ('first', 1)):
@@ -228,10 +228,23 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
 
 def zipper(a, b, opts=None):
     """
-    Apply MPO a on MPS/MPS b, performing svd compression during the sweep.
+    Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
 
+    Perform canonization of `b` to the last site.
+    Next, sweep back attaching elements of `a` and truncating the bond dimension along the way.
+    The resulting state is canonized to the first site.
+
+    Parameters
+    ----------
+    a, b: yastn.tn.mps.MpsMpo
+
+    opts: dict
+        truncation parameters for :meth:`yastn.linalg.truncation_mask`
+
+    Returns
+    -------
+    yastn.tn.mps.MpsMpo
     """
-
     psi = b.shallow_copy()
     psi.canonize_(to='last')
 
@@ -263,3 +276,7 @@ def zipper(a, b, opts=None):
     psi[psi.first] = (tmp / ntmp) @ psi[psi.first]
     psi.factor = a.factor * b.factor * ntmp
     return psi
+
+
+def linear_combination(self):
+    pass

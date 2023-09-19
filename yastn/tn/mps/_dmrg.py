@@ -31,8 +31,8 @@ def dmrg_(psi, H, project=None, method='1site',
     The DMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
     or until all convergence measures, with tolerance that is not None, change by less than the provided tolerance during a single sweep.
 
-    Outputs generator if :code:`iterator_step` is given.
-    Generator allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
+    Outputs iterator if :code:`iterator_step` is given.
+    It allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------
@@ -70,21 +70,21 @@ def dmrg_(psi, H, project=None, method='1site',
         If None, use default {'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
     opts_svd: dict
-        Options passed to :meth:`yastn.svd` used to truncate virtual spaces in :code:`method='2site'`.
-        If None, use default {'tol': 1e-14}
+        Options passed to :meth:`yastn.linalg.svd_with_truncation` used to truncate virtual spaces in :code:`method='2site'`.
+        If None, use default {'tol': 1e-13}
 
     Returns
     -------
     DMRG_out(NamedTuple)
         NamedTuple including fields:
-            
+
             * :code:`sweeps` number of performed dmrg sweeps.
             * :code:`energy` energy after the last sweep.
             * :code:`denergy` absolut value of energy change in the last sweep.
             * :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
             * :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
-    tmp = _dmrg_(psi, H, project, method, 
+    tmp = _dmrg_(psi, H, project, method,
                 energy_tol, Schmidt_tol, max_sweeps, iterator_step,
                 opts_eigs, opts_svd)
     return tmp if iterator_step else next(tmp)
@@ -133,7 +133,7 @@ def _dmrg_(psi, H, project, method,
 
         if Schmidt_tol is not None:
             max_dS = max((Schmidt[k] - Schmidt_old[k]).norm() for k in Schmidt.keys())
-            Schmidt_old = Schmidt
+            Schmidt_old = Schmidt.copy()
             converged.append(max_dS < Schmidt_tol)
 
         logger.info('Sweep = %03d  energy = %0.14f  dE = %0.4f  dSchmidt = %0.4f', sweep, E, dE, max_dS)
@@ -180,7 +180,7 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
     psi = env.ket
 
     if opts_svd is None:
-        opts_svd = {'tol': 1e-14}
+        opts_svd = {'tol': 1e-13}
 
     max_disc_weight = -1.
     for to, dn in (('last', 0), ('first', 1)):

@@ -1,4 +1,6 @@
 """ Mps structure and its basic manipulations. """
+from __future__ import annotations
+import numbers
 from ... import tensor, initialize, YastnError
 
 ###################################
@@ -37,9 +39,9 @@ def Mpo(N):
     return MpsMpo(N, nr_phys=2)
 
 
-def add(*states, amplitudes=None):
+def add(*states, amplitudes=None) -> MpsMpo:
     r"""
-    Linear superposition of several MPS/MPOs with specific amplitudes.
+    Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]} \times \textrm{states[j]}`.
 
     Compression (truncation of bond dimensions) is not performed.
 
@@ -53,8 +55,6 @@ def add(*states, amplitudes=None):
     Returns
     -------
     yastn.tn.mps.MpsMpo
-        new MPS/MPO given by linear superpostion of :code:`states`, i.e.
-        :math:`\sum_j \textrm{amplitudes[j]} \times \textrm{states[j]}`.
     """
     if amplitudes is None:
         amplitudes = [1] * len(states)
@@ -70,8 +70,8 @@ def add(*states, amplitudes=None):
         raise YastnError('MPS: All states should be either Mps or Mpo.')
     if any(psi.pC != None for psi in states):
         raise YastnError('MPS: Absorb central sites of mps-s before calling add.')
-    legf = states[0][phi.first].get_legs(axes=0)
-    legl = states[0][phi.last].get_legs(axes=2)
+    # legf = states[0][phi.first].get_legs(axes=0)
+    # legl = states[0][phi.last].get_legs(axes=2)
     #if any(psi.virtual_leg('first') != legf or psi.virtual_leg('last') != legl for psi in states):
     #    raise YastnError('MPS: Addition')
 
@@ -95,7 +95,7 @@ def add(*states, amplitudes=None):
     return phi
 
 
-def multiply(a, b, mode=None):
+def multiply(a, b, mode=None) -> MpsMpo:
     r"""
     Performs MPO-MPS product resulting in a new MPS, or
     MPO-MPO product resulting in a new MPO.
@@ -158,16 +158,16 @@ def multiply(a, b, mode=None):
 
 class MpsMpo:
     r"""
-    The basic structure of MPS (for nr_phys=1) and MPO (for nr_phys=2).
+    The basic structure of MPS/MPO with *N* sites.
 
     MpsMpo tensors (sites) are accessed with usual ``[]`` operator. They are indexed
     by integers from :math:`0, 1, 2, 3, \ldots, N-1` with :math:`0` corresponding to the first site.
-    A central block, associated with a bond, is indexed using ordered tuple (n, n+1). At most one central block is allowed.
+    A central block, associated with a bond, is indexed using ordered tuple (n, n+1).
+    At most one central block is allowed.
 
     The :ref:`Index convention<mps/properties:index convention>` for
     legs of each tensor is: virtual leg in the direction of first site, 1st physical leg (:math:`|\textrm{ket}\rangle`),
     virtual leg in the direction of last site, and 2nd physical leg (:math:`\langle \textrm{bra}|`) in case of MPO.
-
     """
 
     def __init__(self, N=1, nr_phys=1):
@@ -182,7 +182,7 @@ class MpsMpo:
         nr_phys : int
             number of physical legs: 1 for MPS (default); 2 for MPO;
         """
-        if not isinstance(N, int) or N <= 0:
+        if not isinstance(N, numbers.Integral) or N <= 0:
             raise YastnError('MPS: Number of Mps sites N should be a positive integer.')
         if nr_phys not in (1, 2):
             raise YastnError('MPS: Number of physical legs, nr_phys, should be equal to 1 or 2.')
@@ -221,7 +221,7 @@ class MpsMpo:
 
     def __setitem__(self, n, tensor):
         """ Assign tensor to n-th site of Mps or Mpo. """
-        if not isinstance(n, int) or n < self.first or n > self.last:
+        if not isinstance(n, numbers.Integral) or n < self.first or n > self.last:
             raise YastnError('MPS: n should be an integer in [0, N - 1].')
         if tensor.ndim != self.nr_phys + 2:
             raise YastnError('MPS: Tensor rank should be {}.'.format(self.nr_phys + 2))
@@ -574,7 +574,7 @@ class MpsMpo:
     def truncate_(self, to='last', normalize=True, opts_svd=None):
         r"""
         Sweep through the MPS/MPO and put it in right/left canonical form
-        using :meth:`SVD<yastn.linalg.svd>` decomposition by setting
+        using :meth:`yastn.linalg.svd_with_truncation` decomposition by setting
         :code:`to='first'` or :code:`to='last'`. It is assumed that tensors are enumerated
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
@@ -595,7 +595,7 @@ class MpsMpo:
             to unity according to the standard 2-norm.
 
         opts_svd : dict
-            options passed to :meth:`SVD<yastn.linalg.svd>`,
+            options passed to :meth:`yastn.linalg.svd_with_truncation`,
             including options governing truncation.
 
         Returns
@@ -635,7 +635,7 @@ class MpsMpo:
     def unmerge_two_sites(self, AA, bd, opts_svd):
         r"""
         Unmerge rank-4 tensor into two neighbouring MPS sites and a central block
-        using :func:`yastn.linalg.svd` to trunctate the bond dimension.
+        using :meth:`yastn.linalg.svd_with_truncation` to trunctate the bond dimension.
 
         Input tensor should be a result of :meth:`merge_two_sites` (or fused consistently).
 
@@ -670,30 +670,24 @@ class MpsMpo:
         if ind == 'last':
             return self.A[self.last].get_legs(axes=2)
 
-    def get_bond_dimensions(self):
+    def get_bond_dimensions(self) -> list[int]:
         r"""
-        Returns total bond dimensions of all virtual spaces along MPS/MPO.
-
-        Returns
-        -------
-        list(int)
-            list of total bond dimensions on virtual legs from first to last,
-            including "trivial" leftmost and rightmost virtual spaces.
+        Returns total bond dimensions of all virtual spaces along MPS/MPO from the first to the last site,
+        including "trivial" leftmost and rightmost virtual spaces.
         """
         Ds = [self.A[n].get_shape(axes=0) for n in self.sweep(to='last')]
         Ds.append(self.A[self.last].get_shape(axes=2))
         return tuple(Ds)
 
-    def get_bond_charges_dimensions(self):
+    def get_bond_charges_dimensions(self) -> list[dict[tuple[int], int]]:
         r"""
-        Returns list of charge sectors and their dimensions for all virtual spaces
-        along MPS/MPO.
+        Returns list of charge sectors and their dimensions for all virtual spaces along MPS/MPO from the first to the last site,
+        including "trivial" leftmost and rightmost virtual spaces.
+        Each element of the list is a dictionary {charge: sectorial bond dimension}.
 
         Returns
         -------
         list(dict(tuple(int),int))
-            list of charges and corresponding dimensions on virtual mps bonds from first to last,
-            including "trivial" leftmost and rightmost virtual spaces.
         """
         tDs = []
         for n in self.sweep(to='last'):
@@ -705,18 +699,18 @@ class MpsMpo:
 
     def get_entropy(self, alpha=1):
         r"""
-        Entropy of bipartition across each bond.
+        Entropy of bipartition across each bond, along MPS/MPO from the first to the last site,
+        including "trivial" leftmost and rightmost cuts.
 
         Parameters
         ----------
         alpha : int
-            value 1 (default) computes Von Neumann entropy. Higher values
-            instead compute order :code:`alpha` Renyi entropies.
+            value 1 (default) computes Von Neumann entropy.
+            Higher values instead compute order `alpha` Renyi entropies.
 
         Returns
         -------
         list(scalar)
-            list of bond entropies.
         """
         Entropy = [0] * (self.N + 1)
         psi = self.shallow_copy()
@@ -730,12 +724,11 @@ class MpsMpo:
 
     def get_Schmidt_values(self):
         r"""
-        Schmidt values for bipartition across all bonds (i-1, i).
+        Schmidt values for bipartition across all bonds (i-1, i). Schmidt values are stored as diagonal tensors.
 
         Returns
         -------
         dict((int, int), yastn.Tensor)
-            tuple(int)-indexed dictionary of Schmidt values stored as diagonal tensors.
         """
         SV = {}
         psi = self.shallow_copy()
@@ -752,12 +745,13 @@ class MpsMpo:
         r"""
         Serialize MPS/MPO into a dictionary.
 
+        Each element represents serialized :class:`yastn.Tensor`
+        (see :meth:`yastn.Tensor.save_to_dict`)
+        of the MPS/MPO starting from the first site to the last.
+
         Returns
         -------
-        dict(int,dict)
-            each element represents serialized :class:`yastn.Tensor`
-            (see :meth:`yastn.Tensor.save_to_dict`) of the MPS/MPO starting
-            from the first site to the last.
+        dict(int, dict)
         """
         out_dict = {
             'nr_phys': self.nr_phys,

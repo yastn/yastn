@@ -71,9 +71,9 @@ def measure_mpo(bra, op, ket):
     return env.measure(bd=(-1, 0))
 
 
-def measure_1site(bra, O, ket):
+def measure_1site(bra, o, ket):
     r"""
-    Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i|\textrm{ket} \rangle` for local operator :code:`O` at each lattice site `i`.
+    Calculate expectation values :math:`\langle \textrm{bra}|\textrm{o}_i|\textrm{ket} \rangle` for local operator :code:`O` at each lattice site `i`.
 
     Local operators can be provided as dictionary {site: operator}, limiting the calculation to provided sites.
     Conjugate of MPS :code:`bra` is computed internally.
@@ -93,7 +93,7 @@ def measure_1site(bra, O, ket):
     -------
     dict
     """
-    op = sorted(O.items()) if isinstance(O, dict) else [(n, O) for n in ket.sweep(to='last')]
+    op = sorted(o.items()) if isinstance(o, dict) else [(n, o) for n in ket.sweep(to='last')]
     env = Env2(bra=bra, ket=ket)
     env.setup(to='first').setup(to='last')
     results = {}
@@ -103,9 +103,9 @@ def measure_1site(bra, O, ket):
     return results
 
 
-def measure_2site(bra, O, P, ket):
+def measure_2site(bra, o, p, ket):
     r"""
-    Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i \textrm{P}_j|\textrm{ket} \rangle` for local operators :code:`O` and :code:`P` at each pair of lattice sites :math:`i < j`.
+    Calculate expectation values :math:`\langle \textrm{bra}|\textrm{o}_i \textrm{p}_j|\textrm{ket} \rangle` for local operators :code:`O` and :code:`P` at each pair of lattice sites :math:`i < j`.
 
     Local operators can be provided as dictionary {site: operator}, limiting the calculation to provided sites.
     Conjugate of MPS :code:`bra` is computed internally.
@@ -125,8 +125,8 @@ def measure_2site(bra, O, P, ket):
     -------
     dict
     """
-    op1 = sorted(O.items()) if isinstance(O, dict) else [(n, O) for n in ket.sweep(to='last')]
-    op2 = sorted(P.items()) if isinstance(P, dict) else [(n, P) for n in ket.sweep(to='last')]
+    op1 = sorted(o.items()) if isinstance(o, dict) else [(n, o) for n in ket.sweep(to='last')]
+    op2 = sorted(p.items()) if isinstance(p, dict) else [(n, p) for n in ket.sweep(to='last')]
     n2s = [x[0] for x in op2]
 
     env = Env2(bra=bra, ket=ket)

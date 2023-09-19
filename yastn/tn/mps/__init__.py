@@ -6,5 +6,5 @@ from ._dmrg import dmrg_
 from ._tdvp import tdvp_
 from ._compression import compression_, zipper
 from ._generate import random_dense_mps, random_dense_mpo
-from ._generate import Generator, generate_single_mpo, Hterm, generate_mpo, generate_mps
-from ._latex2term import latex2term, single_term
+from ._generate import Hterm, generate_product_mpo, generate_product_mps
+from ._generate import generate_mpo, generate_mpo_template, generate_mpo_fast, Generator
