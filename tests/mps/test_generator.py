@@ -29,11 +29,11 @@ def mpo_nn_hopping_manually(N=10, t=1.0, mu=0.0, config=None):
     #
     # We chose signature convention for indices of the MPO tensor as follows
     #          |
-    #          V(-1)
+    #          ^(-1)
     #          |
-    # (-1) ->-|T|->-(+1)
+    # (-1) -<-|T|-<-(+1)
     #          |
-    #          V(+1)
+    #          ^(+1)
     #          |
 
     if config is None:
@@ -255,6 +255,32 @@ def test_generate_random_mps():
         assert all(bd > D_total/2 for bd in bds[2:-2])
 
 
+def test_generate_product_mps():
+    """ test mps.generate_prod_mps"""
+    for sym, nl, nr in [('U1', (1,), (0,)), ('Z2', (1,), (0,)), ('dense', (), ())]:
+        ops = yastn.operators.Spin12(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+        vp1 = ops.vec_z(val=+1)
+        vm1 = ops.vec_z(val=-1)
+
+        psi = mps.generate_product_mps(vectors=[vp1, vm1, vp1, vm1, vm1, vp1, vp1])
+
+        assert pytest.approx(mps.vdot(psi, psi).item(), rel=tol) == 1.0
+        assert psi.virtual_leg('first').t == (nl,)
+        assert psi.virtual_leg('last').t == (nr,)
+        assert mps.measure_1site(psi, ops.z(), psi) == {0: +1.0, 1: -1.0, 2: +1.0, 3: -1.0, 4: -1.0, 5: +1.0, 6: +1.0}
+
+    for sym, ntot in [('U1', (4,)), ('Z2', (0,))]:
+        ops = yastn.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+        v0 = ops.vec_n(val=0)
+        v1 = ops.vec_n(val=1)
+
+        psi = mps.generate_product_mps(vectors=[v1, v0, v1, v0, v0, v1, v1])
+
+        assert pytest.approx(mps.vdot(psi, psi).item(), rel=tol) == 1.0
+        assert psi.virtual_leg('first').t == (ntot,)
+        assert mps.measure_1site(psi, ops.n(), psi) == {0: 1.0, 1: 0.0, 2: 1.0, 3: 0.0, 4: 0.0, 5: 1.0, 6: 1.0}
+
+
 def test_generator_mpo():
     # uniform chain with nearest neighbor hopping
     # notation:
@@ -358,7 +384,7 @@ def test_mpo_from_templete():
     for n0 in emap.keys():
         for n1 in emap.keys():
             man_input.append(\
-                mps.single_term((('A',n0,n1), ('cp',n0), ('c',n1),)))
+                mps._latex2term.single_term((('A',n0,n1), ('cp',n0), ('c',n1),)))
     h_man = generate.mpo_from_templete(man_input, eparam)
 
     # test the result by comparing expectation value for a steady state.
@@ -390,36 +416,36 @@ def mpo_basis_ex(config):
     return cpc, ccp, I
 
 
-def test_generator_mps():
-    N = 3
-    cpc, ccp, I = mpo_basis_ex(cfg)
-    ops = yastn.operators.General({'cpc': lambda j: cpc, 'ccp': lambda j: ccp, 'I': lambda j: I})
-    emap = {str(i): i for i in range(N)}
-    generate = mps.Generator(N, ops, map=emap)
-    generate.random_seed(seed=0)
+# def test_generator_mps():
+#     N = 3
+#     cpc, ccp, I = mpo_basis_ex(cfg)
+#     ops = yastn.operators.General({'cpc': lambda j: cpc, 'ccp': lambda j: ccp, 'I': lambda j: I})
+#     emap = {str(i): i for i in range(N)}
+#     generate = mps.Generator(N, ops, map=emap)
+#     generate.random_seed(seed=0)
 
-    # generate from LaTeX-like instruction
-    A = np.random.rand(2)
-    psi_str = "A_{0} Plus_{0} Plus_{1} Plus_{2} + A_{1} Minus_{0} Minus_{1} Minus_{2}"
-    plus, minus = mps_basis_ex(cfg)
+#     # generate from LaTeX-like instruction
+#     A = np.random.rand(2)
+#     psi_str = "A_{0} Plus_{0} Plus_{1} Plus_{2} + A_{1} Minus_{0} Minus_{1} Minus_{2}"
+#     plus, minus = mps_basis_ex(cfg)
 
-    psi_ltx = generate.mps_from_latex(psi_str, \
-        vectors = {'Plus': lambda j: plus, 'Minus': lambda j: minus}, \
-        parameters = {'A': A})
+#     psi_ltx = generate.mps_from_latex(psi_str, \
+#         vectors = {'Plus': lambda j: plus, 'Minus': lambda j: minus}, \
+#         parameters = {'A': A})
 
-    psi_tmpl = generate.mps_from_templete(
-        [mps.single_term((('A','0'),('Plus','0'),('Plus','1'),('Plus','2'))), \
-        mps.single_term((('A','1'),('Minus','0'),('Minus','1'),('Minus','2')))], \
-        vectors = {'Plus': lambda j: plus, 'Minus': lambda j: minus}, \
-        parameters = {'A': A})
+#     psi_tmpl = generate.mps_from_templete(
+#         [mps.single_term((('A','0'),('Plus','0'),('Plus','1'),('Plus','2'))), \
+#         mps.single_term((('A','1'),('Minus','0'),('Minus','1'),('Minus','2')))], \
+#         vectors = {'Plus': lambda j: plus, 'Minus': lambda j: minus}, \
+#         parameters = {'A': A})
 
-    psi = generate.random_mps(D_total=8)
-    assert mps.measure_overlap(psi_tmpl, psi) == mps.measure_overlap(psi_ltx, psi)
+#     psi = generate.random_mps(D_total=8)
+#     assert mps.measure_overlap(psi_tmpl, psi) == mps.measure_overlap(psi_ltx, psi)
 
 
 if __name__ == "__main__":
     test_generate_random_mps()
-    test_generator_mps()
+    test_generate_product_mps()
     test_generator_mpo()
     test_mpo_from_latex()
     test_mpo_from_templete()

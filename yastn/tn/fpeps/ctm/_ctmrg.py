@@ -27,7 +27,7 @@ def ctmrg(peps, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, en
     The CTMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
     or until all convergence measures with provided tolerance change by less then the tolerance.
 
-    Outputs generator if :code:`iterator_step` is given.
+    Outputs iterator if :code:`iterator_step` is given.
     It allows inspecting :code:`peps` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
 
     Parameters
@@ -37,7 +37,7 @@ def ctmrg(peps, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, en
         It is not updated during execution.
 
     env: yastn.fPEPS.CtmEnv
-        Initial environmental tensors: maybe random or given by the user. It is updated during execution. 
+        Initial environmental tensors: maybe random or given by the user. It is updated during execution.
         The virtual bonds aligning with the boundary can be of maximum bond dimension chi
 
     chi: maximal CTM bond dimension
@@ -65,11 +65,11 @@ def ctmrg(peps, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, en
         Includes fields:
         :code:`sweeps` number of performed dmrg sweeps.
     """
-    
+
     # if environment is not given, start with a random initialization
     pconfig =  peps[0,0].config
     if env is None:
-        env = init_rand(peps, tc = ((0,) * pconfig.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
+        env = init_rand(peps, tc = ((0,) * pconfig.sym.NSYM,), Dc=(1,))  # initialization with random tensors
 
     tmp = _ctmrg(peps, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd)
     return tmp if iterator_step else next(tmp)
@@ -87,7 +87,7 @@ def _ctmrg(peps, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd=N
 
     if AAb_mode >= 1:
         fPEPS_fuse_layers(AAb)
-  
+
     for sweep in range(1, max_sweeps + 1):
         logging.info('CTM sweep: %2d', sweep)
         t_start = time.time()

@@ -30,9 +30,10 @@ API: yastn.tn.mps
    :maxdepth: 2
 
    mps/properties
-   mps/algebra
    mps/init
    mps/measurements
+   mps/algebra
+   mps/canonization
    mps/algorithms_dmrg
    mps/algorithms_tdvp
    mps/algorithms_overlap

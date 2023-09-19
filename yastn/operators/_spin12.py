@@ -8,7 +8,7 @@ class Spin12(meta_operators):
         r"""
         A set of standard operators for 2-dimensional Hilbert space. Defines identity,
         :math:`S^z,\ S^x,\ S^y` operators and :math:`S^+,\ S^-` raising and lowering operators,
-        and Pauli matrices (if allowed by symmetry).
+        and Pauli matrices (if allowed by symmetry). Define eigenvectors of :math:`S^z`
 
         Parameters
         ----------
@@ -96,6 +96,32 @@ class Spin12(meta_operators):
             z.set_block(ts=(1, 1), Ds=(1, 1), val=1)
             z.set_block(ts=(-1, -1), Ds=(1, 1), val=-1)
         return z
+
+    def vec_z(self, val=1):
+        """ Normalized eigenvectors of :math:`\sigma^z. """
+        if val not in (-1, 1):
+            raise YastnError('val should be in (-1, 1)')
+        if self._sym == 'dense' and val == 1:
+            vec = Tensor(config=self.config, s=(1,))
+            vec.set_block(val=[1, 0], Ds=(2,))
+        elif self._sym == 'dense' and val == -1:
+            vec = Tensor(config=self.config, s=(1,))
+            vec.set_block(val=[0, 1], Ds=(2,))
+        elif self._sym == 'Z2' and val == 1:
+            vec = Tensor(config=self.config, s=(1,), n=(0,))
+            vec.set_block(val=[1], ts=(0,), Ds=(1,))
+        elif self._sym == 'Z2' and val == -1:
+            vec = Tensor(config=self.config, s=(1,), n=(1,))
+            vec.set_block(val=[1], ts=(1,), Ds=(1,))
+        elif self._sym == 'U1' and val == 1:
+            vec = Tensor(config=self.config, s=(1,), n=(1,))
+            vec.set_block(val=[1], ts=(1,), Ds=(1,))
+        elif self._sym == 'U1' and val == -1:
+            vec = Tensor(config=self.config, s=(1,), n=(-1,))
+            vec.set_block(val=[1], ts=(-1,), Ds=(1,))
+        else:
+            raise YastnError('For Spin12 val in vec_z should be in (-1, 1).')
+        return vec
 
     def sx(self):
         """ Spin-1/2 :math:`S^x` operator """

@@ -18,7 +18,7 @@ class TDVP_out(NamedTuple):
 
 def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opts_expmv=None, opts_svd=None, normalize=True):
     r"""
-    Generator performing TDVP sweeps to solve :math:`\frac{d}{dt} |\psi(t)\rangle = -uH|\psi(t)\rangle`,
+    Iterator performing TDVP sweeps to solve :math:`\frac{d}{dt} |\psi(t)\rangle = -uH|\psi(t)\rangle`,
 
     Parameters
     ----------
@@ -52,12 +52,12 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
 
     opts_expmv: dict
         Options passed to :meth:`yastn.expmv`
-        If there is information from previous excecutions stored in env,
-        overrid the initial guess of the size of krylov space opts_expmv['ncv'] will be overriden.
+        If there is information from previous time-steps stored under the hood,
+        the initial guess of the size of krylov space opts_expmv['ncv'] will be overriden.
 
     opts_svd: dict
-        Options passed to :meth:`yastn.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`method='mix'`.
-        If None, use default {'tol': 1e-14}
+        Options passed to :meth:`yastn.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`'12site'`.
+        If None, use default {'tol': 1e-13}.
 
     Returns
     -------
