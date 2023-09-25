@@ -207,19 +207,50 @@ def test_tensordot_exceptions():
 
 
 @pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
+def test_tensordot_fuse_hard_backward():
+    import torch
+    # U1
+    t1, t2, t3 = (-1, 0, 1), (-2, 0, 2), (-3, 0, 3)
+    D1, D2, D3 = (1, 2, 2), (2, 2, 2), (2, 2, 2)
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
+                t=(t1, t1, t2, t2, t3, t3), D=(D1, D2, D2, D1, D1, D2), dtype='complex128')
+    b = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1, 1),
+                t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2), dtype='complex128')
+    fb = yastn.fuse_legs(b, axes=(0, (4, 3, 1), (5, 2)), mode='hard')
+    ffb = yastn.fuse_legs(fb, axes=(0, (2, 1)), mode='hard')
+    
+    target_block = (0,0,0,0,0,0) 
+    target_block_size = a[target_block].size()
+
+    def test_f(block):
+        a.set_block(ts=target_block, val=block)
+        fa = yastn.fuse_legs(a, axes=(0, (4, 3, 1), (5, 2)), mode='hard')
+        ffa = yastn.fuse_legs(fa, axes=(0, (2, 1)), mode='hard')
+        ffab = yastn.tensordot(ffa, ffb, axes=(1, 1), conj=(1, 0))
+        ffab = ffab.norm()
+        return ffab
+
+    op_args = (torch.randn(target_block_size, dtype=a.get_dtype(), requires_grad=True),)
+    test = torch.autograd.gradcheck(test_f, op_args, eps=1e-6, atol=1e-4)
+    assert test
+
+@pytest.mark.skipif(config_dense.backend.BACKEND_ID=="numpy", reason="numpy backend does not support autograd")
 def test_tensordot_backward():
     import torch
     # U1
     a = yastn.rand(config=config_U1, s=(-1, -1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1)],
                   D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype='complex128')
-    b = a.clone()
+    b = yastn.rand(config=config_U1, s=(1, 1, -1, -1),
+                  t=[(0, 1), (0, 1), (0, 1), (0, 1)],
+                  D=[(2, 3), (4, 5), (4, 3), (2, 1)], dtype='complex128')
+    # b = a.clone()
     target_block = (0, 1, 1, 0)
     target_block_size = a[target_block].size()
 
     def test_f(block):
         a.set_block(ts=target_block, val=block)
-        ab = yastn.tensordot(a, b.conj(), axes=((1, 2), (1, 2)))
+        ab = yastn.tensordot(a, b, axes=((1, 2), (1, 2)))
         ab = ab.norm()
         return ab
 
@@ -234,3 +265,4 @@ if __name__ == '__main__':
     test_tensordot_fuse_meta()
     test_tensordot_exceptions()
     test_tensordot_backward()
+    test_tensordot_fuse_hard_backward()
