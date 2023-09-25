@@ -76,7 +76,7 @@ jobs:
       matrix:
         backend: [ torch ]
         python_v: ['3.9']
-        pytorch_v: ['1.13.1']
+        pytorch_v: ['2.0']
       fail-fast: true
 
     steps:
@@ -128,7 +128,7 @@ jobs:
       matrix:
         backend: [ np, torch ]
         python_v: ['3.9', '3.10', '3.11']
-        pytorch_v: [ 'none', '1.13.1', '2.0' ]
+        pytorch_v: [ 'none', '2.0' ]
         exclude:
           - backend: np
             python_v: '3.9'
