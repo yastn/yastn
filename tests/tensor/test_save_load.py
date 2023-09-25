@@ -34,7 +34,7 @@ def check_to_numpy(a1, config):
     assert all(yastn.are_independent(a, b) for a, b in [(a1, b1), (a2, b2)])
 
 
-def check_to_hdf5(a, **args):
+def check_to_hdf5(a, *args):
     """ Test if two Tensor-s have the same values. """
     # os.remove("tmp.h5") remove if exists .. perhaps 'w' in the line below
     try:
