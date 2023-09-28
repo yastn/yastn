@@ -1,7 +1,7 @@
 Initializing PEPS
 =================
 
-PEPS is an instance of :class:`yastn.tn.fpeps.Lattice` which has the following information about the lattice :code:`lattice`: can be 
+PEPS is an instance of :class:`yastn.tn.fpeps._geometry.Lattice` which has the following information about the lattice :code:`lattice`: can be 
 'checkerboard' or 'square', :code:`dims` specifying dimensions of the lattice and :code:`boundary`, which could be `infinite` or with 
 open boundary conditions `obc`. It supports two-dimensional tensor networks, defined by dict of rank-5 and rank-6 :class:`yastn.Tensor`-s for PEPS
 with just the physical index and with an additional ancillary index, respectively.

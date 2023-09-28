@@ -1,5 +1,5 @@
-Structure
-=========
+Lattice Geometry
+==================
 
 Geometry
 --------
