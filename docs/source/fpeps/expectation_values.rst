@@ -1,3 +1,8 @@
+Expectation values
+==================
+
+Expectation values in PEPS require contraction of the lattice. This can be approximately done using CTMRG.
+
 Corner transfer matrix renormalization group (CTMRG) algorithm
 ===============================================================
 
@@ -23,8 +28,6 @@ In the corner transfer matrix method, the infinite environment of a given site (
 combination of four corner :math:`C_{nw},C_{sw},C_{ne},C_{se}` and four transfer :math:`T_{n},T_{w},T_{e},T_{s}` tensors of finite size, as depicted in the
 following figure. The single-site observable :math:`O` is placed between the site and its conjugated attached via the physical indices.
 The CTMRG tensors, when contracted, provides the reduced density matrix with which the expectation value is to be computed.
-
-
 
 
 ::
@@ -80,6 +83,22 @@ The convention for ordering the indices in the CTMRG environment tensors are giv
 We implement one-step of the Corboz version [3] of CTMRG:
 
 .. autofunction:: yastn.tn.fpeps.ctm._ctm_iteration_routines.CTM_it
+
+
+.. autofunction:: yastn.tn.fpeps.ctm._ctmrg
+
+One can stop the CTM after a fixed number of iterations. Stopping criteria can also be set based on
+the convergence of one or more observables or by comparing the singular values of the projectors.
+Once the CTMRG environment tensors are found, it is straightforward to obtain one-site and two-site
+observables using the following functions.
+
+One-site observables for all lattice sites can be calculated using the function
+
+.. autofunction:: yastn.tn.fpeps.ctm._ctm_observables.one_site_dict
+
+and all nearest neighbor two-point correlators can be calculated using the function
+
+.. autofunction:: yastn.tn.fpeps.ctm._ctm_observables.nn_exp_dict
 
 References & Related works
 ^^^^^^^^^^^^^^^^^^^^^^^^^^

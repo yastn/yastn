@@ -4,8 +4,8 @@ Structure
 Geometry
 --------
 
-The module :code:`yastn.tn.fpeps._geometry.py` contains classes to represent the lattice geometry of the Projected Entangled Pair States (PEPS).
-The classes defined in the module include:
+The module :code:`yastn.tn.fpeps._geometry.py` contains classes to represent the lattice geometry and also the infomration contents
+of the Projected Entangled Pair States (PEPS). The classes defined in the module include:
 
 - **Bond**: A Named Tuple that represents a bond between two lattice sites. The sites are arranged in the fermionic order. Each bond has a directionality, captured by the "dirn" property. In the context of PEPS, a bond represents the entangled pair of quantum states. 
 .. autofunction:: yastn.tn.fpeps._geometry.Bond
@@ -19,7 +19,6 @@ the PEPS by defining its spatial structure. In the context of strongly correlate
         :pyobject: test_Lattice
         :pyobject: test_Peps_get_set
         :pyobject: test_NtuEnv
-
 
 
 Double Peps Tensor
@@ -101,22 +100,3 @@ Let the output tensor after the contraction be `tt'`.
 
 .. autofunction:: yastn.tn.fpeps._geometry.Lattice
 
-- **Peps**:
-
-The Peps class extends the Lattice class, holding the PEPS data itself, and provides additional functionalities specifically related to PEPS.
-The methods included in the Peps class, such as mpo and boundary_mps, allow for efficient manipulation and transformation of the PEPS, which are key tasks in many numerical algorithms used to study these systems.
-
-The functions (`_attach_01` and `_attach_23`) are similar to the append methods but they attach the
-tensor to the top or bottom left if rotation = 0, and to the top or bottom right if rotation = 90.
-
-.. literalinclude:: /../../tests/peps/test_geometry.py
-      :pyobject: test_Lattice
-
-.. literalinclude:: /../../tests/peps/test_geometry.py
-      :pyobject: test_Peps_get_set
-
-- **fPEPS_fuse_layers**:
-
-This method fuses the top and bottom layers of a PEPS tensor network for a particular
-instance of DoublePepsTensor. It can be used when it is convenient to work with contracted double tensors rather
-than keeping them separate. It is generally avoided due to higher computational complexity.

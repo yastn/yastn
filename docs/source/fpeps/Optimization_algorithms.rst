@@ -1,3 +1,10 @@
+Optimization Algorithms
+==========================
+
+The optimization algorithm ( :ref:`Optimization of iPEPS<theory/fpeps/basics:Truncation of the PEPS bond dimensions>`)  for optimizing truncated PEPS tensors 
+used in YASTN is that of the neighborhood tensor update. It is described in details below.
+
+
 Neighborhood tensor update (NTU) algorithm
 ==========================================
 
