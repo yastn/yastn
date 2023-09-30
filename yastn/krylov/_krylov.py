@@ -10,7 +10,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     r"""
     Calculate :math:`e^{(tF)}v`, where :math:`v` is a vector, and :math:`F(v)` is linear operator acting on :math:`v`.
 
-    Employs the algorithm of: J. Niesen, W. M. Wright, ACM Trans. Math. Softw. 38, 22 (2012), 
+    Employs the algorithm of: J. Niesen, W. M. Wright, ACM Trans. Math. Softw. 38, 22 (2012),
     Algorithm 919: A Krylov subspace algorithm for evaluating the phi-functions appearing in exponential integrators.
 
     Parameters
@@ -165,7 +165,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
         k: int
             Number of desired eigenvalues and eigenvectors. default is 1.
 
-        which: str 
+        which: str
             One of [‘LM’, ‘LR’, ‘SR’] specifying which k eigenvectors and eigenvalues to find:
             ‘LM’ : largest magnitude, ‘SM’ : smallest magnitude, ‘LR’ : largest real part, ‘SR’ : smallest real part
 
@@ -174,7 +174,7 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
             Must be greated than k.
 
         maxiter: int
-            Maximal number of restarts; 
+            Maximal number of restarts;
 
         tol: float
             Stopping criterion for Krylov subspace. Default is 1e-13.

@@ -3,10 +3,10 @@ from ... import tensor, initialize, YastnError, expmv
 
 
 def vdot(*args):
-    r""" 
-    Calculate the overlap :math:`\langle \textrm{bra}|\textrm{ket}\rangle`, 
+    r"""
+    Calculate the overlap :math:`\langle \textrm{bra}|\textrm{ket}\rangle`,
     or :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle` depending on the number of provided agruments.
-    
+
     Parameters
     -----------
     *args : yastn.tn.mps.MpsMpo
@@ -24,7 +24,7 @@ def measure_overlap(bra, ket):
     r"""
     Calculate overlap :math:`\langle \textrm{bra}|\textrm{ket} \rangle`.
     Conjugate of MPS :code:`bra` is computed internally.
-    
+
     MPSs :code:`bra` and :code:`ket` must have matching length,
     physical dimensions, and symmetry.
 
@@ -47,6 +47,7 @@ def measure_overlap(bra, ket):
 def measure_mpo(bra, op, ket):
     r"""
     Calculate expectation value :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle`.
+
     Conjugate of MPS :code:`bra` is computed internally.
     MPSs :code:`bra`, :code:`ket`, and MPO :code:`op` must have matching length,
     physical dimensions, and symmetry.
@@ -68,6 +69,79 @@ def measure_mpo(bra, op, ket):
     env = Env3(bra=bra, op=op, ket=ket)
     env.setup(to='first')
     return env.measure(bd=(-1, 0))
+
+
+def measure_1site(bra, o, ket):
+    r"""
+    Calculate expectation values :math:`\langle \textrm{bra}|\textrm{o}_i|\textrm{ket} \rangle` for local operator :code:`O` at each lattice site `i`.
+
+    Local operators can be provided as dictionary {site: operator}, limiting the calculation to provided sites.
+    Conjugate of MPS :code:`bra` is computed internally.
+
+    Parameters
+    -----------
+    bra : yastn.tn.mps.MpsMpo
+        An MPS which will be conjugated.
+
+    O : yastn.Tensor or dict
+        An operator with signature (1, -1).
+        It is possible to provide a dictionary {site: operator}
+
+    ket : yastn.tn.mps.MpsMpo
+
+    Returns
+    -------
+    dict
+    """
+    op = sorted(o.items()) if isinstance(o, dict) else [(n, o) for n in ket.sweep(to='last')]
+    env = Env2(bra=bra, ket=ket)
+    env.setup(to='first').setup(to='last')
+    results = {}
+    for n, o in op:
+        env.update_env_op(n, o, to='first')
+        results[n] = env.measure(bd=(n - 1, n))
+    return results
+
+
+def measure_2site(bra, o, p, ket):
+    r"""
+    Calculate expectation values :math:`\langle \textrm{bra}|\textrm{o}_i \textrm{p}_j|\textrm{ket} \rangle` for local operators :code:`O` and :code:`P` at each pair of lattice sites :math:`i < j`.
+
+    Local operators can be provided as dictionary {site: operator}, limiting the calculation to provided sites.
+    Conjugate of MPS :code:`bra` is computed internally.
+
+    Parameters
+    -----------
+    bra : yastn.tn.mps.MpsMpo
+        An MPS which will be conjugated.
+
+    O, P : yastn.Tensor or dict
+        Operators with signature (1, -1).
+        It is possible to provide a dictionaries {site: operator}
+
+    ket : yastn.tn.mps.MpsMpo
+
+    Returns
+    -------
+    dict
+    """
+    op1 = sorted(o.items()) if isinstance(o, dict) else [(n, o) for n in ket.sweep(to='last')]
+    op2 = sorted(p.items()) if isinstance(p, dict) else [(n, p) for n in ket.sweep(to='last')]
+    n2s = [x[0] for x in op2]
+
+    env = Env2(bra=bra, ket=ket)
+    env.setup(to='first').setup(to='last')
+    for n2, o2 in op2:
+        env.update_env_op(n2, o2, to='first')
+
+    results = {}
+    for n1, o1 in op1[::-1]:
+        env.update_env_op(n1, o1, to='last')
+        for n in env.ket.sweep(to='last', df=n1 + 1):
+            if n in n2s:
+                results[(n1, n)] = env.measure(bd=(n - 1, n))
+            env.update_env(n, to='last')
+    return results
 
 
 class _EnvParent:
@@ -239,6 +313,27 @@ class Env2(_EnvParent):
         if temp.ndim == 6:
             temp = temp.transpose(axes=(0, 1, 2, 3, 5, 4))
         return temp
+
+
+    def update_env_op(self, n, op, to='first'):
+        """ Contractions for 2-layer environment update. """
+        if to == 'first':
+            temp = tensor.tensordot(self.ket[n], self.F[(n + 1, n)], axes=(2, 0))
+            op = op.add_leg(axis=0, s=1)
+            temp = tensor.tensordot(op, temp, axes=(2, 1))
+            temp = temp.swap_gate(axes=(0, 2))
+            temp = temp.remove_leg(axis=0)
+            axes = ((0, 2), (1, 2)) if self.nr_phys == 1 else ((0, 3, 2), (1, 2, 3))
+            self.F[(n, n - 1)] = tensor.tensordot(temp, self.bra[n].conj(), axes=axes)
+        else:  # to == 'last'
+            op = op.add_leg(axis=0, s=1)
+            temp = tensor.tensordot(op, self.ket[n], axes=((2, 1)))
+            temp = temp.swap_gate(axes=(0, 2))
+            temp = temp.remove_leg(axis=0)
+            temp = tensor.tensordot(self.F[(n - 1, n)], temp, axes=((1, 1)))
+            axes = ((0, 1), (0, 1)) if self.nr_phys == 1 else ((0, 1, 3), (0, 1, 3))
+            self.F[(n, n + 1)] = tensor.tensordot(self.bra[n].conj(), temp, axes=axes)
+
 
 class Env3(_EnvParent):
     """

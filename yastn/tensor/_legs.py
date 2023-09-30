@@ -85,12 +85,11 @@ class Leg:
 
     def conj(self):
         r"""
-        Switch the signature of Leg.
+        New :class:`yastn.Leg` with switched signature.
 
         Returns
         -------
-        Leg
-            Returns a new Leg with opposite signature.
+        yastn.Leg
         """
         legs_conj = tuple(leg.conj() for leg in self.legs)
         return replace(self, s=-self.s, legs=legs_conj)
@@ -107,28 +106,32 @@ class Leg:
         Returns
         -------
         int
-            size of the charge sector
         """
         return self.D[self.t.index(t)]
 
     @property
     def tD(self):
         r"""
+        Return charge sectors `t` and their sizes `D` as a dictionary ``{t: D}``.
+
         Returns
         -------
         dict
-            charge sectors `t` and their sizes `D` as dictionary ``{t: D}``.
         """
         return dict(zip(self.t, self.D))
 
     def history(self):
         """
-        Show str representation of Leg fusion history.
+        Show representation of Leg fusion history.
 
         'o' marks original legs,
         's' is for sum (block),
         'p' is for product fuse(..., mode='hard'),
         'm' is for meta-fusion.
+
+        Returns
+        -------
+        str
         """
         if isinstance(self.fusion, tuple):  # meta fused
             tree = self.fusion
@@ -148,7 +151,7 @@ class Leg:
 
 def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False):
     """
-    Creat :class:`yastn.Leg`. Randomly distribute bond dimensions to sectors according to Gaussian distribution.
+    Create :class:`yastn.Leg` with randomly distributed bond dimensions to sectors according to Gaussian distribution.
 
     Parameters
     ----------
@@ -167,8 +170,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
 
     Returns
     -------
-    Leg : :class:`yastn.Leg`
-        Returns a new Leg with randomly distributed bond dimensions.
+    yastn.Leg
     """
     if config.sym.NSYM == 0:
         return Leg(config, s=s, D=(D_total,))
@@ -240,7 +242,7 @@ def _leg_fusions_need_mask(*legs):
 def leg_outer_product(*legs, t_allowed=None):
     """
     Output Leg being an outer product of a list of legs.
-    
+
     Equivalent to result of :meth:`yastn.Tensor.get_legs` from tensor with fused legs -
     up to possibility, that in fused tensor not all possible effective charges have to appear.
 
@@ -254,8 +256,7 @@ def leg_outer_product(*legs, t_allowed=None):
 
     Returns
     -------
-    Leg : :class:`yastn.Leg`
-        Leg representing outer product of provided legs.
+    yastn.Leg
     """
     seff = legs[0].s
     sym = legs[0].sym
@@ -284,7 +285,7 @@ def leg_outer_product(*legs, t_allowed=None):
 def leg_undo_product(leg):
     """
     Output Leg being an outer product of a list of legs.
-    
+
     Equivalent to result of :meth:`yastn.Tensor.get_legs` from tensor with fused legs -
     up to possibility, that in fused tensor not all possible effective charges have to appear.
 
@@ -295,8 +296,7 @@ def leg_undo_product(leg):
 
     Returns
     -------
-    list(:class:`yastn.Leg`)
-        Returns a new Leg with randomly distributed bond dimensions.
+    list(yastn.Leg)
     """
     hst = leg.history()
     if hst[0] in ('o', 's'):

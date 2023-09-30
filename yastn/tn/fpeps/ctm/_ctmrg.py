@@ -18,26 +18,26 @@ class CTMRGout(NamedTuple):
     tt : float = None
 
 
-def ctmrg(psi, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, env=None, opts_svd=None):
+def ctmrg(peps, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, env=None, opts_svd=None):
     r"""
-    Perform CTMRG sweeps until convergence, starting from PEPS and environmental corner and edge tensors :code:`psi`.
+    Perform CTMRG sweeps until convergence, starting from PEPS and environmental corner and edge tensors :code:`peps`.
 
     The outer loop sweeps over PEPS updating only the environmental tensors through 2x2 windows of PEPS tensors.
     Convergence can be controlled based on observables or Schmidt values of projectors.
     The CTMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
     or until all convergence measures with provided tolerance change by less then the tolerance.
 
-    Outputs generator if :code:`iterator_step` is given.
-    It allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
+    Outputs iterator if :code:`iterator_step` is given.
+    It allows inspecting :code:`peps` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------
-    psi: yaps.Peps
+    peps: yastn.fPEPS.Lattice
         peps tensors occupying all the lattice sites in 2D. Maybe obtained after real or imaginary time evolution.
         It is not updated during execution.
 
-    env: yaps.CtmEnv
-        Initial environmental tensors: maybe random or given by the user. It is updated during execution. 
+    env: yastn.fPEPS.CtmEnv
+        Initial environmental tensors: maybe random or given by the user. It is updated during execution.
         The virtual bonds aligning with the boundary can be of maximum bond dimension chi
 
     chi: maximal CTM bond dimension
@@ -65,37 +65,36 @@ def ctmrg(psi, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, env
         Includes fields:
         :code:`sweeps` number of performed dmrg sweeps.
     """
-    
-    # if environment is not given, start with a random initialization
-    pconfig =  psi[0,0].config
-    if env is None:
-        env = init_rand(psi, tc = ((0,) * pconfig.sym.NSYM,), Dc=(1,))  # initialization with random tensors 
 
-    tmp = _ctmrg(psi, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd)
+    # if environment is not given, start with a random initialization
+    pconfig =  peps[0,0].config
+    if env is None:
+        env = init_rand(peps, tc = ((0,) * pconfig.sym.NSYM,), Dc=(1,))  # initialization with random tensors
+
+    tmp = _ctmrg(peps, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd)
     return tmp if iterator_step else next(tmp)
 
 
-def _ctmrg(psi, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd=None):
+def _ctmrg(peps, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd=None):
 
     """ Generator for ctmrg(). """
-    psi = check_consistency_tensors(psi) # to check if A has the desired fused form of legs i.e. t l b r [s a]
+    peps = check_consistency_tensors(peps) # to check if A has the desired fused form of legs i.e. t l b r [s a]
 
-    AAb = CtmEnv(psi)
+    AAb = CtmEnv(peps)
 
-    for ms in psi.sites():
-        AAb[ms] = fPEPS_2layers(psi[ms])
+    for ms in peps.sites():
+        AAb[ms] = fPEPS_2layers(peps[ms])
 
     if AAb_mode >= 1:
         fPEPS_fuse_layers(AAb)
-  
+
     for sweep in range(1, max_sweeps + 1):
         logging.info('CTM sweep: %2d', sweep)
         t_start = time.time()
         env, proj = CTM_it(env, AAb, fix_signs, opts_svd)
         t_end = time.time()
-        tt = t_start - t_end
+        tt = t_end - t_start
         logging.info('sweep time: %0.2f s.', tt)
-
 
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield CTMRGout(sweep, env, proj, tt)

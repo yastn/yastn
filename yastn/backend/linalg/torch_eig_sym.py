@@ -33,7 +33,7 @@ class SYMEIG(torch.autograd.Function):
 
             self.save_for_backward(D, U, ad_decomp_reg)
             return D, U
-    else:  
+    else:
         @staticmethod
         def forward(self, A, ad_decomp_reg):
             r"""

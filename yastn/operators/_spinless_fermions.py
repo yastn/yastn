@@ -6,9 +6,10 @@ class SpinlessFermions(meta_operators):
     """ Predefine operators for spinless fermions. """
 
     def __init__(self, sym='U1', **kwargs):
-        r""" 
+        r"""
         Standard operators for single fermionic species and 2-dimensional Hilbert space.
         Defines identity, creation, annihilation, and density operators.
+        Defines vectors for empty and occupied states.
 
         Parameters
         ----------
@@ -37,9 +38,17 @@ class SpinlessFermions(meta_operators):
     def n(self):
         """ Particle number operator. """
         n = Tensor(config=self.config, s=self.s, n=0)
-        n.set_block(ts=(0, 0), Ds=(1, 1), val=0)
+        # n.set_block(ts=(0, 0), Ds=(1, 1), val=0)
         n.set_block(ts=(1, 1), Ds=(1, 1), val=1)
         return n
+
+    def vec_n(self, val=0):
+        """ Vector with occupation 0 or 1. """
+        if val not in (0, 1):
+            raise YastnError("For SpinlessFermions val in vec_n should be in (0, 1).")
+        vec = Tensor(config=self.config, s=(1,), n=val)
+        vec.set_block(ts=(val,), Ds=(1,), val=1)
+        return vec
 
     def cp(self):
         """ Raising operator. """

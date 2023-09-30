@@ -31,7 +31,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
         mask_f=None, **kwargs):
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
-    where the columns of `U` and the rows of :math:`V` form orthonormal bases
+    where the columns of `U` and the rows of `V` form orthonormal bases
     and `S` is positive and diagonal matrix. Optionally, truncate the result.
 
     Truncation can be based on relative tolerance, bond dimension of each block,
@@ -94,7 +94,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
 def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False, **kwargs):
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
-    where the columns of `U` and the rows of :math:`V` form orthonormal bases
+    where the columns of `U` and the rows of `V` form orthonormal bases
     and `S` is a positive and diagonal matrix.
 
     Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
@@ -232,7 +232,7 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     return meta, Ustruct, Usl, Sstruct, Ssl, Vstruct, Vsl
 
 
-def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-14, **kwargs):
+def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-13, **kwargs):
     """
     Generate a mask tensor from real positive spectrum S, while preserving
     degenerate multiplets. This is achieved by truncating the spectrum
@@ -394,7 +394,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
     Returns
     -------
-        Q, R: yastn.Tensor
+    Q, R: yastn.Tensor
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -482,8 +482,8 @@ def eigh(a, axes, sU=1, Uaxis=-1):
 
     Returns
     -------
-        S, U: yastn.Tensor
-            U is unitary projector. S is a diagonal tensor.
+    S, U: yastn.Tensor
+        U is unitary projector. S is a diagonal tensor.
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -593,8 +593,8 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
 
     Returns
     -------
-        S, U: yastn.Tensor
-            U is unitary projector. S is a diagonal tensor.
+    S, U: yastn.Tensor
+        U is unitary projector. S is a diagonal tensor.
     """
     S, U = eigh(a, axes=axes, sU=sU)
 

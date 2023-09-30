@@ -47,7 +47,7 @@ allowing for automatic differentiation (autograd) on backends which provide it.
 
 Install using
 ```
-git clone https://gitlab.com/marekrams/yastn.git && cd yast
+git clone https://github.com/yastn/yastn.git && cd yastn
 pip install .
 ```
 or just clone and add YASTN root to your Python import path to sucessfully ``import yastn``.

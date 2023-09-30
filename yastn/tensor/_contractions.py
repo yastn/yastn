@@ -147,18 +147,18 @@ def _tensordot_diag(a, b, in_b, destination):
 
 def broadcast(a, *args, axes=0):
     r"""
-    Compute tensordot product of diagonal tensor a with tensors in args.
+    Compute tensordot product of diagonal tensor `a` with tensors in args.
 
-    Legs of the resulting tensors are ordered in the same way as those of tensor in args.
     Produce diagonal tensor if both are diagonal.
+    Legs of the resulting tensors are ordered in the same way as those of tensors in args.
 
     Parameters
     ----------
     a, args: yastn.Tensor
-        a is a diagonal tensor to be broadcasted
+        `a` is diagonal tensor to be broadcasted
 
     axes: int or tuple(int)
-        legs of tensors in args to be multiplied by diagonal tensor a.
+        legs of tensors in args to be multiplied by diagonal tensor `a`.
         Number of tensors provided in args should match lenght of axes.
 
     Returns
@@ -228,20 +228,20 @@ def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
 
 def apply_mask(a, *args, axes=0):
     r"""
-    Apply mask given by nonzero elements of diagonal tensor a on specified axes of tensors in args.
+    Apply mask given by nonzero elements of diagonal tensor `a` on specified axes of tensors in args.
     Can provide arbitrary number of tensors in args, in which case axes is a list of corresponding length.
 
     Legs of resulting tensor are ordered in the same way as those of tensors in args.
-    Bond dimensions of specified axes of args are truncated according to the mask a.
+    Bond dimensions of specified axes of args are truncated according to the mask `a`.
     Produce diagonal tensor if both are diagonal.
 
     Parameters
     ----------
     a, args: yastn.Tensor
-        a is a diagonal tensor
+        `a` is a diagonal tensor
 
     axes: int or tuple of ints
-        leg of tensor a where the mask is applied.
+        leg of tensors in args where the mask is applied.
 
     Returns
     -------
@@ -462,10 +462,10 @@ def _meta_trace(struct, slices, in1, in2, out):
 
 def swap_gate(a, axes):
     """
-    Return tensor after application of a swap gate.
+    Return tensor after application of swap gate.
 
-    Multiply the block with odd charges on swaped legs by -1.
-    If one of the provided axes is -1, then swap with the charge n.
+    Multiply blocks with odd charges on swaped legs by -1.
+    If one of the provided axes is -1, then swap with the charge `n`.
 
     Parameters
     ----------
@@ -538,7 +538,7 @@ def einsum(subscripts, *operands, order='Alphabetic'):
 
         yastn.einsum('ab,al,bm->lm', t1, t2, t3, order='ba')
 
-        # Contract along b first, and a second.
+        # Contract along `b` first, and `a` second.
 
     Returns
     -------
@@ -611,6 +611,7 @@ def ncon(ts, inds, conjs=None):
     conjs: tuple[int]
         For each tensor in `ts` contains either 0 or 1. If the value is 1 the tensor
         is conjugated.
+
 
     .. note::
         :meth:`yastn.ncon` and :meth:`yastn.einsum` differ only by syntax.

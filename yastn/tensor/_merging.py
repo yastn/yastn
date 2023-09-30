@@ -172,8 +172,8 @@ def fuse_legs(a, axes, mode=None):
     r"""
     Fuse groups of legs into effective legs, reducing the rank of the tensor.
 
-        .. note::
-            Fusion can be reverted back by :meth:`yastn.Tensor.unfuse_legs`
+    .. note::
+        Fusion can be reverted back by :meth:`yastn.Tensor.unfuse_legs`
 
     First, the legs are permuted into desired order. Then, selected groups of consecutive legs
     are fused. The desired order of the legs is given by a tuple `axes`
@@ -199,9 +199,9 @@ def fuse_legs(a, axes, mode=None):
 
     Two types of fusion are supported: `meta` and `hard`:
 
-        * ``'meta'`` performs the fusion only at the level of a syntax, where it operates as a tensor with lower rank. Tensor structure and data (blocks) are not affected - apart from a transpose that may be needed for consistency.
+        * ``'meta'`` performs the fusion only at the level of syntax, where it operates as a tensor with lower rank. Tensor structure and data (blocks) are not affected - apart from a transpose that may be needed for consistency.
 
-        * ``'hard'`` changes both the structure and data, by aggregating smaller blocks into larger ones. Such fusion allows to balance number of non-zero blocks and typical block size.
+        * ``'hard'`` changes both the structure and data by aggregating smaller blocks into larger ones. Such fusion allows to balance number of non-zero blocks and typical block size.
 
     It is possible to use both `meta` and `hard` fusion of legs on the same tensor.
     Applying hard fusion on tensor turns all previous meta fused legs into hard fused
@@ -219,7 +219,7 @@ def fuse_legs(a, axes, mode=None):
 
     Returns
     -------
-    tensor : Tensor
+    yastn.Tensor
     """
     if a.isdiag:
         raise YastnError('Cannot fuse legs of a diagonal tensor.')

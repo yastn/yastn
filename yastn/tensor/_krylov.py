@@ -2,9 +2,7 @@
 
 def expand_krylov_space(self, f, tol, ncv, hermitian, V, H=None, **kwargs):
     """
-    Expand the Krylov base up to ncv states or until reaching tolerance tol.
-    
-    Implementation for yastn.Tensor
+    Expand the Krylov base up to ncv states or until reaching desired tolerance tol. Implementation for yastn.Tensor.
     """
     if H is None:
         H = {}
