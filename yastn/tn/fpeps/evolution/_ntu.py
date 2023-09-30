@@ -7,13 +7,13 @@ from yastn import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse
 ##### creating ntu environment ####
 ###################################
 
-def env_NTU(psi, bd, QA, QB, dirn):
+def env_NTU(peps, bd, QA, QB, dirn):
     r"""
     Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
     
     Parameters
     ----------
-    psi : class PEPS
+    peps : class PEPS
 
     bd  : class Bond
         bond around which the tensor environment is to be calculated 
@@ -35,16 +35,16 @@ def env_NTU(psi, bd, QA, QB, dirn):
         The environment tensor g .
     """
   
-    env = psi.tensors_NtuEnv(bd)
+    env = peps.tensors_NtuEnv(bd)
     G={}
     for ms in env.keys():
         if env[ms] is None:
-            leg = psi[(0, 0)].get_legs(axes=-1)
+            leg = peps[(0, 0)].get_legs(axes=-1)
             leg, _ = yastn.leg_undo_product(leg) # last leg of A should be fused
-            fid = yastn.eye(config=psi[(0,0)].config, legs=[leg, leg.conj()]).diag()
+            fid = yastn.eye(config=peps[(0,0)].config, legs=[leg, leg.conj()]).diag()
             G[ms] = trivial_tensor(fid)
         else:
-            G[ms] = psi[env[ms]]
+            G[ms] = peps[env[ms]]
 
     if dirn == "h":
         m_tl, m_l, m_bl = con_tl(G['tl']), con_l(G['l']), con_bl(G['bl'])

@@ -8,8 +8,8 @@ class Spin1(meta_operators):
     # Predefine operators for spin-1 system.
     def __init__(self, sym='dense', **kwargs):
         r"""
-        A set of standard operators for 3-dimensional Hilbert space as Spin-1 representation 
-        of su(2) algebra. Defines identity, :math:`S^z,\ S^x,\ S^y` operators 
+        A set of standard operators for 3-dimensional Hilbert space as Spin-1 representation
+        of su(2) algebra. Defines identity, :math:`S^z,\ S^x,\ S^y` operators
         and :math:`S^+,\ S^-` raising and lowering operators (if allowed by symmetry).
 
         Parameters
@@ -25,9 +25,8 @@ class Spin1(meta_operators):
         The following basis ordering and charge conventions are assumed
 
             * For :code:`sym='dense'`, the basis order is (sz=+1, sz=0, sz=-1).
-            * For :code:`sym='Z3'`, charge t=0 -> sz=+1, t=1 -> sz=0; t=2 -> sz=-1,
-              i.e., :math:`sz = e^{i \frac{2}{3}\pi t}`
-            * For :code:`sym='U1'`, charge t=-1 -> sz=-1, t=0 -> sz=0, t=1 -> sz=1; i.e., sz = t
+            * For :code:`sym='Z3'`, charge t=0 -> sz=+1, t=1 -> sz=0; t=2 -> sz=-1.
+            * For :code:`sym='U1'`, charge t=-1 -> sz=-1, t=0 -> sz=0, t=1 -> sz=1; i.e., sz = t.
 
         Default configuration sets :code:`fermionic` to :code:`False`.
 
@@ -134,7 +133,7 @@ class Spin1(meta_operators):
         r"""
         :return: vector of Spin-1 generators as rank-3 tensor
         :rtype: yastn.Tensor
-        
+
         Returns vector of Spin-1 generators, in order: :math:`S^z, S^+, S^-`.
         The generators are indexed by first index of the resulting rank-3 tensors.
         Signature convention is::

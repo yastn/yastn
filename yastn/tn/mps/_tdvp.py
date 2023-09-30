@@ -18,7 +18,7 @@ class TDVP_out(NamedTuple):
 
 def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opts_expmv=None, opts_svd=None, normalize=True):
     r"""
-    Generator performing TDVP sweeps to solve :math:`\frac{d}{dt} |\psi(t)\rangle = -uH|\psi(t)\rangle`,
+    Iterator performing TDVP sweeps to solve :math:`\frac{d}{dt} |\psi(t)\rangle = -uH|\psi(t)\rangle`,
 
     Parameters
     ----------
@@ -28,11 +28,11 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
         Resulting state is also canonized to the first site.
 
     H: Mps, nr_phys=2
-        Evolution generator given either as MPO for time-independent problem 
+        Evolution generator given either as MPO for time-independent problem
         or as a function returning MPO for time-dependent problem, i.e. ``Callable[[float], Mpo]``.
 
     time: float64 or tuple(float64)
-        Initial and final times; can also provide intermediate times for snapshots returned 
+        Initial and final times; can also provide intermediate times for snapshots returned
         by the iterator. If only the final time is provided, initial time is set to 0.
 
     dt: double
@@ -52,18 +52,18 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
 
     opts_expmv: dict
         Options passed to :meth:`yastn.expmv`
-        If there is information from previous excecutions stored in env,
-        overrid the initial guess of the size of krylov space opts_expmv['ncv'] will be overriden.
+        If there is information from previous time-steps stored under the hood,
+        the initial guess of the size of krylov space opts_expmv['ncv'] will be overriden.
 
     opts_svd: dict
-        Options passed to :meth:`yastn.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`method='mix'`.
-        If None, use default {'tol': 1e-14}
+        Options passed to :meth:`yastn.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`'12site'`.
+        If None, use default {'tol': 1e-13}.
 
     Returns
     -------
     TDVP_out(NamedTuple)
         NamedTuple with fields:
-        
+
             * :code:`ti` initial time of the time-interval.
             * :code:`tf` current time.
             * :code:`time_independent` if the Hamiltonian is time-independent.
@@ -117,7 +117,7 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
 
 def _tdvp_sweep_1site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, normalize=True):
     r""" Perform sweep with 1-site TDVP update, see :meth:`tdvp` for description. """
-    
+
     env, opts = _init_tdvp(psi, H, env, opts_expmv)
 
     for to in ('last', 'first'):

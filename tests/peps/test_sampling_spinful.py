@@ -6,11 +6,12 @@ import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.mps as mps
 import time
-from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_fermi_sea, gate_local_Hubbard
+from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_Hubbard
 from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
 from yastn.tn.fpeps import initialize_peps_purification
-from yastn.tn.fpeps.ctm import sample, nn_bond, CtmEnv2Mps, nn_avg, ctmrg, init_rand, one_site_avg, Local_CTM_Env
+from yastn.tn.fpeps.ctm import sample, CtmEnv2Mps, nn_exp_dict, ctmrg
 from yastn.tn.mps import Env2, Env3
+from yastn.tn.fpeps import _auxiliary
 
 
 try:
@@ -22,11 +23,12 @@ except ImportError:
 
 def not_working_test_sampling_spinfull():
 
-    lattice = 'rectangle'
-    boundary = 'finite'
+    lattice = 'square'
+    boundary = 'obc'
     purification = 'True'
     xx = 3
     yy = 3
+    tot_sites = (xx * yy)
     Ds = 12
     chi = 20
     U = 12
@@ -36,21 +38,23 @@ def not_working_test_sampling_spinfull():
     dbeta = 0.01
     step = 'two-step'
     tr_mode = 'optimal'
+    coeff = 0.25 # for purification; 0.5 for ground state calculation and 1j*0.5 for real-time evolution
+    trotter_step = coeff * dbeta  
 
     dims = (yy, xx)
-    net = fpeps.Peps(lattice, dims, boundary)  # shape = (rows, columns)
+    net = fpeps.Lattice(lattice, dims, boundary)  # shape = (rows, columns)
 
     opt = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
-    GA_nn_up, GB_nn_up = gates_hopping(t_up, dbeta, fid, fc_up, fcdag_up, purification=purification)
-    GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, dbeta, fid, fc_dn, fcdag_dn, purification=purification)
-    g_loc = gate_local_Hubbard(mu_up, mu_dn, U, dbeta, fid, fc_up, fc_dn, fcdag_up, fcdag_dn, purification=purification)
+    GA_nn_up, GB_nn_up = gates_hopping(t_up, trotter_step, fid, fc_up, fcdag_up)
+    GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, trotter_step, fid, fc_dn, fcdag_dn)
+    g_loc = gate_local_Hubbard(mu_up, mu_dn, U, trotter_step, fid, fc_up, fc_dn, fcdag_up, fcdag_dn)
     g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
 
     if purification == 'True':
-        psi = initialize_peps_purification(fid, net) # initialized at infinite temperature
+        peps = initialize_peps_purification(fid, net) # initialized at infinite temperature
     
-    gates = gates_homogeneous(psi, g_nn, g_loc)
+    gates = gates_homogeneous(peps, g_nn, g_loc)
 
     time_steps = round(beta_end / dbeta)
     opts_svd_ntu = {'D_total': Ds, 'tol_block': 1e-15}
@@ -58,7 +62,7 @@ def not_working_test_sampling_spinfull():
     for nums in range(time_steps):
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        psi, _ =  evolution_step_(psi, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
+        peps, _ =  evolution_step_(peps, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu) 
 
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -74,17 +78,24 @@ def not_working_test_sampling_spinfull():
     cf_energy_old = 0
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg(psi, max_sweeps, iterator_step=4, AAb_mode=0, opts_svd=opts_svd_ctm):
+    for step in ctmrg(peps, max_sweeps, iterator_step=4, AAb_mode=0, opts_svd=opts_svd_ctm):
         
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
-        obs_hor, obs_ver =  nn_avg(psi, step.env, ops)
+        obs_hor, obs_ver =  nn_exp_dict(peps, step.env, ops)
 
-        cdagc_up = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
-        ccdag_up = 0.5*(abs(obs_hor.get('ccdag_up')) + abs(obs_ver.get('ccdag_up')))
-        cdagc_dn = 0.5*(abs(obs_hor.get('cdagc_dn')) + abs(obs_ver.get('cdagc_dn')))
-        ccdag_dn = 0.5*(abs(obs_hor.get('cdagc_up')) + abs(obs_ver.get('cdagc_up')))
+        cdagc_up = (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) + 
+                  sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
 
-        cf_energy =  - (cdagc_up + ccdag_up + cdagc_dn + ccdag_dn) * (2 * xx * yy - xx - yy)
+        ccdag_up = (sum(abs(val) for val in obs_hor.get('ccdag_up').values()) + 
+                  sum(abs(val) for val in obs_ver.get('ccdag_up').values()))
+
+        cdagc_dn = (sum(abs(val) for val in obs_hor.get('cdagc_dn').values()) + 
+                  sum(abs(val) for val in obs_ver.get('cdagc_dn').values()))
+
+        ccdag_dn = (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) + 
+                  sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
+
+        cf_energy =  - (cdagc_up + ccdag_up + cdagc_dn + ccdag_dn) / tot_sites
 
         print("expectation value: ", cf_energy)
         if abs(cf_energy - cf_energy_old) < tol_exp:
@@ -99,21 +110,19 @@ def not_working_test_sampling_spinfull():
     ##### (0,2) (1,2) (2,2) #######
     ###############################
 
-    phi = psi.boundary_mps()
+    phi = peps.boundary_mps()
     opts = {'D_total': chi}
 
     for r_index in range(net.Ny-1,-1,-1):
-        print(r_index)
         Bctm = CtmEnv2Mps(net, step.env, index=r_index, index_type='r')   # right boundary of r_index th column through CTM environment tensors
-        #assert all(Bctm[i].get_shape() == psi[i].get_shape() for i in range(net.Nx))
+        #assert all(Bctm[i].get_shape() == peps[i].get_shape() for i in range(net.Nx))
         print(abs(mps.vdot(phi, Bctm)) / (phi.norm() * Bctm.norm()))
         assert pytest.approx(abs(mps.vdot(phi, Bctm)) / (phi.norm() * Bctm.norm()), rel=1e-10) == 1.0
 
         phi0 = phi.copy()
-        O = psi.mpo(index=r_index, index_type='column')
+        O = peps.mpo(index=r_index, index_type='column')
         phi = mps.zipper(O, phi0, opts)  # right boundary of (r_index-1) th column through zipper
-        mps.variational_(phi, O, phi0, method='1site', max_sweeps=2)
-
+        mps.compression_(phi, (O, phi0), method='1site', max_sweeps=2)
 
     n_up = fcdag_up @ fc_up 
     n_dn = fcdag_dn @ fc_dn 
@@ -122,7 +131,7 @@ def not_working_test_sampling_spinfull():
 
     nn_up, nn_dn, nn_do, nn_hole = n_up @ h_dn, n_dn @ h_up, n_up @ n_dn, h_up @ h_dn
     projectors = [nn_up, nn_dn, nn_do, nn_hole]
-    out = sample(psi, step.env, projectors)
+    out = sample(peps, step.env, projectors)
     print(out)
 
 if __name__ == '__main__':

@@ -8,13 +8,15 @@ from ._tests import YastnError, _test_tD_consistency
 
 def __setitem__(a, key, newvalue):
     """
+    Update data of the selected block.
+
+    The data (its shape) should be consistent with
+    the dimensions of the charge sectors where the block belongs.
+
     Parameters
     ----------
-    key : tuple[int]
+    key : tuple(int)
         charges of the block
-
-    Update data of the selected block. The data (its shape) should be consistent with
-    the dimensions of the charge sectors where the block belongs.
     """
     key = tuple(_flatten(key))
     try:
@@ -51,15 +53,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
 
     val : str
         ``'rand'``, ``'ones'``, or  ``'zeros'``
-
-    Returns
-    -------
-    yastn.Tensor
-        tensor filled with selected values
     """
-
-    # if dtype is None:
-
     D = (D,) if isinstance(D, int) else D
     t = (t,) if isinstance(t, int) else t
 
@@ -114,7 +108,7 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     _test_tD_consistency(a.struct)
 
 
-def set_block(a, ts=(), Ds=None, val='zeros'):  # change to ts; Ds  #  TODO
+def set_block(a, ts=(), Ds=None, val='zeros'):
     """
     Add new block to tensor or change the existing one.
 

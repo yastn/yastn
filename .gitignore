@@ -131,3 +131,11 @@ dmypy.json
 
 # vim
 .swp
+
+# data files
+*.npy
+*.h5
+
+# cprof
+*.prof
+*.cprof

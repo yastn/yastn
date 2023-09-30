@@ -12,7 +12,7 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 
 def test_spin12():
-    """ Generate standard operators in two-dimensional Hilbert space for various symmetries. """
+    """ Standard operators and some vectors in two-dimensional Hilbert space for various symmetries. """
     backend = config_dense.backend  # pytest switches backends in config files for testing
 
     ops_dense = yastn.operators.Spin12(sym='dense', backend=backend)
@@ -53,6 +53,12 @@ def test_spin12():
     assert all(yastn.norm(sz @ sp - sp @ sz - sp) < tol for sz, sp in zip(szs, sps))
     assert all(yastn.norm(sz @ sm - sm @ sz + sm) < tol for sz, sm in zip(szs, sms))
 
+    zp1s = [ops_dense.vec_z(val=+1), ops_Z2.vec_z(val=+1), ops_U1.vec_z(val=+1)]
+    zm1s = [ops_dense.vec_z(val=-1), ops_Z2.vec_z(val=-1), ops_U1.vec_z(val=-1)]
+
+    assert all(yastn.norm(z @ v - v) < tol for z, v in zip(zs, zp1s))
+    assert all(yastn.norm(z @ v + v) < tol for z, v in zip(zs, zm1s))
+
     with pytest.raises(yastn.YastnError):
         _ = ops_U1.x()
         # Cannot define sigma_x operator for U(1) symmetry
@@ -62,6 +68,9 @@ def test_spin12():
     with pytest.raises(yastn.YastnError):
         yastn.operators.Spin12('wrong symmetry')
         # For Spin12 sym should be in ('dense', 'Z2', 'U1').
+    with pytest.raises(yastn.YastnError):
+        ops_U1.vec_z(val=10)
+        # For Spin12 val in vec_z should be in (-1, 1).
 
 
 def test_spin1():
@@ -126,10 +135,10 @@ def test_spinless_fermions():
     Is = [ops_Z2.I(), ops_U1.I()]
     assert all(np.allclose(I.to_numpy(), np.eye(2)) for I in Is)
 
-    ns = [ops_Z2.n(), ops_U1.n()]
-    assert all(np.allclose(n.to_numpy(), np.array([[0, 0], [0, 1]])) for n in ns)
-
     lss = [{0: I.get_legs(0), 1: I.get_legs(1)} for I in Is]
+
+    ns = [ops_Z2.n(), ops_U1.n()]
+    assert all(np.allclose(n.to_numpy(legs=ls), np.array([[0, 0], [0, 1]])) for n, ls in zip(ns, lss))
 
     cps = [ops_Z2.cp(), ops_U1.cp()]
     assert all(np.allclose(cp.to_numpy(legs=ls), np.array([[0, 0], [1, 0]])) for cp, ls in zip(cps, lss))
@@ -139,9 +148,22 @@ def test_spinless_fermions():
 
     assert all(yastn.norm(cp @ c - n) < tol for cp, c, n in zip(cps, cs, ns))
 
+    n0s = [ops_Z2.vec_n(val=0), ops_U1.vec_n(val=0)]
+    n1s = [ops_Z2.vec_n(val=1), ops_U1.vec_n(val=1)]
+
+    assert all(yastn.norm(n @ v) < tol for n, v in zip(ns, n0s))
+    assert all(yastn.norm(n @ v - v) < tol for n, v in zip(ns, n1s))
+    assert all(yastn.norm(cp @ v0 - v1) < tol for cp, v0, v1 in zip(cps, n0s, n1s))
+    assert all(yastn.norm(c @ v1 - v0) < tol for c, v0, v1 in zip(cs, n0s, n1s))
+    assert all(yastn.norm(c @ v0) < tol for c, v0 in zip(cs, n0s))
+    assert all(yastn.norm(cp @ v1) < tol for cp, v1 in zip(cps, n1s))
+
     with pytest.raises(yastn.YastnError):
         yastn.operators.SpinlessFermions('dense')
         # For SpinlessFermions sym should be in ('Z2', 'U1').
+    with pytest.raises(yastn.YastnError):
+        ops_U1.vec_n(val=-1)
+        # For SpinlessFermions val in vec_n should be in (0, 1).
 
 
 def test_spinful_fermions():
@@ -169,6 +191,13 @@ def test_spinful_fermions():
         assert yastn.norm(ops.cp('u') @ ops.cp('d') + inter_sgn * ops.cp('d') @ ops.cp('u')) < tol
         assert yastn.norm(ops.cp('u') @ ops.c('d') + inter_sgn * ops.c('d') @ ops.cp('u')) < tol
 
+        v00, v10, v01, v11 = ops.vec_n((0, 0)), ops.vec_n((1, 0)), ops.vec_n((0, 1)), ops.vec_n((1, 1))
+        nu, nd = ops.n('u'), ops.n('d')
+        assert yastn.norm(nu @ v00) < tol and yastn.norm(nd @ v00) < tol
+        assert yastn.norm(nu @ v01) < tol and yastn.norm(nd @ v01 - v01) < tol
+        assert yastn.norm(nu @ v10 - v10) < tol and yastn.norm(nd @ v10) < tol
+        assert yastn.norm(nu @ v11 - v11) < tol and yastn.norm(nd @ v11 - v11) < tol
+
     with pytest.raises(yastn.YastnError):
         yastn.operators.SpinfulFermions('dense')
         # For SpinlessFermions sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').
@@ -177,8 +206,11 @@ def test_spinful_fermions():
         # spin shoul be equal 'u' or 'd'.
     with pytest.raises(yastn.YastnError):
         ops_Z2.cp(spin=+1)
-    # spin shoul be equal 'u' or 'd'.
-    
+        # spin shoul be equal 'u' or 'd'.
+    with pytest.raises(yastn.YastnError):
+        ops_Z2.vec_n(1)
+        # For SpinfulFermions val in vec_n should be in [(0, 0), (1, 0), (0, 1), (1, 1)].
+
 
 if __name__ == '__main__':
     test_spin12()

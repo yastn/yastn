@@ -38,10 +38,10 @@ def build_spin1_aklt_state(N=5):
         # Create a yastn.Tensor with appropriate legs and assign it to MPS.
         # Here, the choice of signatures is as follows
         #
-        # (+1) ->--|T|-->- (-1)
+        # (-1) -<--|T|--<- (+1)
         #           ^
         #           |(+1)
-        psi[n] = yastn.Tensor(config=cfg, s=(1, 1, -1))
+        psi[n] = yastn.Tensor(config=cfg, s=(-1, 1, 1))
         if n == 0:
             psi[n].set_block(val=T[0, :, :], Ds=(1, 3, 2))
         elif n == N - 1:

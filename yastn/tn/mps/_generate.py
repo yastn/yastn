@@ -1,9 +1,10 @@
 import numpy as np
+import numbers
 from typing import NamedTuple
-from ... import ones, rand, ncon, Leg, random_leg, YastnError
+from ... import ones, rand, zeros, ncon, Leg, random_leg, YastnError, Tensor, block, svd_with_truncation
 from ...operators import Qdit
-from ._mps import Mpo, Mps, add
-from ._latex2term import latex2term, GeneratorError
+from ._mps import Mpo, Mps
+from ._latex2term import latex2term
 
 
 class Hterm(NamedTuple):
@@ -30,7 +31,7 @@ class Hterm(NamedTuple):
     operators : tuple = ()
 
 
-def generate_single_mpo(I, term):   # this can be private
+def generate_product_mpo(I, term, amplitude=True):
     r"""
     Apply local operators specified by term in :class:`Hterm` to the MPO `I`.
 
@@ -50,6 +51,10 @@ def generate_single_mpo(I, term):   # this can be private
     """
     single_mpo = I.copy()
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
+        if site < 0 or site > I.N or not isinstance(site, numbers.Integral):
+            raise YastnError("position in Hterm should be in 0, 1, ..., N-1 ")
+        if not op.s == (1, -1):
+            raise YastnError("operator in Hterm should be a matrix with signature (1, -1)")
         op = op.add_leg(axis=0, s=-1)
         leg = op.get_legs(axes=0)
         one = ones(config=op.config, legs=(leg, leg.conj()))
@@ -61,126 +66,212 @@ def generate_single_mpo(I, term):   # this can be private
             single_mpo[n] = temp.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
     for n in single_mpo.sweep():
         single_mpo[n] = single_mpo[n].drop_leg_history(axes=(0, 2))
-    single_mpo[0] = term.amplitude * single_mpo[0]
+    if amplitude:
+        single_mpo[0] = term.amplitude * single_mpo[0]
     return single_mpo
 
 
-def generate_mpo(I, terms, opts=None, packet=50):  # can use better algorithm to compress
-    r"""
-    Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
+class GenerateMpoTemplate(NamedTuple):
+    config: NamedTuple = None
+    basis : list = None
+    trans : list = None
+    tleft : list = None
 
-    If the number of MPOs is large, adding them all together can result
-    in large intermediate MPO. By specifying `packet` size, the groups of MPO-s
-    are truncated at intermediate steps before continuing with summation.
+
+def generate_mpo_template(I, terms, return_amplitudes=False):
+    r"""
+    Precompute an amplitude-independent template that is then used to generate MPO by :meth:`yastn.tn.mps.generate_mpo_fast`
 
     Parameters
     ----------
     term: list of :class:`Hterm`
         product operators making up the MPO
-    I: yastn.Tensor
-        on-site identity operator
+    I: yastn.tn.mps.MpsMpo
+        identity MPO
+    return_amplitudes: bool
+        Apart from template, return also amplitudes = [term.amplitude for term in terms]
+
+    Returns
+    -------
+    template [NamedTuple] or (template [NamedTuple], amplitude [list])
+    """
+    H1s = [generate_product_mpo(I, term, amplitude=False) for term in terms]
+    cfg = H1s[0][0].config
+    mapH = np.zeros((len(H1s), I.N), dtype=int)
+
+    basis, t1bs, t2bs, tfbs, ifbs = [], [], [], [], []
+    for n in I.sweep():
+        base = []
+        for m, H1 in enumerate(H1s):
+            ind = next((ind for ind, v in enumerate(base) if (v - H1[n]).norm() < 1e-13), None)  # site-tensors differing by less then 1e-13 are considered identical
+            if ind is None:
+                ind = len(base)
+                base.append(H1[n])
+            mapH[m, n] = ind
+
+        t1bs.append([ten.get_legs(axes=0).t[0] for ten in base])
+        t2bs.append([ten.get_legs(axes=2).t[0] for ten in base])
+        base = [ten.fuse_legs(axes=((0, 2), 1, 3)).drop_leg_history() for ten in base]
+        tfb = [ten.get_legs(axes=0).t[0] for ten in base]
+        tfbs.append(tfb)
+        ifbs.append([sum(x == y for x in tfb[:i]) for i, y in enumerate(tfb)])
+        base = block(dict(enumerate(base)), common_legs=(1, 2)).drop_leg_history()
+        basis.append(base)
+
+    tleft = [t1bs[0][i] for i in mapH[:, 0]]
+
+    trans = []
+    for n in I.sweep():
+        mapH0 = mapH[:, 0]
+        mapH, rind, iind = np.unique(mapH[:, 1:], axis=0, return_index=True, return_inverse=True)
+
+        i2bs = {t: {} for t in t2bs[n]}
+        for ii, rr in enumerate(rind):
+            i2bs[t2bs[n][mapH0[rr]]][ii] = len(i2bs[t2bs[n][mapH0[rr]]])
+
+        i1bs = {t: 0 for t in t1bs[n]}
+        for ii, rr in enumerate(mapH0):
+            i1bs[t1bs[n][rr]] += 1
+
+        leg1 = Leg(cfg, s=-1, t=list(i1bs.keys()), D=list(i1bs.values()))
+        leg2 = basis[n].get_legs(axes=0).conj()
+        leg3 = Leg(cfg, s=1, t=list(i2bs.keys()), D=[len(x) for x in i2bs.values()])
+        tran = zeros(config=cfg, legs=[leg1, leg2, leg3])
+
+        li = {x: -1 for x in t1bs[n]}
+        for bl, br in zip(mapH0, iind):
+            lt = t1bs[n][bl]
+            li[lt] += 1
+            ft = tfbs[n][bl]
+            fi = ifbs[n][bl]
+            rt = t2bs[n][bl]
+            ri = i2bs[rt][br]
+            tran[lt + ft + rt][li[lt], fi, ri] += 1
+        trans.append(tran)
+
+    template = GenerateMpoTemplate(config=cfg, basis=basis, trans=trans, tleft=tleft)
+    if return_amplitudes:
+        amplitudes = [term.amplitude for term in terms]
+        return template, amplitudes
+    return template
+
+
+def generate_mpo_fast(template, amplitudes, opts=None):
+    r"""
+    Fast generation of MPO representing the lists(Hterm) that differ only in amplitudes.
+
+    Some precomputations in :meth:`yastn.tn.mps.generate_mpo` might be slow.
+    When only amplitudes in Hterms are changing (e.g. for time-dependent Hamiltonian),
+    MPO generation can be significantly speeded up by precalculating an reusing amplitude-independent `template`.
+    The latter is done with :meth:`yastn.tn.mps.generate_mpo_template`.
+
+    Parameters
+    ----------
+    template: NamedTuple
+        calculated with :meth:`yastn.tn.mps.generate_mpo_template`
+    amplidutes: list(numbers)
+        list of amplitudes that would appear in :class:`Hterm`.
+        The order of the list should match the order of Hterms supplemented to :meth:`yastn.tn.mps.generate_mpo_template`.
     opts: dict
-        options for truncation of the result
-    packet: int
-        how many ``Hterm``\s (MPOs of bond dimension 1) should be truncated at once
+        The generator function employs svd while compressing MPO bond dimension.
+        opts allows passing options to :meth:`yastn.linalg.svd_with_truncation`
+        Default None sets truncation `tol` close to the numerical precision, which should effectively result in lossless compression.
 
     Returns
     -------
     yastn.tn.mps.MpsMpo
     """
-    ip, M_tot, Nterms = 0, None, len(terms)
     if opts is None:
-        opts={'tol': 5e-15}
-    while ip < Nterms:
-        H1s = [generate_single_mpo(I, terms[j]) for j in range(ip, min([Nterms, ip + packet]))]
-        M = add(*H1s)
-        M.canonize_(to='last', normalize=False)
-        M.truncate_(to='first', opts_svd=opts, normalize=False)
-        ip += packet
-        if not M_tot:
-            M_tot = M.copy()
-        else:
-            M_tot = M_tot + M
-            M_tot.canonize_(to='last', normalize=False)
-            M_tot.truncate_(to='first', opts_svd=opts, normalize=False)
-    return M_tot
+        opts = {'tol': 1e-13}
 
-def generate_single_mps(term, N):  # obsolate - DELETE  (not docummented)
+    Js = {}
+    for a, t in zip(amplitudes, template.tleft):
+        if t in Js:
+            Js[t].append(a)
+        else:
+            Js[t] = [a]
+
+    dtype = 'complex128' if any(isinstance(a, complex) for a in amplitudes) else template.config.default_dtype
+    J = Tensor(config=template.config, s=(-1, 1), dtype=dtype)
+    for t, val in Js.items():
+        J.set_block(ts=(t, t), Ds=(1, len(val)), val=val)
+
+    M = Mpo(len(template.basis))
+    for n in M.sweep():
+        #   nJ = J @ template.trans[n]
+        #   if n < M.last:
+        #       nJ, S, V = svd_with_truncation(nJ, axes=((0, 1), 2), sU=1, **opts)
+        #       J = S @ V
+        #   M[n] = ncon([nJ, template.basis[n]], [[0, 1, -2], [1, -1, -3]])
+        nJ = J @ template.trans[n]
+        nJ = ncon([nJ, template.basis[n]], [[0, 1, -3], [1, -1, -2]])
+        if n < M.last:
+            nJ, S, V = svd_with_truncation(nJ, axes=((0, 1, 2), 3), sU=1, **opts)
+            nS = S.norm()
+            nJ = nS * nJ
+            J = (S / nS) @ V
+        M[n] = nJ.transpose(axes=(0, 1, 3, 2))
+    return M
+
+
+def generate_mpo(I, terms, opts=None):
+    r"""
+    Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
+
+    It is a shorthand for :meth:`yastn.tn.mps.generate_mpo_template` and :meth:`yastn.tn.mps.generate_mpo_fast`,
+    but without storying the template that helps generate MPOs for different amplitudes in front of product operators.
+
+    Parameters
+    ----------
+    term: list of :class:`Hterm`
+        product operators making up the MPO
+    I: yastn.tn.mps.MpsMpo
+        identity MPO
+    opts: dict
+        generator employs svd while compressing MPO bond dimension.
+        opts allows passing options to :meth:`yastn.linalg.svd_with_truncation`
+        Default None sets truncation `tol` close to the numerical precision, which should result in effectively lossless compression.
+
+    Returns
+    -------
+    yastn.tn.mps.MpsMpo
+    """
+    template, amplitudes = generate_mpo_template(I, terms, return_amplitudes=True)
+    return generate_mpo_fast(template, amplitudes, opts=opts)
+
+
+def generate_product_mps(vectors):
     r"""
     Generate an MPS given vectors for each site in the MPS.
 
     Parameters
     ----------
-    term: :class:`Hterm`
-        instruction to create the Mps which is a product of
-        operators element.operator at location element.position
-        and with amplitude element.amplitude.
-    N: int
-        MPS size
+    vectors: list[yastn.Tensor]
+        vectors will be attributed to consecuative MPS sites.
+        Each vector should have signature s=+1.
+        They can have non-zero charge, that will be converted into virtual legs.
+        The size of MPS is follows as len(vectors).
     """
-    if len(term.positions) != len(set(term.positions)):
-        raise GeneratorError("List contains more than one operator for a single position.\n \
-            Multiplication of two vectors is not defined.")
-    if len(set(term.positions)) != N:
-        raise GeneratorError("Provide term for each site in MPS.")
-    single_mps = Mps(N)
-    for n in range(N):
-        if n in term.positions:
-            op = term.operators[term.positions == n]
-        else:
-            raise GeneratorError("Provide term for each site in MPS.")
-        single_mps.A[n] = op.add_leg(axis=0, s=-1).add_leg(axis=2, s=1)
-    return term.amplitude * single_mps
-
-def generate_mps(terms, N, normalize=False, opts=None, packet=50):   #  DELETE
-    r"""
-    Generate MPS provided a list of :class:`Hterm`-s.
-
-    If the number of MPSs is large, adding them all together can result
-    in large intermediate MPS. By specifying ``packet`` size, the groups of MPO-s
-    are truncated at intermediate steps before continuing with summing.
-
-    Parameters
-    ----------
-    N: int
-       number of sites
-    term: list of :class:`Hterm`
-        product operators making up the MPS
-    normalize: bool
-        True if the result should be normalized
-    opts: dict
-        options for truncation of the result
-    packet: int
-        how many single MPO-s of bond dimension 1 shuold be truncated at ones
-
-    Returns
-    -------
-    yastn.tn.mps.MpsMpo
-    """
-    ip, M_tot, Nterms = 0, None, len(terms)
-    while ip < Nterms:
-        H1s = [generate_single_mps(terms[j], N) for j in range(ip, min([Nterms, ip + packet]))]
-        M = add(*H1s)
-        M.truncate_(to='first', opts_svd=opts, normalize=normalize)
-        ip += packet
-        if not M_tot:
-            M_tot = M.copy()
-        else:
-            M_tot = M_tot + M
-            M_tot.truncate_(to='first', opts_svd=opts, normalize=normalize)
-    return M_tot
+    psi = Mps(len(vectors))
+    rt = (0,) * vectors[0].config.sym.NSYM
+    for n, vec in zip(psi.sweep(to='first'), vectors[::-1]):
+        if not vec.s == (1,):
+            raise YastnError("Vector should have s = (1,).")
+        psi[n] = vec.add_leg(axis=1, s=1, t=rt).add_leg(axis=0, s=-1)
+        rt = psi[n].get_legs(axes=0).t[0]
+    return psi
 
 
 class Generator:
 
-    def __init__(self, N, operators, map=None, Is=None, parameters=None, opts={"tol": 1e-14}):
+    def __init__(self, N, operators, map=None, Is=None, parameters=None, opts={"tol": 1e-13}):
         r"""
         Generator is a convenience class building MPOs from a set of local operators.
         Generated MPO have following :ref:`index order<mps/properties:index convention>` and signature::
 
                      3 (-1) (physical bra)
                      |
-            (+1) 0--|MPO_i|--2 (-1)
+            (-1) 0--|MPO_i|--2 (+1)
                      |
                      1 (+1) (physical ket)
 
@@ -203,7 +294,7 @@ class Generator:
             Default parameters used by the interpreters :meth:`Generator.mpo` and :meth:`Generator.mps`.
             If None, uses default ``{'sites': [*map.keys()]}``.
         opts : dict
-            used if compression is needed. Options passed to :meth:`yastn.linalg.svd`.
+            used if compression is needed. Options passed to :meth:`yastn.linalg.svd_with_truncation`.
         """
         # Notes
         # ------
@@ -268,7 +359,7 @@ class Generator:
         D_total : int
             largest bond dimension
         sigma : int
-            variance of Normal distribution from which dimensions of charge sectors
+            standard deviation of the normal distribution from which dimensions of charge sectors
             are drawn.
         dtype : string
             number format, e.g., ``'float64'`` or ``'complex128'``
@@ -310,7 +401,7 @@ class Generator:
         D_total : int
             largest bond dimension
         sigma : int
-            variance of Normal distribution from which dimensions of charge sectors
+            standard deviation of the normal distribution from which dimensions of charge sectors
             are drawn.
         dtype : string
             number format, e.g., ``'float64'`` or ``'complex128'``
@@ -335,62 +426,62 @@ class Generator:
             return psi
         raise YastnError("Random mps is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
 
-    def mps_from_latex(self, psi_str, vectors=None, parameters=None):
-        r"""
-        Generate simple mps form the instruction in psi_str.
+    # def mps_from_latex(self, psi_str, vectors=None, parameters=None):
+    #     r"""
+    #     Generate simple mps form the instruction in psi_str.
 
-        Parameters
-        ----------
-        psi_str : str
-            instruction in latex-like format
-        vectors : dict
-            dictionary with vectors for the generator. All should be given as
-            a dictionary with elements in a format:
-            name : lambda j: tensor
-                where
-                name - is a name of an element which can be used in psi_str,
-                j - single index for lambda function,
-                tensor - is a yastn.Tensor with one physical index.
-        parameters : dict
-            dictionary with parameters for the generator
+    #     Parameters
+    #     ----------
+    #     psi_str : str
+    #         instruction in latex-like format
+    #     vectors : dict
+    #         dictionary with vectors for the generator. All should be given as
+    #         a dictionary with elements in a format:
+    #         name : lambda j: tensor
+    #             where
+    #             name - is a name of an element which can be used in psi_str,
+    #             j - single index for lambda function,
+    #             tensor - is a yastn.Tensor with one physical index.
+    #     parameters : dict
+    #         dictionary with parameters for the generator
 
-        Returns
-        -------
-        yastn.tn.mps.MpsMpo
-        """
-        parameters = {**self.parameters, **parameters}
-        c2 = latex2term(psi_str, parameters)
-        c3 = self._term2Hterm(c2, vectors, parameters)
-        return generate_mps(c3, self.N)
+    #     Returns
+    #     -------
+    #     yastn.tn.mps.MpsMpo
+    #     """
+    #     parameters = {**self.parameters, **parameters}
+    #     c2 = latex2term(psi_str, parameters)
+    #     c3 = self._term2Hterm(c2, vectors, parameters)
+    #     return generate_mps(c3, self.N)
 
-    def mps_from_templete(self, templete, vectors=None, parameters=None):
-        r"""
-        Convert instruction in a form of single_term-s to yastn.tn.mps MPO.
+    # def mps_from_templete(self, templete, vectors=None, parameters=None):
+    #     r"""
+    #     Convert instruction in a form of single_term-s to yastn.tn.mps MPO.
 
-        single_term is a templete which which take named from operators and templetes.
+    #     single_term is a templete which which take named from operators and templetes.
 
-        Parameters
-        -----------
-        templete: list
-            List of single_term objects. The object is defined in ._latex2term
-        vectors : dict
-            dictionary with vectors for the generator. All should be given as
-            a dictionary with elements in a format:
-            name : lambda j: tensor
-                where
-                name - is a name of an element which can be used in psi_str,
-                j - single index for lambda function,
-                tensor - is a yastn.Tensor with one physical index.
-        parameters: dict
-            Keys for the dict define the expressions that occur in H_str
+    #     Parameters
+    #     -----------
+    #     templete: list
+    #         List of single_term objects. The object is defined in ._latex2term
+    #     vectors : dict
+    #         dictionary with vectors for the generator. All should be given as
+    #         a dictionary with elements in a format:
+    #         name : lambda j: tensor
+    #             where
+    #             name - is a name of an element which can be used in psi_str,
+    #             j - single index for lambda function,
+    #             tensor - is a yastn.Tensor with one physical index.
+    #     parameters: dict
+    #         Keys for the dict define the expressions that occur in H_str
 
-        Returns
-        -------
-        yastn.tn.mps.MpsMpo
-        """
-        parameters = {**self.parameters, **parameters}
-        c3 = self._term2Hterm(templete, vectors, parameters)
-        return generate_mps(c3, self.N)
+    #     Returns
+    #     -------
+    #     yastn.tn.mps.MpsMpo
+    #     """
+    #     parameters = {**self.parameters, **parameters}
+    #     c3 = self._term2Hterm(templete, vectors, parameters)
+    #     return generate_mps(c3, self.N)
 
     def mpo_from_latex(self, H_str, parameters=None, opts=None):
         r"""
