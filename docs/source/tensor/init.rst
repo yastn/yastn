@@ -18,14 +18,12 @@ See examples: :ref:`examples/tensor/init:create empty tensor and fill it block b
 Basic creation operations
 -------------------------
 
-Basic creation operations such as random tensors,
-tensors filled with zeros, or diagonal identity tensors.
+YASTN enables creating typical objects, such as random tensors, tensors filled with zeros, or diagonal identity tensors.
 
-The symmetry structure of the tensor can be given either
-by directly listing all charge sectors for each leg and dimensions
-of these sectors `or` by passing a list of legs.
+The symmetries of the tensor is provided either by directly listing all charge sectors and corresponding dimensions 
+for each leg `or` by passing a list of legs.
 
-See examples: :ref:`examples/tensor/init:create tensors from scratch`.
+For more examples see: :ref:`examples/tensor/init:create tensors from scratch`.
 
 .. automodule:: yastn
    :noindex:

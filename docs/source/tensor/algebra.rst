@@ -4,12 +4,11 @@ Algebra with YASTN tensors
 Basic algebra operations with symmetric tensors
 -----------------------------------------------
 
-Symmetric tensors can be added and multiplied by a scalar
-through usual operations ``+``, ``-``, ``*``, ``/``.
-You can also raise each element of tensor to some power using
-standard power operation ``**``.
+The convention for basic operations on tensors uses standard symbols such as ``+`` for addition of two objects, ``-`` for substraction of two objects,
+ ``*`` for multiplication by a scalar, ``/`` for division by a scalar.
+To rise all tensor elements to a power use ``**``.
 
-See examples: :ref:`examples/tensor/algebra:basic algebra operations`.
+For more specific examples see :ref:`examples/tensor/algebra:basic algebra operations`.
 
 Simple element-wise operations
 ------------------------------
@@ -80,7 +79,7 @@ Fusion of legs (reshaping)
 
 Fusion of several vector spaces :math:`V_1,V_2,\ldots,V_n` creates a new vector space as direct product :math:`W=V_1 \otimes V_2 \otimes \ldots \otimes V_n`, which is then indexed by a single index of dimension :math:`\prod_i dim(V_i)`. The inverse operation can split the fused space into its original constituents.
 
-For dense tensors, this operation corresponds to reshaping.
+For dense tensors, this operation corresponds to a reshape.
 
 Fusion can be used to vary compression between (unfused) symmetric tensors with many small non-zero blocks and tensors with several fused spaces having just few, but large non-zero blocks.
 

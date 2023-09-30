@@ -1,17 +1,16 @@
 Specifying symmetry
 ===================
 
-YASTN specifies symmetry through any object be it plain Python module, 
+YASTN specifies symmetry through any object to be in plain Python module, 
 `types.SimpleNamespace <https://docs.python.org/3/librarytypes.html#types.SimpleNamespace>`_,
-or class which defines
+or class with properties:
 
-    #. ``SYM_ID`` string label for the symmetry
+    #. ``SYM_ID`` string label for the symmetry.
 
     #. ``NSYM`` number of elements in the charge vector. For example, `NSYM=1` 
-       for U(1) or :math:`Z_2` group. For product groups such 
-       as U(1)xU(1) instead `NSYM=2`.
+       for a single symmetry,such as U(1) or :math:`Z_2`. The product of two groups, e.g., U(1)xU(1), requires `NSYM=2` instead.
        
-    #. how to add up charges by implementing a `fuse` function
+    #. Instruction how to add up charges by implementing a `fuse` function.
 
 .. automodule:: yastn.sym.sym_abelian
     :members: sym_abelian

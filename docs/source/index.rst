@@ -1,7 +1,7 @@
 Welcome to YASTN's documentation!
 =================================
 
-YASTN - yet another symmetric tensor network
+YASTN = Yet Another Symmetric Tensor Network
 
 Block-sparse tensor algebra library supporting abelian symmetries
 together with MPS and PEPS implementations powered by symmetric tensor.

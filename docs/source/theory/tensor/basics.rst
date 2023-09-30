@@ -15,8 +15,8 @@ where `T` expressed in bases and components is
 .. math::
     T = \sum_{abc...ijk...} T^{abc...}_{ijk...} e^ie^je^k...e_ae_be_c...
 
-YASTN refers to individual spaces :math:`V` as `legs`. In graphical notation
-the shapes represent tensors, while legs correspond to lines emerging from these shapes
+YASTN refers to individual vector spaces :math:`V` as `legs` representing designated index of a tensor. In graphical notation
+the shapes represent tensors, while lines protruding from these shapes are `legs` corresponding to individual spaces.  
 
 ::
 
@@ -28,21 +28,21 @@ the shapes represent tensors, while legs correspond to lines emerging from these
       ...|___|...
 
 .. note::
-        YASTN defines a vector space and its abelian symmetry structure through :class:`yastn.Leg`
+        YASTN defines a vector space and its abelian symmetry structure through :class:`yastn.Leg`.
 
-In some contexts, it is often useful to distinguish underlying spaces as co- or contra-variant with respect to transformations acting on these spaces.
-Often such a distinction is encoded through the position of the indices: subscript or superscript.
+In some contexts, it is useful to distinguish underlying spaces as co- or contra-variant with respect to transformations acting on them.
+Often such a distinction is indicated in writing as a subscript or superscript of the tensor.
 
-In quantum mechanics, it is useful to distinguish between :math:`\langle bra |`
-and :math:`|ket \rangle` spaces, due to different actions of symmetry transformations on these spaces
+An example from quantum mechanics is a different between :math:`\langle bra |`
+and :math:`|ket \rangle` spaces to separate co- and contra-variant spaces we write
 
 .. math::
 
     T = \sum_{abc...ijk...} T^{abc...}_{ijk...} |i \rangle|j \rangle|k \rangle ...
     \langle a |\langle b |\langle c |...
 
-In YASTN, similar to other implementations (:ref:`see below <refs_basics>`), the distinction between
-:math:`\langle bra |` and :math:`|ket \rangle` spaces, or Hilbert space :math:`\mathcal{H}` and its dual :math:`\mathcal{H}^*`, is encoded through `signature`.
+In YASTN, similar to other implementations (:ref:`see below <refs_basics>`), the convension for spaces of different meaning is through a `signature`. 
+The binary choice between :math:`\langle bra |` and :math:`|ket \rangle` spaces, or Hilbert space :math:`\mathcal{H}` and its dual :math:`\mathcal{H}^*`, is given by a sign for a given leg of the tensor.
 
 .. note::
     `signature`, :attr:`yastn.Tensor.s`, is a tuple of signs :math:`\pm 1`
@@ -62,7 +62,7 @@ in YASTN always taken to be integers :math:`\mathbb{Z}` or their subset, as
 
 .. math::
 
-    U(g)^j_k=exp(-i\theta_g t_j)\delta_{jk}
+    U(g)^j_k=\exp(-i\theta_g t_j)\delta_{jk}
 
 with angle :math:`\theta_g \in [0,2\pi)`, which depends on :math:`g \in G`, and :math:`\delta_{jk}` being
 Kronecker delta.
@@ -81,11 +81,10 @@ The selection rule can be equivalently expressed as charge conservation
 .. math::
     t_a+t_b+...-t_i-t_j-... = N
 
-with total charge of the tensor `N` being independent of tensor elements :math:`T^{ab...}_{ij...}`. In the case of :math:`N=0`, such a tensor is invariant (unchanged) under the action of the symmetry.
-Otherwise, it transforms covariantly as all its elements are altered by the same complex phase :math:`exp(i\theta_gN)`.
+with total charge of the tensor `N` being independent of tensor elements :math:`T^{ab...}_{ij...}`. In the case of :math:`N=0`, such a tensor is invariant (unchanged) under the action of the symmetry transformation.
+Otherwise, it transforms covariantly because as all its elements are altered by the same complex phase :math:`\exp(i\theta_gN)`.
 
-The charges :math:`t_i,\ N` and precise form of their addition :math:`+` depends on the abelian group
-considered.
+The charges :math:`t_i,\ N` and the addition :math:`+` operation depends on tensor abelian group. 
 
 .. note::
     * Total charge `N` of YASTN tensor can be accessed by :attr:`yastn.Tensor.n`
@@ -96,29 +95,30 @@ considered.
 Examples for selected groups
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-* **U(1)**: The charges can be taken as integers :math:`t_i \in \mathbb{Z}` with usual integer addition.
-  With :math:`\theta_g` being usual angle :math:`\theta_g \in [0,2\pi)`.
-* **Z(2)**: The charges are just a subset of integers :math:`t_i \in \{0,1\}` with addition :math:`\textrm{mod 2}`. Similarly, two elements of group Z(2) are mapped to angles :math:`\{0,1\}\xrightarrow{\theta} \{0,\pi\}`.
-* direct product :math:`\mathbf{Z_2xU(1)}`: The charges of individual groups are accummulated in a vector :math:`t_i \in \{0,1\}\otimes \mathbb{Z}`. The addition is distributed
+* **U(1)**: The charges are integer numbers :math:`t_i \in \mathbb{Z}` with normal integer addition.
+  With :math:`\theta_g` being an angle :math:`\theta_g \in [0,2\pi)`.
+* **Z(2)**: The charges are from a subset of integers :math:`t_i \in \{0,1\}` with addition modeulo :math:`2`. 
+In a similar way, two elements of group :math:`Z_2` are mapped to the angles :math:`\{0,1\}\xrightarrow{\theta} \{0,\pi\}`. 
+* direct product of symmetries :math:`\mathbf{Z_2xU(1)}`: The charges of individual groups are accummulated in a vector :math:`t_i \in \{0,1\}\otimes \mathbb{Z}`. The addition operation matches the symmetry such that 
 
 .. math::
 
     t_i+t'_i := \begin{pmatrix} t_{i,0} \\ t_{i,1} \end{pmatrix} + \begin{pmatrix} t'_{i,0} \\ t'_{i,1} \end{pmatrix} = \begin{pmatrix} t_{i,0} + t'_{i,0}\ \textrm{mod}\ 2\\ t'_{i,1} + t'_{i,1} \end{pmatrix}
 
 .. note::
-    See how YASTN defines symmetries and the above examples in the :ref:`API docs<tensor/symmetry:specifying symmetry>`.
+    To learn more on how YASTN defines symmetries with examples visit :ref:`API docs<tensor/symmetry:specifying symmetry>`.
 
 Conjugation
 ^^^^^^^^^^^
 
 Conjugation of a tensor complex-conjugates tensor elements, flips tensor signature :attr:`yastn.Tensor.s` by
 replacing :math:`\pm 1 \to \mp 1`, as well as the total charge :math:`N \to -N`.
-In the latter, :math:`-` depends on the abelian group.
+In the latter, charge negation :math:`-` depends on the abelian group.
 
-It is also possible to flip the signature of a specific leg, which is accompanied by negation of charges on that leg.
+YAST enable to control the signature, i.e., interpretation, of each individual leg. The signature flip changes the interpretation of the leg and negates the charges for a flipped leg. 
 
 .. note::
-    See :ref:`API docs<tensor/algebra:Conjugation of symmetric tensors>`, for various types of conjugation.
+    For various types of conjugation see :ref:`API docs<tensor/algebra:Conjugation of symmetric tensors>`.
 
 .. _refs_basics:
 

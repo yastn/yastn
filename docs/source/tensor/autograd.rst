@@ -9,10 +9,9 @@ if the individual operations on dense tensors support autograd.
 YASTN supports autograd through selected backends which provide
 this capability for dense tensor algebra, for example PyTorch backend.
 
-You can activate autograd on YASTN tensor
+To activate autograd on YASTN tensor use
 
 .. automethod:: yastn.Tensor.requires_grad_
-
 
 The operations on tensor are then recorded for later differentiation.
 

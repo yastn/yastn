@@ -2,9 +2,9 @@ Create Leg (vector space)
 =========================
 
 Tensor are :ref:`multilinear maps from product of vector spaces <theory/tensor/basics:tensors>`.
-In YASTN, the `legs` of the tensor represent individual vector spaces.
+In YASTN, the `legs` of the tensor represent individual vector spaces. 
 
-To create a Leg, use
+The leg can be creating using a fuction:
 
 .. autoclass:: yastn.Leg
     :members: conj, tD, history
