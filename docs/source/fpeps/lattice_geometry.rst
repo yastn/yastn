@@ -7,11 +7,16 @@ Geometry
 The module :code:`yastn.tn.fpeps._geometry.py` contains classes to represent the lattice geometry and also the infomration contents
 of the Projected Entangled Pair States (PEPS). The classes defined in the module include:
 
-- **Bond**: A Named Tuple that represents a bond between two lattice sites. The sites are arranged in the fermionic order. Each bond has a directionality, captured by the "dirn" property. In the context of PEPS, a bond represents the entangled pair of quantum states. 
-    .. autofunction:: yastn.tn.fpeps._geometry.Bond
-- **Lattice**: A Class that represents the geometric information about a 2D lattice. The Lattice class holds information about the geometry of the lattice on which the PEPS is defined. It can handle different lattice types, like 'checkerboard' or 'square', 
-and different boundary conditions, 'obc' (open boundary conditions) or 'infinite'. The Lattice class also provides methods to navigate this geometry, for instance, by providing the neighbouring sites or bonds. It thus provides the backbone for the PEPS by defining its spatial structure. In the context of strongly correlated systems, the lattice and its properties can drastically affect the system's behavior.
-    .. autofunction:: yastn.tn.fpeps._geometry.Lattice
+**Bond**: A Named Tuple that represents a bond between two lattice sites. The sites are arranged in the fermionic order. Each bond has a directionality, 
+captured by the "dirn" property. In the context of PEPS, a bond represents the entangled pair of quantum states. 
+
+.. autofunction:: yastn.tn.fpeps._geometry.Bond
+
+**Lattice**: A Class that represents the geometric information about a 2D lattice. The Lattice class holds information about the geometry of the lattice on which the PEPS is defined. It can handle different lattice types, like 'checkerboard' or 'square', 
+and different boundary conditions, 'obc' (open boundary conditions) or 'infinite'. The Lattice class also provides methods to navigate this geometry, for instance, by providing the neighbouring sites or bonds. It thus provides the backbone for the PEPS by 
+defining its spatial structure. In the context of strongly correlated systems, the lattice and its properties can drastically affect the system's behavior.
+
+.. autofunction:: yastn.tn.fpeps._geometry.Lattice
                                                                                                                                                                                                                                                                                                                                                                                                                                  
 .. literalinclude:: /../../tests/peps/test_geometry.py
     :pyobject: test_Lattice
@@ -87,8 +92,6 @@ Let the output tensor after the contraction be `tt'`.
 
 .. autofunction:: yastn.tn.fpeps._doublePepsTensor.DoublePepsTensor.append_a_tl
 
-.. autofunction:: yastn.tn.fpeps._geometry.Bond
-
 - **append_a_br**:
 
 ::
@@ -100,5 +103,4 @@ Let the output tensor after the contraction be `tt'`.
            _|__|   |             |        |
        3--|________|          2--|________|
 
-.. autofunction:: yastn.tn.fpeps._geometry.Lattice
 
