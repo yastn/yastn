@@ -80,18 +80,19 @@ The convention for ordering the indices in the CTMRG environment tensors are giv
 
 
 
-We implement one-step of the Corboz version [3] of CTMRG:
+We implement a single iteration of the Corboz version [3] of CTMRG:
 
 .. autofunction:: yastn.tn.fpeps.ctm._ctm_iteration_routines.CTM_it
 
 One can stop the CTM after a fixed number of iterations. Stopping criteria can also be set based on
-the convergence of one or more observables or by comparing the singular values of the projectors by 
-performing operations on the output of the following function:
+the convergence of one or more observables or by comparing the singular values of the projectors. These
+can usually be done by directly accessing the output of the following function like ctm
+environment tensors and projectors:
 
 .. autofunction:: yastn.tn.fpeps.ctm._ctmrg.ctmrg
 
 Once the CTMRG environment tensors are found, it is straightforward to obtain one-site and two-site
-observables using the following functions.
+observables.
 
 One-site observables for all lattice sites can be calculated using the function
 

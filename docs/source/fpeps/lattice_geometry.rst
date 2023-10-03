@@ -17,15 +17,7 @@ and different boundary conditions, 'obc' (open boundary conditions) or 'infinite
 defining its spatial structure. In the context of strongly correlated systems, the lattice and its properties can drastically affect the system's behavior.
 
 .. autofunction:: yastn.tn.fpeps._geometry.Lattice
-                                                                                                                                                                                                                                                                                                                                                                                                                                 
-.. literalinclude:: /../../tests/peps/test_geometry.py
-    :pyobject: test_Lattice
 
-.. literalinclude:: /../../tests/peps/test_geometry.py
-    :pyobject: test_Peps_get_set
-
-.. literalinclude:: /../../tests/peps/test_geometry.py
-    :pyobject: test_NtuEnv
 
 
 Double Peps Tensor
