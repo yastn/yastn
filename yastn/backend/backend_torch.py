@@ -1,5 +1,6 @@
 """Support of torch as a data structure used by yastn."""
 from itertools import groupby
+from types import SimpleNamespace
 from functools import reduce
 import numpy as np
 import torch
@@ -349,28 +350,60 @@ def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
 
 def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
     diagnostics=None, **kwargs):
-    # SVDGESDD decomposes A = USV^\dag and return U,S,V^\dag
-    #
-    # NOTE: switch device to cpu as svd on cuda seems to be very slow.
-    # device = data.device
-    # data = data.to(device='cpu')
-    real_dtype = data.real.dtype if data.is_complex() else data.dtype
-    Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
-    Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
-    Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
-    reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
-    for (sl, D, slU, DU, slS, slV, DV) in meta:
-        # is_zero_block = torch.linalg.vector_norm(data[slice(*sl)]) == 0. if _torch_version_check("1.7.0") \
-        #     else data[slice(*sl)].norm() == 0.
-        # if is_zero_block: continue
-        U, S, Vh = SVDGESDD.apply(data[slice(*sl)].view(D), reg, fullrank_uv, diagnostics)
-        Udata[slice(*slU)].reshape(DU)[:] = U
-        Sdata[slice(*slS)] = S
-        Vhdata[slice(*slV)].reshape(DV)[:] = Vh
-    #
-    # Udata.to(device=device), Sdata.to(device=device), Vhdata.to(device=device)
-    return Udata, Sdata, Vhdata
+    return kernel_svd.apply(data,meta,sizes,fullrank_uv,ad_decomp_reg,diagnostics)
 
+class kernel_svd(torch.autograd.Function):
+    @staticmethod
+    def forward(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
+            diagnostics=None):
+        # SVDGESDD decomposes A = USV^\dag and return U,S,V^\dag
+        #
+        # NOTE: switch device to cpu as svd on cuda seems to be very slow.
+        # device = data.device
+        # data = data.to(device='cpu')
+        real_dtype = data.real.dtype if data.is_complex() else data.dtype
+        Udata = torch.empty((sizes[0],), dtype=data.dtype, device=data.device)
+        Sdata = torch.empty((sizes[1],), dtype=real_dtype, device=data.device)
+        Vhdata = torch.empty((sizes[2],), dtype=data.dtype, device=data.device)
+        reg = torch.as_tensor(ad_decomp_reg, dtype=real_dtype, device=data.device)
+        for (sl, D, slU, DU, slS, slV, DV) in meta:
+            # is_zero_block = torch.linalg.vector_norm(data[slice(*sl)]) == 0. if _torch_version_check("1.7.0") \
+            #     else data[slice(*sl)].norm() == 0.
+            # if is_zero_block: continue
+            U, S, Vh = SVDGESDD.forward(data[slice(*sl)].view(D), reg, fullrank_uv, diagnostics)
+            Udata[slice(*slU)].reshape(DU)[:] = U
+            Sdata[slice(*slS)] = S
+            Vhdata[slice(*slV)].reshape(DV)[:] = Vh
+        #
+        # Udata.to(device=device), Sdata.to(device=device), Vhdata.to(device=device)
+        return Udata, Sdata, Vhdata
+
+    @staticmethod
+    # inputs is a Tuple of all of the inputs passed to forward.
+    # output is the output of the forward().
+    def setup_context(ctx, inputs, output):
+        data, meta, sizes, _, ad_decomp_reg,diagnostics= inputs
+        reg= torch.as_tensor(ad_decomp_reg, dtype=data.real.dtype, device=data.device)
+        Udata, Sdata, Vhdata= output
+        ctx.save_for_backward(Udata, Sdata, Vhdata, reg)
+        ctx.meta_svd= meta
+        ctx.data_size= data.numel()
+        ctx.diagnostics= diagnostics
+
+    @staticmethod
+    def backward(ctx, Udata_b, Sdata_b, Vhdata_b):
+        Udata, Sdata, Vhdata, reg= ctx.saved_tensors
+        meta= ctx.meta_svd
+        diagnostics= ctx.diagnostics
+        data_size= ctx.data_size
+        data_b= torch.zeros(data_size, dtype=Udata.dtype, device=Udata.device)
+        for (sl, D, slU, DU, slS, slV, DV) in meta:
+            loc_ctx= SimpleNamespace(diagnostics=diagnostics,
+                saved_tensors=(Udata[slice(*slU)].view(DU),Sdata[slice(*slS)],Vhdata[slice(*slV)].view(DV),reg))
+            data_b[slice(*sl)].view(D)[:],_,_,_ = SVDGESDD.backward(loc_ctx,\
+                Udata_b[slice(*slU)].view(DU),Sdata_b[slice(*slS)],Vhdata_b[slice(*slV)].view(DV))
+        return data_b,None,None,None,None,None
+    
 
 def fix_svd_signs(Udata, Vhdata, meta):
     Ud = torch.empty_like(Udata)
