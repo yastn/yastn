@@ -20,6 +20,14 @@ concurrency:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
+  dump_contexts_to_log:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump GitHub context
+        env:
+          DEBUG_GH_CONTEXT_EVENT: ${{ toJson(github.event_name) }}
+          DEBUG_GH_CONTEXT_BASE_REF: ${{ toJson(github.base_ref) }}
+        run: echo "$DEBUG_GH_CONTEXT_EVENT $DEBUG_GH_CONTEXT_BASE_REF"
 
   # runs basic tests on numpy backend. Dependency for job test-full
   test-basic:
@@ -120,7 +128,9 @@ jobs:
   # run matrix of tests for python and torch versions
   test-full:
     needs: test-basic
-    if: contains(fromJson('["refs/heads/master", "refs/heads/tests"]'), github.ref)
+    if: |
+      contains(fromJson('["refs/heads/master", "refs/heads/tests"]'), github.ref) ||
+      ( github.event_name == 'pull_request' && contains(fromJson('["master",]'), github.base_ref) )
     
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
