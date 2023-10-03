@@ -2,7 +2,7 @@
 from functools import lru_cache
 from itertools import groupby
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
+from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
 from ._merging import _merge_to_matrix, _unmerge, _meta_unmerge_matrix
 from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
@@ -76,23 +76,22 @@ def tensordot(a, b, axes, conj=(0, 0)):
 
     ind_a, ind_b = _common_inds(a.struct.t, b.struct.t, nin_a, nin_b, a.ndim_n, b.ndim_n, a.config.sym.NSYM)
 
-    data_a, struct_a, ls_l, ls_ac = _merge_to_matrix(a, (nout_a, nin_a), ind_a)
-    data_b, struct_b, ls_bc, ls_r = _merge_to_matrix(b, (nin_b, nout_b), ind_b)
+    data_a, struct_a, slices_a, ls_l, ls_ac = _merge_to_matrix(a, (nout_a, nin_a), ind_a)
+    data_b, struct_b, slices_b, ls_bc, ls_r = _merge_to_matrix(b, (nin_b, nout_b), ind_b)
 
-    meta_dot, struct_c = _meta_tensordot(a.config, struct_a, struct_b)
-    Dsize = struct_c.sl[-1][1] if len(struct_c.sl) > 0 else 0
+    meta_dot, struct_c, slices_c = _meta_tensordot(a.config, struct_a, slices_a, struct_b, slices_b)
 
     if needs_mask:
         msk_a, msk_b = _masks_for_tensordot(a.config, a.struct, a.hfs, nin_a, ls_ac, b.struct, b.hfs, nin_b, ls_bc)
-        data = a.config.backend.dot_with_mask(data_a, data_b, meta_dot, Dsize, msk_a, msk_b)
+        data = a.config.backend.dot_with_mask(data_a, data_b, meta_dot, struct_c.size, msk_a, msk_b)
     else:
         if ls_ac != ls_bc:
             raise YastnError('Bond dimensions do not match.')
-        data = a.config.backend.dot(data_a, data_b, meta_dot, Dsize)
+        data = a.config.backend.dot(data_a, data_b, meta_dot, struct_c.size)
 
-    meta_unmerge, struct_c = _meta_unmerge_matrix(a.config, struct_c, ls_l, ls_r, s_c)
+    meta_unmerge, struct_c, slices_c = _meta_unmerge_matrix(a.config, struct_c, slices_c, ls_l, ls_r, s_c)
     data = _unmerge(a.config, data, meta_unmerge)
-    return a._replace(data=data, struct=struct_c, mfs=mfs_c, hfs=hfs_c)
+    return a._replace(data=data, struct=struct_c, slices=slices_c, mfs=mfs_c, hfs=hfs_c)
 
 
 @lru_cache(maxsize=1024)
@@ -114,39 +113,25 @@ def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym):
 
 
 @lru_cache(maxsize=1024)
-def _meta_tensordot(config, struct_a, struct_b):
+def _meta_tensordot(config, struct_a, slices_a, struct_b, slices_b):
     nsym = len(struct_a.n)
     n_c = np.array(struct_a.n + struct_b.n, dtype=int).reshape((1, 2, nsym))
     n_c = tuple(config.sym.fuse(n_c, (1, 1), 1)[0])
-    struct_a_resorted = sorted(((t[nsym:], t, D, sl) for t, D, sl in zip(struct_a.t, struct_a.D, struct_a.sl)))
-    struct_b_resorted = ((t[:nsym], t, D, sl) for t, D, sl in zip(struct_b.t, struct_b.D, struct_b.sl))
+    struct_a_resorted = sorted(((t[nsym:], t, D, sl.slcs[0]) for t, D, sl in zip(struct_a.t, struct_a.D, slices_a)))
+    struct_b_resorted = ((t[:nsym], t, D, sl.slcs[0]) for t, D, sl in zip(struct_b.t, struct_b.D, slices_b))
     meta = []
     for (tar, ta, Da, sla), (tbl, tb, Db, slb) in zip( struct_a_resorted, struct_b_resorted):
         assert tar == tbl, "This should not have happend"
         meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db, tar, tbl))
-    # try:
-    #     tar, ta, Da, sla = next(struct_a_resorted)
-    #     tbl, tb, Db, slb = next(struct_b_resorted)
-    #     while True:
-    #         if tar == tbl:
-    #             meta.append((ta[:nsym] + tb[nsym:], (Da[0], Db[1]), sla, Da, slb, Db, tar, tbl))
-    #             tar, ta, Da, sla = next(struct_a_resorted)
-    #             tbl, tb, Db, slb = next(struct_b_resorted)
-    #         elif tar < tbl:
-    #             tar, ta, Da, sla = next(struct_a_resorted)
-    #         elif tar > tbl:
-    #             tbl, tb, Db, slb = next(struct_b_resorted)
-    # except StopIteration:
-    #     pass
     meta = sorted(meta)
     t_c = tuple(x[0] for x in meta)
     D_c = tuple(x[1] for x in meta)
     Dp_c = tuple(D[0] * D[1] for D in D_c)
-    sl_c = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dp_c), Dp_c))
-    meta = tuple((sl, *mt[1:]) for sl, mt in zip(sl_c, meta))
+    slices_c = tuple( _slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(Dp_c), Dp_c, D_c))
+    meta = tuple((sl.slcs[0], *mt[1:]) for sl, mt in zip(slices_c, meta))
     s_c = (struct_a.s[0], struct_b.s[1])
-    struct_c = _struct(s=s_c, n=n_c, t=t_c, D=D_c, Dp=Dp_c, sl=sl_c)
-    return meta, struct_c
+    struct_c = _struct(s=s_c, n=n_c, t=t_c, D=D_c, size=sum(Dp_c))
+    return meta, struct_c, slices_c
 
 
 def _tensordot_diag(a, b, in_b, destination):
@@ -191,16 +176,15 @@ def broadcast(a, *args, axes=0):
         if b.hfs[ax].tree != (1,):
             raise YastnError('Second tensor`s leg specified in axes cannot be fused.')
 
-        meta, struct = _meta_broadcast(b.struct, a.struct, ax)
+        meta, struct, slices = _meta_broadcast(b.struct, b.slices, a.struct, a.slices, ax)
 
         if b.isdiag:
             b_ndim, ax = (1, 0)
             meta = tuple((sln, slb, Db[0], sla) for sln, slb, Db, sla in meta)
         else:
             b_ndim = b.ndim_n
-        Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
-        data = b.config.backend.dot_diag(a._data, b._data, meta, Dsize, ax, b_ndim)
-        results.append(b._replace(struct=struct, data=data))
+        data = b.config.backend.dot_diag(a._data, b._data, meta, struct.size, ax, b_ndim)
+        results.append(b._replace(struct=struct, slices=slices, data=data))
     return results if multiple_axes else results.pop()
 
 
@@ -215,15 +199,15 @@ def _broadcast_input(axis, mf, isdiag):
 
 
 @lru_cache(maxsize=1024)
-def _meta_broadcast(b_struct, a_struct, axis):
+def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
     """ meta information for backend, and new tensor structure for brodcast """
     nsym = len(a_struct.n)
     ind_tb = tuple(x[axis * nsym: (axis + 1) * nsym] for x in b_struct.t)
     ind_ta = tuple(x[:nsym] for x in a_struct.t)
-    sl_a = dict(zip(ind_ta, a_struct.sl))
+    sl_a = dict(zip(ind_ta, a_slices))
 
-    meta = tuple((tb, slb, Db, Dbp, sl_a[ib]) for tb, slb, Db, Dbp, ib in \
-                 zip(b_struct.t, b_struct.sl, b_struct.D, b_struct.Dp, ind_tb) if ib in ind_ta)
+    meta = tuple((tb, slb.slcs[0], Db, slb.Dp, sl_a[ib].slcs[0]) for tb, slb, Db, ib in \
+                 zip(b_struct.t, b_slices, b_struct.D, ind_tb) if ib in ind_ta)
 
     if any(Db[axis] != sla[1] - sla[0] for _, _, Db, _, sla in meta):
         raise YastnError("Bond dimensions do not match.")
@@ -232,13 +216,14 @@ def _meta_broadcast(b_struct, a_struct, axis):
         c_t = tuple(mt[0] for mt in meta)
         c_D = tuple(mt[2] for mt in meta)
         c_Dp = tuple(mt[3] for mt in meta)
-        c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-        c_struct = b_struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+        c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, c_D))
+        c_struct = b_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
     else:
         c_struct = b_struct
+        c_slices = b_slices
 
-    meta = tuple((sln, slb, Db, sla) for (_, slb, Db, _, sla), sln in zip(meta, c_struct.sl))
-    return meta, c_struct
+    meta = tuple((sln.slcs[0], slb, Db, sla) for (_, slb, Db, _, sla), sln in zip(meta, c_slices))
+    return meta, c_struct, c_slices
 
 
 def apply_mask(a, *args, axes=0):
@@ -273,29 +258,28 @@ def apply_mask(a, *args, axes=0):
         if b.hfs[ax].tree != (1,):
             raise YastnError('Second tensor`s leg specified by axes cannot be fused.')
 
-        Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl)]) for sl in a.struct.sl)
-        meta, struct = _meta_mask(b.struct, b.isdiag, a.struct, Dbnew, ax)
-        Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
+        Dbnew = tuple(a.config.backend.count_nonzero(a._data[slice(*sl.slcs[0])]) for sl in a.slices)
+        meta, struct, slices = _meta_mask(b.struct, b.slices, b.isdiag, a.struct, a.slices, Dbnew, ax)
 
         if b.isdiag:
             b_ndim, ax = (1, 0)
             meta = tuple((sln, sla, Da[0], slb) for sln, sla, Da, slb in meta)
         else:
             b_ndim = b.ndim_n
-        data = b.config.backend.mask_diag(b._data, a._data, meta, Dsize, ax, b_ndim)
-        results.append(b._replace(struct=struct, data=data))
+        data = b.config.backend.mask_diag(b._data, a._data, meta, struct.size, ax, b_ndim)
+        results.append(b._replace(struct=struct, slices=slices, data=data))
     return results.pop() if len(results) == 1 else results
 
 
 @lru_cache(maxsize=1024)
-def _meta_mask(a_struct, a_isdiag, b_struct, Dbnew, axis):
+def _meta_mask(a_struct, a_slices, a_isdiag, b_struct, b_slices, Dbnew, axis):
     """ meta information for backend, and new tensor structure for mask."""
     nsym = len(a_struct.n)
-    ind_tb = {x[:nsym]: (sl, d) for x, d, sl in zip(b_struct.t, Dbnew, b_struct.sl) if d > 0}
+    ind_tb = {x[:nsym]: (sl.slcs[0], d) for x, d, sl in zip(b_struct.t, Dbnew, b_slices) if d > 0}
     ind_ta = tuple(x[axis * nsym: (axis + 1) * nsym] for x in a_struct.t)
 
-    meta = tuple((ta, sla, Da, *ind_tb[ia]) for ta, sla, Da, ia in \
-                zip(a_struct.t, a_struct.sl, a_struct.D, ind_ta) if ia in ind_tb)
+    meta = tuple((ta, sla.slcs[0], Da, *ind_tb[ia]) for ta, sla, Da, ia in \
+                zip(a_struct.t, a_slices, a_struct.D, ind_ta) if ia in ind_tb)
 
     if any(Da[axis] != slb[1] - slb[0] for _, _, Da, slb, _ in meta):
         raise YastnError("Bond dimensions do not match.")
@@ -308,10 +292,11 @@ def _meta_mask(a_struct, a_isdiag, b_struct, Dbnew, axis):
     else:
         c_D = tuple(mt[2][:axis] + (mt[4],) + mt[2][axis + 1:] for mt in meta)
         c_Dp = tuple(np.prod(c_D, axis=1)) if len(c_D) > 0 else ()
-    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-    c_struct = a_struct._replace(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
-    meta = tuple((sln, sla, Da, slb) for (_, sla, Da, slb, _), sln in zip(meta, c_struct.sl))
-    return meta, c_struct
+
+    c_slices = tuple(_slc(((stop - dp, stop),), ds, dp)  for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, c_D))
+    c_struct = a_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
+    meta = tuple((sln.slcs[0], sla, Da, slb) for (_, sla, Da, slb, _), sln in zip(meta, c_slices))
+    return meta, c_struct, c_slices
 
 
 def vdot(a, b, conj=(1, 0)):
@@ -336,9 +321,10 @@ def vdot(a, b, conj=(1, 0)):
     if conj[1] == 1:
         b = b.conj()
     needs_mask, _ = _test_axes_match(a, b, sgn=-1)
-    if a.struct.t == b.struct.t:
+    if a.struct.t == b.struct.t and a.slices == b.slices:
         Adata, Bdata = a._data, b._data
-        struct_a, struct_b = a.struct, b.struct
+        struct_a, slices_a = a.struct, a.slices
+        struct_b, slices_b = b.struct, b.slices
     else:
         ia, ib, ta, Da, Dpa, inter_sla,  tb, Db, Dpb, inter_slb,  = 0, 0, [], [], [], [], [], [], [], []
         while ia < len(a.struct.t) and ib < len(b.struct.t):
@@ -347,10 +333,10 @@ def vdot(a, b, conj=(1, 0)):
                 tb.append(b.struct.t[ib])
                 Da.append(a.struct.D[ia])
                 Db.append(b.struct.D[ib])
-                Dpa.append(a.struct.Dp[ia])
-                Dpb.append(b.struct.Dp[ib])
-                inter_sla.append(a.struct.sl[ia])
-                inter_slb.append(b.struct.sl[ib])
+                Dpa.append(a.slices[ia].Dp)
+                Dpb.append(b.slices[ib].Dp)
+                inter_sla.append(a.slices[ia].slcs[0])
+                inter_slb.append(b.slices[ib].slcs[0])
                 ia += 1
                 ib += 1
             elif a.struct.t[ia] < b.struct.t[ib]:
@@ -359,12 +345,14 @@ def vdot(a, b, conj=(1, 0)):
                 ib += 1
         sla = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpa), Dpa))
         slb = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpb), Dpb))
-        struct_a = a.struct._replace(t=tuple(ta), D=tuple(Da), Dp=tuple(Dpa), sl=sla)
-        struct_b = b.struct._replace(t=tuple(tb), D=tuple(Db), Dp=tuple(Dpb), sl=slb)
+        struct_a = a.struct._replace(t=tuple(ta), D=tuple(Da), size=sum(Dpa))
+        struct_b = b.struct._replace(t=tuple(tb), D=tuple(Db), size=sum(Dpb))
+        slices_a = tuple(_slc((x,), y, z) for x, y, z in zip(sla, Da, Dpa))
+        slices_b = tuple(_slc((x,), y, z) for x, y, z in zip(slb, Db, Dpb))
         Adata = a.config.backend.apply_slice(a._data, sla, inter_sla)
         Bdata = b.config.backend.apply_slice(b._data, slb, inter_slb)
     if needs_mask:
-        msk_a, msk_b, struct_a, struct_b = _masks_for_vdot(a.config, struct_a, a.hfs, struct_b, b.hfs)
+        msk_a, msk_b, struct_a, slices_a, struct_b, slices_b = _masks_for_vdot(a.config, struct_a, slices_a, a.hfs, struct_b, slices_b, b.hfs)
         Adata = Adata[msk_a]
         Bdata = Bdata[msk_b]
     if struct_a.D != struct_b.D:
@@ -406,25 +394,24 @@ def trace(a, axes=(0, 1)):
 
     if a.isdiag:
         # if needs_mask: raise YastnError('Should not have happend')
-        struct = a.struct._replace(s=(), diag=False, t=((),), D=((),), Dp=(1,), sl=((0, 1),))
+        struct = a.struct._replace(s=(), diag=False, t=((),), D=((),), size=1)
         data = a.config.backend.sum_elements(a._data)
-        return a._replace(struct=struct, mfs=mfs, hfs=hfs, isdiag=False, data=data)
+        return a._replace(struct=struct, slices=(_slc(((0, 1),), (), 1),), mfs=mfs, hfs=hfs, isdiag=False, data=data)
 
-    meta, struct, tcon, D1, D2 = _meta_trace(a.struct, in1, in2, out)
-    Dsize = struct.sl[-1][1] if len(struct.sl) > 0 else 0
+    meta, struct, slices, tcon, D1, D2 = _meta_trace(a.struct, a.slices, in1, in2, out)
     if needs_mask:
         msk12 = _masks_for_trace(a.config, tcon, D1, D2, a.hfs, in1, in2)
-        data = a.config.backend.trace_with_mask(a._data, order, meta, Dsize, tcon, msk12)
+        data = a.config.backend.trace_with_mask(a._data, order, meta, struct.size, tcon, msk12)
     else:
         if D1 != D2:
             raise YastnError('Bond dimensions do not match.')
-        data = a.config.backend.trace(a._data, order, meta, Dsize)
-    return a._replace(mfs=mfs, hfs=hfs, struct=struct, data=data)
+        data = a.config.backend.trace(a._data, order, meta, struct.size)
+    return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices, data=data)
 
 
 
 @lru_cache(maxsize=1024)
-def _meta_trace(struct, in1, in2, out):
+def _meta_trace(struct, slices, in1, in2, out):
     """ meta-information for backend and struct of traced tensor. """
     lt = len(struct.t)
     tset = np.array(struct.t, dtype=int).reshape((lt, len(struct.s), len(struct.n)))
@@ -446,32 +433,31 @@ def _meta_trace(struct, in1, in2, out):
     D2 = tuple(tuple(x.flat) for x in D2[ind])
     Dn = tuple(tuple(x.flat) for x in Dn[ind])
     Dnp = Dnp[ind]
-    slo = tuple(struct.sl[n] for n in ind)
+    slo = tuple(slices[n].slcs[0] for n in ind)
     Do = tuple(struct.D[n] for n in ind)
     Drsh = tuple(tuple(x.flat) for x in Drsh[ind])
 
     meta = tuple(sorted(zip(tn, Dn, Dnp, t12, slo, Do, Drsh), key=lambda x: x[0]))
 
     low, high = 0, 0
-    c_t, c_D, c_Dp, c_sl, meta2, tcon = [], [], [], [], [], []
+    c_t, c_D, c_slices, meta2, tcon = [], [], [], [], []
     for t, group in groupby(meta, key=lambda x: x[0]):
         c_t.append(t)
         mt = next(group)
         c_D.append(mt[1])
-        c_Dp.append(mt[2])
-        high = low + mt[2]
+        Dp = mt[2]
+        high = low + Dp
         sl = (low, high)
         low = high
-        c_sl.append(sl)
+        c_slices.append(_slc((sl,), c_D[-1], Dp))
         tcon.append(mt[3])
         meta2.append((sl, *mt[4:]))
         for mt in group:
             tcon.append(mt[3])
             meta2.append((sl, *mt[4:]))
     c_s = tuple(struct.s[i] for i in out)
-    c_struct = _struct(s=c_s, n=struct.n, t=tuple(c_t), D=tuple(c_D), Dp=tuple(c_Dp), sl=tuple(c_sl))
-    return tuple(meta2), c_struct, tuple(tcon), D1, D2
-
+    c_struct = _struct(s=c_s, n=struct.n, t=tuple(c_t), D=tuple(c_D), size=high)
+    return tuple(meta2), c_struct, tuple(c_slices), tuple(tcon), D1, D2
 
 
 def swap_gate(a, axes):
@@ -496,9 +482,9 @@ def swap_gate(a, axes):
     axes = tuple(_clear_axes(*axes))  # swapped groups of legs
     tp = _meta_swap_gate(a.struct.t, a.struct.n, a.mfs, a.ndim_n, axes, fss)
     c = a.clone()
-    for sl, odd in zip(c.struct.sl, tp):
+    for sl, odd in zip(c.slices, tp):
         if odd:
-            c._data[slice(*sl)] = -1 * c._data[slice(*sl)]
+            c._data[slice(*sl.slcs[0])] = -1 * c._data[slice(*sl.slcs[0])]
     return c
 
 
@@ -742,92 +728,3 @@ def _consume_edges(edges, conjs):
         axes = None
     meta_transpose = (t1, axes, conjs[t1])
     return tuple(meta_tr), tuple(meta_dot), meta_transpose
-
-    # if policy in ('hybrid', 'direct'):
-    #     meta, c_t, c_D, c_Dp, c_sl, tcon = _meta_tensordot_nomerge(a.struct, b.struct, nout_a, nin_a, nin_b, nout_b)
-    #     c_struct = _struct(t=c_t, D=c_D, Dp=c_Dp, sl=c_sl, s=c_s, n=c_n)
-    #     Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
-    #     oA = tuple(nout_a + nin_a)
-    #     oB = tuple(nin_b + nout_b)
-    #     if needs_mask:
-    #         ma, mb = _masks_for_axes(a.config, a.struct, a.hfs, nin_a, b.struct, b.hfs, nin_b, tcon)
-    #         data = a.config.backend.dot_nomerge_masks(a._data, b._data, conj, oA, oB, meta, Dsize, tcon, ma, mb)
-    #     else:
-    #         if any(mt[3][1] != mt[6][0] for mt in meta):
-    #             raise YastnError('Bond dimensions do not match.')
-    #         data = a.config.backend.dot_nomerge(a._data, b._data, conj, oA, oB, meta, Dsize)
-    #     return a._replace(mfs=c_mfs, hfs=c_hfs, struct=c_struct, data=data)
-    # raise YastnError("Unknown policy for tensordot. policy should be in ('hybrid', 'direct', 'merge').")
-
-    # @lru_cache(maxsize=1024)
-    # def _meta_tensordot_nomerge(a_struct, b_struct, nout_a, nin_a, nin_b, nout_b):
-    # """ meta information for backend, and new tensor structure for tensordot_nomerge """
-    # nsym = len(a_struct.n)
-    # a_ndim, b_ndim = len(a_struct.s), len(b_struct.s)
-
-    # ta = np.array(a_struct.t, dtype=int).reshape((len(a_struct.t), a_ndim, nsym))
-    # tb = np.array(b_struct.t, dtype=int).reshape((len(b_struct.t), b_ndim, nsym))
-    # Da = np.array(a_struct.D, dtype=int).reshape((len(a_struct.D), a_ndim))
-    # Db = np.array(b_struct.D, dtype=int).reshape((len(b_struct.D), b_ndim))
-
-    # ta_con = tuple(tuple(t.flat) for t in ta[:, nin_a, :])
-    # tb_con = tuple(tuple(t.flat) for t in tb[:, nin_b, :])
-    # ta_out = tuple(tuple(t.flat) for t in ta[:, nout_a, :])
-    # tb_out = tuple(tuple(t.flat) for t in tb[:, nout_b, :])
-
-    # Da_pcon = np.prod(Da[:, nin_a], axis=1, dtype=int)
-    # Db_pcon = np.prod(Db[:, nin_b], axis=1, dtype=int)
-    # Da_out = tuple(tuple(D.flat) for D in Da[:, nout_a])
-    # Db_out = tuple(tuple(D.flat) for D in Db[:, nout_b])
-    # Da_pout = np.prod(Da_out, axis=1, dtype=int)
-    # Db_pout = np.prod(Db_out, axis=1, dtype=int)
-
-    # block_a = [x for x in zip(ta_con, ta_out, a_struct.sl, a_struct.D, Da_pcon, Da_out, Da_pout)]
-    # block_a = groupby(sorted(block_a, key=lambda x: x[0]), key=lambda x: x[0])
-
-    # block_b = [x for x in zip(tb_con, tb_out, b_struct.sl, b_struct.D, Db_pcon, Db_out, Db_pout)]
-    # block_b = groupby(sorted(block_b, key=lambda x: x[0]), key=lambda x: x[0])
-
-    # meta = []
-    # try:
-    #     tta, ga = next(block_a)
-    #     ttb, gb = next(block_b)
-    #     while True:
-    #         if tta == ttb:
-    #             for ta, tb in product(ga, gb):
-    #                 meta.append((ta[1] + tb[1], ta[2], ta[3], (ta[6], ta[4]), tb[2], tb[3], (tb[4], tb[6]), ta[5] + tb[5], ta[6] * tb[6], ta[0]))
-    #             tta, ga = next(block_a)
-    #             ttb, gb = next(block_b)
-    #         elif tta < ttb:
-    #             tta, ga = next(block_a)
-    #         elif tta > ttb:
-    #             ttb, gb = next(block_b)
-    # except StopIteration:
-    #     pass
-
-    # meta = tuple(sorted(meta, key=lambda x: x[0]))
-    # tcon = tuple(mm[9] for mm in meta)
-    # if len(nin_a) == 1:
-    #     c_t = tuple(mm[0] for mm in meta)
-    #     c_D = tuple(mm[7] for mm in meta)
-    #     c_Dp = tuple(mm[8] for mm in meta)
-    #     c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-    #     meta = tuple((sl, *mt[1:7]) for sl, mt in zip(c_sl, meta))
-    #     return meta, c_t, c_D, c_Dp, c_sl, tcon
-    # if len(meta) > 0:
-    #     low, high = 0, 0
-    #     c_t, c_D, c_Dp, c_sl, meta2 = [], [], [], [], []
-    #     for t, group in groupby(meta, key=lambda x: x[0]):
-    #         c_t.append(t)
-    #         mt = next(group)
-    #         c_D.append(mt[7])
-    #         c_Dp.append(mt[8])
-    #         high = low + mt[8]
-    #         sl = (low, high)
-    #         low = high
-    #         c_sl.append(sl)
-    #         meta2.append((sl, *mt[1:7]))
-    #         for mt in group:
-    #             meta2.append((sl, *mt[1:7]))
-    #     return tuple(meta2), tuple(c_t), tuple(c_D), tuple(c_Dp), tuple(c_sl), tcon
-    # return meta, (), (), (), (), tcon

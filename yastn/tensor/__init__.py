@@ -91,6 +91,8 @@ class Tensor:
                     raise YastnError("Tensor charge of a diagonal tensor should be 0")
             self.struct = _struct(s=s, n=n, diag=isdiag)
 
+        self.slices = kwargs['slices'] if 'slices' in kwargs else ()
+
         # fusion tree for each leg: encodes number of fused legs e.g. 5 2 1 1 3 1 2 1 1 = [[1, 1], [1, [1, 1]]]
         try:
             self.mfs = tuple(kwargs['mfs'])
@@ -122,10 +124,8 @@ class Tensor:
     from ._krylov import linear_combination, expand_krylov_space
 
     def _replace(self, **kwargs):
-        """
-        Creates a shallow copy replacing fields specified in kwargs
-        """
-        for arg in ('config', 'struct', 'mfs', 'hfs', 'data'):
+        """ Creates a shallow copy replacing fields specified in kwargs """
+        for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices'):
             if arg not in kwargs:
                 kwargs[arg] = getattr(self, arg)
         return Tensor(**kwargs)
@@ -231,7 +231,7 @@ class Tensor:
         -------
         int
         """
-        return self.config.backend.get_size(self._data)
+        return self.struct.size
 
     @property
     def device(self):
@@ -273,6 +273,6 @@ class Tensor:
 
         Returns
         -------
-        backend tensor
+        tensor_like
         """
         return self._data

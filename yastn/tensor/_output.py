@@ -1,7 +1,7 @@
 """ methods outputing data from yastn tensor. """
 
 import numpy as np
-from ._auxliary import _clear_axes, _unpack_axes, _struct, _flatten
+from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
 from ._tests import YastnError, _test_configs_match
 from ..sym import sym_none
 from ._legs import Leg, leg_union, _leg_fusions_need_mask
@@ -56,7 +56,7 @@ def save_to_hdf5(a, file, path):
     file.create_dataset(path+'/matrix', data=_d)
 
 
-def compress_to_1d(a, meta=None):
+def compress_to_1d(a, meta=None): # TODO
     """
     Return 1D array containing tensor data (without cloning the data if not necessary) and
     create metadata allowing re-creation of the original tensor.
@@ -84,7 +84,7 @@ def compress_to_1d(a, meta=None):
         metadata with structure of the symmetric tensor
     """
     if meta is None:
-        meta = {'config': a.config, 'struct': a.struct,
+        meta = {'config': a.config, 'struct': a.struct, 'slices': a.slices,
                 'mfs': a.mfs, 'legs': a.get_legs(native=True)}
         return a._data, meta
     # else:
@@ -106,7 +106,7 @@ def compress_to_1d(a, meta=None):
         if a.hfs != meta_hfs:
             raise YastnError("Tensor fused legs do not match metadata.")
 
-    if a.struct == meta['struct']:
+    if a.struct == meta['struct'] and a.slices == meta['slices']:
         return a._data, meta
     # else: embed filling in missing zero blocks
     ia, im, meta_merge = 0, 0, []
@@ -114,13 +114,12 @@ def compress_to_1d(a, meta=None):
         if a.struct.t[ia] < meta['struct'].t[im] or im >= len(meta['struct'].t):
             raise YastnError("Tensor has blocks that do not appear in meta.")
         if a.struct.t[ia] == meta['struct'].t[im]:
-            meta_merge.append((meta['struct'].sl[im], a.struct.sl[ia]))
+            meta_merge.append((meta['slices'][im].slcs[0], a.slices[ia].slcs[0]))
             ia += 1
             im += 1
         else: #a.struct.t[ia] > meta['struct'].t[im]:
             im += 1
-    Dsize = meta['struct'].sl[-1][1] if len(meta['struct'].sl) > 0 else 0
-    data = a.config.backend.embed_slc(a._data, meta_merge, Dsize)
+    data = a.config.backend.embed_slc(a._data, meta_merge, meta['struct'].size)
     return data, meta
 
 
@@ -155,7 +154,7 @@ def show_properties(a):
     print("shape meta   :", a.get_shape(native=False))
     print("shape native :", a.get_shape(native=True))
     print("no. blocks   :", len(a.struct.t))  # number of blocks
-    print("size         :", a.size)  # total number of elements in all blocks
+    print("size         :", a.struct.size)  # total number of elements in all blocks
     st = {i: leg.history() for i, leg in enumerate(a.get_legs())}
     print("legs fusions :", st, "\n")
 
@@ -314,7 +313,7 @@ def __getitem__(a, key):
         ind = a.struct.t.index(key)
     except ValueError as exc:
         raise YastnError('tensor does not have block specify by key') from exc
-    x = a._data[slice(*a.struct.sl[ind])]
+    x = a._data[slice(*a.slices[ind].slcs[0])]
 
     # TODO this should be reshape called from backend ?
     return x if a.isdiag else x.reshape(a.struct.D[ind])
@@ -563,8 +562,8 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
         axes = tuple(_unpack_axes(a.mfs, *axes))
     meta = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-    for t_sl, tt in zip(a.struct.sl, tset):
-        meta.append((slice(*t_sl), tuple(tD[n][tuple(tt[ax, :].flat)] for n, ax in enumerate(axes))))
+    for t_sl, tt in zip(a.slices, tset):
+        meta.append((slice(*t_sl.slcs[0]), tuple(tD[n][tuple(tt[ax, :].flat)] for n, ax in enumerate(axes))))
     if a.isdiag:
         Dtot = Dtot[:1]
         meta = [(sl, D[:1]) for sl, D in meta]
@@ -573,11 +572,10 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     c_t = ((),)
     c_D = (Dtot,) if not a.isdiag else (Dtot + Dtot,)
     Dp = np.prod(Dtot, dtype=int)
-    c_Dp = (Dp,)
-    c_sl = ((0, Dp),)
-    c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, size=Dp)
+    c_slices = (_slc(((0, Dp),), c_D[0], Dp),)
     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)
-    return a._replace(config=config_dense, struct=c_struct, data=data, mfs=None, hfs=None)
+    return a._replace(config=config_dense, struct=c_struct, slices=c_slices, data=data, mfs=None, hfs=None)
 
 
 def zero_of_dtype(a):
