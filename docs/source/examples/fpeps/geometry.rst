@@ -1,4 +1,4 @@
-Testing Class Lattice 
+Test Class Lattice 
 =====================
 
 Test Lattice
