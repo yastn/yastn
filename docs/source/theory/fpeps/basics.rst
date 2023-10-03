@@ -5,7 +5,7 @@ Basic concepts
 Projected Entangled Pair States (PEPS)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The Projected Entangled Pair State (PEPS) [1,2] is a tensor network appearing typically in the context of two-dimensional (`2D`) systems,
+The Projected Entangled Pair State (PEPS) [1,2] is a tensor network ansatz typically appearing in the context of two-dimensional (`2D`) systems,
 that by construction satisfies the area law of entanglement entropy for such systems.
 It allows efficient simulations of ground and thermal states of many-body quantum systems in `2D` with their respective area laws [3].
 We employ PEPS constructed from a set of tensors located on a `2D` lattice.
@@ -172,10 +172,10 @@ To keep the PEPS representation compact, each application of the gate has to be 
 Truncation of the PEPS bond dimensions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-In `1D`, canonical structure of MPS makes truncation of a single bond dimension based on SVD singular values optimal in a Frobenius norm.
+In `1D`, the canonical structure of the MPS makes the  truncation of bond dimension based on SVD singular values, optimal in a Frobenius norm.
 However, a loopy structure of PEPS prevents a canonical form, and a successful algorithm requires using optimization techniques on top of SVD.
-The aim is to minimize the Frobenius norm of (a) the PEPS after application of the gate with virtual bond dimension increased to
-:math:`D = r \times D` and (b) a new PEPS with the bond dimension truncated back to :math:`D`:
+The aim is to minimize the Frobenius norm of (a) PEPS after application of the Trotter gate, whose virtual bond dimension is now increased to
+:math:`D = r \times D` and (b) a new PEPS, with the bond dimension truncated back to :math:`D`:
 
 ::
 
@@ -196,18 +196,18 @@ The aim is to minimize the Frobenius norm of (a) the PEPS after application of t
 
 We denote the wavefunction in (a) by :math:`|\Psi(A_1',A_2')\rangle` and in (b) as :math:`|\Psi(A_1'',A_2'')\rangle`.
 The Frobenius norm is denoted by :math:`d(A_1',A_2';A_1'',A_2'') = || |\Psi(A_1'',A_2'')\rangle - |\Psi(A_1',A_2')\rangle ||^{2}`
-The aim is to minimalize it with respect to two isolated tensors :math:`A_{1}''` and :math:`A_{2}''` with the metric tensor representing the
+The aim is to minimalize it with respect to the two isolated tensors :math:`A_{1}''` and :math:`A_{2}''` with the metric tensor representing the
 rest of the lattice. In the minimal example above, it would just correspond to :math:`A_{3}` and :math:`A_{4}`.
 More generally, a state-of-the-art optimization method in this context is the so-called Full Update [5], employing the Corner Transfer Matrix Renormalization Group to
-obtain an environment of tensors to be optimized. It is however numerically expensive and might be unstable in some applications.
-In YASTN, we implement a Neighborhood Tensor Update (:ref:`NTU<fpeps/Optimization_algorithms:Neighborhood tensor update (NTU) algorithm>`) [5] that approximates
+obtain a set of environment of tensors. It is however numerically expensive and might be unstable in some applications.
+In YASTN, we implement a Neighborhood Tensor Update (:ref:`NTU<fpeps/Optimization_algorithms:Neighborhood tensor update (NTU) algorithm>`) [6] that approximates
 the metric tensor by contracting a small cluster of neighboring tensors.
 
 
 Infinite PEPS (iPEPS)
 ^^^^^^^^^^^^^^^^^^^^^
 
-Although finite PEPS is widely used, some of the best results have been obtained with infinite PEPS (iPEPS) [6].
+Although finite PEPS is widely used, some of the best results have been obtained with infinite PEPS (iPEPS) [5].
 It operates directly in the thermodynamic limit describing a system with translational invariance.
 In iPEPS ansatz is formed by a unit cell of tensors repeated all over an infinite lattice.
 A common example is a checkerboard lattice, which has two tensors A and B in a :math:`2\times 2` unit cell.
@@ -276,6 +276,6 @@ References & Related works
 2. "A practical introduction to tensor networks: Matrix product states and projected entangled pair states", R. Orus, `Annals of Physics 349, 117 (2014) <https://arxiv.org/abs/1306.2164>`_
 3. "Entanglement and tensor network states", J. Eisert, `arXiv:1308.3318 [quant-ph] (2013), <https://arxiv.org/abs/1308.3318>`_
 4. "Simulation of strongly correlated fermions in two spatial dimensions with fermionic projected entangled-pair states", Philippe Corboz, Román Orús, Bela Bauer, and Guifré Vidal, `Phys. Rev. B 81, 165104 (2010) <https://arxiv.org/abs/0912.0646>`_
-5. "Time evolution of an infinite projected entangled pair state: Neighborhood tensor update", Jacek Dziarmaga, `Phys. Rev. B 104, 094411 (2021) <https://arxiv.org/abs/2107.06635>`_
-6. “Classical Simulation of Infinite-Size Quantum Lattice Systems in Two Spatial Dimensions”, J. Jordan, R. Orus, G. Vidal, F. Verstraete, and J. I. Cirac, `Phys. Rev. Lett. 101, 250602 (2008) <https://arxiv.org/abs/cond-mat/0703788>`_
+5. “Classical Simulation of Infinite-Size Quantum Lattice Systems in Two Spatial Dimensions”, J. Jordan, R. Orus, G. Vidal, F. Verstraete, and J. I. Cirac, `Phys. Rev. Lett. 101, 250602 (2008) <https://arxiv.org/abs/cond-mat/0703788>`_
+6. "Time evolution of an infinite projected entangled pair state: Neighborhood tensor update", Jacek Dziarmaga, `Phys. Rev. B 104, 094411 (2021) <https://arxiv.org/abs/2107.06635>`_
 7. "On entropy growth and the hardness of simulating time evolution", N. Schuch, M. M. Wolf, K. G. H. Vollbrecht and J. I. Cirac, `New Journal of Physics 10(3), 033032 (2008) <https://arxiv.org/abs/0801.2078>`_

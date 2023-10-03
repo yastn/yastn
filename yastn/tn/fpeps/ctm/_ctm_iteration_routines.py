@@ -1,5 +1,5 @@
 """
-Routines for CTMRG of layers PEPS on an arbitrary mxn rectangular lattice.
+Routines for CTMRG of layers PEPS on an arbitrary mxn square lattice.
 
 PEPS tensors A[0] and A[1] corresponds to "black" and "white" sites of the checkerboard.
 PEPs tensors habe 6 legs: [top, left, bottom, right, ancilla, system] with signature s=(-1, 1, 1, -1, -1, 1).
@@ -562,9 +562,8 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
               The updated CTM environment tensor         
         proj     :  dictionary of CTM projectors.
 
-    Procedure
-    ---------
-    The function performs a CTMRG update for a rectangular lattice using the corner transfer matrix
+  
+    The function performs a CTMRG update for a square lattice using the corner transfer matrix
     renormalization group (CTMRG) algorithm. The update is performed in two steps: a horizontal move
     and a vertical move. The projectors for each move are calculated first, and then the tensors in
     the CTM environment are updated using the projectors. The boundary conditions of the lattice
