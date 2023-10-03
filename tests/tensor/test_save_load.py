@@ -1,4 +1,3 @@
-
 """ yastn.save_to_dict() yastn.load_from_dict() yastn.save_to_hdf5() yastn.load_from_hdf5(). """
 import warnings
 import os
@@ -35,7 +34,7 @@ def check_to_numpy(a1, config):
     assert all(yastn.are_independent(a, b) for a, b in [(a1, b1), (a2, b2)])
 
 
-def check_to_hdf5(a):
+def check_to_hdf5(a, *args):
     """ Test if two Tensor-s have the same values. """
     # os.remove("tmp.h5") remove if exists .. perhaps 'w' in the line below
     try:
@@ -52,37 +51,34 @@ def check_to_hdf5(a):
     assert yastn.norm(a - b) < tol
 
 
-def test_dict():
+@pytest.mark.parametrize("test_f", [check_to_numpy, check_to_hdf5])
+def test_dict(test_f):
+    if test_f==check_to_hdf5: pytest.importorskip("h5py")
     """ test exporting tensor to native python data-structure,
         that allows robust saving/loading with np.save/load."""
     a = yastn.rand(config=config_dense)  # s=() i.e. a scalar
     assert a.size == 1
-    check_to_numpy(a, config_dense)
-    check_to_hdf5(a)
+    test_f(a, config_dense)
 
     legs = [yastn.Leg(config_U1, s=1, t=(0, 1, 2), D= (3, 5, 2)),
             yastn.Leg(config_U1, s=-1, t=(0, 1, 3), D= (1, 2, 3)),
             yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D= (2, 3, 4))]
 
     a = yastn.rand(config=config_U1, legs=legs)
-    check_to_numpy(a, config_U1)
-    check_to_hdf5(a)
+    test_f(a, config_U1)
 
     a = yastn.randC(config=config_U1, legs=legs, n=1)
-    check_to_numpy(a, config_U1) # here a is complex
-    check_to_hdf5(a)
+    test_f(a, config_U1) # here a is complex
 
     a = yastn.rand(config=config_U1, isdiag=True, legs=legs[0])
-    check_to_numpy(a, config_U1)
-    check_to_hdf5(a)
+    test_f(a, config_U1)
 
 
     legs = [yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, 2), (1, 0), (1, 2)), D=(1, 2, 3, 4)),
             yastn.Leg(config_Z2xU1, s=1, t=((0, -2), (0, 2)), D=(2, 1)),
             yastn.Leg(config_Z2xU1, s=1, t=((0, -2), (0, 0), (0, 2), (1, -2), (1, 0), (1, 2)), D=(2, 3, 5, 4, 1, 6))]
     a = yastn.ones(config=config_Z2xU1, legs=legs, n=(0, -2))
-    check_to_numpy(a, config_Z2xU1)
-    check_to_hdf5(a)
+    test_f(a, config_Z2xU1)
 
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
@@ -90,8 +86,7 @@ def test_dict():
     a = a.fuse_legs(axes=((0, 2), 1, (4, 3), 5), mode='hard')
     a = a.fuse_legs(axes=((0, 2), 1, 3), mode='hard')
     a = a.fuse_legs(axes=((0, 2), 1), mode='meta')
-    check_to_numpy(a, config_U1)
-    check_to_hdf5(a)
+    test_f(a, config_U1)
 
 
 

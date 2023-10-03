@@ -84,7 +84,7 @@ jobs:
       matrix:
         backend: [ torch ]
         python_v: ['3.9']
-        pytorch_v: ['1.13.1']
+        pytorch_v: ['2.0']
       fail-fast: true
 
     steps:
