@@ -30,11 +30,10 @@ API: yastn.tn.fpeps
    :glob:
    :maxdepth: 2
 
-   fpeps/structure
-   fpeps/measurements
+   fpeps/expectation_values.rst
+   fpeps/lattice_geometry
    fpeps/init
-   fpeps/algorithms_ctmrg
-   fpeps/algorithms_ntu
+   fpeps/Optimization_algorithms
 
 *************************
 Examples: basics of usage

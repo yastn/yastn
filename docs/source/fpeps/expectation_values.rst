@@ -4,7 +4,7 @@ Expectation values
 Expectation values in PEPS require contraction of the lattice. This can be approximately done using CTMRG.
 
 Corner transfer matrix renormalization group (CTMRG) algorithm
-===============================================================
+--------------------------------------------------------------
 
 Introduction
 ^^^^^^^^^^^^
@@ -84,11 +84,12 @@ We implement one-step of the Corboz version [3] of CTMRG:
 
 .. autofunction:: yastn.tn.fpeps.ctm._ctm_iteration_routines.CTM_it
 
-
-.. autofunction:: yastn.tn.fpeps.ctm._ctmrg
-
 One can stop the CTM after a fixed number of iterations. Stopping criteria can also be set based on
-the convergence of one or more observables or by comparing the singular values of the projectors.
+the convergence of one or more observables or by comparing the singular values of the projectors by 
+performing operations on the output of the following function:
+
+.. autofunction:: yastn.tn.fpeps.ctm._ctmrg.ctmrg
+
 Once the CTMRG environment tensors are found, it is straightforward to obtain one-site and two-site
 observables using the following functions.
 

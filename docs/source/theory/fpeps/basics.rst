@@ -10,7 +10,7 @@ that by construction satisfies the area law of entanglement entropy for such sys
 It allows efficient simulations of ground and thermal states of many-body quantum systems in `2D` with their respective area laws [3].
 We employ PEPS constructed from a set of tensors located on a `2D` lattice.
 Each tensor has a physical leg, corresponding to the physical degrees of freedom of the lattice site, and virtual legs (bonds) connecting it to neighboring tensors.
-Here we implement a `2D` rectangular lattice of size :math:`L_{x} \times L_{y}`, with sites labeled by coordinates :math:`(x,y)` as shown below:
+Here we implement a `2D` square lattice of size :math:`L_{x} \times L_{y}`, with sites labeled by coordinates :math:`(x,y)` as shown below:
 
 
 ::
@@ -200,7 +200,7 @@ The aim is to minimalize it with respect to two isolated tensors :math:`A_{1}''`
 rest of the lattice. In the minimal example above, it would just correspond to :math:`A_{3}` and :math:`A_{4}`.
 More generally, a state-of-the-art optimization method in this context is the so-called Full Update [5], employing the Corner Transfer Matrix Renormalization Group to
 obtain an environment of tensors to be optimized. It is however numerically expensive and might be unstable in some applications.
-In YASTN, we implement a Neighborhood Tensor Update (:ref:`NTU<fpeps/algorithms_NTU:Neighborhood tensor update (NTU) algorithm>`) [5] that approximates
+In YASTN, we implement a Neighborhood Tensor Update (:ref:`NTU<fpeps/Optimization_algorithms:Neighborhood tensor update (NTU) algorithm>`) [5] that approximates
 the metric tensor by contracting a small cluster of neighboring tensors.
 
 
@@ -237,7 +237,7 @@ Corner transfer matrix renormalization group (CTMRG)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Calculation of expectation values of interests requires contraction of PEPS with its conjugate.
-This amouts to contraction of PEPS network composed of reduced tensor :math:`a` which is obtained by tracing over the physical index in tensors :math:`A` and it's conjugate :math:`A^{\dagger}`.
+This amounts to contraction of PEPS network composed of reduced tensor :math:`a` which is obtained by tracing over the physical index in tensors :math:`A` and it's conjugate :math:`A^{\dagger}`.
 Note that in the following digram the virtual legs of the peps tensor are labelled by :math:`t` (top), :math:`l` (left), :math:`b` (bottom), and :math:`r` (right) in
 an anticlockwise fashion. For the conjugate tensor, similarly, they are labelled by :math:`{t'}`, :math:`{l'}`, :math:`{b'}` and :math:`{r'}`.
 
@@ -264,7 +264,7 @@ an anticlockwise fashion. For the conjugate tensor, similarly, they are labelled
 Swap gates are placed where the legs cross. This gives a simple structure for the contracted tensors on the :math:`2D` lattice, respecting the global fermionic order.
 
 The exact contraction of a PEPS is exponentially hard [7], and one has to use efficient approximate contraction schemes. One of the state-of-the-art for calculating expectation values in the case of PEPS is the
-Corner Transfer Matrix Renormalization Group (:ref:`CTMRG<fpeps/algorithms_ctmrg:corner transfer matrix renormalization group (ctmrg) algorithm>`).
+Corner Transfer Matrix Renormalization Group (:ref:`CTMRG<fpeps/expectation_values:Corner transfer matrix renormalization group (CTMRG) algorithm>`).
 CTMRG iteratively finds the environment of each tensor, representing the rest of the lattice, in the form of four corner
 tensors and edge tensors transfer matrices surrounding each unique tensor in the unit cell. They are used to calculate the expectation values by contracting tensors (with operators of interest acting on physical legs) and their environments.
 
