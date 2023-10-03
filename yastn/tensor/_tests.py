@@ -104,17 +104,17 @@ def is_consistent(a):
     2) tset follow symmetry rule f(s@t)==n
     3) block dimensions are consistent (this requires config.test=True)
     """
-    low, high = 0, 0
-    for D, Dp, sl in zip(a.struct.D, a.struct.Dp, a.struct.sl):
-        assert D[0] == Dp if a.isdiag else np.prod(D, dtype=int) == Dp
-        high = low + Dp
-        assert sl == (low, high)
-        low = high
-    assert a.config.backend.get_shape(a._data) == (high,)
+
+    Dtot = 0
+    for slc in a.slices:
+        Dtot += slc.Dp
+        assert slc.D[0] == slc.Dp if a.isdiag else np.prod(slc.D, dtype=int) == slc.Dp
+
+    assert a.config.backend.get_shape(a._data) == (Dtot,)
+    assert a.struct.size == Dtot
 
     assert len(a.struct.t) == len(a.struct.D)
-    assert len(a.struct.t) == len(a.struct.Dp)
-    assert len(a.struct.t) == len(a.struct.sl)
+    assert len(a.struct.t) == len(a.slices)
 
     for i in range(len(a.struct.t) - 1):
         assert a.struct.t[i] < a.struct.t[i + 1]

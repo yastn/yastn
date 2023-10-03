@@ -5,7 +5,7 @@ from ast import literal_eval
 from itertools import groupby
 import numpy as np
 from .tensor import Tensor, YastnError
-from .tensor._auxliary import _struct, _config, _clear_axes, _unpack_legs
+from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
 from .tensor._merging import _Fusion, _embed_tensor, _sum_hfs
 from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
 from .tensor._tests import _test_can_be_combined
@@ -16,8 +16,8 @@ __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
 
 
 # def make_config(backend=backend_np, sym=sym_none, default_device='cpu',
-#     default_dtype='float64', fermionic= False,
-#     default_fusion= 'meta', force_fusion= None, **kwargs):
+#                 default_dtype='float64', fermionic=False,
+#                 default_fusion='meta', force_fusion=None, **kwargs):
 def make_config(**kwargs):
     r"""
     Parameters
@@ -45,7 +45,7 @@ def make_config(**kwargs):
         If not specified, the default device is ``'cpu'``.
 
     default_dtype: str
-        Default data type (dtype) of YASTN tensors. Supported options are: ``'float64'``, 
+        Default data type (dtype) of YASTN tensors. Supported options are: ``'float64'``,
         ``'complex128'``. If not specified, the default dtype is ``'float64'``.
     fermionic : bool or tuple[bool,...]
         Specify behavior of :meth:`yastn.swap_gate` function, allowing to introduce fermionic symmetries.
@@ -104,7 +104,7 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs):
     r"""
     Initialize tensor with all allowed blocks filled with random numbers.
 
-    Draws from a uniform distribution in [-1, 1] or [-1, 1] + 1j * [-1, 1], 
+    Draws from a uniform distribution in [-1, 1] or [-1, 1] + 1j * [-1, 1],
     depending on desired ``dtype``.
 
     Parameters
@@ -253,7 +253,7 @@ def eye(config=None, legs=(), n=None, **kwargs):
         device on which the tensor should be initialized, overrides default_device
         specified in config.
     s : tuple
-        (alternative) Signature of tensor, should be (1, -1) or (-1, 1). Default is s=(1, -1) 
+        (alternative) Signature of tensor, should be (1, -1) or (-1, 1). Default is s=(1, -1)
     t : list
         (alternative) List of charges for each leg. Default is t=().
     D : list
@@ -290,12 +290,11 @@ def load_from_dict(config=None, d=None):
     """
     if d is not None:
         c_isdiag = bool(d['isdiag'])
-        c_Dp = tuple(x[0] for x in d['D']) if c_isdiag else tuple(np.prod(d['D'], axis=1))
-        c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-        struct = _struct(s=d['s'], n=d['n'], diag=c_isdiag, t=d['t'], D=d['D'], Dp=c_Dp, sl=c_sl)
+        c_Dp = [x[0] for x in d['D']] if c_isdiag else np.prod(d['D'], axis=1)
+        slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, d['D']))
+        struct = _struct(s=d['s'], n=d['n'], diag=c_isdiag, t=d['t'], D=d['D'], size=sum(c_Dp))
         hfs = tuple(_Fusion(**hf) for hf in d['hfs'])
-        c = Tensor(config=config, struct=struct,
-                    hfs=hfs, mfs=d['mfs'])
+        c = Tensor(config=config, struct=struct, slices=slices, hfs=hfs, mfs=d['mfs'])
         if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID']:
             raise YastnError("Symmetry rule in config do not match loaded one.")
         if 'fermionic' in d and c.config.fermionic != d['fermionic']:
@@ -314,7 +313,7 @@ def load_from_hdf5(config, file, path):
     ----------
     config : module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    file: pointer to opened HDF5 file. 
+    file: pointer to opened HDF5 file.
     path: path inside the file which contains the state
 
     Returns
@@ -327,14 +326,14 @@ def load_from_hdf5(config, file, path):
     c_s = tuple(g.get('s')[:])
     c_t = tuple(tuple(x.flat) for x in g.get('ts')[:])
     c_D = tuple(tuple(x.flat) for x in g.get('Ds')[:])
-    c_Dp = tuple(x[0] for x in c_D) if c_isdiag else tuple(np.prod(c_D, axis=1))
-    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-    struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
+    c_Dp = [x[0] for x in c_D] if c_isdiag else np.prod(c_D, axis=1)
+    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, c_D))
+    struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, size=sum(c_Dp))
 
     mfs = literal_eval(tuple(file.get(path+'/mfs').keys())[0])
     hfs = tuple(_Fusion(*hf) if isinstance(hf, tuple) else _Fusion(**hf) \
                 for hf in literal_eval(tuple(g.get('hfs').keys())[0]))
-    c = Tensor(config=config, struct=struct, mfs=mfs, hfs=hfs)
+    c = Tensor(config=config, struct=struct, slices=slices, mfs=mfs, hfs=hfs)
 
     vmat = g.get('matrix')[:]
     c._data = c.config.backend.to_tensor(vmat, dtype=vmat.dtype.name, device=c.device)
@@ -365,7 +364,7 @@ def decompress_from_1d(r1d, meta):
     yastn.Tensor
     """
     hfs = tuple(leg.legs[0] for leg in meta['legs'])
-    a = Tensor(config=meta['config'], hfs=hfs, mfs=meta['mfs'], struct=meta['struct'])
+    a = Tensor(config=meta['config'], hfs=hfs, mfs=meta['mfs'], struct=meta['struct'], slices=meta['slices'])
     a._data = r1d
     return a
 
@@ -457,9 +456,9 @@ def block(tensors, common_legs=None):
     meta_new, meta_block = {}, []
     nsym = tn0.config.sym.NSYM
     for pa, a in tensors.items():
-        for tind, slind, Dind in zip(a.struct.t, a.struct.sl, a.struct.D):
+        for tind, slind, Dind in zip(a.struct.t, a.slices, a.struct.D):
             Dslcs = tuple(tDslc[tind[n * nsym : n * nsym + nsym]][pa[n]] for n, tDslc in enumerate(ltDslc))
-            meta_block.append((tind, slind, Dind, pa, Dslcs))
+            meta_block.append((tind, slind.slcs[0], Dind, pa, Dslcs))
             if tind not in meta_new:
                 meta_new[tind] = tuple(tDtot[tind[n * nsym : n * nsym + nsym]] for n, tDtot in enumerate(ltDtot))
 
@@ -468,13 +467,11 @@ def block(tensors, common_legs=None):
     c_t = tuple(t for t, _ in meta_new)
     c_D = tuple(D for _, D in meta_new)
     c_Dp = tuple(np.prod(c_D, axis=1)) if len(c_D) > 0 else ()
-    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
-    c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, Dp=c_Dp, sl=c_sl)
-    meta_new = tuple(zip(c_t, c_D, c_sl))
-    Dsize = c_sl[-1][1] if len(c_sl) > 0 else 0
-
-    data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, Dsize)
-    return tn0._replace(struct=c_struct, data=data, hfs=tuple(hfs))
+    c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, c_D))
+    c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, size=sum(c_Dp))
+    meta_new = tuple((x, y, z.slcs[0]) for x, y, z in zip(c_t, c_D, c_slices))
+    data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, c_struct.size)
+    return tn0._replace(struct=c_struct, slices=c_slices, data=data, hfs=tuple(hfs))
 
 
 def _sum_legs_hfs(legs):
