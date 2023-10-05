@@ -12,12 +12,20 @@ def safe_inverse_2(x, epsilon):
 class SVDGESDD(torch.autograd.Function):
     if _torch_version_check("1.8.1"):
         @staticmethod
-        def forward(self, A, ad_decomp_reg, fullrank_uv, diagnostics):
+        def forward(A, ad_decomp_reg, fullrank_uv, diagnostics):
             U, S, Vh = torch.linalg.svd(A, full_matrices=fullrank_uv)
             # A = U @ diag(S) @ Vh
-            self.save_for_backward(U, S, Vh, ad_decomp_reg)
-            self.diagnostics= diagnostics
             return U, S, Vh
+        
+        @staticmethod
+        # inputs is a Tuple of all of the inputs passed to forward.
+        # output is the output of the forward().
+        def setup_context(ctx, inputs, output):
+            _, ad_decomp_reg, _, diagnostics= inputs
+            U, S, Vh= output
+            ctx.save_for_backward(U, S, Vh, ad_decomp_reg)
+            ctx.diagnostics= diagnostics
+            
     else:
         @staticmethod
         def forward(self, A, ad_decomp_reg, fullrank_uv, diagnostics):
