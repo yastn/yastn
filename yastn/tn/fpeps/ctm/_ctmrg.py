@@ -25,10 +25,10 @@ def ctmrg(peps, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, en
     The outer loop sweeps over PEPS updating only the environmental tensors through 2x2 windows of PEPS tensors.
     Convergence can be controlled based on observables or Schmidt values of projectors.
     The CTMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
-    or until all convergence measures with provided tolerance change by less then the tolerance.
+    or through some externally set convergence criteria.
 
     Outputs iterator if :code:`iterator_step` is given.
-    It allows inspecting :code:`peps` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
+    It allows inspecting :code:`CtmEnv` outside of :code:`ctmrg_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------
@@ -50,8 +50,8 @@ def ctmrg(peps, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, en
         Maximal number of sweeps.
 
     iterator_step: int
-        If int, :code:`dmrg_` returns a generator that would yield output after every iterator_step sweeps.
-        Default is None, in which case  :code:`dmrg_` sweeps are performed immidiatly.
+        If int, :code:`ctmrg_` returns a generator that would yield output after every iterator_step sweeps.
+        Default is None, in which case  :code:`ctmrg_` sweeps are performed immediately.
 
     tcinit: symmetry sectors of initial corners legs
 
@@ -64,6 +64,8 @@ def ctmrg(peps, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, en
     out: CTMRGout(NamedTuple)
         Includes fields:
         :code:`sweeps` number of performed dmrg sweeps.
+        :code:`env` environmental tensors.
+        :code:`proj` projectors.
     """
 
     # if environment is not given, start with a random initialization
