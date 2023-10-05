@@ -1,13 +1,13 @@
-Testing for NTU algorithms
-==========================
+Test of NTU algorithm
+=======================
 
 NTU
 ----
 
-In order to execute the NTU algorithm :ref:`NTU<fpeps/algorithms_NTU:Neighborhood tensor update (NTU) algorithm>` for calulating thermal states, 
+In order to execute the neighborhood tensor update algorithm :ref:`NTU<fpeps/Optimization_algorithms:Neighborhood tensor update (NTU) algorithm>` for calulating thermal states, 
 we need to initialize the PEPS at each site as a maximaly entangled state of its physical and ancilliary degrees of freedom :ref:`Purification<theory/fpeps/purification:Purification>`.
 Then we need to perform imaginary time evolution with NTU and subsequently calculate expectation values using 
-CTMRG :ref:`CTMRG<fpeps/algorithms_CTMRG:Corner transfer matrix renormalization group (CTMRG) algorithm>`.
+Corner Transfer Matrix Renormalization Algorithm :ref:`CTMRG<fpeps/expectation_values:Corner transfer matrix renormalization group (CTMRG) algorithm>`.
 
 Thermal expectation value of spinless fermi sea
 -----------------------------------------------
