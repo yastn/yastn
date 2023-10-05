@@ -9,15 +9,15 @@ def nn_exp_dict(peps, env, op):
     Returns two dictionaries 'obs_hor' and 'obs_ver' that store horizontal and vertical 
     nearest-neighbor expectation values, respectively. Each such dictionary has as its keys
     labels of the input two-site operators which further stores a dictionary of NN sites as
-    keys and the corresponding obervables as values. Used in yastn/tests/peps
-
+    keys and the corresponding obervables as values. 
+    
     Parameters
     ----------
     peps : class Lattice
         class containing peps data along with the lattice structure data
     env: class CtmEnv
         class containing ctm environment tensors along with lattice structure data
-    op: dictionary of single site operators
+    op: dictionary of two-site observables
 
     """
 
