@@ -1,7 +1,6 @@
 """ Basic structures forming PEPS network. """
 from itertools import product
 from typing import NamedTuple
-from ...tn.mps import Mps, Mpo
 
 class Bond(NamedTuple):
     """ A bond between two lattice sites. site_0 should be before site_1 in the fermionic order. """
@@ -58,7 +57,7 @@ class Lattice():
         """ Get data for site. """
         assert site in self._sites, "Site is inconsistent with lattice"
         return self._data[self.site2index(site)]
-    
+
     def __setitem__(self, site, obj):
         """ Set data at site. """
         assert site in self._sites, "Site is inconsistent with lattice"
@@ -88,7 +87,7 @@ class Lattice():
 
     def nn_site(self, site, d):
         """
-        Index of the site in the direction d in ('t', 'b', 'l', 'r', 'tl', 'bl', 'tr', 'br'). 
+        Index of the site in the direction d in ('t', 'b', 'l', 'r', 'tl', 'bl', 'tr', 'br').
         Return None if there is no neighboring site in given direction.
         """
         x, y = site
@@ -103,7 +102,7 @@ class Lattice():
                   The keys of the dictionary are the direction of the neighboring site with respect to
                   the bond: 'tl' (top left), 't' (top), 'tr' (top right), 'l' (left), 'r' (right),
                   'bl' (bottom left), and 'b' (bottom)"""
-                          
+
         neighbors = {}
         site_1, site_2 = bds.site_0, bds.site_1
         if self.lattice == 'checkerboard':
@@ -126,4 +125,4 @@ class Lattice():
 
 
 
- 
+
