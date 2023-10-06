@@ -2,15 +2,13 @@
 ![Test status](https://github.com/yastn/yastn/actions/workflows/main.yml/badge.svg?branch=master)
 ![Docs status](https://github.com/yastn/yastn/actions/workflows/docs.yml/badge.svg?branch=master)
 
-by Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, and Juraj Hasik
-
 <br />
-  
+
 ### Python library for differentiable linear algebra with block-sparse tensors, supporting abelian symmetries
 
 ##### YASTN tensors can be defined with both discrete and continuous abelian groups
 
-- Z<sub>2</sub> for parity conservation 
+- Z<sub>2</sub> for parity conservation
 - U(1) for particle number conservation
 - direct product of abelian groups such as Z<sub>3</sub>xU(1) or U(1)xU(1)xZ<sub>2</sub> and so on
 
@@ -24,9 +22,9 @@ allowing for automatic differentiation (autograd) on backends which provide it.
 
 ##### To see YASTN in action, check
 
-- Matrix product states (MPS) and algorithms powered by YASTN 
+- Matrix product states (MPS) and algorithms powered by YASTN
 
-   Explore the entire [MPS module](https://yastn.github.io/yastn/yastn.mps.html) or 
+   Explore the entire [MPS module](https://yastn.github.io/yastn/yastn.mps.html) or
    try out code examples running [DMRG](https://yastn.github.io/yastn/examples/mps/algorithms.html#dmrg)
    or [TDVP](https://yastn.github.io/yastn/examples/mps/algorithms.html#tdvp) optimizations
 
@@ -57,7 +55,7 @@ or just clone and add YASTN root to your Python import path to sucessfully ``imp
 - Python 3.9+
 - NumPy
 
-and optionally 
+and optionally
 
 - PyTorch 1.11+ (for PyTorch backend)
 - SciPy (for sparse linear algebra solvers)
@@ -66,7 +64,7 @@ and optionally
 ### Run the tests
 
 Tests, which are also a good source of examples of usage, can be found in the folder `tests`.
-To verify that everything works, get `pytest`. See [Installing pytest](https://docs.pytest.org/en/6.2.x/getting-started.html) 
+To verify that everything works, get `pytest`. See [Installing pytest](https://docs.pytest.org/en/6.2.x/getting-started.html)
 or `conda install -c conda-forge pytest`. Then you can test base yastn.Tensor and also yastn.mps modules
 
 ```
