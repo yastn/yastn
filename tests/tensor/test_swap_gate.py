@@ -62,13 +62,13 @@ def apply_operator(psi, c, site):
 
 
 def test_apply_operators():
-    """ 
+    """
     Apply swap_gate during calculation of expectation value such as, e.g. <psi| c_1 cdag_3 |psi>.
 
     Use SpinfulFermions defined in :class:`yastn.operators.SpinfulFermions`
     """
     for sym in ['Z2', 'U1xU1xZ2', 'U1xU1']:
-        ops = yastn.operators.SpinfulFermions(sym=sym, backend=config_dense.backend)
+        ops = yastn.operators.SpinfulFermions(sym=sym, backend=config_dense.backend, default_device=config_dense.default_device)
         # pytest switches backends in configs imported in tests
 
         vac = vacum_spinful(sites=4, ops=ops)
@@ -104,7 +104,7 @@ def vacum_spinful(sites, ops):
     I = ops.I()
     if ops._sym == 'Z2':
         psi = yastn.zeros(config=I.config, s=s, t=[((0,),)] * sites, D=(2,) * sites)
-        psi[(0,) * sites][(0,) * sites] = 1.  # here first [(0,0,..)] is the block charge -- here outputed as ndim object. 
+        psi[(0,) * sites][(0,) * sites] = 1.  # here first [(0,0,..)] is the block charge -- here outputed as ndim object.
         # The second [(0,0,..)] is index in the block.
     else: # ops._sym in ('U1xU1xZ2', 'U1xU1'):
         psi = yastn.ones(config=I.config, s=s, t=[(I.n,)] * sites, D=(1,) * sites)

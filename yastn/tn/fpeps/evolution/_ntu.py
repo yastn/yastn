@@ -1,7 +1,7 @@
 import logging
 import yastn
-from yastn.tn.fpeps.operators.gates import trivial_tensor, match_ancilla_1s, match_ancilla_2s
-from yastn import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse_legs, ncon, eigh_with_truncation, eye
+from yastn.tn.fpeps.operators.gates import trivial_tensor
+from yastn import tensordot, swap_gate, fuse_legs, ncon
 
 ###################################
 ##### creating ntu environment ####
@@ -10,13 +10,13 @@ from yastn import tensordot, vdot, svd_with_truncation, svd, qr, swap_gate, fuse
 def env_NTU(peps, bd, QA, QB, dirn):
     r"""
     Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
-    
+
     Parameters
     ----------
     peps : class PEPS
 
     bd  : class Bond
-        bond around which the tensor environment is to be calculated 
+        bond around which the tensor environment is to be calculated
 
     QA : yastn.Tensor
         Fixed isometry to be attached to the metric positioned on the left/top side of the bond.
@@ -28,13 +28,13 @@ def env_NTU(peps, bd, QA, QB, dirn):
 
     dirn : str
         The direction of the bond. Can be "h" (horizontal) or "v" (vertical).
-    
+
     Returns
     -------
     Tensor
         The environment tensor g .
     """
-  
+
     env = peps.tensors_NtuEnv(bd)
     G={}
     for ms in env.keys():
@@ -66,7 +66,7 @@ def env_NTU(peps, bd, QA, QB, dirn):
 
 
 def con_tl(A):  # A -> [t l] [b r] s
-    """ top-left env tensor """  
+    """ top-left env tensor """
     A = fuse_legs(A, axes=((0, 2), 1))  # [[t l] s] [b r]
     m_tl = tensordot(A, A, axes=(0, 0), conj=(0, 1))  # [b r] [b' r']
     m_tl = m_tl.unfuse_legs(axes=(0, 1))  # b r b' r'
