@@ -24,7 +24,7 @@ def pytest_configure(config):
         print('Using numpy backend')
         import yastn.backend.backend_np as backend
 
-    for folder in ["tensor", "mps"]:
+    for folder in ["tensor", "mps", "operators"]:
         confs = [name[:-3] for name in os.listdir(folder + "/configs") if fnmatch(name, 'config*.py')]
         for conf in confs:
             conf = importlib.import_module(folder + ".configs." + conf)

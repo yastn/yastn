@@ -1,7 +1,5 @@
 import numpy as np
 import yastn.tn.fpeps as fpeps
-import yastn
-import random
 from ...initialize import *
 
 r""" Initialization of peps tensors for real or imaginary time evolution """
@@ -48,7 +46,7 @@ def initialize_diagonal_basis(projectors, net, out):
         net : class Lattice
         out : dict
             A dictionary specifying the occupation pattern. The keys are the lattice sites
-            and the values are integers indicating the occupation type 
+            and the values are integers indicating the occupation type
             (For Spinful fermions the convention can be to choose 0 for spin-up, 1 for spin-down,
             2 for double occupancy, and 3 for hole).
 

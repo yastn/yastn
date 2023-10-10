@@ -1,6 +1,6 @@
 # this routine just calculates nearest neighbor correlators
 import numpy as np
-from yastn import tensordot, svd_with_truncation, rand, ncon
+from yastn import tensordot, ncon
 from ._ctm_iteration_routines import append_a_tl, append_a_br, append_a_tr, append_a_bl, fPEPS_2layers
 
 def ret_AAbs(A, bds, op, orient):
@@ -30,7 +30,7 @@ def apply_TM_top(vect, env, site, AAb):
     new_vect = tensordot(env[site].l, vect, axes=(2, 0))
     new_vect = append_a_tl(new_vect, AAb)
     new_vect = new_vect.unfuse_legs(axes=2)
-    
+
     if new_vect.ndim == 5:
         new_vect = ncon((new_vect, env[site].r), ([-1, -2, 2, -4, 1], [2, 1, -3]))
         new_vect =  new_vect.fuse_legs(axes=(0, 1, (2, 3)))
@@ -85,7 +85,7 @@ def apply_TMO_bottom(vecb, env, site, AAb):
     new_vecb = new_vecb.unfuse_legs(axes=1).unfuse_legs(axes=1)
     if new_vecb.ndim == 5:
         new_vecb = new_vecb.swap_gate(axes=((0, 1), 2))
-        new_vecb =  new_vecb.fuse_legs(axes=((0, 2), (1, 3), 4)) 
+        new_vecb =  new_vecb.fuse_legs(axes=((0, 2), (1, 3), 4))
     elif new_vecb.ndim == 4:
         new_vecb =  new_vecb.fuse_legs(axes=(0, (1, 2), 3))
     return new_vecb
@@ -97,7 +97,7 @@ def left_right_op_vectors(env, site_0, site_1, AAbl, AAbr):
     vecl = tensordot(env[site_0].l, env[site_0].tl, axes=(2, 0))
     vecl = tensordot(env[site_0].bl, vecl, axes=(1, 0))
 
-    vecr = tensordot(env[site_1].tr, env[site_1].r, axes=(1, 0)) 
+    vecr = tensordot(env[site_1].tr, env[site_1].r, axes=(1, 0))
     vecr = tensordot(vecr, env[site_1].br, axes=(2, 0))
 
     new_vecl = apply_TMO_left(vecl, env, site_0, AAbl)
@@ -142,17 +142,17 @@ def array_EV2pt(peps, env, site0, site1, op=None):
     """
 
     # check if horizontal or vertical
-    
+
     dx, dy = site1[0] - site0[0], site1[1] - site0[1]
     if dx == dy == 0:
         raise ValueError("Both sites are the same.")
     elif dx != 0 and dy != 0:
         raise ValueError("Both sites should be aligned vertically or horizontally.")
-    
+
     orient = 'horizontal' if dx == 0 else 'vertical'
     num_correlators = abs(dy) if orient == 'horizontal' else abs(dx)
-    nxt_site = peps.nn_site(site0, d='r' if orient == 'horizontal' else 'b')  
-    
+    nxt_site = peps.nn_site(site0, d='r' if orient == 'horizontal' else 'b')
+
     if orient == 'horizontal':
         AAbl = fPEPS_2layers(peps[site0])
         AAbr = fPEPS_2layers(peps[nxt_site])
@@ -169,19 +169,19 @@ def array_EV2pt(peps, env, site0, site1, op=None):
             AAbb = fPEPS_2layers(peps[nxt_site], op=op['r'], dir='b')
 
     array_vals = np.zeros((num_correlators))
-    if orient == 'horizontal': 
-        left_bound_vec, right_bound_vec = left_right_op_vectors(env, site0, nxt_site, AAbl, AAbr) 
+    if orient == 'horizontal':
+        left_bound_vec, right_bound_vec = left_right_op_vectors(env, site0, nxt_site, AAbl, AAbr)
     elif orient == 'vertical':
-        left_bound_vec, right_bound_vec = top_bottom_op_vectors(env, site0, nxt_site, AAbt, AAbb) 
+        left_bound_vec, right_bound_vec = top_bottom_op_vectors(env, site0, nxt_site, AAbt, AAbb)
 
-    array_vals[0] = con_bi(left_bound_vec, right_bound_vec) 
+    array_vals[0] = con_bi(left_bound_vec, right_bound_vec)
     vecl = left_bound_vec
 
     for num in range(2, num_correlators+1):
-        
+
         AAb_nxt = fPEPS_2layers(peps[nxt_site])
         new_vecl = apply_TM_left(vecl, env, nxt_site, AAb_nxt) if orient == 'horizontal' else apply_TM_top(vecl, env, nxt_site, AAb_nxt)
-        nxt_site = peps.nn_site(nxt_site, d='r' if orient == 'horizontal' else 'b')  
+        nxt_site = peps.nn_site(nxt_site, d='r' if orient == 'horizontal' else 'b')
 
         if op is not None:
             if orient == 'horizontal':
@@ -192,18 +192,18 @@ def array_EV2pt(peps, env, site0, site1, op=None):
             if orient == 'horizontal':
                 AAbr = fPEPS_2layers(peps[nxt_site])
             elif orient == 'vertical':
-                AAbb = fPEPS_2layers(peps[nxt_site])                 
-                                 
+                AAbb = fPEPS_2layers(peps[nxt_site])
+
         if orient == 'horizontal':
-            vecr = tensordot(env[nxt_site].tr, env[nxt_site].r, axes=(1, 0)) 
+            vecr = tensordot(env[nxt_site].tr, env[nxt_site].r, axes=(1, 0))
             vecr = tensordot(vecr, env[nxt_site].br, axes=(2, 0))
             right_bound_vec = apply_TMO_right(vecr, env, nxt_site, AAbr)
         elif orient == 'vertical':
             vecb = tensordot(env[nxt_site].b, env[nxt_site].bl, axes=(2, 0))
             vecb = tensordot(env[nxt_site].br, vecb, axes=(1, 0))
             right_bound_vec = apply_TMO_bottom(vecb, env, nxt_site, AAbb)
-         
-        array_vals[num-1] = con_bi(new_vecl, right_bound_vec) 
+
+        array_vals[num-1] = con_bi(new_vecl, right_bound_vec)
         vecl = new_vecl
 
     return array_vals
@@ -215,9 +215,9 @@ def hor_extension(env, bd, AAbo, AAb):
     """ merge the left and right vecs + TM """
     site_0, site_1 = bd.site_0, bd.site_1
 
-    left_bound_vec, right_bound_vec = left_right_op_vectors(env, site_0, site_1, AAbo) 
+    left_bound_vec, right_bound_vec = left_right_op_vectors(env, site_0, site_1, AAbo)
     hor = con_bi(left_bound_vec, right_bound_vec)
-    left_bound_vec_norm, right_bound_vec_norm = left_right_op_vectors(env, site_0, site_1, AAb) 
+    left_bound_vec_norm, right_bound_vec_norm = left_right_op_vectors(env, site_0, site_1, AAb)
     hor_norm = con_bi(left_bound_vec_norm, right_bound_vec_norm)
 
     return (hor/hor_norm)
@@ -226,9 +226,9 @@ def ver_extension(env, bd, AAbo, AAb):
     """ merge the left and right vecs + TM """
     site_0, site_1 = bd.site_0, bd.site_1
     top_bound_vec, bottom_bound_vec = top_bottom_op_vectors(env, site_0, site_1, AAbo)
-    ver = con_bi(top_bound_vec, bottom_bound_vec) 
+    ver = con_bi(top_bound_vec, bottom_bound_vec)
     top_bound_vec_norm, bottom_bound_vec_norm = top_bottom_op_vectors(env, site_0, site_1, AAb)
-    ver_norm = con_bi(top_bound_vec_norm, bottom_bound_vec_norm) 
+    ver_norm = con_bi(top_bound_vec_norm, bottom_bound_vec_norm)
 
     return (ver/ver_norm)
 
@@ -257,7 +257,7 @@ def make_ext_corner_bl(corbl, str_b, str_l, AAb):
     vec_cor_bl = str_b @ corbl @ str_l
     new_vec_cor_bl = append_a_bl(vec_cor_bl, AAb).fuse_legs(axes=(0, 1, 3, 2))
     nfbl = new_vec_cor_bl.unfuse_legs(axes=1).unfuse_legs(axes=1)
-    if nfbl.ndim == 6: 
+    if nfbl.ndim == 6:
         new_vec_cor_bl = nfbl.swap_gate(axes=(2, 1))
         new_vec_cor_bl = new_vec_cor_bl.fuse_legs(axes=(0, (1, 3), 4, 5, 2))
     return new_vec_cor_bl
@@ -273,7 +273,7 @@ def make_ext_corner_br(corbr, str_b, str_r, AAb):
     return new_vec_cor_br
 
 def array2ptdiag(peps, env, AAb_top, AAb_bottom, site0, site1, flag=None):
-    r""" Returns diagonal correlators 
+    r""" Returns diagonal correlators
 
     Note: 1. site0 has to be to at left and site1 at right according to the defined fermionic order.
           2. Flag should be set to 'y' when observables are included.
@@ -300,7 +300,7 @@ def array2ptdiag(peps, env, AAb_top, AAb_bottom, site0, site1, flag=None):
         elif x1<x0:
             corr_l = ncon((vec_tl, vec_bl), ([2, 1, -3, -4], [-1, -2, 1, 2, -5]))
             corr_r = ncon((vec_br, vec_tr), ([2, 1, -2, -1], [-4, -3, 1, 2, -5]))
-            corr = tensordot(corr_l, corr_r, axes=((0, 1, 2, 3, 4), (0, 1, 2, 3, 4))).to_number()   
+            corr = tensordot(corr_l, corr_r, axes=((0, 1, 2, 3, 4), (0, 1, 2, 3, 4))).to_number()
     elif flag is None:
         corr_l = ncon((vec_tl, vec_bl), ([2, 1, -3, -4], [-1, -2, 1, 2]))
         corr_r = ncon((vec_br, vec_tr), ([2, 1, -2, -1], [-4, -3, 1, 2]))

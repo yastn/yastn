@@ -11,7 +11,6 @@ from yastn import tensordot, ncon, svd_with_truncation, qr, vdot, initialize
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps._doublePepsTensor import DoublePepsTensor
 from ._ctm_env import Local_Projector_Env
-import time
 import numpy as np
 
 
@@ -377,7 +376,7 @@ def move_horizontal(envn, env, AAb, proj, ms):
     (_,y) = ms
     left = AAb.nn_site(ms, d='l')
     right = AAb.nn_site(ms, d='r')
-    
+
     if AAb.boundary == 'obc' and y == 0:
         l_abv = None
         l_bel = None
@@ -559,10 +558,10 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
     Returns
     -------
         envn_ver : class CTMEnv
-              The updated CTM environment tensor         
+              The updated CTM environment tensor
         proj     :  dictionary of CTM projectors.
 
-  
+
     The function performs a CTMRG update for a square lattice using the corner transfer matrix
     renormalization group (CTMRG) algorithm. The update is performed in two steps: a horizontal move
     and a vertical move. The projectors for each move are calculated first, and then the tensors in
@@ -586,7 +585,7 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
         # print('projector calculation ctm cluster horizontal', ms)
         proj = proj_horizontal(env[ms.nw], env[ms.ne], env[ms.sw], env[ms.se], proj, ms, AAb[ms.nw], AAb[ms.ne], AAb[ms.sw], AAb[ms.se], fix_signs, opts_svd)
 
-    if AAb.boundary == 'obc': 
+    if AAb.boundary == 'obc':
         # we need trivial projectors on the boundary for horizontal move for finite lattices
         for ms in range(AAb.Ny-1):
             proj[0,ms].hlt = trivial_projector(env[0,ms].l, AAb[0,ms], env[0,ms+1].tl, dirn='hlt')
@@ -611,7 +610,7 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
         # print('projector calculation ctm cluster vertical', ms)
         proj = proj_vertical(envn_hor[ms.nw], envn_hor[ms.sw], envn_hor[ms.ne], envn_hor[ms.se], proj, ms, AAb[ms.nw], AAb[ms.sw], AAb[ms.ne], AAb[ms.se], fix_signs, opts_svd)
 
-    if AAb.boundary == 'obc': 
+    if AAb.boundary == 'obc':
         # we need trivial projectors on the boundary for vertical move for finite lattices
         for ms in range(AAb.Nx-1):
             proj[ms,0].vtl = trivial_projector(envn_hor[ms,0].t, AAb[ms,0], envn_hor[ms+1,0].tl, dirn='vtl')
