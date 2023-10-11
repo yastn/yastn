@@ -1,7 +1,3 @@
-# temp files
-tmp.h5
-tmp.npy
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -135,6 +131,12 @@ dmypy.json
 # data files
 *.npy
 *.h5
+*.dat
+tests/*.txt
+tests/mps/*.txt
+tests/operators/*.txt
+tests/peps/*.txt
+tests/tensor/*.txt
 
 # cprof
 *.prof
