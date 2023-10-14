@@ -1,4 +1,5 @@
 """ class yastn.Leg """
+from __future__ import annotations
 from dataclasses import dataclass, replace
 from itertools import product, groupby
 import numpy as np
@@ -20,13 +21,13 @@ class Leg:
     sum of `plain` vector spaces (sectors), each labeled by charge `t`
 
     .. math::
-        V = \oplus_t V_t
+        V = \bigoplus_t V_t
 
     The action of abelian symmetry on elements of such space
     depends only on the charge `t` of the element
 
     .. math::
-        g \in G:\quad U(g)V = \oplus_t U(g)_t V_t.
+        g \in G:\quad U(g)V = \bigoplus_t U(g)_t V_t.
 
     The size of individual sectors :math:`dim(V_t)` is arbitrary.
 
@@ -83,7 +84,7 @@ class Leg:
     def __repr__(self):
         return ("Leg(sym={}, s={}, t={}, D={}, hist={})".format(self.sym, self.s, self.t, self.D, self.history()))
 
-    def conj(self):
+    def conj(self) -> Leg:
         r"""
         New :class:`yastn.Leg` with switched signature.
 
@@ -94,7 +95,7 @@ class Leg:
         legs_conj = tuple(leg.conj() for leg in self.legs)
         return replace(self, s=-self.s, legs=legs_conj)
 
-    def __getitem__(self, t):
+    def __getitem__(self, t) -> int:
         r"""
         Size of a charge sector
 
@@ -102,36 +103,24 @@ class Leg:
         ----------
         t : int or tuple(int)
             selected charge sector
-
-        Returns
-        -------
-        int
         """
         return self.D[self.t.index(t)]
 
     @property
-    def tD(self):
+    def tD(self) -> dict[tuple, int]:
         r"""
         Return charge sectors `t` and their sizes `D` as a dictionary ``{t: D}``.
-
-        Returns
-        -------
-        dict
         """
         return dict(zip(self.t, self.D))
 
-    def history(self):
+    def history(self) -> str:
         """
         Show representation of Leg fusion history.
 
-        'o' marks original legs,
-        's' is for sum (block),
-        'p' is for product fuse(..., mode='hard'),
-        'm' is for meta-fusion.
-
-        Returns
-        -------
-        str
+        'o' marks original legs
+        's' is for sum, i.e. block
+        'p' is for product, i.e., fuse_legs(..., mode='hard')
+        'm' is for meta-fusion
         """
         if isinstance(self.fusion, tuple):  # meta fused
             tree = self.fusion
@@ -144,18 +133,19 @@ class Leg:
         hf = self.legs[0]  # hard fusion
         return _str_tree(hf.tree, hf.op)
 
-    def is_fused(self):
+    def is_fused(self) -> bool:
         """ Return True if the leg is a result of some fusion, and False is it is elementary. """
         return len(self.legs) > 1 or self.legs[0].tree[0] > 1
 
 
-def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False):
+def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False) -> Leg:
     """
-    Create :class:`yastn.Leg` with randomly distributed bond dimensions to sectors according to Gaussian distribution.
+    Create :class:`yastn.Leg` with distributing bond dimensions to sectors
+    randomly according to Gaussian distribution.
 
     Parameters
     ----------
-    module, types.SimpleNamespace, or typing.NamedTuple
+    config: module, types.SimpleNamespace, or typing.NamedTuple
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
     s : int
         Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
@@ -167,10 +157,6 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
         total bond dimension of the leg, to be distributed to sectors
     nonnegative : bool
         If true, cut off negative charges
-
-    Returns
-    -------
-    yastn.Leg
     """
     if config.sym.NSYM == 0:
         return Leg(config, s=s, D=(D_total,))
@@ -239,7 +225,7 @@ def _leg_fusions_need_mask(*legs):
     raise YastnError("mixing meta- and hard-fused legs")
 
 
-def leg_outer_product(*legs, t_allowed=None):
+def leg_outer_product(*legs, t_allowed=None) -> Leg:
     """
     Output Leg being an outer product of a list of legs.
 
@@ -253,10 +239,6 @@ def leg_outer_product(*legs, t_allowed=None):
 
     t_allowed : list(tuple)
         limit effective charges to the ones provided in the list.
-
-    Returns
-    -------
-    yastn.Leg
     """
     seff = legs[0].s
     sym = legs[0].sym
@@ -308,7 +290,7 @@ def leg_undo_product(leg):
     pass
 
 
-def leg_union(*legs):
+def leg_union(*legs) -> Leg:
     """
     Output Leg that represent space being an union of spaces of a list of legs.
     """
@@ -330,7 +312,7 @@ def leg_union(*legs):
     raise YastnError('All arguments of leg_union should have consistent fusions.')
 
 
-def _leg_union(*legs):
+def _leg_union(*legs) -> Leg:
     """
     Output _Leg that represent space being an union of spaces of a list of legs.
     """
@@ -354,7 +336,7 @@ def _leg_union(*legs):
     return Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D, legs=(hf,))
 
 
-def _str_tree(tree, op):
+def _str_tree(tree, op) -> str:
     if len(tree) == 1:
         return op
     st, op, tree = op[0] + '(', op[1:], tree[1:]

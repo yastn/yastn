@@ -15,16 +15,18 @@ class sym_U1(sym_abelian):
         Parameters
         ----------
             charges: numpy.ndarray(int)
-                rank-3 integer tensor with shape (k, n, NSYM)
+                `k x m x nsym` matrix, where `k` is the number of independent blocks,
+                and `m` is the number of fused legs.
 
             signatures: numpy.ndarray(int)
-                integer vector with `n` +1 or -1 elements
+                integer vector with `m` elements in `{-1, +1}`
 
             new_signature: int
 
         Returns
         -------
             numpy.ndarray(int)
-                integer matrix with shape (k,NSYM) of fused charges; includes multiplication by ``new_signature``
+                integer matrix with shape (k, NSYM) of fused charges;
+                includes multiplication by ``new_signature``
         """
         return new_signature * (charges.swapaxes(1, 2) @ signatures)
