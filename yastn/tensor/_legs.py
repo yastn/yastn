@@ -33,13 +33,13 @@ class Leg:
 
     Parameters
     ----------
-    sym : module, types.SimpleNamespace, or typing.NamedTuple
+    sym : module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
     s : int
         Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
-    t : iterable[int] or iterable[iterable[int]]
+    t : Sequence[int] | Sequence[Sequence[int]]
         List of charge sectors.
-    D : iterable[int]
+    D : Sequence[int]
         List of corresponding charge sector dimensions.
         The lengths `len(D)` and `len(t)` must be equal.
     """
@@ -84,14 +84,8 @@ class Leg:
     def __repr__(self):
         return ("Leg(sym={}, s={}, t={}, D={}, hist={})".format(self.sym, self.s, self.t, self.D, self.history()))
 
-    def conj(self) -> Leg:
-        r"""
-        New :class:`yastn.Leg` with switched signature.
-
-        Returns
-        -------
-        yastn.Leg
-        """
+    def conj(self) -> yastn.Leg:
+        r""" New :class:`yastn.Leg` with switched signature. """
         legs_conj = tuple(leg.conj() for leg in self.legs)
         return replace(self, s=-self.s, legs=legs_conj)
 
@@ -101,7 +95,7 @@ class Leg:
 
         Parameters
         ----------
-        t : int or tuple(int)
+        t : int | Sequence[int]
             selected charge sector
         """
         return self.D[self.t.index(t)]
@@ -138,14 +132,14 @@ class Leg:
         return len(self.legs) > 1 or self.legs[0].tree[0] > 1
 
 
-def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False) -> Leg:
+def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False) -> yastn.Leg:
     """
     Create :class:`yastn.Leg` with distributing bond dimensions to sectors
     randomly according to Gaussian distribution.
 
     Parameters
     ----------
-    config: module, types.SimpleNamespace, or typing.NamedTuple
+    config: module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
     s : int
         Signature of the leg. Either 1 (ingoing) or -1 (outgoing).
@@ -225,7 +219,7 @@ def _leg_fusions_need_mask(*legs):
     raise YastnError("mixing meta- and hard-fused legs")
 
 
-def leg_outer_product(*legs, t_allowed=None) -> Leg:
+def leg_outer_product(*legs, t_allowed=None) -> yastn.Leg:
     """
     Output Leg being an outer product of a list of legs.
 
@@ -234,10 +228,10 @@ def leg_outer_product(*legs, t_allowed=None) -> Leg:
 
     Parameters
     ----------
-    *legs : :class:`yastn.Leg`
+    legs : yastn.Leg
         legs to compute outer product from.
 
-    t_allowed : list(tuple)
+    t_allowed : Sequence[Sequence[int]]
         limit effective charges to the ones provided in the list.
     """
     seff = legs[0].s
@@ -264,7 +258,7 @@ def leg_outer_product(*legs, t_allowed=None) -> Leg:
     return Leg(sym=sym, s=seff, t=tnew, D=Dnew, legs=(hf,))
 
 
-def leg_undo_product(leg):
+def leg_undo_product(leg) -> Sequence[yastn.Leg]:
     """
     Output Leg being an outer product of a list of legs.
 
@@ -273,12 +267,8 @@ def leg_undo_product(leg):
 
     Parameters
     ----------
-    leg : :class:`yastn.Leg`
+    leg : yastn.Leg
         legs to compute outer product from.
-
-    Returns
-    -------
-    list(yastn.Leg)
     """
     hst = leg.history()
     if hst[0] in ('o', 's'):
@@ -290,7 +280,7 @@ def leg_undo_product(leg):
     pass
 
 
-def leg_union(*legs) -> Leg:
+def leg_union(*legs) -> yastn.Leg:
     """
     Output Leg that represent space being an union of spaces of a list of legs.
     """
@@ -312,7 +302,7 @@ def leg_union(*legs) -> Leg:
     raise YastnError('All arguments of leg_union should have consistent fusions.')
 
 
-def _leg_union(*legs) -> Leg:
+def _leg_union(*legs) -> yastn.Leg:
     """
     Output _Leg that represent space being an union of spaces of a list of legs.
     """

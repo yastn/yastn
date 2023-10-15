@@ -1,5 +1,5 @@
 """ methods outputing data from yastn tensor. """
-
+from __future__ import annotations
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
 from ._tests import YastnError, _test_configs_match
@@ -11,19 +11,19 @@ from ._merging import _embed_tensor
 __all__ = ['compress_to_1d', 'save_to_dict', 'save_to_hdf5', 'requires_grad']
 
 
-def save_to_dict(a):
+def save_to_dict(a) -> dict:
     r"""
-    Export YASTN tensor to dictionary.
+    Export YASTN tensor to dictionary containing all the information needed to recreate the tensor.
 
     .. note::
         allows to save the tensor, e.g. with numpy.save()
 
-    Returns
-    -------
+    Complementary function is :meth:`yastn.load_from_dict`
+
+    Parameters
+    ----------
     a: yastn.Tensor
         tensor to export
-    d: dict
-        dictionary containing all the information needed to recreate the tensor.
     """
     _d = a.config.backend.to_numpy(a._data)
     hfs = [hf._asdict() for hf in a.hfs]
@@ -33,16 +33,16 @@ def save_to_dict(a):
             'SYM_ID': a.config.sym.SYM_ID, 'fermionic': a.config.fermionic}
 
 
-def save_to_hdf5(a, file, path):
+def save_to_hdf5(a, file, path) -> Never:
     """
     Export tensor into hdf5 type file.
+
+    Complementary function is :meth:`yastn.load_from_hdf5`
 
     Parameters
     ----------
     a : yastn.Tensor
         tensor to export
-
-    TODO
     """
     _d = a.config.backend.to_numpy(a._data)
     hfs = [tuple(hf) for hf in a.hfs]
@@ -56,7 +56,7 @@ def save_to_hdf5(a, file, path):
     file.create_dataset(path+'/matrix', data=_d)
 
 
-def compress_to_1d(a, meta=None): # TODO
+def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
     """
     Return 1D array containing tensor data (without cloning the data if not necessary) and
     create metadata allowing re-creation of the original tensor.
@@ -108,7 +108,7 @@ def compress_to_1d(a, meta=None): # TODO
 
     if a.struct == meta['struct'] and a.slices == meta['slices']:
         return a._data, meta
-    # else: embed filling in missing zero blocks
+    # else: embed filling in missing zero blocks # TODO ?
     ia, im, meta_merge = 0, 0, []
     while ia < len(a.struct.t):
         if a.struct.t[ia] < meta['struct'].t[im] or im >= len(meta['struct'].t):
@@ -128,7 +128,7 @@ def compress_to_1d(a, meta=None): # TODO
 ############################
 
 
-def show_properties(a):
+def show_properties(a) -> Never:
     """
     Print basic properties of the tensor:
         * it's symmetry
@@ -159,7 +159,7 @@ def show_properties(a):
     print("legs fusions :", st, "\n")
 
 
-def __str__(a):
+def __str__(a) -> str:
     legs = a.get_legs()
     ts = tuple(leg.t for leg in legs)
     Ds = tuple(leg.D for leg in legs)
@@ -169,18 +169,14 @@ def __str__(a):
     return s
 
 
-def requires_grad(a):
+def requires_grad(a) -> bool:
     """
     Return ``True`` if tensor data have autograd enabled
-
-    Returns
-    -------
-    bool
     """
     return a.config.backend.requires_grad(a._data)
 
 
-def print_blocks_shape(a):
+def print_blocks_shape(a) -> str:
     """
     Print shapes of blocks as a sequence of block's charge followed by its shape
     """
@@ -188,90 +184,62 @@ def print_blocks_shape(a):
         print(f"{t} {D}")
 
 
-def is_complex(a):
+def is_complex(a) -> bool:
     """
     Return ``True`` if tensor data are complex
-
-    Returns
-    -------
-    bool
     """
     return a.config.backend.is_complex(a._data)
 
 
-def get_tensor_charge(a):
+def get_tensor_charge(a) -> Sequence[int]:
     """
     Return :attr:`yastn.Tensor.n`
-
-    Returns
-    -------
-    tuple(int)
     """
     return a.struct.n
 
 
-def get_signature(a, native=False):
+def get_signature(a, native=False) -> Sequence[int]:
     """
     Return tensor signature, equivalent to :attr:`yastn.Tensor.s`.
 
     If native, returns the signature of tensors's native legs, see :attr:`yastn.Tensor.s_n`.
-
-    Returns
-    -------
-    tuple(int)
     """
     return a.s_n if native else a.s
 
 
-def get_rank(a, native=False):
+def get_rank(a, native=False) -> int:
     """
     Return tensor rank equivalent to :attr:`yastn.Tensor.ndim`.
 
     If native, the native rank of the tensor is returned, see :attr:`yastn.Tensor.ndim_n`.
-
-    Returns
-    -------
-    int
     """
     return a.ndim_n if native else a.ndim
 
 
-def get_blocks_charge(a):
+def get_blocks_charge(a) -> Sequence[Sequence[int]]:
     """
     Return charges of all native blocks.
 
     In case of product of abelian symmetries, for each block the individual symmetry charges are flattened into a single tuple.
-
-    Returns
-    -------
-    tuple(tuple(int))
     """
     return a.struct.t
 
 
-def get_blocks_shape(a):
+def get_blocks_shape(a) -> Sequence[Sequence[int]]:
     """
     Shapes of all native blocks.
-
-    Returns
-    -------
-    tuple(tuple(int))
     """
     return a.struct.D
 
 
-def get_shape(a, axes=None, native=False):
+def get_shape(a, axes=None, native=False) ->  int | Sequence[int]:
     r"""
     Return effective bond dimensions as sum of dimensions along sectors for each leg.
 
     Parameters
     ----------
-    axes : int or tuple(int)
-        indices of legs; If axes is ``None`` returns for all legs (default).
-
-    Returns
-    -------
-    int or tuple(int)
+    axes : int | Sequence[int]
+        indices of legs; If axes is ``None`` returns for all legs (default).s
     """
     if axes is None:
         axes = tuple(n for n in range(a.ndim_n if native else a.ndim))
@@ -280,18 +248,14 @@ def get_shape(a, axes=None, native=False):
     return tuple(sum(leg.D) for leg in a.get_legs(axes, native=native))
 
 
-def get_dtype(a):
+def get_dtype(a) -> numpy.dtype | torch.dtype:
     """
-    Returns data ``dtype``.
-
-    Returns
-    -------
-    dtype
+    dtype of tensor data used by the backend.
     """
     return a.config.backend.get_dtype(a._data)
 
 
-def __getitem__(a, key):
+def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     """
     Block corresponding to a given charge combination.
 
@@ -301,12 +265,8 @@ def __getitem__(a, key):
 
     Parameters
     ----------
-    key : tuple(int) or tuple(tuple(int))
+    key : Sequence[int] | Sequence[Sequence[int]]
         charges of the block.
-
-    Returns
-    -------
-    tensor-like
     """
     key = tuple(_flatten(key))
     try:
@@ -342,21 +302,17 @@ def get_leg_fusion(a, axes=None):  # pragma: no cover
     return {'meta': tuple(a.mfs(n) for n in axes), 'hard': tuple(a.hfs(n) for n in axes)}
 
 
-def get_legs(a, axes=None, native=False):
+def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
     r"""
     Return a leg or a set of legs of a Tensor.
 
     Parameters
     ----------
-    axes : int or tuple[int] or None
+    axes : int | Sequence[int] | None
         indices of legs to retrieve. If ``None`` return list with all legs.
 
     native : bool
         consider native legs if ``True``; otherwise returns fused legs (default).
-
-    Returns
-    -------
-    yastn.Leg if axes is `int`, otherwise tuple(yastn.Leg).
     """
     legs = []
     tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
@@ -443,7 +399,7 @@ def get_leg_charges_and_dims(a, native=False):  # pragma: no cover
 #   Down-casting tensors   #
 ############################
 
-def to_dense(a, legs=None, native=False, reverse=False):
+def to_dense(a, legs=None, native=False, reverse=False) -> numpy.ndarray | torch.tensor:
     r"""
     Create dense tensor corresponding to the symmetric tensor.
 
@@ -465,10 +421,6 @@ def to_dense(a, legs=None, native=False, reverse=False):
     reverse: bool
         reverse the order in which blocks are sorted. Default order is ascending in
         values of block's charges.
-
-    Returns
-    -------
-    tensor-like
     """
     c = a.to_nonsymmetric(legs, native, reverse)
     x = c.config.backend.clone(c._data)
@@ -476,35 +428,27 @@ def to_dense(a, legs=None, native=False, reverse=False):
     return x
 
 
-def to_numpy(a, legs=None, native=False, reverse=False):
+def to_numpy(a, legs=None, native=False, reverse=False) -> numpy.ndarray:
     r"""
     Create dense :class:`numpy.ndarray`` corresponding to the symmetric tensor.
     See :func:`yastn.to_dense`.
-
-    Returns
-    -------
-    numpy.ndarray
     """
     return a.config.backend.to_numpy(a.to_dense(legs, native, reverse))
 
 
-def to_raw_tensor(a):
+def to_raw_tensor(a) -> numpy.ndarray | torch.tensor:
     """
     If the symmetric tensor has just a single non-empty block, return raw tensor representing
     that block.
 
     The type of the returned tensor depends on the backend, i.e. ``numpy.ndarray`` or ``torch.tensor``.
-
-    Returns
-    -------
-    tensor-like
     """
     if len(a.struct.D) == 1:
         return a._data.reshape(a.struct.D[0])
     raise YastnError('Only tensor with a single block can be converted to raw tensor.')
 
 
-def to_nonsymmetric(a, legs=None, native=False, reverse=False):
+def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> yastn.Tensor:
     r"""
     Create equivalent ``yastn.Tensor`` with no explict symmetry. All blocks of the original
     tensor are accummulated into a single block.
@@ -530,10 +474,6 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False):
     reverse: bool
         reverse the order in which blocks are sorted. Default order is ascending in
         values of block's charges.
-
-    Returns
-    -------
-    yastn.Tensor
     """
     config_dense = a.config._replace(sym=sym_none)
 
@@ -583,7 +523,7 @@ def zero_of_dtype(a):
     return a.config.backend.zeros((), dtype=a.yast_dtype, device=a.device)
 
 
-def to_number(a, part=None):
+def to_number(a, part=None) -> number:
     r"""
     Assuming the symmetric tensor has just a single non-empty block of total dimension one,
     return this element as a scalar.
@@ -598,10 +538,6 @@ def to_number(a, part=None):
     ----------
     part : str
         if 'real' return real part only
-
-    Returns
-    -------
-    number
     """
     size = a.size
     if size == 1:
@@ -613,16 +549,12 @@ def to_number(a, part=None):
     return a.config.backend.real(x) if part == 'real' else x
 
 
-def item(a):
+def item(a) -> float:
     """
     Assuming the symmetric tensor has just a single non-empty block of total dimension one,
     return this element as standard Python scalar.
 
     For empty tensor, returns 0.
-
-    Returns
-    -------
-    number
     """
     size = a.size
     if size == 1:

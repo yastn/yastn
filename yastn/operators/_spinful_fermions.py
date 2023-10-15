@@ -1,3 +1,5 @@
+""" Generator of basic local spingful-fermion operators. """
+from __future__ import annotations
 from ..sym import sym_Z2, sym_U1xU1, sym_U1xU1xZ2
 from ..tensor import YastnError, Tensor
 from ._meta_operators import meta_operators
@@ -6,7 +8,7 @@ class SpinfulFermions(meta_operators):
     """ Predefine operators for spinful fermions. """
 
     def __init__(self, sym='Z2', **kwargs):
-        """
+        r"""
         Generator of standard operators for local Hilbert space with two fermionic species and 4-dimensional Hilbert space.
 
         Predefine identity, creation, annihilation, and density operators.
@@ -39,8 +41,8 @@ class SpinfulFermions(meta_operators):
         self.operators = ('I', 'n', 'c', 'cp')
 
 
-    def I(self):
-        """ Identity operator in 4-dimensional Hilbert space. """
+    def I(self) -> yastn.Tensor:
+        r""" Identity operator in 4-dimensional Hilbert space. """
         if self._sym == 'Z2':
             I = Tensor(config=self.config, s=self.s, n=0)
             for t in [0, 1]:
@@ -55,12 +57,12 @@ class SpinfulFermions(meta_operators):
                 I.set_block(ts=(t, t), Ds=(1, 1), val=1)
         return I
 
-    def n(self, spin='u'):
-        """ Particle number operator, with spin='u' for spin-up, and 'd' for spin-down. """
+    def n(self, spin='u') -> yastn.Tensor:
+        r""" Particle number operator, with spin='u' for spin-up, and 'd' for spin-down. """
         return (self.cp(spin=spin) @ self.c(spin=spin)).remove_zero_blocks()
 
-    def vec_n(self, val=(0, 0)):
-        """ Vector with occupation (u, d). """
+    def vec_n(self, val=(0, 0)) -> yastn.Tensor:
+        r""" Vector with occupation (u, d). """
         if self._sym == 'Z2' and val == (0, 0):
             vec = Tensor(config=self.config, s=(1,), n=0)
             vec.set_block(ts=(0,), Ds=(2,), val=[1, 0])
@@ -101,8 +103,8 @@ class SpinfulFermions(meta_operators):
             raise YastnError('For SpinfulFermions val in vec_n should be in [(0, 0), (1, 0), (0, 1), (1, 1)].')
         return vec
 
-    def cp(self, spin='u'):
-        """ Creation operator, with spin='u' for spin-up, and 'd' for spin-down. """
+    def cp(self, spin='u') -> yastn.Tensor:
+        r""" Creation operator, with spin='u' for spin-up, and 'd' for spin-down. """
         if self._sym == 'Z2' and spin == 'u':  # charges: 0 <-> (|00>, |11>); 1 <-> (|10>, |01>)
             cp = Tensor(config=self.config, s=self.s, n=1)
             cp.set_block(ts=(0, 1), Ds=(2, 2), val=[[0, 0], [0, 1]])
@@ -131,8 +133,8 @@ class SpinfulFermions(meta_operators):
             raise YastnError("spin shoul be equal 'u' or 'd'.")
         return cp
 
-    def c(self, spin='u'):
-        """ Annihilation operator, with spin='u' for spin-up, and 'd' for spin-down. """
+    def c(self, spin='u') -> yastn.Tensor:
+        r""" Annihilation operator, with spin='u' for spin-up, and 'd' for spin-down. """
         if self._sym == 'Z2' and spin == 'u': # charges: 0 <-> (|00>, |11>); 1 <-> (|10>, |01>)
             c = Tensor(config=self.config, s=self.s, n=1)
             c.set_block(ts=(0, 1), Ds=(2, 2), val=[[1, 0], [0, 0]])

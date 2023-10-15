@@ -3,6 +3,7 @@ Methods creating new YASTN tensors from scratch
 and importing tensors from different formats
 such as 1D+metadata or dictionary representation
 """
+from __future__ import annotations
 from ast import literal_eval
 from itertools import groupby
 import numpy as np
@@ -20,8 +21,10 @@ __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
 # def make_config(backend=backend_np, sym=sym_none, default_device='cpu',
 #                 default_dtype='float64', fermionic=False,
 #                 default_fusion='meta', force_fusion=None, **kwargs):
-def make_config(**kwargs):
+def make_config(**kwargs) -> NamedTuple:
     r"""
+    Create structure with YASTN configuration
+
     Parameters
     ----------
     backend : backend module or compatible object
@@ -58,11 +61,6 @@ def make_config(**kwargs):
         for details. Default is ``'hard'``.
     force_fusion : str
         Overrides fusion strategy provided in :meth:`yastn.Tensor.fuse_legs`. Default is ``None``.
-
-    Returns
-    -------
-    typing.NamedTuple
-        YASTN configuration
     """
     if "backend" not in kwargs:
         from .backend import backend_np
@@ -102,7 +100,7 @@ def _fill(config=None, legs=(), n=None, isdiag=False, val='rand', **kwargs):
     return a
 
 
-def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
+def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with random numbers.
 
@@ -111,11 +109,11 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
 
     Parameters
     ----------
-    config : module, types.SimpleNamespace, or typing.NamedTuple
+    config : module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    legs : list[yastn.Leg]
-        Specify legs of the tensor passing a list of :class:`~yastn.Leg`.
-    n : int
+    legs : Sequence[yastn.Leg]
+        Specify legs of the tensor passing a list of :class:`yastn.Leg`.
+    n : int | Sequence[int]
         Total charge of the tensor.
     isdiag : bool
         Makes tensor diagonal
@@ -123,21 +121,22 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
         Desired dtype, overrides default_dtype specified in config
     device : str
         Device on which the tensor should be initialized, overrides default_device specified in config
-    s : tuple
+    s : Optional[Sequence[int]]
         (alternative) Signature of tensor. Also determines the number of legs. Default is s=().
-    t : list
+    t : Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. Default is t=().
-    D : list
+    D : Optional[Sequence[Sequence[int]]]
         (alternative) List of corresponding bond dimensions. Default is D=().
 
     Note
     ----
-    If any of `s`, `t`, or `D` are specified, `legs` are overriden and only `t`, `D`, and `s` are used.
+    If any of `s`, `t`, or `D` are specified,
+    `legs` are overriden and only `t`, `D`, and `s` are used.
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
 
-def randR(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
+def randR(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with real random numbers,
     see :meth:`yastn.rand`.
@@ -146,7 +145,7 @@ def randR(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
 
-def randC(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
+def randC(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with complex random numbers,
     see :meth:`yastn.rand`.
@@ -155,17 +154,17 @@ def randC(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
 
 
-def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
+def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with zeros.
 
     Parameters
     ----------
-    config : module, types.SimpleNamespace, or typing.NamedTuple
+    config : module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    legs : list[yastn.Leg]
-        Specify legs of the tensor passing a list of :class:`~yastn.Leg`.
-    n : int
+    legs : Sequence[yastn.Leg]
+        Specify legs of the tensor passing a list of :class:`yastn.Leg`.
+    n : int | Sequence[int]
         total charge of the tensor.
     isdiag : bool
         makes tensor diagonal
@@ -174,52 +173,54 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
     device : str
         device on which the tensor should be initialized, overrides default_device
         specified in config.
-    s : tuple
+    s : Optional[Sequence[int]]
         (alternative) Signature of tensor. Also determines the number of legs. Default is s=().
-    t : list
+    t : Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. Default is t=().
-    D : list
+    D : Optional[Sequence[Sequence[int]]]
         (alternative) List of corresponding bond dimensions. Default is D=().
 
     Note
     ----
-    If any of `s`, `t`, or `D` are specified, `legs` are overriden and only `t`, `D`, and `s` are used.
+    If any of `s`, `t`, or `D` are specified,
+    `legs` are overriden and only `t`, `D`, and `s` are used.
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='zeros', **kwargs)
 
 
-def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> Tensor:
+def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     r"""
     Initialize tensor with all allowed blocks filled with ones.
 
     Parameters
     ----------
-    config : module, types.SimpleNamespace, or typing.NamedTuple
+    config : module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    legs : list[yastn.Leg]
-        Specify legs of the tensor passing a list of :class:`~yastn.Leg`.
-    n : int
+    legs : Sequence[yastn.Leg]
+        Specify legs of the tensor passing a list of :class:`yastn.Leg`.
+    n : int | Sequence[int]
         total charge of the tensor.
     dtype : str
         desired dtype, overrides default_dtype specified in config.
     device : str
         device on which the tensor should be initialized, overrides default_device
         specified in config.
-    s : tuple
+    s : Optional[Sequence[int]]
         (alternative) Signature of tensor. Also determines the number of legs. Default is s=().
-    t : list
+    t : Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. Default is t=().
-    D : list
+    D : Optional[Sequence[Sequence[int]]]
         (alternative) List of corresponding bond dimensions. Default is D=().
 
     Note
     ----
-    If any of `s`, `t`, or `D` are specified, `legs` are overriden and only `t`, `D`, and `s` are used.
+    If any of `s`, `t`, or `D` are specified,
+    `legs` are overriden and only `t`, `D`, and `s` are used.
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='ones', **kwargs)
 
 
-def eye(config=None, legs=(), n=None, **kwargs) -> Tensor:
+def eye(config=None, legs=(), n=None, **kwargs) -> yastn.Tensor:
     r"""
     Initialize `diagonal` identity matrix. Such matrix is block-diagonal with all allowed blocks filled with identity matrices.
 
@@ -230,41 +231,41 @@ def eye(config=None, legs=(), n=None, **kwargs) -> Tensor:
 
     Parameters
     ----------
-    config : module, types.SimpleNamespace, or typing.NamedTuple
+    config : module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    legs : list[yastn.Leg]
-        Specify legs of the tensor passing a list of :class:`~yastn.Leg`.
+    legs : Sequence[yastn.Leg]
+        Specify legs of the tensor passing a list of :class:`yastn.Leg`.
     dtype : str
         desired dtype, overrides default_dtype specified in config.
     device : str
         device on which the tensor should be initialized, overrides default_device
         specified in config.
-    s : tuple
+    s : Optional[Sequence[int]]
         (alternative) Signature of tensor, should be (1, -1) or (-1, 1). Default is s=(1, -1)
-    t : list
+    t : Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. Default is t=().
-    D : list
+    D : Optional[list]
         (alternative) List of corresponding bond dimensions. Default is D=().
 
     Note
     ----
-    If any of `s`, `t`, or `D` are specified, `legs` are overriden and only `t`, `D`, and `s` are used.
+    If any of `s`, `t`, or `D` are specified,
+    `legs` are overriden and only `t`, `D`, and `s` are used.
     """
     return _fill(config=config, legs=legs, n=n, isdiag=True, val='ones', **kwargs)
 
 
-def load_from_dict(config=None, d=None) -> Tensor:
+def load_from_dict(config=None, d=None) -> yastn.Tensor:
     """
     Create tensor from the dictionary `d`.
 
     Parameters
     ----------
-    config : module, types.SimpleNamespace, or typing.NamedTuple
+    config : module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn  configuration>`
-
     d : dict
         Tensor stored in form of a dictionary. Typically provided by an output
-        of :meth:`~yastn.save_to_dict`
+        of :meth:`yastn.save_to_dict`
     """
     if d is not None:
         c_isdiag = bool(d['isdiag'])
@@ -283,16 +284,18 @@ def load_from_dict(config=None, d=None) -> Tensor:
     raise YastnError("Dictionary d is required.")
 
 
-def load_from_hdf5(config, file, path) -> Tensor:
+def load_from_hdf5(config, file, path) -> yastn.Tensor:
     """
     Create tensor from hdf5 file.
 
     Parameters
     ----------
-    config : module, types.SimpleNamespace, or typing.NamedTuple
+    config : module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-    file: pointer to opened HDF5 file.
-    path: path inside the file which contains the state
+    file:
+        pointer to opened HDF5 file.
+    path:
+        path inside the file which contains the state
     """
     g = file.get(path)
     c_isdiag = bool(g.get('isdiag')[:][0])
@@ -315,13 +318,13 @@ def load_from_hdf5(config, file, path) -> Tensor:
     return c
 
 
-def decompress_from_1d(r1d, meta) -> Tensor:
+def decompress_from_1d(r1d, meta) -> yastn.Tensor:
     """
     Generate tensor from dictionary `meta` describing the structure of the tensor,
     charges and dimensions of its non-zero blocks, and 1-D array `r1d` containing
     serialized data of non-zero blocks.
 
-    Typically, the pair `r1d` and `meta` is obtained from :meth:`~yastn.compress_to_1d`.
+    Typically, the pair `r1d` and `meta` is obtained from :meth:`yastn.compress_to_1d`.
 
     Parameters
     ----------
@@ -339,7 +342,7 @@ def decompress_from_1d(r1d, meta) -> Tensor:
     return a
 
 
-def block(tensors, common_legs=None) -> Tensor:
+def block(tensors, common_legs=None) -> yastn.Tensor:
     """
     Assemble new tensor by blocking a group of tensors.
 
@@ -349,11 +352,11 @@ def block(tensors, common_legs=None) -> Tensor:
 
     Parameters
     ----------
-    tensors : dict
+    tensors : dict[Sequence[int], yastn.Tensor]
         dictionary of tensors {(x,y,...): tensor at position x,y,.. in the new, blocked super-tensor}.
         Length of tuple should be equall to tensor.ndim - len(common_legs)
 
-    common_legs : list
+    common_legs : Sequence[int]
         Legs that are not blocked.
         This is equivalently to all tensors having the same position
         (not specified explicitly) in the super-tensor on that leg.

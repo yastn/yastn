@@ -1,4 +1,5 @@
 """ Linalg methods for yastn tensor. """
+from __future__ import annotations
 import numpy as np
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes
 from ._tests import YastnError, _test_axes_all
@@ -8,27 +9,24 @@ from ._merging import _Fusion, _leg_struct_trivial
 __all__ = ['svd', 'svd_with_truncation', 'qr', 'eigh', 'eigh_with_truncation', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets']
 
 
-def norm(a, p='fro'):
+def norm(a, p='fro') -> number:
     r"""
     Norm of the tensor.
 
     Parameters
     ----------
     p: str
-        ``'fro'`` for Frobenius norm;  ``'inf'`` for :math:`l^\infty` (or supremum) norm
-
-    Returns
-    -------
-    real scalar
+        ``'fro'`` for Frobenius norm;  ``'inf'`` for :math:`l^\infty` (or supremum) norm.
     """
     if p not in ('fro', 'inf'):
         raise YastnError("Error in norm: p not in ('fro', 'inf'). ")
     return a.config.backend.norm(a._data, p)
 
 
-def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False,
-        tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32,
-        mask_f=None, **kwargs):
+def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
+        Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False,
+        tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
+        mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -41,7 +39,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
 
     Parameters
     ----------
-    axes: Sequence(int) or Sequence(Sequence(int),Sequence(int))
+    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         Specify two groups of legs between which to perform SVD, as well as
         their final order.
 
@@ -68,13 +66,12 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
     untruncated_S: bool
         returns U, S, V, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
 
-    mask_f: function(yastn.Tensor) -> yastn.Tensor
+    mask_f: function[yastn.Tensor] -> yastn.Tensor
         custom truncation mask
 
     Returns
     -------
-    U, S, V: yastn.Tensor
-        U and V are unitary projectors. S is a real diagonal tensor.
+    U, S, V
     """
     diagnostics = kwargs['diagonostics'] if 'diagonostics' in kwargs else None
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block, diagnostics=diagnostics, fix_signs=fix_signs)
@@ -91,7 +88,9 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy
     return U, S, V
 
 
-def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False, **kwargs):
+def svd(a, axes=(0, 1), sU=1, nU=True,
+        Uaxis=-1, Vaxis=0, policy='fullrank',
+        fix_signs=False, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -101,7 +100,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix
 
     Parameters
     ----------
-    axes: Sequence(int) or Sequence(Sequence(int),Sequence(int))
+    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         Specify two groups of legs between which to perform SVD, as well as
         their final order.
 
@@ -115,8 +114,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, Uaxis=-1, Vaxis=0, policy='fullrank', fix
 
     Returns
     -------
-    U, S, V: yastn.Tensor
-        U and V are unitary projectors. S is a real diagonal tensor.
+    U, S, V
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -232,7 +230,8 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     return meta, Ustruct, Usl, Sstruct, Ssl, Vstruct, Vsl
 
 
-def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-13, **kwargs):
+def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
+                               eps_multiplet=1e-13, **kwargs) -> yastn.Tensor[bool]:
     """
     Generate a mask tensor from real positive spectrum S, while preserving
     degenerate multiplets. This is achieved by truncating the spectrum
@@ -246,14 +245,10 @@ def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-13, *
         relative tolerance
     D_total: int
         maximum number of elements kept
-    eps_multiplet:
+    eps_multiplet: float
         relative tolerance on multiplet splitting. If relative difference between
         two consecutive elements of S is larger than ``eps_multiplet``, these
         elements are not considered as part of the same multiplet.
-
-    Returns
-    -------
-    yastn.Tensor
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
         raise YastnError("Truncation_mask requires S to be real and diagonal")
@@ -315,7 +310,8 @@ def truncation_mask_multiplets(S, tol=0, D_total=2 ** 32, eps_multiplet=1e-13, *
     return Smask
 
 
-def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32, **kwargs):
+def truncation_mask(S, tol=0, tol_block=0, D_block=float('inf'),
+                    D_total=float('inf'), **kwargs) -> yastn.Tensor[bool]:
     """
     Generate mask tensor based on diagonal and real tensor S.
     It can be then used for truncation.
@@ -335,10 +331,6 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32, **k
         maximum number of elements kept
     D_block: int
         maximum number of elements kept per block
-
-    Returns
-    -------
-    yastn.Tensor
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
         raise YastnError("Truncation_mask requires S to be real and diagonal")
@@ -374,14 +366,14 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=2 ** 32, D_total=2 ** 32, **k
     return Smask
 
 
-def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
+def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split tensor using reduced QR decomposition, such that :math:`a = Q R`,
     with :math:`QQ^\dagger=I`. The charge of R is zero.
 
     Parameters
     ----------
-    axes: Sequence(int) or Sequence(Sequence(int),Sequence(int))
+    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         Specify two groups of legs between which to perform QR, as well as their final order.
 
     sQ: int
@@ -394,7 +386,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0):
 
     Returns
     -------
-    Q, R: yastn.Tensor
+    Q, R
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -463,7 +455,7 @@ def _meta_qr(config, struct, slices, sQ):
     return meta, Qstruct, Qsl, Rstruct, Rsl
 
 
-def eigh(a, axes, sU=1, Uaxis=-1):
+def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
 
@@ -471,7 +463,7 @@ def eigh(a, axes, sU=1, Uaxis=-1):
 
     Parameters
     ----------
-    axes: tuple
+    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         Specify two groups of legs between which to perform svd, as well as their final order.
 
     sU: int
@@ -482,8 +474,7 @@ def eigh(a, axes, sU=1, Uaxis=-1):
 
     Returns
     -------
-    S, U: yastn.Tensor
-        U is unitary projector. S is a diagonal tensor.
+    S, U
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -555,7 +546,7 @@ def _meta_eigh(config, struct, slices, sU):
 
 
 def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
-    D_block=2 ** 32, D_total=2 ** 32):
+    D_block=float('inf'), D_total=float('inf')) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
     Optionally, truncate the resulting decomposition.
@@ -567,7 +558,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
 
     Parameters
     ----------
-    axes: tuple
+    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         Specify two groups of legs between which to perform svd, as well as their final order.
 
     sU: int
@@ -593,8 +584,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
 
     Returns
     -------
-    S, U: yastn.Tensor
-        U is unitary projector. S is a diagonal tensor.
+    S, U
     """
     S, U = eigh(a, axes=axes, sU=sU)
 
@@ -605,7 +595,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
     return S, U
 
 
-def entropy(a, axes=(0, 1), alpha=1):
+def entropy(a, axes=(0, 1), alpha=1) -> tuple[number, number, number]:
     r"""
     Calculate entropy from spliting the tensor using svd.
 
@@ -613,19 +603,21 @@ def entropy(a, axes=(0, 1), alpha=1):
     If not diagonal, starts with svd to get the diagonal S.
     Use base-2 log.
 
+    Returns also minimal singular value and normalization
+
     Parameters
     ----------
-    axes: tuple
+    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         Specify two groups of legs between which to perform svd
 
     alpha: float
         Order of Renyi entropy.
-        alpha=1 is von Neuman entropy -Tr(S^2 log2(S^2))
+        alpha == 1 is von Neuman entropy -Tr(S^2 log2(S^2))
         otherwise: 1/(1-alpha) log2(Tr(S^(2*alpha)))
 
     Returns
     -------
-    entropy, minimal singular value, normalization : number
+    entropy, minimal_singular_value, normalization
     """
     if len(a._data) == 0:
         return a.zero_of_dtype(), a.zero_of_dtype(), a.zero_of_dtype()

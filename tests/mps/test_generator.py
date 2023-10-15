@@ -17,10 +17,10 @@ tol = 1e-12
 #
 ####### MPO for XX model ##########
 #
-def mpo_nn_hopping_manually(N=10, t=1.0, mu=0.0, config=None):
+def mpo_nn_hopping_manually(N, t, mu, config):
     """
     Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
-    i.e. sum_{n=1}^{N-1} t * (sp_n sm_{n+1} + sp_{n+1} sm_n) + sum_{n=1}^{N} mu * sp_n sm_n"
+    i.e. t * sum_{n=1}^{N-1} (cp_n c_{n+1} + cp_{n+1} c_n) + mu * sum_{n=1}^{N} cp_n c_n"
 
     Initialize MPO tensor by hand with dense, Z2, or U1 symmetric tensors.
     Symmetry is specified in config.
@@ -41,8 +41,9 @@ def mpo_nn_hopping_manually(N=10, t=1.0, mu=0.0, config=None):
     #          ^(+1)
     #          |
 
-    if config is None:
-        config = yastn.make_config()  # default is no symmetry, i.e. dense.
+    # we set fermionic=True for conistency as mpo will be compared with operators.SpinlessFermions
+    config = yastn.make_config(fermionic=True, default_device=config.default_device,
+                                sym=config.sym, backend=config.backend)
 
     if config.sym.SYM_ID == 'dense':  # no symmetry
         # Basic rank-2 blocks (matrices) of on-site tensors
@@ -52,8 +53,8 @@ def mpo_nn_hopping_manually(N=10, t=1.0, mu=0.0, config=None):
         ee = np.array([[1, 0], [0, 1]])
         oo = np.array([[0, 0], [0, 0]])
 
-        for n in H.sweep(to='last'):  # empty tensors
-            H[n] = yastn.Tensor(config=config, s=(-1, 1, 1, -1))
+        for n in H.sweep(to='last'):
+            H[n] = yastn.Tensor(config=config, s=(-1, 1, 1, -1)) # empty tensors
             if n == H.first:
                 tmp = np.block([[mu * nn, t * cp, t * c, ee]])
                 H[n].set_block(val=tmp, Ds=(1, 2, 4, 2))
@@ -108,9 +109,6 @@ def mpo_nn_hopping_manually(N=10, t=1.0, mu=0.0, config=None):
                 H.A[n].set_block(ts=(0, 1, -1, 0), val=[0, t], Ds=(2, 1, 1, 1))
                 H.A[n].set_block(ts=(1, 1, 0, 0), val=[1, 0], Ds=(1, 1, 2, 1))
                 H.A[n].set_block(ts=(-1, 0, 0, 1), val=[1, 0], Ds=(1, 1, 2, 1))
-
-    for n in H.sweep():
-        H[n].config = H[n].config._replace(fermionic=True)  # change fermionic to True, as those Hamiltonians will be tested again SpinlessFermions
     return H
 
 
@@ -161,7 +159,7 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
     return H
 
 
-def mpo_nn_hopping_latex(N=10, t=1.0, mu=0.0, sym="U1", config=None):
+def mpo_nn_hopping_latex(N, t, mu, sym="U1", config=None):
     """
     Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
 
@@ -441,6 +439,7 @@ def test_mpo_nn_example():
     assert (H_Z2_dense - H['dense']).norm() < tol
     assert (H_U1_dense - H['dense']).norm() < tol
 
+    # test mpo energy with direct calculation of all terms
     for sym, n in [('Z2', (0,)), ('U1', (N // 2,))]:
         # SpinlessFermions do not support 'dense'
         ops = yastn.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
@@ -454,7 +453,7 @@ def test_mpo_nn_example():
         en = mps.measure_1site(psi, cp @ c, psi)
 
         E1 = mps.measure_mpo(psi, H[sym], psi)
-        E2 = t * sum(epm[(n, n+1)] - emp[(n, n+1)] for n in range(N - 1))
+        E2 = t * sum(epm[(n, n+1)] - emp[(n, n+1)] for n in range(N - 1)) # minus due to fermionic=True
         E2 += mu * sum(en[n] for n in range(N))
 
         psi_dense = mps.Mps(N=N)  # test also dense Hamiltonian casting down state psi to dense tensors
@@ -462,7 +461,6 @@ def test_mpo_nn_example():
             psi_dense[n] = psi[n].to_nonsymmetric()
         E3 = mps.measure_mpo(psi_dense, H['dense'], psi_dense)
 
-        print(E1, E2, E3)
         assert pytest.approx(E1.item(), rel=tol) == E2.item()
         assert pytest.approx(E1.item(), rel=tol) == E3.item()
 

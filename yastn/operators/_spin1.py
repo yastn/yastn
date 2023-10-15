@@ -1,3 +1,5 @@
+""" Generator of basic local spin-1 operators. """
+from __future__ import annotations
 import numpy as np
 from ..sym import sym_none, sym_Z3, sym_U1
 from .. import block
@@ -43,8 +45,8 @@ class Spin1(meta_operators):
         self._sym = sym
         self.operators = ('I', 'sx', 'sy', 'sz', 'sp', 'sm')
 
-    def I(self):
-        """ Identity operator. """
+    def I(self) -> yastn.Tensor:
+        r""" Identity operator. """
         if self._sym == 'dense':
             I = Tensor(config=self.config, s=self.s)
             I.set_block(val=[[1, 0, 0], [0, 1, 0], [0, 0, 1]], Ds=(3, 3))
@@ -60,8 +62,8 @@ class Spin1(meta_operators):
             I.set_block(ts=(-1, -1), Ds=(1, 1), val=1)
         return I
 
-    def sx(self):
-        """ Spin-1 :math:`S^x` operator. """
+    def sx(self) -> yastn.Tensor:
+        r""" Spin-1 :math:`S^x` operator. """
         isq2 = 1 / np.sqrt(2)
         if self._sym == 'dense':
             sx = Tensor(config=self.config, s=self.s)
@@ -70,8 +72,8 @@ class Spin1(meta_operators):
             raise YastnError('Cannot define sx operator for U(1) or Z3 symmetry.')
         return sx
 
-    def sy(self):
-        """ Spin-1 :math:`S^y` operator. """
+    def sy(self) -> yastn.Tensor:
+        r""" Spin-1 :math:`S^y` operator. """
         iisq2 = 1j / np.sqrt(2)
         if self._sym == 'dense':
             sy = Tensor(config=self.config, s=self.s, dtype='complex128')
@@ -80,8 +82,8 @@ class Spin1(meta_operators):
             raise YastnError('Cannot define sy operator for U(1) or Z3 symmetry.')
         return sy
 
-    def sz(self):
-        """ Spin-1 :math:`S^z` operator. """
+    def sz(self) -> yastn.Tensor:
+        r""" Spin-1 :math:`S^z` operator. """
         if self._sym == 'dense':
             sz = Tensor(config=self.config, s=self.s)
             sz.set_block(val=[[1, 0, 0], [0, 0, 0], [0, 0, -1]], Ds=(3, 3))
@@ -97,8 +99,8 @@ class Spin1(meta_operators):
             sz.set_block(ts=(-1, -1), Ds=(1, 1), val=-1)
         return sz
 
-    def sp(self):
-        """ Spin-1 raising operator :math:`S^+=S^x + iS^y`. """
+    def sp(self) -> yastn.Tensor:
+        r""" Spin-1 raising operator :math:`S^+=S^x + iS^y`. """
         sq2 = np.sqrt(2)
         if self._sym == 'dense':
             sp = Tensor(config=self.config, s=self.s)
@@ -113,8 +115,8 @@ class Spin1(meta_operators):
             sp.set_block(ts=(1, 0), Ds=(1, 1), val=sq2)
         return sp
 
-    def sm(self):
-        """ Spin-1 lowering operator :math:`S^-=S^x - iS^y`. """
+    def sm(self) -> yastn.Tensor:
+        r""" Spin-1 lowering operator :math:`S^-=S^x - iS^y`. """
         sq2 = np.sqrt(2)
         if self._sym == 'dense':
             sm = Tensor(config=self.config, s=self.s)
@@ -129,7 +131,7 @@ class Spin1(meta_operators):
             sm.set_block(ts=(-1, 0), Ds=(1, 1), val=sq2)
         return sm
 
-    def vec_s(self):
+    def vec_s(self) -> yastn.Tensor:
         r"""
         :return: vector of Spin-1 generators as rank-3 tensor
         :rtype: yastn.Tensor
@@ -147,7 +149,7 @@ class Spin1(meta_operators):
         vec_s= vec_s.drop_leg_history(axes=0)
         return vec_s
 
-    def g(self):
+    def g(self) -> yastn.Tensor:
         r"""
         :return: metric tensor.
         :rtype: yastn.Tensor
