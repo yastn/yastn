@@ -1,4 +1,4 @@
-import yastn.backend.backend_torch as backend
+import yastn.backend.backend_np as backend
 from yastn.sym import sym_U1 as sym
 
 default_device: str = 'cpu'
