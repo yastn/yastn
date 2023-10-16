@@ -1,4 +1,3 @@
-import unittest
 import numpy as np
 import pytest
 import yastn
@@ -218,8 +217,8 @@ def test_tensordot_fuse_hard_backward():
                 t=(t2, t2, t3, t3, t1, t1), D=(D2, D3, D1, D3, D1, D2), dtype='complex128')
     fb = yastn.fuse_legs(b, axes=(0, (4, 3, 1), (5, 2)), mode='hard')
     ffb = yastn.fuse_legs(fb, axes=(0, (2, 1)), mode='hard')
-    
-    target_block = (0,0,0,0,0,0) 
+
+    target_block = (0,0,0,0,0,0)
     target_block_size = a[target_block].size()
 
     def test_f(block):

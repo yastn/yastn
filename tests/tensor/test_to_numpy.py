@@ -1,6 +1,4 @@
-"""
-to_nonsymmetric()  to_dense()  to_numpy()
-"""
+""" to_nonsymmetric()  to_dense()  to_numpy() """
 import numpy as np
 import pytest
 import yastn
@@ -53,7 +51,7 @@ def test_dense_basic():
     na = a.to_numpy(legs=lsa)
     nd = d.to_numpy(legs=lsd)
     nad = np.tensordot(na, nd, axes=((1, 0), (1, 2)))
-    
+
     ad = yastn.tensordot(a, d, axes=((1, 0), (1, 2)))
     lsad = {0: a.get_legs(2), 1: d.get_legs(0)}
     assert np.allclose(ad.to_numpy(legs=lsad), nad)
