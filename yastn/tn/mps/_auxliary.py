@@ -1,9 +1,10 @@
 """ Mps structure and its basics. """
+from __future__ import annotations
 from ... import initialize, YastnError
 from ._mps import MpsMpo
 
 
-def load_from_dict(config, in_dict):
+def load_from_dict(config, in_dict) -> yastn.tn.mps.MpsMpo:
     r"""
     Create MPS/MPO from dictionary.
 
@@ -15,10 +16,6 @@ def load_from_dict(config, in_dict):
     in_dict: dict
         dictionary containing serialized MPS/MPO, i.e.,
         a result of :meth:`yastn.tn.mps.MpsMpo.save_to_dict`.
-
-    Returns
-    -------
-    yastn.tn.mps.MpsMpo
     """
     nr_phys = in_dict['nr_phys']
     N = len(in_dict['A'])
@@ -28,7 +25,7 @@ def load_from_dict(config, in_dict):
     return out_Mps
 
 
-def load_from_hdf5(config, file, my_address):
+def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpo:
     r"""
     Create MPS/MPO from HDF5 file.
 
@@ -42,10 +39,6 @@ def load_from_hdf5(config, file, my_address):
 
     my_address: str
         Name of a group in the file, where the Mps is saved, e.g., './state/'
-
-    Returns
-    -------
-    yastn.tn.mps.MpsMpo
     """
     sym_id = file[my_address].get('sym/SYM_ID')[()]
     nsym = file[my_address].get('sym/NSYM')[()]

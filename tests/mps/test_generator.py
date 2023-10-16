@@ -261,14 +261,14 @@ def test_generate_random_mps():
         assert all(bd > D_total/2 for bd in bds[2:-2])
 
 
-def test_generate_product_mps():
+def test_product_mps():
     """ test mps.generate_prod_mps"""
     for sym, nl, nr in [('U1', (1,), (0,)), ('Z2', (1,), (0,)), ('dense', (), ())]:
         ops = yastn.operators.Spin12(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
         vp1 = ops.vec_z(val=+1)
         vm1 = ops.vec_z(val=-1)
 
-        psi = mps.generate_product_mps(vectors=[vp1, vm1, vp1, vm1, vm1, vp1, vp1])
+        psi = mps.product_mps(vectors=[vp1, vm1, vp1, vm1, vm1, vp1, vp1])
 
         assert pytest.approx(mps.vdot(psi, psi).item(), rel=tol) == 1.0
         assert psi.virtual_leg('first').t == (nl,)
@@ -280,7 +280,7 @@ def test_generate_product_mps():
         v0 = ops.vec_n(val=0)
         v1 = ops.vec_n(val=1)
 
-        psi = mps.generate_product_mps(vectors=[v1, v0, v1, v0, v0, v1, v1])
+        psi = mps.product_mps(vectors=[v1, v0, v1, v0, v0, v1, v1])
 
         assert pytest.approx(mps.vdot(psi, psi).item(), rel=tol) == 1.0
         assert psi.virtual_leg('first').t == (ntot,)
@@ -468,7 +468,7 @@ def test_mpo_nn_example():
 if __name__ == "__main__":
     test_mpo_nn_example()
     test_generate_random_mps()
-    test_generate_product_mps()
+    test_product_mps()
     test_generator_mpo()
     test_mpo_from_latex()
     test_mpo_from_templete()

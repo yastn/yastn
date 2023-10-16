@@ -433,7 +433,7 @@ class kernel_svd(torch.autograd.Function):
             data_b[slice(*sl)].view(D)[:],_,_,_ = SVDGESDD.backward(loc_ctx,\
                 Udata_b[slice(*slU)].view(DU),Sdata_b[slice(*slS)],Vhdata_b[slice(*slV)].view(DV))
         return data_b,None,None,None,None,None
-    
+
 
 def fix_svd_signs(Udata, Vhdata, meta):
     Ud = torch.empty_like(Udata)
@@ -611,7 +611,7 @@ if _torch_version_check("2.0"):
         @staticmethod
         def backward(ctx, Cdata_b):
             # adjoint of block-sparse matrix-matrix multiplication A.B = C
-            # 
+            #
             # A_b = C_b.B^T ; B_b = A^T . C_b
             Adata, Bdata= ctx.saved_tensors
             meta_dot= ctx.meta_dot
@@ -641,7 +641,7 @@ else:
         @staticmethod
         def backward(ctx, Cdata_b):
             # adjoint of block-sparse matrix-matrix multiplication A.B = C
-            # 
+            #
             # A_b = C_b.B^T ; B_b = A^T . C_b
             Adata, Bdata= ctx.saved_tensors
             meta_dot= ctx.meta_dot
@@ -650,7 +650,7 @@ else:
             for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
                 Adata_b[slice(*sla)].view(Da)[:]= Cdata_b[slice(*slc)].view(Dc) @ Bdata[slice(*slb)].view(Db).adjoint()
                 Bdata_b[slice(*slb)].view(Db)[:]= Adata[slice(*sla)].view(Da).adjoint() @ Cdata_b[slice(*slc)].view(Dc)
-            return Adata_b, Bdata_b, None, None 
+            return Adata_b, Bdata_b, None, None
 
 def dot_with_mask(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b):
     return kernel_dot_with_mask.apply(Adata, Bdata, meta_dot, Dsize, msk_a, msk_b)
@@ -684,7 +684,7 @@ if _torch_version_check("2.0"):
         @staticmethod
         def backward(ctx, Cdata_b):
             # adjoint of block-sparse matrix-matrix multiplication A.B = C
-            # 
+            #
             # A_b = C_b.B^T ; B_b = A^T . C_b
             Adata, Bdata= ctx.saved_tensors
             meta_dot, msk_a, msk_b= ctx.meta_dot, ctx.msk_a, ctx.msk_b
@@ -712,12 +712,12 @@ else:
             Cdata = torch.zeros((Dsize,), dtype=dtype, device=Adata.device)
             for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
                 Cdata[slice(*slc)].view(Dc)[:] = Adata[slice(*sla)].view(Da)[:, msk_a[ia]] @ Bdata[slice(*slb)].view(Db)[msk_b[ib], :]
-            return Cdata 
+            return Cdata
 
         @staticmethod
         def backward(ctx, Cdata_b):
             # adjoint of block-sparse matrix-matrix multiplication A.B = C
-            # 
+            #
             # A_b = C_b.B^T ; B_b = A^T . C_b
             Adata, Bdata= ctx.saved_tensors
             meta_dot, msk_a, msk_b= ctx.meta_dot, ctx.msk_a, ctx.msk_b
@@ -894,4 +894,4 @@ def is_independent(x, y):
     """
     check if two arrays are identical, or share the same view.
     """
-    return not ((x is y) or (x.numel() > 0 and x.storage().data_ptr() == y.storage().data_ptr()))
+    return not ((x is y) or (x.numel() > 0 and x.untyped_storage().data_ptr() == y.untyped_storage().data_ptr()))

@@ -1,8 +1,9 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
+from __future__ import annotations
 from ... import tensor, initialize, YastnError, expmv
 
 
-def vdot(*args):
+def vdot(*args) -> number:
     r"""
     Calculate the overlap :math:`\langle \textrm{bra}|\textrm{ket}\rangle`,
     or :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle` depending on the number of provided agruments.
@@ -10,17 +11,13 @@ def vdot(*args):
     Parameters
     -----------
     *args : yastn.tn.mps.MpsMpo
-
-    Returns
-    -------
-    scalar
     """
     if len(args) == 2:
         return measure_overlap(*args)
     return measure_mpo(*args)
 
 
-def measure_overlap(bra, ket):
+def measure_overlap(bra, ket) -> number:
     r"""
     Calculate overlap :math:`\langle \textrm{bra}|\textrm{ket} \rangle`.
     Conjugate of MPS :code:`bra` is computed internally.
@@ -34,17 +31,13 @@ def measure_overlap(bra, ket):
         An MPS which will be conjugated.
 
     ket : yastn.tn.mps.MpsMpo
-
-    Returns
-    -------
-    scalar
     """
     env = Env2(bra=bra, ket=ket)
     env.setup(to='first')
     return env.measure(bd=(-1, 0))
 
 
-def measure_mpo(bra, op, ket):
+def measure_mpo(bra, op, ket) -> number:
     r"""
     Calculate expectation value :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle`.
 
@@ -61,17 +54,13 @@ def measure_mpo(bra, op, ket):
         Operator written as MPO.
 
     ket : yastn.tn.mps.MpsMpo
-
-    Returns
-    -------
-    scalar
     """
     env = Env3(bra=bra, op=op, ket=ket)
     env.setup(to='first')
     return env.measure(bd=(-1, 0))
 
 
-def measure_1site(bra, o, ket):
+def measure_1site(bra, o, ket) -> dict[int, number]:
     r"""
     Calculate expectation values :math:`\langle \textrm{bra}|\textrm{o}_i|\textrm{ket} \rangle` for local operator :code:`O` at each lattice site `i`.
 
@@ -88,10 +77,6 @@ def measure_1site(bra, o, ket):
         It is possible to provide a dictionary {site: operator}
 
     ket : yastn.tn.mps.MpsMpo
-
-    Returns
-    -------
-    dict
     """
     op = sorted(o.items()) if isinstance(o, dict) else [(n, o) for n in ket.sweep(to='last')]
     env = Env2(bra=bra, ket=ket)
@@ -103,7 +88,7 @@ def measure_1site(bra, o, ket):
     return results
 
 
-def measure_2site(bra, o, p, ket):
+def measure_2site(bra, o, p, ket) -> dict[tuple[int, int], number]:
     r"""
     Calculate expectation values :math:`\langle \textrm{bra}|\textrm{o}_i \textrm{p}_j|\textrm{ket} \rangle` for local operators :code:`O` and :code:`P` at each pair of lattice sites :math:`i < j`.
 
@@ -120,10 +105,6 @@ def measure_2site(bra, o, p, ket):
         It is possible to provide a dictionaries {site: operator}
 
     ket : yastn.tn.mps.MpsMpo
-
-    Returns
-    -------
-    dict
     """
     op1 = sorted(o.items()) if isinstance(o, dict) else [(n, o) for n in ket.sweep(to='last')]
     op2 = sorted(p.items()) if isinstance(p, dict) else [(n, p) for n in ket.sweep(to='last')]

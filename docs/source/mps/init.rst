@@ -38,15 +38,17 @@ An empty MPS/MPO can be filled with tensors by setting them one by one.
     # assign tensor to site 1
     psi[1] = A_1
 
-
 Tensor should be of the rank expected for :ref:`MPS<theory/mps/basics:Matrix product state (MPS)>` or :ref:`MPO<theory/mps/basics:Matrix product operator (MPO)>`.
-The virtual dimensions/spaces of the neighbouring MPS/MPO tensors should be consistent.
+The virtual dimensions/spaces of the neighboring MPS/MPO tensors should be consistent.
 The examples of creating MPS/MPO by hand can be found here:
 :ref:`Ground state of Spin-1 AKLT model<examples/mps/build:Ground state of spin-1 AKLT model>`, and
 :ref:`MPO for hopping model with U(1) symmetry<examples/mps/build:Hamiltonian for nearest-neighbor hopping/XX model>`.
 
-.. note::
-    To create :class:`yastn.Tensor`'s look :ref:`here<tensor/init:Creating symmetric YASTN tensors>`.
+
+Generating product MPS or MPO
+-----------------------------
+
+.. autofunction:: yastn.tn.mps.product_mps
 
 
 Generating MPO using Hterm
@@ -63,7 +65,7 @@ Each ``Hterm`` represents a product of local (on-site) operators.
 A list(Hterm) defines a broad class of operators of interests.
 In order to generate the corresponding MPO use :code:`mps.generate_mpo(I, terms)`,
 where :code:`terms` is a list of Hterm-s and :code:`I` is the identity MPO.
-The latter can conviniently be created with a :meth:`generator<yastn.tn.mps.Generator.I>` described below.
+The latter can conveniently be created with a :meth:`generator<yastn.tn.mps.Generator.I>` described below.
 An example using this method can be found :ref:`here<examples/mps/build:Building MPO using Hterm>`.
 
 .. autofunction:: yastn.tn.mps.generate_mpo
@@ -71,12 +73,6 @@ An example using this method can be found :ref:`here<examples/mps/build:Building
 .. autofunction:: yastn.tn.mps.generate_mpo_fast
 
 .. autofunction:: yastn.tn.mps.generate_mpo_template
-
-
-Generating product MPS
-----------------------
-
-.. autofunction:: yastn.tn.mps.generate_product_mps
 
 
 Generator class for MPO/MPS
@@ -88,7 +84,7 @@ one can build both the states and operators. The MPS/MPO can be given as a LaTeX
 
 .. autoclass:: yastn.tn.mps.Generator
 
-We can directly output identity MPO build from identity `I` in operator class.
+We can directly output identity MPO built from the identity `I` from the operator generator class.
 
 .. autofunction:: yastn.tn.mps.Generator.I
 
@@ -97,7 +93,7 @@ For examples, see :ref:`Generate MPO from LaTex<examples/mps/build:Generator cla
 
 
 Generator allows initialization of MPS and MPO filled with random tensors, where local Hilbert spaces are read from identity operator in the Generator.
-It also provides a direct link to random number generator in the backend to fix the seed.
+It also provides a direct link to a random number generator in the backend to fix the seed.
 
 .. autofunction:: yastn.tn.mps.Generator.random_mps
 

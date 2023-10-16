@@ -1,3 +1,4 @@
+from __future__ import annotations
 import numpy as np
 import numbers
 from typing import NamedTuple
@@ -14,40 +15,39 @@ class Hterm(NamedTuple):
     The product operator :math:`O = \otimes_i o_i` is a tensor product of local operators :math:`o_i`.
     Unless explicitly specified, the :math:`o_i` is assumed to be an identity operator.
 
-    If operators are fermionic, execution of swap gates enforces fermionic order (the last operator in the list acts first).
+    If operators are fermionic, execution of swap gates enforces fermionic order (the last operator in `operators` acts first).
 
     Parameters
     ----------
     amplitude : number
         numerical multiplier in front of the operator product.
-    positions : tuple(int)
-        positions of the local operators :math:`o_i` in the product different than identity
-    operators : tuple(yastn.Tensor)
+    positions : Sequence[int]
+        positions of the local operators :math:`o_i` in the product different than identity.
+    operators : Sequence[yastn.Tensor]
         local operators in the product that are different than the identity.
-        *i*-th operator is acting at position :code:`positions[i]`
+        *i*-th operator is acting at position :code:`positions[i]`.
     """
     amplitude : float = 1.0
     positions : tuple = ()
     operators : tuple = ()
 
 
-def generate_product_mpo(I, term, amplitude=True):
+def generate_product_mpo(I, term, amplitude=True) -> yastn.tn.mps.MpsMpo:
     r"""
     Apply local operators specified by term in :class:`Hterm` to the MPO `I`.
 
     MPO `I` is presumed to be an identity.
     Apply swap_gates to introduce fermionic degrees of freedom
-    (fermionic order is the same as order of sites in Mps).
+    (fermionic order is the same as the order of sites in Mps).
     With this respect, local operators specified in term.operators are applied starting with the last element,
     i.e., from right to left.
 
     Parameters
     ----------
-    term: :class:`Hterm`
+    term: yastn.tn.mps.Hterm
 
-    Returns
-    -------
-    yastn.tn.mps.MpsMpo
+    amplitude: bool
+        if True, includes term.amplitude in MPO.
     """
     single_mpo = I.copy()
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
@@ -156,7 +156,7 @@ def generate_mpo_template(I, terms, return_amplitudes=False):
     return template
 
 
-def generate_mpo_fast(template, amplitudes, opts=None):
+def generate_mpo_fast(template, amplitudes, opts=None) -> yastn.tn.mps.MpsMpo:
     r"""
     Fast generation of MPO representing the lists(Hterm) that differ only in amplitudes.
 
@@ -169,17 +169,13 @@ def generate_mpo_fast(template, amplitudes, opts=None):
     ----------
     template: NamedTuple
         calculated with :meth:`yastn.tn.mps.generate_mpo_template`
-    amplidutes: list(numbers)
+    amplidutes: Sequence[numbers]
         list of amplitudes that would appear in :class:`Hterm`.
         The order of the list should match the order of Hterms supplemented to :meth:`yastn.tn.mps.generate_mpo_template`.
     opts: dict
         The generator function employs svd while compressing MPO bond dimension.
         opts allows passing options to :meth:`yastn.linalg.svd_with_truncation`
         Default None sets truncation `tol` close to the numerical precision, which should effectively result in lossless compression.
-
-    Returns
-    -------
-    yastn.tn.mps.MpsMpo
     """
     if opts is None:
         opts = {'tol': 1e-13}
@@ -214,7 +210,7 @@ def generate_mpo_fast(template, amplitudes, opts=None):
     return M
 
 
-def generate_mpo(I, terms, opts=None):
+def generate_mpo(I, terms, opts=None) -> yastn.tn.mps.MpsMpo:
     r"""
     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
 
@@ -223,7 +219,7 @@ def generate_mpo(I, terms, opts=None):
 
     Parameters
     ----------
-    term: list of :class:`Hterm`
+    term: Sequence[yastn.tn.mps.Hterm]
         product operators making up the MPO
     I: yastn.tn.mps.MpsMpo
         identity MPO
@@ -231,26 +227,22 @@ def generate_mpo(I, terms, opts=None):
         generator employs svd while compressing MPO bond dimension.
         opts allows passing options to :meth:`yastn.linalg.svd_with_truncation`
         Default None sets truncation `tol` close to the numerical precision, which should result in effectively lossless compression.
-
-    Returns
-    -------
-    yastn.tn.mps.MpsMpo
     """
     template, amplitudes = generate_mpo_template(I, terms, return_amplitudes=True)
     return generate_mpo_fast(template, amplitudes, opts=opts)
 
 
-def generate_product_mps(vectors):
+def product_mps(vectors) -> yastn.tn.mps.MpsMpo:
     r"""
     Generate an MPS given vectors for each site in the MPS.
 
     Parameters
     ----------
-    vectors: list[yastn.Tensor]
-        vectors will be attributed to consecuative MPS sites.
-        Each vector should have signature s=+1.
-        They can have non-zero charge, that will be converted into virtual legs.
-        The size of MPS is follows as len(vectors).
+    vectors: Sequence[yastn.Tensor]
+        Tensors will be attributed to consecuative MPS sites,
+        and the MPS length follows from `len(vectors)`.
+        Each tensor should have `ndim=1` and signature `s=+1`.
+        They can have non-zero charge, that will be converted into MPS virtual legs.
     """
     psi = Mps(len(vectors))
     rt = (0,) * vectors[0].config.sym.NSYM
@@ -338,17 +330,11 @@ class Generator:
         """
         self.config.backend.random_seed(seed)
 
-    def I(self):
-        r"""
-        Indetity MPO derived from identity in local operators class.
-
-        Returns
-        -------
-        yastn.tn.mps.MpsMpo
-        """
+    def I(self) -> yastn.tn.mps.MpsMpo:
+        """ Indetity MPO derived from identity in local operators class. """
         return self._I.copy()
 
-    def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64'):
+    def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
         r"""
         Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
@@ -363,10 +349,6 @@ class Generator:
             are drawn.
         dtype : string
             number format, e.g., ``'float64'`` or ``'complex128'``
-
-        Returns
-        -------
-        yastn.tn.mps.MpsMpo
         """
         if n is None:
             n = (0,) * self.config.sym.NSYM
@@ -392,7 +374,7 @@ class Generator:
             return psi
         raise YastnError("MPS: Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization. ")
 
-    def random_mpo(self, D_total=8, sigma=1, dtype='float64'):
+    def random_mpo(self, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
         r"""
         Generate a random MPO with bond dimension ``D_total``.
 
@@ -405,10 +387,6 @@ class Generator:
             are drawn.
         dtype : string
             number format, e.g., ``'float64'`` or ``'complex128'``
-
-        Returns
-        -------
-        yastn.tn.mps.MpsMpo
         """
         n0 = (0,) * self.config.sym.NSYM
         psi = Mpo(self.N)
@@ -483,7 +461,7 @@ class Generator:
     #     c3 = self._term2Hterm(templete, vectors, parameters)
     #     return generate_mps(c3, self.N)
 
-    def mpo_from_latex(self, H_str, parameters=None, opts=None):
+    def mpo_from_latex(self, H_str, parameters=None, opts=None) -> yastn.tn.mps.MpsMpo:
         r"""
         Convert latex-like string to yastn.tn.mps MPO.
 
@@ -496,10 +474,6 @@ class Generator:
             You can define automatic summation with expression '\sum_{j \in A}', where A has to be iterable, one-dimensional object with specified values of 'j'.
         parameters: dict
             Keys for the dict define the expressions that occur in H_str
-
-        Returns
-        -------
-        yastn.tn.mps.MpsMpo
         """
         parameters = {**self.parameters, **parameters}
         c2 = latex2term(H_str, parameters)
