@@ -5,6 +5,7 @@ from ....tn import mps
 from yastn.tn.fpeps import Lattice
 from yastn.tn.fpeps.operators.gates import match_ancilla_1s
 from yastn import rand, tensordot, ones
+from .._auxiliary import transfer_mpo
 
 
 class ctm_window(NamedTuple):
@@ -43,7 +44,7 @@ class CtmEnv(Lattice):
         return self._windows
 
 @dataclass()
-class Local_Projector_Env(): # no more variables than the one given 
+class Local_Projector_Env(): # no more variables than the one given
     """ data class for projectors labelled by a single lattice site calculated during ctm renormalization step """
 
     hlt : any = None # horizontal left top
@@ -60,7 +61,7 @@ class Local_Projector_Env(): # no more variables than the one given
 
 
 @dataclass()
-class Local_CTM_Env(): # no more variables than the one given 
+class Local_CTM_Env(): # no more variables than the one given
     """ data class for CTM environment tensors associated with each peps tensor """
 
     tl : any = None # top-left
@@ -108,7 +109,7 @@ def CtmEnv2Mps(net, env, index, index_type):
 def init_rand(A, tc, Dc):
     """ Initialize random CTMRG environments of peps tensors A. """
 
-    config = A[(0,0)].config 
+    config = A[(0,0)].config
     env= CtmEnv(A)
 
     for ms in A.sites():
@@ -150,7 +151,7 @@ def init_rand(A, tc, Dc):
 def init_ones(A, tc, Dc):
     """ Initialize CTMRG environments of peps tensors A with trivial tensors. """
 
-    config = A[(0,0)].config 
+    config = A[(0,0)].config
     env= CtmEnv(A)
 
     for ms in A.sites():
@@ -189,9 +190,9 @@ def init_ones(A, tc, Dc):
     return env
 
 def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
-    """ 
-    Sample a random configuration from a finite peps. 
-   
+    """
+    Sample a random configuration from a finite peps.
+
     Takes  CTM emvironments and a complete list of projectors to sample from.
     """
 
@@ -204,10 +205,10 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
 
     for ny in range(state.Ny - 1, -1, -1):
 
-        Os = state.mpo(index=ny, index_type='column') # converts ny colum of PEPS to MPO
+        Os = transfer_mpo(state, index=ny, index_type='column') # converts ny colum of PEPS to MPO
         vL = CtmEnv2Mps(state, CTMenv, index=ny, index_type='l').conj() # left boundary of indexed column through CTM environment tensors
 
-        env = mps.Env3(vL, Os, vR).setup(to = 'first') 
+        env = mps.Env3(vL, Os, vR).setup(to = 'first')
 
         for nx in range(0, state.Nx):
             dpt = Os[nx].copy()
@@ -229,7 +230,7 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
             Os[nx] = dpt               # updated with the new collapse
             env.update_env(nx, to='last')
             count += 1
-        
+
         if opts_svd is None:
             opts_svd = {'D_total': max(vL.get_bond_dimensions())}
 

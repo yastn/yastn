@@ -2,6 +2,7 @@
 from itertools import product
 from typing import NamedTuple
 
+
 class Bond(NamedTuple):
     """ A bond between two lattice sites. site_0 should be before site_1 in the fermionic order. """
     site_0 : tuple = None
@@ -122,7 +123,14 @@ class Lattice():
 
         return neighbors
 
+    def save_to_dict(self):
+        d = {'lattice': self.lattice, 'dims': self.dims, 'boundary': self.boundary, 'data': {}}
+        for ind in self._data.keys():
+            d['data'][ind] = self._data[ind].save_to_dict()
+        return d
 
-
-
-
+    def copy(self):
+        psi = Lattice(lattice=self.lattice, dims=self.dims, boundary=self.boundary)
+        for ind in psi._data.keys():
+            psi._data[ind] = self._data[ind]
+        return psi

@@ -168,7 +168,7 @@ def array_EV2pt(peps, env, site0, site1, op=None):
             AAbt = fPEPS_2layers(peps[site0], op=op['l'], dir='t')
             AAbb = fPEPS_2layers(peps[nxt_site], op=op['r'], dir='b')
 
-    array_vals = np.zeros((num_correlators))
+    array_vals = np.zeros((num_correlators), dtype=np.complex128)
     if orient == 'horizontal':
         left_bound_vec, right_bound_vec = left_right_op_vectors(env, site0, nxt_site, AAbl, AAbr)
     elif orient == 'vertical':

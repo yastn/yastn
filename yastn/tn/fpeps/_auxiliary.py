@@ -1,9 +1,8 @@
 from ...tn.mps import Mps, Mpo
 from ._doublePepsTensor import DoublePepsTensor
 from ... import tensor, initialize
-from ._geometry import Lattice
 
-def mpo(self, index, index_type, rotation=''):
+def transfer_mpo(self, index, index_type, rotation=''):
 
     """Converts a specific row or column of PEPS into MPO.
 
@@ -62,11 +61,4 @@ def boundary_mps(self, rotation=''):
         legAAb = tensor.leg_outer_product(legA, legA.conj())
         psi[nx] = initialize.ones(config=cfg, legs=[leg0, legAAb.conj(), leg0.conj()])
 
-    return psi 
-
-
-Lattice.mpo = mpo
-Lattice.boundary_mps = boundary_mps
-
- 
-
+    return psi
