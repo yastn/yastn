@@ -1,3 +1,5 @@
+""" Generator of basic local spin-1/2 operators. """
+from __future__ import annotations
 from ..sym import sym_none, sym_Z2, sym_U1
 from ..tensor import YastnError, Tensor
 from ._meta_operators import meta_operators
@@ -41,8 +43,8 @@ class Spin12(meta_operators):
         self._sym = sym
         self.operators = ('I', 'x', 'y', 'z', 'sx', 'sy', 'sz', 'sp', 'sm')
 
-    def I(self):
-        """ Identity operator. """
+    def I(self) -> yastn.Tensor:
+        r""" Identity operator. """
         if self._sym == 'dense':
             I = Tensor(config=self.config, s=self.s)
             I.set_block(val=[[1, 0], [0, 1]], Ds=(2, 2))
@@ -56,7 +58,7 @@ class Spin12(meta_operators):
             I.set_block(ts=(-1, -1), Ds=(1, 1), val=1)
         return I
 
-    def x(self):
+    def x(self) -> yastn.Tensor:
         r""" Pauli :math:`\sigma^x` operator. """
         if self._sym == 'dense':
             x = Tensor(config=self.config, s=self.s)
@@ -69,7 +71,7 @@ class Spin12(meta_operators):
             raise YastnError('Cannot define sigma_x operator for U(1) symmetry.')
         return x
 
-    def y(self):
+    def y(self) -> yastn.Tensor:
         r""" Pauli :math:`\sigma^y` operator. """
         if self._sym == 'dense':
             y = Tensor(config=self.config, s=self.s, dtype='complex128')
@@ -82,7 +84,7 @@ class Spin12(meta_operators):
             raise YastnError('Cannot define sigma_y operator for U(1) symmetry.')
         return y
 
-    def z(self):
+    def z(self) -> yastn.Tensor:
         r""" Pauli :math:`\sigma^z` operator. """
         if self._sym == 'dense':
             z = Tensor(config=self.config, s=self.s)
@@ -97,8 +99,8 @@ class Spin12(meta_operators):
             z.set_block(ts=(-1, -1), Ds=(1, 1), val=-1)
         return z
 
-    def vec_z(self, val=1):
-        """ Normalized eigenvectors of :math:`\sigma^z. """
+    def vec_z(self, val=1) -> yastn.Tensor:
+        r""" Normalized eigenvectors of :math:`\sigma^z`. """
         if val not in (-1, 1):
             raise YastnError('val should be in (-1, 1)')
         if self._sym == 'dense' and val == 1:
@@ -123,20 +125,20 @@ class Spin12(meta_operators):
             raise YastnError('For Spin12 val in vec_z should be in (-1, 1).')
         return vec
 
-    def sx(self):
-        """ Spin-1/2 :math:`S^x` operator """
+    def sx(self) -> yastn.Tensor:
+        r""" Spin-1/2 :math:`S^x` operator """
         return self.x() / 2
 
-    def sy(self):
-        """ Spin-1/2 :math:`S^y` operator """
+    def sy(self) -> yastn.Tensor:
+        r""" Spin-1/2 :math:`S^y` operator """
         return self.y() / 2
 
-    def sz(self):
-        """ Spin-1/2 :math:`S^z` operator """
+    def sz(self) -> yastn.Tensor:
+        r""" Spin-1/2 :math:`S^z` operator """
         return self.z() / 2
 
-    def sp(self):
-        """ Spin-1/2 raising operator :math:`S^+=S^x + iS^y`. """
+    def sp(self) -> yastn.Tensor:
+        r""" Spin-1/2 raising operator :math:`S^+=S^x + iS^y`. """
         if self._sym == 'dense':
             sp = Tensor(config=self.config, s=self.s)
             sp.set_block(val=[[0, 1], [0, 0]], Ds=(2, 2))
@@ -148,8 +150,8 @@ class Spin12(meta_operators):
             sp.set_block(ts=(1, -1), Ds=(1, 1), val=1)
         return sp
 
-    def sm(self):
-        """ Spin-1/2 lowering operator :math:`S^-=S^x - iS^y`. """
+    def sm(self) -> yastn.Tensor:
+        r""" Spin-1/2 lowering operator :math:`S^-=S^x - iS^y`. """
         if self._sym == 'dense':
             sm = Tensor(config=self.config, s=self.s)
             sm.set_block(val=[[0, 0], [1, 0]], Ds=(2, 2))

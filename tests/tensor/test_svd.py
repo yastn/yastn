@@ -1,6 +1,5 @@
 """ yastn.linalg.svd() and truncation of its singular values """
 from itertools import product
-import unittest
 import pytest
 import numpy as np
 import yastn
@@ -118,8 +117,9 @@ def test_svd_fix_signs():
         nU, nS, nV = f(USV, axis=(0, 1), fix_signs=True)
         nUSV = nU @ nS @ nV
         assert yastn.norm(nUSV - USV) < tol
-        assert np.linalg.norm(np.array(nU[0, 0]) - np.array([[1, 0], [0, 1], [0, 0]])) < tol
-        assert np.linalg.norm(np.array(nU[1, 1]) - np.array([[0, 1], [1, 0]])) < tol
+        nUcpu = nU.to(device='cpu')  # for test running on cuda
+        assert np.linalg.norm(np.array(nUcpu[0, 0]) - np.array([[1, 0], [0, 1], [0, 0]])) < tol
+        assert np.linalg.norm(np.array(nUcpu[1, 1]) - np.array([[0, 1], [1, 0]])) < tol
 
 
 

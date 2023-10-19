@@ -1,3 +1,5 @@
+""" Generator of basic local spingless-fermion operators. """
+from __future__ import annotations
 from ..sym import sym_Z2, sym_U1
 from ..tensor import YastnError, Tensor
 from ._meta_operators import meta_operators
@@ -28,36 +30,36 @@ class SpinlessFermions(meta_operators):
         self._sym = sym
         self.operators = ('I', 'n', 'c', 'cp')
 
-    def I(self):
-        """ Identity operator. """
+    def I(self) -> yastn.Tensor:
+        r""" Identity operator. """
         I = Tensor(config=self.config, s=self.s, n=0)
         I.set_block(ts=(0, 0), Ds=(1, 1), val=1)
         I.set_block(ts=(1, 1), Ds=(1, 1), val=1)
         return I
 
-    def n(self):
-        """ Particle number operator. """
+    def n(self) -> yastn.Tensor:
+        r""" Particle number operator. """
         n = Tensor(config=self.config, s=self.s, n=0)
         # n.set_block(ts=(0, 0), Ds=(1, 1), val=0)
         n.set_block(ts=(1, 1), Ds=(1, 1), val=1)
         return n
 
-    def vec_n(self, val=0):
-        """ Vector with occupation 0 or 1. """
+    def vec_n(self, val=0) -> yastn.Tensor:
+        r""" Vector with occupation 0 or 1. """
         if val not in (0, 1):
             raise YastnError("For SpinlessFermions val in vec_n should be in (0, 1).")
         vec = Tensor(config=self.config, s=(1,), n=val)
         vec.set_block(ts=(val,), Ds=(1,), val=1)
         return vec
 
-    def cp(self):
-        """ Raising operator. """
+    def cp(self) -> yastn.Tensor:
+        r""" Raising operator. """
         cp = Tensor(config=self.config, s=self.s, n=1)
         cp.set_block(ts=(1, 0), Ds=(1, 1), val=1)
         return cp
 
-    def c(self):
-        """ Lowering operator. """
+    def c(self) -> yastn.Tensor:
+        r""" Lowering operator. """
         n = 1 if self._sym == 'Z2' else -1
         c = Tensor(config=self.config, s=self.s, n=n)
         c.set_block(ts=(0, 1), Ds=(1, 1), val=1)

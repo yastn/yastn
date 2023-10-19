@@ -1,3 +1,4 @@
+""" change device/dtype with .to()"""
 import pytest
 import yastn
 try:

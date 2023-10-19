@@ -1,13 +1,12 @@
 """ Test elements of fuse_legs(... mode='hard') """
 import numpy as np
-import unittest
 import pytest
 import yastn
 from itertools import groupby
 try:
-    from .configs import config_U1, config_dense, config_Z2xU1
+    from .configs import config_U1
 except ImportError:
-    from configs import config_U1, config_Z2xU1, config_dense
+    from configs import config_U1
 
 tol = 1e-10  #pylint: disable=invalid-name
 
@@ -30,6 +29,7 @@ def unmerge2(data, meta2):
     return newdata
 
 
+@pytest.mark.skipif(config_U1.backend.BACKEND_ID=="torch", reason="this test explicitly uses numpy array; will become obsolate after introducing views")
 def test_hard_unmerge():
     a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1, 2), (0, 1, 2), (0, 1, 2), (0, 1, 2), (0, 1, 2), (0, 1, 2)],
@@ -41,7 +41,7 @@ def test_hard_unmerge():
     meta2 = sorted(meta2, key = lambda x: x[2])
 
     b = a.fuse_legs(axes=((0, 1, 2), (3, 4, 5)), mode='hard')
-    
+
     for _ in range(1000):
         cc = unmerge(b.data, meta)
 
@@ -52,7 +52,7 @@ def test_hard_unmerge():
 
     assert max(abs(cc - dd)) < 1e-12
 
-  
+
 
 if __name__ == '__main__':
     test_hard_unmerge()

@@ -15,7 +15,7 @@ def __setitem__(a, key, newvalue):
 
     Parameters
     ----------
-    key : tuple(int)
+    key : Sequence[int] | Sequence[Sequence[int]]
         charges of the block
     """
     key = tuple(_flatten(key))
@@ -44,11 +44,11 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     ----------
     a : yastn.Tensor
 
-    t : list[list[int]] or list[list[list[int]]]
+    t : Sequence[Sequence[int]] or Sequence[Sequence[Sequence[int]]]
         list of charge sectors for each leg of the tensor, see examples.
         In case of tensor without symmetry this argument is ignored.
 
-    D : list[int] or list[list[int]]
+    D : Sequence[int] or Sequence[Sequence[int]]
         list of sector sizes for each leg of the tensor, see examples.
 
     val : str
@@ -118,14 +118,14 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
 
     Parameters
     ----------
-    ts : tuple(int) or tuple(tuple(int))
+    ts : Sequence[int] | Sequence[Sequence[int]]
         Charges identifing the block. Ignored if tensor has no symmetry.
 
-    Ds : tuple(int)
+    Ds : Sequence[int]
         Dimensions of the block. If ``None``, tries to infer
         dimensions from legs of the tensor.
 
-    val : str, tensor-like
+    val : str | tensor-like
         recognized string values are ``'rand'``, ``'ones'``,`or  ``'zeros'``.
         Otherwise any tensor-like format such as nested list, numpy.ndarray, etc.,
         can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.

@@ -5,25 +5,25 @@ Spin-1/2 and Pauli matrices
 ---------------------------
 
 .. autoclass:: yastn.operators.Spin12
-    :members: I, x, y, z, sz, sx, sy, sp, sm
+    :members: I, x, y, z, sz, sx, sy, sp, sm, vec_z
 
 
 Spin-1
 ------
 
 .. autoclass:: yastn.operators.Spin1
-    :members: I, sz, sx, sy, sp, sm
+    :members: I, sz, sx, sy, sp, sm, vec_s
 
 
 Spinless fermions
 -----------------
 
 .. autoclass:: yastn.operators.SpinlessFermions
-    :members: I, n, cp, c
+    :members: I, n, cp, c,  vec_n
 
 
 Spinful fermions
 -----------------
 
 .. autoclass:: yastn.operators.SpinfulFermions
-    :members: I, n, cp, c
+    :members: I, n, cp, c,  vec_n

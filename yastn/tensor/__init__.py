@@ -6,7 +6,7 @@ In principle, any number of symmetries can be used, including dense tensor with 
 
 An instance of a Tensor is specified by a list of blocks (dense tensors) labeled by symmetries' charges on each leg.
 """
-
+from __future__ import annotations
 from ._auxliary import _struct, _config
 from ._merging import _Fusion
 from ._tests import YastnError
@@ -49,11 +49,11 @@ class Tensor:
 
         Parameters
         ----------
-            config : module, types.SimpleNamespace, or typing.NamedTuple
+            config : module | _config(NamedTuple)
                 :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
-            s : tuple
+            s : Sequence[int]
                 a signature of tensor. Also determines the number of legs
-            n : int or tuple
+            n : int | Sequence[int]
                 total charge of the tensor. In case of direct product of several
                 abelian symmetries, `n` is a tuple with total charge for each individual
                 symmetry
@@ -123,7 +123,7 @@ class Tensor:
     from ._special import _attach_01, _attach_23
     from ._krylov import linear_combination, expand_krylov_space
 
-    def _replace(self, **kwargs):
+    def _replace(self, **kwargs) -> yastn.Tensor:
         """ Creates a shallow copy replacing fields specified in kwargs """
         for arg in ('config', 'struct', 'mfs', 'hfs', 'data', 'slices'):
             if arg not in kwargs:
@@ -131,16 +131,12 @@ class Tensor:
         return Tensor(**kwargs)
 
     @property
-    def s(self):
-        """
+    def s(self) -> Sequence[int]:
+        r"""
         Signature of tensor's effective legs.
 
         Legs (spaces) fused together by :meth:`yastn.Tensor.fuse` are treated as single leg.
         The signature of each fused leg is given by the first native leg in the fused space.
-
-        Returns
-        -------
-        tuple(int)
         """
         inds, n = [], 0
         for mf in self.mfs:
@@ -149,130 +145,75 @@ class Tensor:
         return tuple(self.struct.s[ind] for ind in inds)
 
     @property
-    def s_n(self):
-        """
+    def s_n(self) -> Sequence[int]:
+        r"""
         Signature of tensor's native legs.
 
-        This includes legs (spaces) which have been fused together by :meth:`yastn.Tensor.fuse` using mode=`meta`.
-
-        Returns
-        -------
-        tuple(int)
+        This includes legs (spaces) which have been fused together
+        by :meth:`yastn.fuse_legs` using mode=`meta`.
         """
         return self.struct.s
 
     @property
-    def n(self):
-        """
+    def n(self) -> Sequence[int]:
+        r"""
         Total charge of the tensor.
 
-        In case of direct product of abelian symmetries, total charge for each symmetry, accummulated in a tuple.
-
-        Returns
-        -------
-        tuple(int)
+        In case of direct product of abelian symmetries,
+        total charge for each symmetry, accummulated in a tuple.
         """
         return self.struct.n
 
     @property
-    def ndim(self):
-        """
+    def ndim(self) -> int:
+        r"""
         Effective rank of the tensor.
 
-        Legs (spaces) fused together by :meth:`yastn.Tensor.fuse` are treated as single leg.
-
-        Returns
-        -------
-        int
+        Legs (spaces) fused together by :meth:`yastn.fuse_legs` are treated as single leg.
         """
         return len(self.mfs)
 
     @property
-    def ndim_n(self):
-        """
+    def ndim_n(self) -> int:
+        r"""
         Native rank of the tensor.
 
-        This includes legs (spaces) which have been fused together by :meth:`yastn.Tensor.fuse` using mode=`meta`.
-
-        Returns
-        -------
-        int
+        This includes legs (spaces) which have been fused together
+        by :meth:`yastn.fuse_legs` using mode=`meta`.
         """
         return len(self.struct.s)
 
     @property
-    def isdiag(self):
-        """
-        Return ``True`` if the tensor is diagonal.
-
-        Returns
-        -------
-        bool
-        """
+    def isdiag(self) -> bool:
+        """ Return ``True`` if the tensor is diagonal. """
         return self.struct.diag
 
     @property
-    def requires_grad(self):
-        """
-        Return ``True`` if tensor data have autograd enabled
-
-        Returns
-        -------
-        bool
-        """
+    def requires_grad(self) -> bool:
+        """ Return ``True`` if tensor data have autograd enabled. """
         return requires_grad(self)
 
     @property
-    def size(self):
-        """
-        Total number of elements in all non-empty blocks of the tensor
-
-        Returns
-        -------
-        int
-        """
+    def size(self) -> int:
+        """ Total number of elements in all non-empty blocks of the tensor. """
         return self.struct.size
 
     @property
-    def device(self):
-        """
-        Name of device on which the data reside
-
-        Returns
-        -------
-        str
-        """
+    def device(self) -> str:
+        """ Name of device on which the data resides. """
         return self.config.backend.get_device(self._data)
 
     @property
-    def dtype(self):
-        """
-        dtype of tensor data used by the backend
-
-        Returns
-        -------
-        dtype
-        """
+    def dtype(self) -> numpy.dtype | torch.dtype:
+        """ dtype of tensor data used by the backend. """
         return self.config.backend.get_dtype(self._data)
 
     @property
-    def yast_dtype(self):
-        """
-        Return 'complex128' if tensor data are complex else 'float64'
-
-        Returns
-        -------
-        str
-        """
+    def yast_dtype(self) -> str:
+        """ Return 'complex128' if tensor data are complex else 'float64.' """
         return 'complex128' if self.config.backend.is_complex(self._data) else 'float64'
 
     @property
-    def data(self):
-        """
-        Return underlying 1D-array storing the elements of the tensor
-
-        Returns
-        -------
-        tensor_like
-        """
+    def data(self) -> numpy.array | torch.tensor:
+        """ Return underlying 1D-array storing the elements of the tensor. """
         return self._data

@@ -79,16 +79,16 @@ Taking group element :math:`g \in G` for **all non-zero** elements of `T`, it mu
 The selection rule can be equivalently expressed as charge conservation
 
 .. math::
-    t_a+t_b+...-t_i-t_j-... = N
+    t_a+t_b+...-t_i-t_j-... = n
 
-with total charge of the tensor `N` being independent of tensor elements :math:`T^{ab...}_{ij...}`. In the case of :math:`N=0`, such a tensor is invariant (unchanged) under the action of the symmetry.
-Otherwise, it transforms covariantly as all its elements are altered by the same complex phase :math:`exp(i\theta_gN)`.
+with total charge of the tensor :math:`n` being independent of tensor elements :math:`T^{ab...}_{ij...}`. In the case of :math:`n=0`, such a tensor is invariant (unchanged) under the action of the symmetry.
+Otherwise, it transforms covariantly as all its elements are altered by the same complex phase :math:`exp(i\theta_g n)`.
 
-The charges :math:`t_i,\ N` and precise form of their addition :math:`+` depends on the abelian group
+The charges :math:`t_i,\ n` and precise form of their addition :math:`+` depends on the abelian group
 considered.
 
 .. note::
-    * Total charge `N` of YASTN tensor can be accessed by :attr:`yastn.Tensor.n`
+    * Total charge :math:`n` of YASTN tensor can be accessed by :attr:`yastn.Tensor.n`
     * To inspect what charge sectors :math:`t_i` exist on legs of a tensor
       use :meth:`yastn.Tensor.get_legs`.
 
@@ -112,7 +112,7 @@ Conjugation
 ^^^^^^^^^^^
 
 Conjugation of a tensor complex-conjugates tensor elements, flips tensor signature :attr:`yastn.Tensor.s` by
-replacing :math:`\pm 1 \to \mp 1`, as well as the total charge :math:`N \to -N`.
+replacing :math:`\pm 1 \to \mp 1`, as well as the total charge :math:`n \to -n`.
 In the latter, :math:`-` depends on the abelian group.
 
 It is also possible to flip the signature of a specific leg, which is accompanied by negation of charges on that leg.

@@ -6,7 +6,7 @@ __all__ = ['are_independent', 'is_consistent']
 
 
 class YastnError(Exception):
-    """Errors cought by checks in yastn."""
+    """Errors raised by yastn."""
 
 
 def _test_can_be_combined(a, b):

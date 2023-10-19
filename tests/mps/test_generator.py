@@ -4,18 +4,23 @@ import yastn
 import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
+    from .configs import config_U1
+    from .configs import config_Z2
     # pytest modifies cfg to inject different backends and devices during tests
 except ImportError:
     from configs import config_dense as cfg
+    from configs import config_U1
+    from configs import config_Z2
 
 tol = 1e-12
 
 #
 ####### MPO for XX model ##########
 #
-def mpo_nn_hopping_manually(N=10, t=1.0, mu=0.0, config=None):
+def mpo_nn_hopping_manually(N, t, mu, config):
     """
     Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
+    i.e. t * sum_{n=1}^{N-1} (cp_n c_{n+1} + cp_{n+1} c_n) + mu * sum_{n=1}^{N} cp_n c_n"
 
     Initialize MPO tensor by hand with dense, Z2, or U1 symmetric tensors.
     Symmetry is specified in config.
@@ -36,8 +41,9 @@ def mpo_nn_hopping_manually(N=10, t=1.0, mu=0.0, config=None):
     #          ^(+1)
     #          |
 
-    if config is None:
-        config = yastn.make_config()  # default is no symmetry, i.e. dense.
+    # we set fermionic=True for conistency as mpo will be compared with operators.SpinlessFermions
+    config = yastn.make_config(fermionic=True, default_device=config.default_device,
+                                sym=config.sym, backend=config.backend)
 
     if config.sym.SYM_ID == 'dense':  # no symmetry
         # Basic rank-2 blocks (matrices) of on-site tensors
@@ -47,20 +53,20 @@ def mpo_nn_hopping_manually(N=10, t=1.0, mu=0.0, config=None):
         ee = np.array([[1, 0], [0, 1]])
         oo = np.array([[0, 0], [0, 0]])
 
-        for n in H.sweep(to='last'):  # empty tensors
-            H[n] = yastn.Tensor(config=config, s=(-1, 1, 1, -1))
+        for n in H.sweep(to='last'):
+            H[n] = yastn.Tensor(config=config, s=(-1, 1, 1, -1)) # empty tensors
             if n == H.first:
                 tmp = np.block([[mu * nn, t * cp, t * c, ee]])
-                H[n].set_block(val=tmp, Ds=(1, 2, 2, 4))
+                H[n].set_block(val=tmp, Ds=(1, 2, 4, 2))
             elif n == H.last:
                 tmp = np.block([[ee], [c], [cp], [mu * nn]])
-                H[n].set_block(val=tmp, Ds=(4, 2, 2, 1))
+                H[n].set_block(val=tmp, Ds=(4, 2, 1, 2))
             else:
                 tmp = np.block([[ee, oo, oo, oo],
                                 [c, oo, oo, oo],
                                 [cp, oo, oo, oo],
                                 [mu * nn, t * cp, t * c, ee]])
-                H[n].set_block(val=tmp, Ds=(4, 2, 2, 4))
+                H[n].set_block(val=tmp, Ds=(4, 2, 4, 2))
 
     elif config.sym.SYM_ID == 'Z2':  # Z2 symmetry
         for n in H.sweep(to='last'):
@@ -153,7 +159,7 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
     return H
 
 
-def mpo_nn_hopping_latex(N=10, t=1.0, mu=0.0, sym="U1", config=None):
+def mpo_nn_hopping_latex(N, t, mu, sym="U1", config=None):
     """
     Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
 
@@ -416,34 +422,51 @@ def mpo_basis_ex(config):
     return cpc, ccp, I
 
 
-# def test_generator_mps():
-#     N = 3
-#     cpc, ccp, I = mpo_basis_ex(cfg)
-#     ops = yastn.operators.General({'cpc': lambda j: cpc, 'ccp': lambda j: ccp, 'I': lambda j: I})
-#     emap = {str(i): i for i in range(N)}
-#     generate = mps.Generator(N, ops, map=emap)
-#     generate.random_seed(seed=0)
+def test_mpo_nn_example():
+    """ test example generating mpo by hand """
+    N, t, mu = 10, 1.0, 0.1
+    H = {}
+    H['dense'] = mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=cfg)
+    H['Z2'] = mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=config_Z2)
+    H['U1'] = mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=config_U1)
 
-#     # generate from LaTeX-like instruction
-#     A = np.random.rand(2)
-#     psi_str = "A_{0} Plus_{0} Plus_{1} Plus_{2} + A_{1} Minus_{0} Minus_{1} Minus_{2}"
-#     plus, minus = mps_basis_ex(cfg)
+    H_Z2_dense = mps.Mpo(N=N)
+    H_U1_dense = mps.Mpo(N=N)
+    for n in range(N):
+        H_Z2_dense[n] = H['Z2'][n].to_nonsymmetric()
+        H_U1_dense[n] = H['U1'][n].to_nonsymmetric()
 
-#     psi_ltx = generate.mps_from_latex(psi_str, \
-#         vectors = {'Plus': lambda j: plus, 'Minus': lambda j: minus}, \
-#         parameters = {'A': A})
+    assert (H_Z2_dense - H['dense']).norm() < tol
+    assert (H_U1_dense - H['dense']).norm() < tol
 
-#     psi_tmpl = generate.mps_from_templete(
-#         [mps.single_term((('A','0'),('Plus','0'),('Plus','1'),('Plus','2'))), \
-#         mps.single_term((('A','1'),('Minus','0'),('Minus','1'),('Minus','2')))], \
-#         vectors = {'Plus': lambda j: plus, 'Minus': lambda j: minus}, \
-#         parameters = {'A': A})
+    # test mpo energy with direct calculation of all terms
+    for sym, n in [('Z2', (0,)), ('U1', (N // 2,))]:
+        # SpinlessFermions do not support 'dense'
+        ops = yastn.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+        generate = mps.Generator(N, ops)
+        psi = generate.random_mps(D_total=16, n=n).canonize_(to='last').canonize_(to='first')
 
-#     psi = generate.random_mps(D_total=8)
-#     assert mps.measure_overlap(psi_tmpl, psi) == mps.measure_overlap(psi_ltx, psi)
+        cp, c = ops.cp(), ops.c()
+
+        epm = mps.measure_2site(psi, cp, c, psi)
+        emp = mps.measure_2site(psi, c, cp, psi)
+        en = mps.measure_1site(psi, cp @ c, psi)
+
+        E1 = mps.measure_mpo(psi, H[sym], psi)
+        E2 = t * sum(epm[(n, n+1)] - emp[(n, n+1)] for n in range(N - 1)) # minus due to fermionic=True
+        E2 += mu * sum(en[n] for n in range(N))
+
+        psi_dense = mps.Mps(N=N)  # test also dense Hamiltonian casting down state psi to dense tensors
+        for n in range(N):
+            psi_dense[n] = psi[n].to_nonsymmetric()
+        E3 = mps.measure_mpo(psi_dense, H['dense'], psi_dense)
+
+        assert pytest.approx(E1.item(), rel=tol) == E2.item()
+        assert pytest.approx(E1.item(), rel=tol) == E3.item()
 
 
 if __name__ == "__main__":
+    test_mpo_nn_example()
     test_generate_random_mps()
     test_generate_product_mps()
     test_generator_mpo()

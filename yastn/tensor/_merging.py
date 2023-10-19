@@ -1,5 +1,5 @@
 """ Support for merging blocks in yastn tensors. """
-
+from __future__ import annotations
 from functools import lru_cache
 from itertools import groupby, product
 from operator import itemgetter
@@ -168,7 +168,7 @@ def _leg_struct_trivial(struct, axis=0):
 
 #  =========== fuse legs ======================
 
-def fuse_legs(a, axes, mode=None):
+def fuse_legs(a, axes, mode=None) -> yastn.Tensor:
     r"""
     Fuse groups of legs into effective legs, reducing the rank of the tensor.
 
@@ -209,17 +209,13 @@ def fuse_legs(a, axes, mode=None):
 
     Parameters
     ----------
-    axes: tuple[tuple[int]]
+    axes: Sequence[int | Sequence[int]]
         tuple of leg indices. Groups of legs to be fused together are accumulated within inner tuples.
 
     mode: str
         can select ``'hard'`` or ``'meta'`` fusion. If ``None``, uses ``default_fusion``
         from tensor's :doc:`configuration </tensor/configuration>`.
         Configuration option ``force_fusion`` can be used to override `mode`, typically for debugging purposes.
-
-    Returns
-    -------
-    yastn.Tensor
     """
     if a.isdiag:
         raise YastnError('Cannot fuse legs of a diagonal tensor.')
@@ -326,7 +322,7 @@ def fuse_meta_to_hard(a):
 
 #  =========== unfuse legs ======================
 
-def unfuse_legs(a, axes):
+def unfuse_legs(a, axes) -> yastn.Tensor:
     r"""
     Unfuse legs, reverting one layer of fusion.
 
@@ -366,12 +362,8 @@ def unfuse_legs(a, axes):
 
     Parameters
     ----------
-    axes: int or tuple[int]
+    axes: int | Sequence[int]
         leg(s) to unfuse.
-
-    Returns
-    -------
-    yastn.Tensor
     """
     if a.isdiag:
         raise YastnError('Cannot unfuse legs of a diagonal tensor.')

@@ -1,4 +1,5 @@
 """ Contractions of yastn tensors """
+from __future__ import annotations
 from functools import lru_cache
 from itertools import groupby
 import numpy as np
@@ -11,21 +12,17 @@ from ._merging import _masks_for_tensordot, _masks_for_vdot, _masks_for_trace
 __all__ = ['tensordot', 'vdot', 'trace', 'swap_gate', 'ncon', 'einsum', 'broadcast', 'apply_mask']
 
 
-def __matmul__(a, b):
+def __matmul__(a, b) -> yastn.Tensor:
     """
     The ``@`` operator computes tensor dot product, contracting the last axis
     of `self` with the first axis of `b`.
 
     Shorthand for yastn.tensordot(a, b, axes=(a.ndim - 1, 0)).
-
-    Returns
-    -------
-    yastn.Tensor
     """
     return tensordot(a, b, axes=(a.ndim - 1, 0))
 
 
-def tensordot(a, b, axes, conj=(0, 0)):
+def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
     r"""
     Compute tensor dot product of two tensor along specified axes.
 
@@ -38,21 +35,14 @@ def tensordot(a, b, axes, conj=(0, 0)):
     a, b: yastn.Tensor
         Tensors to contract
 
-    axes: tuple[int] or tuple[tuple[int]]
+    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         legs of both tensors (for each it is specified by int or tuple of ints)
         e.g. axes=(0, 3) to contract 0th leg of `a` with 3rd leg of `b`;
         axes=((0, 3), (1, 2)) to contract legs 0 and 3 of `a` with 1 and 2 of `b`, respectively.
 
-    conj: tuple[int]
+    conj: tuple[int, int]
         specify tensors to conjugate: (0, 0), (0, 1), (1, 0), or (1, 1).
         Default is (0, 0), i.e. neither tensor is conjugated
-
-    policy: str
-        method of executing contraction (reserved for future extensions)
-
-    Returns
-    -------
-    yastn.Tensor
     """
     if conj[0]:
         a = a.conj()
@@ -145,7 +135,7 @@ def _tensordot_diag(a, b, in_b, destination):
     raise YastnError('Outer product with diagonal tensor not supported. Use yastn.diag() first.')  # len(in_a) == 0
 
 
-def broadcast(a, *args, axes=0):
+def broadcast(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
     r"""
     Compute tensordot product of diagonal tensor `a` with tensors in args.
 
@@ -157,13 +147,9 @@ def broadcast(a, *args, axes=0):
     a, args: yastn.Tensor
         `a` is diagonal tensor to be broadcasted
 
-    axes: int or tuple(int)
+    axes: int | Sequence[int]
         legs of tensors in args to be multiplied by diagonal tensor `a`.
         Number of tensors provided in args should match lenght of axes.
-
-    Returns
-    -------
-    yastn.Tensor
     """
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
@@ -226,7 +212,7 @@ def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
     return meta, c_struct, c_slices
 
 
-def apply_mask(a, *args, axes=0):
+def apply_mask(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
     r"""
     Apply mask given by nonzero elements of diagonal tensor `a` on specified axes of tensors in args.
     Can provide arbitrary number of tensors in args, in which case axes is a list of corresponding length.
@@ -240,12 +226,8 @@ def apply_mask(a, *args, axes=0):
     a, args: yastn.Tensor
         `a` is a diagonal tensor
 
-    axes: int or tuple of ints
+    axes: int | Sequence[int]
         leg of tensors in args where the mask is applied.
-
-    Returns
-    -------
-    yastn.Tensor
     """
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
@@ -299,7 +281,7 @@ def _meta_mask(a_struct, a_slices, a_isdiag, b_struct, b_slices, Dbnew, axis):
     return meta, c_struct, c_slices
 
 
-def vdot(a, b, conj=(1, 0)):
+def vdot(a, b, conj=(1, 0)) -> number:
     r"""
     Compute scalar product :math:`x = \langle a|b \rangle` of two tensors.
 
@@ -307,13 +289,9 @@ def vdot(a, b, conj=(1, 0)):
     ----------
     a, b: yastn.Tensor
 
-    conj: tuple[int]
+    conj: tuple[int, int]
         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), or (1, 1).
-        Default is (1, 0), i.e. tensor `a` is conjugated.
-
-    Returns
-    -------
-    number
+        Default is (1, 0), i.e. tensor `a` is conjugated.s
     """
     _test_can_be_combined(a, b)
     if conj[0] == 1:
@@ -365,18 +343,14 @@ def vdot(a, b, conj=(1, 0)):
     return a.zero_of_dtype()
 
 
-def trace(a, axes=(0, 1)):
+def trace(a, axes=(0, 1)) -> yastn.Tensor:
     """
     Compute trace of legs specified by axes.
 
     Parameters
     ----------
-    axes: tuple[int] or tuple[tuple[int]]
+    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         Legs to be traced out, e.g axes=(0, 1); or axes=((2, 3, 4), (0, 1, 5))
-
-    Returns
-    -------
-    yastn.Tensor
     """
     lin1, lin2 = _clear_axes(*axes)  # contracted legs
     if len(set(lin1) & set(lin2)) > 0:
@@ -460,7 +434,7 @@ def _meta_trace(struct, slices, in1, in2, out):
     return tuple(meta2), c_struct, tuple(c_slices), tuple(tcon), D1, D2
 
 
-def swap_gate(a, axes):
+def swap_gate(a, axes) -> yastn.Tensor:
     """
     Return tensor after application of swap gate.
 
@@ -469,12 +443,8 @@ def swap_gate(a, axes):
 
     Parameters
     ----------
-    axes: tuple
+    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
         two groups of legs to be swaped
-
-    Returns
-    -------
-    yastn.Tensor
     """
     if not a.config.fermionic:
         return a
@@ -507,7 +477,7 @@ def _meta_swap_gate(t, n, mf, ndim, axes, fss):
     return tuple(tp % 2)
 
 
-def einsum(subscripts, *operands, order='Alphabetic'):
+def einsum(subscripts, *operands, order='Alphabetic') -> yastn.Tensor:
     """
     Execute series of tensor contractions.
 
@@ -518,7 +488,7 @@ def einsum(subscripts, *operands, order='Alphabetic'):
     ----------
     subscripts: str
 
-    operands: tensors to be contracted
+    operands: Sequence[yastn.Tensor]
 
     order: str
         Specify order in which repeated indices from subscipt are contracted.
@@ -539,10 +509,6 @@ def einsum(subscripts, *operands, order='Alphabetic'):
         yastn.einsum('ab,al,bm->lm', t1, t2, t3, order='ba')
 
         # Contract along `b` first, and `a` second.
-
-    Returns
-    -------
-    yastn.Tensor
     """
     if not isinstance(subscripts, str):
         raise YastnError('The first argument should be a string.')
@@ -592,29 +558,29 @@ def einsum(subscripts, *operands, order='Alphabetic'):
     return ncon(ts, inds, conjs)
 
 
-def ncon(ts, inds, conjs=None):
+def ncon(ts, inds, conjs=None) -> yastn.Tensor:
     """
     Execute series of tensor contractions.
 
     Parameters
     ----------
-    ts: list[yastn.Tensor]
+    ts: Sequence[yastn.Tensor]
         list of tensors to be contracted
 
-    inds: list[list[int]]
+    inds: Sequence[Sequence[int]]
         each inner tuple labels legs of respective tensor with integers.
         Positive values label legs to be contracted,
         with pairs of legs to be contracted denoted by the same integer label.
         Legs are contracted in the order of ascending integer value.
         Non-positive numbers label legs of the resulting tensor, in reversed order.
 
-    conjs: tuple[int]
+    conjs: Sequence[int]
         For each tensor in `ts` contains either 0 or 1. If the value is 1 the tensor
         is conjugated.
 
-
-    .. note::
-        :meth:`yastn.ncon` and :meth:`yastn.einsum` differ only by syntax.
+    Note
+    ----
+    :meth:`yastn.ncon` and :meth:`yastn.einsum` differ only by syntax.
 
     Example
     -------
@@ -628,10 +594,6 @@ def ncon(ts, inds, conjs=None):
         # outer product
 
         yastn.ncon([a, b], ((-0, -2), (-1, -3)))
-
-    Returns
-    -------
-    yastn.Tensor
     """
     if len(ts) != len(inds):
         raise YastnError('Number of tensors and indices do not match.')

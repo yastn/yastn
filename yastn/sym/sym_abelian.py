@@ -18,23 +18,26 @@ class sym_abelian(metaclass=sym_meta):
     @classmethod
     def fuse(cls, charges, signatures, new_signature):
         """
-        Fusion rule for abelian symmetry. An `i`-th row ``charges[i,:,:]`` contains `n` length-`NSYM`
-        charge vectors. For each row, the charge vectors are added up (fused) with selected ``signature``
+        Fusion rule for abelian symmetry. An `i`-th row ``charges[i,:,:]`` contains `m` length-`NSYM`
+        charge vectors, where `m` is the number of legs being fused.
+        For each row, the charge vectors are added up (fused) with selected ``signatures``
         according to the group addition rules.
 
         Parameters
         ----------
             charges: numpy.ndarray(int)
-                rank-3 integer tensor with shape (k, n, NSYM)
+                `k x m x nsym` matrix, where `k` is the number of independent blocks,
+                and `m` is the number of fused legs.
 
             signatures: numpy.ndarray(int)
-                vector with `n` elements in `{+1, -1}`
+                integer vector with `m` elements in `{-1, +1}`
 
             new_signature: int
 
         Returns
         -------
             numpy.ndarray(int)
-                integer matrix with shape (k,NSYM) of fused charges; includes multiplication by ``new_signature``
+                integer matrix with shape (k, NSYM) of fused charges;
+                includes multiplication by ``new_signature``
         """
         raise NotImplementedError("Subclasses need to override the fuse function")  # pragma: no cover

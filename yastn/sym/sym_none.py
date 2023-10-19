@@ -15,17 +15,19 @@ class sym_none(sym_abelian):
         Parameters
         ----------
             charges: nparray(int)
-                k x number_legs x nsym matrix, where k is the number of independent blocks.
+                `k x m x nsym` matrix, where `k` is the number of independent blocks,
+                and `m` is the number of fused legs.
 
-            signatures: nparray(int)
-                vector with number_legs elements
+            signatures: numpy.ndarray(int)
+                integer vector with `m` elements in `{-1, +1}`
 
             new_signature: int
 
         Returns
         -------
             nparray(int)
-                integer matrix with shape (k,NSYM) of fused charges; includes multiplication by ``new_signature``
+                integer matrix with shape (k,NSYM) of fused charges;
+                includes multiplication by ``new_signature``
         """
         # charges is an empty matrix
         # swap to properly match non-zero dimensions of returned tset
