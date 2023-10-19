@@ -137,12 +137,12 @@ class MpsMpo:
         MpsMpo tensors (sites) are indexed by integers :math:`0, 1, 2, \ldots, N-1`,
         where :math:`0` corresponds to the 'first' site.
         They can be accessed with ``[]`` operator.
-        MPS/MPO can contain a central block associated with a bond, indexed by a tuple `(n, n+1)`.
+        MPS/MPO can contain a central block associated with a bond and indexed by a tuple :math:`(n, n+1)`.
         At most one central block is allowed.
 
         :ref:`The legs' order <mps/properties:index convention>` of each tensor is:
-        (0) virtual leg in the direction of the first site, (1) 1st physical leg, i.e., :math:`|\textrm{ket}\rangle`,
-        (2) virtual leg in the direction of the last site, and, in case of MPO, (3) 2nd physical leg, i.e., :math:`\langle \textrm{bra}|`.
+        (0) virtual leg pointing towards the first site, (1) 1st physical leg, i.e., :math:`|\textrm{ket}\rangle`,
+        (2) virtual leg pointing towards the last site, and, in case of MPO, (3) 2nd physical leg, i.e., :math:`\langle \textrm{bra}|`.
         """
         if not isinstance(N, numbers.Integral) or N <= 0:
             raise YastnError('MPS: Number of Mps sites N should be a positive integer.')

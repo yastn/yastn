@@ -262,18 +262,18 @@ def test_generate_random_mps():
 
 
 def test_product_mps():
-    """ test mps.generate_prod_mps"""
+    """ test mps.product_mps"""
     for sym, nl, nr in [('U1', (1,), (0,)), ('Z2', (1,), (0,)), ('dense', (), ())]:
         ops = yastn.operators.Spin12(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
         vp1 = ops.vec_z(val=+1)
         vm1 = ops.vec_z(val=-1)
 
-        psi = mps.product_mps(vectors=[vp1, vm1, vp1, vm1, vm1, vp1, vp1])
+        psi = mps.product_mps(vectors=[vp1, vm1], N=7)  #  mps of [vp1, vm1, vp1, vm1, vp1, vm1, vp1]
 
         assert pytest.approx(mps.vdot(psi, psi).item(), rel=tol) == 1.0
         assert psi.virtual_leg('first').t == (nl,)
         assert psi.virtual_leg('last').t == (nr,)
-        assert mps.measure_1site(psi, ops.z(), psi) == {0: +1.0, 1: -1.0, 2: +1.0, 3: -1.0, 4: -1.0, 5: +1.0, 6: +1.0}
+        assert mps.measure_1site(psi, ops.z(), psi) == {0: +1.0, 1: -1.0, 2: +1.0, 3: -1.0, 4: +1.0, 5: -1.0, 6: +1.0}
 
     for sym, ntot in [('U1', (4,)), ('Z2', (0,))]:
         ops = yastn.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
@@ -285,6 +285,19 @@ def test_product_mps():
         assert pytest.approx(mps.vdot(psi, psi).item(), rel=tol) == 1.0
         assert psi.virtual_leg('first').t == (ntot,)
         assert mps.measure_1site(psi, ops.n(), psi) == {0: 1.0, 1: 0.0, 2: 1.0, 3: 0.0, 4: 0.0, 5: 1.0, 6: 1.0}
+
+
+def test_product_mpo():
+
+    for sym, nl, nr in [('U1', (0,), (0,)), ('Z2', (0,), (0,)), ('dense', (), ())]:
+        ops = yastn.operators.Spin12(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
+        N = 8
+        I = mps.product_mpo(ops.I(), N=8)
+
+        assert pytest.approx(mps.vdot(I, I).item(), rel=tol) == 2 ** N
+        assert (I @ I - I).norm() < tol
+        assert I.virtual_leg('first').t == (nl,)
+        assert I.virtual_leg('last').t == (nr,)
 
 
 def test_generator_mpo():
@@ -469,6 +482,7 @@ if __name__ == "__main__":
     test_mpo_nn_example()
     test_generate_random_mps()
     test_product_mps()
+    test_product_mpo()
     test_generator_mpo()
     test_mpo_from_latex()
     test_mpo_from_templete()
