@@ -1,5 +1,4 @@
 """ yastn.linalg.qr() """
-import numpy as np
 from itertools import product
 import yastn
 try:

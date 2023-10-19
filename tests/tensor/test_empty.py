@@ -1,6 +1,4 @@
 """ Test tensor operations on an empty tensor """
-import pytest
-import numpy as np
 import yastn
 try:
     from .configs import config_U1
@@ -22,6 +20,8 @@ def test_empty_tensor():
 
     d = yastn.tensordot(a, a, axes=((2, 3), (0, 1)))
     assert (a - d).norm() < tol
+
+    assert a.item() == 0.
 
 
 if __name__ == '__main__':

@@ -1,13 +1,10 @@
 """ yastn.swap_gate() to introduce fermionic statistics. """
-from itertools import product
 import pytest
-from tests.tensor.configs import config_dense
 import yastn
 try:
-    from .configs import config_U1xU1_fermionic, config_U1xU1xZ2_fermionic, config_Z2_fermionic, config_Z2
+    from .configs import config_dense, config_Z2_fermionic, config_Z2
 except ImportError:
-    from configs import config_U1xU1_fermionic, config_U1xU1xZ2_fermionic, config_Z2_fermionic, config_Z2
-
+    from configs import config_dense, config_Z2_fermionic, config_Z2
 
 
 tol = 1e-12  #pylint: disable=invalid-name
