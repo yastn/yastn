@@ -55,7 +55,7 @@ Automatic generator creates MPO with symmetries inherited from local operators.
 Building random MPS/MPO
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. literalinclude:: /../../tests/mps/test_generator.py
+.. literalinclude:: /../../tests/mps/test_initialization.py
         :pyobject: random_mps_spinless_fermions
 
 
