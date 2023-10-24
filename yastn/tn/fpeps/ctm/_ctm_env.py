@@ -243,3 +243,61 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
         vR = vRnew
     return out
 
+
+def measure_2site(state, CTMenv, o1, o2, opts_svd=None, opts_var=None, tol=1e-5):
+    """
+    Calculate all 2-point correlations <o1 o2> in a finite peps.
+
+    Takes CTM emvironments and operators.
+    """
+    out = {}
+    if opts_var is None:
+        opts_var = {'max_sweeps' : 10, 'Schmidt_tol': tol}
+
+    for ny1 in range(state.Ny - 1, -1, -1):
+        for nx1 in range(0, state.Nx):  # o1 at position (nx, ny)
+            # first calculate correlations along the column
+            vR = CtmEnv2Mps(state, CTMenv, index=ny1, index_type='r') # right boundary of indexed column through CTM environment tensors
+            vL = CtmEnv2Mps(state, CTMenv, index=ny1, index_type='l').conj() # left boundary of indexed column through CTM environment tensors
+            Os = transfer_mpo(state, index=ny1, index_type='column') # converts ny colum of PEPS to MPO
+            env = mps.Env3(vL, Os, vR).setup(to='first')
+            norm_env = env.measure(bd=(-1, 0))
+
+            if opts_svd is None:
+                opts_svd = {'D_total': max(vL.get_bond_dimensions())}
+            vRnext = mps.zipper(Os, vR, opts=opts_svd)
+            mps.compression_(vRnext, (Os, vR), method='1site', normalize=False, **opts_var)
+
+            loc_o1 = match_ancilla_1s(o1, Os[nx1].A)
+            Os[nx1].A = tensordot(Os[nx1].A, loc_o1, axes=(4, 1))
+            env.setup(to='last')
+
+            vRo1next = mps.zipper(Os, vR, opts=opts_svd)
+            mps.compression_(vRo1next, (Os, vR), method='1site', normalize=False, **opts_var)
+
+            for nx2 in range(nx1 + 1, state.Nx):
+                loc_o2 = match_ancilla_1s(o2, Os[nx2].A)
+                Os[nx2].A = tensordot(Os[nx2].A, loc_o2, axes=(4, 1))
+                env.update_env(nx2, to='first')
+                out[(nx1, ny1), (nx2, ny1)] = env.measure(bd=(nx2-1, nx2)) / norm_env
+
+            for ny2 in range(ny1 - 1, -1, -1):
+                vR = vRnext
+                vRo1 = vRo1next
+                vL = CtmEnv2Mps(state, CTMenv, index=ny2, index_type='l').conj() # left boundary of indexed column through CTM environment tensors
+                Os = transfer_mpo(state, index=ny2, index_type='column') # converts ny colum of PEPS to MPO
+                env = mps.Env3(vL, Os, vR).setup(to='first')
+                norm_env = env.measure(bd=(-1, 0))
+
+                vRnext = mps.zipper(Os, vR, opts=opts_svd)
+                mps.compression_(vRnext, (Os, vR), method='1site', normalize=False, **opts_var)
+                vRo1next = mps.zipper(Os, vRo1, opts=opts_svd)
+                mps.compression_(vRo1next, (Os, vRo1), method='1site', normalize=False, **opts_var)
+
+                env = mps.Env3(vL, Os, vRo1).setup(to='first').setup(to='last')
+                for nx2 in range(state.Nx):
+                    loc_o2 = match_ancilla_1s(o2, Os[nx2].A)
+                    Os[nx2].A = tensordot(Os[nx2].A, loc_o2, axes=(4, 1))
+                    env.update_env(nx2, to='first')
+                    out[(nx1, ny1), (nx2, ny2)] = env.measure(bd=(nx2-1, nx2)) / norm_env
+    return out
