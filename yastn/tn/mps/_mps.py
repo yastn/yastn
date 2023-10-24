@@ -135,7 +135,7 @@ class MpsMpo:
         for system of `N` sites. Empty MPS/MPO has no tensors assigned.
 
         MpsMpo tensors (sites) are indexed by integers :math:`0, 1, 2, \ldots, N-1`,
-        where :math:`0` corresponds to the 'first' site.
+        where :math:`0` corresponds to the `'first'` site.
         They can be accessed with ``[]`` operator.
         MPS/MPO can contain a central block associated with a bond and indexed by a tuple :math:`(n, n+1)`.
         At most one central block is allowed.
@@ -205,9 +205,6 @@ class MpsMpo:
         r"""
         Makes a clone of MPS or MPO by :meth:`cloning<yastn.Tensor.clone>`
         all :class:`yastn.Tensor<yastn.Tensor>`'s into a new and independent :class:`yastn.tn.mps.MpsMpo`.
-
-        .. note::
-            Cloning preserves autograd tracking on all tensors.
         """
         phi = self.shallow_copy()
         for ind, ten in phi.A.items():
@@ -219,9 +216,6 @@ class MpsMpo:
         r"""
         Makes a copy of MPS or MPO by :meth:`copying<yastn.Tensor.copy>` all :class:`yastn.Tensor<yastn.Tensor>`'s
         into a new and independent :class:`yastn.tn.mps.MpsMpo`.
-
-        .. warning::
-            this operation does not preserve autograd on the returned :code:`yastn.tn.mps.MpsMpo`.
         """
         phi = self.shallow_copy()
         for ind, ten in phi.A.items():

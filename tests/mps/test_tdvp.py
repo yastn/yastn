@@ -1,6 +1,4 @@
 """ dmrg tested on XX model. """
-import itertools
-import logging
 import pytest
 import numpy as np
 import yastn.tn.mps as mps
@@ -17,22 +15,23 @@ except ImportError:
 
 tol = 1e-10
 
-def correlation_matrix(psi, gen):
+def correlation_matrix(psi, ops):
     """ Calculate correlation matrix for Mps psi  C[m,n] = <c_n^dag c_m>"""
     assert pytest.approx(psi.norm().item(), rel=tol) == 1
-
+    N = psi.N
     # first approach: directly act with c operators on state psi
-    cns = [mps.generate_mpo(gen.I(), [mps.Hterm(1, [n], [gen._ops.c()])]) for n in range(gen.N)]
+    I = mps.product_mpo(ops.I(), N)
+    cns = [mps.generate_mpo(I, [mps.Hterm(1, [n], [ops.c()])]) for n in range(N)]
     ps = [cn @ psi for cn in cns]
-    C = np.zeros((gen.N, gen.N), dtype=np.complex128)
-    for m in range(gen.N):
-        for n in range(gen.N):
+    C = np.zeros((N, N), dtype=np.complex128)
+    for m in range(N):
+        for n in range(N):
             C[m, n] = mps.vdot(ps[n], ps[m])
 
     # second approach: use measure_1site() and measure_2site()
-    occs = mps.measure_1site(psi, gen._ops.n(), psi)
-    cpc = mps.measure_2site(psi, gen._ops.cp(), gen._ops.c(), psi)
-    C2 = np.zeros((gen.N, gen.N), dtype=np.complex128)
+    occs = mps.measure_1site(psi, ops.n(), psi)
+    cpc = mps.measure_2site(psi, ops.cp(), ops.c(), psi)
+    C2 = np.zeros((N, N), dtype=np.complex128)
     for n, v in occs.items():
         C2[n, n] = v
     for (n1, n2), v in cpc.items():
@@ -46,13 +45,14 @@ def test_tdvp_hermitian():
     """
     Simulate a sudden quench of a free-fermionic (hopping) model.
     Compare observables versus known references.
+
+    ./tests/mps/test_tdvp.py  test_tdvp_hermitian()
     """
     N, n = 6, 3  # consider a system of 6 modes and 3 particles
     #
-    # load operators
+    # load operators;  cfg is used by pytest to inject backend and device
     operators = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
-    generate = mps.Generator(N=N, operators=operators)
-    generate.random_seed(seed=0)
+    operators.random_seed(seed=0)
     #
     # hopping matrix, it is hermitized inside functions consuming it.
     J0 = [[1, 0.5j, 0, 0.3, 0.1, 0], [0, -1, 0.5j, 0, 0.3, 0.1], [0, 0, 1, 0.5j, 0, 0.3], [0, 0, 0, -1, 0.5j, 0], [0, 0, 0, 0, 1, 0.5j], [0, 0, 0, 0, 0, -1]]
@@ -63,14 +63,15 @@ def test_tdvp_hermitian():
     # find ground state using dmrg
     Dmax = 8  # we will have exact Mps
     opts_svd = {'tol': 1e-15, 'D_total': Dmax}  # with no truncation in 2site methods
-    psi = generate.random_mps(D_total=Dmax, n=n)
+    I = mps.product_mpo(operators.I(), N)
+    psi = mps.random_mps(I, D_total=Dmax, n=n)
     out = mps.dmrg_(psi, H0, method='2site', max_sweeps=2, opts_svd=opts_svd)
     out = mps.dmrg_(psi, H0, method='1site', energy_tol=1e-14, Schmidt_tol=1e-14, max_sweeps=10)
     #
     # get reference results for ground state and check mps
     C0ref, E0ref = gs_correlation_matrix(J0, n)
     assert pytest.approx(out.energy.item(), rel=1e-14) == E0ref
-    assert np.allclose(C0ref, correlation_matrix(psi, generate), rtol=1e-12)
+    assert np.allclose(C0ref, correlation_matrix(psi, operators), rtol=1e-12)
     #
     # sudden quench with a new Hamiltonian
     J1 = [[-1, 0.5, 0, -0.3, 0.1, 0], [0, 1, 0.5, 0, -0.3, 0.1], [0, 0, -1, 0.5, 0, -0.3], [0, 0, 0, 1, 0.5, 0], [0, 0, 0, 0, -1, 0.5], [0, 0, 0, 0, 0, 1]]
@@ -84,7 +85,7 @@ def test_tdvp_hermitian():
     for method in ('1site', '2site', '12site'):  # test various methods
         psi1 = psi.shallow_copy()  # shallow_copy is sufficient to retain initial state
         for step in mps.tdvp_(psi1, H1, times=times, method=method, dt=0.125, opts_svd=opts_svd, opts_expmv=opts_expmv):
-            C1 = correlation_matrix(psi1, generate)  # calculate correlation matrix from mps
+            C1 = correlation_matrix(psi1, operators)  # calculate correlation matrix from mps
             C1ref = evolve_correlation_matrix(C0ref, J1, step.tf)  # exact reference
             assert np.linalg.norm(C1ref - C1) < 1e-12  # compare results with references
 

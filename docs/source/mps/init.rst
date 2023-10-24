@@ -68,12 +68,12 @@ operators, e.g., Hamiltonians, given as a sum of products of local (on-site) ope
 They are encoded as a list of :class:`mps.Hterm<yastn.tn.mps.Hterm>`, where each :class:`mps.Hterm<yastn.tn.mps.Hterm>`
 represents a product of local operators, including the numerical coefficient (amplitude) in front of that product.
 
-.. autoclass:: yastn.tn.mps.Hterm
-
 To generate the corresponding MPO use :code:`mps.generate_mpo(I, terms)`,
 where `terms` is a list of Hterm-s and `I` is the identity MPO.
 The latter can be conveniently created as shown in :class:`mps.product_mpo<yastn.tn.mps.product_mpo>`.
 For an example, see :ref:`MPO for spinless fermions with hopping at arbitrary range using Hterms<examples/mps/build:Building MPO using Hterm>`.
+
+.. autoclass:: yastn.tn.mps.Hterm
 
 .. autofunction:: yastn.tn.mps.generate_mpo
 
