@@ -33,15 +33,15 @@ def mpo_nn_hopping_manually(N, t, mu, config):
     # Depending on the symmetry, define elements of on-site tensor
     #
     # We chose signature convention for indices of the MPO tensor as follows
-    #          |
-    #          ^(-1)
-    #          |
-    # (-1) -<-|T|-<-(+1)
-    #          |
-    #          ^(+1)
-    #          |
+    #         |
+    #         ^(-1)
+    #         |
+    # (-1)-<-|T|-<-(+1)
+    #         |
+    #         ^(+1)
+    #         |
 
-    # we set fermionic=True for conistency as mpo will be compared with operators.SpinlessFermions
+    # we set fermionic=True for conistency as mpo will be compared with operators.SpinlessFermions in tests.
     config = yastn.make_config(fermionic=True, default_device=config.default_device,
                                 sym=config.sym, backend=config.backend)
 
@@ -120,10 +120,9 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
     and the diagonal defines on-site chemical potentials.
     """
 
-    if config is None:
-        ops = yastn.operators.SpinlessFermions(sym=sym)
-    else:  # config is used here by pytest to inject backend and device for testing
-        ops = yastn.operators.SpinlessFermions(sym=sym, backend=config.backend, default_device=config.default_device)
+    # config is used here by pytest to inject backend and device for testing
+    opts_config = {} if config is None else {'backend': config.backend, 'default_device': config.default_device}
+    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
     Hterms = []  # list of Hterm(amplitude, positions, operators)
     # Each Hterm corresponds to a single product of local operators.
@@ -132,30 +131,21 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
     # chemical potential on site n
     for n in range(N):
         if abs(J[n][n]) > 0:
-            Hterms.append(mps.Hterm(J[n][n], [n], [ops.n()]))
+            Hterms.append(mps.Hterm(amplitude=J[n][n], positions=[n], operators=[ops.n()]))
 
     # hopping term between sites m and n
     for m in range(N):
         for n in range(m + 1, N):
             if abs(J[m][n]) > 0:
-                Hterms.append(mps.Hterm(J[m][n], (m, n), (ops.cp(), ops.c())))
-                Hterms.append(mps.Hterm(np.conj(J[m][n]), (n, m), (ops.cp(), ops.c())))
+                Hterms.append(mps.Hterm(amplitude=J[m][n], positions=(m, n),operators=(ops.cp(), ops.c())))
+                Hterms.append(mps.Hterm(amplitude=np.conj(J[m][n]), positions=(n, m),operators=(ops.cp(), ops.c())))
 
-    # We need an identity MPO operator. Here it is created manually.
-    I = mps.Mpo(N)
-    for n in I.sweep():
-        I[n] = ops.I().add_leg(axis=0, s=-1).add_leg(axis=2, s=1)
-    #
-    # Identity MPO can be also obtained using mps.Generator class
-    #
-    # generator = mps.Generator(N, ops)
-    # I = generator.I()
-    #
+    # We need an identity MPO operator.
+    I = mps.product_mpo(ops.I(), N)
 
-    #
     # Generate MPO for Hterms
-    #
     H = mps.generate_mpo(I, Hterms, opts={'tol':1e-14})
+
     return H
 
 
@@ -167,13 +157,13 @@ def mpo_nn_hopping_latex(N, t, mu, sym="U1", config=None):
     and the diagonal defines on-site chemical potentials.
     """
 
-    if config is None:
-        ops = yastn.operators.SpinlessFermions(sym=sym)
-    else:  # config is used here by pytest to inject backend and device for testing
-        ops = yastn.operators.SpinlessFermions(sym=sym, backend=config.backend, default_device=config.default_device)
+    # config is used here by pytest to inject backend and device for testing
+    opts_config = {} if config is None else {'backend': config.backend, 'default_device': config.default_device}
+    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
     Hstr = "\sum_{j,k \in NN} t (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in sites} mu cp_{i} c_{i}"
     parameters = {"t": t, "mu": mu, "sites": list(range(N)), "NN": list((i, i+1) for i in range(N-1))}
+
     generate = mps.Generator(N, ops)
     H = generate.mpo_from_latex(Hstr, parameters=parameters)
     return H
@@ -187,10 +177,9 @@ def mpo_hopping_latex(N, J, sym="U1", config=None):
     and the diagonal defines on-site chemical potentials.
     """
 
-    if config is None:
-        ops = yastn.operators.SpinlessFermions(sym=sym)
-    else:  # config is used here by pytest to inject backend and device for testing
-        ops = yastn.operators.SpinlessFermions(sym=sym, backend=config.backend, default_device=config.default_device)
+    # config is used here by pytest to inject backend and device for testing
+    opts_config = {} if config is None else {'backend': config.backend, 'default_device': config.default_device}
+    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
     Hstr = "\sum_{j,k \in NN} J_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in sites} J_{i,i} cp_{i} c_{i}"
     parameters = {"J": J, "sites": list(range(N)), "NN": list((i, j) for i in range(N-1) for j in range(i + 1, N))}
@@ -198,93 +187,6 @@ def mpo_hopping_latex(N, J, sym="U1", config=None):
     generate = mps.Generator(N, ops)
     H = generate.mpo_from_latex(Hstr, parameters=parameters)
     return H
-
-
-def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config=None):
-    """
-    Generate random MPS of N sites, with bond dimension D_total, tensors with symmetry sym and total charge n.
-    """
-    if config is None:
-        ops = yastn.operators.SpinlessFermions(sym=sym)
-    else:  # config is used here by pytest to inject backend and device for testing
-        ops = yastn.operators.SpinlessFermions(sym=sym, backend=config.backend, default_device=config.default_device)
-
-    generate = mps.Generator(N, ops)
-    psi = generate.random_mps(D_total=D_total, n=n)
-    return psi
-
-
-def random_mpo_spinless_fermions(N=10, D_total=16, sym='Z2', config=None):
-    """
-    Generate random MPO of N sites, with bond dimension D_total and tensors with symmetry sym.
-    """
-    if config is None:
-        ops = yastn.operators.SpinlessFermions(sym=sym)
-    else:  # config is used here by pytest to inject backend and device for testing
-        ops = yastn.operators.SpinlessFermions(sym=sym, backend=config.backend, default_device=config.default_device)
-
-    generate = mps.Generator(N, ops)
-    H = generate.random_mpo(D_total=D_total)
-    return H
-
-
-def test_generate_random_mps():
-    N = 10
-    D_total = 16
-    bds = (1,) + (D_total,) * (N - 1) + (1,)
-
-    for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U1', (N // 2,))):
-        ops = yastn.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
-        generate = mps.Generator(N, ops)
-        I = generate.I()
-        assert pytest.approx(mps.measure_overlap(I, I).item(), rel=tol) == 2 ** N
-        O = I @ I + (-1 * I)
-        assert pytest.approx(O.norm().item(), abs=tol) == 0
-
-        n0 = (0,) * len(nn)
-        psi = random_mps_spinless_fermions(N, D_total, sym, nn)
-        leg = psi[psi.first].get_legs(axes=0)
-        assert leg.t == (nn,) and leg.s == -1
-        leg = psi[psi.last].get_legs(axes=2)
-        assert leg.t == (n0,) and leg.s == 1
-        bds = psi.get_bond_dimensions()
-        assert bds[0] == bds[-1] == 1
-        assert all(bd > D_total/2 for bd in bds[2:-2])
-
-        H = random_mpo_spinless_fermions(N, D_total, sym)
-        leg = H[H.first].get_legs(axes=0)
-        assert leg.t == (n0,) and leg.s == -1
-        leg = H[H.last].get_legs(axes=2)
-        assert leg.t == (n0,) and leg.s == 1
-        bds = H.get_bond_dimensions()
-        assert bds[0] == bds[-1] == 1
-        assert all(bd > D_total/2 for bd in bds[2:-2])
-
-
-def test_generate_product_mps():
-    """ test mps.generate_prod_mps"""
-    for sym, nl, nr in [('U1', (1,), (0,)), ('Z2', (1,), (0,)), ('dense', (), ())]:
-        ops = yastn.operators.Spin12(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
-        vp1 = ops.vec_z(val=+1)
-        vm1 = ops.vec_z(val=-1)
-
-        psi = mps.generate_product_mps(vectors=[vp1, vm1, vp1, vm1, vm1, vp1, vp1])
-
-        assert pytest.approx(mps.vdot(psi, psi).item(), rel=tol) == 1.0
-        assert psi.virtual_leg('first').t == (nl,)
-        assert psi.virtual_leg('last').t == (nr,)
-        assert mps.measure_1site(psi, ops.z(), psi) == {0: +1.0, 1: -1.0, 2: +1.0, 3: -1.0, 4: -1.0, 5: +1.0, 6: +1.0}
-
-    for sym, ntot in [('U1', (4,)), ('Z2', (0,))]:
-        ops = yastn.operators.SpinlessFermions(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
-        v0 = ops.vec_n(val=0)
-        v1 = ops.vec_n(val=1)
-
-        psi = mps.generate_product_mps(vectors=[v1, v0, v1, v0, v0, v1, v1])
-
-        assert pytest.approx(mps.vdot(psi, psi).item(), rel=tol) == 1.0
-        assert psi.virtual_leg('first').t == (ntot,)
-        assert mps.measure_1site(psi, ops.n(), psi) == {0: 1.0, 1: 0.0, 2: 1.0, 3: 0.0, 4: 0.0, 5: 1.0, 6: 1.0}
 
 
 def test_generator_mpo():
@@ -404,25 +306,7 @@ def test_mpo_from_templete():
     assert abs(x_man - x_str) < tol
 
 
-def mps_basis_ex(config):
-    plus = yastn.Tensor(config=config, s=[1])
-    plus.set_block(val=[0, 1],Ds=(2,))
-    minus = yastn.Tensor(config=config, s=[1])
-    minus.set_block(val=[1, 0],Ds=(2,))
-    return plus, minus
-
-
-def mpo_basis_ex(config):
-    cpc = yastn.Tensor(config=config, s=[1, -1])
-    cpc.set_block(val=[[0,0],[0,1]],Ds=(2,2,))
-    ccp = yastn.Tensor(config=config, s=[1, -1])
-    ccp.set_block(val=[[1,0],[0,0]],Ds=(2,2,))
-    I = yastn.Tensor(config=config, s=[1, -1])
-    I.set_block(val=[[1,0],[0,1]],Ds=(2,2,))
-    return cpc, ccp, I
-
-
-def test_mpo_nn_example():
+def test_mpo_nn_hopping_manually():
     """ test example generating mpo by hand """
     N, t, mu = 10, 1.0, 0.1
     H = {}
@@ -466,9 +350,7 @@ def test_mpo_nn_example():
 
 
 if __name__ == "__main__":
-    test_mpo_nn_example()
-    test_generate_random_mps()
-    test_generate_product_mps()
     test_generator_mpo()
     test_mpo_from_latex()
     test_mpo_from_templete()
+    test_mpo_nn_hopping_manually()

@@ -29,8 +29,8 @@ API: yastn.tn.mps
    :glob:
    :maxdepth: 2
 
-   mps/properties
    mps/init
+   mps/properties
    mps/measurements
    mps/algebra
    mps/canonization

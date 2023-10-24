@@ -894,4 +894,4 @@ def is_independent(x, y):
     """
     check if two arrays are identical, or share the same view.
     """
-    return not ((x is y) or (x.numel() > 0 and x.storage().data_ptr() == y.storage().data_ptr()))
+    return not ((x is y) or (x.numel() > 0 and x.untyped_storage().data_ptr() == y.untyped_storage().data_ptr()))
