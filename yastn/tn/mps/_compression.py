@@ -263,7 +263,7 @@ def zipper(a, b, opts=None):
             tmp = tmp.fuse_legs(axes=(0, 1, 3, (4, 2)))
         tmp = a[n]._attach_23(tmp)
 
-        U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1)
+        U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1, nU=False)
 
         mask = tensor.truncation_mask(S, **opts)
         U, C, V = mask.apply_mask(U, S, V, axes=(2, 0, 0))

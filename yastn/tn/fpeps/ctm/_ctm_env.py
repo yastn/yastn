@@ -265,15 +265,18 @@ def measure_2site(state, CTMenv, o1, o2, opts_svd=None, opts_var=None, tol=1e-5)
 
             if opts_svd is None:
                 opts_svd = {'D_total': max(vL.get_bond_dimensions())}
-            vRnext = mps.zipper(Os, vR, opts=opts_svd)
-            mps.compression_(vRnext, (Os, vR), method='1site', normalize=False, **opts_var)
+
+            if ny1 > 0:
+                vRnext = mps.zipper(Os, vR, opts=opts_svd)
+                mps.compression_(vRnext, (Os, vR), method='1site', normalize=False, **opts_var)
 
             loc_o1 = match_ancilla_1s(o1, Os[nx1].A)
             Os[nx1].A = tensordot(Os[nx1].A, loc_o1, axes=(4, 1))
             env.setup(to='last')
 
-            vRo1next = mps.zipper(Os, vR, opts=opts_svd)
-            mps.compression_(vRo1next, (Os, vR), method='1site', normalize=False, **opts_var)
+            if ny1 > 0:
+                vRo1next = mps.zipper(Os, vR, opts=opts_svd)
+                mps.compression_(vRo1next, (Os, vR), method='1site', normalize=False, **opts_var)
 
             for nx2 in range(nx1 + 1, state.Nx):
                 loc_o2 = match_ancilla_1s(o2, Os[nx2].A)
@@ -289,10 +292,11 @@ def measure_2site(state, CTMenv, o1, o2, opts_svd=None, opts_var=None, tol=1e-5)
                 env = mps.Env3(vL, Os, vR).setup(to='first')
                 norm_env = env.measure(bd=(-1, 0))
 
-                vRnext = mps.zipper(Os, vR, opts=opts_svd)
-                mps.compression_(vRnext, (Os, vR), method='1site', normalize=False, **opts_var)
-                vRo1next = mps.zipper(Os, vRo1, opts=opts_svd)
-                mps.compression_(vRo1next, (Os, vRo1), method='1site', normalize=False, **opts_var)
+                if ny2 > 0:
+                    vRnext = mps.zipper(Os, vR, opts=opts_svd)
+                    mps.compression_(vRnext, (Os, vR), method='1site', normalize=False, **opts_var)
+                    vRo1next = mps.zipper(Os, vRo1, opts=opts_svd)
+                    mps.compression_(vRo1next, (Os, vRo1), method='1site', normalize=False, **opts_var)
 
                 env = mps.Env3(vL, Os, vRo1).setup(to='first').setup(to='last')
                 for nx2 in range(state.Nx):
