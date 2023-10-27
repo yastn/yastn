@@ -1,7 +1,7 @@
 """ Generator of basic local spingless-fermion operators. """
 from __future__ import annotations
 from ..sym import sym_Z2, sym_U1
-from ..tensor import YastnError, Tensor
+from ..tensor import YastnError, Tensor, Leg
 from ._meta_operators import meta_operators
 
 class SpinlessFermions(meta_operators):
@@ -15,11 +15,14 @@ class SpinlessFermions(meta_operators):
 
         Parameters
         ----------
-        sym : str
-            Should be 'Z2' or 'U1'. Fixes symmetry and fermionic fields in config.
+            sym : str
+                Explicit symmetry to used. Allowed options are :code:`'Z2'`, or :code:`'U1'`.
 
-        **kwargs : any
-            Passed to :meth:`yastn.make_config` to change backend, default_device or other config parameters.
+            **kwargs : any
+                Passed to :meth:`yastn.make_config` to change backend,
+                default_device or other config parameters.
+
+        Fixes :code:`fermionic` fields in config to :code:`True`.
         """
         if sym not in ('Z2', 'U1'):
             raise YastnError("For SpinlessFermions sym should be in ('Z2', 'U1').")
@@ -29,6 +32,10 @@ class SpinlessFermions(meta_operators):
         super().__init__(**kwargs)
         self._sym = sym
         self.operators = ('I', 'n', 'c', 'cp')
+
+    def space(self) -> yastn.Leg:
+        r""" :class:`yastn.Leg` describing local Hilbert space. """
+        return Leg(self.config, s=1, t=(0, 1), D=(1, 1))  # the same for U1 and Z2
 
     def I(self) -> yastn.Tensor:
         r""" Identity operator. """
@@ -45,9 +52,9 @@ class SpinlessFermions(meta_operators):
         return n
 
     def vec_n(self, val=0) -> yastn.Tensor:
-        r""" Vector with occupation 0 or 1. """
+        r""" State with occupation 0 or 1. """
         if val not in (0, 1):
-            raise YastnError("For SpinlessFermions val in vec_n should be in (0, 1).")
+            raise YastnError("Occupation val should be in (0, 1).")
         vec = Tensor(config=self.config, s=(1,), n=val)
         vec.set_block(ts=(val,), Ds=(1,), val=1)
         return vec

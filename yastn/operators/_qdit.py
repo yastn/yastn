@@ -1,6 +1,8 @@
+from __future__ import annotations
 from ..sym import sym_none
 from ..initialize import eye
 from .. import diag
+from ..tensor import Leg
 from ._meta_operators import meta_operators
 
 class Qdit(meta_operators):
@@ -28,7 +30,11 @@ class Qdit(meta_operators):
         self._sym = 'dense'
         self.operators = ('I',)
 
-    def I(self):
+    def space(self) -> yastn.Leg:
+        r""" :class:`yastn.Leg` describing local Hilbert space. """
+        return Leg(self.config, s=1, D=(self._d,))
+
+    def I(self) -> yastn.Tensor:
         """ Identity operator. """
         return diag(eye(config=self.config, s=self.s, D=self._d))
 
