@@ -9,7 +9,7 @@ class Qdit(meta_operators):
     # Predefine dense operators with set dimension of the local space.
     def __init__(self, d=2, **kwargs):
         r"""
-        Algebra of d-dimensional Hilbert space with only identity operator.
+        Algebra of d-dimensional Hilbert space with only identity operator, and local Hilbert space as a :class:`yastn.Leg`.
 
         Parameters
         ----------

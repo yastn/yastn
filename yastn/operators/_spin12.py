@@ -12,7 +12,7 @@ class Spin12(meta_operators):
         A set of standard operators for 2-dimensional Hilbert space. Defines identity,
         :math:`S^z,\ S^x,\ S^y` operators and :math:`S^+,\ S^-` raising and lowering operators,
         and Pauli matrices (if allowed by symmetry).
-        Define eigenvectors of :math:`S^z`, :math:`S^x`, :math:`S^y`.
+        Define eigenvectors of :math:`S^z`, :math:`S^x`, :math:`S^y`, and local Hilbert space as a :class:`yastn.Leg`.
 
         Parameters
         ----------

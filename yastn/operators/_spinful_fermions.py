@@ -12,7 +12,7 @@ class SpinfulFermions(meta_operators):
         Generator of standard operators for local Hilbert space with two fermionic species and 4-dimensional Hilbert space.
 
         Predefine identity, creation, annihilation, and density operators.
-        Defines vectors with possible occupations.
+        Defines vectors with possible occupations, and local Hilbert space as a :class:`yastn.Leg`.
 
         Parameters
         ----------

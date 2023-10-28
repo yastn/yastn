@@ -11,7 +11,7 @@ class SpinlessFermions(meta_operators):
         r"""
         Standard operators for single fermionic species and 2-dimensional Hilbert space.
         Defines identity, creation, annihilation, and density operators.
-        Defines vectors for empty and occupied states.
+        Defines vectors for empty and occupied states, and local Hilbert space as a :class:`yastn.Leg`.
 
         Parameters
         ----------

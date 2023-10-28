@@ -13,7 +13,7 @@ class Spin1(meta_operators):
         A set of standard operators for 3-dimensional Hilbert space as Spin-1 representation
         of su(2) algebra. Defines identity, :math:`S^z,\ S^x,\ S^y` operators
         and :math:`S^+,\ S^-` raising and lowering operators (if allowed by symmetry).
-        Define eigenvectors of :math:`S^z`, :math:`S^x`, :math:`S^y`.
+        Define eigenvectors of :math:`S^z`, :math:`S^x`, :math:`S^y`, and local Hilbert space as a :class:`yastn.Leg`.
 
         Parameters
         ----------
