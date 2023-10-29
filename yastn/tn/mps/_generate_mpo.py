@@ -23,6 +23,7 @@ class Hterm(NamedTuple):
     operators : Sequence[yastn.Tensor]
         local operators in the product that are different than the identity.
         *i*-th operator is acting at `positions[i]`.
+        Each operator should have `ndim=2` and signature `s=(+1, -1).`
     """
     amplitude : float = 1.0
     positions : tuple = ()
@@ -75,14 +76,14 @@ class GenerateMpoTemplate(NamedTuple):
     tleft : list = None
 
 
-def generate_mpo_preprocessing(I, terms, return_amplitudes=False) -> GenerateMpoTemplate | list[float]:
+def generate_mpo_preprocessing(I, terms, return_amplitudes=False) -> GenerateMpoTemplate | tuple[GenerateMpoTemplate, list[float]]:
     r"""
     Precompute an amplitude-independent template that is used
     to generate MPO with :meth:`mps.generate_mpo_fast<yastn.tn.mps.generate_mpo_fast>`
 
     Parameters
     ----------
-    term: list of :class:`Hterm`
+    terms: list of :class:`Hterm`
         product operators making up the MPO.
     I: yastn.tn.mps.MpsMpo
         identity MPO.
@@ -156,7 +157,7 @@ def generate_mpo_fast(template, amplitudes, opts=None) -> yastn.tn.mps.MpsMpo:
 
     Preprocessing in :meth:`yastn.tn.mps.generate_mpo` might be slow.
     When only amplitudes in Hterms are changing, e.g., for time-dependent Hamiltonian,
-    MPO generation can be significantly speeded up by precalculating an reusing amplitude-independent `template`.
+    MPO generation can be significantly speeded up by precalculating and reusing amplitude-independent `template`.
     The latter is done with :meth:`yastn.tn.mps.generate_mpo_preprocessing`.
 
     Parameters
@@ -190,11 +191,6 @@ def generate_mpo_fast(template, amplitudes, opts=None) -> yastn.tn.mps.MpsMpo:
 
     M = Mpo(len(template.basis))
     for n in M.sweep():
-        #   nJ = J @ template.trans[n]
-        #   if n < M.last:
-        #       nJ, S, V = svd_with_truncation(nJ, axes=((0, 1), 2), sU=1, **opts)
-        #       J = S @ V
-        #   M[n] = ncon([nJ, template.basis[n]], [[0, 1, -2], [1, -1, -3]])
         nJ = J @ template.trans[n]
         nJ = ncon([nJ, template.basis[n]], [[0, 1, -3], [1, -1, -2]])
         if n < M.last:
@@ -218,7 +214,7 @@ def generate_mpo(I, terms, opts=None) -> yastn.tn.mps.MpsMpo:
 
     Parameters
     ----------
-    term: Sequence[yastn.tn.mps.Hterm]
+    terms: Sequence[yastn.tn.mps.Hterm]
         Product operators making up MPO.
     I: yastn.tn.mps.MpsMpo
         Identity MPO.

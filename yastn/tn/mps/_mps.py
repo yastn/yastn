@@ -614,8 +614,7 @@ class MpsMpo:
         Serialize MPS/MPO into a dictionary.
 
         Each element represents serialized :class:`yastn.Tensor`
-        (see :meth:`yastn.Tensor.save_to_dict`)
-        of the MPS/MPO starting from the first site to the last.
+        (see, :meth:`yastn.Tensor.save_to_dict`) of the MPS/MPO.
         """
         out_dict = {
             'nr_phys': self.nr_phys,

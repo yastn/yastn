@@ -265,7 +265,7 @@ def load_from_dict(config=None, d=None) -> yastn.Tensor:
         :ref:`YASTN configuration <tensor/configuration:yastn  configuration>`
     d : dict
         Tensor stored in form of a dictionary. Typically provided by an output
-        of :meth:`yastn.save_to_dict`
+        of :meth:`yastn.Tensor.save_to_dict`
     """
     if d is not None:
         c_isdiag = bool(d['isdiag'])
@@ -324,7 +324,7 @@ def decompress_from_1d(r1d, meta) -> yastn.Tensor:
     charges and dimensions of its non-zero blocks, and 1-D array `r1d` containing
     serialized data of non-zero blocks.
 
-    Typically, the pair `r1d` and `meta` is obtained from :meth:`yastn.compress_to_1d`.
+    Typically, the pair `r1d` and `meta` is obtained from :meth:`yastn.Tensor.compress_to_1d`.
 
     Parameters
     ----------

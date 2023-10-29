@@ -23,24 +23,25 @@ An empty MPS/MPO can be filled with tensors by setting them one by one.
 
 .. code-block::
 
+    import yastn
     import yastn.tn.mps as mps
 
     # create empty MPS over three sites
     psi = mps.Mps(3)
 
     # create 3x2x3 random dense tensor
-    cfg = yastn.make_config()
-    legs = [yastn.Leg(config=cgf, s=-1, D=(3,)),
-            yastn.Leg(config=cgf, s=1, D=(2,)),
-            yastn.Leg(config=cgf, s=1, D=(3,))]
-    A_1 = yastn.rand(config=cfg, legs=legs)
+    config = yastn.make_config()  # config for dense tensors
+    legs = [yastn.Leg(config, s=-1, D=(3,)),
+            yastn.Leg(config, s=1, D=(2,)),
+            yastn.Leg(config, s=1, D=(3,))]
+    A_1 = yastn.rand(config, legs=legs)
 
     # assign tensor to site 1
     psi[1] = A_1
 
 Tensor should be of the rank expected for :ref:`MPS<theory/mps/basics:Matrix product state (MPS)>` or :ref:`MPO<theory/mps/basics:Matrix product operator (MPO)>`.
 The virtual dimensions/spaces of the neighboring MPS/MPO tensors should be consistent, which, however, is not tested during direct assigment.
-For examples creating MPS/MPO by hand, see :ref:`Ground state of Spin-1 AKLT model<examples/mps/build:Ground state of spin-1 AKLT model>`
+For examples showing creation of MPS/MPO by hand, see :ref:`Ground state of Spin-1 AKLT model<examples/mps/build:Ground state of spin-1 AKLT model>`
 and :ref:`MPO for hopping model with U(1) symmetry<examples/mps/build:Hamiltonian for nearest-neighbor hopping/XX model>`.
 
 

@@ -4,12 +4,17 @@ Basic concepts
 Matrix product state (MPS)
 --------------------------
 
-Numerical simulations of quantum many-body systems prove to be hard due to the exponentially growing size of the matrix representation of the system with the number of constituent particles.
+Numerical simulations of quantum many-body systems prove to be hard due to the exponentially
+growing size of the matrix representation of the system with the number of constituent particles.
 In particular, if the local Hilbert space for *j*-th particle, :math:`\mathcal{H}_j`, has dimension :math:`d`
-(e.g., :math:`d=2` for qubit and :math:`d=3` for qutrit) then for :math:`N` particles it will be :math:`\mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1}` of dimension :math:`d^N`.
-Bipartite tensor networks, such as matrix product states, introduce a concept of efficient separation of variables which splits groups of particles, performing :ref:`spectral decomposition<tensor/algebra:spectral decompositions and truncation>` e.g. singular value decomposition
-(`SVD <https://en.wikipedia.org/wiki/Singular_value_decomposition>`_).
-To form a `matrix product state`, SVD at first isolates `0`-th site from `1-to-N-1`-th, then `0-to-1` from `2-to-N-1`-th, and so on until the state is decomposed into `N` tensors.
+(e.g., :math:`d=2` for qubit and :math:`d=3` for qutrit) then :math:`N` sites
+will have the total Hilbert space :math:`\mathcal{H} = \mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1}`
+of dimension :math:`d^N`. Bipartite tensor networks, such as matrix product states,
+introduce a concept of efficient separation of variables which splits groups of particles,
+performing :ref:`spectral decomposition<tensor/algebra:spectral decompositions and truncation>`,
+e.g. singular value decomposition (`SVD <https://en.wikipedia.org/wiki/Singular_value_decomposition>`_).
+To form a `matrix product state`, SVD at first isolates `0`-th site from `1-to-N-1`-th,
+then `0-to-1` from `2-to-N-1`-th, and so on until the state is decomposed into `N` tensors.
 
 .. math::
     \Psi^{\sigma_0,\sigma_1\dots \sigma_{N-1}} \in \mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1} \xrightarrow{SVD}{\sum_{j_0,j_1\dots j_{N-1}} \, A^{\sigma_0}_{,j_0} A^{\sigma_1}_{j_0,j_1} \dots A^{\sigma_{N-2}}_{j_{N-2},j_{N-1}} A^{\sigma_{N-1}}_{j_{N-1},}}

@@ -15,8 +15,7 @@ def save_to_dict(a) -> dict:
     r"""
     Export YASTN tensor to dictionary containing all the information needed to recreate the tensor.
 
-    .. note::
-        allows to save the tensor, e.g. with numpy.save()
+    Allows saving the tensor, e.g., with numpy.save()
 
     Complementary function is :meth:`yastn.load_from_dict`
 
@@ -73,7 +72,7 @@ def compress_to_1d(a, meta=None) -> tuple[numpy.array | torch.tensor, dict]:
             meta does not match the tensor.
 
     .. note::
-        :meth:`yastn.Tensor.compress_to_1d` and :meth:`yastn.Tensor.decompress_from_1d`
+        :meth:`yastn.Tensor.compress_to_1d` and :meth:`yastn.decompress_from_1d`
         provide mechanism that allows using external matrix-free methods, such as eigs implemented in scipy.
 
     Returns
