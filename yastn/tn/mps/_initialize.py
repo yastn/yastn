@@ -5,7 +5,6 @@ from ._mps import Mpo, Mps, MpsMpo
 from ...operators import Qdit
 
 
-
 def product_mps(vectors, N=None) -> yastn.tn.mps.MpsMpo:
     r"""
     Generate an MPS with bond-dimension one from a list of vectors which get assigned to consecutive MPS sites.
@@ -17,7 +16,7 @@ def product_mps(vectors, N=None) -> yastn.tn.mps.MpsMpo:
     vectors : Sequence[yastn.Tensor] | yastn.Tensor
         Tensors will be attributed to consecutive MPS sites.
         Each tensor should have `ndim=1` and the signature `s=+1`.
-        They can have non-zero charges that will be converted into MPS virtual legs.
+        They can have non-zero charges that will be converted into matching MPS virtual legs.
 
     N : Optional[int]
         number of MPS sites. By default, it is equal to the number of provided `vectors`.
@@ -27,7 +26,7 @@ def product_mps(vectors, N=None) -> yastn.tn.mps.MpsMpo:
 
 def product_mpo(operators, N=None) -> yastn.tn.mps.MpsMpo:
     r"""
-    Generate an MPO with bond-dimension one list of operators which get assigned to consecutive MPO sites.
+    Generate an MPO with bond-dimension one from a list of operators which get assigned to consecutive MPO sites.
 
     In `N` is provided, operators are cyclicly iterated to fill in `N` MPO sites.
 
@@ -36,7 +35,7 @@ def product_mpo(operators, N=None) -> yastn.tn.mps.MpsMpo:
     operators : Sequence[yastn.Tensor] | yastn.Tensor
         Tensors will be attributed to consecutive MPS sites.
         Each tensor should have `ndim=2` and the signature `s=(+1, -1)`.
-        They can have non-zero charges, that will be converted into MPO virtual legs.
+        They can have non-zero charges, that will be converted into matching MPO virtual legs.
 
     N : Optional[int]
         number of MPO sites. By default, it is equal to the number of provided `operators`.
@@ -50,7 +49,10 @@ def product_mpo(operators, N=None) -> yastn.tn.mps.MpsMpo:
         # which is the base ingredient for a few other functions
         # generating more complicated MPOs and MPSs.
 
-        ops = operators.Spin12(sym='Z2')
+        import yastn
+        import yastn.tn.mps as mps
+
+        ops = yastn.operators.Spin12(sym='Z2')
         I = mps.product_mpo(ops.I(), N=8)
 
         # Here, each site has the same local physical Hilbert space
@@ -92,17 +94,18 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
     r"""
     Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
-    Local Hilbert spaces, as well as the number of sites,
-    are read from ket spaces of provided MPS or MPO `I`, e.g., an identity MPO.
+    Local Hilbert spaces are read from ket spaces
+    of provided MPS or MPO `I`. For instance, `I` can be an identity MPO.
+    The number of sites and Tensor config is also inherited from `I`.
 
     Parameters
     ----------
     I : yastn.tn.mps.MpsMpo
         MPS or MPO that defines local Hilbert spaces.
     n : int
-        Total charge.
-        Virtual MPS spaces are drawn randomly from normal distribution,
-        which mean changes linearly along the chain from `n` to 0.
+        Total charge of MPS.
+        Virtual MPS spaces are drawn randomly from a normal distribution,
+        whose mean value changes linearly along the chain from `n` to 0.
     D_total : int
         Largest bond dimension. Due to the random nature of the algorithm,
         the desired total bond dimension might not be reached on some bonds,
@@ -110,7 +113,22 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
     sigma : int
         The standard deviation of the normal distribution.
     dtype : string
-        Number format, e.g., ``'float64'`` or ``'complex128'``
+        Number format, i.e., ``'float64'`` or ``'complex128'``
+
+    Example
+    -------
+
+    ::
+
+        import yastn
+        import yastn.tn.mps as mps
+
+        ops = yastn.operators.SpinlessFermions(sym='U1')
+        I = mps.product_mpo(ops.I(), N=13)
+        psi = mps.random_mps(I, n=6, D_total=8)
+
+        # Random MPS with 13 sites occupied by 6 fermions (fixed by U1 symmetry),
+        # and maximal bond dimension 8.
     """
     if n is None:
         n = (0,) * I.config.sym.NSYM
@@ -125,7 +143,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
 
     lr = Leg(config, s=1, t=(tuple(an * 0),), D=(1,),)
     for site in psi.sweep(to='first'):
-        lp = I[site].get_legs(axes=1)
+        lp = I[site].get_legs(axes=1)  # ket leg of MPS/MPO
         nl = tuple(an * (I.N - site) / I.N)  # mean n changes linearly along the chain
         if site != psi.first:
             ll = random_leg(config, s=-1, n=nl, D_total=D_total, sigma=sigma, legs=[lp, lr])
@@ -138,14 +156,13 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
     raise YastnError("MPS: Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization. ")
 
 
-
 def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
     r"""
     Generate a random MPO with bond dimension ``D_total``.
 
     The number of sites and local bra and ket spaces of MPO follow
     from provided MPO `I`, e.g., an identity MPO.
-    (`I` can be an MPS, in which case its ket spaces are used)
+    `I` can be an MPS, in which case its ket spaces are used.
 
     Parameters
     ----------
@@ -156,10 +173,10 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
         the desired total bond dimension might not be reached on some bonds,
         in particular, for higher symmetries.
     sigma : int
-        Standard deviation of the normal distribution
+        Standard deviation of a normal distribution
         from which dimensions of charge sectors are drawn.
     dtype : string
-        number format, e.g., ``'float64'`` or ``'complex128'``
+        number format, i.e., ``'float64'`` or ``'complex128'``
     """
     config = I.config
     n0 = (0,) * config.sym.NSYM
@@ -168,7 +185,7 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
     lr = Leg(config, s=1, t=(n0,), D=(1,),)
     for site in psi.sweep(to='first'):
         lp = I[site].get_legs(axes=1)
-        lpc = I[site].get_legs(axes=3) if I[site].ndim == 3 else lp.conj()
+        lpc = I[site].get_legs(axes=3) if I[site].ndim == 4 else lp.conj()
         if site != psi.first:
             ll = random_leg(config, s=-1, n=n0, D_total=D_total, sigma=sigma, legs=[lp, lr, lpc])
         else:
@@ -180,12 +197,13 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
     raise YastnError("Random mpo is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
 
 
-def random_dense_mps(N, D, d, **kwargs):
-    r"""Generate random mps with physical dimension d and virtual dimension D."""
+def random_dense_mps(N, D, d, **kwargs) -> yastn.tn.mps.MpsMpo:
+    r"""Generate random MPS with physical dimension d and virtual dimension D."""
     I = product_mpo(Qdit(d=d, **kwargs).I(), N)
     return random_mps(I, D_total=D)
 
-def random_dense_mpo(N, D, d, **kwargs):
-    r"""Generate random mpo with physical dimension d and virtual dimension D."""
+
+def random_dense_mpo(N, D, d, **kwargs) -> yastn.tn.mps.MpsMpo:
+    r"""Generate random MPO with physical dimension d and virtual dimension D."""
     I = product_mpo(Qdit(d=d, **kwargs).I(), N)
     return random_mpo(I, D_total=D)

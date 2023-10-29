@@ -38,9 +38,9 @@ Copying and cloning with autograd
 
 YASTN follows the semantics of PyTorch with regards to creating
 differentiable `clones` or non-differentiable `copies` of symmetric
-tensors. See 
-`clone <https://pytorch.org/docs/stable/generated/torch.clone.html#torch.clone>`_ 
-and 
+tensors. See
+`clone <https://pytorch.org/docs/stable/generated/torch.clone.html#torch.clone>`_
+and
 `detach <https://pytorch.org/docs/stable/generated/torch.Tensor.detach.html?highlight=detach#torch.Tensor.detach>`_ for PyTorch.
 
 See YASTN examples: :ref:`examples/tensor/init:clone, detach or copy tensors`.
@@ -67,18 +67,20 @@ Tensors can be moved between devices and/or their `dtype` changed
 Import/Export of YASTN tensors from/to different formats
 --------------------------------------------------------
 
-These utility operations can re-create tensors from
-different formats. For example, 1D representation or dictionary.
-Their export counterparts are
-
-	* :meth:`yastn.save_to_dict`
-	* :meth:`yastn.save_to_hdf5`
-	* :meth:`yastn.compress_to_1d`
+These utility operations can export and then import tensors from
+different formats. For example, 1D representation or dictionaries.
 
 See examples: :ref:`examples/tensor/init:serialization of symmetric tensors`.
 
-.. automodule:: yastn
-   :noindex:
-   :members: load_from_dict, load_from_hdf5, decompress_from_1d,
-             save_to_dict, save_to_hdf5, compress_to_1d
-   :show-inheritance:
+.. autofunction:: yastn.Tensor.save_to_dict
+
+.. autofunction:: yastn.Tensor.save_to_hdf5
+
+.. autofunction:: yastn.Tensor.compress_to_1d
+
+.. autofunction:: yastn.load_from_dict
+
+.. autofunction:: yastn.load_from_hdf5
+
+.. autofunction:: yastn.decompress_from_1d
+

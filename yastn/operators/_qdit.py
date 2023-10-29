@@ -1,13 +1,15 @@
+from __future__ import annotations
 from ..sym import sym_none
 from ..initialize import eye
 from .. import diag
+from ..tensor import Leg
 from ._meta_operators import meta_operators
 
 class Qdit(meta_operators):
     # Predefine dense operators with set dimension of the local space.
     def __init__(self, d=2, **kwargs):
         r"""
-        Algebra of d-dimensional Hilbert space with only identity operator.
+        Algebra of d-dimensional Hilbert space with only identity operator, and local Hilbert space as a :class:`yastn.Leg`.
 
         Parameters
         ----------
@@ -28,7 +30,11 @@ class Qdit(meta_operators):
         self._sym = 'dense'
         self.operators = ('I',)
 
-    def I(self):
+    def space(self) -> yastn.Leg:
+        r""" :class:`yastn.Leg` describing local Hilbert space. """
+        return Leg(self.config, s=1, D=(self._d,))
+
+    def I(self) -> yastn.Tensor:
         """ Identity operator. """
         return diag(eye(config=self.config, s=self.s, D=self._d))
 

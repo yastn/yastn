@@ -1,15 +1,20 @@
 Basic concepts
---------------
+==============
 
 Matrix product state (MPS)
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+--------------------------
 
-Numerical simulations of quantum many-body systems prove to be hard due to the exponentially growing size of the matrix representation of the system with the number of constituent particles.
+Numerical simulations of quantum many-body systems prove to be hard due to the exponentially
+growing size of the matrix representation of the system with the number of constituent particles.
 In particular, if the local Hilbert space for *j*-th particle, :math:`\mathcal{H}_j`, has dimension :math:`d`
-(e.g., :math:`d=2` for qubit and :math:`d=3` for qutrit) then for :math:`N` particles it will be :math:`\mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1}` of dimension :math:`d^N`.
-Bipartite tensor networks, such as matrix product states, introduce a concept of efficient separation of variables which splits groups of particles, performing :ref:`spectral decomposition<tensor/algebra:spectral decompositions and truncation>` e.g. singular value decomposition
-(`SVD <https://en.wikipedia.org/wiki/Singular_value_decomposition>`_).
-To form a `matrix product state`, SVD at first isolates `0`-th site from `1-to-N-1`-th, then `0-to-1` from `2-to-N-1`-th, and so on until the state is decomposed into `N` tensors.
+(e.g., :math:`d=2` for qubit and :math:`d=3` for qutrit) then :math:`N` sites
+will have the total Hilbert space :math:`\mathcal{H} = \mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1}`
+of dimension :math:`d^N`. Bipartite tensor networks, such as matrix product states,
+introduce a concept of efficient separation of variables which splits groups of particles,
+performing :ref:`spectral decomposition<tensor/algebra:spectral decompositions and truncation>`,
+e.g. singular value decomposition (`SVD <https://en.wikipedia.org/wiki/Singular_value_decomposition>`_).
+To form a `matrix product state`, SVD at first isolates `0`-th site from `1-to-N-1`-th,
+then `0-to-1` from `2-to-N-1`-th, and so on until the state is decomposed into `N` tensors.
 
 .. math::
     \Psi^{\sigma_0,\sigma_1\dots \sigma_{N-1}} \in \mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1} \xrightarrow{SVD}{\sum_{j_0,j_1\dots j_{N-1}} \, A^{\sigma_0}_{,j_0} A^{\sigma_1}_{j_0,j_1} \dots A^{\sigma_{N-2}}_{j_{N-2},j_{N-1}} A^{\sigma_{N-1}}_{j_{N-1},}}
@@ -48,7 +53,7 @@ controls the quality of the approximation, where the exact representation is rec
 
 
 Matrix product operator (MPO)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+-----------------------------
 
 *Matrix product operator* is tensor product representation for an operator on space of :math:`N` particles,
 in general a :math:`d^N \times d^N` matrix, by :math:`N` tensors with two physical and two virtual indices.
@@ -79,7 +84,7 @@ MPO with open boundary conditions has a bond dimension :math:`D=1` on the edges 
 
 
 Canonical form
-^^^^^^^^^^^^^^
+--------------
 
 The practical success of matrix product states is closely related to the existence of its canonical forms.
 Among others, this allow using local :ref:`sepctral decomposition<tensor/algebra:spectral decompositions and truncation>` to perform globally optimal truncation of the MPS on a specific bond.
@@ -115,7 +120,7 @@ A mixed canonical form with respect to some bond or MPS site interpolates betwee
 
 
 Algorithms
-^^^^^^^^^^
+----------
 
 :ref:`Density matrix renormalization group (DMRG)<mps/algorithms_dmrg:density matrix renormalization group (dmrg) algorithm>`
 is an algorithm searching for the MPS which extremizes the expectation value of the hermitian operator written as MPO, usually the Hamiltonian.
@@ -126,7 +131,7 @@ TDVP can be performed for the evolution of MPS under MPO for a time `t`, real or
 
 
 Measurements
-^^^^^^^^^^^^
+------------
 
 Scalar product :math:`\langle\Phi|\Psi\rangle`, written in bra-ket notation, where :math:`|\Psi\rangle` is the MPS and
 :math:`\langle\Phi|` is a conjugation of the MPS. This overlap can be calculated for an arbitrary pair of vectors of matching physical indices.
@@ -159,7 +164,7 @@ The overlap can be efficiently calculated for any pair of vectors and operator i
 
 
 References & Related works
-^^^^^^^^^^^^^^^^^^^^^^^^^^
+--------------------------
 
 1. "Tensor Network Contractions: Methods and Applications to Quantum Many-Body Systems" Shi-Ju Ran, Emanuele Tirrito, Cheng Peng, Xi Chen, Luca Tagliacozzo, Gang Su, Maciej Lewenstein `Lecture Notes in Physics LNP, volume 964, (2020) <https://link.springer.com/book/10.1007/978-3-030-34489-4>`_
 2. "The density-matrix renormalization group in the age of matrix product states" Ulrich Schollwoeck, `Annals of Physics, Volume 326, Issue 1, Pages 96-192, (2011) <https://arxiv.org/pdf/1008.3477.pdf>`_
