@@ -108,6 +108,8 @@ def _dmrg_(psi, H, project, method,
         if not Schmidt_tol > 0:
             raise YastnError('DMRG: Schmidt_tol has to be positive or None.')
         Schmidt_old = psi.get_Schmidt_values()
+        Schmidt_old = {(n-1, n): sv for n, sv in enumerate(Schmidt_old)}
+
     max_dS, max_dw = None, None
     Schmidt = None if Schmidt_tol is None else {}
 
