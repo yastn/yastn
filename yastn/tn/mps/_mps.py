@@ -148,13 +148,32 @@ class MpsMpo:
             raise YastnError('MPS: Number of Mps sites N should be a positive integer.')
         if nr_phys not in (1, 2):
             raise YastnError('MPS: Number of physical legs, nr_phys, should be equal to 1 or 2.')
-        self.N = N
+        self._N = N
         self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
         self.pC = None  # index of the central site, None if it does not exist
-        self.first = 0  # index of the first lattice site
-        self.last = N - 1  # index of the last lattice site
-        self.nr_phys = nr_phys
+        self._first = 0  # index of the first lattice site
+        self._last = N - 1  # index of the last lattice site
+        self._nr_phys = nr_phys
         self.factor = 1  # multiplicative factor is real and positive (e.g. norm)
+
+    @property
+    def first(self):
+        return self._first
+
+    @property
+    def last(self):
+        return self._last
+
+    @property
+    def nr_phys(self):
+        return self._nr_phys
+
+    @property
+    def N(self):
+        return self._N
+
+    def __len__(self):
+        return self._N
 
     @property
     def config(self):
@@ -169,7 +188,7 @@ class MpsMpo:
         to : str
             'first' or 'last'.
         df, dl : int
-            shift iterator by df >= 0 and dl >= 0 from the first and the last site, respectively.
+            shift iterator by :math:`df \ge 0` and :math:`dl \ge 0` from the first and the last site, respectively.
         """
         if to == 'last':
             return range(df, self.N - dl)
@@ -244,6 +263,10 @@ class MpsMpo:
     def __rmul__(self, number) -> yastn.tn.mps.MpsMpo:
         """ New MPS/MPO with the first tensor multiplied by a scalar. """
         return self.__mul__(number)
+
+    def __truediv__(self, number) -> yastn.tn.mps.MpsMpo:
+        """ Divide MPS/MPO by a scalar. """
+        return self.__mul__(1 / number)
 
     def __add__(self, phi) -> yastn.tn.mps.MpsMpo:
         """ Sum of two Mps's or two Mpo's. """
@@ -552,8 +575,9 @@ class MpsMpo:
 
     def get_bond_dimensions(self) -> Sequence[int]:
         r"""
-        Returns total bond dimensions of all virtual spaces along MPS/MPO from the first to the last site,
-        including "trivial" leftmost and rightmost virtual spaces.
+        Returns total bond dimensions of all virtual spaces along MPS/MPO from
+        the first to the last site, including "trivial" leftmost and rightmost virtual spaces.
+        This gives a tuple with `N + 1` elements.
         """
         Ds = [self.A[n].get_shape(axes=0) for n in self.sweep(to='last')]
         Ds.append(self.A[self.last].get_shape(axes=2))
@@ -561,9 +585,10 @@ class MpsMpo:
 
     def get_bond_charges_dimensions(self) -> Sequence[dict[Sequence[int], int]]:
         r"""
-        Returns list of charge sectors and their dimensions for all virtual spaces along MPS/MPO from the first to the last site,
-        including "trivial" leftmost and rightmost virtual spaces.
+        Returns list of charge sectors and their dimensions for all virtual spaces along MPS/MPO
+        from the first to the last site, including "trivial" leftmost and rightmost virtual spaces.
         Each element of the list is a dictionary {charge: sectorial bond dimension}.
+        This gives a list with `N + 1` elements.
         """
         tDs = []
         for n in self.sweep(to='last'):
@@ -572,6 +597,27 @@ class MpsMpo:
         leg = self.A[self.last].get_legs(axes=2)
         tDs.append(leg.tD)
         return tDs
+
+    def get_virtual_legs(self) -> Sequence[yastn.Leg]:
+        r"""
+        Returns :class:`yastn.Leg` of all virtual spaces along MPS/MPO from
+        the first to the last site, in the form of the `0th` leg of each MPS/MPO tensor.
+        Finally, append the rightmost virtual spaces, i.e., `2nd` leg of the last tensor,
+        conjugating it so that all legs have signature `-1`.
+        This gives a list with `N + 1` elements.
+        """
+        legs = [self.A[n].get_legs(axes=0) for n in self.sweep(to='last')]
+        legs.append(self.A[self.last].get_legs(axes=2).conj())
+        return legs
+
+    def get_physical_legs(self) -> Sequence[yastn.Leg] | Sequence[tuple(yastn.Leg, yastn.Leg)]:
+        r"""
+        Returns :class:`yastn.Leg` of all physical spaces along MPS/MPO from
+        the first to the last site. For MPO return a tuple of ket and bra spaces for each site.
+        """
+        if self.nr_phys == 2:
+            return [self.A[n].get_legs(axes=(1, 3)) for n in self.sweep(to='last')]
+        return [self.A[n].get_legs(axes=1) for n in self.sweep(to='last')]
 
     def get_entropy(self, alpha=1) -> Sequence[number]:
         r"""
@@ -582,31 +628,30 @@ class MpsMpo:
         ----------
         alpha : int
             value 1 (default) computes Von Neumann entropy.
-            Higher values instead compute order `alpha` Renyi entropies.
+            Other values refer to order `alpha` Renyi entropies.
         """
-        Entropy = [0] * (self.N + 1)
-        psi = self.shallow_copy()
-        psi.absorb_central(to='first')
-        psi.canonize_(to='last', normalize=False)
-        for n in psi.sweep(to='first'):
-            psi.orthogonalize_site(n=n, to='first', normalize=False)
-            Entropy[n], _, _ = tensor.entropy(psi.A[psi.pC], alpha=alpha)
-            psi.absorb_central(to='first')
-        return Entropy
+        schmidt_spectra = self.get_Schmidt_values()
+        return [tensor.entropy(spectrum, alpha=alpha)[0] for spectrum in schmidt_spectra]
 
-    def get_Schmidt_values(self) -> dict[tuple[int, int], yastn.Tensor]:
+
+    def get_Schmidt_values(self) -> Sequence[yastn.Tensor]:
         r"""
-        Schmidt values for bipartition across all bonds (i-1, i). Schmidt values are stored as diagonal tensors.
+        Schmidt values for bipartition across all bonds along MPS/MPO from the first to the last site,
+        including "trivial" leftmost and rightmost cuts. This gives a list with `N + 1` elements.
+        Schmidt values are stored as diagonal tensors.
         """
-        SV = {}
+        SV = []
         psi = self.shallow_copy()
-        psi.canonize_(to='last', normalize=False)
-        psi.absorb_central(to='first')
-        for n in psi.sweep(to='first', df=1):
-            psi.orthogonalize_site(n=n, to='first', normalize=False)
+        psi.canonize_(to='first', normalize=False)
+        # canonize_ attaches trivial central block at the end
+        axes = (0, (1, 2)) if self.nr_phys == 1 else (0, (1, 2, 3))
+        _, sv, _ = tensor.svd(psi.A[self.first], axes=axes, sU=1)
+        SV.append(sv)
+        for n in psi.sweep(to='last'):
+            psi.orthogonalize_site(n=n, to='last', normalize=False)
             _, sv, _ = tensor.svd(psi.A[psi.pC], sU=1)
-            SV[psi.pC] = sv
-            psi.absorb_central(to='first')
+            SV.append(sv)
+            psi.absorb_central(to='last')
         return SV
 
     def save_to_dict(self) -> dict[int, dict]:

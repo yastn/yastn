@@ -15,7 +15,7 @@ Ground state of spin-1 AKLT model
 Here, as an example, we set up a well-known exact MPS: A ground state of
 `Affleck-Kennedy-Lieb-Tasaki (AKLT) model <https://en.wikipedia.org/wiki/AKLT_model>`_.
 
-.. literalinclude:: /../../tests/mps/test_initialization.py
+.. literalinclude:: /../../tests/mps/test_measurement.py
         :pyobject: build_spin1_aklt_state
 
 
@@ -94,3 +94,19 @@ Using HDF5 format
 
 .. literalinclude:: /../../tests/mps/test_save_load.py
         :pyobject: test_basic_hdf5
+
+
+Expectation values
+==================
+
+Expectation values in mps
+-------------------------
+
+.. literalinclude:: /../../tests/mps/test_measurement.py
+        :pyobject: test_measure_mps
+
+Entropy and Schmidt values
+--------------------------
+
+.. literalinclude:: /../../tests/mps/test_measurement.py
+        :pyobject: test_mps_spectrum
