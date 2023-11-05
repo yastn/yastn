@@ -289,6 +289,17 @@ def svd(data, meta, sizes, **kwargs):
     return Udata, Sdata, Vdata
 
 
+def svdvals(data, meta, sizeS, **kwargs):
+    Sdata = np.empty((sizeS,), dtype=DTYPE['float64'])
+    for (sl, D, _, _, slS, _, _) in meta:
+        try:
+            S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False)
+        except scipy.linalg.LinAlgError:  # pragma: no cover
+            S = scipy.linalg.svd(data[slice(*sl)].reshape(D), full_matrices=False, compute_uv=False, lapack_driver='gesvd')
+        Sdata[slice(*slS)] = S
+    return Sdata
+
+
 def fix_svd_signs(Udata, Vdata, meta):
     for (_, _, slU, DU, _, slV, DV) in meta:
         Utemp = Udata[slice(*slU)].reshape(DU)

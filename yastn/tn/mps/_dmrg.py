@@ -163,8 +163,7 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
             _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
             psi.orthogonalize_site(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != psi.first:
-                _, S, _ = psi[psi.pC].svd(sU=1)
-                Schmidt[psi.pC] = S
+                Schmidt[psi.pC] = psi[psi.pC].svd(sU=1, compute_uv=False)
             psi.absorb_central(to=to)
             env.clear_site(n)
             env.update_env(n, to=to)

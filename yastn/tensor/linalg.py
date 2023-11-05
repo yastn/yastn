@@ -88,15 +88,15 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     return U, S, V
 
 
-def svd(a, axes=(0, 1), sU=1, nU=True,
+def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Uaxis=-1, Vaxis=0, policy='fullrank',
-        fix_signs=False, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
+        fix_signs=False, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor] | yastn.Tensor:
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
     where the columns of `U` and the rows of `V` form orthonormal bases
     and `S` is a positive and diagonal matrix.
 
-    Charge of input tensor `a` is attached to `U` if `nU` and to `V` otherwise.
+
 
     Parameters
     ----------
@@ -105,16 +105,33 @@ def svd(a, axes=(0, 1), sU=1, nU=True,
         their final order.
 
     sU: int
-        signature of the new leg in U; equal 1 or -1. Default is 1.
-        V is going to have opposite signature on connecting leg.
+        Signature of the new leg in U; equal to 1 or -1. By default is 1.
+        V is going to have the opposite signature on the connecting leg.
+
+    nU: bool
+        Whether or not to attach the charge of  `a` `U`. Otherwise attaches it to `V`.
+        By default is True.
+
+    compute_uv: bool
+        If True, compute U and V in addition to S. Default is True.
 
     Uaxis, Vaxis: int
-        specify which leg of U and V tensors are connecting with S. By default
+        Specify which leg of U and V tensors are connecting with S. By default
         it is the last leg of U and the first of V, in which case a = U @ S @ V.
+
+    policy: str
+        "fullrank" or "lowrank". Use standard full (but reduced) SVD for "fullrank".
+        For "lowrank", uses randomized (truncated) SVD and requires providing `D_block` in `kwargs`.
+
+    fix_signs: bool
+        Whether or not to fix phases in `U` and `V`,
+        so that the largest element in each column of `U` is positive.
+        Provide uniqueness of decomposition for non-degenerate cases.
+        By default is False.
 
     Returns
     -------
-    U, S, V
+    U, S, V or S
     """
     _test_axes_all(a, axes)
     lout_l, lout_r = _clear_axes(*axes)
@@ -137,30 +154,34 @@ def svd(a, axes=(0, 1), sU=1, nU=True,
     meta, Ustruct, Uslices, Sstruct, Sslices, Vstruct, Vslices = _meta_svd(a.config, struct, slices, minD, sU, nU)
     sizes = tuple(x.size for x in (Ustruct, Sstruct, Vstruct))
 
-    if policy == 'fullrank':
+    if compute_uv and policy == 'fullrank':
         Udata, Sdata, Vdata = a.config.backend.svd(data, meta, sizes, \
             diagnostics=kwargs['diagnostics'] if 'diagnostics' in kwargs else None)
-    elif policy == 'lowrank':
+    elif not compute_uv and policy == 'fullrank':
+        Sdata = a.config.backend.svdvals(data, meta, sizes[1])
+    elif compute_uv and policy == 'lowrank':
         Udata, Sdata, Vdata = a.config.backend.svd_lowrank(data, meta, sizes, **kwargs)
     else:
-        raise YastnError('svd policy should be one of (`lowrank`, `fullrank`)')
+        raise YastnError('svd policy should in (`lowrank`, `fullrank`). compute_uv == False only works with `fullrank`')
 
-    if fix_signs:
+    if compute_uv and fix_signs:
         Udata, Vdata = a.config.backend.fix_svd_signs(Udata, Vdata, meta)
 
     ls_s = _leg_struct_trivial(Sstruct, axis=0)
 
+    Smfs = ((1,), (1,))
+    Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
+    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs)
+
+    if not compute_uv:
+        return S
+
     Us = tuple(a.struct.s[ii] for ii in axes[0]) + (sU,)
     Umeta_unmerge, Ustruct, Uslices = _meta_unmerge_matrix(a.config, Ustruct, Uslices, ls_l, ls_s, Us)
-
     Udata = _unmerge(a.config, Udata, Umeta_unmerge)
     Umfs = tuple(a.mfs[ii] for ii in lout_l) + ((1,),)
     Uhfs = tuple(a.hfs[ii] for ii in axes[0]) + (_Fusion(s=(sU,)),)
     U = a._replace(struct=Ustruct, slices=Uslices, data=Udata, mfs=Umfs, hfs=Uhfs)
-
-    Smfs = ((1,), (1,))
-    Shfs = (_Fusion(s=(-sU,)), _Fusion(s=(sU,)))
-    S = a._replace(struct=Sstruct, slices=Sslices, data=Sdata, mfs=Smfs, hfs=Shfs)
 
     Vs = (-sU,) + tuple(a.struct.s[ii] for ii in axes[1])
     Vmeta_unmerge, Vstruct, Vslices = _meta_unmerge_matrix(a.config, Vstruct, Vslices, ls_s, ls_r, Vs)
@@ -622,6 +643,6 @@ def entropy(a, axes=(0, 1), alpha=1) -> tuple[number, number, number]:
     if len(a._data) == 0:
         return a.zero_of_dtype(), a.zero_of_dtype(), a.zero_of_dtype()
     if not a.isdiag:
-        _, a, _ = svd(a, axes=axes)
+        a = svd(a, axes=axes, compute_uv=False)
     # entropy, Smin, normalization
     return a.config.backend.entropy(a._data, alpha=alpha)

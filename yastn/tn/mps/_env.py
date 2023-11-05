@@ -514,7 +514,7 @@ class Env3(_EnvParent):
         if 'tol' in opts_svd:
             _, R0 = tensor.qr(AL, axes=(0, 1), sQ=1)
             _, R1 = tensor.qr(AR, axes=(1, 0), Raxis=1, sQ=-1)
-            _, S, _ = tensor.svd(R0 @ R1)
+            S = tensor.svd(R0 @ R1, compute_uv=False)
             if any(S[t][-1] > opts_svd['tol'] * 1.1 for t in S.struct.t):
                 return True
         return False

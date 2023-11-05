@@ -195,8 +195,7 @@ def _compression_1site_sweep_(env, Schmidt=None):
             bra.A[n] = env.Heff1(ket[n], n)
             bra.orthogonalize_site(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != bra.first:
-                _, S, _ = bra[bra.pC].svd(sU=1)
-                Schmidt[bra.pC] = S
+                Schmidt[bra.pC] = bra[bra.pC].svd(sU=1, compute_uv=False)
             env.clear_site(n)
             env.update_env(n, to=to)
     bra.absorb_central(to='first')

@@ -348,6 +348,14 @@ def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
     return Udata, Sdata, Vdata
 
 
+def svdvals(data, meta, sizeS, **kwargss):
+    real_dtype = data.real.dtype if data.is_complex() else data.dtype
+    Sdata = torch.zeros((sizeS,), dtype=real_dtype, device=data.device)
+    for (sl, D, _, _, slS, _, _) in meta:
+        torch.linalg.svdvals(data[slice(*sl)].view(D), out=Sdata[slice(*slS)])
+    return Sdata
+
+
 def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\
     diagnostics=None, **kwargs):
     return kernel_svd.apply(data,meta,sizes,fullrank_uv,ad_decomp_reg,diagnostics)
