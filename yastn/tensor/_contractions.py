@@ -36,7 +36,7 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
         Tensors to contract
 
     axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
-        legs of both tensors (for each it is specified by int or tuple of ints)
+        legs of both tensors to be contracted (for each, they are specified by int or tuple of ints)
         e.g. axes=(0, 3) to contract 0th leg of `a` with 3rd leg of `b`;
         axes=((0, 3), (1, 2)) to contract legs 0 and 3 of `a` with 1 and 2 of `b`, respectively.
 
@@ -149,7 +149,7 @@ def broadcast(a, *args, axes=0) -> yastn.Tensor | iterable[yastn.Tensor]:
 
     axes: int | Sequence[int]
         legs of tensors in args to be multiplied by diagonal tensor `a`.
-        Number of tensors provided in args should match lenght of axes.
+        Number of tensors provided in args should match the lenght of axes.
     """
     multiple_axes = hasattr(axes, '__iter__')
     axes = (axes,) if not multiple_axes else axes
@@ -291,7 +291,7 @@ def vdot(a, b, conj=(1, 0)) -> number:
 
     conj: tuple[int, int]
         shows which tensor to conjugate: (0, 0), (0, 1), (1, 0), or (1, 1).
-        Default is (1, 0), i.e. tensor `a` is conjugated.s
+        Default is (1, 0), i.e. tensor `a` is conjugated.
     """
     _test_can_be_combined(a, b)
     if conj[0] == 1:
@@ -439,12 +439,13 @@ def swap_gate(a, axes) -> yastn.Tensor:
     Return tensor after application of swap gate.
 
     Multiply blocks with odd charges on swaped legs by -1.
-    If one of the provided axes is -1, then swap with the charge `n`.
 
     Parameters
     ----------
-    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
-        two groups of legs to be swaped
+    axes: Sequence[int | Sequence[int]]
+        Tuple with groups of legs. Consecutive pairs of grouped legs to be swapped.
+        For instance, axes = (0, 1) apply swap gate between 0th and 1st leg.
+        axes = ((0, 1), (2, 3), 4, 5) swaps (0, 1) with (2, 3), and 4 with 5.
     """
     if not a.config.fermionic:
         return a
@@ -575,8 +576,8 @@ def ncon(ts, inds, conjs=None) -> yastn.Tensor:
         Non-positive numbers label legs of the resulting tensor, in reversed order.
 
     conjs: Sequence[int]
-        For each tensor in `ts` contains either 0 or 1. If the value is 1 the tensor
-        is conjugated.
+        For each tensor in `ts` contains either 0 or 1.
+        If the value is 1, the tensor is conjugated.
 
     Note
     ----

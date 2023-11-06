@@ -25,9 +25,9 @@ def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpo:
 
     Parameters
     ----------
-    states : sequence(yastn.tn.mps.MpsMpo)
+    states: Sequence[yastn.tn.mps.MpsMpo]
 
-    amplitudes : list(scalar)
+    amplitudes: Sequence[scalar]
         If :code:`None`, all amplitudes are assumed to be 1.
     """
     if amplitudes is None:
@@ -43,7 +43,7 @@ def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpo:
     if any(psi.nr_phys != phi.nr_phys for psi in states):
         raise YastnError('MPS: All states should be either Mps or Mpo.')
     if any(psi.pC != None for psi in states):
-        raise YastnError('MPS: Absorb central sites of mps-s before calling add.')
+        raise YastnError('MPS: Absorb central block of mps-s before calling add.')
     # legf = states[0][phi.first].get_legs(axes=0)
     # legl = states[0][phi.last].get_legs(axes=2)
     #if any(psi.virtual_leg('first') != legf or psi.virtual_leg('last') != legl for psi in states):
@@ -112,7 +112,7 @@ def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpo:
     if b.N != a.N:
         raise YastnError('MPS: a and b must have equal number of sites.')
     if a.pC is not None or b.pC is not None:
-        raise YastnError('MPS: Absorb central sites of mps-s before calling multiply.')
+        raise YastnError('MPS: Absorb central blocks of mps-s before calling multiply.')
 
     axes_fuse = ((0, 3), 1, (2, 4)) if b.nr_phys == 1 else ((0, 3), 1, (2, 4), 5)
     for n in phi.sweep():
@@ -150,7 +150,7 @@ class MpsMpo:
             raise YastnError('MPS: Number of physical legs, nr_phys, should be equal to 1 or 2.')
         self._N = N
         self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
-        self.pC = None  # index of the central site, None if it does not exist
+        self.pC = None  # index of the central block, None if it does not exist
         self._first = 0  # index of the first lattice site
         self._last = N - 1  # index of the last lattice site
         self._nr_phys = nr_phys
@@ -311,7 +311,7 @@ class MpsMpo:
 
             normalize : bool
                 If :code:`True`, central block is normalized to unity according
-                to standard 2-norm, and :code:`self.factor` is set to `1`. If false, the norm
+                to standard 2-norm, and :code:`self.factor` is set to `1`. If False, the norm
                 gets accumulated in :code:`self.factor`.
         """
         if self.pC is not None:
@@ -339,7 +339,7 @@ class MpsMpo:
 
     def diagonalize_central(self, opts_svd, normalize=True) -> number:
         r"""
-        Perform svd of the central site C = U @ S @ V. Truncation can be done based on opts_svd.
+        Perform svd of the central block C = U @ S @ V. Truncation can be done based on opts_svd.
 
         Attach U and V respective to the left and right sites.
 
@@ -349,7 +349,7 @@ class MpsMpo:
             Options passed for svd. iIncludes information how to truncate bond.
 
         normalize : bool
-            If true, S is normalized to 1 according to the standard 2-norm.
+            If True, S is normalized to 1 according to the standard 2-norm.
 
         Return
         ------
@@ -380,16 +380,16 @@ class MpsMpo:
         return 0
 
     def remove_central(self):
-        """ Removes (ignores) the central site. Do nothing if is does not exist. """
+        """ Removes (ignores) the central block. Do nothing if is does not exist. """
         if self.pC is not None:
             del self.A[self.pC]
             self.pC = None
 
     def absorb_central(self, to='last'):
         r"""
-        Absorb central site towards the first or the last site.
+        Absorb central block towards the first or the last site.
 
-        If the central site is outside of the chain, it is goes in the one direction possible.
+        If the central block is outside of the chain, it is goes in the one direction possible.
         Do nothing if central does not exist.
 
         Parameters
@@ -418,11 +418,13 @@ class MpsMpo:
     def canonize_(self, to='first', normalize=True) -> yastn.tn.mps.MpsMpo:
         r"""
         Sweep through the MPS/MPO and put it in right/left canonical form
-        using :meth:`QR<yastn.linalg.qr>` decomposition by setting
+        using :meth:`QR decomposition<yastn.linalg.qr>` by setting
         :code:`to='first'` or :code:`to='last'`. It is assumed that tensors are enumerated
         by index increasing from `0` (:code:`first`) to `N-1` (:code:`last`).
 
         Finally, the trivial central block is attached to the end of the chain.
+
+        It updates MPS/MPO in-place.
 
         Parameters
         ----------
@@ -430,12 +432,8 @@ class MpsMpo:
             :code:`'first'` (default) or :code:`'last'`.
 
         normalize : bool
-            If :code:`true` (default), the central block and thus MPS/MPO is normalized
-            to unity according to the standard 2-norm. If false, the norm gets accumulated in :code:`self.factor`.
-
-        Returns
-        -------
-        in-place canonized MPS/MPO
+            If :code:`True` (default), the central block and thus MPS/MPO is normalized
+            to unity according to the standard 2-norm. If False, the norm gets accumulated in :code:`self.factor`.
         """
         self.absorb_central(to=to)
         for n in self.sweep(to=to):
@@ -475,7 +473,7 @@ class MpsMpo:
             x0 = initialize.eye(config=x.config, legs=x.get_legs((0, 1)))
             if (x - x0.diag()).norm() > tol:  # == 0
                 return False
-        return self.pC is None  # True if no central site
+        return self.pC is None  # True if no central block
 
     def truncate_(self, to='last', normalize=True, opts_svd=None) -> number:
         r"""
@@ -485,11 +483,11 @@ class MpsMpo:
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
         Access to singular values during sweeping allows to truncate virtual spaces.
-        This truncation makes sense if MPS/MPO is already in the canonical form
+        This truncation makes sense if MPS/MPO is already in the canonical form (not checked/enforced)
         in the direction opposite to current sweep, i.e., left canonical form for :code:`to='last'`
         or right canonical form for :code:`to='first'`.
 
-        The MPS/MPO is canonized in-place.
+        The MPS/MPO is updated in-place.
 
         Parameters
         ----------
@@ -497,7 +495,7 @@ class MpsMpo:
             :code:`'last'` (default) or :code:`'first'`.
 
         normalize : bool
-            If :code:`true` (default), the central block and thus MPS/MPO is normalized
+            If :code:`True` (default), the central block and thus MPS/MPO is normalized
             to unity according to the standard 2-norm.
 
         opts_svd : dict
@@ -622,13 +620,13 @@ class MpsMpo:
     def get_entropy(self, alpha=1) -> Sequence[number]:
         r"""
         Entropy of bipartition across each bond, along MPS/MPO from the first to the last site,
-        including "trivial" leftmost and rightmost cuts.
+        including "trivial" leftmost and rightmost cuts.  This gives a list with N + 1 elements.
 
         Parameters
         ----------
         alpha : int
             value 1 (default) computes Von Neumann entropy.
-            Other values refer to order `alpha` Renyi entropies.
+            Other values refer to order `alpha` of Renyi entropy.
         """
         schmidt_spectra = self.get_Schmidt_values()
         return [tensor.entropy(spectrum ** 2, alpha=alpha) for spectrum in schmidt_spectra]

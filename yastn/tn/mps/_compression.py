@@ -1,4 +1,5 @@
 """ Algorithm for variational optimization of mps to match the target state."""
+from __future__ import annotations
 from typing import NamedTuple
 import logging
 from ._env import Env2, Env3
@@ -21,18 +22,18 @@ def compression_(psi, target, method='1site',
     r"""
     Perform variational optimization sweeps until convergence to best approximate the target, starting from MPS/MPO :code:`psi`.
 
-    The outer loop sweeps over ``psi`` updating sites from the first site to last and back.
+    The outer loop sweeps over ``psi`` updating sites from the first site to the last and back.
     Convergence can be controlled based on overlap and/or Schmidt values (which is a more sensitive measure).
     The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided, it terminates earlier
     if the convergence criteria are satisfied: change in overlap or Schmidt values is less then the provided tolerance during a single sweep.
 
     Works for
 
-        * optimization against provided MPS: ``target`` is ``Mps`` or list ``[Mps,]``
-        * against MPO acting on MPS: ``target`` is a list ``[Mpo, Mps]``.
-        * against MPO (replacing all Mps's above with Mpo's), i.e., ``[Mpo,]`` or ``[Mpo, Mpo]``
-        * sum of MPS's: target is ``[[Mps],[Mps],...]``
-        * sum of MPO's acting on MPS's: target is ``[[Mpo,Mps], [Mpo,Mps], ...]``
+        * optimization against provided MPS: ``target`` is ``MPS`` or list ``[MPS,]``
+        * against MPO acting on MPS: ``target`` is a list ``[MPO, MPS]``.
+        * against MPO (replacing all MPS's above with MPO's), i.e., ``[MPO,]`` or ``[MPO, MPO]``
+        * sum of MPS's: target is ``[[MPS], [MPS],...]``
+        * sum of MPO's acting on MPS's: target is ``[[MPO, MPS], [MPO, MPS], ...]``
 
     Outputs iterator if :code:`iterator_step` is given.
     It allows inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
@@ -44,9 +45,9 @@ def compression_(psi, target, method='1site',
         It is first canonized to the first site, if not provided in such a form.
         State resulting from :code:`compression_` is canonized to the first site.
 
-    target: yamps.MpsMpo or list(yamps.MpsMpo)
-        Defines target state. Can be an Mps (target = Mps or (Mps,)),
-        or Mpo acting on Mps (target = (Mpo, Mps)).
+    target: yastn.tn.mps.MpsMpo or list(yastn.tn.mps.MpsMpo)
+        Defines target state. Can be an MPS (target = MPS or (MPS,)),
+        or MPO acting on MPS (target = (MPO, MPS)).
 
     method: str
         Which optimization variant to use from :code:`'1site'`, :code:`'2site'`
@@ -67,7 +68,7 @@ def compression_(psi, target, method='1site',
         Default is None, in which case  :code:`compression_` sweeps are performed immidiatly.
 
     opts_svd: dict
-        Options passed to :meth:`yastn.svd` used to truncate virtual spaces in :code:`method='2site'`.
+        Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'`.
         If None, use default {'tol': 1e-13}
 
     Returns
@@ -165,7 +166,7 @@ def _compression_1site_sweep_(env, Schmidt=None):
     overlap :math:`\langle \psi | O |\psi_{target}\rangle`.
 
     It is assumed that the initial MPS :code:`psi` is in the right canonical form.
-    The outer loop sweeps over MPS :code:`psi` updating sites from the first site to last and back.
+    The outer loop sweeps over MPS :code:`psi` updating sites from the first site to the last and back.
 
     Parameters
     ----------
@@ -226,12 +227,13 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
     return max_disc_weight
 
 
-def zipper(a, b, opts=None):
+def zipper(a, b, opts=None) -> yastn.tn.mps.MpsMpo:
     """
     Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
 
     Perform canonization of `b` to the last site.
-    Next, sweep back attaching elements of `a` and truncating the bond dimension along the way.
+    Next, sweep back attaching elements of `a` one at a time,
+    truncating the bond dimension along the way.
     The resulting state is canonized to the first site.
 
     Parameters
@@ -240,10 +242,6 @@ def zipper(a, b, opts=None):
 
     opts: dict
         truncation parameters for :meth:`yastn.linalg.truncation_mask`
-
-    Returns
-    -------
-    yastn.tn.mps.MpsMpo
     """
     psi = b.shallow_copy()
     psi.canonize_(to='last')

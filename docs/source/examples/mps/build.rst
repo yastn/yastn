@@ -6,8 +6,7 @@ Building MPS/MPO manually
 
 The tensor making up MPS/MPO can be assigned manually, setting them one by one.
 
-.. note::
-        The virtual dimensions/spaces of the neighboring MPS/MPO tensors should be consistent.
+Note that the virtual dimensions/spaces of the neighboring MPS/MPO tensors should be consistent.
 
 Ground state of spin-1 AKLT model
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -78,35 +77,19 @@ Save and load MPS/MPO
 
 MPS/MPO can be saved/loaded either to/from a dictionary or an HDF5 file.
 
-.. note::
-        :ref:`YASTN configuration<tensor/configuration:yastn configuration>`
-        of on-site tensors of MPS/MPO must be provided
-        when loading either from dictionary or HDF5 file.
+:ref:`YASTN configuration<tensor/configuration:yastn configuration>`
+with matching symmetry has to be provided
+for on-site MPS/MPO tensors
+when loading either from a dictionary or HDF5 file.
 
 Using Python's dictionary
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. literalinclude:: /../../tests/mps/test_save_load.py
-        :pyobject: test_basic_dict
+        :pyobject: test_save_load_mps_dict
 
 Using HDF5 format
 ^^^^^^^^^^^^^^^^^
 
 .. literalinclude:: /../../tests/mps/test_save_load.py
-        :pyobject: test_basic_hdf5
-
-
-Expectation values
-==================
-
-Expectation values in mps
--------------------------
-
-.. literalinclude:: /../../tests/mps/test_measurement.py
-        :pyobject: test_measure_mps
-
-Entropy and Schmidt values
---------------------------
-
-.. literalinclude:: /../../tests/mps/test_measurement.py
-        :pyobject: test_mps_spectrum
+        :pyobject: test_save_load_mps_hdf5

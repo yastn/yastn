@@ -4,7 +4,8 @@ Algebra
 Multiplication by a scalar
 ---------------------------
 
-MPS/MPO can be multiplied by a scalar using regular `*` operator, e.g., :code:`B = a * A` or :code:`B = A * a`.
+MPS/MPO can be multiplied by a scalar using regular :code:`*` and :code:`/` operators,
+i.e.,:code:`B = a * A`, :code:`B = A * a` or :code:`B = A / a`.
 
 Addition of MPS/MPO
 -------------------
@@ -23,7 +24,7 @@ and :code:`B`'s tensors along virtual dimension.
             d|  |    |  |   |  |   |  |   |  |       d|        |      |      |      |
               \/      \/     \/     \/     \/
 
-To make a sum of many MPS/MPOs :math:`\{A_0, A_1,\dots\}` at once, use :code:`yamps.add(A_0, A_1,...)`.
+To add many MPS/MPOs :math:`A_0, A_1,\dots` at once, use :code:`yastn.tn.mps.add(A_0, A_1,...)`.
 
 .. autofunction:: yastn.tn.mps.add
 
@@ -64,8 +65,8 @@ operator product :math:`\hat{O}\hat{P} = \hat{C}` (matrix-matrix multiplication)
              |___|--D'--|___|--...--|___|     |d           |           |
                |d         |           |
 
-One can either use product operator :code:`C = A @ B` or more verbose
-:code:`C = yastn.tn.mps.multiply(A, B)`. See examples here: :ref:`examples/mps/algebra:Multiplication`.
+One can either use call :code:`C = A @ B` or in a more verbose form
+:code:`C = mps.multiply(A, B)`. See examples here: :ref:`examples/mps/algebra:Multiplication`.
 
 .. autofunction:: yastn.tn.mps.multiply
 
@@ -73,7 +74,7 @@ One can either use product operator :code:`C = A @ B` or more verbose
 Multiplication with truncation
 ------------------------------
 
-A fast procedure to multiply MPO by MPO/MPS while performing truncation.
-The result can be subsequently fine-funed using :ref:`mps/algorithms_overlap:Variational overlap maximalization algorithm`.
+A fast procedure to multiply MPO by MPO/MPS while performing truncation is a `zipper`.
+The result can be subsequently fine-tuned using :ref:`variational optimization<mps/algorithms_overlap:Variational overlap maximalization>`.
 
 .. autofunction:: yastn.tn.mps.zipper

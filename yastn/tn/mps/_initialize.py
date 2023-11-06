@@ -107,7 +107,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
         Virtual MPS spaces are drawn randomly from a normal distribution,
         whose mean value changes linearly along the chain from `n` to 0.
     D_total : int
-        Largest bond dimension. Due to the random nature of the algorithm,
+        Largest bond dimension. Due to the random and local nature of the procedure,
         the desired total bond dimension might not be reached on some bonds,
         in particular, for higher symmetries.
     sigma : int
@@ -169,7 +169,7 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
     I : yastn.tn.mps.MpsMpo
         MPS or MPO that defines local spaces.
     D_total : int
-        Largest bond dimension. Due to the random nature of the algorithm,
+        Largest bond dimension. Due to the random and local nature of the procedure,
         the desired total bond dimension might not be reached on some bonds,
         in particular, for higher symmetries.
     sigma : int

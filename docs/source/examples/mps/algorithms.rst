@@ -7,7 +7,7 @@ Algorithms for MPS
 DMRG
 ----
 
-In order to execute :ref:`DMRG<mps/algorithms_dmrg:Density matrix renormalization group (DMRG) algorithm>` we need the hermitian operator (typically a Hamiltonian) written as MPO, and an initial guess for MPS.
+In order to execute :ref:`DMRG<mps/algorithms_dmrg:Density matrix renormalization group (DMRG)>` we need the hermitian operator (typically a Hamiltonian) written as MPO, and an initial guess for MPS.
 
 Here is a simple example for DMRG used to obtain a ground state for a quadratic Hamiltonian:
 
@@ -32,7 +32,7 @@ Also see the test in examples for :ref:`examples/mps/algebra:Multiplication`.
 TDVP
 ----
 
-Test :ref:`TDVP<mps/algorithms_tdvp:time-dependent variational principle (tdvp) algorithm>` simulating time evolution after a sudden quench in a free-fermionic model.
+Test :ref:`TDVP<mps/algorithms_tdvp:Time-dependent variational principle (TDVP)>` simulating time evolution after a sudden quench in a free-fermionic model.
 
 .. literalinclude:: /../../tests/mps/test_tdvp.py
         :pyobject: test_tdvp_hermitian

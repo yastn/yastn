@@ -48,15 +48,15 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
 
     order: str
         Order of Suzuki-Trotter decomposition in ('2nd', '4th').
-        4th order step is composed of 5 2nd order steps.
+        4th order step is composed of five 2nd order steps.
 
     opts_expmv: dict
         Options passed to :meth:`yastn.expmv`
         If there is information from previous time-steps stored under the hood,
-        the initial guess of the size of krylov space opts_expmv['ncv'] will be overriden.
+        the initial guess of the size of krylov space opts_expmv['ncv'] is overriden.
 
     opts_svd: dict
-        Options passed to :meth:`yastn.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`'12site'`.
+        Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`'12site'`.
         If None, use default {'tol': 1e-13}.
 
     Returns

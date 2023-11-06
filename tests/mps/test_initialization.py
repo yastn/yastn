@@ -15,15 +15,26 @@ tol = 1e-12
 
 def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config=None):
     """
-    Generate random MPS of N sites, with bond dimension D_total, tensors with symmetry sym and total charge n.
+    Generate random MPS of N sites, with bond dimension D_total,
+    tensors with symmetry sym and total charge n.
     """
-    if config is None:
-        ops = yastn.operators.SpinlessFermions(sym=sym)
-    else:  # config is used here by pytest to inject backend and device for testing
-        ops = yastn.operators.SpinlessFermions(sym=sym, backend=config.backend, default_device=config.default_device)
+
+    # config is used here by pytest to inject backend and device for testing
+    opts_config = {} if config is None else \
+                  {'backend': config.backend, 'default_device': config.default_device}
+    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
     generate = mps.Generator(N, ops)
+    generate.random_seed(seed=0)
     psi = generate.random_mps(D_total=D_total, n=n)
+    #
+    # the same can be done without employing Generator class
+    #
+    ops.random_seed(seed=0)
+    I = mps.product_mpo(ops.I(), N)
+    psi2 = mps.random_mps(I, D_total=D_total, n=n)
+    assert (psi - psi2).norm() < tol
+
     return psi
 
 
@@ -114,7 +125,6 @@ def test_product_mpo():
 
 
 if __name__ == "__main__":
-    build_spin1_aklt_state()
     test_generate_random_mps()
     test_product_mps()
     test_product_mpo()

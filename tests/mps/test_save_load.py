@@ -1,7 +1,7 @@
 """ basic procedures of single mps """
 import os
 import warnings
-import numpy as np
+import pytest
 import yastn
 import yastn.tn.mps as mps
 
@@ -10,33 +10,30 @@ try:
 except ImportError:
     warnings.warn("h5py module not available", ImportWarning)
 try:
-    from .configs import config_dense as cfg
+    from .configs import config_dense as config
     # pytest modifies cfg to inject different backends and devices during tests
 except ImportError:
-    from configs import config_dense as cfg
+    from configs import config_dense as config
 
 
+@pytest.mark.parametrize("kwargs", [{'sym': 'dense', 'config': config},
+                                    {'sym': 'Z3', 'config': config},
+                                    {'sym': 'U1', 'config': config}])
+def test_save_load_mps_hdf5(kwargs):
+    save_load_mps_hdf5(**kwargs)
 
-
-tol = 1e-12
-
-
-def check_copy(psi1, psi2):
-    """ Test if two mps-s have the same tensors (velues). """
-    for n in psi1.sweep():
-        assert np.allclose(psi1.A[n].to_numpy(), psi2.A[n].to_numpy())
-    assert psi1.A is not psi2.A
-    assert psi1 is not psi2
-
-
-def test_basic_hdf5():
-    # Initialize random MPS with dense tensors and checks saving/loading 
-    # to and from HDF5 file.
+def save_load_mps_hdf5(sym='dense', config=None, tol=1e-12):
+    """Initialize random MPS and checks saving/loading to/from HDF5 file."""
     #
-    psi = mps.random_dense_mps(N=16, D=15, d=2, backend=cfg.backend, default_device=cfg.default_device)
-    config_dense = psi.config
+    opts_config = {} if config is None else \
+                  {'backend': config.backend,
+                   'default_device': config.default_device}
+    # pytest uses config to inject backend and device for testing
+    ops = yastn.operators.Spin1(sym=sym, **opts_config)
+    I = mps.product_mpo(ops.I(), N=16)
+    psi = 2 * mps.random_mps(I, D_total=25)  # adding extra factor
     #
-    # We delete file if it already exists. 
+    # We delete file if it already exists.
     # (It is enough to clear the address './state' if the file already exists)
     #
     try:
@@ -48,80 +45,68 @@ def test_basic_hdf5():
     #
     with h5py.File('tmp.h5', 'a') as f:
         psi.save_to_hdf5(f, 'state/')
-
     #
-    # To read MPS from HDF5 file, open the file and load the MPS stored 
-    # at address 'state/'. 
-    # Note: You have to provide valid YASTN configuration 
+    # To read MPS from HDF5 file, open the file and load the MPS stored
+    # at address 'state/'.
+    # Note: You have to provide valid YASTN configuration
     #
+    config = ops.config
     with h5py.File('tmp.h5', 'r') as f:
-        phi = mps.load_from_hdf5(config_dense, f, './state/')
+        phi = mps.load_from_hdf5(config, f, './state/')
     #
     # Test psi == phi
     #
-    check_copy(psi, phi)
+    #assert (psi - phi).norm() < tol and psi is not phi
+    assert all((psi[n] - phi[n]).norm() < tol for n in psi.sweep())
     #
     # Similarily, one can save and load MPO
     #
-    psi = mps.random_dense_mpo(N=16, D=8, d=3, backend=cfg.backend, default_device=cfg.default_device)
+    psi = mps.random_mpo(I, D_total=8)
     with h5py.File('tmp.h5', 'w') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
-        phi = mps.load_from_hdf5(config_dense, f, './state/')
+        phi = mps.load_from_hdf5(config, f, './state/')
     os.remove("tmp.h5")
-    check_copy(psi, phi)
+    assert len(psi) == len(phi) and psi is not phi
+    assert all((psi[n] - phi[n]).norm() < tol for n in psi.sweep())
+    # assert (psi - phi).norm() < tol
 
 
-def test_Z2_hdf5():
-    operators = yastn.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
-    generate = mps.Generator(N=16, operators=operators)
+@pytest.mark.parametrize("kwargs", [{'sym': 'dense', 'config': config},
+                                    {'sym': 'Z3', 'config': config},
+                                    {'sym': 'U1', 'config': config}])
+def test_save_load_mps_dict(kwargs):
+    save_load_mps_dict(**kwargs)
+
+def save_load_mps_dict(sym='dense', config=None, tol=1e-12):
+    """Initialize random MPS and checks saving/loading to/from npy file."""
     #
-    psi = generate.random_mps(D_total=25, n=0)
-    try:
-        os.remove("tmp.h5")
-    except OSError:
-        pass
-    with h5py.File('tmp.h5', 'a') as f:
-        psi.save_to_hdf5(f, 'state/')
-    with h5py.File('tmp.h5', 'r') as f:
-        phi = mps.load_from_hdf5(psi.A[0].config, f, './state/')
-    os.remove("tmp.h5") 
-    check_copy(psi, phi)
-
-
-def test_basic_dict():
-    #
-    # First, we generate random MPS without any symmetry.
-    #    
-    psi = mps.random_dense_mps(N=16, D=25, d=3, backend=cfg.backend, default_device=cfg.default_device)
-    config_dense = psi.config
+    opts_config = {} if config is None else \
+                  {'backend': config.backend,
+                   'default_device': config.default_device}
+    # pytest uses config to inject backend and device for testing
+    ops = yastn.operators.Spin1(sym=sym, **opts_config)
+    I = mps.product_mpo(ops.I(), N=16)
+    psi = -0.5 * mps.random_mps(I, D_total=25)  # adding extra factor
     #
     # Next, we serialize MPS into dictionary.
     #
     tmp = psi.save_to_dict()
     #
-    # Last, we load the MPS from the dictionary, providing valid YASTN configuration
+    # Last, we load the MPS from the dictionary,
+    # providing valid YASTN configuration
     #
-    phi = mps.load_from_dict(config_dense, tmp)
+    config = ops.config
+    phi = mps.load_from_dict(config, tmp)
     #
     # Test psi == phi
     #
-    check_copy(psi, phi)
-
-
-
-def test_Z2_dict():
-    operators = yastn.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
-    generate = mps.Generator(N=16, operators=operators)
-
-    psi = generate.random_mps(D_total=15, n=0)
-    tmp = psi.save_to_dict()
-    phi = mps.load_from_dict(generate.config, tmp)
-    check_copy(psi, phi)
+    assert len(psi) == len(phi) and psi is not phi
+    assert all((psi[n] - phi[n]).norm() < tol for n in psi.sweep())
+    # assert (psi - phi).norm() < tol
 
 
 if __name__ == "__main__":
-    test_basic_hdf5()
-    test_Z2_hdf5()
-    test_basic_dict()
-    test_Z2_dict()
+    for sym in ['dense', 'Z3', 'U1']:
+        save_load_mps_hdf5(sym=sym)
+        save_load_mps_dict(sym=sym)

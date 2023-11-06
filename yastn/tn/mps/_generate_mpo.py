@@ -88,7 +88,7 @@ def generate_mpo_preprocessing(I, terms, return_amplitudes=False) -> GenerateMpo
     I: yastn.tn.mps.MpsMpo
         identity MPO.
     return_amplitudes: bool
-        If true, apart from template return also amplitudes = [term.amplitude for term in terms].
+        If True, apart from template return also amplitudes = [term.amplitude for term in terms].
     """
     H1s = [generate_product_mpo_from_Hterm(I, term, amplitude=False) for term in terms]
     cfg = H1s[0][0].config

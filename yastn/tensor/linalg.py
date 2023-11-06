@@ -624,7 +624,7 @@ def entropy(a, alpha=1, tol=1e-12) -> number:
     r"""
     Calculate entropy from probabilities encoded in diagonal tensor `a`.
 
-    Normalizes `a` to 1, but do check correctness otherwise.
+    Normalizes (sum of) `a` to 1, but do not check correctness otherwise.
     Use base-2 log. For empty or zero tensor, return 0.
 
     Parameters

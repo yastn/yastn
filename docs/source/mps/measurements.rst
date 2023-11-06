@@ -2,6 +2,8 @@
 Expectation values
 ==================
 
+Examples can be found :ref:`here <examples/mps/measurement:Expectation values>`.
+
 Overlaps and MPO expectation values
 -----------------------------------
 
@@ -41,8 +43,8 @@ Schmidt values and entropy profile
 
 The Schmidt values are computed by performing bipartition of the MPS/MPO across
 each of the bonds. This amounts to SVD decomposition with respect to a bond,
-where all sites to the left are in left-canonical form and all sites to the right
-are in right-canonical form, see :ref:`Canonical form<theory/mps/basics:canonical form>`.
+where all sites to the left are in :ref:`left-canonical form<theory/mps/basics:canonical form>` and all sites to the right
+are in :ref:`right-canonical form<theory/mps/basics:canonical form>`.
 
 .. autofunction:: yastn.tn.mps.MpsMpo.get_Schmidt_values
 

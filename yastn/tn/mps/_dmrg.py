@@ -29,10 +29,10 @@ def dmrg_(psi, H, project=None, method='1site',
     The inner loop sweeps over MPS updating sites from the first site to the last and back, constituting a single iteration.
     Convergence can be controlled based on energy and/or Schmidt values (which is a more sensitive measure).
     The DMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
-    or until all convergence measures, with tolerance that is not None, change by less than the provided tolerance during a single sweep.
+    or until all convergence measures (with provided tolerance other than None) change by less than the provided tolerance during a single sweep.
 
-    Outputs iterator if :code:`iterator_step` is given.
-    It allows inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
+    Outputs iterator if :code:`iterator_step` is given, which allows
+    inspecting :code:`psi` outside of :code:`dmrg_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------
@@ -48,7 +48,7 @@ def dmrg_(psi, H, project=None, method='1site',
         Optimizes MPS in the subspace orthogonal to MPS's in the list.
 
     method: str
-        Which DMRG variant to use from :code:`'1site'`, :code:`'2site'`
+        Which DMRG variant to use from '1site', '2site'
 
     energy_tol: float
         Convergence tolerance for the change of energy in a single sweep.
@@ -70,7 +70,7 @@ def dmrg_(psi, H, project=None, method='1site',
         If None, use default {'hermitian': True, 'ncv': 3, 'which': 'SR'}
 
     opts_svd: dict
-        Options passed to :meth:`yastn.linalg.svd_with_truncation` used to truncate virtual spaces in :code:`method='2site'`.
+        Options passed to :meth:`yastn.linalg.svd_with_truncation` used to truncate virtual spaces in method='2site'.
         If None, use default {'tol': 1e-13}
 
     Returns

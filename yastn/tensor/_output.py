@@ -536,7 +536,7 @@ def to_number(a, part=None) -> number:
     Parameters
     ----------
     part : str
-        if 'real' return real part only
+        if 'real', returns real part only.
     """
     size = a.size
     if size == 1:

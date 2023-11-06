@@ -47,9 +47,8 @@ The paradigmatic example is energy minimization to find the best approximation o
 The MPS ansatz with fixed virtual dimensions fixes the manifold of states we can reach. Virtual bond dimension
 controls the quality of the approximation, where the exact representation is recovered for :math:`D\rightarrow\infty`.
 
-.. note::
-        The MPS can be equipped with symmetries by making its individual tensors symmetric.
-        Note that the construction of MPS requires common virtual spaces to be matching.
+The MPS can be equipped with symmetries by making its individual tensors symmetric.
+Note that the construction of MPS requires common virtual spaces to be matching.
 
 
 Matrix product operator (MPO)
@@ -92,8 +91,10 @@ Among others, this allow using local :ref:`sepctral decomposition<tensor/algebra
 In those algorithms, one locally updates individual MPS tensors, adjusting its canonical form while sweeping through the lattice.
 
 We choose to put MPS in the `canonical form` with respect to the *j*-to-*j+1*-th bond.
-This is equivalent to performing Schmidt decomposition of the MPS with :math:`D_{j,j+1}` left Schmidt vectors :math:`|L_{0,1\cdots j}\rangle`, :math:`D_{j,j+1}` right Schmidt vectors :math:`|R_{j+1,j+2\cdots N-1}\rangle`, and a diagonal matrix of Schmidt values :math:`\Lambda_{j-1,j}`.
-More generally, instead of a diagonal positive matrix :math:`\Lambda_{j-1,j}`, one often works with a central matrix (block) :math:`C_{j,j+1}`, which SVD gives the Schmidt values on the bond.
+This is equivalent to performing Schmidt decomposition of the MPS with :math:`D_{j,j+1}` left Schmidt vectors :math:`|L_{0,1\cdots j}\rangle`,
+:math:`D_{j,j+1}` right Schmidt vectors :math:`|R_{j+1,j+2\cdots N-1}\rangle`, and a diagonal matrix of Schmidt values :math:`\Lambda_{j,j+1}`.
+More generally, instead of a diagonal positive matrix :math:`\Lambda_{j,j+1}`,
+one often works with a central matrix (block) :math:`C_{j,j+1}`, which SVD gives the Schmidt values on the bond.
 
 ::
 
@@ -110,7 +111,7 @@ The left and right Schmidt vectors, forming columns of the matrix :math:`L_{0,1\
 It implies that :math:`L^\dagger L=I` and  :math:`R R^\dagger=I`, where :math:`I` is an identity matrix on the virtual bond, which we obtain after contracting physical indices.
 The virtual bond of MPS can be efficiently truncated by discarding singular values :math:`\Lambda_{j,j+1}` of the smallest magnitude.
 If, for every MPS tensor, the left environment is unitary, i.e., for corresponding left vectors :math:`L_j^\dagger L_j=I`, then we say that MPS is in the `left canonical form`.
-It can be obtained by consecutive :meth:`QR<yastn.linalg.qr>` decompositions of each MPS tensor, starting from `0`-th, where the unitary part forms a new tensor, and the upper-triangular part becomes a central tensor that gets attached to the subsequent MPS tensor.
+It can be obtained by consecutive :meth:`QR decompositions<yastn.linalg.qr>` of each MPS tensor, starting from `0`-th, where the unitary part forms a new tensor, and the upper-triangular part becomes a central tensor that gets attached to the subsequent MPS tensor.
 Similarly, if for every MPS tensor the right environment is unitary, :math:`R_j R_j^\dagger=I`, then we say that MPS is in the `right canonical form`.
 A mixed canonical form with respect to some bond or MPS site interpolates between those two extremes.
 
@@ -122,10 +123,10 @@ A mixed canonical form with respect to some bond or MPS site interpolates betwee
 Algorithms
 ----------
 
-:ref:`Density matrix renormalization group (DMRG)<mps/algorithms_dmrg:density matrix renormalization group (dmrg) algorithm>`
+:ref:`Density matrix renormalization group (DMRG)<mps/algorithms_dmrg:Density matrix renormalization group (DMRG)>`
 is an algorithm searching for the MPS which extremizes the expectation value of the hermitian operator written as MPO, usually the Hamiltonian.
 
-:ref:`Time-dependent variational principle (TDVP)<mps/algorithms_tdvp:time-dependent variational principle (tdvp) algorithm>`
+:ref:`Time-dependent variational principle (TDVP)<mps/algorithms_tdvp:Time-dependent variational principle (TDVP)>`
 allows for a variational approximation of the evolution of a state :math:`\Psi(0)` under a Hamiltonian :math:`\hat H`, :math:`\Psi(t)=e^{- i t \hat H} \Psi(0)`, with :math:`i` an imaginary unit.
 TDVP can be performed for the evolution of MPS under MPO for a time `t`, real or imaginary.
 

@@ -93,7 +93,7 @@ def measure_2site(bra, O, P, ket) -> dict[tuple[int, int], number]:
     Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i \textrm{P}_j|\textrm{ket} \rangle` for local operators :code:`O` and :code:`P` at each pair of lattice sites :math:`i < j`.
 
     Local operators can be provided as dictionary {site: operator}, limiting the calculation to provided sites.
-    Conjugate of MPS :code:`bra` is computed internally. For fermionic operators, includes fermionic strings via swap_gate.
+    Conjugate of MPS :code:`bra` is computed internally. Includes fermionic strings via swap_gate for fermionic operators.
 
     Parameters
     -----------
@@ -355,12 +355,12 @@ class Env3(_EnvParent):
 
     def Heff0(self, C, bd):
         r"""
-        Action of Heff on central site.
+        Action of Heff on central block.
 
         Parameters
         ----------
         C : tensor
-            a central site
+            a central block
         bd : tuple
             index of bond on which it acts, e.g. (1, 2) [or (2, 1) -- it is ordered]
 
@@ -414,7 +414,7 @@ class Env3(_EnvParent):
 
     def Heff2(self, AA, bd):
         r"""
-        Action of Heff on central site.
+        Action of Heff on central block.
 
         Parameters
         ----------
@@ -477,7 +477,7 @@ class Env3(_EnvParent):
     def update_C(self, du, opts, normalize=True):
         """ Updates env.ket[bd] by exp(du Heff0). """
         bd = self.ket.pC
-        if bd[0] != -1 and bd[1] != self.N:  # do not update central sites outsite of the chain
+        if bd[0] != -1 and bd[1] != self.N:  # do not update central block outsite of the chain
             if bd in self._temp['expmv_ncv']:
                 opts['ncv'] = self._temp['expmv_ncv'][bd]
             f = lambda x: self.Heff0(x, bd)

@@ -19,8 +19,9 @@ tol = 1e-12
 #
 def mpo_nn_hopping_manually(N, t, mu, config):
     """
-    Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
-    i.e. t * sum_{n=1}^{N-1} (cp_n c_{n+1} + cp_{n+1} c_n) + mu * sum_{n=1}^{N} cp_n c_n"
+    Nearest-neighbor hopping Hamiltonian on N sites
+    with hopping amplitude t and chemical potential mu, i.e.,
+    t * sum_{n=1}^{N-1} (cp_n c_{n+1} + cp_{n+1} c_n) + mu * sum_{n=1}^{N} cp_n c_n
 
     Initialize MPO tensor by hand with dense, Z2, or U1 symmetric tensors.
     Symmetry is specified in config.
@@ -40,8 +41,10 @@ def mpo_nn_hopping_manually(N, t, mu, config):
     #         |
     #         ^(+1)
     #         |
-
-    # we set fermionic=True for conistency as mpo will be compared with operators.SpinlessFermions in tests.
+    #
+    # We set fermionic=True for conistency as in tests
+    # MPO is compared with operators.SpinlessFermions.
+    # backend and device is inherited from config to automitize pytest testing.
     config = yastn.make_config(fermionic=True, default_device=config.default_device,
                                 sym=config.sym, backend=config.backend)
 
@@ -121,7 +124,8 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
     """
 
     # config is used here by pytest to inject backend and device for testing
-    opts_config = {} if config is None else {'backend': config.backend, 'default_device': config.default_device}
+    opts_config = {} if config is None else \
+                  {'backend': config.backend, 'default_device': config.default_device}
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
     Hterms = []  # list of Hterm(amplitude, positions, operators)
@@ -131,14 +135,20 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
     # chemical potential on site n
     for n in range(N):
         if abs(J[n][n]) > 0:
-            Hterms.append(mps.Hterm(amplitude=J[n][n], positions=[n], operators=[ops.n()]))
+            Hterms.append(mps.Hterm(amplitude=J[n][n],
+                                    positions=[n],
+                                    operators=[ops.n()]))
 
     # hopping term between sites m and n
     for m in range(N):
         for n in range(m + 1, N):
             if abs(J[m][n]) > 0:
-                Hterms.append(mps.Hterm(amplitude=J[m][n], positions=(m, n),operators=(ops.cp(), ops.c())))
-                Hterms.append(mps.Hterm(amplitude=np.conj(J[m][n]), positions=(n, m),operators=(ops.cp(), ops.c())))
+                Hterms.append(mps.Hterm(amplitude=J[m][n],
+                                        positions=(m, n),
+                                        operators=(ops.cp(), ops.c())))
+                Hterms.append(mps.Hterm(amplitude=np.conj(J[m][n]),
+                                        positions=(n, m),
+                                        operators=(ops.cp(), ops.c())))
 
     # We need an identity MPO operator.
     I = mps.product_mpo(ops.I(), N)
@@ -151,18 +161,24 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
 
 def mpo_nn_hopping_latex(N, t, mu, sym="U1", config=None):
     """
-    Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
+    Nearest-neighbor hopping Hamiltonian on N sites
+    with hopping amplitude t and chemical potential mu.
 
     The upper triangular part of matrix J defines hopping amplitudes,
     and the diagonal defines on-site chemical potentials.
     """
 
     # config is used here by pytest to inject backend and device for testing
-    opts_config = {} if config is None else {'backend': config.backend, 'default_device': config.default_device}
+    opts_config = {} if config is None else \
+                  {'backend': config.backend, 'default_device': config.default_device}
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
-    Hstr = "\sum_{j,k \in NN} t (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in sites} mu cp_{i} c_{i}"
-    parameters = {"t": t, "mu": mu, "sites": list(range(N)), "NN": list((i, i+1) for i in range(N-1))}
+    Hstr = "\sum_{j,k \in NN} t (cp_{j} c_{k}+cp_{k} c_{j}) + " \
+         + "\sum_{i \in sites} mu cp_{i} c_{i}"
+    parameters = {"t": t,
+                  "mu": mu,
+                  "sites": list(range(N)),
+                  "NN": list((i, i+1) for i in range(N-1))}
 
     generate = mps.Generator(N, ops)
     H = generate.mpo_from_latex(Hstr, parameters=parameters)
@@ -171,18 +187,23 @@ def mpo_nn_hopping_latex(N, t, mu, sym="U1", config=None):
 
 def mpo_hopping_latex(N, J, sym="U1", config=None):
     """
-    Nearest-neighbor hopping Hamiltonian on N sites with hopping amplitude t and chemical potential mu.
+    Nearest-neighbor hopping Hamiltonian on N sites
+    with hopping amplitude t and chemical potential mu.
 
     The upper triangular part of matrix J defines hopping amplitudes,
     and the diagonal defines on-site chemical potentials.
     """
 
     # config is used here by pytest to inject backend and device for testing
-    opts_config = {} if config is None else {'backend': config.backend, 'default_device': config.default_device}
+    opts_config = {} if config is None else \
+                  {'backend': config.backend, 'default_device': config.default_device}
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
-    Hstr = "\sum_{j,k \in NN} J_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in sites} J_{i,i} cp_{i} c_{i}"
-    parameters = {"J": J, "sites": list(range(N)), "NN": list((i, j) for i in range(N-1) for j in range(i + 1, N))}
+    Hstr = "\sum_{j,k \in NN} J_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + " \
+         + "\sum_{i \in sites} J_{i,i} cp_{i} c_{i}"
+    parameters = {"J": J,
+                  "sites": list(range(N)),
+                  "NN": list((i, j) for i in range(N-1) for j in range(i + 1, N))}
 
     generate = mps.Generator(N, ops)
     H = generate.mpo_from_latex(Hstr, parameters=parameters)

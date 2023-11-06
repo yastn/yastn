@@ -116,7 +116,7 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     n : int | Sequence[int]
         Total charge of the tensor.
     isdiag : bool
-        Makes tensor diagonal
+        whether or not to make tensor diagonal
     dtype : str
         Desired dtype, overrides default_dtype specified in config
     device : str
@@ -167,7 +167,7 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     n : int | Sequence[int]
         total charge of the tensor.
     isdiag : bool
-        makes tensor diagonal
+        whether or not to make tensor diagonal
     dtype : str
         desired dtype, overrides default_dtype specified in config.
     device : str
@@ -200,6 +200,8 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
         Specify legs of the tensor passing a list of :class:`yastn.Leg`.
     n : int | Sequence[int]
         total charge of the tensor.
+    isdiag : bool
+        whether or not to make tensor diagonal
     dtype : str
         desired dtype, overrides default_dtype specified in config.
     device : str
@@ -348,7 +350,7 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
 
     History of blocking is stored together with history of hard-fusions.
     Subsequent blocking in a few steps and its equivalent single step blocking give the same tensor.
-    Applying block on tensors turns all previous meta fused legs into hard fused ones.
+    Applying block on tensors turns all previous meta-fused legs into hard-fused ones.
 
     Parameters
     ----------
