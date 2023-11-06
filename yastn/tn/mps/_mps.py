@@ -631,7 +631,7 @@ class MpsMpo:
             Other values refer to order `alpha` Renyi entropies.
         """
         schmidt_spectra = self.get_Schmidt_values()
-        return [tensor.entropy(spectrum, alpha=alpha)[0] for spectrum in schmidt_spectra]
+        return [tensor.entropy(spectrum ** 2, alpha=alpha) for spectrum in schmidt_spectra]
 
 
     def get_Schmidt_values(self) -> Sequence[yastn.Tensor]:

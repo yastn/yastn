@@ -55,7 +55,7 @@ def make_config(**kwargs) -> NamedTuple:
     fermionic : bool or tuple[bool,...]
         Specify behavior of :meth:`yastn.swap_gate` function, allowing to introduce fermionic symmetries.
         Allowed values: ``False``, ``True``, or a tuple ``(True, False, ...)`` with one bool for each component
-        charge vector i.e. of length sym.NSYM. Default is ``False``.
+        charge vector, i.e., of length sym.NSYM. Default is ``False``.
     default_fusion: str
         Specify default strategy to handle leg fusion: ``'hard'`` or ``'meta'``. See :meth:`yastn.Tensor.fuse_legs`
         for details. Default is ``'hard'``.

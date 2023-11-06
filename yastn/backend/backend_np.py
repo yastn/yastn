@@ -138,21 +138,16 @@ def norm(data, p):
     return max(np.abs(data)) if len(data) > 0  else np.float64(0.)
 
 
-def entropy(data, alpha=1, tol=1e-12):
-    """ von Neuman or Renyi entropy from svd's"""
-    Snorm = np.linalg.norm(data)
+def entropy(data, alpha, tol):
+    """ von Neuman or Renyi entropy from data describing probability distribution."""
+    Snorm = np.sum(data) if len(data) > 0 else 0.
     if Snorm > 0:
-        Smin = min(data)
         data = data / Snorm
         data = data[data > tol]
         if alpha == 1:
-            ent = -2 * np.sum(data * data * np.log2(data))
-        else:
-            ent = np.sum(data **(2 * alpha))
-        if alpha != 1:
-            ent = np.log2(ent) / (1 - alpha)
-        return ent, Smin, Snorm
-    return Snorm, Snorm, Snorm  # this should be 0., 0., 0.
+            return - np.sum(data * np.log2(data))
+        return np.log2(np.sum(data ** alpha)) / (1 - alpha)
+    return 0.
 
 
 ##########################

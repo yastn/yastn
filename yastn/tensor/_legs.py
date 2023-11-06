@@ -109,12 +109,14 @@ class Leg:
 
     def history(self) -> str:
         """
-        Show representation of Leg fusion history.
+        Show linearized representation of Leg fusion history.
 
-        'o' marks original legs
-        's' is for sum, i.e. block
-        'p' is for product, i.e., fuse_legs(..., mode='hard')
-        'm' is for meta-fusion
+        ::
+
+            'o' marks original legs
+            's' is for sum, i.e. block
+            'p' is for product, i.e., fuse_legs(..., mode='hard')
+            'm' is for meta-fusion
         """
         if isinstance(self.fusion, tuple):  # meta fused
             tree = self.fusion

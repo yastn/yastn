@@ -47,6 +47,10 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         signature of the new leg in U; equal 1 or -1. Default is 1.
         V is going to have opposite signature on connecting leg.
 
+    nU: bool
+        Whether or not to attach the charge of  `a` to `U`.
+        Otherwise it is attached to `V`. By default is True.
+
     Uaxis, Vaxis: int
         specify which leg of U and V tensors are connecting with S. By default
         it is the last leg of U and the first of V.
@@ -109,8 +113,8 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         V is going to have the opposite signature on the connecting leg.
 
     nU: bool
-        Whether or not to attach the charge of  `a` `U`. Otherwise attaches it to `V`.
-        By default is True.
+        Whether or not to attach the charge of  `a` to `U`.
+        Otherwise it is attached to `V`. By default is True.
 
     compute_uv: bool
         If True, compute U and V in addition to S. Default is True.
@@ -121,7 +125,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
 
     policy: str
         "fullrank" or "lowrank". Use standard full (but reduced) SVD for "fullrank".
-        For "lowrank", uses randomized (truncated) SVD and requires providing `D_block` in `kwargs`.
+        For "lowrank", uses randomized/truncated SVD and requires providing `D_block` in `kwargs`.
 
     fix_signs: bool
         Whether or not to fix phases in `U` and `V`,
@@ -403,7 +407,7 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
 
     Qaxis, Raxis: int
         specify which leg of Q and R tensors are connecting to the other tensor.
-        By delault it is the last leg of Q and the first leg of R.
+        By default it is the last leg of Q and the first leg of R.
 
     Returns
     -------
@@ -491,7 +495,7 @@ def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
         signature of connecting leg in U equall 1 or -1. Default is 1.
 
     Uaxis: int
-        specify which leg of U is the new connecting leg. By delault it is the last leg.
+        specify which leg of U is the new connecting leg. By default it is the last leg.
 
     Returns
     -------
@@ -586,7 +590,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
         signature of connecting leg in U equall 1 or -1. Default is 1.
 
     Uaxis: int
-        specify which leg of U is the new connecting leg. By delault it is the last leg.
+        specify which leg of U is the new connecting leg. By default it is the last leg.
 
     tol: float
         relative tolerance of singular values below which to truncate across all blocks.
@@ -616,33 +620,25 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
     return S, U
 
 
-def entropy(a, axes=(0, 1), alpha=1) -> tuple[number, number, number]:
+def entropy(a, alpha=1, tol=1e-12) -> number:
     r"""
-    Calculate entropy from spliting the tensor using svd.
+    Calculate entropy from probabilities encoded in diagonal tensor `a`.
 
-    If diagonal, calculates entropy treating S^2 as probabilities. Normalizes S^2 if neccesary.
-    If not diagonal, starts with svd to get the diagonal S.
-    Use base-2 log.
-
-    Returns also minimal singular value and normalization
+    Normalizes `a` to 1, but do check correctness otherwise.
+    Use base-2 log. For empty or zero tensor, return 0.
 
     Parameters
     ----------
-    axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
-        Specify two groups of legs between which to perform svd
-
     alpha: float
         Order of Renyi entropy.
-        alpha == 1 is von Neuman entropy -Tr(S^2 log2(S^2))
-        otherwise: 1/(1-alpha) log2(Tr(S^(2*alpha)))
+        alpha == 1 is von Neuman entropy: -Tr(a log2(a))
+        otherwise: 1/(1-alpha) log2(Tr(a ** alpha))
 
-    Returns
-    -------
-    entropy, minimal_singular_value, normalization
+    tol: float
+        Discard all probabilities smaller than `tol` during calculation.
     """
-    if len(a._data) == 0:
-        return a.zero_of_dtype(), a.zero_of_dtype(), a.zero_of_dtype()
     if not a.isdiag:
-        a = svd(a, axes=axes, compute_uv=False)
-    # entropy, Smin, normalization
-    return a.config.backend.entropy(a._data, alpha=alpha)
+        raise YastnError("yastn.linalg.entropy requires diagonal tensor.")
+    if not alpha > 0:
+        raise YastnError("yastn.linalg.entropy requires positive order alpha.")
+    return a.config.backend.entropy(a._data, alpha=alpha, tol=tol)

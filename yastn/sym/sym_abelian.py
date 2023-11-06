@@ -26,8 +26,8 @@ class sym_abelian(metaclass=sym_meta):
         Parameters
         ----------
             charges: numpy.ndarray(int)
-                `k x m x nsym` matrix, where `k` is the number of independent blocks,
-                and `m` is the number of fused legs.
+                `k x m x nsym` matrix, where `k` is the number of
+                independent blocks, and `m` is the number of fused legs.
 
             signatures: numpy.ndarray(int)
                 integer vector with `m` elements in `{-1, +1}`

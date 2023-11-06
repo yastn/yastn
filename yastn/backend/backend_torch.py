@@ -171,21 +171,16 @@ def norm(data, p):
     return data.abs().max() if len(data) > 0 else torch.tensor(0.) # else p == "inf":
 
 
-def entropy(data, alpha=1, tol=1e-12):
+def entropy(data, alpha, tol):
     """ von Neuman or Renyi entropy from svd's"""
-    Snorm = data.norm()
+    Snorm = torch.sum(data) if len(data) > 0 else 0.
     if Snorm > 0:
-        Smin = min(data)
         data = data / Snorm
         data = data[data > tol]
         if alpha == 1:
-            ent = -2 * torch.sum(data * data * torch.log2(data))
-        else:
-            ent = torch.sum(data **(2 * alpha))
-        if alpha != 1:
-            ent = torch.log2(ent) / (1 - alpha)
-        return ent, Smin, Snorm
-    return Snorm, Snorm, Snorm  # this should be 0., 0., 0.
+            return -torch.sum(data * torch.log2(data))
+        return torch.log2(torch.sum(data ** alpha)) / (1 - alpha)
+    return 0.
 
 
 ##########################
