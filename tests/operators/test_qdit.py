@@ -26,9 +26,16 @@ def test_qdit(d=5):
     assert I.device[:len(default_device)] == default_device  # for cuda, accept cuda:0 == cudav
 
     # used in mps Generator
-    d = ops_dense.to_dict()
-    (d["I"](3) - I).norm() < tol  # here 3 is a posible position in the mps
-    assert all(k in d for k in ('I',))
+    dictionary = ops_dense.to_dict()
+    (dictionary["I"](3) - I).norm() < tol  # here 3 is a posible position in the mps
+    assert all(k in dictionary for k in ('I',))
+
+    # override default d
+    local_d = d + 4
+    I = ops_dense.I(d=local_d)
+    leg = ops_dense.space(d=local_d)
+    assert leg == I.get_legs(axes=0)
+    assert np.allclose(I.to_numpy(), np.eye(local_d))
 
 
 if __name__ == '__main__':
