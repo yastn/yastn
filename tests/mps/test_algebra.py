@@ -115,7 +115,7 @@ def multiplication_example_gs(config=None, tol=1e-12):
     #
     # Test if we obtained the exact solution for energy?:
     #
-    assert pytest.approx(out.energy.item(), rel=tol) == Eng
+    assert abs(out.energy - Eng) < tol
     #
     # We should have the ground state.
     # Now we calculate the variation of energy <H^2>-<H>^2=<(H-Eng)^2>

@@ -75,7 +75,7 @@ after each SVD during the sweep through MPS/MPO.
 
         # Generate random MPO with no symmetry
         #
-        H = mps.random_dense_mpo(N=16, Dmax=25, d=2)
+        H = mps.random_dense_mpo(N=16, D=25, d=2)
 
         # Bring MPO to canonical form and truncate (here, left canonical form).
         # For MPO we do not want to change overall scale, thus no normalization.

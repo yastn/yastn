@@ -26,7 +26,7 @@ def build_spin1_aklt_state(N=5, lvec=(1, 0), rvec=(0, 1), config=None):
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
-    # config is used above by pytest to inject backend and device for tests
+    # pytest uses config to inject backend and device for testing
     config = yastn.make_config(**opts_config)
     A = yastn.Tensor(config, s=(-1, 1, 1))
     s13, s23 = np.sqrt(1. / 3), np.sqrt(2. / 3)
@@ -71,11 +71,15 @@ def measure_mps_aklt(config=None, tol=1e-12):
     psi = build_spin1_aklt_state(N=N, lvec=(1, 0), rvec=(1, 0), config=config)
     #
     # We verify transfer matrix in the middle of AKLT state
+    # to specify the effect of lvec and rvec
     #
     A = psi[N // 2]  # read MPS tensor
     T = yastn.ncon((A, A.conj()), ((-0, 1, -2), (-1, 1, -3)))
     T = T.fuse_legs(axes=((0, 1), (2, 3)))
-    Tref = np.array([[1, 0, 0, 2], [0, -1, 0, 0], [0, 0, -1, 0], [2, 0, 0, 1]])
+    Tref = np.array([[1,  0,  0,  2],
+                     [0, -1,  0,  0],
+                     [0,  0, -1,  0],
+                     [2,  0,  0,  1]])
     assert np.allclose(T.to_numpy(), Tref / 3, atol=tol)
     #
     # psi1 is not normalized.
@@ -84,8 +88,8 @@ def measure_mps_aklt(config=None, tol=1e-12):
     norm = psi.norm()  # use canonization to calculate norm
     norm2 = mps.vdot(psi, psi)  # directly contract mps squared
     #
-    assert pytest.approx(norm.item(), rel=tol) == np.sqrt(0.5)
-    assert pytest.approx(norm2.item(), rel=tol) == 0.5
+    assert abs(norm - np.sqrt(0.5)) < tol
+    assert abs(norm2 - 0.5) < tol
     #
     # Initialize dense Spin1 operators for expectation values calculations
     #
@@ -99,18 +103,18 @@ def measure_mps_aklt(config=None, tol=1e-12):
     #
     ez = mps.measure_1site(psi, {0: ops.sz(), N-1: ops.sz()}, psi)
     assert len(ez) == 2 and isinstance(ez, dict)
-    assert pytest.approx(ez[0], rel=tol) == 1. / 3  # psi is not normalized
-    assert pytest.approx(ez[N-1], rel=tol) == -1. / 3
+    assert abs(ez[0] - 1./3) < tol  # psi is not normalized
+    assert abs(ez[N - 1] + 1./3) < tol
     #
     psin = psi / norm
     ez = mps.measure_1site(psin, ops.sz(), psin)  # calculate sz on all sites
     assert len(ez) == N and isinstance(ez, dict)
-    assert pytest.approx(ez[0], rel=tol) == 2. / 3  # psin is normalized
+    assert abs(ez[0] - 2. / 3) < tol  # psin is normalized
     #
     # Calculate <Sz_i Sz_j> for all pairs i < j
     ezz = mps.measure_2site(psin, ops.sz(), ops.sz(), psin)
     assert len(ezz) == N * (N - 1) // 2 and isinstance(ez, dict)
-    assert pytest.approx(ezz[N // 2, N // 2 + 1], rel=tol) == -4. / 9
+    assert abs(ezz[N // 2, N // 2 + 1] + 4. / 9) < tol
     #
     #  Measure string operator; exp (i pi * Sz) = I - 2 * abs(Sz)
     #
@@ -121,7 +125,7 @@ def measure_mps_aklt(config=None, tol=1e-12):
     I = mps.product_mpo(ops.I(), N)
     Ostring = mps.generate_mpo(I, [Hterm])  # MPO a string correlator
     Estring = mps.vdot(psin, Ostring, psin)
-    assert pytest.approx(Estring.item(), rel=tol) == -4. / 9
+    assert abs(Estring + 4. / 9) < tol
 
 
 @pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': cfg},
@@ -153,7 +157,7 @@ def mps_spectrum_ghz(sym='dense', config=None, tol=1e-12):
     #
     # state psi is not normalized
     #
-    assert pytest.approx(psi.norm(), rel=tol) == np.sqrt(0.375)
+    assert abs(psi.norm() - np.sqrt(0.375)) < tol
     #
     # calculate Schmidt values; Schmidt values are properly normalized
     #
@@ -185,7 +189,7 @@ def mps_spectrum_ghz(sym='dense', config=None, tol=1e-12):
     #
     # the state psi is not affected by calculations
     #
-    assert pytest.approx(psi.norm(), rel=tol) == np.sqrt(0.375)
+    assert abs(psi.norm() - np.sqrt(0.375)) < tol
     #
     # similar thing can be done for MPO
 
@@ -218,7 +222,7 @@ def test_mpo_spectrum(sym, config, tol=1e-12):
     #
     # state psi is not normalized
     #
-    assert pytest.approx(psi.norm(), rel=tol) == np.sqrt(3) * 2. ** N
+    assert abs(psi.norm() - np.sqrt(3) * 2. ** N) < tol * 2. ** N
     #
     # calculate Schmidt values; Schmidt values are properly normalized
     #

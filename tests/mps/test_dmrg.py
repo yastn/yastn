@@ -1,5 +1,4 @@
 """ dmrg tested on XX model. """
-import logging
 import pytest
 import yastn.tn.mps as mps
 import yastn
@@ -9,7 +8,6 @@ try:
 except ImportError:
     from configs import config_dense as cfg
 
-tol = 1e-5
 
 def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
     r"""
@@ -50,10 +48,10 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
         #
         # Print the result:
         #
-        logging.info(f"2site DMRG; energy: {eng:{1}.{8}} / {ref_eng:{1}.{8}}"
-                     + f"; occupation: {occ:{1}.{8}} / {ref_occ}")
-        assert pytest.approx(eng.item(), rel=tol) == ref_eng
-        assert pytest.approx(occ.item(), rel=tol) == ref_occ
+        print(f"2site DMRG; energy: {eng:{1}.{8}} / {ref_eng:{1}.{8}}"
+              + f"; occupation: {occ:{1}.{8}} / {ref_occ}")
+        assert abs(eng - ref_eng) < tol
+        assert abs(occ - ref_occ) < tol
         #
         # We furthe iterate with '1site' DMRG
         # and stricter convergence criterion.
@@ -63,12 +61,12 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
 
         eng = mps.measure_mpo(psi, H, psi)
         occ = mps.measure_mpo(psi, O_occ, psi)
-        logging.info(f"1site DMRG; energy: {eng:{1}.{8}} / {ref_eng:{1}.{8}}"
-                     + f"; occupation: {occ:{1}.{8}} / {ref_occ}")
+        print(f"1site DMRG; energy: {eng:{1}.{8}} / {ref_eng:{1}.{8}}"
+              + f"; occupation: {occ:{1}.{8}} / {ref_occ}")
         # test that energy outputed by dmrg is correct
-        assert pytest.approx(eng.item(), rel=tol) == ref_eng
-        assert pytest.approx(occ.item(), rel=tol) == ref_occ
-        assert pytest.approx(eng.item(), rel=1e-14) == out.energy.item()
+        assert abs(eng - ref_eng) < tol
+        assert abs(occ - ref_occ) < tol
+        assert abs(eng - out.energy) < tol  # test dmrg_ output information
         #
         # Finally, we add the found state psi to the list of states
         # to be projected out in the next step of the loop.
@@ -93,7 +91,6 @@ def dmrg_XX_model_dense(config=None, tol=1e-6):
     # In this test we will consider sectors of different occupations.
     #
     # In this example we use yastn.Tensor with no symmetry imposed.
-    logging.info(' Tensor : dense ')
     #
     # Here, the Hamiltonian for N = 7 sites
     # is obtained with the automatic generator.
@@ -165,7 +162,6 @@ def dmrg_XX_model_Z2(config=None, tol=1e-6):
     """
     Initialize random MPS of Z2 tensors and tests mps.dmrg_ vs known results.
     """
-    logging.info(' Tensor : Z2 ')
     opts_config = {} if config is None else \
             {'backend': config.backend,
             'default_device': config.default_device}
@@ -175,8 +171,6 @@ def dmrg_XX_model_Z2(config=None, tol=1e-6):
     generate.random_seed(seed=0)
     N, Dmax  = 7, 8
     opts_svd = {'tol': 1e-8, 'D_total': Dmax}
-
-    logging.info(' Tensor : Z2 ')
 
     Eng_occ_target = {
         0: ([-3.227339492125, -2.861972627395, -2.461972627395],
@@ -203,7 +197,6 @@ def dmrg_XX_model_U1(config=None, tol=1e-6):
     """
     Initialize random MPS of U(1) tensors and tests _dmrg vs known results.
     """
-    logging.info(' Tensor : U1 ')
     opts_config = {} if config is None else \
         {'backend': config.backend,
         'default_device': config.default_device}
@@ -242,7 +235,6 @@ def dmrg_XX_model_U1(config=None, tol=1e-6):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level='INFO')
     dmrg_XX_model_dense()
     dmrg_XX_model_Z2()
     dmrg_XX_model_U1()

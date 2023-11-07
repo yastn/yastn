@@ -12,17 +12,16 @@ except ImportError:
 tol = 1e-12
 
 
-
 def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config=None):
     """
     Generate random MPS of N sites, with bond dimension D_total,
     tensors with symmetry sym and total charge n.
     """
 
-    # config is used here by pytest to inject backend and device for testing
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
+    # pytest uses config to inject backend and device for testing
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
     generate = mps.Generator(N, ops)
@@ -34,7 +33,7 @@ def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config=None):
     ops.random_seed(seed=0)
     I = mps.product_mpo(ops.I(), N)
     psi2 = mps.random_mps(I, D_total=D_total, n=n)
-    assert (psi - psi2).norm() < tol
+    assert (psi - psi2).norm() < 1e-12
 
     return psi
 
@@ -43,10 +42,11 @@ def random_mpo_spinless_fermions(N=10, D_total=16, sym='Z2', config=None):
     """
     Generate random MPO of N sites, with bond dimension D_total and tensors with symmetry sym.
     """
-    if config is None:
-        ops = yastn.operators.SpinlessFermions(sym=sym)
-    else:  # config is used here by pytest to inject backend and device for testing
-        ops = yastn.operators.SpinlessFermions(sym=sym, backend=config.backend, default_device=config.default_device)
+    opts_config = {} if config is None else \
+                  {'backend': config.backend,
+                   'default_device': config.default_device}
+    # pytest uses config to inject backend and device for testing
+    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
     generate = mps.Generator(N, ops)
     H = generate.random_mpo(D_total=D_total)
@@ -67,7 +67,7 @@ def test_generate_random_mps():
         assert pytest.approx(O.norm().item(), abs=tol) == 0
 
         n0 = (0,) * len(nn)
-        psi = random_mps_spinless_fermions(N, D_total, sym, nn)
+        psi = random_mps_spinless_fermions(N, D_total, sym, nn, config=cfg)
         leg = psi[psi.first].get_legs(axes=0)
         assert leg.t == (nn,) and leg.s == -1
         leg = psi[psi.last].get_legs(axes=2)
@@ -76,7 +76,7 @@ def test_generate_random_mps():
         assert bds[0] == bds[-1] == 1
         assert all(bd > D_total/2 for bd in bds[2:-2])
 
-        H = random_mpo_spinless_fermions(N, D_total, sym)
+        H = random_mpo_spinless_fermions(N, D_total, sym, config=cfg)
         leg = H[H.first].get_legs(axes=0)
         assert leg.t == (n0,) and leg.s == -1
         leg = H[H.last].get_legs(axes=2)
@@ -113,7 +113,7 @@ def test_product_mps():
 
 
 def test_product_mpo():
-
+    """ test mps.product_mpo"""
     for sym, nl, nr in [('U1', (0,), (0,)), ('Z2', (0,), (0,)), ('dense', (), ())]:
         ops = yastn.operators.Spin12(sym=sym, backend=cfg.backend, default_device=cfg.default_device)
         N = 8

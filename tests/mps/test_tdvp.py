@@ -46,7 +46,7 @@ def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
     #
     # Generate corresponding MPO using the function from previous examples
     #
-    H0 = mpo_hopping_Hterm(N, J0, sym=sym, config=config)
+    H0 = mpo_hopping_Hterm(J0, sym=sym, config=config)
     #
     # Find the ground state using DMRG
     #
@@ -112,7 +112,7 @@ def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
           [ 0,   0  ,   0,   1,   0.5, 0  ],
           [ 0,   0  ,   0,   0,  -1,   0.5],
           [ 0,   0  ,   0,   0,   0,   1  ]]
-    H1 = mpo_hopping_Hterm(N, J1, sym=sym, config=config)
+    H1 = mpo_hopping_Hterm(J1, sym=sym, config=config)
     #
     # Exact reference for free-fermionic correlation matrix
     #

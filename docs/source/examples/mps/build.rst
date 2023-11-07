@@ -96,5 +96,10 @@ Using Python's dictionary
 Using HDF5 format
 ^^^^^^^^^^^^^^^^^
 
+::
+
+    import os
+    import h5py
+
 .. literalinclude:: /../../tests/mps/test_save_load.py
         :pyobject: save_load_mps_hdf5

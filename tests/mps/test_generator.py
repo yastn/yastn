@@ -17,15 +17,15 @@ tol = 1e-12
 #
 ####### MPO for XX model ##########
 #
-def build_mpo_nn_hopping_manually(N, t, mu, config):
+def build_mpo_nn_hopping_manually(N, t, mu, sym='U1', config=None):
     """
     Nearest-neighbor hopping Hamiltonian on N sites
     with hopping amplitude t and chemical potential mu, i.e.,
     H = t * sum_{n=1}^{N-1} (cp_n c_{n+1} + cp_{n+1} c_n)
       + mu * sum_{n=1}^{N} cp_n c_n
 
-    Initialize MPO tensor by hand with dense, Z2, or U1 symmetric tensors.
-    Symmetry is specified in config.
+    Initialize MPO symmetric tensors by hand with sym = 'dense', 'Z2', or 'U1'.
+    Config is used to inject non-default backend and default_device.
     """
     #
     # Build empty MPO for system of N sites
@@ -46,10 +46,14 @@ def build_mpo_nn_hopping_manually(N, t, mu, config):
     # We set fermionic=True for conistency as in tests
     # MPO is compared with operators.SpinlessFermions.
     # backend and device is inherited from config to automitize pytest testing.
-    config = yastn.make_config(fermionic=True, default_device=config.default_device,
-                                sym=config.sym, backend=config.backend)
 
-    if config.sym.SYM_ID == 'dense':  # no symmetry
+    opts_config = {} if config is None else \
+                  {'backend': config.backend,
+                   'default_device': config.default_device}
+    # pytest uses config to inject backend and device for testing
+    config = yastn.make_config(fermionic=True, sym=sym, **opts_config)
+
+    if sym == 'dense':  # no symmetry
         # Basic rank-2 blocks (matrices) of on-site tensors
         cp = np.array([[0, 0], [1, 0]])
         c  = np.array([[0, 1], [0, 0]])
@@ -74,7 +78,7 @@ def build_mpo_nn_hopping_manually(N, t, mu, config):
                                 [mu * nn, t * cp, t * c, ee]])
                 H[n].set_block(val=tmp, Ds=(4, 2, 4, 2))
 
-    elif config.sym.SYM_ID == 'Z2':  # Z2 symmetry
+    elif sym == 'Z2':  # Z2 symmetry
         for n in H.sweep(to='last'):
             H[n] = yastn.Tensor(config=config, s=(-1, 1, 1, -1), n=0)
             if n == H.first:
@@ -109,7 +113,7 @@ def build_mpo_nn_hopping_manually(N, t, mu, config):
                 H[n].set_block(ts=(1, 0, 0, 1),
                                Ds=(2, 1, 2, 1), val=[[0, 0], [1, 0]])
 
-    elif config.sym.SYM_ID == 'U(1)':  # U1 symmetry
+    elif sym == 'U1':  # U1 symmetry
         for n in H.sweep(to='last'):
             H.A[n] = yastn.Tensor(config=config, s=(-1, 1, 1, -1), n=0)
             if n == H.first:
@@ -146,25 +150,28 @@ def build_mpo_nn_hopping_manually(N, t, mu, config):
     return H
 
 
-def mpo_hopping_Hterm(N, J, sym="U1", config=None):
+def mpo_hopping_Hterm(J, sym="U1", config=None):
     """
     Fermionic hopping Hamiltonian on N sites with hoppings at arbitrary range.
 
-    The upper triangular part of matrix J defines hopping amplitudes,
+    The upper triangular part of N x N matrix J defines hopping amplitudes,
     and the diagonal defines on-site chemical potentials.
     """
 
-    # config is used here by pytest to inject backend and device for testing
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
+    # pytest uses config to inject backend and device for testing
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
     Hterms = []  # list of Hterm(amplitude, positions, operators)
     # Each Hterm corresponds to a single product of local operators.
     # Hamiltonian is a sum of such products.
-
+    #
+    N = len(J)
+    #
     # chemical potential on site n
+    #
     for n in range(N):
         if abs(J[n][n]) > 0:
             Hterms.append(mps.Hterm(amplitude=J[n][n],
@@ -200,10 +207,10 @@ def mpo_nn_hopping_latex(N, t, mu, sym="U1", config=None):
     and the diagonal defines on-site chemical potentials.
     """
 
-    # config is used here by pytest to inject backend and device for testing
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
+    # pytest uses config to inject backend and device for testing
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
     Hstr = "\sum_{j,k \in NN} t (cp_{j} c_{k}+cp_{k} c_{j})"
@@ -218,7 +225,7 @@ def mpo_nn_hopping_latex(N, t, mu, sym="U1", config=None):
     return H
 
 
-def mpo_hopping_latex(N, J, sym="U1", config=None):
+def mpo_hopping_latex(J=np.array([[0.5, 1], [0, 0.2]]), sym="U1", config=None):
     """
     Nearest-neighbor hopping Hamiltonian on N sites
     with hopping amplitude t and chemical potential mu.
@@ -227,11 +234,13 @@ def mpo_hopping_latex(N, J, sym="U1", config=None):
     and the diagonal defines on-site chemical potentials.
     """
 
-    # config is used here by pytest to inject backend and device for testing
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
+    # pytest uses config to inject backend and device for testing
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
+
+    N = len(J)
 
     Hstr = "\sum_{j,k \in NN} J_{j,k} (cp_{j} c_{k}+cp_{k} c_{j})"
     Hstr += " + \sum_{i \in sites} J_{i,i} cp_{i} c_{i}"
@@ -274,7 +283,7 @@ def test_generator_mpo():
                         generate = mps.Generator(N, ops, map=emap)
 
                         H1 = generate.mpo_from_latex(H_str, eparam)
-                        H2 = build_mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=generate.config)
+                        H2 = build_mpo_nn_hopping_manually(N=N, t=t, mu=mu, sym=sym, config=cfg)
                         H3 = mpo_nn_hopping_latex(N=N, t=t, mu=mu, sym=sym, config=cfg)
 
                         generate.random_seed(seed=0)
@@ -308,8 +317,8 @@ def test_mpo_from_latex():
                \sum_{j\in sites} mu_{j} cp_{j} c_{j}"
 
     H1 = generate.mpo_from_latex(h_input, eparam)
-    H2 = mpo_hopping_Hterm(N, J, sym=sym, config=cfg)
-    H3 = mpo_hopping_latex(N, J, sym=sym, config=cfg)
+    H2 = mpo_hopping_Hterm(J, sym=sym, config=cfg)
+    H3 = mpo_hopping_latex(J, sym=sym, config=cfg)
 
     tmp = mps.vdot(H1, H2) / (H1.norm() * H2.norm())
     assert pytest.approx(tmp.item(), rel=tol) == 1
@@ -366,9 +375,8 @@ def test_build_mpo_nn_hopping_manually():
     """ test example generating mpo by hand """
     N, t, mu = 10, 1.0, 0.1
     H = {}
-    H['dense'] = build_mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=cfg)
-    H['Z2'] = build_mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=config_Z2)
-    H['U1'] = build_mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=config_U1)
+    for sym in ['dense', 'Z2', 'U1']:
+        H[sym] = build_mpo_nn_hopping_manually(N=N, t=t, mu=mu, sym=sym, config=cfg)
 
     H_Z2_dense = mps.Mpo(N=N)
     H_U1_dense = mps.Mpo(N=N)
