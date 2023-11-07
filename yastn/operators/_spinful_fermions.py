@@ -1,6 +1,5 @@
 """ Generator of basic local spingful-fermion operators. """
 from __future__ import annotations
-from ..sym import sym_Z2, sym_U1xU1, sym_U1xU1xZ2
 from ..tensor import YastnError, Tensor, Leg
 from ._meta_operators import meta_operators
 
@@ -35,8 +34,7 @@ class SpinfulFermions(meta_operators):
         if sym not in ('Z2', 'U1xU1', 'U1xU1xZ2'):
             raise YastnError("For SpinfulFermions sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').")
         kwargs['fermionic'] = (False, False, True) if sym == 'U1xU1xZ2' else True
-        import_sym = {'Z2': sym_Z2, 'U1xU1': sym_U1xU1, 'U1xU1xZ2': sym_U1xU1xZ2}
-        kwargs['sym'] = import_sym[sym]
+        kwargs['sym'] = sym
         super().__init__(**kwargs)
         self._sym = sym
         self.operators = ('I', 'n', 'c', 'cp')

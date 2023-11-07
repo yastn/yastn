@@ -1,7 +1,6 @@
 """ Generator of basic local spin-1 operators. """
 from __future__ import annotations
 import numpy as np
-from ..sym import sym_none, sym_Z3, sym_U1
 from .. import block
 from ..tensor import YastnError, Tensor, Leg
 from ._meta_operators import meta_operators
@@ -40,8 +39,7 @@ class Spin1(meta_operators):
         if sym not in ('dense', 'Z3', 'U1'):
             raise YastnError("For Spin1 sym should be in ('dense', 'Z3', 'U1').")
         kwargs['fermionic'] = False
-        import_sym = {'dense': sym_none, 'Z3': sym_Z3, 'U1': sym_U1}
-        kwargs['sym'] = import_sym[sym]
+        kwargs['sym'] = sym
         super().__init__(**kwargs)
         self._sym = sym
         self.operators = ('I', 'sx', 'sy', 'sz', 'sp', 'sm')

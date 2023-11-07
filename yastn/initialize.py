@@ -12,7 +12,10 @@ from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
 from .tensor._merging import _Fusion, _embed_tensor, _sum_hfs
 from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
 from .tensor._tests import _test_can_be_combined
+from .backend import backend_np
+from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
+_syms = {"dense": sym_none, "U1": sym_U1, "Z2": sym_Z2, "Z3": sym_Z3, "U1xU1": sym_U1xU1, "U1xU1xZ2": sym_U1xU1xZ2}
 
 __all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
            'make_config', 'load_from_dict', 'load_from_hdf5', 'decompress_from_1d']
@@ -36,10 +39,12 @@ def make_config(**kwargs) -> NamedTuple:
 
         Defaults to NumPy backend.
 
-    sym : symmetry module or compatible object
+    sym : symmetry module or compatible object or str
         Specify abelian symmetry. To see how YASTN defines symmetries,
         see :class:`yastn.sym.sym_abelian`.
         Defaults to ``yastn.sym.sym_none``, effectively a dense tensor.
+        For predefined symmetries, takes string input from
+        'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.
     default_device : str
         Tensors can be stored on various devices as supported by ``backend``
 
@@ -63,11 +68,15 @@ def make_config(**kwargs) -> NamedTuple:
         Overrides fusion strategy provided in :meth:`yastn.Tensor.fuse_legs`. Default is ``None``.
     """
     if "backend" not in kwargs:
-        from .backend import backend_np
+
         kwargs["backend"] = backend_np
     if "sym" not in kwargs:
-        from .sym import sym_none
         kwargs["sym"] = sym_none
+    elif isinstance(kwargs["sym"], str):
+        try:
+            kwargs["sym"] = _syms[kwargs["sym"]]
+        except KeyError:
+            raise YastnError("sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'.")
     return _config(**{a: kwargs[a] for a in _config._fields if a in kwargs})
 
 

@@ -1,5 +1,4 @@
 from __future__ import annotations
-from ..sym import sym_none
 from ..initialize import eye
 from .. import diag
 from ..tensor import Leg
@@ -24,7 +23,7 @@ class Qdit(meta_operators):
         Default configuration sets :code:`fermionic` to :code:`False`.
         """
         kwargs['fermionic'] = False
-        kwargs['sym'] = sym_none
+        kwargs['sym'] = 'dense'
         super().__init__(**kwargs)
         self._d = d
         self._sym = 'dense'

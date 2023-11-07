@@ -1,6 +1,5 @@
 """ Generator of basic local spingless-fermion operators. """
 from __future__ import annotations
-from ..sym import sym_Z2, sym_U1
 from ..tensor import YastnError, Tensor, Leg
 from ._meta_operators import meta_operators
 
@@ -27,8 +26,7 @@ class SpinlessFermions(meta_operators):
         if sym not in ('Z2', 'U1'):
             raise YastnError("For SpinlessFermions sym should be in ('Z2', 'U1').")
         kwargs['fermionic'] = True
-        import_sym = {'Z2': sym_Z2, 'U1': sym_U1}
-        kwargs['sym'] = import_sym[sym]
+        kwargs['sym'] = sym
         super().__init__(**kwargs)
         self._sym = sym
         self.operators = ('I', 'n', 'c', 'cp')

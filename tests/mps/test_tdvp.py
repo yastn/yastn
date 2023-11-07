@@ -13,10 +13,10 @@ except ImportError:
     from test_generator import mpo_hopping_Hterm
 
 
-@pytest.mark.parametrize('kwargs', [{'config': cfg}])
-def test_tdvp(kwargs):
+@pytest.mark.parametrize('kwargs', [{'config': cfg, 'sym': 'U1'},
+                                    {'config': cfg, 'sym': 'Z2'}])
+def test_tdvp_sudden_quench(kwargs):
     tdvp_sudden_quench(**kwargs, tol=1e-10)
-    tdvp_KZ_quench(**kwargs, tol=1e-10)
 
 
 def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
@@ -57,9 +57,12 @@ def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
     opts_svd = {'tol': 1e-15, 'D_total': Dmax}
     #
     # Run DMRG for the ground state
+    # global ground state is for n=3, i.e., works for Z2 and U1
     #
     I = mps.product_mpo(ops.I(), N)
-    psi = mps.random_mps(I, D_total=Dmax, n=n)
+    n_psi = n % 2 if sym=='Z2' else n # for U1; charge of MPS
+    psi = mps.random_mps(I, D_total=Dmax, n=n_psi)
+    #
     out = mps.dmrg_(psi, H0, method='2site', max_sweeps=2, opts_svd=opts_svd)
     out = mps.dmrg_(psi, H0, method='1site', max_sweeps=10,
                     energy_tol=1e-14, Schmidt_tol=1e-14)
@@ -149,6 +152,11 @@ def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
             #
             assert np.allclose(Cref, Cphi, rtol=tol)
 
+
+@pytest.mark.parametrize('kwargs', [{'config': cfg, 'sym': 'Z2'},
+                                    {'config': cfg, 'sym': 'dense'}])
+def test_tdvp_KZ_quench(kwargs):
+    tdvp_KZ_quench(**kwargs)
 
 def tdvp_KZ_quench(sym='Z2', config=None):
     """
@@ -248,7 +256,7 @@ def tdvp_KZ_quench(sym='Z2', config=None):
 
 
 if __name__ == "__main__":
-    for sym in ['U1']:
+    for sym in ['Z2', 'U1']:
         t0 = time.time()
         tdvp_sudden_quench(sym=sym)
         print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
