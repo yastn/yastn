@@ -40,14 +40,15 @@ def build_spin1_aklt_state(N=5, lvec=(1, 0), rvec=(0, 1), config=None):
     RV = yastn.Tensor(config, s=(-1, 1))
     RV.set_block(Ds=(2, 1), val=rvec)
     #
-    # We initialize empty MPS for N sites, and assign its on-site tensors one-by-one.
+    # We initialize empty MPS for N sites
+    # and assign its on-site tensors one-by-one.
     #
     psi = mps.Mps(N)
     for n in range(N):
         psi[n] = A.copy()
     #
     # Due to open boundary conditions, the first and the last
-    # MPS tensors have left and right virtual indices projected to dimension 1.
+    # MPS tensors have left and right virtual indices projected to dimension 1
     #
     psi[psi.first] = LV @ psi[psi.first]
     psi[psi.last] = psi[psi.last] @ RV
@@ -57,7 +58,7 @@ def build_spin1_aklt_state(N=5, lvec=(1, 0), rvec=(0, 1), config=None):
     return psi
 
 
-@pytest.mark.parametrize("kwargs", [{'config': cfg}])
+@pytest.mark.parametrize('kwargs', [{'config': cfg}])
 def test_measure_mps_aklt(kwargs):
     measure_mps_aklt(**kwargs, tol=1e-12)
 
@@ -123,7 +124,7 @@ def measure_mps_aklt(config=None, tol=1e-12):
     assert pytest.approx(Estring.item(), rel=tol) == -4. / 9
 
 
-@pytest.mark.parametrize("kwargs", [{'sym': 'dense', 'config': cfg},
+@pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': cfg},
                                   {'sym': 'Z3', 'config': cfg},
                                   {'sym': 'U1', 'config': cfg}])
 def test_mps_spectrum_ghz(kwargs):
@@ -241,6 +242,33 @@ def test_mpo_spectrum(sym, config, tol=1e-12):
     #
     assert all(abs(ent - np.log2(3)) < tol for ent in entropies[1:-1])
     assert abs(entropies[0]) < tol and abs(entropies[-1]) < tol
+
+
+
+# def correlation_matrix(psi, ops):
+#     """ Calculate correlation matrix for Mps psi  C[m,n] = <c_n^dag c_m>"""
+#     assert pytest.approx(psi.norm().item()) == 1
+#     N = psi.N
+#     # first approach: directly act with c operators on state psi
+#     I = mps.product_mpo(ops.I(), N)
+#     cns = [mps.generate_mpo(I, [mps.Hterm(1, [n], [ops.c()])]) for n in range(N)]
+#     ps = [cn @ psi for cn in cns]
+#     C = np.zeros((N, N), dtype=np.complex128)
+#     for m in range(N):
+#         for n in range(N):
+#             C[m, n] = mps.vdot(ps[n], ps[m])
+
+#     # second approach: use measure_1site() and measure_2site()
+#     occs = mps.measure_1site(psi, ops.n(), psi)
+#     cpc = mps.measure_2site(psi, ops.cp(), ops.c(), psi)
+#     C2 = np.zeros((N, N), dtype=np.complex128)
+#     for n, v in occs.items():
+#         C2[n, n] = v
+#     for (n1, n2), v in cpc.items():
+#         C2[n2, n1] = v
+#         C2[n1, n2] = v.conj()
+#     assert np.allclose(C, C2)
+#     return C
 
 
 if __name__ == "__main__":

@@ -21,7 +21,8 @@ def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config=None):
 
     # config is used here by pytest to inject backend and device for testing
     opts_config = {} if config is None else \
-                  {'backend': config.backend, 'default_device': config.default_device}
+                  {'backend': config.backend,
+                   'default_device': config.default_device}
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
     generate = mps.Generator(N, ops)

@@ -14,6 +14,12 @@ Ground state of spin-1 AKLT model
 Here, as an example, we set up a well-known exact MPS: A ground state of
 `Affleck-Kennedy-Lieb-Tasaki (AKLT) model <https://en.wikipedia.org/wiki/AKLT_model>`_.
 
+::
+
+    import numpy as np
+    import yastn
+    import yastn.tn.mps as mps
+
 .. literalinclude:: /../../tests/mps/test_measurement.py
         :pyobject: build_spin1_aklt_state
 
@@ -27,7 +33,7 @@ and on-site energy :math:`\mu` with different
 realizations of explicit symmetry.
 
 .. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: mpo_nn_hopping_manually
+        :pyobject: build_mpo_nn_hopping_manually
 
 
 Building MPO using Hterm
@@ -76,7 +82,6 @@ Save and load MPS/MPO
 ---------------------
 
 MPS/MPO can be saved/loaded either to/from a dictionary or an HDF5 file.
-
 :ref:`YASTN configuration<tensor/configuration:yastn configuration>`
 with matching symmetry has to be provided
 for on-site MPS/MPO tensors
@@ -86,10 +91,10 @@ Using Python's dictionary
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. literalinclude:: /../../tests/mps/test_save_load.py
-        :pyobject: test_save_load_mps_dict
+        :pyobject: save_load_mps_dict
 
 Using HDF5 format
 ^^^^^^^^^^^^^^^^^
 
 .. literalinclude:: /../../tests/mps/test_save_load.py
-        :pyobject: test_save_load_mps_hdf5
+        :pyobject: save_load_mps_hdf5

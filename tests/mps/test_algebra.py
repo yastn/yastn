@@ -64,46 +64,47 @@ def test_addition(tol=1e-8):
 
 
 @pytest.mark.parametrize("kwargs", [{'config': cfg}])
-def test_multiplication_in_ground_state(kwargs):
-    multiplication_in_ground_state(**kwargs)
+def test_multiplication_example_gs(kwargs):
+    multiplication_example_gs(**kwargs)
 
-def multiplication_in_ground_state(config=None, tol=1e-12):
+def multiplication_example_gs(config=None, tol=1e-12):
     """
     Calculate ground state and tests, within eigen-condition,
     functions mps.multiply, __mul__, mps.zipper and mps.add
 
-    This test presents multiplication as part of DMRG study.
+    This test presents multiplication as part of the DMRG study.
     We use multiplication to get expectation values from a state.
     Knowing the exact solution, we will compare it to the value we obtain.
     """
     N = 7
-    Eng = -3.427339492125848
+    Eng = -3.427339492125
+    t, mu = 1.0, 0.2
     #
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
     # pytest uses config to inject backend and device for testing
     ops = yastn.operators.SpinlessFermions(sym='U1', **opts_config)
-    generate = mps.Generator(N=N, operators=ops)
     #
-    # The Hamiltonian is obtained with automatic generator.
+    # The Hamiltonian is obtained using Hterm.
     #
-    parameters = {"t": 1.0,
-                  "mu": 0.2,
-                  "rangeN": range(N),
-                  "rangeNN": zip(range(N-1),range(1,N))}
-    H_str = "\sum_{i,j \in rangeNN} t ( cp_{i} c_{j} + cp_{j} c_{i} )" \
-          + " + \sum_{j\in rangeN} mu cp_{j} c_{j}"
-    H = generate.mpo_from_latex(H_str, parameters)
+    I = mps.product_mpo(ops.I(), N)  # identity MPO
+    terms = []
+    for i in range(N - 1):
+        terms.append(mps.Hterm(t, (i, i+1), (ops.cp(), ops.c())))
+        terms.append(mps.Hterm(t, (i+1, i), (ops.cp(), ops.c())))
+    for i in range(N):
+        terms.append(mps.Hterm(mu, [i], [ops.cp() @ ops.c()]))
+    H = mps.generate_mpo(I, terms)
     #
     # To standardize this test we will fix a seed for random MPS we use.
     #
-    generate.random_seed(seed=0)
+    ops.random_seed(seed=0)
     #
-    # In this example we use yastn.Tensor's with U(1) symmetry.
+    # In this example we use yastn.Tensor with U(1) symmetry.
     #
     total_charge = 3
-    psi = generate.random_mps(D_total=8, n=total_charge)
+    psi = mps.random_mps(I, D_total=8, n=total_charge)
     #
     # We set truncation for DMRG and run the algorithm in '2site' version.
     #
@@ -112,7 +113,7 @@ def multiplication_in_ground_state(config=None, tol=1e-12):
     out = mps.dmrg_(psi, H, method='2site', **opts_dmrg, opts_svd=opts_svd)
     out = mps.dmrg_(psi, H, method='1site', **opts_dmrg)
     #
-    # Test if we obtained exact solution for the energy?:
+    # Test if we obtained the exact solution for energy?:
     #
     assert pytest.approx(out.energy.item(), rel=tol) == Eng
     #
@@ -143,8 +144,8 @@ def multiplication_in_ground_state(config=None, tol=1e-12):
     assert p0.norm() < tol
     #
     # case 2/
-    # Here H @ psi is calculated exactly with resulting bond dimension
-    # being a product of bond dimensions of H and psi.
+    # Here H @ psi is calculated exactly with resulting
+    # bond dimension being a product of bond dimensions of H and psi.
     #
     Hpsi = mps.multiply(H, psi)
     p0 = Eng * psi - Hpsi
@@ -159,4 +160,4 @@ def multiplication_in_ground_state(config=None, tol=1e-12):
 if __name__ == "__main__":
     test_addition()
     test_addition_basic()
-    multiplication_in_ground_state()
+    multiplication_example_gs()

@@ -90,4 +90,4 @@ We can test the multiplication of MPO and MPS using an example of a ground state
 obtained with :ref:`DMRG<mps/algorithms_dmrg:Density matrix renormalization group (DMRG)>`.
 
 .. literalinclude:: /../../tests/mps/test_algebra.py
-        :pyobject: multiplication_in_ground_state
+        :pyobject: multiplication_example_gs

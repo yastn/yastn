@@ -16,15 +16,16 @@ except ImportError:
     from configs import config_dense as config
 
 
-@pytest.mark.parametrize("kwargs", [{'sym': 'dense', 'config': config},
+@pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': config},
                                     {'sym': 'Z3', 'config': config},
                                     {'sym': 'U1', 'config': config}])
 def test_save_load_mps_hdf5(kwargs):
     save_load_mps_hdf5(**kwargs)
 
 def save_load_mps_hdf5(sym='dense', config=None, tol=1e-12):
-    """Initialize random MPS and checks saving/loading to/from HDF5 file."""
-    #
+    """
+    Initialize random MPS and checks saving/loading to/from HDF5 file.
+    """
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
@@ -72,15 +73,16 @@ def save_load_mps_hdf5(sym='dense', config=None, tol=1e-12):
     # assert (psi - phi).norm() < tol
 
 
-@pytest.mark.parametrize("kwargs", [{'sym': 'dense', 'config': config},
+@pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': config},
                                     {'sym': 'Z3', 'config': config},
                                     {'sym': 'U1', 'config': config}])
 def test_save_load_mps_dict(kwargs):
     save_load_mps_dict(**kwargs)
 
 def save_load_mps_dict(sym='dense', config=None, tol=1e-12):
-    """Initialize random MPS and checks saving/loading to/from npy file."""
-    #
+    """
+    Initialize random MPS and checks saving/loading to/from npy file.
+    """
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}

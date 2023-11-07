@@ -17,11 +17,12 @@ tol = 1e-12
 #
 ####### MPO for XX model ##########
 #
-def mpo_nn_hopping_manually(N, t, mu, config):
+def build_mpo_nn_hopping_manually(N, t, mu, config):
     """
     Nearest-neighbor hopping Hamiltonian on N sites
     with hopping amplitude t and chemical potential mu, i.e.,
-    t * sum_{n=1}^{N-1} (cp_n c_{n+1} + cp_{n+1} c_n) + mu * sum_{n=1}^{N} cp_n c_n
+    H = t * sum_{n=1}^{N-1} (cp_n c_{n+1} + cp_{n+1} c_n)
+      + mu * sum_{n=1}^{N} cp_n c_n
 
     Initialize MPO tensor by hand with dense, Z2, or U1 symmetric tensors.
     Symmetry is specified in config.
@@ -57,7 +58,9 @@ def mpo_nn_hopping_manually(N, t, mu, config):
         oo = np.array([[0, 0], [0, 0]])
 
         for n in H.sweep(to='last'):
-            H[n] = yastn.Tensor(config=config, s=(-1, 1, 1, -1)) # empty tensors
+            # empty tensors
+            H[n] = yastn.Tensor(config=config, s=(-1, 1, 1, -1))
+            # that gets filled-in
             if n == H.first:
                 tmp = np.block([[mu * nn, t * cp, t * c, ee]])
                 H[n].set_block(val=tmp, Ds=(1, 2, 4, 2))
@@ -75,43 +78,71 @@ def mpo_nn_hopping_manually(N, t, mu, config):
         for n in H.sweep(to='last'):
             H[n] = yastn.Tensor(config=config, s=(-1, 1, 1, -1), n=0)
             if n == H.first:
-                H[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 2, 1))
-                H[n].set_block(ts=(0, 1, 0, 1), val=[mu, 1], Ds=(1, 1, 2, 1))
-                H[n].set_block(ts=(0, 0, 1, 1), val=[t, 0], Ds=(1, 1, 2, 1))
-                H[n].set_block(ts=(0, 1, 1, 0), val=[0, t], Ds=(1, 1, 2, 1))
+                H[n].set_block(ts=(0, 0, 0, 0),
+                               Ds=(1, 1, 2, 1), val=[0, 1])
+                H[n].set_block(ts=(0, 1, 0, 1),
+                               Ds=(1, 1, 2, 1), val=[mu, 1])
+                H[n].set_block(ts=(0, 0, 1, 1),
+                               Ds=(1, 1, 2, 1), val=[t, 0])
+                H[n].set_block(ts=(0, 1, 1, 0),
+                               Ds=(1, 1, 2, 1), val=[0, t])
             elif n == H.last:
-                H[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
-                H[n].set_block(ts=(0, 1, 0, 1), val=[1, mu], Ds=(2, 1, 1, 1))
-                H[n].set_block(ts=(1, 1, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
-                H[n].set_block(ts=(1, 0, 0, 1), val=[0, 1], Ds=(2, 1, 1, 1))
+                H[n].set_block(ts=(0, 0, 0, 0),
+                               Ds=(2, 1, 1, 1), val=[1, 0])
+                H[n].set_block(ts=(0, 1, 0, 1),
+                               Ds=(2, 1, 1, 1), val=[1, mu])
+                H[n].set_block(ts=(1, 1, 0, 0),
+                               Ds=(2, 1, 1, 1), val=[1, 0])
+                H[n].set_block(ts=(1, 0, 0, 1),
+                               Ds=(2, 1, 1, 1), val=[0, 1])
             else:
-                H[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 2, 1))
-                H[n].set_block(ts=(0, 1, 0, 1), val=[[1, 0], [mu, 1]], Ds=(2, 1, 2, 1))
-                H[n].set_block(ts=(0, 0, 1, 1), val=[[0, 0], [t, 0]], Ds=(2, 1, 2, 1))
-                H[n].set_block(ts=(0, 1, 1, 0), val=[[0, 0], [0, t]], Ds=(2, 1, 2, 1))
-                H[n].set_block(ts=(1, 1, 0, 0), val=[[1, 0], [0, 0]], Ds=(2, 1, 2, 1))
-                H[n].set_block(ts=(1, 0, 0, 1), val=[[0, 0], [1, 0]], Ds=(2, 1, 2, 1))
+                H[n].set_block(ts=(0, 0, 0, 0),
+                               Ds=(2, 1, 2, 1), val=[[1, 0], [0, 1]])
+                H[n].set_block(ts=(0, 1, 0, 1),
+                               Ds=(2, 1, 2, 1), val=[[1, 0], [mu, 1]])
+                H[n].set_block(ts=(0, 0, 1, 1),
+                               Ds=(2, 1, 2, 1), val=[[0, 0], [t, 0]])
+                H[n].set_block(ts=(0, 1, 1, 0),
+                               Ds=(2, 1, 2, 1), val=[[0, 0], [0, t]])
+                H[n].set_block(ts=(1, 1, 0, 0),
+                               Ds=(2, 1, 2, 1), val=[[1, 0], [0, 0]])
+                H[n].set_block(ts=(1, 0, 0, 1),
+                               Ds=(2, 1, 2, 1), val=[[0, 0], [1, 0]])
 
     elif config.sym.SYM_ID == 'U(1)':  # U1 symmetry
         for n in H.sweep(to='last'):
             H.A[n] = yastn.Tensor(config=config, s=(-1, 1, 1, -1), n=0)
             if n == H.first:
-                H.A[n].set_block(ts=(0, 0, 0, 0), val=[0, 1], Ds=(1, 1, 2, 1))
-                H.A[n].set_block(ts=(0, 1, 0, 1), val=[mu, 1], Ds=(1, 1, 2, 1))
-                H.A[n].set_block(ts=(0, 0, 1, 1), val=[t], Ds=(1, 1, 1, 1))
-                H.A[n].set_block(ts=(0, 1, -1, 0), val=[t], Ds=(1, 1, 1, 1))
+                H.A[n].set_block(ts=(0, 0, 0, 0),
+                                 val=[0, 1], Ds=(1, 1, 2, 1))
+                H.A[n].set_block(ts=(0, 1, 0, 1),
+                                 val=[mu, 1], Ds=(1, 1, 2, 1))
+                H.A[n].set_block(ts=(0, 0, 1, 1),
+                                 val=[t], Ds=(1, 1, 1, 1))
+                H.A[n].set_block(ts=(0, 1, -1, 0),
+                                 val=[t], Ds=(1, 1, 1, 1))
             elif n == H.last:
-                H.A[n].set_block(ts=(0, 0, 0, 0), val=[1, 0], Ds=(2, 1, 1, 1))
-                H.A[n].set_block(ts=(0, 1, 0, 1), val=[1, mu], Ds=(2, 1, 1, 1))
-                H.A[n].set_block(ts=(1, 1, 0, 0), val=[1], Ds=(1, 1, 1, 1))
-                H.A[n].set_block(ts=(-1, 0, 0, 1), val=[1], Ds=(1, 1, 1, 1))
+                H.A[n].set_block(ts=(0, 0, 0, 0),
+                                 Ds=(2, 1, 1, 1), val=[1, 0])
+                H.A[n].set_block(ts=(0, 1, 0, 1),
+                                 Ds=(2, 1, 1, 1), val=[1, mu])
+                H.A[n].set_block(ts=(1, 1, 0, 0),
+                                 Ds=(1, 1, 1, 1), val=[1])
+                H.A[n].set_block(ts=(-1, 0, 0, 1),
+                                 Ds=(1, 1, 1, 1), val=[1])
             else:
-                H.A[n].set_block(ts=(0, 0, 0, 0), val=[[1, 0], [0, 1]], Ds=(2, 1, 2, 1))
-                H.A[n].set_block(ts=(0, 1, 0, 1), val=[[1, 0], [mu, 1]], Ds=(2, 1, 2, 1))
-                H.A[n].set_block(ts=(0, 0, 1, 1), val=[0, t], Ds=(2, 1, 1, 1))
-                H.A[n].set_block(ts=(0, 1, -1, 0), val=[0, t], Ds=(2, 1, 1, 1))
-                H.A[n].set_block(ts=(1, 1, 0, 0), val=[1, 0], Ds=(1, 1, 2, 1))
-                H.A[n].set_block(ts=(-1, 0, 0, 1), val=[1, 0], Ds=(1, 1, 2, 1))
+                H.A[n].set_block(ts=(0, 0, 0, 0),
+                                 Ds=(2, 1, 2, 1), val=[[1, 0], [0, 1]])
+                H.A[n].set_block(ts=(0, 1, 0, 1),
+                                 Ds=(2, 1, 2, 1), val=[[1, 0], [mu, 1]])
+                H.A[n].set_block(ts=(0, 0, 1, 1),
+                                 Ds=(2, 1, 1, 1), val=[0, t])
+                H.A[n].set_block(ts=(0, 1, -1, 0),
+                                 Ds=(2, 1, 1, 1), val=[0, t])
+                H.A[n].set_block(ts=(1, 1, 0, 0),
+                                 Ds=(1, 1, 2, 1), val=[1, 0])
+                H.A[n].set_block(ts=(-1, 0, 0, 1),
+                                 Ds=(1, 1, 2, 1), val=[1, 0])
     return H
 
 
@@ -125,7 +156,8 @@ def mpo_hopping_Hterm(N, J, sym="U1", config=None):
 
     # config is used here by pytest to inject backend and device for testing
     opts_config = {} if config is None else \
-                  {'backend': config.backend, 'default_device': config.default_device}
+                  {'backend': config.backend,
+                   'default_device': config.default_device}
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
     Hterms = []  # list of Hterm(amplitude, positions, operators)
@@ -170,11 +202,12 @@ def mpo_nn_hopping_latex(N, t, mu, sym="U1", config=None):
 
     # config is used here by pytest to inject backend and device for testing
     opts_config = {} if config is None else \
-                  {'backend': config.backend, 'default_device': config.default_device}
+                  {'backend': config.backend,
+                   'default_device': config.default_device}
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
-    Hstr = "\sum_{j,k \in NN} t (cp_{j} c_{k}+cp_{k} c_{j}) + " \
-         + "\sum_{i \in sites} mu cp_{i} c_{i}"
+    Hstr = "\sum_{j,k \in NN} t (cp_{j} c_{k}+cp_{k} c_{j})"
+    Hstr += " + \sum_{i \in sites} mu cp_{i} c_{i}"
     parameters = {"t": t,
                   "mu": mu,
                   "sites": list(range(N)),
@@ -196,14 +229,16 @@ def mpo_hopping_latex(N, J, sym="U1", config=None):
 
     # config is used here by pytest to inject backend and device for testing
     opts_config = {} if config is None else \
-                  {'backend': config.backend, 'default_device': config.default_device}
+                  {'backend': config.backend,
+                   'default_device': config.default_device}
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
-    Hstr = "\sum_{j,k \in NN} J_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + " \
-         + "\sum_{i \in sites} J_{i,i} cp_{i} c_{i}"
+    Hstr = "\sum_{j,k \in NN} J_{j,k} (cp_{j} c_{k}+cp_{k} c_{j})"
+    Hstr += " + \sum_{i \in sites} J_{i,i} cp_{i} c_{i}"
     parameters = {"J": J,
                   "sites": list(range(N)),
-                  "NN": list((i, j) for i in range(N-1) for j in range(i + 1, N))}
+                  "NN": list((i, j) for i in range(N-1)
+                             for j in range(i + 1, N))}
 
     generate = mps.Generator(N, ops)
     H = generate.mpo_from_latex(Hstr, parameters=parameters)
@@ -239,7 +274,7 @@ def test_generator_mpo():
                         generate = mps.Generator(N, ops, map=emap)
 
                         H1 = generate.mpo_from_latex(H_str, eparam)
-                        H2 = mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=generate.config)
+                        H2 = build_mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=generate.config)
                         H3 = mpo_nn_hopping_latex(N=N, t=t, mu=mu, sym=sym, config=cfg)
 
                         generate.random_seed(seed=0)
@@ -327,13 +362,13 @@ def test_mpo_from_templete():
     assert abs(x_man - x_str) < tol
 
 
-def test_mpo_nn_hopping_manually():
+def test_build_mpo_nn_hopping_manually():
     """ test example generating mpo by hand """
     N, t, mu = 10, 1.0, 0.1
     H = {}
-    H['dense'] = mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=cfg)
-    H['Z2'] = mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=config_Z2)
-    H['U1'] = mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=config_U1)
+    H['dense'] = build_mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=cfg)
+    H['Z2'] = build_mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=config_Z2)
+    H['U1'] = build_mpo_nn_hopping_manually(N=N, t=t, mu=mu, config=config_U1)
 
     H_Z2_dense = mps.Mpo(N=N)
     H_U1_dense = mps.Mpo(N=N)
@@ -374,4 +409,4 @@ if __name__ == "__main__":
     test_generator_mpo()
     test_mpo_from_latex()
     test_mpo_from_templete()
-    test_mpo_nn_hopping_manually()
+    test_build_mpo_nn_hopping_manually()
