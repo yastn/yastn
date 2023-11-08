@@ -17,12 +17,12 @@ and :code:`B`'s tensors along virtual dimension.
 ::
 
     # a product of two MPS's
-               ___     ___    ___    ___    ___      ___      ___    ___    ___    ___
-      A       |___|-D-|___|--|___|--|___|--|___|    |   |    |   |  |   |  |   |  |   |
- C =  +  =  __ d|   ___ |  ___ |  ___ |  ___ |   =  |   |-2D-|   |--|   |--|   |--|   |
-      B    |___|:D-|___|:-|___|:-|___|:-|___|:      |___|    |___|  |___|  |___|  |___|
-            d|  |    |  |   |  |   |  |   |  |       d|        |      |      |      |
-              \/      \/     \/     \/     \/
+               ___     ___    ___    ___      ___      ___    ___    ___
+      A       |___|-D-|___|--|___|--|___|    |   |    |   |  |   |  |   |
+ C =  +  =  __ d|   ___ |  ___ |  ___ |   =  |   |-2D-|   |--|   |--|   |
+      B    |___|:D-|___|:-|___|:-|___|:      |___|    |___|  |___|  |___|
+            d|  |    |  |   |  |   |  |       d|        |      |      |
+              \/      \/     \/     \/
 
 To add many MPS/MPOs :math:`A_0, A_1,\dots` at once, use :code:`yastn.tn.mps.add(A_0, A_1,...)`.
 
@@ -30,8 +30,13 @@ To add many MPS/MPOs :math:`A_0, A_1,\dots` at once, use :code:`yastn.tn.mps.add
 
 Following example show an addition of two MPSs:
 
+::
+
+    import yastn
+    import yastn.tn.mps as mps
+
 .. literalinclude:: /../../tests/mps/test_algebra.py
-        :pyobject: test_addition_basic
+        :pyobject: addition_example
 
 
 Products of MPO and MPS

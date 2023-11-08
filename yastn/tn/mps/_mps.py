@@ -652,23 +652,24 @@ class MpsMpo:
             psi.absorb_central(to='last')
         return SV
 
-    def save_to_dict(self) -> dict[int, dict]:
+    def save_to_dict(self) -> dict[str, dict | number]:
         r"""
         Serialize MPS/MPO into a dictionary.
 
         Each element represents serialized :class:`yastn.Tensor`
         (see, :meth:`yastn.Tensor.save_to_dict`) of the MPS/MPO.
+        Absorbs central block if it exists.
         """
+        psi = self.shallow_copy()
+        psi.absorb_central()  # make sure central block is eliminated
         out_dict = {
-            'nr_phys': self.nr_phys,
-            'sym': {
-                'SYM_ID': self[0].config.sym.SYM_ID,
-                'NSYM': self[0].config.sym.NSYM
-            },
+            'N': psi.N,
+            'nr_phys': psi.nr_phys,
+            'factor': psi.factor, #.item(),
             'A' : {}
         }
-        for n in self.sweep(to='last'):
-            out_dict['A'][n] = self.A[n].save_to_dict()
+        for n in psi.sweep(to='last'):
+            out_dict['A'][n] = psi[n].save_to_dict()
         return out_dict
 
     def save_to_hdf5(self, file, my_address):
@@ -683,8 +684,10 @@ class MpsMpo:
         my_address: str
             Name of a group in the file, where the Mps will be saved, e.g., 'state/'
         """
-        file.create_dataset(my_address+'/nr_phys', data=self.nr_phys)
-        file.create_dataset(my_address+'/sym/SYM_ID', data=self[0].config.sym.SYM_ID)
-        file.create_dataset(my_address+'/sym/NSYM', data=self[0].config.sym.NSYM)
+        psi = self.shallow_copy()
+        psi.absorb_central()  # make sure central block is eliminated
+        file.create_dataset(my_address+'/N', data=psi.N)
+        file.create_dataset(my_address+'/nr_phys', data=psi.nr_phys)
+        file.create_dataset(my_address+'/factor', data=psi.factor)
         for n in self.sweep(to='last'):
-            self.A[n].save_to_hdf5(file, my_address+'/A/'+str(n))
+            psi[n].save_to_hdf5(file, my_address+'/A/'+str(n))

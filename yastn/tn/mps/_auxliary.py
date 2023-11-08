@@ -18,11 +18,13 @@ def load_from_dict(config, in_dict) -> yastn.tn.mps.MpsMpo:
         a result of :meth:`yastn.tn.mps.MpsMpo.save_to_dict`.
     """
     nr_phys = in_dict['nr_phys']
-    N = len(in_dict['A'])
-    out_Mps = MpsMpo(N, nr_phys=nr_phys)
-    for n in range(out_Mps.N):
-        out_Mps.A[n] = initialize.load_from_dict(config=config, d=in_dict['A'][n])
-    return out_Mps
+    N = in_dict['N'] if 'N' in in_dict else len(in_dict['A'])  # backwards compability
+    out_mps = MpsMpo(N, nr_phys=nr_phys)
+    if 'factor' in in_dict:  # backwards compability
+        out_mps.factor = in_dict['factor']
+    for n in range(out_mps.N):
+        out_mps.A[n] = initialize.load_from_dict(config=config, d=in_dict['A'][n])
+    return out_mps
 
 
 def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpo:
@@ -40,13 +42,18 @@ def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpo:
     my_address: str
         Name of a group in the file, where the Mps is saved, e.g., './state/'
     """
-    sym_id = file[my_address].get('sym/SYM_ID')[()]
-    nsym = file[my_address].get('sym/NSYM')[()]
-    if not sym_id.decode('ascii') == config.sym.SYM_ID or not nsym == config.sym.NSYM:
-        raise YastnError("config doesn't match the one for saved data")
+
     nr_phys = int(file[my_address].get('nr_phys')[()])
-    N = len(file[my_address+'/A'].keys())
+    N = file[my_address].get('N')
+    if N is None:
+        N = len(file[my_address+'/A'].keys())
+    else:
+        N = int(N[()])
     out_Mps = MpsMpo(N, nr_phys=nr_phys)
+
+    factor = file[my_address].get('factor')
+    if factor:
+        out_Mps.factor = factor[()]
     for n in range(out_Mps.N):
         out_Mps.A[n] = initialize.load_from_hdf5(config, file, my_address+'/A/'+str(n))
     return out_Mps

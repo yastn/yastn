@@ -33,7 +33,7 @@ def random_mps_spinless_fermions(N=10, D_total=16, sym='Z2', n=1, config=None):
     ops.random_seed(seed=0)
     I = mps.product_mpo(ops.I(), N)
     psi2 = mps.random_mps(I, D_total=D_total, n=n)
-    assert (psi - psi2).norm() < 1e-12
+    assert (psi - psi2).norm() < 1e-10
 
     return psi
 

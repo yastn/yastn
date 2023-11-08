@@ -22,15 +22,23 @@ def check_add(psi0, psi1, tol):
         assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
 
 
-def test_addition_basic(tol=1e-12):
-    import yastn.tn.mps as mps
-    import yastn
 
+@pytest.mark.parametrize("kwargs", [{'config': cfg}])
+def test_addition_example(kwargs):
+    addition_example(**kwargs)
+
+
+def addition_example(tol=1e-12, config=None):
     # Define random MPS's without any symmetry
     #
-    config_dense = yastn.make_config()
-    psi0 = mps.random_dense_mps(N=8, D=5, d=2)
-    psi1 = mps.random_dense_mps(N=8, D=3, d=2)
+    opts_config = {} if config is None else \
+                  {'backend': config.backend,
+                   'default_device': config.default_device}
+    # pytest uses config to inject backend and device for testing
+    ops = yastn.operators.Qdit(d=2, **opts_config)
+    I = mps.product_mpo(ops.I(), N=8)
+    psi0 = mps.random_mps(I, D_total=5)
+    psi1 = mps.random_mps(I, D_total=3, dtype='complex128')
 
     # We want to calculate: res = psi0 + 2 * psi1. There is a couple of ways:
     # A/
@@ -45,7 +53,8 @@ def test_addition_basic(tol=1e-12):
     nresA, nresB, nresC = resA.norm(), resB.norm(), resC.norm()
     assert abs(mps.vdot(resA, resB) / (nresA * nresB) - 1) < tol
     assert abs(mps.vdot(resA, resC) / (nresA * nresC) - 1) < tol
-    assert (x.get_bond_dimensions == (1, 8, 8, 8, 8, 8, 8, 8, 1) for x in (resA, resB, resC))
+    assert (x.get_bond_dimensions() == (1, 8, 8, 8, 8, 8, 8, 8, 1)
+            for x in (resA, resB, resC))
 
 
 def test_addition(tol=1e-8):
@@ -159,5 +168,5 @@ def multiplication_example_gs(config=None, tol=1e-12):
 
 if __name__ == "__main__":
     test_addition()
-    test_addition_basic()
+    addition_example()
     multiplication_example_gs()

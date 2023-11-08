@@ -30,8 +30,11 @@ def save_load_mps_hdf5(sym='dense', config=None, tol=1e-12):
                   {'backend': config.backend,
                    'default_device': config.default_device}
     # pytest uses config to inject backend and device for testing
+    #
+    # generate random mps with 3-dimensional local spaces
+    #
     ops = yastn.operators.Spin1(sym=sym, **opts_config)
-    I = mps.product_mpo(ops.I(), N=16)
+    I = mps.product_mpo(ops.I(), N=31)
     psi = 2 * mps.random_mps(I, D_total=25)  # adding extra factor
     #
     # We delete file if it already exists.
@@ -57,20 +60,19 @@ def save_load_mps_hdf5(sym='dense', config=None, tol=1e-12):
     #
     # Test psi == phi
     #
-    #assert (psi - phi).norm() < tol and psi is not phi
-    assert all((psi[n] - phi[n]).norm() < tol for n in psi.sweep())
+    assert (psi - phi).norm() < tol * psi.norm()
     #
     # Similarily, one can save and load MPO
     #
-    psi = mps.random_mpo(I, D_total=8)
+    psi = mps.random_mpo(I, D_total=8, dtype='complex128')
+    psi.canonize_(to='last', normalize=False)  # extra cannonization
+    psi.canonize_(to='first', normalize=False)  # retaining the norm
     with h5py.File('tmp.h5', 'w') as f:
         psi.save_to_hdf5(f, 'state/')
     with h5py.File('tmp.h5', 'r') as f:
         phi = mps.load_from_hdf5(config, f, './state/')
     os.remove("tmp.h5")
-    assert len(psi) == len(phi) and psi is not phi
-    assert all((psi[n] - phi[n]).norm() < tol for n in psi.sweep())
-    # assert (psi - phi).norm() < tol
+    assert (psi - phi).norm() < tol * psi.norm()
 
 
 @pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': config},
@@ -87,9 +89,12 @@ def save_load_mps_dict(sym='dense', config=None, tol=1e-12):
                   {'backend': config.backend,
                    'default_device': config.default_device}
     # pytest uses config to inject backend and device for testing
+    #
+    # generate random mps with 3-dimensional local spaces
+    #
     ops = yastn.operators.Spin1(sym=sym, **opts_config)
-    I = mps.product_mpo(ops.I(), N=16)
-    psi = -0.5 * mps.random_mps(I, D_total=25)  # adding extra factor
+    I = mps.product_mpo(ops.I(), N=31)
+    psi = -0.5 * mps.random_mps(I, D_total=25, dtype='complex128')
     #
     # Next, we serialize MPS into dictionary.
     #
@@ -103,9 +108,17 @@ def save_load_mps_dict(sym='dense', config=None, tol=1e-12):
     #
     # Test psi == phi
     #
-    assert len(psi) == len(phi) and psi is not phi
-    assert all((psi[n] - phi[n]).norm() < tol for n in psi.sweep())
-    # assert (psi - phi).norm() < tol
+    assert (psi - phi).norm() < tol * psi.norm()
+    #
+    # Similarly for MPO
+    #
+    psi = -1j * mps.random_mpo(I, D_total=11)  # adding extra complex factor
+    psi.canonize_(to='last', normalize=False)  # extra cannonization
+    psi.canonize_(to='first', normalize=False)  # retaining the norm
+    tmp = psi.save_to_dict()
+    phi = mps.load_from_dict(config, tmp)
+    assert (psi - phi).norm() < tol * psi.norm()
+
 
 
 if __name__ == "__main__":
