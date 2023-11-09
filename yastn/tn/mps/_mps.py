@@ -198,14 +198,21 @@ class MpsMpo:
 
     def __getitem__(self, n) -> yastn.Tensor:
         """ Return tensor corresponding to n-th site."""
-        return self.A[n]
+        try:
+            return self.A[n]
+        except KeyError as e:
+            raise YastnError(f"MpsMpo does not have site with index {n}") from e
 
     def __setitem__(self, n, tensor):
-        """ Assign tensor to n-th site of Mps or Mpo. """
+        """
+        Assign tensor to n-th site of Mps or Mpo.
+
+        Assigning central block is not supported.
+        """
         if not isinstance(n, numbers.Integral) or n < self.first or n > self.last:
-            raise YastnError('MPS: n should be an integer in [0, N - 1].')
+            raise YastnError("MpsMpo: n should be an integer in 0, 1, ..., N-1")
         if tensor.ndim != self.nr_phys + 2:
-            raise YastnError('MPS: Tensor rank should be {}.'.format(self.nr_phys + 2))
+            raise YastnError(f"MpsMpo: Tensor rank should be {self.nr_phys + 2}")
         self.A[n] = tensor
 
     def shallow_copy(self) -> yastn.tn.mps.MpsMpo:
@@ -248,6 +255,20 @@ class MpsMpo:
         for ind, ten in phi.A.items():
             phi.A[ind] = ten.conj()
         return phi
+
+    def transpose(self) -> yastn.tn.mps.MpsMpo:
+        """ Transpose of MPO. For MPS, return self. Same as :attr:`self.T<yastn.tn.mps.MpsMpo.T>`"""
+        if self.nr_phys == 1:
+            return self
+        phi = self.shallow_copy()
+        for n in phi.sweep(to='last'):
+            phi.A[n] = phi.A[n].transpose(axes=(0, 3, 2, 1))
+        return phi
+
+    @property
+    def T(self) -> yastn.tn.mps.MpsMpo:
+        r""" Transpose of MPO. For MPS, return self. Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
+        return self.transpose()
 
     def __mul__(self, multiplier) -> yastn.tn.mps.MpsMpo:
         """ New MPS/MPO with the first tensor multiplied by a scalar. """

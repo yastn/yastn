@@ -205,7 +205,7 @@ def drop_leg_history(a, axes=None) -> yastn.Tensor:
     return a._replace(hfs=hfs)
 
 
-def transpose(a, axes) -> yastn.Tensor:
+def transpose(a, axes=None) -> yastn.Tensor:
     r"""
     Transpose tensor by permuting the order of its legs (spaces).
     Makes a shallow copy of tensor data if the order is not changed.
@@ -214,7 +214,10 @@ def transpose(a, axes) -> yastn.Tensor:
     ----------
     axes: Sequence[int]
         new order of legs. Has to be a valid permutation of (0, 1, ..., ndim-1)
+        If not provided, defaults to range(a.ndim)[::-1], which reverses the order of the axes.
     """
+    if axes is None:
+        axes = tuple(range(a.ndim-1, -1, -1))
     _test_axes_all(a, axes, native=False)
     if axes == tuple(range(a.ndim)):
         return a._replace()

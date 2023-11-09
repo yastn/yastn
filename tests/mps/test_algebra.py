@@ -22,11 +22,9 @@ def check_add(psi0, psi1, tol):
         assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
 
 
-
 @pytest.mark.parametrize("kwargs", [{'config': cfg}])
 def test_addition_example(kwargs):
     addition_example(**kwargs)
-
 
 def addition_example(tol=1e-12, config=None):
     # Define random MPS's without any symmetry
@@ -164,6 +162,7 @@ def multiplication_example_gs(config=None, tol=1e-12):
     Hpsi = H @ psi
     p0 = Eng * psi - Hpsi
     assert p0.norm() < tol
+
 
 
 if __name__ == "__main__":

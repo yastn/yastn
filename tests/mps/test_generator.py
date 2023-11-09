@@ -4,13 +4,9 @@ import yastn
 import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
-    from .configs import config_U1
-    from .configs import config_Z2
     # pytest modifies cfg to inject different backends and devices during tests
 except ImportError:
     from configs import config_dense as cfg
-    from configs import config_U1
-    from configs import config_Z2
 
 tol = 1e-12
 

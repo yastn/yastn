@@ -7,6 +7,15 @@ Multiplication by a scalar
 MPS/MPO can be multiplied by a scalar using regular :code:`*` and :code:`/` operators,
 i.e.,:code:`B = a * A`, :code:`B = A * a` or :code:`B = A / a`.
 
+
+Conjugation and transpose
+-------------------------
+
+.. automethod:: yastn.tn.mps.MpsMpo.conj
+.. automethod:: yastn.tn.mps.MpsMpo.transpose
+.. autoproperty:: yastn.tn.mps.MpsMpo.T
+
+
 Addition of MPS/MPO
 -------------------
 

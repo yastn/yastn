@@ -71,6 +71,7 @@ Transposition
 See examples: :ref:`examples/tensor/algebra:transposition`.
 
 .. automethod:: yastn.Tensor.transpose
+.. autoproperty:: yastn.Tensor.T
 .. automethod:: yastn.Tensor.move_leg
 .. automethod:: yastn.Tensor.moveaxis
 

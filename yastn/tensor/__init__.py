@@ -217,3 +217,8 @@ class Tensor:
     def data(self) -> numpy.array | torch.tensor:
         """ Return underlying 1D-array storing the elements of the tensor. """
         return self._data
+
+    @property
+    def T(self) -> yastn.Tensor:
+        r""" Same as :meth:`self.transpose()<yastn.Tensor.transpose>` """
+        return self.transpose()
