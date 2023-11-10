@@ -1,16 +1,16 @@
-""" dmrg tested on XX model. """
+""" tdvp tests """
 import pytest
 import numpy as np
 import time
 import yastn.tn.mps as mps
 import yastn
 try:
-    # pytest modifies cfg to inject different backends and devices during tests
     from .configs import config_dense as cfg
-    from .test_generator import mpo_hopping_Hterm
+    from .test_generate_mpo import build_mpo_hopping_Hterm
 except ImportError:
     from configs import config_dense as cfg
-    from test_generator import mpo_hopping_Hterm
+    from test_generate_mpo import build_mpo_hopping_Hterm
+# pytest modifies cfg to inject different backends and devices during tests
 
 
 @pytest.mark.parametrize('kwargs', [{'config': cfg, 'sym': 'U1'},
@@ -31,7 +31,7 @@ def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
     opts_config = {} if config is None else \
                 {'backend': config.backend,
                 'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
     ops.random_seed(seed=0)
     #
@@ -46,7 +46,7 @@ def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
     #
     # Generate corresponding MPO using the function from previous examples
     #
-    H0 = mpo_hopping_Hterm(J0, sym=sym, config=config)
+    H0 = build_mpo_hopping_Hterm(J0, sym=sym, config=config)
     #
     # Find the ground state using DMRG
     #
@@ -112,7 +112,7 @@ def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
           [ 0,   0  ,   0,   1,   0.5, 0  ],
           [ 0,   0  ,   0,   0,  -1,   0.5],
           [ 0,   0  ,   0,   0,   0,   1  ]]
-    H1 = mpo_hopping_Hterm(J1, sym=sym, config=config)
+    H1 = build_mpo_hopping_Hterm(J1, sym=sym, config=config)
     #
     # Exact reference for free-fermionic correlation matrix
     #
@@ -172,7 +172,7 @@ def tdvp_KZ_quench(sym='Z2', config=None):
     opts_config = {} if config is None else \
                 {'backend': config.backend,
                 'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.Spin12(sym=sym, **opts_config)
     ops.random_seed(seed=0)
     ox, oz, oi = ops.x(), ops.z(), ops.I()
@@ -255,7 +255,34 @@ def tdvp_KZ_quench(sym='Z2', config=None):
         assert psi.get_bond_dimensions() == bd_ref
 
 
+
+def test_tdvp_raise(config=cfg):
+    opts_config = {} if config is None else \
+        {'backend': config.backend,
+        'default_device': config.default_device}
+    ops = yastn.operators.Spin12(sym='dense', **opts_config)
+    ops.random_seed(seed=0)
+    I = mps.product_mpo(ops.I(), N=3)
+    H = mps.random_mpo(I, D_total=3)
+    psi = mps.random_mpo(I, D_total=2)
+
+    with pytest.raises(yastn.YastnError):
+        next(mps.tdvp_(psi, H, method='one-site'))
+        # TDVP: tdvp method one-site not recognized
+    with pytest.raises(yastn.YastnError):
+        next(mps.tdvp_(psi, H, dt=0.))
+        # TDVP: dt should be positive.
+    with pytest.raises(yastn.YastnError):
+        next(mps.tdvp_(psi, H, times=(1, 0)))
+        # TDVP: times should be an ascending tuple.
+
+    out = next(mps.tdvp_(psi, H, dt=0.1, times=0.1))
+    # times=0.1 => times=(0, 0.1)
+    assert out.ti == 0 and out.tf == 0.1 and out.steps == 1
+
+
 if __name__ == "__main__":
+    test_tdvp_raise(config=cfg)
     for sym in ['Z2', 'U1']:
         t0 = time.time()
         tdvp_sudden_quench(sym=sym)

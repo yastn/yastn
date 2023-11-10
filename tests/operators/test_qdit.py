@@ -23,7 +23,7 @@ def test_qdit(d=5):
 
     assert leg == I.get_legs(axes=0)
     assert np.allclose(I.to_numpy(), np.eye(d))
-    assert I.device[:len(default_device)] == default_device  # for cuda, accept cuda:0 == cudav
+    assert default_device in I.device  # accept 'cuda' in 'cuda:0'
 
     # used in mps Generator
     dictionary = ops_dense.to_dict()

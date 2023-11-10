@@ -286,11 +286,10 @@ def leg_undo_product(leg) -> Sequence[yastn.Leg]:
     hst = leg.history()
     if hst[0] in ('o', 's'):
         raise YastnError('Leg is not a result of outer_product.')
-    if hst[0] == 'p':
-        ts, Ds, ss, hfs = _unfuse_Fusion(leg.legs[0])
-        return tuple(Leg(sym=leg.sym, s=s, t=t, D=D, legs=(hf,))
-                        for s, t, D, hf in zip(ss, ts, Ds, hfs))
-    pass
+    # else hst[0] == 'p':
+    ts, Ds, ss, hfs = _unfuse_Fusion(leg.legs[0])
+    return tuple(Leg(sym=leg.sym, s=s, t=t, D=D, legs=(hf,))
+                    for s, t, D, hf in zip(ss, ts, Ds, hfs))
 
 
 def leg_union(*legs) -> yastn.Leg:

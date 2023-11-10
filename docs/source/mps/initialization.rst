@@ -49,7 +49,6 @@ Initializing product MPS/MPO
 -----------------------------
 
 .. autofunction:: yastn.tn.mps.product_mps
-
 .. autofunction:: yastn.tn.mps.product_mpo
 
 
@@ -57,7 +56,6 @@ Initializing random MPS/MPO
 -----------------------------
 
 .. autofunction:: yastn.tn.mps.random_mps
-
 .. autofunction:: yastn.tn.mps.random_mpo
 
 
@@ -75,11 +73,8 @@ The latter can be conveniently created as shown in :class:`mps.product_mpo<yastn
 For an example, see :ref:`MPO for spinless fermions with hopping at arbitrary range using Hterms<examples/mps/build:Building MPO using Hterm>`.
 
 .. autoclass:: yastn.tn.mps.Hterm
-
 .. autofunction:: yastn.tn.mps.generate_mpo
-
 .. autofunction:: yastn.tn.mps.generate_mpo_fast
-
 .. autofunction:: yastn.tn.mps.generate_mpo_preprocessing
 
 
@@ -92,9 +87,8 @@ A class supporting automatizes generation of MPOs from LaTeX-like expressions.
 
 We can directly output identity MPO built from the identity `I` from the operator generator class.
 
-.. autofunction:: yastn.tn.mps.Generator.I
-
-.. autofunction:: yastn.tn.mps.Generator.mpo_from_latex
+.. automethod:: yastn.tn.mps.Generator.I
+.. automethod:: yastn.tn.mps.Generator.mpo_from_latex
 
 Generator supports latex-like string instructions to help building MPOs.
 For examples, see :ref:`Generate MPO from LaTex<examples/mps/build:Generator class for MPO/MPS>`.
@@ -103,11 +97,9 @@ For examples, see :ref:`Generate MPO from LaTex<examples/mps/build:Generator cla
 Generator allows initialization of MPS and MPO filled with random tensors, where local Hilbert spaces are read from the identity operator in the Generator.
 It also provides a direct link to a random number generator in the backend to fix the seed.
 
-.. autofunction:: yastn.tn.mps.Generator.random_mps
-
-.. autofunction:: yastn.tn.mps.Generator.random_mpo
-
-.. autofunction:: yastn.tn.mps.Generator.random_seed
+.. automethod:: yastn.tn.mps.Generator.random_mps
+.. automethod:: yastn.tn.mps.Generator.random_mpo
+.. automethod:: yastn.tn.mps.Generator.random_seed
 
 
 Making a copy of MPS/MPO
@@ -117,11 +109,9 @@ To create an independent copy or clone of MPS/MPO :code:`psi` call :code:`psi.co
 or :code:`psi.clone()`, respectively.
 It is also possible to make a shallow copy with :code:`psi.shallow_copy()`, where explicit copies of data tensors are not created.
 
-.. autofunction:: yastn.tn.mps.MpsMpo.shallow_copy
-
-.. autofunction:: yastn.tn.mps.MpsMpo.copy
-
-.. autofunction:: yastn.tn.mps.MpsMpo.clone
+.. automethod:: yastn.tn.mps.MpsMpo.shallow_copy
+.. automethod:: yastn.tn.mps.MpsMpo.copy
+.. automethod:: yastn.tn.mps.MpsMpo.clone
 
 
 Import and export MPS/MPO from/to different formats
@@ -133,10 +123,7 @@ or :meth:`yastn.tn.mps.MpsMpo.save_to_hdf5` can be again deserialized into MPS/M
 
 Examples of exporting and loading MPS/MPO can be found in :ref:`examples/mps/build:save and load mps/mpo`.
 
-.. autofunction:: yastn.tn.mps.MpsMpo.save_to_dict
-
-.. autofunction:: yastn.tn.mps.MpsMpo.save_to_hdf5
-
-.. autofunction:: yastn.tn.mps.load_from_dict
-
-.. autofunction:: yastn.tn.mps.load_from_hdf5
+.. automethod:: yastn.tn.mps.MpsMpo.save_to_dict
+.. automethod:: yastn.tn.mps.MpsMpo.save_to_hdf5
+.. automethod:: yastn.tn.mps.load_from_dict
+.. automethod:: yastn.tn.mps.load_from_hdf5

@@ -4,26 +4,13 @@ import yastn.tn.mps as mps
 import yastn
 try:
     from .configs import config_dense as cfg
-    # pytest modifies cfg to inject different backends and devices during tests
 except ImportError:
     from configs import config_dense as cfg
-
-
-def check_add(psi0, psi1, tol):
-    """ series of test of mps.add performed on provided psi0 and psi1"""
-    out1 = mps.add(psi0, psi1, amplitudes=[1., 2.])
-    out2 = (1.0 * psi0) + (2.0 * psi1)
-    p0 = mps.measure_overlap(psi0, psi0)
-    p1 = mps.measure_overlap(psi1, psi1)
-    p01 = mps.measure_overlap(psi0, psi1)
-    p10 = mps.measure_overlap(psi1, psi0)
-    for out in (out1, out2):
-        o1 = mps.measure_overlap(out, out)
-        assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
+# pytest modifies cfg to inject different backends and devices during tests
 
 
 @pytest.mark.parametrize("kwargs", [{'config': cfg}])
-def test_addition_example(kwargs):
+def test_add_example(kwargs):
     addition_example(**kwargs)
 
 def addition_example(tol=1e-12, config=None):
@@ -32,7 +19,7 @@ def addition_example(tol=1e-12, config=None):
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.Qdit(d=2, **opts_config)
     I = mps.product_mpo(ops.I(), N=8)
     psi0 = mps.random_mps(I, D_total=5)
@@ -55,10 +42,11 @@ def addition_example(tol=1e-12, config=None):
             for x in (resA, resB, resC))
 
 
-def test_addition(tol=1e-8):
-    """Create two Mps-s and add them to each other."""
+def test_add(config=cfg, tol=1e-8):
+    opts_config = {} if config is None else \
+                  {'backend': config.backend, 'default_device': config.default_device}
 
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1', **opts_config)
     generate = mps.Generator(N=9, operators=ops)
 
     psi0 = generate.random_mps(D_total=15, n=(3, 5))
@@ -68,6 +56,38 @@ def test_addition(tol=1e-8):
     psi0 = generate.random_mpo(D_total=12)
     psi1 = generate.random_mpo(D_total=11)
     check_add(psi0, psi1, tol)
+
+def check_add(psi0, psi1, tol):
+    """ series of test of mps.add performed on provided psi0 and psi1"""
+    out1 = mps.add(psi0, psi1, amplitudes=[1., 2.])
+    out2 = (1.0 * psi0) + (2.0 * psi1)
+    p0 = mps.measure_overlap(psi0, psi0)
+    p1 = mps.measure_overlap(psi1, psi1)
+    p01 = mps.measure_overlap(psi0, psi1)
+    p10 = mps.measure_overlap(psi1, psi0)
+    for out in (out1, out2):
+        o1 = mps.measure_overlap(out, out)
+        assert abs(o1 - p0 - 4 * p1 - 2 * p01 - 2 * p10) < tol
+
+
+def test_multiply(config=cfg):
+    # Define random MPS's without any symmetry
+    #
+    opts_config = {} if config is None else \
+                  {'backend': config.backend, 'default_device': config.default_device}
+    N = 4
+    psi = mps.random_dense_mps(N=N, D=5, d=2, **opts_config)
+    H1 = mps.random_dense_mpo(N=N, D=3, d=2, **opts_config)
+    H2 = mps.random_dense_mpo(N=N, D=4, d=2, **opts_config)
+
+    H1psi = H1 @ psi
+    assert H1psi.get_bond_dimensions() == (1, 15, 15, 15, 1)
+    assert (H1psi[n].s == (-1, 1, 1) for n in H1psi.sweep())
+    assert H1psi.nr_phys == 1
+    H1H2 = H1 @ H2
+    assert H1H2.get_bond_dimensions() == (1, 12, 12, 12, 1)
+    assert (H1H2[n].s == (-1, 1, 1, -1) for n in H1H2.sweep())
+    assert H1H2.nr_phys == 2
 
 
 @pytest.mark.parametrize("kwargs", [{'config': cfg}])
@@ -90,7 +110,7 @@ def multiplication_example_gs(config=None, tol=1e-12):
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.SpinlessFermions(sym='U1', **opts_config)
     #
     # The Hamiltonian is obtained using Hterm.
@@ -164,8 +184,47 @@ def multiplication_example_gs(config=None, tol=1e-12):
     assert p0.norm() < tol
 
 
+def test_add_multiply_raise(config=cfg):
+    # Define random MPS's without any symmetry
+    #
+    opts_config = {} if config is None else \
+                  {'backend': config.backend,
+                   'default_device': config.default_device}
+    ops = yastn.operators.Qdit(d=2, **opts_config)
+
+    I = ops.I()
+    psi8 = mps.random_mps(mps.product_mpo(I, N=8), D_total=5)
+    H8 = mps.random_mpo(mps.product_mpo(I, N=8), D_total=3)
+    psi7 = mps.random_mps(mps.product_mpo(I, N=7), D_total=7)
+
+    with pytest.raises(yastn.YastnError):
+        mps.add(psi8, psi8, amplitudes=[2, 3, 4])
+        # Number of Mps-s to add must be equal to the number of coefficients in amplitudes.
+    with pytest.raises(yastn.YastnError):
+        mps.add(psi7, psi8)
+        # All MpsMpo to add must have equal number of sites.
+    with pytest.raises(yastn.YastnError):
+        mps.add(H8, psi8)
+        #  All states to add should be either Mps or Mpo.
+    H8c = H8.shallow_copy()
+    H8c.orthogonalize_site(4, to='last')
+    with pytest.raises(yastn.YastnError):
+        mps.add(H8c, H8c)
+        #  Absorb central block of MpsMpo-s before calling add.
+
+    with pytest.raises(yastn.YastnError):
+        H8 @ psi7
+        #  MpsMpo-s to multiply must have equal number of sites.
+    with pytest.raises(yastn.YastnError):
+        H8c @ psi8
+        # Absorb central blocks of MpsMpo-s before calling multiply.
+    with pytest.raises(yastn.YastnError):
+        psi8 @ H8
+        # Multiplication by MPS from left is not supported.
 
 if __name__ == "__main__":
-    test_addition()
+    test_add()
     addition_example()
+    test_multiply()
     multiplication_example_gs()
+    test_add_multiply_raise()

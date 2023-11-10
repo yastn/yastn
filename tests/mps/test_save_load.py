@@ -10,15 +10,15 @@ try:
 except ImportError:
     warnings.warn("h5py module not available", ImportWarning)
 try:
-    from .configs import config_dense as config
-    # pytest modifies cfg to inject different backends and devices during tests
+    from .configs import config_dense as cfg
 except ImportError:
-    from configs import config_dense as config
+    from configs import config_dense as cfg
+# pytest modifies cfg to inject different backends and devices during tests
 
 
-@pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': config},
-                                    {'sym': 'Z3', 'config': config},
-                                    {'sym': 'U1', 'config': config}])
+@pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': cfg},
+                                    {'sym': 'Z3', 'config': cfg},
+                                    {'sym': 'U1', 'config': cfg}])
 def test_save_load_mps_hdf5(kwargs):
     save_load_mps_hdf5(**kwargs)
 
@@ -29,7 +29,7 @@ def save_load_mps_hdf5(sym='dense', config=None, tol=1e-12):
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     #
     # generate random mps with 3-dimensional local spaces
     #
@@ -75,9 +75,9 @@ def save_load_mps_hdf5(sym='dense', config=None, tol=1e-12):
     assert (psi - phi).norm() < tol * psi.norm()
 
 
-@pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': config},
-                                    {'sym': 'Z3', 'config': config},
-                                    {'sym': 'U1', 'config': config}])
+@pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': cfg},
+                                    {'sym': 'Z3', 'config': cfg},
+                                    {'sym': 'U1', 'config': cfg}])
 def test_save_load_mps_dict(kwargs):
     save_load_mps_dict(**kwargs)
 
@@ -88,7 +88,7 @@ def save_load_mps_dict(sym='dense', config=None, tol=1e-12):
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     #
     # generate random mps with 3-dimensional local spaces
     #
@@ -118,7 +118,6 @@ def save_load_mps_dict(sym='dense', config=None, tol=1e-12):
     tmp = psi.save_to_dict()
     phi = mps.load_from_dict(config, tmp)
     assert (psi - phi).norm() < tol * psi.norm()
-
 
 
 if __name__ == "__main__":

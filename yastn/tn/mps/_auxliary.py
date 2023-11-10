@@ -45,10 +45,7 @@ def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpo:
 
     nr_phys = int(file[my_address].get('nr_phys')[()])
     N = file[my_address].get('N')
-    if N is None:
-        N = len(file[my_address+'/A'].keys())
-    else:
-        N = int(N[()])
+    N = len(file[my_address+'/A'].keys()) if N is None else int(N[()])
     out_Mps = MpsMpo(N, nr_phys=nr_phys)
 
     factor = file[my_address].get('factor')

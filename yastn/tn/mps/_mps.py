@@ -34,16 +34,16 @@ def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpo:
         amplitudes = [1] * len(states)
 
     if len(states) != len(amplitudes):
-        raise YastnError('MPS: Number of Mps-s must be equal to the number of coefficients in amplitudes.')
+        raise YastnError('Number of MpsMPo-s to add must be equal to the number of coefficients in amplitudes.')
 
     phi = MpsMpo(N=states[0].N, nr_phys=states[0].nr_phys)
 
     if any(psi.N != phi.N for psi in states):
-        raise YastnError('MPS: All states must have equal number of sites.')
+        raise YastnError('All MpsMpo to add must have equal number of sites.')
     if any(psi.nr_phys != phi.nr_phys for psi in states):
-        raise YastnError('MPS: All states should be either Mps or Mpo.')
+        raise YastnError('All states to add should be either Mps or Mpo.')
     if any(psi.pC != None for psi in states):
-        raise YastnError('MPS: Absorb central block of mps-s before calling add.')
+        raise YastnError('Absorb central block of MpsMpo-s before calling add.')
     # legf = states[0][phi.first].get_legs(axes=0)
     # legl = states[0][phi.last].get_legs(axes=2)
     #if any(psi.virtual_leg('first') != legf or psi.virtual_leg('last') != legl for psi in states):
@@ -101,18 +101,17 @@ def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpo:
            :ref:`configuration<tensor/configuration:yastn configuration>`.
     """
     if a.N != b.N:
-        YastnError('MPS: Mps-s must have equal number of sites.')
+        raise YastnError('MpsMpo-s to multiply must have equal number of sites.')
+
+    if a.pC is not None or b.pC is not None:
+        raise YastnError('Absorb central blocks of MpsMpo-s before calling multiply.')
 
     nr_phys = a.nr_phys + b.nr_phys - 2
 
     if a.nr_phys == 1:
-        YastnError('MPS: First argument has to be an MPO.')
-    phi = MpsMpo(N=a.N, nr_phys=nr_phys)
+        raise YastnError(' Multiplication by MPS from left is not supported.')
 
-    if b.N != a.N:
-        raise YastnError('MPS: a and b must have equal number of sites.')
-    if a.pC is not None or b.pC is not None:
-        raise YastnError('MPS: Absorb central blocks of mps-s before calling multiply.')
+    phi = MpsMpo(N=a.N, nr_phys=nr_phys)
 
     axes_fuse = ((0, 3), 1, (2, 4)) if b.nr_phys == 1 else ((0, 3), 1, (2, 4), 5)
     for n in phi.sweep():
@@ -145,9 +144,9 @@ class MpsMpo:
         (2) virtual leg pointing towards the last site, and, in case of MPO, (3) 2nd physical leg, i.e., :math:`\langle \textrm{bra}|`.
         """
         if not isinstance(N, numbers.Integral) or N <= 0:
-            raise YastnError('MPS: Number of Mps sites N should be a positive integer.')
+            raise YastnError('Number of Mps sites N should be a positive integer.')
         if nr_phys not in (1, 2):
-            raise YastnError('MPS: Number of physical legs, nr_phys, should be equal to 1 or 2.')
+            raise YastnError('Number of physical legs, nr_phys, should be 1 or 2.')
         self._N = N
         self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
         self.pC = None  # index of the central block, None if it does not exist
@@ -194,7 +193,7 @@ class MpsMpo:
             return range(df, self.N - dl)
         if to == 'first':
             return range(self.N - 1 - dl, df - 1, -1)
-        raise YastnError('MPS: Argument "to" should be in ("first", "last")')
+        raise YastnError('"to" in sweep should be in "first" or "last"')
 
     def __getitem__(self, n) -> yastn.Tensor:
         """ Return tensor corresponding to n-th site."""
@@ -336,7 +335,7 @@ class MpsMpo:
                 gets accumulated in :code:`self.factor`.
         """
         if self.pC is not None:
-            raise YastnError('MPS: Only one central block is possible. Attach the existing central block first.')
+            raise YastnError('Only one central block is allowed. Attach the existing central block before orthogonalizing site.')
 
         if to == 'first':
             self.pC = (n - 1, n)
@@ -353,7 +352,7 @@ class MpsMpo:
             #                                 --Q---2            --
             self.A[n], R = self.A[n].qr(axes=(ax, 2), sQ=1, Qaxis=2)
         else:
-            raise YastnError('MPS: Argument "to" should be in ("first", "last")')
+            raise YastnError('"to" should be in "first" or "last"')
         nR = R.norm()
         self.A[self.pC] = R / nR
         self.factor = 1 if normalize else self.factor * nR
@@ -376,29 +375,30 @@ class MpsMpo:
         ------
         norm of discarded singular values normalized by the remining ones
         """
-        if self.pC is not None:
-            U, S, V = tensor.svd(self.A[self.pC], axes=(0, 1), sU=1)
+        # if self.pC is None:  does not happen now
+        #     return 0
+        U, S, V = tensor.svd(self.A[self.pC], axes=(0, 1), sU=1)
 
-            mask = tensor.truncation_mask(S, **opts_svd)
-            discarded = tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()
+        mask = tensor.truncation_mask(S, **opts_svd)
+        discarded = tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()
 
-            U, S, V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
-            self.A[self.pC] = S / S.norm() if normalize else S
-            n1, n2 = self.pC
+        U, S, V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
+        self.A[self.pC] = S / S.norm() if normalize else S
 
-            if n1 >= self.first:
-                ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
-                self.A[n1] = tensor.ncon([self.A[n1], U], (ax, (1, -2)))
-            else:
-                self.A[self.pC] = U @ self.A[self.pC]
+        n1, n2 = self.pC
 
-            if n2 <= self.last:
-                self.A[n2] = V @ self.A[n2]
-            else:
-                self.A[self.pC] = self.A[self.pC] @ V
+        if n1 >= self.first:
+            ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
+            self.A[n1] = tensor.ncon([self.A[n1], U], (ax, (1, -2)))
+        else:
+            self.A[self.pC] = U @ self.A[self.pC]
 
-            return discarded
-        return 0
+        if n2 <= self.last:
+            self.A[n2] = V @ self.A[n2]
+        else:
+            self.A[self.pC] = self.A[self.pC] @ V
+
+        return discarded
 
     def remove_central(self):
         """ Removes (ignores) the central block. Do nothing if is does not exist. """
@@ -521,7 +521,7 @@ class MpsMpo:
 
         opts_svd : dict
             options passed to :meth:`yastn.linalg.svd_with_truncation`,
-            including options governing truncation.
+            including options governing truncation. Default is {'tol': 1e-13}.
 
         Returns
         -------
@@ -529,7 +529,7 @@ class MpsMpo:
         """
         discarded_max = 0.
         if opts_svd is None:
-            opts_svd = {}
+            opts_svd = {'tol': 1e-13}
         for n in self.sweep(to=to):
             self.orthogonalize_site(n=n, to=to, normalize=normalize)
             discarded = self.diagonalize_central(opts_svd=opts_svd, normalize=normalize)

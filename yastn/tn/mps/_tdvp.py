@@ -72,11 +72,11 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
     """
     time_independent = isinstance(H, MpsMpo)
     if dt <= 0:
-        raise YastnError('MPS: dt should be positive.')
+        raise YastnError('TDVP: dt should be positive.')
     if not hasattr(times, '__iter__'):
         times = (0, times)
     if any(t1 - t0 <= 0 for t0, t1 in zip(times[:-1], times[1:])):
-        raise YastnError('MPS: Time should be an ascending tuple.')
+        raise YastnError('TDVP: times should be an ascending tuple.')
 
     if method == '1site' and time_independent:
         routine = lambda t, dt0, env: _tdvp_sweep_1site_(psi, H, dt0, u, env, opts_expmv, normalize)
@@ -91,7 +91,7 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
     elif method == '12site' and not time_independent:
         routine = lambda t, dt0, env: _tdvp_sweep_12site_(psi, H(t), dt0, u, None, opts_expmv, opts_svd, normalize)
     else:
-        raise YastnError('MPS: tdvp method %s not recognized' % method)
+        raise YastnError('TDVP: tdvp method %s not recognized' % method)
 
     env = None
     # perform time-steps
@@ -109,7 +109,7 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
                 env = routine(t + (1 - 1.5 * s2) * ds, ds * s2, env)
                 env = routine(t + (1 - 0.5 * s2) * ds, ds * s2, env)
             else:
-                raise YastnError("MPS: order should be in ('2nd', '4th')")
+                raise YastnError("TDVP: order should be in ('2nd', '4th')")
             t = t + ds
         yield TDVP_out(t0, t, time_independent, ds, steps)
 
@@ -201,6 +201,4 @@ def _init_tdvp(psi, H, env, opts_expmv):
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup(to='first')
-    if not (env.bra is psi and env.ket is psi):
-        raise YastnError('MPS: Require environment env where ket == bra == psi')
     return env, opts

@@ -1,12 +1,12 @@
-""" dmrg tested on XX model. """
+""" dmrg tests """
 import pytest
 import yastn.tn.mps as mps
 import yastn
 try:
     from .configs import config_dense as cfg
-    # pytest modifies cfg to inject different backends and devices during tests
 except ImportError:
     from configs import config_dense as cfg
+# pytest modifies cfg to inject different backends and devices during tests
 
 
 def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
@@ -100,7 +100,7 @@ def dmrg_XX_model_dense(config=None, tol=1e-6):
     opts_config = {} if config is None else \
                 {'backend': config.backend,
                 'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.Spin12(sym='dense', **opts_config)
     generate = mps.Generator(N=N, operators=ops)
     parameters = {"t": 1.0, "mu": 0.2,
@@ -165,7 +165,7 @@ def dmrg_XX_model_Z2(config=None, tol=1e-6):
     opts_config = {} if config is None else \
             {'backend': config.backend,
             'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.SpinlessFermions(sym='Z2', **opts_config)
     generate = mps.Generator(N=7, operators=ops)
     generate.random_seed(seed=0)
@@ -200,7 +200,7 @@ def dmrg_XX_model_U1(config=None, tol=1e-6):
     opts_config = {} if config is None else \
         {'backend': config.backend,
         'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.SpinlessFermions(sym='U1', **opts_config)
     generate = mps.Generator(N=7, operators=ops)
     generate.random_seed(seed=0)
@@ -234,7 +234,33 @@ def dmrg_XX_model_U1(config=None, tol=1e-6):
         psi = run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
 
 
+def test_dmrg_raise(config=cfg):
+    opts_config = {} if config is None else \
+        {'backend': config.backend,
+        'default_device': config.default_device}
+    ops = yastn.operators.Spin12(sym='dense', **opts_config)
+    I = mps.product_mpo(ops.I(), N=7)
+    H = mps.random_mpo(I, D_total=5)
+    psi = mps.random_mpo(I, D_total=4)
+
+    with pytest.raises(yastn.YastnError):
+        mps.dmrg_(psi, H, method='1site', Schmidt_tol=-1)
+        #  DMRG: Schmidt_tol has to be positive or None.
+    with pytest.raises(yastn.YastnError):
+        mps.dmrg_(psi, H, method='1site', energy_tol=-1)
+        # DMRG: energy_tol has to be positive or None.
+    with pytest.raises(yastn.YastnError):
+        mps.dmrg_(psi, H, method='one-site')
+        # DMRG: dmrg method one-site not recognized.
+
+    with pytest.raises(yastn.YastnError):
+        psi8 = mps.random_mpo(mps.product_mpo(ops.I(), N=8), D_total=4)
+        mps.dmrg_(psi8, H, method='1site')
+        # MPO operator and state should have the same number of sites.
+
+
 if __name__ == "__main__":
+    test_dmrg_raise()
     dmrg_XX_model_dense()
     dmrg_XX_model_Z2()
     dmrg_XX_model_U1()

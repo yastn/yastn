@@ -139,9 +139,9 @@ class _EnvParent:
         self.reset_temp()
 
         if self.bra.nr_phys != self.ket.nr_phys:
-            raise YastnError('MPS: bra and ket should have the same number of physical legs.')
+            raise YastnError('MpsMpo for bra and ket should have the same number of physical legs.')
         if self.bra.N != self.ket.N:
-            raise YastnError('MPS: bra and ket should have the same number of sites.')
+            raise YastnError('MpsMpo for bra and ket should have the same number of sites.')
 
         config = self.ket[0].config
         for ii in range(len(self.ort)):
@@ -339,7 +339,7 @@ class Env3(_EnvParent):
         self.nr_layers = 3
         self.on_aux = on_aux
         if self.op.N != self.N:
-            raise YastnError('MPS: op should should have the same number of sites as ket.')
+            raise YastnError('MPO operator and state should have the same number of sites.')
 
         # left boundary
         config = self.ket[0].config

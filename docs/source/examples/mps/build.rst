@@ -20,8 +20,8 @@ Here, as an example, we set up a well-known exact MPS: A ground state of
     import yastn
     import yastn.tn.mps as mps
 
-.. literalinclude:: /../../tests/mps/test_measurement.py
-        :pyobject: build_spin1_aklt_state
+.. literalinclude:: /../../tests/mps/build_manually.py
+        :pyobject: build_aklt_state_manually
 
 
 Hamiltonian for nearest-neighbor hopping/XX model
@@ -32,7 +32,7 @@ nearest-neighbour hopping Hamiltonian with hopping amplitude :math:`t`
 and on-site energy :math:`\mu` with different
 realizations of explicit symmetry.
 
-.. literalinclude:: /../../tests/mps/test_generator.py
+.. literalinclude:: /../../tests/mps/build_manually.py
         :pyobject: build_mpo_nn_hopping_manually
 
 
@@ -47,7 +47,7 @@ Spinless fermions with hopping at arbitrary range (Hterm)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. literalinclude:: /../../tests/mps/test_generator.py
-        :pyobject: mpo_hopping_Hterm
+        :pyobject: build_mpo_hopping_Hterm
 
 
 Generator class for MPO/MPS

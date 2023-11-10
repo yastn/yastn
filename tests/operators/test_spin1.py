@@ -30,7 +30,7 @@ def test_spin1():
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(reverse=r), np.eye(3)) for (I, r) in zip(Is, rs))
-    assert all(I.device[:len(default_device)] == default_device for I in Is)  # for cuda, accept cuda:0 == cuda
+    assert all(default_device in I.device for I in Is)  # accept 'cuda' in 'cuda:0'
 
     Szs = [ops_dense.sz(), ops_Z3.sz(), ops_U1.sz()]
     assert all(np.allclose(Sz.to_numpy(reverse=r), np.array([[1, 0, 0], [0, 0, 0], [0, 0, -1]])) for (Sz, r) in zip(Szs, rs))

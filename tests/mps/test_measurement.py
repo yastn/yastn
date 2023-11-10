@@ -5,12 +5,12 @@ import yastn
 import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
-    # pytest modifies cfg to inject different backends and devices during tests
 except ImportError:
     from configs import config_dense as cfg
+# pytest modifies cfg to inject different backends and devices during tests
 
 
-def build_spin1_aklt_state(N=5, lvec=(1, 0), rvec=(0, 1), config=None):
+def build_aklt_state_manually(N=5, lvec=(1, 0), rvec=(0, 1), config=None):
     """
     Initialize MPS tensors by hand. Example for Spin-1 AKLT state of N sites.
 
@@ -26,7 +26,7 @@ def build_spin1_aklt_state(N=5, lvec=(1, 0), rvec=(0, 1), config=None):
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     config = yastn.make_config(**opts_config)
     A = yastn.Tensor(config, s=(-1, 1, 1))
     s13, s23 = np.sqrt(1. / 3), np.sqrt(2. / 3)
@@ -68,7 +68,7 @@ def measure_mps_aklt(config=None, tol=1e-12):
     # AKLT state with open boundary conditions and N = 31 sites.
     #
     N = 31
-    psi = build_spin1_aklt_state(N=N, lvec=(1, 0), rvec=(1, 0), config=config)
+    psi = build_aklt_state_manually(N=N, lvec=(1, 0), rvec=(1, 0), config=config)
     #
     # We verify transfer matrix in the middle of AKLT state
     # to specify the effect of lvec and rvec
@@ -96,7 +96,7 @@ def measure_mps_aklt(config=None, tol=1e-12):
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.Spin1(sym='dense', **opts_config)
     #
     # Measure Sz at the first and last sites
@@ -141,7 +141,7 @@ def mps_spectrum_ghz(sym='dense', config=None, tol=1e-12):
     opts_config = {} if config is None else \
                     {'backend': config.backend,
                     'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.Spin1(sym=sym, **opts_config)
     #
     # take 3 orthonormal product states
@@ -201,7 +201,7 @@ def test_mpo_spectrum(sym, config, tol=1e-12):
     opts_config = {} if config is None else \
                     {'backend': config.backend,
                     'default_device': config.default_device}
-    # pytest uses config to inject backend and device for testing
+    # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.Spin1(sym=sym, **opts_config)
     #
     # take 3 orthogonal operator-product states
@@ -248,6 +248,26 @@ def test_mpo_spectrum(sym, config, tol=1e-12):
     assert abs(entropies[0]) < tol and abs(entropies[-1]) < tol
 
 
+def test_measurment_raise(config=cfg):
+    opts_config = {} if config is None else \
+                    {'backend': config.backend,
+                    'default_device': config.default_device}
+    # pytest uses config to inject various backends and devices for testing
+    ops = yastn.operators.Spin1(sym='dense', **opts_config)
+    #
+    # take 3 orthogonal operator-product states
+    #
+    H7 = mps.product_mpo(ops.sz(), N=7)
+    psi7 = mps.product_mps(ops.vec_z(), N=7)
+    psi8 = mps.product_mps(ops.vec_z(), N=8)
+
+    with pytest.raises(yastn.YastnError):
+        mps.vdot(psi7, psi8)
+        # MpsMpo for bra and ket should have the same number of sites.
+    with pytest.raises(yastn.YastnError):
+        mps.vdot(psi7, H7)
+        # MpsMpo for bra and ket should have the same number of physical legs.
+
 
 # def correlation_matrix(psi, ops):
 #     """ Calculate correlation matrix for Mps psi  C[m,n] = <c_n^dag c_m>"""
@@ -277,6 +297,7 @@ def test_mpo_spectrum(sym, config, tol=1e-12):
 
 if __name__ == "__main__":
     measure_mps_aklt()
+    test_measurment_raise()
     for sym in ['dense', 'Z3', 'U1']:
         mps_spectrum_ghz(sym=sym)
         test_mpo_spectrum(sym=sym, config=cfg)

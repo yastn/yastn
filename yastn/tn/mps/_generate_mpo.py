@@ -48,6 +48,13 @@ def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.Mps
         if True, includes term.amplitude in MPO.
     """
     single_mpo = I.copy()
+
+    try:
+        if len(term.positions) != len(term.operators):
+            raise YastnError("Hterm: numbers of positions and operators do not match. ")
+    except TypeError:
+        raise YastnError("Hterm: positions and operators should be provided as lists or tuples.")
+
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
         if site < 0 or site > I.N or not isinstance(site, numbers.Integral):
             raise YastnError("position in Hterm should be in 0, 1, ..., N-1 ")

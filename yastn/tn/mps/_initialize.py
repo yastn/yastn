@@ -77,7 +77,7 @@ def _product_mpsmpo(vectors, N=None, nr_phys=1) -> yastn.tn.mps.MpsMpo:
     if nr_phys == 1 and any(vec.s != (1,) for vec in vectors):
         raise YastnError("Vector should have ndim = 1 with the signature s = (1,).")
     if nr_phys == 2 and any(vec.s != (1, -1) for vec in vectors):
-        raise YastnError("Vector should have ndim = 2 with the signature s = (1, -1).")
+        raise YastnError("Operator should have ndim = 2 with the signature s = (1, -1).")
 
     Nv = len(vectors)
     if Nv != N:
