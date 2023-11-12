@@ -13,11 +13,11 @@ logger = logging.Logger('dmrg')
 #################################
 
 class DMRG_out(NamedTuple):
-    sweeps : int = 0
-    energy : float = None
-    denergy : float = None
-    max_dSchmidt : float = None
-    max_discarded_weight : float = None
+    sweeps: int = 0
+    energy: float = None
+    denergy: float = None
+    max_dSchmidt: float = None
+    max_discarded_weight: float = None
 
 
 def dmrg_(psi, H, project=None, method='1site',

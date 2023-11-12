@@ -10,7 +10,7 @@ def load_from_dict(config, in_dict) -> yastn.tn.mps.MpsMpo:
 
     Parameters
     ----------
-    config : module | _config(NamedTuple)
+    config: module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
 
     in_dict: dict
@@ -33,7 +33,7 @@ def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpo:
 
     Parameters
     ----------
-    config : module | _config(NamedTuple)
+    config: module | _config(NamedTuple)
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
 
     file: File

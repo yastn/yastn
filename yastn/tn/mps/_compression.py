@@ -9,11 +9,11 @@ from ... import initialize, tensor, YastnError
 logger = logging.Logger('compression')
 
 class compression_out(NamedTuple):
-    sweeps : int = 0
-    overlap : float = None
-    doverlap : float = None
-    max_dSchmidt : float = None
-    max_discarded_weight : float = None
+    sweeps: int = 0
+    overlap: float = None
+    doverlap: float = None
+    max_dSchmidt: float = None
+    max_discarded_weight: float = None
 
 
 def compression_(psi, target, method='1site',
@@ -227,7 +227,7 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
     return max_disc_weight
 
 
-def zipper(a, b, opts=None) -> yastn.tn.mps.MpsMpo:
+def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpo:
     """
     Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
 
@@ -240,20 +240,33 @@ def zipper(a, b, opts=None) -> yastn.tn.mps.MpsMpo:
     ----------
     a, b: yastn.tn.mps.MpsMpo
 
-    opts: dict
+    opts_svd: dict
         truncation parameters for :meth:`yastn.linalg.truncation_mask`
-    """
-    psi = b.shallow_copy()
-    psi.canonize_(to='last')
 
-    if psi.N != a.N:
-        raise YastnError('MPS: a and b must have equal number of sites.')
+    normalize: bool
+        Whether to approximate the norm of initial, untruncated a @ b in out.factor
+        Default is True, i.e. sets the norm to unity.
+        The individual tensors at the end of the procedure are in a proper canonical form.
+
+    return_discarded: bool
+        Whether to return discarded weights together with the resulting MPS/MPO.
+        Default is False, i.e., returns only MPS/MPO.
+        Discarded weight is the norm of truncated elements normalized by the norm of the untruncated state.
+    """
+    if a.N != b.N:
+        raise YastnError('MpsMpo-s to multiply must have equal number of sites.')
+
+    psi = b.shallow_copy()
+    psi.canonize_(to='last', normalize=normalize)
+    if not normalize:
+        psi.factor = a.factor * psi.factor
 
     la, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
     tmp = initialize.ones(b.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
     tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axes=2)
 
+    discarded2_total = 0.
     for n in psi.sweep(to='first'):
         tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
 
@@ -262,18 +275,63 @@ def zipper(a, b, opts=None) -> yastn.tn.mps.MpsMpo:
         tmp = a[n]._attach_23(tmp)
 
         U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1)
+        nSold = S.norm()
 
-        mask = tensor.truncation_mask(S, **opts)
-        U, C, V = mask.apply_mask(U, S, V, axes=(2, 0, 0))
+        mask = tensor.truncation_mask(S, **opts_svd)
+        nSout = tensor.bitwise_not(mask).apply_mask(S, axes=0).norm()
+        discarded2_local = (nSout / nSold) ** 2
+        discarded2_total = discarded2_local + discarded2_total - discarded2_total * discarded2_local
+
+        U, S, V = mask.apply_mask(U, S, V, axes=(2, 0, 0))
+        S = S / S.norm()
+
+        psi.factor = 1 if normalize else psi.factor * nSold
 
         psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
-        tmp = U @ C
+        tmp = U @ S
 
     tmp = tmp.fuse_legs(axes=((0, 1), 2)).drop_leg_history(axes=0)
     ntmp = tmp.norm()
     psi[psi.first] = (tmp / ntmp) @ psi[psi.first]
-    psi.factor = a.factor * b.factor * ntmp
+    psi.factor = 1 if normalize else psi.factor * ntmp
+    if return_discarded:
+        return psi, psi.config.backend.sqrt(discarded2_total)
     return psi
+
+
+# def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpo:
+
+#     psi = b.shallow_copy()
+#     psi.canonize_(to='last')
+
+#     if psi.N != a.N:
+#         raise YastnError('MPS: a and b must have equal number of sites.')
+
+#     la, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
+
+#     tmp = initialize.ones(b.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
+#     tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axes=2)
+
+#     for n in psi.sweep(to='first'):
+#         tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
+
+#         if psi.nr_phys == 2:
+#             tmp = tmp.fuse_legs(axes=(0, 1, 3, (4, 2)))
+#         tmp = a[n]._attach_23(tmp)
+
+#         U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1)
+
+#         mask = tensor.truncation_mask(S, **opts_svd)
+#         U, C, V = mask.apply_mask(U, S, V, axes=(2, 0, 0))
+
+#         psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
+#         tmp = U @ C
+
+#     tmp = tmp.fuse_legs(axes=((0, 1), 2)).drop_leg_history(axes=0)
+#     ntmp = tmp.norm()
+#     psi[psi.first] = (tmp / ntmp) @ psi[psi.first]
+#     psi.factor = a.factor * b.factor * ntmp
+#     return psi
 
 
 def linear_combination(self):

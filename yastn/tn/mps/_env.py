@@ -10,7 +10,7 @@ def vdot(*args) -> number:
 
     Parameters
     -----------
-    *args : yastn.tn.mps.MpsMpo
+    *args: yastn.tn.mps.MpsMpo
     """
     if len(args) == 2:
         return measure_overlap(*args)
@@ -27,10 +27,10 @@ def measure_overlap(bra, ket) -> number:
 
     Parameters
     -----------
-    bra : yastn.tn.mps.MpsMpo
+    bra: yastn.tn.mps.MpsMpo
         An MPS which will be conjugated.
 
-    ket : yastn.tn.mps.MpsMpo
+    ket: yastn.tn.mps.MpsMpo
     """
     env = Env2(bra=bra, ket=ket)
     env.setup(to='first')
@@ -47,13 +47,13 @@ def measure_mpo(bra, op, ket) -> number:
 
     Parameters
     -----------
-    bra : yastn.tn.mps.MpsMpo
+    bra: yastn.tn.mps.MpsMpo
         An MPS which will be conjugated.
 
-    op : yastn.tn.mps.MpsMpo
+    op: yastn.tn.mps.MpsMpo
         Operator written as MPO.
 
-    ket : yastn.tn.mps.MpsMpo
+    ket: yastn.tn.mps.MpsMpo
     """
     env = Env3(bra=bra, op=op, ket=ket)
     env.setup(to='first')
@@ -69,14 +69,14 @@ def measure_1site(bra, O, ket) -> dict[int, number]:
 
     Parameters
     -----------
-    bra : yastn.tn.mps.MpsMpo
+    bra: yastn.tn.mps.MpsMpo
         An MPS which will be conjugated.
 
-    O : yastn.Tensor or dict
+    O: yastn.Tensor or dict
         An operator with signature (1, -1).
         It is possible to provide a dictionary {site: operator}
 
-    ket : yastn.tn.mps.MpsMpo
+    ket: yastn.tn.mps.MpsMpo
     """
     op = sorted(O.items()) if isinstance(O, dict) else [(n, O) for n in ket.sweep(to='last')]
     env = Env2(bra=bra, ket=ket)
@@ -97,14 +97,14 @@ def measure_2site(bra, O, P, ket) -> dict[tuple[int, int], number]:
 
     Parameters
     -----------
-    bra : yastn.tn.mps.MpsMpo
+    bra: yastn.tn.mps.MpsMpo
         An MPS which will be conjugated.
 
-    O, P : yastn.Tensor or dict
+    O, P: yastn.Tensor or dict
         Operators with signature (1, -1).
         It is possible to provide a dictionaries {site: operator}
 
-    ket : yastn.tn.mps.MpsMpo
+    ket: yastn.tn.mps.MpsMpo
     """
     op1 = sorted(O.items()) if isinstance(O, dict) else [(n, O) for n in ket.sweep(to='last')]
     op2 = sorted(P.items()) if isinstance(P, dict) else [(n, P) for n in ket.sweep(to='last')]
@@ -160,7 +160,7 @@ class _EnvParent:
 
         Parameters
         ----------
-        to : str
+        to: str
             'first' or 'last'.
         """
         for n in self.ket.sweep(to=to):
@@ -184,7 +184,7 @@ class _EnvParent:
 
         Returns
         -------
-        overlap : float or complex
+        overlap: float or complex
         """
         if bd is None:
             bd = (-1, 0)
@@ -200,7 +200,7 @@ class _EnvParent:
         n: int
             index of site to include to the environment
 
-        to : str
+        to: str
             'first' or 'last'.
         """
         if self.nr_layers == 2:
@@ -246,9 +246,9 @@ class Env2(_EnvParent):
 
         Parameters
         ----------
-        bra : mps
+        bra: mps
             mps for :math:`| {\rm bra} \rangle`. If None, it is the same as ket.
-        ket : mps
+        ket: mps
             mps for :math:`| {\rm ket} \rangle`.
         """
         super().__init__(bra, ket)
@@ -270,15 +270,15 @@ class Env2(_EnvParent):
 
         Parameters
         ----------
-        A : tensor
+        A: tensor
             site tensor
 
-        n : int
+        n: int
             index of corresponding site
 
         Returns
         -------
-        out : tensor
+        out: tensor
             Heff1 * A
         """
         inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
@@ -327,11 +327,11 @@ class Env3(_EnvParent):
 
         Parameters
         ----------
-        bra : mps
+        bra: mps
             mps for :math:`| {\rm bra} \rangle`. If None, it is the same as ket.
-        op : mps
+        op: mps
             mps for operator op.
-        ket : mps
+        ket: mps
             mps for :math:`| {\rm ket} \rangle`.
         """
         super().__init__(bra, ket, project)
@@ -359,14 +359,14 @@ class Env3(_EnvParent):
 
         Parameters
         ----------
-        C : tensor
+        C: tensor
             a central block
-        bd : tuple
+        bd: tuple
             index of bond on which it acts, e.g. (1, 2) [or (2, 1) -- it is ordered]
 
         Returns
         -------
-        out : tensor
+        out: tensor
             Heff0 @ C
         """
         bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
@@ -380,15 +380,15 @@ class Env3(_EnvParent):
 
         Parameters
         ----------
-        A : tensor
+        A: tensor
             site tensor
 
-        n : int
+        n: int
             index of corresponding site
 
         Returns
         -------
-        out : tensor
+        out: tensor
             Heff1 @ A
         """
         nl, nr = n - 1, n + 1
@@ -418,15 +418,15 @@ class Env3(_EnvParent):
 
         Parameters
         ----------
-        AA : tensor
+        AA: tensor
             merged tensor for 2 sites.
             Physical legs should be fused turning it effectivly into 1-site update.
-        bd : tuple
+        bd: tuple
             index of bond on which it acts, e.g. (1, 2) [or (2, 1) -- it is ordered]
 
         Returns
         -------
-        out : tensor
+        out: tensor
             Heff2 * AA
         """
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]

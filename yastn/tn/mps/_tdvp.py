@@ -9,8 +9,8 @@ from ... import YastnError
 #################################
 
 class TDVP_out(NamedTuple):
-    ti : float = 0.
-    tf : float = 0.
+    ti: float = 0.
+    tf: float = 0.
     time_independent: bool = None
     dt: float = 0.
     steps: int = 0

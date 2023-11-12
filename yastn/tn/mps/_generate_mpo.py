@@ -16,18 +16,18 @@ class Hterm(NamedTuple):
 
     Parameters
     ----------
-    amplitude : number
+    amplitude: number
         numerical multiplier in front of the operator product.
-    positions : Sequence[int]
+    positions: Sequence[int]
         positions of the local operators :math:`o_i` in the product different than identity.
-    operators : Sequence[yastn.Tensor]
+    operators: Sequence[yastn.Tensor]
         local operators in the product that are different than the identity.
         *i*-th operator is acting at `positions[i]`.
         Each operator should have `ndim=2` and signature `s=(+1, -1).`
     """
-    amplitude : float = 1.0
-    positions : tuple = ()
-    operators : tuple = ()
+    amplitude: float = 1.0
+    positions: tuple = ()
+    operators: tuple = ()
 
 
 def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.MpsMpo:
@@ -78,9 +78,9 @@ def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.Mps
 
 class GenerateMpoTemplate(NamedTuple):
     config: NamedTuple = None
-    basis : list = None
-    trans : list = None
-    tleft : list = None
+    basis: list = None
+    trans: list = None
+    tleft: list = None
 
 
 def generate_mpo_preprocessing(I, terms, return_amplitudes=False) -> GenerateMpoTemplate | tuple[GenerateMpoTemplate, list[float]]:

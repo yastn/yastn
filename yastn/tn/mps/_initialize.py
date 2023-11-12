@@ -13,12 +13,12 @@ def product_mps(vectors, N=None) -> yastn.tn.mps.MpsMpo:
 
     Parameters
     ----------
-    vectors : Sequence[yastn.Tensor] | yastn.Tensor
+    vectors: Sequence[yastn.Tensor] | yastn.Tensor
         Tensors will be attributed to consecutive MPS sites.
         Each tensor should have `ndim=1` and the signature `s=+1`.
         They can have non-zero charges that will be converted into matching MPS virtual legs.
 
-    N : Optional[int]
+    N: Optional[int]
         number of MPS sites. By default, it is equal to the number of provided `vectors`.
     """
     return _product_mpsmpo(vectors, N=N, nr_phys=1)
@@ -32,12 +32,12 @@ def product_mpo(operators, N=None) -> yastn.tn.mps.MpsMpo:
 
     Parameters
     ----------
-    operators : Sequence[yastn.Tensor] | yastn.Tensor
+    operators: Sequence[yastn.Tensor] | yastn.Tensor
         Tensors will be attributed to consecutive MPS sites.
         Each tensor should have `ndim=2` and the signature `s=(+1, -1)`.
         They can have non-zero charges, that will be converted into matching MPO virtual legs.
 
-    N : Optional[int]
+    N: Optional[int]
         number of MPO sites. By default, it is equal to the number of provided `operators`.
 
     Example
@@ -100,19 +100,19 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
 
     Parameters
     ----------
-    I : yastn.tn.mps.MpsMpo
+    I: yastn.tn.mps.MpsMpo
         MPS or MPO that defines local Hilbert spaces.
-    n : int
+    n: int
         Total charge of MPS.
         Virtual MPS spaces are drawn randomly from a normal distribution,
         whose mean value changes linearly along the chain from `n` to 0.
-    D_total : int
+    D_total: int
         Largest bond dimension. Due to the random and local nature of the procedure,
         the desired total bond dimension might not be reached on some bonds,
         in particular, for higher symmetries.
-    sigma : int
+    sigma: int
         The standard deviation of the normal distribution.
-    dtype : string
+    dtype: string
         Number format, i.e., ``'float64'`` or ``'complex128'``
 
     Example
@@ -166,16 +166,16 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
 
     Parameters
     ----------
-    I : yastn.tn.mps.MpsMpo
+    I: yastn.tn.mps.MpsMpo
         MPS or MPO that defines local spaces.
-    D_total : int
+    D_total: int
         Largest bond dimension. Due to the random and local nature of the procedure,
         the desired total bond dimension might not be reached on some bonds,
         in particular, for higher symmetries.
-    sigma : int
+    sigma: int
         Standard deviation of a normal distribution
         from which dimensions of charge sectors are drawn.
-    dtype : string
+    dtype: string
         number format, i.e., ``'float64'`` or ``'complex128'``
     """
     config = I.config

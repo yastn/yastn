@@ -92,10 +92,10 @@ def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpo:
 
     Parameters
     ----------
-        a, b : yastn.tn.mps.MpsMpo, yastn.tn.mps.MpsMpo
+        a, b: yastn.tn.mps.MpsMpo, yastn.tn.mps.MpsMpo
             a pair of MPO and MPS or two MPO's to be multiplied
 
-        mode : str
+        mode: str
            mode for :meth:`Tensor.fuse_legs()<yastn.Tensor.fuse_legs>`; If :code:`None` (default)
            use default setting from YASTN tensor's
            :ref:`configuration<tensor/configuration:yastn configuration>`.
@@ -184,9 +184,9 @@ class MpsMpo:
 
         Parameters
         ----------
-        to : str
+        to: str
             'first' or 'last'.
-        df, dl : int
+        df, dl: int
             shift iterator by :math:`df \ge 0` and :math:`dl \ge 0` from the first and the last site, respectively.
         """
         if to == 'last':
@@ -323,16 +323,16 @@ class MpsMpo:
 
         Parameters
         ----------
-            n : int
+            n: int
                 index of site to be orthogonalized
 
-            to : str
+            to: str
                 a choice of canonical form: :code:`'last'` or :code:`'first'`.
 
-            normalize : bool
-                If :code:`True`, central block is normalized to unity according
-                to standard 2-norm, and :code:`self.factor` is set to `1`. If False, the norm
-                gets accumulated in :code:`self.factor`.
+            normalize: bool
+                Whether to keep track of the norm by accumulating it in self.factor
+                Default is True, i.e., sets the norm to unity.
+                The central blocks at the end of the procedure is normalized to unity.
         """
         if self.pC is not None:
             raise YastnError('Only one central block is allowed. Attach the existing central block before orthogonalizing site.')
@@ -368,12 +368,13 @@ class MpsMpo:
 
         Parameters
         ----------
-        opts_svd : dict
+        opts_svd: dict
             Options passed to :meth:`yastn.linalg.truncation_mask`. It includes information on how to truncate the Schmidt values.
 
-        normalize : bool
-            Whether to normalize the central block.
-            If False, retains the norm of untruncated central block in self.factor
+        normalize: bool
+            Whether to keep track of the norm of untruncated Schmidt values by accumulating it in self.factor
+            Default is True, i.e., sets the norm to unity.
+            The truncated Schmidt values (central block) at the end of the procedure is normalized to unity.
         """
         # if self.pC is None:  does not happen now
         #     return 0
@@ -421,7 +422,7 @@ class MpsMpo:
 
         Parameters
         ----------
-        to : str
+        to: str
             'last' or 'first'.
         """
         if self.pC is not None:
@@ -456,12 +457,13 @@ class MpsMpo:
 
         Parameters
         ----------
-        to : str
+        to: str
             :code:`'first'` (default) or :code:`'last'`.
 
-        normalize : bool
-            If :code:`True` (default), the central block and thus MPS/MPO is normalized to unity
-            according to the standard 2-norm. If False, the norm gets accumulated in :code:`self.factor`.
+        normalize: bool
+            Whether to keep track of the norm of initial, untruncated state in self.factor.
+            Default is True, i.e. sets the norm to unity.
+            The individual tensors at the end of the procedure are in a proper canonical form.
         """
         self.absorb_central(to=to)
         for n in self.sweep(to=to):
@@ -475,13 +477,13 @@ class MpsMpo:
 
         Parameters
         ----------
-        to : str
+        to: str
             :code:`'first'` (default) or code:`'last'`.
 
-        n : int
+        n: int
             Can check a single site if int provided. If None, check all sites.
 
-        tol : float
+        tol: float
             Tolerance of the check. Default is 1e-12.
         """
         if to == 'first':
@@ -503,7 +505,7 @@ class MpsMpo:
                 return False
         return self.pC is None  # True if no central block
 
-    def truncate_(self, to='last', normalize=True, opts_svd=None) -> number:
+    def truncate_(self, to='last', opts_svd=None, normalize=True) -> number:
         r"""
         Sweep through the MPS/MPO and put it in right/left canonical form
         (:code:`to='first'` or :code:`to='last'`, respectively)
@@ -518,18 +520,19 @@ class MpsMpo:
 
         The MPS/MPO is updated in place.
 
-        Returns norm of truncated elements normalized by the norm of the untruncated state.
+        Returns the norm of truncated elements normalized by the norm of the untruncated state.
 
         Parameters
         ----------
-        to : str
+        to: str
             :code:`'last'` (default) or :code:`'first'`.
 
-        normalize : bool
-            If :code:`True` (default), the central block and thus MPS/MPO is normalized
-            to unity according to the standard 2-norm.
+        normalize: bool
+            Whether to keep track of the norm of initial, untruncated state in self.factor.
+            Default is True, i.e. sets the norm to unity.
+            The individual tensors at the end of the procedure are in a proper canonical form.
 
-        opts_svd : dict
+        opts_svd: dict
             options passed to :meth:`yastn.linalg.svd_with_truncation`,
             including options governing truncation. Default is {'tol': 1e-13}.
         """
@@ -552,7 +555,7 @@ class MpsMpo:
 
         Parameters
         ----------
-        bd : tuple
+        bd: tuple
             (n, n + 1), index of two sites to merge.
 
         Returns
@@ -571,10 +574,10 @@ class MpsMpo:
 
         Parameters
         ----------
-        AA : Tensor
+        AA: Tensor
             Tensor to be unmerged. It gets unfused in place during the operation.
 
-        bd : tuple
+        bd: tuple
             (n, n + 1), index of two sites to merge.
 
         Returns
@@ -652,7 +655,7 @@ class MpsMpo:
 
         Parameters
         ----------
-        alpha : int
+        alpha: int
             Order of Renyi entropy.
             The default value is 1, which corresponds to the Von Neumann entropy.
         """
@@ -694,7 +697,7 @@ class MpsMpo:
             'N': psi.N,
             'nr_phys': psi.nr_phys,
             'factor': psi.factor, #.item(),
-            'A' : {}
+            'A': {}
         }
         for n in psi.sweep(to='last'):
             out_dict['A'][n] = psi[n].save_to_dict()
