@@ -330,8 +330,8 @@ class MpsMpo:
                 a choice of canonical form: :code:`'last'` or :code:`'first'`.
 
             normalize: bool
-                Whether to keep track of the norm by accumulating it in self.factor
-                Default is True, i.e., sets the norm to unity.
+                Whether to keep track of the norm by accumulating it in self.factor;
+                default is True, i.e., sets the norm to unity.
                 The central blocks at the end of the procedure is normalized to unity.
         """
         if self.pC is not None:
@@ -372,9 +372,9 @@ class MpsMpo:
             Options passed to :meth:`yastn.linalg.truncation_mask`. It includes information on how to truncate the Schmidt values.
 
         normalize: bool
-            Whether to keep track of the norm of untruncated Schmidt values by accumulating it in self.factor
-            Default is True, i.e., sets the norm to unity.
-            The truncated Schmidt values (central block) at the end of the procedure is normalized to unity.
+            Whether to keep track of the norm of retained Schmidt values
+            by accumulating it in self.factor; default is True, i.e., sets the norm to unity.
+            The truncated Schmidt values (central block) at the end of the procedure are normalized to unity.
         """
         # if self.pC is None:  does not happen now
         #     return 0
@@ -391,7 +391,7 @@ class MpsMpo:
             U, S, V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
             nS = S.norm()
             self.A[self.pC] = S / nS
-            self.factor = 1 if normalize else self.factor * nSold
+            self.factor = 1 if normalize else self.factor * nS
 
             n1, n2 = self.pC
 
@@ -461,8 +461,8 @@ class MpsMpo:
             :code:`'first'` (default) or :code:`'last'`.
 
         normalize: bool
-            Whether to keep track of the norm of initial, untruncated state in self.factor.
-            Default is True, i.e. sets the norm to unity.
+            Whether to keep track of the norm of the state by accumulating it in self.factor;
+            default is True, i.e., sets the norm to unity.
             The individual tensors at the end of the procedure are in a proper canonical form.
         """
         self.absorb_central_(to=to)
@@ -528,8 +528,8 @@ class MpsMpo:
             :code:`'last'` (default) or :code:`'first'`.
 
         normalize: bool
-            Whether to keep track of the norm of initial, untruncated state in self.factor.
-            Default is True, i.e. sets the norm to unity.
+            Whether to keep in self.factor the norm of the initial state projected on
+            the direction of the truncated state; default is True, i.e. sets the norm to unity.
             The individual tensors at the end of the procedure are in a proper canonical form.
 
         opts_svd: dict

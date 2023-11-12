@@ -98,7 +98,7 @@ def _dmrg_(psi, H, project, method,
     if not psi.is_canonical(to='first'):
         psi.canonize_(to='first')
 
-    env = Env3(bra=psi, op=H, ket=psi, project=project).setup(to='first')
+    env = Env3(bra=psi, op=H, ket=psi, project=project).setup_(to='first')
     E_old = env.measure()
 
     if opts_eigs is None:
@@ -159,14 +159,14 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
     psi = env.ket
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
-            env.update_Aort(n)
+            env.update_Aort_(n)
             _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
             psi.orthogonalize_site_(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != psi.first:
                 Schmidt[psi.pC] = psi[psi.pC].svd(sU=1, compute_uv=False)
             psi.absorb_central_(to=to)
-            env.clear_site(n)
-            env.update_env(n, to=to)
+            env.clear_site_(n)
+            env.update_env_(n, to=to)
 
 
 def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
@@ -187,7 +187,7 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
     for to, dn in (('last', 0), ('first', 1)):
         for n in psi.sweep(to=to, dl=1):
             bd = (n, n + 1)
-            env.update_AAort(bd)
+            env.update_AAort_(bd)
             AA = psi.merge_two_sites(bd)
             _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
             _disc_weight_bd = psi.unmerge_two_sites_(AA, bd, opts_svd)
@@ -195,7 +195,7 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
             if Schmidt is not None and to == 'first':
                 Schmidt[psi.pC] = psi[psi.pC]
             psi.absorb_central_(to=to)
-            env.clear_site(n, n + 1)
-            env.update_env(n + dn, to=to)
-    env.update_env(psi.first, to='first')
+            env.clear_site_(n, n + 1)
+            env.update_env_(n + dn, to=to)
+    env.update_env_(psi.first, to='first')
     return max_disc_weight

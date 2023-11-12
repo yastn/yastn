@@ -47,7 +47,7 @@ def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.Mps
     amplitude: bool
         if True, includes term.amplitude in MPO.
     """
-    single_mpo = I.copy()
+    single_mpo = I.shallow_copy()
 
     try:
         if len(term.positions) != len(term.operators):

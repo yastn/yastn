@@ -30,8 +30,8 @@ def check_env2_measure(psi1, psi2, tol):
     """ Test if different overlaps of psi1 and psi2 give consistent results. """
     N = psi1.N
     env = mps.Env2(bra=psi1, ket=psi2)
-    env.setup(to='first')
-    env.setup(to='last')
+    env.setup_(to='first')
+    env.setup_(to='last')
 
     results = [env.measure()]
     for n in range(N - 1):
@@ -43,7 +43,7 @@ def check_env2_measure(psi1, psi2, tol):
     results.append(env.measure(bd=(0, -1)))
 
     env2 = mps.Env2(bra=psi2, ket=psi1)
-    env2.setup(to='last')
+    env2.setup_(to='last')
     results.append(env2.measure(bd=(N, N - 1)).conj())
 
     results.append(mps.measure_overlap(bra=psi1, ket=psi2))
@@ -69,8 +69,8 @@ def check_env3_measure(psi1, op, psi2, tol):
     """ Test if different overlaps of psi1 and psi2 give consistent results. """
     N = psi1.N
     env = mps.Env3(bra=psi1, op=op, ket=psi2)
-    env.setup(to='first')
-    env.setup(to='last')
+    env.setup_(to='first')
+    env.setup_(to='last')
 
     results = [env.measure()]
     for n in range(N - 1):

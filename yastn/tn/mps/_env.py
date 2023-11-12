@@ -1,6 +1,7 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
 from __future__ import annotations
 from ... import tensor, initialize, YastnError, expmv
+from itertools import groupby
 
 
 def vdot(*args) -> number:
@@ -33,7 +34,7 @@ def measure_overlap(bra, ket) -> number:
     ket: yastn.tn.mps.MpsMpo
     """
     env = Env2(bra=bra, ket=ket)
-    env.setup(to='first')
+    env.setup_(to='first')
     return env.measure(bd=(-1, 0))
 
 
@@ -56,7 +57,7 @@ def measure_mpo(bra, op, ket) -> number:
     ket: yastn.tn.mps.MpsMpo
     """
     env = Env3(bra=bra, op=op, ket=ket)
-    env.setup(to='first')
+    env.setup_(to='first')
     return env.measure(bd=(-1, 0))
 
 
@@ -80,19 +81,19 @@ def measure_1site(bra, O, ket) -> dict[int, number]:
     """
     op = sorted(O.items()) if isinstance(O, dict) else [(n, O) for n in ket.sweep(to='last')]
     env = Env2(bra=bra, ket=ket)
-    env.setup(to='first').setup(to='last')
+    env.setup_(to='first').setup_(to='last')
     results = {}
     for n, o in op:
-        env.update_env_op(n, o, to='first')
+        env.update_env_op_(n, o, to='first')
         results[n] = env.measure(bd=(n - 1, n))
     return results
 
 
-def measure_2site(bra, O, P, ket) -> dict[tuple[int, int], number]:
+def measure_2site(bra, O, P, ket, pairs=None) -> dict[tuple[int, int], number]:
     r"""
-    Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i \textrm{P}_j|\textrm{ket} \rangle` for local operators :code:`O` and :code:`P` at each pair of lattice sites :math:`i < j`.
+    Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i \textrm{P}_j|\textrm{ket} \rangle`
+    of local operators :code:`O` and :code:`P` for each pair of lattice sites :math:`i < j`.
 
-    Local operators can be provided as dictionary {site: operator}, limiting the calculation to provided sites.
     Conjugate of MPS :code:`bra` is computed internally. Includes fermionic strings via swap_gate for fermionic operators.
 
     Parameters
@@ -105,24 +106,37 @@ def measure_2site(bra, O, P, ket) -> dict[tuple[int, int], number]:
         It is possible to provide a dictionaries {site: operator}
 
     ket: yastn.tn.mps.MpsMpo
+
+    pairs: list[tuple[int, int]]
+        It is possible to provide a list of pairs to limit the calculation.
+        By default is None, when all pairs are calculated.
     """
-    op1 = sorted(O.items()) if isinstance(O, dict) else [(n, O) for n in ket.sweep(to='last')]
-    op2 = sorted(P.items()) if isinstance(P, dict) else [(n, P) for n in ket.sweep(to='last')]
-    n2s = [x[0] for x in op2]
+    if pairs is not None:
+        n1s = sorted(set(x[1] for x in pairs))
+        pairs = sorted((-i, j) for i, j in pairs)
+        pairs = [(-i, j) for i, j in pairs]
+    else:
+        n1s = range(ket.N)
+        pairs = [(i, j) for i in range(ket.N - 1, -1, -1) for j in range(i + 1, ket.N)]
 
     env = Env2(bra=bra, ket=ket)
-    env.setup(to='first').setup(to='last')
-    for n2, o2 in op2:
-        env.update_env_op(n2, o2, to='first')
+    env.setup_(to='first').setup_(to='last')
+    for n1 in n1s:
+        env.update_env_op_(n1, P, to='first')
 
     results = {}
-    for n1, o1 in op1[::-1]:
-        env.update_env_op(n1, o1, to='last')
-        for n in env.ket.sweep(to='last', df=n1 + 1):
-            if n in n2s:
-                results[(n1, n)] = env.measure(bd=(n - 1, n))
-            env.update_env(n, to='last')
-    return results
+    for n0, n01s in groupby(pairs, key=lambda x: x[0]):
+        env.update_env_op_(n0, O, to='last')
+        _, n1 = next(n01s)
+        for n in env.ket.sweep(to='last', df=n0 + 1):
+            if n == n1:
+                results[(n0, n1)] = env.measure(bd=(n - 1, n))
+                try:
+                    _, n1 = next(n01s)
+                except StopIteration:
+                    break
+            env.update_env_(n, to='last')
+    return dict(sorted(results.items()))
 
 
 class _EnvParent:
@@ -136,7 +150,7 @@ class _EnvParent:
         self.ort = [] if project is None else project
         self.Fort = [{} for _ in range(len(self.ort))]
         self._temp = {}
-        self.reset_temp()
+        self.reset_temp_()
 
         if self.bra.nr_phys != self.ket.nr_phys:
             raise YastnError('MpsMpo for bra and ket should have the same number of physical legs.')
@@ -150,11 +164,11 @@ class _EnvParent:
             legs = [self.ket.virtual_leg('last').conj(), self.ort[ii].virtual_leg('last')]
             self.Fort[ii][(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)
 
-    def reset_temp(self):
+    def reset_temp_(self):
         """ Reset temporary objects stored to speed-up some simulations. """
         self._temp = {'Aort': [], 'op_2site': {}, 'expmv_ncv': {}}
 
-    def setup(self, to='last'):
+    def setup_(self, to='last'):
         r"""
         Setup all environments in the direction given by to.
 
@@ -164,10 +178,10 @@ class _EnvParent:
             'first' or 'last'.
         """
         for n in self.ket.sweep(to=to):
-            self.update_env(n, to=to)
+            self.update_env_(n, to=to)
         return self
 
-    def clear_site(self, *args):
+    def clear_site_(self, *args):
         r""" Clear environments pointing from sites which indices are provided in args. """
         for n in args:
             self.F.pop((n, n - 1), None)
@@ -191,7 +205,7 @@ class _EnvParent:
         axes = ((0, 1), (1, 0)) if self.nr_layers == 2 else ((0, 1, 2), (2, 1, 0))
         return self.factor() * self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
 
-    def update_env(self, n, to='last'):
+    def update_env_(self, n, to='last'):
         r"""
         Update environment including site n, in the direction given by to.
 
@@ -204,13 +218,13 @@ class _EnvParent:
             'first' or 'last'.
         """
         if self.nr_layers == 2:
-            _update2(n, self.F, self.bra, self.ket, to, self.nr_phys)
+            _update2_(n, self.F, self.bra, self.ket, to, self.nr_phys)
         else:
-            _update3(n, self.F, self.bra, self.op, self.ket, to, self.nr_phys, self.on_aux)
+            _update3_(n, self.F, self.bra, self.op, self.ket, to, self.nr_phys, self.on_aux)
         for ii in range(len(self.ort)):
-            _update2(n, self.Fort[ii], self.bra, self.ort[ii], to, self.nr_phys)
+            _update2_(n, self.Fort[ii], self.bra, self.ort[ii], to, self.nr_phys)
 
-    def update_Aort(self, n):
+    def update_Aort_(self, n):
         """ Update projection of states to be subtracted from psi. """
         Aort = []
         inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
@@ -218,7 +232,7 @@ class _EnvParent:
             Aort.append(tensor.ncon([self.Fort[ii][(n - 1, n)], self.ort[ii][n], self.Fort[ii][(n + 1, n)]], inds))
         self._temp['Aort'] = Aort
 
-    def update_AAort(self, bd):
+    def update_AAort_(self, bd):
         """ Update projection of states to be subtracted from psi. """
         Aort = []
         nl, nr = bd
@@ -296,7 +310,7 @@ class Env2(_EnvParent):
         return temp
 
 
-    def update_env_op(self, n, op, to='first'):
+    def update_env_op_(self, n, op, to='first'):
         """ Contractions for 2-layer environment update. """
         if to == 'first':
             temp = tensor.tensordot(self.ket[n], self.F[(n + 1, n)], axes=(2, 0))
@@ -520,7 +534,7 @@ class Env3(_EnvParent):
         return False
 
 
-def _update2(n, F, bra, ket, to, nr_phys):
+def _update2_(n, F, bra, ket, to, nr_phys):
     """ Contractions for 2-layer environment update. """
     if to == 'first':
         inds = ((-0, 2, 1), (1, 3), (-1, 2, 3)) if nr_phys == 1 else ((-0, 2, 1, 4), (1, 3), (-1, 2, 3, 4))
@@ -530,7 +544,7 @@ def _update2(n, F, bra, ket, to, nr_phys):
         F[(n, n + 1)] = tensor.ncon([bra[n].conj(), F[(n - 1, n)], ket[n]], inds)
 
 
-def _update3(n, F, bra, op, ket, to, nr_phys, on_aux):
+def _update3_(n, F, bra, op, ket, to, nr_phys, on_aux):
     if nr_phys == 1 and to == 'last':
         tmp = tensor.ncon([bra[n].conj(), F[(n - 1, n)]], ((1, -1, -0), (1, -2, -3)))
         tmp = op[n]._attach_01(tmp)

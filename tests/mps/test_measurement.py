@@ -111,10 +111,10 @@ def measure_mps_aklt(config=None, tol=1e-12):
     assert len(ez) == N and isinstance(ez, dict)
     assert abs(ez[0] - 2. / 3) < tol  # psin is normalized
     #
-    # Calculate <Sz_i Sz_j> for all pairs i < j
-    ezz = mps.measure_2site(psin, ops.sz(), ops.sz(), psin)
-    assert len(ezz) == N * (N - 1) // 2 and isinstance(ez, dict)
-    assert abs(ezz[N // 2, N // 2 + 1] + 4. / 9) < tol
+    # Calculate <Sz_i Sz_j> for NN (n, n+1)
+    ezz = mps.measure_2site(psin, ops.sz(), ops.sz(), psin, pairs=[(n, n+1) for n in range(N - 1)])
+    assert len(ezz) == N - 1 and isinstance(ez, dict)
+    assert all(abs(ezznn + 4. / 9) < tol for ezznn in ezz.values())
     #
     #  Measure string operator; exp (i pi * Sz) = I - 2 * abs(Sz)
     #

@@ -164,22 +164,23 @@ def test_build_mpo_nn_hopping_manually(config=cfg, tol=1e-12):
         I = mps.product_mpo(ops.I(), N)
         psi = mps.random_mps(I, D_total=16, n=n).canonize_(to='last').canonize_(to='first')
 
-        cp, c = ops.cp(), ops.c()
-
-        epm = mps.measure_2site(psi, cp, c, psi)
-        emp = mps.measure_2site(psi, c, cp, psi)
-        en = mps.measure_1site(psi, cp @ c, psi)
-
         E1 = mps.measure_mpo(psi, H[sym], psi)
-        E2 = t * sum(epm[(n, n+1)] - emp[(n, n+1)] for n in range(N - 1)) # minus due to fermionic=True
+
+        cp, c = ops.cp(), ops.c()
+        epm = mps.measure_2site(psi, cp, c, psi, pairs=[(n, n+1) for n in range(N - 1)])
+        en = mps.measure_1site(psi, cp @ c, psi)
+        E2 = t * sum(2 * epm[(n, n+1)].real for n in range(N - 1))
         E2 += mu * sum(en[n] for n in range(N))
+        assert pytest.approx(E1.item(), rel=tol) == E2.item()
+
+        emp = mps.measure_2site(psi, c, cp, psi, pairs=[(n, n+1) for n in range(N - 1)])
+        assert all(abs(emp[k].conj() + epm[k]) < tol for k in emp)
+        assert len(emp) == len(epm) == N - 1
 
         psi_dense = mps.Mps(N=N)  # test also dense Hamiltonian casting down state psi to dense tensors
         for n in range(N):
             psi_dense[n] = psi[n].to_nonsymmetric()
         E3 = mps.measure_mpo(psi_dense, H['dense'], psi_dense)
-
-        assert pytest.approx(E1.item(), rel=tol) == E2.item()
         assert pytest.approx(E1.item(), rel=tol) == E3.item()
 
 

@@ -103,7 +103,7 @@ def _compression_(psi, target, method,
     else:
         env = Env3(bra=psi, op=target[0], ket=target[1])
 
-    env.setup(to='first')
+    env.setup_(to='first')
 
     overlap_old = env.measure()
 
@@ -197,10 +197,10 @@ def _compression_1site_sweep_(env, Schmidt=None):
             bra.orthogonalize_site_(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != bra.first:
                 Schmidt[bra.pC] = bra[bra.pC].svd(sU=1, compute_uv=False)
-            env.clear_site(n)
-            env.update_env(n, to=to)
+            env.clear_site_(n)
+            env.update_env_(n, to=to)
     bra.absorb_central_(to='first')
-    env.update_env(n, to=to)
+    env.update_env_(n, to=to)
 
 
 
@@ -220,20 +220,20 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
             if Schmidt is not None and to == 'first':
                 Schmidt[bra.pC] = bra[bra.pC]
             bra.absorb_central_(to=to)
-            env.clear_site(n, n + 1)
-            env.update_env(n + dn, to=to)
+            env.clear_site_(n, n + 1)
+            env.update_env_(n + dn, to=to)
     bra[bra.first] = bra[bra.first] / bra[bra.first].norm()
-    env.update_env(bra.first, to='first')
+    env.update_env_(bra.first, to='first')
     return max_disc_weight
 
 
-def zipper(a, b, opts_svd=None, return_discarded=False) -> yastn.tn.mps.MpsMpo:
+def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpo:
     """
     Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
 
     Perform canonization of `b` to the last site.
-    Next, sweep back attaching elements of `a` one at a time,
-    truncating the bond dimension along the way.
+    Next, sweep back attaching elements of `a` one at a time
+    and truncating the resulting bond dimensions along the way.
     The resulting state is canonized to the first site and normalized to unity.
 
     Parameters
@@ -241,10 +241,15 @@ def zipper(a, b, opts_svd=None, return_discarded=False) -> yastn.tn.mps.MpsMpo:
     a, b: yastn.tn.mps.MpsMpo
 
     opts_svd: dict
-        truncation parameters for :meth:`yastn.linalg.truncation_mask`
+        truncation parameters for :meth:`yastn.linalg.truncation_mask`.
+
+    normalize: bool
+        Whether to keep track of the norm of the initial state projected on
+        the direction of the truncated state; default is True, i.e. sets the norm to unity.
+        The individual tensors at the end of the procedure are in a proper canonical form.
 
     return_discarded: bool
-        Whether to return discarded weights together with the resulting MPS/MPO.
+        Whether to return the approximation discarded weights together with the resulting MPS/MPO.
         Default is False, i.e., returns only MPS/MPO.
         Discarded weight approximates norm of truncated elements normalized by the norm of the untruncated state.
     """
@@ -252,7 +257,9 @@ def zipper(a, b, opts_svd=None, return_discarded=False) -> yastn.tn.mps.MpsMpo:
         raise YastnError('MpsMpo-s to multiply must have equal number of sites.')
 
     psi = b.shallow_copy()
-    psi.canonize_(to='last')
+    psi.canonize_(to='last', normalize=normalize)
+    if not normalize:
+        psi.factor = psi.factor * a.factor
 
     la, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
@@ -273,17 +280,19 @@ def zipper(a, b, opts_svd=None, return_discarded=False) -> yastn.tn.mps.MpsMpo:
         mask = tensor.truncation_mask(S, **opts_svd)
         nSout = tensor.bitwise_not(mask).apply_mask(S, axes=0).norm()
         discarded2_local = (nSout / nSold) ** 2
-        discarded2_total = discarded2_local + discarded2_total - discarded2_total * discarded2_local
+        discarded2_total = discarded2_total + discarded2_local - discarded2_total * discarded2_local
 
         U, S, V = mask.apply_mask(U, S, V, axes=(2, 0, 0))
-        S = S / S.norm()
+        nS = S.norm()
 
         psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
-        tmp = U @ S
+        tmp = U @ S / nS
+        psi.factor = psi.factor * nS
 
     tmp = tmp.fuse_legs(axes=((0, 1), 2)).drop_leg_history(axes=0)
     ntmp = tmp.norm()
     psi[psi.first] = (tmp / ntmp) @ psi[psi.first]
+    psi.factor = 1 if normalize else psi.factor * ntmp
     if return_discarded:
         return psi, psi.config.backend.sqrt(discarded2_total)
     return psi

@@ -73,17 +73,19 @@ def test_build_mpo_hopping_Hterm(config=cfg, tol=1e-12):
         I = mps.product_mpo(ops.I(), N)
         psi = mps.random_mps(I, D_total=16, n=n).canonize_(to='last').canonize_(to='first')
 
-        cp, c = ops.cp(), ops.c()
-
-        epm = mps.measure_2site(psi, cp, c, psi)
-        emp = mps.measure_2site(psi, c, cp, psi)
-        en = mps.measure_1site(psi, cp @ c, psi)
-
         E1 = mps.vdot(psi, H, psi)
-        E2 = sum(J[n1, n2] * (epm[(n1, n2)] - emp[(n1, n2)]) for n1 in range(N) for n2 in range(n1 + 1, N)) # minus due to fermions
+
+        cp, c = ops.cp(), ops.c()
+        epm = mps.measure_2site(psi, cp, c, psi)
+        en = mps.measure_1site(psi, cp @ c, psi)
+        E2 = sum(J[n1, n2] * 2 * epm[(n1, n2)].real for n1 in range(N) for n2 in range(n1 + 1, N))
         E2 += sum(J[n, n] * en[n] for n in range(N))
 
         assert pytest.approx(E1.item(), rel=tol) == E2.item()
+
+        emp = mps.measure_2site(psi, c, cp, psi)
+        assert all(abs(emp[k].conj() + epm[k]) < tol for k in emp)
+        assert len(emp) == len(epm) == N * (N - 1) / 2
 
 
 def test_generate_mpo_raise(config=cfg):

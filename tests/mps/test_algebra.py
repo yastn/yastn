@@ -154,14 +154,14 @@ def multiplication_example_gs(config=None, tol=1e-12):
     # First, zipper function gives a good first approximation
     # though a series of svd.
     #
-    Hpsi = mps.zipper(H, psi, opts={"D_total": 8})
+    Hpsi = mps.zipper(H, psi, opts_svd={"D_total": 8})  # here, Hpsi is normalized
     #
     # Second, compression is optimizing the overlap
     # between approximation and a product H @ psi.
     #
     mps.compression_(Hpsi, (H, psi), method='2site', max_sweeps=5,
                      Schmidt_tol=1e-6, opts_svd={"D_total": 8},
-                     normalize=False)
+                     normalize=False)  # norm of Hpsi approximates norm of H @ psi
     #
     # Use mps.norm() to get variation.
     # Norm canonizes a copy of the state and, close to zero,

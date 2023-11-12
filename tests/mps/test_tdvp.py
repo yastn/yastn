@@ -240,14 +240,19 @@ def tdvp_KZ_quench(sym='Z2', config=None):
         #
         EZ = mps.measure_1site(psi, oz, psi)
         mEZ = sum(EZ.values()) / N
-        EXX = mps.measure_2site(psi, ox, ox, psi)
-        mEXX = (sum(EXX[i, i+1] for i in range(N - 1)) + EXX[0, N - 1]) / N
+        pairs = [(i, i+1) for i in range(N-1)] + [(0, N-1)]
+        EXX = mps.measure_2site(psi, ox, ox, psi, pairs=pairs)
+        mEXX = sum(EXX[k] for k in pairs) / N
         #
         # Compare them with the exact result
         #
         gg = round(g(step.tf))  # g at the snapshot
         assert abs(mEZ - Zex[gg]) < 1e-5
         assert abs(mEXX - XXex[gg]) < 1e-5
+        print(max(abs(EXX[k] - EXX[0, 1])for k in pairs))
+        print(max(abs(EZ[k] - EZ[0]) < 1e-5 for k in range(N)))
+        assert all(abs(EXX[k] - EXX[0, 1]) < 1e-5 for k in pairs)
+        assert all(abs(EZ[k] - EZ[0]) < 1e-5 for k in range(N))
         #
         # Bond dimension was updated
         #
@@ -258,8 +263,7 @@ def tdvp_KZ_quench(sym='Z2', config=None):
 
 def test_tdvp_raise(config=cfg):
     opts_config = {} if config is None else \
-        {'backend': config.backend,
-        'default_device': config.default_device}
+        {'backend': config.backend, 'default_device': config.default_device}
     ops = yastn.operators.Spin12(sym='dense', **opts_config)
     ops.random_seed(seed=0)
     I = mps.product_mpo(ops.I(), N=3)

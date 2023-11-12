@@ -123,12 +123,12 @@ def _tdvp_sweep_1site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, normaliz
         for n in psi.sweep(to=to):
             env.update_A(n, -u * 0.5 * dt, opts, normalize=normalize)
             psi.orthogonalize_site_(n, to=to, normalize=normalize)
-            env.clear_site(n)
-            env.update_env(n, to=to)
+            env.clear_site_(n)
+            env.update_env_(n, to=to)
             env.update_C(u * 0.5 * dt, opts, normalize=normalize)
             psi.absorb_central_(to=to)
 
-    env.update_env(psi.first, to='first')
+    env.update_env_(psi.first, to='first')
     return env
 
 
@@ -141,13 +141,13 @@ def _tdvp_sweep_2site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd
         for n in psi.sweep(to=to, dl=1):
             env.update_AA((n, n + 1), -u * 0.5 * dt, opts, opts_svd, normalize=normalize)
             psi.absorb_central_(to=to)
-            env.clear_site(n, n + 1)
-            env.update_env(n + 1 - dn, to=to)
+            env.clear_site_(n, n + 1)
+            env.update_env_(n + 1 - dn, to=to)
             if n + dn != getattr(psi, to):
                 env.update_A(n + dn, u * 0.5 * dt, opts, normalize=normalize)
 
-    env.clear_site(psi.first)
-    env.update_env(psi.first, to='first')
+    env.clear_site_(psi.first)
+    env.update_env_(psi.first, to='first')
     return env
 
 
@@ -171,26 +171,26 @@ def _tdvp_sweep_12site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_sv
                 else:
                     env.update_A(n, -u * 0.5 * dt, opts, normalize=normalize)
                     psi.orthogonalize_site_(n, to=to, normalize=normalize)
-                    env.clear_site(n)
-                    env.update_env(n, to=to)
+                    env.clear_site_(n)
+                    env.update_env_(n, to=to)
                     env.update_C(u * 0.5 * dt, opts, normalize=normalize)
                     psi.absorb_central_(to=to)
             else:
                 env.update_AA((n - dn , n - dn + 1), - u * 0.5 * dt, opts, opts_svd, normalize=normalize)
                 psi.absorb_central_(to=to)
-                env.clear_site(n - dn, n - dn + 1)
-                env.update_env(n + 1 - 2 * dn, to=to)
+                env.clear_site_(n - dn, n - dn + 1)
+                env.update_env_(n + 1 - 2 * dn, to=to)
                 if env.enlarge_bond((n - 1 + dn, n + dn), opts_svd):
                     env.update_A(n, u * 0.5 * dt, opts, normalize=normalize)
                 else:
                     psi.orthogonalize_site_(n, to=to, normalize=normalize)
-                    env.update_env(n, to=to)
+                    env.update_env_(n, to=to)
                     env.update_C(u * 0.5 * dt, opts, normalize=normalize)
                     psi.absorb_central_(to=to)
                     update_two = False
 
-    env.clear_site(psi.first)
-    env.update_env(psi.first, to='first')
+    env.clear_site_(psi.first)
+    env.update_env_(psi.first, to='first')
     return env
 
 
@@ -199,5 +199,5 @@ def _init_tdvp(psi, H, env, opts_expmv):
     opts = {} if opts_expmv is None else opts_expmv.copy()
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
-        env.setup(to='first')
+        env.setup_(to='first')
     return env, opts

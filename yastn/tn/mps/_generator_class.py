@@ -77,7 +77,7 @@ class Generator:
 
     def I(self) -> yastn.tn.mps.MpsMpo:
         """ Indetity MPO derived from identity in local operators class. """
-        return self._I.copy()
+        return self._I.shallow_copy()
 
     def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
         r"""
