@@ -300,7 +300,7 @@ class MpsMpo:
         """ Multiply Mpo by Mpo or Mps. """
         return multiply(self, phi)
 
-    def orthogonalize_site(self, n, to='first', normalize=True) -> None:
+    def orthogonalize_site_(self, n, to='first', normalize=True) -> None:
         r"""
         Performs QR (or RQ) decomposition of on-site tensor at :code:`n`-th position.
         Two modes of usage are
@@ -357,7 +357,7 @@ class MpsMpo:
         self.A[self.pC] = R / nR
         self.factor = 1 if normalize else self.factor * nR
 
-    def diagonalize_central(self, opts_svd, normalize=True) -> number:
+    def diagonalize_central_(self, opts_svd, normalize=True) -> number:
         r"""
         Perform svd of the central block C = U @ S @ V. Truncation is done based on opts_svd.
 
@@ -407,13 +407,13 @@ class MpsMpo:
                 self.A[self.pC] = self.A[self.pC] @ V
         return discarded
 
-    def remove_central(self) -> None:
+    def remove_central_(self) -> None:
         """ Removes (ignores) the central block. Do nothing if is does not exist. """
         if self.pC is not None:
             del self.A[self.pC]
             self.pC = None
 
-    def absorb_central(self, to='last') -> None:
+    def absorb_central_(self, to='last') -> None:
         r"""
         Absorb central block towards the first or the last site.
 
@@ -465,10 +465,10 @@ class MpsMpo:
             Default is True, i.e. sets the norm to unity.
             The individual tensors at the end of the procedure are in a proper canonical form.
         """
-        self.absorb_central(to=to)
+        self.absorb_central_(to=to)
         for n in self.sweep(to=to):
-            self.orthogonalize_site(n=n, to=to, normalize=normalize)
-            self.absorb_central(to=to)
+            self.orthogonalize_site_(n=n, to=to, normalize=normalize)
+            self.absorb_central_(to=to)
         return self
 
     def is_canonical(self, to='first', n=None, tol=1e-12) -> bool:
@@ -540,11 +540,11 @@ class MpsMpo:
         if opts_svd is None:
             opts_svd = {'tol': 1e-13}
         for n in self.sweep(to=to):
-            self.orthogonalize_site(n=n, to=to, normalize=normalize)
-            discarded_local = self.diagonalize_central(opts_svd=opts_svd, normalize=normalize)
+            self.orthogonalize_site_(n=n, to=to, normalize=normalize)
+            discarded_local = self.diagonalize_central_(opts_svd=opts_svd, normalize=normalize)
             discarded2_local = discarded_local ** 2
             discarded2_total = discarded2_local + discarded2_total - discarded2_total * discarded2_local
-            self.absorb_central(to=to)
+            self.absorb_central_(to=to)
         return self.config.backend.sqrt(discarded2_total)
 
     def merge_two_sites(self, bd) -> yastn.Tensor:
@@ -565,7 +565,7 @@ class MpsMpo:
         nl, nr = bd
         return tensor.tensordot(self.A[nl], self.A[nr], axes=(2, 0))
 
-    def unmerge_two_sites(self, AA, bd, opts_svd) -> number:
+    def unmerge_two_sites_(self, AA, bd, opts_svd) -> number:
         r"""
         Unmerge rank-4 tensor into two neighbouring MPS sites and a central block
         using :meth:`yastn.linalg.svd_with_truncation` to trunctate the bond dimension.
@@ -662,7 +662,6 @@ class MpsMpo:
         schmidt_spectra = self.get_Schmidt_values()
         return [tensor.entropy(spectrum ** 2, alpha=alpha) for spectrum in schmidt_spectra]
 
-
     def get_Schmidt_values(self) -> Sequence[yastn.Tensor]:
         r"""
         Schmidt values for bipartition across all bonds along MPS/MPO from the first to the last site,
@@ -677,10 +676,10 @@ class MpsMpo:
         _, sv, _ = tensor.svd(psi.A[self.first], axes=axes, sU=1)
         SV.append(sv)
         for n in psi.sweep(to='last'):
-            psi.orthogonalize_site(n=n, to='last')
+            psi.orthogonalize_site_(n=n, to='last')
             _, sv, _ = tensor.svd(psi.A[psi.pC], sU=1)
             SV.append(sv)
-            psi.absorb_central(to='last')
+            psi.absorb_central_(to='last')
         return SV
 
     def save_to_dict(self) -> dict[str, dict | number]:
@@ -692,7 +691,7 @@ class MpsMpo:
         Absorbs central block if it exists.
         """
         psi = self.shallow_copy()
-        psi.absorb_central()  # make sure central block is eliminated
+        psi.absorb_central_()  # make sure central block is eliminated
         out_dict = {
             'N': psi.N,
             'nr_phys': psi.nr_phys,
@@ -716,7 +715,7 @@ class MpsMpo:
             Name of a group in the file, where the Mps will be saved, e.g., 'state/'
         """
         psi = self.shallow_copy()
-        psi.absorb_central()  # make sure central block is eliminated
+        psi.absorb_central_()  # make sure central block is eliminated
         file.create_dataset(my_address+'/N', data=psi.N)
         file.create_dataset(my_address+'/nr_phys', data=psi.nr_phys)
         file.create_dataset(my_address+'/factor', data=psi.factor)

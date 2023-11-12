@@ -161,10 +161,10 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
         for n in psi.sweep(to=to):
             env.update_Aort(n)
             _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
-            psi.orthogonalize_site(n, to=to, normalize=True)
+            psi.orthogonalize_site_(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != psi.first:
                 Schmidt[psi.pC] = psi[psi.pC].svd(sU=1, compute_uv=False)
-            psi.absorb_central(to=to)
+            psi.absorb_central_(to=to)
             env.clear_site(n)
             env.update_env(n, to=to)
 
@@ -190,11 +190,11 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
             env.update_AAort(bd)
             AA = psi.merge_two_sites(bd)
             _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
-            _disc_weight_bd = psi.unmerge_two_sites(AA, bd, opts_svd)
+            _disc_weight_bd = psi.unmerge_two_sites_(AA, bd, opts_svd)
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':
                 Schmidt[psi.pC] = psi[psi.pC]
-            psi.absorb_central(to=to)
+            psi.absorb_central_(to=to)
             env.clear_site(n, n + 1)
             env.update_env(n + dn, to=to)
     env.update_env(psi.first, to='first')

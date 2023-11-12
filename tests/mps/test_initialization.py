@@ -329,7 +329,7 @@ def test_MpsMpo_copy(config=cfg):
     assert psi.A is not phi.A and psi is not phi
 
     psi = generate.random_mpo(D_total=16)
-    psi.orthogonalize_site(4)
+    psi.orthogonalize_site_(4)
     phi = psi.clone()
     assert len(psi.A) == len(phi.A) == len(psi) + 1 == N + 1
     for n in psi.A:

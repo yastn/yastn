@@ -30,11 +30,11 @@ def test_canonize(config=cfg, tol=1e-12):
     check_canonize(H, tol)
 
     with pytest.raises(yastn.YastnError):
-        psi.orthogonalize_site(4, to="center")
+        psi.orthogonalize_site_(4, to="center")
         # "to" should be in "first" or "last"
     with pytest.raises(yastn.YastnError):
-        psi.orthogonalize_site(4, to="last")
-        psi.orthogonalize_site(5, to="last")
+        psi.orthogonalize_site_(4, to="last")
+        psi.orthogonalize_site_(5, to="last")
         # Only one central block is allowed. Attach the existing central block before orthogonalizing site.
 
 

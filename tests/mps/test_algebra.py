@@ -207,7 +207,7 @@ def test_add_multiply_raise(config=cfg):
         mps.add(H8, psi8)
         #  All states to add should be either Mps or Mpo.
     H8c = H8.shallow_copy()
-    H8c.orthogonalize_site(4, to='last')
+    H8c.orthogonalize_site_(4, to='last')
     with pytest.raises(yastn.YastnError):
         mps.add(H8c, H8c)
         #  Absorb central block of MpsMpo-s before calling add.

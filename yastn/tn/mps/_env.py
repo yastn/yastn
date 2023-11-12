@@ -493,7 +493,7 @@ class Env3(_EnvParent):
         f = lambda v: self.Heff2(v, bd)
         AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
         self._temp['expmv_ncv'][ibd] = info['ncv']
-        self.ket.unmerge_two_sites(AA, bd, opts_svd)
+        self.ket.unmerge_two_sites_(AA, bd, opts_svd)
 
     def enlarge_bond(self, bd, opts_svd):
         if bd[0] < 0 or bd[1] >= self.N:  # do not enlarge bond outside of the chain
