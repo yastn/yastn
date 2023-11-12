@@ -9,91 +9,77 @@ except ImportError:
 # pytest modifies cfg to inject different backends and devices during tests
 
 
-def test_truncate_svd_dense(config=cfg):
-    """
-    Initialize random mps of dense tensors and runs a few sweeps of dmrg1 with Hamiltonian of XX model.
-    """
-    opts_config = {} if config is None else \
-            {'backend': config.backend, 'default_device': config.default_device}
-
-    N = 8
-    Eng_gs = -4.758770483143633
-    D_total = 8
-
-    operators = yastn.operators.Spin12(sym='dense', **opts_config)
-    generate = mps.Generator(N=N, operators=operators)
-    generate.random_seed(seed=0)
-
-    parameters = {"t": 1.0, "mu": 0.0, "rangeN": range(N), "rangeNN": [(i, i+1) for i in range(N-1)]}
-    H_str = "\sum_{i,j \in rangeNN} t ( sp_{i} sm_{j} + sp_{j} sm_{i} )"
-    H_str += " + \sum_{j\in rangeN} mu sp_{j} sm_{j}"
-    H = generate.mpo_from_latex(H_str, parameters)
-    psi = generate.random_mps(D_total=D_total).canonize_(to='first')
-    mps.dmrg_(psi, H, max_sweeps=10, Schmidt_tol=1e-8)
-    #
-    run_truncation(psi, H, Eng_gs)
-    #
-    psi.canonize_(to='last')
-    run_truncation(psi, H, Eng_gs, to='first')
-    #
-    discarded = psi.truncate_(to='last')  # default 'tol': 1e-13
-    assert discarded < 1e-12
-
-def run_truncation(psi, H, Egs, to='last'):
-    phi = psi.shallow_copy()
-    phi.truncate_(to=to, opts_svd={'D_total': 4})
-
-    ov_t = mps.measure_overlap(psi, phi).item()
-    Eng_t = mps.measure_mpo(phi, H, phi).item()
-    assert 1 > abs(ov_t) > 0.99
-    assert Egs < Eng_t.real < Egs * 0.99
-
-    out = mps.compression_(phi, psi, max_sweeps=5, normalize=True)
-    ov_v = mps.measure_overlap(psi, phi).item()
-    Eng_v = mps.measure_mpo(phi, H, phi).item()
-    assert all(dp <= do for dp, do in zip(phi.get_bond_dimensions(), (1, 2, 4, 4, 4, 4, 4, 2, 1)))
-    assert 1 > abs(ov_v) > abs(ov_t)
-    assert Egs < Eng_v.real < Eng_t.real
-    assert pytest.approx(out.overlap.item(), rel=1e-12) == ov_v
-
-
-def test_truncate_svd_Z2(config=cfg):
-    """
-    Initialize random mps of dense tensors and checks canonization
-    """
+def test_truncate(config=cfg, tol=1e-12):
+    """ Initialize random mps and checks mps.truncate_ """
     opts_config = {} if config is None else \
                 {'backend': config.backend, 'default_device': config.default_device}
-    N = 8
-    D_total = 10
-    Eng_parity = {0: -4.758770483143633, 1: -4.411474127809773}
+    #
+    # initialize random MPO
+    #
+    N = 13
+    Di = 35  # initial D
+    ops = yastn.operators.Spin12(sym='dense', **opts_config)
+    I = mps.product_mpo(ops.I(), N)
+    ops.random_seed(seed=0)
+    psi = mps.random_mpo(I, D_total=Di)
+    assert psi.get_bond_dimensions() == (1, Di, Di, Di, Di, Di, Di, Di, Di, Di, Di, Di, Di, 1)
+    psipsi = mps.vdot(psi, psi)
+    #
+    # canonize psi to the last site; retains the norm in psi.factor for the record
+    #
+    psi.canonize_(to='last', normalize=False)
+    assert psi.get_bond_dimensions() == (1, 4, 16, Di, Di, Di, Di, Di, Di, Di, Di, Di, Di, 1)
+    assert abs(mps.vdot(psi, psi) / psipsi - 1) < tol
+    assert psi.is_canonical(to='last', tol=tol)
+    #
+    # truncate phi while canonizing to the first site;
+    # keep the norm of the original state psi in phi.factor
+    #
+    #
+    Df = 17  # final D
+    phi = psi.shallow_copy()
+    discarded = phi.truncate_(to='first', opts_svd={'D_total': Df}, normalize=False)
+    assert phi.get_bond_dimensions() == (1, 4, 16, Df, Df, Df, Df, Df, Df, Df, Df, 16, 4, 1)
+    #
+    phiphi = mps.vdot(phi, phi)
+    assert abs(phiphi / psipsi - 1) < tol
+    #
+    phipsi = mps.vdot(phi, psi)
+    assert abs(phipsi ** 2 / psipsi ** 2 + discarded ** 2 - 1) < tol
+    #
+    # norm of phi is phi.factor; individual tensors are properly canonized
+    assert phi.is_canonical(to='first', tol=tol)
 
-    operators = yastn.operators.Spin12(sym='Z2', **opts_config)
-    generate = mps.Generator(N=N, operators=operators)
-    generate.random_seed(seed=1)
+    #
+    # truncate MPS forgetting the norm of phi
+    #
+    psi = mps.random_mps(I, D_total=Di)
+    assert psi.get_bond_dimensions() == (1, Di, Di, Di, Di, Di, Di, Di, Di, Di, Di, Di, Di, 1)
+    #
+    # canonize psi to the first site; forgets the norm
+    #
+    psi.canonize_(to='first')
+    assert psi.get_bond_dimensions() == (1, Di, Di, Di, Di, Di, Di, Di, 32, 16, 8, 4, 2, 1)
+    assert abs(mps.vdot(psi, psi) - 1) < tol
+    assert psi.is_canonical(to='first', tol=tol)
+    #
+    #  truncate phi while canonizing to the last site; truncate based on tolerance
+    svd_tol = 1e-1
+    phi = psi.shallow_copy()
+    discarded = phi.truncate_(to='last', opts_svd={'tol': svd_tol})
+    #
+    assert abs(mps.vdot(phi, phi) - 1) < tol
+    svals = phi.get_Schmidt_values()
+    for sval in svals:
+        assert min(sval._data) / max(sval.data) > svd_tol * 0.8  # 0.8 as local truncations affect rach other
+    #
+    phipsi = mps.vdot(phi, psi)
+    assert abs(phipsi ** 2 + discarded ** 2 - 1) < tol
 
-    parameters = {"t": 1.0, "mu": 0.0, "rangeN": range(N), "rangeNN": [(i, i+1) for i in range(N-1)]}
-    H_str = "\sum_{i,j \in rangeNN} t ( sp_{i} sm_{j} + sp_{j} sm_{i} )"
-    H_str += " + \sum_{j\in rangeN} mu sp_{j} sm_{j}"
-    H = generate.mpo_from_latex(H_str, parameters)
-
-    for parity in (0, 1):
-        psi = generate.random_mps(D_total=D_total, n=parity)
-        mps.dmrg_(psi, H, max_sweeps=10, Schmidt_tol=1e-8, method='2site')
-        run_truncation(psi, H, Eng_parity[parity])
-        run_zipper(psi, H, Eng_parity[parity])
-
-def run_zipper(psi, H, Egs):
-    Hpsi = mps.zipper(H, psi, opts={'D_total': 8})
-
-    Eng_t = mps.measure_overlap(Hpsi, psi)
-    assert Egs < Eng_t < Egs * 0.99
-
-    for out in mps.compression_(Hpsi, (H, psi), iterator_step=1, max_sweeps=1, normalize=False):
-        Eng_new = mps.vdot(Hpsi, psi)
-        assert Egs < Eng_new < Eng_t
-        Eng_t = Eng_new
 
 
 if __name__ == "__main__":
-    test_truncate_svd_dense()
-    test_truncate_svd_Z2()
+    test_truncate()
+
+
+

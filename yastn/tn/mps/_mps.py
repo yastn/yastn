@@ -300,10 +300,10 @@ class MpsMpo:
         """ Multiply Mpo by Mpo or Mps. """
         return multiply(self, phi)
 
-    def orthogonalize_site(self, n, to='first', normalize=True):
+    def orthogonalize_site(self, n, to='first', normalize=True) -> None:
         r"""
         Performs QR (or RQ) decomposition of on-site tensor at :code:`n`-th position.
-        Two typical modes of usage are
+        Two modes of usage are
 
             * ``to='last'`` - Advance left canonical form: Assuming first `n - 1` sites are already
               in the left canonical form, brings n-th site to left canonical form,
@@ -359,54 +359,60 @@ class MpsMpo:
 
     def diagonalize_central(self, opts_svd, normalize=True) -> number:
         r"""
-        Perform svd of the central block C = U @ S @ V. Truncation can be done based on opts_svd.
+        Perform svd of the central block C = U @ S @ V. Truncation is done based on opts_svd.
 
-        Attach U and V respective to the left and right sites.
+        Attach U and V respectively to the left and right sites
+        (or to the central site at the edges when there are no left or right sites).
+
+        Returns the norm of truncated Schmidt values, normalized by the norm of all Schmidt values.
 
         Parameters
         ----------
         opts_svd : dict
-            Options passed for svd. iIncludes information how to truncate bond.
+            Options passed to :meth:`yastn.linalg.truncation_mask`. It includes information on how to truncate the Schmidt values.
 
         normalize : bool
-            If True, S is normalized to 1 according to the standard 2-norm.
-
-        Return
-        ------
-        norm of discarded singular values normalized by the remining ones
+            Whether to normalize the central block.
+            If False, retains the norm of untruncated central block in self.factor
         """
         # if self.pC is None:  does not happen now
         #     return 0
-        U, S, V = tensor.svd(self.A[self.pC], axes=(0, 1), sU=1)
+        discarded = 0.
+        if self.pC is not None:
 
-        mask = tensor.truncation_mask(S, **opts_svd)
-        discarded = tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()
+            U, S, V = tensor.svd(self.A[self.pC], axes=(0, 1), sU=1)
+            nSold = S.norm()
 
-        U, S, V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
-        self.A[self.pC] = S / S.norm() if normalize else S
+            mask = tensor.truncation_mask(S, **opts_svd)
+            nSout = tensor.bitwise_not(mask).apply_mask(S, axes=0).norm()
+            discarded = nSout / nSold
 
-        n1, n2 = self.pC
+            U, S, V = mask.apply_mask(U, S, V, axes=(1, 0, 0))
+            nS = S.norm()
+            self.A[self.pC] = S / nS
+            self.factor = 1 if normalize else self.factor * nSold
 
-        if n1 >= self.first:
-            ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
-            self.A[n1] = tensor.ncon([self.A[n1], U], (ax, (1, -2)))
-        else:
-            self.A[self.pC] = U @ self.A[self.pC]
+            n1, n2 = self.pC
 
-        if n2 <= self.last:
-            self.A[n2] = V @ self.A[n2]
-        else:
-            self.A[self.pC] = self.A[self.pC] @ V
+            if n1 >= self.first:
+                ax = (-0, -1, 1) if self.nr_phys == 1 else (-0, -1, 1, -3)
+                self.A[n1] = tensor.ncon([self.A[n1], U], (ax, (1, -2)))
+            else:
+                self.A[self.pC] = U @ self.A[self.pC]
 
+            if n2 <= self.last:
+                self.A[n2] = V @ self.A[n2]
+            else:
+                self.A[self.pC] = self.A[self.pC] @ V
         return discarded
 
-    def remove_central(self):
+    def remove_central(self) -> None:
         """ Removes (ignores) the central block. Do nothing if is does not exist. """
         if self.pC is not None:
             del self.A[self.pC]
             self.pC = None
 
-    def absorb_central(self, to='last'):
+    def absorb_central(self, to='last') -> None:
         r"""
         Absorb central block towards the first or the last site.
 
@@ -439,13 +445,14 @@ class MpsMpo:
     def canonize_(self, to='first', normalize=True) -> yastn.tn.mps.MpsMpo:
         r"""
         Sweep through the MPS/MPO and put it in right/left canonical form
-        using :meth:`QR decomposition<yastn.linalg.qr>` by setting
-        :code:`to='first'` or :code:`to='last'`. It is assumed that tensors are enumerated
+        (:code:`to='first'` or :code:`to='last'`, respectively)
+        using :meth:`QR decomposition<yastn.linalg.qr>`.
+        It is assumed that tensors are enumerated
         by index increasing from `0` (:code:`first`) to `N-1` (:code:`last`).
 
         Finally, the trivial central block is attached to the end of the chain.
 
-        It updates MPS/MPO in-place.
+        It updates MPS/MPO in place.
 
         Parameters
         ----------
@@ -453,8 +460,8 @@ class MpsMpo:
             :code:`'first'` (default) or :code:`'last'`.
 
         normalize : bool
-            If :code:`True` (default), the central block and thus MPS/MPO is normalized
-            to unity according to the standard 2-norm. If False, the norm gets accumulated in :code:`self.factor`.
+            If :code:`True` (default), the central block and thus MPS/MPO is normalized to unity
+            according to the standard 2-norm. If False, the norm gets accumulated in :code:`self.factor`.
         """
         self.absorb_central(to=to)
         for n in self.sweep(to=to):
@@ -499,16 +506,19 @@ class MpsMpo:
     def truncate_(self, to='last', normalize=True, opts_svd=None) -> number:
         r"""
         Sweep through the MPS/MPO and put it in right/left canonical form
-        using :meth:`yastn.linalg.svd_with_truncation` decomposition by setting
-        :code:`to='first'` or :code:`to='last'`. It is assumed that tensors are enumerated
+        (:code:`to='first'` or :code:`to='last'`, respectively)
+        using :meth:`yastn.linalg.svd_with_truncation` decomposition.
+        It is assumed that tensors are enumerated
         by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
-        Access to singular values during sweeping allows to truncate virtual spaces.
+        Access to singular values during sweeping allows truncation of virtual spaces.
         This truncation makes sense if MPS/MPO is already in the canonical form (not checked/enforced)
-        in the direction opposite to current sweep, i.e., left canonical form for :code:`to='last'`
-        or right canonical form for :code:`to='first'`.
+        in the direction opposite to the current sweep, i.e., right canonical form for :code:`to='last'`
+        or left canonical form for :code:`to='first'`.
 
-        The MPS/MPO is updated in-place.
+        The MPS/MPO is updated in place.
+
+        Returns norm of truncated elements normalized by the norm of the untruncated state.
 
         Parameters
         ----------
@@ -522,20 +532,17 @@ class MpsMpo:
         opts_svd : dict
             options passed to :meth:`yastn.linalg.svd_with_truncation`,
             including options governing truncation. Default is {'tol': 1e-13}.
-
-        Returns
-        -------
-        maximal norm of the discarded singular values after normalization
         """
-        discarded_max = 0.
+        discarded2_total = 0.
         if opts_svd is None:
             opts_svd = {'tol': 1e-13}
         for n in self.sweep(to=to):
             self.orthogonalize_site(n=n, to=to, normalize=normalize)
-            discarded = self.diagonalize_central(opts_svd=opts_svd, normalize=normalize)
-            discarded_max = max(discarded_max, discarded)
+            discarded_local = self.diagonalize_central(opts_svd=opts_svd, normalize=normalize)
+            discarded2_local = discarded_local ** 2
+            discarded2_total = discarded2_local + discarded2_total - discarded2_total * discarded2_local
             self.absorb_central(to=to)
-        return discarded_max
+        return self.config.backend.sqrt(discarded2_total)
 
     def merge_two_sites(self, bd) -> yastn.Tensor:
         r"""
@@ -646,8 +653,8 @@ class MpsMpo:
         Parameters
         ----------
         alpha : int
-            value 1 (default) computes Von Neumann entropy.
-            Other values refer to order `alpha` of Renyi entropy.
+            Order of Renyi entropy.
+            The default value is 1, which corresponds to the Von Neumann entropy.
         """
         schmidt_spectra = self.get_Schmidt_values()
         return [tensor.entropy(spectrum ** 2, alpha=alpha) for spectrum in schmidt_spectra]
@@ -657,17 +664,17 @@ class MpsMpo:
         r"""
         Schmidt values for bipartition across all bonds along MPS/MPO from the first to the last site,
         including "trivial" leftmost and rightmost cuts. This gives a list with `N + 1` elements.
-        Schmidt values are stored as diagonal tensors.
+        Schmidt values are stored as diagonal tensors and are normalized.
         """
         SV = []
         psi = self.shallow_copy()
-        psi.canonize_(to='first', normalize=False)
+        psi.canonize_(to='first')
         # canonize_ attaches trivial central block at the end
         axes = (0, (1, 2)) if self.nr_phys == 1 else (0, (1, 2, 3))
         _, sv, _ = tensor.svd(psi.A[self.first], axes=axes, sU=1)
         SV.append(sv)
         for n in psi.sweep(to='last'):
-            psi.orthogonalize_site(n=n, to='last', normalize=False)
+            psi.orthogonalize_site(n=n, to='last')
             _, sv, _ = tensor.svd(psi.A[psi.pC], sU=1)
             SV.append(sv)
             psi.absorb_central(to='last')
