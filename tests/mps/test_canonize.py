@@ -48,8 +48,8 @@ def check_canonize(psi, tol):
         assert all(psi[site].s == ref_s for site in psi.sweep())
         assert psi.pC is None
         assert len(psi.A) == len(psi)
-        assert pytest.approx(psi.factor, rel=tol) == norm
-        assert pytest.approx(mps.vdot(psi, psi), rel=tol) == norm ** 2
+        assert abs(psi.factor / norm - 1) < tol
+        assert abs(mps.vdot(psi, psi) / norm ** 2 - 1) < tol
 
     for to in ('last', 'first'):
         phi = psi.shallow_copy()

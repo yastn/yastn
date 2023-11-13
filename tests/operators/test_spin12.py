@@ -44,6 +44,11 @@ def test_spin12():
     sys = [ops_dense.sy(), ops_Z2.sy()]
     assert all(np.allclose(y.to_numpy(reverse=r), np.array([[0, -1j], [1j, 0]])) for (y, r) in zip(ys, rs))
 
+    iys = [ops_dense.iy(), ops_Z2.iy()]
+    isys = [ops_dense.isy(), ops_Z2.isy()]
+    assert all((1j * y - iy).norm() < tol for (y, iy) in zip(ys, iys))
+    assert all((1j * sy - isy).norm() < tol for (sy, isy) in zip(sys, isys))
+
     lss = [{0: I.get_legs(0), 1: I.get_legs(1)} for I in Is]
 
     sps = [ops_dense.sp(), ops_Z2.sp(), ops_U1.sp()]
@@ -74,7 +79,7 @@ def test_spin12():
     assert all(yastn.norm(y @ v - v) < tol for y, v in zip(ys, yp1s))
     assert all(yastn.norm(y @ v + v) < tol for y, v in zip(ys, ym1s))
 
-    assert all(pytest.approx(v.norm(), rel=tol) == 1 for v in chain(zp1s, zm1s, xp1s, xm1s, yp1s, ym1s))
+    assert all(abs(v.norm() - 1) < tol for v in chain(zp1s, zm1s, xp1s, xm1s, yp1s, ym1s))
 
     with pytest.raises(yastn.YastnError):
         _ = ops_U1.x()

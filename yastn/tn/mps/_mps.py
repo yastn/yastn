@@ -715,9 +715,13 @@ class MpsMpo:
             Name of a group in the file, where the Mps will be saved, e.g., 'state/'
         """
         psi = self.shallow_copy()
+        try:
+            factor = psi.config.backend.to_numpy(psi.factor)
+        except:
+            factor = psi.factor
         psi.absorb_central_()  # make sure central block is eliminated
         file.create_dataset(my_address+'/N', data=psi.N)
         file.create_dataset(my_address+'/nr_phys', data=psi.nr_phys)
-        file.create_dataset(my_address+'/factor', data=psi.factor)
+        file.create_dataset(my_address+'/factor', data=factor)
         for n in self.sweep(to='last'):
             psi[n].save_to_hdf5(file, my_address+'/A/'+str(n))

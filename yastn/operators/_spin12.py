@@ -43,7 +43,7 @@ class Spin12(meta_operators):
         kwargs['sym'] = sym
         super().__init__(**kwargs)
         self._sym = sym
-        self.operators = ('I', 'x', 'y', 'z', 'sx', 'sy', 'sz', 'sp', 'sm')
+        self.operators = ('I', 'x', 'y', 'iy', 'z', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm')
 
     def space(self) -> yastn.Leg:
         r""" :class:`yastn.Leg` describing local Hilbert space. """
@@ -92,6 +92,19 @@ class Spin12(meta_operators):
             y = Tensor(config=self.config, s=self.s, n=1, dtype='complex128')
             y.set_block(ts=(0, 1), Ds=(1, 1), val=-1j)
             y.set_block(ts=(1, 0), Ds=(1, 1), val=1j)
+        if self._sym == 'U1':
+            raise YastnError('Cannot define sigma_y operator for U(1) symmetry.')
+        return y
+
+    def iy(self) -> yastn.Tensor:
+        r""" :math:`i \cdot \sigma^y` operator with real representation. """
+        if self._sym == 'dense':
+            y = Tensor(config=self.config, s=self.s)
+            y.set_block(val=[[0, 1], [-1, 0]], Ds=(2, 2))
+        if self._sym == 'Z2':
+            y = Tensor(config=self.config, s=self.s, n=1)
+            y.set_block(ts=(0, 1), Ds=(1, 1), val=1)
+            y.set_block(ts=(1, 0), Ds=(1, 1), val=-1)
         if self._sym == 'U1':
             raise YastnError('Cannot define sigma_y operator for U(1) symmetry.')
         return y
@@ -168,6 +181,10 @@ class Spin12(meta_operators):
     def sy(self) -> yastn.Tensor:
         r""" Spin-1/2 :math:`S^y` operator """
         return self.y() / 2
+
+    def isy(self) -> yastn.Tensor:
+        r""" Spin-1/2 :math:`i \cdot S^y` operator with real representation."""
+        return self.iy() / 2
 
     def sz(self) -> yastn.Tensor:
         r""" Spin-1/2 :math:`S^z` operator """

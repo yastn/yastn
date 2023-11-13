@@ -42,7 +42,7 @@ class Spin1(meta_operators):
         kwargs['sym'] = sym
         super().__init__(**kwargs)
         self._sym = sym
-        self.operators = ('I', 'sx', 'sy', 'sz', 'sp', 'sm')
+        self.operators = ('I', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm')
 
     def space(self) -> yastn.Leg:
         r""" :class:`yastn.Leg` describing local Hilbert space. """
@@ -87,6 +87,16 @@ class Spin1(meta_operators):
         if self._sym == 'dense':
             sy = Tensor(config=self.config, s=self.s, dtype='complex128')
             sy.set_block(val=[[0, -iisq2, 0], [iisq2, 0, -iisq2], [0, iisq2, 0]], Ds=(3, 3))
+        if self._sym in ('Z3', 'U1'):
+            raise YastnError('Cannot define sy operator for U(1) or Z3 symmetry.')
+        return sy
+
+    def isy(self) -> yastn.Tensor:
+        r""" Spin-1 :math:`i \cdot S^y` operator with real representation. """
+        isq2 = 1 / np.sqrt(2)
+        if self._sym == 'dense':
+            sy = Tensor(config=self.config, s=self.s)
+            sy.set_block(val=[[0, isq2, 0], [-isq2, 0, isq2], [0, -isq2, 0]], Ds=(3, 3))
         if self._sym in ('Z3', 'U1'):
             raise YastnError('Cannot define sy operator for U(1) or Z3 symmetry.')
         return sy
