@@ -27,7 +27,7 @@ def dmrg_(psi, H, project=None, method='1site',
     Perform DMRG sweeps until convergence, starting from MPS :code:`psi`.
 
     The inner loop sweeps over MPS updating sites from the first site to the last and back, constituting a single iteration.
-    Convergence can be controlled based on energy and/or Schmidt values (which is a more sensitive measure).
+    Convergence can be controlled based on energy and/or Schmidt values (which is a more sensitive measure of convergence).
     The DMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
     or until all convergence measures (with provided tolerance other than None) change by less than the provided tolerance during a single sweep.
 
@@ -63,7 +63,7 @@ def dmrg_(psi, H, project=None, method='1site',
 
     iterator_step: int
         If int, :code:`dmrg_` returns a generator that would yield output after every iterator_step sweeps.
-        Default is None, in which case  :code:`dmrg_` sweeps are performed immidiatly.
+        Default is None, in which case  :code:`dmrg_` sweeps are performed immediately.
 
     opts_eigs: dict
         options passed to :meth:`yastn.eigs`.

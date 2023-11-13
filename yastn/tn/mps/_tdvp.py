@@ -156,8 +156,6 @@ def _tdvp_sweep_12site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_sv
     Perform sweep with mixed TDVP update, see :meth:`tdvp` for description.
 
     This mixes 1-site and 2-site updates based on smallest Schmidt value and maximal bond dimension
-
-    NOT FINISHED
     """
 
     env, opts = _init_tdvp(psi, H, env, opts_expmv)

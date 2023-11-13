@@ -23,20 +23,18 @@ def compression_(psi, target, method='1site',
     Perform variational optimization sweeps until convergence to best approximate the target, starting from MPS/MPO :code:`psi`.
 
     The outer loop sweeps over ``psi`` updating sites from the first site to the last and back.
-    Convergence can be controlled based on overlap and/or Schmidt values (which is a more sensitive measure).
+    Convergence can be controlled based on overlap and/or Schmidt values (which is a more sensitive measure of convergence).
     The algorithm performs at most :code:`max_sweeps`. If tolerance measures are provided, it terminates earlier
-    if the convergence criteria are satisfied: change in overlap or Schmidt values is less then the provided tolerance during a single sweep.
+    if the convergence criteria are satisfied: change in overlap or Schmidt values is less than the provided tolerance during a single sweep.
 
     Works for
 
         * optimization against provided MPS: ``target`` is ``MPS`` or list ``[MPS,]``
         * against MPO acting on MPS: ``target`` is a list ``[MPO, MPS]``.
         * against MPO (replacing all MPS's above with MPO's), i.e., ``[MPO,]`` or ``[MPO, MPO]``
-        * sum of MPS's: target is ``[[MPS], [MPS],...]``
-        * sum of MPO's acting on MPS's: target is ``[[MPO, MPS], [MPO, MPS], ...]``
 
-    Outputs iterator if :code:`iterator_step` is given.
-    It allows inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
+    Outputs iterator if :code:`iterator_step` is given, which allows
+    inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
 
     Parameters
     ----------
@@ -53,7 +51,7 @@ def compression_(psi, target, method='1site',
         Which optimization variant to use from :code:`'1site'`, :code:`'2site'`
 
     overlap_tol: float
-        Convergence tolerance for the change of overlap in a single sweep.
+        Convergence tolerance for the change of relative overlap in a single sweep.
         By default is None, in which case overlap convergence is not checked.
 
     Schmidt_tol: float
@@ -65,7 +63,7 @@ def compression_(psi, target, method='1site',
 
     iterator_step: int
         If int, :code:`compression_` returns a generator that would yield output after every iterator_step sweeps.
-        Default is None, in which case  :code:`compression_` sweeps are performed immidiatly.
+        Default is None, in which case  :code:`compression_` sweeps are performed immediately.
 
     opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'`.
@@ -78,10 +76,14 @@ def compression_(psi, target, method='1site',
 
             * :code:`sweeps` number of performed sweeps.
             * :code:`overlap` overlap after the last sweep.
-            * :code:`doverlap` absolute value of overlap change in the last sweep.
+            * :code:`doverlap` absolute value of relative overlap change in the last sweep.
             * :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
             * :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
+    # TODO:
+    # * sum of MPS's: target is ``[[MPS], [MPS],...]``
+    # * sum of MPO's acting on MPS's: target is ``[[MPO, MPS], [MPO, MPS], ...]``
+
     tmp = _compression_(psi, target, method,
                         overlap_tol, Schmidt_tol, max_sweeps,
                         iterator_step, opts_svd, normalize)
@@ -129,7 +131,7 @@ def _compression_(psi, target, method,
 
         psi.factor = 1
         overlap = env.measure()
-        doverlap, overlap_old = overlap_old - overlap, overlap
+        doverlap, overlap_old = (overlap - overlap_old) / overlap, overlap
         converged = []
 
         if not normalize:
