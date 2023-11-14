@@ -208,7 +208,7 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
         Os = transfer_mpo(state, index=ny, index_type='column') # converts ny colum of PEPS to MPO
         vL = CtmEnv2Mps(state, CTMenv, index=ny, index_type='l').conj() # left boundary of indexed column through CTM environment tensors
 
-        env = mps.Env3(vL, Os, vR).setup(to = 'first')
+        env = mps.Env3(vL, Os, vR).setup_(to = 'first')
 
         for nx in range(0, state.Nx):
             dpt = Os[nx].copy()
@@ -219,7 +219,7 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
                 dpt_pr = dpt.copy()
                 dpt_pr.A = tensordot(dpt_pr.A, proj, axes=(4, 1))
                 Os[nx] = dpt_pr
-                env.update_env(nx, to='last')
+                env.update_env_(nx, to='last')
                 prob.append(env.measure(bd=(nx, nx+1)) / norm_prob)
 
             assert abs(sum(prob) - 1) < 1e-12
@@ -228,7 +228,7 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
             out[(nx, ny)] = ind
             dpt.A = tensordot(dpt.A, loc_projectors[ind], axes=(4, 1))
             Os[nx] = dpt               # updated with the new collapse
-            env.update_env(nx, to='last')
+            env.update_env_(nx, to='last')
             count += 1
 
         if opts_svd is None:

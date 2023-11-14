@@ -27,7 +27,7 @@ def test_spinless_fermions():
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(), np.eye(2)) for I in Is)
-    assert all(I.device[:len(default_device)] == default_device for I in Is)  # for cuda, accept cuda:0 == cuda
+    assert all(default_device in I.device for I in Is)  # accept 'cuda' in 'cuda:0'
 
     lss = [{0: I.get_legs(0), 1: I.get_legs(1)} for I in Is]
 

@@ -16,16 +16,16 @@ class TestSyntaxTensorCreation(unittest.TestCase):
     #             D=((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)))
 
     def test_syntax_tensor_creation_operations(self):
-        # 
+        #
         # Initialize several rank-4 tensors, with the following signature
         #             ___
         #  (-) 0--<--| a |--<--1 (+)
         #  (+) 2-->--|___|-->--3 (-)
         #
-        # The signatures can be interpreted as tensor legs being directed: ingoing for (+) 
+        # The signatures can be interpreted as tensor legs being directed: ingoing for (+)
         # or outgoing for (-).
-        #  
-        # The symmetry, U(1), is specified in config_U1. We specify the charge 
+        #
+        # The symmetry, U(1), is specified in config_U1. We specify the charge
         # sectors on all legs by tuple t, with its first member, t[0], defining charge
         # sectors on the first leg, t[1] on second leg and so on.
         # The corresponding dimensions of each charge sector are specified by tuple D
@@ -35,7 +35,7 @@ class TestSyntaxTensorCreation(unittest.TestCase):
         # initialized and filled with either random numbers, ones, or zeros in the examples
         # below.
         #
-        # The dtype of the tensor elements as well as the device on which its data 
+        # The dtype of the tensor elements as well as the device on which its data
         # reside is given in config_U1.
         #
         leg1 = yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3))
@@ -46,16 +46,16 @@ class TestSyntaxTensorCreation(unittest.TestCase):
         a = yastn.rand(config=config_U1, legs=[leg1, leg2, leg3, leg4])
         b = yastn.ones(config=config_U1, legs=[leg1, leg2, leg3, leg4])
         c = yastn.zeros(config=config_U1, legs=[leg1, leg2, leg3, leg4])
-        
+
         #
         # The identity tensor behaves as rank-2 tensor with automatic signature (1, -1)
-        # or (-1, 1). It is enough to provide charge sectors and their dimensions 
-        # for single leg, the data for other leg is inferred automatically. 
+        # or (-1, 1). It is enough to provide charge sectors and their dimensions
+        # for single leg, the data for other leg is inferred automatically.
         #
         e = yastn.eye(config=config_U1,legs=leg1)
 
     def test_syntax_create_empty_tensor_and_fill(self):
-        # 
+        #
         # Initialize empty rank-4 tensor, with the following signature
         #             ___
         #  (-) 0--<--| a |--<--1 (+)
@@ -73,7 +73,7 @@ class TestSyntaxTensorCreation(unittest.TestCase):
 
         #
         # Once the dimension is assigned to charge sector on a leg of the tensor
-        # attempt to create block with different dimension will raise an error. 
+        # attempt to create block with different dimension will raise an error.
         # In the example above sector with charge 2 on 3rd leg has dimension 9.
         #
         # Attempting to create new block with different dimension for the same
@@ -93,15 +93,15 @@ class TestSyntaxBasicAlgebra(unittest.TestCase):
 
         a = yastn.rand(config=config_U1, legs=legs)
 
-        # 
-        # Tensor can be multiplied by scalar 
-        # 
+        #
+        # Tensor can be multiplied by scalar
+        #
         tensor = a / 2
         tensor = 2. * a
         tensor = a * 2.
 
         #
-        # Tensors can be added or subtracted assuming their structure is 
+        # Tensors can be added or subtracted assuming their structure is
         # compatible.
         #
         b = yastn.ones(config=config_U1, legs=legs)
@@ -111,36 +111,36 @@ class TestSyntaxBasicAlgebra(unittest.TestCase):
         #
         # Attempting to add/subtract two tensors with different total charge,
         # or different dimension of a common charge sector raises exception
-        # 
+        #
         legs[0] = yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(7, 2, 3))
         c = yastn.ones(config=config_U1, legs=legs)
         with self.assertRaises(Exception):
             tensor = a + c
 
-        # 
-        # element-wise exponentiation, absolute value, reciprocal i.e. x -> 1/x, 
+        #
+        # element-wise exponentiation, absolute value, reciprocal i.e. x -> 1/x,
         # square root and its reciprocal x -> 1/sqrt(x)
         #
         tensor = a.exp(step=1)
         tensor = yastn.exp(a, step=1)
-        
+
         tensor = abs(a)
 
         tensor = a.reciprocal(cutoff=1e-12)
         tensor = yastn.reciprocal(a, cutoff=1e-12)
-        
+
         tensor = abs(a).sqrt()
         tensor = yastn.sqrt(abs(a))
-        
+
         tensor = abs(a).rsqrt(cutoff=1e-12)
         tensor = yastn.rsqrt(abs(a), cutoff=1e-12)
-        
+
 
         #
-        # Sometimes a composite operation is faster than serial execution of individual 
-        # operations. For example, multiplication by scalar and addition, a + x*b, 
+        # Sometimes a composite operation is faster than serial execution of individual
+        # operations. For example, multiplication by scalar and addition, a + x*b,
         # are handled by specialized function
-        # 
+        #
         tensor = a.apxb(b, x=1)
         tensor = yastn.apxb(a, b, x=1)
 
@@ -165,12 +165,12 @@ class TestSyntaxTensorExportImport(unittest.TestCase):
         # the symmetric structure of the tensors. Each entry of meta represents
         # non-zero block indexed by charges and it points to location of 1-D vector
         # where the raw data of that block is stored
-        # 
+        #
         vector, meta = yastn.compress_to_1d(a)
         vector, meta = a.compress_to_1d(meta=meta)
         tensor = yastn.decompress_from_1d(vector, meta)
 
-        # 
+        #
         # Tensors can be also serialized directly into basic Python dictionary
         #
         dictionary = yastn.save_to_dict(a)
@@ -184,7 +184,7 @@ class TestSyntaxBlockAccess(unittest.TestCase):
         legs = [yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3)),
                 yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
                 yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(7, 8, 9))]
-        
+
         a = yastn.rand(config=config_U1, legs=legs)
 
         #
@@ -241,7 +241,7 @@ class TestSyntaxContractions(unittest.TestCase):
         # First, the outgoing indices of a (the first argument to tensordot), then
         # the outgoing indices of tensor b
         tensor = yastn.tensordot(a, b, axes=((1, 2), (1, 2)), conj=(1, 0))
-        
+
         # tensordot can also be invoked also as a function of the tensor itself
         #
         tensor = a.tensordot(b, axes=((1, 2), (1, 2)), conj=(1, 0))
@@ -256,8 +256,8 @@ class TestSyntaxContractions(unittest.TestCase):
         # 0-<-|a|-<-2     |c|-<-1 = 0-<-|ac|-<-2
         # 1->-|_|->-3 0->-|_|->-2   1->-|  |-<-1->3
         #                               |__|->-2->4
-        t0 = yastn.tensordot(a, c, axes=(a.ndim - 1, 0)) 
-        # 
+        t0 = yastn.tensordot(a, c, axes=(a.ndim - 1, 0))
+        #
         # is the @ operator. For rank-2 tensor it is thus equivalent to matrix multiplication
         t1 = a @ c
         assert yastn.norm(t0 - t1) < tol
@@ -273,7 +273,7 @@ class TestSyntaxContractions(unittest.TestCase):
         #  __           _
         # |a*|-<-0 0-<-|b| = scalar
         # |  |->-1 1->-| |
-        # |  |->-2 2->-| | 
+        # |  |->-2 2->-| |
         # |__|-<-3 3-<-|_|
         tensor = a.tensordot(b, axes=((0, 1, 2, 3), (0, 1, 2, 3)), conj=(1, 0))
         assert isinstance(tensor,yastn.Tensor)
@@ -293,7 +293,7 @@ class TestSyntaxContractions(unittest.TestCase):
         a2 = yastn.tensordot(a, a, axes=((0, 1), (0, 1)), conj=(1, 0))
         tensor = a2.trace(axes=(0, 2))
         assert tensor.get_rank()==2
-        # 
+        #
         # More pairs of indices can be traced at once a_ijij = scalar
         tensor = a2.trace(axes=((0, 1), (2, 3)))
         number = tensor.to_number()
@@ -394,6 +394,9 @@ class TestSyntaxGeneral(unittest.TestCase):
         D, U = yastn.eigh_with_truncation(a2, axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
         D, U = a2.eigh_with_truncation(axes=((0, 1), (2, 3)), D_total=5, tol=1e-12, D_block=2)  # here with truncation
 
+        # utils
+        entropy = yastn.entropy(S ** 2)
+
         # linalg
         number = a.norm()
         number = yastn.norm(a, p='fro')  # p = 'for', i.e. frobenius is default
@@ -403,9 +406,6 @@ class TestSyntaxGeneral(unittest.TestCase):
         number = yastn.norm(a - b)
         number = yastn.linalg.norm(a - b)
         number = yastn.norm(a - b)
-
-        # utils
-        entropy, Smin, normalization = yastn.entropy(a, axes=((0, 1), (2, 3)))
 
         # fuse
         tensor = a.fuse_legs(axes=(0, (1, 3), 2))

@@ -1,5 +1,4 @@
 from __future__ import annotations
-from ..sym import sym_none
 from ..initialize import eye
 from .. import diag
 from ..tensor import Leg
@@ -14,7 +13,7 @@ class Qdit(meta_operators):
         Parameters
         ----------
         d : int
-            Hilbert space dimension.
+            Default Hilbert space dimension.
 
         kwargs
             Other YASTN configuration parameters can be provided, see :meth:`yastn.make_config`.
@@ -24,19 +23,19 @@ class Qdit(meta_operators):
         Default configuration sets :code:`fermionic` to :code:`False`.
         """
         kwargs['fermionic'] = False
-        kwargs['sym'] = sym_none
+        kwargs['sym'] = 'dense'
         super().__init__(**kwargs)
         self._d = d
         self._sym = 'dense'
         self.operators = ('I',)
 
-    def space(self) -> yastn.Leg:
-        r""" :class:`yastn.Leg` describing local Hilbert space. """
-        return Leg(self.config, s=1, D=(self._d,))
+    def space(self, d=None) -> yastn.Leg:
+        r""" :class:`yastn.Leg` describing local Hilbert space. Can override default dimension by providing d. """
+        return Leg(self.config, s=1, D=(self._d if d is None else d,))
 
-    def I(self) -> yastn.Tensor:
-        """ Identity operator. """
-        return diag(eye(config=self.config, s=self.s, D=self._d))
+    def I(self, d=None) -> yastn.Tensor:
+        """ Identity operator. Can override default dimension by providing d."""
+        return diag(eye(config=self.config, s=self.s, D=self._d if d is None else d))
 
     def to_dict(self):
         """

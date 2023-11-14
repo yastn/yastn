@@ -1,4 +1,5 @@
 """ Building Krylov space. """
+from __future__ import annotations
 import numpy as np
 from ..tensor import YastnError
 
@@ -6,7 +7,7 @@ __all__ = ['expmv', 'eigs']
 
 
 # Krylov based methods, handled by anonymous function decribing action of matrix on a vector
-def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, return_info=False, **kwargs):
+def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, return_info=False, **kwargs) -> vector:
     r"""
     Calculate :math:`e^{(tF)}v`, where :math:`v` is a vector, and :math:`F(v)` is linear operator acting on :math:`v`.
 
@@ -15,7 +16,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
 
     Parameters
     ----------
-        f: Callable[[vector],vector]
+        f: Callable[[vector], vector]
             defines an action of a 'square matrix' on vector.
 
         v: vector
@@ -37,7 +38,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
             The result is normalized to unity using 2-norm.
 
         return_info: bool
-            if true, returns (vector, info), where
+            if True, returns (vector, info), where
 
             * info.ncv : guess of the Krylov-space size,
             * info.error : estimate of error (likely over-estimate)
@@ -46,10 +47,6 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
 
         **kwargs: any
             further parameters that are passed to expand_krylov_space and linear_combination
-
-    Returns
-    -------
-    vector
     """
     backend = v.config.backend
     ncv, ncv_max = max(1, ncv), min([30, v.size])  # Krylov space parameters
@@ -148,7 +145,7 @@ def expmv(f, v, t=1., tol=1e-12, ncv=10, hermitian=False, normalize=False, retur
     return (v, info) if return_info else v
 
 
-def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=False, **kwargs):
+def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=False, **kwargs) -> tuple[array, Sequence[vectors]]:
     r"""
     Search for dominant eigenvalues of linear operator f using Arnoldi algorithm.
     Economic implementation (without restart) for internal use within :meth:`yastn.tn.dmrg_`.
@@ -174,10 +171,10 @@ def eigs(f, v0, k=1, which='SR', ncv=10, maxiter=None, tol=1e-13, hermitian=Fals
             Must be greated than k.
 
         maxiter: int
-            Maximal number of restarts;
+            Maximal number of restarts; (not implemented for now)
 
         tol: float
-            Stopping criterion for Krylov subspace. Default is 1e-13.
+            Stopping criterion for Krylov subspace. Default is 1e-13. (not implemented for now)
 
         hermitian: bool
             Assume that f is a hermitian operator, in which case Lanczos iterations are used.

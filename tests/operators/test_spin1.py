@@ -30,7 +30,7 @@ def test_spin1():
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(reverse=r), np.eye(3)) for (I, r) in zip(Is, rs))
-    assert all(I.device[:len(default_device)] == default_device for I in Is)  # for cuda, accept cuda:0 == cuda
+    assert all(default_device in I.device for I in Is)  # accept 'cuda' in 'cuda:0'
 
     Szs = [ops_dense.sz(), ops_Z3.sz(), ops_U1.sz()]
     assert all(np.allclose(Sz.to_numpy(reverse=r), np.array([[1, 0, 0], [0, 0, 0], [0, 0, -1]])) for (Sz, r) in zip(Szs, rs))
@@ -40,6 +40,10 @@ def test_spin1():
 
     Sys = [ops_dense.sy()]
     assert all(np.allclose(Sy.to_numpy(reverse=r), np.array([[0, -1j, 0], [1j, 0, -1j], [0, 1j, 0]]) / np.sqrt(2)) for (Sy, r) in zip(Sys, rs))
+
+    iSys = [ops_dense.isy()]
+    assert all((1j * sy - isy).norm() < tol for (sy, isy) in zip(Sys, iSys))
+
 
     lss = [{0: I.get_legs(0), 1: I.get_legs(1)} for I in Is]
 
@@ -76,7 +80,7 @@ def test_spin1():
     assert all(yastn.norm(Sy @ v - v) < tol for Sy, v in zip(Sys, yp1s))
     assert all(yastn.norm(Sy @ v) < tol for Sy, v in zip(Sys, y0s))
     assert all(yastn.norm(Sy @ v + v) < tol for Sy, v in zip(Sys, ym1s))
-    assert all(pytest.approx(v.norm(), rel=tol) == 1 for v in chain(zp1s, z0s, zm1s, xp1s, x0s, xm1s, yp1s, y0s, ym1s))
+    assert all(abs(v.norm() -1) < tol for v in chain(zp1s, z0s, zm1s, xp1s, x0s, xm1s, yp1s, y0s, ym1s))
 
 
     vecss = [ops_dense.vec_s(), ops_Z3.vec_s(), ops_U1.vec_s()]

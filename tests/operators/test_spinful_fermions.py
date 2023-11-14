@@ -26,7 +26,7 @@ def test_spinful_fermions():
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(), np.eye(4)) for I in Is)
-    assert all(I.device[:len(default_device)] == default_device for I in Is)  # for cuda, accept cuda:0 == cuda
+    assert all(default_device in I.device for I in Is)  # accept 'cuda' in 'cuda:0'
 
     assert all(ops.config.fermionic == fs for ops, fs in zip((ops_Z2, ops_U1xU1_ind, ops_U1xU1_dis), (True, (False, False, True), True)))
 

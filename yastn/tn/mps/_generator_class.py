@@ -14,23 +14,23 @@ class Generator:
 
         Parameters
         ----------
-        N : int
+        N: int
             number of sites of MPO.
-        operators : object or dict[str, yastn.Tensor]
+        operators: object or dict[str, yastn.Tensor]
             a set of local operators, e.g., an instance of :class:`yastn.operators.Spin12`.
             Or a dictionary with string-labeled local operators, including at least ``{'I': <identity operator>,...}``.
-        map : dict[int, int]
+        map: dict[int, int]
             custom labels of N sites indexed from 0 to N-1 , e.g., ``{3: 0, 21: 1, ...}``.
             If ``None``, the sites are labled as :code:`{site: site for site in range(N)}`.
-        Is : dict[int, str]
+        Is: dict[int, str]
             For each site (using default or custom label), specify identity operator by providing
             its string key as defined in ``operators``.
             If ``None``, assumes ``{i: 'I' for i in range(N)}``, which is compatible with all predefined
             ``operators``.
-        parameters : dict
+        parameters: dict
             Default parameters used by the interpreters :meth:`Generator.mpo` and :meth:`Generator.mps`.
             If None, uses default ``{'sites': [*map.keys()]}``.
-        opts : dict
+        opts: dict
             used if compression is needed. Options passed to :meth:`yastn.linalg.svd_with_truncation`.
         """
         # Notes
@@ -70,14 +70,14 @@ class Generator:
 
         Parameters
         ----------
-        seed : int
+        seed: int
             Seed number for random number generator.
         """
         self.config.backend.random_seed(seed)
 
     def I(self) -> yastn.tn.mps.MpsMpo:
         """ Indetity MPO derived from identity in local operators class. """
-        return self._I.copy()
+        return self._I.shallow_copy()
 
     def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
         r"""
@@ -146,11 +146,11 @@ class Generator:
 
         Parameters
         ----------
-        c2 : list
+        c2: list
             list of single_term-s
-        obj_yastn : dict
+        obj_yastn: dict
             dictionary with operators for the generator
-        obj_number : dict
+        obj_number: dict
             dictionary with parameters for the generator
         """
         # can be used with latex-form interpreter or alone.
@@ -181,17 +181,17 @@ class Generator:
 
     #     Parameters
     #     ----------
-    #     psi_str : str
+    #     psi_str: str
     #         instruction in latex-like format
-    #     vectors : dict
+    #     vectors: dict
     #         dictionary with vectors for the generator. All should be given as
     #         a dictionary with elements in a format:
-    #         name : lambda j: tensor
+    #         name: lambda j: tensor
     #             where
     #             name - is a name of an element which can be used in psi_str,
     #             j - single index for lambda function,
     #             tensor - is a yastn.Tensor with one physical index.
-    #     parameters : dict
+    #     parameters: dict
     #         dictionary with parameters for the generator
 
     #     Returns
@@ -213,10 +213,10 @@ class Generator:
     #     -----------
     #     templete: list
     #         List of single_term objects. The object is defined in ._latex2term
-    #     vectors : dict
+    #     vectors: dict
     #         dictionary with vectors for the generator. All should be given as
     #         a dictionary with elements in a format:
-    #         name : lambda j: tensor
+    #         name: lambda j: tensor
     #             where
     #             name - is a name of an element which can be used in psi_str,
     #             j - single index for lambda function,

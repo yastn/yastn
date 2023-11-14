@@ -16,8 +16,8 @@ class sym_Z3(sym_abelian):
         Parameters
         ----------
             charges: nparray(int)
-                `k x m x nsym` matrix, where `k` is the number of independent blocks,
-                and `m` is the number of fused legs.
+                `k x m x nsym` matrix, where `k` is the number of
+                independent blocks, and `m` is the number of fused legs.
 
             signatures: numpy.ndarray(int)
                 integer vector with `m` elements in `{-1, +1}`

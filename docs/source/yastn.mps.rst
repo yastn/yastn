@@ -29,7 +29,7 @@ API: yastn.tn.mps
    :glob:
    :maxdepth: 2
 
-   mps/init
+   mps/initialization
    mps/properties
    mps/measurements
    mps/algebra
@@ -48,5 +48,6 @@ Examples: basics of usage
    :maxdepth: 2
 
    examples/mps/build
+   examples/mps/measurement
    examples/mps/algebra
    examples/mps/algorithms

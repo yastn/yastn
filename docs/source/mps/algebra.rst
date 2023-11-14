@@ -4,7 +4,17 @@ Algebra
 Multiplication by a scalar
 ---------------------------
 
-MPS/MPO can be multiplied by a scalar using regular `*` operator, e.g., :code:`B = a * A` or :code:`B = A * a`.
+MPS/MPO can be multiplied by a scalar using regular :code:`*` and :code:`/` operators,
+i.e.,:code:`B = a * A`, :code:`B = A * a` or :code:`B = A / a`.
+
+
+Conjugation and transpose
+-------------------------
+
+.. automethod:: yastn.tn.mps.MpsMpo.conj
+.. automethod:: yastn.tn.mps.MpsMpo.transpose
+.. autoproperty:: yastn.tn.mps.MpsMpo.T
+
 
 Addition of MPS/MPO
 -------------------
@@ -16,21 +26,26 @@ and :code:`B`'s tensors along virtual dimension.
 ::
 
     # a product of two MPS's
-               ___     ___    ___    ___    ___      ___      ___    ___    ___    ___
-      A       |___|-D-|___|--|___|--|___|--|___|    |   |    |   |  |   |  |   |  |   |
- C =  +  =  __ d|   ___ |  ___ |  ___ |  ___ |   =  |   |-2D-|   |--|   |--|   |--|   |
-      B    |___|:D-|___|:-|___|:-|___|:-|___|:      |___|    |___|  |___|  |___|  |___|
-            d|  |    |  |   |  |   |  |   |  |       d|        |      |      |      |
-              \/      \/     \/     \/     \/
+               ___     ___    ___    ___      ___      ___    ___    ___
+      A       |___|-D-|___|--|___|--|___|    |   |    |   |  |   |  |   |
+ C =  +  =  __ d|   ___ |  ___ |  ___ |   =  |   |-2D-|   |--|   |--|   |
+      B    |___|:D-|___|:-|___|:-|___|:      |___|    |___|  |___|  |___|
+            d|  |    |  |   |  |   |  |       d|        |      |      |
+              \/      \/     \/     \/
 
-To make a sum of many MPS/MPOs :math:`\{A_0, A_1,\dots\}` at once, use :code:`yamps.add(A_0, A_1,...)`.
+To add many MPS/MPOs :math:`A_0, A_1,\dots` at once, use :code:`yastn.tn.mps.add(A_0, A_1,...)`.
 
 .. autofunction:: yastn.tn.mps.add
 
 Following example show an addition of two MPSs:
 
+::
+
+    import yastn
+    import yastn.tn.mps as mps
+
 .. literalinclude:: /../../tests/mps/test_algebra.py
-        :pyobject: test_addition_basic
+        :pyobject: addition_example
 
 
 Products of MPO and MPS
@@ -64,8 +79,8 @@ operator product :math:`\hat{O}\hat{P} = \hat{C}` (matrix-matrix multiplication)
              |___|--D'--|___|--...--|___|     |d           |           |
                |d         |           |
 
-One can either use product operator :code:`C = A @ B` or more verbose
-:code:`C = yastn.tn.mps.multiply(A, B)`. See examples here: :ref:`examples/mps/algebra:Multiplication`.
+One can either use call :code:`C = A @ B` or in a more verbose form
+:code:`C = mps.multiply(A, B)`. See examples here: :ref:`examples/mps/algebra:Multiplication`.
 
 .. autofunction:: yastn.tn.mps.multiply
 
@@ -73,7 +88,7 @@ One can either use product operator :code:`C = A @ B` or more verbose
 Multiplication with truncation
 ------------------------------
 
-A fast procedure to multiply MPO by MPO/MPS while performing truncation.
-The result can be subsequently fine-funed using :ref:`mps/algorithms_overlap:Variational overlap maximalization algorithm`.
+A fast procedure to multiply MPO by MPO/MPS while performing truncation is a `zipper`.
+The result can be subsequently fine-tuned using :ref:`variational optimization<mps/algorithms_overlap:Variational overlap maximalization>`.
 
 .. autofunction:: yastn.tn.mps.zipper

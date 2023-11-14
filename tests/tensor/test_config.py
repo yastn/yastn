@@ -42,6 +42,16 @@ def test_config_exceptions_torch():
             # Devices of the two tensors do not match.
 
 
+def test_make_config():
+    cfg_U1 = yastn.make_config(sym="U1", backend=config_U1.backend)
+    assert cfg_U1.sym == config_U1.sym
+
+    with pytest.raises(yastn.YastnError):
+        yastn.make_config(sym="random_name1")
+        #  sym encoded as string only supports: 'dense', 'Z2', 'Z3', 'U1', 'U1xU1', 'U1xU1xZ2'
+
+
 if __name__ == '__main__':
-    test_config_exceptions()
-    test_config_exceptions_torch()
+    # test_config_exceptions()
+    # test_config_exceptions_torch()
+    test_make_config()

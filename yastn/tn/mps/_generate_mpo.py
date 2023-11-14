@@ -16,18 +16,18 @@ class Hterm(NamedTuple):
 
     Parameters
     ----------
-    amplitude : number
+    amplitude: number
         numerical multiplier in front of the operator product.
-    positions : Sequence[int]
+    positions: Sequence[int]
         positions of the local operators :math:`o_i` in the product different than identity.
-    operators : Sequence[yastn.Tensor]
+    operators: Sequence[yastn.Tensor]
         local operators in the product that are different than the identity.
         *i*-th operator is acting at `positions[i]`.
         Each operator should have `ndim=2` and signature `s=(+1, -1).`
     """
-    amplitude : float = 1.0
-    positions : tuple = ()
-    operators : tuple = ()
+    amplitude: float = 1.0
+    positions: tuple = ()
+    operators: tuple = ()
 
 
 def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.MpsMpo:
@@ -47,7 +47,14 @@ def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.Mps
     amplitude: bool
         if True, includes term.amplitude in MPO.
     """
-    single_mpo = I.copy()
+    single_mpo = I.shallow_copy()
+
+    try:
+        if len(term.positions) != len(term.operators):
+            raise YastnError("Hterm: numbers of positions and operators do not match. ")
+    except TypeError:
+        raise YastnError("Hterm: positions and operators should be provided as lists or tuples.")
+
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
         if site < 0 or site > I.N or not isinstance(site, numbers.Integral):
             raise YastnError("position in Hterm should be in 0, 1, ..., N-1 ")
@@ -71,9 +78,9 @@ def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.Mps
 
 class GenerateMpoTemplate(NamedTuple):
     config: NamedTuple = None
-    basis : list = None
-    trans : list = None
-    tleft : list = None
+    basis: list = None
+    trans: list = None
+    tleft: list = None
 
 
 def generate_mpo_preprocessing(I, terms, return_amplitudes=False) -> GenerateMpoTemplate | tuple[GenerateMpoTemplate, list[float]]:
@@ -88,7 +95,7 @@ def generate_mpo_preprocessing(I, terms, return_amplitudes=False) -> GenerateMpo
     I: yastn.tn.mps.MpsMpo
         identity MPO.
     return_amplitudes: bool
-        If true, apart from template return also amplitudes = [term.amplitude for term in terms].
+        If True, apart from template return also amplitudes = [term.amplitude for term in terms].
     """
     H1s = [generate_product_mpo_from_Hterm(I, term, amplitude=False) for term in terms]
     cfg = H1s[0][0].config

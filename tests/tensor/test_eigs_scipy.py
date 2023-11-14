@@ -163,6 +163,6 @@ def test_eigs_temp():
 
 
 if __name__ == '__main__':
-    # test_eigs_simple()
-    # test_eigs_mismatches()
+    test_eigs_simple()
+    test_eigs_mismatches()
     test_eigs_temp()

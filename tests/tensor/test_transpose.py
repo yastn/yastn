@@ -51,6 +51,12 @@ class TestSyntaxTranspose(unittest.TestCase):
         assert b.get_shape() == (5, 13, 7, 9, 11, 3)
 
         #
+        #  if axes is not provided, reverse the order
+        #  This can be also done using a shorthand self.T
+        a.transpose().get_shape() == (3, 7, 11, 13, 9, 5)
+        a.T.get_shape() == (3, 7, 11, 13, 9, 5)
+
+        #
         # sometimes, instead of writing explicit permutation of all legs
         # it is more convenient to only specify pairs of legs to switched.
         # In this example, we reverse the permutation done previously thus

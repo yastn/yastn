@@ -42,6 +42,10 @@ class Leg:
     D : Sequence[int]
         List of corresponding charge sector dimensions.
         The lengths `len(D)` and `len(t)` must be equal.
+    legs: Sequence[yastn.Leg]
+        Includes information about fused (sub-)legs.
+    fusion: str
+        and how the fusion was performed.
     """
     sym: any = sym_none
     s: int = 1  # leg signature in (1, -1)
@@ -109,12 +113,19 @@ class Leg:
 
     def history(self) -> str:
         """
-        Show representation of Leg fusion history.
+        Show linearized representation of Leg fusion history.
 
-        'o' marks original legs
-        's' is for sum, i.e. block
-        'p' is for product, i.e., fuse_legs(..., mode='hard')
-        'm' is for meta-fusion
+        ::
+
+            'o' marks original legs
+            's' is for sum, i.e. block
+            'p' is for product, i.e., fuse_legs(..., mode='hard')
+            'm' is for meta-fusion
+
+        Example
+        -------
+        'p(p(oo)p(oo))' corresponds to 4 original spaces.
+        Two pairs are fused first, then the result gets fused.
         """
         if isinstance(self.fusion, tuple):  # meta fused
             tree = self.fusion
@@ -150,7 +161,9 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
     D_total : int
         total bond dimension of the leg, to be distributed to sectors
     nonnegative : bool
-        If true, cut off negative charges
+        If True, cut off negative charges
+    legs : Sequence[yastn.Leg]
+        limits charges to match provided legs (e.g., in tensor with zero charge)
     """
     if config.sym.NSYM == 0:
         return Leg(config, s=s, D=(D_total,))
@@ -273,16 +286,18 @@ def leg_undo_product(leg) -> Sequence[yastn.Leg]:
     hst = leg.history()
     if hst[0] in ('o', 's'):
         raise YastnError('Leg is not a result of outer_product.')
-    if hst[0] == 'p':
-        ts, Ds, ss, hfs = _unfuse_Fusion(leg.legs[0])
-        return tuple(Leg(sym=leg.sym, s=s, t=t, D=D, legs=(hf,))
-                        for s, t, D, hf in zip(ss, ts, Ds, hfs))
-    pass
+    # else hst[0] == 'p':
+    ts, Ds, ss, hfs = _unfuse_Fusion(leg.legs[0])
+    return tuple(Leg(sym=leg.sym, s=s, t=t, D=D, legs=(hf,))
+                    for s, t, D, hf in zip(ss, ts, Ds, hfs))
 
 
 def leg_union(*legs) -> yastn.Leg:
     """
     Output Leg that represent space being an union of spaces of a list of legs.
+
+    It collects charges appearing in all provided legs.
+    Their dimensions and fusion history have to match.
     """
     legs = list(legs)
     if len(legs) == 1:
