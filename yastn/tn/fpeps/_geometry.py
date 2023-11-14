@@ -24,14 +24,14 @@ class Lattice():
                 Size of elementary cell.
                 For 'checkerboard' it is always (2, 2)
             boundary : str
-                'obc' or 'infinite'
+                'obc', 'infinite' or 'cylinder'
 
         Notes
         -----
             Site (0, 0) corresponds to top-left corner of the lattice
         """
         assert lattice in ('checkerboard', 'square'), "lattice should be 'checkerboard' or 'square' or ''"
-        assert boundary in ('obc', 'infinite'), "boundary should be 'obc' or 'infinite'"
+        assert boundary in ('obc', 'infinite', 'cylinder'), "boundary should be 'obc', 'infinite' or 'cylinder'"
         self.lattice = lattice
         self.boundary = boundary
         self.Nx, self.Ny = (2, 2) if lattice == 'checkerboard' else dims
@@ -95,6 +95,8 @@ class Lattice():
         dx, dy = self._dir[d]
         x, y = x + dx, y + dy
         if self.boundary == 'obc' and (x < 0 or x >= self.Nx or y < 0 or y >= self.Ny):
+            return None
+        if self.boundary == 'cylinder' and (y < 0 or y >= self.Ny):
             return None
         return (x % self.Nx, y % self.Ny)
 
