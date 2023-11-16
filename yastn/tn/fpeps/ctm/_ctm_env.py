@@ -43,6 +43,37 @@ class CtmEnv(Lattice):
     def tensors_CtmEnv(self):
         return self._windows
 
+    def env2mps(self, index, index_type):
+        """ Convert environmental tensors of Ctm to an MPS """
+        if index_type == 'b':
+            nx = index
+            H = mps.Mps(N=self.Ny)
+            for ny in range(self.Ny):
+                site = (nx, ny)
+                H.A[nx] = self[site].b.transpose(axes=(2,1,0))
+            H = H.conj()
+        elif index_type == 'r':
+            ny = index
+            H = mps.Mps(N=self.Nx)
+            for nx in range(self.Nx):
+                site = (nx, ny)
+                H.A[nx] = self[site].r
+        elif index_type == 't':
+            nx = index
+            H = mps.Mps(N=self.Ny)
+            for ny in range(self.Ny):
+                site = (nx, ny)
+                H.A[ny] = self[site].t
+        elif index_type == 'l':
+            ny = index
+            H = mps.Mps(N=self.Nx)
+            for nx in range(self.Nx):
+                site = (nx, ny)
+                H.A[nx] = self[site].l.transpose(axes=(2,1,0))
+            H = H.conj()
+        return H
+
+
 @dataclass()
 class Local_Projector_Env(): # no more variables than the one given
     """ data class for projectors labelled by a single lattice site calculated during ctm renormalization step """
@@ -76,34 +107,6 @@ class Local_CTM_Env(): # no more variables than the one given
     def copy(self):
         return Local_CTM_Env(tl=self.tl, tr=self.tr, bl=self.bl, br=self.br, t=self.t, b=self.b, l=self.l, r=self.r)
 
-
-def CtmEnv2Mps(net, env, index, index_type):
-    """ Convert environmental tensors of Ctm to an MPS """
-    if index_type == 'b':
-        nx = index
-        H = mps.Mps(N=net.Ny)
-        for ny in range(net.Ny):
-            site = (nx, ny)
-            H.A[nx] = env[site].b.transpose(axes=(2,1,0))
-    elif index_type == 'r':
-        ny = index
-        H = mps.Mps(N=net.Nx)
-        for nx in range(net.Nx):
-            site = (nx, ny)
-            H.A[nx] = env[site].r
-    elif index_type == 't':
-        nx = index
-        H = mps.Mps(N=net.Ny)
-        for ny in range(net.Ny):
-            site = (nx, ny)
-            H.A[ny] = env[site].t
-    elif index_type == 'l':
-        ny = index
-        H = mps.Mps(N=net.Nx)
-        for nx in range(net.Nx):
-            site = (nx, ny)
-            H.A[nx] = env[site].l.transpose(axes=(2,1,0))
-    return H
 
 
 def init_rand(A, tc, Dc):
@@ -148,10 +151,14 @@ def init_rand(A, tc, Dc):
     return env
 
 
-def init_ones(A, tc, Dc):
+def init_ones(A):
     """ Initialize CTMRG environments of peps tensors A with trivial tensors. """
 
     config = A[(0,0)].config
+
+    tc = ((0,) * config.sym.NSYM,)
+    Dc = (1,)
+
     env= CtmEnv(A)
 
     for ms in A.sites():
@@ -201,12 +208,12 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
 
     out = {}
     count = 0
-    vR = CtmEnv2Mps(state, CTMenv, index=state.Ny-1, index_type='r') # right boundary of indexed column through CTM environment tensors
+    vR = CTMenv.env2mps(index=state.Ny-1, index_type='r') # right boundary of indexed column through CTM environment tensors
 
     for ny in range(state.Ny - 1, -1, -1):
 
         Os = transfer_mpo(state, index=ny, index_type='column') # converts ny colum of PEPS to MPO
-        vL = CtmEnv2Mps(state, CTMenv, index=ny, index_type='l').conj() # left boundary of indexed column through CTM environment tensors
+        vL = CTMenv.env2mps(index=ny, index_type='l') # left boundary of indexed column through CTM environment tensors
 
         env = mps.Env3(vL, Os, vR).setup_(to = 'first')
 
@@ -257,9 +264,9 @@ def measure_2site(state, CTMenv, o1, o2, opts_svd=None, opts_var=None, tol=1e-5)
     for ny1 in range(state.Ny - 1, -1, -1):
         for nx1 in range(0, state.Nx):  # o1 at position (nx, ny)
             # first calculate correlations along the column
-            vR = CtmEnv2Mps(state, CTMenv, index=ny1, index_type='r') # right boundary of indexed column through CTM environment tensors
-            vL = CtmEnv2Mps(state, CTMenv, index=ny1, index_type='l').conj() # left boundary of indexed column through CTM environment tensors
-            Os = transfer_mpo(state, index=ny1, index_type='column') # converts ny colum of PEPS to MPO
+            vR = CTMenv.env2mps(index=ny1, index_type='r')
+            vL = CTMenv.env2mps(index=ny1, index_type='l')
+            Os = transfer_mpo(state, index=ny1, index_type='column')
             env = mps.Env3(vL, Os, vR).setup(to='first')
             norm_env = env.measure(bd=(-1, 0))
 
@@ -287,8 +294,8 @@ def measure_2site(state, CTMenv, o1, o2, opts_svd=None, opts_var=None, tol=1e-5)
             for ny2 in range(ny1 - 1, -1, -1):
                 vR = vRnext
                 vRo1 = vRo1next
-                vL = CtmEnv2Mps(state, CTMenv, index=ny2, index_type='l').conj() # left boundary of indexed column through CTM environment tensors
-                Os = transfer_mpo(state, index=ny2, index_type='column') # converts ny colum of PEPS to MPO
+                vL = CTMenv.env2mps(index=ny2, index_type='l')
+                Os = transfer_mpo(state, index=ny2, index_type='column')
                 env = mps.Env3(vL, Os, vR).setup(to='first')
                 norm_env = env.measure(bd=(-1, 0))
 

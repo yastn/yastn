@@ -2,7 +2,7 @@ from ...tn.mps import Mps, Mpo
 from ._doublePepsTensor import DoublePepsTensor
 from ... import tensor, initialize
 
-def transfer_mpo(self, index, index_type, rotation=''):
+def transfer_mpo(self, index, index_type, rotation=False):
 
     """Converts a specific row or column of PEPS into MPO.
 
@@ -14,8 +14,8 @@ def transfer_mpo(self, index, index_type, rotation=''):
 
     """
 
-    if index_type == 'row':
-        nx = index
+    if index_type == 'row' and not rotation:
+        nx = index  # is this ever used?
         H = Mpo(N=self.Ny)
         for ny in range(self.Ny):
             site = (nx, ny)
@@ -23,8 +23,8 @@ def transfer_mpo(self, index, index_type, rotation=''):
             if top.ndim == 3:
                 top = top.unfuse_legs(axes=(0, 1))
             btm = top.swap_gate(axes=(0, 1, 2, 3))
-            H.A[ny] = DoublePepsTensor(top=top, btm=btm)
-    elif index_type == 'column':
+            H.A[ny] = DoublePepsTensor(top=top, btm=btm, rotation=90)
+    elif index_type == 'column' and not rotation:
         ny = index
         H = Mpo(N=self.Nx)
         for nx in range(self.Nx):
@@ -35,6 +35,16 @@ def transfer_mpo(self, index, index_type, rotation=''):
             btm = top.swap_gate(axes=(0, 1, 2, 3))
             H.A[nx] = DoublePepsTensor(top=top, btm=btm)
 
+    elif index_type == 'column' and rotation:
+        ny = index
+        H = Mpo(N=self.Nx)
+        for nx in range(self.Nx):
+            site = (nx, ny)
+            top = self[site]
+            if top.ndim == 3:
+                top = top.unfuse_legs(axes=(0, 1))
+            btm = top.swap_gate(axes=(0, 1, 2, 3))
+            H.A[self.Nx - nx - 1] = DoublePepsTensor(top=top, btm=btm, rotation=180)  #change site ordering
     return H
 
 def boundary_mps(self, rotation=''):
