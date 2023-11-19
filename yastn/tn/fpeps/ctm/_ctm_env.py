@@ -2,6 +2,7 @@ from typing import NamedTuple, Tuple
 from itertools import accumulate
 from dataclasses import dataclass
 from ....tn import mps
+from .... import Tensor
 from yastn.tn.fpeps import Lattice
 from yastn.tn.fpeps.operators.gates import match_ancilla_1s
 from yastn import rand, tensordot, ones
@@ -241,74 +242,135 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
         if opts_svd is None:
             opts_svd = {'D_total': max(vL.get_bond_dimensions())}
 
-        vRnew = mps.zipper(Os, vR, opts=opts_svd)
+        vRnew = mps.zipper(Os, vR, opts_svd=opts_svd)
         if opts_var is None:
             opts_var = {}
-
 
         mps.compression_(vRnew, (Os, vR), method='1site', **opts_var)
         vR = vRnew
     return out
 
 
-def measure_2site(state, CTMenv, o1, o2, opts_svd=None, opts_var=None, tol=1e-5):
+def _clear_operator_input(op, sites):
+    op_dict = op.copy() if isinstance(op, dict) else {site: op for site in sites}
+    for k, v in op_dict.items():
+        if isinstance(v, dict):
+            op_dict[k] = {(i,): vi for i, vi in v.items()}
+        elif isinstance(v, dict):
+            op_dict[k] = {(): v}
+        else: # is iterable
+            op_dict[k] = {(i,): vi for i, vi in enumerate(v)}
+    return op_dict
+
+
+def measure_2site(state, CTMenv, op1, op2, opts_svd, opts_var=None):
     """
     Calculate all 2-point correlations <o1 o2> in a finite peps.
 
     Takes CTM emvironments and operators.
+
+    o1 and o2 are given as dict[tuple[int, int], dict[int, operators]],
+    mapping sites with list of operators at each site.
     """
     out = {}
     if opts_var is None:
-        opts_var = {'max_sweeps' : 10, 'Schmidt_tol': tol}
+        opts_var = {'max_sweeps' : 10}
 
-    for ny1 in range(state.Ny - 1, -1, -1):
-        for nx1 in range(0, state.Nx):  # o1 at position (nx, ny)
-            # first calculate correlations along the column
+    Nx, Ny = state.Nx, state.Ny
+    sites = [(nx, ny) for ny in range(Ny-1, -1, -1) for nx in range(Nx)]
+    op1dict = _clear_operator_input(op1, sites)
+    op2dict = _clear_operator_input(op2, sites)
+
+    for nx1, ny1 in sites:
+        for nz1, o1 in op1dict[nx1, ny1].items():
             vR = CTMenv.env2mps(index=ny1, index_type='r')
             vL = CTMenv.env2mps(index=ny1, index_type='l')
             Os = transfer_mpo(state, index=ny1, index_type='column')
-            env = mps.Env3(vL, Os, vR).setup(to='first')
+            env = mps.Env3(vL, Os, vR).setup_(to='first').setup_(to='last')
             norm_env = env.measure(bd=(-1, 0))
 
-            if opts_svd is None:
-                opts_svd = {'D_total': max(vL.get_bond_dimensions())}
-
             if ny1 > 0:
-                vRnext = mps.zipper(Os, vR, opts=opts_svd)
+                vRnext = mps.zipper(Os, vR, opts_svd=opts_svd)
                 mps.compression_(vRnext, (Os, vR), method='1site', normalize=False, **opts_var)
 
-            loc_o1 = match_ancilla_1s(o1, Os[nx1].A)
-            Os[nx1].A = tensordot(Os[nx1].A, loc_o1, axes=(4, 1))
-            env.setup(to='last')
+            # first calculate on-site correlations
+            Osnx1A = Os[nx1].A
+            for nz2, o2 in op2dict[nx1, ny1].items():
+                loc_o = match_ancilla_1s(o1 @ o2, Osnx1A)
+                Os[nx1].A = tensordot(Osnx1A, loc_o, axes=(4, 1))
+                env.update_env_(nx1, to='last')
+                out[(nx1, ny1) + nz1, (nx1, ny1) + nz2] = env.measure(bd=(nx1, nx1+1)) / norm_env
+
+            loc_o1 = match_ancilla_1s(o1, Osnx1A)
+            Os[nx1].A = tensordot(Osnx1A, loc_o1, axes=(4, 1))
+            env.setup_(to='last')
 
             if ny1 > 0:
-                vRo1next = mps.zipper(Os, vR, opts=opts_svd)
+                vRo1next = mps.zipper(Os, vR, opts_svd=opts_svd)
                 mps.compression_(vRo1next, (Os, vR), method='1site', normalize=False, **opts_var)
 
-            for nx2 in range(nx1 + 1, state.Nx):
-                loc_o2 = match_ancilla_1s(o2, Os[nx2].A)
-                Os[nx2].A = tensordot(Os[nx2].A, loc_o2, axes=(4, 1))
-                env.update_env(nx2, to='first')
-                out[(nx1, ny1), (nx2, ny1)] = env.measure(bd=(nx2-1, nx2)) / norm_env
+            # calculate correlations along the row
+            for nx2 in range(nx1 + 1, Nx):
+                Osnx2A = Os[nx2].A
+                for nz2, o2 in op2dict[nx2, ny1].items():
+                    loc_o2 = match_ancilla_1s(o2, Osnx2A)
+                    Os[nx2].A = tensordot(Osnx2A, loc_o2, axes=(4, 1))
+                    env.update_env_(nx2, to='first')
+                    out[(nx1, ny1) + nz1, (nx2, ny1) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
 
-            for ny2 in range(ny1 - 1, -1, -1):
+            # and all subsequent rows
+            for ny2 in range(ny1-1, -1, -1):
                 vR = vRnext
                 vRo1 = vRo1next
                 vL = CTMenv.env2mps(index=ny2, index_type='l')
                 Os = transfer_mpo(state, index=ny2, index_type='column')
-                env = mps.Env3(vL, Os, vR).setup(to='first')
+                env = mps.Env3(vL, Os, vR).setup_(to='first')
                 norm_env = env.measure(bd=(-1, 0))
 
                 if ny2 > 0:
-                    vRnext = mps.zipper(Os, vR, opts=opts_svd)
+                    vRnext = mps.zipper(Os, vR, opts_svd=opts_svd)
                     mps.compression_(vRnext, (Os, vR), method='1site', normalize=False, **opts_var)
-                    vRo1next = mps.zipper(Os, vRo1, opts=opts_svd)
+                    vRo1next = mps.zipper(Os, vRo1, opts_svd=opts_svd)
                     mps.compression_(vRo1next, (Os, vRo1), method='1site', normalize=False, **opts_var)
 
-                env = mps.Env3(vL, Os, vRo1).setup(to='first').setup(to='last')
+                env = mps.Env3(vL, Os, vRo1).setup_(to='first').setup_(to='last')
                 for nx2 in range(state.Nx):
-                    loc_o2 = match_ancilla_1s(o2, Os[nx2].A)
-                    Os[nx2].A = tensordot(Os[nx2].A, loc_o2, axes=(4, 1))
-                    env.update_env(nx2, to='first')
-                    out[(nx1, ny1), (nx2, ny2)] = env.measure(bd=(nx2-1, nx2)) / norm_env
+                    Osnx2A = Os[nx2].A
+                    for nz2, o2 in op2dict[nx2, ny2].items():
+                        loc_o2 = match_ancilla_1s(o2, Osnx2A)
+                        Os[nx2].A = tensordot(Osnx2A, loc_o2, axes=(4, 1))
+                        env.update_env_(nx2, to='first')
+                        out[(nx1, ny1) + nz1, (nx2, ny2) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
+    return out
+
+
+def measure_1site(state, CTMenv, op):
+    """
+    Calculate all 1-point expectation values <o> in a finite peps.
+
+    Takes CTM emvironments and operators.
+
+    o1 are given as dict[tuple[int, int], dict[int, operators]],
+    mapping sites with list of operators at each site.
+    """
+    out = {}
+
+    Nx, Ny = state.Nx, state.Ny
+    sites = [(nx, ny) for ny in range(Ny-1, -1, -1) for nx in range(Nx)]
+    opdict = _clear_operator_input(op, sites)
+
+    for ny in range(Ny-1, -1, -1):
+        vR = CTMenv.env2mps(index=ny, index_type='r')
+        vL = CTMenv.env2mps(index=ny, index_type='l')
+        Os = transfer_mpo(state, index=ny, index_type='column')
+        env = mps.Env3(vL, Os, vR).setup_(to='first').setup_(to='last')
+        norm_env = env.measure()
+        for nx in range(Nx):
+            if (nx, ny) in opdict:
+                Osnx1A = Os[nx].A
+                for nz, o in opdict[nx, ny].items():
+                    loc_o = match_ancilla_1s(o, Osnx1A)
+                    Os[nx].A = tensordot(Osnx1A, loc_o, axes=(4, 1))
+                    env.update_env_(nx, to='first')
+                    out[(nx, ny) + nz] = env.measure(bd=(nx-1, nx)) / norm_env
     return out
