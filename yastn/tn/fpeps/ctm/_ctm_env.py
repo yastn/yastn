@@ -274,7 +274,7 @@ def measure_2site(state, CTMenv, op1, op2, opts_svd, opts_var=None):
     """
     out = {}
     if opts_var is None:
-        opts_var = {'max_sweeps' : 10}
+        opts_var =  {'max_sweeps': 2}
 
     Nx, Ny = state.Nx, state.Ny
     sites = [(nx, ny) for ny in range(Ny-1, -1, -1) for nx in range(Nx)]

@@ -6,7 +6,7 @@ from ... import YastnError, ones, Leg
 
 class MpsEnv(Lattice):
     r""" Geometric information about the lattice provided to ctm tensors """
-    def __init__(self, peps, opts_svd, setup='lr', opts_compression=None):
+    def __init__(self, peps, opts_svd, setup='lr', opts_var=None):
         super().__init__(lattice=peps.lattice, dims=peps.dims, boundary=peps.boundary)
 
         self._env = {('r', peps.Ny-1):  trivial_mps_boundary(peps, peps.Ny-1, index_type='r'),
@@ -14,19 +14,16 @@ class MpsEnv(Lattice):
 
         self.info = {}
 
-        if opts_compression == None:
-            opts_compression = {'overlap_tol': 1e-5,
-                                'Schmidt_tol': 1e-5,
-                                'max_sweeps': 20,
-                                'normalize': False,
-                                'opts_svd': opts_svd}
+        if opts_var == None:
+            opts_var = {'max_sweeps': 2,
+                        'normalize': False,}
 
         for ny in range(peps.Ny-2, -1, -1):
             psi0 = self._env['r', ny + 1]
             Os = transfer_mpo(peps, index=ny + 1, index_type='column')
 
             psi, discarded = mps.zipper(Os, psi0, opts_svd, return_discarded=True)
-            mps.compression_(psi, (Os, psi0), **opts_compression)
+            mps.compression_(psi, (Os, psi0), **opts_var)
             self._env['r', ny] = psi
             self.info['r', ny] = {'discarded': discarded}
 
@@ -34,7 +31,7 @@ class MpsEnv(Lattice):
             psi0 = self._env['l', ny - 1]
             Os = transfer_mpo(peps, index=ny - 1, index_type='column', rotation=True)
             psi, discarded = mps.zipper(Os, psi0, opts_svd, return_discarded=True)
-            mps.compression_(psi, (Os, psi0), **opts_compression)
+            mps.compression_(psi, (Os, psi0), **opts_var)
             self._env['l', ny] = psi
             self.info['l', ny] = {'discarded': discarded}
 

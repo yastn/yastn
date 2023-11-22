@@ -57,7 +57,7 @@ def evolution_step_(peps, gates, step, truncation_mode, env_type, opts_svd=None)
     if step == 'svd-update':
         return peps, info
 
-    if env_type == 'NTU':
+    if env_type == 'NTU' and not step=='svd-update':
         info['ntu_error'] = [record['ntu_error'] for record in infos]
         info['optimal_cutoff'] = [record['optimal_cutoff'] for record in infos]
         info['svd_error'] = [record['svd_error'] for record in infos]
