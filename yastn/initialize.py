@@ -129,9 +129,9 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     dtype : str
         Desired dtype, overrides default_dtype specified in config
     device : str
-        Device on which the tensor should be initialized, overrides default_device specified in config
+        Device on which the tensor should be initialized. Overrides default_device. specified in config
     s : Optional[Sequence[int]]
-        (alternative) Signature of tensor. Also determines the number of legs. Default is s=().
+        (alternative) Tensor signature. Also determines the number of legs. Default is s=().
     t : Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. Default is t=().
     D : Optional[Sequence[Sequence[int]]]
@@ -180,10 +180,10 @@ def zeros(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     dtype : str
         desired dtype, overrides default_dtype specified in config.
     device : str
-        device on which the tensor should be initialized, overrides default_device
+        Device on which the tensor should be initialized. Overrides default_device.
         specified in config.
     s : Optional[Sequence[int]]
-        (alternative) Signature of tensor. Also determines the number of legs. Default is s=().
+        (alternative) Tensor signature. Also determines the number of legs. Default is s=().
     t : Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. Default is t=().
     D : Optional[Sequence[Sequence[int]]]
@@ -214,10 +214,10 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     dtype : str
         desired dtype, overrides default_dtype specified in config.
     device : str
-        device on which the tensor should be initialized, overrides default_device
+        Device on which the tensor should be initialized. Overrides default_device.
         specified in config.
     s : Optional[Sequence[int]]
-        (alternative) Signature of tensor. Also determines the number of legs. Default is s=().
+        (alternative) Tensor signature. Also determines the number of legs. Default is s=().
     t : Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. Default is t=().
     D : Optional[Sequence[Sequence[int]]]
@@ -231,7 +231,7 @@ def ones(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='ones', **kwargs)
 
 
-def eye(config=None, legs=(), n=None, **kwargs) -> yastn.Tensor:
+def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
     r"""
     Initialize `diagonal` identity matrix. Such matrix is block-diagonal with all allowed blocks filled with identity matrices.
 
@@ -246,13 +246,14 @@ def eye(config=None, legs=(), n=None, **kwargs) -> yastn.Tensor:
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
     legs : Sequence[yastn.Leg]
         Specify legs of the tensor passing a list of :class:`yastn.Leg`.
-    dtype : str
-        desired dtype, overrides default_dtype specified in config.
+    isdiag : bool
+        Whether to return explicitly diagonal tensor.
+        If False, it supports having fused legs.
     device : str
-        device on which the tensor should be initialized, overrides default_device
+        Device on which the tensor should be initialized. Overrides default_device
         specified in config.
     s : Optional[Sequence[int]]
-        (alternative) Signature of tensor, should be (1, -1) or (-1, 1). Default is s=(1, -1)
+        (alternative) Tensor signature; should be (1, -1) or (-1, 1). Default is s=(1, -1)
     t : Optional[Sequence[Sequence[int | Sequence[int]]]]
         (alternative) List of charges for each leg. Default is t=().
     D : Optional[list]
@@ -263,8 +264,20 @@ def eye(config=None, legs=(), n=None, **kwargs) -> yastn.Tensor:
     If any of `s`, `t`, or `D` are specified,
     `legs` are overriden and only `t`, `D`, and `s` are used.
     """
-    return _fill(config=config, legs=legs, n=n, isdiag=True, val='ones', **kwargs)
-
+    if isdiag:
+        return _fill(config=config, legs=legs, isdiag=True, val='ones', **kwargs)
+    if isinstance(legs, Leg):
+        legs = (legs,)
+    if len(legs) == 1:
+        legs = (legs[0], legs[0].conj())
+    if any(leg.fusion != 'hard' for leg in legs):
+        raise YastnError("eye does not support 'meta'-fused legs")
+    # ulegs, mfs = _unpack_legs(legs)
+    legs_nomerge = tuple(leg.drop_history() for leg in legs)
+    hfs = tuple(leg.legs[0] for leg in legs)
+    tmp = _fill(config=config, legs=legs_nomerge, isdiag=True, val='ones', **kwargs)
+    tmp = tmp.diag()
+    return tmp._replace(hfs=hfs)
 
 def load_from_dict(config=None, d=None) -> yastn.Tensor:
     """

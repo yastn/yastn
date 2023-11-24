@@ -12,7 +12,7 @@ tol = 1e-10  #pylint: disable=invalid-name
 
 
 class FusionSyntax(unittest.TestCase):
-    
+
     def test_fuse_hard(self):
         # define a rank-5 U(1)-symmetric tensor
         a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
@@ -62,21 +62,21 @@ class FusionSyntax(unittest.TestCase):
         # (0, 0) (283, 15)
         # (1, 1) (358, 38)
         # (2, 2) (144, 24)
-        
+
         # The fusion can be simply reverted, proceeding step-by-step in reverse
-        # order of the applied fusions. 
+        # order of the applied fusions.
         # NOTE: Unfusing an index *does not* permute the resulting indices into
         #       into their original order
         #
         # fusion step 1: 0 1 2 3 4 -> permute -> 0 3 4 2 1 -> fuse -> 0 (3 4) (2 1) = 0 1 2
-        # fusion step 2: 0 1 2 -> fuse -> (0 1) 2 = 0 1 
+        # fusion step 2: 0 1 2 -> fuse -> (0 1) 2 = 0 1
         #
         # unfuse step 2: 0 1 -> unfuse -> (0 1) 1->2 = 0 1 2
         c0_0 = c1.unfuse_legs(axes=0)
         assert yastn.norm(c0_0 - c0) < tol
 
         # unfuse step 1: 0 1 2 -> unfuse -> 0 (3->1 4->2) (2->3 1->4) = 0 1 2 3 4
-        # 
+        #
         # Hence, to retrieve original tensor, we have to permute its indices
         a_0 = c0_0.unfuse_legs(axes=(1, 2))
         a_0 = a_0.transpose(axes=(0, 4, 3, 1, 2))
@@ -399,6 +399,38 @@ def test_leg_outer_product():
     assert not ul0.is_fused()
 
 
+def test_initialize_eye():
+    legs = [yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(1, 2, 3)),
+            yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6)),
+            yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(3, 8, 9)),
+            yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(3, 11, 12))]
+    a = yastn.rand(config=config_U1, legs=legs)
+    b = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
+
+    c = b.fuse_legs(axes=(0, (1, 2)), mode='hard')
+
+    leg = c.get_legs(axes=1)
+    e = yastn.eye(a.config, legs=leg.conj(), isdiag=False)
+    assert e.isdiag is False
+    cc = c @ e
+    assert (c - cc).norm() < tol
+
+    e = e.unfuse_legs(axes=(0, 1))
+    e = e.unfuse_legs(axes=(0, 2))
+    legse = e.get_legs()
+    assert legse[0].conj() == legs[1] == legse[3]
+    assert legse[1].conj() == legs[2] == legse[4]
+    assert legse[2].conj() == legs[3] == legse[5]
+    aa = yastn.tensordot(a, e, axes=((1, 2, 3), (0, 1, 2)))
+    assert (a - aa).norm() < tol
+
+    with pytest.raises(yastn.YastnError):
+        c = b.fuse_legs(axes=(0, (1, 2)), mode='meta')
+        leg = c.get_legs(axes=1)
+        e = yastn.eye(a.config, legs=leg.conj(), isdiag=False)
+        # eye does not support 'meta'-fused legs
+
+
 if __name__ == '__main__':
     unittest.main()
     test_leg_outer_product()
@@ -409,5 +441,6 @@ if __name__ == '__main__':
     test_hard_dot_sparse()
     test_fuse_mix()
     test_auxliary_merging_functions()
+    test_initialize_eye()
     # test_transpose_and_merge_backward()
     # test_unmerge_backward()

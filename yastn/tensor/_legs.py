@@ -93,6 +93,10 @@ class Leg:
         legs_conj = tuple(leg.conj() for leg in self.legs)
         return replace(self, s=-self.s, legs=legs_conj)
 
+    def drop_history(self) -> yastn.Leg:
+        r""" New :class:`yastn.Leg` with no information on merging history. """
+        return Leg(self.sym, self.s, self.t, self.D)
+
     def __getitem__(self, t) -> int:
         r"""
         Size of a charge sector
