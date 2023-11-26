@@ -278,6 +278,11 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
     # TODO this should be reshape called from backend ?
     return x if a.isdiag else x.reshape(a.struct.D[ind])
 
+def __contains__(a, key) -> bool:
+    key = tuple(_flatten(key)) if (hasattr(key,'__iter__') or hasattr(key,'__next__')) else (key,)
+    if a.isdiag: 
+        return key in a.struct.t or (key+key) in a.struct.t
+    return key in a.struct.t
 
 ##################################################
 #    output tensors info - advanced structure    #
