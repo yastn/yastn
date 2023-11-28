@@ -2,18 +2,21 @@ import numpy as np
 import yastn.tn.fpeps as fpeps
 from ...initialize import ones as ones
 from ...initialize import load_from_dict as load_tensor_from_dict
-
 from ._geometry import Lattice
 
 r""" Initialization of peps tensors for real or imaginary time evolution """
 
-def reduce_operators(ops):
-        ds = ops.remove_zero_blocks()
-        lg = ds.get_legs(1).conj()
-        vone = ones(config=ds.config,legs=[lg], n=lg.t[0])
-        W = ds@vone
-        W = W.add_leg(s=-1)
-        return W
+# def reduce_operators(ops):
+#         ds = ops.remove_zero_blocks()
+#         lg = ds.get_legs(1).conj()
+#         vone = ones(config=ds.config,legs=[lg], n=lg.t[0])
+#         W = ds@vone
+#         W = W.add_leg(s=-1)
+#         return W
+
+
+def product_peps():
+    pass
 
 def initialize_peps_purification(fid, net):
     """

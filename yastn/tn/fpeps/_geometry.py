@@ -3,13 +3,14 @@ from itertools import product
 from typing import NamedTuple
 
 
-class Bond(NamedTuple):
+class Bond(NamedTuple):  # Not very convinient to use
     """ A bond between two lattice sites. site_0 should be before site_1 in the fermionic order. """
     site_0 : tuple = None
     site_1 : tuple = None
     dirn : str = ''
 
-class Lattice():
+
+class SquareLattice():
     """ Geometric information about 2D lattice. """
 
     def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
@@ -99,31 +100,6 @@ class Lattice():
         if self.boundary == 'cylinder' and (y < 0 or y >= self.Ny):
             return None
         return (x % self.Nx, y % self.Ny)
-
-    def tensors_NtuEnv(self, bds):
-        r""" Returns a dictionary containing the neighboring sites of the bond `bds`.
-                  The keys of the dictionary are the direction of the neighboring site with respect to
-                  the bond: 'tl' (top left), 't' (top), 'tr' (top right), 'l' (left), 'r' (right),
-                  'bl' (bottom left), and 'b' (bottom)"""
-
-        neighbors = {}
-        site_1, site_2 = bds.site_0, bds.site_1
-        if self.lattice == 'checkerboard':
-            if bds.dirn == 'h':
-                neighbors['tl'], neighbors['l'], neighbors['bl'] = site_2, site_2, site_2
-                neighbors['tr'], neighbors['r'], neighbors['br'] = site_1, site_1, site_1
-            elif bds.dirn == 'v':
-                neighbors['tl'], neighbors['t'], neighbors['tr'] = site_2, site_2, site_2
-                neighbors['bl'], neighbors['b'], neighbors['br'] = site_1, site_1, site_1
-        else:
-            if bds.dirn == 'h':
-                neighbors['tl'], neighbors['l'], neighbors['bl'] = self.nn_site(site_1, d='t'), self.nn_site(site_1, d='l'), self.nn_site(site_1, d='b')
-                neighbors['tr'], neighbors['r'], neighbors['br'] = self.nn_site(site_2, d='t'), self.nn_site(site_2, d='r'), self.nn_site(site_2, d='b')
-            elif bds.dirn == 'v':
-                neighbors['tl'], neighbors['t'], neighbors['tr'] = self.nn_site(site_1, d='l'), self.nn_site(site_1, d='t'), self.nn_site(site_1, d='r')
-                neighbors['bl'], neighbors['b'], neighbors['br'] = self.nn_site(site_2, d='l'), self.nn_site(site_2, d='b'), self.nn_site(site_2, d='r')
-
-        return neighbors
 
     def save_to_dict(self):
         d = {'lattice': self.lattice, 'dims': self.dims, 'boundary': self.boundary, 'data': {}}
