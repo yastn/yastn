@@ -15,7 +15,7 @@ r""" Initialization of peps tensors for real or imaginary time evolution """
 #         return W
 
 
-def product_peps(*args, **kwargs):
+def product_peps(*args, **kwargs):  #   (geometry, vectors : yastn.Tensor | Dict[tuple[Int, Int], yastn.Tensor])
     """
     Initializes and returns Projected Entangled Pair States (PEPS) tensors based on provided parameters.
 
@@ -52,7 +52,7 @@ def product_peps(*args, **kwargs):
 
     else:
         raise ValueError("Invalid arguments for PEPS initialization")
-    
+
 
 
 
