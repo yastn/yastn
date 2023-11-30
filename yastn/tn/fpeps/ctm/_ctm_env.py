@@ -3,7 +3,7 @@ from itertools import accumulate
 from dataclasses import dataclass
 from ....tn import mps
 from .... import Tensor
-from yastn.tn.fpeps import Lattice
+from yastn.tn.fpeps import Peps
 from yastn.tn.fpeps.operators.gates import match_ancilla_1s
 from yastn import rand, tensordot, ones
 from .._auxiliary import transfer_mpo
@@ -17,10 +17,10 @@ class ctm_window(NamedTuple):
     se : Tuple # south-east
 
 
-class CtmEnv(Lattice):
+class CtmEnv(Peps):
     r""" Geometric information about the lattice provided to ctm tensors """
     def __init__(self, peps):
-        super().__init__(lattice=peps.lattice, dims=peps.dims, boundary=peps.boundary)
+        super().__init__(peps) 
 
         if self.lattice == 'checkerboard':
             windows = (ctm_window(nw=(0, 0), ne=(0, 1), sw=(0, 1), se=(0, 0)),

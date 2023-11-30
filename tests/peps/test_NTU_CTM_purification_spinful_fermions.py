@@ -6,7 +6,7 @@ import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_Hubbard
 from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
-from yastn.tn.fpeps import initialize_peps_purification
+from yastn.tn.fpeps import product_peps
 from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, one_site_dict, EV2ptcorr
 
 try:
@@ -42,7 +42,7 @@ def test_NTU_spinful_finite():
     trotter_step = coeff * dbeta  
 
     dims = (xx, yy)
-    net = fpeps.Lattice(lattice, dims, boundary)  # shape = (rows, columns)
+    geometry = fpeps.SquareLattice(lattice, dims, boundary)  # shape = (rows, columns)
     
     GA_nn_up, GB_nn_up = gates_hopping(t_up, trotter_step, fid, fc_up, fcdag_up)
     GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, trotter_step, fid, fc_dn, fcdag_dn)
@@ -50,7 +50,7 @@ def test_NTU_spinful_finite():
     g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
 
     if purification == 'True':
-        peps = initialize_peps_purification(fid, net) # initialized at infinite temperature
+        peps = product_peps(geometry, fid) # initialized at infinite temperature
     
     gates = gates_homogeneous(peps, g_nn, g_loc)
 
@@ -139,7 +139,7 @@ def test_NTU_spinful_infinite():
     tr_mode = 'optimal'
     coeff = 0.25 # for purification; 0.5 for ground state calculation and 1j*0.5 for real-time evolution
     trotter_step = coeff * dbeta  
-    net = fpeps.Lattice(lattice=lattice, boundary=boundary)
+    geometry = fpeps.SquareLattice(lattice=lattice, boundary=boundary)
 
     opt = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
@@ -150,7 +150,7 @@ def test_NTU_spinful_infinite():
     g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
 
     if purification == 'True':
-        peps = initialize_peps_purification(fid, net) # initialized at infinite temperature
+        peps = product_peps(geometry, fid) # initialized at infinite temperature
     
     gates = gates_homogeneous(peps, g_nn, g_loc)
     time_steps = round(beta_end / dbeta)

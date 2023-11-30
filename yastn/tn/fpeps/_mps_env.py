@@ -1,10 +1,10 @@
 from ...tn import mps
-from yastn.tn.fpeps import Lattice
+from yastn.tn.fpeps import SquareLattice
 from ._auxiliary import transfer_mpo
 from ... import YastnError, ones, Leg
 
 
-class MpsEnv(Lattice):
+class MpsEnv(SquareLattice):
     r""" Geometric information about the lattice provided to ctm tensors """
     def __init__(self, peps, opts_svd, setup='lr', opts_var=None):
         super().__init__(lattice=peps.lattice, dims=peps.dims, boundary=peps.boundary)

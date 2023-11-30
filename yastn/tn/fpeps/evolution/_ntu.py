@@ -36,6 +36,7 @@ def env_NTU(peps, bd, QA, QB, dirn):
     """
 
     env = peps.tensors_NtuEnv(bd)
+  
     G={}
     for ms in env.keys():
         if env[ms] is None:

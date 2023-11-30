@@ -574,7 +574,7 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
 
     """
 
-    proj = fpeps.Lattice(lattice=AAb.lattice, dims=AAb.dims, boundary=AAb.boundary) # ctm projectors defined as an instance of Lattice class
+    proj = fpeps.Peps(AAb) # ctm projectors defined as an instance of Lattice class
     for ms in proj.sites():
         proj[ms] = Local_Projector_Env()
 
@@ -807,7 +807,7 @@ def fPEPS_fuse_layers(AAb, EVonly=False):
 def check_consistency_tensors(A):
     # to check if the A tensors have the appropriate configuration of legs i.e. t l b r [s a]
 
-    Ab = fpeps.Lattice(A.lattice, A.dims, A.boundary)
+    Ab = fpeps.Peps(A)
     if A[0, 0].ndim == 6:
         for ms in Ab.sites():
             Ab[ms] = A[ms].fuse_legs(axes=(0, 1, 2, 3, (4, 5)))

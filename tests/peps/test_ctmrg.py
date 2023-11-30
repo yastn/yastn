@@ -86,10 +86,11 @@ def test_ctm_loop():  ###high temperature
     list_lattice = [('checkerboard', (2, 2))]
     for lattice, dims in list_lattice:
         T = create_Ising_tensor(opt.z(), beta)
-        peps = fpeps.Lattice(lattice=lattice, dims=dims, boundary='infinite')
-        for site in peps.sites():
-            peps[site] = T
-        ctm_for_Onsager(peps, opt, Z_exact)
+        geometry = fpeps.SquareLattice(lattice=lattice, dims=dims, boundary='infinite')
+        psi = fpeps.Peps(geometry)
+        for site in psi.sites():
+            psi[site] = T
+        ctm_for_Onsager(psi, opt, Z_exact)
 
         h_rg1, inv_h_rg1 = gauges_random()
         h_rg2, inv_h_rg2 = gauges_random()
@@ -104,9 +105,9 @@ def test_ctm_loop():  ###high temperature
         TA = yastn.ncon((TA, v_rg2), ((-0, -1, 1, -3, -4), (-2, 1)))
         TB = yastn.ncon((inv_v_rg2, TB), ((1, -0), (1, -1, -2, -3, -4)))
 
-        for site in peps.sites():
-            peps[site] = TA if sum(site) % 2 == 0 else TB
-        ctm_for_Onsager(peps, opt, Z_exact)
+        for site in psi.sites():
+            psi[site] = TA if sum(site) % 2 == 0 else TB
+        ctm_for_Onsager(psi, opt, Z_exact)
 
 
 if __name__ == '__main__':
