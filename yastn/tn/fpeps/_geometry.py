@@ -2,6 +2,7 @@
 from itertools import product
 from typing import NamedTuple
 
+
 class Bond(NamedTuple):
     """ A bond between two lattice sites. site_0 should be before site_1 in the fermionic order. """
     site_0 : tuple = None
@@ -23,14 +24,14 @@ class Lattice():
                 Size of elementary cell.
                 For 'checkerboard' it is always (2, 2)
             boundary : str
-                'obc' or 'infinite'
+                'obc', 'infinite' or 'cylinder'
 
         Notes
         -----
             Site (0, 0) corresponds to top-left corner of the lattice
         """
         assert lattice in ('checkerboard', 'square'), "lattice should be 'checkerboard' or 'square' or ''"
-        assert boundary in ('obc', 'infinite'), "boundary should be 'obc' or 'infinite'"
+        assert boundary in ('obc', 'infinite', 'cylinder'), "boundary should be 'obc', 'infinite' or 'cylinder'"
         self.lattice = lattice
         self.boundary = boundary
         self.Nx, self.Ny = (2, 2) if lattice == 'checkerboard' else dims
@@ -95,6 +96,8 @@ class Lattice():
         x, y = x + dx, y + dy
         if self.boundary == 'obc' and (x < 0 or x >= self.Nx or y < 0 or y >= self.Ny):
             return None
+        if self.boundary == 'cylinder' and (y < 0 or y >= self.Ny):
+            return None
         return (x % self.Nx, y % self.Ny)
 
     def tensors_NtuEnv(self, bds):
@@ -122,7 +125,14 @@ class Lattice():
 
         return neighbors
 
+    def save_to_dict(self):
+        d = {'lattice': self.lattice, 'dims': self.dims, 'boundary': self.boundary, 'data': {}}
+        for ind in self._data.keys():
+            d['data'][ind] = self._data[ind].save_to_dict()
+        return d
 
-
-
-
+    def copy(self):
+        psi = Lattice(lattice=self.lattice, dims=self.dims, boundary=self.boundary)
+        for ind in psi._data.keys():
+            psi._data[ind] = self._data[ind]
+        return psi

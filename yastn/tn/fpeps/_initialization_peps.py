@@ -1,6 +1,9 @@
 import numpy as np
 import yastn.tn.fpeps as fpeps
-from ...initialize import *
+from ...initialize import ones as ones
+from ...initialize import load_from_dict as load_tensor_from_dict
+
+from ._geometry import Lattice
 
 r""" Initialization of peps tensors for real or imaginary time evolution """
 
@@ -62,3 +65,10 @@ def initialize_diagonal_basis(projectors, net, out):
         gamma[kk] = Ga.fuse_legs(axes=((0, 1), (2, 3), 4))
 
     return gamma
+
+
+def load_from_dict(config, d):
+    psi = Lattice(lattice=d['lattice'], dims=d['dims'], boundary=d['boundary'])
+    for ind, dtensor in d['data'].items():
+        psi._data[ind] = load_tensor_from_dict(config, dtensor)
+    return psi

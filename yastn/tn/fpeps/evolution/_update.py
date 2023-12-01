@@ -1,7 +1,6 @@
 """ Function performing NTU update on all four unique bonds corresponding to a two site unit cell. """
 from ._routines import apply_local_gate_, evol_machine
 from typing import NamedTuple
-# import multiprocessing as mp
 
 class Gate_nn(NamedTuple):
     """ A should be before B in the fermionic order. """
@@ -18,12 +17,11 @@ class Gates(NamedTuple):
     nn : list = None   # list of Gate_nn
 
 
-def evolution_step_(peps, gates, step, truncation_mode, env_type, opts_svd=None):  
-
+def evolution_step_(peps, gates, step, truncation_mode, env_type, opts_svd=None):
     r"""
     Perform a single step of evolution on a PEPS by applying a list of gates,
     performing truncation and subsequent optimization.
-    
+
     Parameters
     ----------
 
@@ -37,7 +35,7 @@ def evolution_step_(peps, gates, step, truncation_mode, env_type, opts_svd=None)
 
     Returns
     -------
-        peps  : class Lattice 
+        peps  : class Lattice
         info : dict (Dictionary containing information about the evolution.)
 
     """
@@ -49,7 +47,7 @@ def evolution_step_(peps, gates, step, truncation_mode, env_type, opts_svd=None)
 
     all_gates = gates.nn + gates.nn[::-1]
 
-    for gate in all_gates:    
+    for gate in all_gates:
         peps, info = evol_machine(peps, gate, truncation_mode, step, env_type, opts_svd)
         infos.append(info)
 
@@ -57,9 +55,9 @@ def evolution_step_(peps, gates, step, truncation_mode, env_type, opts_svd=None)
         peps = apply_local_gate_(peps, gate)
 
     if step == 'svd-update':
-        return peps, info 
-    
-    if env_type == 'NTU': 
+        return peps, info
+
+    if env_type == 'NTU' and not step=='svd-update':
         info['ntu_error'] = [record['ntu_error'] for record in infos]
         info['optimal_cutoff'] = [record['optimal_cutoff'] for record in infos]
         info['svd_error'] = [record['svd_error'] for record in infos]
@@ -69,8 +67,8 @@ def evolution_step_(peps, gates, step, truncation_mode, env_type, opts_svd=None)
 def gates_homogeneous(peps, nn_gates, loc_gates):
 
     """
-    Generate a list of gates that is homogeneous over the lattice. 
-    
+    Generate a list of gates that is homogeneous over the lattice.
+
     Parameters
     ----------
     peps      : class Lattice
@@ -81,13 +79,13 @@ def gates_homogeneous(peps, nn_gates, loc_gates):
 
     Returns
     -------
-    Gates: The generated gates. The NamedTuple 'Gates` named tuple contains a list of 
+    Gates: The generated gates. The NamedTuple 'Gates` named tuple contains a list of
       local and nn gates along with info where they should be applied.
     """
     # len(nn_gates) indicates the physical degrees of freedom; option to add more
     bonds = peps.nn_bonds(dirn='h') + peps.nn_bonds(dirn='v')
 
-    gates_nn = []   # nn_gates = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)] 
+    gates_nn = []   # nn_gates = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)]
     for bd in bonds:
         for i in range(len(nn_gates)):
             gates_nn.append(Gate_nn(A=nn_gates[i][0], B=nn_gates[i][1], bond=bd))
@@ -105,5 +103,5 @@ def show_leg_structure(peps):
    """ Prints the leg structure of each site tensor in a PEPS """
    for ms in peps.sites():
         xs = peps[ms].unfuse_legs((0, 1))
-        print("site ", str(ms), xs.get_shape()) 
-  
+        print("site ", str(ms), xs.get_shape())
+

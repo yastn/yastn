@@ -1,6 +1,6 @@
 from yastn import tensordot, leg_outer_product
 
-_rotations = {0: (0, 1, 2, 3), 90: (1, 2, 3, 0)}
+_rotations = {0: (0, 1, 2, 3), 90: (1, 2, 3, 0), 180: (2, 3, 0, 1)}
 
 class DoublePepsTensor:
 
@@ -43,12 +43,12 @@ class DoublePepsTensor:
         sA = self.A.get_shape(axes=axes)
         sB = self.Ab.get_shape(axes=axes)
         if isinstance(axes, int):
-            return sA * sB 
+            return sA * sB
         return tuple(x * y for x, y in zip(sA, sB))
 
     def get_legs(self, axes=None):
         """ Returns the legs of the DoublePepsTensor along the specified axes. """
-        
+
         if axes is None:
             axes = tuple(range(4))
         multiple_legs = hasattr(axes, '__iter__')
@@ -81,7 +81,7 @@ class DoublePepsTensor:
             this operation does not preserve autograd on the returned :code:`yastn.tn.mps.MpsMpo`.
 
         .. note::
-            Use when retaining "old" DoublePepsTensor is necessary. 
+            Use when retaining "old" DoublePepsTensor is necessary.
 
         """
         return DoublePepsTensor(self.A.copy(), self.Ab.copy(), rotation=self._r)
@@ -164,13 +164,15 @@ class DoublePepsTensor:
         """
         Attach a tensor to the top left corner of the tensor network tt if rotation = 0
         and to the bottom left if rotation is 90.
-  
+
         """
         if self._r == 0:
             return self.append_a_tl(tt)
         elif self._r == 90:
             return self.append_a_bl(tt)
-    
+        elif self._r == 180:
+            return self.append_a_br(tt)
+
     def _attach_23(self, tt):
         """
         Attach a tensor to the bottom right corner of the tensor network tt if rotation = 0
@@ -180,6 +182,8 @@ class DoublePepsTensor:
             return self.append_a_br(tt)
         elif self._r == 90:
             return self.append_a_tr(tt)
+        elif self._r == 180:
+            return self.append_a_tl(tt)
 
     def fPEPS_fuse_layers(self):
 
