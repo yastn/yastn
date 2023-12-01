@@ -1,4 +1,4 @@
-""" Predefined operators """
+""" Predefined spinful fermion operators operators """
 import pytest
 import numpy as np
 import yastn
@@ -22,8 +22,11 @@ def test_spinful_fermions():
     ops_U1xU1_dis = yastn.operators.SpinfulFermions(sym='U1xU1', backend=backend, default_device=default_device)
 
     Is = [ops_Z2.I(), ops_U1xU1_ind.I(), ops_U1xU1_dis.I()]
+    legs = [ops_Z2.space(), ops_U1xU1_ind.space(), ops_U1xU1_dis.space()]
+
+    assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(), np.eye(4)) for I in Is)
-    assert all(I.device[:len(default_device)] == default_device for I in Is)  # for cuda, accept cuda:0 == cuda
+    assert all(default_device in I.device for I in Is)  # accept 'cuda' in 'cuda:0'
 
     assert all(ops.config.fermionic == fs for ops, fs in zip((ops_Z2, ops_U1xU1_ind, ops_U1xU1_dis), (True, (False, False, True), True)))
 
@@ -57,7 +60,12 @@ def test_spinful_fermions():
         # spin shoul be equal 'u' or 'd'.
     with pytest.raises(yastn.YastnError):
         ops_Z2.vec_n(1)
-        # For SpinfulFermions val in vec_n should be in [(0, 0), (1, 0), (0, 1), (1, 1)].
+        # Occupations given by val should be (0, 0), (1, 0), (0, 1), or (1, 1).
+
+    d = ops_Z2.to_dict()  # dict used in mps.Generator
+    (d["I"](3) - ops_Z2.I()).norm() < tol  # here 3 is a posible position in the mps
+    d.keys() == ops_Z2.operators
+    assert all(k in d for k in ('I', 'nu', 'cu', 'cpu', 'nd', 'cd', 'cpd'))
 
 
 if __name__ == '__main__':

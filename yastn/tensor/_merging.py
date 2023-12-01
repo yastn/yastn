@@ -215,7 +215,7 @@ def fuse_legs(a, axes, mode=None) -> yastn.Tensor:
     mode: str
         can select ``'hard'`` or ``'meta'`` fusion. If ``None``, uses ``default_fusion``
         from tensor's :doc:`configuration </tensor/configuration>`.
-        Configuration option ``force_fusion`` can be used to override `mode`, typically for debugging purposes.
+        Configuration option ``force_fusion`` can be used to override `mode` (introduced for debugging purposes).
     """
     if a.isdiag:
         raise YastnError('Cannot fuse legs of a diagonal tensor.')
@@ -328,8 +328,8 @@ def unfuse_legs(a, axes) -> yastn.Tensor:
 
     If the tensor has been obtained by fusing some legs together, `unfuse_legs`
     can revert such fusion. The legs to be unfused are passed in `axes` as `int`
-    or `tuple[int]` in case of more legs to be unfused. The unfused legs follow
-    the original position of the fused legs. The remaining legs are shifted accordingly ::
+    or `tuple[int]` in case of more legs to be unfused. The unfused legs are inserted at
+    the positions of the fused legs. The remaining legs are shifted accordingly ::
 
         axes=2              unfuse leg 2 into legs 2,3,4
         ->   (0,1,2,3,4,5)
@@ -359,6 +359,8 @@ def unfuse_legs(a, axes) -> yastn.Tensor:
         1--|__|           =>  1--|  |
             |                 2--|__|--4<-3
             2=(2,3=(3,4))
+
+    fuse_legs may involve leg transposition, which is not undone by unfuse_legs.
 
     Parameters
     ----------

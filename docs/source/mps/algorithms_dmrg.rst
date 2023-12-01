@@ -1,10 +1,8 @@
-Density matrix renormalization group (DMRG) algorithm
-=====================================================
+Density matrix renormalization group (DMRG)
+===========================================
 
-DMRG is a variational technique devised
-to obtain a state which extremizes the expectation value of Hermitian operator.
-A typical example is search for the best MPS approximation of a ground-state
-of some Hamiltonian in form of MPO.
+DMRG is a variational technique devised to obtain a state that extremizes the expectation value of the Hermitian operator.
+A typical example is the search for the best MPS approximation of a ground-state of some Hamiltonian in the form of MPO.
 
 A high-level function organizing DMRG simulations is :code:`yastn.tn.mps.dmrg_()`. For examples, see :ref:`examples/mps/algorithms:dmrg`.
 
@@ -18,12 +16,13 @@ In the algorithm we `sweep` through the MPS, starting from the initial guess :co
 optimizing each :class:`yastn.Tensor` :math:`A_j` one by one while keeping
 all other tensors fixed (alternating least squares).
 At each step, the best :math:`A_j` is then found by minimizing the energy
-of the local effective Hamiltonian :math:`H_{eff}`. This DMRG variant, called :code:`method='1site'`,
+of the local effective Hamiltonian :math:`H_{eff}`. DMRG :code:`method='1site'`
 works with single-site effective :math:`H_{eff}`.
 
 ::
 
-    # local optimization of the MPS tensor A_j using the effective Hamiltonian H_eff
+    # local optimization of the MPS tensor A_j
+    # using the effective Hamiltonian H_eff
                               ___
                             -|A_j|-
              ___    ___        |        ___    ___    ___
@@ -37,17 +36,17 @@ works with single-site effective :math:`H_{eff}`.
 
 After the local problem is solved and a new :math:`A_j` minimizing :math:`H_{eff}` is found,
 the MPS is orthogonalized to keep it in the :ref:`canonical form<theory/mps/basics:Canonical form>`.
-In the simplest formulation of ``1site`` DMRG algorithm, the virtual dimension/spaces are fixed.
+In the simplest formulation of '1site' DMRG algorithm, the virtual dimension/spaces are fixed.
 
 
 Two-site DMRG
 -------------
 
-The virtual spaces of the MPS can be adjusted by performing :code:`method='2site'` DMRG.
+The virtual spaces of the MPS can be adjusted by performing DMRG :code:`method='2site'`.
 In this approach, we (i) build effective Hamiltonian :math:`H_{eff}` of two neighbouring sites,
-(ii) solve for its ground state, and (iii) finally split the resulting tensor back into two sites with SVD
-and then move to next pair. By doing SVD decomposition we can dynamically
-adjust virtual space of MPS according to :code:`opts_svd`.
+(ii) solve for its ground state, (iii) split the resulting tensor back into
+two sites with SVD, and then move to next pair. By doing SVD decomposition we can dynamically
+adjust virtual space of MPS according to parameters in :code:`opts_svd`.
 
 ::
 

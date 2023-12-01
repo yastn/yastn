@@ -20,13 +20,19 @@ def svd_combine(a):
     assert yastn.norm(a - USV) < tol  # == 0.0
     assert all(x.is_consistent() for x in (a, U, S, V))
 
+    onlyS = yastn.linalg.svd(a, axes=((3, 1), (2, 0)), sU=-1, compute_uv=False)
+    assert yastn.norm(S - onlyS) < tol
+
     # changes signature of new leg; and position of new leg
-    U, S, V = yastn.linalg.svd(a, axes=((3, 1), (2, 0)), sU=1, Uaxis=0, Vaxis=-1, fix_signs=True)
+    U, S, V = yastn.linalg.svd(a, axes=((3, 1), (2, 0)), sU=1, nU=False, Uaxis=0, Vaxis=-1, fix_signs=True)
     US = yastn.tensordot(S, U, axes=(0, 0))
     USV = yastn.tensordot(US, V, axes=(0, 2))
     USV = USV.transpose(axes=(3, 1, 2, 0))
     assert yastn.norm(a - USV) < tol  # == 0.0
     assert all(x.is_consistent() for x in (U, S, V))
+
+    onlyS = yastn.linalg.svd(a, axes=((3, 1), (2, 0)), sU=1, nU=False, compute_uv=False)
+    assert yastn.norm(S - onlyS) < tol
 
 
 def test_svd_basic():
@@ -352,7 +358,7 @@ def test_svd_exceptions():
         _ = yastn.svd(a, axes=((0, 1), 2), policy='lowrank')
         # lowrank policy in svd requires passing argument D_block
 
-    _, S, _ = yastn.svd(a, axes=((0, 1), 2))
+    S = yastn.svd(a, axes=((0, 1), 2), compute_uv=False)
     with pytest.raises(yastn.YastnError):
         _ = yastn.truncation_mask(1j * S, tol=1e-10)
         # Truncation_mask requires S to be real and diagonal

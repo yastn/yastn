@@ -16,14 +16,15 @@ class sym_Z2xU1(sym_abelian):
                 rank-3 integer tensor with shape (k, n, NSYM)
 
             signatures: numpy.ndarray
-                integer vector with `n` +1 or -1 elements 
+                integer vector with `n` +1 or -1 elements
 
             new_signature: int
 
         Returns
         -------
             teff: numpy.ndarray
-                integer matrix with shape (k,NSYM) of fused charges and multiplied by ``new_signature``
+                integer matrix with shape (k,NSYM) of fused charges
+                and multiplied by ``new_signature``
         """
         teff = new_signature * (charges.swapaxes(1,2) @ signatures)
         teff[:, 0] = np.mod(teff[:, 0], 2)

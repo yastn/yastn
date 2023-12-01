@@ -43,7 +43,7 @@ class CtmEnv(Lattice):
         return self._windows
 
 @dataclass()
-class Local_Projector_Env(): # no more variables than the one given 
+class Local_Projector_Env(): # no more variables than the one given
     """ data class for projectors labelled by a single lattice site calculated during ctm renormalization step """
 
     hlt : any = None # horizontal left top
@@ -60,7 +60,7 @@ class Local_Projector_Env(): # no more variables than the one given
 
 
 @dataclass()
-class Local_CTM_Env(): # no more variables than the one given 
+class Local_CTM_Env(): # no more variables than the one given
     """ data class for CTM environment tensors associated with each peps tensor """
 
     tl : any = None # top-left
@@ -108,7 +108,7 @@ def CtmEnv2Mps(net, env, index, index_type):
 def init_rand(A, tc, Dc):
     """ Initialize random CTMRG environments of peps tensors A. """
 
-    config = A[(0,0)].config 
+    config = A[(0,0)].config
     env= CtmEnv(A)
 
     for ms in A.sites():
@@ -150,7 +150,7 @@ def init_rand(A, tc, Dc):
 def init_ones(A, tc, Dc):
     """ Initialize CTMRG environments of peps tensors A with trivial tensors. """
 
-    config = A[(0,0)].config 
+    config = A[(0,0)].config
     env= CtmEnv(A)
 
     for ms in A.sites():
@@ -189,9 +189,9 @@ def init_ones(A, tc, Dc):
     return env
 
 def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
-    """ 
-    Sample a random configuration from a finite peps. 
-   
+    """
+    Sample a random configuration from a finite peps.
+
     Takes  CTM emvironments and a complete list of projectors to sample from.
     """
 
@@ -207,7 +207,7 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
         Os = state.mpo(index=ny, index_type='column') # converts ny colum of PEPS to MPO
         vL = CtmEnv2Mps(state, CTMenv, index=ny, index_type='l').conj() # left boundary of indexed column through CTM environment tensors
 
-        env = mps.Env3(vL, Os, vR).setup(to = 'first') 
+        env = mps.Env3(vL, Os, vR).setup_(to = 'first')
 
         for nx in range(0, state.Nx):
             dpt = Os[nx].copy()
@@ -218,7 +218,7 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
                 dpt_pr = dpt.copy()
                 dpt_pr.A = tensordot(dpt_pr.A, proj, axes=(4, 1))
                 Os[nx] = dpt_pr
-                env.update_env(nx, to='last')
+                env.update_env_(nx, to='last')
                 prob.append(env.measure(bd=(nx, nx+1)) / norm_prob)
 
             assert abs(sum(prob) - 1) < 1e-12
@@ -227,9 +227,9 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
             out[(nx, ny)] = ind
             dpt.A = tensordot(dpt.A, loc_projectors[ind], axes=(4, 1))
             Os[nx] = dpt               # updated with the new collapse
-            env.update_env(nx, to='last')
+            env.update_env_(nx, to='last')
             count += 1
-        
+
         if opts_svd is None:
             opts_svd = {'D_total': max(vL.get_bond_dimensions())}
 

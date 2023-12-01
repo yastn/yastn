@@ -8,4 +8,5 @@ class meta_operators():
         self.s = (1, -1)
 
     def random_seed(self, seed):
+        """ Set the seed of random number generator in the backend. """
         self.config.backend.random_seed(seed)

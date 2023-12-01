@@ -1,122 +1,62 @@
 """ basic procedures of single mps """
-import numpy as np
 import pytest
 import yastn
 import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
-    # pytest modifies cfg to inject different backends and divices during tests
 except ImportError:
     from configs import config_dense as cfg
+# pytest modifies cfg to inject different backends and divices during tests
 
-tol = 1e-12
 
-
-def test_canonize():
+def test_canonize(config=cfg, tol=1e-12):
     """ Initialize random mps and checks canonization. """
-    operators = yastn.operators.Spin1(sym='Z3', backend=cfg.backend, default_device=cfg.default_device)
-    generate = mps.Generator(N=16, operators=operators)
+    opts_config = {} if config is None else \
+                {'backend': config.backend, 'default_device': config.default_device}
+    N = 16
 
+    ops = yastn.operators.Spin1(sym='Z3', **opts_config)
+    I = mps.product_mpo(ops.I(), N=N)
     for n in (0, 1, 2):
-        psi = generate.random_mps(n=n, D_total=16)
-        check_canonize(psi)
-    psi = generate.random_mpo(D_total=8, dtype='complex128')
-    check_canonize(psi)
+        psi = mps.random_mps(I, n=n, D_total=16)
+        check_canonize(psi, tol)
+    H = mps.random_mpo(I, D_total=8, dtype='complex128')
+    check_canonize(H, tol)
 
-    operators = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
-    generate = mps.Generator(N=16, operators=operators)
-    psi = generate.random_mps(D_total=16, dtype='complex128')
-    check_canonize(psi)
-    psi = generate.random_mpo(D_total=8)
-    check_canonize(psi)
+    ops = yastn.operators.Spin12(sym='dense', **opts_config)
+    psi = mps.random_mps(I, D_total=16, dtype='complex128')
+    check_canonize(psi, tol)
+    H = mps.random_mpo(I, D_total=8)
+    check_canonize(H, tol)
 
-
-def test_env2_update():
-    """ Initialize random mps' and check if overlaps are calculated consistently. """
-    operators = yastn.operators.Spin12(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
-    generate = mps.Generator(N=12, operators=operators)
-    psi1 = generate.random_mps(D_total=15)
-    psi2 = generate.random_mps(D_total=7)
-    check_env2_measure(psi1, psi2)
-
-    operators = yastn.operators.SpinlessFermions(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
-    generate = mps.Generator(N=13, operators=operators)
-
-    psi1 = generate.random_mps(D_total=11, n=1)
-    psi2 = generate.random_mps(D_total=15, n=1)
-    psi3 = generate.random_mpo(D_total=10)
-    psi4 = generate.random_mpo(D_total=8)
-    check_env2_measure(psi1, psi2)
-    check_env2_measure(psi3, psi4)
+    with pytest.raises(yastn.YastnError):
+        psi.orthogonalize_site_(4, to="center")
+        # "to" should be in "first" or "last"
+    with pytest.raises(yastn.YastnError):
+        psi.orthogonalize_site_(4, to="last")
+        psi.orthogonalize_site_(5, to="last")
+        # Only one central block is allowed. Attach the existing central block before orthogonalizing site.
 
 
-def test_env3_update():
-    """ Initialize random mps' and check if overlaps are calculated consistently. """
-    operators = yastn.operators.SpinfulFermions(sym='U1xU1', backend=cfg.backend, default_device=cfg.default_device)
-    generate = mps.Generator(N=13, operators=operators)
-    psi1 = generate.random_mps(D_total=11, n=(7, 7))
-    psi2 = generate.random_mps(D_total=15, n=(7, 7))
-    op = generate.random_mpo(D_total=10)
-    check_env3_measure(psi1, op, psi2)
-
-
-def check_canonize(psi):
+def check_canonize(psi, tol):
     """ Canonize mps to left and right, running tests if it is canonical. """
     ref_s = (-1, 1, 1) if psi.nr_phys == 1 else (-1, 1, 1, -1)
+    norm = psi.norm()
     for to in ('last', 'first'):
-        psi.canonize_(to=to)
+        psi.canonize_(to=to, normalize=False)
         assert psi.is_canonical(to=to, tol=tol)
-        assert abs(mps.measure_overlap(psi, psi) - 1) < tol
         assert all(psi[site].s == ref_s for site in psi.sweep())
+        assert psi.pC is None
+        assert len(psi.A) == len(psi)
+        assert abs(psi.factor / norm - 1) < tol
+        assert abs(mps.vdot(psi, psi) / norm ** 2 - 1) < tol
 
-
-def check_env2_measure(psi1, psi2):
-    """ Test if different overlaps of psi1 and psi2 give consistent results. """
-    N = psi1.N
-    env = mps.Env2(bra=psi1, ket=psi2)
-    env.setup(to='first')
-    env.setup(to='last')
-
-    results = [env.measure()]
-    for n in range(N - 1):
-        results.append(env.measure(bd=(n, n + 1)))
-    results.append(env.measure(bd=(N - 1, N)))
-    results.append(env.measure(bd=(N, N - 1)))
-    for n in range(N - 1, 0, -1):
-        results.append(env.measure(bd=(n, n - 1)))
-    results.append(env.measure(bd=(0, -1)))
-
-    env2 = mps.Env2(bra=psi2, ket=psi1)
-    env2.setup(to='last')
-    results.append(env2.measure(bd=(N, N - 1)).conj())
-
-    results.append(mps.measure_overlap(bra=psi1, ket=psi2))
-    results.append(mps.measure_overlap(bra=psi2, ket=psi1).conj())
-    results = [x.item() for x in results]  # added for cuda
-    assert np.std(results) / abs(np.mean(results)) < tol
-
-
-def check_env3_measure(psi1, op, psi2):
-    """ Test if different overlaps of psi1 and psi2 give consistent results. """
-    N = psi1.N
-    env = mps.Env3(bra=psi1, op=op, ket=psi2)
-    env.setup(to='first')
-    env.setup(to='last')
-
-    results = [env.measure()]
-    for n in range(N - 1):
-        results.append(env.measure(bd=(n, n + 1)))
-    results.append(env.measure(bd=(N - 1, N)))
-    results.append(env.measure(bd=(N, N - 1)))
-    for n in range(N - 1, 0, -1):
-        results.append(env.measure(bd=(n, n - 1)))
-    results.append(env.measure(bd=(0, -1)))
-    results.append(mps.measure_mpo(bra=psi1, op=op, ket=psi2))
-    results = [x.item() for x in results]  # added for cuda
-    assert np.std(results) / abs(np.mean(results)) < tol
+    for to in ('last', 'first'):
+        phi = psi.shallow_copy()
+        phi.canonize_(to=to)
+        assert abs(phi.factor - 1) < tol
+        assert abs(mps.vdot(phi, phi) - 1) < tol
 
 
 if __name__ == "__main__":
     test_canonize()
-    test_env2_update()
-    test_env3_update()

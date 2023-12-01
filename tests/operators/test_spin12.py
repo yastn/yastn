@@ -1,4 +1,5 @@
-""" Predefined operators """
+""" Predefined spin-1/2 operators """
+from itertools import chain
 import pytest
 import numpy as np
 import yastn
@@ -25,8 +26,11 @@ def test_spin12():
     assert all(ops.config.fermionic == False for ops in (ops_dense, ops_Z2, ops_U1))
 
     Is = [ops_dense.I(), ops_Z2.I(), ops_U1.I()]
+    legs = [ops_dense.space(), ops_Z2.space(), ops_U1.space()]
+
+    assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(reverse=r), np.eye(2)) for (I, r) in zip(Is, rs))
-    assert all(I.device[:len(default_device)] == default_device for I in Is)  # for cuda, accept cuda:0 == cuda
+    assert all(default_device in I.device for I in Is)  # accept 'cuda' in 'cuda:0'
 
     zs = [ops_dense.z(), ops_Z2.z(), ops_U1.z()]
     szs = [ops_dense.sz(), ops_Z2.sz(), ops_U1.sz()]
@@ -39,6 +43,11 @@ def test_spin12():
     ys = [ops_dense.y(), ops_Z2.y()]
     sys = [ops_dense.sy(), ops_Z2.sy()]
     assert all(np.allclose(y.to_numpy(reverse=r), np.array([[0, -1j], [1j, 0]])) for (y, r) in zip(ys, rs))
+
+    iys = [ops_dense.iy(), ops_Z2.iy()]
+    isys = [ops_dense.isy(), ops_Z2.isy()]
+    assert all((1j * y - iy).norm() < tol for (y, iy) in zip(ys, iys))
+    assert all((1j * sy - isy).norm() < tol for (sy, isy) in zip(sys, isys))
 
     lss = [{0: I.get_legs(0), 1: I.get_legs(1)} for I in Is]
 
@@ -58,9 +67,19 @@ def test_spin12():
 
     zp1s = [ops_dense.vec_z(val=+1), ops_Z2.vec_z(val=+1), ops_U1.vec_z(val=+1)]
     zm1s = [ops_dense.vec_z(val=-1), ops_Z2.vec_z(val=-1), ops_U1.vec_z(val=-1)]
+    xp1s = [ops_dense.vec_x(val=+1)]
+    xm1s = [ops_dense.vec_x(val=-1)]
+    yp1s = [ops_dense.vec_y(val=+1)]
+    ym1s = [ops_dense.vec_y(val=-1)]
 
     assert all(yastn.norm(z @ v - v) < tol for z, v in zip(zs, zp1s))
     assert all(yastn.norm(z @ v + v) < tol for z, v in zip(zs, zm1s))
+    assert all(yastn.norm(x @ v - v) < tol for x, v in zip(xs, xp1s))
+    assert all(yastn.norm(x @ v + v) < tol for x, v in zip(xs, xm1s))
+    assert all(yastn.norm(y @ v - v) < tol for y, v in zip(ys, yp1s))
+    assert all(yastn.norm(y @ v + v) < tol for y, v in zip(ys, ym1s))
+
+    assert all(abs(v.norm() - 1) < tol for v in chain(zp1s, zm1s, xp1s, xm1s, yp1s, ym1s))
 
     with pytest.raises(yastn.YastnError):
         _ = ops_U1.x()
@@ -73,7 +92,19 @@ def test_spin12():
         # For Spin12 sym should be in ('dense', 'Z2', 'U1').
     with pytest.raises(yastn.YastnError):
         ops_U1.vec_z(val=10)
-        # For Spin12 val in vec_z should be in (-1, 1).
+        # Eigenvalues val should be in (-1, 1).
+    with pytest.raises(yastn.YastnError):
+        ops_dense.vec_x(val=10)
+        # Eigenvalues val should be in (-1, 1) and eigenvectors of Sx are well defined only for dense tensors.
+    with pytest.raises(yastn.YastnError):
+        ops_Z2.vec_y(val=1)
+        # Eigenvalues val should be in (-1, 1) and eigenvectors of Sy are well defined only for dense tensors.
+
+
+    # used in mps Generator
+    d = ops_dense.to_dict()
+    (d["I"](3) - ops_dense.I()).norm() < tol  # here 3 is a posible position in the mps
+    assert all(k in d for k in ('I', 'x', 'y', 'z', 'sx', 'sy', 'sz', 'sp', 'sm'))
 
 
 if __name__ == '__main__':

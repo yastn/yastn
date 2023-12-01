@@ -1,7 +1,6 @@
 """ Generator of basic local spingful-fermion operators. """
 from __future__ import annotations
-from ..sym import sym_Z2, sym_U1xU1, sym_U1xU1xZ2
-from ..tensor import YastnError, Tensor
+from ..tensor import YastnError, Tensor, Leg
 from ._meta_operators import meta_operators
 
 class SpinfulFermions(meta_operators):
@@ -12,34 +11,43 @@ class SpinfulFermions(meta_operators):
         Generator of standard operators for local Hilbert space with two fermionic species and 4-dimensional Hilbert space.
 
         Predefine identity, creation, annihilation, and density operators.
-        Defines vectors with possible occupations.
+        Defines vectors with possible occupations, and local Hilbert space as a :class:`yastn.Leg`.
 
         Parameters
         ----------
         sym : str
-            Should be 'Z2', 'U1xU1' or 'U1xU1xZ2'. Fixes symmetry and fermionic fields in config.
+            Explicit symmetry to used. Allowed options are :code:`'Z2'`, :code:`'U1xU1'`, or :code:`'U1xU1xZ2'`.
 
         **kwargs : any
             Passed to :meth:`yastn.make_config` to change backend, default_device or other config parameters.
 
         Notes
         -----
-        For 'Z2' and 'U1xU1xZ2', the two species (spin-up and spin-down) are treated as indistinguishable.
-        In that case, creation and annihilation operators of the two species anti-commute
-        (fermionic statistics is encoded in the Z2 channel).
+        Fermionic field in config is fixed such that:
 
-        For 'U1xU1' the two species (spin-up and spin-down) are treated as distinguishable.
-        In that case, creation and annihilation operators of the two species commute.
+            * For :code:`'Z2'` and :code:`'U1xU1xZ2'`, the two species (spin-up and spin-down)
+              are treated as indistinguishable. In that case, creation and annihilation operators
+              of the two species anti-commute (fermionic statistics is encoded in the Z2 channel).
+            * For :code:`'U1xU1'` the two species (spin-up and spin-down) are treated as distinguishable.
+              In that case, creation and annihilation operators of the two species commute.
         """
         if sym not in ('Z2', 'U1xU1', 'U1xU1xZ2'):
             raise YastnError("For SpinfulFermions sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').")
         kwargs['fermionic'] = (False, False, True) if sym == 'U1xU1xZ2' else True
-        import_sym = {'Z2': sym_Z2, 'U1xU1': sym_U1xU1, 'U1xU1xZ2': sym_U1xU1xZ2}
-        kwargs['sym'] = import_sym[sym]
+        kwargs['sym'] = sym
         super().__init__(**kwargs)
         self._sym = sym
         self.operators = ('I', 'n', 'c', 'cp')
 
+    def space(self) -> yastn.Leg:
+        r""" :class:`yastn.Leg` describing local Hilbert space. """
+        if self._sym == 'Z2':
+            leg = Leg(self.config, s=1, t=(0, 1), D=(2, 2))
+        if self._sym == 'U1xU1xZ2':
+            leg = Leg(self.config, s=1, t=((0, 0, 0), (0, 1, 1), (1, 0, 1), (1, 1, 0)), D=(1, 1, 1 ,1))
+        if self._sym == 'U1xU1':
+            leg = Leg(self.config, s=1, t=((0, 0), (0, 1), (1, 0), (1, 1)), D=(1, 1, 1, 1))
+        return leg
 
     def I(self) -> yastn.Tensor:
         r""" Identity operator in 4-dimensional Hilbert space. """
@@ -62,7 +70,7 @@ class SpinfulFermions(meta_operators):
         return (self.cp(spin=spin) @ self.c(spin=spin)).remove_zero_blocks()
 
     def vec_n(self, val=(0, 0)) -> yastn.Tensor:
-        r""" Vector with occupation (u, d). """
+        r""" State with occupation given by tuple (nu, nd). """
         if self._sym == 'Z2' and val == (0, 0):
             vec = Tensor(config=self.config, s=(1,), n=0)
             vec.set_block(ts=(0,), Ds=(2,), val=[1, 0])
@@ -100,7 +108,7 @@ class SpinfulFermions(meta_operators):
             vec = Tensor(config=self.config, s=(1,), n=(1, 1, 0))
             vec.set_block(ts=((1, 1, 0),), Ds=(1,), val=[1])
         else:
-            raise YastnError('For SpinfulFermions val in vec_n should be in [(0, 0), (1, 0), (0, 1), (1, 1)].')
+            raise YastnError('Occupations given by val should be (0, 0), (1, 0), (0, 1), or (1, 1).')
         return vec
 
     def cp(self, spin='u') -> yastn.Tensor:

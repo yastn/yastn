@@ -171,21 +171,16 @@ def norm(data, p):
     return data.abs().max() if len(data) > 0 else torch.tensor(0.) # else p == "inf":
 
 
-def entropy(data, alpha=1, tol=1e-12):
+def entropy(data, alpha, tol):
     """ von Neuman or Renyi entropy from svd's"""
-    Snorm = data.norm()
+    Snorm = torch.sum(data) if len(data) > 0 else 0.
     if Snorm > 0:
-        Smin = min(data)
         data = data / Snorm
         data = data[data > tol]
         if alpha == 1:
-            ent = -2 * torch.sum(data * data * torch.log2(data))
-        else:
-            ent = torch.sum(data **(2 * alpha))
-        if alpha != 1:
-            ent = torch.log2(ent) / (1 - alpha)
-        return ent, Smin, Snorm
-    return Snorm, Snorm, Snorm  # this should be 0., 0., 0.
+            return -torch.sum(data * torch.log2(data))
+        return torch.log2(torch.sum(data ** alpha)) / (1 - alpha)
+    return 0.
 
 
 ##########################
@@ -346,6 +341,14 @@ def svd_lowrank(data, meta, sizes, n_iter=60, k_fac=6, **kwargs):
         Sdata[slice(*slS)] = S
         Vdata[slice(*slV)].reshape(DV)[:] = V.t().conj()
     return Udata, Sdata, Vdata
+
+
+def svdvals(data, meta, sizeS, **kwargss):
+    real_dtype = data.real.dtype if data.is_complex() else data.dtype
+    Sdata = torch.zeros((sizeS,), dtype=real_dtype, device=data.device)
+    for (sl, D, _, _, slS, _, _) in meta:
+        torch.linalg.svdvals(data[slice(*sl)].view(D), out=Sdata[slice(*slS)])
+    return Sdata
 
 
 def svd(data, meta, sizes, fullrank_uv=False, ad_decomp_reg=1.0e-12,\

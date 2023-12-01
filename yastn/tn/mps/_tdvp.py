@@ -9,8 +9,8 @@ from ... import YastnError
 #################################
 
 class TDVP_out(NamedTuple):
-    ti : float = 0.
-    tf : float = 0.
+    ti: float = 0.
+    tf: float = 0.
     time_independent: bool = None
     dt: float = 0.
     steps: int = 0
@@ -48,15 +48,15 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
 
     order: str
         Order of Suzuki-Trotter decomposition in ('2nd', '4th').
-        4th order step is composed of 5 2nd order steps.
+        4th order step is composed of five 2nd order steps.
 
     opts_expmv: dict
         Options passed to :meth:`yastn.expmv`
         If there is information from previous time-steps stored under the hood,
-        the initial guess of the size of krylov space opts_expmv['ncv'] will be overriden.
+        the initial guess of the size of krylov space opts_expmv['ncv'] is overriden.
 
     opts_svd: dict
-        Options passed to :meth:`yastn.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`'12site'`.
+        Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`'12site'`.
         If None, use default {'tol': 1e-13}.
 
     Returns
@@ -72,11 +72,11 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
     """
     time_independent = isinstance(H, MpsMpo)
     if dt <= 0:
-        raise YastnError('MPS: dt should be positive.')
+        raise YastnError('TDVP: dt should be positive.')
     if not hasattr(times, '__iter__'):
         times = (0, times)
     if any(t1 - t0 <= 0 for t0, t1 in zip(times[:-1], times[1:])):
-        raise YastnError('MPS: Time should be an ascending tuple.')
+        raise YastnError('TDVP: times should be an ascending tuple.')
 
     if method == '1site' and time_independent:
         routine = lambda t, dt0, env: _tdvp_sweep_1site_(psi, H, dt0, u, env, opts_expmv, normalize)
@@ -91,7 +91,7 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
     elif method == '12site' and not time_independent:
         routine = lambda t, dt0, env: _tdvp_sweep_12site_(psi, H(t), dt0, u, None, opts_expmv, opts_svd, normalize)
     else:
-        raise YastnError('MPS: tdvp method %s not recognized' % method)
+        raise YastnError('TDVP: tdvp method %s not recognized' % method)
 
     env = None
     # perform time-steps
@@ -109,10 +109,9 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
                 env = routine(t + (1 - 1.5 * s2) * ds, ds * s2, env)
                 env = routine(t + (1 - 0.5 * s2) * ds, ds * s2, env)
             else:
-                raise YastnError("MPS: order should be in ('2nd', '4th')")
+                raise YastnError("TDVP: order should be in ('2nd', '4th')")
             t = t + ds
         yield TDVP_out(t0, t, time_independent, ds, steps)
-
 
 
 def _tdvp_sweep_1site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, normalize=True):
@@ -123,13 +122,13 @@ def _tdvp_sweep_1site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, normaliz
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
             env.update_A(n, -u * 0.5 * dt, opts, normalize=normalize)
-            psi.orthogonalize_site(n, to=to, normalize=normalize)
-            env.clear_site(n)
-            env.update_env(n, to=to)
+            psi.orthogonalize_site_(n, to=to, normalize=normalize)
+            env.clear_site_(n)
+            env.update_env_(n, to=to)
             env.update_C(u * 0.5 * dt, opts, normalize=normalize)
-            psi.absorb_central(to=to)
+            psi.absorb_central_(to=to)
 
-    env.update_env(psi.first, to='first')
+    env.update_env_(psi.first, to='first')
     return env
 
 
@@ -141,14 +140,14 @@ def _tdvp_sweep_2site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_svd
     for to, dn in (('last', 1), ('first', 0)):
         for n in psi.sweep(to=to, dl=1):
             env.update_AA((n, n + 1), -u * 0.5 * dt, opts, opts_svd, normalize=normalize)
-            psi.absorb_central(to=to)
-            env.clear_site(n, n + 1)
-            env.update_env(n + 1 - dn, to=to)
+            psi.absorb_central_(to=to)
+            env.clear_site_(n, n + 1)
+            env.update_env_(n + 1 - dn, to=to)
             if n + dn != getattr(psi, to):
                 env.update_A(n + dn, u * 0.5 * dt, opts, normalize=normalize)
 
-    env.clear_site(psi.first)
-    env.update_env(psi.first, to='first')
+    env.clear_site_(psi.first)
+    env.update_env_(psi.first, to='first')
     return env
 
 
@@ -157,8 +156,6 @@ def _tdvp_sweep_12site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_sv
     Perform sweep with mixed TDVP update, see :meth:`tdvp` for description.
 
     This mixes 1-site and 2-site updates based on smallest Schmidt value and maximal bond dimension
-
-    NOT FINISHED
     """
 
     env, opts = _init_tdvp(psi, H, env, opts_expmv)
@@ -171,27 +168,27 @@ def _tdvp_sweep_12site_(psi, H, dt=0.1, u=1j, env=None, opts_expmv=None, opts_sv
                     update_two = True
                 else:
                     env.update_A(n, -u * 0.5 * dt, opts, normalize=normalize)
-                    psi.orthogonalize_site(n, to=to, normalize=normalize)
-                    env.clear_site(n)
-                    env.update_env(n, to=to)
+                    psi.orthogonalize_site_(n, to=to, normalize=normalize)
+                    env.clear_site_(n)
+                    env.update_env_(n, to=to)
                     env.update_C(u * 0.5 * dt, opts, normalize=normalize)
-                    psi.absorb_central(to=to)
+                    psi.absorb_central_(to=to)
             else:
                 env.update_AA((n - dn , n - dn + 1), - u * 0.5 * dt, opts, opts_svd, normalize=normalize)
-                psi.absorb_central(to=to)
-                env.clear_site(n - dn, n - dn + 1)
-                env.update_env(n + 1 - 2 * dn, to=to)
+                psi.absorb_central_(to=to)
+                env.clear_site_(n - dn, n - dn + 1)
+                env.update_env_(n + 1 - 2 * dn, to=to)
                 if env.enlarge_bond((n - 1 + dn, n + dn), opts_svd):
                     env.update_A(n, u * 0.5 * dt, opts, normalize=normalize)
                 else:
-                    psi.orthogonalize_site(n, to=to, normalize=normalize)
-                    env.update_env(n, to=to)
+                    psi.orthogonalize_site_(n, to=to, normalize=normalize)
+                    env.update_env_(n, to=to)
                     env.update_C(u * 0.5 * dt, opts, normalize=normalize)
-                    psi.absorb_central(to=to)
+                    psi.absorb_central_(to=to)
                     update_two = False
 
-    env.clear_site(psi.first)
-    env.update_env(psi.first, to='first')
+    env.clear_site_(psi.first)
+    env.update_env_(psi.first, to='first')
     return env
 
 
@@ -200,7 +197,5 @@ def _init_tdvp(psi, H, env, opts_expmv):
     opts = {} if opts_expmv is None else opts_expmv.copy()
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
-        env.setup(to='first')
-    if not (env.bra is psi and env.ket is psi):
-        raise YastnError('MPS: Require environment env where ket == bra == psi')
+        env.setup_(to='first')
     return env, opts
