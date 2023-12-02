@@ -2,7 +2,7 @@ from __future__ import annotations
 import numpy as np
 import numbers
 from typing import NamedTuple
-from ... import ones, zeros, ncon, Leg, YastnError, Tensor, block, svd_with_truncation
+from ... import zeros, ncon, Leg, YastnError, Tensor, block, svd_with_truncation
 from ._mps import Mpo
 
 
@@ -47,34 +47,34 @@ def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.Mps
     amplitude: bool
         if True, includes term.amplitude in MPO.
     """
-    single_mpo = I.shallow_copy()
-
     try:
         if len(term.positions) != len(term.operators):
             raise YastnError("Hterm: numbers of positions and operators do not match. ")
     except TypeError:
         raise YastnError("Hterm: positions and operators should be provided as lists or tuples.")
 
+    tmp = [I[n].remove_leg(axis=0).remove_leg(axis=1) for n in I.sweep(to='last')]
+
     for site, op in zip(term.positions[::-1], term.operators[::-1]):
         if site < 0 or site > I.N or not isinstance(site, numbers.Integral):
             raise YastnError("position in Hterm should be in 0, 1, ..., N-1 ")
         if not op.s == (1, -1):
             raise YastnError("operator in Hterm should be a matrix with signature (1, -1)")
-        op = op.add_leg(axis=0, s=-1)
-        leg = op.get_legs(axes=0)
-        one = ones(config=op.config, legs=(leg, leg.conj()))
-        temp = ncon([op, single_mpo[site]], [(-1, -2, 1), (-0, 1, -3, -4)])
-        single_mpo[site] = temp.fuse_legs(axes=((0, 1), 2, 3, 4), mode='hard')
-        for n in range(site):
-            temp = ncon([single_mpo[n], one], [(-0, -2, -3, -5), (-1, -4)])
-            temp = temp.swap_gate(axes=(1, 2))
-            single_mpo[n] = temp.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='hard')
-    for n in single_mpo.sweep():
-        single_mpo[n] = single_mpo[n].drop_leg_history(axes=(0, 2))
-    if amplitude:
-        single_mpo[0] = term.amplitude * single_mpo[0]
-    return single_mpo
 
+        tmp[site] = op @ tmp[site]
+        charge = op.n
+        for n in range(site):
+            tmp[n] = tmp[n].swap_gate(axes=0, charge=charge)
+
+    psi = Mpo(I.N)
+    rt = (0,) * op.config.sym.NSYM
+    for n, vec in zip(psi.sweep(to='first'), tmp[::-1]):
+        psi[n] = vec.add_leg(axis=1, s=1, t=rt).add_leg(axis=0, s=-1)
+        rt = psi[n].get_legs(axes=0).t[0]
+
+    if amplitude:
+        psi[0] = term.amplitude * psi[0]
+    return psi
 
 class GenerateMpoTemplate(NamedTuple):
     config: NamedTuple = None
