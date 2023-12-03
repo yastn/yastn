@@ -85,8 +85,9 @@ def _product_mpsmpo(vectors, N=None, nr_phys=1) -> yastn.tn.mps.MpsMpo:
 
     rt = (0,) * vectors[0].config.sym.NSYM
     for n, vec in zip(psi.sweep(to='first'), vectors[::-1]):
-        psi[n] = vec.add_leg(axis=1, s=1, t=rt).add_leg(axis=0, s=-1)
-        rt = psi[n].get_legs(axes=0).t[0]
+        vec = vec.add_leg(axis=1, s=1, t=rt)
+        rt = vec.n
+        psi[n] = vec.add_leg(axis=0, s=-1)
     return psi
 
 

@@ -18,7 +18,7 @@ __all__= [
     'requires_grad_', 'requires_grad', 'move_to', 'conj',
     'trace', 'trace_with_mask', 'rsqrt', 'reciprocal', 'exp', 'sqrt', 'absolute',
     'svd_lowrank', 'svd', 'eigh', 'qr',
-    'argsort', 'eigs_which', 'embed_msk', 'embed_slc',
+    'argsort', 'eigs_which', 'embed_msk', 'embed_slc', 'allclose',
     'add', 'sub', 'apxb', 'apply_slice', 'vdot', 'diag_1dto2d', 'diag_2dto1d',
     'dot', 'dot_with_mask', 'dot_diag', 'mask_diag',
     'merge_to_dense', 'merge_super_blocks', 'is_independent'
@@ -521,6 +521,10 @@ def embed_slc(data, meta, Dsize):
 ################################
 #     two dicts operations     #
 ################################
+
+
+def allclose(Adata, Bdata, rtol, atol):
+    return torch.allclose(Adata, Bdata, rtol=rtol, atol=atol)
 
 
 def add(Adata, Bdata, meta, Dsize):

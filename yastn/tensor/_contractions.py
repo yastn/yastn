@@ -460,8 +460,7 @@ def swap_gate(a, axes, charge=None) -> yastn.Tensor:
         axes = tuple(_clear_axes(*axes))  # swapped groups of legs
         tp = _meta_swap_gate(a.struct.t, a.mfs, a.ndim_n, nsym, axes, fss)
     else:
-        axes = tuple(_flatten(*_clear_axes(axes)))
-        charge, = _clear_axes(charge)
+        axes, = _clear_axes(axes)  # swapped groups of legs
         tp = _meta_swap_gate_charge(a.struct.t, charge, a.mfs, a.ndim_n, nsym, axes, fss)
     c = a.clone()
     for sl, odd in zip(c.slices, tp):
@@ -497,11 +496,9 @@ def _meta_swap_gate_charge(t, charge, mf, ndim, nsym, axes, fss):
     if len(charge) != nsym:
         raise YastnError(f'Len of charge {charge} does not match sym.NSYM = {nsym}.')
 
-    fss = np.array(fss, dtype=bool)
-    charge = np.array(charge, dtype=int)
-    charge = charge[fss].reshape(1, -1) % 2
+    charge = np.array(charge, dtype=int).reshape(1, nsym) % 2
     tp = np.sum(tset[:, axes, :], axis=1) % 2
-    return tuple(np.sum(tp[:, fss] * charge, axis=1) % 2)
+    return tuple(np.sum(tp[:, fss] * charge[:, fss], axis=1) % 2)
 
 
 def einsum(subscripts, *operands, order='Alphabetic') -> yastn.Tensor:
