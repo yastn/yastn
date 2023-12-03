@@ -124,9 +124,11 @@ def _addition_meta(a, b):
 
 def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     """
-    Check if `a` and `b` are identical within desired tolerance.
-    To be True, all tensors' blocks and merge history has to be identical.
-    If this condition is satisfy, execute allclose function of the backend.
+    Check if a and b are identical within a desired tolerance.
+    To be True, all tensors' blocks and merge history have to be identical.
+    If this condition is satisfied, execute the allclose function
+    of the backend to compare tensors’ data.
+
 
     Note that if two tenors differ by zero blocks, this function returns False.
     To resolve such differences, use :code:`(a - b).norm() < tol`
@@ -136,7 +138,7 @@ def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
     a, b: yastn.Tensor
 
     rtol, atol: float
-        desired relative and absolut precision.
+        desired relative and absolute precision.
     """
     if a.struct != b.struct or a.slices != b.slices or a.hfs != b.hfs or a.mfs != b.mfs:
         return False

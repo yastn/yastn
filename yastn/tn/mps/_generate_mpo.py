@@ -2,7 +2,7 @@ from __future__ import annotations
 import numpy as np
 import numbers
 from typing import NamedTuple
-from ... import zeros, ncon, Leg, YastnError, Tensor, block, svd_with_truncation
+from ... import zeros, ncon, Leg, YastnError, Tensor, block, svd_with_truncation, allclose
 from ._mps import Mpo
 
 
@@ -108,7 +108,8 @@ def generate_mpo_preprocessing(I, terms, return_amplitudes=False) -> GenerateMpo
     for n in I.sweep():
         base = []
         for m, H1 in enumerate(H1s):
-            ind = next((ind for ind, v in enumerate(base) if (v - H1[n]).norm() < 1e-13), None)  # site-tensors differing by less then 1e-13 are considered identical
+            # site-tensors for which yastn.allclose is True are assumed idential.
+            ind = next((ind for ind, v in enumerate(base) if allclose(v, H1[n])), None)
             if ind is None:
                 ind = len(base)
                 base.append(H1[n])
