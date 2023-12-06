@@ -42,9 +42,9 @@ def test_NTU_spinless_finite():
     opt = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
 
-    GA_nn, GB_nn = gates_hopping(t, trotter_step, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    G_hop = gates_hopping(t, trotter_step, fid, fc, fcdag)  # nn gate for 2D fermi sea
     g_loc = gate_local_fermi_sea(mu, trotter_step, fid, fc, fcdag) # local gate for spinless fermi sea
-    g_nn = [(GA_nn, GB_nn)]
+    g_nn = [(G_hop)]
 
     if purification == 'True':
         peps = product_peps(geometry, fid) # initialized at infinite temperature

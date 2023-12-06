@@ -8,9 +8,8 @@ import logging
 import yastn
 from yastn.tn.fpeps.operators.gates import match_ancilla_1s, match_ancilla_2s
 from yastn import tensordot, vdot, svd_with_truncation, svd, qr, ncon, eigh_with_truncation
-from ._ntu import env_NTU
 
-def evol_machine(peps, gate, truncation_mode, step, env_type, opts_svd=None):
+def evol_machine(env, gate, opts_evol, opts_svd=None):
 
     r"""
     Applies a nearest-neighbor gate to a PEPS tensor and optimizes the resulting tensor using alternate
@@ -18,7 +17,7 @@ def evol_machine(peps, gate, truncation_mode, step, env_type, opts_svd=None):
 
     Parameters
     ----------
-        peps            : class Lattice
+        env             : class ClusterEnv
         gate            : A Gate object representing the nearest-neighbor gate to apply.
         truncation_mode : str
                         The mode to use for truncation of the environment tensors. Can be
@@ -45,43 +44,44 @@ def evol_machine(peps, gate, truncation_mode, step, env_type, opts_svd=None):
     if opts_svd is None:
         opts_svd = {'D_total':10, 'tol_block':1e-15}  # D_total = 10 chosen arbitrarily
 
-    QA, QB, RA, RB = apply_nn_gate(peps, gate)
+    QA, QB, RA, RB = apply_nn_gate(env.psi, gate)
 
-    if step == "svd-update":
+    if env.depth == 0: # svd-upddate
         MA, MB = truncation_step(RA, RB, opts_svd=opts_svd, normalize=True)
-        peps[gate.bond.site_0], peps[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
+        env.psi[gate.bond.site_0], env.psi[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
         info = {}
-        return peps, info
+        return env, info
     else:
-        if env_type=='NTU':
-            g = env_NTU(peps, gate.bond, QA, QB, dirn=gate.bond.dirn)
+        # for now only other possibility is env.depth == 1
+        g = env.bond_metric(gate.bond, QA, QB, dirn=gate.bond.dirn)
         info={}
-        MA, MB, opt_error, optim, svd_error = truncate_and_optimize(g, RA, RB, truncation_mode, opts_svd=opts_svd)
-        if step == 'two-step':  # else 'one-step'
+       
+        MA, MB, opt_error, optim, svd_error = truncate_and_optimize(g, RA, RB, opts_evol["initialization"], opts_svd=opts_svd)
+        if opts_evol["gradual_truncation"] == 'two-step':  # else 'one-step'
             opts_svd_2 = {'D_total':int(opts_svd['D_total']*2), 'tol_block':opts_svd['tol_block']}
-            MA_int, MB_int, _, _, _ = truncate_and_optimize(g, RA, RB, truncation_mode, opts_svd=opts_svd_2)
-            MA_2, MB_2, opt_error_2, optim_2, svd_error_2 = truncate_and_optimize(g, MA_int, MB_int, truncation_mode, opts_svd=opts_svd)
+            MA_int, MB_int, _, _, _ = truncate_and_optimize(g, RA, RB, opts_evol["initialization"], opts_svd=opts_svd_2)
+            MA_2, MB_2, opt_error_2, optim_2, svd_error_2 = truncate_and_optimize(g, MA_int, MB_int, opts_evol["initialization"], opts_svd=opts_svd)
             if opt_error < opt_error_2:
                 logging.info("1-step update; truncation errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e" % (opt_error, opt_error_2, svd_error, svd_error_2))
             else:
                 MA, MB = MA_2, MB_2
                 logging.info("2-step update; truncation errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e " % (opt_error, opt_error_2, svd_error, svd_error_2))
                 opt_error, optim, svd_error = opt_error_2, optim_2, svd_error_2
-        peps[gate.bond.site_0], peps[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
-        if env_type == 'NTU':
+        env.psi[gate.bond.site_0], env.psi[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
+        if env.depth == 'NTU':
             info.update({'ntu_error': opt_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
 
-        return peps, info
+        return env, info
 
 ############################
 ##### gate application  ####
 ############################
 
-def apply_local_gate_(peps, gate):
+def apply_local_gate_(env, gate):
     """ apply local gates on PEPS tensors """
-    A = match_ancilla_1s(gate.A, peps[gate.site])
-    peps[gate.site] = tensordot(peps[gate.site], A, axes=(2, 1)) # [t l] [b r] [s a]
-    return peps
+    A = match_ancilla_1s(gate.A, env.psi[gate.site])
+    env.psi[gate.site] = tensordot(env.psi[gate.site], A, axes=(2, 1)) # [t l] [b r] [s a]
+    return env
 
 
 def apply_nn_gate(peps, gate):
@@ -181,7 +181,7 @@ def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mod
                before the optimization
     """
 
-    if truncation_mode == 'optimal':
+    if truncation_mode == 'EAT':
         G = ncon((g, RA, RB, RA, RB), ([1, 2, 3, 4], [1, -1], [-3, 3], [2, -2], [-4, 4]), conjs=(0, 0, 0, 1, 1))
         [ul, _, vr] = svd_with_truncation(G, axes=((0, 1), (2, 3)), tol_block=1e-15, D_total=1)
         ul = ul.remove_leg(axis=2)

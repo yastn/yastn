@@ -17,7 +17,7 @@ class Gates(NamedTuple):
     nn : list = None   # list of Gate_nn
 
 
-def evolution_step_(peps, gates, step, truncation_mode, env_type, opts_svd=None):
+def evolution_step_(env, gates, opts_evol, opts_svd=None):
     r"""
     Perform a single step of evolution on a PEPS by applying a list of gates,
     performing truncation and subsequent optimization.
@@ -43,25 +43,25 @@ def evolution_step_(peps, gates, step, truncation_mode, env_type, opts_svd=None)
     infos = []
 
     for gate in gates.local:
-        peps = apply_local_gate_(peps, gate)
+        env = apply_local_gate_(env, gate) # here psi will be update in place
 
     all_gates = gates.nn + gates.nn[::-1]
 
     for gate in all_gates:
-        peps, info = evol_machine(peps, gate, truncation_mode, step, env_type, opts_svd)
+        env, info = evol_machine(env, gate, opts_evol, opts_svd)
         infos.append(info)
 
     for gate in gates.local[::-1]:
-        peps = apply_local_gate_(peps, gate)
+        env = apply_local_gate_(env, gate)
 
-    if step == 'svd-update':
-        return peps, info
+    if env.depth == 'svd-update':
+        return env, info
 
-    if env_type == 'NTU' and not step=='svd-update':
+    if env.depth == 1 and not env.depth==0:
         info['ntu_error'] = [record['ntu_error'] for record in infos]
         info['optimal_cutoff'] = [record['optimal_cutoff'] for record in infos]
         info['svd_error'] = [record['svd_error'] for record in infos]
-        return peps, info
+        return env, info
 
 
 def gates_homogeneous(peps, nn_gates, loc_gates):

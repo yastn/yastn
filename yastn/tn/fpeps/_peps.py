@@ -1,11 +1,3 @@
-
-
-# g = SquareLattice(lattice='checkerboard', dims=(2, 2), boundary='infinite')
-
-# peps1 = Peps(g)  # empty peps
-# peps2 = peps.product_peps(vectors: yastn.Tensor | dict[tuple, Tensor], g)  # product state/operator
-
-
 class Peps():
     r""" 
     Has data container and info about the geometry.
@@ -65,5 +57,3 @@ class Peps():
             psi._data[ind] = self._data[ind].copy()  # Assuming tensors have a copy method
         return psi
     
-    def tensors_NtuEnv(self, bd):
-        return self.g.tensors_NtuEnv(bd)

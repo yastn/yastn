@@ -1,69 +1,5 @@
-import logging
-import yastn
-from yastn.tn.fpeps.operators.gates import trivial_tensor
-from yastn import tensordot, swap_gate, fuse_legs, ncon
+from yastn import fuse_legs, tensordot, swap_gate, ncon
 
-###################################
-##### creating ntu environment ####
-###################################
-
-def env_NTU(peps, bd, QA, QB, dirn):
-    r"""
-    Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
-
-    Parameters
-    ----------
-    peps : class PEPS
-
-    bd  : class Bond
-        bond around which the tensor environment is to be calculated
-
-    QA : yastn.Tensor
-        Fixed isometry to be attached to the metric positioned on the left/top side of the bond.
-        Input obtained from QR decomposition of the PEPS to the left/top of the bond being optimized
-
-    QB : yastn.Tensor
-        Fixed isometry to be attached to the metric positioned on the right/bottom side of the bond.
-        Input obtained from QR decomposition of the PEPS to the right/bottom of the bond being optimized
-
-    dirn : str
-        The direction of the bond. Can be "h" (horizontal) or "v" (vertical).
-
-    Returns
-    -------
-    Tensor
-        The environment tensor g .
-    """
-
-    env = peps.tensors_NtuEnv(bd)
-  
-    G={}
-    for ms in env.keys():
-        if env[ms] is None:
-            leg = peps[(0, 0)].get_legs(axes=-1)
-            leg, _ = yastn.leg_undo_product(leg) # last leg of A should be fused
-            fid = yastn.eye(config=peps[(0,0)].config, legs=[leg, leg.conj()]).diag()
-            G[ms] = trivial_tensor(fid)
-        else:
-            G[ms] = peps[env[ms]]
-
-    if dirn == "h":
-        m_tl, m_l, m_bl = con_tl(G['tl']), con_l(G['l']), con_bl(G['bl'])
-        m_tr, m_r, m_br = con_tr(G['tr']), con_r(G['r']), con_br(G['br'])
-        env_l = con_Q_l(QA, m_l)  # [t t'] [b b'] [rr rr']
-        env_r = con_Q_r(QB, m_r)  # [ll ll'] [t t'] [b b']
-        env_t = m_tl @ m_tr  # [tl tl'] [tr tr']
-        env_b = m_br @ m_bl  # [br br'] [bl bl']
-        g = ncon((env_t, env_l, env_r, env_b), ((1, 4), (1, 3, -1), (-2, 4, 2), (2, 3)))  # [ll ll'] [rr rr']
-    elif dirn == "v":
-        m_tl, m_t, m_tr = con_tl(G['tl']), con_t(G['t']), con_tr(G['tr'])
-        m_bl, m_b, m_br = con_bl(G['bl']), con_b(G['b']), con_br(G['br'])
-        env_t = con_Q_t(QA, m_t)  # [l l'] [r r'] [bb bb']
-        env_b = con_Q_b(QB, m_b)  # [tt tt'] [l l'] [r r']
-        env_l = m_bl @ m_tl  # [bl bl'] [tl tl']
-        env_r = m_tr @ m_br  # [tr tr'] [br br']
-        g = ncon((env_l, env_t, env_b, env_r), ((4, 1), (1, 3, -1), (-2, 4, 2), (3, 2)))  # [tt tt'] [bb bb']
-    return g.unfuse_legs(axes=(0, 1))
 
 
 def con_tl(A):  # A -> [t l] [b r] s
@@ -210,5 +146,3 @@ def con_Q_b(QB, m_b):  # QB -> t [l [[b r] s]]
     env_b = env_b.swap_gate(axes=((0, 2), 1)) # tt tt' X l
     env_b = env_b.fuse_legs(axes=((0, 2), (1, 3), 4))  # [tt tt'] [l l'] [r r']
     return env_b
-
-
