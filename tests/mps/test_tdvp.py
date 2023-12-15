@@ -231,7 +231,7 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
     J1s= [np.zeros_like(J1) for _ in range(J1.shape[0])]
     for i in range(len(J1s)):
         J1s[i][:,i]= J1[:,i]
-    H1 = [(build_mpo_hopping_Hterm(col, sym=sym, config=config),1.) for col in J1s]
+    H1 = [mps.MpoTerm(1.,build_mpo_hopping_Hterm(col, sym=sym, config=config)) for col in J1s]
     #
     # Exact reference for free-fermionic correlation matrix
     #

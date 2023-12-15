@@ -219,7 +219,7 @@ class _EnvParent(metaclass=abc.ABCMeta):
 
     def __init__(self, bra=None, ket=None, project=None) -> None:
         """
-        Holds environments of 1D TNs. In particular of type
+        Interface for environments of 1D TNs. In particular of type
 
               <bra| B_0--B_1--...(i-1,i)--B_i--(i,i+1)...--B_N-1--B_N
                     
@@ -227,8 +227,7 @@ class _EnvParent(metaclass=abc.ABCMeta):
 
                     K_0--K_1--...(i-1,i)--K_i--(i,i+1)...--K_N-1--K_N |ket>
 
-        with optional sum of MPOs. To retrieve specific environments ...
-
+        optinally with (sum of) MPO(s).
         """
         self.ket = ket
         self.bra = bra if bra is not None else ket
@@ -298,6 +297,7 @@ class _EnvParent(metaclass=abc.ABCMeta):
             'first' or 'last'.
         """
 
+    # functions facilitating projection, if projector is present
     def update_Aort_(self,n:int):
         if self.projector is not None:
             self.projector.update_Aort_(n)
@@ -552,7 +552,43 @@ def Env3(bra=None, op: Optional[Sequence[MpoTerm]|MpsMpo] = None, ket=None, on_a
             return Env3Sum(bra,op,ket,on_aux,project)
 
 
-class Env3_single(_EnvParent):
+class _tdvp_update():
+    """
+    Interface for TDVP updates, injected into environments for either single or sum of MPOs
+    """
+    def update_A(self, n, du, opts, normalize=True):
+        """ Updates env.ket[n] by exp(du Heff1). """
+        if n in self._temp['expmv_ncv']:
+            opts['ncv'] = self._temp['expmv_ncv'][n]
+        f = lambda x: self.Heff1(x, n)
+        self.ket[n], info = expmv(f, self.ket[n], du, **opts, normalize=normalize, return_info=True)
+        self._temp['expmv_ncv'][n] = info['ncv']
+
+
+    def update_C(self, du, opts, normalize=True):
+        """ Updates env.ket[bd] by exp(du Heff0). """
+        bd = self.ket.pC
+        if bd[0] != -1 and bd[1] != self.N:  # do not update central block outsite of the chain
+            if bd in self._temp['expmv_ncv']:
+                opts['ncv'] = self._temp['expmv_ncv'][bd]
+            f = lambda x: self.Heff0(x, bd)
+            self.ket.A[bd], info = expmv(f, self.ket[bd], du, **opts, normalize=normalize, return_info=True)
+            self._temp['expmv_ncv'][bd] = info['ncv']
+
+
+    def update_AA(self, bd, du, opts, opts_svd, normalize=True):
+        """ Merge two sites given in bd into AA, updates AA by exp(du Heff2) and unmerge the sites. """
+        ibd = bd[::-1]
+        if ibd in self._temp['expmv_ncv']:
+            opts['ncv'] = self._temp['expmv_ncv'][ibd]
+        AA = self.ket.merge_two_sites(bd)
+        f = lambda v: self.Heff2(v, bd)
+        AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
+        self._temp['expmv_ncv'][ibd] = info['ncv']
+        self.ket.unmerge_two_sites_(AA, bd, opts_svd)
+
+
+class Env3_single(_EnvParent, _tdvp_update):
     """
     The class combines environments of mps+mpo+mps for calculation of expectation values, overlaps, etc.
     """
@@ -685,38 +721,6 @@ class Env3_single(_EnvParent):
             self.projector._update_env(n,to)
 
 
-    def update_A(self, n, du, opts, normalize=True):
-        """ Updates env.ket[n] by exp(du Heff1). """
-        if n in self._temp['expmv_ncv']:
-            opts['ncv'] = self._temp['expmv_ncv'][n]
-        f = lambda x: self.Heff1(x, n)
-        self.ket[n], info = expmv(f, self.ket[n], du, **opts, normalize=normalize, return_info=True)
-        self._temp['expmv_ncv'][n] = info['ncv']
-
-
-    def update_C(self, du, opts, normalize=True):
-        """ Updates env.ket[bd] by exp(du Heff0). """
-        bd = self.ket.pC
-        if bd[0] != -1 and bd[1] != self.N:  # do not update central block outsite of the chain
-            if bd in self._temp['expmv_ncv']:
-                opts['ncv'] = self._temp['expmv_ncv'][bd]
-            f = lambda x: self.Heff0(x, bd)
-            self.ket.A[bd], info = expmv(f, self.ket[bd], du, **opts, normalize=normalize, return_info=True)
-            self._temp['expmv_ncv'][bd] = info['ncv']
-
-
-    def update_AA(self, bd, du, opts, opts_svd, normalize=True):
-        """ Merge two sites given in bd into AA, updates AA by exp(du Heff2) and unmerge the sites. """
-        ibd = bd[::-1]
-        if ibd in self._temp['expmv_ncv']:
-            opts['ncv'] = self._temp['expmv_ncv'][ibd]
-        AA = self.ket.merge_two_sites(bd)
-        f = lambda v: self.Heff2(v, bd)
-        AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
-        self._temp['expmv_ncv'][ibd] = info['ncv']
-        self.ket.unmerge_two_sites_(AA, bd, opts_svd)
-
-
     def enlarge_bond(self, bd, opts_svd):
         if bd[0] < 0 or bd[1] >= self.N:  # do not enlarge bond outside of the chain
             return False
@@ -742,7 +746,7 @@ class Env3_single(_EnvParent):
         return False
 
 
-class Env3Sum(_EnvParent):
+class Env3Sum(_EnvParent, _tdvp_update):
 
     def __init__(self, bra=None, op: Optional[Sequence[MpoTerm]] = None, ket=None, on_aux=False, project=None):
         r"""
@@ -840,6 +844,30 @@ class Env3Sum(_EnvParent):
         tmp = sum( [ _op.amp*e.Heff2(tmp,bd) for _op,e in zip(self.op[1:],self.e3s[1:])],\
                    self.op[0].amp*self.e3s[0].Heff2(tmp,bd) )
         return self._project_ort(tmp)
+
+    def enlarge_bond(self, bd, opts_svd):
+        if bd[0] < 0 or bd[1] >= self.N:  # do not enlarge bond outside of the chain
+            return False
+        AL = self.ket[bd[0]]
+        AR = self.ket[bd[1]]
+        if any([(_op.mpo[bd[0]].get_legs(axes=1).t != AL.get_legs(axes=1).t) or \
+           (_op.mpo[bd[1]].get_legs(axes=1).t != AR.get_legs(axes=1).t) for _op in self.op]):
+            return True  # true if some charges are missing on physical legs of psi
+
+        AL = AL.fuse_legs(axes=((0, 1), 2))
+        AR = AR.fuse_legs(axes=(0, (1, 2)))
+        shapeL = AL.get_shape()
+        shapeR = AR.get_shape()
+        if shapeL[0] == shapeL[1] or shapeR[0] == shapeR[1] or \
+           ('D_total' in opts_svd and shapeL[1] >= opts_svd['D_total']):
+            return False  # maximal bond dimension
+        if 'tol' in opts_svd:
+            _, R0 = tensor.qr(AL, axes=(0, 1), sQ=1)
+            _, R1 = tensor.qr(AR, axes=(1, 0), Raxis=1, sQ=-1)
+            S = tensor.svd(R0 @ R1, compute_uv=False)
+            if any(S[t][-1] > opts_svd['tol'] * 1.1 for t in S.struct.t):
+                return True
+        return False
 
 
 def _clear_site_(F, *args):
