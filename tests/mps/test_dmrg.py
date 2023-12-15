@@ -259,8 +259,8 @@ def dmrg_XX_model_Z2_sum_of_Mpos(config=None, tol=1e-6):
     parameters = {"t": 1.0, "mu": 0.2,
                   "rN": range(N),
                   "rNN": [(i, i+1) for i in range(N - 1)]}
-    H_n = [(generate.mpo_from_latex(H_str_n, parameters), 1.)]
-    Hs_nn = [(generate.mpo_from_latex(H_str_nn, {"t": 1.0, "rNN": [(i, i+1)]}), 1.) for i in range(N - 1)]
+    H_n = [mps.MpoTerm(1., generate.mpo_from_latex(H_str_n, parameters))]
+    Hs_nn = [mps.MpoTerm(1., generate.mpo_from_latex(H_str_nn, {"t": 1.0, "rNN": [(i, i+1)]})) for i in range(N - 1)]
     O_occ = generate.mpo_from_latex("\sum_{j\in rN} cp_{j} c_{j}",
                                   parameters)
 
@@ -312,7 +312,7 @@ def dmrg_XX_model_U1_sum_of_Mpos(config=None, tol=1e-6):
     Dmax = 8
     opts_svd = {'tol': 1e-8, 'D_total': Dmax}
 
-    H= [(H_nn,t), (H_n,mu)]
+    H= [mps.MpoTerm(t,H_nn), mps.MpoTerm(mu,H_n)]
     for occ_sector, E_target in Eng_sectors.items():
         psi = generate.random_mps(D_total=Dmax, n=occ_sector)
         occ_target = [occ_sector] * len(E_target)
