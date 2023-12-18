@@ -5,7 +5,7 @@ from ._tests import YastnError, _test_can_be_combined, _get_tD_legs, _test_axes_
 from ._auxliary import _slc
 
 
-__all__ = ['apxb', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not']
+__all__ = ['apxb', 'real', 'imag', 'sqrt', 'rsqrt', 'reciprocal', 'exp', 'bitwise_not', 'allclose']
 
 
 def __add__(a, b) -> yastn.Tensor:
@@ -120,6 +120,29 @@ def _addition_meta(a, b):
     if check_structure:
         _get_tD_legs(struct_c)
     return Adata, Bdata, hfs, (metaA, metaB), struct_c, slices_c
+
+
+def allclose(a, b, rtol=1e-13, atol=1e-13) -> bool:
+    """
+    Check if a and b are identical within a desired tolerance.
+    To be True, all tensors' blocks and merge history have to be identical.
+    If this condition is satisfied, execute the allclose function
+    of the backend to compare tensors’ data.
+
+
+    Note that if two tenors differ by zero blocks, this function returns False.
+    To resolve such differences, use :code:`(a - b).norm() < tol`
+
+    Parameters
+    ----------
+    a, b: yastn.Tensor
+
+    rtol, atol: float
+        desired relative and absolute precision.
+    """
+    if a.struct != b.struct or a.slices != b.slices or a.hfs != b.hfs or a.mfs != b.mfs:
+        return False
+    return a.config.backend.allclose(a._data, b._data, rtol, atol)
 
 
 def __lt__(a, number) -> yastn.Tensor[bool]:

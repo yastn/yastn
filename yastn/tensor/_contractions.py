@@ -434,36 +434,46 @@ def _meta_trace(struct, slices, in1, in2, out):
     return tuple(meta2), c_struct, tuple(c_slices), tuple(tcon), D1, D2
 
 
-def swap_gate(a, axes) -> yastn.Tensor:
+def swap_gate(a, axes, charge=None) -> yastn.Tensor:
     """
     Return tensor after application of swap gate.
 
-    Multiply blocks with odd charges on swaped legs by -1.
+    Multiply blocks with odd charges on swapped legs by -1.
 
     Parameters
     ----------
     axes: Sequence[int | Sequence[int]]
-        Tuple with groups of legs. Consecutive pairs of grouped legs to be swapped.
+        Tuple with groups of legs. Consecutive pairs of grouped legs that are to be swapped.
         For instance, axes = (0, 1) apply swap gate between 0th and 1st leg.
         axes = ((0, 1), (2, 3), 4, 5) swaps (0, 1) with (2, 3), and 4 with 5.
+
+    charge: Optional[Sequence[int]]
+        If provided, the swap gate is applied between a virtual one-dimensional leg
+        of specified charge, e.g., a fermionic string, and tensor legs specified in axes.
+        In this case, there is no application of swap gates on legs specified in axes.
     """
     if not a.config.fermionic:
         return a
-    fss = (True,) * len(a.struct.n) if a.config.fermionic is True else a.config.fermionic
-    axes = tuple(_clear_axes(*axes))  # swapped groups of legs
-    tp = _meta_swap_gate(a.struct.t, a.struct.n, a.mfs, a.ndim_n, axes, fss)
+    nsym = a.config.sym.NSYM
+    fss = (True,) * nsym if a.config.fermionic is True else a.config.fermionic
+    if charge is None:
+        axes = tuple(_clear_axes(*axes))  # swapped groups of legs
+        tp = _meta_swap_gate(a.struct.t, a.mfs, a.ndim_n, nsym, axes, fss)
+    else:
+        axes, = _clear_axes(axes)  # swapped groups of legs
+        tp = _meta_swap_gate_charge(a.struct.t, charge, a.mfs, a.ndim_n, nsym, axes, fss)
     c = a.clone()
     for sl, odd in zip(c.slices, tp):
         if odd:
-            c._data[slice(*sl.slcs[0])] = -1 * c._data[slice(*sl.slcs[0])]
+            c._data[slice(*sl.slcs[0])] *= -1
     return c
 
 
 @lru_cache(maxsize=1024)
-def _meta_swap_gate(t, n, mf, ndim, axes, fss):
+def _meta_swap_gate(t, mf, ndim, nsym, axes, fss):
     """ calculate which blocks to negate. """
     axes = _unpack_axes(mf, *axes)
-    tset = np.array(t, dtype=int).reshape((len(t), ndim, len(n)))
+    tset = np.array(t, dtype=int).reshape((len(t), ndim, nsym))
     iaxes = iter(axes)
     tp = np.zeros(len(t), dtype=int)
 
@@ -476,6 +486,19 @@ def _meta_swap_gate(t, n, mf, ndim, axes, fss):
         t2 = np.sum(tset[:, l2, :], axis=1) % 2
         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)
     return tuple(tp % 2)
+
+
+@lru_cache(maxsize=1024)
+def _meta_swap_gate_charge(t, charge, mf, ndim, nsym, axes, fss):
+    """ calculate which blocks to negate. """
+    axes, = _unpack_axes(mf, axes)
+    tset = np.array(t, dtype=int).reshape((len(t), ndim, nsym))
+    if len(charge) != nsym:
+        raise YastnError(f'Len of charge {charge} does not match sym.NSYM = {nsym}.')
+
+    charge = np.array(charge, dtype=int).reshape(1, nsym) % 2
+    tp = np.sum(tset[:, axes, :], axis=1) % 2
+    return tuple(np.sum(tp[:, fss] * charge[:, fss], axis=1) % 2)
 
 
 def einsum(subscripts, *operands, order='Alphabetic') -> yastn.Tensor:

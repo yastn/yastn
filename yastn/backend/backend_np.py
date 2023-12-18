@@ -368,6 +368,10 @@ def embed_slc(data, meta, Dsize):
 ################################
 
 
+def allclose(Adata, Bdata, rtol, atol):
+    return np.allclose(Adata, Bdata, rtol=rtol, atol=atol)
+
+
 def add(Adata, Bdata, meta, Dsize):
     dtype = np.promote_types(Adata.dtype, Bdata.dtype)
     newdata = np.zeros((Dsize,), dtype=dtype)
