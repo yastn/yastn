@@ -108,6 +108,50 @@ def vacum_spinful(sites, ops):
     return psi
 
 
+def test_swap_gate_charge():
+    """ test is swap_gate(axes, charge) give the same results as swap_gate(axes)"""
+    for sym in ['Z2', 'U1xU1xZ2', 'U1xU1']:
+        ops = yastn.operators.SpinfulFermions(sym=sym,
+                                              backend=config_dense.backend,
+                                              default_device=config_dense.default_device)
+
+        cpu, cpd, = ops.c('u'), ops.c('d')
+        cu, cd = ops.cp('u'), ops.cp('d')
+        nu, nd = ops.n('u'), ops.n('d')
+        cuuh = yastn.ncon([cu, cu], [(-0, -2), [-1, -3]]).fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+        cuum = yastn.ncon([cu, cu], [(-0, -2), [-1, -3]]).fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
+
+        cdpdh = yastn.ncon([cd, cpd], [(-0, -2), [-1, -3]]).fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+        cdpdm = yastn.ncon([cd, cpd], [(-0, -2), [-1, -3]]).fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
+
+        cndcdh = yastn.ncon([nd, cd], [(-0, -2), [-1, -3]]).fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
+        cndcdm = yastn.ncon([nd, cd], [(-0, -2), [-1, -3]]).fuse_legs(axes=((0, 1), (2, 3)), mode='meta')
+
+
+        for x, y, z in [[cpu, cpd, cu],
+                        [cpu, cu, cpu],
+                        [nd, nu, cpd],
+                        [cpu, cu, cpd],
+                        [nu, nd, cd],
+                        [cuuh, cdpdh, cndcdh],
+                        [cdpdm, cndcdm, cuum],
+                        [cuuh, cndcdh, cdpdm]]:
+
+            xyz0 = yastn.ncon([x, y, z], [(-0, -1), (-2, -3), (-4, -5)])
+            xyz0 = xyz0.swap_gate(axes=(0, 2), charge=z.n)
+
+            x1 = x.swap_gate(axes=0, charge=z.n)
+            y1 = y.swap_gate(axes=0, charge=z.n)
+            xyz1 = yastn.ncon([x1, y1, z], [(-0, -1), (-2, -3), (-4, -5)])
+
+            z = z.add_leg(axis=2)
+            xyz2 = yastn.ncon([x, y, z], [(-0, -1), (-2, -3), (-4, -5, -6)])
+            xyz2 = xyz2.swap_gate(axes=((0, 2), 6)).remove_leg(axis=6)
+
+            assert (xyz0 - xyz2).norm() < tol
+            assert (xyz1 - xyz2).norm() < tol
+
+
 def test_swap_gate_exceptions():
     """ swap_gate raising exceptions """
     t1, D1 = (0, 1, 2, 3), (2, 2, 2, 2)
@@ -118,9 +162,13 @@ def test_swap_gate_exceptions():
     with pytest.raises(yastn.YastnError):
         a.swap_gate(axes=((0, 1), 0))
         # Cannot swap the same index
+    with pytest.raises(yastn.YastnError):
+        a.swap_gate(axes=(0,), charge=(1, 1))
+        # Len of charge (1, 1) does not match sym.NSYM = 1.
 
 
 if __name__ == '__main__':
     test_swap_gate_basic()
     test_apply_operators()
+    test_swap_gate_charge()
     test_swap_gate_exceptions()

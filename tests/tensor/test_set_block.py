@@ -17,6 +17,8 @@ def test_U1():
     assert a.get_shape() == (0, 0, 0)
     a.set_block(ts=(1, -1, 2), Ds=(2, 5, 3), val='rand')  # add a block filled with random numbers
     a.set_block(ts=(2, 0, 2), Ds=(3, 6, 3), val='rand')  # add a block filled with random numbers
+    assert (1, -1, 2) in a
+    assert (2, 0, 2) in a
     assert a.to_numpy().shape == a.get_shape() == (5, 11, 3)
 
     b = yastn.Tensor(config=config_U1, s=(-1, 1, 1))  # initialize empty tensor
@@ -32,6 +34,7 @@ def test_U1():
     assert c.get_shape() == (6, 3, 6, 1)
     assert pytest.approx(c.norm().item() ** 2, rel=tol) == 30
     c.set_block(ts=(-2, 0, -2, 0), val='zeros')  # replaces existing block
+    assert (-2, 0, -2, 0) in c
     assert c.get_shape() == (6, 3, 6, 1)
     assert pytest.approx(c.norm().item() ** 2, rel=tol) == 29
     c.set_block(ts=(2, 0, 0, 2), Ds=(3, 1, 2, 3), val='ones')  # adds a new block changing tensor shape
@@ -50,6 +53,7 @@ def test_U1():
     # for U1 simplified notation of charges avoiding some brackets is usually supported, if unambiguous.
     a.set_block(ts=0, val='rand')
     a.set_block(ts=1, val='rand', Ds=4)
+    assert 0 in a
     npa = a.to_numpy()
     assert npa.shape == a.get_shape() == (9, 9)
     assert a.is_consistent()
@@ -67,6 +71,7 @@ def test_Z2xU1():
     assert pytest.approx(a.norm().item() ** 2, rel=tol) == a.size == 104
 
     a.set_block(ts=((0, 0), (0, 0), (0, 0)), Ds=(1, 5, 4), val=np.sqrt(np.arange(20)))
+    assert ((0, 0), (0, 0), (0, 0)) in a
     assert pytest.approx(a.norm().item() ** 2, rel=tol) == 294  # sum(range(20)) == 190
     assert a.get_shape() == (9, 8, 30)
     assert a.is_consistent()
@@ -75,7 +80,12 @@ def test_Z2xU1():
     a[(0, 0, 0, 0, 0, 0)] = a[(0, 0, 0, 0, 0, 0)] * 2
     assert pytest.approx(a.norm().item() ** 2, rel=tol) == 864  # sum(4 * range(20)) == 760
 
+    b = a.fuse_legs(axes=((0, 1), 2), mode='hard')  # if tensor is hard-fused, have to refer to fused blocks
+    assert ((0, 0), (0, 0)) in b
+
     a = a.fuse_legs(axes=((0, 1), 2), mode='meta')  # if tensor is meta-fused, have to refer to unfused blocks
+    assert ((0, 0), (0, 0), (0, 0)) in a
+    #TODO assert (0, 0, 0, 0) in a
     a.set_block(ts=((0, 0), (0, 0), (0, 0)), Ds=(1, 5, 4), val=np.sqrt(np.arange(20)))
     assert pytest.approx(a.norm().item() ** 2, rel=tol) == 294  # sum(range(20)) == 190
     assert a.get_shape() == (26, 30)
@@ -90,6 +100,8 @@ def test_Z2xU1():
 
     a.set_block(ts=((0, 1), (0, -2), (0, 3)), Ds=(1, 5, 6), val='ones')
     a.set_block(ts=(0, 1, 0, -2, 0, 3), Ds=(1, 5, 6), val='ones') # those two have the same effect
+    assert ((0, 1), (0, -2), (0, 3)) in a
+    assert (0, 1, 0, -2, 0, 3) in a
     assert a.get_shape() == (3, 8, 9)
     assert a.is_consistent()
 
@@ -102,6 +114,7 @@ def test_Z2xU1():
     a.set_block(ts=((1, 1), (1, 1)), val='ones')
     a.set_block(ts=((0, 2), (0, 2)), val='ones')
     a.set_block(ts=(1, 3), val='ones', Ds=1)
+    assert (1, 3) in a
     npa = a.to_numpy()
     assert npa.shape == a.get_shape() == (11, 11)
     assert np.allclose(npa, np.eye(11), rtol=tol, atol=tol)
@@ -168,21 +181,26 @@ def test_set_block_exceptions():
         b.set_block(ts=(3, 0, 0), Ds=(2, 2, 2), val='ones')
         # Charges ts are not consistent with the symmetry rules: f(t @ s) == n
     with pytest.raises(yastn.YastnError):
-        a.set_block(ts=(1, 1, 2), val='ones')
+        b = a.copy()
+        b.set_block(ts=(1, 1, 2), val='ones')
         # Provided Ds. Cannot infer all bond dimensions from existing blocks.
     with pytest.raises(yastn.YastnError):
         b = yastn.Tensor(config=config_U1, isdiag=True)
         b.set_block(ts=(0, 0), Ds=(1, 2), val='ones')
         # Diagonal tensor requires the same bond dimensions on both legs.
     with pytest.raises(yastn.YastnError):
-        a.set_block(ts=(0, 0, 0), val='four')
+        b= a.copy()
+        b.set_block(ts=(0, 0, 0), val='four')
         # val should be in ("zeros", "ones", "rand")
     with pytest.raises(yastn.YastnError):
         a[(1, 1, 1)] = np.ones((3, 3, 3))
-        # tensor does not have block specify by key
+        # tensor does not have block specified by key
     with pytest.raises(yastn.YastnError):
         a[(1, 1, 1)]
-        # tensor does not have block specify by key
+        # tensor does not have block specified by key
+    with pytest.raises(yastn.YastnError):
+        b= a.fuse_legs(axes=((0,1),2))
+        b.set_block(ts=(0,0), Ds=a[(0,0)].shape, val='zeros') # cannot set blocks on fused tensors
 
 
 if __name__ == '__main__':

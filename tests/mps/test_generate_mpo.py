@@ -64,7 +64,7 @@ def test_build_mpo_hopping_Hterm(config=cfg, tol=1e-12):
     opts_config = {} if config is None else \
                   {'backend': config.backend, 'default_device': config.default_device}
 
-    N = 7
+    N = 35
     J = np.triu(np.random.rand(N, N))
 
     for sym, n in [('Z2', (0,)), ('U1', (N // 2,))]:

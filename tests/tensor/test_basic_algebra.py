@@ -216,6 +216,23 @@ def test_algebra_fuse_hard():
     algebra_hf(lambda x, y: x - y ** 3, a.conj(), b)
 
 
+def test_algebra_allclose():
+    # U1 with 4 legs
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1),
+                t=((0,), (0,), (-1, 0, 1), (-1, 0, 1)),
+                D=((2,), (5,), (7, 8, 9), (10, 11, 12)))
+
+    assert yastn.allclose(a, a) is True
+    assert yastn.allclose(a, a.flip_signature()) is False
+
+    b = 0 * a
+    b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 9, 12), val='zeros')
+
+    c = a + b  # differs from `a` by a single zero block
+    assert yastn.allclose(a, c, rtol=1e-13, atol=1e-13) is False
+    assert (a - c).norm() < 1e-13
+
+
 def test_algebra_exceptions():
     """ test handling exceptions """
     leg1 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
@@ -306,3 +323,4 @@ if __name__ == '__main__':
     test_algebra_fuse_hard()
     test_algebra_exceptions()
     test_hf_union_exceptions()
+    test_algebra_allclose()

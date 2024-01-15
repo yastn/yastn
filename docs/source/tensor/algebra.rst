@@ -36,6 +36,8 @@ Simple element-wise operations
 .. autofunction:: yastn.Tensor.__ge__
 .. autofunction:: yastn.Tensor.bitwise_not
 
+.. autofunction:: yastn.allclose
+
 
 Tensor contractions
 -------------------
