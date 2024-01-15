@@ -56,20 +56,20 @@ class EnvCluster:
         Returns a dictionary containing the neighboring sites of the bond `bds`.
         """
         neighbors = {}
-        site_1, site_2 = bds.site_0, bds.site_1
+        site1, site_2 = bds.site0, bds.site1
         if self.psi.lattice == 'checkerboard':
             if bds.dirn == 'h':
                 neighbors['tl'], neighbors['l'], neighbors['bl'] = site_2, site_2, site_2
-                neighbors['tr'], neighbors['r'], neighbors['br'] = site_1, site_1, site_1
+                neighbors['tr'], neighbors['r'], neighbors['br'] = site1, site1, site1
             elif bds.dirn == 'v':
                 neighbors['tl'], neighbors['t'], neighbors['tr'] = site_2, site_2, site_2
-                neighbors['bl'], neighbors['b'], neighbors['br'] = site_1, site_1, site_1
+                neighbors['bl'], neighbors['b'], neighbors['br'] = site1, site1, site1
         else:
             if bds.dirn == 'h':
-                neighbors['tl'], neighbors['l'], neighbors['bl'] = self.nn_site(site_1, d='t'), self.nn_site(site_1, d='l'), self.nn_site(site_1, d='b')
+                neighbors['tl'], neighbors['l'], neighbors['bl'] = self.nn_site(site1, d='t'), self.nn_site(site1, d='l'), self.nn_site(site1, d='b')
                 neighbors['tr'], neighbors['r'], neighbors['br'] = self.nn_site(site_2, d='t'), self.nn_site(site_2, d='r'), self.nn_site(site_2, d='b')
             elif bds.dirn == 'v':
-                neighbors['tl'], neighbors['t'], neighbors['tr'] = self.nn_site(site_1, d='l'), self.nn_site(site_1, d='t'), self.nn_site(site_1, d='r')
+                neighbors['tl'], neighbors['t'], neighbors['tr'] = self.nn_site(site1, d='l'), self.nn_site(site1, d='t'), self.nn_site(site1, d='r')
                 neighbors['bl'], neighbors['b'], neighbors['br'] = self.nn_site(site_2, d='l'), self.nn_site(site_2, d='b'), self.nn_site(site_2, d='r')
 
         return neighbors

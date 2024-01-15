@@ -6,11 +6,11 @@ from ._ctm_iteration_routines import append_a_tl, append_a_br, append_a_tr, appe
 def ret_AAbs(A, bds, op, orient):
     """ preparing the nearest neighbor tensor before contraction by attaching them with operators"""
     if orient == 'h':
-        AAb = {'l': fPEPS_2layers(A[bds.site_0], op=op['l'], dir='l'), 'r': fPEPS_2layers(A[bds.site_1], op=op['r'], dir='r')}
+        AAb = {'l': fPEPS_2layers(A[bds.site0], op=op['l'], dir='l'), 'r': fPEPS_2layers(A[bds.site1], op=op['r'], dir='r')}
     elif orient == 'v':
-        AAb = {'l': fPEPS_2layers(A[bds.site_0], op=op['l'], dir='t'), 'r': fPEPS_2layers(A[bds.site_1], op=op['r'], dir='b')}
+        AAb = {'l': fPEPS_2layers(A[bds.site0], op=op['l'], dir='t'), 'r': fPEPS_2layers(A[bds.site1], op=op['r'], dir='b')}
     elif orient == '1s':
-        AAb = {'l': fPEPS_2layers(A[bds.site_0], op=op['l'], dir='1s'), 'r': fPEPS_2layers(A[bds.site_1], op=op['r'], dir='1s')}
+        AAb = {'l': fPEPS_2layers(A[bds.site0], op=op['l'], dir='1s'), 'r': fPEPS_2layers(A[bds.site1], op=op['r'], dir='1s')}
     return AAb
 
 def apply_TM_left(vecl, env, site, AAb):
@@ -91,32 +91,32 @@ def apply_TMO_bottom(vecb, env, site, AAb):
     return new_vecb
 
 
-def left_right_op_vectors(env, site_0, site_1, AAbl, AAbr):
+def left_right_op_vectors(env, site0, site1, AAbl, AAbr):
     """ form the left and right part in the process of evaluating a horizontal correlator before contracting them"""
 
-    vecl = tensordot(env[site_0].l, env[site_0].tl, axes=(2, 0))
-    vecl = tensordot(env[site_0].bl, vecl, axes=(1, 0))
+    vecl = tensordot(env[site0].l, env[site0].tl, axes=(2, 0))
+    vecl = tensordot(env[site0].bl, vecl, axes=(1, 0))
 
-    vecr = tensordot(env[site_1].tr, env[site_1].r, axes=(1, 0))
-    vecr = tensordot(vecr, env[site_1].br, axes=(2, 0))
+    vecr = tensordot(env[site1].tr, env[site1].r, axes=(1, 0))
+    vecr = tensordot(vecr, env[site1].br, axes=(2, 0))
 
-    new_vecl = apply_TMO_left(vecl, env, site_0, AAbl)
-    new_vecr = apply_TMO_right(vecr, env, site_1, AAbr)
+    new_vecl = apply_TMO_left(vecl, env, site0, AAbl)
+    new_vecr = apply_TMO_right(vecr, env, site1, AAbr)
 
     return new_vecl, new_vecr
 
 
-def top_bottom_op_vectors(env, site_0, site_1, AAbt, AAbb):
+def top_bottom_op_vectors(env, site0, site1, AAbt, AAbb):
     """ form the top and bottom part in the process of evaluating a vertical correlator before contracting them"""
 
-    vect = tensordot(env[site_0].tl, env[site_0].t, axes=(1, 0))
-    vect = tensordot(vect, env[site_0].tr, axes=(2, 0))
+    vect = tensordot(env[site0].tl, env[site0].t, axes=(1, 0))
+    vect = tensordot(vect, env[site0].tr, axes=(2, 0))
 
-    vecb = tensordot(env[site_1].b, env[site_1].bl, axes=(2, 0))
-    vecb = tensordot(env[site_1].br, vecb, axes=(1, 0))
+    vecb = tensordot(env[site1].b, env[site1].bl, axes=(2, 0))
+    vecb = tensordot(env[site1].br, vecb, axes=(1, 0))
 
-    new_vect = apply_TMO_top(vect, env, site_0, AAbt)
-    new_vecb = apply_TMO_bottom(vecb, env, site_1, AAbb)
+    new_vect = apply_TMO_top(vect, env, site0, AAbt)
+    new_vecb = apply_TMO_bottom(vecb, env, site1, AAbb)
 
     return new_vect, new_vecb
 
@@ -213,21 +213,21 @@ def con_bi(new_vecl, new_vecr):
 
 def hor_extension(env, bd, AAbo, AAb):
     """ merge the left and right vecs + TM """
-    site_0, site_1 = bd.site_0, bd.site_1
+    site0, site1 = bd.site0, bd.site1
 
-    left_bound_vec, right_bound_vec = left_right_op_vectors(env, site_0, site_1, AAbo)
+    left_bound_vec, right_bound_vec = left_right_op_vectors(env, site0, site1, AAbo)
     hor = con_bi(left_bound_vec, right_bound_vec)
-    left_bound_vec_norm, right_bound_vec_norm = left_right_op_vectors(env, site_0, site_1, AAb)
+    left_bound_vec_norm, right_bound_vec_norm = left_right_op_vectors(env, site0, site1, AAb)
     hor_norm = con_bi(left_bound_vec_norm, right_bound_vec_norm)
 
     return (hor/hor_norm)
 
 def ver_extension(env, bd, AAbo, AAb):
     """ merge the left and right vecs + TM """
-    site_0, site_1 = bd.site_0, bd.site_1
-    top_bound_vec, bottom_bound_vec = top_bottom_op_vectors(env, site_0, site_1, AAbo)
+    site0, site1 = bd.site0, bd.site1
+    top_bound_vec, bottom_bound_vec = top_bottom_op_vectors(env, site0, site1, AAbo)
     ver = con_bi(top_bound_vec, bottom_bound_vec)
-    top_bound_vec_norm, bottom_bound_vec_norm = top_bottom_op_vectors(env, site_0, site_1, AAb)
+    top_bound_vec_norm, bottom_bound_vec_norm = top_bottom_op_vectors(env, site0, site1, AAb)
     ver_norm = con_bi(top_bound_vec_norm, bottom_bound_vec_norm)
 
     return (ver/ver_norm)

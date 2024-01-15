@@ -1,63 +1,67 @@
 """ Basic structures forming PEPS network. """
 from itertools import product
 from typing import NamedTuple
+from ... import YastnError
+
+
+class Site(NamedTuple):
+    nx : int = 0
+    ny : int = 0
 
 
 class Bond(NamedTuple):  # Not very convinient to use
-    """ A bond between two lattice sites. site_0 should be before site_1 in the fermionic order. """
-    site_0 : tuple = None
-    site_1 : tuple = None
-    dirn : str = ''
+    """
+    A bond between two lattice sites.
+
+    site0 should preceed site1 in the fermionic order.
+    """
+    site0 : Site = None
+    site1 : Site = None
+
+    @property
+    def dirn(self):
+        """ Bond direction. 'h' when site0.nx == site1.nx; else 'v' (when site0.ny == site1.ny by construction). """
+        return 'h' if self.site0[0] == self.site1[0] else 'v'
 
 
 class SquareLattice():
     """ Geometric information about 2D lattice. """
 
-    def __init__(self, lattice='checkerboard', dims=(2, 2), boundary='infinite'):
+    def __init__(self, dims=(2, 2), boundary='infinite'):
         r"""
         Geometric information about the lattice.
 
         Parameters
         ----------
-            lattice : str
-                'square' or 'checkerboard'
-            dims : tuple(int)
-                Size of elementary cell.
-                For 'checkerboard' it is always (2, 2)
-            boundary : str
-                'obc', 'infinite' or 'cylinder'
+        dims : tuple[int, int]
+            Size of elementary cell.
+        boundary : str
+            'obc', 'infinite' or 'cylinder'
 
         Notes
         -----
-            Site (0, 0) corresponds to top-left corner of the lattice
+        Site(0, 0) corresponds to top-left corner of the lattice
         """
-        assert lattice in ('checkerboard', 'square'), "lattice should be 'checkerboard' or 'square' or ''"
-        assert boundary in ('obc', 'infinite', 'cylinder'), "boundary should be 'obc', 'infinite' or 'cylinder'"
-        self.lattice = lattice
-        self.boundary = boundary
-        self.Nx, self.Ny = (2, 2) if lattice == 'checkerboard' else dims
-        self._sites = tuple(product(*(range(k) for k in self.dims)))
+        if boundary in ('obc', 'infinite', 'cylinder'):
+            self.boundary = boundary
+        else:
+            raise YastnError("boundary should be 'obc', 'infinite' or 'cylinder'")
+        self.Nx = dims[0]
+        self.Ny = dims[1]
+        self._sites = tuple(Site(nx, ny) for nx, ny in product(*(range(k) for k in self.dims)))
         self._dir = {'t': (-1, 0), 'l': (0, -1), 'b': (1, 0), 'r': (0, 1),
                      'tl': (-1, -1), 'bl': (1, -1), 'br': (1, 1), 'tr': (-1, 1)}
 
-        bonds = []
-        if self.lattice == 'checkerboard':
-            self._bonds = (Bond(site_0=(0, 0), site_1=(0, 1), dirn='h'), Bond(site_0=(0, 1), site_1=(0, 0), dirn='h'), Bond(site_0=(0, 0), site_1=(0, 1), dirn='v'), Bond(site_0=(0, 1), site_1=(0, 0), dirn='v'))
-        else:
-            for s in self._sites:
-                s_b = self.nn_site(s, d='b')
-                if s_b is not None:
-                    bonds.append(Bond(s, s_b, 'v'))
-                s_r = self.nn_site(s, d='r')
-                if s_r is not None:
-                    bonds.append(Bond(s, s_r, 'h'))
-            self._bonds = tuple(bonds)
-
-
-    def site2index(self, site):
-        """ Tensor index depending on site """
-        assert site in self._sites, "wrong index of site"
-        return site if self.lattice == 'square' else sum(site) % 2
+        bonds_h, bonds_v = [], []
+        for s in self._sites:
+            s_r = self.nn_site(s, d='r')
+            if s_r is not None:
+                bonds_h.append(Bond(s, s_r))
+            s_b = self.nn_site(s, d='b')
+            if s_b is not None:
+                bonds_v.append(Bond(s, s_b))
+        self._bonds_h = tuple(bonds_h)
+        self._bonds_v = tuple(bonds_v)
 
     @property
     def dims(self):
@@ -65,22 +69,21 @@ class SquareLattice():
         return (self.Nx, self.Ny)
 
     def sites(self, reverse=False):
-        """ Labels of the lattice sites """
+        """ Lattice sites """
         return self._sites[::-1] if reverse else self._sites
-  
 
     def nn_bonds(self, dirn=None, reverse=False):
-        """ Labels of the links between sites """
-
-        bnds = self._bonds[::-1] if reverse else self._bonds
-        if dirn is None:
-            return bnds
-        return tuple(bnd for bnd in bnds if bnd.dirn == dirn)
+        """ Labels of unique nearest neighbor bonds between lattice sites. """
+        if dirn == 'v':
+            return self._bonds_v[::-1] if reverse else self._bonds_v
+        if dirn == 'h':
+            return self._bonds_h[::-1] if reverse else self._bonds_h
+        return self._bonds_v[::-1] + self._bonds_h[::-1] if reverse else self._bonds_h + self._bonds_v
 
     def nn_site(self, site, d):
         """
         Index of the site in the direction d in ('t', 'b', 'l', 'r', 'tl', 'bl', 'tr', 'br').
-        Return None if there is no neighboring site in given direction.
+        Return None if there is no neighboring site in a given direction.
         """
         x, y = site
         dx, dy = self._dir[d]
@@ -89,6 +92,28 @@ class SquareLattice():
             return None
         if self.boundary == 'cylinder' and (y < 0 or y >= self.Ny):
             return None
-        return (x % self.Nx, y % self.Ny)
+        return Site(x % self.Nx, y % self.Ny)
 
-    
+    def site2index(self, site):
+        """ Tensor index depending on site """
+        if site not in self._sites:
+            raise YastnError(f"Site {site} does not correspond to any lattice site.")
+        return site
+
+
+class CheckerboardLattice(SquareLattice):
+    """ Geometric information about 2D lattice. """
+
+    def __init__(self):
+        r"""
+        Checkerboard lattice is an infinite lattiec with 2x2 unit cell and 2 unique tensors.
+        """
+        super().__init__(dims=(2, 2), boundary='infinite')
+        self._bonds_h = (Bond(Site(0, 0), Site(0, 1)), Bond(Site(0, 1), Site(0, 0)))
+        self._bonds_v = (Bond(Site(0, 0), Site(1, 0)), Bond(Site(1, 0), Site(0, 0)))
+
+    def site2index(self, site):
+        """ Tensor index depending on site """
+        if site not in self._sites:
+            raise YastnError(f"Site {site} does not correspond to any lattice site.")
+        return sum(site) % 2

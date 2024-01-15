@@ -6,11 +6,11 @@ import yastn
 def nn_exp_dict(peps, env, op):
 
     r"""
-    Returns two dictionaries 'obs_hor' and 'obs_ver' that store horizontal and vertical 
+    Returns two dictionaries 'obs_hor' and 'obs_ver' that store horizontal and vertical
     nearest-neighbor expectation values, respectively. Each such dictionary has as its keys
     labels of the input two-site operators which further stores a dictionary of NN sites as
-    keys and the corresponding obervables as values. 
-    
+    keys and the corresponding obervables as values.
+
     Parameters
     ----------
     peps : class Lattice
@@ -32,18 +32,18 @@ def nn_exp_dict(peps, env, op):
         opt = op.get(ms)
 
         for bds_h in peps.nn_bonds(dirn='h'):  # correlators on all horizontal bonds
-            val_hor = EV2ptcorr(peps, env, opt, bds_h.site_0, bds_h.site_1)
-            obs_hor[ms][(bds_h.site_0, bds_h.site_1)] = val_hor[0]
+            val_hor = EV2ptcorr(peps, env, opt, bds_h.site0, bds_h.site1)
+            obs_hor[ms][(bds_h.site0, bds_h.site1)] = val_hor[0]
 
         for bds_v in peps.nn_bonds(dirn='v'):  # correlators on all vertical bonds
-            val_ver = EV2ptcorr(peps, env, opt, bds_v.site_0, bds_v.site_1)
-            obs_ver[ms][(bds_v.site_0, bds_v.site_1)] = val_ver[0]
+            val_ver = EV2ptcorr(peps, env, opt, bds_v.site0, bds_v.site1)
+            obs_ver[ms][(bds_v.site0, bds_v.site1)] = val_ver[0]
 
     return obs_hor, obs_ver
 
 def one_site_dict(peps, env, op):
     r"""
-    dictionary containing site coordinates as keys and their corresponding expectation values 
+    dictionary containing site coordinates as keys and their corresponding expectation values
 
     Parameters
     ----------
@@ -145,10 +145,10 @@ def EV2ptcorr_diagonal(peps, env, ops, site0, site1):
     r"""
     Returns two-point correlators along diagonal direction given any two sites and observables
     to be evaluated on those sites. Directed from EV2ptcorr when sites lie diagonally.
-    
+
     Note: site0 has to be to at left and site1 at right according to the defined fermionic order
     """
-    
+
     peps = check_consistency_tensors(peps) # to check if A has the desired fused form of legs i.e. t l b r [s a]
     x0, y0 = site0
     x1, y1 = site1
@@ -174,9 +174,9 @@ def EV2ptcorr_diagonal(peps, env, ops, site0, site1):
         AAbop_top = {'l': fPEPS_2layers(peps[ptl]), 'r': fPEPS_2layers(peps[ptr], op=ops['r'], dir='r')} # top layer of dounle peps tensors with operator
         AAbop_bottom = {'l': fPEPS_2layers(peps[pbl], op=ops['l'], dir='l'), 'r': fPEPS_2layers(peps[pbr])} # bottom layer of double peps tensors with operator
 
-    expdg = array2ptdiag(peps, env, AAbop_top, AAbop_bottom, site0, site1, flag='y') 
-    exp_diag = expdg/normd 
-        
+    expdg = array2ptdiag(peps, env, AAbop_top, AAbop_bottom, site0, site1, flag='y')
+    exp_diag = expdg/normd
+
     print('normalized expectation value of diagonal correlator', exp_diag)
     print('#####################')
 

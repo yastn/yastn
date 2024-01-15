@@ -1,11 +1,10 @@
 class Peps():
-    r""" 
+    r"""
     Has data container and info about the geometry.
     """
-    
+
     def __init__(self, geometry):
         self.g = geometry
-        self.lattice = self.g.lattice
         self.Nx, self.Ny = self.g.Nx, self.g.Ny
         self.boundary = self.g.boundary
 
@@ -56,4 +55,4 @@ class Peps():
         for ind in self._data:
             psi._data[ind] = self._data[ind].copy()  # Assuming tensors have a copy method
         return psi
-    
+

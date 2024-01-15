@@ -1,90 +1,88 @@
 """ Test operation of peps.Lattice and peps.Peps that inherits Lattice"""
 import pytest
 import yastn.tn.fpeps as fpeps
+from yastn.tn.fpeps import Site
 
 def test_Lattice():
     """ Generate a few lattices veryfing expected output of some functions. """
-    net = fpeps.SquareLattice(lattice='checkerboard', boundary='infinite')
+    #
+    ##########
+    net = fpeps.CheckerboardLattice()
 
     assert net.dims == (2, 2)
-    assert net.sites() == ((0, 0), (0, 1), (1, 0), (1, 1))
-    assert net.sites(reverse=True) == ((1, 1), (1, 0), (0, 1), (0, 0))
-    bonds_hor = tuple((bnd.site_0, bnd.site_1) for bnd in net.nn_bonds(dirn='h'))
-    bonds_ver = tuple((bnd.site_0, bnd.site_1) for bnd in net.nn_bonds(dirn='v'))
-    assert bonds_hor == (((0, 0), (0, 1)), ((0, 1), (0, 0)))
-    # assert bonds_ver == (((1, 0), (0, 0)), ((0, 0), (1, 0)))  # TODO make it wor
+    assert net.sites() == (Site(0, 0), Site(0, 1), Site(1, 0), Site(1, 1))
+    assert net.sites(reverse=True) == (Site(1, 1), Site(1, 0), Site(0, 1), Site(0, 0))
 
-    assert net.site2index((0, 0)) == 0 == net.site2index((1, 1))
-    assert net.site2index((1, 0)) == 1 == net.site2index((0, 1))
-    assert net.nn_site((0, 1), d='r') == (0, 0)
+    assert net.nn_bonds(dirn='h') == (((0, 0), (0, 1)), ((0, 1), (0, 0)))
+    assert net.nn_bonds(dirn='v') == (((0, 0), (1, 0)), ((1, 0), (0, 0)))
+    assert net.nn_bonds() == (((0, 0), (0, 1)),
+                              ((0, 1), (0, 0)),
+                              ((0, 0), (1, 0)),
+                              ((1, 0), (0, 0)))
+    assert net.nn_bonds(reverse=True)[::1] == net.nn_bonds()[::-1]
 
-    net = fpeps.SquareLattice(lattice='square', dims=(3, 2), boundary='obc')
-
-    assert net.dims == (3, 2)
-    assert net.sites() == ((0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1))
-    bonds_hor = tuple((bnd.site_0, bnd.site_1) for bnd in net.nn_bonds(dirn='h'))
-    bonds_ver = tuple((bnd.site_0, bnd.site_1) for bnd in net.nn_bonds(dirn='v'))
-    assert bonds_hor == (((0, 0), (0, 1)), ((1, 0), (1, 1)), ((2, 0), (2, 1)))
-    assert bonds_ver == (((0, 0), (1, 0)), ((0, 1), (1, 1)), ((1, 0), (2, 0)), ((1, 1), (2, 1)))
-
-    assert net.nn_site((0, 1), d='r') is None
-    assert net.site2index((1, 0)) == (1, 0)
-
-    net = fpeps.SquareLattice(lattice='square', dims=(3, 2), boundary='cylinder')
-    net = fpeps.Peps(net)
+    assert net.site2index((0, 0)) == net.site2index((1, 1)) == 0
+    assert net.site2index((1, 0)) == net.site2index((0, 1)) == 1
+    assert net.nn_site(Site(0, 1), d='r') == (0, 0)
+    #
+    ##########
+    net = fpeps.SquareLattice(dims=(3, 2), boundary='obc')
 
     assert net.dims == (3, 2)
     assert net.sites() == ((0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1))
-    bonds_hor = tuple((bnd.site_0, bnd.site_1) for bnd in net.nn_bonds(dirn='h'))
-    bonds_ver = tuple((bnd.site_0, bnd.site_1) for bnd in net.nn_bonds(dirn='v'))
-    assert bonds_hor == (((0, 0), (0, 1)), ((1, 0), (1, 1)), ((2, 0), (2, 1)))
-    assert bonds_ver == (((0, 0), (1, 0)), ((0, 1), (1, 1)),
-                         ((1, 0), (2, 0)), ((1, 1), (2, 1)),
-                         ((2, 0), (0, 0)), ((2, 1), (0, 1)))
+    assert net.nn_bonds(dirn='h') == (((0, 0), (0, 1)),
+                                      ((1, 0), (1, 1)),
+                                      ((2, 0), (2, 1)))
+    assert net.nn_bonds(dirn='v') == (((0, 0), (1, 0)),
+                                      ((0, 1), (1, 1)),
+                                      ((1, 0), (2, 0)),
+                                      ((1, 1), (2, 1)))
 
     assert net.nn_site((0, 1), d='r') is None
-    assert net.nn_site((0, 1), d='t') == (2, 1)
-    assert net.nn_site((2, 0), d='b') == (0, 0)
-
     assert net.site2index((1, 0)) == (1, 0)
+    #
+    ##########
+    net = fpeps.SquareLattice(dims=(3, 2), boundary='cylinder')
 
-def test_NtuEnv():
-    """ nearest environmental sites around a bond;  creates indices of the NTU environment """
+    assert net.dims == (3, 2)
+    assert net.sites() == ((0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1))
+    assert net.nn_bonds('h') == (((0, 0), (0, 1)),
+                                 ((1, 0), (1, 1)),
+                                 ((2, 0), (2, 1)))
+    assert net.nn_bonds('v') == (((0, 0), (1, 0)),
+                                 ((0, 1), (1, 1)),
+                                 ((1, 0), (2, 0)),
+                                 ((1, 1), (2, 1)),
+                                 ((2, 0), (0, 0)),
+                                 ((2, 1), (0, 1)))
 
-    bd00_01_h = fpeps.Bond(site_0 = (0, 0), site_1=(0, 1), dirn='h')
-    bd11_21_v = fpeps.Bond(site_0 = (1, 1), site_1=(2, 1), dirn='v')
+    assert net.nn_site((0, 1), d='r') is None
+    assert net.nn_site((0, 1), d='t') == Site(2, 1)
+    assert net.nn_site((2, 0), d='b') == Site(0, 0)
 
-    net_1 = fpeps.SquareLattice(lattice='square', dims=(3, 4), boundary='obc')  # dims = (rows, columns) # finite lattice
-    assert net_1.tensors_NtuEnv(bd00_01_h) == {'tl': None, 'l': None, 'bl': (1, 0), 'tr': None, 'r': (0, 2), 'br': (1, 1)}
-    assert net_1.tensors_NtuEnv(bd11_21_v) == {'tl': (1, 0), 't': (0, 1), 'tr': (1, 2), 'bl': (2, 0), 'b': None, 'br': (2, 2)}
-
-    net_2 = fpeps.SquareLattice(lattice='square', dims=(3, 4), boundary='infinite')  # dims = (rows, columns) # infinite lattice
-    assert net_2.tensors_NtuEnv(bd00_01_h) == {'tl':(2, 0), 'l': (0, 3), 'bl': (1, 0), 'tr': (2, 1), 'r': (0, 2), 'br': (1, 1)}
-    assert net_2.tensors_NtuEnv(bd11_21_v) == {'tl': (1, 0), 't': (0, 1), 'tr': (1, 2), 'bl': (2, 0), 'b': (0, 1), 'br': (2, 2)}
 
 def test_Peps_get_set():
     """ Setitem and getitem in peps allows to acces individual tensors. """
-    net = fpeps.SquareLattice(lattice='checkerboard', dims=(2, 2), boundary='infinite')
-    net = fpeps.Peps(net)
+    net = fpeps.CheckerboardLattice()
+    #
+    psi = fpeps.Peps(net)
+    assert all(psi[site] == None for site in psi.sites())  # all tensors initialized as None
+    #
+    psi[(0, 0)] = "Wannabe tensor"
+    # on a checkerboard lattice we have the same tensor at Site(0, 0) and Site(1, 1)
+    assert psi[(0, 0)] == psi[(1, 1)] == "Wannabe tensor"
+    assert psi[(0, 1)] == psi[(1, 0)] == None
+    #
+    ##########
+    net = fpeps.SquareLattice(dims=(3, 3), boundary='obc')
+    psi = fpeps.Peps(net)
 
-
-    assert all(net[site] == None for site in net.sites())  # all tensors initialized as None
-    net[(0, 0)] = "Wannabe tensor"
-    # on a checkerboard lattice we have the same tensor at (0, 0) and (1, 1
-    assert net[(0, 0)] == "Wannabe tensor" == net[(1, 1)]
-    assert net[(0, 1)] == None == net[(1, 0)]
-
-    net = fpeps.SquareLattice(lattice='square', dims=(3, 3), boundary='obc')
-    net = fpeps.Peps(net)
-
-    assert all(net[site] == None for site in net.sites())  # all tensors initialized as None
-    net[(0, 0)] = "Wannabe tensor"
-    assert net[(0, 0)] == "Wannabe tensor"
-    assert net[(1, 1)] is None
-
+    assert all(psi[site] == None for site in psi.sites())  # all tensors initialized as None
+    psi[(0, 0)] = "Wannabe tensor"
+    assert psi[(0, 0)] == "Wannabe tensor"
+    assert psi[(1, 1)] is None
 
 
 if __name__ == '__main__':
     test_Lattice()
     test_Peps_get_set()
-    test_NtuEnv()

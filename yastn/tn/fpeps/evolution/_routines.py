@@ -48,14 +48,14 @@ def evol_machine(env, gate, opts_evol, opts_svd=None):
 
     if env.depth == 0: # svd-upddate
         MA, MB = truncation_step(RA, RB, opts_svd=opts_svd, normalize=True)
-        env.psi[gate.bond.site_0], env.psi[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
+        env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
         info = {}
         return env, info
     else:
         # for now only other possibility is env.depth == 1
         g = env.bond_metric(gate.bond, QA, QB, dirn=gate.bond.dirn)
         info={}
-       
+
         MA, MB, opt_error, optim, svd_error = truncate_and_optimize(g, RA, RB, opts_evol["initialization"], opts_svd=opts_svd)
         if opts_evol["gradual_truncation"] == 'two-step':  # else 'one-step'
             opts_svd_2 = {'D_total':int(opts_svd['D_total']*2), 'tol_block':opts_svd['tol_block']}
@@ -67,7 +67,7 @@ def evol_machine(env, gate, opts_evol, opts_svd=None):
                 MA, MB = MA_2, MB_2
                 logging.info("2-step update; truncation errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e " % (opt_error, opt_error_2, svd_error, svd_error_2))
                 opt_error, optim, svd_error = opt_error_2, optim_2, svd_error_2
-        env.psi[gate.bond.site_0], env.psi[gate.bond.site_1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
+        env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
         if env.depth == 'NTU':
             info.update({'ntu_error': opt_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
 
@@ -87,7 +87,7 @@ def apply_local_gate_(env, gate):
 def apply_nn_gate(peps, gate):
 
     """ apply nn gates on PEPS tensors. """
-    A, B = peps[gate.bond.site_0], peps[gate.bond.site_1]  # A = [t l] [b r] s
+    A, B = peps[gate.bond.site0], peps[gate.bond.site1]  # A = [t l] [b r] s
 
     dirn = gate.bond.dirn
     if dirn == "h":  # Horizontal gate

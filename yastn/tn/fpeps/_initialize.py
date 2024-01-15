@@ -7,13 +7,13 @@ from ._geometry import SquareLattice
 
 r""" Initialization of peps tensors for real or imaginary time evolution """
 
-def product_peps(geometry, vectors)-> fpeps.Peps:  #   (geometry, vectors : yastn.Tensor | Dict[tuple[Int, Int], yastn.Tensor])
+def product_peps(geometry, vectors): #-> fpeps.Peps:  #   (geometry, vectors : yastn.Tensor | Dict[tuple[Int, Int], yastn.Tensor])
     """
     Initializes and returns Projected Entangled Pair States (PEPS) tensors based on provided parameters.
 
     This function serves as a versatile initializer for PEPS tensors, handling different initialization schemes.
     It can initialize tensors either by repeating a given tensor across a lattice geometry or based on a specific occupation pattern.
-    
+
     Parameters
     ----------
     geometry : SquareLattice or TriangularLattice
@@ -62,7 +62,7 @@ def product_peps(geometry, vectors)-> fpeps.Peps:  #   (geometry, vectors : yast
 
 def load_from_dict(config, d):
     psi = SquareLattice(lattice=d['lattice'], dims=d['dims'], boundary=d['boundary'])
-    psi= fpeps.Peps(psi)
+    psi = fpeps.Peps(psi)
     for ind, dtensor in d['data'].items():
         psi._data[ind] = load_tensor_from_dict(config, dtensor)
     return psi
