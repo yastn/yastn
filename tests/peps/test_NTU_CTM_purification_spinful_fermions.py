@@ -4,7 +4,7 @@ import pytest
 import logging
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.operators.gates import gates_hopping, gate_local_Hubbard
+from yastn.tn.fpeps.operators.gates import gates_hopping, gate_Coulomb
 from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
 from yastn.tn.fpeps import product_peps
 from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, one_site_dict, EV2ptcorr
@@ -46,7 +46,7 @@ def test_NTU_spinful_finite():
 
     GA_nn_up, GB_nn_up = gates_hopping(t_up, trotter_step, fid, fc_up, fcdag_up)
     GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, trotter_step, fid, fc_dn, fcdag_dn)
-    g_loc = gate_local_Hubbard(mu_up, mu_dn, U, trotter_step, fid, n_up, n_dn)
+    g_loc = gate_Coulomb(mu_up, mu_dn, U, trotter_step, fid, n_up, n_dn)
     g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
 
     if purification == 'True':
@@ -143,7 +143,7 @@ def test_NTU_spinful_infinite():
 
     GA_nn_up, GB_nn_up = gates_hopping(t_up, trotter_step, fid, fc_up, fcdag_up)
     GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, trotter_step, fid, fc_dn, fcdag_dn)
-    g_loc = gate_local_Hubbard(mu_up, mu_dn, U, trotter_step, fid, n_up, n_dn)
+    g_loc = gate_Coulomb(mu_up, mu_dn, U, trotter_step, fid, n_up, n_dn)
     g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
 
     if purification == 'True':

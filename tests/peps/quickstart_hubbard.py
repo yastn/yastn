@@ -19,8 +19,8 @@ opts_svd = {'D_total': D, 'tol_block': 1e-15}
 
 gate_hopping_u = fpeps.operators.gates.gates_hopping(dbeta*0.5, t, opt.I(), opt.c(spin='u'), opt.cp(spin='u'))
 gate_hopping_d = fpeps.operators.gates.gates_hopping(dbeta*0.5, t, opt.I(), opt.c(spin='d'), opt.cp(spin='d'))
-gate_loc_Hubbard = fpeps.operators.gates.gate_local_Hubbard(dbeta*0.5, mu, mu, U, opt.I(), opt.n(spin='u'), opt.n(spin='d'))
-gates = fpeps.evolution.gates_homogeneous(geometry, nn_gates=[gate_hopping_u, gate_hopping_d], loc_gates=gate_loc_Hubbard)
+gate_loc_Hubbard = fpeps.operators.gates.gate_Coulomb(dbeta*0.5, mu, mu, U, opt.I(), opt.n(spin='u'), opt.n(spin='d'))
+gates = fpeps.evolution.gates_homogeneous(geometry, nn=[gate_hopping_u, gate_hopping_d], loc_gates=gate_loc_Hubbard)
 
 psi = fpeps.product_peps(geometry=geometry, vectors = opt.I() / 2)
 
@@ -45,7 +45,7 @@ for step in range(steps):
 # convergence criteria for CTM based on total energy
 chi = 80 # environmental bond dimension
 tol = 1e-10 # truncation of singular values of CTM projectors
-max_sweeps=50 
+max_sweeps=50
 tol_exp = 1e-7   # difference of some observable must be lower than tolernace
 
 ops = {'cdagc_up': {'l': opt.cp(spin='u'), 'r': opt.c(spin='u')},
@@ -57,21 +57,21 @@ cf_energy_old = 0
 opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
 for step in fpeps.ctm.ctmrg(psi, max_sweeps, iterator_step=2, AAb_mode=0, opts_svd=opts_svd_ctm):
-    
+
     assert step.sweeps % 2 == 0 # stop every 2nd step as iteration_step=2
 
     obs_hor, obs_ver =  fpeps.ctm.nn_exp_dict(psi, step.env, ops)
 
-    cdagc_up = (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) + 
+    cdagc_up = (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) +
             sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
 
-    ccdag_up = (sum(abs(val) for val in obs_hor.get('ccdag_up').values()) + 
+    ccdag_up = (sum(abs(val) for val in obs_hor.get('ccdag_up').values()) +
             sum(abs(val) for val in obs_ver.get('ccdag_up').values()))
 
-    cdagc_dn = (sum(abs(val) for val in obs_hor.get('cdagc_dn').values()) + 
+    cdagc_dn = (sum(abs(val) for val in obs_hor.get('cdagc_dn').values()) +
             sum(abs(val) for val in obs_ver.get('cdagc_dn').values()))
 
-    ccdag_dn = (sum(abs(val) for val in obs_hor.get('ccdag_dn').values()) + 
+    ccdag_dn = (sum(abs(val) for val in obs_hor.get('ccdag_dn').values()) +
             sum(abs(val) for val in obs_ver.get('ccdag_dn').values()))
 
 

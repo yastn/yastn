@@ -1,11 +1,8 @@
-import numpy as np
-import yastn
-import yastn.tn.fpeps as fpeps
-from ...initialize import ones as ones
+""" Initialization of peps tensors for real or imaginary time evolution """
+from ._geometry import SquareLattice, CheckerboardLattice
+from ._peps import Peps
 from ...initialize import load_from_dict as load_tensor_from_dict
-from ._geometry import SquareLattice
-
-r""" Initialization of peps tensors for real or imaginary time evolution """
+from ... import YastnError, Tensor
 
 def product_peps(geometry, vectors): #-> fpeps.Peps:  #   (geometry, vectors : yastn.Tensor | Dict[tuple[Int, Int], yastn.Tensor])
     """
@@ -28,41 +25,29 @@ def product_peps(geometry, vectors): #-> fpeps.Peps:  #   (geometry, vectors : y
         The initialized PEPS.
 
     """
+    if not isinstance(geometry, (SquareLattice, CheckerboardLattice)):
+        raise YastnError("Geometry should be an instance of SquareLattice or CheckerboardLattice")
 
-    # Lattice Geometry with Repeated Tensor Initialization
-    if not isinstance(geometry, (SquareLattice)):
-        raise TypeError("Expected geometry to be an instance of SquareLattice")
+    if isinstance(vectors, Tensor):
+        vectors = {site: vectors.copy() for site in geometry.sites()}
 
-    if isinstance(vectors, yastn.Tensor):
-        # Lattice Geometry with Repeated Tensor Initialization
-        A = vectors.fuse_legs(axes=[(0, 1)])
+    psi = Peps(geometry)
+    for site, vec in vectors.items():
         for s in (-1, 1, 1, -1):
-            A = A.add_leg(axis=0, s=s)
-        A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
-        gamma = fpeps.Peps(geometry)
-        for ms in gamma.sites():
-            gamma[ms] = A
-    elif isinstance(vectors, dict):
-        # Occupation Pattern Initialization
-        gamma = fpeps.Peps(geometry)
-        for kk in gamma.sites():
-            Ga = vectors.get(kk)
-            if Ga is None:
-                continue  # Skip sites not defined in the vectors dictionary
-            for s in (-1, 1, 1, -1):
-                Ga = Ga.add_leg(axis=0, s=s)
-            gamma[kk] = Ga.fuse_legs(axes=((0, 1), (2, 3), 4))
-    else:
-        raise TypeError("Invalid type for vectors. Expected yastn.Tensor or Dict.")
-
-    return gamma
-
-
+            vec = vec.add_leg(axis=0, s=s)
+        psi[site] = vec.fuse_legs(axes=((0, 1), (2, 3), 4))
+    if any(psi[site] is None for site in psi.sites()):
+        raise YastnError("product_peps did not initialize some peps tensor")
+    return psi
 
 
 def load_from_dict(config, d):
-    psi = SquareLattice(lattice=d['lattice'], dims=d['dims'], boundary=d['boundary'])
-    psi = fpeps.Peps(psi)
-    for ind, dtensor in d['data'].items():
-        psi._data[ind] = load_tensor_from_dict(config, dtensor)
+    if d['lattice'] == "square":
+        net = SquareLattice(dims=d['dims'], boundary=d['boundary'])
+    elif d['lattice'] == "checkerboard":
+        net = CheckerboardLattice()
+
+    psi = Peps(net)
+    for ind, tensor in d['data'].items():
+        psi._data[ind] = load_tensor_from_dict(config, tensor)
     return psi

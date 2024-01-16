@@ -64,7 +64,7 @@ def evolution_step_(env, gates, opts_evol, opts_svd=None):
         return env, info
 
 
-def gates_homogeneous(peps, nn_gates, loc_gates):
+def gates_homogeneous(peps, nn, local):
 
     """
     Generate a list of gates that is homogeneous over the lattice.
@@ -72,30 +72,30 @@ def gates_homogeneous(peps, nn_gates, loc_gates):
     Parameters
     ----------
     peps      : class Lattice
-    nn_gates : list
+    nn : list
               A list of two-tuples, each containing the tensors that form a two-site
               nearest-neighbor gate.
-    loc_gates : A two-tuple containing the tensors that form the single-site gate.
+    local : A two-tuple containing the tensors that form the single-site gate.
 
     Returns
     -------
     Gates: The generated gates. The NamedTuple 'Gates` named tuple contains a list of
       local and nn gates along with info where they should be applied.
     """
-    # len(nn_gates) indicates the physical degrees of freedom; option to add more
+    # len(nn) indicates the physical degrees of freedom; option to add more
     bonds = peps.nn_bonds(dirn='h') + peps.nn_bonds(dirn='v')
 
-    gates_nn = []   # nn_gates = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)]
+    gates_nn = []   # nn = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)]
     for bd in bonds:
-        for i in range(len(nn_gates)):
-            gates_nn.append(Gate_nn(A=nn_gates[i][0], B=nn_gates[i][1], bond=bd))
+        for i in range(len(nn)):
+            gates_nn.append(Gate_nn(A=nn[i][0], B=nn[i][1], bond=bd))
     gates_loc = []
     if peps.lattice=='checkerboard':
-        gates_loc.append(Gate_local(A=loc_gates, site=(0,0)))
-        gates_loc.append(Gate_local(A=loc_gates, site=(0,1)))
+        gates_loc.append(Gate_local(A=local, site=(0,0)))
+        gates_loc.append(Gate_local(A=local, site=(0,1)))
     elif peps.lattice != 'checkerboard':
         for site in peps.sites():
-            gates_loc.append(Gate_local(A=loc_gates, site=site))
+            gates_loc.append(Gate_local(A=local, site=site))
     return Gates(local=gates_loc, nn=gates_nn)
 
 

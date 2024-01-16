@@ -8,11 +8,11 @@ opt = yastn.operators.SpinfulFermions(sym='U1xU1xZ2')
 # while initializing basic operators it is possible to specify different backend and device, see ref:`yastn.make_config`
 
 
-geometry = fpeps.SquareLattice(lattice = 'checkerboard')
+geometry = fpeps.CheckerboardLattice()
 # this is for infinite lattice with checkerboard structure; other options incude ...
 
 one = opt.I()
-psi = fpeps.product_peps(geometry=geometry, vector = one / 2)
+psi = fpeps.product_peps(geometry, one.fuse_legs(axes=[(0, 1)])) #
 # this prepares as initial state at infinite temperature, which is a product state with
 
 # we will be simulating Hubbard model at a square lattice with parameters
@@ -30,15 +30,15 @@ U = 0 # Coulomb interaction
 dbeta = 0.01
 #
 # this in latex    exp( - t * dbeta /2  c_1^dag c_2 + c_2^dag c_1)
-gate_hopping_u = fpeps.operators.gate_hopping(dbeta, t, opt.I(), opt.c(spin='u'), opt.cp(spin='u'))
-gate_hopping_d = fpeps.operators.gate_hopping(dbeta, t, opt.I(), opt.c(spin='d'), opt.cp(spin='d'))
+gate_hopping_u = fpeps.gates_hopping(dbeta, t, opt.I(), opt.c(spin='u'), opt.cp(spin='u'))
+gate_hopping_d = fpeps.gates_hopping(dbeta, t, opt.I(), opt.c(spin='d'), opt.cp(spin='d'))
 #
 # this in latex  exp( - dbeta /2  (n_u n_d) ....)
 #
-gate_coulomb = fpeps.operators.gate_coulomb(dbeta, mu, mu, U, opt.I(), opt.n(spin='u'), opt.n(spin='d'))
+gate_Coulomb = fpeps.gate_Coulomb(dbeta, mu, mu, U, opt.I(), opt.n(spin='u'), opt.n(spin='d'))
 #
 #
-gates = fpeps.gates_homogeneous(geometry, nn=[gate_hopping_u, gate_hopping_d], local=gate_coulomb)
+gates = fpeps.gates_homogeneous(geometry, nn=[gate_hopping_u, gate_hopping_d], local=gate_Coulomb)
 #
 
 #
