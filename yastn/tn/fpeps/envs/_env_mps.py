@@ -1,7 +1,7 @@
-from ...tn import mps
+from ... import mps
 from yastn.tn.fpeps import SquareLattice
-from ._auxiliary import transfer_mpo
-from ... import YastnError, ones, Leg
+from .._auxiliary import transfer_mpo
+from .... import YastnError, ones, Leg
 
 
 class MpsEnv(SquareLattice):

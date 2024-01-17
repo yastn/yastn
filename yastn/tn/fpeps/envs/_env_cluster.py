@@ -1,7 +1,7 @@
 import yastn
-from yastn.tn.fpeps.operators.gates import trivial_tensor
+from yastn.tn.fpeps.gates._gates import trivial_tensor
 from yastn import tensordot, swap_gate, fuse_legs, ncon
-from ._contraction_envs import con_tl, con_tr, con_br, con_bl, con_l, con_r, con_b, con_t, con_Q_l, con_Q_r, con_Q_t, con_Q_b
+from ._env_auxlliary import con_tl, con_tr, con_br, con_bl, con_l, con_r, con_b, con_t, con_Q_l, con_Q_r, con_Q_t, con_Q_b
 
 class EnvCluster:
     def __init__(self, psi, depth=1):

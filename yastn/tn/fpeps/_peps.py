@@ -27,7 +27,7 @@ class Peps():
     def save_to_dict(self):
         if isinstance(self.geometry, SquareLattice):
             lattice = "square"
-        else:  # isinstance(self.g, CheckerboardLattice):
+        elif isinstance(self.geometry, CheckerboardLattice):
             lattice = "checkerboard"
 
         d = {'lattice': lattice,
