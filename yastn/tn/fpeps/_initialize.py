@@ -31,6 +31,13 @@ def product_peps(geometry, vectors): #-> fpeps.Peps:  #   (geometry, vectors : y
     if isinstance(vectors, Tensor):
         vectors = {site: vectors.copy() for site in geometry.sites()}
 
+    for k, v in vectors.items():
+        if v.ndim == 1 and not v.get_legs(axes=0).is_fused():
+            v = v.add_leg(s=-1)
+        if v.ndim == 2:
+            v = v.fuse_legs(axes=[(0, 1)])
+            vectors[k] = v
+
     psi = Peps(geometry)
     for site, vec in vectors.items():
         for s in (-1, 1, 1, -1):

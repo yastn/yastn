@@ -11,8 +11,8 @@ def test_propuct_peps():
     ops = yastn.operators.SpinlessFermions(sym='U1')
 
     geometry = fpeps.CheckerboardLattice()
-    v0 = ops.vec_n(val=0).add_leg(axis=0, s=-1).fuse_legs(axes=[(0, 1)])
-    v1 = ops.vec_n(val=1).add_leg(axis=0, s=-1).fuse_legs(axes=[(0, 1)])
+    v0 = ops.vec_n(val=0)
+    v1 = ops.vec_n(val=1)
     psi = fpeps.product_peps(geometry, {(0, 0): v0, (0, 1): v1})
     for site in psi.sites():
         legs = psi[site].get_legs()
@@ -21,7 +21,7 @@ def test_propuct_peps():
     #
     #
     geometry = fpeps.SquareLattice(dims=(3, 2), boundary='obc')
-    psi = fpeps.product_peps(geometry, ops.I().fuse_legs(axes=[(0, 1)]))
+    psi = fpeps.product_peps(geometry, ops.I())
     for site in psi.sites():
         legs = psi[site].get_legs()
         for leg in legs:
@@ -36,7 +36,7 @@ def test_propuct_peps():
 def test_save_load():
     ops = yastn.operators.Spin1(sym='Z3')
     geometry = fpeps.SquareLattice(dims=(3, 2), boundary='obc')
-    psi = fpeps.product_peps(geometry, ops.I().fuse_legs(axes=[(0, 1)]))
+    psi = fpeps.product_peps(geometry, ops.I())
 
     d = psi.save_to_dict()
     psi2 = fpeps.load_from_dict(ops.config, d)

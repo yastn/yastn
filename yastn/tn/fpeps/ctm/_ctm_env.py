@@ -2,11 +2,11 @@ from typing import NamedTuple, Tuple
 from itertools import accumulate
 from dataclasses import dataclass
 from ....tn import mps
-from .... import Tensor
 from yastn.tn.fpeps import Peps
-from yastn.tn.fpeps.operators.gates import match_ancilla_1s
+from yastn.tn.fpeps.gates._gates import match_ancilla_1s
 from yastn import rand, tensordot, ones
 from .._auxiliary import transfer_mpo
+from .._geometry import CheckerboardLattice
 
 
 class ctm_window(NamedTuple):
@@ -19,10 +19,11 @@ class ctm_window(NamedTuple):
 
 class CtmEnv(Peps):
     r""" Geometric information about the lattice provided to ctm tensors """
-    def __init__(self, peps):
-        super().__init__(peps) 
+    def __init__(self, psi):
+        super().__init__(psi.geometry)
+        self.psi = psi
 
-        if self.lattice == 'checkerboard':
+        if isinstance(self.geometry, CheckerboardLattice):
             windows = (ctm_window(nw=(0, 0), ne=(0, 1), sw=(0, 1), se=(0, 0)),
                        ctm_window(nw=(0, 1), ne=(0, 0), sw=(0, 0), se=(0, 1)))
         else:
@@ -34,7 +35,6 @@ class CtmEnv(Peps):
                 if None not in win:
                     windows.append(ctm_window(*win))
         self._windows = tuple(windows)
-
 
     def copy(self):
         env = CtmEnv(self)

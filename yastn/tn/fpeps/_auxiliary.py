@@ -2,6 +2,15 @@ from ...tn.mps import Mps, Mpo
 from ._doublePepsTensor import DoublePepsTensor
 from ... import tensor, initialize
 
+
+def show_leg_structure(peps):
+   """ Prints the leg structure of each site tensor in a PEPS """
+   for ms in peps.sites():
+        xs = peps[ms].unfuse_legs((0, 1))
+        print("site ", str(ms), xs.get_shape())
+
+
+
 def transfer_mpo(self, index, index_type, rotation=False):
 
     """Converts a specific row or column of PEPS into MPO.

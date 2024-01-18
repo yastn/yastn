@@ -1,7 +1,8 @@
 from ._ctm_iteration_routines import check_consistency_tensors
 from ._ctm_iteration_routines import fPEPS_2layers
 from ._ctm_observable_routines import apply_TMO_left, con_bi, array_EV2pt, array2ptdiag
-import yastn
+from .... import tensordot
+from .._geometry import CheckerboardLattice
 
 def nn_exp_dict(peps, env, op):
 
@@ -58,7 +59,7 @@ def one_site_dict(peps, env, op):
     site_exp_dict = {}  # Dictionary to store site-wise expectation values
     peps = check_consistency_tensors(peps)
 
-    if peps.lattice == 'checkerboard':
+    if isinstance(peps.geometry, CheckerboardLattice):
         lists = [(0,0), (0,1)]
     else:
         lists = peps.sites()
@@ -90,11 +91,11 @@ def measure_one_site_spin(A, ms, env, op=None):
         AAb = fPEPS_2layers(A, op=op, dir='1s')
     elif op is None:
         AAb = fPEPS_2layers(A)
-    vecl = yastn.tensordot(env[ms].l, env[ms].tl, axes=(2, 0))
-    vecl = yastn.tensordot(env[ms].bl, vecl, axes=(1, 0))
+    vecl = tensordot(env[ms].l, env[ms].tl, axes=(2, 0))
+    vecl = tensordot(env[ms].bl, vecl, axes=(1, 0))
     new_vecl = apply_TMO_left(vecl, env, ms, AAb)
-    vecr = yastn.tensordot(env[ms].tr, env[ms].r, axes=(1, 0))
-    vecr = yastn.tensordot(vecr, env[ms].br, axes=(2, 0))
+    vecr = tensordot(env[ms].tr, env[ms].r, axes=(1, 0))
+    vecr = tensordot(vecr, env[ms].br, axes=(2, 0))
     hor = con_bi(new_vecl, vecr)
     return hor
 

@@ -186,10 +186,8 @@ class DoublePepsTensor:
             return self.append_a_tl(tt)
 
     def fPEPS_fuse_layers(self):
-
         """
-          Fuse the top and bottom layers of a PEPS tensor network.
-
+        Fuse the top and bottom layers of a PEPS tensor network.
         """
 
         fA = self.top.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0t 1t) (2t 3t) 4t

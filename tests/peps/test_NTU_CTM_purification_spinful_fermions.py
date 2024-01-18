@@ -4,9 +4,7 @@ import pytest
 import logging
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.operators.gates import gates_hopping, gate_Coulomb
-from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
-from yastn.tn.fpeps import product_peps
+from yastn.tn.fpeps.gates import gates_hopping, gate_Coulomb
 from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, one_site_dict, EV2ptcorr
 
 try:
@@ -24,7 +22,6 @@ n_int = n_up @ n_dn
 
 def test_NTU_spinful_finite():
 
-    lattice = 'square'
     boundary = 'obc'
     purification = 'True'
     xx = 3
@@ -42,7 +39,7 @@ def test_NTU_spinful_finite():
     trotter_step = coeff * dbeta
 
     dims = (xx, yy)
-    geometry = fpeps.SquareLattice(lattice, dims, boundary)  # shape = (rows, columns)
+    geometry = fpeps.SquareLattice(dims, boundary)  # shape = (rows, columns)
 
     GA_nn_up, GB_nn_up = gates_hopping(t_up, trotter_step, fid, fc_up, fcdag_up)
     GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, trotter_step, fid, fc_dn, fcdag_dn)
@@ -50,18 +47,22 @@ def test_NTU_spinful_finite():
     g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
 
     if purification == 'True':
-        peps = product_peps(geometry, fid) # initialized at infinite temperature
+        peps = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
 
-    gates = gates_homogeneous(peps, g_nn, g_loc)
+    gates = fpeps.gates_homogeneous(peps, g_nn, g_loc)
 
     time_steps = round(beta_end / dbeta)
-    opts_svd_ntu = {'D_total': D, 'tol_block': 1e-15}
+
+
+    # contatins the state psi and information how to calculate metric tensor for truncation; here we use nearest tensor clusters (NTU) environment
+    env = fpeps.EnvNTU(peps)
+    opts = {"D_total": D, 'tol_block': 1e-15, "gradual_truncation": False, "initialization": "EAT"}  # truncation options  # should be also bond dimension
 
     for nums in range(time_steps):
-
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        peps, _ =  evolution_step_(peps, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu)
+        info = fpeps.evolution_step_(env, gates, opts)
+
 
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
@@ -106,8 +107,8 @@ def test_NTU_spinful_finite():
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
-    bd_h = fpeps.Bond(site0 = (2, 0), site1=(2, 1), dirn='h')
-    bd_v = fpeps.Bond(site0 = (0, 1), site1=(1, 1), dirn='v')
+    bd_h = fpeps.Bond(site0 = (2, 0), site1=(2, 1))
+    bd_v = fpeps.Bond(site0 = (0, 1), site1=(1, 1))
 
     nn_CTM_bond_1_up = 0.5*(abs(EV2ptcorr(peps, step.env, ops['cdagc_up'], bd_h.site0, bd_h.site1)) + abs(EV2ptcorr(peps, step.env, ops['ccdag_up'], bd_h.site0, bd_h.site1)))
     nn_CTM_bond_2_up = 0.5*(abs(EV2ptcorr(peps, step.env, ops['cdagc_up'], bd_v.site0, bd_v.site1)) + abs(EV2ptcorr(peps, step.env, ops['ccdag_up'], bd_v.site0, bd_v.site1)))
@@ -125,8 +126,6 @@ def test_NTU_spinful_finite():
 
 def test_NTU_spinful_infinite():
 
-    lattice = 'checkerboard'
-    boundary = 'infinite'
     purification = 'True'
     D = 12
     chi = 40
@@ -136,10 +135,9 @@ def test_NTU_spinful_infinite():
     U=0
     dbeta = 0.01
     step = 'two-step'
-    tr_mode = 'optimal'
     coeff = 0.25 # for purification; 0.5 for ground state calculation and 1j*0.5 for real-time evolution
     trotter_step = coeff * dbeta
-    geometry = fpeps.SquareLattice(lattice=lattice, boundary=boundary)
+    geometry = fpeps.CheckerboardLattice()
 
     GA_nn_up, GB_nn_up = gates_hopping(t_up, trotter_step, fid, fc_up, fcdag_up)
     GA_nn_dn, GB_nn_dn = gates_hopping(t_dn, trotter_step, fid, fc_dn, fcdag_dn)
@@ -147,22 +145,23 @@ def test_NTU_spinful_infinite():
     g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
 
     if purification == 'True':
-        peps = product_peps(geometry, fid) # initialized at infinite temperature
+        peps = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
 
-    gates = gates_homogeneous(peps, g_nn, g_loc)
+    gates = fpeps.gates_homogeneous(peps, g_nn, g_loc)
     time_steps = round(beta_end / dbeta)
-    opts_svd_ntu = {'D_total': D, 'tol_block': 1e-15}
+
+    env = fpeps.EnvNTU(peps)
+    opts = {"D_total": D, 'tol_block': 1e-15, "gradual_truncation": False, "initialization": "EAT"}  # truncation options  # should be also bond dimension
 
     for nums in range(time_steps):
-
         beta = (nums + 1) * dbeta
         logging.info("beta = %0.3f" % beta)
-        peps, _ =  evolution_step_(peps, gates, step, tr_mode, env_type='NTU', opts_svd=opts_svd_ntu)
+        info = fpeps.evolution_step_(env, gates, opts)
 
     # convergence criteria for CTM based on total energy
     chi = 40 # environmental bond dimension
     tol = 1e-10 # truncation of singular values of CTM projectors
-    max_sweeps=50
+    max_sweeps = 50
     tol_exp = 1e-7   # difference of some observable must be lower than tolernace
 
     ops = {'cdagc_up': {'l': fcdag_up, 'r': fc_up},

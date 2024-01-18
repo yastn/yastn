@@ -12,6 +12,7 @@ import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps._doublePepsTensor import DoublePepsTensor
 from ._ctm_env import Local_Projector_Env
 import numpy as np
+from .._geometry import CheckerboardLattice
 
 
 def append_a_bl(tt, AAb):
@@ -391,7 +392,7 @@ def move_horizontal(envn, env, AAb, proj, ms):
         r_abv = AAb.nn_site(right, d='t')
         r_bel = AAb.nn_site(right, d='b')
 
-    if AAb.lattice == 'checkerboard':
+    if isinstance(AAb.geometry, CheckerboardLattice):
         if ms == (0,0):
             left =  right = (0,1)
             l_abv = r_abv = r_bel = l_bel = (0,0)
@@ -474,7 +475,7 @@ def move_vertical(envn, env, AAb, proj, ms):
         b_left = AAb.nn_site(bottom, d='l')
         b_right = AAb.nn_site(bottom, d='r')
 
-    if AAb.lattice == 'checkerboard':
+    if isinstance(AAb.geometry, CheckerboardLattice):
         if ms == (0,0):
             top =  bottom = (0,1)
             t_left = b_left = b_right = t_right = (0,0)
@@ -595,7 +596,7 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
 
     # print('######## Horizontal Move ###########')
 
-    if AAb.lattice == 'checkerboard':
+    if isinstance(AAb.geometry, CheckerboardLattice):
         envn_hor = move_horizontal(envn_hor, env, AAb, proj, (0,0))
         envn_hor = move_horizontal(envn_hor, env, AAb, proj, (0,1))
     else:
@@ -620,7 +621,7 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
 
     # print('######### Vertical Move ###########')
 
-    if AAb.lattice == 'checkerboard':
+    if isinstance(AAb.geometry, CheckerboardLattice):
         envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, (0,0))
         envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, (0,1))
     else:

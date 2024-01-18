@@ -101,13 +101,3 @@ def gate_local_fermi_sea(mu, step, fid, fc, fcdag):
     G_loc = fid + fn * (np.exp(tr_step) - 1)
     return G_loc
 
-
-def trivial_tensor(fid):
-    """
-    fid is identity operator in local space with desired symmetry
-    """
-    A = (1/np.sqrt(fid.get_shape()[0])) * fid
-    A = A.fuse_legs(axes=[(0, 1)])
-    for s in (-1, 1, 1, -1):
-        A = A.add_leg(axis=0, s=s)
-    return A.fuse_legs(axes=((0, 1), (2, 3), 4))

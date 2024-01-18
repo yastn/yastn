@@ -9,7 +9,7 @@ mu = 0
 t = 1
 U=0
 dbeta = 0.01
-geometry = fpeps.SquareLattice(lattice = 'checkerboard')
+geometry = fpeps.CheckerboardLattice()
 step = "one-step"
 tr_mode = 'optimal'
 Nx=2
@@ -17,26 +17,25 @@ Ny=2
 D = 12
 opts_svd = {'D_total': D, 'tol_block': 1e-15}
 
-gate_hopping_u = fpeps.operators.gates.gates_hopping(dbeta*0.5, t, opt.I(), opt.c(spin='u'), opt.cp(spin='u'))
-gate_hopping_d = fpeps.operators.gates.gates_hopping(dbeta*0.5, t, opt.I(), opt.c(spin='d'), opt.cp(spin='d'))
-gate_loc_Hubbard = fpeps.operators.gates.gate_Coulomb(dbeta*0.5, mu, mu, U, opt.I(), opt.n(spin='u'), opt.n(spin='d'))
-gates = fpeps.evolution.gates_homogeneous(geometry, nn=[gate_hopping_u, gate_hopping_d], loc_gates=gate_loc_Hubbard)
+gate_hopping_u = fpeps.gates._gates.gates_hopping(dbeta*0.5, t, opt.I(), opt.c(spin='u'), opt.cp(spin='u'))
+gate_hopping_d = fpeps.gates._gates.gates_hopping(dbeta*0.5, t, opt.I(), opt.c(spin='d'), opt.cp(spin='d'))
+gate_loc_Hubbard = fpeps.gates._gates.gate_Coulomb(dbeta*0.5, mu, mu, U, opt.I(), opt.n(spin='u'), opt.n(spin='d'))
 
 psi = fpeps.product_peps(geometry=geometry, vectors = opt.I() / 2)
+gates = fpeps.gates_homogeneous(psi, nn=[gate_hopping_u, gate_hopping_d], local=gate_loc_Hubbard)
 
 beta = 0.1
 steps = int((beta / 2) / dbeta)
 
-opts_evol = {"D_total": D, "gradual_truncation": "two-step", "initialization": "EAT"} # initialization is "EAT" or "normal"
 # contatins the state psi and information how to calculate metric tensor for truncation; here we use nearest tensor clusters (NTU) environment
-env = fpeps.EnvCluster(psi, depth=1)
-opts_svd_ntu = {'D_total': D, 'tol_block': 1e-15}
+env = fpeps.EnvNTU(psi)
 
+opts = {"D_total": D, "gradual_truncation": False, "initialization": "EAT"}  # truncation options  # should be also bond dimension
 
 for step in range(steps):
     beta = (step + 1) * dbeta
     print("beta = %0.3f" % beta)
-    env = fpeps.evolution.evolution_step_(env, gates, opts_evol, opts_svd)
+    info = fpeps.evolution_step_(env, gates, opts)
     # psi is updated in place inside the environment
 
 

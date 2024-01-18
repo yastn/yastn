@@ -8,6 +8,7 @@ import logging
 from yastn.tn.fpeps.gates._gates import match_ancilla_1s, match_ancilla_2s
 from yastn import tensordot, vdot, svd_with_truncation, svd, qr, ncon, eigh_with_truncation
 from typing import NamedTuple
+from ._geometry import CheckerboardLattice
 
 
 class Gate_nn(NamedTuple):
@@ -23,44 +24,6 @@ class Gate_local(NamedTuple):
 class Gates(NamedTuple):
     local : list = None   # list of Gate_local
     nn : list = None   # list of Gate_nn
-
-
-
-
-def gates_homogeneous(peps, nn, local):
-
-    """
-    Generate a list of gates that is homogeneous over the lattice.
-
-    Parameters
-    ----------
-    peps      : class Lattice
-    nn : list
-              A list of two-tuples, each containing the tensors that form a two-site
-              nearest-neighbor gate.
-    local : A two-tuple containing the tensors that form the single-site gate.
-
-    Returns
-    -------
-    Gates: The generated gates. The NamedTuple 'Gates` named tuple contains a list of
-      local and nn gates along with info where they should be applied.
-    """
-    # len(nn) indicates the physical degrees of freedom; option to add more
-    bonds = peps.nn_bonds(dirn='h') + peps.nn_bonds(dirn='v')
-
-    gates_nn = []   # nn = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)]
-    for bd in bonds:
-        for i in range(len(nn)):
-            gates_nn.append(Gate_nn(A=nn[i][0], B=nn[i][1], bond=bd))
-    gates_loc = []
-    if peps.lattice=='checkerboard':
-        gates_loc.append(Gate_local(A=local, site=(0,0)))
-        gates_loc.append(Gate_local(A=local, site=(0,1)))
-    elif peps.lattice != 'checkerboard':
-        for site in peps.sites():
-            gates_loc.append(Gate_local(A=local, site=site))
-    return Gates(local=gates_loc, nn=gates_nn)
-
 
 
 def evolution_step_(env, gates, opts_evol, opts_svd=None):
@@ -81,7 +44,6 @@ def evolution_step_(env, gates, opts_evol, opts_svd=None):
 
     Returns
     -------
-        peps  : class Lattice
         info : dict (Dictionary containing information about the evolution.)
 
     """
@@ -94,20 +56,21 @@ def evolution_step_(env, gates, opts_evol, opts_svd=None):
     all_gates = gates.nn + gates.nn[::-1]
 
     for gate in all_gates:
-        env, info = evol_machine(env, gate, opts_evol, opts_svd)
+        info = evol_machine(env, gate, opts_evol, opts_svd)
         infos.append(info)
 
     for gate in gates.local[::-1]:
         env = apply_local_gate_(env, gate)
 
-    if env.depth == 'svd-update':
-        return env, info
+    if env.which != 'NN':
+        return info
 
-    if env.depth == 1 and not env.depth==0:
+    if env.which == 'NN':
+        info = {}
         info['ntu_error'] = [record['ntu_error'] for record in infos]
         info['optimal_cutoff'] = [record['optimal_cutoff'] for record in infos]
         info['svd_error'] = [record['svd_error'] for record in infos]
-        return env, info
+        return info
 
 
 def evol_machine(env, gate, opts_evol, opts_svd=None):
@@ -147,15 +110,14 @@ def evol_machine(env, gate, opts_evol, opts_svd=None):
 
     QA, QB, RA, RB = apply_nn_gate(env.psi, gate)
 
-    if env.depth == 0: # svd-upddate
+    if env.which != 'NN': # svd-upddate
         MA, MB = truncation_step(RA, RB, opts_svd=opts_svd, normalize=True)
         env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
         info = {}
-        return env, info
+        return info
     else:
-        # for now only other possibility is env.depth == 1
-        g = env.bond_metric(gate.bond, QA, QB, dirn=gate.bond.dirn)
-        info={}
+        g = env.bond_metric(gate.bond, QA, QB)
+        info = {}
 
         MA, MB, opt_error, optim, svd_error = truncate_and_optimize(g, RA, RB, opts_evol["initialization"], opts_svd=opts_svd)
         if opts_evol["gradual_truncation"] == 'two-step':  # else 'one-step'
@@ -169,10 +131,10 @@ def evol_machine(env, gate, opts_evol, opts_svd=None):
                 logging.info("2-step update; truncation errors 1-and 2-step %0.5e,  %0.5e; svd error %0.5e,  %0.5e " % (opt_error, opt_error_2, svd_error, svd_error_2))
                 opt_error, optim, svd_error = opt_error_2, optim_2, svd_error_2
         env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
-        if env.depth == 'NTU':
+        if env.which == 'NN':
             info.update({'ntu_error': opt_error, 'optimal_cutoff': optim, 'svd_error': svd_error})
 
-        return env, info
+        return info
 
 ############################
 ##### gate application  ####
@@ -428,3 +390,39 @@ def optimal_pinv(gg, J, gRR):
 
     Mnew = Mnew.unfuse_legs(axes=0)
     return tu_error, c_off, Mnew
+
+
+def gates_homogeneous(peps, nn, local):
+
+    """
+    Generate a list of gates that is homogeneous over the lattice.
+
+    Parameters
+    ----------
+    peps      : class Lattice
+    nn : list
+              A list of two-tuples, each containing the tensors that form a two-site
+              nearest-neighbor gate.
+    local : A two-tuple containing the tensors that form the single-site gate.
+
+    Returns
+    -------
+    Gates: The generated gates. The NamedTuple 'Gates` named tuple contains a list of
+      local and nn gates along with info where they should be applied.
+    """
+    # len(nn) indicates the physical degrees of freedom; option to add more
+    bonds = peps.nn_bonds(dirn='h') + peps.nn_bonds(dirn='v')
+
+    gates_nn = []   # nn = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)]
+    for bd in bonds:
+        for i in range(len(nn)):
+            gates_nn.append(Gate_nn(A=nn[i][0], B=nn[i][1], bond=bd))
+    gates_loc = []
+    if isinstance(peps.geometry, CheckerboardLattice):
+        gates_loc.append(Gate_local(A=local, site=(0,0)))
+        gates_loc.append(Gate_local(A=local, site=(0,1)))
+    else:
+        for site in peps.sites():
+            gates_loc.append(Gate_local(A=local, site=site))
+    return Gates(local=gates_loc, nn=gates_nn)
+
