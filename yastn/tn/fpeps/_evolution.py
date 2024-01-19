@@ -8,7 +8,6 @@ import logging
 from yastn.tn.fpeps.gates._gates import match_ancilla_1s, match_ancilla_2s
 from yastn import tensordot, vdot, svd_with_truncation, svd, qr, ncon, eigh_with_truncation
 from typing import NamedTuple
-from ._geometry import CheckerboardLattice
 
 
 class Gate_nn(NamedTuple):
@@ -33,34 +32,32 @@ def evolution_step_(env, gates, opts_evol, opts_svd=None):
 
     Parameters
     ----------
+    env: EnvNTU | ...
+        Contains PEPS state, that is updated in place, and method to calculate bond environment for truncation.
+    gates: Gates
+        The gates to by applied. Iterates though provided gates forward and then backward, resulting in a 2nd order method.
+        Each gate should correspond to half time-step.
 
-        peps: class Lattice
-        gates: The gates to apply during the evolution. The `Gates` named tuple
-                should contain a list of NamedTuples `Gate_local` and `Gate_nn`.
-        step: str (Specifies the type of evolution step to perform. Can be either 'ntu-update' or 'svd-update'.
-        truncation_mode: str (Specifies the truncation mode to use during the evolution.)
-        env_type: str (Specifies the type of environment to use during the evolution.)
-        opts_svd (dict, optional): Dictionary containing options for the SVD routine.
+
+    opts_svd (dict, optional):
+        Dictionary containing options for the SVD routine.
 
     Returns
     -------
         info : dict (Dictionary containing information about the evolution.)
-
     """
 
     infos = []
 
     for gate in gates.local:
-        env = apply_local_gate_(env, gate) # here psi will be update in place
+        apply_local_gate_(env, gate)
 
-    all_gates = gates.nn + gates.nn[::-1]
-
-    for gate in all_gates:
+    for gate in gates.nn + gates.nn[::-1]:
         info = evol_machine(env, gate, opts_evol, opts_svd)
         infos.append(info)
 
     for gate in gates.local[::-1]:
-        env = apply_local_gate_(env, gate)
+        apply_local_gate_(env, gate)
 
     if env.which != 'NN':
         return info
@@ -136,99 +133,116 @@ def evol_machine(env, gate, opts_evol, opts_svd=None):
 
         return info
 
-############################
-##### gate application  ####
-############################
 
 def apply_local_gate_(env, gate):
     """ apply local gates on PEPS tensors """
     A = match_ancilla_1s(gate.A, env.psi[gate.site])
     env.psi[gate.site] = tensordot(env.psi[gate.site], A, axes=(2, 1)) # [t l] [b r] [s a]
-    return env
 
 
-def apply_nn_gate(peps, gate):
+def apply_nn_gate(psi, gate):
+    """ Apply nearest neighbor gate to PEPS tensors. """
+    bd = gate.bond
+    dirn = bd.dirn
+    A = psi[bd.site0]  # [t l] [b r] sa
+    B = psi[bd.site1]  # [t l] [b r] sa
 
-    """ apply nn gates on PEPS tensors. """
-    A, B = peps[gate.bond.site0], peps[gate.bond.site1]  # A = [t l] [b r] s
-
-    dirn = gate.bond.dirn
     if dirn == "h":  # Horizontal gate
         GA_an = match_ancilla_2s(gate.A, A, dir='l')
-        int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
-        int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] s] [b r] c
-        int_A = int_A.unfuse_legs(axes=1)  # [[t l] s] b r c
+        int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] sa c
+        int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
+        int_A = int_A.unfuse_legs(axes=1)  # [[t l] sa] b r c
         int_A = int_A.swap_gate(axes=(1, 3))  # b X c
-        int_A = int_A.fuse_legs(axes=((0, 1), (2, 3)))  # [[[t l] s] b] [r c]
-        QA, RA = qr(int_A, axes=(0, 1), sQ=-1)  # [[[t l] s] b] rr @ rr [r c]
+        int_A = int_A.fuse_legs(axes=((0, 1), (2, 3)))  # [[[t l] sa] b] [r c]
+        QA, RA = qr(int_A, axes=(0, 1), sQ=-1)  # [[[t l] sa] b] rr @ rr [r c]
 
         GB_an = match_ancilla_2s(gate.B, B, dir='r')
-        int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
-        int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] s] c
-        int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] s] c
-        int_B = int_B.fuse_legs(axes=((0, 2), (1, 3)))  # [t [[b r] s]] [l c]
-        QB, RB = qr(int_B, axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] s]]  @  [l c] ll
+        int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] sa c
+        int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
+        int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] sa] c
+        int_B = int_B.fuse_legs(axes=((0, 2), (1, 3)))  # [t [[b r] sa]] [l c]
+        QB, RB = qr(int_B, axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] sa]]  @  [l c] ll
 
     elif dirn == "v":  # Vertical gate
-
         GA_an = match_ancilla_2s(gate.A, A, dir='l')
-        int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] s c
-        int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] s] [b r] c
-        int_A = int_A.unfuse_legs(axes=1)  # [[t l] s] b r c
-        int_A = int_A.fuse_legs(axes=((0, 2), (1, 3)))  # [[[t l] s] r] [b c]
-        QA, RA = qr(int_A, axes=(0, 1), sQ=1)  # [[[t l] s] r] bb  @  bb [b c]
+        int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] sa c
+        int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
+        int_A = int_A.unfuse_legs(axes=1)  # [[t l] sa] b r c
+        int_A = int_A.fuse_legs(axes=((0, 2), (1, 3)))  # [[[t l] sa] r] [b c]
+        QA, RA = qr(int_A, axes=(0, 1), sQ=1)  # [[[t l] sa] r] bb  @  bb [b c]
 
         GB_an = match_ancilla_2s(gate.B, B, dir='r')
-        int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] s c
-        int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] s] c
-        int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] s] c
+        int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] sa c
+        int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
+        int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] sa] c
         int_B = int_B.swap_gate(axes=(1, 3))  # l X c
-        int_B = int_B.fuse_legs(axes=((1, 2), (0, 3)))  # [l [[b r] s]] [t c]
-        QB, RB = qr(int_B, axes=(0, 1), sQ=-1, Qaxis=0, Raxis=-1)  # tt [l [[b r] s]]  @  [t c] tt
+        int_B = int_B.fuse_legs(axes=((1, 2), (0, 3)))  # [l [[b r] sa]] [t c]
+        QB, RB = qr(int_B, axes=(0, 1), sQ=-1, Qaxis=0, Raxis=-1)  # tt [l [[b r] sa]]  @  [t c] tt
 
     return QA, QB, RA, RB
-
-
-def truncation_step(RA, RB, opts_svd, normalize=False):
-    """ svd truncation of central tensor """
-
-    theta = RA @ RB
-    if isinstance(opts_svd['D_total'], dict):
-        opts_svd['D_total'] = sum(opts_svd['D_total'].values())
-    UA, S, UB = svd_with_truncation(theta, sU=RA.get_signature()[1], **opts_svd)
-    if normalize:
-        S = S / S.norm(p='inf')
-    sS = S.sqrt()
-    MA = sS.broadcast(UA, axes=1)
-    MB = sS.broadcast(UB, axes=0)
-    return MA, MB
 
 
 def form_new_peps_tensors(QA, QB, MA, MB, bond):
     """ combine unitaries in QA with optimized MA to form new peps tensors. """
     if bond.dirn == "h":
-        A = QA @ MA  # [[[[t l] s] b] r
-        A = A.unfuse_legs(axes=0)  # [[t l] s] b r
-        A = A.fuse_legs(axes=(0, (1, 2)))  # [[t l] s] [b r]
-        A = A.unfuse_legs(axes=0)  # [t l] s [b r]
-        A = A.transpose(axes=(0, 2, 1))  # [t l] [b r] s
+        A = QA @ MA  # [[[[t l] sa] b] r
+        A = A.unfuse_legs(axes=0)  # [[t l] sa] b r
+        A = A.fuse_legs(axes=(0, (1, 2)))  # [[t l] sa] [b r]
+        A = A.unfuse_legs(axes=0)  # [t l] sa [b r]
+        A = A.transpose(axes=(0, 2, 1))  # [t l] [b r] sa
 
         B = MB @ QB  # l [t [[b r] s]]
-        B = B.unfuse_legs(axes=1)  # l t [[b r] s]
-        B = B.fuse_legs(axes=((1, 0), 2))  # [t l] [[b r] s]
-        B = B.unfuse_legs(axes=1)  # [t l] [b r] s
+        B = B.unfuse_legs(axes=1)  # l t [[b r] sa]
+        B = B.fuse_legs(axes=((1, 0), 2))  # [t l] [[b r] sa]
+        B = B.unfuse_legs(axes=1)  # [t l] [b r] sa
     elif bond.dirn == "v":
-        A = QA @ MA  # [[[t l] s] r] b
-        A = A.unfuse_legs(axes=0)  # [[t l] s] r b
-        A = A.fuse_legs(axes=(0, (2, 1)))  # [[t l] s] [b r]
-        A = A.unfuse_legs(axes=0)  # [t l] s [b r]
-        A = A.transpose(axes=(0, 2, 1))  # [t l] [b r] s
+        A = QA @ MA  # [[[t l] sa] r] b
+        A = A.unfuse_legs(axes=0)  # [[t l] sa] r b
+        A = A.fuse_legs(axes=(0, (2, 1)))  # [[t l] sa] [b r]
+        A = A.unfuse_legs(axes=0)  # [t l] sa [b r]
+        A = A.transpose(axes=(0, 2, 1))  # [t l] [b r] sa
 
-        B = MB @ QB  # t [l [[b r] s]]
-        B = B.unfuse_legs(axes=1)  # t l [[b r] s]
-        B = B.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] s]
-        B = B.unfuse_legs(axes=1)  # [t l] [b r] s
+        B = MB @ QB  # t [l [[b r] sa]]
+        B = B.unfuse_legs(axes=1)  # t l [[b r] sa]
+        B = B.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
+        B = B.unfuse_legs(axes=1)  # [t l] [b r] sa
     return A, B
+
+
+def truncate_and_optimize(g, RA, RB, truncation_mode, opts_svd):
+
+    """
+    First we truncate RA and RB tensors based on the input truncation_mode with
+    function environment_aided_truncation_step. Then the truncated
+    MA and MB tensors are subjected to least square optimization to minimize
+     the truncation error with the function tu_single_optimization.
+    """
+    max_iter = 1000 # max no of tu optimization loops
+    assert (g.fuse_legs(axes=((0, 2), (1, 3))) - g.fuse_legs(axes=((0, 2), (1, 3))).conj().transpose(axes=(1, 0))).norm() < 1e-14 * g.fuse_legs(axes=((0, 2), (1, 3))).norm()
+
+    RAB = RA @ RB
+    RAB = RAB.fuse_legs(axes=[(0, 1)])
+    gf = g.fuse_legs(axes=(1, 3, (0, 2)))
+    fgf = gf.fuse_legs(axes=((0, 1), 2))
+    fgRAB = fgf @ RAB
+    gRAB =  gf @ RAB
+    gRR = vdot(RAB, fgRAB).item()
+
+    MA, MB, svd_error = environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mode, opts_svd)
+    MA, MB, tu_errorB, optimal_cf  = tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter)
+    MA, MB = truncation_step(MA, MB, opts_svd, normalize=True)
+    return MA, MB, tu_errorB, optimal_cf, svd_error
+
+
+def truncation_step(RA, RB, opts_svd, normalize=False):
+    """ svd truncation of central tensor """
+
+    U, S, V = svd_with_truncation(RA @ RB, sU=RA.get_signature()[1], **opts_svd)
+    if normalize:
+        S = S / S.norm(p='inf')
+    S = S.sqrt()
+    MA, MB = S.broadcast(U, V, axes=(1, 0))
+    return MA, MB
 
 
 def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mode, opts_svd):
@@ -269,27 +283,6 @@ def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mod
         svd_error = abs((gMM + gRR - gMR - gMR.conjugate()) / gRR)
 
     return MA, MB, svd_error
-
-
-def optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB):
-
-    """ function for choosing the optimal initial cutoff for the inverse which gives the least svd_error """
-
-    cutoff_list = [10**n for n in [-12, -11, -10, -9, -8, -7, -6, -5, -4]]
-    results = []
-    for c_off in cutoff_list:
-        XL_inv, XR_inv = tensordot(UL.conj(), SL.sqrt().reciprocal(cutoff=c_off), axes=(0, 0)), tensordot(SR.sqrt().reciprocal(cutoff=c_off), UR.conj(), axes=(1, 1))
-        pA, pB = XL_inv @ mA, mB @ XR_inv
-        MA, MB = RA @ pA, pB @ RB
-        MAB = MA @ MB
-        MAB = MAB.fuse_legs(axes=[(0, 1)])
-        gMM = vdot(MAB, fgf @ MAB).item()
-        gMR = vdot(MAB, fgRAB).item()
-        svd_error = abs((gMM + gRR - gMR - gMR.conjugate()) / gRR)
-        results.append((svd_error, c_off, MA, MB))
-    svd_error, c_off, MA, MB = min(results, key=lambda x: x[0])
-
-    return MA, MB, svd_error, c_off
 
 
 def tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter):
@@ -342,29 +335,26 @@ def tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter):
     return MA, MB, tu_errorB, optimal_cf
 
 
-def truncate_and_optimize(g, RA, RB, truncation_mode, opts_svd):
+def optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB):
 
-    """
-    First we truncate RA and RB tensors based on the input truncation_mode with
-    function environment_aided_truncation_step. Then the truncated
-    MA and MB tensors are subjected to least square optimization to minimize
-     the truncation error with the function tu_single_optimization.
-    """
-    max_iter = 1000 # max no of tu optimization loops
-    assert (g.fuse_legs(axes=((0, 2), (1, 3))) - g.fuse_legs(axes=((0, 2), (1, 3))).conj().transpose(axes=(1, 0))).norm() < 1e-14 * g.fuse_legs(axes=((0, 2), (1, 3))).norm()
+    """ function for choosing the optimal initial cutoff for the inverse which gives the least svd_error """
 
-    RAB = RA @ RB
-    RAB = RAB.fuse_legs(axes=[(0, 1)])
-    gf = g.fuse_legs(axes=(1, 3, (0, 2)))
-    fgf = gf.fuse_legs(axes=((0, 1), 2))
-    fgRAB = fgf @ RAB
-    gRAB =  gf @ RAB
-    gRR = vdot(RAB, fgRAB).item()
+    cutoff_list = [10**n for n in [-12, -11, -10, -9, -8, -7, -6, -5, -4]]
+    results = []
+    for c_off in cutoff_list:
+        XL_inv, XR_inv = tensordot(UL.conj(), SL.sqrt().reciprocal(cutoff=c_off), axes=(0, 0)), tensordot(SR.sqrt().reciprocal(cutoff=c_off), UR.conj(), axes=(1, 1))
+        pA, pB = XL_inv @ mA, mB @ XR_inv
+        MA, MB = RA @ pA, pB @ RB
+        MAB = MA @ MB
+        MAB = MAB.fuse_legs(axes=[(0, 1)])
+        gMM = vdot(MAB, fgf @ MAB).item()
+        gMR = vdot(MAB, fgRAB).item()
+        svd_error = abs((gMM + gRR - gMR - gMR.conjugate()) / gRR)
+        results.append((svd_error, c_off, MA, MB))
+    svd_error, c_off, MA, MB = min(results, key=lambda x: x[0])
 
-    MA, MB, svd_error = environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, truncation_mode, opts_svd)
-    MA, MB, tu_errorB, optimal_cf  = tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, max_iter)
-    MA, MB = truncation_step(MA, MB, opts_svd, normalize=True)
-    return MA, MB, tu_errorB, optimal_cf, svd_error
+    return MA, MB, svd_error, c_off
+
 
 def optimal_pinv(gg, J, gRR):
     """ solve pinv(gg) * J, optimizing pseudoinverse cutoff for tu error. """
@@ -410,11 +400,8 @@ def gates_homogeneous(peps, nn, local):
     Gates: The generated gates. The NamedTuple 'Gates` named tuple contains a list of
       local and nn gates along with info where they should be applied.
     """
-    # len(nn) indicates the physical degrees of freedom; option to add more
-    bonds = peps.nn_bonds(dirn='h') + peps.nn_bonds(dirn='v')
-
     gates_nn = []   # nn = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)]
-    for bd in bonds:
+    for bd in peps.bonds():
         for i in range(len(nn)):
             gates_nn.append(Gate_nn(A=nn[i][0], B=nn[i][1], bond=bd))
     gates_loc = []

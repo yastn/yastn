@@ -31,11 +31,11 @@ def nn_exp_dict(peps, env, op):
 
         opt = op.get(ms)
 
-        for bds_h in peps.nn_bonds(dirn='h'):  # correlators on all horizontal bonds
+        for bds_h in peps.bonds(dirn='h'):  # correlators on all horizontal bonds
             val_hor = EV2ptcorr(peps, env, opt, bds_h.site0, bds_h.site1)
             obs_hor[ms][(bds_h.site0, bds_h.site1)] = val_hor[0]
 
-        for bds_v in peps.nn_bonds(dirn='v'):  # correlators on all vertical bonds
+        for bds_v in peps.bonds(dirn='v'):  # correlators on all vertical bonds
             val_ver = EV2ptcorr(peps, env, opt, bds_v.site0, bds_v.site1)
             obs_ver[ms][(bds_v.site0, bds_v.site1)] = val_ver[0]
 

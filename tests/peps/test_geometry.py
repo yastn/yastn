@@ -13,13 +13,13 @@ def test_Lattice():
     assert net.sites() == (Site(0, 0), Site(0, 1))
     assert net.sites(reverse=True) == (Site(0, 1), Site(0, 0))
 
-    assert net.nn_bonds(dirn='h') == (((0, 0), (0, 1)), ((0, 1), (0, 0)))
-    assert net.nn_bonds(dirn='v') == (((0, 0), (1, 0)), ((1, 0), (0, 0)))
-    assert net.nn_bonds() == (((0, 0), (0, 1)),
+    assert net.bonds(dirn='h') == (((0, 0), (0, 1)), ((0, 1), (0, 0)))
+    assert net.bonds(dirn='v') == (((0, 0), (1, 0)), ((1, 0), (0, 0)))
+    assert net.bonds() == (((0, 0), (0, 1)),
                               ((0, 1), (0, 0)),
                               ((0, 0), (1, 0)),
                               ((1, 0), (0, 0)))
-    assert net.nn_bonds(reverse=True)[::1] == net.nn_bonds()[::-1]
+    assert net.bonds(reverse=True)[::1] == net.bonds()[::-1]
 
     assert net.site2index((0, 0)) == net.site2index((1, 1)) == 0
     assert net.site2index((1, 0)) == net.site2index((0, 1)) == 1
@@ -30,10 +30,10 @@ def test_Lattice():
 
     assert net.dims == (3, 2)
     assert net.sites() == ((0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1))
-    assert net.nn_bonds(dirn='h') == (((0, 0), (0, 1)),
+    assert net.bonds(dirn='h') == (((0, 0), (0, 1)),
                                       ((1, 0), (1, 1)),
                                       ((2, 0), (2, 1)))
-    assert net.nn_bonds(dirn='v') == (((0, 0), (1, 0)),
+    assert net.bonds(dirn='v') == (((0, 0), (1, 0)),
                                       ((0, 1), (1, 1)),
                                       ((1, 0), (2, 0)),
                                       ((1, 1), (2, 1)))
@@ -46,10 +46,10 @@ def test_Lattice():
 
     assert net.dims == (3, 2)
     assert net.sites() == ((0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1))
-    assert net.nn_bonds('h') == (((0, 0), (0, 1)),
+    assert net.bonds('h') == (((0, 0), (0, 1)),
                                  ((1, 0), (1, 1)),
                                  ((2, 0), (2, 1)))
-    assert net.nn_bonds('v') == (((0, 0), (1, 0)),
+    assert net.bonds('v') == (((0, 0), (1, 0)),
                                  ((0, 1), (1, 1)),
                                  ((1, 0), (2, 0)),
                                  ((1, 1), (2, 1)),
