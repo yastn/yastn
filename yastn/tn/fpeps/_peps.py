@@ -14,14 +14,10 @@ class Peps():
 
     def __getitem__(self, site):
         """ Get data for site. """
-        if site not in self.sites():
-            raise YastnError(f"Site {site} is not a lattice site.")
         return self._data[self.site2index(site)]
 
     def __setitem__(self, site, obj):
         """ Set data at site. """
-        if site not in self.sites():
-            raise YastnError(f"Site {site} is not a lattice site.")
         self._data[self.site2index(site)] = obj
 
     def save_to_dict(self):

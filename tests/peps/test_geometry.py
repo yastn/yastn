@@ -10,8 +10,8 @@ def test_Lattice():
     net = fpeps.CheckerboardLattice()
 
     assert net.dims == (2, 2)
-    assert net.sites() == (Site(0, 0), Site(0, 1), Site(1, 0), Site(1, 1))
-    assert net.sites(reverse=True) == (Site(1, 1), Site(1, 0), Site(0, 1), Site(0, 0))
+    assert net.sites() == (Site(0, 0), Site(0, 1))
+    assert net.sites(reverse=True) == (Site(0, 1), Site(0, 0))
 
     assert net.nn_bonds(dirn='h') == (((0, 0), (0, 1)), ((0, 1), (0, 0)))
     assert net.nn_bonds(dirn='v') == (((0, 0), (1, 0)), ((1, 0), (0, 0)))

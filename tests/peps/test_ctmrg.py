@@ -50,10 +50,10 @@ def gauges_random():
 def ctm_for_Onsager(peps, opt, Z_exact):
     """ Compares ctm expectation values with analytical result. """
 
-    chi = 30 # max environmental bond dimension
+    chi = 8 # max environmental bond dimension
     tol = 1e-10 # singular values of svd truncation of projectors
-    tol_exp = 1e-8 # tolerance for expectation values
-    max_sweeps = 40
+    tol_exp = 1e-5 # tolerance for expectation values
+    max_sweeps = 100
 
     cf_old = 0
     opts_svd = {'D_total': chi, 'tol': tol}

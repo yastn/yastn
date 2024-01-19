@@ -12,7 +12,6 @@ import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps._doublePepsTensor import DoublePepsTensor
 from ._ctm_env import Local_Projector_Env
 import numpy as np
-from .._geometry import CheckerboardLattice
 
 
 def append_a_bl(tt, AAb):
@@ -392,14 +391,6 @@ def move_horizontal(envn, env, AAb, proj, ms):
         r_abv = AAb.nn_site(right, d='t')
         r_bel = AAb.nn_site(right, d='b')
 
-    if isinstance(AAb.geometry, CheckerboardLattice):
-        if ms == (0,0):
-            left =  right = (0,1)
-            l_abv = r_abv = r_bel = l_bel = (0,0)
-        elif ms == (0,1):
-            left =  right = (0,0)
-            l_abv = r_abv = r_bel = l_bel = (0,1)
-
     if l_abv is not None:
         envn[ms].tl = ncon((env[left].tl, env[left].t, proj[l_abv].hlb),
                                    ([2, 3], [3, 1, -1], [2, 1, -0]))
@@ -474,14 +465,6 @@ def move_vertical(envn, env, AAb, proj, ms):
     else:
         b_left = AAb.nn_site(bottom, d='l')
         b_right = AAb.nn_site(bottom, d='r')
-
-    if isinstance(AAb.geometry, CheckerboardLattice):
-        if ms == (0,0):
-            top =  bottom = (0,1)
-            t_left = b_left = b_right = t_right = (0,0)
-        elif ms == (0,1):
-            top =  bottom = (0,0)
-            t_left = b_left = b_right = t_right = (0,1)
 
 
     if t_left is not None:
@@ -596,14 +579,9 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
 
     # print('######## Horizontal Move ###########')
 
-    if isinstance(AAb.geometry, CheckerboardLattice):
-        envn_hor = move_horizontal(envn_hor, env, AAb, proj, (0,0))
-        envn_hor = move_horizontal(envn_hor, env, AAb, proj, (0,1))
-    else:
-        for ms in AAb.sites():
-            # print('move ctm horizontal', ms)
-            envn_hor = move_horizontal(envn_hor, env, AAb, proj, ms)
-
+    for ms in AAb.sites():
+        # print('move ctm horizontal', ms)
+        envn_hor = move_horizontal(envn_hor, env, AAb, proj, ms)
     envn_ver = envn_hor.copy()
 
     # print('######## Calculating projectors for vertical move ###########')
@@ -621,14 +599,9 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
 
     # print('######### Vertical Move ###########')
 
-    if isinstance(AAb.geometry, CheckerboardLattice):
-        envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, (0,0))
-        envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, (0,1))
-    else:
-        for ms in AAb.sites():   # vertical absorption and renormalization
-            # print('move ctm vertical', ms)
-            envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, ms)
-
+    for ms in AAb.sites():   # vertical absorption and renormalization
+        # print('move ctm vertical', ms)
+        envn_ver = move_vertical(envn_ver, envn_hor, AAb, proj, ms)
     return envn_ver, proj
 
 

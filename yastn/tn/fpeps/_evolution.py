@@ -418,11 +418,7 @@ def gates_homogeneous(peps, nn, local):
         for i in range(len(nn)):
             gates_nn.append(Gate_nn(A=nn[i][0], B=nn[i][1], bond=bd))
     gates_loc = []
-    if isinstance(peps.geometry, CheckerboardLattice):
-        gates_loc.append(Gate_local(A=local, site=(0,0)))
-        gates_loc.append(Gate_local(A=local, site=(0,1)))
-    else:
-        for site in peps.sites():
-            gates_loc.append(Gate_local(A=local, site=site))
+    for site in peps.sites():
+        gates_loc.append(Gate_local(A=local, site=site))
     return Gates(local=gates_loc, nn=gates_nn)
 

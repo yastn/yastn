@@ -2,7 +2,6 @@ from ._ctm_iteration_routines import check_consistency_tensors
 from ._ctm_iteration_routines import fPEPS_2layers
 from ._ctm_observable_routines import apply_TMO_left, con_bi, array_EV2pt, array2ptdiag
 from .... import tensordot
-from .._geometry import CheckerboardLattice
 
 def nn_exp_dict(peps, env, op):
 
@@ -59,12 +58,7 @@ def one_site_dict(peps, env, op):
     site_exp_dict = {}  # Dictionary to store site-wise expectation values
     peps = check_consistency_tensors(peps)
 
-    if isinstance(peps.geometry, CheckerboardLattice):
-        lists = [(0,0), (0,1)]
-    else:
-        lists = peps.sites()
-
-    for ms in lists:
+    for ms in peps.sites():
         Am = peps[ms]
         val_op = measure_one_site_spin(Am, ms, env, op=op)
         val_norm = measure_one_site_spin(Am, ms, env, op=None)

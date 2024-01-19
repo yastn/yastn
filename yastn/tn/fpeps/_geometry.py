@@ -69,11 +69,11 @@ class SquareLattice():
         return (self.Nx, self.Ny)
 
     def sites(self, reverse=False):
-        """ Lattice sites """
+        """ Sequence of unique lattice sites. """
         return self._sites[::-1] if reverse else self._sites
 
     def nn_bonds(self, dirn=None, reverse=False):
-        """ Labels of unique nearest neighbor bonds between lattice sites. """
+        """ Sequence of unique nearest neighbor bonds between lattice sites. """
         if dirn == 'v':
             return self._bonds_v[::-1] if reverse else self._bonds_v
         if dirn == 'h':
@@ -109,11 +109,12 @@ class CheckerboardLattice(SquareLattice):
         Checkerboard lattice is an infinite lattiec with 2x2 unit cell and 2 unique tensors.
         """
         super().__init__(dims=(2, 2), boundary='infinite')
+        self._sites = ((0, 0), (0, 1))
         self._bonds_h = (Bond(Site(0, 0), Site(0, 1)), Bond(Site(0, 1), Site(0, 0)))
         self._bonds_v = (Bond(Site(0, 0), Site(1, 0)), Bond(Site(1, 0), Site(0, 0)))
 
     def site2index(self, site):
         """ Tensor index depending on site """
-        if site not in self._sites:
+        if site not in ((0, 0), (0, 1), (1, 0), (1, 1)):
             raise YastnError(f"Site {site} does not correspond to any lattice site.")
         return sum(site) % 2

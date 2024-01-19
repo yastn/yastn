@@ -6,7 +6,6 @@ from yastn.tn.fpeps import Peps
 from yastn.tn.fpeps.gates._gates import match_ancilla_1s
 from yastn import rand, tensordot, ones
 from .._auxiliary import transfer_mpo
-from .._geometry import CheckerboardLattice
 
 
 class ctm_window(NamedTuple):
@@ -23,17 +22,13 @@ class CtmEnv(Peps):
         super().__init__(psi.geometry)
         self.psi = psi
 
-        if isinstance(self.geometry, CheckerboardLattice):
-            windows = (ctm_window(nw=(0, 0), ne=(0, 1), sw=(0, 1), se=(0, 0)),
-                       ctm_window(nw=(0, 1), ne=(0, 0), sw=(0, 0), se=(0, 1)))
-        else:
-            windows = []
-            for site in self.sites():
-                win = [site]
-                for d in ('r', 'b', 'br'):
-                    win.append(self.nn_site(site, d=d))
-                if None not in win:
-                    windows.append(ctm_window(*win))
+        windows = []
+        for site in self.sites():
+            win = [site]
+            for d in ('r', 'b', 'br'):
+                win.append(self.nn_site(site, d=d))
+            if None not in win:
+                windows.append(ctm_window(*win))
         self._windows = tuple(windows)
 
     def copy(self):
