@@ -47,7 +47,7 @@ def gauges_random():
     return a, b
 
 
-def ctm_for_Onsager(peps, opt, Z_exact):
+def ctm_for_Onsager(peps, ops, Z_exact):
     """ Compares ctm expectation values with analytical result. """
 
     chi = 8 # max environmental bond dimension
@@ -58,8 +58,8 @@ def ctm_for_Onsager(peps, opt, Z_exact):
     cf_old = 0
     opts_svd = {'D_total': chi, 'tol': tol}
 
-    ops = {'magA1': {'l': opt.z(), 'r': opt.I()},
-           'magB1': {'l': opt.I(), 'r': opt.z()}}
+    ops = {'magA1': {'l': ops.z(), 'r': ops.I()},
+           'magB1': {'l': ops.I(), 'r': ops.z()}}
 
     for step in ctmrg(peps, max_sweeps, iterator_step=4, AAb_mode=0, opts_svd=opts_svd):
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
@@ -81,14 +81,15 @@ def test_ctm_loop():  ###high temperature
     beta = 0.8 # check for a certain inverse temperature
     Z_exact = 0.99602 # analytical value of magnetization up to 4 decimal places for beta = 0.7 (2D Classical Ising)
 
-    opt = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
+    ops.random_seed(seed=0)
 
-    T = create_Ising_tensor(opt.z(), beta)
+    T = create_Ising_tensor(ops.z(), beta)
     geometry = fpeps.CheckerboardLattice()
     psi = fpeps.Peps(geometry)
     for site in psi.sites():
         psi[site] = T
-    ctm_for_Onsager(psi, opt, Z_exact)
+    ctm_for_Onsager(psi, ops, Z_exact)
 
     h_rg1, inv_h_rg1 = gauges_random()
     h_rg2, inv_h_rg2 = gauges_random()
@@ -105,9 +106,8 @@ def test_ctm_loop():  ###high temperature
 
     for site in psi.sites():
         psi[site] = TA if sum(site) % 2 == 0 else TB
-    ctm_for_Onsager(psi, opt, Z_exact)
+    ctm_for_Onsager(psi, ops, Z_exact)
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level='INFO')
     test_ctm_loop()

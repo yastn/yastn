@@ -49,7 +49,7 @@ def match_ancilla_2s(G, A, dir=None):
     return Gsa
 
 
-def gates_hopping(t, step, fid, fc, fcdag):
+def gate_hopping(t, step, fid, fc, fcdag):
     """ gates for exp[step * t * (cdag1 c2 + c2dag c1)] """
     # below note that local operators follow convention where
     # they are transposed comparing to typical matrix notation

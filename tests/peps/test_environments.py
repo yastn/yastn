@@ -4,7 +4,7 @@
 # import logging
 # import yastn
 # import yastn.tn.fpeps as fpeps
-# from yastn.tn.fpeps.gates._gates import gates_hopping, gate_local_fermi_sea
+# from yastn.tn.fpeps.gates._gates import gate_hopping, gate_local_fermi_sea
 # from yastn.tn.fpeps.evolution import evolution_step_, gates_homogeneous
 # from yastn.tn.fpeps import initialize_peps_purification, MpsEnv
 # from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, EV2ptcorr
@@ -41,7 +41,7 @@
 #     opt = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
 #     fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
 
-#     GA_nn, GB_nn = gates_hopping(t, trotter_step, fid, fc, fcdag)  # nn gate for 2D fermi sea
+#     GA_nn, GB_nn = gate_hopping(t, trotter_step, fid, fc, fcdag)  # nn gate for 2D fermi sea
 #     g_loc = gate_local_fermi_sea(mu, trotter_step, fid, fc, fcdag) # local gate for spinless fermi sea
 #     g_nn = [(GA_nn, GB_nn)]
 
