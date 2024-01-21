@@ -123,18 +123,18 @@ def apply_nn_gate_and_truncate_(env, gate, opts_svd=None, initialization="EAT",
     if opts_svd is None:
         opts_svd = {'D_total':4, 'tol_block':1e-15}
 
-    QA, QB, RA, RB = apply_nn_gate(env.psi, gate)
+    QA, QB, RA, RB, QAf, QBf = apply_nn_gate(env.psi, gate)
 
     info = {}
     if env.which != 'NN': # svd-upddate
         MA, MB = truncation_step(RA, RB, opts_svd=opts_svd, normalize=True)
-        env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
+        env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QAf, QBf, MA, MB, gate.bond)
         info['truncation'] = 0
         return info
 
     g = env.bond_metric(gate.bond, QA, QB)
     MA, MB, opt_error, optim, svd_error = truncate_and_optimize(g, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter)
-    env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QA, QB, MA, MB, gate.bond)
+    env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QAf, QBf, MA, MB, gate.bond)
     info.update({'truncation': opt_error, 'optimal_cutoff': optim})
     return info
 
@@ -200,9 +200,7 @@ def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, initialization
         mA, mB = U @ L.sqrt(), L.sqrt() @ V
         MA, MB, svd_error, _ = optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB, pinv_cutoffs)
         return MA, MB, svd_error
-
     elif initialization == 'SVD':
-
         MA, MB = truncation_step(RA, RB, opts_svd)
         MAB = MA @ MB
         MAB = MAB.fuse_legs(axes=[(0, 1)])
@@ -309,6 +307,95 @@ def optimal_pinv(gg, J, gRR, pinv_cutoffs):
     return tu_error, c_off, Mnew
 
 
+def apply_local_gate_(env, gate):
+    """ apply local gates on PEPS tensors """
+    A = match_ancilla_1s(gate.A, env.psi[gate.site])
+    env.psi[gate.site] = tensordot(env.psi[gate.site], A, axes=(2, 1)) # [t l] [b r] [s a]
+
+
+def apply_nn_gate(psi, gate):
+    """ Apply nearest neighbor gate to PEPS tensors. """
+    bd = gate.bond
+    dirn = bd.dirn
+    A = psi[bd.site0]  # [t l] [b r] sa
+    B = psi[bd.site1]  # [t l] [b r] sa
+
+    if dirn == "h":  # Horizontal gate
+        GA_an = match_ancilla_2s(gate.A, A, dir='l')
+        int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] sa c
+        int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
+        int_A = int_A.unfuse_legs(axes=1)  # [[t l] sa] b r c
+        int_A = int_A.swap_gate(axes=(1, 3))  # b X c
+        int_A = int_A.fuse_legs(axes=((0, 1), (2, 3)))  # [[[t l] sa] b] [r c]
+        QAf, RA = qr(int_A, axes=(0, 1), sQ=-1)  # [[[t l] sa] b] rr @ rr [r c]
+        QA = QAf.unfuse_legs(axes=0)  # [[t l] sa] b rr
+        QA = QA.fuse_legs(axes=(0, (1, 2)))  # [[t l] sa] [b rr]
+        QA = QA.unfuse_legs(axes=0)  # [t l] sa [b rr]
+        QA = QA.transpose(axes=(0, 2, 1))  # [t l] [b rr] sa
+
+        GB_an = match_ancilla_2s(gate.B, B, dir='r')
+        int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] sa c
+        int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
+        int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] sa] c
+        int_B = int_B.fuse_legs(axes=((0, 2), (1, 3)))  # [t [[b r] sa]] [l c]
+        QBf, RB = qr(int_B, axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] sa]]  @  [l c] ll
+        QB = QBf.unfuse_legs(axes=1)  # ll t [[b r] sa]
+        QB = QB.fuse_legs(axes=((1, 0), 2))  # [t ll] [[b r] sa]
+        QB = QB.unfuse_legs(axes=1)  # [t ll] [b r] sa
+
+    elif dirn == "v":  # Vertical gate
+        GA_an = match_ancilla_2s(gate.A, A, dir='l')
+        int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] sa c
+        int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
+        int_A = int_A.unfuse_legs(axes=1)  # [[t l] sa] b r c
+        int_A = int_A.fuse_legs(axes=((0, 2), (1, 3)))  # [[[t l] sa] r] [b c]
+        QAf, RA = qr(int_A, axes=(0, 1), sQ=1)  # [[[t l] sa] r] bb  @  bb [b c]
+        QA = QAf.unfuse_legs(axes=0)  # [[t l] sa] r bb
+        QA = QA.fuse_legs(axes=(0, (2, 1)))  # [[t l] sa] [bb r]
+        QA = QA.unfuse_legs(axes=0)  # [t l] sa [bb r]
+        QA = QA.transpose(axes=(0, 2, 1))  # [t l] [bb r] sa
+
+        GB_an = match_ancilla_2s(gate.B, B, dir='r')
+        int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] sa c
+        int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
+        int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] sa] c
+        int_B = int_B.swap_gate(axes=(1, 3))  # l X c
+        int_B = int_B.fuse_legs(axes=((1, 2), (0, 3)))  # [l [[b r] sa]] [t c]
+        QBf, RB = qr(int_B, axes=(0, 1), sQ=-1, Qaxis=0, Raxis=-1)  # tt [l [[b r] sa]]  @  [t c] tt
+        QB = QBf.unfuse_legs(axes=1)  # t l [[b r] sa]
+        QB = QB.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
+        QB = QB.unfuse_legs(axes=1)  # [t l] [b r] sa
+
+    return QA, QB, RA, RB, QAf, QBf
+
+
+def form_new_peps_tensors(QAf, QBf, MA, MB, bond):
+    """ combine unitaries in QA with optimized MA to form new peps tensors. """
+    if bond.dirn == "h":
+        A = QAf @ MA  # [[[[t l] sa] b] r
+        A = A.unfuse_legs(axes=0)  # [[t l] sa] b r
+        A = A.fuse_legs(axes=(0, (1, 2)))  # [[t l] sa] [b r]
+        A = A.unfuse_legs(axes=0)  # [t l] sa [b r]
+        A = A.transpose(axes=(0, 2, 1))  # [t l] [b r] sa
+
+        B = MB @ QBf  # l [t [[b r] s]]
+        B = B.unfuse_legs(axes=1)  # l t [[b r] sa]
+        B = B.fuse_legs(axes=((1, 0), 2))  # [t l] [[b r] sa]
+        B = B.unfuse_legs(axes=1)  # [t l] [b r] sa
+    elif bond.dirn == "v":
+        A = QAf @ MA  # [[[t l] sa] r] b
+        A = A.unfuse_legs(axes=0)  # [[t l] sa] r b
+        A = A.fuse_legs(axes=(0, (2, 1)))  # [[t l] sa] [b r]
+        A = A.unfuse_legs(axes=0)  # [t l] sa [b r]
+        A = A.transpose(axes=(0, 2, 1))  # [t l] [b r] sa
+
+        B = MB @ QBf  # t [l [[b r] sa]]
+        B = B.unfuse_legs(axes=1)  # t l [[b r] sa]
+        B = B.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
+        B = B.unfuse_legs(axes=1)  # [t l] [b r] sa
+    return A, B
+
+
 def gates_homogeneous(peps, nn, local):
     """
     Generate a list of gates that is homogeneous over the lattice.
@@ -334,78 +421,3 @@ def gates_homogeneous(peps, nn, local):
     for site in peps.sites():
         gates_loc.append(Gate_local(A=local, site=site))
     return Gates(local=gates_loc, nn=gates_nn)
-
-
-def apply_local_gate_(env, gate):
-    """ apply local gates on PEPS tensors """
-    A = match_ancilla_1s(gate.A, env.psi[gate.site])
-    env.psi[gate.site] = tensordot(env.psi[gate.site], A, axes=(2, 1)) # [t l] [b r] [s a]
-
-
-def apply_nn_gate(psi, gate):
-    """ Apply nearest neighbor gate to PEPS tensors. """
-    bd = gate.bond
-    dirn = bd.dirn
-    A = psi[bd.site0]  # [t l] [b r] sa
-    B = psi[bd.site1]  # [t l] [b r] sa
-
-    if dirn == "h":  # Horizontal gate
-        GA_an = match_ancilla_2s(gate.A, A, dir='l')
-        int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] sa c
-        int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
-        int_A = int_A.unfuse_legs(axes=1)  # [[t l] sa] b r c
-        int_A = int_A.swap_gate(axes=(1, 3))  # b X c
-        int_A = int_A.fuse_legs(axes=((0, 1), (2, 3)))  # [[[t l] sa] b] [r c]
-        QA, RA = qr(int_A, axes=(0, 1), sQ=-1)  # [[[t l] sa] b] rr @ rr [r c]
-
-        GB_an = match_ancilla_2s(gate.B, B, dir='r')
-        int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] sa c
-        int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
-        int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] sa] c
-        int_B = int_B.fuse_legs(axes=((0, 2), (1, 3)))  # [t [[b r] sa]] [l c]
-        QB, RB = qr(int_B, axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] sa]]  @  [l c] ll
-
-    elif dirn == "v":  # Vertical gate
-        GA_an = match_ancilla_2s(gate.A, A, dir='l')
-        int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] sa c
-        int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
-        int_A = int_A.unfuse_legs(axes=1)  # [[t l] sa] b r c
-        int_A = int_A.fuse_legs(axes=((0, 2), (1, 3)))  # [[[t l] sa] r] [b c]
-        QA, RA = qr(int_A, axes=(0, 1), sQ=1)  # [[[t l] sa] r] bb  @  bb [b c]
-
-        GB_an = match_ancilla_2s(gate.B, B, dir='r')
-        int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] sa c
-        int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
-        int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] sa] c
-        int_B = int_B.swap_gate(axes=(1, 3))  # l X c
-        int_B = int_B.fuse_legs(axes=((1, 2), (0, 3)))  # [l [[b r] sa]] [t c]
-        QB, RB = qr(int_B, axes=(0, 1), sQ=-1, Qaxis=0, Raxis=-1)  # tt [l [[b r] sa]]  @  [t c] tt
-
-    return QA, QB, RA, RB
-
-
-def form_new_peps_tensors(QA, QB, MA, MB, bond):
-    """ combine unitaries in QA with optimized MA to form new peps tensors. """
-    if bond.dirn == "h":
-        A = QA @ MA  # [[[[t l] sa] b] r
-        A = A.unfuse_legs(axes=0)  # [[t l] sa] b r
-        A = A.fuse_legs(axes=(0, (1, 2)))  # [[t l] sa] [b r]
-        A = A.unfuse_legs(axes=0)  # [t l] sa [b r]
-        A = A.transpose(axes=(0, 2, 1))  # [t l] [b r] sa
-
-        B = MB @ QB  # l [t [[b r] s]]
-        B = B.unfuse_legs(axes=1)  # l t [[b r] sa]
-        B = B.fuse_legs(axes=((1, 0), 2))  # [t l] [[b r] sa]
-        B = B.unfuse_legs(axes=1)  # [t l] [b r] sa
-    elif bond.dirn == "v":
-        A = QA @ MA  # [[[t l] sa] r] b
-        A = A.unfuse_legs(axes=0)  # [[t l] sa] r b
-        A = A.fuse_legs(axes=(0, (2, 1)))  # [[t l] sa] [b r]
-        A = A.unfuse_legs(axes=0)  # [t l] sa [b r]
-        A = A.transpose(axes=(0, 2, 1))  # [t l] [b r] sa
-
-        B = MB @ QB  # t [l [[b r] sa]]
-        B = B.unfuse_legs(axes=1)  # t l [[b r] sa]
-        B = B.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
-        B = B.unfuse_legs(axes=1)  # [t l] [b r] sa
-    return A, B
