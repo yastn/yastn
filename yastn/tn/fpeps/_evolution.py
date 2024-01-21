@@ -126,11 +126,11 @@ def apply_nn_gate_and_truncate_(env, gate, opts_svd=None, initialization="EAT",
     QA, QB, RA, RB, QAf, QBf = apply_nn_gate(env.psi, gate)
 
     info = {}
-    if env.which != 'NN': # svd-upddate
-        MA, MB = truncation_step(RA, RB, opts_svd=opts_svd, normalize=True)
-        env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QAf, QBf, MA, MB, gate.bond)
-        info['truncation'] = 0
-        return info
+    # if env.which != 'NN': # svd-upddate
+    #     MA, MB = truncation_step(RA, RB, opts_svd=opts_svd, normalize=True)
+    #     env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QAf, QBf, MA, MB, gate.bond)
+    #     info['truncation'] = 0
+    #     return info
 
     g = env.bond_metric(gate.bond, QA, QB)
     MA, MB, opt_error, optim, svd_error = truncate_and_optimize(g, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter)
