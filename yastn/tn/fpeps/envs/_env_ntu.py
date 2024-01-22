@@ -32,10 +32,10 @@ class EnvNTU:
                  'br': psi.nn_site(bd.site1, d='b')}
             tensors_from_psi(m, psi)
 
-            env_l = con_Al(QA, con_l(m['l']))  # [t t'] [b b'] [rr rr']
-            env_r = con_Ar(QB, con_r(m['r']))  # [ll ll'] [t t'] [b b']
-            env_t = con_tl(m['tl']) @ con_tr(m['tr'])  # [tl tl'] [tr tr']
-            env_b = con_br(m['br']) @ con_bl(m['bl'])  # [br br'] [bl bl']
+            env_l = edge_l(QA, leaf_l(m['l']))  # [t t'] [b b'] [rr rr']
+            env_r = edge_r(QB, leaf_r(m['r']))  # [ll ll'] [t t'] [b b']
+            env_t = cor_tl(m['tl']) @ cor_tr(m['tr'])  # [tl tl'] [tr tr']
+            env_b = cor_br(m['br']) @ cor_bl(m['bl'])  # [br br'] [bl bl']
             env_l = env_b @ env_l
             env_r = env_t @ env_r
             G = tensordot(env_l, env_r, axes=((0, 2), (2, 0)))  # [ll ll'] [rr rr']
@@ -48,10 +48,10 @@ class EnvNTU:
                  'br': psi.nn_site(bd.site1, d='r')}
             tensors_from_psi(m, psi)
 
-            env_t = con_At(QA, con_t(m['t']))  # [l l'] [r r'] [bb bb']
-            env_b = con_Ab(QB, con_b(m['b']))  # [tt tt'] [l l'] [r r']
-            env_l = con_bl(m['bl']) @ con_tl(m['tl'])  # [bl bl'] [tl tl']
-            env_r = con_tr(m['tr']) @ con_br(m['br'])  # [tr tr'] [br br']
+            env_t = edge_t(QA, leaf_t(m['t']))  # [l l'] [r r'] [bb bb']
+            env_b = edge_b(QB, leaf_b(m['b']))  # [tt tt'] [l l'] [r r']
+            env_l = cor_bl(m['bl']) @ cor_tl(m['tl'])  # [bl bl'] [tl tl']
+            env_r = cor_tr(m['tr']) @ cor_br(m['br'])  # [tr tr'] [br br']
             env_t = env_l @ env_t
             env_b = env_r @ env_b
             G = tensordot(env_t, env_b, axes=((0, 2), (2, 0)))
@@ -77,27 +77,23 @@ class EnvNTU:
                  'rb' : psi.nn_site(bd.site1, d='b')}
             tensors_from_psi(m, psi)
 
-            lt  = con_At(m['lt'])
-            ltl = con_tl(m['ltl'])
-            ll  = con_Al(m['ll'])
-            lbl = con_bl(m['lbl'])
-            lb  = con_Ab(m['lb'])
-            rt  = con_At(m['rt'])
-            rtr = con_tr(m['rtr'])
-            rr  = con_Ar(m['rr'])
-            rbr = con_br(m['rbr'])
-            rb  = con_Ab(m['rb'])
+            lt  = edge_t(m['lt'])
+            ltl = cor_tl(m['ltl'])
+            ll  = edge_l(m['ll'])
+            lbl = cor_bl(m['lbl'])
+            lb  = edge_b(m['lb'])
+            rt  = edge_t(m['rt'])
+            rtr = cor_tr(m['rtr'])
+            rr  = edge_r(m['rr'])
+            rbr = cor_br(m['rbr'])
+            rb  = edge_b(m['rb'])
 
             vecl = (lbl @ ll) @ (ltl @ lt)
-            uQA = QA.unfuse_legs(axes=(0, 1))
-            dQA = DoublePepsTensor(uQA, uQA.swap_gate(axes=(0, 1, 2, 3)))
-            vecl = dQA.append_a_tl(vecl)
+            vecl = append_vec_tl(QA, QA, vecl)
             vecl = tensordot(lb, vecl, axes=((2, 1), (0, 1)))
 
             vecr = (rtr @ rr) @ (rbr @ rb)
-            uQB = QB.unfuse_legs(axes=(0, 1))
-            dQB = DoublePepsTensor(uQB, uQB.swap_gate(axes=(0, 1, 2, 3)))
-            vecr = dQB.append_a_br(vecr)
+            vecr = append_vec_br(QB, QB, vecr)
             vecr = tensordot(rt, vecr, axes=((2, 1), (0, 1)))
 
             G = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [ll ll'] [rr rr']
@@ -114,27 +110,23 @@ class EnvNTU:
                  'br' : psi.nn_site(bd.site1, d='r')}
             tensors_from_psi(m, psi)
 
-            tl  = con_Al(m['tl'])
-            ttl = con_tl(m['ttl'])
-            tt  = con_At(m['tt'])
-            ttr = con_tr(m['ttr'])
-            tr  = con_Ar(m['tr'])
-            bl  = con_Al(m['bl'])
-            bbl = con_bl(m['bbl'])
-            bb  = con_Ab(m['bb'])
-            bbr = con_br(m['bbr'])
-            br  = con_Ar(m['br'])
+            tl  = edge_l(m['tl'])
+            ttl = cor_tl(m['ttl'])
+            tt  = edge_t(m['tt'])
+            ttr = cor_tr(m['ttr'])
+            tr  = edge_r(m['tr'])
+            bl  = edge_l(m['bl'])
+            bbl = cor_bl(m['bbl'])
+            bb  = edge_b(m['bb'])
+            bbr = cor_br(m['bbr'])
+            br  = edge_r(m['br'])
 
             vect = (tl @ ttl) @ (tt @ ttr)
-            uQA = QA.unfuse_legs(axes=(0, 1))
-            dQA = DoublePepsTensor(uQA, uQA.swap_gate(axes=(0, 1, 2, 3)))
-            vect = dQA.append_a_tl(vect)
+            vect = append_vec_tl(QA, QA, vect)
             vect = tensordot(vect, tr, axes=((2, 3), (0, 1)))
 
             vecb = (br @ bbr) @ (bb @ bbl)
-            uQB = QB.unfuse_legs(axes=(0, 1))
-            dQB = DoublePepsTensor(uQB, uQB.swap_gate(axes=(0, 1, 2, 3)))
-            vecb = dQB.append_a_br(vecb)
+            vecb = append_vec_br(QB, QB, vecb)
             vecb = tensordot(vecb, bl, axes=((2, 3), (0, 1)))
 
             G = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [tt tt'] [bb bb']
