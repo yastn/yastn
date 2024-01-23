@@ -67,5 +67,5 @@ def load_from_dict(config, d):
 
     psi = Peps(net)
     for ind, tensor in d['data'].items():
-        psi._data[Site(ind)] = load_tensor_from_dict(config, tensor)
+        psi._data[Site(*ind)] = load_tensor_from_dict(config, tensor)
     return psi

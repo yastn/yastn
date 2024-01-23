@@ -215,7 +215,7 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
 
         for nx in range(0, state.Nx):
             dpt = Os[nx].copy()
-            loc_projectors = [match_ancilla_1s(pr, dpt.A) for pr in projectors]
+            loc_projectors = projectors[nx, ny] # [match_ancilla_1s(pr, dpt.A) for pr in projectors]
             prob = []
             norm_prob = env.measure(bd=(nx - 1, nx))
             for proj in loc_projectors:
@@ -277,6 +277,7 @@ def measure_2site(state, CTMenv, op1, op2, opts_svd, opts_var=None):
     op2dict = _clear_operator_input(op2, sites)
 
     for nx1, ny1 in sites:
+        print( f"Correlations from {nx1} {ny1} ... ")
         for nz1, o1 in op1dict[nx1, ny1].items():
             vR = CTMenv.env2mps(index=ny1, index_type='r')
             vL = CTMenv.env2mps(index=ny1, index_type='l')
@@ -369,3 +370,116 @@ def measure_1site(state, CTMenv, op):
                     env.update_env_(nx, to='first')
                     out[(nx, ny) + nz] = env.measure(bd=(nx-1, nx)) / norm_env
     return out
+
+
+def match_ancilla_projectors(psi, projectors):
+    loc_proj = {}
+    for k, proj in projectors.items():
+        loc_proj[k] = [match_ancilla_1s(pr, psi[k]) for pr in proj]
+    return loc_proj
+
+
+def _sample_MC_column_local(ny, proj_psi, proj_env, st0, st1, psi, projectors, rands):
+    # update is proposed based on local probabilies
+    vR = proj_env.env2mps(index=ny, index_type='r')
+    Os = transfer_mpo(proj_psi, index=ny, index_type='column', one_layer=True)
+    vL = proj_env.env2mps(index=ny, index_type='l')
+    env = mps.Env3(vL, Os, vR).setup_(to='first')
+    for nx in range(psi.Nx):
+        amp = env.hole(nx).tensordot(psi[nx, ny], axes=((0, 1, 2, 3), (0, 1, 2, 3)))
+        prob = [abs(amp.vdot(pr, conj=(0, 0))) ** 2 for pr in projectors[nx, ny]]
+        sumprob = sum(prob)
+        prob = [x / sumprob for x in prob]
+        rand = next(rands)
+        ind = sum(x < rand for x in accumulate(prob))
+        st1[nx, ny] = ind
+        proj_psi[nx, ny] = tensordot(psi[nx, ny], projectors[nx, ny][ind], axes=(4, 0))
+        Os[nx] = proj_psi[nx, ny]
+        env.update_env_(nx, to='last')
+    accept = psi.Nx
+    return vR, Os, vL, accept
+
+
+def _sample_MC_column_uniform(ny, proj_psi, proj_env, st0, st1, psi, projectors, rands):
+    # update is proposed from uniform local distribution
+    config = proj_psi[0, 0].config
+    accept = 0
+    vR = proj_env.env2mps(index=ny, index_type='r')
+    Os = transfer_mpo(proj_psi, index=ny, index_type='column', one_layer=True)
+    vL = proj_env.env2mps(index=ny, index_type='l')
+    env = mps.Env3(vL, Os, vR).setup_(to='first')
+    for nx in range(psi.Nx):
+        A = psi[nx, ny]
+        ind0 = st0[nx, ny]
+
+        ind1 = config.backend.randint(0, len(projectors[nx, ny]))
+
+        pr0 = projectors[nx, ny][ind0]
+        pr1 = projectors[nx, ny][ind1]
+
+        A0 = tensordot(A, pr0, axes=(4, 0))
+        A1 = tensordot(A, pr1, axes=(4, 0))
+
+        Os[nx] = A1
+        env.update_env_(nx, to='last')
+        prob_new = abs(env.measure(bd=(nx, nx+1))) ** 2
+
+        Os[nx] = A0
+        env.update_env_(nx, to='last')
+        prob_old = abs(env.measure(bd=(nx, nx+1))) ** 2
+
+        if next(rands) < prob_new / prob_old:  # accept
+            accept += 1
+            st1[nx, ny] = ind1
+            proj_psi[nx, ny] = A1
+            Os[nx] = A1
+            env.update_env_(nx, to='last')
+        else:  # reject
+            st1[nx, ny] = ind0
+    return vR, Os, vL, accept
+
+
+def sample_MC_(proj_psi, proj_env, st0, st1, st2, psi, projectors, opts_svd, opts_var, trial="local"):
+    """
+    MC steps in a finite peps. Makes two steps
+    while sweeping finite lattice back and forth.
+
+    Takes emvironments and a complete list of projectors to sample from.
+
+    proj_psi, proj_env, st1, st2 are updated in place
+    """
+
+    if trial == "local":
+        _sample_MC_column = _sample_MC_column_local
+    elif trial == "uniform":
+        _sample_MC_column = _sample_MC_column_uniform
+    else:
+        raise ValueError(f"trial = {trial} not supported.")
+
+    Nx, Ny = psi.Nx, psi.Ny
+    config = psi[0, 0].config
+    # pre-draw uniformly distributed random numbers as iterator;
+    rands = iter((config.backend.rand(2 * Nx * Ny) + 1) / 2)  # in [0, 1]
+
+    # sweep though the lattice
+    accept = 0
+    for ny in range(Ny-1, -1, -1):
+        vR, Os, _, astep = _sample_MC_column(ny, proj_psi, proj_env, st0, st1, psi, projectors, rands)
+        accept += astep
+        if ny > 0:
+            vRnew = mps.zipper(Os, vR, opts_svd=opts_svd)
+            mps.compression_(vRnew, (Os, vR), method='1site', **opts_var)
+            proj_env._env['r', ny-1] = vRnew
+            proj_env._env.pop(('l', ny))
+
+    for ny in range(Ny):
+        _, Os, vL, astep = _sample_MC_column(ny, proj_psi, proj_env, st1, st2, psi, projectors, rands)
+        accept += astep
+        if ny < Ny - 1:
+            OsT = Os.T.conj()
+            vLnew = mps.zipper(OsT, vL, opts_svd=opts_svd)
+            mps.compression_(vLnew, (OsT, vL), method='1site', **opts_var)
+            proj_env._env['l', ny+1] = vLnew
+            proj_env._env.pop(('r', ny))
+
+    return accept / (2 * Nx * Ny)  # acceptance rate
