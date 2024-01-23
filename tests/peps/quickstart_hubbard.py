@@ -21,7 +21,7 @@ gates = fpeps.gates_homogeneous(geometry, nn=[gate_hopping_u, gate_hopping_d], l
 
 psi = fpeps.product_peps(geometry=geometry, vectors = ops.I())
 
-env = fpeps.EnvNTU(psi, which='NNN')
+env = fpeps.EnvNTU(psi, which='NN')
 # contatins the state psi and information how to calculate metric tensor for truncation;
 # here we use nearest tensor clusters (NTU) environment
 

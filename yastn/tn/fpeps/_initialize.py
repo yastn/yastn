@@ -1,5 +1,5 @@
 """ Initialization of peps tensors for real or imaginary time evolution """
-from ._geometry import SquareLattice, CheckerboardLattice
+from ._geometry import SquareLattice, CheckerboardLattice, Site
 from ._peps import Peps
 from ...initialize import load_from_dict as load_tensor_from_dict
 from ... import YastnError, Tensor
@@ -67,5 +67,5 @@ def load_from_dict(config, d):
 
     psi = Peps(net)
     for ind, tensor in d['data'].items():
-        psi._data[ind] = load_tensor_from_dict(config, tensor)
+        psi._data[Site(ind)] = load_tensor_from_dict(config, tensor)
     return psi

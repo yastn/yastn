@@ -36,7 +36,7 @@ class Peps():
              'boundary': self.boundary,
              'data': {}}
         for ind, tensor in self._data.items():
-            d['data'][ind] = tensor.save_to_dict()
+            d['data'][tuple(ind)] = tensor.save_to_dict()
         return d
 
     def copy(self):

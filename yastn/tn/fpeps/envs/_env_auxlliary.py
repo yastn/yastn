@@ -38,42 +38,66 @@ def leaf_r(A):  # A = [t l] [b r] s
     return lfr  # l' l
 
 
-def cor_tl(A):  # A -> [t l] [b r] s
+def cor_tl(A, leafs=None):  # A -> [t l] [b r] s
     """ top-left corner tensor """
-    A = fuse_legs(A, axes=((0, 2), 1))  # [[t l] s] [b r]
-    ctl = tensordot(A, A.conj(), axes=(0, 0))  # [b r] [b' r']
+    if leafs is None:
+        A = fuse_legs(A, axes=((0, 2), 1))  # [[t l] s] [b r]
+        ctl = tensordot(A, A.conj(), axes=(0, 0))  # [b r] [b' r']
+    else:
+        lft, lfl = leafs
+        A = A.unfuse_legs(axes=0).transpose(axes=(0, 2, 3, 1))  # t [b r] s l
+        Af = (lft @ A) @ lfl.T
+        ctl = tensordot(Af, A.conj(), axes=((0, 2, 3), (0, 2, 3)))  # [b r] [b' r']
     ctl = ctl.unfuse_legs(axes=(0, 1))  # b r b' r'
     ctl = ctl.swap_gate(axes=((0, 2), 3))  # b b' X r'
     ctl = ctl.fuse_legs(axes=((0, 2), (1, 3)))  # [b b'] [r r']
     return ctl  # [b b'] [r r']
 
 
-def cor_bl(A):  # A = [t l] [b r] s
+def cor_bl(A, leafs=None):  # A = [t l] [b r] s
     """ bottom-left corner tensor """
     A = A.unfuse_legs(axes=(0, 1))  # t l b r s
-    A = fuse_legs(A, axes=((0, 3), (1, 2, 4)))  # [t r] [b l s]
-    cbl = tensordot(A, A.conj(), axes=(1, 1))  # [t r] [t' r']
+    if leafs is None:
+        A = fuse_legs(A, axes=((0, 3), (1, 2, 4)))  # [t r] [b l s]
+        cbl = tensordot(A, A.conj(), axes=(1, 1))  # [t r] [t' r']
+    else:
+        lfb, lfl = leafs
+        A = fuse_legs(A, axes=(1, (0, 3), 4, 2))  # l [t r] s b
+        Af = (lfl @ A) @ lfb.T
+        cbl = tensordot(Af, A.conj(), axes=((0, 2, 3), (0, 2, 3)))  # [t r] [t' r']
     cbl = cbl.unfuse_legs(axes=(0, 1))  # t r t' r'
     cbl = cbl.fuse_legs(axes=((1, 3), (0, 2)))  # [r r'] [t t']
     return cbl  # [r r'] [t t']
 
 
-def cor_br(A):  # A = [t l] [b r] s
+def cor_br(A, leafs=None):  # A = [t l] [b r] s
     """ bottom-right corner tensor """
-    A = fuse_legs(A, axes=(0, (1, 2)))  # [t l] [[b r] s]
-    cbr = tensordot(A, A.conj(), axes=(1, 1))  # [t l] [t' l']
+    if leafs is None:
+        A = fuse_legs(A, axes=(0, (1, 2)))  # [t l] [[b r] s]
+        cbr = tensordot(A, A.conj(), axes=(1, 1))  # [t l] [t' l']
+    else:
+        lfb, lfr = leafs
+        A = A.unfuse_legs(axes=1).transpose(axes=(1, 0, 3, 2))  # b [t l] s r
+        Af = (lfb @ A) @ lfr.T
+        cbr = tensordot(Af, A.conj(), axes=((0, 2, 3), (0, 2, 3)))  # [t l] [t' l']
     cbr = cbr.unfuse_legs(axes=(0, 1))  # t l t' l'
     cbr = cbr.swap_gate(axes=((1, 3), 2))  # l l' X t'
     cbr = cbr.fuse_legs(axes=((0, 2), (1, 3)))  # [t t'] [l l']
     return cbr  # [t t'] [l l']
 
 
-def cor_tr(A):  # A = [t l] [b r] s
+def cor_tr(A, leafs=None):  # A = [t l] [b r] s
     """ top-right corner tensor """
     A = A.unfuse_legs(axes=(0, 1))  # t l b r s
     A = swap_gate(A, axes=(0, 1, 2, 3))  # t X l, b X r
-    A = fuse_legs(A, axes=((1, 2), (0, 3, 4)))  # [l b] [t r s]
-    ctr = tensordot(A, A.conj(), axes=(1, 1))  # [l b] [l' b']
+    if leafs is None:
+        A = fuse_legs(A, axes=((1, 2), (0, 3, 4)))  # [l b] [t r s]
+        ctr = tensordot(A, A.conj(), axes=(1, 1))  # [l b] [l' b']
+    else:
+        lft, lfr = leafs
+        A = fuse_legs(A, axes=(0, (1, 2), 4, 3))  # t [l b] s r
+        Af = (lft @ A) @ lfr.T
+        ctr = tensordot(Af, A.conj(), axes=((0, 2, 3), (0, 2, 3)))  # [l b] [l' b']
     ctr = ctr.unfuse_legs(axes=(0, 1))  # l b l' b'
     ctr = ctr.fuse_legs(axes=((0, 2), (1, 3)))  # [l l'] [b b']
     return ctr  # [l l'] [b b']

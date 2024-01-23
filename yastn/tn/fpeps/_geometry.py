@@ -95,6 +95,8 @@ class SquareLattice():
         d: str
             Take values in: 't', 'b', 'l', 'r', 'tl', 'bl', 'tr', 'br'.
         """
+        if site is None:
+            return None
         x, y = site
         dx, dy = self._dir[d]
         x, y = x + dx, y + dy
