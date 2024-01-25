@@ -4,7 +4,7 @@ from .._doublePepsTensor import DoublePepsTensor
 
 class EnvNTU:
     def __init__(self, psi, which='NN'):
-        if which not in ('p', 'NN', 'NNN', 'NNN+'):
+        if which not in ('h', 'NN', 'NNN', 'NNNh'):
             raise YastnError(f" Type of EnvNTU {which} not recognized.")
         self.psi = psi
         self.which = which
@@ -15,12 +15,12 @@ class EnvNTU:
             return self._g_NN(bd, QA, QB)
         if self.which == 'NNN':
             return self._g_NNN(bd, QA, QB)
-        if self.which == 'NNNp':
-            return self._g_NNNp(bd, QA, QB)
-        if self.which == 'p':
-            return self._g_p(bd, QA, QB)
+        if self.which == 'NNNh':
+            return self._g_NNNh(bd, QA, QB)
+        if self.which == 'h':
+            return self._g_h(bd, QA, QB)
 
-    def _g_p(self, bd, QA, QB):
+    def _g_h(self, bd, QA, QB):
         """
         Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
         """
@@ -36,8 +36,8 @@ class EnvNTU:
                  'br': psi.nn_site(bd.site1, d='b')}
             tensors_from_psi(m, psi)
 
-            env_l = edge_l(QA, leaf_l(m['l']))  # [t t'] [b b'] [rr rr']
-            env_r = edge_r(QB, leaf_r(m['r']))  # [ll ll'] [t t'] [b b']
+            env_l = edge_l(QA, hair_l(m['l']))  # [t t'] [b b'] [rr rr']
+            env_r = edge_r(QB, hair_r(m['r']))  # [ll ll'] [t t'] [b b']
             env_t = cor_tl(m['tl']) @ cor_tr(m['tr'])  # [tl tl'] [tr tr']
             env_b = cor_br(m['br']) @ cor_bl(m['bl'])  # [br br'] [bl bl']
             env_l = env_b @ env_l
@@ -52,8 +52,8 @@ class EnvNTU:
                  'br': psi.nn_site(bd.site1, d='r')}
             tensors_from_psi(m, psi)
 
-            env_t = edge_t(QA, leaf_t(m['t']))  # [l l'] [r r'] [bb bb']
-            env_b = edge_b(QB, leaf_b(m['b']))  # [tt tt'] [l l'] [r r']
+            env_t = edge_t(QA, hair_t(m['t']))  # [l l'] [r r'] [bb bb']
+            env_b = edge_b(QB, hair_b(m['b']))  # [tt tt'] [l l'] [r r']
             env_l = cor_bl(m['bl']) @ cor_tl(m['tl'])  # [bl bl'] [tl tl']
             env_r = cor_tr(m['tr']) @ cor_br(m['br'])  # [tr tr'] [br br']
             env_t = env_l @ env_t
@@ -78,8 +78,8 @@ class EnvNTU:
                  'br': psi.nn_site(bd.site1, d='b')}
             tensors_from_psi(m, psi)
 
-            env_l = edge_l(QA, leaf_l(m['l']))  # [t t'] [b b'] [rr rr']
-            env_r = edge_r(QB, leaf_r(m['r']))  # [ll ll'] [t t'] [b b']
+            env_l = edge_l(QA, hair_l(m['l']))  # [t t'] [b b'] [rr rr']
+            env_r = edge_r(QB, hair_r(m['r']))  # [ll ll'] [t t'] [b b']
             env_t = cor_tl(m['tl']) @ cor_tr(m['tr'])  # [tl tl'] [tr tr']
             env_b = cor_br(m['br']) @ cor_bl(m['bl'])  # [br br'] [bl bl']
             env_l = env_b @ env_l
@@ -94,8 +94,8 @@ class EnvNTU:
                  'br': psi.nn_site(bd.site1, d='r')}
             tensors_from_psi(m, psi)
 
-            env_t = edge_t(QA, leaf_t(m['t']))  # [l l'] [r r'] [bb bb']
-            env_b = edge_b(QB, leaf_b(m['b']))  # [tt tt'] [l l'] [r r']
+            env_t = edge_t(QA, hair_t(m['t']))  # [l l'] [r r'] [bb bb']
+            env_b = edge_b(QB, hair_b(m['b']))  # [tt tt'] [l l'] [r r']
             env_l = cor_bl(m['bl']) @ cor_tl(m['tl'])  # [bl bl'] [tl tl']
             env_r = cor_tr(m['tr']) @ cor_br(m['br'])  # [tr tr'] [br br']
             env_t = env_l @ env_t
@@ -179,7 +179,7 @@ class EnvNTU:
         return G.unfuse_legs(axes=(0, 1))
 
 
-    def _g_NNNp(self, bd, QA, QB):
+    def _g_NNNh(self, bd, QA, QB):
         """
         Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
         """
@@ -214,16 +214,16 @@ class EnvNTU:
 
             tensors_from_psi(m, psi)
 
-            lt  = edge_t(m['lt'], lft=leaf_t(m['lt_t']))
-            ltl = cor_tl(m['ltl'], leafs=(leaf_t(m['ltl_t']), leaf_l(m['ltl_l'])))
-            ll  = edge_l(m['ll'], lfl=leaf_l(m['ll_l']))
-            lbl = cor_bl(m['lbl'], leafs=(leaf_b(m['lbl_b']), leaf_l(m['lbl_l'])))
-            lb  = edge_b(m['lb'], lfb=leaf_b(m['lb_b']))
-            rt  = edge_t(m['rt'], lft=leaf_t(m['rt_t']))
-            rtr = cor_tr(m['rtr'], leafs=(leaf_t(m['rtr_t']), leaf_r(m['rtr_r'])))
-            rr  = edge_r(m['rr'], lfr=leaf_r(m['rr_r']))
-            rbr = cor_br(m['rbr'], leafs=(leaf_b(m['rbr_b']), leaf_r(m['rbr_r'])))
-            rb  = edge_b(m['rb'], lfb=leaf_b(m['rb_b']))
+            lt  = edge_t(m['lt'], ht=hair_t(m['lt_t']))
+            ltl = cor_tl(m['ltl'], ht=hair_t(m['ltl_t']), hl=hair_l(m['ltl_l']))
+            ll  = edge_l(m['ll'], hl=hair_l(m['ll_l']))
+            lbl = cor_bl(m['lbl'], hb=hair_b(m['lbl_b']), hl=hair_l(m['lbl_l']))
+            lb  = edge_b(m['lb'], hb=hair_b(m['lb_b']))
+            rt  = edge_t(m['rt'], ht=hair_t(m['rt_t']))
+            rtr = cor_tr(m['rtr'], ht=hair_t(m['rtr_t']), hr=hair_r(m['rtr_r']))
+            rr  = edge_r(m['rr'], hr=hair_r(m['rr_r']))
+            rbr = cor_br(m['rbr'], hb=hair_b(m['rbr_b']), hr=hair_r(m['rbr_r']))
+            rb  = edge_b(m['rb'], hb=hair_b(m['rb_b']))
 
             vecl = (lbl @ ll) @ (ltl @ lt)
             vecl = append_vec_tl(QA, QA, vecl)
@@ -262,16 +262,16 @@ class EnvNTU:
 
             tensors_from_psi(m, psi)
 
-            tl  = edge_l(m['tl'], lfl=leaf_l(m['tl_l']))
-            ttl = cor_tl(m['ttl'], leafs=(leaf_t(m['ttl_t']), leaf_l(m['ttl_l'])))
-            tt  = edge_t(m['tt'], lft=leaf_t(m['tt_t']))
-            ttr = cor_tr(m['ttr'], leafs=(leaf_t(m['ttr_t']), leaf_r(m['ttr_r'])))
-            tr  = edge_r(m['tr'], lfr=leaf_r(m['tr_r']))
-            bl  = edge_l(m['bl'], lfl=leaf_l(m['bl_l']))
-            bbl = cor_bl(m['bbl'], leafs=(leaf_b(m['bbl_b']), leaf_l(m['bbl_l'])))
-            bb  = edge_b(m['bb'], lfb=leaf_b(m['bb_b']))
-            bbr = cor_br(m['bbr'], leafs=(leaf_b(m['bbr_b']), leaf_r(m['bbr_r'])))
-            br  = edge_r(m['br'], lfr=leaf_r(m['br_r']))
+            tl  = edge_l(m['tl'], hl=hair_l(m['tl_l']))
+            ttl = cor_tl(m['ttl'], ht=hair_t(m['ttl_t']), hl=hair_l(m['ttl_l']))
+            tt  = edge_t(m['tt'], ht=hair_t(m['tt_t']))
+            ttr = cor_tr(m['ttr'], ht=hair_t(m['ttr_t']), hr=hair_r(m['ttr_r']))
+            tr  = edge_r(m['tr'], hr=hair_r(m['tr_r']))
+            bl  = edge_l(m['bl'], hl=hair_l(m['bl_l']))
+            bbl = cor_bl(m['bbl'], hb=hair_b(m['bbl_b']), hl=hair_l(m['bbl_l']))
+            bb  = edge_b(m['bb'], hb=hair_b(m['bb_b']))
+            bbr = cor_br(m['bbr'], hb=hair_b(m['bbr_b']), hr=hair_r(m['bbr_r']))
+            br  = edge_r(m['br'], hr=hair_r(m['br_r']))
 
             vect = (tl @ ttl) @ (tt @ ttr)
             vect = append_vec_tl(QA, QA, vect)
