@@ -1,10 +1,9 @@
 from .... import tensordot, YastnError, ones, Leg
 from ._env_auxlliary import *
-from .._doublePepsTensor import DoublePepsTensor
 
 class EnvNTU:
     def __init__(self, psi, which='NN'):
-        if which not in ('h', 'NN', 'NNN', 'NNNh'):
+        if which not in ('h', 'NN', 'NNh', 'NNhh', 'NNhh', 'NNN', 'NNNh'):
             raise YastnError(f" Type of EnvNTU {which} not recognized.")
         self.psi = psi
         self.which = which
@@ -13,6 +12,11 @@ class EnvNTU:
         """ Calculates bond metric. """
         if self.which == 'NN':
             return self._g_NN(bd, QA, QB)
+        if self.which == 'NNh':
+            return self._g_NNh(bd, QA, QB)
+        if self.which == 'NNhh':
+            return self._g_NNhh(bd, QA, QB)
+
         if self.which == 'NNN':
             return self._g_NNN(bd, QA, QB)
         if self.which == 'NNNh':
@@ -24,158 +28,227 @@ class EnvNTU:
         """
         Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
         """
-        psi = self.psi
-        dirn = bd.dirn
-
-        if dirn == "h":
-            m = {'tl': psi.nn_site(bd.site0, d='t'),
-                 'l' : psi.nn_site(bd.site0, d='l'),
-                 'bl': psi.nn_site(bd.site0, d='b'),
-                 'tr': psi.nn_site(bd.site1, d='t'),
-                 'r' : psi.nn_site(bd.site1, d='r'),
-                 'br': psi.nn_site(bd.site1, d='b')}
-            tensors_from_psi(m, psi)
-
-            env_l = edge_l(QA, hair_l(m['l']))  # [t t'] [b b'] [rr rr']
-            env_r = edge_r(QB, hair_r(m['r']))  # [ll ll'] [t t'] [b b']
-            env_t = cor_tl(m['tl']) @ cor_tr(m['tr'])  # [tl tl'] [tr tr']
-            env_b = cor_br(m['br']) @ cor_bl(m['bl'])  # [br br'] [bl bl']
-            env_l = env_b @ env_l
-            env_r = env_t @ env_r
-            G = tensordot(env_l, env_r, axes=((0, 2), (2, 0)))  # [ll ll'] [rr rr']
+        if bd.dirn == "h":
+            assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
+            #          (-1, 0)  (-1, 1)
+            #             ||       ||
+            #   (0, -1) = GA +   + GB = (0, +2)
+            #             ||       ||
+            #          (+1, 0)  (+1, 1)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1, 0), (0, -1), (1, 0), (1, 1), (0, 2), (-1, 1)]}
+            tensors_from_psi(m, self.psi)
+            env_l = hair_l(QA, hl=hair_l(m[0, -1]), ht=hair_t(m[-1, 0]), hb=hair_b(m[1, 0]))
+            env_r = hair_r(QB, hr=hair_r(m[0,  2]), ht=hair_t(m[-1, 1]), hb=hair_b(m[1, 1]))
+            G = tensordot(env_l, env_r, axes=((), ()))  # [rr' rr] [ll' ll]
         else: # dirn == "v":
-            m = {'tl': psi.nn_site(bd.site0, d='l'),
-                 't' : psi.nn_site(bd.site0, d='t'),
-                 'tr': psi.nn_site(bd.site0, d='r'),
-                 'bl': psi.nn_site(bd.site1, d='l'),
-                 'b' : psi.nn_site(bd.site1, d='b'),
-                 'br': psi.nn_site(bd.site1, d='r')}
-            tensors_from_psi(m, psi)
-
-            env_t = edge_t(QA, hair_t(m['t']))  # [l l'] [r r'] [bb bb']
-            env_b = edge_b(QB, hair_b(m['b']))  # [tt tt'] [l l'] [r r']
-            env_l = cor_bl(m['bl']) @ cor_tl(m['tl'])  # [bl bl'] [tl tl']
-            env_r = cor_tr(m['tr']) @ cor_br(m['br'])  # [tr tr'] [br br']
-            env_t = env_l @ env_t
-            env_b = env_r @ env_b
-            G = tensordot(env_t, env_b, axes=((0, 2), (2, 0)))
-        return G.unfuse_legs(axes=(0, 1))
+            assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
+            #          (-1, 0)
+            #             ||
+            #   (0, -1) = GA = (0, 1)
+            #             ++
+            #   (1, -1) = GB = (1, 1)
+            #             ||
+            #          (+2, 0)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1, 0), (0, -1), (1, -1), (2, 0), (1, 1), (0, 1)]}
+            tensors_from_psi(m, self.psi)
+            env_t = hair_t(QA, ht=hair_t(m[-1, 0]), hl=hair_l(m[0, -1]), hr=hair_r(m[0, 1]))
+            env_b = hair_b(QB, hb=hair_b(m[ 2, 0]), hl=hair_l(m[1, -1]), hr=hair_r(m[1, 1]))
+            G = tensordot(env_t, env_b, axes=((), ()))  # [bb' bb] [tt' tt]
+        return G.unfuse_legs(axes=(0, 1)).transpose(axes=(1, 0, 3, 2))
 
 
     def _g_NN(self, bd, QA, QB):
         """
         Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
         """
-        psi = self.psi
-        dirn = bd.dirn
-
-        if dirn == "h":
-            m = {'tl': psi.nn_site(bd.site0, d='t'),
-                 'l' : psi.nn_site(bd.site0, d='l'),
-                 'bl': psi.nn_site(bd.site0, d='b'),
-                 'tr': psi.nn_site(bd.site1, d='t'),
-                 'r' : psi.nn_site(bd.site1, d='r'),
-                 'br': psi.nn_site(bd.site1, d='b')}
-            tensors_from_psi(m, psi)
-
-            env_l = edge_l(QA, hair_l(m['l']))  # [t t'] [b b'] [rr rr']
-            env_r = edge_r(QB, hair_r(m['r']))  # [ll ll'] [t t'] [b b']
-            env_t = cor_tl(m['tl']) @ cor_tr(m['tr'])  # [tl tl'] [tr tr']
-            env_b = cor_br(m['br']) @ cor_bl(m['bl'])  # [br br'] [bl bl']
-            env_l = env_b @ env_l
-            env_r = env_t @ env_r
-            G = tensordot(env_l, env_r, axes=((0, 2), (2, 0)))  # [ll ll'] [rr rr']
+        if bd.dirn == "h":
+            assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
+            #          (-1, 0)==(-1, 1)
+            #             ||       ||
+            #   (0, -1) = GA +   + GB = (0, +2)
+            #             ||       ||
+            #          (+1, 0)==(+1, 1)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1, 0), (0, -1), (1, 0), (1, 1), (0, 2), (-1, 1)]}
+            tensors_from_psi(m, self.psi)
+            env_l = edge_l(QA, hair_l(m[0, -1]))  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(QB, hair_r(m[0,  2]))  # [tr tr'] [ll ll'] [br br']
+            ctl = cor_tl(m[-1, 0])
+            ctr = cor_tr(m[-1, 1])
+            cbr = cor_br(m[ 1, 1])
+            cbl = cor_bl(m[ 1, 0])
+            G = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
-            m = {'tl': psi.nn_site(bd.site0, d='l'),
-                 't' : psi.nn_site(bd.site0, d='t'),
-                 'tr': psi.nn_site(bd.site0, d='r'),
-                 'bl': psi.nn_site(bd.site1, d='l'),
-                 'b' : psi.nn_site(bd.site1, d='b'),
-                 'br': psi.nn_site(bd.site1, d='r')}
-            tensors_from_psi(m, psi)
-
-            env_t = edge_t(QA, hair_t(m['t']))  # [l l'] [r r'] [bb bb']
-            env_b = edge_b(QB, hair_b(m['b']))  # [tt tt'] [l l'] [r r']
-            env_l = cor_bl(m['bl']) @ cor_tl(m['tl'])  # [bl bl'] [tl tl']
-            env_r = cor_tr(m['tr']) @ cor_br(m['br'])  # [tr tr'] [br br']
-            env_t = env_l @ env_t
-            env_b = env_r @ env_b
-            G = tensordot(env_t, env_b, axes=((0, 2), (2, 0)))
+            assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
+            #         (-1, 0)
+            #            ||
+            #   (0,-1) = GA = (0, 1)
+            #     ||     ++     ||
+            #   (1,-1) = GB = (1, 1)
+            #            ||
+            #         (+2, 0)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1, 0), (0, -1), (1, -1), (2, 0), (1, 1), (0, 1)]}
+            tensors_from_psi(m, self.psi)
+            env_t = edge_t(QA, hair_t(m[-1, 0]))  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(QB, hair_b(m[ 2, 0]))  # [rb rb'] [tt tt'] [lb lb']
+            cbl = cor_bl(m[1,-1])
+            ctl = cor_tl(m[0,-1])
+            ctr = cor_tr(m[0, 1])
+            cbr = cor_br(m[1, 1])
+            G = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
         return G.unfuse_legs(axes=(0, 1))
+
+
+    def _g_NNh(self, bd, QA, QB):
+        """
+        Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
+        """
+        if bd.dirn == "h":
+            assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
+            #                 (-2,0)  (-2,1)
+            #        (-1,-1)==(-1,0)==(-1,1)==(-1,2)
+            #                   ||      ||
+            # (0, -2)(0, -1) == GA  ++  GB == (0, 2)(0, 3)
+            #                   ||      ||
+            #        (1, -1)==(1, 0)==(1, 1)==(1, 2)
+            #                 (2, 0)  (2, 1)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (1, 0), (1, 1), (1, 2), (0, 2), (-1, 2), (-1, 1), (-1, 0),
+                                                              (0, -2), (2, 0), (2, 1), (0, 3), (-2, 1), (-2, 0)]}
+            tensors_from_psi(m, self.psi)
+            env_l = edge_l(QA, hair_l(m[0,-1], hl=hair_l(m[0,-2])))  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(QB, hair_r(m[0, 2], hr=hair_r(m[0, 3])))  # [tr tr'] [ll ll'] [br br']
+            ctl = cor_tl(m[-1, 0], ht=hair_t(m[-2, 0]), hl=hair_l(m[-1,-1]))
+            ctr = cor_tr(m[-1, 1], ht=hair_t(m[-2, 1]), hr=hair_r(m[-1, 2]))
+            cbr = cor_br(m[ 1, 1], hb=hair_b(m[ 2, 1]), hr=hair_r(m[ 1, 2]))
+            cbl = cor_bl(m[ 1, 0], hb=hair_b(m[ 2, 0]), hl=hair_l(m[ 1,-1]))
+            G = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
+        else: # dirn == "v":
+            assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
+            #                 (-2, 0)
+            #        (-1,-1)  (-1, 0)  (-1,1)
+            #           ||       ||      ||
+            # (0, -2)(0, -1)===  GA ===(0, 1)(0, 2)
+            #           ||       ++      ||
+            # (1, -2)(1, -1)===  GB ===(1, 1)(1, 2)
+            #           ||       ||      ||
+            #        (2, -1)  (2,  0)  (2, 1)
+            #                 (3,  0)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (2,-1), (2, 0), (2, 1), (1, 1), (0, 1), (-1, 1), (-1, 0),
+                                                              (0, -2), (1,-2), (3, 0), (1, 2), (0, 2), (-2, 0)]}
+            tensors_from_psi(m, self.psi)
+            env_t = edge_t(QA, hair_t(m[-1, 0], ht=hair_t(m[-2, 0])))  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(QB, hair_b(m[ 2, 0], hb=hair_b(m[ 3, 0])))  # [rb rb'] [tt tt'] [lb lb']
+            cbl = cor_bl(m[1,-1], hl=hair_l(m[1,-2]), hb=hair_b(m[2, -1]))
+            ctl = cor_tl(m[0,-1], hl=hair_l(m[0,-2]), ht=hair_t(m[-1,-1]))
+            ctr = cor_tr(m[0, 1], hr=hair_r(m[0, 2]), ht=hair_t(m[-1, 1]))
+            cbr = cor_br(m[1, 1], hr=hair_r(m[1, 2]), hb=hair_b(m[2,  1]))
+            G = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+        return G.unfuse_legs(axes=(0, 1))
+
+    def _g_NNhh(self, bd, QA, QB):
+        """
+        Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
+        """
+        if bd.dirn == "h":
+            assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
+            #        (-2,-1)  (-2,0)  (-2,1)  (-2,2)
+            # (-1,-2)(-1,-1)==(-1,0)==(-1,1)==(-1,2)(-1,3)
+            #                   ||      ||
+            # (0, -2)(0, -1) == GA  ++  GB == (0, 2)(0, 3)
+            #                   ||      ||
+            # (1, -2)(1, -1)==(1, 0)==(1, 1)==(1, 2)(1, 3)
+            #        (2, -1)  (2, 0)  (2, 1)  (2, 2)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (1, 0), (1, 1), (1, 2), (0, 2), (-1, 2), (-1, 1), (-1, 0),
+                                                              (-1,-2), (0,-2), (1,-2), (2,-1), (2, 0), (2, 1), (2, 2), ( 1, 3), ( 0, 3), (-1, 3), (-2, 2), (-2, 1), (-2, 0), (-2, -1)]}
+            tensors_from_psi(m, self.psi)
+            env_l = edge_l(QA, hair_l(m[0,-1], hl=hair_l(m[0,-2])))  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(QB, hair_r(m[0, 2], hr=hair_r(m[0, 3])))  # [tr tr'] [ll ll'] [br br']
+            ctr = cor_tr(m[-1, 1], ht=hair_t(m[-2, 1]), hr=hair_r(m[-1, 2], hr=hair_r(m[-1, 3]), ht=hair_t(m[-2, 2])))
+            ctl = cor_tl(m[-1, 0], ht=hair_t(m[-2, 0]), hl=hair_l(m[-1,-1], hl=hair_l(m[-1,-2]), ht=hair_t(m[-2,-1])))
+            cbr = cor_br(m[ 1, 1], hb=hair_b(m[ 2, 1]), hr=hair_r(m[ 1, 2], hr=hair_r(m[ 1, 3]), hb=hair_b(m[ 2, 2])))
+            cbl = cor_bl(m[ 1, 0], hb=hair_b(m[ 2, 0]), hl=hair_l(m[ 1,-1], hl=hair_l(m[ 1,-2]), hb=hair_b(m[ 2,-1])))
+            G = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
+        else: # dirn == "v":
+            assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
+            #        (-2,-1)  (-2, 0)  (-2,1)
+            # (-1,-2)(-1,-1)  (-1, 0)  (-1,1)(-1,2)
+            #           ||       ||      ||
+            # (0, -2)(0, -1)===  GA ===(0, 1)(0, 2)
+            #           ||       ++      ||
+            # (1, -2)(1, -1)===  GB ===(1, 1)(1, 2)
+            #           ||       ||      ||
+            # (2, -2)(2, -1)  (2,  0)  (2, 1)(2, 2)
+            #        (3, -1)  (3,  0)  (3, 1)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (2,-1), (2, 0), (2, 1), (1, 1), (0, 1), (-1, 1), (-1, 0),
+                                                              (-1,-2), (0,-2), (1,-2), (2,-2), (3,-1), (3, 0), (3, 1), (2, 2), (1, 2), (0, 2), (-1, 2), (-2, 1), (-2, 0), (-2,-1)]}
+            tensors_from_psi(m, self.psi)
+            env_t = edge_t(QA, hair_t(m[-1, 0], ht=hair_t(m[-2, 0])))  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(QB, hair_b(m[ 2, 0], hb=hair_b(m[ 3, 0])))  # [rb rb'] [tt tt'] [lb lb']
+            cbl = cor_bl(m[1,-1], hl=hair_l(m[1,-2]), hb=hair_b(m[2, -1], hb=hair_b(m[3, -1]), hl=hair_l(m[2, -2])))
+            ctl = cor_tl(m[0,-1], hl=hair_l(m[0,-2]), ht=hair_t(m[-1,-1], ht=hair_t(m[-2,-1]), hl=hair_l(m[-1,-2])))
+            ctr = cor_tr(m[0, 1], hr=hair_r(m[0, 2]), ht=hair_t(m[-1, 1], ht=hair_t(m[-2, 1]), hr=hair_r(m[-1, 2])))
+            cbr = cor_br(m[1, 1], hr=hair_r(m[1, 2]), hb=hair_b(m[2,  1], hb=hair_b(m[3,  1]), hr=hair_r(m[2,  2])))
+            G = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+        return G.unfuse_legs(axes=(0, 1))
+
 
     def _g_NNN(self, bd, QA, QB):
         """
         Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
         """
-        psi = self.psi
-        dirn = bd.dirn
+        if bd.dirn == "h":
+            assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
+            #   (-1,-1)==(-1,0)==(-1,1)==(-1,2)
+            #      ||      ||      ||      ||
+            #   (0, -1) == GA  ++  GB == (0, 2)
+            #      ||      ||      ||      ||
+            #   (1, -1)==(1, 0)==(1, 1)==(1, 2)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1, -1), (0, -1), (1, -1), (1,  0), (1,  1),  (1,  2), (0,  2), (-1, 2), (-1, 1), (-1, 0)]}
+            tensors_from_psi(m, self.psi)
 
-        if dirn == "h":
-            m = {'lt' : psi.nn_site(bd.site0, d='t'),
-                 'ltl': psi.nn_site(bd.site0, d='tl'),
-                 'll' : psi.nn_site(bd.site0, d='l'),
-                 'lbl': psi.nn_site(bd.site0, d='bl'),
-                 'lb' : psi.nn_site(bd.site0, d='b'),
-                 'rt' : psi.nn_site(bd.site1, d='t'),
-                 'rtr': psi.nn_site(bd.site1, d='tr'),
-                 'rr' : psi.nn_site(bd.site1, d='r'),
-                 'rbr': psi.nn_site(bd.site1, d='br'),
-                 'rb' : psi.nn_site(bd.site1, d='b')}
-            tensors_from_psi(m, psi)
+            ell = edge_l(m[0, -1])
+            clt = cor_tl(m[-1, -1])
+            elt = edge_t(m[-1, 0])
+            vecl = append_vec_tl(QA, QA, ell @ (clt @ elt))
+            elb = edge_b(m[1, 0])
+            clb = cor_bl(m[1, -1])
+            vecl = tensordot(elb @ clb, vecl, axes=((2, 1), (0, 1)))
 
-            lt  = edge_t(m['lt'])
-            ltl = cor_tl(m['ltl'])
-            ll  = edge_l(m['ll'])
-            lbl = cor_bl(m['lbl'])
-            lb  = edge_b(m['lb'])
-            rt  = edge_t(m['rt'])
-            rtr = cor_tr(m['rtr'])
-            rr  = edge_r(m['rr'])
-            rbr = cor_br(m['rbr'])
-            rb  = edge_b(m['rb'])
-
-            vecl = (lbl @ ll) @ (ltl @ lt)
-            vecl = append_vec_tl(QA, QA, vecl)
-            vecl = tensordot(lb, vecl, axes=((2, 1), (0, 1)))
-
-            vecr = (rtr @ rr) @ (rbr @ rb)
-            vecr = append_vec_br(QB, QB, vecr)
-            vecr = tensordot(rt, vecr, axes=((2, 1), (0, 1)))
-
-            G = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [ll ll'] [rr rr']
+            err = edge_r(m[0, 2])
+            crb = cor_br(m[1, 2])
+            erb = edge_b(m[1, 1])
+            vecr = append_vec_br(QB, QB, err @ (crb @ erb))
+            ert = edge_t(m[-1, 1])
+            crt = cor_tr(m[-1, 2])
+            vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
+            G = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
-            m = {'tl' : psi.nn_site(bd.site0, d='l'),
-                 'ttl': psi.nn_site(bd.site0, d='tl'),
-                 'tt' : psi.nn_site(bd.site0, d='t'),
-                 'ttr': psi.nn_site(bd.site0, d='tr'),
-                 'tr' : psi.nn_site(bd.site0, d='r'),
-                 'bl' : psi.nn_site(bd.site1, d='l'),
-                 'bbl': psi.nn_site(bd.site1, d='bl'),
-                 'bb' : psi.nn_site(bd.site1, d='b'),
-                 'bbr': psi.nn_site(bd.site1, d='br'),
-                 'br' : psi.nn_site(bd.site1, d='r')}
-            tensors_from_psi(m, psi)
+            assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
+            #   (-1,-1)==(-1, 0)==(-1,1)
+            #      ||       ||      ||
+            #   (0, -1)===  GA ===(0, 1)
+            #      ||       ++      ||
+            #   (1, -1)===  GB ===(1, 1)
+            #      ||       ||      ||
+            #   (2, -1)==(2,  0)==(2, 1)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1, -1), (0, -1), (1, -1), (2, -1), (2, 0), (2, 1), (1, 1), (0, 1), (-1, 1), (-1, 0)]}
+            tensors_from_psi(m, self.psi)
 
-            tl  = edge_l(m['tl'])
-            ttl = cor_tl(m['ttl'])
-            tt  = edge_t(m['tt'])
-            ttr = cor_tr(m['ttr'])
-            tr  = edge_r(m['tr'])
-            bl  = edge_l(m['bl'])
-            bbl = cor_bl(m['bbl'])
-            bb  = edge_b(m['bb'])
-            bbr = cor_br(m['bbr'])
-            br  = edge_r(m['br'])
+            etl = edge_l(m[0, -1])
+            ctl = cor_tl(m[-1, -1])
+            ett = edge_t(m[-1, 0])
+            vect = append_vec_tl(QA, QA, etl @ (ctl @ ett))
+            ctr = cor_tr(m[-1, 1])
+            etr = edge_r(m[0, 1])
+            vect = tensordot(vect, ctr @ etr, axes=((2, 3), (0, 1)))
 
-            vect = (tl @ ttl) @ (tt @ ttr)
-            vect = append_vec_tl(QA, QA, vect)
-            vect = tensordot(vect, tr, axes=((2, 3), (0, 1)))
-
-            vecb = (br @ bbr) @ (bb @ bbl)
-            vecb = append_vec_br(QB, QB, vecb)
-            vecb = tensordot(vecb, bl, axes=((2, 3), (0, 1)))
-
-            G = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [tt tt'] [bb bb']
+            ebr = edge_r(m[1, 1])
+            cbr = cor_br(m[2, 1])
+            ebb = edge_b(m[2, 0])
+            vecb = append_vec_br(QB, QB, ebr @ (cbr @ ebb))
+            cbl = cor_bl(m[2, -1])
+            ebl = edge_l(m[1, -1])
+            vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
+            G = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
         return G.unfuse_legs(axes=(0, 1))
 
 
@@ -183,105 +256,68 @@ class EnvNTU:
         """
         Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
         """
-        psi = self.psi
-        dirn = bd.dirn
+        if bd.dirn == "h":
+            assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
+            #        (-2,-1)  (-2,0)  (-2,1)  (-2,2)
+            # (-1,-2)(-1,-1)==(-1,0)==(-1,1)==(-1,2)(-1,3)
+            #           ||      ||      ||      ||
+            # (0, -2)(0, -1) == GA  ++  GB == (0, 2)(0, 3)
+            #           ||      ||      ||      ||
+            # (1, -2)(1, -1)==(1, 0)==(1, 1)==(1, 2)(1, 3)
+            #        (2, -1)  (2, 0)  (2, 1)  (2, 2)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (1, 0), (1, 1), (1, 2), (0, 2), (-1, 2), (-1, 1), (-1, 0),
+                                                              (-1,-2), (0,-2), (1,-2), (2,-1), (2, 0), (2, 1), (2, 2), ( 1, 3), ( 0, 3), (-1, 3), (-2, 2), (-2, 1), (-2, 0), (-2, -1)]}
+            tensors_from_psi(m, self.psi)
 
-        if dirn == "h":
-            m = {'lt' : psi.nn_site(bd.site0, d='t'),
-                 'ltl': psi.nn_site(bd.site0, d='tl'),
-                 'll' : psi.nn_site(bd.site0, d='l'),
-                 'lbl': psi.nn_site(bd.site0, d='bl'),
-                 'lb' : psi.nn_site(bd.site0, d='b'),
-                 'rt' : psi.nn_site(bd.site1, d='t'),
-                 'rtr': psi.nn_site(bd.site1, d='tr'),
-                 'rr' : psi.nn_site(bd.site1, d='r'),
-                 'rbr': psi.nn_site(bd.site1, d='br'),
-                 'rb' : psi.nn_site(bd.site1, d='b')}
-            m['lt_t'] = psi.nn_site(m['lt'], d='t')
-            m['ltl_t'] = psi.nn_site(m['ltl'], d='t')
-            m['ltl_l'] = psi.nn_site(m['ltl'], d='l')
-            m['ll_l'] = psi.nn_site(m['ll'], d='l')
-            m['lbl_l'] = psi.nn_site(m['lbl'], d='l')
-            m['lbl_b'] = psi.nn_site(m['lbl'], d='b')
-            m['lb_b'] = psi.nn_site(m['lb'], d='b')
-            m['rt_t'] = psi.nn_site(m['rt'], d='t')
-            m['rtr_t'] = psi.nn_site(m['rtr'], d='t')
-            m['rtr_r'] = psi.nn_site(m['rtr'], d='r')
-            m['rr_r'] = psi.nn_site(m['rr'], d='r')
-            m['rbr_r'] = psi.nn_site(m['rbr'], d='r')
-            m['rbr_b'] = psi.nn_site(m['rbr'], d='b')
-            m['rb_b'] = psi.nn_site(m['rb'], d='b')
+            ell = edge_l(m[0, -1], hl=hair_l(m[0, -2]))
+            clt = cor_tl(m[-1, -1], hl=hair_l(m[-1, -2]), ht=hair_t(m[-2, -1]))
+            elt = edge_t(m[-1, 0], ht=hair_t(m[-2, 0]))
+            vecl = append_vec_tl(QA, QA, ell @ (clt @ elt))
+            elb = edge_b(m[1, 0], hb=hair_b(m[2, 0]))
+            clb = cor_bl(m[1, -1], hb=hair_b(m[2, -1]), hl=hair_l(m[1, -2]))
+            vecl = tensordot(elb @ clb, vecl, axes=((2, 1), (0, 1)))
 
-            tensors_from_psi(m, psi)
+            err = edge_r(m[0, 2], hr=hair_r(m[0, 3]))
+            crb = cor_br(m[1, 2], hr=hair_r(m[1, 3]), hb=hair_b(m[2, 2]))
+            erb = edge_b(m[1, 1], hb=hair_b(m[2, 1]))
+            vecr = append_vec_br(QB, QB, err @ (crb @ erb))
+            ert = edge_t(m[-1, 1], ht=hair_t(m[-2, 1]))
+            crt = cor_tr(m[-1, 2], ht=hair_t(m[-2, 2]), hr=hair_r(m[-1, 3]))
+            vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
 
-            lt  = edge_t(m['lt'], ht=hair_t(m['lt_t']))
-            ltl = cor_tl(m['ltl'], ht=hair_t(m['ltl_t']), hl=hair_l(m['ltl_l']))
-            ll  = edge_l(m['ll'], hl=hair_l(m['ll_l']))
-            lbl = cor_bl(m['lbl'], hb=hair_b(m['lbl_b']), hl=hair_l(m['lbl_l']))
-            lb  = edge_b(m['lb'], hb=hair_b(m['lb_b']))
-            rt  = edge_t(m['rt'], ht=hair_t(m['rt_t']))
-            rtr = cor_tr(m['rtr'], ht=hair_t(m['rtr_t']), hr=hair_r(m['rtr_r']))
-            rr  = edge_r(m['rr'], hr=hair_r(m['rr_r']))
-            rbr = cor_br(m['rbr'], hb=hair_b(m['rbr_b']), hr=hair_r(m['rbr_r']))
-            rb  = edge_b(m['rb'], hb=hair_b(m['rb_b']))
-
-            vecl = (lbl @ ll) @ (ltl @ lt)
-            vecl = append_vec_tl(QA, QA, vecl)
-            vecl = tensordot(lb, vecl, axes=((2, 1), (0, 1)))
-
-            vecr = (rtr @ rr) @ (rbr @ rb)
-            vecr = append_vec_br(QB, QB, vecr)
-            vecr = tensordot(rt, vecr, axes=((2, 1), (0, 1)))
-
-            G = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [ll ll'] [rr rr']
+            G = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
-            m = {'tl' : psi.nn_site(bd.site0, d='l'),
-                 'ttl': psi.nn_site(bd.site0, d='tl'),
-                 'tt' : psi.nn_site(bd.site0, d='t'),
-                 'ttr': psi.nn_site(bd.site0, d='tr'),
-                 'tr' : psi.nn_site(bd.site0, d='r'),
-                 'bl' : psi.nn_site(bd.site1, d='l'),
-                 'bbl': psi.nn_site(bd.site1, d='bl'),
-                 'bb' : psi.nn_site(bd.site1, d='b'),
-                 'bbr': psi.nn_site(bd.site1, d='br'),
-                 'br' : psi.nn_site(bd.site1, d='r')}
-            m['tl_l'] = psi.nn_site(m['tl'], d='l')
-            m['ttl_l'] = psi.nn_site(m['ttl'], d='l')
-            m['ttl_t'] = psi.nn_site(m['ttl'], d='t')
-            m['tt_t'] = psi.nn_site(m['tt'], d='t')
-            m['ttr_t'] = psi.nn_site(m['ttr'], d='t')
-            m['ttr_r'] = psi.nn_site(m['ttr'], d='r')
-            m['tr_r'] = psi.nn_site(m['tr'], d='r')
-            m['bl_l'] = psi.nn_site(m['bl'], d='l')
-            m['bbl_l'] = psi.nn_site(m['bbl'], d='l')
-            m['bbl_b'] = psi.nn_site(m['bbl'], d='b')
-            m['bb_b'] = psi.nn_site(m['bb'], d='b')
-            m['bbr_b'] = psi.nn_site(m['bbr'], d='b')
-            m['bbr_r'] = psi.nn_site(m['bbr'], d='r')
-            m['br_r'] = psi.nn_site(m['br'], d='r')
+            assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
+            #        (-2,-1)  (-2, 0)  (-2,1)
+            # (-1,-2)(-1,-1)==(-1, 0)==(-1,1)(-1,2)
+            #           ||       ||      ||
+            # (0, -2)(0, -1)===  GA ===(0, 1)(0, 2)
+            #           ||       ++      ||
+            # (1, -2)(1, -1)===  GB ===(1, 1)(1, 2)
+            #           ||       ||      ||
+            # (2, -2)(2, -1)==(2,  0)==(2, 1)(2, 2)
+            #        (3, -1)  (3,  0)  (3, 1)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (2,-1), (2, 0), (2, 1), (1, 1), (0, 1), (-1, 1), (-1, 0),
+                                                              (-1,-2), (0,-2), (1,-2), (2,-2), (3,-1), (3, 0), (3, 1), (2, 2), (1, 2), (0, 2), (-1, 2), (-2, 1), (-2, 0), (-2,-1)]}
+            tensors_from_psi(m, self.psi)
 
-            tensors_from_psi(m, psi)
+            etl = edge_l(m[0, -1], hl=hair_l(m[0, -2]))
+            ctl = cor_tl(m[-1, -1], hl=hair_l(m[-1, -2]), ht=hair_t(m[-2, -1]))
+            ett = edge_t(m[-1, 0], ht=hair_t(m[-2, 0]))
+            vect = append_vec_tl(QA, QA, etl @ (ctl @ ett))
+            ctr = cor_tr(m[-1, 1], ht=hair_t(m[-2, 1]), hr=hair_r(m[-1, 2]))
+            etr = edge_r(m[0, 1], hr=hair_r(m[0, 2]))
+            vect = tensordot(vect, ctr @ etr, axes=((2, 3), (0, 1)))
 
-            tl  = edge_l(m['tl'], hl=hair_l(m['tl_l']))
-            ttl = cor_tl(m['ttl'], ht=hair_t(m['ttl_t']), hl=hair_l(m['ttl_l']))
-            tt  = edge_t(m['tt'], ht=hair_t(m['tt_t']))
-            ttr = cor_tr(m['ttr'], ht=hair_t(m['ttr_t']), hr=hair_r(m['ttr_r']))
-            tr  = edge_r(m['tr'], hr=hair_r(m['tr_r']))
-            bl  = edge_l(m['bl'], hl=hair_l(m['bl_l']))
-            bbl = cor_bl(m['bbl'], hb=hair_b(m['bbl_b']), hl=hair_l(m['bbl_l']))
-            bb  = edge_b(m['bb'], hb=hair_b(m['bb_b']))
-            bbr = cor_br(m['bbr'], hb=hair_b(m['bbr_b']), hr=hair_r(m['bbr_r']))
-            br  = edge_r(m['br'], hr=hair_r(m['br_r']))
+            ebr = edge_r(m[1, 1], hr=hair_r(m[1, 2]))
+            cbr = cor_br(m[2, 1], hr=hair_r(m[2, 2]), hb=hair_b(m[3, 1]))
+            cbb = edge_b(m[2, 0], hb=hair_b(m[3, 0]))
+            vecb = append_vec_br(QB, QB, ebr @ (cbr @ cbb))
+            cbl = cor_bl(m[2, -1], hb=hair_b(m[3, -1]), hl=hair_l(m[2, -2]))
+            ebl = edge_l(m[1, -1], hl=hair_l(m[1, -2]))
+            vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
 
-            vect = (tl @ ttl) @ (tt @ ttr)
-            vect = append_vec_tl(QA, QA, vect)
-            vect = tensordot(vect, tr, axes=((2, 3), (0, 1)))
-
-            vecb = (br @ bbr) @ (bb @ bbl)
-            vecb = append_vec_br(QB, QB, vecb)
-            vecb = tensordot(vecb, bl, axes=((2, 3), (0, 1)))
-
-            G = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [tt tt'] [bb bb']
+            G = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
         return G.unfuse_legs(axes=(0, 1))
 
 

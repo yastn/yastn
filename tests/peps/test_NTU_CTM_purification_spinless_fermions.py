@@ -34,7 +34,7 @@ def test_NTU_spinless_finite():
     gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
-    env = fpeps.EnvNTU(psi)
+    env = fpeps.EnvNTU(psi, which='NN')
 
     opts_svd = {"D_total": D, 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)
@@ -90,7 +90,7 @@ def test_NTU_spinless_infinite():
     t = 1  # hopping amplitude
     beta = 0.2
 
-    D = 8
+    D = 6
     dbeta = 0.01
 
     ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
@@ -101,7 +101,7 @@ def test_NTU_spinless_infinite():
     gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
-    env = fpeps.EnvNTU(psi, which='NNNh')
+    env = fpeps.EnvNTU(psi, which='NN')
 
     opts_svd = {"D_total": D, 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)

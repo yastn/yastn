@@ -92,13 +92,14 @@ class SquareLattice():
 
         Parameters
         ----------
-        d: str
-            Take values in: 't', 'b', 'l', 'r', 'tl', 'bl', 'tr', 'br'.
+        d: str | tuple[int, int]
+            Take values in: 't', 'b', 'l', 'r', 'tl', 'bl', 'tr', 'br',
+            or a tuple of (dx, dy).
         """
         if site is None:
             return None
         x, y = site
-        dx, dy = self._dir[d]
+        dx, dy = self._dir[d] if isinstance(d, str) else d
         x, y = x + dx, y + dy
         if self.boundary == 'obc' and (x < 0 or x >= self.Nx or y < 0 or y >= self.Ny):
             return None

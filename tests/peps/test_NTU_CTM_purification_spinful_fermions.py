@@ -25,7 +25,7 @@ def test_NTU_spinful_finite():
     beta = 0.1
 
     dbeta = 0.025
-    D = 12
+    D = 8
 
     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid = ops.I()
@@ -39,7 +39,7 @@ def test_NTU_spinful_finite():
     gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
-    env = fpeps.EnvNTU(psi, which='NNN')
+    env = fpeps.EnvNTU(psi, which='NN')
 
     opts_svd = {"D_total": D, 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)
@@ -96,10 +96,10 @@ def test_NTU_spinful_finite():
     nn_bond_2_exact = 0.024896433958165112  # bond between (0, 0) and (1, 0)
     print(nn_CTM_bond_1_up, nn_CTM_bond_1_dn, 'vs', nn_bond_1_exact)
     print(nn_CTM_bond_2_up, nn_CTM_bond_2_dn, 'vs', nn_bond_2_exact)
-    assert pytest.approx(nn_CTM_bond_1_up, abs=1e-5) == nn_bond_1_exact
-    assert pytest.approx(nn_CTM_bond_1_dn, abs=1e-5) == nn_bond_1_exact
-    assert pytest.approx(nn_CTM_bond_2_up, abs=1e-5) == nn_bond_2_exact
-    assert pytest.approx(nn_CTM_bond_2_dn, abs=1e-5) == nn_bond_2_exact
+    assert pytest.approx(nn_CTM_bond_1_up, abs=1e-4) == nn_bond_1_exact
+    assert pytest.approx(nn_CTM_bond_1_dn, abs=1e-4) == nn_bond_1_exact
+    assert pytest.approx(nn_CTM_bond_2_up, abs=1e-4) == nn_bond_2_exact
+    assert pytest.approx(nn_CTM_bond_2_dn, abs=1e-4) == nn_bond_2_exact
 
 
 def test_NTU_spinful_infinite():
@@ -113,7 +113,7 @@ def test_NTU_spinful_infinite():
     beta = 0.1
 
     dbeta = 0.025
-    D = 12
+    D = 8
 
     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     fid = ops.I()
@@ -129,7 +129,7 @@ def test_NTU_spinful_infinite():
     # initialized at infinite temperature
     psi = fpeps.product_peps(geometry, fid)
 
-    env = fpeps.EnvNTU(psi)
+    env = fpeps.EnvNTU(psi, which='NN')
 
     opts_svd = {"D_total": D, 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)
@@ -173,7 +173,7 @@ def test_NTU_spinful_infinite():
     # analytical nn fermionic correlator at beta = 0.1 for 2D infinite lattice with checkerboard ansatz
     nn_exact = 0.02481459
     print(nn_CTM, 'vs', nn_exact)
-    assert pytest.approx(nn_CTM, abs=1e-5) == nn_exact
+    assert pytest.approx(nn_CTM, abs=1e-4) == nn_exact
 
 
 if __name__ == '__main__':

@@ -39,6 +39,7 @@ def test_Lattice():
                                       ((1, 1), (2, 1)))
 
     assert net.nn_site((0, 1), d='r') is None
+    assert net.nn_site((0, 1), d=(2, -1)) == Site(2, 0)
     assert net.site2index((1, 0)) == (1, 0)
     #
     ##########
@@ -47,18 +48,21 @@ def test_Lattice():
     assert net.dims == (3, 2)
     assert net.sites() == ((0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1))
     assert net.bonds('h') == (((0, 0), (0, 1)),
-                                 ((1, 0), (1, 1)),
-                                 ((2, 0), (2, 1)))
+                              ((1, 0), (1, 1)),
+                              ((2, 0), (2, 1)))
     assert net.bonds('v') == (((0, 0), (1, 0)),
-                                 ((0, 1), (1, 1)),
-                                 ((1, 0), (2, 0)),
-                                 ((1, 1), (2, 1)),
-                                 ((2, 0), (0, 0)),
-                                 ((2, 1), (0, 1)))
+                              ((0, 1), (1, 1)),
+                              ((1, 0), (2, 0)),
+                              ((1, 1), (2, 1)),
+                              ((2, 0), (0, 0)),
+                              ((2, 1), (0, 1)))
 
     assert net.nn_site((0, 1), d='r') is None
     assert net.nn_site((0, 1), d='t') == Site(2, 1)
     assert net.nn_site((2, 0), d='b') == Site(0, 0)
+    assert net.nn_site((0, 0), d=(4, 4)) is None
+    assert net.nn_site((2, 0), d=(2, 1)) == Site(1, 1)
+    assert net.nn_site((2, 0), d=(-3, 1)) == Site(2, 1)
 
 
 def test_Peps_get_set():
