@@ -727,13 +727,13 @@ def fPEPS_2layers(A, B=None, op=None, dir=None):
 
     if B is None:
         if A.ndim == 5:
-            B = A.swap_gate(axes=(0, 1, 2, 3)) # t l b r [s a]
+            B = A # t l b r [s a]
         if A.ndim == 6:
-            B_int = A.swap_gate(axes=(0, 1, 2, 3)) # t l b r str [s a]
+            B_int = A # t l b r str [s a]
             B_int = B_int.unfuse_legs(axes=5) # t l b r str s a
             B = B_int.fuse_legs(axes=(0, 1, 2, 3, 5, (6, 4))).fuse_legs(axes=(0, 1, 2, 3, (4, 5))) # t l b r [s [a str]]
     elif B is not None:
-        B = B.swap_gate(axes=(0, 1, 2, 3))
+        B = B
     AAb = DoublePepsTensor(top=Ao, btm=B)
     return AAb
 

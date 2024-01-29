@@ -207,35 +207,31 @@ def edge_b(A, hb=None):  # A = [t l] [b r] s;  hb = b' b
 
 def append_vec_tl(A, Ac, vectl):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectl = x [l l'] [t t'] y
     """ Append the A and Ac tensors to the top-left vector """
-    vectl = vectl.fuse_legs(axes=((0, 3), 1, 2))  # [x y] [l l'] [t t']
-    vectl = vectl.unfuse_legs(axes=(1, 2))  # [x y] l l' t t'
-    vectl = vectl.swap_gate(axes=((1, 2), 4))  # l l' X t'
-    # vectl = vectl.fuse_legs(axes=(0, (3, 1), (4, 2)))  # [x y] [t l] [t' l']
-    # vectl = vectl.tensordot(Ac.conj(), axes=(2, 0))  # [x y] [t l] [b' r'] s
-    # vectl = vectl.tensordot(A, axes=((1, 3), (0, 2)))  # [x y] [b' r'] [b r]
-    vectl = vectl.fuse_legs(axes=(0, (4, 2), (3, 1)))  # [x y] [t' l'] [t l]
-    vectl = vectl.tensordot(A, axes=(2, 0))  # [x y] [t' l'] [b r] s
-    vectl = vectl.tensordot(Ac.conj(), axes=((1, 3), (0, 2)))  # [x y] [b r] [b' r']
-    #
-    vectl = vectl.unfuse_legs(axes=(1, 2))  # [x y] b r b' r'
-    vectl = vectl.swap_gate(axes=((1, 3), 4))  # b b' X r'
-    vectl = vectl.fuse_legs(axes=(0, (1, 3), (2, 4)))  # [x y] [b b'] [r r']
-    vectl = vectl.unfuse_legs(axes=0)  # x y [b b'] [r r']
-    vectl = vectl.transpose(axes=(0, 2, 1, 3))  # x [b b'] y [r r']
+    vectl = vectl.fuse_legs(axes=(2, (0, 3), 1))  # [t t'] [x y] [l l']
+    vectl = vectl.unfuse_legs(axes=(0, 2))  # t t' [x y] l l'
+    vectl = vectl.swap_gate(axes=(1, (3, 4)))  # t' X l l'
+    vectl = vectl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t l] [x y] [t' l']
+    vectl = vectl.tensordot(Ac.conj(), axes=(2, 0))  # [t l] [x y] [b' r'] s
+    vectl = A.tensordot(vectl, axes=((0, 2), (0, 3)))  # [b r] [x y] [b' r']
+    vectl = vectl.unfuse_legs(axes=(0, 2))  # b r [x y] b' r'
+    vectl = vectl.swap_gate(axes=((0, 3), 4))  # b b' X r'
+    vectl = vectl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b b'] [x y] [r r']
+    vectl = vectl.unfuse_legs(axes=1)  # [b b'] x y [r r']
+    vectl = vectl.transpose(axes=(1, 0, 2, 3))  # x [b b'] y [r r']
     return vectl
 
 
 def append_vec_br(A, Ac, vecbr):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbr = x [r r'] [b b'] y
     """ Append the A and Ac tensors to the bottom-right vector. """
-    vecbr = vecbr.fuse_legs(axes=((0, 3), 1, 2))  # [x y] [r r'] [b b']
-    vecbr = vecbr.unfuse_legs(axes=(1, 2))  # [x y] r r' b b'
-    vecbr = vecbr.swap_gate(axes=(2, (3, 4)))  # r' X b b'
-    vecbr = vecbr.fuse_legs(axes=(0, (4, 2), (3, 1)))  # [x y] [b' r'] [b r]
-    vecbr = vecbr.tensordot(A, axes=(2, 1))  # [x y] [b' r'] [t l] s
-    vecbr = vecbr.tensordot(Ac.conj(), axes=((1, 3), (1, 2)))  # [x y] [t l] [t' l']
-    vecbr = vecbr.unfuse_legs(axes=(1, 2))  # [x y] t l t' l'
-    vecbr = vecbr.swap_gate(axes=((2, 4), 3))  # l l' X t'
-    vecbr = vecbr.fuse_legs(axes=(0, (1, 3), (2, 4)))  # [x y] [t t'] [l l']
-    vecbr = vecbr.unfuse_legs(axes=0)  # x y [t t'] [l l']
-    vecbr = vecbr.transpose(axes=(0, 2, 1, 3))  # x [t t'] y [l l']
+    vecbr = vecbr.fuse_legs(axes=(2, (0, 3), 1))  # [b b'] [x y] [r r']
+    vecbr = vecbr.unfuse_legs(axes=(0, 2))  # b b' [x y] r r'
+    vecbr = vecbr.swap_gate(axes=((0, 1), 4))  # b b' X r'
+    vecbr = vecbr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b r] [x y] [b' r']
+    vecbr = vecbr.tensordot(Ac.conj(), axes=(2, 1))  # [b r] [x y] [t' l'] s
+    vecbr = A.tensordot(vecbr, axes=((1, 2), (0, 3)))  # [t l] [x y] [t' l']
+    vecbr = vecbr.unfuse_legs(axes=(0, 2))  # t l [x y] t' l'
+    vecbr = vecbr.swap_gate(axes=((1, 4), 3))  # l l' X t'
+    vecbr = vecbr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t t'] [x y] [l l']
+    vecbr = vecbr.unfuse_legs(axes=1)  # [t t'] x y [l l']
+    vecbr = vecbr.transpose(axes=(1, 0, 2, 3))  # x [t t'] y [l l']
     return vecbr
