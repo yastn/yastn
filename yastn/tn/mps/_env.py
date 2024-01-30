@@ -151,7 +151,7 @@ class MpoTerm(NamedTuple):
     r"""
     Utility class for defining Hamiltonians as linear combinations of MPOs
 
-    H = \sum_i amp_i Mpo_i
+        H = \sum_i amp_i Mpo_i
 
     """
     amp: number = 1.0
@@ -159,7 +159,7 @@ class MpoTerm(NamedTuple):
 
 
 class MpsProjector():
-    # holds ref to a set of n states, and owns a set of n mps-mps environments 
+    # holds ref to a set of n states and owns a set of n mps-mps environments 
     # for projections 
 
     def __init__(self,ket,bra,project:Optional[Sequence[MpsMpo]] = None):
@@ -549,7 +549,7 @@ def Env3(bra=None, op: Optional[Sequence[MpoTerm]|MpsMpo] = None, ket=None, on_a
         if type(op)==MpsMpo:
             return Env3_single(bra,op,ket,on_aux,project)
         else:
-            return Env3Sum(bra,op,ket,on_aux,project)
+            return Env3_sum(bra,op,ket,on_aux,project)
 
 
 class _tdvp_update():
@@ -746,7 +746,7 @@ class Env3_single(_EnvParent, _tdvp_update):
         return False
 
 
-class Env3Sum(_EnvParent, _tdvp_update):
+class Env3_sum(_EnvParent, _tdvp_update):
 
     def __init__(self, bra=None, op: Optional[Sequence[MpoTerm]] = None, ket=None, on_aux=False, project=None):
         r"""
@@ -1052,5 +1052,3 @@ def _update3_(n, F : Dict[tuple(int),Tensor], bra, op : MpsMpo, ket : MpsMpo, to
         tmp = op[n]._attach_23(tmp)
         tmp = tmp.unfuse_legs(axes=0)
         F[(n, n - 1)] = tensor.ncon([ket[n], tmp], ((-0, 1, 2, 3), (-2, 1, -1, 2, 3)))
-
-
