@@ -31,7 +31,7 @@ def transfer_mpo(self, index, index_type, rotation=False):
             top = self[site]
             if top.ndim == 3:
                 top = top.unfuse_legs(axes=(0, 1))
-            H.A[ny] = DoublePepsTensor(top=top, btm=top, rotation=90)
+            H.A[ny] = DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
     elif index_type == 'column' and not rotation:
         ny = index
         H = Mpo(N=self.Nx)
@@ -50,7 +50,8 @@ def transfer_mpo(self, index, index_type, rotation=False):
             top = self[site]
             if top.ndim == 3:
                 top = top.unfuse_legs(axes=(0, 1))
-            H.A[self.Nx - nx - 1] = DoublePepsTensor(top=top, btm=top, rotation=180)  #change site ordering
+            # change site ordering
+            H.A[self.Nx - nx - 1] = DoublePepsTensor(top=top, btm=top, transpose=(2, 3, 0, 1))
     return H
 
 def boundary_mps(self, rotation=''):

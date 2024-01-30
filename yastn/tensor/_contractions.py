@@ -480,8 +480,8 @@ def _meta_swap_gate(t, mf, ndim, nsym, axes, fss):
     if len(axes) % 2 == 1:
         raise YastnError('Odd number of elements in axes. Elements of axes should come in pairs.')
     for l1, l2 in zip(*(iaxes, iaxes)):
-        if len(set(l1) & set(l2)) > 0:
-            raise YastnError('Cannot swap the same index.')
+        # if len(set(l1) & set(l2)) > 0:
+        #     raise YastnError('Cannot swap the same index.')
         t1 = np.sum(tset[:, l1, :], axis=1) % 2
         t2 = np.sum(tset[:, l2, :], axis=1) % 2
         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)

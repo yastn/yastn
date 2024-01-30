@@ -21,6 +21,11 @@ def test_swap_gate_basic():
 
     c = a.swap_gate(axes=(0, 2))
     c = c.swap_gate(axes=(1, 2))
+
+    c1 = c.swap_gate(axes=(0, (1, 3)))
+    c2 = c.swap_gate(axes=(0, (0, 2)))  # swap with itself
+    assert (c1 - c2).norm() < tol
+
     assert pytest.approx(sum(c.to_numpy().ravel()), rel=tol) == 4
     c1 = a.swap_gate(axes=((0, 1), 2))  # swap between group of (0, 1) and 2
     c2 = a.swap_gate(axes=(0, 2, 1, 2)) # swap between 0, 2 and then 1, 2
@@ -159,9 +164,9 @@ def test_swap_gate_exceptions():
     with pytest.raises(yastn.YastnError):
         a.swap_gate(axes=(0, 1, 2))
         # Odd number of elements in axes. Elements of axes should come in pairs.
-    with pytest.raises(yastn.YastnError):
-        a.swap_gate(axes=((0, 1), 0))
-        # Cannot swap the same index
+    # with pytest.raises(yastn.YastnError):
+    #     a.swap_gate(axes=((0, 1), 0))
+    #     # Cannot swap the same index
     with pytest.raises(yastn.YastnError):
         a.swap_gate(axes=(0,), charge=(1, 1))
         # Len of charge (1, 1) does not match sym.NSYM = 1.

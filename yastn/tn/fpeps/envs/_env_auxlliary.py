@@ -3,7 +3,7 @@ from yastn import fuse_legs, tensordot, swap_gate
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'cor_tl', 'cor_bl', 'cor_br', 'cor_tr',
            'edge_t', 'edge_l', 'edge_b', 'edge_r',
-           'append_vec_tl', 'append_vec_br']
+           'append_vec_tl', 'append_vec_br', 'append_vec_tr']
 
 
 def hair_t(A, ht=None, hl=None, hr=None):
@@ -235,3 +235,47 @@ def append_vec_br(A, Ac, vecbr):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s; 
     vecbr = vecbr.unfuse_legs(axes=1)  # [t t'] x y [l l']
     vecbr = vecbr.transpose(axes=(1, 0, 2, 3))  # x [t t'] y [l l']
     return vecbr
+
+
+def append_vec_tr(A, Ac, vectr):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectr = x [t t'] [r r'] y
+    """ Append the A and Ac tensors to the top-left vector """
+    vectr = vectr.fuse_legs(axes=(1, (0, 3), 2))  # [t t'] [x y] [r r']
+    vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
+    vectr = vectr.swap_gate(axes=(1, 2))  # t' X x y
+    vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [t r] [x y] [t' r']
+    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
+    Ac = Ac.unfuse_legs(axes=(0, 1))  # t' l' b' r' s
+    A = A.swap_gate(axes=(2, 4))  # b X s
+    Ac = Ac.swap_gate(axes=(2, (0, 3)))  # b' X t' r'
+    A = A.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t r] [l b] s
+    Ac = Ac.fuse_legs(axes=((0, 3), (1, 2), 4))  # [t' r'] [l' b'] s
+    vectr = vectr.tensordot(Ac.conj(), axes=(2, 0))  # [t r] [x y] [l' b'] s
+    vectr = A.tensordot(vectr, axes=((0, 2), (0, 3)))  # [l b] [x y] [l' b']
+    vectr = vectr.unfuse_legs(axes=(0, 2))  # l b [x y] l' b'
+    vectr = vectr.swap_gate(axes=(1, (3, 4)))  # b X l' b'
+    vectr = vectr.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [l l'] [x y] [b b']
+    vectr = vectr.unfuse_legs(axes=1)  # [l l'] x y [b b']
+    vectr = vectr.transpose(axes=(1, 0, 2, 3))  # x [l l'] y [b b']
+    return vectr
+
+
+def append_vec_bl(A, Ac, vecbl):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbl = x [b b'] [l l'] y
+    """ Append the A and Ac tensors to the top-left vector """
+    vecbl = vecbl.fuse_legs(axes=(1, (0, 3), 2))  # [b b'] [x y] [l l']
+    vecbl = vecbl.unfuse_legs(axes=(0, 2))  # b b' [x y] l l'
+    vecbl = vecbl.swap_gate(axes=(0, (1, 4)))  # b X b' l'
+    vecbl = vecbl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [b l] [x y] [b' l']
+    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
+    Ac = Ac.unfuse_legs(axes=(0, 1))  # t' l' b' r' s
+    A = A.swap_gate(axes=(2, 4))  # b X s
+    Ac = Ac.swap_gate(axes=(2, (0, 3)))  # b' X t' r'
+    A = A.fuse_legs(axes=((2, 1), (3, 0), 4))  # [b l] [r t] s
+    Ac = Ac.fuse_legs(axes=((2, 1), (3, 0), 4))  # [b' l'] [r' t'] s
+    vecbl = vecbl.tensordot(Ac.conj(), axes=(2, 0))  # [b l] [x y] [r' t'] s
+    vecbl = A.tensordot(vecbl, axes=((0, 2), (0, 3)))  # [r t] [x y] [r' t']
+    vecbl = vecbl.unfuse_legs(axes=(0, 2))  # r t [x y] r' t'
+    vecbl = vecbl.swap_gate(axes=(2, 4))  #  [x y] X t'
+    vecbl = vecbl.fuse_legs(axes=((0, 3), 2, (1, 4)))  # [r r'] [x y] [t t']
+    vecbl = vecbl.unfuse_legs(axes=1)  # [r r'] x y [t t']
+    vecbl = vecbl.transpose(axes=(1, 0, 2, 3))  # x [r r'] y [t t']
+    return vecbl
