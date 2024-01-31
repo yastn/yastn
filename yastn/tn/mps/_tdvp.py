@@ -1,5 +1,6 @@
 """ Various variants of the TDVP algorithm for mps."""
-from typing import NamedTuple
+from __future__ import annotations
+from typing import NamedTuple, Sequence, Callable
 from ._env import Env3
 from ._mps import MpsMpo
 from ... import YastnError
@@ -16,7 +17,8 @@ class TDVP_out(NamedTuple):
     steps: int = 0
 
 
-def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opts_expmv=None, opts_svd=None, normalize=True):
+def tdvp_(psi, H : MpsMpo | Sequence[tuple(MpsMpo,number)] | Callable, 
+          times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opts_expmv=None, opts_svd=None, normalize=True):
     r"""
     Iterator performing TDVP sweeps to solve :math:`\frac{d}{dt} |\psi(t)\rangle = -uH|\psi(t)\rangle`,
 
@@ -27,9 +29,10 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
         It is first canonized to the first site, if not provided in such a form.
         Resulting state is also canonized to the first site.
 
-    H: Mps, nr_phys=2
-        Evolution generator given either as MPO for time-independent problem
-        or as a function returning MPO for time-dependent problem, i.e. ``Callable[[float], Mpo]``.
+    H:
+        Evolution generator given either as (sum of) MPO for time-independent problem
+        or as a function returning (sum of) MPO for time-dependent problem, i.e. ``Callable[[float], Mpo]`` 
+        or ``Callable[[float], Sequence[tuple(Mpo,number)]``.
 
     time: float64 or tuple(float64)
         Initial and final times; can also provide intermediate times for snapshots returned
@@ -70,7 +73,7 @@ def tdvp_(psi, H, times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opt
             * :code:`dt` time-step used.
             * :code:`steps` number of time-steps in the last time-interval.
     """
-    time_independent = isinstance(H, MpsMpo)
+    time_independent = not callable(H)
     if dt <= 0:
         raise YastnError('TDVP: dt should be positive.')
     if not hasattr(times, '__iter__'):

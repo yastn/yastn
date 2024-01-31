@@ -1,8 +1,10 @@
 """ Various variants of the DMRG algorithm for mps."""
-from typing import NamedTuple
+from __future__ import annotations
+from typing import NamedTuple, Sequence
 import logging
 from ... import eigs, YastnError
 from ._env import Env3
+from . import MpsMpo
 
 
 logger = logging.Logger('dmrg')
@@ -20,7 +22,7 @@ class DMRG_out(NamedTuple):
     max_discarded_weight: float = None
 
 
-def dmrg_(psi, H, project=None, method='1site',
+def dmrg_(psi, H : MpsMpo | Sequence[tuple(MpsMpo,number)], project=None, method='1site',
         energy_tol=None, Schmidt_tol=None, max_sweeps=1, iterator_step=None,
         opts_eigs=None, opts_svd=None):
     r"""
@@ -41,7 +43,7 @@ def dmrg_(psi, H, project=None, method='1site',
         It is first canonized to the first site, if not provided in such a form.
         State resulting from :code:`dmrg_` is canonized to the first site.
 
-    H: yastn.tn.mps.MpsMpo
+    H: yastn.tn.mps.MpsMpo or Sequence[tuple(MpsMpo,number)]
         MPO to minimize against.
 
     project: list(yastn.tn.mps.MpsMpo)
@@ -90,7 +92,7 @@ def dmrg_(psi, H, project=None, method='1site',
     return tmp if iterator_step else next(tmp)
 
 
-def _dmrg_(psi, H, project, method,
+def _dmrg_(psi, H : MpsMpo | Sequence[tuple(MpsMpo,number)], project, method,
         energy_tol, Schmidt_tol, max_sweeps, iterator_step,
         opts_eigs, opts_svd):
     """ Generator for dmrg_(). """
