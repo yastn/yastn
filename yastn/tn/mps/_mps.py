@@ -269,6 +269,20 @@ class MpsMpo:
         r""" Transpose of MPO. For MPS, return self. Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
         return self.transpose()
 
+    def reverse_sites(self) -> yastn.tn.mps.MpsMpo:
+        r""" New MPS/MPO with reversed order of sites and respectively transposed tensors. """  # TODO (no swap_gates ?)
+        phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
+        phi.factor = self.factor
+        axes = (2, 1, 0) if self.nr_phys == 1 else (2, 1, 0, 3)
+        for n in phi.sweep(to='last'):
+            phi.A[n] = self.A[self.N - n - 1].transpose(axes=axes)
+        if self.pC is None:
+            phi.pC = None
+        else:
+            phi.pC = (self.N - self.pC[1] - 1, self.N - self.pC[0] - 1)
+            phi.A[phi.pC] = self.A[self.pC].transpose(axes=(1, 0))
+        return phi
+
     def __mul__(self, multiplier) -> yastn.tn.mps.MpsMpo:
         """ New MPS/MPO with the first tensor multiplied by a scalar. """
         phi = self.shallow_copy()

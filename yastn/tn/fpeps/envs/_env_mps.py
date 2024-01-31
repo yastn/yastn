@@ -3,43 +3,39 @@ from .._auxiliary import transfer_mpo
 from .... import YastnError, ones, Leg
 
 
-class MpsEnv():
+class MpsEnv:
     r""" Geometric information about the lattice provided to ctm tensors """
     def __init__(self, psi, opts_svd, setup='lr', opts_var=None):
         self.psi = psi
 
-        self._env = {('r', psi.Ny-1):  trivial_mps_boundary(psi, psi.Ny-1, index_type='r'),
-                ('l', 0):  trivial_mps_boundary(psi, 0, index_type='l')}
+        li, ri = 0, psi.Ny-1
+        self._env = {('r', ri): trivial_mps_boundary(psi, ri, index_type='r'),
+                     ('l', li): trivial_mps_boundary(psi, li, index_type='l')}
 
         self.info = {}
 
         if opts_var == None:
-            opts_var = {'max_sweeps': 2,
-                        'normalize': False,}
+            opts_var = {'max_sweeps': 2, 'normalize': False,}
 
-        for ny in range(psi.Ny-2, -1, -1):
+        for ny in range(ri - 1, -1, -1):
             phi0 = self._env['r', ny + 1]
-            Os = transfer_mpo(psi, index=ny + 1, index_type='column')
+            Os = transfer_mpo(psi, index=ny+1, index_type='column')
 
             phi, discarded = mps.zipper(Os, phi0, opts_svd, return_discarded=True)
             mps.compression_(phi, (Os, phi0), **opts_var)
             self._env['r', ny] = phi
             self.info['r', ny] = {'discarded': discarded}
 
-        for ny in range(1, psi.Ny):
+        for ny in range(1, ri + 1):
             phi0 = self._env['l', ny - 1]
-            Os = transfer_mpo(psi, index=ny - 1, index_type='column', rotation=True)
+            Os = transfer_mpo(psi, index=ny-1, index_type='column', rotation=True)
             phi, discarded = mps.zipper(Os, phi0, opts_svd, return_discarded=True)
             mps.compression_(phi, (Os, phi0), **opts_var)
             self._env['l', ny] = phi
             self.info['l', ny] = {'discarded': discarded}
 
-        for ny in range(psi.Ny):  # reverse left
-            phi0 = self._env['l', ny]
-            phi = mps.Mps(N=psi.Nx)
-            for n in phi.sweep():
-                phi[n] = phi0[psi.Nx - n - 1].transpose(axes=(2, 1, 0))
-            self._env['l', ny] = phi.conj()
+        for ny in range(ri + 1):  # reverse left
+            self._env['l', ny] = self._env['l', ny].reverse_sites().conj()
 
 
     def env2mps(self, index, index_type):
