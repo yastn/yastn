@@ -13,7 +13,7 @@ except ImportError:
     from configs import config_U1xU1_R_fermionic as cfg
 
 
-def test_envs_spinless_finite():
+def test_finite_spinless_boundary_mps_ctmrg():
 
     boundary = 'obc'
     Nx, Ny = 3, 2
@@ -75,10 +75,10 @@ def test_envs_spinless_finite():
     mpsenv = fpeps.EnvBoundaryMps(psi, opts_svd=opts_svd_ctm, setup='tlbr')
 
     for ny in range(psi.Ny):
-        vR0 = step.env.env2mps(index=ny, index_type='r')
-        vR1 = mpsenv.env2mps(index=ny, index_type='r')
-        vL0 = step.env.env2mps(index=ny, index_type='l')
-        vL1 = mpsenv.env2mps(index=ny, index_type='l')
+        vR0 = step.env.env2mps(n=ny, dirn='r')
+        vR1 = mpsenv.env2mps(n=ny, dirn='r')
+        vL0 = step.env.env2mps(n=ny, dirn='l')
+        vL1 = mpsenv.env2mps(n=ny, dirn='l')
 
         print(mps.vdot(vR0, vR1) / (vR0.norm() * vR1.norm()))  # problem with phase in peps?
         print(mps.vdot(vL0, vL1) / (vL0.norm() * vL1.norm()))
@@ -86,10 +86,10 @@ def test_envs_spinless_finite():
         assert abs(abs(mps.vdot(vL0, vL1)) / (vL0.norm() * vL1.norm()) - 1) < 1e-7
 
     for nx in range(psi.Nx):
-        vT0 = step.env.env2mps(index=nx, index_type='t')
-        vT1 = mpsenv.env2mps(index=nx, index_type='t')
-        vB0 = step.env.env2mps(index=nx, index_type='b')
-        vB1 = mpsenv.env2mps(index=nx, index_type='b')
+        vT0 = step.env.env2mps(n=nx, dirn='t')
+        vT1 = mpsenv.env2mps(n=nx, dirn='t')
+        vB0 = step.env.env2mps(n=nx, dirn='b')
+        vB1 = mpsenv.env2mps(n=nx, dirn='b')
 
         print(mps.vdot(vT0, vT1) / (vT0.norm() * vT1.norm()))  # problem with phase in peps?
         print(mps.vdot(vB0, vB1) / (vB0.norm() * vB1.norm()))
@@ -97,5 +97,54 @@ def test_envs_spinless_finite():
         assert abs(abs(mps.vdot(vB0, vB1)) / (vB0.norm() * vB1.norm()) - 1) < 1e-7
 
 
+
+
+def test_spinless_infinite_approx():
+    """ Simulate purification of free fermions in an infinite system.s """
+    geometry = fpeps.CheckerboardLattice()
+
+    mu = 0  # chemical potential
+    t = 1  # hopping amplitude
+    beta = 0.1
+
+    D = 6
+    dbeta = 0.01
+
+    ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    fid, fc, fcdag = ops.I(), ops.c(), ops.cp()
+    GA_nn, GB_nn = fpeps.gates.gate_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    g_loc = fpeps.gates.gate_local_fermi_sea(mu, dbeta / 2, fid, fc, fcdag) # local gate for spinless fermi sea
+    g_nn = [(GA_nn, GB_nn)]
+    gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
+
+    psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
+    env = fpeps.EnvNTU(psi, which='NN')
+
+    opts_svd = {"D_total": D, 'tol_block': 1e-15}
+    steps = np.rint((beta / 2) / dbeta).astype(int)
+    for step in range(steps):
+        print(f"beta = {(step + 1) * dbeta}" )
+        out = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="SVD")
+
+
+    env1 = fpeps.EnvApproximate(psi, which='32', opts_svd= opts_svd)
+    env2 = fpeps.EnvNTU(psi, which='NNN')
+
+    bd = fpeps.Bond((0, 0), (0, 1))
+    QA = psi[(0, 0)]
+    QB = psi[(0, 1)]
+
+    G2 = env2.bond_metric(bd, QA, QB)
+    G1 = env1.bond_metric(bd, QA, QB)
+
+    print(G1.get_shape())
+    print(G2.get_shape())
+
+
+
 if __name__ == '__main__':
-    test_envs_spinless_finite()
+    # test_finite_spinless_boundary_mps_ctmrg()
+
+    test_spinless_infinite_approx()
+
+

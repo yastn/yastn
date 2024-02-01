@@ -1,9 +1,36 @@
-from yastn import fuse_legs, tensordot, swap_gate
+from .... import fuse_legs, tensordot, swap_gate, ones, Leg, eye
+from ... import mps
 
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'cor_tl', 'cor_bl', 'cor_br', 'cor_tr',
            'edge_t', 'edge_l', 'edge_b', 'edge_r',
-           'append_vec_tl', 'append_vec_br', 'append_vec_tr']
+           'append_vec_tl', 'append_vec_br', 'append_vec_tr',
+           'tensors_from_psi', 'identity_tm_boundary']
+
+
+def tensors_from_psi(d, psi):
+    if any(v is None for v in d.values()):
+        cfg = psi[(0, 0)].config
+        triv = ones(cfg, legs=[Leg(cfg, t=((0,) * cfg.sym.NSYM,), D=(1,))])
+        for s in (-1, 1, 1, -1):
+            triv = triv.add_leg(axis=0, s=s)
+        triv = triv.fuse_legs(axes=((0, 1), (2, 3), 4))
+    for k, v in d.items():
+        d[k] = triv if v is None else psi[v]
+
+
+def identity_tm_boundary(tmpo):
+    """
+    For transfer matrix MPO build of DoublePepsTensors,
+    create MPS that contracts each DoublePepsTensor from the right.
+    """
+    phi = mps.Mps(N=tmpo.N)
+    config = tmpo.config
+    for n in phi.sweep(to='last'):
+        legf = tmpo[n].get_legs(axes=3).conj()
+        tmp = eye(config, legs=legf.unfuse_leg(), isdiag=False).fuse_legs(axes=[(0, 1)])
+        phi[n] = tmp.add_leg(0, s=-1).add_leg(2, s=1)
+    return phi
 
 
 def hair_t(A, ht=None, hl=None, hr=None):

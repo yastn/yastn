@@ -1,5 +1,6 @@
-from .... import tensordot, YastnError, ones, Leg
+from .... import tensordot, YastnError
 from ._env_auxlliary import *
+
 
 class EnvNTU:
     def __init__(self, psi, which='NN'):
@@ -7,26 +8,18 @@ class EnvNTU:
             raise YastnError(f" Type of EnvNTU {which} not recognized.")
         self.psi = psi
         self.which = which
+        self._dict_gs = {'h': self._g_h,
+                         'NN': self._g_NN,
+                         'NNh': self._g_NNh,
+                         'NNhh': self._g_NNhh,
+                         'NNN': self._g_NNN,
+                         'NNNh': self._g_NNNh,
+                         'NNNhh': self._g_NNNhh,
+                         'NNNhhh': self._g_NNNhhh}
 
     def bond_metric(self, bd, QA, QB):
         """ Calculates bond metric. """
-        if self.which == 'NN':
-            return self._g_NN(bd, QA, QB)
-        if self.which == 'NNh':
-            return self._g_NNh(bd, QA, QB)
-        if self.which == 'NNhh':
-            return self._g_NNhh(bd, QA, QB)
-        if self.which == 'NNN':
-            return self._g_NNN(bd, QA, QB)
-        if self.which == 'NNNh':
-            return self._g_NNNh(bd, QA, QB)
-        if self.which == 'NNNhh':
-            return self._g_NNNhh(bd, QA, QB)
-        if self.which == 'NNNhhh':
-            return self._g_NNNhhh(bd, QA, QB)
-
-        if self.which == 'h':
-            return self._g_h(bd, QA, QB)
+        return self._dict_gs[self.which](bd, QA, QB)
 
     def _g_h(self, bd, QA, QB):
         """
@@ -486,14 +479,3 @@ class EnvNTU:
 
             G = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
         return G.unfuse_legs(axes=(0, 1))
-
-
-def tensors_from_psi(m, psi):
-    if any(v is None for v in m.values()):
-        cfg = psi[(0, 0)].config
-        triv = ones(cfg, legs=[Leg(cfg, t=((0,) * cfg.sym.NSYM,), D=(1,))])
-        for s in (-1, 1, 1, -1):
-            triv = triv.add_leg(axis=0, s=s)
-        triv = triv.fuse_legs(axes=((0, 1), (2, 3), 4))
-    for k, v in m.items():
-        m[k] = triv if v is None else psi[v]

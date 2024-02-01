@@ -1,3 +1,5 @@
+from ...tn.mps import Mpo
+from ._doublePepsTensor import DoublePepsTensor
 from ._geometry import SquareLattice, CheckerboardLattice
 
 
@@ -59,3 +61,38 @@ class Peps():
         for ind in self._data:
             psi._data[ind] = self._data[ind].copy()
         return psi
+
+
+    def transfer_mpo(self, n=0, dirn='v', one_layer=False):
+        """
+        Converts a specific row or column of PEPS into MPO.
+
+        Parameters
+        ----------
+        n: int
+            index of row/column.
+        dirn: str
+            'v' for column, 'h' for row.
+        """
+
+        if dirn == 'h':
+            nx = n  # is this ever used?
+            H = Mpo(N=self.Ny)
+            for ny in range(self.Ny):
+                site = (nx, ny)
+                top = self[site]
+                if top.ndim == 3:
+                    top = top.unfuse_legs(axes=(0, 1))
+                H.A[ny] = top.transpose(axes=(1, 2, 3, 0)) if one_layer else \
+                        DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
+        elif dirn == 'v':
+            ny = n
+            H = Mpo(N=self.Nx)
+            for nx in range(self.Nx):
+                site = (nx, ny)
+                top = self[site]
+                if top.ndim == 3:
+                    top = top.unfuse_legs(axes=(0, 1))
+                H.A[nx] = top if one_layer else \
+                        DoublePepsTensor(top=top, btm=top)
+        return H

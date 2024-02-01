@@ -5,7 +5,6 @@ from ....tn import mps
 from yastn.tn.fpeps import Peps
 from yastn.tn.fpeps.gates._gates import match_ancilla_1s
 from yastn import rand, tensordot, ones
-from .._auxiliary import transfer_mpo
 
 
 class ctm_window(NamedTuple):
@@ -39,29 +38,25 @@ class CtmEnv(Peps):
     def tensors_CtmEnv(self):
         return self._windows
 
-    def env2mps(self, index, index_type):
+    def env2mps(self, n, dirn):
         """ Convert environmental tensors of Ctm to an MPS """
-        if index_type == 'b':
-            nx = index
+        if dirn == 'b':
             H = mps.Mps(N=self.Ny)
             for ny in range(self.Ny):
-                H.A[ny] = self[nx, ny].b.transpose(axes=(2,1,0))
+                H.A[ny] = self[n, ny].b.transpose(axes=(2,1,0))
             H = H.conj()
-        elif index_type == 'r':
-            ny = index
+        elif dirn == 'r':
             H = mps.Mps(N=self.Nx)
             for nx in range(self.Nx):
-                H.A[nx] = self[nx, ny].r
-        elif index_type == 't':
-            nx = index
+                H.A[nx] = self[nx, n].r
+        elif dirn == 't':
             H = mps.Mps(N=self.Ny)
             for ny in range(self.Ny):
-                H.A[ny] = self[nx, ny].t
-        elif index_type == 'l':
-            ny = index
+                H.A[ny] = self[n, ny].t
+        elif dirn == 'l':
             H = mps.Mps(N=self.Nx)
             for nx in range(self.Nx):
-                H.A[nx] = self[nx, ny].l.transpose(axes=(2,1,0))
+                H.A[nx] = self[nx, n].l.transpose(axes=(2,1,0))
             H = H.conj()
         return H
 
@@ -200,12 +195,12 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
 
     out = {}
     count = 0
-    vR = CTMenv.env2mps(index=state.Ny-1, index_type='r') # right boundary of indexed column through CTM environment tensors
+    vR = CTMenv.env2mps(n=state.Ny-1, dirn='r') # right boundary of indexed column through CTM environment tensors
 
     for ny in range(state.Ny - 1, -1, -1):
 
-        Os = transfer_mpo(state, index=ny, index_type='column') # converts ny colum of PEPS to MPO
-        vL = CTMenv.env2mps(index=ny, index_type='l') # left boundary of indexed column through CTM environment tensors
+        Os = state.transfer_mpo(n=ny, dirn='v') # converts ny colum of PEPS to MPO
+        vL = CTMenv.env2mps(n=ny, dirn='l') # left boundary of indexed column through CTM environment tensors
 
         env = mps.Env3(vL, Os, vR).setup_(to = 'first')
 
@@ -275,9 +270,9 @@ def measure_2site(state, CTMenv, op1, op2, opts_svd, opts_var=None):
     for nx1, ny1 in sites:
         print( f"Correlations from {nx1} {ny1} ... ")
         for nz1, o1 in op1dict[nx1, ny1].items():
-            vR = CTMenv.env2mps(index=ny1, index_type='r')
-            vL = CTMenv.env2mps(index=ny1, index_type='l')
-            Os = transfer_mpo(state, index=ny1, index_type='column')
+            vR = CTMenv.env2mps(n=ny1, dirn='r')
+            vL = CTMenv.env2mps(n=ny1, dirn='l')
+            Os = state.transfer_mpo(n=ny1, dirn='v')
             env = mps.Env3(vL, Os, vR).setup_(to='first').setup_(to='last')
             norm_env = env.measure(bd=(-1, 0))
 
@@ -314,8 +309,8 @@ def measure_2site(state, CTMenv, op1, op2, opts_svd, opts_var=None):
             for ny2 in range(ny1-1, -1, -1):
                 vR = vRnext
                 vRo1 = vRo1next
-                vL = CTMenv.env2mps(index=ny2, index_type='l')
-                Os = transfer_mpo(state, index=ny2, index_type='column')
+                vL = CTMenv.env2mps(n=ny2, dirn='l')
+                Os = state.transfer_mpo(n=ny2, dirn='v')
                 env = mps.Env3(vL, Os, vR).setup_(to='first')
                 norm_env = env.measure(bd=(-1, 0))
 
@@ -352,9 +347,9 @@ def measure_1site(state, CTMenv, op):
     opdict = _clear_operator_input(op, sites)
 
     for ny in range(Ny-1, -1, -1):
-        vR = CTMenv.env2mps(index=ny, index_type='r')
-        vL = CTMenv.env2mps(index=ny, index_type='l')
-        Os = transfer_mpo(state, index=ny, index_type='column')
+        vR = CTMenv.env2mps(n=ny, dirn='r')
+        vL = CTMenv.env2mps(n=ny, dirn='l')
+        Os = state.transfer_mpo(n=ny, dirn='v')
         env = mps.Env3(vL, Os, vR).setup_(to='first').setup_(to='last')
         norm_env = env.measure()
         for nx in range(Nx):
@@ -377,9 +372,9 @@ def match_ancilla_projectors(psi, projectors):
 
 def _sample_MC_column_local(ny, proj_psi, proj_env, st0, st1, psi, projectors, rands):
     # update is proposed based on local probabilies
-    vR = proj_env.env2mps(index=ny, index_type='r')
-    Os = transfer_mpo(proj_psi, index=ny, index_type='column', one_layer=True)
-    vL = proj_env.env2mps(index=ny, index_type='l')
+    vR = proj_env.env2mps(n=ny, dirn='r')
+    Os = proj_psi.transfer_mpo(n=ny, dirn='v', one_layer=True)
+    vL = proj_env.env2mps(n=ny, dirn='l')
     env = mps.Env3(vL, Os, vR).setup_(to='first')
     for nx in range(psi.Nx):
         amp = env.hole(nx).tensordot(psi[nx, ny], axes=((0, 1, 2, 3), (0, 1, 2, 3)))
@@ -400,9 +395,9 @@ def _sample_MC_column_uniform(ny, proj_psi, proj_env, st0, st1, psi, projectors,
     # update is proposed from uniform local distribution
     config = proj_psi[0, 0].config
     accept = 0
-    vR = proj_env.env2mps(index=ny, index_type='r')
-    Os = transfer_mpo(proj_psi, index=ny, index_type='column', one_layer=True)
-    vL = proj_env.env2mps(index=ny, index_type='l')
+    vR = proj_env.env2mps(n=ny, dirn='r')
+    Os = proj_psi.transfer_mpo(n=ny, dirn='v', one_layer=True)
+    vL = proj_env.env2mps(n=ny, dirn='l')
     env = mps.Env3(vL, Os, vR).setup_(to='first')
     for nx in range(psi.Nx):
         A = psi[nx, ny]

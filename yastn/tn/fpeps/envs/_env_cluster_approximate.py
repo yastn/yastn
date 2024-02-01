@@ -1,28 +1,29 @@
-from .... import tensordot, YastnError, ones, Leg
+from .... import YastnError, tensordot
+from ...import mps
+from .. import DoublePepsTensor
 from ._env_auxlliary import *
 
-class EnvApprox:
-    def __init__(self, psi, which='65', D=4):
-        if which not in ('65', '65h'):
+
+class EnvApproximate:
+    def __init__(self, psi, which='65', opts_svd=None, opts_var=None):
+        if which not in ('32', '32h', '65', '65h'):
             raise YastnError(f" Type of EnvApprox {which} not recognized.")
         self.psi = psi
+        if which in ('65', '65h') :
+            self.Nl = 3
+            self.Nw = 2
+        if which in ('32', '32h') :
+            self.Nl = 2
+            self.Nw = 1
+        self.include_hairs = 'h' in which
         self.which = which
-        self.D = D
+        if opts_var == None:
+            opts_var = {'max_sweeps': 2, 'normalize': False,}
+        self.opts_var = opts_var
         self.data = {}
 
     def bond_metric(self, bd, QA, QB):
         """ Calculates bond metric. """
-        if self.which == '65':
-            return self._g_NN(bd, QA, QB)
-        if self.which == '65h':
-            return self._g_NNh(bd, QA, QB)
-
-
-
-    def _g_6x5(self, bd, QA, QB):
-        """
-        Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
-        """
         if bd.dirn == "h":
             assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
             # (-2,-2)==(-2,-1)==(-2,0)==(-2,1)==(-2,2)==(-2,3)
@@ -35,26 +36,49 @@ class EnvApprox:
             #    ||      ||       ||      ||      ||      ||
             # (2, -2)==(2, -1)==(2, 0)==(2, 1)==(2, 2)==(2, 3)
 
-            m = {(nx, ny): self.psi.nn_site(bd.site0, d=(nx, ny)) for nx in range(-2, 3) for ny in range(-2, 4)}
-            [m.pop(k) for k in [(0, 0), (0, 1)]]
-            tensors_from_psi(m, self.psi)
+            d = {(nx, ny): self.psi.nn_site(bd.site0, d=(nx, ny)) for nx in range(-self.Nw, self.Nw+1) for ny in range(-self.Nl+1, self.Nl+1)}
+            [d.pop(k) for k in [(0, 0), (0, 1)]]
+            if self.include_hairs:
+                for ny in range(-self.Nl+1, self.Nl+1):
+                    d[-self.Nw - 1, ny] = self.psi.nn_site(bd.site0, d=(-self.Nw - 1, ny))
+                    d[ self.Nw + 1, ny] = self.psi.nn_site(bd.site0, d=( self.Nw + 1, ny))
+                for nx in range(-self.Nw, self.Nw+1):
+                    d[nx, -self.Nl] = self.psi.nn_site(bd.site0, d=(nx, -self.Nl))
+                    d[nx, self.Nl+1] = self.psi.nn_site(bd.site0, d=(nx, self.Nl+1))
+            tensors_from_psi(d, self.psi)
+            d[0, 0] = QA
+            d[0, 1] = QB
 
-            ell = edge_l(m[0, -1])
-            clt = cor_tl(m[-1, -1])
-            elt = edge_t(m[-1, 0])
-            vecl = append_vec_tl(QA, QA, ell @ (clt @ elt))
-            elb = edge_b(m[1, 0])
-            clb = cor_bl(m[1, -1])
-            vecl = tensordot(elb @ clb, vecl, axes=((2, 1), (0, 1)))
+            tmpo = self.transfer_mpo(d, n=-self.Nw, dirn='h')
+            if self.include_hairs:
+                phit0 = mps.product_mps([hair_t(d[-self.Nw - 1, ny]) for ny in range(-self.Nl+1, self.Nl+1)])
+            else:
+                phit0 = identity_tm_boundary(tmpo)
+            for nx in range(-self.Nw, 0):
+                phit = mps.zipper(tmpo, phit0, self.opts_svd)
+                mps.compression_(phit, (tmpo, phit0), **self.opts_var)
+                if nx < -1:
+                    tmpo = self.transfer_mpo(d, n=nx+1, dirn='h')
 
-            err = edge_r(m[0, 2])
-            crb = cor_br(m[1, 2])
-            erb = edge_b(m[1, 1])
-            vecr = append_vec_br(QB, QB, err @ (crb @ erb))
-            ert = edge_t(m[-1, 1])
-            crt = cor_tr(m[-1, 2])
-            vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
-            G = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
+            tmpo = self.transfer_mpo(d, n=self.Nw, dirn='h').T.conj()
+            if self.include_hairs:
+                phib0 = mps.product_mps([hair_b(d[self.Nw + 1, ny]) for ny in range(-self.Nl+1, self.Nl+1)])
+            else:
+                phib0 = identity_tm_boundary(tmpo)
+            for nx in range(self.Nw, 0, -1):
+                phib = mps.zipper(tmpo, phib0, self.opts_svd)
+                mps.compression_(phib, (tmpo, phib0), **self.opts_var)
+                if nx > 1:
+                    tmpo = self.transfer_mpo(d, n=nx-1, dirn='h')
+
+            tmpo = self.transfer_mpo(d, n=0, dirn='h')
+            env = mps.Env3(phib, tmpo, phit)
+            for n in range(self.Nl):
+                env.update_env_(n, to='last')
+                env.update_env_(2 * self.Nl - n - 1, to='first')
+            G = tensordot(env.F[self.Nl-1, self.Nl], env.F[self.Nl, self.Nl-1], axes=((0, 2), (2, 0)))
+
+
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
             #   (-2,-2)==(-2,-1)==(-2,0)==(-2,1)==(-2,2)
@@ -69,35 +93,56 @@ class EnvApprox:
             #      ||       ||      ||      ||      ||
             #   (3, -2)==(3, -1)==(3, 0)==(3, 1)==(3, 2)
 
-            m = {(nx, ny): self.psi.nn_site(bd.site0, d=(nx, ny)) for nx in range(-2, 4) for ny in range(-2, 3)}
-            [m.pop(k) for k in [(0, 0), (1, 0)]]
-            tensors_from_psi(m, self.psi)
+            d = {(nx, ny): self.psi.nn_site(bd.site0, d=(nx, ny)) for nx in range(-self.Nl+1, self.Nl+1) for ny in range(-self.Nw, self.Nw+1)}
+            [d.pop(k) for k in [(0, 0), (1, 0)]]
+            if self.include_hairs:
+                for nx in range(-self.Nl+1, self.Nl+1):
+                    d[nx, -self.Nw - 1] = self.psi.nn_site(bd.site0, d=(nx, -self.Nw - 1))
+                    d[nx,  self.Nw + 1] = self.psi.nn_site(bd.site0, d=(nx,  self.Nw + 1))
+                for ny in range(-self.Nw, self.Nw+1):
+                    d[-self.Nl,  ny] = self.psi.nn_site(bd.site0, d=(-self.Nl,  ny))
+                    d[self.Nl+1, ny] = self.psi.nn_site(bd.site0, d=(self.Nl+1, ny))
+            tensors_from_psi(d, self.psi)
+            d[0, 0] = QA
+            d[1, 0] = QB
 
-            etl = edge_l(m[0, -1])
-            ctl = cor_tl(m[-1, -1])
-            ett = edge_t(m[-1, 0])
-            vect = append_vec_tl(QA, QA, etl @ (ctl @ ett))
-            ctr = cor_tr(m[-1, 1])
-            etr = edge_r(m[0, 1])
-            vect = tensordot(vect, ctr @ etr, axes=((2, 3), (0, 1)))
 
-            ebr = edge_r(m[1, 1])
-            cbr = cor_br(m[2, 1])
-            ebb = edge_b(m[2, 0])
-            vecb = append_vec_br(QB, QB, ebr @ (cbr @ ebb))
-            cbl = cor_bl(m[2, -1])
-            ebl = edge_l(m[1, -1])
-            vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
-            G = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+
+
+
         return G.unfuse_legs(axes=(0, 1))
 
 
-def tensors_from_psi(m, psi):
-    if any(v is None for v in m.values()):
-        cfg = psi[(0, 0)].config
-        triv = ones(cfg, legs=[Leg(cfg, t=((0,) * cfg.sym.NSYM,), D=(1,))])
-        for s in (-1, 1, 1, -1):
-            triv = triv.add_leg(axis=0, s=s)
-        triv = triv.fuse_legs(axes=((0, 1), (2, 3), 4))
-    for k, v in m.items():
-        m[k] = triv if v is None else psi[v]
+    def transfer_mpo(self, d, n, dirn='v'):
+        H = mps.Mpo(N = 2 * self.Nl)
+        if dirn == 'v':
+            nx, ny = n, -self.Nl + 1
+            ht = hair_t(d[nx, ny - 1]) if self.include_hairs else None
+            et = edge_t(d[nx, ny], ht=ht).add_leg(s=-1, axis=0)
+            H.A[H.first] = et
+            for site in H.sweep(to='last', dl=1, df=1):
+                ny += 1
+                top = d[nx, ny]
+                if top.ndim == 3:
+                    top = top.unfuse_legs(axes=(0, 1))
+                H.A[site] = DoublePepsTensor(top=top, btm=top)
+            ny += 1
+            hb = hair_b(d[nx, ny + 1]) if self.include_hairs else None
+            eb = edge_b(d[nx, ny], hb=hb).add_leg(s=1).transpose(axes=(1, 2, 3, 0))
+            H.A[H.last] = eb
+        else:  # dirn == 'h':
+            nx, ny = -self.Nl + 1, n
+            hl = hair_l(d[nx - 1, ny]) if self.include_hairs else None
+            el = edge_l(d[nx, ny], hl=hl).add_leg(s=-1, axis=0)
+            H.A[H.first] = el
+            for site in H.sweep(to='last', dl=1, df=1):
+                nx += 1
+                top = d[nx, ny]
+                if top.ndim == 3:
+                    top = top.unfuse_legs(axes=(0, 1))
+                H.A[site] = DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
+            nx += 1
+            hr = hair_r(d[nx + 1, ny]) if self.include_hairs else None
+            er = edge_r(d[nx, ny], hr=hr).add_leg(s=1).transpose(axes=(1, 2, 3, 0))
+            H.A[H.last] = er
+        return H
