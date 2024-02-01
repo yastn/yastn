@@ -6,30 +6,17 @@ _allowed_transpose = ((0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2),
                       (0, 3, 2, 1), (1, 0, 3, 2), (2, 1, 0, 3), (3, 2, 1, 0))
 
 class DoublePepsTensor:
-
-    r"""Class that treats a cell of a double-layer peps as a single tensor.
-
-    Parameters
-    ----------
-        top : yastn.Tensor
-            The top tensor of the cell.
-        btm : yastn.Tensor
-            The bottom tensor of the cell.
-        rotation : int, optional
-            The rotation angle of the cell, default is 0.
-
-    Attributes
-    ----------
-        A : yastn.Tensor
-            The top tensor of the cell.
-        Ab : yastn.Tensor
-            The bottom tensor of the cell.
-        _r : int
-            The rotation angle of the cell.
-
-    """
-
     def __init__(self, top, btm, transpose=(0, 1, 2, 3)):
+        r"""Class that treats a cell of a double-layer peps as a single tensor.
+        Parameters
+        ----------
+        top: yastn.Tensor
+            The top tensor of the cell.
+        btm: yastn.Tensor
+            The bottom tensor of the cell.
+        transpose: tuple[int, int  int, int]
+            Transposition with respect to canonical order of PEPS legs.
+        """
         self.A = top
         self.Ab = btm
         transpose = tuple(transpose)
@@ -38,6 +25,9 @@ class DoublePepsTensor:
         self._t = transpose
 
 
+    @property
+    def config(self):
+        return self.A.config
 
     @property
     def ndim(self):
@@ -71,6 +61,9 @@ class DoublePepsTensor:
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
         return DoublePepsTensor(self.A, self.Ab, transpose=axes)
 
+    def conj(self):
+        r""" conj """
+        return DoublePepsTensor(self.A.conj(), self.Ab.conj(), transpose=self._t)
 
     def clone(self):
         r"""

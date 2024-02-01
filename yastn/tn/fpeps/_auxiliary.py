@@ -11,7 +11,7 @@ def show_leg_structure(peps):
 
 
 
-def transfer_mpo(self, index, index_type, rotation=False):
+def transfer_mpo(self, index, index_type, one_layer=False):
 
     """Converts a specific row or column of PEPS into MPO.
 
@@ -20,10 +20,9 @@ def transfer_mpo(self, index, index_type, rotation=False):
     index (int): The row or column index to convert.
     index_type (str): The index type to convert, either 'row' or 'column'.
     rotation (str): Optional string indicating the rotation of the PEPS tensor.
-
     """
 
-    if index_type == 'row' and not rotation:
+    if index_type == 'row':
         nx = index  # is this ever used?
         H = Mpo(N=self.Ny)
         for ny in range(self.Ny):
@@ -31,8 +30,9 @@ def transfer_mpo(self, index, index_type, rotation=False):
             top = self[site]
             if top.ndim == 3:
                 top = top.unfuse_legs(axes=(0, 1))
-            H.A[ny] = DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
-    elif index_type == 'column' and not rotation:
+            H.A[ny] = top.transpose(axes=(1, 2, 3, 0)) if one_layer else \
+                      DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
+    elif index_type == 'column':
         ny = index
         H = Mpo(N=self.Nx)
         for nx in range(self.Nx):
@@ -40,42 +40,6 @@ def transfer_mpo(self, index, index_type, rotation=False):
             top = self[site]
             if top.ndim == 3:
                 top = top.unfuse_legs(axes=(0, 1))
-            H.A[nx] = DoublePepsTensor(top=top, btm=top)
-
-    elif index_type == 'column' and rotation:
-        ny = index
-        H = Mpo(N=self.Nx)
-        for nx in range(self.Nx):
-            site = (nx, ny)
-            top = self[site]
-            if top.ndim == 3:
-                top = top.unfuse_legs(axes=(0, 1))
-            # change site ordering
-            H.A[self.Nx - nx - 1] = DoublePepsTensor(top=top, btm=top, transpose=(2, 3, 0, 1))
+            H.A[nx] = top if one_layer else \
+                      DoublePepsTensor(top=top, btm=top)
     return H
-
-def boundary_mps(self, rotation=''):
-
-    r"""Returns a boundary MPS at the right most column.
-
-    Parameters
-    ----------
-        rotation (str): Optional string indicating the rotation of the PEPS tensor.
-
-    """
-    psi = Mps(N=self.Nx)
-    cfg = self._data[(0, 0)].config
-    n0 = (0,) * cfg.sym.NSYM
-    leg0 = tensor.Leg(cfg, s=-1, t=(n0,), D=(1,))
-    for nx in range(self.Nx):
-        site = (nx, self.Ny-1)
-        A = self[site]
-        if A.ndim == 3:
-            legA = A.get_legs(axes=1)
-            _, legA = tensor.leg_undo_product(legA)
-        else:
-            legA = A.get_legs(axes=3)
-        legAAb = tensor.leg_outer_product(legA, legA.conj())
-        psi[nx] = initialize.ones(config=cfg, legs=[leg0, legAAb.conj(), leg0.conj()])
-
-    return psi

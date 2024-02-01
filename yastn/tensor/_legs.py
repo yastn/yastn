@@ -146,6 +146,9 @@ class Leg:
         """ Return True if the leg is a result of some fusion, and False is it is elementary. """
         return len(self.legs) > 1 or self.legs[0].tree[0] > 1
 
+    def unfuse_leg(self):
+        return leg_undo_product(self)
+
 
 def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=False) -> yastn.Leg:
     """

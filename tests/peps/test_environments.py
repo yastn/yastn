@@ -72,7 +72,8 @@ def test_envs_spinless_finite():
             break # here break if the relative differnece is below tolerance
         cf_energy_old = cf_energy
 
-    mpsenv = fpeps.MpsEnv(psi, opts_svd=opts_svd_ctm)
+    mpsenv = fpeps.EnvBoundaryMps(psi, opts_svd=opts_svd_ctm, setup='tlbr')
+
     for ny in range(psi.Ny):
         vR0 = step.env.env2mps(index=ny, index_type='r')
         vR1 = mpsenv.env2mps(index=ny, index_type='r')
@@ -83,6 +84,17 @@ def test_envs_spinless_finite():
         print(mps.vdot(vL0, vL1) / (vL0.norm() * vL1.norm()))
         assert abs(abs(mps.vdot(vR0, vR1)) / (vR0.norm() * vR1.norm()) - 1) < 1e-7
         assert abs(abs(mps.vdot(vL0, vL1)) / (vL0.norm() * vL1.norm()) - 1) < 1e-7
+
+    for nx in range(psi.Nx):
+        vT0 = step.env.env2mps(index=nx, index_type='t')
+        vT1 = mpsenv.env2mps(index=nx, index_type='t')
+        vB0 = step.env.env2mps(index=nx, index_type='b')
+        vB1 = mpsenv.env2mps(index=nx, index_type='b')
+
+        print(mps.vdot(vT0, vT1) / (vT0.norm() * vT1.norm()))  # problem with phase in peps?
+        print(mps.vdot(vB0, vB1) / (vB0.norm() * vB1.norm()))
+        assert abs(abs(mps.vdot(vT0, vT1)) / (vT0.norm() * vT1.norm()) - 1) < 1e-7
+        assert abs(abs(mps.vdot(vB0, vB1)) / (vB0.norm() * vB1.norm()) - 1) < 1e-7
 
 
 if __name__ == '__main__':

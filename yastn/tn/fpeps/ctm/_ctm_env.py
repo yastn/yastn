@@ -45,27 +45,23 @@ class CtmEnv(Peps):
             nx = index
             H = mps.Mps(N=self.Ny)
             for ny in range(self.Ny):
-                site = (nx, ny)
-                H.A[nx] = self[site].b.transpose(axes=(2,1,0))
+                H.A[ny] = self[nx, ny].b.transpose(axes=(2,1,0))
             H = H.conj()
         elif index_type == 'r':
             ny = index
             H = mps.Mps(N=self.Nx)
             for nx in range(self.Nx):
-                site = (nx, ny)
-                H.A[nx] = self[site].r
+                H.A[nx] = self[nx, ny].r
         elif index_type == 't':
             nx = index
             H = mps.Mps(N=self.Ny)
             for ny in range(self.Ny):
-                site = (nx, ny)
-                H.A[ny] = self[site].t
+                H.A[ny] = self[nx, ny].t
         elif index_type == 'l':
             ny = index
             H = mps.Mps(N=self.Nx)
             for nx in range(self.Nx):
-                site = (nx, ny)
-                H.A[nx] = self[site].l.transpose(axes=(2,1,0))
+                H.A[nx] = self[nx, ny].l.transpose(axes=(2,1,0))
             H = H.conj()
         return H
 

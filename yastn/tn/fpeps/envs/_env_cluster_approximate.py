@@ -2,8 +2,8 @@ from .... import tensordot, YastnError, ones, Leg
 from ._env_auxlliary import *
 
 class EnvApprox:
-    def __init__(self, psi, which='6x5', D=4):
-        if which not in ('6x5', '6x5h'):
+    def __init__(self, psi, which='65', D=4):
+        if which not in ('65', '65h'):
             raise YastnError(f" Type of EnvApprox {which} not recognized.")
         self.psi = psi
         self.which = which
@@ -12,9 +12,9 @@ class EnvApprox:
 
     def bond_metric(self, bd, QA, QB):
         """ Calculates bond metric. """
-        if self.which == '6x5':
+        if self.which == '65':
             return self._g_NN(bd, QA, QB)
-        if self.which == '6x5h':
+        if self.which == '65h':
             return self._g_NNh(bd, QA, QB)
 
 
