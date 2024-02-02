@@ -36,7 +36,7 @@ class EnvNTU:
             tensors_from_psi(m, self.psi)
             env_l = hair_l(QA, hl=hair_l(m[0, -1]), ht=hair_t(m[-1, 0]), hb=hair_b(m[1, 0]))
             env_r = hair_r(QB, hr=hair_r(m[0,  2]), ht=hair_t(m[-1, 1]), hb=hair_b(m[1, 1]))
-            G = tensordot(env_l, env_r, axes=((), ()))  # [rr' rr] [ll' ll]
+            g = tensordot(env_l, env_r, axes=((), ()))  # [rr' rr] [ll' ll]
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
             #          (-1, 0)
@@ -50,8 +50,9 @@ class EnvNTU:
             tensors_from_psi(m, self.psi)
             env_t = hair_t(QA, ht=hair_t(m[-1, 0]), hl=hair_l(m[0, -1]), hr=hair_r(m[0, 1]))
             env_b = hair_b(QB, hb=hair_b(m[ 2, 0]), hl=hair_l(m[1, -1]), hr=hair_r(m[1, 1]))
-            G = tensordot(env_t, env_b, axes=((), ()))  # [bb' bb] [tt' tt]
-        return G.unfuse_legs(axes=(0, 1)).transpose(axes=(1, 0, 3, 2))
+            g = tensordot(env_t, env_b, axes=((), ()))  # [bb' bb] [tt' tt]
+        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((0, 2), (1, 3)))
+
 
 
     def _g_NN(self, bd, QA, QB):
@@ -73,7 +74,7 @@ class EnvNTU:
             ctr = cor_tr(m[-1, 1])
             cbr = cor_br(m[ 1, 1])
             cbl = cor_bl(m[ 1, 0])
-            G = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
+            g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
             #         (-1, 0)
@@ -91,8 +92,8 @@ class EnvNTU:
             ctl = cor_tl(m[0,-1])
             ctr = cor_tr(m[0, 1])
             cbr = cor_br(m[1, 1])
-            G = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return G.unfuse_legs(axes=(0, 1))
+            g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
     def _g_NNh(self, bd, QA, QB):
@@ -117,7 +118,7 @@ class EnvNTU:
             ctr = cor_tr(m[-1, 1], ht=hair_t(m[-2, 1]), hr=hair_r(m[-1, 2]))
             cbr = cor_br(m[ 1, 1], hb=hair_b(m[ 2, 1]), hr=hair_r(m[ 1, 2]))
             cbl = cor_bl(m[ 1, 0], hb=hair_b(m[ 2, 0]), hl=hair_l(m[ 1,-1]))
-            G = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
+            g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
             #                 (-2, 0)
@@ -138,8 +139,8 @@ class EnvNTU:
             ctl = cor_tl(m[0,-1], hl=hair_l(m[0,-2]), ht=hair_t(m[-1,-1]))
             ctr = cor_tr(m[0, 1], hr=hair_r(m[0, 2]), ht=hair_t(m[-1, 1]))
             cbr = cor_br(m[1, 1], hr=hair_r(m[1, 2]), hb=hair_b(m[2,  1]))
-            G = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return G.unfuse_legs(axes=(0, 1))
+            g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
     def _g_NNhh(self, bd, QA, QB):
         """
@@ -163,7 +164,7 @@ class EnvNTU:
             ctl = cor_tl(m[-1, 0], ht=hair_t(m[-2, 0]), hl=hair_l(m[-1,-1], hl=hair_l(m[-1,-2]), ht=hair_t(m[-2,-1])))
             cbr = cor_br(m[ 1, 1], hb=hair_b(m[ 2, 1]), hr=hair_r(m[ 1, 2], hr=hair_r(m[ 1, 3]), hb=hair_b(m[ 2, 2])))
             cbl = cor_bl(m[ 1, 0], hb=hair_b(m[ 2, 0]), hl=hair_l(m[ 1,-1], hl=hair_l(m[ 1,-2]), hb=hair_b(m[ 2,-1])))
-            G = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
+            g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
             #        (-2,-1)  (-2, 0)  (-2,1)
@@ -184,8 +185,8 @@ class EnvNTU:
             ctl = cor_tl(m[0,-1], hl=hair_l(m[0,-2]), ht=hair_t(m[-1,-1], ht=hair_t(m[-2,-1]), hl=hair_l(m[-1,-2])))
             ctr = cor_tr(m[0, 1], hr=hair_r(m[0, 2]), ht=hair_t(m[-1, 1], ht=hair_t(m[-2, 1]), hr=hair_r(m[-1, 2])))
             cbr = cor_br(m[1, 1], hr=hair_r(m[1, 2]), hb=hair_b(m[2,  1], hb=hair_b(m[3,  1]), hr=hair_r(m[2,  2])))
-            G = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return G.unfuse_legs(axes=(0, 1))
+            g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
     def _g_NNN(self, bd, QA, QB):
@@ -217,7 +218,7 @@ class EnvNTU:
             ert = edge_t(m[-1, 1])
             crt = cor_tr(m[-1, 2])
             vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
-            G = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
+            g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
             #   (-1,-1)==(-1, 0)==(-1,1)
@@ -245,8 +246,8 @@ class EnvNTU:
             cbl = cor_bl(m[2, -1])
             ebl = edge_l(m[1, -1])
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
-            G = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return G.unfuse_legs(axes=(0, 1))
+            g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
     def _g_NNNh(self, bd, QA, QB):
@@ -282,7 +283,7 @@ class EnvNTU:
             crt = cor_tr(m[-1, 2], ht=hair_t(m[-2, 2]), hr=hair_r(m[-1, 3]))
             vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
 
-            G = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
+            g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
             #        (-2,-1)  (-2, 0)  (-2,1)
@@ -314,8 +315,8 @@ class EnvNTU:
             ebl = edge_l(m[1, -1], hl=hair_l(m[1, -2]))
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
 
-            G = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return G.unfuse_legs(axes=(0, 1))
+            g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
     def _g_NNNhh(self, bd, QA, QB):
@@ -355,7 +356,7 @@ class EnvNTU:
             crt = cor_tr(m[-1, 2], ht=hair_t(m[-2, 2], ht=hair_t(m[-3, 2])), hr=hair_r(m[-1, 3], hr=hair_r(m[-1, 4])))
             vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
 
-            G = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
+            g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
             #               (-3,-1)  (-3, 0)  (-3,1)
@@ -390,8 +391,8 @@ class EnvNTU:
             ebl = edge_l(m[1, -1], hl=hair_l(m[1, -2], hl=hair_l(m[1, -3])))
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
 
-            G = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return G.unfuse_legs(axes=(0, 1))
+            g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
     def _g_NNNhhh(self, bd, QA, QB):
@@ -437,7 +438,7 @@ class EnvNTU:
             crt = cor_tr(m[-1, 2], ht=hair_t(m[-2, 2], ht=hair_t(m[-3, 2])), hr=hair_r(m[-1, 3], hr=hair_r(m[-1, 4]), ht=ccrt))
             vecr = tensordot(ert @ crt, vecr, axes=((2, 1), (0, 1)))
 
-            G = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
+            g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
             #       (-3,-2) (-3,-1)  (-3, 0)  (-3,1) (-3,2)
@@ -477,5 +478,5 @@ class EnvNTU:
             ebl = edge_l(m[1, -1], hl=hair_l(m[1, -2], hl=hair_l(m[1, -3])))
             vecb = tensordot(vecb, cbl @ ebl, axes=((2, 3), (0, 1)))
 
-            G = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
-        return G.unfuse_legs(axes=(0, 1))
+            g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))

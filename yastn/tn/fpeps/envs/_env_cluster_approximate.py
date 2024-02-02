@@ -6,15 +6,18 @@ from ._env_auxlliary import *
 
 class EnvApproximate:
     def __init__(self, psi, which='65', opts_svd=None, opts_var=None):
-        if which not in ('43', '43h', '65', '65h'):
+        if which not in ('43', '43h', '65', '65h', '87', '87h'):
             raise YastnError(f" Type of EnvApprox {which} not recognized.")
         self.psi = psi
-        if which in ('65', '65h') :
-            self.Nl = 3
-            self.Nw = 2
         if which in ('43', '43h') :
             self.Nl = 2
             self.Nw = 1
+        if which in ('65', '65h') :
+            self.Nl = 3
+            self.Nw = 2
+        if which in ('87', '87h') :
+            self.Nl = 4
+            self.Nw = 3
         self.include_hairs = 'h' in which
         self.which = which
         if opts_var is None:
@@ -22,11 +25,14 @@ class EnvApproximate:
         self.opts_var = opts_var
         self.opts_svd = opts_svd
         self.data = {}
+        self.min_spectrum = []
+
 
     def bond_metric(self, bd, QA, QB):
         """ Calculates bond metric. """
         if bd.dirn == "h":
             assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
+
             # (-2,-2)==(-2,-1)==(-2,0)==(-2,1)==(-2,2)==(-2,3)
             #    ||      ||       ||      ||      ||      ||
             # (-1,-2)==(-1,-1)==(-1,0)==(-1,1)==(-1,2)==(-1,3)
@@ -37,15 +43,17 @@ class EnvApproximate:
             #    ||      ||       ||      ||      ||      ||
             # (2, -2)==(2, -1)==(2, 0)==(2, 1)==(2, 2)==(2, 3)
 
-            d = {(nx, ny): self.psi.nn_site(bd.site0, d=(nx, ny)) for nx in range(-self.Nw, self.Nw+1) for ny in range(-self.Nl+1, self.Nl+1)}
+            d = {(nx, ny): self.psi.nn_site(bd.site0, d=(nx, ny))
+                 for nx in range(-self.Nw, self.Nw+1)
+                 for ny in range(-self.Nl+1, self.Nl+1)}
             [d.pop(k) for k in [(0, 0), (0, 1)]]
             if self.include_hairs:
                 for ny in range(-self.Nl+1, self.Nl+1):
                     d[-self.Nw - 1, ny] = self.psi.nn_site(bd.site0, d=(-self.Nw - 1, ny))
-                    d[self.Nw + 1, ny] = self.psi.nn_site(bd.site0, d=(self.Nw + 1, ny))
+                    d[ self.Nw + 1, ny] = self.psi.nn_site(bd.site0, d=( self.Nw + 1, ny))
                 for nx in range(-self.Nw, self.Nw+1):
                     d[nx, -self.Nl] = self.psi.nn_site(bd.site0, d=(nx, -self.Nl))
-                    d[nx, self.Nl+1] = self.psi.nn_site(bd.site0, d=(nx, self.Nl+1))
+                    d[nx,  self.Nl+1] = self.psi.nn_site(bd.site0, d=(nx, self.Nl+1))
             tensors_from_psi(d, self.psi)
             d[0, 0] = QA
             d[0, 1] = QB
@@ -75,12 +83,7 @@ class EnvApproximate:
                     tmpo = self.transfer_mpo(d, n=nx-1, dirn='h').T.conj()
 
             tmpo = self.transfer_mpo(d, n=0, dirn='h')
-            env = mps.Env3(phib, tmpo, phit)
-            for n in range(self.Nl):
-                env.update_env_(n, to='last')
-                env.update_env_(2 * self.Nl - n - 1, to='first')
-            G = tensordot(env.F[self.Nl-1, self.Nl], env.F[self.Nl, self.Nl-1], axes=((0, 2), (2, 0)))
-
+            g = g_from_env3(phib, tmpo, phit)
 
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
@@ -134,14 +137,15 @@ class EnvApproximate:
                     tmpo = self.transfer_mpo(d, n=ny+1, dirn='v').T.conj()
 
             tmpo = self.transfer_mpo(d, n=0, dirn='v')
-            env = mps.Env3(phil, tmpo, phir)
-            for n in range(self.Nl):
-                env.update_env_(n, to='last')
-                env.update_env_(2 * self.Nl - n - 1, to='first')
-            G = tensordot(env.F[self.Nl-1, self.Nl], env.F[self.Nl, self.Nl-1], axes=((0, 2), (2, 0)))
+            g = g_from_env3(phil, tmpo, phir)
 
-
-        return G.unfuse_legs(axes=(0, 1))
+        # make hermitian and fix negative elements.
+        g = (g + g.T.conj()) / 2
+        S, U = g.eigh(axes=(0, 1))
+        smin, smax = min(S._data), max(S._data)
+        self.min_spectrum.append(smin / smax)
+        S._data[S._data < abs(smin)] = abs(smin)
+        return U @ S @ U.T.conj()
 
 
     def transfer_mpo(self, d, n, dirn='v'):
@@ -177,3 +181,13 @@ class EnvApproximate:
             eb = edge_b(d[nx, ny], hb=hb).add_leg(s=1).transpose(axes=(1, 2, 3, 0))
             H.A[H.last] = eb
         return H
+
+
+def g_from_env3(bra, tmpo, ket):
+    Nl = len(tmpo) // 2
+    env = mps.Env3(bra, tmpo, ket)
+    for n in range(Nl):
+        env.update_env_(n, to='last')
+        env.update_env_(2 * Nl - n - 1, to='first')
+    g = tensordot(env.F[Nl-1, Nl], env.F[Nl, Nl-1], axes=((0, 2), (2, 0)))
+    return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))

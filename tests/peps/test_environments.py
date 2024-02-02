@@ -123,7 +123,7 @@ def test_spinless_infinite_approx():
         print(f"beta = {(step + 1) * dbeta}" )
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="SVD")
 
-    opts_svd = {"D_total": 2 * D , 'tol_block': 1e-15}
+    opts_svd = {"D_total": 2 * D, 'tol_block': 1e-15}
 
     envs = {}
     envs['NNN']  = fpeps.EnvNTU(psi, which='NNN')
@@ -144,7 +144,10 @@ def test_spinless_infinite_approx():
         assert ((Gs['43h'] - Gs['65']).norm()) < 1e-4
         assert ((Gs['65'] - Gs['65h']).norm()) < 1e-5
 
-
+        assert all(x > 0 for x in envs['43'].min_spectrum)
+        assert all(x > 0 for x in envs['43h'].min_spectrum)
+        assert all(x > 0 for x in envs['65'].min_spectrum)
+        assert all(x > 0 for x in envs['65h'].min_spectrum)
 
 if __name__ == '__main__':
     # test_finite_spinless_boundary_mps_ctmrg()

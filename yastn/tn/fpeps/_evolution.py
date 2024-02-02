@@ -132,31 +132,28 @@ def apply_nn_gate_and_truncate_(env, gate, opts_svd=None, initialization="EAT",
     #     info['truncation'] = 0
     #     return info
 
-    g = env.bond_metric(gate.bond, QA, QB)
-    MA, MB, opt_error, optim, svd_error = truncate_and_optimize(g, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter)
+    fgf = env.bond_metric(gate.bond, QA, QB)
+    MA, MB, opt_error, optim, svd_error = truncate_and_optimize(fgf, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter)
     env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QAf, QBf, MA, MB, gate.bond)
     info.update({'truncation': opt_error, 'optimal_cutoff': optim})
     return info
 
 
-def truncate_and_optimize(g, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter):
+def truncate_and_optimize(fgf, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter):
     """
     First we truncate RA and RB tensors based on the input truncation_mode with
     function environment_aided_truncation_step. Then the truncated
     MA and MB tensors are subjected to least square optimization to minimize
      the truncation error with the function tu_single_optimization.
     """
-    assert (g.fuse_legs(axes=((0, 2), (1, 3))) - g.fuse_legs(axes=((0, 2), (1, 3))).conj().transpose(axes=(1, 0))).norm() < 1e-14 * g.fuse_legs(axes=((0, 2), (1, 3))).norm()
-
     RAB = RA @ RB
     RAB = RAB.fuse_legs(axes=[(0, 1)])
-    gf = g.fuse_legs(axes=(1, 3, (0, 2)))
-    fgf = gf.fuse_legs(axes=((0, 1), 2))
+    gf = fgf.unfuse_legs(axes=0)
     fgRAB = fgf @ RAB
     gRAB =  gf @ RAB
     gRR = vdot(RAB, fgRAB).item()
 
-    MA, MB, svd_error = environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, initialization, opts_svd, pinv_cutoffs)
+    MA, MB, svd_error = environment_aided_truncation_step(gRR, fgf, fgRAB, RA, RB, initialization, opts_svd, pinv_cutoffs)
     MA, MB, tu_errorB, optimal_cf  = tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, pinv_cutoffs, max_iter)
     MA, MB = truncation_step(MA, MB, opts_svd, normalize=True)
     return MA, MB, tu_errorB, optimal_cf, svd_error
@@ -173,7 +170,7 @@ def truncation_step(RA, RB, opts_svd, normalize=False):
     return MA, MB
 
 
-def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, initialization, opts_svd, pinv_cutoffs):
+def environment_aided_truncation_step(gRR, fgf, fgRAB, RA, RB, initialization, opts_svd, pinv_cutoffs):
 
     """
     truncation_mode = 'optimal' is for implementing EAT algorithm only applicable for symmetric
@@ -187,7 +184,8 @@ def environment_aided_truncation_step(g, gRR, fgf, fgRAB, RA, RB, initialization
     """
 
     if initialization == 'EAT':
-        G = ncon((g, RA, RB, RA, RB), ([1, 2, 3, 4], [1, -1], [-3, 3], [2, -2], [-4, 4]), conjs=(0, 0, 0, 1, 1))
+        g = fgf.unfuse_legs(axes=(0, 1))
+        G = ncon((g, RA, RB, RA, RB), ([1, 2, 3, 4], [3, -1], [-3, 4], [1, -2], [-4, 2]), conjs=(0, 0, 0, 1, 1))
         [ul, _, vr] = svd_with_truncation(G, axes=((0, 1), (2, 3)), D_total=1)
         ul = ul.remove_leg(axis=2)
         vr = vr.remove_leg(axis=0)
