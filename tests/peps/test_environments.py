@@ -101,7 +101,7 @@ def test_finite_spinless_boundary_mps_ctmrg():
 
 def test_spinless_infinite_approx():
     """ Simulate purification of free fermions in an infinite system.s """
-    geometry = fpeps.SquareLattice(dims=(2, 2), boundary='infinite')
+    geometry = fpeps.SquareLattice(dims=(3, 3), boundary='infinite')
 
     mu, t, beta = 0, 1, 0.5  # chemical potential
     D = 6

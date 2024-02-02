@@ -112,7 +112,7 @@ class EnvApproximate:
             d[0, 0] = QA
             d[1, 0] = QB
 
-            tmpo = self.transfer_mpo(d, n=-self.Nw, dirn='v')
+            tmpo = self.transfer_mpo(d, n=self.Nw, dirn='v')
             if self.include_hairs:
                 phir0 = mps.product_mps([hair_r(d[nx, self.Nw + 1]).fuse_legs(axes=[(0, 1)]).conj() for nx in range(-self.Nl+1, self.Nl+1)])
             else:
@@ -124,12 +124,12 @@ class EnvApproximate:
                 if ny > 1:
                     tmpo = self.transfer_mpo(d, n=ny-1, dirn='v')
 
-            tmpo = self.transfer_mpo(d, n=self.Nw, dirn='v').T.conj()
+            tmpo = self.transfer_mpo(d, n=-self.Nw, dirn='v').T.conj()
             if self.include_hairs:
                 phil0 = mps.product_mps([hair_l(d[nx, -self.Nw - 1]).fuse_legs(axes=[(0, 1)]) for nx in range(-self.Nl+1, self.Nl+1)])
             else:
                 phil0 = identity_tm_boundary(tmpo)
-            for ny in range(0, self.Nw):
+            for ny in range(-self.Nw, 0):
                 phil = mps.zipper(tmpo, phil0, opts_svd=self.opts_svd)
                 mps.compression_(phil, (tmpo, phil0), **self.opts_var)
                 phil0 = phil
