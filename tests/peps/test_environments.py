@@ -101,14 +101,11 @@ def test_finite_spinless_boundary_mps_ctmrg():
 
 def test_spinless_infinite_approx():
     """ Simulate purification of free fermions in an infinite system.s """
-    geometry = fpeps.CheckerboardLattice()
+    geometry = fpeps.SquareLattice(dims=(2, 2), boundary='infinite')
 
-    mu = 0  # chemical potential
-    t = 1  # hopping amplitude
-    beta = 0.1
-
+    mu, t, beta = 0, 1, 0.5  # chemical potential
     D = 6
-    dbeta = 0.01
+    dbeta = 0.05
 
     ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = ops.I(), ops.c(), ops.cp()
@@ -118,27 +115,34 @@ def test_spinless_infinite_approx():
     gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
-    env = fpeps.EnvNTU(psi, which='NN')
+    env = fpeps.EnvNTU(psi, which='NNh')
 
-    opts_svd = {"D_total": D, 'tol_block': 1e-15}
+    opts_svd = {"D_total": D , 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)
     for step in range(steps):
         print(f"beta = {(step + 1) * dbeta}" )
-        out = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="SVD")
+        fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="SVD")
 
+    opts_svd = {"D_total": 2 * D , 'tol_block': 1e-15}
 
-    env1 = fpeps.EnvApproximate(psi, which='32', opts_svd= opts_svd)
-    env2 = fpeps.EnvNTU(psi, which='NNN')
+    envs = {}
+    envs['NNN']  = fpeps.EnvNTU(psi, which='NNN')
+    envs['43']   = fpeps.EnvApproximate(psi, which='43', opts_svd= opts_svd)
+    envs['NNNh'] = fpeps.EnvNTU(psi, which='NNNh')
+    envs['43h']  = fpeps.EnvApproximate(psi, which='43h', opts_svd= opts_svd)
+    envs['65']   = fpeps.EnvApproximate(psi, which='65', opts_svd= opts_svd)
+    envs['65h']  = fpeps.EnvApproximate(psi, which='65h', opts_svd= opts_svd)
 
-    bd = fpeps.Bond((0, 0), (0, 1))
-    QA = psi[(0, 0)]
-    QB = psi[(0, 1)]
-
-    G2 = env2.bond_metric(bd, QA, QB)
-    G1 = env1.bond_metric(bd, QA, QB)
-
-    print(G1.get_shape())
-    print(G2.get_shape())
+    for st0, st1 in [[(0, 0), (0, 1)], [(0, 1), (1, 1)]]:
+        bd = fpeps.Bond(st0, st1)
+        QA, QB = psi[st0], psi[st1]
+        Gs = {k: env.bond_metric(bd, QA, QB) for k, env in envs.items()}
+        Gs = {k: v / v.norm() for k, v in Gs.items()}
+        assert (Gs['NNN'] - Gs['43']).norm() < 1e-6
+        assert (Gs['NNNh'] - Gs['43h']).norm() < 1e-6
+        assert ((Gs['43'] - Gs['43h']).norm()) < 1e-3
+        assert ((Gs['43h'] - Gs['65']).norm()) < 1e-4
+        assert ((Gs['65'] - Gs['65h']).norm()) < 1e-5
 
 
 
