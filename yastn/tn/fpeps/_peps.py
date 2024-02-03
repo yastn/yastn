@@ -16,6 +16,10 @@ class Peps():
             setattr(self, name, getattr(geometry, name))
         self._data = {self.site2index(site): None for site in self.sites()}
 
+    @property
+    def config(self):
+        return self[0, 0].config
+
     def __getitem__(self, site):
         """ Get tensor for site. """
         return self._data[self.site2index(site)]

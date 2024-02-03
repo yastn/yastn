@@ -1,181 +1,163 @@
-from .... import YastnError, tensordot
+from .... import YastnError, tensordot, eye
 from ...import mps
 from .. import DoublePepsTensor
 from ._env_auxlliary import *
 
+# horizontal bd; here Nl, Nw = 3, 2
+#
+# (-2,-2)==(-2,-1)==(-2,0)==(-2,1)==(-2,2)==(-2,3)
+#    ||      ||       ||      ||      ||      ||
+# (-1,-2)==(-1,-1)==(-1,0)==(-1,1)==(-1,2)==(-1,3)
+#    ||      ||       ||      ||      ||      ||
+# (0, -2)==(0, -1)=== GA  ++  GB ===(0, 2)==(0, 3)
+#    ||      ||       ||      ||      ||      ||
+# (1, -2)==(1, -1)==(1, 0)==(1, 1)==(1, 2)==(1, 3)
+#    ||      ||       ||      ||      ||      ||
+# (2, -2)==(2, -1)==(2, 0)==(2, 1)==(2, 2)==(2, 3)
+
+# vertical bd; here Nl, Nw = 3, 2
+#
+# (-2,-2)==(-2,-1)==(-2,0)==(-2,1)==(-2,2)
+#    ||       ||      ||      ||      ||
+# (-1,-2)==(-1,-1)==(-1,0)==(-1,1)==(-1,2)
+#    ||       ||      ||      ||      ||
+# (0, -2)==(0, -1)=== GA ===(0, 1)==(0, 2)
+#    ||       ||      ++      ||      ||
+# (1, -2)==(1, -1)=== GB ===(1, 1)==(1, 2)
+#    ||       ||      ||      ||      ||
+# (2, -2)==(2, -1)==(2, 0)==(2, 1)==(2, 2)
+#    ||       ||      ||      ||      ||
+# (3, -2)==(3, -1)==(3, 0)==(3, 1)==(3, 2)
+
+_hair_dirn = {'t': hair_t, 'l': hair_l, 'b': hair_b, 'r': hair_r}
+#_axis_dirn ={'t': 2, 'l': 3, 'b': 0, 'r': 1}
+_axis_dirn = {'t': (1, 0), 'l': (1, 1), 'b': (0, 0), 'r': (0, 1)}
 
 class EnvApproximate:
     def __init__(self, psi, which='65', opts_svd=None, opts_var=None):
         if which not in ('43', '43h', '65', '65h', '87', '87h'):
             raise YastnError(f" Type of EnvApprox {which} not recognized.")
+        self._which = which
         self.psi = psi
-        if which in ('43', '43h') :
-            self.Nl = 2
-            self.Nw = 1
-        if which in ('65', '65h') :
-            self.Nl = 3
-            self.Nw = 2
-        if which in ('87', '87h') :
-            self.Nl = 4
-            self.Nw = 3
-        self.include_hairs = 'h' in which
-        self.which = which
-        if opts_var is None:
-            opts_var = {'max_sweeps': 2, 'normalize': False,}
-        self.opts_var = opts_var
+        if which in ('43', '43h'):
+            self.Nl, self.Nw = 2, 1
+        if which in ('65', '65h'):
+            self.Nl, self.Nw = 3, 2
+        if which in ('87', '87h'):
+            self.Nl, self.Nw = 4, 3
+        self._hairs = 'h' in which
+        self.opts_var = {'max_sweeps': 2, 'normalize': False} if opts_var is None else opts_var
         self.opts_svd = opts_svd
-        self.data = {}
-        self.min_spectrum = []
+        self._envs = {}
 
+    @property
+    def which(self):
+        return self._which
 
     def bond_metric(self, bd, QA, QB):
         """ Calculates bond metric. """
         if bd.dirn == "h":
             assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
 
-            # (-2,-2)==(-2,-1)==(-2,0)==(-2,1)==(-2,2)==(-2,3)
-            #    ||      ||       ||      ||      ||      ||
-            # (-1,-2)==(-1,-1)==(-1,0)==(-1,1)==(-1,2)==(-1,3)
-            #    ||      ||       ||      ||      ||      ||
-            # (0, -2)==(0, -1)=== GA  ++  GB ===(0, 2)==(0, 3)
-            #    ||      ||       ||      ||      ||      ||
-            # (1, -2)==(1, -1)==(1, 0)==(1, 1)==(1, 2)==(1, 3)
-            #    ||      ||       ||      ||      ||      ||
-            # (2, -2)==(2, -1)==(2, 0)==(2, 1)==(2, 2)==(2, 3)
-
-            d = {(nx, ny): self.psi.nn_site(bd.site0, d=(nx, ny))
-                 for nx in range(-self.Nw, self.Nw+1)
-                 for ny in range(-self.Nl+1, self.Nl+1)}
-            [d.pop(k) for k in [(0, 0), (0, 1)]]
-            if self.include_hairs:
-                for ny in range(-self.Nl+1, self.Nl+1):
-                    d[-self.Nw - 1, ny] = self.psi.nn_site(bd.site0, d=(-self.Nw - 1, ny))
-                    d[ self.Nw + 1, ny] = self.psi.nn_site(bd.site0, d=( self.Nw + 1, ny))
-                for nx in range(-self.Nw, self.Nw+1):
-                    d[nx, -self.Nl] = self.psi.nn_site(bd.site0, d=(nx, -self.Nl))
-                    d[nx,  self.Nl+1] = self.psi.nn_site(bd.site0, d=(nx, self.Nl+1))
-            tensors_from_psi(d, self.psi)
-            d[0, 0] = QA
-            d[0, 1] = QB
-
-            tmpo = self.transfer_mpo(d, n=-self.Nw, dirn='h')
-            if self.include_hairs:
-                phit0 = mps.product_mps([hair_t(d[-self.Nw - 1, ny]).fuse_legs(axes=[(0, 1)]).conj() for ny in range(-self.Nl+1, self.Nl+1)])
-            else:
-                phit0 = identity_tm_boundary(tmpo)
+            phit0 = self.boundary_mps(bd, 't')
             for nx in range(-self.Nw, 0):
+                tmpo = self.transfer_mpo_h(bd, nx=nx)
                 phit = mps.zipper(tmpo, phit0, opts_svd=self.opts_svd)
                 mps.compression_(phit, (tmpo, phit0), **self.opts_var)
                 phit0 = phit
-                if nx < -1:
-                    tmpo = self.transfer_mpo(d, n=nx+1, dirn='h')
 
-            tmpo = self.transfer_mpo(d, n=self.Nw, dirn='h').H
-            if self.include_hairs:
-                phib0 = mps.product_mps([hair_b(d[self.Nw + 1, ny]).fuse_legs(axes=[(0, 1)]) for ny in range(-self.Nl+1, self.Nl+1)])
-            else:
-                phib0 = identity_tm_boundary(tmpo)
+            phib0 = self.boundary_mps(bd, 'b').conj()
             for nx in range(self.Nw, 0, -1):
+                tmpo = self.transfer_mpo_h(bd, nx=nx).H
                 phib = mps.zipper(tmpo, phib0, opts_svd=self.opts_svd)
                 mps.compression_(phib, (tmpo, phib0), **self.opts_var)
                 phib0 = phib
-                if nx > 1:
-                    tmpo = self.transfer_mpo(d, n=nx-1, dirn='h').H
 
-            tmpo = self.transfer_mpo(d, n=0, dirn='h')
+            tmpo = self.transfer_mpo_h(bd, nx=0, QA=QA, QB=QB)
             g = g_from_env3(phib, tmpo, phit)
 
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
-            #   (-2,-2)==(-2,-1)==(-2,0)==(-2,1)==(-2,2)
-            #      ||       ||      ||      ||      ||
-            #   (-1,-2)==(-1,-1)==(-1,0)==(-1,1)==(-1,2)
-            #      ||       ||      ||      ||      ||
-            #   (0, -2)==(0, -1)=== GA ===(0, 1)==(0, 2)
-            #      ||       ||      ++      ||      ||
-            #   (1, -2)==(1, -1)=== GB ===(1, 1)==(1, 2)
-            #      ||       ||      ||      ||      ||
-            #   (2, -2)==(2, -1)==(2, 0)==(2, 1)==(2, 2)
-            #      ||       ||      ||      ||      ||
-            #   (3, -2)==(3, -1)==(3, 0)==(3, 1)==(3, 2)
 
-            d = {(nx, ny): self.psi.nn_site(bd.site0, d=(nx, ny)) for nx in range(-self.Nl+1, self.Nl+1) for ny in range(-self.Nw, self.Nw+1)}
-            [d.pop(k) for k in [(0, 0), (1, 0)]]
-            if self.include_hairs:
-                for nx in range(-self.Nl+1, self.Nl+1):
-                    d[nx, -self.Nw - 1] = self.psi.nn_site(bd.site0, d=(nx, -self.Nw - 1))
-                    d[nx,  self.Nw + 1] = self.psi.nn_site(bd.site0, d=(nx,  self.Nw + 1))
-                for ny in range(-self.Nw, self.Nw+1):
-                    d[-self.Nl,  ny] = self.psi.nn_site(bd.site0, d=(-self.Nl,  ny))
-                    d[self.Nl+1, ny] = self.psi.nn_site(bd.site0, d=(self.Nl+1, ny))
-            tensors_from_psi(d, self.psi)
-            d[0, 0] = QA
-            d[1, 0] = QB
-
-            tmpo = self.transfer_mpo(d, n=self.Nw, dirn='v')
-            if self.include_hairs:
-                phir0 = mps.product_mps([hair_r(d[nx, self.Nw + 1]).fuse_legs(axes=[(0, 1)]).conj() for nx in range(-self.Nl+1, self.Nl+1)])
-            else:
-                phir0 = identity_tm_boundary(tmpo)
+            phir0 = self.boundary_mps(bd, 'r')
             for ny in range(self.Nw, 0, -1):
+                tmpo = self.transfer_mpo_v(bd, ny=ny)
                 phir = mps.zipper(tmpo, phir0, opts_svd=self.opts_svd)
                 mps.compression_(phir, (tmpo, phir0), **self.opts_var)
                 phir0 = phir
-                if ny > 1:
-                    tmpo = self.transfer_mpo(d, n=ny-1, dirn='v')
 
-            tmpo = self.transfer_mpo(d, n=-self.Nw, dirn='v').H
-            if self.include_hairs:
-                phil0 = mps.product_mps([hair_l(d[nx, -self.Nw - 1]).fuse_legs(axes=[(0, 1)]) for nx in range(-self.Nl+1, self.Nl+1)])
-            else:
-                phil0 = identity_tm_boundary(tmpo)
+            phil0 = self.boundary_mps(bd, 'l').conj()
             for ny in range(-self.Nw, 0):
+                tmpo = self.transfer_mpo_v(bd, ny=ny).H
                 phil = mps.zipper(tmpo, phil0, opts_svd=self.opts_svd)
                 mps.compression_(phil, (tmpo, phil0), **self.opts_var)
                 phil0 = phil
-                if ny < -1:
-                    tmpo = self.transfer_mpo(d, n=ny+1, dirn='v').H
 
-            tmpo = self.transfer_mpo(d, n=0, dirn='v')
+            tmpo = self.transfer_mpo_v(bd, ny=0, QA=QA, QB=QB)
             g = g_from_env3(phil, tmpo, phir)
-
-        # make hermitian and fix negative elements.
         return g
 
-
-    def transfer_mpo(self, d, n, dirn='v'):
+    def transfer_mpo_h(self, bd, nx, QA=None, QB=None):
         H = mps.Mpo(N = 2 * self.Nl)
-        if dirn == 'h':
-            nx, ny = n, -self.Nl + 1
-            hl = hair_l(d[nx, ny - 1]) if self.include_hairs else None
-            el = edge_l(d[nx, ny], hl=hl).add_leg(s=-1, axis=0)
-            H.A[H.first] = el
-            for site in H.sweep(to='last', dl=1, df=1):
-                ny += 1
-                top = d[nx, ny]
-                if top.ndim == 3:
-                    top = top.unfuse_legs(axes=(0, 1))
-                H.A[site] = DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
+        d = {(nx, ny): self.psi.nn_site(bd.site0, d=(nx, ny))
+             for ny in range(-self.Nl + 1 - self._hairs, self.Nl + 1 + self._hairs)}
+        tensors_from_psi(d, self.psi)
+        if nx == 0:
+            d[0, 0], d[0, 1] = QA, QB
+
+        ny = -self.Nl + 1
+        hl = hair_l(d[nx, ny - 1]) if self._hairs else None
+        H.A[H.first] = edge_l(d[nx, ny], hl=hl).add_leg(s=-1, axis=0)
+        for site in H.sweep(to='last', dl=1, df=1):
             ny += 1
-            hr = hair_r(d[nx, ny + 1]) if self.include_hairs else None
-            er = edge_r(d[nx, ny], hr=hr).add_leg(s=1).transpose(axes=(1, 2, 3, 0))
-            H.A[H.last] = er
-        else:  # dirn == 'v':
-            nx, ny = -self.Nl + 1, n
-            ht = hair_t(d[nx - 1, ny]) if self.include_hairs else None
-            et = edge_t(d[nx, ny], ht=ht).add_leg(s=-1, axis=0)
-            H.A[H.first] = et
-            for site in H.sweep(to='last', dl=1, df=1):
-                nx += 1
-                top = d[nx, ny]
-                if top.ndim == 3:
-                    top = top.unfuse_legs(axes=(0, 1))
-                H.A[site] = DoublePepsTensor(top=top, btm=top)
-            nx += 1
-            hb = hair_b(d[nx + 1, ny]) if self.include_hairs else None
-            eb = edge_b(d[nx, ny], hb=hb).add_leg(s=1).transpose(axes=(1, 2, 3, 0))
-            H.A[H.last] = eb
+            top = d[nx, ny].unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
+            H.A[site] = DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
+        ny += 1
+        hr = hair_r(d[nx, ny + 1]) if self._hairs else None
+        H.A[H.last] = edge_r(d[nx, ny], hr=hr).add_leg(s=1).transpose(axes=(1, 2, 3, 0))
         return H
+
+    def transfer_mpo_v(self, bd, ny, QA=None, QB=None):
+        H = mps.Mpo(N = 2 * self.Nl)
+        d = {(nx, ny): self.psi.nn_site(bd.site0, d=(nx, ny))
+             for nx in range(-self.Nl + 1 - self._hairs, self.Nl + 1 + self._hairs)}
+        tensors_from_psi(d, self.psi)
+        if ny == 0:
+            d[0, 0], d[1, 0] = QA, QB
+
+        nx = -self.Nl + 1
+        ht = hair_t(d[nx - 1, ny]) if self._hairs else None
+        H.A[H.first] = edge_t(d[nx, ny], ht=ht).add_leg(s=-1, axis=0)
+        for site in H.sweep(to='last', dl=1, df=1):
+            nx += 1
+            top = d[nx, ny].unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
+            H.A[site] = DoublePepsTensor(top=top, btm=top)
+        nx += 1
+        hb = hair_b(d[nx + 1, ny]) if self._hairs else None
+        H.A[H.last] = edge_b(d[nx, ny], hb=hb).add_leg(s=1).transpose(axes=(1, 2, 3, 0))
+        return H
+
+    def boundary_mps(self, bd, dirn='r'):
+        if dirn in 'lr':
+            ny = self.Nw + 1 if dirn == 'r' else -self.Nw - 1
+            nns = [(nx, ny) for nx in range(-self.Nl + 1, self.Nl + 1)]
+        else: # dirn in 'tb':
+            nx = self.Nw + 1 if dirn == 'b' else -self.Nw - 1
+            nns = [(nx, ny) for ny in range(-self.Nl + 1, self.Nl + 1)]
+        d = {nxy: self.psi.nn_site(bd.site0, d=nxy) for nxy in nns}
+        tensors_from_psi(d, self.psi)
+        if self._hairs:
+            hair_dirn = _hair_dirn[dirn]
+            return mps.product_mps([hair_dirn(d[nxy]).fuse_legs(axes=[(0, 1)]).conj() for nxy in nns])
+
+        vectors, config = [], self.psi.config
+        axis = _axis_dirn[dirn]
+        for nxy in nns:
+            leg = d[nxy].get_legs(axes=axis[0])  # peps tensor are now [t l] [b r] s
+            leg = leg.unfuse_leg()  # we need to unfuse
+            leg = leg[axis[1]]
+            vectors.append(eye(config, legs=[leg, leg.conj()], isdiag=False).fuse_legs(axes=[(0, 1)]))
+        return mps.product_mps(vectors)
 
 
 def g_from_env3(bra, tmpo, ket):

@@ -103,11 +103,8 @@ def test_product_mps(config=cfg, tol=1e-12):
         assert mps.measure_1site(psi, ops.n(), psi) == {0: 1.0, 1: 0.0, 2: 1.0, 3: 0.0, 4: 0.0, 5: 1.0, 6: 1.0}
 
         with pytest.raises(yastn.YastnError):
-            psi = mps.product_mps(v1.conj(), N=4)
-            # Vector should have ndim = 1 with the signature s = (1,).
-        with pytest.raises(yastn.YastnError):
             psi = mps.product_mps(v1.add_leg(), N=4)
-            # Vector should have ndim = 1 with the signature s = (1,).
+            # Vector should have ndim = 1.
 
     psi = mps.random_dense_mps(N=5, D=4, d=3, **opts_config)
     assert len(psi) == 5
@@ -137,8 +134,8 @@ def test_product_mpo(config=cfg, tol=1e-12):
         assert all(I[site].s == (-1, 1, 1, -1) for site in I.sweep())
 
         with pytest.raises(yastn.YastnError):
-            mps.product_mpo(ops.I().T, N=8)
-            # Operator should have ndim = 2 with the signature s = (1, -1).
+            mps.product_mpo(ops.vec_z(val=1), N=8)
+            # Operator should have ndim = 2.
 
     H = mps.random_dense_mpo(N=5, D=4, d=3, **opts_config)
     assert len(H) == 5

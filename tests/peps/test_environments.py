@@ -125,12 +125,12 @@ def test_spinless_infinite_approx():
 
     envs = {}
     envs['NNN']  = fpeps.EnvNTU(psi, which='NNN')
-    envs['43']   = fpeps.EnvApproximate(psi, which='43', opts_svd= opts_svd)
     envs['NNNh'] = fpeps.EnvNTU(psi, which='NNNh')
+    envs['43']   = fpeps.EnvApproximate(psi, which='43',  opts_svd= opts_svd)
     envs['43h']  = fpeps.EnvApproximate(psi, which='43h', opts_svd= opts_svd)
-    envs['65']   = fpeps.EnvApproximate(psi, which='65', opts_svd= opts_svd)
+    envs['65']   = fpeps.EnvApproximate(psi, which='65',  opts_svd= opts_svd)
     envs['65h']  = fpeps.EnvApproximate(psi, which='65h', opts_svd= opts_svd)
-    envs['87']   = fpeps.EnvApproximate(psi, which='87', opts_svd= opts_svd)
+    envs['87']   = fpeps.EnvApproximate(psi, which='87',  opts_svd= opts_svd)
     envs['87h']  = fpeps.EnvApproximate(psi, which='87h', opts_svd= opts_svd)
 
     for st0, st1 in [[(0, 0), (0, 1)], [(0, 1), (1, 1)]]:
@@ -139,13 +139,13 @@ def test_spinless_infinite_approx():
         Gs = {k: env.bond_metric(bd, QA, QB) for k, env in envs.items()}
         Gs = {k: v / v.norm() for k, v in Gs.items()}
         assert (Gs['NNN'] - Gs['43']).norm() < 1e-6
-        assert (Gs['NNNh'] - Gs['43h']).norm() < 1e-6
-        assert ((Gs['43'] - Gs['43h']).norm()) < 1e-3
-        assert ((Gs['43h'] - Gs['65']).norm()) < 1e-4
-        assert ((Gs['65'] - Gs['65h']).norm()) < 1e-5
-        assert ((Gs['65h'] - Gs['87']).norm()) < 1e-5
-        assert ((Gs['87'] - Gs['87h']).norm()) < 1e-5
+        assert (Gs['NNNh']-Gs['43h']).norm() < 1e-6
+        assert (Gs['43'] - Gs['43h']).norm() < 1e-3
+        assert (Gs['43h'] - Gs['65']).norm() < 1e-4
+        assert (Gs['65'] - Gs['65h']).norm() < 1e-5
+        assert (Gs['65h'] - Gs['87']).norm() < 1e-5
+        assert (Gs['87'] - Gs['87h']).norm() < 1e-5
 
 if __name__ == '__main__':
-    test_finite_spinless_boundary_mps_ctmrg()
+    # test_finite_spinless_boundary_mps_ctmrg()
     test_spinless_infinite_approx()
