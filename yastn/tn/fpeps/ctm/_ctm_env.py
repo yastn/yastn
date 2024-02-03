@@ -467,7 +467,7 @@ def sample_MC_(proj_psi, proj_env, st0, st1, st2, psi, projectors, opts_svd, opt
         _, Os, vL, astep = _sample_MC_column(ny, proj_psi, proj_env, st1, st2, psi, projectors, rands)
         accept += astep
         if ny < Ny - 1:
-            OsT = Os.T.conj()
+            OsT = Os.H
             vLnew = mps.zipper(OsT, vL, opts_svd=opts_svd)
             mps.compression_(vLnew, (OsT, vL), method='1site', **opts_var)
             proj_env._env['l', ny+1] = vLnew

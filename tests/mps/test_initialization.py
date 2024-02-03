@@ -260,8 +260,8 @@ def test_mixed_dims_mpo_and_transpose():
     #
     # expectation value in positive operator H @ H.conj().T
     #
-    assert mps.vdot(psi_bra, H.conj().T @ H, psi_bra) > 0
-    assert mps.vdot(psi_ket, H @ H.conj().T, psi_ket) > 0
+    assert mps.vdot(psi_bra, H.H @ H, psi_bra) > 0
+    assert mps.vdot(psi_ket, H @ H.H, psi_ket) > 0
     #
     # final tests of transpose
     #

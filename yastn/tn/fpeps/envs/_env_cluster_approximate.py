@@ -70,7 +70,7 @@ class EnvApproximate:
                 if nx < -1:
                     tmpo = self.transfer_mpo(d, n=nx+1, dirn='h')
 
-            tmpo = self.transfer_mpo(d, n=self.Nw, dirn='h').T.conj()
+            tmpo = self.transfer_mpo(d, n=self.Nw, dirn='h').H
             if self.include_hairs:
                 phib0 = mps.product_mps([hair_b(d[self.Nw + 1, ny]).fuse_legs(axes=[(0, 1)]) for ny in range(-self.Nl+1, self.Nl+1)])
             else:
@@ -80,7 +80,7 @@ class EnvApproximate:
                 mps.compression_(phib, (tmpo, phib0), **self.opts_var)
                 phib0 = phib
                 if nx > 1:
-                    tmpo = self.transfer_mpo(d, n=nx-1, dirn='h').T.conj()
+                    tmpo = self.transfer_mpo(d, n=nx-1, dirn='h').H
 
             tmpo = self.transfer_mpo(d, n=0, dirn='h')
             g = g_from_env3(phib, tmpo, phit)
@@ -124,7 +124,7 @@ class EnvApproximate:
                 if ny > 1:
                     tmpo = self.transfer_mpo(d, n=ny-1, dirn='v')
 
-            tmpo = self.transfer_mpo(d, n=-self.Nw, dirn='v').T.conj()
+            tmpo = self.transfer_mpo(d, n=-self.Nw, dirn='v').H
             if self.include_hairs:
                 phil0 = mps.product_mps([hair_l(d[nx, -self.Nw - 1]).fuse_legs(axes=[(0, 1)]) for nx in range(-self.Nl+1, self.Nl+1)])
             else:
@@ -134,18 +134,13 @@ class EnvApproximate:
                 mps.compression_(phil, (tmpo, phil0), **self.opts_var)
                 phil0 = phil
                 if ny < -1:
-                    tmpo = self.transfer_mpo(d, n=ny+1, dirn='v').T.conj()
+                    tmpo = self.transfer_mpo(d, n=ny+1, dirn='v').H
 
             tmpo = self.transfer_mpo(d, n=0, dirn='v')
             g = g_from_env3(phil, tmpo, phir)
 
         # make hermitian and fix negative elements.
-        g = (g + g.T.conj()) / 2
-        S, U = g.eigh(axes=(0, 1))
-        smin, smax = min(S._data), max(S._data)
-        self.min_spectrum.append(smin / smax)
-        S._data[S._data < abs(smin)] = abs(smin)
-        return U @ S @ U.T.conj()
+        return g
 
 
     def transfer_mpo(self, d, n, dirn='v'):

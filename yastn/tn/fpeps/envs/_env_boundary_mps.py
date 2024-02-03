@@ -14,12 +14,12 @@ class EnvBoundaryMps:
         if 'l' in setup or 'r' in setup:
             tmpo = psi.transfer_mpo(n=ri, dirn='v')
             self._env['r', ri] = identity_tm_boundary(tmpo)
-            tmpo = psi.transfer_mpo(n=li, dirn='v').T.conj()
+            tmpo = psi.transfer_mpo(n=li, dirn='v').H
             self._env['l', li] = identity_tm_boundary(tmpo)
         if 'b' in setup or 't' in setup:
             tmpo = psi.transfer_mpo(n=ti, dirn='h')
             self._env['t', ti] = identity_tm_boundary(tmpo)
-            tmpo = psi.transfer_mpo(n=bi, dirn='h').T.conj()
+            tmpo = psi.transfer_mpo(n=bi, dirn='h').H
             self._env['b', bi] = identity_tm_boundary(tmpo)
 
         self.info = {}
@@ -37,7 +37,7 @@ class EnvBoundaryMps:
 
         if 'l' in setup:
             for ny in range(li+1, ri+1):
-                tmpo = psi.transfer_mpo(n=ny-1, dirn='v').T.conj()
+                tmpo = psi.transfer_mpo(n=ny-1, dirn='v').H
                 phi0 = self._env['l', ny-1]
                 self._env['l', ny], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
                 mps.compression_(self._env['l', ny], (tmpo, phi0), **opts_var)
@@ -53,7 +53,7 @@ class EnvBoundaryMps:
 
         if 'b' in setup:
             for nx in range(bi-1, ti-1, -1):
-                tmpo = psi.transfer_mpo(n=nx+1, dirn='h').T.conj()
+                tmpo = psi.transfer_mpo(n=nx+1, dirn='h').H
                 phi0 = self._env['b', nx+1]
                 self._env['b', nx], discarded = mps.zipper(tmpo, phi0, opts_svd, return_discarded=True)
                 mps.compression_(self._env['b', nx], (tmpo, phi0), **opts_var)

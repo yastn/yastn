@@ -264,10 +264,24 @@ class MpsMpo:
             phi.A[n] = phi.A[n].transpose(axes=(0, 3, 2, 1))
         return phi
 
+    def conjugate_transpose(self) -> yastn.tn.mps.MpsMpo:
+        """ Transpose of MPO. For MPS, return self. Same as :attr:`self.T<yastn.tn.mps.MpsMpo.T>`"""
+        if self.nr_phys == 1:
+            return self.conj()
+        phi = self.shallow_copy()
+        for n in phi.sweep(to='last'):
+            phi.A[n] = phi.A[n].transpose(axes=(0, 3, 2, 1)).conj()
+        return phi
+
     @property
     def T(self) -> yastn.tn.mps.MpsMpo:
         r""" Transpose of MPO. For MPS, return self. Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
         return self.transpose()
+
+    @property
+    def H(self) -> yastn.tn.mps.MpsMpo:
+        r""" Transpose of MPO. For MPS, return self. Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
+        return self.conjugate_transpose()
 
     def reverse_sites(self) -> yastn.tn.mps.MpsMpo:
         r""" New MPS/MPO with reversed order of sites and respectively transposed tensors. """  # TODO (no swap_gates ?)

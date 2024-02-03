@@ -222,3 +222,8 @@ class Tensor:
     def T(self) -> yastn.Tensor:
         r""" Same as :meth:`self.transpose()<yastn.Tensor.transpose>` """
         return self.transpose()
+
+    @property
+    def H(self) -> yastn.Tensor:
+        r""" Same as self.T.conj() """
+        return self.transpose().conj()

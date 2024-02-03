@@ -27,13 +27,16 @@ class Gates(NamedTuple):
 
 
 class Evolution_out(NamedTuple):
-    truncation_errors : list = None
-    optimal_cutoffs : list = None
+    truncation_error: float = 0
+    optimal_pinv_cutoff: float = 0
+    min_eigenvalue: float = 0
+    second_eigenvalue: float = 0
+    fixed_eigenvalues: float = 0
 
 
 def evolution_step_(env, gates, symmetrize=True,
                     opts_svd=None, initialization="EAT",
-                    pinv_cutoffs=(1e-12, 1e-10, 1e-8, 1e-6, 1e-4), max_iter=1000):
+                    pinv_cutoffs=(1e-12, 1e-10, 1e-8, 1e-6), max_iter=1000):
     r"""
     Perform a single step of PEPS evolution by applying a list of gates,
     performing bond-dimension truncation after each application of a two-site gate.
@@ -81,15 +84,11 @@ def evolution_step_(env, gates, symmetrize=True,
         for gate in gates.local[::-1]:
             apply_local_gate_(env, gate)
 
-    trunction_errors = [record['truncation'] for record in infos]
-    optimal_cutoffs = [record['optimal_cutoff'] for record in infos]
-
-    return Evolution_out(trunction_errors, optimal_cutoffs)
-
+    return Evolution_out(*zip(*infos))
 
 
 def apply_nn_gate_and_truncate_(env, gate, opts_svd=None, initialization="EAT",
-                   pinv_cutoffs=(1e-12, 1e-10, 1e-8, 1e-6, 1e-4), max_iter=1000):
+                   pinv_cutoffs=(1e-12, 1e-10, 1e-8, 1e-6), max_iter=1000):
     r"""
     Applies a nearest-neighbor gate to a PEPS tensor and optimizes the resulting tensor using alternate
     least squares.
@@ -121,22 +120,34 @@ def apply_nn_gate_and_truncate_(env, gate, opts_svd=None, initialization="EAT",
     """
 
     if opts_svd is None:
-        opts_svd = {'D_total':4, 'tol_block':1e-15}
+        opts_svd = {'D_total': 4, 'tol_block': 1e-15}
 
     QA, QB, RA, RB, QAf, QBf = apply_nn_gate(env.psi, gate)
 
-    info = {}
-    # if env.which != 'NN': # svd-upddate
-    #     MA, MB = truncation_step(RA, RB, opts_svd=opts_svd, normalize=True)
-    #     env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QAf, QBf, MA, MB, gate.bond)
-    #     info['truncation'] = 0
-    #     return info
-
     fgf = env.bond_metric(gate.bond, QA, QB)
-    MA, MB, opt_error, optim, svd_error = truncate_and_optimize(fgf, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter)
+
+    # enforce hermiticity
+    fgf = (fgf + fgf.H) / 2
+
+    # check metric tensor eigenvalues
+    S, U = fgf.eigh(axes=(0, 1))
+    smin, smax = min(S._data), max(S._data)
+    smax2 = max(x for x in S._data if x < smax)
+    asmin = abs(smin)
+
+    # fix (smin, -smin) eigenvalues to |smin|
+    num_fixed = sum(S._data < asmin).item
+    S._data[S._data < asmin] = asmin
+    fgf_fixed = U @ S @ U.H
+
+    MA, MB, truncation_error, optimal_pinv_cutoff = truncate_and_optimize(fgf_fixed, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter)
     env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QAf, QBf, MA, MB, gate.bond)
-    info.update({'truncation': opt_error, 'optimal_cutoff': optim})
-    return info
+
+    return Evolution_out(truncation_error=truncation_error,
+                         optimal_pinv_cutoff=optimal_pinv_cutoff,
+                         min_eigenvalue = smin / smax,
+                         second_eigenvalue = smax2 / smax,
+                         fixed_eigenvalues = num_fixed)
 
 
 def truncate_and_optimize(fgf, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter):
@@ -156,7 +167,7 @@ def truncate_and_optimize(fgf, RA, RB, initialization, opts_svd, pinv_cutoffs, m
     MA, MB, svd_error = environment_aided_truncation_step(gRR, fgf, fgRAB, RA, RB, initialization, opts_svd, pinv_cutoffs)
     MA, MB, tu_errorB, optimal_cf  = tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, pinv_cutoffs, max_iter)
     MA, MB = truncation_step(MA, MB, opts_svd, normalize=True)
-    return MA, MB, tu_errorB, optimal_cf, svd_error
+    return MA, MB, tu_errorB, optimal_cf
 
 
 def truncation_step(RA, RB, opts_svd, normalize=False):

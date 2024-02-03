@@ -97,8 +97,6 @@ def test_finite_spinless_boundary_mps_ctmrg():
         assert abs(abs(mps.vdot(vB0, vB1)) / (vB0.norm() * vB1.norm()) - 1) < 1e-7
 
 
-
-
 def test_spinless_infinite_approx():
     """ Simulate purification of free fermions in an infinite system.s """
     geometry = fpeps.SquareLattice(dims=(3, 3), boundary='infinite')
@@ -132,6 +130,8 @@ def test_spinless_infinite_approx():
     envs['43h']  = fpeps.EnvApproximate(psi, which='43h', opts_svd= opts_svd)
     envs['65']   = fpeps.EnvApproximate(psi, which='65', opts_svd= opts_svd)
     envs['65h']  = fpeps.EnvApproximate(psi, which='65h', opts_svd= opts_svd)
+    envs['87']   = fpeps.EnvApproximate(psi, which='87', opts_svd= opts_svd)
+    envs['87h']  = fpeps.EnvApproximate(psi, which='87h', opts_svd= opts_svd)
 
     for st0, st1 in [[(0, 0), (0, 1)], [(0, 1), (1, 1)]]:
         bd = fpeps.Bond(st0, st1)
@@ -143,15 +143,9 @@ def test_spinless_infinite_approx():
         assert ((Gs['43'] - Gs['43h']).norm()) < 1e-3
         assert ((Gs['43h'] - Gs['65']).norm()) < 1e-4
         assert ((Gs['65'] - Gs['65h']).norm()) < 1e-5
-
-        assert all(x > 0 for x in envs['43'].min_spectrum)
-        assert all(x > 0 for x in envs['43h'].min_spectrum)
-        assert all(x > 0 for x in envs['65'].min_spectrum)
-        assert all(x > 0 for x in envs['65h'].min_spectrum)
+        assert ((Gs['65h'] - Gs['87']).norm()) < 1e-5
+        assert ((Gs['87'] - Gs['87h']).norm()) < 1e-5
 
 if __name__ == '__main__':
-    # test_finite_spinless_boundary_mps_ctmrg()
-
+    test_finite_spinless_boundary_mps_ctmrg()
     test_spinless_infinite_approx()
-
-
