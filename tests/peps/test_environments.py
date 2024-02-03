@@ -1,10 +1,9 @@
 """ Test the expectation values of spinless fermions with analytical values of fermi sea for finite and infinite lattices """
 import numpy as np
-import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.mps as mps
-from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, one_site_dict, EV2ptcorr
+from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg
@@ -126,12 +125,11 @@ def test_spinless_infinite_approx():
     envs = {}
     envs['NNN']  = fpeps.EnvNTU(psi, which='NNN')
     envs['NNNh'] = fpeps.EnvNTU(psi, which='NNNh')
-    envs['43']   = fpeps.EnvApproximate(psi, which='43',  opts_svd= opts_svd)
-    envs['43h']  = fpeps.EnvApproximate(psi, which='43h', opts_svd= opts_svd)
-    envs['65']   = fpeps.EnvApproximate(psi, which='65',  opts_svd= opts_svd)
-    envs['65h']  = fpeps.EnvApproximate(psi, which='65h', opts_svd= opts_svd)
-    envs['87']   = fpeps.EnvApproximate(psi, which='87',  opts_svd= opts_svd)
-    envs['87h']  = fpeps.EnvApproximate(psi, which='87h', opts_svd= opts_svd)
+    for k in ['43', '43h', '65', '65h', '87', '87h']:
+        envs[k] = fpeps.EnvApproximate(psi,
+                                       which=k,
+                                       opts_svd=opts_svd,
+                                       update_sweeps=1)
 
     for st0, st1 in [[(0, 0), (0, 1)], [(0, 1), (1, 1)]]:
         bd = fpeps.Bond(st0, st1)
@@ -143,9 +141,16 @@ def test_spinless_infinite_approx():
         assert (Gs['43'] - Gs['43h']).norm() < 1e-3
         assert (Gs['43h'] - Gs['65']).norm() < 1e-4
         assert (Gs['65'] - Gs['65h']).norm() < 1e-5
-        assert (Gs['65h'] - Gs['87']).norm() < 1e-5
-        assert (Gs['87'] - Gs['87h']).norm() < 1e-5
+        assert (Gs['65h'] - Gs['87']).norm() < 1e-6
+        assert (Gs['87'] - Gs['87h']).norm() < 1e-6
+
+        Gs2 = {k: envs[k].bond_metric(bd, QA, QB)
+               for k in ['43', '43h', '65', '65h', '87', '87h']}
+        Gs2 = {k: v / v.norm() for k, v in Gs2.items()}
+        for k in Gs2:
+            assert 1e-15 < (Gs[k] - Gs2[k]).norm() < 1e-10
+
 
 if __name__ == '__main__':
-    # test_finite_spinless_boundary_mps_ctmrg()
+    test_finite_spinless_boundary_mps_ctmrg()
     test_spinless_infinite_approx()
