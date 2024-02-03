@@ -132,7 +132,10 @@ def apply_nn_gate_and_truncate_(env, gate, opts_svd=None, initialization="EAT",
     # check metric tensor eigenvalues
     S, U = fgf.eigh(axes=(0, 1))
     smin, smax = min(S._data), max(S._data)
-    smax2 = max(x for x in S._data if x < smax)
+    try:
+        smax2 = max(x for x in S._data if x < smax)
+    except ValueError:
+        smax2 = 0.
     asmin = abs(smin)
 
     # fix (smin, -smin) eigenvalues to |smin|
