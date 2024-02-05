@@ -139,7 +139,7 @@ def apply_nn_gate_and_truncate_(env, gate, opts_svd=None, initialization="EAT",
     asmin = abs(smin)
 
     # fix (smin, -smin) eigenvalues to |smin|
-    num_fixed = sum(S._data < asmin).item
+    num_fixed = sum(S._data < asmin).item() / len(S._data)
     S._data[S._data < asmin] = asmin
     fgf_fixed = U @ S @ U.H
 
