@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import NamedTuple, Sequence, Callable
 from ._env import Env3
-from ._mps import MpsMpo
+from ._mps_obc import MpsMpoOBC
 from ... import YastnError, expmv
 
 #################################
@@ -17,7 +17,7 @@ class TDVP_out(NamedTuple):
     steps: int = 0
 
 
-def tdvp_(psi, H : MpsMpo | Sequence[tuple(MpsMpo, number)] | Callable,
+def tdvp_(psi, H : MpsMpoOBC | Sequence[tuple(MpsMpoOBC, number)] | Callable,
           times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opts_expmv=None, opts_svd=None, normalize=True):
     r"""
     Iterator performing TDVP sweeps to solve :math:`\frac{d}{dt} |\psi(t)\rangle = -uH|\psi(t)\rangle`,

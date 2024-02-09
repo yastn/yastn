@@ -1,10 +1,10 @@
 """ Mps structure and its basics. """
 from __future__ import annotations
 from ... import initialize, YastnError
-from ._mps import MpsMpo
+from ._mps_obc import MpsMpoOBC
 
 
-def load_from_dict(config, in_dict) -> yastn.tn.mps.MpsMpo:
+def load_from_dict(config, in_dict) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Create MPS/MPO from dictionary.
 
@@ -15,11 +15,11 @@ def load_from_dict(config, in_dict) -> yastn.tn.mps.MpsMpo:
 
     in_dict: dict
         dictionary containing serialized MPS/MPO, i.e.,
-        a result of :meth:`yastn.tn.mps.MpsMpo.save_to_dict`.
+        a result of :meth:`yastn.tn.mps.MpsMpoOBC.save_to_dict`.
     """
     nr_phys = in_dict['nr_phys']
     N = in_dict['N'] if 'N' in in_dict else len(in_dict['A'])  # backwards compability
-    out_mps = MpsMpo(N, nr_phys=nr_phys)
+    out_mps = MpsMpoOBC(N, nr_phys=nr_phys)
     if 'factor' in in_dict:  # backwards compability
         out_mps.factor = in_dict['factor']
     for n in range(out_mps.N):
@@ -27,7 +27,7 @@ def load_from_dict(config, in_dict) -> yastn.tn.mps.MpsMpo:
     return out_mps
 
 
-def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpo:
+def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Create MPS/MPO from HDF5 file.
 
@@ -46,7 +46,7 @@ def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpo:
     nr_phys = int(file[my_address].get('nr_phys')[()])
     N = file[my_address].get('N')
     N = len(file[my_address+'/A'].keys()) if N is None else int(N[()])
-    out_Mps = MpsMpo(N, nr_phys=nr_phys)
+    out_Mps = MpsMpoOBC(N, nr_phys=nr_phys)
 
     factor = file[my_address].get('factor')
     if factor:

@@ -1,23 +1,25 @@
 """ Mps structure and its basic manipulations. """
 from __future__ import annotations
-import numbers
 from ... import tensor, initialize, YastnError
+from ._mps_parent import _MpsMpoParent
 
 ###################################
 #   auxiliary for basic algebra   #
 ###################################
 
-def Mps(N) -> yastn.tn.mps.MpsMpo:
+def Mps(N) -> yastn.tn.mps.MpsMpoOBC:
     r""" Generate empty MPS for system of `N` sites, fixing :code:`nr_phys=1`. """
-    return MpsMpo(N, nr_phys=1)
+    return MpsMpoOBC(N, nr_phys=1)
 
 
-def Mpo(N) -> yastn.tn.mps.MpsMpo:
+def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC:
     r""" Generate empty MPO for system of `N` sites, fixing :code:`nr_phys=2`."""
-    return MpsMpo(N, nr_phys=2)
+    if periodic:
+        return MpoPBC(N, nr_phys=2)
+    return MpsMpoOBC(N, nr_phys=2)
 
 
-def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpo:
+def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]} \times \textrm{states[j]}`.
 
@@ -25,7 +27,7 @@ def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpo:
 
     Parameters
     ----------
-    states: Sequence[yastn.tn.mps.MpsMpo]
+    states: Sequence[yastn.tn.mps.MpsMpoOBC]
 
     amplitudes: Sequence[scalar]
         If :code:`None`, all amplitudes are assumed to be 1.
@@ -34,16 +36,16 @@ def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpo:
         amplitudes = [1] * len(states)
 
     if len(states) != len(amplitudes):
-        raise YastnError('Number of MpsMPo-s to add must be equal to the number of coefficients in amplitudes.')
+        raise YastnError('Number of MpsMpoOBC-s to add must be equal to the number of coefficients in amplitudes.')
 
-    phi = MpsMpo(N=states[0].N, nr_phys=states[0].nr_phys)
+    phi = MpsMpoOBC(N=states[0].N, nr_phys=states[0].nr_phys)
 
     if any(psi.N != phi.N for psi in states):
-        raise YastnError('All MpsMpo to add must have equal number of sites.')
+        raise YastnError('All MpsMpoOBC to add must have equal number of sites.')
     if any(psi.nr_phys != phi.nr_phys for psi in states):
         raise YastnError('All states to add should be either Mps or Mpo.')
     if any(psi.pC != None for psi in states):
-        raise YastnError('Absorb central block of MpsMpo-s before calling add.')
+        raise YastnError('Absorb central block of MpsMpoOBC-s before calling add.')
     # legf = states[0][phi.first].get_legs(axes=0)
     # legl = states[0][phi.last].get_legs(axes=2)
     #if any(psi.virtual_leg('first') != legf or psi.virtual_leg('last') != legl for psi in states):
@@ -69,7 +71,7 @@ def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpo:
     return phi
 
 
-def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpo:
+def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Performs MPO-MPS product resulting in a new MPS, or
     MPO-MPO product resulting in a new MPO.
@@ -92,7 +94,7 @@ def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpo:
 
     Parameters
     ----------
-        a, b: yastn.tn.mps.MpsMpo, yastn.tn.mps.MpsMpo
+        a, b: yastn.tn.mps.MpsMpoOBC, yastn.tn.mps.MpsMpoOBC
             a pair of MPO and MPS or two MPO's to be multiplied
 
         mode: str
@@ -101,17 +103,17 @@ def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpo:
            :ref:`configuration<tensor/configuration:yastn configuration>`.
     """
     if a.N != b.N:
-        raise YastnError('MpsMpo-s to multiply must have equal number of sites.')
+        raise YastnError('MpsMpoOBC-s to multiply must have equal number of sites.')
 
     if a.pC is not None or b.pC is not None:
-        raise YastnError('Absorb central blocks of MpsMpo-s before calling multiply.')
+        raise YastnError('Absorb central blocks of MpsMpoOBC-s before calling multiply.')
 
     nr_phys = a.nr_phys + b.nr_phys - 2
 
     if a.nr_phys == 1:
         raise YastnError(' Multiplication by MPS from left is not supported.')
 
-    phi = MpsMpo(N=a.N, nr_phys=nr_phys)
+    phi = MpsMpoOBC(N=a.N, nr_phys=nr_phys)
 
     axes_fuse = ((0, 3), 1, (2, 4)) if b.nr_phys == 1 else ((0, 3), 1, (2, 4), 5)
     for n in phi.sweep():
@@ -121,19 +123,27 @@ def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpo:
     phi.factor = a.factor * b.factor
     return phi
 
-###################################
-#     basic operations on MPS     #
-###################################
 
-class MpsMpo:
-    # The basic structure of MPS/MPO with `N` sites.
+class MpoPBC(_MpsMpoParent):
+    # The basic structure of MPO with `N` sites and PBC.
+
+    def __init__(self, N=1, nr_phys=2):
+        r"""
+        Class to isolate a special case of periodic Mpo,
+        which in some functions can be applied on Mps with OBC.
+        """
+        super().__init__(N=N, nr_phys=2)
+
+
+class MpsMpoOBC(_MpsMpoParent):
+    # The basic structure of MPS/MPO with `N` sites and OBC
 
     def __init__(self, N=1, nr_phys=1):
         r"""
         Initialize empty MPS (:code:`nr_phys=1`) or MPO (:code:`nr_phys=2`)
         for system of `N` sites. Empty MPS/MPO has no tensors assigned.
 
-        MpsMpo tensors (sites) are indexed by integers :math:`0, 1, 2, \ldots, N-1`,
+        MpsMpoOBC tensors (sites) are indexed by integers :math:`0, 1, 2, \ldots, N-1`,
         where :math:`0` corresponds to the `'first'` site.
         They can be accessed with ``[]`` operator.
         MPS/MPO can contain a central block associated with a bond and indexed by a tuple :math:`(n, n+1)`.
@@ -143,160 +153,19 @@ class MpsMpo:
         (0) virtual leg pointing towards the first site, (1) 1st physical leg, i.e., :math:`|\textrm{ket}\rangle`,
         (2) virtual leg pointing towards the last site, and, in case of MPO, (3) 2nd physical leg, i.e., :math:`\langle \textrm{bra}|`.
         """
-        if not isinstance(N, numbers.Integral) or N <= 0:
-            raise YastnError('Number of Mps sites N should be a positive integer.')
-        if nr_phys not in (1, 2):
-            raise YastnError('Number of physical legs, nr_phys, should be 1 or 2.')
-        self._N = N
-        self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
+        super().__init__(N=N, nr_phys=nr_phys)
         self.pC = None  # index of the central block, None if it does not exist
-        self._first = 0  # index of the first lattice site
-        self._last = N - 1  # index of the last lattice site
-        self._nr_phys = nr_phys
-        self.factor = 1  # multiplicative factor is real and positive (e.g. norm)
 
-    @property
-    def first(self):
-        return self._first
 
-    @property
-    def last(self):
-        return self._last
-
-    @property
-    def nr_phys(self):
-        return self._nr_phys
-
-    @property
-    def N(self):
-        return self._N
-
-    def __len__(self):
-        return self._N
-
-    @property
-    def config(self):
-        return self.A[0].config
-
-    def sweep(self, to='last', df=0, dl=0) -> Iterator[int]:
-        r"""
-        Generator of indices of all sites going from the first site to the last site, or vice-versa.
-
-        Parameters
-        ----------
-        to: str
-            'first' or 'last'.
-        df, dl: int
-            shift iterator by :math:`df \ge 0` and :math:`dl \ge 0` from the first and the last site, respectively.
-        """
-        if to == 'last':
-            return range(df, self.N - dl)
-        if to == 'first':
-            return range(self.N - 1 - dl, df - 1, -1)
-        raise YastnError('"to" in sweep should be in "first" or "last"')
-
-    def __getitem__(self, n) -> yastn.Tensor:
-        """ Return tensor corresponding to n-th site."""
-        try:
-            return self.A[n]
-        except KeyError as e:
-            raise YastnError(f"MpsMpo does not have site with index {n}") from e
-
-    def __setitem__(self, n, tensor):
-        """
-        Assign tensor to n-th site of Mps or Mpo.
-
-        Assigning central block is not supported.
-        """
-        if not isinstance(n, numbers.Integral) or n < self.first or n > self.last:
-            raise YastnError("MpsMpo: n should be an integer in 0, 1, ..., N-1")
-        if tensor.ndim != self.nr_phys + 2:
-            raise YastnError(f"MpsMpo: Tensor rank should be {self.nr_phys + 2}")
-        self.A[n] = tensor
-
-    def shallow_copy(self) -> yastn.tn.mps.MpsMpo:
-        r"""
-        New instance of :class:`yastn.tn.mps.MpsMpo` pointing to the same tensors as the old one.
-
-        Shallow copy is usually sufficient to retain the old MPS/MPO.
-        """
-        phi = MpsMpo(N=self.N, nr_phys=self.nr_phys)
-        phi.A = dict(self.A)
-        phi.pC = self.pC
-        phi.factor = self.factor
-        return phi
-
-    def clone(self) -> yastn.tn.mps.MpsMpo:
-        r"""
-        Makes a clone of MPS or MPO by :meth:`cloning<yastn.Tensor.clone>`
-        all :class:`yastn.Tensor<yastn.Tensor>`'s into a new and independent :class:`yastn.tn.mps.MpsMpo`.
-        """
-        phi = self.shallow_copy()
-        for ind, ten in phi.A.items():
-            phi.A[ind] = ten.clone()
-        # TODO clone factor ?
-        return phi
-
-    def copy(self) -> yastn.tn.mps.MpsMpo:
-        r"""
-        Makes a copy of MPS or MPO by :meth:`copying<yastn.Tensor.copy>` all :class:`yastn.Tensor<yastn.Tensor>`'s
-        into a new and independent :class:`yastn.tn.mps.MpsMpo`.
-        """
-        phi = self.shallow_copy()
-        for ind, ten in phi.A.items():
-            phi.A[ind] = ten.copy()
-        # TODO copy factor ?
-        return phi
-
-    def conj(self) -> yastn.tn.mps.MpsMpo:
-        """ Makes a conjugation of the object. """
-        phi = self.shallow_copy()
-        for ind, ten in phi.A.items():
-            phi.A[ind] = ten.conj()
-        return phi
-
-    def transpose(self) -> yastn.tn.mps.MpsMpo:
-        """ Transpose of MPO. For MPS, return self. Same as :attr:`self.T<yastn.tn.mps.MpsMpo.T>`"""
-        if self.nr_phys == 1:
-            return self
-        phi = self.shallow_copy()
-        for n in phi.sweep(to='last'):
-            phi.A[n] = phi.A[n].transpose(axes=(0, 3, 2, 1))
-        return phi
-
-    @property
-    def T(self) -> yastn.tn.mps.MpsMpo:
-        r""" Transpose of MPO. For MPS, return self. Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
-        return self.transpose()
-
-    def __mul__(self, multiplier) -> yastn.tn.mps.MpsMpo:
-        """ New MPS/MPO with the first tensor multiplied by a scalar. """
-        phi = self.shallow_copy()
-        am = abs(multiplier)
-        if am > 0:
-            phi.factor = am * self.factor
-            phi.A[0] = phi.A[0] * (multiplier / am)
-        else:
-            phi.A[0] = phi.A[0] * multiplier
-        return phi
-
-    def __rmul__(self, number) -> yastn.tn.mps.MpsMpo:
-        """ New MPS/MPO with the first tensor multiplied by a scalar. """
-        return self.__mul__(number)
-
-    def __truediv__(self, number) -> yastn.tn.mps.MpsMpo:
-        """ Divide MPS/MPO by a scalar. """
-        return self.__mul__(1 / number)
-
-    def __add__(self, phi) -> yastn.tn.mps.MpsMpo:
+    def __add__(self, phi) -> yastn.tn.mps.MpsMpoOBC:
         """ Sum of two Mps's or two Mpo's. """
         return add(self, phi)
 
-    def __sub__(self, phi) -> yastn.tn.mps.MpsMpo:
+    def __sub__(self, phi) -> yastn.tn.mps.MpsMpoOBC:
         """ Subtraction of two Mps's or two Mpo's. """
         return add(self, phi, amplitudes=(1, -1))
 
-    def __matmul__(self, phi) -> yastn.tn.mps.MpsMpo:
+    def __matmul__(self, phi) -> yastn.tn.mps.MpsMpoOBC:
         """ Multiply Mpo by Mpo or Mps. """
         return multiply(self, phi)
 
@@ -443,7 +312,7 @@ class MpsMpo:
         phi.canonize_(to='first', normalize=False)
         return phi.factor
 
-    def canonize_(self, to='first', normalize=True) -> yastn.tn.mps.MpsMpo:
+    def canonize_(self, to='first', normalize=True) -> yastn.tn.mps.MpsMpoOBC:
         r"""
         Sweep through the MPS/MPO and put it in right/left canonical form
         (:code:`to='first'` or :code:`to='last'`, respectively)
@@ -596,57 +465,6 @@ class MpsMpo:
         self.A[nl], self.A[bd], self.A[nr] = mask.apply_mask(U, S, V, axes=(2, 0, 0))
         return tensor.bitwise_not(mask).apply_mask(S, axes=0).norm() / S.norm()  # discarded weight
 
-    def virtual_leg(self, ind):
-        if ind == 'first':
-            return self.A[self.first].get_legs(axes=0)
-        if ind == 'last':
-            return self.A[self.last].get_legs(axes=2)
-
-    def get_bond_dimensions(self) -> Sequence[int]:
-        r"""
-        Returns total bond dimensions of all virtual spaces along MPS/MPO from
-        the first to the last site, including "trivial" leftmost and rightmost virtual spaces.
-        This gives a tuple with `N + 1` elements.
-        """
-        Ds = [self.A[n].get_shape(axes=0) for n in self.sweep(to='last')]
-        Ds.append(self.A[self.last].get_shape(axes=2))
-        return tuple(Ds)
-
-    def get_bond_charges_dimensions(self) -> Sequence[dict[Sequence[int], int]]:
-        r"""
-        Returns list of charge sectors and their dimensions for all virtual spaces along MPS/MPO
-        from the first to the last site, including "trivial" leftmost and rightmost virtual spaces.
-        Each element of the list is a dictionary {charge: sectorial bond dimension}.
-        This gives a list with `N + 1` elements.
-        """
-        tDs = []
-        for n in self.sweep(to='last'):
-            leg = self.A[n].get_legs(axes=0)
-            tDs.append(leg.tD)
-        leg = self.A[self.last].get_legs(axes=2)
-        tDs.append(leg.tD)
-        return tDs
-
-    def get_virtual_legs(self) -> Sequence[yastn.Leg]:
-        r"""
-        Returns :class:`yastn.Leg` of all virtual spaces along MPS/MPO from
-        the first to the last site, in the form of the `0th` leg of each MPS/MPO tensor.
-        Finally, append the rightmost virtual spaces, i.e., `2nd` leg of the last tensor,
-        conjugating it so that all legs have signature `-1`.
-        This gives a list with `N + 1` elements.
-        """
-        legs = [self.A[n].get_legs(axes=0) for n in self.sweep(to='last')]
-        legs.append(self.A[self.last].get_legs(axes=2).conj())
-        return legs
-
-    def get_physical_legs(self) -> Sequence[yastn.Leg] | Sequence[tuple(yastn.Leg, yastn.Leg)]:
-        r"""
-        Returns :class:`yastn.Leg` of all physical spaces along MPS/MPO from
-        the first to the last site. For MPO return a tuple of ket and bra spaces for each site.
-        """
-        if self.nr_phys == 2:
-            return [self.A[n].get_legs(axes=(1, 3)) for n in self.sweep(to='last')]
-        return [self.A[n].get_legs(axes=1) for n in self.sweep(to='last')]
 
     def get_entropy(self, alpha=1) -> Sequence[number]:
         r"""
@@ -681,47 +499,3 @@ class MpsMpo:
             SV.append(sv)
             psi.absorb_central_(to='last')
         return SV
-
-    def save_to_dict(self) -> dict[str, dict | number]:
-        r"""
-        Serialize MPS/MPO into a dictionary.
-
-        Each element represents serialized :class:`yastn.Tensor`
-        (see, :meth:`yastn.Tensor.save_to_dict`) of the MPS/MPO.
-        Absorbs central block if it exists.
-        """
-        psi = self.shallow_copy()
-        psi.absorb_central_()  # make sure central block is eliminated
-        out_dict = {
-            'N': psi.N,
-            'nr_phys': psi.nr_phys,
-            'factor': psi.factor, #.item(),
-            'A': {}
-        }
-        for n in psi.sweep(to='last'):
-            out_dict['A'][n] = psi[n].save_to_dict()
-        return out_dict
-
-    def save_to_hdf5(self, file, my_address):
-        r"""
-        Save MPS/MPO into a HDF5 file.
-
-        Parameters
-        ----------
-        file: File
-            A `pointer` to a file opened by the user
-
-        my_address: str
-            Name of a group in the file, where the Mps will be saved, e.g., 'state/'
-        """
-        psi = self.shallow_copy()
-        try:
-            factor = psi.config.backend.to_numpy(psi.factor)
-        except:
-            factor = psi.factor
-        psi.absorb_central_()  # make sure central block is eliminated
-        file.create_dataset(my_address+'/N', data=psi.N)
-        file.create_dataset(my_address+'/nr_phys', data=psi.nr_phys)
-        file.create_dataset(my_address+'/factor', data=factor)
-        for n in self.sweep(to='last'):
-            psi[n].save_to_hdf5(file, my_address+'/A/'+str(n))

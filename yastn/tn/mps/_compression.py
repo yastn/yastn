@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import NamedTuple
 import logging
 from ._env import Env2, Env3
-from ._mps import MpsMpo
+from ._mps_obc import MpsMpoOBC
 from ... import initialize, tensor, YastnError
 
 logger = logging.Logger('compression')
@@ -38,12 +38,12 @@ def compression_(psi, target, method='1site',
 
     Parameters
     ----------
-    psi: yastn.tn.mps.MpsMpo
+    psi: yastn.tn.mps.MpsMpoOBC
         Initial state. It is updated during execution.
         It is first canonized to the first site, if not provided in such a form.
         State resulting from :code:`compression_` is canonized to the first site.
 
-    target: yastn.tn.mps.MpsMpo or list(yastn.tn.mps.MpsMpo)
+    target: yastn.tn.mps.MpsMpoOBC or list(yastn.tn.mps.MpsMpoOBC)
         Defines target state. Can be an MPS (target = MPS or (MPS,)),
         or MPO acting on MPS (target = (MPO, MPS)).
 
@@ -98,7 +98,7 @@ def _compression_(psi, target, method,
     if not psi.is_canonical(to='first'):
         psi.canonize_(to='first')
 
-    if isinstance(target, MpsMpo):
+    if isinstance(target, MpsMpoOBC):
         env = Env2(bra=psi, ket=target)
     elif len(target) == 1:
         env = Env2(bra=psi, ket=target[0])
@@ -172,17 +172,17 @@ def _compression_1site_sweep_(env, Schmidt=None):
 
     Parameters
     ----------
-    psi: yastn.tn.mps.MpsMpo
+    psi: yastn.tn.mps.MpsMpoOBC
         initial MPS in right canonical form.
 
-    psi_target: yastn.tn.mps.MpsMpo
+    psi_target: yastn.tn.mps.MpsMpoOBC
         Target MPS.
 
     env: Env2 or Env3
         optional environment of tensor network :math:`\langle \psi|\psi_{target} \rangle`
         or :math:`\langle \psi|O|\psi_{target} \rangle` from the previous run.
 
-    op: yastn.tn.mps.MpsMpo
+    op: yastn.tn.mps.MpsMpoOBC
         operator acting on :math:`|\psi_{\textrm{target}}\rangle`.
 
     Returns
@@ -232,7 +232,7 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
 #
 # zipper for PBC mpo -- to eb dispached later
 #
-# def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpo:
+# def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpoOBC:
 #     """
 #     Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
 
@@ -243,7 +243,7 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
 
 #     Parameters
 #     ----------
-#     a, b: yastn.tn.mps.MpsMpo
+#     a, b: yastn.tn.mps.MpsMpoOBC
 
 #     opts_svd: dict
 #         truncation parameters for :meth:`yastn.linalg.truncation_mask`.
@@ -259,7 +259,7 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
 #         Discarded weight approximates norm of truncated elements normalized by the norm of the untruncated state.
 #     """
 #     if a.N != b.N:
-#         raise YastnError('MpsMpo-s to multiply must have equal number of sites.')
+#         raise YastnError('MpsMpoOBC-s to multiply must have equal number of sites.')
 
 #     psi = b.shallow_copy()
 #     psi.canonize_(to='last', normalize=normalize)
@@ -313,7 +313,7 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
 
 
 
-def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpo:
+def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpoOBC:
     """
     Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
 
@@ -324,7 +324,7 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
 
     Parameters
     ----------
-    a, b: yastn.tn.mps.MpsMpo
+    a, b: yastn.tn.mps.MpsMpoOBC
 
     opts_svd: dict
         truncation parameters for :meth:`yastn.linalg.truncation_mask`.
@@ -340,7 +340,7 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
         Discarded weight approximates norm of truncated elements normalized by the norm of the untruncated state.
     """
     if a.N != b.N:
-        raise YastnError('MpsMpo-s to multiply must have equal number of sites.')
+        raise YastnError('MpsMpoOBC-s to multiply must have equal number of sites.')
 
     psi = b.shallow_copy()
     psi.canonize_(to='last', normalize=normalize)

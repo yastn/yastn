@@ -1,6 +1,6 @@
 from __future__ import annotations
 from ... import YastnError
-from ._mps import Mpo
+from ._mps_obc import Mpo
 from ._latex2term import latex2term
 from ._initialize import random_mpo, random_mps
 from ._generate_mpo import Hterm, generate_mpo
@@ -75,11 +75,11 @@ class Generator:
         """
         self.config.backend.random_seed(seed)
 
-    def I(self) -> yastn.tn.mps.MpsMpo:
+    def I(self) -> yastn.tn.mps.MpsMpoOBC:
         """ Indetity MPO derived from identity in local operators class. """
         return self._I.shallow_copy()
 
-    def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
+    def random_mps(self, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC:
         r"""
         Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
@@ -87,7 +87,7 @@ class Generator:
         """
         return random_mps(self._I, n=n, D_total=D_total, sigma=sigma, dtype=dtype)
 
-    def random_mpo(self, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
+    def random_mpo(self, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC:
         r"""
         Generate a random MPO with bond dimension ``D_total``.
 
@@ -95,7 +95,7 @@ class Generator:
         """
         return random_mpo(self._I, D_total=D_total, sigma=sigma, dtype=dtype)
 
-    def mpo_from_latex(self, H_str, parameters=None, opts=None) -> yastn.tn.mps.MpsMpo:
+    def mpo_from_latex(self, H_str, parameters=None, opts=None) -> yastn.tn.mps.MpsMpoOBC:
         r"""
         Convert latex-like string to yastn.tn.mps MPO.
 
@@ -131,7 +131,7 @@ class Generator:
 
         Returns
         -------
-        yastn.tn.mps.MpsMpo
+        yastn.tn.mps.MpsMpoOBC
         """
         parameters = {**self.parameters, **parameters}
         c3 = self._term2Hterm(templete, self._ops.to_dict(), parameters)
@@ -196,7 +196,7 @@ class Generator:
 
     #     Returns
     #     -------
-    #     yastn.tn.mps.MpsMpo
+    #     yastn.tn.mps.MpsMpoOBC
     #     """
     #     parameters = {**self.parameters, **parameters}
     #     c2 = latex2term(psi_str, parameters)
@@ -226,7 +226,7 @@ class Generator:
 
     #     Returns
     #     -------
-    #     yastn.tn.mps.MpsMpo
+    #     yastn.tn.mps.MpsMpoOBC
     #     """
     #     parameters = {**self.parameters, **parameters}
     #     c3 = self._term2Hterm(templete, vectors, parameters)

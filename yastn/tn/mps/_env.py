@@ -1,10 +1,10 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
 from __future__ import annotations
-from ... import tensor, initialize, YastnError, expmv
+from ... import tensor, initialize, YastnError
 from itertools import groupby
 from typing import Sequence, Dict, Optional, NamedTuple
 from ...tensor import Tensor
-from . import MpsMpo
+from . import MpsMpoOBC, MpoPBC
 import abc
 
 
@@ -15,7 +15,7 @@ def vdot(*args) -> number:
 
     Parameters
     -----------
-    *args: yastn.tn.mps.MpsMpo
+    *args: yastn.tn.mps.MpsMpoOBC
     """
     if len(args) == 2:
         return measure_overlap(*args)
@@ -32,17 +32,17 @@ def measure_overlap(bra, ket) -> number:
 
     Parameters
     -----------
-    bra: yastn.tn.mps.MpsMpo
+    bra: yastn.tn.mps.MpsMpoOBC
         An MPS which will be conjugated.
 
-    ket: yastn.tn.mps.MpsMpo
+    ket: yastn.tn.mps.MpsMpoOBC
     """
     env = Env2(bra=bra, ket=ket)
     env.setup_(to='first')
     return env.measure(bd=(-1, 0))
 
 
-def measure_mpo(bra, op: MpsMpo | Sequence[tuple(MpsMpo,number)], ket) -> number:
+def measure_mpo(bra, op: MpsMpoOBC | Sequence[tuple(MpsMpoOBC, number)], ket) -> number:
     r"""
     Calculate expectation value :math:`\langle \textrm{bra}|\textrm{op}|\textrm{ket} \rangle`.
 
@@ -52,13 +52,13 @@ def measure_mpo(bra, op: MpsMpo | Sequence[tuple(MpsMpo,number)], ket) -> number
 
     Parameters
     -----------
-    bra: yastn.tn.mps.MpsMpo
+    bra: yastn.tn.mps.MpsMpoOBC
         An MPS which will be conjugated.
 
-    op: yastn.tn.mps.MpsMpo or Sequence[tuple(MpsMpo,number)]
+    op: yastn.tn.mps.MpsMpoOBC or Sequence[tuple(MpsMpoOBC,number)]
         Operator written as (sums of) MPO.
 
-    ket: yastn.tn.mps.MpsMpo
+    ket: yastn.tn.mps.MpsMpoOBC
     """
     env = Env3(bra=bra, op=op, ket=ket)
     env.setup_(to='first')
@@ -74,14 +74,14 @@ def measure_1site(bra, O, ket) -> dict[int, number]:
 
     Parameters
     -----------
-    bra: yastn.tn.mps.MpsMpo
+    bra: yastn.tn.mps.MpsMpoOBC
         An MPS which will be conjugated.
 
     O: yastn.Tensor or dict
         An operator with signature (1, -1).
         It is possible to provide a dictionary {site: operator}
 
-    ket: yastn.tn.mps.MpsMpo
+    ket: yastn.tn.mps.MpsMpoOBC
     """
     op = sorted(O.items()) if isinstance(O, dict) else [(n, O) for n in ket.sweep(to='last')]
     env = Env2(bra=bra, ket=ket)
@@ -102,14 +102,14 @@ def measure_2site(bra, O, P, ket, pairs=None) -> dict[tuple[int, int], number]:
 
     Parameters
     -----------
-    bra: yastn.tn.mps.MpsMpo
+    bra: yastn.tn.mps.MpsMpoOBC
         An MPS which will be conjugated.
 
     O, P: yastn.Tensor or dict
         Operators with signature (1, -1).
         It is possible to provide a dictionaries {site: operator}
 
-    ket: yastn.tn.mps.MpsMpo
+    ket: yastn.tn.mps.MpsMpoOBC
 
     pairs: list[tuple[int, int]]
         It is possible to provide a list of pairs to limit the calculation.
@@ -155,14 +155,14 @@ class MpoTerm(NamedTuple):
 
     """
     amp: float = 1.0
-    mpo: MpsMpo = None
+    mpo: MpsMpoOBC = None
 
 
 class MpsProjector():
     # holds ref to a set of n states and owns a set of n mps-mps environments
     # for projections
 
-    def __init__(self,ket,bra,project:Optional[Sequence[MpsMpo]] = None):
+    def __init__(self,ket,bra,project:Optional[Sequence[MpsMpoOBC]] = None):
         # environments, indexed by bonds with respect to k-th MPS-based projector
         if project and len(project)>0:
             assert all([ket.N == _mps.N for _mps in project]),"all MPO operators and state should have the same number of sites"
@@ -235,9 +235,9 @@ class _EnvParent(metaclass=abc.ABCMeta):
         self.nr_phys = ket.nr_phys
 
         if self.bra.nr_phys != self.ket.nr_phys:
-            raise YastnError('MpsMpo for bra and ket should have the same number of physical legs.')
+            raise YastnError('MpsMpoOBC for bra and ket should have the same number of physical legs.')
         if self.bra.N != self.ket.N:
-            raise YastnError('MpsMpo for bra and ket should have the same number of sites.')
+            raise YastnError('MpsMpoOBC for bra and ket should have the same number of sites.')
 
         self.projector = None
         if project:
@@ -422,8 +422,8 @@ class Env2(_EnvParent):
             self.F[(n, n + 1)] = tensor.tensordot(self.bra[n].conj(), temp, axes=axes)
 
 
-def Env3(bra=None, op: Optional[Sequence[MpoTerm] | MpsMpo] = None, ket=None, on_aux=False,\
-            project: Optional[Sequence[MpsMpo]] = None):
+def Env3(bra=None, op: Optional[Sequence[MpoTerm] | MpsMpoOBC] = None, ket=None, on_aux=False,\
+            project: Optional[Sequence[MpsMpoOBC]] = None):
         r"""
         Initialize structure for :math:`\langle {\rm bra} | {\rm op} | {\rm ket} \rangle` related operations.
 
@@ -436,8 +436,10 @@ def Env3(bra=None, op: Optional[Sequence[MpoTerm] | MpsMpo] = None, ket=None, on
         ket: mps
             mps for :math:`| {\rm ket} \rangle`.
         """
-        if type(op) == MpsMpo:
+        if type(op) == MpsMpoOBC:
             return Env3_single(bra,op,ket,on_aux,project)
+        elif type(op) == MpoPBC:
+            return Env3_pbc(bra,op,ket,on_aux,project)
         else:
             return Env3_sum(bra,op,ket,on_aux,project)
 
@@ -447,7 +449,7 @@ class Env3_single(_EnvParent):
     The class combines environments of mps+mpo+mps for calculation of expectation values, overlaps, etc.
     """
 
-    def __init__(self, bra=None, op: Optional[MpsMpo] = None, ket=None, on_aux=False, project=None):
+    def __init__(self, bra=None, op: Optional[MpsMpoOBC] = None, ket=None, on_aux=False, project=None):
         r"""
         Initialize structure for :math:`\langle {\rm bra} | {\rm op} | {\rm ket} \rangle` related operations.
 
@@ -733,7 +735,7 @@ def _clear_site_(F, *args):
         F.pop((n, n + 1), None)
 
 
-def f_heff1_noproject(A: Tensor, n: int, nr_phys: int, on_aux:bool, F:Dict[tuple(int),Tensor], op: MpsMpo):
+def f_heff1_noproject(A: Tensor, n: int, nr_phys: int, on_aux:bool, F:Dict[tuple(int),Tensor], op: MpsMpoOBC):
     r"""
     Action of Heff on a single site mps tensor.
 
@@ -782,7 +784,7 @@ def f_heff1_noproject(A: Tensor, n: int, nr_phys: int, on_aux:bool, F:Dict[tuple
     return A
 
 
-def f_heff2_noproject(AA: Tensor, bd: Sequence[int], nr_phys: int, on_aux:bool, F:Dict[tuple(int),Tensor], op: MpsMpo):
+def f_heff2_noproject(AA: Tensor, bd: Sequence[int], nr_phys: int, on_aux:bool, F:Dict[tuple(int),Tensor], op: MpsMpoOBC):
     r"""
     Action of Heff on central block.
 
@@ -854,7 +856,7 @@ def f_heff2_noproject(AA: Tensor, bd: Sequence[int], nr_phys: int, on_aux:bool, 
     return AA
 
 
-def _update2_(n, F : Dict[tuple(int),Tensor], bra : MpsMpo, ket : MpsMpo, to, nr_phys):
+def _update2_(n, F : Dict[tuple(int),Tensor], bra : MpsMpoOBC, ket : MpsMpoOBC, to, nr_phys):
     """
     Contractions for 2-layer environment update.
     """
@@ -866,7 +868,7 @@ def _update2_(n, F : Dict[tuple(int),Tensor], bra : MpsMpo, ket : MpsMpo, to, nr
         F[(n, n + 1)] = tensor.ncon([bra[n].conj(), F[(n - 1, n)], ket[n]], inds)
 
 
-def _update3_(n, F : Dict[tuple(int),Tensor], bra, op : MpsMpo, ket : MpsMpo, to, nr_phys, on_aux):
+def _update3_(n, F : Dict[tuple(int),Tensor], bra, op : MpsMpoOBC, ket : MpsMpoOBC, to, nr_phys, on_aux):
     r"""
     Contractions for 3-layer environment update.
 
@@ -1095,16 +1097,16 @@ class Env3_pbc(_EnvParent):
     def clear_site_(self, *args):
         return _clear_site_(self.F, *args)
 
-    def update_env_(self, n, to='last'):
-        _update3_pbc_(n, self.F, self.bra, self.op, self.ket, to, self.nr_phys, self.on_aux)
-        if self.projector:
-            self.projector._update_env(n,to)
-
     def measure(self, bd=None):
         if bd is None:
             bd = (-1, 0)
         axes = ((0, 1, 2, 3), (3, 1, 2, 0))
         return self.factor() * self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
+
+    def update_env_(self, n, to='last'):
+        _update3_pbc_(n, self.F, self.bra, self.op, self.ket, to, self.nr_phys, self.on_aux)
+        if self.projector:
+            self.projector._update_env(n,to)
 
 
 def _update3_pbc_(n, F, bra, op, ket, to, nr_phys, on_aux):

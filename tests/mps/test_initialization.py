@@ -10,8 +10,8 @@ except ImportError:
 # pytest modifies cfg to inject different backends and devices during tests
 
 
-def test_MpsMpo_getitem_setitem():
-    """ raise exceptions in MpsMpo, __getitem__, __setitem__"""
+def test_MpsMpoOBC_getitem_setitem():
+    """ raise exceptions in MpsMpoOBC, __getitem__, __setitem__"""
     #
     #  empry Mps and Mpo
     N = 8
@@ -33,21 +33,21 @@ def test_MpsMpo_getitem_setitem():
     #  raising in getitem setitem
     with pytest.raises(yastn.YastnError):
         psi3[5] = T4
-        # MpsMpo: Tensor rank should be 3.
+        # MpsMpoOBC: Tensor rank should be 3.
     with pytest.raises(yastn.YastnError):
         psi4[5] = T3
-        # MpsMpo: Tensor rank should be 4.
+        # MpsMpoOBC: Tensor rank should be 4.
     with pytest.raises(yastn.YastnError):
         psi4[5.] = T4
-        # MpsMpo: n should be an integer in 0, 1, ..., N-1.
+        # MpsMpoOBC: n should be an integer in 0, 1, ..., N-1.
     with pytest.raises(yastn.YastnError):
         psi3[9] = T3
-        # MpsMpo: n should be an integer in 0, 1, ..., N-1.
+        # MpsMpoOBC: n should be an integer in 0, 1, ..., N-1.
     with pytest.raises(yastn.YastnError):
         psi3[(4, 5)]
-        #  MpsMpo does not have site with index (4, 5)
+        #  MpsMpoOBC does not have site with index (4, 5)
     #
-    #  raising in MpsMpo
+    #  raising in MpsMpoOBC
     with pytest.raises(yastn.YastnError):
         mps.Mps(N=0)
         # Number of Mps sites N should be a positive integer.
@@ -55,7 +55,7 @@ def test_MpsMpo_getitem_setitem():
         mps.Mps(N=3.)
         # Number of Mps sites N should be a positive integer.
     with pytest.raises(yastn.YastnError):
-        mps.MpsMpo(N=5, nr_phys=3)
+        mps.MpsMpoOBC(N=5, nr_phys=3)
         # Number of physical legs, nr_phys, should be 1 or 2.
     #
     #  raising in sweep
@@ -271,7 +271,7 @@ def test_mixed_dims_mpo_and_transpose():
 
 
 
-def test_MpsMpo_properties(config=cfg):
+def test_MpsMpoOBC_properties(config=cfg):
     """ Test reading MPS/MPO properties """
     opts_config = {} if config is None else \
                 {'backend': config.backend, 'default_device': config.default_device}
@@ -312,7 +312,7 @@ def test_MpsMpo_properties(config=cfg):
     assert all(leg == (ops.space(), ops.space().conj()) for leg in legs)
 
 
-def test_MpsMpo_copy(config=cfg):
+def test_MpsMpoOBC_copy(config=cfg):
     """ Initialize random mps of full tensors and checks copying. """
     opts_config = {} if config is None else \
                 {'backend': config.backend, 'default_device': config.default_device}
@@ -343,10 +343,10 @@ def test_MpsMpo_copy(config=cfg):
 
 
 if __name__ == "__main__":
-    test_MpsMpo_getitem_setitem()
+    test_MpsMpoOBC_getitem_setitem()
     test_product_mps()
     test_product_mpo()
     test_generate_random_mps()
     test_mixed_dims_mpo_and_transpose()
-    test_MpsMpo_properties()
-    test_MpsMpo_copy()
+    test_MpsMpoOBC_properties()
+    test_MpsMpoOBC_copy()
