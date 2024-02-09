@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import NamedTuple
 import logging
 from ._env import Env2, Env3
-from ._mps_obc import MpsMpoOBC
+from ._mps_obc import MpsMpoOBC, MpoPBC
 from ... import initialize, tensor, YastnError
 
 logger = logging.Logger('compression')
@@ -229,90 +229,6 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
     return max_disc_weight
 
 
-#
-# zipper for PBC mpo -- to eb dispached later
-#
-# def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpoOBC:
-#     """
-#     Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
-
-#     Perform canonization of `b` to the last site.
-#     Next, sweep back attaching elements of `a` one at a time
-#     and truncating the resulting bond dimensions along the way.
-#     The resulting state is canonized to the first site and normalized to unity.
-
-#     Parameters
-#     ----------
-#     a, b: yastn.tn.mps.MpsMpoOBC
-
-#     opts_svd: dict
-#         truncation parameters for :meth:`yastn.linalg.truncation_mask`.
-
-#     normalize: bool
-#         Whether to keep track of the norm of the initial state projected on
-#         the direction of the truncated state; default is True, i.e. sets the norm to unity.
-#         The individual tensors at the end of the procedure are in a proper canonical form.
-
-#     return_discarded: bool
-#         Whether to return the approximation discarded weights together with the resulting MPS/MPO.
-#         Default is False, i.e., returns only MPS/MPO.
-#         Discarded weight approximates norm of truncated elements normalized by the norm of the untruncated state.
-#     """
-#     if a.N != b.N:
-#         raise YastnError('MpsMpoOBC-s to multiply must have equal number of sites.')
-
-#     psi = b.shallow_copy()
-#     psi.canonize_(to='last', normalize=normalize)
-#     if not normalize:
-#         psi.factor = psi.factor * a.factor
-
-#     lmpo, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
-
-#     tmp = initialize.eye(psi.config, legs=lmpo, isdiag=False)
-#     tmp = tmp.add_leg(axis=0, s=-lpsi.s, t=lpsi.t[0])
-#     tmp = tmp.add_leg(axis=3, s=lpsi.s, t=lpsi.t[0])
-
-#     discarded2_total = 0.
-#     for n in psi.sweep(to='first'):
-#         tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
-
-#         if psi.nr_phys == 1:
-#             tmp = tmp.fuse_legs(axes=((0, 2), 1, 3, 4))
-#         else:  # psi.nr_phys == 2:
-#             tmp = tmp.swap_gate(axes=(2, 3))
-#             tmp = tmp.fuse_legs(axes=((0, 3), 1, 4, (5, 2)))
-#         tmp = a[n]._attach_23(tmp)
-
-#         if n > psi.first:
-#             U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1, nU=False)
-#             nSold = S.norm()
-
-#             mask = tensor.truncation_mask(S, **opts_svd)
-#             nSout = tensor.bitwise_not(mask).apply_mask(S, axes=0).norm()
-#             discarded2_local = (nSout / nSold) ** 2
-#             discarded2_total = discarded2_total + discarded2_local - discarded2_total * discarded2_local
-
-#             U, S, V = mask.apply_mask(U, S, V, axes=(2, 0, 0))
-#             nS = S.norm()
-
-#             psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
-#             tmp = U @ (S / nS)
-#             tmp = tmp.unfuse_legs(axes=0)
-#             psi.factor = psi.factor * nS
-#         else:  # n == first
-#             tmp = tmp.unfuse_legs(axes=0)
-#             tmp = tmp.trace(axes=(1, 2))
-#             ntmp = tmp.norm()
-#             psi.factor = 1 if normalize else psi.factor * ntmp
-#             tmp = (tmp / ntmp).transpose(axes=(0, 2, 1))
-#             psi[n] = tmp if psi.nr_phys == 1 else tmp.unfuse_legs(axes=2)
-
-#     if return_discarded:
-#         return psi, psi.config.backend.sqrt(discarded2_total)
-#     return psi
-
-
-
 def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpoOBC:
     """
     Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
@@ -349,6 +265,9 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
 
     la, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
+    if isinstance(a, MpoPBC):
+        return _zipper_MpoPBC(a, psi, opts_svd, normalize, return_discarded)
+
     tmp = initialize.ones(b.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
     tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axes=2)
 
@@ -379,6 +298,57 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
     ntmp = tmp.norm()
     psi[psi.first] = (tmp / ntmp) @ psi[psi.first]
     psi.factor = 1 if normalize else psi.factor * ntmp
+    if return_discarded:
+        return psi, psi.config.backend.sqrt(discarded2_total)
+    return psi
+
+
+def _zipper_MpoPBC(a, psi, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpo:
+    """
+    Special case of periodic Mpo
+    """
+
+    lmpo, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
+
+    tmp = initialize.eye(psi.config, legs=lmpo, isdiag=False)
+    tmp = tmp.add_leg(axis=0, s=-lpsi.s, t=lpsi.t[0])
+    tmp = tmp.add_leg(axis=3, s=lpsi.s, t=lpsi.t[0])
+
+    discarded2_total = 0.
+    for n in psi.sweep(to='first'):
+        tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
+
+        if psi.nr_phys == 1:
+            tmp = tmp.fuse_legs(axes=((0, 2), 1, 3, 4))
+        else:  # psi.nr_phys == 2:
+            tmp = tmp.swap_gate(axes=(2, 3))
+            tmp = tmp.fuse_legs(axes=((0, 3), 1, 4, (5, 2)))
+        tmp = a[n]._attach_23(tmp)
+
+        if n > psi.first:
+            U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1, nU=False)
+            nSold = S.norm()
+
+            mask = tensor.truncation_mask(S, **opts_svd)
+            nSout = tensor.bitwise_not(mask).apply_mask(S, axes=0).norm()
+            discarded2_local = (nSout / nSold) ** 2
+            discarded2_total = discarded2_total + discarded2_local - discarded2_total * discarded2_local
+
+            U, S, V = mask.apply_mask(U, S, V, axes=(2, 0, 0))
+            nS = S.norm()
+
+            psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
+            tmp = U @ (S / nS)
+            tmp = tmp.unfuse_legs(axes=0)
+            psi.factor = psi.factor * nS
+        else:  # n == first
+            tmp = tmp.unfuse_legs(axes=0)
+            tmp = tmp.trace(axes=(1, 2))
+            ntmp = tmp.norm()
+            psi.factor = 1 if normalize else psi.factor * ntmp
+            tmp = (tmp / ntmp).transpose(axes=(0, 2, 1))
+            psi[n] = tmp if psi.nr_phys == 1 else tmp.unfuse_legs(axes=2)
+
     if return_discarded:
         return psi, psi.config.backend.sqrt(discarded2_total)
     return psi
