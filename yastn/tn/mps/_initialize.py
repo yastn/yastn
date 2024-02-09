@@ -1,10 +1,13 @@
 from __future__ import annotations
 import numpy as np
-from ... import rand, Leg, random_leg,  initialize, YastnError
-from ._mps import Mpo, Mps, MpsMpo
+from ... import rand, Leg, random_leg, YastnError
+from ... import load_from_dict as load_from_dict_tensor
+from ... import load_from_hdf5 as load_from_hdf5_tensor
+from ._mps_obc import Mpo, Mps, MpsMpoOBC
 from ...operators import Qdit
 
-def product_mps(vectors, N=None) -> yastn.tn.mps.MpsMpo:
+
+def product_mps(vectors, N=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Generate an MPS with bond-dimension one from a list of vectors which get assigned to consecutive MPS sites.
 
@@ -20,10 +23,10 @@ def product_mps(vectors, N=None) -> yastn.tn.mps.MpsMpo:
     N: Optional[int]
         number of MPS sites. By default, it is equal to the number of provided `vectors`.
     """
-    return _product_mpsmpo(vectors, N=N, nr_phys=1)
+    return _product_MpsMpoOBC(vectors, N=N, nr_phys=1)
 
 
-def product_mpo(operators, N=None) -> yastn.tn.mps.MpsMpo:
+def product_mpo(operators, N=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Generate an MPO with bond-dimension one from a list of operators which get assigned to consecutive MPO sites.
 
@@ -58,10 +61,10 @@ def product_mpo(operators, N=None) -> yastn.tn.mps.MpsMpo:
         # of dimension 2, consistent with predefined spin-1/2 operators.
         # The MPO I uniquely identifies those local Hilbert spaces.
     """
-    return _product_mpsmpo(operators, N=N, nr_phys=2)
+    return _product_MpsMpoOBC(operators, N=N, nr_phys=2)
 
 
-def _product_mpsmpo(vectors, N=None, nr_phys=1) -> yastn.tn.mps.MpsMpo:
+def _product_MpsMpoOBC(vectors, N=None, nr_phys=1) -> yastn.tn.mps.MpsMpoOBC:
     """ handles product mpo and mps"""
     try:  # handle inputing single bare Tensor
         vectors = list(vectors)
@@ -71,7 +74,7 @@ def _product_mpsmpo(vectors, N=None, nr_phys=1) -> yastn.tn.mps.MpsMpo:
     if N is None:
         N = len(vectors)
 
-    psi = MpsMpo(N=N, nr_phys=nr_phys)
+    psi = MpsMpoOBC(N=N, nr_phys=nr_phys)
 
     if nr_phys == 1 and any(vec.ndim != 1 for vec in vectors):
         raise YastnError("Vector should have ndim = 1.")
@@ -90,7 +93,7 @@ def _product_mpsmpo(vectors, N=None, nr_phys=1) -> yastn.tn.mps.MpsMpo:
     return psi
 
 
-def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
+def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Generate a random MPS of total charge ``n`` and bond dimension ``D_total``.
 
@@ -100,7 +103,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
 
     Parameters
     ----------
-    I: yastn.tn.mps.MpsMpo
+    I: yastn.tn.mps.MpsMpoOBC
         MPS or MPO that defines local Hilbert spaces.
     n: int
         Total charge of MPS.
@@ -156,7 +159,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
     raise YastnError("MPS: Random mps is a zero state. Check parameters, or try running again in this is due to randomness of the initialization. ")
 
 
-def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
+def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Generate a random MPO with bond dimension ``D_total``.
 
@@ -166,7 +169,7 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
 
     Parameters
     ----------
-    I: yastn.tn.mps.MpsMpo
+    I: yastn.tn.mps.MpsMpoOBC
         MPS or MPO that defines local spaces.
     D_total: int
         Largest bond dimension. Due to the random and local nature of the procedure,
@@ -197,13 +200,13 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpo:
     raise YastnError("Random mpo is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
 
 
-def random_dense_mps(N, D, d, **kwargs) -> yastn.tn.mps.MpsMpo:
+def random_dense_mps(N, D, d, **kwargs) -> yastn.tn.mps.MpsMpoOBC:
     r"""Generate random MPS with physical dimension d and virtual dimension D."""
     I = product_mpo(Qdit(d=d, **kwargs).I(), N)
     return random_mps(I, D_total=D)
 
 
-def random_dense_mpo(N, D, d, **kwargs) -> yastn.tn.mps.MpsMpo:
+def random_dense_mpo(N, D, d, **kwargs) -> yastn.tn.mps.MpsMpoOBC:
     r"""Generate random MPO with physical dimension d and virtual dimension D."""
     I = product_mpo(Qdit(d=d, **kwargs).I(), N)
     return random_mpo(I, D_total=D)
@@ -224,11 +227,11 @@ def load_from_dict(config, in_dict) -> yastn.tn.mps.MpsMpo:
     """
     nr_phys = in_dict['nr_phys']
     N = in_dict['N'] if 'N' in in_dict else len(in_dict['A'])  # backwards compability
-    out_mps = MpsMpo(N, nr_phys=nr_phys)
+    out_mps = MpsMpoOBC(N, nr_phys=nr_phys)
     if 'factor' in in_dict:  # backwards compability
         out_mps.factor = in_dict['factor']
     for n in range(out_mps.N):
-        out_mps.A[n] = initialize.load_from_dict(config=config, d=in_dict['A'][n])
+        out_mps.A[n] = load_from_dict_tensor(config=config, d=in_dict['A'][n])
     return out_mps
 
 
@@ -251,11 +254,11 @@ def load_from_hdf5(config, file, my_address) -> yastn.tn.mps.MpsMpo:
     nr_phys = int(file[my_address].get('nr_phys')[()])
     N = file[my_address].get('N')
     N = len(file[my_address+'/A'].keys()) if N is None else int(N[()])
-    out_Mps = MpsMpo(N, nr_phys=nr_phys)
+    out_Mps = MpsMpoOBC(N, nr_phys=nr_phys)
 
     factor = file[my_address].get('factor')
     if factor:
         out_Mps.factor = factor[()]
     for n in range(out_Mps.N):
-        out_Mps.A[n] = initialize.load_from_hdf5(config, file, my_address+'/A/'+str(n))
+        out_Mps.A[n] = load_from_hdf5_tensor(config, file, my_address+'/A/'+str(n))
     return out_Mps

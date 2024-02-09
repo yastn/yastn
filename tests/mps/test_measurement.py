@@ -263,10 +263,10 @@ def test_measurment_raise(config=cfg):
 
     with pytest.raises(yastn.YastnError):
         mps.vdot(psi7, psi8)
-        # MpsMpo for bra and ket should have the same number of sites.
+        # MpsMpoOBC for bra and ket should have the same number of sites.
     with pytest.raises(yastn.YastnError):
         mps.vdot(psi7, H7)
-        # MpsMpo for bra and ket should have the same number of physical legs.
+        # MpsMpoOBC for bra and ket should have the same number of physical legs.
 
 
 # def correlation_matrix(psi, ops):

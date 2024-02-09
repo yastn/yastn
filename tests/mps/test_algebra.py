@@ -202,7 +202,7 @@ def test_add_multiply_raise(config=cfg):
         # Number of Mps-s to add must be equal to the number of coefficients in amplitudes.
     with pytest.raises(yastn.YastnError):
         mps.add(psi7, psi8)
-        # All MpsMpo to add must have equal number of sites.
+        # All MpsMpoOBC to add must have equal number of sites.
     with pytest.raises(yastn.YastnError):
         mps.add(H8, psi8)
         #  All states to add should be either Mps or Mpo.
@@ -210,14 +210,14 @@ def test_add_multiply_raise(config=cfg):
     H8c.orthogonalize_site_(4, to='last')
     with pytest.raises(yastn.YastnError):
         mps.add(H8c, H8c)
-        #  Absorb central block of MpsMpo-s before calling add.
+        #  Absorb central block of MpsMpoOBC-s before calling add.
 
     with pytest.raises(yastn.YastnError):
         H8 @ psi7
-        #  MpsMpo-s to multiply must have equal number of sites.
+        #  MpsMpoOBC-s to multiply must have equal number of sites.
     with pytest.raises(yastn.YastnError):
         H8c @ psi8
-        # Absorb central blocks of MpsMpo-s before calling multiply.
+        # Absorb central blocks of MpsMpoOBC-s before calling multiply.
     with pytest.raises(yastn.YastnError):
         psi8 @ H8
         # Multiplication by MPS from left is not supported.

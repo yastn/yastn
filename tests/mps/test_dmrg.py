@@ -205,11 +205,6 @@ def dmrg_XX_model_U1(config=None, tol=1e-6):
     generate = mps.Generator(N=7, operators=ops)
     generate.random_seed(seed=0)
 
-    Eng_sectors = {
-        2: [-2.861972627395, -2.213125929752, -1.779580427103],
-        3: [-3.427339492125, -2.661972627395, -2.013125929752],
-        4: [-3.227339492125, -2.461972627395, -1.813125929752]}
-
     N = 7
     H_str = "\sum_{i,j \in rNN} t ( cp_{i} c_{j} + cp_{j} c_{i} )"
     H_str += " + \sum_{j\in rN} mu cp_{j} c_{j}"
@@ -228,6 +223,96 @@ def dmrg_XX_model_U1(config=None, tol=1e-6):
     Dmax = 8
     opts_svd = {'tol': 1e-8, 'D_total': Dmax}
 
+    for occ_sector, E_target in Eng_sectors.items():
+        psi = generate.random_mps(D_total=Dmax, n=occ_sector)
+        occ_target = [occ_sector] * len(E_target)
+        psi = run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
+
+
+@pytest.mark.parametrize("kwargs", [{'config': cfg}])
+def test_dmrg_sum_of_mpos(kwargs):
+    dmrg_XX_model_Z2_sum_of_Mpos(**kwargs, tol=1e-6)
+    dmrg_XX_model_U1_sum_of_Mpos(**kwargs, tol=1e-6)
+
+
+def dmrg_XX_model_Z2_sum_of_Mpos(config=None, tol=1e-6):
+    """
+    Initialize random MPS of Z2 tensors and tests mps.dmrg_ vs known results.
+    """
+    opts_config = {} if config is None else \
+            {'backend': config.backend,
+            'default_device': config.default_device}
+    # pytest uses config to inject various backends and devices for testing
+    ops = yastn.operators.SpinlessFermions(sym='Z2', **opts_config)
+    generate = mps.Generator(N=7, operators=ops)
+    generate.random_seed(seed=0)
+    N, Dmax  = 7, 8
+    opts_svd = {'tol': 1e-8, 'D_total': Dmax}
+
+    Eng_occ_target = {
+        0: ([-3.227339492125, -2.861972627395, -2.461972627395],
+            [4, 2, 4]),
+        1: ([-3.427339492125, -2.661972627395, -2.261972627395],
+            [3, 3, 5])}
+    H_str_nn= "\sum_{i,j \in rNN} t ( cp_{i} c_{j} + cp_{j} c_{i} )"
+    H_str_n= "\sum_{j\in rN} mu cp_{j} c_{j}"
+    parameters = {"t": 1.0, "mu": 0.2,
+                  "rN": range(N),
+                  "rNN": [(i, i+1) for i in range(N - 1)]}
+    H_n = [mps.MpoTerm(1., generate.mpo_from_latex(H_str_n, parameters))]
+    Hs_nn = [mps.MpoTerm(1., generate.mpo_from_latex(H_str_nn, {"t": 1.0, "rNN": [(i, i+1)]})) for i in range(N - 1)]
+    O_occ = generate.mpo_from_latex("\sum_{j\in rN} cp_{j} c_{j}",
+                                  parameters)
+
+    H= Hs_nn + H_n
+    for parity, (E_target, occ_target) in Eng_occ_target.items():
+        psi = generate.random_mps(D_total=Dmax, n=parity)
+        # run_dmrg starts with 2-site method to update bond dimension
+        # for small tests with random distribution of bond dimensions.
+        psi = run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
+
+
+def dmrg_XX_model_U1_sum_of_Mpos(config=None, tol=1e-6):
+    """
+    Initialize random MPS of U(1) tensors and tests _dmrg vs known results.
+    """
+    opts_config = {} if config is None else \
+        {'backend': config.backend,
+        'default_device': config.default_device}
+    # pytest uses config to inject various backends and devices for testing
+    ops = yastn.operators.SpinlessFermions(sym='U1', **opts_config)
+    generate = mps.Generator(N=7, operators=ops)
+    generate.random_seed(seed=0)
+
+    N = 7
+    H_str_nn = "\sum_{i,j \in rNN} t ( cp_{i} c_{j} + cp_{j} c_{i} )"
+    H_str_n  = "\sum_{j\in rN} mu cp_{j} c_{j}"
+    t, mu= 1.0, 0.2
+    parameters = {"t": 1.0, "mu": 1.0,
+                  "rN": range(N),
+                  "rNN": [(i, i+1) for i in range(N - 1)]}
+    H_nn = generate.mpo_from_latex(H_str_nn, parameters)
+    H_n = generate.mpo_from_latex(H_str_n, parameters)
+
+    # H_str = "\sum_{i,j \in rNN} t ( cp_{i} c_{j} + cp_{j} c_{i} )"
+    # H_str += " + \sum_{j\in rN} mu cp_{j} c_{j}"
+    # parameters = {"t": 1.0, "mu": 0.2,
+    #               "rN": range(N),
+    #               "rNN": [(i, i+1) for i in range(N - 1)]}
+    # H = generate.mpo_from_latex(H_str, parameters)
+
+    O_occ = generate.mpo_from_latex("\sum_{j\in rN} cp_{j} c_{j}",
+                                  parameters)
+
+    Eng_sectors = {
+        2: [-2.861972627395, -2.213125929752, -1.779580427103],
+        3: [-3.427339492125, -2.661972627395, -2.013125929752],
+        4: [-3.227339492125, -2.461972627395, -1.813125929752]}
+
+    Dmax = 8
+    opts_svd = {'tol': 1e-8, 'D_total': Dmax}
+
+    H= [mps.MpoTerm(t,H_nn), mps.MpoTerm(mu,H_n)]
     for occ_sector, E_target in Eng_sectors.items():
         psi = generate.random_mps(D_total=Dmax, n=occ_sector)
         occ_target = [occ_sector] * len(E_target)

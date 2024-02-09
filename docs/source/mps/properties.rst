@@ -7,7 +7,7 @@ Geometry
 The number of sites of MPS/MPO :code:`psi` can be read as :code:`psi.N` or :code:`len(psi)`.
 Iterating though sites is supported by
 
-.. automethod:: yastn.tn.mps.MpsMpo.sweep
+.. automethod:: yastn.tn.mps.MpsMpoOBC.sweep
 
 Symmetry
 --------
@@ -66,7 +66,7 @@ Typically, the effective control parameter is the maximal total dimension
 :math:`D_{j,j+1}=\sum_t D^t_{j,j+1}`, appearing in some methods as a parameter :code:`D_total`.
 A number of functions allow extracting this information directly from MPS/MPO:
 
-.. automethod:: yastn.tn.mps.MpsMpo.get_bond_dimensions
-.. automethod:: yastn.tn.mps.MpsMpo.get_bond_charges_dimensions
-.. automethod:: yastn.tn.mps.MpsMpo.get_virtual_legs
-.. automethod:: yastn.tn.mps.MpsMpo.get_physical_legs
+.. automethod:: yastn.tn.mps.MpsMpoOBC.get_bond_dimensions
+.. automethod:: yastn.tn.mps.MpsMpoOBC.get_bond_charges_dimensions
+.. automethod:: yastn.tn.mps.MpsMpoOBC.get_virtual_legs
+.. automethod:: yastn.tn.mps.MpsMpoOBC.get_physical_legs

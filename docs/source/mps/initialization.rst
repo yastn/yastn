@@ -4,9 +4,9 @@ Creating MPS and MPO
 Initializing empty MPS/MPO
 --------------------------
 
-MPS and MPO are instances of class :class:`yastn.tn.mps.MpsMpo`.
+MPS and MPO are instances of class :class:`yastn.tn.mps.MpsMpoOBC`.
 
-.. autoclass:: yastn.tn.mps.MpsMpo
+.. autoclass:: yastn.tn.mps.MpsMpoOBC
 
 One can directly create a new empty MPS of `N` sites using :code:`yastn.tn.mps.Mps(N)`.
 Similarly, :code:`yastn.tn.mps.Mpo(N)` initializes MPO.
@@ -109,21 +109,21 @@ To create an independent copy or clone of MPS/MPO :code:`psi` call :code:`psi.co
 or :code:`psi.clone()`, respectively.
 It is also possible to make a shallow copy with :code:`psi.shallow_copy()`, where explicit copies of data tensors are not created.
 
-.. automethod:: yastn.tn.mps.MpsMpo.shallow_copy
-.. automethod:: yastn.tn.mps.MpsMpo.copy
-.. automethod:: yastn.tn.mps.MpsMpo.clone
+.. automethod:: yastn.tn.mps.MpsMpoOBC.shallow_copy
+.. automethod:: yastn.tn.mps.MpsMpoOBC.copy
+.. automethod:: yastn.tn.mps.MpsMpoOBC.clone
 
 
 Import and export MPS/MPO from/to different formats
 ---------------------------------------------------
 
 MPS/MPO can be saved as Python `dict` or `HDF5` file.
-The MPS/MPO previously serialized by :meth:`yastn.tn.mps.MpsMpo.save_to_dict`
-or :meth:`yastn.tn.mps.MpsMpo.save_to_hdf5` can be again deserialized into MPS/MPO.
+The MPS/MPO previously serialized by :meth:`yastn.tn.mps.MpsMpoOBC.save_to_dict`
+or :meth:`yastn.tn.mps.MpsMpoOBC.save_to_hdf5` can be again deserialized into MPS/MPO.
 
 Examples of exporting and loading MPS/MPO can be found in :ref:`examples/mps/build:save and load mps/mpo`.
 
-.. automethod:: yastn.tn.mps.MpsMpo.save_to_dict
-.. automethod:: yastn.tn.mps.MpsMpo.save_to_hdf5
+.. automethod:: yastn.tn.mps.MpsMpoOBC.save_to_dict
+.. automethod:: yastn.tn.mps.MpsMpoOBC.save_to_hdf5
 .. automethod:: yastn.tn.mps.load_from_dict
 .. automethod:: yastn.tn.mps.load_from_hdf5

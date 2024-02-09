@@ -11,10 +11,9 @@ i.e.,:code:`B = a * A`, :code:`B = A * a` or :code:`B = A / a`.
 Conjugation and transpose
 -------------------------
 
-.. automethod:: yastn.tn.mps.MpsMpo.conj
-.. automethod:: yastn.tn.mps.MpsMpo.transpose
-.. autoproperty:: yastn.tn.mps.MpsMpo.T
-.. automethod:: yastn.tn.mps.MpsMpo.reverse_sites
+.. automethod:: yastn.tn.mps.MpsMpoOBC.conj
+.. automethod:: yastn.tn.mps.MpsMpoOBC.transpose
+.. autoproperty:: yastn.tn.mps.MpsMpoOBC.T
 
 
 Addition of MPS/MPO
