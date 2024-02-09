@@ -6,7 +6,7 @@ from typing import Sequence, Dict, Optional, NamedTuple
 from ...tensor import Tensor
 from . import MpsMpo
 import abc
-from math import prod
+
 
 def vdot(*args) -> number:
     r"""
@@ -154,13 +154,13 @@ class MpoTerm(NamedTuple):
         H = \sum_i amp_i Mpo_i
 
     """
-    amp: number = 1.0
+    amp: float = 1.0
     mpo: MpsMpo = None
 
 
 class MpsProjector():
-    # holds ref to a set of n states and owns a set of n mps-mps environments 
-    # for projections 
+    # holds ref to a set of n states and owns a set of n mps-mps environments
+    # for projections
 
     def __init__(self,ket,bra,project:Optional[Sequence[MpsMpo]] = None):
         # environments, indexed by bonds with respect to k-th MPS-based projector
@@ -172,7 +172,7 @@ class MpsProjector():
         self.bra= bra
         self.ort = [] if project is None else project
         self.Fort : Sequence[Dict[tuple(int),Tensor]] = [{} for _ in range(len(self.ort))]
-        
+
         # initialize environments with respect to orthogonal projections
         config = self.ort[0].config
         for ii in range(len(self.ort)):
@@ -213,7 +213,7 @@ class MpsProjector():
             x = tensor.vdot(self._temp['Aort'][ii], A)
             A = A.apxb(self._temp['Aort'][ii], -x)
         return A
-    
+
 
 class _EnvParent(metaclass=abc.ABCMeta):
 
@@ -222,8 +222,8 @@ class _EnvParent(metaclass=abc.ABCMeta):
         Interface for environments of 1D TNs. In particular of type
 
               <bra| B_0--B_1--...(i-1,i)--B_i--(i,i+1)...--B_N-1--B_N
-                    
-        \sum_i c_i*(O_0--O_1--...(i-1,i)--O_i--(i,i+1)...--O_N-1--O_N)_i  
+
+        \sum_i c_i*(O_0--O_1--...(i-1,i)--O_i--(i,i+1)...--O_N-1--O_N)_i
 
                     K_0--K_1--...(i-1,i)--K_i--(i,i+1)...--K_N-1--K_N |ket>
 
@@ -247,7 +247,7 @@ class _EnvParent(metaclass=abc.ABCMeta):
 
     def reset_temp_(self):
         """ Reset temporary objects stored to speed-up some simulations. """
-        self._temp = {'op_2site': {}, 'expmv_ncv': {}}
+        self._temp = {'expmv_ncv': {}}
         if self.projector is not None:
             self.projector._reset_temp()
 
@@ -301,7 +301,7 @@ class _EnvParent(metaclass=abc.ABCMeta):
     def update_Aort_(self,n:int):
         if self.projector is not None:
             self.projector.update_Aort_(n)
-    
+
     def update_AAort_(self,bd:Sequence[int]):
         if self.projector is not None:
             self.projector.update_AAort_(bd)
@@ -333,7 +333,7 @@ class Env2(_EnvParent):
 
         # left boundary
         config = self.bra[0].config
-        self.F : Dict[tuple(int),Tensor] = {}
+        self.F : Dict[tuple[int, int], Tensor] = {}
         legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
         self.F[(-1, 0)] = initialize.ones(config=config, legs=legs)
         # right boundary
@@ -401,7 +401,7 @@ class Env2(_EnvParent):
             self.projector._update_env(n,to)
 
     def update_env_op_(self, n, op, to='first'):
-        """ 
+        """
         Contractions for 2-layer environment update, with on-site operator ``op`` applied on site ``n``.
         """
         if to == 'first':
@@ -422,118 +422,8 @@ class Env2(_EnvParent):
             self.F[(n, n + 1)] = tensor.tensordot(self.bra[n].conj(), temp, axes=axes)
 
 
-class Env2_single(_EnvParent):
-    """
-    The class combines environments of mps+mps for calculation of expectation values, overlaps, etc.
-    """
-
-    def __init__(self, bra=None, ket=None):
-        r"""
-        Initialize structure for :math:`\langle {\rm bra} | {\rm ket} \rangle` related operations.
-
-        Parameters
-        ----------
-        bra: mps
-            mps for :math:`| {\rm bra} \rangle`. If None, it is the same as ket.
-        ket: mps
-            mps for :math:`| {\rm ket} \rangle`.
-        """
-        super().__init__(bra, ket)
-        self.nr_layers=2
-
-        # left boundary
-        config = self.bra[0].config
-        self.F : Dict[tuple(int),Tensor] = {}
-        legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
-        self.F[(-1, 0)] = initialize.ones(config=config, legs=legs)
-        # right boundary
-        legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
-        self.F[(self.N, self.N - 1)] = initialize.ones(config=config, legs=legs)
-
-    def factor(self):
-        return self.bra.factor * self.ket.factor
-
-    def Heff1(self, x, n):
-        r"""
-        Action of Heff on a single site mps tensor.
-
-        Parameters
-        ----------
-        A: tensor
-            site tensor
-
-        n: int
-            index of corresponding site
-
-        Returns
-        -------
-        out: tensor
-            Heff1 * A
-        """
-        inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
-        return tensor.ncon([self.F[(n - 1, n)], x, self.F[(n + 1, n)]], inds)
-
-    def Heff2(self, AA, bd):
-        """ Heff2 @ AA """
-        n1, n2 = bd
-        axes = (0, (1, 2), 3) if AA.ndim == 4 else (0, (1, 2, 3, 5), 4)
-        temp = AA.fuse_legs(axes=axes)
-        temp = self.F[(n1 - 1, n1)] @ temp @ self.F[(n2 + 1, n2)]
-        temp = temp.unfuse_legs(axes=1)
-        if temp.ndim == 6:
-            temp = temp.transpose(axes=(0, 1, 2, 3, 5, 4))
-        return temp
-
-    def measure(self, bd=None):
-        r"""
-        Calculate overlap between environments at bd bond.
-
-        Parameters
-        ----------
-        bd: tuple
-            index of bond at which to calculate overlap.
-
-        Returns
-        -------
-        overlap: float or complex
-        """
-        if bd is None:
-            bd = (-1, 0)
-        axes = ((0, 1), (1, 0))
-        return self.factor() * self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
-
-    def clear_site_(self, *args):
-        return _clear_site_(self.F, *args)
-
-    def update_env_(self, n, to='last'):
-        _update2_(n, self.F, self.bra, self.ket, to, self.nr_phys)
-        # for ii in range(len(self.ort)):
-        _update2_(n, self.Fort, self.bra, self.ort, to, self.nr_phys)
-
-    def update_env_op_(self, n, op, to='first'):
-        """ 
-        Contractions for 2-layer environment update, with on-site operator ``op`` applied on site ``n``.
-        """
-        if to == 'first':
-            temp = tensor.tensordot(self.ket[n], self.F[(n + 1, n)], axes=(2, 0))
-            op = op.add_leg(axis=0, s=1)
-            temp = tensor.tensordot(op, temp, axes=(2, 1))
-            temp = temp.swap_gate(axes=(0, 2))
-            temp = temp.remove_leg(axis=0)
-            axes = ((0, 2), (1, 2)) if self.nr_phys == 1 else ((0, 3, 2), (1, 2, 3))
-            self.F[(n, n - 1)] = tensor.tensordot(temp, self.bra[n].conj(), axes=axes)
-        else:  # to == 'last'
-            op = op.add_leg(axis=0, s=1)
-            temp = tensor.tensordot(op, self.ket[n], axes=((2, 1)))
-            temp = temp.swap_gate(axes=(0, 2))
-            temp = temp.remove_leg(axis=0)
-            temp = tensor.tensordot(self.F[(n - 1, n)], temp, axes=((1, 1)))
-            axes = ((0, 1), (0, 1)) if self.nr_phys == 1 else ((0, 1, 3), (0, 1, 3))
-            self.F[(n, n + 1)] = tensor.tensordot(self.bra[n].conj(), temp, axes=axes)
-
-
-def Env3(bra=None, op: Optional[Sequence[MpoTerm]|MpsMpo] = None, ket=None, on_aux=False,\
-            project:Optional[Sequence[MpsMpo]] = None):
+def Env3(bra=None, op: Optional[Sequence[MpoTerm] | MpsMpo] = None, ket=None, on_aux=False,\
+            project: Optional[Sequence[MpsMpo]] = None):
         r"""
         Initialize structure for :math:`\langle {\rm bra} | {\rm op} | {\rm ket} \rangle` related operations.
 
@@ -541,54 +431,18 @@ def Env3(bra=None, op: Optional[Sequence[MpoTerm]|MpsMpo] = None, ket=None, on_a
         ----------
         bra: mps
             mps for :math:`| {\rm bra} \rangle`. If None, it is the same as ket.
-        op: 
+        op:
             Mpo for operator op.
         ket: mps
             mps for :math:`| {\rm ket} \rangle`.
         """
-        if type(op)==MpsMpo:
+        if type(op) == MpsMpo:
             return Env3_single(bra,op,ket,on_aux,project)
         else:
             return Env3_sum(bra,op,ket,on_aux,project)
 
 
-class _tdvp_update():
-    """
-    Interface for TDVP updates, injected into environments for either single or sum of MPOs
-    """
-    def update_A(self, n, du, opts, normalize=True):
-        """ Updates env.ket[n] by exp(du Heff1). """
-        if n in self._temp['expmv_ncv']:
-            opts['ncv'] = self._temp['expmv_ncv'][n]
-        f = lambda x: self.Heff1(x, n)
-        self.ket[n], info = expmv(f, self.ket[n], du, **opts, normalize=normalize, return_info=True)
-        self._temp['expmv_ncv'][n] = info['ncv']
-
-
-    def update_C(self, du, opts, normalize=True):
-        """ Updates env.ket[bd] by exp(du Heff0). """
-        bd = self.ket.pC
-        if bd[0] != -1 and bd[1] != self.N:  # do not update central block outsite of the chain
-            if bd in self._temp['expmv_ncv']:
-                opts['ncv'] = self._temp['expmv_ncv'][bd]
-            f = lambda x: self.Heff0(x, bd)
-            self.ket.A[bd], info = expmv(f, self.ket[bd], du, **opts, normalize=normalize, return_info=True)
-            self._temp['expmv_ncv'][bd] = info['ncv']
-
-
-    def update_AA(self, bd, du, opts, opts_svd, normalize=True):
-        """ Merge two sites given in bd into AA, updates AA by exp(du Heff2) and unmerge the sites. """
-        ibd = bd[::-1]
-        if ibd in self._temp['expmv_ncv']:
-            opts['ncv'] = self._temp['expmv_ncv'][ibd]
-        AA = self.ket.merge_two_sites(bd)
-        f = lambda v: self.Heff2(v, bd)
-        AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
-        self._temp['expmv_ncv'][ibd] = info['ncv']
-        self.ket.unmerge_two_sites_(AA, bd, opts_svd)
-
-
-class Env3_single(_EnvParent, _tdvp_update):
+class Env3_single(_EnvParent):
     """
     The class combines environments of mps+mpo+mps for calculation of expectation values, overlaps, etc.
     """
@@ -601,7 +455,7 @@ class Env3_single(_EnvParent, _tdvp_update):
         ----------
         bra: mps
             mps for :math:`| {\rm bra} \rangle`. If None, it is the same as ket.
-        op: 
+        op:
             Mpo for operator op.
         ket: mps
             mps for :math:`| {\rm ket} \rangle`.
@@ -612,7 +466,7 @@ class Env3_single(_EnvParent, _tdvp_update):
         self.op = op
         self.nr_layers = 3
         self.on_aux = on_aux
-        
+
         config = self.ket[0].config
         # environment, indexed by bonds with respect to i-th MPO
         self.F : Dict[tuple(int),Tensor] = {}
@@ -624,8 +478,8 @@ class Env3_single(_EnvParent, _tdvp_update):
         self.F[(self.N, self.N - 1)] = initialize.ones(config=config, legs=r_legs)
 
 
-    def factor(self)->number:
-        return self.bra.factor * self.ket.factor
+    def factor(self) -> number:
+        return self.bra.factor * self.op.factor * self.ket.factor
 
 
     def Heff0(self, C, bd):
@@ -645,7 +499,9 @@ class Env3_single(_EnvParent, _tdvp_update):
             Heff0 @ C
         """
         bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
-        return tensor.ncon([self.F[bd], self.op.factor*C, self.F[ibd]], ((-0, 2, 1), (1, 3), (3, 2, -1)))
+        C = self.op.factor * C
+        tmp = self.F[bd].tensordot(C, axes=(2, 0))
+        return tmp.tensordot(self.F[ibd], axes=((1, 2), (1, 0)))
 
 
     def Heff1(self, A, n):
@@ -667,7 +523,7 @@ class Env3_single(_EnvParent, _tdvp_update):
         """
         tmp= self._project_ort(A)
         tmp= f_heff1_noproject(tmp,n,self.nr_phys,self.on_aux,self.F,self.op)
-        return self._project_ort(tmp)
+        return self.op.factor * self._project_ort(tmp)
 
 
     def Heff2(self, AA, bd):
@@ -689,7 +545,7 @@ class Env3_single(_EnvParent, _tdvp_update):
         """
         tmp = self._project_ort(AA)
         tmp = f_heff2_noproject(tmp,bd,self.nr_phys,self.on_aux,self.F,self.op)
-        return self._project_ort(tmp)
+        return self.op.factor * self._project_ort(tmp)
 
 
     def measure(self, bd=None):
@@ -708,7 +564,7 @@ class Env3_single(_EnvParent, _tdvp_update):
         if bd is None:
             bd = (-1, 0)
         axes = ((0, 1, 2), (2, 1, 0))
-        return self.factor()*self.op.factor * self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
+        return self.factor() * self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
 
 
     def clear_site_(self, *args):
@@ -746,7 +602,7 @@ class Env3_single(_EnvParent, _tdvp_update):
         return False
 
 
-class Env3_sum(_EnvParent, _tdvp_update):
+class Env3_sum(_EnvParent):
 
     def __init__(self, bra=None, op: Optional[Sequence[MpoTerm]] = None, ket=None, on_aux=False, project=None):
         r"""
@@ -756,7 +612,7 @@ class Env3_sum(_EnvParent, _tdvp_update):
         ----------
         bra: mps
             mps for :math:`| {\rm bra} \rangle`. If None, it is the same as ket.
-        op: 
+        op:
             sum of mps for operator op.
         ket: mps
             mps for :math:`| {\rm ket} \rangle`.
@@ -767,7 +623,7 @@ class Env3_sum(_EnvParent, _tdvp_update):
         self.op = op
         self.nr_layers = 3
         self.on_aux = on_aux
-        
+
         self.op= op
         self.e3s= [Env3_single(bra,_op.mpo,ket) for _op in op]
 
@@ -895,10 +751,10 @@ def f_heff1_noproject(A: Tensor, n: int, nr_phys: int, on_aux:bool, F:Dict[tuple
     on_aux:
         action on ancilla physical index
 
-    F: 
+    F:
         environments
 
-    op: 
+    op:
         MPO
 
     Returns
@@ -923,7 +779,7 @@ def f_heff1_noproject(A: Tensor, n: int, nr_phys: int, on_aux:bool, F:Dict[tuple
         A = op[n]._attach_01(A)
         A = A.unfuse_legs(axes=0)
         A = tensor.ncon([A, F[(nr, n)]], ((-1, 1, -0, 2, -3), (1, 2, -2)))
-    return op.factor * A
+    return A
 
 
 def f_heff2_noproject(AA: Tensor, bd: Sequence[int], nr_phys: int, on_aux:bool, F:Dict[tuple(int),Tensor], op: MpsMpo):
@@ -944,12 +800,12 @@ def f_heff2_noproject(AA: Tensor, bd: Sequence[int], nr_phys: int, on_aux:bool, 
     on_aux:
         action on ancilla physical index
 
-    F: 
+    F:
         environments
 
-    op: 
+    op:
         MPO
-        
+
     Returns
     -------
     out: tensor
@@ -965,7 +821,7 @@ def f_heff2_noproject(AA: Tensor, bd: Sequence[int], nr_phys: int, on_aux:bool, 
         # 0==A--A--2 0--   -> 0==A--A-----
         #       1       |           1     |
         #            1--F              2--F
-        #               2                 3 
+        #               2                 3
         AA = AA @ F[(nr, n2)]
         AA = op[n2]._attach_23(AA)
         AA = AA.fuse_legs(axes=(0, 1, (3, 2)))
@@ -995,7 +851,7 @@ def f_heff2_noproject(AA: Tensor, bd: Sequence[int], nr_phys: int, on_aux:bool, 
         AA = AA.unfuse_legs(axes=0)
         AA = tensor.ncon([AA, F[(nr, n2)]], ((-1, -2, 1, 2, -0, -4), (1, 2, -3)))
         AA = AA.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3, 4, 5))
-    return op.factor * AA
+    return AA
 
 
 def _update2_(n, F : Dict[tuple(int),Tensor], bra : MpsMpo, ket : MpsMpo, to, nr_phys):
@@ -1047,6 +903,247 @@ def _update3_(n, F : Dict[tuple(int),Tensor], bra, op : MpsMpo, ket : MpsMpo, to
         bA = bra[n].fuse_legs(axes=((0, 1), 2, 3))
         F[(n, n + 1)] = tensor.ncon([bA.conj(), tmp], ((1, -0, 2), (-2, -1, 1, 2)))
     else: # nr_phys == 2 and on_aux and to == 'first':
+        bA = bra[n].fuse_legs(axes=((0, 1), 2, 3))
+        tmp = tensor.ncon([bA.conj(), F[(n + 1, n)]], ((-0, 1, -1), (-3, -2, 1)))
+        tmp = op[n]._attach_23(tmp)
+        tmp = tmp.unfuse_legs(axes=0)
+        F[(n, n - 1)] = tensor.ncon([ket[n], tmp], ((-0, 1, 2, 3), (-2, 1, -1, 2, 3)))
+
+
+class Env3_pbc(_EnvParent):
+    """
+    The class combines environments of mps+(periodic_mpo)+mps for calculation of expectation values, overlaps, etc.
+    """
+
+    def __init__(self, bra=None, op=None, ket=None, on_aux=False, project=None):
+        r"""
+        Initialize structure for :math:`\langle {\rm bra} | {\rm op} | {\rm ket} \rangle` related operations.
+
+        Parameters
+        ----------
+        bra: mps
+            mps for :math:`| {\rm bra} \rangle`. If None, it is the same as ket.
+        op: mps
+            mps for operator op.
+        ket: mps
+            mps for :math:`| {\rm ket} \rangle`.
+        """
+        super().__init__(bra, ket, project)
+        if self.op.N != self.N:
+            raise YastnError('MPO operator and state should have the same number of sites.')
+        self.op = op
+        self.nr_layers = 3
+        self.on_aux = on_aux
+
+        config = self.ket.config
+
+        # left boundary
+        lfb = self.bra.virtual_leg('first')
+        lfo = self.op.virtual_leg('first')
+        lfk = self.ket.virtual_leg('first')
+        tmp_oo = initialize.eye(config, legs=lfo.conj(), isdiag=False)
+        tmp_bk = initialize.eye(config, legs=[lfb, lfk.conj()], isdiag=False)
+        self.F[(-1, 0)] = tensor.ncon([tmp_oo, tmp_bk], ((-1, -2), (-0, -3)))
+
+        # right boundary
+        llk = self.ket.virtual_leg('last')
+        llo = self.op.virtual_leg('last')
+        llb = self.bra.virtual_leg('last')
+        tmp_oo = initialize.eye(config, legs=llo.conj(), isdiag=False)
+        tmp_bk = initialize.eye(config, legs=[llk.conj(), llb], isdiag=False)
+        self.F[(self.N, self.N - 1)] = tensor.ncon([tmp_oo, tmp_bk], ((-1, -2), (-0, -3)))
+
+    def factor(self):
+        return self.bra.factor * self.op.factor * self.ket.factor
+
+    def Heff0(self, C, bd):
+        r"""
+        Action of Heff on central block.
+
+        Parameters
+        ----------
+        C: tensor
+            a central block
+        bd: tuple
+            index of bond on which it acts, e.g. (1, 2) [or (2, 1) -- it is ordered]
+
+        Returns
+        -------
+        out: tensor
+            Heff0 @ C
+        """
+        bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
+        C = self.op.factor * C
+        tmp = self.F[bd].tensordot(C, axes=(3, 0))
+        return tmp.tensordot(self.F[ibd], axes=((3, 1, 2), (0, 1, 2)))
+
+    def Heff1(self, A, n):
+        r"""
+        Action of Heff on a single site mps tensor.
+
+        Parameters
+        ----------
+        A: tensor
+            site tensor
+
+        n: int
+            index of corresponding site
+
+        Returns
+        -------
+        out: tensor
+            Heff1 @ A
+        """
+        nl, nr = n - 1, n + 1
+        tmp = self._project_ort(A)
+        if self.nr_phys == 1:
+            Fr = self.F[(nr, n)].fuse_legs(axes=(0, 1, (2, 3)))
+            tmp = tmp.tensordot(Fr, axes=(2, 0))
+            tmp = self.op[n]._attach_23(tmp)
+            tmp = tmp.unfuse_legs(axes=2)
+            tmp = self.F[(nl, n)].tensordot(tmp, axes=((3, 1, 2), (0, 1, 2)))
+            tmp = tmp.transpose(axes=(0, 2, 1))
+        elif self.nr_phys == 2 and not self.on_aux:
+            tmp = tmp.fuse_legs(axes=((0, 3), 1, 2))
+            Fr = self.F[(nr, n)].fuse_legs(axes=(0, 1, (2, 3)))
+            tmp = tmp.tensordot(Fr, axes=(2, 0))
+            tmp = self.op[n]._attach_23(tmp)
+            tmp = tmp.unfuse_legs(axes=(0, 2))
+            tmp = tmp.swap_gate(axes=(1, 3))
+            tmp = self.F[(nl, n)].tensordot(tmp, axes=((1, 2, 3), (2, 3, 0)))
+            tmp = tmp.transpose(axes=(0, 3, 2, 1))
+        else:  # if self.nr_phys == 2 and self.on_aux:    #todo
+            tmp = tmp.fuse_legs(axes=(0, (1, 2), 3))
+            tmp = tensor.ncon([tmp, self.F[(nl, n)]], ((1, -0, -1), (-3, -2, 1)))
+            tmp = self.op[n]._attach_01(tmp)
+            tmp = tmp.unfuse_legs(axes=0)
+            tmp = tensor.ncon([tmp, self.F[(nr, n)]], ((-1, 1, -0, 2, -3), (1, 2, -2)))
+        return self.op.factor * self._project_ort(tmp)
+
+
+    def Heff2(self, AA, bd):
+        r"""
+        Action of Heff on central block.
+
+        Parameters
+        ----------
+        AA: tensor
+            merged tensor for 2 sites.
+            Physical legs should be fused turning it effectivly into 1-site update.
+        bd: tuple
+            index of bond on which it acts, e.g. (1, 2) [or (2, 1) -- it is ordered]
+
+        Returns
+        -------
+        out: tensor
+            Heff2 * AA
+        """
+        n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
+        bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
+
+        tmp = self._project_ort(AA)
+        if self.nr_phys == 1:
+            Fr = self.F[(nr, n2)].fuse_legs(axes=(0, 1, (2, 3)))
+            tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))
+            tmp = tmp.tensordot(Fr, axes=(2, 0))
+            tmp = self.op[n2]._attach_23(tmp)
+            tmp = tmp.fuse_legs(axes=(0, 1, (2, 3)))
+            tmp = tmp.unfuse_legs(axes=0)
+            tmp = self.op[n1]._attach_23(tmp)
+            tmp = tmp.unfuse_legs(axes=2)
+            tmp = tmp.unfuse_legs(axes=2)
+            tmp = self.F[(nl, n1)].tensordot(tmp, axes=((3, 1, 2), (0, 1, 2)))
+            tmp = tmp.transpose(axes=(0, 3, 2, 1))
+        elif self.nr_phys == 2 and not self.on_aux:
+            Fr = self.F[(nr, n2)].fuse_legs(axes=(0, 1, (2, 3)))
+            tmp = tmp.fuse_legs(axes=(0, 1, (2, 5), 3, 4))
+            tmp = tmp.fuse_legs(axes=((0, 2), 1, 3, 4))
+            tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))
+            tmp = tmp.tensordot(Fr, axes=(2, 0))
+            tmp = self.op[n2]._attach_23(tmp)
+            tmp = tmp.fuse_legs(axes=(0, 1, (2, 3)))
+            tmp = tmp.unfuse_legs(axes=0)
+            tmp = self.op[n1]._attach_23(tmp)
+            tmp = tmp.unfuse_legs(axes=2)
+            tmp = tmp.unfuse_legs(axes=(0, 2))
+            tmp = tmp.swap_gate(axes=(1, 3))
+            tmp = self.F[(nl, n1)].tensordot(tmp, axes=((3, 1, 2), (0, 2, 3)))
+            tmp = tmp.unfuse_legs(axes=1)
+            tmp = tmp.transpose(axes=(0, 5, 1, 4, 3, 2))
+        else:  # if self.nr_phys == 2 and self.on_aux:  todo
+            tmp = tmp.fuse_legs(axes=(0, 2, (1, 3, 4), 5))
+            tmp = tmp.fuse_legs(axes=(0, 1, (2, 3)))
+            tmp = tensor.ncon([tmp, self.F[(nl, n1)]], ((1, -1, -0), (-3, -2, 1)))
+            tmp = self.op[n1]._attach_01(tmp)
+            tmp = tmp.fuse_legs(axes=(0, 1, (2, 3)))
+            tmp = tmp.unfuse_legs(axes=0)
+            tmp = self.op[n2]._attach_01(tmp)
+            tmp = tmp.unfuse_legs(axes=0)
+            tmp = tensor.ncon([tmp, self.F[(nr, n2)]], ((-1, -2, 1, 2, -0, -4), (1, 2, -3)))
+            tmp = tmp.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3, 4, 5))
+        return self.op.factor * self._project_ort(tmp)
+
+    def hole(self, n):
+        """ Hole for peps tensor at site n. """
+        nl, nr = n - 1, n + 1
+        if self.nr_phys == 1:
+            tmp = self.F[(nl, n)].tensordot(self.ket[n], axes=(3, 0))
+            tmp = tmp.tensordot(self.F[(nr, n)], axes=((2, 4), (2, 0)))
+            tmp = tmp.tensordot(self.bra[n].conj(), axes=((0, 4), (0, 2)))
+            return tmp.transpose(axes=(0, 3, 2, 1))
+
+    def clear_site_(self, *args):
+        return _clear_site_(self.F, *args)
+
+    def update_env_(self, n, to='last'):
+        _update3_pbc_(n, self.F, self.bra, self.op, self.ket, to, self.nr_phys, self.on_aux)
+        if self.projector:
+            self.projector._update_env(n,to)
+
+    def measure(self, bd=None):
+        if bd is None:
+            bd = (-1, 0)
+        axes = ((0, 1, 2, 3), (3, 1, 2, 0))
+        return self.factor() * self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
+
+
+def _update3_pbc_(n, F, bra, op, ket, to, nr_phys, on_aux):
+    if nr_phys == 1 and to == 'last':
+        bran = bra[n].transpose(axes=(2, 1, 0)).conj()
+        tmp = F[(n - 1, n)].fuse_legs(axes=(0, 1, (2, 3)))
+        tmp = bran.tensordot(tmp, axes=(2, 0))
+        tmp = op[n]._attach_01(tmp)
+        tmp = tmp.unfuse_legs(axes=2)
+        F[(n, n + 1)] = tmp.tensordot(ket[n], axes=((3, 4), (0, 1)))
+    elif nr_phys == 1 and to == 'first':
+        tmp = F[(n + 1, n)].fuse_legs(axes=(0, 1, (2, 3)))
+        tmp = ket[n].tensordot(tmp, axes=(2, 0))
+        tmp = op[n]._attach_23(tmp)
+        tmp = tmp.unfuse_legs(axes=2)
+        F[(n, n - 1)] = tmp.tensordot(bra[n].conj(), axes=((3, 4), (2, 1)))
+    elif nr_phys == 2 and not on_aux and to == 'last':
+        bran = bra[n].fuse_legs(axes=((2, 3), 1, 0)).conj()
+        tmp = F[(n - 1, n)].fuse_legs(axes=(0, 1, (2, 3)))
+        tmp = bran.tensordot(tmp, axes=(2, 0))
+        tmp = op[n]._attach_01(tmp)
+        tmp = tmp.unfuse_legs(axes=(0, 2))
+        tmp = tmp.swap_gate(axes=(1, 3))
+        F[(n, n + 1)] = tmp.tensordot(ket[n], axes=((4, 5, 1), (0, 1, 3)))
+    elif nr_phys == 2 and not on_aux and to == 'first':
+        ketn = ket[n].fuse_legs(axes=((0, 3), 1, 2))
+        tmp = F[(n + 1, n)].fuse_legs(axes=(0, 1, (2, 3)))
+        tmp = ketn.tensordot(tmp, axes=(2, 0))
+        tmp = op[n]._attach_23(tmp)
+        tmp = tmp.unfuse_legs(axes=(0, 2))
+        tmp = tmp.swap_gate(axes=(1, 3))
+        F[(n, n - 1)] = tmp.tensordot(bra[n].conj(), axes=((1, 4, 5), (3, 2, 1)))
+    elif nr_phys == 2 and on_aux and to == 'last':  # todo
+        tmp = tensor.ncon([ket[n], F[(n - 1, n)]], ((1, -4, -0, -1), (-3, -2, 1)))
+        tmp = tmp.fuse_legs(axes=(0, 1, 2, (3, 4)))
+        tmp = op[n]._attach_01(tmp)
+        bA = bra[n].fuse_legs(axes=((0, 1), 2, 3))
+        F[(n, n + 1)] = tensor.ncon([bA.conj(), tmp], ((1, -0, 2), (-2, -1, 1, 2)))
+    else: # nr_phys == 2 and on_aux and to == 'first':  # todo
         bA = bra[n].fuse_legs(axes=((0, 1), 2, 3))
         tmp = tensor.ncon([bA.conj(), F[(n + 1, n)]], ((-0, 1, -1), (-3, -2, 1)))
         tmp = op[n]._attach_23(tmp)
