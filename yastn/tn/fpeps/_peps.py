@@ -80,23 +80,23 @@ class Peps():
         """
 
         if dirn == 'h':
-            nx = n  # is this ever used?
-            H = Mpo(N=self.Ny)
+            op = Mpo(N=self.Ny)
             for ny in range(self.Ny):
-                site = (nx, ny)
+                site = (n, ny)
                 top = self[site]
                 if top.ndim == 3:
                     top = top.unfuse_legs(axes=(0, 1))
-                H.A[ny] = top.transpose(axes=(1, 2, 3, 0)) if one_layer else \
+                op.A[ny] = top.transpose(axes=(1, 2, 3, 0)) if one_layer else \
                         DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
         elif dirn == 'v':
-            ny = n
-            H = Mpo(N=self.Nx)
+            periodic = (self.boundary == "cylinder")
+            op = Mpo(N=self.Nx, periodic=periodic)
+            op.tol = self._data['tol'] if 'tol' in self._data else None
             for nx in range(self.Nx):
-                site = (nx, ny)
+                site = (nx, n)
                 top = self[site]
                 if top.ndim == 3:
                     top = top.unfuse_legs(axes=(0, 1))
-                H.A[nx] = top if one_layer else \
+                op.A[nx] = top if one_layer else \
                         DoublePepsTensor(top=top, btm=top)
-        return H
+        return op

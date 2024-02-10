@@ -303,16 +303,18 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
     return psi
 
 
-def _zipper_MpoPBC(a, psi, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpo:
+def _zipper_MpoPBC(op, psi, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpo:
     """
     Special case of periodic Mpo
     """
 
-    lmpo, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
+    lmpo, lpsi = op.virtual_leg('last'), psi.virtual_leg('last')
 
     tmp = initialize.eye(psi.config, legs=lmpo, isdiag=False)
     tmp = tmp.add_leg(axis=0, s=-lpsi.s, t=lpsi.t[0])
     tmp = tmp.add_leg(axis=3, s=lpsi.s, t=lpsi.t[0])
+
+    connector = initialize.eye(psi.config, legs=lmpo, isdiag=False)
 
     discarded2_total = 0.
     for n in psi.sweep(to='first'):
@@ -323,7 +325,7 @@ def _zipper_MpoPBC(a, psi, opts_svd=None, normalize=True, return_discarded=False
         else:  # psi.nr_phys == 2:
             tmp = tmp.swap_gate(axes=(2, 3))
             tmp = tmp.fuse_legs(axes=((0, 3), 1, 4, (5, 2)))
-        tmp = a[n]._attach_23(tmp)
+        tmp = op[n]._attach_23(tmp)
 
         if n > psi.first:
             U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1, nU=False)
@@ -340,10 +342,17 @@ def _zipper_MpoPBC(a, psi, opts_svd=None, normalize=True, return_discarded=False
             psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
             tmp = U @ (S / nS)
             tmp = tmp.unfuse_legs(axes=0)
+
+            if op.tol is not None and op.tol > 0:
+                Uc, Sc, Vc = tensor.svd_with_truncation(tmp, axes=(1, (0, 2, 3)), tol=op.tol)
+                tmp = (Sc @ Vc).transpose(axes=(1, 0, 2, 3))
+                connector  = connector @ Uc
+
             psi.factor = psi.factor * nS
         else:  # n == first
             tmp = tmp.unfuse_legs(axes=0)
-            tmp = tmp.trace(axes=(1, 2))
+            tmp = tensor.tensordot(connector, tmp, axes=(1, 1))
+            tmp = tmp.trace(axes=(0, 2))
             ntmp = tmp.norm()
             psi.factor = 1 if normalize else psi.factor * ntmp
             tmp = (tmp / ntmp).transpose(axes=(0, 2, 1))

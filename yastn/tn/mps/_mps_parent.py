@@ -92,6 +92,8 @@ class _MpsMpoParent:
         phi.A = dict(self.A)
         phi.pC = self.pC
         phi.factor = self.factor
+        if hasattr(self, 'tol'):
+            phi.tol = self.tol
         return phi
 
     def clone(self) -> yastn.tn.mps.MpsMpoOBC:
@@ -154,7 +156,7 @@ class _MpsMpoParent:
 
     def reverse_sites(self) -> yastn.tn.mps.MpsMpo:
         r""" New MPS/MPO with reversed order of sites and respectively transposed tensors. """  # TODO (no swap_gates ?)
-        phi = type(self)(N=self.N, nr_phys=self.nr_phys)
+        phi = self.shallow_copy()
         phi.factor = self.factor
         axes = (2, 1, 0) if self.nr_phys == 1 else (2, 1, 0, 3)
         for n in phi.sweep(to='last'):
