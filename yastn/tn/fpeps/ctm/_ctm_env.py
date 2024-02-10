@@ -373,7 +373,7 @@ def match_ancilla_projectors(psi, projectors):
 def _sample_MC_column_local(ny, proj_psi, proj_env, st0, st1, psi, projectors, rands):
     # update is proposed based on local probabilies
     vR = proj_env.env2mps(n=ny, dirn='r')
-    Os = proj_psi.transfer_mpo(n=ny, dirn='v', one_layer=True)
+    Os = proj_psi.transfer_mpo(n=ny, dirn='v')
     vL = proj_env.env2mps(n=ny, dirn='l')
     env = mps.Env3(vL, Os, vR).setup_(to='first')
     for nx in range(psi.Nx):
@@ -396,7 +396,7 @@ def _sample_MC_column_uniform(ny, proj_psi, proj_env, st0, st1, psi, projectors,
     config = proj_psi[0, 0].config
     accept = 0
     vR = proj_env.env2mps(n=ny, dirn='r')
-    Os = proj_psi.transfer_mpo(n=ny, dirn='v', one_layer=True)
+    Os = proj_psi.transfer_mpo(n=ny, dirn='v')
     vL = proj_env.env2mps(n=ny, dirn='l')
     env = mps.Env3(vL, Os, vR).setup_(to='first')
     for nx in range(psi.Nx):

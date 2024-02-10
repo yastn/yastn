@@ -28,7 +28,10 @@ def identity_tm_boundary(tmpo):
     config = tmpo.config
     for n in phi.sweep(to='last'):
         legf = tmpo[n].get_legs(axes=3).conj()
-        tmp = eye(config, legs=legf.unfuse_leg(), isdiag=False).fuse_legs(axes=[(0, 1)])
+        if legf.is_fused():
+            tmp = eye(config, legs=legf.unfuse_leg(), isdiag=False).fuse_legs(axes=[(0, 1)])
+        else:
+            tmp = ones(config, legs=[legf])
         phi[n] = tmp.add_leg(0, s=-1).add_leg(2, s=1)
     return phi
 

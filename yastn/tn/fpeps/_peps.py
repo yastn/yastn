@@ -67,7 +67,7 @@ class Peps():
         return psi
 
 
-    def transfer_mpo(self, n=0, dirn='v', one_layer=False):
+    def transfer_mpo(self, n=0, dirn='v'):
         """
         Converts a specific row or column of PEPS into MPO.
 
@@ -84,10 +84,10 @@ class Peps():
             for ny in range(self.Ny):
                 site = (n, ny)
                 top = self[site]
-                if top.ndim == 3:
+                if top.ndim in (2, 3):
                     top = top.unfuse_legs(axes=(0, 1))
-                op.A[ny] = top.transpose(axes=(1, 2, 3, 0)) if one_layer else \
-                        DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
+                op.A[ny] = top.transpose(axes=(1, 2, 3, 0)) if top.ndim == 4 else \
+                           DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
         elif dirn == 'v':
             periodic = (self.boundary == "cylinder")
             op = Mpo(N=self.Nx, periodic=periodic)
@@ -95,8 +95,8 @@ class Peps():
             for nx in range(self.Nx):
                 site = (nx, n)
                 top = self[site]
-                if top.ndim == 3:
+                if top.ndim in (2, 3):
                     top = top.unfuse_legs(axes=(0, 1))
-                op.A[nx] = top if one_layer else \
-                        DoublePepsTensor(top=top, btm=top)
+                op.A[nx] = top if top.ndim == 4 else \
+                           DoublePepsTensor(top=top, btm=top)
         return op

@@ -1182,7 +1182,7 @@ def _update3_pbc_(n, F, bra, op, ket, to, nr_phys, on_aux):
 
 def _truncate_zipper(tmp, conn, tol):
     if tol is not None and tol > 0:
-        Uc, Sc, Vc = tmp.svd_with_truncation(axes=((0, 1, 3), 2), tol=op.tol)
+        Uc, Sc, Vc = tmp.svd_with_truncation(axes=((0, 1, 3), 2), tol=tol)
         new_conn = Vc @ conn
         return new_conn, (Uc @ Sc).transpose(axes=(0, 1, 3, 2))
     return conn, tmp
