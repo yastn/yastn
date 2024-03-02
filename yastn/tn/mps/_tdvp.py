@@ -201,6 +201,7 @@ def _init_tdvp(psi, H, env, opts_expmv):
     if env is None:
         env = Env3(bra=psi, op=H, ket=psi)
         env.setup_(to='first')
+        env._temp = {'expmv_ncv': {}}
     return env, opts
 
 

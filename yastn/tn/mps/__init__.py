@@ -1,7 +1,8 @@
 # An implementation of Matrix Product State (Mps) and Matrix Product Operator (Mpo) employing yastn Tensor.
 from ._mps_obc import Mps, Mpo, MpsMpoOBC, add, multiply, MpoPBC
 from ._auxliary import load_from_dict, load_from_hdf5
-from ._env import Env2, Env3, MpoTerm, measure_overlap, measure_mpo, vdot, measure_1site, measure_2site
+from ._env import  Env3, MpoTerm, measure_overlap, measure_mpo, vdot, measure_1site, measure_2site
+from ._env_auxiliary import Env2
 from ._dmrg import dmrg_
 from ._tdvp import tdvp_
 from ._compression import compression_, zipper

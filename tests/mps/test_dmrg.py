@@ -346,6 +346,5 @@ def test_dmrg_raise(config=cfg):
 
 if __name__ == "__main__":
     test_dmrg_raise()
-    dmrg_XX_model_dense()
-    dmrg_XX_model_Z2()
-    dmrg_XX_model_U1()
+    test_dmrg({'config': cfg})
+    test_dmrg_sum_of_mpos({'config': cfg})
