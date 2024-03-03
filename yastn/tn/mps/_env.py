@@ -207,10 +207,24 @@ class Env3_sum(_EnvParent):
                   self.op[0].amp*self.e3s[0].Heff1(tmp,n) )
         return self._project_ort(tmp)
 
+    def project_ket_on_bra_1(self, n):
+        o0, e0 = self.op[0], self.e3s[0]
+        ops, envs = self.op[1:], self.e3s[1:]
+        tmp = sum((oo.amp * ee.project_ket_on_bra_1(n) for oo, ee in zip(ops, envs)), \
+                   o0.amp * e0.project_ket_on_bra_1(n))
+        return self._project_ort(tmp)
+
     def Heff2(self, AA, bd):
         tmp = self._project_ort(AA)
         tmp = sum( [ _op.amp*e.Heff2(tmp,bd) for _op,e in zip(self.op[1:],self.e3s[1:])],\
                    self.op[0].amp*self.e3s[0].Heff2(tmp,bd) )
+        return self._project_ort(tmp)
+
+    def project_ket_on_bra_2(self, bd):
+        o0, e0 = self.op[0], self.e3s[0]
+        ops, envs = self.op[1:], self.e3s[1:]
+        tmp = sum((oo.amp * ee.project_ket_on_bra_2(bd) for oo, ee in zip(ops, envs)), \
+                   o0.amp * e0.project_ket_on_bra_2(bd))
         return self._project_ort(tmp)
 
     def enlarge_bond(self, bd, opts_svd):

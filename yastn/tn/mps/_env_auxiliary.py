@@ -59,6 +59,15 @@ class MpsProjector():
         return A
 
 
+def _update2_(n, F : Dict[tuple[int, int],Tensor], bra : MpsMpoOBC, ket : MpsMpoOBC, to, nr_phys):
+    if to == 'first':
+        inds = ((-0, 2, 1), (1, 3), (-1, 2, 3)) if nr_phys == 1 else ((-0, 2, 1, 4), (1, 3), (-1, 2, 3, 4))
+        F[(n, n - 1)] = ncon([ket[n], F[(n + 1, n)], bra[n].conj()], inds)
+    elif to == 'last':
+        inds = ((2, 3, -0), (2, 1), (1, 3, -1)) if nr_phys == 1 else ((2, 3, -0, 4), (2, 1), (1, 3, -1, 4))
+        F[(n, n + 1)] = ncon([bra[n].conj(), F[(n - 1, n)], ket[n]], inds)
+
+
 class _EnvParent(metaclass=abc.ABCMeta):
 
     def __init__(self, bra=None, project=None) -> None:
@@ -89,11 +98,13 @@ class _EnvParent(metaclass=abc.ABCMeta):
             self.update_env_(n, to=to)
         return self
 
-    @abc.abstractmethod
     def clear_site_(self, *args):
         r"""
         Clear environments pointing from sites which indices are provided in args.
         """
+        for n in args:
+            self.F.pop((n, n - 1), None)
+            self.F.pop((n, n + 1), None)
 
     @abc.abstractmethod
     def factor(self) -> number:
@@ -153,6 +164,12 @@ class _EnvParent(metaclass=abc.ABCMeta):
             index of corresponding site
         """
 
+    def project_ket_on_bra_1(self, n) -> yastn.Tensor:
+        r"""
+        Action of Heff1 on n-th ket MPS tensor, Heff1 @ ket[n]
+        """
+        return self.Heff1(self.ket[n], n)
+
     @abc.abstractmethod
     def Heff2(self, AA, bd) -> yastn.Tensor:
         r"""
@@ -166,6 +183,12 @@ class _EnvParent(metaclass=abc.ABCMeta):
         bd: tuple
             index of bond on which it acts, e.g. (1, 2) [or (2, 1) -- it is ordered]
         """
+
+    def project_ket_on_bra_2(self, bd) -> yastn.Tensor:
+        r"""
+        Action of Heff2 on bd = (n, n+1) ket MPS tensors, Heff2 @ AA
+        """
+        return self.Heff2(self.ket.merge_two_sites(bd), bd)
 
     # functions facilitating projection, if projector is present
     def update_Aort_(self,n:int):
@@ -198,9 +221,6 @@ class Env2(_EnvParent):
         # right boundary
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         self.F[(self.N, self.N - 1)] = ones(self.config, legs=legs, isdiag=False)
-
-    def clear_site_(self, *args):
-        return _clear_site_(self.F, *args)
 
     def factor(self):
         return self.bra.factor * self.ket.factor
@@ -255,7 +275,6 @@ class Env2(_EnvParent):
 
 
 
-
 class _EnvParent_3(_EnvParent):
 
     def __init__(self, bra=None, op: Optional[MpsMpoOBC] = None, ket=None, project=None):
@@ -281,9 +300,6 @@ class _EnvParent_3(_EnvParent):
         # right boundary
         legs = [self.ket.virtual_leg('last').conj(), op.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         self.F[(self.N, self.N - 1)] = ones(self.config, legs=legs, isdiag=False)
-
-    def clear_site_(self, *args):
-        return _clear_site_(self.F, *args)
 
     def factor(self) -> number:
         return self.bra.factor * self.op.factor * self.ket.factor
@@ -455,20 +471,6 @@ class _Env_mpo_mpo_mpo_aux(_EnvParent_3):
         return self.op.factor * self._project_ort(tmp)
 
 
-def _clear_site_(F, *args):
-    for n in args:
-        F.pop((n, n - 1), None)
-        F.pop((n, n + 1), None)
-
-def _update2_(n, F : Dict[tuple[int, int],Tensor], bra : MpsMpoOBC, ket : MpsMpoOBC, to, nr_phys):
-    if to == 'first':
-        inds = ((-0, 2, 1), (1, 3), (-1, 2, 3)) if nr_phys == 1 else ((-0, 2, 1, 4), (1, 3), (-1, 2, 3, 4))
-        F[(n, n - 1)] = ncon([ket[n], F[(n + 1, n)], bra[n].conj()], inds)
-    elif to == 'last':
-        inds = ((2, 3, -0), (2, 1), (1, 3, -1)) if nr_phys == 1 else ((2, 3, -0, 4), (2, 1), (1, 3, -1, 4))
-        F[(n, n + 1)] = ncon([bra[n].conj(), F[(n - 1, n)], ket[n]], inds)
-
-
 
 class Env3_pbc(_EnvParent):
     def __init__(self, bra=None, op=None, ket=None, project=None):
@@ -584,9 +586,6 @@ class Env3_pbc(_EnvParent):
             tmp = tmp.tensordot(self.F[(nr, n)], axes=((2, 4), (2, 0)))
             tmp = tmp.tensordot(self.bra[n].conj(), axes=((0, 4), (0, 2)))
             return tmp.transpose(axes=(0, 3, 2, 1))
-
-    def clear_site_(self, *args):
-        return _clear_site_(self.F, *args)
 
     def measure(self, bd=None):
         if bd is None:

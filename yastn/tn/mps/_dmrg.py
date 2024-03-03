@@ -22,7 +22,7 @@ class DMRG_out(NamedTuple):
     max_discarded_weight: float = None
 
 
-def dmrg_(psi, H : MpsMpoOBC | Sequence[tuple(MpsMpoOBC,number)], project=None, method='1site',
+def dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project=None, method='1site',
         energy_tol=None, Schmidt_tol=None, max_sweeps=1, iterator_step=None,
         opts_eigs=None, opts_svd=None):
     r"""

@@ -191,11 +191,11 @@ def _compression_1site_sweep_(env, Schmidt=None):
         Environment of the network :math:`\langle \psi|\psi_{target} \rangle`
         or :math:`\langle \psi|O|\psi_{target} \rangle`.
     """
-    bra, ket = env.bra, env.ket
+    bra = env.bra
     for to in ('last', 'first'):
         for n in bra.sweep(to=to):
             bra.remove_central_()
-            bra.A[n] = env.Heff1(ket[n], n)
+            bra.A[n] = env.project_ket_on_bra_1(n)
             bra.orthogonalize_site_(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != bra.first:
                 Schmidt[bra.pC] = bra[bra.pC].svd(sU=1, compute_uv=False)
@@ -205,18 +205,16 @@ def _compression_1site_sweep_(env, Schmidt=None):
     env.update_env_(n, to=to)
 
 
-
 def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
     """ variational update on 2 sites """
     if opts_svd is None:
         opts_svd = {'tol': 1e-13}
     max_disc_weight = -1.
-    bra, ket = env.bra, env.ket
+    bra = env.bra
     for to, dn in (('last', 0), ('first', 1)):
         for n in bra.sweep(to=to, dl=1):
             bd = (n, n + 1)
-            AA = ket.merge_two_sites(bd)
-            AA = env.Heff2(AA, bd)
+            AA = env.project_ket_on_bra_2(bd)
             _disc_weight_bd = bra.unmerge_two_sites_(AA, bd, opts_svd)
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':
