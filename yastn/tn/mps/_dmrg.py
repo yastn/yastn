@@ -158,7 +158,7 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
     env: Env3
         Environment of the <psi|H|psi> ready for the next iteration.
     """
-    psi = env.ket
+    psi = env.bra
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
             env.update_Aort_(n)
@@ -180,7 +180,7 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
     env: Env3
         Environment of the <psi|H|psi> ready for the next iteration.
     """
-    psi = env.ket
+    psi = env.bra
 
     if opts_svd is None:
         opts_svd = {'tol': 1e-13}

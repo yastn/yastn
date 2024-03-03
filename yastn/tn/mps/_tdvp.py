@@ -17,7 +17,7 @@ class TDVP_out(NamedTuple):
     steps: int = 0
 
 
-def tdvp_(psi, H : MpsMpoOBC | Sequence[tuple(MpsMpoOBC, number)] | Callable,
+def tdvp_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]] | Callable,
           times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opts_expmv=None, opts_svd=None, normalize=True):
     r"""
     Iterator performing TDVP sweeps to solve :math:`\frac{d}{dt} |\psi(t)\rangle = -uH|\psi(t)\rangle`,
@@ -206,22 +206,22 @@ def _init_tdvp(psi, H, env, opts_expmv):
 
 
 def _update_A(env, n, du, opts, normalize=True):
-    """ Updates env.ket[n] by exp(du Heff1). """
+    """ Updates env.bra[n] by exp(du Heff1). """
     if n in env._temp['expmv_ncv']:
         opts['ncv'] = env._temp['expmv_ncv'][n]
     f = lambda x: env.Heff1(x, n)
-    env.ket[n], info = expmv(f, env.ket[n], du, **opts, normalize=normalize, return_info=True)
+    env.bra[n], info = expmv(f, env.bra[n], du, **opts, normalize=normalize, return_info=True)
     env._temp['expmv_ncv'][n] = info['ncv']
 
 
 def _update_C(env, du, opts, normalize=True):
-    """ Updates env.ket[bd] by exp(du Heff0). """
-    bd = env.ket.pC
+    """ Updates env.bra[bd] by exp(du Heff0). """
+    bd = env.bra.pC
     if bd[0] != -1 and bd[1] != env.N:  # do not update central block outsite of the chain
         if bd in env._temp['expmv_ncv']:
             opts['ncv'] = env._temp['expmv_ncv'][bd]
         f = lambda x: env.Heff0(x, bd)
-        env.ket.A[bd], info = expmv(f, env.ket[bd], du, **opts, normalize=normalize, return_info=True)
+        env.bra.A[bd], info = expmv(f, env.bra[bd], du, **opts, normalize=normalize, return_info=True)
         env._temp['expmv_ncv'][bd] = info['ncv']
 
 
@@ -230,8 +230,8 @@ def _update_AA(env, bd, du, opts, opts_svd, normalize=True):
     ibd = bd[::-1]
     if ibd in env._temp['expmv_ncv']:
         opts['ncv'] = env._temp['expmv_ncv'][ibd]
-    AA = env.ket.merge_two_sites(bd)
+    AA = env.bra.merge_two_sites(bd)
     f = lambda v: env.Heff2(v, bd)
     AA, info = expmv(f, AA, du, **opts, normalize=normalize, return_info=True)
     env._temp['expmv_ncv'][ibd] = info['ncv']
-    env.ket.unmerge_two_sites_(AA, bd, opts_svd)
+    env.bra.unmerge_two_sites_(AA, bd, opts_svd)

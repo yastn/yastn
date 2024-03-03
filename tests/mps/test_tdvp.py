@@ -165,7 +165,7 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
                 'default_device': config.default_device}
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
     ops.random_seed(seed=0)
-    
+
     J0 = [[1,   0.5j, 0,    0.3,  0.1,  0   ],
           [0,  -1,    0.5j, 0,    0.3,  0.1 ],
           [0,   0,    1,    0.5j, 0,    0.3 ],
@@ -182,7 +182,7 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
     out = mps.dmrg_(psi, H0, method='2site', max_sweeps=2, opts_svd=opts_svd)
     out = mps.dmrg_(psi, H0, method='1site', max_sweeps=10,
                     energy_tol=1e-14, Schmidt_tol=1e-14)
-    
+
     def gs_correlation_matrix(J, n):
         # Correlation matrix for the ground state
         # of n particles with hopping Hamiltonian matrix J.
@@ -212,26 +212,27 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
             C[n2, n1] = v
             C[n1, n2] = v.conj()
         return C
-    
+
     #
     # verify MPS vs reference
     #
     C0psi = correlation_matrix(psi)
     assert np.allclose(C0ref, C0psi, rtol=tol)
-    
+
     #
     # Sudden quench with a new Hamiltonian, here as sum of Mpos
     #
-    J1= np.asarray([[-1,   0.5,   0,  -0.3, 0.1, 0  ],
-          [ 0,   1  ,   0.5, 0,  -0.3, 0.1],
-          [ 0,   0  ,  -1,   0.5, 0,  -0.3],
-          [ 0,   0  ,   0,   1,   0.5, 0  ],
-          [ 0,   0  ,   0,   0,  -1,   0.5],
-          [ 0,   0  ,   0,   0,   0,   1  ]])
-    J1s= [np.zeros_like(J1) for _ in range(J1.shape[0])]
+    J1 = np.asarray(
+        [[-1,   0.5,   0,  -0.3, 0.1, 0  ],
+         [ 0,   1  ,   0.5, 0,  -0.3, 0.1],
+         [ 0,   0  ,  -1,   0.5, 0,  -0.3],
+         [ 0,   0  ,   0,   1,   0.5, 0  ],
+         [ 0,   0  ,   0,   0,  -1,   0.5],
+         [ 0,   0  ,   0,   0,   0,   1  ]])
+    J1s = [np.zeros_like(J1) for _ in range(J1.shape[0])]
     for i in range(len(J1s)):
-        J1s[i][:,i]= J1[:,i]
-    H1 = [mps.MpoTerm(1.,build_mpo_hopping_Hterm(col, sym=sym, config=config)) for col in J1s]
+        J1s[i][:, i]= J1[:, i]
+    H1 = [mps.MpoTerm(1., build_mpo_hopping_Hterm(col, sym=sym, config=config)) for col in J1s]
     #
     # Exact reference for free-fermionic correlation matrix
     #
@@ -408,6 +409,9 @@ if __name__ == "__main__":
     for sym in ['Z2', 'U1']:
         t0 = time.time()
         tdvp_sudden_quench(sym=sym)
+        print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
+        t0 = time.time()
+        tdvp_sudden_quench_mpo_sum(sym=sym)
         print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
     for sym in ['dense', 'Z2']:
         t0 = time.time()

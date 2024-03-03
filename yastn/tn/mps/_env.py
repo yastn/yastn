@@ -1,8 +1,8 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
 from __future__ import annotations
 from itertools import groupby
-from typing import Sequence, NamedTuple
-from . import MpsMpoOBC, MpoPBC
+from typing import Sequence
+from . import MpsMpoOBC, MpoPBC, MpoTerm
 from ._env_auxiliary import Env2, Env3_pbc, _Env_mpo_mpo_mpo, _Env_mps_mpo_mps, _Env_mpo_mpo_mpo_aux, _EnvParent
 from ... import svd, qr, YastnError
 
@@ -147,16 +147,43 @@ def measure_2site(bra, O, P, ket, pairs=None) -> dict[tuple[int, int], number]:
 #   where H is MPO or sum of MPOs
 
 
-class MpoTerm(NamedTuple):
-    r"""
-    Utility class for defining Hamiltonians as linear combinations of MPOs
+# def Env(bra=None, target=None, project=None):
+#         if type(target) == MpsMpoOBC:  # mps
+#             return Env2(bra=bra, ket=target)
 
-        H = \sum_i amp_i Mpo_i
+#         # [mps]
+#         # [mpo, mps]
+#         # [mpo, mps]
+#         # [MPS,]
+#         # [MPO, MPS]
+#         # [[MPO, MPO], MPS]
 
-    """
-    amp: float = 1.0
-    mpo: MpsMpoOBC = None
+#         # [[MPS], [MPS],...]
+#         # [[MPO, MPS], [MPO, MPS], ...]
 
+#         # [[[MPO, MPO], MPS], [MPO, MPS], [MPS]]
+
+
+
+
+#         if len(target) == 1:
+#             env = Env(bra=psi, ket=target[0])
+#         else:
+#             env = Env(bra=psi, op=target[0], ket=target[1])
+
+#         if op is None:
+#             return Env2(bra=bra, ket=ket)
+#         if type(op) == MpsMpoOBC:
+#             if ket.nr_phys == 1:
+#                 return _Env_mps_mpo_mps(bra, op, ket, project)
+#             elif hasattr(op, 'mode') and op.mode == 'bra':
+#                 _Env_mpo_mpo_mpo_aux(bra, op, ket, project)
+#             else:
+#                 return _Env_mpo_mpo_mpo(bra, op, ket, project)
+#         elif type(op) == MpoPBC:
+#             return Env3_pbc(bra, op, ket, project)
+#         else:
+#             return Env3_sum(bra, op, ket, project)
 
 def Env(bra=None, op=None, ket=None, project=None):
         if op is None:
@@ -164,6 +191,8 @@ def Env(bra=None, op=None, ket=None, project=None):
         if type(op) == MpsMpoOBC:
             if ket.nr_phys == 1:
                 return _Env_mps_mpo_mps(bra, op, ket, project)
+            elif hasattr(op, 'mode') and op.mode == 'bra':
+                _Env_mpo_mpo_mpo_aux(bra, op, ket, project)
             else:
                 return _Env_mpo_mpo_mpo(bra, op, ket, project)
         elif type(op) == MpoPBC:
@@ -172,68 +201,78 @@ def Env(bra=None, op=None, ket=None, project=None):
             return Env3_sum(bra, op, ket, project)
 
 
-
 class Env3_sum(_EnvParent):
 
-    def __init__(self, bra=None, op: Optional[Sequence[MpoTerm]] = None, ket=None, project=None):
+    def __init__(self, bra=None, op:Sequence[MpoTerm]=None, ket=None, project=None):
         super().__init__(bra, project)
-        if not all([_op.mpo.N == self.N for _op in op]):
-            raise YastnError("all MPO operators and state should have the same number of sites")
-        self.op = op
-        self.ket = ket
-        self.e3s = [Env(bra, _op.mpo, ket) for _op in op]
+        envs, amps = [], []
+        for o in [op] if type(op) == MpoTerm else op:
+            if o.mpo.N != self.N:
+                raise YastnError("all MPO operators and state should have the same number of sites")
+            amps.append(o.amp)
+            H = o.mpo
+            if o.mode == 'bra':
+                H = H.mpo.shallow_copy()
+                H.mode = 'bra'
+            envs.append(Env(bra, H, ket))
+        self.envs = envs
+        self.amps = amps
 
     def clear_site_(self, *args):
-        [e.clear_site_(*args) for e in self.e3s]
+        for env in self.envs:
+            env.clear_site_(*args)
 
     def factor(self):
         return 1
 
     def update_env_(self, n, to='last'):
-        [e.update_env_(n, to) for e in self.e3s]
+        for env in self.envs:
+            env.update_env_(n, to)
         if self.projector:
-            self.projector._update_env(n,to)
+            self.projector._update_env(n, to)
 
     def measure(self, bd=(-1, 0)):
-        return sum( [_op.amp * e.measure(bd) for _op,e in zip(self.op, self.e3s)] )
+        return sum(amp * env.measure(bd) for amp, env in zip(self.amps, self.envs))
 
     def Heff0(self, C, bd):
-        return sum( [_op.amp*e.Heff0(C,bd) for _op,e in zip(self.op[1:],self.e3s[1:])],\
-            self.op[0].amp*self.e3s[0].Heff0(C,bd) )
+        tmp = self.amps[0] * self.envs[0].Heff0(C, bd)
+        for amp, env in zip(self.amps[1:], self.envs[1:]):
+            tmp = tmp + amp * env.Heff0(C, bd)
+        return tmp
 
     def Heff1(self, A, n):
-        tmp = self._project_ort(A)
-        tmp = sum( [ _op.amp*e.Heff1(tmp,n) for _op,e in zip(self.op[1:],self.e3s[1:])],\
-                  self.op[0].amp*self.e3s[0].Heff1(tmp,n) )
+        A = self._project_ort(A)
+        tmp = self.amps[0] * self.envs[0].Heff1(A, n)
+        for amp, env in zip(self.amps[1:], self.envs[1:]):
+            tmp = tmp + amp * env.Heff1(A, n)
         return self._project_ort(tmp)
 
     def project_ket_on_bra_1(self, n):
-        o0, e0 = self.op[0], self.e3s[0]
-        ops, envs = self.op[1:], self.e3s[1:]
-        tmp = sum((oo.amp * ee.project_ket_on_bra_1(n) for oo, ee in zip(ops, envs)), \
-                   o0.amp * e0.project_ket_on_bra_1(n))
+        tmp = self.amps[0] * self.envs[0].project_ket_on_bra_1(n)
+        for amp, env in zip(self.amps[1:], self.envs[1:]):
+            tmp = tmp + amp * env.project_ket_on_bra_1(n)
         return self._project_ort(tmp)
 
     def Heff2(self, AA, bd):
         tmp = self._project_ort(AA)
-        tmp = sum( [ _op.amp*e.Heff2(tmp,bd) for _op,e in zip(self.op[1:],self.e3s[1:])],\
-                   self.op[0].amp*self.e3s[0].Heff2(tmp,bd) )
+        tmp = self.amps[0] * self.envs[0].Heff2(AA, bd)
+        for amp, env in zip(self.amps[1:], self.envs[1:]):
+            tmp = tmp + amp * env.Heff2(AA, bd)
         return self._project_ort(tmp)
 
     def project_ket_on_bra_2(self, bd):
-        o0, e0 = self.op[0], self.e3s[0]
-        ops, envs = self.op[1:], self.e3s[1:]
-        tmp = sum((oo.amp * ee.project_ket_on_bra_2(bd) for oo, ee in zip(ops, envs)), \
-                   o0.amp * e0.project_ket_on_bra_2(bd))
+        tmp = self.amps[0] * self.envs[0].project_ket_on_bra_2(bd)
+        for amp, env in zip(self.amps[1:], self.envs[1:]):
+            tmp = tmp + amp * env.project_ket_on_bra_2(bd)
         return self._project_ort(tmp)
 
     def enlarge_bond(self, bd, opts_svd):
         if bd[0] < 0 or bd[1] >= self.N:  # do not enlarge bond outside of the chain
             return False
-        AL = self.ket[bd[0]]
-        AR = self.ket[bd[1]]
-        if any([(_op.mpo[bd[0]].get_legs(axes=1).t != AL.get_legs(axes=1).t) or \
-           (_op.mpo[bd[1]].get_legs(axes=1).t != AR.get_legs(axes=1).t) for _op in self.op]):
+        AL = self.bra[bd[0]]
+        AR = self.bra[bd[1]]
+        if any([(env.op[bd[0]].get_legs(axes=1).t != AL.get_legs(axes=1).t) or \
+           (env.op[bd[1]].get_legs(axes=1).t != AR.get_legs(axes=1).t) for env in self.envs]):
             return True  # true if some charges are missing on physical legs of psi
 
         AL = AL.fuse_legs(axes=((0, 1), 2))

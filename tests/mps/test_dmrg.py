@@ -49,7 +49,7 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
         # Print the result:
         #
         print(f"2site DMRG; energy: {eng:{1}.{8}} / {ref_eng:{1}.{8}}"
-              + f"; occupation: {occ:{1}.{8}} / {ref_occ}")
+            + f"; occupation: {occ:{1}.{8}} / {ref_occ}")
         assert abs(eng - ref_eng) < tol
         assert abs(occ - ref_occ) < tol
         #
@@ -62,7 +62,7 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
         eng = mps.measure_mpo(psi, H, psi)
         occ = mps.measure_mpo(psi, O_occ, psi)
         print(f"1site DMRG; energy: {eng:{1}.{8}} / {ref_eng:{1}.{8}}"
-              + f"; occupation: {occ:{1}.{8}} / {ref_occ}")
+            + f"; occupation: {occ:{1}.{8}} / {ref_occ}")
         # test that energy outputed by dmrg is correct
         assert abs(eng - ref_eng) < tol
         assert abs(occ - ref_occ) < tol
@@ -99,7 +99,7 @@ def dmrg_XX_model_dense(config=None, tol=1e-6):
     #
     opts_config = {} if config is None else \
                 {'backend': config.backend,
-                'default_device': config.default_device}
+                 'default_device': config.default_device}
     # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.Spin12(sym='dense', **opts_config)
     generate = mps.Generator(N=N, operators=ops)
@@ -177,19 +177,16 @@ def dmrg_XX_model_Z2(config=None, tol=1e-6):
             [4, 2, 4]),
         1: ([-3.427339492125, -2.661972627395, -2.261972627395],
             [3, 3, 5])}
-    H_str = "\sum_{i,j \in rNN} t ( cp_{i} c_{j} + cp_{j} c_{i} )"
+    H_str = "\sum_{i,j \in rNN} t (cp_{i} c_{j} + cp_{j} c_{i})"
     H_str += " + \sum_{j\in rN} mu cp_{j} c_{j}"
     parameters = {"t": 1.0, "mu": 0.2,
                   "rN": range(N),
                   "rNN": [(i, i+1) for i in range(N - 1)]}
     H = generate.mpo_from_latex(H_str, parameters)
-    O_occ = generate.mpo_from_latex("\sum_{j\in rN} cp_{j} c_{j}",
-                                  parameters)
+    O_occ = generate.mpo_from_latex("\sum_{j\in rN} cp_{j} c_{j}", parameters)
 
     for parity, (E_target, occ_target) in Eng_occ_target.items():
         psi = generate.random_mps(D_total=Dmax, n=parity)
-        # run_dmrg starts with 2-site method to update bond dimension
-        # for small tests with random distribution of bond dimensions.
         psi = run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
 
 
@@ -206,14 +203,13 @@ def dmrg_XX_model_U1(config=None, tol=1e-6):
     generate.random_seed(seed=0)
 
     N = 7
-    H_str = "\sum_{i,j \in rNN} t ( cp_{i} c_{j} + cp_{j} c_{i} )"
+    H_str = "\sum_{i,j \in rNN} t (cp_{i} c_{j} + cp_{j} c_{i})"
     H_str += " + \sum_{j\in rN} mu cp_{j} c_{j}"
     parameters = {"t": 1.0, "mu": 0.2,
                   "rN": range(N),
                   "rNN": [(i, i+1) for i in range(N - 1)]}
     H = generate.mpo_from_latex(H_str, parameters)
-    O_occ = generate.mpo_from_latex("\sum_{j\in rN} cp_{j} c_{j}",
-                                  parameters)
+    O_occ = generate.mpo_from_latex("\sum_{j\in rN} cp_{j} c_{j}", parameters)
 
     Eng_sectors = {
         2: [-2.861972627395, -2.213125929752, -1.779580427103],
@@ -254,21 +250,21 @@ def dmrg_XX_model_Z2_sum_of_Mpos(config=None, tol=1e-6):
             [4, 2, 4]),
         1: ([-3.427339492125, -2.661972627395, -2.261972627395],
             [3, 3, 5])}
-    H_str_nn= "\sum_{i,j \in rNN} t ( cp_{i} c_{j} + cp_{j} c_{i} )"
-    H_str_n= "\sum_{j\in rN} mu cp_{j} c_{j}"
-    parameters = {"t": 1.0, "mu": 0.2,
-                  "rN": range(N),
-                  "rNN": [(i, i+1) for i in range(N - 1)]}
-    H_n = [mps.MpoTerm(1., generate.mpo_from_latex(H_str_n, parameters))]
-    Hs_nn = [mps.MpoTerm(1., generate.mpo_from_latex(H_str_nn, {"t": 1.0, "rNN": [(i, i+1)]})) for i in range(N - 1)]
-    O_occ = generate.mpo_from_latex("\sum_{j\in rN} cp_{j} c_{j}",
-                                  parameters)
 
-    H= Hs_nn + H_n
+    parameters = {"mu": 0.2, "rN": list(range(N))}
+    H_str_n = "\sum_{j \in rN} mu cp_{j} c_{j}"
+    H_n = [mps.MpoTerm(1., generate.mpo_from_latex(H_str_n, parameters))]
+    O_occ = generate.mpo_from_latex("\sum_{j\in rN} cp_{j} c_{j}", parameters)
+
+    H_str_nn = "\sum_{i,j \in rNN} t (cp_{i} c_{j} + cp_{j} c_{i})"
+    Hs_nn = []
+    for i in range(N - 1):
+        parameters = {"t": 1.0, "rNN": [(i, i+1)]}
+        Hs_nn.append(mps.MpoTerm(1., generate.mpo_from_latex(H_str_nn, parameters)))
+
+    H = Hs_nn + H_n
     for parity, (E_target, occ_target) in Eng_occ_target.items():
         psi = generate.random_mps(D_total=Dmax, n=parity)
-        # run_dmrg starts with 2-site method to update bond dimension
-        # for small tests with random distribution of bond dimensions.
         psi = run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
 
 
@@ -285,24 +281,13 @@ def dmrg_XX_model_U1_sum_of_Mpos(config=None, tol=1e-6):
     generate.random_seed(seed=0)
 
     N = 7
-    H_str_nn = "\sum_{i,j \in rNN} t ( cp_{i} c_{j} + cp_{j} c_{i} )"
-    H_str_n  = "\sum_{j\in rN} mu cp_{j} c_{j}"
-    t, mu= 1.0, 0.2
-    parameters = {"t": 1.0, "mu": 1.0,
-                  "rN": range(N),
+    H_str_nn = "\sum_{i,j \in rNN} (cp_{i} c_{j} + cp_{j} c_{i})"
+    H_str_n  = "\sum_{j \in rN} cp_{j} c_{j}"
+    parameters = {"rN": list(range(N)),
                   "rNN": [(i, i+1) for i in range(N - 1)]}
     H_nn = generate.mpo_from_latex(H_str_nn, parameters)
     H_n = generate.mpo_from_latex(H_str_n, parameters)
-
-    # H_str = "\sum_{i,j \in rNN} t ( cp_{i} c_{j} + cp_{j} c_{i} )"
-    # H_str += " + \sum_{j\in rN} mu cp_{j} c_{j}"
-    # parameters = {"t": 1.0, "mu": 0.2,
-    #               "rN": range(N),
-    #               "rNN": [(i, i+1) for i in range(N - 1)]}
-    # H = generate.mpo_from_latex(H_str, parameters)
-
-    O_occ = generate.mpo_from_latex("\sum_{j\in rN} cp_{j} c_{j}",
-                                  parameters)
+    O_occ = generate.mpo_from_latex("\sum_{j \in rN} cp_{j} c_{j}", parameters)
 
     Eng_sectors = {
         2: [-2.861972627395, -2.213125929752, -1.779580427103],
@@ -312,7 +297,9 @@ def dmrg_XX_model_U1_sum_of_Mpos(config=None, tol=1e-6):
     Dmax = 8
     opts_svd = {'tol': 1e-8, 'D_total': Dmax}
 
-    H= [mps.MpoTerm(t,H_nn), mps.MpoTerm(mu,H_n)]
+    t, mu = 1.0, 0.2
+    H = [mps.MpoTerm(t, H_nn), mps.MpoTerm(mu, H_n)]
+
     for occ_sector, E_target in Eng_sectors.items():
         psi = generate.random_mps(D_total=Dmax, n=occ_sector)
         occ_target = [occ_sector] * len(E_target)
@@ -337,7 +324,6 @@ def test_dmrg_raise(config=cfg):
     with pytest.raises(yastn.YastnError):
         mps.dmrg_(psi, H, method='one-site')
         # DMRG: dmrg method one-site not recognized.
-
     with pytest.raises(yastn.YastnError):
         psi8 = mps.random_mpo(mps.product_mpo(ops.I(), N=8), D_total=4)
         mps.dmrg_(psi8, H, method='1site')

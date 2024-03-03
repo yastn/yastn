@@ -4,8 +4,10 @@ import yastn
 import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
+    from .test_build_mpo_manually import build_mpo_nn_hopping_manually
 except ImportError:
     from configs import config_dense as cfg
+    from test_build_mpo_manually import build_mpo_nn_hopping_manually
 # pytest modifies cfg to inject different backends and devices during tests
 
 
@@ -212,7 +214,32 @@ def test_compression(config=cfg, tol=1e-12):
         assert 0.6 < vca / vaa  < 1
 
 
+
+def test_compression_sum(config=cfg, tol=1e-6):
+    """ Test mps.zipper on random input states. """
+    opts_config = {} if config is None else \
+                {'backend': config.backend, 'default_device': config.default_device}
+    #
+    ops = yastn.operators.SpinlessFermions(sym='Z2', **opts_config)
+    N = 7
+    H = build_mpo_nn_hopping_manually(N, t=1.0, mu=0.2, sym='Z2', config=ops.config)
+    E0 = -3.227339492125
+    Dmax = 8
+    psi = mps.random_mps(H, n=(0,), D_total=Dmax)
+    step = mps.dmrg_(psi, H, method='2site', max_sweeps=10, energy_tol=1e-10)
+    assert abs(step.energy - E0) < tol
+
+    phi = mps.random_mps(H, n=(0,), D_total=Dmax)
+    target = [H, psi] #[[H, psi], [mps.MpoTerm(1j), psi], [psi]]
+    mps.compression_(phi, target, method='2site', max_sweeps=10, normalize=False)
+    nE = phi.norm()
+    assert abs(nE - abs(E0)) < tol
+
+
+
+
 if __name__ == "__main__":
     test_truncate()
     test_zipper()
     test_compression()
+    test_compression_sum()

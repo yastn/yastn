@@ -94,7 +94,7 @@ class _EnvParent(metaclass=abc.ABCMeta):
         to: str
             'first' or 'last'.
         """
-        for n in self.ket.sweep(to=to):
+        for n in self.bra.sweep(to=to):
             self.update_env_(n, to=to)
         return self
 
@@ -326,8 +326,8 @@ class _EnvParent_3(_EnvParent):
     def enlarge_bond(self, bd, opts_svd):
         if bd[0] < 0 or bd[1] >= self.N:  # do not enlarge bond outside of the chain
             return False
-        AL = self.ket[bd[0]]
-        AR = self.ket[bd[1]]
+        AL = self.bra[bd[0]]
+        AR = self.bra[bd[1]]
         if (self.op[bd[0]].get_legs(axes=1).t != AL.get_legs(axes=1).t) or \
            (self.op[bd[1]].get_legs(axes=1).t != AR.get_legs(axes=1).t):
             return True  # true if some charges are missing on physical legs of psi

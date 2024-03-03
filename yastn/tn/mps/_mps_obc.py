@@ -1,5 +1,6 @@
 """ Mps structure and its basic manipulations. """
 from __future__ import annotations
+from typing import NamedTuple
 from ... import tensor, initialize, YastnError
 from ._mps_parent import _MpsMpoParent
 
@@ -12,11 +13,34 @@ def Mps(N) -> yastn.tn.mps.MpsMpoOBC:
     return MpsMpoOBC(N, nr_phys=1)
 
 
-def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC:
+def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC | yastn.tn.mps.MpoPBC:
     r""" Generate empty MPO for system of `N` sites, fixing :code:`nr_phys=2`."""
     if periodic:
         return MpoPBC(N, nr_phys=2)
     return MpsMpoOBC(N, nr_phys=2)
+
+
+class MpoTerm(NamedTuple):
+    r"""
+    Utility class for defining Hamiltonians as linear combinations of MPOs
+
+        H = \sum_i amp_i Mpo_i
+
+    Parameters
+    ----------
+    amp: float
+        amplitude factor that is not included in mpo itself
+    mpo: MpsMpoOBC
+        operator
+    mode: how mpo is applied on a state
+        'ket' is a standard application on ket legs
+            mpo @ |psi> or mpo @ rho
+        'bra' for states in a form of mpo, it can be applied on bra leg
+            rho @ mpo
+    """
+    amp: float = 1.0
+    mpo: MpsMpoOBC = None
+    mode: str = 'ket'  # MPO is applied on ket legs
 
 
 def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpoOBC:
