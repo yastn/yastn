@@ -194,10 +194,10 @@ class Env2(_EnvParent):
             raise YastnError('MpsMpoOBC for bra and ket should have the same number of sites.')
         # left boundary
         legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
-        self.F[(-1, 0)] = eye(self.config, legs=legs, isdiag=False)
+        self.F[(-1, 0)] = ones(self.config, legs=legs, isdiag=False)
         # right boundary
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
-        self.F[(self.N, self.N - 1)] = eye(self.config, legs=legs, isdiag=False)
+        self.F[(self.N, self.N - 1)] = ones(self.config, legs=legs, isdiag=False)
 
     def clear_site_(self, *args):
         return _clear_site_(self.F, *args)

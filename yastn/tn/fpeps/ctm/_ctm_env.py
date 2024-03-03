@@ -216,7 +216,7 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
         Os = transfer_mpo(state, index=ny, index_type='column') # converts ny colum of PEPS to MPO
         vL = CTMenv.env2mps(index=ny, index_type='l') # left boundary of indexed column through CTM environment tensors
 
-        env = mps.Env3(vL, Os, vR).setup_(to = 'first')
+        env = mps.Env(vL, Os, vR).setup_(to = 'first')
 
         for nx in range(0, state.Nx):
             dpt = Os[nx].copy()
@@ -286,7 +286,7 @@ def measure_2site(state, CTMenv, op1, op2, opts_svd, opts_var=None):
             vR = CTMenv.env2mps(index=ny1, index_type='r')
             vL = CTMenv.env2mps(index=ny1, index_type='l')
             Os = transfer_mpo(state, index=ny1, index_type='column')
-            env = mps.Env3(vL, Os, vR).setup_(to='first').setup_(to='last')
+            env = mps.Env(vL, Os, vR).setup_(to='first').setup_(to='last')
             norm_env = env.measure(bd=(-1, 0))
 
             if ny1 > 0:
@@ -324,7 +324,7 @@ def measure_2site(state, CTMenv, op1, op2, opts_svd, opts_var=None):
                 vRo1 = vRo1next
                 vL = CTMenv.env2mps(index=ny2, index_type='l')
                 Os = transfer_mpo(state, index=ny2, index_type='column')
-                env = mps.Env3(vL, Os, vR).setup_(to='first')
+                env = mps.Env(vL, Os, vR).setup_(to='first')
                 norm_env = env.measure(bd=(-1, 0))
 
                 if ny2 > 0:
@@ -333,7 +333,7 @@ def measure_2site(state, CTMenv, op1, op2, opts_svd, opts_var=None):
                     vRo1next = mps.zipper(Os, vRo1, opts_svd=opts_svd)
                     mps.compression_(vRo1next, (Os, vRo1), method='1site', normalize=False, **opts_var)
 
-                env = mps.Env3(vL, Os, vRo1).setup_(to='first').setup_(to='last')
+                env = mps.Env(vL, Os, vRo1).setup_(to='first').setup_(to='last')
                 for nx2 in range(state.Nx):
                     Osnx2A = Os[nx2].A
                     for nz2, o2 in op2dict[nx2, ny2].items():
@@ -363,7 +363,7 @@ def measure_1site(state, CTMenv, op):
         vR = CTMenv.env2mps(index=ny, index_type='r')
         vL = CTMenv.env2mps(index=ny, index_type='l')
         Os = transfer_mpo(state, index=ny, index_type='column')
-        env = mps.Env3(vL, Os, vR).setup_(to='first').setup_(to='last')
+        env = mps.Env(vL, Os, vR).setup_(to='first').setup_(to='last')
         norm_env = env.measure()
         for nx in range(Nx):
             if (nx, ny) in opdict:

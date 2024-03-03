@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import NamedTuple
 import logging
-from ._env import Env2, Env3
+from ._env import Env
 from ._mps_obc import MpsMpoOBC, MpoPBC
 from ... import initialize, tensor, YastnError
 
@@ -99,11 +99,11 @@ def _compression_(psi, target, method,
         psi.canonize_(to='first')
 
     if isinstance(target, MpsMpoOBC):
-        env = Env2(bra=psi, ket=target)
+        env = Env(bra=psi, ket=target)
     elif len(target) == 1:
-        env = Env2(bra=psi, ket=target[0])
+        env = Env(bra=psi, ket=target[0])
     else:
-        env = Env3(bra=psi, op=target[0], ket=target[1])
+        env = Env(bra=psi, op=target[0], ket=target[1])
 
     env.setup_(to='first')
 

@@ -36,7 +36,7 @@ def measure_overlap(bra, ket) -> number:
 
     ket: yastn.tn.mps.MpsMpoOBC
     """
-    env = Env2(bra=bra, ket=ket)
+    env = Env(bra=bra, ket=ket)
     env.setup_(to='first')
     return env.measure(bd=(-1, 0))
 
@@ -59,7 +59,7 @@ def measure_mpo(bra, op: MpsMpoOBC | Sequence[tuple(MpsMpoOBC, number)], ket) ->
 
     ket: yastn.tn.mps.MpsMpoOBC
     """
-    env = Env3(bra=bra, op=op, ket=ket)
+    env = Env(bra=bra, op=op, ket=ket)
     env.setup_(to='first')
     return env.measure(bd=(-1, 0))
 
@@ -83,7 +83,7 @@ def measure_1site(bra, O, ket) -> dict[int, number]:
     ket: yastn.tn.mps.MpsMpoOBC
     """
     op = sorted(O.items()) if isinstance(O, dict) else [(n, O) for n in ket.sweep(to='last')]
-    env = Env2(bra=bra, ket=ket)
+    env = Env(bra=bra, ket=ket)
     env.setup_(to='first').setup_(to='last')
     results = {}
     for n, o in op:
@@ -122,7 +122,7 @@ def measure_2site(bra, O, P, ket, pairs=None) -> dict[tuple[int, int], number]:
         n1s = range(ket.N)
         pairs = [(i, j) for i in range(ket.N - 1, -1, -1) for j in range(i + 1, ket.N)]
 
-    env = Env2(bra=bra, ket=ket)
+    env = Env(bra=bra, ket=ket)
     env.setup_(to='first').setup_(to='last')
     for n1 in n1s:
         env.update_env_op_(n1, P, to='first')
@@ -158,7 +158,9 @@ class MpoTerm(NamedTuple):
     mpo: MpsMpoOBC = None
 
 
-def Env3(bra=None, op=None, ket=None, project=None):
+def Env(bra=None, op=None, ket=None, project=None):
+        if op is None:
+            return Env2(bra=bra, ket=ket)
         if type(op) == MpsMpoOBC:
             if ket.nr_phys == 1:
                 return _Env_mps_mpo_mps(bra, op, ket, project)
@@ -179,7 +181,7 @@ class Env3_sum(_EnvParent):
             raise YastnError("all MPO operators and state should have the same number of sites")
         self.op = op
         self.ket = ket
-        self.e3s = [Env3(bra,_op.mpo,ket) for _op in op]
+        self.e3s = [Env(bra, _op.mpo, ket) for _op in op]
 
     def clear_site_(self, *args):
         [e.clear_site_(*args) for e in self.e3s]
