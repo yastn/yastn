@@ -92,7 +92,7 @@ def dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project=None, 
     return tmp if iterator_step else next(tmp)
 
 
-def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple(MpsMpoOBC,number)], project, method,
+def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, method,
         energy_tol, Schmidt_tol, max_sweeps, iterator_step,
         opts_eigs, opts_svd):
     """ Generator for dmrg_(). """
@@ -161,7 +161,6 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
     psi = env.bra
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
-            env.update_Aort_(n)
             _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
             psi.orthogonalize_site_(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != psi.first:
@@ -189,7 +188,6 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
     for to, dn in (('last', 0), ('first', 1)):
         for n in psi.sweep(to=to, dl=1):
             bd = (n, n + 1)
-            env.update_AAort_(bd)
             AA = psi.merge_two_sites(bd)
             _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
             _disc_weight_bd = psi.unmerge_two_sites_(AA, bd, opts_svd)

@@ -6,59 +6,6 @@ from . import MpsMpoOBC, MpoPBC
 import abc
 
 
-class MpsProjector():
-    # holds reference to a set of n states and
-    # owns a set of n mps-mps environments for projections
-
-    def __init__(self, bra, project:Optional[Sequence[MpsMpoOBC]] = None):
-        # environments, indexed by bonds with respect to k-th MPS-based projector
-        if project and len(project) > 0:
-            assert all([bra.N == _mps.N for _mps in project]), "all MPO operators and state should have the same number of sites"
-        self.N = bra.N
-        self.nr_phys = bra.nr_phys
-        self.bra = bra
-        self.config = bra.config
-        self.ort = [] if project is None else project
-        self.Fort = [{} for _ in range(len(self.ort))]
-
-        # initialize environments with respect to orthogonal projections
-        for ii in range(len(self.ort)):
-            legs = [self.ort[ii].virtual_leg('first'), self.bra.virtual_leg('first').conj()]
-            self.Fort[ii][(-1, 0)] = eye(self.config, legs=legs, isdiag=False)
-            legs = [self.bra.virtual_leg('last').conj(), self.ort[ii].virtual_leg('last')]
-            self.Fort[ii][(self.N, self.N - 1)] = eye(self.config, legs=legs, isdiag=False)
-        self._temp = {'Aort': [],}
-
-    def _update_env(self,n,to='last'):
-        for ii in range(len(self.ort)):
-            _update2_(n, self.Fort[ii], self.bra, self.ort[ii], to, self.nr_phys)
-
-    # methods handling projection wrt. set of states (MPS)
-    def update_Aort_(self, n):
-        """ Update projection of states to be subtracted from psi. """
-        Aort = []
-        inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
-        for ii in range(len(self.ort)):
-            Aort.append(ncon([self.Fort[ii][(n - 1, n)], self.ort[ii][n], self.Fort[ii][(n + 1, n)]], inds))
-        self._temp['Aort'] = Aort
-
-    def update_AAort_(self, bd):
-        """ Update projection of states to be subtracted from psi. """
-        AAort = []
-        nl, nr = bd
-        inds = ((-0, 1), (1, -1, -2,  2), (2, -3)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
-        for ii in range(len(self.ort)):
-            AA = self.ort[ii].merge_two_sites(bd)
-            AAort.append(ncon([self.Fort[ii][(nl - 1, nl)], AA, self.Fort[ii][(nr + 1, nr)]], inds))
-        self._temp['Aort'] = AAort
-
-    def _project_ort(self, A):
-        for ii in range(len(self.ort)):
-            x = vdot(self._temp['Aort'][ii], A)
-            A = A.apxb(self._temp['Aort'][ii], -x)
-        return A
-
-
 def _update2_(n, F : Dict[tuple[int, int],Tensor], bra : MpsMpoOBC, ket : MpsMpoOBC, to, nr_phys):
     if to == 'first':
         inds = ((-0, 2, 1), (1, 3), (-1, 2, 3)) if nr_phys == 1 else ((-0, 2, 1, 4), (1, 3), (-1, 2, 3, 4))
@@ -70,7 +17,7 @@ def _update2_(n, F : Dict[tuple[int, int],Tensor], bra : MpsMpoOBC, ket : MpsMpo
 
 class _EnvParent(metaclass=abc.ABCMeta):
 
-    def __init__(self, bra=None, project=None) -> None:
+    def __init__(self, bra=None) -> None:
         """
         Interface for environments of 1D TNs. In particular of the form,
 
@@ -83,7 +30,7 @@ class _EnvParent(metaclass=abc.ABCMeta):
         self.N = self.bra.N
         self.nr_phys = bra.nr_phys
         self.F = {}  # dict of envs dict[tuple[int, int], yastn.Tensor]
-        self.projector = None if project is None else MpsProjector(bra, project)
+
 
     def setup_(self, to='last'):
         r"""
@@ -190,19 +137,6 @@ class _EnvParent(metaclass=abc.ABCMeta):
         """
         return self.Heff2(self.ket.merge_two_sites(bd), bd)
 
-    # functions facilitating projection, if projector is present
-    def update_Aort_(self,n:int):
-        if self.projector is not None:
-            self.projector.update_Aort_(n)
-
-    def update_AAort_(self,bd:Sequence[int]):
-        if self.projector is not None:
-            self.projector.update_AAort_(bd)
-
-    def _project_ort(self,A):
-        if self.projector is None:
-            return A
-        return self.projector._project_ort(A)
 
 
 class Env2(_EnvParent):
@@ -231,8 +165,6 @@ class Env2(_EnvParent):
 
     def update_env_(self, n, to='last'):
         _update2_(n, self.F, self.bra, self.ket, to, self.nr_phys)
-        if self.projector:
-            self.projector._update_env(n,to)
 
     def Heff0(self, C, bd):
         pass
@@ -274,11 +206,32 @@ class Env2(_EnvParent):
             self.F[(n, n + 1)] = tensordot(self.bra[n].conj(), temp, axes=axes)
 
 
+class Env_project(Env2):
+    def __init__(self, bra, proj, penalty=100):
+        super().__init__(bra, proj)
+        self.penalty = penalty
+
+    def Heff1(self, x, n):
+        inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
+        pp = ncon([self.F[(n - 1, n)], self.ket[n], self.F[(n + 1, n)]], inds)
+        return self.penalty * pp * vdot(pp, x)
+
+    def Heff2(self, AA, bd):
+        """ Heff2 @ AA """
+        n1, n2 = bd
+        pp = self.ket.merge_two_sites(bd)
+        axes = (0, (1, 2), 3) if pp.ndim == 4 else (0, (1, 2, 3, 5), 4)
+        pp = pp.fuse_legs(axes=axes)
+        pp = self.F[(n1 - 1, n1)] @ pp @ self.F[(n2 + 1, n2)]
+        pp = pp.unfuse_legs(axes=1)
+        if pp.ndim == 6:
+            pp = pp.transpose(axes=(0, 1, 2, 3, 5, 4))
+        return (self.penalty * vdot(pp, AA)) * pp
 
 class _EnvParent_3(_EnvParent):
 
-    def __init__(self, bra=None, op: Optional[MpsMpoOBC] = None, ket=None, project=None):
-        super().__init__(bra, project)
+    def __init__(self, bra=None, op: Optional[MpsMpoOBC] = None, ket=None):
+        super().__init__(bra)
         if not op.N == self.N:
             raise YastnError("MPO operator and state should have the same number of sites")
         self.ket = ket
@@ -359,22 +312,18 @@ class _Env_mps_mpo_mps(_EnvParent_3):
             tmp = self.ket[n] @ self.F[(n + 1, n)]
             tmp = self.op[n]._attach_23(tmp)
             self.F[(n, n - 1)] = ncon([tmp, self.bra[n].conj()], ((-0, -1, 1, 2), (-2, 2, 1)))
-        if self.projector:
-            self.projector._update_env(n, to)
 
     def Heff1(self, A, n):
         nl, nr = n - 1, n + 1
-        tmp = self._project_ort(A)
-        tmp = tmp @ self.F[(nr, n)]
+        tmp = A @ self.F[(nr, n)]
         tmp = self.op[n]._attach_23(tmp)
         tmp = ncon([self.F[(nl, n)], tmp], ((-0, 1, 2), (2, 1, -2, -1)))
-        return self.op.factor * self._project_ort(tmp)
+        return self.op.factor * tmp
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
-        tmp = self._project_ort(AA)
-        tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))
+        tmp = AA.fuse_legs(axes=((0, 1), 2, 3))
         tmp = tmp @ self.F[(nr, n2)]
         tmp = self.op[n2]._attach_23(tmp)
         tmp = tmp.fuse_legs(axes=(0, 1, (3, 2)))
@@ -382,7 +331,7 @@ class _Env_mps_mpo_mps(_EnvParent_3):
         tmp = self.op[n1]._attach_23(tmp)
         tmp = ncon([self.F[(nl, n1)], tmp], ((-0, 1, 2), (2, 1, -2, -1)))
         tmp = tmp.unfuse_legs(axes=2)
-        return self.op.factor * self._project_ort(tmp)
+        return self.op.factor * tmp
 
 
 class _Env_mpo_mpo_mpo(_EnvParent_3):
@@ -400,8 +349,6 @@ class _Env_mpo_mpo_mpo(_EnvParent_3):
             tmp = self.op[n]._attach_23(tmp)
             tmp = tmp.unfuse_legs(axes=0)
             self.F[(n, n - 1)] = ncon([tmp, self.bra[n].conj()], ((-0, 3, -1, 1, 2), (-2, 2, 1, 3)))
-        if self.projector:
-            self.projector._update_env(n,to)
 
     def Heff1(self, A, n):
         nl, nr = n - 1, n + 1
@@ -410,7 +357,7 @@ class _Env_mpo_mpo_mpo(_EnvParent_3):
         tmp = self.op[n]._attach_23(tmp)
         tmp = tmp.unfuse_legs(axes=0)
         tmp = ncon([self.F[(nl, n)], tmp], ((-0, 1, 2), (2, -3, 1, -2, -1)))
-        return self.op.factor * self._project_ort(tmp)
+        return self.op.factor * tmp
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
@@ -425,7 +372,7 @@ class _Env_mpo_mpo_mpo(_EnvParent_3):
         tmp = tmp.unfuse_legs(axes=0)
         tmp = ncon([self.F[(nl, n1)], tmp], ((-0, 1, 2), (2, -2, -4, 1, -3, -1)))
         tmp = tmp.unfuse_legs(axes=3)
-        return self.op.factor * self._project_ort(tmp)
+        return self.op.factor * tmp
 
 
 class _Env_mpo_mpo_mpo_aux(_EnvParent_3):
@@ -443,8 +390,6 @@ class _Env_mpo_mpo_mpo_aux(_EnvParent_3):
             tmp = self.op[n]._attach_23(tmp)
             tmp = tmp.unfuse_legs(axes=0)
             self.F[(n, n - 1)] = ncon([self.ket[n], tmp], ((-0, 1, 2, 3), (-2, 1, -1, 2, 3)))
-        if self.projector:
-            self.projector._update_env(n,to)
 
     def Heff1(self, A, n):
         nl, nr = n - 1, n + 1
@@ -453,7 +398,7 @@ class _Env_mpo_mpo_mpo_aux(_EnvParent_3):
         tmp = self.op[n]._attach_01(tmp)
         tmp = tmp.unfuse_legs(axes=0)
         tmp = ncon([tmp, self.F[(nr, n)]], ((-1, 1, -0, 2, -3), (1, 2, -2)))
-        return self.op.factor * self._project_ort(tmp)
+        return self.op.factor * tmp
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
@@ -468,13 +413,13 @@ class _Env_mpo_mpo_mpo_aux(_EnvParent_3):
         tmp = tmp.unfuse_legs(axes=0)
         tmp = ncon([tmp, self.F[(nr, n2)]], ((-1, -2, 1, 2, -0, -4), (1, 2, -3)))
         tmp = tmp.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3, 4, 5))
-        return self.op.factor * self._project_ort(tmp)
+        return self.op.factor * tmp
 
 
 
 class Env3_pbc(_EnvParent):
-    def __init__(self, bra=None, op=None, ket=None, project=None):
-        super().__init__(bra, ket, project)
+    def __init__(self, bra=None, op=None, ket=None):
+        super().__init__(bra, ket)
         if self.op.N != self.N:
             raise YastnError('MPO operator and state should have the same number of sites.')
         self.op = op
@@ -506,10 +451,9 @@ class Env3_pbc(_EnvParent):
 
     def Heff1(self, A, n):
         nl, nr = n - 1, n + 1
-        tmp = self._project_ort(A)
         if self.nr_phys == 1:
             Fr = self.F[(nr, n)].fuse_legs(axes=(0, 1, (2, 3)))
-            tmp = tmp.tensordot(Fr, axes=(2, 0))
+            tmp = A.tensordot(Fr, axes=(2, 0))
             tmp = self.op[n]._attach_23(tmp)
             tmp = tmp.unfuse_legs(axes=2)
             tmp = self.F[(nl, n)].tensordot(tmp, axes=((3, 1, 2), (0, 1, 2)))
@@ -529,17 +473,16 @@ class Env3_pbc(_EnvParent):
         #     tmp = self.op[n]._attach_01(tmp)
         #     tmp = tmp.unfuse_legs(axes=0)
         #     tmp = ncon([tmp, self.F[(nr, n)]], ((-1, 1, -0, 2, -3), (1, 2, -2)))
-        return self.op.factor * self._project_ort(tmp)
+        return self.op.factor * tmp
 
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
         bd, nl, nr = (n1, n2), n1 - 1, n2 + 1
 
-        tmp = self._project_ort(AA)
         if self.nr_phys == 1:
             Fr = self.F[(nr, n2)].fuse_legs(axes=(0, 1, (2, 3)))
-            tmp = tmp.fuse_legs(axes=((0, 1), 2, 3))
+            tmp = AA.fuse_legs(axes=((0, 1), 2, 3))
             tmp = tmp.tensordot(Fr, axes=(2, 0))
             tmp = self.op[n2]._attach_23(tmp)
             tmp = tmp.fuse_legs(axes=(0, 1, (2, 3)))
@@ -576,7 +519,7 @@ class Env3_pbc(_EnvParent):
         #     tmp = tmp.unfuse_legs(axes=0)
         #     tmp = ncon([tmp, self.F[(nr, n2)]], ((-1, -2, 1, 2, -0, -4), (1, 2, -3)))
         #     tmp = tmp.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3, 4, 5))
-        return self.op.factor * self._project_ort(tmp)
+        return self.op.factor * tmp
 
     def hole(self, n):
         """ Hole for peps tensor at site n. """
@@ -635,7 +578,4 @@ class Env3_pbc(_EnvParent):
         #     tmp = op[n]._attach_23(tmp)
         #     tmp = tmp.unfuse_legs(axes=0)
         #     F[(n, n - 1)] = ncon([ket[n], tmp], ((-0, 1, 2, 3), (-2, 1, -1, 2, 3)))
-
-        if self.projector:
-            self.projector._update_env(n,to)
 
