@@ -230,7 +230,7 @@ def test_compression_sum(config=cfg, tol=1e-6):
     assert abs(step.energy - E0) < tol
 
     phi = mps.random_mps(H, n=(0,), D_total=Dmax)
-    target = [H, psi] #[[H, psi], [mps.MpoTerm(1j), psi], [psi]]
+    target = [H, psi] #[[H, psi], [1j * psi], [psi]]
     mps.compression_(phi, target, method='2site', max_sweeps=10, normalize=False)
     nE = phi.norm()
     assert abs(nE - abs(E0)) < tol

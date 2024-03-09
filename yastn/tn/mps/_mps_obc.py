@@ -20,29 +20,6 @@ def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC | yastn.tn.mps.MpoPBC:
     return MpsMpoOBC(N, nr_phys=2)
 
 
-class MpoTerm(NamedTuple):
-    r"""
-    Utility class for defining Hamiltonians as linear combinations of MPOs
-
-        H = \sum_i amp_i Mpo_i
-
-    Parameters
-    ----------
-    amp: float
-        amplitude factor that is not included in mpo itself
-    mpo: MpsMpoOBC
-        operator
-    mode: how mpo is applied on a state
-        'ket' is a standard application on ket legs
-            mpo @ |psi> or mpo @ rho
-        'bra' for states in a form of mpo, it can be applied on bra leg
-            rho @ mpo
-    """
-    amp: float = 1.0
-    mpo: MpsMpoOBC = None
-    mode: str = 'ket'  # MPO is applied on ket legs
-
-
 def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]} \times \textrm{states[j]}`.

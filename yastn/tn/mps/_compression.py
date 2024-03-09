@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import NamedTuple
 import logging
-from ._env import Env
+from ._measure import Env
 from ._mps_obc import MpsMpoOBC, MpoPBC
 from ... import initialize, tensor, YastnError
 
@@ -98,13 +98,7 @@ def _compression_(psi, target, method,
     if not psi.is_canonical(to='first'):
         psi.canonize_(to='first')
 
-    if isinstance(target, MpsMpoOBC):
-        env = Env(bra=psi, ket=target)
-    elif len(target) == 1:
-        env = Env(bra=psi, ket=target[0])
-    else:
-        env = Env(bra=psi, op=target[0], ket=target[1])
-
+    env = Env(psi, target)
     env.setup_(to='first')
 
     overlap_old = env.measure()

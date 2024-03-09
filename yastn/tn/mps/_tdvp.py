@@ -1,7 +1,7 @@
 """ Various variants of the TDVP algorithm for mps."""
 from __future__ import annotations
 from typing import NamedTuple, Sequence, Callable
-from ._env import Env
+from ._measure import Env
 from ._mps_obc import MpsMpoOBC
 from ... import YastnError, expmv
 
@@ -199,8 +199,7 @@ def _init_tdvp(psi, H, env, opts_expmv):
     """ tests and initializations for all tdvp methods. """
     opts = {} if opts_expmv is None else opts_expmv.copy()
     if env is None:
-        env = Env(bra=psi, op=H, ket=psi)
-        env.setup_(to='first')
+        env = Env(psi, [H, psi]).setup_(to='first')
         env._temp = {'expmv_ncv': {}}
     return env, opts
 

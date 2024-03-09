@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import NamedTuple, Sequence
 import logging
 from ... import eigs, YastnError
-from ._env import Env
+from ._measure import Env
+from ._env import Env_sum, Env_project
 from . import MpsMpoOBC
 
 
@@ -100,7 +101,14 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
     if not psi.is_canonical(to='first'):
         psi.canonize_(to='first')
 
-    env = Env(bra=psi, op=H, ket=psi, project=project).setup_(to='first')
+    env = Env(psi, [H, psi])
+    if project:
+        if not isinstance(env, Env_sum):
+            env = Env_sum([env])
+        for pr in project:
+            env.envs.append(Env_project(psi, pr, 100))
+    env.setup_(to='first')
+
     E_old = env.measure()
 
     if opts_eigs is None:
