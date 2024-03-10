@@ -13,38 +13,44 @@ def Env(bra, target):
     [ket]  --  Env2
     [mpo, ket]  --  various Env3
     [[mpo, mpo], ket]  --  Env_sum
-    [[ket], [mpo, ket]]
+    [[ket], [mpo, ket], [[mpo, mpo], ket]]  --  Env_sum
     """
     if isinstance(target, MpsMpoOBC):
         return Env2(bra=bra, ket=target)  # ket
-    if len(target) == 1 and isinstance(target[0], MpsMpoOBC):
-        return Env2(bra=bra, ket=target[0])  # [ket]
-    if len(target) == 2 and isinstance(target[1], MpsMpoOBC):  # [mpo, ket]
-        op, ket = target
-        if isinstance(op, MpsMpoOBC):
-            if ket.nr_phys == 1:
-                return _Env_mps_mpo_mps(bra, op, ket)
-            elif ket.nr_phys == 2 and hasattr(op, 'mode') and op.mode == 'on_bra':
-                return _Env_mpo_mpobra_mpo(bra, op, ket)
+    if isinstance(target[-1], MpsMpoOBC):
+        ket = target[-1]
+        if len(target) == 1:
+            return Env2(bra=bra, ket=target[0])
+        if len(target) == 2:
+            op = target[0]
+            if isinstance(op, MpsMpoOBC):
+                if ket.nr_phys == 1:
+                    return _Env_mps_mpo_mps(bra, op, ket)
+                elif ket.nr_phys == 2 and hasattr(op, 'mode') and op.mode == 'on_bra':
+                    return _Env_mpo_mpobra_mpo(bra, op, ket)
+                else:  # ket.nr_phys == 2 and default 'on_ket"
+                    return _Env_mpo_mpo_mpo(bra, op, ket)
+            elif isinstance(op, MpoPBC):
+                return Env3_pbc(bra, op, ket)
+            elif hasattr(op, '__iter__'):
+                return Env_sum([Env(bra, [o, ket]) for o in op])
             else:
-                return _Env_mpo_mpo_mpo(bra, op, ket)
-        elif isinstance(op, MpoPBC):
-            return Env3_pbc(bra, op, ket)
-        elif hasattr(op, '__iter__'):
-            return Env_sum([Env(bra, [o, ket]) for o in op])
-        else:
-            raise YastnError("Unknown Env input.")
+                raise YastnError("Env: Input cannot be parsed.")
+        if len(target) > 2:
+            raise YastnError("Env: Input cannot be parsed.")
+
     # simple environments are handled
     # we flatten more complicated ones into Env_sum
-    # envs = []
-    # for temp in target:
-    #     if len(temp) == 1:
-    #         envs.append(Env(bra=bra, target=temp))  # [ket]
-    #     elif len(temp) == 2 and isinstance(temp[1], MpsMpoOBC):
-    #         for tmp in temp[0] if hasattr(temp[0], '__iter__') else [temp[0]]:
-    #             envs.append(Env(bra, [tmp, temp[1]]))
-
-
+    envs = []
+    for tmp in target:
+        if not hasattr(tmp, '__iter__'):
+            raise YastnError("Env: Input cannot be parsed.")
+        env = Env(bra, tmp)
+        if isinstance(env, Env_sum):
+            envs.extend(env.envs)
+        else:
+            envs.append(env)
+    return Env_sum(envs)
 
 
 class _EnvParent(metaclass=abc.ABCMeta):
@@ -252,9 +258,9 @@ class Env2(_EnvParent):
         super().__init__(bra)
         self.ket = ket
         if self.bra.nr_phys != self.ket.nr_phys:
-            raise YastnError('MpsMpoOBC for bra and ket should have the same number of physical legs.')
+            raise YastnError('Env: bra and ket should have the same number of physical legs.')
         if self.bra.N != self.ket.N:
-            raise YastnError('MpsMpoOBC for bra and ket should have the same number of sites.')
+            raise YastnError('Env: bra and ket should have the same number of sites.')
         # left boundary
         legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
         self.F[(-1, 0)] = ones(self.config, legs=legs, isdiag=False)
@@ -341,12 +347,19 @@ class Env_project(Env2):
 
 class _EnvParent_3(_EnvParent):
 
-    def __init__(self, bra=None, op: Optional[MpsMpoOBC] = None, ket=None):
+    def __init__(self, bra, op, ket):
         super().__init__(bra)
-        if not op.N == self.N:
-            raise YastnError("MPO operator and state should have the same number of sites")
         self.ket = ket
         self.op = op
+
+        if op.N != self.N or ket.N != self.N:
+            raise YastnError("Env: MPO operator, bra and ket should have the same number of sites.")
+        if self.bra.nr_phys != self.ket.nr_phys:
+            raise YastnError('Env: bra and ket should have the same number of physical legs.')
+        if self.op.nr_phys != 2:
+            raise YastnError('Env: MPO operator should have 2 physical legs.')
+
+
 
         # left boundary
         # legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]

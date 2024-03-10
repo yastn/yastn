@@ -324,10 +324,6 @@ def test_dmrg_raise(config=cfg):
     with pytest.raises(yastn.YastnError):
         mps.dmrg_(psi, H, method='one-site')
         # DMRG: dmrg method one-site not recognized.
-    with pytest.raises(yastn.YastnError):
-        psi8 = mps.random_mpo(mps.product_mpo(ops.I(), N=8), D_total=4)
-        mps.dmrg_(psi8, H, method='1site')
-        # MPO operator and state should have the same number of sites.
 
 
 if __name__ == "__main__":

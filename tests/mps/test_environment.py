@@ -26,6 +26,7 @@ def test_env2_update(config=cfg, tol=1e-12):
         check_env2_measure(psi1, psi2, tol)
         check_env2_measure(H1, H2, tol)
 
+
 def check_env2_measure(psi1, psi2, tol):
     """ Test if different overlaps of psi1 and psi2 give consistent results. """
     N = psi1.N
@@ -65,6 +66,7 @@ def test_env3_update(config=cfg, tol=1e-12):
     #
     check_env3_measure(psi1, op, psi2, tol)
 
+
 def check_env3_measure(psi1, op, psi2, tol):
     """ Test if different overlaps of psi1 and psi2 give consistent results. """
     N = psi1.N
@@ -85,6 +87,44 @@ def check_env3_measure(psi1, op, psi2, tol):
     assert np.std(results) / abs(np.mean(results)) < tol
 
 
+def test_env_raise(config=cfg):
+    opts_config = {} if config is None else \
+            {'backend': config.backend, 'default_device': config.default_device}
+    ops = yastn.operators.SpinfulFermions(sym='Z2', **opts_config)
+    I12 = mps.product_mpo(ops.I(), 12)
+    H12 = mps.random_mpo(I12, D_total=10)
+    psi12 = mps.random_mps(I12, D_total=15)
+
+    I13 = mps.product_mpo(ops.I(), 13)
+    psi13 = mps.random_mpo(I13, D_total=4)
+
+    with pytest.raises(yastn.YastnError):
+        mps.Env(psi12, [psi12, psi12])
+        # Env: MPO operator should have 2 physical legs.
+    with pytest.raises(yastn.YastnError):
+        mps.Env(psi12, [H12, H12])
+        # Env: bra and ket should have the same number of physical legs.
+    with pytest.raises(yastn.YastnError):
+        mps.Env(psi12, [H12, H12, psi12])
+        # Env: Input cannot be parsed.
+    with pytest.raises(yastn.YastnError):
+        mps.Env(psi12, [1, psi12])
+        # Env: Input cannot be parsed.
+    with pytest.raises(yastn.YastnError):
+        mps.Env(psi12, [psi13])
+        # Env: bra and ket should have the same number of physical legs.
+    with pytest.raises(yastn.YastnError):
+        mps.Env(psi13, [H12, psi13])
+        # Env: MPO operator, bra and ket should have the same number of sites.
+    with pytest.raises(yastn.YastnError):
+        mps.Env(psi12, H12)
+        # Env: bra and ket should have the same number of physical legs.
+    with pytest.raises(yastn.YastnError):
+        mps.Env(psi12, [[H12, psi12], psi12, [psi12]])
+        # Env: Input cannot be parsed.
+
+
 if __name__ == "__main__":
     test_env2_update()
     test_env3_update()
+    test_env_raise()
