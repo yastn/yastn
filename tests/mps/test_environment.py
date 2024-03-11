@@ -105,11 +105,11 @@ def test_env_raise(config=cfg):
     psi12 = mps.random_mps(I12, D_total=15)
 
     I13 = mps.product_mpo(ops.I(), 13)
-    psi13 = mps.random_mpo(I13, D_total=4)
+    psi13 = mps.random_mps(I13, D_total=4)
 
     # miscalcullus
     env = mps.Env(psi12, [[H12, H12], psi12])  # Env_sum
-    env.factor == 1
+    assert env.factor() == 1
 
     with pytest.raises(yastn.YastnError):
         mps.Env(psi12, [psi12, psi12])
@@ -124,7 +124,7 @@ def test_env_raise(config=cfg):
         mps.Env(psi12, [1, psi12])
         # Env: Input cannot be parsed.
     with pytest.raises(yastn.YastnError):
-        mps.Env(psi12, [psi13])
+        mps.Env(psi12, psi13)
         # Env: bra and ket should have the same number of physical legs.
     with pytest.raises(yastn.YastnError):
         mps.Env(psi13, [H12, psi13])

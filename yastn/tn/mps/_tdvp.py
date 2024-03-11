@@ -73,7 +73,6 @@ def tdvp_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]] | Callable,
             * :code:`dt` time-step used.
             * :code:`steps` number of time-steps in the last time-interval.
     """
-    time_independent = not callable(H)
     if dt <= 0:
         raise YastnError('TDVP: dt should be positive.')
     if not hasattr(times, '__iter__'):
@@ -81,18 +80,20 @@ def tdvp_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]] | Callable,
     if any(t1 - t0 <= 0 for t0, t1 in zip(times[:-1], times[1:])):
         raise YastnError('TDVP: times should be an ascending tuple.')
 
-    if method == '1site' and time_independent:
-        routine = lambda t, dt0, env: _tdvp_sweep_1site_(psi, H, dt0, u, env, opts_expmv, normalize)
-    elif method == '2site' and time_independent:
-        routine = lambda t, dt0, env: _tdvp_sweep_2site_(psi, H, dt0, u, env, opts_expmv, opts_svd, normalize)
-    elif method == '12site' and time_independent:
-        routine = lambda t, dt0, env: _tdvp_sweep_12site_(psi, H, dt0, u, env, opts_expmv, opts_svd, normalize)
-    elif method == '1site' and not time_independent:
-        routine = lambda t, dt0, env: _tdvp_sweep_1site_(psi, H(t), dt0, u, None, opts_expmv, normalize)
-    elif method == '2site' and not time_independent:
-        routine = lambda t, dt0, env: _tdvp_sweep_2site_(psi, H(t), dt0, u, None, opts_expmv, opts_svd, normalize)
-    elif method == '12site' and not time_independent:
-        routine = lambda t, dt0, env: _tdvp_sweep_12site_(psi, H(t), dt0, u, None, opts_expmv, opts_svd, normalize)
+    time_independent = not callable(H)
+    if time_independent:
+        Ht = lambda t: H
+        et = lambda e: e
+    else:
+        Ht = H
+        et = lambda e: None
+
+    if method == '1site':
+        routine = lambda t, dt0, env: _tdvp_sweep_1site_(psi, Ht(t), dt0, u, et(env), opts_expmv, normalize)
+    elif method == '2site':
+        routine = lambda t, dt0, env: _tdvp_sweep_2site_(psi, Ht(t), dt0, u, et(env), opts_expmv, opts_svd, normalize)
+    elif method == '12site':
+        routine = lambda t, dt0, env: _tdvp_sweep_12site_(psi, Ht(t), dt0, u, et(env), opts_expmv, opts_svd, normalize)
     else:
         raise YastnError('TDVP: tdvp method %s not recognized' % method)
 

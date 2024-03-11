@@ -231,6 +231,20 @@ def test_generate_random_mps():
         assert bds[0] == bds[-1] == 1
         assert all(bd > D_total/2 for bd in bds[2:-2])
 
+    with pytest.raises(yastn.YastnError):
+        random_mps_spinless_fermions(N=5, D_total=4, sym="U1", n=20)  # impossible number of particles for given N.
+        # MPS: Random mps is a zero state. Check parameters,
+        # or try running again in this is due to randomness of the initialization.
+
+    with pytest.raises(yastn.YastnError):
+        ops = yastn.operators.SpinfulFermions(sym='U1xU1', backend=H.config.backend)
+        ops.random_seed(seed=0)  # fix seed
+        I = mps.product_mpo(ops.I(), 100)  # identity MPS
+        mps.random_mpo(I, D_total=1, sigma=4)
+        # Random mpo is a zero state. Check parameters,
+        # or try running again in this is due to randomness of the initialization.
+
+
 
 def test_mixed_dims_mpo_and_transpose():
     N = 5

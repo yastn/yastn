@@ -398,6 +398,9 @@ def test_tdvp_raise(config=cfg):
     with pytest.raises(yastn.YastnError):
         next(mps.tdvp_(psi, H, times=(1, 0)))
         # TDVP: times should be an ascending tuple.
+    with pytest.raises(yastn.YastnError):
+        next(mps.tdvp_(psi, H, order='1st'))
+        # TDVP: order should be in ('2nd', '4th')
 
     out = next(mps.tdvp_(psi, H, dt=0.1, times=0.1))
     # times=0.1 => times=(0, 0.1)
@@ -413,7 +416,7 @@ if __name__ == "__main__":
         t0 = time.time()
         tdvp_sudden_quench_mpo_sum(sym=sym)
         print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
-    for sym in ['dense', 'Z2']:
-        t0 = time.time()
-        tdvp_KZ_quench(sym=sym)
-        print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
+    # for sym in ['dense', 'Z2']:
+    #     t0 = time.time()
+    #     tdvp_KZ_quench(sym=sym)
+    #     print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )

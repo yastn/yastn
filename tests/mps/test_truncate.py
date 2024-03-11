@@ -227,7 +227,7 @@ def test_compression_sum(config=cfg, tol=1e-6):
     step = mps.dmrg_(psi, H, method='2site', max_sweeps=10, energy_tol=1e-10)
     assert abs(step.energy - E0) < tol
 
-    phi = mps.random_mps(H, n=(0,), D_total=Dmax).canonize_(to='first')
+    phi = mps.random_mps(H, n=(0,), D_total=Dmax)
     target = [[H, psi], [1j * psi], [[-1 * H, 3 * H], psi]]
     mps.compression_(phi, target, method='2site', max_sweeps=2, normalize=False)
     mps.compression_(phi, target, method='1site', max_sweeps=4, normalize=False)
@@ -235,8 +235,38 @@ def test_compression_sum(config=cfg, tol=1e-6):
     assert abs(nE - abs(3 * E0 + 1j)) < tol
 
 
+def test_comression_raise(config=cfg):
+    opts_config = {} if config is None else \
+        {'backend': config.backend,
+        'default_device': config.default_device}
+    ops = yastn.operators.Spin12(sym='dense', **opts_config)
+    N = 7
+    I = mps.product_mpo(ops.I(), N=N)
+    H = mps.random_mpo(I, D_total=5)
+    psi0  = mps.random_mpo(I, D_total=4)
+    psi1 = mps.random_mpo(I, D_total=4)
+
+    with pytest.raises(yastn.YastnError):
+        mps.compression_(psi1, [H, psi0], method='1site', Schmidt_tol=-1)
+        # Compression: Schmidt_tol has to be positive or None.
+    with pytest.raises(yastn.YastnError):
+        mps.compression_(psi1, [H, psi0], method='1site', overlap_tol=-1)
+        # Compression: overlap_tol has to be positive or None.
+    with pytest.raises(yastn.YastnError):
+        mps.compression_(psi1, [H, psi0], method='one-site')
+        # Compression: method one-site not recognized.
+    with pytest.raises(yastn.YastnError):
+        psi_Np1  = mps.Mps(N=N+1)
+        mps.zipper(H, psi_Np1)
+        #  Zipper: Mpo and Mpo/Mps must have the same number of sites to be multiplied.
+    with pytest.raises(yastn.YastnError):
+        H_pbc  = mps.Mpo(N, periodic=True)
+        mps.zipper(H_pbc, psi0)
+        # Zipper: Application of MpoPBC on Mpo is currently not supported. Contact developers to add this functionality.
+
 if __name__ == "__main__":
     test_truncate()
     test_zipper()
     test_compression()
     test_compression_sum()
+    test_comression_raise()

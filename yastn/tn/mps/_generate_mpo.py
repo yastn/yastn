@@ -74,8 +74,8 @@ def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.Mps
         rt = vec.n
         psi[n] = vec.add_leg(axis=0, s=-1)
 
-    if amplitude:
-        psi[0] = term.amplitude * psi[0]
+    if amplitude: psi[0] = term.amplitude * psi[0]
+
     return psi
 
 class GenerateMpoTemplate(NamedTuple):
