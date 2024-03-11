@@ -17,6 +17,7 @@ def test_env2_update(config=cfg, tol=1e-12):
     N = 12
     for sym, n in [('U1', 0), ('Z2', 1), ('Z2', 0)]:
         ops = yastn.operators.Spin12(sym=sym, **opts_config)
+        ops.random_seed(seed=0)
         I = mps.product_mpo(ops.I(), N)
         psi1 = mps.random_mps(I, D_total=15, n=n)
         psi2 = mps.random_mps(I, D_total=7, n=n)
@@ -58,13 +59,21 @@ def test_env3_update(config=cfg, tol=1e-12):
     opts_config = {} if config is None else \
             {'backend': config.backend, 'default_device': config.default_device}
     ops = yastn.operators.SpinfulFermions(sym='U1xU1', **opts_config)
-    N = 13
+    ops.random_seed(seed=0)
+    N = 7
     I = mps.product_mpo(ops.I(), N=N)
-    psi1 = mps.random_mps(I, D_total=11, n=(8, 6))
-    psi2 = mps.random_mps(I, D_total=15, n=(8, 6))
+    psi1 = mps.random_mps(I, D_total=11, n=(4, 2))
+    psi2 = mps.random_mps(I, D_total=15, n=(4, 2))
     op = mps.random_mpo(I, D_total=10)
     #
     check_env3_measure(psi1, op, psi2, tol)
+    check_env3_measure(op, op, op, tol)
+    #
+    # also for MpoPBC
+    op_pbc = mps.Mpo(N, periodic=True)
+    for n in op_pbc.sweep():
+        op_pbc[n] = op[(n + 5) % N].copy()
+    check_env3_measure(psi1, op_pbc, psi2, tol)
 
 
 def check_env3_measure(psi1, op, psi2, tol):
@@ -98,6 +107,10 @@ def test_env_raise(config=cfg):
     I13 = mps.product_mpo(ops.I(), 13)
     psi13 = mps.random_mpo(I13, D_total=4)
 
+    # miscalcullus
+    env = mps.Env(psi12, [[H12, H12], psi12])  # Env_sum
+    env.factor == 1
+
     with pytest.raises(yastn.YastnError):
         mps.Env(psi12, [psi12, psi12])
         # Env: MPO operator should have 2 physical legs.
@@ -122,6 +135,10 @@ def test_env_raise(config=cfg):
     with pytest.raises(yastn.YastnError):
         mps.Env(psi12, [[H12, psi12], psi12, [psi12]])
         # Env: Input cannot be parsed.
+    with pytest.raises(yastn.YastnError):
+        H12pbc = mps.Mpo(12, periodic=True)
+        mps.Env(H12, [H12pbc, H12])
+        # Env: Application of MpoPBC on Mpo is not supported. Contact developers to add this functionality.
 
 
 if __name__ == "__main__":

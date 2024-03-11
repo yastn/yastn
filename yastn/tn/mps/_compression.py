@@ -31,7 +31,9 @@ def compression_(psi, target, method='1site',
 
         * optimization against provided MPS: ``target`` is ``MPS`` or list ``[MPS,]``
         * against MPO acting on MPS: ``target`` is a list ``[MPO, MPS]``.
-        * against MPO (replacing all MPS's above with MPO's), i.e., ``[MPO,]`` or ``[MPO, MPO]``
+        * against sum of MPOs acting on MPS: ``target`` is a list ``[[MPO, MPO, ...], MPS]``.
+        * sum of any of the three above: target is ``[[MPS], [MPO, MPS], [[MPO, MPO, ...], MPS], ...]``
+        * for psi being MPO, where all MPS's above should be replaced with MPO, e.g., ``[MPO, MPO]``
 
     Outputs iterator if :code:`iterator_step` is given, which allows
     inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
@@ -80,9 +82,6 @@ def compression_(psi, target, method='1site',
             * :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
             * :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
-    # TODO:
-    # * sum of MPS's: target is ``[[MPS], [MPS],...]``
-    # * sum of MPO's acting on MPS's: target is ``[[MPO, MPS], [MPO, MPS], ...]``
 
     tmp = _compression_(psi, target, method,
                         overlap_tol, Schmidt_tol, max_sweeps,
@@ -346,5 +345,5 @@ def _zipper_MpoPBC(a, psi, opts_svd=None, normalize=True, return_discarded=False
     return psi
 
 
-def linear_combination(self):
-    pass
+# def linear_combination(self):
+#     pass

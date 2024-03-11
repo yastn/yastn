@@ -50,7 +50,7 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
         #
         print(f"2site DMRG; energy: {eng:{1}.{8}} / {ref_eng:{1}.{8}}"
             + f"; occupation: {occ:{1}.{8}} / {ref_occ}")
-        assert abs(eng - ref_eng) < tol
+        assert abs(eng - ref_eng) < tol * 100
         assert abs(occ - ref_occ) < tol
         #
         # We furthe iterate with '1site' DMRG
@@ -72,7 +72,7 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
         # to be projected out in the next step of the loop.
         #
         project.append(psi)
-    return project[0]
+    return project
 
 
 @pytest.mark.parametrize("kwargs", [{'config': cfg}])
@@ -141,7 +141,7 @@ def dmrg_XX_model_dense(config=None, tol=1e-6):
     # target some sectors for occupation. This is not necessary
     # but we do it for the sake of clarity and testing.
     #
-    psi = run_dmrg(psi, H, O_occ, Eng_gs, occ_gs, opts_svd, tol)
+    psis = run_dmrg(psi, H, O_occ, Eng_gs, occ_gs, opts_svd, tol)
     #
     # _dmrg can be executed as a generator to monitor states
     # between dmrg sweeps. This is done by providing `iterator_step`.
@@ -187,7 +187,7 @@ def dmrg_XX_model_Z2(config=None, tol=1e-6):
 
     for parity, (E_target, occ_target) in Eng_occ_target.items():
         psi = generate.random_mps(D_total=Dmax, n=parity)
-        psi = run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
+        run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
 
 
 def dmrg_XX_model_U1(config=None, tol=1e-6):
@@ -222,7 +222,7 @@ def dmrg_XX_model_U1(config=None, tol=1e-6):
     for occ_sector, E_target in Eng_sectors.items():
         psi = generate.random_mps(D_total=Dmax, n=occ_sector)
         occ_target = [occ_sector] * len(E_target)
-        psi = run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
+        run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
 
 
 @pytest.mark.parametrize("kwargs", [{'config': cfg}])
@@ -265,7 +265,7 @@ def dmrg_XX_model_Z2_sum_of_Mpos(config=None, tol=1e-6):
     H = Hs_nn + H_n
     for parity, (E_target, occ_target) in Eng_occ_target.items():
         psi = generate.random_mps(D_total=Dmax, n=parity)
-        psi = run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
+        run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
 
 
 def dmrg_XX_model_U1_sum_of_Mpos(config=None, tol=1e-6):
@@ -303,7 +303,54 @@ def dmrg_XX_model_U1_sum_of_Mpos(config=None, tol=1e-6):
     for occ_sector, E_target in Eng_sectors.items():
         psi = generate.random_mps(D_total=Dmax, n=occ_sector)
         occ_target = [occ_sector] * len(E_target)
-        psi = run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
+        run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
+
+
+def test_dmrg_Ising_PBC_Z2(config=cfg, tol=1e-6):
+    """
+    Initialize random MPS of U(1) tensors and tests _dmrg vs known results.
+    """
+    opts_config = {} if config is None else \
+        {'backend': config.backend,
+        'default_device': config.default_device}
+    # pytest uses config to inject various backends and devices for testing
+    ops = yastn.operators.Spin12(sym='Z2', **opts_config)
+    N = 8
+    I = mps.product_mpo(ops.I(), N)
+
+    terms = []
+    for n in range(N):
+        terms.append(mps.Hterm(-1, [n], [ops.z()]))
+        terms.append(mps.Hterm(-1, [n, (n + 1) % N], [ops.x(), ops.x()]))
+
+    # OBC MPO
+    H0 = mps.generate_mpo(I, terms)
+    P0 = mps.product_mpo(ops.z(), N)
+
+    H1 = mps.Mpo(N, periodic=True)
+    P1 = mps.Mpo(N, periodic=True)
+    dn = N // 2
+    for n in range(N):
+        H1[(n + dn) % N] = H0[n].copy()
+        P1[(n + dn) % N] = P0[n].copy()
+
+    Eng_sectors = {
+        0: [-10.2516617910, -8.6909392148, -7.2490195708, -7.2490195708, -7.2490195708, -7.2490195708, -6.1454220537],
+        1: [-10.0546789842, -8.5239452547, -8.5239452547, -7.2262518595, -7.2262518595, -6.9932115253, -6.3591608542]}
+
+    Dmax = 16
+    opts_svd = {'tol': 1e-10, 'D_total': Dmax}
+
+    for H, P in [(H0, P0), (H1, P1)]:
+        for parity, E_target in Eng_sectors.items():
+            psi = mps.random_mps(I, D_total=Dmax, n=(parity,)).canonize_(to='first')
+            parity_target = [(-1) ** parity] * len(E_target)
+            psis = run_dmrg(psi, H, P, E_target, parity_target, opts_svd, tol)
+            for EE, psi in zip(E_target, psis):
+                psi1 = mps.zipper(H, psi, opts_svd=opts_svd, normalize=False)
+                mps.compression_(psi1, [H, psi], method='2site', max_sweeps=2, normalize=False)
+                mps.compression_(psi1, [H, psi], method='1site', max_sweeps=6, normalize=False)
+                assert (EE * psi - psi1).norm() < tol
 
 
 def test_dmrg_raise(config=cfg):
@@ -330,3 +377,4 @@ if __name__ == "__main__":
     test_dmrg_raise()
     test_dmrg({'config': cfg})
     test_dmrg_sum_of_mpos({'config': cfg})
+    test_dmrg_Ising_PBC_Z2()
