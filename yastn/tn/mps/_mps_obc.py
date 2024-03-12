@@ -455,9 +455,6 @@ class MpsMpoOBC(_MpsMpoParent):
         where :math:`\lambda_i` are singular values across the bond.
         """
         nl, nr = bd
-        # axes = (1,) if self.nr_phys == 1 else (1, 3)
-        # AA = AA.unfuse_legs(axes=axes)
-        # axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 4), (2, 3, 5))
         axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 2), (3, 4, 5))
         self.pC = bd
         U, S, V = tensor.svd(AA, axes=axes, sU=1, Uaxis=2)

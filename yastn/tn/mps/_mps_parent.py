@@ -92,6 +92,23 @@ class _MpsMpoParent:
         phi.A = dict(self.A)
         phi.pC = self.pC
         phi.factor = self.factor
+        if hasattr(self, 'flag'):
+            phi.flag = self.flag
+        return phi
+
+    def on_bra(self) -> yastn.tn.mps.MpsMpoOBC:
+        r"""
+        Shallow copy of the tensor with 'on_bra' flag.
+
+        The 'on_bra' flag is only relevant in functions using Env: tdvp_, dmrg_, compression_, vdot.
+        It makes the Mpo operator acting on an Mpo state to be applied on the bra (or auxiliary) legs
+        instead of a default application on 'ket' legs.
+
+        This flag gets propagated by __mul__, conj, transpose, and other functions employing shallow_copy.
+        It is not saved/loaded, or propagated by more complicated functions.
+        """
+        phi = self.shallow_copy()
+        phi.flag = 'on_bra'
         return phi
 
     def clone(self) -> yastn.tn.mps.MpsMpoOBC:
@@ -101,8 +118,7 @@ class _MpsMpoParent:
         """
         phi = self.shallow_copy()
         for ind, ten in phi.A.items():
-            phi.A[ind] = ten.clone()
-        # TODO clone factor ?
+            phi.A[ind] = ten.clone()  # TODO clone factor ?
         return phi
 
     def copy(self) -> yastn.tn.mps.MpsMpoOBC:
@@ -113,7 +129,6 @@ class _MpsMpoParent:
         phi = self.shallow_copy()
         for ind, ten in phi.A.items():
             phi.A[ind] = ten.copy()
-        # TODO copy factor ???
         return phi
 
     def conj(self) -> yastn.tn.mps.MpsMpoOBC:
@@ -174,7 +189,7 @@ class _MpsMpoParent:
             phi.factor = am * self.factor
             phi.A[0] = phi.A[0] * (multiplier / am)
         else:
-            phi.A[0] = phi.A[0] * multiplier
+            phi.factor = am * self.factor
         return phi
 
     def __rmul__(self, number) -> yastn.tn.mps.MpsMpoOBC:

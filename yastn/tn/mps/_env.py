@@ -26,7 +26,7 @@ def Env(bra, target):
             if isinstance(op, MpsMpoOBC):
                 if ket.nr_phys == 1:
                     return _Env_mps_mpo_mps(bra, op, ket)
-                elif ket.nr_phys == 2 and hasattr(op, 'mode') and op.mode == 'on_bra':
+                elif ket.nr_phys == 2 and hasattr(op, 'flag') and op.flag == 'on_bra':
                     return _Env_mpo_mpobra_mpo(bra, op, ket)
                 else:  # ket.nr_phys == 2 and default 'on_ket"
                     return _Env_mpo_mpo_mpo(bra, op, ket)
@@ -519,7 +519,7 @@ class _Env_mpo_mpobra_mpo(_EnvParent_3_obc):
         tmp = ncon([tmp, self.F[(nl, n)]], ((1, -0, -1), (-3, -2, 1)))
         tmp = self.op[n]._attach_01(tmp)
         tmp = tmp.unfuse_legs(axes=0)
-        tmp = ncon([tmp, self.F[(nr, n)]], ((-1, 1, -0, 2, -3), (1, 2, -2)))
+        tmp = ncon([tmp, self.F[(nr, n)]], ((-1, 1, 2, -0, -3), (1, 2, -2)))
         return self.op.factor * tmp
 
     def Heff2(self, AA, bd):

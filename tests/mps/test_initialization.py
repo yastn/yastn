@@ -255,7 +255,7 @@ def test_mixed_dims_mpo_and_transpose():
     #
     # random mpo with physical dimensions matching ref
     #
-    H = mps.random_mpo(ref, D_total=5)
+    H = mps.random_mpo(ref, D_total=5, dtype='complex128')
     #
     H_legs = H.get_physical_legs()
     assert H_legs == ref.get_physical_legs()
@@ -268,7 +268,7 @@ def test_mixed_dims_mpo_and_transpose():
     #
     # conjugate transpose to change reference to bra
     #
-    psi_bra = mps.random_mps(ref.conj().T, D_total=3)  #
+    psi_bra = mps.random_mps(ref.conj().T, D_total=3, dtype='complex128')  #
     bra_legs = psi_bra.get_physical_legs()
     assert [leg.D for leg in bra_legs] == [(3,), (4,), (3,), (4,), (3,)]
     #
@@ -276,13 +276,15 @@ def test_mixed_dims_mpo_and_transpose():
     #
     assert mps.vdot(psi_bra, H.conj().T @ H, psi_bra) > 0
     assert mps.vdot(psi_ket, H @ H.conj().T, psi_ket) > 0
+    assert (H.conj().T - H.H).norm() < 1e-12 * H.norm()
+    assert (psi_bra.conj() - psi_bra.H).norm() < 1e-12 * psi_bra.norm()
+    assert (psi_bra.T - psi_bra).norm() < 1e-12 * psi_bra.norm()
     #
     # final tests of transpose
     #
     assert psi_ket.T == psi_ket
     phys_dims = [(legs[0].D, legs[1].D) for legs in H.T.get_physical_legs()]
     assert phys_dims == [((3,), (2,)), ((4,), (3,)), ((3,), (2,)), ((4,), (3,)), ((3,), (2,))]
-
 
 
 def test_MpsMpoOBC_properties(config=cfg):
