@@ -176,6 +176,46 @@ class _EnvParent(metaclass=abc.ABCMeta):
         """
         return self.Heff2(self.ket.merge_two_sites(bd), bd)
 
+    @abc.abstractmethod
+    def charges_missing(self, n):
+        """
+        Auxiliary function for enlarge_bond.
+        It checks if some charges are missing on the physical leg of the state
+        as compared to the physical leg of the operator.
+
+        In some corner cases, it is possible that symmetries might restrict
+        1-site update from including this charge into the physical leg of psi.
+        2-site update is better in such cases.
+        """
+
+    def enlarge_bond(self, bd, opts_svd):
+        """
+        Auxiliary function for site12 tdvp update.
+        It decides if 1- or 2-site update should be used around a given bond.
+        """
+        if bd[0] < 0 or bd[1] >= self.N:
+            return False  # do not enlarge bond outside of the chain
+
+        if self.charges_missing(bd[0]) or self.charges_missing(bd[1]):
+            return True  # true if some charges are missing on physical legs of psi
+
+        AL = self.bra[bd[0]].fuse_legs(axes=((0, 1), 2))
+        AR = self.bra[bd[1]].fuse_legs(axes=(0, (1, 2)))
+        shapeL = AL.get_shape()
+        shapeR = AR.get_shape()
+        if shapeL[0] == shapeL[1] or shapeR[0] == shapeR[1] or \
+           ('D_total' in opts_svd and shapeL[1] >= opts_svd['D_total']):
+            return False  # maximal bond dimension
+
+        if 'tol' in opts_svd:
+            _, R0 = qr(AL, axes=(0, 1), sQ=1)
+            _, R1 = qr(AR, axes=(1, 0), Raxis=1, sQ=-1)
+            S = svd(R0 @ R1, compute_uv=False)
+            if any(S[t][-1] > opts_svd['tol'] * 1.1 for t in S.struct.t):
+                return True  # Schmidt values below expected tolerance
+
+        return False  # no hint for using 2-site update
+
 
 class Env_sum(_EnvParent):
 
@@ -227,29 +267,8 @@ class Env_sum(_EnvParent):
             tmp = tmp + env.project_ket_on_bra_2(bd)
         return tmp
 
-    def enlarge_bond(self, bd, opts_svd):
-        if bd[0] < 0 or bd[1] >= self.N:  # do not enlarge bond outside of the chain
-            return False
-        AL = self.bra[bd[0]]
-        AR = self.bra[bd[1]]
-        if any([(env.op[bd[0]].get_legs(axes=1).t != AL.get_legs(axes=1).t) or \
-           (env.op[bd[1]].get_legs(axes=1).t != AR.get_legs(axes=1).t) for env in self.envs]):
-            return True  # true if some charges are missing on physical legs of psi
-
-        AL = AL.fuse_legs(axes=((0, 1), 2))
-        AR = AR.fuse_legs(axes=(0, (1, 2)))
-        shapeL = AL.get_shape()
-        shapeR = AR.get_shape()
-        if shapeL[0] == shapeL[1] or shapeR[0] == shapeR[1] or \
-           ('D_total' in opts_svd and shapeL[1] >= opts_svd['D_total']):
-            return False  # maximal bond dimension
-        if 'tol' in opts_svd:
-            _, R0 = qr(AL, axes=(0, 1), sQ=1)
-            _, R1 = qr(AR, axes=(1, 0), Raxis=1, sQ=-1)
-            S = svd(R0 @ R1, compute_uv=False)
-            if any(S[t][-1] > opts_svd['tol'] * 1.1 for t in S.struct.t):
-                return True
-        return False
+    def charges_missing(self, n):
+        return any(env.charges_missing(n) for env in self.envs)
 
 
 class Env2(_EnvParent):
@@ -285,9 +304,10 @@ class Env2(_EnvParent):
             self.F[(n, n + 1)] = ncon([self.bra[n].conj(), self.F[(n - 1, n)], self.ket[n]], inds)
 
     def Heff0(self, C, bd):
-        bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
-        C = self.op.factor * C
-        return self.F[bd] @ C @ self.F[ibd]
+        raise YastnError("Should not be triggered by current higher-level functions.")  # pragma: no cover
+        # bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
+        # C = self.op.factor * C
+        # return self.F[bd] @ C @ self.F[ibd]
 
     def Heff1(self, x, n):
         inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
@@ -324,6 +344,9 @@ class Env2(_EnvParent):
             temp = tensordot(self.F[(n - 1, n)], temp, axes=((1, 1)))
             axes = ((0, 1), (0, 1)) if self.nr_phys == 1 else ((0, 1, 3), (0, 1, 3))
             self.F[(n, n + 1)] = tensordot(self.bra[n].conj(), temp, axes=axes)
+
+    def charges_missing(self, n):
+        raise YastnError("Should not be triggered by current higher-level functions.")  # pragma: no cover
 
 
 class Env_project(Env2):
@@ -365,29 +388,11 @@ class _EnvParent_3(_EnvParent):
     def factor(self) -> float:
         return self.bra.factor * self.op.factor * self.ket.factor
 
-    def enlarge_bond(self, bd, opts_svd):
-        if bd[0] < 0 or bd[1] >= self.N:  # do not enlarge bond outside of the chain
-            return False
-        AL = self.bra[bd[0]]
-        AR = self.bra[bd[1]]
-        if (self.op[bd[0]].get_legs(axes=1).t != AL.get_legs(axes=1).t) or \
-           (self.op[bd[1]].get_legs(axes=1).t != AR.get_legs(axes=1).t):
-            return True  # true if some charges are missing on physical legs of psi
+    def charges_missing(self, n):
+        op_t = self.op[n].get_legs(axes=1).t
+        psi_t = self.bra[n].get_legs(axes=1).t
+        return any(tt not in psi_t for tt in op_t)
 
-        AL = AL.fuse_legs(axes=((0, 1), 2))
-        AR = AR.fuse_legs(axes=(0, (1, 2)))
-        shapeL = AL.get_shape()
-        shapeR = AR.get_shape()
-        if shapeL[0] == shapeL[1] or shapeR[0] == shapeR[1] or \
-           ('D_total' in opts_svd and shapeL[1] >= opts_svd['D_total']):
-            return False  # maximal bond dimension
-        if 'tol' in opts_svd:
-            _, R0 = qr(AL, axes=(0, 1), sQ=1)
-            _, R1 = qr(AR, axes=(1, 0), Raxis=1, sQ=-1)
-            S = svd(R0 @ R1, compute_uv=False)
-            if any(S[t][-1] > opts_svd['tol'] * 1.1 for t in S.struct.t):
-                return True
-        return False
 
 
 class _EnvParent_3_obc(_EnvParent_3):
@@ -536,6 +541,11 @@ class _Env_mpo_mpobra_mpo(_EnvParent_3_obc):
         tmp = ncon([tmp, self.F[(nr, n2)]], ((-1, -2, 1, 2, -0, -4), (1, 2, -3)))
         tmp = tmp.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3, 4, 5))
         return self.op.factor * tmp
+
+    def charges_missing(self, n):
+        op_t = self.op[n].get_legs(axes=3).t
+        psi_t = self.bra[n].get_legs(axes=3).t
+        return any(tt not in psi_t for tt in op_t)
 
 
 class _EnvParent_3_pbc(_EnvParent_3):
