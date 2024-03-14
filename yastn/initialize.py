@@ -238,7 +238,6 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
     .. note::
         currently supports either one or two legs as input. In case of a single leg,
         an identity matrix with Leg and its conjugate :meth:`yastn.Leg.conj()` is returned.
-        If two legs are passed, they must have opposite signature.
 
     Parameters
     ----------
@@ -248,7 +247,8 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
         Specify legs of the tensor passing a list of :class:`yastn.Leg`.
     isdiag : bool
         Whether to return explicitly diagonal tensor.
-        If False, it supports having fused legs.
+        If True, the signatures of the legs have to be opposite, and fused legs are not supported.
+        If False, it supports having fused legs and any combination of signatures.
     device : str
         Device on which the tensor should be initialized. Overrides default_device
         specified in config.
@@ -270,14 +270,15 @@ def eye(config=None, legs=(), isdiag=True, **kwargs) -> yastn.Tensor:
         legs = (legs,)
     if len(legs) == 1:
         legs = (legs[0], legs[0].conj())
+    legs = legs[:2]  # in case more then 2 legs are provided
     if any(leg.fusion != 'hard' for leg in legs):
         raise YastnError("eye does not support 'meta'-fused legs")
-    # ulegs, mfs = _unpack_legs(legs)
-    legs_nomerge = tuple(leg.drop_history() for leg in legs)
-    hfs = tuple(leg.legs[0] for leg in legs)
-    tmp = _fill(config=config, legs=legs_nomerge, isdiag=True, val='ones', **kwargs)
-    tmp = tmp.diag()
-    return tmp._replace(hfs=hfs)
+    tmp = _fill(config=config, legs=legs, val='zeros', **kwargs)
+    for t, D in zip(tmp.struct.t, tmp.struct.D):
+        blk = tmp[t]
+        for i in range(min(D)):
+            blk[i, i] = 1
+    return tmp
 
 def load_from_dict(config=None, d=None) -> yastn.Tensor:
     """

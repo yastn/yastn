@@ -1,7 +1,6 @@
 """ Environments for the <mps| mpo |mps> and <mps|mps>  contractions. """
 from __future__ import annotations
-from ... import eye, tensordot, ncon, vdot, YastnError, Tensor, qr, svd, ones
-from typing import Sequence, Dict, Optional
+from ... import eye, tensordot, ncon, vdot, YastnError, qr, svd, ones
 from . import MpsMpoOBC, MpoPBC
 import abc
 
@@ -284,9 +283,9 @@ class Env2(_EnvParent):
             raise YastnError('Env: bra and ket should have the same number of sites.')
 
         legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
-        self.F[(-1, 0)] = ones(self.config, legs=legs, isdiag=False)
+        self.F[(-1, 0)] = eye(self.config, legs=legs, isdiag=False)
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
-        self.F[(self.N, self.N - 1)] = ones(self.config, legs=legs, isdiag=False)
+        self.F[(self.N, self.N - 1)] = eye(self.config, legs=legs, isdiag=False)
 
     def factor(self):
         return self.bra.factor * self.ket.factor
@@ -401,23 +400,13 @@ class _EnvParent_3_obc(_EnvParent_3):
         super().__init__(bra, op, ket)
 
         # init boundaries
-        legs = [self.bra.virtual_leg('first'),
-                self.op.virtual_leg('first').conj(),
-                self.ket.virtual_leg('first').conj()]
-        self.F[(-1, 0)] = ones(self.config, legs=legs, isdiag=False)
+        legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
+        tmp = eye(self.config, legs=legs, isdiag=False)
+        self.F[(-1, 0)] = tmp.add_leg(axis=1, leg=op.virtual_leg('first').conj())
 
-        legs = [self.ket.virtual_leg('last').conj(),
-                self.op.virtual_leg('last').conj(),
-                self.bra.virtual_leg('last')]
-        self.F[(self.N, self.N - 1)] = ones(self.config, legs=legs, isdiag=False)
-
-        # legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
-        # tmp = eye(self.config, legs=legs, isdiag=False)
-        # self.F[(-1, 0)] = tmp.add_leg(axis=1, s=-op.virtual_leg('first').s)
-        # right boundary
-        # legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
-        # tmp = eye(self.config, legs=legs, isdiag=False)
-        # self.F[(self.N, self.N - 1)] = tmp.add_leg(axis=1, s=-op.virtual_leg('last').s)
+        legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
+        tmp = eye(self.config, legs=legs, isdiag=False)
+        self.F[(self.N, self.N - 1)] = tmp.add_leg(axis=1, leg=op.virtual_leg('last').conj())
 
     def measure(self, bd=(-1, 0)):
         tmp = tensordot(self.F[bd], self.F[bd[::-1]], axes=((0, 1, 2), (2, 1, 0)))
