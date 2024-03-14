@@ -354,20 +354,13 @@ class Env_project(Env2):
         self.penalty = penalty
 
     def Heff1(self, x, n):
-        inds = ((-0, 1), (1, -1, 2), (2, -2)) if self.nr_phys == 1 else ((-0, 1), (1, -1, 2, -3), (2, -2))
-        pp = ncon([self.F[(n - 1, n)], self.ket[n], self.F[(n + 1, n)]], inds)
+        pp = super().Heff1(self.ket[n], n)
         return self.penalty * pp * vdot(pp, x)
 
     def Heff2(self, AA, bd):
         """ Heff2 @ AA """
-        n1, n2 = bd
         pp = self.ket.merge_two_sites(bd)
-        axes = (0, (1, 2), 3) if pp.ndim == 4 else (0, (1, 2, 3, 5), 4)
-        pp = pp.fuse_legs(axes=axes)
-        pp = self.F[(n1 - 1, n1)] @ pp @ self.F[(n2 + 1, n2)]
-        pp = pp.unfuse_legs(axes=1)
-        if pp.ndim == 6:
-            pp = pp.transpose(axes=(0, 1, 2, 3, 5, 4))
+        pp = super().Heff2(pp, bd)
         return (self.penalty * vdot(pp, AA)) * pp
 
 class _EnvParent_3(_EnvParent):
