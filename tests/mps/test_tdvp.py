@@ -18,7 +18,7 @@ except ImportError:
 def test_tdvp_sudden_quench(kwargs):
     tdvp_sudden_quench(**kwargs, tol=1e-10)
     tdvp_sudden_quench_mpo_sum(**kwargs, tol=1e-10)
-    tdvp_sudden_quench_on_bra(**kwargs, tol=1e-5)
+    tdvp_sudden_quench_Heisenberg(**kwargs, tol=1e-5)
 
 def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
     """
@@ -272,10 +272,13 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
             assert np.allclose(Cref, Cphi, rtol=tol)
 
 
-def tdvp_sudden_quench_on_bra(sym='U1', config=cfg, tol=1e-4):
+def tdvp_sudden_quench_Heisenberg(sym='U1', config=cfg, tol=1e-5):
     """
     Simulate a sudden quench of a free-fermionic (hopping) model.
     Compare observables versus known reference results.
+
+    Here we employ the Heisenberg picture to evolve an operator of interest.
+    Test constructor [-H, H.on_bra()]
     """
     N, n = 6, 3  # Consider a system of 6 modes and 3 particles.
     #
@@ -324,28 +327,37 @@ def tdvp_sudden_quench_on_bra(sym='U1', config=cfg, tol=1e-4):
     #
     # C[m, n] = <c_n^dag c_m>
     pps = [(0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (1, 2), (1, 3), (1, 4), (1, 5), (2, 3), (2, 4), (2, 5), (3, 4), (3, 5), (4, 5)]  # (m, n)
-    ams = [1, 0.5, 0.1, 0.2, 0.3, -0.2, -0.4, 0.7, 0.9, -0.2, -0.2, -0.3, 0.3, 0.5, 0.7]
-    terms = [mps.Hterm(am, pp[::-1], (ops.cp(), ops.c())) for pp, am in zip(pps, ams)]
+    terms = [mps.Hterm(1, pp[::-1], (ops.cp(), ops.c())) for pp in pps]
     O = mps.generate_mpo(I, terms)
     #
-    e0ref = sum(am * C0ref[pp] for pp, am in zip(pps, ams))
+    e0ref = sum(C0ref[pp] for pp in pps)
     e0 = mps.vdot(psi, O, psi)
     print(e0, e0ref)
-    assert abs(e0 - e0ref) < tol
+    assert abs(e0 - e0ref) < tol * abs(e0ref)
     #
     OO = O.shallow_copy()
     opts_expmv = {'hermitian': False, 'ncv': 5, 'tol': 1e-12}
     opts_svd = {'tol': 1e-15, 'D_total': 64}
 
-    HH = [-1j * H1, 1j * H1.on_bra()]
+    HH = [-H1, H1.on_bra()]
     for step in mps.tdvp_(OO, HH, times=(0, 0.00001, 0.00002, 0.00005, 0.0001, 0.002, 0.005, 0.01, 0.1),
-                          method='2site', dt=0.01, u=1, normalize=False,
+                          method='2site', dt=0.01, normalize=False,
                           opts_svd=opts_svd, opts_expmv=opts_expmv):
         Cref = evolve_correlation_matrix(C0ref, J1, step.tf)
-        e1ref = sum(am * Cref[pp] for pp, am in zip(pps, ams))
+        e1ref = sum(Cref[pp] for pp in pps)
         e1 = mps.vdot(psi, OO, psi)
-        assert abs(e1 - e1ref) < tol
+        print(e1, e1ref)
+        assert abs(e1 - e1ref) < tol * abs(e1ref)
 
+    for step in mps.tdvp_(OO, HH, times=(0.1, 0.2, 0.3),
+                          method='12site', dt=0.01, normalize=False,
+                          opts_svd=opts_svd, opts_expmv=opts_expmv):
+        Cref = evolve_correlation_matrix(C0ref, J1, step.tf)
+        e1ref = sum(Cref[pp] for pp in pps)
+        e1 = mps.vdot(psi, OO, psi)
+        print(e1, e1ref)
+        assert abs(e1 - e1ref) < tol * abs(e1ref)
+    print(OO.get_bond_dimensions())
 
 @pytest.mark.parametrize('kwargs', [{'config': cfg, 'sym': 'Z2'},
                                     {'config': cfg, 'sym': 'dense'}])
@@ -483,15 +495,15 @@ def test_tdvp_raise(config=cfg):
 
 if __name__ == "__main__":
     test_tdvp_raise(config=cfg)
-    tdvp_sudden_quench_on_bra()
-    for sym in ['Z2', 'U1']:
-        t0 = time.time()
-        tdvp_sudden_quench(sym=sym)
-        print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
-        t0 = time.time()
-        tdvp_sudden_quench_mpo_sum(sym=sym)
-        print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
-    for sym in ['dense', 'Z2']:
-        t0 = time.time()
-        tdvp_KZ_quench(sym=sym)
-        print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
+    tdvp_sudden_quench_Heisenberg()
+    # for sym in ['Z2', 'U1']:
+    #     t0 = time.time()
+    #     tdvp_sudden_quench(sym=sym)
+    #     print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
+    #     t0 = time.time()
+    #     tdvp_sudden_quench_mpo_sum(sym=sym)
+    #     print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
+    # for sym in ['dense', 'Z2']:
+    #     t0 = time.time()
+    #     tdvp_KZ_quench(sym=sym)
+    #     print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )

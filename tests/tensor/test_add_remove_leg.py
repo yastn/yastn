@@ -141,7 +141,7 @@ def test_operators_chain():
 
     T1 = yastn.ncon([cdag, cdag, c, c], [(-1, -5), (-2, -6), (-3 ,-7), (-4, -8)])
     T2 = yastn.ncon([o1, o2, o3, o4], [(4, -1, -5, 1), (1, -2, -6, 2), (2, -3 ,-7, 3), (3, -4, -8, 4)])
-    assert yastn.norm(T1 -  T2) < tol
+    assert yastn.norm(T1 - T2) < tol
 
     # special case when there are no blocks in the tensor
     a = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1), n=1)

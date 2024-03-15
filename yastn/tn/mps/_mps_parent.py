@@ -196,6 +196,9 @@ class _MpsMpoParent:
         """ New MPS/MPO with the first tensor multiplied by a scalar. """
         return self.__mul__(number)
 
+    def __neg__(self):
+        return self.__mul__(-1)
+
     def __truediv__(self, number) -> yastn.tn.mps.MpsMpoOBC:
         """ Divide MPS/MPO by a scalar. """
         return self.__mul__(1 / number)

@@ -209,13 +209,13 @@ def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
             bd = (n, n + 1)
             AA = env.project_ket_on_bra_2(bd)
             _disc_weight_bd = bra.unmerge_two_sites_(AA, bd, opts_svd)
+            bra.A[bra.pC] = bra.A[bra.pC] / bra.A[bra.pC].norm()
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':
                 Schmidt[bra.pC] = bra[bra.pC]
             bra.absorb_central_(to=to)
             env.clear_site_(n, n + 1)
             env.update_env_(n + dn, to=to)
-    bra[bra.first] = bra[bra.first] / bra[bra.first].norm()
     env.update_env_(bra.first, to='first')
     return max_disc_weight
 

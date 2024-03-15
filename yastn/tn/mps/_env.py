@@ -153,7 +153,7 @@ class _EnvParent(metaclass=abc.ABCMeta):
         r"""
         Action of Heff1 on n-th ket MPS tensor, Heff1 @ ket[n]
         """
-        return self.Heff1(self.ket[n], n)
+        return self.ket.factor * self.Heff1(self.ket[n], n)
 
     @abc.abstractmethod
     def Heff2(self, AA, bd) -> yastn.Tensor:
@@ -173,7 +173,7 @@ class _EnvParent(metaclass=abc.ABCMeta):
         r"""
         Action of Heff2 on bd = (n, n+1) ket MPS tensors, Heff2 @ AA
         """
-        return self.Heff2(self.ket.merge_two_sites(bd), bd)
+        return self.ket.factor * self.Heff2(self.ket.merge_two_sites(bd), bd)
 
     @abc.abstractmethod
     def charges_missing(self, n):
@@ -198,8 +198,10 @@ class _EnvParent(metaclass=abc.ABCMeta):
         if self.charges_missing(bd[0]) or self.charges_missing(bd[1]):
             return True  # true if some charges are missing on physical legs of psi
 
-        AL = self.bra[bd[0]].fuse_legs(axes=((0, 1), 2))
-        AR = self.bra[bd[1]].fuse_legs(axes=(0, (1, 2)))
+        indsL = (0, 1) if self.bra.nr_phys == 1 else (0, 1, 3)
+        indsR = (1, 2) if self.bra.nr_phys == 1 else (1, 2, 3)
+        AL = self.bra[bd[0]].fuse_legs(axes=(indsL, 2))
+        AR = self.bra[bd[1]].fuse_legs(axes=(0, indsR))
         shapeL = AL.get_shape()
         shapeR = AR.get_shape()
         if shapeL[0] == shapeL[1] or shapeR[0] == shapeR[1] or \

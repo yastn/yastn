@@ -107,7 +107,7 @@ class Tensor:
     from ._initialize import set_block, _fill_tensor, __setitem__
     from .linalg import norm, svd, svd_with_truncation, eigh, eigh_with_truncation, qr
     from ._contractions import tensordot, __matmul__, vdot, trace, swap_gate, broadcast, apply_mask
-    from ._algebra import __add__, __sub__, __mul__, __rmul__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
+    from ._algebra import __add__, __sub__, __mul__, __rmul__, __neg__, apxb, __truediv__, __pow__, __lt__, __gt__, __le__, __ge__
     from ._algebra import __abs__, real, imag, sqrt, rsqrt, reciprocal, exp, bitwise_not
     from ._single import conj, conj_blocks, flip_signature, flip_charges, transpose, moveaxis, move_leg, diag, grad
     from ._single import copy, clone, detach, to, requires_grad_, remove_zero_blocks, add_leg, remove_leg, drop_leg_history
