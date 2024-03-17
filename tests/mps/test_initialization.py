@@ -274,8 +274,12 @@ def test_mixed_dims_mpo_and_transpose():
     #
     # expectation value in positive operator H @ H.conj().T
     #
-    assert mps.vdot(psi_bra, H.conj().T @ H, psi_bra) > 0
-    assert mps.vdot(psi_ket, H @ H.conj().T, psi_ket) > 0
+    tmp = mps.vdot(psi_bra, H.conj().T @ H, psi_bra)
+    assert tmp.real > 0
+    assert abs(tmp.imag) < 1e-8
+    tmp = mps.vdot(psi_ket, H @ H.conj().T, psi_ket)
+    assert tmp.real > 0
+    assert abs(tmp.imag) < 1e-8
     assert (H.conj().T - H.H).norm() < 1e-12 * H.norm()
     assert (psi_bra.conj() - psi_bra.H).norm() < 1e-12 * psi_bra.norm()
     assert (psi_bra.T - psi_bra).norm() < 1e-12 * psi_bra.norm()
