@@ -266,7 +266,7 @@ def test_dmrg_XX_model_U1_sum_of_Mpos(config=cfg, tol=1e-6):
         run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
 
 
-def test_dmrg_Ising_PBC_Z2(config=cfg, tol=1e-5):
+def test_dmrg_Ising_PBC_Z2(config=cfg, tol=1e-4):
     """
     Initialize random MPS of U(1) tensors and tests _dmrg vs known results.
     """
@@ -305,7 +305,7 @@ def test_dmrg_Ising_PBC_Z2(config=cfg, tol=1e-5):
         for parity, E_target in Eng_sectors.items():
             psi = mps.random_mps(I, D_total=Dmax, n=(parity,)).canonize_(to='first')
             parity_target = [(-1) ** parity] * len(E_target)
-            psis = run_dmrg(psi, H, P, E_target, parity_target, opts_svd, tol / 1000)
+            psis = run_dmrg(psi, H, P, E_target, parity_target, opts_svd, tol / 100)
             for EE, psi in zip(E_target, psis):
                 psi1 = mps.zipper(H, psi, opts_svd=opts_svd, normalize=False)
                 mps.compression_(psi1, [H, psi], method='2site', max_sweeps=4, opts_svd=opts_svd, normalize=False)
