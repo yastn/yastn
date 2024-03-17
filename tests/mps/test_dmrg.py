@@ -1,4 +1,5 @@
 """ dmrg tests """
+import numpy as np
 import pytest
 import yastn.tn.mps as mps
 import yastn
@@ -22,7 +23,7 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
     # This allows us to find the ground state
     # and a few consequative lowest-energy eigenstates.
     #
-    project = []
+    project, states = [], []
     for ref_eng, ref_occ  in zip(E_target, occ_target):
         #
         # We find a state and check that its energy and total occupation
@@ -71,8 +72,10 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
         # Finally, we add the found state psi to the list of states
         # to be projected out in the next step of the loop.
         #
-        project.append(psi)
-    return project
+        penalty = 100
+        project.append((penalty, psi))
+        states.append(psi)
+    return states
 
 
 @pytest.mark.parametrize("kwargs", [{'config': cfg}])
@@ -263,7 +266,7 @@ def test_dmrg_XX_model_U1_sum_of_Mpos(config=cfg, tol=1e-6):
         run_dmrg(psi, H, O_occ, E_target, occ_target, opts_svd, tol)
 
 
-def test_dmrg_Ising_PBC_Z2(config=cfg, tol=1e-6):
+def test_dmrg_Ising_PBC_Z2(config=cfg, tol=1e-5):
     """
     Initialize random MPS of U(1) tensors and tests _dmrg vs known results.
     """
@@ -305,9 +308,15 @@ def test_dmrg_Ising_PBC_Z2(config=cfg, tol=1e-6):
             psis = run_dmrg(psi, H, P, E_target, parity_target, opts_svd, tol)
             for EE, psi in zip(E_target, psis):
                 psi1 = mps.zipper(H, psi, opts_svd=opts_svd, normalize=False)
-                mps.compression_(psi1, [H, psi], method='2site', max_sweeps=2, normalize=False)
+                mps.compression_(psi1, [H, psi], method='2site', max_sweeps=2, opts_svd=opts_svd, normalize=False)
                 mps.compression_(psi1, [H, psi], method='1site', max_sweeps=6, normalize=False)
                 assert (EE * psi - psi1).norm() < tol
+                #
+                # evolve in real time  # test Heff0 in PBC
+                tf = 0.1
+                next(mps.tdvp_(psi1, H, method='1site', times=(0, tf), dt=0.05, normalize=False))
+                print((EE * psi * (np.exp(-1j * EE * tf)) - psi1).norm())
+                assert (EE * psi * (np.exp(-1j * EE * tf)) - psi1).norm() < tol
 
 
 def test_dmrg_raise(config=cfg):
@@ -328,6 +337,9 @@ def test_dmrg_raise(config=cfg):
     with pytest.raises(yastn.YastnError):
         mps.dmrg_(psi, H, method='one-site')
         # DMRG: dmrg method one-site not recognized.
+    with pytest.raises(yastn.YastnError):
+        mps.dmrg_(psi, H, method='2site')
+        # DMRG: provide opts_svd for 2site method.
 
 
 if __name__ == "__main__":

@@ -113,6 +113,9 @@ def _compression_(psi, target, method,
     if overlap_tol is not None and not overlap_tol > 0:
         raise YastnError('Compression: overlap_tol has to be positive or None.')
 
+    if opts_svd is None and method == '2site':
+        raise YastnError("Compression: provide opts_svd for %s method." % method)
+
     if method not in ('1site', '2site'):
         raise YastnError('Compression: method %s not recognized.' % method)
 
@@ -200,8 +203,6 @@ def _compression_1site_sweep_(env, Schmidt=None):
 
 def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
     """ variational update on 2 sites """
-    if opts_svd is None:
-        opts_svd = {'tol': 1e-13}
     max_disc_weight = -1.
     bra = env.bra
     for to, dn in (('last', 0), ('first', 1)):

@@ -332,7 +332,6 @@ def tdvp_sudden_quench_Heisenberg(sym='U1', config=cfg, tol=1e-5):
     #
     e0ref = sum(C0ref[pp] for pp in pps)
     e0 = mps.vdot(psi, O, psi)
-    print(e0, e0ref)
     assert abs(e0 - e0ref) < tol * abs(e0ref)
     #
     OO = O.shallow_copy()
@@ -346,7 +345,6 @@ def tdvp_sudden_quench_Heisenberg(sym='U1', config=cfg, tol=1e-5):
         Cref = evolve_correlation_matrix(C0ref, J1, step.tf)
         e1ref = sum(Cref[pp] for pp in pps)
         e1 = mps.vdot(psi, OO, psi)
-        print(e1, e1ref)
         assert abs(e1 - e1ref) < tol * abs(e1ref)
 
     for step in mps.tdvp_(OO, HH, times=(0.1, 0.2, 0.3),
@@ -355,9 +353,7 @@ def tdvp_sudden_quench_Heisenberg(sym='U1', config=cfg, tol=1e-5):
         Cref = evolve_correlation_matrix(C0ref, J1, step.tf)
         e1ref = sum(Cref[pp] for pp in pps)
         e1 = mps.vdot(psi, OO, psi)
-        print(e1, e1ref)
         assert abs(e1 - e1ref) < tol * abs(e1ref)
-    print(OO.get_bond_dimensions())
 
 @pytest.mark.parametrize('kwargs', [{'config': cfg, 'sym': 'Z2'},
                                     {'config': cfg, 'sym': 'dense'}])
@@ -455,8 +451,8 @@ def tdvp_KZ_quench(sym='Z2', config=None):
         gg = round(g(step.tf))  # g at the snapshot
         assert abs(mEZ - Zex[gg]) < 1e-5
         assert abs(mEXX - XXex[gg]) < 1e-5
-        print(max(abs(EXX[k] - EXX[0, 1])for k in pairs))
-        print(max(abs(EZ[k] - EZ[0]) < 1e-5 for k in range(N)))
+        # print(max(abs(EXX[k] - EXX[0, 1])for k in pairs))
+        # print(max(abs(EZ[k] - EZ[0]) < 1e-5 for k in range(N)))
         assert all(abs(EXX[k] - EXX[0, 1]) < 1e-5 for k in pairs)
         assert all(abs(EZ[k] - EZ[0]) < 1e-5 for k in range(N))
         #
@@ -479,6 +475,9 @@ def test_tdvp_raise(config=cfg):
         next(mps.tdvp_(psi, H, method='one-site'))
         # TDVP: tdvp method one-site not recognized
     with pytest.raises(yastn.YastnError):
+        next(mps.tdvp_(psi, H, method='2site'))
+        # TDVP: provide opts_svd for 2site method.
+    with pytest.raises(yastn.YastnError):
         next(mps.tdvp_(psi, H, dt=0.))
         # TDVP: dt should be positive.
     with pytest.raises(yastn.YastnError):
@@ -495,15 +494,17 @@ def test_tdvp_raise(config=cfg):
 
 if __name__ == "__main__":
     test_tdvp_raise(config=cfg)
-    tdvp_sudden_quench_Heisenberg()
-    # for sym in ['Z2', 'U1']:
-    #     t0 = time.time()
-    #     tdvp_sudden_quench(sym=sym)
-    #     print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
-    #     t0 = time.time()
-    #     tdvp_sudden_quench_mpo_sum(sym=sym)
-    #     print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
-    # for sym in ['dense', 'Z2']:
-    #     t0 = time.time()
-    #     tdvp_KZ_quench(sym=sym)
-    #     print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
+    for sym in ['Z2', 'U1']:
+        t0 = time.time()
+        tdvp_sudden_quench(sym=sym)
+        print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
+        t0 = time.time()
+        tdvp_sudden_quench_mpo_sum(sym=sym)
+        print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
+        t0 = time.time()
+        tdvp_sudden_quench_Heisenberg(sym=sym)
+        print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
+    for sym in ['dense', 'Z2']:
+        t0 = time.time()
+        tdvp_KZ_quench(sym=sym)
+        print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )

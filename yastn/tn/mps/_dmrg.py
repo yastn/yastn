@@ -23,7 +23,7 @@ class DMRG_out(NamedTuple):
     max_discarded_weight: float = None
 
 
-def dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project=None, method='1site',
+def dmrg_(psi, H, project=None, method='1site',
         energy_tol=None, Schmidt_tol=None, max_sweeps=1, iterator_step=None,
         opts_eigs=None, opts_svd=None):
     r"""
@@ -44,11 +44,15 @@ def dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project=None, 
         It is first canonized to the first site, if not provided in such a form.
         State resulting from :code:`dmrg_` is canonized to the first site.
 
-    H: yastn.tn.mps.MpsMpoOBC or Sequence[tuple(MpsMpoOBC,number)]
-        MPO to minimize against.
+    H: yastn.tn.mps.MpsMpoOBC | Sequence
+        MPO (or a sum of MPOs) to minimize against, see :meth:`Env<yastn.tn.mps.Env>`.
 
-    project: list(yastn.tn.mps.MpsMpoOBC)
-        Optimizes MPS in the subspace orthogonal to MPS's in the list.
+    project: Sequence[yastn.tn.mps.MpsMpoOBC | tuple[float, yastn.tn.mps.MpsMpoOBC]]
+        Add a penalty to the directions spanned by MPSs in the list.
+        It can be used to find a few low-energy states of the Hamiltonian
+        if the penalty is larger than the energy gap from the ground state.
+        Use :code:`[(penalty, MPS), ...]` to provide penalty by hand
+        :code:`[mps, ...]` uses default :code:`penalty=100`.
 
     method: str
         Which DMRG variant to use from '1site', '2site'
@@ -106,7 +110,8 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
         if not isinstance(env, Env_sum):
             env = Env_sum([env])
         for pr in project:
-            env.envs.append(Env_project(psi, pr, 100))
+            penalty, st = (100, pr) if isinstance(pr, MpsMpoOBC) else pr
+            env.envs.append(Env_project(psi, st, penalty))
     env.setup_(to='first')
 
     E_old = env.measure()
@@ -128,6 +133,9 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
 
     if method not in ('1site', '2site'):
         raise YastnError('DMRG: dmrg method %s not recognized.' % method)
+
+    if opts_svd is None and method == '2site':
+        raise YastnError("DMRG: provide opts_svd for %s method." % method)
 
     for sweep in range(1, max_sweeps + 1):
         if method == '1site':
@@ -188,9 +196,6 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
         Environment of the <psi|H|psi> ready for the next iteration.
     """
     psi = env.bra
-
-    if opts_svd is None:
-        opts_svd = {'tol': 1e-13}
 
     max_disc_weight = -1.
     for to, dn in (('last', 0), ('first', 1)):

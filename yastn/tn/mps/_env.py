@@ -6,13 +6,27 @@ import abc
 
 
 def Env(bra, target):
-    """
-    target is:
-    ket  --  Env2
-    [ket]  --  Env2
-    [mpo, ket]  --  various Env3
-    [[mpo, mpo], ket]  --  Env_sum
-    [[ket], [mpo, ket], [[mpo, mpo], ket]]  --  Env_sum
+    r"""
+    Initialize proper environment supporting contraction of MPS/MPO's:
+    :math:`\langle \textrm{bra} | \textrm{target} \rangle`, where
+    :math:`|\textrm{target} \rangle` can be an MPS/MPO, an operator acting on MPS/MPO, or a sum of thereof.
+
+    Parameters
+    ----------
+    bra : yastn.tn.mps.MpsMpoOBC
+        Can be an MPS or an MPO -- the target should be of the matching form.
+
+    target : Sequence | yastn.tn.mps.MpsMpoOBC
+        Dispatch over a set of supported targets
+
+            * ket or [ket] for :math:`\langle \textrm{bra} | \textrm{ket} \rangle`.
+            * [mpo, ket]  for :math:`\langle \textrm{bra} | \textrm{mpo} | \textrm{ket} \rangle`.
+            * [[mpo_1, mpo_2, ...], ket] for :math:`\langle \textrm{bra} | \sum_i \textrm{mpo}_i | \textrm{ket} \rangle`.
+            * [[ket_1], [mpo_2, ket_2], [[mpo_3, mpo_4], ket_3]] for a sum of any combination of the above.
+    Notes
+    -----
+    :meth:`compression_<yastn.tn.mps.compression_>` directly calls :code:`Env(psi, target)`.
+    :meth:`dmrg_<yastn.tn.mps.dmrg_>` and :meth:`tdvp_<yastn.tn.mps.tdvp_>` call :code:`Env(psi, target=[H, psi])`.
     """
     if isinstance(target, MpsMpoOBC):
         return Env2(bra=bra, ket=target)  # ket
@@ -24,15 +38,15 @@ def Env(bra, target):
             op = target[0]
             if isinstance(op, MpsMpoOBC):
                 if ket.nr_phys == 1:
-                    return _Env_mps_mpo_mps(bra, op, ket)
+                    return Env_mps_mpo_mps(bra, op, ket)
                 elif ket.nr_phys == 2 and hasattr(op, 'flag') and op.flag == 'on_bra':
-                    return _Env_mpo_mpobra_mpo(bra, op, ket)
+                    return Env_mpo_mpobra_mpo(bra, op, ket)
                 else:  # ket.nr_phys == 2 and default 'on_ket"
-                    return _Env_mpo_mpo_mpo(bra, op, ket)
+                    return Env_mpo_mpo_mpo(bra, op, ket)
             elif isinstance(op, MpoPBC):
                 if bra.nr_phys != 1:
                     raise YastnError("Env: Application of MpoPBC on Mpo is not supported. Contact developers to add this functionality.")
-                return _Env_mps_mpopbc_mps(bra, op, ket)
+                return Env_mps_mpopbc_mps(bra, op, ket)
             elif hasattr(op, '__iter__'):
                 return Env_sum([Env(bra, [o, ket]) for o in op])
             else:
@@ -54,15 +68,11 @@ def Env(bra, target):
     return Env_sum(envs)
 
 
-class _EnvParent(metaclass=abc.ABCMeta):
+class EnvParent(metaclass=abc.ABCMeta):
 
     def __init__(self, bra=None) -> None:
         """
-        Interface for environments of 1D TNs. In particular of the form,
-
-            <bra| (sum_i op_i |ket_i>)
-
-        where op_i can be None/identity.
+        Interface for environments of 1D TNs.
         """
         self.config = bra.config
         self.bra = bra
@@ -72,12 +82,12 @@ class _EnvParent(metaclass=abc.ABCMeta):
 
     def setup_(self, to='last'):
         r"""
-        Setup all environments in the direction given by ``to``.
+        Setup all environments in given direction.
 
         Parameters
         ----------
         to: str
-            'first' or 'last'.
+            :code:`first` or :code:`last`.
         """
         for n in self.bra.sweep(to=to):
             self.update_env_(n, to=to)
@@ -100,7 +110,7 @@ class _EnvParent(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def measure(self, bd=None) -> number:
         r"""
-        Calculate overlap between environments at bd bond.
+        Calculate overlap between environments at :code:`bd` bond.
 
         Parameters
         ----------
@@ -111,7 +121,7 @@ class _EnvParent(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def update_env_(self, n, to='last'):
         r"""
-        Update environment including site n, in the direction given by to.
+        Update environment including site :code:`n`, in the direction given by :code:`to`.
 
         Parameters
         ----------
@@ -119,26 +129,26 @@ class _EnvParent(metaclass=abc.ABCMeta):
             index of site to include to the environment
 
         to: str
-            'first' or 'last'.
+            :code:`first` or :code:`last`.
         """
 
     @abc.abstractmethod
     def Heff0(self, C, bd) -> yastn.Tensor:
         r"""
-        Action of Heff on central block, Heff0 @ C
+        Action of Heff on central block :code:`Heff0 @ C`.
 
         Parameters
         ----------
         C: tensor
             a central block
         bd: tuple
-            index of bond on which it acts, e.g. (1, 2) [or (2, 1) -- it is ordered]
+            index of bond on which it acts, e.g. (1, 2) [or (2, 1) as it is ordered]
         """
 
     @abc.abstractmethod
     def Heff1(self, A, n) -> yastn.Tensor:
         r"""
-        Action of Heff on a single site MPS tensor, Heff1 @ A
+        Action of Heff on a single site MPS tensor :code:`Heff1 @ A`.
 
         Parameters
         ----------
@@ -151,14 +161,14 @@ class _EnvParent(metaclass=abc.ABCMeta):
 
     def project_ket_on_bra_1(self, n) -> yastn.Tensor:
         r"""
-        Action of Heff1 on n-th ket MPS tensor, Heff1 @ ket[n]
+        Action of Heff1 on :code:`n`-th ket MPS tensor :code:`Heff1 @ ket[n]`.
         """
         return self.ket.factor * self.Heff1(self.ket[n], n)
 
     @abc.abstractmethod
     def Heff2(self, AA, bd) -> yastn.Tensor:
         r"""
-        Action of Heff on central block, Heff2 @ AA.
+        Action of Heff on central block :code:`Heff2 @ AA`.
 
         Parameters
         ----------
@@ -166,12 +176,12 @@ class _EnvParent(metaclass=abc.ABCMeta):
             merged tensor for 2 sites.
             Physical legs should be fused turning it effectivly into 1-site update.
         bd: tuple
-            index of bond on which it acts, e.g. (1, 2) [or (2, 1) -- it is ordered]
+            index of bond on which it acts, e.g. (1, 2) [or (2, 1) as it gets ordered]
         """
 
     def project_ket_on_bra_2(self, bd) -> yastn.Tensor:
         r"""
-        Action of Heff2 on bd = (n, n+1) ket MPS tensors, Heff2 @ AA
+        Action of Heff2 on :code:`bd=(n, n+1)` ket MPS tensors :code:`Heff2 @ AA`.
         """
         return self.ket.factor * self.Heff2(self.ket.merge_two_sites(bd), bd)
 
@@ -218,7 +228,7 @@ class _EnvParent(metaclass=abc.ABCMeta):
         return False  # no hint for using 2-site update
 
 
-class Env_sum(_EnvParent):
+class Env_sum(EnvParent):
 
     def __init__(self, envs):
         super().__init__(bra=envs[0].bra)
@@ -272,7 +282,7 @@ class Env_sum(_EnvParent):
         return any(env.charges_missing(n) for env in self.envs)
 
 
-class Env2(_EnvParent):
+class Env2(EnvParent):
     # The class combines environments of mps+mps for calculation of expectation values, overlaps, etc.
 
     def __init__(self, bra=None, ket=None):
@@ -365,7 +375,7 @@ class Env_project(Env2):
         pp = super().Heff2(pp, bd)
         return (self.penalty * vdot(pp, AA)) * pp
 
-class _EnvParent_3(_EnvParent):
+class EnvParent_3(EnvParent):
 
     def __init__(self, bra, op, ket):
         super().__init__(bra)
@@ -389,7 +399,7 @@ class _EnvParent_3(_EnvParent):
 
 
 
-class _EnvParent_3_obc(_EnvParent_3):
+class EnvParent_3_obc(EnvParent_3):
 
     def __init__(self, bra, op, ket):
         super().__init__(bra, op, ket)
@@ -413,7 +423,7 @@ class _EnvParent_3_obc(_EnvParent_3):
         tmp = self.F[bd].tensordot(C, axes=(2, 0))
         return tmp.tensordot(self.F[ibd], axes=((1, 2), (1, 0)))
 
-class _Env_mps_mpo_mps(_EnvParent_3_obc):
+class Env_mps_mpo_mps(EnvParent_3_obc):
 
     def update_env_(self, n, to='last'):
         if to == 'last':
@@ -446,7 +456,7 @@ class _Env_mps_mpo_mps(_EnvParent_3_obc):
         return self.op.factor * tmp
 
 
-class _Env_mpo_mpo_mpo(_EnvParent_3_obc):
+class Env_mpo_mpo_mpo(EnvParent_3_obc):
 
     def update_env_(self, n, to='last'):
         if to == 'last':
@@ -487,7 +497,7 @@ class _Env_mpo_mpo_mpo(_EnvParent_3_obc):
         return self.op.factor * tmp
 
 
-class _Env_mpo_mpobra_mpo(_EnvParent_3_obc):
+class Env_mpo_mpobra_mpo(EnvParent_3_obc):
     def update_env_(self, n, to='last'):
         if to == 'last':
             tmp = ncon([self.ket[n], self.F[(n - 1, n)]], ((1, -4, -0, -1), (-3, -2, 1)))
@@ -532,7 +542,7 @@ class _Env_mpo_mpobra_mpo(_EnvParent_3_obc):
         return any(tt not in psi_t for tt in op_t)
 
 
-class _EnvParent_3_pbc(_EnvParent_3):
+class EnvParent_3_pbc(EnvParent_3):
 
     def __init__(self, bra, op, ket):
         super().__init__(bra, op, ket)
@@ -564,7 +574,7 @@ class _EnvParent_3_pbc(_EnvParent_3):
         return self.factor() * self.F[bd].tensordot(self.F[bd[::-1]], axes=axes).to_number()
 
 
-class _Env_mps_mpopbc_mps(_EnvParent_3_pbc):
+class Env_mps_mpopbc_mps(EnvParent_3_pbc):
 
     def __init__(self, bra=None, op=None, ket=None):
         super().__init__(bra, op, ket)
@@ -619,7 +629,7 @@ class _Env_mps_mpopbc_mps(_EnvParent_3_pbc):
             self.F[(n, n - 1)] = tmp.tensordot(self.bra[n].conj(), axes=((3, 4), (2, 1)))
 
 
-# class _Env_mpo_mpopbc_mpo  _Env_mpo_mpopbcbra_mpo
+# class Env_mpo_mpopbc_mpo  Env_mpo_mpopbcbra_mpo
     # def Heff1(self, A, n):
         # elif self.nr_phys == 2 and not self.on_aux:
         #     tmp = tmp.fuse_legs(axes=((0, 3), 1, 2))

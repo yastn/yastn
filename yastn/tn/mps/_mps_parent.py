@@ -98,11 +98,12 @@ class _MpsMpoParent:
 
     def on_bra(self) -> yastn.tn.mps.MpsMpoOBC:
         r"""
-        Shallow copy of the tensor with 'on_bra' flag.
+        A shallow copy of the tensor with an added 'on_bra' flag.
 
-        The 'on_bra' flag is only relevant in functions using Env: tdvp_, dmrg_, compression_, vdot.
-        It makes the Mpo operator acting on an Mpo state to be applied on the bra (or auxiliary) legs
+        The flag is only relevant in functions using Env.
+        It makes the Mpo operator acting on an Mpo state to be applied on the bra legs (or auxiliary legs),
         instead of a default application on 'ket' legs.
+        For instance, :code:`Heff = [-H, H.on_bra()]` can be used to evolve an operator in the Heisenberg picture.
 
         This flag gets propagated by __mul__, conj, transpose, and other functions employing shallow_copy.
         It is not saved/loaded, or propagated by more complicated functions.
@@ -139,7 +140,7 @@ class _MpsMpoParent:
         return phi
 
     def transpose(self) -> yastn.tn.mps.MpsMpoOBC:
-        """ Transpose of MPO. For MPS, return self. Same as :attr:`self.T<yastn.tn.mps.MpsMpoOBC.T>`"""
+        """ Transpose of MPO. For MPS, return self."""
         if self.nr_phys == 1:
             return self
         phi = self.shallow_copy()
@@ -147,9 +148,8 @@ class _MpsMpoParent:
             phi.A[n] = phi.A[n].transpose(axes=(0, 3, 2, 1))
         return phi
 
-
     def conjugate_transpose(self) -> yastn.tn.mps.MpsMpo:
-        """ Transpose of MPO. For MPS, return self. Same as :attr:`self.T<yastn.tn.mps.MpsMpo.T>`"""
+        """ Transpose of MPO. For MPS, return self."""
         if self.nr_phys == 1:
             return self.conj()
         phi = self.shallow_copy()
@@ -159,16 +159,22 @@ class _MpsMpoParent:
 
     @property
     def T(self) -> yastn.tn.mps.MpsMpo:
-        r""" Transpose of MPO. For MPS, return self. Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
+        r""" Transpose of MPO. For MPS, return self.
+
+        Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
         return self.transpose()
 
     @property
     def H(self) -> yastn.tn.mps.MpsMpo:
-        r""" Transpose of MPO. For MPS, return self. Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
+        r""" Transpose of MPO. For MPS, return self.
+
+        Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.conjugate_transpose>` """
         return self.conjugate_transpose()
 
     def reverse_sites(self) -> yastn.tn.mps.MpsMpo:
-        r""" New MPS/MPO with reversed order of sites and respectively transposed tensors. """  # TODO (no swap_gates ?)
+        r"""
+        New MPS/MPO with reversed order of sites and respectively transposed virtual tensor legs.
+        """
         phi = type(self)(N=self.N, nr_phys=self.nr_phys)
         phi.factor = self.factor
         axes = (2, 1, 0) if self.nr_phys == 1 else (2, 1, 0, 3)

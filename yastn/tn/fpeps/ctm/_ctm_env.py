@@ -76,7 +76,7 @@ class CtmEnv(Lattice):
 
 
 @dataclass()
-class Local_Projector_Env(): # no more variables than the one given
+class Local_ProjectorEnv(): # no more variables than the one given
     """ data class for projectors labelled by a single lattice site calculated during ctm renormalization step """
 
     hlt : any = None # horizontal left top
@@ -89,11 +89,11 @@ class Local_Projector_Env(): # no more variables than the one given
     vbr : any = None # vertical bottom right
 
     def copy(self):
-        return Local_Projector_Env(hlt=self.hlt, hlb=self.hlb, hrt=self.hrt, hrb=self.hrb, vtl=self.vtl, vtr=self.vtr, vbl=self.vbl, vbr=self.vbr)
+        return Local_ProjectorEnv(hlt=self.hlt, hlb=self.hlb, hrt=self.hrt, hrb=self.hrb, vtl=self.vtl, vtr=self.vtr, vbl=self.vbl, vbr=self.vbr)
 
 
 @dataclass()
-class Local_CTM_Env(): # no more variables than the one given
+class Local_CTMEnv(): # no more variables than the one given
     """ data class for CTM environment tensors associated with each peps tensor """
 
     tl : any = None # top-left
@@ -106,7 +106,7 @@ class Local_CTM_Env(): # no more variables than the one given
     r : any = None  # right
 
     def copy(self):
-        return Local_CTM_Env(tl=self.tl, tr=self.tr, bl=self.bl, br=self.br, t=self.t, b=self.b, l=self.l, r=self.r)
+        return Local_CTMEnv(tl=self.tl, tr=self.tr, bl=self.bl, br=self.br, t=self.t, b=self.b, l=self.l, r=self.r)
 
 
 
@@ -119,7 +119,7 @@ def init_rand(A, tc, Dc):
     for ms in A.sites():
         B = A[ms].copy()
         B = B.unfuse_legs(axes=(0,1))
-        env[ms] = Local_CTM_Env()
+        env[ms] = Local_CTMEnv()
         env[ms].tl = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].tr = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].bl = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
@@ -165,7 +165,7 @@ def init_ones(A):
     for ms in A.sites():
         B = A[ms].copy()
         B = B.unfuse_legs(axes=(0,1))
-        env[ms] = Local_CTM_Env()
+        env[ms] = Local_CTMEnv()
         env[ms].tl = ones(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].tr = ones(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].bl = ones(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
