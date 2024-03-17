@@ -4,18 +4,20 @@ from ._env_auxlliary import *
 
 class EnvNTU:
     def __init__(self, psi, which='NN'):
-        if which not in ('h', 'NN', 'NNh', 'NNhh', 'NNhh', 'NNN', 'NNNh', 'NNNhh', 'NNNhhh'):
+        if which not in ('h', 'NN', 'NNh', 'NNsvd', 'NNhh', 'NNhh', 'NNN', 'NNNh', 'NNNhh', 'NNNhhh'):
             raise YastnError(f" Type of EnvNTU {which} not recognized.")
         self.psi = psi
         self.which = which
         self._dict_gs = {'h': self._g_h,
                          'NN': self._g_NN,
                          'NNh': self._g_NNh,
+                         'NNsvd': self._g_NNsvd,
                          'NNhh': self._g_NNhh,
                          'NNN': self._g_NNN,
                          'NNNh': self._g_NNNh,
                          'NNNhh': self._g_NNNhh,
                          'NNNhhh': self._g_NNNhhh}
+
 
     def bond_metric(self, bd, QA, QB):
         """ Calculates bond metric. """
@@ -141,6 +143,89 @@ class EnvNTU:
             cbr = cor_br(m[1, 1], hr=hair_r(m[1, 2]), hb=hair_b(m[2,  1]))
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
         return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+
+
+    def _g_NNsvd(self, bd, QA, QB):
+        """
+        Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
+        """
+        if bd.dirn == "h":
+            assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
+            #                 (-2,0)  (-2,1)
+            #        (-1,-1)--(-1,0)==(-1,1)--(-1,2)
+            #           |       ||      ||      |
+            # (0, -2)(0, -1) == GA  ++  GB == (0, 2)(0, 3)
+            #           |       ||      ||      |
+            #        (1, -1)--(1, 0)==(1, 1)==(1, 2)
+            #                 (2, 0)  (2, 1)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (1, 0), (1, 1), (1, 2), (0, 2), (-1, 2), (-1, 1), (-1, 0),
+                                                              (0, -2), (2, 0), (2, 1), (0, 3), (-2, 1), (-2, 0)]}
+            tensors_from_psi(m, self.psi)
+            htl_t, _, htl_l = cor_tl(m[-1,-1]).svd_with_truncation(axes=(0, 1), D_total=1)
+            htl_t = htl_t.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
+            htl_l = htl_l.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
+
+            htr_r, _, htr_t = cor_tr(m[-1, 2]).svd_with_truncation(axes=(0, 1), D_total=1)
+            htr_r = htr_r.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
+            htr_t = htr_t.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
+
+            hbr_b, _, hbr_r = cor_br(m[1, 2]).svd_with_truncation(axes=(0, 1), D_total=1)
+            hbr_b = hbr_b.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
+            hbr_r = hbr_r.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
+
+            hbl_l, _, hbl_b = cor_bl(m[1, -1]).svd_with_truncation(axes=(0, 1), D_total=1)
+            hbl_l = hbl_l.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
+            hbl_b = hbl_b.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
+
+            env_l = edge_l(QA, hair_l(m[0,-1], hl=hair_l(m[0,-2]), ht=htl_t, hb=hbl_b))  # [bl bl'] [rr rr'] [tl tl']
+            env_r = edge_r(QB, hair_r(m[0, 2], hr=hair_r(m[0, 3]), ht=htr_t, hb=hbr_b))  # [tr tr'] [ll ll'] [br br']
+
+            ctl = cor_tl(m[-1, 0], ht=hair_t(m[-2, 0]), hl=htl_l)
+            ctr = cor_tr(m[-1, 1], ht=hair_t(m[-2, 1]), hr=htr_r)
+            cbr = cor_br(m[ 1, 1], hb=hair_b(m[ 2, 1]), hr=hbr_r)
+            cbl = cor_bl(m[ 1, 0], hb=hair_b(m[ 2, 0]), hl=hbl_l)
+            g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
+        else: # dirn == "v":
+            assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
+            #                 (-2, 0)
+            #        (-1,-1)--(-1, 0)--(-1,1)
+            #           |        ||      |
+            # (0, -2)(0, -1)===  GA ===(0, 1)(0, 2)
+            #           ||       ++      ||
+            # (1, -2)(1, -1)===  GB ===(1, 1)(1, 2)
+            #           |        ||      |
+            #        (2, -1)--(2,  0)--(2, 1)
+            #                 (3,  0)
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (2,-1), (2, 0), (2, 1), (1, 1), (0, 1), (-1, 1), (-1, 0),
+                                                              (0, -2), (1,-2), (3, 0), (1, 2), (0, 2), (-2, 0)]}
+            tensors_from_psi(m, self.psi)
+
+            htl_t, _, htl_l = cor_tl(m[-1,-1]).svd_with_truncation(axes=(0, 1), D_total=1)
+            htl_t = htl_t.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
+            htl_l = htl_l.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
+
+            htr_r, _, htr_t = cor_tr(m[-1, 1]).svd_with_truncation(axes=(0, 1), D_total=1)
+            htr_r = htr_r.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
+            htr_t = htr_t.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
+
+            hbr_b, _, hbr_r = cor_br(m[2, 1]).svd_with_truncation(axes=(0, 1), D_total=1)
+            hbr_b = hbr_b.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
+            hbr_r = hbr_r.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
+
+            hbl_l, _, hbl_b = cor_bl(m[2, -1]).svd_with_truncation(axes=(0, 1), D_total=1)
+            hbl_l = hbl_l.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
+            hbl_b = hbl_b.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
+
+
+            env_t = edge_t(QA, hair_t(m[-1, 0], ht=hair_t(m[-2, 0]), hl=htl_l, hr=htr_r))  # [lt lt'] [bb bb'] [rt rt']
+            env_b = edge_b(QB, hair_b(m[ 2, 0], hb=hair_b(m[ 3, 0]), hl=hbl_l, hr=hbr_r))  # [rb rb'] [tt tt'] [lb lb']
+            cbl = cor_bl(m[1,-1], hl=hair_l(m[1,-2]), hb=hbl_b)
+            ctl = cor_tl(m[0,-1], hl=hair_l(m[0,-2]), ht=htl_t)
+            ctr = cor_tr(m[0, 1], hr=hair_r(m[0, 2]), ht=htr_t)
+            cbr = cor_br(m[1, 1], hr=hair_r(m[1, 2]), hb=hbr_b)
+            g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+
 
     def _g_NNhh(self, bd, QA, QB):
         """
