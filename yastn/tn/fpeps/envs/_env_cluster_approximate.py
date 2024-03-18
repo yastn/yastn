@@ -76,7 +76,7 @@ class EnvApproximate:
             self.initialize_env(bd)
 
         tmpo = self.transfer_mpo(bd, n=0, QA=QA, QB=QB)
-        env = mps.Env3(self[bd, -1], tmpo, self[bd, 1])
+        env = mps.Env(self[bd, -1], [tmpo, self[bd, 1]])
         Nl = self.Nl
         for n in range(Nl):
             env.update_env_(n, to='last')

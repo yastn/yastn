@@ -228,6 +228,20 @@ def test_generate_random_mps():
         assert bds[0] == bds[-1] == 1
         assert all(bd > D_total/2 for bd in bds[2:-2])
 
+    with pytest.raises(yastn.YastnError):
+        random_mps_spinless_fermions(N=5, D_total=4, sym="U1", n=20)  # impossible number of particles for given N.
+        # MPS: Random mps is a zero state. Check parameters,
+        # or try running again in this is due to randomness of the initialization.
+
+    with pytest.raises(yastn.YastnError):
+        ops = yastn.operators.SpinfulFermions(sym='U1xU1', backend=H.config.backend)
+        ops.random_seed(seed=0)  # fix seed
+        I = mps.product_mpo(ops.I(), 100)  # identity MPS
+        mps.random_mpo(I, D_total=1, sigma=4)
+        # Random mpo is a zero state. Check parameters,
+        # or try running again in this is due to randomness of the initialization.
+
+
 
 def test_mixed_dims_mpo_and_transpose():
     N = 5
@@ -238,7 +252,7 @@ def test_mixed_dims_mpo_and_transpose():
     #
     # random mpo with physical dimensions matching ref
     #
-    H = mps.random_mpo(ref, D_total=5)
+    H = mps.random_mpo(ref, D_total=5, dtype='complex128')
     #
     H_legs = H.get_physical_legs()
     assert H_legs == ref.get_physical_legs()
@@ -251,21 +265,27 @@ def test_mixed_dims_mpo_and_transpose():
     #
     # conjugate transpose to change reference to bra
     #
-    psi_bra = mps.random_mps(ref.conj().T, D_total=3)  #
+    psi_bra = mps.random_mps(ref.conj().T, D_total=3, dtype='complex128')  #
     bra_legs = psi_bra.get_physical_legs()
     assert [leg.D for leg in bra_legs] == [(3,), (4,), (3,), (4,), (3,)]
     #
     # expectation value in positive operator H @ H.conj().T
     #
-    assert mps.vdot(psi_bra, H.H @ H, psi_bra) > 0
-    assert mps.vdot(psi_ket, H @ H.H, psi_ket) > 0
+    tmp = mps.vdot(psi_bra, H.conj().T @ H, psi_bra)
+    assert tmp.real > 0
+    assert abs(tmp.imag) < 1e-8
+    tmp = mps.vdot(psi_ket, H @ H.conj().T, psi_ket)
+    assert tmp.real > 0
+    assert abs(tmp.imag) < 1e-8
+    assert (H.conj().T - H.H).norm() < 1e-12 * H.norm()
+    assert (psi_bra.conj() - psi_bra.H).norm() < 1e-12 * psi_bra.norm()
+    assert (psi_bra.T - psi_bra).norm() < 1e-12 * psi_bra.norm()
     #
     # final tests of transpose
     #
     assert psi_ket.T == psi_ket
     phys_dims = [(legs[0].D, legs[1].D) for legs in H.T.get_physical_legs()]
     assert phys_dims == [((3,), (2,)), ((4,), (3,)), ((3,), (2,)), ((4,), (3,)), ((3,), (2,))]
-
 
 
 def test_MpsMpoOBC_properties(config=cfg):

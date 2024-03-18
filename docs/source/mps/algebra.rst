@@ -14,6 +14,9 @@ Conjugation and transpose
 .. automethod:: yastn.tn.mps.MpsMpoOBC.conj
 .. automethod:: yastn.tn.mps.MpsMpoOBC.transpose
 .. autoproperty:: yastn.tn.mps.MpsMpoOBC.T
+.. automethod:: yastn.tn.mps.MpsMpoOBC.conjugate_transpose
+.. autoproperty:: yastn.tn.mps.MpsMpoOBC.H
+.. automethod:: yastn.tn.mps.MpsMpoOBC.reverse_sites
 
 
 Addition of MPS/MPO

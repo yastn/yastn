@@ -181,7 +181,6 @@ def flip_charges(a, axes=None) -> yastn.Tensor:
     return a._replace(struct=struct, slices=slices, data=data, hfs=hfs)
 
 
-
 def drop_leg_history(a, axes=None) -> yastn.Tensor:
     r"""
     Drops information about original structure of fused or blocked legs that have been combined into a selected tensor leg(s).
@@ -286,7 +285,7 @@ def moveaxis(a, source, destination) -> yastn.Tensor:
     return move_leg(a, source, destination)
 
 
-def add_leg(a, axis=-1, s=1, t=None) -> yastn.Tensor:
+def add_leg(a, axis=-1, s=1, t=None, leg=None) -> yastn.Tensor:
     r"""
     Creates a new tensor with extra leg that carries the charge (or part of it)
     of the orignal tensor. This is achieved by extra leg having a single charge sector
@@ -305,9 +304,29 @@ def add_leg(a, axis=-1, s=1, t=None) -> yastn.Tensor:
     t : int | Sequence[int]
         charge carried by the new leg. If ``None``, takes the total charge `n`
         of the original tensor resulting in uncharged tensor with `n=0`.
+
+    leg : Optional[Leg]
+        It is possible to provide a new leg directly.
+        It has to be of dimension one but can contain information about the fusion of other dimension-one legs.
+        If given (not None), it overrides information provided in `s` and `t`.
     """
     if a.isdiag:
         raise YastnError('Cannot add axis to a diagonal tensor.')
+
+    if leg is not None:
+        if len(leg.t) != 1 or leg.D[0] != 1:
+            raise YastnError("Only the leg of dimension one can be added to the tensor.")
+        if isinstance(leg.fusion, tuple):  # meta fused leg
+            for ll in leg.legs[::-1]:
+                a = a.add_leg(axis=axis, leg=ll)
+            mfs = a.mfs[:axis] + (leg.fusion,) + a.mfs[axis + len(leg.legs):]
+            return a._replace(mfs=mfs)
+        s = leg.s
+        t = leg.t[0]
+        hfsa = leg.legs[0]
+    else:
+        hfsa = _Fusion(s=(s,))
+
     if s not in (-1, 1):
         raise YastnError('Signature of the new axis should be 1 or -1.')
 
@@ -329,7 +348,7 @@ def add_leg(a, axis=-1, s=1, t=None) -> yastn.Tensor:
     newD = tuple(x[:axis] + (1,) + x[axis:] for x in a.struct.D)
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
     slices = tuple(_slc(x.slcs, y, x.Dp) for x, y in zip(a.slices, newD))
-    hfs = a.hfs[:axis] + (_Fusion(s=(s,)),) + a.hfs[axis:]
+    hfs = a.hfs[:axis] + (hfsa,) + a.hfs[axis:]
     return a._replace(mfs=mfs, hfs=hfs, struct=struct, slices=slices)
 
 

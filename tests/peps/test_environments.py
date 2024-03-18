@@ -39,7 +39,7 @@ def test_finite_spinless_boundary_mps_ctmrg():
     opts_svd = {'D_total': D, 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)
     for step in range(steps):
-        print(f"beta = {(step + 1) * dbeta}" )
+        print(f"beta = {(step + 1) * dbeta:0.2f}" )
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
 
 

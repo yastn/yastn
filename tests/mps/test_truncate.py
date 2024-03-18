@@ -4,8 +4,10 @@ import yastn
 import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
+    from .test_build_mpo_manually import build_mpo_nn_hopping_manually
 except ImportError:
     from configs import config_dense as cfg
+    from test_build_mpo_manually import build_mpo_nn_hopping_manually
 # pytest modifies cfg to inject different backends and devices during tests
 
 
@@ -81,7 +83,6 @@ def test_truncate(config=cfg, tol=1e-12):
         assert abs(phipsi ** 2 / psipsi + discarded ** 2 - 1) < tol
 
 
-
 def test_zipper(config=cfg, tol=1e-12):
     """ Test mps.zipper on random input states. """
     opts_config = {} if config is None else \
@@ -131,7 +132,7 @@ def test_zipper(config=cfg, tol=1e-12):
 
 
 def test_compression(config=cfg, tol=1e-12):
-    """ Test mps.zipper on random input states. """
+    """ Test mps.compression on random input states. """
     opts_config = {} if config is None else \
                 {'backend': config.backend, 'default_device': config.default_device}
     #
@@ -155,7 +156,7 @@ def test_compression(config=cfg, tol=1e-12):
         #  optimize overlap
         #
         out = mps.compression_(c, (a, b), method='1site', overlap_tol=1e-4, Schmidt_tol=1e-4,
-                         max_sweeps = 100, normalize=False)
+                         max_sweeps=100, normalize=False)
         #
         vcc = mps.vdot(c, c)
         vcab = mps.vdot(c, ab)
@@ -212,7 +213,134 @@ def test_compression(config=cfg, tol=1e-12):
         assert 0.6 < vca / vaa  < 1
 
 
+def test_compression_sum(config=cfg, tol=1e-6):
+    """ Test various combinations of targets and environments. """
+    opts_config = {} if config is None else \
+                {'backend': config.backend, 'default_device': config.default_device}
+    #
+    ops = yastn.operators.SpinlessFermions(sym='Z2', **opts_config)
+    N = 7
+    I = mps.product_mpo(ops.I(), N)
+    terms = []
+    for i in range(N):
+        tmp = [mps.Hterm(1.0, [i, (i+1) % N], [ops.cp(), ops.c()]),
+               mps.Hterm(1.0, [(i+1) % N, i], [ops.cp(), ops.c()]),
+               mps.Hterm(0.5, [i, (i+2) % N], [ops.cp(), ops.c()]),
+               mps.Hterm(0.5, [(i+2) % N, i], [ops.cp(), ops.c()]),
+               mps.Hterm(0.2, [i,], [ops.n()])]
+        terms.extend(tmp)
+    H = mps.generate_mpo(I, terms)
+
+    Dmax = 8
+    opts_svd = {'D_total': Dmax}
+    E0s = {0: -4.24891733952, 1: -3.27046940557}
+
+    for n, E0 in E0s.items():
+        psi = mps.random_mps(H, n=n, D_total=Dmax)
+        step = mps.dmrg_(psi, H, method='2site', max_sweeps=10, energy_tol=1e-11, opts_svd=opts_svd)
+        assert abs(step.energy - E0) < tol
+
+        phi = mps.random_mps(H, n=n, D_total=Dmax)
+        target = [[H, psi], [2j * psi], [[-H, 3 * H], psi]]
+        mps.compression_(phi, target, method='2site', max_sweeps=2, opts_svd=opts_svd, normalize=False)
+        mps.compression_(phi, target, method='1site', max_sweeps=10, normalize=False)
+        assert abs(phi.norm() - abs(3 * E0 + 2j)) < tol
+        #
+        # for variance
+        psi0 = mps.zipper(H - E0 * I, psi, opts_svd=opts_svd, normalize=False)
+        assert mps.vdot(psi0, psi0) < tol
+        H2ref = (H - E0 * I) @ (H - E0 * I)
+        assert mps.vdot(psi, H2ref, psi) < tol
+        #
+        for method in ['1site', '2site']:
+            opts_svd = {'D_total': 8}
+            mps.compression_(psi0, [H - E0 * I, psi], normalize=False,
+                            method=method, max_sweeps=10, opts_svd=opts_svd)
+            assert mps.vdot(psi0, psi0) < tol
+            #
+            mps.compression_(psi0, [[H, psi], [-E0 * psi]], normalize=False,
+                            method=method, max_sweeps=10, opts_svd=opts_svd)
+            assert mps.vdot(psi0, psi0) < tol
+            #
+            mps.compression_(psi0, [[H, psi], [-E0 * psi]], normalize=False,
+                            method=method, max_sweeps=10, opts_svd=opts_svd)
+            assert mps.vdot(psi0, psi0) < tol
+            #
+            opts_svd = {'D_total': 30}
+            H2 = mps.zipper(H - E0 * I, H - E0 * I, opts_svd=opts_svd)
+            mps.compression_(H2, [H - E0 * I, H - E0 * I], normalize=False,
+                                method=method, max_sweeps=10, opts_svd=opts_svd)
+            assert mps.vdot(psi, H2, psi) < tol
+            assert (H2 - H2ref).norm() < tol
+            #
+            mps.compression_(H2, [[H, H], [-2 * E0 * H], [E0 * E0 * I]], normalize=False,
+                                method=method, max_sweeps=10, opts_svd=opts_svd)
+            assert mps.vdot(psi, H2, psi) < tol
+            assert (H2 - H2ref).norm() < tol
+            #
+            mps.compression_(H2, [[H.on_bra(), H], [-2 * E0 * H], [E0 * E0 * I]], normalize=False,
+                                method=method, max_sweeps=10, opts_svd=opts_svd)
+            assert mps.vdot(psi, H2, psi) < tol
+            assert (H2 - H2ref).norm() < tol
+
+
+    HP = mps.Mpo(N, periodic=True)
+    for i in range(N):
+        HP[(i + N // 2) % N] = H[i].copy()
+    #
+    #  here, we cannot mix HP and H (due to messed-up fermionic in the above construction of HP)
+    #
+    for n, E0 in E0s.items():
+        psi = mps.random_mps(HP, n=n, D_total=Dmax)
+        step = mps.dmrg_(psi, HP, method='2site', max_sweeps=10, energy_tol=1e-11, opts_svd=opts_svd)
+        assert abs(step.energy - E0) < tol
+
+        phi = mps.random_mps(HP, n=n, D_total=Dmax)
+        target = [[HP, psi], [2j * psi], [[-HP, 3 * HP], psi]]
+        mps.compression_(phi, target, method='2site', max_sweeps=2, opts_svd=opts_svd, normalize=False)
+        mps.compression_(phi, target, method='1site', max_sweeps=10, normalize=False)
+        assert abs(phi.norm() - abs(3 * E0 + 2j)) < tol
+
+
+def test_comression_raise(config=cfg):
+    opts_config = {} if config is None else \
+        {'backend': config.backend,
+        'default_device': config.default_device}
+    ops = yastn.operators.Spin12(sym='dense', **opts_config)
+    N = 7
+    I = mps.product_mpo(ops.I(), N=N)
+    H = mps.random_mpo(I, D_total=5)
+    psi0  = mps.random_mpo(I, D_total=4)
+    psi1 = mps.random_mpo(I, D_total=4)
+
+    with pytest.raises(yastn.YastnError):
+        psi1.truncate_()
+        # truncate_: provide opts_svd.
+    with pytest.raises(yastn.YastnError):
+        mps.compression_(psi1, [H, psi0], method='1site', Schmidt_tol=-1)
+        # Compression: Schmidt_tol has to be positive or None.
+    with pytest.raises(yastn.YastnError):
+        mps.compression_(psi1, [H, psi0], method='1site', overlap_tol=-1)
+        # Compression: overlap_tol has to be positive or None.
+    with pytest.raises(yastn.YastnError):
+        mps.compression_(psi1, [H, psi0], method='one-site')
+        # Compression: method one-site not recognized.
+    with pytest.raises(yastn.YastnError):
+        mps.compression_(psi1, [H, psi0], method='2site')
+        # Compression: provide opts_svd for 2site method.
+    with pytest.raises(yastn.YastnError):
+        psi_Np1  = mps.Mps(N=N+1)
+        mps.zipper(H, psi_Np1)
+        #  Zipper: Mpo and Mpo/Mps must have the same number of sites to be multiplied.
+    with pytest.raises(yastn.YastnError):
+        H_pbc  = mps.Mpo(N, periodic=True)
+        mps.zipper(H_pbc, psi0)
+        # Zipper: Application of MpoPBC on Mpo is currently not supported. Contact developers to add this functionality.
+
+
 if __name__ == "__main__":
     test_truncate()
     test_zipper()
     test_compression()
+    test_compression_sum()
+    test_comression_raise()

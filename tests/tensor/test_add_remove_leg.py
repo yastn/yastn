@@ -80,6 +80,36 @@ def test_add_leg_basic():
     a.is_consistent()
 
 
+def test_add_leg_fused():
+    """ add_leg combined with fusion """
+    leg0m = yastn.Leg(config_U1, s=-1, t=(-1,), D=(1,))
+    leg0z = yastn.Leg(config_U1, s=1, t=(0,), D=(1,))
+    leg0p = yastn.Leg(config_U1, s=-1, t=(1,), D=(1,))
+    leg1 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
+
+    legs = [leg0z, leg0m, leg0p, leg1.conj(), leg1]
+    a = yastn.ones(config=config_U1, legs=legs)
+    #
+    # test fusions
+    #
+    for mode, mfs in [('hard', ((1,), (1,), (1,), (1,))),
+                      ('meta', ((3, 2, 1, 1, 1), (1,), (3, 2, 1, 1, 1), (1,)))]:
+        b = a.fuse_legs(axes=((0, 1), 2, 3, 4), mode=mode)
+        b = b.fuse_legs(axes=((0, 1), 2, 3), mode=mode)
+        legf = b.get_legs(axes=0)
+
+        c = b.add_leg(axis=2, leg=legf)
+
+        assert legf == c.get_legs(axes=2)
+        assert c.mfs == mfs
+
+        c = c.unfuse_legs(axes=(0, 2))
+        c = c.unfuse_legs(axes=(0, 3))
+        legc1 = c.get_legs()
+        legc2 = legs[:4] + [leg0z, leg0m, leg0p,] + legs[4:]
+        assert all(l1 == l2 for l1, l2 in zip(legc1, legc2))
+
+
 def test_operators_chain():
     """
     Consider a sequence of operators "cp cp c c"
@@ -111,7 +141,7 @@ def test_operators_chain():
 
     T1 = yastn.ncon([cdag, cdag, c, c], [(-1, -5), (-2, -6), (-3 ,-7), (-4, -8)])
     T2 = yastn.ncon([o1, o2, o3, o4], [(4, -1, -5, 1), (1, -2, -6, 2), (2, -3 ,-7, 3), (3, -4, -8, 4)])
-    assert yastn.norm(T1 -  T2) < tol
+    assert yastn.norm(T1 - T2) < tol
 
     # special case when there are no blocks in the tensor
     a = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1), n=1)
@@ -134,6 +164,18 @@ def test_add_leg_exceptions():
     with pytest.raises(yastn.YastnError):
         a = yastn.ones(config=config_U1, n=1, legs=[leg, leg.conj()])
         a.add_leg(s=2)  # Signature of the new axis should be 1 or -1.
+    with pytest.raises(yastn.YastnError):
+        a = yastn.ones(config=config_U1, legs=[leg, leg.conj()])
+        new_leg = yastn.Leg(config_U1, s=1, t=(-1,), D=(2,))
+        a.add_leg(axis=1, leg=new_leg)  # Only the leg of dimension one can be added to the tensor.
+    with pytest.raises(yastn.YastnError):
+        a = yastn.ones(config=config_U1, legs=[leg, leg.conj()])
+        new_leg = yastn.Leg(config_U1, s=1, t=(), D=())
+        a.add_leg(axis=1, leg=new_leg)  # Only the leg of dimension one can be added to the tensor.
+    with pytest.raises(yastn.YastnError):
+        a = yastn.ones(config=config_U1, legs=[leg, leg.conj()])
+        new_leg = yastn.Leg(config_U1, s=1, t=(-1, 0), D=(1, 1))
+        a.add_leg(axis=1, leg=new_leg)  # Only the leg of dimension one can be added to the tensor.
 
 
 def test_remove_leg_exceptions():
@@ -162,6 +204,7 @@ def test_remove_leg_exceptions():
 
 if __name__ == '__main__':
     test_add_leg_basic()
+    test_add_leg_fused()
     test_operators_chain()
     test_add_leg_exceptions()
     test_remove_leg_exceptions()

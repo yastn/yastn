@@ -62,7 +62,7 @@ class CtmEnv(Peps):
 
 
 @dataclass()
-class Local_Projector_Env(): # no more variables than the one given
+class Local_ProjectorEnv(): # no more variables than the one given
     """ data class for projectors labelled by a single lattice site calculated during ctm renormalization step """
 
     hlt : any = None # horizontal left top
@@ -75,11 +75,11 @@ class Local_Projector_Env(): # no more variables than the one given
     vbr : any = None # vertical bottom right
 
     def copy(self):
-        return Local_Projector_Env(hlt=self.hlt, hlb=self.hlb, hrt=self.hrt, hrb=self.hrb, vtl=self.vtl, vtr=self.vtr, vbl=self.vbl, vbr=self.vbr)
+        return Local_ProjectorEnv(hlt=self.hlt, hlb=self.hlb, hrt=self.hrt, hrb=self.hrb, vtl=self.vtl, vtr=self.vtr, vbl=self.vbl, vbr=self.vbr)
 
 
 @dataclass()
-class Local_CTM_Env(): # no more variables than the one given
+class Local_CTMEnv(): # no more variables than the one given
     """ data class for CTM environment tensors associated with each peps tensor """
 
     tl : any = None # top-left
@@ -92,7 +92,7 @@ class Local_CTM_Env(): # no more variables than the one given
     r : any = None  # right
 
     def copy(self):
-        return Local_CTM_Env(tl=self.tl, tr=self.tr, bl=self.bl, br=self.br, t=self.t, b=self.b, l=self.l, r=self.r)
+        return Local_CTMEnv(tl=self.tl, tr=self.tr, bl=self.bl, br=self.br, t=self.t, b=self.b, l=self.l, r=self.r)
 
 
 
@@ -105,7 +105,7 @@ def init_rand(A, tc, Dc):
     for ms in A.sites():
         B = A[ms].copy()
         B = B.unfuse_legs(axes=(0,1))
-        env[ms] = Local_CTM_Env()
+        env[ms] = Local_CTMEnv()
         env[ms].tl = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].tr = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].bl = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
@@ -151,7 +151,7 @@ def init_ones(A):
     for ms in A.sites():
         B = A[ms].copy()
         B = B.unfuse_legs(axes=(0,1))
-        env[ms] = Local_CTM_Env()
+        env[ms] = Local_CTMEnv()
         env[ms].tl = ones(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].tr = ones(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
         env[ms].bl = ones(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
@@ -202,7 +202,7 @@ def sample(state, CTMenv, projectors, opts_svd=None, opts_var=None):
         Os = state.transfer_mpo(n=ny, dirn='v') # converts ny colum of PEPS to MPO
         vL = CTMenv.env2mps(n=ny, dirn='l') # left boundary of indexed column through CTM environment tensors
 
-        env = mps.Env3(vL, Os, vR).setup_(to = 'first')
+        env = mps.Env(vL, [Os, vR]).setup_(to = 'first')
 
         for nx in range(0, state.Nx):
             dpt = Os[nx].copy()
@@ -273,7 +273,7 @@ def measure_2site(state, CTMenv, op1, op2, opts_svd, opts_var=None):
             vR = CTMenv.env2mps(n=ny1, dirn='r')
             vL = CTMenv.env2mps(n=ny1, dirn='l')
             Os = state.transfer_mpo(n=ny1, dirn='v')
-            env = mps.Env3(vL, Os, vR).setup_(to='first').setup_(to='last')
+            env = mps.Env(vL, [Os, vR]).setup_(to='first').setup_(to='last')
             norm_env = env.measure(bd=(-1, 0))
 
             if ny1 > 0:
@@ -311,7 +311,7 @@ def measure_2site(state, CTMenv, op1, op2, opts_svd, opts_var=None):
                 vRo1 = vRo1next
                 vL = CTMenv.env2mps(n=ny2, dirn='l')
                 Os = state.transfer_mpo(n=ny2, dirn='v')
-                env = mps.Env3(vL, Os, vR).setup_(to='first')
+                env = mps.Env(vL, [Os, vR]).setup_(to='first')
                 norm_env = env.measure(bd=(-1, 0))
 
                 if ny2 > 0:
@@ -320,7 +320,7 @@ def measure_2site(state, CTMenv, op1, op2, opts_svd, opts_var=None):
                     vRo1next = mps.zipper(Os, vRo1, opts_svd=opts_svd)
                     mps.compression_(vRo1next, (Os, vRo1), method='1site', normalize=False, **opts_var)
 
-                env = mps.Env3(vL, Os, vRo1).setup_(to='first').setup_(to='last')
+                env = mps.Env(vL, [Os, vRo1]).setup_(to='first').setup_(to='last')
                 for nx2 in range(state.Nx):
                     Osnx2A = Os[nx2].A
                     for nz2, o2 in op2dict[nx2, ny2].items():
@@ -350,7 +350,7 @@ def measure_1site(state, CTMenv, op):
         vR = CTMenv.env2mps(n=ny, dirn='r')
         vL = CTMenv.env2mps(n=ny, dirn='l')
         Os = state.transfer_mpo(n=ny, dirn='v')
-        env = mps.Env3(vL, Os, vR).setup_(to='first').setup_(to='last')
+        env = mps.Env(vL, [Os, vR]).setup_(to='first').setup_(to='last')
         norm_env = env.measure()
         for nx in range(Nx):
             if (nx, ny) in opdict:
@@ -375,7 +375,7 @@ def _sample_MC_column_local(ny, proj_psi, proj_env, st0, st1, psi, projectors, r
     vR = proj_env.env2mps(n=ny, dirn='r')
     Os = proj_psi.transfer_mpo(n=ny, dirn='v')
     vL = proj_env.env2mps(n=ny, dirn='l')
-    env = mps.Env3(vL, Os, vR).setup_(to='first')
+    env = mps.Env(vL, [Os, vR]).setup_(to='first')
     for nx in range(psi.Nx):
         amp = env.hole(nx).tensordot(psi[nx, ny], axes=((0, 1, 2, 3), (0, 1, 2, 3)))
         prob = [abs(amp.vdot(pr, conj=(0, 0))) ** 2 for pr in projectors[nx, ny]]
@@ -398,7 +398,7 @@ def _sample_MC_column_uniform(ny, proj_psi, proj_env, st0, st1, psi, projectors,
     vR = proj_env.env2mps(n=ny, dirn='r')
     Os = proj_psi.transfer_mpo(n=ny, dirn='v')
     vL = proj_env.env2mps(n=ny, dirn='l')
-    env = mps.Env3(vL, Os, vR).setup_(to='first')
+    env = mps.Env(vL, [Os, vR]).setup_(to='first')
     for nx in range(psi.Nx):
         A = psi[nx, ny]
         ind0 = st0[nx, ny]

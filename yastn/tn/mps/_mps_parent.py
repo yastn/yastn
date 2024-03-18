@@ -92,8 +92,24 @@ class _MpsMpoParent:
         phi.A = dict(self.A)
         phi.pC = self.pC
         phi.factor = self.factor
-        if hasattr(self, 'tol'):
-            phi.tol = self.tol
+        if hasattr(self, 'flag'):
+            phi.flag = self.flag
+        return phi
+
+    def on_bra(self) -> yastn.tn.mps.MpsMpoOBC:
+        r"""
+        A shallow copy of the tensor with an added 'on_bra' flag.
+
+        The flag is only relevant in functions using Env.
+        It makes the Mpo operator acting on an Mpo state to be applied on the bra legs (or auxiliary legs),
+        instead of a default application on 'ket' legs.
+        For instance, :code:`Heff = [-H, H.on_bra()]` can be used to evolve an operator in the Heisenberg picture.
+
+        This flag gets propagated by __mul__, conj, transpose, and other functions employing shallow_copy.
+        It is not saved/loaded, or propagated by more complicated functions.
+        """
+        phi = self.shallow_copy()
+        phi.flag = 'on_bra'
         return phi
 
     def clone(self) -> yastn.tn.mps.MpsMpoOBC:
@@ -103,8 +119,7 @@ class _MpsMpoParent:
         """
         phi = self.shallow_copy()
         for ind, ten in phi.A.items():
-            phi.A[ind] = ten.clone()
-        # TODO clone factor ?
+            phi.A[ind] = ten.clone()  # TODO clone factor ?
         return phi
 
     def copy(self) -> yastn.tn.mps.MpsMpoOBC:
@@ -115,7 +130,6 @@ class _MpsMpoParent:
         phi = self.shallow_copy()
         for ind, ten in phi.A.items():
             phi.A[ind] = ten.copy()
-        # TODO copy factor ???
         return phi
 
     def conj(self) -> yastn.tn.mps.MpsMpoOBC:
@@ -126,7 +140,7 @@ class _MpsMpoParent:
         return phi
 
     def transpose(self) -> yastn.tn.mps.MpsMpoOBC:
-        """ Transpose of MPO. For MPS, return self. Same as :attr:`self.T<yastn.tn.mps.MpsMpoOBC.T>`"""
+        """ Transpose of MPO. For MPS, return self."""
         if self.nr_phys == 1:
             return self
         phi = self.shallow_copy()
@@ -134,9 +148,8 @@ class _MpsMpoParent:
             phi.A[n] = phi.A[n].transpose(axes=(0, 3, 2, 1))
         return phi
 
-
     def conjugate_transpose(self) -> yastn.tn.mps.MpsMpo:
-        """ Transpose of MPO. For MPS, return self. Same as :attr:`self.T<yastn.tn.mps.MpsMpo.T>`"""
+        """ Transpose of MPO. For MPS, return self."""
         if self.nr_phys == 1:
             return self.conj()
         phi = self.shallow_copy()
@@ -146,17 +159,23 @@ class _MpsMpoParent:
 
     @property
     def T(self) -> yastn.tn.mps.MpsMpo:
-        r""" Transpose of MPO. For MPS, return self. Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
+        r""" Transpose of MPO. For MPS, return self.
+
+        Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
         return self.transpose()
 
     @property
     def H(self) -> yastn.tn.mps.MpsMpo:
-        r""" Transpose of MPO. For MPS, return self. Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
+        r""" Transpose of MPO. For MPS, return self.
+
+        Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.conjugate_transpose>` """
         return self.conjugate_transpose()
 
     def reverse_sites(self) -> yastn.tn.mps.MpsMpo:
-        r""" New MPS/MPO with reversed order of sites and respectively transposed tensors. """  # TODO (no swap_gates ?)
-        phi = self.shallow_copy()
+        r"""
+        New MPS/MPO with reversed order of sites and respectively transposed virtual tensor legs.
+        """
+        phi = type(self)(N=self.N, nr_phys=self.nr_phys)
         phi.factor = self.factor
         axes = (2, 1, 0) if self.nr_phys == 1 else (2, 1, 0, 3)
         for n in phi.sweep(to='last'):
@@ -176,12 +195,15 @@ class _MpsMpoParent:
             phi.factor = am * self.factor
             phi.A[0] = phi.A[0] * (multiplier / am)
         else:
-            phi.A[0] = phi.A[0] * multiplier
+            phi.factor = am * self.factor
         return phi
 
     def __rmul__(self, number) -> yastn.tn.mps.MpsMpoOBC:
         """ New MPS/MPO with the first tensor multiplied by a scalar. """
         return self.__mul__(number)
+
+    def __neg__(self):
+        return self.__mul__(-1)
 
     def __truediv__(self, number) -> yastn.tn.mps.MpsMpoOBC:
         """ Divide MPS/MPO by a scalar. """

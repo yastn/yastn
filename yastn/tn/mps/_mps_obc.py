@@ -1,5 +1,6 @@
 """ Mps structure and its basic manipulations. """
 from __future__ import annotations
+from typing import NamedTuple
 from ... import tensor, initialize, YastnError
 from ._mps_parent import _MpsMpoParent
 
@@ -12,8 +13,13 @@ def Mps(N) -> yastn.tn.mps.MpsMpoOBC:
     return MpsMpoOBC(N, nr_phys=1)
 
 
-def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC:
-    r""" Generate empty MPO for system of `N` sites, fixing :code:`nr_phys=2`."""
+def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC | yastn.tn.mps.MpoPBC:
+    r"""
+    Generate empty MPO for system of `N` sites, fixing :code:`nr_phys=2`.
+
+    A flag :code:`periodic` allows initializing periodic MPO,
+    which is special class supported as an operator in MPS environments.
+    """
     if periodic:
         return MpoPBC(N, nr_phys=2)
     return MpsMpoOBC(N, nr_phys=2)
@@ -409,7 +415,8 @@ class MpsMpoOBC(_MpsMpoParent):
         """
         discarded2_total = 0.
         if opts_svd is None:
-            opts_svd = {'tol': 1e-13}
+            raise YastnError("truncate_: provide opts_svd.")
+
         for n in self.sweep(to=to):
             self.orthogonalize_site_(n=n, to=to, normalize=normalize)
             discarded_local = self.diagonalize_central_(opts_svd=opts_svd, normalize=normalize)
@@ -457,9 +464,6 @@ class MpsMpoOBC(_MpsMpoParent):
         where :math:`\lambda_i` are singular values across the bond.
         """
         nl, nr = bd
-        # axes = (1,) if self.nr_phys == 1 else (1, 3)
-        # AA = AA.unfuse_legs(axes=axes)
-        # axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 4), (2, 3, 5))
         axes = ((0, 1), (2, 3)) if self.nr_phys == 1 else ((0, 1, 2), (3, 4, 5))
         self.pC = bd
         U, S, V = tensor.svd(AA, axes=axes, sU=1, Uaxis=2)

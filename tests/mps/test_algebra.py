@@ -57,6 +57,11 @@ def test_add(config=cfg, tol=1e-8):
     psi1 = generate.random_mpo(D_total=11)
     check_add(psi0, psi1, tol)
 
+    psi_zero = psi0 * 0
+    assert psi_zero.norm() < tol
+    assert psi_zero.factor == 0  # multiply by 0, included in psi.factor
+
+
 def check_add(psi0, psi1, tol):
     """ series of test of mps.add performed on provided psi0 and psi1"""
     out1 = mps.add(psi0, psi1, amplitudes=[1., 2.])

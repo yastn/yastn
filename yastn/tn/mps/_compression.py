@@ -2,7 +2,7 @@
 from __future__ import annotations
 from typing import NamedTuple
 import logging
-from ._env import Env2, Env3
+from ._measure import Env
 from ._mps_obc import MpsMpoOBC, MpoPBC
 from ... import initialize, tensor, YastnError
 
@@ -31,7 +31,9 @@ def compression_(psi, target, method='1site',
 
         * optimization against provided MPS: ``target`` is ``MPS`` or list ``[MPS,]``
         * against MPO acting on MPS: ``target`` is a list ``[MPO, MPS]``.
-        * against MPO (replacing all MPS's above with MPO's), i.e., ``[MPO,]`` or ``[MPO, MPO]``
+        * against sum of MPOs acting on MPS: ``target`` is a list ``[[MPO, MPO, ...], MPS]``.
+        * sum of any of the three above: target is ``[[MPS], [MPO, MPS], [[MPO, MPO, ...], MPS], ...]``
+        * for psi being MPO, where all MPS's above should be replaced with MPO, e.g., ``[MPO, MPO]``
 
     Outputs iterator if :code:`iterator_step` is given, which allows
     inspecting :code:`psi` outside of :code:`compression_` function after every :code:`iterator_step` sweeps.
@@ -80,9 +82,6 @@ def compression_(psi, target, method='1site',
             * :code:`max_dSchmidt` norm of Schmidt values change on the worst cut in the last sweep.
             * :code:`max_discarded_weight` norm of discarded_weights on the worst cut in '2site' procedure.
     """
-    # TODO:
-    # * sum of MPS's: target is ``[[MPS], [MPS],...]``
-    # * sum of MPO's acting on MPS's: target is ``[[MPO, MPS], [MPO, MPS], ...]``
 
     tmp = _compression_(psi, target, method,
                         overlap_tol, Schmidt_tol, max_sweeps,
@@ -98,30 +97,27 @@ def _compression_(psi, target, method,
     if not psi.is_canonical(to='first'):
         psi.canonize_(to='first')
 
-    if isinstance(target, MpsMpoOBC):
-        env = Env2(bra=psi, ket=target)
-    elif len(target) == 1:
-        env = Env2(bra=psi, ket=target[0])
-    else:
-        env = Env3(bra=psi, op=target[0], ket=target[1])
-
+    env = Env(psi, target)
     env.setup_(to='first')
 
     overlap_old = env.measure()
 
     if Schmidt_tol is not None:
         if not Schmidt_tol > 0:
-            raise YastnError('DMRG: Schmidt_tol has to be positive or None.')
+            raise YastnError('Compression: Schmidt_tol has to be positive or None.')
         Schmidt_old = psi.get_Schmidt_values()
         Schmidt_old = {(n-1, n): sv for n, sv in enumerate(Schmidt_old)}
     max_dS, max_dw = None, None
     Schmidt = None if Schmidt_tol is None else {}
 
     if overlap_tol is not None and not overlap_tol > 0:
-        raise YastnError('DMRG: energy_tol has to be positive or None.')
+        raise YastnError('Compression: overlap_tol has to be positive or None.')
+
+    if opts_svd is None and method == '2site':
+        raise YastnError("Compression: provide opts_svd for %s method." % method)
 
     if method not in ('1site', '2site'):
-        raise YastnError('DMRG: dmrg method %s not recognized.' % method)
+        raise YastnError('Compression: method %s not recognized.' % method)
 
     for sweep in range(1, max_sweeps + 1):
         if method == '1site':
@@ -191,11 +187,11 @@ def _compression_1site_sweep_(env, Schmidt=None):
         Environment of the network :math:`\langle \psi|\psi_{target} \rangle`
         or :math:`\langle \psi|O|\psi_{target} \rangle`.
     """
-    bra, ket = env.bra, env.ket
+    bra = env.bra
     for to in ('last', 'first'):
         for n in bra.sweep(to=to):
             bra.remove_central_()
-            bra.A[n] = env.Heff1(ket[n], n)
+            bra.A[n] = env.project_ket_on_bra_1(n)
             bra.orthogonalize_site_(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != bra.first:
                 Schmidt[bra.pC] = bra[bra.pC].svd(sU=1, compute_uv=False)
@@ -205,26 +201,22 @@ def _compression_1site_sweep_(env, Schmidt=None):
     env.update_env_(n, to=to)
 
 
-
 def _compression_2site_sweep_(env, opts_svd=None, Schmidt=None):
     """ variational update on 2 sites """
-    if opts_svd is None:
-        opts_svd = {'tol': 1e-13}
     max_disc_weight = -1.
-    bra, ket = env.bra, env.ket
+    bra = env.bra
     for to, dn in (('last', 0), ('first', 1)):
         for n in bra.sweep(to=to, dl=1):
             bd = (n, n + 1)
-            AA = ket.merge_two_sites(bd)
-            AA = env.Heff2(AA, bd)
+            AA = env.project_ket_on_bra_2(bd)
             _disc_weight_bd = bra.unmerge_two_sites_(AA, bd, opts_svd)
+            bra.A[bra.pC] = bra.A[bra.pC] / bra.A[bra.pC].norm()
             max_disc_weight = max(max_disc_weight, _disc_weight_bd)
             if Schmidt is not None and to == 'first':
                 Schmidt[bra.pC] = bra[bra.pC]
             bra.absorb_central_(to=to)
             env.clear_site_(n, n + 1)
             env.update_env_(n + dn, to=to)
-    bra[bra.first] = bra[bra.first] / bra[bra.first].norm()
     env.update_env_(bra.first, to='first')
     return max_disc_weight
 
@@ -256,19 +248,34 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
         Discarded weight approximates norm of truncated elements normalized by the norm of the untruncated state.
     """
     if a.N != b.N:
-        raise YastnError('MpsMpoOBC-s to multiply must have equal number of sites.')
+        raise YastnError('Zippr: Mpo and Mpo/Mps must have the same number of sites to be multiplied.')
 
     psi = b.shallow_copy()
     psi.canonize_(to='last', normalize=normalize)
     if not normalize:
         psi.factor = psi.factor * a.factor
 
+    if isinstance(a, MpoPBC):
+        if psi.nr_phys != 1:
+            raise YastnError("Zipper: Application of MpoPBC on Mpo is currently not supported. Contact developers to add this functionality.")
+        psi, discarded = _zipper_MpoPBC(a, psi, opts_svd, normalize)
+
+    if isinstance(a, MpsMpoOBC) and a.nr_phys == 2:
+        psi, discarded = _zipper_MpoOBC(a, psi, opts_svd, normalize)
+
+    if return_discarded:
+        return psi, discarded
+    return psi
+
+
+def _zipper_MpoOBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
+    """
+    Special case of MpoOBC
+    """
+
     la, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
-    if isinstance(a, MpoPBC):
-        return _zipper_MpoPBC(a, psi, opts_svd, normalize, return_discarded)
-
-    tmp = initialize.ones(b.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
+    tmp = initialize.ones(psi.config, legs=[lpsi.conj(), la.conj(), lpsi, la])
     tmp = tmp.fuse_legs(axes=(0, 1, (2, 3))).drop_leg_history(axes=2)
 
     discarded2_total = 0.
@@ -298,17 +305,16 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
     ntmp = tmp.norm()
     psi[psi.first] = (tmp / ntmp) @ psi[psi.first]
     psi.factor = 1 if normalize else psi.factor * ntmp
-    if return_discarded:
-        return psi, psi.config.backend.sqrt(discarded2_total)
-    return psi
+
+    return psi, psi.config.backend.sqrt(discarded2_total)
 
 
-def _zipper_MpoPBC(op, psi, opts_svd=None, normalize=True, return_discarded=False) -> yastn.tn.mps.MpsMpo:
+def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
     """
-    Special case of periodic Mpo
+    Special case of MpoPBC
     """
 
-    lmpo, lpsi = op.virtual_leg('last'), psi.virtual_leg('last')
+    lmpo, lpsi = a.virtual_leg('last'), psi.virtual_leg('last')
 
     tmp = initialize.eye(psi.config, legs=lmpo, isdiag=False)
     tmp = tmp.add_leg(axis=0, s=-lpsi.s, t=lpsi.t[0])
@@ -320,12 +326,12 @@ def _zipper_MpoPBC(op, psi, opts_svd=None, normalize=True, return_discarded=Fals
     for n in psi.sweep(to='first'):
         tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
 
-        if psi.nr_phys == 1:
-            tmp = tmp.fuse_legs(axes=((0, 2), 1, 3, 4))
-        else:  # psi.nr_phys == 2:
-            tmp = tmp.swap_gate(axes=(2, 3))
-            tmp = tmp.fuse_legs(axes=((0, 3), 1, 4, (5, 2)))
-        tmp = op[n]._attach_23(tmp)
+        #if psi.nr_phys == 1:
+        tmp = tmp.fuse_legs(axes=((0, 2), 1, 3, 4))
+        # else:  # psi.nr_phys == 2:
+        #     tmp = tmp.swap_gate(axes=(2, 3))
+        #     tmp = tmp.fuse_legs(axes=((0, 3), 1, 4, (5, 2)))
+        tmp = a[n]._attach_23(tmp)
 
         if n > psi.first:
             U, S, V = tensor.svd(tmp, axes=((0, 1), (3, 2)), sU=1, nU=False)
@@ -343,8 +349,8 @@ def _zipper_MpoPBC(op, psi, opts_svd=None, normalize=True, return_discarded=Fals
             tmp = U @ (S / nS)
             tmp = tmp.unfuse_legs(axes=0)
 
-            if op.tol is not None and op.tol > 0:
-                Uc, Sc, Vc = tensor.svd_with_truncation(tmp, axes=(1, (0, 2, 3)), tol=op.tol)
+            if a.tol is not None and a.tol > 0:
+                Uc, Sc, Vc = tensor.svd_with_truncation(tmp, axes=(1, (0, 2, 3)), tol=a.tol)
                 tmp = (Sc @ Vc).transpose(axes=(1, 0, 2, 3))
                 connector  = connector @ Uc
 
@@ -358,10 +364,8 @@ def _zipper_MpoPBC(op, psi, opts_svd=None, normalize=True, return_discarded=Fals
             tmp = (tmp / ntmp).transpose(axes=(0, 2, 1))
             psi[n] = tmp if psi.nr_phys == 1 else tmp.unfuse_legs(axes=2)
 
-    if return_discarded:
-        return psi, psi.config.backend.sqrt(discarded2_total)
-    return psi
+    return psi, psi.config.backend.sqrt(discarded2_total)
 
 
-def linear_combination(self):
-    pass
+# def linear_combination(self):
+#     pass

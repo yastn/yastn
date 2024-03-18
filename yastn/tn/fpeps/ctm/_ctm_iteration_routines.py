@@ -10,7 +10,7 @@ import yastn
 from yastn import tensordot, ncon, svd_with_truncation, qr, vdot, initialize
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps._doublePepsTensor import DoublePepsTensor
-from ._ctm_env import Local_Projector_Env
+from ._ctm_env import Local_ProjectorEnv
 import numpy as np
 
 
@@ -560,7 +560,7 @@ def CTM_it(env, AAb, fix_signs, opts_svd=None):
 
     proj = fpeps.Peps(AAb) # ctm projectors defined as an instance of Lattice class
     for ms in proj.sites():
-        proj[ms] = Local_Projector_Env()
+        proj[ms] = Local_ProjectorEnv()
 
     # print('######## Calculating projectors for horizontal move ###########')
     envn_hor = env.copy()

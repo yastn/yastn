@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import NamedTuple, Sequence
 import logging
 from ... import eigs, YastnError
-from ._env import Env3
+from ._measure import Env
+from ._env import Env_sum, Env_project
 from . import MpsMpoOBC
 
 
@@ -22,7 +23,7 @@ class DMRG_out(NamedTuple):
     max_discarded_weight: float = None
 
 
-def dmrg_(psi, H : MpsMpoOBC | Sequence[tuple(MpsMpoOBC,number)], project=None, method='1site',
+def dmrg_(psi, H, project=None, method='1site',
         energy_tol=None, Schmidt_tol=None, max_sweeps=1, iterator_step=None,
         opts_eigs=None, opts_svd=None):
     r"""
@@ -43,11 +44,15 @@ def dmrg_(psi, H : MpsMpoOBC | Sequence[tuple(MpsMpoOBC,number)], project=None, 
         It is first canonized to the first site, if not provided in such a form.
         State resulting from :code:`dmrg_` is canonized to the first site.
 
-    H: yastn.tn.mps.MpsMpoOBC or Sequence[tuple(MpsMpoOBC,number)]
-        MPO to minimize against.
+    H: yastn.tn.mps.MpsMpoOBC | Sequence
+        MPO (or a sum of MPOs) to minimize against, see :meth:`Env<yastn.tn.mps.Env>`.
 
-    project: list(yastn.tn.mps.MpsMpoOBC)
-        Optimizes MPS in the subspace orthogonal to MPS's in the list.
+    project: Sequence[yastn.tn.mps.MpsMpoOBC | tuple[float, yastn.tn.mps.MpsMpoOBC]]
+        Add a penalty to the directions spanned by MPSs in the list.
+        It can be used to find a few low-energy states of the Hamiltonian
+        if the penalty is larger than the energy gap from the ground state.
+        Use :code:`[(penalty, MPS), ...]` to provide penalty by hand
+        :code:`[mps, ...]` uses default :code:`penalty=100`.
 
     method: str
         Which DMRG variant to use from '1site', '2site'
@@ -92,7 +97,7 @@ def dmrg_(psi, H : MpsMpoOBC | Sequence[tuple(MpsMpoOBC,number)], project=None, 
     return tmp if iterator_step else next(tmp)
 
 
-def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple(MpsMpoOBC,number)], project, method,
+def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, method,
         energy_tol, Schmidt_tol, max_sweeps, iterator_step,
         opts_eigs, opts_svd):
     """ Generator for dmrg_(). """
@@ -100,7 +105,15 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple(MpsMpoOBC,number)], project, meth
     if not psi.is_canonical(to='first'):
         psi.canonize_(to='first')
 
-    env = Env3(bra=psi, op=H, ket=psi, project=project).setup_(to='first')
+    env = Env(psi, [H, psi])
+    if project:
+        if not isinstance(env, Env_sum):
+            env = Env_sum([env])
+        for pr in project:
+            penalty, st = (100, pr) if isinstance(pr, MpsMpoOBC) else pr
+            env.envs.append(Env_project(psi, st, penalty))
+    env.setup_(to='first')
+
     E_old = env.measure()
 
     if opts_eigs is None:
@@ -120,6 +133,9 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple(MpsMpoOBC,number)], project, meth
 
     if method not in ('1site', '2site'):
         raise YastnError('DMRG: dmrg method %s not recognized.' % method)
+
+    if opts_svd is None and method == '2site':
+        raise YastnError("DMRG: provide opts_svd for %s method." % method)
 
     for sweep in range(1, max_sweeps + 1):
         if method == '1site':
@@ -158,10 +174,9 @@ def _dmrg_sweep_1site_(env, opts_eigs=None, Schmidt=None):
     env: Env3
         Environment of the <psi|H|psi> ready for the next iteration.
     """
-    psi = env.ket
+    psi = env.bra
     for to in ('last', 'first'):
         for n in psi.sweep(to=to):
-            env.update_Aort_(n)
             _, (psi.A[n],) = eigs(lambda x: env.Heff1(x, n), psi.A[n], k=1, **opts_eigs)
             psi.orthogonalize_site_(n, to=to, normalize=True)
             if Schmidt is not None and to == 'first' and n != psi.first:
@@ -180,16 +195,12 @@ def _dmrg_sweep_2site_(env, opts_eigs=None, opts_svd=None, Schmidt=None):
     env: Env3
         Environment of the <psi|H|psi> ready for the next iteration.
     """
-    psi = env.ket
-
-    if opts_svd is None:
-        opts_svd = {'tol': 1e-13}
+    psi = env.bra
 
     max_disc_weight = -1.
     for to, dn in (('last', 0), ('first', 1)):
         for n in psi.sweep(to=to, dl=1):
             bd = (n, n + 1)
-            env.update_AAort_(bd)
             AA = psi.merge_two_sites(bd)
             _, (AA,) = eigs(lambda v: env.Heff2(v, bd), AA, k=1, **opts_eigs)
             _disc_weight_bd = psi.unmerge_two_sites_(AA, bd, opts_svd)

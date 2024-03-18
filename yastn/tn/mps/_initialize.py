@@ -197,7 +197,7 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC
         lr = psi.A[site].get_legs(axes=0).conj()
     if sum(lr.D) == 1:
         return psi
-    raise YastnError("Random mpo is a zero state. Check parameters (or try running again in this is due to randomness of the initialization).")
+    raise YastnError("Random mpo is a zero state. Check parameters, or try running again in this is due to randomness of the initialization.")
 
 
 def random_dense_mps(N, D, d, **kwargs) -> yastn.tn.mps.MpsMpoOBC:
