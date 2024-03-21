@@ -15,7 +15,7 @@ by contracting a network formed by MPS and conjugate of another or the same MPS.
 While the above allows calculating the norm of MPS or MPO, a dedicated method extracts the norm through canonization.
 This can be more precise for norms close to zero.
 
-.. automethod:: yastn.tn.mps.MpsMpo.norm
+.. automethod:: yastn.tn.mps.MpsMpoOBC.norm
 
 :ref:`Measurement<theory/mps/basics:Measurements>` of MPO's expectation value
 is calculated by contracting a network formed by MPS, MPO, and a conjugate
@@ -45,5 +45,5 @@ each of the bonds. This amounts to SVD decomposition with respect to a bond,
 where all sites to the left are in :ref:`left-canonical form<theory/mps/basics:canonical form>` and all sites to the right
 are in :ref:`right-canonical form<theory/mps/basics:canonical form>`.
 
-.. automethod:: yastn.tn.mps.MpsMpo.get_Schmidt_values
-.. automethod:: yastn.tn.mps.MpsMpo.get_entropy
+.. automethod:: yastn.tn.mps.MpsMpoOBC.get_Schmidt_values
+.. automethod:: yastn.tn.mps.MpsMpoOBC.get_entropy

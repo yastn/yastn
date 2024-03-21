@@ -18,6 +18,7 @@ except ImportError:
 def test_tdvp_sudden_quench(kwargs):
     tdvp_sudden_quench(**kwargs, tol=1e-10)
     tdvp_sudden_quench_mpo_sum(**kwargs, tol=1e-10)
+    tdvp_sudden_quench_Heisenberg(**kwargs, tol=1e-5)
 
 def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
     """
@@ -153,6 +154,30 @@ def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
             assert np.allclose(Cref, Cphi, rtol=tol)
 
 
+def gs_correlation_matrix(J, n):
+    # Correlation matrix for the ground state
+    # of n particles with hopping Hamiltonian matrix J.
+    # C[m, n] = <c_n^dag c_m>
+    J = np.triu(J, 0) + np.triu(J, 1).T.conj()
+    D, V = np.linalg.eigh(J)
+    Egs = np.sum(D[:n])
+    C0 = np.zeros(len(D))
+    C0[:n] = 1
+    C = V @ np.diag(C0) @ V.T.conj()
+    return C, Egs
+
+
+def evolve_correlation_matrix(C, J, t):
+    # Evolve correlation matrix C by time t with hopping Hamiltonian J.
+    # Diagonal od J gives chemical on-site potentials and
+    # upper triangular of J are hopping amplitudes.
+    J = np.triu(J, 0) + np.triu(J, 1).T.conj()
+    # U = expm(1j * t * J)
+    D, V = np.linalg.eigh(J)
+    U = V @ np.diag(np.exp(1j * t * D)) @ V.T.conj()
+    return U.conj().T @ C @ U
+
+
 def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
     """
     Simulate a sudden quench of a free-fermionic (hopping) model.
@@ -165,7 +190,7 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
                 'default_device': config.default_device}
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
     ops.random_seed(seed=0)
-    
+
     J0 = [[1,   0.5j, 0,    0.3,  0.1,  0   ],
           [0,  -1,    0.5j, 0,    0.3,  0.1 ],
           [0,   0,    1,    0.5j, 0,    0.3 ],
@@ -182,18 +207,6 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
     out = mps.dmrg_(psi, H0, method='2site', max_sweeps=2, opts_svd=opts_svd)
     out = mps.dmrg_(psi, H0, method='1site', max_sweeps=10,
                     energy_tol=1e-14, Schmidt_tol=1e-14)
-    
-    def gs_correlation_matrix(J, n):
-        # Correlation matrix for the ground state
-        # of n particles with hopping Hamiltonian matrix J.
-        # C[m, n] = <c_n^dag c_m>
-        J = np.triu(J, 0) + np.triu(J, 1).T.conj()
-        D, V = np.linalg.eigh(J)
-        Egs = np.sum(D[:n])
-        C0 = np.zeros(len(D))
-        C0[:n] = 1
-        C = V @ np.diag(C0) @ V.T.conj()
-        return C, Egs
     #
     C0ref, E0ref = gs_correlation_matrix(J0, n)
     assert abs(out.energy - E0ref) < tol
@@ -212,38 +225,25 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
             C[n2, n1] = v
             C[n1, n2] = v.conj()
         return C
-    
     #
     # verify MPS vs reference
     #
     C0psi = correlation_matrix(psi)
     assert np.allclose(C0ref, C0psi, rtol=tol)
-    
     #
     # Sudden quench with a new Hamiltonian, here as sum of Mpos
     #
-    J1= np.asarray([[-1,   0.5,   0,  -0.3, 0.1, 0  ],
-          [ 0,   1  ,   0.5, 0,  -0.3, 0.1],
-          [ 0,   0  ,  -1,   0.5, 0,  -0.3],
-          [ 0,   0  ,   0,   1,   0.5, 0  ],
-          [ 0,   0  ,   0,   0,  -1,   0.5],
-          [ 0,   0  ,   0,   0,   0,   1  ]])
-    J1s= [np.zeros_like(J1) for _ in range(J1.shape[0])]
+    J1 = np.asarray(
+        [[-1,   0.5,   0,  -0.3, 0.1, 0  ],
+         [ 0,   1  ,   0.5, 0,  -0.3, 0.1],
+         [ 0,   0  ,  -1,   0.5, 0,  -0.3],
+         [ 0,   0  ,   0,   1,   0.5, 0  ],
+         [ 0,   0  ,   0,   0,  -1,   0.5],
+         [ 0,   0  ,   0,   0,   0,   1  ]])
+    J1s = [np.zeros_like(J1) for _ in range(J1.shape[0])]
     for i in range(len(J1s)):
-        J1s[i][:,i]= J1[:,i]
-    H1 = [mps.MpoTerm(1.,build_mpo_hopping_Hterm(col, sym=sym, config=config)) for col in J1s]
-    #
-    # Exact reference for free-fermionic correlation matrix
-    #
-    def evolve_correlation_matrix(C, J, t):
-        # Evolve correlation matrix C by time t with hopping Hamiltonian J.
-        # Diagonal od J gives chemical on-site potentials and
-        # upper triangular of J are hopping amplitudes.
-        J = np.triu(J, 0) + np.triu(J, 1).T.conj()
-        # U = expm(1j * t * J)
-        D, V = np.linalg.eigh(J)
-        U = V @ np.diag(np.exp(1j * t * D)) @ V.T.conj()
-        return U.conj().T @ C @ U
+        J1s[i][:, i]= J1[:, i]
+    H1 = [build_mpo_hopping_Hterm(col, sym=sym, config=config) for col in J1s]
     #
     # Run time evolution and calculate correlation matrix at two snapshots
     #
@@ -271,6 +271,89 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
             #
             assert np.allclose(Cref, Cphi, rtol=tol)
 
+
+def tdvp_sudden_quench_Heisenberg(sym='U1', config=cfg, tol=1e-5):
+    """
+    Simulate a sudden quench of a free-fermionic (hopping) model.
+    Compare observables versus known reference results.
+
+    Here we employ the Heisenberg picture to evolve an operator of interest.
+    Test constructor [-H, H.on_bra()]
+    """
+    N, n = 6, 3  # Consider a system of 6 modes and 3 particles.
+    #
+    # Load operators
+    #
+    opts_config = {} if config is None else \
+                {'backend': config.backend,
+                'default_device': config.default_device}
+    # pytest uses config to inject various backends and devices for testing
+    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
+    ops.random_seed(seed=0)
+    #
+    # Hopping matrix, it is hermitized inside functions consuming it.
+    #
+    J0 = [[1,   0.5j, 0,    0.3,  0.1,  0   ],
+          [0,  -1,    0.5j, 0,    0.3,  0.1 ],
+          [0,   0,    1,    0.5j, 0,    0.3 ],
+          [0,   0,    0,   -1,    0.5j, 0   ],
+          [0,   0,    0,    0,    1,    0.5j],
+          [0,   0,    0,    0,    0,   -1   ]]
+    H0 = build_mpo_hopping_Hterm(J0, sym=sym, config=config)
+    # assert (H0 - H0.H).norm() < tol * H0.norm()  # flip signature of virtual legs?
+    #
+    Dmax = 8
+    opts_svd = {'tol': 1e-15, 'D_total': Dmax}
+    I = mps.product_mpo(ops.I(), N)
+    n_psi = n % 2 if sym=='Z2' else n # for U1; charge of MPS
+    psi = mps.random_mps(I, D_total=Dmax, n=n_psi)
+    #
+    out = mps.dmrg_(psi, H0, method='2site', max_sweeps=2, opts_svd=opts_svd)
+    out = mps.dmrg_(psi, H0, method='1site', max_sweeps=10,
+                    energy_tol=1e-14, Schmidt_tol=1e-14)
+    #
+    C0ref, E0ref = gs_correlation_matrix(J0, n)
+    assert abs(out.energy - E0ref) < tol
+    #
+    # Sudden quench with a new Hamiltonian
+    #
+    J1 = [[-1,   0.5,   0,  -0.3, 0.1, 0  ],
+          [ 0,   1  ,   0.5, 0,  -0.3, 0.1],
+          [ 0,   0  ,  -1,   0.5, 0,  -0.3],
+          [ 0,   0  ,   0,   1,   0.5, 0  ],
+          [ 0,   0  ,   0,   0,  -1,   0.5],
+          [ 0,   0  ,   0,   0,   0,   1  ]]
+    H1 = build_mpo_hopping_Hterm(J1, sym=sym, config=config)
+    #
+    # C[m, n] = <c_n^dag c_m>
+    pps = [(0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (1, 2), (1, 3), (1, 4), (1, 5), (2, 3), (2, 4), (2, 5), (3, 4), (3, 5), (4, 5)]  # (m, n)
+    terms = [mps.Hterm(1, pp[::-1], (ops.cp(), ops.c())) for pp in pps]
+    O = mps.generate_mpo(I, terms)
+    #
+    e0ref = sum(C0ref[pp] for pp in pps)
+    e0 = mps.vdot(psi, O, psi)
+    assert abs(e0 - e0ref) < tol * abs(e0ref)
+    #
+    OO = O.shallow_copy()
+    opts_expmv = {'hermitian': False, 'ncv': 5, 'tol': 1e-12}
+    opts_svd = {'tol': 1e-15, 'D_total': 64}
+
+    HH = [-H1, H1.on_bra()]
+    for step in mps.tdvp_(OO, HH, times=(0, 0.00001, 0.00002, 0.00005, 0.0001, 0.002, 0.005, 0.01, 0.1),
+                          method='2site', dt=0.01, normalize=False,
+                          opts_svd=opts_svd, opts_expmv=opts_expmv):
+        Cref = evolve_correlation_matrix(C0ref, J1, step.tf)
+        e1ref = sum(Cref[pp] for pp in pps)
+        e1 = mps.vdot(psi, OO, psi)
+        assert abs(e1 - e1ref) < tol * abs(e1ref)
+
+    for step in mps.tdvp_(OO, HH, times=(0.1, 0.2, 0.3),
+                          method='12site', dt=0.01, normalize=False,
+                          opts_svd=opts_svd, opts_expmv=opts_expmv):
+        Cref = evolve_correlation_matrix(C0ref, J1, step.tf)
+        e1ref = sum(Cref[pp] for pp in pps)
+        e1 = mps.vdot(psi, OO, psi)
+        assert abs(e1 - e1ref) < tol * abs(e1ref)
 
 @pytest.mark.parametrize('kwargs', [{'config': cfg, 'sym': 'Z2'},
                                     {'config': cfg, 'sym': 'dense'}])
@@ -368,8 +451,8 @@ def tdvp_KZ_quench(sym='Z2', config=None):
         gg = round(g(step.tf))  # g at the snapshot
         assert abs(mEZ - Zex[gg]) < 1e-5
         assert abs(mEXX - XXex[gg]) < 1e-5
-        print(max(abs(EXX[k] - EXX[0, 1])for k in pairs))
-        print(max(abs(EZ[k] - EZ[0]) < 1e-5 for k in range(N)))
+        # print(max(abs(EXX[k] - EXX[0, 1])for k in pairs))
+        # print(max(abs(EZ[k] - EZ[0]) < 1e-5 for k in range(N)))
         assert all(abs(EXX[k] - EXX[0, 1]) < 1e-5 for k in pairs)
         assert all(abs(EZ[k] - EZ[0]) < 1e-5 for k in range(N))
         #
@@ -392,11 +475,17 @@ def test_tdvp_raise(config=cfg):
         next(mps.tdvp_(psi, H, method='one-site'))
         # TDVP: tdvp method one-site not recognized
     with pytest.raises(yastn.YastnError):
+        next(mps.tdvp_(psi, H, method='2site'))
+        # TDVP: provide opts_svd for 2site method.
+    with pytest.raises(yastn.YastnError):
         next(mps.tdvp_(psi, H, dt=0.))
         # TDVP: dt should be positive.
     with pytest.raises(yastn.YastnError):
         next(mps.tdvp_(psi, H, times=(1, 0)))
         # TDVP: times should be an ascending tuple.
+    with pytest.raises(yastn.YastnError):
+        next(mps.tdvp_(psi, H, order='1st'))
+        # TDVP: order should be in ('2nd', '4th')
 
     out = next(mps.tdvp_(psi, H, dt=0.1, times=0.1))
     # times=0.1 => times=(0, 0.1)
@@ -408,6 +497,12 @@ if __name__ == "__main__":
     for sym in ['Z2', 'U1']:
         t0 = time.time()
         tdvp_sudden_quench(sym=sym)
+        print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
+        t0 = time.time()
+        tdvp_sudden_quench_mpo_sum(sym=sym)
+        print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
+        t0 = time.time()
+        tdvp_sudden_quench_Heisenberg(sym=sym)
         print("Symmetry = ", sym, " time = %1.2f" % (time.time() - t0), "s." )
     for sym in ['dense', 'Z2']:
         t0 = time.time()

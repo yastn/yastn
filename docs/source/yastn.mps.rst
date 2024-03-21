@@ -37,6 +37,7 @@ API: yastn.tn.mps
    mps/algorithms_dmrg
    mps/algorithms_tdvp
    mps/algorithms_overlap
+   mps/environment
 
 *************************
 Examples: basics of usage

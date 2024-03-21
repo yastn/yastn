@@ -3,7 +3,7 @@ import numpy as np
 import numbers
 from typing import NamedTuple
 from ... import zeros, ncon, Leg, YastnError, Tensor, block, svd_with_truncation, allclose
-from ._mps import Mpo
+from ._mps_obc import Mpo
 
 
 class Hterm(NamedTuple):
@@ -30,7 +30,7 @@ class Hterm(NamedTuple):
     operators: tuple = ()
 
 
-def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.MpsMpo:
+def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Apply local operators specified by term in :class:`Hterm` to
     the list of identities `I`. Generate product MPO as a result.
@@ -74,8 +74,8 @@ def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.Mps
         rt = vec.n
         psi[n] = vec.add_leg(axis=0, s=-1)
 
-    if amplitude:
-        psi[0] = term.amplitude * psi[0]
+    if amplitude: psi[0] = term.amplitude * psi[0]
+
     return psi
 
 class GenerateMpoTemplate(NamedTuple):
@@ -94,7 +94,7 @@ def generate_mpo_preprocessing(I, terms, return_amplitudes=False) -> GenerateMpo
     ----------
     terms: list of :class:`Hterm`
         product operators making up the MPO.
-    I: yastn.tn.mps.MpsMpo
+    I: yastn.tn.mps.MpsMpoOBC
         identity MPO.
     return_amplitudes: bool
         If True, apart from template return also amplitudes = [term.amplitude for term in terms].
@@ -162,7 +162,7 @@ def generate_mpo_preprocessing(I, terms, return_amplitudes=False) -> GenerateMpo
     return template
 
 
-def generate_mpo_fast(template, amplitudes, opts=None) -> yastn.tn.mps.MpsMpo:
+def generate_mpo_fast(template, amplitudes, opts=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Fast generation of MPOs representing `Sequence[Hterm]` that differ only in amplitudes.
 
@@ -213,7 +213,7 @@ def generate_mpo_fast(template, amplitudes, opts=None) -> yastn.tn.mps.MpsMpo:
     return M
 
 
-def generate_mpo(I, terms, opts=None) -> yastn.tn.mps.MpsMpo:
+def generate_mpo(I, terms, opts=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
 
@@ -227,7 +227,7 @@ def generate_mpo(I, terms, opts=None) -> yastn.tn.mps.MpsMpo:
     ----------
     terms: Sequence[yastn.tn.mps.Hterm]
         Product operators making up MPO.
-    I: yastn.tn.mps.MpsMpo
+    I: yastn.tn.mps.MpsMpoOBC
         Identity MPO.
     opts: dict
         Options passed to :meth:`yastn.linalg.svd_with_truncation`.

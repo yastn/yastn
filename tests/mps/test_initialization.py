@@ -10,8 +10,8 @@ except ImportError:
 # pytest modifies cfg to inject different backends and devices during tests
 
 
-def test_MpsMpo_getitem_setitem():
-    """ raise exceptions in MpsMpo, __getitem__, __setitem__"""
+def test_MpsMpoOBC_getitem_setitem():
+    """ raise exceptions in MpsMpoOBC, __getitem__, __setitem__"""
     #
     #  empry Mps and Mpo
     N = 8
@@ -33,21 +33,21 @@ def test_MpsMpo_getitem_setitem():
     #  raising in getitem setitem
     with pytest.raises(yastn.YastnError):
         psi3[5] = T4
-        # MpsMpo: Tensor rank should be 3.
+        # MpsMpoOBC: Tensor rank should be 3.
     with pytest.raises(yastn.YastnError):
         psi4[5] = T3
-        # MpsMpo: Tensor rank should be 4.
+        # MpsMpoOBC: Tensor rank should be 4.
     with pytest.raises(yastn.YastnError):
         psi4[5.] = T4
-        # MpsMpo: n should be an integer in 0, 1, ..., N-1.
+        # MpsMpoOBC: n should be an integer in 0, 1, ..., N-1.
     with pytest.raises(yastn.YastnError):
         psi3[9] = T3
-        # MpsMpo: n should be an integer in 0, 1, ..., N-1.
+        # MpsMpoOBC: n should be an integer in 0, 1, ..., N-1.
     with pytest.raises(yastn.YastnError):
         psi3[(4, 5)]
-        #  MpsMpo does not have site with index (4, 5)
+        #  MpsMpoOBC does not have site with index (4, 5)
     #
-    #  raising in MpsMpo
+    #  raising in MpsMpoOBC
     with pytest.raises(yastn.YastnError):
         mps.Mps(N=0)
         # Number of Mps sites N should be a positive integer.
@@ -55,7 +55,7 @@ def test_MpsMpo_getitem_setitem():
         mps.Mps(N=3.)
         # Number of Mps sites N should be a positive integer.
     with pytest.raises(yastn.YastnError):
-        mps.MpsMpo(N=5, nr_phys=3)
+        mps.MpsMpoOBC(N=5, nr_phys=3)
         # Number of physical legs, nr_phys, should be 1 or 2.
     #
     #  raising in sweep
@@ -231,6 +231,20 @@ def test_generate_random_mps():
         assert bds[0] == bds[-1] == 1
         assert all(bd > D_total/2 for bd in bds[2:-2])
 
+    with pytest.raises(yastn.YastnError):
+        random_mps_spinless_fermions(N=5, D_total=4, sym="U1", n=20)  # impossible number of particles for given N.
+        # MPS: Random mps is a zero state. Check parameters,
+        # or try running again in this is due to randomness of the initialization.
+
+    with pytest.raises(yastn.YastnError):
+        ops = yastn.operators.SpinfulFermions(sym='U1xU1', backend=H.config.backend)
+        ops.random_seed(seed=0)  # fix seed
+        I = mps.product_mpo(ops.I(), 100)  # identity MPS
+        mps.random_mpo(I, D_total=1, sigma=4)
+        # Random mpo is a zero state. Check parameters,
+        # or try running again in this is due to randomness of the initialization.
+
+
 
 def test_mixed_dims_mpo_and_transpose():
     N = 5
@@ -241,7 +255,7 @@ def test_mixed_dims_mpo_and_transpose():
     #
     # random mpo with physical dimensions matching ref
     #
-    H = mps.random_mpo(ref, D_total=5)
+    H = mps.random_mpo(ref, D_total=5, dtype='complex128')
     #
     H_legs = H.get_physical_legs()
     assert H_legs == ref.get_physical_legs()
@@ -254,14 +268,21 @@ def test_mixed_dims_mpo_and_transpose():
     #
     # conjugate transpose to change reference to bra
     #
-    psi_bra = mps.random_mps(ref.conj().T, D_total=3)  #
+    psi_bra = mps.random_mps(ref.conj().T, D_total=3, dtype='complex128')  #
     bra_legs = psi_bra.get_physical_legs()
     assert [leg.D for leg in bra_legs] == [(3,), (4,), (3,), (4,), (3,)]
     #
     # expectation value in positive operator H @ H.conj().T
     #
-    assert mps.vdot(psi_bra, H.conj().T @ H, psi_bra) > 0
-    assert mps.vdot(psi_ket, H @ H.conj().T, psi_ket) > 0
+    tmp = mps.vdot(psi_bra, H.conj().T @ H, psi_bra)
+    assert tmp.real > 0
+    assert abs(tmp.imag) < 1e-8
+    tmp = mps.vdot(psi_ket, H @ H.conj().T, psi_ket)
+    assert tmp.real > 0
+    assert abs(tmp.imag) < 1e-8
+    assert (H.conj().T - H.H).norm() < 1e-12 * H.norm()
+    assert (psi_bra.conj() - psi_bra.H).norm() < 1e-12 * psi_bra.norm()
+    assert (psi_bra.T - psi_bra).norm() < 1e-12 * psi_bra.norm()
     #
     # final tests of transpose
     #
@@ -270,8 +291,7 @@ def test_mixed_dims_mpo_and_transpose():
     assert phys_dims == [((3,), (2,)), ((4,), (3,)), ((3,), (2,)), ((4,), (3,)), ((3,), (2,))]
 
 
-
-def test_MpsMpo_properties(config=cfg):
+def test_MpsMpoOBC_properties(config=cfg):
     """ Test reading MPS/MPO properties """
     opts_config = {} if config is None else \
                 {'backend': config.backend, 'default_device': config.default_device}
@@ -312,7 +332,7 @@ def test_MpsMpo_properties(config=cfg):
     assert all(leg == (ops.space(), ops.space().conj()) for leg in legs)
 
 
-def test_MpsMpo_copy(config=cfg):
+def test_MpsMpoOBC_copy(config=cfg):
     """ Initialize random mps of full tensors and checks copying. """
     opts_config = {} if config is None else \
                 {'backend': config.backend, 'default_device': config.default_device}
@@ -343,10 +363,10 @@ def test_MpsMpo_copy(config=cfg):
 
 
 if __name__ == "__main__":
-    test_MpsMpo_getitem_setitem()
+    test_MpsMpoOBC_getitem_setitem()
     test_product_mps()
     test_product_mpo()
     test_generate_random_mps()
     test_mixed_dims_mpo_and_transpose()
-    test_MpsMpo_properties()
-    test_MpsMpo_copy()
+    test_MpsMpoOBC_properties()
+    test_MpsMpoOBC_copy()

@@ -57,6 +57,11 @@ def test_add(config=cfg, tol=1e-8):
     psi1 = generate.random_mpo(D_total=11)
     check_add(psi0, psi1, tol)
 
+    psi_zero = psi0 * 0
+    assert psi_zero.norm() < tol
+    assert psi_zero.factor == 0  # multiply by 0, included in psi.factor
+
+
 def check_add(psi0, psi1, tol):
     """ series of test of mps.add performed on provided psi0 and psi1"""
     out1 = mps.add(psi0, psi1, amplitudes=[1., 2.])
@@ -202,7 +207,7 @@ def test_add_multiply_raise(config=cfg):
         # Number of Mps-s to add must be equal to the number of coefficients in amplitudes.
     with pytest.raises(yastn.YastnError):
         mps.add(psi7, psi8)
-        # All MpsMpo to add must have equal number of sites.
+        # All MpsMpoOBC to add must have equal number of sites.
     with pytest.raises(yastn.YastnError):
         mps.add(H8, psi8)
         #  All states to add should be either Mps or Mpo.
@@ -210,14 +215,14 @@ def test_add_multiply_raise(config=cfg):
     H8c.orthogonalize_site_(4, to='last')
     with pytest.raises(yastn.YastnError):
         mps.add(H8c, H8c)
-        #  Absorb central block of MpsMpo-s before calling add.
+        #  Absorb central block of MpsMpoOBC-s before calling add.
 
     with pytest.raises(yastn.YastnError):
         H8 @ psi7
-        #  MpsMpo-s to multiply must have equal number of sites.
+        #  MpsMpoOBC-s to multiply must have equal number of sites.
     with pytest.raises(yastn.YastnError):
         H8c @ psi8
-        # Absorb central blocks of MpsMpo-s before calling multiply.
+        # Absorb central blocks of MpsMpoOBC-s before calling multiply.
     with pytest.raises(yastn.YastnError):
         psi8 @ H8
         # Multiplication by MPS from left is not supported.

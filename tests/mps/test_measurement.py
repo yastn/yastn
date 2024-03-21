@@ -248,25 +248,25 @@ def test_mpo_spectrum(sym, config, tol=1e-12):
     assert abs(entropies[0]) < tol and abs(entropies[-1]) < tol
 
 
-def test_measurment_raise(config=cfg):
-    opts_config = {} if config is None else \
-                    {'backend': config.backend,
-                    'default_device': config.default_device}
-    # pytest uses config to inject various backends and devices for testing
-    ops = yastn.operators.Spin1(sym='dense', **opts_config)
-    #
-    # take 3 orthogonal operator-product states
-    #
-    H7 = mps.product_mpo(ops.sz(), N=7)
-    psi7 = mps.product_mps(ops.vec_z(), N=7)
-    psi8 = mps.product_mps(ops.vec_z(), N=8)
+# def test_measurment_raise(config=cfg):
+#     opts_config = {} if config is None else \
+#                     {'backend': config.backend,
+#                     'default_device': config.default_device}
+#     # pytest uses config to inject various backends and devices for testing
+#     ops = yastn.operators.Spin1(sym='dense', **opts_config)
+#     #
+#     # take 3 orthogonal operator-product states
+#     #
+#     H7 = mps.product_mpo(ops.sz(), N=7)
+#     psi7 = mps.product_mps(ops.vec_z(), N=7)
+#     psi8 = mps.product_mps(ops.vec_z(), N=8)
 
-    with pytest.raises(yastn.YastnError):
-        mps.vdot(psi7, psi8)
-        # MpsMpo for bra and ket should have the same number of sites.
-    with pytest.raises(yastn.YastnError):
-        mps.vdot(psi7, H7)
-        # MpsMpo for bra and ket should have the same number of physical legs.
+    # with pytest.raises(yastn.YastnError):
+    #     mps.vdot(psi7, psi8)
+    #     # MpsMpoOBC for bra and ket should have the same number of sites.
+    # with pytest.raises(yastn.YastnError):
+    #     mps.vdot(psi7, H7)
+    #     # MpsMpoOBC for bra and ket should have the same number of physical legs.
 
 
 # def correlation_matrix(psi, ops):

@@ -49,7 +49,7 @@ def test_algebra_basic():
     c = yastn.rand(config=config_dense, isdiag=True, D=5, dtype='float64')
     d, e = c.copy(), c.clone()
     r4 = algebra_vs_numpy(lambda x, y: 2. * x - (y + y), c, d)
-    r5 = algebra_vs_numpy(lambda x, y: 2. * x - y - y, c, e)
+    r5 = algebra_vs_numpy(lambda x, y: -y + 2. * x - y, c, e)
     assert r4.norm() < tol  # == 0.0
     assert r5.norm() < tol  # == 0.0
     assert all(yastn.are_independent(c, x) for x in (d, e))

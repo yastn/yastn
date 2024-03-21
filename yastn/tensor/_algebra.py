@@ -200,6 +200,11 @@ def __rmul__(a, number) -> yastn.Tensor:
     return __mul__(a, number)
 
 
+def __neg__(a) -> yastn.Tensor:
+    """ Multiply tensor by -1, use: `-tensor`. """
+    return __mul__(a, -1)
+
+
 def __pow__(a, exponent) -> yastn.Tensor:
     """ Element-wise exponent of tensor, use: `tensor ** exponent`. """
     data = a._data ** exponent

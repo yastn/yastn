@@ -406,7 +406,6 @@ def test_initialize_eye():
             yastn.Leg(config_U1, s=-1, t=(-1, 1, 2), D=(3, 11, 12))]
     a = yastn.rand(config=config_U1, legs=legs)
     b = a.fuse_legs(axes=(0, (1, 2), 3), mode='hard')
-
     c = b.fuse_legs(axes=(0, (1, 2)), mode='hard')
 
     leg = c.get_legs(axes=1)
@@ -423,6 +422,11 @@ def test_initialize_eye():
     assert legse[2].conj() == legs[3] == legse[5]
     aa = yastn.tensordot(a, e, axes=((1, 2, 3), (0, 1, 2)))
     assert (a - aa).norm() < tol
+
+    leg = a.get_legs(axes=0)
+    e = yastn.eye(a.config, legs=[leg, leg], isdiag=False)
+    assert e.get_shape() == (3, 3)
+    assert yastn.vdot(e, e) == 2
 
     with pytest.raises(yastn.YastnError):
         c = b.fuse_legs(axes=(0, (1, 2)), mode='meta')

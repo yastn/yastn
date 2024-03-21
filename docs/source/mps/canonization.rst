@@ -9,20 +9,20 @@ or as a part of the setup for many algorithms, including
 The canonical form obtained by QR decomposition is fast, but does not allow for truncation
 of the virtual spaces of MPS/MPO.
 
-.. automethod:: yastn.tn.mps.MpsMpo.canonize_
+.. automethod:: yastn.tn.mps.MpsMpoOBC.canonize_
 
 See examples: :ref:`examples/mps/algebra:canonical form by qr`.
 
 The canonization by SVD allows truncating virtual dimension/spaces
 with the lowest weights (smallest singular values).
 
-.. automethod:: yastn.tn.mps.MpsMpo.truncate_
+.. automethod:: yastn.tn.mps.MpsMpoOBC.truncate_
 
 See examples: :ref:`examples/mps/algebra:canonical form by svd`.
 
 The above routines operate on entire MPS or MPO.
 They are build from functions operating on individual tensors of MPS/MPO:
 
-.. automethod:: yastn.tn.mps.MpsMpo.orthogonalize_site_
-.. automethod:: yastn.tn.mps.MpsMpo.absorb_central_
-.. automethod:: yastn.tn.mps.MpsMpo.diagonalize_central_
+.. automethod:: yastn.tn.mps.MpsMpoOBC.orthogonalize_site_
+.. automethod:: yastn.tn.mps.MpsMpoOBC.absorb_central_
+.. automethod:: yastn.tn.mps.MpsMpoOBC.diagonalize_central_

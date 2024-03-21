@@ -1,0 +1,307 @@
+""" MpsMpoParent structure and basic methods common for OBC and PBC. """
+from __future__ import annotations
+import numbers
+from ... import YastnError
+
+
+class _MpsMpoParent:
+    # The basic structure of MPS/MPO with `N` sites.
+
+    def __init__(self, N=1, nr_phys=1):
+        r"""
+        Parent class extracting common elements of periodic and open boundary MpsMpo
+        """
+        if not isinstance(N, numbers.Integral) or N <= 0:
+            raise YastnError('Number of Mps sites N should be a positive integer.')
+        if nr_phys not in (1, 2):
+            raise YastnError('Number of physical legs, nr_phys, should be 1 or 2.')
+        self._N = N
+        self.A = {i: None for i in range(N)}  # dict of mps tensors; indexed by integers
+        self.pC = None  # index of the central block, None if it does not exist
+        self._first = 0  # index of the first lattice site
+        self._last = N - 1  # index of the last lattice site
+        self._nr_phys = nr_phys
+        self.factor = 1  # multiplicative factor is real and positive (e.g. norm)
+
+    @property
+    def first(self):
+        return self._first
+
+    @property
+    def last(self):
+        return self._last
+
+    @property
+    def nr_phys(self):
+        return self._nr_phys
+
+    @property
+    def N(self):
+        return self._N
+
+    def __len__(self):
+        return self._N
+
+    @property
+    def config(self):
+        return self.A[0].config
+
+    def sweep(self, to='last', df=0, dl=0) -> Iterator[int]:
+        r"""
+        Generator of indices of all sites going from the first site to the last site, or vice-versa.
+
+        Parameters
+        ----------
+        to: str
+            'first' or 'last'.
+        df, dl: int
+            shift iterator by :math:`df \ge 0` and :math:`dl \ge 0` from the first and the last site, respectively.
+        """
+        if to == 'last':
+            return range(df, self.N - dl)
+        if to == 'first':
+            return range(self.N - 1 - dl, df - 1, -1)
+        raise YastnError('"to" in sweep should be in "first" or "last"')
+
+    def __getitem__(self, n) -> yastn.Tensor:
+        """ Return tensor corresponding to n-th site."""
+        try:
+            return self.A[n]
+        except KeyError as e:
+            raise YastnError(f"MpsMpoOBC does not have site with index {n}") from e
+
+    def __setitem__(self, n, tensor):
+        """
+        Assign tensor to n-th site of Mps or Mpo.
+
+        Assigning central block is not supported.
+        """
+        if not isinstance(n, numbers.Integral) or n < self.first or n > self.last:
+            raise YastnError("MpsMpoOBC: n should be an integer in 0, 1, ..., N-1")
+        if tensor.ndim != self.nr_phys + 2:
+            raise YastnError(f"MpsMpoOBC: Tensor rank should be {self.nr_phys + 2}")
+        self.A[n] = tensor
+
+    def shallow_copy(self) -> yastn.tn.mps.MpsMpoOBC:
+        r"""
+        New instance of :class:`yastn.tn.mps.MpsMpoOBC` pointing to the same tensors as the old one.
+
+        Shallow copy is usually sufficient to retain the old MPS/MPO.
+        """
+        phi = type(self)(N=self.N, nr_phys=self.nr_phys)
+        phi.A = dict(self.A)
+        phi.pC = self.pC
+        phi.factor = self.factor
+        if hasattr(self, 'flag'):
+            phi.flag = self.flag
+        return phi
+
+    def on_bra(self) -> yastn.tn.mps.MpsMpoOBC:
+        r"""
+        A shallow copy of the tensor with an added 'on_bra' flag.
+
+        The flag is only relevant in functions using Env.
+        It makes the Mpo operator acting on an Mpo state to be applied on the bra legs (or auxiliary legs),
+        instead of a default application on 'ket' legs.
+        For instance, :code:`Heff = [-H, H.on_bra()]` can be used to evolve an operator in the Heisenberg picture.
+
+        This flag gets propagated by __mul__, conj, transpose, and other functions employing shallow_copy.
+        It is not saved/loaded, or propagated by more complicated functions.
+        """
+        phi = self.shallow_copy()
+        phi.flag = 'on_bra'
+        return phi
+
+    def clone(self) -> yastn.tn.mps.MpsMpoOBC:
+        r"""
+        Makes a clone of MPS or MPO by :meth:`cloning<yastn.Tensor.clone>`
+        all :class:`yastn.Tensor<yastn.Tensor>`'s into a new and independent :class:`yastn.tn.mps.MpsMpoOBC`.
+        """
+        phi = self.shallow_copy()
+        for ind, ten in phi.A.items():
+            phi.A[ind] = ten.clone()  # TODO clone factor ?
+        return phi
+
+    def copy(self) -> yastn.tn.mps.MpsMpoOBC:
+        r"""
+        Makes a copy of MPS or MPO by :meth:`copying<yastn.Tensor.copy>` all :class:`yastn.Tensor<yastn.Tensor>`'s
+        into a new and independent :class:`yastn.tn.mps.MpsMpoOBC`.
+        """
+        phi = self.shallow_copy()
+        for ind, ten in phi.A.items():
+            phi.A[ind] = ten.copy()
+        return phi
+
+    def conj(self) -> yastn.tn.mps.MpsMpoOBC:
+        """ Makes a conjugation of the object. """
+        phi = self.shallow_copy()
+        for ind, ten in phi.A.items():
+            phi.A[ind] = ten.conj()
+        return phi
+
+    def transpose(self) -> yastn.tn.mps.MpsMpoOBC:
+        """ Transpose of MPO. For MPS, return self."""
+        if self.nr_phys == 1:
+            return self
+        phi = self.shallow_copy()
+        for n in phi.sweep(to='last'):
+            phi.A[n] = phi.A[n].transpose(axes=(0, 3, 2, 1))
+        return phi
+
+    def conjugate_transpose(self) -> yastn.tn.mps.MpsMpo:
+        """ Transpose of MPO. For MPS, return self."""
+        if self.nr_phys == 1:
+            return self.conj()
+        phi = self.shallow_copy()
+        for n in phi.sweep(to='last'):
+            phi.A[n] = phi.A[n].transpose(axes=(0, 3, 2, 1)).conj()
+        return phi
+
+    @property
+    def T(self) -> yastn.tn.mps.MpsMpo:
+        r""" Transpose of MPO. For MPS, return self.
+
+        Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.transpose>` """
+        return self.transpose()
+
+    @property
+    def H(self) -> yastn.tn.mps.MpsMpo:
+        r""" Transpose of MPO. For MPS, return self.
+
+        Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.conjugate_transpose>` """
+        return self.conjugate_transpose()
+
+    def reverse_sites(self) -> yastn.tn.mps.MpsMpo:
+        r"""
+        New MPS/MPO with reversed order of sites and respectively transposed virtual tensor legs.
+        """
+        phi = type(self)(N=self.N, nr_phys=self.nr_phys)
+        phi.factor = self.factor
+        axes = (2, 1, 0) if self.nr_phys == 1 else (2, 1, 0, 3)
+        for n in phi.sweep(to='last'):
+            phi.A[n] = self.A[self.N - n - 1].transpose(axes=axes)
+        if self.pC is None:
+            phi.pC = None
+        else:
+            phi.pC = (self.N - self.pC[1] - 1, self.N - self.pC[0] - 1)
+            phi.A[phi.pC] = self.A[self.pC].transpose(axes=(1, 0))
+        return phi
+
+    def __mul__(self, multiplier) -> yastn.tn.mps.MpsMpoOBC:
+        """ New MPS/MPO with the first tensor multiplied by a scalar. """
+        phi = self.shallow_copy()
+        am = abs(multiplier)
+        if am > 0:
+            phi.factor = am * self.factor
+            phi.A[0] = phi.A[0] * (multiplier / am)
+        else:
+            phi.factor = am * self.factor
+        return phi
+
+    def __rmul__(self, number) -> yastn.tn.mps.MpsMpoOBC:
+        """ New MPS/MPO with the first tensor multiplied by a scalar. """
+        return self.__mul__(number)
+
+    def __neg__(self):
+        return self.__mul__(-1)
+
+    def __truediv__(self, number) -> yastn.tn.mps.MpsMpoOBC:
+        """ Divide MPS/MPO by a scalar. """
+        return self.__mul__(1 / number)
+
+    def virtual_leg(self, ind):
+        if ind == 'first':
+            return self.A[self.first].get_legs(axes=0)
+        if ind == 'last':
+            return self.A[self.last].get_legs(axes=2)
+
+    def get_bond_dimensions(self) -> Sequence[int]:
+        r"""
+        Returns total bond dimensions of all virtual spaces along MPS/MPO from
+        the first to the last site, including "trivial" leftmost and rightmost virtual spaces.
+        This gives a tuple with `N + 1` elements.
+        """
+        Ds = [self.A[n].get_shape(axes=0) for n in self.sweep(to='last')]
+        Ds.append(self.A[self.last].get_shape(axes=2))
+        return tuple(Ds)
+
+    def get_bond_charges_dimensions(self) -> Sequence[dict[Sequence[int], int]]:
+        r"""
+        Returns list of charge sectors and their dimensions for all virtual spaces along MPS/MPO
+        from the first to the last site, including "trivial" leftmost and rightmost virtual spaces.
+        Each element of the list is a dictionary {charge: sectorial bond dimension}.
+        This gives a list with `N + 1` elements.
+        """
+        tDs = []
+        for n in self.sweep(to='last'):
+            leg = self.A[n].get_legs(axes=0)
+            tDs.append(leg.tD)
+        leg = self.A[self.last].get_legs(axes=2)
+        tDs.append(leg.tD)
+        return tDs
+
+    def get_virtual_legs(self) -> Sequence[yastn.Leg]:
+        r"""
+        Returns :class:`yastn.Leg` of all virtual spaces along MPS/MPO from
+        the first to the last site, in the form of the `0th` leg of each MPS/MPO tensor.
+        Finally, append the rightmost virtual spaces, i.e., `2nd` leg of the last tensor,
+        conjugating it so that all legs have signature `-1`.
+        This gives a list with `N + 1` elements.
+        """
+        legs = [self.A[n].get_legs(axes=0) for n in self.sweep(to='last')]
+        legs.append(self.A[self.last].get_legs(axes=2).conj())
+        return legs
+
+    def get_physical_legs(self) -> Sequence[yastn.Leg] | Sequence[tuple(yastn.Leg, yastn.Leg)]:
+        r"""
+        Returns :class:`yastn.Leg` of all physical spaces along MPS/MPO from
+        the first to the last site. For MPO return a tuple of ket and bra spaces for each site.
+        """
+        if self.nr_phys == 2:
+            return [self.A[n].get_legs(axes=(1, 3)) for n in self.sweep(to='last')]
+        return [self.A[n].get_legs(axes=1) for n in self.sweep(to='last')]
+
+
+    def save_to_dict(self) -> dict[str, dict | number]:
+        r"""
+        Serialize MPS/MPO into a dictionary.
+
+        Each element represents serialized :class:`yastn.Tensor`
+        (see, :meth:`yastn.Tensor.save_to_dict`) of the MPS/MPO.
+        Absorbs central block if it exists.
+        """
+        psi = self.shallow_copy()
+        psi.absorb_central_()  # make sure central block is eliminated
+        out_dict = {
+            'N': psi.N,
+            'nr_phys': psi.nr_phys,
+            'factor': psi.factor, #.item(),
+            'A': {}
+        }
+        for n in psi.sweep(to='last'):
+            out_dict['A'][n] = psi[n].save_to_dict()
+        return out_dict
+
+    def save_to_hdf5(self, file, my_address):
+        r"""
+        Save MPS/MPO into a HDF5 file.
+
+        Parameters
+        ----------
+        file: File
+            A `pointer` to a file opened by the user
+
+        my_address: str
+            Name of a group in the file, where the Mps will be saved, e.g., 'state/'
+        """
+        psi = self.shallow_copy()
+        try:
+            factor = psi.config.backend.to_numpy(psi.factor)
+        except:
+            factor = psi.factor
+        psi.absorb_central_()  # make sure central block is eliminated
+        file.create_dataset(my_address+'/N', data=psi.N)
+        file.create_dataset(my_address+'/nr_phys', data=psi.nr_phys)
+        file.create_dataset(my_address+'/factor', data=factor)
+        for n in self.sweep(to='last'):
+            psi[n].save_to_hdf5(file, my_address+'/A/'+str(n))
