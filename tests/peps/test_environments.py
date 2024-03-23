@@ -34,7 +34,7 @@ def test_finite_spinless_boundary_mps_ctmrg():
     gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
-    env = fpeps.EnvNTU(psi, which='NNh')
+    env = fpeps.EnvNTU(psi, which='NN+')
 
     opts_svd = {'D_total': D, 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)
@@ -112,7 +112,7 @@ def test_spinless_infinite_approx():
     gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
-    env = fpeps.EnvNTU(psi, which='NNh')
+    env = fpeps.EnvNTU(psi, which='NN+')
 
     opts_svd = {"D_total": D , 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)
@@ -124,7 +124,7 @@ def test_spinless_infinite_approx():
 
     envs = {}
     envs['NNN']  = fpeps.EnvNTU(psi, which='NNN')
-    envs['NNNh'] = fpeps.EnvNTU(psi, which='NNNh')
+    envs['NNN+'] = fpeps.EnvNTU(psi, which='NNN+')
     for k in ['43', '43h', '65', '65h', '87', '87h']:
         envs[k] = fpeps.EnvApproximate(psi,
                                        which=k,
@@ -137,7 +137,7 @@ def test_spinless_infinite_approx():
         Gs = {k: env.bond_metric(bd, QA, QB) for k, env in envs.items()}
         Gs = {k: v / v.norm() for k, v in Gs.items()}
         assert (Gs['NNN'] - Gs['43']).norm() < 1e-6
-        assert (Gs['NNNh']-Gs['43h']).norm() < 1e-6
+        assert (Gs['NNN+']-Gs['43h']).norm() < 1e-6
         assert (Gs['43'] - Gs['43h']).norm() < 1e-3
         assert (Gs['43h'] - Gs['65']).norm() < 1e-4
         assert (Gs['65'] - Gs['65h']).norm() < 1e-5

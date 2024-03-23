@@ -39,7 +39,7 @@ def test_NTU_spinful_finite():
     gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
-    env = fpeps.EnvNTU(psi, which='NNNhhh')
+    env = fpeps.EnvNTU(psi, which='NNN++')
 
     opts_svd = {"D_total": D, 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)
@@ -129,7 +129,7 @@ def test_NTU_spinful_infinite():
     # initialized at infinite temperature
     psi = fpeps.product_peps(geometry, fid)
 
-    env = fpeps.EnvNTU(psi, which='NNNhhh')
+    env = fpeps.EnvNTU(psi, which='NNN++')
 
     opts_svd = {"D_total": D, 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)
