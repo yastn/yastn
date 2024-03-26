@@ -55,7 +55,6 @@ class Peps():
             psi._data[ind] = self._data[ind].copy()
         return psi
 
-
     def clone(self):
         r"""
         Makes a clone of PEPS by :meth:`copying<yastn.Tensor.clone>` all :class:`yastn.Tensor<yastn.Tensor>`'s
@@ -65,7 +64,6 @@ class Peps():
         for ind in self._data:
             psi._data[ind] = self._data[ind].copy()
         return psi
-
 
     def transfer_mpo(self, n=0, dirn='v'):
         """

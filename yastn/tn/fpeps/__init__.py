@@ -6,4 +6,4 @@ from ._doublePepsTensor import DoublePepsTensor
 from .envs._env_ntu import EnvNTU
 from .envs._env_boundary_mps import EnvBoundaryMps
 from .envs._env_cluster_approximate import EnvApproximate
-from .ctm import measure_1site, measure_2site, ctmrg
+from .envs._measure import measure_1site, measure_2site, sample, sample_MC_

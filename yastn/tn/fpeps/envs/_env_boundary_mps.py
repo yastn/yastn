@@ -3,7 +3,10 @@ from ._env_auxlliary import identity_tm_boundary
 
 
 class EnvBoundaryMps:
-    r""" Geometric information about the lattice provided to ctm tensors """
+    r"""
+    Geometric information about the lattice provided to ctm tensors
+    """
+
     def __init__(self, psi, opts_svd, setup='l', opts_var=None):
         self.psi = psi
         self._env = {}
@@ -59,6 +62,7 @@ class EnvBoundaryMps:
                 mps.compression_(self._env['b', nx], (tmpo, phi0), **opts_var)
                 self.info['b', nx] = {'discarded': discarded}
 
+    from ._measure import sample, sample_MC_, measure_1site, measure_2site
 
-    def env2mps(self, n, dirn):
+    def boundary_mps(self, n, dirn):
         return self._env[dirn, n]

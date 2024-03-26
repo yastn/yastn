@@ -8,7 +8,7 @@ class EnvNTU:
             raise YastnError(f" Type of EnvNTU {which} not recognized.")
         self.psi = psi
         self.which = which
-        self._dict_gs = {#'SU': self._g_h,
+        self._dict_gs = {#'SU': self._g_p,
                          'NN': self._g_NN,
                          'NN+': self._g_NNp,
                          'NN++': self._g_NNpp,
@@ -57,16 +57,29 @@ class EnvNTU:
 
     def _g_NN(self, bd, QA, QB):
         """
-        Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
+        Calculates the metric tensor g for the given PEPS tensor network within "NTU-NN" approximation.
+
+        For bd.dirn == 'h':
+
+                 (-1, +0)==(-1, +1)
+                    ||        ||
+        (+0, -1) == QA+      +QB == (+0, +2)
+                    ||        ||
+                 (+1, +0)==(+1, +1)
+
+        For bd.dirn == 'v':
+
+                 (-1, +0)
+                    ||
+        (+0, -1) == QA == (+0, +1)
+           ||       ++       ||
+        (+1, -1) == QB == (+1, +1)
+                    ||
+                 (+2, +0)
         """
         if bd.dirn == "h":
             assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
-            #          (-1, 0)==(-1, 1)
-            #             ||       ||
-            #   (0, -1) = GA +   + GB = (0, +2)
-            #             ||       ||
-            #          (+1, 0)==(+1, 1)
-            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1, 0), (0, -1), (1, 0), (1, 1), (0, 2), (-1, 1)]}
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,0), (0,-1), (1,0), (1,1), (0,2), (-1,1)]}
             tensors_from_psi(m, self.psi)
             env_l = edge_l(QA, hair_l(m[0, -1]))  # [bl bl'] [rr rr'] [tl tl']
             env_r = edge_r(QB, hair_r(m[0,  2]))  # [tr tr'] [ll ll'] [br br']
@@ -77,14 +90,7 @@ class EnvNTU:
             g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
-            #         (-1, 0)
-            #            ||
-            #   (0,-1) = GA = (0, 1)
-            #     ||     ++     ||
-            #   (1,-1) = GB = (1, 1)
-            #            ||
-            #         (+2, 0)
-            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1, 0), (0, -1), (1, -1), (2, 0), (1, 1), (0, 1)]}
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,0), (0,-1), (1,-1), (2,0), (1,1), (0,1)]}
             tensors_from_psi(m, self.psi)
             env_t = edge_t(QA, hair_t(m[-1, 0]))  # [lt lt'] [bb bb'] [rt rt']
             env_b = edge_b(QB, hair_b(m[ 2, 0]))  # [rb rb'] [tt tt'] [lb lb']
@@ -98,35 +104,44 @@ class EnvNTU:
 
     def _g_NNp(self, bd, QA, QB):
         """
-        Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
+        Calculates the metric tensor g for the given PEPS tensor network within "NTU-NN+" approximation.
+
+        For bd.dirn == 'h':
+
+                          (-2, +0)  (-2, +1)
+                             ||        ||
+                 (-1, -1)-(-1, +0)==(-1, +1)-(-1, +2)
+                     :       ||        ||       :
+        (+0, -2)=(+0, -1) == QA+      +QB == (+0, +2)=(+0, +3)
+                     :       ||        ||       :
+                 (+1, -1)-(+1, +0)==(+1, +1)-(+1, +2)
+                             ||        ||
+                          (+2, +0)  (+2, +1)
+
+        For bd.dirn == 'v':
+
+                          (-2, +0)
+                             ||
+                 (-1, -1)-(-1, +0)-(-1, +1)
+                     :       ||       :
+        (+0, -2)=(+0, -1) == GA == (+0, +1)=(+0, +2)
+                    ||       ++       ||
+        (+1, -2)=(+1, -1) == GB == (+1, +1)=(+1, +2)
+                     :       ||       :
+                 (+2, -1)-(+2, +0)-(+2, +1)
+                             ||
+                          (+3, +0)
         """
         if bd.dirn == "h":
             assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
-            #                 (-2,0)  (-2,1)
-            #        (-1,-1)--(-1,0)==(-1,1)--(-1,2)
-            #           |       ||      ||      |
-            # (0, -2)(0, -1) == GA  ++  GB == (0, 2)(0, 3)
-            #           |       ||      ||      |
-            #        (1, -1)--(1, 0)==(1, 1)==(1, 2)
-            #                 (2, 0)  (2, 1)
-            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (1, 0), (1, 1), (1, 2), (0, 2), (-1, 2), (-1, 1), (-1, 0),
-                                                              (0, -2), (2, 0), (2, 1), (0, 3), (-2, 1), (-2, 0)]}
+            sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2),
+                   (-1,1), (-1,0), (0,-2), (2,0), (2,1), (0,3), (-2,1), (-2,0)]
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
-            htl_t, _, htl_l = cor_tl(m[-1,-1]).svd_with_truncation(axes=(0, 1), D_total=1)
-            htl_t = htl_t.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
-            htl_l = htl_l.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
-
-            htr_r, _, htr_t = cor_tr(m[-1, 2]).svd_with_truncation(axes=(0, 1), D_total=1)
-            htr_r = htr_r.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
-            htr_t = htr_t.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
-
-            hbr_b, _, hbr_r = cor_br(m[1, 2]).svd_with_truncation(axes=(0, 1), D_total=1)
-            hbr_b = hbr_b.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
-            hbr_r = hbr_r.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
-
-            hbl_l, _, hbl_b = cor_bl(m[1, -1]).svd_with_truncation(axes=(0, 1), D_total=1)
-            hbl_l = hbl_l.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
-            hbl_b = hbl_b.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
+            htl_t, htl_l = cut_into_hairs(cor_tl(m[-1,-1]))
+            htr_r, htr_t = cut_into_hairs(cor_tr(m[-1, 2]))
+            hbr_b, hbr_r = cut_into_hairs(cor_br(m[1, 2]))
+            hbl_l, hbl_b = cut_into_hairs(cor_bl(m[1, -1]))
 
             env_l = edge_l(QA, hair_l(m[0,-1], hl=hair_l(m[0,-2]), ht=htl_t, hb=hbl_b))  # [bl bl'] [rr rr'] [tl tl']
             env_r = edge_r(QB, hair_r(m[0, 2], hr=hair_r(m[0, 3]), ht=htr_t, hb=hbr_b))  # [tr tr'] [ll ll'] [br br']
@@ -138,35 +153,15 @@ class EnvNTU:
             g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
-            #                 (-2, 0)
-            #        (-1,-1)--(-1, 0)--(-1,1)
-            #           |        ||      |
-            # (0, -2)(0, -1)===  GA ===(0, 1)(0, 2)
-            #           ||       ++      ||
-            # (1, -2)(1, -1)===  GB ===(1, 1)(1, 2)
-            #           |        ||      |
-            #        (2, -1)--(2,  0)--(2, 1)
-            #                 (3,  0)
-            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (2,-1), (2, 0), (2, 1), (1, 1), (0, 1), (-1, 1), (-1, 0),
-                                                              (0, -2), (1,-2), (3, 0), (1, 2), (0, 2), (-2, 0)]}
+            sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1),
+                   (-1,1), (-1,0), (0,-2), (1,-2), (3,0), (1,2), (0,2), (-2,0)]
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
 
-            htl_t, _, htl_l = cor_tl(m[-1,-1]).svd_with_truncation(axes=(0, 1), D_total=1)
-            htl_t = htl_t.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
-            htl_l = htl_l.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
-
-            htr_r, _, htr_t = cor_tr(m[-1, 1]).svd_with_truncation(axes=(0, 1), D_total=1)
-            htr_r = htr_r.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
-            htr_t = htr_t.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
-
-            hbr_b, _, hbr_r = cor_br(m[2, 1]).svd_with_truncation(axes=(0, 1), D_total=1)
-            hbr_b = hbr_b.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
-            hbr_r = hbr_r.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
-
-            hbl_l, _, hbl_b = cor_bl(m[2, -1]).svd_with_truncation(axes=(0, 1), D_total=1)
-            hbl_l = hbl_l.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
-            hbl_b = hbl_b.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
-
+            htl_t, htl_l = cut_into_hairs(cor_tl(m[-1,-1]))
+            htr_r, htr_t = cut_into_hairs(cor_tr(m[-1, 1]))
+            hbr_b, hbr_r = cut_into_hairs(cor_br(m[2, 1]))
+            hbl_l, hbl_b = cut_into_hairs(cor_bl(m[2, -1]))
 
             env_t = edge_t(QA, hair_t(m[-1, 0], ht=hair_t(m[-2, 0]), hl=htl_l, hr=htr_r))  # [lt lt'] [bb bb'] [rt rt']
             env_b = edge_b(QB, hair_b(m[ 2, 0], hb=hair_b(m[ 3, 0]), hl=hbl_l, hr=hbr_r))  # [rb rb'] [tt tt'] [lb lb']
@@ -180,19 +175,47 @@ class EnvNTU:
 
     def _g_NNpp(self, bd, QA, QB):
         """
-        Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
+        Calculates the metric tensor g for the given PEPS tensor network "NTU-NN++" approximation.
+
+        For bd.dirn == 'h':
+
+                                   (-2, +0)--(-2, +1)
+                                      ||        ||
+                          (-2, -1)-(-2, +0)--(-2, +1)-(-2, +1)
+                             :        ||        ||       :
+                 (-1, -2)-(-1, -1)-(-1, +0)==(-1, +1)-(-1, +2)-(-1, +3)
+                    :        :        ||        ||       :        :
+        (+0, -2)=(+0, -2)=(+0, -1) == QA+      +QB == (+0, +2)=(+0, +3)=(+0, +4)
+                    :        :        ||        ||       :        :
+                 (+1, -2)-(+1, -1)-(+1, +0)==(+1, +1)-(+1, +2)-(+1, +3)
+                             :        ||        ||       :
+                          (+2, -1)-(+2, +0)--(+2, +1)-(+2, +2)
+                                      ||        ||
+                                   (+2, +0)--(+2, +1)
+
+        For bd.dirn == 'v':
+
+                                   (-3, +0)
+                                      ||
+                          (-2, -1)-(-2, +0)-(-2, +1)
+                             :        ||       :
+                 (-1, -2)-(-1, -1)-(-1, +0)-(-1, +1)-(-1, +2)
+                    :        :        ||       :        :
+        (+0, -3)=(+0, -2)=(+0, -1) == GA == (+0, +1)=(+0, +2)=(+0, +3)
+           :        :        ||       ++       ||       :        :
+        (+1, -3)=(+1, -2)=(+1, -1) == GB == (+1, +1)=(+1, +2)=(+1, +3)
+                    :        :        ||       :        :
+                 (+2, -2)-(+2, -1)-(+2, +0)-(+2, +1)-(+2, +2)
+                             :        ||       :
+                          (+3, -1)-(+3, +0)-(+3, +1)
+                                      ||
+                                   (+4, +0)
         """
         if bd.dirn == "h":
             assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
-            #        (-2,-1)  (-2,0)  (-2,1)  (-2,2)
-            # (-1,-2)(-1,-1)==(-1,0)==(-1,1)==(-1,2)(-1,3)
-            #                   ||      ||
-            # (0, -2)(0, -1) == GA  ++  GB == (0, 2)(0, 3)
-            #                   ||      ||
-            # (1, -2)(1, -1)==(1, 0)==(1, 1)==(1, 2)(1, 3)
-            #        (2, -1)  (2, 0)  (2, 1)  (2, 2)
-            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (1, 0), (1, 1), (1, 2), (0, 2), (-1, 2), (-1, 1), (-1, 0),
-                                                              (-1,-2), (0,-2), (1,-2), (2,-1), (2, 0), (2, 1), (2, 2), ( 1, 3), ( 0, 3), (-1, 3), (-2, 2), (-2, 1), (-2, 0), (-2, -1)]}
+            sts =  [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0), (-1,-2), (0,-2),
+                    (1,-2), (2,-1), (2,0), (2,1), (2,2), (1,3), (0,3), (-1,3), (-2,2), (-2,1), (-2,0), (-2,-1)]
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
             env_l = edge_l(QA, hair_l(m[0,-1], hl=hair_l(m[0,-2])))  # [bl bl'] [rr rr'] [tl tl']
             env_r = edge_r(QB, hair_r(m[0, 2], hr=hair_r(m[0, 3])))  # [tr tr'] [ll ll'] [br br']
@@ -203,17 +226,9 @@ class EnvNTU:
             g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
-            #        (-2,-1)  (-2, 0)  (-2,1)
-            # (-1,-2)(-1,-1)  (-1, 0)  (-1,1)(-1,2)
-            #           ||       ||      ||
-            # (0, -2)(0, -1)===  GA ===(0, 1)(0, 2)
-            #           ||       ++      ||
-            # (1, -2)(1, -1)===  GB ===(1, 1)(1, 2)
-            #           ||       ||      ||
-            # (2, -2)(2, -1)  (2,  0)  (2, 1)(2, 2)
-            #        (3, -1)  (3,  0)  (3, 1)
-            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (2,-1), (2, 0), (2, 1), (1, 1), (0, 1), (-1, 1), (-1, 0),
-                                                              (-1,-2), (0,-2), (1,-2), (2,-2), (3,-1), (3, 0), (3, 1), (2, 2), (1, 2), (0, 2), (-1, 2), (-2, 1), (-2, 0), (-2,-1)]}
+            sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1), (-1,1), (-1,0), (-1,-2), (0,-2),
+                    (1,-2), (2,-2), (3,-1), (3,0), (3,1), (2,2), (1,2), (0,2), (-1,2), (-2,1), (-2,0), (-2,-1)]
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
             env_t = edge_t(QA, hair_t(m[-1, 0], ht=hair_t(m[-2, 0])))  # [lt lt'] [bb bb'] [rt rt']
             env_b = edge_b(QB, hair_b(m[ 2, 0], hb=hair_b(m[ 3, 0])))  # [rb rb'] [tt tt'] [lb lb']
@@ -227,16 +242,30 @@ class EnvNTU:
 
     def _g_NNN(self, bd, QA, QB):
         """
-        Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
+        Calculates the metric tensor g for the given PEPS tensor network "NTU-NNN" approximation.
+
+        For bd.dirn == 'h':
+
+        (-1, -1)=(-1, +0)==(-1, +1)=(-1, +2)
+           ||       ||        ||       ||
+        (+0, -1) == GA-+    +-GB == (+0, +2)
+           ||       ||        ||       ||
+        (+1, -1)=(+1, +0)==(+1, +1)=(+1, +2)
+
+        For bd.dirn == 'v':
+
+        (-1, -1)=(-1, +0)=(-1, +1)
+           ||       ||       ||
+        (+0, -1) == GA == (+0, +1)
+           ||       ++       ||
+        (+1, -1) == GB == (+1, +1)
+           ||       ||       ||
+        (+2, -1)=(+2, +0)=(+2, +1)
         """
         if bd.dirn == "h":
             assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
-            #   (-1,-1)==(-1,0)==(-1,1)==(-1,2)
-            #      ||      ||      ||      ||
-            #   (0, -1) == GA  ++  GB == (0, 2)
-            #      ||      ||      ||      ||
-            #   (1, -1)==(1, 0)==(1, 1)==(1, 2)
-            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1, -1), (0, -1), (1, -1), (1,  0), (1,  1),  (1,  2), (0,  2), (-1, 2), (-1, 1), (-1, 0)]}
+            sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0)]
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
 
             ell = edge_l(m[0, -1])
@@ -257,14 +286,8 @@ class EnvNTU:
             g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
-            #   (-1,-1)==(-1, 0)==(-1,1)
-            #      ||       ||      ||
-            #   (0, -1)===  GA ===(0, 1)
-            #      ||       ++      ||
-            #   (1, -1)===  GB ===(1, 1)
-            #      ||       ||      ||
-            #   (2, -1)==(2,  0)==(2, 1)
-            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1, -1), (0, -1), (1, -1), (2, -1), (2, 0), (2, 1), (1, 1), (0, 1), (-1, 1), (-1, 0)]}
+            sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1), (-1,1), (-1,0)]
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
 
             etl = edge_l(m[0, -1])
@@ -288,19 +311,39 @@ class EnvNTU:
 
     def _g_NNNp(self, bd, QA, QB):
         """
-        Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
+        Calculates the metric tensor g for the given PEPS tensor network "NTU-NNN+" approximation.
+
+        For bd.dirn == 'h':
+
+                 (-2, -1) (-2, +0)  (-2, +1) (-2, +2)
+                    ||       ||        ||       ||
+        (-1, -2)=(-1, -1)=(-1, +0)==(-1, +1)=(-1, +2)=(-1, +3)
+                    ||       ||        ||       ||
+        (+0, -2)=(+0, -1) == GA+      +GB == (+0, +2)=(+0, +3)
+                    ||       ||        ||       ||
+        (+1, -2)=(+1, -1)=(+1, +0)==(+1, +1)=(+1, +2)=(+1, +3)
+                    ||       ||        ||       ||
+                 (+2, -1) (+2, +0)  (+2, +1) (+2, +2)
+
+        For bd.dirn == 'v':
+
+                 (-2, -1) (-2, +0) (-2, +1)
+                    ||       ||       ||
+        (-1, -2)=(-1, -1)=(-1, +0)=(-1, +1)=(-1, +2)
+                    ||       ||       ||
+        (+0, -2)=(+0, -1) == GA == (+0, +1)=(+0, +2)
+                    ||       ++       ||
+        (+1, -2)=(+1, -1) == GB == (+1, +1)=(+1, +2)
+                    ||       ||       ||
+        (+2, -2)=(+2, -1)=(+2, +0)=(+2, +1)=(+2, +2)
+                    ||       ||       ||
+                 (+3, -1) (+3, +0) (+3, +1)
         """
         if bd.dirn == "h":
             assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
-            #        (-2,-1)  (-2,0)  (-2,1)  (-2,2)
-            # (-1,-2)(-1,-1)==(-1,0)==(-1,1)==(-1,2)(-1,3)
-            #           ||      ||      ||      ||
-            # (0, -2)(0, -1) == GA  ++  GB == (0, 2)(0, 3)
-            #           ||      ||      ||      ||
-            # (1, -2)(1, -1)==(1, 0)==(1, 1)==(1, 2)(1, 3)
-            #        (2, -1)  (2, 0)  (2, 1)  (2, 2)
-            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (1, 0), (1, 1), (1, 2), (0, 2), (-1, 2), (-1, 1), (-1, 0),
-                                                              (-1,-2), (0,-2), (1,-2), (2,-1), (2, 0), (2, 1), (2, 2), ( 1, 3), ( 0, 3), (-1, 3), (-2, 2), (-2, 1), (-2, 0), (-2, -1)]}
+            sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0), (-1,-2), (0,-2),
+                   (1,-2), (2,-1), (2,0), (2,1), (2,2), (1,3), (0,3), (-1,3), (-2,2), (-2,1), (-2,0), (-2,-1)]
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
 
             ell = edge_l(m[0, -1], hl=hair_l(m[0, -2]))
@@ -322,17 +365,9 @@ class EnvNTU:
             g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
-            #        (-2,-1)  (-2, 0)  (-2,1)
-            # (-1,-2)(-1,-1)==(-1, 0)==(-1,1)(-1,2)
-            #           ||       ||      ||
-            # (0, -2)(0, -1)===  GA ===(0, 1)(0, 2)
-            #           ||       ++      ||
-            # (1, -2)(1, -1)===  GB ===(1, 1)(1, 2)
-            #           ||       ||      ||
-            # (2, -2)(2, -1)==(2,  0)==(2, 1)(2, 2)
-            #        (3, -1)  (3,  0)  (3, 1)
-            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (2,-1), (2, 0), (2, 1), (1, 1), (0, 1), (-1, 1), (-1, 0),
-                                                              (-1,-2), (0,-2), (1,-2), (2,-2), (3,-1), (3, 0), (3, 1), (2, 2), (1, 2), (0, 2), (-1, 2), (-2, 1), (-2, 0), (-2,-1)]}
+            sts =  [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1), (-1,1), (-1,0), (-1,-2), (0,-2),
+                    (1,-2), (2,-2), (3,-1), (3,0), (3,1), (2,2), (1,2), (0,2), (-1,2), (-2,1), (-2,0), (-2,-1)]
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
 
             etl = edge_l(m[0, -1], hl=hair_l(m[0, -2]))
@@ -357,25 +392,49 @@ class EnvNTU:
 
     def _g_NNNpp(self, bd, QA, QB):
         """
-        Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
+        Calculates the metric tensor g for the given PEPS tensor network using "NTU-NNN++" approximation.
+
+        For bd.dirn == 'h':
+
+                 (-3, -2) (-3, -1) (-3, +0)  (-3, +1) (-3, +2) (-3, +3)
+                             ||       ||        ||       ||
+        (-2, -3) (-2, -2) (-2, -1) (-2, +0)  (-2, +1) (-2, +2) (-2, +3) (-2, +4)
+                             ||       ||        ||       ||
+        (-1, -3)=(-1, -2)=(-1, -1)=(-1, +0)==(-1, +1)=(-1, +2)=(-1, +3)=(-1, +4)
+                             ||       ||        ||       ||
+        (+0, -3)=(+0, -2)=(+0, -1) == GA+      +GB == (+0, +2)=(+0, +3)=(+0, +4)
+                             ||       ||        ||       ||
+        (+1, -3)=(+1, -2)=(+1, -1)=(+1, +0)==(+1, +1)=(+1, +2)=(+1, +3)=(+1, +4)
+                             ||       ||        ||       ||
+        (+2, -3) (+2, -2) (+2, -1) (+2, +0)  (+2, +1) (+2, +2) (+2, +3) (+2, +4)
+                             ||       ||        ||       ||
+                 (+3, -2) (+3, -1) (+3, +0)  (+3, +1) (+3, +2) (+3, +3)
+
+        For bd.dirn == 'v':
+
+                 (-3, -2) (-3, -1) (-3, +0) (-3, +1) (-3, +2)
+
+        (-2, -3) (-2, -2) (-2, -1) (-2, +0) (-2, +1) (-2, +2) (-2, +3)
+
+        (-1, -3) (-1, -2) (-1, -1)=(-1, +0)=(-1, +1) (-1, +2) (-1, +3)
+                             ||       ||       ||
+        (+0, -3) (+0, -2) (+0, -1) == GA == (+0, +1) (+0, +2) (+0, +3)
+                             ||       ++       ||
+        (+1, -3) (+1, -2) (+1, -1) == GB == (+1, +1) (+1, +2) (+1, +3)
+                             ||       ||       ||
+        (+2, -3) (+2, -2) (+2, -1)=(+2, +0)=(+2, +1) (+2, +2) (+2, +3)
+
+        (+3, -3) (+3, -2) (+3, -1) (+3, +0) (+3, +1) (+3, +2) (+3, +3)
+
+                 (+4, -2) (+4, -1) (+4, +0) (+4, +1) (+4, +2)
         """
         if bd.dirn == "h":
             assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
-            #       (-3,-2) (-3,-1)  (-3,0)  (-3,1)  (-3,2) (-3, 3)
-            #(-2,-3)(-2,-2) (-2,-1)  (-2,0)  (-2,1)  (-2,2) (-2, 3)(-2, 4)
-            # (-1,-3)(-1,-2)(-1,-1)==(-1,0)==(-1,1)==(-1,2)(-1,3)(-1,4)
-            #                  ||      ||      ||      ||
-            # (0, -3)(0, -2)(0, -1) == GA  ++  GB == (0, 2)(0, 3)(0, 4)
-            #                  ||      ||      ||      ||
-            # (1, -3)(1, -2)(1, -1)==(1, 0)==(1, 1)==(1, 2)(1, 3)(1, 4)
-            #(2, -3)(2, -2) (2, -1)  (2, 0)  (2, 1)  (2, 2) (2, 3)(2, 4)
-            #       (3, -2) (3, -1)  (3, 0)  (3, 1)  (3, 2) (3, 3)
-
-            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (1, 0), (1, 1), (1, 2), (0, 2), (-1, 2), (-1, 1), (-1, 0),
-                                                              (-1,-2), (0,-2), (1,-2), (2,-1), (2, 0), (2, 1), (2, 2), ( 1, 3), ( 0, 3), (-1, 3), (-2, 2), (-2, 1), (-2, 0), (-2, -1),
-                                                              (-1,-3), (0,-3), (1,-3), (3,-1), (3, 0), (3, 1), (3, 2), ( 1, 4), ( 0, 4), (-1, 4), (-3, 2), (-3, 1), (-3, 0), (-3, -1),
-                                                              (-2,-3), (-2,-2), (-3,-2), (-2,3), (-3,3), (-2,4), (2,-3), (2,-2), (3,-2), (2,3), (2,4), (3,3)]}
-
+            sts = [(-1,-1), (0,-1), (1,-1), (1,0), (1,1), (1,2), (0,2), (-1,2), (-1,1), (-1,0), (-1,-2), (0,-2),
+                   (1,-2), (2,-1), (2,0), (2,1), (2,2), (1,3), (0,3), (-1,3), (-2,2), (-2,1), (-2,0), (-2,-1), (-1,-3),
+                   (0,-3), (1,-3), (3,-1), (3,0), (3,1), (3,2), (1,4), (0,4), (-1,4), (-3,2), (-3,1), (-3,0), (-3,-1),
+                   (-2,-3), (-2,-2), (-3,-2), (-2,3), (-3,3), (-2,4), (2,-3), (2,-2), (3,-2), (2,3), (2,4), (3,3)]
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
 
             ell = edge_l(m[0, -1], hl=hair_l(m[0, -2], hl=hair_l(m[0, -3])))
@@ -401,21 +460,11 @@ class EnvNTU:
             g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
-            #       (-3,-2) (-3,-1)  (-3, 0)  (-3,1) (-3,2)
-            #(-2,-3)(-2,-2) (-2,-1)  (-2, 0)  (-2,1) (-2,2)(-2,3)
-            # (-1,-3)(-1,-2)(-1,-1)==(-1, 0)==(-1,1)(-1,2)(-1,3)
-            #                  ||       ||      ||
-            # (0, -3)(0, -2)(0, -1)===  GA ===(0, 1)(0, 2)(0, 3)
-            #                  ||       ++      ||
-            # (1, -3)(1, -2)(1, -1)===  GB ===(1, 1)(1, 2)(1, 3)
-            #                  ||       ||      ||
-            # (2, -3)(2, -2)(2, -1)==(2,  0)==(2, 1)(2, 2)(2, 3)
-            #(3, -3)(3, -2) (3, -1)  (3,  0)  (3, 1) (3, 2)(3, 3)
-            #       (4, -2) (4, -1)  (4,  0)  (4, 1) (4, 2)
-            m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1,-1), (0,-1), (1,-1), (2,-1), (2, 0), (2, 1), (1, 1), (0, 1), (-1, 1), (-1, 0),
-                                                              (-1,-2), (0,-2), (1,-2), (2,-2), (3,-1), (3, 0), (3, 1), (2, 2), (1, 2), (0, 2), (-1, 2), (-2, 1), (-2, 0), (-2,-1),
-                                                              (-1,-3), (0,-3), (1,-3), (2,-3), (4,-1), (4, 0), (4, 1), (2, 3), (1, 3), (0, 3), (-1, 3), (-3, 1), (-3, 0), (-3,-1),
-                                                              (-2,-2), (-2,-3), (-3,-2), (-2,2), (-2,3), (-3,2), (3,-2), (3,-3), (4,-2), (3,2), (3,3), (4,2)]}
+            sts = [(-1,-1), (0,-1), (1,-1), (2,-1), (2,0), (2,1), (1,1), (0,1), (-1,1), (-1,0), (-1,-2), (0,-2),
+                   (1,-2), (2,-2), (3,-1), (3,0), (3,1), (2,2), (1,2), (0,2), (-1,2), (-2,1), (-2,0), (-2,-1), (-1,-3),
+                   (0,-3), (1,-3), (2,-3), (4,-1), (4,0), (4,1), (2,3), (1,3), (0,3), (-1,3), (-3,1), (-3,0), (-3,-1),
+                   (-2,-2), (-2,-3), (-3,-2), (-2,2), (-2,3), (-3,2), (3,-2), (3,-3), (4,-2), (3,2), (3,3), (4,2)]
+            m = {d: self.psi.nn_site(bd.site0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
 
             etl = edge_l(m[0, -1], hl=hair_l(m[0, -2], hl=hair_l(m[0, -3])))

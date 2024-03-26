@@ -74,10 +74,10 @@ def test_finite_spinless_boundary_mps_ctmrg():
     mpsenv = fpeps.EnvBoundaryMps(psi, opts_svd=opts_svd_ctm, setup='tlbr')
 
     for ny in range(psi.Ny):
-        vR0 = step.env.env2mps(n=ny, dirn='r')
-        vR1 = mpsenv.env2mps(n=ny, dirn='r')
-        vL0 = step.env.env2mps(n=ny, dirn='l')
-        vL1 = mpsenv.env2mps(n=ny, dirn='l')
+        vR0 = step.env.boundary_mps(n=ny, dirn='r')
+        vR1 = mpsenv.boundary_mps(n=ny, dirn='r')
+        vL0 = step.env.boundary_mps(n=ny, dirn='l')
+        vL1 = mpsenv.boundary_mps(n=ny, dirn='l')
 
         print(mps.vdot(vR0, vR1) / (vR0.norm() * vR1.norm()))  # problem with phase in peps?
         print(mps.vdot(vL0, vL1) / (vL0.norm() * vL1.norm()))
@@ -85,10 +85,10 @@ def test_finite_spinless_boundary_mps_ctmrg():
         assert abs(abs(mps.vdot(vL0, vL1)) / (vL0.norm() * vL1.norm()) - 1) < 1e-7
 
     for nx in range(psi.Nx):
-        vT0 = step.env.env2mps(n=nx, dirn='t')
-        vT1 = mpsenv.env2mps(n=nx, dirn='t')
-        vB0 = step.env.env2mps(n=nx, dirn='b')
-        vB1 = mpsenv.env2mps(n=nx, dirn='b')
+        vT0 = step.env.boundary_mps(n=nx, dirn='t')
+        vT1 = mpsenv.boundary_mps(n=nx, dirn='t')
+        vB0 = step.env.boundary_mps(n=nx, dirn='b')
+        vB1 = mpsenv.boundary_mps(n=nx, dirn='b')
 
         print(mps.vdot(vT0, vT1) / (vT0.norm() * vT1.norm()))  # problem with phase in peps?
         print(mps.vdot(vB0, vB1) / (vB0.norm() * vB1.norm()))

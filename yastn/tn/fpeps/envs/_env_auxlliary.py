@@ -4,8 +4,10 @@ from ... import mps
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'cor_tl', 'cor_bl', 'cor_br', 'cor_tr',
            'edge_t', 'edge_l', 'edge_b', 'edge_r',
-           'append_vec_tl', 'append_vec_br', 'append_vec_tr',
-           'tensors_from_psi', 'identity_tm_boundary']
+           'append_vec_tl', 'append_vec_tr',
+           'append_vec_bl', 'append_vec_br',
+           'tensors_from_psi', 'identity_tm_boundary',
+           'cut_into_hairs']
 
 
 def tensors_from_psi(d, psi):
@@ -34,6 +36,14 @@ def identity_tm_boundary(tmpo):
             tmp = ones(config, legs=[legf])
         phi[n] = tmp.add_leg(0, s=-1).add_leg(2, s=1)
     return phi
+
+
+def cut_into_hairs(A):
+    """ rank-one approximation of a tensor into hairs """
+    hl, _, hr = A.svd_with_truncation(axes=(0, 1), D_total=1)
+    hl = hl.remove_leg(axis=1).unfuse_legs(axes=0).transpose(axes=(1, 0))
+    hr = hr.remove_leg(axis=0).unfuse_legs(axes=0).transpose(axes=(1, 0))
+    return hl, hr
 
 
 def hair_t(A, ht=None, hl=None, hr=None):
