@@ -320,6 +320,8 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
     tmp = tmp.add_leg(axis=0, s=-lpsi.s, t=lpsi.t[0])
     tmp = tmp.add_leg(axis=3, s=lpsi.s, t=lpsi.t[0])
 
+    connector = initialize.eye(psi.config, legs=lmpo, isdiag=False)
+
     discarded2_total = 0.
     for n in psi.sweep(to='first'):
         tmp = tensor.tensordot(psi[n], tmp, axes=(2, 0))
@@ -346,10 +348,17 @@ def _zipper_MpoPBC(a, psi, opts_svd, normalize) -> yastn.tn.mps.MpsMpo:
             psi[n] = V if psi.nr_phys == 1 else V.unfuse_legs(axes=2)
             tmp = U @ (S / nS)
             tmp = tmp.unfuse_legs(axes=0)
+
+            if a.tol is not None and a.tol > 0:
+                Uc, Sc, Vc = tensor.svd_with_truncation(tmp, axes=(1, (0, 2, 3)), tol=a.tol)
+                tmp = (Sc @ Vc).transpose(axes=(1, 0, 2, 3))
+                connector  = connector @ Uc
+
             psi.factor = psi.factor * nS
         else:  # n == first
             tmp = tmp.unfuse_legs(axes=0)
-            tmp = tmp.trace(axes=(1, 2))
+            tmp = tensor.tensordot(connector, tmp, axes=(1, 1))
+            tmp = tmp.trace(axes=(0, 2))
             ntmp = tmp.norm()
             psi.factor = 1 if normalize else psi.factor * ntmp
             tmp = (tmp / ntmp).transpose(axes=(0, 2, 1))

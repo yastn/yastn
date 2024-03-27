@@ -139,6 +139,8 @@ class MpoPBC(_MpsMpoParent):
         which in some functions can be applied on Mps with OBC.
         """
         super().__init__(N=N, nr_phys=2)
+        self.tol = None
+
 
 
 class MpsMpoOBC(_MpsMpoParent):

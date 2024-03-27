@@ -47,6 +47,7 @@ from .linalg.torch_eig_sym import SYMEIG
 # from .linalg.torch_eig_arnoldi import SYMARNOLDI, SYMARNOLDI_2C
 
 
+torch.random.seed()
 BACKEND_ID = "torch"
 DTYPE = {'float64': torch.float64,
          'complex128': torch.complex128}

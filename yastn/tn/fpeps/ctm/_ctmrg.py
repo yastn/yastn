@@ -32,7 +32,7 @@ def ctmrg(peps, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, en
 
     Parameters
     ----------
-    peps: yastn.fPEPS.Lattice
+    peps: yastn.fPEPS.Peps
         peps tensors occupying all the lattice sites in 2D. Maybe obtained after real or imaginary time evolution.
         It is not updated during execution.
 

@@ -563,11 +563,25 @@ class EnvParent_3_pbc(EnvParent_3):
         tmp_bk = eye(self.config, legs=[llk.conj(), llb], isdiag=False)
         self.F[(self.N, self.N - 1)] = ncon([tmp_oo, tmp_bk], ((-1, -2), (-0, -3)))
 
+    def Fsmall(self, bdl, bdr):
+        conn_l, Fl = self.F[bdl]
+        Fr, conn_r = self.F[bdr]
+        conn = conn_r.tensordot(conn_l, axes=(1, 1))
+        s1, s2 = conn.get_shape()
+        if s1 > s2:
+            Fr = Fr.tensordot(conn, axes=(2, 0)).transpose(axes=(0, 1, 3, 2))
+        else:
+            Fl = Fl.tensordot(conn, axes=(2, 1)).transpose(axes=(0, 1, 3, 2))
+        return Fl, Fr
+
     def Heff0(self, C, bd):
         bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
+        Fl = self.F[bd]
+        Fr = self.F[ibd]
+        # Fl, Fr = self.Fsmall(bd, ibd)
         C = self.op.factor * C
-        tmp = self.F[bd].tensordot(C, axes=(3, 0))
-        return tmp.tensordot(self.F[ibd], axes=((3, 1, 2), (0, 1, 2)))
+        tmp = Fl.tensordot(C, axes=(3, 0))
+        return tmp.tensordot(Fr, axes=((3, 1, 2), (0, 1, 2)))
 
     def measure(self, bd=(-1, 0)):
         axes = ((0, 1, 2, 3), (3, 1, 2, 0))

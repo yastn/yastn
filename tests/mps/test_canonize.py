@@ -58,5 +58,32 @@ def check_canonize(psi, tol):
         assert abs(mps.vdot(phi, phi) - 1) < tol
 
 
+def test_reverse(config=cfg, tol=1e-12):
+    """ Initialize random mps and checks canonization. """
+    opts_config = {} if config is None else \
+                {'backend': config.backend, 'default_device': config.default_device}
+
+    N = 8
+    ops = yastn.operators.Spin1(sym='Z3', **opts_config)
+    I = mps.product_mpo(ops.I(), N=N)
+
+    psi = mps.random_mps(I, n=2, D_total=16).canonize_(to='first')
+    psi.orthogonalize_site_(n=0, to='last', normalize=False)
+
+    phi = psi.reverse_sites()
+    phi.absorb_central_(to='last')
+    phi = phi.reverse_sites()
+
+    psi.absorb_central_(to='last')
+    assert abs(mps.vdot(phi, psi) - 1) < tol
+
+
+    psi = mps.random_mpo(I, D_total=8)
+    phi = psi.reverse_sites()
+    phi = phi.reverse_sites()
+    assert abs(mps.vdot(phi, psi) / mps.vdot(phi, phi) - 1) < tol
+
+
 if __name__ == "__main__":
     test_canonize()
+    test_reverse()

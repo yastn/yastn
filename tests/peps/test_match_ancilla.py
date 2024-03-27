@@ -2,7 +2,7 @@ import logging
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.operators.gates import match_ancilla_1s, match_ancilla_2s
+from yastn.tn.fpeps.gates._gates import match_ancilla_1s, match_ancilla_2s
 
 try:
     from .configs import config_U1xU1_R_fermionic
@@ -12,7 +12,7 @@ except ImportError:
 def test_match_ancilla():
     """ initialize vacuum state and check the functions match_ancilla_1s and match_ancilla_2s """
 
-    net = fpeps.Lattice(lattice='square', dims=(3,3), boundary='obc')
+    net = fpeps.SquareLattice(dims=(3, 3), boundary='obc')
     opt = yastn.operators.SpinfulFermions(sym='U1xU1xZ2',backend=config_U1xU1_R_fermionic.backend,default_device=config_U1xU1_R_fermionic.default_device)
     fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
 
@@ -23,7 +23,7 @@ def test_match_ancilla():
         A = A.add_leg(axis=0, s=s)
 
     A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
-    peps = fpeps.Lattice(net.lattice, net.dims, net.boundary)
+    peps = fpeps.Peps(net)
 
     for ms in net.sites():
         peps[ms] = A

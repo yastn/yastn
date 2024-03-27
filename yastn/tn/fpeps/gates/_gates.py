@@ -49,7 +49,7 @@ def match_ancilla_2s(G, A, dir=None):
     return Gsa
 
 
-def gates_hopping(t, step, fid, fc, fcdag):
+def gate_hopping(t, step, fid, fc, fcdag):
     """ gates for exp[step * t * (cdag1 c2 + c2dag c1)] """
     # below note that local operators follow convention where
     # they are transposed comparing to typical matrix notation
@@ -75,21 +75,21 @@ def gates_hopping(t, step, fid, fc, fcdag):
     GB = S.broadcast(V, axes=2)
     return GA, GB
 
-def gate_local_Hubbard(mu_up, mu_dn, U, step, fid, fc_up, fc_dn, fcdag_up, fcdag_dn):
+
+def gate_Coulomb(mu_up, mu_dn, U, step, fid, fn_up, fn_dn):
     """ gates for exp[- beta * (U * (fn_up-0.5*ident) * (fn_dn-0.5*iden) - mu_up * fn_up - mu_dn * fn_dn];
     we ignore a total of contant U/4 in the gate constructed below """
     # local Hubbard gate with chemical potential and Coulomb interaction
     # below note that local operators follow convention where
     # they are transposed comparing to typical matrix notation
-    fn_up = fcdag_up @ fc_up
-    fn_dn = fcdag_dn @ fc_dn
-    fnn = fn_up @ fn_dn
 
+    fnn = fn_up @ fn_dn
     G_loc = fid
     G_loc = G_loc + (fn_dn - fnn) * (np.exp((step * (mu_dn + 0.5 * U))) - 1)
     G_loc = G_loc + (fn_up - fnn) * (np.exp((step * (mu_up + 0.5 * U))) - 1)
     G_loc = G_loc + fnn * (np.exp((step * (mu_up + mu_dn))) - 1)
     return G_loc
+
 
 def gate_local_fermi_sea(mu, step, fid, fc, fcdag):
     """ gates for exp[beta * mu * fn] """
@@ -100,16 +100,4 @@ def gate_local_fermi_sea(mu, step, fid, fc, fcdag):
     tr_step = step * mu
     G_loc = fid + fn * (np.exp(tr_step) - 1)
     return G_loc
-
-
-def trivial_tensor(fid):
-    """
-    fid is identity operator in local space with desired symmetry
-    """
-    A = (1/np.sqrt(fid.get_shape()[0])) * fid
-    A = A.fuse_legs(axes=[(0, 1)])
-    for s in (-1, 1, 1, -1):
-        A = A.add_leg(axis=0, s=s)
-    return A.fuse_legs(axes=((0, 1), (2, 3), 4))
-
 

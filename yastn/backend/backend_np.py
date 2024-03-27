@@ -9,7 +9,8 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     warnings.warn("fbpca not available", Warning)
 
-rng = {'rng': np.random.default_rng()}  # initialize random number generator
+# non-deterministic initialization of random number generator
+rng = {'rng': np.random.default_rng(None)}  # initialize random number generator
 BACKEND_ID = "numpy"
 DTYPE = {'float64': np.float64,
          'complex128': np.complex128}
@@ -167,6 +168,10 @@ def rand(D, dtype='float64', **kwargs):
     if dtype == 'float64':
         return 2 * rng['rng'].random(D) - 1
     return 2 * (rng['rng'].random(D) + 1j *  rng['rng'].random(D)) - (1 + 1j)  # dtype == 'complex128
+
+
+def randint(low, high, size=None):
+    return rng['rng'].integers(low, high, size)
 
 
 def to_tensor(val, Ds=None, dtype='float64', **kwargs):
