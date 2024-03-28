@@ -3,7 +3,7 @@ from typing import NamedTuple
 import logging
 import time
 from ._ctm_iteration_routines import CTM_it
-from ._ctm_iteration_routines import fPEPS_2layers, fPEPS_fuse_layers, check_consistency_tensors
+from ._ctm_iteration_routines import fPEPS_2layers, check_consistency_tensors
 from ._ctm_env import CtmEnv, init_rand
 
 
@@ -18,7 +18,7 @@ class CTMRGout(NamedTuple):
     tt : float = None
 
 
-def ctmrg(peps, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, env=None, opts_svd=None):
+def ctmrg(peps, max_sweeps=1, iterator_step=None, fix_signs=None, env=None, opts_svd=None):
     r"""
     Perform CTMRG sweeps until convergence, starting from PEPS and environmental corner and edge tensors :code:`peps`.
 
@@ -73,11 +73,11 @@ def ctmrg(peps, max_sweeps=1, iterator_step=None, AAb_mode=0, fix_signs=None, en
     if env is None:
         env = init_rand(peps, tc = ((0,) * pconfig.sym.NSYM,), Dc=(1,))  # initialization with random tensors
 
-    tmp = _ctmrg(peps, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd)
+    tmp = _ctmrg(peps, env, max_sweeps, iterator_step, fix_signs, opts_svd)
     return tmp if iterator_step else next(tmp)
 
 
-def _ctmrg(peps, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd=None):
+def _ctmrg(peps, env, max_sweeps, iterator_step, fix_signs, opts_svd=None):
 
     """ Generator for ctmrg(). """
     peps = check_consistency_tensors(peps) # to check if A has the desired fused form of legs i.e. t l b r [s a]
@@ -86,9 +86,6 @@ def _ctmrg(peps, env, max_sweeps, iterator_step, AAb_mode, fix_signs, opts_svd=N
 
     for ms in peps.sites():
         AAb[ms] = fPEPS_2layers(peps[ms])
-
-    if AAb_mode >= 1:
-        fPEPS_fuse_layers(AAb)
 
     for sweep in range(1, max_sweeps + 1):
         logging.info('CTM sweep: %2d', sweep)

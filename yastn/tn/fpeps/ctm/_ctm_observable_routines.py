@@ -1,7 +1,7 @@
 # this routine just calculates nearest neighbor correlators
 import numpy as np
 from yastn import tensordot, ncon
-from ._ctm_iteration_routines import append_a_tl, append_a_br, append_a_tr, append_a_bl, fPEPS_2layers
+from ._ctm_iteration_routines import fPEPS_2layers
 
 def ret_AAbs(A, bds, op, orient):
     """ preparing the nearest neighbor tensor before contraction by attaching them with operators"""
@@ -16,7 +16,7 @@ def ret_AAbs(A, bds, op, orient):
 def apply_TM_left(vecl, env, site, AAb):
     """ apply TM (bottom-AAB-top) to left boundary vector"""
     new_vecl = tensordot(vecl, env[site].t, axes=(2, 0))
-    new_vecl = append_a_tl(new_vecl, AAb)
+    new_vecl = AAb.append_a_tl(new_vecl)
     new_vecl = new_vecl.unfuse_legs(axes=0)
     if new_vecl.ndim == 5:
         new_vecl = ncon((new_vecl, env[site].b), ([1, -4, 2, -3, -2], [-1, 2, 1]))
@@ -28,7 +28,7 @@ def apply_TM_left(vecl, env, site, AAb):
 def apply_TM_top(vect, env, site, AAb):
     """ apply TM (left-AAB-right)   to top boundary vector"""
     new_vect = tensordot(env[site].l, vect, axes=(2, 0))
-    new_vect = append_a_tl(new_vect, AAb)
+    new_vect = AAb.append_a_tl(new_vect)
     new_vect = new_vect.unfuse_legs(axes=2)
 
     if new_vect.ndim == 5:
@@ -41,7 +41,7 @@ def apply_TM_top(vect, env, site, AAb):
 def apply_TMO_left(vecl, env, site, AAb):
     """ apply TM (bottom-AAB-top) to left boundary vector"""
     new_vecl = tensordot(vecl, env[site].t, axes=(2, 0))
-    new_vecl = append_a_tl(new_vecl, AAb)
+    new_vecl = AAb.append_a_tl(new_vecl)
     new_vecl = ncon((new_vecl, env[site].b), ([1, 2, -3, -2], [-1, 2, 1]))
     new_vecl = new_vecl.unfuse_legs(axes=1).unfuse_legs(axes=1)
     if new_vecl.ndim == 5:
@@ -54,7 +54,7 @@ def apply_TMO_left(vecl, env, site, AAb):
 def apply_TMO_right(vecr, env, site, AAb):
     """ apply TM (top-AAB-bottom) to right boundary vector"""
     new_vecr = tensordot(vecr, env[site].b, axes=(2, 0))
-    new_vecr = append_a_br(new_vecr, AAb)
+    new_vecr = AAb.append_a_br(new_vecr)
     new_vecr = ncon((new_vecr, env[site].t), ([1, 2, -3, -2], [-1, 2, 1]))
     new_vecr = new_vecr.unfuse_legs(axes=1).unfuse_legs(axes=1)
     if new_vecr.ndim == 5:
@@ -67,7 +67,7 @@ def apply_TMO_right(vecr, env, site, AAb):
 def apply_TMO_top(vect, env, site, AAb):
     """ apply TMO (top-AAB-bottom) to top boundary vector"""
     new_vect = tensordot(env[site].l, vect, axes=(2, 0))
-    new_vect = append_a_tl(new_vect, AAb)
+    new_vect = AAb.append_a_tl(new_vect)
     new_vect = ncon((new_vect, env[site].r), ([-1, -2, 2, 1], [2, 1, -3]))
     new_vect = new_vect.unfuse_legs(axes=1).unfuse_legs(axes=1)
     if new_vect.ndim == 5:
@@ -80,7 +80,7 @@ def apply_TMO_top(vect, env, site, AAb):
 def apply_TMO_bottom(vecb, env, site, AAb):
     """ apply TMO (bottom-AAB-top) to bottom boundary vector"""
     new_vecb = tensordot(env[site].r, vecb, axes=(2, 0))
-    new_vecb = append_a_br(new_vecb, AAb)
+    new_vecb = AAb.append_a_br(new_vecb)
     new_vecb = ncon((new_vecb, env[site].l), ([-1, -2, 1, 2], [1, 2, -3]))
     new_vecb = new_vecb.unfuse_legs(axes=1).unfuse_legs(axes=1)
     if new_vecb.ndim == 5:
@@ -235,7 +235,7 @@ def ver_extension(env, bd, AAbo, AAb):
 def make_ext_corner_tl(cortl, str_t, str_l, AAb):
     """ Returns the newly created extended top-left corner tensor """
     vec_cor_tl = str_l @ cortl @ str_t
-    new_vec_cor_tl = append_a_tl(vec_cor_tl, AAb).fuse_legs(axes=(0, 1, 3, 2))
+    new_vec_cor_tl = AAb.append_a_tl(vec_cor_tl).fuse_legs(axes=(0, 1, 3, 2))
     nftl = new_vec_cor_tl.unfuse_legs(axes=2).unfuse_legs(axes=2)
     if nftl.ndim == 6:
         new_vec_cor_tl = nftl.swap_gate(axes=(4, 3))
@@ -245,7 +245,7 @@ def make_ext_corner_tl(cortl, str_t, str_l, AAb):
 def make_ext_corner_tr(cortr, str_t, str_r, AAb):
     """ Returns the newly created extended top-right corner tensor """
     vec_cor_tr = str_t @ cortr @ str_r
-    new_vec_cor_tr = append_a_tr(vec_cor_tr, AAb).fuse_legs(axes=(0, 1, 3, 2))
+    new_vec_cor_tr = AAb.append_a_tr(vec_cor_tr).fuse_legs(axes=(0, 1, 3, 2))
     nftr = new_vec_cor_tr.unfuse_legs(axes=1).unfuse_legs(axes=1)
     if nftr.ndim == 6:
         new_vec_cor_tr = nftr.swap_gate(axes=(2, 3))
@@ -255,7 +255,7 @@ def make_ext_corner_tr(cortr, str_t, str_r, AAb):
 def make_ext_corner_bl(corbl, str_b, str_l, AAb):
     """ Returns the newly created extended bottom-left corner tensor """
     vec_cor_bl = str_b @ corbl @ str_l
-    new_vec_cor_bl = append_a_bl(vec_cor_bl, AAb).fuse_legs(axes=(0, 1, 3, 2))
+    new_vec_cor_bl = vec_cor_bl.append_a_bl(AAb).fuse_legs(axes=(0, 1, 3, 2))
     nfbl = new_vec_cor_bl.unfuse_legs(axes=1).unfuse_legs(axes=1)
     if nfbl.ndim == 6:
         new_vec_cor_bl = nfbl.swap_gate(axes=(2, 1))
@@ -265,7 +265,7 @@ def make_ext_corner_bl(corbl, str_b, str_l, AAb):
 def make_ext_corner_br(corbr, str_b, str_r, AAb):
     """ Returns the newly created extended bottom-right corner tensor """
     vec_cor_br = str_r @ corbr @ str_b
-    new_vec_cor_br = append_a_br(vec_cor_br, AAb).fuse_legs(axes=(0, 1, 3, 2))
+    new_vec_cor_br = AAb. append_a_br(vec_cor_br).fuse_legs(axes=(0, 1, 3, 2))
     nfbr = new_vec_cor_br.unfuse_legs(axes=2).unfuse_legs(axes=2)
     if nfbr.ndim == 6:
         new_vec_cor_br = nfbr.swap_gate(axes=(2, 3))
