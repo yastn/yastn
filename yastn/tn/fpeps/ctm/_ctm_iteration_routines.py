@@ -40,34 +40,6 @@ def fcor_br(env_r, env_br, env_b, AAb):
     return AAb.append_a_br(corbrn)
 
 
-def apply_TMO_left(vecl, env, indten, indop, AAb):
-    """ apply TM (bottom-AAB-top) to left boundary vector"""
-    new_vecl = tensordot(vecl, env[indten].t, axes=(2, 0))
-    new_vecl = AAb[indop].append_a_tl(new_vecl)
-    new_vecl = ncon((new_vecl, env[indten].b), ([1, 2, -3, -2], [-1, 2, 1]))
-    new_vecl = new_vecl.unfuse_legs(axes=1).unfuse_legs(axes=1)
-    if new_vecl.ndim == 5:
-        new_vecl = new_vecl.swap_gate(axes=((0, 3), 2))
-        new_vecl = new_vecl.fuse_legs(axes=((0, 2), (1, 3), 4))
-    elif new_vecl.ndim == 4:
-        new_vecl =  new_vecl.fuse_legs(axes=(0, (1, 2), 3))
-    return new_vecl
-
-
-def apply_TMO_right(vecr, env, indten, indop, AAb):
-    """ apply TM (top-AAB-bottom) to right boundary vector"""
-    new_vecr = tensordot(vecr, env[indten].b, axes=(2, 0))
-    new_vecr = AAb[indop].append_a_br(new_vecr)
-    new_vecr = ncon((new_vecr, env[indten].t), ([1, 2, -3, -2], [-1, 2, 1]))
-    new_vecr = new_vecr.unfuse_legs(axes=1).unfuse_legs(axes=1)
-    if new_vecr.ndim == 5:
-        new_vecr = new_vecr.swap_gate(axes=((3, 4), 2))
-        new_vecr =  new_vecr.fuse_legs(axes=(0, (1, 3), (4, 2)))
-    elif new_vecr.ndim == 4:
-        new_vecr =  new_vecr.fuse_legs(axes=(0, (1, 2), 3))
-    return new_vecr
-
-
 def apply_TM_left(vecl, env, indten, AAb):
     """ apply TM (bottom-AAB-top) to left boundary vector"""
     new_vecl = tensordot(vecl, env[indten].t, axes=(2, 0))
@@ -79,34 +51,6 @@ def apply_TM_left(vecl, env, indten, AAb):
     elif new_vecl.ndim == 4:
         new_vecl = ncon((new_vecl, env[indten].b), ([1, 2, -3, -2], [-1, 2, 1]))
     return new_vecl
-
-
-def apply_TMO_top(vect, env, indten, indop, AAb):
-    """ apply TMO (top-AAB-bottom) to top boundary vector"""
-    new_vect = tensordot(env[indten].l, vect, axes=(2, 0))
-    new_vect =  AAb[indop].append_a_tl(new_vect)
-    new_vect = ncon((new_vect, env[indten].r), ([-1, -2, 2, 1], [2, 1, -3]))
-    new_vect = new_vect.unfuse_legs(axes=1).unfuse_legs(axes=1)
-    if new_vect.ndim == 5:
-        new_vect = new_vect.swap_gate(axes=((1, 4), 2))
-        new_vect =  new_vect.fuse_legs(axes=(0, (1, 3), (4, 2)))
-    elif new_vect.ndim == 4:
-        new_vect =  new_vect.fuse_legs(axes=(0, (1, 2), 3))
-    return new_vect
-
-
-def apply_TMO_bottom(vecb, env, indten, indop, AAb):
-    """ apply TMO (bottom-AAB-top) to bottom boundary vector"""
-    new_vecb = tensordot(env[indten].r, vecb, axes=(2, 0))
-    new_vecb = AAb[indop].append_a_br(new_vecb)
-    new_vecb = ncon((new_vecb, env['strl', indten]), ([-1, -2, 1, 2], [1, 2, -3]))
-    new_vecb = new_vecb.unfuse_legs(axes=1).unfuse_legs(axes=1)
-    if new_vecb.ndim == 5:
-        new_vecb = new_vecb.swap_gate(axes=((0, 1), 2))
-        new_vecb =  new_vecb.fuse_legs(axes=((0, 2), (1, 3), 4))
-    elif new_vecb.ndim == 4:
-        new_vecb =  new_vecb.fuse_legs(axes=(0, (1, 2), 3))
-    return new_vecb
 
 
 def apply_TM_top(vect, env, indten, AAb):
@@ -121,32 +65,6 @@ def apply_TM_top(vect, env, indten, AAb):
         new_vect = ncon((new_vect, env[indten].r), ([-1, -2, 2, 1], [2, 1, -3]))
     return new_vect
 
-
-
-def EV2sNN_ver(env, indten_t, indten_b, indop_t, indop_b, AAb):
-    """
-    Calculates 2-site verical NN expectation value.
-    indt is the top PEPS index. indb is the bottom PEPS index.
-    """
-    cortln = fcor_tl(env, indten_t, indop_t, AAb)
-    corttn = ncon((cortln, env[indten_t].tr, env[indten_t].r), ((-0, -1, 2, 3), (2, 1), (1, 3, -2)))
-    del cortln
-    corbrn = fcor_br(env, indten_b, indop_b, AAb)
-    corbbn = ncon((corbrn, env[indten_b].l, env[indten_b].bl), ((-2, -1, 2, 3), (1, 3, -0), (2, 1)))
-    del corbrn
-    return vdot(corttn, corbbn, conj=(0, 0))
-
-
-def EV1s(env, indop, AAb):
-    """
-    Calculates 1-site expectation value.
-    indt is the top PEPS index. indb is the bottom PEPS index.
-    """
-    indten = 0 if indop == 'l' else 1
-    cortln = fcor_tl(env, indten, indop, AAb)
-    top_part = ncon((cortln, env[indten].tr, env[indten].r), ((-0, -1, 2, 3), (2, 1), (1, 3, -2)))
-    bot_part = ncon((env[indten].br, env[indten].b, env[indten].bl), ((-2, 1), (1, -1, 2), (2, -0)))
-    return vdot(top_part, bot_part, conj=(0, 0))
 
 
 def proj_Cor(rt, rb, fix_signs, opts_svd):
