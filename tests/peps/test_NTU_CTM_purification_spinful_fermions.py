@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, one_site_dict, EV2ptcorr
+from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, one_site_dict, EVnn
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg
@@ -79,17 +79,17 @@ def test_NTU_spinful_finite():
             break
         cf_energy_old = cf_energy
 
-    bd_h = fpeps.Bond(site0=(2, 0), site1=(2, 1))
-    bd_v = fpeps.Bond(site0=(0, 1), site1=(1, 1))
+    bd_h = fpeps.Bond(fpeps.Site(2, 0), fpeps.Site(2, 1))
+    bd_v = fpeps.Bond(fpeps.Site(0, 1), fpeps.Site(1, 1))
 
-    nn_CTM_bond_1_up = 0.5 * (abs(EV2ptcorr(psi, step.env, ops['cdagc_up'], bd_h.site0, bd_h.site1)) +
-                              abs(EV2ptcorr(psi, step.env, ops['ccdag_up'], bd_h.site0, bd_h.site1)))
-    nn_CTM_bond_2_up = 0.5 * (abs(EV2ptcorr(psi, step.env, ops['cdagc_up'], bd_v.site0, bd_v.site1)) +
-                              abs(EV2ptcorr(psi, step.env, ops['ccdag_up'], bd_v.site0, bd_v.site1)))
-    nn_CTM_bond_1_dn = 0.5 * (abs(EV2ptcorr(psi, step.env, ops['cdagc_dn'], bd_h.site0, bd_h.site1)) +
-                              abs(EV2ptcorr(psi, step.env, ops['ccdag_dn'], bd_h.site0, bd_h.site1)))
-    nn_CTM_bond_2_dn = 0.5 * (abs(EV2ptcorr(psi, step.env, ops['cdagc_dn'], bd_v.site0, bd_v.site1)) +
-                              abs(EV2ptcorr(psi, step.env, ops['ccdag_dn'], bd_v.site0, bd_v.site1)))
+    nn_CTM_bond_1_up = 0.5 * (abs(EVnn(psi, step.env, bd_h.site0, bd_h.site1, ops['cdagc_up'])) +
+                              abs(EVnn(psi, step.env, bd_h.site0, bd_h.site1, ops['ccdag_up'])))
+    nn_CTM_bond_2_up = 0.5 * (abs(EVnn(psi, step.env, bd_v.site0, bd_v.site1, ops['cdagc_up'])) +
+                              abs(EVnn(psi, step.env, bd_v.site0, bd_v.site1, ops['ccdag_up'])))
+    nn_CTM_bond_1_dn = 0.5 * (abs(EVnn(psi, step.env, bd_h.site0, bd_h.site1, ops['cdagc_dn'])) +
+                              abs(EVnn(psi, step.env, bd_h.site0, bd_h.site1, ops['ccdag_dn'])))
+    nn_CTM_bond_2_dn = 0.5 * (abs(EVnn(psi, step.env, bd_v.site0, bd_v.site1, ops['cdagc_dn'])) +
+                              abs(EVnn(psi, step.env, bd_v.site0, bd_v.site1, ops['ccdag_dn'])))
 
     # analytical nn fermionic correlator at beta = 0.1 for 2D finite 2 x 3 lattice
     nn_bond_1_exact = 0.024917101651703362  # bond between (1, 1) and (1, 2)

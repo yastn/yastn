@@ -4,7 +4,7 @@ import pytest
 import logging
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, EV2ptcorr
+from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, EVnn
 try:
     from .configs import config_U1_R_fermionic as cfg
     # cfg is used by pytest to inject different backends and divices
@@ -67,13 +67,13 @@ def test_NTU_spinless_finite():
             break
         cf_energy_old = cf_energy
 
-    bd_h = fpeps.Bond(site0=(2, 0), site1=(2, 1))
-    bd_v = fpeps.Bond(site0=(0, 1), site1=(1, 1))
+    bd_h = fpeps.Bond(fpeps.Site(2, 0), fpeps.Site(2, 1))
+    bd_v = fpeps.Bond(fpeps.Site(0, 1), fpeps.Site(1, 1))
 
-    nn_CTM_bond_1 = 0.5 * (abs(EV2ptcorr(psi, step.env, ops['cdagc'], bd_h.site0, bd_h.site1)) +
-                           abs(EV2ptcorr(psi, step.env, ops['ccdag'], bd_h.site0, bd_h.site1)))
-    nn_CTM_bond_2 = 0.5 * (abs(EV2ptcorr(psi, step.env, ops['cdagc'], bd_v.site0, bd_v.site1)) +
-                           abs(EV2ptcorr(psi, step.env, ops['ccdag'], bd_v.site0, bd_v.site1)))
+    nn_CTM_bond_1 = 0.5 * (abs(EVnn(psi, step.env, bd_h.site0, bd_h.site1, ops['cdagc'])) +
+                           abs(EVnn(psi, step.env, bd_h.site0, bd_h.site1, ops['ccdag'])))
+    nn_CTM_bond_2 = 0.5 * (abs(EVnn(psi, step.env, bd_v.site0, bd_v.site1, ops['cdagc'])) +
+                           abs(EVnn(psi, step.env, bd_v.site0, bd_v.site1, ops['ccdag'])))
 
     # analytical nn fermionic correlator at beta = 0.2 for 2D finite (2, 3) lattice;
     nn_bond_1_exact = 0.04934701696955436  # bond between (1, 1) and (1, 2)

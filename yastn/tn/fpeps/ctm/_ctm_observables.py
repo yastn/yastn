@@ -1,6 +1,6 @@
 from ._ctm_iteration_routines import check_consistency_tensors
 from ._ctm_iteration_routines import fPEPS_2layers
-from ._ctm_observable_routines import apply_TMO_left, con_bi, array_EV2pt, array2ptdiag
+from ._ctm_observable_routines import apply_TMO_left, EV2pt
 from .... import tensordot
 
 def nn_exp_dict(peps, env, op):
@@ -32,12 +32,12 @@ def nn_exp_dict(peps, env, op):
         opt = op.get(ms)
 
         for bds_h in peps.bonds(dirn='h'):  # correlators on all horizontal bonds
-            val_hor = EV2ptcorr(peps, env, opt, bds_h.site0, bds_h.site1)
-            obs_hor[ms][(bds_h.site0, bds_h.site1)] = val_hor[0]
+            val_hor = EVnn(peps, env, bds_h.site0, bds_h.site1, opt)
+            obs_hor[ms][(bds_h.site0, bds_h.site1)] = val_hor
 
         for bds_v in peps.bonds(dirn='v'):  # correlators on all vertical bonds
-            val_ver = EV2ptcorr(peps, env, opt, bds_v.site0, bds_v.site1)
-            obs_ver[ms][(bds_v.site0, bds_v.site1)] = val_ver[0]
+            val_ver = EVnn(peps, env, bds_v.site0, bds_v.site1, opt)
+            obs_ver[ms][(bds_v.site0, bds_v.site1)] = val_ver
 
     return obs_hor, obs_ver
 
@@ -90,89 +90,29 @@ def measure_one_site_spin(A, ms, env, op=None):
     new_vecl = apply_TMO_left(vecl, env, ms, AAb)
     vecr = tensordot(env[ms].tr, env[ms].r, axes=(1, 0))
     vecr = tensordot(vecr, env[ms].br, axes=(2, 0))
-    hor = con_bi(new_vecl, vecr)
+    hor = tensordot(new_vecl, vecr, axes=((0, 1, 2), (2, 1, 0))).to_number()
     return hor
 
 
-def EV2ptcorr(peps, env, op, site0, site1):
+def EVnn(peps, env, site0, site1, op):
 
     r"""
-    Returns two-point correlators given any two sites.
+    Returns two-point correlators given any two nearest-neighbor sites.
 
     Parameters
     ----------
     peps : class Lattice
     env: class CtmEnv
-    op: observable whose two-point correlators need to be calculated
     site0, site1: sites where the two-point correlator is to be calculated
+    op: observable whose two-point correlators need to be calculated
 
-    ### note for now it has only arbitary axial correlator and nearest diagonal coorelator
-    ### to be done arbitrary coorelator
-    """
-
-    x0, y0 = site0
-    x1, y1 = site1
-
-    if (x0-x1) == 0 or (y0-y1) == 0:   # check if axial
-        exp_corr = EV2ptcorr_axial(peps, env, op, site0, site1)
-    elif abs(x0-x1) == 1 and abs(y0-y1) == 1:   # check if diagonal
-        exp_corr = EV2ptcorr_diagonal(peps, env, op, site0, site1)
-
-    return exp_corr
-
-
-def EV2ptcorr_axial(peps, env, op, site0, site1):
-
-    r"""
-    Returns two-point correlators along axial direction (horizontal or vertical) given any two sites and observables
-    to be evaluated on those sites. Directed from EV2ptcorr when sites lie in the axial (horizontal or vertical) direction
     """
 
     peps = check_consistency_tensors(peps) # to check if A has the desired fused form of legs i.e. t l b r [s a]
-    norm_array = array_EV2pt(peps, env, site0, site1)
-    op_array = array_EV2pt(peps, env, site0, site1, op)
+    norm_array = EV2pt(peps, env, site0, site1)
+    op_array = EV2pt(peps, env, site0, site1, op)
     array_corr = op_array / norm_array
 
     return array_corr
 
 
-def EV2ptcorr_diagonal(peps, env, ops, site0, site1):
-    r"""
-    Returns two-point correlators along diagonal direction given any two sites and observables
-    to be evaluated on those sites. Directed from EV2ptcorr when sites lie diagonally.
-
-    Note: site0 has to be to at left and site1 at right according to the defined fermionic order
-    """
-
-    peps = check_consistency_tensors(peps) # to check if A has the desired fused form of legs i.e. t l b r [s a]
-    x0, y0 = site0
-    x1, y1 = site1
-
-    if x0<x1:
-        ptl,ptr, pbr, pbl = site0, peps.nn_site(site0, d='r'), site1, peps.nn_site(site1, d='l')
-    elif x1<x0:
-        ptr, ptl, pbl, pbr = site1, peps.nn_site(site1, d='l'), site0, peps.nn_site(site0, d='r')
-
-    AAb_top = {'l': fPEPS_2layers(peps[ptl]), 'r': fPEPS_2layers(peps[ptr])}     # top layer of double peps tensors without operator
-    AAb_bottom = {'l': fPEPS_2layers(peps[pbl]), 'r': fPEPS_2layers(peps[pbr])}  # bottom layer of double peps tensors without operator
-    normd = array2ptdiag(peps, env, AAb_top, AAb_bottom, site0, site1)
-
-    # print('#####################')
-    # print('site left', site0)
-    # print('site right', site1)
-    # print('norm ',normd)
-
-    if x0<x1:
-        AAbop_top = {'l': fPEPS_2layers(peps[ptl], op=ops['l'], dir='l'), 'r': fPEPS_2layers(peps[ptr])} # top layer of double peps tensors with operator
-        AAbop_bottom = {'l': fPEPS_2layers(peps[pbl]), 'r': fPEPS_2layers(peps[pbr], op=ops['r'], dir='r')} # bottom layer of double peps tensors with operator
-    elif x1<x0:
-        AAbop_top = {'l': fPEPS_2layers(peps[ptl]), 'r': fPEPS_2layers(peps[ptr], op=ops['r'], dir='r')} # top layer of dounle peps tensors with operator
-        AAbop_bottom = {'l': fPEPS_2layers(peps[pbl], op=ops['l'], dir='l'), 'r': fPEPS_2layers(peps[pbr])} # bottom layer of double peps tensors with operator
-
-    expdg = array2ptdiag(peps, env, AAbop_top, AAbop_bottom, site0, site1, flag='y')
-    exp_diag = expdg/normd
-
-    print('normalized expectation value of diagonal correlator', exp_diag)
-    print('#####################')
-
-    return exp_diag

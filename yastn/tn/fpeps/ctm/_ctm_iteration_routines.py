@@ -13,8 +13,6 @@ from yastn.tn.fpeps._doublePepsTensor import DoublePepsTensor
 from ._ctm_env import Local_ProjectorEnv
 import numpy as np
 
-
-
 def fcor_bl(env_b, env_bl, env_l, AAb):
     """ Creates extended bottom left corner. Order of indices see append_a_bl. """
     corbln = tensordot(env_b, env_bl, axes=(2, 0))
@@ -373,8 +371,6 @@ def trivial_projector(a, b, c, dirn):
     tmp = initialize.ones(b.A.config, legs=[la.conj(), lb.conj(), lc.conj()])
 
     return tmp
-
-
 
 def CTM_it(env, AAb, fix_signs, opts_svd=None):
     r"""Perform one step of CTMRG update for a mxn lattice.
