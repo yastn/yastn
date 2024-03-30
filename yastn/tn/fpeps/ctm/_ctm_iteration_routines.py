@@ -14,55 +14,28 @@ from ._ctm_env import Local_ProjectorEnv
 import numpy as np
 
 def fcor_bl(env_b, env_bl, env_l, AAb):
-    """ Creates extended bottom left corner. Order of indices see append_a_bl. """
+    """ Creates extended bottom left corner. Order of indices see _attach_12. """
     corbln = tensordot(env_b, env_bl, axes=(2, 0))
     corbln = tensordot(corbln, env_l, axes=(2, 0))
-    return AAb.append_a_bl(corbln)
+    return AAb._attach_12(corbln)
 
 def fcor_tl(env_l, env_tl, env_t, AAb):
     """ Creates extended top left corner. """
     cortln = tensordot(env_l, env_tl, axes=(2, 0))
     cortln = tensordot(cortln, env_t, axes=(2, 0))
-    return AAb.append_a_tl(cortln)
+    return AAb._attach_01(cortln)
 
 def fcor_tr(env_t, env_tr, env_r, AAb):
     """ Creates extended top right corner. """
     cortrn = tensordot(env_t, env_tr, axes=(2, 0))
     cortrn = tensordot(cortrn, env_r, axes=(2, 0))
-    return AAb.append_a_tr(cortrn)
+    return AAb._attach_30(cortrn)
 
 def fcor_br(env_r, env_br, env_b, AAb):
     """ Creates extended bottom right corner. """
     corbrn = tensordot(env_r, env_br, axes=(2, 0))
     corbrn = tensordot(corbrn, env_b, axes=(2, 0))
-    return AAb.append_a_br(corbrn)
-
-
-def apply_TM_left(vecl, env, indten, AAb):
-    """ apply TM (bottom-AAB-top) to left boundary vector"""
-    new_vecl = tensordot(vecl, env[indten].t, axes=(2, 0))
-    new_vecl = AAb.append_a_tl(new_vecl)
-    new_vecl = new_vecl.unfuse_legs(axes=0)
-    if new_vecl.ndim == 5:
-        new_vecl = ncon((new_vecl, env[indten].b), ([1, -4, 2, -3, -2], [-1, 2, 1]))
-        new_vecl = new_vecl.fuse_legs(axes=((0, 3), 1, 2))
-    elif new_vecl.ndim == 4:
-        new_vecl = ncon((new_vecl, env[indten].b), ([1, 2, -3, -2], [-1, 2, 1]))
-    return new_vecl
-
-
-def apply_TM_top(vect, env, indten, AAb):
-    """ apply TM (left-AAB-right)   to top boundary vector"""
-    new_vect = tensordot(env[indten].l, vect, axes=(2, 0))
-    new_vect = AAb.append_a_tl(new_vect)
-    new_vect = new_vect.unfuse_legs(axes=2)
-    if new_vect.ndim == 5:
-        new_vect = ncon((new_vect, env[indten].r), ([-1, -2, 2, -4, 1], [2, 1, -3]))
-        new_vect = new_vect.fuse_legs(axes=(0, 1, (2, 3)))
-    elif new_vect.ndim == 4:
-        new_vect = ncon((new_vect, env[indten].r), ([-1, -2, 2, 1], [2, 1, -3]))
-    return new_vect
-
+    return AAb._attach_23(corbrn)
 
 
 def proj_Cor(rt, rb, fix_signs, opts_svd):
@@ -256,12 +229,12 @@ def move_horizontal(envn, env, AAb, proj, ms):
 
     if not(left is None):
         tt_l = tensordot(env[left].l, proj[left].hlt, axes=(2, 0))
-        tt_l = AAb[left].append_a_tl(tt_l)
+        tt_l = AAb[left]._attach_01(tt_l)
         envn[ms].l = ncon((proj[left].hlb, tt_l), ([2, 1, -0], [2, 1, -2, -1]))
 
     if not(right is None):
         tt_r = tensordot(env[right].r, proj[right].hrb, axes=(2,0))
-        tt_r = AAb[right].append_a_br(tt_r)
+        tt_r = AAb[right]._attach_23(tt_r)
         envn[ms].r = ncon((tt_r, proj[right].hrt), ([1, 2, -3, -2], [1, 2, -1]))
 
     envn[ms].tl = envn[ms].tl/ envn[ms].tl.norm(p='inf')
@@ -330,11 +303,11 @@ def move_vertical(envn, env, AAb, proj, ms):
                                ([2, 1, -1], [3, 2], [-0, 1, 3]))
     if not(top is None):
         ll_t = ncon((proj[top].vtl, env[top].t), ([1, -1, -0], [1, -2, -3]))
-        ll_t = AAb[top].append_a_tl(ll_t)
+        ll_t = AAb[top]._attach_01(ll_t)
         envn[ms].t = ncon((ll_t, proj[top].vtr), ([-0, -1, 2, 1], [2, 1, -2]))
     if not(bottom is None):
         ll_b = ncon((proj[bottom].vbr, env[bottom].b), ([1, -2, -1], [1, -3, -4]))
-        ll_b = AAb[bottom].append_a_br(ll_b)
+        ll_b = AAb[bottom]._attach_23(ll_b)
         envn[ms].b = ncon((ll_b, proj[bottom].vbl), ([-0, -1, 1, 2], [1, 2, -3]))
 
     envn[ms].tl = envn[ms].tl/ envn[ms].tl.norm(p='inf')

@@ -162,6 +162,28 @@ class DoublePepsTensor:
             return self.append_a_tr(tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (1, 0, 3, 2):
             return self.append_a_br(tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+        
+
+    def _attach_30(self, tt):
+        """
+        Attach a tensor to the top left corner of the tensor network tt if rotation = 0
+        and to the bottom left if rotation is 90.
+        """
+        if self._t == (0, 1, 2, 3):
+            return self.append_a_tr(tt)
+        else:
+            raise YastnError('rotation not supported')
+        
+    def _attach_12(self, tt):
+        """
+        Attach a tensor to the top left corner of the tensor network tt if rotation = 0
+        and to the bottom left if rotation is 90.
+        """
+        if self._t == (0, 1, 2, 3):
+            return self.append_a_bl(tt)
+        else:
+            raise YastnError('rotation not supported')
+    
 
 
     def fPEPS_fuse_layers(self):
