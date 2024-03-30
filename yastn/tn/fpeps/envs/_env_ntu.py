@@ -8,8 +8,7 @@ class EnvNTU:
             raise YastnError(f" Type of EnvNTU {which} not recognized.")
         self.psi = psi
         self.which = which
-        self._dict_gs = {#'SU': self._g_p,
-                         'NN': self._g_NN,
+        self._dict_gs = {'NN': self._g_NN,
                          'NN+': self._g_NNp,
                          'NN++': self._g_NNpp,
                          'NNN': self._g_NNN,
@@ -22,42 +21,10 @@ class EnvNTU:
         """ Calculates bond metric. """
         return self._dict_gs[self.which](bd, QA, QB)
 
-    # def _g_p(self, bd, QA, QB):
-    #     """
-    #     Calculates the metric tensor g for the given PEPS tensor network using the NTU algorithm.
-    #     """
-    #     if bd.dirn == "h":
-    #         assert self.psi.nn_site(bd.site0, (0, 1)) == bd.site1
-    #         #          (-1, 0)  (-1, 1)
-    #         #             ||       ||
-    #         #   (0, -1) = GA +   + GB = (0, +2)
-    #         #             ||       ||
-    #         #          (+1, 0)  (+1, 1)
-    #         m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1, 0), (0, -1), (1, 0), (1, 1), (0, 2), (-1, 1)]}
-    #         tensors_from_psi(m, self.psi)
-    #         env_l = hair_l(QA, hl=hair_l(m[0, -1]), ht=hair_t(m[-1, 0]), hb=hair_b(m[1, 0]))
-    #         env_r = hair_r(QB, hr=hair_r(m[0,  2]), ht=hair_t(m[-1, 1]), hb=hair_b(m[1, 1]))
-    #         g = tensordot(env_l, env_r, axes=((), ()))  # [rr' rr] [ll' ll]
-    #     else: # dirn == "v":
-    #         assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
-    #         #          (-1, 0)
-    #         #             ||
-    #         #   (0, -1) = GA = (0, 1)
-    #         #             ++
-    #         #   (1, -1) = GB = (1, 1)
-    #         #             ||
-    #         #          (+2, 0)
-    #         m = {d: self.psi.nn_site(bd.site0, d=d) for d in [(-1, 0), (0, -1), (1, -1), (2, 0), (1, 1), (0, 1)]}
-    #         tensors_from_psi(m, self.psi)
-    #         env_t = hair_t(QA, ht=hair_t(m[-1, 0]), hl=hair_l(m[0, -1]), hr=hair_r(m[0, 1]))
-    #         env_b = hair_b(QB, hb=hair_b(m[ 2, 0]), hl=hair_l(m[1, -1]), hr=hair_r(m[1, 1]))
-    #         g = tensordot(env_t, env_b, axes=((), ()))  # [bb' bb] [tt' tt]
-    #     return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((0, 2), (1, 3)))
-
 
     def _g_NN(self, bd, QA, QB):
         """
-        Calculates the metric tensor g for the given PEPS tensor network within "NTU-NN" approximation.
+        Calculates metric tensor within "NTU-NN" approximation.
 
         For bd.dirn == 'h':
 
@@ -104,7 +71,7 @@ class EnvNTU:
 
     def _g_NNp(self, bd, QA, QB):
         """
-        Calculates the metric tensor g for the given PEPS tensor network within "NTU-NN+" approximation.
+        Calculates the metric tensor within "NTU-NN+" approximation.
 
         For bd.dirn == 'h':
 
@@ -175,20 +142,20 @@ class EnvNTU:
 
     def _g_NNpp(self, bd, QA, QB):
         """
-        Calculates the metric tensor g for the given PEPS tensor network "NTU-NN++" approximation.
+        Calculates the metric tensor within "NTU-NN++" approximation.
 
         For bd.dirn == 'h':
 
                                    (-3, +0)--(-3, +1)
                                       :         :
                           (-2, -1)-(-2, +0)--(-2, +1)-(-2, +2)
-                             :        :         :        :
+                              :       :         :        :
                  (-1, -2)-(-1, -1)-(-1, +0)==(-1, +1)-(-1, +2)-(-1, +3)
-                    :        :        ||        ||       :        :
+                     :        :       ||        ||       :        :
         (+0, -3)=(+0, -2)=(+0, -1) == QA++    ++QB == (+0, +2)=(+0, +3)=(+0, +4)
-                    :        :        ||        ||       :        :
+                     :        :       ||        ||       :        :
                  (+1, -2)-(+1, -1)-(+1, +0)==(+1, +1)-(+1, +2)-(+1, +3)
-                             :        :         :        :
+                              :       :         :        :
                           (+2, -1)-(+2, +0)--(+2, +1)-(+2, +2)
                                       :         :
                                    (+3, +0)--(+3, +1)
@@ -220,21 +187,45 @@ class EnvNTU:
                     (2,-1), (2,0), (2,1), (2,2), (3,0), (3,1)]
             m = {d: self.psi.nn_site(bd.site0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
-            h0mp2_t, hm1m1_l = cut_into_hairs(cor_tl(m[-1,-2]))
-            hm1m1_t, hm2p0_l = cut_into_hairs(cor_tl(m[-2,-1]))
+
+            hp0m2_t, hm1m1_l = cut_into_hairs(cor_tl(m[-1, -2]))
+            hm1m1_t, hm2p0_l = cut_into_hairs(cor_tl(m[-2, -1]))
+            hp0m1_t, hm1p0_l = cut_into_hairs(cor_tl(m[-1, -1], hl=hm1m1_l, ht=hm1m1_t))
+
             hm2p1_r, hm1p2_t = cut_into_hairs(cor_tr(m[-2, 2]))
             hm1p2_r, hp0p3_t = cut_into_hairs(cor_tr(m[-1, 3]))
+            hm1p1_r, hp0p2_t = cut_into_hairs(cor_tr(m[-1, 2], ht=hm1p2_t, hr=hm1p2_r))
+
             hp0p3_b, hp1p2_r = cut_into_hairs(cor_br(m[1, 3]))
             hp1p2_b, hp2p1_r = cut_into_hairs(cor_br(m[2, 2]))
+            hp0p2_b, hp1p1_r = cut_into_hairs(cor_br(m[1, 2], hr=hp1p2_r, hb=hp1p2_b))
+
             hp1m1_l, hp0m2_b = cut_into_hairs(cor_bl(m[1, -2]))
             hp2p0_l, hp1m1_b = cut_into_hairs(cor_bl(m[2, -1]))
+            hp1p0_l, hp0m1_b = cut_into_hairs(cor_bl(m[1, -1], hb=hp1m1_b, hl=hp1m1_l))
 
-            env_l = edge_l(QA, hair_l(m[0,-1], hl=hair_l(m[0,-2])))  # [bl bl'] [rr rr'] [tl tl']
-            env_r = edge_r(QB, hair_r(m[0, 2], hr=hair_r(m[0, 3])))  # [tr tr'] [ll ll'] [br br']
-            ctr = cor_tr(m[-1, 1], ht=hair_t(m[-2, 1]), hr=hair_r(m[-1, 2], hr=hair_r(m[-1, 3]), ht=hair_t(m[-2, 2])))
-            ctl = cor_tl(m[-1, 0], ht=hair_t(m[-2, 0]), hl=hair_l(m[-1,-1], hl=hair_l(m[-1,-2]), ht=hair_t(m[-2,-1])))
-            cbr = cor_br(m[ 1, 1], hb=hair_b(m[ 2, 1]), hr=hair_r(m[ 1, 2], hr=hair_r(m[ 1, 3]), hb=hair_b(m[ 2, 2])))
-            cbl = cor_bl(m[ 1, 0], hb=hair_b(m[ 2, 0]), hl=hair_l(m[ 1,-1], hl=hair_l(m[ 1,-2]), hb=hair_b(m[ 2,-1])))
+            hp0m1_l = hair_l(m[0, -2], hl=hair_l(m[0, -2]), ht=hp0m2_t, hb=hp0m2_b)
+            hp0m0_l = hair_l(m[0, -1], hl=hp0m1_l, ht=hp0m1_t, hb=hp0m1_b)
+            env_l = edge_l(QA, hp0m0_l)  # [bl bl'] [rr rr'] [tl tl']
+
+            hp0p2_r = hair_r(m[0, 3], hr=hair_r(m[0, 4]), ht=hp0p3_t, hb=hp0p3_b)
+            hp0p1_r = hair_r(m[0, 2], hr=hp0p2_r, ht=hp0p2_t, hb=hp0p2_b)
+            env_r = edge_r(QB, hp0p1_r)  # [tr tr'] [ll ll'] [br br']
+
+            hm2p0_t, hm2p1_t = cut_into_hairs(cor_tl(m[-3, 0]) @ cor_tr(m[-3, 1]))
+            cm2p0 = cor_tl(m[-2, 0], hl=hm2p0_l, ht=hm2p0_t)
+            cm2p1 = cor_tr(m[-2, 1], ht=hm2p1_t, hr=hm2p1_r)
+            hm1p0_t, hm1p1_t = cut_into_hairs(cm2p0 @ cm2p1)
+            ctl = cor_tl(m[-1, 0], ht=hm1p0_t, hl=hm1p0_l)
+            ctr = cor_tr(m[-1, 1], ht=hm1p1_t, hr=hm1p1_r)
+
+            hp2p1_b, hp2p0_b = cut_into_hairs(cor_br(m[3, 1]) @ cor_bl(m[3, 0]))
+            cp2p1 = cor_br(m[2, 1], hb=hp2p1_b, hr=hp2p1_r)
+            cp2p0 = cor_bl(m[2, 0], hl=hp2p0_l, hb=hp2p0_b)
+            hp1p1_b, hp1p0_b = cut_into_hairs(cp2p1 @ cp2p0)
+            cbr = cor_br(m[1, 1], hb=hp1p1_b, hr=hp1p1_r)
+            cbl = cor_bl(m[1, 0], hb=hp1p0_b, hl=hp1p0_l)
+
             g = tensordot((cbr @ cbl) @ env_l, (ctl @ ctr) @ env_r, axes=((0, 2), (2, 0)))  # [rr rr'] [ll ll']
         else: # dirn == "v":
             assert self.psi.nn_site(bd.site0, (1, 0)) == bd.site1
@@ -243,22 +234,55 @@ class EnvNTU:
                    (0,-3), (0,-2), (0,-1), (0,1), (0,2), (0,3),
                    (1,-3), (1,-2), (1,-1), (1,1), (1,2), (1,3),
                    (2,-2), (2,-1), (2,0), (2,1), (2,2),
-                   (3,-1), (3,0), (3,-1), (4,0)]
+                   (3,-1), (3,0), (3,1), (4,0)]
             m = {d: self.psi.nn_site(bd.site0, d=d) for d in sts}
             tensors_from_psi(m, self.psi)
-            env_t = edge_t(QA, hair_t(m[-1, 0], ht=hair_t(m[-2, 0])))  # [lt lt'] [bb bb'] [rt rt']
-            env_b = edge_b(QB, hair_b(m[ 2, 0], hb=hair_b(m[ 3, 0])))  # [rb rb'] [tt tt'] [lb lb']
-            cbl = cor_bl(m[1,-1], hl=hair_l(m[1,-2]), hb=hair_b(m[2, -1], hb=hair_b(m[3, -1]), hl=hair_l(m[2, -2])))
-            ctl = cor_tl(m[0,-1], hl=hair_l(m[0,-2]), ht=hair_t(m[-1,-1], ht=hair_t(m[-2,-1]), hl=hair_l(m[-1,-2])))
-            ctr = cor_tr(m[0, 1], hr=hair_r(m[0, 2]), ht=hair_t(m[-1, 1], ht=hair_t(m[-2, 1]), hr=hair_r(m[-1, 2])))
-            cbr = cor_br(m[1, 1], hr=hair_r(m[1, 2]), hb=hair_b(m[2,  1], hb=hair_b(m[3,  1]), hr=hair_r(m[2,  2])))
+
+            hp0m2_t, hm1m1_l = cut_into_hairs(cor_tl(m[-1, -2]))
+            hm1m1_t, hm2p0_l = cut_into_hairs(cor_tl(m[-2, -1]))
+            hp0m1_t, hm1p0_l = cut_into_hairs(cor_tl(m[-1, -1], hl=hm1m1_l, ht=hm1m1_t))
+
+            hm1p1_r, hp0p2_t = cut_into_hairs(cor_tr(m[-1, 2]))
+            hm2p0_r, hm1p1_t = cut_into_hairs(cor_tr(m[-2, 1]))
+            hm1p0_r, hp0p1_t = cut_into_hairs(cor_tr(m[-1, 1], ht=hm1p1_t, hr=hm1p1_r))
+
+            hp1p2_b, hp2p1_r = cut_into_hairs(cor_br(m[2, 2]))
+            hp2p1_b, hp3p0_r = cut_into_hairs(cor_br(m[3, 1]))
+            hp1p1_b, hp2p0_r = cut_into_hairs(cor_br(m[2, 1], hr=hp2p1_r, hb=hp2p1_b))
+
+            hp2m1_l, hp1m2_b = cut_into_hairs(cor_bl(m[2, -2]))
+            hp3p0_l, hp2m1_b = cut_into_hairs(cor_bl(m[3, -1]))
+            hp2p0_l, hp1m1_b = cut_into_hairs(cor_bl(m[2, -1], hb=hp2m1_b, hl=hp2m1_l))
+
+            hm1p0_t = hair_t(m[-2, 0], ht=hair_t(m[-3, 0]), hl=hm2p0_l, hr=hm2p0_r)
+            hp0p0_t = hair_t(m[-1, 0], ht=hm1p0_t, hl=hm1p0_l, hr=hm1p0_r)
+            env_t = edge_t(QA, hp0p0_t)  # [lt lt'] [bb bb'] [rt rt']
+
+            hp2p0_b = hair_b(m[3, 0], hb=hair_b(m[4, 0]), hl=hp3p0_l, hr=hp3p0_r)
+            hp1p0_b = hair_b(m[2, 0], hb=hp2p0_b, hl=hp2p0_l, hr=hp2p0_r)
+            env_b = edge_b(QB, hp1p0_b)  # [rb rb'] [tt tt'] [lb lb']
+
+            hp1m2_l, hp0m2_l = cut_into_hairs(cor_bl(m[1, -3]) @ cor_tl(m[0, -3]))
+            cp1m2 = cor_bl(m[1, -2], hb=hp1m2_b, hl=hp1m2_l)
+            cp0m2 = cor_tl(m[0, -2], hl=hp0m2_l, ht=hp0m2_t)
+            hp1m1_l, hp0m1_l = cut_into_hairs(cp1m2 @ cp0m2)
+            cbl = cor_bl(m[1,-1], hb=hp1m1_b, hl=hp1m1_l)
+            ctl = cor_tl(m[0,-1], ht=hp0m1_t, hl=hp0m1_l)
+
+            hp0p2_r, hp1p2_r  = cut_into_hairs(cor_tr(m[0, 3]) @ cor_br(m[1, 3]))
+            cp0p2 = cor_tr(m[0, 2], ht=hp0p2_t, hr=hp0p2_r)
+            cp1p2 = cor_br(m[1, 2], hb=hp1p2_b, hr=hp1p2_r)
+            hp0p1_r, hp1p1_r  = cut_into_hairs(cp0p2 @ cp1p2)
+            ctr = cor_tr(m[0, 1], ht=hp0p1_t, hr=hp0p1_r)
+            cbr = cor_br(m[1, 1], hb=hp1p1_b, hr=hp1p1_r)
+
             g = tensordot((cbl @ ctl) @ env_t, (ctr @ cbr) @ env_b, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
         return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
     def _g_NNN(self, bd, QA, QB):
         """
-        Calculates the metric tensor g for the given PEPS tensor network "NTU-NNN" approximation.
+        Calculates the metric tensor within "NTU-NNN" approximation.
 
         For bd.dirn == 'h':
 
@@ -327,7 +351,7 @@ class EnvNTU:
 
     def _g_NNNp(self, bd, QA, QB):
         """
-        Calculates the metric tensor g for the given PEPS tensor network "NTU-NNN+" approximation.
+        Calculates the metric tensor within "NTU-NNN+" approximation.
 
         For bd.dirn == 'h':
 
@@ -412,7 +436,7 @@ class EnvNTU:
 
     def _g_NNNpp(self, bd, QA, QB):
         """
-        Calculates the metric tensor g for the given PEPS tensor network using "NTU-NNN++" approximation.
+        Calculates the metric tensor within using "NTU-NNN++" approximation.
 
         For bd.dirn == 'h':
 
