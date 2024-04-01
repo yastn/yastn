@@ -4,26 +4,10 @@ tu supports fermions though application of swap-gates.
 PEPS tensors have 5 legs: (top, left, bottom, right, system)
 In case of purification, system leg is a fusion of (ancilla, system)
 """
-from yastn.tn.fpeps.gates._gates import match_ancilla_1s, match_ancilla_2s
-from yastn import tensordot, vdot, svd_with_truncation, svd, qr, ncon, eigh_with_truncation
+from ... import tensordot, vdot, svd_with_truncation, svd, qr, ncon, eigh_with_truncation
+from .gates import match_ancilla_1s, match_ancilla_2s
 from typing import NamedTuple
 
-
-class Gate_nn(NamedTuple):
-    """ A should be before B in the fermionic order. """
-    A : tuple = None
-    B : tuple = None
-    bond : tuple = None
-
-
-class Gate_local(NamedTuple):
-    A : tuple = None
-    site : tuple = None
-
-
-class Gates(NamedTuple):
-    local : list = None   # list of Gate_local
-    nn : list = None   # list of Gate_nn
 
 
 class Evolution_out(NamedTuple):
@@ -406,30 +390,3 @@ def form_new_peps_tensors(QAf, QBf, MA, MB, bond):
         B = B.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
         B = B.unfuse_legs(axes=1)  # [t l] [b r] sa
     return A, B
-
-
-def gates_homogeneous(peps, nn, local):
-    """
-    Generate a list of gates that is homogeneous over the lattice.
-
-    Parameters
-    ----------
-    peps      : class Lattice
-    nn : list
-              A list of two-tuples, each containing the tensors that form a two-site
-              nearest-neighbor gate.
-    local : A two-tuple containing the tensors that form the single-site gate.
-
-    Returns
-    -------
-    Gates: The generated gates. The NamedTuple 'Gates` named tuple contains a list of
-      local and nn gates along with info where they should be applied.
-    """
-    gates_nn = []   # nn = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)]
-    for bd in peps.bonds():
-        for i in range(len(nn)):
-            gates_nn.append(Gate_nn(A=nn[i][0], B=nn[i][1], bond=bd))
-    gates_loc = []
-    for site in peps.sites():
-        gates_loc.append(Gate_local(A=local, site=site))
-    return Gates(local=gates_loc, nn=gates_nn)

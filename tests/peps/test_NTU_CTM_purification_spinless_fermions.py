@@ -28,10 +28,9 @@ def test_NTU_spinless_finite():
     ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = ops.I(), ops.c(), ops.cp()
 
-    G_hop = fpeps.gates.gate_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
-    g_loc = fpeps.gates.gate_local_fermi_sea(mu, dbeta / 2, fid, fc, fcdag) # local gate for spinless fermi sea
-    g_nn = [G_hop]
-    gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
+    g_hop = fpeps.gates.gate_nn_hopping(t * dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    g_loc = fpeps.gates.gate_local_occupation(mu, dbeta / 2, ops.I(), ops.n())  # local gate for spinless fermi sea
+    gates = fpeps.gates_homogeneous(geometry, gates_nn=g_hop, gates_local=g_loc)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
     env = fpeps.EnvNTU(psi, which='NNN++')
@@ -95,10 +94,9 @@ def test_NTU_spinless_infinite():
 
     ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = ops.I(), ops.c(), ops.cp()
-    GA_nn, GB_nn = fpeps.gates.gate_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
-    g_loc = fpeps.gates.gate_local_fermi_sea(mu, dbeta / 2, fid, fc, fcdag) # local gate for spinless fermi sea
-    g_nn = [(GA_nn, GB_nn)]
-    gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
+    g_hop = fpeps.gates.gate_nn_hopping(t * dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    g_loc = fpeps.gates.gate_local_occupation(mu, dbeta / 2, ops.I(), ops.n())  # local gate for spinless fermi sea
+    gates = fpeps.gates_homogeneous(geometry, gates_nn=g_hop, gates_local=g_loc)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
     env = fpeps.EnvNTU(psi, which='NN')

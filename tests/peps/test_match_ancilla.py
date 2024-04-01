@@ -2,7 +2,7 @@ import logging
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.gates._gates import match_ancilla_1s, match_ancilla_2s
+from yastn.tn.fpeps.gates import match_ancilla_1s, match_ancilla_2s
 
 try:
     from .configs import config_U1xU1_R_fermionic

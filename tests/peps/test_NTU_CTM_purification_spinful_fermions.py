@@ -32,11 +32,10 @@ def test_NTU_spinful_finite():
     fc_up, fc_dn, fcdag_up, fcdag_dn = ops.c(spin='u'), ops.c(spin='d'), ops.cp(spin='u'), ops.cp(spin='d')
     n_up, n_dn =  ops.n(spin='u'), ops.n(spin='d')
     n_int = n_up @ n_dn
-    GA_nn_up, GB_nn_up = fpeps.gates.gate_hopping(t_up, dbeta / 2, fid, fc_up, fcdag_up)
-    GA_nn_dn, GB_nn_dn = fpeps.gates.gate_hopping(t_dn, dbeta / 2, fid, fc_dn, fcdag_dn)
-    g_loc = fpeps.gates.gate_Coulomb(mu_up, mu_dn, U, dbeta / 2, fid, n_up, n_dn)
-    g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
-    gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
+    g_hop_u = fpeps.gates.gate_nn_hopping(t_up * dbeta / 2, fid, fc_up, fcdag_up)
+    g_hop_d = fpeps.gates.gate_nn_hopping(t_dn * dbeta / 2, fid, fc_dn, fcdag_dn)
+    g_loc = fpeps.gates.gate_local_Coulomb(mu_up, mu_dn, U, dbeta / 2, fid, n_up, n_dn)
+    gates = fpeps.gates_homogeneous(geometry, gates_nn=[g_hop_u, g_hop_d], gates_local=g_loc)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
     env = fpeps.EnvNTU(psi, which='NNN++')
@@ -119,12 +118,11 @@ def test_NTU_spinful_infinite():
     fid = ops.I()
     fc_up, fc_dn, fcdag_up, fcdag_dn = ops.c(spin='u'), ops.c(spin='d'), ops.cp(spin='u'), ops.cp(spin='d')
     n_up, n_dn =  ops.n(spin='u'), ops.n(spin='d')
-    n_int = n_up @ n_dn
-    GA_nn_up, GB_nn_up = fpeps.gates.gate_hopping(t_up, dbeta / 2, fid, fc_up, fcdag_up)
-    GA_nn_dn, GB_nn_dn = fpeps.gates.gate_hopping(t_dn, dbeta / 2, fid, fc_dn, fcdag_dn)
-    g_loc = fpeps.gates.gate_Coulomb(mu_up, mu_dn, U, dbeta / 2, fid, n_up, n_dn)
-    g_nn = [(GA_nn_up, GB_nn_up), (GA_nn_dn, GB_nn_dn)]
-    gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
+
+    g_hop_u = fpeps.gates.gate_nn_hopping(t_up * dbeta / 2, fid, fc_up, fcdag_up)
+    g_hop_d = fpeps.gates.gate_nn_hopping(t_dn * dbeta / 2, fid, fc_dn, fcdag_dn)
+    g_loc = fpeps.gates.gate_local_Coulomb(mu_up, mu_dn, U, dbeta / 2, fid, n_up, n_dn)
+    gates = fpeps.gates_homogeneous(geometry, gates_nn=[g_hop_u, g_hop_d], gates_local=g_loc)
 
     # initialized at infinite temperature
     psi = fpeps.product_peps(geometry, fid)
