@@ -1,7 +1,6 @@
 from ... import mps
 from ._env_auxlliary import identity_tm_boundary
 
-
 class EnvBoundaryMps:
     r"""
     Geometric information about the lattice provided to ctm tensors

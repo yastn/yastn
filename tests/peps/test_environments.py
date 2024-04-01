@@ -25,10 +25,10 @@ def test_finite_spinless_boundary_mps_ctmrg():
 
     D = 6
 
-    opt = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
-    fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
+    ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    fid, fc, fcdag = ops.I(), ops.c(), ops.cp()
 
-    g_hop = fpeps.gates.gate_nn_hopping(t * dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
     gates = fpeps.gates_homogeneous(geometry, gates_nn=g_hop)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
@@ -104,7 +104,7 @@ def test_spinless_infinite_approx():
 
     ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = ops.I(), ops.c(), ops.cp()
-    g_hop = fpeps.gates.gate_nn_hopping(t * dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
     gates = fpeps.gates_homogeneous(geometry, gates_nn=g_hop)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature

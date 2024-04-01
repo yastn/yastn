@@ -61,38 +61,38 @@ def match_ancilla_2s(G, A, dir=None):
 
 
 def decompose_nn_gate(Gnn):
-    U, S, V = Gnn.svd_with_truncation(axes = ((0, 1), (2, 3)), sU = -1, tol = 1e-15, Vaxis=2)
+    U, S, V = Gnn.svd_with_truncation(axes = ((0, 2), (1, 3)), sU = -1, tol = 1e-15, Vaxis=2)
     S = S.sqrt()
     GA = S.broadcast(U, axes=2)
     GB = S.broadcast(V, axes=2)
     return Gate_nn(GA, GB)
 
 
-def gate_nn_hopping(step, I, c, cdag):
+def gate_nn_hopping(t, step, I, c, cdag):
     """
     Nearest-neighbor gate G = exp(-step * H)
     for H = -t * (cdag1 c2 + c2dag c1)
 
-    G = I + (cosh(x) - 1) * (n1 + n2 - 2 n1 n2) + sinh(x)(c1dag c2 + c2dag c1)
+    G = I + (cosh(x) - 1) * (n1 + n2 - 2 n1 n2) + sinh(x) * (c1dag c2 + c2dag c1)
     """
     n = cdag @ c
-    II = ncon([I, I], ((-0, -1), (-2, -3)))
-    n1 = ncon([n, I], ((-0, -1), (-2, -3)))
-    n2 = ncon([I, n], ((-0, -1), (-2, -3)))
-    nn = ncon([n, n], ((-0, -1), (-2, -3)))
+    II = ncon([I, I], [(-0, -2), (-1, -3)])
+    n1 = ncon([n, I], [(-0, -2), (-1, -3)])
+    n2 = ncon([I, n], [(-0, -2), (-1, -3)])
+    nn = ncon([n, n], [(-0, -2), (-1, -3)])
 
     # site-1 is before site-2 in fermionic order
     # c1dag c2;
     c1dag = cdag.add_leg(s=1).swap_gate(axes=(0, 2))
     c2 = c.add_leg(s=-1)
-    cc = ncon([c1dag, c2], ((-0, -1, 1) , (-2, -3, 1)))
+    cc = ncon([c1dag, c2], [(-0, -2, 1) , (-1, -3, 1)])
 
     # c2dag c1
     c1 = c.add_leg(s=1).swap_gate(axes=(1, 2))
     c2dag = cdag.add_leg(s=-1)
-    cc = cc + ncon([c1, c2dag], ((-0, -1, 1) , (-2, -3, 1)))
+    cc = cc + ncon([c1, c2dag], [(-0, -2, 1) , (-1, -3, 1)])
 
-    G =  II + (np.cosh(step) - 1) * (n1 + n2 - 2 * nn) + np.sinh(step) * cc
+    G =  II + (np.cosh(t * step) - 1) * (n1 + n2 - 2 * nn) + np.sinh(t * step) * cc
     return decompose_nn_gate(G)
 
 
@@ -119,17 +119,18 @@ def gate_local_occupation(mu, step, I, n):
     return Gate_local(I + n * (np.exp(mu * step) - 1))
 
 
-def gates_homogeneous(psi, gates_nn=None, gates_local=None) -> Gates:
+def gates_homogeneous(geometry, gates_nn=None, gates_local=None) -> Gates:
     """
     Distributes gates homogeneous over the lattice.
 
     Parameters
     ----------
-    psi : Peps
-        geometry of PEPS lattice
+    geomtry : yastn.tn.fpeps.SquareLattice | yastn.tn.fpeps.CheckerboardLattice | yast.tn.fpeps.Peps
+        Geometry of PEPS lattice.
+        Can be any structure that includes geometric information about the lattice, like the Peps class.
 
     nn : Gate_nn | Sequence[Gate_nn]
-        Nearest-neigbor gate, or a list of gates, to be distributed over lattice bonds.
+        Nearest-neighbor gate, or a list of gates, to be distributed over lattice bonds.
 
     local : Gate_local | Sequence[Gate_local]
         Local gate, or a list of local gates, to be distributed over lattice sites.
@@ -140,7 +141,7 @@ def gates_homogeneous(psi, gates_nn=None, gates_local=None) -> Gates:
 
     nn = []
     if gates_nn is not None:
-        for bond in psi.bonds():
+        for bond in geometry.bonds():
             for Gnn in gates_nn:
                 nn.append(Gnn._replace(bond=bond))
 
@@ -149,7 +150,7 @@ def gates_homogeneous(psi, gates_nn=None, gates_local=None) -> Gates:
 
     local = []
     if gates_local is not None:
-        for site in psi.sites():
+        for site in geometry.sites():
             for Gloc in gates_local:
                 local.append(Gloc._replace(site=site))
 

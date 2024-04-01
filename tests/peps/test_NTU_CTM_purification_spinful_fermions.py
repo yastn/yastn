@@ -32,8 +32,8 @@ def test_NTU_spinful_finite():
     fc_up, fc_dn, fcdag_up, fcdag_dn = ops.c(spin='u'), ops.c(spin='d'), ops.cp(spin='u'), ops.cp(spin='d')
     n_up, n_dn =  ops.n(spin='u'), ops.n(spin='d')
     n_int = n_up @ n_dn
-    g_hop_u = fpeps.gates.gate_nn_hopping(t_up * dbeta / 2, fid, fc_up, fcdag_up)
-    g_hop_d = fpeps.gates.gate_nn_hopping(t_dn * dbeta / 2, fid, fc_dn, fcdag_dn)
+    g_hop_u = fpeps.gates.gate_nn_hopping(t_up, dbeta / 2, fid, fc_up, fcdag_up)
+    g_hop_d = fpeps.gates.gate_nn_hopping(t_dn, dbeta / 2, fid, fc_dn, fcdag_dn)
     g_loc = fpeps.gates.gate_local_Coulomb(mu_up, mu_dn, U, dbeta / 2, fid, n_up, n_dn)
     gates = fpeps.gates_homogeneous(geometry, gates_nn=[g_hop_u, g_hop_d], gates_local=g_loc)
 
@@ -119,8 +119,8 @@ def test_NTU_spinful_infinite():
     fc_up, fc_dn, fcdag_up, fcdag_dn = ops.c(spin='u'), ops.c(spin='d'), ops.cp(spin='u'), ops.cp(spin='d')
     n_up, n_dn =  ops.n(spin='u'), ops.n(spin='d')
 
-    g_hop_u = fpeps.gates.gate_nn_hopping(t_up * dbeta / 2, fid, fc_up, fcdag_up)
-    g_hop_d = fpeps.gates.gate_nn_hopping(t_dn * dbeta / 2, fid, fc_dn, fcdag_dn)
+    g_hop_u = fpeps.gates.gate_nn_hopping(t_up, dbeta / 2, fid, fc_up, fcdag_up)
+    g_hop_d = fpeps.gates.gate_nn_hopping(t_dn, dbeta / 2, fid, fc_dn, fcdag_dn)
     g_loc = fpeps.gates.gate_local_Coulomb(mu_up, mu_dn, U, dbeta / 2, fid, n_up, n_dn)
     gates = fpeps.gates_homogeneous(geometry, gates_nn=[g_hop_u, g_hop_d], gates_local=g_loc)
 

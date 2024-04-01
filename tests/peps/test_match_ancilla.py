@@ -13,8 +13,8 @@ def test_match_ancilla():
     """ initialize vacuum state and check the functions match_ancilla_1s and match_ancilla_2s """
 
     net = fpeps.SquareLattice(dims=(3, 3), boundary='obc')
-    opt = yastn.operators.SpinfulFermions(sym='U1xU1xZ2',backend=config_U1xU1_R_fermionic.backend,default_device=config_U1xU1_R_fermionic.default_device)
-    fid, fc_up, fc_dn, fcdag_up, fcdag_dn = opt.I(), opt.c(spin='u'), opt.c(spin='d'), opt.cp(spin='u'), opt.cp(spin='d')
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2',backend=config_U1xU1_R_fermionic.backend,default_device=config_U1xU1_R_fermionic.default_device)
+    fid, fc_up, fc_dn, fcdag_up, fcdag_dn = ops.I(), ops.c(spin='u'), ops.c(spin='d'), ops.cp(spin='u'), ops.cp(spin='d')
 
     # initialize vacuum state peps with lattice specifications
     A = yastn.Leg(fid.config, t= ((0,0,0),), D=((1),))
