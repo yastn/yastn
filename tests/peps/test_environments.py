@@ -54,7 +54,7 @@ def test_finite_spinless_boundary_mps_ctmrg():
 
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
+    for step in ctmrg(psi, max_sweeps, iterator_step=1, opts_svd=opts_svd_ctm):
         obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
 
         cdagc = (sum(abs(val) for val in obs_hor.get('cdagc').values()) +
