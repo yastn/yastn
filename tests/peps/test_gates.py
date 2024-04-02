@@ -40,7 +40,7 @@ def check_hopping_gate(ops, t, ds):
     II = yastn.ncon([I, I], [(-0, -2) , (-1, -3)])
     II = II.fuse_legs(axes=((0, 1), (2, 3)))
 
-    O2 = II + (-ds) * H + (ds ** 2 / 2) * H @ H + (ds ** 3 / 6) * H @ H @ H + (ds ** 4 / 24) * H @ H @ H @ H
+    O2 = II + (-ds) * H + (ds ** 2 / 2) * H @ H + (-ds ** 3 / 6) * H @ H @ H + (ds ** 4 / 24) * H @ H @ H @ H
 
     assert ((O - O2).norm()) < (ds * t) ** 3
 

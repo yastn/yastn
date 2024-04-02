@@ -20,6 +20,9 @@ class Peps():
     def config(self):
         return self[0, 0].config
 
+    def has_physical(self):
+        return self[0, 0].ndim in (3, 5)
+
     def __getitem__(self, site):
         """ Get tensor for site. """
         return self._data[self.site2index(site)]
@@ -98,3 +101,33 @@ class Peps():
                 op.A[nx] = top if top.ndim == 4 else \
                            DoublePepsTensor(top=top, btm=top)
         return op
+
+
+class Peps2Layers():
+
+    def __init__(self, bra, ket=None):
+        """
+        Initialize empty PEPS on a lattice specified by provided geometry.
+
+        Empty PEPS has no tensors assigned.
+        """
+        if ket is None:
+            ket = bra
+
+        self.bra = bra
+        self.ket = ket
+        self.geometry = bra.geometry
+
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary"]:
+            setattr(self, name, getattr(bra.geometry, name))
+
+    def has_physical(self):
+        return False
+
+    @property
+    def config(self):
+        return self.ket.config
+
+    def __getitem__(self, site):
+        """ Get tensor for site. """
+        return DoublePepsTensor(top=self.ket[site], btm=self.bra[site])
