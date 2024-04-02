@@ -1,17 +1,7 @@
 # this routine just calculates nearest neighbor correlators
-import numpy as np
 from yastn import tensordot, ncon
 from ._ctm_iteration_routines import fPEPS_2layers
 
-def ret_AAbs(A, bds, op, orient):
-    """ preparing the nearest neighbor tensor before contraction by attaching them with operators"""
-    if orient == 'h':
-        AAb = {'l': fPEPS_2layers(A[bds.site0], op=op['l'], dir='l'), 'r': fPEPS_2layers(A[bds.site1], op=op['r'], dir='r')}
-    elif orient == 'v':
-        AAb = {'l': fPEPS_2layers(A[bds.site0], op=op['l'], dir='t'), 'r': fPEPS_2layers(A[bds.site1], op=op['r'], dir='b')}
-    elif orient == '1s':
-        AAb = {'l': fPEPS_2layers(A[bds.site0], op=op['l'], dir='1s'), 'r': fPEPS_2layers(A[bds.site1], op=op['r'], dir='1s')}
-    return AAb
 
 
 def apply_TMO_left(vecl, env, site, AAb):

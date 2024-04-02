@@ -1,10 +1,3 @@
-"""
-Routines for CTMRG of layers PEPS on an arbitrary mxn square lattice.
-
-PEPS tensors A[0] and A[1] corresponds to "black" and "white" sites of the checkerboard.
-PEPs tensors habe 6 legs: [top, left, bottom, right, ancilla, system] with signature s=(-1, 1, 1, -1, -1, 1).
-The routines include swap_gates to incorporate fermionic anticommutation relations into the lattice.
-"""
 
 import yastn
 from yastn import tensordot, ncon
@@ -64,12 +57,6 @@ def fPEPS_op1s(A, op):
     """
     Aop = tensordot(A, op, axes=(4, 1)) # t l b r [s a]
     return Aop
-
-def fPEPS_fuse_physical(A):
-    return {ind: x.fuse_legs(axes=(0, 1, 2, 3, (4, 5))) for ind, x in A.items()}
-
-def fPEPS_unfuse_physical(A):
-    return {ind: x.unfuse_legs(axes=4) for ind, x in A.items()}
 
 def fuse_ancilla_wos(op, fid):
     """ kron and fusion of local operator with identity for ancilla --- without string """
