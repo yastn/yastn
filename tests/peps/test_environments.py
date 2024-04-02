@@ -3,7 +3,7 @@ import numpy as np
 import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.mps as mps
-from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg
+from yastn.tn.fpeps.ctm import nn_exp_dict
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg
@@ -37,7 +37,7 @@ def test_finite_spinless_boundary_mps_ctmrg():
     opts_svd = {'D_total': D, 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)
     for step in range(steps):
-        print(f"beta = {(step + 1) * dbeta:0.2f}" )
+        print(f"beta = {(step + 1) * dbeta:0.3f}" )
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
 
 
@@ -54,7 +54,7 @@ def test_finite_spinless_boundary_mps_ctmrg():
 
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg(psi, max_sweeps, iterator_step=1, opts_svd=opts_svd_ctm):
+    for step in fpeps.ctmrg(psi, max_sweeps, iterator_step=1, opts_svd=opts_svd_ctm):
         obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
 
         cdagc = (sum(abs(val) for val in obs_hor.get('cdagc').values()) +
@@ -113,14 +113,15 @@ def test_spinless_infinite_approx():
     opts_svd = {"D_total": D , 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)
     for step in range(steps):
-        print(f"beta = {(step + 1) * dbeta}" )
+        print(f"beta = {(step + 1) * dbeta:0.3f}" )
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="SVD")
 
     opts_svd = {"D_total": 2 * D, 'tol_block': 1e-15}
 
     envs = {}
-    envs['NNN']  = fpeps.EnvNTU(psi, which='NNN')
-    envs['NNN+'] = fpeps.EnvNTU(psi, which='NNN+')
+    for k in ['NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++']:
+        envs[k] = fpeps.EnvNTU(psi, which=k)
+
     for k in ['43', '43h', '65', '65h', '87', '87h']:
         envs[k] = fpeps.EnvApproximate(psi,
                                        which=k,
@@ -132,8 +133,12 @@ def test_spinless_infinite_approx():
         QA, QB = psi[st0], psi[st1]
         Gs = {k: env.bond_metric(bd, QA, QB) for k, env in envs.items()}
         Gs = {k: v / v.norm() for k, v in Gs.items()}
+        assert (Gs['NN'] - Gs['NN+']).norm() < 2e-3
+        assert (Gs['NN+'] - Gs['NN++']).norm() < 1e-4
+        assert (Gs['NN++'] - Gs['NNN++']).norm() < 1e-3
         assert (Gs['NNN'] - Gs['43']).norm() < 1e-6
-        assert (Gs['NNN+']-Gs['43h']).norm() < 1e-6
+        assert (Gs['NNN+'] - Gs['43h']).norm() < 1e-6
+        assert (Gs['NNN+'] - Gs['NNN+']).norm() < 1e-4
         assert (Gs['43'] - Gs['43h']).norm() < 1e-3
         assert (Gs['43h'] - Gs['65']).norm() < 1e-4
         assert (Gs['65'] - Gs['65h']).norm() < 1e-5

@@ -1,6 +1,6 @@
 from typing import NamedTuple
 from dataclasses import dataclass
-from .... import rand, ones, YastnError
+from .... import rand, ones, YastnError, Leg
 from ... import mps
 from .._peps import Peps, Peps2Layers
 
@@ -57,68 +57,30 @@ class EnvCTM(Peps):
         return H
 
 
-    def init(self, tc, Dc, type='rand'):
+    def init_(self, t0=None, D0=1, type='rand'):
         """ Initialize random CTMRG environments of peps tensors A. """
-
-
         if type not in ('rand', 'ones'):
             raise YastnError(f"type = {type} not recognized in EnvCTM init. Should be in ('rand', 'ones')")
 
+        config = self.psi.config
         tensor_init = rand if type == 'rand' else ones
 
-        config = self.psi.config
+        if t0 is None:
+            t0 = (0,) * config.sym.NSYM
+        leg0 = Leg(config, s=1, t=[t0], D=[D0])
 
-        # for ms in self.sites():
-        #     B = A[ms].copy()
-        #     B = B.unfuse_legs(axes=(0,1))
-        #     env[ms] = Local_CTMEnv()
-        #     env[ms].tl = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
-        #     env[ms].tr = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
-        #     env[ms].bl = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
-        #     env[ms].br = rand(config=config, s=(1, -1), t=(tc, tc), D=(Dc, Dc))
-        #     legs = [env[ms].tl.get_legs(1).conj(),
-        #             B.get_legs(0).conj(),
-        #             B.get_legs(0),
-        #             env[ms].tr.get_legs(0).conj()]
-        #     env[ms].t = rand(config=config, legs=legs)
-        #     legs = [env[ms].br.get_legs(1).conj(),
-        #             B.get_legs(2).conj(),
-        #             B.get_legs(2),
-        #             env[ms].bl.get_legs(0).conj()]
-        #     env[ms].b = rand(config=config, legs=legs)
-        #     legs = [env[ms].bl.get_legs(1).conj(),
-        #             B.get_legs(1).conj(),
-        #             B.get_legs(1),
-        #             env[ms].tl.get_legs(0).conj()]
-        #     env[ms].l = rand(config=config, legs=legs)
-        #     legs = [env[ms].tr.get_legs(1).conj(),
-        #             B.get_legs(3).conj(),
-        #             B.get_legs(3),
-        #             env[ms].br.get_legs(0).conj()]
-        #     env[ms].r = rand(config=config, legs=legs)
-        #     env[ms].t = env[ms].t.fuse_legs(axes=(0, (1, 2), 3))
-        #     env[ms].b = env[ms].b.fuse_legs(axes=(0, (1, 2), 3))
-        #     env[ms].l = env[ms].l.fuse_legs(axes=(0, (1, 2), 3))
-        #     env[ms].r = env[ms].r.fuse_legs(axes=(0, (1, 2), 3))
+        for site in self.sites():
+            legsA = self.psi[site].get_legs()
 
-        # return env
-
-
-@dataclass()
-class Local_ProjectorEnv():
-    """ data class for projectors labelled by a single lattice site calculated during ctm renormalization step """
-
-    hlt : any = None # horizontal left top
-    hlb : any = None # horizontal left bottom
-    hrt : any = None # horizontal right top
-    hrb : any = None # horizontal right bottom
-    vtl : any = None # vertical top left
-    vtr : any = None # vertical top right
-    vbl : any = None # vertical bottom left
-    vbr : any = None # vertical bottom right
-
-    def copy(self):
-        return Local_ProjectorEnv(hlt=self.hlt, hlb=self.hlb, hrt=self.hrt, hrb=self.hrb, vtl=self.vtl, vtr=self.vtr, vbl=self.vbl, vbr=self.vbr)
+            self[site] = Local_CTMEnv()
+            self[site].tl = tensor_init(config, legs=[leg0, leg0.conj()])
+            self[site].tr = tensor_init(config, legs=[leg0, leg0.conj()])
+            self[site].bl = tensor_init(config, legs=[leg0, leg0.conj()])
+            self[site].br = tensor_init(config, legs=[leg0, leg0.conj()])
+            self[site].t = tensor_init(config, legs=[leg0, legsA[0].conj(), leg0.conj()])
+            self[site].b = tensor_init(config, legs=[leg0, legsA[2].conj(), leg0.conj()])
+            self[site].l = tensor_init(config, legs=[leg0, legsA[1].conj(), leg0.conj()])
+            self[site].r = tensor_init(config, legs=[leg0, legsA[3].conj(), leg0.conj()])
 
 
 @dataclass()
