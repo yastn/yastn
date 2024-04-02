@@ -109,9 +109,10 @@ class SquareLattice():
 
     def site2index(self, site):
         """ Tensor index depending on site. """
-        if site not in self._sites:
+        x, y = site
+        if (self.boundary != 'infinite' and (x < 0 or x >= self.Nx or y < 0 or y >= self.Ny)):
             raise YastnError(f"Site {site} does not correspond to any lattice site.")
-        return site
+        return (x % self.Nx, y % self.Ny)
 
 
 class CheckerboardLattice(SquareLattice):
@@ -129,6 +130,6 @@ class CheckerboardLattice(SquareLattice):
 
     def site2index(self, site):
         """ Tensor index depending on site. """
-        if site not in ((0, 0), (0, 1), (1, 0), (1, 1)):
-            raise YastnError(f"Site {site} does not correspond to any lattice site.")
+        # if site not in ((0, 0), (0, 1), (1, 0), (1, 1)):
+        #     raise YastnError(f"Site {site} does not correspond to any lattice site.")
         return sum(site) % 2

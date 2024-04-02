@@ -25,13 +25,11 @@ def test_finite_spinless_boundary_mps_ctmrg():
 
     D = 6
 
-    opt = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
-    fid, fc, fcdag = opt.I(), opt.c(), opt.cp()
+    ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
+    fid, fc, fcdag = ops.I(), ops.c(), ops.cp()
 
-    GA_nn, GB_nn = fpeps.gates.gate_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
-    g_loc = fpeps.gates.gate_local_fermi_sea(mu, dbeta / 2, fid, fc, fcdag)  # local gate for spinless fermi sea
-    g_nn = [(GA_nn, GB_nn)]
-    gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
+    g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    gates = fpeps.gates_homogeneous(geometry, gates_nn=g_hop)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
     env = fpeps.EnvNTU(psi, which='NN+')
@@ -56,7 +54,7 @@ def test_finite_spinless_boundary_mps_ctmrg():
 
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
+    for step in ctmrg(psi, max_sweeps, iterator_step=1, opts_svd=opts_svd_ctm):
         obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
 
         cdagc = (sum(abs(val) for val in obs_hor.get('cdagc').values()) +
@@ -106,10 +104,8 @@ def test_spinless_infinite_approx():
 
     ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = ops.I(), ops.c(), ops.cp()
-    GA_nn, GB_nn = fpeps.gates.gate_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
-    g_loc = fpeps.gates.gate_local_fermi_sea(mu, dbeta / 2, fid, fc, fcdag) # local gate for spinless fermi sea
-    g_nn = [(GA_nn, GB_nn)]
-    gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
+    g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    gates = fpeps.gates_homogeneous(geometry, gates_nn=g_hop)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
     env = fpeps.EnvNTU(psi, which='NN+')

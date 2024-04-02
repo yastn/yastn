@@ -21,8 +21,8 @@ def test_Lattice():
                               ((1, 0), (0, 0)))
     assert net.bonds(reverse=True)[::1] == net.bonds()[::-1]
 
-    assert net.site2index((0, 0)) == net.site2index((1, 1)) == 0
-    assert net.site2index((1, 0)) == net.site2index((0, 1)) == 1
+    assert net.site2index((0, 0)) == net.site2index((1, 1)) == net.site2index((-3, 3)) == 0
+    assert net.site2index((1, 0)) == net.site2index((0, 1)) == net.site2index((2, 5)) == 1
     assert net.nn_site(Site(0, 1), d='r') == (0, 0)
     #
     ##########
@@ -74,8 +74,8 @@ def test_Peps_get_set():
     #
     psi[(0, 0)] = "Wannabe tensor"
     # on a checkerboard lattice we have the same tensor at Site(0, 0) and Site(1, 1)
-    assert psi[(0, 0)] == psi[(1, 1)] == "Wannabe tensor"
-    assert psi[(0, 1)] == psi[(1, 0)] == None
+    assert psi[(0, 0)] == psi[(1, 1)] == psi[(5, 1)] == "Wannabe tensor"
+    assert psi[(0, 1)] == psi[(1, 0)] == psi[(5, 0)] == None
     #
     ##########
     net = fpeps.SquareLattice(dims=(3, 3), boundary='obc')

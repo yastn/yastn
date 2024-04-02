@@ -14,10 +14,10 @@ dbeta = 0.01
 D = 12
 
 ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2')
-gate_hopping_u = fpeps.gates.gate_hopping(dbeta / 2, t, ops.I(), ops.c(spin='u'), ops.cp(spin='u'))
-gate_hopping_d = fpeps.gates.gate_hopping(dbeta / 2, t, ops.I(), ops.c(spin='d'), ops.cp(spin='d'))
-gate_loc_Hubbard = fpeps.gates.gate_Coulomb(dbeta / 2, mu, mu, U, ops.I(), ops.n(spin='u'), ops.n(spin='d'))
-gates = fpeps.gates_homogeneous(geometry, nn=[gate_hopping_u, gate_hopping_d], local=gate_loc_Hubbard)
+g_hop_u = fpeps.gates.gate_nn_hopping(t, dbeta / 2, ops.I(), ops.c(spin='u'), ops.cp(spin='u'))
+g_hop_d = fpeps.gates.gate_nn_hopping(t, dbeta / 2, ops.I(), ops.c(spin='d'), ops.cp(spin='d'))
+g_Hubbard = fpeps.gates.gate_local_Coulomb(dbeta / 2, mu, mu, U, ops.I(), ops.n(spin='u'), ops.n(spin='d'))
+gates = fpeps.gates_homogeneous(geometry, gates_nn=[g_hop_u, g_hop_d], gates_local=g_Hubbard)
 
 psi = fpeps.product_peps(geometry=geometry, vectors = ops.I())
 

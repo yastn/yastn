@@ -13,207 +13,29 @@ from yastn.tn.fpeps._doublePepsTensor import DoublePepsTensor
 from ._ctm_env import Local_ProjectorEnv
 import numpy as np
 
-
-def append_a_bl(tt, AAb):
-    """
-    tensor indices have counterclockwise order.
-    A indices counterclockwise order starting from top, then spin and ancilla indices.
-    tt indices counterclockwise order (e1,[t1,b1],e2,[t2,b2]).
-    """
-    if isinstance(AAb, DoublePepsTensor):
-        return AAb.append_a_bl(tt)
-    return append_a_bl2(tt, AAb)
-
-
-def append_a_bl2(tt, AAb):
-    # tt: e3 (2t 2b) (1t 1b) e0
-    # AAb['bl']: ((2t 2b) (1t 1b)) ((0t 0b) (3t 3b))
-    tt = tt.fuse_legs(axes=((0, 3), (1, 2)))  # (e3 e0) ((2t 2b) (1t 1b))
-    tt = tensordot(tt, AAb['bl'], axes=(1, 0))
-    tt = tt.unfuse_legs(axes=(0, 1))  # e3 e0 (0t 0b) (3t 3b)
-    tt = tt.transpose(axes=(0, 3, 1, 2)) # e3 (3t 3b) e0 (0t 0b)
-    return tt
-
-def append_a_tr(tt, AAb):
-    """ ind like in append_a_bl """
-    if isinstance(AAb, DoublePepsTensor):
-        return AAb.append_a_tr(tt)
-    return append_a_tr2(tt, AAb)
-
-
-def append_a_tr2(tt, AAb):
-    # tt:  e1 (0t 0b) (3t 3b) e2
-    # AAb['bl']: ((2t 2b) (1t 1b)) ((0t 0b) (3t 3b))
-    tt = tt.fuse_legs(axes=((1, 2), (0, 3)))  # ((0t 0b) (3t 3b)) (e1 e2)
-    tt = tensordot(AAb['bl'], tt, axes=(1, 0))  # ((2t 2b) (1t 1b)) (e1 e2)
-    tt = tt.unfuse_legs(axes=(0, 1))  # (2t 2b) (1t 1b) e1 e2
-    tt = tt.transpose(axes=(2, 1, 3, 0))  # e1 (1t 1b) e2 (2t 2b)
-    return tt
-
-def append_a_tl(tt, AAb):
-    """ ind like in append_a_bl """
-    if isinstance(AAb, DoublePepsTensor):
-        return AAb.append_a_tl(tt)
-    return append_a_tl2(tt, AAb)
-
-
-def append_a_tl2(tt, AAb):
-    # tt: e2 (1t 1b) (0t 0b) e3
-    # AAb['tl']:  ((1t 1b) (0t 0b)) ((3t 3b) (2t 2b))
-    tt = tt.fuse_legs(axes=((0, 3), (1, 2)))  # (e2 e3) ((1t 1b) (0t 0b))
-    tt = tensordot(tt, AAb['tl'], axes=(1, 0))
-    tt = tt.unfuse_legs(axes=(0, 1))  # e2 e3 (3t 3b) (2t 2b)
-    tt = tt.transpose(axes=(0, 3, 1, 2))  # e2 (2t 2b) e3 (3t 3b)
-    return tt
-
-
-def append_a_br(tt, AAb):
-    """ ind like in append_a_bl """
-    if isinstance(AAb, DoublePepsTensor):
-        return AAb.append_a_br(tt)
-    return append_a_br2(tt, AAb)
-
-def append_a_br2(tt, AAb):
-    # tt: e0 (3t 3b) (2t 2b) e1
-    # AAb['tl']:  ((1t 1b) (0t 0b)) ((3t 3b) (2t 2b))
-    tt = tt.fuse_legs(axes=((1, 2), (0, 3)))  # ((3t 3b) (2t 2b)) (e0 e1)
-    tt = tensordot(AAb['tl'], tt, axes=(1, 0))  # ((1t 1b) (0t 0b)) (e0 e1)
-    tt = tt.unfuse_legs(axes=(0, 1))  # (1t 1b) (0t 0b) e0 e1
-    tt = tt.transpose(axes=(2, 1, 3, 0))  # e0 (0t 0b) e1 (1t 1b)
-    return tt
-
 def fcor_bl(env_b, env_bl, env_l, AAb):
-    """ Creates extended bottom left corner. Order of indices see append_a_bl. """
+    """ Creates extended bottom left corner. Order of indices see _attach_12. """
     corbln = tensordot(env_b, env_bl, axes=(2, 0))
     corbln = tensordot(corbln, env_l, axes=(2, 0))
-    return append_a_bl(corbln, AAb)
+    return AAb._attach_12(corbln)
 
 def fcor_tl(env_l, env_tl, env_t, AAb):
     """ Creates extended top left corner. """
     cortln = tensordot(env_l, env_tl, axes=(2, 0))
     cortln = tensordot(cortln, env_t, axes=(2, 0))
-    return append_a_tl(cortln, AAb)
+    return AAb._attach_01(cortln)
 
 def fcor_tr(env_t, env_tr, env_r, AAb):
     """ Creates extended top right corner. """
     cortrn = tensordot(env_t, env_tr, axes=(2, 0))
     cortrn = tensordot(cortrn, env_r, axes=(2, 0))
-    return append_a_tr(cortrn, AAb)
+    return AAb._attach_30(cortrn)
 
 def fcor_br(env_r, env_br, env_b, AAb):
     """ Creates extended bottom right corner. """
     corbrn = tensordot(env_r, env_br, axes=(2, 0))
     corbrn = tensordot(corbrn, env_b, axes=(2, 0))
-    return append_a_br(corbrn, AAb)
-
-
-def apply_TMO_left(vecl, env, indten, indop, AAb):
-    """ apply TM (bottom-AAB-top) to left boundary vector"""
-    new_vecl = tensordot(vecl, env[indten].t, axes=(2, 0))
-    new_vecl = append_a_tl(new_vecl, AAb[indop])
-    new_vecl = ncon((new_vecl, env[indten].b), ([1, 2, -3, -2], [-1, 2, 1]))
-    new_vecl = new_vecl.unfuse_legs(axes=1).unfuse_legs(axes=1)
-    if new_vecl.ndim == 5:
-        new_vecl = new_vecl.swap_gate(axes=((0, 3), 2))
-        new_vecl = new_vecl.fuse_legs(axes=((0, 2), (1, 3), 4))
-    elif new_vecl.ndim == 4:
-        new_vecl =  new_vecl.fuse_legs(axes=(0, (1, 2), 3))
-    return new_vecl
-
-
-def apply_TMO_right(vecr, env, indten, indop, AAb):
-    """ apply TM (top-AAB-bottom) to right boundary vector"""
-    new_vecr = tensordot(vecr, env[indten].b, axes=(2, 0))
-    new_vecr = append_a_br(new_vecr, AAb[indop])
-    new_vecr = ncon((new_vecr, env[indten].t), ([1, 2, -3, -2], [-1, 2, 1]))
-    new_vecr = new_vecr.unfuse_legs(axes=1).unfuse_legs(axes=1)
-    if new_vecr.ndim == 5:
-        new_vecr = new_vecr.swap_gate(axes=((3, 4), 2))
-        new_vecr =  new_vecr.fuse_legs(axes=(0, (1, 3), (4, 2)))
-    elif new_vecr.ndim == 4:
-        new_vecr =  new_vecr.fuse_legs(axes=(0, (1, 2), 3))
-    return new_vecr
-
-
-def apply_TM_left(vecl, env, indten, AAb):
-    """ apply TM (bottom-AAB-top) to left boundary vector"""
-    new_vecl = tensordot(vecl, env[indten].t, axes=(2, 0))
-    new_vecl = append_a_tl(new_vecl, AAb)
-    new_vecl = new_vecl.unfuse_legs(axes=0)
-    if new_vecl.ndim == 5:
-        new_vecl = ncon((new_vecl, env[indten].b), ([1, -4, 2, -3, -2], [-1, 2, 1]))
-        new_vecl = new_vecl.fuse_legs(axes=((0, 3), 1, 2))
-    elif new_vecl.ndim == 4:
-        new_vecl = ncon((new_vecl, env[indten].b), ([1, 2, -3, -2], [-1, 2, 1]))
-    return new_vecl
-
-
-def apply_TMO_top(vect, env, indten, indop, AAb):
-    """ apply TMO (top-AAB-bottom) to top boundary vector"""
-    new_vect = tensordot(env[indten].l, vect, axes=(2, 0))
-    new_vect = append_a_tl(new_vect, AAb[indop])
-    new_vect = ncon((new_vect, env[indten].r), ([-1, -2, 2, 1], [2, 1, -3]))
-    new_vect = new_vect.unfuse_legs(axes=1).unfuse_legs(axes=1)
-    if new_vect.ndim == 5:
-        new_vect = new_vect.swap_gate(axes=((1, 4), 2))
-        new_vect =  new_vect.fuse_legs(axes=(0, (1, 3), (4, 2)))
-    elif new_vect.ndim == 4:
-        new_vect =  new_vect.fuse_legs(axes=(0, (1, 2), 3))
-    return new_vect
-
-
-def apply_TMO_bottom(vecb, env, indten, indop, AAb):
-    """ apply TMO (bottom-AAB-top) to bottom boundary vector"""
-    new_vecb = tensordot(env[indten].r, vecb, axes=(2, 0))
-    new_vecb = append_a_br(new_vecb, AAb[indop])
-    new_vecb = ncon((new_vecb, env['strl', indten]), ([-1, -2, 1, 2], [1, 2, -3]))
-    new_vecb = new_vecb.unfuse_legs(axes=1).unfuse_legs(axes=1)
-    if new_vecb.ndim == 5:
-        new_vecb = new_vecb.swap_gate(axes=((0, 1), 2))
-        new_vecb =  new_vecb.fuse_legs(axes=((0, 2), (1, 3), 4))
-    elif new_vecb.ndim == 4:
-        new_vecb =  new_vecb.fuse_legs(axes=(0, (1, 2), 3))
-    return new_vecb
-
-
-def apply_TM_top(vect, env, indten, AAb):
-    """ apply TM (left-AAB-right)   to top boundary vector"""
-    new_vect = tensordot(env[indten].l, vect, axes=(2, 0))
-    new_vect = append_a_tl(new_vect, AAb)
-    new_vect = new_vect.unfuse_legs(axes=2)
-    if new_vect.ndim == 5:
-        new_vect = ncon((new_vect, env[indten].r), ([-1, -2, 2, -4, 1], [2, 1, -3]))
-        new_vect = new_vect.fuse_legs(axes=(0, 1, (2, 3)))
-    elif new_vect.ndim == 4:
-        new_vect = ncon((new_vect, env[indten].r), ([-1, -2, 2, 1], [2, 1, -3]))
-    return new_vect
-
-
-
-def EV2sNN_ver(env, indten_t, indten_b, indop_t, indop_b, AAb):
-    """
-    Calculates 2-site verical NN expectation value.
-    indt is the top PEPS index. indb is the bottom PEPS index.
-    """
-    cortln = fcor_tl(env, indten_t, indop_t, AAb)
-    corttn = ncon((cortln, env[indten_t].tr, env[indten_t].r), ((-0, -1, 2, 3), (2, 1), (1, 3, -2)))
-    del cortln
-    corbrn = fcor_br(env, indten_b, indop_b, AAb)
-    corbbn = ncon((corbrn, env[indten_b].l, env[indten_b].bl), ((-2, -1, 2, 3), (1, 3, -0), (2, 1)))
-    del corbrn
-    return vdot(corttn, corbbn, conj=(0, 0))
-
-
-def EV1s(env, indop, AAb):
-    """
-    Calculates 1-site expectation value.
-    indt is the top PEPS index. indb is the bottom PEPS index.
-    """
-    indten = 0 if indop == 'l' else 1
-    cortln = fcor_tl(env, indten, indop, AAb)
-    top_part = ncon((cortln, env[indten].tr, env[indten].r), ((-0, -1, 2, 3), (2, 1), (1, 3, -2)))
-    bot_part = ncon((env[indten].br, env[indten].b, env[indten].bl), ((-2, 1), (1, -1, 2), (2, -0)))
-    return vdot(top_part, bot_part, conj=(0, 0))
+    return AAb._attach_23(corbrn)
 
 
 def proj_Cor(rt, rb, fix_signs, opts_svd):
@@ -407,12 +229,12 @@ def move_horizontal(envn, env, AAb, proj, ms):
 
     if not(left is None):
         tt_l = tensordot(env[left].l, proj[left].hlt, axes=(2, 0))
-        tt_l = append_a_tl(tt_l, AAb[left])
+        tt_l = AAb[left]._attach_01(tt_l)
         envn[ms].l = ncon((proj[left].hlb, tt_l), ([2, 1, -0], [2, 1, -2, -1]))
 
     if not(right is None):
         tt_r = tensordot(env[right].r, proj[right].hrb, axes=(2,0))
-        tt_r = append_a_br(tt_r, AAb[right])
+        tt_r = AAb[right]._attach_23(tt_r)
         envn[ms].r = ncon((tt_r, proj[right].hrt), ([1, 2, -3, -2], [1, 2, -1]))
 
     envn[ms].tl = envn[ms].tl/ envn[ms].tl.norm(p='inf')
@@ -481,11 +303,11 @@ def move_vertical(envn, env, AAb, proj, ms):
                                ([2, 1, -1], [3, 2], [-0, 1, 3]))
     if not(top is None):
         ll_t = ncon((proj[top].vtl, env[top].t), ([1, -1, -0], [1, -2, -3]))
-        ll_t = append_a_tl(ll_t, AAb[top])
+        ll_t = AAb[top]._attach_01(ll_t)
         envn[ms].t = ncon((ll_t, proj[top].vtr), ([-0, -1, 2, 1], [2, 1, -2]))
     if not(bottom is None):
         ll_b = ncon((proj[bottom].vbr, env[bottom].b), ([1, -2, -1], [1, -3, -4]))
-        ll_b = append_a_br(ll_b, AAb[bottom])
+        ll_b = AAb[bottom]._attach_23(ll_b)
         envn[ms].b = ncon((ll_b, proj[bottom].vbl), ([-0, -1, 1, 2], [1, 2, -3]))
 
     envn[ms].tl = envn[ms].tl/ envn[ms].tl.norm(p='inf')
@@ -522,8 +344,6 @@ def trivial_projector(a, b, c, dirn):
     tmp = initialize.ones(b.A.config, legs=[la.conj(), lb.conj(), lc.conj()])
 
     return tmp
-
-
 
 def CTM_it(env, AAb, fix_signs, opts_svd=None):
     r"""Perform one step of CTMRG update for a mxn lattice.
@@ -736,46 +556,6 @@ def fPEPS_2layers(A, B=None, op=None, dir=None):
         B = B
     AAb = DoublePepsTensor(top=Ao, btm=B)
     return AAb
-
-
-def fPEPS_fuse_layers(AAb, EVonly=False):
-
-    r"""
-    Fuse two layers of PEPS tensors along their vertical and horizontal bonds to obtain a new, thicker
-    layer.
-
-    Parameters
-    ----------
-        AAb (dict): A dictionary of PEPS tensors for the two adjacent layers, with keys 'A', 'Ab', 'B', 'Bb', etc.
-        EVonly (bool): If True, only compute and return the top-left corner of the fused layer, containing the
-            eigenvectors. If False (default), also compute and return the bottom-left corner, containing the
-            singular values.
-
-    Returns
-    -------
-        dict: A dictionary containing the fused PEPS tensor for the new, thicker layer, with keys 'tl' (top-left
-            corner) and 'bl' (bottom-left corner, only if EVonly is False).
-    """
-
-    for st in AAb.values():
-        fA = st.top.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0t 1t) (2t 3t) 4t
-       # st.pop('A')
-        fAb = st.btm.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0b 1b) (2b 3b) 4b
-       # st.pop('Ab')
-        tt = tensordot(fA, fAb, axes=(2, 2), conj=(0, 1))  # (0t 1t) (2t 3t) (0b 1b) (2b 3b)
-        tt = tt.fuse_legs(axes=(0, 2, (1, 3)))  # (0t 1t) (0b 1b) ((2t 3t) (2b 3b))
-        tt = tt.unfuse_legs(axes=(0, 1))  # 0t 1t 0b 1b ((2t 3t) (2b 3b))
-        tt = tt.swap_gate(axes=(1, 2))  # 0t 1t 0b 1b ((2t 3t) (2b 3b))
-        tt = tt.fuse_legs(axes=((0, 2), (1, 3), 4))  # (0t 0b) (1t 1b) ((2t 3t) (2b 3b))
-        tt = tt.fuse_legs(axes=((1, 0), 2))  # ((1t 1b) (0t 0b)) ((2t 3t) (2b 3b))
-        tt = tt.unfuse_legs(axes=1)  # ((1t 1b) (0t 0b)) (2t 3t) (2b 3b)
-        tt = tt.unfuse_legs(axes=(1, 2))  # ((1t 1b) (0t 0b)) 2t 3t 2b 3b
-        tt = tt.swap_gate(axes=(1, 4))  # ((1t 1b) (0t 0b)) 2t 3t 2b 3b
-        tt = tt.fuse_legs(axes=(0, (1, 3), (2, 4)))  # ((1t 1b) (0t 0b)) (2t 2b) (3t 3b)
-        st['tl'] = tt.fuse_legs(axes=(0, (2, 1))) # ((1t 1b) (0t 0b)) ((3t 3b) (2t 2b))
-        if not EVonly:
-            tt = tt.unfuse_legs(axes=0)  # (1t 1b) (0t 0b) (2t 2b) (3t 3b)
-            st['bl'] = tt.fuse_legs(axes=((2, 0), (1, 3)))  # ((2t 2b) (1t 1b)) ((0t 0b) (3t 3b))
 
 
 def check_consistency_tensors(A):

@@ -4,26 +4,9 @@ tu supports fermions though application of swap-gates.
 PEPS tensors have 5 legs: (top, left, bottom, right, system)
 In case of purification, system leg is a fusion of (ancilla, system)
 """
-from yastn.tn.fpeps.gates._gates import match_ancilla_1s, match_ancilla_2s
-from yastn import tensordot, vdot, svd_with_truncation, svd, qr, ncon, eigh_with_truncation
+from ... import tensordot, vdot, svd_with_truncation, svd, qr, ncon, eigh_with_truncation
+from .gates import match_ancilla_1s, match_ancilla_2s
 from typing import NamedTuple
-
-
-class Gate_nn(NamedTuple):
-    """ A should be before B in the fermionic order. """
-    A : tuple = None
-    B : tuple = None
-    bond : tuple = None
-
-
-class Gate_local(NamedTuple):
-    A : tuple = None
-    site : tuple = None
-
-
-class Gates(NamedTuple):
-    local : list = None   # list of Gate_local
-    nn : list = None   # list of Gate_nn
 
 
 class Evolution_out(NamedTuple):
@@ -143,10 +126,10 @@ def apply_nn_gate_and_truncate_(env, gate, opts_svd=None, initialization="EAT",
     S._data[S._data < asmin] = asmin
     fgf_fixed = U @ S @ U.H
 
-    MA, MB, truncation_error, optimal_pinv_cutoff = truncate_and_optimize(fgf_fixed, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter)
+    MA, MB, truncation_error2, optimal_pinv_cutoff = truncate_and_optimize(fgf_fixed, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter)
     env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QAf, QBf, MA, MB, gate.bond)
 
-    return Evolution_out(truncation_error=truncation_error,
+    return Evolution_out(truncation_error=truncation_error2 ** 0.5,
                          optimal_pinv_cutoff=optimal_pinv_cutoff,
                          min_eigenvalue = smin / smax,
                          second_eigenvalue = smax2 / smax,
@@ -167,10 +150,10 @@ def truncate_and_optimize(fgf, RA, RB, initialization, opts_svd, pinv_cutoffs, m
     gRAB =  gf @ RAB
     gRR = vdot(RAB, fgRAB).item()
 
-    MA, MB, svd_error = environment_aided_truncation_step(gRR, fgf, fgRAB, RA, RB, initialization, opts_svd, pinv_cutoffs)
-    MA, MB, tu_errorB, optimal_cf  = tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, pinv_cutoffs, max_iter)
+    MA, MB, svd_error2 = environment_aided_truncation_step(gRR, fgf, fgRAB, RA, RB, initialization, opts_svd, pinv_cutoffs)
+    MA, MB, truncation_error2, optimal_pinv_cutoff  = tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error2, pinv_cutoffs, max_iter)
     MA, MB = truncation_step(MA, MB, opts_svd, normalize=True)
-    return MA, MB, tu_errorB, optimal_cf
+    return MA, MB, truncation_error2, optimal_pinv_cutoff
 
 
 def truncation_step(RA, RB, opts_svd, normalize=False):
@@ -193,7 +176,7 @@ def environment_aided_truncation_step(gRR, fgf, fgRAB, RA, RB, initialization, o
     Returns
     -------
         MA, MB: truncated pair of tensors before alternate least square optimization
-        svd_error: here just implies the error incurred for the initial truncation
+        svd_error2: here just implies the error2 incurred for the initial truncation
                before the optimization
     """
 
@@ -210,25 +193,25 @@ def environment_aided_truncation_step(gRR, fgf, fgRAB, RA, RB, initialization, o
         XRRX = XL @ XR
         U, L, V = svd_with_truncation(XRRX, sU=RA.get_signature()[1], **opts_svd)
         mA, mB = U @ L.sqrt(), L.sqrt() @ V
-        MA, MB, svd_error, _ = optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB, pinv_cutoffs)
-        return MA, MB, svd_error
+        MA, MB, svd_error2, _ = optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB, pinv_cutoffs)
+        return MA, MB, svd_error2
     elif initialization == 'SVD':
         MA, MB = truncation_step(RA, RB, opts_svd)
         MAB = MA @ MB
         MAB = MAB.fuse_legs(axes=[(0, 1)])
         gMM = vdot(MAB, fgf @ MAB).item()
         gMR = vdot(MAB, fgRAB).item()
-        svd_error = abs((gMM + gRR - gMR - gMR.conjugate()) / gRR)
+        svd_error2 = abs((gMM + gRR - gMR - gMR.conjugate()) / gRR)
 
-    return MA, MB, svd_error
+    return MA, MB, svd_error2
 
 
-def tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, pinv_cutoffs, max_iter):
+def tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error2, pinv_cutoffs, max_iter):
 
     """ Optimizes the matrices MA and MB by minimizing the truncation error using least square optimization """
 
     MA_guess, MB_guess = MA, MB
-    tu_errorA_old, tu_errorB_old = 0, 0
+    truncation_error2_old_A, truncation_error2_old_B = 0, 0
     epsilon1, epsilon2 = 0, 0
 
     for _ in range(max_iter):
@@ -237,14 +220,14 @@ def tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, pinv_cutoffs, max_i
         g_A = tensordot(MB, gf, axes=(1, 1), conj=(1, 0)).fuse_legs(axes=((1, 0), 2))
         g_A = g_A.unfuse_legs(axes=1)
         g_A = tensordot(g_A, MB, axes=(2, 1)).fuse_legs(axes=(0, (1, 2)))
-        tu_errorA, optimal_cf, MA = optimal_pinv(g_A, j_A, gRR, pinv_cutoffs)
+        truncation_error2, optimal_pinv_cutoff, MA = optimal_pinv(g_A, j_A, gRR, pinv_cutoffs)
 
-        epsilon1 = abs(tu_errorA_old - tu_errorA)
-        tu_errorA_old = tu_errorA
+        epsilon1 = abs(truncation_error2_old_A - truncation_error2)
+        truncation_error2_old_A = truncation_error2
         count1, count2 = 0, 0
-        if abs(tu_errorA) >= abs(svd_error):
+        if truncation_error2 >= svd_error2:
             MA = MA_guess
-            epsilon1, tu_errorA_old = 0, 0
+            epsilon1, truncation_error2_old_A = 0, 0
             count1 += 1
 
          # fix MA and optimize MB
@@ -252,14 +235,14 @@ def tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, pinv_cutoffs, max_i
         g_B = tensordot(MA, gf, axes=(0, 0), conj=(1, 0)).fuse_legs(axes=((0, 1), 2))
         g_B = g_B.unfuse_legs(axes=1)
         g_B = tensordot(g_B, MA, axes=(1, 0)).fuse_legs(axes=(0, (2, 1)))
-        tu_errorB, optimal_cf, MB = optimal_pinv(g_B, j_B, gRR, pinv_cutoffs)
+        truncation_error2, optimal_pinv_cutoff, MB = optimal_pinv(g_B, j_B, gRR, pinv_cutoffs)
 
-        epsilon2 = abs(tu_errorB_old - tu_errorB)
-        tu_errorB_old = tu_errorB
+        epsilon2 = abs(truncation_error2_old_B - truncation_error2)
+        truncation_error2_old_B = truncation_error2
 
-        if abs(tu_errorB) >= abs(svd_error):
+        if truncation_error2 >= svd_error2:
             MB = MB_guess
-            epsilon2, tu_errorB_old = 0, 0
+            epsilon2, truncation_error2_old_B = 0, 0
             count2 += 1
 
         count = count1 + count2
@@ -267,15 +250,15 @@ def tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error, pinv_cutoffs, max_i
             break
 
         epsilon = max(epsilon1, epsilon2)
-        if epsilon < 1e-14: ### convergence condition
+        if epsilon < 1e-13:  # convergence condition
             break
 
-    return MA, MB, tu_errorB, optimal_cf
+    return MA, MB, truncation_error2, optimal_pinv_cutoff
 
 
 def optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB, pinv_cutoffs):
 
-    """ function for choosing the optimal initial cutoff for the inverse which gives the least svd_error """
+    """ function for choosing the optimal initial cutoff for the inverse which gives the least svd_error2 """
 
     results = []
     for c_off in pinv_cutoffs:
@@ -286,15 +269,16 @@ def optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB, pinv_c
         MAB = MAB.fuse_legs(axes=[(0, 1)])
         gMM = vdot(MAB, fgf @ MAB).item()
         gMR = vdot(MAB, fgRAB).item()
-        svd_error = abs((gMM + gRR - gMR - gMR.conjugate()) / gRR)
-        results.append((svd_error, c_off, MA, MB))
-    svd_error, c_off, MA, MB = min(results, key=lambda x: x[0])
+        svd_error2 = abs((gMM + gRR - gMR - gMR.conjugate()) / gRR)
+        results.append((svd_error2, c_off, MA, MB))
 
-    return MA, MB, svd_error, c_off
+    svd_error2, c_off, MA, MB = min(results, key=lambda x: x[0])
+
+    return MA, MB, svd_error2, c_off
 
 
 def optimal_pinv(gg, J, gRR, pinv_cutoffs):
-    """ solve pinv(gg) * J, optimizing pseudoinverse cutoff for tu error. """
+    """ solve pinv(gg) * J, optimizing pseudoinverse cutoff for tu error2. """
 
     assert (gg - gg.conj().transpose(axes=(1, 0))).norm() < 1e-12 * gg.norm()
     S, U = eigh_with_truncation(gg, axes=(0, 1), tol=1e-14)
@@ -310,13 +294,13 @@ def optimal_pinv(gg, J, gRR, pinv_cutoffs):
         # calculation of errors with respect to metric
         met_newA = vdot(Mnew, gg @ Mnew).item()
         met_mixedA = vdot(Mnew, J).item()
-        tu_error = abs((met_newA + gRR - met_mixedA - met_mixedA.conjugate()) / gRR)
-        results.append((tu_error, c_off, Mnew))
+        error2 = abs((met_newA + gRR - met_mixedA - met_mixedA.conjugate()) / gRR)
+        results.append((error2, c_off, Mnew))
 
-    tu_error, c_off, Mnew = min(results, key=lambda x: x[0])
+    truncation_error2, optimal_pinv_cutoff, Mnew = min(results, key=lambda x: x[0])
 
     Mnew = Mnew.unfuse_legs(axes=0)
-    return tu_error, c_off, Mnew
+    return truncation_error2, optimal_pinv_cutoff, Mnew
 
 
 def apply_local_gate_(env, gate):
@@ -406,30 +390,3 @@ def form_new_peps_tensors(QAf, QBf, MA, MB, bond):
         B = B.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
         B = B.unfuse_legs(axes=1)  # [t l] [b r] sa
     return A, B
-
-
-def gates_homogeneous(peps, nn, local):
-    """
-    Generate a list of gates that is homogeneous over the lattice.
-
-    Parameters
-    ----------
-    peps      : class Lattice
-    nn : list
-              A list of two-tuples, each containing the tensors that form a two-site
-              nearest-neighbor gate.
-    local : A two-tuple containing the tensors that form the single-site gate.
-
-    Returns
-    -------
-    Gates: The generated gates. The NamedTuple 'Gates` named tuple contains a list of
-      local and nn gates along with info where they should be applied.
-    """
-    gates_nn = []   # nn = [(GA, GB), (GA, GB)]   [(GA, GB, GA, GB)]
-    for bd in peps.bonds():
-        for i in range(len(nn)):
-            gates_nn.append(Gate_nn(A=nn[i][0], B=nn[i][1], bond=bd))
-    gates_loc = []
-    for site in peps.sites():
-        gates_loc.append(Gate_local(A=local, site=site))
-    return Gates(local=gates_loc, nn=gates_nn)

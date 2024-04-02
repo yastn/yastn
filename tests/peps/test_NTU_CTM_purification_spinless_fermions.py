@@ -4,7 +4,7 @@ import pytest
 import logging
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, EV2ptcorr
+from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, EVnn
 try:
     from .configs import config_U1_R_fermionic as cfg
     # cfg is used by pytest to inject different backends and divices
@@ -28,13 +28,12 @@ def test_NTU_spinless_finite():
     ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = ops.I(), ops.c(), ops.cp()
 
-    G_hop = fpeps.gates.gate_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
-    g_loc = fpeps.gates.gate_local_fermi_sea(mu, dbeta / 2, fid, fc, fcdag) # local gate for spinless fermi sea
-    g_nn = [G_hop]
-    gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
+    g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    g_loc = fpeps.gates.gate_local_occupation(mu, dbeta / 2, ops.I(), ops.n())  # local gate for spinless fermi sea
+    gates = fpeps.gates_homogeneous(geometry, gates_nn=g_hop, gates_local=g_loc)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
-    env = fpeps.EnvNTU(psi, which='NN')
+    env = fpeps.EnvNTU(psi, which='NNN++')
 
     opts_svd = {"D_total": D, 'tol_block': 1e-15}
     steps = np.rint((beta / 2) / dbeta).astype(int)
@@ -53,7 +52,7 @@ def test_NTU_spinless_finite():
 
     cf_energy_old = 0
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
-    for step in ctmrg(psi, max_sweeps, iterator_step=2, AAb_mode=0, fix_signs=False, opts_svd=opts_svd_ctm):
+    for step in ctmrg(psi, max_sweeps, iterator_step=2, fix_signs=False, opts_svd=opts_svd_ctm):
         obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
 
         cdagc = (sum(abs(val) for val in obs_hor['cdagc'].values()) +
@@ -67,13 +66,13 @@ def test_NTU_spinless_finite():
             break
         cf_energy_old = cf_energy
 
-    bd_h = fpeps.Bond(site0=(2, 0), site1=(2, 1))
-    bd_v = fpeps.Bond(site0=(0, 1), site1=(1, 1))
+    bd_h = fpeps.Bond(fpeps.Site(2, 0), fpeps.Site(2, 1))
+    bd_v = fpeps.Bond(fpeps.Site(0, 1), fpeps.Site(1, 1))
 
-    nn_CTM_bond_1 = 0.5 * (abs(EV2ptcorr(psi, step.env, ops['cdagc'], bd_h.site0, bd_h.site1)) +
-                           abs(EV2ptcorr(psi, step.env, ops['ccdag'], bd_h.site0, bd_h.site1)))
-    nn_CTM_bond_2 = 0.5 * (abs(EV2ptcorr(psi, step.env, ops['cdagc'], bd_v.site0, bd_v.site1)) +
-                           abs(EV2ptcorr(psi, step.env, ops['ccdag'], bd_v.site0, bd_v.site1)))
+    nn_CTM_bond_1 = 0.5 * (abs(EVnn(psi, step.env, bd_h.site0, bd_h.site1, ops['cdagc'])) +
+                           abs(EVnn(psi, step.env, bd_h.site0, bd_h.site1, ops['ccdag'])))
+    nn_CTM_bond_2 = 0.5 * (abs(EVnn(psi, step.env, bd_v.site0, bd_v.site1, ops['cdagc'])) +
+                           abs(EVnn(psi, step.env, bd_v.site0, bd_v.site1, ops['ccdag'])))
 
     # analytical nn fermionic correlator at beta = 0.2 for 2D finite (2, 3) lattice;
     nn_bond_1_exact = 0.04934701696955436  # bond between (1, 1) and (1, 2)
@@ -95,10 +94,9 @@ def test_NTU_spinless_infinite():
 
     ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     fid, fc, fcdag = ops.I(), ops.c(), ops.cp()
-    GA_nn, GB_nn = fpeps.gates.gate_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
-    g_loc = fpeps.gates.gate_local_fermi_sea(mu, dbeta / 2, fid, fc, fcdag) # local gate for spinless fermi sea
-    g_nn = [(GA_nn, GB_nn)]
-    gates = fpeps.gates_homogeneous(geometry, g_nn, g_loc)
+    g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    g_loc = fpeps.gates.gate_local_occupation(mu, dbeta / 2, ops.I(), ops.n())  # local gate for spinless fermi sea
+    gates = fpeps.gates_homogeneous(geometry, gates_nn=g_hop, gates_local=g_loc)
 
     psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
     env = fpeps.EnvNTU(psi, which='NN')
@@ -119,7 +117,7 @@ def test_NTU_spinless_infinite():
            'ccdag': {'l': fc, 'r': fcdag}}
     cf_energy_old = 0
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
-    for step in ctmrg(psi, max_sweeps, iterator_step=1, AAb_mode=0, opts_svd=opts_svd_ctm):
+    for step in ctmrg(psi, max_sweeps, iterator_step=1, opts_svd=opts_svd_ctm):
         obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
 
         cdagc = (sum(abs(val) for val in obs_hor.get('cdagc').values()) +
