@@ -4,7 +4,7 @@ import pytest
 import logging
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg, EVnn
+from yastn.tn.fpeps.ctm import nn_exp_dict, EVnn
 try:
     from .configs import config_U1_R_fermionic as cfg
     # cfg is used by pytest to inject different backends and divices
@@ -52,7 +52,7 @@ def test_NTU_spinless_finite():
 
     cf_energy_old = 0
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
-    for step in ctmrg(psi, max_sweeps, iterator_step=2, fix_signs=False, opts_svd=opts_svd_ctm):
+    for step in fpeps.ctmrg(psi, max_sweeps, iterator_step=2, fix_signs=False, opts_svd=opts_svd_ctm):
         obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
 
         cdagc = (sum(abs(val) for val in obs_hor['cdagc'].values()) +
@@ -117,7 +117,7 @@ def test_NTU_spinless_infinite():
            'ccdag': {'l': fc, 'r': fcdag}}
     cf_energy_old = 0
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
-    for step in ctmrg(psi, max_sweeps, iterator_step=1, opts_svd=opts_svd_ctm):
+    for step in fpeps.ctmrg(psi, max_sweeps, iterator_step=1, opts_svd=opts_svd_ctm):
         obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
 
         cdagc = (sum(abs(val) for val in obs_hor.get('cdagc').values()) +

@@ -111,8 +111,8 @@ class Peps2Layers():
 
         Empty PEPS has no tensors assigned.
         """
-        if ket is None:
-            ket = bra
+        bra = peps_unfuse(bra)
+        ket = bra if ket is None else peps_unfuse(ket)
 
         self.bra = bra
         self.ket = ket
@@ -131,3 +131,14 @@ class Peps2Layers():
     def __getitem__(self, site):
         """ Get tensor for site. """
         return DoublePepsTensor(top=self.ket[site], btm=self.bra[site])
+
+
+def peps_unfuse(psi):
+    """ unfuse peps virtual legs if needed. """
+    if psi[0, 0].ndim != 3:
+        return psi
+
+    phi = Peps(geometry=psi.geometry)
+    for site in psi.sites():
+        phi[site] = psi[site].unfuse_legs(axes=(0, 1))
+    return phi

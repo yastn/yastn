@@ -61,11 +61,9 @@ def match_ancilla_2s(G, A, dir=None):
 
 
 def decompose_nn_gate(Gnn):
-    U, S, V = Gnn.svd_with_truncation(axes = ((0, 2), (1, 3)), sU = -1, tol = 1e-15, Vaxis=2)
+    U, S, V = Gnn.svd_with_truncation(axes=((0, 2), (1, 3)), sU=-1, tol=1e-14, Vaxis=2)
     S = S.sqrt()
-    GA = S.broadcast(U, axes=2)
-    GB = S.broadcast(V, axes=2)
-    return Gate_nn(GA, GB)
+    return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2))
 
 
 def gate_nn_hopping(t, step, I, c, cdag):

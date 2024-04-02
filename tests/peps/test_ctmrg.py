@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.ctm import nn_exp_dict, ctmrg
+from yastn.tn.fpeps.ctm import nn_exp_dict
 
 try:
     from .configs import config_dense as cfg
@@ -61,7 +61,7 @@ def ctm_for_Onsager(peps, ops, Z_exact):
     ops = {'magA1': {'l': ops.z(), 'r': ops.I()},
            'magB1': {'l': ops.I(), 'r': ops.z()}}
 
-    for step in ctmrg(peps, max_sweeps, iterator_step=4, opts_svd=opts_svd):
+    for step in fpeps.ctmrg(peps, max_sweeps, iterator_step=4, opts_svd=opts_svd):
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
 
         ob_hor, ob_ver = nn_exp_dict(peps, step.env, ops)
