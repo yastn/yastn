@@ -3,7 +3,6 @@ import numpy as np
 import yastn
 import yastn.tn.fpeps as fpeps
 import yastn.tn.mps as mps
-from yastn.tn.fpeps.ctm import nn_exp_dict
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg
@@ -35,40 +34,25 @@ def test_finite_spinless_boundary_mps_ctmrg():
     env = fpeps.EnvNTU(psi, which='NN+')
 
     opts_svd = {'D_total': D, 'tol_block': 1e-15}
-    steps = np.rint((beta / 2) / dbeta).astype(int)
+    steps = round((beta / 2) / dbeta)
     for step in range(steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
 
 
     # convergence criteria for CTM based on total energy
-    chi = 30 # environmental bond dimension
-    tol = 1e-10 # truncation of singular values of ctm projectors
-    max_sweeps = 50
-    tol_exp = 1e-7   # difference of some expectation value must be lower than tolerance
-
-    ops = {'cdagc': {'l': fcdag, 'r': fc},
-           'ccdag': {'l': fc, 'r': fcdag}}
-
-    cf_energy_old = 0
-
-    opts_svd_ctm = {'D_total': chi, 'tol': tol}
+    energy_old, tol_exp = 0, 1e-7
 
     env = fpeps.EnvCTM(psi)
-    for step in fpeps.ctmrg_(env, max_sweeps, iterator_step=1, opts_svd=opts_svd_ctm):
-        obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
+    opts_svd_ctm = {'D_total': 30, 'tol': 1e-10}
+    for step in fpeps.ctmrg_(env, max_sweeps=50, iterator_step=1, opts_svd=opts_svd_ctm):
+        cdagc = env.measure_nn(fcdag, fc)
+        energy = -2 * np.mean([*cdagc.values()])
 
-        cdagc = (sum(abs(val) for val in obs_hor.get('cdagc').values()) +
-                 sum(abs(val) for val in obs_ver.get('cdagc').values()))
-        ccdag = (sum(abs(val) for val in obs_hor.get('ccdag').values()) +
-                 sum(abs(val) for val in obs_ver.get('ccdag').values()))
-
-        cf_energy = - (cdagc + ccdag) / (Nx * Ny)
-
-        print("energy: ", cf_energy)
-        if abs(cf_energy - cf_energy_old) < tol_exp:
-            break # here break if the relative differnece is below tolerance
-        cf_energy_old = cf_energy
+        print("energy: ", energy)
+        if abs(energy - energy_old) < tol_exp:
+            break
+        energy_old = energy
 
     mpsenv = fpeps.EnvBoundaryMps(psi, opts_svd=opts_svd_ctm, setup='tlbr')
 
@@ -112,7 +96,7 @@ def test_spinless_infinite_approx():
     env = fpeps.EnvNTU(psi, which='NN+')
 
     opts_svd = {"D_total": D , 'tol_block': 1e-15}
-    steps = np.rint((beta / 2) / dbeta).astype(int)
+    steps = round((beta / 2) / dbeta)
     for step in range(steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="SVD")

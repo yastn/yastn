@@ -2,7 +2,6 @@
 from typing import NamedTuple
 from dataclasses import dataclass
 from ... import tensordot, ncon, svd_with_truncation, qr, ones
-from .envs._env_ctm import EnvCTM
 from ._peps import Peps
 
 #################################

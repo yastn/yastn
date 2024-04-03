@@ -1,6 +1,6 @@
 import numpy as np
 from typing import NamedTuple
-from ... import ncon, leg_undo_product, eye
+from ... import ncon, eye, tensordot
 
 
 class Gate_nn(NamedTuple):
@@ -30,7 +30,7 @@ def match_ancilla_1s(G, A):
             G = G.fuse_legs(axes=((0, 1), 2))  # new ancilla on outgoing leg
         return G
 
-    _, leg = leg_undo_product(leg)  # unfuse to get ancilla leg
+    _, leg = leg.unfuse_leg()  # unfuse to get ancilla leg
     one = eye(config=A.config, legs=[leg, leg.conj()], isdiag=False)
     Gsa = ncon((G, one), ((-0, -2), (-1, -3)))
     Gsa = Gsa.fuse_legs(axes=((0, 1), (2, 3)))
@@ -44,7 +44,7 @@ def match_ancilla_2s(G, A, dir=None):
     if not leg.is_fused():
         return G
 
-    _, leg = leg_undo_product(leg)  # unfuse to get ancilla leg
+    _, leg = leg.unfuse_leg()  # unfuse to get ancilla leg
     one = eye(config=A.config, legs=[leg, leg.conj()], isdiag=False)
 
     if G.ndim == 2:
@@ -94,6 +94,16 @@ def gate_nn_hopping(t, step, I, c, cdag):
     return decompose_nn_gate(G)
 
 
+# def Hamiltonian_nn_hopping():
+#     #  c1 dag c2 + c2dag c1
+#     pass
+#     c1 = c.add_leg(s=1).swap_gate(axes=(1, 2))
+#     c2dag = cdag.add_leg(s=-1)
+#     cc = cc + ncon([c1, c2dag], [(-0, -2, 1) , (-1, -3, 1)])
+#     return decompose_nn_gate(cc)
+
+
+
 def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn):
     """
     Local gate exp(-step * H)
@@ -108,6 +118,9 @@ def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn):
     G_loc = G_loc + nn * (np.exp(step * (mu_up + mu_dn)) - 1)
     return Gate_local(G_loc)
 
+
+# def Hamiltonian_local_Coulomb(n_up, n_dn):
+#     return Gate_local(n_up @ n_dn)
 
 def gate_local_occupation(mu, step, I, n):
     """
@@ -153,3 +166,58 @@ def gates_homogeneous(geometry, gates_nn=None, gates_local=None) -> Gates:
                 local.append(Gloc._replace(site=site))
 
     return Gates(nn=nn, local=local)
+
+
+def fuse_ancilla_wos(op, fid):
+    """ kron and fusion of local operator with identity for ancilla --- without string """
+    op = ncon((op, fid), ((-0, -2), (-1, -3)))
+    return op.fuse_legs(axes=((0, 1), (2, 3)))
+
+def fuse_ancilla_ws(op, fid, dirn):
+    """ kron and fusion of nn operator with identity for ancilla --- with string """
+    if dirn in 'lt':
+        op= op.add_leg(s=1).swap_gate(axes=(0, 2))
+        op = ncon((op, fid), ((-0, -2, -4), (-1, -3)))
+        op = op.swap_gate(axes=(3, 4)) # swap of connecting axis with ancilla is always in GA gate
+        op = op.fuse_legs(axes=((0, 1), (2, 3), 4))
+    elif dirn in 'rb':
+        op = op.add_leg(s=-1)
+        op = ncon((op, fid), ((-0, -2, -4), (-1, -3)))
+        op = op.fuse_legs(axes=((0, 1), (2, 3), 4))
+    return op
+
+def apply_gate(A, op, dir):
+    """
+    Prepare top and bottom peps tensors for CTM procedures.
+    Applies operators on top if provided, with dir = 'l', 'r', 't', 'b', '1s'
+    If dir = '1s', no auxiliary indices are introduced as the operator is local.
+    Here spin and ancilla legs of tensors are fused
+    """
+    leg = A.get_legs(axes=-1)
+
+    if not leg.is_fused():  # when there is no ancilla on A, only the physical index is present
+        A = A.add_leg(s=-1)
+        A = A.fuse_legs(axes=(0, 1, 2, 3, (4, 5)))  # new ancilla on outgoing leg
+        leg = A.get_legs(axes=-1)
+
+    _, leg = leg.unfuse_leg() # last leg of A should be fused
+    fid = eye(config=A.config, legs=[leg, leg.conj()], isdiag=False)
+
+    op_aux = fuse_ancilla_ws(op, fid, dirn=dir)
+    if dir == 't':
+        Ao = tensordot(A, op_aux, axes=(4, 1))
+        Ao = Ao.fuse_legs(axes=(0, 1, (2, 5), 3, 4)) # t l [b c] r [s a]
+    elif dir == 'b':
+        Ao = tensordot(A, op_aux, axes=(4, 1))
+        Ao = Ao.swap_gate(axes=(1, 5))
+        Ao = Ao.fuse_legs(axes=((0, 5), 1, 2, 3, 4)) # [t c] l b r [s a]
+    elif dir == 'l':
+        Ao = tensordot(A, op_aux, axes=(4, 1)) # t l b r [s a] c
+        Ao = Ao.swap_gate(axes=(2, 5))
+        Ao = Ao.fuse_legs(axes=(0, 1, 2, (3, 5), 4)) # t l b [r c] [s a]
+    elif dir == 'r':
+        Ao = tensordot(A, op_aux, axes=(4, 1))
+        Ao = Ao.fuse_legs(axes=(0, (1, 5), 2, 3, 4)) # t [l c] b r [s a]
+    else:
+        raise RuntimeError("dir should be equal to 'l', 'r', 't', 'b'")
+    return Ao

@@ -391,9 +391,9 @@ def test_leg_outer_product():
     assert pffa == lffa
     assert pffa.is_fused()
 
-    ul0, ul1 = yastn.leg_undo_product(lfa0)
-    ul2, ul3 = yastn.leg_undo_product(lfa1)
-    ulf0, ulf1 = yastn.leg_undo_product(lffa)
+    ul0, ul1 = lfa0.unfuse_leg()
+    ul2, ul3 = lfa1.unfuse_leg()
+    ulf0, ulf1 = lffa.unfuse_leg()
     assert (ul0, ul1, ul2, ul3) == (l0, l1, l2, l3)
     assert (ulf0, ulf1) == (lfa0, lfa1)
     assert not ul0.is_fused()

@@ -3,12 +3,10 @@ Test ctmrg on 2D Classical Ising model.
 Calculate expectation values using ctm for analytical dense peps tensors
 of 2D Ising model with zero transverse field (Onsager solution)
 """
-import logging
 import numpy as np
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.ctm import nn_exp_dict
 
 try:
     from .configs import config_dense as cfg
@@ -47,35 +45,34 @@ def gauges_random():
     return a, b
 
 
-def ctm_for_Onsager(peps, ops, Z_exact):
+def ctm_for_Onsager(psi, ops, Z_exact):
     """ Compares ctm expectation values with analytical result. """
 
     chi = 8 # max environmental bond dimension
     tol = 1e-10 # singular values of svd truncation of projectors
-    tol_exp = 1e-5 # tolerance for expectation values
+    tol_exp = 1e-5  # tolerance for expectation values
     max_sweeps = 100
 
-    cf_old = 0
     opts_svd = {'D_total': chi, 'tol': tol}
 
-    ops = {'magA1': {'l': ops.z(), 'r': ops.I()},
-           'magB1': {'l': ops.I(), 'r': ops.z()}}
-
-
-    env = fpeps.EnvCTM(peps)
+    Z_old = 0
+    env = fpeps.EnvCTM(psi)
     for step in fpeps.ctmrg_(env, max_sweeps, iterator_step=4, opts_svd=opts_svd):
         assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
+        Zlocal = env.measure_1site(ops.z())
+        Z = np.mean(list(Zlocal.values()))
+        print("Z expectation value: ", Z)
+        if abs(Z - Z_old) < tol_exp:
+            break
+        Z_old = Z
 
-        ob_hor, ob_ver = nn_exp_dict(peps, env, ops)
-        cf =  0.125 * (sum([abs(val) for val in ob_hor.get('magA1').values()]) +
-                sum([abs(val) for val in ob_hor.get('magB1').values()]) +
-                sum([abs(val) for val in ob_ver.get('magA1').values()]) +
-                sum([abs(val) for val in ob_ver.get('magB1').values()]))
-        print("expectation value: ", cf)
-        if abs(cf - cf_old) < tol_exp:
-            break # here break if the relative differnece is below tolerance
-        cf_old = cf
-    assert pytest.approx(cf, rel=1e-3) == Z_exact
+    Znn1 = env.measure_nn(ops.z(), ops.I())
+    Znn2 = env.measure_nn(ops.I(), ops.z())
+    Zs = [*Zlocal.values(), *Znn1.values(), *Znn2.values()]
+    Z = np.mean(Zs)
+
+    assert np.std(Zs) < tol_exp
+    assert pytest.approx(abs(Z), rel=1e-3) == Z_exact
 
 
 def test_ctm_loop():  ###high temperature
@@ -84,7 +81,7 @@ def test_ctm_loop():  ###high temperature
     Z_exact = 0.99602 # analytical value of magnetization up to 4 decimal places for beta = 0.7 (2D Classical Ising)
 
     ops = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
-    ops.random_seed(seed=0)
+    ops.random_seed(seed=30)
 
     T = create_Ising_tensor(ops.z(), beta)
     geometry = fpeps.CheckerboardLattice()

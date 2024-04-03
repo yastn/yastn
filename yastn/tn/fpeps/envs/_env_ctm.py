@@ -3,7 +3,8 @@ from dataclasses import dataclass
 from .... import rand, ones, YastnError, Leg, tensordot
 from ... import mps
 from .._peps import Peps, Peps2Layers
-from ..gates import match_ancilla_1s
+from ..gates import match_ancilla_1s, apply_gate
+from .._geometry import Bond
 
 
 class ctm_window(NamedTuple):
@@ -27,7 +28,6 @@ class EnvCTM(Peps):
                 windows.append(ctm_window(site, *win))
         self._windows = tuple(windows)
         self.init_()
-
 
     def copy(self):
         env = EnvCTM(self.psi)
@@ -85,7 +85,7 @@ class EnvCTM(Peps):
             self[site].l = tensor_init(config, legs=[leg0, legsA[1].conj(), leg0.conj()])
             self[site].r = tensor_init(config, legs=[leg0, legsA[3].conj(), leg0.conj()])
 
-    def measure_1site(self, O):
+    def measure_1site(self, op, site=None):
         r"""
         dictionary containing site coordinates as keys and their corresponding expectation values
 
@@ -95,22 +95,73 @@ class EnvCTM(Peps):
             class containing ctm environment tensors along with lattice structure data
         op: single site operator
         """
-        if not isinstance(O, dict):
-            O = {site: O for site in self.sites()}
+        if site is None:
+            return {site: self.measure_1site(op, site) for site in self.sites()}
 
-        results = {}
-        for site, op in O.items():
-            lenv = self[site]
-            ten = self.psi[site]
-            val_no = measure_one(lenv, ten)
+        lenv = self[site]
+        ten = self.psi[site]
+        val_no = measure_one(lenv, ten)
 
-            op_aux = match_ancilla_1s(op, ten.A)
-            ten.A = ten.A @ op_aux.T
+        op_aux = match_ancilla_1s(op, ten.A)
+        ten.A = ten.A @ op_aux.T
 
-            val_op = measure_one(lenv, ten)
-            results[site] = val_op / val_no
+        val_op = measure_one(lenv, ten)
+        return val_op / val_no
 
-        return results
+
+    def measure_nn(self, O0, O1, bond=None):
+        if bond is None:
+             return {bond: self.measure_nn(O0, O1, bond) for bond in self.bonds()}
+
+        bond = Bond(*bond)
+        env0 = self[bond.site0]
+        env1 = self[bond.site1]
+        ten0 = self.psi[bond.site0]
+        ten1 = self.psi[bond.site1]
+
+        if bond.dirn == 'h':
+            vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
+            vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
+
+            tmp0 = ten0._attach_01(vecl)
+            tmp0 = tensordot(env0.b, tmp0, axes=((2, 1), (0, 1)))
+            tmp1 = ten1._attach_23(vecr)
+            tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
+            val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
+
+            ten0.A = apply_gate(ten0.A, O0, dir='l')
+            ten1.A = apply_gate(ten1.A, O1, dir='r')
+
+            tmp0 = ten0._attach_01(vecl)
+            tmp0 = tensordot(env0.b, tmp0, axes=((2, 1), (0, 1)))
+            tmp1 = ten1._attach_23(vecr)
+            tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
+            val_op = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
+        else:
+            vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
+            vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
+
+            tmp0 = ten0._attach_01(vect)
+            tmp0 = tensordot(tmp0, env0.r, axes=((2, 3), (0, 1)))
+            tmp1 = ten1._attach_23(vecb)
+            tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
+            val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
+
+            ten0.A = apply_gate(ten0.A, O0, dir='t')
+            ten1.A = apply_gate(ten1.A, O1, dir='b')
+
+            tmp0 = ten0._attach_01(vect)
+            tmp0 = tensordot(tmp0, env0.r, axes=((2, 3), (0, 1)))
+            tmp1 = ten1._attach_23(vecb)
+            tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
+            val_op = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
+
+        return val_op / val_no
+
+
+    def update_(method="2site"):  # single sweep
+        pass
+
 
 
 def measure_one(lenv, ten):

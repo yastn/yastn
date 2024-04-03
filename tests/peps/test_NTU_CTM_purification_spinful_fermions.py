@@ -3,7 +3,6 @@ import numpy as np
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.ctm import nn_exp_dict, EVnn
 
 try:
     from .configs import config_U1xU1_R_fermionic as cfg
@@ -41,60 +40,40 @@ def test_NTU_spinful_finite():
     env = fpeps.EnvNTU(psi, which='NNN++')
 
     opts_svd = {"D_total": D, 'tol_block': 1e-15}
-    steps = np.rint((beta / 2) / dbeta).astype(int)
+    steps = round((beta / 2) / dbeta)
     for step in range(steps):
         print(f"beta = {(step + 1) * dbeta}" )
         out = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
 
-    # convergence criteria for CTM based on total energy
-    chi = 40  # environmental bond dimension
-    tol = 1e-10  # truncation of singular values of CTM projectors
-    max_sweeps = 50
-    tol_exp = 1e-7   # difference of some observable must be lower than tolernace
 
-    ops = {'cdagc_up': {'l': fcdag_up, 'r': fc_up},
-           'ccdag_up': {'l': fc_up, 'r': fcdag_up},
-           'cdagc_dn': {'l': fcdag_dn, 'r': fc_dn},
-           'ccdag_dn': {'l': fc_dn, 'r': fcdag_dn}}
-    cf_energy_old = 0
-    opts_svd_ctm = {'D_total': chi, 'tol': tol}
+    # convergence criteria for CTM based on total energy
+    energy_old, tol_exp = 0, 1e-7
 
     env = fpeps.EnvCTM(psi)
-    for step in fpeps.ctmrg_(env, max_sweeps, iterator_step=1, opts_svd=opts_svd_ctm):
-        # first entry of the function gives average of one-site observables of the sites
-        d_oc = step.env.measure_1site(n_int)
-        obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
-        cdagc_up = 0.5 * (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) +
-                          sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
-        ccdag_up = 0.5 * (sum(abs(val) for val in obs_hor.get('ccdag_up').values()) +
-                          sum(abs(val) for val in obs_ver.get('ccdag_up').values()))
-        cdagc_dn = 0.5 * (sum(abs(val) for val in obs_hor.get('cdagc_dn').values()) +
-                          sum(abs(val) for val in obs_ver.get('cdagc_dn').values()))
-        ccdag_dn = 0.5 * (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) +
-                          sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
+    opts_svd_ctm = {'D_total': 40, 'tol': 1e-10}
+    for step in fpeps.ctmrg_(env, max_sweeps=50, iterator_step=1, opts_svd=opts_svd_ctm):
 
-        cf_energy = U * sum(d_oc.values()) - (cdagc_up + ccdag_up + cdagc_dn + ccdag_dn) / (Nx * Ny)
+        d_oc = env.measure_1site(n_int)
+        cdagc_up = env.measure_nn(fcdag_up, fc_up)
+        cdagc_dn = env.measure_nn(fcdag_dn, fc_dn)
 
-        print("Energy: ", cf_energy)
-        if abs(cf_energy - cf_energy_old) < tol_exp:
+        cdagc_up.values()
+        energy = U * sum(d_oc.values()) - sum(cdagc_up.values()) - sum(cdagc_dn.values())
+
+        print("Energy: ", energy)
+        if abs(energy - energy_old) < tol_exp:
             break
-        cf_energy_old = cf_energy
-
-    bd_h = fpeps.Bond(fpeps.Site(2, 0), fpeps.Site(2, 1))
-    bd_v = fpeps.Bond(fpeps.Site(0, 1), fpeps.Site(1, 1))
-
-    nn_CTM_bond_1_up = 0.5 * (abs(EVnn(psi, step.env, bd_h.site0, bd_h.site1, ops['cdagc_up'])) +
-                              abs(EVnn(psi, step.env, bd_h.site0, bd_h.site1, ops['ccdag_up'])))
-    nn_CTM_bond_2_up = 0.5 * (abs(EVnn(psi, step.env, bd_v.site0, bd_v.site1, ops['cdagc_up'])) +
-                              abs(EVnn(psi, step.env, bd_v.site0, bd_v.site1, ops['ccdag_up'])))
-    nn_CTM_bond_1_dn = 0.5 * (abs(EVnn(psi, step.env, bd_h.site0, bd_h.site1, ops['cdagc_dn'])) +
-                              abs(EVnn(psi, step.env, bd_h.site0, bd_h.site1, ops['ccdag_dn'])))
-    nn_CTM_bond_2_dn = 0.5 * (abs(EVnn(psi, step.env, bd_v.site0, bd_v.site1, ops['cdagc_dn'])) +
-                              abs(EVnn(psi, step.env, bd_v.site0, bd_v.site1, ops['ccdag_dn'])))
+        energy_old = energy
 
     # analytical nn fermionic correlator at beta = 0.1 for 2D finite 2 x 3 lattice
     nn_bond_1_exact = 0.024917101651703362  # bond between (1, 1) and (1, 2)
     nn_bond_2_exact = 0.024896433958165112  # bond between (0, 0) and (1, 0)
+
+    nn_CTM_bond_1_up = env.measure_nn(fcdag_up, fc_up, bond=((2, 0), (2, 1)))  # horizontal bond
+    nn_CTM_bond_2_up = env.measure_nn(fcdag_up, fc_up, bond=((0, 1), (1, 1)))  # vertical bond
+    nn_CTM_bond_1_dn = env.measure_nn(fcdag_dn, fc_dn, bond=((2, 0), (2, 1)))  # horizontal bond
+    nn_CTM_bond_2_dn = env.measure_nn(fcdag_dn, fc_dn, bond=((0, 1), (1, 1)))  # vertical bond
+
     print(nn_CTM_bond_1_up, nn_CTM_bond_1_dn, 'vs', nn_bond_1_exact)
     print(nn_CTM_bond_2_up, nn_CTM_bond_2_dn, 'vs', nn_bond_2_exact)
     assert pytest.approx(nn_CTM_bond_1_up, abs=1e-4) == nn_bond_1_exact
@@ -130,53 +109,36 @@ def test_NTU_spinful_infinite():
     psi = fpeps.product_peps(geometry, fid)
 
     env = fpeps.EnvNTU(psi, which='NNN++')
-
     opts_svd = {"D_total": D, 'tol_block': 1e-15}
-    steps = np.rint((beta / 2) / dbeta).astype(int)
+    steps = round((beta / 2) / dbeta)
     for step in range(steps):
         print(f"beta = {(step + 1) * dbeta}" )
-        out = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
+        fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
+
 
     # convergence criteria for CTM based on total energy
-    chi = 40  # environmental bond dimension
-    tol = 1e-10  # truncation of singular values of CTM projectors
-    max_sweeps = 50
-    tol_exp = 1e-7  # difference of some observable must be lower than tolernace
-
-    ops = {'cdagc_up': {'l': fcdag_up, 'r': fc_up},
-           'ccdag_up': {'l': fc_up, 'r': fcdag_up},
-           'cdagc_dn': {'l': fcdag_dn, 'r': fc_dn},
-           'ccdag_dn': {'l': fc_dn, 'r': fcdag_dn}}
-
-    cf_energy_old = 0
-    opts_svd_ctm = {'D_total': chi, 'tol': tol}
+    energy_old, tol_exp = 0, 1e-7
 
     env = fpeps.EnvCTM(psi)
-    for step in fpeps.ctmrg_(env, max_sweeps, iterator_step=2, opts_svd=opts_svd_ctm):
-        obs_hor, obs_ver =  nn_exp_dict(psi, step.env, ops)
-        cdagc_up = (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) +
-                    sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
-        ccdag_up = (sum(abs(val) for val in obs_hor.get('ccdag_up').values()) +
-                    sum(abs(val) for val in obs_ver.get('ccdag_up').values()))
-        cdagc_dn = (sum(abs(val) for val in obs_hor.get('cdagc_dn').values()) +
-                    sum(abs(val) for val in obs_ver.get('cdagc_dn').values()))
-        ccdag_dn = (sum(abs(val) for val in obs_hor.get('cdagc_up').values()) +
-                    sum(abs(val) for val in obs_ver.get('cdagc_up').values()))
-        cf_energy = -0.125 * (cdagc_up + ccdag_up +cdagc_dn + ccdag_dn)
+    opts_svd_ctm = {'D_total': 40, 'tol': 1e-10}
+    for step in fpeps.ctmrg_(env, max_sweeps=50, iterator_step=2, opts_svd=opts_svd_ctm):
+        cdagc_up = env.measure_nn(fcdag_up, fc_up)
+        cdagc_dn = env.measure_nn(fcdag_dn, fc_dn)
+        energy = -2 * np.mean([*cdagc_up.values(), *cdagc_dn.values()])
 
-        print("Energy: ", cf_energy)
-        if abs(cf_energy - cf_energy_old) < tol_exp:
+        print("Energy: ", energy)
+        if abs(energy - energy_old) < tol_exp:
             break
-        cf_energy_old = cf_energy
+        energy_old = energy
 
-    nn_CTM = (cdagc_up + ccdag_up + cdagc_dn + ccdag_dn) / 16
 
-    # analytical nn fermionic correlator at beta = 0.1 for 2D infinite lattice with checkerboard ansatz
+    # analytical nn fermionic correlator at beta = 0.1 for 2D infinite lattice
     nn_exact = 0.02481459
-    print(nn_CTM, 'vs', nn_exact)
+    nn_CTM = np.mean([*cdagc_up.values(), *cdagc_dn.values()])
+    print(nn_CTM, 'vs', nn_exact, nn_CTM - nn_exact)
     assert pytest.approx(nn_CTM, abs=1e-4) == nn_exact
 
 
 if __name__ == '__main__':
     test_NTU_spinful_finite()
-#    test_NTU_spinful_infinite()
+    # test_NTU_spinful_infinite()
