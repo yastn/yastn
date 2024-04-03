@@ -41,59 +41,6 @@ def nn_exp_dict(peps, env, op):
 
     return obs_hor, obs_ver
 
-def one_site_dict(peps, env, op):
-    r"""
-    dictionary containing site coordinates as keys and their corresponding expectation values
-
-    Parameters
-    ----------
-    peps : class Lattice
-        class containing peps data along with the lattice structure data
-    env: class CtmEnv
-        class containing ctm environment tensors along with lattice structure data
-    op: single site operator
-
-    """
-
-    site_exp_dict = {}  # Dictionary to store site-wise expectation values
-    peps = check_consistency_tensors(peps)
-
-    for ms in peps.sites():
-        Am = peps[ms]
-        val_op = measure_one_site_spin(Am, ms, env, op=op)
-        val_norm = measure_one_site_spin(Am, ms, env, op=None)
-        site_exp_value = val_op / val_norm  # expectation value of particular target site
-        # Store the site and its expectation value in the dictionary
-        site_exp_dict[ms] = site_exp_value
-
-    return site_exp_dict
-
-def measure_one_site_spin(A, ms, env, op=None):
-    r"""
-    Returns the overlap of bra and ket on a single site.
-
-    Parameters
-    ----------
-    A : single peps tensor at site ms
-    ms : site where we want to measure some observable
-    env: class CtmEnv
-        class containing ctm environmental tensors along with lattice structure data
-    op: single site operator
-    """
-
-    if op is not None:
-        AAb = fPEPS_2layers(A, op=op, dir='1s')
-    elif op is None:
-        AAb = fPEPS_2layers(A)
-    vecl = tensordot(env[ms].l, env[ms].tl, axes=(2, 0))
-    vecl = tensordot(env[ms].bl, vecl, axes=(1, 0))
-    new_vecl = apply_TMO_left(vecl, env, ms, AAb)
-    vecr = tensordot(env[ms].tr, env[ms].r, axes=(1, 0))
-    vecr = tensordot(vecr, env[ms].br, axes=(2, 0))
-    hor = tensordot(new_vecl, vecr, axes=((0, 1, 2), (2, 1, 0))).to_number()
-    return hor
-
-
 def EVnn(peps, env, site0, site1, op):
 
     r"""

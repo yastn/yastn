@@ -32,63 +32,7 @@ class Local_ProjectorEnv():
         return Local_ProjectorEnv(hlt=self.hlt, hlb=self.hlb, hrt=self.hrt, hrb=self.hrb, vtl=self.vtl, vtr=self.vtr, vbl=self.vbl, vbr=self.vbr)
 
 
-def ctmrg(psi, max_sweeps=1, iterator_step=None, fix_signs=None, opts_svd=None):
-    r"""
-    Perform CTMRG sweeps until convergence, starting from PEPS and environmental corner and edge tensors :code:`peps`.
-
-    The outer loop sweeps over PEPS updating only the environmental tensors through 2x2 windows of PEPS tensors.
-    Convergence can be controlled based on observables or Schmidt values of projectors.
-    The CTMRG algorithm sweeps through the lattice at most :code:`max_sweeps` times
-    or through some externally set convergence criteria.
-
-    Outputs iterator if :code:`iterator_step` is given.
-    It allows inspecting :code:`CtmEnv` outside of :code:`ctmrg_` function after every :code:`iterator_step` sweeps.
-
-    Parameters
-    ----------
-    peps: yastn.fPEPS.Peps
-        peps tensors occupying all the lattice sites in 2D. Maybe obtained after real or imaginary time evolution.
-        It is not updated during execution.
-
-    env: yastn.fPEPS.CtmEnv
-        Initial environmental tensors: maybe random or given by the user. It is updated during execution.
-        The virtual bonds aligning with the boundary can be of maximum bond dimension chi
-
-    chi: maximal CTM bond dimension
-
-    cutoff: controls removal of singular values smaller than cutoff during CTM projector construction
-
-    prec: stop execution when 2 consecutive iterations give difference of a function used to evaluate conv smaller than prec
-
-    max_sweeps: int
-        Maximal number of sweeps.
-
-    iterator_step: int
-        If int, :code:`ctmrg_` returns a generator that would yield output after every iterator_step sweeps.
-        Default is None, in which case  :code:`ctmrg_` sweeps are performed immediately.
-
-    tcinit: symmetry sectors of initial corners legs
-
-    Dcinit: dimensions of initial corner legs
-
-    Returns
-    -------
-    out: CTMRGout(NamedTuple)
-        Includes fields:
-        :code:`sweeps` number of performed dmrg sweeps.
-        :code:`env` environmental tensors.
-        :code:`proj` projectors.
-    """
-
-    # if environment is not given, start with a random initialization
-    env = EnvCTM(psi)
-    env.init_()
-
-    tmp = ctmrg_(env, max_sweeps, iterator_step, fix_signs, opts_svd)
-    return tmp if iterator_step else next(tmp)
-
-
-def ctmrg_(env, max_sweeps, iterator_step, fix_signs, opts_svd):
+def ctmrg_(env, max_sweeps=1, iterator_step=1, fix_signs=None, opts_svd=None):
     r"""
     Generator for ctmrg().
     Perform one step of CTMRG update for a mxn lattice.

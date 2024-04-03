@@ -1,8 +1,9 @@
 from typing import NamedTuple
 from dataclasses import dataclass
-from .... import rand, ones, YastnError, Leg
+from .... import rand, ones, YastnError, Leg, tensordot
 from ... import mps
 from .._peps import Peps, Peps2Layers
+from ..gates import match_ancilla_1s
 
 
 class ctm_window(NamedTuple):
@@ -25,6 +26,8 @@ class EnvCTM(Peps):
             if None not in win:
                 windows.append(ctm_window(site, *win))
         self._windows = tuple(windows)
+        self.init_()
+
 
     def copy(self):
         env = EnvCTM(self.psi)
@@ -81,6 +84,41 @@ class EnvCTM(Peps):
             self[site].b = tensor_init(config, legs=[leg0, legsA[2].conj(), leg0.conj()])
             self[site].l = tensor_init(config, legs=[leg0, legsA[1].conj(), leg0.conj()])
             self[site].r = tensor_init(config, legs=[leg0, legsA[3].conj(), leg0.conj()])
+
+    def measure_1site(self, O):
+        r"""
+        dictionary containing site coordinates as keys and their corresponding expectation values
+
+        Parameters
+        ----------
+        env: class CtmEnv
+            class containing ctm environment tensors along with lattice structure data
+        op: single site operator
+        """
+        if not isinstance(O, dict):
+            O = {site: O for site in self.sites()}
+
+        results = {}
+        for site, op in O.items():
+            lenv = self[site]
+            ten = self.psi[site]
+            val_no = measure_one(lenv, ten)
+
+            op_aux = match_ancilla_1s(op, ten.A)
+            ten.A = ten.A @ op_aux.T
+
+            val_op = measure_one(lenv, ten)
+            results[site] = val_op / val_no
+
+        return results
+
+
+def measure_one(lenv, ten):
+    vect = (lenv.l @ lenv.tl) @ (lenv.t @ lenv.tr)
+    vect = ten._attach_01(vect)
+    vect = tensordot(vect, lenv.r, axes=((2, 3), (0, 1)))
+    vecb = (lenv.br @ lenv.b) @ lenv.bl
+    return tensordot(vect, vecb, axes=((0, 1, 2), (2, 1, 0))).to_number()
 
 
 @dataclass()
