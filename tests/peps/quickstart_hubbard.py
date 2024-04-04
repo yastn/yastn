@@ -17,7 +17,7 @@ ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2')
 g_hop_u = fpeps.gates.gate_nn_hopping(t, dbeta / 2, ops.I(), ops.c(spin='u'), ops.cp(spin='u'))
 g_hop_d = fpeps.gates.gate_nn_hopping(t, dbeta / 2, ops.I(), ops.c(spin='d'), ops.cp(spin='d'))
 g_Hubbard = fpeps.gates.gate_local_Coulomb(dbeta / 2, mu, mu, U, ops.I(), ops.n(spin='u'), ops.n(spin='d'))
-gates = fpeps.gates_homogeneous(geometry, gates_nn=[g_hop_u, g_hop_d], gates_local=g_Hubbard)
+gates = fpeps.gates.distribute(geometry, gates_nn=[g_hop_u, g_hop_d], gates_local=g_Hubbard)
 
 psi = fpeps.product_peps(geometry=geometry, vectors = ops.I())
 
@@ -38,8 +38,9 @@ energy_old, tol_exp = 0, 1e-7
 
 env = fpeps.EnvCTM(psi)
 opts_svd_ctm = {'D_total': 40, 'tol': 1e-10}
-for step in fpeps.ctmrg_(env, max_sweeps=50, iterator_step=1, opts_svd=opts_svd_ctm):
 
+for _ in range(50):
+    env.update_(opts_svd=opts_svd_ctm)
     cdagc_up = env.measure_nn(ops.cp(spin='u'), ops.c(spin='u'))
     cdagc_dn = env.measure_nn(ops.cp(spin='d'), ops.c(spin='d'))
 

@@ -130,7 +130,7 @@ def gate_local_occupation(mu, step, I, n):
     return Gate_local(I + n * (np.exp(mu * step) - 1))
 
 
-def gates_homogeneous(geometry, gates_nn=None, gates_local=None) -> Gates:
+def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
     """
     Distributes gates homogeneous over the lattice.
 

@@ -57,14 +57,16 @@ def ctm_for_Onsager(psi, ops, Z_exact):
 
     Z_old = 0
     env = fpeps.EnvCTM(psi)
-    for step in fpeps.ctmrg_(env, max_sweeps, iterator_step=4, opts_svd=opts_svd):
-        assert step.sweeps % 4 == 0 # stop every 4th step as iteration_step=4
-        Zlocal = env.measure_1site(ops.z())
-        Z = np.mean(list(Zlocal.values()))
-        print("Z expectation value: ", Z)
-        if abs(Z - Z_old) < tol_exp:
-            break
-        Z_old = Z
+    for sweep in range(50):
+        env.update_(opts_svd=opts_svd)
+
+        if sweep % 2 == 0:  # check convergence after 2 steps
+            Zlocal = env.measure_1site(ops.z())
+            Z = np.mean(list(Zlocal.values()))
+            print("Z expectation value: ", Z)
+            if abs(Z - Z_old) < tol_exp:
+                break
+            Z_old = Z
 
     Znn1 = env.measure_nn(ops.z(), ops.I())
     Znn2 = env.measure_nn(ops.I(), ops.z())
@@ -81,7 +83,7 @@ def test_ctm_loop():  ###high temperature
     Z_exact = 0.99602 # analytical value of magnetization up to 4 decimal places for beta = 0.7 (2D Classical Ising)
 
     ops = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
-    ops.random_seed(seed=30)
+    ops.random_seed(seed=20)
 
     T = create_Ising_tensor(ops.z(), beta)
     geometry = fpeps.CheckerboardLattice()
