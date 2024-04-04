@@ -42,7 +42,7 @@ def check_hopping_gate(ops, t, ds):
 
     O2 = II + (-ds) * H + (ds ** 2 / 2) * H @ H + (-ds ** 3 / 6) * H @ H @ H + (ds ** 4 / 24) * H @ H @ H @ H
 
-    assert ((O - O2).norm()) < (ds * t) ** 3
+    assert ((O - O2).norm()) < (ds * t) ** 5
 
 
 
