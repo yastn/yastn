@@ -145,7 +145,7 @@ def test_NTU_spinful_infinite():
     # analytical nn fermionic correlator at beta = 0.1 for 2D infinite lattice
     nn_exact = 0.02481459
     nn_CTM = np.mean([*cdagc_up.values(), *cdagc_dn.values()])
-    print(nn_CTM, 'vs', nn_exact, nn_CTM - nn_exact)
+    print(nn_CTM, 'vs', nn_exact)
     assert pytest.approx(nn_CTM, abs=1e-4) == nn_exact
 
 

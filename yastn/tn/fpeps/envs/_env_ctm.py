@@ -100,14 +100,18 @@ class EnvCTM(Peps):
 
         lenv = self[site]
         ten = self.psi[site]
-        val_no = measure_one(lenv, ten)
+        vect = (lenv.l @ lenv.tl) @ (lenv.t @ lenv.tr)
+        vecb = (lenv.r @ lenv.br) @ (lenv.b @ lenv.bl)
+
+        tmp = ten._attach_01(vect)
+        val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
         op_aux = match_ancilla_1s(op, ten.A)
         ten.A = ten.A @ op_aux.T
+        tmp = ten._attach_01(vect)
+        val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
-        val_op = measure_one(lenv, ten)
         return val_op / val_no
-
 
     def measure_nn(self, O0, O1, bond=None):
         if bond is None:
@@ -237,15 +241,6 @@ class EnvCTM(Peps):
         env0 = env.copy()
         for ms in psi.sites():   # vertical absorption and renormalization
             move_vertical_(env, env0, psi, proj, ms)
-
-
-def measure_one(lenv, ten):
-    vect = (lenv.l @ lenv.tl) @ (lenv.t @ lenv.tr)
-    vect = ten._attach_01(vect)
-    vect = tensordot(vect, lenv.r, axes=((2, 3), (0, 1)))
-    vecb = (lenv.br @ lenv.b) @ lenv.bl
-    return tensordot(vect, vecb, axes=((0, 1, 2), (2, 1, 0))).to_number()
-
 
 @dataclass()
 class Local_CTMEnv():
