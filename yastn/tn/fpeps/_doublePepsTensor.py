@@ -49,8 +49,15 @@ class DoublePepsTensor:
         multiple_legs = hasattr(axes, '__iter__')
         axes = (axes,) if isinstance(axes, int) else tuple(axes)
         axes = tuple(self._t[ax] for ax in axes)
-        lts = self.A.get_legs(axes=axes)
-        lbs = self.Ab.get_legs(axes=axes)
+
+        lts = self.A.get_legs(axes=(0, 1))
+        lbs = self.Ab.get_legs(axes=(0, 1))
+        lts = [*lts[0].unfuse_leg(), *lts[1].unfuse_leg()]
+        lbs = [*lbs[0].unfuse_leg(), *lbs[1].unfuse_leg()]
+        lts = [lts[i] for i in axes]
+        lbs = [lbs[i] for i in axes]
+        # lts = self.A.get_legs(axes=axes)
+        # lbs = self.Ab.get_legs(axes=axes)
         legs = tuple(leg_outer_product(lt, lb.conj()) for lt, lb in zip(lts, lbs))
         return legs if multiple_legs else legs[0]
 
@@ -92,30 +99,30 @@ class DoublePepsTensor:
 
     def append_a_bl(self, tt):
         """ Append the A and Ab tensors of self to the bottom-left corner, tt. """
-        A = self.A.fuse_legs(axes=((0, 1), (2, 3), 4))
-        Ab = self.Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
-        return append_vec_bl(A, Ab, tt)
+        # A = self.A.fuse_legs(axes=((0, 1), (2, 3), 4))
+        # Ab = self.Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
+        return append_vec_bl(self.A, self.Ab, tt)
 
 
     def append_a_tr(self, tt):
         """ Append the A and Ab tensors of self to the top-right corner, tt. """
-        A = self.A.fuse_legs(axes=((0, 1), (2, 3), 4))
-        Ab = self.Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
-        return append_vec_tr(A, Ab, tt)
+        # A = self.A.fuse_legs(axes=((0, 1), (2, 3), 4))
+        # Ab = self.Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
+        return append_vec_tr(self.A, self.Ab, tt)
 
 
     def append_a_tl(self, tt):
         """ Append the A and Ab tensors of self to the top-left corner, tt. """
-        A = self.A.fuse_legs(axes=((0, 1), (2, 3), 4))
-        Ab = self.Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
-        return append_vec_tl(A, Ab, tt)
+        # A = self.A.fuse_legs(axes=((0, 1), (2, 3), 4))
+        # Ab = self.Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
+        return append_vec_tl(self.A, self.Ab, tt)
 
 
     def append_a_br(self, tt):
         """ Append the A and Ab tensors of self to the bottom-right corner, tt. """
-        A = self.A.fuse_legs(axes=((0, 1), (2, 3), 4))
-        Ab = self.Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
-        return append_vec_br(A, Ab, tt)
+        # A = self.A.fuse_legs(axes=((0, 1), (2, 3), 4))
+        # Ab = self.Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
+        return append_vec_br(self.A, self.Ab, tt)
 
 
     def _attach_01(self, tt):
@@ -162,7 +169,7 @@ class DoublePepsTensor:
             return self.append_a_tr(tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (1, 0, 3, 2):
             return self.append_a_br(tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
-        
+
 
     def _attach_30(self, tt):
         """
@@ -173,7 +180,7 @@ class DoublePepsTensor:
             return self.append_a_tr(tt)
         else:
             raise YastnError('rotation not supported')
-        
+
     def _attach_12(self, tt):
         """
         Attach a tensor to the top left corner of the tensor network tt if rotation = 0
@@ -183,7 +190,7 @@ class DoublePepsTensor:
             return self.append_a_bl(tt)
         else:
             raise YastnError('rotation not supported')
-    
+
 
 
     def fPEPS_fuse_layers(self):

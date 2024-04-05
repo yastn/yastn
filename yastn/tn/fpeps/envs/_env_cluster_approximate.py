@@ -150,7 +150,7 @@ class EnvApproximate:
             H.A[H.first] = edge_l(d[nx, ny], hl=hl).add_leg(s=-1, axis=0)
             for site in H.sweep(to='last', dl=1, df=1):
                 ny += 1
-                top = d[nx, ny].unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
+                top = d[nx, ny] # d[nx, ny].unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
                 H.A[site] = DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
             ny += 1
             hr = hair_r(d[nx, ny + 1]) if self._hairs else None
@@ -169,7 +169,7 @@ class EnvApproximate:
             H.A[H.first] = edge_t(d[nx, ny], ht=ht).add_leg(s=-1, axis=0)
             for site in H.sweep(to='last', dl=1, df=1):
                 nx += 1
-                top = d[nx, ny].unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
+                top = d[nx, ny]  #.unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
                 H.A[site] = DoublePepsTensor(top=top, btm=top)
             nx += 1
             hb = hair_b(d[nx + 1, ny]) if self._hairs else None

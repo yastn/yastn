@@ -197,27 +197,32 @@ def apply_gate(A, op, dir):
 
     if not leg.is_fused():  # when there is no ancilla on A, only the physical index is present
         A = A.add_leg(s=-1)
-        A = A.fuse_legs(axes=(0, 1, 2, 3, (4, 5)))  # new ancilla on outgoing leg
+        A = A.fuse_legs(axes=(0, 1, (2, 3)))  # new ancilla on outgoing leg
         leg = A.get_legs(axes=-1)
 
     _, leg = leg.unfuse_leg() # last leg of A should be fused
     fid = eye(config=A.config, legs=[leg, leg.conj()], isdiag=False)
 
     op_aux = fuse_ancilla_ws(op, fid, dirn=dir)
+    Ao = tensordot(A, op_aux, axes=(2, 1)) # [t l] [b r] [s a] c
     if dir == 't':
-        Ao = tensordot(A, op_aux, axes=(4, 1))
-        Ao = Ao.fuse_legs(axes=(0, 1, (2, 5), 3, 4)) # t l [b c] r [s a]
+        Ao = Ao.unfuse_legs(axes=1) # [t l] b r [s a] c
+        Ao = Ao.fuse_legs(axes=(0, (1, 4), 2, 3)) # [t l] [b c] r [s a]
+        Ao = Ao.fuse_legs(axes=(0, (1, 2), 3)) # [t l] [[b c] r] [s a]
     elif dir == 'b':
-        Ao = tensordot(A, op_aux, axes=(4, 1))
-        Ao = Ao.swap_gate(axes=(1, 5))
-        Ao = Ao.fuse_legs(axes=((0, 5), 1, 2, 3, 4)) # [t c] l b r [s a]
+        Ao = Ao.unfuse_legs(axes=0) # t l [b r] [s a] c
+        Ao = Ao.swap_gate(axes=(1, 4))
+        Ao = Ao.fuse_legs(axes=((0, 4), 1, 2, 3)) # [t c] l [b r] [s a]
+        Ao = Ao.fuse_legs(axes=((0, 1), 2, 3)) # [[t c] l] [b r] [s a]
     elif dir == 'l':
-        Ao = tensordot(A, op_aux, axes=(4, 1)) # t l b r [s a] c
-        Ao = Ao.swap_gate(axes=(2, 5))
-        Ao = Ao.fuse_legs(axes=(0, 1, 2, (3, 5), 4)) # t l b [r c] [s a]
+        Ao = Ao.unfuse_legs(axes=1) # [t l] b r [s a] c
+        Ao = Ao.swap_gate(axes=(1, 4))
+        Ao = Ao.fuse_legs(axes=(0, 1, (2, 4), 3)) # [t l] b [r c] [s a]
+        Ao = Ao.fuse_legs(axes=(0, (1, 2), 3)) # [t l] [b [r c]] [s a]
     elif dir == 'r':
-        Ao = tensordot(A, op_aux, axes=(4, 1))
-        Ao = Ao.fuse_legs(axes=(0, (1, 5), 2, 3, 4)) # t [l c] b r [s a]
+        Ao = Ao.unfuse_legs(axes=0) # t l [b r] [s a] c
+        Ao = Ao.fuse_legs(axes=(0, (1, 4), 2, 3)) # t [l c] [b r] [s a]
+        Ao = Ao.fuse_legs(axes=((0, 1), 2, 3)) # [t [l c]] [b r] [s a]
     else:
         raise RuntimeError("dir should be equal to 'l', 'r', 't', 'b'")
     return Ao

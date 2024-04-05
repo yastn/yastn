@@ -18,6 +18,8 @@ def test_dpt():
     leg4 = ops.space()
 
     A = yastn.rand(ops.config, legs=[leg0, leg1, leg2, leg3, leg4])
+    A = A.fuse_legs(axes=((0, 1), (2, 3), 4))
+    # we keep the legs [t l] [b r] fused for efficiency of higher symmetries
 
     # creat double peps tensor
     T0123 = fpeps.DoublePepsTensor(top=A, btm=A)
