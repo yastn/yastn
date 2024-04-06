@@ -106,8 +106,8 @@ class EnvCTM(Peps):
         tmp = ten._attach_01(vect)
         val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
-        op_aux = match_ancilla_1s(op, ten.A)
-        ten.A = ten.A @ op_aux.T
+        op_aux = match_ancilla_1s(op, ten.top)
+        ten.top = ten.top @ op_aux.T
         tmp = ten._attach_01(vect)
         val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
@@ -133,8 +133,8 @@ class EnvCTM(Peps):
             tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
             val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
 
-            ten0.A = apply_gate(ten0.A, O0, dir='l')
-            ten1.A = apply_gate(ten1.A, O1, dir='r')
+            ten0.top = apply_gate(ten0.top, O0, dir='l')
+            ten1.top = apply_gate(ten1.top, O1, dir='r')
 
             tmp0 = ten0._attach_01(vecl)
             tmp0 = tensordot(env0.b, tmp0, axes=((2, 1), (0, 1)))
@@ -151,8 +151,8 @@ class EnvCTM(Peps):
             tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
             val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
 
-            ten0.A = apply_gate(ten0.A, O0, dir='t')
-            ten1.A = apply_gate(ten1.A, O1, dir='b')
+            ten0.top = apply_gate(ten0.top, O0, dir='t')
+            ten1.top = apply_gate(ten1.top, O1, dir='b')
 
             tmp0 = ten0._attach_01(vect)
             tmp0 = tensordot(tmp0, env0.r, axes=((2, 3), (0, 1)))
@@ -404,7 +404,7 @@ def trivial_projector(a, b, c, dirn):
     elif dirn == 'vbr':
         la, lb, lc = a.get_legs(axes=0), b.get_legs(axes=3), c.get_legs(axes=1)
 
-    return ones(b.A.config, legs=[la.conj(), lb.conj(), lc.conj()])
+    return ones(b.config, legs=[la.conj(), lb.conj(), lc.conj()])
 
 
 def move_horizontal_(envn, env, AAb, proj, ms):

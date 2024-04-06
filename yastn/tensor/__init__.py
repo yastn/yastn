@@ -120,7 +120,7 @@ class Tensor:
     from ._output import save_to_hdf5, save_to_dict, compress_to_1d
     from ._tests import is_consistent, are_independent
     from ._merging import fuse_legs, unfuse_legs, fuse_meta_to_hard
-    from ._special import _attach_01, _attach_23
+    from ._special import _attach_01, _attach_23, _attach_12, _attach_30
     from ._krylov import linear_combination, expand_krylov_space
 
     def _replace(self, **kwargs) -> yastn.Tensor:
