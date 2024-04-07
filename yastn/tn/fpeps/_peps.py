@@ -12,7 +12,7 @@ class Peps():
         Empty PEPS has no tensors assigned.
         """
         self.geometry = geometry
-        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary"]:
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered"]:
             setattr(self, name, getattr(geometry, name))
         self._data = {self.site2index(site): None for site in self.sites()}
 
