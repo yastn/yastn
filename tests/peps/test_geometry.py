@@ -30,9 +30,13 @@ def test_CheckerboardLattice():
     assert net.nn_bond_type(Bond((1, 0), (2, 0))) == 'tb'
     assert net.nn_bond_type(Bond((1, 0), (3, 0))) is None
 
+    assert all(net.nn_bond_type(bond) == 'lr' for bond in net.bonds(dirn='h'))
+    assert all(net.nn_bond_type(bond) == 'tb' for bond in net.bonds(dirn='v'))
+
     assert net.f_ordered(Bond((2, 0), (4, 0)))
     assert net.f_ordered(Bond((4, 0), (0, 4)))
     assert all(net.f_ordered((s0, s1)) for s0, s1 in zip(net.sites(), net.sites()[1:]))
+    assert all(net.f_ordered(bond) for bond in net.bonds())
 
 
 def test_SquareLattice():
@@ -62,11 +66,14 @@ def test_SquareLattice():
     assert net.nn_bond_type(Bond((2, 1), (1, 1))) == 'bt'
     assert net.nn_bond_type(Bond((1, 0), (2, 0))) == 'tb'
     assert net.nn_bond_type(Bond((0, 0), (2, 0))) is None
+    assert all(net.nn_bond_type(bond) == 'lr' for bond in net.bonds(dirn='h'))
+    assert all(net.nn_bond_type(bond) == 'tb' for bond in net.bonds(dirn='v'))
 
     assert net.f_ordered(Bond((0, 0), (1, 0)))
     assert net.f_ordered(Bond((0, 0), (0, 1)))
     assert net.f_ordered(Bond((1, 0), (0, 1)))
     assert all(net.f_ordered((s0, s1)) for s0, s1 in zip(net.sites(), net.sites()[1:]))
+    assert all(net.f_ordered(bond) for bond in net.bonds())
 
     ##########
 
@@ -97,9 +104,45 @@ def test_SquareLattice():
     assert net.nn_bond_type(Bond((2, 0), (0, 0))) == 'tb'
     assert net.nn_bond_type(Bond((0, 1), (2, 1))) == 'bt'
     assert net.nn_bond_type(Bond((3, 0), (2, 0))) is None
+    assert all(net.nn_bond_type(bond) == 'lr' for bond in net.bonds(dirn='h'))
+    assert all(net.nn_bond_type(bond) == 'tb' for bond in net.bonds(dirn='v'))
 
     assert not net.f_ordered(Bond((2, 0), (0, 0)))
     assert all(net.f_ordered((s0, s1)) for s0, s1 in zip(net.sites(), net.sites()[1:]))
+    assert not all(net.f_ordered(bond) for bond in net.bonds())  #  PBC bonds in cylinder are not fermionically alligned
+
+    ##########
+
+    net = fpeps.SquareLattice(dims=(3, 2), boundary='infinite')
+
+    assert net.dims == (3, 2)
+    assert net.sites() == ((0, 0), (1, 0), (2, 0), (0, 1), (1, 1), (2, 1))
+    assert net.bonds(dirn='h') == (Bond((0, 0), (0, 1)),
+                                   Bond((1, 0), (1, 1)),
+                                   Bond((2, 0), (2, 1)),
+                                   Bond((0, 1), (0, 2)),
+                                   Bond((1, 1), (1, 2)),
+                                   Bond((2, 1), (2, 2)))
+    assert net.bonds(dirn='v') == (Bond((0, 0), (1, 0)),
+                                   Bond((1, 0), (2, 0)),
+                                   Bond((2, 0), (3, 0)),
+                                   Bond((0, 1), (1, 1)),
+                                   Bond((1, 1), (2, 1)),
+                                   Bond((2, 1), (3, 1)))
+
+    assert net.nn_site((0, 1), d='r') == (0, 2)
+    assert net.nn_site((0, 1), d='t') == (-1, 1)
+    assert net.nn_site((2, 0), d='l') == (2, -1)
+    assert net.nn_site((2, 0), d='b') == (3, 0)
+    assert net.nn_site((0, 1), d=(3, 4)) == Site(3, 5)
+    assert net.site2index((1, 0)) == (1, 0)
+    assert net.site2index(None) == None
+
+    assert all(net.nn_bond_type(bond) == 'lr' for bond in net.bonds(dirn='h'))
+    assert all(net.nn_bond_type(bond) == 'tb' for bond in net.bonds(dirn='v'))
+
+    assert all(net.f_ordered((s0, s1)) for s0, s1 in zip(net.sites(), net.sites()[1:]))
+    assert all(net.f_ordered(bond) for bond in net.bonds())
 
 
 def test_Peps_get_set():
