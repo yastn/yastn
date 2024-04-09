@@ -13,6 +13,7 @@ together with MPS and PEPS implementations powered by symmetric tensor.
    yastn.tensor
    yastn.mps
    yastn.fpeps
+   yastn.quickstart
 
 
 Indices and tables
