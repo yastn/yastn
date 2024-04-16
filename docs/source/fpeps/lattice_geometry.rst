@@ -16,7 +16,7 @@ captured by the "dirn" property. In the context of PEPS, a bond represents the e
 and different boundary conditions, 'obc' (open boundary conditions) or 'infinite'. The Lattice class also provides methods to navigate this geometry, for instance, by providing the neighbouring sites or bonds. It thus provides the backbone for the PEPS by 
 defining its spatial structure. In the context of strongly correlated systems, the lattice and its properties can drastically affect the system's behavior.
 
-.. autofunction:: yastn.tn.fpeps._geometry.Lattice
+.. autofunction:: yastn.tn.fpeps._geometry.SquareLattice
 
 
 

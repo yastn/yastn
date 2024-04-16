@@ -10,11 +10,11 @@ t_up = 1
 t_dn = 1
 mu_up = 0
 mu_dn = 0
-beta = 0.2
-U = 8
+beta = 0.5
+U = 10
 
 dbeta = 0.01
-D = 16
+D = 12
 
 ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2')
 fid = ops.I()
@@ -59,7 +59,10 @@ for i in range(50):
     cdagc_up = env_ctm.measure_nn(fcdag_up, fc_up)  # calculate for all unique bonds
     cdagc_dn = env_ctm.measure_nn(fcdag_dn, fc_dn)  # -> {bond: value}
     PEn = U * np.mean([*d_oc.values()]) 
-    KEn = -2 * np.sum([*cdagc_up.values(), *cdagc_dn.values()])
+    KEn = - 8 * (np.mean([*cdagc_up.values()]) + np.mean([*cdagc_dn.values()]))
+
+    # add provisions for square lattice as well 
+    # dont do the sum just the mean cdag up and mean cdag_dn
 
     energy = PEn + KEn
     print(f"Energy after iteration {i+1}: ", energy)
@@ -67,4 +70,22 @@ for i in range(50):
         break
     energy_old = energy
 
-print("Final Energy:", energy)
+# calculate expectation values
+
+occupation_up = env_ctm.measure_1site(n_up) # average occupation of spin polarization up
+occupation_dn = env_ctm.measure_1site(n_dn) # average occupation of spin polarization up
+
+print("average occupation of spin-polarization up: ", np.mean([*occupation_up.values()]))
+print("average occupation of spin-polarization up: ", np.mean([*occupation_dn.values()]))
+
+sz = 0.5*(n_up - n_dn)   # pauli sz operator
+
+correlation_sz_sz = env_ctm.measure_nn(sz, sz)  # calculate for all unique bonds
+
+print("kinetic energy per bond - up spin", np.mean([*cdagc_up.values()]))
+print("kinetic energy per bond - down spin", np.mean([*cdagc_dn.values()]))
+print("average double occupancy", np.mean([*d_oc.values()]) )
+
+
+print("average spin-spin correlator", np.mean([*correlation_sz_sz.values()]))
+

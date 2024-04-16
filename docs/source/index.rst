@@ -10,10 +10,10 @@ together with MPS and PEPS implementations powered by symmetric tensor.
    :maxdepth: 3
    :caption: Table of contents:
 
+   yastn.quickstart
    yastn.tensor
    yastn.mps
    yastn.fpeps
-   yastn.quickstart
 
 
 Indices and tables
