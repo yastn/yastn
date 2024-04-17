@@ -20,44 +20,23 @@ class Gates(NamedTuple):
     local : list = None   # list of local gates
 
 
-def match_ancilla_1s(G, A):
+def match_ancilla(gate, top, swap=False):
     """ kron and fusion of local gate with identity for ancilla. Identity is read from ancila of A. """
-    leg = A.get_legs(axes=-1)
+    leg = top.get_legs(axes=-1)
 
     if not leg.is_fused():
-        if any(n != 0 for n in G.n):
-            G = G.add_leg(axis=1, s=-1)
-            G = G.fuse_legs(axes=((0, 1), 2))  # new ancilla on outgoing leg
-        return G
+        return gate
 
     _, leg = leg.unfuse_leg()  # unfuse to get ancilla leg
-    one = eye(config=A.config, legs=[leg, leg.conj()], isdiag=False)
-    Gsa = ncon((G, one), ((-0, -2), (-1, -3)))
-    Gsa = Gsa.fuse_legs(axes=((0, 1), (2, 3)))
-    return Gsa
+    one = eye(config=top.config, legs=[leg, leg.conj()], isdiag=False)
+    new_gate = tensordot(gate, one, axes=((), ()))
 
-
-def match_ancilla_2s(G, A, dir=None):
-    """ kron and fusion of local gate with identity for ancilla. """
-    leg = A.get_legs(axes=-1)
-
-    if not leg.is_fused():
-        return G
-
-    _, leg = leg.unfuse_leg()  # unfuse to get ancilla leg
-    one = eye(config=A.config, legs=[leg, leg.conj()], isdiag=False)
-
-    if G.ndim == 2:
-        if dir=='l':
-            G = G.add_leg(s=1, axis=-1).swap_gate(axes=(0, 2))
-        elif dir=='r':
-            G = G.add_leg(s=-1, axis=-1)
-    Gsa = ncon((G, one), ((-0, -2, -4), (-1, -3)))
-    if dir == 'l':
-        # swap of connecting axis with ancilla is always in G gate
-        Gsa = Gsa.swap_gate(axes=(3, 4))
-    Gsa = Gsa.fuse_legs(axes=((0, 1), (2, 3), 4))
-    return Gsa
+    if gate.ndim == 2:
+        return new_gate.fuse_legs(axes=((0, 2), (1, 3)))
+    # else gate.ndim == 3:
+    if swap:
+        new_gate = new_gate.swap_gate(axes=(2, 3))
+    return new_gate.fuse_legs(axes=((0, 3), (1, 4), 2))
 
 
 def decompose_nn_gate(Gnn):
@@ -168,61 +147,35 @@ def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
     return Gates(nn=nn, local=local)
 
 
-def fuse_ancilla_wos(op, fid):
-    """ kron and fusion of local operator with identity for ancilla --- without string """
-    op = ncon((op, fid), ((-0, -2), (-1, -3)))
-    return op.fuse_legs(axes=((0, 1), (2, 3)))
-
-def fuse_ancilla_ws(op, fid, dirn):
-    """ kron and fusion of nn operator with identity for ancilla --- with string """
-    if dirn in 'lt':
-        op= op.add_leg(s=1).swap_gate(axes=(0, 2))
-        op = ncon((op, fid), ((-0, -2, -4), (-1, -3)))
-        op = op.swap_gate(axes=(3, 4)) # swap of connecting axis with ancilla is always in GA gate
-        op = op.fuse_legs(axes=((0, 1), (2, 3), 4))
-    elif dirn in 'rb':
-        op = op.add_leg(s=-1)
-        op = ncon((op, fid), ((-0, -2, -4), (-1, -3)))
-        op = op.fuse_legs(axes=((0, 1), (2, 3), 4))
-    return op
-
-def apply_gate(A, op, dir):
+def apply_gate(ten, op, dirn=None):
     """
     Prepare top and bottom peps tensors for CTM procedures.
-    Applies operators on top if provided, with dir = 'l', 'r', 't', 'b', '1s'
-    If dir = '1s', no auxiliary indices are introduced as the operator is local.
-    Here spin and ancilla legs of tensors are fused
+    Applies operators on top if provided, with dir = 'l', 'r', 't', 'b', '1s'.
+    If dirn is None, no auxiliary indices are introduced as the operator is local.
+    Spin and ancilla legs of tensors are always fused.
     """
-    leg = A.get_legs(axes=-1)
+    swap = dirn is not None and dirn in 'tl'
+    op = match_ancilla(op, ten, swap=swap)
+    Ao = tensordot(ten, op, axes=(2, 1)) # [t l] [b r] [s a] c
 
-    if not leg.is_fused():  # when there is no ancilla on A, only the physical index is present
-        A = A.add_leg(s=-1)
-        A = A.fuse_legs(axes=(0, 1, (2, 3)))  # new ancilla on outgoing leg
-        leg = A.get_legs(axes=-1)
-
-    _, leg = leg.unfuse_leg() # last leg of A should be fused
-    fid = eye(config=A.config, legs=[leg, leg.conj()], isdiag=False)
-
-    op_aux = fuse_ancilla_ws(op, fid, dirn=dir)
-    Ao = tensordot(A, op_aux, axes=(2, 1)) # [t l] [b r] [s a] c
-    if dir == 't':
+    if dirn is None:
+        return Ao
+    if dirn == 't':
         Ao = Ao.unfuse_legs(axes=1) # [t l] b r [s a] c
         Ao = Ao.fuse_legs(axes=(0, (1, 4), 2, 3)) # [t l] [b c] r [s a]
-        Ao = Ao.fuse_legs(axes=(0, (1, 2), 3)) # [t l] [[b c] r] [s a]
-    elif dir == 'b':
+        return Ao.fuse_legs(axes=(0, (1, 2), 3)) # [t l] [[b c] r] [s a]
+    if dirn == 'b':
         Ao = Ao.unfuse_legs(axes=0) # t l [b r] [s a] c
         Ao = Ao.swap_gate(axes=(1, 4))
         Ao = Ao.fuse_legs(axes=((0, 4), 1, 2, 3)) # [t c] l [b r] [s a]
-        Ao = Ao.fuse_legs(axes=((0, 1), 2, 3)) # [[t c] l] [b r] [s a]
-    elif dir == 'l':
+        return Ao.fuse_legs(axes=((0, 1), 2, 3)) # [[t c] l] [b r] [s a]
+    if dirn == 'l':
         Ao = Ao.unfuse_legs(axes=1) # [t l] b r [s a] c
         Ao = Ao.swap_gate(axes=(1, 4))
         Ao = Ao.fuse_legs(axes=(0, 1, (2, 4), 3)) # [t l] b [r c] [s a]
-        Ao = Ao.fuse_legs(axes=(0, (1, 2), 3)) # [t l] [b [r c]] [s a]
-    elif dir == 'r':
+        return Ao.fuse_legs(axes=(0, (1, 2), 3)) # [t l] [b [r c]] [s a]
+    if dirn == 'r':
         Ao = Ao.unfuse_legs(axes=0) # t l [b r] [s a] c
         Ao = Ao.fuse_legs(axes=(0, (1, 4), 2, 3)) # t [l c] [b r] [s a]
-        Ao = Ao.fuse_legs(axes=((0, 1), 2, 3)) # [t [l c]] [b r] [s a]
-    else:
-        raise RuntimeError("dir should be equal to 'l', 'r', 't', 'b'")
-    return Ao
+        return Ao.fuse_legs(axes=((0, 1), 2, 3)) # [t [l c]] [b r] [s a]
+    raise RuntimeError("dirn should be equal to 'l', 'r', 't', 'b', or None")

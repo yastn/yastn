@@ -1,7 +1,7 @@
 from itertools import accumulate
 from .... import tensordot
 from ... import mps
-from ..gates import match_ancilla_1s
+from ..gates import apply_gate
 
 
 def sample(peps_env, projectors, opts_svd=None, opts_var=None):
@@ -27,7 +27,7 @@ def sample(peps_env, projectors, opts_svd=None, opts_var=None):
 
         for nx in range(0, psi.Nx):
             dpt = Os[nx].copy()
-            loc_projectors = projectors[nx, ny] # [match_ancilla_1s(pr, dpt.A) for pr in projectors]
+            loc_projectors = projectors[nx, ny]
             prob = []
             norm_prob = env.measure(bd=(nx - 1, nx))
             for proj in loc_projectors:
@@ -105,13 +105,11 @@ def measure_2site(peps_env, op1, op2, opts_svd, opts_var=None):
             # first calculate on-site correlations
             Osnx1A = Os[nx1].A
             for nz2, o2 in op2dict[nx1, ny1].items():
-                loc_o = match_ancilla_1s(o1 @ o2, Osnx1A)
-                Os[nx1].A = tensordot(Osnx1A, loc_o, axes=(4, 1))
+                Os[nx1].A = apply_gate(Osnx1A, o1 @ o2)
                 env.update_env_(nx1, to='last')
                 out[(nx1, ny1) + nz1, (nx1, ny1) + nz2] = env.measure(bd=(nx1, nx1+1)) / norm_env
 
-            loc_o1 = match_ancilla_1s(o1, Osnx1A)
-            Os[nx1].A = tensordot(Osnx1A, loc_o1, axes=(4, 1))
+            Os[nx1].A = apply_gate(Osnx1A, o1)
             env.setup_(to='last')
 
             if ny1 > 0:
@@ -122,8 +120,7 @@ def measure_2site(peps_env, op1, op2, opts_svd, opts_var=None):
             for nx2 in range(nx1 + 1, Nx):
                 Osnx2A = Os[nx2].A
                 for nz2, o2 in op2dict[nx2, ny1].items():
-                    loc_o2 = match_ancilla_1s(o2, Osnx2A)
-                    Os[nx2].A = tensordot(Osnx2A, loc_o2, axes=(4, 1))
+                    Os[nx2].A = apply_gate(Osnx2A, o2)
                     env.update_env_(nx2, to='first')
                     out[(nx1, ny1) + nz1, (nx2, ny1) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
 
@@ -146,8 +143,7 @@ def measure_2site(peps_env, op1, op2, opts_svd, opts_var=None):
                 for nx2 in range(psi.Nx):
                     Osnx2A = Os[nx2].A
                     for nz2, o2 in op2dict[nx2, ny2].items():
-                        loc_o2 = match_ancilla_1s(o2, Osnx2A)
-                        Os[nx2].A = tensordot(Osnx2A, loc_o2, axes=(4, 1))
+                        Os[nx1].A = apply_gate(Osnx2A, o2)
                         env.update_env_(nx2, to='first')
                         out[(nx1, ny1) + nz1, (nx2, ny2) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
     return out
@@ -179,18 +175,10 @@ def measure_1site(peps_env, op):
             if (nx, ny) in opdict:
                 Osnx1A = Os[nx].A
                 for nz, o in opdict[nx, ny].items():
-                    loc_o = match_ancilla_1s(o, Osnx1A)
-                    Os[nx].A = tensordot(Osnx1A, loc_o, axes=(4, 1))
+                    Os[nx].A = apply_gate(Osnx1A, o)
                     env.update_env_(nx, to='first')
                     out[(nx, ny) + nz] = env.measure(bd=(nx-1, nx)) / norm_env
     return out
-
-
-def match_ancilla_projectors(psi, projectors):
-    loc_proj = {}
-    for k, proj in projectors.items():
-        loc_proj[k] = [match_ancilla_1s(pr, psi[k]) for pr in proj]
-    return loc_proj
 
 
 def _sample_MC_column_local(ny, proj_psi, proj_env, st0, st1, psi, projectors, rands):

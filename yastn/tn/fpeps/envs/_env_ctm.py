@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from .... import rand, ones, YastnError, Leg, tensordot, ncon, qr
 from ... import mps
 from .._peps import Peps, Peps2Layers
-from ..gates import match_ancilla_1s, apply_gate
+from ..gates import apply_gate
 from .._geometry import Bond
 
 
@@ -59,7 +59,6 @@ class EnvCTM(Peps):
             H = H.conj()
         return H
 
-
     def init_(self, t0=None, D0=1, type='rand'):
         """ Initialize random CTMRG environments of peps tensors A. """
         if type not in ('rand', 'ones'):
@@ -106,8 +105,7 @@ class EnvCTM(Peps):
         tmp = ten._attach_01(vect)
         val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
-        op_aux = match_ancilla_1s(op, ten.top)
-        ten.top = ten.top @ op_aux.T
+        ten.top = apply_gate(ten.top, op)
         tmp = ten._attach_01(vect)
         val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
@@ -118,12 +116,21 @@ class EnvCTM(Peps):
              return {bond: self.measure_nn(O0, O1, bond) for bond in self.bonds()}
 
         bond = Bond(*bond)
-        env0 = self[bond.site0]
-        env1 = self[bond.site1]
-        ten0 = self.psi[bond.site0]
-        ten1 = self.psi[bond.site1]
+        dirn = self.nn_bond_type(bond)
+        if dirn in ("lr", 'tb'):
+            site0, site1 = bond.site0, bond.site1
+        else:  # dirn in ("rl", 'bt')
+            site0, site1 = bond.site1, bond.site0
 
-        if bond.dirn == 'h':
+        env0, env1 = self[site0], self[site1]
+        ten0, ten1 = self.psi[site0], self.psi[site1]
+
+        if O0.ndim == 2:
+            O0 = O0.add_leg(s=1).swap_gate(axes=(0, 2))
+        if O1.ndim == 2:
+            O1 = O1.add_leg(s=-1)
+
+        if dirn in ('lr', 'rl'):
             vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
             vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
 
@@ -133,15 +140,15 @@ class EnvCTM(Peps):
             tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
             val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
 
-            ten0.top = apply_gate(ten0.top, O0, dir='l')
-            ten1.top = apply_gate(ten1.top, O1, dir='r')
+            ten0.top = apply_gate(ten0.top, O0, dirn='l')
+            ten1.top = apply_gate(ten1.top, O1, dirn='r')
 
             tmp0 = ten0._attach_01(vecl)
             tmp0 = tensordot(env0.b, tmp0, axes=((2, 1), (0, 1)))
             tmp1 = ten1._attach_23(vecr)
             tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
             val_op = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
-        else:
+        else:  # dirn in ('bt', 'bt'):
             vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
             vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
 
@@ -151,8 +158,8 @@ class EnvCTM(Peps):
             tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
             val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
 
-            ten0.top = apply_gate(ten0.top, O0, dir='t')
-            ten1.top = apply_gate(ten1.top, O1, dir='b')
+            ten0.top = apply_gate(ten0.top, O0, dirn='t')
+            ten1.top = apply_gate(ten1.top, O1, dirn='b')
 
             tmp0 = ten0._attach_01(vect)
             tmp0 = tensordot(tmp0, env0.r, axes=((2, 3), (0, 1)))

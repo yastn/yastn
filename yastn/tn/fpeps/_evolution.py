@@ -5,7 +5,7 @@ PEPS tensors have 5 legs: (top, left, bottom, right, system)
 In case of purification, system leg is a fusion of (ancilla, system)
 """
 from ... import tensordot, vdot, svd_with_truncation, svd, qr, ncon, eigh_with_truncation
-from .gates import match_ancilla_1s, match_ancilla_2s
+from .gates import apply_gate, match_ancilla
 from typing import NamedTuple
 
 
@@ -305,9 +305,7 @@ def optimal_pinv(gg, J, gRR, pinv_cutoffs):
 
 def apply_local_gate_(env, gate):
     """ apply local gates on PEPS tensors """
-    A = match_ancilla_1s(gate.A, env.psi[gate.site])
-    env.psi[gate.site] = tensordot(env.psi[gate.site], A, axes=(2, 1)) # [t l] [b r] [s a]
-
+    env.psi[gate.site] = apply_gate(env.psi[gate.site], gate.A)
 
 def apply_nn_gate(psi, gate):
     """ Apply nearest neighbor gate to PEPS tensors. """
@@ -317,7 +315,7 @@ def apply_nn_gate(psi, gate):
     B = psi[bd.site1]  # [t l] [b r] sa
 
     if dirn == "h":  # Horizontal gate
-        GA_an = match_ancilla_2s(gate.A, A, dir='l')
+        GA_an = match_ancilla(gate.A, A, swap=True)
         int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] sa c
         int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
         int_A = int_A.unfuse_legs(axes=1)  # [[t l] sa] b r c
@@ -329,7 +327,7 @@ def apply_nn_gate(psi, gate):
         QA = QA.unfuse_legs(axes=0)  # [t l] sa [b rr]
         QA = QA.transpose(axes=(0, 2, 1))  # [t l] [b rr] sa
 
-        GB_an = match_ancilla_2s(gate.B, B, dir='r')
+        GB_an = match_ancilla(gate.B, B)
         int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] sa c
         int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
         int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] sa] c
@@ -340,7 +338,7 @@ def apply_nn_gate(psi, gate):
         QB = QB.unfuse_legs(axes=1)  # [t ll] [b r] sa
 
     elif dirn == "v":  # Vertical gate
-        GA_an = match_ancilla_2s(gate.A, A, dir='l')
+        GA_an = match_ancilla(gate.A, A, swap=True)
         int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] sa c
         int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
         int_A = int_A.unfuse_legs(axes=1)  # [[t l] sa] b r c
@@ -351,7 +349,7 @@ def apply_nn_gate(psi, gate):
         QA = QA.unfuse_legs(axes=0)  # [t l] sa [bb r]
         QA = QA.transpose(axes=(0, 2, 1))  # [t l] [bb r] sa
 
-        GB_an = match_ancilla_2s(gate.B, B, dir='r')
+        GB_an = match_ancilla(gate.B, B)
         int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] sa c
         int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
         int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] sa] c
