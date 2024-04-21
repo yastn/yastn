@@ -126,7 +126,7 @@ class SquareLattice():
             return None
         if self._periodic[0] == 'p' and (x < 0 or x >= self._dims[0]):
             x = x % self._dims[0]
-        # we don't have such option now
+        # we don't have such option now:
         # if self._periodic[1] == 'p' and (y < 0 or y >= self._dims[1]):
         #     y = y % self._dims[1]
         return Site(x, y)

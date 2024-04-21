@@ -147,6 +147,44 @@ def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
     return Gates(nn=nn, local=local)
 
 
+def gate_product_operator(O0, O1, l_ordered=True, f_ordered=True, merge=False):
+    """
+    Takes two ndim=2 local operators O0 O1, with O1 acting first (relevant for fermionic operators).
+    Adds a connecting leg with a swap_gate consistent with fermionic order.
+    Orders output to match lattice order.
+
+    If merge, returns equivalnt of ncon([O0, O1], [(-0, -2), (-1, -3)]),
+    with proper operator order and swap-gate applied.
+    """
+    G0 = O0.add_leg(s=1)
+    G1 = O1.add_leg(s=-1)
+    if f_ordered:
+        G0 = G0.swap_gate(axes=(0, 2))
+    else:
+        G1 = G1.swap_gate(axes=(1, 2))
+
+    if not l_ordered or l_ordered in ('rl', 'bt'):
+        G0, G1 = G1, G0
+
+    if merge:
+        return tensordot(G0, G1, axes=(2, 2)).transpose(axes=(0, 2, 1, 3))
+    return G0, G1
+
+
+def gate_fix_order(G0, G1, l_ordered=True, f_ordered=True):
+    """
+    Modifies two gate tensors, that were generated consitent with lattice and fermionic orders,
+    to make them consistent with provided ordere.
+    """
+    if not f_ordered:
+        G0 = G0.swap_gate(axes=(0, 2))
+        G1 = G1.swap_gate(axes=(1, 2))
+    if not l_ordered or l_ordered in ('rl', 'bt'):
+        G0, G1 = G1, G0
+    return G0, G1
+
+
+
 def apply_gate(ten, op, dirn=None):
     """
     Prepare top and bottom peps tensors for CTM procedures.
