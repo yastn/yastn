@@ -117,7 +117,7 @@ class Peps2Layers():
         self.ket = bra if ket is None else ket
         self.geometry = bra.geometry
 
-        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary"]:
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered"]:
             setattr(self, name, getattr(bra.geometry, name))
 
     @property

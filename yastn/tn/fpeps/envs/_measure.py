@@ -1,7 +1,7 @@
 from itertools import accumulate
 from .... import tensordot
 from ... import mps
-from .._gates_auxlliary import apply_gate
+from .._gates_auxlliary import apply_gate_onsite
 
 
 def sample(peps_env, projectors, opts_svd=None, opts_var=None):
@@ -105,11 +105,11 @@ def measure_2site(peps_env, op1, op2, opts_svd, opts_var=None):
             # first calculate on-site correlations
             Osnx1A = Os[nx1].top
             for nz2, o2 in op2dict[nx1, ny1].items():
-                Os[nx1].top = apply_gate(Osnx1A, o1 @ o2)
+                Os[nx1].top = apply_gate_onsite(Osnx1A, o1 @ o2)
                 env.update_env_(nx1, to='last')
                 out[(nx1, ny1) + nz1, (nx1, ny1) + nz2] = env.measure(bd=(nx1, nx1+1)) / norm_env
 
-            Os[nx1].top = apply_gate(Osnx1A, o1)
+            Os[nx1].top = apply_gate_onsite(Osnx1A, o1)
             env.setup_(to='last')
 
             if ny1 > 0:
@@ -120,7 +120,7 @@ def measure_2site(peps_env, op1, op2, opts_svd, opts_var=None):
             for nx2 in range(nx1 + 1, Nx):
                 Osnx2A = Os[nx2].top
                 for nz2, o2 in op2dict[nx2, ny1].items():
-                    Os[nx2].top = apply_gate(Osnx2A, o2)
+                    Os[nx2].top = apply_gate_onsite(Osnx2A, o2)
                     env.update_env_(nx2, to='first')
                     out[(nx1, ny1) + nz1, (nx2, ny1) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
 
@@ -143,7 +143,7 @@ def measure_2site(peps_env, op1, op2, opts_svd, opts_var=None):
                 for nx2 in range(psi.Nx):
                     Osnx2A = Os[nx2].top
                     for nz2, o2 in op2dict[nx2, ny2].items():
-                        Os[nx1].top = apply_gate(Osnx2A, o2)
+                        Os[nx1].top = apply_gate_onsite(Osnx2A, o2)
                         env.update_env_(nx2, to='first')
                         out[(nx1, ny1) + nz1, (nx2, ny2) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
     return out
@@ -175,7 +175,7 @@ def measure_1site(peps_env, op):
             if (nx, ny) in opdict:
                 Osnx1A = Os[nx].top
                 for nz, o in opdict[nx, ny].items():
-                    Os[nx].top = apply_gate(Osnx1A, o)
+                    Os[nx].top = apply_gate_onsite(Osnx1A, o)
                     env.update_env_(nx, to='first')
                     out[(nx, ny) + nz] = env.measure(bd=(nx-1, nx)) / norm_env
     return out

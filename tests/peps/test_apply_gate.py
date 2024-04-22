@@ -7,8 +7,8 @@ except ImportError:
     from configs import config_dense
 
 
-def test_apply_gate():
-    """ initialize vacuum state and check the functions apply_gate and apply_gate_2s """
+def test_apply_gate_onsite():
+    """ initialize vacuum state and check the functions apply_gate_onsite and apply_gate_onsite_2s """
 
     net = fpeps.SquareLattice(dims=(2, 2), boundary='obc')
     ops = yastn.operators.SpinfulFermions(sym='U1xU1',backend=config_dense.backend,default_device=config_dense.default_device)
@@ -24,18 +24,18 @@ def test_apply_gate():
     #
     # apply annihilation operator of the same polarization. It should create a hole.
     ten10 = psi[0, 0]
-    ten00 = fpeps.apply_gate(ten10, c_up)
+    ten00 = fpeps.apply_gate_onsite(ten10, c_up)
     assert ten10.unfuse_legs(axes=2).get_legs(axes=2).t == ((1, 0),)
     assert ten00.unfuse_legs(axes=2).get_legs(axes=2).t == ((0, 0),)
     #
     # annihilate site (0, 0).
-    vac = fpeps.apply_gate(psi[0, 0], c_dn)
+    vac = fpeps.apply_gate_onsite(psi[0, 0], c_dn)
     assert vac.unfuse_legs(axes=2).get_legs(axes=2).t == ()
-    vac = fpeps.apply_gate(psi[0, 0], cdag_up)
+    vac = fpeps.apply_gate_onsite(psi[0, 0], cdag_up)
     assert vac.unfuse_legs(axes=2).get_legs(axes=2).t == ()
     #
     # create double occupancy
-    doc = fpeps.apply_gate(psi[0, 0], cdag_dn)
+    doc = fpeps.apply_gate_onsite(psi[0, 0], cdag_dn)
     assert doc.unfuse_legs(axes=2).get_legs(axes=2).t == ((1, 1),)
     #
     # we transfer the spin-up electron from site (0, 0) to (0, 1)
@@ -43,15 +43,15 @@ def test_apply_gate():
     c2dag = cdag_up.add_leg(s=-1)
     cc =  yastn.ncon([c1, c2dag], ((-0, -2, 1) , (-1, -3, 1)))
     gate = fpeps.gates.decompose_nn_gate(cc)
-    vac = fpeps.apply_gate(psi[0, 0], gate.G0, dirn='l')
-    doc = fpeps.apply_gate(psi[0, 1], gate.G1, dirn='r')
+    vac = fpeps.apply_gate_onsite(psi[0, 0], gate.G0, dirn='l')
+    doc = fpeps.apply_gate_onsite(psi[0, 1], gate.G1, dirn='r')
     assert vac.unfuse_legs(axes=2).get_legs(axes=2).t == ((0, 0),)
     assert doc.unfuse_legs(axes=2).get_legs(axes=2).t == ((1, 1),)
-    vac = fpeps.apply_gate(psi[0, 0], gate.G0, dirn='t')
-    doc = fpeps.apply_gate(psi[1, 0], gate.G1, dirn='b')
+    vac = fpeps.apply_gate_onsite(psi[0, 0], gate.G0, dirn='t')
+    doc = fpeps.apply_gate_onsite(psi[1, 0], gate.G1, dirn='b')
     assert vac.unfuse_legs(axes=2).get_legs(axes=2).t == ((0, 0),)
     assert doc.unfuse_legs(axes=2).get_legs(axes=2).t == ((1, 1),)
 
 
 if __name__ == "__main__":
-    test_apply_gate()
+    test_apply_gate_onsite()

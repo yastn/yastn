@@ -1,4 +1,4 @@
-from ... import eye, tensordot
+from ... import eye, tensordot, qr
 
 
 def match_ancilla(ten, G, swap=False):
@@ -20,7 +20,7 @@ def match_ancilla(ten, G, swap=False):
     return Gnew.fuse_legs(axes=((0, 3), (1, 4), 2))
 
 
-def apply_gate(ten, G, dirn=None):
+def apply_gate_onsite(ten, G, dirn=None):
     """
     Prepare top and bottom peps tensors for CTM procedures.
     Applies operators on top if provided, with dir = 'l', 'r', 't', 'b'.
@@ -52,6 +52,92 @@ def apply_gate(ten, G, dirn=None):
         tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3)) # t [l c] [b r] [s a]
         return tmp.fuse_legs(axes=((0, 1), 2, 3)) # [t [l c]] [b r] [s a]
     raise RuntimeError("dirn should be equal to 'l', 'r', 't', 'b', or None")
+
+
+
+def apply_gate_nn(ten0, ten1, G0, G1, dirn):
+    """
+    Apply nearest neighbor gate to PEPS tensors.
+
+    Mismatch in orientation of the gate and fermionic order are handled outside of this function.
+    Here it is assumed we have 'lr' (if dirn=='h') and 'tb' (if dirn=='v') orientation.
+    """
+
+    G0 = match_ancilla(ten0, G0, swap=True)
+    G1 = match_ancilla(ten1, G1, swap=False)
+
+    if dirn == 'h':  # Horizontal gate "lr" ordered
+        tmp0 = tensordot(ten0, G0, axes=(2, 1)) # [t l] [b r] sa c
+        tmp0 = tmp0.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
+        tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r c
+        tmp0 = tmp0.swap_gate(axes=(1, 3))  # b X c
+        tmp0 = tmp0.fuse_legs(axes=((0, 1), (2, 3)))  # [[[t l] sa] b] [r c]
+        Q0f, R0 = qr(tmp0, axes=(0, 1), sQ=-1)  # [[[t l] sa] b] rr @ rr [r c]
+        Q0 = Q0f.unfuse_legs(axes=0)  # [[t l] sa] b rr
+        Q0 = Q0.fuse_legs(axes=(0, (1, 2)))  # [[t l] sa] [b rr]
+        Q0 = Q0.unfuse_legs(axes=0)  # [t l] sa [b rr]
+        Q0 = Q0.transpose(axes=(0, 2, 1))  # [t l] [b rr] sa
+
+        tmp1 = tensordot(ten1, G1, axes=(2, 1)) # [t l] [b r] sa c
+        tmp1 = tmp1.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
+        tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa] c
+        tmp1 = tmp1.fuse_legs(axes=((0, 2), (1, 3)))  # [t [[b r] sa]] [l c]
+        Q1f, R1 = qr(tmp1, axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] sa]]  @  [l c] ll
+        Q1 = Q1f.unfuse_legs(axes=1)  # ll t [[b r] sa]
+        Q1 = Q1.fuse_legs(axes=((1, 0), 2))  # [t ll] [[b r] sa]
+        Q1 = Q1.unfuse_legs(axes=1)  # [t ll] [b r] sa
+
+    else: # dirn == 'v':  # Vertical gate "tb" ordered
+        tmp0 = tensordot(ten0, G0, axes=(2, 1)) # [t l] [b r] sa c
+        tmp0 = tmp0.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
+        tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r c
+        tmp0 = tmp0.fuse_legs(axes=((0, 2), (1, 3)))  # [[[t l] sa] r] [b c]
+        Q0f, R0 = qr(tmp0, axes=(0, 1), sQ=1)  # [[[t l] sa] r] bb  @  bb [b c]
+        Q0 = Q0f.unfuse_legs(axes=0)  # [[t l] sa] r bb
+        Q0 = Q0.fuse_legs(axes=(0, (2, 1)))  # [[t l] sa] [bb r]
+        Q0 = Q0.unfuse_legs(axes=0)  # [t l] sa [bb r]
+        Q0 = Q0.transpose(axes=(0, 2, 1))  # [t l] [bb r] sa
+
+        tmp1 = tensordot(ten1, G1, axes=(2, 1)) # [t l] [b r] sa c
+        tmp1 = tmp1.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
+        tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa] c
+        tmp1 = tmp1.swap_gate(axes=(1, 3))  # l X c
+        tmp1 = tmp1.fuse_legs(axes=((1, 2), (0, 3)))  # [l [[b r] sa]] [t c]
+        Q1f, R1 = qr(tmp1, axes=(0, 1), sQ=-1, Qaxis=0, Raxis=-1)  # tt [l [[b r] sa]]  @  [t c] tt
+        Q1 = Q1f.unfuse_legs(axes=1)  # t l [[b r] sa]
+        Q1 = Q1.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
+        Q1 = Q1.unfuse_legs(axes=1)  # [t l] [b r] sa
+
+    return Q0, Q1, R0, R1, Q0f, Q1f
+
+
+def apply_bond_tensors(Q0f, Q1f, M0, M1, dirn):
+    """
+    Combine unitaries in Q0f, Q1f with optimized M0, M1 to form new peps tensors.
+    """
+    if dirn == "h":
+        ten0 = Q0f @ M0  # [[[[t l] sa] b] r
+        ten0 = ten0.unfuse_legs(axes=0)  # [[t l] sa] b r
+        ten0 = ten0.fuse_legs(axes=(0, (1, 2)))  # [[t l] sa] [b r]
+        ten0 = ten0.unfuse_legs(axes=0)  # [t l] sa [b r]
+        ten0 = ten0.transpose(axes=(0, 2, 1))  # [t l] [b r] sa
+
+        ten1 = M1 @ Q1f  # l [t [[b r] s]]
+        ten1 = ten1.unfuse_legs(axes=1)  # l t [[b r] sa]
+        ten1 = ten1.fuse_legs(axes=((1, 0), 2))  # [t l] [[b r] sa]
+        ten1 = ten1.unfuse_legs(axes=1)  # [t l] [b r] sa
+    else:  # dirn == "v":
+        ten0 = Q0f @ M0  # [[[t l] sa] r] b
+        ten0 = ten0.unfuse_legs(axes=0)  # [[t l] sa] r b
+        ten0 = ten0.fuse_legs(axes=(0, (2, 1)))  # [[t l] sa] [b r]
+        ten0 = ten0.unfuse_legs(axes=0)  # [t l] sa [b r]
+        ten0 = ten0.transpose(axes=(0, 2, 1))  # [t l] [b r] sa
+
+        ten1 = M1 @ Q1f  # t [l [[b r] sa]]
+        ten1 = ten1.unfuse_legs(axes=1)  # t l [[b r] sa]
+        ten1 = ten1.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
+        ten1 = ten1.unfuse_legs(axes=1)  # [t l] [b r] sa
+    return ten0, ten1
 
 
 def gate_product_operator(O0, O1, l_ordered=True, f_ordered=True, merge=False):

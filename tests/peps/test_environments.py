@@ -114,10 +114,9 @@ def test_spinless_infinite_approx():
                                        opts_svd=opts_svd,
                                        update_sweeps=1)
 
-    for st0, st1 in [[(0, 0), (0, 1)], [(0, 1), (1, 1)]]:
-        bd = fpeps.Bond(st0, st1)
-        QA, QB = psi[st0], psi[st1]
-        Gs = {k: env.bond_metric(bd, QA, QB) for k, env in envs.items()}
+    for s0, s1, dirn in [[(0, 0), (0, 1), 'h'], [(0, 1), (1, 1), 'v']]:
+        QA, QB = psi[s0], psi[s1]
+        Gs = {k: env.bond_metric(QA, QB, s0, s1, dirn) for k, env in envs.items()}
         Gs = {k: v / v.norm() for k, v in Gs.items()}
         assert (Gs['NN'] - Gs['NN+']).norm() < 2e-3
         assert (Gs['NN+'] - Gs['NN++']).norm() < 1e-4
@@ -131,7 +130,7 @@ def test_spinless_infinite_approx():
         assert (Gs['65h'] - Gs['87']).norm() < 1e-6
         assert (Gs['87'] - Gs['87h']).norm() < 1e-6
 
-        Gs2 = {k: envs[k].bond_metric(bd, QA, QB)
+        Gs2 = {k: envs[k].bond_metric(QA, QB, s0, s1, dirn)
                for k in ['43', '43h', '65', '65h', '87', '87h']}
         Gs2 = {k: v / v.norm() for k, v in Gs2.items()}
         for k in Gs2:

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from .... import rand, ones, YastnError, Leg, tensordot, ncon, qr
 from ... import mps
 from .._peps import Peps, Peps2Layers
-from .._gates_auxlliary import apply_gate, gate_product_operator, gate_fix_order
+from .._gates_auxlliary import apply_gate_onsite, gate_product_operator, gate_fix_order
 from .._geometry import Bond
 
 
@@ -105,7 +105,7 @@ class EnvCTM(Peps):
         tmp = ten._attach_01(vect)
         val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
-        ten.top = apply_gate(ten.top, op)
+        ten.top = apply_gate_onsite(ten.top, op)
         tmp = ten._attach_01(vect)
         val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
@@ -139,8 +139,8 @@ class EnvCTM(Peps):
             tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
             val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
 
-            ten0.top = apply_gate(ten0.top, G0, dirn='l')
-            ten1.top = apply_gate(ten1.top, G1, dirn='r')
+            ten0.top = apply_gate_onsite(ten0.top, G0, dirn='l')
+            ten1.top = apply_gate_onsite(ten1.top, G1, dirn='r')
 
             tmp0 = ten0._attach_01(vecl)
             tmp0 = tensordot(env0.b, tmp0, axes=((2, 1), (0, 1)))
@@ -157,8 +157,8 @@ class EnvCTM(Peps):
             tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
             val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
 
-            ten0.top = apply_gate(ten0.top, G0, dirn='t')
-            ten1.top = apply_gate(ten1.top, G1, dirn='b')
+            ten0.top = apply_gate_onsite(ten0.top, G0, dirn='t')
+            ten1.top = apply_gate_onsite(ten1.top, G1, dirn='b')
 
             tmp0 = ten0._attach_01(vect)
             tmp0 = tensordot(tmp0, env0.r, axes=((2, 3), (0, 1)))
