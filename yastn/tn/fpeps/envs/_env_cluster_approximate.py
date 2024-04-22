@@ -111,7 +111,7 @@ class EnvApproximate:
                 mps.compression_(self[bd, ny], (tmpo, self[bd, ny-1]), **self.opts_var)
 
     def update_env(self, bd):
-        if bd[2] == "h":
+        if bd[2] == "h":  # dirn == "h":
             self[bd, self.Nw + 1] = self.boundary_mps(bd, 't')
             for nx in range(-self.Nw, 0):  # [bd, 1]
                 tmpo = self.transfer_mpo(bd, n=nx)
@@ -122,7 +122,7 @@ class EnvApproximate:
                 tmpo = self.transfer_mpo(bd, n=nx).H
                 mps.compression_(self[bd, -nx], (tmpo, self[bd, -nx-1]), max_sweeps=self.update_sweeps)
 
-        else:  # bd.dirn == "v":
+        else:  # dirn == "v":
             self[bd, self.Nw + 1] = self.boundary_mps(bd, 'r')
             for ny in range(self.Nw, 0, -1):  # [bd, 1]
                 tmpo = self.transfer_mpo(bd, n=ny)

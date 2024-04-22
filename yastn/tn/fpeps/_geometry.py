@@ -25,17 +25,6 @@ class Bond(NamedTuple):  # Not very convinient to use
         return f"Bond(({self.site0[0]},{self.site0[1]}),({self.site1[0]},{self.site1[1]}))"
 
 
-    @property
-    def dirn(self):
-        """
-        Bond direction.
-
-        Return 'h' when site0.nx == site1.nx.
-        Otherwise return 'v' when, by construction, site0.ny == site1.ny.
-        """
-        return 'h' if self.site0[0] == self.site1[0] else 'v'
-
-
 _periodic_dict = {'infinite': 'ii', 'obc': 'oo', 'cylinder': 'po'}
 
 class SquareLattice():
