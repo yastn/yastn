@@ -22,7 +22,7 @@ class Bond(NamedTuple):  # Not very convinient to use
     site1 : Site = None
 
     def __str__(self):
-        return f"Bond(({self.site0.nx},{self.site0.ny}),({self.site1.nx},{self.site1.ny}))"
+        return f"Bond(({self.site0[0]},{self.site0[1]}),({self.site1[0]},{self.site1[1]}))"
 
 
     @property
@@ -132,22 +132,24 @@ class SquareLattice():
         return Site(x, y)
 
 
-    def nn_bond_type(self, bond):
+    def nn_bond_type(self, bond) -> tuple[str, bool]:
         """
-        For a bond corresponding to a pair of nearest-neighbor sites
-        return its orientation in the 2D grid as 'lr', 'rl', 'tb', or 'bt'.
-        Otherwise, return None.
+        Raise YastnError if a bond does not connect nearest-neighbor lattice sites.
+        Return bond orientation in 2D grid as a tuple: dirn, l_ordered
+        dirn is 'h' or 'v' (horizontal, vertical).
+        l_ordered is True for bond directed as 'lr' or 'tb', and False for 'rl' or 'bt'.
         """
         s0, s1 = bond
         if self.nn_site(s0, 'r') == s1 and self.nn_site(s1, 'l') == s0:
-            return 'lr'
+            return 'h', True  # dirn, l_ordered
         if self.nn_site(s0, 'b') == s1 and self.nn_site(s1, 't') == s0:
-            return 'tb'
+            return 'v', True
         if self.nn_site(s0, 'l') == s1 and self.nn_site(s1, 'r') == s0:
-            return 'rl'
+            return 'h', False
         if self.nn_site(s0, 't') == s1 and self.nn_site(s1, 'b') == s0:
-            return 'bt'
-        return None
+            return 'v', False
+        raise YastnError(f"{bond} is not a nearest-neighbor bond.")
+
 
     def f_ordered(self, bond):
         """ Check if bond sites appear in fermionic order. """

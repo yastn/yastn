@@ -1,5 +1,6 @@
 """ Test operation of peps.Lattice and peps.Peps that inherits Lattice"""
 import pytest
+import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps import Site, Bond
 
@@ -24,14 +25,16 @@ def test_CheckerboardLattice():
     assert net.nn_site(Site(0, 0), d='t') == (-1, 0)
     assert net.nn_site(Site(1, 0), d='b') == (2, 0)
 
-    assert net.nn_bond_type(Bond((0, 0), (0, 1))) == 'lr'
-    assert net.nn_bond_type(Bond((0, 3), (0, 2))) == 'rl'
-    assert net.nn_bond_type(Bond((1, 3), (0, 3))) == 'bt'
-    assert net.nn_bond_type(Bond((1, 0), (2, 0))) == 'tb'
-    assert net.nn_bond_type(Bond((1, 0), (3, 0))) is None
+    assert net.nn_bond_type(Bond((0, 0), (0, 1))) == ('h', True)  # 'lr'
+    assert net.nn_bond_type(Bond((0, 3), (0, 2))) == ('h', False)  # 'rl'
+    assert net.nn_bond_type(Bond((1, 3), (0, 3))) == ('v', False)  # 'bt'
+    assert net.nn_bond_type(Bond((1, 0), (2, 0))) == ('v', True)  # 'tb'
+    with pytest.raises(yastn.YastnError):
+        net.nn_bond_type(Bond((1, 0), (3, 0)))
+        # Bond((1,0),(3,0)) is not a nearest-neighboor bond.
 
-    assert all(net.nn_bond_type(bond) == 'lr' for bond in net.bonds(dirn='h'))
-    assert all(net.nn_bond_type(bond) == 'tb' for bond in net.bonds(dirn='v'))
+    assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
+    assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
 
     assert net.f_ordered(Bond((2, 0), (4, 0)))
     assert net.f_ordered(Bond((4, 0), (0, 4)))
@@ -61,13 +64,15 @@ def test_SquareLattice():
     assert net.site2index((1, 0)) == (1, 0)
     assert net.site2index(None) == None
 
-    assert net.nn_bond_type(Bond((0, 0), (0, 1))) == 'lr'
-    assert net.nn_bond_type(Bond((0, 1), (0, 0))) == 'rl'
-    assert net.nn_bond_type(Bond((2, 1), (1, 1))) == 'bt'
-    assert net.nn_bond_type(Bond((1, 0), (2, 0))) == 'tb'
-    assert net.nn_bond_type(Bond((0, 0), (2, 0))) is None
-    assert all(net.nn_bond_type(bond) == 'lr' for bond in net.bonds(dirn='h'))
-    assert all(net.nn_bond_type(bond) == 'tb' for bond in net.bonds(dirn='v'))
+    assert net.nn_bond_type(Bond((0, 0), (0, 1))) == ('h', True)  # 'lr'
+    assert net.nn_bond_type(Bond((0, 1), (0, 0))) == ('h', False)  # 'rl'
+    assert net.nn_bond_type(Bond((2, 1), (1, 1))) == ('v', False)  # 'bt'
+    assert net.nn_bond_type(Bond((1, 0), (2, 0))) == ('v', True)  # 'tb'
+    with pytest.raises(yastn.YastnError):
+        net.nn_bond_type(Bond((0, 0), (2, 0)))
+        # Bond((0,0),(2,0)) is not a nearest-neighboor bond.
+    assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
+    assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
 
     assert net.f_ordered(Bond((0, 0), (1, 0)))
     assert net.f_ordered(Bond((0, 0), (0, 1)))
@@ -99,13 +104,15 @@ def test_SquareLattice():
     assert net.nn_site((2, 0), d=(2, 1)) == Site(1, 1)
     assert net.nn_site((2, 0), d=(-3, 1)) == Site(2, 1)
 
-    assert net.nn_bond_type(Bond((0, 0), (0, 1))) == 'lr'
-    assert net.nn_bond_type(Bond((0, 1), (0, 0))) == 'rl'
-    assert net.nn_bond_type(Bond((2, 0), (0, 0))) == 'tb'
-    assert net.nn_bond_type(Bond((0, 1), (2, 1))) == 'bt'
-    assert net.nn_bond_type(Bond((3, 0), (2, 0))) is None
-    assert all(net.nn_bond_type(bond) == 'lr' for bond in net.bonds(dirn='h'))
-    assert all(net.nn_bond_type(bond) == 'tb' for bond in net.bonds(dirn='v'))
+    assert net.nn_bond_type(Bond((0, 0), (0, 1))) == ('h', True)  # 'lr'
+    assert net.nn_bond_type(Bond((0, 1), (0, 0))) == ('h', False)  # 'rl'
+    assert net.nn_bond_type(Bond((2, 0), (0, 0))) == ('v', True)  # 'tb'
+    assert net.nn_bond_type(Bond((0, 1), (2, 1))) == ('v', False)  # 'bt'
+    with pytest.raises(yastn.YastnError):
+        net.nn_bond_type(Bond((3, 0), (2, 0)))
+        # Bond((3,0),(2,0)) is not a nearest-neighboor bond.
+    assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
+    assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
 
     assert not net.f_ordered(Bond((2, 0), (0, 0)))
     assert all(net.f_ordered((s0, s1)) for s0, s1 in zip(net.sites(), net.sites()[1:]))
@@ -138,8 +145,8 @@ def test_SquareLattice():
     assert net.site2index((1, 0)) == (1, 0)
     assert net.site2index(None) == None
 
-    assert all(net.nn_bond_type(bond) == 'lr' for bond in net.bonds(dirn='h'))
-    assert all(net.nn_bond_type(bond) == 'tb' for bond in net.bonds(dirn='v'))
+    assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
+    assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
 
     assert all(net.f_ordered((s0, s1)) for s0, s1 in zip(net.sites(), net.sites()[1:]))
     assert all(net.f_ordered(bond) for bond in net.bonds())
@@ -193,7 +200,7 @@ def test_Peps_inheritance():
     assert len(psi.bonds()) == 12
     assert len(psi.sites()) == 6
     assert psi.nn_site((0, 0), 'r') == (0, 1)
-    assert psi.nn_bond_type(Bond((0, 0), (0, 1))) == 'lr'
+    assert psi.nn_bond_type(Bond((0, 0), (0, 1))) == ('h', True)  # 'lr'
     assert psi.f_ordered(Bond((0, 0), (0, 1)))
 
 

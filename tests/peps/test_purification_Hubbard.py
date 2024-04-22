@@ -112,7 +112,7 @@ def test_NTU_spinful_infinite():
     U = 0
     beta = 0.1
 
-    dbeta = 0.025
+    dbeta = 0.01
     D = 8
 
     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
@@ -128,7 +128,7 @@ def test_NTU_spinful_infinite():
     # initialized at infinite temperature
     psi = fpeps.product_peps(geometry, fid)
 
-    env = fpeps.EnvNTU(psi, which='NNN++')
+    env = fpeps.EnvNTU(psi, which='NN++')
     opts_svd = {"D_total": D, 'tol_block': 1e-15}
     steps = round((beta / 2) / dbeta)
     for step in range(steps):

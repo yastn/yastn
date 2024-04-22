@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from .... import rand, ones, YastnError, Leg, tensordot, ncon, qr
 from ... import mps
 from .._peps import Peps, Peps2Layers
-from ..gates import apply_gate, gate_product_operator, gate_fix_order
+from .._gates_auxlliary import apply_gate, gate_product_operator, gate_fix_order
 from .._geometry import Bond
 
 
@@ -116,25 +116,20 @@ class EnvCTM(Peps):
              return {bond: self.measure_nn(O0, O1, bond) for bond in self.bonds()}
 
         bond = Bond(*bond)
-        dirn = self.nn_bond_type(bond)
+        dirn, l_ordered = self.nn_bond_type(bond)
         f_ordered = self.f_ordered(bond)
-        if dirn in ("lr", 'tb'):
-            env0, env1 = self[bond.site0], self[bond.site1]
-            ten0, ten1 = self.psi[bond.site0], self.psi[bond.site1]
-        elif dirn in ("rl", 'bt'):
-            env0, env1 = self[bond.site1], self[bond.site0]
-            ten0, ten1 = self.psi[bond.site1], self.psi[bond.site0]
-        else:
-            raise YastnError("Measure_nn requires nearet-neighbor bond on the lattice.")
+        s0, s1 = bond if l_ordered else bond[::-1]
+        env0, env1 = self[s0], self[s1]
+        ten0, ten1 = self.psi[s0], self.psi[s1]
 
         if O0.ndim == 2 and O1.ndim == 2:
-            G0, G1 = gate_product_operator(O0, O1, l_ordered=dirn, f_ordered=f_ordered)
+            G0, G1 = gate_product_operator(O0, O1, l_ordered, f_ordered)
         elif O0.ndim == 3 and O1.ndim == 3:
-            G0, G1 = gate_fix_order(O0, O1, l_ordered=dirn, f_ordered=f_ordered)
+            G0, G1 = gate_fix_order(O0, O1, l_ordered, f_ordered)
         else:
             raise YastnError("Both operators O0 and O1 should have the same ndim==2, or ndim=3.")
 
-        if dirn in ('lr', 'rl'):
+        if dirn == 'h':
             vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
             vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
 
@@ -152,7 +147,7 @@ class EnvCTM(Peps):
             tmp1 = ten1._attach_23(vecr)
             tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
             val_op = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
-        else:  # dirn in ('tb', 'bt'):
+        else:  # dirn == 'v':
             vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
             vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
 

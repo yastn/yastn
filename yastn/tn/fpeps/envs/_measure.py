@@ -1,7 +1,7 @@
 from itertools import accumulate
 from .... import tensordot
 from ... import mps
-from ..gates import apply_gate
+from .._gates_auxlliary import apply_gate
 
 
 def sample(peps_env, projectors, opts_svd=None, opts_var=None):
@@ -32,7 +32,7 @@ def sample(peps_env, projectors, opts_svd=None, opts_var=None):
             norm_prob = env.measure(bd=(nx - 1, nx))
             for proj in loc_projectors:
                 dpt_pr = dpt.copy()
-                dpt_pr.A = tensordot(dpt_pr.A, proj, axes=(4, 1))
+                dpt_pr.top = tensordot(dpt_pr.top, proj, axes=(4, 1))
                 Os[nx] = dpt_pr
                 env.update_env_(nx, to='last')
                 prob.append(env.measure(bd=(nx, nx+1)) / norm_prob)
@@ -41,7 +41,7 @@ def sample(peps_env, projectors, opts_svd=None, opts_var=None):
             rand = rands[count]
             ind = sum(apr < rand for apr in accumulate(prob))
             out[(nx, ny)] = ind
-            dpt.A = tensordot(dpt.A, loc_projectors[ind], axes=(4, 1))
+            dpt.top = tensordot(dpt.top, loc_projectors[ind], axes=(4, 1))
             Os[nx] = dpt  # updated with the new collapse
             env.update_env_(nx, to='last')
             count += 1
@@ -103,13 +103,13 @@ def measure_2site(peps_env, op1, op2, opts_svd, opts_var=None):
                 mps.compression_(vRnext, (Os, vR), method='1site', normalize=False, **opts_var)
 
             # first calculate on-site correlations
-            Osnx1A = Os[nx1].A
+            Osnx1A = Os[nx1].top
             for nz2, o2 in op2dict[nx1, ny1].items():
-                Os[nx1].A = apply_gate(Osnx1A, o1 @ o2)
+                Os[nx1].top = apply_gate(Osnx1A, o1 @ o2)
                 env.update_env_(nx1, to='last')
                 out[(nx1, ny1) + nz1, (nx1, ny1) + nz2] = env.measure(bd=(nx1, nx1+1)) / norm_env
 
-            Os[nx1].A = apply_gate(Osnx1A, o1)
+            Os[nx1].top = apply_gate(Osnx1A, o1)
             env.setup_(to='last')
 
             if ny1 > 0:
@@ -118,9 +118,9 @@ def measure_2site(peps_env, op1, op2, opts_svd, opts_var=None):
 
             # calculate correlations along the row
             for nx2 in range(nx1 + 1, Nx):
-                Osnx2A = Os[nx2].A
+                Osnx2A = Os[nx2].top
                 for nz2, o2 in op2dict[nx2, ny1].items():
-                    Os[nx2].A = apply_gate(Osnx2A, o2)
+                    Os[nx2].top = apply_gate(Osnx2A, o2)
                     env.update_env_(nx2, to='first')
                     out[(nx1, ny1) + nz1, (nx2, ny1) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
 
@@ -141,9 +141,9 @@ def measure_2site(peps_env, op1, op2, opts_svd, opts_var=None):
 
                 env = mps.Env(vL, [Os, vRo1]).setup_(to='first').setup_(to='last')
                 for nx2 in range(psi.Nx):
-                    Osnx2A = Os[nx2].A
+                    Osnx2A = Os[nx2].top
                     for nz2, o2 in op2dict[nx2, ny2].items():
-                        Os[nx1].A = apply_gate(Osnx2A, o2)
+                        Os[nx1].top = apply_gate(Osnx2A, o2)
                         env.update_env_(nx2, to='first')
                         out[(nx1, ny1) + nz1, (nx2, ny2) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
     return out
@@ -173,9 +173,9 @@ def measure_1site(peps_env, op):
         norm_env = env.measure()
         for nx in range(Nx):
             if (nx, ny) in opdict:
-                Osnx1A = Os[nx].A
+                Osnx1A = Os[nx].top
                 for nz, o in opdict[nx, ny].items():
-                    Os[nx].A = apply_gate(Osnx1A, o)
+                    Os[nx].top = apply_gate(Osnx1A, o)
                     env.update_env_(nx, to='first')
                     out[(nx, ny) + nz] = env.measure(bd=(nx-1, nx)) / norm_env
     return out

@@ -1,6 +1,5 @@
 import yastn
 import yastn.tn.fpeps as fpeps
-from yastn.tn.fpeps.gates import apply_gate
 
 try:
     from .configs import config_dense
@@ -13,7 +12,7 @@ def test_apply_gate():
 
     net = fpeps.SquareLattice(dims=(2, 2), boundary='obc')
     ops = yastn.operators.SpinfulFermions(sym='U1xU1',backend=config_dense.backend,default_device=config_dense.default_device)
-    one, c_up, c_dn, cdag_up, cdag_dn = ops.I(), ops.c(spin='u'), ops.c(spin='d'), ops.cp(spin='u'), ops.cp(spin='d')
+    c_up, c_dn, cdag_up, cdag_dn = ops.c(spin='u'), ops.c(spin='d'), ops.cp(spin='u'), ops.cp(spin='d')
 
     # initialize peps in Neel state
     A10 = ops.vec_n(val=(1, 0))
@@ -44,12 +43,12 @@ def test_apply_gate():
     c2dag = cdag_up.add_leg(s=-1)
     cc =  yastn.ncon([c1, c2dag], ((-0, -2, 1) , (-1, -3, 1)))
     gate = fpeps.gates.decompose_nn_gate(cc)
-    vac = fpeps.apply_gate(psi[0, 0], gate.A, dirn='l')
-    doc = fpeps.apply_gate(psi[0, 1], gate.B, dirn='r')
+    vac = fpeps.apply_gate(psi[0, 0], gate.G0, dirn='l')
+    doc = fpeps.apply_gate(psi[0, 1], gate.G1, dirn='r')
     assert vac.unfuse_legs(axes=2).get_legs(axes=2).t == ((0, 0),)
     assert doc.unfuse_legs(axes=2).get_legs(axes=2).t == ((1, 1),)
-    vac = fpeps.apply_gate(psi[0, 0], gate.A, dirn='t')
-    doc = fpeps.apply_gate(psi[1, 0], gate.B, dirn='b')
+    vac = fpeps.apply_gate(psi[0, 0], gate.G0, dirn='t')
+    doc = fpeps.apply_gate(psi[1, 0], gate.G1, dirn='b')
     assert vac.unfuse_legs(axes=2).get_legs(axes=2).t == ((0, 0),)
     assert doc.unfuse_legs(axes=2).get_legs(axes=2).t == ((1, 1),)
 

@@ -27,7 +27,7 @@ def check_hopping_gate(ops, t, ds):
     I, c, cdag = ops.I(), ops.c(), ops.cp()
 
     g_hop = fpeps.gates.gate_nn_hopping(t, ds, I, c, cdag)  # nn gate for 2D fermi sea
-    O = yastn.ncon([g_hop.A, g_hop.B], [(-0, -2, 1) , (-1, -3, 1)])
+    O = yastn.ncon([g_hop.G0, g_hop.G1], [(-0, -2, 1) , (-1, -3, 1)])
     O = O.fuse_legs(axes=((0, 1), (2, 3)))
 
     c1dag = cdag.add_leg(s=1).swap_gate(axes=(0, 2))

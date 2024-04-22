@@ -288,7 +288,7 @@ class EnvNTU:
             hp2p0_l, hp1m1_b = cut_into_hairs(cor_bl(m[2, -1]))
             hp1p0_l, hp0m1_b = cut_into_hairs(cor_bl(m[1, -1], hb=hp1m1_b, hl=hp1m1_l))
 
-            hp0m1_l = hair_l(m[0, -2], hl=hair_l(m[0, -2]), ht=hp0m2_t, hb=hp0m2_b)
+            hp0m1_l = hair_l(m[0, -2], hl=hair_l(m[0, -3]), ht=hp0m2_t, hb=hp0m2_b)
             hp0m0_l = hair_l(m[0, -1], hl=hp0m1_l, ht=hp0m1_t, hb=hp0m1_b)
             env_l = edge_l(QA, hp0m0_l)  # [bl bl'] [rr rr'] [tl tl']
 
