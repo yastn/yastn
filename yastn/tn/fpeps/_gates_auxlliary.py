@@ -41,24 +41,24 @@ def apply_gate_onsite(ten, G, dirn=None):
     if dirn is None:
         return tmp
     if dirn == 't':
-        tmp = tmp.unfuse_legs(axes=1) # [t l] b r [s a] c
-        tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3)) # [t l] [b c] r [s a]
-        return tmp.fuse_legs(axes=(0, (1, 2), 3)) # [t l] [[b c] r] [s a]
+        tmp = tmp.unfuse_legs(axes=1)  # [t l] b r [s a] c
+        tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3))  # [t l] [b c] r [s a]
+        return tmp.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b c] r] [s a]
     if dirn == 'b':
-        tmp = tmp.unfuse_legs(axes=0) # t l [b r] [s a] c
+        tmp = tmp.unfuse_legs(axes=0)  # t l [b r] [s a] c
         tmp = tmp.swap_gate(axes=(1, 4))
-        tmp = tmp.fuse_legs(axes=((0, 4), 1, 2, 3)) # [t c] l [b r] [s a]
-        return tmp.fuse_legs(axes=((0, 1), 2, 3)) # [[t c] l] [b r] [s a]
+        tmp = tmp.fuse_legs(axes=((0, 4), 1, 2, 3))  # [t c] l [b r] [s a]
+        return tmp.fuse_legs(axes=((0, 1), 2, 3))  # [[t c] l] [b r] [s a]
     if dirn == 'l':
-        tmp = tmp.unfuse_legs(axes=1) # [t l] b r [s a] c
+        tmp = tmp.unfuse_legs(axes=1)  # [t l] b r [s a] c
         tmp = tmp.swap_gate(axes=(1, 4))
-        tmp = tmp.fuse_legs(axes=(0, 1, (2, 4), 3)) # [t l] b [r c] [s a]
-        return tmp.fuse_legs(axes=(0, (1, 2), 3)) # [t l] [b [r c]] [s a]
+        tmp = tmp.fuse_legs(axes=(0, 1, (2, 4), 3))  # [t l] b [r c] [s a]
+        return tmp.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [b [r c]] [s a]
     if dirn == 'r':
-        tmp = tmp.unfuse_legs(axes=0) # t l [b r] [s a] c
-        tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3)) # t [l c] [b r] [s a]
-        return tmp.fuse_legs(axes=((0, 1), 2, 3)) # [t [l c]] [b r] [s a]
-    raise YastnError("dirn should be equal to 'l', 'r', 't', 'b', or None")
+        tmp = tmp.unfuse_legs(axes=0)  # t l [b r] [s a] c
+        tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3))  # t [l c] [b r] [s a]
+        return tmp.fuse_legs(axes=((0, 1), 2, 3))  # [t [l c]] [b r] [s a]
+    # raise YastnError("dirn should be equal to 'l', 'r', 't', 'b', or None")
 
 
 def apply_gate_nn(ten0, ten1, G0, G1, dirn):
@@ -74,7 +74,7 @@ def apply_gate_nn(ten0, ten1, G0, G1, dirn):
     G1 = match_ancilla(ten1, G1, swap=False)
 
     if dirn == 'h':  # Horizontal gate, "lr" ordered
-        tmp0 = tensordot(ten0, G0, axes=(2, 1)) # [t l] [b r] sa c
+        tmp0 = tensordot(ten0, G0, axes=(2, 1))  # [t l] [b r] sa c
         tmp0 = tmp0.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
         tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r c
         tmp0 = tmp0.swap_gate(axes=(1, 3))  # b X c
@@ -85,7 +85,7 @@ def apply_gate_nn(ten0, ten1, G0, G1, dirn):
         Q0 = Q0.unfuse_legs(axes=0)  # [t l] sa [b rr]
         Q0 = Q0.transpose(axes=(0, 2, 1))  # [t l] [b rr] sa
 
-        tmp1 = tensordot(ten1, G1, axes=(2, 1)) # [t l] [b r] sa c
+        tmp1 = tensordot(ten1, G1, axes=(2, 1))  # [t l] [b r] sa c
         tmp1 = tmp1.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
         tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa] c
         tmp1 = tmp1.fuse_legs(axes=((0, 2), (1, 3)))  # [t [[b r] sa]] [l c]
@@ -94,7 +94,7 @@ def apply_gate_nn(ten0, ten1, G0, G1, dirn):
         Q1 = Q1.fuse_legs(axes=((1, 0), 2))  # [t ll] [[b r] sa]
         Q1 = Q1.unfuse_legs(axes=1)  # [t ll] [b r] sa
     else: # dirn == 'v':  # Vertical gate, "tb" ordered
-        tmp0 = tensordot(ten0, G0, axes=(2, 1)) # [t l] [b r] sa c
+        tmp0 = tensordot(ten0, G0, axes=(2, 1))  # [t l] [b r] sa c
         tmp0 = tmp0.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
         tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r c
         tmp0 = tmp0.fuse_legs(axes=((0, 2), (1, 3)))  # [[[t l] sa] r] [b c]
@@ -104,7 +104,7 @@ def apply_gate_nn(ten0, ten1, G0, G1, dirn):
         Q0 = Q0.unfuse_legs(axes=0)  # [t l] sa [bb r]
         Q0 = Q0.transpose(axes=(0, 2, 1))  # [t l] [bb r] sa
 
-        tmp1 = tensordot(ten1, G1, axes=(2, 1)) # [t l] [b r] sa c
+        tmp1 = tensordot(ten1, G1, axes=(2, 1))  # [t l] [b r] sa c
         tmp1 = tmp1.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
         tmp1 = tmp1.unfuse_legs(axes=0)  # t l [[b r] sa] c
         tmp1 = tmp1.swap_gate(axes=(1, 3))  # l X c

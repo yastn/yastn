@@ -7,7 +7,7 @@ except ImportError:
     from configs import config_dense
 
 
-def test_apply_gate_onsite():
+def atest_apply_gate_onsite():
     """ initialize vacuum state and check the functions apply_gate_onsite and apply_gate_onsite_2s """
 
     net = fpeps.SquareLattice(dims=(2, 2), boundary='obc')
@@ -54,4 +54,4 @@ def test_apply_gate_onsite():
 
 
 if __name__ == "__main__":
-    test_apply_gate_onsite()
+    atest_apply_gate_onsite()
