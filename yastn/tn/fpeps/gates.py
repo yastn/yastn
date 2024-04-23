@@ -1,26 +1,46 @@
 import numpy as np
 from typing import NamedTuple
-from ... import ncon
+from ._gates_auxlliary import twosite_operator
 
 
 class Gate_nn(NamedTuple):
-    """ A should be before B in the fermionic order. """
+    """
+    G0 should be before G1 in the fermionic and lattice orders.
+    The third legs of G0 and G1 are auxiliary legs connecting them into a two-site operator.
+
+    If a bond is None, this is a general operator.
+    Otherwise, the bond can carry information where it should be applied
+    (potentially, after fixing the order mismatches).
+    """
     G0 : tuple = None
     G1 : tuple = None
     bond : tuple = None
 
 
 class Gate_local(NamedTuple):
+    """
+    G is a local operator with ndim==2.
+
+    If site is None, this is a general operator.
+    Otherwise, the site can carry information where it should be applied.
+    """
     G : tuple = None
     site : tuple = None
 
 
 class Gates(NamedTuple):
+    """
+    List of nearest-neighbor and local operators to be applied to PEPS during evolution_step.
+    """
     nn : list = None   # list of NN gates
     local : list = None   # list of local gates
 
 
 def decompose_nn_gate(Gnn):
+    """
+    Auxiliary function cutting a two-site gate with SVD
+    into two local operators with the connecting legs.
+    """
     U, S, V = Gnn.svd_with_truncation(axes=((0, 2), (1, 3)), sU=-1, tol=1e-14, Vaxis=2)
     S = S.sqrt()
     return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2))
@@ -29,39 +49,22 @@ def decompose_nn_gate(Gnn):
 def gate_nn_hopping(t, step, I, c, cdag):
     """
     Nearest-neighbor gate G = exp(-step * H)
-    for H = -t * (cdag1 c2 + c2dag c1)
+    for H = -t * (cdag_1 c_2 + cdag_2 c_1)
 
-    G = I + (cosh(x) - 1) * (n1 + n2 - 2 n1 n2) + sinh(x) * (c1dag c2 + c2dag c1)
+    G = I + (cosh(x) - 1) * (n_1 h_2 + h_1 n_2) + sinh(x) * (cdag_1 c_2 + cdag_2 c_1)
     """
     n = cdag @ c
-    II = ncon([I, I], [(-0, -2), (-1, -3)])
-    n1 = ncon([n, I], [(-0, -2), (-1, -3)])
-    n2 = ncon([I, n], [(-0, -2), (-1, -3)])
-    nn = ncon([n, n], [(-0, -2), (-1, -3)])
+    h = c @ cdag
 
-    # site-1 is before site-2 in fermionic order
-    # c1dag c2;
-    c1dag = cdag.add_leg(s=1).swap_gate(axes=(0, 2))
-    c2 = c.add_leg(s=-1)
-    cc = ncon([c1dag, c2], [(-0, -2, 1) , (-1, -3, 1)])
+    II = twosite_operator(I, I, sites=(0, 1))
+    nh = twosite_operator(n, h, sites=(0, 1))
+    hn = twosite_operator(h, n, sites=(0, 1))
 
-    # c2dag c1
-    c1 = c.add_leg(s=1).swap_gate(axes=(1, 2))
-    c2dag = cdag.add_leg(s=-1)
-    cc = cc + ncon([c1, c2dag], [(-0, -2, 1) , (-1, -3, 1)])
+    cc = twosite_operator(cdag, c, sites=(0, 1)) \
+       + twosite_operator(cdag, c, sites=(1, 0))
 
-    G =  II + (np.cosh(t * step) - 1) * (n1 + n2 - 2 * nn) + np.sinh(t * step) * cc
+    G =  II + (np.cosh(t * step) - 1) * (nh + hn) + np.sinh(t * step) * cc
     return decompose_nn_gate(G)
-
-
-# def Hamiltonian_nn_hopping():
-#     #  c1 dag c2 + c2dag c1
-#     pass
-#     c1 = c.add_leg(s=1).swap_gate(axes=(1, 2))
-#     c2dag = cdag.add_leg(s=-1)
-#     cc = cc + ncon([c1, c2dag], [(-0, -2, 1) , (-1, -3, 1)])
-#     return decompose_nn_gate(cc)
-
 
 
 def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn):
@@ -78,9 +81,6 @@ def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn):
     G_loc = G_loc + nn * (np.exp(step * (mu_up + mu_dn)) - 1)
     return Gate_local(G_loc)
 
-
-# def Hamiltonian_local_Coulomb(n_up, n_dn):
-#     return Gate_local(n_up @ n_dn)
 
 def gate_local_occupation(mu, step, I, n):
     """
@@ -101,12 +101,11 @@ def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
         Can be any structure that includes geometric information about the lattice, like the Peps class.
 
     nn : Gate_nn | Sequence[Gate_nn]
-        Nearest-neighbor gate, or a list of gates, to be distributed over lattice bonds.
+        Nearest-neighbor gate, or a list of gates, to be distributed over all unique lattice bonds.
 
     local : Gate_local | Sequence[Gate_local]
-        Local gate, or a list of local gates, to be distributed over lattice sites.
+        Local gate, or a list of local gates, to be distributed over all unique lattice sites.
     """
-
     if isinstance(gates_nn, Gate_nn):
         gates_nn = [gates_nn]
 

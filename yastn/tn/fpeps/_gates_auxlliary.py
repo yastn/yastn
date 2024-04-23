@@ -1,8 +1,13 @@
-from ... import eye, tensordot, qr
+from ... import eye, tensordot, qr, YastnError
 
 
 def match_ancilla(ten, G, swap=False):
-    """ kron and fusion of local gate with identity for ancilla. Identity is read from ancila of A. """
+    """
+    Kronecker product and fusion of local gate with identity for ancilla.
+
+    Identity is read from the ancilla leg of the tensor.
+    Can perform a swap gate of the auxiliary operator leg (if present) with an ancilla.
+    """
     leg = ten.get_legs(axes=-1)
 
     if not leg.is_fused():
@@ -14,7 +19,7 @@ def match_ancilla(ten, G, swap=False):
 
     if G.ndim == 2:
         return Gnew.fuse_legs(axes=((0, 2), (1, 3)))
-    # else gate.ndim == 3:
+    # else G.ndim == 3:
     if swap:
         Gnew = Gnew.swap_gate(axes=(2, 3))
     return Gnew.fuse_legs(axes=((0, 3), (1, 4), 2))
@@ -22,10 +27,12 @@ def match_ancilla(ten, G, swap=False):
 
 def apply_gate_onsite(ten, G, dirn=None):
     """
-    Prepare top and bottom peps tensors for CTM procedures.
-    Applies operators on top if provided, with dir = 'l', 'r', 't', 'b'.
-    If dirn is None, no auxiliary indices are introduced as the operator is local.
-    Spin and ancilla legs of tensors are always fused.
+    Applies operator to the physical leg of (ket) PEPS tensor.
+
+    Operator with auxiliary leg should have dirn in 'l', 'r', 't', 'b', indicating
+    the fusion of the auxiliary leg with the corresponding virtual tensor leg and
+    application of a proper swap gate.
+    For a local operator with no auxiliary index, dirn should be None.
     """
     swap = dirn is not None and dirn in 'tl'
     G = match_ancilla(ten, G, swap=swap)
@@ -51,22 +58,22 @@ def apply_gate_onsite(ten, G, dirn=None):
         tmp = tmp.unfuse_legs(axes=0) # t l [b r] [s a] c
         tmp = tmp.fuse_legs(axes=(0, (1, 4), 2, 3)) # t [l c] [b r] [s a]
         return tmp.fuse_legs(axes=((0, 1), 2, 3)) # [t [l c]] [b r] [s a]
-    raise RuntimeError("dirn should be equal to 'l', 'r', 't', 'b', or None")
-
+    raise YastnError("dirn should be equal to 'l', 'r', 't', 'b', or None")
 
 
 def apply_gate_nn(ten0, ten1, G0, G1, dirn):
     """
-    Apply nearest neighbor gate to PEPS tensors.
+    Apply the nearest neighbor gate to a pair of (ket) PEPS tensors.
 
-    Mismatch in orientation of the gate and fermionic order are handled outside of this function.
-    Here it is assumed we have 'lr' (if dirn=='h') and 'tb' (if dirn=='v') orientation.
+    The gate should be oriented in accordance with fermionic and lattice orders,
+    i.e., here it is assumed we have gate oriented as 'lr' if dirn=='h', and 'tb' if dirn=='v'.
+    This gets handled outside of this function.
     """
 
     G0 = match_ancilla(ten0, G0, swap=True)
     G1 = match_ancilla(ten1, G1, swap=False)
 
-    if dirn == 'h':  # Horizontal gate "lr" ordered
+    if dirn == 'h':  # Horizontal gate, "lr" ordered
         tmp0 = tensordot(ten0, G0, axes=(2, 1)) # [t l] [b r] sa c
         tmp0 = tmp0.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
         tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r c
@@ -86,8 +93,7 @@ def apply_gate_nn(ten0, ten1, G0, G1, dirn):
         Q1 = Q1f.unfuse_legs(axes=1)  # ll t [[b r] sa]
         Q1 = Q1.fuse_legs(axes=((1, 0), 2))  # [t ll] [[b r] sa]
         Q1 = Q1.unfuse_legs(axes=1)  # [t ll] [b r] sa
-
-    else: # dirn == 'v':  # Vertical gate "tb" ordered
+    else: # dirn == 'v':  # Vertical gate, "tb" ordered
         tmp0 = tensordot(ten0, G0, axes=(2, 1)) # [t l] [b r] sa c
         tmp0 = tmp0.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
         tmp0 = tmp0.unfuse_legs(axes=1)  # [[t l] sa] b r c
@@ -107,7 +113,6 @@ def apply_gate_nn(ten0, ten1, G0, G1, dirn):
         Q1 = Q1f.unfuse_legs(axes=1)  # t l [[b r] sa]
         Q1 = Q1.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
         Q1 = Q1.unfuse_legs(axes=1)  # [t l] [b r] sa
-
     return Q0, Q1, R0, R1, Q0f, Q1f
 
 
@@ -142,12 +147,13 @@ def apply_bond_tensors(Q0f, Q1f, M0, M1, dirn):
 
 def gate_product_operator(O0, O1, l_ordered=True, f_ordered=True, merge=False):
     """
-    Takes two ndim=2 local operators O0 O1, with O1 acting first (relevant for fermionic operators).
+    Takes two ndim=2 local operators O0 O1 to be applied
+    on two sites with O1 acting first (relevant for fermionic operators).
     Adds a connecting leg with a swap_gate consistent with fermionic order.
-    Orders output to match lattice order.
+    Orders output to match lattice order (canonical l_order is 'lr' and 'tb').
 
-    If merge, returns equivalnt of ncon([O0, O1], [(-0, -2), (-1, -3)]),
-    with proper operator order and swap-gate applied.
+    If merge, returns equivalent of ncon([O0, O1], [(-0, -2), (-1, -3)]),
+    with proper operator order and swap gate applied.
     """
     G0 = O0.add_leg(s=1)
     G1 = O1.add_leg(s=-1)
@@ -164,10 +170,35 @@ def gate_product_operator(O0, O1, l_ordered=True, f_ordered=True, merge=False):
     return G0, G1
 
 
+def twosite_operator(A, B, sites=(0, 1), merge=True):
+    """
+    Auxiliary function for gate generation,
+    returning a Kronecker product of two local operators, A and B.
+
+    Calculate A_0 B_1 for sites == (0, 1), and A_1 B_0 for sites = (1, 0),
+    i.e., operator B acts first (relevant for fermionic operators).
+
+    Site 0 is assumed to be first in both lattice and fermionic orders.
+
+    If merge, returns equivalent of ncon([O0, O1], [(-0, -2), (-1, -3)]),
+    with proper operator order and swap gate applied;
+    O0 corresponds to the operator acting on site 0.
+    """
+    if sites not in ((0, 1), (1, 0)):
+        raise YastnError("sites should be equal to (0, 1) or (1, 0)")
+    order = (sites == (0, 1))
+    return gate_product_operator(A, B, order, order, merge)
+
+
 def gate_fix_order(G0, G1, l_ordered=True, f_ordered=True):
     """
-    Modifies two gate tensors, that were generated consitent with lattice and fermionic orders,
-    to make them consistent with provided ordere.
+    Modifies two gate tensors,
+    that were generated consistently with lattice and fermionic orders,
+    making them consistent with provided orders.
+
+    l_ordered and f_ordered typically coincide;
+    they do not coincide in a special case of
+    cylindric lattice geometry across the periodic boundary.
     """
     if not f_ordered:
         G0 = G0.swap_gate(axes=(0, 2))
