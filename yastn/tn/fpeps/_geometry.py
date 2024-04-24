@@ -9,7 +9,7 @@ class Site(NamedTuple):
     ny : int = 0
 
     def __str__(self):
-        return f"Site({self.nx},{self.ny})"
+        return f"Site({self.nx}, {self.ny})"
 
 
 class Bond(NamedTuple):  # Not very convinient to use
@@ -22,7 +22,7 @@ class Bond(NamedTuple):  # Not very convinient to use
     site1 : Site = None
 
     def __str__(self):
-        return f"Bond(({self.site0[0]},{self.site0[1]}),({self.site1[0]},{self.site1[1]}))"
+        return f"Bond(({self.site0[0]}, {self.site0[1]}), ({self.site1[0]}, {self.site1[1]}))"
 
 
 _periodic_dict = {'infinite': 'ii', 'obc': 'oo', 'cylinder': 'po'}
@@ -45,7 +45,7 @@ class SquareLattice():
         Site(0, 0) corresponds to top-left corner of the lattice.
         """
         if boundary not in ('obc', 'infinite', 'cylinder'):
-            raise YastnError("boundary should be 'obc', 'infinite', or 'cylinder'")
+            raise YastnError(f"{boundary=} not recognized; should be 'obc', 'infinite', or 'cylinder'")
 
         self.boundary = boundary
         self._periodic = _periodic_dict[boundary]

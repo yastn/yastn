@@ -7,6 +7,9 @@ from yastn.tn.fpeps import Site, Bond
 def test_CheckerboardLattice():
     """ Generate a few lattices veryfing expected output of some functions. """
 
+    assert str(Site(0, 0)) == "Site(0, 0)"
+    assert str(Bond(Site(0, 0), Site(0, 1))) == "Bond((0, 0), (0, 1))"
+
     net = fpeps.CheckerboardLattice()
 
     assert net.dims == (2, 2)
@@ -59,6 +62,7 @@ def test_SquareLattice():
     assert net.nn_site((0, 1), d='t') is None
     assert net.nn_site((2, 0), d='l') is None
     assert net.nn_site((2, 0), d='b') is None
+    assert net.nn_site(None, d='l') is None
 
     assert net.nn_site((0, 1), d=(2, -1)) == Site(2, 0)
     assert net.site2index((1, 0)) == (1, 0)
@@ -150,6 +154,12 @@ def test_SquareLattice():
 
     assert all(net.f_ordered((s0, s1)) for s0, s1 in zip(net.sites(), net.sites()[1:]))
     assert all(net.f_ordered(bond) for bond in net.bonds())
+
+    ###
+
+    with pytest.raises(yastn.YastnError):
+        fpeps.SquareLattice(dims=(3, 2), boundary='some')
+        #  boundary='some' not recognized; should be 'obc', 'infinite', or 'cylinder'
 
 
 def test_Peps_get_set():

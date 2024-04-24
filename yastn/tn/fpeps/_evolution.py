@@ -34,10 +34,12 @@ def evolution_step_(env, gates, opts_svd,
     symmetrize : bool
         Whether to iterate through provided gates forward and then backward, resulting in a 2nd order method.
         In that case, each gate should correspond to half of desired timestep.
-    opts_svd : dict
+    opts_svd : dict | Sequence[dict]
         Options passed to :meth:`yastn.linalg.svd_with_truncation` which are used
         to initially truncate the bond dimension, before it is further optimized iteratively.
         In particular, it fixes bond dimensions (potentially, sectorial).
+        It is possible to prvide a list of dicts (with decreasing bond dimensions),
+        in which case the truncation is done step by step.
     initialization : str
         "SVD" or "EAT". Type of procedure initializing the optimization of truncated PEPS tensors
         after application of two-site gate. Employ plain SVD, or SVD that includes
@@ -137,24 +139,29 @@ def apply_gate_nn_and_truncate_(env, gate, opts_svd, initialization="EAT",
                          fixed_eigenvalues = num_fixed)
 
 
-def truncate_and_optimize(fgf, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter):
+def truncate_and_optimize(fgf, R0, R1, initialization, opts_svd, pinv_cutoffs, max_iter):
     """
     First we truncate RA and RB tensors based on the input truncation_mode with
     function environment_aided_truncation_step. Then the truncated
     MA and MB tensors are subjected to least square optimization to minimize
      the truncation error with the function tu_single_optimization.
     """
-    RAB = RA @ RB
-    RAB = RAB.fuse_legs(axes=[(0, 1)])
+    R01 = R0 @ R1
+    R01 = R01.fuse_legs(axes=[(0, 1)])
     gf = fgf.unfuse_legs(axes=0)
-    fgRAB = fgf @ RAB
-    gRAB =  gf @ RAB
-    gRR = vdot(RAB, fgRAB).item()
+    fgR01 = fgf @ R01
+    gR01 =  gf @ R01
+    gRR = vdot(R01, fgR01).item()
 
-    MA, MB, svd_error2 = environment_aided_truncation_step(gRR, fgf, fgRAB, RA, RB, initialization, opts_svd, pinv_cutoffs)
-    MA, MB, truncation_error2, optimal_pinv_cutoff  = tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error2, pinv_cutoffs, max_iter)
-    MA, MB = truncation_step(MA, MB, opts_svd, normalize=True)
-    return MA, MB, truncation_error2, optimal_pinv_cutoff
+    if isinstance(opts_svd, dict):
+        opts_svd = [opts_svd]
+
+    for opts in opts_svd:
+        R0, R1, svd_error2 = environment_aided_truncation_step(gRR, fgf, fgR01, R0, R1, initialization, opts, pinv_cutoffs)
+        R0, R1, truncation_error2, optimal_pinv_cutoff  = tu_single_optimization(R0, R1, gR01, gf, gRR, svd_error2, pinv_cutoffs, max_iter)
+        R0, R1 = truncation_step(R0, R1, opts, normalize=True)
+
+    return R0, R1, truncation_error2, optimal_pinv_cutoff
 
 
 def truncation_step(RA, RB, opts_svd, normalize=False):

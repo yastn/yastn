@@ -129,11 +129,11 @@ def test_NTU_spinful_infinite():
     psi = fpeps.product_peps(geometry, I)
 
     env = fpeps.EnvNTU(psi, which='NN++')
-    opts_svd = {"D_total": D, 'tol_block': 1e-15}
+    opts_svd_evol = [{"D_total": 2 * D, 'tol_block': 1e-15}, {"D_total": D, 'tol_block': 1e-15}]  # two step
     steps = round((beta / 2) / dbeta)
     for step in range(steps):
         print(f"beta = {(step + 1) * dbeta}" )
-        fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
+        fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
 
 
     # CTMRG
@@ -157,10 +157,10 @@ def test_NTU_spinful_infinite():
     # analytical nn fermionic correlator at beta = 0.1 for 2D infinite lattice
     nn_exact = 0.02481459
     nn_CTM = np.mean([*cdagc_up.values(), *cdagc_dn.values()])
-    print(nn_CTM, 'vs', nn_exact)
+    print(f"{nn_CTM:0.6f} vs {nn_exact:0.6f}  diff = {nn_CTM - nn_exact:0.6f}")
     assert pytest.approx(nn_CTM, abs=1e-4) == nn_exact
 
 
 if __name__ == '__main__':
-    test_NTU_spinful_finite()
+    # test_NTU_spinful_finite()
     test_NTU_spinful_infinite()
