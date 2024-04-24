@@ -36,7 +36,7 @@ _axis_dirn = {'t': (1, 0), 'l': (1, 1), 'b': (0, 0), 'r': (0, 1)}
 class EnvApproximate:
     def __init__(self, psi, which='65', opts_svd=None, opts_var=None, update_sweeps=None):
         if which not in ('43', '43h', '65', '65h', '87', '87h'):
-            raise YastnError(f" Type of EnvApprox {which} not recognized.")
+            raise YastnError(f" Type of EnvApprox {which=} not recognized.")
         self._which = which
         self.psi = psi
         if which in ('43', '43h'):

@@ -40,7 +40,7 @@ def test_mpsboundary_measure(boundary):
     pr2 = [x.tensordot(x.conj(), axes=((), ())) for x in pr]
     pr2s = {s: pr2[:] for s in sites}
 
-    smpl = env.sample(pr2s, opts_svd=opts_svd)
+    smpl = env.sample(pr2s)
     assert all(vloc[smpl[s]] == vals[s] for s in sites)
 
 
@@ -61,10 +61,15 @@ def test_mpsboundary_measure(boundary):
     smpl2 = {}
 
     opts_var = {"max_sweeps": 2}
-    for _ in range(4):
-        proj_env.sample_MC_(proj_psi, smpl, smpl1, smpl2, psi, prs, opts_svd, opts_var, trial="local")
+    for trial in ["uniform", "local"]:
+        proj_env.sample_MC_(proj_psi, smpl, smpl1, smpl2, psi, prs, opts_svd, opts_var, trial=trial)
         assert all(vloc[smpl1[s]] == vals[s] for s in sites)
         assert all(vloc[smpl2[s]] == vals[s] for s in sites)
+
+    with pytest.raises(yastn.YastnError):
+        proj_env.sample_MC_(proj_psi, smpl, smpl1, smpl2, psi, prs, opts_svd, opts_var, trial="some")
+        # trial='some' not supported.
+
 
 if __name__ == '__main__':
     test_mpsboundary_measure(boundary='obc')

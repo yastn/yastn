@@ -17,7 +17,7 @@ class EnvNTU:
         """
 
         if which not in ('NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'):  # 'SU+'
-            raise YastnError(f" Type of EnvNTU {which} not recognized.")
+            raise YastnError(f" Type of EnvNTU {which=} not recognized.")
         self.psi = psi
         self.which = which
         self._dict_gs = {'NN': self._g_NN,

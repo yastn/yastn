@@ -1,4 +1,5 @@
 """ Test the expectation values of spinless fermions with analytical values of fermi sea for finite and infinite lattices """
+import pytest
 import numpy as np
 import yastn
 import yastn.tn.fpeps as fpeps
@@ -135,6 +136,14 @@ def test_spinless_infinite_approx():
         Gs2 = {k: v / v.norm() for k, v in Gs2.items()}
         for k in Gs2:
             assert 1e-15 < (Gs[k] - Gs2[k]).norm() < 1e-10
+
+    with pytest.raises(yastn.YastnError):
+        fpeps.EnvNTU(psi, which="some")
+        #  Type of EnvNTU which='some' not recognized.
+
+    with pytest.raises(yastn.YastnError):
+        fpeps.EnvApproximate(psi, which="some")
+        # Type of EnvApprox which='some' not recognized.
 
 
 if __name__ == '__main__':

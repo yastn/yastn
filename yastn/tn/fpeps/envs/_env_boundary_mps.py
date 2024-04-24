@@ -1,5 +1,5 @@
 from itertools import accumulate
-from .... import tensordot, Tensor
+from .... import tensordot, Tensor, YastnError
 from ... import mps
 from ._env_auxlliary import identity_tm_boundary
 from .._gates_auxlliary import apply_gate_onsite
@@ -247,7 +247,7 @@ class EnvBoundaryMps:
         elif trial == "uniform":
             _sample_MC_column = _sample_MC_column_uniform
         else:
-            raise ValueError(f"trial = {trial} not supported.")
+            raise YastnError(f"{trial=} not supported.")
 
         Nx, Ny = psi.Nx, psi.Ny
         config = psi[0, 0].config
@@ -319,7 +319,7 @@ def _sample_MC_column_uniform(ny, proj_psi, proj_env, st0, st1, psi, projectors,
     accept = 0
     vR = proj_env.boundary_mps(n=ny, dirn='r')
     Os = proj_psi.transfer_mpo(n=ny, dirn='v')
-    vL = proj_env.env2mps(n=ny, dirn='l')
+    vL = proj_env.boundary_mps(n=ny, dirn='l')
     env = mps.Env(vL, [Os, vR]).setup_(to='first')
     for nx in range(psi.Nx):
         A = psi[nx, ny]

@@ -37,17 +37,17 @@ class Peps():
         """
         Serialize PEPS into a dictionary.
         """
-        if isinstance(self.geometry, SquareLattice):
-            lattice = "square"
-        elif isinstance(self.geometry, CheckerboardLattice):
+        if isinstance(self.geometry, CheckerboardLattice):
             lattice = "checkerboard"
+        elif isinstance(self.geometry, SquareLattice):
+            lattice = "square"
 
         d = {'lattice': lattice,
              'dims': self.dims,
              'boundary': self.boundary,
              'data': {}}
         for ind, tensor in self._data.items():
-            d['data'][tuple(ind)] = tensor.save_to_dict()
+            d['data'][ind] = tensor.save_to_dict()
         return d
 
     def copy(self):
@@ -87,8 +87,8 @@ class Peps():
             for ny in range(self.Ny):
                 site = (n, ny)
                 top = self[site]
-                if top.ndim in (2, ):
-                    top = top.unfuse_legs(axes=(0, 1))
+                # if top.ndim in (2, ):
+                #     top = top.unfuse_legs(axes=(0, 1))
                 op.A[ny] = top.transpose(axes=(1, 2, 3, 0)) if top.ndim == 4 else \
                            DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
         elif dirn == 'v':
