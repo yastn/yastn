@@ -29,19 +29,19 @@ def test_NTU_spinful_finite():
 
     # prepare evolution gates
     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
-    fid = ops.I()
+    I = ops.I()
     c_up, c_dn, cdag_up, cdag_dn = ops.c(spin='u'), ops.c(spin='d'), ops.cp(spin='u'), ops.cp(spin='d')
     n_up, n_dn =  ops.n(spin='u'), ops.n(spin='d')
     n_int = n_up @ n_dn
 
-    g_hop_u = fpeps.gates.gate_nn_hopping(t_up, dbeta / 2, fid, c_up, cdag_up)
-    g_hop_d = fpeps.gates.gate_nn_hopping(t_dn, dbeta / 2, fid, c_dn, cdag_dn)
-    g_loc = fpeps.gates.gate_local_Coulomb(mu_up, mu_dn, U, dbeta / 2, fid, n_up, n_dn)
+    g_hop_u = fpeps.gates.gate_nn_hopping(t_up, dbeta / 2, I, c_up, cdag_up)
+    g_hop_d = fpeps.gates.gate_nn_hopping(t_dn, dbeta / 2, I, c_dn, cdag_dn)
+    g_loc = fpeps.gates.gate_local_Coulomb(mu_up, mu_dn, U, dbeta / 2, I, n_up, n_dn)
     gates = fpeps.gates.distribute(geometry, gates_nn=[g_hop_u, g_hop_d], gates_local=g_loc)
 
 
     # initialized infinite temperature purification
-    psi = fpeps.product_peps(geometry, fid)
+    psi = fpeps.product_peps(geometry, I)
 
     # time-evolve purification
     env = fpeps.EnvNTU(psi, which='NN+')
@@ -116,17 +116,17 @@ def test_NTU_spinful_infinite():
     D = 8
 
     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
-    fid = ops.I()
+    I = ops.I()
     c_up, c_dn, cdag_up, cdag_dn = ops.c(spin='u'), ops.c(spin='d'), ops.cp(spin='u'), ops.cp(spin='d')
     n_up, n_dn =  ops.n(spin='u'), ops.n(spin='d')
 
-    g_hop_u = fpeps.gates.gate_nn_hopping(t_up, dbeta / 2, fid, c_up, cdag_up)
-    g_hop_d = fpeps.gates.gate_nn_hopping(t_dn, dbeta / 2, fid, c_dn, cdag_dn)
-    g_loc = fpeps.gates.gate_local_Coulomb(mu_up, mu_dn, U, dbeta / 2, fid, n_up, n_dn)
+    g_hop_u = fpeps.gates.gate_nn_hopping(t_up, dbeta / 2, I, c_up, cdag_up)
+    g_hop_d = fpeps.gates.gate_nn_hopping(t_dn, dbeta / 2, I, c_dn, cdag_dn)
+    g_loc = fpeps.gates.gate_local_Coulomb(mu_up, mu_dn, U, dbeta / 2, I, n_up, n_dn)
     gates = fpeps.gates.distribute(geometry, gates_nn=[g_hop_u, g_hop_d], gates_local=g_loc)
 
     # initialized at infinite temperature
-    psi = fpeps.product_peps(geometry, fid)
+    psi = fpeps.product_peps(geometry, I)
 
     env = fpeps.EnvNTU(psi, which='NN++')
     opts_svd = {"D_total": D, 'tol_block': 1e-15}

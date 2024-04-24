@@ -59,16 +59,6 @@ def test_gate_raises():
         fpeps.gates.twosite_operator(c, cdag, sites=(0, 2))
         # sites should be equal to (0, 1) or (1, 0)
 
-    # # forming PEPS tensor for tests
-    # ten = ops.I()
-    # for s in (-1, 1, 1, -1):
-    #     ten = ten.add_leg(s=s, axis=0)
-    # ten = ten.fuse_legs(axes=((0, 1), (2, 3), (4, 5)))
-
-    # with pytest.raises(yastn.YastnError):
-    #     fpeps.apply_gate_onsite(ten, c, dirn='horizontal')
-    #     #  dirn should be equal to 'l', 'r', 't', 'b', or None
-
 
 if __name__ == '__main__':
     test_hopping_gate()

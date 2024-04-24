@@ -87,8 +87,8 @@ class Peps():
             for ny in range(self.Ny):
                 site = (n, ny)
                 top = self[site]
-                # if top.ndim in (2, 3):
-                #     top = top.unfuse_legs(axes=(0, 1))
+                if top.ndim in (2, ):
+                    top = top.unfuse_legs(axes=(0, 1))
                 op.A[ny] = top.transpose(axes=(1, 2, 3, 0)) if top.ndim == 4 else \
                            DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
         elif dirn == 'v':
@@ -98,8 +98,8 @@ class Peps():
             for nx in range(self.Nx):
                 site = (nx, n)
                 top = self[site]
-                # if top.ndim in (2, 3):
-                #     top = top.unfuse_legs(axes=(0, 1))
+                if top.ndim in (2, ):
+                    top = top.unfuse_legs(axes=(0, 1))
                 op.A[nx] = top if top.ndim == 4 else \
                            DoublePepsTensor(top=top, btm=top)
         return op

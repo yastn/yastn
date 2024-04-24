@@ -17,8 +17,8 @@ class Evolution_out(NamedTuple):
     fixed_eigenvalues: float = 0
 
 
-def evolution_step_(env, gates, symmetrize=True,
-                    opts_svd=None, initialization="EAT",
+def evolution_step_(env, gates, opts_svd,
+                    symmetrize=True, initialization="EAT",
                     pinv_cutoffs=(1e-12, 1e-10, 1e-8, 1e-6), max_iter=1000):
     r"""
     Perform a single step of PEPS evolution by applying a list of gates,
@@ -53,8 +53,6 @@ def evolution_step_(env, gates, symmetrize=True,
         Namedtuple containing fields:
             * :code:`truncation_error` for all applied gates, calculated according to metric specified by env.
     """
-    if opts_svd is None:
-        opts_svd = {'D_total': 4, 'tol_block': 1e-15}
     infos = []
 
     for gate in gates.local:

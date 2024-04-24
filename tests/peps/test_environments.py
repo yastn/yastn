@@ -25,12 +25,12 @@ def test_finite_spinless_boundary_mps_ctmrg():
     D = 6
 
     ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
-    fid, fc, fcdag = ops.I(), ops.c(), ops.cp()
+    I, c, cdag = ops.I(), ops.c(), ops.cp()
 
-    g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, I, c, cdag)  # nn gate for 2D fermi sea
     gates = fpeps.gates.distribute(geometry, gates_nn=g_hop)
 
-    psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
+    psi = fpeps.product_peps(geometry, I) # initialized at infinite temperature
     env = fpeps.EnvNTU(psi, which='NN+')
 
     opts_svd = {'D_total': D, 'tol_block': 1e-15}
@@ -47,7 +47,7 @@ def test_finite_spinless_boundary_mps_ctmrg():
     opts_svd_ctm = {'D_total': 30, 'tol': 1e-10}
     for _ in range(50):
         env.update_(opts_svd=opts_svd_ctm)
-        cdagc = env.measure_nn(fcdag, fc)
+        cdagc = env.measure_nn(cdag, c)
         energy = -2 * np.mean([*cdagc.values()])
 
         print("energy: ", energy)
@@ -89,11 +89,11 @@ def test_spinless_infinite_approx():
     dbeta = 0.05
 
     ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
-    fid, fc, fcdag = ops.I(), ops.c(), ops.cp()
-    g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, fid, fc, fcdag)  # nn gate for 2D fermi sea
+    I, c, cdag = ops.I(), ops.c(), ops.cp()
+    g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, I, c, cdag)  # nn gate for 2D fermi sea
     gates = fpeps.gates.distribute(geometry, gates_nn=g_hop)
 
-    psi = fpeps.product_peps(geometry, fid) # initialized at infinite temperature
+    psi = fpeps.product_peps(geometry, I) # initialized at infinite temperature
     env = fpeps.EnvNTU(psi, which='NN+')
 
     opts_svd = {"D_total": D , 'tol_block': 1e-15}
