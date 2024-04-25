@@ -129,12 +129,19 @@ def test_NTU_spinful_infinite():
     psi = fpeps.product_peps(geometry, I)
 
     env = fpeps.EnvNTU(psi, which='NN++')
-    opts_svd_evol = [{"D_total": 2 * D, 'tol_block': 1e-15}, {"D_total": D, 'tol_block': 1e-15}]  # two step
+
+    # env = fpeps.EnvCTM(psi)
+    # env.init_(type='ones')
+
+    opts_svd_evol = [{"D_total": 2 * D, 'tol_block': 1e-15},
+                     {"D_total": D, 'tol_block': 1e-15}]  # two step
+
+
     steps = round((beta / 2) / dbeta)
     for step in range(steps):
         print(f"beta = {(step + 1) * dbeta}" )
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
-
+        # env.update_(opts_svd=opts_svd_ctm)
 
     # CTMRG
     # convergence criteria for CTM based on total energy
@@ -143,7 +150,7 @@ def test_NTU_spinful_infinite():
     env = fpeps.EnvCTM(psi)
     opts_svd_ctm = {'D_total': 40, 'tol': 1e-10}
 
-    for _ in range(50):
+    for _ in range(10):
         env.update_(opts_svd=opts_svd_ctm)  # method='2site',
         cdagc_up = env.measure_nn(cdag_up, c_up)
         cdagc_dn = env.measure_nn(cdag_dn, c_dn)

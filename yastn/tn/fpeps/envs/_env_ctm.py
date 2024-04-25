@@ -5,6 +5,7 @@ from ... import mps
 from .._peps import Peps, Peps2Layers
 from .._gates_auxlliary import apply_gate_onsite, gate_product_operator, gate_fix_order
 from .._geometry import Bond
+from ._env_auxlliary import append_vec_tl, append_vec_br
 
 
 class ctm_window(NamedTuple):
@@ -247,6 +248,50 @@ class EnvCTM(Peps):
         env0 = env.copy()
         for ms in psi.sites():   # vertical absorption and renormalization
             move_vertical_(env, env0, psi, proj, ms)
+
+
+    def bond_metric(self, Q0, Q1, s0, s1, dirn):
+        """
+        Calculates Full-update metric tensor.
+
+        For dirn == 'h':
+
+        tl == tt  ==  tt == tr
+        |     |        |     |
+        ll == GA-+  +-GB == rr
+        |     |        |     |
+        bl == bb  ==  bb == br
+
+        For dirn == 'v':
+
+        tl == tt == tr
+        |     |      |
+        ll == GA == rr
+        |     ++     |
+        ll == GB == rr
+        |     |      |
+        bl == bb == br
+        """
+
+        env0, env1 = self[s0], self[s1]
+        if dirn == "h":
+            assert self.psi.nn_site(s0, (0, 1)) == s1
+            vecl = append_vec_tl(Q0, Q0, env0.l @ (env0.tl @ env0.t))
+            vecl = tensordot(env0.b @ env0.bl, vecl, axes=((2, 1), (0, 1)))
+            vecr = append_vec_br(Q1, Q1, env1.r  @ (env1.br @ env1.b))
+            vecr = tensordot(env1.t @ env1.tr, vecr, axes=((2, 1), (0, 1)))
+            g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
+        else: # dirn == "v":
+            assert self.psi.nn_site(s0, (1, 0)) == s1
+            vect = append_vec_tl(Q0, Q0, env0.l @ (env0.tl @ env0.t))
+            vect = tensordot(vect, env0.tr @ env0.r, axes=((2, 3), (0, 1)))
+            vecb = append_vec_br(Q1, Q1, env1.r @ (env1.br @ env1.b))
+            vecb = tensordot(vecb, env1.bl @ env1.l, axes=((2, 3), (0, 1)))
+            g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+
+        g = g / g.trace(axes=(0, 1)).to_number()
+        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+
 
 @dataclass()
 class Local_CTMEnv():
