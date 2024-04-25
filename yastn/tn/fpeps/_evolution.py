@@ -4,8 +4,8 @@ tu supports fermions though application of swap-gates.
 PEPS tensors have 5 legs: (top, left, bottom, right, system)
 In case of purification, system leg is a fusion of (ancilla, system)
 """
-from ... import tensordot, vdot, svd_with_truncation, svd, qr, ncon, eigh_with_truncation
-from .gates import match_ancilla_1s, match_ancilla_2s
+from ... import tensordot, vdot, svd_with_truncation, svd, ncon, eigh_with_truncation
+from ._gates_auxlliary import apply_gate_onsite, apply_gate_nn, gate_fix_order, apply_bond_tensors
 from typing import NamedTuple
 
 
@@ -17,8 +17,8 @@ class Evolution_out(NamedTuple):
     fixed_eigenvalues: float = 0
 
 
-def evolution_step_(env, gates, symmetrize=True,
-                    opts_svd=None, initialization="EAT",
+def evolution_step_(env, gates, opts_svd,
+                    symmetrize=True, initialization="EAT",
                     pinv_cutoffs=(1e-12, 1e-10, 1e-8, 1e-6), max_iter=1000):
     r"""
     Perform a single step of PEPS evolution by applying a list of gates,
@@ -34,10 +34,12 @@ def evolution_step_(env, gates, symmetrize=True,
     symmetrize : bool
         Whether to iterate through provided gates forward and then backward, resulting in a 2nd order method.
         In that case, each gate should correspond to half of desired timestep.
-    opts_svd : dict
+    opts_svd : dict | Sequence[dict]
         Options passed to :meth:`yastn.linalg.svd_with_truncation` which are used
         to initially truncate the bond dimension, before it is further optimized iteratively.
         In particular, it fixes bond dimensions (potentially, sectorial).
+        It is possible to prvide a list of dicts (with decreasing bond dimensions),
+        in which case the truncation is done step by step.
     initialization : str
         "SVD" or "EAT". Type of procedure initializing the optimization of truncated PEPS tensors
         after application of two-site gate. Employ plain SVD, or SVD that includes
@@ -53,24 +55,22 @@ def evolution_step_(env, gates, symmetrize=True,
         Namedtuple containing fields:
             * :code:`truncation_error` for all applied gates, calculated according to metric specified by env.
     """
-    if opts_svd is None:
-        opts_svd = {'D_total': 4, 'tol_block': 1e-15}
     infos = []
 
     for gate in gates.local:
         apply_local_gate_(env, gate)
     for gate in gates.nn:
-        infos.append(apply_nn_gate_and_truncate_(env, gate, opts_svd, initialization, pinv_cutoffs, max_iter))
+        infos.append(apply_gate_nn_and_truncate_(env, gate, opts_svd, initialization, pinv_cutoffs, max_iter))
     if symmetrize:
         for gate in gates.nn[::-1]:
-            infos.append(apply_nn_gate_and_truncate_(env, gate, opts_svd, initialization, pinv_cutoffs, max_iter))
+            infos.append(apply_gate_nn_and_truncate_(env, gate, opts_svd, initialization, pinv_cutoffs, max_iter))
         for gate in gates.local[::-1]:
             apply_local_gate_(env, gate)
 
     return Evolution_out(*zip(*infos))
 
 
-def apply_nn_gate_and_truncate_(env, gate, opts_svd=None, initialization="EAT",
+def apply_gate_nn_and_truncate_(env, gate, opts_svd, initialization="EAT",
                    pinv_cutoffs=(1e-12, 1e-10, 1e-8, 1e-6), max_iter=1000):
     r"""
     Applies a nearest-neighbor gate to a PEPS tensor and optimizes the resulting tensor using alternate
@@ -102,12 +102,15 @@ def apply_nn_gate_and_truncate_(env, gate, opts_svd=None, initialization="EAT",
 
     """
 
-    if opts_svd is None:
-        opts_svd = {'D_total': 4, 'tol_block': 1e-15}
+    dirn, l_ordered = env.psi.nn_bond_type(gate.bond)
+    f_ordered = env.psi.f_ordered(gate.bond)
+    s0, s1 = gate.bond if l_ordered else gate.bond[::-1]
 
-    QA, QB, RA, RB, QAf, QBf = apply_nn_gate(env.psi, gate)
+    ten0, ten1 = env.psi[s0], env.psi[s1]
+    G0, G1 = gate_fix_order(gate.G0, gate.G1, l_ordered, f_ordered)
+    Q0, Q1, R0, R1, Q0f, Q1f = apply_gate_nn(ten0, ten1, G0, G1, dirn)
 
-    fgf = env.bond_metric(gate.bond, QA, QB)
+    fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
 
     # enforce hermiticity
     fgf = (fgf + fgf.H) / 2
@@ -126,8 +129,8 @@ def apply_nn_gate_and_truncate_(env, gate, opts_svd=None, initialization="EAT",
     S._data[S._data < asmin] = asmin
     fgf_fixed = U @ S @ U.H
 
-    MA, MB, truncation_error2, optimal_pinv_cutoff = truncate_and_optimize(fgf_fixed, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter)
-    env.psi[gate.bond.site0], env.psi[gate.bond.site1] = form_new_peps_tensors(QAf, QBf, MA, MB, gate.bond)
+    M0, M1, truncation_error2, optimal_pinv_cutoff = truncate_and_optimize(fgf_fixed, R0, R1, initialization, opts_svd, pinv_cutoffs, max_iter)
+    env.psi[s0], env.psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
 
     return Evolution_out(truncation_error=truncation_error2 ** 0.5,
                          optimal_pinv_cutoff=optimal_pinv_cutoff,
@@ -136,24 +139,29 @@ def apply_nn_gate_and_truncate_(env, gate, opts_svd=None, initialization="EAT",
                          fixed_eigenvalues = num_fixed)
 
 
-def truncate_and_optimize(fgf, RA, RB, initialization, opts_svd, pinv_cutoffs, max_iter):
+def truncate_and_optimize(fgf, R0, R1, initialization, opts_svd, pinv_cutoffs, max_iter):
     """
     First we truncate RA and RB tensors based on the input truncation_mode with
     function environment_aided_truncation_step. Then the truncated
     MA and MB tensors are subjected to least square optimization to minimize
      the truncation error with the function tu_single_optimization.
     """
-    RAB = RA @ RB
-    RAB = RAB.fuse_legs(axes=[(0, 1)])
+    R01 = R0 @ R1
+    R01 = R01.fuse_legs(axes=[(0, 1)])
     gf = fgf.unfuse_legs(axes=0)
-    fgRAB = fgf @ RAB
-    gRAB =  gf @ RAB
-    gRR = vdot(RAB, fgRAB).item()
+    fgR01 = fgf @ R01
+    gR01 =  gf @ R01
+    gRR = vdot(R01, fgR01).item()
 
-    MA, MB, svd_error2 = environment_aided_truncation_step(gRR, fgf, fgRAB, RA, RB, initialization, opts_svd, pinv_cutoffs)
-    MA, MB, truncation_error2, optimal_pinv_cutoff  = tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error2, pinv_cutoffs, max_iter)
-    MA, MB = truncation_step(MA, MB, opts_svd, normalize=True)
-    return MA, MB, truncation_error2, optimal_pinv_cutoff
+    if isinstance(opts_svd, dict):
+        opts_svd = [opts_svd]
+
+    for opts in opts_svd:
+        R0, R1, svd_error2 = environment_aided_truncation_step(gRR, fgf, fgR01, R0, R1, initialization, opts, pinv_cutoffs)
+        R0, R1, truncation_error2, optimal_pinv_cutoff  = tu_single_optimization(R0, R1, gR01, gf, gRR, svd_error2, pinv_cutoffs, max_iter)
+        R0, R1 = truncation_step(R0, R1, opts, normalize=True)
+
+    return R0, R1, truncation_error2, optimal_pinv_cutoff
 
 
 def truncation_step(RA, RB, opts_svd, normalize=False):
@@ -305,88 +313,4 @@ def optimal_pinv(gg, J, gRR, pinv_cutoffs):
 
 def apply_local_gate_(env, gate):
     """ apply local gates on PEPS tensors """
-    A = match_ancilla_1s(gate.A, env.psi[gate.site])
-    env.psi[gate.site] = tensordot(env.psi[gate.site], A, axes=(2, 1)) # [t l] [b r] [s a]
-
-
-def apply_nn_gate(psi, gate):
-    """ Apply nearest neighbor gate to PEPS tensors. """
-    bd = gate.bond
-    dirn = bd.dirn
-    A = psi[bd.site0]  # [t l] [b r] sa
-    B = psi[bd.site1]  # [t l] [b r] sa
-
-    if dirn == "h":  # Horizontal gate
-        GA_an = match_ancilla_2s(gate.A, A, dir='l')
-        int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] sa c
-        int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
-        int_A = int_A.unfuse_legs(axes=1)  # [[t l] sa] b r c
-        int_A = int_A.swap_gate(axes=(1, 3))  # b X c
-        int_A = int_A.fuse_legs(axes=((0, 1), (2, 3)))  # [[[t l] sa] b] [r c]
-        QAf, RA = qr(int_A, axes=(0, 1), sQ=-1)  # [[[t l] sa] b] rr @ rr [r c]
-        QA = QAf.unfuse_legs(axes=0)  # [[t l] sa] b rr
-        QA = QA.fuse_legs(axes=(0, (1, 2)))  # [[t l] sa] [b rr]
-        QA = QA.unfuse_legs(axes=0)  # [t l] sa [b rr]
-        QA = QA.transpose(axes=(0, 2, 1))  # [t l] [b rr] sa
-
-        GB_an = match_ancilla_2s(gate.B, B, dir='r')
-        int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] sa c
-        int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
-        int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] sa] c
-        int_B = int_B.fuse_legs(axes=((0, 2), (1, 3)))  # [t [[b r] sa]] [l c]
-        QBf, RB = qr(int_B, axes=(0, 1), sQ=1, Qaxis=0, Raxis=-1)  # ll [t [[b r] sa]]  @  [l c] ll
-        QB = QBf.unfuse_legs(axes=1)  # ll t [[b r] sa]
-        QB = QB.fuse_legs(axes=((1, 0), 2))  # [t ll] [[b r] sa]
-        QB = QB.unfuse_legs(axes=1)  # [t ll] [b r] sa
-
-    elif dirn == "v":  # Vertical gate
-        GA_an = match_ancilla_2s(gate.A, A, dir='l')
-        int_A = tensordot(A, GA_an, axes=(2, 1)) # [t l] [b r] sa c
-        int_A = int_A.fuse_legs(axes=((0, 2), 1, 3))  # [[t l] sa] [b r] c
-        int_A = int_A.unfuse_legs(axes=1)  # [[t l] sa] b r c
-        int_A = int_A.fuse_legs(axes=((0, 2), (1, 3)))  # [[[t l] sa] r] [b c]
-        QAf, RA = qr(int_A, axes=(0, 1), sQ=1)  # [[[t l] sa] r] bb  @  bb [b c]
-        QA = QAf.unfuse_legs(axes=0)  # [[t l] sa] r bb
-        QA = QA.fuse_legs(axes=(0, (2, 1)))  # [[t l] sa] [bb r]
-        QA = QA.unfuse_legs(axes=0)  # [t l] sa [bb r]
-        QA = QA.transpose(axes=(0, 2, 1))  # [t l] [bb r] sa
-
-        GB_an = match_ancilla_2s(gate.B, B, dir='r')
-        int_B = tensordot(B, GB_an, axes=(2, 1)) # [t l] [b r] sa c
-        int_B = int_B.fuse_legs(axes=(0, (1, 2), 3))  # [t l] [[b r] sa] c
-        int_B = int_B.unfuse_legs(axes=0)  # t l [[b r] sa] c
-        int_B = int_B.swap_gate(axes=(1, 3))  # l X c
-        int_B = int_B.fuse_legs(axes=((1, 2), (0, 3)))  # [l [[b r] sa]] [t c]
-        QBf, RB = qr(int_B, axes=(0, 1), sQ=-1, Qaxis=0, Raxis=-1)  # tt [l [[b r] sa]]  @  [t c] tt
-        QB = QBf.unfuse_legs(axes=1)  # t l [[b r] sa]
-        QB = QB.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
-        QB = QB.unfuse_legs(axes=1)  # [t l] [b r] sa
-
-    return QA, QB, RA, RB, QAf, QBf
-
-
-def form_new_peps_tensors(QAf, QBf, MA, MB, bond):
-    """ combine unitaries in QA with optimized MA to form new peps tensors. """
-    if bond.dirn == "h":
-        A = QAf @ MA  # [[[[t l] sa] b] r
-        A = A.unfuse_legs(axes=0)  # [[t l] sa] b r
-        A = A.fuse_legs(axes=(0, (1, 2)))  # [[t l] sa] [b r]
-        A = A.unfuse_legs(axes=0)  # [t l] sa [b r]
-        A = A.transpose(axes=(0, 2, 1))  # [t l] [b r] sa
-
-        B = MB @ QBf  # l [t [[b r] s]]
-        B = B.unfuse_legs(axes=1)  # l t [[b r] sa]
-        B = B.fuse_legs(axes=((1, 0), 2))  # [t l] [[b r] sa]
-        B = B.unfuse_legs(axes=1)  # [t l] [b r] sa
-    elif bond.dirn == "v":
-        A = QAf @ MA  # [[[t l] sa] r] b
-        A = A.unfuse_legs(axes=0)  # [[t l] sa] r b
-        A = A.fuse_legs(axes=(0, (2, 1)))  # [[t l] sa] [b r]
-        A = A.unfuse_legs(axes=0)  # [t l] sa [b r]
-        A = A.transpose(axes=(0, 2, 1))  # [t l] [b r] sa
-
-        B = MB @ QBf  # t [l [[b r] sa]]
-        B = B.unfuse_legs(axes=1)  # t l [[b r] sa]
-        B = B.fuse_legs(axes=((0, 1), 2))  # [t l] [[b r] sa]
-        B = B.unfuse_legs(axes=1)  # [t l] [b r] sa
-    return A, B
+    env.psi[gate.site] = apply_gate_onsite(env.psi[gate.site], gate.G)

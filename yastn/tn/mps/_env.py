@@ -455,6 +455,14 @@ class Env_mps_mpo_mps(EnvParent_3_obc):
         tmp = tmp.unfuse_legs(axes=2)
         return self.op.factor * tmp
 
+    def hole(self, n):
+        """ Hole for peps tensor at site n. """
+        nl, nr = n - 1, n + 1
+        tmp = self.F[(nl, n)].tensordot(self.ket[n], axes=(2, 0))
+        tmp = tmp.tensordot(self.F[(nr, n)], axes=(3, 0))
+        tmp = tmp.tensordot(self.bra[n].conj(), axes=((0, 4), (0, 2)))
+        return tmp.transpose(axes=(0, 3, 2, 1)).fuse_legs(axes=((0, 1), (2, 3)))
+
 
 class Env_mpo_mpo_mpo(EnvParent_3_obc):
 
@@ -625,7 +633,7 @@ class Env_mps_mpopbc_mps(EnvParent_3_pbc):
         tmp = self.F[(nl, n)].tensordot(self.ket[n], axes=(3, 0))
         tmp = tmp.tensordot(self.F[(nr, n)], axes=((2, 4), (2, 0)))
         tmp = tmp.tensordot(self.bra[n].conj(), axes=((0, 4), (0, 2)))
-        return tmp.transpose(axes=(0, 3, 2, 1))
+        return tmp.transpose(axes=(0, 3, 2, 1)).fuse_legs(axes=((0, 1), (2, 3)))
 
     def update_env_(self, n, to='last'):
         if to == 'last':

@@ -3,8 +3,9 @@ from dataclasses import dataclass
 from .... import rand, ones, YastnError, Leg, tensordot, ncon, qr
 from ... import mps
 from .._peps import Peps, Peps2Layers
-from ..gates import match_ancilla_1s, apply_gate
+from .._gates_auxlliary import apply_gate_onsite, gate_product_operator, gate_fix_order
 from .._geometry import Bond
+from ._env_auxlliary import append_vec_tl, append_vec_br
 
 
 class ctm_window(NamedTuple):
@@ -59,7 +60,6 @@ class EnvCTM(Peps):
             H = H.conj()
         return H
 
-
     def init_(self, t0=None, D0=1, type='rand'):
         """ Initialize random CTMRG environments of peps tensors A. """
         if type not in ('rand', 'ones'):
@@ -100,26 +100,37 @@ class EnvCTM(Peps):
 
         lenv = self[site]
         ten = self.psi[site]
-        val_no = measure_one(lenv, ten)
+        vect = (lenv.l @ lenv.tl) @ (lenv.t @ lenv.tr)
+        vecb = (lenv.r @ lenv.br) @ (lenv.b @ lenv.bl)
 
-        op_aux = match_ancilla_1s(op, ten.A)
-        ten.A = ten.A @ op_aux.T
+        tmp = ten._attach_01(vect)
+        val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
-        val_op = measure_one(lenv, ten)
+        ten.top = apply_gate_onsite(ten.top, op)
+        tmp = ten._attach_01(vect)
+        val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
+
         return val_op / val_no
-
 
     def measure_nn(self, O0, O1, bond=None):
         if bond is None:
              return {bond: self.measure_nn(O0, O1, bond) for bond in self.bonds()}
 
         bond = Bond(*bond)
-        env0 = self[bond.site0]
-        env1 = self[bond.site1]
-        ten0 = self.psi[bond.site0]
-        ten1 = self.psi[bond.site1]
+        dirn, l_ordered = self.nn_bond_type(bond)
+        f_ordered = self.f_ordered(bond)
+        s0, s1 = bond if l_ordered else bond[::-1]
+        env0, env1 = self[s0], self[s1]
+        ten0, ten1 = self.psi[s0], self.psi[s1]
 
-        if bond.dirn == 'h':
+        if O0.ndim == 2 and O1.ndim == 2:
+            G0, G1 = gate_product_operator(O0, O1, l_ordered, f_ordered)
+        elif O0.ndim == 3 and O1.ndim == 3:
+            G0, G1 = gate_fix_order(O0, O1, l_ordered, f_ordered)
+        else:
+            raise YastnError("Both operators O0 and O1 should have the same ndim==2, or ndim=3.")
+
+        if dirn == 'h':
             vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
             vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
 
@@ -129,15 +140,15 @@ class EnvCTM(Peps):
             tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
             val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
 
-            ten0.A = apply_gate(ten0.A, O0, dir='l')
-            ten1.A = apply_gate(ten1.A, O1, dir='r')
+            ten0.top = apply_gate_onsite(ten0.top, G0, dirn='l')
+            ten1.top = apply_gate_onsite(ten1.top, G1, dirn='r')
 
             tmp0 = ten0._attach_01(vecl)
             tmp0 = tensordot(env0.b, tmp0, axes=((2, 1), (0, 1)))
             tmp1 = ten1._attach_23(vecr)
             tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
             val_op = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
-        else:
+        else:  # dirn == 'v':
             vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
             vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
 
@@ -147,8 +158,8 @@ class EnvCTM(Peps):
             tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
             val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
 
-            ten0.A = apply_gate(ten0.A, O0, dir='t')
-            ten1.A = apply_gate(ten1.A, O1, dir='b')
+            ten0.top = apply_gate_onsite(ten0.top, G0, dirn='t')
+            ten1.top = apply_gate_onsite(ten1.top, G1, dirn='b')
 
             tmp0 = ten0._attach_01(vect)
             tmp0 = tensordot(tmp0, env0.r, axes=((2, 3), (0, 1)))
@@ -239,12 +250,47 @@ class EnvCTM(Peps):
             move_vertical_(env, env0, psi, proj, ms)
 
 
-def measure_one(lenv, ten):
-    vect = (lenv.l @ lenv.tl) @ (lenv.t @ lenv.tr)
-    vect = ten._attach_01(vect)
-    vect = tensordot(vect, lenv.r, axes=((2, 3), (0, 1)))
-    vecb = (lenv.br @ lenv.b) @ lenv.bl
-    return tensordot(vect, vecb, axes=((0, 1, 2), (2, 1, 0))).to_number()
+    def bond_metric(self, Q0, Q1, s0, s1, dirn):
+        """
+        Calculates Full-update metric tensor.
+
+        For dirn == 'h':
+
+        tl == tt  ==  tt == tr
+        |     |        |     |
+        ll == GA-+  +-GB == rr
+        |     |        |     |
+        bl == bb  ==  bb == br
+
+        For dirn == 'v':
+
+        tl == tt == tr
+        |     |      |
+        ll == GA == rr
+        |     ++     |
+        ll == GB == rr
+        |     |      |
+        bl == bb == br
+        """
+
+        env0, env1 = self[s0], self[s1]
+        if dirn == "h":
+            assert self.psi.nn_site(s0, (0, 1)) == s1
+            vecl = append_vec_tl(Q0, Q0, env0.l @ (env0.tl @ env0.t))
+            vecl = tensordot(env0.b @ env0.bl, vecl, axes=((2, 1), (0, 1)))
+            vecr = append_vec_br(Q1, Q1, env1.r  @ (env1.br @ env1.b))
+            vecr = tensordot(env1.t @ env1.tr, vecr, axes=((2, 1), (0, 1)))
+            g = tensordot(vecl, vecr, axes=((0, 1), (1, 0)))  # [rr rr'] [ll ll']
+        else: # dirn == "v":
+            assert self.psi.nn_site(s0, (1, 0)) == s1
+            vect = append_vec_tl(Q0, Q0, env0.l @ (env0.tl @ env0.t))
+            vect = tensordot(vect, env0.tr @ env0.r, axes=((2, 3), (0, 1)))
+            vecb = append_vec_br(Q1, Q1, env1.r @ (env1.br @ env1.b))
+            vecb = tensordot(vecb, env1.bl @ env1.l, axes=((2, 3), (0, 1)))
+            g = tensordot(vect, vecb, axes=((0, 2), (2, 0)))  # [bb bb'] [tt tt']
+
+        g = g / g.trace(axes=(0, 1)).to_number()
+        return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
 @dataclass()
@@ -409,7 +455,7 @@ def trivial_projector(a, b, c, dirn):
     elif dirn == 'vbr':
         la, lb, lc = a.get_legs(axes=0), b.get_legs(axes=3), c.get_legs(axes=1)
 
-    return ones(b.A.config, legs=[la.conj(), lb.conj(), lc.conj()])
+    return ones(b.config, legs=[la.conj(), lb.conj(), lc.conj()])
 
 
 def move_horizontal_(envn, env, AAb, proj, ms):

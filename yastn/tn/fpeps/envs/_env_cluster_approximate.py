@@ -36,7 +36,7 @@ _axis_dirn = {'t': (1, 0), 'l': (1, 1), 'b': (0, 0), 'r': (0, 1)}
 class EnvApproximate:
     def __init__(self, psi, which='65', opts_svd=None, opts_var=None, update_sweeps=None):
         if which not in ('43', '43h', '65', '65h', '87', '87h'):
-            raise YastnError(f" Type of EnvApprox {which} not recognized.")
+            raise YastnError(f" Type of EnvApprox {which=} not recognized.")
         self._which = which
         self.psi = psi
         if which in ('43', '43h'):
@@ -61,11 +61,10 @@ class EnvApproximate:
     def __setitem__(self, key, value):
         self._envs[key] = value
 
-    def bond_metric(self, bd, QA, QB):
+    def bond_metric(self, QA, QB, s0, s1, dirn):
         """ Calculates bond metric. """
-        dirn = bd.dirn
-        dx = (0, 1) if dirn == 'h' else (1, 0)
-        assert self.psi.nn_site(bd.site0, dx) == bd.site1
+        assert self.psi.nn_site(s0, (0, 1) if dirn == 'h' else (1, 0)) == s1
+        bd = (s0, s1, dirn)
 
         try:
             if self.update_sweeps:
@@ -85,7 +84,7 @@ class EnvApproximate:
         return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
     def initialize_env(self, bd):
-        if bd.dirn == "h":
+        if bd[2] == "h":
             self[bd, self.Nw + 1] = self.boundary_mps(bd, 't')
             for nx in range(-self.Nw, 0):  # [bd, 1]
                 tmpo = self.transfer_mpo(bd, n=nx)
@@ -98,7 +97,7 @@ class EnvApproximate:
                 self[bd, -nx] = mps.zipper(tmpo, self[bd, -nx-1], opts_svd=self.opts_svd)
                 mps.compression_(self[bd, -nx], (tmpo, self[bd, -nx-1]), **self.opts_var)
 
-        else:  # bd.dirn == "v":
+        else:  # dirn == "v":
             self[bd, self.Nw + 1] = self.boundary_mps(bd, 'r')
             for ny in range(self.Nw, 0, -1):  # [bd, 1]
                 tmpo = self.transfer_mpo(bd, n=ny)
@@ -112,7 +111,7 @@ class EnvApproximate:
                 mps.compression_(self[bd, ny], (tmpo, self[bd, ny-1]), **self.opts_var)
 
     def update_env(self, bd):
-        if bd.dirn == "h":
+        if bd[2] == "h":  # dirn == "h":
             self[bd, self.Nw + 1] = self.boundary_mps(bd, 't')
             for nx in range(-self.Nw, 0):  # [bd, 1]
                 tmpo = self.transfer_mpo(bd, n=nx)
@@ -123,7 +122,7 @@ class EnvApproximate:
                 tmpo = self.transfer_mpo(bd, n=nx).H
                 mps.compression_(self[bd, -nx], (tmpo, self[bd, -nx-1]), max_sweeps=self.update_sweeps)
 
-        else:  # bd.dirn == "v":
+        else:  # dirn == "v":
             self[bd, self.Nw + 1] = self.boundary_mps(bd, 'r')
             for ny in range(self.Nw, 0, -1):  # [bd, 1]
                 tmpo = self.transfer_mpo(bd, n=ny)
@@ -136,10 +135,11 @@ class EnvApproximate:
 
     def transfer_mpo(self, bd, n, QA=None, QB=None):
         H = mps.Mpo(N = 2 * self.Nl)
+        s0, s1, dirn = bd
 
-        if bd.dirn == "h":
+        if dirn == "h":
             nx = n
-            d = {(nx, ny): self.psi.nn_site(bd.site0, d=(nx, ny))
+            d = {(nx, ny): self.psi.nn_site(s0, d=(nx, ny))
                 for ny in range(-self.Nl + 1 - self._hairs, self.Nl + 1 + self._hairs)}
             tensors_from_psi(d, self.psi)
             if nx == 0:
@@ -150,15 +150,15 @@ class EnvApproximate:
             H.A[H.first] = edge_l(d[nx, ny], hl=hl).add_leg(s=-1, axis=0)
             for site in H.sweep(to='last', dl=1, df=1):
                 ny += 1
-                top = d[nx, ny].unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
+                top = d[nx, ny] # d[nx, ny].unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
                 H.A[site] = DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
             ny += 1
             hr = hair_r(d[nx, ny + 1]) if self._hairs else None
             H.A[H.last] = edge_r(d[nx, ny], hr=hr).add_leg(s=1).transpose(axes=(1, 2, 3, 0))
 
-        else:  # bd.dirn == "v":
+        else:  # dirn == "v":
             ny = n
-            d = {(nx, ny): self.psi.nn_site(bd.site0, d=(nx, ny))
+            d = {(nx, ny): self.psi.nn_site(s0, d=(nx, ny))
                 for nx in range(-self.Nl + 1 - self._hairs, self.Nl + 1 + self._hairs)}
             tensors_from_psi(d, self.psi)
             if ny == 0:
@@ -169,7 +169,7 @@ class EnvApproximate:
             H.A[H.first] = edge_t(d[nx, ny], ht=ht).add_leg(s=-1, axis=0)
             for site in H.sweep(to='last', dl=1, df=1):
                 nx += 1
-                top = d[nx, ny].unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
+                top = d[nx, ny]  #.unfuse_legs(axes=(0, 1)) if d[nx, ny].ndim == 3 else d[nx, ny]
                 H.A[site] = DoublePepsTensor(top=top, btm=top)
             nx += 1
             hb = hair_b(d[nx + 1, ny]) if self._hairs else None
@@ -183,7 +183,7 @@ class EnvApproximate:
         else: # dirn in 'tb':
             nx = self.Nw + 1 if dirn == 'b' else -self.Nw - 1
             nns = [(nx, ny) for ny in range(-self.Nl + 1, self.Nl + 1)]
-        d = {nxy: self.psi.nn_site(bd.site0, d=nxy) for nxy in nns}
+        d = {nxy: self.psi.nn_site(bd[0], d=nxy) for nxy in nns}
         tensors_from_psi(d, self.psi)
         if self._hairs:
             hair_dirn = _hair_dirn[dirn]

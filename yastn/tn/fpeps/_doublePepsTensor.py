@@ -17,17 +17,16 @@ class DoublePepsTensor:
         transpose: tuple[int, int  int, int]
             Transposition with respect to canonical order of PEPS legs.
         """
-        self.A = top
-        self.Ab = btm
+        self.top = top
+        self.btm = btm
         transpose = tuple(transpose)
         if transpose not in _allowed_transpose:
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
         self._t = transpose
 
-
     @property
     def config(self):
-        return self.A.config
+        return self.top.config
 
     @property
     def ndim(self):
@@ -41,7 +40,6 @@ class DoublePepsTensor:
             return sum(self.get_legs(axes).D)
         return tuple(sum(leg.D) for leg in self.get_legs(axes))
 
-
     def get_legs(self, axes=None):
         """ Returns the legs of the DoublePepsTensor along the specified axes. """
         if axes is None:
@@ -49,74 +47,41 @@ class DoublePepsTensor:
         multiple_legs = hasattr(axes, '__iter__')
         axes = (axes,) if isinstance(axes, int) else tuple(axes)
         axes = tuple(self._t[ax] for ax in axes)
-        lts = self.A.get_legs(axes=axes)
-        lbs = self.Ab.get_legs(axes=axes)
+
+        lts = self.top.get_legs(axes=(0, 1))
+        lbs = self.btm.get_legs(axes=(0, 1))
+        lts = [*lts[0].unfuse_leg(), *lts[1].unfuse_leg()]
+        lbs = [*lbs[0].unfuse_leg(), *lbs[1].unfuse_leg()]
+        lts = [lts[i] for i in axes]
+        lbs = [lbs[i] for i in axes]
+        # lts = self.top.get_legs(axes=axes)
+        # lbs = self.btm.get_legs(axes=axes)
         legs = tuple(leg_outer_product(lt, lb.conj()) for lt, lb in zip(lts, lbs))
         return legs if multiple_legs else legs[0]
-
 
     def transpose(self, axes):
         axes = tuple(self._t[ax] for ax in axes)
         if axes not in _allowed_transpose:
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
-        return DoublePepsTensor(self.A, self.Ab, transpose=axes)
+        return DoublePepsTensor(self.top, self.btm, transpose=axes)
 
     def conj(self):
         r""" conj """
-        return DoublePepsTensor(self.A.conj(), self.Ab.conj(), transpose=self._t)
+        return DoublePepsTensor(self.top.conj(), self.btm.conj(), transpose=self._t)
 
     def clone(self):
         r"""
-        Makes a clone of yastn.tn.fpeps.DoublePepsTensor by :meth:`cloning<yastn.Tensor.clone>`
-        all :class:`yastn.Tensor<yastn.Tensor>`'s into a new and independent :class:`peps.DoublePepsTensor`.
-
-        .. note::
-            Cloning preserves autograd tracking on all tensors.
-
+        Makes a clone of yastn.tn.fpeps.DoublePepsTensor by :meth:`cloning<yastn.Tensor.clone>`-ing
+        all constituent tensors forming a new instance of :class:`peps.DoublePepsTensor`.
         """
-        return DoublePepsTensor(self.A.clone(), self.Ab.clone(), transpose=self._t)
+        return DoublePepsTensor(self.top.clone(), self.btm.clone(), transpose=self._t)
 
     def copy(self):
         r"""
-        Makes a copy of yastn.tn.fpeps.DoublePepsTensor by :meth:`copying<yastn.Tensor.copy>` all :class:`yastn.Tensor<yastn.Tensor>`'s
-        into a new and independent :class:`yastn.tn.mps.MpsMpoOBC`.
-
-        .. warning::
-            this operation does not preserve autograd on the returned :code:`yastn.tn.mps.MpsMpoOBC`.
-
-        .. note::
-            Use when retaining "old" DoublePepsTensor is necessary.
-
+        Makes a copy of yastn.tn.fpeps.DoublePepsTensor by :meth:`copying<yastn.Tensor.copy>`-ing
+        all constituent tensors forming a new instance of :class:`peps.DoublePepsTensor`.
         """
-        return DoublePepsTensor(self.A.copy(), self.Ab.copy(), transpose=self._t)
-
-    def append_a_bl(self, tt):
-        """ Append the A and Ab tensors of self to the bottom-left corner, tt. """
-        A = self.A.fuse_legs(axes=((0, 1), (2, 3), 4))
-        Ab = self.Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
-        return append_vec_bl(A, Ab, tt)
-
-
-    def append_a_tr(self, tt):
-        """ Append the A and Ab tensors of self to the top-right corner, tt. """
-        A = self.A.fuse_legs(axes=((0, 1), (2, 3), 4))
-        Ab = self.Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
-        return append_vec_tr(A, Ab, tt)
-
-
-    def append_a_tl(self, tt):
-        """ Append the A and Ab tensors of self to the top-left corner, tt. """
-        A = self.A.fuse_legs(axes=((0, 1), (2, 3), 4))
-        Ab = self.Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
-        return append_vec_tl(A, Ab, tt)
-
-
-    def append_a_br(self, tt):
-        """ Append the A and Ab tensors of self to the bottom-right corner, tt. """
-        A = self.A.fuse_legs(axes=((0, 1), (2, 3), 4))
-        Ab = self.Ab.fuse_legs(axes=((0, 1), (2, 3), 4))
-        return append_vec_br(A, Ab, tt)
-
+        return DoublePepsTensor(self.top.copy(), self.btm.copy(), transpose=self._t)
 
     def _attach_01(self, tt):
         """
@@ -124,22 +89,21 @@ class DoublePepsTensor:
         and to the bottom left if rotation is 90.
         """
         if self._t == (0, 1, 2, 3):
-            return self.append_a_tl(tt)
+            return append_vec_tl(self.top, self.btm, tt)
         if self._t == (1, 2, 3, 0):
-            return self.append_a_bl(tt)
+            return append_vec_bl(self.top, self.btm, tt)
         if self._t == (2, 3, 0, 1):
-            return self.append_a_br(tt)
+            return append_vec_br(self.top, self.btm, tt)
         if self._t == (3, 0, 1, 2):
-            return self.append_a_tr(tt)
+            return append_vec_tr(self.top, self.btm, tt)
         if self._t == (0, 3, 2, 1):
-            return self.append_a_tr(tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_tr(self.top, self.btm, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (3, 2, 1, 0):
-            return self.append_a_br(tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_br(self.top, self.btm, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (2, 1, 0, 3):
-            return self.append_a_bl(tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_bl(self.top, self.btm, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (1, 0, 3, 2):
-            return self.append_a_tl(tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
-
+            return append_vec_tl(self.top, self.btm, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
 
     def _attach_23(self, tt):
         """
@@ -147,22 +111,21 @@ class DoublePepsTensor:
         and to the top right if rotation is 90.
         """
         if self._t == (0, 1, 2, 3):
-            return self.append_a_br(tt)
+            return append_vec_br(self.top, self.btm, tt)
         if self._t == (1, 2, 3, 0):
-            return self.append_a_tr(tt)
+            return append_vec_tr(self.top, self.btm, tt)
         if self._t == (2, 3, 0, 1):
-            return self.append_a_tl(tt)
+            return append_vec_tl(self.top, self.btm, tt)
         if self._t == (3, 0, 1, 2):
-            return self.append_a_bl(tt)
+            return append_vec_bl(self.top, self.btm, tt)
         if self._t == (0, 3, 2, 1):
-            return self.append_a_bl(tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_bl(self.top, self.btm, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (3, 2, 1, 0):
-            return self.append_a_tl(tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_tl(self.top, self.btm, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (2, 1, 0, 3):
-            return self.append_a_tr(tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_tr(self.top, self.btm, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (1, 0, 3, 2):
-            return self.append_a_br(tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
-        
+            return append_vec_br(self.top, self.btm, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
 
     def _attach_30(self, tt):
         """
@@ -170,39 +133,31 @@ class DoublePepsTensor:
         and to the bottom left if rotation is 90.
         """
         if self._t == (0, 1, 2, 3):
-            return self.append_a_tr(tt)
-        else:
-            raise YastnError('rotation not supported')
-        
+            return append_vec_tr(self.top, self.btm, tt)
+        raise YastnError(f'Transpositions not supported by _attach_30')
+
     def _attach_12(self, tt):
         """
         Attach a tensor to the top left corner of the tensor network tt if rotation = 0
         and to the bottom left if rotation is 90.
         """
         if self._t == (0, 1, 2, 3):
-            return self.append_a_bl(tt)
-        else:
-            raise YastnError('rotation not supported')
-    
+            return append_vec_bl(self.top, self.btm, tt)
+        raise YastnError(f'Transpositions not supported by _attach_12')
 
-
-    def fPEPS_fuse_layers(self):
+    def fuse_layers(self):
         """
         Fuse the top and bottom layers of a PEPS tensor network.
         """
-
-        fA = self.top.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0t 1t) (2t 3t) 4t
-        fAb = self.btm.fuse_legs(axes=((0, 1), (2, 3), 4))  # (0b 1b) (2b 3b) 4b
-        tt = tensordot(fA, fAb, axes=(2, 2), conj=(0, 1))  # (0t 1t) (2t 3t) (0b 1b) (2b 3b)
-        tt = tt.fuse_legs(axes=(0, 2, (1, 3)))  # (0t 1t) (0b 1b) ((2t 3t) (2b 3b))
-        tt = tt.unfuse_legs(axes=(0, 1))  # 0t 1t 0b 1b ((2t 3t) (2b 3b))
-        tt = tt.swap_gate(axes=(1, 2))  # 0t 1t 0b 1b ((2t 3t) (2b 3b))
-        tt = tt.fuse_legs(axes=((0, 2), (1, 3), 4))  # (0t 0b) (1t 1b) ((2t 3t) (2b 3b))
-        tt = tt.fuse_legs(axes=((1, 0), 2))  # ((1t 1b) (0t 0b)) ((2t 3t) (2b 3b))
-        tt = tt.unfuse_legs(axes=1)  # ((1t 1b) (0t 0b)) (2t 3t) (2b 3b)
-        tt = tt.unfuse_legs(axes=(1, 2))  # ((1t 1b) (0t 0b)) 2t 3t 2b 3b
-        tt = tt.swap_gate(axes=(1, 4))  # ((1t 1b) (0t 0b)) 2t 3t 2b 3b
-        tt = tt.fuse_legs(axes=(0, (1, 3), (2, 4)))  # ((1t 1b) (0t 0b)) (2t 2b) (3t 3b)
-        st = tt.unfuse_legs(axes=(0)) # (1t 1b) (0t 0b) (3t 3b) (2t 2b)
-        st = st.fuse_legs(axes=(1, 0, 3, 2)) # (0t 0b) (1t 1b) (2t 2b) (3t 3b)
-        return st
+        tt = tensordot(self.top, self.btm, axes=(2, 2), conj=(0, 1))  # [t l] [b r] [t' l'] [b' r']
+        tt = tt.fuse_legs(axes=(0, 2, (1, 3)))  # [t l] [t' l'] [[b r] [b' r']]
+        tt = tt.unfuse_legs(axes=(0, 1))  # t l t' l' [[b r] [b' r']]
+        tt = tt.swap_gate(axes=((1, 3), 2))  # l l' X t'
+        tt = tt.fuse_legs(axes=((0, 2), (1, 3), 4))  # [t t'] [l l'] [[b r] [b' r']]
+        tt = tt.fuse_legs(axes=((0, 1), 2))  # [[t t'] [l l']] [[b r] [b' r']]
+        tt = tt.unfuse_legs(axes=1)  # [[t t'] [l l']] [b r] [b' r']
+        tt = tt.unfuse_legs(axes=(1, 2))  # [[t t'] [l l']] b r b' r'
+        tt = tt.swap_gate(axes=((1, 3), 4))  # b b' X r'
+        tt = tt.fuse_legs(axes=(0, (1, 3), (2, 4)))  # [[t t'] [l l']] [b b'] [r r']
+        tt = tt.unfuse_legs(axes=0) # [t t'] [l l'] [b b'] [r r']
+        return tt.transpose(axes=self._t)

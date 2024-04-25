@@ -1,4 +1,7 @@
-""" Test the expectation values of spinless fermions with analytical values of fermi sea for finite and infinite lattices """
+"""
+Test definitions of two-site gates.
+"""
+import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 
@@ -26,26 +29,37 @@ def check_hopping_gate(ops, t, ds):
 
     I, c, cdag = ops.I(), ops.c(), ops.cp()
 
-    g_hop = fpeps.gates.gate_nn_hopping(t, ds, I, c, cdag)  # nn gate for 2D fermi sea
-    O = yastn.ncon([g_hop.A, g_hop.B], [(-0, -2, 1) , (-1, -3, 1)])
+    # nearest-neighbor hopping gate
+    g_hop = fpeps.gates.gate_nn_hopping(t, ds, I, c, cdag)
+    O = yastn.ncon([g_hop.G0, g_hop.G1], [(-0, -2, 1) , (-1, -3, 1)])
     O = O.fuse_legs(axes=((0, 1), (2, 3)))
 
-    c1dag = cdag.add_leg(s=1).swap_gate(axes=(0, 2))
-    c2 = c.add_leg(s=-1)
-    c1 = c.add_leg(s=1).swap_gate(axes=(1, 2))
-    c2dag = cdag.add_leg(s=-1)
-    H = - t * yastn.ncon([c1dag, c2], [(-0, -2, 1) , (-1, -3, 1)]) \
-        - t * yastn.ncon([c1, c2dag], [(-0, -2, 1) , (-1, -3, 1)])
+    # hopping Hamiltonian
+    H = - t * fpeps.gates.fkron(cdag, c, sites=(0, 1), merge=True) \
+        - t * fpeps.gates.fkron(cdag, c, sites=(1, 0), merge=True)
     H = H.fuse_legs(axes=((0, 1), (2, 3)))
+
     II = yastn.ncon([I, I], [(-0, -2) , (-1, -3)])
     II = II.fuse_legs(axes=((0, 1), (2, 3)))
 
-    O2 = II + (-ds) * H + (ds ** 2 / 2) * H @ H + (-ds ** 3 / 6) * H @ H @ H + (ds ** 4 / 24) * H @ H @ H @ H
+    # Hamiltonian exponent from Taylor expansion
+    O2 = II + (-ds) * H + (ds ** 2 / 2) * H @ H \
+       + (-ds ** 3 / 6) * H @ H @ H + (ds ** 4 / 24) * H @ H @ H @ H
 
     assert ((O - O2).norm()) < (ds * t) ** 5
 
 
+def test_gate_raises():
+    kwargs = {'backend': cfg.backend, 'default_device': cfg.default_device}
+    ops = yastn.operators.SpinlessFermions(sym='U1', **kwargs)
+
+    c, cdag = ops.c(), ops.cp()
+
+    with pytest.raises(yastn.YastnError):
+        fpeps.gates.fkron(c, cdag, sites=(0, 2))
+        # sites should be equal to (0, 1) or (1, 0)
 
 
 if __name__ == '__main__':
     test_hopping_gate()
+    test_gate_raises()

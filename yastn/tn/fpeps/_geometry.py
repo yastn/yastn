@@ -8,6 +8,9 @@ class Site(NamedTuple):
     nx : int = 0
     ny : int = 0
 
+    def __str__(self):
+        return f"Site({self.nx}, {self.ny})"
+
 
 class Bond(NamedTuple):  # Not very convinient to use
     """
@@ -18,16 +21,11 @@ class Bond(NamedTuple):  # Not very convinient to use
     site0 : Site = None
     site1 : Site = None
 
-    @property
-    def dirn(self):
-        """
-        Bond direction.
+    def __str__(self):
+        return f"Bond(({self.site0[0]}, {self.site0[1]}), ({self.site1[0]}, {self.site1[1]}))"
 
-        Return 'h' when site0.nx == site1.nx.
-        Otherwise return 'v' when, by construction, site0.ny == site1.ny.
-        """
-        return 'h' if self.site0[0] == self.site1[0] else 'v'
 
+_periodic_dict = {'infinite': 'ii', 'obc': 'oo', 'cylinder': 'po'}
 
 class SquareLattice():
 
@@ -46,15 +44,16 @@ class SquareLattice():
         -----
         Site(0, 0) corresponds to top-left corner of the lattice.
         """
-        if boundary in ('obc', 'infinite', 'cylinder'):
-            self.boundary = boundary
-        else:
-            raise YastnError("boundary should be 'obc', 'infinite', or 'cylinder'")
-        self.Nx = dims[0]
-        self.Ny = dims[1]
-        self._sites = tuple(Site(nx, ny) for nx, ny in product(*(range(k) for k in self.dims)))
-        self._dir = {'t': (-1, 0), 'tl': (-1, -1), 'l': (0, -1), 'bl': ( 1, -1),
-                     'b': ( 1, 0), 'br': ( 1,  1), 'r': (0,  1), 'tr': (-1,  1)}
+        if boundary not in ('obc', 'infinite', 'cylinder'):
+            raise YastnError(f"{boundary=} not recognized; should be 'obc', 'infinite', or 'cylinder'")
+
+        self.boundary = boundary
+        self._periodic = _periodic_dict[boundary]
+        self._dims = (dims[0], dims[1])
+        self._sites = tuple(Site(nx, ny) for ny in range(self._dims[1]) for nx in range(self._dims[0]))
+        self._dir = {'tl': (-1, -1), 't': (-1, 0), 'tr': (-1,  1),
+                      'l': ( 0, -1),                'r': ( 0,  1),
+                     'bl': ( 1, -1), 'b': ( 1, 0), 'br': ( 1,  1)}
 
         bonds_h, bonds_v = [], []
         for s in self._sites:
@@ -68,9 +67,17 @@ class SquareLattice():
         self._bonds_v = tuple(bonds_v)
 
     @property
+    def Nx(self):
+        return self._dims[0]
+
+    @property
+    def Ny(self):
+        return self._dims[1]
+
+    @property
     def dims(self):
-        """ Size of the unit cell """
-        return (self.Nx, self.Ny)
+        """ Size of the unit cell. """
+        return self._dims
 
     def sites(self, reverse=False):
         """ Sequence of unique lattice sites. """
@@ -101,18 +108,50 @@ class SquareLattice():
         x, y = site
         dx, dy = self._dir[d] if isinstance(d, str) else d
         x, y = x + dx, y + dy
-        if self.boundary == 'obc' and (x < 0 or x >= self.Nx or y < 0 or y >= self.Ny):
+
+        if self._periodic[0] == 'o' and (x < 0 or x >= self._dims[0]):
             return None
-        if self.boundary == 'cylinder' and (y < 0 or y >= self.Ny):
+        if self._periodic[1] == 'o' and (y < 0 or y >= self._dims[1]):
             return None
-        return Site(x % self.Nx, y % self.Ny)
+        if self._periodic[0] == 'p' and (x < 0 or x >= self._dims[0]):
+            x = x % self._dims[0]
+        # we don't have such option now:
+        # if self._periodic[1] == 'p' and (y < 0 or y >= self._dims[1]):
+        #     y = y % self._dims[1]
+        return Site(x, y)
+
+
+    def nn_bond_type(self, bond) -> tuple[str, bool]:
+        """
+        Raise YastnError if a bond does not connect nearest-neighbor lattice sites.
+        Return bond orientation in 2D grid as a tuple: dirn, l_ordered
+        dirn is 'h' or 'v' (horizontal, vertical).
+        l_ordered is True for bond directed as 'lr' or 'tb', and False for 'rl' or 'bt'.
+        """
+        s0, s1 = bond
+        if self.nn_site(s0, 'r') == s1 and self.nn_site(s1, 'l') == s0:
+            return 'h', True  # dirn, l_ordered
+        if self.nn_site(s0, 'b') == s1 and self.nn_site(s1, 't') == s0:
+            return 'v', True
+        if self.nn_site(s0, 'l') == s1 and self.nn_site(s1, 'r') == s0:
+            return 'h', False
+        if self.nn_site(s0, 't') == s1 and self.nn_site(s1, 'b') == s0:
+            return 'v', False
+        raise YastnError(f"{bond} is not a nearest-neighbor bond.")
+
+
+    def f_ordered(self, bond):
+        """ Check if bond sites appear in fermionic order. """
+        s0, s1 = bond
+        return s0[1] < s1[1] or (s0[1] == s1[1] and s0[0] <= s1[0])
 
     def site2index(self, site):
         """ Tensor index depending on site. """
-        x, y = site
-        if (self.boundary != 'infinite' and (x < 0 or x >= self.Nx or y < 0 or y >= self.Ny)):
-            raise YastnError(f"Site {site} does not correspond to any lattice site.")
-        return (x % self.Nx, y % self.Ny)
+        if site is None:
+            return None
+        x = site[0] % self._dims[0] if self._periodic[0] == 'i' else site[0]
+        y = site[1] % self._dims[1] if self._periodic[1] == 'i' else site[1]
+        return (x, y)
 
 
 class CheckerboardLattice(SquareLattice):
@@ -125,11 +164,9 @@ class CheckerboardLattice(SquareLattice):
         """
         super().__init__(dims=(2, 2), boundary='infinite')
         self._sites = (Site(0, 0), Site(0, 1))
-        self._bonds_h = (Bond(Site(0, 0), Site(0, 1)), Bond(Site(0, 1), Site(0, 0)))
-        self._bonds_v = (Bond(Site(0, 0), Site(1, 0)), Bond(Site(1, 0), Site(0, 0)))
+        self._bonds_h = (Bond(Site(0, 0), Site(0, 1)), Bond(Site(0, 1), Site(0, 2)))
+        self._bonds_v = (Bond(Site(0, 0), Site(1, 0)), Bond(Site(1, 0), Site(2, 0)))
 
     def site2index(self, site):
         """ Tensor index depending on site. """
-        # if site not in ((0, 0), (0, 1), (1, 0), (1, 1)):
-        #     raise YastnError(f"Site {site} does not correspond to any lattice site.")
-        return sum(site) % 2
+        return (site[0] + site[1]) % 2

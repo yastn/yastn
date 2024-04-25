@@ -1,9 +1,6 @@
 """ Functions performing many CTMRG steps until convergence and return of CTM environment tensors for mxn lattice. """
 from typing import NamedTuple
 
-#################################
-#           ctmrg               #
-#################################
 
 class CTMRGout(NamedTuple):
     sweeps : int = 0

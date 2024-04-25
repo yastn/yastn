@@ -12,7 +12,7 @@ class Peps():
         Empty PEPS has no tensors assigned.
         """
         self.geometry = geometry
-        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary"]:
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered"]:
             setattr(self, name, getattr(geometry, name))
         self._data = {self.site2index(site): None for site in self.sites()}
 
@@ -29,23 +29,27 @@ class Peps():
 
     def __setitem__(self, site, obj):
         """ Set tensor at site. """
+        if hasattr(obj, 'ndim') and obj.ndim == 5 :
+            obj = obj.fuse_legs(axes=((0, 1), (2, 3), 4))
+        if hasattr(obj, 'ndim') and obj.ndim == 2 :
+            obj = obj.unfuse_legs(axes=(0, 1))
         self._data[self.site2index(site)] = obj
 
     def save_to_dict(self):
         """
         Serialize PEPS into a dictionary.
         """
-        if isinstance(self.geometry, SquareLattice):
-            lattice = "square"
-        elif isinstance(self.geometry, CheckerboardLattice):
+        if isinstance(self.geometry, CheckerboardLattice):
             lattice = "checkerboard"
+        elif isinstance(self.geometry, SquareLattice):
+            lattice = "square"
 
         d = {'lattice': lattice,
              'dims': self.dims,
              'boundary': self.boundary,
              'data': {}}
         for ind, tensor in self._data.items():
-            d['data'][tuple(ind)] = tensor.save_to_dict()
+            d['data'][ind] = tensor.save_to_dict()
         return d
 
     def copy(self):
@@ -85,8 +89,6 @@ class Peps():
             for ny in range(self.Ny):
                 site = (n, ny)
                 top = self[site]
-                if top.ndim in (2, 3):
-                    top = top.unfuse_legs(axes=(0, 1))
                 op.A[ny] = top.transpose(axes=(1, 2, 3, 0)) if top.ndim == 4 else \
                            DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
         elif dirn == 'v':
@@ -96,8 +98,6 @@ class Peps():
             for nx in range(self.Nx):
                 site = (nx, n)
                 top = self[site]
-                if top.ndim in (2, 3):
-                    top = top.unfuse_legs(axes=(0, 1))
                 op.A[nx] = top if top.ndim == 4 else \
                            DoublePepsTensor(top=top, btm=top)
         return op
@@ -111,34 +111,20 @@ class Peps2Layers():
 
         Empty PEPS has no tensors assigned.
         """
-        bra = peps_unfuse(bra)
-        ket = bra if ket is None else peps_unfuse(ket)
-
         self.bra = bra
-        self.ket = ket
+        self.ket = bra if ket is None else ket
         self.geometry = bra.geometry
 
-        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary"]:
+        for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered"]:
             setattr(self, name, getattr(bra.geometry, name))
-
-    def has_physical(self):
-        return False
 
     @property
     def config(self):
         return self.ket.config
 
+    def has_physical(self):
+        return False
+
     def __getitem__(self, site):
         """ Get tensor for site. """
         return DoublePepsTensor(top=self.ket[site], btm=self.bra[site])
-
-
-def peps_unfuse(psi):
-    """ unfuse peps virtual legs if needed. """
-    if psi[0, 0].ndim != 3:
-        return psi
-
-    phi = Peps(geometry=psi.geometry)
-    for site in psi.sites():
-        phi[site] = psi[site].unfuse_legs(axes=(0, 1))
-    return phi
