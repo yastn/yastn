@@ -31,6 +31,8 @@ class Peps():
         """ Set tensor at site. """
         if hasattr(obj, 'ndim') and obj.ndim == 5 :
             obj = obj.fuse_legs(axes=((0, 1), (2, 3), 4))
+        if hasattr(obj, 'ndim') and obj.ndim == 2 :
+            obj = obj.unfuse_legs(axes=(0, 1))
         self._data[self.site2index(site)] = obj
 
     def save_to_dict(self):
@@ -87,8 +89,6 @@ class Peps():
             for ny in range(self.Ny):
                 site = (n, ny)
                 top = self[site]
-                # if top.ndim in (2, ):
-                #     top = top.unfuse_legs(axes=(0, 1))
                 op.A[ny] = top.transpose(axes=(1, 2, 3, 0)) if top.ndim == 4 else \
                            DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
         elif dirn == 'v':
@@ -98,8 +98,6 @@ class Peps():
             for nx in range(self.Nx):
                 site = (nx, n)
                 top = self[site]
-                if top.ndim in (2, ):
-                    top = top.unfuse_legs(axes=(0, 1))
                 op.A[nx] = top if top.ndim == 4 else \
                            DoublePepsTensor(top=top, btm=top)
         return op

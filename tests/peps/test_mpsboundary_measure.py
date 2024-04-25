@@ -62,12 +62,12 @@ def test_mpsboundary_measure(boundary):
 
     opts_var = {"max_sweeps": 2}
     for trial in ["uniform", "local"]:
-        proj_env.sample_MC_(proj_psi, smpl, smpl1, smpl2, psi, prs, opts_svd, opts_var, trial=trial)
+        proj_env.sample_MC_(smpl, smpl1, smpl2, psi, prs, opts_svd, opts_var, trial=trial)
         assert all(vloc[smpl1[s]] == vals[s] for s in sites)
         assert all(vloc[smpl2[s]] == vals[s] for s in sites)
 
     with pytest.raises(yastn.YastnError):
-        proj_env.sample_MC_(proj_psi, smpl, smpl1, smpl2, psi, prs, opts_svd, opts_var, trial="some")
+        proj_env.sample_MC_(smpl, smpl1, smpl2, psi, prs, opts_svd, opts_var, trial="some")
         # trial='some' not supported.
 
 

@@ -35,8 +35,8 @@ def check_hopping_gate(ops, t, ds):
     O = O.fuse_legs(axes=((0, 1), (2, 3)))
 
     # hopping Hamiltonian
-    H = - t * fpeps.gates.twosite_operator(cdag, c, sites=(0, 1), merge=True) \
-        - t * fpeps.gates.twosite_operator(cdag, c, sites=(1, 0), merge=True)
+    H = - t * fpeps.gates.fkron(cdag, c, sites=(0, 1), merge=True) \
+        - t * fpeps.gates.fkron(cdag, c, sites=(1, 0), merge=True)
     H = H.fuse_legs(axes=((0, 1), (2, 3)))
 
     II = yastn.ncon([I, I], [(-0, -2) , (-1, -3)])
@@ -56,7 +56,7 @@ def test_gate_raises():
     c, cdag = ops.c(), ops.cp()
 
     with pytest.raises(yastn.YastnError):
-        fpeps.gates.twosite_operator(c, cdag, sites=(0, 2))
+        fpeps.gates.fkron(c, cdag, sites=(0, 2))
         # sites should be equal to (0, 1) or (1, 0)
 
 

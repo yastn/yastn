@@ -1,6 +1,6 @@
 import numpy as np
 from typing import NamedTuple
-from ._gates_auxlliary import twosite_operator
+from ._gates_auxlliary import fkron
 
 
 class Gate_nn(NamedTuple):
@@ -56,12 +56,12 @@ def gate_nn_hopping(t, step, I, c, cdag):
     n = cdag @ c
     h = c @ cdag
 
-    II = twosite_operator(I, I, sites=(0, 1))
-    nh = twosite_operator(n, h, sites=(0, 1))
-    hn = twosite_operator(h, n, sites=(0, 1))
+    II = fkron(I, I, sites=(0, 1))
+    nh = fkron(n, h, sites=(0, 1))
+    hn = fkron(h, n, sites=(0, 1))
 
-    cc = twosite_operator(cdag, c, sites=(0, 1)) \
-       + twosite_operator(cdag, c, sites=(1, 0))
+    cc = fkron(cdag, c, sites=(0, 1)) \
+       + fkron(cdag, c, sites=(1, 0))
 
     G =  II + (np.cosh(t * step) - 1) * (nh + hn) + np.sinh(t * step) * cc
     return decompose_nn_gate(G)

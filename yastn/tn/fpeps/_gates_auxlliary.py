@@ -170,10 +170,11 @@ def gate_product_operator(O0, O1, l_ordered=True, f_ordered=True, merge=False):
     return G0, G1
 
 
-def twosite_operator(A, B, sites=(0, 1), merge=True):
+def fkron(A, B, sites=(0, 1), merge=True):
     """
-    Auxiliary function for gate generation,
-    returning a Kronecker product of two local operators, A and B.
+    Fermionic kron; auxiliary function for gate generation.
+    Returns a Kronecker product of two local operators, A and B,
+    including swap-gate (fermionic string) to handle fermionic operators.
 
     Calculate A_0 B_1 for sites == (0, 1), and A_1 B_0 for sites = (1, 0),
     i.e., operator B acts first (relevant for fermionic operators).

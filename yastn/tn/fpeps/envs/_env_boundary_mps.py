@@ -232,14 +232,14 @@ class EnvBoundaryMps:
             vR = vRnew
         return out
 
-    def sample_MC_(proj_env, proj_psi, st0, st1, st2, psi, projectors, opts_svd, opts_var, trial="local"):
+    def sample_MC_(proj_env, st0, st1, st2, psi, projectors, opts_svd, opts_var, trial="local"):
         """
         MC steps in a finite peps. Makes two steps
         while sweeping finite lattice back and forth.
 
         Takes emvironments and a complete list of projectors to sample from.
 
-        proj_psi, proj_env, st1, st2 are updated in place
+        proj_env, st1, st2 are updated in place
         """
 
         if trial == "local":
@@ -257,7 +257,7 @@ class EnvBoundaryMps:
         # sweep though the lattice
         accept = 0
         for ny in range(Ny-1, -1, -1):
-            vR, Os, _, astep = _sample_MC_column(ny, proj_psi, proj_env, st0, st1, psi, projectors, rands)
+            vR, Os, _, astep = _sample_MC_column(ny, proj_env, st0, st1, psi, projectors, rands)
             accept += astep
             if ny > 0:
                 vRnew = mps.zipper(Os, vR, opts_svd=opts_svd)
@@ -266,7 +266,7 @@ class EnvBoundaryMps:
                 proj_env._env.pop(('l', ny))
 
         for ny in range(Ny):
-            _, Os, vL, astep = _sample_MC_column(ny, proj_psi, proj_env, st1, st2, psi, projectors, rands)
+            _, Os, vL, astep = _sample_MC_column(ny, proj_env, st1, st2, psi, projectors, rands)
             accept += astep
             if ny < Ny - 1:
                 OsT = Os.H
@@ -276,8 +276,6 @@ class EnvBoundaryMps:
                 proj_env._env.pop(('r', ny))
 
         return accept / (2 * Nx * Ny)  # acceptance rate
-
-
 
 
 def _clear_operator_input(op, sites):
@@ -292,10 +290,10 @@ def _clear_operator_input(op, sites):
     return op_dict
 
 
-def _sample_MC_column_local(ny, proj_psi, proj_env, st0, st1, psi, projectors, rands):
+def _sample_MC_column_local(ny, proj_env, st0, st1, psi, projectors, rands):
     # update is proposed based on local probabilies
     vR = proj_env.boundary_mps(n=ny, dirn='r')
-    Os = proj_psi.transfer_mpo(n=ny, dirn='v')
+    Os = proj_env.psi.transfer_mpo(n=ny, dirn='v')
     vL = proj_env.boundary_mps(n=ny, dirn='l')
     env = mps.Env(vL, [Os, vR]).setup_(to='first')
     for nx in range(psi.Nx):
@@ -306,19 +304,19 @@ def _sample_MC_column_local(ny, proj_psi, proj_env, st0, st1, psi, projectors, r
         rand = next(rands)
         ind = sum(x < rand for x in accumulate(prob))
         st1[nx, ny] = ind
-        proj_psi[nx, ny] = (psi[nx, ny] @ projectors[nx, ny][ind]).unfuse_legs(axes=(0, 1))
-        Os[nx] = proj_psi[nx, ny]
+        proj_env.psi[nx, ny] = (psi[nx, ny] @ projectors[nx, ny][ind])
+        Os[nx] = proj_env.psi[nx, ny]
         env.update_env_(nx, to='last')
     accept = psi.Nx
     return vR, Os, vL, accept
 
 
-def _sample_MC_column_uniform(ny, proj_psi, proj_env, st0, st1, psi, projectors, rands):
+def _sample_MC_column_uniform(ny, proj_env, st0, st1, psi, projectors, rands):
     # update is proposed from uniform local distribution
-    config = proj_psi[0, 0].config
+    config = proj_env.psi[0, 0].config
     accept = 0
     vR = proj_env.boundary_mps(n=ny, dirn='r')
-    Os = proj_psi.transfer_mpo(n=ny, dirn='v')
+    Os = proj_env.psi.transfer_mpo(n=ny, dirn='v')
     vL = proj_env.boundary_mps(n=ny, dirn='l')
     env = mps.Env(vL, [Os, vR]).setup_(to='first')
     for nx in range(psi.Nx):
@@ -344,7 +342,7 @@ def _sample_MC_column_uniform(ny, proj_psi, proj_env, st0, st1, psi, projectors,
         if next(rands) < prob_new / prob_old:  # accept
             accept += 1
             st1[nx, ny] = ind1
-            proj_psi[nx, ny] = A1
+            proj_env.psi[nx, ny] = A1
             Os[nx] = A1
             env.update_env_(nx, to='last')
         else:  # reject
