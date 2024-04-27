@@ -112,12 +112,13 @@ def test_NTU_spinful_infinite():
     U = 0
     beta = 0.1
 
-    dbeta = 0.01
+    dbeta = 0.005
     D = 8
 
     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     I = ops.I()
-    c_up, c_dn, cdag_up, cdag_dn = ops.c(spin='u'), ops.c(spin='d'), ops.cp(spin='u'), ops.cp(spin='d')
+    c_up, c_dn = ops.c(spin='u'), ops.c(spin='d')
+    cdag_up, cdag_dn = ops.cp(spin='u'), ops.cp(spin='d')
     n_up, n_dn =  ops.n(spin='u'), ops.n(spin='d')
 
     g_hop_u = fpeps.gates.gate_nn_hopping(t_up, dbeta / 2, I, c_up, cdag_up)
@@ -130,18 +131,26 @@ def test_NTU_spinful_infinite():
 
     env = fpeps.EnvNTU(psi, which='NN++')
 
-    # env = fpeps.EnvCTM(psi)
-    # env.init_(type='ones')
     opts_svd_ctm = {'D_total': 40, 'tol': 1e-10}
 
     opts_svd_evol = [{"D_total": 2 * D, 'tol_block': 1e-15},
                      {"D_total": D, 'tol_block': 1e-15}]  # two step
 
     steps = round((beta / 2) / dbeta)
-    for step in range(steps):
-        print(f"beta = {(step + 1) * dbeta}" )
+
+    fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+    fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+    fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+
+    print(steps)
+    env = fpeps.EnvCTM(psi)
+    env.init_(type='ones')
+    env.update_(opts_svd=opts_svd_ctm)
+
+    for step in range(3, steps):  # FU works for fixed
+        print(f"beta = {(step + 1) * dbeta:0.3f}" )
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
-        # env.update_(opts_svd=opts_svd_ctm)
+        env.update_(opts_svd=opts_svd_ctm)
 
     # CTMRG
     # convergence criteria for CTM based on total energy
