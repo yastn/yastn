@@ -132,10 +132,10 @@ def test_NTU_spinful_infinite():
 
     # env = fpeps.EnvCTM(psi)
     # env.init_(type='ones')
+    opts_svd_ctm = {'D_total': 40, 'tol': 1e-10}
 
     opts_svd_evol = [{"D_total": 2 * D, 'tol_block': 1e-15},
                      {"D_total": D, 'tol_block': 1e-15}]  # two step
-
 
     steps = round((beta / 2) / dbeta)
     for step in range(steps):
@@ -148,8 +148,6 @@ def test_NTU_spinful_infinite():
     energy_old, tol_exp = 0, 1e-7
 
     env = fpeps.EnvCTM(psi)
-    opts_svd_ctm = {'D_total': 40, 'tol': 1e-10}
-
     for _ in range(10):
         env.update_(opts_svd=opts_svd_ctm)  # method='2site',
         cdagc_up = env.measure_nn(cdag_up, c_up)

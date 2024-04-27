@@ -65,9 +65,6 @@ def test_save_load_copy():
                 assert (phi[site] - psi[site]).norm() < tol
 
 
-
-
-
 if __name__ == '__main__':
     test_propuct_peps()
     test_save_load_copy()

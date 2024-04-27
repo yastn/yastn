@@ -41,13 +41,13 @@ def product_peps(geometry, vectors) -> Peps:
     for site, vec in vectors.items():
         for s in (-1, 1, 1, -1):
             vec = vec.add_leg(axis=0, s=s)
-        psi[site] = vec.fuse_legs(axes=((0, 1), (2, 3), 4))
+        psi[site] = vec
     if any(psi[site] is None for site in psi.sites()):
         raise YastnError("product_peps did not initialize some peps tensor")
     return psi
 
 
-def load_from_dict(config, d):
+def load_from_dict(config, d) -> Peps:
     r"""
     Create PEPS from dictionary.
 

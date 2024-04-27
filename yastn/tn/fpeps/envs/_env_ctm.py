@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from .... import rand, ones, YastnError, Leg, tensordot, ncon, qr
 from ... import mps
 from .._peps import Peps, Peps2Layers
-from .._gates_auxlliary import apply_gate_onsite, gate_product_operator, gate_fix_order
+from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
 from .._geometry import Bond
 from ._env_auxlliary import append_vec_tl, append_vec_br
 

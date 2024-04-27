@@ -5,7 +5,8 @@ PEPS tensors have 5 legs: (top, left, bottom, right, system)
 In case of purification, system leg is a fusion of (ancilla, system)
 """
 from ... import tensordot, vdot, svd_with_truncation, svd, ncon, eigh_with_truncation
-from ._gates_auxlliary import apply_gate_onsite, apply_gate_nn, gate_fix_order, apply_bond_tensors
+from ._peps import Peps2Layers
+from ._gates_auxiliary import apply_gate_onsite, apply_gate_nn, gate_fix_order, apply_bond_tensors
 from typing import NamedTuple
 
 
@@ -57,20 +58,24 @@ def evolution_step_(env, gates, opts_svd,
     """
     infos = []
 
+    psi = env.psi
+    if isinstance(psi, Peps2Layers):
+        psi = psi.ket  # to make it work with CtmEnv
+
     for gate in gates.local:
-        apply_local_gate_(env, gate)
+        psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
     for gate in gates.nn:
-        infos.append(apply_gate_nn_and_truncate_(env, gate, opts_svd, initialization, pinv_cutoffs, max_iter))
+        infos.append(apply_gate_nn_and_truncate_(env, psi, gate, opts_svd, initialization, pinv_cutoffs, max_iter))
     if symmetrize:
         for gate in gates.nn[::-1]:
-            infos.append(apply_gate_nn_and_truncate_(env, gate, opts_svd, initialization, pinv_cutoffs, max_iter))
+            infos.append(apply_gate_nn_and_truncate_(env, psi, gate, opts_svd, initialization, pinv_cutoffs, max_iter))
         for gate in gates.local[::-1]:
-            apply_local_gate_(env, gate)
+            psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
 
     return Evolution_out(*zip(*infos))
 
 
-def apply_gate_nn_and_truncate_(env, gate, opts_svd, initialization="EAT",
+def apply_gate_nn_and_truncate_(env, psi, gate, opts_svd, initialization="EAT",
                    pinv_cutoffs=(1e-12, 1e-10, 1e-8, 1e-6), max_iter=1000):
     r"""
     Applies a nearest-neighbor gate to a PEPS tensor and optimizes the resulting tensor using alternate
@@ -101,14 +106,12 @@ def apply_gate_nn_and_truncate_(env, gate, opts_svd, initialization="EAT",
              - 'optimal_cutoff': The optimal cutoff value used for inverse.
 
     """
-
-    dirn, l_ordered = env.psi.nn_bond_type(gate.bond)
-    f_ordered = env.psi.f_ordered(gate.bond)
+    dirn, l_ordered = psi.nn_bond_type(gate.bond)
+    f_ordered = psi.f_ordered(gate.bond)
     s0, s1 = gate.bond if l_ordered else gate.bond[::-1]
 
-    ten0, ten1 = env.psi[s0], env.psi[s1]
     G0, G1 = gate_fix_order(gate.G0, gate.G1, l_ordered, f_ordered)
-    Q0, Q1, R0, R1, Q0f, Q1f = apply_gate_nn(ten0, ten1, G0, G1, dirn)
+    Q0, Q1, R0, R1, Q0f, Q1f = apply_gate_nn(psi[s0], psi[s1], G0, G1, dirn)
 
     fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
 
@@ -130,7 +133,7 @@ def apply_gate_nn_and_truncate_(env, gate, opts_svd, initialization="EAT",
     fgf_fixed = U @ S @ U.H
 
     M0, M1, truncation_error2, optimal_pinv_cutoff = truncate_and_optimize(fgf_fixed, R0, R1, initialization, opts_svd, pinv_cutoffs, max_iter)
-    env.psi[s0], env.psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
+    psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
 
     return Evolution_out(truncation_error=truncation_error2 ** 0.5,
                          optimal_pinv_cutoff=optimal_pinv_cutoff,
@@ -309,8 +312,3 @@ def optimal_pinv(gg, J, gRR, pinv_cutoffs):
 
     Mnew = Mnew.unfuse_legs(axes=0)
     return truncation_error2, optimal_pinv_cutoff, Mnew
-
-
-def apply_local_gate_(env, gate):
-    """ apply local gates on PEPS tensors """
-    env.psi[gate.site] = apply_gate_onsite(env.psi[gate.site], gate.G)

@@ -19,7 +19,7 @@ class EnvNTU:
         if which not in ('NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'):  # 'SU+'
             raise YastnError(f" Type of EnvNTU {which=} not recognized.")
         self.psi = psi
-        self.which = which
+        self._which = which
         self._dict_gs = {'NN': self._g_NN,
                          'NN+': self._g_NNp,
                          'NN++': self._g_NNpp,
@@ -102,7 +102,7 @@ class EnvNTU:
                     :        :        :         :        :        :
                  (+3, -2)-(+3, -1)-(+3, +0)--(+3, +1)-(+3, +2)-(+3, +3)
         """
-        return self._dict_gs[self.which](Q0, Q1, s0, s1, dirn)
+        return self._dict_gs[self._which](Q0, Q1, s0, s1, dirn)
 
 
     def _g_NN(self, Q0, Q1, s0, s1, dirn):
