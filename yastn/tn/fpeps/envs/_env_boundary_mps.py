@@ -1,5 +1,5 @@
 from itertools import accumulate
-from .... import tensordot, Tensor, YastnError
+from .... import Tensor, YastnError
 from ... import mps
 from ._env_auxlliary import identity_tm_boundary
 from .._gates_auxiliary import apply_gate_onsite

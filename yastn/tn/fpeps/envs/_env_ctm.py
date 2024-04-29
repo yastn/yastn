@@ -4,12 +4,12 @@ from ... import mps
 from .._peps import Peps, Peps2Layers
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
 from .._geometry import Bond
-from ._env_auxlliary import append_vec_tl, append_vec_br
+from ._env_auxlliary import *
 
 
 @dataclass()
 class EnvCTM_local():
-    """ Dataclass for CTM environment tensors associated with Peps lattice site. """
+    r""" Dataclass for CTM environment tensors associated with Peps lattice site. """
     tl = None # top-left
     tr = None # top-right
     bl = None # bottom-left
@@ -25,7 +25,7 @@ class EnvCTM_local():
 
 @dataclass()
 class EnvCTM_projectors():
-    """ Dataclass for CTM projectors associated with Peps lattice site. """
+    r""" Dataclass for CTM projectors associated with Peps lattice site. """
     hlt : any = None  # horizontal left top
     hlb : any = None  # horizontal left bottom
     hrt : any = None  # horizontal right top
@@ -37,17 +37,23 @@ class EnvCTM_projectors():
 
 
 class EnvCTM(Peps):
-    r""" Geometric information about the lattice provided to ctm tensors """
     def __init__(self, psi, init='ones', leg=None):
+        r"""
+        Environment used in Corner Transfer Matrix Renormalization algorithm.
+
+        Parameters
+        ----------
+        psi: yastn.tn.Peps
+            Peps lattice to be contracted using CTM.
+            If psi has physical legs, 2-layers peps with no physical legs is formed.
+        """
+
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
-
-        if init not in (None, 'rand', 'ones', 'nn'):
-            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'ones', None, or 'nn'.")
-
+        if init not in (None, 'rand', 'ones'):  # TODO: add 'nn'
+            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'ones', None.")
         for site in self.sites():
             self[site] = EnvCTM_local()
-
         if init is not None:
             self.reset_(init=init, leg=leg)
 
@@ -57,8 +63,9 @@ class EnvCTM(Peps):
         return env
 
     def reset_(self, init='ones', leg=None):
-        """ Initialize random CTMRG environments of peps tensors A. """
+        r""" Initialize random CTMRG environments of peps tensors A. """
         config = self.psi.config
+        leg0 = Leg(config, s=1, t=((0,) * config.sym.NSYM,), D=(1,))
 
         if init == 'nn':
             pass
@@ -66,7 +73,6 @@ class EnvCTM(Peps):
             ten0 = ones
             ten = rand if type == 'rand' else ones
 
-            leg0 = Leg(config, s=1, t=((0,) * config.sym.NSYM,), D=(1,))
             if leg is None:
                 leg = leg0
 
@@ -75,20 +81,18 @@ class EnvCTM(Peps):
 
                 for dirn in ('tl', 'tr', 'bl', 'br'):
                     if self.nn_site(site, d=dirn) is None:
-                        tmp = ten0(config, legs=[leg0, leg0.conj()])
+                        setattr(self[site], dirn, ten0(config, legs=[leg0, leg0.conj()]))
                     else:
-                        tmp = ten(config, legs=[leg, leg.conj()])
-                    setattr(self[site], dirn, tmp)
+                        setattr(self[site], dirn, ten(config, legs=[leg, leg.conj()]))
 
                 for ind, dirn in enumerate('tlbr'):
                     if self.nn_site(site, d=dirn) is None:
-                        tmp = ten0(config, legs=[leg0, legs[ind].conj(), leg0.conj()])
+                        setattr(self[site], dirn, ten0(config, legs=[leg0, legs[ind].conj(), leg0.conj()]))
                     else:
-                        tmp = ten(config, legs=[leg, legs[ind].conj(), leg.conj()])
-                    setattr(self[site], dirn, tmp)
+                        setattr(self[site], dirn, ten(config, legs=[leg, legs[ind].conj(), leg.conj()]))
 
     def boundary_mps(self, n, dirn):
-        """ Convert environmental tensors of Ctm to an MPS """
+        r""" Convert environmental tensors of Ctm to an MPS """
         if dirn == 'b':
             H = mps.Mps(N=self.Ny)
             for ny in range(self.Ny):
@@ -109,9 +113,12 @@ class EnvCTM(Peps):
             H = H.conj()
         return H
 
-    def measure_1site(self, op, site=None):
+    def measure_1site(self, op, site=None) -> dict:
         r"""
-        dictionary containing site coordinates as keys and their corresponding expectation values
+        Calculate local expectation values within CTM environment.
+
+        Return a number if site is provided.
+        If None, returns a dictionary {site: value} for all unique lattice sites.
 
         Parameters
         ----------
@@ -137,6 +144,21 @@ class EnvCTM(Peps):
         return val_op / val_no
 
     def measure_nn(self, O0, O1, bond=None):
+        r"""
+        Calculate nearest-neighbor expectation values within CTM environment.
+
+        Return a number if the nearest-neighbor bond is provided.
+        If None, returns a dictionary {bond: value} for all unique lattice bonds.
+
+        Parameters
+        ----------
+        O0, O1: yastn.Tensor
+            Calculate <O0_s0 O1_s1>.
+            O1 is applied first, which might matter for fermionic operators.
+        bond: yastn.tn.fpeps.Bond | tuple[tuple[int, int], tuple[int, int]]
+            Bond of the form (s0, s1). Sites s0 and s1 should be nearest-neighbors on the lattice.
+        """
+
         if bond is None:
              return {bond: self.measure_nn(O0, O1, bond) for bond in self.bonds()}
 
@@ -195,36 +217,28 @@ class EnvCTM(Peps):
 
     def update_(env, opts_svd=None, fix_signs=True):
         r"""
-        Generator for ctmrg().
-        Perform one step of CTMRG update for a mxn lattice.
-
-        Parameters
-        ----------
-            env : class CTMEnv
-                The current CTM environment tensor.
-            AAb : CtmBond
-                The CtmBond tensor for the lattice.
-            fix_signs : bool
-                Whether to fix the signs of the environment tensors.
-            opts_svd : dict, optional
-                A dictionary of options to pass to the SVD algorithm, by default None.
-
-        Returns
-        -------
-            envn_ver : class CTMEnv
-                The updated CTM environment tensor
-            proj     :  dictionary of CTM projectors.
-
+        Perform one step of CTMRG update.
 
         The function performs a CTMRG update for a square lattice using the corner transfer matrix
         renormalization group (CTMRG) algorithm. The update is performed in two steps: a horizontal move
         and a vertical move. The projectors for each move are calculated first, and then the tensors in
         the CTM environment are updated using the projectors. The boundary conditions of the lattice
-        determine whether trivial projectors are needed for the move. If the boundary conditions are
-        'infinite', no trivial projectors are needed; if they are 'obc', four trivial projectors
-        are needed for each move. The signs of the environment tensors can also be fixed during the
-        update if `fix_signs` is set to True. The latter is important when we set the criteria for
-        stopping the algorithm based on singular values of the corners.
+        determine whether trivial projectors are needed for the move.
+
+        Parameters
+        ----------
+        env: EnvCTM
+            The current CTM environment tensor.
+        opts_svd: dict
+            A dictionary of options to pass to the SVD algorithm, by default None.
+        fix_signs: bool
+            Whether to fix the signs of the environment tensors.
+            The latter is important when we set the criteria for
+            stopping the algorithm based on singular values of the corners.
+
+        Returns
+        -------
+        proj: dictionary of CTM projectors.
         """
         # Empty structure for projectors
         proj = Peps(env.geometry)
@@ -256,8 +270,8 @@ class EnvCTM(Peps):
         return proj
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn):
-        """
-        Calculates Full-update metric tensor.
+        r"""
+        Calculates Full-Update metric tensor.
 
         For dirn == 'h':
 
@@ -299,6 +313,9 @@ class EnvCTM(Peps):
 
 
 def update_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
+    r"""
+    Calculate new projectors for CTM moves.
+    """
     psi = env.psi
     sites = [psi.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
     if None in sites:
@@ -341,7 +358,7 @@ def update_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
 
 
 def proj_corners(r0, r1, fix_signs, opts_svd):
-    """ Projectors in between r0 @ r1.T corners. """
+    r""" Projectors in between r0 @ r1.T corners. """
     rr = tensordot(r0, r1, axes=(1, 1))
     u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs, **opts_svd)
     rs = s.rsqrt()
@@ -361,7 +378,7 @@ _trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
 
 
 def trivial_projectors_(proj, dirn, env):
-    """
+    r"""
     Adds trivial projectors if not present at the edges of the lattice with open boundary conditions.
     """
     config = env.psi.config
@@ -459,7 +476,7 @@ def update_env_vertical_(env_tmp, site, env, proj):
 
 
 def update_old_env_(env, env_tmp):
-    """
+    r"""
     Update tensors in env with the ones from env_tmp that are not None.
     """
     for site in env.sites():

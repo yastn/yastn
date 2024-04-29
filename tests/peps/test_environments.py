@@ -66,8 +66,8 @@ def test_finite_spinless_boundary_mps_ctmrg():
 
         print(mps.vdot(vR0, vR1) / (vR0.norm() * vR1.norm()))  # problem with phase in peps?
         print(mps.vdot(vL0, vL1) / (vL0.norm() * vL1.norm()))
-        assert abs(abs(mps.vdot(vR0, vR1)) / (vR0.norm() * vR1.norm()) - 1) < 1e-7
-        assert abs(abs(mps.vdot(vL0, vL1)) / (vL0.norm() * vL1.norm()) - 1) < 1e-7
+        assert abs(mps.vdot(vR0, vR1) / (vR0.norm() * vR1.norm()) - 1) < 1e-7
+        assert abs(mps.vdot(vL0, vL1) / (vL0.norm() * vL1.norm()) - 1) < 1e-7
 
     for nx in range(psi.Nx):
         vT0 = env.boundary_mps(n=nx, dirn='t')
@@ -77,8 +77,8 @@ def test_finite_spinless_boundary_mps_ctmrg():
 
         print(mps.vdot(vT0, vT1) / (vT0.norm() * vT1.norm()))  # problem with phase in peps?
         print(mps.vdot(vB0, vB1) / (vB0.norm() * vB1.norm()))
-        assert abs(abs(mps.vdot(vT0, vT1)) / (vT0.norm() * vT1.norm()) - 1) < 1e-7
-        assert abs(abs(mps.vdot(vB0, vB1)) / (vB0.norm() * vB1.norm()) - 1) < 1e-7
+        assert abs(mps.vdot(vT0, vT1) / (vT0.norm() * vT1.norm()) - 1) < 1e-7
+        assert abs(mps.vdot(vB0, vB1) / (vB0.norm() * vB1.norm()) - 1) < 1e-7
 
 
 def test_spinless_infinite_approx():
