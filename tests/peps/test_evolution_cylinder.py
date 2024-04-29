@@ -4,10 +4,10 @@ import yastn
 import yastn.tn.fpeps as fpeps
 
 try:
-    from .configs import config_U1_R_fermionic as cfg
+    from .configs import config as cfg
     # cfg is used by pytest to inject different backends and divices
 except ImportError:
-    from configs import config_U1_R_fermionic as cfg
+    from configs import config as cfg
 
 
 def evolve_correlation_matrix(Js, mus, occs0, s2i, t):

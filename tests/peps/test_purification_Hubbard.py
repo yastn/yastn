@@ -1,14 +1,15 @@
 """ Test the expectation values of spin-1/2 fermions with analytical values of fermi sea """
-import numpy as np
-import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-
 try:
-    from .configs import config_U1xU1_R_fermionic as cfg
+    from .configs import config as cfg
     # cfg is used by pytest to inject different backends and divices
 except ImportError:
-    from configs import config_U1xU1_R_fermionic as cfg
+    from configs import config as cfg
+
+
+def mean(xs):
+    return sum(xs) / len(xs)
 
 
 def test_NTU_spinful_finite():
@@ -91,15 +92,14 @@ def test_NTU_spinful_finite():
 
     print(nn_CTM_bond_1_up, nn_CTM_bond_1_dn, 'vs', nn_bond_1_exact)
     print(nn_CTM_bond_2_up, nn_CTM_bond_2_dn, 'vs', nn_bond_2_exact)
-    assert pytest.approx(nn_CTM_bond_1_up, abs=1e-4) == nn_bond_1_exact
-    assert pytest.approx(nn_CTM_bond_1_dn, abs=1e-4) == nn_bond_1_exact
-    assert pytest.approx(nn_CTM_bond_2_up, abs=1e-4) == nn_bond_2_exact
-    assert pytest.approx(nn_CTM_bond_2_dn, abs=1e-4) == nn_bond_2_exact
-
-    assert pytest.approx(nn_CTM_bond_1r_up, abs=1e-4) == nn_bond_1_exact
-    assert pytest.approx(nn_CTM_bond_1r_dn, abs=1e-4) == nn_bond_1_exact
-    assert pytest.approx(nn_CTM_bond_2r_up, abs=1e-4) == nn_bond_2_exact
-    assert pytest.approx(nn_CTM_bond_2r_dn, abs=1e-4) == nn_bond_2_exact
+    assert abs(nn_CTM_bond_1_up - nn_bond_1_exact) < 1e-4
+    assert abs(nn_CTM_bond_1_dn - nn_bond_1_exact) < 1e-4
+    assert abs(nn_CTM_bond_2_up - nn_bond_2_exact) < 1e-4
+    assert abs(nn_CTM_bond_2_dn - nn_bond_2_exact) < 1e-4
+    assert abs(nn_CTM_bond_1r_up - nn_bond_1_exact) < 1e-4
+    assert abs(nn_CTM_bond_1r_dn - nn_bond_1_exact) < 1e-4
+    assert abs(nn_CTM_bond_2r_up - nn_bond_2_exact) < 1e-4
+    assert abs(nn_CTM_bond_2r_dn - nn_bond_2_exact) < 1e-4
 
 
 def test_NTU_spinful_infinite():
@@ -160,7 +160,7 @@ def test_NTU_spinful_infinite():
         env.update_(opts_svd=opts_svd_ctm)  # method='2site',
         cdagc_up = env.measure_nn(cdag_up, c_up)
         cdagc_dn = env.measure_nn(cdag_dn, c_dn)
-        energy = -2 * np.mean([*cdagc_up.values(), *cdagc_dn.values()])
+        energy = -2 * mean([*cdagc_up.values(), *cdagc_dn.values()])
 
         print("Energy: ", energy)
         if abs(energy - energy_old) < tol_exp:
@@ -169,11 +169,11 @@ def test_NTU_spinful_infinite():
 
     # analytical nn fermionic correlator at beta = 0.1 for 2D infinite lattice
     nn_exact = 0.02481459
-    nn_CTM = np.mean([*cdagc_up.values(), *cdagc_dn.values()])
+    nn_CTM = mean([*cdagc_up.values(), *cdagc_dn.values()])
     print(f"{nn_CTM:0.6f} vs {nn_exact:0.6f}  diff = {nn_CTM - nn_exact:0.6f}")
-    assert pytest.approx(nn_CTM, abs=1e-4) == nn_exact
+    assert abs(nn_CTM - nn_exact) < 1e-4
 
 
 if __name__ == '__main__':
-    # test_NTU_spinful_finite()
+    test_NTU_spinful_finite()
     test_NTU_spinful_infinite()

@@ -8,12 +8,20 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 try:
-    from .configs import config_dense as cfg
+    from .configs import config as cfg
     # cfg is used by pytest to inject different backends and divices
 except ImportError:
-    from configs import config_dense as cfg
+    from configs import config as cfg
 
 tol_exp = 1e-6
+
+def mean(xs):
+    return sum(xs) / len(xs)
+
+def max_dev(xs):
+    mx = mean(xs)
+    return max(abs(x - mx) for x in xs)
+
 
 def create_Ising_tensor(si, sz, beta):
     """ Creates peps tensor for given beta. """
@@ -79,45 +87,42 @@ def run_ctm(psi, ops, D=8, init='ones'):
     env = fpeps.EnvCTM(psi, init=init)
     for seed in range(1000):
         env.update_(opts_svd=opts_svd)
-        Z = np.mean([*env.measure_1site(ops.z()).values()])
-        ZZ = np.mean([*env.measure_nn(ops.z(), ops.z()).values()])
+        Z = mean([*env.measure_1site(ops.z()).values()])
+        ZZ = mean([*env.measure_nn(ops.z(), ops.z()).values()])
         if abs(Z - Z_old) < tol_exp and abs(ZZ - ZZ_old) < tol_exp:
             break
         Z_old, ZZ_old = Z, ZZ
         if seed % 100 == 99:
             print(f"{seed=} {Z=} {ZZ=}")
-
     return env
 
 
 def check_Z(env, ops, Z_exact, site=None):
-    Zlocal = env.measure_1site(ops.z(), site=site)
-    if site is not None:
-        Z = Zlocal
-    else:
+    Z = env.measure_1site(ops.z(), site=site)
+    if site is None:
         Znn1 = env.measure_nn(ops.z(), ops.I())
         Znn2 = env.measure_nn(ops.I(), ops.z())
-        Zs = [*Zlocal.values(), *Znn1.values(), *Znn2.values()]
-        Z = np.mean(Zs)
-        print(f"std(Z)={np.std(Zs):0.6f}")
-        assert np.std(Zs) < 100 * tol_exp
-    print(f"{Z=:0.6f}")
-    assert pytest.approx(abs(Z), abs=tol_exp * 100) == Z_exact
+        Zs = [*Z.values(), *Znn1.values(), *Znn2.values()]
+        Z = mean(Zs)
+        print(f"max dev Z ={max_dev(Zs)}")
+        assert max_dev(Zs) < 100 * tol_exp
+    print(f"{Z=}")
+    assert abs(abs(Z) - Z_exact) < tol_exp * 100
 
 
 def check_ZZ(env, ops, ZZ_exact, bond=None):
     ZZ = env.measure_nn(ops.z(), ops.z(), bond=bond)
     if bond is None:
-        ZZ = np.mean([*ZZ.values()])
-    print(f"ZZ={ZZ:0.6f}")
-    assert pytest.approx(ZZ, abs=tol_exp * 100) == ZZ_exact
+        ZZ = mean([*ZZ.values()])
+    print(f"{ZZ=}")
+    assert abs(ZZ - ZZ_exact) < tol_exp * 100
 
 
-def test_ctm_loop():  ###high temperature
+def test_ctm_loop():
     """ Calculate magnetization for classical 2D Ising model and compares with the exact result. """
     # beta_c = ln(1+sqrt(2)) / 2  = 0.44068679350977147
     # spontanic magnetization = (1 - sinh(2 beta) **-4) ** 0.125
-    Z_exact =  {0.3: 0.000000, 0.5: 0.911319, 0.6: 0.973609}
+    Z_exact  = {0.3: 0.000000, 0.5: 0.911319, 0.6: 0.973609}
     ZZ_exact = {0.3: 0.352250, 0.5: 0.872783, 0.6: 0.954543}
     #
     ops = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
@@ -147,14 +152,14 @@ def test_ctm_loop():  ###high temperature
     beta = 0.6
     print(f"Lattice = square obc, gauges = False; {beta=}")
     psi = create_Ising_peps(ops, beta, lattice='square', dims=(13, 13), boundary='obc', gauges=False)
-    env = run_ctm(psi, ops, init='rand')
+    env = run_ctm(psi, ops, D=4, init='rand')
     check_Z(env, ops, Z_exact[beta], site=(6, 6))
     check_ZZ(env, ops, ZZ_exact[beta], bond=((6, 6), (6, 5)))
     #
     beta = 0.6  # CTM should not be really used with "cylinder"
     print(f"Lattice = square cylinder, gauges = False; {beta=}")
     psi = create_Ising_peps(ops, beta, lattice='square', dims=(13, 15), boundary='cylinder', gauges=False)
-    env = run_ctm(psi, ops, init='rand')
+    env = run_ctm(psi, ops, D=4, init='rand')
     check_Z(env, ops, Z_exact[beta], site=(5, 8))
     check_ZZ(env, ops, ZZ_exact[beta], bond=((5, 8), (6, 8)))
 
