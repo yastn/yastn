@@ -143,8 +143,7 @@ def test_NTU_spinful_infinite():
     fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
 
     print(steps)
-    env = fpeps.EnvCTM(psi)
-    env.init_(type='ones')
+    env = fpeps.EnvCTM(psi, init='ones')
     env.update_(opts_svd=opts_svd_ctm)
 
     for step in range(3, steps):  # FU works for fixed
