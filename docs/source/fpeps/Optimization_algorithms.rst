@@ -47,7 +47,7 @@ The NTU error can be calculated numerically exactly via parallelizable tensor co
 The algorithm is described Ref. [1] and in the appendix of Ref. [6].
 That exactness warrants that the error measure is Hermitian and non-negative own to the numerical precision.
 
-The least-square optimization processes used is in :meth:`yastn.tn.fpeps.evolution._routines`
+The least-square optimization processes used is in :meth:`yastn.tn.fpeps.EnvNTU`
 
 References & Related works
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
