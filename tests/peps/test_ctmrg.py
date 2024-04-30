@@ -80,13 +80,16 @@ def create_Ising_peps(ops, beta, lattice='checkerboard', dims=(2, 2), boundary='
     return psi
 
 
-def run_ctm(psi, ops, D=8, init='ones'):
+def run_ctm(psi, ops, D=8, init='ones', method='2site'):
     """ Compares ctm expectation values with analytical result. """
     opts_svd = {'D_total': D, 'tol': 1e-10}
     Z_old, ZZ_old = 0, 0
     env = fpeps.EnvCTM(psi, init=init)
+    if method == '1site':
+        for _ in range(4):
+            env.update_(opts_svd=opts_svd, method='2site')
     for seed in range(1000):
-        env.update_(opts_svd=opts_svd)
+        env.update_(opts_svd=opts_svd, method=method)
         Z = mean([*env.measure_1site(ops.z()).values()])
         ZZ = mean([*env.measure_nn(ops.z(), ops.z()).values()])
         if abs(Z - Z_old) < tol_exp and abs(ZZ - ZZ_old) < tol_exp:
@@ -104,9 +107,9 @@ def check_Z(env, ops, Z_exact, site=None):
         Znn2 = env.measure_nn(ops.I(), ops.z())
         Zs = [*Z.values(), *Znn1.values(), *Znn2.values()]
         Z = mean(Zs)
-        print(f"max dev Z ={max_dev(Zs)}")
+        print(f"max dev Z ={max_dev(Zs):0.6f}")
         assert max_dev(Zs) < 100 * tol_exp
-    print(f"{Z=}")
+    print(f"{Z=:0.6f}")
     assert abs(abs(Z) - Z_exact) < tol_exp * 100
 
 
@@ -114,54 +117,55 @@ def check_ZZ(env, ops, ZZ_exact, bond=None):
     ZZ = env.measure_nn(ops.z(), ops.z(), bond=bond)
     if bond is None:
         ZZ = mean([*ZZ.values()])
-    print(f"{ZZ=}")
+    print(f"{ZZ=:0.6f}")
     assert abs(ZZ - ZZ_exact) < tol_exp * 100
 
 
 def test_ctm_loop():
     """ Calculate magnetization for classical 2D Ising model and compares with the exact result. """
-    # beta_c = ln(1+sqrt(2)) / 2  = 0.44068679350977147
-    # spontanic magnetization = (1 - sinh(2 beta) **-4) ** 0.125
+    # beta_c = ln(1 + sqrt(2)) / 2 = 0.44068679350977147
+    # spontanic magnetization = (1 - sinh(2 * beta) ** -4) ** 0.125
     Z_exact  = {0.3: 0.000000, 0.5: 0.911319, 0.6: 0.973609}
     ZZ_exact = {0.3: 0.352250, 0.5: 0.872783, 0.6: 0.954543}
     #
     ops = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
     ops.random_seed(seed=0)
     #
-    beta = 0.6
-    print(f"Lattice: checkerboard infinite; gauges= False; {beta=}")
-    psi = create_Ising_peps(ops, beta, lattice='checkerboard', dims=(2, 2), boundary='infinite', gauges=False)
-    env = run_ctm(psi, ops, init='ones')
-    check_Z(env, ops, Z_exact[beta])
-    check_ZZ(env, ops, ZZ_exact[beta])
-    #
-    beta = 0.3
-    print(f"Lattice: checkerboard infinite, gauges= True; {beta=}")
-    psi = create_Ising_peps(ops, beta, lattice='checkerboard', dims=(2, 2), boundary='infinite', gauges=True)
-    env = run_ctm(psi, ops, init='rand')
-    check_Z(env, ops, Z_exact[beta])
-    check_ZZ(env, ops, ZZ_exact[beta])
-    #
-    beta = 0.3
-    print(f"Lattice = square infinite, gauges = False; {beta=}")
-    psi = create_Ising_peps(ops, beta, lattice='square', dims=(3, 4), boundary='infinite', gauges=False)
-    env = run_ctm(psi, ops, init='rand')
-    check_Z(env, ops, Z_exact[beta])
-    check_ZZ(env, ops, ZZ_exact[beta])
-    #
-    beta = 0.6
-    print(f"Lattice = square obc, gauges = False; {beta=}")
-    psi = create_Ising_peps(ops, beta, lattice='square', dims=(13, 13), boundary='obc', gauges=False)
-    env = run_ctm(psi, ops, D=4, init='rand')
-    check_Z(env, ops, Z_exact[beta], site=(6, 6))
-    check_ZZ(env, ops, ZZ_exact[beta], bond=((6, 6), (6, 5)))
-    #
-    beta = 0.6  # CTM should not be really used with "cylinder"
-    print(f"Lattice = square cylinder, gauges = False; {beta=}")
-    psi = create_Ising_peps(ops, beta, lattice='square', dims=(13, 15), boundary='cylinder', gauges=False)
-    env = run_ctm(psi, ops, D=4, init='rand')
-    check_Z(env, ops, Z_exact[beta], site=(5, 8))
-    check_ZZ(env, ops, ZZ_exact[beta], bond=((5, 8), (6, 8)))
+    for method in ['1site', '2site']:
+        beta = 0.6
+        print(f"Lattice: checkerboard infinite; gauges= False; {beta=}; {method=}")
+        psi = create_Ising_peps(ops, beta, lattice='checkerboard', dims=(2, 2), boundary='infinite', gauges=False)
+        env = run_ctm(psi, ops, init='ones', method=method)
+        check_Z(env, ops, Z_exact[beta])
+        check_ZZ(env, ops, ZZ_exact[beta])
+        #
+        beta = 0.3
+        print(f"Lattice: checkerboard infinite, gauges= True; {beta=}; {method=}")
+        psi = create_Ising_peps(ops, beta, lattice='checkerboard', dims=(2, 2), boundary='infinite', gauges=True)
+        env = run_ctm(psi, ops, init='rand', method=method)
+        check_Z(env, ops, Z_exact[beta])
+        check_ZZ(env, ops, ZZ_exact[beta])
+        #
+        beta = 0.3
+        print(f"Lattice = square infinite, gauges = False; {beta=}; {method=}")
+        psi = create_Ising_peps(ops, beta, lattice='square', dims=(3, 4), boundary='infinite', gauges=False)
+        env = run_ctm(psi, ops, init='rand', method=method)
+        check_Z(env, ops, Z_exact[beta])
+        check_ZZ(env, ops, ZZ_exact[beta])
+        #
+        beta = 0.6
+        print(f"Lattice = square obc, gauges = False; {beta=}; {method=}")
+        psi = create_Ising_peps(ops, beta, lattice='square', dims=(13, 13), boundary='obc', gauges=False)
+        env = run_ctm(psi, ops, D=4, init='rand', method=method)
+        check_Z(env, ops, Z_exact[beta], site=(6, 6))
+        check_ZZ(env, ops, ZZ_exact[beta], bond=((6, 6), (6, 5)))
+        #
+        beta = 0.6  # CTM should not be really used with "cylinder"
+        print(f"Lattice = square cylinder, gauges = False; {beta=}; {method=}")
+        psi = create_Ising_peps(ops, beta, lattice='square', dims=(13, 15), boundary='cylinder', gauges=False)
+        env = run_ctm(psi, ops, D=4, init='ones', method=method)
+        check_Z(env, ops, Z_exact[beta], site=(5, 8))
+        check_ZZ(env, ops, ZZ_exact[beta], bond=((5, 8), (6, 8)))
 
 
 if __name__ == '__main__':

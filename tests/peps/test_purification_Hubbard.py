@@ -129,7 +129,7 @@ def test_NTU_spinful_infinite():
     # initialized at infinite temperature
     psi = fpeps.product_peps(geometry, I)
 
-    env = fpeps.EnvNTU(psi, which='NN++')
+    env = fpeps.EnvNTU(psi, which='NN+')
 
     opts_svd_ctm = {'D_total': 40, 'tol': 1e-10}
 

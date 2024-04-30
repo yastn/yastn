@@ -37,7 +37,7 @@ class EnvCTM_projectors():
 
 
 class EnvCTM(Peps):
-    def __init__(self, psi, init='ones', leg=None):
+    def __init__(self, psi, init='rand', leg=None):
         r"""
         Environment used in Corner Transfer Matrix Renormalization algorithm.
 
@@ -47,10 +47,9 @@ class EnvCTM(Peps):
             Peps lattice to be contracted using CTM.
             If psi has physical legs, 2-layers peps with no physical legs is formed.
         """
-
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
-        if init not in (None, 'rand', 'ones'):  # TODO: add 'nn'
+        if init not in (None, 'rand', 'ones'):
             raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'ones', None.")
         for site in self.sites():
             self[site] = EnvCTM_local()
@@ -62,7 +61,7 @@ class EnvCTM(Peps):
         env._data = {k: v.copy() for k, v in self._data.items()}
         return env
 
-    def reset_(self, init='ones', leg=None):
+    def reset_(self, init='rand', leg=None):
         r""" Initialize random CTMRG environments of peps tensors A. """
         config = self.psi.config
         leg0 = Leg(config, s=1, t=((0,) * config.sym.NSYM,), D=(1,))
@@ -215,7 +214,7 @@ class EnvCTM(Peps):
 
         return val_op / val_no
 
-    def update_(env, opts_svd=None, fix_signs=True):
+    def update_(env, opts_svd, method='2site', fix_signs=True):
         r"""
         Perform one step of CTMRG update.
 
@@ -231,6 +230,10 @@ class EnvCTM(Peps):
             The current CTM environment tensor.
         opts_svd: dict
             A dictionary of options to pass to the SVD algorithm, by default None.
+        method: str
+            '2site' or '1site'.
+            '2site' is a standard 4x4 enlarged corners, allowing to enlarge EnvCTM bond dimension.
+            '1site' uses smaller 4x2 corners. It does not allow to grow EnvCTM bond dimension.
         fix_signs: bool
             Whether to fix the signs of the environment tensors.
             The latter is important when we set the criteria for
@@ -240,6 +243,12 @@ class EnvCTM(Peps):
         -------
         proj: dictionary of CTM projectors.
         """
+        if all(s not in opts_svd for s in ('tol', 'tol_block')):
+            opts_svd['tol'] = 1e-14
+        if method not in ('1site', '2site'):
+            raise YastnError(f"CTM update {method=} not recognized. Should be '1site' or '2site'")
+        update_proj_ = update_2site_projectors_ if method == '2site' else update_1site_projectors_
+        #
         # Empty structure for projectors
         proj = Peps(env.geometry)
         for site in proj.sites():
@@ -247,7 +256,7 @@ class EnvCTM(Peps):
         #
         # horizontal projectors
         for site in env.sites():
-            update_projectors_(proj, site, 'lr', env, opts_svd, fix_signs)
+            update_proj_(proj, site, 'lr', env, opts_svd, fix_signs)
         trivial_projectors_(proj, 'lr', env)  # fill None's
         #
         # horizontal move
@@ -258,7 +267,7 @@ class EnvCTM(Peps):
         #
         # vertical projectors
         for site in env.sites():
-            update_projectors_(proj, site, 'tb', env, opts_svd, fix_signs)
+            update_proj_(proj, site, 'tb', env, opts_svd, fix_signs)
         trivial_projectors_(proj, 'tb', env)
         #
         # vertical move
@@ -312,9 +321,9 @@ class EnvCTM(Peps):
         return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
-def update_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
+def update_2site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
     r"""
-    Calculate new projectors for CTM moves.
+    Calculate new projectors for CTM moves from 4x4 extended corners.
     """
     psi = env.psi
     sites = [psi.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
@@ -333,28 +342,92 @@ def update_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
         cor_bb = cor_br @ cor_bl
 
     if 'r' in dirn:
-        _, rt = qr(cor_tt, axes=(0, 1))
-        _, rb = qr(cor_bb, axes=(1, 0))
-        proj[tr].hrb, proj[br].hrt = proj_corners(rt, rb, fix_signs, opts_svd=opts_svd)
+        _, r_t = qr(cor_tt, axes=(0, 1))
+        _, r_b = qr(cor_bb, axes=(1, 0))
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, fix_signs, opts_svd=opts_svd)
 
     if 'l' in dirn:
-        _, rt = qr(cor_tt, axes=(1, 0))
-        _, rb = qr(cor_bb, axes=(0, 1))
-        proj[tl].hlb, proj[bl].hlt = proj_corners(rt, rb, fix_signs, opts_svd=opts_svd)
+        _, r_t = qr(cor_tt, axes=(1, 0))
+        _, r_b = qr(cor_bb, axes=(0, 1))
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, fix_signs, opts_svd=opts_svd)
 
     if ('t' in dirn) or ('b' in dirn):
         cor_ll = cor_bl @ cor_tl
         cor_rr = cor_tr @ cor_br
 
     if 't' in dirn:
-        _, rl = qr(cor_ll, axes=(0, 1))
-        _, rr = qr(cor_rr, axes=(1, 0))
-        proj[tl].vtr, proj[tr].vtl = proj_corners(rl, rr, fix_signs, opts_svd=opts_svd) # projector top-middle
+        _, r_l = qr(cor_ll, axes=(0, 1))
+        _, r_r = qr(cor_rr, axes=(1, 0))
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, fix_signs, opts_svd=opts_svd)
 
     if 'b' in dirn:
-        _, rl = qr(cor_ll, axes=(1, 0))
-        _, rr = qr(cor_rr, axes=(0, 1))
-        proj[bl].vbr, proj[br].vbl = proj_corners(rl, rr, fix_signs, opts_svd=opts_svd) # projector bottom-middle
+        _, r_l = qr(cor_ll, axes=(1, 0))
+        _, r_r = qr(cor_rr, axes=(0, 1))
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, fix_signs, opts_svd=opts_svd)
+
+
+def update_1site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
+    r"""
+    Calculate new projectors for CTM moves from 4x2 extended corners.
+    """
+    psi = env.psi
+    sites = [psi.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
+    if None in sites:
+        return
+
+    tl, tr, bl, br = sites
+
+    if ('l' in dirn) or ('r' in dirn):
+        cor_tl = (env[bl].tl @ env[bl].t).fuse_legs(axes=((0, 1), 2))
+        cor_tr = (env[br].t @ env[br].tr).fuse_legs(axes=(0, (2, 1)))
+        cor_br = (env[tr].br @ env[tr].b).fuse_legs(axes=((0, 1), 2))
+        cor_bl = (env[tl].b @ env[tl].bl).fuse_legs(axes=(0, (2, 1)))
+
+        Q_tl, R_tl = qr(cor_tl, axes=(0, 1))
+        Q_tr, R_tr = qr(cor_tr, axes=(1, 0))
+        Utl, S, Utr = tensordot(R_tl, R_tr, axes=(1, 1)).svd(axes=(0, 1))
+        S = S.sqrt()
+        r_tl = tensordot((Utl @ S), Q_tl, axes=(0, 1))
+        r_tr = tensordot((S @ Utr), Q_tr, axes=(1, 1))
+
+        Q_br, R_br = qr(cor_br, axes=(0, 1))
+        Q_bl, R_bl = qr(cor_bl, axes=(1, 0))
+        Ubr, S, Ubl = tensordot(R_br, R_bl, axes=(1, 1)).svd(axes=(0, 1))
+        S = S.sqrt()
+        r_br = tensordot((Ubr @ S), Q_br, axes=(0, 1))
+        r_bl = tensordot((S @ Ubl), Q_bl, axes=(1, 1))
+
+    if 'r' in dirn:
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, fix_signs, opts_svd=opts_svd)
+
+    if 'l' in dirn:
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_tl, r_bl, fix_signs, opts_svd=opts_svd)
+
+    if ('t' in dirn) or ('b' in dirn):
+        cor_bl = (env[br].bl @ env[br].l).fuse_legs(axes=((0, 1), 2))
+        cor_tl = (env[tr].l @ env[tr].tl).fuse_legs(axes=(0, (2, 1)))
+        cor_tr = (env[tl].tr @ env[tl].r).fuse_legs(axes=((0, 1), 2))
+        cor_br = (env[bl].r @ env[bl].br).fuse_legs(axes=(0, (2, 1)))
+
+        Q_bl, R_bl = qr(cor_bl, axes=(0, 1))
+        Q_tl, R_tl = qr(cor_tl, axes=(1, 0))
+        Ubl, S, Utl = tensordot(R_bl, R_tl, axes=(1, 1)).svd(axes=(0, 1))
+        S = S.sqrt()
+        r_bl = tensordot((Ubl @ S), Q_bl, axes=(0, 1))
+        r_tl = tensordot((S @ Utl), Q_tl, axes=(1, 1))
+
+        Q_tr, R_tr = qr(cor_tr, axes=(0, 1))
+        Q_br, R_br = qr(cor_br, axes=(1, 0))
+        Utr, S, Ubr = tensordot(R_tr, R_br, axes=(1, 1)).svd(axes=(0, 1))
+        S = S.sqrt()
+        r_tr = tensordot((Utr @ S), Q_tr, axes=(0, 1))
+        r_br = tensordot((S @ Ubr), Q_br, axes=(1, 1))
+
+    if 't' in dirn:
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, fix_signs, opts_svd=opts_svd)
+
+    if 'b' in dirn:
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, fix_signs, opts_svd=opts_svd)
 
 
 def proj_corners(r0, r1, fix_signs, opts_svd):
