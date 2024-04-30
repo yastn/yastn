@@ -1,3 +1,4 @@
+""" example of config; here used by pytest to modify and inject backend and device. """
 import yastn.backend.backend_np as backend
 import yastn.sym.sym_none as sym
 default_device = 'cpu'

@@ -170,8 +170,8 @@ def rand(D, dtype='float64', **kwargs):
     return 2 * (rng['rng'].random(D) + 1j *  rng['rng'].random(D)) - (1 + 1j)  # dtype == 'complex128
 
 
-def randint(low, high, size=None):
-    return rng['rng'].integers(low, high, size)
+def randint(low, high):
+    return rng['rng'].integers(low, high)
 
 
 def to_tensor(val, Ds=None, dtype='float64', **kwargs):

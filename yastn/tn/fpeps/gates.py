@@ -1,6 +1,6 @@
 import numpy as np
 from typing import NamedTuple
-from ._gates_auxlliary import fkron
+from ._gates_auxiliary import fkron
 
 
 class Gate_nn(NamedTuple):
@@ -36,7 +36,7 @@ class Gates(NamedTuple):
     local : list = None   # list of local gates
 
 
-def decompose_nn_gate(Gnn):
+def decompose_nn_gate(Gnn) -> Gate_nn:
     """
     Auxiliary function cutting a two-site gate with SVD
     into two local operators with the connecting legs.
@@ -46,7 +46,7 @@ def decompose_nn_gate(Gnn):
     return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2))
 
 
-def gate_nn_hopping(t, step, I, c, cdag):
+def gate_nn_hopping(t, step, I, c, cdag) -> Gate_nn:
     """
     Nearest-neighbor gate G = exp(-step * H)
     for H = -t * (cdag_1 c_2 + cdag_2 c_1)
@@ -67,7 +67,7 @@ def gate_nn_hopping(t, step, I, c, cdag):
     return decompose_nn_gate(G)
 
 
-def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn):
+def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn) -> Gate_local:
     """
     Local gate exp(-step * H)
     for H = U * (n_up - I / 2) * (n_dn - I / 2) - mu_up * n_up - mu_dn * n_dn
@@ -82,7 +82,7 @@ def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn):
     return Gate_local(G_loc)
 
 
-def gate_local_occupation(mu, step, I, n):
+def gate_local_occupation(mu, step, I, n) -> Gate_local:
     """
     Local gate exp(-step * H)
     for H = -mu * n

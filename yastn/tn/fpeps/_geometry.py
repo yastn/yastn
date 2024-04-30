@@ -1,10 +1,11 @@
 """ Basic structures forming PEPS network. """
-from itertools import product
+from typing import Sequence
 from typing import NamedTuple
 from ... import YastnError
 
 
 class Site(NamedTuple):
+    """ (nx, ny) == (row, column) """
     nx : int = 0
     ny : int = 0
 
@@ -36,7 +37,7 @@ class SquareLattice():
         Parameters
         ----------
         dims : tuple[int, int]
-            Size of elementary cell.
+            Size of elementary cell, number of (rows, columns).
         boundary : str
             'obc', 'infinite', or 'cylinder'.
 
@@ -67,23 +68,23 @@ class SquareLattice():
         self._bonds_v = tuple(bonds_v)
 
     @property
-    def Nx(self):
+    def Nx(self) -> int:
         return self._dims[0]
 
     @property
-    def Ny(self):
+    def Ny(self) -> int:
         return self._dims[1]
 
     @property
-    def dims(self):
+    def dims(self) -> tuple[int, int]:
         """ Size of the unit cell. """
         return self._dims
 
-    def sites(self, reverse=False):
+    def sites(self, reverse=False) -> Sequence[Site]:
         """ Sequence of unique lattice sites. """
         return self._sites[::-1] if reverse else self._sites
 
-    def bonds(self, dirn=None, reverse=False):
+    def bonds(self, dirn=None, reverse=False) -> Sequence[Bond]:
         """ Sequence of unique nearest neighbor bonds between lattice sites. """
         if dirn == 'v':
             return self._bonds_v[::-1] if reverse else self._bonds_v
@@ -91,7 +92,7 @@ class SquareLattice():
             return self._bonds_h[::-1] if reverse else self._bonds_h
         return self._bonds_v[::-1] + self._bonds_h[::-1] if reverse else self._bonds_h + self._bonds_v
 
-    def nn_site(self, site, d):
+    def nn_site(self, site, d) -> Site:
         """
         Index of the lattice site neighboring site in the direction d.
 
@@ -140,7 +141,7 @@ class SquareLattice():
         raise YastnError(f"{bond} is not a nearest-neighbor bond.")
 
 
-    def f_ordered(self, bond):
+    def f_ordered(self, bond) -> bool:
         """ Check if bond sites appear in fermionic order. """
         s0, s1 = bond
         return s0[1] < s1[1] or (s0[1] == s1[1] and s0[0] <= s1[0])

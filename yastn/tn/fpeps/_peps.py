@@ -1,3 +1,4 @@
+from __future__ import annotations
 from ...tn.mps import Mpo
 from ._doublePepsTensor import DoublePepsTensor
 from ._geometry import SquareLattice, CheckerboardLattice
@@ -28,7 +29,11 @@ class Peps():
         return self._data[self.site2index(site)]
 
     def __setitem__(self, site, obj):
-        """ Set tensor at site. """
+        """
+        Set tensor at site.
+        5-leg tensors are fused to 3-leg: [t l] [b r] sa
+        2-leg tensors are unfused to 4-leg: t l b r
+        """
         if hasattr(obj, 'ndim') and obj.ndim == 5 :
             obj = obj.fuse_legs(axes=((0, 1), (2, 3), 4))
         if hasattr(obj, 'ndim') and obj.ndim == 2 :
@@ -72,9 +77,13 @@ class Peps():
             psi._data[ind] = self._data[ind].copy()
         return psi
 
-    def transfer_mpo(self, n=0, dirn='v'):
+    def transfer_mpo(self, n=0, dirn='v') -> yastn.tn.mps.MpsMpo:
         """
         Converts a specific row or column of PEPS into MPO.
+
+        For tensor with physical leg, Mpo consists of DoublePepsTensor (2-layers)
+        For tensor without physical leg, directly uses Peps tensors (1-layer)
+
 
         Parameters
         ----------
@@ -122,9 +131,9 @@ class Peps2Layers():
     def config(self):
         return self.ket.config
 
-    def has_physical(self):
+    def has_physical(self) -> bool:
         return False
 
-    def __getitem__(self, site):
+    def __getitem__(self, site) -> yastn.tn.fpeps.DoublePepsTensor:
         """ Get tensor for site. """
         return DoublePepsTensor(top=self.ket[site], btm=self.bra[site])

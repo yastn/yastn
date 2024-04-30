@@ -1,84 +1,13 @@
-""" Test the expectation values of spinless fermions with analytical values of fermi sea for finite and infinite lattices """
+""" Test bond_metric for various environments. """
 import pytest
-import numpy as np
 import yastn
 import yastn.tn.fpeps as fpeps
-import yastn.tn.mps as mps
 
 try:
-    from .configs import config_U1xU1_R_fermionic as cfg
+    from .configs import config as cfg
     # cfg is used by pytest to inject different backends and divices
 except ImportError:
-    from configs import config_U1xU1_R_fermionic as cfg
-
-
-def test_finite_spinless_boundary_mps_ctmrg():
-
-    boundary = 'obc'
-    Nx, Ny = 3, 2
-    geometry = fpeps.SquareLattice(dims=(Nx, Ny), boundary=boundary)
-
-    mu = 0  # chemical potential
-    t = 1  # hopping amplitude
-    beta = 0.2
-    dbeta = 0.025
-
-    D = 6
-
-    ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
-    I, c, cdag = ops.I(), ops.c(), ops.cp()
-
-    g_hop = fpeps.gates.gate_nn_hopping(t, dbeta / 2, I, c, cdag)  # nn gate for 2D fermi sea
-    gates = fpeps.gates.distribute(geometry, gates_nn=g_hop)
-
-    psi = fpeps.product_peps(geometry, I) # initialized at infinite temperature
-    env = fpeps.EnvNTU(psi, which='NN+')
-
-    opts_svd = {'D_total': D, 'tol_block': 1e-15}
-    steps = round((beta / 2) / dbeta)
-    for step in range(steps):
-        print(f"beta = {(step + 1) * dbeta:0.3f}" )
-        fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
-
-
-    # convergence criteria for CTM based on total energy
-    energy_old, tol_exp = 0, 1e-7
-
-    env = fpeps.EnvCTM(psi)
-    opts_svd_ctm = {'D_total': 30, 'tol': 1e-10}
-    for _ in range(50):
-        env.update_(opts_svd=opts_svd_ctm)
-        cdagc = env.measure_nn(cdag, c)
-        energy = -2 * np.mean([*cdagc.values()])
-
-        print("energy: ", energy)
-        if abs(energy - energy_old) < tol_exp:
-            break
-        energy_old = energy
-
-    mpsenv = fpeps.EnvBoundaryMps(psi, opts_svd=opts_svd_ctm, setup='tlbr')
-
-    for ny in range(psi.Ny):
-        vR0 = env.boundary_mps(n=ny, dirn='r')
-        vR1 = mpsenv.boundary_mps(n=ny, dirn='r')
-        vL0 = env.boundary_mps(n=ny, dirn='l')
-        vL1 = mpsenv.boundary_mps(n=ny, dirn='l')
-
-        print(mps.vdot(vR0, vR1) / (vR0.norm() * vR1.norm()))  # problem with phase in peps?
-        print(mps.vdot(vL0, vL1) / (vL0.norm() * vL1.norm()))
-        assert abs(abs(mps.vdot(vR0, vR1)) / (vR0.norm() * vR1.norm()) - 1) < 1e-7
-        assert abs(abs(mps.vdot(vL0, vL1)) / (vL0.norm() * vL1.norm()) - 1) < 1e-7
-
-    for nx in range(psi.Nx):
-        vT0 = env.boundary_mps(n=nx, dirn='t')
-        vT1 = mpsenv.boundary_mps(n=nx, dirn='t')
-        vB0 = env.boundary_mps(n=nx, dirn='b')
-        vB1 = mpsenv.boundary_mps(n=nx, dirn='b')
-
-        print(mps.vdot(vT0, vT1) / (vT0.norm() * vT1.norm()))  # problem with phase in peps?
-        print(mps.vdot(vB0, vB1) / (vB0.norm() * vB1.norm()))
-        assert abs(abs(mps.vdot(vT0, vT1)) / (vT0.norm() * vT1.norm()) - 1) < 1e-7
-        assert abs(abs(mps.vdot(vB0, vB1)) / (vB0.norm() * vB1.norm()) - 1) < 1e-7
+    from configs import config as cfg
 
 
 def test_spinless_infinite_approx():
@@ -152,5 +81,4 @@ def test_spinless_infinite_approx():
 
 
 if __name__ == '__main__':
-    test_finite_spinless_boundary_mps_ctmrg()
     test_spinless_infinite_approx()

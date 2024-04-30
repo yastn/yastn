@@ -1,15 +1,13 @@
-"""
-Test definitions of two-site gates.
-"""
+""" Test definitions of two-site gates. """
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 
 try:
-    from .configs import config_U1xU1_R_fermionic as cfg
+    from .configs import config as cfg
     # cfg is used by pytest to inject different backends and divices
 except ImportError:
-    from configs import config_U1xU1_R_fermionic as cfg
+    from configs import config as cfg
 
 
 def test_hopping_gate():

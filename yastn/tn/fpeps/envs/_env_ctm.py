@@ -1,45 +1,100 @@
-from typing import NamedTuple
 from dataclasses import dataclass
-from .... import rand, ones, YastnError, Leg, tensordot, ncon, qr
+from .... import rand, ones, YastnError, Leg, tensordot, qr
 from ... import mps
 from .._peps import Peps, Peps2Layers
-from .._gates_auxlliary import apply_gate_onsite, gate_product_operator, gate_fix_order
+from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
 from .._geometry import Bond
-from ._env_auxlliary import append_vec_tl, append_vec_br
+from ._env_auxlliary import *
 
 
-class ctm_window(NamedTuple):
-    """ elements of a 2x2 window for the CTM algorithm. """
-    nw : tuple  # north-west
-    ne : tuple  # north-east
-    sw : tuple  # south-west
-    se : tuple  # south-east
+@dataclass()
+class EnvCTM_local():
+    r""" Dataclass for CTM environment tensors associated with Peps lattice site. """
+    tl = None # top-left
+    tr = None # top-right
+    bl = None # bottom-left
+    br = None # bottom-right
+    t = None  # top
+    b = None  # bottom
+    l = None  # left
+    r = None  # right
+
+    def copy(self):
+        return EnvCTM_local(**self.__dict__)
+
+
+@dataclass()
+class EnvCTM_projectors():
+    r""" Dataclass for CTM projectors associated with Peps lattice site. """
+    hlt : any = None  # horizontal left top
+    hlb : any = None  # horizontal left bottom
+    hrt : any = None  # horizontal right top
+    hrb : any = None  # horizontal right bottom
+    vtl : any = None  # vertical top left
+    vtr : any = None  # vertical top right
+    vbl : any = None  # vertical bottom left
+    vbr : any = None  # vertical bottom right
 
 
 class EnvCTM(Peps):
-    r""" Geometric information about the lattice provided to ctm tensors """
-    def __init__(self, psi):
+    def __init__(self, psi, init='rand', leg=None):
+        r"""
+        Environment used in Corner Transfer Matrix Renormalization algorithm.
+
+        Parameters
+        ----------
+        psi: yastn.tn.Peps
+            Peps lattice to be contracted using CTM.
+            If psi has physical legs, 2-layers peps with no physical legs is formed.
+        """
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
-
-        windows = []
+        if init not in (None, 'rand', 'ones'):
+            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'ones', None.")
         for site in self.sites():
-            win = [self.nn_site(site, d=d) for d in ('r', 'b', 'br')]
-            if None not in win:
-                windows.append(ctm_window(site, *win))
-        self._windows = tuple(windows)
-        self.init_()
+            self[site] = EnvCTM_local()
+        if init is not None:
+            self.reset_(init=init, leg=leg)
 
     def copy(self):
         env = EnvCTM(self.psi)
-        env._data = {k : v.copy() for k, v in self._data.items()}
+        env._data = {k: v.copy() for k, v in self._data.items()}
         return env
 
-    def tensors_CtmEnv(self):
-        return self._windows
+    def save_to_dict(self):
+        pass  # TODO
+
+    def reset_(self, init='rand', leg=None):
+        r""" Initialize random CTMRG environments of peps tensors A. """
+        config = self.psi.config
+        leg0 = Leg(config, s=1, t=((0,) * config.sym.NSYM,), D=(1,))
+
+        if init == 'nn':
+            pass
+        else:
+            ten0 = ones
+            ten = rand if type == 'rand' else ones
+
+            if leg is None:
+                leg = leg0
+
+            for site in self.sites():
+                legs = self.psi[site].get_legs()
+
+                for dirn in ('tl', 'tr', 'bl', 'br'):
+                    if self.nn_site(site, d=dirn) is None:
+                        setattr(self[site], dirn, ten0(config, legs=[leg0, leg0.conj()]))
+                    else:
+                        setattr(self[site], dirn, ten(config, legs=[leg, leg.conj()]))
+
+                for ind, dirn in enumerate('tlbr'):
+                    if self.nn_site(site, d=dirn) is None:
+                        setattr(self[site], dirn, ten0(config, legs=[leg0, legs[ind].conj(), leg0.conj()]))
+                    else:
+                        setattr(self[site], dirn, ten(config, legs=[leg, legs[ind].conj(), leg.conj()]))
 
     def boundary_mps(self, n, dirn):
-        """ Convert environmental tensors of Ctm to an MPS """
+        r""" Convert environmental tensors of Ctm to an MPS """
         if dirn == 'b':
             H = mps.Mps(N=self.Ny)
             for ny in range(self.Ny):
@@ -60,34 +115,12 @@ class EnvCTM(Peps):
             H = H.conj()
         return H
 
-    def init_(self, t0=None, D0=1, type='rand'):
-        """ Initialize random CTMRG environments of peps tensors A. """
-        if type not in ('rand', 'ones'):
-            raise YastnError(f"type = {type} not recognized in EnvCTM init. Should be in ('rand', 'ones')")
-
-        config = self.psi.config
-        tensor_init = rand if type == 'rand' else ones
-
-        if t0 is None:
-            t0 = (0,) * config.sym.NSYM
-        leg0 = Leg(config, s=1, t=[t0], D=[D0])
-
-        for site in self.sites():
-            legsA = self.psi[site].get_legs()
-
-            self[site] = Local_CTMEnv()
-            self[site].tl = tensor_init(config, legs=[leg0, leg0.conj()])
-            self[site].tr = tensor_init(config, legs=[leg0, leg0.conj()])
-            self[site].bl = tensor_init(config, legs=[leg0, leg0.conj()])
-            self[site].br = tensor_init(config, legs=[leg0, leg0.conj()])
-            self[site].t = tensor_init(config, legs=[leg0, legsA[0].conj(), leg0.conj()])
-            self[site].b = tensor_init(config, legs=[leg0, legsA[2].conj(), leg0.conj()])
-            self[site].l = tensor_init(config, legs=[leg0, legsA[1].conj(), leg0.conj()])
-            self[site].r = tensor_init(config, legs=[leg0, legsA[3].conj(), leg0.conj()])
-
-    def measure_1site(self, op, site=None):
+    def measure_1site(self, op, site=None) -> dict:
         r"""
-        dictionary containing site coordinates as keys and their corresponding expectation values
+        Calculate local expectation values within CTM environment.
+
+        Return a number if site is provided.
+        If None, returns a dictionary {site: value} for all unique lattice sites.
 
         Parameters
         ----------
@@ -113,6 +146,21 @@ class EnvCTM(Peps):
         return val_op / val_no
 
     def measure_nn(self, O0, O1, bond=None):
+        r"""
+        Calculate nearest-neighbor expectation values within CTM environment.
+
+        Return a number if the nearest-neighbor bond is provided.
+        If None, returns a dictionary {bond: value} for all unique lattice bonds.
+
+        Parameters
+        ----------
+        O0, O1: yastn.Tensor
+            Calculate <O0_s0 O1_s1>.
+            O1 is applied first, which might matter for fermionic operators.
+        bond: yastn.tn.fpeps.Bond | tuple[tuple[int, int], tuple[int, int]]
+            Bond of the form (s0, s1). Sites s0 and s1 should be nearest-neighbors on the lattice.
+        """
+
         if bond is None:
              return {bond: self.measure_nn(O0, O1, bond) for bond in self.bonds()}
 
@@ -169,90 +217,72 @@ class EnvCTM(Peps):
 
         return val_op / val_no
 
-
-    def update_(env, opts_svd=None, fix_signs=None):
+    def update_(env, opts_svd, method='2site', fix_signs=True):
         r"""
-        Generator for ctmrg().
-        Perform one step of CTMRG update for a mxn lattice.
-
-        Parameters
-        ----------
-            env : class CTMEnv
-                The current CTM environment tensor.
-            AAb : CtmBond
-                The CtmBond tensor for the lattice.
-            fix_signs : bool
-                Whether to fix the signs of the environment tensors.
-            opts_svd : dict, optional
-                A dictionary of options to pass to the SVD algorithm, by default None.
-
-        Returns
-        -------
-            envn_ver : class CTMEnv
-                The updated CTM environment tensor
-            proj     :  dictionary of CTM projectors.
-
+        Perform one step of CTMRG update. Environment tensors are updated in place.
 
         The function performs a CTMRG update for a square lattice using the corner transfer matrix
         renormalization group (CTMRG) algorithm. The update is performed in two steps: a horizontal move
         and a vertical move. The projectors for each move are calculated first, and then the tensors in
         the CTM environment are updated using the projectors. The boundary conditions of the lattice
-        determine whether trivial projectors are needed for the move. If the boundary conditions are
-        'infinite', no trivial projectors are needed; if they are 'obc', four trivial projectors
-        are needed for each move. The signs of the environment tensors can also be fixed during the
-        update if `fix_signs` is set to True. The latter is important when we set the criteria for
-        stopping the algorithm based on singular values of the corners.
+        determine whether trivial projectors are needed for the move.
+
+        Parameters
+        ----------
+        opts_svd: dict
+            A dictionary of options to pass to the SVD algorithm.
+        method: str
+            '2site' or '1site'. Default is '2site'
+            '2site' uses the standard 4x4 enlarged corners, allowing to enlarge EnvCTM bond dimension.
+            '1site' uses smaller 4x2 corners. It is faster, but does not allow to grow EnvCTM bond dimension.
+        fix_signs: bool
+            Whether to fix the signs in unitaries during SVD.
+            This makes SVD decomposition unique in case with no degeneracy.
+            The latter is important when we set the criteria for stopping
+            the algorithm based on singular values of the corners.
+
+        Returns
+        -------
+        proj: Peps structure loaded with CTM projectors related to all lattice site.
         """
-
-        psi = env.psi
-        Nx, Ny = psi.Nx, psi.Ny
-
-        proj = Peps(psi.geometry)
+        if all(s not in opts_svd for s in ('tol', 'tol_block')):
+            opts_svd['tol'] = 1e-14
+        if method not in ('1site', '2site'):
+            raise YastnError(f"CTM update {method=} not recognized. Should be '1site' or '2site'")
+        update_proj_ = update_2site_projectors_ if method == '2site' else update_1site_projectors_
+        #
+        # Empty structure for projectors
+        proj = Peps(env.geometry)
         for site in proj.sites():
-            proj[site] = Local_ProjectorEnv()
-
-
-        for ms in env.tensors_CtmEnv():
-            proj = proj_horizontal(env[ms.nw], env[ms.ne], env[ms.sw], env[ms.se], proj, ms, psi[ms.nw], psi[ms.ne], psi[ms.sw], psi[ms.se], fix_signs, opts_svd)
-
-        if env.boundary == 'obc':
-            # we need trivial projectors on the boundary for horizontal move for finite lattices
-            for ms in range(psi.Ny - 1):
-                proj[0, ms].hlt = trivial_projector(env[0,ms].l, psi[0,ms], env[0,ms+1].tl, dirn='hlt')
-                proj[Nx-1,ms].hlb = trivial_projector(env[Nx-1,ms].l, psi[Nx-1,ms], env[Nx-1,ms+1].bl, dirn='hlb')
-                proj[0, ms+1].hrt = trivial_projector(env[0,ms+1].r, psi[0,ms+1], env[0,ms].tr, dirn='hrt')
-                proj[Nx-1, ms+1].hrb = trivial_projector(env[Nx-1,ms+1].r, psi[Nx-1,ms+1], env[Nx-1,ms].br, dirn='hrb')
-
-        # print('######## Horizontal Move ###########')
-
-        env0 = env.copy()
-        for ms in psi.sites():
-            # print('move ctm horizontal', ms)
-            move_horizontal_(env, env0, psi, proj, ms)
-
-        # print('######## Calculating projectors for vertical move ###########')
-        for ms in env.tensors_CtmEnv():   # vertical absorption and renormalization
-            # print('projector calculation ctm cluster vertical', ms)
-            proj = proj_vertical(env[ms.nw], env[ms.sw], env[ms.ne], env[ms.se], proj, ms, psi[ms.nw], psi[ms.sw], psi[ms.ne], psi[ms.se], fix_signs, opts_svd)
-
-        if psi.boundary == 'obc':
-            # we need trivial projectors on the boundary for vertical move for finite lattices
-            for ms in range(Nx-1):
-                proj[ms,0].vtl = trivial_projector(env[ms,0].t, psi[ms,0], env[ms+1,0].tl, dirn='vtl')
-                proj[ms+1,0].vbl = trivial_projector(env[ms+1,0].b, psi[ms+1,0], env[ms,0].bl, dirn='vbl')
-                proj[ms,Ny-1].vtr = trivial_projector(env[ms, Ny-1].t, psi[ms,Ny-1], env[ms+1,Ny-1].tr, dirn='vtr')
-                proj[ms+1,Ny-1].vbr = trivial_projector(env[ms+1,Ny-1].b, psi[ms+1,Ny-1], env[ms,Ny-1].br, dirn='vbr')
-
-        # print('######### Vertical Move ###########')
-
-        env0 = env.copy()
-        for ms in psi.sites():   # vertical absorption and renormalization
-            move_vertical_(env, env0, psi, proj, ms)
-
+            proj[site] = EnvCTM_projectors()
+        #
+        # horizontal projectors
+        for site in env.sites():
+            update_proj_(proj, site, 'lr', env, opts_svd, fix_signs)
+        trivial_projectors_(proj, 'lr', env)  # fill None's
+        #
+        # horizontal move
+        env_tmp = EnvCTM(env.psi, init=None)  # empty environments
+        for site in env.sites():
+            update_env_horizontal_(env_tmp, site, env, proj)
+        update_old_env_(env, env_tmp)
+        #
+        # vertical projectors
+        for site in env.sites():
+            update_proj_(proj, site, 'tb', env, opts_svd, fix_signs)
+        trivial_projectors_(proj, 'tb', env)
+        #
+        # vertical move
+        env_tmp = EnvCTM(env.psi, init=None)
+        for site in env.sites():
+            update_env_vertical_(env_tmp, site, env, proj)
+        update_old_env_(env, env_tmp)
+        #
+        return proj
 
     def bond_metric(self, Q0, Q1, s0, s1, dirn):
-        """
-        Calculates Full-update metric tensor.
+        r"""
+        Calculates Full-Update metric tensor.
 
         For dirn == 'h':
 
@@ -293,346 +323,228 @@ class EnvCTM(Peps):
         return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
 
-@dataclass()
-class Local_CTMEnv():
-    """ data class for CTM environment tensors associated with each peps tensor """
-
-    tl : any = None # top-left
-    tr : any = None # top-right
-    bl : any = None # bottom-left
-    br : any = None # bottom-right
-    t : any = None  # top
-    b : any = None  # bottom
-    l : any = None  # left
-    r : any = None  # right
-
-    def copy(self):
-        return Local_CTMEnv(tl=self.tl, tr=self.tr, bl=self.bl, br=self.br, t=self.t, b=self.b, l=self.l, r=self.r)
-
-
-@dataclass()
-class Local_ProjectorEnv():
-    """ data class for projectors labelled by a single lattice site calculated during ctm renormalization step """
-
-    hlt : any = None  # horizontal left top
-    hlb : any = None  # horizontal left bottom
-    hrt : any = None  # horizontal right top
-    hrb : any = None  # horizontal right bottom
-    vtl : any = None  # vertical top left
-    vtr : any = None  # vertical top right
-    vbl : any = None  # vertical bottom left
-    vbr : any = None  # vertical bottom right
-
-    def copy(self):
-        return Local_ProjectorEnv(hlt=self.hlt, hlb=self.hlb, hrt=self.hrt, hrb=self.hrb, vtl=self.vtl, vtr=self.vtr, vbl=self.vbl, vbr=self.vbr)
-
-
-
-
-def proj_horizontal(env_nw, env_ne, env_sw, env_se, out, ms, AAb_nw, AAb_ne, AAb_sw, AAb_se, fix_signs, opts_svd=None):
-
-    """
-    Calculates horizontal environment projectors and stores the resulting tensors in the output dictionary.
-
-    Parameters
-    ----------
-    env_nw: environment at north west of 2x2 ctm window
-    env_sw: environment at south west of 2x2 ctm window
-    env_ne: environment at north east of 2x2 ctm window
-    env_se: environment at south east of 2x2 ctm window
-    out: dictionary that stores the horizontal projectors
-    ms: current 2x2 ctm window
-    AAb_nw: double PEPS tensor at north west of 2x2 ctm window
-    AAb_sw: double PEPS tensor at south west of 2x2 ctm window
-    AAb_ne: double PEPS tensor at north east of 2x2 ctm window
-    AAb_se: double PEPS tensor at south east of 2x2 ctm window
-    fix_signs: whether to fix the signs of the projectors or not
-    opts_svd: options for the SVD (singular value decomposition)
-
-    Returns
-    ----------
-    out: dictionary that stores the vertical projectors
-
-    """
-    # ms in the CTM unit cell
-    cortlm = fcor_tl(env_nw.l, env_nw.tl, env_nw.t, AAb_nw) # contracted matrix at top-left constructing a projector with cut in the middle
-    cortrm = fcor_tr(env_ne.t, env_ne.tr, env_ne.r, AAb_ne) # contracted matrix at top-right constructing a projector with cut in the middle
-    corttm = tensordot(cortrm, cortlm, axes=((0, 1), (2, 3))) # top half for constructing middle projector
-    del cortlm
-    del cortrm
-
-    corblm = fcor_bl(env_sw.b, env_sw.bl, env_sw.l, AAb_sw) # contracted matrix at bottom-left constructing a projector with cut in the middle
-    corbrm = fcor_br(env_se.r, env_se.br, env_se.b, AAb_se) # contracted matrix at bottom-right constructing a projector with cut in the middle
-    corbbm = tensordot(corbrm, corblm, axes=((2, 3), (0, 1)))
-    del corblm
-    del corbrm
-
-    _, rt = qr(corttm, axes=((0, 1), (2, 3)))
-    _, rb = qr(corbbm, axes=((0, 1), (2, 3)))
-
-    out[ms.nw].hlb, out[ms.sw].hlt = proj_Cor(rt, rb, fix_signs, opts_svd=opts_svd)   # projector left-middle
-
-    corttm = corttm.transpose(axes=(2, 3, 0, 1))
-    corbbm = corbbm.transpose(axes=(2, 3, 0, 1))
-
-    _, rt = qr(corttm, axes=((0, 1), (2, 3)))
-    _, rb = qr(corbbm, axes=((0, 1), (2, 3)))
-
-    out[ms.ne].hrb, out[ms.se].hrt = proj_Cor(rt, rb, fix_signs, opts_svd=opts_svd)   # projector right-middle
-    return out
-
-
-def proj_vertical(env_nw, env_sw, env_ne, env_se, out, ms, AAb_nw, AAb_sw, AAb_ne, AAb_se, fix_signs, opts_svd=None):
-
+def update_2site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
     r"""
-    Calculates vertical environment projectors and stores the resulting tensors in the output dictionary.
-
-    Parameters
-    ----------
-    env_nw: environment at north west of 2x2 ctm window
-    env_sw: environment at south west of 2x2 ctm window
-    env_ne: environment at north east of 2x2 ctm window
-    env_se: environment at south east of 2x2 ctm window
-    out: dictionary that stores the vertical projectors
-    ms: current 2x2 ctm window
-    AAb_nw: double PEPS tensor at north west of 2x2 ctm window
-    AAb_sw: double PEPS tensor at south west of 2x2 ctm window
-    AAb_ne: double PEPS tensor at north east of 2x2 ctm window
-    AAb_se: double PEPS tensor at south east of 2x2 ctm window
-    fix_signs: whether to fix the signs of the projectors or not
-    opts_svd: options for the SVD (singular value decomposition)
-
-    Returns
-    ----------
-    out: dictionary that stores the vertical projectors
-
+    Calculate new projectors for CTM moves from 4x4 extended corners.
     """
-    cortlm = fcor_tl(env_nw.l, env_nw.tl, env_nw.t, AAb_nw) # contracted matrix at top-left constructing a projector with a cut in the middle
-    corblm = fcor_bl(env_sw.b, env_sw.bl, env_sw.l, AAb_sw) # contracted matrix at bottom-left constructing a projector with a cut in the middle
+    psi = env.psi
+    sites = [psi.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
+    if None in sites:
+        return
 
-    corvvm = tensordot(corblm, cortlm, axes=((2, 3), (0, 1))) # left half for constructing middle projector
-    del corblm
-    del cortlm
+    tl, tr, bl, br = sites
 
-    cortrm = fcor_tr(env_ne.t, env_ne.tr, env_ne.r, AAb_ne) # contracted matrix at top-right constructing a projector with cut in the middle
-    corbrm = fcor_br(env_se.r, env_se.br, env_se.b, AAb_se) # contracted matrix at bottom-right constructing a projector with cut in the middle
+    cor_tl = psi[tl]._attach_01(env[tl].l @ env[tl].tl @ env[tl].t)
+    cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
+    cor_bl = psi[bl]._attach_12(env[bl].b @ env[bl].bl @ env[bl].l)
+    cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
+    cor_tr = psi[tr]._attach_30(env[tr].t @ env[tr].tr @ env[tr].r)
+    cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
+    cor_br = psi[br]._attach_23(env[br].r @ env[br].br @ env[br].b)
+    cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
 
-    corkkr = tensordot(corbrm, cortrm, axes=((0, 1), (2, 3))) # right half for constructing middle projector
+    if ('l' in dirn) or ('r' in dirn):
+        cor_tt = cor_tl @ cor_tr
+        cor_bb = cor_br @ cor_bl
 
-    _, rl = qr(corvvm, axes=((0, 1), (2, 3)))
-    _, rr = qr(corkkr, axes=((0, 1), (2, 3)))
+    if 'r' in dirn:
+        _, r_t = qr(cor_tt, axes=(0, 1))
+        _, r_b = qr(cor_bb, axes=(1, 0))
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, fix_signs, opts_svd=opts_svd)
 
-    out[ms.nw].vtr, out[ms.ne].vtl = proj_Cor(rl, rr, fix_signs, opts_svd=opts_svd) # projector top-middle
+    if 'l' in dirn:
+        _, r_t = qr(cor_tt, axes=(1, 0))
+        _, r_b = qr(cor_bb, axes=(0, 1))
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, fix_signs, opts_svd=opts_svd)
 
-    corvvm = corvvm.transpose(axes=(2, 3, 0, 1))
-    corkkr = corkkr.transpose(axes=(2, 3, 0, 1))
+    if ('t' in dirn) or ('b' in dirn):
+        cor_ll = cor_bl @ cor_tl
+        cor_rr = cor_tr @ cor_br
 
-    _, rl = qr(corvvm, axes=((0, 1), (2, 3)))
-    _, rr = qr(corkkr, axes=((0, 1), (2, 3)))
+    if 't' in dirn:
+        _, r_l = qr(cor_ll, axes=(0, 1))
+        _, r_r = qr(cor_rr, axes=(1, 0))
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, fix_signs, opts_svd=opts_svd)
 
-    out[ms.sw].vbr, out[ms.se].vbl = proj_Cor(rl, rr, fix_signs, opts_svd=opts_svd) # projector bottom-middle
-    return out
-
-
-def trivial_projector(a, b, c, dirn):
-    """ projectors which fix the bond dimension of the environment CTM tensors
-     corresponding to boundary PEPS tensors to 1 """
-
-    if dirn == 'hlt':
-        la, lb, lc = a.get_legs(axes=2), b.get_legs(axes=0), c.get_legs(axes=0)
-    elif dirn == 'hlb':
-        la, lb, lc = a.get_legs(axes=0), b.get_legs(axes=2), c.get_legs(axes=1)
-    elif dirn == 'hrt':
-        la, lb, lc = a.get_legs(axes=0), b.get_legs(axes=0), c.get_legs(axes=1)
-    elif dirn == 'hrb':
-        la, lb, lc = a.get_legs(axes=2), b.get_legs(axes=2), c.get_legs(axes=0)
-    elif dirn == 'vtl':
-        la, lb, lc = a.get_legs(axes=0), b.get_legs(axes=1), c.get_legs(axes=1)
-    elif dirn == 'vbl':
-        la, lb, lc = a.get_legs(axes=2), b.get_legs(axes=1), c.get_legs(axes=0)
-    elif dirn == 'vtr':
-        la, lb, lc = a.get_legs(axes=2), b.get_legs(axes=3), c.get_legs(axes=0)
-    elif dirn == 'vbr':
-        la, lb, lc = a.get_legs(axes=0), b.get_legs(axes=3), c.get_legs(axes=1)
-
-    return ones(b.config, legs=[la.conj(), lb.conj(), lc.conj()])
+    if 'b' in dirn:
+        _, r_l = qr(cor_ll, axes=(1, 0))
+        _, r_r = qr(cor_rr, axes=(0, 1))
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, fix_signs, opts_svd=opts_svd)
 
 
-def move_horizontal_(envn, env, AAb, proj, ms):
-
+def update_1site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
     r"""
-    Horizontal move of CTM step calculating environment tensors corresponding
-     to a particular site on a lattice.
-
-    Parameters
-    ----------
-        envn : class CtmEnv
-            Class containing data for the new environment tensors renormalized by the horizontal move at each site + lattice info.
-        env : class CtmEnv
-            Class containing data for the input environment tensors at each site + lattice info.
-        AAb : Contains top and bottom Peps tensors
-        proj : Class Lattice with info on lattice
-            Projectors to be applied for renormalization.
-        ms : site whose environment tensors are to be renormalized
-
-    Returns
-    -------
-        yastn.fpeps.CtmEnv
-        Contains data of updated environment tensors along with those not updated
+    Calculate new projectors for CTM moves from 4x2 extended corners.
     """
-    _, y = ms
-    left = AAb.nn_site(ms, d='l')
-    right = AAb.nn_site(ms, d='r')
+    psi = env.psi
+    sites = [psi.nn_site(site, d=d) for d in ((0, 0), (0, 1), (1, 0), (1, 1))]
+    if None in sites:
+        return
 
-    if AAb.boundary == 'obc' and y == 0:
-        l_abv = None
-        l_bel = None
-    else:
-        l_abv = AAb.nn_site(left, d='t')
-        l_bel = AAb.nn_site(left, d='b')
+    tl, tr, bl, br = sites
 
-    if AAb.boundary == 'obc' and y == (env.Ny-1):
-        r_abv = None
-        r_bel = None
-    else:
-        r_abv = AAb.nn_site(right, d='t')
-        r_bel = AAb.nn_site(right, d='b')
+    if ('l' in dirn) or ('r' in dirn):
+        cor_tl = (env[bl].tl @ env[bl].t).fuse_legs(axes=((0, 1), 2))
+        cor_tr = (env[br].t @ env[br].tr).fuse_legs(axes=(0, (2, 1)))
+        cor_br = (env[tr].br @ env[tr].b).fuse_legs(axes=((0, 1), 2))
+        cor_bl = (env[tl].b @ env[tl].bl).fuse_legs(axes=(0, (2, 1)))
+        r_tl, r_tr = regularize_1site_corners(cor_tl, cor_tr)
+        r_br, r_bl = regularize_1site_corners(cor_br, cor_bl)
 
-    if l_abv is not None:
-        envn[ms].tl = ncon((env[left].tl, env[left].t, proj[l_abv].hlb),
-                                   ([2, 3], [3, 1, -1], [2, 1, -0]))
+    if 'r' in dirn:
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, fix_signs, opts_svd=opts_svd)
 
-    if r_abv is not None:
-        envn[ms].tr = ncon((env[right].tr, env[right].t, proj[r_abv].hrb),
-                               ([3, 2], [-0, 1, 3], [2, 1, -1]))
-    if l_bel is not None:
-        envn[ms].bl = ncon((env[left].bl, env[left].b, proj[l_bel].hlt),
-                               ([3, 2], [-0, 1, 3], [2, 1, -1]))
-    if r_bel is not None:
-        envn[ms].br = ncon((proj[r_bel].hrt, env[right].br, env[right].b),
-                               ([2, 1, -0], [2, 3], [3, 1, -1]))
+    if 'l' in dirn:
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_tl, r_bl, fix_signs, opts_svd=opts_svd)
 
-    if not(left is None):
-        tt_l = tensordot(env[left].l, proj[left].hlt, axes=(2, 0))
-        tt_l = AAb[left]._attach_01(tt_l)
-        envn[ms].l = ncon((proj[left].hlb, tt_l), ([2, 1, -0], [2, 1, -2, -1]))
+    if ('t' in dirn) or ('b' in dirn):
+        cor_bl = (env[br].bl @ env[br].l).fuse_legs(axes=((0, 1), 2))
+        cor_tl = (env[tr].l @ env[tr].tl).fuse_legs(axes=(0, (2, 1)))
+        cor_tr = (env[tl].tr @ env[tl].r).fuse_legs(axes=((0, 1), 2))
+        cor_br = (env[bl].r @ env[bl].br).fuse_legs(axes=(0, (2, 1)))
+        r_bl, r_tl = regularize_1site_corners(cor_bl, cor_tl)
+        r_tr, r_br = regularize_1site_corners(cor_tr, cor_br)
 
-    if not(right is None):
-        tt_r = tensordot(env[right].r, proj[right].hrb, axes=(2,0))
-        tt_r = AAb[right]._attach_23(tt_r)
-        envn[ms].r = ncon((tt_r, proj[right].hrt), ([1, 2, -3, -2], [1, 2, -1]))
+    if 't' in dirn:
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, fix_signs, opts_svd=opts_svd)
 
-    envn[ms].tl = envn[ms].tl/ envn[ms].tl.norm(p='inf')
-    envn[ms].l = envn[ms].l/ envn[ms].l.norm(p='inf')
-    envn[ms].tr = envn[ms].tr/ envn[ms].tr.norm(p='inf')
-    envn[ms].bl = envn[ms].bl/ envn[ms].bl.norm(p='inf')
-    envn[ms].r = envn[ms].r/ envn[ms].r.norm(p='inf')
-    envn[ms].br = envn[ms].br/ envn[ms].br.norm(p='inf')
+    if 'b' in dirn:
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, fix_signs, opts_svd=opts_svd)
 
 
-def move_vertical_(envn, env, AAb, proj, ms):
+def regularize_1site_corners(cor_0, cor_1):
+    Q_0, R_0 = qr(cor_0, axes=(0, 1))
+    Q_1, R_1 = qr(cor_1, axes=(1, 0))
+    U_0, S, U_1 = tensordot(R_0, R_1, axes=(1, 1)).svd(axes=(0, 1))
+    S = S.sqrt()
+    r_0 = tensordot((U_0 @ S), Q_0, axes=(0, 1))
+    r_1 = tensordot((S @ U_1), Q_1, axes=(1, 1))
+    return r_0, r_1
 
+
+def proj_corners(r0, r1, fix_signs, opts_svd):
+    r""" Projectors in between r0 @ r1.T corners. """
+    rr = tensordot(r0, r1, axes=(1, 1))
+    u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs, **opts_svd)
+    rs = s.rsqrt()
+    p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
+    p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
+    return p0, p1
+
+
+_trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
+            ('hlb', 'r', 'l', 'bl', 0, 2, 1),
+            ('hrt', 'l', 'r', 'tr', 0, 0, 1),
+            ('hrb', 'l', 'r', 'br', 2, 2, 0),
+            ('vtl', 'b', 't', 'tl', 0, 1, 1),
+            ('vtr', 'b', 't', 'tr', 2, 3, 0),
+            ('vbl', 't', 'b', 'bl', 2, 1, 0),
+            ('vbr', 't', 'b', 'br', 0, 3, 1))
+
+
+def trivial_projectors_(proj, dirn, env):
     r"""
-    Vertical move of CTM step calculating environment tensors corresponding
-     to a particular site on a lattice.
-
-    Parameters
-    ----------
-        envn : class CtmEnv
-            Class containing data for the new environment tensors renormalized by the vertical move at each site + lattice info.
-        env : class CtmEnv
-            Class containing data for the input environment tensors at each site + lattice info.
-        AAb : Contains top and bottom Peps tensors
-        proj : Class Lattice with info on lattice
-              Projectors to be applied for renormalization.
-        ms : site whose environment tensors are to be renormalized
-
-    Returns
-    -------
-        yastn.fpeps.CtmEnv
-        Contains data of updated environment tensors along with those not updated
+    Adds trivial projectors if not present at the edges of the lattice with open boundary conditions.
     """
-    x, _ = ms
-    top = AAb.nn_site(ms, d='t')
-    bottom = AAb.nn_site(ms, d='b')
-
-    if AAb.boundary == 'obc' and x == 0:
-        t_left = None
-        t_right = None
-    else:
-        t_left = AAb.nn_site(top, d='l')
-        t_right =  AAb.nn_site(top, d='r')
-    if AAb.boundary == 'obc' and x == (env.Nx-1):
-        b_left = None
-        b_right = None
-    else:
-        b_left = AAb.nn_site(bottom, d='l')
-        b_right = AAb.nn_site(bottom, d='r')
+    config = env.psi.config
+    for site in env.sites():
+        for s0, s1, s2, s3, a0, a1, a2 in _trivial:
+            if s2 in dirn and getattr(proj[site], s0) is None:
+                site_nn = env.nn_site(site, d=s1)
+                if site_nn is not None:
+                    l0 = getattr(env[site], s2).get_legs(a0).conj()
+                    l1 = env.psi[site].get_legs(a1).conj()
+                    l2 = getattr(env[site_nn], s3).get_legs(a2).conj()
+                    setattr(proj[site], s0, ones(config, legs=(l0, l1, l2)))
 
 
-    if t_left is not None:
-        envn[ms].tl = ncon((env[top].tl, env[top].l, proj[t_left].vtr),
-                               ([3, 2], [-0, 1, 3], [2, 1, -1]))
-    if t_right is not None:
-        envn[ms].tr = ncon((proj[t_right].vtl, env[top].tr, env[top].r),
-                               ([2, 1, -0], [2, 3], [3, 1, -1]))
-    if b_left is not None:
-        envn[ms].bl = ncon((env[bottom].bl, env[bottom].l, proj[b_left].vbr),
-                               ([1, 3], [3, 2, -1], [1, 2, -0]))
-    if b_right is not None:
-        envn[ms].br = ncon((proj[b_right].vbl, env[bottom].br, env[bottom].r),
-                               ([2, 1, -1], [3, 2], [-0, 1, 3]))
-    if not(top is None):
-        ll_t = ncon((proj[top].vtl, env[top].t), ([1, -1, -0], [1, -2, -3]))
-        ll_t = AAb[top]._attach_01(ll_t)
-        envn[ms].t = ncon((ll_t, proj[top].vtr), ([-0, -1, 2, 1], [2, 1, -2]))
-    if not(bottom is None):
-        ll_b = ncon((proj[bottom].vbr, env[bottom].b), ([1, -2, -1], [1, -3, -4]))
-        ll_b = AAb[bottom]._attach_23(ll_b)
-        envn[ms].b = ncon((ll_b, proj[bottom].vbl), ([-0, -1, 1, 2], [1, 2, -3]))
-
-    envn[ms].tl = envn[ms].tl/ envn[ms].tl.norm(p='inf')
-    envn[ms].t = envn[ms].t/ envn[ms].t.norm(p='inf')
-    envn[ms].tr = envn[ms].tr/ envn[ms].tr.norm(p='inf')
-    envn[ms].bl = envn[ms].bl/ envn[ms].bl.norm(p='inf')
-    envn[ms].b = envn[ms].b/ envn[ms].b.norm(p='inf')
-    envn[ms].br = envn[ms].br/ envn[ms].br.norm(p='inf')
-
-
-def fcor_bl(env_b, env_bl, env_l, AAb):
-    """ Creates extended bottom left corner. Order of indices see _attach_12. """
-    corbln = tensordot(env_b, env_bl, axes=(2, 0))
-    corbln = tensordot(corbln, env_l, axes=(2, 0))
-    return AAb._attach_12(corbln)
-
-def fcor_tl(env_l, env_tl, env_t, AAb):
-    """ Creates extended top left corner. """
-    cortln = tensordot(env_l, env_tl, axes=(2, 0))
-    cortln = tensordot(cortln, env_t, axes=(2, 0))
-    return AAb._attach_01(cortln)
-
-def fcor_tr(env_t, env_tr, env_r, AAb):
-    """ Creates extended top right corner. """
-    cortrn = tensordot(env_t, env_tr, axes=(2, 0))
-    cortrn = tensordot(cortrn, env_r, axes=(2, 0))
-    return AAb._attach_30(cortrn)
-
-def fcor_br(env_r, env_br, env_b, AAb):
-    """ Creates extended bottom right corner. """
-    corbrn = tensordot(env_r, env_br, axes=(2, 0))
-    corbrn = tensordot(corbrn, env_b, axes=(2, 0))
-    return AAb._attach_23(corbrn)
-
-
-def proj_Cor(rt, rb, fix_signs, opts_svd):
+def update_env_horizontal_(env_tmp, site, env, proj):
+    r"""
+    Horizontal move of CTM step. Calculate environment tensors for given site.
     """
-    tt upper half of the CTM 4 extended corners diagram indices from right (e,t,b) to left (e,t,b)
-    tb lower half of the CTM 4 extended corners diagram indices from right (e,t,b) to left (e,t,b)
-    """
+    psi = env.psi
 
-    rr = tensordot(rt, rb, axes=((1, 2), (1, 2)))
-    u, s, v = rr.svd_with_truncation(axes=(0, 1), sU =rt.get_signature()[1], fix_signs=fix_signs, **opts_svd)
-    s = s.rsqrt()
-    pt = s.broadcast(tensordot(rb, v, axes=(0, 1), conj=(0, 1)), axes=2)
-    pb = s.broadcast(tensordot(rt, u, axes=(0, 0), conj=(0, 1)), axes=2)
-    return pt, pb
+    l = psi.nn_site(site, d='l')
+    if l is not None:
+        tmp = env[l].l @ proj[l].hlt
+        tmp = psi[l]._attach_01(tmp)
+        tmp = tensordot(proj[l].hlb, tmp, axes=((0, 1), (0, 1))).transpose(axes=(0, 2, 1))
+        env_tmp[site].l = tmp / tmp.norm(p='inf')
+
+    r = psi.nn_site(site, d='r')
+    if r is not None:
+        tmp = env[r].r @ proj[r].hrb
+        tmp = psi[r]._attach_23(tmp)
+        tmp = tensordot(proj[r].hrt, tmp, axes=((0, 1), (0, 1))).transpose(axes=(0, 2, 1))
+        env_tmp[site].r = tmp / tmp.norm(p='inf')
+
+    tl = psi.nn_site(site, d='tl')
+    if tl is not None:
+        tmp = tensordot(proj[tl].hlb, env[l].tl @ env[l].t, axes=((0, 1), (0, 1)))
+        env_tmp[site].tl = tmp / tmp.norm(p='inf')
+
+    tr = psi.nn_site(site, d='tr')
+    if tr is not None:
+        tmp = tensordot(env[r].t, env[r].tr @ proj[tr].hrb, axes=((2, 1), (0, 1)))
+        env_tmp[site].tr = tmp / tmp.norm(p='inf')
+
+    bl = psi.nn_site(site, d='bl')
+    if bl is not None:
+        tmp = tensordot(env[l].b, env[l].bl @ proj[bl].hlt, axes=((2, 1), (0, 1)))
+        env_tmp[site].bl = tmp / tmp.norm(p='inf')
+
+    br = psi.nn_site(site, d='br')
+    if br is not None:
+        tmp = tensordot(proj[br].hrt, env[r].br @ env[r].b, axes=((0, 1), (0, 1)))
+        env_tmp[site].br = tmp / tmp.norm(p='inf')
+
+
+def update_env_vertical_(env_tmp, site, env, proj):
+    r"""
+    Vertical move of CTM step. Calculate environment tensors for given site.
+    """
+    psi = env.psi
+
+    t = psi.nn_site(site, d='t')
+    if t is not None:
+        tmp = proj[t].vtl.transpose(axes=(2, 1, 0)) @ env[t].t
+        tmp = psi[t]._attach_01(tmp)
+        tmp = tensordot(tmp, proj[t].vtr, axes=((2, 3), (0, 1)))
+        env_tmp[site].t = tmp / tmp.norm(p='inf')
+
+    b = psi.nn_site(site, d='b')
+    if b is not None:
+        tmp = proj[b].vbr.transpose(axes=(2, 1, 0)) @ env[b].b
+        tmp = psi[b]._attach_23(tmp)
+        tmp = tensordot(tmp, proj[b].vbl, axes=((2, 3), (0, 1)))
+        env_tmp[site].b = tmp / tmp.norm(p='inf')
+
+    tl = psi.nn_site(site, d='tl')
+    if tl is not None:
+        tmp = tensordot(env[t].l, env[t].tl @ proj[tl].vtr, axes=((2, 1), (0, 1)))
+        env_tmp[site].tl = tmp / tmp.norm(p='inf')
+
+    tr = psi.nn_site(site, d='tr')
+    if tr is not None:
+        tmp = tensordot(proj[tr].vtl, env[t].tr @ env[t].r, axes=((0, 1), (0, 1)))
+        env_tmp[site].tr =  tmp / tmp.norm(p='inf')
+
+    bl = psi.nn_site(site, d='bl')
+    if bl is not None:
+        tmp = tensordot(proj[bl].vbr, env[b].bl @ env[b].l, axes=((0, 1), (0, 1)))
+        env_tmp[site].bl = tmp / tmp.norm(p='inf')
+
+    br = psi.nn_site(site, d='br')
+    if br is not None:
+        tmp = tensordot(env[b].r, env[b].br @ proj[br].vbl, axes=((2, 1), (0, 1)))
+        env_tmp[site].br = tmp / tmp.norm(p='inf')
+
+
+def update_old_env_(env, env_tmp):
+    r"""
+    Update tensors in env with the ones from env_tmp that are not None.
+    """
+    for site in env.sites():
+        for k, v in env_tmp[site].__dict__.items():
+            if v is not None:
+                setattr(env[site], k, v)

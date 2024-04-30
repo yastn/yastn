@@ -1,13 +1,13 @@
-""" Test operation of peps.Lattice and peps.Peps that inherits Lattice"""
+""" Test Peps state initialization. """
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 
 try:
-    from .configs import config_dense as cfg
+    from .configs import config as cfg
     # cfg is used by pytest to inject different backends and divices
 except ImportError:
-    from configs import config_dense as cfg
+    from configs import config as cfg
 
 
 tol = 1e-12
@@ -63,9 +63,6 @@ def test_save_load_copy():
         for site in psi.sites():
             for phi in [psi2, psi3, psi4]:
                 assert (phi[site] - psi[site]).norm() < tol
-
-
-
 
 
 if __name__ == '__main__':

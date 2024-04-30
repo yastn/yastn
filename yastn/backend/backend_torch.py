@@ -202,6 +202,10 @@ def rand(D, dtype='float64', device='cpu'):
     return 2 * torch.rand(D, dtype=DTYPE[dtype], device=device) - ds
 
 
+def randint(low, high):
+    return torch.randint(low, high, (1,))[0]
+
+
 def to_tensor(val, Ds=None, dtype='float64', device='cpu'):
     # try:
     T = torch.as_tensor(val, dtype=DTYPE[dtype], device=device)

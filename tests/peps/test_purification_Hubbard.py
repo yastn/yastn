@@ -1,14 +1,15 @@
 """ Test the expectation values of spin-1/2 fermions with analytical values of fermi sea """
-import numpy as np
-import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
-
 try:
-    from .configs import config_U1xU1_R_fermionic as cfg
+    from .configs import config as cfg
     # cfg is used by pytest to inject different backends and divices
 except ImportError:
-    from configs import config_U1xU1_R_fermionic as cfg
+    from configs import config as cfg
+
+
+def mean(xs):
+    return sum(xs) / len(xs)
 
 
 def test_NTU_spinful_finite():
@@ -91,15 +92,14 @@ def test_NTU_spinful_finite():
 
     print(nn_CTM_bond_1_up, nn_CTM_bond_1_dn, 'vs', nn_bond_1_exact)
     print(nn_CTM_bond_2_up, nn_CTM_bond_2_dn, 'vs', nn_bond_2_exact)
-    assert pytest.approx(nn_CTM_bond_1_up, abs=1e-4) == nn_bond_1_exact
-    assert pytest.approx(nn_CTM_bond_1_dn, abs=1e-4) == nn_bond_1_exact
-    assert pytest.approx(nn_CTM_bond_2_up, abs=1e-4) == nn_bond_2_exact
-    assert pytest.approx(nn_CTM_bond_2_dn, abs=1e-4) == nn_bond_2_exact
-
-    assert pytest.approx(nn_CTM_bond_1r_up, abs=1e-4) == nn_bond_1_exact
-    assert pytest.approx(nn_CTM_bond_1r_dn, abs=1e-4) == nn_bond_1_exact
-    assert pytest.approx(nn_CTM_bond_2r_up, abs=1e-4) == nn_bond_2_exact
-    assert pytest.approx(nn_CTM_bond_2r_dn, abs=1e-4) == nn_bond_2_exact
+    assert abs(nn_CTM_bond_1_up - nn_bond_1_exact) < 1e-4
+    assert abs(nn_CTM_bond_1_dn - nn_bond_1_exact) < 1e-4
+    assert abs(nn_CTM_bond_2_up - nn_bond_2_exact) < 1e-4
+    assert abs(nn_CTM_bond_2_dn - nn_bond_2_exact) < 1e-4
+    assert abs(nn_CTM_bond_1r_up - nn_bond_1_exact) < 1e-4
+    assert abs(nn_CTM_bond_1r_dn - nn_bond_1_exact) < 1e-4
+    assert abs(nn_CTM_bond_2r_up - nn_bond_2_exact) < 1e-4
+    assert abs(nn_CTM_bond_2r_dn - nn_bond_2_exact) < 1e-4
 
 
 def test_NTU_spinful_infinite():
@@ -112,12 +112,13 @@ def test_NTU_spinful_infinite():
     U = 0
     beta = 0.1
 
-    dbeta = 0.01
+    dbeta = 0.005
     D = 8
 
     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     I = ops.I()
-    c_up, c_dn, cdag_up, cdag_dn = ops.c(spin='u'), ops.c(spin='d'), ops.cp(spin='u'), ops.cp(spin='d')
+    c_up, c_dn = ops.c(spin='u'), ops.c(spin='d')
+    cdag_up, cdag_dn = ops.cp(spin='u'), ops.cp(spin='d')
     n_up, n_dn =  ops.n(spin='u'), ops.n(spin='d')
 
     g_hop_u = fpeps.gates.gate_nn_hopping(t_up, dbeta / 2, I, c_up, cdag_up)
@@ -128,33 +129,41 @@ def test_NTU_spinful_infinite():
     # initialized at infinite temperature
     psi = fpeps.product_peps(geometry, I)
 
-    env = fpeps.EnvNTU(psi, which='NN++')
-
-    # env = fpeps.EnvCTM(psi)
-    # env.init_(type='ones')
-
+    opts_svd_ctm = {'D_total': D * D, 'tol': 1e-10}
     opts_svd_evol = [{"D_total": 2 * D, 'tol_block': 1e-15},
-                     {"D_total": D, 'tol_block': 1e-15}]  # two step
-
+                     {"D_total": D, 'tol_block': 1e-15}]  # two step truncation
 
     steps = round((beta / 2) / dbeta)
-    for step in range(steps):
-        print(f"beta = {(step + 1) * dbeta}" )
+
+    init_steps = 3
+    # first few steps are performed with NTU-NN+ to reach fixed peps bond dimensions.
+    env = fpeps.EnvNTU(psi, which='NN+')
+    for step in range(init_steps):
+        print(f"beta = {(step + 1) * dbeta:0.3f}" )
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
-        # env.update_(opts_svd=opts_svd_ctm)
+
+    # after that we switch to fast Full Update
+    # here it requirs Peps bond dimensions not to change in time
+    print("Switching to full update")
+    env = fpeps.EnvCTM(psi, init='ones')
+    for _ in range(4):  # few CTM iterations to converge
+        env.update_(opts_svd=opts_svd_ctm)
+
+    for step in range(init_steps, steps):
+        print(f"beta = {(step + 1) * dbeta:0.3f}" )
+        fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+        env.update_(opts_svd=opts_svd_ctm)  # update CTM tensors after a full evolution step.
 
     # CTMRG
     # convergence criteria for CTM based on total energy
     energy_old, tol_exp = 0, 1e-7
 
-    env = fpeps.EnvCTM(psi)
-    opts_svd_ctm = {'D_total': 40, 'tol': 1e-10}
-
-    for _ in range(10):
+    # env = fpeps.EnvCTM(psi)
+    for _ in range(10):  # we double-check convergence of CTM tensors
         env.update_(opts_svd=opts_svd_ctm)  # method='2site',
         cdagc_up = env.measure_nn(cdag_up, c_up)
         cdagc_dn = env.measure_nn(cdag_dn, c_dn)
-        energy = -2 * np.mean([*cdagc_up.values(), *cdagc_dn.values()])
+        energy = -2 * mean([*cdagc_up.values(), *cdagc_dn.values()])
 
         print("Energy: ", energy)
         if abs(energy - energy_old) < tol_exp:
@@ -163,9 +172,9 @@ def test_NTU_spinful_infinite():
 
     # analytical nn fermionic correlator at beta = 0.1 for 2D infinite lattice
     nn_exact = 0.02481459
-    nn_CTM = np.mean([*cdagc_up.values(), *cdagc_dn.values()])
+    nn_CTM = mean([*cdagc_up.values(), *cdagc_dn.values()])
     print(f"{nn_CTM:0.6f} vs {nn_exact:0.6f}  diff = {nn_CTM - nn_exact:0.6f}")
-    assert pytest.approx(nn_CTM, abs=1e-4) == nn_exact
+    assert abs(nn_CTM - nn_exact) < 1e-4
 
 
 if __name__ == '__main__':
