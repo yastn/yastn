@@ -61,6 +61,9 @@ class EnvCTM(Peps):
         env._data = {k: v.copy() for k, v in self._data.items()}
         return env
 
+    def save_to_dict(self):
+        pass  # TODO
+
     def reset_(self, init='rand', leg=None):
         r""" Initialize random CTMRG environments of peps tensors A. """
         config = self.psi.config
@@ -216,7 +219,7 @@ class EnvCTM(Peps):
 
     def update_(env, opts_svd, method='2site', fix_signs=True):
         r"""
-        Perform one step of CTMRG update.
+        Perform one step of CTMRG update. Environment tensors are updated in place.
 
         The function performs a CTMRG update for a square lattice using the corner transfer matrix
         renormalization group (CTMRG) algorithm. The update is performed in two steps: a horizontal move
@@ -226,22 +229,21 @@ class EnvCTM(Peps):
 
         Parameters
         ----------
-        env: EnvCTM
-            The current CTM environment tensor.
         opts_svd: dict
-            A dictionary of options to pass to the SVD algorithm, by default None.
+            A dictionary of options to pass to the SVD algorithm.
         method: str
-            '2site' or '1site'.
-            '2site' is a standard 4x4 enlarged corners, allowing to enlarge EnvCTM bond dimension.
-            '1site' uses smaller 4x2 corners. It does not allow to grow EnvCTM bond dimension.
+            '2site' or '1site'. Default is '2site'
+            '2site' uses the standard 4x4 enlarged corners, allowing to enlarge EnvCTM bond dimension.
+            '1site' uses smaller 4x2 corners. It is faster, but does not allow to grow EnvCTM bond dimension.
         fix_signs: bool
-            Whether to fix the signs of the environment tensors.
-            The latter is important when we set the criteria for
-            stopping the algorithm based on singular values of the corners.
+            Whether to fix the signs in unitaries during SVD.
+            This makes SVD decomposition unique in case with no degeneracy.
+            The latter is important when we set the criteria for stopping
+            the algorithm based on singular values of the corners.
 
         Returns
         -------
-        proj: dictionary of CTM projectors.
+        proj: Peps structure loaded with CTM projectors related to all lattice site.
         """
         if all(s not in opts_svd for s in ('tol', 'tol_block')):
             opts_svd['tol'] = 1e-14
@@ -332,10 +334,14 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
 
     tl, tr, bl, br = sites
 
-    cor_tl = psi[tl]._attach_01(env[tl].l @ env[tl].tl @ env[tl].t).fuse_legs(axes=((0, 1), (2, 3)))
-    cor_bl = psi[bl]._attach_12(env[bl].b @ env[bl].bl @ env[bl].l).fuse_legs(axes=((0, 1), (2, 3)))
-    cor_tr = psi[tr]._attach_30(env[tr].t @ env[tr].tr @ env[tr].r).fuse_legs(axes=((0, 1), (2, 3)))
-    cor_br = psi[br]._attach_23(env[br].r @ env[br].br @ env[br].b).fuse_legs(axes=((0, 1), (2, 3)))
+    cor_tl = psi[tl]._attach_01(env[tl].l @ env[tl].tl @ env[tl].t)
+    cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
+    cor_bl = psi[bl]._attach_12(env[bl].b @ env[bl].bl @ env[bl].l)
+    cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
+    cor_tr = psi[tr]._attach_30(env[tr].t @ env[tr].tr @ env[tr].r)
+    cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
+    cor_br = psi[br]._attach_23(env[br].r @ env[br].br @ env[br].b)
+    cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
 
     if ('l' in dirn) or ('r' in dirn):
         cor_tt = cor_tl @ cor_tr
@@ -382,20 +388,8 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
         cor_tr = (env[br].t @ env[br].tr).fuse_legs(axes=(0, (2, 1)))
         cor_br = (env[tr].br @ env[tr].b).fuse_legs(axes=((0, 1), 2))
         cor_bl = (env[tl].b @ env[tl].bl).fuse_legs(axes=(0, (2, 1)))
-
-        Q_tl, R_tl = qr(cor_tl, axes=(0, 1))
-        Q_tr, R_tr = qr(cor_tr, axes=(1, 0))
-        Utl, S, Utr = tensordot(R_tl, R_tr, axes=(1, 1)).svd(axes=(0, 1))
-        S = S.sqrt()
-        r_tl = tensordot((Utl @ S), Q_tl, axes=(0, 1))
-        r_tr = tensordot((S @ Utr), Q_tr, axes=(1, 1))
-
-        Q_br, R_br = qr(cor_br, axes=(0, 1))
-        Q_bl, R_bl = qr(cor_bl, axes=(1, 0))
-        Ubr, S, Ubl = tensordot(R_br, R_bl, axes=(1, 1)).svd(axes=(0, 1))
-        S = S.sqrt()
-        r_br = tensordot((Ubr @ S), Q_br, axes=(0, 1))
-        r_bl = tensordot((S @ Ubl), Q_bl, axes=(1, 1))
+        r_tl, r_tr = regularize_1site_corners(cor_tl, cor_tr)
+        r_br, r_bl = regularize_1site_corners(cor_br, cor_bl)
 
     if 'r' in dirn:
         proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, fix_signs, opts_svd=opts_svd)
@@ -408,26 +402,24 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
         cor_tl = (env[tr].l @ env[tr].tl).fuse_legs(axes=(0, (2, 1)))
         cor_tr = (env[tl].tr @ env[tl].r).fuse_legs(axes=((0, 1), 2))
         cor_br = (env[bl].r @ env[bl].br).fuse_legs(axes=(0, (2, 1)))
-
-        Q_bl, R_bl = qr(cor_bl, axes=(0, 1))
-        Q_tl, R_tl = qr(cor_tl, axes=(1, 0))
-        Ubl, S, Utl = tensordot(R_bl, R_tl, axes=(1, 1)).svd(axes=(0, 1))
-        S = S.sqrt()
-        r_bl = tensordot((Ubl @ S), Q_bl, axes=(0, 1))
-        r_tl = tensordot((S @ Utl), Q_tl, axes=(1, 1))
-
-        Q_tr, R_tr = qr(cor_tr, axes=(0, 1))
-        Q_br, R_br = qr(cor_br, axes=(1, 0))
-        Utr, S, Ubr = tensordot(R_tr, R_br, axes=(1, 1)).svd(axes=(0, 1))
-        S = S.sqrt()
-        r_tr = tensordot((Utr @ S), Q_tr, axes=(0, 1))
-        r_br = tensordot((S @ Ubr), Q_br, axes=(1, 1))
+        r_bl, r_tl = regularize_1site_corners(cor_bl, cor_tl)
+        r_tr, r_br = regularize_1site_corners(cor_tr, cor_br)
 
     if 't' in dirn:
         proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, fix_signs, opts_svd=opts_svd)
 
     if 'b' in dirn:
         proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, fix_signs, opts_svd=opts_svd)
+
+
+def regularize_1site_corners(cor_0, cor_1):
+    Q_0, R_0 = qr(cor_0, axes=(0, 1))
+    Q_1, R_1 = qr(cor_1, axes=(1, 0))
+    U_0, S, U_1 = tensordot(R_0, R_1, axes=(1, 1)).svd(axes=(0, 1))
+    S = S.sqrt()
+    r_0 = tensordot((U_0 @ S), Q_0, axes=(0, 1))
+    r_1 = tensordot((S @ U_1), Q_1, axes=(1, 1))
+    return r_0, r_1
 
 
 def proj_corners(r0, r1, fix_signs, opts_svd):

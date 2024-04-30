@@ -129,34 +129,37 @@ def test_NTU_spinful_infinite():
     # initialized at infinite temperature
     psi = fpeps.product_peps(geometry, I)
 
-    env = fpeps.EnvNTU(psi, which='NN+')
-
-    opts_svd_ctm = {'D_total': 40, 'tol': 1e-10}
-
+    opts_svd_ctm = {'D_total': D * D, 'tol': 1e-10}
     opts_svd_evol = [{"D_total": 2 * D, 'tol_block': 1e-15},
-                     {"D_total": D, 'tol_block': 1e-15}]  # two step
+                     {"D_total": D, 'tol_block': 1e-15}]  # two step truncation
 
     steps = round((beta / 2) / dbeta)
 
-    fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
-    fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
-    fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
-
-    print(steps)
-    env = fpeps.EnvCTM(psi, init='ones')
-    env.update_(opts_svd=opts_svd_ctm)
-
-    for step in range(3, steps):  # FU works for fixed
+    init_steps = 3
+    # first few steps are performed with NTU-NN+ to reach fixed peps bond dimensions.
+    env = fpeps.EnvNTU(psi, which='NN+')
+    for step in range(init_steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+
+    # after that we switch to fast Full Update
+    # here it requirs Peps bond dimensions not to change in time
+    print("Switching to full update")
+    env = fpeps.EnvCTM(psi, init='ones')
+    for _ in range(4):  # few CTM iterations to converge
         env.update_(opts_svd=opts_svd_ctm)
+
+    for step in range(init_steps, steps):
+        print(f"beta = {(step + 1) * dbeta:0.3f}" )
+        fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+        env.update_(opts_svd=opts_svd_ctm)  # update CTM tensors after a full evolution step.
 
     # CTMRG
     # convergence criteria for CTM based on total energy
     energy_old, tol_exp = 0, 1e-7
 
-    env = fpeps.EnvCTM(psi)
-    for _ in range(10):
+    # env = fpeps.EnvCTM(psi)
+    for _ in range(10):  # we double-check convergence of CTM tensors
         env.update_(opts_svd=opts_svd_ctm)  # method='2site',
         cdagc_up = env.measure_nn(cdag_up, c_up)
         cdagc_dn = env.measure_nn(cdag_dn, c_dn)
@@ -175,5 +178,5 @@ def test_NTU_spinful_infinite():
 
 
 if __name__ == '__main__':
-    test_NTU_spinful_finite()
+    # test_NTU_spinful_finite()
     test_NTU_spinful_infinite()
