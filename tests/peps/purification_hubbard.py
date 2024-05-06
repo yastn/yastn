@@ -82,7 +82,7 @@ def NTU_Hubbard_Purification(sym, D, mu, t, U, beta_target, dbeta, step, ntu_env
 if __name__ == '__main__':
     setup_logging()
     parser = argparse.ArgumentParser()
-    parser.add_argument("-D", type=int, default=10)
+    parser.add_argument("-D", type=int, default=16)
     parser.add_argument("-S", default='U1xU1xZ2')
     parser.add_argument("-MU", type=float, default=-2.2)
     parser.add_argument("-t", type=float, default=1)
@@ -90,7 +90,7 @@ if __name__ == '__main__':
     parser.add_argument("-BT", type=float, default=2)
     parser.add_argument("-DBETA", type=float, default=0.01)
     parser.add_argument("-STEP", default='FIX')
-    parser.add_argument("-NTUEnvironment", default='NN')
+    parser.add_argument("-NTUEnvironment", default='NN+')
     args = parser.parse_args()
 
     start_time = time.time()

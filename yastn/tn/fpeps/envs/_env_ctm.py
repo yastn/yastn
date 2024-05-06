@@ -19,9 +19,6 @@ class EnvCTM_local():
     l = None  # left
     r = None  # right
 
-    def copy(self):
-        return EnvCTM_local(**self.__dict__)
-
 
 @dataclass()
 class EnvCTM_projectors():
@@ -57,8 +54,10 @@ class EnvCTM(Peps):
             self.reset_(init=init, leg=leg)
 
     def copy(self):
-        env = EnvCTM(self.psi)
-        env._data = {k: v.copy() for k, v in self._data.items()}
+        env = EnvCTM(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+                setattr(env[site], dirn, getattr(self[site], dirn).copy())
         return env
 
     def save_to_dict(self):
