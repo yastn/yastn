@@ -30,8 +30,6 @@ def get_directory(sym, D, mu, U, beta, dbeta, step, ntu_environment):
     """Generate the directory structure based on parameters."""
     formatted_beta = f"{2*beta:.2f}"  # Ensure beta is formatted to two decimal places
     dir_path = f"data/{sym}/NTU_{ntu_environment}/mu_{mu:.4f}/U_{U:.1f}/beta_{formatted_beta}/D_{D}/dbeta_{dbeta:.3f}/{step}/"
-
-
     return ensure_directory(dir_path)
 
 def setup_logging():
@@ -58,6 +56,7 @@ def NTU_Hubbard_Purification(sym, D, mu, t, U, beta_target, dbeta, step, ntu_env
     psi = fpeps.product_peps(geometry, I)
     env_evolution = fpeps.EnvNTU(psi, which=ntu_environment)
     num_steps = round((beta_target / 2) / dbeta)
+    dbeta = (beta_target / 2) / num_steps
 
     opts_svd = {"D_total": D, 'tol_block': 1e-15, "D_block": FIX_dimensions.get(D, {})}
 
@@ -65,22 +64,25 @@ def NTU_Hubbard_Purification(sym, D, mu, t, U, beta_target, dbeta, step, ntu_env
         beta = (num + 1) * dbeta
         fpeps.evolution_step_(env_evolution, gates, opts_svd=opts_svd, initialization="EAT")
 
-        print(beta)
-        if 2*beta % 0.5 == 0:  # Save only at specific intervals of beta
+        print(f"{beta:0.3f}")
+
+        if abs(2 * beta % 0.5) < 1e-10:  # Save only at specific intervals of beta
             directory = get_directory(sym, D, mu, U, beta, dbeta, step, ntu_environment)
             file_name = f"PEPS_tensor.npy"  # Use formatted beta for filename
             info = fpeps.evolution_step_(env_evolution, gates, opts_svd=opts_svd, initialization="EAT")
             ntu_error_max, ntu_error_mean = np.max(info.truncation_error), np.mean(info.truncation_error)
             logging.info(f"Step {num + 1}, beta = {beta:.2f}, NTU Error Max: {ntu_error_max:.2e}, Mean: {ntu_error_mean:.2e}")
 
-            mdata = {site: psi[site].save_to_dict() for site in psi.sites()}
+            mdata = psi.save_to_dict()
+
             np.save(os.path.join(directory, file_name), mdata)
             logging.info(f"Data saved: {os.path.join(directory, file_name)}")
+
 
 if __name__ == '__main__':
     setup_logging()
     parser = argparse.ArgumentParser()
-    parser.add_argument("-D", type=int, default=14)
+    parser.add_argument("-D", type=int, default=10)
     parser.add_argument("-S", default='U1xU1xZ2')
     parser.add_argument("-MU", type=float, default=-2.2)
     parser.add_argument("-t", type=float, default=1)

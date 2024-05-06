@@ -53,8 +53,10 @@ class Peps():
              'dims': self.dims,
              'boundary': self.boundary,
              'data': {}}
-        for ind, tensor in self._data.items():
-            d['data'][ind] = tensor.save_to_dict()
+
+        for site in self.sites():
+            d['data'][site] = self[site].save_to_dict()
+
         return d
 
     def copy(self):
