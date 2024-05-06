@@ -145,7 +145,7 @@ def test_NTU_spinful_infinite():
     # after that we switch to fast Full Update
     # here it requirs Peps bond dimensions not to change in time
     print("Switching to full update")
-    env = fpeps.EnvCTM(psi, init='ones')
+    env = fpeps.EnvCTM(psi, init='eye')
     for _ in range(4):  # few CTM iterations to converge
         env.update_(opts_svd=opts_svd_ctm)
 
