@@ -32,11 +32,11 @@ def get_directory(sym, D, mu, U, beta, dbeta, step, ntu_environment):
     dir_path = f"data/{sym}/NTU_{ntu_environment}/mu_{mu:.4f}/U_{U:.1f}/beta_{formatted_beta}/D_{D}/dbeta_{dbeta:.3f}/{step}/"
     return ensure_directory(dir_path)
 
-def setup_logging():
+def setup_logging(args):
     """Setup logging configuration."""
     log_directory = 'logs'
     ensure_directory(log_directory)
-    log_file_path = os.path.join(log_directory, 'simulation.log')
+    log_file_path = os.path.join(log_directory, f'simulation_E={args.NTUEnvironment}_D={args.D}.log')
     logging.basicConfig(level=logging.INFO, filename=log_file_path, filemode='w',
                         format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -80,18 +80,18 @@ def NTU_Hubbard_Purification(sym, D, mu, t, U, beta_target, dbeta, step, ntu_env
 
 
 if __name__ == '__main__':
-    setup_logging()
     parser = argparse.ArgumentParser()
-    parser.add_argument("-D", type=int, default=16)
+    parser.add_argument("-D", type=int, default=25)
     parser.add_argument("-S", default='U1xU1xZ2')
     parser.add_argument("-MU", type=float, default=-2.2)
     parser.add_argument("-t", type=float, default=1)
     parser.add_argument("-U", type=float, default=8)
-    parser.add_argument("-BT", type=float, default=2)
+    parser.add_argument("-BT", type=float, default=10)
     parser.add_argument("-DBETA", type=float, default=0.01)
     parser.add_argument("-STEP", default='FIX')
     parser.add_argument("-NTUEnvironment", default='NN+')
     args = parser.parse_args()
+    setup_logging(args)
 
     start_time = time.time()
     NTU_Hubbard_Purification(sym=args.S, D=args.D, mu=args.MU, t=args.t, U=args.U,

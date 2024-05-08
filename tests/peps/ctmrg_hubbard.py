@@ -18,11 +18,11 @@ def ensure_directory(directory):
         os.makedirs(directory)
     return directory
 
-def setup_logging():
+def setup_logging(args):
     """Setup logging configuration."""
     log_directory = 'logs'
     ensure_directory(log_directory)
-    log_file_path = os.path.join(log_directory, 'ctmrg_analysis.log')
+    log_file_path = os.path.join(log_directory, f'ctmrg_analysis_E={args.NTUEnvironment}_D={args.D}_X={args.X}.log')
     logging.basicConfig(level=logging.INFO, filename=log_file_path, filemode='w',
                         format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -76,9 +76,8 @@ def main(args):
 
 
 if __name__ == '__main__':
-    setup_logging()
     parser = argparse.ArgumentParser(description="Analyze PEPS Tensor Data with CTMRG")
-    parser.add_argument("-D", type=int, default=10, help="PEPS bond dimension")
+    parser.add_argument("-D", type=int, default=16, help="PEPS bond dimension")
     parser.add_argument("-S", default='U1xU1xZ2', help="Symmetry")
     parser.add_argument("-MU", type=float, default=-2.2, help="Chemical potential")
     parser.add_argument("-t", type=float, default=1, help="Hopping parameter")
@@ -86,8 +85,9 @@ if __name__ == '__main__':
     parser.add_argument("-BT", type=float, default=2, help="Beta value at which to analyze the tensor")
     parser.add_argument("-DBETA", type=float, default=0.01)
     parser.add_argument("-STEP", default='FIX', help="Step method used during NTU simulation")
-    parser.add_argument("-NTUEnvironment", default='NN', help="NTU environment configuration")
+    parser.add_argument("-NTUEnvironment", default='NN+', help="NTU environment configuration")
     parser.add_argument("-X", type=int, default=50, help="CTMRG bond dimension")
     args = parser.parse_args()
 
+    setup_logging(args)
     main(args)
