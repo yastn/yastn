@@ -11,16 +11,22 @@ from typing import NamedTuple
 
 
 class Evolution_out(NamedTuple):
+    """ All errors and eigenvalues are relative. """
+    bond: tuple = None
     truncation_error: float = 0
-    optimal_pinv_cutoff: float = 0
+    nonhermitian_error: float = 0
     min_eigenvalue: float = 0
     second_eigenvalue: float = 0
     fixed_eigenvalues: float = 0
+    iterations: int = 0
+    pinv_cutoff: float = 0
+    exit_code: int = 0
 
 
-def evolution_step_(env, gates, opts_svd,
-                    symmetrize=True, initialization="EAT",
-                    pinv_cutoffs=(1e-12, 1e-10, 1e-8, 1e-6), max_iter=1000):
+def evolution_step_(env, gates, opts_svd, symmetrize=True,
+                    initialization="EAT", fix=0,
+                    pinv_cutoffs=(1e-12, 1e-10, 1e-8, 1e-6),
+                    max_iter=100, tol_iter=1e-13):
     r"""
     Perform a single step of PEPS evolution by applying a list of gates,
     performing bond-dimension truncation after each application of a two-site gate.
@@ -65,47 +71,26 @@ def evolution_step_(env, gates, opts_svd,
     for gate in gates.local:
         psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
     for gate in gates.nn:
-        infos.append(apply_gate_nn_and_truncate_(env, psi, gate, opts_svd, initialization, pinv_cutoffs, max_iter))
+        info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, initialization, fix, pinv_cutoffs, max_iter, tol_iter)
+        infos.append(info)
     if symmetrize:
         for gate in gates.nn[::-1]:
-            infos.append(apply_gate_nn_and_truncate_(env, psi, gate, opts_svd, initialization, pinv_cutoffs, max_iter))
+            info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, initialization, fix, pinv_cutoffs, max_iter, tol_iter)
+            infos.append(info)
         for gate in gates.local[::-1]:
             psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
-
     return Evolution_out(*zip(*infos))
 
 
-def apply_gate_nn_and_truncate_(env, psi, gate, opts_svd, initialization="EAT",
-                   pinv_cutoffs=(1e-12, 1e-10, 1e-8, 1e-6), max_iter=1000):
+def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
+                    initialization="EAT", fix=0,
+                    pinv_cutoffs=(1e-12, 1e-10, 1e-8, 1e-6),
+                    max_iter=1000, tol_iter=1e-13):
     r"""
-    Applies a nearest-neighbor gate to a PEPS tensor and optimizes the resulting tensor using alternate
-    least squares.
-
-    Parameters
-    ----------
-    env             : class ClusterEnv
-    gate            : A Gate object representing the nearest-neighbor gate to apply.
-    truncation_mode : str
-                    The mode to use for truncation of the environment tensors. Can be
-                    'normal' or 'optimal'.
-    step            : str
-                    The optimization step to perform. Can be 'svd-update', 'one-step', or 'two-step'.
-    env_type        : str
-                    The type of environment to use for optimization. Can be 'NTU' (neighborhood tensor update),
-                        'FU'(full update - to be added).
-    opts_svd        : dict, optional
-                    A dictionary with options for the SVD truncation. Default is None.
-
-    Returns
-    -------
-        peps : The optimized PEPS tensor (yastn.fpeps.Lattice).
-        info : dict
-             A dictionary with information about the optimization. Contains the following keys:
-             - 'svd_error': The SVD truncation error.
-             - 'tu_error': The truncation error after optimization.
-             - 'optimal_cutoff': The optimal cutoff value used for inverse.
-
+    Applies a nearest-neighbor gate to a PEPS tensor, truncate, and
+    optimize the resulting tensors using alternate least squares.
     """
+    info = {'bond': gate.bond}
     dirn, l_ordered = psi.nn_bond_type(gate.bond)
     f_ordered = psi.f_ordered(gate.bond)
     s0, s1 = gate.bond if l_ordered else gate.bond[::-1]
@@ -116,39 +101,27 @@ def apply_gate_nn_and_truncate_(env, psi, gate, opts_svd, initialization="EAT",
     fgf = env.bond_metric(Q0, Q1, s0, s1, dirn)
 
     # enforce hermiticity
+    nonh = (fgf - fgf.H).norm()
     fgf = (fgf + fgf.H) / 2
 
     # check metric tensor eigenvalues
     S, U = fgf.eigh(axes=(0, 1))
     smin, smax = min(S._data), max(S._data)
-    try:
-        smax2 = max(x for x in S._data if x < smax)
-    except ValueError:
-        smax2 = 0.
-    asmin = abs(smin)
 
-    # fix (smin, -smin) eigenvalues to |smin|
-    num_fixed = sum(S._data < asmin).item() / len(S._data)
-    S._data[S._data < asmin] = asmin
-    fgf_fixed = U @ S @ U.H
+    info['nonhermitian_error'] = nonh / smax
+    info['min_eigenvalue'] = smin / smax
+    info['second_eigenvalue'] = max(*(x for x in S._data if x < smax), smin) / smax
 
-    M0, M1, truncation_error2, optimal_pinv_cutoff = truncate_and_optimize(fgf_fixed, R0, R1, initialization, opts_svd, pinv_cutoffs, max_iter)
-    psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
+    g_error = max(-smin / smax, 0 * smax) + nonh / smax
 
-    return Evolution_out(truncation_error=truncation_error2 ** 0.5,
-                         optimal_pinv_cutoff=optimal_pinv_cutoff,
-                         min_eigenvalue = smin / smax,
-                         second_eigenvalue = smax2 / smax,
-                         fixed_eigenvalues = num_fixed)
+    if fix is not None:
+        S._data[S._data < g_error] = g_error * fix
+        info['fixed_eigenvalues'] = sum(S._data < g_error).item() / len(S._data)
+    else:
+        info['fixed_eigenvalues'] = 0.
 
+    fgf = U @ S @ U.H
 
-def truncate_and_optimize(fgf, R0, R1, initialization, opts_svd, pinv_cutoffs, max_iter):
-    """
-    First we truncate RA and RB tensors based on the input truncation_mode with
-    function environment_aided_truncation_step. Then the truncated
-    MA and MB tensors are subjected to least square optimization to minimize
-     the truncation error with the function tu_single_optimization.
-    """
     R01 = R0 @ R1
     R01 = R01.fuse_legs(axes=[(0, 1)])
     gf = fgf.unfuse_legs(axes=0)
@@ -156,18 +129,22 @@ def truncate_and_optimize(fgf, R0, R1, initialization, opts_svd, pinv_cutoffs, m
     gR01 =  gf @ R01
     gRR = vdot(R01, fgR01).item()
 
-    if isinstance(opts_svd, dict):
-        opts_svd = [opts_svd]
+    M0, M1 = R0, R1
+    for opts in [opts_svd] if isinstance(opts_svd, dict) else opts_svd:
+        M0, M1, svd_error2 = initial_truncation(gRR, fgf, fgR01, M0, M1, initialization, opts, pinv_cutoffs)
+        M0, M1, truncation_error2, pinv_cutoff, iters = optimize_truncation(M0, M1, gR01, gf, gRR, svd_error2, pinv_cutoffs, max_iter, tol_iter)
+        M0, M1 = symmetrize_truncation(R0, R1, opts, normalize=True)
 
-    for opts in opts_svd:
-        R0, R1, svd_error2 = environment_aided_truncation_step(gRR, fgf, fgR01, R0, R1, initialization, opts, pinv_cutoffs)
-        R0, R1, truncation_error2, optimal_pinv_cutoff  = tu_single_optimization(R0, R1, gR01, gf, gRR, svd_error2, pinv_cutoffs, max_iter)
-        R0, R1 = truncation_step(R0, R1, opts, normalize=True)
+    psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
 
-    return R0, R1, truncation_error2, optimal_pinv_cutoff
+    info['truncation_error'] = truncation_error2 ** 0.5
+    info['pinv_cutoff'] = pinv_cutoff
+    info['iterations'] = iters
+
+    return Evolution_out(**info)
 
 
-def truncation_step(RA, RB, opts_svd, normalize=False):
+def symmetrize_truncation(RA, RB, opts_svd, normalize=False):
     """ svd truncation of central tensor """
 
     U, S, V = svd_with_truncation(RA @ RB, sU=RA.s[1], **opts_svd)
@@ -178,8 +155,7 @@ def truncation_step(RA, RB, opts_svd, normalize=False):
     return MA, MB
 
 
-def environment_aided_truncation_step(gRR, fgf, fgRAB, RA, RB, initialization, opts_svd, pinv_cutoffs):
-
+def initial_truncation(gRR, fgf, fgRAB, RA, RB, initialization, opts_svd, pinv_cutoffs):
     """
     truncation_mode = 'optimal' is for implementing EAT algorithm only applicable for symmetric
     tensors and offers no advantage for dense tensors.
@@ -207,7 +183,7 @@ def environment_aided_truncation_step(gRR, fgf, fgRAB, RA, RB, initialization, o
         MA, MB, svd_error2, _ = optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB, pinv_cutoffs)
         return MA, MB, svd_error2
     elif initialization == 'SVD':
-        MA, MB = truncation_step(RA, RB, opts_svd)
+        MA, MB = symmetrize_truncation(RA, RB, opts_svd)
         MAB = MA @ MB
         MAB = MAB.fuse_legs(axes=[(0, 1)])
         gMM = vdot(MAB, fgf @ MAB).item()
@@ -217,7 +193,7 @@ def environment_aided_truncation_step(gRR, fgf, fgRAB, RA, RB, initialization, o
     return MA, MB, svd_error2
 
 
-def tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error2, pinv_cutoffs, max_iter):
+def optimize_truncation(MA, MB, gRAB, gf, gRR, svd_error2, pinv_cutoffs, max_iter, tol_iter):
 
     """ Optimizes the matrices MA and MB by minimizing the truncation error using least square optimization """
 
@@ -225,7 +201,7 @@ def tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error2, pinv_cutoffs, max_
     truncation_error2_old_A, truncation_error2_old_B = 0, 0
     epsilon1, epsilon2 = 0, 0
 
-    for _ in range(max_iter):
+    for iter in range(max_iter):
         # fix MB and optimize MA
         j_A = tensordot(gRAB, MB, axes=(1, 1), conj=(0, 1)).fuse_legs(axes=[(0, 1)])
         g_A = tensordot(MB, gf, axes=(1, 1), conj=(1, 0)).fuse_legs(axes=((1, 0), 2))
@@ -261,10 +237,10 @@ def tu_single_optimization(MA, MB, gRAB, gf, gRR, svd_error2, pinv_cutoffs, max_
             break
 
         epsilon = max(epsilon1, epsilon2)
-        if epsilon < 1e-13:  # convergence condition
+        if epsilon < tol_iter:  # convergence condition
             break
 
-    return MA, MB, truncation_error2, optimal_pinv_cutoff
+    return MA, MB, truncation_error2, optimal_pinv_cutoff, iter + 1
 
 
 def optimal_initial_pinv(mA, mB, RA, RB, gRR, SL, UL, SR, UR, fgf, fgRAB, pinv_cutoffs):
