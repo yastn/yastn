@@ -150,7 +150,7 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
             M0, M1 = M0i, M1i
             error2 = i_error2
 
-    M0, M1 = symmetrize_truncation(M0, M1, opts, normalize=True)
+    M0, M1 = symmetrized_svd(M0, M1, opts, normalize=True)
     psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
 
     info['truncation_error'] = error2 ** 0.5
@@ -159,14 +159,16 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
     return Evolution_out(**info)
 
 
-def symmetrize_truncation(RA, RB, opts_svd, normalize=False):
+def symmetrized_svd(R0, R1, opts_svd, normalize=False):
     """ svd truncation of central tensor; divide singular values symmetrically between tensors. """
-    U, S, V = svd_with_truncation(RA @ RB, sU=RA.s[1], **opts_svd)
+    Q0, R0 = R0.qr(axes=(0, 1))
+    Q1, R1 = R1.qr(axes=(1, 0), Qaxis=0, Raxis=1)
+    U, S, V = svd_with_truncation(R0 @ R1, sU=R0.s[1], **opts_svd)
     if normalize:
         S = S / S.norm(p='inf')
     S = S.sqrt()
-    MA, MB = S.broadcast(U, V, axes=(1, 0))
-    return MA, MB
+    M0, M1 = S.broadcast(U, V, axes=(1, 0))
+    return Q0 @ M0, M1 @ Q1
 
 
 def calculate_truncation_error2(fMM, fgf, fRR, RRgRR):
@@ -182,35 +184,33 @@ def initial_truncation(R0, R1, fgf, fRR, RRgRR, initialization, opts_svd, pinv_c
     Truncate R0 @ R1 to bond dimension specified in opts_svd, wither using SVD,
     or including information from a product approximation the bond metric
     """
-
     if initialization == 'EAT':
         g = fgf.unfuse_legs(axes=(0, 1))
         G = ncon((g, R0, R1, R0.conj(), R1.conj()), ((1, 2, 3, 4), (3, -0), (-2, 4), (1, -1), (-3, 2)))
-        [ul, _, vr] = svd_with_truncation(G, axes=((0, 1), (2, 3)), D_total=1)
-        ul = ul.remove_leg(axis=2)
-        vr = vr.remove_leg(axis=0)
-        GL, GR = ul.transpose(axes=(1, 0)), vr
-        _, SL, UL = svd(GL)
-        UR, SR, _ = svd(GR)
+        GL, _, GR = svd_with_truncation(G, axes=((1, 0), (2, 3)), D_total=1)
+        _, SL, UL = svd(GL.remove_leg(axis=2))
+        UR, SR, _ = svd(GR.remove_leg(axis=0))
         XL, XR = SL.sqrt() @ UL, UR @ SR.sqrt()
         XRRX = XL @ XR
-        U, L, V = svd_with_truncation(XRRX, sU=R0.get_signature()[1], **opts_svd)
+        U, L, V = svd_with_truncation(XRRX, sU=R0.s[1], **opts_svd)
         mA, mB = U @ L.sqrt(), L.sqrt() @ V
 
-        results = []
+        slmax, srmax = max(SL._data), max(SR._data)
+        vslo, vsro = len(SL._data) + 1, len(SR._data) + 1
+        error2 = 100
         for c_off in pinv_cutoffs:
-            XL_inv = tensordot(UL.conj(), SL.sqrt().reciprocal(cutoff=c_off), axes=(0, 0))
-            XR_inv = tensordot(SR.sqrt().reciprocal(cutoff=c_off), UR.conj(), axes=(1, 1))
-            pA, pB = XL_inv @ mA, mB @ XR_inv
-            M0, M1 = R0 @ pA, pB @ R1
-            error2 = calculate_truncation_error2(M0 @ M1, fgf, fRR, RRgRR)
-            results.append((error2, c_off, M0, M1))
-        error2, c_off, M0, M1 = min(results, key=lambda x: x[0])
-
+            vsl = sum(SL._data > c_off * slmax).item()
+            vsr = sum(SR._data > c_off * srmax).item()
+            if vsl < vslo or vsr < vsro:
+                vslo, vsro = vsl, vsr
+                M0_tmp = R0 @ UL.H @ SL.reciprocal(cutoff=c_off * slmax).sqrt() @ mA
+                M1_tmp = mB @ SR.reciprocal(cutoff=c_off * srmax).sqrt() @ UR.H @ R1
+                error2_tmp = calculate_truncation_error2(M0_tmp @ M1_tmp, fgf, fRR, RRgRR)
+                if error2 > error2_tmp:
+                    M0, M1, error2 = M0_tmp, M1_tmp, error2_tmp
     elif initialization == 'SVD':
-        M0, M1 = symmetrize_truncation(R0, R1, opts_svd)
+        M0, M1 = symmetrized_svd(R0, R1, opts_svd)
         error2 = calculate_truncation_error2(M0 @ M1, fgf, fRR, RRgRR)
-
     return M0, M1, error2
 
 
