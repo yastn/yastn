@@ -141,6 +141,8 @@ def test_NTU_spinful_infinite():
                      {"D_total": D, 'tol_block': 1e-15}]
 
     steps = round((beta / 2) / dbeta)
+    dbeta = (beta / 2) / steps
+
 
     infos = []
     init_steps = 3

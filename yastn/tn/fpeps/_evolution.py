@@ -128,7 +128,7 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
 
     info['nonhermitian_part'] = nonhermitian / smax
     info['min_eigenvalue'] = smin / smax
-    info['second_eigenvalue'] = max(*(x for x in S._data if x < smax), smin) / smax
+    info['second_eigenvalue'] = max(*(x for x in S._data if x < smax), smin, smin) / smax
 
     g_error = max(-smin, 0) + nonhermitian
     info['wrong_eigenvalues'] = sum(S._data < g_error).item() / len(S._data)
