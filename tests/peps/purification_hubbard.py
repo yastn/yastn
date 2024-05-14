@@ -58,7 +58,10 @@ def NTU_Hubbard_Purification(sym, D, mu, t, U, beta_target, dbeta, step, ntu_env
     num_steps = round((beta_target / 2) / dbeta)
     dbeta = (beta_target / 2) / num_steps
 
-    opts_svd = {"D_total": D, 'tol_block': 1e-15, "D_block": FIX_dimensions.get(D, {})}
+    if step == 'FIX':
+        opts_svd = {"D_total": D, 'tol_block': 1e-15, "D_block": FIX_dimensions.get(D, {})}
+    else:
+        opts_svd = {"D_total": D, 'tol_block': 1e-15}
 
     for num in range(num_steps):
         beta = (num + 1) * dbeta
@@ -81,19 +84,22 @@ def NTU_Hubbard_Purification(sym, D, mu, t, U, beta_target, dbeta, step, ntu_env
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-D", type=int, default=25)
+    parser.add_argument("-D", type=str, default='25')
     parser.add_argument("-S", default='U1xU1xZ2')
     parser.add_argument("-MU", type=float, default=-2.2)
     parser.add_argument("-t", type=float, default=1)
     parser.add_argument("-U", type=float, default=8)
-    parser.add_argument("-BT", type=float, default=10)
+    parser.add_argument("-BT", type=float, default=2)
     parser.add_argument("-DBETA", type=float, default=0.01)
     parser.add_argument("-STEP", default='FIX')
     parser.add_argument("-NTUEnvironment", default='NN+')
     args = parser.parse_args()
-    setup_logging(args)
 
-    start_time = time.time()
-    NTU_Hubbard_Purification(sym=args.S, D=args.D, mu=args.MU, t=args.t, U=args.U,
-                             beta_target=args.BT, dbeta=args.DBETA, step=args.STEP, ntu_environment=args.NTUEnvironment)
-    logging.info(f'Elapsed time: {time.time() - start_time:.2f} s.')
+    Ds = [int(x) for x in args.D.strip().split(',')]
+    for D in Ds:
+        args.D = D
+        setup_logging(args)
+        start_time = time.time()
+        NTU_Hubbard_Purification(sym=args.S, D=args.D, mu=args.MU, t=args.t, U=args.U,
+                                beta_target=args.BT, dbeta=args.DBETA, step=args.STEP, ntu_environment=args.NTUEnvironment)
+        logging.info(f'Elapsed time: {time.time() - start_time:.2f} s.')
