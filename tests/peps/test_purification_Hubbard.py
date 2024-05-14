@@ -48,10 +48,15 @@ def test_NTU_spinful_finite():
     env = fpeps.EnvNTU(psi, which='NN+')
     opts_svd = {"D_total": D, 'tol_block': 1e-15}
     steps = round((beta / 2) / dbeta)
+    dbeta = (beta / 2) / steps
+
+    infos = []
     for step in range(steps):
         print(f"beta = {(step + 1) * dbeta}" )
-        fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
+        infos.append(info)
 
+    print(f"Accumulated truncation error: {fpeps.accumulated_truncation_error(infos, mode='gates'):0.4f}")
 
     # convergence criteria for CTM based on total energy
     energy_old, tol_exp = 0, 1e-7
@@ -130,17 +135,23 @@ def test_NTU_spinful_infinite():
     psi = fpeps.product_peps(geometry, I)
 
     opts_svd_ctm = {'D_total': D * D, 'tol': 1e-10}
+
+    # list of dicts for a two-step truncation
     opts_svd_evol = [{"D_total": 2 * D, 'tol_block': 1e-15},
-                     {"D_total": D, 'tol_block': 1e-15}]  # two step truncation
+                     {"D_total": D, 'tol_block': 1e-15}]
 
     steps = round((beta / 2) / dbeta)
+    dbeta = (beta / 2) / steps
 
+
+    infos = []
     init_steps = 3
     # first few steps are performed with NTU-NN+ to reach fixed peps bond dimensions.
     env = fpeps.EnvNTU(psi, which='NN+')
     for step in range(init_steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
-        fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+        infos.append(info)
 
     # after that we switch to fast Full Update
     # here it requirs Peps bond dimensions not to change in time
@@ -151,8 +162,11 @@ def test_NTU_spinful_infinite():
 
     for step in range(init_steps, steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
-        fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+        infos.append(info)
         env.update_(opts_svd=opts_svd_ctm)  # update CTM tensors after a full evolution step.
+
+    print(f"Accumulated truncation error: {fpeps.accumulated_truncation_error(infos):0.4f}")
 
     # CTMRG
     # convergence criteria for CTM based on total energy
@@ -178,5 +192,5 @@ def test_NTU_spinful_infinite():
 
 
 if __name__ == '__main__':
-    # test_NTU_spinful_finite()
+    test_NTU_spinful_finite()
     test_NTU_spinful_infinite()

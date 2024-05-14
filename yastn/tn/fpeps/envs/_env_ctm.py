@@ -19,9 +19,6 @@ class EnvCTM_local():
     l = None  # left
     r = None  # right
 
-    def copy(self):
-        return EnvCTM_local(**self.__dict__)
-
 
 @dataclass()
 class EnvCTM_projectors():
@@ -57,8 +54,10 @@ class EnvCTM(Peps):
             self.reset_(init=init, leg=leg)
 
     def copy(self):
-        env = EnvCTM(self.psi)
-        env._data = {k: v.copy() for k, v in self._data.items()}
+        env = EnvCTM(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+                setattr(env[site], dirn, getattr(self[site], dirn).copy())
         return env
 
     def save_to_dict(self):
@@ -321,6 +320,23 @@ class EnvCTM(Peps):
 
         g = g / g.trace(axes=(0, 1)).to_number()
         return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
+
+    def save_to_dict(self):
+        """
+        Serialize EnvCTM into a dictionary.
+        """
+        psi = self.psi
+        if isinstance(psi, Peps2Layers):
+            psi = psi.ket
+
+        d = {'class': 'EnvCTM',
+             'psi': psi.save_to_dict(),
+             'data': {}}
+        for site in self.sites():
+            d_local = {dirn: getattr(self[site], dirn).save_to_dict()
+                       for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']}
+            d['data'][site] = d_local
+        return d
 
 
 def update_2site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
