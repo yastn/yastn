@@ -18,19 +18,20 @@ def test_spinful_fermions():
     default_device = config_dense.default_device
 
     ops_Z2 = yastn.operators.SpinfulFermions(sym='Z2', backend=backend, default_device=default_device)
+    ops_U1 = yastn.operators.SpinfulFermions(sym='U1', backend=backend, default_device=default_device)
     ops_U1xU1_ind = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=backend, default_device=default_device)
     ops_U1xU1_dis = yastn.operators.SpinfulFermions(sym='U1xU1', backend=backend, default_device=default_device)
 
-    Is = [ops_Z2.I(), ops_U1xU1_ind.I(), ops_U1xU1_dis.I()]
-    legs = [ops_Z2.space(), ops_U1xU1_ind.space(), ops_U1xU1_dis.space()]
+    Is = [ops_Z2.I(), ops_U1.I(), ops_U1xU1_ind.I(), ops_U1xU1_dis.I()]
+    legs = [ops_Z2.space(), ops_U1.space(), ops_U1xU1_ind.space(), ops_U1xU1_dis.space()]
 
     assert all(leg == I.get_legs(axes=0) for (leg, I) in zip(legs, Is))
     assert all(np.allclose(I.to_numpy(), np.eye(4)) for I in Is)
     assert all(default_device in I.device for I in Is)  # accept 'cuda' in 'cuda:0'
 
-    assert all(ops.config.fermionic == fs for ops, fs in zip((ops_Z2, ops_U1xU1_ind, ops_U1xU1_dis), (True, (False, False, True), True)))
+    assert all(ops.config.fermionic == fs for ops, fs in zip((ops_Z2, ops_U1, ops_U1xU1_ind, ops_U1xU1_dis), (True, True, (False, False, True), True)))
 
-    for ops, inter_sgn in [(ops_Z2, 1), (ops_U1xU1_ind, 1), (ops_U1xU1_dis, -1)]:
+    for ops, inter_sgn in [(ops_Z2, 1), (ops_U1, 1), (ops_U1xU1_ind, 1), (ops_U1xU1_dis, -1)]:
         # check anti-commutation relations
         assert all(yastn.norm(ops.c(s) @ ops.c(s)) < tol for s in ('u', 'd'))
         assert all(yastn.norm(ops.c(s) @ ops.cp(s) + ops.cp(s) @ ops.c(s) - ops.I()) < tol for s in ('u', 'd'))

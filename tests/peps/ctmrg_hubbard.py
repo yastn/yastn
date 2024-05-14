@@ -22,7 +22,7 @@ def setup_logging(args):
     """Setup logging configuration."""
     log_directory = 'logs'
     ensure_directory(log_directory)
-    log_file_path = os.path.join(log_directory, f'ctmrg_analysis_E={args.NTUEnvironment}_D={args.D}_X={args.X}.log')
+    log_file_path = os.path.join(log_directory, f'ctmrg_analysis_E={args.NTUEnvironment}_D={args.D}_X={args.X}_{args.S}.log')
     logging.basicConfig(level=logging.INFO, filename=log_file_path, filemode='w',
                         format='%(asctime)s - %(levelname)s - %(message)s')
 
