@@ -120,7 +120,7 @@ def check_ZZ(env, ops, ZZ_exact, bond=None, tol_ev = 1e-4):
     assert abs(ZZ - ZZ_exact) < tol_ev
 
 
-def test_ctm_loop():
+def test_ctm_ising():
     """ Calculate magnetization for classical 2D Ising model and compares with the exact result. """
     # beta_c = ln(1 + sqrt(2)) / 2 = 0.44068679350977147
     # spontanic magnetization = (1 - sinh(2 * beta) ** -4) ** 0.125
@@ -169,5 +169,28 @@ def test_ctm_loop():
         check_ZZ(env, ops, ZZ_exact[beta], bond=((1, 8), (0, 8)))
 
 
+def test_ctm_save_load_copy():
+    ops = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
+
+    psi = create_Ising_peps(ops, beta=0.5, lattice='checkerboard', dims=(2, 2), boundary='infinite', gauges=False)
+    env = run_ctm(psi, ops, init='ones', method='2site')
+
+    d = env.save_to_dict()
+
+    env_save = fpeps.load_from_dict(ops.config, d)
+    env_copy = env.copy()
+
+    for site in env.sites():
+        for dirn in  ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+            ten0 = getattr(env[site], dirn)
+            ten1 = getattr(env_save[site], dirn)
+            ten2 = getattr(env_copy[site], dirn)
+
+            yastn.are_independent(ten0, ten1)
+            yastn.are_independent(ten0, ten2)
+            assert (ten0 - ten1).norm() < 1e-14
+            assert (ten0 - ten2).norm() < 1e-14
+
 if __name__ == '__main__':
-    test_ctm_loop()
+    test_ctm_ising()
+    test_ctm_save_load_copy()

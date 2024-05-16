@@ -1,6 +1,7 @@
 """ Initialization of peps tensors for real or imaginary time evolution """
 from ._geometry import SquareLattice, CheckerboardLattice
 from ._peps import Peps
+from .envs._env_ctm import EnvCTM, EnvCTM_local
 from ...initialize import load_from_dict as load_tensor_from_dict
 from ... import YastnError, Tensor
 
@@ -60,12 +61,22 @@ def load_from_dict(config, d) -> Peps:
         dictionary containing serialized MPS/MPO, i.e.,
         a result of :meth:`yastn.tn.mps.MpsMpo.save_to_dict`.
     """
+
+    if 'class' in d and d['class'] == 'EnvCTM':  # load EnvCTM
+        psi = load_from_dict(config, d['psi'])
+        env = EnvCTM(psi, init=None)
+        for site in env.sites():
+            for dirn, v in d['data'][site].items():
+                setattr(env[site], dirn, load_tensor_from_dict(config, v))
+        return env
+
+    # otherwise assume class == 'Peps'
     if d['lattice'] == "square":
         net = SquareLattice(dims=d['dims'], boundary=d['boundary'])
     elif d['lattice'] == "checkerboard":
         net = CheckerboardLattice()
 
     psi = Peps(net)
-    for ind, tensor in d['data'].items():
-        psi._data[ind] = load_tensor_from_dict(config, tensor)
+    for site in psi.sites():
+        psi[site] = load_tensor_from_dict(config, d['data'][site])
     return psi
