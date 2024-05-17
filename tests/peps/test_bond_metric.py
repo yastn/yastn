@@ -30,7 +30,7 @@ def test_spinless_infinite_approx():
     steps = round((beta / 2) / dbeta)
     for step in range(steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
-        fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="SVD")
+        fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
 
     opts_svd = {"D_total": 2 * D, 'tol_block': 1e-15}
 

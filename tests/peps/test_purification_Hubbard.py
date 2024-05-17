@@ -53,7 +53,7 @@ def test_NTU_spinful_finite():
     infos = []
     for step in range(steps):
         print(f"beta = {(step + 1) * dbeta}" )
-        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
         infos.append(info)
 
     print(f"Accumulated truncation error: {fpeps.accumulated_truncation_error(infos, mode='gates'):0.4f}")
@@ -150,7 +150,7 @@ def test_NTU_spinful_infinite():
     env = fpeps.EnvNTU(psi, which='NN+')
     for step in range(init_steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
-        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol)
         infos.append(info)
 
     # after that we switch to fast Full Update
@@ -162,7 +162,7 @@ def test_NTU_spinful_infinite():
 
     for step in range(init_steps, steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
-        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol)
         infos.append(info)
         env.update_(opts_svd=opts_svd_ctm)  # update CTM tensors after a full evolution step.
 

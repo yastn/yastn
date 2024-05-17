@@ -173,7 +173,7 @@ def test_ctm_save_load_copy():
     ops = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
 
     psi = create_Ising_peps(ops, beta=0.5, lattice='checkerboard', dims=(2, 2), boundary='infinite', gauges=False)
-    env = run_ctm(psi, ops, init='ones', method='2site')
+    env = run_ctm(psi, ops, init='eye', method='2site')
 
     d = env.save_to_dict()
 
