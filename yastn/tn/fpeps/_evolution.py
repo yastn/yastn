@@ -22,7 +22,7 @@ class Evolution_out(NamedTuple):
         txt = f"({self.bond}, error={self.truncation_error:0.2e}"
         txt += ", errors=(" + ", ".join(format(f, '.2e') for f in self.truncation_errors) + ")"
         txt += f", EAT_err={self.EAT_error:0.1e}"
-        txt += f", nonh_err={self.nonhermitian_part:0.1e}, min_eig={self.min_eigenvalue:0.1e}, fixed={self.wrong_eigenvalues:0.1e},"
+        txt += f", nonh_err={self.nonhermitian_part:0.1e}, min_eig={self.min_eigenvalue:0.1e}, fixed={self.wrong_eigenvalues:0.1e}"
         txt += ", pinv_c=(" + ", ".join(format(f, '.0e') for f in self.pinv_cutoffs) + ")"
         txt += f", iters={self.iterations})"
         return txt
