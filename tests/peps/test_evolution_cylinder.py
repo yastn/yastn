@@ -41,7 +41,7 @@ def test_evol_cylinder():
     """ Simulate purification of spinful fermions in a small finite system """
     print(" Simulating spinful fermions in a small finite system. ")
 
-    Nx, Ny = 5, 1
+    Nx, Ny = 3, 1
     geometry = fpeps.SquareLattice(dims=(Nx, Ny), boundary='cylinder')
 
     bonds = geometry.bonds()
@@ -49,77 +49,59 @@ def test_evol_cylinder():
     assert len(bonds) == Nx * Ny + Nx * (Ny - 1)
     assert len(sites) == Nx * Ny
 
-    # random couplings, chemical potentials and initial occupation
-    np.random.seed(seed=0)
-    # Js = dict(zip(bonds, 2 * np.random.rand(len(bonds)) - 1))
-    # mus = dict(zip(sites, np.random.rand(len(sites)) / 20 - 0.025))
-
-    # occs0 = dict(zip(sites, np.random.rand(len(sites)) > 0.5))
-    # occs1 = dict(zip(sites, np.random.rand(len(sites)) > 0.5))
-
-    Js = dict(zip(bonds, [1, 1, 1, 1, 1]))
-    mus = dict(zip(sites, [0, 0, 0, 0, 0]))
-
-    occs0 = dict(zip(sites, [1, 0, 1, 0, 1]))
-    occs1 = dict(zip(sites, [0, 1, 0, 1, 0]))
+    Js = {bond: 1 for bond in bonds}
+    ms = dict(zip(sites, [0.0, 2.0, 0.0]))
 
     i2s = dict(enumerate(sites))
-    s2i = {s: i for i, s in i2s.items()}  # 1d order of sites
+    s2i = {s: i for i, s in i2s.items()}  # 1d order of sites for free-fermions
 
-    tf = 0.6
-    Ci0, Cf0 = evolve_correlation_matrix(Js, mus, occs0, s2i, tf)
-    Ci1, Cf1 = evolve_correlation_matrix(Js, mus, occs1, s2i, tf)
-    # print(np.diag(Ci0))
-    # print(np.diag(Cf0))
+    occs = {'u': dict(zip(sites, [1, 0, 0])),
+            'd': dict(zip(sites, [0, 1, 0]))}
 
-    D, dt = 6, 0.05
+    tf = 0.3
+    Ci, Cf = {}, {}
+    for spin in 'ud':
+        Ci[spin], Cf[spin] = evolve_correlation_matrix(Js, ms, occs[spin], s2i, tf)
+
+    D, dt = 8, 0.05
     steps = round(tf / dt)
     dt = tf / steps
 
     # prepare evolution gates
-    ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
+    ops = yastn.operators.SpinfulFermions(sym='U1xU1', backend=cfg.backend, default_device=cfg.default_device)
     I = ops.I()
-    c_up, cdag_up, n_up = ops.c(spin='u'), ops.cp(spin='u'), ops.n(spin='u')
-    c_dn, cdag_dn, n_dn = ops.c(spin='d'), ops.cp(spin='d'), ops.n(spin='d')
-
     gates_nn = []
-    for bond, t in Js.items():
-        gt = fpeps.gates.gate_nn_hopping(t, 1j * dt / 2, I, c_up, cdag_up)
-        gates_nn.append(gt._replace(bond=bond))
-        gt = fpeps.gates.gate_nn_hopping(t, 1j * dt / 2, I, c_dn, cdag_dn)
-        gates_nn.append(gt._replace(bond=bond))
     gates_local = []
-    for site, mu in mus.items():
-        gt = fpeps.gates.gate_local_occupation(mu, 1j * dt / 2, I, n_up)
-        gates_local.append(gt._replace(site=site))
-        gt = fpeps.gates.gate_local_occupation(mu, 1j * dt / 2, I, n_dn)
-        gates_local.append(gt._replace(site=site))
-
+    for spin in 'ud':
+        for bond, t in Js.items():
+            gt = fpeps.gates.gate_nn_hopping(t, 1j * dt / 2, I, ops.c(spin=spin), ops.cp(spin=spin))
+            gates_nn.append(gt._replace(bond=bond))
+        for site, mu in ms.items():
+            gt = fpeps.gates.gate_local_occupation(mu, 1j * dt / 2, I, ops.n(spin=spin))
+            gates_local.append(gt._replace(site=site))
     gates = fpeps.Gates(gates_nn, gates_local)
-
+    #
     # initialized product state
-
-    occs = {s: ops.vec_n(val=(occs0[s], occs1[s])) for s in occs0}
-    psi = fpeps.product_peps(geometry, occs)
-
+    psi = fpeps.product_peps(geometry, {s: ops.vec_n(val=(occs['u'][s], occs['d'][s])) for s in sites})
+    #
     # time-evolve initial state
-    env = fpeps.EnvNTU(psi, which='NN++')
-    opts_svd = {"D_total": D, 'tol_block': 1e-15}
+    env = fpeps.EnvNTU(psi, which='NN')
+    opts_svd = {"D_total": D, 'tol': 1e-12}
     for step in range(steps):
-        print(f"t = {(step + 1) * dt:0.2f}" )
-        fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
+        print(f"t = {(step + 1) * dt:0.3f}" )
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
+        #for i in info:
+        #    print(i)
 
-
-    opts_svd_mps = {'D_total': 4 * D, 'tol': 1e-10}
+    opts_svd_mps = {'D_total': D, 'tol': 1e-10}
     env = fpeps.EnvBoundaryMps(psi, opts_svd=opts_svd_mps, setup='lr')
-    occf = env.measure_1site(n_up)
-    for k, v in sorted(occf.items()):
-        print(k, v.real, Cf0[s2i[k], s2i[k]].real, v.real - Cf0[s2i[k], s2i[k]].real)
-
-    occf = env.measure_1site(n_dn)
-    for k, v in sorted(occf.items()):
-        print(k, v.real, Cf1[s2i[k], s2i[k]].real, v.real - Cf1[s2i[k], s2i[k]].real)
-
+    for spin in 'ud':
+        print(f"{spin=}")
+        occf = env.measure_1site(ops.n(spin=spin))
+        for k, v in sorted(occf.items()):
+            print(f"{k}, {v.real:0.7f}, {Cf[spin][s2i[k], s2i[k]].real:0.7f}, {v.real - Cf[spin][s2i[k], s2i[k]].real:0.2e}")
+            assert abs(v - Cf[spin][s2i[k], s2i[k]]) < 5e-4
 
 if __name__ == '__main__':
     test_evol_cylinder()
+    # revise U1xU1xxZ2

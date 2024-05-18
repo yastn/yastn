@@ -18,6 +18,15 @@ class Evolution_out(NamedTuple):
     EAT_quality: float = 0
     pinv_cutoffs: tuple[float] = ()
 
+    def __str__(self):
+        txt = f"({self.bond}, error={self.truncation_error:0.2e}"
+        txt += ", errors=(" + ", ".join(format(f, '.2e') for f in self.truncation_errors) + ")"
+        txt += f", EAT_q={self.EAT_quality:0.1e}"
+        txt += f", non_h={self.nonhermitian_part:0.1e}, min_e={self.min_eigenvalue:0.1e}, fixed={self.wrong_eigenvalues:0.1e},"
+        txt += ", pinv_c=(" + ", ".join(format(f, '.0e') for f in self.pinv_cutoffs) + ")"
+        txt += f", iters={self.iterations})"
+        return txt
+
 
 def evolution_step_(env, gates, opts_svd, symmetrize=True,
                     fix_metric=0,
@@ -132,7 +141,7 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
 
     fRR = (R0 @ R1).fuse_legs(axes=[(0, 1)])
     fgRR = fgf @ fRR
-    RRgRR = vdot(fRR, fgRR)
+    RRgRR = abs(vdot(fRR, fgRR).item())
 
     pinv_cutoffs = sorted(pinv_cutoffs)
     M0, M1 = R0, R1
@@ -142,12 +151,12 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
         M0_svd, M1_svd = symmetrized_svd(M0, M1, opts, normalize=False)
         error2_svd = calculate_truncation_error2(M0_svd @ M1_svd, fgf, fRR, RRgRR)
         M0_eat, M1_eat, error2_eat = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs, info)
-        M0_ite, M1_ite, error2_ite = optimize_truncation(M0_eat, M1_eat, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info)
-        M0_its, M1_its, error2_its = optimize_truncation(M0_svd, M1_svd, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info)
+        M0_ite, M1_ite, error2_ite = optimize_truncation(M0_eat, M1_eat, error2_eat, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info)
+        M0_its, M1_its, error2_its = optimize_truncation(M0_svd, M1_svd, error2_svd, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info)
 
         Ms = [(M0_eat, M1_eat), (M0_ite, M1_ite), (M0_svd, M1_svd), (M0_its, M1_its)]
         error2s = [(error2_eat, 0), (error2_ite, 1), (error2_svd, 2), (error2_its, 3)]
-        error2, ind = max(error2s)
+        error2, ind = min(error2s)
 
         M0, M1 = Ms[ind]
 
@@ -214,7 +223,7 @@ def calculate_truncation_error2(fMM, fgf, fRR, RRgRR):
     if fMM.ndim == 2:  # if legs of MM not fused into vector
         fMM = fMM.fuse_legs(axes=[(0, 1)])
     delta = fRR - fMM
-    return vdot(delta, fgf @ delta) / RRgRR
+    return abs(vdot(delta, fgf @ delta).item()) / RRgRR
 
 
 def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, info):
@@ -271,7 +280,7 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, info
     return M0, M1, error2
 
 
-def optimize_truncation(M0, M1, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info):
+def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info):
     r"""
     Optimizes the matrices M0 and M1 by minimizing
     truncation error using least square optimization.
@@ -279,7 +288,6 @@ def optimize_truncation(M0, M1, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, t
     gf = fgf.unfuse_legs(axes=0)
     gRR =  fgRR.unfuse_legs(axes=0)
 
-    error2_old = 0
     for iter in range(1, max_iter+1):
         # fix M1 and optimize M0
         j0 = (gRR @ M1.H).fuse_legs(axes=[(0, 1)])

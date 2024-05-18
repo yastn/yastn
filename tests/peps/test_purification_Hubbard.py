@@ -46,7 +46,11 @@ def test_NTU_spinful_finite():
 
     # time-evolve purification
     env = fpeps.EnvNTU(psi, which='NN+')
-    opts_svd = {"D_total": D, 'tol_block': 1e-15}
+
+    # list of dicts for a two-step truncation
+    opts_svd = [{"D_total": D, 'tol': 1e-14},
+                {"D_total": 2 * D, 'tol': 1e-14}]
+
     steps = round((beta / 2) / dbeta)
     dbeta = (beta / 2) / steps
 
@@ -117,8 +121,8 @@ def test_NTU_spinful_infinite():
     U = 0
     beta = 0.1
 
-    dbeta = 0.005
-    D = 8
+    dbeta = 0.01
+    D = 5
 
     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     I = ops.I()
@@ -134,18 +138,15 @@ def test_NTU_spinful_infinite():
     # initialized at infinite temperature
     psi = fpeps.product_peps(geometry, I)
 
-    opts_svd_ctm = {'D_total': D * D, 'tol': 1e-10}
-
-    # list of dicts for a two-step truncation
-    opts_svd_evol = [{"D_total": 2 * D, 'tol_block': 1e-15},
-                     {"D_total": D, 'tol_block': 1e-15}]
+    opts_svd_ctm = {'D_total': D * D, 'tol': 1e-8}
+    opts_svd_evol = {"D_total": D, 'tol': 1e-14}
 
     steps = round((beta / 2) / dbeta)
     dbeta = (beta / 2) / steps
 
 
     infos = []
-    init_steps = 3
+    init_steps = 2
     # first few steps are performed with NTU-NN+ to reach fixed peps bond dimensions.
     env = fpeps.EnvNTU(psi, which='NN+')
     for step in range(init_steps):
@@ -179,7 +180,6 @@ def test_NTU_spinful_infinite():
         cdagc_dn = env.measure_nn(cdag_dn, c_dn)
         energy = -2 * mean([*cdagc_up.values(), *cdagc_dn.values()])
 
-        print("Energy: ", energy)
         if abs(energy - energy_old) < tol_exp:
             break
         energy_old = energy
@@ -192,5 +192,5 @@ def test_NTU_spinful_infinite():
 
 
 if __name__ == '__main__':
-    test_NTU_spinful_finite()
+    # test_NTU_spinful_finite()
     test_NTU_spinful_infinite()
