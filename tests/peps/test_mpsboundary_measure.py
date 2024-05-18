@@ -106,7 +106,6 @@ def test_finite_spinless_boundary_mps_ctmrg():
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
 
-
     # convergence criteria for CTM based on total energy
     energy_old, tol_exp = 0, 1e-7
 

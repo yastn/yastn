@@ -89,9 +89,7 @@ def test_evol_cylinder():
     opts_svd = {"D_total": D, 'tol': 1e-12}
     for step in range(steps):
         print(f"t = {(step + 1) * dt:0.3f}" )
-        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
-        #for i in info:
-        #    print(i)
+        fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
 
     opts_svd_mps = {'D_total': D, 'tol': 1e-10}
     env = fpeps.EnvBoundaryMps(psi, opts_svd=opts_svd_mps, setup='lr')
