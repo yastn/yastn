@@ -71,7 +71,7 @@ def test_fuse_transpose():
 
     fa = a.fuse_legs(axes=((0, 1), 2, (3, 4), 5), mode='meta')
     assert fa.get_shape() == (15, 7, 99, 13)
-    
+
     fc = np.transpose(fa, axes=(3, 2, 1, 0))
     assert fc.get_shape() == (13, 99, 7, 15)
 

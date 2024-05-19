@@ -127,7 +127,7 @@ class TestConj_Z2xU1(unittest.TestCase):
         assert abs(a.norm()**2 - norm_F.real().to_number()) < tol
 
         #
-        # only complex-conjugate elements of the blocks of tensor a, leaving 
+        # only complex-conjugate elements of the blocks of tensor a, leaving
         # the structure i.e. signature and total charge intact.
         #
         c = a.conj_blocks()
@@ -137,14 +137,14 @@ class TestConj_Z2xU1(unittest.TestCase):
         #
         # flip signature of the tensor c and its total charge, but do not
         # complex-conjugate elements of its block
-        # 
+        #
         d = c.flip_signature()
         assert d.get_tensor_charge() == b.get_tensor_charge()
         assert d.get_signature() == b.get_signature()
-        
+
         #
-        # conj() is equivalent to flip_signature().conj_blocks() (or in the 
-        # opposite order). Hence, tensor b and tensor d should be numerically 
+        # conj() is equivalent to flip_signature().conj_blocks() (or in the
+        # opposite order). Hence, tensor b and tensor d should be numerically
         # identical
         #
         assert yastn.norm(b - d)<tol

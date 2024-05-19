@@ -1,4 +1,5 @@
 """ Test the expectation values of spin-1/2 fermions with analytical values of fermi sea """
+import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 try:
@@ -169,9 +170,14 @@ def test_NTU_spinful_infinite():
         info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol)
         infos.append(info)
         env.update_(opts_svd=opts_svd_ctm)  # update CTM tensors after a full evolution step.
+        for inf in info:
+            print(inf)
 
-    print(f"Accumulated truncation error: {fpeps.accumulated_truncation_error(infos):0.4f}")
-
+    print(f"Delta_mean: {fpeps.accumulated_truncation_error(infos, statistics='mean'):0.4f}")
+    print(f"Delta_max : {fpeps.accumulated_truncation_error(infos, statistics='max'):0.4f}")
+    with pytest.raises(yastn.YastnError):
+        fpeps.accumulated_truncation_error(infos, statistics='other')
+    #
     # CTMRG
     # convergence criteria for CTM based on total energy
     energy_old, tol_exp = 0, 1e-7
