@@ -18,7 +18,7 @@ from ._initialize import product_peps, load_from_dict
 from ._evolution import evolution_step_, accumulated_truncation_error
 from ._doublePepsTensor import DoublePepsTensor
 from .gates import Gates, Gate_local, Gate_nn
-from ._gates_auxiliary import apply_gate_onsite
+from ._gates_auxiliary import apply_gate_onsite, fkron
 from ._ctmrg import ctmrg_
 from .envs._env_ctm import EnvCTM, EnvCTM_local
 from .envs._env_ntu import EnvNTU
