@@ -42,17 +42,17 @@ class TestSyntaxAutograd(unittest.TestCase):
 
         #
         # Clone the tensor a resulting in a new, numerically identical, tensor b.
-        # However, tensors a and b do not share data - their blocks are independent. 
-        # Further operations on b would be correctly differentiated when computing gradients 
+        # However, tensors a and b do not share data - their blocks are independent.
+        # Further operations on b would be correctly differentiated when computing gradients
         # with respect to a.
         b = a.clone()
         assert b.requires_grad
         assert yastn.are_independent(a, b)
 
         #
-        # Tensor tracked by autograd can be "detached" from the computational 
-        # graph. This might be useful, if one wishes to perform some computations 
-        # with the tensor outside of autograd. 
+        # Tensor tracked by autograd can be "detached" from the computational
+        # graph. This might be useful, if one wishes to perform some computations
+        # with the tensor outside of autograd.
         # The original and detached tensor still share data (blocks).
         c = a.detach()
         assert not c.requires_grad

@@ -132,7 +132,7 @@ def test_broadcast_exceptions():
         # First tensor should be diagonal.
     with pytest.raises(yastn.YastnError):
         bmf = b.fuse_legs(axes=(0, (1, 2), 3), mode='meta')
-        _ = a.broadcast(bmf, axes=1)  
+        _ = a.broadcast(bmf, axes=1)
         # Second tensor`s leg specified by axes cannot be fused.
     with pytest.raises(yastn.YastnError):
         bhf = b.fuse_legs(axes=(0, (1, 2), 3), mode='hard')

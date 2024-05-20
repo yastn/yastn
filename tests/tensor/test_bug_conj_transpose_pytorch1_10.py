@@ -44,7 +44,7 @@ def test_bug_conj_transpose_torch(block_D):
     # order: conj then transpose
     X= R.conj()
     D1[block].view(block_Ds)[:]= X[block].view(block_Ds).permute(1,0)
-    
+
     assert torch.allclose(D1[block].view(block_Ds)[:5,:5],Y[block].view(block_Ds)[:5,:5],\
         rtol=1e-05, atol=1e-08)
 
@@ -68,7 +68,7 @@ def test_bug_conj_transpose_torch_conjphys(block_D):
     # order: conj then transpose
     X= R.conj_physical()
     D1[block].view(block_Ds)[:]= X[block].view(block_Ds).permute(1,0)
-    
+
     assert torch.allclose(D1[block].view(block_Ds)[:5,:5],Y[block].view(block_Ds)[:5,:5],\
         rtol=1e-05, atol=1e-08)
 

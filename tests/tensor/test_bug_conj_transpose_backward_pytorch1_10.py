@@ -39,7 +39,7 @@ def test_bug_conj_transpose_backward_u1xu1():
 
     # C--T--
     # |  |
-    # T-- 
+    # T--
     # |
     #
     # len 157632
@@ -200,7 +200,7 @@ def test_bug_conj_transpose_backward_u1():
 @pytest.mark.skipif("not config.getoption('bug_pytorch110')")
 def test_bug_contraction_backward_u1_C4x4_closed():
     r"""
-    Computes contraction of 
+    Computes contraction of
 
     CTTC
     TaaT
@@ -217,7 +217,7 @@ def test_bug_contraction_backward_u1_C4x4_closed():
 
 
     # C2x2_LU
-    # 
+    #
     # len 246266
     t0_data = np.random.randn(246266) + 1.0j * np.random.randn(246266)
     C2x2_LU= yastn.load_from_dict(loc_c, {'_d': t0_data,\
@@ -310,7 +310,7 @@ def test_bug_contraction_backward_u1_C4x4_closed():
 @pytest.mark.skipif("not config.getoption('bug_pytorch110')")
 def test_bug_contraction_backward_u1_C4x4_open():
     r"""
-    Computes contraction of 
+    Computes contraction of
 
     CTTC
     TaaT
@@ -319,7 +319,7 @@ def test_bug_contraction_backward_u1_C4x4_open():
 
     where a is double-layer tensor obtained as a = A^\dag A
 
-    by first contracting 
+    by first contracting
 
     CT-----TC
     Taa     T
@@ -337,7 +337,7 @@ def test_bug_contraction_backward_u1_C4x4_open():
 
 
     # C2x2_LU
-    # 
+    #
     # len 246266
     t0_data = np.random.randn(246266) + 1.0j * np.random.randn(246266)
     C2x2_LU= yastn.load_from_dict(loc_c, {'_d': t0_data,\
@@ -405,7 +405,7 @@ def test_bug_contraction_backward_u1_C4x4_open():
         C2x2_RDx = yastn.tensordot(C2x2_RD, a_open, ([0, 3], [2, 3]))
         C2x2_RDx = C2x2_RDx.fuse_legs(axes=((1,2),(0,3),4))
 
-        
+
         # 0(+)     0->2(-)
         # T1--1 1--a--3(+)
         # |        2\...
@@ -415,8 +415,8 @@ def test_bug_contraction_backward_u1_C4x4_open():
         C2x2_LDx = C2x2_LDx.fuse_legs(axes=((0,2),(1,3)))
 
         upper_half = yastn.tensordot(C2x2_LUx, C2x2_RUx, ([1], [0]))
-        # 0             0->1   
-        # |             |/2 
+        # 0             0->1
+        # |             |/2
         # C2x2_LD--1 1--C2x2_RD
         lower_half = yastn.tensordot(C2x2_LDx, C2x2_RDx, ([1], [1]))
         norm_2x2= yastn.tensordot(upper_half, lower_half, ([0, 1], [0, 1]))

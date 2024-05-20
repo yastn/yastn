@@ -26,7 +26,7 @@ def test_ncon_einsum_syntax():
     #  (-3) 2--|_|               |_|--1 (-2)   (-3) 3<-2--|_|  |_|--1->2 (-2)
     #
     # The uncontracted indices, labeled by negative integers, are ordered according in
-    # descending fashion on resulting tensor 
+    # descending fashion on resulting tensor
     e = yastn.ncon([a, b], [[1, -1, -3], [-0, -2, 1]])
     assert e.get_shape() == (8, 6, 4, 2)
 
@@ -41,7 +41,7 @@ def test_ncon_einsum_syntax():
     #  (-0) 2--|_|               |_|--3 (1)   (-0) 0<-2--|_|  |_|  |__|  |__|--1->1 (-1)
     #                             |
     #                             1 (3)
-    #                             0 (3) 
+    #                             0 (3)
     #           __                |_
     #  (-3) 0--|b*|--2(5) (5) 2--|d*|--1 (2)
     #  (-1) 1--|__|              |__|--3 (2)
@@ -50,8 +50,8 @@ def test_ncon_einsum_syntax():
                   conjs=(0, 1, 0, 1))
     assert f.get_shape() == (2, 4, 6, 8)
 
-    # In yastn.einsum(subscripts, *operands, order='Alphabetic') 
-    # 
+    # In yastn.einsum(subscripts, *operands, order='Alphabetic')
+    #
     # order specifies the order of contraction, otherwise alphabetic order of contracted indices is used
     # character '*' can be used in einsum subscripts to conjugate respective tensor
     # spaces in subscripts are ignored

@@ -142,7 +142,7 @@ def test_trace_fusions():
     a.set_block(ts=(3, 1, 1, 2, 1, 1, 0, 1), Ds=(3, 1, 1, 2, 1, 1, 4, 1), val='rand')
     af = yastn.fuse_legs(a, axes=((0, 2), (1, 3), (4, 6), (5, 7)), mode='hard')
     aff = yastn.fuse_legs(af, axes=((0, 2), (1, 3)), mode='hard')
-    
+
     b = trace_vs_numpy(a, axes=((0, 2, 4, 6), (1, 3, 5, 7)))
     bf = trace_vs_numpy(af, axes=((0, 2), (1, 3)))
     bff = trace_vs_numpy(aff, axes=(0, 1))

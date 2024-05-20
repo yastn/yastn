@@ -6,8 +6,8 @@ __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
            'edge_t', 'edge_l', 'edge_b', 'edge_r',
            'append_vec_tl', 'append_vec_tr',
            'append_vec_bl', 'append_vec_br',
-           'tensors_from_psi', 'identity_tm_boundary',
-           'cut_into_hairs']
+           'tensors_from_psi', 'cut_into_hairs',
+           'identity_tm_boundary', 'identity_boundary']
 
 
 def tensors_from_psi(d, psi):
@@ -30,12 +30,16 @@ def identity_tm_boundary(tmpo):
     config = tmpo.config
     for n in phi.sweep(to='last'):
         legf = tmpo[n].get_legs(axes=3).conj()
-        if legf.is_fused():
-            tmp = eye(config, legs=legf.unfuse_leg(), isdiag=False).fuse_legs(axes=[(0, 1)])
-        else:
-            tmp = ones(config, legs=[legf])
+        tmp = identity_boundary(config, legf)
         phi[n] = tmp.add_leg(0, s=-1).add_leg(2, s=1)
     return phi
+
+
+def identity_boundary(config, leg):
+    if leg.is_fused():
+        return eye(config, legs=leg.unfuse_leg(), isdiag=False).fuse_legs(axes=[(0, 1)])
+    else:
+        return ones(config, legs=[leg])
 
 
 def cut_into_hairs(A):

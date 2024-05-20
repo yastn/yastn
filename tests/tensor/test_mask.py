@@ -17,7 +17,7 @@ def test_mask_basic():
     leg1 =  yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))
     leg2 =  yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(5, 6, 7))
     a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1, leg2.conj()])
- 
+
     legd =  yastn.Leg(config_U1, s=1, t=(-1, 1), D=(7, 8))
     b0 = yastn.rand(config=config_U1, isdiag=True, legs=legd)
 

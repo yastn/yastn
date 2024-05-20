@@ -47,7 +47,7 @@ def test_block_U1():
 
     # also possible to explicite put empty tensor filling in the super-block grid
     # here in 2 steps
-    null = yastn.Tensor(config=config_U1, s=(1, 1, -1, -1))  
+    null = yastn.Tensor(config=config_U1, s=(1, 1, -1, -1))
     H00 = yastn.block({(0, 0): II, (1, 0): cp10, (0, 1): null, (1, 1): null}, common_legs=(1, 2))
     H01 = yastn.block({(0, 0): null, (1, 0): null, (0, 1): null, (1, 1): null}, common_legs=(1, 2))
     H10 = yastn.block({(0, 0): c10, (1, 0): mu * nn, (0, 1): null, (1, 1): w * c01}, common_legs=(1, 2))
@@ -62,6 +62,9 @@ def test_block_U1():
     assert yastn.norm(H1d - H0) < tol
     # different syntax of drop_leg_history(axes=...)
     H2d = H1.drop_leg_history(axes=0).drop_leg_history(axes=(1, 2, 3))
+    l1 = H1.get_legs(axes=0).drop_history()
+    l2 = H1d.get_legs(axes=0)
+    assert l1 == l2
     assert yastn.norm(H2d - H0) < tol
 
 
@@ -192,7 +195,7 @@ def run_block_embed_fuse(a, b):
 
     for x in (fad, fbd, fabbav, fbaabv, ffad, ffbd):
         vs.append(yastn.vdot(x, x).item() / 2)
-    
+
     for x, y in ((fad, fbd), (fbd, fad), (fbaabv, fabbav), (fabbav, fbaabv), (ffad, ffbd), (ffbd, ffad)):
         vapb.append(yastn.vdot(x + y, x + y).item() / 4)
         vamb.append(yastn.vdot(x - y, x - y).item() / 4)

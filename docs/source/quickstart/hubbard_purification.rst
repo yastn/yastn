@@ -2,7 +2,7 @@ Purifcation for Fermi-Hubbard Model Quickstart
 ==============================================
 
 This guide provides a quick overview on how to simulate the Fermi-Hubbard model at finite temperature using the `YASTN`
-tensor network library for an infinite square lattice. We'll focus on initializing the model, setting up the simulation, 
+tensor network library for an infinite square lattice. We'll focus on initializing the model, setting up the simulation,
 and calculating expectation values.
 
 
@@ -28,7 +28,7 @@ Simulation Setup
 
 1. **Initialization of Model Parameters**:
 
-    We set our model parameters keeping in mind that in purification there is no clear way to fix particle number 
+    We set our model parameters keeping in mind that in purification there is no clear way to fix particle number
     and must be controlled by changing chemical potention :math:`\mu`.
 
     .. code-block:: python
@@ -51,7 +51,7 @@ as 'mu_up' and 'mu_dn' can be set diiferent to get different fillings for up and
 
         import yastn.tn.fpeps as fpeps
         geometry = fpeps.CheckerboardLattice()
-    
+
         # for bigger unit cells, set 'geometry = fpeps.SquareLattice(dims=(m,n))'
         # for finite lattice, set 'geometry = fpeps.SquareLattice(dims=(m,n), boundary='finite')
 
@@ -92,7 +92,7 @@ as 'mu_up' and 'mu_dn' can be set diiferent to get different fillings for up and
         steps = np.rint((beta / 2) / dbeta).astype(int)
         for step in range(steps):
             print(f"beta = {(step + 1) * dbeta}" )
-            evolution_results = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
+            evolution_results = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
             print(f"Error after optimization for all gates: {evolution_results.truncation_error}")
 
 6. **Calculation of Environmental Tensor for Expectation Value Calculations**:
@@ -120,7 +120,7 @@ as 'mu_up' and 'mu_dn' can be set diiferent to get different fillings for up and
             d_oc = env_ctm.measure_1site(n_int)
             cdagc_up = env_ctm.measure_nn(fcdag_up, fc_up)  # calculate for all unique bonds
             cdagc_dn = env_ctm.measure_nn(fcdag_dn, fc_dn)  # -> {bond: value}
-            PEn = U * np.mean([*d_oc.values()]) 
+            PEn = U * np.mean([*d_oc.values()])
             KEn = - 8 * (np.mean([*cdagc_up.values()]) + np.mean([*cdagc_dn.values()]))
 
             energy = PEn + KEn
@@ -140,7 +140,7 @@ as 'mu_up' and 'mu_dn' can be set diiferent to get different fillings for up and
         Energy after iteration 5:  -0.357062698531201
 
 7. **Specific Expectation Values**:
-    
+
 
     Now we move on to calculate expectation values of interest. We have commands follwed by its terminal output.
 

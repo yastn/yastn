@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from .... import rand, ones, YastnError, Leg, tensordot, qr
+from .... import rand, ones, eye, YastnError, Leg, tensordot, qr
 from ... import mps
 from .._peps import Peps, Peps2Layers
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
@@ -46,8 +46,8 @@ class EnvCTM(Peps):
         """
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
-        if init not in (None, 'rand', 'ones'):
-            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'ones', None.")
+        if init not in (None, 'rand', 'eye'):
+            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'eye', None.")
         for site in self.sites():
             self[site] = EnvCTM_local()
         if init is not None:
@@ -60,9 +60,6 @@ class EnvCTM(Peps):
                 setattr(env[site], dirn, getattr(self[site], dirn).copy())
         return env
 
-    def save_to_dict(self):
-        pass  # TODO
-
     def reset_(self, init='rand', leg=None):
         r""" Initialize random CTMRG environments of peps tensors A. """
         config = self.psi.config
@@ -71,9 +68,6 @@ class EnvCTM(Peps):
         if init == 'nn':
             pass
         else:
-            ten0 = ones
-            ten = rand if type == 'rand' else ones
-
             if leg is None:
                 leg = leg0
 
@@ -81,16 +75,19 @@ class EnvCTM(Peps):
                 legs = self.psi[site].get_legs()
 
                 for dirn in ('tl', 'tr', 'bl', 'br'):
-                    if self.nn_site(site, d=dirn) is None:
-                        setattr(self[site], dirn, ten0(config, legs=[leg0, leg0.conj()]))
+                    if self.nn_site(site, d=dirn) is None or type == 'eye':
+                        setattr(self[site], dirn, eye(config, legs=[leg0, leg0.conj()], isdiag=False))
                     else:
-                        setattr(self[site], dirn, ten(config, legs=[leg, leg.conj()]))
+                        setattr(self[site], dirn, rand(config, legs=[leg, leg.conj()]))
 
                 for ind, dirn in enumerate('tlbr'):
-                    if self.nn_site(site, d=dirn) is None:
-                        setattr(self[site], dirn, ten0(config, legs=[leg0, legs[ind].conj(), leg0.conj()]))
+                    if self.nn_site(site, d=dirn) is None or type == 'eye':
+                        tmp1 = identity_boundary(config, legs[ind].conj())
+                        tmp0 = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
+                        tmp = tensordot(tmp0, tmp1, axes=((), ())).transpose(axes=(0, 2, 1))
+                        setattr(self[site], dirn, tmp)
                     else:
-                        setattr(self[site], dirn, ten(config, legs=[leg, legs[ind].conj(), leg.conj()]))
+                        setattr(self[site], dirn, rand(config, legs=[leg, legs[ind].conj(), leg.conj()]))
 
     def boundary_mps(self, n, dirn):
         r""" Convert environmental tensors of Ctm to an MPS """

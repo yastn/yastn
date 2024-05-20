@@ -64,7 +64,7 @@ def test_env3_update(config=cfg, tol=1e-12):
     I = mps.product_mpo(ops.I(), N=N)
     psi1 = mps.random_mps(I, D_total=11, n=(4, 2))
     psi2 = mps.random_mps(I, D_total=15, n=(4, 2))
-    op = mps.random_mpo(I, D_total=10)
+    op = mps.random_mpo(I, D_total=16)
     #
     check_env3_measure(psi1, op, psi2, tol)
     check_env3_measure(op, op, op, tol)

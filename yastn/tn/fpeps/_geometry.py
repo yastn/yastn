@@ -25,6 +25,8 @@ class Bond(NamedTuple):  # Not very convinient to use
     def __str__(self):
         return f"Bond(({self.site0[0]}, {self.site0[1]}), ({self.site1[0]}, {self.site1[1]}))"
 
+    def __format__(self, spec):
+            return str(self).format(spec)
 
 _periodic_dict = {'infinite': 'ii', 'obc': 'oo', 'cylinder': 'po'}
 
