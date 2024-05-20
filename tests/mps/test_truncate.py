@@ -4,10 +4,8 @@ import yastn
 import yastn.tn.mps as mps
 try:
     from .configs import config_dense as cfg
-    from .test_build_mpo_manually import build_mpo_nn_hopping_manually
 except ImportError:
     from configs import config_dense as cfg
-    from test_build_mpo_manually import build_mpo_nn_hopping_manually
 # pytest modifies cfg to inject different backends and devices during tests
 
 

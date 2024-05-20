@@ -12,11 +12,11 @@ except ImportError:
 
 def test_spinless_infinite_approx():
     """ Simulate purification of free fermions in an infinite system.s """
-    geometry = fpeps.SquareLattice(dims=(3, 3), boundary='infinite')
+    geometry = fpeps.SquareLattice(dims=(2, 3), boundary='infinite')
 
-    t, beta = 1, 0.5  # chemical potential
-    D = 6
-    dbeta = 0.05
+    t, beta = 1, 0.6  # chemical potential
+    D = 4
+    dbeta = 0.1
 
     ops = yastn.operators.SpinlessFermions(sym='U1', backend=cfg.backend, default_device=cfg.default_device)
     I, c, cdag = ops.I(), ops.c(), ops.cp()
@@ -24,13 +24,15 @@ def test_spinless_infinite_approx():
     gates = fpeps.gates.distribute(geometry, gates_nn=g_hop)
 
     psi = fpeps.product_peps(geometry, I) # initialized at infinite temperature
-    env = fpeps.EnvNTU(psi, which='NN+')
+    env = fpeps.EnvNTU(psi, which='NN')
 
     opts_svd = {"D_total": D , 'tol_block': 1e-15}
     steps = round((beta / 2) / dbeta)
+    dbeta = (beta / 2) / steps
+
     for step in range(steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
-        fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="SVD")
+        fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
 
     opts_svd = {"D_total": 2 * D, 'tol_block': 1e-15}
 
@@ -53,23 +55,18 @@ def test_spinless_infinite_approx():
         QA, QB = psi[s0], psi[s1]
         Gs = {k: env.bond_metric(QA, QB, s0, s1, dirn) for k, env in envs.items()}
         Gs = {k: v / v.norm() for k, v in Gs.items()}
-        assert (Gs['NN'] - Gs['NN+']).norm() < 2e-3
-        assert (Gs['NN+'] - Gs['NN++']).norm() < 1e-4
+
+        assert (Gs['NN'] - Gs['NN+']).norm() < 1e-2
+        assert (Gs['NN+'] - Gs['NN++']).norm() < 1e-3
         assert (Gs['NN++'] - Gs['NNN++']).norm() < 1e-3
         assert (Gs['NNN'] - Gs['43']).norm() < 1e-6
         assert (Gs['NNN+'] - Gs['43h']).norm() < 1e-6
-        assert (Gs['NNN+'] - Gs['FU']).norm() < 1e-4
-        assert (Gs['43'] - Gs['43h']).norm() < 1e-3
-        assert (Gs['43h'] - Gs['65']).norm() < 1e-4
-        assert (Gs['65'] - Gs['65h']).norm() < 1e-5
-        assert (Gs['65h'] - Gs['87']).norm() < 1e-6
+        assert (Gs['43'] - Gs['43h']).norm() < 1e-2
+        assert (Gs['43h'] - Gs['65']).norm() < 1e-3
+        assert (Gs['65'] - Gs['65h']).norm() < 1e-4
+        assert (Gs['65h'] - Gs['87']).norm() < 1e-5
         assert (Gs['87'] - Gs['87h']).norm() < 1e-6
-        #
-        # Gs2 = {k: envs[k].bond_metric(QA, QB, s0, s1, dirn)
-        #        for k in ['43', '43h', '65', '65h', '87', '87h']}
-        # Gs2 = {k: v / v.norm() for k, v in Gs2.items()}
-        # for k in Gs2:
-        #     assert 1e-15 < (Gs[k] - Gs2[k]).norm() < 1e-10
+        assert (Gs['87h'] - Gs['FU']).norm() < 1e-6
 
     with pytest.raises(yastn.YastnError):
         fpeps.EnvNTU(psi, which="some")

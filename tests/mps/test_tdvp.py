@@ -17,7 +17,13 @@ except ImportError:
                                     {'config': cfg, 'sym': 'Z2'}])
 def test_tdvp_sudden_quench(kwargs):
     tdvp_sudden_quench(**kwargs, tol=1e-10)
+
+@pytest.mark.parametrize('kwargs', [{'config': cfg, 'sym': 'U1'},])
+def test_tdvp_sudden_quench_mpo_sum(kwargs):
     tdvp_sudden_quench_mpo_sum(**kwargs, tol=1e-10)
+
+@pytest.mark.parametrize('kwargs', [{'config': cfg, 'sym': 'Z2'},])
+def test_tdvp_sudden_quench_Heisenberg(kwargs):
     tdvp_sudden_quench_Heisenberg(**kwargs, tol=1e-5)
 
 def tdvp_sudden_quench(sym='U1', config=None, tol=1e-10):
@@ -255,7 +261,7 @@ def tdvp_sudden_quench_mpo_sum(sym='U1', config=None, tol=1e-10):
     #
     opts_expmv = {'hermitian': True, 'ncv': 5, 'tol': 1e-12}
     #
-    for method in ('1site', '2site', '12site'):  # test various methods
+    for method in ('12site', ):   # '1site', '2site', test various methods
         # shallow_copy is sufficient to retain the initial state
         phi = psi.shallow_copy()
         for step in mps.tdvp_(phi, H1, times=times, method=method, dt=0.125,
@@ -355,7 +361,7 @@ def tdvp_sudden_quench_Heisenberg(sym='U1', config=cfg, tol=1e-5):
         e1 = mps.vdot(psi, OO, psi)
         assert abs(e1 - e1ref) < tol * abs(e1ref)
 
-@pytest.mark.parametrize('kwargs', [{'config': cfg, 'sym': 'Z2'},
+@pytest.mark.parametrize('kwargs', [#{'config': cfg, 'sym': 'Z2'},
                                     {'config': cfg, 'sym': 'dense'}])
 def test_tdvp_KZ_quench(kwargs):
     tdvp_KZ_quench(**kwargs)

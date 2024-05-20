@@ -1,4 +1,5 @@
 """ Test the expectation values of spin-1/2 fermions with analytical values of fermi sea """
+import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 try:
@@ -40,26 +41,27 @@ def test_NTU_spinful_finite():
     g_loc = fpeps.gates.gate_local_Coulomb(mu_up, mu_dn, U, dbeta / 2, I, n_up, n_dn)
     gates = fpeps.gates.distribute(geometry, gates_nn=[g_hop_u, g_hop_d], gates_local=g_loc)
 
-
     # initialized infinite temperature purification
     psi = fpeps.product_peps(geometry, I)
 
     # time-evolve purification
     env = fpeps.EnvNTU(psi, which='NN+')
-    opts_svd = {"D_total": D, 'tol_block': 1e-15}
+
+    # list of dicts for a two-step truncation
+    opts_svd = [{"D_total": 2 * D, 'tol': 1e-14},
+                {"D_total": D, 'tol': 1e-14}]
+
     steps = round((beta / 2) / dbeta)
     dbeta = (beta / 2) / steps
 
     infos = []
-    for step in range(steps):
-        print(f"beta = {(step + 1) * dbeta}" )
-        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization="EAT")
+    for step in range(1, steps + 1):
+        print(f"beta = {step * dbeta:0.3f}" )
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
         infos.append(info)
 
-    print(f"Accumulated truncation error: {fpeps.accumulated_truncation_error(infos, mode='gates'):0.4f}")
-
     # convergence criteria for CTM based on total energy
-    energy_old, tol_exp = 0, 1e-7
+    energy_old, tol_exp = 0, 1e-8
     opts_svd_ctm = {'D_total': 40, 'tol': 1e-10}
 
     env = fpeps.EnvCTM(psi)
@@ -74,10 +76,12 @@ def test_NTU_spinful_finite():
 
         energy = U * sum(d_oc.values()) - sum(cdagc_up.values()) - sum(cdagc_dn.values())
 
-        print("Energy: ", energy)
+        print(f"Energy: {energy:0.10}")
         if abs(energy - energy_old) < tol_exp:
             break
         energy_old = energy
+
+    print(f"Accumulated truncation error: {fpeps.accumulated_truncation_error(infos):0.4f}")
 
     # analytical nn fermionic correlator at beta = 0.1 for 2D finite 2 x 3 lattice
     nn_bond_1_exact = 0.024917101651703362  # bond between (1, 1) and (1, 2)   # this requires checking; bonds exact vs CTM should match
@@ -95,8 +99,12 @@ def test_NTU_spinful_finite():
     nn_CTM_bond_1r_dn = env.measure_nn(cdag_dn, c_dn, bond=((2, 1), (2, 0)))  # horizontal bond
     nn_CTM_bond_2r_dn = env.measure_nn(cdag_dn, c_dn, bond=((1, 1), (0, 1)))  # vertical bonds
 
-    print(nn_CTM_bond_1_up, nn_CTM_bond_1_dn, 'vs', nn_bond_1_exact)
-    print(nn_CTM_bond_2_up, nn_CTM_bond_2_dn, 'vs', nn_bond_2_exact)
+    print("Relative errors:")
+    print(f"{abs(nn_CTM_bond_1_up - nn_bond_1_exact) / nn_bond_1_exact:0.5f}, " +
+          f"{abs(nn_CTM_bond_1_dn - nn_bond_1_exact) / nn_bond_1_exact:0.5f}")
+    print(f"{abs(nn_CTM_bond_2_up - nn_bond_2_exact) / nn_bond_2_exact:0.5f}, " +
+          f"{abs(nn_CTM_bond_2_dn - nn_bond_2_exact) / nn_bond_2_exact:0.5f}")
+
     assert abs(nn_CTM_bond_1_up - nn_bond_1_exact) < 1e-4
     assert abs(nn_CTM_bond_1_dn - nn_bond_1_exact) < 1e-4
     assert abs(nn_CTM_bond_2_up - nn_bond_2_exact) < 1e-4
@@ -117,8 +125,8 @@ def test_NTU_spinful_infinite():
     U = 0
     beta = 0.1
 
-    dbeta = 0.005
-    D = 8
+    dbeta = 0.01
+    D = 5
 
     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=cfg.backend, default_device=cfg.default_device)
     I = ops.I()
@@ -134,40 +142,42 @@ def test_NTU_spinful_infinite():
     # initialized at infinite temperature
     psi = fpeps.product_peps(geometry, I)
 
-    opts_svd_ctm = {'D_total': D * D, 'tol': 1e-10}
-
-    # list of dicts for a two-step truncation
-    opts_svd_evol = [{"D_total": 2 * D, 'tol_block': 1e-15},
-                     {"D_total": D, 'tol_block': 1e-15}]
+    opts_svd_ctm = {'D_total': D * D, 'tol': 1e-8}
+    opts_svd_evol = {"D_total": D, 'tol': 1e-14}
 
     steps = round((beta / 2) / dbeta)
     dbeta = (beta / 2) / steps
 
-
     infos = []
-    init_steps = 3
+    init_steps = 2
     # first few steps are performed with NTU-NN+ to reach fixed peps bond dimensions.
+    print("Evolve with NN+")
     env = fpeps.EnvNTU(psi, which='NN+')
     for step in range(init_steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
-        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol)
         infos.append(info)
 
     # after that we switch to fast Full Update
     # here it requirs Peps bond dimensions not to change in time
     print("Switching to full update")
-    env = fpeps.EnvCTM(psi, init='ones')
+    env = fpeps.EnvCTM(psi, init='eye')
     for _ in range(4):  # few CTM iterations to converge
         env.update_(opts_svd=opts_svd_ctm)
 
     for step in range(init_steps, steps):
         print(f"beta = {(step + 1) * dbeta:0.3f}" )
-        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol, initialization="EAT")
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_evol)
         infos.append(info)
         env.update_(opts_svd=opts_svd_ctm)  # update CTM tensors after a full evolution step.
+        for inf in info:
+            print(inf)
 
-    print(f"Accumulated truncation error: {fpeps.accumulated_truncation_error(infos):0.4f}")
-
+    print(f"Delta_mean: {fpeps.accumulated_truncation_error(infos, statistics='mean'):0.4f}")
+    print(f"Delta_max : {fpeps.accumulated_truncation_error(infos, statistics='max'):0.4f}")
+    with pytest.raises(yastn.YastnError):
+        fpeps.accumulated_truncation_error(infos, statistics='other')
+    #
     # CTMRG
     # convergence criteria for CTM based on total energy
     energy_old, tol_exp = 0, 1e-7
@@ -179,7 +189,6 @@ def test_NTU_spinful_infinite():
         cdagc_dn = env.measure_nn(cdag_dn, c_dn)
         energy = -2 * mean([*cdagc_up.values(), *cdagc_dn.values()])
 
-        print("Energy: ", energy)
         if abs(energy - energy_old) < tol_exp:
             break
         energy_old = energy
@@ -187,7 +196,8 @@ def test_NTU_spinful_infinite():
     # analytical nn fermionic correlator at beta = 0.1 for 2D infinite lattice
     nn_exact = 0.02481459
     nn_CTM = mean([*cdagc_up.values(), *cdagc_dn.values()])
-    print(f"{nn_CTM:0.6f} vs {nn_exact:0.6f}  diff = {nn_CTM - nn_exact:0.6f}")
+    print(f"{nn_CTM:0.6f} vs {nn_exact:0.6f}")
+    print(f"Relativ error: {abs(nn_CTM - nn_exact) / nn_exact:0.6f}")
     assert abs(nn_CTM - nn_exact) < 1e-4
 
 
