@@ -1,7 +1,9 @@
 import numpy as np
 from typing import NamedTuple
+from yastn.tensor._algebra import exp
+from yastn.tensor.linalg import eigh
+from yastn.tensor._contractions import ncon
 from ._gates_auxiliary import fkron
-
 
 class Gate_nn(NamedTuple):
     """
@@ -66,6 +68,40 @@ def gate_nn_hopping(t, step, I, c, cdag) -> Gate_nn:
     G =  II + (np.cosh(t * step) - 1) * (nh + hn) + np.sinh(t * step) * cc
     return decompose_nn_gate(G)
 
+
+def gates_Heisenberg_spinful(step, Jz, J, Jn, Sz, Sp, Sm, n, I):
+    '''
+    # Gate exp(-step * H_heisenberg)
+
+    H_{Heisenberg} = J / 2 (Sp @ Sm + Sm @ Sp) + Jz Sz @ Sz - 0.25 * Jn n @ n
+
+    '''
+    # nn gate for Heisenberg model
+
+    s = -step
+
+    # TODO: use fkron function -- it is written to be consistent with fermionic conventions,
+    # applying swap gates automatically
+
+    # H = ncon([I, I],((-0, -2), (-1, -3)))
+    # H = H + Jz * ncon([Sz, Sz], ((-0, -2), (-1, -3)))
+    # H = H + 0.5 * J * ncon([Sp, Sm], ((-0, -2), (-1, -3)))
+    # H = H + 0.5 * J * ncon([Sm, Sp], ((-0, -2), (-1, -3)))
+    # H = H - 0.25 * Jn * ncon([n, n], ((-0, -2), (-1, -3)))
+    H = fkron(I, I, sites=(0, 1))
+    H = H + Jz * fkron(Sz, Sz, sites=(0, 1))
+    H = H + 0.5 * J * fkron(Sp, Sm, sites=(0, 1))
+    H = H + 0.5 * J * fkron(Sp, Sm, sites=(1, 0))
+    H = H - 0.25 * Jn * fkron(n, n, sites=(1, 0))
+
+    H = H.fuse_legs(axes = ((0, 1), (2, 3)))
+    D, S = eigh(H, axes = (0, 1))
+    D = exp(D, step=s)
+
+    G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
+    G = G.unfuse_legs(axes=(0, 1))
+
+    return decompose_nn_gate(G)
 
 def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn) -> Gate_local:
     """
