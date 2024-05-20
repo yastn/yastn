@@ -60,9 +60,6 @@ class EnvCTM(Peps):
                 setattr(env[site], dirn, getattr(self[site], dirn).copy())
         return env
 
-    def save_to_dict(self):
-        pass  # TODO
-
     def reset_(self, init='rand', leg=None):
         r""" Initialize random CTMRG environments of peps tensors A. """
         config = self.psi.config
