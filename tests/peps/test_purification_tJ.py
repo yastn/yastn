@@ -51,7 +51,7 @@ def purification_tJ_test(chemical_potential):
     for num in range(num_steps):
         beta = (num+1)*dbeta + beta0
         logging.info("beta = %0.3f" % beta)
-        fpeps.evolution_step_(env_evolution, gates, opts_svd=opts_svd, initialization="EAT")
+        fpeps.evolution_step_(env_evolution, gates, opts_svd=opts_svd)
 
     # calculate observables with ctm
     tol = 1e-10 # truncation of singular values of CTM projectors
