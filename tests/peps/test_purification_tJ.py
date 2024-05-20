@@ -59,7 +59,7 @@ def purification_tJ_test(chemical_potential):
     tol_exp = 1e-6
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
-    env = fpeps.EnvCTM(psi, init="ones")
+    env = fpeps.EnvCTM(psi, init="eye")
     # env.init_(type="ones")
 
     energy_old = np.inf
