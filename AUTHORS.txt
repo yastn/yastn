@@ -4,3 +4,5 @@ Marek M. Rams
 Juraj Hasik
 Gabriela Wójtowicz
 Aritra Sinha
+
+For full list of contributors, see the revision history in source control.
