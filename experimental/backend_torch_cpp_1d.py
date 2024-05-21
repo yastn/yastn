@@ -1,3 +1,17 @@
+# Copyright 2024 The YASTN Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 import torch
 from itertools import groupby
 import numpy as np
@@ -47,9 +61,9 @@ class kernel_transpose_and_merge(torch.autograd.Function):
         # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
         #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
         #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
         #             this source block will belong to destination block tn
         #          -> gr: tuple holding description of source data
         #                 slo -> specifies the location of source block in 1d data
@@ -57,7 +71,7 @@ class kernel_transpose_and_merge(torch.autograd.Function):
         #                 Dscl-> list of slice data which specifies the location of the "transformed"
         #                        source block in the destination block tn
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        # 
+        #
         jobs= [ (tn,Dn,sln,t1,list(gr)) for (tn,Dn,sln),(t1,gr) in \
             zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])) ]
 
@@ -97,9 +111,9 @@ class kernel_transpose_and_merge_omp(torch.autograd.Function):
         # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
         #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
         #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
         #             this source block will belong to destination block tn
         #          -> gr: tuple holding description of source data
         #                 slo -> specifies the location of source block in 1d data
@@ -107,7 +121,7 @@ class kernel_transpose_and_merge_omp(torch.autograd.Function):
         #                 Dscl-> list of slice data which specifies the location of the "transformed"
         #                        source block in the destination block tn
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        # 
+        #
         jobs= [ (tn,Dn,sln,t1,list(gr)) for (tn,Dn,sln),(t1,gr) in \
             zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])) ]
 
@@ -148,9 +162,9 @@ class kernel_transpose_and_merge_ptp(torch.autograd.Function):
         # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
         #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
         #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
         #             this source block will belong to destination block tn
         #          -> gr: tuple holding description of source data
         #                 slo -> specifies the location of source block in 1d data
@@ -158,7 +172,7 @@ class kernel_transpose_and_merge_ptp(torch.autograd.Function):
         #                 Dscl-> list of slice data which specifies the location of the "transformed"
         #                        source block in the destination block tn
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        # 
+        #
         source_to_dest= _source_to_dest_plain(data, order, meta_new, meta_mrg)
         newdata= merge_to_matrix_cpp_1d.forward_ptp(data, source_to_dest, Dsize)
         return newdata
@@ -196,9 +210,9 @@ class kernel_transpose_and_merge_ptp_omp(torch.autograd.Function):
         # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
         #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
         #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
         #             this source block will belong to destination block tn
         #          -> gr: tuple holding description of source data
         #                 slo -> specifies the location of source block in 1d data
@@ -206,7 +220,7 @@ class kernel_transpose_and_merge_ptp_omp(torch.autograd.Function):
         #                 Dscl-> list of slice data which specifies the location of the "transformed"
         #                        source block in the destination block tn
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        # 
+        #
         source_to_dest= _source_to_dest_plain_omp(data, order, meta_new, meta_mrg)
         newdata= merge_to_matrix_cpp_1d.forward_ptp(data, source_to_dest, Dsize)
         return newdata
@@ -244,9 +258,9 @@ class kernel_transpose_and_merge_ptp_omp_v2(torch.autograd.Function):
         # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
         #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
         #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
         #             this source block will belong to destination block tn
         #          -> gr: tuple holding description of source data
         #                 slo -> specifies the location of source block in 1d data
@@ -254,7 +268,7 @@ class kernel_transpose_and_merge_ptp_omp_v2(torch.autograd.Function):
         #                 Dscl-> list of slice data which specifies the location of the "transformed"
         #                        source block in the destination block tn
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        # 
+        #
         source_inds, dest_inds= _source_to_dest_plain_omp_v3(data, order, meta_new, meta_mrg)
         newdata= merge_to_matrix_cpp_1d.forward_ptp_v2(data, source_inds, dest_inds, Dsize)
         return newdata

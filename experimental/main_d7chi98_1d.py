@@ -1,3 +1,17 @@
+# Copyright 2024 The YASTN Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 import argparse
 import time
 
@@ -51,7 +65,7 @@ if __name__ == '__main__':
         # for _ in range(args.niter):
         #     source_to_dest= backend._source_to_dest_v1(data_a, a_order, a_meta_new, a_meta_mrg)
         # print('(_source_to_dest_v1) Total time : %.2f seconds' % (time.time() - keep_time))
-        
+
         # keep_time = time.time()
         # for _ in range(args.niter):
         #     source_to_dest= backend._source_to_dest_v2(data_a, a_order, a_meta_new, a_meta_mrg)
@@ -107,7 +121,7 @@ if __name__ == '__main__':
         for _ in range(args.niter):
             backend.transpose_and_merge_ptp_omp_v2(data_a, a_order, a_meta_new, a_meta_mrg, a_Dsize)
         print('(transpose_and_merge_ptp_omp_v2) Total time : %.2f seconds' % (time.time() - keep_time))
-        
+
     keep_time = time.time()
     for _ in range(args.niter):
         backend.transpose_and_merge(data_a, a_order, a_meta_new, a_meta_mrg, a_Dsize)

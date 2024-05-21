@@ -1,3 +1,17 @@
+// Copyright 2024 The YASTN Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// ==============================================================================
 #include <torch/extension.h>
 #include <iostream>
 #include <vector>
@@ -6,12 +20,12 @@ std::vector< std::pair<std::vector<int64_t>, torch::Tensor> > mtm_forward(
 	std::map< std::vector<int64_t>, torch::Tensor > A,
 	std::vector<int64_t> order,
 	std::vector< std::vector< std::vector<int64_t> > > meta_new,
-	std::vector< std::tuple< 
-		std::vector<int64_t>, 
-		std::vector<int64_t>, 
-		std::vector<int64_t>, 
-		int64_t, 
-		std::vector<int64_t>, 
+	std::vector< std::tuple<
+		std::vector<int64_t>,
+		std::vector<int64_t>,
+		std::vector<int64_t>,
+		int64_t,
+		std::vector<int64_t>,
 		int64_t> > meta_mrg,
 	std::string	device_str = "cpu"
 	){
@@ -34,7 +48,7 @@ std::vector< std::pair<std::vector<int64_t>, torch::Tensor> > mtm_forward(
 			}, A[std::get<1>(t)].permute( at::IntArrayRef(order) ).reshape( at::IntArrayRef({ std::get<3>(t), std::get<5>(t) }) ) );
 	}
 
-	std::vector< std::pair<std::vector<int64_t>, torch::Tensor> > res = 
+	std::vector< std::pair<std::vector<int64_t>, torch::Tensor> > res =
 		std::vector< std::pair<std::vector<int64_t>, torch::Tensor> >(A_new.begin(), A_new.end());
 	return res;
 }

@@ -1,9 +1,23 @@
+# Copyright 2024 The YASTN Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 from setuptools import setup, Extension
 from torch.utils import cpp_extension
 
 setup(name='merge_to_matrix_cpp',
     ext_modules=[cpp_extension.CppExtension(
-        'merge_to_matrix_cpp', 
+        'merge_to_matrix_cpp',
         ['torch_mtm.cpp'],
         extra_compile_args=['-fopenmp']
         )
@@ -12,7 +26,7 @@ setup(name='merge_to_matrix_cpp',
 
 setup(name='merge_to_matrix_cpp_1d',
     ext_modules=[cpp_extension.CppExtension(
-        'merge_to_matrix_cpp_1d', 
+        'merge_to_matrix_cpp_1d',
         ['torch_mtm_1d.cpp'],
         extra_compile_args=['-fopenmp']
         )
@@ -21,7 +35,7 @@ setup(name='merge_to_matrix_cpp_1d',
 
 setup(name='mm_incommensurate_batch_cpp',
     ext_modules=[cpp_extension.CppExtension(
-        'mm_incommensurate_batch_cpp', 
+        'mm_incommensurate_batch_cpp',
         ['torch_mmib.cpp'],
         extra_compile_args=['-fopenmp']
         )
