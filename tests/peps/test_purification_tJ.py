@@ -3,6 +3,7 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 import logging
+from yastn.tn.fpeps._ctmrg import ctmrg_
 
 try:
     from .configs import config as cfg
@@ -64,22 +65,24 @@ def purification_tJ_test(chemical_potential):
 
     energy_old = np.inf
 
+    print("Time evolution done")
     for _ in range(max_sweeps):
-        env.update_(opts_svd=opts_svd_ctm)  # single CMTRG sweep
+        for step in ctmrg_(env, max_sweeps=1, iterator_step=1, opts_svd=opts_svd_ctm, corner_svd=True, method="1site"):
+            pass
 
-        # calculate expectation values
-        cdagc_up = env.measure_nn(fcdag_up, fc_up)  # calculate for all unique bonds
-        cdagc_dn = env.measure_nn(fcdag_dn, fc_dn)  # -> {bond: value}
-        ccdag_dn = env.measure_nn(fc_dn, fcdag_dn)
-        ccdag_up = env.measure_nn(fc_up, fcdag_up)
-        SmSp = env.measure_nn(Sm, Sp)
-        SpSm = env.measure_nn(Sp, Sm)
-        SzSz = env.measure_nn(Sz, Sz)
-        nn = env.measure_nn(n, n)
+            # calculate expectation values
+        cdagc_up = step.env.measure_nn(fcdag_up, fc_up)  # calculate for all unique bonds
+        cdagc_dn = step.env.measure_nn(fcdag_dn, fc_dn)  # -> {bond: value}
+        ccdag_dn = step.env.measure_nn(fc_dn, fcdag_dn)
+        ccdag_up = step.env.measure_nn(fc_up, fcdag_up)
+        SmSp = step.env.measure_nn(Sm, Sp)
+        SpSm = step.env.measure_nn(Sp, Sm)
+        SzSz = step.env.measure_nn(Sz, Sz)
+        nn = step.env.measure_nn(n, n)
 
-        n_total = env.measure_1site(n)
-        nu = env.measure_1site(n_up)
-        nd = env.measure_1site(n_dn)
+        n_total = step.env.measure_1site(n)
+        nu = step.env.measure_1site(n_up)
+        nd = step.env.measure_1site(n_dn)
 
         energy = -t * (sum(cdagc_up.values()) - sum(ccdag_up.values()) + sum(cdagc_dn.values()) - sum(ccdag_dn.values())) + \
                     J / 2 * (sum(SmSp.values()) + sum(SpSm.values())) + Jz * sum(SzSz.values()) - J / 4 * sum(nn.values()) - \
