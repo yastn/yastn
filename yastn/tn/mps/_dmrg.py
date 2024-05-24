@@ -114,7 +114,7 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
             env.envs.append(Env_project(psi, st, penalty))
     env.setup_(to='first')
 
-    E_old = env.measure()
+    E_old = env.measure().item().real
 
     if opts_eigs is None:
         opts_eigs = {'hermitian': True, 'ncv': 3, 'which': 'SR'}
@@ -144,8 +144,8 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
             max_dw = _dmrg_sweep_2site_(env, opts_eigs=opts_eigs,
                                         opts_svd=opts_svd, Schmidt=Schmidt)
 
-        E = env.measure()
-        dE, E_old = E_old - E, E
+        E = env.measure().item().real
+        dE, E_old = abs(E_old - E), E
         converged = []
 
         if energy_tol is not None:

@@ -215,6 +215,27 @@ class SpinfulFermions(meta_operators):
             raise YastnError("spin shoul be equal 'u' or 'd'.")
         return c
 
+    def Sz(self) -> yastn.Tensor:
+        """ Return Sz operator for spin-1/2 fermions
+        Returns:
+            yastn.Tensor: _description_
+        """
+        return 0.5 * (self.n('u') - self.n('d'))
+
+    def Sp(self) -> yastn.Tensor:
+        """ Return Sp operator for spin-1/2 fermions
+        Returns:
+            yastn.Tensor: _description_
+        """
+        return self.cp('u') @ self.c('d')
+
+    def Sm(self) -> yastn.Tensor:
+        """ Return Sm operator for spin-1/2 fermions
+        Returns:
+            yastn.Tensor: _description_
+        """
+        return self.cp('d') @ self.c('u')
+
     def to_dict(self):
         return {'I': lambda j: self.I(),
                 'nu': lambda j: self.n(spin='u'),
@@ -222,4 +243,7 @@ class SpinfulFermions(meta_operators):
                 'cpu': lambda j: self.cp(spin='u'),
                 'nd': lambda j: self.n(spin='d'),
                 'cd': lambda j: self.c(spin='d'),
-                'cpd': lambda j: self.cp(spin='d')}
+                'cpd': lambda j: self.cp(spin='d'),
+                'Sz': lambda j: self.Sz(),
+                'Sp': lambda j: self.Sp(),
+                'Sm': lambda j: self.Sm()}
