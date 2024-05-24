@@ -58,8 +58,9 @@ def purification_tJ(chemical_potential):
     # calculate observables with ctm
     tol = 1e-10 # truncation of singular values of CTM projectors
     max_sweeps = 100  # ctm param
-    tol_exp = 1e-6
-    opts_svd_ctm = {'D_total': chi, 'tol': tol, 'policy': 'lowrank', 'D_block': chi // 8}
+    tol_exp = 1e-7
+    # opts_svd_ctm = {'D_total': chi, 'tol': tol, 'policy': 'lowrank', 'D_block': chi // 8}
+    opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
     env = fpeps.EnvCTM(psi, init="eye")
     env.update_(opts_svd=opts_svd_ctm, method="2site")
@@ -67,6 +68,7 @@ def purification_tJ(chemical_potential):
     energy_old = np.inf
 
     print("Time evolution done")
+    ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=opts_svd, fix_signs=True, corner_tol=tol_exp)
     for out in ctmrg_(env, max_sweeps=max_sweeps, iterator_step=1, method="1site", opts_svd=opts_svd_ctm, corner_tol=tol_exp):
 
         # calculate expectation values
@@ -132,30 +134,23 @@ def test_purification_tJ():
                    0.0: {0: 0.3341762261156182, 2: 0.3345960764790318}}
 
     for mu in mu_list:
+
+        dict_bond = {((0, 0), (0, 1)):0,
+                     ((0, 1), (0, 2)):1,
+                     ((1, 0), (1, 1)):2,
+                     ((1, 1), (1, 2)):3,
+                     ((0, 0), (1, 0)):4, ((0, 1), (1, 1)):5, ((0, 2), (1, 2)):6}
         print(f"Calculations for {mu=}")
         energy, density, cdagc_up, cdagc_dn, SpSm, SzSz, nn, n_up, n_dn = purification_tJ(mu)
         assert abs(energy - energy_ED[mu]) < 1e-3
         assert abs(density - density_ED[mu]) < 1e-3
 
-        assert  abs(cdagc_up[0] - cdagc_up_ED[mu][((0, 0), (0, 1))]) / abs(cdagc_up_ED[mu][((0, 0), (0, 1))]) < 2e-3 #v1
-        assert  abs(cdagc_up[5] - cdagc_up_ED[mu][((0, 1), (1, 1))]) / abs(cdagc_up_ED[mu][((0, 1), (1, 1))]) < 2e-3 #h2
-        assert  abs(cdagc_up[4] - cdagc_up_ED[mu][((0, 0), (1, 0))]) / abs(cdagc_up_ED[mu][((0, 0), (1, 0))]) < 2e-3 #h1
-
-        assert  abs(cdagc_dn[0] - cdagc_dn_ED[mu][((0, 0), (0, 1))]) / abs(cdagc_dn_ED[mu][((0, 0), (0, 1))]) < 2e-3
-        assert  abs(cdagc_dn[5] - cdagc_dn_ED[mu][((0, 1), (1, 1))]) / abs(cdagc_dn_ED[mu][((0, 1), (1, 1))]) < 2e-3
-        assert  abs(cdagc_dn[4] - cdagc_dn_ED[mu][((0, 0), (1, 0))]) / abs(cdagc_dn_ED[mu][((0, 0), (1, 0))]) < 2e-3
-
-        assert  abs(SpSm[0] - SpSm_ED[mu][((0, 0), (0, 1))]) / abs(SpSm_ED[mu][((0, 0), (0, 1))]) < 2e-3
-        assert  abs(SpSm[5] - SpSm_ED[mu][((0, 1), (1, 1))]) / abs(SpSm_ED[mu][((0, 1), (1, 1))]) < 2e-3
-        assert  abs(SpSm[4] - SpSm_ED[mu][((0, 0), (1, 0))]) / abs(SpSm_ED[mu][((0, 0), (1, 0))]) < 2e-3
-
-        assert  abs(SzSz[0] - SzSz_ED[mu][((0, 0), (0, 1))]) / abs(SzSz_ED[mu][((0, 0), (0, 1))]) < 2e-3
-        assert  abs(SzSz[5] - SzSz_ED[mu][((0, 1), (1, 1))]) / abs(SzSz_ED[mu][((0, 1), (1, 1))]) < 2e-3
-        assert  abs(SzSz[4] - SzSz_ED[mu][((0, 0), (1, 0))]) / abs(SzSz_ED[mu][((0, 0), (1, 0))]) < 2e-3
-
-        assert  abs(nn[0] - nn_ED[mu][((0, 0), (0, 1))]) / abs(nn_ED[mu][((0, 0), (0, 1))]) < 2e-3
-        assert  abs(nn[5] - nn_ED[mu][((0, 1), (1, 1))]) / abs(nn_ED[mu][((0, 1), (1, 1))]) < 2e-3
-        assert  abs(nn[4] - nn_ED[mu][((0, 0), (1, 0))]) / abs(nn_ED[mu][((0, 0), (1, 0))]) < 2e-3
+        for bond in [((0, 0), (0, 1)), ((0, 1), (1, 1)), ((0, 0), (1, 0))]:
+            assert  abs(cdagc_up[dict_bond[bond]] - cdagc_up_ED[mu][bond]) / abs(cdagc_up_ED[mu][bond]) < 2e-3
+            assert  abs(cdagc_dn[dict_bond[bond]] - cdagc_dn_ED[mu][bond]) / abs(cdagc_dn_ED[mu][bond]) < 2e-3
+            assert  abs(SpSm[dict_bond[bond]] - SpSm_ED[mu][bond]) / abs(SpSm_ED[mu][bond]) < 2e-3
+            assert  abs(SzSz[dict_bond[bond]] - SzSz_ED[mu][bond]) / abs(SzSz_ED[mu][bond]) < 2e-3
+            assert  abs(nn[dict_bond[bond]] - nn_ED[mu][bond]) / abs(nn_ED[mu][bond]) < 2e-3
 
         assert  abs(n_up[0] - n_ED[mu][0]) / abs(n_ED[mu][0]) < 1e-3
         assert  abs(n_up[2] - n_ED[mu][2]) / abs(n_ED[mu][2]) < 1e-3
