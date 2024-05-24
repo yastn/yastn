@@ -156,7 +156,7 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
             Schmidt_old = Schmidt.copy()
             converged.append(max_dS < Schmidt_tol)
 
-        logger.info('Sweep = %03d  energy = %0.14f  dE = %0.4f  dSchmidt = %0.4f', sweep, E, dE, max_dS)
+        logger.info(f'Sweep = {sweep:03d}  energy = {E:0.14f}  dE = {dE:0.4f}  dSchmidt = {max_dS}')
 
         if len(converged) > 0 and all(converged):
             break
