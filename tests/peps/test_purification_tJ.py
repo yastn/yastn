@@ -11,7 +11,8 @@ try:
 except ImportError:
     from configs import config as cfg
 
-def purification_tJ_test(chemical_potential):
+
+def purification_tJ(chemical_potential):
 
     D = 8
     chi = 40
@@ -56,52 +57,55 @@ def purification_tJ_test(chemical_potential):
 
     # calculate observables with ctm
     tol = 1e-10 # truncation of singular values of CTM projectors
-    max_sweeps=100  # ctm param
+    max_sweeps = 100  # ctm param
     tol_exp = 1e-6
-    opts_svd_ctm = {'D_total': chi, 'tol': tol}
+    opts_svd_ctm = {'D_total': chi, 'tol': tol, 'policy': 'lowrank', 'D_block': chi // 8}
 
     env = fpeps.EnvCTM(psi, init="eye")
-    # env.init_(type="ones")
+    env.update_(opts_svd=opts_svd_ctm, method="2site")
 
     energy_old = np.inf
 
     print("Time evolution done")
-    for _ in range(max_sweeps):
-        for step in ctmrg_(env, max_sweeps=1, iterator_step=1, opts_svd=opts_svd_ctm, corner_svd=True, method="1site"):
-            pass
+    for out in ctmrg_(env, max_sweeps=max_sweeps, iterator_step=1, method="1site", opts_svd=opts_svd_ctm, corner_tol=tol_exp):
 
-            # calculate expectation values
-        cdagc_up = step.env.measure_nn(fcdag_up, fc_up)  # calculate for all unique bonds
-        cdagc_dn = step.env.measure_nn(fcdag_dn, fc_dn)  # -> {bond: value}
-        ccdag_dn = step.env.measure_nn(fc_dn, fcdag_dn)
-        ccdag_up = step.env.measure_nn(fc_up, fcdag_up)
-        SmSp = step.env.measure_nn(Sm, Sp)
-        SpSm = step.env.measure_nn(Sp, Sm)
-        SzSz = step.env.measure_nn(Sz, Sz)
-        nn = step.env.measure_nn(n, n)
+        # calculate expectation values
+        cdagc_up = env.measure_nn(fcdag_up, fc_up)  # calculate for all unique bonds
+        cdagc_dn = env.measure_nn(fcdag_dn, fc_dn)  # -> {bond: value}
+        ccdag_dn = env.measure_nn(fc_dn, fcdag_dn)
+        ccdag_up = env.measure_nn(fc_up, fcdag_up)
+        SmSp = env.measure_nn(Sm, Sp)
+        SpSm = env.measure_nn(Sp, Sm)
+        SzSz = env.measure_nn(Sz, Sz)
+        nn = env.measure_nn(n, n)
 
-        n_total = step.env.measure_1site(n)
-        nu = step.env.measure_1site(n_up)
-        nd = step.env.measure_1site(n_dn)
+        n_total = env.measure_1site(n)
+        nu = env.measure_1site(n_up)
+        nd = env.measure_1site(n_dn)
 
         energy = -t * (sum(cdagc_up.values()) - sum(ccdag_up.values()) + sum(cdagc_dn.values()) - sum(ccdag_dn.values())) + \
                     J / 2 * (sum(SmSp.values()) + sum(SpSm.values())) + Jz * sum(SzSz.values()) - J / 4 * sum(nn.values()) - \
                     sum(n_total.values()) * chemical_potential
         energy = energy / tot_sites
 
-
         # print("Energy: ", energy)
+        print(f"dE = {energy - energy_old}")
         if abs(energy - energy_old) < tol_exp:
             break
         energy_old = energy
 
     mean_density = sum(env.measure_1site(n).values()) / tot_sites
+    print(out)
+    print("CTMRG done")
+
     return (energy, mean_density, list(cdagc_up.values()), list(cdagc_dn.values()), list(SpSm.values()), list(SzSz.values()), list(nn.values()), list(nu.values()), list(nd.values()))
 
-def check_purification_tJ():
+
+def test_purification_tJ():
     mu_list = [4.0, 2.0, 0.0]
-    energy_ED = [-2.944895, -1.476636, -0.092255]
-    density_ED = [0.711440, 0.690445, 0.668632]
+
+    energy_ED  = {4.0: -2.944895, 2.0: -1.476636, 0.0: -0.092255}
+    density_ED = {4.0:  0.711440, 2.0:  0.690445, 0.0:  0.668632}
 
     cdagc_up_ED = {4.0: {((0, 0), (1, 0)): 0.0051242685725287895, ((0, 0), (0, 1)): 0.005118887340003729, ((0, 0), (1, 1)): -1.60106267146614e-05, ((0, 0), (0, 2)): -7.977839795621708e-06, ((0, 0), (1, 2)): -1.2850731871040807e-06, ((0, 1), (1, 1)): 0.005113076713279957},
                    2.0: {((0, 0), (1, 0)): 0.005334331154560933, ((0, 0), (0, 1)): 0.005329253764495156, ((0, 0), (1, 1)): -8.320902120925753e-06, ((0, 0), (0, 2)): -4.131369887258778e-06, ((0, 0), (1, 2)): -1.413020664357699e-06, ((0, 1), (1, 1)): 0.00532370373574041},
@@ -127,37 +131,38 @@ def check_purification_tJ():
                    2.0: {0: 0.3450844497724358, 2: 0.34549831230933825},
                    0.0: {0: 0.3341762261156182, 2: 0.3345960764790318}}
 
+    for mu in mu_list:
+        print(f"Calculations for {mu=}")
+        energy, density, cdagc_up, cdagc_dn, SpSm, SzSz, nn, n_up, n_dn = purification_tJ(mu)
+        assert abs(energy - energy_ED[mu]) < 1e-3
+        assert abs(density - density_ED[mu]) < 1e-3
 
-    for i in range (0, 3):
-        energy, density, cdagc_up, cdagc_dn, SpSm, SzSz, nn, n_up, n_dn = purification_tJ_test(mu_list[i])
-        assert abs(energy - energy_ED[i]) < 1e-3
-        assert abs(density - density_ED[i]) < 1e-3
+        assert  abs(cdagc_up[0] - cdagc_up_ED[mu][((0, 0), (0, 1))]) / abs(cdagc_up_ED[mu][((0, 0), (0, 1))]) < 2e-3 #v1
+        assert  abs(cdagc_up[5] - cdagc_up_ED[mu][((0, 1), (1, 1))]) / abs(cdagc_up_ED[mu][((0, 1), (1, 1))]) < 2e-3 #h2
+        assert  abs(cdagc_up[4] - cdagc_up_ED[mu][((0, 0), (1, 0))]) / abs(cdagc_up_ED[mu][((0, 0), (1, 0))]) < 2e-3 #h1
 
-        assert  abs(cdagc_up[0] - cdagc_up_ED[mu_list[i]][((0, 0), (0, 1))]) / abs(cdagc_up_ED[mu_list[i]][((0, 0), (0, 1))]) < 2e-3 #v1
-        assert  abs(cdagc_up[5] - cdagc_up_ED[mu_list[i]][((0, 1), (1, 1))]) / abs(cdagc_up_ED[mu_list[i]][((0, 1), (1, 1))]) < 2e-3 #h2
-        assert  abs(cdagc_up[4] - cdagc_up_ED[mu_list[i]][((0, 0), (1, 0))]) / abs(cdagc_up_ED[mu_list[i]][((0, 0), (1, 0))]) < 2e-3 #h1
+        assert  abs(cdagc_dn[0] - cdagc_dn_ED[mu][((0, 0), (0, 1))]) / abs(cdagc_dn_ED[mu][((0, 0), (0, 1))]) < 2e-3
+        assert  abs(cdagc_dn[5] - cdagc_dn_ED[mu][((0, 1), (1, 1))]) / abs(cdagc_dn_ED[mu][((0, 1), (1, 1))]) < 2e-3
+        assert  abs(cdagc_dn[4] - cdagc_dn_ED[mu][((0, 0), (1, 0))]) / abs(cdagc_dn_ED[mu][((0, 0), (1, 0))]) < 2e-3
 
-        assert  abs(cdagc_dn[0] - cdagc_dn_ED[mu_list[i]][((0, 0), (0, 1))]) / abs(cdagc_dn_ED[mu_list[i]][((0, 0), (0, 1))]) < 2e-3
-        assert  abs(cdagc_dn[5] - cdagc_dn_ED[mu_list[i]][((0, 1), (1, 1))]) / abs(cdagc_dn_ED[mu_list[i]][((0, 1), (1, 1))]) < 2e-3
-        assert  abs(cdagc_dn[4] - cdagc_dn_ED[mu_list[i]][((0, 0), (1, 0))]) / abs(cdagc_dn_ED[mu_list[i]][((0, 0), (1, 0))]) < 2e-3
+        assert  abs(SpSm[0] - SpSm_ED[mu][((0, 0), (0, 1))]) / abs(SpSm_ED[mu][((0, 0), (0, 1))]) < 2e-3
+        assert  abs(SpSm[5] - SpSm_ED[mu][((0, 1), (1, 1))]) / abs(SpSm_ED[mu][((0, 1), (1, 1))]) < 2e-3
+        assert  abs(SpSm[4] - SpSm_ED[mu][((0, 0), (1, 0))]) / abs(SpSm_ED[mu][((0, 0), (1, 0))]) < 2e-3
 
-        assert  abs(SpSm[0] - SpSm_ED[mu_list[i]][((0, 0), (0, 1))]) / abs(SpSm_ED[mu_list[i]][((0, 0), (0, 1))]) < 2e-3
-        assert  abs(SpSm[5] - SpSm_ED[mu_list[i]][((0, 1), (1, 1))]) / abs(SpSm_ED[mu_list[i]][((0, 1), (1, 1))]) < 2e-3
-        assert  abs(SpSm[4] - SpSm_ED[mu_list[i]][((0, 0), (1, 0))]) / abs(SpSm_ED[mu_list[i]][((0, 0), (1, 0))]) < 2e-3
+        assert  abs(SzSz[0] - SzSz_ED[mu][((0, 0), (0, 1))]) / abs(SzSz_ED[mu][((0, 0), (0, 1))]) < 2e-3
+        assert  abs(SzSz[5] - SzSz_ED[mu][((0, 1), (1, 1))]) / abs(SzSz_ED[mu][((0, 1), (1, 1))]) < 2e-3
+        assert  abs(SzSz[4] - SzSz_ED[mu][((0, 0), (1, 0))]) / abs(SzSz_ED[mu][((0, 0), (1, 0))]) < 2e-3
 
-        assert  abs(SzSz[0] - SzSz_ED[mu_list[i]][((0, 0), (0, 1))]) / abs(SzSz_ED[mu_list[i]][((0, 0), (0, 1))]) < 2e-3
-        assert  abs(SzSz[5] - SzSz_ED[mu_list[i]][((0, 1), (1, 1))]) / abs(SzSz_ED[mu_list[i]][((0, 1), (1, 1))]) < 2e-3
-        assert  abs(SzSz[4] - SzSz_ED[mu_list[i]][((0, 0), (1, 0))]) / abs(SzSz_ED[mu_list[i]][((0, 0), (1, 0))]) < 2e-3
+        assert  abs(nn[0] - nn_ED[mu][((0, 0), (0, 1))]) / abs(nn_ED[mu][((0, 0), (0, 1))]) < 2e-3
+        assert  abs(nn[5] - nn_ED[mu][((0, 1), (1, 1))]) / abs(nn_ED[mu][((0, 1), (1, 1))]) < 2e-3
+        assert  abs(nn[4] - nn_ED[mu][((0, 0), (1, 0))]) / abs(nn_ED[mu][((0, 0), (1, 0))]) < 2e-3
 
-        assert  abs(nn[0] - nn_ED[mu_list[i]][((0, 0), (0, 1))]) / abs(nn_ED[mu_list[i]][((0, 0), (0, 1))]) < 2e-3
-        assert  abs(nn[5] - nn_ED[mu_list[i]][((0, 1), (1, 1))]) / abs(nn_ED[mu_list[i]][((0, 1), (1, 1))]) < 2e-3
-        assert  abs(nn[4] - nn_ED[mu_list[i]][((0, 0), (1, 0))]) / abs(nn_ED[mu_list[i]][((0, 0), (1, 0))]) < 2e-3
+        assert  abs(n_up[0] - n_ED[mu][0]) / abs(n_ED[mu][0]) < 1e-3
+        assert  abs(n_up[2] - n_ED[mu][2]) / abs(n_ED[mu][2]) < 1e-3
 
-        assert  abs(n_up[0] - n_ED[mu_list[i]][0]) / abs(n_ED[mu_list[i]][0]) < 1e-3
-        assert  abs(n_up[2] - n_ED[mu_list[i]][2]) / abs(n_ED[mu_list[i]][2]) < 1e-3
+        assert  abs(n_dn[0] - n_ED[mu][0]) / abs(n_ED[mu][0]) < 1e-3
+        assert  abs(n_dn[2] - n_ED[mu][2]) / abs(n_ED[mu][2]) < 1e-3
 
-        assert  abs(n_dn[0] - n_ED[mu_list[i]][0]) / abs(n_ED[mu_list[i]][0]) < 1e-3
-        assert  abs(n_dn[2] - n_ED[mu_list[i]][2]) / abs(n_ED[mu_list[i]][2]) < 1e-3
 
 if __name__== '__main__':
-    check_purification_tJ()
+    test_purification_tJ()
