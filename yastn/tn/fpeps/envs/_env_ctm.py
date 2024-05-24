@@ -373,6 +373,9 @@ class EnvCTM(Peps):
             d['data'][site] = d_local
         return d
 
+    def check_env_bond_dimension(env):
+        pass
+
 
 def update_2site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
     r"""
