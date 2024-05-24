@@ -5,6 +5,7 @@ from yastn.tensor.linalg import svd
 
 
 logger = logging.Logger('ctmrg')
+logger.setLevel("INFO")
 
 
 class CTMRGout(NamedTuple):
@@ -37,13 +38,15 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, fi
         #
         if corner_tol:  # check convergence of corners singular values
             corner_sv = calculate_corner_svd(env)
-            max_dsv = max((old_corner_sv[k] - v).norm().item() / v.norm().item() for k, v in corner_sv.items())
+            max_dsv = max((old_corner_sv[k] - v).norm().item() / max(v.norm().item(), old_corner_sv[k].norm().item()) for k, v in corner_sv.items())
+
+            print(max_dsv)
             old_corner_sv = corner_sv
 
-        logger.info(f'Sweep = {sweep:03d}  max_d_corner_singular_values = {max_dsv}')
+            logger.info(f'Sweep = {sweep:03d}  max_d_corner_singular_values = {max_dsv}')
 
-        if corner_tol and max_dsv < corner_tol:
-            break
+            if corner_tol and max_dsv < corner_tol:
+                break
 
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield CTMRGout(sweeps=sweep, max_dsv=max_dsv)
