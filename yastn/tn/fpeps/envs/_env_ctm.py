@@ -75,13 +75,13 @@ class EnvCTM(Peps):
                 legs = self.psi[site].get_legs()
 
                 for dirn in ('tl', 'tr', 'bl', 'br'):
-                    if self.nn_site(site, d=dirn) is None or type == 'eye':
+                    if self.nn_site(site, d=dirn) is None or init == 'eye':
                         setattr(self[site], dirn, eye(config, legs=[leg0, leg0.conj()], isdiag=False))
                     else:
                         setattr(self[site], dirn, rand(config, legs=[leg, leg.conj()]))
 
                 for ind, dirn in enumerate('tlbr'):
-                    if self.nn_site(site, d=dirn) is None or type == 'eye':
+                    if self.nn_site(site, d=dirn) is None or init == 'eye':
                         tmp1 = identity_boundary(config, legs[ind].conj())
                         tmp0 = eye(config, legs=[leg0, leg0.conj()], isdiag=False)
                         tmp = tensordot(tmp0, tmp1, axes=((), ())).transpose(axes=(0, 2, 1))
