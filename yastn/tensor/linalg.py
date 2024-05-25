@@ -41,7 +41,7 @@ def norm(a, p='fro') -> number:
 def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False,
         tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
-        mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
+        mask_f=None, relative=True, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -95,10 +95,22 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     diagnostics = kwargs['diagonostics'] if 'diagonostics' in kwargs else None
     U, S, V = svd(a, axes=axes, sU=sU, nU=nU, policy=policy, D_block=D_block, diagnostics=diagnostics, fix_signs=fix_signs)
 
+    if relative == True:
+        maxS = S.norm(p='inf').item()
+    else:
+        maxS = 1.0
+
+    if type(tol_block) is dict:
+        tol_block_abs = {}
+        for k, tol in tol_block.items():
+            tol_block_abs[k] = tol * maxS
+    else:
+        tol_block_abs = tol_block * maxS
+
     if mask_f:
         Smask = mask_f(S)
     else:
-        Smask = truncation_mask(S, tol=tol * S.norm(p='inf').item(), tol_block=tol_block, D_block=D_block, D_total=D_total)
+        Smask = truncation_mask(S, tol=tol * maxS, tol_block=tol_block_abs, D_block=D_block, D_total=D_total)
 
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
 
