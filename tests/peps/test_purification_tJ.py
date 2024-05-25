@@ -56,45 +56,37 @@ def purification_tJ(chemical_potential):
         fpeps.evolution_step_(env_evolution, gates, opts_svd=opts_svd)
 
     # calculate observables with ctm
-    tol = 1e-10 # truncation of singular values of CTM projectors
+    tol = 1e-8 # truncation of singular values of CTM projectors
     max_sweeps = 100  # ctm param
-    tol_exp = 1e-7
+    tol_exp = 1e-6
     # opts_svd_ctm = {'D_total': chi, 'tol': tol, 'policy': 'lowrank', 'D_block': chi // 8}
     opts_svd_ctm = {'D_total': chi, 'tol': tol}
 
     env = fpeps.EnvCTM(psi, init="eye")
     env.update_(opts_svd=opts_svd_ctm, method="2site")
 
-    energy_old = np.inf
-
     print("Time evolution done")
-    ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=opts_svd, fix_signs=True, corner_tol=tol_exp)
-    for out in ctmrg_(env, max_sweeps=max_sweeps, iterator_step=1, method="1site", opts_svd=opts_svd_ctm, corner_tol=tol_exp):
+    for out in ctmrg_(env, max_sweeps=max_sweeps, iterator_step=1, method="2site", opts_svd=opts_svd_ctm, corner_tol=tol_exp):
+        pass
 
-        # calculate expectation values
-        cdagc_up = env.measure_nn(fcdag_up, fc_up)  # calculate for all unique bonds
-        cdagc_dn = env.measure_nn(fcdag_dn, fc_dn)  # -> {bond: value}
-        ccdag_dn = env.measure_nn(fc_dn, fcdag_dn)
-        ccdag_up = env.measure_nn(fc_up, fcdag_up)
-        SmSp = env.measure_nn(Sm, Sp)
-        SpSm = env.measure_nn(Sp, Sm)
-        SzSz = env.measure_nn(Sz, Sz)
-        nn = env.measure_nn(n, n)
+    # calculate expectation values
+    cdagc_up = env.measure_nn(fcdag_up, fc_up)  # calculate for all unique bonds
+    cdagc_dn = env.measure_nn(fcdag_dn, fc_dn)  # -> {bond: value}
+    ccdag_dn = env.measure_nn(fc_dn, fcdag_dn)
+    ccdag_up = env.measure_nn(fc_up, fcdag_up)
+    SmSp = env.measure_nn(Sm, Sp)
+    SpSm = env.measure_nn(Sp, Sm)
+    SzSz = env.measure_nn(Sz, Sz)
+    nn = env.measure_nn(n, n)
 
-        n_total = env.measure_1site(n)
-        nu = env.measure_1site(n_up)
-        nd = env.measure_1site(n_dn)
+    n_total = env.measure_1site(n)
+    nu = env.measure_1site(n_up)
+    nd = env.measure_1site(n_dn)
 
-        energy = -t * (sum(cdagc_up.values()) - sum(ccdag_up.values()) + sum(cdagc_dn.values()) - sum(ccdag_dn.values())) + \
-                    J / 2 * (sum(SmSp.values()) + sum(SpSm.values())) + Jz * sum(SzSz.values()) - J / 4 * sum(nn.values()) - \
-                    sum(n_total.values()) * chemical_potential
-        energy = energy / tot_sites
-
-        # print("Energy: ", energy)
-        print(f"dE = {energy - energy_old}")
-        if abs(energy - energy_old) < tol_exp:
-            break
-        energy_old = energy
+    energy = -t * (sum(cdagc_up.values()) - sum(ccdag_up.values()) + sum(cdagc_dn.values()) - sum(ccdag_dn.values())) + \
+                J / 2 * (sum(SmSp.values()) + sum(SpSm.values())) + Jz * sum(SzSz.values()) - J / 4 * sum(nn.values()) - \
+                sum(n_total.values()) * chemical_potential
+    energy = energy / tot_sites
 
     mean_density = sum(env.measure_1site(n).values()) / tot_sites
     print(out)
