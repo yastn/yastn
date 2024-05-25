@@ -16,9 +16,9 @@
 from typing import NamedTuple
 import logging
 from yastn.tensor.linalg import svd
+import numpy as np
 
-
-# logger = logging.Logger('ctmrg')
+logger = logging.Logger('ctmrg')
 
 
 class CTMRGout(NamedTuple):
@@ -35,6 +35,17 @@ def calculate_corner_svd(env):
         corner_sv[site, 'br'] = svd(env[site].br, compute_uv=False)
     return corner_sv
 
+def diff_compatible(a, b):
+    if len(a) > len(b):
+        a_ = a
+        b_ = np.zeros(len(a))
+        b_[0:len(b)] = b
+    else:
+        b_ = b
+        a_ = np.zeros(len(b))
+        a_[0:len(a)] = a
+
+    return np.linalg.norm(a_ - b_, ord = np.inf)
 
 def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, fix_signs=True, corner_tol=None):
     r"""
@@ -51,8 +62,16 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, fi
         #
         if corner_tol:  # check convergence of corners singular values
             corner_sv = calculate_corner_svd(env)
-            max_dsv = max((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item() \
-                            for k, v in corner_sv.items())
+            # max_dsv = max((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item() \
+            #                 for k, v in corner_sv.items())
+
+            dsv = []
+            for k, v in corner_sv.items():
+                s_old = np.sort(np.diag((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item()).to_numpy()))[::-1]
+                s_new = np.sort(np.diag((v / v.norm(p='inf').item()).to_numpy()))[::-1]
+                dsv.append(diff_compatible(s_new, s_old))
+
+            max_dsv = max(dsv)
             old_corner_sv = corner_sv
 
             logging.info(f'Sweep = {sweep:03d}  max_d_corner_singular_values = {max_dsv}')
