@@ -98,7 +98,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     if mask_f:
         Smask = mask_f(S)
     else:
-        Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total)
+        Smask = truncation_mask(S, tol=tol * S.norm(p='inf').item(), tol_block=tol_block, D_block=D_block, D_total=D_total)
 
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
 
