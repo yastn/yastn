@@ -59,7 +59,6 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, fi
     for sweep in range(1, max_sweeps + 1):
         #
         env.update_(method=method, fix_signs=fix_signs, opts_svd=opts_svd)
-        #
         if corner_tol:  # check convergence of corners singular values
             corner_sv = calculate_corner_svd(env)
             # max_dsv = max((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item() \
@@ -69,7 +68,8 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, fi
             for k, v in corner_sv.items():
                 s_old = np.sort(np.diag((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item()).to_numpy()))[::-1]
                 s_new = np.sort(np.diag((v / v.norm(p='inf').item()).to_numpy()))[::-1]
-                dsv.append(diff_compatible(s_new, s_old))
+                diff = diff_compatible(s_new, s_old)
+                dsv.append(diff)
 
             max_dsv = max(dsv)
             old_corner_sv = corner_sv

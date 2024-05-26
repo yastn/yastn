@@ -383,6 +383,8 @@ class EnvCTM(Peps):
             corners = [env[site].tl, env[site].bl, env[site].br, env[site].tr]
             corners_id = ["tl", "bl", "br", "tr"]
             for ii in range(4):
+                dict_symmetric_sector[site, corners_id[ii]] = []
+                dict_bond_dimension[site, corners_id[ii]] = []
                 if disp:
                     print(corners_id[ii])
                 for leg in range (0, 2):
@@ -394,8 +396,8 @@ class EnvCTM(Peps):
                     if disp:
                         print(temp_t)
                         print(temp_D)
-                    dict_symmetric_sector[site, corners_id[ii]] = temp_t
-                    dict_bond_dimension[site, corners_id[ii]] = temp_D
+                    dict_symmetric_sector[site, corners_id[ii]].append(temp_t)
+                    dict_bond_dimension[site, corners_id[ii]].append(temp_D)
         return [dict_bond_dimension, dict_symmetric_sector]
 
 
