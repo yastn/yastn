@@ -373,8 +373,32 @@ class EnvCTM(Peps):
             d['data'][site] = d_local
         return d
 
-    def check_env_bond_dimension(env):
-        pass
+    def check_corner_bond_dimension(env, disp=False):
+
+        dict_bond_dimension = {}
+        dict_symmetric_sector = {}
+        for site in env.sites():
+            if disp:
+                print(site)
+            corners = [env[site].tl, env[site].bl, env[site].br, env[site].tr]
+            corners_id = ["tl", "bl", "br", "tr"]
+            for ii in range(4):
+                if disp:
+                    print(corners_id[ii])
+                for leg in range (0, 2):
+                    temp_t = []
+                    temp_D = []
+                    for it in range(len(corners[ii].get_legs()[leg].t)):
+                        temp_t.append(corners[ii].get_legs()[leg].t[it])
+                        temp_D.append(corners[ii].get_legs()[leg].D[it])
+                    if disp:
+                        print(temp_t)
+                        print(temp_D)
+                    dict_symmetric_sector[site, corners_id[ii]] = temp_t
+                    dict_bond_dimension[site, corners_id[ii]] = temp_D
+        return [dict_bond_dimension, dict_symmetric_sector]
+
+
 
 
 def update_2site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
