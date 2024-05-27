@@ -468,8 +468,8 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
         cor_tr = (env[br].t @ env[br].tr).fuse_legs(axes=(0, (2, 1)))
         cor_br = (env[tr].br @ env[tr].b).fuse_legs(axes=((0, 1), 2))
         cor_bl = (env[tl].b @ env[tl].bl).fuse_legs(axes=(0, (2, 1)))
-        r_tl, r_tr = regularize_1site_corners(cor_tl, cor_tr, fix_signs)
-        r_br, r_bl = regularize_1site_corners(cor_br, cor_bl, fix_signs)
+        r_tl, r_tr = regularize_1site_corners(cor_tl, cor_tr, fix_signs, opts_svd=opts_svd)
+        r_br, r_bl = regularize_1site_corners(cor_br, cor_bl, fix_signs, opts_svd=opts_svd)
 
     if 'r' in dirn:
         proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, fix_signs, opts_svd=opts_svd)
@@ -482,8 +482,8 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
         cor_tl = (env[tr].l @ env[tr].tl).fuse_legs(axes=(0, (2, 1)))
         cor_tr = (env[tl].tr @ env[tl].r).fuse_legs(axes=((0, 1), 2))
         cor_br = (env[bl].r @ env[bl].br).fuse_legs(axes=(0, (2, 1)))
-        r_bl, r_tl = regularize_1site_corners(cor_bl, cor_tl, fix_signs)
-        r_tr, r_br = regularize_1site_corners(cor_tr, cor_br, fix_signs)
+        r_bl, r_tl = regularize_1site_corners(cor_bl, cor_tl, fix_signs, opts_svd=opts_svd)
+        r_tr, r_br = regularize_1site_corners(cor_tr, cor_br, fix_signs, opts_svd=opts_svd)
 
     if 't' in dirn:
         proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, fix_signs, opts_svd=opts_svd)
@@ -492,10 +492,10 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
         proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, fix_signs, opts_svd=opts_svd)
 
 
-def regularize_1site_corners(cor_0, cor_1, fix_signs):
+def regularize_1site_corners(cor_0, cor_1, fix_signs, opts_svd):
     Q_0, R_0 = qr(cor_0, axes=(0, 1))
     Q_1, R_1 = qr(cor_1, axes=(1, 0))
-    U_0, S, U_1 = tensordot(R_0, R_1, axes=(1, 1)).svd(axes=(0, 1), fix_signs=fix_signs)
+    U_0, S, U_1 = tensordot(R_0, R_1, axes=(1, 1)).svd(axes=(0, 1), fix_signs=fix_signs, opts_svd=opts_svd)
     S = S.sqrt()
     r_0 = tensordot((U_0 @ S), Q_0, axes=(0, 1))
     r_1 = tensordot((S @ U_1), Q_1, axes=(1, 1))
