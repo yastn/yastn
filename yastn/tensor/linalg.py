@@ -40,7 +40,7 @@ def norm(a, p='fro') -> number:
 
 def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False,
-        tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
+        tol=0, tol_block=0, tol_multiplets=0, D_block=float('inf'), D_total=float('inf'),
         mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
@@ -98,7 +98,7 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     if mask_f:
         Smask = mask_f(S)
     else:
-        Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total)
+        Smask = truncation_mask(S, tol=tol, tol_block=tol_block, tol_multiplets=tol_multiplets, D_block=D_block, D_total=D_total)
 
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
 
@@ -347,7 +347,6 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
             Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
     return Smask
 
-
 def truncation_mask(S, tol=0, tol_block=0, tol_multiplets=0,
                     D_block=float('inf'), D_total=float('inf'), **kwargs) -> yastn.Tensor[bool]:
     """
@@ -396,16 +395,20 @@ def truncation_mask(S, tol=0, tol_block=0, tol_multiplets=0,
     temp_data = S._data * Smask.data
     D_tol = sum(temp_data > tol * S.config.backend.max_abs(temp_data)).item()
     D_total = min(D_total, D_tol)
-    if 0 < D_total < sum(Smask.data):
+
+    if 0 < D_total <= sum(Smask.data):
+
         inds = S.config.backend.argsort(temp_data)
 
-        pos = D_total
-        # condition for multiplet
-        if pos < len(inds):
-            while abs(S._data[inds[-pos]] - S._data[inds[-pos-1]]) < abs(S._data[inds[-pos]]) * tol_multiplets:
-                pos -= 1
+        if S.config.sym.SYM_ID != "dense":
+            pos = D_total
+            # condition for multiplet
+            if pos < len(inds):
+                while abs(S._data[inds[-pos]] - S._data[inds[-pos-1]]) < abs(S._data[inds[-pos]]) * tol_multiplets:
+                    pos -= 1
+                    D_total = D_total - 1
 
-        Smask._data[inds[:-D_total]] = False
+            Smask._data[inds[:-D_total]] = False
     elif D_total == 0:
         Smask._data[:] = False
     return Smask
@@ -590,7 +593,7 @@ def _meta_eigh(config, struct, slices, sU):
     return meta, Sstruct, Ssl, Ustruct, slices
 
 
-def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
+def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, tol_multiplets=0,
     D_block=float('inf'), D_total=float('inf')) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
@@ -633,7 +636,7 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0,
     """
     S, U = eigh(a, axes=axes, sU=sU)
 
-    Smask = truncation_mask(S, tol=tol, tol_block=tol_block, D_block=D_block, D_total=D_total)
+    Smask = truncation_mask(S, tol=tol, tol_block=tol_block, tol_multiplets=tol_multiplets, D_block=D_block, D_total=D_total)
 
     S, U = Smask.apply_mask(S, U, axes=(0, -1))
     U = U.move_leg(source=-1, destination=Uaxis)
