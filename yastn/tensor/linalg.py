@@ -396,19 +396,23 @@ def truncation_mask(S, tol=0, tol_block=0, tol_multiplets=0,
     D_tol = sum(temp_data > tol * S.config.backend.max_abs(temp_data)).item()
     D_total = min(D_total, D_tol)
 
-    if 0 < D_total <= sum(Smask.data):
+    if 0 < D_total < sum(Smask.data):
 
         inds = S.config.backend.argsort(temp_data)
+        # print(inds)
 
-        if S.config.sym.SYM_ID != "dense":
+        if (S.config.sym.SYM_ID != "dense") and (abs(tol_multiplets) > 1e-16): # Do not apply symmetric trunction for dense tensors or tol_multiplets = 0
             pos = D_total
             # condition for multiplet
             if pos < len(inds):
                 while abs(S._data[inds[-pos]] - S._data[inds[-pos-1]]) < abs(S._data[inds[-pos]]) * tol_multiplets:
-                    pos -= 1
-                    D_total = D_total - 1
+                    pos = pos - 1
 
+            Smask._data[inds[:-pos]] = False
+        else:
+            inds = S.config.backend.argsort(temp_data)
             Smask._data[inds[:-D_total]] = False
+
     elif D_total == 0:
         Smask._data[:] = False
     return Smask
