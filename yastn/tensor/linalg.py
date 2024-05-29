@@ -100,8 +100,6 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
     where the columns of `U` and the rows of `V` form orthonormal bases
     and `S` is a positive and diagonal matrix.
 
-
-
     Parameters
     ----------
     axes: tuple[int, int] | tuple[Sequence[int], Sequence[int]]
@@ -335,8 +333,8 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     return Smask
 
 
-def truncation_mask(S, tol=0, tol_block=0, D_block=float('inf'),
-                    D_total=float('inf'), **kwargs) -> yastn.Tensor[bool]:
+def truncation_mask(S, tol=0, tol_block=0, tol_multiplets=0,
+                    D_block=float('inf'), D_total=float('inf'), **kwargs) -> yastn.Tensor[bool]:
     """
     Generate mask tensor based on diagonal and real tensor S.
     It can be then used for truncation.
@@ -385,6 +383,13 @@ def truncation_mask(S, tol=0, tol_block=0, D_block=float('inf'),
     D_total = min(D_total, D_tol)
     if 0 < D_total < sum(Smask.data):
         inds = S.config.backend.argsort(temp_data)
+
+        pos = D_total
+        # condition for multiplet
+        if pos < len(inds):
+            while abs(S._data[inds[-pos]] - S._data[inds[-pos-1]]) < abs(S._data[inds[-pos]]) * tol_multiplets:
+                pos -= 1
+
         Smask._data[inds[:-D_total]] = False
     elif D_total == 0:
         Smask._data[:] = False
