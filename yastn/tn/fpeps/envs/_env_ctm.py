@@ -357,6 +357,17 @@ class EnvCTM(Peps):
                     dict_bond_dimension[site, corners_id[ii]].append(temp_D)
         return [dict_bond_dimension, dict_symmetric_sector]
 
+    def initialize_ctm_with_old_ctm(env, psi, env_old):
+        for site in psi.sites():
+            env[site].tl = env_old[site].tl
+            env[site].tr = env_old[site].tr
+            env[site].bl = env_old[site].bl
+            env[site].br = env_old[site].br
+            env[site].l = env_old[site].l
+            env[site].r = env_old[site].r
+            env[site].b = env_old[site].b
+            env[site].t = env_old[site].t
+
 
 
 
