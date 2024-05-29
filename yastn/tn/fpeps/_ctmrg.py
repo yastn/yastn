@@ -39,6 +39,7 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, co
     """
     # init
     max_dsv = None
+    truncation_method = None
     if corner_tol:
         old_corner_sv = calculate_corner_svd(env)
 
@@ -47,20 +48,25 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, co
         env.update_(method=method, opts_svd=opts_svd)
         if corner_tol:  # check convergence of corners singular values
             corner_sv = calculate_corner_svd(env)
-            # max_dsv = max((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item() \
-            #                 for k, v in corner_sv.items())
 
-            dsv = []
-            for k, v in corner_sv.items():
-                s_old = np.sort(np.diag((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item()).to_numpy()))[::-1]
-                s_new = np.sort(np.diag((v / v.norm(p='inf').item()).to_numpy()))[::-1]
-                diff = diff_compatible(s_new, s_old)
-                dsv.append(diff)
+            if not 'tol_multiplets' in opts_svd.keys():
+                dsv = []
+                for k, v in corner_sv.items():
+                    s_old = np.sort(np.diag((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item()).to_numpy()))[::-1]
+                    s_new = np.sort(np.diag((v / v.norm(p='inf').item()).to_numpy()))[::-1]
+                    diff = diff_compatible(s_new, s_old)
+                    dsv.append(diff)
 
-            max_dsv = max(dsv)
+                max_dsv = max(dsv)
+                truncation_method = "Dense"
+            else:
+                max_dsv = max((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item() \
+                            for k, v in corner_sv.items())
+                truncation_method = "Symmetric"
+
             old_corner_sv = corner_sv
 
-            logging.info(f'Sweep = {sweep:03d}  max_d_corner_singular_values = {max_dsv}')
+            logging.info(f'Sweep = {sweep:03d}  max_d_corner_singular_values = {max_dsv}  Truncation method: {truncation_method}')
 
             if corner_tol and max_dsv < corner_tol:
                 break
