@@ -138,8 +138,10 @@ def test_svd_fix_signs():
         nUSV = nU @ nS @ nV
         assert yastn.norm(nUSV - USV) < tol
         nUcpu = nU.to(device='cpu')  # for test running on cuda
-        assert np.linalg.norm(np.array(nUcpu[0, 0]) - np.array([[1, 0], [0, 1], [0, 0]])) < tol
-        assert np.linalg.norm(np.array(nUcpu[1, 1]) - np.array([[0, 1], [1, 0]])) < tol
+        t = 0
+        assert np.linalg.norm(np.array(nUcpu[t, t]) - np.array([[1, 0], [0, 1], [0, 0]])) < tol
+        t = 1
+        assert np.linalg.norm(np.array(nUcpu[t, t]) - np.array([[0, 1], [1, 0]])) < tol
 
 
 
@@ -156,9 +158,9 @@ def test_svd_truncate():
     # fixing singular values for testing
     # creat new tensor *a* that will be used for testing
     U, S, V = yastn.linalg.svd(a, axes=((0, 1), (2, 3)), sU=-1)
-    S.set_block(ts=(-2, -2), Ds=4, val=[2**(-ii - 5) for ii in range(4)])
-    S.set_block(ts=(-1, -1), Ds=12, val=[2**(-ii - 1) for ii in range(12)])
-    S.set_block(ts=(0, 0), Ds=25, val=[2**(-ii - 0) for ii in range(25)])
+    S.set_block(ts=(-2, -2), Ds=4, val=[2**(-ii - 6) for ii in range(4)])
+    S.set_block(ts=(-1, -1), Ds=12, val=[2**(-ii - 2) for ii in range(12)])
+    S.set_block(ts=(0, 0), Ds=25, val=[2**(-ii - 1) for ii in range(25)])
     a = yastn.ncon([U, S, V], [(-1, -2, 1), (1, 2), (2, -3, -4)])
 
     #

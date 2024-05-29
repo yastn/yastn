@@ -47,7 +47,7 @@ def diff_compatible(a, b):
 
     return np.linalg.norm(a_ - b_, ord = np.inf)
 
-def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, fix_signs=True, corner_tol=None):
+def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, corner_tol=None):
     r"""
     Generator executing ctmrg().
     """
@@ -58,7 +58,7 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, fi
 
     for sweep in range(1, max_sweeps + 1):
         #
-        env.update_(method=method, fix_signs=fix_signs, opts_svd=opts_svd)
+        env.update_(method=method, opts_svd=opts_svd)
         if corner_tol:  # check convergence of corners singular values
             corner_sv = calculate_corner_svd(env)
             # max_dsv = max((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item() \
