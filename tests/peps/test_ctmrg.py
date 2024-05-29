@@ -148,7 +148,7 @@ def test_ctm_ising():
     beta = 0.6
     print(f"Lattice: checkerboard infinite; gauges= False; {beta=}; {method=}")
     psi = create_Ising_peps(ops, beta, lattice='checkerboard', dims=(2, 2), boundary='infinite', gauges=False)
-    env = run_ctm(psi, ops, init='rand', method=method)
+    env = run_ctm(psi, ops, init='rand', method=method) # eye
     check_Z(env, ops, Z_exact[beta])
     check_ZZ(env, ops, ZZ_exact[beta])
     #
@@ -164,7 +164,7 @@ def test_ctm_ising():
     beta = 0.6  # CTM should not be really used with "cylinder"
     print(f"Lattice = square cylinder, gauges = False; {beta=}; {method=}")
     psi = create_Ising_peps(ops, beta, lattice='square', dims=(3, 17), boundary='cylinder', gauges=False)
-    env = run_ctm(psi, ops, D=4, init='rand', method=method)
+    env = run_ctm(psi, ops, D=4, init='rand', method=method) # eye
     check_Z(env, ops, Z_exact[beta], site=(1, 6))
     check_Z(env, ops, Z_exact[beta], site=(0, 6))
     check_ZZ(env, ops, ZZ_exact[beta], bond=((1, 8), (0, 8)))

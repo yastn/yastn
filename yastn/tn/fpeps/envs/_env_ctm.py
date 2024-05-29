@@ -14,7 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 from dataclasses import dataclass
-from .... import rand, ones, eye, YastnError, Leg, tensordot, qr
+from .... import rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask_multiplets, truncation_mask
 from ... import mps
 from .._peps import Peps, Peps2Layers
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
@@ -505,7 +505,12 @@ def regularize_1site_corners(cor_0, cor_1, fix_signs, opts_svd):
 def proj_corners(r0, r1, fix_signs, opts_svd):
     r""" Projectors in between r0 @ r1.T corners. """
     rr = tensordot(r0, r1, axes=(1, 1))
-    u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs, **opts_svd)
+    u, s, v = rr.svd(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs)
+
+    Smask = truncation_mask(s, **opts_svd)
+    u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
+
+    # u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs, **opts_svd)
     rs = s.rsqrt()
     p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
     p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
