@@ -19,7 +19,7 @@ from ... import YastnError
 
 
 class Site(NamedTuple):
-    """ (nx, ny) == (row, column) """
+    """ Site coordinates `(nx, ny)` are consistent with matrix notation of `(row, column)`. """
     nx : int = 0
     ny : int = 0
 
@@ -27,12 +27,8 @@ class Site(NamedTuple):
         return f"Site({self.nx}, {self.ny})"
 
 
-class Bond(NamedTuple):  # Not very convinient to use
-    """
-    A bond between two lattice sites.
-
-    site0 should preceed site1 in the fermionic order.
-    """
+class Bond(NamedTuple):
+    """ A bond between two lattice sites. """
     site0 : Site = None
     site1 : Site = None
 
@@ -53,13 +49,11 @@ class SquareLattice():
         Parameters
         ----------
         dims : tuple[int, int]
-            Size of elementary cell, number of (rows, columns).
-        boundary : str
-            'obc', 'infinite', or 'cylinder'.
+            Size of elementary cell, number of `(rows, columns)`.
+            Site(0, 0) corresponds to top-left corner of the lattice.
 
-        Notes
-        -----
-        Site(0, 0) corresponds to top-left corner of the lattice.
+        boundary : str
+            `obc`, `infinite`, or `cylinder`.
         """
         if boundary not in ('obc', 'infinite', 'cylinder'):
             raise YastnError(f"{boundary=} not recognized; should be 'obc', 'infinite', or 'cylinder'")
@@ -101,7 +95,18 @@ class SquareLattice():
         return self._sites[::-1] if reverse else self._sites
 
     def bonds(self, dirn=None, reverse=False) -> Sequence[Bond]:
-        """ Sequence of unique nearest neighbor bonds between lattice sites. """
+        """
+        Sequence of unique nearest neighbor bonds between lattice sites.
+
+        Parameters
+        ----------
+        dirn: None | str
+            return all bonds if None;
+            `v` and `h` are for vertical and horizontal bonds, respectively.
+
+        reverse: bool
+            whether to reverse order of returned bonds
+        """
         if dirn == 'v':
             return self._bonds_v[::-1] if reverse else self._bonds_v
         if dirn == 'h':
@@ -175,9 +180,8 @@ class CheckerboardLattice(SquareLattice):
 
     def __init__(self):
         r"""
-        Geometric information about infinite checkerboard lattice.
-
-        Checkerboard lattice is infinite lattice with 2x2 unit cell and two unique tensors.
+        Geometric information about infinite checkerboard lattice, which
+        is an infinite lattice with :math:`2 \times 2` unit cell and two unique tensors.
         """
         super().__init__(dims=(2, 2), boundary='infinite')
         self._sites = (Site(0, 0), Site(0, 1))

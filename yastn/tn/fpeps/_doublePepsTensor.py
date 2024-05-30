@@ -21,7 +21,9 @@ _allowed_transpose = ((0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2),
 
 class DoublePepsTensor:
     def __init__(self, top, btm, transpose=(0, 1, 2, 3)):
-        r"""Class that treats a cell of a double-layer peps as a single tensor.
+        r"""
+        Class that treats a cell of a double-layer peps as a single tensor.
+
         Parameters
         ----------
         top: yastn.Tensor

@@ -7,6 +7,7 @@ Projected Entangled Pair States (PEPS)
 The Projected Entangled Pair State (PEPS) [1,2] is a tensor network ansatz typically appearing in the context of two-dimensional (`2D`) systems,
 that by construction satisfies the area law of entanglement entropy for such systems.
 It allows efficient simulations of ground and thermal states of many-body quantum systems in `2D` with their respective area laws [3].
+
 We employ PEPS constructed from a set of tensors located on a `2D` lattice.
 Each tensor has a physical leg, corresponding to the physical degrees of freedom of the lattice site, and virtual legs (bonds) connecting it to neighboring tensors.
 Here we implement a `2D` square lattice of size :math:`L_{x} \times L_{y}`, with sites labeled by coordinates :math:`(x,y)` as shown below:
@@ -18,15 +19,15 @@ Here we implement a `2D` square lattice of size :math:`L_{x} \times L_{y}`, with
 
         ----------->
        |
-       |  (0,0)      (0,1)      (0,2)      ...      (0, L_y-1)
+       |  (0,0)      (0,1)      ...      (0, L_y-1)
        |
-       |  (1,0)      (1,1)      (1,2)      ...      (1, L_y-1)
+       |  (1,0)      (1,1)      ...      (1, L_y-1)
       \|/
-            .          .                               .
-            .                     .                    .
-            .                               .          .
+            .          .                     .
+            .                                .
+            .                    .           .
 
-        (L_x-1,0)  (L_x-1,1)  (L_x-1,2)    ...    (L_x-1,L_y-1)
+        (L_x-1,0)  (L_x-1,1)    ...    (L_x-1,L_y-1)
 
 
 Each tensor :math:`A_{(x,y)}` in PEPS is a rank-:math:`5` tensor of size :math:`D_{(x-1,y),(x,y)} \times D_{(x,y-1),(x,y)} \times D_{(x,y),(x+1,y)} \times D_{(x,y),(x,y+1)} \times d_{(x,y)}`.
@@ -37,13 +38,13 @@ Each tensor :math:`A_{(x,y)}` in PEPS is a rank-:math:`5` tensor of size :math:`
 
                                  D_(x-1,y),(x,y)
                                          \
-                                       ___\_______
-                                      |           |
-         A_(x,y)  =  D_(x,y-1),(x,y)--|   (x,y)   |--D_(x,y),(x,y+1)
-                                      |___________|
-                                         |      \
-                                         |       \
-                                      d_(x,y)  D_(x,y),(x+1,y)
+                                       ___\_____
+                                      |         |
+         A_(x,y)  =  D_(x,y-1),(x,y)--|  (x,y)  |--D_(x,y),(x,y+1)
+                                      |_________|
+                                        |      \
+                                        |       \
+                                     d_(x,y)  D_(x,y),(x+1,y)
 
 
 The hermitian conjugate of the above tensor :math:`A_{x,y}^{\dagger}` is represented as its mirror image
@@ -52,15 +53,15 @@ The hermitian conjugate of the above tensor :math:`A_{x,y}^{\dagger}` is represe
 
       # conjugate tensor in PEPS
 
-                                          d_(x,y)  D_(x,y),(x+1,y)
-                                             |      /
-                                            _|_____/___
-                                           |           |
-      A_(x,y)^{\dagger} = D_(x,y-1),(x,y)--|   (x,y)   |--D_(x,y),(x,y+1)
-                                           |___________|
-                                               /
-                                              /
-                                          D_(x-1,y),(x,y)
+                                        d_(x,y)  D_(x,y),(x+1,y)
+                                           |      /
+                                          _|_____/_
+                                         |         |
+      A_(x,y)^\dagger = D_(x,y-1),(x,y)--|  (x,y)  |--D_(x,y),(x,y+1)
+                                         |_________|
+                                             /
+                                            /
+                                        D_(x-1,y),(x,y)
 
 
 The module :code:`yastn.tn.fpeps` implements operations on PEPS both for a finite system with open boundary conditions (OBC) and in the thermodynamic limit.
@@ -94,10 +95,14 @@ Implementation of fermionic anticommutation rules in PEPS
 ---------------------------------------------------------
 
 We follow the recipe introduced by Corboz et al. in Ref. [4].
-It relies on (a) working with parity preserving tensors and (b) supplementing lines (legs) crossings, in a planar projection of the network, with fermionic swap gates :meth:`yastn.swap_gate`.
-The distribution of crossings (swap gates) follows from a chosen fermionic order, but their application can be made local for contracting the network.
-The leading numerical cost of contracting fermionic and bosonic (or spin) lattices are the same, with swap gates adding a subleading overhead.
-The module :code:`yastn.tn.fpeps` handles both fermionic and bosonic statistics, controlled by :code:`fermionic` flag in the :ref:`tensor configuration <tensor/configuration:yastn configuration>`.
+It relies on (a) working with parity preserving tensors and
+(b) supplementing lines (legs) crossings in a planar projection of the network with fermionic swap gates :meth:`yastn.swap_gate`.
+The distribution of crossings (swap gates) follows from a chosen fermionic order,
+but their application can be made local for contracting the network.
+The leading numerical cost of contracting fermionic and bosonic (or spin) lattices are the same,
+with swap gates adding a subleading overhead.
+The module :code:`yastn.tn.fpeps` handles both fermionic and bosonic statistics,
+controlled by :code:`fermionic` flag in the :ref:`tensor configuration <tensor/configuration:yastn configuration>`.
 We use the name fpeps to emphasize the incorporation of fermionic statistics in the module.
 
 Here we employ the fermionic order demonstrated in a :math:`3\times 3` PEPS example below.
@@ -105,26 +110,53 @@ Parity-preserving tensors permit moving the lines over tensors, changing the pla
 
 ::
 
-              ________            ________            ________
-             |        |          |        |          |        |
-             |        |----------|        |--------- |        |
-             |________|          |________|          |________|
-               |    \              |    \              |    \
-               |   __\_____        |   __\_____        |   __\_____
-               |  |        |       |  |        |       |  |        |
-      |Psi> =  |  |        |-------|--|        |-------|--|        |
-               |  |________|       |  |________|       |  |________|
-               |    |    \         |    |    \         |    |    \
-               |    |   __\_____   |    |   __\_____   |    |   __\_____
-               |    |  |        |  |    |  |        |  |    |  |        |
-               |    |  |        |--|----|--|        |--|----|--|        |
-               |    |  |________|  |    |  |________|  |    |  |________|
-               |    |    |         |    |    |         |    |    |
-               |    |    |         |    |    |         |    |    |
+              ______         ______         ______
+             |      |       |      |       |      |
+             |      |-------|      |-------|      |
+             |______|       |______|       |______|
+               |   \          |   \          |   \
+               |  __\___      |  __\___      |  __\___
+               | |      |     | |      |     | |      |
+      |Psi> =  | |      |-----|-|      |-----|-|      |
+               | |______|     | |______|     | |______|
+               |   |   \      |   |   \      |   |   \
+               |   |  __\___  |   |  __\___  |   |  __\___
+               |   | |      | |   | |      | |   | |      |
+               |   | |      |-|---|-|      |-|---|-|      |
+               |   | |______| |   | |______| |   | |______|
+               |   |   |      |   |   |      |   |   |
+               |   |   |      |   |   |      |   |   |
 
-            --------------------------------------------------------->
-                                                   fermionic order
+              ------------------------------------------->
+                                        fermionic order
 
+
+Infinite PEPS (iPEPS)
+---------------------
+
+Although finite PEPS is widely used, some of the best results have been obtained with infinite PEPS (iPEPS) [5].
+It operates directly in the thermodynamic limit describing a system with translational invariance.
+iPEPS ansatz is formed by a unit cell of tensors repeated all over an infinite lattice.
+A common example is a checkerboard lattice, which has two tensors A and B in a :math:`2\times 2` unit cell.
+
+::
+
+      # Checkerboard ansatz for iPEPS
+             .               .
+              .               .
+             __\____         __\____
+            |       |       |       |
+      ... --|   A   |-- D --|   B   |-- ...
+            |_______|       |_______|
+               |   \          |    \
+               |    D         |     D
+                   __\____         __\____
+                  |       |       |       |
+            ... --|   B   |-- D --|   A   |-- ...
+                  |_______|       |_______|
+                    |    \          |    \
+                    |     .         |     .
+                           .               .
 
 
 Time evolution
@@ -167,14 +199,10 @@ Each gate increases the virtual bond dimension of PEPS tensors by a factor equal
 
 To keep the PEPS representation compact, each application of the gate has to be followed by a truncation procedure to reduce the virtual bond dimension back to :math:`D`.
 
-
-Truncation of the PEPS bond dimensions
---------------------------------------
-
 In `1D`, the canonical structure of the MPS makes the  truncation of bond dimension based on SVD singular values, optimal in a Frobenius norm.
 However, a loopy structure of PEPS prevents a canonical form, and a successful algorithm requires using optimization techniques on top of SVD.
 The aim is to minimize the Frobenius norm of (a) PEPS after application of the Trotter gate, whose virtual bond dimension is now increased to
-:math:`D = r \times D` and (b) a new PEPS, with the bond dimension truncated back to :math:`D`:
+:math:`r \times D` and (b) a new PEPS, with the bond dimension truncated back to :math:`D`:
 
 ::
 
@@ -193,43 +221,57 @@ The aim is to minimize the Frobenius norm of (a) PEPS after application of the T
                   |               |                    |               |
 
 
-We denote the wavefunction in (a) by :math:`|\Psi(A_1',A_2')\rangle` and in (b) as :math:`|\Psi(A_1'',A_2'')\rangle`.
-The Frobenius norm is denoted by :math:`d(A_1',A_2';A_1'',A_2'') = || |\Psi(A_1'',A_2'')\rangle - |\Psi(A_1',A_2')\rangle ||^{2}`
+We denote the wavefunction in (a) by :math:`\Psi(A_1',A_2')` and in (b) as :math:`\Psi(A_1'',A_2'')`.
+The normalized Frobenius norm of the difference is
+
+:math:`d(A_1',A_2';A_1'',A_2'') = || \Psi(A_1',A_2') - \Psi(A_1'',A_2'') || / || \Psi(A_1',A_2') ||.`
+
 The aim is to minimalize it with respect to the two isolated tensors :math:`A_{1}''` and :math:`A_{2}''` with the metric tensor representing the
 rest of the lattice. In the minimal example above, it would just correspond to :math:`A_{3}` and :math:`A_{4}`.
-More generally, a state-of-the-art optimization method in this context is the so-called Full Update [5], employing the Corner Transfer Matrix Renormalization Group to
+More generally, a standard method in this context is the so-called Full Update [5], employing the Corner Transfer Matrix Renormalization Group to
 obtain a set of environment of tensors. It is however numerically expensive and might be unstable in some applications.
-In YASTN, we implement a Neighborhood Tensor Update (:ref:`NTU<fpeps/Optimization_algorithms:Neighborhood tensor update (NTU) algorithm>`) [6] that approximates
-the metric tensor by contracting a small cluster of neighboring tensors.
+YASTN allows for a flexible selection of employed environment approximation.
+In particular, we implement a Neighborhood Tensor Update (NTU) [6],
+that approximates the metric tensor by numerically-exact contraction of a small cluster of neighboring tensors.
+
+Minimization is performed via least-square optimization processes, where iteratively one truncated tensor is updated while keeping the other fixed.
+An initial guess follows from Environment Assisted Truncation of Ref. [7].
 
 
-Infinite PEPS (iPEPS)
----------------------
+Neighborhood tensor update (NTU)
+--------------------------------
 
-Although finite PEPS is widely used, some of the best results have been obtained with infinite PEPS (iPEPS) [5].
-It operates directly in the thermodynamic limit describing a system with translational invariance.
-In iPEPS ansatz is formed by a unit cell of tensors repeated all over an infinite lattice.
-A common example is a checkerboard lattice, which has two tensors A and B in a :math:`2\times 2` unit cell.
+Neighborhood Tensor Update can be regarded as a special case of a cluster update, see Refs [9,10], where the number of neighboring lattice sites taken into account during truncation makes for a refining parameter.
+The cluster update interpolates between a local truncation — as in the simple update (SU) [8]—and the full update (FU) [5] that attempts to account for all correlations in the truncated state.
+The NTU cluster includes the neighboring sites only as the metric tensor to compute the Frobenius norm in :ref:`time evolution algorithm<theory/fpeps/basics:Time evolution>`.
+In the diagram below, we have a checkerboard lattice with alternating tensors :math:`A` and :math:`B`
+in the `2D` square lattice. The tensors :math:`A'` and :math:`B'` in the center are highlighted as
+they have been updated by a NN :math:`2`-site gate of SVD-rank :math:`r`.
+The :code:`NN` environment use only the sites directly surrounding the updated bond to calculate the metric tensor
 
 ::
 
-      # Checkerboard ansatz for iPEPS
-             .               .
-              .               .
-             __\____         __\____
-            |       |       |       |
-      ... --|   A   |-- D --|   B   |-- ...
-            |_______|       |_______|
-               |   \          |    \
-               |    D         |     D
-                   __\____         __\____
-                  |       |       |       |
-            ... --|   B   |-- D --|   A   |-- ...
-                  |_______|       |_______|
-                    |    \          |    \
-                    |     .         |     .
-                           .               .
+                  \             \
+                  _\_____       _\_____
+                 |       |     |       |
+              ---|   B   |--D--|   A   |---
+                 |_______|     |_______|
+          \         |   \         |   \             \
+         __\____    |  __\____    |  __\____       __\____
+        |       |     ||     ||     ||     ||     |       |
+     ---|   B   |--D--||  A' ||=   =||  B' ||--D--|   A   |---
+        |_______|     ||_____||     ||_____||     |_______|
+           |   \        |   \         |   \         |   \
+           |    \       |  __\____    |  __\____    |    \
+                          |       |     |       |
+                       ---|   A   |--D--|   B   |---
+                          |_______|     |_______|
+                            |    \        |    \
+                            |     \       |     \
 
+
+It is calculated numerically exactly, warranting that the bond metric tensor is Hermitian and non-negative down to the numerical precision.
+A family of such environments is supported by :class:`yastn.tn.fpeps.EnvNTU`.
 
 
 Corner transfer matrix renormalization group (CTMRG)
@@ -237,8 +279,9 @@ Corner transfer matrix renormalization group (CTMRG)
 
 Calculation of expectation values of interests requires contraction of PEPS with its conjugate.
 This amounts to contraction of PEPS network composed of reduced tensor :math:`a` which is obtained by tracing over the physical index in tensors :math:`A` and it's conjugate :math:`A^{\dagger}`.
-Note that in the following digram the virtual legs of the peps tensor are labelled by :math:`t` (top), :math:`l` (left), :math:`b` (bottom), and :math:`r` (right) in
+In YASTN, this is supported by :class:`yastn.tn.fpeps.DoublePepsTensor`. Note that in the following digram the virtual legs of the peps tensor are labelled by :math:`t` (top), :math:`l` (left), :math:`b` (bottom), and :math:`r` (right) in
 an anticlockwise fashion. For the conjugate tensor, similarly, they are labelled by :math:`{t'}`, :math:`{l'}`, :math:`{b'}` and :math:`{r'}`.
+Swap gates are placed where the legs cross. This gives a simple structure for the contracted tensors on the :math:`2D` lattice, respecting the global fermionic order.
 
 ::
 
@@ -260,12 +303,39 @@ an anticlockwise fashion. For the conjugate tensor, similarly, they are labelled
                                        b' b
 
 
-Swap gates are placed where the legs cross. This gives a simple structure for the contracted tensors on the :math:`2D` lattice, respecting the global fermionic order.
 
-The exact contraction of a PEPS is exponentially hard [7], and one has to use efficient approximate contraction schemes. One of the state-of-the-art for calculating expectation values in the case of PEPS is the
-Corner Transfer Matrix Renormalization Group (:ref:`CTMRG<fpeps/expectation_values:Corner transfer matrix renormalization group (CTMRG) algorithm>`).
-CTMRG iteratively finds the environment of each tensor, representing the rest of the lattice, in the form of four corner
-tensors and edge tensors transfer matrices surrounding each unique tensor in the unit cell. They are used to calculate the expectation values by contracting tensors (with operators of interest acting on physical legs) and their environments.
+The exact contraction of a PEPS is exponentially hard and one has to use efficient approximate contraction schemes.
+One of the state-of-the-art for calculating expectation values in the case of PEPS employs the Corner Transfer Matrix Renormalization Group (CTMRG) [11] idea.
+It iteratively finds the environment of each unique tensor in the lattice, representing the rest of the lattice in the form of four corner
+tensors and edge tensors, see :ref:`CTMRG<fpeps/environments:Corner transfer matrix renormalization group (CTMRG) algorithm>` for further description.
+They are used to calculate the expectation values by contracting tensors (with operators of interest acting on physical legs) and their environments.
+
+
+Purification
+------------
+
+The thermal state for a Hamiltonian :math:`H` and inverse temperature  :math:`\beta = 1/(k_B T)`  is given by  :math:`\rho_{\beta} = \exp(-\beta H) / Z`, with :math:`Z = \text{Tr}(\exp(-\beta H))`. Since in tensor networks pure states are more amenable to proper representation and manipulation, we often choose to embed our thermal density matrix
+in a pure state by adding an ancillary Hilbert space to the physical Hilbert space. The thermal density matrix is obtained by tracing out the ancilla degrees of freedom. The technique is outlined as follows.
+
+We start with the system at infinite temperature (:math:`\beta=0`) where all states are equally probable. This is described as a maximally mixed density matrix :math:`\rho_0`.
+With the local basis :math:`\ket{e_{n}}` of dimension  :math:`d` (we assume for simplicity that the full Hilbert space of a many-body system is a product of identical local Hilbert spaces)
+
+:math:`\rho_0 = \prod_{sites} \sum_{n} \frac{1}{d} \ket{e_{n}}\bra{e_{n}}`.
+
+Then we write a purified wave-function :math:`\ket{\psi_{0}}` at infinite temperature as a maximally entangled state between the physical and ancillary degrees of freedom,
+where the latter is spanned by the same basis :math:`\ket{e_{n}}` as physical Hilbert space
+:math:`\ket{\psi_{0}} = \prod_{sites} \frac{1}{\sqrt{d}} \sum_{n=1}^{d}\ket{e_{n}} \ket{e_{n}}`.
+The state at finite temperature :math:`\beta` is obtained by evolving :math:`\ket{\psi_{0}}` in imaginary time
+with operator :math:`U = \exp(-\frac{\beta}{2}H)` acting on physical degrees of freedom:
+
+:math:`\ket{\psi_{\beta}} = \exp\left(-\frac{\beta}{2} H \right) \ket{\psi_{0}}`
+
+Now, to recover the thermal density matrix of the physical system, we take the trace over the ancillary degrees of freedom of the total density matrix :math:`\rho_{tot} = \ket{\psi_{\beta}} \bra{\psi_{\beta}}`
+
+:math:`\text{Tr}_{ancillas} \rho_{tot} = \exp(-\beta H) = \rho_{\beta}`.
+
+In YASTN, legs corresponding to system space and an ancilla space are always fused together forming one physical PEPS leg.
+During numerical simulations, the Hamiltonian acting on system degrees of freedom is augmented with an identity operator acting on ancillas.
 
 
 References & Related works
@@ -277,4 +347,8 @@ References & Related works
 4. "Simulation of strongly correlated fermions in two spatial dimensions with fermionic projected entangled-pair states", Philippe Corboz, Román Orús, Bela Bauer, and Guifré Vidal, `Phys. Rev. B 81, 165104 (2010) <https://arxiv.org/abs/0912.0646>`_
 5. “Classical Simulation of Infinite-Size Quantum Lattice Systems in Two Spatial Dimensions”, J. Jordan, R. Orus, G. Vidal, F. Verstraete, and J. I. Cirac, `Phys. Rev. Lett. 101, 250602 (2008) <https://arxiv.org/abs/cond-mat/0703788>`_
 6. "Time evolution of an infinite projected entangled pair state: Neighborhood tensor update", Jacek Dziarmaga, `Phys. Rev. B 104, 094411 (2021) <https://arxiv.org/abs/2107.06635>`_
-7. "On entropy growth and the hardness of simulating time evolution", N. Schuch, M. M. Wolf, K. G. H. Vollbrecht and J. I. Cirac, `New Journal of Physics 10(3), 033032 (2008) <https://arxiv.org/abs/0801.2078>`_
+7. "Finite-temperature tensor network study of the Hubbard model on an infinite square lattice" Aritra Sinha, Marek M. Rams, Piotr Czarnik, and Jacek Dziarmaga, `Phys. Rev. B 106, 195105 (2022) <https://arxiv.org/abs/2209.00985>`_
+8. “Accurate Determination of Tensor Network State of Quantum Lattice Models in Two Dimensions”, H. C. Jiang, Z. Y. Weng, and T. Xiang, `Phys. Rev.Lett. 101, 090603 (2008) <https://arxiv.org/abs/0806.3719>`_
+9. "Algorithms for finite projected entangled pair states", M. Lubasch, J. I. Cirac, and M.-C. Banyuls, `Phys. Rev. B 90, 064425 (2014) <https://arxiv.org/abs/1405.3259>`_
+10. "Cluster update for tensor network states", L. Wang and F. Verstraete, `arXiv:1110.4362 [cond-mat.str-el] (2011) <https://arxiv.org/abs/1110.4362>`_
+11. “Corner Transfer Matrix Renormalization Group Method”, T. Nishino and K. Okunishi, `Journal of the Physical Society of Japan 65, 891 (1996) <https://arxiv.org/abs/cond-mat/9507087>`_
