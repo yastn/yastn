@@ -405,7 +405,7 @@ def truncation_mask(S, tol=0, tol_block=0, tol_multiplets=0,
             pos = D_total
             # condition for multiplet
             if pos < len(inds):
-                while abs(S._data[inds[-pos]] - S._data[inds[-pos-1]]) < abs(S._data[inds[-pos]]) * tol_multiplets:
+                while abs(S._data[inds[-pos]] - S._data[inds[-pos-1]]) <= abs(S._data[inds[len(inds) - 1]]) * tol_multiplets:
                     pos = pos - 1
 
             Smask._data[inds[:-pos]] = False
