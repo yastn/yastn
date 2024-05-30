@@ -62,6 +62,20 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, co
             else:
                 max_dsv = max((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item() \
                             for k, v in corner_sv.items())
+
+                # for k, v in corner_sv.items():
+                #     print(k)
+                #     num_of_sv = 0
+                #     for t in [(-2, 0, 0), (-1, -1, 0), (-1, 0, 1), (-1, 1, 0), (0, -2, 0), (0, -1, 1), (0, 0, 0), (0, 1, 1), (0, 2, 0), (1, -1, 0), (1, 0, 1), (1, 1, 0), (2, 0, 0)]:
+                #         try:
+                #             print("t, sv", t, (old_corner_sv[k][t, t]).tolist())
+                #             print("t, sv", t, (v[t, t]).tolist())
+                #             num_of_sv = num_of_sv + len(v[t, t].tolist())
+                #         except:
+                #             continue
+                #     print((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item())
+                #     print("Num of SV:", num_of_sv)
+
                 truncation_method = "Symmetric"
 
             old_corner_sv = corner_sv
