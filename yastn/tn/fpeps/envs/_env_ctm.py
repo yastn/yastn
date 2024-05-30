@@ -479,8 +479,8 @@ def proj_corners(r0, r1, opts_svd):
     Smask = truncation_mask(s, **opts_svd)
 
     # print("-----------------")
-    # if sum(Smask[(1,1,0), (1,1,0)]) != sum(Smask[(-1,-1,0), (-1,-1,0)]):
-    #     for t in [(1,1,0), (-1,-1,0)]:
+    # if sum(Smask[(0,-1,1), (0,-1,1)]) != sum(Smask[(0,1,1), (0,1,1)]):
+    #     for t in [(0,-1,1), (0,1,1)]:
     #         try:
     #             st = s[t, t]
     #             print("t, s = ", t, st.tolist())
