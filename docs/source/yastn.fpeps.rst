@@ -33,7 +33,6 @@ API: yastn.tn.fpeps
    fpeps/initialization
    fpeps/evolution
    fpeps/environments.rst
-   fpeps/double_peps_tensor.rst
 
 *************************
 Examples: basics of usage

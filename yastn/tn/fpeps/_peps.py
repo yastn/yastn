@@ -22,9 +22,34 @@ class Peps():
 
     def __init__(self, geometry):
         """
-        Initialize empty PEPS on a lattice specified by provided geometry.
+        Empty PEPS instance on a lattice specified by provided geometry.
 
         Empty PEPS has no tensors assigned.
+        Supports [] notation to get/set individual tensors.
+        Inherits methods from geometry.
+
+        Example
+        -------
+
+        ::
+
+            geometry = fpeps.CheckerboardLattice()
+            psi = fpeps.Peps(geometry)
+
+            config = yastn.make_config(sym='U1')
+            leg = yastn.Leg(config, s=1, t=(0, 1), D=(1, 1))
+            A00 = yastn.rand(config, legs=[leg.conj(), leg, leg.conj(), leg])
+            psi[0, 0] = A00
+            ten = psi[0, 0]
+            assert ten.ndim == 3
+            # Currently, Peps tensor with 5 legs gets fused as (oo)(oo)o
+            # in the process of setting to limit the number of tensor blocks.
+
+            A00 = yastn.rand(config, legs=[leg.conj(), leg, leg.conj()])
+            psi[0, 0] = A00
+            ten = psi[0, 0]
+            assert ten.ndim == 4
+             # Peps with no physical legs are also possible and handled by algorithms like ctmrg.
         """
         self.geometry = geometry
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered"]:
@@ -36,6 +61,7 @@ class Peps():
         return self[0, 0].config
 
     def has_physical(self):
+        """ Whether PEPS has phyical leg"""
         return self[0, 0].ndim in (3, 5)
 
     def __getitem__(self, site):
@@ -97,14 +123,13 @@ class Peps():
         """
         Converts a specific row or column of PEPS into MPO.
 
-        For tensor with physical leg, Mpo consists of DoublePepsTensor (2-layers)
-        For tensor without physical leg, directly uses Peps tensors (1-layer)
-
+        For tensors with physical leg, Mpo consists of DoublePepsTensor (2-layers).
+        For tensors without a physical leg directly use Peps tensors (1-layer).
 
         Parameters
         ----------
         n: int
-            index of row/column.
+            index of row or column.
         dirn: str
             'v' for column, 'h' for row.
         """

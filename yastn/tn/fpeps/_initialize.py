@@ -24,10 +24,11 @@ def product_peps(geometry, vectors) -> Peps:
     """
     Initialize PEPS in a product state composed of provided vectors.
 
-    Vectors can have ndim 1 or 2, respectively for state or purification/operator.
+    Vectors can have ndim=1 for (pure) state and ndim=2 for purification/operator.
+    In the latter case, two legs will be fused into one physical leg.
     Virtual legs of dimension one with zero charge are added automatically.
-    For vectors, their possibly non-zero charge is compensated by an auxiliary leg,
-    that is added automatically.
+    For vectors, their possibly non-zero charge is incorporated by
+    adding an auxiliary leg with dimension one.
 
     Parameters
     ----------
@@ -35,7 +36,8 @@ def product_peps(geometry, vectors) -> Peps:
         lattice geometry.
     vectors : yastn.Tensor | Dict[tuple[Int, Int], yastn.Tensor]
         If yastn.Tensor is provided, it gets repeated across the lattice.
-        If dict is provided, it should specify a map between each unique lattice site and the corresponding vector.
+        If dict is provided, it should specify a map between
+        each unique lattice site and the corresponding vector.
     """
     if not isinstance(geometry, (SquareLattice, CheckerboardLattice)):
         raise YastnError("Geometry should be an instance of SquareLattice or CheckerboardLattice")

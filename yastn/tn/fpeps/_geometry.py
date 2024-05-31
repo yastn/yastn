@@ -19,7 +19,7 @@ from ... import YastnError
 
 
 class Site(NamedTuple):
-    """ Site coordinates `(nx, ny)` are consistent with matrix notation of `(row, column)`. """
+    """ Site coordinates `(nx, ny)` are consistent with matrix indexing with `(row, column)`. """
     nx : int = 0
     ny : int = 0
 
@@ -48,12 +48,13 @@ class SquareLattice():
 
         Parameters
         ----------
-        dims : tuple[int, int]
-            Size of elementary cell, number of `(rows, columns)`.
-            Site(0, 0) corresponds to top-left corner of the lattice.
+        dims: tuple[int, int]
+            Size of the unit cell in a form of ``dims=(rows, columns)``.
+            Site(0, 0) corresponds to top-left corner of the unit cell.
 
-        boundary : str
-            `obc`, `infinite`, or `cylinder`.
+        boundary: str
+            Finite lattice, infinite lattice, or finite cylinder periodic along rows,
+            respectively, for 'obc', 'infinite', or 'cylinder'.
         """
         if boundary not in ('obc', 'infinite', 'cylinder'):
             raise YastnError(f"{boundary=} not recognized; should be 'obc', 'infinite', or 'cylinder'")
@@ -102,10 +103,10 @@ class SquareLattice():
         ----------
         dirn: None | str
             return all bonds if None;
-            `v` and `h` are for vertical and horizontal bonds, respectively.
+            'v' and 'h' are for vertical and horizontal bonds, respectively.
 
         reverse: bool
-            whether to reverse order of returned bonds
+            whether to reverse the order of bonds.
         """
         if dirn == 'v':
             return self._bonds_v[::-1] if reverse else self._bonds_v
@@ -123,7 +124,7 @@ class SquareLattice():
         ----------
         d: str | tuple[int, int]
             Take values in: 't', 'b', 'l', 'r', 'tl', 'bl', 'tr', 'br',
-            or a tuple of (dx, dy).
+            or a tuple of shifts (dx, dy).
         """
         if site is None:
             return None
