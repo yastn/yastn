@@ -78,7 +78,7 @@ def save_load_mps_hdf5(sym='dense', config=None, tol=1e-12):
     #
     # Similarily, one can save and load MPO
     #
-    psi = mps.random_mpo(I, D_total=8, dtype='complex128')
+    psi = -1j * mps.random_mpo(I, D_total=8, dtype='complex128')
     psi.canonize_(to='last', normalize=False)  # extra cannonization
     psi.canonize_(to='first', normalize=False)  # retaining the norm
     with h5py.File('tmp.h5', 'w') as f:

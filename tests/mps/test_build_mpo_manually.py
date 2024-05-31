@@ -25,9 +25,9 @@ except ImportError:
 def build_mpo_nn_hopping_manually(N, t, mu, sym='U1', config=None):
     """
     Nearest-neighbor hopping Hamiltonian on N sites
-    with hopping amplitude t and chemical potential mu, i.e.,
+    with hopping amplitude t and chemical potential mu,
     H = t * sum_{n=1}^{N-1} (cp_n c_{n+1} + cp_{n+1} c_n)
-      + mu * sum_{n=1}^{N} cp_n c_n
+        + mu * sum_{n=1}^{N} cp_n c_n
 
     Initialize MPO symmetric tensors by hand with sym = 'dense', 'Z2', or 'U1'.
     Config is used to inject non-default backend and default_device.

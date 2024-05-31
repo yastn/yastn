@@ -31,13 +31,24 @@ which contains DMRG and variational MPS compression.
 TDVP
 ----
 
-Example of :ref:`TDVP<mps/algorithms_tdvp:Time-dependent variational principle (TDVP)>`
-simulating time evolution after a sudden quench in a free-fermionic model.
+Sudden quench in a free-fermionic model
+"""""""""""""""""""""""""""""""""""""""
 
 .. literalinclude:: /../../tests/mps/test_tdvp.py
         :pyobject: tdvp_sudden_quench
 
-Slow quench across a quantum critical point in a transverse Ising chain.
+.. literalinclude:: /../../tests/mps/test_tdvp.py
+        :pyobject: correlation_matrix_from_mps
+
+.. literalinclude:: /../../tests/mps/test_tdvp.py
+        :pyobject: gs_correlation_matrix_exact
+
+.. literalinclude:: /../../tests/mps/test_tdvp.py
+        :pyobject: evolve_correlation_matrix_exact
+
+
+Slow quench across a quantum critical point in a transverse Ising chain
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 .. literalinclude:: /../../tests/mps/test_tdvp.py
         :pyobject: tdvp_KZ_quench

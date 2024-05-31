@@ -16,8 +16,8 @@ In the algorithm we `sweep` through the MPS, starting from the initial guess :co
 optimizing each :class:`yastn.Tensor` :math:`A_j` one by one while keeping
 all other tensors fixed (alternating least squares).
 At each step, the best :math:`A_j` is then found by minimizing the energy
-of the local effective Hamiltonian :math:`H_{eff}`. DMRG :code:`method='1site'`
-works with single-site effective :math:`H_{eff}`.
+of the local effective Hamiltonian :math:`H_{\rm eff}`. DMRG :code:`method='1site'`
+works with single-site effective :math:`H_{\rm eff}`.
 
 ::
 
@@ -34,7 +34,7 @@ works with single-site effective :math:`H_{eff}`.
              _|_    _|_                 _|_    _|_    _|
             |___|--|___|-..         ..-|___|--|___|--|___|
 
-After the local problem is solved and a new :math:`A_j` minimizing :math:`H_{eff}` is found,
+After the local problem is solved and a new :math:`A_j` minimizing :math:`H_{\rm eff}` is found,
 the MPS is orthogonalized to keep it in the :ref:`canonical form<theory/mps/basics:Canonical form>`.
 In the simplest formulation of '1site' DMRG algorithm, the virtual dimension/spaces are fixed.
 
@@ -43,7 +43,7 @@ Two-site DMRG
 -------------
 
 The virtual spaces of the MPS can be adjusted by performing DMRG :code:`method='2site'`.
-In this approach, we (i) build effective Hamiltonian :math:`H_{eff}` of two neighbouring sites,
+In this approach, we (i) build effective Hamiltonian :math:`H_{\rm eff}` of two neighbouring sites,
 (ii) solve for its ground state, (iii) split the resulting tensor back into
 two sites with SVD, and then move to next pair. By doing SVD decomposition we can dynamically
 adjust virtual space of MPS according to parameters in :code:`opts_svd`.

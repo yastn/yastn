@@ -20,11 +20,14 @@ Example symmetries
 * U(1) symmetry
 
 .. literalinclude:: /../../yastn/sym/sym_U1.py
+    :pyobject: sym_U1
 
 * :math:`Z_2` symmetry
 
 .. literalinclude:: /../../yastn/sym/sym_Z2.py
+    :pyobject: sym_Z2
 
 * :math:`Z_2\times U(1)`
 
 .. literalinclude:: /../../tests/tensor/configs/syms/sym_Z2xU1.py
+    :pyobject: sym_Z2xU1

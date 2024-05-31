@@ -67,13 +67,13 @@ def tdvp_(psi, H,
         4th order step is composed of five 2nd order steps.
 
     opts_expmv: dict
-        Options passed to :meth:`yastn.expmv`
+        Options passed to :meth:`yastn.expmv`, in particular wherher ``H`` is hermitian.
+        Unspecified options use default :meth:`yastn.expmv` settings.
         If there is information from previous time-steps stored under the hood,
         the initial guess of the size of krylov space opts_expmv['ncv'] is overriden.
 
     opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`'12site'`.
-        If None, use default {'tol': 1e-13}.
 
     Returns
     -------
@@ -82,7 +82,7 @@ def tdvp_(psi, H,
 
             * :code:`ti` initial time of the time-interval.
             * :code:`tf` current time.
-            * :code:`time_independent` if the Hamiltonian is time-independent.
+            * :code:`time_independent` whether the Hamiltonian is time-independent.
             * :code:`dt` time-step used.
             * :code:`steps` number of time-steps in the last time-interval.
     """

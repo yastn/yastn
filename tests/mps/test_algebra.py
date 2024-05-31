@@ -143,7 +143,7 @@ def multiplication_example_gs(config=None, tol=1e-12):
         terms.append(mps.Hterm(mu, [i], [ops.cp() @ ops.c()]))
     H = mps.generate_mpo(I, terms)
     #
-    # To standardize this test we will fix a seed for random MPS we use.
+    # To standardize this test we fix a seed for random MPS we use.
     #
     ops.random_seed(seed=0)
     #

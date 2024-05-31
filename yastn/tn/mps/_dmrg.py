@@ -92,7 +92,6 @@ def dmrg_(psi, H, project=None, method='1site',
 
     opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd_with_truncation` used to truncate virtual spaces in method='2site'.
-        If None, use default {'tol': 1e-13}
 
     Returns
     -------
