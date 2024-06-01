@@ -66,13 +66,13 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, co
                 # for k, v in corner_sv.items():
                 #     print(k)
                 #     num_of_sv = 0
-                #     for t in [(-2, 0, 0), (-1, -1, 0), (-1, 0, 1), (-1, 1, 0), (0, -2, 0), (0, -1, 1), (0, 0, 0), (0, 1, 1), (0, 2, 0), (1, -1, 0), (1, 0, 1), (1, 1, 0), (2, 0, 0)]:
+                #     for t in v.get_legs()[0].t:
                 #         try:
                 #             print("t, sv", t, (old_corner_sv[k][t, t]).tolist())
-                #             print("t, sv", t, (v[t, t]).tolist())
-                #             num_of_sv = num_of_sv + len(v[t, t].tolist())
                 #         except:
-                #             continue
+                #             pass
+                #         print("t, sv", t, (v[t, t]).tolist())
+                #         num_of_sv = num_of_sv + len(v[t, t].tolist())
                 #     print((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item())
                 #     print("Num of SV:", num_of_sv)
 
