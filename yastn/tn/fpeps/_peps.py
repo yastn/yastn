@@ -24,32 +24,42 @@ class Peps():
         """
         Empty PEPS instance on a lattice specified by provided geometry.
 
-        Empty PEPS has no tensors assigned.
-        Supports [] notation to get/set individual tensors.
         Inherits methods from geometry.
+        Empty PEPS has no tensors assigned.
+        Supports :code:`[]` notation to get/set individual tensors.
+        Intended both for PEPS with physical legs (rank-5 PEPS tensors)
+        and without physical legs (rank-4 PEPS tensors).
 
         Example
         -------
 
         ::
 
+            import yastn
+            import yastn.tn.fpeps as fpeps
+
             geometry = fpeps.CheckerboardLattice()
             psi = fpeps.Peps(geometry)
 
             config = yastn.make_config(sym='U1')
             leg = yastn.Leg(config, s=1, t=(0, 1), D=(1, 1))
-            A00 = yastn.rand(config, legs=[leg.conj(), leg, leg.conj(), leg])
+            #
+            # for rank-5 tensors
+            #
+            A00 = yastn.rand(config, legs=[leg.conj(), leg, leg, leg.conj(), leg])
             psi[0, 0] = A00
-            ten = psi[0, 0]
-            assert ten.ndim == 3
-            # Currently, Peps tensor with 5 legs gets fused as (oo)(oo)o
-            # in the process of setting to limit the number of tensor blocks.
+            # Currently, PEPS tensor with 5 legs gets fused as (oo)(oo)o by __setitem__.
+            # This is done to work with object having smaller number of blocks.
+            assert psi[0, 0].ndim == 3
+            assert (psi[0, 0].unfuse_legs(axes=(0, 1)) - A00).norm() < 1e-13
 
-            A00 = yastn.rand(config, legs=[leg.conj(), leg, leg.conj()])
-            psi[0, 0] = A00
-            ten = psi[0, 0]
-            assert ten.ndim == 4
-             # Peps with no physical legs are also possible and handled by algorithms like ctmrg.
+            # PEPS with no physical legs is also possible.
+            #
+            # for rank-4 tensors
+            #
+            B00 = yastn.rand(config, legs=[leg.conj(), leg, leg, leg.conj()])
+            psi[0, 0] = B00
+            assert psi[0, 0].ndim == 4
         """
         self.geometry = geometry
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered"]:
@@ -60,7 +70,7 @@ class Peps():
     def config(self):
         return self[0, 0].config
 
-    def has_physical(self):
+    def has_physical(self) -> bool:
         """ Whether PEPS has phyical leg"""
         return self[0, 0].ndim in (3, 5)
 
@@ -80,7 +90,7 @@ class Peps():
             obj = obj.unfuse_legs(axes=(0, 1))
         self._data[self.site2index(site)] = obj
 
-    def save_to_dict(self):
+    def save_to_dict(self) -> dict:
         """
         Serialize PEPS into a dictionary.
         """
@@ -157,9 +167,9 @@ class Peps2Layers():
 
     def __init__(self, bra, ket=None):
         """
-        Initialize empty PEPS on a lattice specified by provided geometry.
+        PEPS class supporting <bra|ket> contraction.
 
-        Empty PEPS has no tensors assigned.
+        If ket is not provided, ket = bra.
         """
         self.bra = bra
         self.ket = bra if ket is None else ket

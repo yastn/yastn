@@ -8,7 +8,7 @@ What are abelian-symmetric tensors
 
 .. toctree::
    :caption: What are abelian-symmetric tensors
-   
+
    theory/tensor/basics
 
 ***************************
@@ -30,6 +30,7 @@ API: yastn and yastn.Tensor
    tensor/output
    tensor/autograd
    tensor/krylov
+   tensor/dispatch
 
 *************************
 Examples: basics of usage

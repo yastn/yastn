@@ -24,7 +24,7 @@ class EnvNTU:
         Parameters
         ----------
         psi: yastn.tn.Peps
-            Evolved state
+            State being evolved.
 
         which: str
             Type of environment from 'NN', 'NN+', 'NN++', 'NNN', 'NNN+', 'NNN++'

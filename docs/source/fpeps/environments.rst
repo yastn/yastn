@@ -1,13 +1,26 @@
-Expectation values
-==================
+Environments
+============
+
+Contractions of PEPS lattice are supported by environment classes. Those include:
+
+    * :class:`yastn.tn.fpeps.EnvNTU` which g NTU approximation of the bond metric
+    * :class:`yastn.tn.fpeps.EnvCTM`
+    * :class:`yastn.tn.fpeps.EnvBoundaryMPS`
 
 Expectation values in PEPS require contraction of the lattice. This can be approximately done using CTMRG.
 
-Corner transfer matrix renormalization group (CTMRG) algorithm
---------------------------------------------------------------
+
+Neighberhood tensor update environments
+---------------------------------------
+
+.. autoclass:: yastn.tn.fpeps.EnvNTU
+
+
+Corner transfer matrix renormalization group (CTMRG)
+----------------------------------------------------
 
 Introduction
-^^^^^^^^^^^^
+""""""""""""
 
 Nishino and Okunishi first deployed CTMRG [1] by extending the DMRG framework to give variational approximations for
 Baxter's corner matrices of the vertex model. Their pioneering work demonstrated the potential of combining DMRG with
@@ -18,7 +31,7 @@ the application of CTMRG techniques to nonsymmetric tensors. However, this exten
 due to the loss of symmetry on the virtual indices.
 
 Idea
-^^^^
+""""
 
 The core idea behind CTMRG, both in the symmetric and nonsymmetric cases, remains the same. The method approximates the
 contraction of an infinite tensor network by utilizing a finite set of environment tensors with a fixed rank :math:`\chi`.
@@ -79,6 +92,7 @@ The convention for ordering the indices in the CTMRG environment tensors are giv
 
 
 
+.. autoclass:: yastn.tn.fpeps.EnvCTM
 
 We implement a single iteration of the Corboz version [3] of CTMRG:
 
@@ -98,8 +112,10 @@ and all unique neighbor two-point correlators can be calculated using the functi
 
 .. autofunction:: yastn.tn.fpeps.EnvCTM.measure_nn
 
-References & Related works
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-1. “Corner Transfer Matrix Renormalization Group Method”, T. Nishino and K. Okunishi, `Journal of the Physical Society of Japan 65, 891 (1996) <https://arxiv.org/abs/cond-mat/9507087>`_
-2. "Simulation of two dimensional quantum systems on an infinite lattice revisited: corner transfer matrix for tensor contraction", R. Orus, G. Vidal, `Phys. Rev. B 80, 094403 (2009) <https://arxiv.org/abs/0905.3225>`_
-3. "Competing States in the t-J Model: Uniform d-Wave State versus Stripe State (Supplemental Material)", P. Corboz, T. M. Rice, and M. Troyer, `Phys. Rev. Lett. 113, 046402 (2014) <https://arxiv.org/abs/1402.2859>`_
+
+Boundary MPS
+------------
+
+.. autoclass:: yastn.tn.fpeps.EnvBoundaryMps
+
+

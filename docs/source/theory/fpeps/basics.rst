@@ -172,11 +172,11 @@ is approximated by a product of local two-site gates.
 
 For a Hamiltonian with nearest-neighbor interactions definded on
 a :math:`2 \times 2` lattice, :math:`H = \sum_{\rm bond} H_{\rm bond},` there are four disjoint bonds:
-two horizontal :math:`A_{1}A_{2}`, :math:`A_{3}A_{4}`, and two vertical :math:`A_{1}A_{3}`, :math:`A_{2}A_{4}`.
+two horizontal :math:`1{-}2`, :math:`3{-}4`, and two vertical :math:`1{-}3`, :math:`2{-}4`.
 The corresponding two-site gates :math:`U_{\rm bond} = \exp(-d\beta H_{\rm bond} / 2)`,
 and a typical 2nd-order Suzuki-Trotter approximation gives
 
-:math:`\exp(-d\beta H) \approx U_{A_{1}A_{2}}^{\rm hor} U_{A_{3}A_{4}}^{\rm hor} U_{A_{1}A_{3}}^{\rm ver} U_{A_{2}A_{4}}^{\rm ver} U_{A_{2}A_{4}}^{\rm ver} U_{A_{1}A_{3}}^{\rm ver} U_{A_{3}A_{4}}^{\rm hor} U_{A_{1}A_{2}}^{\rm hor}`.
+:math:`\exp(-d\beta H) \approx U_{1{-}2}^{\rm hor} U_{3{-}4}^{\rm hor} U_{1{-}3}^{\rm ver} U_{2{-}4}^{\rm ver} U_{2{-}4}^{\rm ver} U_{1{-}3}^{\rm ver} U_{3{-}4}^{\rm hor} U_{1{-}2}^{\rm hor}`.
 
 Each gate increases the virtual bond dimension of PEPS tensors by a factor equal to the SVD rank of the gate `r`.
 
@@ -327,10 +327,10 @@ the :math:`2D` lattice, respecting the global fermionic order.
 
 The exact contraction of a PEPS is exponentially hard and one has to use efficient approximate contraction schemes.
 One of the state-of-the-art for calculating expectation values in the case of PEPS employs
-the Corner Transfer Matrix Renormalization Group (CTMRG) [11] idea. It iteratively finds
+the Corner Transfer Matrix Renormalization Group (CTMRG) [11,12,13]. It iteratively finds
 the environment of each unique tensor in the lattice, representing the rest of the lattice
 in the form of four corner tensors and four edge tensors, for further description see
-:ref:`CTMRG<fpeps/environments:Corner transfer matrix renormalization group (CTMRG) algorithm>`.
+:ref:`CTMRG<fpeps/environments:Corner transfer matrix renormalization group (CTMRG)>`.
 They are used to calculate the expectation values by contracting tensors---
 with operators of interest acting on physical legs---and their environments.
 
@@ -385,3 +385,5 @@ References & Related works
 9. "Algorithms for finite projected entangled pair states", M. Lubasch, J. I. Cirac, and M.-C. Banyuls, `Phys. Rev. B 90, 064425 (2014) <https://arxiv.org/abs/1405.3259>`_
 10. "Cluster update for tensor network states", L. Wang and F. Verstraete, `arXiv:1110.4362 (2011) <https://arxiv.org/abs/1110.4362>`_
 11. “Corner Transfer Matrix Renormalization Group Method”, T. Nishino and K. Okunishi, `J. Phys. Soc. Jpn. 65, 891 (1996) <https://arxiv.org/abs/cond-mat/9507087>`_
+12. "Simulation of two dimensional quantum systems on an infinite lattice revisited: corner transfer matrix for tensor contraction", R. Orus, G. Vidal, `Phys. Rev. B 80, 094403 (2009) <https://arxiv.org/abs/0905.3225>`_
+13. "Competing States in the t-J Model: Uniform d-Wave State versus Stripe State (Supplemental Material)", P. Corboz, T. M. Rice, and M. Troyer, `Phys. Rev. Lett. 113, 046402 (2014) <https://arxiv.org/abs/1402.2859>`_

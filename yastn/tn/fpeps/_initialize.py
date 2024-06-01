@@ -25,7 +25,7 @@ def product_peps(geometry, vectors) -> Peps:
     Initialize PEPS in a product state composed of provided vectors.
 
     Vectors can have ndim=1 for (pure) state and ndim=2 for purification/operator.
-    In the latter case, two legs will be fused into one physical leg.
+    In the latter case, two legs will be fused into one physical PEPS leg.
     Virtual legs of dimension one with zero charge are added automatically.
     For vectors, their possibly non-zero charge is incorporated by
     adding an auxiliary leg with dimension one.
@@ -66,7 +66,8 @@ def product_peps(geometry, vectors) -> Peps:
 
 def load_from_dict(config, d) -> Peps:
     r"""
-    Create PEPS from dictionary.
+    Create PEPS-related object from dictionary.
+    Works for :class:`yastn.tn.fpeps.Peps`, :class:`yastn.tn.fpeps.EnvCTM`.
 
     Parameters
     ----------
@@ -74,8 +75,9 @@ def load_from_dict(config, d) -> Peps:
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
 
     in_dict: dict
-        dictionary containing serialized MPS/MPO, i.e.,
-        a result of :meth:`yastn.tn.mps.MpsMpo.save_to_dict`.
+        dictionary containing serialized PEPS related object, i.e.,
+        a result of :meth:`yastn.tn.fpeps.Peps.save_to_dict`, or
+        :meth:`yastn.tn.fpeps.EnvCTM.save_to_dict`.
     """
 
     if 'class' in d and d['class'] == 'EnvCTM':  # load EnvCTM

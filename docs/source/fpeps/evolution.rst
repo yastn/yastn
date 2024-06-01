@@ -21,4 +21,3 @@ a method to calculate `bond_metric`. A primary class in this context is :class:`
 however :class:`yastn.tn.fpeps.EnvCTM` can be used for a (fast) full update scheme, and
 :class:`yastn.tn.fpeps.EnvApproximae` for claster updates that require approximate contraction.
 
-.. autoclass:: yastn.tn.fpeps.EnvNTU
