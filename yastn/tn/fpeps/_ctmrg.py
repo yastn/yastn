@@ -46,8 +46,8 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, co
     for sweep in range(1, max_sweeps + 1):
         #
         env.update_(method=method, opts_svd=opts_svd)
+        if sweep % 2 == 1: continue
         if corner_tol:  # check convergence of corners singular values
-            # if sweep % 2 == 1: continue
             corner_sv = calculate_corner_svd(env)
 
             if not 'tol_multiplets' in opts_svd.keys():
