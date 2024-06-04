@@ -1,3 +1,17 @@
+// Copyright 2024 The YASTN Authors. All Rights Reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// ==============================================================================
 #include <torch/extension.h>
 #include <iostream>
 #include <vector>
@@ -5,9 +19,9 @@
 // meta_new -> list of [(tn, Dn, sln), ...] where
 //              tn -> effective charge for block in fused tensor
 //              Dn -> effective shape of block tn in fused tensor
-//              sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+//              sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
 //
-// meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+// meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
 //             this source block will belong to destination block tn
 //          -> gr: tuple holding description of source data
 //                  slo -> specifies the location of source block in 1d data
@@ -21,11 +35,11 @@ torch::Tensor mtm_forward_1d_plain(
 	torch::Tensor data,
 	std::vector<int64_t> order,
 	std::vector< std::tuple<
-		std::vector<int64_t> /* tn */, 
-		std::vector<int64_t> /* Dn */, 
-		std::vector<int64_t> /* Sln */, 
+		std::vector<int64_t> /* tn */,
+		std::vector<int64_t> /* Dn */,
+		std::vector<int64_t> /* Sln */,
 		std::vector<int64_t> /* t1 */,
-		std::vector< 
+		std::vector<
 			std::tuple <
 				std::vector<int64_t> /* _ */,
 				std::vector<int64_t> /* slo */,
@@ -33,7 +47,7 @@ torch::Tensor mtm_forward_1d_plain(
 				std::vector< std::vector<int64_t> >, /* Dscl */
 				std::vector<int64_t> /* Drsh */
 			>
-		> 
+		>
 	> > jobs,
 	int64_t Dsize
 	){
@@ -47,7 +61,7 @@ torch::Tensor mtm_forward_1d_plain(
 	for (auto const &job : jobs) {
 		auto _tmp = newdata.index({torch::indexing::Slice(std::get<2>(job)[0], std::get<2>(job)[1])})
 			.view(at::IntArrayRef(std::get<1>(job)));
-		
+
 		for (auto const &job_b : std::get<4>(job)) {
 
 			std::vector<at::indexing::TensorIndex> slcs;
@@ -72,11 +86,11 @@ torch::Tensor mtm_forward_1d_plain_omp(
 	torch::Tensor data,
 	std::vector<int64_t> order,
 	std::vector< std::tuple<
-		std::vector<int64_t> /* tn */, 
-		std::vector<int64_t> /* Dn */, 
-		std::vector<int64_t> /* Sln */, 
+		std::vector<int64_t> /* tn */,
+		std::vector<int64_t> /* Dn */,
+		std::vector<int64_t> /* Sln */,
 		std::vector<int64_t> /* t1 */,
-		std::vector< 
+		std::vector<
 			std::tuple <
 				std::vector<int64_t> /* _ */,
 				std::vector<int64_t> /* slo */,
@@ -84,7 +98,7 @@ torch::Tensor mtm_forward_1d_plain_omp(
 				std::vector< std::vector<int64_t> >, /* Dscl */
 				std::vector<int64_t> /* Drsh */
 			>
-		> 
+		>
 	> > jobs,
 	int64_t Dsize
 	){
@@ -98,7 +112,7 @@ torch::Tensor mtm_forward_1d_plain_omp(
 	for (auto const &job : jobs) {
 		auto _tmp = newdata.index({torch::indexing::Slice(std::get<2>(job)[0], std::get<2>(job)[1])})
 			.view(at::IntArrayRef(std::get<1>(job)));
-		
+
 		#pragma omp parallel for
 		for (auto const &job_b : std::get<4>(job)) {
 
@@ -185,7 +199,7 @@ inline int64_t f_i_source_to_dest(
     // iv) indices in reshaped destination
   	std::vector<int64_t> X_dest_block(X_reshaped.size());
     for (int d=0; d<X_reshaped.size(); d++) {
-    	X_dest_block[d]= X_reshaped[d] + Dslc[d][0]; 
+    	X_dest_block[d]= X_reshaped[d] + Dslc[d][0];
     }
     auto i_dest_block= index_1d(X_dest_block, strides_Dn);
     auto i_dest= i_dest_block + source_offset;
@@ -196,11 +210,11 @@ torch::Tensor map_source_to_dest_v1(
 	torch::Tensor data,
 	std::vector<int64_t> order,
 	std::vector< std::tuple<
-		std::vector<int64_t> /* tn */, 
-		std::vector<int64_t> /* Dn */, 
-		std::vector<int64_t> /* Sln */, 
+		std::vector<int64_t> /* tn */,
+		std::vector<int64_t> /* Dn */,
+		std::vector<int64_t> /* Sln */,
 		std::vector<int64_t> /* t1 */,
-		std::vector< 
+		std::vector<
 			std::tuple <
 				std::vector<int64_t> /* _ */,
 				std::vector<int64_t> /* slo */,
@@ -208,7 +222,7 @@ torch::Tensor map_source_to_dest_v1(
 				std::vector< std::vector<int64_t> >, /* Dscl */
 				std::vector<int64_t> /* Drsh */
 			>
-		> 
+		>
 	> > jobs){
 
 	auto options_int= torch::TensorOptions()
@@ -242,13 +256,13 @@ torch::Tensor map_source_to_dest_v1(
         // iv) indices in reshaped destination
       	std::vector<int64_t> X_dest_block(X_reshaped.size());
         for (int d=0; d<X_reshaped.size(); d++) {
-        	X_dest_block[d]= X_reshaped[d] + std::get<3>(job_b)[d][0]; 
+        	X_dest_block[d]= X_reshaped[d] + std::get<3>(job_b)[d][0];
         }
         auto i_dest_block= index_1d(X_dest_block, strides_Dn);
         auto i_dest= i_dest_block + std::get<2>(job)[0];
         return i_dest;
       };
-      
+
       for (int64_t i=std::get<1>(job_b)[0]; i<std::get<1>(job_b)[1]; i++){
       	a_source_to_dest[i]= i_source_to_dest(a_source_to_dest[i]);
       }
@@ -261,11 +275,11 @@ torch::Tensor map_source_to_dest_v2(
 	torch::Tensor data,
 	const std::vector<int64_t> & order,
 	std::vector< std::tuple<
-		std::vector<int64_t> /* tn */, 
-		std::vector<int64_t> /* Dn */, 
-		std::vector<int64_t> /* Sln */, 
+		std::vector<int64_t> /* tn */,
+		std::vector<int64_t> /* Dn */,
+		std::vector<int64_t> /* Sln */,
 		std::vector<int64_t> /* t1 */,
-		std::vector< 
+		std::vector<
 			std::tuple <
 				std::vector<int64_t> /* _ */,
 				std::vector<int64_t> /* slo */,
@@ -292,7 +306,7 @@ torch::Tensor map_source_to_dest_v2(
 			auto strides_Do= get_strides(std::get<2>(job_b));
       auto strides_perm= get_strides(apply_perm(std::get<2>(job_b), order));
       auto strides_reshaped= get_strides(std::get<4>(job_b));
-      
+
       #pragma omp simd
       for (int64_t i=std::get<1>(job_b)[0]; i<std::get<1>(job_b)[1]; i++){
       	a_source_to_dest[i]= f_i_source_to_dest(i,
@@ -308,11 +322,11 @@ torch::Tensor map_source_to_dest_plain(
 	torch::Tensor data,
 	const std::vector<int64_t> & order,
 	std::vector< std::tuple<
-		std::vector<int64_t> /* tn */, 
-		std::vector<int64_t> /* Dn */, 
-		std::vector<int64_t> /* Sln */, 
+		std::vector<int64_t> /* tn */,
+		std::vector<int64_t> /* Dn */,
+		std::vector<int64_t> /* Sln */,
 		std::vector<int64_t> /* t1 */,
-		std::vector< 
+		std::vector<
 			std::tuple <
 				std::vector<int64_t> /* _ */,
 				std::vector<int64_t> /* slo */,
@@ -324,7 +338,7 @@ torch::Tensor map_source_to_dest_plain(
 	> > jobs){
 
 	std::vector<int64_t> _tmp_range(order.size());
-	for (int i=0; i<order.size(); i++) { 
+	for (int i=0; i<order.size(); i++) {
 		_tmp_range[i]= i;
 	}
 	auto inv_order= apply_inv_perm(_tmp_range, order);
@@ -338,7 +352,7 @@ torch::Tensor map_source_to_dest_plain(
 	for (auto const &job : jobs) {
 		torch::Tensor tmp_b = torch::arange(std::get<2>(job)[0], std::get<2>(job)[1], options_int)
 			.view(at::IntArrayRef(std::get<1>(job)));
-		
+
 		for (auto const &job_b : std::get<4>(job)) {
 			// prelim)
       // get strides of shape Do, strides of shape permute(Do; order)
@@ -348,7 +362,7 @@ torch::Tensor map_source_to_dest_plain(
 				slcs.emplace(slcs.end(), torch::indexing::Slice(elem_Dslc[0], elem_Dslc[1]));
 			}
 			auto inv_Do= apply_perm(std::get<2>(job_b), order);
-      
+
       source_to_dest.index_put_({torch::indexing::Slice(std::get<1>(job_b)[0],std::get<1>(job_b)[1])},
       	tmp_b.index(at::ArrayRef<at::indexing::TensorIndex>(slcs)).view(at::IntArrayRef(inv_Do))
       		.permute(at::IntArrayRef(inv_order)).contiguous().view(-1)
@@ -362,11 +376,11 @@ torch::Tensor map_source_to_dest_plain_omp(
 	torch::Tensor data,
 	const std::vector<int64_t> & order,
 	std::vector< std::tuple<
-		std::vector<int64_t> /* tn */, 
-		std::vector<int64_t> /* Dn */, 
-		std::vector<int64_t> /* Sln */, 
+		std::vector<int64_t> /* tn */,
+		std::vector<int64_t> /* Dn */,
+		std::vector<int64_t> /* Sln */,
 		std::vector<int64_t> /* t1 */,
-		std::vector< 
+		std::vector<
 			std::tuple <
 				std::vector<int64_t> /* _ */,
 				std::vector<int64_t> /* slo */,
@@ -378,7 +392,7 @@ torch::Tensor map_source_to_dest_plain_omp(
 	> > jobs){
 
 	std::vector<int64_t> _tmp_range(order.size());
-	for (int i=0; i<order.size(); i++) { 
+	for (int i=0; i<order.size(); i++) {
 		_tmp_range[i]= i;
 	}
 	auto inv_order= apply_inv_perm(_tmp_range, order);
@@ -392,7 +406,7 @@ torch::Tensor map_source_to_dest_plain_omp(
 	for (auto const &job : jobs) {
 		torch::Tensor tmp_b = torch::arange(std::get<2>(job)[0], std::get<2>(job)[1], options_int)
 			.view(at::IntArrayRef(std::get<1>(job)));
-		
+
 		#pragma omp parallel for
 		for (auto const &job_b : std::get<4>(job)) {
 			// prelim)
@@ -403,7 +417,7 @@ torch::Tensor map_source_to_dest_plain_omp(
 				slcs.emplace(slcs.end(), torch::indexing::Slice(elem_Dslc[0], elem_Dslc[1]));
 			}
 			auto inv_Do= apply_perm(std::get<2>(job_b), order);
-      
+
       source_to_dest.index_put_({torch::indexing::Slice(std::get<1>(job_b)[0],std::get<1>(job_b)[1])},
       	tmp_b.index(at::ArrayRef<at::indexing::TensorIndex>(slcs)).view(at::IntArrayRef(inv_Do))
       		.permute(at::IntArrayRef(inv_order)).contiguous().view(-1)
@@ -417,8 +431,8 @@ torch::Tensor map_source_to_dest_plain_omp_v2(
 	torch::Tensor data,
 	const std::vector<int64_t> & order,
 	const std::vector< std::tuple<
-		std::vector<int64_t> /* tn */, 
-		std::vector<int64_t> /* Dn */, 
+		std::vector<int64_t> /* tn */,
+		std::vector<int64_t> /* Dn */,
 		std::vector<int64_t>  /* Sln */
 		> > & meta_new,
 	const std::vector< std::tuple <
@@ -431,7 +445,7 @@ torch::Tensor map_source_to_dest_plain_omp_v2(
 	){
 	// 0) permute inv_order
 	std::vector<int64_t> _tmp_range(order.size());
-	for (int i=0; i<order.size(); i++) { 
+	for (int i=0; i<order.size(); i++) {
 		_tmp_range[i]= i;
 	}
 	auto inv_order= apply_inv_perm(_tmp_range, order);
@@ -468,13 +482,13 @@ torch::Tensor map_source_to_dest_plain_omp_v2(
 	    .dtype(torch::kInt64)
 	    .layout(data.layout())
 		.device(torch::kCPU);
-	torch::Tensor source_to_dest= torch::empty( data.numel(), options_int );	
+	torch::Tensor source_to_dest= torch::empty( data.numel(), options_int );
 
 	for (auto const &row : jobs) {
 		auto job= row.second;
 		torch::Tensor tmp_b = torch::arange(std::get<2>(job)[0], std::get<2>(job)[1], options_int)
 			.view(at::IntArrayRef(std::get<1>(job)));
-		
+
 		#pragma omp parallel for
 		for (auto const &job_b : jobs_b[std::get<0>(job)]) {
 			// prelim)
@@ -485,7 +499,7 @@ torch::Tensor map_source_to_dest_plain_omp_v2(
 				slcs.emplace(slcs.end(), torch::indexing::Slice(elem_Dslc[0], elem_Dslc[1]));
 			}
 			auto inv_Do= apply_perm(std::get<2>(job_b), order);
-      
+
       source_to_dest.index_put_({torch::indexing::Slice(std::get<1>(job_b)[0],std::get<1>(job_b)[1])},
       	tmp_b.index(at::ArrayRef<at::indexing::TensorIndex>(slcs)).view(at::IntArrayRef(inv_Do))
       		.permute(at::IntArrayRef(inv_order)).contiguous().view(-1)
@@ -499,8 +513,8 @@ std::vector<torch::Tensor> map_source_to_dest_plain_omp_v3(
 	torch::Tensor data,
 	const std::vector<int64_t> & order,
 	const std::vector< std::tuple<
-		std::vector<int64_t> /* tn */, 
-		std::vector<int64_t> /* Dn */, 
+		std::vector<int64_t> /* tn */,
+		std::vector<int64_t> /* Dn */,
 		std::vector<int64_t>  /* Sln */
 		> > & meta_new,
 	const std::vector< std::tuple <
@@ -513,7 +527,7 @@ std::vector<torch::Tensor> map_source_to_dest_plain_omp_v3(
 	){
 	// 0) permute inv_order
 	std::vector<int64_t> _tmp_range(order.size());
-	for (int i=0; i<order.size(); i++) { 
+	for (int i=0; i<order.size(); i++) {
 		_tmp_range[i]= i;
 	}
 	auto inv_order= apply_inv_perm(_tmp_range, order);
@@ -561,7 +575,7 @@ std::vector<torch::Tensor> map_source_to_dest_plain_omp_v3(
 		auto job= row.second;
 		torch::Tensor tmp_b = torch::arange(std::get<2>(job)[0], std::get<2>(job)[1], options_int)
 			.view(at::IntArrayRef(std::get<1>(job)));
-		
+
 		#pragma omp parallel for
 		for (auto const &job_b : jobs_b[std::get<0>(job)]) {
 			// prelim)
@@ -572,7 +586,7 @@ std::vector<torch::Tensor> map_source_to_dest_plain_omp_v3(
 				slcs.emplace(slcs.end(), torch::indexing::Slice(elem_Dslc[0], elem_Dslc[1]));
 			}
 			auto inv_Do= apply_perm(std::get<2>(job_b), order);
-      
+
       source_inds.index_put_({torch::indexing::Slice(std::get<4>(job_b)[0],std::get<4>(job_b)[1])},
       	torch::arange(std::get<1>(job_b)[0],std::get<1>(job_b)[1],options_int));
       dest_inds.index_put_({torch::indexing::Slice(std::get<4>(job_b)[0],std::get<4>(job_b)[1])},

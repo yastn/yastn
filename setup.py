@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 requirements = open('requirements.txt').readlines()
 
-description = ('Yet another symmetric tensor.')
+description = ('YASTN - Yet Another Symmetric Tensor Network')
 
 # README file as long_description.
 long_description = open('README.md', encoding='utf-8').read()
@@ -13,11 +13,11 @@ __version__ = '1.0.0'
 setup(
     name='yastn',
     version=__version__,
-    author='Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, Juraj Hasik',
+    author='The YASTN Authors',
     author_email='marek.rams@uj.edu.pl',
     license='Apache License 2.0',
     platform=['any'],
-    python_requires=('>=3.7'),
+    python_requires=('>=3.9'),
     install_requires=requirements,
     description=description,
     long_description=long_description,

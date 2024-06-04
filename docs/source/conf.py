@@ -18,8 +18,8 @@ sys.path.insert(0, os.path.abspath('../..'))
 # -- Project information -----------------------------------------------------
 
 project = 'YASTN'
-copyright = '2023, Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, Juraj Hasik'
-author = 'Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, Juraj Hasik'
+copyright = '2024, The YASTN Authors'
+author = 'The YASTN Authors'
 
 
 # -- General configuration ---------------------------------------------------
@@ -27,7 +27,7 @@ author = 'Marek M. Rams, Gabriela Wójtowicz, Aritra Sinha, Juraj Hasik'
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-# 
+#
 # To find list of explicit and implicit links from autosectionlabel: python -m sphinx.ext.intersphinx
 extensions = [
     'sphinx.ext.todo',

@@ -1,3 +1,17 @@
+# Copyright 2024 The YASTN Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 import torch
 import numpy as np
 from itertools import groupby
@@ -27,9 +41,9 @@ class kernel_transpose_and_merge(torch.autograd.Function):
         # meta_new -> list of [(tn, Dn, sln), ...] where
         #             tn -> effective charge for block in fused tensor
         #             Dn -> effective shape of block tn in fused tensor
-        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+        #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
         #
-        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+        # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
         #             this source block will belong to destination block tn
         #          -> gr: tuple holding description of source data
         #                 slo -> specifies the location of source block in 1d data
@@ -37,7 +51,7 @@ class kernel_transpose_and_merge(torch.autograd.Function):
         #                 Dscl-> list of slice data which specifies the location of the "transformed"
         #                        source block in the destination block tn
         #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-        # 
+        #
         for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
             assert tn == t1
             temp = newdata[slice(*sln)].reshape(Dn)
@@ -68,10 +82,10 @@ class kernel_transpose_and_merge(torch.autograd.Function):
 from math import prod
 def get_strides(D):
     # D - Sequence(int)
-    # 
+    #
     # returns
-    # Sequence(int) - row-major strides, starting with total number of elements 
-    # 
+    # Sequence(int) - row-major strides, starting with total number of elements
+    #
     # v. a
     res= [1]
     for d in reversed(D):
@@ -86,13 +100,13 @@ def get_indices(i,strides):
     # strides - Sequence(int) - strides wrt. to which compute indices
     #
     # returns
-    # Sequence(int) - indices in tensors specified by strides 
+    # Sequence(int) - indices in tensors specified by strides
     return [ (i%strides[d])//strides[d+1] for d in range(len(strides)-1) ]
 
 def index_1d(X,strides):
     # X - Sequence(int) - indices of element wrt. to strides
     # strides - Sequence(int) - strides
-    # 
+    #
     # returns
     # int - index of element in underlying 1d row-major array
     return sum([X[d]*strides[d+1] for d in range(len(X))])
@@ -109,11 +123,11 @@ def i_source_to_dest(i,offset_source,strides_Do,order,strides_perm,strides_resha
     X_perm= [X[d] for d in order]
     i_perm= index_1d(X_perm, strides_perm)
     # iii) indices in (permute+reshape)d source
-    # 
+    #
     X_reshaped= get_indices(i_perm,strides_reshaped)
     # iv) indices in reshaped destination
     #
-    X_dest_block= [ X_reshaped[d]+Dslc[d][0] for d in range(len(Dslc)) ] 
+    X_dest_block= [ X_reshaped[d]+Dslc[d][0] for d in range(len(Dslc)) ]
     i_dest_block= index_1d(X_dest_block, strides_Dn)
     i_dest= i_dest_block + offset_dest
     return i_dest
@@ -122,9 +136,9 @@ def _source_to_dest_v1(data, order, meta_new, meta_mrg):
     # meta_new -> list of [(tn, Dn, sln), ...] where
     #             tn -> effective charge for block in fused tensor
     #             Dn -> effective shape of block tn in fused tensor
-    #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+    #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
     #
-    # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+    # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
     #             this source block will belong to destination block tn
     #          -> gr: tuple holding description of source data
     #                 slo -> specifies the location of source block in 1d data
@@ -132,7 +146,7 @@ def _source_to_dest_v1(data, order, meta_new, meta_mrg):
     #                 Dscl-> list of slice data which specifies the location of the "transformed"
     #                        source block in the destination block tn
     #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-    # 
+    #
     source_to_dest= torch.arange(data.numel(), dtype=torch.int64, device='cpu')
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
         strides_Dn= get_strides(Dn)
@@ -156,9 +170,9 @@ def _source_to_dest_v2(data, order, meta_new, meta_mrg):
     # meta_new -> list of [(tn, Dn, sln), ...] where
     #             tn -> effective charge for block in fused tensor
     #             Dn -> effective shape of block tn in fused tensor
-    #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+    #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
     #
-    # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+    # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
     #             this source block will belong to destination block tn
     #          -> gr: tuple holding description of source data
     #                 slo -> specifies the location of source block in 1d data
@@ -166,7 +180,7 @@ def _source_to_dest_v2(data, order, meta_new, meta_mrg):
     #                 Dscl-> list of slice data which specifies the location of the "transformed"
     #                        source block in the destination block tn
     #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-    # 
+    #
     source_to_dest= torch.arange(data.numel(), dtype=torch.int64, device='cpu')
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):
         strides_Dn= get_strides(Dn)
@@ -176,7 +190,7 @@ def _source_to_dest_v2(data, order, meta_new, meta_mrg):
             strides_Do= get_strides(Do)
             strides_perm= get_strides([Do[d] for d in order])
             strides_reshaped= get_strides(Drsh)
-            
+
             def local_i_source_to_dest(i):
                 # 0) subtract offset
                 i=i-slo[0]
@@ -188,11 +202,11 @@ def _source_to_dest_v2(data, order, meta_new, meta_mrg):
                 X_perm= [X[d] for d in order]
                 i_perm= index_1d(X_perm, strides_perm)
                 # iii) indices in (permute+reshape)d source
-                # 
+                #
                 X_reshaped= get_indices(i_perm,strides_reshaped)
                 # iv) indices in reshaped destination
                 #
-                X_dest_block= [ X_reshaped[d]+Dslc[d][0] for d in range(len(Dslc)) ] 
+                X_dest_block= [ X_reshaped[d]+Dslc[d][0] for d in range(len(Dslc)) ]
                 i_dest_block= index_1d(X_dest_block, strides_Dn)
                 i_dest= i_dest_block + sln[0]
                 return i_dest
@@ -211,9 +225,9 @@ def _source_to_dest_np(data, order, meta_new, meta_mrg):
     # meta_new -> list of [(tn, Dn, sln), ...] where
     #             tn -> effective charge for block in fused tensor
     #             Dn -> effective shape of block tn in fused tensor
-    #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor  
+    #             sln -> slice specifying the location of serialized tn block in 1d data of fused tensor
     #
-    # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that 
+    # meta_mrg -> t1 is effective charge of source block after fusion. I.e. t1==tn, means, that
     #             this source block will belong to destination block tn
     #          -> gr: tuple holding description of source data
     #                 slo -> specifies the location of source block in 1d data
@@ -221,7 +235,7 @@ def _source_to_dest_np(data, order, meta_new, meta_mrg):
     #                 Dscl-> list of slice data which specifies the location of the "transformed"
     #                        source block in the destination block tn
     #                 Drsh-> the shape of the "transformed" source block in the destination block tn
-    # 
+    #
     inv_order= tuple(np.argsort(order))
     source_to_dest = np.empty((data.numel(),), dtype=np.int64)
     for (tn, Dn, sln), (t1, gr) in zip(meta_new, groupby(meta_mrg, key=lambda x: x[0])):

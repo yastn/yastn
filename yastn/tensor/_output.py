@@ -1,4 +1,18 @@
-""" methods outputing data from yastn tensor. """
+# Copyright 2024 The YASTN Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+""" Methods outputing data from yastn.Tensor. """
 from __future__ import annotations
 import numpy as np
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
@@ -279,7 +293,7 @@ def __getitem__(a, key) -> numpy.ndarray | torch.tensor:
 
 def __contains__(a, key) -> bool:
     key = tuple(_flatten(key)) if (hasattr(key,'__iter__') or hasattr(key,'__next__')) else (key,)
-    if a.isdiag: 
+    if a.isdiag:
         return key in a.struct.t or (key+key) in a.struct.t
     return key in a.struct.t
 
