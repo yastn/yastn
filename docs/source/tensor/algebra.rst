@@ -47,8 +47,8 @@ Functions below facilitate the computation of
 
 	* `Trace`: :math:`B_{jl}= \sum_{i} T_{ijil}` or using Einstein's summation convention
 	  for repeated indices :math:`B_{jl} = T_{ijil}`.
-	* `Contractions`: in the usual form :math:`C_{abc} = A_{aijb} \times B_{cij}` and also
-	  outer products :math:`M_{abkl} = A_{ak} \times B_{bl}`
+	* `Contractions`: in the usual form :math:`C_{abc} = A_{aijb}{\times}B_{cij}` and also
+	  outer products :math:`M_{abkl} = A_{ak}{\times}B_{bl}`
 
 or composition of such operations over several tensors.
 

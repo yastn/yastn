@@ -43,6 +43,5 @@ Examples: basics of usage
    :glob:
    :maxdepth: 2
 
-   examples/fpeps/ctmrg
    examples/fpeps/geometry
-   examples/fpeps/ntu
+   examples/fpeps/ctmrg

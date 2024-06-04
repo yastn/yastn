@@ -41,7 +41,7 @@ def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC | yastn.tn.mps.MpoPBC:
 
 def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
-    Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]} \times \textrm{states[j]}`.
+    Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
 
     Compression (truncation of bond dimensions) is not performed.
 

@@ -4,7 +4,7 @@ Lattice Geometry
 Geometric information about 2D lattice are captured by a class :class:`yastn.tn.fpeps.SquareLattice`
 or its special subclass :class:`yastn.tn.fpeps.CheckerboardLattice`.
 They provide information on lattice sites (in particular, unique sites in the unit cell),
-unique bonds, and a way to navigate the lattice through the neighborhood of each site.
+unique bonds, and a way to navigate the lattice through the information on the neighborhood of each site.
 
 .. autoclass:: yastn.tn.fpeps.SquareLattice
     :members: sites, bonds, nn_site

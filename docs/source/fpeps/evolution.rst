@@ -9,7 +9,7 @@ evolution operator to a set of nearest-neighbor and local gates.
 A single evolution step consists of the application of trotterized gates,
 together with truncation of the bond dimension after each application of a nearest-neighbor gate.
 It is performed by :meth:`yastn.tn.fpeps.evolution_step_`, which takes as the first argument
-an environment, which contains the PEPS state (updated in place), and a method to calculate `bond_metric`.
+an environment, which contains the PEPS state (updated in place) and a method to calculate `bond_metric`.
 A primary class in this context is :class:`yastn.tn.fpeps.EnvNTU`.
 :class:`yastn.tn.fpeps.EnvCTM` can be used for a (fast) full update scheme, and
 :class:`yastn.tn.fpeps.EnvApproximate` for cluster updates with approximate contraction.

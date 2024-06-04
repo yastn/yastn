@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from __future__ import annotations
 from dataclasses import dataclass
 from .... import rand, ones, eye, YastnError, Leg, tensordot, qr
 from ... import mps
@@ -23,15 +24,19 @@ from ._env_auxlliary import *
 
 @dataclass()
 class EnvCTM_local():
-    r""" Dataclass for CTM environment tensors associated with Peps lattice site. """
+    r"""
+    Dataclass for CTM environment tensors associated with Peps lattice site.
+
+    Contains fields 'tl', 't', 'tr', 'r', 'br', 'b', 'bl', 'l'
+    """
     tl = None # top-left
-    tr = None # top-right
-    bl = None # bottom-left
-    br = None # bottom-right
     t = None  # top
-    b = None  # bottom
-    l = None  # left
+    tr = None # top-right
     r = None  # right
+    br = None # bottom-right
+    b = None  # bottom
+    bl = None # bottom-left
+    l = None  # left
 
 
 @dataclass()
@@ -56,7 +61,13 @@ class EnvCTM(Peps):
         ----------
         psi: yastn.tn.Peps
             Peps lattice to be contracted using CTM.
-            If psi has physical legs, 2-layers peps with no physical legs is formed.
+            If :code:`psi` has physical legs, a double-layer PEPS with no physical legs is formed.
+
+        init: str
+            None, 'eye' or 'rand'. Initialization scheme, see :meth:`yastn.tn.fpeps.EnvCTM.reset_`.
+
+        leg: yastn.Leg | None
+            Passed to :meth:`yastn.tn.fpeps.EnvCTM.reset_`.
         """
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
@@ -67,7 +78,7 @@ class EnvCTM(Peps):
         if init is not None:
             self.reset_(init=init, leg=leg)
 
-    def copy(self):
+    def copy(self) -> EnvCTM:
         env = EnvCTM(self.psi, init=None)
         for site in env.sites():
             for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
@@ -75,7 +86,20 @@ class EnvCTM(Peps):
         return env
 
     def reset_(self, init='rand', leg=None):
-        r""" Initialize random CTMRG environments of peps tensors A. """
+        r"""
+        Initialize random CTMRG environments of peps tensors.
+
+        Parameters
+        ----------
+        init: str
+            'eye' or 'rand'.
+            For 'eye' starts with identity environments of dimension 1.
+            For 'rand' sets environments randomly.
+
+        leg: None | yastn.Leg
+            If not provided, random initialization has CTMRG bond dimension set to 1.
+            Otherwise, the provided Leg is used to initialize CTMRG virtual legs.
+        """
         config = self.psi.config
         leg0 = Leg(config, s=1, t=((0,) * config.sym.NSYM,), D=(1,))
 
@@ -155,7 +179,7 @@ class EnvCTM(Peps):
 
         return val_op / val_no
 
-    def measure_nn(self, O0, O1, bond=None):
+    def measure_nn(self, O0, O1, bond=None) -> dict:
         r"""
         Calculate nearest-neighbor expectation values within CTM environment.
 
@@ -294,23 +318,23 @@ class EnvCTM(Peps):
         r"""
         Calculates Full-Update metric tensor.
 
-        For dirn == 'h':
+        ::
 
-        tl == tt  ==  tt == tr
-        |     |        |     |
-        ll == GA-+  +-GB == rr
-        |     |        |     |
-        bl == bb  ==  bb == br
+            If dirn == 'h':
+                tl == tt  ==  tt == tr
+                |     |        |     |
+                ll == GA-+  +-GB == rr
+                |     |        |     |
+                bl == bb  ==  bb == br
 
-        For dirn == 'v':
-
-        tl == tt == tr
-        |     |      |
-        ll == GA == rr
-        |     ++     |
-        ll == GB == rr
-        |     |      |
-        bl == bb == br
+            If dirn == 'v':
+                tl == tt == tr
+                |     |      |
+                ll == GA == rr
+                |     ++     |
+                ll == GB == rr
+                |     |      |
+                bl == bb == br
         """
 
         env0, env1 = self[s0], self[s1]
@@ -332,7 +356,7 @@ class EnvCTM(Peps):
         g = g / g.trace(axes=(0, 1)).to_number()
         return g.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((1, 3), (0, 2)))
 
-    def save_to_dict(self):
+    def save_to_dict(self) -> dict:
         """
         Serialize EnvCTM into a dictionary.
         """

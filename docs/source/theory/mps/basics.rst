@@ -19,7 +19,7 @@ then `0-to-1` from `2-to-N-1`-th, and so on until the state is decomposed into `
 .. math::
     \Psi^{\sigma_0,\sigma_1\dots \sigma_{N-1}} \in \mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1} \xrightarrow{SVD}{\sum_{j_0,j_1\dots j_{N-1}} \, A^{\sigma_0}_{,j_0} A^{\sigma_1}_{j_0,j_1} \dots A^{\sigma_{N-2}}_{j_{N-2},j_{N-1}} A^{\sigma_{N-1}}_{j_{N-1},}}
 
-A single tensor :math:`A_j` is a rank-3 array of size :math:`D_{j-1,j} \times d_j \times D_{j,j+1}`.
+A single tensor :math:`A_j` is a rank-3 array of size :math:`D_{j-1,j}{\times}d_j{\times}D_{j,j+1}`.
 
 ::
 
@@ -31,8 +31,8 @@ A single tensor :math:`A_j` is a rank-3 array of size :math:`D_{j-1,j} \times d_
 
 The MPS forms a one-dimensional structure with each tensor having a physical dimension :math:`d` (:math:`d_j` for general case when qudits at each site are different) and virtual dimensions
 :math:`D_{j-1,j}` connecting *j-1*-th site with *j*-th site. :code:`yastn.tn.mps` implements operations on one-dimensional MPS with open boundary conditions.
-The schematic picture for general MPS is shown below. Notice that for open boundary conditions, we always have edge tensor with dimension :math:`1\times d_0 \times D_{0,1}`
-on the left edge and :math:`D_{N-2,N-1} \times d_{N-1} \times 1` on the right edge.
+The schematic picture for general MPS is shown below. Notice that for open boundary conditions, we always have edge tensor with dimension :math:`1\times d_0{\times}D_{0,1}`
+on the left edge and :math:`D_{N-2,N-1}{\times}d_{N-1}{\times}1` on the right edge.
 
 ::
 
@@ -56,7 +56,7 @@ Matrix product operator (MPO)
 -----------------------------
 
 *Matrix product operator* is an efficient representation of an operator acting in the space of :math:`N` particles,
-in general a :math:`d^N \times d^N` matrix, by a product of :math:`N` tensors with two physical and two virtual indices.
+in general a :math:`d^N{\times}d^N` matrix, by a product of :math:`N` tensors with two physical and two virtual indices.
 The concept of MPO is analogous to :ref:`MPS <theory/mps/basics:Matrix product state (MPS)>`.
 
 ::

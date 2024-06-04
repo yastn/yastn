@@ -23,7 +23,7 @@ from ._mps_obc import Mpo
 
 class Hterm(NamedTuple):
     r"""
-    Defines a product operator :math:`O = amplitude \times \bigotimes_i o_i` of local operators :math:`o_i`.
+    Defines a product operator :math:`O = amplitude{\times}\bigotimes_i o_i` of local operators :math:`o_i`.
     Local operators that are not explicitly specified are assumed to be identity operators.
 
     If operators are fermionic, execution of :meth:`swap gates<yastn.swap_gate>` enforces fermionic order,

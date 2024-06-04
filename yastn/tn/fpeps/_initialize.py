@@ -22,7 +22,7 @@ from ... import YastnError, Tensor
 
 def product_peps(geometry, vectors) -> Peps:
     """
-    Initialize PEPS in a product state composed of provided vectors.
+    Initialize PEPS in a product state composed of provided vectors for all lattice sites.
 
     Vectors can have ndim=1 for (pure) state and ndim=2 for purification/operator.
     In the latter case, two legs will be fused into one physical PEPS leg.
@@ -75,7 +75,7 @@ def load_from_dict(config, d) -> Peps:
         :ref:`YASTN configuration <tensor/configuration:yastn configuration>`
 
     in_dict: dict
-        dictionary containing serialized PEPS related object, i.e.,
+        dictionary containing serialized PEPS-related object, i.e.,
         a result of :meth:`yastn.tn.fpeps.Peps.save_to_dict`, or
         :meth:`yastn.tn.fpeps.EnvCTM.save_to_dict`.
     """

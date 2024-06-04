@@ -116,7 +116,7 @@ class SquareLattice():
 
     def nn_site(self, site, d) -> Site:
         """
-        Index of the lattice site neighboring site in the direction d.
+        Index of the lattice site neighboring the :code:`site` in the direction :code:`d`.
 
         Return None if there is no neighboring site in a given direction.
 
@@ -182,7 +182,7 @@ class CheckerboardLattice(SquareLattice):
     def __init__(self):
         r"""
         Geometric information about infinite checkerboard lattice, which
-        is an infinite lattice with :math:`2 \times 2` unit cell and two unique tensors.
+        is an infinite lattice with :math:`2{\times}2` unit cell and two unique tensors.
         """
         super().__init__(dims=(2, 2), boundary='infinite')
         self._sites = (Site(0, 0), Site(0, 1))

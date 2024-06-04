@@ -1,15 +1,14 @@
 2D Fermi-Hubbard model at finite temperature
 ============================================
 
-This guide provides a quick overview of how to simulate the Fermi-Hubbard model at finite temperature using the `YASTN`
-tensor network library for an infinite square lattice. We'll focus on initializing the model, setting up the simulation,
-and calculating expectation values.
+This guide provides a quick overview of how to simulate the Fermi-Hubbard model at finite temperature
+using the `YASTN`tensor network library for an infinite square lattice. We'll focus on initializing
+the model, setting up the simulation, and calculating expectation values.
 
 
-Model Overview
---------------
-
-The Fermi-Hubbard model describes interacting electrons on a lattice, where the kinetic energy due to electron hopping competes with on-site Coulomb interaction. The model's Hamiltonian is expressed as:
+The Fermi-Hubbard model describes interacting electrons on a lattice,
+where the kinetic energy due to electron hopping competes with on-site Coulomb interaction.
+The model's Hamiltonian is expressed as:
 
 .. math::
 
@@ -22,9 +21,6 @@ where:
     - :math:`c_{i, \sigma}^\dagger` and :math:`c_{i, \sigma}` are the creation and annihilation operators at site :math:`i` with spin :math:`\sigma`,
     - :math:`n_{i, \sigma} = c_{i, \sigma}^\dagger c_{i, \sigma}` is the number operator for electrons at site :math:`i` with spin :math:`\sigma`.
 
-
-Simulation Setup
-----------------
 
 1. *Initialization of Model Parameters*:
     We set our model parameters keeping in mind that in the purification there is no clear way to fix particle number
@@ -89,12 +85,14 @@ Simulation Setup
 
         opts_svd = {'D_total': D, 'tol': 1e-12}
         infoss = []
+
+        print(f"beta_purif; accumulated truncation error" )
         for step in range(1, steps + 1):
             infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
             #
-            infoss.append(info)
+            infoss.append(infos)
             Delta = fpeps.accumulated_truncation_error(infoss)
-            print(f"beta_purification: {step * db:0.3f}; Accumulated truncation error: {Delta:0.5f}" )
+            print(f"{step * db:0.3f};   {Delta:0.5f}")
 
 5. *CTMRG and Expectation Values*:
     .. code-block:: python

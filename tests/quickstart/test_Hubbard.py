@@ -49,12 +49,14 @@ def test_quickstart_hubbard():
 
     opts_svd = {'D_total': D, 'tol': 1e-12}
     infoss = []
+
+    print(f"beta_purif; accumulated truncation error" )
     for step in range(1, steps + 1):
         infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
         #
         infoss.append(infos)
         Delta = fpeps.accumulated_truncation_error(infoss)
-        print(f"beta_purification: {step * db:0.3f}; Accumulated truncation error: {Delta:0.5f}" )
+        print(f"{step * db:0.3f};   {Delta:0.5f}")
 
 
     env_ctm = fpeps.EnvCTM(psi, init='eye')
