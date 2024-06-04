@@ -23,7 +23,7 @@ from ._mps_obc import Mpo
 
 class Hterm(NamedTuple):
     r"""
-    Defines a product operator :math:`O = amplitude \times \bigotimes_i o_i` of local operators :math:`o_i`.
+    Defines a product operator :math:`O = amplitude{\times}\bigotimes_i o_i` of local operators :math:`o_i`.
     Local operators that are not explicitly specified are assumed to be identity operators.
 
     If operators are fermionic, execution of :meth:`swap gates<yastn.swap_gate>` enforces fermionic order,
@@ -37,8 +37,8 @@ class Hterm(NamedTuple):
         positions of the local operators :math:`o_i` in the product different than identity.
     operators: Sequence[yastn.Tensor]
         local operators in the product that are different than the identity.
-        *i*-th operator is acting at `positions[i]`.
-        Each operator should have `ndim=2` and signature `s=(+1, -1).`
+        *i*-th operator is acting at ``positions[i]``.
+        Each operator should have ``ndim=2`` and signature ``s=(+1, -1)``.
     """
     amplitude: float = 1.0
     positions: tuple = ()
@@ -100,7 +100,7 @@ class GenerateMpoTemplate(NamedTuple):
     tleft: list = None
 
 
-def generate_mpo_preprocessing(I, terms, return_amplitudes=False) -> GenerateMpoTemplate | tuple[GenerateMpoTemplate, list[float]]:
+def generate_mpo_preprocessing(I, terms) -> GenerateMpoTemplate | tuple[GenerateMpoTemplate, list[float]]:
     r"""
     Precompute an amplitude-independent template that is used
     to generate MPO with :meth:`mps.generate_mpo_fast<yastn.tn.mps.generate_mpo_fast>`
@@ -111,8 +111,6 @@ def generate_mpo_preprocessing(I, terms, return_amplitudes=False) -> GenerateMpo
         product operators making up the MPO.
     I: yastn.tn.mps.MpsMpoOBC
         identity MPO.
-    return_amplitudes: bool
-        If True, apart from template return also amplitudes = [term.amplitude for term in terms].
     """
     I2 = [I[n].remove_leg(axis=0).remove_leg(axis=1) for n in I.sweep(to='last')]
     H1s = [generate_product_mpo_from_Hterm(I2, term, amplitude=False) for term in terms]
@@ -170,20 +168,16 @@ def generate_mpo_preprocessing(I, terms, return_amplitudes=False) -> GenerateMpo
             tran[lt + ft + rt][li[lt], fi, ri] += 1
         trans.append(tran)
 
-    template = GenerateMpoTemplate(config=cfg, basis=basis, trans=trans, tleft=tleft)
-    if return_amplitudes:
-        amplitudes = [term.amplitude for term in terms]
-        return template, amplitudes
-    return template
+    return GenerateMpoTemplate(config=cfg, basis=basis, trans=trans, tleft=tleft)
 
 
-def generate_mpo_fast(template, amplitudes, opts=None) -> yastn.tn.mps.MpsMpoOBC:
+def generate_mpo_fast(template, amplitudes, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Fast generation of MPOs representing `Sequence[Hterm]` that differ only in amplitudes.
 
     Preprocessing in :meth:`yastn.tn.mps.generate_mpo` might be slow.
     When only amplitudes in Hterms are changing, e.g., for time-dependent Hamiltonian,
-    MPO generation can be significantly speeded up by precalculating and reusing amplitude-independent `template`.
+    MPO generation can be significantly speeded up by precalculating and reusing amplitude-independent ``template``.
     The latter is done with :meth:`yastn.tn.mps.generate_mpo_preprocessing`.
 
     Parameters
@@ -197,11 +191,11 @@ def generate_mpo_fast(template, amplitudes, opts=None) -> yastn.tn.mps.MpsMpoOBC
     opts: dict
         Options passed to :meth:`yastn.linalg.svd_with_truncation`.
         The function employs SVD while compressing the MPO bond dimensions.
-        Default `None` sets truncation `tol` close to the numerical precision,
+        Default ``None`` sets truncation ``tol`` close to the numerical precision,
         which typically results in lossless compression.
     """
-    if opts is None:
-        opts = {'tol': 1e-13}
+    if opts_svd is None:
+        opts_svd = {'tol': 1e-13}
 
     Js = {}
     for a, t in zip(amplitudes, template.tleft):
@@ -220,7 +214,7 @@ def generate_mpo_fast(template, amplitudes, opts=None) -> yastn.tn.mps.MpsMpoOBC
         nJ = J @ template.trans[n]
         nJ = ncon([nJ, template.basis[n]], [[0, 1, -3], [1, -1, -2]])
         if n < M.last:
-            nJ, S, V = svd_with_truncation(nJ, axes=((0, 1, 2), 3), sU=1, **opts)
+            nJ, S, V = svd_with_truncation(nJ, axes=((0, 1, 2), 3), sU=1, **opts_svd)
             nS = S.norm()
             nJ = nS * nJ
             J = (S / nS) @ V
@@ -228,9 +222,9 @@ def generate_mpo_fast(template, amplitudes, opts=None) -> yastn.tn.mps.MpsMpoOBC
     return M
 
 
-def generate_mpo(I, terms, opts=None) -> yastn.tn.mps.MpsMpoOBC:
+def generate_mpo(I, terms, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
-    Generate MPO provided a list of :class:`Hterm`\-s and identity MPO `I`.
+    Generate MPO provided a list of :class:`Hterm`\-s and identity MPO ``I``.
 
     It employs :meth:`mps.generate_mpo_preprocessing<yastn.tn.mps.generate_mpo_preprocessing>`
     and :meth:`mps.generate_mpo_fast<yastn.tn.mps.generate_mpo_fast>`,
@@ -247,8 +241,9 @@ def generate_mpo(I, terms, opts=None) -> yastn.tn.mps.MpsMpoOBC:
     opts: dict
         Options passed to :meth:`yastn.linalg.svd_with_truncation`.
         The function employs SVD while compressing the MPO bond dimensions.
-        Default `None` sets truncation `tol` close to the numerical precision,
+        Default ``None`` sets truncation ``tol`` close to the numerical precision,
         which typically results in lossless compression.
     """
-    template, amplitudes = generate_mpo_preprocessing(I, terms, return_amplitudes=True)
-    return generate_mpo_fast(template, amplitudes, opts=opts)
+    template = generate_mpo_preprocessing(I, terms)
+    amplitudes = [term.amplitude for term in terms]
+    return generate_mpo_fast(template, amplitudes, opts_svd=opts_svd)

@@ -68,7 +68,7 @@ def build_mpo_hopping_Hterm(J, sym="U1", config=None):
     #
     # Generate MPO for Hterms
     #
-    H = mps.generate_mpo(I, Hterms, opts={'tol':1e-14})
+    H = mps.generate_mpo(I, Hterms)
     #
     return H
 

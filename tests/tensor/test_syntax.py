@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" List supported operations on  tastn.Tensor (not all arguments are shown). """
+""" List supported operations on  yastn.Tensor (not all arguments are shown). """
 import unittest
 import yastn
 try:

@@ -163,7 +163,7 @@ class _MpsMpoParent:
         return phi
 
     def conjugate_transpose(self) -> yastn.tn.mps.MpsMpo:
-        """ Transpose of MPO. For MPS, return self."""
+        """ Transpose and conjugate MPO. For MPS, return self.conj()."""
         if self.nr_phys == 1:
             return self.conj()
         phi = self.shallow_copy()
@@ -180,7 +180,7 @@ class _MpsMpoParent:
 
     @property
     def H(self) -> yastn.tn.mps.MpsMpo:
-        r""" Transpose of MPO. For MPS, return self.
+        r""" Transpose and conjugate of MPO. For MPS, return self.conj().
 
         Same as :meth:`self.transpose()<yastn.tn.mps.MpsMpo.conjugate_transpose>` """
         return self.conjugate_transpose()
@@ -233,7 +233,7 @@ class _MpsMpoParent:
         r"""
         Returns total bond dimensions of all virtual spaces along MPS/MPO from
         the first to the last site, including "trivial" leftmost and rightmost virtual spaces.
-        This gives a tuple with `N + 1` elements.
+        This gives a tuple with N+1 elements.
         """
         Ds = [self.A[n].get_shape(axes=0) for n in self.sweep(to='last')]
         Ds.append(self.A[self.last].get_shape(axes=2))
@@ -244,7 +244,7 @@ class _MpsMpoParent:
         Returns list of charge sectors and their dimensions for all virtual spaces along MPS/MPO
         from the first to the last site, including "trivial" leftmost and rightmost virtual spaces.
         Each element of the list is a dictionary {charge: sectorial bond dimension}.
-        This gives a list with `N + 1` elements.
+        This gives a list with N+1 elements.
         """
         tDs = []
         for n in self.sweep(to='last'):
@@ -260,7 +260,7 @@ class _MpsMpoParent:
         the first to the last site, in the form of the `0th` leg of each MPS/MPO tensor.
         Finally, append the rightmost virtual spaces, i.e., `2nd` leg of the last tensor,
         conjugating it so that all legs have signature `-1`.
-        This gives a list with `N + 1` elements.
+        This gives a list with N+1 elements.
         """
         legs = [self.A[n].get_legs(axes=0) for n in self.sweep(to='last')]
         legs.append(self.A[self.last].get_legs(axes=2).conj())

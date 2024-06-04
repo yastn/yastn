@@ -10,16 +10,16 @@ In particular, if the local Hilbert space for *j*-th particle, :math:`\mathcal{H
 (e.g., :math:`d=2` for qubit and :math:`d=3` for qutrit) then :math:`N` sites
 will have the total Hilbert space :math:`\mathcal{H} = \mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1}`
 of dimension :math:`d^N`. Bipartite tensor networks, such as matrix product states,
-introduce a concept of efficient separation of variables which splits groups of particles,
+introduce a concept of efficient separation of variables which splits groups of particles
 performing :ref:`spectral decomposition<tensor/algebra:spectral decompositions and truncation>`,
-e.g. singular value decomposition (`SVD <https://en.wikipedia.org/wiki/Singular_value_decomposition>`_).
+e.g., singular value decomposition (`SVD <https://en.wikipedia.org/wiki/Singular_value_decomposition>`_).
 To form a `matrix product state`, SVD at first isolates `0`-th site from `1-to-N-1`-th,
 then `0-to-1` from `2-to-N-1`-th, and so on until the state is decomposed into `N` tensors.
 
 .. math::
     \Psi^{\sigma_0,\sigma_1\dots \sigma_{N-1}} \in \mathcal{H}_0 \otimes \mathcal{H}_1 \cdots \otimes \mathcal{H}_{N-1} \xrightarrow{SVD}{\sum_{j_0,j_1\dots j_{N-1}} \, A^{\sigma_0}_{,j_0} A^{\sigma_1}_{j_0,j_1} \dots A^{\sigma_{N-2}}_{j_{N-2},j_{N-1}} A^{\sigma_{N-1}}_{j_{N-1},}}
 
-A single tensor :math:`A_j` is a rank-3 array of size :math:`D_{j-1,j} \times d_j \times D_{j,j+1}`.
+A single tensor :math:`A_j` is a rank-3 array of size :math:`D_{j-1,j}{\times}d_j{\times}D_{j,j+1}`.
 
 ::
 
@@ -31,8 +31,8 @@ A single tensor :math:`A_j` is a rank-3 array of size :math:`D_{j-1,j} \times d_
 
 The MPS forms a one-dimensional structure with each tensor having a physical dimension :math:`d` (:math:`d_j` for general case when qudits at each site are different) and virtual dimensions
 :math:`D_{j-1,j}` connecting *j-1*-th site with *j*-th site. :code:`yastn.tn.mps` implements operations on one-dimensional MPS with open boundary conditions.
-The schematic picture for general MPS is shown below. Notice that for open boundary conditions, we always have edge tensor with dimension :math:`1\times d_0 \times D_{0,1}`
-on the left edge and :math:`D_{N-2,N-1} \times d_{N-1} \times 1` on the right edge.
+The schematic picture for general MPS is shown below. Notice that for open boundary conditions, we always have edge tensor with dimension :math:`1\times d_0{\times}D_{0,1}`
+on the left edge and :math:`D_{N-2,N-1}{\times}d_{N-1}{\times}1` on the right edge.
 
 ::
 
@@ -42,9 +42,10 @@ on the left edge and :math:`D_{N-2,N-1} \times d_{N-1} \times 1` on the right ed
             |             |             |             |             |
            d_0           d_1           d_2           d_3           d_4
 
-The above discussion presents top-to-bottom construction. However, one can also think about MPS as an ansatz.
+The above discussion presents top-to-bottom construction.
+However, one can also treat MPS as an ansatz, that provides a good approximation of weakly entangled states.
 The paradigmatic example is energy minimization to find the best approximation of the ground state of a system.
-The MPS ansatz with fixed virtual dimensions fixes the manifold of states we can reach. Virtual bond dimension
+The MPS ansatz with fixed virtual dimensions defines the manifold of states we can reach. Virtual bond dimension
 controls the quality of the approximation, where the exact representation is recovered for :math:`D\rightarrow\infty`.
 
 The MPS can be equipped with symmetries by making its individual tensors symmetric.
@@ -54,8 +55,8 @@ Note that the construction of MPS requires common virtual spaces to be matching.
 Matrix product operator (MPO)
 -----------------------------
 
-*Matrix product operator* is tensor product representation for an operator on space of :math:`N` particles,
-in general a :math:`d^N \times d^N` matrix, by :math:`N` tensors with two physical and two virtual indices.
+*Matrix product operator* is an efficient representation of an operator acting in the space of :math:`N` particles,
+in general a :math:`d^N{\times}d^N` matrix, by a product of :math:`N` tensors with two physical and two virtual indices.
 The concept of MPO is analogous to :ref:`MPS <theory/mps/basics:Matrix product state (MPS)>`.
 
 ::
@@ -68,7 +69,7 @@ The concept of MPO is analogous to :ref:`MPS <theory/mps/basics:Matrix product s
                      |
                     d_j
 
-It allows to encode operators, e.g., Hamiltonian or other operators associated with expectation values, or a density matrix.
+It allows to encode operators, e.g., Hamiltonian or other observables associated with expectation values, a density matrix, transfer matrices, etc.
 MPO with open boundary conditions has a bond dimension :math:`D=1` on the edges of the MPO chain.
 
 ::
@@ -85,8 +86,8 @@ MPO with open boundary conditions has a bond dimension :math:`D=1` on the edges 
 Canonical form
 --------------
 
-The practical success of matrix product states is closely related to the existence of its canonical forms.
-Among others, this allow using local :ref:`sepctral decomposition<tensor/algebra:spectral decompositions and truncation>` to perform globally optimal truncation of the MPS on a specific bond.
+The practical success of matrix product states is closely related to their canonical forms and the possibility to efficiently transform between them.
+Among others, the proper canonical form allows using local :ref:`sepctral decomposition<tensor/algebra:spectral decompositions and truncation>` to perform globally optimal truncation of the MPS on a specific bond.
 *Canonical decomposition* is also an integral element of every :ref:`MPS algorithm<theory/mps/basics:Algorithms>`, including energy minimization with DMRG or time evolution with TDVP.
 In those algorithms, one locally updates individual MPS tensors, adjusting its canonical form while sweeping through the lattice.
 
@@ -116,7 +117,7 @@ Similarly, if for every MPS tensor the right environment is unitary, :math:`R_j 
 A mixed canonical form with respect to some bond or MPS site interpolates between those two extremes.
 
 .. note::
-        In :code:`yastn.tn.mps` we refer to `0`-th site as :code:`'first'`, and `N-1`-th site as :code:`'last'`.
+        In :code:`yastn.tn.mps` we refer to 0-th site as :code:`'first'`, and N-1-th site as :code:`'last'`.
         Namely, left-canonical MPS is canonized to the last site, and right-canonical MPS is canonized to the first site.
 
 
@@ -127,8 +128,8 @@ Algorithms
 is an algorithm searching for the MPS which extremizes the expectation value of the hermitian operator written as MPO, usually the Hamiltonian.
 
 :ref:`Time-dependent variational principle (TDVP)<mps/algorithms_tdvp:Time-dependent variational principle (TDVP)>`
-allows for a variational approximation of the evolution of a state :math:`\Psi(0)` under a Hamiltonian :math:`\hat H`, :math:`\Psi(t)=e^{- i t \hat H} \Psi(0)`, with :math:`i` an imaginary unit.
-TDVP can be performed for the evolution of MPS under MPO for a time `t`, real or imaginary.
+allows for a variational approximation of the evolution of a state :math:`\Psi(0)` under a Hamiltonian :math:`\hat H`, :math:`\Psi(t)=e^{- u t \hat H} \Psi(0)`.
+TDVP can be performed for the evolution of MPS under MPO for a time `t`, where `u` is real or imaginary unit.
 
 
 Measurements
@@ -140,7 +141,7 @@ After contracting physical and virtual indices, an overlap gives a scalar value.
 
 ::
 
-        # overlap between MPS \Psi and conjugate MPS \Phi^\dagger
+  # overlap between MPS \Psi and conjugate MPS \Phi^\dagger
                  ___    ___    ___    ___    ___
          \Psi = |___|--|___|--|___|--|___|--|___|
                   |      |      |      |      |
@@ -153,7 +154,7 @@ The overlap can be efficiently calculated for any pair of vectors and operator i
 
 ::
 
-        # overlap between MPS \Psi and conjugate MPS \Phi^\dagger and MPO \hat O
+  # overlap between MPS \Psi and conjugate MPS \Phi^\dagger and MPO \hat O
                  ___    ___    ___    ___    ___
          \Psi = |___|--|___|--|___|--|___|--|___|
                   |      |      |      |      |

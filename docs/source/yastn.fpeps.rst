@@ -19,7 +19,6 @@ What are projected entangled pair states
    :glob:
 
    theory/fpeps/basics
-   theory/fpeps/purification
 
 *******************
 API: yastn.tn.fpeps
@@ -30,10 +29,10 @@ API: yastn.tn.fpeps
    :glob:
    :maxdepth: 2
 
-   fpeps/expectation_values.rst
    fpeps/lattice_geometry
-   fpeps/init
-   fpeps/Optimization_algorithms
+   fpeps/initialization
+   fpeps/evolution
+   fpeps/environments.rst
 
 *************************
 Examples: basics of usage
@@ -44,6 +43,5 @@ Examples: basics of usage
    :glob:
    :maxdepth: 2
 
-   examples/fpeps/ctmrg
    examples/fpeps/geometry
-   examples/fpeps/ntu
+   examples/fpeps/ctmrg

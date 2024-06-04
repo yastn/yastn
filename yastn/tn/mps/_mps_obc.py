@@ -32,7 +32,7 @@ def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC | yastn.tn.mps.MpoPBC:
     Generate empty MPO for system of `N` sites, fixing :code:`nr_phys=2`.
 
     A flag :code:`periodic` allows initializing periodic MPO,
-    which is special class supported as an operator in MPS environments.
+    which is a special class supported as an operator in MPS environments.
     """
     if periodic:
         return MpoPBC(N, nr_phys=2)
@@ -41,7 +41,7 @@ def Mpo(N, periodic=False) -> yastn.tn.mps.MpsMpoOBC | yastn.tn.mps.MpoPBC:
 
 def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
-    Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]} \times \textrm{states[j]}`.
+    Linear superposition of several MPS/MPOs with specific amplitudes, i.e., :math:`\sum_j \textrm{amplitudes[j]}{\times}\textrm{states[j]}`.
 
     Compression (truncation of bond dimensions) is not performed.
 
@@ -340,7 +340,7 @@ class MpsMpoOBC(_MpsMpoParent):
         (:code:`to='first'` or :code:`to='last'`, respectively)
         using :meth:`QR decomposition<yastn.linalg.qr>`.
         It is assumed that tensors are enumerated
-        by index increasing from `0` (:code:`first`) to `N-1` (:code:`last`).
+        by index increasing from 0 (:code:`first`) to N-1 (:code:`last`).
 
         Finally, the trivial central block is attached to the end of the chain.
 
@@ -420,12 +420,12 @@ class MpsMpoOBC(_MpsMpoParent):
 
         normalize: bool
             Whether to keep in self.factor the norm of the initial state projected on
-            the direction of the truncated state; default is True, i.e. sets the norm to unity.
+            the direction of the truncated state; default is True, i.e., sets the norm to unity.
             The individual tensors at the end of the procedure are in a proper canonical form.
 
         opts_svd: dict
             options passed to :meth:`yastn.linalg.svd_with_truncation`,
-            including options governing truncation. Default is {'tol': 1e-13}.
+            including options governing truncation.
         """
         discarded2_total = 0.
         if opts_svd is None:
@@ -489,7 +489,7 @@ class MpsMpoOBC(_MpsMpoParent):
     def get_entropy(self, alpha=1) -> Sequence[number]:
         r"""
         Entropy of bipartition across each bond, along MPS/MPO from the first to the last site,
-        including "trivial" leftmost and rightmost cuts.  This gives a list with N + 1 elements.
+        including "trivial" leftmost and rightmost cuts.  This gives a list with N+1 elements.
 
         Parameters
         ----------
@@ -503,7 +503,7 @@ class MpsMpoOBC(_MpsMpoParent):
     def get_Schmidt_values(self) -> Sequence[yastn.Tensor]:
         r"""
         Schmidt values for bipartition across all bonds along MPS/MPO from the first to the last site,
-        including "trivial" leftmost and rightmost cuts. This gives a list with `N + 1` elements.
+        including "trivial" leftmost and rightmost cuts. This gives a list with N+1 elements.
         Schmidt values are stored as diagonal tensors and are normalized.
         """
         SV = []

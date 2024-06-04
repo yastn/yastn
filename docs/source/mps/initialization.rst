@@ -68,9 +68,9 @@ They are encoded as a list of :class:`mps.Hterm<yastn.tn.mps.Hterm>`, where each
 represents a product of local operators, including the numerical coefficient (amplitude) in front of that product.
 
 To generate the corresponding MPO use :code:`mps.generate_mpo(I, terms)`,
-where `terms` is a list of Hterm-s and `I` is the identity MPO.
+where ``terms`` is a list of Hterm-s and ``I`` is the identity MPO.
 The latter can be conveniently created as shown in :class:`mps.product_mpo<yastn.tn.mps.product_mpo>`.
-For an example, see :ref:`MPO for spinless fermions with hopping at arbitrary range using Hterms<examples/mps/build:Building MPO using Hterm>`.
+For an example, see :ref:`MPO for spinless fermions with long-range hopping via Hterms<examples/mps/build:Building MPO using Hterm>`.
 
 .. autoclass:: yastn.tn.mps.Hterm
 .. autofunction:: yastn.tn.mps.generate_mpo
@@ -85,7 +85,7 @@ A class supporting automatizes generation of MPOs from LaTeX-like expressions.
 
 .. autoclass:: yastn.tn.mps.Generator
 
-We can directly output identity MPO built from the identity `I` from the operator generator class.
+We can directly output identity MPO built from the identity ``I`` from the operator generator class.
 
 .. automethod:: yastn.tn.mps.Generator.I
 .. automethod:: yastn.tn.mps.Generator.mpo_from_latex

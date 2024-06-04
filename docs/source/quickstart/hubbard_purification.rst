@@ -1,191 +1,194 @@
-Purifcation for Fermi-Hubbard Model Quickstart
-==============================================
+2D Fermi-Hubbard model at finite temperature
+============================================
 
-This guide provides a quick overview on how to simulate the Fermi-Hubbard model at finite temperature using the `YASTN`
-tensor network library for an infinite square lattice. We'll focus on initializing the model, setting up the simulation,
-and calculating expectation values.
+This guide provides a quick overview of how to simulate the Fermi-Hubbard model at finite temperature
+using the `YASTN`tensor network library for an infinite square lattice. We'll focus on initializing
+the model, setting up the simulation, and calculating expectation values.
 
 
-Model Overview
---------------
-
-The Fermi-Hubbard model describes interacting electrons on a lattice, where the kinetic energy due to electron hopping competes with on-site Coulomb interaction. The model's Hamiltonian is expressed as:
+The Fermi-Hubbard model describes interacting electrons on a lattice,
+where the kinetic energy due to electron hopping competes with on-site Coulomb interaction.
+The model's Hamiltonian is expressed as:
 
 .. math::
 
-    H = -t \sum_{\langle i, j \rangle, \sigma} (c_{i, \sigma}^\dagger c_{j, \sigma} + h.c.) + U \sum_i n_{i, \uparrow} n_{i, \downarrow} - \mu \sum_{i, \sigma} n_{i, \sigma}
+    H = -t \sum_{\langle i, j \rangle, \sigma} (c_{i, \sigma}^\dagger c_{j, \sigma} + h.c.) + U \sum_i \left( n_{i, \uparrow} - \frac{1}{2} \right) \left(n_{i, \downarrow} - \frac{1}{2} \right) - \sum_{i, \sigma} \mu_\sigma n_{i, \sigma},
 
 where:
-- :math:`t` is the hopping amplitude,
-- :math:`U` is the on-site interaction strength,
-- :math:`\mu` is the chemical potential,
-- :math:`c_{i, \sigma}^\dagger` and :math:`c_{i, \sigma}` are the creation and annihilation operators at site :math:`i` with spin :math:`\sigma`,
-- :math:`n_{i, \sigma} = c_{i, \sigma}^\dagger c_{i, \sigma}` is the number operator for electrons at site :math:`i` with spin :math:`\sigma`.
+    - :math:`t` is the hopping amplitude,
+    - :math:`U` is the on-site interaction strength,
+    - :math:`\mu` is the chemical potential,
+    - :math:`c_{i, \sigma}^\dagger` and :math:`c_{i, \sigma}` are the creation and annihilation operators at site :math:`i` with spin :math:`\sigma`,
+    - :math:`n_{i, \sigma} = c_{i, \sigma}^\dagger c_{i, \sigma}` is the number operator for electrons at site :math:`i` with spin :math:`\sigma`.
 
 
-Simulation Setup
-----------------
-
-1. **Initialization of Model Parameters**:
-
-    We set our model parameters keeping in mind that in purification there is no clear way to fix particle number
-    and must be controlled by changing chemical potention :math:`\mu`.
+1. *Initialization of Model Parameters*:
+    We set our model parameters keeping in mind that in the purification there is no clear way to fix particle number
+    and must be controlled by changing chemical potential :math:`\mu`.
 
     .. code-block:: python
 
-        mu = 0
-        t_up = 1
-        t_dn = 1
-        mu_up = 0
-        mu_dn = 0
-        beta = 0.5 # Inverse temperature
-        U = 10
-
-
-Note that we have the freedom to set different tunneling amplitudes of different elctron polarizations: 't_up' and 't_dn'
-as 'mu_up' and 'mu_dn' can be set diiferent to get different fillings for up and down polarizations.
-
-2. **Lattice Geometry and Initial State Creation**:
-
-    .. code-block:: python
-
+        import yastn
         import yastn.tn.fpeps as fpeps
+
+        t = 1
+        mu = 0
+        U = 10
+        beta = 0.5  # inverse temperature
+
+2. *Local operators*
+    .. code-block:: python
+
+        ops = yastn.operators.SpinfulFermions(sym='U1xU1')
+        I = ops.I()
+        c_up, cdag_up, n_up = ops.c('u'), ops.cp('u'), ops.n('u')
+        c_dn, cdag_dn, n_dn = ops.c('d'), ops.cp('d'), ops.n('d')
+
+
+3. *Lattice Geometry and Initial Product State Creation*:
+    .. code-block:: python
+
         geometry = fpeps.CheckerboardLattice()
 
-        # for bigger unit cells, set 'geometry = fpeps.SquareLattice(dims=(m,n))'
-        # for finite lattice, set 'geometry = fpeps.SquareLattice(dims=(m,n), boundary='finite')
+        # for bigger unit cells, set
+        # geometry = fpeps.SquareLattice(dims=(m, n))
+        # for finite lattice, set
+        # geometry = fpeps.SquareLattice(dims=(m, n), boundary='finite')
 
-        ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2')
-        psi = fpeps.product_peps(geometry=geometry, vectors = ops.I())
-
-3. **Hamiltonian Gates Definition**:
+        # purification at infinite temperature (unnormalized)
+        psi = fpeps.product_peps(geometry=geometry, vectors=I)
 
 
-   .. code-block:: python
+4. *Hamiltonian Gates Definition*:
+    .. code-block:: python
 
-       dbeta = 0.01  # Trotter step size
-       fid = ops.I()
-       fc_up, fc_dn, fcdag_up, fcdag_dn = ops.c('u'), ops.c('d'), ops.cp('u'), ops.cp('d')
-       n_up, n_dn = ops.n('u'), ops.n('d')
-       n_int = n_up @ n_dn
-       g_hop_u = fpeps.gates.gate_nn_hopping(t_up, dbeta / 2, fid, fc_up, fcdag_up)
-       g_hop_d = fpeps.gates.gate_nn_hopping(t_dn, dbeta / 2, fid, fc_dn, fcdag_dn)
-       g_loc = fpeps.gates.gate_local_Coulomb(mu_up, mu_dn, U, dbeta / 2, fid, n_up, n_dn)
-       gates = fpeps.gates.distribute(geometry, gates_nn=[g_hop_u, g_hop_d], gates_local=g_loc)
+        db = 0.01  # Trotter step size
+        steps = round((beta / 2) / db)
+        db = (beta / 2) / steps
 
-4. **Optimzation procedure**:
+        g_hop_u = fpeps.gates.gate_nn_hopping(t, db/2, I, c_up, cdag_up)
+        g_hop_d = fpeps.gates.gate_nn_hopping(t, db/2, I, c_dn, cdag_dn)
+        g_loc = fpeps.gates.gate_local_Coulomb(mu, mu, U, db/2, I, n_up, n_dn)
+        gates = fpeps.gates.distribute(geometry,
+                                       gates_nn=[g_hop_u, g_hop_d],
+                                       gates_local=g_loc)
 
+
+5. *Time Evolution*:
     .. code-block:: python
 
         env = fpeps.EnvNTU(psi, which='NN')
-        # this is set up for neighborhood tensor update optimization as described in https://arxiv.org/pdf/2209.00985.pdf
-
-
-5. **Time Evolution Setup**:
-
-
-    .. code-block:: python
+        # this is set up for neighborhood tensor update optimization
+        # as described in https://arxiv.org/pdf/2209.00985.pdf
 
         D = 12  # bond dimenson
 
-        opts_svd = {'D_total': D, 'tol_block': 1e-15}
-        steps = np.rint((beta / 2) / dbeta).astype(int)
-        for step in range(steps):
-            print(f"beta = {(step + 1) * dbeta}" )
-            evolution_results = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
-            print(f"Error after optimization for all gates: {evolution_results.truncation_error}")
+        opts_svd = {'D_total': D, 'tol': 1e-12}
+        infoss = []
 
-6. **Calculation of Environmental Tensor for Expectation Value Calculations**:
+        print(f"beta_purif; accumulated truncation error" )
+        for step in range(1, steps + 1):
+            infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
+            #
+            infoss.append(infos)
+            Delta = fpeps.accumulated_truncation_error(infoss)
+            print(f"{step * db:0.3f};   {Delta:0.5f}")
 
+5. *CTMRG and Expectation Values*:
     .. code-block:: python
 
-        # This part sets up CTMRG procedure for calculating corner and transfer matrices to be used to calulate any expectation value.
-        # Here it can accessed through an instance of EnvCTM class fpeps. The convergence criteria is based on total energy.
+        # This part sets up CTMRG procedure for calculating corners and
+        # transfer matrices to be used to calculate any expectation value.
+        # It can accessed through an instance of fpeps.EnvCTM class.
+        # Here, the convergence criterion is based on total energy.
 
-        chi = 80  # environmental bond dimension
-        tol = 1e-10  # truncation of singular values of CTM projectors
-        max_sweeps = 50
-        tol_exp = 1e-7  # difference of some observable must be lower than tolernace
+        env_ctm = fpeps.EnvCTM(psi, init='eye')
+        chi = 5 * D
+        opts_svd_ctm = {'D_total': chi, 'tol': 1e-10}
+
+        mean = lambda data: sum(data) / len(data)
 
         energy_old, tol_exp = 0, 1e-7
-
-        opts_svd_ctm = {'D_total': 40, 'tol': 1e-10}
-
-        env_ctm = fpeps.EnvCTM(psi)
-
         for i in range(50):
+            #
             env_ctm.update_(opts_svd=opts_svd_ctm)  # single CMTRG sweep
-
-            # calculate expectation values
-            d_oc = env_ctm.measure_1site(n_int)
-            cdagc_up = env_ctm.measure_nn(fcdag_up, fc_up)  # calculate for all unique bonds
-            cdagc_dn = env_ctm.measure_nn(fcdag_dn, fc_dn)  # -> {bond: value}
-            PEn = U * np.mean([*d_oc.values()])
-            KEn = - 8 * (np.mean([*cdagc_up.values()]) + np.mean([*cdagc_dn.values()]))
-
-            energy = PEn + KEn
-            print(f"Energy after iteration {i+1}: ", energy)
+            #
+            # calculate energy expectation value
+            #
+            # calculate for all unique sites; {site: value}
+            ev_nn = env_ctm.measure_1site((n_up - I / 2) @ (n_dn - I / 2))
+            ev_nn = mean([*ev_nn.values()])  # mean over all sites
+            #
+            # calculate for all unique bonds; {bond: value}
+            ev_cdagc_up = env_ctm.measure_nn(cdag_up, c_up)
+            ev_cdagc_dn = env_ctm.measure_nn(cdag_dn, c_dn)
+            ev_cdagc_up = mean([*ev_cdagc_up.values()])
+            ev_cdagc_dn = mean([*ev_cdagc_dn.values()])
+            #
+            energy = -4 * t * (ev_cdagc_up + ev_cdagc_dn) + U * ev_nn
+            #
+            print(f"Energy per site after iteration {i}: {energy:0.8f}")
             if abs(energy - energy_old) < tol_exp:
                 break
             energy_old = energy
 
-    **Terminal Output Showing Convergence of Energy Calculations**:
-
+6. *Terminal Output Showing Convergence of Energy Calculations*:
     .. code-block:: none
 
-        Energy after iteration 1:  -0.36401150344639244
-        Energy after iteration 2:  -0.35722388043232156
-        Energy after iteration 3:  -0.3570652371408988
-        Energy after iteration 4:  -0.3570627502958944
-        Energy after iteration 5:  -0.357062698531201
+        Energy per site after iteration 0: -2.35954069
+        Energy per site after iteration 1: -2.36550553
+        Energy per site after iteration 2: -2.36557173
+        Energy per site after iteration 3: -2.36557293
+        Energy per site after iteration 4: -2.36557295
 
-7. **Specific Expectation Values**:
-
-
-    Now we move on to calculate expectation values of interest. We have commands follwed by its terminal output.
+7. *Specific Expectation Values*:
+    Now we move to calculate expectation values of interest.
+    We have commands followed by its terminal output.
 
     .. code-block:: python
 
-        occupation_up = env_ctm.measure_1site(n_up) # average occupation of spin polarization up
-        occupation_dn = env_ctm.measure_1site(n_dn) # average occupation of spin polarization up
-        print("average occupation of spin-polarization up: ", np.mean([*occupation_up.values()]))
-        print("average occupation of spin-polarization up: ", np.mean([*occupation_dn.values()]))
+        # average occupation of spin-polarization up and down
+        ev_n_up = env_ctm.measure_1site(n_up)
+        ev_n_dn = env_ctm.measure_1site(n_dn)
+        ev_n_up = mean([*ev_n_up.values()])
+        ev_n_dn = mean([*ev_n_dn.values()])
+        print(f"Occupation spin up: {ev_n_up:0.8f}")
+        print(f"Occupation spin dn: {ev_n_dn:0.8f}")
 
     .. code-block:: none
 
-        average occupation of spin-polarization up:  0.5000000004102714
-        average occupation of spin-polarization up:  0.4999999997308221
+        occupation spin up:  0.50000000
+        occupation spin dn:  0.50000000
 
     .. code-block:: python
 
-        sz = 0.5*(n_up - n_dn)   # sz operator
-        correlation_sz_sz = env_ctm.measure_nn(sz, sz)  # calculate for all unique bonds
-        print("kinetic energy per bond - up spin electrons ", np.mean([*cdagc_up.values()]))
-        print("kinetic energy per bond - down spin electrons ", np.mean([*cdagc_dn.values()]))
+        print("kinetic energy per bond")
+        print(f"spin up electrons: {2 * ev_cdagc_up:0.6f}")
+        print(f"spin dn electrons: {2 * ev_cdagc_dn:0.6f}")
 
     .. code-block:: none
 
-        kinetic energy per bond - up spin electrons  0.06169239676196566
-        kinetic energy per bond - down spin electrons  0.06118004385332907
+        Kinetic energy per bond
+        spin up electrons: 0.123384
+        spin dn electrons: 0.122360
 
     .. code-block:: python
 
-        print("average double occupancy ", np.mean([*d_oc.values()]) )
+        ev_double = env_ctm.measure_1site(n_up @ n_dn)
+        ev_double = mean([*ev_double.values()])
+        print(f"Average double occupancy: {ev_double:0.6f}")
 
     .. code-block:: none
 
-        average double occupancy  0.06259168263911569
+        Average double occupancy: 0.062592
 
     .. code-block:: python
 
-        print("average spin-spin correlator ", np.mean([*correlation_sz_sz.values()]))
-
+        Sz = 0.5 * (n_up - n_dn)   # Sz operator
+        ev_SzSz = env_ctm.measure_nn(Sz, Sz)
+        ev_SzSz = mean([*ev_SzSz.values()])
+        print(f"Average NN spin-spin correlator: {ev_SzSz:0.6f}")
 
     .. code-block:: none
 
-        average spin-spin correlator  -0.0069327726073487505
-
-
-
-
-
+        Average NN spin-spin correlator: -0.006933

@@ -43,7 +43,7 @@ def compression_(psi, target, method='1site',
 
     Works for
 
-        * optimization against provided MPS: ``target`` is ``MPS`` or list ``[MPS,]``
+        * optimization against provided MPS: ``target`` is ``MPS`` or list ``[MPS]``
         * against MPO acting on MPS: ``target`` is a list ``[MPO, MPS]``.
         * against sum of MPOs acting on MPS: ``target`` is a list ``[[MPO, MPO, ...], MPS]``.
         * sum of any of the three above: target is ``[[MPS], [MPO, MPS], [[MPO, MPO, ...], MPS], ...]``
@@ -59,9 +59,11 @@ def compression_(psi, target, method='1site',
         It is first canonized to the first site, if not provided in such a form.
         State resulting from :code:`compression_` is canonized to the first site.
 
-    target: yastn.tn.mps.MpsMpoOBC or list(yastn.tn.mps.MpsMpoOBC)
-        Defines target state. Can be an MPS (target = MPS or (MPS,)),
-        or MPO acting on MPS (target = (MPO, MPS)).
+    target: MPS or MPO
+        Defines target state. Can be an MPS (e.g. target = MPS or [MPS]),
+        or MPO acting on MPS (target = [MPO, MPS]), sum of MPOs acting on MPS.
+        (e.g, [[MPO, MPO], MPS]), of the sum of the above, e.g., [[MPS], [MPO, MPS], [[MPO, MPO], MPS]].
+        For psi and target being MPO, replace MPS above with MPO.
 
     method: str
         Which optimization variant to use from :code:`'1site'`, :code:`'2site'`
@@ -83,7 +85,6 @@ def compression_(psi, target, method='1site',
 
     opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'`.
-        If None, use default {'tol': 1e-13}
 
     Returns
     -------
@@ -239,8 +240,8 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
     """
     Apply MPO `a` on MPS/MPS `b`, performing svd compression during the sweep.
 
-    Perform canonization of `b` to the last site.
-    Next, sweep back attaching elements of `a` one at a time
+    Perform canonization of ``b`` to the last site.
+    Next, sweep back attaching elements of ``a`` one at a time
     and truncating the resulting bond dimensions along the way.
     The resulting state is canonized to the first site and normalized to unity.
 
@@ -253,7 +254,7 @@ def zipper(a, b, opts_svd=None, normalize=True, return_discarded=False) -> yastn
 
     normalize: bool
         Whether to keep track of the norm of the initial state projected on
-        the direction of the truncated state; default is True, i.e. sets the norm to unity.
+        the direction of the truncated state; default is True, i.e., sets the norm to unity.
         The individual tensors at the end of the procedure are in a proper canonical form.
 
     return_discarded: bool

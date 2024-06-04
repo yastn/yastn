@@ -63,8 +63,8 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
         #
         # Print the result:
         #
-        print(f"2site DMRG; energy: {eng:{1}.{8}} / {ref_eng:{1}.{8}}"
-            + f"; occupation: {occ:{1}.{8}} / {ref_occ}")
+        print(f"2site DMRG; energy: {eng:{1}.{8}} / {ref_eng:{1}.{8}}; "
+              + f"occupation: {occ:{1}.{8}} / {ref_occ}")
         assert abs(eng - ref_eng) < tol * 100
         assert abs(occ - ref_occ) < tol
         #
@@ -76,8 +76,8 @@ def run_dmrg(phi, H, O_occ, E_target, occ_target, opts_svd, tol):
 
         eng = mps.measure_mpo(psi, H, psi)
         occ = mps.measure_mpo(psi, O_occ, psi)
-        print(f"1site DMRG; energy: {eng:{1}.{8}} / {ref_eng:{1}.{8}}"
-            + f"; occupation: {occ:{1}.{8}} / {ref_occ}")
+        print(f"1site DMRG; energy: {eng:{1}.{8}} / {ref_eng:{1}.{8}}; "
+              + f"occupation: {occ:{1}.{8}} / {ref_occ}")
         # test that energy outputed by dmrg is correct
         assert abs(eng - ref_eng) < tol
         assert abs(occ - ref_occ) < tol
@@ -137,7 +137,7 @@ def dmrg_XX_model_dense(config=None, tol=1e-6):
     Eng_gs = [-3.427339492125, -3.227339492125, -2.861972627395]
     occ_gs = [3, 4, 2]
     #
-    # To standardize this test we will fix a seed for random MPS we use.
+    # To standardize this test we fix a seed for random MPS we use.
     #
     generate.random_seed(seed=0)
     #

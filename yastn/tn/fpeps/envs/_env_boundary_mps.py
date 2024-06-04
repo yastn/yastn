@@ -21,7 +21,7 @@ from .._gates_auxiliary import apply_gate_onsite
 
 class EnvBoundaryMps:
     r"""
-    Geometric information about the lattice provided to ctm tensors
+    BoundaryMPS class for finite PEPS contraction.
     """
 
     def __init__(self, psi, opts_svd, setup='l', opts_var=None):

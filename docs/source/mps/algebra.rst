@@ -5,7 +5,7 @@ Multiplication by a scalar
 ---------------------------
 
 MPS/MPO can be multiplied by a scalar using regular :code:`*` and :code:`/` operators,
-i.e.,:code:`B = a * A`, :code:`B = A * a` or :code:`B = A / a`.
+i.e., :code:`B = a * A`, :code:`B = A * a` or :code:`B = A / a`.
 
 
 Conjugation and transpose

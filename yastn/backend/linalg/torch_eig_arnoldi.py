@@ -11,7 +11,7 @@ class SYMARNOLDI(torch.autograd.Function):
     @staticmethod
     def forward(self, M, k):
         r"""
-        :param M: square symmetric matrix :math:`N \times N`
+        :param M: square symmetric matrix :math:`N{\times}N`
         :param k: desired rank (must be smaller than :math:`N`)
         :type M: torch.tensor
         :type k: int
@@ -52,8 +52,8 @@ class SYMARNOLDI_2C(torch.autograd.Function):
     @staticmethod
     def forward(self, M, Mhc, k):
         r"""
-        :param M: matrix :math:`N \times M`
-        :param Mhc: matrix :math:`M \times N`
+        :param M: matrix :math:`N{\times}M`
+        :param Mhc: matrix :math:`M{\times}N`
         :param k: desired rank (must be smaller than :math:`N+M`)
         :type M: torch.tensor
         :type Mhc: torch.tensor

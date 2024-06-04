@@ -21,7 +21,9 @@ _allowed_transpose = ((0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2),
 
 class DoublePepsTensor:
     def __init__(self, top, btm, transpose=(0, 1, 2, 3)):
-        r"""Class that treats a cell of a double-layer peps as a single tensor.
+        r"""
+        Class that treats a pair of tensors forming a site of double-layer PEPS as a single tensor.
+
         Parameters
         ----------
         top: yastn.Tensor
@@ -47,7 +49,7 @@ class DoublePepsTensor:
         return 4
 
     def get_shape(self, axes=None):
-        """ Returns the shape of the DoublePepsTensor along the specified axes """
+        """ Returns the shape of the DoublePepsTensor along specified axes. """
         if axes is None:
             axes = tuple(range(4))
         if isinstance(axes, int):
@@ -55,7 +57,7 @@ class DoublePepsTensor:
         return tuple(sum(leg.D) for leg in self.get_legs(axes))
 
     def get_legs(self, axes=None):
-        """ Returns the legs of the DoublePepsTensor along the specified axes. """
+        """ Returns the legs of the DoublePepsTensor along specified axes. """
         if axes is None:
             axes = tuple(range(4))
         multiple_legs = hasattr(axes, '__iter__')
@@ -74,33 +76,33 @@ class DoublePepsTensor:
         return legs if multiple_legs else legs[0]
 
     def transpose(self, axes):
+        """ Transposition of DoublePepsTensor. Only cyclic permutations are allowed. """
         axes = tuple(self._t[ax] for ax in axes)
         if axes not in _allowed_transpose:
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
         return DoublePepsTensor(self.top, self.btm, transpose=axes)
 
     def conj(self):
-        r""" conj """
+        r""" Conjugate DoublePepsTensor. """
         return DoublePepsTensor(self.top.conj(), self.btm.conj(), transpose=self._t)
 
     def clone(self):
         r"""
         Makes a clone of yastn.tn.fpeps.DoublePepsTensor by :meth:`cloning<yastn.Tensor.clone>`-ing
-        all constituent tensors forming a new instance of :class:`peps.DoublePepsTensor`.
+        all constituent tensors forming a new instance of DoublePepsTensor.
         """
         return DoublePepsTensor(self.top.clone(), self.btm.clone(), transpose=self._t)
 
     def copy(self):
         r"""
         Makes a copy of yastn.tn.fpeps.DoublePepsTensor by :meth:`copying<yastn.Tensor.copy>`-ing
-        all constituent tensors forming a new instance of :class:`peps.DoublePepsTensor`.
+        all constituent tensors forming a new instance of DoublePepsTensor.
         """
         return DoublePepsTensor(self.top.copy(), self.btm.copy(), transpose=self._t)
 
     def _attach_01(self, tt):
         """
-        Attach a tensor to the top left corner of the tensor network tt if rotation = 0
-        and to the bottom left if rotation is 90.
+        Attach a tensor to the top-left enlarged corner `tt`.
         """
         if self._t == (0, 1, 2, 3):
             return append_vec_tl(self.top, self.btm, tt)
@@ -121,8 +123,7 @@ class DoublePepsTensor:
 
     def _attach_23(self, tt):
         """
-        Attach a tensor to the bottom right corner of the tensor network tt if rotation = 0
-        and to the top right if rotation is 90.
+        Attach a tensor to the bottom-right enlarged corner `tt`.
         """
         if self._t == (0, 1, 2, 3):
             return append_vec_br(self.top, self.btm, tt)
@@ -143,8 +144,7 @@ class DoublePepsTensor:
 
     def _attach_30(self, tt):
         """
-        Attach a tensor to the top left corner of the tensor network tt if rotation = 0
-        and to the bottom left if rotation is 90.
+        Attach a tensor to the top-right enlarged corner `tt`.
         """
         if self._t == (0, 1, 2, 3):
             return append_vec_tr(self.top, self.btm, tt)
@@ -152,8 +152,7 @@ class DoublePepsTensor:
 
     def _attach_12(self, tt):
         """
-        Attach a tensor to the top left corner of the tensor network tt if rotation = 0
-        and to the bottom left if rotation is 90.
+        Attach a tensor to the bottom-left enlarged corner `tt`.
         """
         if self._t == (0, 1, 2, 3):
             return append_vec_bl(self.top, self.btm, tt)
@@ -161,7 +160,7 @@ class DoublePepsTensor:
 
     def fuse_layers(self):
         """
-        Fuse the top and bottom layers of a PEPS tensor network.
+        Fuse the top and btm tensors into a single :class:`yastn.Tensor`.
         """
         tt = tensordot(self.top, self.btm, axes=(2, 2), conj=(0, 1))  # [t l] [b r] [t' l'] [b' r']
         tt = tt.fuse_legs(axes=(0, 2, (1, 3)))  # [t l] [t' l'] [[b r] [b' r']]
