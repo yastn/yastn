@@ -461,16 +461,16 @@ def test_tdvp_raise(config=cfg):
 
 if __name__ == "__main__":
     test_tdvp_raise(config=cfg)
-    # for sym in ['Z2', 'U1']:
-    #     t0 = time.time()
-    #     tdvp_sudden_quench(sym=sym)
-    #     print(f"Symmetry={sym}; time={time.time()-t0:1.2f}s.")
-    #     t0 = time.time()
-    #     tdvp_sudden_quench_mpo_sum(sym=sym)
-    #     print(f"Symmetry={sym}; time={time.time()-t0:1.2f}s.")
-    #     t0 = time.time()
-    #     tdvp_sudden_quench_Heisenberg(sym=sym)
-    #     print(f"Symmetry={sym}; time={time.time()-t0:1.2f}s.")
+    for sym in ['Z2', 'U1']:
+        t0 = time.time()
+        tdvp_sudden_quench(sym=sym)
+        print(f"Symmetry={sym}; time={time.time()-t0:1.2f}s.")
+        t0 = time.time()
+        tdvp_sudden_quench_mpo_sum(sym=sym)
+        print(f"Symmetry={sym}; time={time.time()-t0:1.2f}s.")
+        t0 = time.time()
+        tdvp_sudden_quench_Heisenberg(sym=sym)
+        print(f"Symmetry={sym}; time={time.time()-t0:1.2f}s.")
     for sym in ['dense', 'Z2']:
         t0 = time.time()
         tdvp_KZ_quench(sym=sym)

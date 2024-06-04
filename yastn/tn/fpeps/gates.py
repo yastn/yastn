@@ -50,17 +50,17 @@ class Gates(NamedTuple):
     local : list = None   # list of local gates
 
 
-def decompose_nn_gate(Gnn) -> Gate_nn:
+def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
     """
     Auxiliary function cutting a two-site gate with SVD
     into two local operators with the connecting legs.
     """
     U, S, V = Gnn.svd_with_truncation(axes=((0, 2), (1, 3)), sU=-1, tol=1e-14, Vaxis=2)
     S = S.sqrt()
-    return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2))
+    return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond=bond)
 
 
-def gate_nn_hopping(t, step, I, c, cdag) -> Gate_nn:
+def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
     """
     Nearest-neighbor gate G = exp(-step * H)
     for H = -t * (cdag_1 c_2 + cdag_2 c_1)
@@ -78,10 +78,24 @@ def gate_nn_hopping(t, step, I, c, cdag) -> Gate_nn:
        + fkron(cdag, c, sites=(1, 0))
 
     G =  II + (np.cosh(t * step) - 1) * (nh + hn) + np.sinh(t * step) * cc
-    return decompose_nn_gate(G)
+    return decompose_nn_gate(G, bond)
 
 
-def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn) -> Gate_local:
+def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
+    """
+    Nearest-neighbor gate G = exp(-step * H)
+    for H = J X_1 X_2, where X is Pauli matrix
+
+    G = cosh(x) I - sinh(x) X_1 X_2;  x = step * J
+    """
+    II = fkron(I, I, sites=(0, 1))
+    XX = fkron(X, X, sites=(0, 1))
+
+    G = np.cosh(J * step) * II - np.sinh(J * step) * XX
+    return decompose_nn_gate(G, bond)
+
+
+def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate_local:
     """
     Local gate exp(-step * H)
     for H = U * (n_up - I / 2) * (n_dn - I / 2) - mu_up * n_up - mu_dn * n_dn
@@ -93,15 +107,26 @@ def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn) -> Gate_local:
     G_loc = G_loc + (n_dn - nn) * (np.exp(step * (mu_dn + U / 2)) - 1)
     G_loc = G_loc + (n_up - nn) * (np.exp(step * (mu_up + U / 2)) - 1)
     G_loc = G_loc + nn * (np.exp(step * (mu_up + mu_dn)) - 1)
-    return Gate_local(G_loc)
+    return Gate_local(G_loc, site)
 
 
-def gate_local_occupation(mu, step, I, n) -> Gate_local:
+def gate_local_occupation(mu, step, I, n, site=None) -> Gate_local:
     """
     Local gate exp(-step * H)
     for H = -mu * n
     """
-    return Gate_local(I + n * (np.exp(mu * step) - 1))
+    G_loc = I + n * (np.exp(mu * step) - 1)
+    return Gate_local(G_loc, site)
+
+
+def gate_local_Ising(h, step, I, X, site=None) -> Gate_local:
+    """
+    Local gate exp(-step * H)
+    for H = -h * X
+    """
+    G_loc = np.cosh(h * step) * I + np.sinh(h * step) * X
+    return Gate_local(G_loc, site)
+
 
 
 def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
