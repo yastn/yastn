@@ -38,6 +38,39 @@ It is an auxiliary class, that is initialized by environments during contraction
 .. autoclass:: yastn.tn.fpeps.Peps2Layers
 
 
+
+Calculation of expectation values of interests requires contraction of PEPS with its conjugate.
+This amounts to contraction of PEPS network composed of reduced tensor :math:`a` which is
+obtained by tracing over the physical index in tensors :math:`A` and it's conjugate :math:`A^{\dagger}`.
+In YASTN, this is supported by :class:`yastn.tn.fpeps.DoublePepsTensor`.
+Note that in the following diagram the virtual legs of the peps tensor are labelled by
+:math:`t` (top), :math:`l` (left), :math:`b` (bottom), and :math:`r` (right) in an anticlockwise fashion.
+For the conjugate tensor, similarly, they are labelled by :math:`{t'}`, :math:`{l'}`, :math:`{b'}` and :math:`{r'}`.
+Swap gates are placed where the legs cross. This gives a simple structure for the contracted tensors on
+the :math:`2D` lattice, respecting the global fermionic order.
+
+::
+
+                      t' t
+                       \ \
+                        | \
+                       /  _\_____
+                      /  |       |                            t' t
+                   /--|--|   A   |-------\                     \ \
+                  /   |  |_______|        \                   __\_\__
+             l --/    |    |      \        \-- r         l --|       |-- r
+                      |    |    __ \               ===       |   a   |
+             l'--\    |   _|___|_ \ \      /-- r'        l'--|_______|-- r'
+                  \   |  |       | \ \    /                      \ \
+                   \--|--|   A'  |--\-\--/                        \ \
+                      \  |_______|   \ \                          b' b
+                       \         \    \ \
+                        \________/     \ \
+                                       b' b
+
+
+
+
 Double PEPS Tensor
 ------------------
 

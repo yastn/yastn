@@ -196,6 +196,19 @@ def accumulated_truncation_error(infoss, statistics='mean'):
         list of outputs of :meth:`evolution_step_`.
     statistics: str
         'max' or 'mean', whether to take the maximal value of a mean over the lattice.
+
+    Example
+    -------
+
+    ::
+
+        infoss = []
+        for step in range(number_of_steps):
+            infos = fpeps.evolution_step_(env, gates, opt_svd)
+            infoss.append(infos)
+
+        # Accumulated runcation error
+        Delta = fpeps.accumulated_truncation_error(infoss)
     """
     if statistics == 'max':
         stat = lambda x: max(x)

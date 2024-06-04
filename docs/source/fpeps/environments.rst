@@ -2,18 +2,17 @@ Environments
 ============
 
 Contractions of PEPS lattice are supported by environment classes. Those include:
-
-    * :class:`yastn.tn.fpeps.EnvNTU` which g NTU approximation of the bond metric
-    * :class:`yastn.tn.fpeps.EnvCTM`
-    * :class:`yastn.tn.fpeps.EnvBoundaryMPS`
-
-Expectation values in PEPS require contraction of the lattice. This can be approximately done using CTMRG.
+    * :class:`yastn.tn.fpeps.EnvNTU` supports a family of NTU approximations of the bond metric for time evolution.
+    * :class:`yastn.tn.fpeps.EnvCTM` CTMRG for finite or infinite lattices. Supports local expectation values, bond metric, etc.
+    * :class:`yastn.tn.fpeps.EnvBoundaryMps` Contraction based on BoundaryMPS in a finite lattice supports expectation values, including long-range correlations, sampling, etc.
+    * :class:`yastn.tn.fpeps.EnvApproximate` Supports larger clusters for approximate contraction of bond metric.
 
 
 Neighberhood tensor update environments
 ---------------------------------------
 
 .. autoclass:: yastn.tn.fpeps.EnvNTU
+    :members: bond_metric
 
 
 Corner transfer matrix renormalization group (CTMRG)
@@ -119,3 +118,7 @@ Boundary MPS
 .. autoclass:: yastn.tn.fpeps.EnvBoundaryMps
 
 
+Approximate cluster update
+--------------------------
+
+.. autoclass:: yastn.tn.fpeps.EnvApproximate

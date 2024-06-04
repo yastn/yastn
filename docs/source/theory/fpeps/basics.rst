@@ -325,6 +325,52 @@ the :math:`2D` lattice, respecting the global fermionic order.
 
 
 
+
+Introduction
+""""""""""""
+
+Nishino and Okunishi first deployed CTMRG [1] by extending the DMRG framework to give variational approximations for
+Baxter's corner matrices of the vertex model. Their pioneering work demonstrated the potential of combining DMRG with
+variational techniques to tackle complex problems in quantum systems.
+The subsequent development of CTMRG (Corner Transfer Matrix Renormalization Group) beyond the realm of C4v symmetric tensors
+was accomplished by Orus and Vidal [2], with further refinements by Corboz [3]. Referred to as directional CTM, this extension enabled
+the application of CTMRG techniques to nonsymmetric tensors. However, this extension also introduced additional challenges
+due to the loss of symmetry on the virtual indices.
+
+Idea
+""""
+
+The core idea behind CTMRG, both in the symmetric and nonsymmetric cases, remains the same. The method approximates the
+contraction of an infinite tensor network by utilizing a finite set of environment tensors with a fixed rank :math:`\chi`.
+These environment tensors undergo a Renormalization Group (RG) procedure, iteratively converging towards their fixed-point forms.
+The ultimate goal is to recover the thermodynamic limit properties as the rank :math:`\chi \rightarrow \infty`.
+In the corner transfer matrix method, the infinite environment of a given site (or sites in a unit cell) in a 2D tensor network is approximated by a
+combination of four corner :math:`C_{nw},C_{sw},C_{ne},C_{se}` and four transfer :math:`T_{n},T_{w},T_{e},T_{s}` tensors of finite size, as depicted in the
+following figure. The single-site observable :math:`O` is placed between the site and its conjugated attached via the physical indices.
+The CTMRG tensors, when contracted, provides the reduced density matrix with which the expectation value is to be computed.
+
+
+::
+
+     _______     _______     _______                       \
+    |       |   |       |chi|       |                     __\____
+    |  C_nw |---|  T_n  |---|  C_ne |                    |       |
+    |_______|   |_______|   |_______|                  --|   A   |--
+        |           |           |                        |_______|
+     ___|___     ___|___     ___|___                         |  \
+    |       |   |       |D^2|       |       ___|___       ___|___
+    |  T_w  |---|   O   |---|  T_e  |      |       |     |       |
+    |_______|   |_______|   |_______|    --|   O   |-- = |       |
+        |chi        |           |          |_______|     |_______|
+     ___|___     ___|___     ___|___           |             |
+    |       |   |       |   |       |                     ___|_/_
+    |  C_sw |---|  T_s  |---|  C_se |                    |       |
+    |_______|   |_______|   |_______|                  --|   A'  |--
+                                                         |_______|
+                                                           /
+                                                          /
+
+
 The exact contraction of a PEPS is exponentially hard and one has to use efficient approximate contraction schemes.
 One of the state-of-the-art for calculating expectation values in the case of PEPS employs
 the Corner Transfer Matrix Renormalization Group (CTMRG) [11,12,13]. It iteratively finds
