@@ -1,5 +1,5 @@
-Purifcation for Fermi-Hubbard Model Quickstart
-==============================================
+2D Fermi-Hubbard model at finite temperature
+============================================
 
 This guide provides a quick overview of how to simulate the Fermi-Hubbard model at finite temperature using the `YASTN`
 tensor network library for an infinite square lattice. We'll focus on initializing the model, setting up the simulation,
@@ -90,11 +90,11 @@ Simulation Setup
         opts_svd = {'D_total': D, 'tol': 1e-12}
         infoss = []
         for step in range(1, steps + 1):
-            print(f"beta_purification = {step * db:0.3f}" )
             infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
+            #
             infoss.append(info)
-        Delta = fpeps.accumulated_truncation_error(infoss)
-        print(f"Accumulated mean truncation error: {Delta:0.3f}")
+            Delta = fpeps.accumulated_truncation_error(infoss)
+            print(f"beta_purification: {step * db:0.3f}; Accumulated truncation error: {Delta:0.5f}" )
 
 5. *CTMRG and Expectation Values*:
     .. code-block:: python
@@ -104,7 +104,7 @@ Simulation Setup
         # It can accessed through an instance of fpeps.EnvCTM class.
         # Here, the convergence criterion is based on total energy.
 
-        env_ctm = fpeps.EnvCTM(psi, init='rand')
+        env_ctm = fpeps.EnvCTM(psi, init='eye')
         chi = 5 * D
         opts_svd_ctm = {'D_total': chi, 'tol': 1e-10}
 
@@ -117,18 +117,17 @@ Simulation Setup
             #
             # calculate energy expectation value
             #
-            ev_nn = env_ctm.measure_1site((n_up - I / 2) @ (n_dn - I / 2))
             # calculate for all unique sites; {site: value}
+            ev_nn = env_ctm.measure_1site((n_up - I / 2) @ (n_dn - I / 2))
+            ev_nn = mean([*ev_nn.values()])  # mean over all sites
             #
+            # calculate for all unique bonds; {bond: value}
             ev_cdagc_up = env_ctm.measure_nn(cdag_up, c_up)
             ev_cdagc_dn = env_ctm.measure_nn(cdag_dn, c_dn)
-            ev_ccdag_up = env_ctm.measure_nn(c_up, cdag_up)
-            ev_ccdag_dn = env_ctm.measure_nn(c_dn, cdag_dn)
-            # calculate for all unique bonds; {bond: value}
+            ev_cdagc_up = mean([*ev_cdagc_up.values()])
+            ev_cdagc_dn = mean([*ev_cdagc_dn.values()])
             #
-            energy = U * mean([*ev_nn.values()])  # mean over all sites
-            energy += -4 * t * mean([*ev_cdagc_up.values()]) # mean over bonds
-            energy += -4 * t * mean([*ev_cdagc_dn.values()])
+            energy = -4 * t * (ev_cdagc_up + ev_cdagc_dn) + U * ev_nn
             #
             print(f"Energy per site after iteration {i}: {energy:0.8f}")
             if abs(energy - energy_old) < tol_exp:
@@ -138,11 +137,11 @@ Simulation Setup
 6. *Terminal Output Showing Convergence of Energy Calculations*:
     .. code-block:: none
 
-        Energy after iteration 1:  -0.36401150344639244
-        Energy after iteration 2:  -0.35722388043232156
-        Energy after iteration 3:  -0.3570652371408988
-        Energy after iteration 4:  -0.3570627502958944
-        Energy after iteration 5:  -0.357062698531201
+        Energy per site after iteration 0: -2.35954069
+        Energy per site after iteration 1: -2.36550553
+        Energy per site after iteration 2: -2.36557173
+        Energy per site after iteration 3: -2.36557293
+        Energy per site after iteration 4: -2.36557295
 
 7. *Specific Expectation Values*:
     Now we move to calculate expectation values of interest.
@@ -153,47 +152,45 @@ Simulation Setup
         # average occupation of spin-polarization up and down
         ev_n_up = env_ctm.measure_1site(n_up)
         ev_n_dn = env_ctm.measure_1site(n_dn)
-        print("occupation spin up: ", mean([*ev_n_up.values()]))
-        print("occupation spin dn: ", mean([*ev_n_dn.values()]))
+        ev_n_up = mean([*ev_n_up.values()])
+        ev_n_dn = mean([*ev_n_dn.values()])
+        print(f"Occupation spin up: {ev_n_up:0.8f}")
+        print(f"Occupation spin dn: {ev_n_dn:0.8f}")
 
     .. code-block:: none
 
-        occupation spin up:  0.5000000004102714
-        occupation spin dn:  0.4999999997308221
+        occupation spin up:  0.50000000
+        occupation spin dn:  0.50000000
 
     .. code-block:: python
 
         print("kinetic energy per bond")
-        print("spin up electrons: ", 2 * mean([*ev_cdagc_up.values(), *ev_ccdag_up.values()]))
-        print("spin dn electrons: ", 2 * mean([*ev_cdagc_dn.values(), *ev_ccdag_dn.values()]))
+        print(f"spin up electrons: {2 * ev_cdagc_up:0.6f}")
+        print(f"spin dn electrons: {2 * ev_cdagc_dn:0.6f}")
 
     .. code-block:: none
 
-        kinetic energy per bond
-        spin up electrons:  0.06169239676196566
-        spin dn electrons:  0.06118004385332907
+        Kinetic energy per bond
+        spin up electrons: 0.123384
+        spin dn electrons: 0.122360
 
     .. code-block:: python
 
-        print("average double occupancy ", np.mean([*ev_nn.values()]))
+        ev_double = env_ctm.measure_1site(n_up @ n_dn)
+        ev_double = mean([*ev_double.values()])
+        print(f"Average double occupancy: {ev_double:0.6f}")
 
     .. code-block:: none
 
-        average double occupancy  0.06259168263911569
+        Average double occupancy: 0.062592
 
     .. code-block:: python
 
-        sz = 0.5 * (n_up - n_dn)   # sz operator
-        # calculate for all unique bonds
-        ev_szsz = env_ctm.measure_nn(sz, sz)
-
-        print("average NN spin-spin correlator ", mean([*ev_szsz.values()]))
+        Sz = 0.5 * (n_up - n_dn)   # Sz operator
+        ev_SzSz = env_ctm.measure_nn(Sz, Sz)
+        ev_SzSz = mean([*ev_SzSz.values()])
+        print(f"Average NN spin-spin correlator: {ev_SzSz:0.6f}")
 
     .. code-block:: none
 
-        average NN spin-spin correlator  -0.0069327726073487505
-
-
-
-
-
+        Average NN spin-spin correlator: -0.006933

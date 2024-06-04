@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Test Quickstart example """
+""" Test quickstart example Hubbard. """
 
 def test_quickstart_hubbard():
 
@@ -22,7 +22,7 @@ def test_quickstart_hubbard():
     t = 1
     mu = 0
     U = 10
-    beta = 0.05  # inverse temperature
+    beta = 0.5  # inverse temperature
 
     ops = yastn.operators.SpinfulFermions(sym='U1xU1')
     I = ops.I()
@@ -45,19 +45,19 @@ def test_quickstart_hubbard():
 
     env = fpeps.EnvNTU(psi, which='NN')
 
-    D = 8  # bond dimenson
+    D = 12  # bond dimenson
 
     opts_svd = {'D_total': D, 'tol': 1e-12}
     infoss = []
     for step in range(1, steps + 1):
-        print(f"beta_purification = {step * db:0.3f}" )
         infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
+        #
         infoss.append(infos)
-    Delta = fpeps.accumulated_truncation_error(infoss)
-    print(f"Accumulated mean truncation error: {Delta:0.6f}")
+        Delta = fpeps.accumulated_truncation_error(infoss)
+        print(f"beta_purification: {step * db:0.3f}; Accumulated truncation error: {Delta:0.5f}" )
 
 
-    env_ctm = fpeps.EnvCTM(psi, init='rand')
+    env_ctm = fpeps.EnvCTM(psi, init='eye')
     chi = 5 * D
     opts_svd_ctm = {'D_total': chi, 'tol': 1e-10}
 
@@ -70,36 +70,42 @@ def test_quickstart_hubbard():
         #
         # calculate energy expectation value
         #
-        ev_nn = env_ctm.measure_1site((n_up - I / 2) @ (n_dn - I / 2))
         # calculate for all unique sites; {site: value}
+        ev_nn = env_ctm.measure_1site((n_up - I / 2) @ (n_dn - I / 2))
+        ev_nn = mean([*ev_nn.values()])  # mean over all sites
         #
+        # calculate for all unique bonds; {bond: value}
         ev_cdagc_up = env_ctm.measure_nn(cdag_up, c_up)
         ev_cdagc_dn = env_ctm.measure_nn(cdag_dn, c_dn)
-        # calculate for all unique bonds; {bond: value}
+        ev_cdagc_up = mean([*ev_cdagc_up.values()]) # mean over bonds
+        ev_cdagc_dn = mean([*ev_cdagc_dn.values()])
         #
-        energy = U * mean([*ev_nn.values()])  # mean over all sites
-        energy += -4 * t * mean([*ev_cdagc_up.values()])
-        energy += -4 * t * mean([*ev_cdagc_dn.values()])
+        energy = -4 * t * (ev_cdagc_up + ev_cdagc_dn) + U * ev_nn
         #
-        print(f"Energy per site after iteration {i}: ", energy)
+        print(f"Energy per site after iteration {i}: {energy:0.8f}")
         if abs(energy - energy_old) < tol_exp:
             break
         energy_old = energy
 
     ev_n_up = env_ctm.measure_1site(n_up)
     ev_n_dn = env_ctm.measure_1site(n_dn)
-    print("Occupation spin up: ", mean([*ev_n_up.values()]))
-    print("Occupation spin dn: ", mean([*ev_n_dn.values()]))
+    ev_n_up = mean([*ev_n_up.values()])
+    ev_n_dn = mean([*ev_n_dn.values()])
+    print(f"Occupation spin up: {ev_n_up:0.8f}")
+    print(f"Occupation spin dn: {ev_n_dn:0.8f}")
 
     print("Kinetic energy per bond")
-    print("spin up electrons: ", 2 * mean([*ev_cdagc_up.values()]))
-    print("spin dn electrons: ", 2 * mean([*ev_cdagc_dn.values()]))
+    print(f"spin up electrons: {2 * ev_cdagc_up:0.6f}")
+    print(f"spin dn electrons: {2 * ev_cdagc_dn:0.6f}")
 
-    print("Average double occupancy ", mean([*ev_nn.values()]))
+    ev_double = env_ctm.measure_1site(n_up @ n_dn)
+    ev_double = mean([*ev_double.values()])
+    print(f"Average double occupancy: {ev_double:0.6f}")
 
-    sz = 0.5 * (n_up - n_dn)  # Sz operator
-    ev_szsz = env_ctm.measure_nn(sz, sz)
-    print("Average NN spin-spin correlator ", mean([*ev_szsz.values()]))
+    Sz = 0.5 * (n_up - n_dn)   # Sz operator
+    ev_SzSz = env_ctm.measure_nn(Sz, Sz)
+    ev_SzSz = mean([*ev_SzSz.values()])
+    print(f"Average NN spin-spin correlator: {ev_SzSz:0.6f}")
 
 
 if __name__ == '__main__':
