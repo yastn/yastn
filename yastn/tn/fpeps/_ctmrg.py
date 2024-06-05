@@ -15,7 +15,7 @@
 """ Functions performing many CTMRG steps until convergence and return of CTM environment tensors for mxn lattice. """
 from typing import NamedTuple
 import logging
-from yastn.tensor.linalg import svd
+from yastn.tensor.linalg import svd, qr
 import numpy as np
 
 logger = logging.Logger('ctmrg')
@@ -24,6 +24,25 @@ logger = logging.Logger('ctmrg')
 class CTMRGout(NamedTuple):
     sweeps : int = 0
     max_dsv : float = None
+
+def calculate_corner_svd_qr(env):
+    corner_sv = {}
+    q_list = []
+    r_list = []
+    sites = env.sites()
+    for site in sites:
+        [q, r] = qr(env[site].tl)
+        q_list.append(q)
+        r_list.append(r)
+        [q, r] = qr(env[site].br)
+        q_list.append(q)
+        r_list.append(r)
+    corner_sv[sites[0], 'tr'] = svd(r_list[2] @ env[sites[0]].tr @ q_list[3], compute_uv=False)
+    corner_sv[sites[0], 'bl'] = svd(r_list[3] @ env[sites[0]].bl @ q_list[2], compute_uv=False)
+    corner_sv[sites[1], 'tr'] = svd(r_list[0] @ env[sites[1]].tr @ q_list[1], compute_uv=False)
+    corner_sv[sites[1], 'bl'] = svd(r_list[1] @ env[sites[1]].bl @ q_list[0], compute_uv=False)
+
+    return corner_sv
 
 
 def calculate_corner_svd(env):
@@ -63,7 +82,6 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, co
         # if sweep % 2 == 1: continue
         if corner_tol:  # check convergence of corners singular values
             corner_sv = calculate_corner_svd(env)
-
             if not 'tol_multiplets' in opts_svd.keys():
                 dsv = []
                 for k, v in corner_sv.items():
@@ -75,21 +93,25 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, co
                 max_dsv = max(dsv)
                 truncation_method = "Dense"
             else:
+
                 max_dsv = max((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item() \
                             for k, v in corner_sv.items())
 
                 # for k, v in corner_sv.items():
                 #     print(k)
                 #     num_of_sv = 0
-                #     for t in v.get_legs()[0].t:
-                #         try:
-                #             print("t, sv", t, (old_corner_sv[k][t, t]).tolist())
-                #         except:
-                #             pass
-                #         print("t, sv", t, (v[t, t]).tolist())
-                #         num_of_sv = num_of_sv + len(v[t, t].tolist())
+                #     print(v.get_legs()[0].t)
+                #     print(v.get_legs()[0].D)
+                #     # for t in v.get_legs()[0].t:
+
+                #     #     try:
+                #     #         print("t, sv", t, (old_corner_sv[k][t, t]).tolist())
+                #     #     except:
+                #     #         pass
+                #     #     print("t, sv", t, (v[t, t]).tolist())
+                #     #     num_of_sv = num_of_sv + len(v[t, t].tolist())
                 #     print((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item())
-                #     print("Num of SV:", num_of_sv)
+                #     # print("Num of SV:", num_of_sv)
 
                 truncation_method = "Symmetric"
 

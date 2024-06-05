@@ -404,9 +404,13 @@ def truncation_mask(S, tol=0, tol_block=0, tol_multiplets=0,
         if (S.config.sym.SYM_ID != "dense") and (abs(tol_multiplets) > 1e-16): # Do not apply symmetric trunction for dense tensors or tol_multiplets = 0
             pos = D_total
             # condition for multiplet
+            abs_tol_multiplets = abs(S._data[inds[len(inds) - 1]]) * tol_multiplets
+            # print(S._data[inds[-pos]], abs_tol_multiplets)
             if pos < len(inds):
-                while abs(S._data[inds[-pos]] - S._data[inds[-pos-1]]) <= abs(S._data[inds[len(inds) - 1]]) * tol_multiplets:
+                while abs(S._data[inds[-pos]] - S._data[inds[-pos - 1]]) <= abs_tol_multiplets:
+                    # print("Truncated, current, next, previous, tol_multiplet", D_total, pos, S._data[inds[-pos]], S._data[inds[-pos-1]], S._data[inds[-pos+1]], abs_tol_multiplets, end="; ")
                     pos = pos - 1
+                    # print("new pos", pos)
 
             Smask._data[inds[:-pos]] = False
         else:
