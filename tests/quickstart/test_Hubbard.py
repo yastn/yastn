@@ -33,15 +33,16 @@ def test_quickstart_hubbard():
     psi = fpeps.product_peps(geometry=geometry, vectors=I)
 
     db = 0.01  # Trotter step size
+    # making sure we have integer number of steps to target beta / 2
     steps = round((beta / 2) / db)
     db = (beta / 2) / steps
 
-    g_hop_u = fpeps.gates.gate_nn_hopping(t, db/2, I, c_up, cdag_up)
-    g_hop_d = fpeps.gates.gate_nn_hopping(t, db/2, I, c_dn, cdag_dn)
+    g_hop_u = fpeps.gates.gate_nn_hopping(t, db / 2, I, c_up, cdag_up)
+    g_hop_d = fpeps.gates.gate_nn_hopping(t, db / 2, I, c_dn, cdag_dn)
     g_loc = fpeps.gates.gate_local_Coulomb(mu, mu, U, db/2, I, n_up, n_dn)
     gates = fpeps.gates.distribute(geometry,
-                                    gates_nn=[g_hop_u, g_hop_d],
-                                    gates_local=g_loc)
+                                   gates_nn=[g_hop_u, g_hop_d],
+                                   gates_local=g_loc)
 
     env = fpeps.EnvNTU(psi, which='NN')
 
@@ -50,7 +51,7 @@ def test_quickstart_hubbard():
     opts_svd = {'D_total': D, 'tol': 1e-12}
     infoss = []
 
-    print(f"beta_purif; accumulated truncation error" )
+    print(f" beta_purif; accumulated truncation error" )
     for step in range(1, steps + 1):
         infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
         #
