@@ -19,116 +19,151 @@ def test_quickstart_KZ():
     """ test quickstart Kibble-Zurek example"""
 
     import numpy as np
+    import matplotlib.pyplot as plt
+    from tqdm import tqdm  # progressbar
     import yastn
     import yastn.tn.mps as mps
-    import yastn.tn.fpeps as fpeps
+    import yastn.tn.fpeps as peps
+    from yastn.tn.fpeps.gates import gate_nn_Ising, gate_local_Ising
     #
-    Lx, Ly = 4, 4
+    # Employ PEPS lattice geometry for sites and bonds
+    Lx, Ly = 4, 4  # lattice size
+    geometry = peps.SquareLattice(dims=(Lx, Ly), boundary='obc')
+    sites = geometry.sites()
     #
-    # Quench protocol
+    # Draw random couplings
+    np.random.seed(seed=0)
+    Jij = {k: 2 * np.random.rand() - 1 for k in geometry.bonds()}
     #
-    # H(s) = fXX(s) J_ij X_i X_j - fZ(s) Z_i
-    #
+    # Define quench protocol
     fXX = lambda s : np.sin((s - 0.5) * np.pi) + 1
     fZ = lambda s :  1 - np.sin((s - 0.5) * np.pi)
-    ta = 1.0  # annealing time
-    dt = 0.02
+    ta = 2.0  # annealing time
+    dt = 0.02  # time step
     steps = round(ta / dt)
     dt = ta / steps
     #
+    # Load operators. Problem has Z2 symmetry, which we impose.
     ops = yastn.operators.Spin12(sym='Z2')
-    #
-    # random couiplings in 2D square lattice with OBC
-    #
-    geometry = fpeps.SquareLattice(dims=(Lx, Ly), boundary='obc')
-    np.random.seed(seed=0)
-    Jij = {k: 2 * np.random.rand() - 1 for k in geometry.bonds()}
-    sites = geometry.sites()
     #
     print("PEPS simulations")
     #
     def gates_Ising(Jij, fXX, fZ, s, dt, sites, ops):
-        nn = [fpeps.gates.gate_nn_Ising(J * fXX(s), 1j * dt / 2, ops.I(), ops.x(), bd) for bd, J in Jij.items()]
-        local = [fpeps.gates.gate_local_Ising(fZ(s), 1j * dt / 2, ops.I(), ops.z(), st) for st in sites]
-        return fpeps.Gates(nn=nn, local=local)
+        """ Trotter gates at time s. """
+        nn, local = [], []
+        # time-step is 1j * dt / 2, as trotterized evolution
+        # is completed by its adjoint for 2nd order method.
+        dt2 = 1j * dt / 2
+        for bond, J in Jij.items():
+            gt = gate_nn_Ising(J * fXX(s), dt2, ops.I(), ops.x(), bond)
+            nn.append(gt)
+        for site in sites:
+            gt = gate_local_Ising(fZ(s), dt2, ops.I(), ops.z(), site)
+            local.append(gt)
+        return peps.Gates(nn=nn, local=local)
     #
-    psi = fpeps.product_peps(geometry=geometry, vectors=ops.vec_z(val=1))
+    # Initialize system in the product ground state at s=0.
+    psi = peps.product_peps(geometry=geometry, vectors=ops.vec_z(val=1))
     #
-    D = 6
+    # simulation parameters
+    D = 4  # PEPS bond dimension
     opts_svd_ntu = {"D_total": D, "D_block": D // 2}
-    env = fpeps.EnvNTU(psi, which='NN+')
+    env = peps.EnvNTU(psi, which='NN+')
     #
-    t = 0
-    infoss = []
-    for _ in range(steps):
+    # execute time evolution
+    infoss, t = [], 0
+    for _ in tqdm(range(steps)):
         t += dt / 2
         gates = gates_Ising(Jij, fXX, fZ, t / ta, dt, sites, ops)
-        infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_ntu)
+        infos = peps.evolution_step_(env, gates, opts_svd=opts_svd_ntu)
         infoss.append(infos)
         t += dt / 2
-        print(f"s = {t / ta:0.4f}")
-    Delta = fpeps.accumulated_truncation_error(infoss, statistics='mean')
-    print(f"{Delta=:0.8f}")
+    Delta = peps.accumulated_truncation_error(infoss, statistics='mean')
+    print(f"Accumulated mean truncation error {Delta:0.6f}")
     #
-    # calculate correlations
+    print("Calculating correlations")
     #
     opts_svd_env = {'D_total': 4 * D}
-    opts_var_env = {"overlap_tol": 1e-5,
-                    "Schmidt_tol": 1e-5,
-                    "max_sweeps": 8}
+    opts_var_env = {"max_sweeps": 8,
+                    "overlap_tol": 1e-5,
+                    "Schmidt_tol": 1e-5}
     #
-    print(" BoundaryMPS preprocessing ")
-    env = fpeps.EnvBoundaryMps(psi, opts_svd=opts_svd_env, opts_var=opts_var_env, setup='lr')
+    # setting-up environment
+    env = peps.EnvBoundaryMps(psi,
+                                opts_svd=opts_svd_env,
+                                opts_var=opts_var_env, setup='lr')
     #
-    # Calculating 1-site
-    print(" Observables 1-site ")
+    # Calculating 1-site <Z_i> for all sites
     Ez_peps = env.measure_1site(ops.z())
     #
-    # Calculating 2-site
-    print(" Observables 2-site ")
+    # Calculating 2-site <X_i X_j> for all pairs
     Exx_peps = env.measure_2site(ops.x(), ops.x(),
-                            opts_svd=opts_svd_env,
-                            opts_var=opts_var_env)
+                                opts_svd=opts_svd_env,
+                                opts_var=opts_var_env)
+    #
+    # remove diagonal
+    Exx_peps = {bd: v for bd, v in Exx_peps.items() if bd[0] != bd[1]}
     #
     print("MPS simulations")
     #
-    i2s = {i: s for i, s in enumerate(sites)}
+    # map between sites and linear MPS ordering.
     s2i = {s: i for i, s in enumerate(sites)}
+    b2i = lambda s1, s2: tuple(sorted([s2i[s1], s2i[s2]]))
     #
+    # define Hamiltonian MPO
     I = mps.product_mpo(ops.I(), Lx * Ly)  # identity MPO
-    termsXX = [mps.Hterm(J, [s2i[s1], s2i[s2]], [ops.x(), ops.x()]) for (s1, s2), J in Jij.items()]
+    #
+    termsXX = []
+    for (s1, s2), J in Jij.items():
+        termXX = mps.Hterm(J, [s2i[s1], s2i[s2]], [ops.x(), ops.x()])
+        termsXX.append(termXX)
     HXX = mps.generate_mpo(I, termsXX)
+    #
     termsZ = [mps.Hterm(-1, [i], [ops.z()]) for i in range(Lx * Ly)]
     HZ = mps.generate_mpo(I, termsZ)
     #
+    # MPO contributions in H(t) will be added up.
     H = lambda t: [HXX * fXX(t / ta), HZ * fZ(t / ta)]
     #
+    # Initial state; product state via dmrg_
+    # TDVP is unstable staring in a product state
+    # We make bond dimension artificially large
     psi = mps.random_mps(I, D_total=128)
-    t = 0
-    mps.dmrg_(psi, H(t), method='1site', max_sweeps=8, Schmidt_tol=1e-8)
+    mps.dmrg_(psi, H(0), method='1site', max_sweeps=8, Schmidt_tol=1e-8)
     #
+    # time-evoluion parametters
     Dmax = 128
     opts_expmv = {'hermitian': True, 'tol': 1e-12}
     opts_svd = {'tol': 1e-6, 'D_total': Dmax}
-    # #
-    for _ in mps.tdvp_(psi, H, times=(0, ta),
-                       method='1site', dt=dt, order='2nd',
-                       opts_svd=opts_svd, opts_expmv=opts_expmv):
-        pass
+    evol = mps.tdvp_(psi, H, times=(0, ta),
+                     method='1site', dt=dt, order='2nd',
+                     opts_svd=opts_svd, opts_expmv=opts_expmv)
+    #
+    # run evolution; # evol is a generaor, with one final snapshot
+    next(evol)
+    #
+    # calculate expectation values
     Ez_mps = mps.measure_1site(psi, ops.z(), psi)
     Exx_mps = mps.measure_2site(psi, ops.x(), ops.x(), psi)
 
-    Zerror = sum(abs(Ez_mps[s2i[st]] - Ez_peps[st]) ** 2 for st in sites) ** 0.5
-    Zerror /= sum(abs(Ez_peps[st]) ** 2 for st in sites) ** 0.5
-    print(f"Normalized error of <Z_i>: {Zerror:0.5f}")
+    Z1 = np.array([Ez_peps[st].real for st in sites]).real
+    Z2 = np.array([Ez_mps[s2i[st]].real for st in sites]).real
+    error_Z = np.linalg.norm(Z1 - Z2) / np.linalg.norm(Z1)
+    print(f"Relative difference in Z magnetization: {error_Z:0.5f}")
 
-    XX_error = 0.
-    for (s1, s2), v in Exx_peps.items():
-        if s1 != s2:
-            XX_error += abs(v - Exx_mps[tuple(sorted((s2i[s1], s2i[s2])))]) ** 2
-    XX_error = XX_error ** 0.5
-    XX_error /= sum(abs(v) ** 2 for v in Exx_mps.values()) ** 0.5
-    print(f"Normalized error of <X_i X_j>: {XX_error:0.5f}")
+    rs = np.array([np.linalg.norm([s1[0]-s2[0], s1[1]-s2[1]]) for (s1, s2) in Exx_peps])
+    XX1 = np.array([*Exx_peps.values()]).real
+    XX2 = np.array([Exx_mps[b2i(*bond)] for bond in Exx_peps.keys()]).real
+    error_XX = np.linalg.norm(XX1 - XX2) / np.linalg.norm(XX1)
+    print(f"Relative difference in XX correlations: {error_XX:0.5f}")
+
+    plt.scatter(rs, XX1, marker='+', color='r', label='PEPS')
+    plt.scatter(rs, XX2, marker='o', color='b', label='MPS', facecolors='none')
+    plt.ylim([-1.05, 1.05])
+    plt.xlabel("distance ||i - j||")
+    plt.ylabel("<X_i X_j>")
+    plt.legend()
+    plt.savefig(f"corr_{Lx}x{Ly}_{ta=}.png")
 
 
 if __name__ == '__main__':

@@ -1,20 +1,23 @@
 Kibble-Zurek quench in 2D transverse-field Ising model
 ======================================================
 
-This guide provides a quick overview of simulating the real-time evolution of
-a Kibble-Zurek quench in 2D Ising model using **YASTN** library.
-We show a minimal example of a system defined on a :math:`4{\times}4` lattice with open boundary conditions (OBC).
-The Hamiltonian reads
+This guide provides a quick overview of simulating the real-time
+Kibble-Zurek quench in 2D Ising model using **YASTN** library.
+We show a minimal example of a system defined on a :math:`4{\times}4`
+lattice with open boundary conditions (OBC). The Hamiltonian reads
 
 .. math::
 
  H(s) = f(s) \sum_{\langle i, j \rangle} J_{i,j} \sigma^x_i \sigma^x_j - g(s) \sum_i \sigma^z_i,
 
-where :math:`\sigma^x` and :math:`\sigma^z` are tandard Pauli matrices,
+where :math:`\sigma^x` and :math:`\sigma^z` are standard Pauli matrices,
 and we assume random couplings :math:`J_{i,j}`.
-The amplitude of couplings is gradually turned on as :math:`f(s) = \sin(\pi (s - 0.5))+ 1`,
+The amplitude of couplings is gradually turned on as :math:`f(s) = \sin(\pi (s - 0.5)) + 1`,
 and the transverse field is gradually turned off as :math:`g(s) = 1 - \sin(\pi (s - 0.5))`.
-The system is initialized in the ground state at :math:`s=0`, and the evolution ends upon reaching :math:`s=1`.
+The system is initialized in the ground (product) state at :math:`s=0`,
+where transverse field :math:`g(0)=2`, and couplings :math:`f(0)=0`.
+The evolution ends upon reaching :math:`s=1`,
+where transverse field :math:`g(0)=0`, and coupling amplitude :math:`f(0)=2`.
 The quench rate is controlled by an annealing time :math:`t_a` as :math:`s= t / t_a`.
 
 We compare the results obtained using MPS and PEPS routines.
@@ -23,6 +26,8 @@ We compare the results obtained using MPS and PEPS routines.
     .. code-block:: python
 
         import numpy as np
+        import matplotlib.pyplot as plt
+        from tqdm import tqdm  # progressbar
         import yastn
         import yastn.tn.mps as mps
         import yastn.tn.fpeps as peps
@@ -30,16 +35,16 @@ We compare the results obtained using MPS and PEPS routines.
         #
         # Employ PEPS lattice geometry for sites and bonds
         Lx, Ly = 4, 4  # lattice size
-        geometry = fpeps.SquareLattice(dims=(Lx, Ly), boundary='obc')
+        geometry = peps.SquareLattice(dims=(Lx, Ly), boundary='obc')
         sites = geometry.sites()
         #
-        # Draw random couplings
+        # Draw random couplings from uniform distribution in [-1, 1].
         np.random.seed(seed=0)
         Jij = {k: 2 * np.random.rand() - 1 for k in geometry.bonds()}
         #
         # Define quench protocol
         fXX = lambda s : np.sin((s - 0.5) * np.pi) + 1
-        fZ = lambda s :  1 - np.sin((s - 0.5) * np.pi)
+        fZ  = lambda s : 1 - np.sin((s - 0.5) * np.pi)
         ta = 2.0  # annealing time
         dt = 0.02  # time step
         steps = round(ta / dt)
@@ -63,26 +68,26 @@ We compare the results obtained using MPS and PEPS routines.
             for site in sites:
                 gt = gate_local_Ising(fZ(s), dt2, ops.I(), ops.z(), site)
                 local.append(gt)
-            return fpeps.Gates(nn=nn, local=local)
+            return peps.Gates(nn=nn, local=local)
         #
         # Initialize system in the product ground state at s=0.
-        psi = fpeps.product_peps(geometry=geometry, vectors=ops.vec_z(val=1))
+        psi = peps.product_peps(geometry=geometry, vectors=ops.vec_z(val=1))
         #
         # simulation parameters
-        D = 6  # PEPS bond dimension
+        D = 4  # PEPS bond dimension
         opts_svd_ntu = {"D_total": D, "D_block": D // 2}
-        env = fpeps.EnvNTU(psi, which='NN+')
+        env = peps.EnvNTU(psi, which='NN+')
         #
         # execute time evolution
         infoss, t = [], 0
-        for _ in range(steps):
+        for _ in tqdm(range(steps)):
             t += dt / 2
             gates = gates_Ising(Jij, fXX, fZ, t / ta, dt, sites, ops)
-            infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd_ntu)
+            infos = peps.evolution_step_(env, gates, opts_svd=opts_svd_ntu)
             infoss.append(infos)
             t += dt / 2
             print(f"s = {t / ta:0.4f}")
-        Delta = fpeps.accumulated_truncation_error(infoss, statistics='mean')
+        Delta = peps.accumulated_truncation_error(infoss, statistics='mean')
         print(f"Accumulated truncation error {Delta:0.8f}")
 
 3. *PEPS simulations; final correlations*:
@@ -95,7 +100,7 @@ We compare the results obtained using MPS and PEPS routines.
                         "Schmidt_tol": 1e-5}
         #
         # setting-up environment
-        env = fpeps.EnvBoundaryMps(psi,
+        env = peps.EnvBoundaryMps(psi,
                                    opts_svd=opts_svd_env,
                                    opts_var=opts_var_env, setup='lr')
         #
@@ -114,9 +119,8 @@ We compare the results obtained using MPS and PEPS routines.
     .. code-block:: python
 
         # map between sites and linear MPS ordering.
-        i2s = {i: s for i, s in enumerate(sites)}
         s2i = {s: i for i, s in enumerate(sites)}
-        b2i = lambda (s1, s2): tuple(sorted([s2i[s1], s2i[s2]]))
+        b2i = lambda s1, s2: tuple(sorted([s2i[s1], s2i[s2]]))
         #
         # define Hamiltonian MPO
         I = mps.product_mpo(ops.I(), Lx * Ly)  # identity MPO
@@ -136,7 +140,7 @@ We compare the results obtained using MPS and PEPS routines.
         # Initial state; product state via dmrg_
         # TDVP is unstable staring in a product state
         # We make bond dimension artificially large
-        psi = mps.random_mps(I, D_total=8)
+        psi = mps.random_mps(I, D_total=128)
         mps.dmrg_(psi, H(0), method='1site', max_sweeps=8, Schmidt_tol=1e-8)
         #
         # time-evoluion parametters
@@ -144,10 +148,11 @@ We compare the results obtained using MPS and PEPS routines.
         opts_expmv = {'hermitian': True, 'tol': 1e-12}
         opts_svd = {'tol': 1e-6, 'D_total': Dmax}
         evol = mps.tdvp_(psi, H, times=(0, ta),
-                        method='12site', dt=dt, order='2nd',
-                        opts_svd=opts_svd, opts_expmv=opts_expmv):
+                        method='1site', dt=dt, order='2nd',
+                        opts_svd=opts_svd, opts_expmv=opts_expmv)
         #
-        # run evolution; # evol is a generaor, with one final snapshot
+        # evol is a generator; for a single (final) snapshot
+        # it is sufficient to consume it with next
         next(evol)
         #
         # calculate expectation values
@@ -157,8 +162,21 @@ We compare the results obtained using MPS and PEPS routines.
 5. *Compare results of PEPS and MPS*:
     .. code-block:: python
 
-        Z1 = np.array([Ez_peps[st].real for st in sites])
-        Z2 = np.array([Ez_mps[s2i[st]].real for st in sites])
+        Z1 = np.array([Ez_peps[st].real for st in sites]).real
+        Z2 = np.array([Ez_mps[s2i[st]].real for st in sites]).real
+        error_Z = np.linalg.norm(Z1 - Z2) / np.linalg.norm(Z1)
+        print(f"Relative difference in Z magnetization: {error_Z:0.5f}")
 
-        XX1 = np.array([Exx_peps.values()])
-        XX2 = np.array([Exx_mps[b2i[bond]] for bond in Exx_peps.keys()])
+        rs = np.array([np.linalg.norm([s1[0]-s2[0], s1[1]-s2[1]]) for (s1, s2) in Exx_peps])
+        XX1 = np.array([*Exx_peps.values()]).real
+        XX2 = np.array([Exx_mps[b2i(*bond)] for bond in Exx_peps.keys()]).real
+        error_XX = np.linalg.norm(XX1 - XX2) / np.linalg.norm(XX1)
+        print(f"Relative difference in XX correlations: {error_XX:0.5f}")
+
+        plt.scatter(rs, XX1, marker='+', color='r', label='PEPS')
+        plt.scatter(rs, XX2, marker='o', color='b', label='MPS', facecolors='none')
+        plt.ylim([-1.05, 1.05])
+        plt.xlabel("distance ||i - j||")
+        plt.ylabel("<X_i X_j>")
+        plt.legend()
+        plt.show()
