@@ -5,6 +5,7 @@ from .._peps import Peps, Peps2Layers
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
 from .._geometry import Bond
 from ._env_auxlliary import *
+import numpy as np
 
 
 @dataclass()
@@ -470,7 +471,6 @@ def regularize_1site_corners(cor_0, cor_1):
     r_1 = tensordot((S @ U_1), Q_1, axes=(1, 1))
     return r_0, r_1
 
-
 def proj_corners(r0, r1, opts_svd):
     r""" Projectors in between r0 @ r1.T corners. """
     rr = tensordot(r0, r1, axes=(1, 1))
@@ -488,7 +488,14 @@ def proj_corners(r0, r1, opts_svd):
     #             print("t, s = ", t, st.tolist())
     #         except YastnError:
     #             pass
+    # dump_s = s._data.tolist()
+    # dump_mask = [int(flag) for flag in Smask._data.tolist()]
 
+    # for ii in range(len(dump_s)):
+    #     with open("dump_svd_test5.txt", "a+") as f:
+    #         f.write(str(dump_s[ii]) + " " + str(dump_mask[ii]) + "\n")
+    # with open("dump_svd_test5.txt", "a+") as f:
+    #     f.write("-1 -1\n")
     u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
 
     # u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs, **opts_svd)
@@ -496,7 +503,6 @@ def proj_corners(r0, r1, opts_svd):
     p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
     p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
     return p0, p1
-
 
 _trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
             ('hlb', 'r', 'l', 'bl', 0, 2, 1),
