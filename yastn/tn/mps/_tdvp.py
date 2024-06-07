@@ -15,6 +15,7 @@
 """ Various variants of the TDVP algorithm for Mps."""
 from __future__ import annotations
 from typing import NamedTuple
+from tqdm import tqdm
 from ._measure import Env
 from ... import YastnError, expmv
 
@@ -31,7 +32,9 @@ class TDVP_out(NamedTuple):
 
 
 def tdvp_(psi, H,
-          times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd', opts_expmv=None, opts_svd=None, normalize=True):
+          times=(0, 0.1), dt=0.1, u=1j, method='1site', order='2nd',
+          opts_expmv=None, opts_svd=None, normalize=True,
+          progressbar=False):
     r"""
     Iterator performing TDVP sweeps to solve :math:`\frac{d}{dt} |\psi(t)\rangle = -uH|\psi(t)\rangle`,
 
@@ -74,6 +77,10 @@ def tdvp_(psi, H,
 
     opts_svd: dict
         Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces in :code:`method='2site'` and :code:`'12site'`.
+
+    progressbar: bool
+        Whether to show the progress bar toward the next snapshot. The default is False.
+        We employ tq
 
     Returns
     -------
@@ -118,7 +125,11 @@ def tdvp_(psi, H,
     for t0, t1 in zip(times[:-1], times[1:]):
         steps = int((t1 - t0 - 1e-12) // dt) + 1
         t, ds = t0, (t1 - t0) / steps
-        for _ in range(steps):
+        if progressbar:
+            rsteps = tqdm(range(steps), desc="tdvp...")
+        else:
+            range(steps)
+        for _ in rsteps:
             if order == '2nd':
                 env = routine(t + ds/2, ds, env)
             elif order == '4th':
