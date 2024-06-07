@@ -99,7 +99,6 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         Smask = mask_f(S)
     else:
         Smask = truncation_mask(S, tol=tol, tol_block=tol_block, tol_multiplets=tol_multiplets, D_block=D_block, D_total=D_total)
-
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
 
     U = U.move_leg(source=-1, destination=Uaxis)
@@ -267,7 +266,6 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     Vstruct = _struct(s=(-sU, struct.s[1]), n=Vn, diag=False, t=Vt, D=VD, size=sum(VDp))
     return meta, Ustruct, Usl, Sstruct, Ssl, Vstruct, Vsl
 
-
 def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
                                eps_multiplet=1e-13, **kwargs) -> yastn.Tensor[bool]:
     """
@@ -404,13 +402,24 @@ def truncation_mask(S, tol=0, tol_block=0, tol_multiplets=0,
         if (S.config.sym.SYM_ID != "dense") and (abs(tol_multiplets) > 1e-16): # Do not apply symmetric trunction for dense tensors or tol_multiplets = 0
             pos = D_total
             # condition for multiplet
-            abs_tol_multiplets = abs(S._data[inds[len(inds) - 1]]) * tol_multiplets
-            # print(S._data[inds[-pos]], abs_tol_multiplets)
+            # find gap
+            if pos <= len(inds) - 1:
+                gap = 0
+                for ii in range(pos + 1, len(inds)):
+                    if gap >= abs(S._data[inds[-ii]]):
+                        break
+                    gap = max(abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]]), gap)
+                abs_tol_multiplets = max(abs(S._data[inds[-1]]) * tol_multiplets, gap)
+                # print(S._data[inds[-pos]], abs_tol_multiplets, abs(S._data[inds[-1]]) * tol_multiplets, gap)
+            else:
+                abs_tol_multiplets = abs(S._data[inds[-1]]) * tol_multiplets
+                # print(S._data[inds[-pos]], abs_tol_multiplets)
             if pos < len(inds):
-                while abs(S._data[inds[-pos]] - S._data[inds[-pos - 1]]) <= abs_tol_multiplets:
+                while abs(S._data[inds[-pos]] - S._data[inds[-pos - 1]]) < abs_tol_multiplets:
                     # print("Truncated, current, next, previous, tol_multiplet", D_total, pos, S._data[inds[-pos]], S._data[inds[-pos-1]], S._data[inds[-pos+1]], abs_tol_multiplets, end="; ")
                     pos = pos - 1
                     # print("new pos", pos)
+                # print("final pos", pos)
 
             Smask._data[inds[:-pos]] = False
         else:
