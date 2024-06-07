@@ -19,6 +19,38 @@ from ._env_auxlliary import identity_tm_boundary
 from .._gates_auxiliary import apply_gate_onsite
 
 
+
+
+class EnvWindow:
+    """ EnvWindow class for finite PEPS contraction. """
+
+    def __init__(self, env_ctm, xlim, ylim):
+        self.psi = env_ctm.psi
+        self.env_ctm = env_ctm
+        self._env = {}
+        self.xlim = xlim
+        self.ylim = ylim
+
+    def transfer_mpo(self, n, dirn='v'):
+        if dirn == 'h':
+            Ny = self.ylim[1] - self.ylim[0]
+            op = mps.Mpo(N = Ny + 2)
+            for ind, ny in enumerate(range(*self.ylim), start=1):
+                op.A[ind] = self.psi[(n, ny)].transpose(axes=(1, 2, 3, 0))
+            op.A[0] = self.env_ctm[(n, self.ylim[0])].l
+            op.A[Ny + 1] = self.env_ctm[(n, self.ylim[1]-1)].r
+        elif dirn == 'v':
+            Nx = self.xlim[1] - self.xlim[0]
+            op = mps.Mpo(N = Nx + 2)
+            for ind, nx in enumerate(range(*self.xlim), start=1):
+                op.A[ind] = self.psi[(nx, n)]
+            op.A[0] = self.env_ctm[(n, self.ylim[0])].t
+            op.A[Nx + 1] = self.env_ctm[(n, self.ylim[1]-1)].b
+        return op
+
+
+
+
 class EnvBoundaryMps:
     r"""
     BoundaryMPS class for finite PEPS contraction.
