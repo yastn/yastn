@@ -388,23 +388,24 @@ def truncation_mask(S, tol=0, tol_block=0, tol_multiplets=0,
             pos = D_total
             # condition for multiplet
             # find gap
-            if pos <= len(inds) - 1:
+
+            if pos <= len(inds) - 2:
                 gap = 0
-                for ii in range(pos + 1, len(inds)):
+                for ii in range(pos, len(inds) - 1):
                     if gap >= abs(S._data[inds[-ii]]):
                         break
                     gap = max(abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]]), gap)
-                abs_tol_multiplets = max(abs(S._data[inds[-1]]) * tol_multiplets, gap)
+                abs_tol_multiplets = max(gap, abs(S._data[inds[-1]]) * tol_multiplets)
                 # print(S._data[inds[-pos]], abs_tol_multiplets, abs(S._data[inds[-1]]) * tol_multiplets, gap)
             else:
                 abs_tol_multiplets = abs(S._data[inds[-1]]) * tol_multiplets
                 # print(S._data[inds[-pos]], abs_tol_multiplets)
             if pos < len(inds):
                 while abs(S._data[inds[-pos]] - S._data[inds[-pos - 1]]) < abs_tol_multiplets:
-                    # print("Truncated, current, next, previous, tol_multiplet", D_total, pos, S._data[inds[-pos]], S._data[inds[-pos-1]], S._data[inds[-pos+1]], abs_tol_multiplets, end="; ")
-                    pos = pos - 1
-                    # print("new pos", pos)
-                # print("final pos", pos)
+                    pos = pos + 1
+                    if pos == len(inds):
+                        break
+            # print("pos", pos)
 
             Smask._data[inds[:-pos]] = False
         else:
