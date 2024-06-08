@@ -410,7 +410,7 @@ def truncation_mask(S, tol=0, tol_block=0, tol_multiplets=0,
                     if gap >= abs(S._data[inds[-ii]]):
                         break
                     gap = max(abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]]), gap)
-                abs_tol_multiplets = max(gap, abs(S._data[inds[-1]]) * tol_multiplets)
+                abs_tol_multiplets = gap
                 # print(S._data[inds[-pos]], abs_tol_multiplets, abs(S._data[inds[-1]]) * tol_multiplets, gap)
             else:
                 abs_tol_multiplets = abs(S._data[inds[-1]]) * tol_multiplets
