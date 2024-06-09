@@ -406,12 +406,13 @@ def truncation_mask(S, tol=0, tol_block=0, tol_multiplets=0,
             gap = -1
             max_i = pos
             for ii in range(pos, len(inds)):
-                if gap >= abs(S._data[inds[-ii]]):
+                if gap > abs(S._data[inds[-ii]]):
                     break
                 # gap = max(abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]]), gap)
-                if gap <= abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]]):
+                if gap < abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]]):
                     gap = abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]])
                     max_i = ii
+                    # print(max_i, gap)
             pos = max_i
 
             # if pos < len(inds):
