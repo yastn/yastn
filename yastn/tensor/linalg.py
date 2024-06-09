@@ -399,27 +399,28 @@ def truncation_mask(S, tol=0, tol_block=0, tol_multiplets=0,
         inds = S.config.backend.argsort(temp_data)
         # print(inds)
 
-        if (S.config.sym.SYM_ID != "dense") and (abs(tol_multiplets) > 1e-16): # Do not apply symmetric trunction for dense tensors or tol_multiplets = 0
+        if abs(tol_multiplets) == 1: # Do not apply symmetric trunction for dense tensors or tol_multiplets = 0
             pos = D_total
             # condition for multiplet
             # find gap
+            gap = -1
+            max_i = pos
+            for ii in range(pos, len(inds)):
+                if gap >= abs(S._data[inds[-ii]]):
+                    break
+                # gap = max(abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]]), gap)
+                if gap <= abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]]):
+                    gap = abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]])
+                    max_i = ii
+            pos = max_i
 
-            if pos <= len(inds) - 2:
-                gap = 0
-                for ii in range(pos, len(inds) - 1):
-                    if gap >= abs(S._data[inds[-ii]]):
-                        break
-                    gap = max(abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]]), gap)
-                abs_tol_multiplets = gap
-                # print(S._data[inds[-pos]], abs_tol_multiplets, abs(S._data[inds[-1]]) * tol_multiplets, gap)
-            else:
-                abs_tol_multiplets = abs(S._data[inds[-1]]) * tol_multiplets
-                # print(S._data[inds[-pos]], abs_tol_multiplets)
-            if pos < len(inds):
-                while abs(S._data[inds[-pos]] - S._data[inds[-pos - 1]]) < abs_tol_multiplets:
-                    pos = pos + 1
-                    if pos == len(inds):
-                        break
+            # if pos < len(inds):
+            #     while abs(S._data[inds[-pos]] - S._data[inds[-pos - 1]]) < gap:
+            #         pos = pos + 1
+            #         if pos == len(inds):
+            #             break
+            if pos == len(inds) - 1:
+                pos = pos + 1
             # print("pos", pos)
 
             Smask._data[inds[:-pos]] = False
