@@ -492,9 +492,9 @@ def proj_corners(r0, r1, opts_svd):
     # dump_mask = [int(flag) for flag in Smask._data.tolist()]
 
     # for ii in range(len(dump_s)):
-    #     with open("dump_svd_test_.txt", "a+") as f:
+    #     with open("dump_svd_test8.txt", "a+") as f:
     #         f.write(str(dump_s[ii]) + " " + str(dump_mask[ii]) + "\n")
-    # with open("dump_svd_test_.txt", "a+") as f:
+    # with open("dump_svd_test8.txt", "a+") as f:
     #     f.write("-1 -1\n")
     u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
 
