@@ -60,7 +60,7 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, co
     max_dsv = None
     truncation_method = None
     if corner_tol:
-        old_corner_sv = calculate_corner_svd(env)
+        corner_sv_list = [calculate_corner_svd(env)]
 
     for sweep in range(1, max_sweeps + 1):
         #
@@ -68,40 +68,33 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, co
         # if sweep % 2 == 1: continue
         if corner_tol:  # check convergence of corners singular values
             corner_sv = calculate_corner_svd(env)
+            corner_sv_list.append(corner_sv)
             if not 'tol_multiplets' in opts_svd.keys():
-                dsv = []
-                for k, v in corner_sv.items():
-                    s_old = np.sort(np.diag((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item()).to_numpy()))[::-1]
-                    s_new = np.sort(np.diag((v / v.norm(p='inf').item()).to_numpy()))[::-1]
-                    diff = diff_compatible(s_new, s_old)
-                    dsv.append(diff)
+                max_dsv_list = []
+                for ii in range(len(corner_sv_list) - 1):
+                    dsv = []
+                    old_corner_sv = corner_sv_list[ii]
+                    for k, v in corner_sv.items():
+                        s_old = np.sort(np.diag((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item()).to_numpy()))[::-1]
+                        s_new = np.sort(np.diag((v / v.norm(p='inf').item()).to_numpy()))[::-1]
+                        diff = diff_compatible(s_new, s_old)
+                        dsv.append(diff)
 
-                max_dsv = max(dsv)
+                    max_dsv = max(dsv)
+                    max_dsv_list.append(max_dsv)
+
+                max_dsv = min(max_dsv_list)
                 truncation_method = "Dense"
             else:
-
-                max_dsv = max((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item() \
-                            for k, v in corner_sv.items())
-
-                # for k, v in corner_sv.items():
-                #     print(k)
-                #     num_of_sv = 0
-                #     print(v.get_legs()[0].t)
-                #     print(v.get_legs()[0].D)
-                #     # for t in v.get_legs()[0].t:
-
-                #     #     try:
-                #     #         print("t, sv", t, (old_corner_sv[k][t, t]).tolist())
-                #     #     except:
-                #     #         pass
-                #     #     print("t, sv", t, (v[t, t]).tolist())
-                #     #     num_of_sv = num_of_sv + len(v[t, t].tolist())
-                #     print((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item())
-                #     # print("Num of SV:", num_of_sv)
+                max_dsv_list = []
+                for ii in range(len(corner_sv_list) - 1):
+                    old_corner_sv = corner_sv_list[ii]
+                    max_dsv = max((old_corner_sv[k] / old_corner_sv[k].norm(p='inf').item() - v / v.norm(p='inf').item()).norm(p='inf').item() \
+                                for k, v in corner_sv.items())
+                    max_dsv_list.append(max_dsv)
+                max_dsv = min(max_dsv_list)
 
                 truncation_method = "Symmetric"
-
-            old_corner_sv = corner_sv
 
             logging.info(f'Sweep = {sweep:03d}  max_d_corner_singular_values = {max_dsv}  Truncation method: {truncation_method}')
 
