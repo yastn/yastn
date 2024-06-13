@@ -56,10 +56,10 @@ def ctmrg_(env, max_sweeps=1, iterator_step=1, method='2site', opts_svd=None, co
             logging.info(f'Sweep = {sweep:03d}  max_d_corner_singular_values = {max_dsv}')
 
             if corner_tol and max_dsv <= corner_tol:
-                old_corner_sv = corner_sv
                 exit_flag = 1
                 break
+            old_corner_sv = corner_sv
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
-            yield CTMRGout(sweeps=sweep, max_dsv=max_dsv, exit_flag = 1)
+            yield CTMRGout(sweeps=sweep, max_dsv=max_dsv, exit=1)
 
     yield CTMRGout(sweeps=sweep, max_dsv=max_dsv, exit=exit_flag)
