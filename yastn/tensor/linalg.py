@@ -382,7 +382,6 @@ def truncation_mask(S, tol=0, tol_block=0, truncate_multiplets=False,
     if 0 < D_total < sum(Smask.data):
 
         inds = S.config.backend.argsort(temp_data)
-        # print(inds)
 
         if truncate_multiplets:
             pos = D_total

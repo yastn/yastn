@@ -477,28 +477,8 @@ def proj_corners(r0, r1, opts_svd):
     u, s, v = rr.svd(axes=(0, 1), sU=r0.s[1], fix_signs=True)
 
     Smask = truncation_mask(s, **opts_svd)
-
-    # print("-----------------")
-    # if sum(Smask[(0,-1,1), (0,-1,1)]) != sum(Smask[(0,1,1), (0,1,1)]):
-    #     for t in [(0,-1,1), (0,1,1)]:
-    #         try:
-    #             st = s[t, t]
-    #             print("t, s = ", t, st.tolist())
-    #             st = Smask[t, t]
-    #             print("t, s = ", t, st.tolist())
-    #         except YastnError:
-    #             pass
-    # dump_s = s._data.tolist()
-    # dump_mask = [int(flag) for flag in Smask._data.tolist()]
-
-    # for ii in range(len(dump_s)):
-    #     with open("dump_svd_test8.txt", "a+") as f:
-    #         f.write(str(dump_s[ii]) + " " + str(dump_mask[ii]) + "\n")
-    # with open("dump_svd_test8.txt", "a+") as f:
-    #     f.write("-1 -1\n")
     u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
 
-    # u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs, **opts_svd)
     rs = s.rsqrt()
     p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
     p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
