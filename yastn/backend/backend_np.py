@@ -325,26 +325,6 @@ def fix_svd_signs(Udata, Vdata, meta):
         Vtemp *= phase.reshape(-1, 1)
     return Udata, Vdata
 
-# def fix_svd_signs_test(Udata, Vdata, meta):
-#     for (_, _, slU, DU, _, slV, DV) in meta:
-#         Utemp = Udata[slice(*slU)].reshape(DU)
-#         Vtemp = Vdata[slice(*slV)].reshape(DV)
-#         try:
-#             a = np.take_along_axis(np.abs(Utemp), np.argsort(np.abs(Utemp), axis=0)[::-1,:], axis= 0)[[0, 1], :]
-#             b = (a[0, :] - a[1, :]) / a[0, :]
-#             for ii in range(len(b)):
-#                 if b[ii] < 1e-5:
-#                     print(b[ii], ii, len(b))
-#         except:
-#             pass
-#         ii = np.argmax(abs(Utemp), axis=0).reshape(1, -1)
-#         phase = np.take_along_axis(Utemp, ii, axis=0)
-#         phase /= abs(phase)
-#         Utemp *= phase.conj().reshape(1, -1)
-#         Vtemp *= phase.reshape(-1, 1)
-#     return Udata, Vdata
-
-
 def eigh(data, meta=None, sizes=(1, 1)):
     Sdata = np.zeros((sizes[0],), dtype=DTYPE['float64'])
     Udata = np.zeros((sizes[1],), dtype=data.dtype)
