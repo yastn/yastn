@@ -169,7 +169,8 @@ We compare the results obtained using MPS and PEPS routines.
         error_Z = np.linalg.norm(Z1 - Z2) / np.linalg.norm(Z1)
         print(f"Relative difference PEPS vs MPS in Z magnetization: {error_Z:0.5f}")
 
-        rs = np.array([np.linalg.norm([s1[0]-s2[0], s1[1]-s2[1]]) for (s1, s2) in Exx_peps])
+        dist = lambda s1, s2: np.linalg.norm([s1[0]-s2[0], s1[1]-s2[1]])
+        rs = np.array([dist(s1, s2) for (s1, s2) in Exx_peps])
         XX1 = np.array([*Exx_peps.values()]).real
         XX2 = np.array([Exx_mps[b2i(*bond)] for bond in Exx_peps.keys()]).real
         error_XX = np.linalg.norm(XX1 - XX2) / np.linalg.norm(XX1)
@@ -181,18 +182,24 @@ We compare the results obtained using MPS and PEPS routines.
         fig, ax = plt.subplots(1, 2)
         fig.set_size_inches(8, 4)
         plt.subplots_adjust(hspace=0.3, wspace=0.3)
+        ax[0].scatter(rs, XX1, label='PEPS',
+                      marker='+', color='r')
+        ax[0].scatter(rs, XX2, label='MPS',
+                      marker='o', color='b', facecolors='none')
         ax[0].scatter(rs, XX1, marker='+', color='r', label='PEPS')
         ax[0].scatter(rs, XX2, marker='o', color='b', label='MPS', facecolors='none')
         ax[0].set_ylim([-1.05, 1.05])
         ax[0].set_xlabel(r"distance $||i - j||$")
-        ax[0].set_ylabel(r"$\langle X_i X_j \rangle$")
+        ax[0].set_ylabel(r"two-point correlations $\langle X_i X_j \rangle$")
         ax[0].legend()
-        ax[1].scatter(np.arange(len(Z1)), Z1, marker='+', color='r', label='PEPS')
-        ax[1].scatter(np.arange(len(Z1)), Z2, marker='o', color='b', label='MPS', facecolors='none')
+        ax[1].scatter(np.arange(len(Z1)), Z1, label='PEPS',
+                      marker='+', color='r')
+        ax[1].scatter(np.arange(len(Z1)), Z2, label='MPS',
+                      marker='o', color='b', facecolors='none')
         ax[1].set_xlabel(r"linear site index i")
-        ax[1].set_ylabel(r"$\langle Z_i \rangle$")
+        ax[1].set_ylabel(r"transverse magnetization $\langle Z_i \rangle$")
         ax[1].set_ylim([-1.05, 1.05])
         fig.suptitle(f"{Lx}x{Ly} lattice; annealing_time = {ta:0.1f}")
         fig.show()
 
-    ![alt text](corr_4x4_ta=2.0.png)
+    .. image:: corr_4x4_ta=2.0.png
