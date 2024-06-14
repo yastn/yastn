@@ -29,6 +29,7 @@ where:
 
         import yastn
         import yastn.tn.fpeps as peps
+        from tqdm import tqdm  # progressbar
 
         t = 1
         mu = 0
@@ -85,13 +86,15 @@ where:
         opts_svd = {'D_total': D, 'tol': 1e-12}
         infoss = []  # for evolution diagnostics
         #
-        print(" beta_purif;  accumulated truncation error" )
-        for step in range(1, steps + 1):
+        for step in tqdm(range(1, steps + 1)):
             infos = peps.evolution_step_(env, gates, opts_svd=opts_svd)
+            # The state psi is contained in env;
+            # evolution_step_ updates psi in place.
             #
             infoss.append(infos)
-            Delta = peps.accumulated_truncation_error(infoss)
-            print(f"{step * db:0.3f};   {Delta:0.5f}")
+        #
+        Delta = fpeps.accumulated_truncation_error(infoss)
+        print(f"Accumulated truncation error {Delta:0.5f}")
 
 
 5. *CTMRG and Expectation Values*:
@@ -131,10 +134,10 @@ where:
                 break
             energy_old = energy
 
-        # Energy per site after iteration 0: -2.35954069
-        # Energy per site after iteration 1: -2.36550553
-        # Energy per site after iteration 2: -2.36557173
-        # Energy per site after iteration 3: -2.36557293
+        # Energy per site after iteration 0: -2.36130904
+        # Energy per site after iteration 1: -2.36554935
+        # Energy per site after iteration 2: -2.36557284
+        # Energy per site after iteration 3: -2.36557295
         # Energy per site after iteration 4: -2.36557295
 
 
@@ -157,7 +160,7 @@ where:
         print(f"spin up electrons: {2 * ev_cdagc_up:0.6f}")
         print(f"spin dn electrons: {2 * ev_cdagc_dn:0.6f}")
         # Kinetic energy per bond
-        # spin up electrons: 0.123384
+        # spin up electrons: 0.123385
         # spin dn electrons: 0.122360
 
         ev_double = env_ctm.measure_1site(n_up @ n_dn)

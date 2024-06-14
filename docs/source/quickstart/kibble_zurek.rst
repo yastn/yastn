@@ -84,8 +84,11 @@ We compare the results obtained using MPS and PEPS routines.
             t += dt / 2
             gates = gates_Ising(Jij, fXX, fZ, t / ta, dt, sites, ops)
             infos = peps.evolution_step_(env, gates, opts_svd=opts_svd_ntu)
+            # The state psi is contained in env;
+            # evolution_step_ updates psi in place.
             infoss.append(infos)
             t += dt / 2
+
         Delta = peps.accumulated_truncation_error(infoss, statistics='mean')
         print(f"Accumulated mean truncation error {Delta:0.5f}")
 
@@ -191,3 +194,5 @@ We compare the results obtained using MPS and PEPS routines.
         ax[1].set_ylim([-1.05, 1.05])
         fig.suptitle(f"{Lx}x{Ly} lattice; annealing_time = {ta:0.1f}")
         fig.show()
+
+    ![alt text](corr_4x4_ta=2.0.png)

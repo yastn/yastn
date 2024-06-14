@@ -76,6 +76,8 @@ def test_quickstart_KZ():
         t += dt / 2
         gates = gates_Ising(Jij, fXX, fZ, t / ta, dt, sites, ops)
         infos = peps.evolution_step_(env, gates, opts_svd=opts_svd_ntu)
+        # The state psi is contained in env;
+        # evolution_step_ updates psi in place.
         infoss.append(infos)
         t += dt / 2
     Delta = peps.accumulated_truncation_error(infoss, statistics='mean')

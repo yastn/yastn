@@ -14,15 +14,21 @@
 # ==============================================================================
 """ Test quickstart example Hubbard. """
 
-def test_quickstart_hubbard():
+
+# keys are: (observable, beta)
+metts_values = {("energy", 2.0): -0.4444}
+
+
+def test_quickstart_hubbard(D, beta=0.5):
 
     import yastn
     import yastn.tn.fpeps as fpeps
+    from tqdm import tqdm  # progressbar
 
     t = 1
     mu = 0
     U = 10
-    beta = 0.5  # inverse temperature
+    # beta = 0.5  # inverse temperature
 
     ops = yastn.operators.SpinfulFermions(sym='U1xU1')
     I = ops.I()
@@ -51,14 +57,15 @@ def test_quickstart_hubbard():
     opts_svd = {'D_total': D, 'tol': 1e-12}
     infoss = []
 
-    print(f" beta_purif; accumulated truncation error" )
-    for step in range(1, steps + 1):
+    for _ in tqdm(range(1, steps + 1)):
         infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
+        # The state psi is contained in env;
+        # evolution_step_ updates psi in place.
         #
         infoss.append(infos)
-        Delta = fpeps.accumulated_truncation_error(infoss)
-        print(f"{step * db:0.3f};   {Delta:0.5f}")
 
+    Delta = fpeps.accumulated_truncation_error(infoss)
+    print(f"Accumulated truncation error {Delta:0.5f}")
 
     env_ctm = fpeps.EnvCTM(psi, init='eye')
     chi = 5 * D
@@ -111,5 +118,7 @@ def test_quickstart_hubbard():
     print(f"Average NN spin-spin correlator: {ev_SzSz:0.6f}")
 
 
+
+
 if __name__ == '__main__':
-    test_quickstart_hubbard()
+    test_quickstart_hubbard(D=12, beta=0.5)
