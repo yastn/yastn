@@ -460,10 +460,12 @@ class kernel_svd(torch.autograd.Function):
 def fix_svd_signs(Udata, Vhdata, meta):
     Ud = torch.empty_like(Udata)
     Vhd = torch.empty_like(Vhdata)
+    Uamp = (abs(Udata) * (2**40)).to(dtype=torch.int64)
     for (_, _, slU, DU, _, slV, DV) in meta:
         Utemp = Udata[slice(*slU)].reshape(DU)
         Vtemp = Vhdata[slice(*slV)].reshape(DV)
-        ii = torch.argmax(abs(Utemp), dim=0, keepdims=True)
+        Utemp_amp = Uamp[slice(*slU)].reshape(DU)
+        ii = torch.argmax(Utemp_amp, dim=0, keepdims=True)
         phase = torch.take_along_dim(Utemp, ii, dim=0)
         phase /= abs(phase)
         # Utemp *= phase.conj().reshape(1, -1)

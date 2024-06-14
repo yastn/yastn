@@ -21,7 +21,8 @@ from ._tests import YastnError, _test_axes_all
 from ._merging import _merge_to_matrix, _meta_unmerge_matrix, _unmerge
 from ._merging import _Fusion, _leg_struct_trivial
 
-__all__ = ['svd', 'svd_with_truncation', 'qr', 'eigh', 'eigh_with_truncation', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets']
+__all__ = ['qr', 'norm', 'entropy', 'truncation_mask', 'truncation_mask_multiplets',
+           'svd', 'svd_with_truncation', 'eigh', 'eigh_with_truncation']
 
 
 def norm(a, p='fro') -> number:
@@ -40,8 +41,8 @@ def norm(a, p='fro') -> number:
 
 def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         Uaxis=-1, Vaxis=0, policy='fullrank', fix_signs=False,
-        tol=0, tol_block=0, truncate_multiplets=False, D_block=float('inf'), D_total=float('inf'),
-        mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
+        tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
+        truncate_multiplets=False, mask_f=None, **kwargs) -> tuple[yastn.Tensor, yastn.Tensor, yastn.Tensor]:
     r"""
     Split tensor into :math:`a = U S V` using exact singular value decomposition (SVD),
     where the columns of `U` and the rows of `V` form orthonormal bases
@@ -59,22 +60,26 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
         their final order.
 
     sU: int
-        signature of the new leg in U; equal 1 or -1. Default is 1.
+        signature of the new leg in U; equal 1 or -1. The default is 1.
         V is going to have opposite signature on connecting leg.
 
     nU: bool
         Whether or not to attach the charge of  `a` to `U`.
-        Otherwise it is attached to `V`. By default is True.
+        Otherwise it is attached to `V`. The default is True.
 
     Uaxis, Vaxis: int
-        specify which leg of U and V tensors are connecting with S. By default
+        specify which leg of U and V tensors are connecting with S. By default,
         it is the last leg of U and the first of V.
 
+    policy: str
+        "fullrank" or "lowrank". Use standard full (but reduced) SVD for "fullrank".
+        For "lowrank", uses randomized/truncated SVD and requires providing `D_block` in `kwargs`.
+
     tol: float
-        relative tolerance of singular values below which to truncate across all blocks
+        relative tolerance of singular values below which to truncate across all blocks.
 
     tol_block: float
-        relative tolerance of singular values below which to truncate within individual blocks
+        relative tolerance of singular values below which to truncate within individual blocks.
 
     D_block: int
         largest number of singular values to keep in a single block.
@@ -82,11 +87,15 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     D_total: int
         largest total number of singular values to keep.
 
-    untruncated_S: bool
-        returns U, S, V, uS  with dict uS with a copy of untruncated singular values and truncated bond dimensions.
+    truncate_multiplets: bool
+        If True, enlarge the truncation range specified by other arguments by shifting
+        the cut to the largest gap between to-be-truncated singular values across all blocks.
+        It provides a heuristic mechanism to avoid truncating part of a multiplet.
+        The default is False.
 
     mask_f: function[yastn.Tensor] -> yastn.Tensor
-        custom truncation mask
+        custom truncation-mask function.
+        If provided, it overrides all other truncation-related arguments.
 
     Returns
     -------
@@ -98,7 +107,9 @@ def svd_with_truncation(a, axes=(0, 1), sU=1, nU=True,
     if mask_f:
         Smask = mask_f(S)
     else:
-        Smask = truncation_mask(S, tol=tol, tol_block=tol_block, truncate_multiplets=truncate_multiplets, D_block=D_block, D_total=D_total)
+        Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
+                                D_block=D_block, D_total=D_total,
+                                truncate_multiplets=truncate_multiplets)
     U, S, V = Smask.apply_mask(U, S, V, axes=(-1, 0, 0))
 
     U = U.move_leg(source=-1, destination=Uaxis)
@@ -121,18 +132,18 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         their final order.
 
     sU: int
-        Signature of the new leg in U; equal to 1 or -1. By default is 1.
+        Signature of the new leg in U; equal to 1 or -1. The default is 1.
         V is going to have the opposite signature on the connecting leg.
 
     nU: bool
         Whether or not to attach the charge of  `a` to `U`.
-        Otherwise it is attached to `V`. By default is True.
+        Otherwise it is attached to `V`. The default is True.
 
     compute_uv: bool
-        If True, compute U and V in addition to S. Default is True.
+        If True, compute U and V in addition to S. The default is True.
 
     Uaxis, Vaxis: int
-        Specify which leg of U and V tensors are connecting with S. By default
+        Specify which leg of U and V tensors are connecting with S. By default,
         it is the last leg of U and the first of V, in which case a = U @ S @ V.
 
     policy: str
@@ -143,7 +154,7 @@ def svd(a, axes=(0, 1), sU=1, nU=True, compute_uv=True,
         Whether or not to fix phases in `U` and `V`,
         so that the largest element in each column of `U` is positive.
         Provide uniqueness of decomposition for non-degenerate cases.
-        By default is False.
+        The default is False.
 
     Returns
     -------
@@ -266,6 +277,7 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     Vstruct = _struct(s=(-sU, struct.s[1]), n=Vn, diag=False, t=Vt, D=VD, size=sum(VDp))
     return meta, Ustruct, Usl, Sstruct, Ssl, Vstruct, Vsl
 
+
 def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
                                eps_multiplet=1e-13, **kwargs) -> yastn.Tensor[bool]:
     """
@@ -277,10 +289,13 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     ----------
     S: yastn.Tensor
         Diagonal tensor with spectrum.
+
     tol: float
         relative tolerance
+
     D_total: int
         maximum number of elements kept
+
     eps_multiplet: float
         relative tolerance on multiplet splitting. If relative difference between
         two consecutive elements of S is larger than ``eps_multiplet``, these
@@ -345,8 +360,10 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
             Smask[t][:common_size] = Smask[tn][:common_size] = Smask[t][:common_size] & Smask[tn][:common_size]
     return Smask
 
-def truncation_mask(S, tol=0, tol_block=0, truncate_multiplets=False,
-                    D_block=float('inf'), D_total=float('inf'), **kwargs) -> yastn.Tensor[bool]:
+
+def truncation_mask(S, tol=0, tol_block=0,
+                    D_block=float('inf'), D_total=float('inf'),
+                    truncate_multiplets=False, **kwargs) -> yastn.Tensor[bool]:
     """
     Generate mask tensor based on diagonal and real tensor S.
     It can be then used for truncation.
@@ -358,14 +375,24 @@ def truncation_mask(S, tol=0, tol_block=0, truncate_multiplets=False,
     ----------
     S: yastn.Tensor
         Diagonal tensor with spectrum.
+
     tol: float
         relative tolerance
+
     tol_block: float
         relative tolerance per block
+
     D_total: int
-        maximum number of elements kept
+        maximum number of elements kept across all blocks
+
     D_block: int
         maximum number of elements kept per block
+
+    truncate_multiplets: bool
+        If True, enlarge the truncation range specified by other arguments by shifting
+        the cut to the largest gap between to-be-truncated singular values across all blocks.
+        It provides a heuristic mechanism to avoid truncating part of a multiplet.
+        The default is False.
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
         raise YastnError("Truncation_mask requires S to be real and diagonal")
@@ -435,12 +462,12 @@ def qr(a, axes=(0, 1), sQ=1, Qaxis=-1, Raxis=0) -> tuple[yastn.Tensor, yastn.Ten
         Specify two groups of legs between which to perform QR, as well as their final order.
 
     sQ: int
-        signature of connecting leg in Q; equal 1 or -1. Default is 1.
+        signature of connecting leg in Q; equal 1 or -1. The default is 1.
         R is going to have opposite signature on connecting leg.
 
     Qaxis, Raxis: int
         specify which leg of Q and R tensors are connecting to the other tensor.
-        By default it is the last leg of Q and the first leg of R.
+        By default, it is the last leg of Q and the first leg of R.
 
     Returns
     -------
@@ -525,10 +552,10 @@ def eigh(a, axes, sU=1, Uaxis=-1) -> tuple[yastn.Tensor, yastn.Tensor]:
         Specify two groups of legs between which to perform svd, as well as their final order.
 
     sU: int
-        signature of connecting leg in U equall 1 or -1. Default is 1.
+        signature of connecting leg in U equall 1 or -1. The default is 1.
 
     Uaxis: int
-        specify which leg of U is the new connecting leg. By default it is the last leg.
+        specify which leg of U is the new connecting leg. By default, it is the last leg.
 
     Returns
     -------
@@ -603,8 +630,9 @@ def _meta_eigh(config, struct, slices, sU):
     return meta, Sstruct, Ssl, Ustruct, slices
 
 
-def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, truncate_multiplets=False,
-    D_block=float('inf'), D_total=float('inf')) -> tuple[yastn.Tensor, yastn.Tensor]:
+def eigh_with_truncation(a, axes, sU=1, Uaxis=-1,
+                         tol=0, tol_block=0, D_block=float('inf'), D_total=float('inf'),
+                         truncate_multiplets=False) -> tuple[yastn.Tensor, yastn.Tensor]:
     r"""
     Split symmetric tensor using exact eigenvalue decomposition, :math:`a= USU^{\dagger}`.
     Optionally, truncate the resulting decomposition.
@@ -620,10 +648,10 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, truncate_m
         Specify two groups of legs between which to perform svd, as well as their final order.
 
     sU: int
-        signature of connecting leg in U equall 1 or -1. Default is 1.
+        signature of connecting leg in U equall 1 or -1. The default is 1.
 
     Uaxis: int
-        specify which leg of U is the new connecting leg. By default it is the last leg.
+        specify which leg of U is the new connecting leg. By default, it is the last leg.
 
     tol: float
         relative tolerance of singular values below which to truncate across all blocks.
@@ -637,16 +665,15 @@ def eigh_with_truncation(a, axes, sU=1, Uaxis=-1, tol=0, tol_block=0, truncate_m
     D_total: int
         largest total number of singular values to keep.
 
-    untruncated_S: bool
-        returns S, U, uS  with dict uS with a copy of untruncated eigenvalues and truncated bond dimensions.
-
     Returns
     -------
     S, U
     """
     S, U = eigh(a, axes=axes, sU=sU)
 
-    Smask = truncation_mask(S, tol=tol, tol_block=tol_block, truncate_multiplets=truncate_multiplets, D_block=D_block, D_total=D_total)
+    Smask = truncation_mask(S, tol=tol, tol_block=tol_block,
+                            D_block=D_block, D_total=D_total,
+                            truncate_multiplets=truncate_multiplets)
 
     S, U = Smask.apply_mask(S, U, axes=(0, -1))
     U = U.move_leg(source=-1, destination=Uaxis)
