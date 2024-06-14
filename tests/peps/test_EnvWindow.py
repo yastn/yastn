@@ -30,6 +30,38 @@ def mean(xs):
     return sum(xs) / len(xs)
 
 
+def test_window_shapes():
+    """ Initialize a product PEPS and perform a set of measurment. """
+
+    # initialized PEPS with mixed bond dimensions
+    geometry = fpeps.SquareLattice(dims=(2, 3), boundary='infinite')
+    psi = fpeps.Peps(geometry)
+    psi[0, 0] = yastn.rand(cfg, s=(-1, 1, 1, -1, 1), D=(2, 3, 4, 5, 2))
+    psi[1, 0] = yastn.rand(cfg, s=(-1, 1, 1, -1, 1), D=(4, 1, 2, 4, 2))
+    psi[0, 1] = yastn.rand(cfg, s=(-1, 1, 1, -1, 1), D=(3, 5, 5, 2, 2))
+    psi[1, 1] = yastn.rand(cfg, s=(-1, 1, 1, -1, 1), D=(5, 4, 3, 1, 2))
+    psi[0, 2] = yastn.rand(cfg, s=(-1, 1, 1, -1, 1), D=(2, 2, 3, 3, 2))
+    psi[1, 2] = yastn.rand(cfg, s=(-1, 1, 1, -1, 1), D=(3, 1, 2, 1, 2))
+
+    opts_svd = {'D_total': 10, 'tol': 1e-10}
+    env_ctm = fpeps.EnvCTM(psi, init='rand')  # in the product state no need for update
+    env_ctm.update_(opts_svd=opts_svd)
+
+    env = fpeps.EnvWindow(env_ctm, xrange=(0, 1), yrange=(0, 6))
+    env['l', 0]
+
+
+    # tv = env.transfer_mpo(2, dirn='v')
+    # th = env.transfer_mpo(2, dirn='h')
+
+    # print(len(tv))
+    # for i in range(len(tv)):
+    #     print(tv[i])
+    # print(len(th))
+    # for i in range(len(th)):
+    #     print(th[i])
+
+
 def test_window():
     """ Initialize a product PEPS and perform a set of measurment. """
 
@@ -59,4 +91,5 @@ def test_window():
         print(th[i])
 
 if __name__ == '__main__':
-    test_window()
+    test_window_shapes()
+    # test_window()

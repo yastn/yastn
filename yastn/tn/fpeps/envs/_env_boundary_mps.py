@@ -35,36 +35,41 @@ class EnvWindow:
 
         li, ri = self.yrange[0], self.yrange[1] - 1
         ti, bi = self.xrange[0], self.xrange[1] - 1
-        self._env['l', li] = mps.Mps(Nx + 2)
-        self._env['r', ri] = mps.Mps(Nx + 2)
-        self._env['t', ti] = mps.Mps(Ny + 2)
-        self._env['b', bi] = mps.Mps(Ny + 2)
+        self['l', li] = mps.Mps(Nx + 2)
+        self['r', ri] = mps.Mps(Nx + 2)
+        self['t', ti] = mps.Mps(Ny + 2)
+        self['b', bi] = mps.Mps(Ny + 2)
 
         for ind, ny in enumerate(range(*self.yrange), start=1):
-            self._env['t', ti][ind] = env_ctm[ti, ny].t
-            self._env['b', bi][ind] = env_ctm[bi, ny].b
+            self['t', ti][ind] = env_ctm[ti, ny].t
+            self['b', bi][ind] = env_ctm[bi, ny].b
 
-        self._env['t', ti][0] = env_ctm[ti, li].tl.add_leg(axis=0)
-        self._env['t', ti][Ny + 1] = env_ctm[ti, ri].tr.add_leg(axis=2)
-        self._env['b', bi][0] = env_ctm[bi, li].bl.add_leg(axis=2)
-        self._env['b', bi][Ny + 1] = env_ctm[bi, ri].br.add_leg(axis=0)
+        self['t', ti][0] = env_ctm[ti, li].tl.add_leg(axis=0)
+        self['t', ti][Ny + 1] = env_ctm[ti, ri].tr.add_leg(axis=2)
+        self['b', bi][0] = env_ctm[bi, li].bl.add_leg(axis=2)
+        self['b', bi][Ny + 1] = env_ctm[bi, ri].br.add_leg(axis=0)
 
         for ind in range(Ny + 2):
-            self._env['b', bi][ind] = self._env['b', bi][ind].transpose(axes=(2, 1, 0)).conj()
+            self['b', bi][ind] = self['b', bi][ind].transpose(axes=(2, 1, 0)).conj()
 
         for ind, nx in enumerate(range(*self.xrange), start=1):
-            self._env['l', li][ind] = env_ctm[nx, li].l
-            self._env['r', ri][ind] = env_ctm[nx, ri].r
+            self['l', li][ind] = env_ctm[nx, li].l
+            self['r', ri][ind] = env_ctm[nx, ri].r
 
-        self._env['l', li][0] = env_ctm[ti, li].tl.add_leg(axis=2)
-        self._env['l', li][Nx + 1] = env_ctm[bi, li].bl.add_leg(axis=0)
-        self._env['r', ri][0] = env_ctm[ti, ri].tr.add_leg(axis=0)
-        self._env['r', ri][Nx + 1] = env_ctm[bi, ri].br.add_leg(axis=0)
+        self['l', li][0] = env_ctm[ti, li].tl.add_leg(axis=2)
+        self['l', li][Nx + 1] = env_ctm[bi, li].bl.add_leg(axis=0)
+        self['r', ri][0] = env_ctm[ti, ri].tr.add_leg(axis=0)
+        self['r', ri][Nx + 1] = env_ctm[bi, ri].br.add_leg(axis=0)
 
-        for ind in range(Ny + 2):
-            self._env['l', li][ind] = self._env['l', li][ind].transpose(axes=(2, 1, 0))
-            self._env['r', ri][ind] = self._env['r', ri][ind].conj()
+        for ind in range(Nx + 2):
+            self['l', li][ind] = self['l', li][ind].transpose(axes=(2, 1, 0))
+            self['r', ri][ind] = self['r', ri][ind].conj()
 
+    def __getitem__(self, ind):
+        return self._env[ind]
+
+    def __setitem__(self, ind, value):
+        self._env[ind] = value
 
     def transfer_mpo(self, n, dirn='v'):
         if dirn == 'h':
@@ -82,6 +87,8 @@ class EnvWindow:
             op.A[0] = self.env_ctm[(n, self.yrange[0])].t
             op.A[Nx + 1] = self.env_ctm[(n, self.yrange[1]-1)].b
         return op
+
+
 
 
 class EnvBoundaryMps:
