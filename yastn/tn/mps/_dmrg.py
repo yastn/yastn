@@ -95,6 +95,8 @@ def dmrg_(psi, H, project=None, method='1site',
 
     Returns
     -------
+    Generator if iterator_step is not None.
+
     DMRG_out(NamedTuple)
         NamedTuple including fields:
 
@@ -165,7 +167,7 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
             converged.append(abs(dE) < energy_tol)
 
         if Schmidt_tol is not None:
-            max_dS = max((Schmidt[k] - Schmidt_old[k]).norm() for k in Schmidt.keys())
+            max_dS = max((Schmidt[k] - Schmidt_old[k]).norm().item() for k in Schmidt.keys())
             Schmidt_old = Schmidt.copy()
             converged.append(max_dS < Schmidt_tol)
 

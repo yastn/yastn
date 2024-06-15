@@ -101,15 +101,7 @@ def run_ctm(psi, ops, D=8, init='eye', method='2site'):
     env = fpeps.EnvCTM(psi, init=init)
     for _ in range(6):
         env.update_(opts_svd=opts_svd, method='2site')
-    for seed in range(1000):
-        env.update_(opts_svd=opts_svd, method=method)
-        Z = mean([*env.measure_1site(ops.z()).values()])
-        ZZ = mean([*env.measure_nn(ops.z(), ops.z()).values()])
-        if abs(Z - Z_old) < tol_exp and abs(ZZ - ZZ_old) < tol_exp:
-            break
-        Z_old, ZZ_old = Z, ZZ
-        if seed % 100 == 99:
-            print(f"{seed=} {Z=} {ZZ=}")
+    out = env.ctmrg_(max_sweeps=1000, opts_svd=opts_svd, method=method, corner_tol=tol_exp)
     return env
 
 

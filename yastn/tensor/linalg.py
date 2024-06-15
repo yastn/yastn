@@ -411,7 +411,7 @@ def truncation_mask(S, tol=0, tol_block=0,
         D_tol = sum(S.data[slice(*sl.slcs[0])] > tol_rel * S.config.backend.max_abs(S.data[slice(*sl.slcs[0])])).item()
         D_bl = D_block[t] if (isinstance(D_block, dict) and t in D_block) else D_null
         D_bl = min(D_bl, D_tol)
-        if 0 < D_bl < sl.Dp:  # no block truncation
+        if 0 < D_bl < sl.Dp:  # block truncation
             inds = S.config.backend.argsort(S.data[slice(*sl.slcs[0])])
             Smask._data[slice(*sl.slcs[0])][inds[:-D_bl]] = False
         elif D_bl == 0:
@@ -421,33 +421,23 @@ def truncation_mask(S, tol=0, tol_block=0,
     D_tol = sum(temp_data > tol * S.config.backend.max_abs(temp_data)).item()
     D_total = min(D_total, D_tol)
 
-    if 0 < D_total < sum(Smask.data):
-
-        inds = S.config.backend.argsort(temp_data)
-
-        if truncate_multiplets:
-            pos = D_total
-            # find gap
-            gap = -1
-            max_i = pos
-            for ii in range(pos, len(inds)):
-                if gap > abs(S._data[inds[-ii]]):
-                    break
-                if gap < abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]]):
-                    gap = abs(S._data[inds[-ii]] - S._data[inds[-ii - 1]])
-                    max_i = ii
-            pos = max_i
-            # if truncate to the one before the last one, then include the last one
-            if pos == len(inds) - 1:
-                pos = pos + 1
-
-            Smask._data[inds[:-pos]] = False
-        else:
-            inds = S.config.backend.argsort(temp_data)
-            Smask._data[inds[:-D_total]] = False
-
-    elif D_total == 0:
+    if D_total == 0:
         Smask._data[:] = False
+        return Smask
+
+    inds = S.config.backend.argsort(temp_data)
+
+    if truncate_multiplets and D_total < len(inds):
+        gap = -1
+        for p in range(D_total, len(inds)):
+            gap_p = abs(S._data[inds[-p]] - S._data[inds[-p - 1]])
+            if gap_p > gap:
+                D_total = p
+                gap = gap_p
+            if gap > abs(S._data[inds[-p]]):
+                break
+
+    Smask._data[inds[:-D_total]] = False
     return Smask
 
 
