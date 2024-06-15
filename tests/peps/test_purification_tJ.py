@@ -3,7 +3,6 @@ import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
 import logging
-from yastn.tn.fpeps._ctmrg import ctmrg_
 
 try:
     from .configs import config as cfg
@@ -66,7 +65,7 @@ def purification_tJ(chemical_potential):
     env.update_(opts_svd=opts_svd_ctm, method="2site")
 
     print("Time evolution done")
-    for out in ctmrg_(env, max_sweeps=max_sweeps, iterator_step=1, method="2site", opts_svd=opts_svd_ctm, corner_tol=tol_exp):
+    for out in env.ctmrg_(max_sweeps=max_sweeps, iterator_step=1, method="2site", opts_svd=opts_svd_ctm, corner_tol=tol_exp):
         pass
 
     # calculate expectation values
