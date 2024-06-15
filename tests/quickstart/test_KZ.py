@@ -13,8 +13,9 @@
 # limitations under the License.
 # ==============================================================================
 """ Test quickstart example Kibble-Zurek. """
+import pytest
 
-
+@pytest.mark.skipif("not config.getoption('quickstarts')")
 def test_quickstart_KZ():
     """ test quickstart Kibble-Zurek example"""
 
