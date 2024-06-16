@@ -83,7 +83,7 @@ def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.Mps
             tmp[n] = tmp[n].swap_gate(axes=0, charge=charge)
 
     psi = Mpo(len(I))
-    rt = (0,) * op.config.sym.NSYM
+    rt = op.config.sym.zero()
     for n, vec in zip(psi.sweep(to='first'), tmp[::-1]):
         vec = vec.add_leg(axis=1, s=1, t=rt)
         rt = vec.n

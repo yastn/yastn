@@ -93,7 +93,7 @@ class Tensor:
             try:
                 n = tuple(n)
             except TypeError:
-                n = (0,) * self.config.sym.NSYM if n is None else (n,)
+                n = self.config.sym.zero() if n is None else (n,)
             if len(n) != self.config.sym.NSYM:
                 raise YastnError("n does not match the number of symmetry sectors")
             if isdiag:

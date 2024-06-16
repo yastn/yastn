@@ -100,7 +100,7 @@ class Leg:
             object.__setattr__(self, "_verified", True)
 
     def __repr__(self):
-        return ("Leg(sym={}, s={}, t={}, D={}, hist={})".format(self.sym, self.s, self.t, self.D, self.history()))
+        return (f"Leg(sym={self.sym}, s={self.s}, t={self.t}, D={self.D}, hist={self.history()})")
 
     def conj(self) -> yastn.Leg:
         r""" New :class:`yastn.Leg` with switched signature. """
@@ -190,7 +190,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
         return Leg(config, s=s, D=(D_total,))
 
     if n is None:
-        n = (0,) * config.sym.NSYM
+        n = config.sym.zero()
     try:  # handle int input
         n = tuple(n)
     except TypeError:

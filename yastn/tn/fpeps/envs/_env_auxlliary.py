@@ -27,7 +27,7 @@ __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
 def tensors_from_psi(d, psi):
     if any(v is None for v in d.values()):
         cfg = psi[(0, 0)].config
-        triv = ones(cfg, legs=[Leg(cfg, t=((0,) * cfg.sym.NSYM,), D=(1,))])
+        triv = ones(cfg, legs=[Leg(cfg, t=(cfg.sym.zero(),), D=(1,))])
         for s in (-1, 1, 1, -1):
             triv = triv.add_leg(axis=0, s=s)
         triv = triv.fuse_legs(axes=((0, 1), (2, 3), 4))
