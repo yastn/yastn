@@ -100,10 +100,10 @@ class Leg:
             object.__setattr__(self, "_verified", True)
 
     def __repr__(self):
-        return (f"Leg(sym={self.sym}, s={self.s}, t={self.t}, D={self.D}, hist={self.history()})")
+        return ("Leg(sym={}, s={}, t={}, D={}, hist={})".format(self.sym, self.s, self.t, self.D, self.history()))
 
     def __str__(self):
-        return (f"Leg(sym={self.sym}, s={self.s}, t={self.t}, D={self.D}, hist={self.history()})")
+        return ("Leg(sym={}, s={}, t={}, D={}, hist={})".format(self.sym, self.s, self.t, self.D, self.history()))
 
     def conj(self) -> yastn.Leg:
         r""" New :class:`yastn.Leg` with switched signature. """

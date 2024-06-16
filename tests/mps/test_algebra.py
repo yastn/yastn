@@ -257,8 +257,8 @@ def test_add_multiply_raise(config=cfg):
         # Multiplication by MPS from left is not supported.
 
 if __name__ == "__main__":
-    # test_add()
-    # addition_example()
-    # test_multiply()
-    # multiplication_example_gs()
+    test_add()
+    addition_example()
+    test_multiply()
+    multiplication_example_gs()
     test_add_multiply_raise()
