@@ -25,6 +25,6 @@ class sym_U1xU1xZ2(sym_abelian):
     @classmethod
     def fuse(cls, charges, signatures, new_signature):
         """ Fusion rule for U(1)xU(1)xZ2 symmetry. """
-        teff = new_signature * (charges.swapaxes(1,2) @ signatures)
+        teff = new_signature * (charges.swapaxes(1, 2) @ signatures)
         teff[:, 2] = np.mod(teff[:, 2], 2)
         return teff
