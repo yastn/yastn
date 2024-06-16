@@ -120,5 +120,6 @@ def test_load_exceptions():
 
 
 if __name__ == '__main__':
-    test_dict()
+    test_dict(check_to_numpy)
+    test_dict(check_to_hdf5)
     test_load_exceptions()

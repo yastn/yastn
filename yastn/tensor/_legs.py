@@ -99,6 +99,9 @@ class Leg:
                 object.__setattr__(self, "legs", legs)
             object.__setattr__(self, "_verified", True)
 
+    def __repr__(self):
+        return (f"Leg(sym={self.sym}, s={self.s}, t={self.t}, D={self.D}, hist={self.history()})")
+
     def __str__(self):
         return (f"Leg(sym={self.sym}, s={self.s}, t={self.t}, D={self.D}, hist={self.history()})")
 
