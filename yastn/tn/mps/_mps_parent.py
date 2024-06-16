@@ -201,13 +201,13 @@ class _MpsMpoParent:
             phi.A[phi.pC] = self.A[self.pC].transpose(axes=(1, 0))
         return phi
 
-    def __mul__(self, multiplier) -> yastn.tn.mps.MpsMpoOBC:
+    def __mul__(self, number) -> yastn.tn.mps.MpsMpoOBC:
         """ New MPS/MPO with the first tensor multiplied by a scalar. """
         phi = self.shallow_copy()
-        am = abs(multiplier)
+        am = abs(number)
         if am > 0:
             phi.factor = am * self.factor
-            phi.A[0] = phi.A[0] * (multiplier / am)
+            phi.A[0] = phi.A[0] * (number / am)
         else:
             phi.factor = am * self.factor
         return phi
@@ -215,6 +215,13 @@ class _MpsMpoParent:
     def __rmul__(self, number) -> yastn.tn.mps.MpsMpoOBC:
         """ New MPS/MPO with the first tensor multiplied by a scalar. """
         return self.__mul__(number)
+
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """ This is to circumvent problems with np.float64 * Mps. """
+        if ufunc.__name__ == 'multiply':
+            lhs, rhs = inputs
+            return rhs.__mul__(lhs)
+        raise YastnError(f"Only np.float * Mps is supported; {ufunc.__name__} was called.")
 
     def __neg__(self):
         return self.__mul__(-1)

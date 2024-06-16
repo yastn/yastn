@@ -25,6 +25,8 @@ class YastnError(Exception):
 
 def _test_can_be_combined(a, b):
     """Check if config's of two tensors allow for performing operations mixing them. """
+    if type(a) is not type(b):
+        raise YastnError('Operation requires two yastn.Tensor-s')
     if a.device != b.device:
         raise YastnError('Devices of the two tensors do not match.')
     _test_configs_match(a.config, b.config)

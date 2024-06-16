@@ -25,6 +25,7 @@ We compare the results obtained using MPS and PEPS routines.
 1. *Initialization of Model Parameters*:
     .. code-block:: python
 
+        import math
         import numpy as np
         import matplotlib.pyplot as plt
         from tqdm import tqdm  # progressbar
@@ -43,8 +44,8 @@ We compare the results obtained using MPS and PEPS routines.
         Jij = {k: 2 * np.random.rand() - 1 for k in geometry.bonds()}
         #
         # Define quench protocol
-        fXX = lambda s : np.sin((s - 0.5) * np.pi) + 1
-        fZ  = lambda s : 1 - np.sin((s - 0.5) * np.pi)
+        fXX = lambda s : math.sin((s - 0.5) * math.pi) + 1
+        fZ  = lambda s : 1 - math.sin((s - 0.5) * math.pi)
         ta = 2.0  # annealing time
         dt = 0.04  # time step; make it smaller to decrees errors
         steps = round(ta / dt)
