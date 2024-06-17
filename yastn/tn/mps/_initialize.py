@@ -101,7 +101,7 @@ def _product_MpsMpoOBC(vectors, N=None, nr_phys=1) -> yastn.tn.mps.MpsMpoOBC:
     if Nv != N:
         vectors = [vectors[n % Nv] for n in psi.sweep(to='last')]
 
-    rt = (0,) * vectors[0].config.sym.NSYM
+    rt = vectors[0].config.sym.zero()
     for n, vec in zip(psi.sweep(to='first'), vectors[::-1]):
         vec = vec.add_leg(axis=1, s=1, t=rt)
         rt = vec.n
@@ -150,7 +150,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
         # and maximal bond dimension 8.
     """
     if n is None:
-        n = (0,) * I.config.sym.NSYM
+        n = I.config.sym.zero()
     try:
         n = tuple(n)
     except TypeError:
@@ -198,7 +198,7 @@ def random_mpo(I, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.MpsMpoOBC
         number format, i.e., ``'float64'`` or ``'complex128'``
     """
     config = I.config
-    n0 = (0,) * config.sym.NSYM
+    n0 = config.sym.zero()
     psi = Mpo(I.N)
 
     lr = Leg(config, s=1, t=(n0,), D=(1,),)

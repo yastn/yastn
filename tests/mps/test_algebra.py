@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ examples for addition of the Mps-s """
+import numpy as np
 import pytest
 import yastn.tn.mps as mps
 import yastn
@@ -216,6 +217,20 @@ def test_add_multiply_raise(config=cfg):
     H8 = mps.random_mpo(mps.product_mpo(I, N=8), D_total=3)
     psi7 = mps.random_mps(mps.product_mpo(I, N=7), D_total=7)
 
+     # numpy is creating some issues with __mul__ that has to be circumvented
+    assert H8.factor == 1
+    tmp = np.int64(4) * H8
+    assert tmp.factor == 4
+
+    with pytest.raises(yastn.YastnError):
+        H8 @ 1
+        # multiply requres two MpsMpoOBC-s.
+    with pytest.raises(yastn.YastnError):
+        np.int64(4) + H8
+        # Only np.float * Mps is supported; add was called.
+    with pytest.raises(yastn.YastnError):
+        H8 + 1
+        # All added states should be MpsMpoOBC-s.
     with pytest.raises(yastn.YastnError):
         mps.add(psi8, psi8, amplitudes=[2, 3, 4])
         # Number of Mps-s to add must be equal to the number of coefficients in amplitudes.

@@ -24,26 +24,7 @@ class sym_U1xU1xZ2(sym_abelian):
 
     @classmethod
     def fuse(cls, charges, signatures, new_signature):
-        """
-        Fusion rule for ... symmetry
-
-        Parameters
-        ----------
-            charges: nparray(int)
-                `k x m x nsym` matrix, where `k` is the number of
-                independent blocks, and `m` is the number of fused legs.
-
-            signatures: numpy.ndarray(int)
-                integer vector with `m` elements in `{-1, +1}`
-
-            new_signature: int
-
-        Returns
-        -------
-            nparray(int)
-                integer matrix with shape (k,NSYM) of fused charges;
-                includes multiplication by ``new_signature``
-        """
-        teff = new_signature * (charges.swapaxes(1,2) @ signatures)
+        """ Fusion rule for U(1)xU(1)xZ2 symmetry. """
+        teff = new_signature * (charges.swapaxes(1, 2) @ signatures)
         teff[:, 2] = np.mod(teff[:, 2], 2)
         return teff

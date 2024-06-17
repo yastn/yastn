@@ -9,7 +9,7 @@ on:
     branches:
       - '**'
   pull_request:
-    branches: [ master, tests, docs ]
+    branches: [ master ]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -48,7 +48,7 @@ jobs:
           python-version: ${{ matrix.python_v }}
 
       - name: setup deps
-        run: pip install flake8 pylint pytest pytest-cov numpy scipy h5py;
+        run: pip install flake8 pylint pytest pytest-cov numpy==1.26 scipy h5py tqdm;
 
       - name: static analysis flake8
         run: |
@@ -66,6 +66,7 @@ jobs:
           pytest --backend ${{ matrix.backend }} -v ./tensor;
           pytest --backend ${{ matrix.backend }} -v ./operators;
           pytest --backend ${{ matrix.backend }} -v ./mps;
+          pytest --backend ${{ matrix.backend }} -v ./peps;
 
   deploy-docs:
     if: contains(fromJson('["refs/heads/master","refs/heads/docs"]'), github.ref)
@@ -98,7 +99,7 @@ jobs:
           python-version: ${{ matrix.python_v }}
 
       - name: setup deps
-        run: pip install flake8 pylint pytest pytest-cov numpy scipy h5py;
+        run: pip install flake8 pylint pytest pytest-cov numpy==1.26 scipy h5py tqdm;
 
       - name: setup pytorch
         if: matrix.backend == 'torch'
@@ -117,6 +118,7 @@ jobs:
           pytest --cov=yastn --cov-report html --backend ${{ matrix.backend }} -v ./tensor;
           pytest --cov=yastn --cov-report html --backend ${{ matrix.backend }} -v ./operators --cov-append;
           pytest --cov=yastn --cov-report html --backend ${{ matrix.backend }} -v ./mps --cov-append;
+          pytest --cov=yastn --cov-report html --backend ${{ matrix.backend }} -v ./peps --cov-append;
           pytest --cov=yastn --cov-report html --backend np -v ./tensor --cov-append;
 
       - name: upload coverage
@@ -173,7 +175,7 @@ jobs:
           python-version: ${{ matrix.python_v }}
 
       - name: setup deps
-        run: pip install flake8 pylint pytest pytest-cov numpy scipy h5py;
+        run: pip install flake8 pylint pytest pytest-cov numpy==1.26 scipy h5py tqdm;
 
       - name: setup pytorch
         if: matrix.backend == 'torch'
@@ -192,3 +194,4 @@ jobs:
           pytest --backend ${{ matrix.backend }} -v ./tensor;
           pytest --backend ${{ matrix.backend }} -v ./operators;
           pytest --backend ${{ matrix.backend }} -v ./mps;
+          pytest --backend ${{ matrix.backend }} -v ./peps;

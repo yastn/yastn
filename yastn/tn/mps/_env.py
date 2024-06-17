@@ -177,7 +177,7 @@ class EnvParent(metaclass=abc.ABCMeta):
         r"""
         Action of Heff1 on :code:`n`-th ket MPS tensor :code:`Heff1 @ ket[n]`.
         """
-        return self.ket.factor * self.Heff1(self.ket[n], n)
+        return self.Heff1(self.ket[n], n) * self.ket.factor
 
     @abc.abstractmethod
     def Heff2(self, AA, bd) -> yastn.Tensor:
@@ -197,7 +197,7 @@ class EnvParent(metaclass=abc.ABCMeta):
         r"""
         Action of Heff2 on :code:`bd=(n, n+1)` ket MPS tensors :code:`Heff2 @ AA`.
         """
-        return self.ket.factor * self.Heff2(self.ket.merge_two_sites(bd), bd)
+        return self.Heff2(self.ket.merge_two_sites(bd), bd) * self.ket.factor
 
     @abc.abstractmethod
     def charges_missing(self, n):
@@ -381,13 +381,13 @@ class Env_project(Env2):
 
     def Heff1(self, x, n):
         pp = super().Heff1(self.ket[n], n)
-        return self.penalty * pp * vdot(pp, x)
+        return  pp * (self.penalty * vdot(pp, x))
 
     def Heff2(self, AA, bd):
         """ Heff2 @ AA """
         pp = self.ket.merge_two_sites(bd)
         pp = super().Heff2(pp, bd)
-        return (self.penalty * vdot(pp, AA)) * pp
+        return pp * (self.penalty * vdot(pp, AA))
 
 class EnvParent_3(EnvParent):
 
@@ -433,7 +433,7 @@ class EnvParent_3_obc(EnvParent_3):
 
     def Heff0(self, C, bd):
         bd, ibd = (bd[::-1], bd) if bd[1] < bd[0] else (bd, bd[::-1])
-        C = self.op.factor * C
+        C = C * self.op.factor
         tmp = self.F[bd].tensordot(C, axes=(2, 0))
         return tmp.tensordot(self.F[ibd], axes=((1, 2), (1, 0)))
 
@@ -454,7 +454,7 @@ class Env_mps_mpo_mps(EnvParent_3_obc):
         tmp = A @ self.F[(nr, n)]
         tmp = self.op[n]._attach_23(tmp)
         tmp = ncon([self.F[(nl, n)], tmp], ((-0, 1, 2), (2, 1, -2, -1)))
-        return self.op.factor * tmp
+        return tmp * self.op.factor
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
@@ -467,7 +467,7 @@ class Env_mps_mpo_mps(EnvParent_3_obc):
         tmp = self.op[n1]._attach_23(tmp)
         tmp = ncon([self.F[(nl, n1)], tmp], ((-0, 1, 2), (2, 1, -2, -1)))
         tmp = tmp.unfuse_legs(axes=2)
-        return self.op.factor * tmp
+        return tmp * self.op.factor
 
     def hole(self, n):
         """ Hole for peps tensor at site n. """
@@ -501,7 +501,7 @@ class Env_mpo_mpo_mpo(EnvParent_3_obc):
         tmp = self.op[n]._attach_23(tmp)
         tmp = tmp.unfuse_legs(axes=0)
         tmp = ncon([self.F[(nl, n)], tmp], ((-0, 1, 2), (2, -3, 1, -2, -1)))
-        return self.op.factor * tmp
+        return tmp * self.op.factor
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
@@ -516,7 +516,7 @@ class Env_mpo_mpo_mpo(EnvParent_3_obc):
         tmp = tmp.unfuse_legs(axes=0)
         tmp = ncon([self.F[(nl, n1)], tmp], ((-0, 1, 2), (2, -2, -4, 1, -3, -1)))
         tmp = tmp.unfuse_legs(axes=3)
-        return self.op.factor * tmp
+        return tmp * self.op.factor
 
 
 class Env_mpo_mpobra_mpo(EnvParent_3_obc):
@@ -541,7 +541,7 @@ class Env_mpo_mpobra_mpo(EnvParent_3_obc):
         tmp = self.op[n]._attach_01(tmp)
         tmp = tmp.unfuse_legs(axes=0)
         tmp = ncon([tmp, self.F[(nr, n)]], ((-1, 1, 2, -0, -3), (1, 2, -2)))
-        return self.op.factor * tmp
+        return tmp * self.op.factor
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
@@ -556,7 +556,7 @@ class Env_mpo_mpobra_mpo(EnvParent_3_obc):
         tmp = tmp.unfuse_legs(axes=0)
         tmp = ncon([tmp, self.F[(nr, n2)]], ((-1, -2, 1, 2, -0, -4), (1, 2, -3)))
         tmp = tmp.unfuse_legs(axes=0).transpose(axes=(0, 2, 1, 3, 4, 5))
-        return self.op.factor * tmp
+        return tmp * self.op.factor
 
     def charges_missing(self, n):
         op_t = self.op[n].get_legs(axes=3).t
@@ -601,7 +601,7 @@ class EnvParent_3_pbc(EnvParent_3):
         Fl = self.F[bd]
         Fr = self.F[ibd]
         # Fl, Fr = self.Fsmall(bd, ibd)
-        C = self.op.factor * C
+        C = C * self.op.factor
         tmp = Fl.tensordot(C, axes=(3, 0))
         return tmp.tensordot(Fr, axes=((3, 1, 2), (0, 1, 2)))
 
@@ -623,7 +623,7 @@ class Env_mps_mpopbc_mps(EnvParent_3_pbc):
         tmp = tmp.unfuse_legs(axes=2)
         tmp = self.F[(nl, n)].tensordot(tmp, axes=((3, 1, 2), (0, 1, 2)))
         tmp = tmp.transpose(axes=(0, 2, 1))
-        return self.op.factor * tmp
+        return tmp * self.op.factor
 
     def Heff2(self, AA, bd):
         n1, n2 = bd if bd[0] < bd[1] else bd[::-1]
@@ -639,7 +639,7 @@ class Env_mps_mpopbc_mps(EnvParent_3_pbc):
         tmp = tmp.unfuse_legs(axes=2)
         tmp = self.F[(nl, n1)].tensordot(tmp, axes=((3, 1, 2), (0, 1, 2)))
         tmp = tmp.transpose(axes=(0, 3, 2, 1))
-        return self.op.factor * tmp
+        return tmp * self.op.factor
 
     def hole(self, n):
         """ Hole for peps tensor at site n. """

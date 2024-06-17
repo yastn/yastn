@@ -308,25 +308,49 @@ def test_hf_union_exceptions():
         b.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
         a = a.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
         b = b.fuse_legs(axes=[(0, 1, 2, 3)], mode='hard')
-        _ = a + b  # Bond dimensions of fused legs do not match.
+        _ = a + b
+        # Bond dimensions of fused legs do not match.
     with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1, leg1.conj(), leg1])
         b = yastn.rand(config=config_U1, legs=[leg2, leg3.conj(), leg2])
         a = a.fuse_legs(axes=((0, 2), 1), mode='hard')
         b = b.fuse_legs(axes=((0, 2), 1), mode='hard')
-        _ = a + b  # Bond dimensions do not match.
+        _ = a + b
+        # Bond dimensions do not match.
     with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
         b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2.conj(), leg1, leg2.conj()])
         a = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         b = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
-        _ = a + b  # Signatures of hard-fused legs do not match.
+        _ = a + b
+        # Signatures of hard-fused legs do not match.
     with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
         b = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
         a = a.fuse_legs(axes=((0, 1), (2, 3)), mode='hard')
         b = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
-        _ = a + b  # Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.
+        _ = a + b
+        # Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.
+    with pytest.raises(yastn.YastnError):
+        a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
+        _ = a * np.array([[1], [2]])
+        # Multiplication cannot change data size; broadcasting not supported.
+    with pytest.raises(yastn.YastnError):
+        a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
+        _ = a / np.array([[1], [2]])
+        # truediv cannot change data size; broadcasting not supported.
+    with pytest.raises(yastn.YastnError):
+        a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
+        _ = a ** np.array([[1], [2]])
+        # Exponent cannot change data size; broadcasting not supported.
+    with pytest.raises(yastn.YastnError):
+        a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
+        _ = np.float64(10) + a
+        # Only np.float * Mps is supported; add was called.
+    with pytest.raises(yastn.YastnError):
+        a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
+        _ = a + 1
+        # Operation requires two yastn.Tensor-s
 
 
 if __name__ == '__main__':

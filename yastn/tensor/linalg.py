@@ -221,8 +221,8 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     V has signature = (-sU, struct.s[1])
     if nU than U carries struct.n, otherwise V
     """
-    nsym = len(struct.n)
-    n0 = (0,) * nsym
+    n0 = config.sym.zero()
+    nsym = config.sym.NSYM
 
     if any(D == 0 for D in minD):
         at = tuple(x for x, mD in zip(struct.t, minD) if mD > 0)
@@ -465,8 +465,8 @@ def _meta_qr(config, struct, slices, sQ):
     R has signature = (-sQ, struct.s[1])
     """
     minD = tuple(min(ds) for ds in struct.D)
-    nsym = len(struct.n)
-    n0 = (0,) * nsym
+    n0 = config.sym.zero()
+    nsym = config.sym.NSYM
 
     if sQ == struct.s[1]:
         t_con = tuple(x[nsym:] for x in struct.t)
@@ -555,8 +555,8 @@ def _meta_eigh(config, struct, slices, sU):
     U has signature = (struct.s[0], sU)
     S has signature = (-sU, sU)
     """
-    nsym = len(struct.n)
-    n0 = (0,) * nsym
+    n0 = config.sym.zero()
+    nsym = config.sym.NSYM
 
     if sU == -struct.s[0]:
         t_con = tuple(x[:nsym] for x in struct.t)
