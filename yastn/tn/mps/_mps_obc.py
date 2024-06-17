@@ -14,7 +14,6 @@
 # ==============================================================================
 """ Mps structure and its basic manipulations. """
 from __future__ import annotations
-from typing import NamedTuple
 from ... import tensor, initialize, YastnError
 from ._mps_parent import _MpsMpoParent
 
@@ -58,6 +57,9 @@ def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpoOBC:
     if len(states) != len(amplitudes):
         raise YastnError('Number of MpsMpoOBC-s to add must be equal to the number of coefficients in amplitudes.')
 
+    if any(not isinstance(state, MpsMpoOBC) for state in states):
+        raise YastnError('All added states should be MpsMpoOBC-s.')
+
     phi = MpsMpoOBC(N=states[0].N, nr_phys=states[0].nr_phys)
 
     if any(psi.N != phi.N for psi in states):
@@ -74,7 +76,7 @@ def add(*states, amplitudes=None) -> yastn.tn.mps.MpsMpoOBC:
     amplitudes = [x * psi.factor for x, psi in zip(amplitudes, states)]
 
     n = phi.first
-    d = {(j,): amplitudes[j] * psi.A[n] for j, psi in enumerate(states)}
+    d = {(j,): psi.A[n] * amplitudes[j] for j, psi in enumerate(states)}
     common_legs = (0, 1) if phi.nr_phys == 1 else (0, 1, 3)
     phi.A[n] = initialize.block(d, common_legs)
 
@@ -122,6 +124,9 @@ def multiply(a, b, mode=None) -> yastn.tn.mps.MpsMpoOBC:
            use default setting from YASTN tensor's
            :ref:`configuration<tensor/configuration:yastn configuration>`.
     """
+    if not isinstance(a, MpsMpoOBC) or not isinstance(b, MpsMpoOBC):
+        raise YastnError('multiply requres two MpsMpoOBC-s.')
+
     if a.N != b.N:
         raise YastnError('MpsMpoOBC-s to multiply must have equal number of sites.')
 
@@ -177,7 +182,6 @@ class MpsMpoOBC(_MpsMpoParent):
         """
         super().__init__(N=N, nr_phys=nr_phys)
         self.pC = None  # index of the central block, None if it does not exist
-
 
     def __add__(self, phi) -> yastn.tn.mps.MpsMpoOBC:
         """ Sum of two Mps's or two Mpo's. """

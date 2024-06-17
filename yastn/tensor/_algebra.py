@@ -205,29 +205,44 @@ def __ge__(a, number) -> yastn.Tensor[bool]:
 
 def __mul__(a, number) -> yastn.Tensor:
     """ Multiply tensor by a number, use: `number * tensor`. """
-    data = number * a._data
+    data = a._data * number
+    if a.config.backend.get_size(data) != a.struct.size:
+        raise YastnError("Multiplication cannot change data size; broadcasting not supported.")
     return a._replace(data=data)
 
 
 def __rmul__(a, number) -> yastn.Tensor:
     """ Multiply tensor by a number, use: `tensor * number`. """
-    return __mul__(a, number)
+    return a.__mul__(number)
+
+
+def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+    """ This is to circumvent problems with np.float64 * Mps. """
+    if ufunc.__name__ == 'multiply':
+        lhs, rhs = inputs
+        return rhs.__mul__(lhs)
+    raise YastnError(f"Only np.float * Mps is supported; {ufunc.__name__} was called.")
 
 
 def __neg__(a) -> yastn.Tensor:
     """ Multiply tensor by -1, use: `-tensor`. """
-    return __mul__(a, -1)
+    return a.__mul__(-1)
 
 
 def __pow__(a, exponent) -> yastn.Tensor:
     """ Element-wise exponent of tensor, use: `tensor ** exponent`. """
     data = a._data ** exponent
+    if a.config.backend.get_size(data) != a.struct.size:
+        raise YastnError("Exponent cannot change data size; broadcasting not supported.")
     return a._replace(data=data)
 
 
 def __truediv__(a, number) -> yastn.Tensor:
     """ Divide tensor by a scalar, use: `tensor / number`. """
     data = a._data / number
+    if a.config.backend.get_size(data) != a.struct.size:
+        raise YastnError("truediv cannot change data size; broadcasting not supported.")
+
     return a._replace(data=data)
 
 

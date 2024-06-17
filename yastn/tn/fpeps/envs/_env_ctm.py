@@ -101,7 +101,7 @@ class EnvCTM(Peps):
             Otherwise, the provided Leg is used to initialize CTMRG virtual legs.
         """
         config = self.psi.config
-        leg0 = Leg(config, s=1, t=((0,) * config.sym.NSYM,), D=(1,))
+        leg0 = Leg(config, s=1, t=(config.sym.zero(),), D=(1,))
 
         if init == 'nn':
             pass

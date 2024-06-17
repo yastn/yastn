@@ -394,7 +394,11 @@ def remove_leg(a, axis=-1) -> yastn.Tensor:
         raise YastnError('Axis to be removed cannot be fused.')
 
     nsym = a.config.sym.NSYM
-    t = a.struct.t[0][axis * nsym: (axis + 1) * nsym] if len(a.struct.t) > 0 else (0,) * nsym
+    if len(a.struct.t) > 0:
+        t = a.struct.t[0][axis * nsym: (axis + 1) * nsym]
+    else:
+        t = a.config.sym.zero()
+
     if any(x[axis] != 1 for x in a.struct.D) or any(x[axis * nsym: (axis + 1) * nsym] != t for x in a.struct.t):
         raise YastnError('Axis to be removed must have single charge of dimension one.')
 
