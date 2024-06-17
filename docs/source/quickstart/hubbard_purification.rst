@@ -163,13 +163,16 @@ where:
         # spin up electrons: 0.123385
         # spin dn electrons: 0.122360
 
-        ev_double = env_ctm.measure_1site(n_up @ n_dn)
-        ev_double = mean([*ev_double.values()])
-        print(f"Average double occupancy: {ev_double:0.6f}")
+        double_occ = env_ctm.measure_1site(n_up @ n_dn)
+        double_occ = mean([*double_occ.values()])
+        print(f"Average double occupancy: {double_occ:0.6f}")
         # Average double occupancy: 0.062592
 
-        Sz = 0.5 * (n_up - n_dn)  # Sz operator
-        ev_SzSz = env_ctm.measure_nn(Sz, Sz)
-        ev_SzSz = mean([*ev_SzSz.values()])
-        print(f"Average NN spin-spin correlator: {ev_SzSz:0.6f}")
+        Sz = 0.5 * (n_up - n_dn)   # Sz operator
+        SzSz_NN = env_ctm.measure_nn(Sz, Sz)
+        SzSz_NN = mean([*SzSz_NN.values()])
+        print(f"Average NN spin-spin correlator: {SzSz_NN:0.6f}")
         # Average NN spin-spin correlator: -0.006933
+        #
+        # for a benchmark against METTS on a finite cylinder
+        # at lower temperatures, see tests/quickstart/test_Hubbard.py

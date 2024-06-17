@@ -14,20 +14,44 @@
 # ==============================================================================
 """ Test quickstart example Hubbard. """
 import pytest
-
-
+#
 # The script below can be benchmarked against reference values obtained from METTS
 # on a 4 x 16 cylinder implemented with ITensor library.
-# Keys are: (observable, beta). Values are accompanied with statistical errors from
+# Values are accompanied with statistical errors from
 # Monte Carlo sampling in METTS
-
-metts_values = {("energy", 2.0): -2.80404 +- 0.00257, ("energy", 4.0): -2.87870 +- 0.00142, ("energy", 6.0): -2.91614 +- 0.00089,
-                ("ev_double", 2.0): 0.02817 +- 0.000033, ("ev_double", 4.0): 0.03384 +- 0.000014, ("ev_double", 6.0): 0.03649 +- 0.000025,
-                ("ev_SzSz", 2.0): -0.04167 +- 0.00183, ("ev_SzSz", 4.0):-0.07500 +- 0.00125, ("ev_SzSz", 6.0): -0.09099 +- 0.00129}
-
-
+#
+#            (observable, beta): (value, statistical err.)
+metts_values = {("energy", 2.0): (-2.8040, 0.0026),
+                ("energy", 4.0): (-2.8787, 0.0014),
+                ("energy", 6.0): (-2.9161, 0.0009),
+                ("double_occ", 2.0): (0.0282, 0.0001),
+                ("double_occ", 4.0): (0.0338, 0.0001),
+                ("double_occ", 6.0): (0.0365, 0.0001),
+                ("SzSz_NN", 2.0): (-0.0417, 0.0018),
+                ("SzSz_NN", 4.0): (-0.0750, 0.0013),
+                ("SzSz_NN", 6.0): (-0.0910, 0.0013)}
+#
+# PEPS results
+#
+# beta=2.0
+#             D=12      D=16      D=20
+# energy     -2.7803   -2.8002   -2.8002
+# double_occ  0.0302    0.0295    0.0294
+# SzSz_NN    -0.0382   -0.0415   -0.0412
+#
+# beta=4.0
+# energy     -2.8677   -2.8715   -2.8707
+# double_occ  0.0337    0.0339    0.0338
+# SzSz_NN    -0.0703   -0.0712   -0.0703
+#
+# beta=6.0
+# energy     -2.8979   -2.8989
+# double_occ  0.0354    0.0354
+# SzSz_NN    -0.0848   -0.0842
+#
+#
 @pytest.mark.skipif("not config.getoption('quickstarts')")
-def test_quickstart_hubbard(D, betas=[0.5]):
+def test_quickstart_hubbard(D=12, betas=[0.5]):
 
     import yastn
     import yastn.tn.fpeps as fpeps
@@ -45,28 +69,23 @@ def test_quickstart_hubbard(D, betas=[0.5]):
     geometry = fpeps.CheckerboardLattice()
     psi = fpeps.product_peps(geometry=geometry, vectors=I)
 
-    beta0 = 0
+    beta0, infoss = 0, []
     for beta in betas:
         db = 0.01  # Trotter step size
         # making sure we have integer number of steps to target beta / 2
         steps = round(((beta-beta0) / 2) / db)
         db = ((beta-beta0) / 2) / steps
         beta0 = beta
-
+        #
         g_hop_u = fpeps.gates.gate_nn_hopping(t, db / 2, I, c_up, cdag_up)
         g_hop_d = fpeps.gates.gate_nn_hopping(t, db / 2, I, c_dn, cdag_dn)
         g_loc = fpeps.gates.gate_local_Coulomb(mu, mu, U, db/2, I, n_up, n_dn)
         gates = fpeps.gates.distribute(geometry,
                                     gates_nn=[g_hop_u, g_hop_d],
                                     gates_local=g_loc)
-
+        #
         env = fpeps.EnvNTU(psi, which='NN')
-
-        D = 12  # bond dimenson
-
         opts_svd = {'D_total': D, 'tol': 1e-12}
-        infoss = []
-
         for _ in tqdm(range(1, steps + 1)):
             infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
             # The state psi is contained in env;
@@ -118,15 +137,15 @@ def test_quickstart_hubbard(D, betas=[0.5]):
         print(f"spin up electrons: {2 * ev_cdagc_up:0.6f}")
         print(f"spin dn electrons: {2 * ev_cdagc_dn:0.6f}")
 
-        ev_double = env_ctm.measure_1site(n_up @ n_dn)
-        ev_double = mean([*ev_double.values()])
-        print(f"Average double occupancy: {ev_double:0.6f}")
+        double_occ = env_ctm.measure_1site(n_up @ n_dn)
+        double_occ = mean([*double_occ.values()])
+        print(f"Average double occupancy: {double_occ:0.6f}")
 
         Sz = 0.5 * (n_up - n_dn)   # Sz operator
-        ev_SzSz = env_ctm.measure_nn(Sz, Sz)
-        ev_SzSz = mean([*ev_SzSz.values()])
-        print(f"Average NN spin-spin correlator: {ev_SzSz:0.6f}")
+        SzSz_NN = env_ctm.measure_nn(Sz, Sz)
+        SzSz_NN = mean([*SzSz_NN.values()])
+        print(f"Average NN spin-spin correlator: {SzSz_NN:0.6f}")
 
 
 if __name__ == '__main__':
-    test_quickstart_hubbard(D=16, betas=[2, 4, 6])
+    test_quickstart_hubbard(D=12, betas=[0.5])
