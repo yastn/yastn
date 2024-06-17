@@ -17,11 +17,13 @@ import pytest
 
 
 # The script below can be benchmarked against reference values obtained from METTS
-# on a 6 x 16 cylinder implemented with ITensor library.
-# Keys are: (observable, beta).
-metts_values = {("energy", 2.0): -2.80404, ("energy", 4.0): -2.87870, ("energy", 6.0): -2.91614,
-                ("ev_double", 2.0): 0.02817, ("ev_double", 4.0): 0.03384, ("ev_double", 6.0): 0.03649,
-                ("ev_SzSz", 2.0): -0.04167, ("ev_SzSz", 4.0):-0.07500, ("ev_SzSz", 6.0): -0.09099}
+# on a 4 x 16 cylinder implemented with ITensor library.
+# Keys are: (observable, beta). Values are accompanied with statistical errors from
+# Monte Carlo sampling in METTS
+
+metts_values = {("energy", 2.0): -2.80404 +- 0.00257, ("energy", 4.0): -2.87870 +- 0.00142, ("energy", 6.0): -2.91614 +- 0.00089,
+                ("ev_double", 2.0): 0.02817 +- 0.000033, ("ev_double", 4.0): 0.03384 +- 0.000014, ("ev_double", 6.0): 0.03649 +- 0.000025,
+                ("ev_SzSz", 2.0): -0.04167 +- 0.00183, ("ev_SzSz", 4.0):-0.07500 +- 0.00125, ("ev_SzSz", 6.0): -0.09099 +- 0.00129}
 
 
 @pytest.mark.skipif("not config.getoption('quickstarts')")
