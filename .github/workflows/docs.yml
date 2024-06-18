@@ -43,7 +43,7 @@ jobs:
           python-version: ${{ inputs.python-version }}
 
       - name: setup deps
-        run: pip install numpy scipy h5py sphinx pydata-sphinx-theme;
+        run: pip install numpy==1.26 scipy h5py tqdm sphinx pydata-sphinx-theme;
 
       - name: build docs
         run: |
