@@ -103,7 +103,7 @@ class Tensor:
                     raise YastnError("Diagonal tensor should have s equal (1, -1) or (-1, 1)")
                 if any(x != 0 for x in n):
                     raise YastnError("Tensor charge of a diagonal tensor should be 0")
-            self.struct = _struct(s=s, n=n, diag=isdiag)
+            self.struct = _struct(s=s, n=n, diag=bool(isdiag))
 
         self.slices = kwargs['slices'] if 'slices' in kwargs else ()
 

@@ -14,7 +14,7 @@
 # ==============================================================================
 """ Methods creating a new yastn.Tensor """
 
-from itertools import product
+from itertools import product, accumulate
 import numpy as np
 from ._auxliary import _flatten, _slc
 from ._tests import YastnError, _test_tD_consistency
@@ -99,8 +99,8 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         comb_t = list(product(*t))
         lcomb_t = len(comb_t)
         comb_t = list(_flatten(comb_t))
-        comb_t = np.array(comb_t, dtype=int).reshape((lcomb_t, len(a.struct.s), len(a.struct.n)))
-        comb_D = np.array(comb_D, dtype=int).reshape((lcomb_t, len(a.struct.s)))
+        comb_t = np.array(comb_t, dtype=int).reshape((lcomb_t, a.ndim_n, a.config.sym.NSYM))
+        comb_D = np.array(comb_D, dtype=int).reshape((lcomb_t, a.ndim_n))
         sa = np.array(a.struct.s, dtype=int)
         na = np.array(a.struct.n, dtype=int)
         ind = np.all(a.config.sym.fuse(comb_t, sa, 1) == na, axis=1)
@@ -110,13 +110,19 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     if a.isdiag and np.any(Dset[:, 0] != Dset[:, 1]):
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
     Dp = Dset[:, 0] if a.isdiag else np.prod(Dset, axis=1, dtype=int)
-    Dsize = np.sum(Dp)
+    Dsize = np.sum(Dp).item()
 
-    meta = [(tuple(ts.flat), tuple(Ds), dp) for ts, Ds, dp in zip(tset, Dset, Dp)]
-    meta = sorted(meta, key=lambda x: x[0])
+    if len(tset) > 0:
+        tset = tset.reshape(len(tset), a.ndim_n * a.config.sym.NSYM).tolist()
+        Dset = Dset.tolist()
+        Dp = Dp.tolist()
+        meta = [(tuple(ts), tuple(Ds), dp) for ts, Ds, dp in zip(tset, Dset, Dp)]
+        meta = sorted(meta, key=lambda x: x[0])
+        a_t, a_D, a_Dp = zip(*meta)
+    else:
+        a_t, a_D, a_Dp = (), (), ()
 
-    a_t, a_D, a_Dp = zip(*meta) if len(meta) > 0 else ((), (), ())
-    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(a_Dp), a_Dp, a_D))
+    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(a_Dp), a_Dp, a_D))
     a.struct = a.struct._replace(t=a_t, D=a_D, size=sum(a_Dp))
     a._data = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
     _test_tD_consistency(a.struct)
@@ -164,20 +170,23 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     na = np.array(a.struct.n, dtype=int)
     if not np.all(a.config.sym.fuse(ats, sa, 1) == na):
         raise YastnError('Charges ts are not consistent with the symmetry rules: f(t @ s) == n')
+    ts = tuple(ats.reshape(a.ndim_n * a.config.sym.NSYM).tolist())
+    ats = ats.reshape(a.ndim_n, a.config.sym.NSYM).tolist()
 
     if Ds is None:  # attempt to read Ds from existing blocks.
         Ds = []
         legs = a.get_legs(range(a.ndim_n), native=True)
-        for n, leg in enumerate(legs):
+        for t, leg in zip(ats, legs):
+            t = tuple(t)
             try:
-                Ds.append(leg.D[leg.t.index(tuple(ats[0, n, :].flat))])
+                Ds.append(leg.D[leg.t.index(t)])
             except ValueError as err:
                 raise YastnError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
-        Ds = tuple(Ds)
+    Ds = tuple(int(x) for x in Ds)
 
     if a.isdiag and Ds[0] != Ds[1]:
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
-    Dsize = Ds[0] if a.isdiag else np.prod(Ds, dtype=int)
+    Dsize = Ds[0] if a.isdiag else np.prod(Ds, dtype=int).item()
 
     ind = sum(t < ts for t in a.struct.t)
     ind2 = ind
@@ -191,7 +200,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     a_t = a.struct.t[:ind] + (ts,) + a.struct.t[ind2:]
     a_D = a.struct.D[:ind] + (Ds,) + a.struct.D[ind2:]
     a_Dp = [x.Dp for x in a.slices[:ind]] + [Dsize] + [x.Dp for x in a.slices[ind2:]]
-    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(a_Dp), a_Dp, a_D))
+    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(a_Dp), a_Dp, a_D))
     a.struct = a.struct._replace(t=a_t, D=a_D, size=sum(a_Dp))
     _test_tD_consistency(a.struct)
 
