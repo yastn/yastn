@@ -14,7 +14,7 @@
 # ==============================================================================
 """ Testing and controls. """
 import numpy as np
-from ._auxliary import _flatten, _unpack_axes
+from ._auxliary import _flatten, _unpack_axes, _slc, _struct
 
 __all__ = ['are_independent', 'is_consistent']
 
@@ -147,7 +147,27 @@ def is_consistent(a):
         assert len(hf.tree) == len(hf.t) + 1
         assert len(hf.tree) == len(hf.D) + 1
         assert all(y in ('p', 's') if x > 1 else 'n' for x, y in zip(hf.tree, hf.op))
+    # test that all elements of tensor are python int types
+    _test_struct_types(a.struct)
     return True
+
+
+def _test_struct_types(struct):
+    assert isinstance(struct, _struct)
+    assert isinstance(struct.s, tuple)
+    assert all(isinstance(x, int) for x in struct.s)
+    assert isinstance(struct.n, tuple)
+    assert all(isinstance(x, int) for x in struct.n)
+    assert isinstance(struct.diag, bool)
+    assert isinstance(struct.t, tuple)
+    assert all(isinstance(x, tuple) for x in struct.t)
+    assert all(isinstance(y, int) for x in struct.t for y in x)
+    assert isinstance(struct.D, tuple)
+    assert all(isinstance(x, tuple) for x in struct.D)
+    assert all(isinstance(y, int) for x in struct.D for y in x)
+    assert isinstance(struct.D, tuple)
+    assert isinstance(struct.size, int)
+
 
 
 def _get_tD_legs(struct):
