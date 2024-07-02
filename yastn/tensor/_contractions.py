@@ -101,10 +101,12 @@ def tensordot(a, b, axes, conj=(0, 0)) -> yastn.Tensor:
 @lru_cache(maxsize=1024)
 def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym):
     """ Return row indices of nparray a that are in b, and vice versa.  Outputs tuples."""
-    t_a = np.array(t_a, dtype=int).reshape((len(t_a), ndimn_a, nsym))
-    t_b = np.array(t_b, dtype=int).reshape((len(t_b), ndimn_b, nsym))
-    la = [tuple(x.flat) for x in t_a[:, nin_a, :]]
-    lb = [tuple(x.flat) for x in t_b[:, nin_b, :]]
+    t_a = np.array(t_a, dtype=np.int64).reshape((len(t_a), ndimn_a, nsym))
+    t_b = np.array(t_b, dtype=np.int64).reshape((len(t_b), ndimn_b, nsym))
+    t_a = t_a[:, nin_a, :].reshape(len(t_a), len(nin_a) * nsym).tolist()
+    t_b = t_b[:, nin_b, :].reshape(len(t_b), len(nin_b) * nsym).tolist()
+    la = [tuple(x) for x in t_a]
+    lb = [tuple(x) for x in t_b]
     sa = set(la)
     sb = set(lb)
     ia = tuple(ii for ii, el in enumerate(la) if el in sb)
@@ -119,7 +121,7 @@ def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym):
 @lru_cache(maxsize=1024)
 def _meta_tensordot(config, struct_a, slices_a, struct_b, slices_b):
     nsym = len(struct_a.n)
-    n_c = np.array(struct_a.n + struct_b.n, dtype=int).reshape((1, 2, nsym))
+    n_c = np.array(struct_a.n + struct_b.n, dtype=np.int64).reshape((1, 2, nsym))
     n_c = tuple(config.sym.fuse(n_c, (1, 1), 1)[0])
     struct_a_resorted = sorted(((t[nsym:], t, D, sl.slcs[0]) for t, D, sl in zip(struct_a.t, struct_a.D, slices_a)))
     struct_b_resorted = ((t[:nsym], t, D, sl.slcs[0]) for t, D, sl in zip(struct_b.t, struct_b.D, slices_b))
@@ -350,7 +352,7 @@ def vdot(a, b, conj=(1, 0)) -> number:
     if struct_a.D != struct_b.D:
         raise YastnError('Bond dimensions do not match.')
 
-    c_n = np.array(a.struct.n + b.struct.n, dtype=int).reshape((1, 2, a.config.sym.NSYM))
+    c_n = np.array(a.struct.n + b.struct.n, dtype=np.int64).reshape((1, 2, a.config.sym.NSYM))
     c_n = a.config.sym.fuse(c_n, (1, 1), 1)
     if len(struct_a.D) > 0 and np.all(c_n == 0):
         return a.config.backend.vdot(Adata, Bdata)
@@ -401,29 +403,29 @@ def trace(a, axes=(0, 1)) -> yastn.Tensor:
 @lru_cache(maxsize=1024)
 def _meta_trace(struct, slices, in1, in2, out):
     """ meta-information for backend and struct of traced tensor. """
-    lt = len(struct.t)
-    tset = np.array(struct.t, dtype=int).reshape((lt, len(struct.s), len(struct.n)))
-    Dset = np.array(struct.D, dtype=int).reshape((lt, len(struct.s)))
-    t1 = tset[:, in1, :].reshape(lt, -1)
-    t2 = tset[:, in2, :].reshape(lt, -1)
-    tn = tset[:, out, :].reshape(lt, -1)
+    lt, nsym = len(struct.t), len(struct.n)
+    tset = np.array(struct.t, dtype=np.int64).reshape((lt, len(struct.s), nsym))
+    Dset = np.array(struct.D, dtype=np.int64).reshape((lt, len(struct.s)))
+    t1 = tset[:, in1, :].reshape(lt, len(in1) * nsym)
+    t2 = tset[:, in2, :].reshape(lt, len(in2) * nsym)
+    tn = tset[:, out, :].reshape(lt, len(out) * nsym)
     D1 = Dset[:, in1]
     D2 = Dset[:, in2]
     Dn = Dset[:, out]
-    Dnp = np.prod(Dn, axis=1, dtype=int)
-    pD1 = np.prod(D1, axis=1, dtype=int).reshape(lt, 1)
-    pD2 = np.prod(D2, axis=1, dtype=int).reshape(lt, 1)
+    Dnp = np.prod(Dn, axis=1, dtype=np.int64)
+    pD1 = np.prod(D1, axis=1, dtype=np.int64).reshape(lt, 1)
+    pD2 = np.prod(D2, axis=1, dtype=np.int64).reshape(lt, 1)
     ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
     Drsh = np.hstack([pD1, pD2, Dn])
-    t12 = tuple(tuple(t.flat) for t in t1[ind])
-    tn = tuple(tuple(x.flat) for x in tn[ind])
-    D1 = tuple(tuple(x.flat) for x in D1[ind])
-    D2 = tuple(tuple(x.flat) for x in D2[ind])
-    Dn = tuple(tuple(x.flat) for x in Dn[ind])
-    Dnp = Dnp[ind]
+    t12 = tuple(tuple(x) for x in t1[ind].tolist())
+    tn = tuple(tuple(x) for x in tn[ind].tolist())
+    D1 = tuple(tuple(x) for x in D1[ind].tolist())
+    D2 = tuple(tuple(x) for x in D2[ind].tolist())
+    Dn = tuple(tuple(x) for x in Dn[ind].tolist())
+    Dnp = Dnp[ind].tolist()
     slo = tuple(slices[n].slcs[0] for n in ind)
     Do = tuple(struct.D[n] for n in ind)
-    Drsh = tuple(tuple(x.flat) for x in Drsh[ind])
+    Drsh = tuple(tuple(x) for x in Drsh[ind].tolist())
 
     meta = tuple(sorted(zip(tn, Dn, Dnp, t12, slo, Do, Drsh), key=lambda x: x[0]))
 
@@ -487,9 +489,9 @@ def swap_gate(a, axes, charge=None) -> yastn.Tensor:
 def _meta_swap_gate(t, mf, ndim, nsym, axes, fss):
     """ calculate which blocks to negate. """
     axes = _unpack_axes(mf, *axes)
-    tset = np.array(t, dtype=int).reshape((len(t), ndim, nsym))
+    tset = np.array(t, dtype=np.int64).reshape((len(t), ndim, nsym))
     iaxes = iter(axes)
-    tp = np.zeros(len(t), dtype=int)
+    tp = np.zeros(len(t), dtype=np.int64)
 
     if len(axes) % 2 == 1:
         raise YastnError('Odd number of elements in axes. Elements of axes should come in pairs.')
@@ -506,11 +508,11 @@ def _meta_swap_gate(t, mf, ndim, nsym, axes, fss):
 def _meta_swap_gate_charge(t, charge, mf, ndim, nsym, axes, fss):
     """ calculate which blocks to negate. """
     axes, = _unpack_axes(mf, axes)
-    tset = np.array(t, dtype=int).reshape((len(t), ndim, nsym))
+    tset = np.array(t, dtype=np.int64).reshape((len(t), ndim, nsym))
     if len(charge) != nsym:
         raise YastnError(f'Len of charge {charge} does not match sym.NSYM = {nsym}.')
 
-    charge = np.array(charge, dtype=int).reshape(1, nsym) % 2
+    charge = np.array(charge, dtype=np.int64).reshape(1, nsym) % 2
     tp = np.sum(tset[:, axes, :], axis=1) % 2
     return tuple(np.sum(tp[:, fss] * charge[:, fss], axis=1) % 2)
 

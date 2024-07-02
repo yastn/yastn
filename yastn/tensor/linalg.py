@@ -234,12 +234,12 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     if nU and sU == struct.s[1]:
         t_con = tuple(x[nsym:] for x in struct.t)
     elif nU: # and -sQ == struct.s[1]
-        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
+        t_con = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), 2, nsym))
         t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, 1:, :], (1,), -1))
     elif sU == -struct.s[0]: # and nV (not nU)
         t_con = tuple(x[:nsym] for x in struct.t)
     else: # not nU and sU == struct.s[0]
-        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
+        t_con = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), 2, nsym))
         t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, :1, :], (1,), -1))
     Un, Vn = (struct.n, n0) if nU else (n0, struct.n)
 
@@ -328,7 +328,7 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     # check symmetry related blocks and truncate to equal length
     active_sectors = filter(lambda x: any(Smask[x]), Smask.struct.t)
     for t in active_sectors:
-        tn = np.array(t, dtype=int).reshape((1, 1, -1))
+        tn = np.array(t, dtype=np.int64).reshape((1, 1, -1))
         tn = tuple(S.config.sym.fuse(tn, (1,), -1).flat)
         if t == tn:
             continue
@@ -471,7 +471,7 @@ def _meta_qr(config, struct, slices, sQ):
     if sQ == struct.s[1]:
         t_con = tuple(x[nsym:] for x in struct.t)
     else: # -sQ == struct.s[1]
-        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
+        t_con = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), 2, nsym))
         t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, 1:, :], (1,), -1))
 
     Qt = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
@@ -561,7 +561,7 @@ def _meta_eigh(config, struct, slices, sU):
     if sU == -struct.s[0]:
         t_con = tuple(x[:nsym] for x in struct.t)
     else: # and sU == struct.s[0]
-        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
+        t_con = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), 2, nsym))
         t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, :1, :], (1,), -1))
 
     Ut = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))

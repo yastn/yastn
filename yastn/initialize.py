@@ -408,8 +408,8 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
     if any(len(ind) != lind for ind in pos):
         raise YastnError('Wrong number of coordinates encoded in tensors.keys()')
 
-    posa = np.zeros((len(pos), tn0.ndim), dtype=int)
-    posa[:, out_b] = np.array(pos, dtype=int).reshape(len(pos), len(out_b))
+    posa = np.zeros((len(pos), tn0.ndim), dtype=np.int64)
+    posa[:, out_b] = np.array(pos, dtype=np.int64).reshape(len(pos), len(out_b))
     posa = tuple(tuple(x.flat) for x in posa)
 
     # perform hard fusion of meta-fused legs before blocking

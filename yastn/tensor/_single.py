@@ -113,8 +113,8 @@ def conj(a) -> yastn.Tensor:
 
     Follows the behavior of the backend.conj() when it comes to creating a new copy of the data.
     """
-    an = np.array(a.struct.n, dtype=int).reshape((1, 1, -1))
-    newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
+    an = np.array(a.struct.n, dtype=np.int64).reshape((1, 1, -1))
+    newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=np.int64), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)
@@ -141,8 +141,8 @@ def flip_signature(a) -> yastn.Tensor:
 
     Creates a shallow copy of the data.
     """
-    an = np.array(a.struct.n, dtype=int).reshape((1, 1, -1))
-    newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
+    an = np.array(a.struct.n, dtype=np.int64).reshape((1, 1, -1))
+    newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=np.int64), -1)[0])
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)
@@ -171,8 +171,8 @@ def flip_charges(a, axes=None) -> yastn.Tensor:
             axes = (axes,)
     uaxes, = _unpack_axes(a.mfs, axes)
 
-    snew = np.array(a.struct.s, dtype=int)
-    tnew = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+    snew = np.array(a.struct.s, dtype=np.int64)
+    tnew = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
     hfs = list(a.hfs)
     for ax in uaxes:
         if hfs[ax].is_fused():
@@ -239,8 +239,8 @@ def transpose(a, axes=None) -> yastn.Tensor:
     mfs = tuple(a.mfs[ii] for ii in axes)
     hfs = tuple(a.hfs[ii] for ii in uaxes)
     c_s = tuple(a.struct.s[ii] for ii in uaxes)
-    tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-    Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
+    tset = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+    Dset = np.array(a.struct.D, dtype=np.int64).reshape((len(a.struct.D), len(a.struct.s)))
     newt = tuple(tuple(x.flat) for x in tset[:, order, :])
     newD = tuple(tuple(x.flat) for x in Dset[:, order])
 
@@ -350,14 +350,14 @@ def add_leg(a, axis=-1, s=1, t=None, leg=None) -> yastn.Tensor:
     axis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
     nsym = a.config.sym.NSYM
     if t is None:
-        t = tuple(a.config.sym.fuse(np.array(a.struct.n, dtype=int).reshape((1, 1, nsym)), (-1,), s).flat)
+        t = tuple(a.config.sym.fuse(np.array(a.struct.n, dtype=np.int64).reshape((1, 1, nsym)), (-1,), s).flat)
     else:
         if (isinstance(t, int) and nsym != 1) or len(t) != nsym:
             raise YastnError('len(t) does not match the number of symmetry charges.')
-        t = tuple(a.config.sym.fuse(np.array(t, dtype=int).reshape((1, 1, nsym)), (s,), s).flat)
+        t = tuple(a.config.sym.fuse(np.array(t, dtype=np.int64).reshape((1, 1, nsym)), (s,), s).flat)
 
     news = a.struct.s[:axis] + (s,) + a.struct.s[axis:]
-    newn = tuple(a.config.sym.fuse(np.array(a.struct.n + t, dtype=int).reshape((1, 2, nsym)), (1, s), 1).flat)
+    newn = tuple(a.config.sym.fuse(np.array(a.struct.n + t, dtype=np.int64).reshape((1, 2, nsym)), (1, s), 1).flat)
     newt = tuple(x[:axis * nsym] + t + x[axis * nsym:] for x in a.struct.t)
     newD = tuple(x[:axis] + (1,) + x[axis:] for x in a.struct.D)
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
@@ -403,7 +403,7 @@ def remove_leg(a, axis=-1) -> yastn.Tensor:
         raise YastnError('Axis to be removed must have single charge of dimension one.')
 
     news = a.struct.s[:axis] + a.struct.s[axis + 1:]
-    newn = tuple(a.config.sym.fuse(np.array(a.struct.n + t, dtype=int).reshape((1, 2, nsym)), (-1, a.struct.s[axis]), -1).flat)
+    newn = tuple(a.config.sym.fuse(np.array(a.struct.n + t, dtype=np.int64).reshape((1, 2, nsym)), (-1, a.struct.s[axis]), -1).flat)
     newt = tuple(x[: axis * nsym] + x[(axis + 1) * nsym:] for x in a.struct.t)
     newD = tuple(x[: axis] + x[axis + 1:] for x in a.struct.D)
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
