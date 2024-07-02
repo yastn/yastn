@@ -118,7 +118,7 @@ def generate_mpo_preprocessing(I, terms=None) -> GenerateMpoTemplate | tuple[Gen
     I2 = [I[n].remove_leg(axis=0).remove_leg(axis=1) for n in I.sweep(to='last')]
     H1s = [generate_product_mpo_from_Hterm(I2, term, amplitude=False) for term in terms]
     cfg = H1s[0][0].config
-    mapH = np.zeros((len(H1s), I.N), dtype=int)
+    mapH = np.zeros((len(H1s), I.N), dtype=np.int64)
 
     basis, t1bs, t2bs, tfbs, ifbs = [], [], [], [], []
     for n in I.sweep():

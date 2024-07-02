@@ -127,20 +127,20 @@ def _meta_merge_to_matrix(config, struct, slices, axes, inds):
     t_old = struct.t if inds is None else [struct.t[ii] for ii in inds]
     D_old = struct.D if inds is None else [struct.D[ii] for ii in inds]
     sl_old = slices if inds is None else [slices[ii] for ii in inds]
-    tset = np.array(t_old, dtype=int).reshape((len(t_old), len(struct.s), config.sym.NSYM))
-    Dset = np.array(D_old, dtype=int).reshape(len(D_old), len(struct.s))
-    legs, t, D, Deff, teff, s, ls = [], [], [], [], [], [], []
+    tset = np.array(t_old, dtype=np.int64).reshape((len(t_old), len(struct.s), config.sym.NSYM))
+    Dset = np.array(D_old, dtype=np.int64).reshape(len(D_old), len(struct.s))
+    t, teff, ls = [], [], []
     for n in (0, 1):
-        legs.append(np.array(axes[n], int))
-        t.append(tset[:, legs[n], :])
-        D.append(Dset[:, legs[n]])
-        Deff.append(np.prod(D[n], axis=1, dtype=int))
-        s.append(np.array([struct.s[ii] for ii in axes[n]], dtype=int))
-        teff.append(config.sym.fuse(t[n], s[n], s_eff[n]))
-        teff[n] = tuple(tuple(t.flat) for t in teff[n])
-        t[n] = tuple(tuple(t.flat) for t in t[n])
-        D[n] = tuple(tuple(x) for x in D[n])
-        ls.append(_leg_structure_merge(teff[n], t[n], Deff[n], D[n]))
+        ta = tset[:, axes[n], :]
+        Da = Dset[:, axes[n]]
+        Deff = np.prod(Da, axis=1, dtype=np.int64).tolist()
+        Da = [tuple(x) for x in Da.tolist()]
+        s = tuple(struct.s[ii] for ii in axes[n])
+        ta_eff = [tuple(x) for x in config.sym.fuse(ta, s, s_eff[n]).tolist()]
+        ta = [tuple(x) for x in ta.reshape(len(ta), len(s) * config.sym.NSYM).tolist()]
+        teff.append(ta_eff)
+        t.append(ta)
+        ls.append(_leg_structure_merge(ta_eff, ta, Deff, Da))
 
     smeta = sorted((tel, ter, tl, tr, slo.slcs[0], Do)
                 for tel, ter, tl, tr, slo, Do in zip(teff[0], teff[1], t[0], t[1], sl_old, D_old))
@@ -278,11 +278,11 @@ def _meta_fuse_hard(config, struct, slices, axes):
     t_in, D_in, tD_dict, tset, Dset = _get_tD_legs(struct)
     slegs = tuple(tuple(struct.s[n] for n in a) for a in axes)
     s_eff = tuple(struct.s[axis[0]] for axis in axes)
-    teff = np.zeros((nblocks, len(s_eff), nsym), dtype=int)
-    Deff = np.zeros((nblocks, len(s_eff)), dtype=int)
+    teff = np.zeros((nblocks, len(s_eff), nsym), dtype=np.int64)
+    Deff = np.zeros((nblocks, len(s_eff)), dtype=np.int64)
     for n, a in enumerate(axes):
         teff[:, n, :] = config.sym.fuse(tset[:, a, :], slegs[n], s_eff[n])
-        Deff[:, n] = np.prod(Dset[:, a], axis=1, dtype=int)
+        Deff[:, n] = np.prod(Dset[:, a], axis=1, dtype=np.int64)
 
     lls = []
     for n, a in enumerate(axes):
@@ -319,7 +319,7 @@ def _meta_fuse_hard(config, struct, slices, axes):
                     _, _, tos, slo, Do = next(gr)
         except StopIteration:
             pass
-    Dp_new = np.prod(D_new, axis=1, dtype=int) if D_new else []
+    Dp_new = np.prod(D_new, axis=1, dtype=np.int64) if D_new else []
     struct_new = struct._replace(t=tuple(t_new), D=tuple(D_new), s=tuple(s_eff), size=sum(Dp_new))
     slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(Dp_new), Dp_new, D_new))
     return struct_new, slices_new, meta_mrg, t_in, D_in
@@ -450,7 +450,7 @@ def _meta_unfuse_hard(config, struct, slices, axes, hfs):
     meta = sorted(meta, key=lambda x: x[0])
     tnew = tuple(x[0] for x in meta)
     Dnew = tuple(x[1] for x in meta)
-    Dpnew = tuple(np.prod(np.array(Dnew, dtype=int).reshape(len(Dnew), len(snew)), axis=1, dtype=int))
+    Dpnew = tuple(np.prod(np.array(Dnew, dtype=np.int64).reshape(len(Dnew), len(snew)), axis=1, dtype=np.int64))
     struct_new = struct._replace(s=tuple(snew), t=tnew, D=Dnew, size=sum(Dpnew))
     slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(Dpnew), Dpnew, Dnew))
     meta = tuple((x.slcs[0], *y[2:]) for x, y in zip(slices_new, meta))
@@ -650,13 +650,13 @@ def _embed_tensor(a, legs, legs_new):
 def _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, t_out, s_out):
     """ Combine effective charges and dimensions from a list of charges and dimensions for a few legs. """
     comb_t = tuple(product(*t_in))
-    comb_t = np.array(comb_t, dtype=int).reshape((len(comb_t), len(s_in), sym.NSYM))
+    comb_t = np.array(comb_t, dtype=np.int64).reshape((len(comb_t), len(s_in), sym.NSYM))
     comb_D = tuple(product(*D_in))
-    comb_D = np.array(comb_D, dtype=int).reshape((len(comb_D), len(s_in)))
+    comb_D = np.array(comb_D, dtype=np.int64).reshape((len(comb_D), len(s_in)))
     teff = sym.fuse(comb_t, s_in, s_out)
-    ind = np.array([ii for ii, te in enumerate(teff) if tuple(te.flat) in t_out], dtype=int)
+    ind = np.array([ii for ii, te in enumerate(teff) if tuple(te.flat) in t_out], dtype=np.int64)
     comb_D, comb_t, teff = comb_D[ind], comb_t[ind], teff[ind]
-    Deff = tuple(np.prod(comb_D, axis=1, dtype=int))
+    Deff = tuple(np.prod(comb_D, axis=1, dtype=np.int64))
     Dlegs = tuple(tuple(x.flat) for x in comb_D)
     teff = tuple(tuple(x.flat) for x in teff)
     tlegs = tuple(tuple(x.flat) for x in comb_t)
