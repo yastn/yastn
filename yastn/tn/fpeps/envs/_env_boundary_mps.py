@@ -22,7 +22,7 @@ from .._gates_auxiliary import apply_gate_onsite
 
 
 class EnvWindow:
-    """ EnvWindow class for finite PEPS contraction. """
+    """ EnvWindow class for expectation values within PEPS. """
 
     def __init__(self, env_ctm, xrange, yrange):
         self.psi = env_ctm.psi
@@ -59,7 +59,7 @@ class EnvWindow:
         self['l', li][0] = env_ctm[ti, li].tl.add_leg(axis=2)
         self['l', li][Nx + 1] = env_ctm[bi, li].bl.add_leg(axis=0)
         self['r', ri][0] = env_ctm[ti, ri].tr.add_leg(axis=0)
-        self['r', ri][Nx + 1] = env_ctm[bi, ri].br.add_leg(axis=0)
+        self['r', ri][Nx + 1] = env_ctm[bi, ri].br.add_leg(axis=2)
 
         for ind in range(Nx + 2):
             self['l', li][ind] = self['l', li][ind].transpose(axes=(2, 1, 0))
@@ -76,16 +76,16 @@ class EnvWindow:
             Ny = self.yrange[1] - self.yrange[0]
             op = mps.Mpo(N = Ny + 2)
             for ind, ny in enumerate(range(*self.yrange), start=1):
-                op.A[ind] = self.psi[(n, ny)].transpose(axes=(1, 2, 3, 0))
-            op.A[0] = self.env_ctm[(n, self.yrange[0])].l
-            op.A[Ny + 1] = self.env_ctm[(n, self.yrange[1]-1)].r
+                op.A[ind] = self.psi[n, ny].transpose(axes=(1, 2, 3, 0))
+            op.A[0] = self.env_ctm[n, self.yrange[0]].l.add_leg(axis=0)
+            op.A[Ny + 1] = self.env_ctm[n, self.yrange[1] - 1].r.add_leg(axis=3).transpose(axes=(1, 2, 3, 0))
         elif dirn == 'v':
             Nx = self.xrange[1] - self.xrange[0]
             op = mps.Mpo(N = Nx + 2)
             for ind, nx in enumerate(range(*self.xrange), start=1):
-                op.A[ind] = self.psi[(nx, n)].transpose(axes=(0, 3, 2, 1))
-            op.A[0] = self.env_ctm[(n, self.yrange[0])].t
-            op.A[Nx + 1] = self.env_ctm[(n, self.yrange[1]-1)].b
+                op.A[ind] = self.psi[nx, n].transpose(axes=(0, 3, 2, 1))
+            op.A[0] = self.env_ctm[self.xrange[0], n].t.add_leg(axis=0).transpose(axes=(0, 3, 2, 1))
+            op.A[Nx + 1] = self.env_ctm[self.xrange[1] - 1, n].b.add_leg(axis=3).transpose(axes=(1, 0, 3, 2))
         return op
 
 
@@ -301,7 +301,7 @@ class EnvBoundaryMps:
                 assert abs(sum(prob) - 1) < 1e-12
                 rand = rands[count]
                 ind = sum(apr < rand for apr in accumulate(prob))
-                out[(nx, ny)] = ind
+                out[nx, ny] = ind
                 dpt.top = apply_gate_onsite(dpt.top, loc_projectors[ind])
                 Os[nx] = dpt  # updated with the new collapse
                 env.update_env_(nx, to='last')
