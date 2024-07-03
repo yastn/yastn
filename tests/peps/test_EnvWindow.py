@@ -34,32 +34,43 @@ def test_window_shapes():
     """ Initialize a product PEPS and perform a set of measurment. """
 
     # initialized PEPS with mixed bond dimensions
-    geometry = fpeps.SquareLattice(dims=(2, 3), boundary='infinite')
+    geometry = fpeps.SquareLattice(dims=(2, 3))  # boundary='infinite'
     psi = fpeps.Peps(geometry)
-    psi[0, 0] = yastn.rand(cfg, s=(-1, 1, 1, -1, 1), D=(2, 3, 4, 5, 2))
-    psi[1, 0] = yastn.rand(cfg, s=(-1, 1, 1, -1, 1), D=(4, 1, 2, 4, 2))
-    psi[0, 1] = yastn.rand(cfg, s=(-1, 1, 1, -1, 1), D=(3, 5, 5, 2, 2))
-    psi[1, 1] = yastn.rand(cfg, s=(-1, 1, 1, -1, 1), D=(5, 4, 3, 1, 2))
-    psi[0, 2] = yastn.rand(cfg, s=(-1, 1, 1, -1, 1), D=(2, 2, 3, 3, 2))
-    psi[1, 2] = yastn.rand(cfg, s=(-1, 1, 1, -1, 1), D=(3, 1, 2, 1, 2))
-
-    opts_svd = {'D_total': 10, 'tol': 1e-10}
-    env_ctm = fpeps.EnvCTM(psi, init='rand')  # in the product state no need for update
-    env_ctm.update_(opts_svd=opts_svd)
-
-    env = fpeps.EnvWindow(env_ctm, xrange=(0, 1), yrange=(0, 6))
-    env['l', 0]
-
-
-    # tv = env.transfer_mpo(2, dirn='v')
-    # th = env.transfer_mpo(2, dirn='h')
-
-    # print(len(tv))
-    # for i in range(len(tv)):
-    #     print(tv[i])
-    # print(len(th))
-    # for i in range(len(th)):
-    #     print(th[i])
+    #
+    for sphys, Dphys in [[(), ()], [(1,), (2,)]]:
+        # sphys, Dphys = (), () gives single-layer PEPS
+        # sphys, Dphys = (1,), (2,) gives double-layer PEPS
+        s = (-1, 1, 1, -1) + sphys
+        psi[0, 0] = yastn.rand(cfg, s=s, D=(2, 3, 4, 5) + Dphys)
+        psi[1, 0] = yastn.rand(cfg, s=s, D=(4, 6, 2, 4) + Dphys)
+        psi[0, 1] = yastn.rand(cfg, s=s, D=(3, 5, 5, 2) + Dphys)
+        psi[1, 1] = yastn.rand(cfg, s=s, D=(5, 4, 3, 6) + Dphys)
+        psi[0, 2] = yastn.rand(cfg, s=s, D=(2, 2, 3, 3) + Dphys)
+        psi[1, 2] = yastn.rand(cfg, s=s, D=(3, 6, 2, 6) + Dphys)
+        #
+        opts_svd = {'D_total': 20, 'tol': 1e-10}
+        env_ctm = fpeps.EnvCTM(psi, init='rand')
+        #
+        for _ in range(1):
+            env_ctm.update_(opts_svd=opts_svd)
+        #
+        #  test contractions of < mps | mpo | mps > in different configurations
+        #
+        for ix in [0, 1, 2]:
+            for yrange in [(0, 5), (1, 3), (2, 6)]:
+                env = fpeps.EnvWindow(env_ctm, xrange=(ix, ix + 1), yrange=yrange)
+                top = env['t', ix]
+                oh = env.transfer_mpo(ix, dirn='h')
+                btm = env['b', ix]
+                mps.vdot(btm, oh, top)
+        #
+        for iy in [0, 1, 2]:
+            for xrange in [(0, 5), (1, 3), (2, 6)]:
+                env = fpeps.EnvWindow(env_ctm, xrange=xrange, yrange=(iy, iy + 1))
+                left = env['l', iy]
+                ov = env.transfer_mpo(iy, dirn='v')
+                right = env['r', iy]
+                mps.vdot(right, ov, left)
 
 
 def test_window():
