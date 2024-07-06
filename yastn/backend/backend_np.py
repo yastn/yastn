@@ -134,7 +134,7 @@ def expm(x):
 
 
 def first_element(x):
-    return x.flat[0]
+    return x.ravel()[0]
 
 
 def item(x):

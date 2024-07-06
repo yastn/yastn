@@ -45,8 +45,8 @@ def _test_tD_consistency(struct):
     tset = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), len(struct.s), len(struct.n)))
     Dset = np.array(struct.D, dtype=np.int64).reshape((len(struct.D), len(struct.s)))
     for i in range(len(struct.s)):
-        ti = [tuple(x.flat) for x in tset[:, i, :].reshape(len(tset), len(struct.n))]
-        Di = Dset[:, i].reshape(-1)
+        ti = [tuple(x) for x in tset[:, i, :].reshape(len(tset), len(struct.n)).tolist()]
+        Di = Dset[:, i].tolist()
         tDi = list(zip(ti, Di))
         if len(set(ti)) != len(set(tDi)):
             raise YastnError('Inconsist assigment of bond dimension to some charge.')
@@ -174,7 +174,7 @@ def _get_tD_legs(struct):
     """ different views on struct.t and struct.D """
     tset = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), len(struct.s), len(struct.n)))
     Dset = np.array(struct.D, dtype=np.int64).reshape((len(struct.t), len(struct.s)))
-    tD_legs = [sorted(set((tuple(t.flat), D) for t, D in zip(tset[:, n, :], Dset[:, n]))) for n in range(len(struct.s))]
+    tD_legs = [sorted(set((tuple(t), D) for t, D in zip(tset[:, n, :].tolist(), Dset[:, n].tolist()))) for n in range(len(struct.s))]
     tD_dict = [dict(tD) for tD in tD_legs]
     if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
         raise YastnError('Bond dimensions related to some charge are not consistent.')
