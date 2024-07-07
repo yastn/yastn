@@ -77,6 +77,8 @@ def _transpose_and_merge(config, data, order, struct, slices, meta_mrg, inds=Non
 def _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
     """ Assumes C ordering on backend reshape """
     low = 0
+    if Dsize in (0, 1):
+        return True
     for _, slo, _, _, _ in meta_mrg:
         if slo[0] != low:
             return False
@@ -241,6 +243,8 @@ def fuse_legs(a, axes, mode=None) -> yastn.Tensor:
     order = tuple(_flatten(axes))
     _test_axes_all(a, order)
     axes = tuple(_clear_axes(*axes))
+    if any(len(x) == 0 for x in axes):
+        raise YastnError(f'Empty axis in {axes=}')
 
     if mode == 'meta':
         mfs = []
@@ -295,9 +299,11 @@ def _meta_fuse_hard(config, struct, slices, axes):
             lls.append(_LegSlices(t, D, dec))
 
     teff_split = (tuple(map(tuple, x)) for x in teff.tolist())
-    told_split = zip(*[tset[:, a, :].reshape(nblocks, len(a) * nsym).tolist() for a in axes])
-    told_split = (tuple(map(tuple, x)) for x in told_split)
-    # told_split = [tuple(tuple(x[a, :].flat) for a in axes) for x in tset]
+    if len(axes) > 0:
+        told_split = zip(*[tset[:, a, :].reshape(nblocks, len(a) * nsym).tolist() for a in axes])
+        told_split = (tuple(map(tuple, x)) for x in told_split)
+    else:
+        told_split = struct.t
     teff = map(tuple, teff.reshape(nblocks, len(axes) * nsym).tolist())
 
     smeta = sorted((tes, tn, tos, slo.slcs[0], Do) for tes, tn, tos, slo, Do

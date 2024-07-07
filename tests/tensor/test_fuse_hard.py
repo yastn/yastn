@@ -97,8 +97,34 @@ class FusionSyntax(unittest.TestCase):
         assert yastn.norm(a - a_0) < tol
 
 
+def test_hard_corner_cases():
+    a = yastn.Tensor(config=config_U1, s=(-1, 1, 1, -1))
+    b = a.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
+    c = b.unfuse_legs(axes=0)
+    assert (c - a).norm() < tol
+    assert abs(b.norm() - a.norm()) < tol
+    assert b.ndim == 2
+
+    a.set_block(ts=(1, 1, 1, 1), Ds=(1, 1, 1, 1), val='rand')
+    d = a.trace(axes=((0, 1), (2, 3)))
+    e = d.fuse_legs(axes=(), mode='hard')
+    f = e.unfuse_legs(axes=())
+    assert abs(d.item() - e.item()) < tol
+    assert abs(d - f).norm() < tol
+
+    k = yastn.Tensor(config=config_U1, s=())
+    l = k.fuse_legs(axes=(), mode='hard')
+    m = l.unfuse_legs(axes=())
+    assert (k - m).norm() < tol
+    assert (k - l).norm() < tol
+
+    with pytest.raises(yastn.YastnError):
+        a.fuse_legs(axes=((0, 1), (2, 3), ()))
+        # Empty axis in axes=((0, 1), (2, 3), ())
+
+
 def test_hard_split():
-    a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
+    a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1),
                   t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                   D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))
 
@@ -460,5 +486,6 @@ if __name__ == '__main__':
     test_fuse_mix()
     test_auxliary_merging_functions()
     test_initialize_eye()
+    test_hard_corner_cases()
     # test_transpose_and_merge_backward()
     # test_unmerge_backward()

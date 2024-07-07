@@ -15,7 +15,7 @@
 """ Contractions of yastn tensors """
 from __future__ import annotations
 from functools import lru_cache
-from itertools import groupby
+from itertools import groupby, accumulate
 import numpy as np
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes, _flatten
 from ._tests import YastnError, _test_can_be_combined, _test_axes_match
@@ -133,7 +133,7 @@ def _meta_tensordot(config, struct_a, slices_a, struct_b, slices_b):
     t_c = tuple(x[0] for x in meta)
     D_c = tuple(x[1] for x in meta)
     Dp_c = tuple(D[0] * D[1] for D in D_c)
-    slices_c = tuple( _slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(Dp_c), Dp_c, D_c))
+    slices_c = tuple( _slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_c), Dp_c, D_c))
     meta = tuple((sl.slcs[0], *mt[1:]) for sl, mt in zip(slices_c, meta))
     s_c = (struct_a.s[0], struct_b.s[1])
     struct_c = _struct(s=s_c, n=n_c, t=t_c, D=D_c, size=sum(Dp_c))
@@ -218,7 +218,7 @@ def _meta_broadcast(b_struct, b_slices, a_struct, a_slices, axis):
         c_t = tuple(mt[0] for mt in meta)
         c_D = tuple(mt[2] for mt in meta)
         c_Dp = tuple(mt[3] for mt in meta)
-        c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, c_D))
+        c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
         c_struct = b_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
     else:
         c_struct = b_struct
@@ -291,7 +291,7 @@ def _meta_mask(a_struct, a_slices, a_isdiag, b_struct, b_slices, Dbnew, axis):
         c_D = tuple(mt[2][:axis] + (mt[4],) + mt[2][axis + 1:] for mt in meta)
         c_Dp = tuple(np.prod(c_D, axis=1)) if len(c_D) > 0 else ()
 
-    c_slices = tuple(_slc(((stop - dp, stop),), ds, dp)  for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, c_D))
+    c_slices = tuple(_slc(((stop - dp, stop),), ds, dp)  for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
     c_struct = a_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
     meta = tuple((sln.slcs[0], sla, Da, slb) for (_, sla, Da, slb, _), sln in zip(meta, c_slices))
     return meta, c_struct, c_slices
@@ -337,8 +337,8 @@ def vdot(a, b, conj=(1, 0)) -> number:
                 ia += 1
             else:
                 ib += 1
-        sla = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpa), Dpa))
-        slb = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(Dpb), Dpb))
+        sla = tuple((stop - dp, stop) for stop, dp in zip(accumulate(Dpa), Dpa))
+        slb = tuple((stop - dp, stop) for stop, dp in zip(accumulate(Dpb), Dpb))
         struct_a = a.struct._replace(t=tuple(ta), D=tuple(Da), size=sum(Dpa))
         struct_b = b.struct._replace(t=tuple(tb), D=tuple(Db), size=sum(Dpb))
         slices_a = tuple(_slc((x,), y, z) for x, y, z in zip(sla, Da, Dpa))
