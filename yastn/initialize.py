@@ -474,7 +474,7 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
     meta_new = tuple(sorted(meta_new.items()))
     c_t = tuple(t for t, _ in meta_new)
     c_D = tuple(D for _, D in meta_new)
-    c_Dp = tuple(np.prod(c_D, axis=1)) if len(c_D) > 0 else ()
+    c_Dp = np.prod(c_D, axis=1).tolist() if len(c_D) > 0 else ()
     c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
     c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, size=sum(c_Dp))
     meta_new = tuple((x, y, z.slcs[0]) for x, y, z in zip(c_t, c_D, c_slices))

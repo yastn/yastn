@@ -250,13 +250,13 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     UD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
     SD = tuple((dm, dm) for dm in minD)
     VD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
-    UDp = tuple(np.prod(UD, axis=1))
+    UDp = np.prod(UD, axis=1).tolist()
     Usl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(UDp), UDp, UD))
 
     meta = tuple(zip(slices, struct.D, Usl, UD, St, Vt, VD))
     St, Vt, SD, VD = zip(*sorted(zip(St, Vt, SD, VD))) if len(St) > 0 else ((), (), (), ())
     SDp = tuple(dd[0] for dd in SD)
-    VDp = tuple(np.prod(VD, axis=1))
+    VDp = np.prod(VD, axis=1).tolist()
     Ssl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(SDp), SDp, SD))
     Vsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(VDp), VDp, VD))
     Sdict = {x: y.slcs[0] for x, y in zip(St, Ssl)}
@@ -479,13 +479,13 @@ def _meta_qr(config, struct, slices, sQ):
     Rt = tuple(y + x[nsym:] for y, x in zip(t_con, struct.t))
     QD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
     RD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
-    QDp = tuple(np.prod(QD, axis=1))
+    QDp = np.prod(QD, axis=1).tolist()
     Qsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(QDp), QDp, QD))
 
     meta = tuple(zip(slices, struct.D, Qsl, QD, Rt, RD))
 
     Rt, RD = zip(*sorted(zip(Rt, RD))) if len(Rt) > 0 else ((), ())
-    RDp = tuple(np.prod(RD, axis=1))
+    RDp = np.prod(RD, axis=1).tolist()
     Rsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(RDp), RDp, RD))
     Rdict = {x: y.slcs[0] for x, y in zip(Rt, Rsl)}
 

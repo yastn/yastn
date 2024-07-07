@@ -87,8 +87,8 @@ class Leg:
                 raise YastnError('Number of provided charges and bond dimensions do not match sym.NSYM')
             #
             t = np.array(t, dtype=np.int64)
-            newt = [tuple(x) for x in self.sym.fuse(t.reshape(lD, 1, nsym), (self.s,), self.s).tolist()]
-            oldt = [tuple(x) for x in t.reshape(lD, nsym).tolist()]
+            newt = list(map(tuple, self.sym.fuse(t.reshape(lD, 1, nsym), (self.s,), self.s).tolist()))
+            oldt = list(map(tuple, t.reshape(lD, nsym).tolist()))
             D = np.array(D, dtype=np.int64).reshape(lD).tolist()
             if oldt != newt:
                 raise YastnError('Provided charges are outside of the natural range for specified symmetry.')
@@ -228,11 +228,11 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
         comb_t = list(_flatten(comb_t))
         comb_t = np.array(comb_t, dtype=np.int64).reshape((lcomb_t, len(ss), len(n)))
         ts = config.sym.fuse(comb_t, ss, -s)
+
     if nonnegative:
         ts = ts[np.all(ts >= 0, axis=1)]
 
-
-    uts = sorted(set(tuple(x) for x in ts.tolist()))
+    uts = sorted(set(map(tuple, ts.tolist())))
     ts = np.array(uts, dtype=np.int64)
 
     distance = np.linalg.norm((ts - an.reshape(1, len(n))) @ spanning_vectors.T, axis=1)
