@@ -13,8 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 """ Testing and controls. """
+from functools import reduce
+from operator import mul
 import numpy as np
-from ._auxliary import _flatten, _unpack_axes, _slc, _struct
+from ._auxliary import _flatten, _unpack_axes, _struct
 
 __all__ = ['are_independent', 'is_consistent']
 
@@ -45,7 +47,7 @@ def _test_tD_consistency(struct):
     tset = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), len(struct.s), len(struct.n)))
     Dset = np.array(struct.D, dtype=np.int64).reshape((len(struct.D), len(struct.s)))
     for i in range(len(struct.s)):
-        ti = [tuple(x) for x in tset[:, i, :].reshape(len(tset), len(struct.n)).tolist()]
+        ti = list(map(tuple, tset[:, i, :].reshape(len(tset), len(struct.n)).tolist()))
         Di = Dset[:, i].tolist()
         tDi = list(zip(ti, Di))
         if len(set(ti)) != len(set(tDi)):
@@ -124,7 +126,7 @@ def is_consistent(a):
     Dtot = 0
     for slc in a.slices:
         Dtot += slc.Dp
-        assert slc.D[0] == slc.Dp if a.isdiag else np.prod(slc.D, dtype=np.int64) == slc.Dp
+        assert slc.D[0] == slc.Dp if a.isdiag else reduce(mul, slc.D, 1) == slc.Dp
 
     assert a.config.backend.get_shape(a._data) == (Dtot,)
     assert a.struct.size == Dtot
@@ -172,12 +174,13 @@ def _test_struct_types(struct):
 
 def _get_tD_legs(struct):
     """ different views on struct.t and struct.D """
-    tset = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), len(struct.s), len(struct.n)))
-    Dset = np.array(struct.D, dtype=np.int64).reshape((len(struct.t), len(struct.s)))
-    tD_legs = [sorted(set((tuple(t), D) for t, D in zip(tset[:, n, :].tolist(), Dset[:, n].tolist()))) for n in range(len(struct.s))]
+    lt, ndim_n, nsym = len(struct.t), len(struct.s), len(struct.n)
+    tset = np.array(struct.t, dtype=np.int64).reshape(lt, ndim_n, nsym)
+    Dset = np.array(struct.D, dtype=np.int64).reshape(lt, ndim_n)
+    tD_legs = [sorted(set((tuple(t), D) for t, D in zip(tset[:, n, :].tolist(), Dset[:, n].tolist()))) for n in range(ndim_n)]
     tD_dict = [dict(tD) for tD in tD_legs]
     if any(len(x) != len(y) for x, y in zip(tD_legs, tD_dict)):
         raise YastnError('Bond dimensions related to some charge are not consistent.')
     tlegs = [tuple(tD.keys()) for tD in tD_dict]
     Dlegs = [tuple(tD.values()) for tD in tD_dict]
-    return tlegs, Dlegs, tD_dict, tset, Dset
+    return tlegs, Dlegs, tD_dict

@@ -114,8 +114,9 @@ def conj(a) -> yastn.Tensor:
 
     Follows the behavior of the backend.conj() when it comes to creating a new copy of the data.
     """
-    an = np.array(a.struct.n, dtype=np.int64).reshape((1, 1, -1))
-    newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=np.int64), -1)[0])
+    nsym = a.config.sym.NSYM
+    an = np.array(a.struct.n, dtype=np.int64).reshape((1, 1, nsym))
+    newn = tuple(a.config.sym.fuse(an, (1,), -1).reshape(nsym).tolist())
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)
@@ -142,8 +143,9 @@ def flip_signature(a) -> yastn.Tensor:
 
     Creates a shallow copy of the data.
     """
-    an = np.array(a.struct.n, dtype=np.int64).reshape((1, 1, -1))
-    newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=np.int64), -1)[0])
+    nsym = a.config.sym.NSYM
+    an = np.array(a.struct.n, dtype=np.int64).reshape((1, 1, nsym))
+    newn = tuple(a.config.sym.fuse(an, (1,), -1).reshape(nsym).tolist())
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)

@@ -122,7 +122,7 @@ def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym):
 def _meta_tensordot(config, struct_a, slices_a, struct_b, slices_b):
     nsym = len(struct_a.n)
     n_c = np.array(struct_a.n + struct_b.n, dtype=np.int64).reshape((1, 2, nsym))
-    n_c = tuple(config.sym.fuse(n_c, (1, 1), 1)[0])
+    n_c = tuple(config.sym.fuse(n_c, (1, 1), 1).reshape(nsym).tolist())
     struct_a_resorted = sorted(((t[nsym:], t, D, sl.slcs[0]) for t, D, sl in zip(struct_a.t, struct_a.D, slices_a)))
     struct_b_resorted = ((t[:nsym], t, D, sl.slcs[0]) for t, D, sl in zip(struct_b.t, struct_b.D, slices_b))
     meta = []
@@ -289,7 +289,7 @@ def _meta_mask(a_struct, a_slices, a_isdiag, b_struct, b_slices, Dbnew, axis):
         c_Dp = tuple(x[0] for x in c_D)
     else:
         c_D = tuple(mt[2][:axis] + (mt[4],) + mt[2][axis + 1:] for mt in meta)
-        c_Dp = tuple(np.prod(c_D, axis=1)) if len(c_D) > 0 else ()
+        c_Dp = np.prod(c_D, axis=1).tolist() if len(c_D) > 0 else ()
 
     c_slices = tuple(_slc(((stop - dp, stop),), ds, dp)  for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
     c_struct = a_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
@@ -353,8 +353,8 @@ def vdot(a, b, conj=(1, 0)) -> number:
         raise YastnError('Bond dimensions do not match.')
 
     c_n = np.array(a.struct.n + b.struct.n, dtype=np.int64).reshape((1, 2, a.config.sym.NSYM))
-    c_n = a.config.sym.fuse(c_n, (1, 1), 1)
-    if len(struct_a.D) > 0 and np.all(c_n == 0):
+    c_n = tuple(a.config.sym.fuse(c_n, (1, 1), 1).ravel().tolist())
+    if len(struct_a.D) > 0 and c_n == a.config.sym.zero():
         return a.config.backend.vdot(Adata, Bdata)
     return a.zero_of_dtype()
 
@@ -417,15 +417,15 @@ def _meta_trace(struct, slices, in1, in2, out):
     pD2 = np.prod(D2, axis=1, dtype=np.int64).reshape(lt, 1)
     ind = (np.all(t1 == t2, axis=1)).nonzero()[0]
     Drsh = np.hstack([pD1, pD2, Dn])
-    t12 = tuple(tuple(x) for x in t1[ind].tolist())
-    tn = tuple(tuple(x) for x in tn[ind].tolist())
-    D1 = tuple(tuple(x) for x in D1[ind].tolist())
-    D2 = tuple(tuple(x) for x in D2[ind].tolist())
-    Dn = tuple(tuple(x) for x in Dn[ind].tolist())
+    t12 = tuple(map(tuple, t1[ind].tolist()))
+    tn = tuple(map(tuple, tn[ind].tolist()))
+    D1 = tuple(map(tuple, D1[ind].tolist()))
+    D2 = tuple(map(tuple, D2[ind].tolist()))
+    Dn = tuple(map(tuple, Dn[ind].tolist()))
     Dnp = Dnp[ind].tolist()
     slo = tuple(slices[n].slcs[0] for n in ind)
     Do = tuple(struct.D[n] for n in ind)
-    Drsh = tuple(tuple(x) for x in Drsh[ind].tolist())
+    Drsh = tuple(map(tuple, Drsh[ind].tolist()))
 
     meta = tuple(sorted(zip(tn, Dn, Dnp, t12, slo, Do, Drsh), key=lambda x: x[0]))
 
@@ -501,7 +501,7 @@ def _meta_swap_gate(t, mf, ndim, nsym, axes, fss):
         t1 = np.sum(tset[:, l1, :], axis=1) % 2
         t2 = np.sum(tset[:, l2, :], axis=1) % 2
         tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)
-    return tuple(tp % 2)
+    return tuple((tp % 2).tolist())
 
 
 @lru_cache(maxsize=1024)
@@ -514,7 +514,8 @@ def _meta_swap_gate_charge(t, charge, mf, ndim, nsym, axes, fss):
 
     charge = np.array(charge, dtype=np.int64).reshape(1, nsym) % 2
     tp = np.sum(tset[:, axes, :], axis=1) % 2
-    return tuple(np.sum(tp[:, fss] * charge[:, fss], axis=1) % 2)
+    fp = np.sum(tp[:, fss] * charge[:, fss], axis=1) % 2
+    return tuple(fp.tolist())
 
 
 def einsum(subscripts, *operands, order='Alphabetic') -> yastn.Tensor:

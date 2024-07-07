@@ -350,14 +350,14 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
             nax = (ax,)
         for i in nax:
             tseta = tset[:, i, :].reshape(len(tset), a.config.sym.NSYM).tolist()
-            Dseta = Dset[:, i].ravel().tolist()
+            Dseta = Dset[:, i].tolist()
             tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
             tDn = dict(sorted(tDn.items()))
             t, D = tuple(tDn.keys()), tuple(tDn.values())
             legs_ax.append(Leg(a.config, s=a.struct.s[i], t=t, D=D, legs=(a.hfs[i],)))
         if not native and mf[0] > 1:
             tseta = tset[:, nax, :].reshape(len(tset), len(nax) * a.config.sym.NSYM).tolist()
-            Dseta = np.prod(Dset[:, nax], axis=1, dtype=np.int64).ravel().tolist()
+            Dseta = np.prod(Dset[:, nax], axis=1, dtype=np.int64).tolist()
             tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
             tDn = dict(sorted(tDn.items()))
             t, D = tuple(tDn.keys()), tuple(tDn.values())
