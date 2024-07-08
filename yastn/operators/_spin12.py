@@ -94,7 +94,7 @@ class Spin12(meta_operators):
             x.set_block(ts=(1, 0), Ds=(1, 1), val=1)
             x.set_block(ts=(0, 1), Ds=(1, 1), val=1)
         if self._sym == 'U1':
-            raise YastnError('Cannot define sigma_x operator for U(1) symmetry.')
+            raise YastnError('Cannot define sigma_x operator for U1 symmetry.')
         return x
 
     def y(self) -> yastn.Tensor:
@@ -107,7 +107,7 @@ class Spin12(meta_operators):
             y.set_block(ts=(0, 1), Ds=(1, 1), val=-1j)
             y.set_block(ts=(1, 0), Ds=(1, 1), val=1j)
         if self._sym == 'U1':
-            raise YastnError('Cannot define sigma_y operator for U(1) symmetry.')
+            raise YastnError('Cannot define sigma_y operator for U1 symmetry.')
         return y
 
     def iy(self) -> yastn.Tensor:
@@ -120,7 +120,7 @@ class Spin12(meta_operators):
             y.set_block(ts=(0, 1), Ds=(1, 1), val=1)
             y.set_block(ts=(1, 0), Ds=(1, 1), val=-1)
         if self._sym == 'U1':
-            raise YastnError('Cannot define sigma_y operator for U(1) symmetry.')
+            raise YastnError('Cannot define sigma_y operator for U1 symmetry.')
         return y
 
     def z(self) -> yastn.Tensor:

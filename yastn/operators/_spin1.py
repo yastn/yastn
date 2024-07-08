@@ -92,7 +92,7 @@ class Spin1(meta_operators):
             sx = Tensor(config=self.config, s=self.s)
             sx.set_block(val=[[0, isq2, 0], [isq2, 0, isq2], [0, isq2, 0]], Ds=(3, 3))
         if self._sym in ('Z3', 'U1'):
-            raise YastnError('Cannot define sx operator for U(1) or Z3 symmetry.')
+            raise YastnError('Cannot define sx operator for U1 or Z3 symmetry.')
         return sx
 
     def sy(self) -> yastn.Tensor:
@@ -102,7 +102,7 @@ class Spin1(meta_operators):
             sy = Tensor(config=self.config, s=self.s, dtype='complex128')
             sy.set_block(val=[[0, -iisq2, 0], [iisq2, 0, -iisq2], [0, iisq2, 0]], Ds=(3, 3))
         if self._sym in ('Z3', 'U1'):
-            raise YastnError('Cannot define sy operator for U(1) or Z3 symmetry.')
+            raise YastnError('Cannot define sy operator for U1 or Z3 symmetry.')
         return sy
 
     def isy(self) -> yastn.Tensor:
@@ -112,7 +112,7 @@ class Spin1(meta_operators):
             sy = Tensor(config=self.config, s=self.s)
             sy.set_block(val=[[0, isq2, 0], [-isq2, 0, isq2], [0, -isq2, 0]], Ds=(3, 3))
         if self._sym in ('Z3', 'U1'):
-            raise YastnError('Cannot define sy operator for U(1) or Z3 symmetry.')
+            raise YastnError('Cannot define sy operator for U1 or Z3 symmetry.')
         return sy
 
     def sz(self) -> yastn.Tensor:

@@ -209,7 +209,7 @@ def dmrg_XX_model_Z2(config=None, tol=1e-6):
 
 def dmrg_XX_model_U1(config=None, tol=1e-6):
     """
-    Initialize random MPS of U(1) tensors and tests _dmrg vs known results.
+    Initialize random MPS of U1 tensors and tests _dmrg vs known results.
     """
     opts_config = {} if config is None else \
         {'backend': config.backend,
@@ -245,7 +245,7 @@ def dmrg_XX_model_U1(config=None, tol=1e-6):
 
 def test_dmrg_XX_model_U1_sum_of_Mpos(config=cfg, tol=1e-6):
     """
-    Initialize random MPS of U(1) tensors and tests _dmrg vs known results.
+    Initialize random MPS of U1 tensors and tests _dmrg vs known results.
     """
     opts_config = {} if config is None else \
         {'backend': config.backend,
@@ -284,7 +284,7 @@ def test_dmrg_XX_model_U1_sum_of_Mpos(config=cfg, tol=1e-6):
 
 def test_dmrg_Ising_PBC_Z2(config=cfg, tol=1e-4):
     """
-    Initialize random MPS of U(1) tensors and tests _dmrg vs known results.
+    Initialize random MPS of U1 tensors and tests _dmrg vs known results.
     """
     opts_config = {} if config is None else \
         {'backend': config.backend,

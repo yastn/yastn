@@ -42,7 +42,7 @@ def test_symmetry():
     #
     # U1
     assert sym_U1.NSYM == 1
-    assert str(sym_U1) == 'U(1)'
+    assert str(sym_U1) == 'U1'
     assert sym_U1.zero() == (0,)
     charges = [[[1], [-1], [1]],
                [[1], [0], [-1]],
@@ -84,7 +84,7 @@ def test_symmetry():
     #
     # U1xU1
     assert sym_U1xU1.NSYM == 2
-    assert str(sym_U1xU1) == 'U(1)xU(1)'
+    assert str(sym_U1xU1) == 'U1xU1'
     assert sym_U1xU1.zero() == (0, 0)
     charges = [[[1, 0], [-1, 1], [1, -2]],
                [[1, 2], [0, -2], [-1, 0]],
@@ -98,7 +98,7 @@ def test_symmetry():
     #
     # U1xU1
     assert sym_U1xU1xZ2.NSYM == 3
-    assert str(sym_U1xU1xZ2) == 'U(1)xU(1)xZ2'
+    assert str(sym_U1xU1xZ2) == 'U1xU1xZ2'
     assert sym_U1xU1xZ2.zero() == (0, 0, 0)
     charges = [[[1, 0, 1], [-1, 1, 0], [1, -2, 1]],
                [[1, 2, 1], [0, -2, 0], [-1, 0, 1]],

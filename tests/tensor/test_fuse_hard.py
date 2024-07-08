@@ -28,7 +28,7 @@ tol = 1e-10  #pylint: disable=invalid-name
 class FusionSyntax(unittest.TestCase):
 
     def test_fuse_hard(self):
-        # define a rank-5 U(1)-symmetric tensor
+        # define a rank-5 U1-symmetric tensor
         a = yastn.rand(config=config_U1, s=(-1, 1, 1, -1, 1,),
                       t=((0, 1), (0, 1), (0, 1), (0, 1), (0, 1)),
                       D=((1, 2), (3, 4), (5, 6), (7, 8), (9, 10)))

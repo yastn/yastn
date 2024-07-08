@@ -109,10 +109,10 @@ def test_spin1():
 
     with pytest.raises(yastn.YastnError):
         _ = ops_U1.sx()
-        # Cannot define Sx operator for U(1) or Z3 symmetry.
+        # Cannot define Sx operator for U1 or Z3 symmetry.
     with pytest.raises(yastn.YastnError):
         _ = ops_Z3.sy()
-        # Cannot define Sy operator for U(1) or Z3 symmetry.
+        # Cannot define Sy operator for U1 or Z3 symmetry.
     with pytest.raises(yastn.YastnError):
         yastn.operators.Spin1('wrong symmetry')
         # For Spin1 sym should be in ('dense', 'Z3', 'U1').

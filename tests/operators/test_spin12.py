@@ -97,10 +97,10 @@ def test_spin12():
 
     with pytest.raises(yastn.YastnError):
         _ = ops_U1.x()
-        # Cannot define sigma_x operator for U(1) symmetry
+        # Cannot define sigma_x operator for U1 symmetry
     with pytest.raises(yastn.YastnError):
         _ = ops_U1.y()
-        # Cannot define sigma_y operator for U(1) symmetry
+        # Cannot define sigma_y operator for U1 symmetry
     with pytest.raises(yastn.YastnError):
         yastn.operators.Spin12('wrong symmetry')
         # For Spin12 sym should be in ('dense', 'Z2', 'U1').

@@ -24,7 +24,7 @@ tol = 1e-12  # pylint: disable=invalid-name
 
 
 def test_ncon_einsum_syntax():
-    # create a set of U(1)-symmetric tensors
+    # create a set of U1-symmetric tensors
     a = yastn.rand(config=config_U1, s=[-1, 1, -1], n=0,
                   D=((20, 10), (3, 3), (1, 1)), t=((1, 0), (1, 0), (1, 0)))
     b = yastn.rand(config=config_U1, s=[1, 1, 1], n=1,
