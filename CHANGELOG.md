@@ -212,3 +212,9 @@ v0.9
 11-2023
 - Tensor.transpose() and Tensor.T reverse th order of axes
 - make_config  accepts str for predefined symmetries
+
+06-2024
+- tag v1.0
+
+07-2024  (v1.01)
+- fix engine type consistency for numpy2.0
