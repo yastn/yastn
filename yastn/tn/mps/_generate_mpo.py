@@ -140,12 +140,14 @@ def generate_mpo_preprocessing(I, terms=None) -> GenerateMpoTemplate | tuple[Gen
         base = block(dict(enumerate(base)), common_legs=(1, 2)).drop_leg_history()
         basis.append(base)
 
-    tleft = [t1bs[0][i] for i in mapH[:, 0]]
+    tleft = [t1bs[0][i] for i in mapH[:, 0].tolist()]
 
     trans = []
     for n in I.sweep():
-        mapH0 = mapH[:, 0]
+        mapH0 = mapH[:, 0].tolist()
         mapH, rind, iind = np.unique(mapH[:, 1:], axis=0, return_index=True, return_inverse=True)
+        iind = iind.ravel().tolist()
+        rind = rind.ravel().tolist()
 
         i2bs = {t: {} for t in t2bs[n]}
         for ii, rr in enumerate(rind):
