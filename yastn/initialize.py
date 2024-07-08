@@ -308,7 +308,7 @@ def load_from_dict(config=None, d=None) -> yastn.Tensor:
     """
     if d is not None:
         c_isdiag = bool(d['isdiag'])
-        c_Dp = [x[0] for x in d['D']] if c_isdiag else np.prod(d['D'], axis=1).tolist()
+        c_Dp = [x[0] for x in d['D']] if c_isdiag else np.prod(d['D'], axis=1, dtype=np.int64).tolist()
         slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, d['D']))
         struct = _struct(s=d['s'], n=d['n'], diag=c_isdiag, t=d['t'], D=d['D'], size=sum(c_Dp))
         hfs = tuple(_Fusion(**hf) for hf in d['hfs'])
@@ -342,7 +342,7 @@ def load_from_hdf5(config, file, path) -> yastn.Tensor:
     c_s = tuple(g.get('s')[:].tolist())
     c_t = tuple(tuple(x) for x in g.get('ts')[:].tolist())
     c_D = tuple(tuple(x) for x in g.get('Ds')[:].tolist())
-    c_Dp = [x[0] for x in c_D] if c_isdiag else np.prod(c_D, axis=1).tolist()
+    c_Dp = [x[0] for x in c_D] if c_isdiag else np.prod(c_D, axis=1, dtype=np.int64).tolist()
     slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
     struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, size=sum(c_Dp))
 
@@ -474,7 +474,7 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
     meta_new = tuple(sorted(meta_new.items()))
     c_t = tuple(t for t, _ in meta_new)
     c_D = tuple(D for _, D in meta_new)
-    c_Dp = np.prod(c_D, axis=1).tolist() if len(c_D) > 0 else ()
+    c_Dp = np.prod(c_D, axis=1, dtype=np.int64).tolist() if len(c_D) > 0 else ()
     c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
     c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, size=sum(c_Dp))
     meta_new = tuple((x, y, z.slcs[0]) for x, y, z in zip(c_t, c_D, c_slices))

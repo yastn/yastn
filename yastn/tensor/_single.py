@@ -238,7 +238,7 @@ def transpose(a, axes=None) -> yastn.Tensor:
     if axes == tuple(range(a.ndim)):
         return a._replace()
     uaxes, = _unpack_axes(a.mfs, axes)
-    order = np.array(uaxes, dtype=np.intp)
+    order = np.array(uaxes, dtype=np.int64)
     mfs = tuple(a.mfs[ii] for ii in axes)
     hfs = tuple(a.hfs[ii] for ii in uaxes)
     c_s = tuple(a.struct.s[ii] for ii in uaxes)

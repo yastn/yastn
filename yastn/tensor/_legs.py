@@ -244,7 +244,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
     # backend.rand gives distribution in [-1, 1]; subjected to backend seed fixing
     samples = (config.backend.rand(D_total, dtype='float64') + 1.) / 2.
     samples = np.array(samples).reshape(D_total, 1)
-    inds = np.sum(samples > cdf, axis=1)
+    inds = np.sum(samples > cdf, axis=1, dtype=np.int64)
     for i in inds:
         Ds[i] += 1
     Ds = Ds.tolist()
@@ -343,7 +343,7 @@ def leg_union(*legs) -> yastn.Leg:
         nsym = legs[0].sym.NSYM
         t = tuple(sorted(set.union(*(set(leg.t) for leg in legs))))
         Dt = [tuple(leg[x[n * nsym : (n + 1) * nsym]] for n, leg in enumerate(new_nlegs)) for x in t]
-        D = tuple(np.prod(Dt, axis=1).tolist())
+        D = tuple(np.prod(Dt, axis=1, dtype=np.int64).tolist())
         return replace(legs[0], t=t, D=D, legs=new_nlegs)
     raise YastnError('All arguments of leg_union should have consistent fusions.')
 

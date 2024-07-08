@@ -155,12 +155,12 @@ def norm(data, p):
 
 def entropy(data, alpha, tol):
     """ von Neuman or Renyi entropy from data describing probability distribution."""
-    Snorm = np.sum(data) if len(data) > 0 else 0.
+    Snorm = np.sum(data)
     if Snorm > 0:
         data = data / Snorm
         data = data[data > tol]
         if alpha == 1:
-            return - np.sum(data * np.log2(data))
+            return -1 * np.sum(data * np.log2(data))
         return np.log2(np.sum(data ** alpha)) / (1 - alpha)
     return 0.
 
