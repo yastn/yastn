@@ -141,11 +141,13 @@ jobs:
     strategy:
       matrix:
         backend: [ np, torch ]
-        python_v: ['3.9', '3.10', '3.11']
+        python_v: ['3.9', '3.11']
         pytorch_v: [ 'none', '1.13.1', '2.0' ]
+        numpy_v: [ '1.26', '2.0' ]
         exclude:
           - backend: np
             python_v: '3.9'
+            numpy_v: '2.0'
           - backend: np
             pytorch_v: '1.13.1'
           - backend: np
@@ -155,6 +157,9 @@ jobs:
           - backend: torch
             python_v: '3.9'
             pytorch_v: '1.13.1'
+          - backend: torch
+            pytorch_v: '1.13.1'
+            numpy_v: '2.0'
       fail-fast: false
 
     # Steps represent a sequence of tasks that will be executed as part of the job
@@ -175,7 +180,9 @@ jobs:
           python-version: ${{ matrix.python_v }}
 
       - name: setup deps
-        run: pip install flake8 pylint pytest pytest-cov numpy scipy h5py tqdm;
+        run: |
+          pip install numpy==${{ matrix.numpy_v }};
+          pip install flake8 pylint pytest pytest-cov scipy h5py tqdm;
 
       - name: setup pytorch
         if: matrix.backend == 'torch'
