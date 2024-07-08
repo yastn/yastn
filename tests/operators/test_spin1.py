@@ -34,7 +34,10 @@ def test_spin1():
 
     ops_dense = yastn.operators.Spin1(sym='dense', backend=backend, default_device=default_device)
     ops_Z3 = yastn.operators.Spin1(sym='Z3', backend=backend, default_device=default_device)
-    ops_U1 = yastn.operators.Spin1(sym='U1', backend=backend, default_device=default_device)
+    # other way to initialize
+    config_U1 = yastn.make_config(sym='U1', backend=backend, default_device=default_device)
+    ops_U1 = yastn.operators.Spin1(**config_U1._asdict())
+
     rs = (False, False, True) # reverse option for to_numpy/to_dense/to_nonsymmetric
 
     assert all(ops.config.fermionic == False for ops in (ops_dense, ops_Z3, ops_U1))
@@ -114,8 +117,11 @@ def test_spin1():
         _ = ops_Z3.sy()
         # Cannot define Sy operator for U1 or Z3 symmetry.
     with pytest.raises(yastn.YastnError):
-        yastn.operators.Spin1('wrong symmetry')
+        yastn.operators.Spin1(sym='wrong symmetry')
         # For Spin1 sym should be in ('dense', 'Z3', 'U1').
+    with pytest.raises(yastn.YastnError):
+        yastn.operators.Spin1(sym='U1', fermionic=True)
+        # For Spin1 config.fermionic should be False.
     with pytest.raises(yastn.YastnError):
         ops_U1.vec_z(val=10)
         # Eigenvalues val should be in (-1, 0, 1).

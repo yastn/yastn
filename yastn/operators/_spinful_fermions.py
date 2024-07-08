@@ -20,7 +20,7 @@ from ._meta_operators import meta_operators
 class SpinfulFermions(meta_operators):
     """ Predefine operators for spinful fermions. """
 
-    def __init__(self, sym='Z2', **kwargs):
+    def __init__(self, **kwargs):
         r"""
         Generator of standard operators for local Hilbert space with two fermionic species and 4-dimensional Hilbert space.
 
@@ -45,12 +45,19 @@ class SpinfulFermions(meta_operators):
             * For :code:`'U1xU1'` the two species (spin-up and spin-down) are treated as distinguishable.
               In that case, creation and annihilation operators of the two species commute.
         """
+        if 'fermionic' not in kwargs and isinstance(kwargs['sym'], str):
+            kwargs['fermionic'] = (False, False, True) if kwargs['sym'] == 'U1xU1xZ2' else True
+        super().__init__(**kwargs)
+
+        sym = self._sym
+        fer = self.config.fermionic
+
         if sym not in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2'):
             raise YastnError("For SpinfulFermions sym should be in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2').")
-        kwargs['fermionic'] = (False, False, True) if sym == 'U1xU1xZ2' else True
-        kwargs['sym'] = sym
-        super().__init__(**kwargs)
-        self._sym = sym
+        if (sym == 'U1xU1xZ2' and fer != (False, False, True)) or \
+           (sym in ('Z2', 'U1') and fer != True) or \
+           (sym == 'U1xU1' and fer not in (True, (True, True))):
+            raise YastnError("For SpinfulFermions config.sym does not match config.fermionic.")
         self.operators = ('I', 'n', 'c', 'cp')
 
     def space(self) -> yastn.Leg:

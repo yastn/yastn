@@ -20,7 +20,7 @@ from ._meta_operators import meta_operators
 
 class Spin12(meta_operators):
     # Predefined set of Pauli operators and spin-1/2 operators.
-    def __init__(self, sym='dense', **kwargs):
+    def __init__(self, **kwargs):
         r"""
         A set of standard operators for 2-dimensional Hilbert space. Defines identity,
         :math:`S^z,\ S^x,\ S^y` operators and :math:`S^+,\ S^-` raising and lowering operators,
@@ -51,12 +51,11 @@ class Spin12(meta_operators):
 
         Default configuration sets :code:`fermionic` to :code:`False`.
         """
-        if sym not in ('dense', 'Z2', 'U1'):
-            raise YastnError("For Spin12 sym should be in ('dense', 'Z2', 'U1').")
-        kwargs['fermionic'] = False
-        kwargs['sym'] = sym
         super().__init__(**kwargs)
-        self._sym = sym
+        if self._sym not in ('dense', 'Z2', 'U1'):
+            raise YastnError("For Spin12 sym should be in ('dense', 'Z2', 'U1').")
+        if self.config.fermionic != False:
+            raise YastnError("For Spin12 config.fermionic should be False.")
         self.operators = ('I', 'x', 'y', 'iy', 'z', 'sx', 'sy', 'isy', 'sz', 'sp', 'sm')
 
     def space(self) -> yastn.Leg:

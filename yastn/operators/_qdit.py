@@ -15,7 +15,7 @@
 from __future__ import annotations
 from ..initialize import eye
 from .. import diag
-from ..tensor import Leg
+from ..tensor import YastnError, Leg
 from ._meta_operators import meta_operators
 
 class Qdit(meta_operators):
@@ -36,11 +36,12 @@ class Qdit(meta_operators):
         -----
         Default configuration sets :code:`fermionic` to :code:`False`.
         """
-        kwargs['fermionic'] = False
-        kwargs['sym'] = 'dense'
         super().__init__(**kwargs)
+        if self._sym!= 'dense':
+            raise YastnError("For Qdit sym should be 'dense'.")
+        if self.config.fermionic != False:
+            raise YastnError("For Qdit config.fermionic should be False.")
         self._d = d
-        self._sym = 'dense'
         self.operators = ('I',)
 
     def space(self, d=None) -> yastn.Leg:

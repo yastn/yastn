@@ -32,7 +32,9 @@ def test_spinless_fermions():
     default_device = config_dense.default_device
 
     ops_Z2 = yastn.operators.SpinlessFermions(sym='Z2', backend=backend, default_device=default_device)
-    ops_U1 = yastn.operators.SpinlessFermions(sym='U1', backend=backend, default_device=default_device)
+    # other way to initialize
+    config_U1 = yastn.make_config(fermionic=True, sym="U1", backend=backend, default_device=default_device)
+    ops_U1 = yastn.operators.SpinlessFermions(**config_U1._asdict())
 
     assert all(ops.config.fermionic == True for ops in (ops_Z2, ops_U1))
 
@@ -67,8 +69,11 @@ def test_spinless_fermions():
     assert all(yastn.norm(cp @ v1) < tol for cp, v1 in zip(cps, n1s))
 
     with pytest.raises(yastn.YastnError):
-        yastn.operators.SpinlessFermions('dense')
+        yastn.operators.SpinlessFermions(sym='dense')
         # For SpinlessFermions sym should be in ('Z2', 'U1').
+    with pytest.raises(yastn.YastnError):
+        yastn.operators.SpinlessFermions(sym='U1', fermionic=False)
+        # For SpinlessFermions config.fermionic should be True.
     with pytest.raises(yastn.YastnError):
         ops_U1.vec_n(val=-1)
         # Occupation val should be in (0, 1).
@@ -76,6 +81,7 @@ def test_spinless_fermions():
     d = ops_Z2.to_dict()  # dict used in mps.Generator
     (d["I"](3) - ops_Z2.I()).norm() < tol  # here 3 is a posible position in the mps
     assert all(k in d for k in ('I', 'n', 'c', 'cp'))
+
 
 
 if __name__ == '__main__':
