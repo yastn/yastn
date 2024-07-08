@@ -21,6 +21,7 @@ class meta_operators():
         r""" Common elements for all operator class. """
         self.config = make_config(**kwargs)
         self.s = (1, -1)
+        self._sym = self.config.sym.SYM_ID
 
     def random_seed(self, seed):
         """ Set the seed of random number generator in the backend. """

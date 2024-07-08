@@ -32,9 +32,11 @@ def test_spinful_fermions():
     default_device = config_dense.default_device
 
     ops_Z2 = yastn.operators.SpinfulFermions(sym='Z2', backend=backend, default_device=default_device)
-    ops_U1 = yastn.operators.SpinfulFermions(sym='U1', backend=backend, default_device=default_device)
     ops_U1xU1_ind = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', backend=backend, default_device=default_device)
     ops_U1xU1_dis = yastn.operators.SpinfulFermions(sym='U1xU1', backend=backend, default_device=default_device)
+    # other way to initialize
+    config_U1 = yastn.make_config(fermionic=True, sym="U1", backend=backend, default_device=default_device)
+    ops_U1 = yastn.operators.SpinfulFermions(**config_U1._asdict())
 
     Is = [ops_Z2.I(), ops_U1.I(), ops_U1xU1_ind.I(), ops_U1xU1_dis.I()]
     legs = [ops_Z2.space(), ops_U1.space(), ops_U1xU1_ind.space(), ops_U1xU1_dis.space()]
@@ -65,8 +67,14 @@ def test_spinful_fermions():
         assert yastn.norm(nu @ v11 - v11) < tol and yastn.norm(nd @ v11 - v11) < tol
 
     with pytest.raises(yastn.YastnError):
-        yastn.operators.SpinfulFermions('dense')
-        # For SpinlessFermions sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').
+        yastn.operators.SpinfulFermions(sym='dense')
+        # For SpinfulFermions sym should be in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2').
+    with pytest.raises(yastn.YastnError):
+        yastn.operators.SpinfulFermions(sym='U1', fermionic=False)
+        # For SpinfulFermions config.sym does not match config.fermionic.
+    with pytest.raises(yastn.YastnError):
+        yastn.operators.SpinfulFermions(sym='U1xU1xZ2', fermionic=True)
+        # For SpinfulFermions config.sym does not match config.fermionic.
     with pytest.raises(yastn.YastnError):
         ops_Z2.c(spin='down')
         # spin shoul be equal 'u' or 'd'.
