@@ -289,7 +289,7 @@ def _meta_mask(a_struct, a_slices, a_isdiag, b_struct, b_slices, Dbnew, axis):
         c_Dp = tuple(x[0] for x in c_D)
     else:
         c_D = tuple(mt[2][:axis] + (mt[4],) + mt[2][axis + 1:] for mt in meta)
-        c_Dp = np.prod(c_D, axis=1).tolist() if len(c_D) > 0 else ()
+        c_Dp = np.prod(c_D, axis=1, dtype=np.int64).tolist() if len(c_D) > 0 else ()
 
     c_slices = tuple(_slc(((stop - dp, stop),), ds, dp)  for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
     c_struct = a_struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
@@ -498,9 +498,9 @@ def _meta_swap_gate(t, mf, ndim, nsym, axes, fss):
     for l1, l2 in zip(*(iaxes, iaxes)):
         # if len(set(l1) & set(l2)) > 0:
         #     raise YastnError('Cannot swap the same index.')
-        t1 = np.sum(tset[:, l1, :], axis=1) % 2
-        t2 = np.sum(tset[:, l2, :], axis=1) % 2
-        tp += np.sum(t1[:, fss] * t2[:, fss], axis=1)
+        t1 = np.sum(tset[:, l1, :], axis=1, dtype=np.int64) % 2
+        t2 = np.sum(tset[:, l2, :], axis=1, dtype=np.int64) % 2
+        tp += np.sum(t1[:, fss] * t2[:, fss], axis=1, dtype=np.int64)
     return tuple((tp % 2).tolist())
 
 
@@ -513,8 +513,8 @@ def _meta_swap_gate_charge(t, charge, mf, ndim, nsym, axes, fss):
         raise YastnError(f'Len of charge {charge} does not match sym.NSYM = {nsym}.')
 
     charge = np.array(charge, dtype=np.int64).reshape(1, nsym) % 2
-    tp = np.sum(tset[:, axes, :], axis=1) % 2
-    fp = np.sum(tp[:, fss] * charge[:, fss], axis=1) % 2
+    tp = np.sum(tset[:, axes, :], axis=1, dtype=np.int64) % 2
+    fp = np.sum(tp[:, fss] * charge[:, fss], axis=1, dtype=np.int64) % 2
     return tuple(fp.tolist())
 
 

@@ -303,24 +303,6 @@ def __contains__(a, key) -> bool:
 #    output tensors info - advanced structure    #
 ##################################################
 
-def get_leg_fusion(a, axes=None):  # pragma: no cover
-    """
-    .. deprecated::
-        to inspect Legs of the tensor, use :meth:`yastn.Tensor.get_legs`.
-
-    Fusion trees for meta legs.
-
-    Parameters
-    ----------
-    axes : Int or tuple of ints
-        indices of legs; If axes is None returns all (default).
-    """
-    if axes is None:
-        return {'meta': a.mfs, 'hard': a.hfs}
-    if isinstance(axes, int):
-        return a.mfs(axes)
-    return {'meta': tuple(a.mfs(n) for n in axes), 'hard': tuple(a.hfs(n) for n in axes)}
-
 
 def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
     r"""
@@ -365,56 +347,6 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
         else:
             legs.append(legs_ax.pop())
     return tuple(legs) if multiple_legs else legs.pop()
-
-
-def get_leg_structure(a, axis, native=False):  # pragma: no cover
-    r"""
-    .. deprecated::
-        to inspect Legs of the tensor, use :meth:`yastn.Tensor.get_legs`.
-
-    Find all charges and the corresponding bond dimension for n-th leg.
-
-    Parameters
-    ----------
-    axis : int
-        Index of a leg.
-
-    native : bool
-        consider native legs if True; otherwise meta/fused legs (default).
-
-    Returns
-    -------
-        tDn : dict of {charge of the sector: size of the sector}
-    """
-    axis, = _clear_axes(axis)
-    if not native:
-        axis, = _unpack_axes(a.mfs, axis)
-    tset = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-    Dset = np.array(a.struct.D, dtype=np.int64).reshape((len(a.struct.D), len(a.struct.s)))
-    tset = tset[:, axis, :]
-    Dset = Dset[:, axis]
-    tset = tset.reshape(len(tset), len(axis) * a.config.sym.NSYM).tolist()
-    Dset = np.prod(Dset, axis=1, dtype=np.int64) if len(axis) > 1 else Dset.reshape(-1)
-    Dset = Dset.tolist()
-
-    tDn = {tuple(tn): Dn for tn, Dn in zip(tset, Dset)}
-    return tDn
-
-
-def get_leg_charges_and_dims(a, native=False):  # pragma: no cover
-    """
-    .. deprecated::
-        to inspect Legs of the tensor, use :meth:`yastn.Tensor.get_legs`.
-
-    Collect information about charges and dimensions on all legs into two lists.
-    """
-    _tmp = [a.get_leg_structure(n, native=native) for n in range(a.ndim_n if native else a.ndim)]
-    _tmp = [{k: lst[k] for k in sorted(lst)} for lst in _tmp]
-    ts_and_Ds= tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
-    if len(ts_and_Ds) < 1:
-        return (), ()
-    ts, Ds = ts_and_Ds
-    return ts, Ds
 
 
 ############################
