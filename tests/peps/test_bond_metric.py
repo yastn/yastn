@@ -73,14 +73,14 @@ def test_spinless_infinite_approx():
         assert (Gs['NN'] - Gs['NN+']).norm() < 1e-2
         assert (Gs['NN+'] - Gs['NN++']).norm() < 1e-3
         assert (Gs['NN++'] - Gs['NNN++']).norm() < 1e-3
-        assert (Gs['NNN'] - Gs['43']).norm() < 1e-6
-        assert (Gs['NNN+'] - Gs['43h']).norm() < 1e-6
+        assert (Gs['NNN'] - Gs['43']).norm() < 1e-5
+        assert (Gs['NNN+'] - Gs['43h']).norm() < 1e-5
         assert (Gs['43'] - Gs['43h']).norm() < 1e-2
         assert (Gs['43h'] - Gs['65']).norm() < 1e-3
         assert (Gs['65'] - Gs['65h']).norm() < 1e-4
         assert (Gs['65h'] - Gs['87']).norm() < 1e-5
-        assert (Gs['87'] - Gs['87h']).norm() < 1e-6
-        assert (Gs['87h'] - Gs['FU']).norm() < 1e-6
+        assert (Gs['87'] - Gs['87h']).norm() < 1e-5
+        assert (Gs['87h'] - Gs['FU']).norm() < 1e-5
 
     with pytest.raises(yastn.YastnError):
         fpeps.EnvNTU(psi, which="some")

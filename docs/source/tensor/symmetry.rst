@@ -6,8 +6,8 @@ YASTN specifies symmetry through any object be it plain Python module, or class 
     #. ``SYM_ID`` string label for the symmetry
 
     #. ``NSYM`` number of elements in the charge vector. For example, `NSYM=1`
-       for U(1) or :math:`Z_2` group. For product groups such
-       as U(1)xU(1) instead `NSYM=2`.
+       for :math:`U(1)` or :math:`Z_2` group. For product groups such
+       as :math:`U(1)xU(1)` instead `NSYM=2`.
 
     #. how to add up charges by implementing a `fuse` function
 

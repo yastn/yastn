@@ -148,7 +148,7 @@ def multiplication_example_gs(config=None, tol=1e-12):
     #
     ops.random_seed(seed=0)
     #
-    # In this example we use yastn.Tensor with U(1) symmetry.
+    # In this example we use yastn.Tensor with U1 symmetry.
     #
     total_charge = 3
     psi = mps.random_mps(I, D_total=8, n=total_charge)

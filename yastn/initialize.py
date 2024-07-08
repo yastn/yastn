@@ -313,7 +313,7 @@ def load_from_dict(config=None, d=None) -> yastn.Tensor:
         struct = _struct(s=d['s'], n=d['n'], diag=c_isdiag, t=d['t'], D=d['D'], size=sum(c_Dp))
         hfs = tuple(_Fusion(**hf) for hf in d['hfs'])
         c = Tensor(config=config, struct=struct, slices=slices, hfs=hfs, mfs=d['mfs'])
-        if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID']:
+        if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID'].replace('(','').replace(')',''):  # for backward compatibility matching U1 and U(1)
             raise YastnError("Symmetry rule in config do not match loaded one.")
         if 'fermionic' in d and c.config.fermionic != d['fermionic']:
             raise YastnError("Fermionic statistics in config do not match loaded one.")

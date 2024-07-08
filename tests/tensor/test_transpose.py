@@ -46,7 +46,7 @@ class TestSyntaxTranspose(unittest.TestCase):
 
     def test_transpose_syntax(self):
         #
-        # define rank-6 U(1)-symmetric tensor
+        # define rank-6 U1-symmetric tensor
         #
         a = yastn.ones(config=config_U1, s=(-1, -1, -1, 1, 1, 1),
                   t=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (0, 1)],
