@@ -218,3 +218,5 @@ v0.9
 
 07-2024  (v1.01)
 - fix engine type consistency for numpy2.0
+- consistently use 'U1' for U(1)-symmetry
+- allow using **config._asdict() while initializing operator classes 
