@@ -15,6 +15,8 @@
 """ Methods outputing data from yastn.Tensor. """
 from __future__ import annotations
 import numpy as np
+from functools import reduce
+from operator import mul
 from ._auxliary import _clear_axes, _unpack_axes, _struct, _slc, _flatten
 from ._tests import YastnError, _test_configs_match
 from ..sym import sym_none
@@ -301,24 +303,6 @@ def __contains__(a, key) -> bool:
 #    output tensors info - advanced structure    #
 ##################################################
 
-def get_leg_fusion(a, axes=None):  # pragma: no cover
-    """
-    .. deprecated::
-        to inspect Legs of the tensor, use :meth:`yastn.Tensor.get_legs`.
-
-    Fusion trees for meta legs.
-
-    Parameters
-    ----------
-    axes : Int or tuple of ints
-        indices of legs; If axes is None returns all (default).
-    """
-    if axes is None:
-        return {'meta': a.mfs, 'hard': a.hfs}
-    if isinstance(axes, int):
-        return a.mfs(axes)
-    return {'meta': tuple(a.mfs(n) for n in axes), 'hard': tuple(a.hfs(n) for n in axes)}
-
 
 def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
     r"""
@@ -333,8 +317,8 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
         consider native legs if ``True``; otherwise returns fused legs (default).
     """
     legs = []
-    tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-    Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
+    tset = np.array(a.struct.t, dtype=np.int64).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+    Dset = np.array(a.struct.D, dtype=np.int64).reshape((len(a.struct.D), len(a.struct.s)))
     if axes is None:
         axes = tuple(range(a.ndim)) if not native else tuple(range(a.ndim_n))
     multiple_legs = hasattr(axes, '__iter__')
@@ -347,70 +331,22 @@ def get_legs(a, axes=None, native=False) -> yastn.Leg | Sequence[yastn.Leg]:
         else:
             nax = (ax,)
         for i in nax:
-            tseta = tset[:, i, :].reshape(len(tset), a.config.sym.NSYM)
-            Dseta = Dset[:, i].reshape(-1)
-            tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tseta, Dseta)}
+            tseta = tset[:, i, :].reshape(len(tset), a.config.sym.NSYM).tolist()
+            Dseta = Dset[:, i].tolist()
+            tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
+            tDn = dict(sorted(tDn.items()))
             t, D = tuple(tDn.keys()), tuple(tDn.values())
             legs_ax.append(Leg(a.config, s=a.struct.s[i], t=t, D=D, legs=(a.hfs[i],)))
         if not native and mf[0] > 1:
-            tseta = tset[:, nax, :].reshape(len(tset), len(nax) * a.config.sym.NSYM)
-            Dseta = np.prod(Dset[:, nax], axis=1, dtype=int)
-            tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tseta, Dseta)}
-            t = tuple(sorted(tDn.keys()))
-            D = tuple(tDn[x] for x in t)
+            tseta = tset[:, nax, :].reshape(len(tset), len(nax) * a.config.sym.NSYM).tolist()
+            Dseta = np.prod(Dset[:, nax], axis=1, dtype=np.int64).tolist()
+            tDn = {tuple(tn): Dn for tn, Dn in zip(tseta, Dseta)}
+            tDn = dict(sorted(tDn.items()))
+            t, D = tuple(tDn.keys()), tuple(tDn.values())
             legs.append(Leg(a.config.sym, s=legs_ax[0].s, t=t, D=D, fusion=mf, legs=tuple(legs_ax), _verified=True))
         else:
             legs.append(legs_ax.pop())
     return tuple(legs) if multiple_legs else legs.pop()
-
-
-def get_leg_structure(a, axis, native=False):  # pragma: no cover
-    r"""
-    .. deprecated::
-        to inspect Legs of the tensor, use :meth:`yastn.Tensor.get_legs`.
-
-    Find all charges and the corresponding bond dimension for n-th leg.
-
-    Parameters
-    ----------
-    axis : int
-        Index of a leg.
-
-    native : bool
-        consider native legs if True; otherwise meta/fused legs (default).
-
-    Returns
-    -------
-        tDn : dict of {charge of the sector: size of the sector}
-    """
-    axis, = _clear_axes(axis)
-    if not native:
-        axis, = _unpack_axes(a.mfs, axis)
-    tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-    Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
-    tset = tset[:, axis, :]
-    Dset = Dset[:, axis]
-    tset = tset.reshape(len(tset), len(axis) * a.config.sym.NSYM)
-    Dset = np.prod(Dset, axis=1, dtype=int) if len(axis) > 1 else Dset.reshape(-1)
-
-    tDn = {tuple(tn.flat): Dn for tn, Dn in zip(tset, Dset)}
-    return tDn
-
-
-def get_leg_charges_and_dims(a, native=False):  # pragma: no cover
-    """
-    .. deprecated::
-        to inspect Legs of the tensor, use :meth:`yastn.Tensor.get_legs`.
-
-    Collect information about charges and dimensions on all legs into two lists.
-    """
-    _tmp = [a.get_leg_structure(n, native=native) for n in range(a.ndim_n if native else a.ndim)]
-    _tmp = [{k: lst[k] for k in sorted(lst)} for lst in _tmp]
-    ts_and_Ds= tuple(zip(*[tuple(zip(*lst.items())) for lst in _tmp]))
-    if len(ts_and_Ds) < 1:
-        return (), ()
-    ts, Ds = ts_and_Ds
-    return ts, Ds
 
 
 ############################
@@ -495,10 +431,12 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> yastn.Tensor:
     """
     config_dense = a.config._replace(sym=sym_none)
 
-    ndim = a.ndim_n if native else a.ndim
-    legs_a = list(a.get_legs(range(ndim), native=native))
+    legs_a = list(a.get_legs(native=native))
+    ndim_a = len(legs_a)  # ndim_n if native else ndim
+
+
     if legs is not None:
-        if any((n < 0) or (n >= ndim) for n in legs.keys()):
+        if any((n < 0) or (n >= ndim_a) for n in legs.keys()):
             raise YastnError('Specified leg out of ndim')
         legs_new = {n: leg_union(legs_a[n], leg) for n, leg in legs.items()}
         if any(_leg_fusions_need_mask(leg, legs_a[n]) for n, leg in legs_new.items()):
@@ -507,29 +445,38 @@ def to_nonsymmetric(a, legs=None, native=False, reverse=False) -> yastn.Tensor:
             legs_a[n] = leg
 
     Dtot = tuple(sum(leg.D) for leg in legs_a)
-    tD, step = [], -1 if reverse else 1
-    for n, leg in enumerate(legs_a):
-        Dlow, tDn = 0, {}
-        for tn, Dn in zip(leg.t[::step], leg.D[::step]):
-            Dhigh = Dlow + Dn
-            tDn[tn] = (Dlow, Dhigh)
-            Dlow = Dhigh
-        tD.append(tDn)
-    axes = tuple((n,) for n in range(ndim))
-    if not native:
-        axes = tuple(_unpack_axes(a.mfs, *axes))
-    meta = []
-    tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-    for t_sl, tt in zip(a.slices, tset):
-        meta.append((slice(*t_sl.slcs[0]), tuple(tD[n][tuple(tt[ax, :].flat)] for n, ax in enumerate(axes))))
+
+    if ndim_a == 0:  # scalar
+        meta = [(slice(*sl.slcs[0]), ()) for sl in a.slices]
+    else:
+        step = -1 if reverse else 1
+        tD = []
+        for leg in legs_a:
+            Dlow, tDn = 0, {}
+            for tn, Dn in zip(leg.t[::step], leg.D[::step]):
+                Dhigh = Dlow + Dn
+                tDn[tn] = (Dlow, Dhigh)
+                Dlow = Dhigh
+            tD.append(tDn)
+
+        axes = tuple((n,) for n in range(ndim_a))
+        if not native:
+            axes = tuple(_unpack_axes(a.mfs, *axes))
+
+        lt, nsym = len(a.struct.t), len(a.struct.n)
+        tset = np.array(a.struct.t, dtype=np.int64).reshape(lt, a.ndim_n, nsym)
+        tset_ax = list(zip(*[tset[:, ax, :].reshape(lt, len(ax) * nsym).tolist() for ax in axes]))
+        meta = [(slice(*t_sl.slcs[0]), tuple(tDn[tuple(tt)] for tDn, tt in zip(tD, t_ax))) for t_sl, t_ax in zip(a.slices, tset_ax)]
+
+    c_s = a.get_signature(native)
+    c_t = ((),)
+    c_D = (Dtot,)
+
     if a.isdiag:
         Dtot = Dtot[:1]
         meta = [(sl, D[:1]) for sl, D in meta]
 
-    c_s = a.get_signature(native)
-    c_t = ((),)
-    c_D = (Dtot,) if not a.isdiag else (Dtot + Dtot,)
-    Dp = np.prod(Dtot, dtype=int)
+    Dp = reduce(mul, Dtot, 1)
     c_struct = _struct(s=c_s, n=(), diag=a.isdiag, t=c_t, D=c_D, size=Dp)
     c_slices = (_slc(((0, Dp),), c_D[0], Dp),)
     data = a.config.backend.merge_to_dense(a._data, Dtot, meta)

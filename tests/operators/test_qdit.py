@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Predefined dense qdit operator. """
+import pytest
 import numpy as np
 import yastn
 try:
@@ -50,6 +51,16 @@ def test_qdit(d=5):
     leg = ops_dense.space(d=local_d)
     assert leg == I.get_legs(axes=0)
     assert np.allclose(I.to_numpy(), np.eye(local_d))
+
+    # wrong init with config
+    with pytest.raises(yastn.YastnError):
+        config_U1 = yastn.make_config(sym="U1", backend=backend, default_device=default_device)
+        yastn.operators.Qdit(d=5, **config_U1._asdict())
+        # For Qdit sym should be 'dense'.
+    with pytest.raises(yastn.YastnError):
+        config_fer = yastn.make_config(fermionic=True, backend=backend, default_device=default_device)
+        yastn.operators.Qdit(d=5, **config_fer._asdict())
+        # For Qdit config.fermionic should be False.
 
 
 if __name__ == '__main__':

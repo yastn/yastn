@@ -14,10 +14,13 @@
 # ==============================================================================
 """ Methods creating a new yastn.Tensor """
 
-from itertools import product
+from functools import reduce
+from itertools import product, accumulate
+from operator import mul
+import numbers
 import numpy as np
 from ._auxliary import _flatten, _slc
-from ._tests import YastnError, _test_tD_consistency
+from ._tests import YastnError, _test_tD_consistency, _test_struct_types
 
 
 def __setitem__(a, key, newvalue):
@@ -32,7 +35,8 @@ def __setitem__(a, key, newvalue):
     key : Sequence[int] | Sequence[Sequence[int]]
         charges of the block
     """
-    key = tuple(_flatten(key))
+    key = np.array(key, dtype=np.int64)
+    key = tuple(key.ravel().tolist())
     try:
         ind = a.struct.t.index(key)
     except ValueError as exc:
@@ -68,8 +72,14 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
     val : str
         ``'rand'``, ``'ones'``, or  ``'zeros'``
     """
-    D = (D,) if isinstance(D, int) else D
-    t = (t,) if isinstance(t, int) else t
+    try:
+        D = tuple(D)
+    except TypeError:
+        D = (D,)
+    try:
+        t = tuple(t)
+    except TypeError:
+        t = (t,)
 
     if a.config.sym.NSYM == 0:
         if a.isdiag and len(D) == 1:
@@ -77,15 +87,15 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         if len(D) != a.ndim_n:
             raise YastnError("Number of elements in D does not match tensor rank.")
         tset = np.zeros((1, a.ndim_n, a.config.sym.NSYM))
-        Dset = np.array(D, dtype=int).reshape(1, a.ndim_n)
+        Dset = np.array(D, dtype=np.int64).reshape(1, a.ndim_n)
     else:  # a.config.sym.NSYM >= 1
-        D = (D,) if (a.ndim_n == 1 or a.isdiag) and isinstance(D[0], int) else D
-        t = (t,) if (a.ndim_n == 1 or a.isdiag) and isinstance(t[0], int) else t
+        D = (D,) if (a.ndim_n == 1 or a.isdiag) and isinstance(D[0], numbers.Number) else D
+        t = (t,) if (a.ndim_n == 1 or a.isdiag) and isinstance(t[0], numbers.Number) else t
         D = D + D if a.isdiag and len(D) == 1 else D
         t = t + t if a.isdiag and len(t) == 1 else t
 
-        D = list((x,) if isinstance(x, int) else x for x in D)
-        t = list((x,) if isinstance(x, int) else x for x in t)
+        D = list((x,) if isinstance(x, numbers.Number) else x for x in D)
+        t = list((x,) if isinstance(x, numbers.Number) else x for x in t)
 
         if len(D) != a.ndim_n:
             raise YastnError("Number of elements in D does not match tensor rank.")
@@ -99,27 +109,32 @@ def _fill_tensor(a, t=(), D=(), val='rand'):  # dtype = None
         comb_t = list(product(*t))
         lcomb_t = len(comb_t)
         comb_t = list(_flatten(comb_t))
-        comb_t = np.array(comb_t, dtype=int).reshape((lcomb_t, len(a.struct.s), len(a.struct.n)))
-        comb_D = np.array(comb_D, dtype=int).reshape((lcomb_t, len(a.struct.s)))
-        sa = np.array(a.struct.s, dtype=int)
-        na = np.array(a.struct.n, dtype=int)
-        ind = np.all(a.config.sym.fuse(comb_t, sa, 1) == na, axis=1)
+        comb_t = np.array(comb_t, dtype=np.int64).reshape((lcomb_t, a.ndim_n, a.config.sym.NSYM))
+        comb_D = np.array(comb_D, dtype=np.int64).reshape((lcomb_t, a.ndim_n))
+        ind = np.all(a.config.sym.fuse(comb_t, a.struct.s, 1) == a.struct.n, axis=1)
         tset = comb_t[ind]
         Dset = comb_D[ind]
 
     if a.isdiag and np.any(Dset[:, 0] != Dset[:, 1]):
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
-    Dp = Dset[:, 0] if a.isdiag else np.prod(Dset, axis=1, dtype=int)
-    Dsize = np.sum(Dp)
+    Dp = Dset[:, 0] if a.isdiag else np.prod(Dset, axis=1, dtype=np.int64)
+    Dp = Dp.tolist()
+    Dsize = sum(Dp)
 
-    meta = [(tuple(ts.flat), tuple(Ds), dp) for ts, Ds, dp in zip(tset, Dset, Dp)]
-    meta = sorted(meta, key=lambda x: x[0])
+    if len(tset) > 0:
+        tset = tset.reshape(len(tset), a.ndim_n * a.config.sym.NSYM).tolist()
+        Dset = Dset.tolist()
+        meta = [(tuple(ts), tuple(Ds), dp) for ts, Ds, dp in zip(tset, Dset, Dp)]
+        meta = sorted(meta, key=lambda x: x[0])
+        a_t, a_D, a_Dp = zip(*meta)
+    else:
+        a_t, a_D, a_Dp = (), (), ()
 
-    a_t, a_D, a_Dp = zip(*meta) if len(meta) > 0 else ((), (), ())
-    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(a_Dp), a_Dp, a_D))
-    a.struct = a.struct._replace(t=a_t, D=a_D, size=sum(a_Dp))
+    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(a_Dp), a_Dp, a_D))
+    a.struct = a.struct._replace(t=a_t, D=a_D, size=Dsize)
     a._data = _init_block(a.config, Dsize, val, dtype=a.yast_dtype, device=a.device)
     _test_tD_consistency(a.struct)
+    _test_struct_types(a.struct)
 
 
 def set_block(a, ts=(), Ds=None, val='zeros'):
@@ -144,40 +159,38 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
         Otherwise any tensor-like format such as nested list, numpy.ndarray, etc.,
         can be used provided it is supported by :doc:`tensor's backend </tensor/configuration>`.
     """
-    if isinstance(Ds, int):
-        Ds = (Ds,)
-    if isinstance(ts, int):
-        ts = (ts,)
-    if a.isdiag and Ds is not None and len(Ds) == 1:
-        Ds = Ds + Ds
-    ts = tuple(_flatten(ts))
-    if a.isdiag and len(ts) == a.config.sym.NSYM:
-        ts = ts + ts
 
+
+    ts = np.array(ts, dtype=np.int64).ravel()
+    if a.isdiag and len(ts) == a.config.sym.NSYM:
+        ts = np.hstack([ts, ts])
     if len(ts) != a.ndim_n * a.config.sym.NSYM:
         raise YastnError('Size of ts is not consistent with tensor rank and the number of symmetry sectors.')
-    if Ds is not None and len(Ds) != a.ndim_n:
-        raise YastnError('Size of Ds is not consistent with tensor rank.')
 
-    ats = np.array(ts, dtype=int).reshape((1, a.ndim_n, a.config.sym.NSYM))
-    sa = np.array(a.struct.s, dtype=int)
-    na = np.array(a.struct.n, dtype=int)
-    if not np.all(a.config.sym.fuse(ats, sa, 1) == na):
+    ats = ts.reshape((1, a.ndim_n, a.config.sym.NSYM))
+    if not np.all(a.config.sym.fuse(ats, a.struct.s, 1) == a.struct.n):
         raise YastnError('Charges ts are not consistent with the symmetry rules: f(t @ s) == n')
 
+    ts = tuple(ts.tolist())
+
     if Ds is None:  # attempt to read Ds from existing blocks.
-        Ds = []
+        ats = ats.tolist()[0]
         legs = a.get_legs(range(a.ndim_n), native=True)
-        for n, leg in enumerate(legs):
-            try:
-                Ds.append(leg.D[leg.t.index(tuple(ats[0, n, :].flat))])
-            except ValueError as err:
-                raise YastnError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
-        Ds = tuple(Ds)
+        try:
+            Ds = tuple(leg.D[leg.t.index(tuple(tl))] for tl, leg in zip(ats, legs))
+        except ValueError as err:
+            raise YastnError('Provided Ds. Cannot infer all bond dimensions from existing blocks.') from err
+    else:  # Ds was provided
+        Ds = np.array(Ds, dtype=np.int64).ravel()
+        if a.isdiag and len(Ds) == 1:
+            Ds = np.hstack([Ds, Ds])
+        Ds = tuple(Ds.tolist())
+    if len(Ds) != a.ndim_n:
+        raise YastnError('Size of Ds is not consistent with tensor rank.')
 
     if a.isdiag and Ds[0] != Ds[1]:
         raise YastnError("Diagonal tensor requires the same bond dimensions on both legs.")
-    Dsize = Ds[0] if a.isdiag else np.prod(Ds, dtype=int)
+    Dsize = Ds[0] if a.isdiag else reduce(mul, Ds, 1)
 
     ind = sum(t < ts for t in a.struct.t)
     ind2 = ind
@@ -191,7 +204,7 @@ def set_block(a, ts=(), Ds=None, val='zeros'):
     a_t = a.struct.t[:ind] + (ts,) + a.struct.t[ind2:]
     a_D = a.struct.D[:ind] + (Ds,) + a.struct.D[ind2:]
     a_Dp = [x.Dp for x in a.slices[:ind]] + [Dsize] + [x.Dp for x in a.slices[ind2:]]
-    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(a_Dp), a_Dp, a_D))
+    a.slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(a_Dp), a_Dp, a_D))
     a.struct = a.struct._replace(t=a_t, D=a_D, size=sum(a_Dp))
     _test_tD_consistency(a.struct)
 

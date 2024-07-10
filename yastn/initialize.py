@@ -18,7 +18,7 @@ importing tensors from different formats such as 1D + metadata or dictionary rep
 """
 from __future__ import annotations
 from ast import literal_eval
-from itertools import groupby
+from itertools import groupby, accumulate
 import numpy as np
 from .tensor import Tensor, YastnError
 from .tensor._auxliary import _struct, _config, _slc, _clear_axes, _unpack_legs
@@ -27,6 +27,7 @@ from .tensor._legs import Leg, leg_union, _leg_fusions_need_mask
 from .tensor._tests import _test_can_be_combined
 from .backend import backend_np
 from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
+
 
 _syms = {"dense": sym_none, "U1": sym_U1, "Z2": sym_Z2, "Z3": sym_Z3, "U1xU1": sym_U1xU1, "U1xU1xZ2": sym_U1xU1xZ2}
 
@@ -307,12 +308,12 @@ def load_from_dict(config=None, d=None) -> yastn.Tensor:
     """
     if d is not None:
         c_isdiag = bool(d['isdiag'])
-        c_Dp = [x[0] for x in d['D']] if c_isdiag else np.prod(d['D'], axis=1)
-        slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, d['D']))
+        c_Dp = [x[0] for x in d['D']] if c_isdiag else np.prod(d['D'], axis=1, dtype=np.int64).tolist()
+        slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, d['D']))
         struct = _struct(s=d['s'], n=d['n'], diag=c_isdiag, t=d['t'], D=d['D'], size=sum(c_Dp))
         hfs = tuple(_Fusion(**hf) for hf in d['hfs'])
         c = Tensor(config=config, struct=struct, slices=slices, hfs=hfs, mfs=d['mfs'])
-        if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID']:
+        if 'SYM_ID' in d and c.config.sym.SYM_ID != d['SYM_ID'].replace('(','').replace(')',''):  # for backward compatibility matching U1 and U(1)
             raise YastnError("Symmetry rule in config do not match loaded one.")
         if 'fermionic' in d and c.config.fermionic != d['fermionic']:
             raise YastnError("Fermionic statistics in config do not match loaded one.")
@@ -337,12 +338,12 @@ def load_from_hdf5(config, file, path) -> yastn.Tensor:
     """
     g = file.get(path)
     c_isdiag = bool(g.get('isdiag')[:][0])
-    c_n = tuple(g.get('n')[:])
-    c_s = tuple(g.get('s')[:])
-    c_t = tuple(tuple(x.flat) for x in g.get('ts')[:])
-    c_D = tuple(tuple(x.flat) for x in g.get('Ds')[:])
-    c_Dp = [x[0] for x in c_D] if c_isdiag else np.prod(c_D, axis=1)
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, c_D))
+    c_n = tuple(g.get('n')[:].tolist())
+    c_s = tuple(g.get('s')[:].tolist())
+    c_t = tuple(tuple(x) for x in g.get('ts')[:].tolist())
+    c_D = tuple(tuple(x) for x in g.get('Ds')[:].tolist())
+    c_Dp = [x[0] for x in c_D] if c_isdiag else np.prod(c_D, axis=1, dtype=np.int64).tolist()
+    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
     struct = _struct(s=c_s, n=c_n, diag=c_isdiag, t=c_t, D=c_D, size=sum(c_Dp))
 
     mfs = literal_eval(tuple(file.get(path+'/mfs').keys())[0])
@@ -408,9 +409,9 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
     if any(len(ind) != lind for ind in pos):
         raise YastnError('Wrong number of coordinates encoded in tensors.keys()')
 
-    posa = np.zeros((len(pos), tn0.ndim), dtype=int)
-    posa[:, out_b] = np.array(pos, dtype=int).reshape(len(pos), len(out_b))
-    posa = tuple(tuple(x.flat) for x in posa)
+    posa = np.zeros((len(pos), tn0.ndim), dtype=np.int64)
+    posa[:, out_b] = np.array(pos, dtype=np.int64).reshape(len(pos), len(out_b)).tolist()
+    posa = tuple(tuple(x) for x in posa)
 
     # perform hard fusion of meta-fused legs before blocking
     tensors = {pa: a.fuse_meta_to_hard() for pa, a in zip(posa, tensors.values())}
@@ -473,8 +474,8 @@ def block(tensors, common_legs=None) -> yastn.Tensor:
     meta_new = tuple(sorted(meta_new.items()))
     c_t = tuple(t for t, _ in meta_new)
     c_D = tuple(D for _, D in meta_new)
-    c_Dp = tuple(np.prod(c_D, axis=1)) if len(c_D) > 0 else ()
-    c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, c_D))
+    c_Dp = np.prod(c_D, axis=1, dtype=np.int64).tolist() if len(c_D) > 0 else ()
+    c_slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
     c_struct = _struct(n=a.struct.n, s=a.struct.s, t=c_t, D=c_D, size=sum(c_Dp))
     meta_new = tuple((x, y, z.slcs[0]) for x, y, z in zip(c_t, c_D, c_slices))
     data = tn0.config.backend.merge_super_blocks(tensors, meta_new, meta_block, c_struct.size)

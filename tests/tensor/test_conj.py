@@ -113,7 +113,7 @@ class TestConj_Z2xU1(unittest.TestCase):
 
     def test_conj_Z2xU1(self):
         #
-        # create random complex-valued symmetric tensor with symmetry Z2 x U(1)
+        # create random complex-valued symmetric tensor with symmetry Z2 x U1
         #
         legs = [yastn.Leg(config_Z2xU1, s=1, t=((0, 2), (1, 1), (1, 2)), D=(1, 2, 3)),
                 yastn.Leg(config_Z2xU1, s=-1, t=((0, 0), (0, -1), (1, 0)), D=(4, 5, 6))]

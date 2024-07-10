@@ -118,7 +118,7 @@ def generate_mpo_preprocessing(I, terms=None) -> GenerateMpoTemplate | tuple[Gen
     I2 = [I[n].remove_leg(axis=0).remove_leg(axis=1) for n in I.sweep(to='last')]
     H1s = [generate_product_mpo_from_Hterm(I2, term, amplitude=False) for term in terms]
     cfg = H1s[0][0].config
-    mapH = np.zeros((len(H1s), I.N), dtype=int)
+    mapH = np.zeros((len(H1s), I.N), dtype=np.int64)
 
     basis, t1bs, t2bs, tfbs, ifbs = [], [], [], [], []
     for n in I.sweep():
@@ -140,12 +140,14 @@ def generate_mpo_preprocessing(I, terms=None) -> GenerateMpoTemplate | tuple[Gen
         base = block(dict(enumerate(base)), common_legs=(1, 2)).drop_leg_history()
         basis.append(base)
 
-    tleft = [t1bs[0][i] for i in mapH[:, 0]]
+    tleft = [t1bs[0][i] for i in mapH[:, 0].tolist()]
 
     trans = []
     for n in I.sweep():
-        mapH0 = mapH[:, 0]
+        mapH0 = mapH[:, 0].tolist()
         mapH, rind, iind = np.unique(mapH[:, 1:], axis=0, return_index=True, return_inverse=True)
+        iind = iind.ravel().tolist()
+        rind = rind.ravel().tolist()
 
         i2bs = {t: {} for t in t2bs[n]}
         for ii, rr in enumerate(rind):

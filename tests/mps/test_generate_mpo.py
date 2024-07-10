@@ -131,5 +131,5 @@ def test_generate_mpo_raise(config=cfg):
 
 
 if __name__ == "__main__":
-    # test_build_mpo_hopping_Hterm()
+    test_build_mpo_hopping_Hterm()
     test_generate_mpo_raise()

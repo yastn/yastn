@@ -155,7 +155,7 @@ def random_mps(I, n=None, D_total=8, sigma=1, dtype='float64') -> yastn.tn.mps.M
         n = tuple(n)
     except TypeError:
         n = (n,)
-    an = np.array(n, dtype=int)
+    an = np.array(n, dtype=np.int64)
 
     psi = Mps(I.N)
     config = I.config

@@ -27,13 +27,13 @@ def test_leg():
     """ basic operations with yastn.Leg"""
     # U1
     leg = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
-    assert str(leg) == 'Leg(sym=U(1), s=1, t=((-1,), (0,), (1,)), D=(2, 3, 4), hist=o)'
+    assert str(leg) == 'Leg(sym=U1, s=1, t=((-1,), (0,), (1,)), D=(2, 3, 4), hist=o)'
 
     # flipping signature
     legc = leg.conj()
     assert leg.s == -legc.s
     assert not leg.is_fused()
-    assert str(legc) == 'Leg(sym=U(1), s=-1, t=((-1,), (0,), (1,)), D=(2, 3, 4), hist=o)'
+    assert str(legc) == 'Leg(sym=U1, s=-1, t=((-1,), (0,), (1,)), D=(2, 3, 4), hist=o)'
 
     # order of provided charges (with corresponding bond dimensions) does not matter
     leg_unsorted = yastn.Leg(config_U1, s=1, t=(1, 0, -1), D=(4, 3, 2))
