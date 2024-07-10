@@ -170,9 +170,12 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
         if safe_mode:
             M0_its, M1_its, error2_its = optimize_truncation(M0_svd, M1_svd, error2_svd, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info)
         else:
-            M0_its = M0_eat
-            M1_its = M1_eat
-            error2_its = error2_eat
+            M0_its = M0_ite
+            M1_its = M1_ite
+            M0_svd = M0_eat
+            M1_svd = M1_eat
+            error2_its = error2_ite
+            error2_svd = error2_eat
 
         Ms = [(M0_eat, M1_eat), (M0_ite, M1_ite), (M0_svd, M1_svd), (M0_its, M1_its)]
         error2s = [(error2_eat, 0), (error2_ite, 1), (error2_svd, 2), (error2_its, 3)]
