@@ -164,7 +164,7 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
         info['iterations'] = []
         if safe_mode:
             M0_svd, M1_svd = symmetrized_svd(M0, M1, opts, normalize=False)
-        error2_svd = calculate_truncation_error2(M0_svd @ M1_svd, fgf, fRR, RRgRR)
+            error2_svd = calculate_truncation_error2(M0_svd @ M1_svd, fgf, fRR, RRgRR)
         M0_eat, M1_eat, error2_eat = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs, info)
         M0_ite, M1_ite, error2_ite = optimize_truncation(M0_eat, M1_eat, error2_eat, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info)
         if safe_mode:
