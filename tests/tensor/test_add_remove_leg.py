@@ -135,7 +135,7 @@ def test_operators_chain():
     c = yastn.Tensor(config=config_U1, s=(1, -1), n=-1)
     c.set_block(ts=(0, 1), Ds=(1, 1), val=1)
 
-    nn = (0,) * len(c.n)
+    nn = c.config.sym.zero()
     o4 = yastn.add_leg(c, axis=-1, t=nn, s=-1)
     o4 = yastn.add_leg(o4, axis=0, s=1)
     nn = o4.get_legs(axes=0).t[0]
@@ -151,7 +151,7 @@ def test_operators_chain():
     o1 = yastn.add_leg(cdag, axis=-1, t=nn, s=-1)
     o1 = yastn.add_leg(o1, axis=0, s=1)
     nn = o1.get_legs(axes=0).t[0]
-    assert nn == (0,) * len(c.n)
+    assert nn == c.config.sym.zero()
 
     T1 = yastn.ncon([cdag, cdag, c, c], [(-1, -5), (-2, -6), (-3 ,-7), (-4, -8)])
     T2 = yastn.ncon([o1, o2, o3, o4], [(4, -1, -5, 1), (1, -2, -6, 2), (2, -3 ,-7, 3), (3, -4, -8, 4)])

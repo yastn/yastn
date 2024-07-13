@@ -14,6 +14,7 @@
 # ==============================================================================
 """ Linear operations and operations on a single yastn.Tensor. """
 from __future__ import annotations
+from itertools import accumulate
 import numpy as np
 from ._auxliary import _slc, _clear_axes, _unpack_axes
 from ._merging import _Fusion
@@ -113,8 +114,9 @@ def conj(a) -> yastn.Tensor:
 
     Follows the behavior of the backend.conj() when it comes to creating a new copy of the data.
     """
-    an = np.array(a.struct.n, dtype=int).reshape((1, 1, -1))
-    newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
+    nsym = a.config.sym.NSYM
+    an = np.array(a.struct.n, dtype=np.int64).reshape((1, 1, nsym))
+    newn = tuple(a.config.sym.fuse(an, (1,), -1).reshape(nsym).tolist())
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)
@@ -141,8 +143,9 @@ def flip_signature(a) -> yastn.Tensor:
 
     Creates a shallow copy of the data.
     """
-    an = np.array(a.struct.n, dtype=int).reshape((1, 1, -1))
-    newn = tuple(a.config.sym.fuse(an, np.array([1], dtype=int), -1)[0])
+    nsym = a.config.sym.NSYM
+    an = np.array(a.struct.n, dtype=np.int64).reshape((1, 1, nsym))
+    newn = tuple(a.config.sym.fuse(an, (1,), -1).reshape(nsym).tolist())
     news = tuple(-x for x in a.struct.s)
     struct = a.struct._replace(s=news, n=newn)
     hfs = tuple(hf.conj() for hf in a.hfs)
@@ -171,9 +174,10 @@ def flip_charges(a, axes=None) -> yastn.Tensor:
             axes = (axes,)
     uaxes, = _unpack_axes(a.mfs, axes)
 
-    snew = np.array(a.struct.s, dtype=int)
-    tnew = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
+    snew = list(a.struct.s)
     hfs = list(a.hfs)
+    lt, ndim_n, nsym = len(a.struct.t), len(a.struct.s), len(a.struct.n)
+    tnew = np.array(a.struct.t, dtype=np.int64).reshape(lt, ndim_n, nsym)
     for ax in uaxes:
         if hfs[ax].is_fused():
             raise YastnError('Flipping charges of hard-fused leg is not supported.')
@@ -183,12 +187,11 @@ def flip_charges(a, axes=None) -> yastn.Tensor:
         hfs[ax] = hfs[ax].conj()
     snew = tuple(snew)
     hfs = tuple(hfs)
-    tnew = tuple(tuple(t.flat) for t in tnew)
-
-    meta = tuple(sorted((x, y, z.Dp, z.slcs[0]) for x, y, z in zip(tnew, a.struct.D, a.slices)))
+    tnew = tuple(map(tuple, tnew.reshape(lt, ndim_n * nsym).tolist()))
+    meta = sorted((x, y, z.Dp, z.slcs[0]) for x, y, z in zip(tnew, a.struct.D, a.slices))
     tnew, Dnew, Dpnew, slold = zip(*meta) if len(meta) > 0 else ((), (), (), ())
 
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(Dpnew), Dpnew, Dnew))
+    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dpnew), Dpnew, Dnew))
     struct = a.struct._replace(s=snew, t=tnew, D=Dnew)
     meta = tuple((x.slcs[0], y) for x, y in zip(slices, slold))
     data = a.config.backend.embed_slc(a.data, meta, struct.size)
@@ -235,22 +238,23 @@ def transpose(a, axes=None) -> yastn.Tensor:
     if axes == tuple(range(a.ndim)):
         return a._replace()
     uaxes, = _unpack_axes(a.mfs, axes)
-    order = np.array(uaxes, dtype=np.intp)
+    order = np.array(uaxes, dtype=np.int64)
     mfs = tuple(a.mfs[ii] for ii in axes)
     hfs = tuple(a.hfs[ii] for ii in uaxes)
     c_s = tuple(a.struct.s[ii] for ii in uaxes)
-    tset = np.array(a.struct.t, dtype=int).reshape((len(a.struct.t), len(a.struct.s), len(a.struct.n)))
-    Dset = np.array(a.struct.D, dtype=int).reshape((len(a.struct.D), len(a.struct.s)))
-    newt = tuple(tuple(x.flat) for x in tset[:, order, :])
-    newD = tuple(tuple(x.flat) for x in Dset[:, order])
+    lt, ndim_n, nsym = len(a.struct.t), len(a.struct.s), len(a.struct.n)
+
+    tset = np.array(a.struct.t, dtype=np.int64).reshape(lt, ndim_n, nsym)
+    Dset = np.array(a.struct.D, dtype=np.int64).reshape(lt, ndim_n)
+    newt = tuple(map(tuple, tset[:, order, :].reshape(lt, ndim_n * nsym).tolist()))
+    newD = tuple(map(tuple, Dset[:, order].tolist()))
 
     meta = sorted(zip(newt, newD, a.slices), key=lambda x: x[0])
 
     c_t = tuple(mt[0] for mt in meta)
     c_D = tuple(mt[1] for mt in meta)
-
     c_Dp = tuple(mt[2].Dp for mt in meta)
-    c_sl = tuple((stop - dp, stop) for stop, dp in zip(np.cumsum(c_Dp), c_Dp))
+    c_sl = tuple((stop - dp, stop) for stop, dp in zip(accumulate(c_Dp), c_Dp))
 
     slices = tuple(_slc((x,), y, z) for x, y, z in zip(c_sl, c_D, c_Dp))
     struct = a.struct._replace(s=c_s, t=c_t, D=c_D)
@@ -343,6 +347,7 @@ def add_leg(a, axis=-1, s=1, t=None, leg=None) -> yastn.Tensor:
 
     if s not in (-1, 1):
         raise YastnError('Signature of the new axis should be 1 or -1.')
+    s = int(s)
 
     axis = axis % (a.ndim + 1)
     mfs = a.mfs[:axis] + ((1,),) + a.mfs[axis:]
@@ -350,14 +355,16 @@ def add_leg(a, axis=-1, s=1, t=None, leg=None) -> yastn.Tensor:
     axis = sum(a.mfs[ii][0] for ii in range(axis))  # unpack mfs
     nsym = a.config.sym.NSYM
     if t is None:
-        t = tuple(a.config.sym.fuse(np.array(a.struct.n, dtype=int).reshape((1, 1, nsym)), (-1,), s).flat)
+        t = a.config.sym.fuse(np.array(a.struct.n, dtype=np.int64).reshape((1, 1, nsym)), (-1,), s)
     else:
         if (isinstance(t, int) and nsym != 1) or len(t) != nsym:
             raise YastnError('len(t) does not match the number of symmetry charges.')
-        t = tuple(a.config.sym.fuse(np.array(t, dtype=int).reshape((1, 1, nsym)), (s,), s).flat)
+        t = a.config.sym.fuse(np.array(t, dtype=np.int64).reshape((1, 1, nsym)), (s,), s)
+    t = tuple(t.reshape(nsym).tolist())
 
     news = a.struct.s[:axis] + (s,) + a.struct.s[axis:]
-    newn = tuple(a.config.sym.fuse(np.array(a.struct.n + t, dtype=int).reshape((1, 2, nsym)), (1, s), 1).flat)
+    newn = a.config.sym.fuse(np.array(a.struct.n + t, dtype=np.int64).reshape((1, 2, nsym)), (1, s), 1)
+    newn = tuple(newn.reshape(nsym).tolist())
     newt = tuple(x[:axis * nsym] + t + x[axis * nsym:] for x in a.struct.t)
     newD = tuple(x[:axis] + (1,) + x[axis:] for x in a.struct.D)
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
@@ -394,12 +401,18 @@ def remove_leg(a, axis=-1) -> yastn.Tensor:
         raise YastnError('Axis to be removed cannot be fused.')
 
     nsym = a.config.sym.NSYM
-    t = a.struct.t[0][axis * nsym: (axis + 1) * nsym] if len(a.struct.t) > 0 else (0,) * nsym
+    if len(a.struct.t) > 0:
+        t = a.struct.t[0][axis * nsym: (axis + 1) * nsym]
+    else:
+        t = a.config.sym.zero()
+
     if any(x[axis] != 1 for x in a.struct.D) or any(x[axis * nsym: (axis + 1) * nsym] != t for x in a.struct.t):
         raise YastnError('Axis to be removed must have single charge of dimension one.')
 
     news = a.struct.s[:axis] + a.struct.s[axis + 1:]
-    newn = tuple(a.config.sym.fuse(np.array(a.struct.n + t, dtype=int).reshape((1, 2, nsym)), (-1, a.struct.s[axis]), -1).flat)
+
+    newn = a.config.sym.fuse(np.array(a.struct.n + t, dtype=np.int64).reshape((1, 2, nsym)), (-1, a.struct.s[axis]), -1)
+    newn = tuple(newn.reshape(nsym).tolist())
     newt = tuple(x[: axis * nsym] + x[(axis + 1) * nsym:] for x in a.struct.t)
     newD = tuple(x[: axis] + x[axis + 1:] for x in a.struct.D)
     struct = a.struct._replace(t=newt, D=newD, s=news, n=newn)
@@ -423,7 +436,7 @@ def diag(a) -> yastn.Tensor:
             raise YastnError('yastn.diag() allowed only for square blocks.')
         #     isdiag=True -> isdiag=False                    isdiag=False -> isdiag=True
     Dp = tuple(x.Dp ** 2 for x in a.slices) if a.isdiag else tuple(D[0] for D in a.struct.D)
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(Dp), Dp, a.struct.D))
+    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, a.struct.D))
     struct = a.struct._replace(diag=not a.isdiag, size=sum(Dp))
 
     if a.isdiag:  # isdiag=True -> isdiag=False
@@ -450,7 +463,7 @@ def remove_zero_blocks(a, rtol=1e-12, atol=0) -> yastn.Tensor:
     old_sl = tuple(mt[2] for mt in meta)
     c_Dp = tuple(x.Dp for x in old_sl)
     old_sl = tuple(x.slcs[0] for x in old_sl)
-    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(c_Dp), c_Dp, c_D))
+    slices = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(c_Dp), c_Dp, c_D))
     c_sl = tuple(x.slcs[0] for x in slices)
     struct = a.struct._replace(t=c_t, D=c_D, size=sum(c_Dp))
     data = a.config.backend.apply_slice(a._data, c_sl, old_sl)

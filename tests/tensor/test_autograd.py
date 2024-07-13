@@ -28,7 +28,7 @@ class TestSyntaxAutograd(unittest.TestCase):
 
     def test_requires_grad(self):
         #
-        # create a random U(1) symmetric tensor. By default, such tensor
+        # create a random U1 symmetric tensor. By default, such tensor
         # does not have autograd active. Activate it
         #
         leg1 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
@@ -47,7 +47,7 @@ class TestSyntaxAutograd(unittest.TestCase):
 
     def test_clone_copy(self):
         #
-        # create random U(1) symmetric tensor and flag it for autograd
+        # create random U1 symmetric tensor and flag it for autograd
         #
         leg1 = yastn.Leg(config_U1, s=1, t=(-1, 0, 1), D=(2, 3, 4))
         leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(2, 4, 5))

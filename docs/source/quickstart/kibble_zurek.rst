@@ -25,6 +25,7 @@ We compare the results obtained using MPS and PEPS routines.
 1. *Initialization of Model Parameters*:
     .. code-block:: python
 
+        import math
         import numpy as np
         import matplotlib.pyplot as plt
         from tqdm import tqdm  # progressbar
@@ -43,10 +44,10 @@ We compare the results obtained using MPS and PEPS routines.
         Jij = {k: 2 * np.random.rand() - 1 for k in geometry.bonds()}
         #
         # Define quench protocol
-        fXX = lambda s : np.sin((s - 0.5) * np.pi) + 1
-        fZ  = lambda s : 1 - np.sin((s - 0.5) * np.pi)
+        fXX = lambda s : math.sin((s - 0.5) * math.pi) + 1
+        fZ  = lambda s : 1 - math.sin((s - 0.5) * math.pi)
         ta = 2.0  # annealing time
-        dt = 0.02  # time step
+        dt = 0.04  # time step; make it smaller to decrees errors
         steps = round(ta / dt)
         dt = ta / steps
         #
@@ -57,7 +58,7 @@ We compare the results obtained using MPS and PEPS routines.
     .. code-block:: python
 
         def gates_Ising(Jij, fXX, fZ, s, dt, sites, ops):
-            """ Trotter gates at time s. """
+        """ Trotter gates at time s. """
             nn, local = [], []
             # time-step is 1j * dt / 2, as trotterized evolution
             # is completed by its adjoint for 2nd order method.
@@ -74,8 +75,8 @@ We compare the results obtained using MPS and PEPS routines.
         psi = peps.product_peps(geometry=geometry, vectors=ops.vec_z(val=1))
         #
         # simulation parameters
-        D = 4  # PEPS bond dimension
-        opts_svd_ntu = {"D_total": D, "D_block": D // 2}
+        D = 6  # PEPS bond dimension
+        opts_svd_ntu = {"D_total": D}
         env = peps.EnvNTU(psi, which='NN+')
         #
         # execute time evolution
@@ -84,11 +85,13 @@ We compare the results obtained using MPS and PEPS routines.
             t += dt / 2
             gates = gates_Ising(Jij, fXX, fZ, t / ta, dt, sites, ops)
             infos = peps.evolution_step_(env, gates, opts_svd=opts_svd_ntu)
+            # The state psi is contained in env;
+            # evolution_step_ updates psi in place.
             infoss.append(infos)
             t += dt / 2
-            print(f"s = {t / ta:0.4f}")
+
         Delta = peps.accumulated_truncation_error(infoss, statistics='mean')
-        print(f"Accumulated truncation error {Delta:0.8f}")
+        print(f"Accumulated mean truncation error {Delta:0.5f}")
 
 3. *PEPS simulations; final correlations*:
     .. code-block:: python
@@ -101,8 +104,8 @@ We compare the results obtained using MPS and PEPS routines.
         #
         # setting-up environment
         env = peps.EnvBoundaryMps(psi,
-                                   opts_svd=opts_svd_env,
-                                   opts_var=opts_var_env, setup='lr')
+                                    opts_svd=opts_svd_env,
+                                    opts_var=opts_var_env, setup='lr')
         #
         # Calculating 1-site <Z_i> for all sites
         Ez_peps = env.measure_1site(ops.z())
@@ -111,9 +114,9 @@ We compare the results obtained using MPS and PEPS routines.
         Exx_peps = env.measure_2site(ops.x(), ops.x(),
                                     opts_svd=opts_svd_env,
                                     opts_var=opts_var_env)
-        #
-        # remove diagonal
+        # remove diagonal for easier comparison with MPS
         Exx_peps = {bd: v for bd, v in Exx_peps.items() if bd[0] != bd[1]}
+
 
 4. *MPS simulations*:
     .. code-block:: python
@@ -137,22 +140,22 @@ We compare the results obtained using MPS and PEPS routines.
         # MPO contributions in H(t) will be added up.
         H = lambda t: [HXX * fXX(t / ta), HZ * fZ(t / ta)]
         #
-        # Initial state; product state via dmrg_
-        # TDVP is unstable staring in a product state
-        # We make bond dimension artificially large
-        psi = mps.random_mps(I, D_total=128)
+        # Initial state; TDVP is unstable staring in a product state
+        # There may be many strategies to mitigate it.
+        # Here it is sufficient to start with a product state obtained via DMRG
+        # with artificially enlarged bond dimension.
+        psi = mps.random_mps(I, D_total=16)  # initialize with D=16
         mps.dmrg_(psi, H(0), method='1site', max_sweeps=8, Schmidt_tol=1e-8)
         #
         # time-evoluion parametters
-        Dmax = 128
         opts_expmv = {'hermitian': True, 'tol': 1e-12}
-        opts_svd = {'tol': 1e-6, 'D_total': Dmax}
+        opts_svd = {'tol': 1e-6, 'D_total': 64}  # max MPS bond dimension
         evol = mps.tdvp_(psi, H, times=(0, ta),
-                        method='1site', dt=dt, order='2nd',
-                        opts_svd=opts_svd, opts_expmv=opts_expmv)
+                        method='12site', dt=dt, order='2nd',
+                        opts_svd=opts_svd, opts_expmv=opts_expmv,
+                        progressbar=True)
         #
-        # evol is a generator; for a single (final) snapshot
-        # it is sufficient to consume it with next
+        # run evolution; # evol is a generaor, with one final snapshot
         next(evol)
         #
         # calculate expectation values
@@ -165,18 +168,39 @@ We compare the results obtained using MPS and PEPS routines.
         Z1 = np.array([Ez_peps[st].real for st in sites]).real
         Z2 = np.array([Ez_mps[s2i[st]].real for st in sites]).real
         error_Z = np.linalg.norm(Z1 - Z2) / np.linalg.norm(Z1)
-        print(f"Relative difference in Z magnetization: {error_Z:0.5f}")
+        print(f"Relative difference PEPS vs MPS in Z magnetization: {error_Z:0.5f}")
 
-        rs = np.array([np.linalg.norm([s1[0]-s2[0], s1[1]-s2[1]]) for (s1, s2) in Exx_peps])
+        dist = lambda s1, s2: np.linalg.norm([s1[0]-s2[0], s1[1]-s2[1]])
+        rs = np.array([dist(s1, s2) for (s1, s2) in Exx_peps])
         XX1 = np.array([*Exx_peps.values()]).real
         XX2 = np.array([Exx_mps[b2i(*bond)] for bond in Exx_peps.keys()]).real
         error_XX = np.linalg.norm(XX1 - XX2) / np.linalg.norm(XX1)
-        print(f"Relative difference in XX correlations: {error_XX:0.5f}")
+        print(f"Relative difference PEPS vs MPS in XX correlations: {error_XX:0.5f}")
 
-        plt.scatter(rs, XX1, marker='+', color='r', label='PEPS')
-        plt.scatter(rs, XX2, marker='o', color='b', label='MPS', facecolors='none')
-        plt.ylim([-1.05, 1.05])
-        plt.xlabel("distance ||i - j||")
-        plt.ylabel("<X_i X_j>")
-        plt.legend()
-        plt.show()
+5. *Visualize*:
+    .. code-block:: python
+
+        fig, ax = plt.subplots(1, 2)
+        fig.set_size_inches(8, 4)
+        plt.subplots_adjust(hspace=0.3, wspace=0.3)
+        ax[0].scatter(rs, XX1, label='PEPS',
+                      marker='+', color='r')
+        ax[0].scatter(rs, XX2, label='MPS',
+                      marker='o', color='b', facecolors='none')
+        ax[0].scatter(rs, XX1, marker='+', color='r', label='PEPS')
+        ax[0].scatter(rs, XX2, marker='o', color='b', label='MPS', facecolors='none')
+        ax[0].set_ylim([-1.05, 1.05])
+        ax[0].set_xlabel(r"distance $||i - j||$")
+        ax[0].set_ylabel(r"two-point correlations $\langle X_i X_j \rangle$")
+        ax[0].legend()
+        ax[1].scatter(np.arange(len(Z1)), Z1, label='PEPS',
+                      marker='+', color='r')
+        ax[1].scatter(np.arange(len(Z1)), Z2, label='MPS',
+                      marker='o', color='b', facecolors='none')
+        ax[1].set_xlabel(r"linear site index i")
+        ax[1].set_ylabel(r"transverse magnetization $\langle Z_i \rangle$")
+        ax[1].set_ylim([-1.05, 1.05])
+        fig.suptitle(f"{Lx}x{Ly} lattice; annealing_time = {ta:0.1f}")
+        fig.show()
+
+    .. image:: corr_4x4_ta=2.0.png

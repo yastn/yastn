@@ -223,8 +223,8 @@ def test_generate_random_mps():
     bds = (1,) + (D_total,) * (N - 1) + (1,)
     #
     for sym, nn in (('Z2', (0,)), ('Z2', (1,)), ('U1', (N // 2,))):
-        n0 = (0,) * len(nn)
         psi = random_mps_spinless_fermions(N, D_total, sym, nn, config=cfg)
+        n0 = psi.config.sym.zero()
         leg = psi[psi.first].get_legs(axes=0)
         assert leg.t == (nn,) and leg.s == -1
         leg = psi[psi.last].get_legs(axes=2)

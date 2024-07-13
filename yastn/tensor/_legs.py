@@ -71,28 +71,33 @@ class Leg:
 
     def __post_init__(self):
         if not self._verified:
-            if not hasattr(self.sym, 'SYM_ID'):
-                object.__setattr__(self, "sym", self.sym.sym)
+            if not hasattr(self.sym, 'SYM_ID'):  # if config is provided
+                object.__setattr__(self, "sym", self.sym.sym)  # replace is with config.sym
             if self.s not in (-1, 1):
                 raise YastnError('Signature of Leg should be 1 or -1')
-            D = tuple(_flatten(self.D))
-            t = tuple(_flatten(self.t))
+            object.__setattr__(self, "s", int(self.s))
+            D = list(_flatten(self.D))
+            t = list(_flatten(self.t))
             if not all(int(x) == x and x > 0 for x in D):
                 raise YastnError('D should be a tuple of positive ints')
             if not all(int(x) == x for x in t):
                 raise YastnError('Charges should be ints')
-            if len(D) * self.sym.NSYM != len(t) or (self.sym.NSYM == 0 and len(D) != 1):
+            lD, nsym = len(D), self.sym.NSYM
+            if lD * nsym != len(t) or (nsym == 0 and lD != 1):
                 raise YastnError('Number of provided charges and bond dimensions do not match sym.NSYM')
-            newt = tuple(tuple(x.flat) for x in self.sym.fuse(np.array(t).reshape((len(D), 1, self.sym.NSYM)), (self.s,), self.s))
-            oldt = tuple(tuple(x.flat) for x in np.array(t).reshape(len(D), self.sym.NSYM))
+            #
+            t = np.array(t, dtype=np.int64)
+            newt = list(map(tuple, self.sym.fuse(t.reshape(lD, 1, nsym), (self.s,), self.s).tolist()))
+            oldt = list(map(tuple, t.reshape(lD, nsym).tolist()))
+            D = np.array(D, dtype=np.int64).reshape(lD).tolist()
             if oldt != newt:
                 raise YastnError('Provided charges are outside of the natural range for specified symmetry.')
             if len(set(newt)) != len(newt):
                 raise YastnError('Repeated charge index.')
-            tD = dict(zip(newt, D))
-            t =  tuple(sorted(newt))
-            object.__setattr__(self, "t", t)
-            object.__setattr__(self, "D", tuple(tD[x] for x in t))
+
+            tD = dict(sorted(zip(newt, D)))
+            object.__setattr__(self, "t", tuple(tD.keys()))
+            object.__setattr__(self, "D", tuple(tD.values()))
 
             if len(self.legs) == 0:
                 legs = (_Fusion(s=(self.s,)),)
@@ -100,6 +105,9 @@ class Leg:
             object.__setattr__(self, "_verified", True)
 
     def __repr__(self):
+        return ("Leg(sym={}, s={}, t={}, D={}, hist={})".format(self.sym, self.s, self.t, self.D, self.history()))
+
+    def __str__(self):
         return ("Leg(sym={}, s={}, t={}, D={}, hist={})".format(self.sym, self.s, self.t, self.D, self.history()))
 
     def conj(self) -> yastn.Leg:
@@ -190,7 +198,7 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
         return Leg(config, s=s, D=(D_total,))
 
     if n is None:
-        n = (0,) * config.sym.NSYM
+        n = config.sym.zero()
     try:  # handle int input
         n = tuple(n)
     except TypeError:
@@ -198,12 +206,12 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
     if len(n) != config.sym.NSYM:
         raise YastnError('len(n) is not consistent with provided symmetry.')
 
-    an = np.array(n)
+    an = np.array(n, dtype=np.int64)
     spanning_vectors = np.eye(len(n)) if not hasattr(config.sym, 'spanning_vectors') \
                         else np.array(config.sym.spanning_vectors)
 
     nvec = len(spanning_vectors)
-    maxr = np.ceil(3 * sigma).astype(dtype=int)
+    maxr = np.ceil(3 * sigma).astype(dtype=np.int64)
 
     if legs is None:
         shifts = np.zeros((2 * maxr + 1,) * nvec + (nvec,))
@@ -218,28 +226,29 @@ def random_leg(config, s=1, n=None, sigma=1, D_total=8, legs=None, nonnegative=F
         comb_t = list(product(*(leg.t for leg in legs)))
         lcomb_t = len(comb_t)
         comb_t = list(_flatten(comb_t))
-        comb_t = np.array(comb_t, dtype=int).reshape((lcomb_t, len(ss), len(n)))
+        comb_t = np.array(comb_t, dtype=np.int64).reshape((lcomb_t, len(ss), len(n)))
         ts = config.sym.fuse(comb_t, ss, -s)
+
     if nonnegative:
         ts = ts[np.all(ts >= 0, axis=1)]
 
-    uts = tuple(set(tuple(x.flat) for x in ts))
-    ts = np.array(uts)
-    distance = np.linalg.norm((ts - an.reshape(1, -1)) @ spanning_vectors.T, axis=1)
+    uts = sorted(set(map(tuple, ts.tolist())))
+    ts = np.array(uts, dtype=np.int64)
 
+    distance = np.linalg.norm((ts - an.reshape(1, len(n))) @ spanning_vectors.T, axis=1)
     pd = np.exp(- (distance ** 2) / (2 * sigma ** 2))
     pd = pd / sum(pd)
 
-    Ds = np.zeros(len(ts), dtype=int)
+    Ds = np.zeros(len(ts), dtype=np.int64)
     cdf = np.add.accumulate(pd).reshape(1, -1)
     # backend.rand gives distribution in [-1, 1]; subjected to backend seed fixing
     samples = (config.backend.rand(D_total, dtype='float64') + 1.) / 2.
-    samples = np.array(samples).reshape(-1, 1)
-    inds = np.sum(samples > cdf, axis=1)
+    samples = np.array(samples).reshape(D_total, 1)
+    inds = np.sum(samples > cdf, axis=1, dtype=np.int64)
     for i in inds:
         Ds[i] += 1
+    Ds = Ds.tolist()
     tnonzero, Dnonzero = zip(*[(t, D) for t, D in zip(uts, Ds) if D > 0])
-
     return Leg(config, s=s, t=tnonzero, D=Dnonzero)
 
 
@@ -272,12 +281,13 @@ def leg_outer_product(*legs, t_allowed=None) -> yastn.Leg:
     sym = legs[0].sym
 
     comb_t = tuple(product(*(leg.t for leg in legs)))
-    comb_t = np.array(comb_t, dtype=int).reshape((len(comb_t), len(legs), sym.NSYM))
+    comb_t = np.array(comb_t, dtype=np.int64).reshape((len(comb_t), len(legs), sym.NSYM))
     comb_D = tuple(product(*(leg.D for leg in legs)))
-    comb_D = np.array(comb_D, dtype=int).reshape((len(comb_D), len(legs)))
-    teff = sym.fuse(comb_t, tuple(leg.s for leg in legs), seff)
-    Deff = np.prod(comb_D, axis=1, dtype=int)
-    tDs = sorted((tuple(t.flat), D) for t, D in zip(teff, Deff))
+    comb_D = np.array(comb_D, dtype=np.int64).reshape((len(comb_D), len(legs)))
+    teff = sym.fuse(comb_t, tuple(leg.s for leg in legs), seff).tolist()
+    Deff = np.prod(comb_D, axis=1, dtype=np.int64).tolist()
+    tDs = sorted((tuple(x), y) for x, y in zip(teff, Deff))
+    #
     tnew, Dnew = [], []
     for t, group in groupby(tDs, key = lambda x: x[0]):
         if t_allowed is None or t in t_allowed:
@@ -333,7 +343,7 @@ def leg_union(*legs) -> yastn.Leg:
         nsym = legs[0].sym.NSYM
         t = tuple(sorted(set.union(*(set(leg.t) for leg in legs))))
         Dt = [tuple(leg[x[n * nsym : (n + 1) * nsym]] for n, leg in enumerate(new_nlegs)) for x in t]
-        D = tuple(np.prod(Dt, axis=1))
+        D = tuple(np.prod(Dt, axis=1, dtype=np.int64).tolist())
         return replace(legs[0], t=t, D=D, legs=new_nlegs)
     raise YastnError('All arguments of leg_union should have consistent fusions.')
 
@@ -356,8 +366,9 @@ def _leg_union(*legs) -> yastn.Leg:
                 if t in tD and tD[t] != D:
                     raise YastnError('Legs have inconsistent dimensions.')
                 tD[t] = D
-        t = tuple(sorted(tD.keys()))
-        D = tuple(tD[x] for x in t)
+        tD = dict(sorted(tD.items()))
+        t = tuple(tD.keys())
+        D = tuple(tD.values())
         hf = legs[0].legs[0]
     return Leg(sym=legs[0].sym, s=legs[0].s, t=t, D=D, legs=(hf,))
 

@@ -109,6 +109,9 @@ def test_generate_mpo_raise(config=cfg):
     ops = yastn.operators.Spin12(sym='dense', **opts_config)
     I = mps.product_mpo(ops.I(), N=7)
 
+    II = mps.generate_mpo(I, [])
+    assert (I - II).norm() < 1e-12
+
     with pytest.raises(yastn.YastnError):
         Hterms = [mps.Hterm(1., positions=[20], operators=[ops.sz()])]
         mps.generate_mpo(I, Hterms)

@@ -32,6 +32,9 @@ def test_meta_operators():
     # desired signature of matrix operators
     assert ops.s == (1, -1)
 
+    # default _sym follows from make_config()
+    assert ops._sym == 'dense'
+
     # provides a short-cut to set the seed of random number generator in the backend
     ops.random_seed(seed=0)
 

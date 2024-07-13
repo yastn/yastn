@@ -15,7 +15,7 @@
 """ Support for merging blocks in yastn.Tensor """
 from __future__ import annotations
 from functools import lru_cache
-from itertools import groupby, product
+from itertools import groupby, product, accumulate
 from operator import itemgetter
 from typing import NamedTuple
 import numpy as np
@@ -77,6 +77,8 @@ def _transpose_and_merge(config, data, order, struct, slices, meta_mrg, inds=Non
 def _no_change_in_transpose_and_merge(meta_mrg, meta_new, Dsize):
     """ Assumes C ordering on backend reshape """
     low = 0
+    if Dsize in (0, 1):
+        return True
     for _, slo, _, _, _ in meta_mrg:
         if slo[0] != low:
             return False
@@ -127,20 +129,20 @@ def _meta_merge_to_matrix(config, struct, slices, axes, inds):
     t_old = struct.t if inds is None else [struct.t[ii] for ii in inds]
     D_old = struct.D if inds is None else [struct.D[ii] for ii in inds]
     sl_old = slices if inds is None else [slices[ii] for ii in inds]
-    tset = np.array(t_old, dtype=int).reshape((len(t_old), len(struct.s), config.sym.NSYM))
-    Dset = np.array(D_old, dtype=int).reshape(len(D_old), len(struct.s))
-    legs, t, D, Deff, teff, s, ls = [], [], [], [], [], [], []
+    tset = np.array(t_old, dtype=np.int64).reshape((len(t_old), len(struct.s), config.sym.NSYM))
+    Dset = np.array(D_old, dtype=np.int64).reshape(len(D_old), len(struct.s))
+    t, teff, ls = [], [], []
     for n in (0, 1):
-        legs.append(np.array(axes[n], int))
-        t.append(tset[:, legs[n], :])
-        D.append(Dset[:, legs[n]])
-        Deff.append(np.prod(D[n], axis=1, dtype=int))
-        s.append(np.array([struct.s[ii] for ii in axes[n]], dtype=int))
-        teff.append(config.sym.fuse(t[n], s[n], s_eff[n]))
-        teff[n] = tuple(tuple(t.flat) for t in teff[n])
-        t[n] = tuple(tuple(t.flat) for t in t[n])
-        D[n] = tuple(tuple(x) for x in D[n])
-        ls.append(_leg_structure_merge(teff[n], t[n], Deff[n], D[n]))
+        ta = tset[:, axes[n], :]
+        Da = Dset[:, axes[n]]
+        Deff = np.prod(Da, axis=1, dtype=np.int64).tolist()
+        Da = [tuple(x) for x in Da.tolist()]
+        s = tuple(struct.s[ii] for ii in axes[n])
+        ta_eff = [tuple(x) for x in config.sym.fuse(ta, s, s_eff[n]).tolist()]
+        ta = [tuple(x) for x in ta.reshape(len(ta), len(s) * config.sym.NSYM).tolist()]
+        teff.append(ta_eff)
+        t.append(ta)
+        ls.append(_leg_structure_merge(ta_eff, ta, Deff, Da))
 
     smeta = sorted((tel, ter, tl, tr, slo.slcs[0], Do)
                 for tel, ter, tl, tr, slo, Do in zip(teff[0], teff[1], t[0], t[1], sl_old, D_old))
@@ -241,6 +243,8 @@ def fuse_legs(a, axes, mode=None) -> yastn.Tensor:
     order = tuple(_flatten(axes))
     _test_axes_all(a, order)
     axes = tuple(_clear_axes(*axes))
+    if any(len(x) == 0 for x in axes):
+        raise YastnError(f'Empty axis in {axes=}')
 
     if mode == 'meta':
         mfs = []
@@ -274,31 +278,34 @@ def _fuse_legs_hard(a, axes, order):
 @lru_cache(maxsize=1024)
 def _meta_fuse_hard(config, struct, slices, axes):
     """ Meta information for backend needed to hard-fuse some legs. """
-    nblocks, nsym = len(struct.t), len(struct.n)
-    t_in, D_in, tD_dict, tset, Dset = _get_tD_legs(struct)
+    lt, ndim_n, nsym = len(struct.t), len(struct.s), len(struct.n)
+    t_in, D_in, tD_dict = _get_tD_legs(struct)
     slegs = tuple(tuple(struct.s[n] for n in a) for a in axes)
     s_eff = tuple(struct.s[axis[0]] for axis in axes)
-    teff = np.zeros((nblocks, len(s_eff), nsym), dtype=int)
-    Deff = np.zeros((nblocks, len(s_eff)), dtype=int)
+    tset = np.array(struct.t, dtype=np.int64).reshape(lt, ndim_n, nsym)
+    teff = np.zeros((lt, len(s_eff), nsym), dtype=np.int64)
     for n, a in enumerate(axes):
         teff[:, n, :] = config.sym.fuse(tset[:, a, :], slegs[n], s_eff[n])
-        Deff[:, n] = np.prod(Dset[:, a], axis=1, dtype=int)
 
     lls = []
     for n, a in enumerate(axes):
         if len(a) > 1:
-            teff_set = tuple(set(tuple(x.flat) for x in teff[:, n, :]))
-            t_a = tuple(t_in[n] for n in a)
-            D_a = tuple(D_in[n] for n in a)
+            teff_set = tuple(set(map(tuple, teff[:, n, :].tolist())))
+            t_a = tuple(t_in[ia] for ia in a)
+            D_a = tuple(D_in[ia] for ia in a)
             lls.append(_leg_structure_combine_charges_prod(config.sym, t_a, D_a, slegs[n], teff_set, s_eff[n]))
         else:
             t, D = tuple(tD_dict[a[0]].keys()), tuple(tD_dict[a[0]].values())
             dec = tuple((_DecRecord(tt, (0, DD), DD, (DD,)),) for tt, DD in zip(t, D))
             lls.append(_LegSlices(t, D, dec))
 
-    teff_split = [tuple(tuple(y.flat) for y in x) for x in teff]
-    told_split = [tuple(tuple(x[a, :].flat) for a in axes) for x in tset]
-    teff = tuple(tuple(x.flat) for x in teff)
+    teff_split = (tuple(map(tuple, x)) for x in teff.tolist())
+    if len(axes) > 0:
+        told_split = zip(*[tset[:, a, :].reshape(lt, len(a) * nsym).tolist() for a in axes])
+        told_split = (tuple(map(tuple, x)) for x in told_split)
+    else:
+        told_split = struct.t
+    teff = map(tuple, teff.reshape(lt, len(axes) * nsym).tolist())
 
     smeta = sorted((tes, tn, tos, slo.slcs[0], Do) for tes, tn, tos, slo, Do
                 in zip(teff_split, teff, told_split, slices, struct.D))
@@ -319,9 +326,9 @@ def _meta_fuse_hard(config, struct, slices, axes):
                     _, _, tos, slo, Do = next(gr)
         except StopIteration:
             pass
-    Dp_new = np.prod(D_new, axis=1, dtype=int) if D_new else []
-    struct_new = struct._replace(t=tuple(t_new), D=tuple(D_new), s=tuple(s_eff), size=sum(Dp_new))
-    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(Dp_new), Dp_new, D_new))
+    Dp_new = np.prod(D_new, axis=1, dtype=np.int64).tolist() if D_new else []
+    struct_new = struct._replace(t=tuple(t_new), D=tuple(D_new), s=s_eff, size=sum(Dp_new))
+    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp_new), Dp_new, D_new))
     return struct_new, slices_new, meta_mrg, t_in, D_in
 
 
@@ -420,7 +427,7 @@ def unfuse_legs(a, axes) -> yastn.Tensor:
 @lru_cache(maxsize=1024)
 def _meta_unfuse_hard(config, struct, slices, axes, hfs):
     """ Meta information for backend needed to hard-unfuse some legs. """
-    t_in, _, tD_dict, _, _ = _get_tD_legs(struct)
+    t_in, _, tD_dict = _get_tD_legs(struct)
     lls, hfs_new, snew, nlegs_unfused = [], [], [], []
     for n, hf in enumerate(hfs):
         if n in axes:
@@ -450,9 +457,9 @@ def _meta_unfuse_hard(config, struct, slices, axes, hfs):
     meta = sorted(meta, key=lambda x: x[0])
     tnew = tuple(x[0] for x in meta)
     Dnew = tuple(x[1] for x in meta)
-    Dpnew = tuple(np.prod(np.array(Dnew, dtype=int).reshape(len(Dnew), len(snew)), axis=1, dtype=int))
+    Dpnew = np.prod(np.array(Dnew, dtype=np.int64).reshape(len(Dnew), len(snew)), axis=1, dtype=np.int64).tolist()
     struct_new = struct._replace(s=tuple(snew), t=tnew, D=Dnew, size=sum(Dpnew))
-    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(Dpnew), Dpnew, Dnew))
+    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dpnew), Dpnew, Dnew))
     meta = tuple((x.slcs[0], *y[2:]) for x, y in zip(slices_new, meta))
     return meta, struct_new, slices_new, tuple(nlegs_unfused), tuple(hfs_new)
 
@@ -476,7 +483,7 @@ def _meta_unmerge_matrix(config, struct, slices, ls0, ls1, snew):
     Dnew = tuple(x[1] for x in meta)
     Dpnew = tuple(x[2] for x in meta)
     struct_new = struct._replace(s=tuple(snew), t=tnew, D=Dnew, size=sum(Dpnew))
-    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(Dpnew), Dpnew, Dnew))
+    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dpnew), Dpnew, Dnew))
     meta = tuple((x.slcs[0], *y[3:]) for x, y in zip(slices_new, meta))
     return meta, struct_new, slices_new
 
@@ -486,8 +493,8 @@ def _meta_unmerge_matrix(config, struct, slices, ls0, ls1, snew):
 # def _masks_for_axes(config, structa, hfa, axa, structb, hfb, axb, tcon):
 #     """ masks to get the intersecting parts of single legs from two tensors. """
 #     msk_a, msk_b = [], []
-#     tla, Dla, _, _, _ = _get_tD_legs(structa)
-#     tlb, Dlb, _, _, _ = _get_tD_legs(structb)
+#     tla, Dla, _= _get_tD_legs(structa)
+#     tlb, Dlb, _= _get_tD_legs(structb)
 #     for i1, i2 in zip(axa, axb):
 #         ma, mb = _intersect_hfs(config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (hfa[i1], hfb[i2]))
 #         msk_a.append(ma)
@@ -501,8 +508,8 @@ def _meta_unmerge_matrix(config, struct, slices, ls0, ls1, snew):
 def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb):
     """ masks to get the intersecting parts of legs from two tensors as single masks """
     msk_a, msk_b = [], []
-    tla, Dla, _, _, _ = _get_tD_legs(structa)
-    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
+    tla, Dla, _= _get_tD_legs(structa)
+    tlb, Dlb, _= _get_tD_legs(structb)
     for i1, i2 in zip(axa, axb):
         ma, mb = _intersect_hfs(config, (tla[i1], tlb[i2]), (Dla[i1], Dlb[i2]), (hfa[i1], hfb[i2]))
         msk_a.append(ma)
@@ -515,34 +522,29 @@ def _masks_for_tensordot(config, structa, hfa, axa, lsa, structb, hfb, axb, lsb)
         msk_b[t] = config.backend.to_mask(x)
     return msk_a, msk_b
 
-
 def _merge_masks_intersect(config, struct, slices, ms):
     """ combine masks using information from struct"""
     msk = np.ones((struct.size,), dtype=bool)
+    Dnew = np.zeros((len(struct.t), len(ms)), dtype=np.int64)
     nsym = config.sym.NSYM
-    Dnew, slices_new, low, high = [], [], 0, 0
-    for t, slo in zip(struct.t, slices):
-        x = ms[0][t[:nsym]]
-        Dt = [np.sum(x)]
-        for i in range(1, len(ms)):
-            xi = ms[i][t[i * nsym: (i + 1) * nsym]]
-            Dt.append(np.sum(xi))
-            x = np.outer(x, xi).ravel()
+    for t, slo, Dt in zip(struct.t, slices, Dnew):
+        for i, msi in enumerate(ms):
+            xi = msi[t[i * nsym: (i + 1) * nsym]]
+            Dt[i] = np.sum(xi)
+            x = xi if i == 0 else np.outer(x, xi).ravel()
         msk[slice(*slo.slcs[0])] = x
-        Dnew.append(tuple(Dt))
-        Dp = np.prod(Dnew[-1])
-        high = low + Dp
-        slices_new.append(_slc(((low, high),), Dnew[-1], Dp))
-        low = high
-    struct_new = struct._replace(D=tuple(Dnew), size=high)
-    return msk, struct_new, tuple(slices_new)
+    Dp = np.prod(Dnew, axis=1, dtype=np.int64).tolist()
+    Dnew = tuple(map(tuple, Dnew.tolist()))
+    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dnew))
+    struct_new = struct._replace(D=Dnew, size=sum(Dp))
+    return msk, struct_new, slices_new
 
 
 def _masks_for_vdot(config, structa, slicesa, hfa, structb, slicesb, hfb):
     """ masks to get the intersecting parts on all legs from two tensors """
     msk_a, msk_b = [], []
-    tla, Dla, _, _, _ = _get_tD_legs(structa)
-    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
+    tla, Dla, _= _get_tD_legs(structa)
+    tlb, Dlb, _= _get_tD_legs(structb)
     ndim = len(tla)
     for n in range(ndim):
         ma, mb = _intersect_hfs(config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (hfa[n], hfb[n]))
@@ -586,29 +588,26 @@ def _merge_masks_embed(config, struct, slices, ms):  # TODO
     """ combine masks using information from struct"""
     nsym = config.sym.NSYM
     msk = []
-    Dnew, slices_new, low, high = [], [], 0, 0
-    for t in struct.t:
-        x = ms[0][t[:nsym]]
-        Dt = [len(x)]
-        for i in range(1, len(ms)):
-            xi = ms[i][t[i * nsym: (i + 1) * nsym]]
-            Dt.append(len(xi))
-            x = np.outer(x, xi).ravel()
+    Dnew = np.zeros((len(struct.t), len(ms)), dtype=np.int64)
+    for t, Dt in zip(struct.t, Dnew):
+        for i, msi in enumerate(ms):
+            xi = msi[t[i * nsym: (i + 1) * nsym]]
+            Dt[i] = len(xi)
+            x = xi if i == 0 else np.outer(x, xi).ravel()
         msk.append(x)
-        Dnew.append(tuple(Dt))
-        Dp = np.prod(Dnew[-1])
-        high = low + Dp
-        slices_new.append(_slc(((low, high),), Dnew[-1], Dp))
-        low = high
-    struct_new = struct._replace(D=tuple(Dnew), size=high)
+    Dp = np.prod(Dnew, axis=1, dtype=np.int64).tolist()
+    Dnew = tuple(map(tuple, Dnew.tolist()))
+    slices_new = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(Dp), Dp, Dnew))
+    struct_new = struct._replace(D=Dnew, size=sum(Dp))
     msk = np.hstack(msk) if len(msk) > 0 else np.zeros((0,), dtype=bool)
-    return msk, struct_new, tuple(slices_new)
+    return msk, struct_new, slices_new
+
 
 
 def _masks_for_add(config, structa, slicesa, hfa, structb, slicesb, hfb):
     msk_a, msk_b, hfs = [], [], []
-    tla, Dla, _, _, _ = _get_tD_legs(structa)
-    tlb, Dlb, _, _, _ = _get_tD_legs(structb)
+    tla, Dla, _= _get_tD_legs(structa)
+    tlb, Dlb, _= _get_tD_legs(structb)
     for n in range(len(structa.s)):
         ma, mb, hf = _union_hfs(config, (tla[n], tlb[n]), (Dla[n], Dlb[n]), (hfa[n], hfb[n]))
         msk_a.append(ma)
@@ -649,17 +648,17 @@ def _embed_tensor(a, legs, legs_new):
 @lru_cache(maxsize=1024)
 def _leg_structure_combine_charges_prod(sym, t_in, D_in, s_in, t_out, s_out):
     """ Combine effective charges and dimensions from a list of charges and dimensions for a few legs. """
-    comb_t = tuple(product(*t_in))
-    comb_t = np.array(comb_t, dtype=int).reshape((len(comb_t), len(s_in), sym.NSYM))
-    comb_D = tuple(product(*D_in))
-    comb_D = np.array(comb_D, dtype=int).reshape((len(comb_D), len(s_in)))
+    comb_t = list(product(*t_in))
+    comb_t = np.array(comb_t, dtype=np.int64).reshape((len(comb_t), len(s_in), sym.NSYM))
+    comb_D = list(product(*D_in))
+    comb_D = np.array(comb_D, dtype=np.int64).reshape((len(comb_D), len(s_in)))
     teff = sym.fuse(comb_t, s_in, s_out)
-    ind = np.array([ii for ii, te in enumerate(teff) if tuple(te.flat) in t_out], dtype=int)
+    ind = np.array([ii for ii, te in enumerate(teff.tolist()) if tuple(te) in t_out], dtype=np.int64)
     comb_D, comb_t, teff = comb_D[ind], comb_t[ind], teff[ind]
-    Deff = tuple(np.prod(comb_D, axis=1, dtype=int))
-    Dlegs = tuple(tuple(x.flat) for x in comb_D)
-    teff = tuple(tuple(x.flat) for x in teff)
-    tlegs = tuple(tuple(x.flat) for x in comb_t)
+    Deff = tuple(np.prod(comb_D, axis=1, dtype=np.int64).tolist())
+    Dlegs = tuple(map(tuple, comb_D.tolist()))
+    teff = tuple(map(tuple, teff.tolist()))
+    tlegs = tuple(map(tuple, comb_t.reshape(len(comb_t), len(s_in) * sym.NSYM).tolist()))
     return _leg_structure_merge(teff, tlegs, Deff, Dlegs)
 
 
@@ -752,9 +751,9 @@ def _merge_masks_sum(ls, ms):
 
 def _outer_masks(t, ms, nsym):
     """ Outer product of masks for different axes, mask of reshaped block. """
-    x = ms[0][t[:nsym]]
-    for i in range(1, len(ms)):
-        x = np.outer(x, ms[i][t[i * nsym: (i + 1) * nsym]]).ravel()
+    for i, msi in enumerate(ms):
+        xi = msi[t[i * nsym: (i + 1) * nsym]]
+        x = xi if i == 0 else np.outer(x, xi).ravel()
     return x
 
 

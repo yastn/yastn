@@ -39,7 +39,7 @@ class TestSyntaxTensorCreation(unittest.TestCase):
         # The signatures can be interpreted as tensor legs being directed: ingoing for (+)
         # or outgoing for (-).
         #
-        # The symmetry, U(1), is specified in config_U1. We specify the charge
+        # The symmetry, U1, is specified in config_U1. We specify the charge
         # sectors on all legs by tuple t, with its first member, t[0], defining charge
         # sectors on the first leg, t[1] on second leg and so on.
         # The corresponding dimensions of each charge sector are specified by tuple D
@@ -75,7 +75,7 @@ class TestSyntaxTensorCreation(unittest.TestCase):
         #  (-) 0--<--| a |--<--1 (+)
         #  (+) 2-->--|___|-->--3 (-)
         #
-        # The symmetry, U(1), is specified in config_U1.
+        # The symmetry, U1, is specified in config_U1.
         #
         # Then, initialize some blocks with random values. The charges
         # of the block, ts, are given as a tuple with the length identical to
@@ -163,7 +163,7 @@ class TestSyntaxTensorExportImport(unittest.TestCase):
 
     def test_syntax_tensor_export_import_operations(self):
         #
-        # First, we crate a random U(1) symmetric tensor
+        # First, we crate a random U1 symmetric tensor
         # Such tensor is stored as dict of non-zero blocks, indexed by charges
         #
 
@@ -235,7 +235,7 @@ class TestSyntaxTensorBlocking(unittest.TestCase):
 class TestSyntaxContractions(unittest.TestCase):
 
     def test_syntax_contraction(self):
-        # create a set of U(1)-symmetric tensors
+        # create a set of U1-symmetric tensors
         leg1 = yastn.Leg(config_U1, s=-1, t=(-1, 0, 1), D=(1, 2, 3))
         leg2 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(4, 5, 6))
         leg3 = yastn.Leg(config_U1, s=1, t=(-1, 1, 2), D=(7, 8, 9))

@@ -83,7 +83,7 @@ def generate_product_mpo_from_Hterm(I, term, amplitude=True) -> yastn.tn.mps.Mps
             tmp[n] = tmp[n].swap_gate(axes=0, charge=charge)
 
     psi = Mpo(len(I))
-    rt = (0,) * op.config.sym.NSYM
+    rt = op.config.sym.zero()
     for n, vec in zip(psi.sweep(to='first'), tmp[::-1]):
         vec = vec.add_leg(axis=1, s=1, t=rt)
         rt = vec.n
@@ -100,22 +100,25 @@ class GenerateMpoTemplate(NamedTuple):
     tleft: list = None
 
 
-def generate_mpo_preprocessing(I, terms) -> GenerateMpoTemplate | tuple[GenerateMpoTemplate, list[float]]:
+def generate_mpo_preprocessing(I, terms=None) -> GenerateMpoTemplate | tuple[GenerateMpoTemplate, list[float]]:
     r"""
     Precompute an amplitude-independent template that is used
     to generate MPO with :meth:`mps.generate_mpo_fast<yastn.tn.mps.generate_mpo_fast>`
 
     Parameters
     ----------
-    terms: list of :class:`Hterm`
-        product operators making up the MPO.
     I: yastn.tn.mps.MpsMpoOBC
         identity MPO.
+
+    terms: list of :class:`Hterm`
+        product operators making up the MPO.
     """
+    if terms is None or len(terms) == 0:
+        return GenerateMpoTemplate(trans=I)
     I2 = [I[n].remove_leg(axis=0).remove_leg(axis=1) for n in I.sweep(to='last')]
     H1s = [generate_product_mpo_from_Hterm(I2, term, amplitude=False) for term in terms]
     cfg = H1s[0][0].config
-    mapH = np.zeros((len(H1s), I.N), dtype=int)
+    mapH = np.zeros((len(H1s), I.N), dtype=np.int64)
 
     basis, t1bs, t2bs, tfbs, ifbs = [], [], [], [], []
     for n in I.sweep():
@@ -137,12 +140,14 @@ def generate_mpo_preprocessing(I, terms) -> GenerateMpoTemplate | tuple[Generate
         base = block(dict(enumerate(base)), common_legs=(1, 2)).drop_leg_history()
         basis.append(base)
 
-    tleft = [t1bs[0][i] for i in mapH[:, 0]]
+    tleft = [t1bs[0][i] for i in mapH[:, 0].tolist()]
 
     trans = []
     for n in I.sweep():
-        mapH0 = mapH[:, 0]
+        mapH0 = mapH[:, 0].tolist()
         mapH, rind, iind = np.unique(mapH[:, 1:], axis=0, return_index=True, return_inverse=True)
+        iind = iind.ravel().tolist()
+        rind = rind.ravel().tolist()
 
         i2bs = {t: {} for t in t2bs[n]}
         for ii, rr in enumerate(rind):
@@ -194,6 +199,9 @@ def generate_mpo_fast(template, amplitudes, opts_svd=None) -> yastn.tn.mps.MpsMp
         Default ``None`` sets truncation ``tol`` close to the numerical precision,
         which typically results in lossless compression.
     """
+    if len(amplitudes) == 0:
+        return template.trans.copy()
+
     if opts_svd is None:
         opts_svd = {'tol': 1e-13}
 
@@ -222,7 +230,7 @@ def generate_mpo_fast(template, amplitudes, opts_svd=None) -> yastn.tn.mps.MpsMp
     return M
 
 
-def generate_mpo(I, terms, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
+def generate_mpo(I, terms=None, opts_svd=None) -> yastn.tn.mps.MpsMpoOBC:
     r"""
     Generate MPO provided a list of :class:`Hterm`\-s and identity MPO ``I``.
 

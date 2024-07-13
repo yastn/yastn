@@ -14,6 +14,7 @@
 # ==============================================================================
 """ Linalg methods for yastn.Tensor. """
 from __future__ import annotations
+from itertools import accumulate
 import numpy as np
 from ._auxliary import _struct, _slc, _clear_axes, _unpack_axes
 from ._tests import YastnError, _test_axes_all
@@ -221,8 +222,8 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     V has signature = (-sU, struct.s[1])
     if nU than U carries struct.n, otherwise V
     """
-    nsym = len(struct.n)
-    n0 = (0,) * nsym
+    n0 = config.sym.zero()
+    nsym = config.sym.NSYM
 
     if any(D == 0 for D in minD):
         at = tuple(x for x, mD in zip(struct.t, minD) if mD > 0)
@@ -234,13 +235,13 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     if nU and sU == struct.s[1]:
         t_con = tuple(x[nsym:] for x in struct.t)
     elif nU: # and -sQ == struct.s[1]
-        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
-        t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, 1:, :], (1,), -1))
+        t_con = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), 2, nsym))
+        t_con = tuple(map(tuple, config.sym.fuse(t_con[:, 1:, :], (1,), -1).tolist()))
     elif sU == -struct.s[0]: # and nV (not nU)
         t_con = tuple(x[:nsym] for x in struct.t)
     else: # not nU and sU == struct.s[0]
-        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
-        t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, :1, :], (1,), -1))
+        t_con = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), 2, nsym))
+        t_con = tuple(map(tuple, config.sym.fuse(t_con[:, :1, :], (1,), -1).tolist()))
     Un, Vn = (struct.n, n0) if nU else (n0, struct.n)
 
     Ut = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
@@ -249,15 +250,15 @@ def _meta_svd(config, struct, slices, minD, sU, nU):
     UD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
     SD = tuple((dm, dm) for dm in minD)
     VD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
-    UDp = tuple(np.prod(UD, axis=1))
-    Usl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(UDp), UDp, UD))
+    UDp = np.prod(UD, axis=1, dtype=np.int64).tolist()
+    Usl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(UDp), UDp, UD))
 
     meta = tuple(zip(slices, struct.D, Usl, UD, St, Vt, VD))
     St, Vt, SD, VD = zip(*sorted(zip(St, Vt, SD, VD))) if len(St) > 0 else ((), (), (), ())
     SDp = tuple(dd[0] for dd in SD)
-    VDp = tuple(np.prod(VD, axis=1))
-    Ssl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(SDp), SDp, SD))
-    Vsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(VDp), VDp, VD))
+    VDp = np.prod(VD, axis=1, dtype=np.int64).tolist()
+    Ssl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(SDp), SDp, SD))
+    Vsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(VDp), VDp, VD))
     Sdict = {x: y.slcs[0] for x, y in zip(St, Ssl)}
     Vdict = {x: y.slcs[0] for x, y in zip(Vt, Vsl)}
 
@@ -328,8 +329,8 @@ def truncation_mask_multiplets(S, tol=0, D_total=float('inf'),
     # check symmetry related blocks and truncate to equal length
     active_sectors = filter(lambda x: any(Smask[x]), Smask.struct.t)
     for t in active_sectors:
-        tn = np.array(t, dtype=int).reshape((1, 1, -1))
-        tn = tuple(S.config.sym.fuse(tn, (1,), -1).flat)
+        tn = np.array(t, dtype=np.int64).reshape((1, 1, -1))
+        tn = tuple(S.config.sym.fuse(tn, (1,), -1).ravel().tolist())
         if t == tn:
             continue
 
@@ -465,27 +466,27 @@ def _meta_qr(config, struct, slices, sQ):
     R has signature = (-sQ, struct.s[1])
     """
     minD = tuple(min(ds) for ds in struct.D)
-    nsym = len(struct.n)
-    n0 = (0,) * nsym
+    n0 = config.sym.zero()
+    nsym = config.sym.NSYM
 
     if sQ == struct.s[1]:
         t_con = tuple(x[nsym:] for x in struct.t)
     else: # -sQ == struct.s[1]
-        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
-        t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, 1:, :], (1,), -1))
+        t_con = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), 2, nsym))
+        t_con = tuple(map(tuple, config.sym.fuse(t_con[:, 1:, :], (1,), -1).tolist()))
 
     Qt = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
     Rt = tuple(y + x[nsym:] for y, x in zip(t_con, struct.t))
     QD = tuple((ds[0], dm) for ds, dm in zip(struct.D, minD))
     RD = tuple((dm, ds[1]) for dm, ds in zip(minD, struct.D))
-    QDp = tuple(np.prod(QD, axis=1))
-    Qsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(QDp), QDp, QD))
+    QDp = np.prod(QD, axis=1, dtype=np.int64).tolist()
+    Qsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(QDp), QDp, QD))
 
     meta = tuple(zip(slices, struct.D, Qsl, QD, Rt, RD))
 
     Rt, RD = zip(*sorted(zip(Rt, RD))) if len(Rt) > 0 else ((), ())
-    RDp = tuple(np.prod(RD, axis=1))
-    Rsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(RDp), RDp, RD))
+    RDp = np.prod(RD, axis=1, dtype=np.int64).tolist()
+    Rsl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(RDp), RDp, RD))
     Rdict = {x: y.slcs[0] for x, y in zip(Rt, Rsl)}
 
     meta = tuple((sl.slcs[0], d, slq.slcs[0], dq, Rdict[tr], dr) for sl, d, slq, dq, tr, dr in meta)
@@ -555,14 +556,14 @@ def _meta_eigh(config, struct, slices, sU):
     U has signature = (struct.s[0], sU)
     S has signature = (-sU, sU)
     """
-    nsym = len(struct.n)
-    n0 = (0,) * nsym
+    n0 = config.sym.zero()
+    nsym = config.sym.NSYM
 
     if sU == -struct.s[0]:
         t_con = tuple(x[:nsym] for x in struct.t)
     else: # and sU == struct.s[0]
-        t_con = np.array(struct.t, dtype=int).reshape((len(struct.t), 2, nsym))
-        t_con = tuple(tuple(x.flat) for x in config.sym.fuse(t_con[:, :1, :], (1,), -1))
+        t_con = np.array(struct.t, dtype=np.int64).reshape((len(struct.t), 2, nsym))
+        t_con = tuple(map(tuple, config.sym.fuse(t_con[:, :1, :], (1,), -1).tolist()))
 
     Ut = tuple(x[:nsym] + y for x, y in zip(struct.t, t_con))
     Ustruct = struct._replace(t=Ut, s=(struct.s[0], sU))
@@ -575,7 +576,7 @@ def _meta_eigh(config, struct, slices, sU):
     St, SD = zip(*sorted(zip(St, SD))) if len(St) > 0 else ((), ())
     SDp = tuple(dd[0] for dd in SD)
 
-    Ssl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(np.cumsum(SDp), SDp, SD))
+    Ssl = tuple(_slc(((stop - dp, stop),), ds, dp) for stop, dp, ds in zip(accumulate(SDp), SDp, SD))
     Sdict = {x: y.slcs[0] for x, y in zip(St, Ssl)}
 
     meta = tuple((sl.slcs[0], d, sl.slcs[0], d, Sdict[ts]) for sl, d, ts in meta)

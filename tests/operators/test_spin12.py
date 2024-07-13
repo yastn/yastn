@@ -34,7 +34,10 @@ def test_spin12():
 
     ops_dense = yastn.operators.Spin12(sym='dense', backend=backend, default_device=default_device)
     ops_Z2 = yastn.operators.Spin12(sym='Z2', backend=backend, default_device=default_device)
-    ops_U1 = yastn.operators.Spin12(sym='U1', backend=backend, default_device=default_device)
+    # other way to initialize
+    config_U1 = yastn.make_config(sym='U1', backend=backend, default_device=default_device)
+    ops_U1 = yastn.operators.Spin12(**config_U1._asdict())
+
     rs = (False, False, True) # reverse option for to_numpy/to_dense/to_nonsymmetric
 
     assert all(ops.config.fermionic == False for ops in (ops_dense, ops_Z2, ops_U1))
@@ -97,13 +100,16 @@ def test_spin12():
 
     with pytest.raises(yastn.YastnError):
         _ = ops_U1.x()
-        # Cannot define sigma_x operator for U(1) symmetry
+        # Cannot define sigma_x operator for U1 symmetry
     with pytest.raises(yastn.YastnError):
         _ = ops_U1.y()
-        # Cannot define sigma_y operator for U(1) symmetry
+        # Cannot define sigma_y operator for U1 symmetry
     with pytest.raises(yastn.YastnError):
-        yastn.operators.Spin12('wrong symmetry')
+        yastn.operators.Spin12(sym='wrong symmetry')
         # For Spin12 sym should be in ('dense', 'Z2', 'U1').
+    with pytest.raises(yastn.YastnError):
+        yastn.operators.Spin12(sym='U1', fermionic=True)
+        # For Spin12 config.fermionic should be False.
     with pytest.raises(yastn.YastnError):
         ops_U1.vec_z(val=10)
         # Eigenvalues val should be in (-1, 1).

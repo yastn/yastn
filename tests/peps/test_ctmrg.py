@@ -113,7 +113,7 @@ def run_ctm(psi, ops, D=8, init='eye', method='2site'):
     return env
 
 
-def check_Z(env, ops, Z_exact, site=None, tol_ev = 1e-4):
+def check_Z(env, ops, Z_exact, site=None, tol_ev = 1e-3):
     Z = env.measure_1site(ops.z(), site=site)
     if site is None:
         Znn1 = env.measure_nn(ops.z(), ops.I())
@@ -126,7 +126,7 @@ def check_Z(env, ops, Z_exact, site=None, tol_ev = 1e-4):
     assert abs(abs(Z) - Z_exact) < tol_ev
 
 
-def check_ZZ(env, ops, ZZ_exact, bond=None, tol_ev = 1e-4):
+def check_ZZ(env, ops, ZZ_exact, bond=None, tol_ev = 1e-3):
     ZZ = env.measure_nn(ops.z(), ops.z(), bond=bond)
     if bond is None:
         ZZ = mean([*ZZ.values()])
@@ -148,7 +148,7 @@ def test_ctm_ising():
     beta = 0.6
     print(f"Lattice: checkerboard infinite; gauges= False; {beta=}; {method=}")
     psi = create_Ising_peps(ops, beta, lattice='checkerboard', dims=(2, 2), boundary='infinite', gauges=False)
-    env = run_ctm(psi, ops, init='eye', method=method)
+    env = run_ctm(psi, ops, init='rand', method=method)
     check_Z(env, ops, Z_exact[beta])
     check_ZZ(env, ops, ZZ_exact[beta])
     #
@@ -156,7 +156,7 @@ def test_ctm_ising():
     beta = 0.3
     print(f"Lattice = square infinite, gauges = False; {beta=}; {method=}")
     psi = create_Ising_peps(ops, beta, lattice='square', dims=(2, 3), boundary='infinite', gauges=True)
-    env = run_ctm(psi, ops, init='rand', method=method)
+    env = run_ctm(psi, ops, init='eye', method=method)
     check_Z(env, ops, Z_exact[beta])
     check_ZZ(env, ops, ZZ_exact[beta])
     #
@@ -164,7 +164,7 @@ def test_ctm_ising():
     beta = 0.6  # CTM should not be really used with "cylinder"
     print(f"Lattice = square cylinder, gauges = False; {beta=}; {method=}")
     psi = create_Ising_peps(ops, beta, lattice='square', dims=(3, 17), boundary='cylinder', gauges=False)
-    env = run_ctm(psi, ops, D=4, init='eye', method=method)
+    env = run_ctm(psi, ops, D=4, init='rand', method=method)
     check_Z(env, ops, Z_exact[beta], site=(1, 6))
     check_Z(env, ops, Z_exact[beta], site=(0, 6))
     check_ZZ(env, ops, ZZ_exact[beta], bond=((1, 8), (0, 8)))

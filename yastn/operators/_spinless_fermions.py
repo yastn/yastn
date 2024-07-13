@@ -20,7 +20,7 @@ from ._meta_operators import meta_operators
 class SpinlessFermions(meta_operators):
     """ Predefine operators for spinless fermions. """
 
-    def __init__(self, sym='U1', **kwargs):
+    def __init__(self, **kwargs):
         r"""
         Standard operators for single fermionic species and 2-dimensional Hilbert space.
         Defines identity, creation, annihilation, and density operators.
@@ -37,12 +37,13 @@ class SpinlessFermions(meta_operators):
 
         Fixes :code:`fermionic` fields in config to :code:`True`.
         """
-        if sym not in ('Z2', 'U1'):
-            raise YastnError("For SpinlessFermions sym should be in ('Z2', 'U1').")
-        kwargs['fermionic'] = True
-        kwargs['sym'] = sym
+        if 'fermionic' not in kwargs:
+            kwargs['fermionic'] = True
         super().__init__(**kwargs)
-        self._sym = sym
+        if self._sym not in ('Z2', 'U1'):
+            raise YastnError("For SpinlessFermions sym should be in ('Z2', 'U1').")
+        if self.config.fermionic != True:
+            raise YastnError("For SpinlessFermions config.fermionic should be True.")
         self.operators = ('I', 'n', 'c', 'cp')
 
     def space(self) -> yastn.Leg:
