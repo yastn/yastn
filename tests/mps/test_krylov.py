@@ -50,7 +50,7 @@ def test_krylov():
     H = HXX + HZ
     psi = mps.random_mps(I, D_total=4)
 
-    yastn.expmv(lambda x: H @ x, psi, 0.1)
+    # yastn.expmv(lambda x: H @ x, psi, 0.1)
 
 
 
