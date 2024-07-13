@@ -263,14 +263,11 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, info
     #
     # rank-1 approximation
     G0, S, G1 = G.svd(axes=((0, 2), (3, 1)))
-
     maskS = truncation_mask(S, D_total=1)
-    G0, S1, G1 = maskS.apply_mask(G0, S, G1, axes=(-1, 0, 0))
-
-    nS = S.norm()
-    info['EAT_error'] = (nS**2 - S1.norm()**2)**0.5 / nS
-
-    G0, _, G1 = svd_with_truncation(G, axes=((0, 2), (3, 1)), D_total=1)
+    Srest = maskS.bitwise_not().apply_mask(S, axes=0)
+    info['EAT_error'] = Srest.norm() / S.norm()
+    #
+    G0, G1 = maskS.apply_mask(G0, G1, axes=(-1, 0))
     G0 = G0.remove_leg(axis=2)
     G1 = G1.remove_leg(axis=0)
     #
