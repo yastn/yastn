@@ -185,6 +185,7 @@ def test_ctm_save_load_copy():
             assert (ten0 - ten1).norm() < 1e-14
             assert (ten0 - ten2).norm() < 1e-14
 
+
 if __name__ == '__main__':
     test_ctm_ising()
     test_ctm_save_load_copy()

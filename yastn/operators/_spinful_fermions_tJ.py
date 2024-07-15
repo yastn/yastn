@@ -1,20 +1,32 @@
+# Copyright 2024 The YASTN Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
 """ Generator of basic local spinful-fermion operators for tJ model. """
 from __future__ import annotations
 from ..tensor import YastnError, Tensor, Leg
 from ._meta_operators import meta_operators
-import yastn
 
 class SpinfulFermions_tJ(meta_operators):
     """ Predefine operators for spinful fermions. """
 
-    def __init__(self, sym, **kwargs):
+    def __init__(self, **kwargs):
         r"""
-        Generator of standard operators for local Hilbert space with two fermionic species and 3-dimensional Hilbert space for tJ model (double occupancy is excluded).
-        
-        Symmetry 'U1xU1xZ2' is forced to used.
+        Generator of standard operators for local Hilbert space with two fermionic species
+        and 3-dimensional Hilbert space where double occupancy is excluded.
 
         Predefine identity, creation, annihilation, and density operators.
-        Defines vectors with possible occupations.
+        Defines vectors with possible occupations, and local Hilbert space as a :class:`yastn.Leg`.
 
         Parameters
         ----------
@@ -28,13 +40,21 @@ class SpinfulFermions_tJ(meta_operators):
         In that case, creation and annihilation operators of the two species anti-commute
         (fermionic statistics is encoded in the Z2 channel).
         """
-        # sym = 'U1xU1xZ2'
-        kwargs['fermionic'] = (False, False, True) if sym == 'U1xU1xZ2' else True
-        kwargs['sym'] = sym
+        if 'fermionic' not in kwargs and isinstance(kwargs['sym'], str):
+            kwargs['fermionic'] = (False, False, True) if kwargs['sym'] == 'U1xU1xZ2' else True
         super().__init__(**kwargs)
-        self._sym = sym
+
+        sym = self._sym
+        fer = self.config.fermionic
+
+        if sym not in ('Z2', 'U1xU1', 'U1xU1xZ2'):
+            raise YastnError("For SpinfulFermions_tJ sym should be in ('Z2', 'U1xU1', 'U1xU1xZ2').")
+        if (sym == 'U1xU1xZ2' and fer != (False, False, True)) or \
+           (sym == 'Z2' and fer != True) or \
+           (sym == 'U1xU1' and fer not in (True, (True, True))):
+            raise YastnError("For SpinfulFermions_tJ config.sym does not match config.fermionic.")
         self.operators = ('I', 'n', 'c', 'cp')
-        
+
     def space(self) -> yastn.Leg:
         r""" :class:`yastn.Leg` describing local Hilbert space. """
         if self._sym == 'U1xU1xZ2':
@@ -43,7 +63,6 @@ class SpinfulFermions_tJ(meta_operators):
             leg = Leg(self.config, s=1, t=(0, 1), D=(1, 2))
         if self._sym == 'U1xU1':
             leg = Leg(self.config, s=1, t=((0, 0), (0, 1), (1, 0)), D=(1, 1, 1))
-
         return leg
 
 
@@ -65,14 +84,7 @@ class SpinfulFermions_tJ(meta_operators):
 
     def n(self, spin='u'):
         """ Particle number operator, with spin='u' for spin-up, and 'd' for spin-down. """
-        # n = Tensor(config=self.config, s=self.s, n=(0, 0, 0))
-        # if spin == 'u':
-        #     n.set_block(ts=((1, 0, 1), (1, 0, 1)), Ds=(1, 1), val=1)
-        # elif spin == 'd':
-        #     n.set_block(ts=((0, 1, 1), (0, 1, 1)), Ds=(1, 1), val=1)
-        # return n
         return (self.cp(spin=spin) @ self.c(spin=spin)).remove_zero_blocks()
-    
 
     def h(self):
         """ hole number operator"""
@@ -91,13 +103,13 @@ class SpinfulFermions_tJ(meta_operators):
         r""" Vector with occupation (u, d). """
         if self._sym == 'U1xU1xZ2' and val == (0, 0):
             vec = Tensor(config=self.config, s=(1,), n=(0, 0, 0))
-            vec.set_block(ts=((0, 0, 0),), Ds=(1,), val=[1])
+            vec.set_block(ts=((0, 0, 0),), Ds=(1,), val=1)
         elif self._sym == 'U1xU1xZ2' and val == (1, 0):
             vec = Tensor(config=self.config, s=(1,), n=(1, 0, 1))
-            vec.set_block(ts=((1, 0, 1),), Ds=(1,), val=[1])
+            vec.set_block(ts=((1, 0, 1),), Ds=(1,), val=1)
         elif self._sym == 'U1xU1xZ2' and val == (0, 1):
             vec = Tensor(config=self.config, s=(1,), n=(0, 1, 1))
-            vec.set_block(ts=((0, 1, 1),), Ds=(1,), val=[1])
+            vec.set_block(ts=((0, 1, 1),), Ds=(1,), val=1)
         elif self._sym == 'Z2' and val == (0, 0):
             vec = Tensor(config=self.config, s=(1,), n=0)
             vec.set_block(ts=(0,), Ds=(1,), val=1)
@@ -109,15 +121,15 @@ class SpinfulFermions_tJ(meta_operators):
             vec.set_block(ts=(1,), Ds=(2,), val=[0, 1])
         elif self._sym == 'U1xU1' and val == (0, 0):
             vec = Tensor(config=self.config, s=(1,), n=(0, 0))
-            vec.set_block(ts=((0, 0),), Ds=(1,), val=[1])
+            vec.set_block(ts=((0, 0),), Ds=(1,), val=1)
         elif self._sym == 'U1xU1' and val == (1, 0):
             vec = Tensor(config=self.config, s=(1,), n=(1, 0))
-            vec.set_block(ts=((1, 0),), Ds=(1,), val=[1])
+            vec.set_block(ts=((1, 0),), Ds=(1,), val=1)
         elif self._sym == 'U1xU1' and val == (0, 1):
             vec = Tensor(config=self.config, s=(1,), n=(0, 1))
-            vec.set_block(ts=((0, 1),), Ds=(1,), val=[1])
+            vec.set_block(ts=((0, 1),), Ds=(1,), val=1)
         else:
-            raise YastnError('For SpinfulFermions val in vec_n should be in [(0, 0), (1, 0), (0, 1)].')
+            raise YastnError('For SpinfulFermions_tJ val in vec_n should be in [(0, 0), (1, 0), (0, 1)].')
         return vec
 
     def cp(self, spin='u') -> yastn.Tensor:
@@ -134,7 +146,7 @@ class SpinfulFermions_tJ(meta_operators):
         elif self._sym == 'U1xU1' and spin == 'd':
             cp = Tensor(config=self.config, s=self.s, n=(0, 1))
             cp.set_block(ts=((0, 1), (0, 0)), Ds=(1, 1), val=1)
-        elif self._sym == 'Z2' and spin == 'u':  # charges: 0 <-> (|00>, |11>); 1 <-> (|10>, |01>)
+        elif self._sym == 'Z2' and spin == 'u':  # charges: 0 <-> (|00>,); 1 <-> (|10>, |01>)
             cp = Tensor(config=self.config, s=self.s, n=1)
             cp.set_block(ts=(1, 0), Ds=(2, 1), val=[[1,], [0,]])
         elif self._sym == 'Z2' and spin == 'd':
@@ -152,7 +164,7 @@ class SpinfulFermions_tJ(meta_operators):
         elif self._sym == 'U1xU1xZ2' and spin == 'd':
             c = Tensor(config=self.config, s=self.s, n=(0, -1, 1))
             c.set_block(ts=((0, 0, 0), (0, 1, 1)), Ds=(1, 1), val=1)
-        elif self._sym == 'Z2' and spin == 'u': # charges: 0 <-> (|00>, |11>); 1 <-> (|10>, |01>)
+        elif self._sym == 'Z2' and spin == 'u': # charges: 0 <-> (|00>,); 1 <-> (|10>, |01>)
             c = Tensor(config=self.config, s=self.s, n=1)
             c.set_block(ts=(0, 1), Ds=(1, 2), val=[[1, 0]])
         elif self._sym == 'Z2' and spin == 'd':
@@ -167,26 +179,17 @@ class SpinfulFermions_tJ(meta_operators):
         else:
             raise YastnError("spin shoul be equal 'u' or 'd'.")
         return c
-    
+
     def Sz(self) -> yastn.Tensor:
-        """ Return Sz operator for spin-1/2 fermions
-        Returns:
-            yastn.Tensor: _description_
-        """
+        """ Return Sz operator for spin-1/2 fermions. """
         return 0.5 * (self.n('u') - self.n('d'))
-    
+
     def Sp(self) -> yastn.Tensor:
-        """ Return Sp operator for spin-1/2 fermions
-        Returns:
-            yastn.Tensor: _description_
-        """
+        """ Return Sp operator for spin-1/2 fermions. """
         return self.cp('u') @ self.c('d')
-    
+
     def Sm(self) -> yastn.Tensor:
-        """ Return Sm operator for spin-1/2 fermions
-        Returns:
-            yastn.Tensor: _description_
-        """
+        """ Return Sm operator for spin-1/2 fermions. """
         return self.cp('d') @ self.c('u')
 
     def to_dict(self):
