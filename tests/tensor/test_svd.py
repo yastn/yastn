@@ -125,22 +125,24 @@ def test_svd_fix_signs():
     S = yastn.Tensor(config=config_U1, s=(-1, 1), isdiag=True)
     V = yastn.Tensor(config=config_U1, s=(-1, 1), dtype='complex128')
 
-    U.set_block(ts=(0, 0), Ds=(3, 2), val= [[-1, 0], [0, 1j], [0, 0]])
-    U.set_block(ts=(1, 1), Ds=(2, 2), val= [[0, -1j], [1, 0]])
+    is2 = 0.5 ** 0.5
+    U.set_block(ts=(0, 0), Ds=(3, 2), val= [[-is2, -1/2], [is2, -1/2], [0, is2 * 1j]])
+    U.set_block(ts=(1, 1), Ds=(2, 2), val= [[0, 1j], [1, 0]])
     S.set_block(ts=(0, 0), Ds=(2, 2), val= [0.5, 0.2])
     S.set_block(ts=(1, 1), Ds=(2, 2), val= [0.3, 0.2])
     V.set_block(ts=(0, 0), Ds=(2, 2), val= [[0, 1], [1, 0]])
     V.set_block(ts=(1, 1), Ds=(2, 3), val= [[1, 0, 0], [0, 0.8j, 0.6]])
+
+    Ufixed = yastn.Tensor(config=config_U1, s=(-1, 1), dtype='complex128')
+    Ufixed.set_block(ts=(0, 0), Ds=(3, 2), val= [[is2, 1j / 2], [-is2, 1j / 2], [0, is2]])
+    Ufixed.set_block(ts=(1, 1), Ds=(2, 2), val= [[0, 1], [1, 0]])
 
     USV = U @ S @ V
     for f in [yastn.svd_with_truncation, yastn.svd]:
         nU, nS, nV = f(USV, axis=(0, 1), fix_signs=True)
         nUSV = nU @ nS @ nV
         assert yastn.norm(nUSV - USV) < tol
-        nUcpu = nU.to(device='cpu')  # for test running on cuda
-        assert np.linalg.norm(np.array(nUcpu[0, 0]) - np.array([[1, 0], [0, 1], [0, 0]])) < tol
-        assert np.linalg.norm(np.array(nUcpu[1, 1]) - np.array([[0, 1], [1, 0]])) < tol
-
+        assert (nU- Ufixed).norm() < tol
 
 
 def test_svd_truncate():
@@ -210,6 +212,12 @@ def test_svd_truncate():
     assert S1.get_shape() == (4, 4)
 
     #
+    # Here use truncate_multiplets option to shift the cut to largest D to retain multiplet
+    opts = {'D_total': 10, "truncate_multiplets": True}
+    _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), sU=-1, **opts)
+    assert S1.get_shape() == (12, 12)
+
+    #
     # empty tensor
     opts = {'D_total': 0}
     _, S2, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), nU=False, sU=-1, **opts)
@@ -277,11 +285,20 @@ def test_svd_multiplets():
 
     opts = {'tol': 0.0001, 'D_block': 7, 'D_total': 30}
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
-    print(sorted(np.diag(S1.to_numpy())))
     assert S1.get_shape() == (30, 30)
 
-    mask_f = lambda x: yastn.truncation_mask_multiplets(x, tol=0.00001, D_total=30, eps_multiplet=0.001)
+    mask_f = lambda x: yastn.truncation_mask_multiplets(x, tol=0.0001, D_total=30, eps_multiplet=0.001)
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), mask_f=mask_f)
+    assert S1.get_shape() == (24, 24)
+
+    # below extend the cut to largest gap in singular values;
+    # enforcing that multiplets are kept
+    opts = {'tol': 0.0001, 'D_block': 7, 'D_total': 30, 'truncate_multiplets': True}
+    _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
+    assert S1.get_shape() == (31, 31)
+
+    opts = {'D_total': 17, 'truncate_multiplets': True}
+    _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
     assert S1.get_shape() == (24, 24)
 
 

@@ -14,8 +14,10 @@
 # ==============================================================================
 import numpy as np
 from typing import NamedTuple
+from yastn.tensor._algebra import exp
+from yastn.tensor.linalg import eigh
+from yastn.tensor._contractions import ncon
 from ._gates_auxiliary import fkron
-
 
 class Gate_nn(NamedTuple):
     """
@@ -94,6 +96,26 @@ def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
     G = np.cosh(J * step) * II - np.sinh(J * step) * XX
     return decompose_nn_gate(G, bond)
 
+
+def gates_Heisenberg_spinful(step, Jz, J, Jn, Sz, Sp, Sm, n, I, bond=None) -> Gate_nn:
+    '''
+    # Gate exp(-step * H_heisenberg)
+
+    H_{Heisenberg} = J / 2 (Sp @ Sm + Sm @ Sp) + Jz Sz @ Sz - 0.25 * Jn n @ n
+    '''
+    H = fkron(I, I, sites=(0, 1))
+    H = H + Jz * fkron(Sz, Sz, sites=(0, 1))
+    H = H + 0.5 * J * fkron(Sp, Sm, sites=(0, 1))
+    H = H + 0.5 * J * fkron(Sp, Sm, sites=(1, 0))
+    H = H - 0.25 * Jn * fkron(n, n, sites=(1, 0))
+
+    H = H.fuse_legs(axes = ((0, 1), (2, 3)))
+    D, S = eigh(H, axes = (0, 1))
+    D = exp(D, step=-step)
+
+    G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
+    G = G.unfuse_legs(axes=(0, 1))
+    return decompose_nn_gate(G, bond)
 
 def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate_local:
     """
