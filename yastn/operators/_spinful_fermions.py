@@ -124,28 +124,28 @@ class SpinfulFermions(meta_operators):
             vec.set_block(ts=(2,), Ds=(1,), val=1)
         elif self._sym == 'U1xU1' and val == (0, 0):
             vec = Tensor(config=self.config, s=(1,), n=(0, 0))
-            vec.set_block(ts=((0, 0),), Ds=(1,), val=[1])
+            vec.set_block(ts=((0, 0),), Ds=(1,), val=1)
         elif self._sym == 'U1xU1' and val == (1, 0):
             vec = Tensor(config=self.config, s=(1,), n=(1, 0))
-            vec.set_block(ts=((1, 0),), Ds=(1,), val=[1])
+            vec.set_block(ts=((1, 0),), Ds=(1,), val=1)
         elif self._sym == 'U1xU1' and val == (0, 1):
             vec = Tensor(config=self.config, s=(1,), n=(0, 1))
-            vec.set_block(ts=((0, 1),), Ds=(1,), val=[1])
+            vec.set_block(ts=((0, 1),), Ds=(1,), val=1)
         elif self._sym == 'U1xU1' and val == (1, 1):
             vec = Tensor(config=self.config, s=(1,), n=(1, 1))
-            vec.set_block(ts=((1, 1),), Ds=(1,), val=[1])
+            vec.set_block(ts=((1, 1),), Ds=(1,), val=1)
         elif self._sym == 'U1xU1xZ2' and val == (0, 0):
             vec = Tensor(config=self.config, s=(1,), n=(0, 0, 0))
-            vec.set_block(ts=((0, 0, 0),), Ds=(1,), val=[1])
+            vec.set_block(ts=((0, 0, 0),), Ds=(1,), val=1)
         elif self._sym == 'U1xU1xZ2' and val == (1, 0):
             vec = Tensor(config=self.config, s=(1,), n=(1, 0, 1))
-            vec.set_block(ts=((1, 0, 1),), Ds=(1,), val=[1])
+            vec.set_block(ts=((1, 0, 1),), Ds=(1,), val=1)
         elif self._sym == 'U1xU1xZ2' and val == (0, 1):
             vec = Tensor(config=self.config, s=(1,), n=(0, 1, 1))
-            vec.set_block(ts=((0, 1, 1),), Ds=(1,), val=[1])
+            vec.set_block(ts=((0, 1, 1),), Ds=(1,), val=1)
         elif self._sym == 'U1xU1xZ2' and val == (1, 1):
             vec = Tensor(config=self.config, s=(1,), n=(1, 1, 0))
-            vec.set_block(ts=((1, 1, 0),), Ds=(1,), val=[1])
+            vec.set_block(ts=((1, 1, 0),), Ds=(1,), val=1)
         else:
             raise YastnError('Occupations given by val should be (0, 0), (1, 0), (0, 1), or (1, 1).')
         return vec
@@ -237,24 +237,15 @@ class SpinfulFermions(meta_operators):
         return c
 
     def Sz(self) -> yastn.Tensor:
-        """ Return Sz operator for spin-1/2 fermions
-        Returns:
-            yastn.Tensor: _description_
-        """
+        """ Return Sz operator for spin-1/2 fermions. """
         return 0.5 * (self.n('u') - self.n('d'))
 
     def Sp(self) -> yastn.Tensor:
-        """ Return Sp operator for spin-1/2 fermions
-        Returns:
-            yastn.Tensor: _description_
-        """
+        """ Return Sp operator for spin-1/2 fermions. """
         return self.cp('u') @ self.c('d')
 
     def Sm(self) -> yastn.Tensor:
-        """ Return Sm operator for spin-1/2 fermions
-        Returns:
-            yastn.Tensor: _description_
-        """
+        """ Return Sm operator for spin-1/2 fermions. """
         return self.cp('d') @ self.c('u')
 
     def to_dict(self):

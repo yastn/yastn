@@ -66,6 +66,15 @@ def test_spinful_fermions():
         assert yastn.norm(nu @ v10 - v10) < tol and yastn.norm(nd @ v10) < tol
         assert yastn.norm(nu @ v11 - v11) < tol and yastn.norm(nd @ v11 - v11) < tol
 
+        # check commute and anti-commute relation between spin-1/2 operators
+        assert yastn.norm(ops.Sp() @ ops.Sm() - ops.Sm() @ ops.Sp() - 2 * ops.Sz()) < tol
+        assert yastn.norm(ops.Sz() @ ops.Sp() - ops.Sp() @ ops.Sz() - ops.Sp()) < tol
+        assert yastn.norm(ops.Sm() @ ops.Sz() - ops.Sz() @ ops.Sm() - ops.Sm()) < tol
+        assert yastn.norm(ops.Sz() @ ops.Sp() + ops.Sp() @ ops.Sz()) < tol
+        assert yastn.norm(ops.Sm() @ ops.Sz() + ops.Sz() @ ops.Sm()) < tol
+        assert yastn.norm(ops.Sp() @ ops.Sm() + ops.Sm() @ ops.Sp() - 2 * abs(ops.Sz())) < tol
+
+
     with pytest.raises(yastn.YastnError):
         yastn.operators.SpinfulFermions(sym='dense')
         # For SpinfulFermions sym should be in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2').
