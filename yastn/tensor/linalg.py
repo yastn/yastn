@@ -392,6 +392,7 @@ def truncation_mask(S, tol=0, tol_block=0,
         If True, enlarge the truncation range specified by other arguments by shifting
         the cut to the largest gap between to-be-truncated singular values across all blocks.
         It provides a heuristic mechanism to avoid truncating part of a multiplet.
+        If True, tol_block and D_block are ignored, as truncate_multiplets is a global condition.
         The default is False.
     """
     if not (S.isdiag and S.yast_dtype == "float64"):
@@ -401,6 +402,9 @@ def truncation_mask(S, tol=0, tol_block=0,
     S = S.copy()
     Smask = S.copy()
     Smask._data = Smask._data > -float('inf') # all True
+
+    if truncate_multiplets:
+        tol_block, D_block = 0, float('inf')
 
     nsym = S.config.sym.NSYM
     tol_null = 0. if isinstance(tol_block, dict) else tol_block
