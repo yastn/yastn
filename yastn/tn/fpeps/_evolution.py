@@ -32,20 +32,11 @@ class Evolution_out(NamedTuple):
     EAT_error: float = 0
     pinv_cutoffs: tuple[float] = ()
 
-    def __str__(self):
-        txt = f"({self.bond}, error={self.truncation_error:0.2e}"
-        txt += ", errors=(" + ", ".join(format(f, '.2e') for f in self.truncation_errors) + ")"
-        txt += f", EAT_err={self.EAT_error:0.1e}"
-        txt += f", nonh_err={self.nonhermitian_part:0.1e}, min_eig={self.min_eigenvalue:0.1e}, fixed={self.wrong_eigenvalues:0.1e}"
-        txt += ", pinv_c=(" + ", ".join(format(f, '.0e') for f in self.pinv_cutoffs) + ")"
-        txt += f", iters={self.iterations})"
-        return txt
-
 
 def evolution_step_(env, gates, opts_svd, symmetrize=True,
                     fix_metric=0,
                     pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-                    max_iter=100, tol_iter=1e-15, safe_mode=False):
+                    max_iter=100, tol_iter=1e-15, initialization="EAT_SVD"):
     r"""
     Perform a single step of PEPS evolution by applying a list of gates.
     Truncate bond dimension after each application of a two-site gate.
@@ -78,8 +69,9 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
         The maximal number of iterative steps for each truncation optimization.
     max_tol : int
         Tolerance of truncation_error to stop iterative optimization.
-    safe_mode: bool
-        True: Do both SVD initialization and EAT initialization and pick up the one with the smallest error; False: Do EAT initialization only.
+    initialization : str
+        Tested initializations of iterative optimization. The one resulting in smallest error is selected.
+        Possible options are 'SVD' (svd initialization only), 'EAT' (EAT optimization only), 'SVD_EAT' (tries both)
 
     Returns
     -------
@@ -104,11 +96,11 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
     for gate in gates.local:
         psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
     for gate in gates.nn:
-        info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, safe_mode=safe_mode)
+        info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
         infos.append(info)
     if symmetrize:
         for gate in gates.nn[::-1]:
-            info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, safe_mode=safe_mode)
+            info = apply_nn_truncate_optimize_(env, psi, gate, opts_svd, fix_metric, pinv_cutoffs, max_iter, tol_iter, initialization=initialization)
             infos.append(info)
         for gate in gates.local[::-1]:
             psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
@@ -118,7 +110,7 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
 def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
                     fix_metric=0,
                     pinv_cutoffs=(1e-12, 1e-11, 1e-10, 1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4),
-                    max_iter=100, tol_iter=1e-15, safe_mode=False):
+                    max_iter=100, tol_iter=1e-15, initialization="EAT_SVD"):
     r"""
     Applies a nearest-neighbor gate to a PEPS tensor, truncate, and
     optimize the resulting tensors using alternate least squares.
@@ -162,28 +154,28 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
     for opts in [opts_svd] if isinstance(opts_svd, dict) else opts_svd:
         info['pinv_cutoffs'] = []
         info['iterations'] = []
-        if safe_mode:
+        Ms, error2s = [], []
+
+        if 'EAT' in initialization:
+            M0_eat, M1_eat, error2_eat = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs, info)
+            M0_ite, M1_ite, error2_ite = optimize_truncation(M0_eat, M1_eat, error2_eat, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info)
+            Ms.extend([(M0_eat, M1_eat), (M0_ite, M1_ite)])
+            error2s.extend([error2_eat, error2_ite])
+
+        if 'SVD' in initialization:
             M0_svd, M1_svd = symmetrized_svd(M0, M1, opts, normalize=False)
             error2_svd = calculate_truncation_error2(M0_svd @ M1_svd, fgf, fRR, RRgRR)
-        M0_eat, M1_eat, error2_eat = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs, info)
-        M0_ite, M1_ite, error2_ite = optimize_truncation(M0_eat, M1_eat, error2_eat, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info)
-        if safe_mode:
             M0_its, M1_its, error2_its = optimize_truncation(M0_svd, M1_svd, error2_svd, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info)
-        else:
-            M0_its = M0_ite
-            M1_its = M1_ite
-            M0_svd = M0_eat
-            M1_svd = M1_eat
-            error2_its = error2_ite
-            error2_svd = error2_eat
+            Ms.extend([(M0_svd, M1_svd), (M0_its, M1_its)])
+            error2s.extend([error2_svd, error2_its])
 
-        Ms = [(M0_eat, M1_eat), (M0_ite, M1_ite), (M0_svd, M1_svd), (M0_its, M1_its)]
-        error2s = [(error2_eat, 0), (error2_ite, 1), (error2_svd, 2), (error2_its, 3)]
-        error2, ind = min(error2s)
+        if len(Ms) == 0:
+            raise YastnError(f"{initialization=} not recognized. Should contain 'SVD' or 'EAT'.")
 
+        ind, error2 = min(enumerate(error2s), key = lambda x: x[1])
         M0, M1 = Ms[ind]
 
-        info['truncation_errors'] = tuple(x ** 0.5 for x, _ in error2s)
+        info['truncation_errors'] = tuple(x ** 0.5 for x in error2s)
         info['truncation_error'] = error2 ** 0.5
         info['pinv_cutoffs'] = tuple(info['pinv_cutoffs'])
         info['iterations'] = tuple(info['iterations'])
