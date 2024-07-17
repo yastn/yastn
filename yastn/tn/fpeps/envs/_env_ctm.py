@@ -417,7 +417,7 @@ class EnvCTM(Peps):
             env[site].b = env_old[site].b
             env[site].t = env_old[site].t
 
-    def ctmrg_(env, opts_svd=None, method='2site', max_sweeps=1, iterator_step=None,  corner_tol=None):
+    def ctmrg_(env, opts_svd=None, method='2site', max_sweeps=1, iterator_step=None, corner_tol=None):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence is based on singular values of CTM environment corner tensors.

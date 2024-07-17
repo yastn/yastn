@@ -24,7 +24,6 @@ except ImportError:
     from configs import config as cfg
 
 
-
 def test_evolution():
     """ Simulate purification of a small finite system to test evolution options and output. """
     #

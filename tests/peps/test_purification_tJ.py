@@ -20,7 +20,6 @@ def purification_tJ(chemical_potential):
     J = 0.5
     Jz = 0.5
     t = 1
-    beta0 = 0
     beta_target = 0.05
     dbeta = 0.005
     ntu_environment = "NN"
@@ -28,16 +27,18 @@ def purification_tJ(chemical_potential):
     tot_sites = int(2 * 3)
     net = fpeps.SquareLattice((2, 3), "obc")
     opt = yastn.operators.SpinfulFermions_tJ(sym = sym, backend=cfg.backend, default_device=cfg.default_device)
-    fid, fc_up, fc_dn, fcdag_up, fcdag_dn, n_up, n_dn, Sz, Sp, Sm = opt.I(), \
-                                                                    opt.c(spin='u'), opt.c(spin='d'), \
-                                                                    opt.cp(spin='u'), opt.cp(spin='d'), \
-                                                                    opt.n(spin='u'), opt.n(spin='d'), \
-                                                                    opt.Sz(), opt.Sp(), opt.Sm()
-
-    psi = fpeps.product_peps(net, fid)
-
+    fid = opt.I()
+    fc_up, fc_dn = opt.c(spin='u'), opt.c(spin='d')
+    fcdag_up, fcdag_dn = opt.cp(spin='u'), opt.cp(spin='d')
+    n_up, n_dn = opt.n(spin='u'), opt.n(spin='d')
     n = n_up + n_dn
-
+    Sz, Sp, Sm = opt.Sz(), opt.Sp(), opt.Sm()
+    #
+    psi = fpeps.product_peps(net, fid)
+    #
+    num_steps = round(beta_target / dbeta)
+    dbeta = beta_target / num_steps
+    #
     g_hopping_up = fpeps.gates.gate_nn_hopping(t, dbeta * coef, fid, fc_up, fcdag_up)
     g_hopping_dn = fpeps.gates.gate_nn_hopping(t, dbeta * coef, fid, fc_dn, fcdag_dn)
     g_heisenberg = fpeps.gates.gates_Heisenberg_spinful(dbeta * coef, Jz, J, J, Sz, Sp, Sm, n, fid)
@@ -46,11 +47,11 @@ def purification_tJ(chemical_potential):
 
     env_evolution = fpeps.EnvNTU(psi, which=ntu_environment)
 
-    num_steps = int(np.round((beta_target - beta0)/dbeta))
     opts_svd = {"D_total": D, 'tol_block': 1e-15}
 
-    for num in range(num_steps):
-        beta = (num+1)*dbeta + beta0
+    beta = 0
+    for _ in range(num_steps):
+        beta += dbeta
         logging.info("beta = %0.3f" % beta)
         fpeps.evolution_step_(env_evolution, gates, opts_svd=opts_svd)
 

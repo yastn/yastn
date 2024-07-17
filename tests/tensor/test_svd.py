@@ -293,9 +293,9 @@ def test_svd_multiplets():
 
     # below extend the cut to largest gap in singular values;
     # enforcing that multiplets are kept
-    opts = {'tol': 0.0001, 'D_block': 7, 'D_total': 30, 'truncate_multiplets': True}
+    opts = {'tol': 0.001, 'truncate_multiplets': True}
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
-    assert S1.get_shape() == (31, 31)
+    assert S1.get_shape() == (32, 32)
 
     opts = {'D_total': 17, 'truncate_multiplets': True}
     _, S1, _ = yastn.linalg.svd_with_truncation(a, axes=((0, 1), (2, 3)), **opts)
