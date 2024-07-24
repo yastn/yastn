@@ -30,7 +30,7 @@ def mean(xs):
     return sum(xs) / len(xs)
 
 
-
+@pytest.mark.parametrize("boundary", ["obc", "cylinder"])
 def test_ctmrg_measure(boundary):
     """ Initialize a product PEPS and perform a set of measurment. """
 
