@@ -21,5 +21,6 @@ from .gates import Gates, Gate_local, Gate_nn
 from ._gates_auxiliary import apply_gate_onsite, fkron
 from .envs._env_ctm import EnvCTM, EnvCTM_local
 from .envs._env_ntu import EnvNTU
-from .envs._env_boundary_mps import EnvBoundaryMps, EnvWindow
+from .envs._env_boundary_mps import EnvBoundaryMps
+from .envs._env_window import EnvWindow
 from .envs._env_cluster_approximate import EnvApproximate
