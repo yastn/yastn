@@ -16,11 +16,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import NamedTuple
 import logging
-from .... import rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask
+from .... import rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask, vdot
 from ... import mps
 from .._peps import Peps, Peps2Layers
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
-from .._geometry import Bond
+from .._geometry import Bond, Site
 from ._env_auxlliary import *
 
 logger = logging.Logger('ctmrg')
@@ -257,6 +257,78 @@ class EnvCTM(Peps):
             tmp1 = ten1._attach_23(vecb)
             tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
             val_op = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
+
+        return val_op / val_no
+
+    def measure_2x2(self, *operators, sites=None):
+        """
+        Calculate expectation value of a product of local opertors
+        in a 2x2 window within CTM environment.
+
+        At the moment works only for bosonic operators (fermionic are to do).
+
+        Parameters
+        ----------
+        operators: Sequence[yastn.Tensor]
+            List of local operators to calculate <O0_s0 O1_s1 ...>.
+
+        sites: Sequence[tuple[int, int]]
+            List of sites that should match operators.
+        """
+        if len(operators) != len(sites):
+            raise YastnError("Number of operators and sites should match.")
+        ops = dict(zip(sites, operators))
+        mx = min(site[0] for site in sites)  # tl corner
+        my = min(site[1] for site in sites)
+
+        tl = Site(mx, my)
+        tr = self.nn_site(tl, 'r')
+        br = self.nn_site(tl, 'br')
+        bl = self.nn_site(tl, 'b')
+        window = [tl, tr, br, bl]
+
+        if any(site not in window for site in sites):
+            raise YastnError("Sites do not form a 2x2 window.")
+
+        ten_tl = self.psi[tl]
+        ten_tr = self.psi[tr]
+        ten_br = self.psi[br]
+        ten_bl = self.psi[bl]
+
+        vec_tl = self[tl].l @ (self[tl].tl @ self[tl].t)
+        vec_tr = self[tr].t @ (self[tr].tr @ self[tr].r)
+        vec_br = self[br].r @ (self[br].br @ self[br].b)
+        vec_bl = self[bl].b @ (self[bl].bl @ self[bl].l)
+
+        cor_tl = ten_tl._attach_01(vec_tl)
+        cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
+        cor_tr = ten_tr._attach_30(vec_tr)
+        cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
+        cor_br = ten_br._attach_23(vec_br)
+        cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
+        cor_bl = ten_bl._attach_12(vec_bl)
+        cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
+
+        val_no = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
+
+        if tl in ops:
+            ten_tl.top = apply_gate_onsite(ten_tl.top, ops[tl])
+            cor_tl = ten_tl._attach_01(vec_tl)
+            cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
+        if tr in ops:
+            ten_tr.top = apply_gate_onsite(ten_tr.top, ops[tr])
+            cor_tr = ten_tr._attach_30(vec_tr)
+            cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
+        if br in ops:
+            ten_br.top = apply_gate_onsite(ten_br.top, ops[br])
+            cor_br = ten_br._attach_23(vec_br)
+            cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
+        if bl in ops:
+            ten_bl.top = apply_gate_onsite(ten_bl.top, ops[bl])
+            cor_bl = ten_bl._attach_12(vec_bl)
+            cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
+
+        val_op = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
 
         return val_op / val_no
 
