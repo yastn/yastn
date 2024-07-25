@@ -59,7 +59,6 @@ def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
     """
     U, S, V = Gnn.svd_with_truncation(axes=((0, 2), (1, 3)), sU=-1, tol=1e-14, Vaxis=2)
     S = S.sqrt()
-    print(np.diag(S.to_numpy()))
     return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond=bond)
 
 
