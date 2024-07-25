@@ -22,6 +22,7 @@ from .._peps import Peps, Peps2Layers
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
 from .._geometry import Bond, Site
 from ._env_auxlliary import *
+from ._env_window import EnvWindow
 
 logger = logging.Logger('ctmrg')
 
@@ -278,6 +279,9 @@ class EnvCTM(Peps):
         if len(operators) != len(sites):
             raise YastnError("Number of operators and sites should match.")
         ops = dict(zip(sites, operators))
+        if len(sites) != len(ops):
+            raise YastnError("Sites should not repeat.")
+
         mx = min(site[0] for site in sites)  # tl corner
         my = min(site[1] for site in sites)
 
@@ -331,6 +335,54 @@ class EnvCTM(Peps):
         val_op = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
 
         return val_op / val_no
+
+
+    def measure_line(self, *operators, sites=None):
+        """
+        Calculate expectation value of a product of local opertors
+        along a horizontal or vertical line within CTM environment.
+
+        At the moment works only for bosonic operators (fermionic are to do).
+
+        Parameters
+        ----------
+        operators: Sequence[yastn.Tensor]
+            List of local operators to calculate <O0_s0 O1_s1 ...>.
+
+        sites: Sequence[tuple[int, int]]
+            List of sites that should match operators.
+        """
+        if len(operators) != len(sites):
+            raise YastnError("Number of operators and sites should match.")
+        ops = dict(zip(sites, operators))
+        if len(sites) != len(ops):
+            raise YastnError("Sites should not repeat.")
+
+        xs = sorted(set(site[0] for site in sites))
+        ys = sorted(set(site[1] for site in sites))
+        if len(xs) > 1 and len(ys) > 1:
+            raise YastnError("Sites should form a horizontal or vertical line.")
+
+
+        win = EnvWindow(self, (xs[0], xs[-1] + 1), (ys[0], ys[-1] + 1))
+        if len(xs) == 1: # horizontal
+            top = win['t', xs[0]]
+            tm = win.transfer_mpo(xs[0], 'h')
+            btm = win['b', xs[0]]
+        else:  # len(ys) == 1:  # vertical
+            top = win['l', ys[0]]
+            tm = win.transfer_mpo(ys[0], 'v')
+            btm = win['r', ys[0]]
+
+        val_no = mps.vdot(btm, tm, top)
+
+        for site, op in ops.items():
+            ind = site[0] - xs[0] + site[1] - ys[0] + 1
+            tm[ind].top = apply_gate_onsite(tm[ind].top, op)
+
+        val_op = mps.vdot(btm, tm, top)
+        return val_op / val_no
+
 
     def update_(env, opts_svd, method='2site'):
         r"""

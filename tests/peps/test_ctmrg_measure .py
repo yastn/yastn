@@ -30,7 +30,7 @@ def mean(xs):
     return sum(xs) / len(xs)
 
 
-@pytest.mark.parametrize("boundary", ["obc", "cylinder"])
+@pytest.mark.parametrize("boundary", ["obc", "infinite"])
 def test_ctmrg_measure(boundary):
     """ Initialize a product PEPS and perform a set of measurment. """
 
@@ -63,13 +63,41 @@ def test_ctmrg_measure(boundary):
     v = env.measure_2x2(sz, sz, sz, sites=(s1, s2, s3))
     assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
 
+    if boundary != 'obc':
+        s1, s2, s3 = (3, 2), (4, 1), (4, 2)
+        v = env.measure_2x2(sz, sz, sz, sites=(s1, s2, s3))
+        s1, s2, s3 = map(geometry.site2index, (s1, s2, s3))
+        assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
+
+    for s1, s2, s3 in [((1, 0), (1, 2), (1, 1)), ((0, 2), (2, 2), (3, 2))]:
+        v = env.measure_line(sz, sz, sz, sites=(s1, s2, s3))
+        assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
+
+    if boundary != 'obc':
+        for s1, s2 in [((2, 0), (2, 5)), ((0, 1), (6, 1))]:
+            v = env.measure_line(sz, sz, sites=(s1, s2))
+            s1, s2 = map(geometry.site2index, (s1, s2))
+            assert abs(vals[s1] * vals[s2] - v) < tol
+
     with pytest.raises(yastn.YastnError):
         env.measure_2x2(sz, sz, sz, sites=((0, 0), (1, 1)))
         # Number of operators and sites should match.
-
     with pytest.raises(yastn.YastnError):
         env.measure_2x2(sz, sz, sites=((0, 0), (1, 2)))
         # Sites do not form a 2x2 window.
+    with pytest.raises(yastn.YastnError):
+        env.measure_2x2(sz, sz, sites=((0, 0), (0, 0)))
+        # Sites should not repeat.
+    with pytest.raises(yastn.YastnError):
+        env.measure_line(sz, sz, sz, sites=((0, 0), (1, 0)))
+        # Number of operators and sites should match.
+    with pytest.raises(yastn.YastnError):
+        env.measure_line(sz, sz, sites=((0, 0), (1, 2)))
+        # Sites should form a horizontal or vertical line.
+    with pytest.raises(yastn.YastnError):
+        env.measure_line(sz, sz, sites=((0, 0), (0, 0)))
+        # Sites should not repeat.
+
 
 if __name__ == '__main__':
     test_ctmrg_measure(boundary='obc')
