@@ -59,6 +59,7 @@ def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
     """
     U, S, V = Gnn.svd_with_truncation(axes=((0, 2), (1, 3)), sU=-1, tol=1e-14, Vaxis=2)
     S = S.sqrt()
+    print(np.diag(S.to_numpy()))
     return Gate_nn(S.broadcast(U, axes=2), S.broadcast(V, axes=2), bond=bond)
 
 
@@ -82,7 +83,6 @@ def gate_nn_hopping(t, step, I, c, cdag, bond=None) -> Gate_nn:
     G =  II + (np.cosh(t * step) - 1) * (nh + hn) + np.sinh(t * step) * cc
     return decompose_nn_gate(G, bond)
 
-
 def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
     """
     Nearest-neighbor gate G = exp(-step * H)
@@ -97,7 +97,7 @@ def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
     return decompose_nn_gate(G, bond)
 
 
-def gates_Heisenberg_spinful(step, Jz, J, Jn, Sz, Sp, Sm, n, I, bond=None) -> Gate_nn:
+def gate_Heisenberg_spinful(step, Jz, J, Jn, Sz, Sp, Sm, n, I, bond=None) -> Gate_nn:
     '''
     # Gate exp(-step * H_heisenberg)
 
@@ -116,6 +116,39 @@ def gates_Heisenberg_spinful(step, Jz, J, Jn, Sz, Sp, Sm, n, I, bond=None) -> Ga
     G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
     G = G.unfuse_legs(axes=(0, 1))
     return decompose_nn_gate(G, bond)
+
+def gate_Heisenberg_homo_spinful(step, J, nu, nd, Sp, Sm, I, bond=None) -> Gate_nn:
+    '''
+    # Gate exp(-step * H_heisenberg)
+
+    H_{Heisenberg} = J / 2 (Sp @ Sm + Sm @ Sp) + J Sz @ Sz - 0.25 * J n @ n
+
+
+    '''
+    # nn gate for Heisenberg model
+
+    # TODO: use fkron function -- it is written to be consistent with fermionic conventions,
+    # applying swap gates automatically
+
+    # H = ncon([I, I],((-0, -2), (-1, -3)))
+    # H = H + Jz * ncon([Sz, Sz], ((-0, -2), (-1, -3)))
+    # H = H + 0.5 * J * ncon([Sp, Sm], ((-0, -2), (-1, -3)))
+    # H = H + 0.5 * J * ncon([Sm, Sp], ((-0, -2), (-1, -3)))
+    # H = H - 0.25 * Jn * ncon([n, n], ((-0, -2), (-1, -3)))
+    SpSm = fkron(Sp, Sm, sites=(0, 1)) \
+         + fkron(Sp, Sm, sites=(1, 0))
+    nund = fkron(nu, nd, sites=(0, 1))
+    ndnu = fkron(nu, nd, sites=(1, 0))
+
+    alpha = step * J * 0.5 * (1j)
+    beta = -step * J * 0.5 * (1j)
+
+    G = fkron(I, I, sites=(0, 1))
+    G = G +  1j * np.sin(alpha) * np.exp(1j * beta) * SpSm
+    G = G + (np.cos(alpha) * np.exp(1j * beta) - 1) * (nund + ndnu)
+
+    return decompose_nn_gate(G, bond)
+
 
 def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate_local:
     """

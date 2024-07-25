@@ -61,35 +61,48 @@ def check_hopping_gate(ops, t, ds):
 
     assert ((O - O2).norm()) < (ds * t) ** 5
 
-def test_heisenberg_gates():
+def test_heisenberg_gate():
     kwargs = {'backend': cfg.backend, 'default_device': cfg.default_device}
 
     ops = yastn.operators.SpinfulFermions(sym='U1xU1xZ2', **kwargs)
-    check_heisenberg_gates(ops, Jz=2, J=1, Jn = 0.5, ds=0.005)
+    check_heisenberg_gate(ops, Jz=2, J=1, Jn = 0.5, ds=0.005)
 
     ops = yastn.operators.SpinfulFermions_tJ(sym='U1xU1xZ2', **kwargs)
-    check_heisenberg_gates(ops, Jz=1, J=1, Jn = 1, ds=0.005)
+    check_heisenberg_gate(ops, Jz=1, J=1, Jn = 1, ds=0.005)
 
     ops = yastn.operators.SpinfulFermions(sym='Z2', **kwargs)
-    check_heisenberg_gates(ops, Jz=2, J=1, Jn = 0.5, ds=0.005)
+    check_heisenberg_gate(ops, Jz=2, J=1, Jn = 0.5, ds=0.005)
 
     ops = yastn.operators.SpinfulFermions_tJ(sym='Z2', **kwargs)
-    check_heisenberg_gates(ops, Jz=1, J=1, Jn = 1, ds=0.005)
+    check_heisenberg_gate(ops, Jz=1, J=1, Jn = 1, ds=0.005)
 
     ops = yastn.operators.SpinfulFermions(sym='U1xU1', **kwargs)
-    check_heisenberg_gates(ops, Jz=1, J=2, Jn = 0.5, ds=0.005)
+    check_heisenberg_gate(ops, Jz=1, J=2, Jn = 0.5, ds=0.005)
 
     ops = yastn.operators.SpinfulFermions_tJ(sym='U1xU1', **kwargs)
-    check_heisenberg_gates(ops, Jz=1, J=1, Jn = 1, ds=0.005)
+    check_heisenberg_gate(ops, Jz=1, J=1, Jn = 1, ds=0.005)
 
-def check_heisenberg_gates(ops, Jz, J, Jn, ds):
+
+def test_homo_heisenberg_gate():
+    kwargs = {'backend': cfg.backend, 'default_device': cfg.default_device}
+
+    ops = yastn.operators.SpinfulFermions_tJ(sym='U1xU1xZ2', **kwargs)
+    check_homo_heisenberg_gate(ops, J=1, ds=0.005)
+
+    ops = yastn.operators.SpinfulFermions_tJ(sym='Z2', **kwargs)
+    check_homo_heisenberg_gate(ops, J=2, ds=0.01)
+
+    ops = yastn.operators.SpinfulFermions_tJ(sym='U1xU1', **kwargs)
+    check_homo_heisenberg_gate(ops, J=0.1, ds=0.025)
+
+def check_heisenberg_gate(ops, Jz, J, Jn, ds):
 
     [I, Sz, Sm, Sp] = [ops.I(), ops.Sz(), ops.Sm(), ops.Sp()]
     nu, nd = ops.n(spin='u'), ops.n(spin='d')
 
     n = nu + nd
 
-    g_heisenberg = fpeps.gates.gates_Heisenberg_spinful(ds, Jz, J, Jn, Sz, Sp, Sm, n, I)
+    g_heisenberg = fpeps.gates.gate_Heisenberg_spinful(ds, Jz, J, Jn, Sz, Sp, Sm, n, I)
     O = yastn.ncon([g_heisenberg.G0, g_heisenberg.G1], [(-0, -2, 1) , (-1, -3, 1)])
     O = O.fuse_legs(axes=((0, 1), (2, 3)))
 
@@ -107,6 +120,29 @@ def check_heisenberg_gates(ops, Jz, J, Jn, ds):
     assert ((O - O2).norm()) < (ds * max(abs(Jz), abs(J), abs(Jn))) ** 4
 
 
+def check_homo_heisenberg_gate(ops, J, ds):
+
+    [I, Sz, Sm, Sp] = [ops.I(), ops.Sz(), ops.Sm(), ops.Sp()]
+    nu, nd = ops.n(spin='u'), ops.n(spin='d')
+
+    n = nu + nd
+    Jz = Jn = J
+    g_heisenberg = fpeps.gates.gate_Heisenberg_homo_spinful(ds, J, nu, nd, Sp, Sm, I)
+    O = yastn.ncon([g_heisenberg.G0, g_heisenberg.G1], [(-0, -2, 1) , (-1, -3, 1)])
+    O = O.fuse_legs(axes=((0, 1), (2, 3)))
+
+    H = J / 2 * (fkron(Sp, Sm, sites=(0, 1)) + fkron(Sp, Sm, sites=(1, 0))) + \
+        Jz * fkron(Sz, Sz, sites=(0, 1)) - 0.25 * Jn * fkron(n, n, sites=(0, 1))
+
+
+    H = H.fuse_legs(axes=((0, 1), (2, 3)))
+    II = yastn.ncon([I, I], [(-0, -2) , (-1, -3)])
+    II = II.fuse_legs(axes=((0, 1), (2, 3)))
+
+    O2 = II + (-ds) * H + (ds ** 2 / 2) * H @ H + (-ds ** 3 / 6) * H @ H @ H + (ds ** 4 / 24) * H @ H @ H @ H
+
+    assert ((O - O2).norm()) < (ds * max(abs(Jz), abs(J), abs(Jn))) ** 4
+
 
 def test_gate_raises():
     kwargs = {'backend': cfg.backend, 'default_device': cfg.default_device}
@@ -121,4 +157,6 @@ def test_gate_raises():
 
 if __name__ == '__main__':
     test_hopping_gate()
+    test_heisenberg_gate()
+    test_homo_heisenberg_gate()
     test_gate_raises()

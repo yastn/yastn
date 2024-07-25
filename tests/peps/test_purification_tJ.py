@@ -41,7 +41,7 @@ def purification_tJ(chemical_potential):
     #
     g_hopping_up = fpeps.gates.gate_nn_hopping(t, dbeta * coef, fid, fc_up, fcdag_up)
     g_hopping_dn = fpeps.gates.gate_nn_hopping(t, dbeta * coef, fid, fc_dn, fcdag_dn)
-    g_heisenberg = fpeps.gates.gates_Heisenberg_spinful(dbeta * coef, Jz, J, J, Sz, Sp, Sm, n, fid)
+    g_heisenberg = fpeps.gates.gate_Heisenberg_spinful(dbeta * coef, Jz, J, J, Sz, Sp, Sm, n, fid)
     g_loc = fpeps.gates.gate_local_occupation(chemical_potential, dbeta * coef, fid, n)
     gates = fpeps.gates.distribute(net, gates_nn=[g_hopping_up, g_hopping_dn, g_heisenberg], gates_local=g_loc)
 
