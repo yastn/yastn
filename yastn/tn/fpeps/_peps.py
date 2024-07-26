@@ -124,16 +124,6 @@ class Peps():
             obj = obj.unfuse_legs(axes=(0, 1))
         self._data[self.site2index(site)] = obj
 
-    def get_parameters(self):
-        r"""
-        :return: variational parameters of iPEPS
-        :rtype: iterable
-
-        This function is called by optimizer to access variational parameters of the state
-        as a sequence of raw data tensors (with type depending on backend)
-        """
-        return list(self[site]._data for site in self.sites())
-
     def __dict__(self):
         """
         Serialize PEPS into a dictionary.
@@ -162,20 +152,6 @@ class Peps():
     
     def __repr__(self):
         return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._data })"
-
-    def write_to_file(self, outputfile, tol=None, normalize=False):
-        pass
-
-    def get_checkpoint(self):
-        r"""
-        :return: serializable representation of IPEPS_ABELIAN state
-        :rtype: dict
-
-        Return dict containing serialized on-site (block-sparse) tensors. The individual
-        blocks are serialized into raw data tensors (with type depending on backend). 
-        This function is called by optimizer to create checkpoints during the optimization process.
-        """
-        return {site: self[site].save_to_dict() for site in self.sites()}
 
     def copy(self):
         r"""

@@ -97,25 +97,13 @@ def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
     return decompose_nn_gate(G, bond)
 
 
-def gates_Heisenberg_spinful(step, Jz, J, Jn, Sz, Sp, Sm, n, I):
+def gates_Heisenberg_spinful(step, Jz, J, Jn, Sz, Sp, Sm, n, I, bond=None) -> Gate_nn:
     '''
     # Gate exp(-step * H_heisenberg)
 
     H_{Heisenberg} = J / 2 (Sp @ Sm + Sm @ Sp) + Jz Sz @ Sz - 0.25 * Jn n @ n
 
     '''
-    # nn gate for Heisenberg model
-
-    s = -step
-
-    # TODO: use fkron function -- it is written to be consistent with fermionic conventions,
-    # applying swap gates automatically
-
-    # H = ncon([I, I],((-0, -2), (-1, -3)))
-    # H = H + Jz * ncon([Sz, Sz], ((-0, -2), (-1, -3)))
-    # H = H + 0.5 * J * ncon([Sp, Sm], ((-0, -2), (-1, -3)))
-    # H = H + 0.5 * J * ncon([Sm, Sp], ((-0, -2), (-1, -3)))
-    # H = H - 0.25 * Jn * ncon([n, n], ((-0, -2), (-1, -3)))
     H = fkron(I, I, sites=(0, 1))
     H = H + Jz * fkron(Sz, Sz, sites=(0, 1))
     H = H + 0.5 * J * fkron(Sp, Sm, sites=(0, 1))
@@ -124,14 +112,14 @@ def gates_Heisenberg_spinful(step, Jz, J, Jn, Sz, Sp, Sm, n, I):
 
     H = H.fuse_legs(axes = ((0, 1), (2, 3)))
     D, S = eigh(H, axes = (0, 1))
-    D = exp(D, step=s)
+    D = exp(D, step=-step)
 
     G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
     G = G.unfuse_legs(axes=(0, 1))
 
-    return decompose_nn_gate(G)
+    return decompose_nn_gate(G, bond)
 
-def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn) -> Gate_local:
+def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate_local:
     """
     Local gate exp(-step * H)
     for H = U * (n_up - I / 2) * (n_dn - I / 2) - mu_up * n_up - mu_dn * n_dn
