@@ -18,13 +18,14 @@ import yastn
 import yastn.tn.fpeps as fpeps
 from yastn.tn.fpeps import Site, Bond
 
-def test_CheckerboardLattice():
+def test_CheckerboardLattice(net=None):
     """ Generate a few lattices veryfing expected output of some functions. """
 
     assert str(Site(0, 0)) == "Site(0, 0)"
     assert str(Bond(Site(0, 0), Site(0, 1))) == "Bond((0, 0), (0, 1))"
 
-    net = fpeps.CheckerboardLattice()
+    if net is None:
+        net = fpeps.CheckerboardLattice()
 
     assert net.dims == (2, 2)
     assert net.sites() == (Site(0, 0), Site(0, 1))
@@ -175,6 +176,51 @@ def test_SquareLattice():
         fpeps.SquareLattice(dims=(3, 2), boundary='some')
         #  boundary='some' not recognized; should be 'obc', 'infinite', or 'cylinder'
 
+
+def test_RectangularUnitCell_1x1():
+    g= fpeps.RectangularUnitcell(pattern=[[0,],])
+    
+    assert g.dims == (1,1)
+    assert g.sites() == (Site(0,0),)
+    
+    assert g.bonds(dirn='h') == (Bond((0,0),(0,1)),)
+    assert g.bonds(dirn='v') == (Bond((0,0),(1,0)),)
+
+    assert g.nn_site(Site(0, 0), d='r') == (0, 1)
+    assert g.nn_site(Site(0, 0), d='b') == (1, 0)
+    
+    assert all(g.site2index(site) == 0 for site in [(0, 0), (1, 1), (-3, 3), (1, -1), (2, 0)])
+
+    assert all(g.f_ordered(bond) for bond in g.bonds())
+
+
+def test_RectangularUnitCell_2x2_bipartite():
+    net1= fpeps.RectangularUnitcell(pattern=[[0,1],[1,0]])
+    # test_CheckerboardLattice(net=net1)
+    assert all( net1.site2index(s)==0 for s in [(0, 0), (1, 1), (-3, 3), (1, -1), (2, 0)] )
+    assert all( net1.sites()[net1.site2index(s)]==(0,0) for s in [(0, 0), (1, 1), (-3, 3), (1, -1), (2, 0)] )
+    assert all( net1.site2index(s)==1 for s in [(1, 0), (0, 1), (2, 5), (1, 2), (-1, 0)] )
+    assert all( net1.sites()[net1.site2index(s)]==(0,1) for s in [(1, 0), (0, 1), (2, 5), (1, 2), (-1, 0)] )
+    
+    net2= fpeps.RectangularUnitcell(pattern={(0,0):0, (1,1):0, (0,1):1, (1,0):1})
+    # test_CheckerboardLattice(net=net2)
+    # assert net1 == net2
+
+
+def test_RectangularUnitCell_3x3_Q_1o3_1o3():
+    g= fpeps.RectangularUnitcell(pattern=[[0,1,2],[1,2,0],[2,0,1]])
+
+    assert g.dims == (3,3)
+    assert g.sites() == (Site(0,0),Site(0,1),Site(0,2))
+
+    assert all( g.site2index(s)==0 for s in [(0, 0), (0, 3), (0, -3), (1, -1), (-2, 2)] )
+    assert all( g.sites()[g.site2index(s)]==(0,0) for s in [(0, 0), (0, 3), (0, -3), (1, -1), (-2, 2)] )
+    
+    assert all( g.site2index(s)==1 for s in [(0, 1), (0, 4), (0, -2), (1, 0), (-2, 3)] )
+    assert all( g.sites()[g.site2index(s)]==(0,1) for s in [(0, 1), (0, 4), (0, -2), (1, 0), (-2, 3)] )
+
+    assert all( g.site2index(s)==2 for s in [(0, 2), (0, 5), (0, -1), (1, 1), (-2, 4)] )
+    assert all( g.sites()[g.site2index(s)]==(0,2) for s in [(0, 2), (0, 5), (0, -1), (1, 1), (-2, 4)] )
 
 def test_Peps_get_set():
     """ Setitem and getitem in peps allows to acces individual tensors. """
