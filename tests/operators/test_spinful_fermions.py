@@ -82,6 +82,12 @@ def test_spinful_fermions():
         yastn.operators.SpinfulFermions(sym='U1', fermionic=False)
         # For SpinfulFermions config.sym does not match config.fermionic.
     with pytest.raises(yastn.YastnError):
+        yastn.operators.SpinfulFermions(sym='dense')
+        # For SpinfulFermions sym should be in ('Z2', 'U1', 'U1xU1', 'U1xU1xZ2').
+    with pytest.raises(yastn.YastnError):
+        yastn.operators.SpinfulFermions(sym='U1', fermionic=False)
+        # For SpinfulFermions config.sym does not match config.fermionic.
+    with pytest.raises(yastn.YastnError):
         yastn.operators.SpinfulFermions(sym='U1xU1xZ2', fermionic=True)
         # For SpinfulFermions config.sym does not match config.fermionic.
     with pytest.raises(yastn.YastnError):
