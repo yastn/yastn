@@ -214,16 +214,23 @@ class RectangularUnitcell(SquareLattice):
 
     def __init__(self, pattern : Union[Sequence[Sequence[int]],dict[tuple[int,int],int]], boundary='infinite'):
         r"""
+        Rectangular unit cells supporting patterns characterized by a single momentum ``Q=(q_x,q_y)``.  
+        
+        Inspired by https://github.com/b1592/ad-peps by B. Ponsioen.
+
         Args:
             pattern : Definition of a rectangular unit cell which tiles the square lattice.
                       Integers are labels of unique tensors populating the sites within the unit cell.
 
                         Examples of such patterns can be:
-                            i) [[0,],] : 1x1 unit cell
-                            ii) [[0,1],] : 1x2 unit cell
-                            iii) [[0,1],[1,0]] : 2x2 unit cell with bipartite pattern
-                            iv) [[0,1,2],[1,2,0],[2,0,1]] : 3x3 unit cell with diagonal stripe order
+                            i) [[0,],] : 1x1 unit cell, Q=0
+                            ii) [[0,1],] : 1x2 unit cell, Q=(\pi,0)
+                            iii) [[0,1],[1,0]] : 2x2 unit cell with bipartite pattern, Q=(\pi,\pi)
+                            iv) [[0,1,2],[1,2,0],[2,0,1]] : 3x3 unit cell with diagonal stripe order, Q=(2\pi/3,2\pi/3)
                             v) ...
+
+        Warning: It is assumed that neighbourhood of each unique tensor is identical. This excludes cases as
+            ``[[0,1],[1,1]]``.
         """
         # TODO validation
         #   pattern should be len > 0, all rows should be of the same length
