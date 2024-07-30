@@ -368,9 +368,10 @@ class SVDGESDD(torch.autograd.Function):
         if (gu is None) and (gvh is None):
             if not (diagnostics is None):
                 print(f"{diagnostics} {sigma_term.abs().max()} {sigma.max()}")
-            return sigma_term, None, None
+            return sigma_term, None, None, None
 
-        sigma_inv= safe_inverse_2(sigma.clone(), sigma_scale*eps)
+        # sigma_inv= safe_inverse_2(sigma.clone(), sigma_scale*eps)
+        sigma_inv= safe_inverse(sigma.clone(), eps_abs=eps)
 
         F = sigma.unsqueeze(-2) - sigma.unsqueeze(-1)
         F = safe_inverse(F, sigma_scale*eps)
