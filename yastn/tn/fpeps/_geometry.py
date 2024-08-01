@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Basic structures forming PEPS network. """
-from typing import Sequence
+from typing import Sequence, Union
 from typing import NamedTuple
 from ... import YastnError
 
@@ -80,15 +80,17 @@ class SquareLattice():
 
     @property
     def Nx(self) -> int:
+        """ Number of rows in the unit cell. """
         return self._dims[0]
 
     @property
     def Ny(self) -> int:
+        """ Number of columns in the unit cell """
         return self._dims[1]
 
     @property
     def dims(self) -> tuple[int, int]:
-        """ Size of the unit cell. """
+        """ Size of the unit cell as rows x columns """
         return self._dims
 
     def sites(self, reverse=False) -> Sequence[Site]:
@@ -102,8 +104,8 @@ class SquareLattice():
         Parameters
         ----------
         dirn: None | str
-            return all bonds if None;
-            'v' and 'h' are for vertical and horizontal bonds, respectively.
+            return vertical followed by horizontal bonds if None;
+            'v' and 'h' are for vertical and horizontal bonds only, respectively.
 
         reverse: bool
             whether to reverse the order of bonds.
@@ -118,13 +120,22 @@ class SquareLattice():
         """
         Index of the lattice site neighboring the :code:`site` in the direction :code:`d`.
 
-        Return None if there is no neighboring site in a given direction.
+        For infinite lattices, this function simply shifts the ``site`` by provided vector ``d``. 
+        For finite lattices with open/periodic boundary it handles corner cases where ``d`` is too large and the 
+        resulting Site either doesn't exist or it wraps around periodic boundary.
+
+        
 
         Parameters
         ----------
         d: str | tuple[int, int]
             Take values in: 't', 'b', 'l', 'r', 'tl', 'bl', 'tr', 'br',
             or a tuple of shifts (dx, dy).
+        
+        Returns
+        -------
+        site: Site | None
+            Return ``None`` if there is no neighboring site in a given direction.
         """
         if site is None:
             return None
@@ -169,13 +180,16 @@ class SquareLattice():
         return s0[1] < s1[1] or (s0[1] == s1[1] and s0[0] <= s1[0])
 
     def site2index(self, site):
-        """ Tensor index depending on site. """
+        """ Maps any Site of the underlying square lattice (accounting for boundaries) into corresponding Site within primitive unit cell."""
         if site is None:
             return None
         x = site[0] % self._dims[0] if self._periodic[0] == 'i' else site[0]
         y = site[1] % self._dims[1] if self._periodic[1] == 'i' else site[1]
         return (x, y)
 
+    def __dict__(self):
+        """Return a dictionary representation of the object."""
+        return { 'dims': self.dims, 'boundary': self.boundary, 'sites': self.sites() }
 
 class CheckerboardLattice(SquareLattice):
 
@@ -192,3 +206,65 @@ class CheckerboardLattice(SquareLattice):
     def site2index(self, site):
         """ Tensor index depending on site. """
         return (site[0] + site[1]) % 2
+
+
+class RectangularUnitcell(SquareLattice):
+    # TODO Optionally numpy.array(dtype=int) ?
+    #      Drop integer ? Can be anything, i.e. even string label for tensors
+
+    def __init__(self, pattern : Union[Sequence[Sequence[int]],dict[tuple[int,int],int]], boundary='infinite'):
+        r"""
+        Rectangular unit cells supporting patterns characterized by a single momentum ``Q=(q_x,q_y)``.  
+        
+        Inspired by https://github.com/b1592/ad-peps by B. Ponsioen.
+
+        Args:
+            pattern : Definition of a rectangular unit cell which tiles the square lattice.
+                      Integers are labels of unique tensors populating the sites within the unit cell.
+
+                        Examples of such patterns can be:
+                            i) [[0,],] : 1x1 unit cell, Q=0
+                            ii) [[0,1],] : 1x2 unit cell, Q=(\pi,0)
+                            iii) [[0,1],[1,0]] : 2x2 unit cell with bipartite pattern, Q=(\pi,\pi)
+                            iv) [[0,1,2],[1,2,0],[2,0,1]] : 3x3 unit cell with diagonal stripe order, Q=(2\pi/3,2\pi/3)
+                            v) ...
+
+        Warning: It is assumed that neighbourhood of each unique tensor is identical. This excludes cases as
+            ``[[0,1],[1,1]]``.
+        """
+        # TODO validation
+        #   pattern should be len > 0, all rows should be of the same length
+        #   the set of integers in pattern should be equal to set of keys of tensors
+        if isinstance(pattern, dict):
+            # validate ranges
+            min_row, min_col, max_row, max_col= tuple(map(min,list(zip(*pattern.keys())))) + tuple(map(max,list(zip(*pattern.keys()))))
+            assert min_row==0 and min_col==0,"Invalid pattern specification"
+            pattern= [ [pattern[(r,c)] for c in range(max_col+1)] for r in range(max_row+1) ]
+        super().__init__(dims=(len(pattern), len(pattern[0])), boundary='infinite')
+
+        self._site2index= { (row,col) : t for row,row_elems in enumerate(pattern) for col,t in enumerate(row_elems) }
+
+         # unique sites, in row-major order
+        self._sites = tuple( Site(*list(self._site2index.keys())[ list(self._site2index.values()).index(t) ]) for t in set(self._site2index.values()) )
+
+        # unique bonds
+        self._bonds_h = tuple(Bond( s,self.nn_site(s,'r')) for s in self._sites)
+        self._bonds_v = tuple(Bond( s,self.nn_site(s,'b')) for s in self._sites)
+
+    def site2index(self, site) -> int:
+        """ Tensor index depending on site. """
+        return self._site2index[ (site[0] % self.Nx, site[1] % self.Ny) ]
+
+    def __str__(self):
+        return type(self).__name__ + f"(Nx={self.Nx}, Ny={self.Ny})\n"\
+            +f"unique sites={self._sites})\n"\
+            +f"unique horizontal bonds={self._bonds_h}\n"\
+            +f"unique vertical bonds={self._bonds_v}\n"\
+            + "\n".join([ ", ".join([f"{self.site2index((row,col))}" for col in range(self.Ny) ]) for row in range(self.Nx)])
+
+    def __repr__(self):
+        return f"RectangularUnitcell(pattern={self._site2index})"
+
+    def __dict__(self):
+        """Return a dictionary representation of the object."""
+        return { 'site2index': self._site2index }

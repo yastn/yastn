@@ -13,25 +13,31 @@
 # limitations under the License.
 # ==============================================================================
 from __future__ import annotations
+from typing import Sequence, Union
+from yastn import Tensor
 from ...tn.mps import Mpo
 from ._doublePepsTensor import DoublePepsTensor
-from ._geometry import SquareLattice, CheckerboardLattice
+from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell
 
 
 class Peps():
 
-    def __init__(self, geometry):
+    def __init__(self, geometry=None, tensors : Union[None, Sequence[Sequence[Tensor]], dict[tuple[int,int],Tensor] ]= None):
         """
-        Empty PEPS instance on a lattice specified by provided geometry.
+        Empty PEPS instance on a lattice specified by provided geometry and optionally tensors.
+
+            i), ii)
+            iii) geometry and tensors. Here, the tensors and geometry must be compatible in terms of non-equivalent sites ?
 
         Inherits methods from geometry.
+
         Empty PEPS has no tensors assigned.
         Supports :code:`[]` notation to get/set individual tensors.
         Intended both for PEPS with physical legs (rank-5 PEPS tensors)
         and without physical legs (rank-4 PEPS tensors).
 
-        Example
-        -------
+        Example 1
+        ---------
 
         ::
 
@@ -60,12 +66,40 @@ class Peps():
             B00 = yastn.rand(config, legs=[leg.conj(), leg, leg, leg.conj()])
             psi[0, 0] = B00
             assert psi[0, 0].ndim == 4
+
+        Example 2
+        ---------
+
+        ::
+            # directly pass the pattern of tensors in the unit cell as a dictionary. The geometry is created implicitly.
+            psi = fpeps.PepsExtended(tensors={ (0,0):A00, (0,1):A01, (1,0):A01, (1,1):A00 })
+            #
+            # or equivalently
+            # psi = fpeps.PepsExtended(tensors=[[A00, A01], [A01, A00]])
         """
-        self.geometry = geometry
+        if geometry is not None and isinstance(tensors,dict):
+            self.geometry = geometry
+        elif geometry is None and isinstance(tensors,dict):
+            id_map= { uuid: i for i,uuid in enumerate( set([id(t) for t in tensors.values() ])) } # convert to small integers
+            self.geometry= RectangularUnitcell(pattern={ site: id_map[id(t)] for site,t in tensors.items() })
+            
+        elif geometry is None and isinstance(tensors,Sequence) and set(map(type(row) for row in tensors))==set(Sequence,):
+            # TODO
+            # for geometry passed as list[list[Tensor]]
+            raise NotImplementedError()
+        elif geometry is not None and tensors is None:
+            self.geometry= geometry
+
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered"]:
             setattr(self, name, getattr(geometry, name))
         self._data = {self.site2index(site): None for site in self.sites()}
-
+        
+        if isinstance(tensors,dict):
+            assert set(self.sites()) <= set(tensors.keys()),"geometry and tensors are not compatible"
+            # self._data = {self.site2index(site): tensors[site] for site in self.sites()}
+            for site in self.sites():
+                self[site] = tensors[site]
+        
     @property
     def config(self):
         return self[0, 0].config
@@ -90,24 +124,34 @@ class Peps():
             obj = obj.unfuse_legs(axes=(0, 1))
         self._data[self.site2index(site)] = obj
 
-    def save_to_dict(self) -> dict:
+    def __dict__(self):
         """
         Serialize PEPS into a dictionary.
         """
-        if isinstance(self.geometry, CheckerboardLattice):
-            lattice = "checkerboard"
-        elif isinstance(self.geometry, SquareLattice):
-            lattice = "square"
-
-        d = {'lattice': lattice,
+        d = {'lattice': type(self.geometry).__name__,
              'dims': self.dims,
              'boundary': self.boundary,
+             'pattern': self.geometry.__dict__(),
              'data': {}}
 
         for site in self.sites():
             d['data'][site] = self[site].save_to_dict()
 
         return d
+
+    def save_to_dict(self) -> dict:
+        """
+        Serialize PEPS into a dictionary.
+        """
+        d= self.__dict__()
+        if isinstance(self.geometry, CheckerboardLattice):
+            d['lattice'] = "checkerboard"
+        elif isinstance(self.geometry, SquareLattice):
+            d['lattice'] = "square"
+        return d
+    
+    def __repr__(self):
+        return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._data })"
 
     def copy(self):
         r"""
@@ -173,6 +217,7 @@ class Peps2Layers():
         """
         self.bra = bra
         self.ket = bra if ket is None else ket
+        assert self.ket.geometry == self.bra.geometry
         self.geometry = bra.geometry
 
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered"]:
