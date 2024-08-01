@@ -150,6 +150,36 @@ def gate_local_Ising(h, step, I, X, site=None) -> Gate_local:
     return Gate_local(G_loc, site)
 
 
+def gates_super_tJ(I, cu, cpu, cd, cpd, step, J, tu, td, muu0, muu1, mud0, mud1, bond=None) -> Gate_nn:
+    '''
+    # Gate exp(-step * H_tj)
+    '''
+    nu = cpu @ cu
+    nd = cpd @ cd
+    Sp = cpu @ cd
+    Sm = cpd @ cu
+
+    H = 0 * fkron(I, I, sites=(0, 1))
+    H = H + 0.5 * J * fkron(Sp, Sm, sites=(0, 1))
+    H = H + 0.5 * J * fkron(Sp, Sm, sites=(1, 0))
+    H = H - 0.5 * J * fkron(nu, nd, sites=(0, 1))
+    H = H - 0.5 * J * fkron(nd, nu, sites=(0, 1))
+    H = H - tu * fkron(cpu, cu, sites=(0, 1))
+    H = H - tu * fkron(cpu, cu, sites=(1, 0))
+    H = H - td * fkron(cpd, cd, sites=(0, 1))
+    H = H - td * fkron(cpd, cd, sites=(1, 0))
+    H = H - 0.5 * muu0 * fkron(cpu @ cu, I, sites=(0, 1))
+    H = H - 0.5 * muu1 * fkron(cpu @ cu, I, sites=(1, 0))
+    H = H - 0.5 * mud0 * fkron(cpd @ cd, I, sites=(0, 1))
+    H = H - 0.5 * mud1 * fkron(cpd @ cd, I, sites=(1, 0))
+
+    H = H.fuse_legs(axes = ((0, 1), (2, 3)))
+    D, S = eigh(H, axes = (0, 1))
+    D = exp(D, step=-step)
+    G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
+    G = G.unfuse_legs(axes=(0, 1))
+    return decompose_nn_gate(G, bond)
+
 
 def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
     """
