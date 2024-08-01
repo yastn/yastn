@@ -595,7 +595,7 @@ def _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol):
             raise YastnError('CTMRG: corner_tol has to be positive or None.')
         old_corner_sv = calculate_corner_svd(env)
 
-    max_dsv, converged = None, False
+    max_dsv, converged = -1, False
     for sweep in range(1, max_sweeps + 1):
         env.update_(opts_svd=opts_svd, method=method)
         if corner_tol is not None:

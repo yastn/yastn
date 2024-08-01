@@ -73,6 +73,22 @@ def test_spinful_fermions():
         assert yastn.norm(ops.Sz() @ ops.Sp() + ops.Sp() @ ops.Sz()) < tol
         assert yastn.norm(ops.Sm() @ ops.Sz() + ops.Sz() @ ops.Sm()) < tol
         assert yastn.norm(ops.Sp() @ ops.Sm() + ops.Sm() @ ops.Sp() - 2 * abs(ops.Sz())) < tol
+        #
+        # |ud>; |11> = cu+ cd+ |00>;
+        # cu |11> =  |01>; cu |10> = |00>
+        # cd |11> = -|10>; cd |01> = |00>
+        assert yastn.norm(ops.cp('u') @ ops.cp('d') @ v00 - v11) < tol
+        assert yastn.norm(ops.c('u') @ v10 - v00) < tol
+        assert yastn.norm(ops.c('u') @ v11 - v01) < tol
+        assert yastn.norm(ops.c('d') @ v01 - v00) < tol
+        assert yastn.norm(ops.c('d') @ v11 + inter_sgn * v10) < tol
+
+        assert yastn.norm(ops.cp('u') @ v00 - v10) < tol
+        assert yastn.norm(ops.cp('u') @ v01 - v11) < tol
+        assert yastn.norm(ops.cp('d') @ v00 - v01) < tol
+        assert yastn.norm(ops.cp('d') @ v10 + inter_sgn * v11) < tol
+
+
 
 
     with pytest.raises(yastn.YastnError):
