@@ -11,7 +11,7 @@ except ImportError:
     from configs import config as cfg
 
 
-def purification_tJ(chemical_potential):
+def purification_tJ(mu):
 
     D = 8
     chi = 40
@@ -42,8 +42,22 @@ def purification_tJ(chemical_potential):
     g_hopping_up = fpeps.gates.gate_nn_hopping(t, dbeta * coef, fid, fc_up, fcdag_up)
     g_hopping_dn = fpeps.gates.gate_nn_hopping(t, dbeta * coef, fid, fc_dn, fcdag_dn)
     g_heisenberg = fpeps.gates.gates_Heisenberg_spinful(dbeta * coef, Jz, J, J, Sz, Sp, Sm, n, fid)
-    g_loc = fpeps.gates.gate_local_occupation(chemical_potential, dbeta * coef, fid, n)
+    g_loc = fpeps.gates.gate_local_occupation(mu, dbeta * coef, fid, n)
     gates = fpeps.gates.distribute(net, gates_nn=[g_hopping_up, g_hopping_dn, g_heisenberg], gates_local=g_loc)
+
+    g_tj = fpeps.gates.gates_tJ(J, t, t, 0, 0, 0, 0, dbeta * coef, fid, fc_up, fcdag_up, fc_dn, fcdag_dn)
+    gates = fpeps.gates.distribute(net, gates_nn=g_tj, gates_local=g_loc)
+
+    # g_tj_loc = fpeps.gates.gates_tJ(J, t, t, mu/4, mu/4, mu/4, mu/4, dbeta * coef, fid, fc_up, fcdag_up, fc_dn, fcdag_dn)
+    # gates = fpeps.gates.distribute(net, gates_nn=g_tj_loc)
+    # # correct boundary terms with local chemical potential
+    # local = [fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, fid, n, site=(0, 0)),
+    #          fpeps.gates.gate_local_occupation(mu/4, dbeta * coef, fid, n, site=(0, 1)),
+    #          fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, fid, n, site=(0, 2)),
+    #          fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, fid, n, site=(1, 0)),
+    #          fpeps.gates.gate_local_occupation(mu/4, dbeta * coef, fid, n, site=(1, 1)),
+    #          fpeps.gates.gate_local_occupation(mu/2, dbeta * coef, fid, n, site=(1, 2))]
+    # gates = gates._replace(local=local)
 
     env_evolution = fpeps.EnvNTU(psi, which=ntu_environment)
 
@@ -66,8 +80,7 @@ def purification_tJ(chemical_potential):
     env.update_(opts_svd=opts_svd_ctm, method="2site")
 
     print("Time evolution done")
-    for out in env.ctmrg_(max_sweeps=max_sweeps, iterator_step=1, method="2site", opts_svd=opts_svd_ctm, corner_tol=tol_exp):
-        pass
+    info = env.ctmrg_(max_sweeps=max_sweeps, method="2site", opts_svd=opts_svd_ctm, corner_tol=tol_exp)
 
     # calculate expectation values
     cdagc_up = env.measure_nn(fcdag_up, fc_up)  # calculate for all unique bonds
@@ -85,11 +98,11 @@ def purification_tJ(chemical_potential):
 
     energy = -t * (sum(cdagc_up.values()) - sum(ccdag_up.values()) + sum(cdagc_dn.values()) - sum(ccdag_dn.values())) + \
                 J / 2 * (sum(SmSp.values()) + sum(SpSm.values())) + Jz * sum(SzSz.values()) - J / 4 * sum(nn.values()) - \
-                sum(n_total.values()) * chemical_potential
+                sum(n_total.values()) * mu
     energy = energy / tot_sites
 
     mean_density = sum(env.measure_1site(n).values()) / tot_sites
-    print(out)
+    print(info)
     print("CTMRG done")
 
     return (energy, mean_density, list(cdagc_up.values()), list(cdagc_dn.values()), list(SpSm.values()), list(SzSz.values()), list(nn.values()), list(nu.values()), list(nd.values()))

@@ -25,6 +25,21 @@ except ImportError:
     from configs import config as cfg
 
 
+tol = 1e-12
+
+def test_fkron():
+    kwargs = {'backend': cfg.backend, 'default_device': cfg.default_device}
+
+    for sym in ['Z2', 'U1xU1', 'U1xU1xZ2']:  # TODO: add 'U1' in tJ
+        for opsclass in [yastn.operators.SpinfulFermions,
+                         yastn.operators.SpinfulFermions_tJ]:
+            ops = opsclass(sym=sym, **kwargs)
+
+            SpSm1 = fkron(ops.Sp(), ops.Sm(), sites=(0, 1))
+            SpSm2 = fkron(ops.Sm(), ops.Sp(), sites=(1, 0))
+            assert yastn.norm(SpSm1 - SpSm2) < tol
+
+
 def test_hopping_gate():
     kwargs = {'backend': cfg.backend, 'default_device': cfg.default_device}
 
@@ -119,6 +134,9 @@ def test_gate_raises():
         # sites should be equal to (0, 1) or (1, 0)
 
 
+
+
 if __name__ == '__main__':
     test_hopping_gate()
     test_gate_raises()
+    test_fkron()
