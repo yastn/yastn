@@ -71,7 +71,7 @@ def test_NTU_spinful_finite():
     infos = []
     for step in range(1, steps + 1):
         print(f"beta = {step * dbeta:0.3f}" )
-        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd)
+        info = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, fix_metric=None)
         infos.append(info)
 
     # convergence criteria for CTM based on total energy

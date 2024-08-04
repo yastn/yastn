@@ -62,6 +62,7 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
         and absolute value of the most negative eigenvalue (if present).
         If fix_metric is not None, replace eigenvalues smaller than the error_measure
         by fix_metric * error_measure. Sensible values of fix_metric are 0 and 1. Default is 0.
+        If None, do not perform eigh to test for negative eigenvalues.
     pinv_cutoffs : Sequence[float] | float
         List of pseudo-inverse cutoffs.
         The one that gives the smallest truncation error is used during iterative optimizations and EAT initialization.
@@ -132,18 +133,19 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
     fgf = (fgf + fgfH) / 2
 
     # check metric tensor eigenvalues
-    S, U = fgf.eigh(axes=(0, 1))
-    smin, smax = min(S._data), max(S._data)
-
-    info['nonhermitian_part'] = nonhermitian / smax
-    info['min_eigenvalue'] = smin / smax
-
-    g_error = max(-smin, 0) + nonhermitian
-    info['wrong_eigenvalues'] = sum(S._data < g_error).item() / len(S._data)
     if fix_metric is not None:
-        S._data[S._data < g_error] = g_error * fix_metric
+        S, U = fgf.eigh(axes=(0, 1))
+        smin, smax = min(S._data), max(S._data)
 
-    fgf = U @ S @ U.H
+        info['nonhermitian_part'] = (nonhermitian / smax).item()
+        info['min_eigenvalue'] = (smin / smax).item()
+
+        g_error = max(-smin, 0) + nonhermitian
+        info['wrong_eigenvalues'] = sum(S._data < g_error).item() / len(S._data)
+        S._data[S._data < g_error] = g_error * fix_metric
+        fgf = U @ S @ U.H
+    else:
+        info['nonhermitian_part'] = (nonhermitian / fgf.norm()).item()
 
     fRR = (R0 @ R1).fuse_legs(axes=[(0, 1)])
     fgRR = fgf @ fRR
@@ -265,12 +267,14 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, info
     G = G.unfuse_legs(axes=2)
     #
     # rank-1 approximation
-    G0, S, G1 = G.svd(axes=((0, 2), (3, 1)))
-    maskS = truncation_mask(S, D_total=1)
-    Srest = maskS.bitwise_not().apply_mask(S, axes=0)
-    info['EAT_error'] = Srest.norm() / S.norm()
+    G0, S, G1 = svd_with_truncation(G, axes=((0, 2), (3, 1)), policy='lowrank', D_block=1, D_total=1)
+
+    # maskS = truncation_mask(S, D_total=1)
+    # Srest = maskS.bitwise_not().apply_mask(S, axes=0)
+    info['EAT_error'] = (1 - (S.norm().item() / G.norm().item()) ** 2) ** 0.5
     #
-    G0, G1 = maskS.apply_mask(G0, G1, axes=(-1, 0))
+    # G0, G1 = maskS.apply_mask(G0, G1, axes=(-1, 0))
+
     G0 = G0.remove_leg(axis=2)
     G1 = G1.remove_leg(axis=0)
     #
