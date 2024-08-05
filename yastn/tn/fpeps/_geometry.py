@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Basic structures forming PEPS network. """
+from __future__ import annotations
 from typing import Sequence, Union
 from typing import NamedTuple
 from ... import YastnError

@@ -56,21 +56,24 @@ def test_window_shapes():
         #
         #  test contractions of < mps | mpo | mps > in different configurations
         #
-        for ix in [0, 1, 2]:
+        for xrange in [(0, 1), (1, 2), (2, 3), (0, 3)]:
             for yrange in [(0, 5), (1, 3), (2, 6)]:
-                env = fpeps.EnvWindow(env_ctm, xrange=(ix, ix + 1), yrange=yrange)
-                top = env['t', ix]
-                oh = env.transfer_mpo(ix, dirn='h')
-                btm = env['b', ix]
-                mps.vdot(btm, oh, top)
+                env = fpeps.EnvWindow(env_ctm, xrange=xrange, yrange=yrange)
+                for ix in range(*xrange):
+                    top = env[ix, 't']
+                    oh = env.transfer_mpo(ix, dirn='h')
+                    btm = env[ix, 'b']
+                    mps.vdot(btm, oh, top)
         #
-        for iy in [0, 1, 2]:
+        for yrange in [(0, 1), (1, 2), (2, 3), (1, 4)]:
             for xrange in [(0, 5), (1, 3), (2, 6)]:
-                env = fpeps.EnvWindow(env_ctm, xrange=xrange, yrange=(iy, iy + 1))
-                left = env['l', iy]
-                ov = env.transfer_mpo(iy, dirn='v')
-                right = env['r', iy]
-                mps.vdot(right, ov, left)
+                env = fpeps.EnvWindow(env_ctm, xrange=xrange, yrange=yrange)
+                for iy in range(*yrange):
+                    left = env[iy, 'l']
+                    ov = env.transfer_mpo(iy, dirn='v')
+                    right = env[iy, 'r']
+                    mps.vdot(right, ov, left)
+
 
 
 if __name__ == '__main__':

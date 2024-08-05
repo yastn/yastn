@@ -170,6 +170,7 @@ class EnvCTM(Peps):
         ----------
         env: class CtmEnv
             class containing ctm environment tensors along with lattice structure data
+
         op: single site operator
         """
         if site is None:
@@ -201,6 +202,7 @@ class EnvCTM(Peps):
         O0, O1: yastn.Tensor
             Calculate <O0_s0 O1_s1>.
             O1 is applied first, which might matter for fermionic operators.
+
         bond: yastn.tn.fpeps.Bond | tuple[tuple[int, int], tuple[int, int]]
             Bond of the form (s0, s1). Sites s0 and s1 should be nearest-neighbors on the lattice.
         """
@@ -363,16 +365,15 @@ class EnvCTM(Peps):
         if len(xs) > 1 and len(ys) > 1:
             raise YastnError("Sites should form a horizontal or vertical line.")
 
-
         win = EnvWindow(self, (xs[0], xs[-1] + 1), (ys[0], ys[-1] + 1))
         if len(xs) == 1: # horizontal
-            top = win['t', xs[0]]
+            top = win[xs[0], 't']
             tm = win.transfer_mpo(xs[0], 'h')
-            btm = win['b', xs[0]]
+            btm = win[xs[0], 'b']
         else:  # len(ys) == 1:  # vertical
-            top = win['l', ys[0]]
+            top = win[ys[0], 'l']
             tm = win.transfer_mpo(ys[0], 'v')
-            btm = win['r', ys[0]]
+            btm = win[ys[0], 'r']
 
         val_no = mps.vdot(btm, tm, top)
 
