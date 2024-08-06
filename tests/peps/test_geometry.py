@@ -136,7 +136,11 @@ def test_SquareLattice():
     assert all(net.nn_bond_type(bond) == ('h', True) for bond in net.bonds(dirn='h'))
     assert all(net.nn_bond_type(bond) == ('v', True) for bond in net.bonds(dirn='v'))
 
+    assert net.nn_bond_type(Bond((2, 0), (0, 0))) == ('v', True)
+    assert net.nn_bond_type(Bond((0, 0), (2, 0))) == ('v', False)
     assert not net.f_ordered(Bond((2, 0), (0, 0)))
+    assert net.f_ordered(Bond((0, 0), (2, 0)))
+
     assert all(net.f_ordered((s0, s1)) for s0, s1 in zip(net.sites(), net.sites()[1:]))
     assert not all(net.f_ordered(bond) for bond in net.bonds())  #  PBC bonds in cylinder are not fermionically alligned
 

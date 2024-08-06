@@ -169,15 +169,16 @@ def gate_product_operator(O0, O1, l_ordered=True, f_ordered=True, merge=False):
     If merge, returns equivalent of ncon([O0, O1], [(-0, -2), (-1, -3)]),
     with proper operator order and swap gate applied.
     """
-    G0 = O0.add_leg(s=1)
-    G1 = O1.add_leg(s=-1)
-    if f_ordered:
-        G0 = G0.swap_gate(axes=(0, 2))
-    else:
-        G1 = G1.swap_gate(axes=(1, 2))
+    s = -1 if l_ordered else 1
+    O0 = O0.add_leg(s=s, axis=2)
+    O1 = O1.add_leg(s=-s, axis=2)
 
-    if not l_ordered:
-        G0, G1 = G1, G0
+    if f_ordered:
+        O0 = O0.swap_gate(axes=(1, 2))
+    else:
+        O1 = O1.swap_gate(axes=(0, 2))
+
+    G0, G1 = (O0, O1) if l_ordered else (O1, O0)
 
     if merge:
         return tensordot(G0, G1, axes=(2, 2)).transpose(axes=(0, 2, 1, 3))
@@ -190,8 +191,8 @@ def fkron(A, B, sites=(0, 1), merge=True):
     Returns a Kronecker product of two local operators, A and B,
     including swap-gate (fermionic string) to handle fermionic operators.
 
-    Calculate A_0 B_1 for sites == (0, 1), and A_1 B_0 for sites = (1, 0),
-    i.e., operator B acts first (relevant for fermionic operators).
+    Calculate A_0 B_1 for sites==(0, 1), and A_1 B_0 for sites==(1, 0),
+    i.e., operator B acts first (relevant when operators are fermionically non-trivial).
 
     Site 0 is assumed to be first in both lattice and fermionic orders.
 
@@ -216,8 +217,8 @@ def gate_fix_order(G0, G1, l_ordered=True, f_ordered=True):
     cylindric lattice geometry across the periodic boundary.
     """
     if not f_ordered:
-        G0 = G0.swap_gate(axes=(0, 2))
-        G1 = G1.swap_gate(axes=(1, 2))
+        G0 = G0.swap_gate(axes=(1, 2))
+        G1 = G1.swap_gate(axes=(0, 2))
     if not l_ordered:
         G0, G1 = G1, G0
     return G0, G1
