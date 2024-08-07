@@ -35,60 +35,60 @@ def test_fkron():
                          yastn.operators.SpinfulFermions_tJ]:
             ops = opsclass(sym=sym, **kwargs)
 
-            Sm1Sp0 = fkron(ops.Sp(), ops.Sm(), sites=(0, 1))
-            Sp0Sm1 = fkron(ops.Sm(), ops.Sp(), sites=(1, 0))
+            Sm1Sp0 = fkron(ops.Sp(), ops.Sm(), sites=(0, 1))  # Sp_0 Sm_1
+            Sp0Sm1 = fkron(ops.Sm(), ops.Sp(), sites=(1, 0))  # Sm_1 Sp_0
             assert yastn.norm(Sm1Sp0 - Sp0Sm1) < tol  # [Sp_0, Sm_1] = 0
 
-            for spin in ['u', 'd']:
-                c1cp0 = fkron(ops.cp(spin), ops.c(spin), sites=(0, 1))
-                cp0c1 = fkron(ops.c(spin), ops.cp(spin), sites=(1, 0))
+            for s in ['u', 'd']:
+                c1cp0 = fkron(ops.cp(s), ops.c(s), sites=(0, 1))  # c+_0 c_1
+                cp0c1 = fkron(ops.c(s), ops.cp(s), sites=(1, 0))  # c_1 c+_0
                 assert yastn.norm(cp0c1 + c1cp0) < tol  # {cp_0, c_1} = 0
 
     for sym, sgn in zip(['Z2', 'U1xU1', 'U1xU1xZ2'], [-1, 1, -1]):   # for U1xU1, cu and cd commute
         ops = yastn.operators.SpinfulFermions(sym=sym, **kwargs)
-        # |1111> = cu+ cd+ cu+ cd+ |0000>
+        # |nu_0 nd_0 nu_1, nd_1 >, where convention is
+        # |1111> = cu+_0 cd+_0 cu+_1 cd+_1 |0000>
         v0110 = yastn.ncon([ops.vec_n((0, 1)), ops.vec_n((1, 0))], [[-0], [-1]])
         v1100 = yastn.ncon([ops.vec_n((1, 1)), ops.vec_n((0, 0))], [[-0], [-1]])
         v0011 = yastn.ncon([ops.vec_n((0, 0)), ops.vec_n((1, 1))], [[-0], [-1]])
         psi = v1100 + v0110 + v0011
 
-        for spin in ['u', 'd']:
-            op = fkron(ops.cp(spin), ops.c(spin), sites=(0, 1))  # c+_0 c_1
+        for s in ['u', 'd']:
+            op = fkron(ops.cp(s), ops.c(s), sites=(0, 1))  # cs+_0 cs_1
             phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) - sgn / 3) < tol
 
-            op = fkron(ops.c(spin), ops.cp(spin), sites=(1, 0))
+            op = fkron(ops.c(s), ops.cp(s), sites=(1, 0))  # cs_1 cs+_0
             phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) + sgn / 3) < tol
 
-            op = fkron(ops.c(spin), ops.cp(spin), sites=(0, 1))
+            op = fkron(ops.c(s), ops.cp(s), sites=(0, 1))  # cs_0 cs+_1
             phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) + sgn / 3) < tol
 
-            op = fkron(ops.cp(spin), ops.c(spin), sites=(1, 0))
+            op = fkron(ops.cp(s), ops.c(s), sites=(1, 0))  # cs+_1 cs_0
             phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) - sgn / 3) < tol
 
-            # now test reversed fermionic order between sites
-            # effectively, |1111> = cu1+ cd1+ cu0+ cd0+ |0000>
-            # state psi can be the same as above -- it has positive amplitudes.
+            # now we test reversed fermionic order between sites,
+            # effectively, this means |1111> = cu+_1 cd+_1 cu+_0 cd+_0 |0000>
+            # vector representation of psi is the same as above, i.e., it has positive amplitudes.
 
-            op = gate_product_operator(ops.cp(spin), ops.c(spin), l_ordered=True, f_ordered=False, merge=True) # c+_0 c_1
+            op = gate_product_operator(ops.cp(s), ops.c(s), l_ordered=True, f_ordered=False, merge=True)  # cs+_0 cs_1
             phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) - 1 / 3) < tol
 
-            op = gate_product_operator(ops.c(spin), ops.cp(spin), l_ordered=False, f_ordered=True, merge=True) # c_1 c+_0
+            op = gate_product_operator(ops.c(s), ops.cp(s), l_ordered=False, f_ordered=True, merge=True)  # cs_1 cs+_0
             phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) + 1 / 3) < tol
 
-            op = gate_product_operator(ops.c(spin), ops.cp(spin), l_ordered=True, f_ordered=False, merge=True) # c_0 c+_1
+            op = gate_product_operator(ops.c(s), ops.cp(s), l_ordered=True, f_ordered=False, merge=True)  # cs_0 cs+_1
             phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) + 1 / 3) < tol
 
-            op = gate_product_operator(ops.cp(spin), ops.c(spin), l_ordered=False, f_ordered=True, merge=True) # c+_1 c_0
+            op = gate_product_operator(ops.cp(s), ops.c(s), l_ordered=False, f_ordered=True, merge=True)  # cs+_1 cs_0
             phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) - 1 / 3) < tol
-
 
 
 def test_hopping_gate():

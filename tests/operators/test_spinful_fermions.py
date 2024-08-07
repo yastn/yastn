@@ -48,10 +48,14 @@ def test_spinful_fermions():
     assert all(ops.config.fermionic == fs for ops, fs in zip((ops_Z2, ops_U1, ops_U1xU1_ind, ops_U1xU1_dis), (True, True, (False, False, True), True)))
 
     for ops, inter_sgn in [(ops_Z2, 1), (ops_U1, 1), (ops_U1xU1_ind, 1), (ops_U1xU1_dis, -1)]:
-        # check anti-commutation relations
-        assert all(yastn.norm(ops.c(s) @ ops.c(s)) < tol for s in ('u', 'd'))
-        assert all(yastn.norm(ops.c(s) @ ops.cp(s) + ops.cp(s) @ ops.c(s) - ops.I()) < tol for s in ('u', 'd'))
-        assert all(yastn.norm(ops.c(s) @ ops.cp(s) + ops.n(s) - ops.I()) < tol for s in ('u', 'd'))
+        for s in ('u', 'd'):
+            # occupation operators
+            assert yastn.norm(ops.cp(s) @ ops.c(s) - ops.n(s)) < tol
+
+            # check anti-commutation relations
+            assert yastn.norm(ops.c(s) @ ops.c(s)) < tol
+            assert yastn.norm(ops.cp(s) @ ops.cp(s)) < tol
+            assert yastn.norm(ops.c(s) @ ops.cp(s) + ops.cp(s) @ ops.c(s) - ops.I()) < tol
 
         # anticommutator for indistinguishable; commutator for distinguishable
         assert yastn.norm(ops.c('u') @ ops.cp('d') + inter_sgn * ops.cp('d') @ ops.c('u')) < tol
@@ -59,24 +63,30 @@ def test_spinful_fermions():
         assert yastn.norm(ops.cp('u') @ ops.cp('d') + inter_sgn * ops.cp('d') @ ops.cp('u')) < tol
         assert yastn.norm(ops.cp('u') @ ops.c('d') + inter_sgn * ops.c('d') @ ops.cp('u')) < tol
 
-        v00, v10, v01, v11 = ops.vec_n((0, 0)), ops.vec_n((1, 0)), ops.vec_n((0, 1)), ops.vec_n((1, 1))
-        nu, nd = ops.n('u'), ops.n('d')
-        assert yastn.norm(nu @ v00) < tol and yastn.norm(nd @ v00) < tol
-        assert yastn.norm(nu @ v01) < tol and yastn.norm(nd @ v01 - v01) < tol
-        assert yastn.norm(nu @ v10 - v10) < tol and yastn.norm(nd @ v10) < tol
-        assert yastn.norm(nu @ v11 - v11) < tol and yastn.norm(nd @ v11 - v11) < tol
-
         # check commute and anti-commute relation between spin-1/2 operators
         assert yastn.norm(ops.Sp() @ ops.Sm() - ops.Sm() @ ops.Sp() - 2 * ops.Sz()) < tol
         assert yastn.norm(ops.Sz() @ ops.Sp() - ops.Sp() @ ops.Sz() - ops.Sp()) < tol
-        assert yastn.norm(ops.Sm() @ ops.Sz() - ops.Sz() @ ops.Sm() - ops.Sm()) < tol
+        assert yastn.norm(ops.Sz() @ ops.Sm() - ops.Sm() @ ops.Sz() + ops.Sm()) < tol
         assert yastn.norm(ops.Sz() @ ops.Sp() + ops.Sp() @ ops.Sz()) < tol
         assert yastn.norm(ops.Sm() @ ops.Sz() + ops.Sz() @ ops.Sm()) < tol
-        assert yastn.norm(ops.Sp() @ ops.Sm() + ops.Sm() @ ops.Sp() - 2 * abs(ops.Sz())) < tol
         #
         # |ud>; |11> = cu+ cd+ |00>;
         # cu |11> =  |01>; cu |10> = |00>
         # cd |11> = -|10>; cd |01> = |00>
+        v00, v10, v01, v11 = ops.vec_n((0, 0)), ops.vec_n((1, 0)), ops.vec_n((0, 1)), ops.vec_n((1, 1))
+        nu, nd = ops.n('u'), ops.n('d')
+        assert yastn.norm(nu @ v00) < tol
+        assert yastn.norm(nd @ v00) < tol
+
+        assert yastn.norm(nu @ v01) < tol
+        assert yastn.norm(nd @ v01 - v01) < tol
+
+        assert yastn.norm(nu @ v10 - v10) < tol
+        assert yastn.norm(nd @ v10) < tol
+
+        assert yastn.norm(nu @ v11 - v11) < tol
+        assert yastn.norm(nd @ v11 - v11) < tol
+
         assert yastn.norm(ops.cp('u') @ ops.cp('d') @ v00 - v11) < tol
         assert yastn.norm(ops.c('u') @ v10 - v00) < tol
         assert yastn.norm(ops.c('u') @ v11 - v01) < tol
@@ -87,8 +97,6 @@ def test_spinful_fermions():
         assert yastn.norm(ops.cp('u') @ v01 - v11) < tol
         assert yastn.norm(ops.cp('d') @ v00 - v01) < tol
         assert yastn.norm(ops.cp('d') @ v10 + inter_sgn * v11) < tol
-
-
 
 
     with pytest.raises(yastn.YastnError):

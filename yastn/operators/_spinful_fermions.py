@@ -24,7 +24,7 @@ class SpinfulFermions(meta_operators):
         r"""
         Generator of standard operators for local Hilbert space with two fermionic species and 4-dimensional Hilbert space.
 
-        Predefine identity, creation, annihilation, and density operators.
+        Predefine identity, creation, annihilation, density, and spin operators.
         Defines vectors with possible occupations, and local Hilbert space as a :class:`yastn.Leg`.
 
         Parameters
@@ -62,93 +62,123 @@ class SpinfulFermions(meta_operators):
 
     def space(self) -> yastn.Leg:
         r""" :class:`yastn.Leg` describing local Hilbert space. """
-        if self._sym == 'Z2':
+        if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
             return Leg(self.config, s=1, t=(0, 1), D=(2, 2))
-        if self._sym == 'U1':
+        if self._sym == 'U1':  # charges: 0 = |00>; 1 = (|10>, |01>); 2 = |11>  |occ_u occ_d>
             return Leg(self.config, s=1, t=(0, 1, 2), D=(1, 2, 1))
-        if self._sym == 'U1xU1xZ2':
+        if self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
             return Leg(self.config, s=1, t=((0, 0, 0), (0, 1, 1), (1, 0, 1), (1, 1, 0)), D=(1, 1, 1 ,1))
-        if self._sym == 'U1xU1':
+        if self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
             return Leg(self.config, s=1, t=((0, 0), (0, 1), (1, 0), (1, 1)), D=(1, 1, 1, 1))
+
+    def vec_n(self, val=(0, 0)) -> yastn.Tensor:
+        r""" State with occupation given by tuple (nu, nd). """
+        if val == (0, 0):
+            if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
+                vec = Tensor(config=self.config, s=(1,), n=0)
+                vec.set_block(ts=(0,), Ds=(2,), val=[1, 0])
+            elif self._sym == 'U1':  # charges: 0 = |00>; 1 = (|10>, |01>); 2 = |11>  |occ_u occ_d>
+                vec = Tensor(config=self.config, s=(1,), n=0)
+                vec.set_block(ts=(0,), Ds=(1,), val=1)
+            elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
+                vec = Tensor(config=self.config, s=(1,), n=(0, 0, 0))
+                vec.set_block(ts=((0, 0, 0),), Ds=(1,), val=1)
+            elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+                vec = Tensor(config=self.config, s=(1,), n=(0, 0))
+                vec.set_block(ts=((0, 0),), Ds=(1,), val=1)
+        elif val == (1, 0):
+            if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
+                vec = Tensor(config=self.config, s=(1,), n=1)
+                vec.set_block(ts=(1,), Ds=(2,), val=[1, 0])
+            elif self._sym == 'U1':  # charges: 0 = |00>; 1 = (|10>, |01>); 2 = |11>  |occ_u occ_d>
+                vec = Tensor(config=self.config, s=(1,), n=1)
+                vec.set_block(ts=(1,), Ds=(2,), val=[1, 0])
+            elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
+                vec = Tensor(config=self.config, s=(1,), n=(1, 0, 1))
+                vec.set_block(ts=((1, 0, 1),), Ds=(1,), val=1)
+            elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+                vec = Tensor(config=self.config, s=(1,), n=(1, 0))
+                vec.set_block(ts=((1, 0),), Ds=(1,), val=1)
+        elif val == (0, 1):
+            if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
+                vec = Tensor(config=self.config, s=(1,), n=1)
+                vec.set_block(ts=(1,), Ds=(2,), val=[0, 1])
+            elif self._sym == 'U1':  # charges: 0 = |00>; 1 = (|10>, |01>); 2 = |11>  |occ_u occ_d>
+                vec = Tensor(config=self.config, s=(1,), n=1)
+                vec.set_block(ts=(1,), Ds=(2,), val=[0, 1])
+            elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
+                vec = Tensor(config=self.config, s=(1,), n=(0, 1, 1))
+                vec.set_block(ts=((0, 1, 1),), Ds=(1,), val=1)
+            elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+                vec = Tensor(config=self.config, s=(1,), n=(0, 1))
+                vec.set_block(ts=((0, 1),), Ds=(1,), val=1)
+        elif val == (1, 1):
+            if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
+                vec = Tensor(config=self.config, s=(1,), n=0)
+                vec.set_block(ts=(0,), Ds=(2,), val=[0, 1])
+            elif self._sym == 'U1':  # charges: 0 = |00>; 1 = (|10>, |01>); 2 = |11>  |occ_u occ_d>
+                vec = Tensor(config=self.config, s=(1,), n=2)
+                vec.set_block(ts=(2,), Ds=(1,), val=1)
+            elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
+                vec = Tensor(config=self.config, s=(1,), n=(1, 1, 0))
+                vec.set_block(ts=((1, 1, 0),), Ds=(1,), val=1)
+            elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+                vec = Tensor(config=self.config, s=(1,), n=(1, 1))
+                vec.set_block(ts=((1, 1),), Ds=(1,), val=1)
+        else:
+            raise YastnError('Occupations given by val should be (0, 0), (1, 0), (0, 1), or (1, 1).')
+        return vec
 
     def I(self) -> yastn.Tensor:
         r""" Identity operator in 4-dimensional Hilbert space. """
-        if self._sym == 'Z2':
-            I = Tensor(config=self.config, s=self.s, n=0)
+        I = Tensor(config=self.config, s=self.s)
+        if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
             I.set_block(ts=(0, 0), Ds=(2, 2), val=[[1, 0], [0, 1]])
             I.set_block(ts=(1, 1), Ds=(2, 2), val=[[1, 0], [0, 1]])
-        if self._sym == 'U1':
-            I = Tensor(config=self.config, s=self.s, n=0)
+        elif self._sym == 'U1':  # charges: 0 = |00>; 1 = (|10>, |01>); 2 = |11>  |occ_u occ_d>
             I.set_block(ts=(0, 0), Ds=(1, 1), val=1)
             I.set_block(ts=(1, 1), Ds=(2, 2), val=[[1, 0], [0, 1]])
             I.set_block(ts=(2, 2), Ds=(1, 1), val=1)
-        if self._sym == 'U1xU1xZ2':
-            I = Tensor(config=self.config, s=self.s, n=(0, 0, 0))
+        elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
             for t in [(0, 0, 0), (0, 1, 1), (1, 0, 1), (1, 1, 0)]:
                 I.set_block(ts=(t, t), Ds=(1, 1), val=1)
-        if self._sym == 'U1xU1':
-            I = Tensor(config=self.config, s=self.s, n=(0, 0))
+        elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
             for t in [(0, 0), (0, 1), (1, 0), (1, 1)]:
                 I.set_block(ts=(t, t), Ds=(1, 1), val=1)
         return I
 
     def n(self, spin='u') -> yastn.Tensor:
         r""" Particle number operator, with spin='u' for spin-up, and 'd' for spin-down. """
-        return (self.cp(spin=spin) @ self.c(spin=spin)).remove_zero_blocks()
-
-    def vec_n(self, val=(0, 0)) -> yastn.Tensor:
-        r""" State with occupation given by tuple (nu, nd). """
-        if self._sym == 'Z2' and val == (0, 0):
-            vec = Tensor(config=self.config, s=(1,), n=0)
-            vec.set_block(ts=(0,), Ds=(2,), val=[1, 0])
-        elif self._sym == 'Z2' and val == (1, 0):
-            vec = Tensor(config=self.config, s=(1,), n=1)
-            vec.set_block(ts=(1,), Ds=(2,), val=[1, 0])
-        elif self._sym == 'Z2' and val == (0, 1):
-            vec = Tensor(config=self.config, s=(1,), n=1)
-            vec.set_block(ts=(1,), Ds=(2,), val=[0, 1])
-        elif self._sym == 'Z2' and val == (1, 1):
-            vec = Tensor(config=self.config, s=(1,), n=0)
-            vec.set_block(ts=(0,), Ds=(2,), val=[0, 1])
-        elif self._sym == 'U1' and val == (0, 0):
-            vec = Tensor(config=self.config, s=(1,), n=0)
-            vec.set_block(ts=(0,), Ds=(1,), val=1)
-        elif self._sym == 'U1' and val == (1, 0):
-            vec = Tensor(config=self.config, s=(1,), n=1)
-            vec.set_block(ts=(1,), Ds=(2,), val=[1, 0])
-        elif self._sym == 'U1' and val == (0, 1):
-            vec = Tensor(config=self.config, s=(1,), n=1)
-            vec.set_block(ts=(1,), Ds=(2,), val=[0, 1])
-        elif self._sym == 'U1' and val == (1, 1):
-            vec = Tensor(config=self.config, s=(1,), n=2)
-            vec.set_block(ts=(2,), Ds=(1,), val=1)
-        elif self._sym == 'U1xU1' and val == (0, 0):
-            vec = Tensor(config=self.config, s=(1,), n=(0, 0))
-            vec.set_block(ts=((0, 0),), Ds=(1,), val=1)
-        elif self._sym == 'U1xU1' and val == (1, 0):
-            vec = Tensor(config=self.config, s=(1,), n=(1, 0))
-            vec.set_block(ts=((1, 0),), Ds=(1,), val=1)
-        elif self._sym == 'U1xU1' and val == (0, 1):
-            vec = Tensor(config=self.config, s=(1,), n=(0, 1))
-            vec.set_block(ts=((0, 1),), Ds=(1,), val=1)
-        elif self._sym == 'U1xU1' and val == (1, 1):
-            vec = Tensor(config=self.config, s=(1,), n=(1, 1))
-            vec.set_block(ts=((1, 1),), Ds=(1,), val=1)
-        elif self._sym == 'U1xU1xZ2' and val == (0, 0):
-            vec = Tensor(config=self.config, s=(1,), n=(0, 0, 0))
-            vec.set_block(ts=((0, 0, 0),), Ds=(1,), val=1)
-        elif self._sym == 'U1xU1xZ2' and val == (1, 0):
-            vec = Tensor(config=self.config, s=(1,), n=(1, 0, 1))
-            vec.set_block(ts=((1, 0, 1),), Ds=(1,), val=1)
-        elif self._sym == 'U1xU1xZ2' and val == (0, 1):
-            vec = Tensor(config=self.config, s=(1,), n=(0, 1, 1))
-            vec.set_block(ts=((0, 1, 1),), Ds=(1,), val=1)
-        elif self._sym == 'U1xU1xZ2' and val == (1, 1):
-            vec = Tensor(config=self.config, s=(1,), n=(1, 1, 0))
-            vec.set_block(ts=((1, 1, 0),), Ds=(1,), val=1)
+        n = Tensor(config=self.config, s=self.s)
+        if spin == 'u':
+            if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)  |occ_u occ_d>
+                n.set_block(ts=(0, 0), Ds=(2, 2), val=[[0, 0], [0, 1]])
+                n.set_block(ts=(1, 1), Ds=(2, 2), val=[[1, 0], [0, 0]])
+            elif self._sym == 'U1':  # charges: 0 = |00>; 1 = (|10>, |01>); 2 = |11>  |occ_u occ_d>
+                n.set_block(ts=(1, 1), Ds=(2, 2), val=[[1, 0], [0, 0]])
+                n.set_block(ts=(2, 2), Ds=(1, 1), val=1)
+            elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
+                n.set_block(ts=((1, 0, 1), (1, 0, 1)), Ds=(1, 1), val=1)
+                n.set_block(ts=((1, 1, 0), (1, 1, 0)), Ds=(1, 1), val=1)
+            elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+                n.set_block(ts=((1, 0), (1, 0)), Ds=(1, 1), val=1)
+                n.set_block(ts=((1, 1), (1, 1)), Ds=(1, 1), val=1)
+        elif spin == 'd':
+            if self._sym == 'Z2':  # charges: 0 = (|00>, |11>); 1 = (|10>, |01>)
+                n.set_block(ts=(0, 0), Ds=(2, 2), val=[[0, 0], [0, 1]])
+                n.set_block(ts=(1, 1), Ds=(2, 2), val=[[0, 0], [0, 1]])
+            elif self._sym == 'U1':  # charges: 0 = |00>; 1 = (|10>, |01>); 2 = |11>
+                n.set_block(ts=(1, 1), Ds=(2, 2), val=[[0, 0], [0, 1]])
+                n.set_block(ts=(2, 2), Ds=(1, 1), val=1)
+            elif self._sym == 'U1xU1xZ2':  # charges == (occ_u, occ_d, parity)
+                n.set_block(ts=((0, 1, 1), (0, 1, 1)), Ds=(1, 1), val=1)
+                n.set_block(ts=((1, 1, 0), (1, 1, 0)), Ds=(1, 1), val=1)
+            elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
+                n.set_block(ts=((0, 1), (0, 1)), Ds=(1, 1), val=1)
+                n.set_block(ts=((1, 1), (1, 1)), Ds=(1, 1), val=1)
         else:
-            raise YastnError('Occupations given by val should be (0, 0), (1, 0), (0, 1), or (1, 1).')
-        return vec
+            raise YastnError("spin shoul be equal 'u' or 'd'.")
+        return n
 
     def cp(self, spin='u') -> yastn.Tensor:
         r""" Creation operator, with spin='u' for spin-up, and 'd' for spin-down. """
