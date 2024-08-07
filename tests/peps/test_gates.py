@@ -30,7 +30,7 @@ tol = 1e-12
 def test_fkron():
     kwargs = {'backend': cfg.backend, 'default_device': cfg.default_device}
 
-    for sym in ['Z2', 'U1xU1', 'U1xU1xZ2']:  # TODO: add 'U1' in tJ
+    for sym in ['Z2', 'U1', 'U1xU1xZ2', 'U1xU1']:
         for opsclass in [yastn.operators.SpinfulFermions,
                          yastn.operators.SpinfulFermions_tJ]:
             ops = opsclass(sym=sym, **kwargs)
@@ -44,16 +44,17 @@ def test_fkron():
                 cp0c1 = fkron(ops.c(s), ops.cp(s), sites=(1, 0))  # c_1 c+_0
                 assert yastn.norm(cp0c1 + c1cp0) < tol  # {cp_0, c_1} = 0
 
-    for sym, sgn in zip(['Z2', 'U1xU1', 'U1xU1xZ2'], [-1, 1, -1]):   # for U1xU1, cu and cd commute
+    for sym, sgn in zip(['Z2', 'U1', 'U1xU1xZ2', 'U1xU1'], [-1, -1, -1, 1]):   # for U1xU1, cu and cd commute
         ops = yastn.operators.SpinfulFermions(sym=sym, **kwargs)
-        # |nu_0 nd_0 nu_1, nd_1 >, where convention is
-        # |1111> = cu+_0 cd+_0 cu+_1 cd+_1 |0000>
         v0110 = yastn.ncon([ops.vec_n((0, 1)), ops.vec_n((1, 0))], [[-0], [-1]])
         v1100 = yastn.ncon([ops.vec_n((1, 1)), ops.vec_n((0, 0))], [[-0], [-1]])
         v0011 = yastn.ncon([ops.vec_n((0, 0)), ops.vec_n((1, 1))], [[-0], [-1]])
         psi = v1100 + v0110 + v0011
 
         for s in ['u', 'd']:
+            # |nu_0 nd_0 nu_1, nd_1 >, where the convention is
+            # |1111> = cu+_0 cd+_0 cu+_1 cd+_1 |0000>, i.e.,
+            # sites 0 is before 1 in fermionic order
             op = fkron(ops.cp(s), ops.c(s), sites=(0, 1))  # cs+_0 cs_1
             phi = yastn.ncon([op, psi], [[-0, -1, 1, 2], [1, 2]])
             assert abs(yastn.vdot(phi, psi) / yastn.vdot(psi, psi) - sgn / 3) < tol

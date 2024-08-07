@@ -105,11 +105,17 @@ def test_spin12():
         _ = ops_U1.y()
         # Cannot define sigma_y operator for U1 symmetry
     with pytest.raises(yastn.YastnError):
+        _ = ops_U1.iy()
+        # Cannot define sigma_y operator for U1 symmetry.
+    with pytest.raises(yastn.YastnError):
         yastn.operators.Spin12(sym='wrong symmetry')
         # For Spin12 sym should be in ('dense', 'Z2', 'U1').
     with pytest.raises(yastn.YastnError):
         yastn.operators.Spin12(sym='U1', fermionic=True)
         # For Spin12 config.fermionic should be False.
+    with pytest.raises(yastn.YastnError):
+        yastn.operators.Spin12(sym='U1xU1')
+        # For Spin12 sym should be in ('dense', 'Z2', 'U1').
     with pytest.raises(yastn.YastnError):
         ops_U1.vec_z(val=10)
         # Eigenvalues val should be in (-1, 1).

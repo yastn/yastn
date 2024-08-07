@@ -99,65 +99,47 @@ def test_ctmrg_measure_product(boundary):
         # Sites should not repeat.
 
 
-
-def test_ctmrg_measure_fermionic():
+def test_ctmrg_measure_2x1():
     """ Initialize a product PEPS of 1x2 cells and perform a set of measurment. """
 
     for dims in [(1, 2), (2, 1)]:
         g = fpeps.SquareLattice(dims=dims, boundary='infinite')
-        ops = yastn.operators.SpinfulFermions(sym='Z2')
 
-        v0000 = yastn.ncon([ops.vec_n((0, 0)), ops.vec_n((0, 0))], [[-0], [-1]])
-        v0110 = yastn.ncon([ops.vec_n((0, 1)), ops.vec_n((1, 0))], [[-0], [-1]])
-        v1100 = yastn.ncon([ops.vec_n((1, 1)), ops.vec_n((0, 0))], [[-0], [-1]])
-        state = v1100 + v0110
+        for sym in ['Z2', 'U1', 'U1xU1xZ2']:
+            ops = yastn.operators.SpinfulFermions(sym=sym)
+            v0110 = yastn.ncon([ops.vec_n((0, 1)), ops.vec_n((1, 0))], [[-0], [-1]])
+            v1100 = yastn.ncon([ops.vec_n((1, 1)), ops.vec_n((0, 0))], [[-0], [-1]])
+            v0011 = yastn.ncon([ops.vec_n((0, 0)), ops.vec_n((1, 1))], [[-0], [-1]])
+            psi = v1100 + v0110 + v0011
 
-        val_no = yastn.vdot(state, state)
-        cu = ops.c('u').add_leg(axis=2)
-        tmp = yastn.ncon([cu, state], [[-1, 1, -2], [-0, 1]])
-        tmp = tmp.swap_gate(axes=(0, 2))
-        tmp = tmp.remove_leg(axis=2)
-        tmp = yastn.ncon([ops.cp('u'), tmp], [[-0, 1], [1, -1]])
-        val_ex = yastn.vdot(state, tmp)
-        assert abs(val_ex / val_no + 0.5) < tol
+            r0, r1 = yastn.qr(psi, sQ=-1, Qaxis=0)
 
+            r0 = r0.add_leg(axis=0, s=-1)  # t
+            r0 = r0.add_leg(axis=1, s=1)  # l
+            if dims == (1, 2):
+                r0 = r0.add_leg(axis=2, s=1)  # b
+                r1 = r1.add_leg(axis=0, s=-1)  # t
+            else:  # dims == (2, 1):
+                r0 = r0.add_leg(axis=3, s=-1)  # r
+                r1 = r1.add_leg(axis=1, s=1)  # l
+            r1 = r1.add_leg(axis=2, s=1)  # b
+            r1 = r1.add_leg(axis=3, s=-1)  # r
 
-        o1100 = fpeps.fkron(ops.cp('u') @ ops.cp('d'), ops.I())
-        o0110 = fpeps.fkron(ops.cp('d'), ops.cp('u'))
-        v1100 = yastn.ncon([o1100, v0000], [(-0, -1, 1, 2), (1, 2)])
-        v0110 = yastn.ncon([o0110, v0000], [(-0, -1, 1, 2), (1, 2)])
-        state = v1100 + v0110
+            psi = fpeps.Peps(g, tensors=dict(zip(g.sites(), [r0, r1])))
 
-        r0, r1 = yastn.qr(state, sQ=-1, Qaxis=0)
+            env = fpeps.EnvCTM(psi, init='eye')
+            # no need to converge ctmrg_ in this example
+            # info = env.ctmrg_(opts_svd = {"D_total": 2}, max_sweeps=5)
 
-        r0 = r0.add_leg(axis=0, s=-1)
-        r0 = r0.add_leg(axis=1, s=1)
-        if dims == (1, 2):
-            r0 = r0.add_leg(axis=2, s=1)
-            r1 = r1.add_leg(axis=0, s=-1)
-        else:  # dims == (2, 1):
-            r0 = r0.add_leg(axis=3, s=-1)
-            r1 = r1.add_leg(axis=1, s=1)
-        r1 = r1.add_leg(axis=2, s=1)
-        r1 = r1.add_leg(axis=3, s=-1)
-
-        psi = fpeps.Peps(g, tensors=dict(zip(g.sites(), [r0, r1])))
-        env = fpeps.EnvCTM(psi, init='eye')
-
-        info = env.ctmrg_(opts_svd = {"D_total": 2}, max_sweeps=5)
-        print(info)
-
-        val = env.measure_nn(ops.cp('u'), ops.c('u'), bond=g.sites())
-        print(val)
-
-        val = env.measure_1site(ops.n('u'))
-        print(val)
-        val = env.measure_1site(ops.n('d'))
-        print(val)
-
+            for s in ['u', 'd']:
+                bond = [*g.sites()]
+                assert abs(env.measure_nn(ops.cp(s), ops.c(s), bond=bond) + 1 / 3) < tol
+                assert abs(env.measure_nn(ops.cp(s), ops.c(s), bond=bond[::-1]) + 1 / 3) < tol
+                assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond) - 1 / 3) < tol
+                assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond[::-1]) - 1 / 3) < tol
 
 
 if __name__ == '__main__':
     test_ctmrg_measure_product(boundary='obc')
     test_ctmrg_measure_product(boundary='infinite')
-    test_ctmrg_measure_fermionic()
+    test_ctmrg_measure_2x1()

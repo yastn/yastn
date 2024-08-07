@@ -117,11 +117,17 @@ def test_spin1():
         _ = ops_Z3.sy()
         # Cannot define Sy operator for U1 or Z3 symmetry.
     with pytest.raises(yastn.YastnError):
+        _ = ops_Z3.isy()
+        # Cannot define sy operator for U1 or Z3 symmetry.
+    with pytest.raises(yastn.YastnError):
         yastn.operators.Spin1(sym='wrong symmetry')
         # For Spin1 sym should be in ('dense', 'Z3', 'U1').
     with pytest.raises(yastn.YastnError):
         yastn.operators.Spin1(sym='U1', fermionic=True)
         # For Spin1 config.fermionic should be False.
+    with pytest.raises(yastn.YastnError):
+        yastn.operators.Spin1(sym='U1xU1')
+        # For Spin1 sym should be in ('dense', 'Z3', 'U1').
     with pytest.raises(yastn.YastnError):
         ops_U1.vec_z(val=10)
         # Eigenvalues val should be in (-1, 0, 1).

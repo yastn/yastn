@@ -150,7 +150,7 @@ class SpinfulFermions_tJ(meta_operators):
             elif self._sym == 'U1xU1':  # charges == (occ_u, occ_d)
                 n.set_block(ts=((0, 1), (0, 1)), Ds=(1, 1), val=1)
         else:
-            raise YastnError("spin shoul be equal 'u' or 'd'.")
+            raise YastnError("spin should be equal 'u' or 'd'.")
         return n
 
     def h(self):
@@ -198,7 +198,7 @@ class SpinfulFermions_tJ(meta_operators):
                 cp = Tensor(config=self.config, s=self.s, n=(0, 1))
                 cp.set_block(ts=((0, 1), (0, 0)), Ds=(1, 1), val=1)
         else:
-            raise YastnError("spin shoul be equal 'u' or 'd'.")
+            raise YastnError("spin should be equal 'u' or 'd'.")
         return cp
 
     def c(self, spin='u') -> yastn.Tensor:
@@ -230,7 +230,7 @@ class SpinfulFermions_tJ(meta_operators):
                 c = Tensor(config=self.config, s=self.s, n=(0, -1))
                 c.set_block(ts=((0, 0), (0, 1)), Ds=(1, 1), val=1)
         else:
-            raise YastnError("spin shoul be equal 'u' or 'd'.")
+            raise YastnError("spin should be equal 'u' or 'd'.")
         return c
 
     def Sz(self) -> yastn.Tensor:

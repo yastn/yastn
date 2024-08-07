@@ -110,10 +110,13 @@ def test_spinful_fermions():
         # For SpinfulFermions config.sym does not match config.fermionic.
     with pytest.raises(yastn.YastnError):
         ops_Z2.c(spin='down')
-        # spin shoul be equal 'u' or 'd'.
+        # spin should be equal 'u' or 'd'.
     with pytest.raises(yastn.YastnError):
         ops_Z2.cp(spin=+1)
-        # spin shoul be equal 'u' or 'd'.
+        # spin should be equal 'u' or 'd'.
+    with pytest.raises(yastn.YastnError):
+        ops_Z2.n(spin=+1)
+        # spin should be equal 'u' or 'd'.
     with pytest.raises(yastn.YastnError):
         ops_Z2.vec_n(1)
         # Occupations given by val should be (0, 0), (1, 0), (0, 1), or (1, 1).

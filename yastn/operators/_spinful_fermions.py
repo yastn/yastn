@@ -177,7 +177,7 @@ class SpinfulFermions(meta_operators):
                 n.set_block(ts=((0, 1), (0, 1)), Ds=(1, 1), val=1)
                 n.set_block(ts=((1, 1), (1, 1)), Ds=(1, 1), val=1)
         else:
-            raise YastnError("spin shoul be equal 'u' or 'd'.")
+            raise YastnError("spin should be equal 'u' or 'd'.")
         return n
 
     def cp(self, spin='u') -> yastn.Tensor:
@@ -220,7 +220,7 @@ class SpinfulFermions(meta_operators):
                 cp.set_block(ts=((0, 1), (0, 0)), Ds=(1, 1), val=1)
                 cp.set_block(ts=((1, 1), (1, 0)), Ds=(1, 1), val=1)
         else:
-            raise YastnError("spin shoul be equal 'u' or 'd'.")
+            raise YastnError("spin should be equal 'u' or 'd'.")
         return cp
 
     def c(self, spin='u') -> yastn.Tensor:
@@ -263,7 +263,7 @@ class SpinfulFermions(meta_operators):
                 c.set_block(ts=((0, 0), (0, 1)), Ds=(1, 1), val=1)
                 c.set_block(ts=((1, 0), (1, 1)), Ds=(1, 1), val=1)
         else:
-            raise YastnError("spin shoul be equal 'u' or 'd'.")
+            raise YastnError("spin should be equal 'u' or 'd'.")
         return c
 
     def Sz(self) -> yastn.Tensor:
