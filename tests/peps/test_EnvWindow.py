@@ -23,12 +23,7 @@ try:
 except ImportError:
     from configs import config as cfg
 
-
 tol = 1e-12
-
-def mean(xs):
-    return sum(xs) / len(xs)
-
 
 def test_window_shapes():
     """ Initialize a product PEPS and perform a set of measurment. """
@@ -73,7 +68,6 @@ def test_window_shapes():
                     ov = env.transfer_mpo(iy, dirn='v')
                     right = env[iy, 'r']
                     mps.vdot(right, ov, left)
-
 
 
 if __name__ == '__main__':
