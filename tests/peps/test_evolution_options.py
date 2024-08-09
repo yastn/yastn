@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-""" Real-time evolution of spinless fermions on a cylinder. """
 import pytest
 import yastn
 import yastn.tn.fpeps as fpeps
@@ -25,7 +24,7 @@ except ImportError:
 
 
 def test_evolution():
-    """ Simulate purification of a small finite system to test evolution options and output. """
+    """ Simulate purification of a small finite system to test evolution options and outputed info. """
     #
     Nx, Ny = 2, 2
     geometry = fpeps.SquareLattice(dims=(Nx, Ny), boundary='obc')
@@ -53,15 +52,31 @@ def test_evolution():
             infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization=initialization)
             infoss.append(infos)
 
-        assert len(infoss[0]) == 2 * ((Nx - 1) * Ny + (Ny - 1) * Nx)
-        info = infoss[3][0]
-        assert len(info.truncation_errors) == le and len(info.pinv_cutoffs) == lp
-        assert abs(info.truncation_error - info.truncation_errors[1]) < 1e-12
+        for infos in infoss:
+            assert len(infos) == 2 * ((Nx - 1) * Ny + (Ny - 1) * Nx)
+            for info, bond in zip(infos, psi.bonds() + psi.bonds(reverse=True)):
+                assert len(info.truncation_errors) == le and len(info.pinv_cutoffs) == lp
+                assert info.bond == bond
+                assert 0. <= info.truncation_error
+                assert -1. <= info.min_eigenvalue <= 1.
+                assert 0. <= info.wrong_eigenvalues <= 1.
+                assert 0. <= info.nonhermitian_part
+                assert info.truncation_error == info.truncation_errors[info.best_method]
+                if 'EAT' in initialization:
+                    assert (0 <= info.eat_metric_error)
+                else:
+                    assert info.eat_metric_error is None
 
         Delta = fpeps.accumulated_truncation_error(infoss)
         # accumulated truncation error should be <= between 'SVD', 'EAT', 'EAT_SVD'
         assert Delta < old_Delta + 1e-8
         old_Delta = Delta
+
+        infos = fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization=initialization, fix_metric=None)
+        for info, bond in zip(infos, psi.bonds() + psi.bonds(reverse=True)):
+            assert info.min_eigenvalue is None
+            assert info.wrong_eigenvalues is None
+            assert 0. <= info.nonhermitian_part
 
     with pytest.raises(yastn.YastnError):
         fpeps.evolution_step_(env, gates, opts_svd=opts_svd, initialization='none')
