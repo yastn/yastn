@@ -52,7 +52,7 @@ def test_ctmrg_measure_product(boundary):
     assert all(abs(v - ez[s]) < tol for s, v in vals.items())
     ez_rdm1x1= {s: measure_rdm_1site(s, psi, env, sz) for s in sites}
     assert all(abs(v - ez[s]) < tol for s, v in ez_rdm1x1.items())
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
 
     ezz = env.measure_nn(sz, sz)
     for (s1, s2), v in ezz.items():
@@ -138,7 +138,7 @@ def test_ctmrg_measure_2x1():
 
             for s in ['u', 'd']:
                 bond = [*g.sites()]
-                import pdb; pdb.set_trace()
+                # import pdb; pdb.set_trace()
                 assert abs(env.measure_nn(ops.cp(s), ops.c(s), bond=bond) + 1 / 3) < tol
                 assert abs(env.measure_nn(ops.cp(s), ops.c(s), bond=bond[::-1]) + 1 / 3) < tol
                 assert abs(env.measure_nn(ops.c(s), ops.cp(s), bond=bond) - 1 / 3) < tol
