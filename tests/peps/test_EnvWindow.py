@@ -53,22 +53,51 @@ def test_window_shapes():
         #
         for xrange in [(0, 1), (1, 2), (2, 3), (0, 3)]:
             for yrange in [(0, 5), (1, 3), (2, 6)]:
-                env = fpeps.EnvWindow(env_ctm, xrange=xrange, yrange=yrange)
+                env_win = fpeps.EnvWindow(env_ctm, xrange=xrange, yrange=yrange)
                 for ix in range(*xrange):
-                    top = env[ix, 't']
-                    oh = env.transfer_mpo(ix, dirn='h')
-                    btm = env[ix, 'b']
-                    mps.vdot(btm, oh, top)
+                    top = env_win[ix, 't']
+                    TMh = env_win[ix, 'h']
+                    btm = env_win[ix, 'b']
+                    mps.vdot(btm, TMh, top)
         #
         for yrange in [(0, 1), (1, 2), (2, 3), (1, 4)]:
             for xrange in [(0, 5), (1, 3), (2, 6)]:
-                env = fpeps.EnvWindow(env_ctm, xrange=xrange, yrange=yrange)
+                env_win = fpeps.EnvWindow(env_ctm, xrange=xrange, yrange=yrange)
                 for iy in range(*yrange):
-                    left = env[iy, 'l']
-                    ov = env.transfer_mpo(iy, dirn='v')
-                    right = env[iy, 'r']
-                    mps.vdot(right, ov, left)
+                    rht = env_win[iy, 'r']
+                    TMv = env_win[iy, 'v']
+                    lft = env_win[iy, 'l']
+                    mps.vdot(rht, TMv, lft)
+
+    ops = yastn.operators.Spin12(sym='dense')
+    env_win = fpeps.EnvWindow(env_ctm, xrange=(0, 4), yrange=(0, 3))
+    out = env_win.measure_2site(ops.sz(), ops.sz(), opts_svd={'D_total':2})
+    print(out)
+
+    # pr = [yastn.tensordot(ops.vec_z(val=v), ops.vec_z(val=v).conj(), axes=((), ())) for v in [-1, 1]]
+    # prs = {(nx, ny): pr[:] for nx in range(0, 4) for ny in range(0, 3)}
+    # smpl = env_win.sample(prs)
+    # print(smpl)
+
+
+def test_window_raises():
+    ops = yastn.operators.Spin12(sym='Z2', backend=cfg.backend, default_device=cfg.default_device)
+    geometry = fpeps.SquareLattice(dims=(3, 5), boundary='obc')
+    psi = fpeps.product_peps(geometry, ops.I())
+    env_ctm = fpeps.EnvCTM(psi, init='eye')
+    env_win = fpeps.EnvWindow(env_ctm, xrange=(0, 4), yrange=(0, 3))
+
+    with pytest.raises(yastn.YastnError):
+        env_win[10, 'l']
+        # n=10 not within self.yrange=(0, 3)
+    with pytest.raises(yastn.YastnError):
+        env_win[-2, 't']
+        # n=-2 not within self.xrange=(0, 4)
+    with pytest.raises(yastn.YastnError):
+        env_win[2, 'none']
+        # dirn='none' not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.
 
 
 if __name__ == '__main__':
     test_window_shapes()
+    test_window_raises()
