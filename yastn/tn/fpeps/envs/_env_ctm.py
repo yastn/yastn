@@ -365,23 +365,23 @@ class EnvCTM(Peps):
         if len(xs) > 1 and len(ys) > 1:
             raise YastnError("Sites should form a horizontal or vertical line.")
 
-        win = EnvWindow(self, (xs[0], xs[-1] + 1), (ys[0], ys[-1] + 1))
+        env_win = EnvWindow(self, (xs[0], xs[-1] + 1), (ys[0], ys[-1] + 1))
         if len(xs) == 1: # horizontal
-            top = win[xs[0], 't']
-            tm = win.transfer_mpo(xs[0], 'h')
-            btm = win[xs[0], 'b']
+            vr = env_win[xs[0], 't']
+            tm = env_win[xs[0], 'h']
+            vl = env_win[xs[0], 'b']
         else:  # len(ys) == 1:  # vertical
-            top = win[ys[0], 'l']
-            tm = win.transfer_mpo(ys[0], 'v')
-            btm = win[ys[0], 'r']
+            vr = env_win[ys[0], 'l']
+            tm = env_win[ys[0], 'v']
+            vl = env_win[ys[0], 'r']
 
-        val_no = mps.vdot(btm, tm, top)
+        val_no = mps.vdot(vl, tm, vr)
 
         for site, op in ops.items():
             ind = site[0] - xs[0] + site[1] - ys[0] + 1
             tm[ind].top = apply_gate_onsite(tm[ind].top, op)
 
-        val_op = mps.vdot(btm, tm, top)
+        val_op = mps.vdot(vl, tm, vr)
         return val_op / val_no
 
 

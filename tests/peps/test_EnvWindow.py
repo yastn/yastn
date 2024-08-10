@@ -72,12 +72,11 @@ def test_window_shapes():
     ops = yastn.operators.Spin12(sym='dense')
     env_win = fpeps.EnvWindow(env_ctm, xrange=(0, 4), yrange=(0, 3))
     out = env_win.measure_2site(ops.sz(), ops.sz(), opts_svd={'D_total':2})
-    print(out)
 
-    # pr = [yastn.tensordot(ops.vec_z(val=v), ops.vec_z(val=v).conj(), axes=((), ())) for v in [-1, 1]]
-    # prs = {(nx, ny): pr[:] for nx in range(0, 4) for ny in range(0, 3)}
-    # smpl = env_win.sample(prs)
-    # print(smpl)
+    pr = [yastn.tensordot(ops.vec_z(val=v), ops.vec_z(val=v).conj(), axes=((), ())) for v in [-1, 1]]
+    prs = {(nx, ny): pr[:] for nx in range(0, 4) for ny in range(0, 3)}
+    smpl = env_win.sample(prs)
+    print(smpl)
 
 
 def test_window_raises():

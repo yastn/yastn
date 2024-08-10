@@ -185,47 +185,42 @@ class EnvWindow:
 
         Takes  CTM emvironments and a complete list of projectors to sample from.
         """
-        psi = self.psi
-        config = psi[0, 0].config
-
-        rands = (config.backend.rand(self.Nx * self.Ny) + 1) / 2
+        config = self.psi[0, 0].config
+        rands = (config.backend.rand(self.Nx * self.Ny) + 1) / 2  # in [0, 1]
         if opts_var is None:
             opts_var =  {'max_sweeps': 2}
 
         out = {}
         count = 0
 
-        vL = self[self.yrange[0], 'l']
+        vec = self[self.yrange[0], 'l']
         for ny in range(*self.yrange):
-            vR = self[ny, 'r']
-            vO = self[ny, 'v']
-            env = mps.Env(vR, [vO, vL]).setup_(to = 'first')
+            con = self[ny, 'r']
+            tm = self[ny, 'v']
+            env = mps.Env(con, [tm, vec]).setup_(to='first')
+            env.update_env_(0, to='last')
 
             for ix, nx in enumerate(range(*self.xrange), start=1):
-                dpt = vO[ix].copy()
+                top = tm[ix].top
                 loc_projectors = projectors[nx, ny]
+                norm_prob = env.measure(bd=(ix-1, ix))
                 prob = []
-                norm_prob = env.measure(bd=(ix - 1, ix))
                 for proj in loc_projectors:
-                    dpt_pr = dpt.copy()
-                    dpt_pr.top = apply_gate_onsite(dpt_pr.top, proj)
-                    vO[ix] = dpt_pr
+                    tm[ix].top = apply_gate_onsite(top, proj)
                     env.update_env_(ix, to='last')
                     prob.append(env.measure(bd=(ix, ix+1)) / norm_prob)
 
                 assert abs(sum(prob) - 1) < 1e-12
-                rand = rands[count]
-                ind = sum(apr < rand for apr in accumulate(prob))
+                ind = sum(apr < rands[count] for apr in accumulate(prob))
                 out[nx, ny] = ind
-                dpt.top = apply_gate_onsite(dpt.top, loc_projectors[ind])
-                vO[ix] = dpt  # updated with the new collapse
+                tm[ix].top = apply_gate_onsite(top, loc_projectors[ind])
                 env.update_env_(ix, to='last')
                 count += 1
 
             if opts_svd is None:
-                opts_svd = {'D_total': max(vL.get_bond_dimensions())}
+                opts_svd = {'D_total': max(*vec.get_bond_dimensions(), *con.get_bond_dimensions())}
 
-            vLnew = mps.zipper(vO, vL, opts_svd=opts_svd)
-            mps.compression_(vLnew, (vO, vL), method='1site', **opts_var)
-            vL = vLnew
+            vec_new = mps.zipper(tm, vec, opts_svd=opts_svd)
+            mps.compression_(vec_new, (tm, vec), method='1site', **opts_var)
+            vec = vec_new
         return out
