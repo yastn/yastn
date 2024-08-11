@@ -93,10 +93,10 @@ def test_window_measure():
     #
     ops = yastn.operators.Spin12(sym='dense')
     vecs = [ops.vec_z(val=v) for v in [-1, 1]]
-    pr = [yastn.tensordot(vec, vec.conj(), axes=((), ())) for vec in vecs]
+    projs = [yastn.tensordot(vec, vec.conj(), axes=((), ())) for vec in vecs]
     #
     number = 4
-    out = env_win.sample(pr, number=number, return_info=True, progressbar=True)
+    out = env_win.sample(projs, number=number, return_info=True, progressbar=True)
     info = out.pop('info')
     assert info['error'] > 1e-3
     assert info['opts_svd']['D_total'] == D_total
@@ -107,8 +107,8 @@ def test_window_measure():
             assert all(x in [0, 1] for x in out[nx, ny])
 
     env_ctm.ctmrg_(opts_svd, max_sweeps=20, corner_tol=1e-3)
-    pr = {k: v for k, v in zip('tb', pr)}
-    out = env_win.sample(pr, number=number, return_info=True)
+    projs = {k: v for k, v in zip('tb', projs)}
+    out = env_win.sample(projs, number=number, return_info=True)
     info = out.pop('info')
     assert info['error'] < 1e-4
     assert info['opts_svd']['D_total'] == D_total
@@ -119,8 +119,7 @@ def test_window_measure():
             assert all(x in 'tb' for x in out[nx, ny])
     #
     with pytest.raises(yastn.YastnError):
-        prs = {(0, 0): pr, (1, 0): pr}
-        env_win.sample(prs)
+        env_win.sample(projectors={(0, 0): projs, (1, 0): projs})
         # projectors not defined for some sites in xrange=(0, 4), yrange=(0, 3).
     #
     # test measure_2site

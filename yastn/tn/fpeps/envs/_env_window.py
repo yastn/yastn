@@ -183,38 +183,9 @@ class EnvWindow:
 
     def sample(self, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_info=False) -> dict[Site, list]:
         """
-        Sample random configurations from PEPS. Output a dictionary linking sites with lists of sampled projectors` keys for each site.
-
-        It does not check whether projectors sum up to identity -- probabilities of provided projectors get normalized to one.
-        If negative probabilities are observed (signaling contraction errors), error = max(abs(negatives)),
-        and all probabilities below that error level are fixed to error (before consecutive renormalization of probabilities to one).
-
-        Parameters
-        ----------
-        projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
-            Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
-            and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
-            Finally, we can provide a dictionary between each site and sets of projectors.
-
-        number: int
-            Number of drawn samples.
-
-        opts_svd: dict
-            Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
-            The default is None, in which case take :code:`D_total` as the largest dimension from CTM environment.
-
-        opts_svd: dict
-            Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
-            The default is None, in which case make 2 variational sweeps.
-
-        progressbar: bool
-            Whether to display progressbar. The default is False.
-
-        return_info: bool
-            Whether to include in the outputted dictionary a field :code:`info` with dictionary
-            that contains information about the amplitude of contraction errors
-            (largest negative probability), D_total, etc. The default is False.
-            """
+        Sample random configurations from PEPS.
+        See :meth:`yastn.tn.fpeps.EnvCTM.sample` for description.
+        """
         if opts_var is None:
             opts_var = {'max_sweeps': 2}
         if opts_svd is None:

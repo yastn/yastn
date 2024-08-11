@@ -58,6 +58,11 @@ def test_ctmrg_measure_product(boundary):
     v = env.measure_2x2(sz, sz, sz, sites=(s1, s2, s3))
     assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
 
+    vecs = {v: ops.vec_z(val=v) for v in [-1, 0, 1]}
+    projs = {k: yastn.ncon([vec, vec.conj()], [[-0], [-1]]) for k, vec in vecs.items()}
+    out = env.sample(xrange=(1, 4), yrange=(1, 3), number=8, projectors=projs)
+    assert all(all(x == vals[k] for x in v) for k, v in out.items())
+
     if boundary != 'obc':
         s1, s2, s3 = (3, 2), (4, 1), (4, 2)
         v = env.measure_2x2(sz, sz, sz, sites=(s1, s2, s3))
@@ -73,6 +78,11 @@ def test_ctmrg_measure_product(boundary):
             v = env.measure_line(sz, sz, sites=(s1, s2))
             s1, s2 = map(g.site2index, (s1, s2))
             assert abs(vals[s1] * vals[s2] - v) < tol
+
+    if boundary != 'obc':
+        out = env.sample(xrange=(3, 7), yrange=(-1, 2), number=5, projectors=projs)
+        assert all(all(x == vals[g.site2index(k)] for x in v) for k, v in out.items())
+
 
     with pytest.raises(yastn.YastnError):
         env.measure_2x2(sz, sz, sz, sites=((0, 0), (1, 1)))
