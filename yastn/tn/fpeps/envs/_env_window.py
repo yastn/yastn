@@ -14,9 +14,11 @@
 # ==============================================================================
 from __future__ import annotations
 from itertools import accumulate
+from tqdm import tqdm
 from ... import mps
-from .... import YastnError
+from .... import YastnError, Tensor
 from .._gates_auxiliary import apply_gate_onsite
+from .._geometry import Site
 
 
 class EnvWindow:
@@ -39,16 +41,16 @@ class EnvWindow:
         Parameters
         ----------
         n: int
-        row/column (depending on dirn) index of the MPO transfer matrix.
-        Boundary MPSs match MPO transfer matrix of a given index.
-        Indexing is consistent with PEPS indexing.
+            row/column (depending on dirn) index of the MPO transfer matrix.
+            Boundary MPSs match MPO transfer matrix of a given index.
+            Indexing is consistent with PEPS indexing.
 
         dirn: str
-        'h', 't', and 'b' refer to a horizontal direction (n specifies a row)
-        'h' is a horizontal/row MPO transfer matrix; 't' and 'b' are top and bottom boundary MPSs.
-        'v', 'l', and 'r' refer to a vertical direction (n specifies a column).
-        'v' is a vertical/column MPO transfer matrix; 'r' and 'l' are right and left boundary MPSs.
-        Leg convention is consistent with vdot(t, h, b) and vdot(r, v, l).
+            'h', 't', and 'b' refer to a horizontal direction (n specifies a row)
+            'h' is a horizontal/row MPO transfer matrix; 't' and 'b' are top and bottom boundary MPSs.
+            'v', 'l', and 'r' refer to a vertical direction (n specifies a column).
+            'v' is a vertical/column MPO transfer matrix; 'r' and 'l' are right and left boundary MPSs.
+            Leg convention is consistent with vdot(t, h, b) and vdot(r, v, l).
         """
         n, dirn = ind
 
@@ -179,48 +181,101 @@ class EnvWindow:
                 out[(nx1, ny1), (nx2, ny2)] = env.measure(bd=(ix2-1, ix2)) / norm_env
         return out
 
-    def sample(self, projectors, opts_svd=None, opts_var=None):
+    def sample(self, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_info=False) -> dict[Site, list]:
         """
-        Sample a random configuration from Peps.
+        Sample random configurations from PEPS. Output a dictionary linking sites with lists of sampled projectors` keys for each site.
 
-        Takes  CTM emvironments and a complete list of projectors to sample from.
-        """
-        config = self.psi[0, 0].config
-        rands = (config.backend.rand(self.Nx * self.Ny) + 1) / 2  # in [0, 1]
+        It does not check whether projectors sum up to identity -- probabilities of provided projectors get normalized to one.
+        If negative probabilities are observed (signaling contraction errors), error = max(abs(negatives)),
+        and all probabilities below that error level are fixed to error (before consecutive renormalization of probabilities to one).
+
+        Parameters
+        ----------
+        projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
+            Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
+            and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
+            Finally, we can provide a dictionary between each site and sets of projectors.
+
+        number: int
+            Number of drawn samples.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
+            The default is None, in which case take :code:`D_total` as the largest dimension from CTM environment.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
+            The default is None, in which case make 2 variational sweeps.
+
+        progressbar: bool
+            Whether to display progressbar. The default is False.
+
+        return_info: bool
+            Whether to include in the outputted dictionary a field :code:`info` with dictionary
+            that contains information about the amplitude of contraction errors
+            (largest negative probability), D_total, etc. The default is False.
+            """
         if opts_var is None:
-            opts_var =  {'max_sweeps': 2}
+            opts_var = {'max_sweeps': 2}
+        if opts_svd is None:
+            D_total = max(max(self[ny, dirn].get_bond_dimensions()) for ny in range(*self.yrange) for dirn in 'lr')
+            opts_svd = {'D_total': D_total}
 
-        out = {}
+        sites = [Site(nx, ny) for ny in range(*self.yrange) for nx in range(*self.xrange)]
+
+        # spread projectors over sites
+        if not isinstance(projectors, dict) or all(isinstance(x, Tensor) for x in projectors.values()):
+            projectors = {site: projectors for site in sites}
+        if set(sites) != set(projectors.keys()):
+            raise YastnError(f"projectors not defined for some sites in xrange={self.xrange}, yrange={self.yrange}.")
+
+        # change each list of projectors into keys and projectors
+        projs_sites = {}
+        for k, v in projectors.items():
+            if isinstance(v, dict):
+                projs_sites[k, 'k'] = list(v.keys())
+                projs_sites[k, 'p'] = list(v.values())
+            else:
+                projs_sites[k, 'k'] = list(range(len(v)))
+                projs_sites[k, 'p'] = v
+
+        out = {site: [] for site in sites}
+        rands = (self.psi.config.backend.rand(self.Nx * self.Ny * number) + 1) / 2  # in [0, 1]
         count = 0
 
-        vec = self[self.yrange[0], 'l']
-        for ny in range(*self.yrange):
-            con = self[ny, 'r']
-            tm = self[ny, 'v']
-            env = mps.Env(con, [tm, vec]).setup_(to='first')
-            env.update_env_(0, to='last')
+        info = {'opts_svd': opts_svd,
+                'error': 0.}
 
-            for ix, nx in enumerate(range(*self.xrange), start=1):
-                top = tm[ix].top
-                loc_projectors = projectors[nx, ny]
-                norm_prob = env.measure(bd=(ix-1, ix))
-                prob = []
-                for proj in loc_projectors:
-                    tm[ix].top = apply_gate_onsite(top, proj)
+        for _ in tqdm(range(number), desc="Sample...", disable=(not progressbar)):
+            vec = self[self.yrange[0], 'l']
+            for ny in range(*self.yrange):
+                vecc = self[ny, 'r']
+                tm = self[ny, 'v'].copy()
+                env = mps.Env(vecc, [tm, vec]).setup_(to='first')
+                env.update_env_(0, to='last')
+                for ix, nx in enumerate(range(*self.xrange), start=1):
+                    top = tm[ix].top
+                    norm_prob = env.measure(bd=(ix-1, ix)).item()
+                    prob = []
+                    for proj in projs_sites[(nx, ny), 'p']:
+                        tm[ix].top = apply_gate_onsite(top, proj)
+                        env.update_env_(ix, to='last')
+                        prob.append(env.measure(bd=(ix, ix+1)).item() / norm_prob)
+                    error = abs(min(0., *(x.real for x in prob))) + max(abs(x.imag) for x in prob)
+                    if error > 0.:
+                        prob = [max(x.real, error) for x in prob]
+                        info['error'] = max(error, info['error'])
+                    norm_prob = sum(prob)
+                    prob = [x / norm_prob for x in prob]
+                    ind = sum(apr < rands[count] for apr in accumulate(prob))
+                    out[nx, ny].append(projs_sites[(nx, ny), 'k'][ind])
+                    tm[ix].top = apply_gate_onsite(top, projs_sites[(nx, ny), 'p'][ind])
                     env.update_env_(ix, to='last')
-                    prob.append(env.measure(bd=(ix, ix+1)) / norm_prob)
-
-                assert abs(sum(prob) - 1) < 1e-12
-                ind = sum(apr < rands[count] for apr in accumulate(prob))
-                out[nx, ny] = ind
-                tm[ix].top = apply_gate_onsite(top, loc_projectors[ind])
-                env.update_env_(ix, to='last')
-                count += 1
-
-            if opts_svd is None:
-                opts_svd = {'D_total': max(*vec.get_bond_dimensions(), *con.get_bond_dimensions())}
-
-            vec_new = mps.zipper(tm, vec, opts_svd=opts_svd)
-            mps.compression_(vec_new, (tm, vec), method='1site', **opts_var)
-            vec = vec_new
+                    count += 1
+                if ny + 1 < self.yrange[1]:
+                    vec_new = mps.zipper(tm, vec, opts_svd=opts_svd)
+                    mps.compression_(vec_new, (tm, vec), method='1site', **opts_var)
+                    vec = vec_new
+        if return_info:
+            out['info'] = info
         return out
