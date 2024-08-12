@@ -32,6 +32,12 @@ class EnvWindow:
         self.Nx = self.xrange[1] - self.xrange[0]
         self.Ny = self.yrange[1] - self.yrange[0]
 
+        if env_ctm.nn_site((xrange[0], yrange[0]), (0, 0)) is None or \
+           env_ctm.nn_site((xrange[1] - 1, yrange[1] - 1), (0, 0)) is None:
+           raise YastnError(f"Window range {xrange=}, {yrange=} does not fit within the lattice.")
+
+
+
     def __getitem__(self, ind) -> yastn.tn.mps.MpsMpoOBC:
         """
         Boundary MPS build of CTM tensors, or a transfer matrix MPO.
@@ -217,7 +223,7 @@ class EnvWindow:
         info = {'opts_svd': opts_svd,
                 'error': 0.}
 
-        for _ in tqdm(range(number), desc="Sample...", disable=(not progressbar)):
+        for _ in tqdm(range(number), desc="Sample...", disable=not progressbar):
             vec = self[self.yrange[0], 'l']
             for ny in range(*self.yrange):
                 vecc = self[ny, 'r']

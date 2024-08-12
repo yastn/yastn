@@ -119,9 +119,11 @@ def test_ctmrg_measure_2x1():
 
             r0, r1 = yastn.qr(state, sQ=-1, Qaxis=0)
 
-            # auxilliary leg; in general, left/top tensor r0 requires a swap_gate between physical and ancilla lags.
+            # auxilliary leg;
+            # in general, left/top tensor r0 requires a swap_gate between physical and ancilla lags.
             r0 = r0.add_leg(axis=-1, s=-1).swap_gate(axes=(1, 2)).fuse_legs(axes=(0, (1, 2)))
-            r1 = r1.add_leg(axis=-1, s=-1).fuse_legs(axes=(0, (1, 2)))
+            # right/bottom tensor r1 swap_gate is effectively trivial
+            r1 = r1.add_leg(axis=-1, s=-1).swap_gate(axes=((0, 1), 2)).fuse_legs(axes=(0, (1, 2)))
 
             r0 = r0.add_leg(axis=0, s=-1)  # t
             r0 = r0.add_leg(axis=1, s=1)  # l
@@ -167,8 +169,8 @@ def test_ctmrg_measure_2x1():
                     r0 = r0.add_leg(axis=1, s=1)  # l
                     r0 = r0.add_leg(axis=2, s=1) if dims == (1, 2) else r0.add_leg(axis=3, s=-1)  # b or r
 
-                    # aux leg of right tensor. no swap gate between physical and ancilla legs
-                    r1 = r1.add_leg(axis=-1, s=-1).fuse_legs(axes=(0, (1, 2)))
+                    # aux leg of right tensor. We put a swap gate, though it is trivial
+                    r1 = r1.add_leg(axis=-1, s=-1).swap_gate(axes=((0, 1), 2)).fuse_legs(axes=(0, (1, 2)))
                     r1 = r1.add_leg(axis=0, s=-1) if dims == (1, 2) else r1.add_leg(axis=1, s=1)  # t or l
                     r1 = r1.add_leg(axis=2, s=1)  # b
                     r1 = r1.add_leg(axis=3, s=-1)  # r

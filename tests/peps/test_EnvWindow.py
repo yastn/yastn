@@ -25,9 +25,9 @@ except ImportError:
 
 tol = 1e-12
 
-def init_peps(Dphys=()):
+def init_peps(Dphys=(), boundary='infinite'):
     """ initialized PEPS with mixed bond dimensions for testing. """
-    geometry = fpeps.SquareLattice(dims=(2, 3))  # boundary='infinite'
+    geometry = fpeps.SquareLattice(dims=(2, 3), boundary=boundary)
     psi = fpeps.Peps(geometry)
     s = (-1, 1, 1, -1) + (1,) * len(Dphys)
     psi[0, 0] = yastn.rand(cfg, s=s, D=(2, 3, 4, 5) + Dphys, dtype='complex128')
@@ -75,6 +75,11 @@ def test_window_shapes():
     with pytest.raises(yastn.YastnError):
         env_win[2, 'none']
         # dirn='none' not recognized. Should be 't', 'h' 'b', 'r', 'v', or 'l'.
+    with pytest.raises(yastn.YastnError):
+        psi = init_peps(Dphys=(), boundary='obc')
+        env_ctm = fpeps.EnvCTM(psi, init='eye')
+        env_win = fpeps.EnvWindow(env_ctm, xrange=(1, 5), yrange=(1, 5))
+        # Window range xrange=(1, 5), yrange=(1, 5) does not fit within the lattice.
 
 
 def test_window_measure():
@@ -91,7 +96,7 @@ def test_window_measure():
     #
     # test sample
     #
-    ops = yastn.operators.Spin12(sym='dense')
+    ops = yastn.operators.Spin12(sym='dense', backend=cfg.backend, default_device=cfg.default_device)
     vecs = [ops.vec_z(val=v) for v in [-1, 1]]
     projs = [yastn.tensordot(vec, vec.conj(), axes=((), ())) for vec in vecs]
     #
