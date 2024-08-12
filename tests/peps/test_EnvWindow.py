@@ -129,7 +129,10 @@ def test_window_measure():
     #
     # test measure_2site
     #
-    out = env_win.measure_2site(ops.sz(), ops.sz(), opts_svd={'D_total':2})
+    out = env_win.measure_2site(ops.sz(), ops.sz())
+    sites = env_win.sites()
+    assert len(sites) == 3 * 4
+    assert all(((0, 0), site) in out for site in sites)
 
 
 if __name__ == '__main__':

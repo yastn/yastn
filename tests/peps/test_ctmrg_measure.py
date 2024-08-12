@@ -40,16 +40,22 @@ def test_ctmrg_measure_product(boundary):
     psi = fpeps.product_peps(g, occs)
 
     env = fpeps.EnvCTM(psi, init='eye')
-
+    #
+    #  measure_1site
+    #
     sz = ops.sz()
     ez = env.measure_1site(sz)
     assert all(abs(v - ez[s]) < tol for s, v in vals.items())
-
+    #
+    #  measure_nn
+    #
     ezz = env.measure_nn(sz, sz)
     for (s1, s2), v in ezz.items():
         s1, s2 = map(g.site2index, (s1, s2))
         assert abs(vals[s1] * vals[s2] - v) < tol
-
+    #
+    #  measure_2x2
+    #
     for s1, s2 in [((0, 1), (1, 0)), ((2, 1), (2, 2)), ((1, 1), (2, 1))]:
         v = env.measure_2x2(sz, sz, sites=(s1, s2))
         assert abs(vals[s1] * vals[s2] - v) < tol
@@ -58,17 +64,14 @@ def test_ctmrg_measure_product(boundary):
     v = env.measure_2x2(sz, sz, sz, sites=(s1, s2, s3))
     assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
 
-    vecs = {v: ops.vec_z(val=v) for v in [-1, 0, 1]}
-    projs = {k: yastn.ncon([vec, vec.conj()], [[-0], [-1]]) for k, vec in vecs.items()}
-    out = env.sample(xrange=(1, 4), yrange=(1, 3), number=8, projectors=projs)
-    assert all(all(x == vals[k] for x in v) for k, v in out.items())
-
     if boundary != 'obc':
         s1, s2, s3 = (3, 2), (4, 1), (4, 2)
         v = env.measure_2x2(sz, sz, sz, sites=(s1, s2, s3))
         s1, s2, s3 = map(g.site2index, (s1, s2, s3))
         assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
-
+    #
+    #  measure_line
+    #
     for s1, s2, s3 in [((1, 0), (1, 2), (1, 1)), ((0, 2), (2, 2), (3, 2))]:
         v = env.measure_line(sz, sz, sz, sites=(s1, s2, s3))
         assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
@@ -78,11 +81,26 @@ def test_ctmrg_measure_product(boundary):
             v = env.measure_line(sz, sz, sites=(s1, s2))
             s1, s2 = map(g.site2index, (s1, s2))
             assert abs(vals[s1] * vals[s2] - v) < tol
+    #
+    #  sample
+    #
+    vecs = {v: ops.vec_z(val=v) for v in [-1, 0, 1]}
+    projs = {k: yastn.ncon([vec, vec.conj()], [[-0], [-1]]) for k, vec in vecs.items()}
+    out = env.sample(xrange=(1, 4), yrange=(1, 3), number=8, projectors=projs)
+    assert all(all(x == vals[k] for x in v) for k, v in out.items())
 
     if boundary != 'obc':
         out = env.sample(xrange=(3, 7), yrange=(-1, 2), number=5, projectors=projs)
         assert all(all(x == vals[g.site2index(k)] for x in v) for k, v in out.items())
+    #
+    #  measure_2site
+    #
+    out = env.measure_2site(sz, sz, xrange=(1, 4), yrange=(0, 3))
+    assert all(abs(vals[s0] * vals[s1] - v) < tol for (s0, s1), v in out.items())
 
+    if boundary != 'obc':
+        out = env.measure_2site(sz, sz, xrange=(3, 7), yrange=(-1, 2))
+        assert all(abs(vals[g.site2index(s0)] * vals[g.site2index(s1)] - v) < tol for (s0, s1), v in out.items())
 
     with pytest.raises(yastn.YastnError):
         env.measure_2x2(sz, sz, sz, sites=((0, 0), (1, 1)))

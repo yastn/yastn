@@ -384,6 +384,12 @@ class EnvCTM(Peps):
         val_op = mps.vdot(vl, tm, vr)
         return val_op / val_no
 
+
+    def measure_2site(self, O0, O1, xrange, yrange, opts_svd=None, opts_var=None) -> dict[Site, list]:
+        env_win = EnvWindow(self, xrange, yrange)
+        return env_win.measure_2site(O0, O1, opts_svd=opts_svd, opts_var=opts_var)
+
+
     def sample(self, xrange, yrange, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_info=False) -> dict[Site, list]:
         """
         Sample random configurations from PEPS. Output a dictionary linking sites with lists of sampled projectors` keys for each site.
