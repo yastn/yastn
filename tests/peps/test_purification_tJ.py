@@ -43,8 +43,11 @@ def purification_tJ(chemical_potential):
     g_hopping_dn = fpeps.gates.gate_nn_hopping(t, dbeta * coef, fid, fc_dn, fcdag_dn)
     # g_heisenberg = fpeps.gates.gate_Heisenberg_spinful(dbeta * coef, Jz, J, J, Sz, Sp, Sm, n, fid)
     g_heisenberg = fpeps.gates.gate_Heisenberg_homo_spinful(dbeta * coef, J, n_up, n_dn, Sp, Sm, fid)
+    g_tj_trotter = fpeps.gates.gate_tJ_trotter(dbeta * coef, t, J, fc_up, fcdag_up, fc_dn, fcdag_dn, Sp, Sm, n_up, n_dn, fid)
+    g_tj = fpeps.gates.gate_tJ(dbeta * coef, t, J, fc_up, fcdag_up, fc_dn, fcdag_dn, Sp, Sm, n_up, n_dn, fid)
     g_loc = fpeps.gates.gate_local_occupation(chemical_potential, dbeta * coef, fid, n)
-    gates = fpeps.gates.distribute(net, gates_nn=[g_hopping_up, g_hopping_dn, g_heisenberg], gates_local=g_loc)
+    # gates = fpeps.gates.distribute(net, gates_nn=[g_hopping_up, g_hopping_dn, g_heisenberg], gates_local=g_loc)
+    gates = fpeps.gates.distribute(net, gates_nn=[g_tj_trotter], gates_local=g_loc)
 
     env_evolution = fpeps.EnvNTU(psi, which=ntu_environment)
 
@@ -135,6 +138,8 @@ def test_purification_tJ():
                      ((0, 0), (1, 0)):4, ((0, 1), (1, 1)):5, ((0, 2), (1, 2)):6}
         print(f"Calculations for {mu=}")
         energy, density, cdagc_up, cdagc_dn, SpSm, SzSz, nn, n_up, n_dn = purification_tJ(mu)
+        print(energy, energy_ED[mu])
+        print(density, density_ED[mu])
         assert abs(energy - energy_ED[mu]) < 1e-3
         assert abs(density - density_ED[mu]) < 1e-3
 

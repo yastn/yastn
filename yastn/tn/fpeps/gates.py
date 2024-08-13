@@ -116,6 +116,43 @@ def gate_Heisenberg_spinful(step, Jz, J, Jn, Sz, Sp, Sm, n, I, bond=None) -> Gat
     G = G.unfuse_legs(axes=(0, 1))
     return decompose_nn_gate(G, bond)
 
+def gate_tJ_trotter(step, t, J, c_u, c_udag, c_d, c_ddag, Sp, Sm, nu, nd, I, bond=None)  -> Gate_nn:
+
+    G = fkron(I, I, sites=(0, 1))
+    G = G + step * t * (fkron(c_udag, c_u, sites=(0, 1)) + \
+                        fkron(c_udag, c_u, sites=(1, 0)) + \
+                        fkron(c_ddag, c_d, sites=(0, 1)) + \
+                        fkron(c_ddag, c_d, sites=(1, 0)))
+    G = G - step * J * (0.5 * fkron(Sp, Sm, sites = (0, 1)) + \
+                        0.5 * fkron(Sp, Sm, sites = (1, 0)) - \
+                        0.5 * fkron(nu, nd, sites = (0, 1)) - \
+                        0.5 * fkron(nu, nd, sites = (1, 0)))
+    return decompose_nn_gate(G, bond)
+
+def gate_tJ(step, t, J, c_u, c_udag, c_d, c_ddag, Sp, Sm, nu, nd, I, bond=None)  -> Gate_nn:
+
+    H = fkron(I, I, sites=(0, 1))
+    H = H - t * (fkron(c_udag, c_u, sites=(0, 1)) + \
+                 fkron(c_udag, c_u, sites=(1, 0)) + \
+                 fkron(c_ddag, c_d, sites=(0, 1)) + \
+                 fkron(c_ddag, c_d, sites=(1, 0)))
+    
+    H = H + J * (0.5 * fkron(Sp, Sm, sites = (0, 1)) + \
+                 0.5 * fkron(Sp, Sm, sites = (1, 0)) - \
+                 0.5 * fkron(nu, nd, sites = (0, 1)) - \
+                 0.5 * fkron(nu, nd, sites = (1, 0)))
+    
+    H = H.fuse_legs(axes = ((0, 1), (2, 3)))
+    D, S = eigh(H, axes = (0, 1))
+    D = exp(D, step=-step)
+
+    G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
+    G = G.unfuse_legs(axes=(0, 1))
+    return decompose_nn_gate(G, bond)
+
+    return decompose_nn_gate(G, bond)
+
+
 def gate_Heisenberg_homo_spinful(step, J, nu, nd, Sp, Sm, I, bond=None) -> Gate_nn:
     '''
     # Gate exp(-step * H_heisenberg)
