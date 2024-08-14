@@ -150,15 +150,16 @@ class EnvWindow:
         top0 = tm[ix0].top
         for nz1, o1 in O1dict[nx0, ny0].items():
             tm[ix0].top = apply_gate_onsite(top0, O0 @ o1)
-            env.update_env_(ix0, to='last')
-            out[(nx0, ny0), (nx0, ny0) + nz1] = env.measure(bd=(ix0, ix0+1)) / norm_env
+            env.update_env_(ix0, to='first')
+            out[(nx0, ny0), (nx0, ny0) + nz1] = env.measure(bd=(ix0-1, ix0)) / norm_env
 
         tm[ix0].top = apply_gate_onsite(top0, O0)
+        env.setup_(to='last')
+
         if ny0 < self.yrange[1] - 1:
             vec_O0_next = mps.zipper(tm, vec, opts_svd=opts_svd)
             mps.compression_(vec_O0_next, (tm, vec), method='1site', normalize=False, **opts_var)
 
-        env.setup_(to='last')
         for ix1, nx1 in enumerate(range(nx0+1, self.xrange[1]), start=nx0-self.xrange[0]+2):
             top1 = tm[ix1].top
             for nz1, o1 in O1dict[nx1, ny0].items():
@@ -169,7 +170,7 @@ class EnvWindow:
         # all subsequent rows
         for ny1 in range(self.yrange[0]+1, self.yrange[1]):
             vecc, tm, vec_O0, vec = self[ny1, 'r'], self[ny1, 'v'], vec_O0_next, vec_next
-            norm_env = mps.vdot(vecc, tm, vec_next)
+            norm_env = mps.vdot(vecc, tm, vec)
 
             if ny1 < self.yrange[1] - 1:
                 vec_next = mps.zipper(tm, vec, opts_svd=opts_svd)

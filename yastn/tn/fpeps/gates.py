@@ -97,22 +97,32 @@ def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
     return decompose_nn_gate(G, bond)
 
 
-def gates_Heisenberg_spinful(step, Jz, J, Jn, Sz, Sp, Sm, n, I, bond=None) -> Gate_nn:
-    '''
-    # Gate exp(-step * H_heisenberg)
+def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bond=None) -> Gate_nn:
+    """
+    Gate exp(-step * H_tj)
+    """
+    nu = cpu @ cu
+    nd = cpd @ cd
+    Sp = cpu @ cd
+    Sm = cpd @ cu
 
-    H_{Heisenberg} = J / 2 (Sp @ Sm + Sm @ Sp) + Jz Sz @ Sz - 0.25 * Jn n @ n
-    '''
-    H = fkron(I, I, sites=(0, 1))
-    H = H + Jz * fkron(Sz, Sz, sites=(0, 1))
+    H = 0 * fkron(I, I, sites=(0, 1))
     H = H + 0.5 * J * fkron(Sp, Sm, sites=(0, 1))
-    H = H + 0.5 * J * fkron(Sp, Sm, sites=(1, 0))
-    H = H - 0.25 * Jn * fkron(n, n, sites=(1, 0))
+    H = H + 0.5 * J * fkron(Sm, Sp, sites=(0, 1))
+    H = H - 0.5 * J * fkron(nu, nd, sites=(0, 1))
+    H = H - 0.5 * J * fkron(nd, nu, sites=(0, 1))
+    H = H - tu * fkron(cpu, cu, sites=(0, 1))
+    H = H - tu * fkron(cpu, cu, sites=(1, 0))
+    H = H - td * fkron(cpd, cd, sites=(0, 1))
+    H = H - td * fkron(cpd, cd, sites=(1, 0))
+    H = H - muu0 * fkron(cpu @ cu, I, sites=(0, 1))
+    H = H - muu1 * fkron(I, cpu @ cu, sites=(0, 1))
+    H = H - mud0 * fkron(cpd @ cd, I, sites=(0, 1))
+    H = H - mud1 * fkron(I, cpd @ cd, sites=(0, 1))
 
     H = H.fuse_legs(axes = ((0, 1), (2, 3)))
     D, S = eigh(H, axes = (0, 1))
     D = exp(D, step=-step)
-
     G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
     G = G.unfuse_legs(axes=(0, 1))
     return decompose_nn_gate(G, bond)
@@ -149,37 +159,6 @@ def gate_local_Ising(h, step, I, X, site=None) -> Gate_local:
     """
     G_loc = np.cosh(h * step) * I + np.sinh(h * step) * X
     return Gate_local(G_loc, site)
-
-
-def gates_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bond=None) -> Gate_nn:
-    '''
-    # Gate exp(-step * H_tj)
-    '''
-    nu = cpu @ cu
-    nd = cpd @ cd
-    Sp = cpu @ cd
-    Sm = cpd @ cu
-
-    H = 0 * fkron(I, I, sites=(0, 1))
-    H = H + 0.5 * J * fkron(Sp, Sm, sites=(0, 1))
-    H = H + 0.5 * J * fkron(Sm, Sp, sites=(0, 1))
-    H = H - 0.5 * J * fkron(nu, nd, sites=(0, 1))
-    H = H - 0.5 * J * fkron(nd, nu, sites=(0, 1))
-    H = H - tu * fkron(cpu, cu, sites=(0, 1))
-    H = H - tu * fkron(cpu, cu, sites=(1, 0))
-    H = H - td * fkron(cpd, cd, sites=(0, 1))
-    H = H - td * fkron(cpd, cd, sites=(1, 0))
-    H = H - muu0 * fkron(cpu @ cu, I, sites=(0, 1))
-    H = H - muu1 * fkron(I, cpu @ cu, sites=(0, 1))
-    H = H - mud0 * fkron(cpd @ cd, I, sites=(0, 1))
-    H = H - mud1 * fkron(I, cpd @ cd, sites=(0, 1))
-
-    H = H.fuse_legs(axes = ((0, 1), (2, 3)))
-    D, S = eigh(H, axes = (0, 1))
-    D = exp(D, step=-step)
-    G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
-    G = G.unfuse_legs(axes=(0, 1))
-    return decompose_nn_gate(G, bond)
 
 
 def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:
