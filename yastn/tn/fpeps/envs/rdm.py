@@ -462,7 +462,7 @@ def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[S
         ordered = env.f_ordered(s0, s1)
         fermionic = True if (O0.n[0] and O1.n[0]) else False
         O0, O1 = op_order(O0, O1, ordered, fermionic)
-        return ncon([O0, O1, rdm], ncon_order).to_number() / norm
+        return ncon([O0, O1, rdm], ncon_order).to_number()
     
     if isinstance(op[0],Tensor) and isinstance(op[1],Tensor):
         return _eval_op(op[0],op[1])

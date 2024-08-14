@@ -119,6 +119,7 @@ def test_ctmrg_measure_2x1():
 
             # auxilliary leg; in general, left/top tensor r0 requires a swap_gate between physical and ancilla lags.
             r0 = r0.add_leg(axis=-1, s=-1).swap_gate(axes=(1, 2)).fuse_legs(axes=(0, (1, 2)))
+            # r0 = r0.add_leg(axis=-1, s=-1).fuse_legs(axes=(0, (1, 2)))
             r1 = r1.add_leg(axis=-1, s=-1).fuse_legs(axes=(0, (1, 2)))
 
             r0 = r0.add_leg(axis=0, s=-1)  # t
