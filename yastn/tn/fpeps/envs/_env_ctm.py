@@ -386,6 +386,30 @@ class EnvCTM(Peps):
 
 
     def measure_2site(self, O0, O1, xrange, yrange, opts_svd=None, opts_var=None) -> dict[Site, list]:
+        """
+        Calculate 2-point correlations <o1 o2> between top-left corner of the window, and all sites in the window.
+
+        wip: other combinations of 2-sites and fermionically-nontrivial operators will be coverad latter.
+
+        Parameters
+        ----------
+        O1, O2: yastn.Tensor
+            one-site operators
+
+        xrange: tuple[int, int]
+            range of rows forming a window, [r0, r1); r0 included, r1 excluded.
+
+        yrange: tuple[int, int]
+            range of columns forming a window.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
+            The default is None, in which case take :code:`D_total` as the largest dimension from CTM environment.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
+            The default is None, in which case make 2 variational sweeps.
+        """
         env_win = EnvWindow(self, xrange, yrange)
         return env_win.measure_2site(O0, O1, opts_svd=opts_svd, opts_var=opts_var)
 

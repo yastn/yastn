@@ -83,10 +83,10 @@ def test_window_shapes():
 
 
 def test_window_measure():
-    """ checks syntax of sample and measure_2site, but not values. """
+    """ checks syntax of sample and measure_2site"""
     # for Dphys = 2
     psi = init_peps(Dphys=(2,))
-    D_total = 8
+    D_total = 12
     opts_svd = {'D_total': D_total, 'tol': 1e-10}
     env_ctm = fpeps.EnvCTM(psi, init='rand')
     #
@@ -111,11 +111,11 @@ def test_window_measure():
             assert len(out[nx, ny]) == number
             assert all(x in [0, 1] for x in out[nx, ny])
 
-    env_ctm.ctmrg_(opts_svd, max_sweeps=20, corner_tol=1e-3)
+    env_ctm.ctmrg_(opts_svd, max_sweeps=40, corner_tol=1e-5)
     projs = {k: v for k, v in zip('tb', projs)}
     out = env_win.sample(projs, number=number, return_info=True)
     info = out.pop('info')
-    assert info['error'] < 1e-4
+    assert info['error'] < 1e-5
     assert info['opts_svd']['D_total'] == D_total
     assert len(out) == 12
     for ny in range(0, 3):
@@ -129,11 +129,27 @@ def test_window_measure():
     #
     # test measure_2site
     #
-    out = env_win.measure_2site(ops.sz(), ops.sz())
+    out = env_win.measure_2site(ops.z(), ops.z())
     sites = env_win.sites()
     assert len(sites) == 3 * 4
     assert all(((0, 0), site) in out for site in sites)
+    #
+    # here we can check some values
+    #
+    outv = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(1, 4), yrange=(1, 2))
+    ev = [env_ctm.measure_line(ops.z(), ops.z(), sites=((1, 1), (n, 1))) for n in [2, 3, ]]
+    ev1 = env_ctm.measure_nn(ops.z(), ops.z(), bond=((1, 1), (2, 1)))
 
+    print("vertical")
+    for n, ref in zip([1, 2, 3, ], [1] + ev):
+        print(outv[(1, 1), (n, 1)], ref, abs(outv[(1, 1), (n, 1)] - ref) / abs(ref))
+
+    print("horizontal")
+    outh = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(2, 3), yrange=(2, 6))
+    eh = [env_ctm.measure_line(ops.z(), ops.z(), sites=((2, 2), (2, n))) for n in [3, 4, 5]]
+    for n, ref in zip([2, 3, 4, 5], [1] + eh):
+        print(outh[(2, 2), (2, n)], ref, abs(outh[(2, 2), (2, n)] - ref) / abs(ref))
+        assert abs(outh[(2, 2), (2, n)] - ref) / abs(ref) < 1e-8
 
 if __name__ == '__main__':
     test_window_shapes()
