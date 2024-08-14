@@ -1,5 +1,8 @@
 from .... import ncon
-from .._peps import Peps2Layers
+from .. import Site, Peps, Peps2Layers, EnvCTM
+from .... import Tensor
+from typing import Sequence, Union, TypeVar
+Scalar = TypeVar('Scalar')
 # from yastn import Tensor, tensordot
 # from yastn.tn.fpeps.envs._env_auxlliary import append_vec_tl, append_vec_tr, append_vec_bl, append_vec_br
 
@@ -99,7 +102,26 @@ def append_vec_bl_open(
     return vecbl
 
 
-def trace_aux(rdm, axis, swap=False):
+def trace_aux(rdm : Tensor, axis : int, swap : bool = False) -> Tensor:
+    r"""
+    This function assumes following index structure of reduced density matrix `rdm`:
+
+        rdm[p0,p0',p1,p1',...]
+
+    where p_i,p_i' is a bra,ket pair of indices.
+
+    Trace out *auxiliary* physical index pair. Include swap gate if `swap`.
+
+    Args:
+        rdm: reduced density matrix
+        axis: index of "bra" leg of leg pair to trace out
+        swap: include swap gate when tracing
+
+    Returns:
+        reduced density matrix with auxiliary physical index pair traced out.
+
+    TODO: also check that auxiliary leg has total dimension 1.
+    """
     leg = rdm.get_legs(axes=axis)
     # check if a dummy leg is fused with the physical leg
     if leg.is_fused():
@@ -144,42 +166,25 @@ def op_order(Oi, Oj, ordered, fermionic=True):
     return Oi, Oj
 
 
-def rdm1x1(s0, psi, env):
+def rdm1x1(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     r"""
-    :param s0: The site of the 1*1 reduced density matrix
-    :param psi: Peps
-    :param env: environment
-    :type site: yastn.tn.fpeps._geometry.Site
-    :type psi: yastn.tn.fpeps.Peps
-    :type env: yastn.tn.fpeps.EnVCTM
+    Contract environment and on-site tensors of 1x1 patch centered at Site `s0`
+    to reduced density matrix.
+
+    TODO: Optionally symmetrize and make non-negative
+
+    Args:
+        s0: The site of the 1*1 reduced density matrix
+        psi: Peps
+        env: environment
+
+    Returns:
+        Reduced density matrix and its unnormalized trace
     """
     env0 = env[s0]
     psi_dl = Peps2Layers(psi)
     ten0 = psi_dl[s0]  # DoublePepsTensor
 
-    """
-    Environment:
-    _______             _______             _______
-   |       |           |       |           |       |
-   |  C_tl |--1     0--|  T_t  |--2     0--|  C_tr |
-   |_______|           |_______|           |_______|
-       |                   |                   |
-       0                   1                   1
-
-       2                   0                   0
-    ___|___             ___|___             ___|___
-   |       |           |       |           |       |
-   |  T_l  |--1     1--|   O   |--3     1--|  T_r  |
-   |_______|           |_______|           |_______|
-       |                   |                   |
-       0                   2                   2
-
-       1                   1                   0
-    ___|___             ___|___             ___|___
-   |       |           |       |           |       |
-   |  C_bl |--0     2--|  T_b  |--0     1--|  C_br |
-   |_______|           |_______|           |_______|
-   """
     vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
     vecb = (env0.r @ env0.br) @ (env0.b @ env0.bl)
 
@@ -197,17 +202,30 @@ def rdm1x1(s0, psi, env):
     rdm_norm = rdm.trace(axes=(0, 1)).to_number()
     rdm = rdm / rdm_norm
 
-    return rdm
+    return rdm, rdm_norm
 
 
-def rdm1x2(s0, psi, env):
+def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     r"""
-    :param s0: The left site of the 1*2 (horizontal) reduced density matrix
-    :param psi: Peps
-    :param env: environment
-    :type site: yastn.tn.fpeps._geometry.Site
-    :type psi: yastn.tn.fpeps.Peps
-    :type env: yastn.tn.fpeps.EnVCTM
+    Contract environment and on-site tensors of 1x2 (horizontal) patch,
+    with `s0` the leftmost Site, to reduced density matrix::
+        
+        C T  T  C
+        T s0 s1 T    
+        C T  T  C
+        
+    The index convention for reduced density matrix is `[s0, s0', s1, s1']`,
+    where s_i,s_i' is bra,ket pair.
+
+    TODO: Optionally symmetrize and make non-negative
+
+    Args:
+        s0: The site of the 1x2 reduced density matrix
+        psi: Peps
+        env: environment
+
+    Returns:
+        Reduced density matrix and its unnormalized trace
     """
     s1 = psi.nn_site(s0, "r")
 
@@ -233,7 +251,7 @@ def rdm1x2(s0, psi, env):
 
     res = tmp0.tensordot(tmp1, axes=((0, 1, 2), (1, 0, 2)))  # [s0 s0'] [s1 s1']
 
-    rdm = res.unfuse_legs(axes=(0, 1))  # s0 s0' s1 s1'
+    rdm = res.unfuse_legs (axes=(0, 1))  # s0 s0' s1 s1'
 
     # We pick a convention such that the aux. leg of the
     # left or top site needs to be swapped with the physical legs
@@ -242,17 +260,31 @@ def rdm1x2(s0, psi, env):
     rdm_norm = rdm.trace(axes=((0, 2), (1, 3))).to_number()
     rdm = rdm / rdm_norm
 
-    return rdm
+    return rdm, rdm_norm
 
 
-def rdm2x1(s0, psi, env):
+def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     r"""
-    :param s0: The upper site of the 2*1 (vertical) reduced density matrix
-    :param psi: Peps
-    :param env: environment
-    :type site: yastn.tn.fpeps._geometry.Site
-    :type psi: yastn.tn.fpeps.Peps
-    :type env: yastn.tn.fpeps.EnVCTM
+    Contract environment and on-site tensors of 2x1 (vertical) patch,
+    with `s0` the top-most Site, to reduced density matrix::
+        
+        C T  C
+        T s0 T 
+        T s1 T    
+        C T  C
+        
+    The index convention for reduced density matrix is `[s0, s0', s1, s1']`,
+    where s_i,s_i' is bra,ket pair.
+
+    TODO: Optionally symmetrize and make non-negative
+
+    Args:
+        s0: The site of the 2x1 reduced density matrix
+        psi: Peps
+        env: environment
+
+    Returns:
+        Reduced density matrix and its unnormalized trace
     """
     s1 = psi.nn_site(s0, "b")
 
@@ -291,7 +323,7 @@ def rdm2x1(s0, psi, env):
     rdm_norm = rdm.trace(axes=((0, 2), (1, 3))).to_number()
     rdm = rdm / rdm_norm
 
-    return rdm
+    return rdm, rdm_norm
 
 
 def rdm2x2(s0, psi, env):
@@ -370,39 +402,71 @@ def rdm2x2(s0, psi, env):
     return rdm
 
 
-def measure_rdm_1site(s0, psi, env, op):
-    rdm = rdm1x1(s0, psi, env)  # s s'
-    norm = rdm.trace(axes=(0, 1)).to_number()
+def measure_rdm_1site(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Tensor, Sequence[Tensor]])->Union[Scalar, Sequence[Scalar]]:
+    """
+    Measure one or more observables on 1x1 patch centered at site `s0`.
 
-    return ncon([op, rdm], ((1, 2), (2, 1))).to_number() / norm
+    Args:
+        s0: site
+        psi: PEPS wavefunction
+        env: CTM environment
+        op: one or more observables 
+
+    Returns:
+        expectation value or a list of expectations values of provided `op`.
+    """
+    rdm, norm = rdm1x1(s0, psi, env)  # s s'
+    # norm = rdm.trace(axes=(0, 1)).to_number()
+
+    if isinstance(op,tuple) or isinstance(op,list):
+        return [ncon([_op, rdm], ((1, 2), (2, 1))).to_number() for _op in op]
+    return ncon([op, rdm], ((1, 2), (2, 1))).to_number() #/ norm
 
 
-def measure_rdm_nn(s0, dirn, psi, env, O0, O1):
-    r"""
-    Parameters
-    ----------
-    s0: site
-    dirn: "h"(horizontal)  s0 -- s1
-       or "v" (vertical)   s0
-                            |
-                            |
-                           s1
-    O0, O1: yastn.Tensor
-        Calculate <O0_s0 O1_s1>.
-        O1 is applied first, which might matter for fermionic operators.
+def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[Sequence[Tensor], Sequence[Sequence[Tensor]]])->Union[Scalar, Sequence[Scalar]]:
+    """
+    Measure one or more observables on 1x2 or 2x1 patch with site `s0` 
+    being leftmost or topmost respectively.
+
+    Observables are expected to be one or more pairs of operators/Tensors, i.e.::
+
+        op = (Tensor, Tensor) 
+
+        or 
+
+        op = [(Tensor,Tensor), (Tensor,Tensor), ...]
+
+    with first operator acting always on site `s0`. Operators are applied from "right-to-left", 
+    i.e. the second operator `op[1]` is applied first, which might matter for fermionic operators.
+
+    Args:
+        s0: site
+        dirn: 'h' for horizontal 1x2 patch (see :func:`rdm1x2`) and 'v' for vertical 2x1 patch (see :func:`rdm2x1`)
+        psi: PEPS wavefunction
+        env: CTM environment
+        op: one or more observables 
+
+    Returns:
+        Expectation value or a list of expectations values of provided `op`.
     """
     if dirn == "h":
-        rdm = rdm1x2(s0, psi, env)  # s0 s0' s1 s1'
+        rdm, norm = rdm1x2(s0, psi, env)  # s0 s0' s1 s1'
         s1 = psi.nn_site(s0, "r")
     elif dirn == "v":
-        rdm = rdm2x1(s0, psi, env)  # s0 s0' s1 s1'
+        rdm, norm = rdm2x1(s0, psi, env)  # s0 s0' s1 s1'
         s1 = psi.nn_site(s0, "b")
-    norm = rdm.trace(axes=((0, 2), (1, 3))).to_number()
-    ordered = env.f_ordered(s0, s1)
-    fermionic = True if (O0.n[0] and O1.n[0]) else False
-    O0, O1 = op_order(O0, O1, ordered, fermionic)
+    # norm = rdm.trace(axes=((0, 2), (1, 3))).to_number()
+
     ncon_order = ((1, 2, 5), (3, 4, 5), (2, 1, 4, 3))
-    return ncon([O0, O1, rdm], ncon_order).to_number() / norm
+    def _eval_op(O0, O1):
+        ordered = env.f_ordered(s0, s1)
+        fermionic = True if (O0.n[0] and O1.n[0]) else False
+        O0, O1 = op_order(O0, O1, ordered, fermionic)
+        return ncon([O0, O1, rdm], ncon_order).to_number() / norm
+    
+    if isinstance(op[0],Tensor) and isinstance(op[1],Tensor):
+        return _eval_op(op[0],op[1])
+    return [ _eval_op(_op[0],_op[1]) for _op in op ]
 
 
 def measure_rdm_2x2(s0, psi, env, op_list):

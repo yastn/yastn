@@ -47,12 +47,15 @@ def test_ctmrg_measure_product(boundary):
     assert all(abs(v - ez[s]) < tol for s, v in vals.items())
     ez_rdm1x1= {s: measure_rdm_1site(s, psi, env, sz) for s in sites}
     assert all(abs(v - ez[s]) < tol for s, v in ez_rdm1x1.items())
-    # import pdb; pdb.set_trace()
 
     ezz = env.measure_nn(sz, sz)
     for (s1, s2), v in ezz.items():
         s1, s2 = map(g.site2index, (s1, s2))
         assert abs(vals[s1] * vals[s2] - v) < tol
+    for s0 in [(0,0), (1,0), (0,1), (1,1)]:
+        for dirn in ['h', 'v']:
+            val= measure_rdm_nn(s0,dirn,psi,env, (sz, sz))
+            assert abs( val - ezz[(s0, psi.nn_site(s0, "r" if dirn=="h" else "b"))] )<tol
 
     for s1, s2 in [((0, 1), (1, 0)), ((2, 1), (2, 2)), ((1, 1), (2, 1))]:
         v = env.measure_2x2(sz, sz, sites=(s1, s2))
