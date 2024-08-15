@@ -229,7 +229,7 @@ class EnvBoundaryMps:
                 assert abs(sum(prob) - 1) < 1e-12
                 rand = rands[count]
                 ind = sum(apr < rand for apr in accumulate(prob))
-                out[(nx, ny)] = ind
+                out[nx, ny] = ind
                 dpt.top = apply_gate_onsite(dpt.top, loc_projectors[ind])
                 Os[nx] = dpt  # updated with the new collapse
                 env.update_env_(nx, to='last')

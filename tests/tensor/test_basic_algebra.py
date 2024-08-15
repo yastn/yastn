@@ -331,17 +331,19 @@ def test_hf_union_exceptions():
         b = b.fuse_legs(axes=((0, 1, 2), 3), mode='hard')
         _ = a + b
         # Indicated axes of two tensors have different number of hard-fused legs or sub-fusions order.
+
+    test_array = a.config.backend.to_tensor([[1], [2]], device=a.device)
     with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
-        _ = a * np.array([[1], [2]])
+        _ = a * test_array
         # Multiplication cannot change data size; broadcasting not supported.
     with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
-        _ = a / np.array([[1], [2]])
+        _ = a / test_array
         # truediv cannot change data size; broadcasting not supported.
     with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])
-        _ = a ** np.array([[1], [2]])
+        _ = a ** test_array
         # Exponent cannot change data size; broadcasting not supported.
     with pytest.raises(yastn.YastnError):
         a = yastn.rand(config=config_U1, legs=[leg1.conj(), leg2, leg1.conj(), leg2.conj()])

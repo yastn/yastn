@@ -14,8 +14,10 @@
 # ==============================================================================
 import numpy as np
 from typing import NamedTuple
+from yastn.tensor._algebra import exp
+from yastn.tensor.linalg import eigh
+from yastn.tensor._contractions import ncon
 from ._gates_auxiliary import fkron
-
 
 class Gate_nn(NamedTuple):
     """
@@ -46,8 +48,8 @@ class Gates(NamedTuple):
     """
     List of nearest-neighbor and local operators to be applied to PEPS during evolution_step.
     """
-    nn : list = None   # list of NN gates
-    local : list = None   # list of local gates
+    nn : list = ()   # list of NN gates
+    local : list = ()   # list of local gates
 
 
 def decompose_nn_gate(Gnn, bond=None) -> Gate_nn:
@@ -95,6 +97,37 @@ def gate_nn_Ising(J, step, I, X, bond=None) -> Gate_nn:
     return decompose_nn_gate(G, bond)
 
 
+def gate_nn_tJ(J, tu, td, muu0, muu1, mud0, mud1, step, I, cu, cpu, cd, cpd, bond=None) -> Gate_nn:
+    """
+    Gate exp(-step * H_tj)
+    """
+    nu = cpu @ cu
+    nd = cpd @ cd
+    Sp = cpu @ cd
+    Sm = cpd @ cu
+
+    H = 0 * fkron(I, I, sites=(0, 1))
+    H = H + 0.5 * J * fkron(Sp, Sm, sites=(0, 1))
+    H = H + 0.5 * J * fkron(Sm, Sp, sites=(0, 1))
+    H = H - 0.5 * J * fkron(nu, nd, sites=(0, 1))
+    H = H - 0.5 * J * fkron(nd, nu, sites=(0, 1))
+    H = H - tu * fkron(cpu, cu, sites=(0, 1))
+    H = H - tu * fkron(cpu, cu, sites=(1, 0))
+    H = H - td * fkron(cpd, cd, sites=(0, 1))
+    H = H - td * fkron(cpd, cd, sites=(1, 0))
+    H = H - muu0 * fkron(cpu @ cu, I, sites=(0, 1))
+    H = H - muu1 * fkron(I, cpu @ cu, sites=(0, 1))
+    H = H - mud0 * fkron(cpd @ cd, I, sites=(0, 1))
+    H = H - mud1 * fkron(I, cpd @ cd, sites=(0, 1))
+
+    H = H.fuse_legs(axes = ((0, 1), (2, 3)))
+    D, S = eigh(H, axes = (0, 1))
+    D = exp(D, step=-step)
+    G = ncon((S, D, S), ([-1, 1], [1, 2], [-3, 2]), conjs=(0, 0, 1))
+    G = G.unfuse_legs(axes=(0, 1))
+    return decompose_nn_gate(G, bond)
+
+
 def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate_local:
     """
     Local gate exp(-step * H)
@@ -126,7 +159,6 @@ def gate_local_Ising(h, step, I, X, site=None) -> Gate_local:
     """
     G_loc = np.cosh(h * step) * I + np.sinh(h * step) * X
     return Gate_local(G_loc, site)
-
 
 
 def distribute(geometry, gates_nn=None, gates_local=None) -> Gates:

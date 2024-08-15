@@ -95,6 +95,8 @@ def dmrg_(psi, H, project=None, method='1site',
 
     Returns
     -------
+    Generator if iterator_step is not None.
+
     DMRG_out(NamedTuple)
         NamedTuple including fields:
 
@@ -127,7 +129,7 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
             env.envs.append(Env_project(psi, st, penalty))
     env.setup_(to='first')
 
-    E_old = env.measure()
+    E_old = env.measure().item().real
 
     if opts_eigs is None:
         opts_eigs = {'hermitian': True, 'ncv': 3, 'which': 'SR'}
@@ -157,19 +159,19 @@ def _dmrg_(psi, H : MpsMpoOBC | Sequence[tuple[MpsMpoOBC, float]], project, meth
             max_dw = _dmrg_sweep_2site_(env, opts_eigs=opts_eigs,
                                         opts_svd=opts_svd, Schmidt=Schmidt)
 
-        E = env.measure()
-        dE, E_old = E_old - E, E
+        E = env.measure().item().real
+        dE, E_old = abs(E_old - E), E
         converged = []
 
         if energy_tol is not None:
             converged.append(abs(dE) < energy_tol)
 
         if Schmidt_tol is not None:
-            max_dS = max((Schmidt[k] - Schmidt_old[k]).norm() for k in Schmidt.keys())
+            max_dS = max((Schmidt[k] - Schmidt_old[k]).norm().item() for k in Schmidt.keys())
             Schmidt_old = Schmidt.copy()
             converged.append(max_dS < Schmidt_tol)
 
-        logger.info('Sweep = %03d  energy = %0.14f  dE = %0.4f  dSchmidt = %0.4f', sweep, E, dE, max_dS)
+        logger.info(f'Sweep = {sweep:03d}  energy = {E:0.14f}  dE = {dE:0.4f}  dSchmidt = {max_dS}')
 
         if len(converged) > 0 and all(converged):
             break

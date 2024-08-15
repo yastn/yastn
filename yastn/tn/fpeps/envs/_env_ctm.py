@@ -14,13 +14,17 @@
 # ==============================================================================
 from __future__ import annotations
 from dataclasses import dataclass
-from .... import rand, ones, eye, YastnError, Leg, tensordot, qr
+from typing import NamedTuple
+import logging
+from .... import rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask, vdot
 from ... import mps
 from .._peps import Peps, Peps2Layers
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
-from .._geometry import Bond
+from .._geometry import Bond, Site
 from ._env_auxlliary import *
+from ._env_window import EnvWindow
 
+logger = logging.Logger('ctmrg')
 
 @dataclass()
 class EnvCTM_local():
@@ -50,6 +54,12 @@ class EnvCTM_projectors():
     vtr : any = None  # vertical top right
     vbl : any = None  # vertical bottom left
     vbr : any = None  # vertical bottom right
+
+
+class CTMRG_out(NamedTuple):
+    sweeps : int = 0
+    max_dsv : float = None
+    converged : bool = False
 
 
 class EnvCTM(Peps):
@@ -160,6 +170,7 @@ class EnvCTM(Peps):
         ----------
         env: class CtmEnv
             class containing ctm environment tensors along with lattice structure data
+
         op: single site operator
         """
         if site is None:
@@ -191,6 +202,7 @@ class EnvCTM(Peps):
         O0, O1: yastn.Tensor
             Calculate <O0_s0 O1_s1>.
             O1 is applied first, which might matter for fermionic operators.
+
         bond: yastn.tn.fpeps.Bond | tuple[tuple[int, int], tuple[int, int]]
             Bond of the form (s0, s1). Sites s0 and s1 should be nearest-neighbors on the lattice.
         """
@@ -251,7 +263,202 @@ class EnvCTM(Peps):
 
         return val_op / val_no
 
-    def update_(env, opts_svd, method='2site', fix_signs=True):
+    def measure_2x2(self, *operators, sites=None):
+        """
+        Calculate expectation value of a product of local opertors
+        in a 2x2 window within CTM environment.
+
+        At the moment works only for bosonic operators (fermionic are to do).
+
+        Parameters
+        ----------
+        operators: Sequence[yastn.Tensor]
+            List of local operators to calculate <O0_s0 O1_s1 ...>.
+
+        sites: Sequence[tuple[int, int]]
+            List of sites that should match operators.
+        """
+        if len(operators) != len(sites):
+            raise YastnError("Number of operators and sites should match.")
+        ops = dict(zip(sites, operators))
+        if len(sites) != len(ops):
+            raise YastnError("Sites should not repeat.")
+
+        mx = min(site[0] for site in sites)  # tl corner
+        my = min(site[1] for site in sites)
+
+        tl = Site(mx, my)
+        tr = self.nn_site(tl, 'r')
+        br = self.nn_site(tl, 'br')
+        bl = self.nn_site(tl, 'b')
+        window = [tl, tr, br, bl]
+
+        if any(site not in window for site in sites):
+            raise YastnError("Sites do not form a 2x2 window.")
+
+        ten_tl = self.psi[tl]
+        ten_tr = self.psi[tr]
+        ten_br = self.psi[br]
+        ten_bl = self.psi[bl]
+
+        vec_tl = self[tl].l @ (self[tl].tl @ self[tl].t)
+        vec_tr = self[tr].t @ (self[tr].tr @ self[tr].r)
+        vec_br = self[br].r @ (self[br].br @ self[br].b)
+        vec_bl = self[bl].b @ (self[bl].bl @ self[bl].l)
+
+        cor_tl = ten_tl._attach_01(vec_tl)
+        cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
+        cor_tr = ten_tr._attach_30(vec_tr)
+        cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
+        cor_br = ten_br._attach_23(vec_br)
+        cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
+        cor_bl = ten_bl._attach_12(vec_bl)
+        cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
+
+        val_no = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
+
+        if tl in ops:
+            ten_tl.top = apply_gate_onsite(ten_tl.top, ops[tl])
+            cor_tl = ten_tl._attach_01(vec_tl)
+            cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
+        if tr in ops:
+            ten_tr.top = apply_gate_onsite(ten_tr.top, ops[tr])
+            cor_tr = ten_tr._attach_30(vec_tr)
+            cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
+        if br in ops:
+            ten_br.top = apply_gate_onsite(ten_br.top, ops[br])
+            cor_br = ten_br._attach_23(vec_br)
+            cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
+        if bl in ops:
+            ten_bl.top = apply_gate_onsite(ten_bl.top, ops[bl])
+            cor_bl = ten_bl._attach_12(vec_bl)
+            cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
+
+        val_op = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
+
+        return val_op / val_no
+
+
+    def measure_line(self, *operators, sites=None):
+        """
+        Calculate expectation value of a product of local opertors
+        along a horizontal or vertical line within CTM environment.
+
+        At the moment works only for bosonic operators (fermionic are to do).
+
+        Parameters
+        ----------
+        operators: Sequence[yastn.Tensor]
+            List of local operators to calculate <O0_s0 O1_s1 ...>.
+
+        sites: Sequence[tuple[int, int]]
+            List of sites that should match operators.
+        """
+        if len(operators) != len(sites):
+            raise YastnError("Number of operators and sites should match.")
+        ops = dict(zip(sites, operators))
+        if len(sites) != len(ops):
+            raise YastnError("Sites should not repeat.")
+
+        xs = sorted(set(site[0] for site in sites))
+        ys = sorted(set(site[1] for site in sites))
+        if len(xs) > 1 and len(ys) > 1:
+            raise YastnError("Sites should form a horizontal or vertical line.")
+
+        env_win = EnvWindow(self, (xs[0], xs[-1] + 1), (ys[0], ys[-1] + 1))
+        if len(xs) == 1: # horizontal
+            vr = env_win[xs[0], 't']
+            tm = env_win[xs[0], 'h']
+            vl = env_win[xs[0], 'b']
+        else:  # len(ys) == 1:  # vertical
+            vr = env_win[ys[0], 'l']
+            tm = env_win[ys[0], 'v']
+            vl = env_win[ys[0], 'r']
+
+        val_no = mps.vdot(vl, tm, vr)
+
+        for site, op in ops.items():
+            ind = site[0] - xs[0] + site[1] - ys[0] + 1
+            tm[ind].top = apply_gate_onsite(tm[ind].top, op)
+
+        val_op = mps.vdot(vl, tm, vr)
+        return val_op / val_no
+
+
+    def measure_2site(self, O0, O1, xrange, yrange, opts_svd=None, opts_var=None) -> dict[Site, list]:
+        """
+        Calculate 2-point correlations <o1 o2> between top-left corner of the window, and all sites in the window.
+
+        wip: other combinations of 2-sites and fermionically-nontrivial operators will be coverad latter.
+
+        Parameters
+        ----------
+        O1, O2: yastn.Tensor
+            one-site operators
+
+        xrange: tuple[int, int]
+            range of rows forming a window, [r0, r1); r0 included, r1 excluded.
+
+        yrange: tuple[int, int]
+            range of columns forming a window.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
+            The default is None, in which case take :code:`D_total` as the largest dimension from CTM environment.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
+            The default is None, in which case make 2 variational sweeps.
+        """
+        env_win = EnvWindow(self, xrange, yrange)
+        return env_win.measure_2site(O0, O1, opts_svd=opts_svd, opts_var=opts_var)
+
+
+    def sample(self, xrange, yrange, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_info=False) -> dict[Site, list]:
+        """
+        Sample random configurations from PEPS. Output a dictionary linking sites with lists of sampled projectors` keys for each site.
+
+        It does not check whether projectors sum up to identity -- probabilities of provided projectors get normalized to one.
+        If negative probabilities are observed (signaling contraction errors), error = max(abs(negatives)),
+        and all probabilities below that error level are fixed to error (before consecutive renormalization of probabilities to one).
+
+        Parameters
+        ----------
+        xrange: tuple[int, int]
+            range of rows to sample from, [r0, r1); r0 included, r1 excluded.
+
+        trange: tuple[int, int]
+            range of columns to sample from.
+
+        projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
+            Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
+            and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
+            Finally, we can provide a dictionary between each site and sets of projectors.
+
+        number: int
+            Number of drawn samples.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
+            The default is None, in which case take :code:`D_total` as the largest dimension from CTM environment.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
+            The default is None, in which case make 2 variational sweeps.
+
+        progressbar: bool
+            Whether to display progressbar. The default is False.
+
+        return_info: bool
+            Whether to include in the outputted dictionary a field :code:`info` with dictionary
+            that contains information about the amplitude of contraction errors
+            (largest negative probability), D_total, etc. The default is False.
+        """
+        env_win = EnvWindow(self, xrange, yrange)
+        return env_win.sample(projectors, number, opts_svd, opts_var, progressbar, return_info)
+
+
+    def update_(env, opts_svd, method='2site'):
         r"""
         Perform one step of CTMRG update. Environment tensors are updated in place.
 
@@ -265,15 +472,12 @@ class EnvCTM(Peps):
         ----------
         opts_svd: dict
             A dictionary of options to pass to the SVD algorithm.
+
         method: str
-            '2site' or '1site'. Default is '2site'
+            '2site' or '1site'. The default is '2site'.
             '2site' uses the standard 4x4 enlarged corners, allowing to enlarge EnvCTM bond dimension.
-            '1site' uses smaller 4x2 corners. It is faster, but does not allow to grow EnvCTM bond dimension.
-        fix_signs: bool
-            Whether to fix the signs in unitaries during SVD.
-            This makes SVD decomposition unique in case with no degeneracy.
-            The latter is important when we set the criteria for stopping
-            the algorithm based on singular values of the corners.
+            '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and
+            does not allow to grow EnvCTM bond dimension.
 
         Returns
         -------
@@ -292,7 +496,7 @@ class EnvCTM(Peps):
         #
         # horizontal projectors
         for site in env.sites():
-            update_proj_(proj, site, 'lr', env, opts_svd, fix_signs)
+            update_proj_(proj, site, 'lr', env, opts_svd)
         trivial_projectors_(proj, 'lr', env)  # fill None's
         #
         # horizontal move
@@ -303,7 +507,7 @@ class EnvCTM(Peps):
         #
         # vertical projectors
         for site in env.sites():
-            update_proj_(proj, site, 'tb', env, opts_svd, fix_signs)
+            update_proj_(proj, site, 'tb', env, opts_svd)
         trivial_projectors_(proj, 'tb', env)
         #
         # vertical move
@@ -373,8 +577,130 @@ class EnvCTM(Peps):
             d['data'][site] = d_local
         return d
 
+    def check_corner_bond_dimension(env, disp=False):
 
-def update_2site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
+        dict_bond_dimension = {}
+        dict_symmetric_sector = {}
+        for site in env.sites():
+            if disp:
+                print(site)
+            corners = [env[site].tl, env[site].bl, env[site].br, env[site].tr]
+            corners_id = ["tl", "bl", "br", "tr"]
+            for ii in range(4):
+                dict_symmetric_sector[site, corners_id[ii]] = []
+                dict_bond_dimension[site, corners_id[ii]] = []
+                if disp:
+                    print(corners_id[ii])
+                for leg in range (0, 2):
+                    temp_t = []
+                    temp_D = []
+                    for it in range(len(corners[ii].get_legs()[leg].t)):
+                        temp_t.append(corners[ii].get_legs()[leg].t[it])
+                        temp_D.append(corners[ii].get_legs()[leg].D[it])
+                    if disp:
+                        print(temp_t)
+                        print(temp_D)
+                    dict_symmetric_sector[site, corners_id[ii]].append(temp_t)
+                    dict_bond_dimension[site, corners_id[ii]].append(temp_D)
+        return [dict_bond_dimension, dict_symmetric_sector]
+
+    def initialize_ctm_with_old_ctm(env, psi, env_old):
+        for site in psi.sites():
+            env[site].tl = env_old[site].tl
+            env[site].tr = env_old[site].tr
+            env[site].bl = env_old[site].bl
+            env[site].br = env_old[site].br
+            env[site].l = env_old[site].l
+            env[site].r = env_old[site].r
+            env[site].b = env_old[site].b
+            env[site].t = env_old[site].t
+
+    def ctmrg_(env, opts_svd=None, method='2site', max_sweeps=1, iterator_step=None, corner_tol=None):
+        r"""
+        Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
+        Convergence is based on singular values of CTM environment corner tensors.
+
+        Outputs iterator if :code:`iterator_step` is given, which allows
+        inspecting :code:`env`, e.g., calculating expectation values,
+        outside of :code:`ctmrg_` function after every :code:`iterator_step` sweeps.
+
+        Parameters
+        ----------
+        opts_svd: dict
+            A dictionary of options to pass to the SVD algorithm.
+
+        method: str
+            '2site' or '1site'. The default is '2site'.
+            '2site' uses the standard 4x4 enlarged corners, allowing to enlarge EnvCTM bond dimension.
+            '1site' uses smaller 4x2 corners. It is significantly faster, but is less stable and
+            does not allow to grow EnvCTM bond dimension.
+
+        max_sweeps: int
+            Maximal number of sweeps.
+
+        iterator_step: int
+            If int, :code:`ctmrg_` returns a generator that would yield output after every iterator_step sweeps.
+            Default is None, in which case  :code:`ctmrg_` sweeps are performed immediately.
+
+        corner_tol: float
+            Convergence tolerance for the change of singular values of all corners in a single update.
+            The default is None, in which case convergence is not checked.
+
+        Returns
+        -------
+        Generator if iterator_step is not None.
+
+        CTMRG_out(NamedTuple)
+            NamedTuple including fields:
+
+                * :code:`sweeps` number of performed ctmrg updates.
+                * :code:`max_dsv` norm of singular values change in the worst corner in the last sweep.
+                * :code:`converged` whether convergence based on conrer_tol has been reached.
+        """
+        tmp = _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol)
+        return tmp if iterator_step else next(tmp)
+
+
+def _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol):
+    """ Generator for ctmrg_(). """
+
+    if corner_tol is not None:
+        if not corner_tol > 0:
+            raise YastnError('CTMRG: corner_tol has to be positive or None.')
+        old_corner_sv = calculate_corner_svd(env)
+
+    max_dsv, converged = -1, False
+    for sweep in range(1, max_sweeps + 1):
+        env.update_(opts_svd=opts_svd, method=method)
+        if corner_tol is not None:
+            corner_sv = calculate_corner_svd(env)
+            max_dsv = max((old_corner_sv[k] - corner_sv[k]).norm().item() for k in corner_sv)
+            old_corner_sv = corner_sv
+
+        logging.info(f'Sweep = {sweep:03d};  max_diff_corner_singular_values = {max_dsv:0.2e}')
+
+        if corner_tol is not None and max_dsv < corner_tol:
+            converged = True
+            break
+
+        if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
+            yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, converged=converged)
+    yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, converged=converged)
+
+
+def calculate_corner_svd(env):
+    corner_sv = {}
+    for site in env.sites():
+        corner_sv[site, 'tl'] = env[site].tl.svd(compute_uv=False)
+        corner_sv[site, 'tr'] = env[site].tr.svd(compute_uv=False)
+        corner_sv[site, 'bl'] = env[site].bl.svd(compute_uv=False)
+        corner_sv[site, 'br'] = env[site].br.svd(compute_uv=False)
+    for k, v in corner_sv.items():
+        corner_sv[k] = v / v.norm(p='inf')
+    return corner_sv
+
+
+def update_2site_projectors_(proj, site, dirn, env, opts_svd):
     r"""
     Calculate new projectors for CTM moves from 4x4 extended corners.
     """
@@ -401,12 +727,12 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
     if 'r' in dirn:
         _, r_t = qr(cor_tt, axes=(0, 1))
         _, r_b = qr(cor_bb, axes=(1, 0))
-        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, fix_signs, opts_svd=opts_svd)
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd)
 
     if 'l' in dirn:
         _, r_t = qr(cor_tt, axes=(1, 0))
         _, r_b = qr(cor_bb, axes=(0, 1))
-        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, fix_signs, opts_svd=opts_svd)
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd)
 
     if ('t' in dirn) or ('b' in dirn):
         cor_ll = cor_bl @ cor_tl
@@ -415,15 +741,15 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
     if 't' in dirn:
         _, r_l = qr(cor_ll, axes=(0, 1))
         _, r_r = qr(cor_rr, axes=(1, 0))
-        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, fix_signs, opts_svd=opts_svd)
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd)
 
     if 'b' in dirn:
         _, r_l = qr(cor_ll, axes=(1, 0))
         _, r_r = qr(cor_rr, axes=(0, 1))
-        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, fix_signs, opts_svd=opts_svd)
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd)
 
 
-def update_1site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
+def update_1site_projectors_(proj, site, dirn, env, opts_svd):
     r"""
     Calculate new projectors for CTM moves from 4x2 extended corners.
     """
@@ -443,10 +769,10 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
         r_br, r_bl = regularize_1site_corners(cor_br, cor_bl)
 
     if 'r' in dirn:
-        proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, fix_signs, opts_svd=opts_svd)
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, opts_svd=opts_svd)
 
     if 'l' in dirn:
-        proj[tl].hlb, proj[bl].hlt = proj_corners(r_tl, r_bl, fix_signs, opts_svd=opts_svd)
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_tl, r_bl, opts_svd=opts_svd)
 
     if ('t' in dirn) or ('b' in dirn):
         cor_bl = (env[br].bl @ env[br].l).fuse_legs(axes=((0, 1), 2))
@@ -457,31 +783,34 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd, fix_signs):
         r_tr, r_br = regularize_1site_corners(cor_tr, cor_br)
 
     if 't' in dirn:
-        proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, fix_signs, opts_svd=opts_svd)
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, opts_svd=opts_svd)
 
     if 'b' in dirn:
-        proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, fix_signs, opts_svd=opts_svd)
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=opts_svd)
 
 
 def regularize_1site_corners(cor_0, cor_1):
     Q_0, R_0 = qr(cor_0, axes=(0, 1))
     Q_1, R_1 = qr(cor_1, axes=(1, 0))
-    U_0, S, U_1 = tensordot(R_0, R_1, axes=(1, 1)).svd(axes=(0, 1))
+    R01 = tensordot(R_0, R_1, axes=(1, 1))
+    U_0, S, U_1 = R01.svd(axes=(0, 1), fix_signs=True)
     S = S.sqrt()
     r_0 = tensordot((U_0 @ S), Q_0, axes=(0, 1))
     r_1 = tensordot((S @ U_1), Q_1, axes=(1, 1))
     return r_0, r_1
 
-
-def proj_corners(r0, r1, fix_signs, opts_svd):
+def proj_corners(r0, r1, opts_svd):
     r""" Projectors in between r0 @ r1.T corners. """
     rr = tensordot(r0, r1, axes=(1, 1))
-    u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs, **opts_svd)
+    u, s, v = rr.svd(axes=(0, 1), sU=r0.s[1], fix_signs=True)
+
+    Smask = truncation_mask(s, **opts_svd)
+    u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
+
     rs = s.rsqrt()
     p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)
     p1 = tensordot(r0, (u @ rs).conj(), axes=(0, 0)).unfuse_legs(axes=0)
     return p0, p1
-
 
 _trivial = (('hlt', 'r', 'l', 'tl', 2, 0, 0),
             ('hlb', 'r', 'l', 'bl', 0, 2, 1),

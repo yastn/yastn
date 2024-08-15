@@ -8,7 +8,7 @@ description = ('YASTN - Yet Another Symmetric Tensor Network')
 # README file as long_description.
 long_description = open('README.md', encoding='utf-8').read()
 
-__version__ = '1.0.1'
+__version__ = '1.0.2'
 
 setup(
     name='yastn',
