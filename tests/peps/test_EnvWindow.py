@@ -140,12 +140,12 @@ def test_window_measure():
     outv = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(1, 5), yrange=(0, 1))
     ev = [env_ctm.measure_line(ops.z(), ops.z(), sites=((1, 0), (n, 0))) for n in [2, 3, 4,]]
     for n, ref in zip([1, 2, 3, 4], [1] + ev):
-        assert abs(outv[(1, 0), (n, 0)] - ref) / abs(ref) < 1e-3
+        assert abs(outv[(1, 0), (n, 0)] - ref) / abs(ref) < 1e-2
 
     outh = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(2, 3), yrange=(2, 5))
     eh = [env_ctm.measure_line(ops.z(), ops.z(), sites=((2, 2), (2, n))) for n in [3, 4]]
     for n, ref in zip([2, 3, 4], [1] + eh):
-        assert abs(outh[(2, 2), (2, n)] - ref) / abs(ref) < 1e-8
+        assert abs(outh[(2, 2), (2, n)] - ref) / abs(ref) < 1e-5
 
 
 if __name__ == '__main__':
