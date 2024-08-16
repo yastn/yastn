@@ -326,14 +326,28 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     return rdm, rdm_norm
 
 
-def rdm2x2(s0, psi, env):
+def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     r"""
-    :param s0: The upper-left site of the 2*2 reduced density matrix
-    :param psi: Peps
-    :param env: environment
-    :type site: yastn.tn.fpeps._geometry.Site
-    :type psi: yastn.tn.fpeps.Peps
-    :type env: yastn.tn.fpeps.EnVCTM
+    Contract environment and on-site tensors of 2x2 patch,
+    with `s0` the upper-left Site, to reduced density matrix::
+        
+        C T  T  C
+        T s0 s1 T 
+        T s2 s3 T    
+        C T  T  C
+        
+    The index convention for reduced density matrix is `[s0, s0', ..., s3, s3']`,
+    where s_i,s_i' is bra,ket pair.
+
+    TODO: Optionally symmetrize and make non-negative
+
+    Args:
+        s0: The site of the 2x2 reduced density matrix
+        psi: Peps
+        env: environment
+
+    Returns:
+        Reduced density matrix and its unnormalized trace
     """
     s1, s2, s3 = psi.nn_site(s0, "r"), psi.nn_site(s0, "b"), psi.nn_site(s0, "br")
     env0, env1, env2, env3 = env[s0], env[s1], env[s2], env[s3]
@@ -399,7 +413,7 @@ def rdm2x2(s0, psi, env):
     rdm_norm = rdm.trace(axes=((0, 2, 4, 6), (1, 3, 5, 7))).to_number()
     rdm = rdm / rdm_norm
 
-    return rdm
+    return rdm, rdm_norm
 
 
 def measure_rdm_1site(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Tensor, Sequence[Tensor]])->Union[Scalar, Sequence[Scalar]]:
@@ -469,29 +483,44 @@ def measure_rdm_nn(s0 : Site, dirn : str, psi : Peps, env : EnvCTM, op : Union[S
     return [ _eval_op(_op[0],_op[1]) for _op in op ]
 
 
-def measure_rdm_2x2(s0, psi, env, op_list):
+def measure_rdm_2x2(s0 : Site, psi : Peps, env : EnvCTM, op : Union[Sequence[Tensor], Sequence[Sequence[Tensor]]])->Union[Scalar, Sequence[Scalar]]:
     r"""
-    Parameters
-    ----------
-    s0: site
-    s0 -- s1
-    |     |
-    s2 -- s3
+    Measure one or more observables on 2x2 patch with site `s0` being upper-left site.
 
-    op_list: [O0, O1, O2, O3] bosonic operators
+    Observables are expected to be one or more quadruples of operators/Tensors, i.e.::
+
+        op = (Tensor, Tensor, Tensor, Tensor) 
+
+        or 
+
+        op = [(Tensor, Tensor, Tensor, Tensor), (Tensor, Tensor, Tensor, Tensor), ...]
+
+    with first operator acting on site `s0`, second on site `s1`, etc. according to :func:`rdm2x2`
+    index ordering convention.
+    
+    NOTE: currently support only bosonic operators, i.e. with even parity.
+
+    Args:
+        s0: site
+        psi: PEPS wavefunction
+        env: CTM environment
+        op: one or more observables 
+
+    Returns:
+        Expectation value or a list of expectations values of provided `op`.
     """
-    rdm = rdm2x2(s0, psi, env)  # s0 s0' s1 s1'
+    rdm, norm = rdm2x2(s0, psi, env)  # s0 s0' s1 s1'
     s1 = psi.nn_site(s0, "r")
     s2 = psi.nn_site(s0, "b")
     s3 = psi.nn_site(s2, "r")
 
-    # ordered = f_ordered(s0, s1)
-    # fermionic = True if (O0.n[0] and O1.n[0]) else False
-    # O0, O1 = op_order(O0, O1, ordered, fermionic)
-    O0, O1, O2, O3 = tuple(op_list)
-    norm = rdm.trace(axes=((0, 2, 4, 6), (1, 3, 5, 7))).to_number()
     ncon_order = ((1, 2), (3, 4), (5, 6), (7, 8), (2, 1, 4, 3, 6, 5, 8, 7))
-    return ncon([O0, O1, O2, O3, rdm], ncon_order).to_number() / norm
+    def _eval_op(O0, O1, O2, O3):
+        return ncon([O0, O1, O2, O3, rdm], ncon_order).to_number()
+    
+    if len(op)==4 and all([isinstance(_op,Tensor) for _op in op]):
+        return _eval_op(*tuple(op))
+    return [ _eval_op(*tuple(_op)) for _op in op ]
 
 
 def test_1site(psi, env, op):

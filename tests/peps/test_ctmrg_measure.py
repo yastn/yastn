@@ -43,6 +43,7 @@ def test_ctmrg_measure_product(boundary):
     env = fpeps.EnvCTM(psi, init='eye')
 
     sz = ops.sz()
+    I= ops.I()
     ez = env.measure_1site(sz)
     assert all(abs(v - ez[s]) < tol for s, v in vals.items())
     ez_rdm1x1= {s: measure_rdm_1site(s, psi, env, sz) for s in sites}
@@ -57,14 +58,23 @@ def test_ctmrg_measure_product(boundary):
             val= measure_rdm_nn(s0,dirn,psi,env, (sz, sz))
             assert abs( val - ezz[(s0, psi.nn_site(s0, "r" if dirn=="h" else "b"))] )<tol
 
-    for s1, s2 in [((0, 1), (1, 0)), ((2, 1), (2, 2)), ((1, 1), (2, 1))]:
+    s_list= [ [((0, 1), (1, 0)), ((0,0),(I, sz, sz, I))], 
+        [((2, 1), (2, 2)), ((2,1),(sz,sz,I,I))], [((1, 1), (2, 1)), ((1,1),(sz,I,sz,I)) ],
+    ]
+    for s_elem in s_list:
+        s1,s2= s_elem[0]
         v = env.measure_2x2(sz, sz, sites=(s1, s2))
-
         assert abs(vals[s1] * vals[s2] - v) < tol
+        s0, ops= s_elem[1]
+        v_rdm = measure_rdm_2x2(s0,psi,env,ops)
+        assert abs(v - v_rdm) < tol
+
 
     s1, s2, s3 = (1, 2), (2, 1), (2, 2)
     v = env.measure_2x2(sz, sz, sz, sites=(s1, s2, s3))
     assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
+    v_rdm= measure_rdm_2x2((1,1),psi,env,(I,sz,sz,sz))
+    assert abs(v - v_rdm) < tol
 
     if boundary != 'obc':
         s1, s2, s3 = (3, 2), (4, 1), (4, 2)
@@ -119,7 +129,6 @@ def test_ctmrg_measure_2x1():
 
             # auxilliary leg; in general, left/top tensor r0 requires a swap_gate between physical and ancilla lags.
             r0 = r0.add_leg(axis=-1, s=-1).swap_gate(axes=(1, 2)).fuse_legs(axes=(0, (1, 2)))
-            # r0 = r0.add_leg(axis=-1, s=-1).fuse_legs(axes=(0, (1, 2)))
             r1 = r1.add_leg(axis=-1, s=-1).fuse_legs(axes=(0, (1, 2)))
 
             r0 = r0.add_leg(axis=0, s=-1)  # t
@@ -187,6 +196,10 @@ def test_ctmrg_measure_2x1():
                     assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond[::-1]) - (-val)) < tol
                     assert abs(env.measure_nn(ops.c('u'), ops.cp('u'), bond=bond) - (-val.conjugate())) < tol
                     assert abs(env.measure_nn(ops.cp('u'), ops.c('u'), bond=bond[::-1]) - (val.conjugate())) < tol
+                    dirn, l_ordered= g.nn_bond_type(bond)
+                    if l_ordered:
+                        assert abs(measure_rdm_nn(bond[0],dirn,psi,env,(ops.cp('u'), ops.c('u'))) - val) < tol
+                        assert abs(measure_rdm_nn(bond[0],dirn,psi,env,(ops.c('u'), ops.cp('u'))) - (-val.conjugate())) < tol
 
 
 if __name__ == '__main__':
