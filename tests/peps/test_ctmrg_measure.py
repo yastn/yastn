@@ -41,7 +41,9 @@ def test_ctmrg_measure_product(boundary):
     psi = fpeps.product_peps(g, occs)
 
     env = fpeps.EnvCTM(psi, init='eye')
-
+    #
+    #  measure_1site
+    #
     sz = ops.sz()
     I= ops.I()
     ez = env.measure_1site(sz)
@@ -65,8 +67,8 @@ def test_ctmrg_measure_product(boundary):
         s1,s2= s_elem[0]
         v = env.measure_2x2(sz, sz, sites=(s1, s2))
         assert abs(vals[s1] * vals[s2] - v) < tol
-        s0, ops= s_elem[1]
-        v_rdm = measure_rdm_2x2(s0,psi,env,ops)
+        s0, op= s_elem[1]
+        v_rdm = measure_rdm_2x2(s0,psi,env,op)
         assert abs(v - v_rdm) < tol
 
 
@@ -81,7 +83,9 @@ def test_ctmrg_measure_product(boundary):
         v = env.measure_2x2(sz, sz, sz, sites=(s1, s2, s3))
         s1, s2, s3 = map(g.site2index, (s1, s2, s3))
         assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
-
+    #
+    #  measure_line
+    #
     for s1, s2, s3 in [((1, 0), (1, 2), (1, 1)), ((0, 2), (2, 2), (3, 2))]:
         v = env.measure_line(sz, sz, sz, sites=(s1, s2, s3))
         assert abs(vals[s1] * vals[s2] * vals[s3] - v) < tol
@@ -91,6 +95,27 @@ def test_ctmrg_measure_product(boundary):
             v = env.measure_line(sz, sz, sites=(s1, s2))
             s1, s2 = map(g.site2index, (s1, s2))
             assert abs(vals[s1] * vals[s2] - v) < tol
+    #
+    #  sample
+    #
+    vecs = {v: ops.vec_z(val=v) for v in [-1, 0, 1]}
+    projs = {k: yastn.ncon([vec, vec.conj()], [[-0], [-1]]) for k, vec in vecs.items()}
+    out = env.sample(xrange=(1, 4), yrange=(1, 3), number=8, projectors=projs)
+    assert all(all(x == vals[k] for x in v) for k, v in out.items())
+
+    if boundary != 'obc':
+        out = env.sample(xrange=(3, 7), yrange=(-1, 2), number=5, projectors=projs)
+        assert all(all(x == vals[g.site2index(k)] for x in v) for k, v in out.items())
+    
+    #
+    #  measure_2site
+    #
+    out = env.measure_2site(sz, sz, xrange=(1, 4), yrange=(0, 3))
+    assert all(abs(vals[s0] * vals[s1] - v) < tol for (s0, s1), v in out.items())
+
+    if boundary != 'obc':
+        out = env.measure_2site(sz, sz, xrange=(3, 7), yrange=(-1, 2))
+        assert all(abs(vals[g.site2index(s0)] * vals[g.site2index(s1)] - v) < tol for (s0, s1), v in out.items())
 
     with pytest.raises(yastn.YastnError):
         env.measure_2x2(sz, sz, sz, sites=((0, 0), (1, 1)))
@@ -127,9 +152,11 @@ def test_ctmrg_measure_2x1():
 
             r0, r1 = yastn.qr(state, sQ=-1, Qaxis=0)
 
-            # auxilliary leg; in general, left/top tensor r0 requires a swap_gate between physical and ancilla lags.
+            # auxilliary leg;
+            # in general, left/top tensor r0 requires a swap_gate between physical and ancilla lags.
             r0 = r0.add_leg(axis=-1, s=-1).swap_gate(axes=(1, 2)).fuse_legs(axes=(0, (1, 2)))
-            r1 = r1.add_leg(axis=-1, s=-1).fuse_legs(axes=(0, (1, 2)))
+            # right/bottom tensor r1 swap_gate is effectively trivial
+            r1 = r1.add_leg(axis=-1, s=-1).swap_gate(axes=((0, 1), 2)).fuse_legs(axes=(0, (1, 2)))
 
             r0 = r0.add_leg(axis=0, s=-1)  # t
             r0 = r0.add_leg(axis=1, s=1)  # l
@@ -180,8 +207,8 @@ def test_ctmrg_measure_2x1():
                     r0 = r0.add_leg(axis=1, s=1)  # l
                     r0 = r0.add_leg(axis=2, s=1) if dims == (1, 2) else r0.add_leg(axis=3, s=-1)  # b or r
 
-                    # aux leg of right tensor. no swap gate between physical and ancilla legs
-                    r1 = r1.add_leg(axis=-1, s=-1).fuse_legs(axes=(0, (1, 2)))
+                    # aux leg of right tensor. We put a swap gate, though it is trivial
+                    r1 = r1.add_leg(axis=-1, s=-1).swap_gate(axes=((0, 1), 2)).fuse_legs(axes=(0, (1, 2)))
                     r1 = r1.add_leg(axis=0, s=-1) if dims == (1, 2) else r1.add_leg(axis=1, s=1)  # t or l
                     r1 = r1.add_leg(axis=2, s=1)  # b
                     r1 = r1.add_leg(axis=3, s=-1)  # r
