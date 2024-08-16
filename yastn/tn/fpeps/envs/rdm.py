@@ -3,11 +3,12 @@ from .. import Site, Peps, Peps2Layers, EnvCTM
 from .... import Tensor
 from typing import Sequence, Union, TypeVar
 Scalar = TypeVar('Scalar')
+
 # from yastn import Tensor, tensordot
 # from yastn.tn.fpeps.envs._env_auxlliary import append_vec_tl, append_vec_tr, append_vec_bl, append_vec_br
 
 # utility functions for corner contractions, leaving the physical indices uncontracted.
-def append_vec_tl_open(
+def _append_vec_tl_open(
     A, Ac, vectl
 ):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s';  vectl = x [l l'] [t t'] y
     """Append the A and Ac tensors to the top-left vector with open and unswapped physical indices [s s']"""
@@ -26,7 +27,7 @@ def append_vec_tl_open(
     return vectl
 
 
-def append_vec_br_open(
+def _append_vec_br_open(
     A, Ac, vecbr
 ):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s';  vecbr = x [r r'] [b b'] y
     """Append the A and Ac tensors to the bottom-right vector with open and unswapped physical indices [s s']."""
@@ -45,7 +46,7 @@ def append_vec_br_open(
     return vecbr
 
 
-def append_vec_tr_open(
+def _append_vec_tr_open(
     A, Ac, vectr
 ):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s';  vectr = x [t t'] [r r'] y
     """Append the A and Ac tensors to the top-right vector with open physical indices [s s'],
@@ -72,7 +73,7 @@ def append_vec_tr_open(
     return vectr
 
 
-def append_vec_bl_open(
+def _append_vec_bl_open(
     A, Ac, vecbl
 ):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s';  vecbl = x [b b'] [l l'] y
     """Append the A and Ac tensors to the bottom-left vector with open physical indices,
@@ -188,7 +189,7 @@ def rdm1x1(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
     vecb = (env0.r @ env0.br) @ (env0.b @ env0.bl)
 
-    tmp = append_vec_tl_open(ten0.top, ten0.btm, vect)
+    tmp = _append_vec_tl_open(ten0.top, ten0.btm, vect)
     res = vecb.tensordot(tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0)))  # [s, s']
 
     rdm = res.unfuse_legs(axes=(0,))  # s s'
@@ -237,13 +238,13 @@ def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     vecl = (env0.bl @ env0.l) @ (env0.tl @ env0.t)
     vecr = (env1.tr @ env1.r) @ (env1.br @ env1.b)
 
-    tmp0 = append_vec_tl_open(ten0.top, ten0.btm, vecl)  # x [b b'] y [r r'] [s s']
+    tmp0 = _append_vec_tl_open(ten0.top, ten0.btm, vecl)  # x [b b'] y [r r'] [s s']
     tmp0 = tmp0.unfuse_legs(axes=(1, 4))  # x b b' y [r r'] s s'
     tmp0 = tmp0.swap_gate(axes=(1, (5, 6)))  # b X s s'
     tmp0 = tmp0.fuse_legs(axes=(0, (1, 2), 3, 4, (5, 6)))  # x [b b'] y [r r'] [s s']
     tmp0 = env0.b.tensordot(tmp0, axes=((2, 1), (0, 1)))
 
-    tmp1 = append_vec_br_open(ten1.top, ten1.btm, vecr)  # x [t t'] y [l l'] [s s']
+    tmp1 = _append_vec_br_open(ten1.top, ten1.btm, vecr)  # x [t t'] y [l l'] [s s']
     tmp1 = tmp1.unfuse_legs(axes=(1, 4))  # x t t' y [l l'] s s'
     tmp1 = tmp1.swap_gate(axes=(2, (5, 6)))  # t' X s s'
     tmp1 = tmp1.fuse_legs(axes=(0, (1, 2), 3, 4, (5, 6)))  # x [t t'] y [l l'] [s s']
@@ -296,7 +297,7 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     vect = (env0.l @ env0.tl) @ (env0.t @ env0.tr)
     vecb = (env1.r @ env1.br) @ (env1.b @ env1.bl)
 
-    tmp0 = append_vec_tl_open(ten0.top, ten0.btm, vect)  # x [b b'] y [r r'] [s s']
+    tmp0 = _append_vec_tl_open(ten0.top, ten0.btm, vect)  # x [b b'] y [r r'] [s s']
     tmp0 = tmp0.unfuse_legs(axes=(1, 3, 4))  # x b b' y r r' s s'
     tmp0 = tmp0.swap_gate(axes=(5, (6, 7)))  # r' X s s'
     tmp0 = tmp0.swap_gate(axes=(2, (6, 7)))  # b' X s s'
@@ -305,7 +306,7 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     )  # x [b b'] y [r r'] [s s']
     tmp0 = env0.r.tensordot(tmp0, axes=((0, 1), (2, 3)))
 
-    tmp1 = append_vec_br_open(ten1.top, ten1.btm, vecb)  # x [t t'] y [l l'] [s s']
+    tmp1 = _append_vec_br_open(ten1.top, ten1.btm, vecb)  # x [t t'] y [l l'] [s s']
     tmp1 = tmp1.unfuse_legs(axes=(1, 3, 4))  # x t t' y l l' s s'
     tmp1 = tmp1.swap_gate(axes=(2, (6, 7)))  # t' X s s'
     tmp1 = tmp1.swap_gate(axes=(4, (6, 7)))  # l X s s'
@@ -365,7 +366,7 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     vecbl = (env2.b @ env2.bl) @ env2.l
     vecbr = (env3.r @ env3.br) @ env3.b
 
-    tmp0 = append_vec_tl_open(ten0.top, ten0.btm, vectl)  # x [b b'] y [r r'] [s s']
+    tmp0 = _append_vec_tl_open(ten0.top, ten0.btm, vectl)  # x [b b'] y [r r'] [s s']
     tmp0 = tmp0.unfuse_legs(axes=(1, 3, 4))  # x b b' y r r' s s'
     tmp0 = tmp0.swap_gate(axes=(1, (6, 7)))  # b X s s'
     tmp0 = tmp0.swap_gate(axes=(5, (6, 7)))  # r' X s s'
@@ -373,21 +374,21 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
         axes=(0, (1, 2), 3, (4, 5), (6, 7))
     )  # x [b b'] y [r r'] [s0 s0']
 
-    tmp1 = append_vec_tr_open(ten1.top, ten1.btm, vectr)  # x [l l'] y [b b'] [s s']
+    tmp1 = _append_vec_tr_open(ten1.top, ten1.btm, vectr)  # x [l l'] y [b b'] [s s']
     tmp1 = tmp1.unfuse_legs(axes=(1, 3, 4))  # x l l' y b b' s s'
     tmp1 = tmp1.swap_gate(axes=(2, (6, 7)))  # l' X s s'
     tmp1 = tmp1.fuse_legs(
         axes=(0, (1, 2), 3, (4, 5), (6, 7))
     )  # x [l l'] y [b b'] [s1 s1']
 
-    tmp2 = append_vec_bl_open(ten2.top, ten2.btm, vecbl)  # x [r r'] y [t t'] [s s']
+    tmp2 = _append_vec_bl_open(ten2.top, ten2.btm, vecbl)  # x [r r'] y [t t'] [s s']
     tmp2 = tmp2.unfuse_legs(axes=(1, 3, 4))  # x r r' y t t' s s'
     tmp2 = tmp2.swap_gate(axes=(1, (6, 7)))  # r X s s'
     tmp2 = tmp2.fuse_legs(
         axes=(0, (1, 2), 3, (4, 5), (6, 7))
     )  # x [r r'] y [t t'] [s2 s2']
 
-    tmp3 = append_vec_br_open(ten3.top, ten3.btm, vecbr)  # x [t t'] y [l l'] [s s']
+    tmp3 = _append_vec_br_open(ten3.top, ten3.btm, vecbr)  # x [t t'] y [l l'] [s s']
     tmp3 = tmp3.unfuse_legs(axes=(1, 3, 4))  # x t t' y l l' s s'
     tmp3 = tmp3.swap_gate(axes=(2, (6, 7)))  # t' X s s'
     tmp3 = tmp3.swap_gate(axes=(4, (6, 7)))  # l X s s'
@@ -528,7 +529,7 @@ def test_1site(psi, env, op):
         val0 = measure_rdm_1site(s0, psi, env, op)
         val1 = env.measure_1site(op, s0)
         print(s0, val0.item(), val1.item())
-        assert torch.isclose(val0, val1)
+        assert np.isclose(val0, val1)
 
 
 def test_nn(psi, env, op0, op1):

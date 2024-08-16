@@ -467,7 +467,7 @@ def fix_svd_signs(Udata, Vhdata, meta):
         Utemp_amp = Uamp[slice(*slU)].reshape(DU)
         ii = torch.argmax(Utemp_amp, dim=0, keepdims=True)
         phase = torch.take_along_dim(Utemp, ii, dim=0)
-        phase /= abs(phase)
+        phase = phase/abs(phase)
         # Utemp *= phase.conj().reshape(1, -1)
         # Vtemp *= phase.reshape(-1, 1)
         Ud[slice(*slU)].reshape(DU)[:] = Utemp * phase.conj().reshape(1, -1)
