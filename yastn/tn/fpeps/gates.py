@@ -14,9 +14,9 @@
 # ==============================================================================
 import numpy as np
 from typing import NamedTuple
-from yastn.tensor._algebra import exp
-from yastn.tensor.linalg import eigh
-from yastn.tensor._contractions import ncon
+from ...tensor._algebra import exp
+from ...tensor.linalg import eigh
+from ...tensor._contractions import ncon
 from ._gates_auxiliary import fkron
 
 class Gate_nn(NamedTuple):
