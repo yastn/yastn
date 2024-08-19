@@ -171,9 +171,18 @@ class SquareLattice():
             return 'v', False
         raise YastnError(f"{bond} is not a nearest-neighbor bond.")
 
-    def f_ordered(self, bond) -> bool:
-        """ Check if bond sites appear in fermionic order. """
-        s0, s1 = bond
+    def f_ordered(self, *bond) -> bool:
+        """
+        Check if bond (s0, s1) appears in fermionic order.
+        The convention is consistent with the PEPS diagrams in https://arxiv.org/abs/0912.0646.
+
+        Args:
+            bond (Bond or tuple[Site,Site] or Site, Site):
+        """
+        if len(bond)==1: # (Bond,) or ((Site,Site),) 
+            s0, s1= bond[0]
+        else: # (Site, Site)
+            s0, s1 = bond[0], bond[1]
         return s0[1] < s1[1] or (s0[1] == s1[1] and s0[0] <= s1[0])
 
     def site2index(self, site):

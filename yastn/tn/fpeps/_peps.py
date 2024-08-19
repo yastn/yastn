@@ -14,7 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 from typing import Sequence, Union
-from yastn import Tensor
+from ...tensor import Tensor
 from ...tn.mps import Mpo
 from ._doublePepsTensor import DoublePepsTensor
 from ._geometry import SquareLattice, CheckerboardLattice, RectangularUnitcell

@@ -125,7 +125,7 @@ def tdvp_(psi, H,
     for t0, t1 in zip(times[:-1], times[1:]):
         steps = int((t1 - t0 - 1e-12) // dt) + 1
         t, ds = t0, (t1 - t0) / steps
-        rsteps = tqdm(range(steps), desc="TDVP...") if progressbar else range(steps)
+        rsteps = tqdm(range(steps), desc="TDVP...", disable=not progressbar)
         for _ in rsteps:
             if order == '2nd':
                 env = routine(t + ds/2, ds, env)

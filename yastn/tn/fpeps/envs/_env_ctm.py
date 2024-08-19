@@ -365,24 +365,97 @@ class EnvCTM(Peps):
         if len(xs) > 1 and len(ys) > 1:
             raise YastnError("Sites should form a horizontal or vertical line.")
 
-        win = EnvWindow(self, (xs[0], xs[-1] + 1), (ys[0], ys[-1] + 1))
+        env_win = EnvWindow(self, (xs[0], xs[-1] + 1), (ys[0], ys[-1] + 1))
         if len(xs) == 1: # horizontal
-            top = win[xs[0], 't']
-            tm = win.transfer_mpo(xs[0], 'h')
-            btm = win[xs[0], 'b']
+            vr = env_win[xs[0], 't']
+            tm = env_win[xs[0], 'h']
+            vl = env_win[xs[0], 'b']
         else:  # len(ys) == 1:  # vertical
-            top = win[ys[0], 'l']
-            tm = win.transfer_mpo(ys[0], 'v')
-            btm = win[ys[0], 'r']
+            vr = env_win[ys[0], 'l']
+            tm = env_win[ys[0], 'v']
+            vl = env_win[ys[0], 'r']
 
-        val_no = mps.vdot(btm, tm, top)
+        val_no = mps.vdot(vl, tm, vr)
 
         for site, op in ops.items():
             ind = site[0] - xs[0] + site[1] - ys[0] + 1
             tm[ind].top = apply_gate_onsite(tm[ind].top, op)
 
-        val_op = mps.vdot(btm, tm, top)
+        val_op = mps.vdot(vl, tm, vr)
         return val_op / val_no
+
+
+    def measure_2site(self, O0, O1, xrange, yrange, opts_svd=None, opts_var=None) -> dict[Site, list]:
+        """
+        Calculate 2-point correlations <o1 o2> between top-left corner of the window, and all sites in the window.
+
+        wip: other combinations of 2-sites and fermionically-nontrivial operators will be coverad latter.
+
+        Parameters
+        ----------
+        O1, O2: yastn.Tensor
+            one-site operators
+
+        xrange: tuple[int, int]
+            range of rows forming a window, [r0, r1); r0 included, r1 excluded.
+
+        yrange: tuple[int, int]
+            range of columns forming a window.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
+            The default is None, in which case take :code:`D_total` as the largest dimension from CTM environment.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
+            The default is None, in which case make 2 variational sweeps.
+        """
+        env_win = EnvWindow(self, xrange, yrange)
+        return env_win.measure_2site(O0, O1, opts_svd=opts_svd, opts_var=opts_var)
+
+
+    def sample(self, xrange, yrange, projectors, number=1, opts_svd=None, opts_var=None, progressbar=False, return_info=False) -> dict[Site, list]:
+        """
+        Sample random configurations from PEPS. Output a dictionary linking sites with lists of sampled projectors` keys for each site.
+
+        It does not check whether projectors sum up to identity -- probabilities of provided projectors get normalized to one.
+        If negative probabilities are observed (signaling contraction errors), error = max(abs(negatives)),
+        and all probabilities below that error level are fixed to error (before consecutive renormalization of probabilities to one).
+
+        Parameters
+        ----------
+        xrange: tuple[int, int]
+            range of rows to sample from, [r0, r1); r0 included, r1 excluded.
+
+        trange: tuple[int, int]
+            range of columns to sample from.
+
+        projectors: Dict[Any, yast.Tensor] | Sequence[yast.Tensor] | Dict[Site, Dict[Any, yast.Tensor]]
+            Projectors to sample from. We can provide a dict(key: projector), where the sampled results will be given as keys,
+            and the same set of projectors is used at each site. For a list of projectors, the keys follow from enumeration.
+            Finally, we can provide a dictionary between each site and sets of projectors.
+
+        number: int
+            Number of drawn samples.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.linalg.svd` used to truncate virtual spaces of boundary MPSs used in sampling.
+            The default is None, in which case take :code:`D_total` as the largest dimension from CTM environment.
+
+        opts_svd: dict
+            Options passed to :meth:`yastn.tn.mps.compression_` used in the refining of boundary MPSs.
+            The default is None, in which case make 2 variational sweeps.
+
+        progressbar: bool
+            Whether to display progressbar. The default is False.
+
+        return_info: bool
+            Whether to include in the outputted dictionary a field :code:`info` with dictionary
+            that contains information about the amplitude of contraction errors
+            (largest negative probability), D_total, etc. The default is False.
+        """
+        env_win = EnvWindow(self, xrange, yrange)
+        return env_win.sample(projectors, number, opts_svd, opts_var, progressbar, return_info)
 
 
     def update_(env, opts_svd, method='2site'):

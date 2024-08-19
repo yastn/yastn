@@ -24,13 +24,14 @@ class Evolution_out(NamedTuple):
     """ All errors and eigenvalues are relative. """
     bond: tuple = None
     truncation_error: float = 0
-    truncation_errors: tuple[float] = ()
-    iterations: tuple[int] = ()
+    best_method: str = ''
     nonhermitian_part: float = 0
-    min_eigenvalue: float = 0
-    wrong_eigenvalues: float = 0
-    EAT_error: float = 0
-    pinv_cutoffs: tuple[float] = ()
+    min_eigenvalue: float = None
+    wrong_eigenvalues: float = None
+    eat_metric_error: float = None
+    truncation_errors: dict[str, float] = ()
+    iterations: dict[str, int] = ()
+    pinv_cutoffs: dict[str, float] = ()
 
 
 def evolution_step_(env, gates, opts_svd, symmetrize=True,
@@ -60,40 +61,40 @@ def evolution_step_(env, gates, opts_svd, symmetrize=True,
     fix_metric: int | None:
         Error_measure of the metric tensor is a sum of: the norm of its non-hermitian part,
         and absolute value of the most negative eigenvalue (if present).
-        If fix_metric is not None, replace eigenvalues smaller than the error_measure
-        by fix_metric * error_measure. Sensible values of fix_metric are 0 and 1. Default is 0.
-        If None, do not perform eigh to test for negative eigenvalues.
-    pinv_cutoffs : Sequence[float] | float
+        If fix_metric is not None, replace eigenvalues smaller than the error_measure by fix_metric * error_measure.
+        Sensible values of fix_metric are 0 and 1. The default is 0.
+        If None, do not perform eigh to test for negative eigenvalues and do not fix metric.
+    pinv_cutoffs: Sequence[float] | float
         List of pseudo-inverse cutoffs.
         The one that gives the smallest truncation error is used during iterative optimizations and EAT initialization.
-    max_iter : int
+    max_iter: int
         The maximal number of iterative steps for each truncation optimization.
-    max_tol : int
+    tol_iter: int
         Tolerance of truncation_error to stop iterative optimization.
-    initialization : str
-        Tested initializations of iterative optimization. The one resulting in smallest error is selected.
-        Possible options are 'SVD' (svd initialization only), 'EAT' (EAT optimization only), 'SVD_EAT' (tries both)
+    initialization: str
+        Tested initializations of iterative optimization. The one resulting in the smallest error is selected.
+        Possible options are 'SVD' (svd initialization only), 'EAT' (EAT optimization only), 'SVD_EAT' (tries both).
 
     Returns
     -------
     Evolution_out(NamedTuple)
         Namedtuple containing fields:
-            * :code:`bond` bond where the gate is applied
-            * :code:`truncation_error` relative norm of the difference between untruncated and truncated bonds, calculated in metric specified by env. The best value.
-            * :code:`truncation_errors` (error2_eat, error2_eat_iter, error2_svd, error2_svd_iter)
-            * :code:`iterations` a number of iterations to iterative optimization convergence (eat_iterations, svd_iterations)
-            * :code:`nonhermitian_part` norm of the non-hermitian part of the bond metric, normalized by its largest eigenvalue. Estimator of a metric error.
-            * :code:`min_eigenvalue` a ratio of the smallest and the largest bond metric eigenvalue. Can be negative which gives an estimate of a metric error.
+            * :code:`bond` bond where the gate is applied.
+            * :code:`truncation_error` relative norm of the difference between untruncated and truncated bonds, calculated in metric specified by env.
+            * :code:`best_method` initialization/optimization method giving the best truncation_error. Possible values are 'eat', 'eat_opt', 'svd', 'svd_opt'.
+            * :code:`nonhermitian_part` norm of the non-hermitian part of the bond metric, normalized by the bond metric norm. Estimator of metric error.
+            * :code:`min_eigenvalue` the smallest bond metric eigenvalue, normalized by the bond metric norm. Can be negative which gives an estimate of metric error.
             * :code:`wrong_eigenvalues` a fraction of bond metrics eigenvalues that were below the error threshold; and were modified according to :code:`fix_metric` argument.
-            * :code:`EAT_error` a ratio of the second largest and the largest bond metric eigenvalue.
-            * :code:`pinv_cutoffs` Optimal pinv_cutoff in (eat, eat_iter, svd_iter).
+            * :code:`eat_metric_error` error of approximating metric tensor by a product via SVD-1 in EAT initialization.
+            * :code:`truncation_errors` dict with truncation_error-s for all tested initializations/optimizations.
+            * :code:`iterations` dict with number of iterations to converge iterative optimization.
+            * :code:`pinv_cutoffs` dict with optimal pinv_cutoffs for methods where pinv appears.
     """
-    infos = []
-
     psi = env.psi
     if isinstance(psi, Peps2Layers):
         psi = psi.ket  # to make it work with CtmEnv
 
+    infos = []
     for gate in gates.local:
         psi[gate.site] = apply_gate_onsite(psi[gate.site], gate.G)
     for gate in gates.nn:
@@ -132,20 +133,18 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
     nonhermitian = (fgf - fgfH).norm() / 2
     fgf = (fgf + fgfH) / 2
 
+    fgf_norm = fgf.norm()
+    info['nonhermitian_part'] = (nonhermitian / fgf_norm).item()
+
     # check metric tensor eigenvalues
     if fix_metric is not None:
         S, U = fgf.eigh(axes=(0, 1))
-        smin, smax = min(S._data), max(S._data)
-
-        info['nonhermitian_part'] = (nonhermitian / smax).item()
-        info['min_eigenvalue'] = (smin / smax).item()
-
+        smin = min(S._data)
+        info['min_eigenvalue'] = (smin / fgf_norm).item()
         g_error = max(-smin, 0) + nonhermitian
         info['wrong_eigenvalues'] = sum(S._data < g_error).item() / len(S._data)
         S._data[S._data < g_error] = g_error * fix_metric
         fgf = U @ S @ U.H
-    else:
-        info['nonhermitian_part'] = (nonhermitian / fgf.norm()).item()
 
     fRR = (R0 @ R1).fuse_legs(axes=[(0, 1)])
     fgRR = fgf @ fRR
@@ -154,43 +153,40 @@ def apply_nn_truncate_optimize_(env, psi, gate, opts_svd,
     pinv_cutoffs = sorted(pinv_cutoffs)
     M0, M1 = R0, R1
     for opts in [opts_svd] if isinstance(opts_svd, dict) else opts_svd:
-        info['pinv_cutoffs'] = []
-        info['iterations'] = []
-        Ms, error2s = [], []
+
+        Ms, error2s, pinvs, iters = {}, {}, {}, {}
 
         if 'EAT' in initialization:
-            M0_eat, M1_eat, error2_eat = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs, info)
-            M0_ite, M1_ite, error2_ite = optimize_truncation(M0_eat, M1_eat, error2_eat, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info)
-            Ms.extend([(M0_eat, M1_eat), (M0_ite, M1_ite)])
-            error2s.extend([error2_eat, error2_ite])
-
+            key = 'eat'
+            Ms[key], error2s[key], pinvs[key], info["eat_metric_error"] = initial_truncation_EAT(M0, M1, fgf, fRR, RRgRR, opts, pinv_cutoffs)
+            key = 'eat_opt'
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['eat'], error2s['eat'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
         if 'SVD' in initialization:
-            M0_svd, M1_svd = symmetrized_svd(M0, M1, opts, normalize=False)
-            error2_svd = calculate_truncation_error2(M0_svd @ M1_svd, fgf, fRR, RRgRR)
-            M0_its, M1_its, error2_its = optimize_truncation(M0_svd, M1_svd, error2_svd, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info)
-            Ms.extend([(M0_svd, M1_svd), (M0_its, M1_its)])
-            error2s.extend([error2_svd, error2_its])
-
+            key = 'svd'
+            Ms[key] = symmetrized_svd(M0, M1, opts, normalize=False)
+            error2s[key] = calculate_truncation_error2(Ms[key][0] @ Ms[key][1], fgf, fRR, RRgRR)
+            key = 'svd_opt'
+            Ms[key], error2s[key], pinvs[key], iters[key] = optimize_truncation(*Ms['svd'], error2s['svd'], fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter)
         if len(Ms) == 0:
             raise YastnError(f"{initialization=} not recognized. Should contain 'SVD' or 'EAT'.")
 
-        ind, error2 = min(enumerate(error2s), key = lambda x: x[1])
-        M0, M1 = Ms[ind]
-
-        info['truncation_errors'] = tuple(x ** 0.5 for x in error2s)
-        info['truncation_error'] = error2 ** 0.5
-        info['pinv_cutoffs'] = tuple(info['pinv_cutoffs'])
-        info['iterations'] = tuple(info['iterations'])
+        error2s = {k: v ** 0.5 for k, v in error2s.items()}
+        key = min(error2s, key=error2s.get)
+        info['best_method'] = key
+        info['truncation_errors'] = error2s
+        info['truncation_error'] = error2s[key]
+        info['pinv_cutoffs'] = pinvs
+        info['iterations'] = iters
+        M0, M1 = Ms[key]
 
     M0, M1 = symmetrized_svd(M0, M1, opts, normalize=True)
     psi[s0], psi[s1] = apply_bond_tensors(Q0f, Q1f, M0, M1, dirn)
-
     return Evolution_out(**info)
 
 
 def accumulated_truncation_error(infoss, statistics='mean'):
     r"""
-    Return accumulated truncation error Delta calcuated from evolution output statistics.
+    Return accumulated truncation error :code:`Delta` calcuated from evolution output statistics.
 
     Delta = sum_steps{statistics(sum_bond truncation_error(bond, step))}
     Gives an estimate of errors accumulated during time evolution.
@@ -228,7 +224,6 @@ def accumulated_truncation_error(infoss, statistics='mean'):
         for info in infos:
             accum[info.bond] = accum.get(info.bond, 0) + info.truncation_error
         Delta += stat(accum.values())
-
     return Delta
 
 
@@ -252,10 +247,10 @@ def calculate_truncation_error2(fMM, fgf, fRR, RRgRR):
     return abs(vdot(delta, fgf @ delta).item()) / RRgRR
 
 
-def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, info):
+def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs):
     """
-    Truncate R0 @ R1 to bond dimension specified in opts_svd,
-    includes information from a product approximation of bond metric.
+    Truncate R0 @ R1 to bond dimension specified in opts_svd
+    including information from a product approximation of bond metric.
     """
     G = fgf.unfuse_legs(axes=1)
     G = tensordot(G, R0, axes=(1, 0))
@@ -268,13 +263,9 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, info
     #
     # rank-1 approximation
     G0, S, G1 = svd_with_truncation(G, axes=((0, 2), (3, 1)), policy='lowrank', D_block=1, D_total=1)
-
-    # maskS = truncation_mask(S, D_total=1)
-    # Srest = maskS.bitwise_not().apply_mask(S, axes=0)
-    info['EAT_error'] = (1 - (S.norm().item() / G.norm().item()) ** 2) ** 0.5
+    fid = (S.norm() / G.norm()).item()
+    eat_metric_error = (max(0., 1 - fid ** 2)) ** 0.5
     #
-    # G0, G1 = maskS.apply_mask(G0, G1, axes=(-1, 0))
-
     G0 = G0.remove_leg(axis=2)
     G1 = G1.remove_leg(axis=0)
     #
@@ -302,11 +293,10 @@ def initial_truncation_EAT(R0, R1, fgf, fRR, RRgRR, opts_svd, pinv_cutoffs, info
             error2_tmp = calculate_truncation_error2(M0_tmp @ M1_tmp, fgf, fRR, RRgRR)
             if error2_tmp < error2:
                 M0, M1, error2, pinv_c = M0_tmp, M1_tmp, error2_tmp, c_off
-    info['pinv_cutoffs'].append(pinv_c)
-    return M0, M1, error2
+    return (M0, M1), error2, pinv_c, eat_metric_error
 
 
-def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter, info):
+def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs, max_iter, tol_iter):
     r"""
     Optimizes the matrices M0 and M1 by minimizing
     truncation error using least square optimization.
@@ -336,9 +326,7 @@ def optimize_truncation(M0, M1, error2_old, fgf, fRR, fgRR, RRgRR, pinv_cutoffs,
             break
         error2_old = error2
 
-    info['pinv_cutoffs'].append(pinv_c)
-    info['iterations'].append(iter)
-    return M0, M1, error2
+    return (M0, M1), error2, pinv_c, iter
 
 
 def optimal_pinv(g, j, pinv_cutoffs, error_fun):
