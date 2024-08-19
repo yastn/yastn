@@ -2,6 +2,9 @@ from .... import ncon
 from .. import Site, Peps, Peps2Layers, EnvCTM
 from .... import Tensor
 from typing import Sequence, Union, TypeVar
+import logging
+log = logging.getLogger(__name__)
+
 Scalar = TypeVar('Scalar')
 
 # from yastn import Tensor, tensordot
@@ -103,6 +106,46 @@ def _append_vec_bl_open(
     return vecbl
 
 
+# utility functions to regularize RDMs and log warnings in case of unphysical RDMs
+def _normalize_and_regularize_rdm(rdm, order : str="interleaved", pos_def=False, who=None, verbosity=0, **kwargs):
+    r"""
+    Regularize reduced density matrix (RDM).
+    
+    Args:
+        order: Index convention of RDM. `"interleaved"` for `[s0, s0', s1, s1', ...]` 
+        where s_i,s_i' is bra,ket pair. `"braket"` for `[s0,s1,...,s0',s1',...]` with all "bra" indices first
+        followed by "ket" indices.
+    """
+    assert rdm.ndim % 2 == 0, "invalid rank of RDM"
+    nsites = rdm.ndim // 2
+
+    trace_axes=None
+    conj_order=None
+    if order=="interleaved":
+        trace_order= (tuple(2*i for i in range(nsites)),tuple(2*i+1 for i in range(nsites)))
+        conj_order= sum(zip(trace_order[1],trace_order[0]),())
+    elif order=="braket":
+        trace_order= (tuple(i for i in range(nsites)),tuple(i+nsites for i in range(nsites)))
+        conj_order= trace_order[1]+trace_order[0]
+    else:
+        raise ValueError(f"order {order} not implemented.")
+
+    # turn RDM into a matrix
+    rdm_asym = 0.5 * (rdm - rdm.conj().transpose(axes=conj_order))
+    rdm = 0.5 * (rdm + rdm.conj().transpose(axes=conj_order))
+    
+    rdm_norm= rdm.trace(axes=trace_order).to_number()
+
+    if verbosity > 0:
+        log.info(f"{who} trace(rdm_sym) {rdm_norm} 2-norm(rdm_sym) {rdm.norm()} 2-norm(rdm_asym) {rdm_asym.norm()}")
+    if pos_def:
+        # shift spectrum such that RDM is non-negative
+        raise NotImplementedError()
+
+    rdm = rdm/rdm_norm
+    return rdm, rdm_norm
+
+
 def trace_aux(rdm : Tensor, axis : int, swap : bool = False) -> Tensor:
     r"""
     This function assumes following index structure of reduced density matrix `rdm`:
@@ -167,7 +210,7 @@ def op_order(Oi, Oj, ordered, fermionic=True):
     return Oi, Oj
 
 
-def rdm1x1(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
+def rdm1x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scalar]:
     r"""
     Contract environment and on-site tensors of 1x1 patch centered at Site `s0`
     to reduced density matrix.
@@ -201,12 +244,12 @@ def rdm1x1(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
 
     # assert rdm.ndim == 2
     rdm_norm = rdm.trace(axes=(0, 1)).to_number()
-    rdm = rdm / rdm_norm
+    rdm, rdm_norm = _normalize_and_regularize_rdm(rdm, who=rdm1x1.__name__)
 
     return rdm, rdm_norm
 
 
-def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
+def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scalar]:
     r"""
     Contract environment and on-site tensors of 1x2 (horizontal) patch,
     with `s0` the leftmost Site, to reduced density matrix::
@@ -258,13 +301,12 @@ def rdm1x2(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     # left or top site needs to be swapped with the physical legs
     rdm = trace_aux(rdm, 0, swap=True)
     rdm = trace_aux(rdm, 2, swap=False)
-    rdm_norm = rdm.trace(axes=((0, 2), (1, 3))).to_number()
-    rdm = rdm / rdm_norm
+    rdm, rdm_norm = _normalize_and_regularize_rdm(rdm, who=rdm1x2.__name__)
 
     return rdm, rdm_norm
 
 
-def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
+def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scalar]:
     r"""
     Contract environment and on-site tensors of 2x1 (vertical) patch,
     with `s0` the top-most Site, to reduced density matrix::
@@ -320,14 +362,12 @@ def rdm2x1(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     rdm = res.unfuse_legs(axes=(0, 1))  # s0 s0' s1 s1'
     rdm = trace_aux(rdm, 0, swap=True)
     rdm = trace_aux(rdm, 2, swap=False)
-
-    rdm_norm = rdm.trace(axes=((0, 2), (1, 3))).to_number()
-    rdm = rdm / rdm_norm
+    rdm, rdm_norm= _normalize_and_regularize_rdm(rdm, who=rdm2x1.__name__)
 
     return rdm, rdm_norm
 
 
-def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
+def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scalar]:
     r"""
     Contract environment and on-site tensors of 2x2 patch,
     with `s0` the upper-left Site, to reduced density matrix::
@@ -410,9 +450,7 @@ def rdm2x2(s0 : Site, psi : Peps, env : EnvCTM) -> tuple[Tensor, Scalar]:
     rdm = trace_aux(rdm, 2, swap=False)
     rdm = trace_aux(rdm, 4, swap=True)
     rdm = trace_aux(rdm, 6, swap=False)
-
-    rdm_norm = rdm.trace(axes=((0, 2, 4, 6), (1, 3, 5, 7))).to_number()
-    rdm = rdm / rdm_norm
+    rdm, rdm_norm= _normalize_and_regularize_rdm(rdm, who=rdm2x1.__name__)
 
     return rdm, rdm_norm
 
