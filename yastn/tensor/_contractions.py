@@ -466,7 +466,7 @@ def swap_gate(a, axes, charge=None) -> yastn.Tensor:
     charge: Optional[Sequence[int]]
         If provided, the swap gate is applied between a virtual one-dimensional leg
         of specified charge, e.g., a fermionic string, and tensor legs specified in axes.
-        In this case, there is no application of swap gates on legs specified in axes.
+        In this case, there is no application of swap gates between legs specified in axes.
     """
     if not a.config.fermionic:
         return a

@@ -321,12 +321,17 @@ class Env2(EnvParent):
         return self.factor() * tmp.to_number()
 
     def update_env_(self, n, to='last'):
+
         if to == 'first':
-            inds = ((-0, 2, 1), (1, 3), (-1, 2, 3)) if self.nr_phys == 1 else ((-0, 2, 1, 4), (1, 3), (-1, 2, 3, 4))
-            self.F[(n, n - 1)] = ncon([self.ket[n], self.F[(n + 1, n)], self.bra[n].conj()], inds)
-        elif to == 'last':
-            inds = ((2, 3, -0), (2, 1), (1, 3, -1)) if self.nr_phys == 1 else ((2, 3, -0, 4), (2, 1), (1, 3, -1, 4))
-            self.F[(n, n + 1)] = ncon([self.bra[n].conj(), self.F[(n - 1, n)], self.ket[n]], inds)
+            temp = tensordot(self.ket[n], self.F[(n + 1, n)], axes=(2, 0))
+            temp = temp.swap_gate(axes=1, charge=self.F[(n + 1, n)].n)
+            axes = ((1, 2), (1, 2)) if self.nr_phys == 1 else ((1, 3, 2), (1, 2, 3))
+            self.F[(n, n - 1)] = tensordot(temp, self.bra[n].conj(), axes=axes)
+        else:  # to == 'last'
+            temp = tensordot(self.F[(n - 1, n)], self.ket[n], axes=((1, 0)))
+            temp = temp.swap_gate(axes=1, charge=self.F[(n - 1, n)].n)
+            axes = ((0, 1), (0, 1)) if self.nr_phys == 1 else ((0, 1, 3), (0, 1, 3))
+            self.F[(n, n + 1)] = tensordot(self.bra[n].conj(), temp, axes=axes)
 
     def Heff0(self, C, bd):
         raise YastnError("Should not be triggered by current higher-level functions.")  # pragma: no cover
@@ -349,25 +354,26 @@ class Env2(EnvParent):
             temp = temp.transpose(axes=(0, 1, 2, 3, 5, 4))
         return temp
 
-    def update_env_op_(self, n, op, to='first'):
+    def update_env_op_(self, n, op, to='first', later=True):
         """
         Contractions for 2-layer environment update, with on-site operator ``op`` applied on site ``n``.
+
+        If operator has a charge, applies swap-gate and carries it in environment;
+        There should be no other source of non-zero environment charge -- MPS tensors should have zero charge.
+        Currently, it does not apply swap-gates with previous non-zero charges in environment.
+        As such, it should be only used once per direction, i.e., for 2-site operators.
         """
         if to == 'first':
             temp = tensordot(self.ket[n], self.F[(n + 1, n)], axes=(2, 0))
-            op = op.add_leg(axis=0, s=1)
-            temp = tensordot(op, temp, axes=(2, 1))
-            temp = temp.swap_gate(axes=(0, 2))
-            temp = temp.remove_leg(axis=0)
+            temp = tensordot(op, temp, axes=(1, 1))
             axes = ((0, 2), (1, 2)) if self.nr_phys == 1 else ((0, 3, 2), (1, 2, 3))
             self.F[(n, n - 1)] = tensordot(temp, self.bra[n].conj(), axes=axes)
         else:  # to == 'last'
-            op = op.add_leg(axis=0, s=1)
-            temp = tensordot(op, self.ket[n], axes=((2, 1)))
-            temp = temp.swap_gate(axes=(0, 2))
-            temp = temp.remove_leg(axis=0)
-            temp = tensordot(self.F[(n - 1, n)], temp, axes=((1, 1)))
-            axes = ((0, 1), (0, 1)) if self.nr_phys == 1 else ((0, 1, 3), (0, 1, 3))
+            to_swap = 1 if later else 0
+            op = op.swap_gate(axes=to_swap, charge=op.n)
+            temp = tensordot(self.F[(n - 1, n)], self.ket[n], axes=((1, 0)))
+            temp = tensordot(op, temp, axes=((1, 1)))
+            axes = ((0, 1), (1, 0)) if self.nr_phys == 1 else ((0, 1, 3), (1, 0, 3))
             self.F[(n, n + 1)] = tensordot(self.bra[n].conj(), temp, axes=axes)
 
     def charges_missing(self, n):

@@ -262,56 +262,8 @@ def test_mpo_spectrum(sym, config, tol=1e-12):
     assert abs(entropies[0]) < tol and abs(entropies[-1]) < tol
 
 
-# def test_measurment_raise(config=cfg):
-#     opts_config = {} if config is None else \
-#                     {'backend': config.backend,
-#                     'default_device': config.default_device}
-#     # pytest uses config to inject various backends and devices for testing
-#     ops = yastn.operators.Spin1(sym='dense', **opts_config)
-#     #
-#     # take 3 orthogonal operator-product states
-#     #
-#     H7 = mps.product_mpo(ops.sz(), N=7)
-#     psi7 = mps.product_mps(ops.vec_z(), N=7)
-#     psi8 = mps.product_mps(ops.vec_z(), N=8)
-
-    # with pytest.raises(yastn.YastnError):
-    #     mps.vdot(psi7, psi8)
-    #     # MpsMpoOBC for bra and ket should have the same number of sites.
-    # with pytest.raises(yastn.YastnError):
-    #     mps.vdot(psi7, H7)
-    #     # MpsMpoOBC for bra and ket should have the same number of physical legs.
-
-
-# def correlation_matrix(psi, ops):
-#     """ Calculate correlation matrix for Mps psi  C[m,n] = <c_n^dag c_m>"""
-#     assert pytest.approx(psi.norm().item()) == 1
-#     N = psi.N
-#     # first approach: directly act with c operators on state psi
-#     I = mps.product_mpo(ops.I(), N)
-#     cns = [mps.generate_mpo(I, [mps.Hterm(1, [n], [ops.c()])]) for n in range(N)]
-#     ps = [cn @ psi for cn in cns]
-#     C = np.zeros((N, N), dtype=np.complex128)
-#     for m in range(N):
-#         for n in range(N):
-#             C[m, n] = mps.vdot(ps[n], ps[m])
-
-#     # second approach: use measure_1site() and measure_2site()
-#     occs = mps.measure_1site(psi, ops.n(), psi)
-#     cpc = mps.measure_2site(psi, ops.cp(), ops.c(), psi)
-#     C2 = np.zeros((N, N), dtype=np.complex128)
-#     for n, v in occs.items():
-#         C2[n, n] = v
-#     for (n1, n2), v in cpc.items():
-#         C2[n2, n1] = v
-#         C2[n1, n2] = v.conj()
-#     assert np.allclose(C, C2)
-#     return C
-
-
 if __name__ == "__main__":
     measure_mps_aklt()
-    test_measurment_raise()
     for sym in ['dense', 'Z3', 'U1']:
         mps_spectrum_ghz(sym=sym)
         test_mpo_spectrum(sym=sym, config=cfg)
