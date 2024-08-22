@@ -77,11 +77,13 @@ def measure_mpo(bra, op: MpsMpoOBC | Sequence[tuple(MpsMpoOBC, number)], ket) ->
     return env.measure(bd=(-1, 0))
 
 
-def measure_1site(bra, O, ket) -> dict[int, number]:
+def measure_1site(bra, O, ket, sites=None) -> dict[int, number]:
     r"""
-    Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i|\textrm{ket} \rangle` for local operator :code:`O` at each lattice site `i`.
+    Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i|\textrm{ket} \rangle` for local operator :code:`O` at sites `i`.
 
     Local operators can be provided as dictionary {site: operator}, limiting the calculation to provided sites.
+    A list of sites can be also directly provided.
+
     Conjugate of MPS :code:`bra` is computed internally.
 
     Parameters
@@ -94,21 +96,39 @@ def measure_1site(bra, O, ket) -> dict[int, number]:
         It is possible to provide a dictionary {site: operator}
 
     ket: yastn.tn.mps.MpsMpoOBC
+
+    sites: int | Sequence[int] | None
+        Which 1-sites observables to calculate.
+        For a single site, int, return float; otherwise return dict[site, float]
+        The default is None, in which case the calculation is done for all sites.
     """
-    op = sorted(O.items()) if isinstance(O, dict) else [(n, O) for n in ket.sweep(to='last')]
+    return_float = False
+    if sites is None:
+        sites = list(range(ket.N))
+    if isinstance(sites, int):  # single site
+        sites = [sites]
+        return_float = True
+
+    usites = sorted(set(sites))
+    if isinstance(O, dict):
+        op = {k: O[k] for k in usites if k in O}
+    else:
+        op = {k: O for k in usites}
+
+    results = {}
     env = Env(bra, ket)
     env.setup_(to='first').setup_(to='last')
-    results = {}
-    for n, o in op:
+    for n, o in op.items():
         env.update_env_op_(n, o, to='first')
         results[n] = env.measure(bd=(n - 1, n))
-    return results
+
+    return results.popitem()[1] if return_float else results
 
 
-def measure_2site(bra, O, P, ket, pairs=None) -> dict[tuple[int, int], number]:
+def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | float:
     r"""
     Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i \textrm{P}_j|\textrm{ket} \rangle`
-    of local operators :code:`O` and :code:`P` for each pair of lattice sites :math:`i < j`.
+    of local operators :code:`O` and :code:`P` for pairs of lattice sites :math:`i, j`.
 
     Conjugate of MPS :code:`bra` is computed internally.
     Includes fermionic strings via swap_gate for fermionic operators.
@@ -124,12 +144,34 @@ def measure_2site(bra, O, P, ket, pairs=None) -> dict[tuple[int, int], number]:
 
     ket: yastn.tn.mps.MpsMpoOBC
 
-    pairs: list[tuple[int, int]]
-        It is possible to provide a list of pairs to limit the calculation.
-        By default is None, when all pairs are calculated.
+    bonds: tuple[int, int] | Sequence[tuple[int, int]] | str
+        Which 2-site correlators to calculate.
+        For a single bond, tuple[int, int], return float; otherwise return dict[bond, float]
+        It is possible to provide a string to build list of bonds:
+
+            '<' - all i < j
+            '=' - all i == j
+            '>' - all i > j
+            'a' - all i, j; equivalent to "<=>"
+            'rx' - all i, i+x with OBC, e.g. "r1" for nearest-neighbours; x can be negative
+            'p' - in the above, include terms for PBC
+
+        The default is '<'.
     """
-    if pairs is None:
-        pairs = [(i, j) for i in range(ket.N - 1, -1, -1) for j in range(i + 1, ket.N)]
+    return_float = False
+    if isinstance(bonds, str):
+        pairs = _parse_2site_bonds(bonds, ket.N)
+    elif isinstance(bonds[0], int):  # single bond
+        pairs = [bonds]
+        return_float = True
+    else:
+        pairs = bonds
+
+    if not isinstance(O, dict):
+        O = {k: O for k in range(ket.N)}
+    if not isinstance(P, dict):
+        P = {k: P for k in range(ket.N)}
+    pairs = [(n0, n1) for n0, n1 in pairs if (n0 in O and n1 in P)]
 
     s0s1 = [pair for pair in pairs if pair[0] < pair[1]]
     s1s0 = [pair[::-1] for pair in pairs if pair[0] > pair[1]]
@@ -147,9 +189,9 @@ def measure_2site(bra, O, P, ket, pairs=None) -> dict[tuple[int, int], number]:
 
     env = env0.shallow_copy()
     for n1 in s1s:
-        env.update_env_op_(n1, P, to='first')
+        env.update_env_op_(n1, P[n1], to='first')
     for n0, n01s in groupby(s0s1, key=lambda x: x[0]):
-        env.update_env_op_(n0, O, to='last', later=True)
+        env.update_env_op_(n0, O[n0], to='last', later=True)
         n = n0
         for _, n1 in n01s:
             while n + 1 < n1:
@@ -159,9 +201,9 @@ def measure_2site(bra, O, P, ket, pairs=None) -> dict[tuple[int, int], number]:
 
     env = env0.shallow_copy()
     for n1 in s0s:
-        env.update_env_op_(n1, O, to='first')
+        env.update_env_op_(n1, O[n1], to='first')
     for n0, n01s in groupby(s1s0, key=lambda x: x[0]):
-        env.update_env_op_(n0, P, to='last', later=False)
+        env.update_env_op_(n0, P[n0], to='last', later=False)
         n = n0
         for _, n1 in n01s:
             while n + 1 < n1:
@@ -171,7 +213,31 @@ def measure_2site(bra, O, P, ket, pairs=None) -> dict[tuple[int, int], number]:
 
     env = env0.shallow_copy()
     for n0 in s0s0:
-        env.update_env_op_(n0, O @ P, to='first')
+        env.update_env_op_(n0, O[n0] @ P[n0], to='first')
         results[(n0, n0)] = env.measure(bd=(n0 - 1, n0))
 
-    return {k: results[k] for k in pairs}
+    return results.popitem()[1] if return_float else results
+
+
+def _parse_2site_bonds(bonds, N):
+    if 'a' in bonds:
+        return [(i, j) for i in range(N) for j in range(N)]
+    pairs = []
+    if '<' in bonds:
+        pairs += [(i, j) for i in range(N) for j in range(i + 1, N)]
+        bonds = bonds.replace('<', '')
+    if '=' in bonds:
+        pairs += [(i, i) for i in range(N)]
+        bonds = bonds.replace('=', '')
+    if '>' in bonds:
+        pairs += [(i, j) for i in range(N) for j in range(i)]
+        bonds = bonds.replace('>', '')
+    pbc = False
+    if 'p' in bonds:
+        pbc = True
+        bonds = bonds.replace('p', '')
+    if 'r' in bonds:  # only "r" are left
+        for r in bonds.split('r')[1:]:
+            r = int(r)
+            pairs += [(i, (i + r) % N) for i in range(N if pbc else N - r)]
+    return sorted(set(pairs))

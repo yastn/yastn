@@ -80,6 +80,9 @@ def test_build_mpo_hopping_Hterm(config=cfg, tol=1e-12):
 
     N = 35
     J = np.triu(np.random.rand(N, N))
+    #
+    # we make it hermitian
+    J += np.tril(J.T, 1).conj()
 
     for sym, n in [('Z2', (0,)), ('U1', (N // 2,))]:
         H = build_mpo_hopping_Hterm(J, sym=sym, config=config)
@@ -90,16 +93,15 @@ def test_build_mpo_hopping_Hterm(config=cfg, tol=1e-12):
         E1 = mps.vdot(psi, H, psi)
 
         cp, c = ops.cp(), ops.c()
-        epm = mps.measure_2site(psi, cp, c, psi)
-        en = mps.measure_1site(psi, cp @ c, psi)
-        E2 = sum(J[n1, n2] * 2 * epm[(n1, n2)].real for n1 in range(N) for n2 in range(n1 + 1, N))
-        E2 += sum(J[n, n] * en[n] for n in range(N))
+        ecpc = mps.measure_2site(psi, cp, c, psi, bonds='a')
+        assert len(ecpc) == N * N
+        E2 = sum(J[n1, n2] * v for (n1, n2), v in ecpc.items())
 
         assert pytest.approx(E1.item(), rel=tol) == E2.item()
 
-        emp = mps.measure_2site(psi, c, cp, psi)
-        assert all(abs(emp[k].conj() + epm[k]) < tol for k in emp)
-        assert len(emp) == len(epm) == N * (N - 1) / 2
+        eccp = mps.measure_2site(psi, c, cp, psi, bonds="<")  # defaulf bonds
+        assert all(abs(eccp[k].conj() + ecpc[k]) < tol for k in eccp)
+        assert len(eccp) == N * (N - 1) / 2
 
 
 def test_generate_mpo_raise(config=cfg):

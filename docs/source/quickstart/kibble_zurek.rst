@@ -110,12 +110,10 @@ We compare the results obtained using MPS and PEPS routines.
         # Calculating 1-site <Z_i> for all sites
         Ez_peps = env.measure_1site(ops.z())
         #
-        # Calculating 2-site <X_i X_j> for all pairs
+        # Calculating 2-site <X_i X_j> for all pairs i <= j
         Exx_peps = env.measure_2site(ops.x(), ops.x(),
                                     opts_svd=opts_svd_env,
                                     opts_var=opts_var_env)
-        # remove diagonal for easier comparison with MPS
-        Exx_peps = {bd: v for bd, v in Exx_peps.items() if bd[0] != bd[1]}
 
 
 4. *MPS simulations*:
@@ -160,7 +158,7 @@ We compare the results obtained using MPS and PEPS routines.
         #
         # calculate expectation values
         Ez_mps = mps.measure_1site(psi, ops.z(), psi)
-        Exx_mps = mps.measure_2site(psi, ops.x(), ops.x(), psi)
+        Exx_mps = mps.measure_2site(psi, ops.x(), ops.x(), psi, bonds="<=")
 
 5. *Compare results of PEPS and MPS*:
     .. code-block:: python

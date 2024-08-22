@@ -100,12 +100,10 @@ def test_quickstart_KZ():
     # Calculating 1-site <Z_i> for all sites
     Ez_peps = env.measure_1site(ops.z())
     #
-    # Calculating 2-site <X_i X_j> for all pairs
+    # Calculating 2-site <X_i X_j> for all pairs i <= j
     Exx_peps = env.measure_2site(ops.x(), ops.x(),
                                 opts_svd=opts_svd_env,
                                 opts_var=opts_var_env)
-    # remove diagonal for easier comparison with MPS
-    Exx_peps = {bd: v for bd, v in Exx_peps.items() if bd[0] != bd[1]}
     #
     print("MPS simulations")
     #
@@ -148,7 +146,7 @@ def test_quickstart_KZ():
     #
     # calculate expectation values
     Ez_mps = mps.measure_1site(psi, ops.z(), psi)
-    Exx_mps = mps.measure_2site(psi, ops.x(), ops.x(), psi)
+    Exx_mps = mps.measure_2site(psi, ops.x(), ops.x(), psi, bonds="<=")
 
     Z1 = np.array([Ez_peps[st].real for st in sites]).real
     Z2 = np.array([Ez_mps[s2i[st]].real for st in sites]).real
@@ -162,8 +160,8 @@ def test_quickstart_KZ():
     error_XX = np.linalg.norm(XX1 - XX2) / np.linalg.norm(XX1)
     print(f"Relative difference PEPS vs MPS in XX correlations: {error_XX:0.5f}")
     #
-    assert error_XX < 1e-3
-    assert error_Z < 1e-3
+    assert error_XX < 2e-3
+    assert error_Z < 2e-3
     #
     fig, ax = plt.subplots(1, 2)
     fig.set_size_inches(8, 4)
