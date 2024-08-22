@@ -302,7 +302,7 @@ def splitt(b, eq_it):
     return operation, list(map(lambda x: splitt(x, (eq_it + 1)%len(basic_operation)), tunnel))
 
 def string2list(c0):
-    """
+    r"""
     Helper function.
 
     Take the latex-like intruction in a form of a string and put in an input format
@@ -330,12 +330,12 @@ def string2list(c0):
     else:
         # replace muiltiple spaces with a single space
         c0 = c0.replace("-", " + minus * ")
-        c0 = c0.replace("\sum_", " sum ")
+        c0 = c0.replace(r"\sum_", " sum ")
         for ix in ["+","*","(",")"]:
             c0 = c0.replace(ix, " "+ix+" ")
         c0 = " ".join(c0.split())
-        c0 = c0.replace(" \in", "\in").replace("\in ", "\in")
-        c0 = c0.replace("\in", ".in.")
+        c0 = c0.replace(r" \in", r"\in").replace(r"\in ", r"\in")
+        c0 = c0.replace(r"\in", ".in.")
         return c0.split(" ")
 
 
