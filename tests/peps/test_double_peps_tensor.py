@@ -41,7 +41,7 @@ def test_double_peps_tensor():
     # we keep the legs [t l] [b r] fused for efficiency of higher symmetries
 
     # create double peps tensor
-    T0123 = fpeps.DoublePepsTensor(top=A, btm=A)
+    T0123 = fpeps.DoublePepsTensor(bra=A, ket=A)
     f0123 = T0123.fuse_layers()
     assert T0123.get_shape() == (25, 16, 9, 4)
     assert f0123.get_shape() == (25, 16, 9, 4)
@@ -50,8 +50,8 @@ def test_double_peps_tensor():
     co0123 = T0123.copy()
     cl0123 = T0123.clone()
     for tmp in  [co0123, cl0123]:
-        assert yastn.are_independent(tmp.top, T0123.top)
-        assert yastn.are_independent(tmp.btm, T0123.btm)
+        assert yastn.are_independent(tmp.ket, T0123.ket)
+        assert yastn.are_independent(tmp.bra, T0123.bra)
 
     T1230 = T0123.transpose(axes=(1, 2, 3, 0))
     f1230 = T1230.fuse_layers()
@@ -173,7 +173,7 @@ def test_double_peps_tensor():
         T0123.transpose(axes=(1, 0, 2, 3))
         # DoublePEPSTensor only supports permutations that retain legs' ordering.
     with pytest.raises(yastn.YastnError):
-        fpeps.DoublePepsTensor(top=A, btm=A, transpose=(1, 2, 0, 3))
+        fpeps.DoublePepsTensor(bra=A, ket=A, transpose=(1, 2, 0, 3))
         # DoublePEPSTensor only supports permutations that retain legs' ordering.
     with pytest.raises(yastn.YastnError):
         T1230._attach_12(t12)

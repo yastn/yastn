@@ -147,13 +147,13 @@ class EnvWindow:
         env = mps.Env(vecc, [tm, vec]).setup_(to='first').setup_(to='last')
         norm_env = env.measure(bd=(0, 1))
         # calculate on-site correlations
-        top0 = tm[ix0].top
+        top0 = tm[ix0].ket
         for nz1, o1 in O1dict[nx0, ny0].items():
-            tm[ix0].top = apply_gate_onsite(top0, O0 @ o1)
+            tm[ix0].ket = apply_gate_onsite(top0, O0 @ o1)
             env.update_env_(ix0, to='first')
             out[(nx0, ny0), (nx0, ny0) + nz1] = env.measure(bd=(ix0-1, ix0)) / norm_env
 
-        tm[ix0].top = apply_gate_onsite(top0, O0)
+        tm[ix0].ket = apply_gate_onsite(top0, O0)
         env.setup_(to='last')
 
         if ny0 < self.yrange[1] - 1:
@@ -161,9 +161,9 @@ class EnvWindow:
             mps.compression_(vec_O0_next, (tm, vec), method='1site', normalize=False, **opts_var)
 
         for ix1, nx1 in enumerate(range(nx0+1, self.xrange[1]), start=nx0-self.xrange[0]+2):
-            top1 = tm[ix1].top
+            top1 = tm[ix1].ket
             for nz1, o1 in O1dict[nx1, ny0].items():
-                tm[ix1].top = apply_gate_onsite(top1, o1)
+                tm[ix1].ket = apply_gate_onsite(top1, o1)
                 env.update_env_(ix1, to='first')
                 out[(nx0, ny0), (nx1, ny0) + nz1] = env.measure(bd=(ix1-1, ix1)) / norm_env
 
@@ -180,9 +180,9 @@ class EnvWindow:
 
             env = mps.Env(vecc, [tm, vec_O0]).setup_(to='last').setup_(to='first')
             for ix1, nx1 in enumerate(range(*self.xrange), start=1):
-                top1 = tm[ix1].top
+                top1 = tm[ix1].ket
                 for nz1, o1 in O1dict[nx1, ny0].items():
-                    tm[ix1].top = apply_gate_onsite(top1, o1)
+                    tm[ix1].ket = apply_gate_onsite(top1, o1)
                     env.update_env_(ix1, to='first')
                     out[(nx0, ny0), (nx1, ny1) + nz1] = env.measure(bd=(ix1-1, ix1)) / norm_env
         return out
@@ -230,11 +230,11 @@ class EnvWindow:
                 env = mps.Env(vecc, [tm, vec]).setup_(to='first')
                 env.update_env_(0, to='last')
                 for ix, nx in enumerate(range(*self.xrange), start=1):
-                    top = tm[ix].top
+                    top = tm[ix].ket
                     norm_prob = env.measure(bd=(ix-1, ix)).item()
                     prob = []
                     for proj in projs_sites[(nx, ny), 'p']:
-                        tm[ix].top = apply_gate_onsite(top, proj)
+                        tm[ix].ket = apply_gate_onsite(top, proj)
                         env.update_env_(ix, to='last')
                         prob.append(env.measure(bd=(ix, ix+1)).item() / norm_prob)
                     error = abs(min(0., *(x.real for x in prob))) + max(abs(x.imag) for x in prob)
@@ -245,7 +245,7 @@ class EnvWindow:
                     prob = [x / norm_prob for x in prob]
                     ind = sum(apr < rands[count] for apr in accumulate(prob))
                     out[nx, ny].append(projs_sites[(nx, ny), 'k'][ind])
-                    tm[ix].top = apply_gate_onsite(top, projs_sites[(nx, ny), 'p'][ind])
+                    tm[ix].ket = apply_gate_onsite(top, projs_sites[(nx, ny), 'p'][ind])
                     env.update_env_(ix, to='last')
                     count += 1
                 if ny + 1 < self.yrange[1]:

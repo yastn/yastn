@@ -107,9 +107,9 @@ class EnvBoundaryMps:
             norm_env = env.measure()
             for nx in range(Nx):
                 if (nx, ny) in opdict:
-                    Osnx1A = Os[nx].top
+                    Osnx1A = Os[nx].ket
                     for nz, o in opdict[nx, ny].items():
-                        Os[nx].top = apply_gate_onsite(Osnx1A, o)
+                        Os[nx].ket = apply_gate_onsite(Osnx1A, o)
                         env.update_env_(nx, to='first')
                         out[(nx, ny) + nz] = env.measure(bd=(nx-1, nx)) / norm_env
         return out
@@ -148,13 +148,13 @@ class EnvBoundaryMps:
                     mps.compression_(vRnext, (Os, vR), method='1site', normalize=False, **opts_var)
 
                 # first calculate on-site correlations
-                Osnx1A = Os[nx1].top
+                Osnx1A = Os[nx1].ket
                 for nz2, o2 in op2dict[nx1, ny1].items():
-                    Os[nx1].top = apply_gate_onsite(Osnx1A, o1 @ o2)
+                    Os[nx1].ket = apply_gate_onsite(Osnx1A, o1 @ o2)
                     env.update_env_(nx1, to='last')
                     out[(nx1, ny1) + nz1, (nx1, ny1) + nz2] = env.measure(bd=(nx1, nx1+1)) / norm_env
 
-                Os[nx1].top = apply_gate_onsite(Osnx1A, o1)
+                Os[nx1].ket = apply_gate_onsite(Osnx1A, o1)
                 env.setup_(to='last')
 
                 if ny1 > 0:
@@ -163,9 +163,9 @@ class EnvBoundaryMps:
 
                 # calculate correlations along the row
                 for nx2 in range(nx1 + 1, Nx):
-                    Osnx2A = Os[nx2].top
+                    Osnx2A = Os[nx2].ket
                     for nz2, o2 in op2dict[nx2, ny1].items():
-                        Os[nx2].top = apply_gate_onsite(Osnx2A, o2)
+                        Os[nx2].ket = apply_gate_onsite(Osnx2A, o2)
                         env.update_env_(nx2, to='first')
                         out[(nx1, ny1) + nz1, (nx2, ny1) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
 
@@ -186,9 +186,9 @@ class EnvBoundaryMps:
 
                     env = mps.Env(vL, [Os, vRo1]).setup_(to='first').setup_(to='last')
                     for nx2 in range(psi.Nx):
-                        Osnx2A = Os[nx2].top
+                        Osnx2A = Os[nx2].ket
                         for nz2, o2 in op2dict[nx2, ny2].items():
-                            Os[nx2].top = apply_gate_onsite(Osnx2A, o2)
+                            Os[nx2].ket = apply_gate_onsite(Osnx2A, o2)
                             env.update_env_(nx2, to='first')
                             out[(nx1, ny1) + nz1, (nx2, ny2) + nz2] = env.measure(bd=(nx2-1, nx2)) / norm_env
         return out
@@ -221,7 +221,7 @@ class EnvBoundaryMps:
                 norm_prob = env.measure(bd=(nx - 1, nx))
                 for proj in loc_projectors:
                     dpt_pr = dpt.copy()
-                    dpt_pr.top = apply_gate_onsite(dpt_pr.top, proj)
+                    dpt_pr.ket = apply_gate_onsite(dpt_pr.ket, proj)
                     Os[nx] = dpt_pr
                     env.update_env_(nx, to='last')
                     prob.append(env.measure(bd=(nx, nx+1)) / norm_prob)
@@ -230,7 +230,7 @@ class EnvBoundaryMps:
                 rand = rands[count]
                 ind = sum(apr < rand for apr in accumulate(prob))
                 out[nx, ny] = ind
-                dpt.top = apply_gate_onsite(dpt.top, loc_projectors[ind])
+                dpt.ket = apply_gate_onsite(dpt.ket, loc_projectors[ind])
                 Os[nx] = dpt  # updated with the new collapse
                 env.update_env_(nx, to='last')
                 count += 1
