@@ -26,7 +26,7 @@ def test_quickstart_KZ():
     import yastn
     import yastn.tn.mps as mps
     import yastn.tn.fpeps as peps
-    from yastn.tn.fpeps.gates import gate_nn_Ising, gate_local_Ising
+    from yastn.tn.fpeps.gates import gate_nn_Ising, gate_local_field
     #
     # Employ PEPS lattice geometry for sites and bonds
     Lx, Ly = 4, 4  # lattice size
@@ -60,7 +60,7 @@ def test_quickstart_KZ():
             gt = gate_nn_Ising(J * fXX(s), dt2, ops.I(), ops.x(), bond)
             nn.append(gt)
         for site in sites:
-            gt = gate_local_Ising(fZ(s), dt2, ops.I(), ops.z(), site)
+            gt = gate_local_field(fZ(s), dt2, ops.I(), ops.z(), site)
             local.append(gt)
         return peps.Gates(nn=nn, local=local)
     #

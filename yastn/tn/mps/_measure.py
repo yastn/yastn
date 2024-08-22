@@ -82,7 +82,7 @@ def measure_1site(bra, O, ket, sites=None) -> dict[int, number]:
     Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i|\textrm{ket} \rangle` for local operator :code:`O` at sites `i`.
 
     Local operators can be provided as dictionary {site: operator}, limiting the calculation to provided sites.
-    A list of sites can be also directly provided.
+    A list of sites can also be provided.
 
     Conjugate of MPS :code:`bra` is computed internally.
 
@@ -140,21 +140,21 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
 
     O, P: yastn.Tensor or dict
         Operators with signature (1, -1).
-        It is possible to provide a dictionaries {site: operator}
+        Each can also be a dictionary {site: operator}
 
     ket: yastn.tn.mps.MpsMpoOBC
 
     bonds: tuple[int, int] | Sequence[tuple[int, int]] | str
         Which 2-site correlators to calculate.
-        For a single bond, tuple[int, int], return float; otherwise return dict[bond, float]
-        It is possible to provide a string to build list of bonds:
+        For a single bond, tuple[int, int], return float. Otherwise, return dict[bond, float].
+        It is possible to provide a string to build a list of bonds as:
 
-            '<' - all i < j
-            '=' - all i == j
-            '>' - all i > j
-            'a' - all i, j; equivalent to "<=>"
-            'rx' - all i, i+x with OBC, e.g. "r1" for nearest-neighbours; x can be negative
-            'p' - in the above, include terms for PBC
+        * '<' for all i < j.
+        * '=' for all i == j.
+        * '>' for all i > j.
+        * 'a' for all i, j; equivalent to "<=>".
+        * 'rx' for all i, i+x with OBC, e.g. "r1" for nearest-neighbours; x can be negative.
+        * 'p' to include PBC terms in 'rx'.
 
         The default is '<'.
     """

@@ -56,7 +56,7 @@ one-site :meth:`yastn.tn.fpeps.EnvCTM.measure_1site` and
 two-site nearest-neighbor observables :meth:`yastn.tn.fpeps.EnvCTM.measure_nn`.
 
 .. autoclass:: yastn.tn.fpeps.EnvCTM
-    :members: save_to_dict, reset_, bond_metric, update_, measure_1site, measure_nn
+    :members: save_to_dict, reset_, bond_metric, update_, ctmrg_, measure_1site, measure_nn, sample
 
 .. autoclass:: yastn.tn.fpeps.EnvCTM_local
 
