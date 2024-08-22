@@ -110,7 +110,8 @@ def measure_2site(bra, O, P, ket, pairs=None) -> dict[tuple[int, int], number]:
     Calculate expectation values :math:`\langle \textrm{bra}|\textrm{O}_i \textrm{P}_j|\textrm{ket} \rangle`
     of local operators :code:`O` and :code:`P` for each pair of lattice sites :math:`i < j`.
 
-    Conjugate of MPS :code:`bra` is computed internally. Includes fermionic strings via swap_gate for fermionic operators.
+    Conjugate of MPS :code:`bra` is computed internally.
+    Includes fermionic strings via swap_gate for fermionic operators.
 
     Parameters
     -----------
@@ -127,29 +128,50 @@ def measure_2site(bra, O, P, ket, pairs=None) -> dict[tuple[int, int], number]:
         It is possible to provide a list of pairs to limit the calculation.
         By default is None, when all pairs are calculated.
     """
-    if pairs is not None:
-        n1s = sorted(set(x[1] for x in pairs))
-        pairs = sorted((-i, j) for i, j in pairs)
-        pairs = [(-i, j) for i, j in pairs]
-    else:
-        n1s = range(ket.N)
+    if pairs is None:
         pairs = [(i, j) for i in range(ket.N - 1, -1, -1) for j in range(i + 1, ket.N)]
 
-    env = Env(bra, ket)
-    env.setup_(to='first').setup_(to='last')
-    for n1 in n1s:
-        env.update_env_op_(n1, P, to='first')
+    s0s1 = [pair for pair in pairs if pair[0] < pair[1]]
+    s1s0 = [pair[::-1] for pair in pairs if pair[0] > pair[1]]
+    s0s0 = sorted(pair[0] for pair in pairs if pair[0] == pair[1])
 
+    s1s = sorted(set(pair[1] for pair in s0s1))
+    s0s1 = sorted(s0s1, key=lambda x: (-x[0], x[1]))
+
+    s0s = sorted(set(pair[1] for pair in s1s0))
+    s1s0 = sorted(s1s0, key=lambda x: (-x[0], x[1]))
+
+    env0 = Env(bra, ket)
+    env0.setup_(to='first').setup_(to='last')
     results = {}
-    for n0, n01s in groupby(pairs, key=lambda x: x[0]):
-        env.update_env_op_(n0, O, to='last')
-        _, n1 = next(n01s)
-        for n in env.ket.sweep(to='last', df=n0 + 1):
-            if n == n1:
-                results[(n0, n1)] = env.measure(bd=(n - 1, n))
-                try:
-                    _, n1 = next(n01s)
-                except StopIteration:
-                    break
-            env.update_env_(n, to='last')
-    return dict(sorted(results.items()))
+
+    env = env0.shallow_copy()
+    for n1 in s1s:
+        env.update_env_op_(n1, P, to='first')
+    for n0, n01s in groupby(s0s1, key=lambda x: x[0]):
+        env.update_env_op_(n0, O, to='last', later=True)
+        n = n0
+        for _, n1 in n01s:
+            while n + 1 < n1:
+                n += 1
+                env.update_env_(n, to='last')
+            results[(n0, n1)] = env.measure(bd=(n, n1))
+
+    env = env0.shallow_copy()
+    for n1 in s0s:
+        env.update_env_op_(n1, O, to='first')
+    for n0, n01s in groupby(s1s0, key=lambda x: x[0]):
+        env.update_env_op_(n0, P, to='last', later=False)
+        n = n0
+        for _, n1 in n01s:
+            while n + 1 < n1:
+                n += 1
+                env.update_env_(n, to='last')
+            results[(n1, n0)] = env.measure(bd=(n, n1))
+
+    env = env0.shallow_copy()
+    for n0 in s0s0:
+        env.update_env_op_(n0, O @ P, to='first')
+        results[(n0, n0)] = env.measure(bd=(n0 - 1, n0))
+
+    return {k: results[k] for k in pairs}

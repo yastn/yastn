@@ -17,6 +17,7 @@ from __future__ import annotations
 from ... import eye, tensordot, ncon, vdot, YastnError, qr, svd
 from . import MpsMpoOBC, MpoPBC
 import abc
+import copy
 
 
 def Env(bra, target):
@@ -240,6 +241,14 @@ class EnvParent(metaclass=abc.ABCMeta):
                 return True  # Schmidt values below expected tolerance
 
         return False  # no hint for using 2-site update
+
+    def shallow_copy(self):
+        r"""
+        A copy of environment class, that cleates new copy of dictionary storing env tensors.
+        """
+        env = copy.copy(self)
+        env.F = dict(self.F)
+        return env
 
 
 class Env_sum(EnvParent):

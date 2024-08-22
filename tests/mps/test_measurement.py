@@ -127,7 +127,7 @@ def measure_mps_aklt(config=None, tol=1e-12):
     #
     # Calculate <Sz_i Sz_j> for NN (n, n+1)
     ezz = mps.measure_2site(psin, ops.sz(), ops.sz(), psin, pairs=[(n, n+1) for n in range(N - 1)])
-    assert len(ezz) == N - 1 and isinstance(ez, dict)
+    assert len(ezz) == N - 1 and isinstance(ezz, dict)
     assert all(abs(ezznn + 4. / 9) < tol for ezznn in ezz.values())
     #
     #  Measure string operator; exp (i pi * Sz) = I - 2 * abs(Sz)
@@ -262,8 +262,37 @@ def test_mpo_spectrum(sym, config, tol=1e-12):
     assert abs(entropies[0]) < tol and abs(entropies[-1]) < tol
 
 
+@pytest.mark.parametrize("sym, config", [('Z2', cfg), ('U1', cfg)])
+def test_measure_fermions(sym, config, tol=1e-12):
+    """ Initialize small MPS and measure fermionic correlators. """
+    opts_config = {} if config is None else \
+                {'backend': config.backend,
+                'default_device': config.default_device}
+    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
+    v0, v1 = ops.vec_n(0), ops.vec_n(1)
+    v1101 = mps.product_mps([v1, v1, v0, v1])
+    v0111 = mps.product_mps([v0, v1, v1, v1])
+    psi = v1101 + v0111
+    npsi = mps.vdot(psi, psi)
+    #
+    # psi is not normalized;  measure_2site, measure_1site are not normzalizing it.
+    #
+    psi_cp_c_psi = {(0, 0): 1.0, (0, 1): 0.0, (0, 2):-1.0, (0, 3): 0.0,
+                    (1, 0): 0.0, (1, 1): 2.0, (1, 2): 0.0, (1, 3): 0.0,
+                    (2, 0):-1.0, (2, 1): 0.0, (2, 2): 1.0, (2, 3): 0.0,
+                    (3, 0): 0.0, (3, 1): 0.0, (3, 2): 0.0, (3, 3): 2.0}
+
+    mps.measure_2site(psi, ops.cp(), ops.c(), psi)
+    ecpc = mps.measure_2site(psi, ops.cp(), ops.c(), psi, pairs=[(0, 2), (0, 0), (1, 1)])
+    assert all(abs(v - psi_cp_c_psi[k]) < tol for k, v in ecpc.items())
+
+    eccp = mps.measure_2site(psi, ops.c(), ops.cp(), psi, pairs=[(2, 0), (2, 2), (1, 1)])
+    assert all(abs(v - npsi * (k[0] == k[1]) + psi_cp_c_psi[k].conjugate()) < tol for k, v in eccp.items())
+
 if __name__ == "__main__":
     measure_mps_aklt()
     for sym in ['dense', 'Z3', 'U1']:
         mps_spectrum_ghz(sym=sym)
         test_mpo_spectrum(sym=sym, config=cfg)
+    for sym in ['Z2', 'U1']:
+        test_measure_fermions(sym=sym, config=cfg)
