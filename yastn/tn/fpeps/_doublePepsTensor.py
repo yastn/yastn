@@ -20,7 +20,7 @@ _allowed_transpose = ((0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2),
                       (0, 3, 2, 1), (1, 0, 3, 2), (2, 1, 0, 3), (3, 2, 1, 0))
 
 class DoublePepsTensor:
-    def __init__(self, bra, ket, transpose=(0, 1, 2, 3)):
+    def __init__(self, bra, ket, transpose=(0, 1, 2, 3), op=None, swaps=None):
         r"""
         Class that treats a pair of tensors forming a site of double-layer PEPS as a single tensor.
 
@@ -34,8 +34,10 @@ class DoublePepsTensor:
             Transposition with respect to canonical order of PEPS legs.
         """
         self.bra = bra
+        self.op = op
         self.ket = ket
         transpose = tuple(transpose)
+        self.swaps = swaps
         if transpose not in _allowed_transpose:
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
         self._t = transpose
@@ -80,74 +82,74 @@ class DoublePepsTensor:
         axes = tuple(self._t[ax] for ax in axes)
         if axes not in _allowed_transpose:
             raise YastnError("DoublePEPSTensor only supports permutations that retain legs' ordering.")
-        return DoublePepsTensor(self.bra, self.ket, transpose=axes)
+        return DoublePepsTensor(bra=self.bra, ket=self.ket, transpose=axes)
 
     def conj(self):
         r""" Conjugate DoublePepsTensor. """
-        return DoublePepsTensor(self.bra.conj(), self.ket.conj(), transpose=self._t)
+        return DoublePepsTensor(bra=self.bra.conj(), ket=self.ket.conj(), transpose=self._t)
 
     def clone(self):
         r"""
         Makes a clone of yastn.tn.fpeps.DoublePepsTensor by :meth:`cloning<yastn.Tensor.clone>`-ing
         all constituent tensors forming a new instance of DoublePepsTensor.
         """
-        return DoublePepsTensor(self.bra.clone(), self.ket.clone(), transpose=self._t)
+        return DoublePepsTensor(bra=self.bra.clone(), ket=self.ket.clone(), transpose=self._t)
 
     def copy(self):
         r"""
         Makes a copy of yastn.tn.fpeps.DoublePepsTensor by :meth:`copying<yastn.Tensor.copy>`-ing
         all constituent tensors forming a new instance of DoublePepsTensor.
         """
-        return DoublePepsTensor(self.bra.copy(), self.ket.copy(), transpose=self._t)
+        return DoublePepsTensor(bra=self.bra.copy(), ket=self.ket.copy(), transpose=self._t)
 
     def _attach_01(self, tt):
         """
         Attach a tensor to the top-left enlarged corner `tt`.
         """
         if self._t == (0, 1, 2, 3):
-            return append_vec_tl(self.ket, self.bra, tt)
+            return append_vec_tl(self.bra, self.ket, tt)
         if self._t == (1, 2, 3, 0):
-            return append_vec_bl(self.ket, self.bra, tt)
+            return append_vec_bl(self.bra, self.ket, tt)
         if self._t == (2, 3, 0, 1):
-            return append_vec_br(self.ket, self.bra, tt)
+            return append_vec_br(self.bra, self.ket, tt)
         if self._t == (3, 0, 1, 2):
-            return append_vec_tr(self.ket, self.bra, tt)
+            return append_vec_tr(self.bra, self.ket, tt)
         if self._t == (0, 3, 2, 1):
-            return append_vec_tr(self.ket, self.bra, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_tr(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (3, 2, 1, 0):
-            return append_vec_br(self.ket, self.bra, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_br(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (2, 1, 0, 3):
-            return append_vec_bl(self.ket, self.bra, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_bl(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (1, 0, 3, 2):
-            return append_vec_tl(self.ket, self.bra, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_tl(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
 
     def _attach_23(self, tt):
         """
         Attach a tensor to the bottom-right enlarged corner `tt`.
         """
         if self._t == (0, 1, 2, 3):
-            return append_vec_br(self.ket, self.bra, tt)
+            return append_vec_br(self.bra, self.ket, tt)
         if self._t == (1, 2, 3, 0):
-            return append_vec_tr(self.ket, self.bra, tt)
+            return append_vec_tr(self.bra, self.ket, tt)
         if self._t == (2, 3, 0, 1):
-            return append_vec_tl(self.ket, self.bra, tt)
+            return append_vec_tl(self.bra, self.ket, tt)
         if self._t == (3, 0, 1, 2):
-            return append_vec_bl(self.ket, self.bra, tt)
+            return append_vec_bl(self.bra, self.ket, tt)
         if self._t == (0, 3, 2, 1):
-            return append_vec_bl(self.ket, self.bra, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_bl(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (3, 2, 1, 0):
-            return append_vec_tl(self.ket, self.bra, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_tl(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (2, 1, 0, 3):
-            return append_vec_tr(self.ket, self.bra, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_tr(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
         if self._t == (1, 0, 3, 2):
-            return append_vec_br(self.ket, self.bra, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_br(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
 
     def _attach_30(self, tt):
         """
         Attach a tensor to the top-right enlarged corner `tt`.
         """
         if self._t == (0, 1, 2, 3):
-            return append_vec_tr(self.ket, self.bra, tt)
+            return append_vec_tr(self.bra, self.ket, tt)
         raise YastnError(f'Transpositions not supported by _attach_30')
 
     def _attach_12(self, tt):
@@ -155,7 +157,7 @@ class DoublePepsTensor:
         Attach a tensor to the bottom-left enlarged corner `tt`.
         """
         if self._t == (0, 1, 2, 3):
-            return append_vec_bl(self.ket, self.bra, tt)
+            return append_vec_bl(self.bra, self.ket, tt)
         raise YastnError(f'Transpositions not supported by _attach_12')
 
     def fuse_layers(self):
