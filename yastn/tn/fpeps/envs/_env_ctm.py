@@ -184,7 +184,7 @@ class EnvCTM(Peps):
         tmp = ten._attach_01(vect)
         val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
-        ten.add_operator_(op)
+        ten.set_operator_(op)
         tmp = ten._attach_01(vect)
         val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
@@ -318,19 +318,19 @@ class EnvCTM(Peps):
         val_no = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
 
         if tl in ops:
-            ten_tl.ket = apply_gate_onsite(ten_tl.ket, ops[tl])
+            ten_tl.set_operator_(ops[tl])
             cor_tl = ten_tl._attach_01(vec_tl)
             cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
         if tr in ops:
-            ten_tr.ket = apply_gate_onsite(ten_tr.ket, ops[tr])
+            ten_tr.set_operator_(ops[tr])
             cor_tr = ten_tr._attach_30(vec_tr)
             cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
         if br in ops:
-            ten_br.ket = apply_gate_onsite(ten_br.ket, ops[br])
+            ten_br.set_operator_(ops[br])
             cor_br = ten_br._attach_23(vec_br)
             cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
         if bl in ops:
-            ten_bl.ket = apply_gate_onsite(ten_bl.ket, ops[bl])
+            ten_bl.set_operator_(ops[bl])
             cor_bl = ten_bl._attach_12(vec_bl)
             cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
 
@@ -379,7 +379,7 @@ class EnvCTM(Peps):
 
         for site, op in ops.items():
             ind = site[0] - xs[0] + site[1] - ys[0] + 1
-            tm[ind].ket = apply_gate_onsite(tm[ind].ket, op)
+            tm[ind].set_operator_(op)
 
         val_op = mps.vdot(vl, tm, vr)
         return val_op / val_no

@@ -51,12 +51,15 @@ class DoublePepsTensor:
     def ndim(self):
         return 4
 
-    def add_operator_(self, op, later=True):
-        """ Include operator which is applied on physical leg of ket tensor during contraction. """
+    def set_operator_(self, op, reset=True):
+        """
+        Include the operator that is applied on the physical leg of the ket tensor during contraction.
+
+        By default, it resets the previous operator (if present).
+        Otherwise, multiply the previous operator from the left, i.e., apply it after the one in self.op.
+        """
         op = match_ancilla(self.ket, op)
-        if self.op is not None:
-            op = op @ self.op if later else self.op @ op
-        self.op = op
+        self.op = op if (reset or self.op is None) else op @ self.op
 
     def del_operator_(self):
         """ Remove operator. """
