@@ -38,8 +38,8 @@ def mpo_nn_hopping_latex(N, t, mu, sym="U1", config=None):
     # pytest uses config to inject various backends and devices for testing
     ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
 
-    Hstr = "\sum_{j,k \in NN} t (cp_{j} c_{k}+cp_{k} c_{j})"
-    Hstr += " + \sum_{i \in sites} mu cp_{i} c_{i}"
+    Hstr = r"\sum_{j,k \in NN} t (cp_{j} c_{k}+cp_{k} c_{j})"
+    Hstr += r" + \sum_{i \in sites} mu cp_{i} c_{i}"
     parameters = {"t": t,
                   "mu": mu,
                   "sites": list(range(N)),
@@ -63,7 +63,7 @@ def test_nn_hopping_latex_map(config=cfg, tol=1e-12):
     opts_config = {} if config is None else \
                   {'backend': config.backend,
                    'default_device': config.default_device}
-    H_str = "\sum_{j,k \in NN} t_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in sites} mu cp_{i} c_{i}"
+    H_str = r"\sum_{j,k \in NN} t_{j,k} (cp_{j} c_{k}+cp_{k} c_{j}) + \sum_{i \in sites} mu cp_{i} c_{i}"
     for sym in ['Z2', 'U1']:
         ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
         for t in [0, 0.2, -0.3]:
@@ -106,8 +106,8 @@ def mpo_hopping_latex(J=np.array([[0.5, 1], [0, 0.2]]), sym="U1", config=None):
 
     N = len(J)
 
-    Hstr = "\sum_{j,k \in NN} J_{j,k} (cp_{j} c_{k}+cp_{k} c_{j})"
-    Hstr += " + \sum_{i \in sites} J_{i,i} cp_{i} c_{i}"
+    Hstr = r"\sum_{j,k \in NN} J_{j,k} (cp_{j} c_{k}+cp_{k} c_{j})"
+    Hstr += r" + \sum_{i \in sites} J_{i,i} cp_{i} c_{i}"
     parameters = {"J": J,
                   "sites": list(range(N)),
                   "NN": list((i, j) for i in range(N-1)
@@ -138,8 +138,8 @@ def test_mpo_hopping_latex(config=cfg, tol=1e-12):
 
     # define parameters for automatic generator and Hamiltonian in a latex-like form
     eparam ={"t": t, "mu": mu, 'sites': list(range(N))}
-    Hstr = "\sum_{j\in sites} \sum_{k\in sites} t_{j,k} (cp_{j} c_{k} + cp_{k} c_{j})"
-    Hstr += " + \sum_{j\in sites} mu_{j} cp_{j} c_{j}"
+    Hstr = r"\sum_{j\in sites} \sum_{k\in sites} t_{j,k} (cp_{j} c_{k} + cp_{k} c_{j})"
+    Hstr += r" + \sum_{j\in sites} mu_{j} cp_{j} c_{j}"
 
     H1 = generate.mpo_from_latex(Hstr, eparam)
     H2 = build_mpo_hopping_Hterm(J, sym=sym, config=config)
@@ -154,10 +154,10 @@ def test_latex2term_unit_tests():
     examples_A = ("   s_j   + d_j    +   1 + 2  + 3 ", \
                 "   s_j   - d_j    +   1 - 2  + 3 ",\
                 "s_j-d_j+1-2+3",\
-                "\sum_{j\in range} (a_j + b_j)",\
-                "\sum_{j \in   range}  (a_j + b_j)",\
-                "\sum_{j\inrange}  (a_j + b_j)",\
-                "\sum_{j\in range}\sum_{k\in range_L}(a_j+b_k)   ",\
+                r"\sum_{j\in range} (a_j + b_j)",\
+                r"\sum_{j \in   range}  (a_j + b_j)",\
+                r"\sum_{j\inrange}  (a_j + b_j)",\
+                r"\sum_{j\in range}\sum_{k\in range_L}(a_j+b_k)   ",\
                 )
     test_examples_A1 = (["s_j","+","d_j","+","1","+","2","+","3"],\
                     ["s_j","+","minus",'*',"d_j","+","1","+","minus",'*',"2","+","3"],\
@@ -205,12 +205,12 @@ def test_latex2term_unit_tests():
         assert interpret(splitt(string2list(x),0), {}) == test_x
 
     # Test interpreter with sum substitution
-    examples_C =["\sum_{j\in range} (a_{j}  b_{j})",
-                 "\sum_{j\in range}\sum_{k\in range_L} a_{j} b_{j}",
-                 "\sum_{j \in   range}  (a_{j} + b_{j})",
-                 "\sum_{j\inrange}  (a_{j} + b_{j})",
-                 "\sum_{j\in range}\sum_{k\in range_L}(a_{j}+b_{k})   ",
-                 "\sum_{i,j\in NN} A_{i,j} ap_{i} a_{j}"]
+    examples_C =[r"\sum_{j\in range} (a_{j}  b_{j})",
+                 r"\sum_{j\in range}\sum_{k\in range_L} a_{j} b_{j}",
+                 r"\sum_{j \in   range}  (a_{j} + b_{j})",
+                 r"\sum_{j\inrange}  (a_{j} + b_{j})",
+                 r"\sum_{j\in range}\sum_{k\in range_L}(a_{j}+b_{k})   ",
+                 r"\sum_{i,j\in NN} A_{i,j} ap_{i} a_{j}"]
     test_examples_C1 = [[single_term(op=(('a', 'i1'), ('b', 'i1'))), single_term(op=(('a', 'i2'), ('b', 'i2'))), single_term(op=(('a', 'i3'), ('b', 'i3')))],\
                         [single_term(op=(('a', 'i1'), ('b', 'i1'))), single_term(op=(('a', 'i1'), ('b', 'i1'))), single_term(op=(('a', 'i1'), ('b', 'i1'))), single_term(op=(('a', 'i2'), ('b', 'i2'))), single_term(op=(('a', 'i2'), ('b', 'i2'))), single_term(op=(('a', 'i2'), ('b', 'i2'))), single_term(op=(('a', 'i3'), ('b', 'i3'))), single_term(op=(('a', 'i3'), ('b', 'i3'))), single_term(op=(('a', 'i3'), ('b', 'i3')))],
                         [single_term(op=(('a', 'i1'),)), single_term(op=(('b', 'i1'),)), single_term(op=(('a', 'i2'),)), single_term(op=(('b', 'i2'),)), single_term(op=(('a', 'i3'),)), single_term(op=(('b', 'i3'),))],
