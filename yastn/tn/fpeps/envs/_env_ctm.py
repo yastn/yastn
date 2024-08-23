@@ -184,7 +184,7 @@ class EnvCTM(Peps):
         tmp = ten._attach_01(vect)
         val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
-        ten.ket = apply_gate_onsite(ten.ket, op)
+        ten.add_operator_(op)
         tmp = ten._attach_01(vect)
         val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 

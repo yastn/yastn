@@ -14,6 +14,7 @@
 # ==============================================================================
 from ... import tensordot, leg_outer_product, YastnError
 from .envs._env_auxlliary import append_vec_tl, append_vec_br, append_vec_tr, append_vec_bl
+from ._gates_auxiliary import match_ancilla
 
 
 _allowed_transpose = ((0, 1, 2, 3), (1, 2, 3, 0), (2, 3, 0, 1), (3, 0, 1, 2),
@@ -49,6 +50,17 @@ class DoublePepsTensor:
     @property
     def ndim(self):
         return 4
+
+    def add_operator_(self, op, later=True):
+        """ Include operator which is applied on physical leg of ket tensor during contraction. """
+        op = match_ancilla(self.ket, op)
+        if self.op is not None:
+            op = op @ self.op if later else self.op @ op
+        self.op = op
+
+    def del_operator_(self):
+        """ Remove operator. """
+        self.op = None
 
     def get_shape(self, axes=None):
         """ Returns the shape of the DoublePepsTensor along specified axes. """
@@ -107,49 +119,49 @@ class DoublePepsTensor:
         Attach a tensor to the top-left enlarged corner `tt`.
         """
         if self._t == (0, 1, 2, 3):
-            return append_vec_tl(self.bra, self.ket, tt)
+            return append_vec_tl(self.bra, self.ket, tt, self.op)
         if self._t == (1, 2, 3, 0):
-            return append_vec_bl(self.bra, self.ket, tt)
+            return append_vec_bl(self.bra, self.ket, tt, self.op)
         if self._t == (2, 3, 0, 1):
-            return append_vec_br(self.bra, self.ket, tt)
+            return append_vec_br(self.bra, self.ket, tt, self.op)
         if self._t == (3, 0, 1, 2):
-            return append_vec_tr(self.bra, self.ket, tt)
+            return append_vec_tr(self.bra, self.ket, tt, self.op)
         if self._t == (0, 3, 2, 1):
-            return append_vec_tr(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_tr(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
         if self._t == (3, 2, 1, 0):
-            return append_vec_br(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_br(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
         if self._t == (2, 1, 0, 3):
-            return append_vec_bl(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_bl(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
         if self._t == (1, 0, 3, 2):
-            return append_vec_tl(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_tl(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
 
     def _attach_23(self, tt):
         """
         Attach a tensor to the bottom-right enlarged corner `tt`.
         """
         if self._t == (0, 1, 2, 3):
-            return append_vec_br(self.bra, self.ket, tt)
+            return append_vec_br(self.bra, self.ket, tt, self.op)
         if self._t == (1, 2, 3, 0):
-            return append_vec_tr(self.bra, self.ket, tt)
+            return append_vec_tr(self.bra, self.ket, tt, self.op)
         if self._t == (2, 3, 0, 1):
-            return append_vec_tl(self.bra, self.ket, tt)
+            return append_vec_tl(self.bra, self.ket, tt, self.op)
         if self._t == (3, 0, 1, 2):
-            return append_vec_bl(self.bra, self.ket, tt)
+            return append_vec_bl(self.bra, self.ket, tt, self.op)
         if self._t == (0, 3, 2, 1):
-            return append_vec_bl(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_bl(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
         if self._t == (3, 2, 1, 0):
-            return append_vec_tl(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_tl(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
         if self._t == (2, 1, 0, 3):
-            return append_vec_tr(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_tr(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
         if self._t == (1, 0, 3, 2):
-            return append_vec_br(self.bra, self.ket, tt.transpose((0, 2, 1, 3))).transpose((0, 3, 2, 1))
+            return append_vec_br(self.bra, self.ket, tt.transpose((0, 2, 1, 3)), self.op).transpose((0, 3, 2, 1))
 
     def _attach_30(self, tt):
         """
         Attach a tensor to the top-right enlarged corner `tt`.
         """
         if self._t == (0, 1, 2, 3):
-            return append_vec_tr(self.bra, self.ket, tt)
+            return append_vec_tr(self.bra, self.ket, tt, self.op)
         raise YastnError(f'Transpositions not supported by _attach_30')
 
     def _attach_12(self, tt):
@@ -157,7 +169,7 @@ class DoublePepsTensor:
         Attach a tensor to the bottom-left enlarged corner `tt`.
         """
         if self._t == (0, 1, 2, 3):
-            return append_vec_bl(self.bra, self.ket, tt)
+            return append_vec_bl(self.bra, self.ket, tt, self.op)
         raise YastnError(f'Transpositions not supported by _attach_12')
 
     def fuse_layers(self):
