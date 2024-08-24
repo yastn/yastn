@@ -14,6 +14,8 @@
 # ==============================================================================
 """ Parent class for defining symmetry rules. """
 
+import numpy as np
+
 class sym_meta(type):
     def __str__(cls):
         return cls.SYM_ID
@@ -31,6 +33,30 @@ class sym_abelian(metaclass=sym_meta):
         return (0,) * cls.NSYM
 
     @classmethod
+    def add_charges(cls, charges, signatures=None, new_signature=1):
+        """
+        Auxiliary function for adding tensor charges.
+        It employs fuse function and returns charge as a tuple.
+
+        Parameters
+        ----------
+        charges: Sequence[tuple[int]]
+            List of tenor charges (tuples).
+
+        signatures: None | Sequence[int]
+            The default None uses signature 1 for all charges.
+            For subtraction, it is possible to provide signatures by hand.
+
+        new_signature: int
+            The default is 1.
+        """
+        if signatures is None:
+            signatures = (1,) * len(charges)
+        charges = np.array(charges, dtype=np.int64).reshape(1, len(charges), cls.NSYM)
+        new_charge = cls.fuse(charges, signatures, new_signature)
+        return tuple(new_charge.reshape(cls.NSYM).tolist())
+
+    @classmethod
     def fuse(cls, charges, signatures, new_signature):
         """
         Fusion rule for abelian symmetry.
@@ -42,19 +68,19 @@ class sym_abelian(metaclass=sym_meta):
 
         Parameters
         ----------
-            charges: numpy.ndarray(int)
-                `k x m x nsym` matrix, where `k` is the number of
-                independent blocks, and `m` is the number of fused legs.
+        charges: numpy.ndarray(int)
+            `k x m x nsym` matrix, where `k` is the number of
+            independent blocks, and `m` is the number of fused legs.
 
-            signatures: numpy.ndarray(int)
-                integer vector with `m` elements in `{-1, +1}`
+        signatures: numpy.ndarray(int)
+            integer vector with `m` elements in `{-1, +1}`
 
-            new_signature: int
+        new_signature: int
 
         Returns
         -------
-            numpy.ndarray(int)
-                integer matrix with shape (k, NSYM) of fused charges;
-                includes multiplication by ``new_signature``
+        numpy.ndarray(int)
+            integer matrix with shape (k, NSYM) of fused charges;
+            includes multiplication by ``new_signature``
         """
         raise NotImplementedError("Subclasses need to override the fuse function")  # pragma: no cover
