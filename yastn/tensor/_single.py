@@ -303,10 +303,10 @@ def moveaxis(a, source, destination) -> yastn.Tensor:
     return move_leg(a, source, destination)
 
 
-def add_leg(a, axis=-1, s=1, t=None, leg=None) -> yastn.Tensor:
+def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
     r"""
-    Creates a new tensor with extra leg that carries the charge (or part of it)
-    of the orignal tensor. This is achieved by extra leg having a single charge sector
+    Creates a new tensor with an extra leg that carries the charge (or part of it)
+    of the orignal tensor. This is achieved by the extra leg having a single charge sector
     of dimension D=1. The total charge of the tensor :attr:`yastn.Tensor.n` can be modified this way.
 
     Makes a shallow copy of tensor data.
@@ -317,11 +317,12 @@ def add_leg(a, axis=-1, s=1, t=None, leg=None) -> yastn.Tensor:
         index of the new leg
 
     s : int
-        signature :math:`\pm1` of the new leg
+        signature :math:`\pm1` of the new leg.
+        The default is -1, where the leg charge is equal to the tensor charge for t=None.
 
     t : int | Sequence[int]
         charge carried by the new leg. If ``None``, takes the total charge `n`
-        of the original tensor resulting in uncharged tensor with `n=0`.
+        of the original tensor resulting in a tensor with `n=0`.
 
     leg : Optional[Leg]
         It is possible to provide a new leg directly.
