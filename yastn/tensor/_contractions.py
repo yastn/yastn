@@ -121,8 +121,7 @@ def _common_inds(t_a, t_b, nin_a, nin_b, ndimn_a, ndimn_b, nsym):
 @lru_cache(maxsize=1024)
 def _meta_tensordot(config, struct_a, slices_a, struct_b, slices_b):
     nsym = len(struct_a.n)
-    n_c = np.array(struct_a.n + struct_b.n, dtype=np.int64).reshape((1, 2, nsym))
-    n_c = tuple(config.sym.fuse(n_c, (1, 1), 1).reshape(nsym).tolist())
+    n_c = config.sym.add_charges(struct_a.n, struct_b.n)
     struct_a_resorted = sorted(((t[nsym:], t, D, sl.slcs[0]) for t, D, sl in zip(struct_a.t, struct_a.D, slices_a)))
     struct_b_resorted = ((t[:nsym], t, D, sl.slcs[0]) for t, D, sl in zip(struct_b.t, struct_b.D, slices_b))
     meta = []
@@ -352,9 +351,8 @@ def vdot(a, b, conj=(1, 0)) -> number:
     if struct_a.D != struct_b.D:
         raise YastnError('Bond dimensions do not match.')
 
-    c_n = np.array(a.struct.n + b.struct.n, dtype=np.int64).reshape((1, 2, a.config.sym.NSYM))
-    c_n = tuple(a.config.sym.fuse(c_n, (1, 1), 1).ravel().tolist())
-    if len(struct_a.D) > 0 and c_n == a.config.sym.zero():
+    n_c = a.config.sym.add_charges(a.struct.n, b.struct.n)
+    if len(struct_a.D) > 0 and n_c == a.config.sym.zero():
         return a.config.backend.vdot(Adata, Bdata)
     return a.zero_of_dtype()
 
