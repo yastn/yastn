@@ -275,41 +275,88 @@ def test_mpo_spectrum(sym, config, tol=1e-12):
 
 
 @pytest.mark.parametrize("sym, config", [('Z2', cfg), ('U1', cfg)])
-def test_measure_fermions(sym, config, tol=1e-12):
+def test_measure_fermions_and_unbalanced(sym, config, tol=1e-12):
     """ Initialize small MPS and measure fermionic correlators. Additionally text measure_2site syntax. """
     opts_config = {} if config is None else \
                 {'backend': config.backend,
                 'default_device': config.default_device}
-    ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
-    v0, v1 = ops.vec_n(0), ops.vec_n(1)
+
+    ops = yastn.operators.SpinfulFermions(sym=sym, **opts_config)
+    I = mps.product_mpo(ops.I(), 4)
+    v0, v1 = ops.vec_n((0, 0)), ops.vec_n((1, 0))
+
+
     v1101 = mps.product_mps([v1, v1, v0, v1])
     v0111 = mps.product_mps([v0, v1, v1, v1])
-    psi = v1101 + v0111
-    npsi = mps.vdot(psi, psi)
+    psi3 = v1101 + v0111
+    npsi3 = mps.vdot(psi3, psi3)
+    assert abs(npsi3 - 2.0) < tol
     #
-    # psi is not normalized;  measure_2site, measure_1site do not normalise the state.
+    # psi3 is not normalized;  measure_2site, measure_1site do not normalise the state.
     #
-    psi_cp_c_psi = {(0, 0): 1.0, (0, 1): 0.0, (0, 2):-1.0, (0, 3): 0.0,
-                    (1, 0): 0.0, (1, 1): 2.0, (1, 2): 0.0, (1, 3): 0.0,
-                    (2, 0):-1.0, (2, 1): 0.0, (2, 2): 1.0, (2, 3): 0.0,
-                    (3, 0): 0.0, (3, 1): 0.0, (3, 2): 0.0, (3, 3): 2.0}
+    psi3_cp_c_psi3 = np.array([[ 1.0, 0.0, -1.0, 0.0],
+                               [ 0.0, 2.0,  0.0, 0.0],
+                               [-1.0, 0.0,  1.0, 0.0],
+                               [ 0.0, 0.0,  0.0, 2.0]])
+    #
+    en33 = mps.measure_1site(psi3, ops.n(), psi3)  # all pairs of sites
+    ecpc33 = mps.measure_2site(psi3, ops.cp(), ops.c(), psi3, bonds='a')  # all pairs of sites
+    assert len(ecpc33) == len(psi3) * len(psi3)
+    assert len(en33) == len(psi3)
+    assert all(abs(v - psi3_cp_c_psi3[k]) < tol for k, v in ecpc33.items())
+    assert all(abs(v - psi3_cp_c_psi3[k, k]) < tol for k, v in en33.items())
+    #
+    eccp33 = mps.measure_2site(psi3, ops.c(), ops.cp(), psi3, bonds='<=')  # bonds with i <= j
+    assert len(eccp33) == (len(psi3) * (len(psi3) + 1)) // 2
+    assert all(abs(v - npsi3 * (k[0] == k[1]) + psi3_cp_c_psi3[k].conjugate()) < tol for k, v in eccp33.items())
+    #
+    # transitions between states with different partice number
+    #
+    v0101 = mps.product_mps([v0, v1, v0, v1])
+    v1001 = mps.product_mps([v1, v0, v0, v1])
+    psi2 = v0101 + v1001
+    npsi2 = mps.vdot(psi2, psi2)
+    assert abs(npsi2 - 2.0) < tol
+    #
+    ec23 = mps.measure_1site(psi2, ops.c(), psi3)
+    ecp32 = mps.measure_1site(psi3, ops.cp(), psi2)
+    psi2_c_psi3 = [1.0, -1.0, -1.0, 0.0]
+    #
+    assert all(abs(v - psi2_c_psi3[k]) < tol for k, v in ec23.items())
+    assert all(abs(v.conj() - psi2_c_psi3[k]) < tol for k, v in ecp32.items())
+    #
+    v0100 = mps.product_mps([v0, v1, v0, v0])
+    v0010 = mps.product_mps([v0, v0, v1, v0])
+    v0001 = mps.product_mps([v0, v0, v0, v1])
+    psi1 = v0100 + v0010 + v0001
+    npsi1 = mps.vdot(psi1, psi1)
+    assert abs(npsi1 - 3.0) < tol
+    #
+    psi1_c_c_psi3 = np.array([[ 0.0, -1.0,  0.0,  1.0],
+                              [ 1.0,  0.0, -1.0,  1.0],
+                              [ 0.0,  1.0,  0.0, -1.0],
+                              [-1.0, -1.0,  1.0,  0.0]])
 
-    ecpc = mps.measure_2site(psi, ops.cp(), ops.c(), psi, bonds='a')  # all pairs of sites
-    assert len(ecpc) == len(psi) * len(psi)
-    assert all(abs(v - psi_cp_c_psi[k]) < tol for k, v in ecpc.items())
-    #
-    eccp = mps.measure_2site(psi, ops.c(), ops.cp(), psi, bonds='<=')  # bonds with i <= j
-    assert len(eccp) == (len(psi) * (len(psi) + 1)) // 2
-    assert all(abs(v - npsi * (k[0] == k[1]) + psi_cp_c_psi[k].conjugate()) < tol for k, v in eccp.items())
+    ecc13 = mps.measure_2site(psi1, ops.c(), ops.c(), psi3, bonds='a')
+    ecpcp31 = mps.measure_2site(psi3, ops.cp(), ops.cp(), psi1, bonds='a')
+
+    for k, v in ecc13.items():
+        if k[0] != k[1]:
+            OP = mps.generate_mpo(I, [mps.Hterm(1, k, [ops.c(), ops.c()])])
+            # assert abs(v - mps.vdot(psi1, OP, psi3)) < tol
+        assert abs(v - psi1_c_c_psi3[k]) < tol
+        assert abs(v + ecpcp31[k].conj()) < tol
+
+
     #
     # extra syntax tests
     #
-    ecpc = mps.measure_2site(psi, {2: ops.cp()}, {0: ops.c(), 3: ops.c()}, psi, bonds='a')  # bonds with i <= j
-    assert len(ecpc) == 2
-    assert all(abs(v - psi_cp_c_psi[k]) < tol for k, v in ecpc.items())
+    ecpc33 = mps.measure_2site(psi3, {2: ops.cp()}, {0: ops.c(), 3: ops.c()}, psi3, bonds='a')  # limited bonds
+    assert len(ecpc33) == 2
+    assert all(abs(v - psi3_cp_c_psi3[k]) < tol for k, v in ecpc33.items())
     #
-    ecpc = mps.measure_2site(psi, ops.cp(), ops.c(), psi, bonds='r-1p')  # step -1 and PBC
-    assert all(k in ecpc for k in [(1, 0), (2, 1), (3, 2), (0, 3)])
+    ecpc33 = mps.measure_2site(psi3, ops.cp(), ops.c(), psi3, bonds='r-1p')  # step -1 and PBC
+    assert all(k in ecpc33 for k in [(1, 0), (2, 1), (3, 2), (0, 3)])
 
 
 if __name__ == "__main__":
@@ -317,5 +364,5 @@ if __name__ == "__main__":
     for sym in ['dense', 'Z3', 'U1']:
         mps_spectrum_ghz(sym=sym)
         test_mpo_spectrum(sym=sym, config=cfg)
-    for sym in ['Z2', 'U1']:
-        test_measure_fermions(sym=sym, config=cfg)
+    for sym in ['U1xU1', ]:  # 'U1'
+        test_measure_fermions_and_unbalanced(sym=sym, config=cfg)

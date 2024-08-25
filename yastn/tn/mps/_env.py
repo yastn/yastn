@@ -308,7 +308,7 @@ class Env_sum(EnvParent):
 class Env2(EnvParent):
     # The class combines environments of mps+mps for calculation of expectation values, overlaps, etc.
 
-    def __init__(self, bra=None, ket=None):
+    def __init__(self, bra=None, ket=None, n_left=None):
         super().__init__(bra)
         self.ket = ket
 
@@ -318,7 +318,7 @@ class Env2(EnvParent):
             raise YastnError('Env: bra and ket should have the same number of sites.')
 
         legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
-        self.F[(-1, 0)] = eye(self.config, legs=legs, isdiag=False)
+        self.F[(-1, 0)] = eye(self.config, legs=legs, isdiag=False, n=n_left)
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         self.F[(self.N, self.N - 1)] = eye(self.config, legs=legs, isdiag=False)
 
@@ -363,14 +363,16 @@ class Env2(EnvParent):
             temp = temp.transpose(axes=(0, 1, 2, 3, 5, 4))
         return temp
 
-    def update_env_op_(self, n, op, to='first', later=True):
+    def update_env_op_(self, n, op, to='first'):
         """
         Contractions for 2-layer environment update, with on-site operator ``op`` applied on site ``n``.
 
-        If operator has a charge, applies swap-gate and carries it in environment;
-        There should be no other source of non-zero environment charge -- MPS tensors should have zero charge.
-        Currently, it does not apply swap-gates with previous non-zero charges in environment.
-        As such, it should be only used once per direction, i.e., for 2-site operators.
+        If the operator has a charge, it gets propagated to the environment;
+        In to='last', the charge of the environment is propagated with a proper swap gate,
+        so that in measure_2site, a combination of to='last' and 'first'
+        corresponds to the situation where the latter operator is applied first.
+        Conventions are adapted to application in measure_1site and measure_2site,
+        consistently with fermionic order.
         """
         if to == 'first':
             temp = tensordot(self.ket[n], self.F[(n + 1, n)], axes=(2, 0))
@@ -378,12 +380,11 @@ class Env2(EnvParent):
             axes = ((0, 2), (1, 2)) if self.nr_phys == 1 else ((0, 3, 2), (1, 2, 3))
             self.F[(n, n - 1)] = tensordot(temp, self.bra[n].conj(), axes=axes)
         else:  # to == 'last'
-            to_swap = 1 if later else 0
-            op = op.swap_gate(axes=to_swap, charge=op.n)
-            temp = tensordot(self.F[(n - 1, n)], self.ket[n], axes=((1, 0)))
-            temp = tensordot(op, temp, axes=((1, 1)))
-            axes = ((0, 1), (1, 0)) if self.nr_phys == 1 else ((0, 1, 3), (1, 0, 3))
-            self.F[(n, n + 1)] = tensordot(self.bra[n].conj(), temp, axes=axes)
+            temp = tensordot(self.bra[n].conj(), self.F[(n - 1, n)], axes=((0, 0)))
+            temp = tensordot(op, temp, axes=((0, 0)))
+            temp = temp.swap_gate(axes=0, charge=temp.n)
+            axes = ((2, 0), (0, 1)) if self.nr_phys == 1 else ((3, 0, 2), (0, 1, 3))
+            self.F[(n, n + 1)] = tensordot(temp, self.ket[n], axes=axes)
 
     def charges_missing(self, n):
         raise YastnError("Should not be triggered by current higher-level functions.")  # pragma: no cover

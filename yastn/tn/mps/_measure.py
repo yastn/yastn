@@ -17,7 +17,7 @@ from __future__ import annotations
 from itertools import groupby
 from typing import Sequence
 from . import MpsMpoOBC
-from ._env import Env
+from ._env import Env, Env2
 
 
 def vdot(*args) -> number:
@@ -115,9 +115,12 @@ def measure_1site(bra, O, ket, sites=None) -> dict[int, number]:
     else:
         op = {k: O for k in usites}
 
-    results = {}
-    env = Env(bra, ket)
+    O0 = next(iter(op.values()))
+    n_left = O0.config.sym.add_charges(O0.n, new_s=-1)
+    env = Env2(bra, ket, n_left=n_left)
     env.setup_(to='first').setup_(to='last')
+
+    results = {}
     for n, o in op.items():
         env.update_env_op_(n, o, to='first')
         results[n] = env.measure(bd=(n - 1, n))
@@ -171,6 +174,11 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
         O = {k: O for k in range(ket.N)}
     if not isinstance(P, dict):
         P = {k: P for k in range(ket.N)}
+
+    O0 = next(iter(O.values()))
+    P0 = next(iter(P.values()))
+    n_left = O0.config.sym.add_charges(O0.n, P0.n, new_s=-1)
+
     pairs = [(n0, n1) for n0, n1 in pairs if (n0 in O and n1 in P)]
 
     s0s1 = [pair for pair in pairs if pair[0] < pair[1]]
@@ -183,15 +191,16 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
     s0s = sorted(set(pair[1] for pair in s1s0))
     s1s0 = sorted(s1s0, key=lambda x: (-x[0], x[1]))
 
-    env0 = Env(bra, ket)
+    env0 = Env2(bra, ket, n_left=n_left)
     env0.setup_(to='first').setup_(to='last')
     results = {}
 
+    # here <O P> in desired order
     env = env0.shallow_copy()
     for n1 in s1s:
         env.update_env_op_(n1, P[n1], to='first')
     for n0, n01s in groupby(s0s1, key=lambda x: x[0]):
-        env.update_env_op_(n0, O[n0], to='last', later=True)
+        env.update_env_op_(n0, O[n0], to='last')
         n = n0
         for _, n1 in n01s:
             while n + 1 < n1:
@@ -199,17 +208,25 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
                 env.update_env_(n, to='last')
             results[(n0, n1)] = env.measure(bd=(n, n1))
 
+    # here <P O>, and we need to correct by the sign derived from swapping the operators.
+    if not O0.config.fermionic:
+        sign = 1
+    elif O0.config.fermionic is True:
+        sign = 1 - 2 * (sum(x * y for x, y in zip(O0.n, P0.n)) % 2)
+    else:
+        sign = 1 - 2 * (sum(x * y * z for x, y, z in zip(O0.n, P0.n, O0.config.fermionic)) % 2)
+
     env = env0.shallow_copy()
     for n1 in s0s:
         env.update_env_op_(n1, O[n1], to='first')
     for n0, n01s in groupby(s1s0, key=lambda x: x[0]):
-        env.update_env_op_(n0, P[n0], to='last', later=False)
+        env.update_env_op_(n0, P[n0], to='last')
         n = n0
         for _, n1 in n01s:
             while n + 1 < n1:
                 n += 1
                 env.update_env_(n, to='last')
-            results[(n1, n0)] = env.measure(bd=(n, n1))
+            results[(n1, n0)] = sign * env.measure(bd=(n, n1))
 
     env = env0.shallow_copy()
     for n0 in s0s0:
