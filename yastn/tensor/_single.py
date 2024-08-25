@@ -313,7 +313,7 @@ def add_leg(a, axis=-1, s=-1, t=None, leg=None) -> yastn.Tensor:
         index of the new leg
 
     s : int
-        signature :math:`\pm1` of the new leg.
+        signature of the new leg, +1 or -1.
         The default is -1, where the leg charge is equal to the tensor charge for t=None.
 
     t : int | Sequence[int]
