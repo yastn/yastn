@@ -36,6 +36,18 @@ class Peps():
         Intended both for PEPS with physical legs (rank-5 PEPS tensors)
         and without physical legs (rank-4 PEPS tensors).
 
+        Note::
+            The convention for PEPS tensor's leg ordering is: top, left, bottom, right, and optionally physical index
+            or t,l,b,r,s for short.
+            
+            Physical index can itself be a fusion of bare physical index and an ancilla dummy index (dimension 1) 
+            carrying the total charge of the tensor.
+            
+            Rank-5 on-site tensors are stored in fused form for efficiency, where pairs of auxiliary legs 
+            are fused as follows
+                
+                [t l] [b r] sa
+
         Example 1
         ---------
 

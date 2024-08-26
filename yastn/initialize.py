@@ -31,7 +31,7 @@ from .sym import sym_none, sym_U1, sym_Z2, sym_Z3, sym_U1xU1, sym_U1xU1xZ2
 
 _syms = {"dense": sym_none, "U1": sym_U1, "Z2": sym_Z2, "Z3": sym_Z3, "U1xU1": sym_U1xU1, "U1xU1xZ2": sym_U1xU1xZ2}
 
-__all__ = ['rand', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
+__all__ = ['rand', 'rand_like', 'randR', 'randC', 'zeros', 'ones', 'eye', 'block',
            'make_config', 'load_from_dict', 'load_from_hdf5', 'decompress_from_1d']
 
 
@@ -157,6 +157,16 @@ def rand(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:
     `legs` are overriden and only `t`, `D`, and `s` are used.
     """
     return _fill(config=config, legs=legs, n=n, isdiag=isdiag, val='rand', **kwargs)
+
+
+def rand_like(T: yastn.Tensor, **kwargs) -> yastn.Tensor:
+    r"""
+    Initialize tensor with same structure as ``T`` filled with random numbers.
+
+    Draws from a uniform distribution in [-1, 1] or [-1, 1] + 1j * [-1, 1],
+    depending on desired ``dtype``.
+    """
+    return rand(config=T.config, legs=T.get_legs(), n=T.n, isdiag=T.is_diag, **kwargs)
 
 
 def randR(config=None, legs=(), n=None, isdiag=False, **kwargs) -> yastn.Tensor:

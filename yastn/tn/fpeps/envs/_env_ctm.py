@@ -14,7 +14,7 @@
 # ==============================================================================
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import NamedTuple
+from typing import NamedTuple, Union, Callable
 import logging
 from .... import rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask, vdot
 from ... import mps
@@ -67,6 +67,11 @@ class EnvCTM(Peps):
         r"""
         Environment used in Corner Transfer Matrix Renormalization algorithm.
 
+        Note:
+            Index convention for environment tensor
+                
+                * enlarged corners: anti-clockwise
+
         Parameters
         ----------
         psi: yastn.tn.Peps
@@ -81,8 +86,8 @@ class EnvCTM(Peps):
         """
         super().__init__(psi.geometry)
         self.psi = Peps2Layers(psi) if psi.has_physical() else psi
-        if init not in (None, 'rand', 'eye'):
-            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'eye', None.")
+        if init not in (None, 'rand', 'eye', 'dl'):
+            raise YastnError(f"EnvCTM {init=} not recognized. Should be 'rand', 'eye', 'dl', None.")
         for site in self.sites():
             self[site] = EnvCTM_local()
         if init is not None:
@@ -94,17 +99,40 @@ class EnvCTM(Peps):
             for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
                 setattr(env[site], dirn, getattr(self[site], dirn).copy())
         return env
+    
+    def clone(self) -> EnvCTM:
+        r"""
+        Return a clone of the environment preserving the autograd - resulting clone is a part
+        of the computational graph. Data of cloned environment tensors is indepedent
+        from the originals.
+        """
+        env = EnvCTM(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+                setattr(env[site], dirn, getattr(self[site], dirn).clone())
+        return env
+    
+    def detach_(self):
+        r"""
+        Detach all environment tensors from the computational graph.
+        Data of environment tensors in detached environment is a `view` of the original data.
+        """
+        for site in self.sites():
+            for dirn in ["tl", "tr", "bl", "br", "t", "l", "b", "r"]:
+                getattr(self[site], dirn)._data.detach_()
 
-    def reset_(self, init='rand', leg=None):
+
+    def reset_(self, init='rand', leg=None, **kwargs):
         r"""
         Initialize random CTMRG environments of peps tensors.
 
         Parameters
         ----------
         init: str
-            'eye' or 'rand'.
+            ['eye', 'rand', 'dl']
             For 'eye' starts with identity environments of dimension 1.
             For 'rand' sets environments randomly.
+            For 'dl' and Env of double-layer PEPS, trace on-site tensors to initialize environment.
 
         leg: None | yastn.Leg
             If not provided, random initialization has CTMRG bond dimension set to 1.
@@ -113,7 +141,9 @@ class EnvCTM(Peps):
         config = self.psi.config
         leg0 = Leg(config, s=1, t=(config.sym.zero(),), D=(1,))
 
-        if init == 'nn':
+        if init == 'dl':
+            self.init_env_from_onsite_(**kwargs)
+        elif init == 'nn':
             pass
         else:
             if leg is None:
@@ -136,6 +166,41 @@ class EnvCTM(Peps):
                         setattr(self[site], dirn, tmp)
                     else:
                         setattr(self[site], dirn, rand(config, legs=[leg, legs[ind].conj(), leg.conj()]))
+
+    def init_env_from_onsite_(self, normalize : Union[str,Callable]='inf'):
+        r"""
+        Initialize CTMRG environment by tracing on-site double-layer tensors A.
+
+        For double-layer PEPS, the top-left corner is initialized as
+
+            C_(bb',rr')= \sum_{ll',tt',s} A_tlbrs A*_t'l'b'r's
+
+        with other corners initialized analogously. The half-row/-column tensors T are
+        also initialized by tracing. For top half-column tensors
+
+            T_(ll',bb',rr') = \sum_{tt',s} A_tlbrs A*_t'l'b'r's
+
+        and analogously for the remaining T tensors.
+
+        Args:
+            normalize: Normalization of initial environment tensors or custom normalization function
+                with signature f(Tensor)->Tensor.
+                For 'inf' (default) normalizes magnitude of largest element to 1, i.e. L-infinity norm.
+        """
+        assert isinstance(self.psi, Peps2Layers), "Initialization by traced double-layer on-site tensors requires double-layer PEPS"
+        for site in self.sites():
+            for dirn, cor_f in ( ('tl', cor_tl), ('tr', cor_tr), ('bl', cor_bl), ('br', cor_br)):
+                shifted_site= self.nn_site(site,dirn)
+                C= cor_f(self.psi.bra[shifted_site], A_ket=self.psi.ket[shifted_site])
+                C= C/C.norm(p=normalize) if isinstance(normalize,str) else normalize(C)
+                setattr(self[site], dirn, C)
+
+            for dirn, edge_f in ( ('t',edge_t), ('l',edge_l), ('b',edge_b), ('r',edge_r) ):
+                shifted_site= self.nn_site(site,dirn)
+                T= edge_f(self.psi.bra[shifted_site], A_ket=self.psi.ket[shifted_site])
+                T= T/T.norm(p=normalize) if isinstance(normalize,str) else normalize(T)
+                setattr(self[site], dirn, T)
+
 
     def boundary_mps(self, n, dirn):
         r""" Convert environmental tensors of Ctm to an MPS """
@@ -458,7 +523,7 @@ class EnvCTM(Peps):
         return env_win.sample(projectors, number, opts_svd, opts_var, progressbar, return_info)
 
 
-    def update_(env, opts_svd, method='2site'):
+    def update_(env, opts_svd, method='2site', **kwargs):
         r"""
         Perform one step of CTMRG update. Environment tensors are updated in place.
 
@@ -496,7 +561,7 @@ class EnvCTM(Peps):
         #
         # horizontal projectors
         for site in env.sites():
-            update_proj_(proj, site, 'lr', env, opts_svd)
+            update_proj_(proj, site, 'lr', env, opts_svd, **kwargs)
         trivial_projectors_(proj, 'lr', env)  # fill None's
         #
         # horizontal move
@@ -507,7 +572,7 @@ class EnvCTM(Peps):
         #
         # vertical projectors
         for site in env.sites():
-            update_proj_(proj, site, 'tb', env, opts_svd)
+            update_proj_(proj, site, 'tb', env, opts_svd, **kwargs)
         trivial_projectors_(proj, 'tb', env)
         #
         # vertical move
@@ -615,7 +680,7 @@ class EnvCTM(Peps):
             env[site].b = env_old[site].b
             env[site].t = env_old[site].t
 
-    def ctmrg_(env, opts_svd=None, method='2site', max_sweeps=1, iterator_step=None, corner_tol=None):
+    def ctmrg_(env, opts_svd=None, method='2site', max_sweeps=1, iterator_step=None, corner_tol=None, truncation_f : Callable=None, **kwargs):
         r"""
         Perform CTMRG updates :meth:`yastn.tn.fpeps.EnvCTM.update_` until convergence.
         Convergence is based on singular values of CTM environment corner tensors.
@@ -646,6 +711,11 @@ class EnvCTM(Peps):
             Convergence tolerance for the change of singular values of all corners in a single update.
             The default is None, in which case convergence is not checked.
 
+        truncation_f:
+            Custom projector truncation function with signature ``truncation_f(S: Tensor)->Tensor``, consuming
+            rank-1 tensor with singular values. If provided, truncation parameters passed to SVD decomposition
+            are ignored.
+
         Returns
         -------
         Generator if iterator_step is not None.
@@ -657,11 +727,12 @@ class EnvCTM(Peps):
                 * :code:`max_dsv` norm of singular values change in the worst corner in the last sweep.
                 * :code:`converged` whether convergence based on conrer_tol has been reached.
         """
-        tmp = _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol)
+        kwargs["truncation_f"]= truncation_f
+        tmp = _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs)
         return tmp if iterator_step else next(tmp)
 
 
-def _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol):
+def _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs):
     """ Generator for ctmrg_(). """
 
     if corner_tol is not None:
@@ -671,7 +742,7 @@ def _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol):
 
     max_dsv, converged = -1, False
     for sweep in range(1, max_sweeps + 1):
-        env.update_(opts_svd=opts_svd, method=method)
+        env.update_(opts_svd=opts_svd, method=method, **kwargs)
         if corner_tol is not None:
             corner_sv = calculate_corner_svd(env)
             max_dsv = max((old_corner_sv[k] - corner_sv[k]).norm().item() for k in corner_sv)
@@ -700,7 +771,7 @@ def calculate_corner_svd(env):
     return corner_sv
 
 
-def update_2site_projectors_(proj, site, dirn, env, opts_svd):
+def update_2site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves from 4x4 extended corners.
     """
@@ -712,44 +783,45 @@ def update_2site_projectors_(proj, site, dirn, env, opts_svd):
     tl, tr, bl, br = sites
 
     cor_tl = psi[tl]._attach_01(env[tl].l @ env[tl].tl @ env[tl].t)
-    cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
+    cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3))) # b r
     cor_bl = psi[bl]._attach_12(env[bl].b @ env[bl].bl @ env[bl].l)
-    cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
+    cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3))) # t r
     cor_tr = psi[tr]._attach_30(env[tr].t @ env[tr].tr @ env[tr].r)
-    cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
+    cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3))) # l b
     cor_br = psi[br]._attach_23(env[br].r @ env[br].br @ env[br].b)
-    cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
+    cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3))) # t l
 
     if ('l' in dirn) or ('r' in dirn):
-        cor_tt = cor_tl @ cor_tr
-        cor_bb = cor_br @ cor_bl
+        cor_tt = cor_tl @ cor_tr # b(left) b(right)
+        cor_bb = cor_br @ cor_bl # t(right) t(left)
 
+    use_qr= kwargs.get("use_qr",True)
     if 'r' in dirn:
-        _, r_t = qr(cor_tt, axes=(0, 1))
-        _, r_b = qr(cor_bb, axes=(1, 0))
-        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd)
+        _, r_t = qr(cor_tt, axes=(0, 1)) if use_qr else None, cor_tt
+        _, r_b = qr(cor_bb, axes=(1, 0)) if use_qr else None, cor_bb.T
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
     if 'l' in dirn:
-        _, r_t = qr(cor_tt, axes=(1, 0))
-        _, r_b = qr(cor_bb, axes=(0, 1))
-        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd)
+        _, r_t = qr(cor_tt, axes=(1, 0)) if use_qr else None, cor_tt.T
+        _, r_b = qr(cor_bb, axes=(0, 1)) if use_qr else None, cor_bb
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_t, r_b, opts_svd=opts_svd, **kwargs)
 
     if ('t' in dirn) or ('b' in dirn):
-        cor_ll = cor_bl @ cor_tl
-        cor_rr = cor_tr @ cor_br
+        cor_ll = cor_bl @ cor_tl # l(bottom) l(top)
+        cor_rr = cor_tr @ cor_br # r(top) r(bottom)
 
     if 't' in dirn:
-        _, r_l = qr(cor_ll, axes=(0, 1))
-        _, r_r = qr(cor_rr, axes=(1, 0))
-        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd)
+        _, r_l = qr(cor_ll, axes=(0, 1)) if use_qr else None, cor_ll
+        _, r_r = qr(cor_rr, axes=(1, 0)) if use_qr else None, cor_rr.T
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
     if 'b' in dirn:
-        _, r_l = qr(cor_ll, axes=(1, 0))
-        _, r_r = qr(cor_rr, axes=(0, 1))
-        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd)
+        _, r_l = qr(cor_ll, axes=(1, 0)) if use_qr else None, cor_ll.T
+        _, r_r = qr(cor_rr, axes=(0, 1)) if use_qr else None, cor_rr
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_l, r_r, opts_svd=opts_svd, **kwargs)
 
 
-def update_1site_projectors_(proj, site, dirn, env, opts_svd):
+def update_1site_projectors_(proj, site, dirn, env, opts_svd, **kwargs):
     r"""
     Calculate new projectors for CTM moves from 4x2 extended corners.
     """
@@ -769,10 +841,10 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd):
         r_br, r_bl = regularize_1site_corners(cor_br, cor_bl)
 
     if 'r' in dirn:
-        proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, opts_svd=opts_svd)
+        proj[tr].hrb, proj[br].hrt = proj_corners(r_tr, r_br, opts_svd=opts_svd, **kwargs)
 
     if 'l' in dirn:
-        proj[tl].hlb, proj[bl].hlt = proj_corners(r_tl, r_bl, opts_svd=opts_svd)
+        proj[tl].hlb, proj[bl].hlt = proj_corners(r_tl, r_bl, opts_svd=opts_svd, **kwargs)
 
     if ('t' in dirn) or ('b' in dirn):
         cor_bl = (env[br].bl @ env[br].l).fuse_legs(axes=((0, 1), 2))
@@ -783,10 +855,10 @@ def update_1site_projectors_(proj, site, dirn, env, opts_svd):
         r_tr, r_br = regularize_1site_corners(cor_tr, cor_br)
 
     if 't' in dirn:
-        proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, opts_svd=opts_svd)
+        proj[tl].vtr, proj[tr].vtl = proj_corners(r_tl, r_tr, opts_svd=opts_svd, **kwargs)
 
     if 'b' in dirn:
-        proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=opts_svd)
+        proj[bl].vbr, proj[br].vbl = proj_corners(r_bl, r_br, opts_svd=opts_svd, **kwargs)
 
 
 def regularize_1site_corners(cor_0, cor_1):
@@ -799,13 +871,18 @@ def regularize_1site_corners(cor_0, cor_1):
     r_1 = tensordot((S @ U_1), Q_1, axes=(1, 1))
     return r_0, r_1
 
-def proj_corners(r0, r1, opts_svd):
+def proj_corners(r0, r1, opts_svd, **kwargs):
     r""" Projectors in between r0 @ r1.T corners. """
     rr = tensordot(r0, r1, axes=(1, 1))
-    u, s, v = rr.svd(axes=(0, 1), sU=r0.s[1], fix_signs=True)
 
-    Smask = truncation_mask(s, **opts_svd)
-    u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
+    fix_signs= opts_svd.get('fix_signs',True)
+    truncation_f= kwargs.get('truncation_f',None)
+    if truncation_f is None:
+        u, s, v = rr.svd(axes=(0, 1), sU=r0.s[1], fix_signs=fix_signs)
+        Smask = truncation_mask(s, **opts_svd)
+        u, s, v = Smask.apply_mask(u, s, v, axes=(-1, 0, 0))
+    else:
+        u, s, v = rr.svd_with_truncation(axes=(0, 1), sU=r0.s[1], mask_f=truncation_f, **kwargs)
 
     rs = s.rsqrt()
     p0 = tensordot(r1, (rs @ v).conj(), axes=(0, 1)).unfuse_legs(axes=0)

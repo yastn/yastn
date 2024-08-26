@@ -134,7 +134,8 @@ def _normalize_and_regularize_rdm(rdm, order : str="interleaved", pos_def=False,
     rdm_asym = 0.5 * (rdm - rdm.conj().transpose(axes=conj_order))
     rdm = 0.5 * (rdm + rdm.conj().transpose(axes=conj_order))
     
-    rdm_norm= rdm.trace(axes=trace_order).to_number()
+    # given enforced symmetry of rdm, the trace has to be real
+    rdm_norm= rdm.trace(axes=trace_order).to_number().real
 
     if verbosity > 0:
         log.info(f"{who} trace(rdm_sym) {rdm_norm} 2-norm(rdm_sym) {rdm.norm()} 2-norm(rdm_asym) {rdm_asym.norm()}")
@@ -238,12 +239,12 @@ def rdm1x1(s0 : Site, psi : Peps, env : EnvCTM, **kwargs) -> tuple[Tensor, Scala
     rdm = res.unfuse_legs(axes=(0,))  # s s'
 
     # check if a dummy leg is fused with the physical leg
-    if rdm.get_legs(0).is_fused():
+    # i) physical leg is fused and ii) its fusion of two legs and iii) the second leg has dimension 1
+    if rdm.get_legs(0).is_fused() and len(rdm.get_legs(0).unfuse_leg())==2 and sum(rdm.get_legs(0).unfuse_leg()[-1].D)==1:
         rdm = rdm.unfuse_legs(axes=(0, 1))  # p d p' d'
         rdm = rdm.trace(axes=(1, 3))  # p p'
 
     # assert rdm.ndim == 2
-    rdm_norm = rdm.trace(axes=(0, 1)).to_number()
     rdm, rdm_norm = _normalize_and_regularize_rdm(rdm, who=rdm1x1.__name__)
 
     return rdm, rdm_norm

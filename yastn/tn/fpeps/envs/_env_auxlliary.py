@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from .... import fuse_legs, tensordot, swap_gate, ones, Leg, eye
+from .... import fuse_legs, tensordot, swap_gate, ones, Leg, eye, Tensor
 from ... import mps
 
 __all__ = ['hair_t', 'hair_l', 'hair_b', 'hair_r',
@@ -120,85 +120,95 @@ def hair_r(A, ht=None, hb=None, hr=None):  # A = [t l] [b r] s
     return tensordot(A.conj(), Af, axes=((2, 0, 3), (0, 1, 2)))  # l' l
 
 
-def cor_tl(A, ht=None, hl=None):  # A -> [t l] [b r] s
+def cor_tl(A_bra, ht=None, hl=None, A_ket=None):  # A -> [t l] [b r] s
     """ top-left corner tensor """
     if ht is None and hl is None:
-        A = fuse_legs(A, axes=((0, 2), 1))  # [[t l] s] [b r]
-        ctl = tensordot(A, A.conj(), axes=(0, 0))  # [b r] [b' r']
+        A = fuse_legs(A_bra, axes=((0, 2), 1))  # [[t l] s] [b r]
+        A_ket= A if A_ket is None else fuse_legs(A_ket, axes=((0, 2), 1))
+        ctl = tensordot(A, A_ket.conj(), axes=(0, 0))  # [b r] [b' r']
     else:
-        A = A.unfuse_legs(axes=0).transpose(axes=(0, 2, 3, 1))  # t [b r] s l
+        A = A_bra.unfuse_legs(axes=0).transpose(axes=(0, 2, 3, 1))  # t [b r] s l
         Af = A if ht is None else ht @ A
         if hl is not None:
             Af = Af @ hl.T
-        ctl = tensordot(Af, A.conj(), axes=((0, 2, 3), (0, 2, 3)))  # [b r] [b' r']
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=0).transpose(axes=(0, 2, 3, 1))
+        ctl = tensordot(Af, A_ket.conj(), axes=((0, 2, 3), (0, 2, 3)))  # [b r] [b' r']
     ctl = ctl.unfuse_legs(axes=(0, 1))  # b r b' r'
     ctl = ctl.swap_gate(axes=((0, 2), 3))  # b b' X r'
     ctl = ctl.fuse_legs(axes=((0, 2), (1, 3)))  # [b b'] [r r']
     return ctl  # [b b'] [r r']
 
 
-def cor_bl(A, hb=None, hl=None):  # A = [t l] [b r] s
+def cor_bl(A_bra, hb=None, hl=None, A_ket=None):  # A = [t l] [b r] s
     """ bottom-left corner tensor """
-    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
+    A = A_bra.unfuse_legs(axes=(0, 1))  # t l b r s
     if hb is None and hl is None:
         A = fuse_legs(A, axes=((0, 3), (1, 2, 4)))  # [t r] [b l s]
-        cbl = tensordot(A, A.conj(), axes=(1, 1))  # [t r] [t' r']
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=(0, 1)).fuse_legs(axes=((0, 3), (1, 2, 4)))
+        cbl = tensordot(A, A_ket.conj(), axes=(1, 1))  # [t r] [t' r']
     else:
         A = fuse_legs(A, axes=(1, (0, 3), 4, 2))  # l [t r] s b
         Af = A if hl is None else hl @ A
         if hb is not None:
             Af = Af @ hb.T
-        cbl = tensordot(Af, A.conj(), axes=((0, 2, 3), (0, 2, 3)))  # [t r] [t' r']
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=(0, 1)).fuse_legs(axes=(1, (0, 3), 4, 2))
+        cbl = tensordot(Af, A_ket.conj(), axes=((0, 2, 3), (0, 2, 3)))  # [t r] [t' r']
     cbl = cbl.unfuse_legs(axes=(0, 1))  # t r t' r'
     cbl = cbl.fuse_legs(axes=((1, 3), (0, 2)))  # [r r'] [t t']
     return cbl  # [r r'] [t t']
 
 
-def cor_br(A, hb=None, hr=None):  # A = [t l] [b r] s
+def cor_br(A_bra, hb=None, hr=None, A_ket=None):  # A = [t l] [b r] s
     """ bottom-right corner tensor """
     if hb is None and hr is None:
-        A = fuse_legs(A, axes=(0, (1, 2)))  # [t l] [[b r] s]
-        cbr = tensordot(A, A.conj(), axes=(1, 1))  # [t l] [t' l']
+        A = fuse_legs(A_bra, axes=(0, (1, 2)))  # [t l] [[b r] s]
+        A_ket = A if A_ket is None else fuse_legs(A_ket, axes=(0, (1, 2)))
+        cbr = tensordot(A, A_ket.conj(), axes=(1, 1))  # [t l] [t' l']
     else:
-        A = A.unfuse_legs(axes=1).transpose(axes=(1, 0, 3, 2))  # b [t l] s r
+        A = A_bra.unfuse_legs(axes=1).transpose(axes=(1, 0, 3, 2))  # b [t l] s r
         Af = A if hb is None else hb @ A
         if hr is not None:
             Af = Af @ hr.T
-        cbr = tensordot(Af, A.conj(), axes=((0, 2, 3), (0, 2, 3)))  # [t l] [t' l']
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=1).transpose(axes=(1, 0, 3, 2))
+        cbr = tensordot(Af, A_ket.conj(), axes=((0, 2, 3), (0, 2, 3)))  # [t l] [t' l']
     cbr = cbr.unfuse_legs(axes=(0, 1))  # t l t' l'
     cbr = cbr.swap_gate(axes=((1, 3), 2))  # l l' X t'
     cbr = cbr.fuse_legs(axes=((0, 2), (1, 3)))  # [t t'] [l l']
     return cbr  # [t t'] [l l']
 
 
-def cor_tr(A, ht=None, hr=None):  # A = [t l] [b r] s
+def cor_tr(A_bra, ht=None, hr=None, A_ket=None):  # A = [t l] [b r] s
     """ top-right corner tensor """
-    A = A.unfuse_legs(axes=(0, 1))  # t l b r s
+    A = A_bra.unfuse_legs(axes=(0, 1))  # t l b r s
     A = swap_gate(A, axes=(0, 1, 2, 3))  # t X l, b X r
     if ht is None and hr is None:
         A = fuse_legs(A, axes=((1, 2), (0, 3, 4)))  # [l b] [t r s]
-        ctr = tensordot(A, A.conj(), axes=(1, 1))  # [l b] [l' b']
+        A_ket = A if A_ket is None else A_ket.unfuse_legs(axes=(0, 1)).swap_gate(axes=(0, 1, 2, 3)).fuse_legs(axes=((1, 2), (0, 3, 4)))
+        ctr = tensordot(A, A_ket.conj(), axes=(1, 1))  # [l b] [l' b']
     else:
         A = fuse_legs(A, axes=(0, (1, 2), 4, 3))  # t [l b] s r
         Af = A if ht is None else ht @ A
         if hr is not None:
             Af = Af @ hr.T
-        ctr = tensordot(Af, A.conj(), axes=((0, 2, 3), (0, 2, 3)))  # [l b] [l' b']
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=(0, 1)).swap_gate(axes=(0, 1, 2, 3)).fuse_legs(axes=(0, (1, 2), 4, 3))
+        ctr = tensordot(Af, A_ket.conj(), axes=((0, 2, 3), (0, 2, 3)))  # [l b] [l' b']
     ctr = ctr.unfuse_legs(axes=(0, 1))  # l b l' b'
     ctr = ctr.fuse_legs(axes=((0, 2), (1, 3)))  # [l l'] [b b']
     return ctr  # [l l'] [b b']
 
 
-def edge_l(A, hl=None):  # A = [t l] [b r] s
+def edge_l(A_bra, hl=None, A_ket=None):  # A = [t l] [b r] s
     """ left edge tensor where left legs of double-layer A tensors can be contracted with hl """
-    A = A.unfuse_legs(axes=0)  # t l [b r] s
+    A = A_bra.unfuse_legs(axes=0)  # t l [b r] s
     if hl is None:
         A = A.fuse_legs(axes=((1, 3), (0, 2)))  # [l s] [t [b r]]
-        egl = tensordot(A, A.conj(), axes=(0, 0))  # [t [b r]] [t' [b' r']]
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=0).fuse_legs(axes=((1, 3), (0, 2)))
+        egl = tensordot(A, A_ket.conj(), axes=(0, 0))  # [t [b r]] [t' [b' r']]
     else:
         A = A.fuse_legs(axes=(1, 3, (0, 2)))  # l s [t [b r]]
         hlA = hl @ A  # l' s [t [b r]]
-        egl = tensordot(hlA, A.conj(), axes=((0, 1), (0, 1)))  # [t [b r]] [t' [b' r']]
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=0).fuse_legs(axes=(1, 3, (0, 2)))
+        egl = tensordot(hlA, A_ket.conj(), axes=((0, 1), (0, 1)))  # [t [b r]] [t' [b' r']]
     egl = egl.unfuse_legs(axes=(0, 1))  # t [b r] t' [b' r']
     egl = egl.fuse_legs(axes=(1, 3, (0, 2)))  # [b r] [b' r'] [t t']
     egl = egl.unfuse_legs(axes=(0, 1))  # b r b' r' [t t']
@@ -207,17 +217,19 @@ def edge_l(A, hl=None):  # A = [t l] [b r] s
     return egl  # [b b'] [r r'] [t t']
 
 
-def edge_t(A, ht=None):  # QA = [t l] [b r] s
+def edge_t(A_bra, ht=None, A_ket=None):  # QA = [t l] [b r] s
     """ top edge tensor where top legs of double-layer A tensors can be contracted with ht """
-    A = A.unfuse_legs(axes=0)  # t l [b r] s
+    A = A_bra.unfuse_legs(axes=0)  # t l [b r] s
     A = A.swap_gate(axes=(0, 1))  # t X l
     if ht is None:
         A = A.fuse_legs(axes=((0, 3), (1, 2)))  # [t s] [l [b r]]
-        egt = tensordot(A, A.conj(), axes=(0, 0))  # [l [b r]] [l' [b' r']]
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=0).swap_gate(axes=(0, 1)).fuse_legs(axes=((0, 3), (1, 2)))
+        egt = tensordot(A, A_ket.conj(), axes=(0, 0))  # [l [b r]] [l' [b' r']]
     else:
         A = A.fuse_legs(axes=(0, 3, (1, 2)))  # t s [l [b r]]
         htA = ht @ A  # t' s [l [b r]]
-        egt = tensordot(htA, A.conj(), axes=((0, 1), (0, 1)))  # [l [b r]] [l' [b' r']]
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=0).swap_gate(axes=(0, 1)).fuse_legs(axes=(0, 3, (1, 2)))
+        egt = tensordot(htA, A_ket.conj(), axes=((0, 1), (0, 1)))  # [l [b r]] [l' [b' r']]
     egt = egt.unfuse_legs(axes=(0, 1))  # l [b r] l' [b' r']
     egt = egt.fuse_legs(axes=((0, 2), 1, 3))  # [l l'] [b r] [b' r']
     egt = egt.unfuse_legs(axes=(1, 2))  # [l l'] b r b' r'
@@ -226,17 +238,19 @@ def edge_t(A, ht=None):  # QA = [t l] [b r] s
     return egt  # [l l'] [b b'] [r r']
 
 
-def edge_r(A, hr=None):  # A = [t l] [b r] s
+def edge_r(A_bra, hr=None, A_ket=None):  # A = [t l] [b r] s
     """ right edge tensor where right legs of double-layer A tensors can be contracted with hr """
-    A = A.unfuse_legs(axes=1)  # [t l] b r s
+    A = A_bra.unfuse_legs(axes=1)  # [t l] b r s
     A = A.swap_gate(axes=(1, 2))  # b X r
     if hr is None:
         A = A.fuse_legs(axes=((2, 3), (0, 1)))  # [r s] [[t l] b]
-        egr = tensordot(A, A.conj(), axes=(0, 0))  # [[t l] b] [[t' l'] b']
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=1).swap_gate(axes=(1, 2)).fuse_legs(axes=((2, 3), (0, 1)))
+        egr = tensordot(A, A_ket.conj(), axes=(0, 0))  # [[t l] b] [[t' l'] b']
     else:
         A = A.fuse_legs(axes=(2, 3, (0, 1)))  # r s [[t l] b]
         hrA = hr @ A  # r' s [[t l] b]
-        egr = tensordot(hrA, A.conj(), axes=((0, 1), (0, 1)))  # [[t l] b] [[t' l'] b']
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=1).swap_gate(axes=(1, 2)).fuse_legs(axes=(2, 3, (0, 1)))
+        egr = tensordot(hrA, A_ket.conj(), axes=((0, 1), (0, 1)))  # [[t l] b] [[t' l'] b']
     egr = egr.unfuse_legs(axes=(0, 1))  # [t l] b [t' l'] b'
     egr = egr.fuse_legs(axes=(0, 2, (1, 3)))  # [t l] [t' l'] [b b']
     egr = egr.unfuse_legs(axes=(0, 1))  # t l t' l' [b b']
@@ -245,16 +259,18 @@ def edge_r(A, hr=None):  # A = [t l] [b r] s
     return egr  # [t t'] [l l'] [b b']
 
 
-def edge_b(A, hb=None):  # A = [t l] [b r] s;  hb = b' b
+def edge_b(A_bra, hb=None, A_ket=None):  # A = [t l] [b r] s;  hb = b' b
     """ bottom edge tensor where bottom legs of double-layer A tensors can be contracted with hb """
-    A = A.unfuse_legs(axes=1)  # [t l] b r s
+    A = A_bra.unfuse_legs(axes=1)  # [t l] b r s
     if hb is None:
         A = A.fuse_legs(axes=((1, 3), (0, 2)))  # [b s] [[t l] r]
-        egb = tensordot(A, A.conj(), axes=(0, 0))  # [[t l] r] [[t' l'] r']
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=1).fuse_legs(axes=((1, 3), (0, 2)))
+        egb = tensordot(A, A_ket.conj(), axes=(0, 0))  # [[t l] r] [[t' l'] r']
     else:
         A = A.fuse_legs(axes=(1, 3, (0, 2)))  # b s [[t l] r]
         hbA = hb @ A  # b' s [[t l] r]
-        egb = tensordot(hbA, A.conj(), axes=((0, 1), (0, 1)))  # [[t l] r] [[t' l'] r']
+        A_ket= A if A_ket is None else A_ket.unfuse_legs(axes=1).fuse_legs(axes=(1, 3, (0, 2)))
+        egb = tensordot(hbA, A_ket.conj(), axes=((0, 1), (0, 1)))  # [[t l] r] [[t' l'] r']
     egb = egb.unfuse_legs(axes=(0, 1))  # [t l] r [t' l'] r'
     egb = egb.fuse_legs(axes=((1, 3), 0, 2))  # [r r'] [t l] [t' l']
     egb = egb.unfuse_legs(axes=(1, 2))  # [r r'] t l t' l'
@@ -263,8 +279,27 @@ def edge_b(A, hb=None):  # A = [t l] [b r] s;  hb = b' b
     return egb  # [r r'] [t t'] [l l']
 
 
-def append_vec_tl(A, Ac, vectl):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectl = x [l l'] [t t'] y
-    """ Append the A and Ac tensors to the top-left vector """
+def append_vec_tl(A : Tensor, Ac : Tensor, vectl : Tensor)->Tensor:
+    """ 
+    Append tensors of double-layer PEPS to the top-left environment (vector)
+    
+        C--T-----      |vectl___|---
+        |  |       <=> |  |   |
+        T--A*Ac--      |__|--A*Ac---
+        |  |            |     |
+
+    with assumed index convention on arguments and resulting tensor::
+
+        A( [t l] [b r] s ) * (Ac [t' l'] [b' r'] s ) * ( vectl x [l l'] [t t'] y ) -> ( x [b b'] y [r r'] )
+
+    Args:
+        A: on-site tensor of "ket" layer
+        Ac: on-site tensor of "bra" layer. Note: complex conjugation of ``Ac`` is done within the function.
+        vectl: top-left part of the environment
+
+    Returns:
+        top-left enlarged corner
+    """
     vectl = vectl.fuse_legs(axes=(2, (0, 3), 1))  # [t t'] [x y] [l l']
     vectl = vectl.unfuse_legs(axes=(0, 2))  # t t' [x y] l l'
     vectl = vectl.swap_gate(axes=(1, (3, 4)))  # t' X l l'
@@ -279,8 +314,27 @@ def append_vec_tl(A, Ac, vectl):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s; 
     return vectl
 
 
-def append_vec_br(A, Ac, vecbr):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbr = x [r r'] [b b'] y
-    """ Append the A and Ac tensors to the bottom-right vector. """
+def append_vec_br(A : Tensor, Ac : Tensor, vecbr : Tensor)->Tensor:  # 
+    """ 
+    Append tensors of double-layer PEPS to the bottom-right environment (vector) 
+
+             |  |        |     |
+        --A*Ac--T <=> --A*Ac--| |
+             |  |        |    | |
+         ----T--C     --|vecbr__|
+
+    with assumed index convention on arguments and resulting tensor::
+
+       (A [t l] [b r] s) * (Ac [t' l'] [b' r'] s) * ( vecbr x [r r'] [b b'] y ) -> ( x [t t'] y [l l'] )
+
+    Args:
+        A: on-site tensor of "ket" layer
+        Ac: on-site tensor of "bra" layer. Note: complex conjugation of ``Ac`` is done within the function.
+        vecbr: bottom-right part of the environment
+
+    Returns:
+        bottom-right enlarged corner
+    """
     vecbr = vecbr.fuse_legs(axes=(2, (0, 3), 1))  # [b b'] [x y] [r r']
     vecbr = vecbr.unfuse_legs(axes=(0, 2))  # b b' [x y] r r'
     vecbr = vecbr.swap_gate(axes=((0, 1), 4))  # b b' X r'
@@ -295,8 +349,27 @@ def append_vec_br(A, Ac, vecbr):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s; 
     return vecbr
 
 
-def append_vec_tr(A, Ac, vectr):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectr = x [t t'] [r r'] y
-    """ Append the A and Ac tensors to the top-left vector """
+def append_vec_tr(A : Tensor, Ac : Tensor, vectr : Tensor)->Tensor:  
+    """ 
+    Append tensors of double-layer PEPS to the top-right environment (vector)
+    
+        ----T---C      --|__vectr|
+            |   |  <=>    |    | |
+        --A*Ac--T      --A*Ac--|_|
+            |   |         |     |
+
+    with assumed index convention on arguments and resulting tensor::
+
+        ( A [t l] [b r] s ) * ( Ac [t' l'] [b' r'] s ) * ( vectr x [t t'] [r r'] y ) -> ( x [l l'] y [b b'] )
+
+    Args:
+        A: on-site tensor of "ket" layer
+        Ac: on-site tensor of "bra" layer. Note: complex conjugation of ``Ac`` is done within the function.
+        vectr: top-left part of the environment
+
+    Returns:
+        top-right enlarged corner
+    """
     vectr = vectr.fuse_legs(axes=(1, (0, 3), 2))  # [t t'] [x y] [r r']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
     vectr = vectr.swap_gate(axes=(1, 2))  # t' X x y
@@ -317,8 +390,27 @@ def append_vec_tr(A, Ac, vectr):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s; 
     return vectr
 
 
-def append_vec_bl(A, Ac, vecbl):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbl = x [b b'] [l l'] y
-    """ Append the A and Ac tensors to the top-left vector """
+def append_vec_bl(A : Tensor, Ac : Tensor, vecbl : Tensor)->Tensor:
+    """ 
+    Append tensors of double-layer PEPS to the bottom-left environment (vector) 
+
+        |  |           |   |
+        T--A*Ac-- <=> | |--A*Ac--
+        |  |          | |__|__
+        C--T-----     |vecbl__|--
+
+    with assumed index convention on arguments and resulting tensor::
+
+       (A [t l] [b r] s ) * ( Ac [t' l'] [b' r'] s ) * ( vecbl x [b b'] [l l'] y ) -> ( x [r r'] y [t t'] )
+
+    Args:
+        A: on-site tensor of "ket" layer
+        Ac: on-site tensor of "bra" layer. Note: complex conjugation of ``Ac`` is done within the function.
+        vecbl: bottom-left part of the environment
+
+    Returns:
+        bottom-left enlarged corner
+    """
     vecbl = vecbl.fuse_legs(axes=(1, (0, 3), 2))  # [b b'] [x y] [l l']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # b b' [x y] l l'
     vecbl = vecbl.swap_gate(axes=(0, (1, 4)))  # b X b' l'

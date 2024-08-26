@@ -136,8 +136,8 @@ def test_ctmrg_measure_product(boundary):
         env.measure_line(sz, sz, sites=((0, 0), (0, 0)))
         # Sites should not repeat.
 
-
-def test_ctmrg_measure_2x1():
+@pytest.mark.parametrize("env_init", ["eye", "dl"])
+def test_ctmrg_measure_2x1(env_init):
     """ Initialize a product PEPS of 1x2 cells and perform a set of measurment. """
 
     for dims in [(1, 2), (2, 1)]:
@@ -168,7 +168,7 @@ def test_ctmrg_measure_2x1():
 
             psi = fpeps.Peps(g, tensors=dict(zip(g.sites(), [r0, r1])))
 
-            env = fpeps.EnvCTM(psi, init='eye')
+            env = fpeps.EnvCTM(psi, init=env_init)
             # no need to converge ctmrg_ in this example
             env.ctmrg_(opts_svd = {"D_total": 3}, max_sweeps=2)
 
@@ -215,7 +215,7 @@ def test_ctmrg_measure_2x1():
 
                     psi = fpeps.Peps(g, tensors=dict(zip(g.sites(), [r0, r1])))
 
-                    env = fpeps.EnvCTM(psi, init='eye')
+                    env = fpeps.EnvCTM(psi, init=env_init)
                     # no need to converge ctmrg_ in this example, but we can do it anyway
                     # env.ctmrg_(opts_svd = {"D_total": 2}, max_sweeps=2)
                     bond = [*g.sites()]

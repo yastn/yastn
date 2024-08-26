@@ -283,4 +283,4 @@ class RectangularUnitcell(SquareLattice):
 
     def __dict__(self):
         """Return a dictionary representation of the object."""
-        return {'site2index': self._site2index}
+        return {'pattern': self._site2index, 'boundary': self.boundary }

@@ -645,6 +645,11 @@ if _torch_version_check("2.0"):
             meta_dot= ctx.meta_dot
             Adata_b = torch.zeros_like(Adata)
             Bdata_b = torch.zeros_like(Bdata)
+            dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+            if dtype != Adata.dtype:
+                Adata = Adata.to(dtype=dtype)
+            if dtype != Bdata.dtype:
+                Bdata = Bdata.to(dtype=dtype)
             for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
                 Adata_b[slice(*sla)].view(Da)[:]= Cdata_b[slice(*slc)].view(Dc) @ Bdata[slice(*slb)].view(Db).adjoint()
                 Bdata_b[slice(*slb)].view(Db)[:]= Adata[slice(*sla)].view(Da).adjoint() @ Cdata_b[slice(*slc)].view(Dc)
@@ -675,6 +680,11 @@ else:
             meta_dot= ctx.meta_dot
             Adata_b = torch.zeros_like(Adata)
             Bdata_b = torch.zeros_like(Bdata)
+            dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+            if dtype != Adata.dtype:
+                Adata = Adata.to(dtype=dtype)
+            if dtype != Bdata.dtype:
+                Bdata = Bdata.to(dtype=dtype)
             for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
                 Adata_b[slice(*sla)].view(Da)[:]= Cdata_b[slice(*slc)].view(Dc) @ Bdata[slice(*slb)].view(Db).adjoint()
                 Bdata_b[slice(*slb)].view(Db)[:]= Adata[slice(*sla)].view(Da).adjoint() @ Cdata_b[slice(*slc)].view(Dc)
@@ -718,6 +728,11 @@ if _torch_version_check("2.0"):
             meta_dot, msk_a, msk_b= ctx.meta_dot, ctx.msk_a, ctx.msk_b
             Adata_b = torch.zeros_like(Adata)
             Bdata_b = torch.zeros_like(Bdata)
+            dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+            if dtype != Adata.dtype:
+                Adata = Adata.to(dtype=dtype)
+            if dtype != Bdata.dtype:
+                Bdata = Bdata.to(dtype=dtype)
             for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
                 Adata_b[slice(*sla)].view(Da)[:, msk_a[ia]]= Cdata_b[slice(*slc)].view(Dc) @ Bdata[slice(*slb)].view(Db)[msk_b[ib],:].adjoint()
                 Bdata_b[slice(*slb)].view(Db)[msk_b[ib],:]= Adata[slice(*sla)].view(Da)[:,msk_a[ia]].adjoint() @ Cdata_b[slice(*slc)].view(Dc)
@@ -751,6 +766,11 @@ else:
             meta_dot, msk_a, msk_b= ctx.meta_dot, ctx.msk_a, ctx.msk_b
             Adata_b = torch.zeros_like(Adata)
             Bdata_b = torch.zeros_like(Bdata)
+            dtype = torch.promote_types(Adata.dtype, Bdata.dtype)
+            if dtype != Adata.dtype:
+                Adata = Adata.to(dtype=dtype)
+            if dtype != Bdata.dtype:
+                Bdata = Bdata.to(dtype=dtype)
             for (slc, Dc, sla, Da, slb, Db, ia, ib) in meta_dot:
                 Adata_b[slice(*sla)].view(Da)[:, msk_a[ia]]= Cdata_b[slice(*slc)].view(Dc) @ Bdata[slice(*slb)].view(Db)[msk_b[ib],:].adjoint()
                 Bdata_b[slice(*slb)].view(Db)[msk_b[ib],:]= Adata[slice(*sla)].view(Da)[:,msk_a[ia]].adjoint() @ Cdata_b[slice(*slc)].view(Dc)
