@@ -19,6 +19,7 @@ from typing import Sequence
 from ... import YastnError
 from . import MpsMpoOBC
 from ._env import Env, Env2
+from ...operators import swap_charges
 
 
 def vdot(*args) -> number:
@@ -224,13 +225,7 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
             results[(n0, n1)] = env.measure(bd=(n, n1))
 
     # here <P O>, and we need to correct by the sign derived from swapping the operators.
-    if not O0.config.fermionic:
-        sign = 1
-    elif O0.config.fermionic is True:
-        sign = 1 - 2 * (sum(x * y for x, y in zip(O0.n, P0.n)) % 2)
-    else:
-        sign = 1 - 2 * (sum(x * y * z for x, y, z in zip(O0.n, P0.n, O0.config.fermionic)) % 2)
-
+    sign = swap_charges([O0.n], [P0.n], O0.config.fermionic)
     env = env0.shallow_copy()
     for n1 in s0s:
         env.update_env_op_(n1, O[n1], to='first')

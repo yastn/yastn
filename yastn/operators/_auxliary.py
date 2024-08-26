@@ -12,11 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from ._meta_operators import meta_operators
-from ._qdit import Qdit
-from ._spin12 import Spin12
-from ._spin1 import Spin1
-from ._spinless_fermions import SpinlessFermions
-from ._spinful_fermions import SpinfulFermions
-from ._spinful_fermions_tJ import SpinfulFermions_tJ
-from ._auxliary import swap_charges
+
+import numpy as np
+
+def swap_charges(charges_0, charges_1, fss):
+    """ Calculates a sign accumulated while swaping lists of charges."""
+    if not fss:
+        return 1
+    t0 = np.array(charges_0, dtype=np.int64)
+    t1 = np.array(charges_1, dtype=np.int64)
+    if fss is True:
+        return 1 - 2 * (np.sum(t0 * t1, dtype=np.int64).item() % 2)
+    return 1 - 2 * (np.sum((t0 * t1)[:, fss], dtype=np.int64).item() % 2)
