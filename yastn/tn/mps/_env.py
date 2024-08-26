@@ -330,7 +330,6 @@ class Env2(EnvParent):
         return self.factor() * tmp.to_number()
 
     def update_env_(self, n, to='last'):
-
         if to == 'first':
             temp = tensordot(self.ket[n], self.F[(n + 1, n)], axes=(2, 0))
             temp = temp.swap_gate(axes=1, charge=self.F[(n + 1, n)].n)
@@ -436,12 +435,16 @@ class EnvParent_3_obc(EnvParent_3):
 
         # init boundaries
         legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
-        tmp = eye(self.config, legs=legs, isdiag=False)
-        self.F[(-1, 0)] = tmp.add_leg(axis=1, leg=op.virtual_leg('first').conj())
+        legv=op.virtual_leg('first').conj()
+        n_left = ket.config.sym.add_charges(legv.t[0], s=(legv.s,), new_s=-1)
+        tmp = eye(self.config, legs=legs, isdiag=False, n=n_left)
+        self.F[(-1, 0)] = tmp.add_leg(axis=1, leg=legv)
 
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
-        tmp = eye(self.config, legs=legs, isdiag=False)
-        self.F[(self.N, self.N - 1)] = tmp.add_leg(axis=1, leg=op.virtual_leg('last').conj())
+        legv=op.virtual_leg('last').conj()
+        n_right = ket.config.sym.add_charges(legv.t[0], s=(legv.s,), new_s=-1)
+        tmp = eye(self.config, legs=legs, isdiag=False, n=n_right)
+        self.F[(self.N, self.N - 1)] = tmp.add_leg(axis=1, leg=legv)
 
     def measure(self, bd=(-1, 0)):
         tmp = tensordot(self.F[bd], self.F[bd[::-1]], axes=((0, 1, 2), (2, 1, 0)))

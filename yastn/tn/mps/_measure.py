@@ -16,6 +16,7 @@
 from __future__ import annotations
 from itertools import groupby
 from typing import Sequence
+from ... import YastnError
 from . import MpsMpoOBC
 from ._env import Env, Env2
 
@@ -93,7 +94,7 @@ def measure_1site(bra, O, ket, sites=None) -> dict[int, number]:
 
     O: yastn.Tensor or dict
         An operator with signature (1, -1).
-        It is possible to provide a dictionary {site: operator}
+        It is possible to provide a dictionary {site: operator} with all operators of the same charge.
 
     ket: yastn.tn.mps.MpsMpoOBC
 
@@ -105,17 +106,23 @@ def measure_1site(bra, O, ket, sites=None) -> dict[int, number]:
     return_float = False
     if sites is None:
         sites = list(range(ket.N))
-    if isinstance(sites, int):  # single site
+    elif isinstance(sites, int):  # single site
         sites = [sites]
         return_float = True
-
-    usites = sorted(set(sites))
-    if isinstance(O, dict):
-        op = {k: O[k] for k in usites if k in O}
     else:
-        op = {k: O for k in usites}
+        sites = sorted(set(sites) & set(range(ket.N)))
 
-    O0 = next(iter(op.values()))
+    if isinstance(O, dict):
+        op = {k: O[k] for k in sites if k in O}
+        if len(op) == 0:
+            return {}
+        O0 = next(iter(op.values()))
+        if any(O0.n != x.n for x in op.values()):
+            raise YastnError("In mps.measure_1site, all operators in O should have the same charge.")
+    else:
+        op = {k: O for k in sites}
+        O0 = O
+
     n_left = O0.config.sym.add_charges(O0.n, new_s=-1)
     env = Env2(bra, ket, n_left=n_left)
     env.setup_(to='first').setup_(to='last')
@@ -143,7 +150,7 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
 
     O, P: yastn.Tensor or dict
         Operators with signature (1, -1).
-        Each can also be a dictionary {site: operator}
+        Each can also be a dictionary {site: operator} with all operators of the same charge.
 
     ket: yastn.tn.mps.MpsMpoOBC
 
@@ -170,17 +177,25 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
     else:
         pairs = bonds
 
-    if not isinstance(O, dict):
+    if isinstance(O, dict):
+        O0 = next(iter(O.values()))
+        if any(O0.n != x.n for x in O.values()):
+            raise YastnError("In mps.measure_2site, all operators in O should have the same charge.")
+    else:  # is a tensor
+        O0 = O
         O = {k: O for k in range(ket.N)}
-    if not isinstance(P, dict):
+
+    if isinstance(P, dict):
+        P0 = next(iter(P.values()))
+        if any(P0.n != x.n for x in P.values()):
+            raise YastnError("In mps.measure_2site, all operators in P should have the same charge.")
+    else: # is a tensor
+        P0 = P
         P = {k: P for k in range(ket.N)}
 
-    O0 = next(iter(O.values()))
-    P0 = next(iter(P.values()))
     n_left = O0.config.sym.add_charges(O0.n, P0.n, new_s=-1)
 
     pairs = [(n0, n1) for n0, n1 in pairs if (n0 in O and n1 in P)]
-
     s0s1 = [pair for pair in pairs if pair[0] < pair[1]]
     s1s0 = [pair[::-1] for pair in pairs if pair[0] > pair[1]]
     s0s0 = sorted(pair[0] for pair in pairs if pair[0] == pair[1])
@@ -233,7 +248,7 @@ def measure_2site(bra, O, P, ket, bonds='<') -> dict[tuple[int, int], float] | f
         env.update_env_op_(n0, O[n0] @ P[n0], to='first')
         results[(n0, n0)] = env.measure(bd=(n0 - 1, n0))
 
-    return results.popitem()[1] if return_float else results
+    return results.popitem()[1] if return_float and len(results) > 0 else results
 
 
 def _parse_2site_bonds(bonds, N):
@@ -256,5 +271,8 @@ def _parse_2site_bonds(bonds, N):
     if 'r' in bonds:  # only "r" are left
         for r in bonds.split('r')[1:]:
             r = int(r)
-            pairs += [(i, (i + r) % N) for i in range(N if pbc else N - r)]
+            if pbc:
+                pairs += [(i, (i + r) % N) for i in range(N)]
+            else:
+                pairs += [(i, (i + r)) for i in range(N) if 0 <= i + r < N]
     return sorted(set(pairs))
