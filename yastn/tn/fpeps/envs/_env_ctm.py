@@ -265,10 +265,10 @@ class EnvCTM(Peps):
 
     def measure_2x2(self, *operators, sites=None):
         """
-        Calculate expectation value of a product of local opertors
-        in a 2x2 window within CTM environment.
+        Calculate expectation value of a product of local operators
+        in a 2x2 window within the CTM environment.
 
-        At the moment works only for bosonic operators (fermionic are to do).
+        At the moment, it works only for bosonic operators (fermionic are todo).
 
         Parameters
         ----------
@@ -276,7 +276,7 @@ class EnvCTM(Peps):
             List of local operators to calculate <O0_s0 O1_s1 ...>.
 
         sites: Sequence[tuple[int, int]]
-            List of sites that should match operators.
+            A list of sites [s0, s1, ...] matching corresponding operators.
         """
         if len(operators) != len(sites):
             raise YastnError("Number of operators and sites should match.")

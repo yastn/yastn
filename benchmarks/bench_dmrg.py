@@ -48,23 +48,23 @@ def dmrg_Heisenberg(args):
     # setting up DMRG parameters
     #
     Ds = [10, 32, 64, 128, 256, 384, 512, 768, 1024, 1536, 2048]
+    rep = 2  # we will make 2 sweeps per D in Ds
     opts_svd = {"D_total": Ds[0]}
-    rep = 2  # we will make two sweeps per D in Ds
     dmrg = mps.dmrg_(psi, H, method='2site', iterator_step=1, max_sweeps=rep * len(Ds), opts_svd=opts_svd)
     #
-    # execute generator dmrg
+    # execute dmrg generator
     #
     ref_time = time.time()
     ref_time_global = ref_time
     for info in dmrg:
         wall_time = time.time() - ref_time
-        print(f"Sweep={info.sweeps:02d}; Energy={info.energy:4.12f}; D={max(psi.get_bond_dimensions()):4d}; time={wall_time:3.1f}sec.")
+        print(f"Sweep={info.sweeps:02d}; Energy={info.energy:4.12f}; D={max(psi.get_bond_dimensions()):4d}; time={wall_time:3.1f}")
         ref_time = time.time()
         if info.sweeps % rep == 0 and info.sweeps // rep < len(Ds):
             opts_svd["D_total"] = Ds[info.sweeps // rep]  # update D used by DMRG
 
         if ref_time - ref_time_global > args.max_seconds:
-            print(f"Maximal simulation time reached with {ref_time - ref_time_global:0.1f}s.")
+            print(f"Maximal simulation time reached after {ref_time - ref_time_global:0.1f}")
             break
 
     print("Cache info")
@@ -74,9 +74,9 @@ def dmrg_Heisenberg(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-sym", type=str, default='U1', choices=['Z3', 'dense', 'U1'])
-    parser.add_argument("-backend", type=str, default='np', choices=['np', 'torch']) # Verbose mode
-    parser.add_argument("-device", type=str, default='cpu', choices=['cpu', 'cuda']) # Verbose mode
-    parser.add_argument("-max_seconds", type=int, default=36) # Verbose mode
+    parser.add_argument("-backend", type=str, default='np', choices=['np', 'torch'])
+    parser.add_argument("-device", type=str, default='cpu', choices=['cpu', 'cuda'])
+    parser.add_argument("-max_seconds", type=int, default=3600)
     args = parser.parse_args()
 
     dmrg_Heisenberg(args)
