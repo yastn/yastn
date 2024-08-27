@@ -14,9 +14,9 @@
 # ==============================================================================
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import NamedTuple, Union, Callable
+from typing import NamedTuple, Union, Callable, Sequence
 import logging
-from .... import rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask, vdot
+from .... import Tensor, rand, ones, eye, YastnError, Leg, tensordot, qr, truncation_mask, vdot
 from ... import mps
 from .._peps import Peps, Peps2Layers
 from .._gates_auxiliary import apply_gate_onsite, gate_product_operator, gate_fix_order
@@ -111,7 +111,19 @@ class EnvCTM(Peps):
             for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
                 setattr(env[site], dirn, getattr(self[site], dirn).clone())
         return env
-    
+
+    def detach(self) -> EnvCTM:  
+        r"""
+        Return a detached view of the environment - resulting environment is **not** a part
+        of the computational graph. Data of detached environment tensors is shared
+        with the originals.
+        """
+        env = EnvCTM(self.psi, init=None)
+        for site in env.sites():
+            for dirn in ['tl', 'tr', 'bl', 'br', 't', 'l', 'b', 'r']:
+                setattr(env[site], dirn, getattr(self[site], dirn).detach())
+        return env
+
     def detach_(self):
         r"""
         Detach all environment tensors from the computational graph.
@@ -709,7 +721,8 @@ class EnvCTM(Peps):
 
         corner_tol: float
             Convergence tolerance for the change of singular values of all corners in a single update.
-            The default is None, in which case convergence is not checked.
+            The default is None, in which case convergence is not checked and it is up to user to implement
+            convergence check.
 
         truncation_f:
             Custom projector truncation function with signature ``truncation_f(S: Tensor)->Tensor``, consuming
@@ -732,34 +745,42 @@ class EnvCTM(Peps):
         return tmp if iterator_step else next(tmp)
 
 
+def ctm_conv_corner_spec(env : EnvCTM, history : Sequence[dict[tuple[Site,str],Tensor]]=[], 
+                         corner_tol : Union[None,float]=1.0e-8)->tuple[bool,float,Sequence[dict[tuple[Site,str],Tensor]]]:
+    """ 
+    Evaluate convergence of CTM by computing the difference of environment corner spectra between consecutive CTM steps.
+    """
+    history.append(calculate_corner_svd(env))
+    max_dsv = max((history[-1][k] - history[-2][k]).norm().item() for k in history[-1]) if len(history)>1 else float('Nan')
+
+    return (corner_tol is not None and max_dsv < corner_tol), max_dsv, history
+
+
 def _ctmrg_(env, opts_svd, method, max_sweeps, iterator_step, corner_tol, **kwargs):
-    """ Generator for ctmrg_(). """
-
-    if corner_tol is not None:
-        if not corner_tol > 0:
-            raise YastnError('CTMRG: corner_tol has to be positive or None.')
-        old_corner_sv = calculate_corner_svd(env)
-
-    max_dsv, converged = -1, False
+    """ Generator for ctmrg_(). """        
+    max_dsv, converged= None, False
     for sweep in range(1, max_sweeps + 1):
         env.update_(opts_svd=opts_svd, method=method, **kwargs)
+        
+        # use default CTM convergence check
         if corner_tol is not None:
-            corner_sv = calculate_corner_svd(env)
-            max_dsv = max((old_corner_sv[k] - corner_sv[k]).norm().item() for k in corner_sv)
-            old_corner_sv = corner_sv
+            if sweep==1: history=[]
+            converged, max_dsv, history= ctm_conv_corner_spec(env.detach(), history, corner_tol)
+            logging.info(f'Sweep = {sweep:03d};  max_diff_corner_singular_values = {max_dsv:0.2e}')
 
-        logging.info(f'Sweep = {sweep:03d};  max_diff_corner_singular_values = {max_dsv:0.2e}')
-
-        if corner_tol is not None and max_dsv < corner_tol:
-            converged = True
-            break
+            if converged:
+                break
 
         if iterator_step and sweep % iterator_step == 0 and sweep < max_sweeps:
             yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, converged=converged)
     yield CTMRG_out(sweeps=sweep, max_dsv=max_dsv, converged=converged)
 
 
-def calculate_corner_svd(env):
+def calculate_corner_svd(env : dict[tuple[Site,str],Tensor]):
+    """
+    Return normalized SVD spectra, with largest singular value set to unity, of all corner tensors of environment.
+    The corners are indexed by pair of Site and corner identifier.
+    """
     corner_sv = {}
     for site in env.sites():
         corner_sv[site, 'tl'] = env[site].tl.svd(compute_uv=False)

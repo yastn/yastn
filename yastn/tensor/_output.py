@@ -40,9 +40,11 @@ def save_to_dict(a) -> dict:
     a: yastn.Tensor
         tensor to export
     """
+    from .. import __version__
     _d = a.config.backend.to_numpy(a._data)
     hfs = [hf._asdict() for hf in a.hfs]
-    return {'_d': _d, 's': a.struct.s, 'n': a.struct.n,
+    return {'type': type(a).__name__, 'version': __version__,
+            '_d': _d, 's': a.struct.s, 'n': a.struct.n,
             't': a.struct.t, 'D': a.struct.D, 'isdiag': a.isdiag,
             'mfs': a.mfs, 'hfs': hfs,
             'SYM_ID': a.config.sym.SYM_ID, 'fermionic': a.config.fermionic}

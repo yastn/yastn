@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """ Import methods of yastn Tensor. """
+__version__ = '1.0.2'
 from .tensor import *
 from .initialize import *
 from .krylov import *
