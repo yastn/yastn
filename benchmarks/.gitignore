@@ -1,1 +1,3 @@
 peps-torch
+*.txt
+*.cprof
