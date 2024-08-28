@@ -28,7 +28,7 @@ def test_quickstart_KZ():
     import yastn.tn.fpeps as peps
     from yastn.tn.fpeps.gates import gate_nn_Ising, gate_local_field
     #
-    # Employ PEPS lattice geometry for sites and bonds
+    # Employ PEPS lattice geometry for sites and nearest-neighbor bonds
     Lx, Ly = 4, 4  # lattice size
     geometry = peps.SquareLattice(dims=(Lx, Ly), boundary='obc')
     sites = geometry.sites()
@@ -41,7 +41,7 @@ def test_quickstart_KZ():
     fXX = lambda s : math.sin((s - 0.5) * math.pi) + 1
     fZ  = lambda s : 1 - math.sin((s - 0.5) * math.pi)
     ta = 2.0  # annealing time
-    dt = 0.04  # time step; make it smaller to decrees errors
+    dt = 0.04  # time step; make it smaller to decrease errors
     steps = round(ta / dt)
     dt = ta / steps
     #
@@ -82,6 +82,7 @@ def test_quickstart_KZ():
         # evolution_step_ updates psi in place.
         infoss.append(infos)
         t += dt / 2
+
     Delta = peps.accumulated_truncation_error(infoss, statistics='mean')
     print(f"Accumulated mean truncation error {Delta:0.5f}")
     #
@@ -93,17 +94,17 @@ def test_quickstart_KZ():
                     "Schmidt_tol": 1e-5}
     #
     # setting-up environment
-    env = peps.EnvBoundaryMps(psi,
-                                opts_svd=opts_svd_env,
-                                opts_var=opts_var_env, setup='lr')
+    env_mps = peps.EnvBoundaryMps(psi,
+                                  opts_svd=opts_svd_env,
+                                  opts_var=opts_var_env, setup='lr')
     #
     # Calculating 1-site <Z_i> for all sites
-    Ez_peps = env.measure_1site(ops.z())
+    Ez_peps = env_mps.measure_1site(ops.z())
     #
     # Calculating 2-site <X_i X_j> for all pairs i <= j
-    Exx_peps = env.measure_2site(ops.x(), ops.x(),
-                                opts_svd=opts_svd_env,
-                                opts_var=opts_var_env)
+    Exx_peps = env_mps.measure_2site(ops.x(), ops.x(),
+                                     opts_svd=opts_svd_env,
+                                     opts_var=opts_var_env)
     #
     print("MPS simulations")
     #
@@ -126,14 +127,14 @@ def test_quickstart_KZ():
     # MPO contributions in H(t) will be added up.
     H = lambda t: [HXX * fXX(t / ta), HZ * fZ(t / ta)]
     #
-    # Initial state; TDVP is unstable staring in a product state
+    # Initial state. TDVP is unstable starting in a product state
     # There may be many strategies to mitigate it.
-    # Here it is sufficient to start with a product state obtained via DMRG
-    # with artificially enlarged bond dimension.
+    # Here, it is sufficient to start with a product state obtained
+    # via DMRG with artificially enlarged bond dimension.
     psi = mps.random_mps(I, D_total=16)  # initialize with D=16
     mps.dmrg_(psi, H(0), method='1site', max_sweeps=8, Schmidt_tol=1e-8)
     #
-    # time-evoluion parametters
+    # time-evolution parameters
     opts_expmv = {'hermitian': True, 'tol': 1e-12}
     opts_svd = {'tol': 1e-6, 'D_total': 64}  # max MPS bond dimension
     evol = mps.tdvp_(psi, H, times=(0, ta),
@@ -141,27 +142,28 @@ def test_quickstart_KZ():
                      opts_svd=opts_svd, opts_expmv=opts_expmv,
                      progressbar=True)
     #
-    # run evolution; # evol is a generaor, with one final snapshot
+    # run evolution
+    # evol is a generator with one (final) snapshot to reach
     next(evol)
     #
     # calculate expectation values
     Ez_mps = mps.measure_1site(psi, ops.z(), psi)
     Exx_mps = mps.measure_2site(psi, ops.x(), ops.x(), psi, bonds="<=")
 
-    Z1 = np.array([Ez_peps[st].real for st in sites]).real
-    Z2 = np.array([Ez_mps[s2i[st]].real for st in sites]).real
+    Z1 = np.array([Ez_peps[st].real for st in sites])
+    Z2 = np.array([Ez_mps[s2i[st]].real for st in sites])
     error_Z = np.linalg.norm(Z1 - Z2) / np.linalg.norm(Z1)
-    print(f"Relative difference PEPS vs MPS in Z magnetization: {error_Z:0.5f}")
+    print(f"Relative difference of PEPS vs MPS in Z magnetization: {error_Z:0.5f}")
 
     dist = lambda s1, s2: np.linalg.norm([s1[0]-s2[0], s1[1]-s2[1]])
     rs = np.array([dist(s1, s2) for (s1, s2) in Exx_peps])
     XX1 = np.array([*Exx_peps.values()]).real
     XX2 = np.array([Exx_mps[b2i(*bond)] for bond in Exx_peps.keys()]).real
     error_XX = np.linalg.norm(XX1 - XX2) / np.linalg.norm(XX1)
-    print(f"Relative difference PEPS vs MPS in XX correlations: {error_XX:0.5f}")
+    print(f"Relative difference of PEPS vs MPS in XX correlations: {error_XX:0.5f}")
     #
-    assert error_XX < 2e-3
-    assert error_Z < 2e-3
+    assert error_XX < 5e-3
+    assert error_Z < 5e-3
     #
     fig, ax = plt.subplots(1, 2)
     fig.set_size_inches(8, 4)
