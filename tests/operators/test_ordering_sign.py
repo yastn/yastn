@@ -28,7 +28,7 @@ def test_ordering_sign():
     """ Generate standard operators in two-dimensional Hilbert space for various symmetries. """
     #
     #  sites in canonical order
-    s0, s1, s2, s3 = (0, 0), (1, 0), (0, 1), (1, 1)
+    s0, s1, s2, s3 = fpeps.Site(0, 0), fpeps.Site(1, 0), fpeps.Site(0, 1), fpeps.Site(1, 1)
     net = fpeps.SquareLattice()
     assert net.f_ordered((s0, s1))
     assert net.f_ordered((s1, s2))
@@ -44,8 +44,10 @@ def test_ordering_sign():
     c, cp, n = ops.c(), ops.cp(), ops.n()
     assert  1 == yastn.operators.sign_canonical_order(c, cp, sites=(s0, s1))
     assert -1 == yastn.operators.sign_canonical_order(c, cp, sites=(s2, s1))
-    assert -1 == yastn.operators.sign_canonical_order(c, cp, n, cp, sites=(s3, s2, s1, s0))
     assert  1 == yastn.operators.sign_canonical_order(c, cp, cp, cp, sites=(s3, s3, s2, s2))
+    assert -1 == yastn.operators.sign_canonical_order(c, cp, n, cp, sites=(s3, s2, s1, s0))
+    # for mps
+    assert -1 == yastn.operators.sign_canonical_order(c, cp, n, cp, sites=(3, 2, 1, 0), tn='mps')
     #
     # spinful fermions with anticommuting spiecies (using U1xU1xZ2 symmetry)
     #
