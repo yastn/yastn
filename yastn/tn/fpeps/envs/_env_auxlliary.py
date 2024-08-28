@@ -263,8 +263,10 @@ def edge_b(A, hb=None):  # A = [t l] [b r] s;  hb = b' b
     return egb  # [r r'] [t t'] [l l']
 
 
-def append_vec_tl(A, Ac, vectl):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectl = x [l l'] [t t'] y
+def append_vec_tl(Ac, A, vectl, op=None):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectl = x [l l'] [t t'] y
     """ Append the A and Ac tensors to the top-left vector """
+    if op is not None:
+        A = tensordot(A, op, axes=(2, 1))
     vectl = vectl.fuse_legs(axes=(2, (0, 3), 1))  # [t t'] [x y] [l l']
     vectl = vectl.unfuse_legs(axes=(0, 2))  # t t' [x y] l l'
     vectl = vectl.swap_gate(axes=(1, (3, 4)))  # t' X l l'
@@ -279,8 +281,10 @@ def append_vec_tl(A, Ac, vectl):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s; 
     return vectl
 
 
-def append_vec_br(A, Ac, vecbr):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbr = x [r r'] [b b'] y
+def append_vec_br(Ac, A, vecbr, op=None):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbr = x [r r'] [b b'] y
     """ Append the A and Ac tensors to the bottom-right vector. """
+    if op is not None:
+        A = tensordot(A, op, axes=(2, 1))
     vecbr = vecbr.fuse_legs(axes=(2, (0, 3), 1))  # [b b'] [x y] [r r']
     vecbr = vecbr.unfuse_legs(axes=(0, 2))  # b b' [x y] r r'
     vecbr = vecbr.swap_gate(axes=((0, 1), 4))  # b b' X r'
@@ -295,8 +299,10 @@ def append_vec_br(A, Ac, vecbr):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s; 
     return vecbr
 
 
-def append_vec_tr(A, Ac, vectr):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectr = x [t t'] [r r'] y
+def append_vec_tr(Ac, A, vectr, op=None):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vectr = x [t t'] [r r'] y
     """ Append the A and Ac tensors to the top-left vector """
+    if op is not None:
+        A = tensordot(A, op, axes=(2, 1))
     vectr = vectr.fuse_legs(axes=(1, (0, 3), 2))  # [t t'] [x y] [r r']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
     vectr = vectr.swap_gate(axes=(1, 2))  # t' X x y
@@ -317,8 +323,10 @@ def append_vec_tr(A, Ac, vectr):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s; 
     return vectr
 
 
-def append_vec_bl(A, Ac, vecbl):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbl = x [b b'] [l l'] y
+def append_vec_bl(Ac, A, vecbl, op=None):  # A = [t l] [b r] s;  Ac = [t' l'] [b' r'] s;  vecbl = x [b b'] [l l'] y
     """ Append the A and Ac tensors to the top-left vector """
+    if op is not None:
+        A = tensordot(A, op, axes=(2, 1))
     vecbl = vecbl.fuse_legs(axes=(1, (0, 3), 2))  # [b b'] [x y] [l l']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # b b' [x y] l l'
     vecbl = vecbl.swap_gate(axes=(0, (1, 4)))  # b X b' l'

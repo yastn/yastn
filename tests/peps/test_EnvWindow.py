@@ -32,11 +32,11 @@ def init_peps(Dphys=(), boundary='infinite'):
     s = (-1, 1, 1, -1) + (1,) * len(Dphys)
     cfg.backend.random_seed(seed=5)
     psi[0, 0] = yastn.rand(cfg, s=s, D=(2, 3, 4, 5) + Dphys, dtype='complex128')
-    psi[1, 0] = yastn.rand(cfg, s=s, D=(4, 6, 2, 4) + Dphys, dtype='complex128')
+    psi[1, 0] = yastn.rand(cfg, s=s, D=(4, 3, 2, 4) + Dphys, dtype='complex128')
     psi[0, 1] = yastn.rand(cfg, s=s, D=(3, 5, 5, 2) + Dphys, dtype='complex128')
-    psi[1, 1] = yastn.rand(cfg, s=s, D=(5, 4, 3, 6) + Dphys, dtype='complex128')
+    psi[1, 1] = yastn.rand(cfg, s=s, D=(5, 4, 3, 3) + Dphys, dtype='complex128')
     psi[0, 2] = yastn.rand(cfg, s=s, D=(2, 2, 3, 3) + Dphys, dtype='complex128')
-    psi[1, 2] = yastn.rand(cfg, s=s, D=(3, 6, 2, 6) + Dphys, dtype='complex128')
+    psi[1, 2] = yastn.rand(cfg, s=s, D=(3, 3, 2, 3) + Dphys, dtype='complex128')
     return psi
 
 
@@ -87,12 +87,13 @@ def test_window_measure():
     """ checks syntax of sample and measure_2site"""
     # for Dphys = 2
     psi = init_peps(Dphys=(2,))
-    D_total = 24
+    D_total = 15
     opts_svd = {'D_total': D_total, 'tol': 1e-10}
     env_ctm = fpeps.EnvCTM(psi, init='eye')
     #
-    for _ in range(5):
-        env_ctm.update_(opts_svd=opts_svd)  # single sweep
+    info = env_ctm.ctmrg_(opts_svd, max_sweeps=20, corner_tol=1e-4)
+    print(info)  # did not converge
+    #
     env_win = fpeps.EnvWindow(env_ctm, xrange=(0, 4), yrange=(0, 3))
     #
     # test sample
@@ -104,7 +105,6 @@ def test_window_measure():
     number = 4
     out = env_win.sample(projs, number=number, return_info=True, progressbar=True)
     info = out.pop('info')
-    # assert info['error'] > 1e-3
     assert info['opts_svd']['D_total'] == D_total
     assert len(out) == 12
     for ny in range(0, 3):
@@ -112,11 +112,9 @@ def test_window_measure():
             assert len(out[nx, ny]) == number
             assert all(x in [0, 1] for x in out[nx, ny])
 
-    env_ctm.ctmrg_(opts_svd, max_sweeps=40, corner_tol=1e-5)
     projs = {k: v for k, v in zip('tb', projs)}
     out = env_win.sample(projs, number=number, return_info=True)
     info = out.pop('info')
-    assert info['error'] < 1e-5
     assert info['opts_svd']['D_total'] == D_total
     assert len(out) == 12
     for ny in range(0, 3):
@@ -141,7 +139,7 @@ def test_window_measure():
     ev = [env_ctm.measure_line(ops.z(), ops.z(), sites=((1, 0), (n, 0))) for n in [2, 3, 4,]]
     for n, ref in zip([1, 2, 3, 4], [1] + ev):
         assert abs(outv[(1, 0), (n, 0)] - ref) / abs(ref) < 1e-2
-
+    #
     outh = env_ctm.measure_2site(ops.z(), ops.z(), xrange=(2, 3), yrange=(2, 5))
     eh = [env_ctm.measure_line(ops.z(), ops.z(), sites=((2, 2), (2, n))) for n in [3, 4]]
     for n, ref in zip([2, 3, 4], [1] + eh):

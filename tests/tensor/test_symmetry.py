@@ -24,7 +24,7 @@ import yastn.sym.sym_U1xU1xZ2 as sym_U1xU1xZ2
 import numpy as np
 
 def test_symmetry():
-    """ basic operations with yastn.Leg"""
+    """ tests of predifined symmery classes. """
     #
     # no sym
     assert sym_none.NSYM == 0
@@ -111,5 +111,32 @@ def test_symmetry():
     assert np.allclose(fused_charges, ref_charges)
 
 
+def test_add_charges():
+    """ tests auxliary symmetry function: add_charges. """
+    assert sym_none.add_charges((), (), ()) == ()
+    #
+    assert sym_Z2.add_charges((1,), (1,), (0,), (1,)) == (1,)
+    assert sym_Z2.add_charges((1,), (1,), (1,), s=(1, -1, -1), new_s=-1) == (1,)
+    assert sym_Z2.add_charges(1, 0, 0, 1,) == (0,)  # flattened input also works, but only for NSYM=1
+    #
+    assert sym_Z3.add_charges((2,), (2,), (1,), s=[1, 1, -1]) == (0,)
+    assert sym_Z3.add_charges((2,), (2,), (1,)) == (2,)
+    assert sym_Z3.add_charges((2,), (2,), (1,), s=[1, 1, 1]) == (2,)
+    assert sym_Z3.add_charges((2,), (2,), (1,), new_s=-1) == (1,)
+    assert sym_Z3.add_charges((1,), new_s=-1) == (2,)
+    #
+    assert sym_U1.add_charges((1,), (2,), (-1,)) == (2,)
+    assert sym_U1.add_charges((1,), (2,), s=[1, -1]) == (-1,)
+    assert sym_U1.add_charges((2,), new_s=-1) == (-2,)
+    #
+    assert sym_U1xU1.add_charges((1, 0), (-1, 1), (1, -2)) == (1, -1)
+    #
+    assert sym_U1xU1xZ2.add_charges((2, 1, 1), new_s=-1) == (-2, -1, 1)
+    charge = sym_U1xU1xZ2.add_charges((1, 0, 1), (-1, 1, 0), (1, -2, 1))
+    assert charge == (1, -1, 0)
+    assert all(isinstance(x, int) for x in charge)
+
+
 if __name__ == '__main__':
     test_symmetry()
+    test_add_charges()

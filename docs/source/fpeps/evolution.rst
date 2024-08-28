@@ -33,8 +33,10 @@ Gates classes are organized as
 Some predefined gates can be found in :code:`yastn.tn.fpeps.gates`, including
 
 .. autofunction:: yastn.tn.fpeps.gates.gate_nn_hopping
+.. autofunction:: yastn.tn.fpeps.gates.gate_nn_Ising
 .. autofunction:: yastn.tn.fpeps.gates.gate_local_Coulomb
 .. autofunction:: yastn.tn.fpeps.gates.gate_local_occupation
+.. autofunction:: yastn.tn.fpeps.gates.gate_local_field
 
 An auxiliary function :meth:`yastn.tn.fpeps.gates.distribute`
 distribute a set of gates homogeneously over the entire lattice.

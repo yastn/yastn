@@ -17,6 +17,7 @@ from __future__ import annotations
 from ... import eye, tensordot, ncon, vdot, YastnError, qr, svd
 from . import MpsMpoOBC, MpoPBC
 import abc
+import copy
 
 
 def Env(bra, target):
@@ -241,6 +242,14 @@ class EnvParent(metaclass=abc.ABCMeta):
 
         return False  # no hint for using 2-site update
 
+    def shallow_copy(self):
+        r"""
+        A copy of environment class, that cleates new copy of dictionary storing env tensors.
+        """
+        env = copy.copy(self)
+        env.F = dict(self.F)
+        return env
+
 
 class Env_sum(EnvParent):
 
@@ -299,7 +308,7 @@ class Env_sum(EnvParent):
 class Env2(EnvParent):
     # The class combines environments of mps+mps for calculation of expectation values, overlaps, etc.
 
-    def __init__(self, bra=None, ket=None):
+    def __init__(self, bra=None, ket=None, n_left=None):
         super().__init__(bra)
         self.ket = ket
 
@@ -309,7 +318,7 @@ class Env2(EnvParent):
             raise YastnError('Env: bra and ket should have the same number of sites.')
 
         legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
-        self.F[(-1, 0)] = eye(self.config, legs=legs, isdiag=False)
+        self.F[(-1, 0)] = eye(self.config, legs=legs, isdiag=False, n=n_left)
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
         self.F[(self.N, self.N - 1)] = eye(self.config, legs=legs, isdiag=False)
 
@@ -322,11 +331,15 @@ class Env2(EnvParent):
 
     def update_env_(self, n, to='last'):
         if to == 'first':
-            inds = ((-0, 2, 1), (1, 3), (-1, 2, 3)) if self.nr_phys == 1 else ((-0, 2, 1, 4), (1, 3), (-1, 2, 3, 4))
-            self.F[(n, n - 1)] = ncon([self.ket[n], self.F[(n + 1, n)], self.bra[n].conj()], inds)
-        elif to == 'last':
-            inds = ((2, 3, -0), (2, 1), (1, 3, -1)) if self.nr_phys == 1 else ((2, 3, -0, 4), (2, 1), (1, 3, -1, 4))
-            self.F[(n, n + 1)] = ncon([self.bra[n].conj(), self.F[(n - 1, n)], self.ket[n]], inds)
+            temp = tensordot(self.ket[n], self.F[(n + 1, n)], axes=(2, 0))
+            temp = temp.swap_gate(axes=1, charge=self.F[(n + 1, n)].n)
+            axes = ((1, 2), (1, 2)) if self.nr_phys == 1 else ((1, 3, 2), (1, 2, 3))
+            self.F[(n, n - 1)] = tensordot(temp, self.bra[n].conj(), axes=axes)
+        else:  # to == 'last'
+            temp = tensordot(self.F[(n - 1, n)], self.ket[n], axes=((1, 0)))
+            temp = temp.swap_gate(axes=1, charge=self.F[(n - 1, n)].n)
+            axes = ((0, 1), (0, 1)) if self.nr_phys == 1 else ((0, 1, 3), (0, 1, 3))
+            self.F[(n, n + 1)] = tensordot(self.bra[n].conj(), temp, axes=axes)
 
     def Heff0(self, C, bd):
         raise YastnError("Should not be triggered by current higher-level functions.")  # pragma: no cover
@@ -352,23 +365,25 @@ class Env2(EnvParent):
     def update_env_op_(self, n, op, to='first'):
         """
         Contractions for 2-layer environment update, with on-site operator ``op`` applied on site ``n``.
+
+        If the operator has a charge, it gets propagated to the environment;
+        In to='last', the charge of the environment is propagated with a proper swap gate,
+        so that in measure_2site, a combination of to='last' and 'first'
+        corresponds to the situation where the latter operator is applied first.
+        Conventions are adapted to application in measure_1site and measure_2site,
+        consistently with fermionic order.
         """
         if to == 'first':
             temp = tensordot(self.ket[n], self.F[(n + 1, n)], axes=(2, 0))
-            op = op.add_leg(axis=0, s=1)
-            temp = tensordot(op, temp, axes=(2, 1))
-            temp = temp.swap_gate(axes=(0, 2))
-            temp = temp.remove_leg(axis=0)
+            temp = tensordot(op, temp, axes=(1, 1))
             axes = ((0, 2), (1, 2)) if self.nr_phys == 1 else ((0, 3, 2), (1, 2, 3))
             self.F[(n, n - 1)] = tensordot(temp, self.bra[n].conj(), axes=axes)
         else:  # to == 'last'
-            op = op.add_leg(axis=0, s=1)
-            temp = tensordot(op, self.ket[n], axes=((2, 1)))
-            temp = temp.swap_gate(axes=(0, 2))
-            temp = temp.remove_leg(axis=0)
-            temp = tensordot(self.F[(n - 1, n)], temp, axes=((1, 1)))
-            axes = ((0, 1), (0, 1)) if self.nr_phys == 1 else ((0, 1, 3), (0, 1, 3))
-            self.F[(n, n + 1)] = tensordot(self.bra[n].conj(), temp, axes=axes)
+            temp = tensordot(self.bra[n].conj(), self.F[(n - 1, n)], axes=((0, 0)))
+            temp = tensordot(op, temp, axes=((0, 0)))
+            temp = temp.swap_gate(axes=0, charge=temp.n)
+            axes = ((2, 0), (0, 1)) if self.nr_phys == 1 else ((3, 0, 2), (0, 1, 3))
+            self.F[(n, n + 1)] = tensordot(temp, self.ket[n], axes=axes)
 
     def charges_missing(self, n):
         raise YastnError("Should not be triggered by current higher-level functions.")  # pragma: no cover
@@ -420,12 +435,16 @@ class EnvParent_3_obc(EnvParent_3):
 
         # init boundaries
         legs = [self.bra.virtual_leg('first'), self.ket.virtual_leg('first').conj()]
-        tmp = eye(self.config, legs=legs, isdiag=False)
-        self.F[(-1, 0)] = tmp.add_leg(axis=1, leg=op.virtual_leg('first').conj())
+        legv=op.virtual_leg('first').conj()
+        n_left = ket.config.sym.add_charges(legv.t[0], s=(legv.s,), new_s=-1)
+        tmp = eye(self.config, legs=legs, isdiag=False, n=n_left)
+        self.F[(-1, 0)] = tmp.add_leg(axis=1, leg=legv)
 
         legs = [self.ket.virtual_leg('last').conj(), self.bra.virtual_leg('last')]
-        tmp = eye(self.config, legs=legs, isdiag=False)
-        self.F[(self.N, self.N - 1)] = tmp.add_leg(axis=1, leg=op.virtual_leg('last').conj())
+        legv=op.virtual_leg('last').conj()
+        n_right = ket.config.sym.add_charges(legv.t[0], s=(legv.s,), new_s=-1)
+        tmp = eye(self.config, legs=legs, isdiag=False, n=n_right)
+        self.F[(self.N, self.N - 1)] = tmp.add_leg(axis=1, leg=legv)
 
     def measure(self, bd=(-1, 0)):
         tmp = tensordot(self.F[bd], self.F[bd[::-1]], axes=((0, 1, 2), (2, 1, 0)))

@@ -184,7 +184,7 @@ class EnvCTM(Peps):
         tmp = ten._attach_01(vect)
         val_no = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
-        ten.top = apply_gate_onsite(ten.top, op)
+        ten.set_operator_(op)
         tmp = ten._attach_01(vect)
         val_op = tensordot(vecb, tmp, axes=((0, 1, 2, 3), (2, 3, 1, 0))).to_number()
 
@@ -234,8 +234,8 @@ class EnvCTM(Peps):
             tmp1 = tensordot(env1.t, tmp1, axes=((2, 1), (0, 1)))
             val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (1, 0, 2))).to_number()
 
-            ten0.top = apply_gate_onsite(ten0.top, G0, dirn='l')
-            ten1.top = apply_gate_onsite(ten1.top, G1, dirn='r')
+            ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='l')
+            ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='r')
 
             tmp0 = ten0._attach_01(vecl)
             tmp0 = tensordot(env0.b, tmp0, axes=((2, 1), (0, 1)))
@@ -252,8 +252,8 @@ class EnvCTM(Peps):
             tmp1 = tensordot(tmp1, env1.l, axes=((2, 3), (0, 1)))
             val_no = tensordot(tmp0, tmp1, axes=((0, 1, 2), (2, 1, 0))).to_number()
 
-            ten0.top = apply_gate_onsite(ten0.top, G0, dirn='t')
-            ten1.top = apply_gate_onsite(ten1.top, G1, dirn='b')
+            ten0.ket = apply_gate_onsite(ten0.ket, G0, dirn='t')
+            ten1.ket = apply_gate_onsite(ten1.ket, G1, dirn='b')
 
             tmp0 = ten0._attach_01(vect)
             tmp0 = tensordot(tmp0, env0.r, axes=((2, 3), (0, 1)))
@@ -265,10 +265,10 @@ class EnvCTM(Peps):
 
     def measure_2x2(self, *operators, sites=None):
         """
-        Calculate expectation value of a product of local opertors
-        in a 2x2 window within CTM environment.
+        Calculate expectation value of a product of local operators
+        in a 2x2 window within the CTM environment.
 
-        At the moment works only for bosonic operators (fermionic are to do).
+        At the moment, it works only for bosonic operators (fermionic are todo).
 
         Parameters
         ----------
@@ -276,7 +276,7 @@ class EnvCTM(Peps):
             List of local operators to calculate <O0_s0 O1_s1 ...>.
 
         sites: Sequence[tuple[int, int]]
-            List of sites that should match operators.
+            A list of sites [s0, s1, ...] matching corresponding operators.
         """
         if len(operators) != len(sites):
             raise YastnError("Number of operators and sites should match.")
@@ -318,19 +318,19 @@ class EnvCTM(Peps):
         val_no = vdot(cor_tl @ cor_tr @ cor_br, cor_bl.T, conj=(0, 0))
 
         if tl in ops:
-            ten_tl.top = apply_gate_onsite(ten_tl.top, ops[tl])
+            ten_tl.set_operator_(ops[tl])
             cor_tl = ten_tl._attach_01(vec_tl)
             cor_tl = cor_tl.fuse_legs(axes=((0, 1), (2, 3)))
         if tr in ops:
-            ten_tr.top = apply_gate_onsite(ten_tr.top, ops[tr])
+            ten_tr.set_operator_(ops[tr])
             cor_tr = ten_tr._attach_30(vec_tr)
             cor_tr = cor_tr.fuse_legs(axes=((0, 1), (2, 3)))
         if br in ops:
-            ten_br.top = apply_gate_onsite(ten_br.top, ops[br])
+            ten_br.set_operator_(ops[br])
             cor_br = ten_br._attach_23(vec_br)
             cor_br = cor_br.fuse_legs(axes=((0, 1), (2, 3)))
         if bl in ops:
-            ten_bl.top = apply_gate_onsite(ten_bl.top, ops[bl])
+            ten_bl.set_operator_(ops[bl])
             cor_bl = ten_bl._attach_12(vec_bl)
             cor_bl = cor_bl.fuse_legs(axes=((0, 1), (2, 3)))
 
@@ -379,7 +379,7 @@ class EnvCTM(Peps):
 
         for site, op in ops.items():
             ind = site[0] - xs[0] + site[1] - ys[0] + 1
-            tm[ind].top = apply_gate_onsite(tm[ind].top, op)
+            tm[ind].set_operator_(op)
 
         val_op = mps.vdot(vl, tm, vr)
         return val_op / val_no
