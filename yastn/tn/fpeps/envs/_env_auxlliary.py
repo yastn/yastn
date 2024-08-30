@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+from typing import Union
 from .... import fuse_legs, tensordot, swap_gate, ones, Leg, eye, Tensor
 from ... import mps
 
@@ -279,13 +280,13 @@ def edge_b(A_bra, hb=None, A_ket=None):  # A = [t l] [b r] s;  hb = b' b
     return egb  # [r r'] [t t'] [l l']
 
 
-def append_vec_tl(A : Tensor, Ac : Tensor, vectl : Tensor)->Tensor:
+def append_vec_tl(Ac : Tensor, A : Tensor, vectl : Tensor, op : Union[None,Tensor] = None)->Tensor:
     """ 
     Append tensors of double-layer PEPS to the top-left environment (vector)
     
         C--T-----      |vectl___|---
         |  |       <=> |  |   |
-        T--A*Ac--      |__|--A*Ac---
+        T--Ac*A--      |__|--Ac*A---
         |  |            |     |
 
     with assumed index convention on arguments and resulting tensor::
@@ -296,10 +297,13 @@ def append_vec_tl(A : Tensor, Ac : Tensor, vectl : Tensor)->Tensor:
         A: on-site tensor of "ket" layer
         Ac: on-site tensor of "bra" layer. Note: complex conjugation of ``Ac`` is done within the function.
         vectl: top-left part of the environment
+        op: optional on-site operator 
 
     Returns:
         top-left enlarged corner
     """
+    if op is not None:
+        A = tensordot(A, op, axes=(2, 1))
     vectl = vectl.fuse_legs(axes=(2, (0, 3), 1))  # [t t'] [x y] [l l']
     vectl = vectl.unfuse_legs(axes=(0, 2))  # t t' [x y] l l'
     vectl = vectl.swap_gate(axes=(1, (3, 4)))  # t' X l l'
@@ -314,12 +318,12 @@ def append_vec_tl(A : Tensor, Ac : Tensor, vectl : Tensor)->Tensor:
     return vectl
 
 
-def append_vec_br(A : Tensor, Ac : Tensor, vecbr : Tensor)->Tensor:  # 
+def append_vec_br(Ac : Tensor, A : Tensor, vecbr : Tensor, op : Union[None,Tensor] = None)->Tensor:  # 
     """ 
     Append tensors of double-layer PEPS to the bottom-right environment (vector) 
 
              |  |        |     |
-        --A*Ac--T <=> --A*Ac--| |
+        --Ac*A--T <=> --Ac*A--| |
              |  |        |    | |
          ----T--C     --|vecbr__|
 
@@ -331,10 +335,13 @@ def append_vec_br(A : Tensor, Ac : Tensor, vecbr : Tensor)->Tensor:  #
         A: on-site tensor of "ket" layer
         Ac: on-site tensor of "bra" layer. Note: complex conjugation of ``Ac`` is done within the function.
         vecbr: bottom-right part of the environment
+        op: optional on-site operator 
 
     Returns:
         bottom-right enlarged corner
     """
+    if op is not None:
+        A = tensordot(A, op, axes=(2, 1))
     vecbr = vecbr.fuse_legs(axes=(2, (0, 3), 1))  # [b b'] [x y] [r r']
     vecbr = vecbr.unfuse_legs(axes=(0, 2))  # b b' [x y] r r'
     vecbr = vecbr.swap_gate(axes=((0, 1), 4))  # b b' X r'
@@ -349,13 +356,13 @@ def append_vec_br(A : Tensor, Ac : Tensor, vecbr : Tensor)->Tensor:  #
     return vecbr
 
 
-def append_vec_tr(A : Tensor, Ac : Tensor, vectr : Tensor)->Tensor:  
+def append_vec_tr(Ac : Tensor, A : Tensor, vectr : Tensor, op : Union[None,Tensor] = None)->Tensor:  
     """ 
     Append tensors of double-layer PEPS to the top-right environment (vector)
     
         ----T---C      --|__vectr|
             |   |  <=>    |    | |
-        --A*Ac--T      --A*Ac--|_|
+        --Ac*A--T      --Ac*A--|_|
             |   |         |     |
 
     with assumed index convention on arguments and resulting tensor::
@@ -366,10 +373,13 @@ def append_vec_tr(A : Tensor, Ac : Tensor, vectr : Tensor)->Tensor:
         A: on-site tensor of "ket" layer
         Ac: on-site tensor of "bra" layer. Note: complex conjugation of ``Ac`` is done within the function.
         vectr: top-left part of the environment
+        op: optional on-site operator 
 
     Returns:
         top-right enlarged corner
     """
+    if op is not None:
+        A = tensordot(A, op, axes=(2, 1))
     vectr = vectr.fuse_legs(axes=(1, (0, 3), 2))  # [t t'] [x y] [r r']
     vectr = vectr.unfuse_legs(axes=(0, 2))  # t t' [x y] r r'
     vectr = vectr.swap_gate(axes=(1, 2))  # t' X x y
@@ -390,12 +400,12 @@ def append_vec_tr(A : Tensor, Ac : Tensor, vectr : Tensor)->Tensor:
     return vectr
 
 
-def append_vec_bl(A : Tensor, Ac : Tensor, vecbl : Tensor)->Tensor:
+def append_vec_bl(Ac : Tensor, A : Tensor, vecbl : Tensor, op : Union[None,Tensor]=None)->Tensor:
     """ 
     Append tensors of double-layer PEPS to the bottom-left environment (vector) 
 
         |  |           |   |
-        T--A*Ac-- <=> | |--A*Ac--
+        T--Ac*A-- <=> | |--Ac*A--
         |  |          | |__|__
         C--T-----     |vecbl__|--
 
@@ -407,10 +417,13 @@ def append_vec_bl(A : Tensor, Ac : Tensor, vecbl : Tensor)->Tensor:
         A: on-site tensor of "ket" layer
         Ac: on-site tensor of "bra" layer. Note: complex conjugation of ``Ac`` is done within the function.
         vecbl: bottom-left part of the environment
+        op: optional on-site operator 
 
     Returns:
         bottom-left enlarged corner
     """
+    if op is not None:
+        A = tensordot(A, op, axes=(2, 1))
     vecbl = vecbl.fuse_legs(axes=(1, (0, 3), 2))  # [b b'] [x y] [l l']
     vecbl = vecbl.unfuse_legs(axes=(0, 2))  # b b' [x y] l l'
     vecbl = vecbl.swap_gate(axes=(0, (1, 4)))  # b X b' l'

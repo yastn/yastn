@@ -11,6 +11,9 @@ unique bonds, and a way to navigate the lattice through the information on the n
 
 .. autoclass:: yastn.tn.fpeps.CheckerboardLattice
 
+.. autoclass:: yastn.tn.fpeps.RectangularUnitcell
+
+
 Auxiliary objects in lattice definition are :class:`yastn.tn.fpeps.Bond`
 representing a pair of nearest-neighbor lattice sites,
 and :class:`yastn.tn.fpeps.Site` for sites.

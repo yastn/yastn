@@ -25,11 +25,11 @@ tol = 1e-12  #pylint: disable=invalid-name
 
 def _test_add_remove_leg(a):
     """ run a sequence of adding and removing axis operations. """
-    b = yastn.add_leg(a)  # new axis with s=1 added as the last one; makes copy
+    b = yastn.add_leg(a)  # new axis with s=-1 added as the last one;
     assert b.is_consistent()
-    assert not yastn.are_independent(a, b)
-    assert all(x == 0 for x in b.struct.n)  # tensor charge is set here to 0
-    b = b.add_leg(axis=1, s=-1)
+    assert not yastn.are_independent(a, b)  # do not copy data
+    assert b.config.sym.zero() == b.struct.n  # tensor charge is set here to 0
+    b = b.add_leg(axis=1, s=1)
     b.is_consistent()
 
     c = b.remove_leg()  # removes last axis by default
@@ -126,36 +126,41 @@ def test_add_leg_fused():
 
 def test_operators_chain():
     """
-    Consider a sequence of operators "cp cp c c"
-    add virtual legs connecting them, starting from the end
+    Consider a sequence of operators "cp cp c cp"
+    add virtual legs connecting them, starting from the end.
     """
-
-    cdag = yastn.Tensor(config=config_U1, s=(1, -1), n=1)
-    cdag.set_block(ts=(1, 0), Ds=(1, 1), val=1)
+    cp = yastn.Tensor(config=config_U1, s=(1, -1), n=1)
+    cp.set_block(ts=(1, 0), Ds=(1, 1), val=1)
     c = yastn.Tensor(config=config_U1, s=(1, -1), n=-1)
     c.set_block(ts=(0, 1), Ds=(1, 1), val=1)
 
     nn = c.config.sym.zero()
-    o4 = yastn.add_leg(c, axis=-1, t=nn, s=-1)
-    o4 = yastn.add_leg(o4, axis=0, s=1)
-    nn = o4.get_legs(axes=0).t[0]
+    o4 = yastn.add_leg(cp, axis=1, t=nn, s=1)
+    nn = o4.n
+    o4 = yastn.add_leg(o4, axis=0, s=-1)
+    assert nn == (1,)
 
-    o3 = yastn.add_leg(c, axis=-1, t=nn, s=-1)
-    o3 = yastn.add_leg(o3, axis=0, s=1)
-    nn = o3.get_legs(axes=0).t[0]
+    o3 = yastn.add_leg(c, axis=1, t=nn, s=1)
+    nn = o3.n
+    o3 = yastn.add_leg(o3, axis=0, s=-1)
+    assert nn == (0,)
 
-    o2 = yastn.add_leg(cdag, axis=-1, t=nn, s=-1)
-    o2 = yastn.add_leg(o2, axis=0, s=1)
-    nn = o2.get_legs(axes=0).t[0]
+    o2 = yastn.add_leg(cp, axis=1, t=nn, s=1)
+    nn = o2.n
+    o2 = yastn.add_leg(o2, axis=0, s=-1)
+    assert nn == (1,)
 
-    o1 = yastn.add_leg(cdag, axis=-1, t=nn, s=-1)
-    o1 = yastn.add_leg(o1, axis=0, s=1)
+    o1 = yastn.add_leg(cp, axis=1, t=nn, s=1)
+    o1 = yastn.add_leg(o1, axis=0, s=-1)
     nn = o1.get_legs(axes=0).t[0]
-    assert nn == c.config.sym.zero()
+    assert nn == (2,)
 
-    T1 = yastn.ncon([cdag, cdag, c, c], [(-1, -5), (-2, -6), (-3 ,-7), (-4, -8)])
-    T2 = yastn.ncon([o1, o2, o3, o4], [(4, -1, -5, 1), (1, -2, -6, 2), (2, -3 ,-7, 3), (3, -4, -8, 4)])
+    T1 = yastn.ncon([cp, cp, c, cp], [(-1, -5), (-2, -6), (-3 ,-7), (-4, -8)])
+    T2 = yastn.ncon([o1, o2, o3, o4], [(-0, -1, 1, -5), (1, -2, 2, -6), (2, -3, 3, -7), (3, -4, -9, -8)])
+    T2 = yastn.remove_leg(T2, axis=9)
+    T2 = yastn.remove_leg(T2, axis=0)
     assert yastn.norm(T1 - T2) < tol
+    assert T1.n == (2,)
 
     # special case when there are no blocks in the tensor
     a = yastn.Tensor(config=config_U1, s=(1, -1, 1, -1), n=1)

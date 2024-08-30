@@ -328,7 +328,6 @@ def test_3x3_D1_Z2_spinlessf_expected(ctm_init, truncate_multiplets_mode):
     R= loc_cost_f(test_elems)
     R.backward()
 
-    import pdb; pdb.set_trace()
     print(test_elems.grad)
 
 

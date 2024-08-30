@@ -102,10 +102,13 @@ def test_quickstart_hubbard(D=12, betas=[0.5]):
 
         mean = lambda data: sum(data) / len(data)
 
+        ctm = env_ctm.ctmrg_(opts_svd=opts_svd_ctm,
+                             iterator_step=1,
+                             max_sweeps=50)  # generator
+
         energy_old, tol_exp = 0, 1e-7
-        for i in range(50):
-            #
-            env_ctm.update_(opts_svd=opts_svd_ctm)  # single CMTRG sweep
+        for info in ctm:
+            # single CMTRG sweep as iterator_step=1 in the ctm generator
             #
             # calculate energy expectation value
             #
@@ -121,7 +124,7 @@ def test_quickstart_hubbard(D=12, betas=[0.5]):
             #
             energy = -4 * t * (ev_cdagc_up + ev_cdagc_dn) + U * ev_nn
             #
-            print(f"Energy per site after iteration {i}: {energy:0.8f}")
+            print(f"Energy per site after iteration {info.sweeps}: {energy:0.8f}")
             if abs(energy - energy_old) < tol_exp:
                 break
             energy_old = energy

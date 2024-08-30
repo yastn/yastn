@@ -94,7 +94,7 @@ class Peps():
         elif geometry is None and isinstance(tensors,dict):
             id_map= { uuid: i for i,uuid in enumerate( set([id(t) for t in tensors.values() ])) } # convert to small integers
             self.geometry= RectangularUnitcell(pattern={ site: id_map[id(t)] for site,t in tensors.items() })
-            
+
         elif geometry is None and isinstance(tensors,Sequence) and set(map(type(row) for row in tensors))==set(Sequence,):
             # TODO
             # for geometry passed as list[list[Tensor]]
@@ -105,13 +105,13 @@ class Peps():
         for name in ["dims", "sites", "nn_site", "bonds", "site2index", "Nx", "Ny", "boundary", "nn_bond_type", "f_ordered"]:
             setattr(self, name, getattr(geometry, name))
         self._data = {self.site2index(site): None for site in self.sites()}
-        
+
         if isinstance(tensors,dict):
             assert set(self.sites()) <= set(tensors.keys()),"geometry and tensors are not compatible"
             # self._data = {self.site2index(site): tensors[site] for site in self.sites()}
             for site in self.sites():
                 self[site] = tensors[site]
-        
+
     @property
     def config(self):
         return self[0, 0].config
@@ -161,7 +161,7 @@ class Peps():
         elif isinstance(self.geometry, SquareLattice):
             d['lattice'] = "square"
         return d
-    
+
     def __repr__(self):
         return f"Peps(geometry={self.geometry.__repr__()}, tensors={ self._data })"
 
@@ -204,18 +204,18 @@ class Peps():
             op = Mpo(N=self.Ny)
             for ny in range(self.Ny):
                 site = (n, ny)
-                top = self[site]
-                op.A[ny] = top.transpose(axes=(1, 2, 3, 0)) if top.ndim == 4 else \
-                           DoublePepsTensor(top=top, btm=top, transpose=(1, 2, 3, 0))
+                psi = self[site]
+                op.A[ny] = psi.transpose(axes=(1, 2, 3, 0)) if psi.ndim == 4 else \
+                           DoublePepsTensor(bra=psi, ket=psi, transpose=(1, 2, 3, 0))
         elif dirn == 'v':
             periodic = (self.boundary == "cylinder")
             op = Mpo(N=self.Nx, periodic=periodic)
             op.tol = self._data['tol'] if 'tol' in self._data else None
             for nx in range(self.Nx):
                 site = (nx, n)
-                top = self[site]
-                op.A[nx] = top if top.ndim == 4 else \
-                           DoublePepsTensor(top=top, btm=top)
+                psi = self[site]
+                op.A[nx] = psi if psi.ndim == 4 else \
+                           DoublePepsTensor(bra=psi, ket=psi)
         return op
 
 
@@ -244,4 +244,4 @@ class Peps2Layers():
 
     def __getitem__(self, site) -> yastn.tn.fpeps.DoublePepsTensor:
         """ Get tensor for site. """
-        return DoublePepsTensor(top=self.ket[site], btm=self.bra[site])
+        return DoublePepsTensor(bra=self.bra[site], ket=self.ket[site])

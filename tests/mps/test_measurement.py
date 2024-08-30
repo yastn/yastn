@@ -120,15 +120,27 @@ def measure_mps_aklt(config=None, tol=1e-12):
     assert abs(ez[0] - 1./3) < tol  # psi is not normalized
     assert abs(ez[N - 1] + 1./3) < tol
     #
+    #  the same with other syntaxes
+    #
+    ez_bis = mps.measure_1site(psi, ops.sz(), psi, sites=[0, N-1])
+    assert ez == ez_bis
+    ez0 = mps.measure_1site(psi, ops.sz(), psi, sites=0)  # this return a number
+    assert abs(ez0 - 1./3) < tol
+    #
+    #  with normalised state
     psin = psi / norm
     ez = mps.measure_1site(psin, ops.sz(), psin)  # calculate sz on all sites
     assert len(ez) == N and isinstance(ez, dict)
     assert abs(ez[0] - 2. / 3) < tol  # psin is normalized
     #
-    # Calculate <Sz_i Sz_j> for NN (n, n+1)
-    ezz = mps.measure_2site(psin, ops.sz(), ops.sz(), psin, pairs=[(n, n+1) for n in range(N - 1)])
-    assert len(ezz) == N - 1 and isinstance(ez, dict)
+    # Calculate <Sz_i Sz_j> for (i, j) = (n, n+r) with r=1
+    ezz = mps.measure_2site(psin, ops.sz(), ops.sz(), psin, bonds='r1')
+    assert len(ezz) == N - 1 and isinstance(ezz, dict)
     assert all(abs(ezznn + 4. / 9) < tol for ezznn in ezz.values())
+    #
+    # here calculate a single bond, returning a number
+    ezz12 = mps.measure_2site(psin, ops.sz(), ops.sz(), psin, bonds=(1, 2))
+    assert abs(ezz12 + 4. / 9) < tol
     #
     #  Measure string operator; exp (i pi * Sz) = I - 2 * abs(Sz)
     #
@@ -143,8 +155,8 @@ def measure_mps_aklt(config=None, tol=1e-12):
 
 
 @pytest.mark.parametrize('kwargs', [{'sym': 'dense', 'config': cfg},
-                                  {'sym': 'Z3', 'config': cfg},
-                                  {'sym': 'U1', 'config': cfg}])
+                                    {'sym': 'Z3', 'config': cfg},
+                                    {'sym': 'U1', 'config': cfg}])
 def test_mps_spectrum_ghz(kwargs):
     mps_spectrum_ghz(**kwargs)
 
@@ -262,56 +274,162 @@ def test_mpo_spectrum(sym, config, tol=1e-12):
     assert abs(entropies[0]) < tol and abs(entropies[-1]) < tol
 
 
-# def test_measurment_raise(config=cfg):
-#     opts_config = {} if config is None else \
-#                     {'backend': config.backend,
-#                     'default_device': config.default_device}
-#     # pytest uses config to inject various backends and devices for testing
-#     ops = yastn.operators.Spin1(sym='dense', **opts_config)
-#     #
-#     # take 3 orthogonal operator-product states
-#     #
-#     H7 = mps.product_mpo(ops.sz(), N=7)
-#     psi7 = mps.product_mps(ops.vec_z(), N=7)
-#     psi8 = mps.product_mps(ops.vec_z(), N=8)
+@pytest.mark.parametrize("sym, config", [('Z2', cfg), ('U1', cfg)])
+def test_measure_fermions_and_unbalanced(sym, config, tol=1e-12):
+    """ Initialize small MPS and measure fermionic correlators. Additionally text measure_2site syntax. """
+    opts_config = {} if config is None else \
+                {'backend': config.backend,
+                'default_device': config.default_device}
 
-    # with pytest.raises(yastn.YastnError):
-    #     mps.vdot(psi7, psi8)
-    #     # MpsMpoOBC for bra and ket should have the same number of sites.
-    # with pytest.raises(yastn.YastnError):
-    #     mps.vdot(psi7, H7)
-    #     # MpsMpoOBC for bra and ket should have the same number of physical legs.
+    if sym == 'U1' or sym == 'Z2':
+        ops = yastn.operators.SpinlessFermions(sym=sym, **opts_config)
+        v0, v1 = ops.vec_n(0), ops.vec_n(1)
+    elif sym == 'U1xU1':
+        # here two spicies commute; we can have particles in "d" and still match spinless case
+        ops = yastn.operators.SpinfulFermions(sym=sym, **opts_config)
+        v0, v1 = ops.vec_n((0, 1)), ops.vec_n((1, 1))
+    elif sym == 'U1xU1xZ2':
+        # here two spicies anti-commute; no particles in "d" to match spinless case
+        ops = yastn.operators.SpinfulFermions(sym=sym, **opts_config)
+        v0, v1 = ops.vec_n((0, 0)), ops.vec_n((1, 0))
+    I = mps.product_mpo(ops.I(), 4)
+
+    v1101 = mps.product_mps([v1, v1, v0, v1])
+    v0111 = mps.product_mps([v0, v1, v1, v1])
+    psi3 = v1101 + v0111
+    npsi3 = mps.vdot(psi3, psi3)
+    assert abs(npsi3 - 2.0) < tol
+    #
+    # psi3 is not normalized;  measure_2site, measure_1site do not normalise the state.
+    #
+    psi3_cp_c_psi3 = np.array([[ 1.0, 0.0, -1.0, 0.0],
+                               [ 0.0, 2.0,  0.0, 0.0],
+                               [-1.0, 0.0,  1.0, 0.0],
+                               [ 0.0, 0.0,  0.0, 2.0]])
+    #
+    en33 = mps.measure_1site(psi3, ops.n(), psi3)  # all sites
+    ecpc33 = mps.measure_2site(psi3, ops.cp(), ops.c(), psi3, bonds='a')  # all pairs of sites
+    eccp33 = mps.measure_2site(psi3, ops.c(), ops.cp(), psi3, bonds='a')  # bonds with i <= j  # move to syntax
+    assert len(en33) == len(psi3)
+    assert len(ecpc33) == len(psi3) * len(psi3)
+    assert len(eccp33) == len(psi3) * len(psi3)
+    assert all(abs(v - psi3_cp_c_psi3[k, k]) < tol for k, v in en33.items())
+    for k in eccp33:
+        OP = mps.generate_mpo(I, [mps.Hterm(1, k, [ops.c(), ops.cp()])])
+        assert abs(eccp33[k] - mps.vdot(psi3, OP, psi3)) < tol
+        assert abs(eccp33[k] - npsi3 * (k[0] == k[1]) + psi3_cp_c_psi3[k].conjugate()) < tol
+        assert abs(ecpc33[k] - psi3_cp_c_psi3[k]) < tol
+    #
+    # transitions between states with different partice number
+    #
+    v0101 = mps.product_mps([v0, v1, v0, v1])
+    v1001 = mps.product_mps([v1, v0, v0, v1])
+    psi2 = 1j * v0101 - v1001
+    assert abs(mps.vdot(psi2, psi2) - 2.0) < tol
+    #
+    ec23 = mps.measure_1site(psi2, ops.c(), psi3)
+    ecp32 = mps.measure_1site(psi3, ops.cp(), psi2)
+    psi2_c_psi3 = [-1.0j, 1.0, 1.0j, 0.0]
+    #
+    for k in ec23:
+        assert abs(psi2_c_psi3[k] - ec23[k]) < tol
+        OP = mps.generate_mpo(I, [mps.Hterm(1, [k], [ops.c()])])
+        assert abs(ec23[k] - mps.vdot(psi2, OP, psi3)) < tol
+        OP = mps.generate_mpo(I, [mps.Hterm(1, [k], [ops.cp()])])
+        assert abs(psi2_c_psi3[k] - ecp32[k].conj()) < tol
+        assert abs(ecp32[k] - mps.vdot(psi3, OP, psi2)) < tol
+    #
+    v0100 = mps.product_mps([v0, v1, v0, v0])
+    v0010 = mps.product_mps([v0, v0, v1, v0])
+    v0001 = mps.product_mps([v0, v0, v0, v1])
+    psi1 = v0100 + v0010 + v0001
+    assert abs(mps.vdot(psi1, psi1) - 3.0) < tol
+    #
+    psi1_c_c_psi3 = np.array([[ 0.0, -1.0,  0.0,  1.0],
+                              [ 1.0,  0.0, -1.0,  1.0],
+                              [ 0.0,  1.0,  0.0, -1.0],
+                              [-1.0, -1.0,  1.0,  0.0]])
+    #
+    ecc13 = mps.measure_2site(psi1, ops.c(), ops.c(), psi3, bonds='a')
+    ecpcp31 = mps.measure_2site(psi3, ops.cp(), ops.cp(), psi1, bonds='a')
+
+    for k in ecc13:
+        if k[0] != k[1]:  # here exclude diagonal, as there is problem with resolving zero operator
+            OP = mps.generate_mpo(I, [mps.Hterm(1, k, [ops.c(), ops.c()])])
+            assert abs(ecc13[k] - mps.vdot(psi1, OP, psi3)) < tol
+        assert abs(ecc13[k] - psi1_c_c_psi3[k]) < tol
+        assert abs(ecpcp31[k] + psi1_c_c_psi3[k].conjugate()) < tol
 
 
-# def correlation_matrix(psi, ops):
-#     """ Calculate correlation matrix for Mps psi  C[m,n] = <c_n^dag c_m>"""
-#     assert pytest.approx(psi.norm().item()) == 1
-#     N = psi.N
-#     # first approach: directly act with c operators on state psi
-#     I = mps.product_mpo(ops.I(), N)
-#     cns = [mps.generate_mpo(I, [mps.Hterm(1, [n], [ops.c()])]) for n in range(N)]
-#     ps = [cn @ psi for cn in cns]
-#     C = np.zeros((N, N), dtype=np.complex128)
-#     for m in range(N):
-#         for n in range(N):
-#             C[m, n] = mps.vdot(ps[n], ps[m])
-
-#     # second approach: use measure_1site() and measure_2site()
-#     occs = mps.measure_1site(psi, ops.n(), psi)
-#     cpc = mps.measure_2site(psi, ops.cp(), ops.c(), psi)
-#     C2 = np.zeros((N, N), dtype=np.complex128)
-#     for n, v in occs.items():
-#         C2[n, n] = v
-#     for (n1, n2), v in cpc.items():
-#         C2[n2, n1] = v
-#         C2[n1, n2] = v.conj()
-#     assert np.allclose(C, C2)
-#     return C
-
+def test_measure_syntax_raises():
+    opts_config = {'backend': cfg.backend, 'default_device': cfg.default_device}
+    ops = yastn.operators.SpinlessFermions(sym='U1', **opts_config)
+    v0, v1 = ops.vec_n(0), ops.vec_n(1)
+    v1101 = mps.product_mps([v1, v1, v0, v1])
+    v0111 = mps.product_mps([v0, v1, v1, v1])
+    psi3 = v1101 + v0111
+    N = 4
+    #
+    #  measure_2site syntax
+    #
+    out = mps.measure_2site(psi3, {2: ops.cp()}, {0: ops.c(), 2: ops.c(), 3: ops.c()}, psi3, bonds='a')  # limited bonds
+    assert all(k in out for k in [(2, 0), (2, 2), (2, 3)]) and len(out) == 3
+    #
+    out = mps.measure_2site(psi3, ops.cp(), ops.c(), psi3, bonds='r-1p')  # step -1 and PBC
+    assert all(k in out for k in [(1, 0), (2, 1), (3, 2), (0, 3)]) and len(out) == 4
+    #
+    out = mps.measure_2site(psi3, ops.cp(), ops.c(), psi3, bonds='r-3r-2')  # step -3 and -2
+    assert all(k in out for k in [(3, 0), (3, 1), (2, 0)])  and len(out) == 3
+    #
+    out = mps.measure_2site(psi3, ops.cp(), ops.c(), psi3, bonds='<=')  # i <= j
+    assert all(k[0] <= k[1] for k in out ) and len(out) == N * (N + 1) // 2
+    #
+    out = mps.measure_2site(psi3, ops.cp(), ops.c(), psi3, bonds='>=')  # i >= j
+    assert all(k[0] >= k[1] for k in out ) and len(out) == N * (N + 1) // 2
+    #
+    out = mps.measure_2site(psi3, ops.cp(), ops.c(), psi3)  # i < j  (default)
+    assert all(k[0] < k[1] for k in out ) and len(out) == N * (N - 1) // 2
+    #
+    out = mps.measure_2site(psi3, ops.cp(), ops.c(), psi3, bonds=(0, 2))
+    assert abs(out + 1.0) < 1e-12  # out is a number
+    #
+    out = mps.measure_2site(psi3, ops.cp(), ops.c(), psi3, bonds=[(0, 2)])
+    assert abs(out[(0, 2)] + 1.0) < 1e-12 and len(out) == 1 # out is a dict
+    #
+    out = mps.measure_2site(psi3, {1: ops.cp()}, ops.c(), psi3, bonds=[(0, 2)])
+    assert len(out) == 0 # empty dict
+    #
+    out = mps.measure_2site(psi3, {1: ops.cp()}, ops.c(), psi3, bonds=(0, 2))
+    assert len(out) == 0 # empty dict as well
+    #
+    #  measure_1site syntax
+    #
+    out = mps.measure_1site(psi3, ops.n(), psi3, sites=[0, 0, 4, 5])  # repeated or out-of-bound sites are dropped
+    assert len(out) == 1
+    #
+    out = mps.measure_1site(psi3, {1: ops.n()}, psi3, sites=[0, 2])
+    assert len(out) == 0
+    #
+    out = mps.measure_1site(psi3, ops.n(), psi3, sites=1)
+    assert isinstance(out.item(), float)
+    #
+    #  measure_1site measure_2site raises
+    #
+    with pytest.raises(yastn.YastnError):
+        out = mps.measure_1site(psi3, {1: ops.n(), 2: ops.c()}, psi3)
+        # In mps.measure_1site, all operators in O should have the same charge.
+    with pytest.raises(yastn.YastnError):
+        out = mps.measure_2site(psi3, {1: ops.n(), 2: ops.c()}, ops.cp(), psi3)
+        # In mps.measure_2site, all operators in O should have the same charge.
+    with pytest.raises(yastn.YastnError):
+        out = mps.measure_2site(psi3, ops.cp(), {1: ops.n(), 2: ops.c()}, psi3)
+        # In mps.measure_2site, all operators in P should have the same charge.
 
 if __name__ == "__main__":
     measure_mps_aklt()
-    test_measurment_raise()
     for sym in ['dense', 'Z3', 'U1']:
         mps_spectrum_ghz(sym=sym)
         test_mpo_spectrum(sym=sym, config=cfg)
+    for sym in ['Z2', 'U1', 'U1xU1', 'U1xU1xZ2']:
+        test_measure_fermions_and_unbalanced(sym=sym, config=cfg)
+    test_measure_syntax_raises()

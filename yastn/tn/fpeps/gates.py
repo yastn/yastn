@@ -145,17 +145,19 @@ def gate_local_Coulomb(mu_up, mu_dn, U, step, I, n_up, n_dn, site=None) -> Gate_
 
 def gate_local_occupation(mu, step, I, n, site=None) -> Gate_local:
     """
-    Local gate exp(-step * H)
-    for H = -mu * n
+    Local gate G = exp(-step * H) for H = -mu * n
+
+    G = I + n * (exp(mu * step) - 1)
     """
     G_loc = I + n * (np.exp(mu * step) - 1)
     return Gate_local(G_loc, site)
 
 
-def gate_local_Ising(h, step, I, X, site=None) -> Gate_local:
+def gate_local_field(h, step, I, X, site=None) -> Gate_local:
     """
-    Local gate exp(-step * H)
-    for H = -h * X
+    Local gate G = exp(-step * H) for H = -h * X
+
+    G = cosh(h * step) * I + np.sinh(h * step) * X
     """
     G_loc = np.cosh(h * step) * I + np.sinh(h * step) * X
     return Gate_local(G_loc, site)

@@ -23,7 +23,7 @@ where:
 
 1. *Initialization of Model Parameters*:
     We set our model parameters keeping in mind that in the purification there is no clear way to fix particle number
-    and must be controlled by changing chemical potential :math:`\mu`.
+    and it is controlled by changing chemical potential :math:`\mu`.
 
     .. code-block:: python
 
@@ -110,10 +110,13 @@ where:
 
         mean = lambda data: sum(data) / len(data)  # helper function
 
+        ctm = env_ctm.ctmrg_(opts_svd=opts_svd_ctm,
+                             iterator_step=1,
+                             max_sweeps=50)  # generator
+
         energy_old, tol_exp = 0, 1e-7
-        for i in range(50):
-            #
-            env_ctm.update_(opts_svd=opts_svd_ctm)  # single CMTRG sweep
+        for info in ctm:
+            # single CMTRG sweep as iterator_step=1 in the ctm generator
             #
             # calculate energy expectation value
             #

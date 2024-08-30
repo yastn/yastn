@@ -136,14 +136,10 @@ def correlation_matrix_from_mps(psi, ops, tol):
         Calculate correlation matrix for MPS psi.
         """
         assert abs(psi.norm() - 1) < tol  # check normalization
-        ns = mps.measure_1site(psi, ops.n(), psi)
-        cpc = mps.measure_2site(psi, ops.cp(), ops.c(), psi)
+        cpc = mps.measure_2site(psi, ops.cp(), ops.c(), psi, bonds='<=>') # all
         C = np.zeros((psi.N, psi.N), dtype=np.complex128)
-        for n, v in ns.items():
-            C[n, n] = v
         for (n1, n2), v in cpc.items():
             C[n2, n1] = v
-            C[n1, n2] = v.conj()
         return C
 
 
@@ -414,13 +410,12 @@ def tdvp_KZ_quench(sym='Z2', config=None):
         # Calculate expectation values at snapshots
         #
         EZ = mps.measure_1site(psi, ops.z(), psi)
-        pairs = [(i, i+1) for i in range(N-1)] + [(0, N-1)]
-        EXX = mps.measure_2site(psi, ops.x(), ops.x(), psi, pairs=pairs)
+        EXX = mps.measure_2site(psi, ops.x(), ops.x(), psi, bonds='r1p')  # periodic nn
         #
         # Compare them with the exact result
         #
         gg = round(gc - step.tf / tauQ)  # g at the snapshot
-        assert all(abs(EXX[k] - XXex[gg]) < 1e-4 for k in pairs)
+        assert all(abs(EXX[k, (k + 1) % N] - XXex[gg]) < 1e-4 for k in range(N))
         assert all(abs(EZ[k] - Zex[gg]) < 1e-4 for k in range(N))
         #
         # Bond dimension was updated
