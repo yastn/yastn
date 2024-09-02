@@ -41,7 +41,7 @@ b_Dsize= 1048
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-backend", type=str, choices=['np', 'np-mp', 'torch', 'torch-mp', 'torch-cpp'], default='np')
+    parser.add_argument("-backend", type=str, choices=['np', 'np-c-mp', 'np-mp', 'torch', 'torch-mp', 'torch-cpp'], default='np-c-mp')
     parser.add_argument("-device", type=str, default='cpu')
     parser.add_argument("-niter", type=int, default=1000)
     parser.add_argument("-num_threads", type=int, default=-1)
@@ -49,6 +49,8 @@ if __name__ == '__main__':
 
     if args.backend == 'np':
         import backend_np_1d as backend
+    elif args.backend == 'np-c-mp':
+        import backend_np_c_mp_1d as backend
     elif args.backend == 'torch':
         import backend_torch_1d as backend
         if args.num_threads>0:
@@ -124,12 +126,21 @@ if __name__ == '__main__':
 
     keep_time = time.time()
     for _ in range(args.niter):
-        backend.transpose_and_merge(data_a, a_order, a_meta_new, a_meta_mrg, a_Dsize)
+        tm1 = backend.transpose_and_merge(data_a, a_order, a_meta_new, a_meta_mrg, a_Dsize)
 
     print('Total time : %.2f seconds' % (time.time() - keep_time))
 
+    if args.backend=='np-c-mp':
+        import numpy as np
+        import backend_np_1d as backend_np
+        keep_time = time.time()
+        for _ in range(args.niter):
+            tm0 = backend_np.transpose_and_merge(data_a, a_order, a_meta_new, a_meta_mrg, a_Dsize)
+        print(f'numpy transpose_and_merge() Total time : %.2f seconds' % (time.time() - keep_time))
+        print(f"Verify: {np.linalg.norm(tm0-tm1)}")
+
     # verify
-    if not args.backend=='np':
+    if args.backend.startswith('torch'):
         import numpy as np
         import backend_np_1d as backend_np
         res_ref= backend_np.transpose_and_merge(data_a.numpy(), a_order, a_meta_new, a_meta_mrg, a_Dsize)
