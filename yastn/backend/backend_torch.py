@@ -18,7 +18,7 @@ from types import SimpleNamespace
 from functools import reduce
 import numpy as np
 import torch
-
+              
 __all__= [
     '_torch_version_check', 'DTYPE', 'cuda_is_available',
     'SVDGESDD','SYMEIG',
@@ -972,6 +972,15 @@ class kernel_unmerge(torch.autograd.Function):
             newdata_b[slice(*slo)].view(Do)[slcs] = data_b[slice(*sln)].view(Dn)
         return newdata_b, None, None, None
 
+
+# functionals
+def checkpoint(f,*args,**kwargs):
+    # context_fn=kwargs.pop('context_fn',None)
+    return torch.utils.checkpoint.checkpoint(f, *args, use_reentrant=kwargs.pop('use_reentrant',None), 
+                                             determinism_check=kwargs.pop('determinism_check','default'), 
+                                             debug=kwargs.pop('debug',False), **kwargs)
+
+  
 
 #############
 #   tests   #
